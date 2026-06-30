@@ -332,7 +332,7 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
       const res = await fetch('/api/onboarding/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ plan, annual }),
       })
       const data = await res.json()
 

@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getStripeClient, isStripeConfigured } from '@/lib/stripe/client'
 import { agents as elAgents, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
-import { PLANS } from '@/types'
-import type { Plan } from '@/types'
+import { PLANS, stripePriceId } from '@/types'
+import type { Plan, BillingInterval } from '@/types'
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -19,7 +19,8 @@ export async function POST(request: Request) {
 
   if (!org) return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
 
-  const { plan } = (await request.json()) as { plan: Plan }
+  const { plan, annual } = (await request.json()) as { plan: Plan; annual?: boolean }
+  const interval: BillingInterval = annual ? 'year' : 'month'
 
   // Get agent — non-fatal in demo mode; ElevenLabs setup is skipped if missing
   const { data: agent } = await supabase
@@ -66,7 +67,9 @@ export async function POST(request: Request) {
   const planConfig = PLANS[plan]
   // Self-serve paid tiers go through Stripe checkout; trial and custom (which
   // have no price id) land on the trial tier until billing/sales takes over.
-  const willCheckout = !!planConfig.stripe_price_id && isStripeConfigured()
+  // Fall back to the monthly price if an annual one isn't configured yet.
+  const priceId = stripePriceId(plan, interval) || planConfig.stripe_price_id
+  const willCheckout = !!priceId && isStripeConfigured()
   const effectivePlan: Plan = willCheckout || planConfig.contact_sales ? 'trial' : plan
 
   await supabase
@@ -104,7 +107,7 @@ export async function POST(request: Request) {
         customer: customerId,
         payment_method_types: ['card'],
         mode: 'subscription',
-        line_items: [{ price: planConfig.stripe_price_id, quantity: 1 }],
+        line_items: [{ price: priceId, quantity: 1 }],
         success_url: `${appUrl}/dashboard?welcome=true&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${appUrl}/onboarding`,
         // Collect billing address + fiscal code (CUI) for SmartBill B2B invoicing.

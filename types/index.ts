@@ -217,6 +217,8 @@ export interface PlanConfig {
   name: string
   /** Monthly list price in USD. */
   price_monthly: number
+  /** Annual list price in USD (billed yearly = 10× monthly, 2 months free). */
+  price_annual: number
   minutes_limit: number
   max_agents: number
   max_phone_numbers: number
@@ -224,9 +226,12 @@ export interface PlanConfig {
   overage_per_min: number
   features: string[]
   stripe_price_id: string
+  stripe_price_id_annual: string
   /** Custom tier — routes to "contact sales" instead of Stripe checkout. */
   contact_sales?: boolean
 }
+
+export type BillingInterval = 'month' | 'year'
 
 // Pricing model: blended COGS ≈ $0.10/min (ElevenLabs voice + Twilio telephony).
 // Each paid tier is sized so the gross margin stays ≥ 60% even at full usage;
@@ -235,6 +240,7 @@ export const PLANS: Record<Plan, PlanConfig> = {
   trial: {
     name: 'Trial',
     price_monthly: 0,
+    price_annual: 0,
     minutes_limit: 30,
     max_agents: 1,
     max_phone_numbers: 1,
@@ -247,10 +253,12 @@ export const PLANS: Record<Plan, PlanConfig> = {
       'Basic analytics',
     ],
     stripe_price_id: '',
+    stripe_price_id_annual: '',
   },
   starter: {
     name: 'Starter',
     price_monthly: 49,
+    price_annual: 490,
     minutes_limit: 150,
     max_agents: 1,
     max_phone_numbers: 1,
@@ -264,10 +272,12 @@ export const PLANS: Record<Plan, PlanConfig> = {
       'Email support',
     ],
     stripe_price_id: process.env.STRIPE_STARTER_PRICE_ID ?? '',
+    stripe_price_id_annual: process.env.STRIPE_STARTER_ANNUAL_PRICE_ID ?? '',
   },
   pro: {
     name: 'Pro',
     price_monthly: 249,
+    price_annual: 2490,
     minutes_limit: 850,
     max_agents: 3,
     max_phone_numbers: 3,
@@ -283,10 +293,12 @@ export const PLANS: Record<Plan, PlanConfig> = {
       'Priority support',
     ],
     stripe_price_id: process.env.STRIPE_PRO_PRICE_ID ?? '',
+    stripe_price_id_annual: process.env.STRIPE_PRO_ANNUAL_PRICE_ID ?? '',
   },
   business: {
     name: 'Business',
     price_monthly: 499,
+    price_annual: 4990,
     minutes_limit: 1750,
     max_agents: 10,
     max_phone_numbers: 5,
@@ -302,10 +314,12 @@ export const PLANS: Record<Plan, PlanConfig> = {
       'Priority support',
     ],
     stripe_price_id: process.env.STRIPE_BUSINESS_PRICE_ID ?? '',
+    stripe_price_id_annual: process.env.STRIPE_BUSINESS_ANNUAL_PRICE_ID ?? '',
   },
   custom: {
     name: 'Custom',
     price_monthly: 999,
+    price_annual: 9990,
     minutes_limit: 3500,
     max_agents: 999,
     max_phone_numbers: 999,
@@ -319,6 +333,13 @@ export const PLANS: Record<Plan, PlanConfig> = {
       'Dedicated support',
     ],
     stripe_price_id: '',
+    stripe_price_id_annual: '',
     contact_sales: true,
   },
+}
+
+/** Pick the Stripe price id for a plan + billing interval. */
+export function stripePriceId(plan: Plan, interval: BillingInterval): string {
+  const cfg = PLANS[plan]
+  return interval === 'year' ? cfg.stripe_price_id_annual : cfg.stripe_price_id
 }

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getStripeClient, isStripeConfigured } from '@/lib/stripe/client'
-import { PLANS } from '@/types'
-import type { Plan } from '@/types'
+import { stripePriceId } from '@/types'
+import type { Plan, BillingInterval } from '@/types'
 
 // Authenticated checkout — lets an existing user upgrade from the dashboard.
 export async function POST(request: Request) {
@@ -15,15 +15,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Billing is not configured' }, { status: 503 })
   }
 
-  const { plan } = (await request.json().catch(() => ({}))) as { plan?: Plan }
+  const { plan, interval } = (await request.json().catch(() => ({}))) as {
+    plan?: Plan
+    interval?: BillingInterval
+  }
   // Custom is sales-led; trial has no checkout. Only the self-serve paid tiers.
   if (plan !== 'starter' && plan !== 'pro' && plan !== 'business') {
     return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
   }
 
-  const priceId = PLANS[plan].stripe_price_id
+  const billingInterval: BillingInterval = interval === 'year' ? 'year' : 'month'
+  const priceId = stripePriceId(plan, billingInterval)
   if (!priceId) {
-    return NextResponse.json({ error: `No Stripe price configured for ${plan}` }, { status: 400 })
+    return NextResponse.json(
+      { error: `No Stripe price configured for ${plan} (${billingInterval})` },
+      { status: 400 }
+    )
   }
 
   const { data: org } = await supabase

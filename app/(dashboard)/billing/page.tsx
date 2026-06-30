@@ -12,7 +12,7 @@ import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
 import { useOrganization } from '@/hooks/useOrganization'
 import { PLANS } from '@/types'
-import type { Plan } from '@/types'
+import type { Plan, BillingInterval } from '@/types'
 
 const PLAN_META: Record<Plan, { icon: LucideIcon; iconBg: string; iconColor: string }> = {
   trial: { icon: Layers, iconBg: 'bg-gray-100', iconColor: 'text-gray-500' },
@@ -32,6 +32,7 @@ const UPGRADE_NEXT: Partial<Record<Plan, Plan>> = {
 export default function BillingPage() {
   const { organization: org, isLoading } = useOrganization()
   const [pending, setPending] = useState<string | null>(null)
+  const [cycle, setCycle] = useState<BillingInterval>('month')
 
   async function goToCheckout(plan: Plan) {
     setPending(plan)
@@ -39,7 +40,7 @@ export default function BillingPage() {
       const res = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ plan, interval: cycle }),
       })
       const data = await res.json()
       if (res.ok && data.url) {
@@ -164,7 +165,27 @@ export default function BillingPage() {
 
       {/* Plan picker */}
       <div className="rounded-2xl border bg-card p-5">
-        <h2 className="text-sm font-semibold text-foreground mb-4">Change plan</h2>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-foreground">Change plan</h2>
+          {/* Billing cycle toggle */}
+          <div className="flex items-center gap-1 rounded-lg border bg-muted/40 p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setCycle('month')}
+              className={cn('rounded-md px-2.5 py-1 font-medium transition-colors', cycle === 'month' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground')}
+            >
+              Monthly
+            </button>
+            <button
+              type="button"
+              onClick={() => setCycle('year')}
+              className={cn('flex items-center gap-1 rounded-md px-2.5 py-1 font-medium transition-colors', cycle === 'year' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground')}
+            >
+              Annual
+              <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[9px] font-bold text-green-700">2 MO FREE</span>
+            </button>
+          </div>
+        </div>
         <div className="space-y-3">
           {(Object.keys(PLANS) as Plan[]).map((planId) => {
             const cfg = PLANS[planId]
@@ -172,6 +193,11 @@ export default function BillingPage() {
             const Icon = meta.icon
             const isCurrent = planId === currentPlan
             const isCustom = planId === 'custom'
+            const isPaid = !isCustom && planId !== 'trial'
+            // Annual shows the monthly-equivalent (yearly total / 12).
+            const displayPrice = cycle === 'year' && isPaid
+              ? Math.round(cfg.price_annual / 12)
+              : cfg.price_monthly
 
             return (
               <div
@@ -204,9 +230,12 @@ export default function BillingPage() {
                   </div>
                   <div className="text-right shrink-0">
                     <p className={cn('text-lg font-black', isCustom ? 'text-white' : 'text-foreground')}>
-                      ${cfg.price_monthly}{isCustom && '+'}
+                      ${displayPrice}{isCustom && '+'}
                       <span className={cn('text-xs font-normal ml-0.5', isCustom ? 'text-gray-400' : 'text-muted-foreground')}>/mo</span>
                     </p>
+                    {cycle === 'year' && isPaid && (
+                      <p className="text-[10px] text-muted-foreground">${cfg.price_annual}/yr billed annually</p>
+                    )}
                     {!isCurrent && isCustom && (
                       <a
                         href="mailto:sales@neuro-tech-voice.com?subject=Custom%20plan%20enquiry"
