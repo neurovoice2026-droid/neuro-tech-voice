@@ -134,6 +134,23 @@ const TEMPLATES = [
   },
 ]
 
+// Localized greeting templates, keyed by language code, so "Auto-generate"
+// respects the selected language.
+const GREETINGS: Record<string, (company: string, agent: string) => string> = {
+  en: (c, a) => `Hello! Thank you for calling ${c}. I'm ${a}, your virtual assistant. How can I help you today?`,
+  ro: (c, a) => `Bună ziua! Vă mulțumim că ați sunat la ${c}. Sunt ${a}, asistentul dumneavoastră virtual. Cu ce vă pot ajuta astăzi?`,
+  es: (c, a) => `¡Hola! Gracias por llamar a ${c}. Soy ${a}, su asistente virtual. ¿En qué puedo ayudarle hoy?`,
+  fr: (c, a) => `Bonjour ! Merci d'appeler ${c}. Je suis ${a}, votre assistant virtuel. Comment puis-je vous aider aujourd'hui ?`,
+  de: (c, a) => `Hallo! Vielen Dank für Ihren Anruf bei ${c}. Ich bin ${a}, Ihr virtueller Assistent. Wie kann ich Ihnen heute helfen?`,
+  it: (c, a) => `Buongiorno! Grazie per aver chiamato ${c}. Sono ${a}, il suo assistente virtuale. Come posso aiutarla oggi?`,
+  pt: (c, a) => `Olá! Obrigado por ligar para ${c}. Sou ${a}, o seu assistente virtual. Como posso ajudá-lo hoje?`,
+  ja: (c, a) => `もしもし、${c}にお電話いただきありがとうございます。バーチャルアシスタントの${a}です。本日はどのようなご用件でしょうか？`,
+  ko: (c, a) => `안녕하세요! ${c}에 전화해 주셔서 감사합니다. 저는 가상 비서 ${a}입니다. 오늘 무엇을 도와드릴까요?`,
+  ar: (c, a) => `مرحباً! شكراً لاتصالك بـ ${c}. أنا ${a}، مساعدك الافتراضي. كيف يمكنني مساعدتك اليوم؟`,
+  pl: (c, a) => `Dzień dobry! Dziękujemy za telefon do ${c}. Nazywam się ${a} i jestem Twoim wirtualnym asystentem. W czym mogę pomóc?`,
+  nl: (c, a) => `Hallo! Bedankt voor het bellen naar ${c}. Ik ben ${a}, uw virtuele assistent. Hoe kan ik u vandaag helpen?`,
+}
+
 export function Step2Agent() {
   const { agent, company, setAgent, setStep } = useOnboardingStore()
   const [templateOpen, setTemplateOpen] = useState(false)
@@ -154,13 +171,11 @@ export function Step2Agent() {
   const personality  = form.watch('personality')
 
   function autoGenerateGreeting() {
-    const cn = company.name || 'our company'
+    const companyName = company.name || 'our company'
     const an = agentName || 'your assistant'
-    form.setValue(
-      'first_message',
-      `Hello! Thank you for calling ${cn}. I'm ${an}, your virtual assistant. How can I help you today?`,
-      { shouldValidate: true }
-    )
+    const lang = form.getValues('language') || 'en'
+    const build = GREETINGS[lang] ?? GREETINGS.en
+    form.setValue('first_message', build(companyName, an), { shouldValidate: true })
   }
 
   function applyTemplate(templateFn: (c: string) => string) {

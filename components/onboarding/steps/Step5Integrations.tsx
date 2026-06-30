@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import { ArrowRight, ArrowLeft, CheckCircle2, Link2, ExternalLink, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -150,8 +150,35 @@ export function Step5Integrations() {
   const { setStep } = useOnboardingStore()
   const [connected, setConnected] = useState<Record<string, boolean>>({})
 
+  // Read the real connection status for each Google integration.
+  const refresh = useCallback(async () => {
+    const entries = await Promise.all(
+      INTEGRATIONS.map((i) =>
+        fetch(`/api/integrations/${i.id}`)
+          .then((r) => (r.ok ? r.json() : { connected: false }))
+          .then((d) => [i.id, !!d.connected] as const)
+          .catch(() => [i.id, false] as const)
+      )
+    )
+    setConnected(Object.fromEntries(entries))
+  }, [])
+
+  useEffect(() => { refresh() }, [refresh])
+
+  // Re-check when the user returns from the OAuth tab.
+  useEffect(() => {
+    function onFocus() { refresh() }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [refresh])
+
   function toggle(id: string) {
-    setConnected((prev) => ({ ...prev, [id]: !prev[id] }))
+    // Real Google OAuth — opened in a new tab so onboarding progress is kept.
+    if (connected[id]) {
+      fetch(`/api/integrations/${id}`, { method: 'DELETE' }).then(() => refresh())
+    } else {
+      window.open(`/api/integrations/google/connect?type=${id}`, '_blank', 'noopener')
+    }
   }
 
   const connectedCount = Object.values(connected).filter(Boolean).length

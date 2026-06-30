@@ -6,6 +6,7 @@ import {
   ArrowLeft, Zap, Shield, Star, Layers,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
 import { cn, formatPhoneNumber } from '@/lib/utils'
 import { PLANS } from '@/types'
@@ -115,9 +116,9 @@ function LightPlanCard({ id, selected, onSelect, annual, icon: Icon }: PlanCardP
           : 'border-border hover:border-purple-300 hover:shadow-md'
       )}
     >
-      <div className="flex min-h-[130px] items-stretch">
+      <div className="flex flex-col sm:flex-row sm:min-h-[130px] sm:items-stretch">
         {/* Left identity panel */}
-        <div className="flex w-52 flex-shrink-0 flex-col justify-between bg-gray-50 p-5 transition-colors group-hover:bg-gray-100/70">
+        <div className="flex w-full sm:w-52 sm:flex-shrink-0 flex-col justify-between bg-gray-50 p-5 transition-colors group-hover:bg-gray-100/70">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-200">
             <Icon className="h-4.5 w-4.5 text-gray-500" />
           </div>
@@ -135,11 +136,11 @@ function LightPlanCard({ id, selected, onSelect, annual, icon: Icon }: PlanCardP
         </div>
 
         {/* Divider */}
-        <div className="w-px flex-shrink-0 bg-border" />
+        <div className="hidden sm:block w-px flex-shrink-0 bg-border" />
 
         {/* Features + CTA */}
-        <div className="flex flex-1 items-center gap-4 px-6 py-5">
-          <ul className="flex-1 grid grid-cols-2 gap-x-4 gap-y-2">
+        <div className="flex flex-1 flex-col sm:flex-row sm:items-center gap-4 px-6 py-5">
+          <ul className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
             {p.features.map((f) => (
               <li key={f} className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Check className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
@@ -183,9 +184,9 @@ function ProPlanCard({ selected, onSelect, annual }: PlanCardProps) {
         <Star className="h-3 w-3 fill-current text-yellow-300" />
       </div>
 
-      <div className="flex min-h-[130px] items-stretch">
+      <div className="flex flex-col sm:flex-row sm:min-h-[130px] sm:items-stretch">
         {/* Left identity */}
-        <div className="flex w-52 flex-shrink-0 flex-col justify-between bg-white/10 p-5 backdrop-blur-sm">
+        <div className="flex w-full sm:w-52 sm:flex-shrink-0 flex-col justify-between bg-white/10 p-5 backdrop-blur-sm">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/20">
             <Zap className="h-4.5 w-4.5 text-yellow-300" />
           </div>
@@ -207,11 +208,11 @@ function ProPlanCard({ selected, onSelect, annual }: PlanCardProps) {
         </div>
 
         {/* Divider */}
-        <div className="w-px flex-shrink-0 bg-white/20" />
+        <div className="hidden sm:block w-px flex-shrink-0 bg-white/20" />
 
         {/* Features + CTA */}
-        <div className="flex flex-1 items-center gap-4 px-6 py-5">
-          <ul className="flex-1 grid grid-cols-2 gap-x-4 gap-y-2">
+        <div className="flex flex-1 flex-col sm:flex-row sm:items-center gap-4 px-6 py-5">
+          <ul className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
             {PLANS.pro.features.map((f) => (
               <li key={f} className="flex items-center gap-1.5 text-xs text-purple-100">
                 <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-white/25">
@@ -248,9 +249,9 @@ function CustomPlanCard({ selected, onSelect }: PlanCardProps) {
       {/* Top neon accent bar */}
       <div className="h-0.5 w-full bg-gradient-to-r from-transparent via-purple-500 to-transparent opacity-70" />
 
-      <div className="flex min-h-[130px] items-stretch">
+      <div className="flex flex-col sm:flex-row sm:min-h-[130px] sm:items-stretch">
         {/* Left identity */}
-        <div className="flex w-52 flex-shrink-0 flex-col justify-between border-r border-gray-800 bg-black/30 p-5">
+        <div className="flex w-full sm:w-52 sm:flex-shrink-0 flex-col justify-between border-r border-gray-800 bg-black/30 p-5">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-900/60">
             <Shield className="h-4.5 w-4.5 text-purple-400" />
           </div>
@@ -266,8 +267,8 @@ function CustomPlanCard({ selected, onSelect }: PlanCardProps) {
         </div>
 
         {/* Features + CTA */}
-        <div className="flex flex-1 items-center gap-4 px-6 py-5">
-          <ul className="flex-1 grid grid-cols-2 gap-x-4 gap-y-2">
+        <div className="flex flex-1 flex-col sm:flex-row sm:items-center gap-4 px-6 py-5">
+          <ul className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
             {PLANS.custom.features.map((f) => (
               <li key={f} className="flex items-center gap-1.5 text-xs text-gray-400">
                 <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-purple-900/60">
@@ -388,19 +389,7 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
           <span className={cn('text-sm font-medium', !annual ? 'text-foreground' : 'text-muted-foreground')}>
             Monthly
           </span>
-          <button
-            type="button"
-            onClick={() => setAnnual(!annual)}
-            className={cn(
-              'relative h-6 w-11 rounded-full border-2 transition-colors duration-200',
-              annual ? 'border-primary bg-primary' : 'border-gray-300 bg-gray-200'
-            )}
-          >
-            <span className={cn(
-              'absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200',
-              annual ? 'translate-x-5' : 'translate-x-0.5'
-            )} />
-          </button>
+          <Switch checked={annual} onCheckedChange={setAnnual} />
           <span className={cn('flex items-center gap-1.5 text-sm font-medium', annual ? 'text-foreground' : 'text-muted-foreground')}>
             Annual
             {annual && (

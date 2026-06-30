@@ -3,10 +3,11 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   Mic2, ArrowRight, ArrowLeft, Play, Square, Search,
-  CheckCircle2, MicOff,
+  CheckCircle2, MicOff, Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { toast } from 'sonner'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
 import { cn } from '@/lib/utils'
 import type { ElevenLabsVoice } from '@/types'
@@ -23,6 +24,8 @@ interface DemoVoice {
   style: string
   featured?: boolean
   preview_url?: string
+  /** Present when the voice comes from the shared library (must be added on use). */
+  public_owner_id?: string
 }
 
 function titleCase(s: string): string {
@@ -51,6 +54,7 @@ function mapVoice(v: ElevenLabsVoice): DemoVoice {
     style: titleCase(labels.use_case ?? labels.description ?? 'Conversational'),
     featured: v.category === 'premade',
     preview_url: v.preview_url ?? undefined,
+    public_owner_id: (v as { public_owner_id?: string }).public_owner_id,
   }
 }
 
@@ -238,6 +242,8 @@ export function Step3Voice() {
   const [genderFilter, setGenderFilter] = useState<'All' | 'Male' | 'Female'>('All')
   const [ageFilter, setAgeFilter]       = useState<'All' | 'Young' | 'Middle Aged' | 'Mature'>('All')
   const [voices, setVoices] = useState<DemoVoice[]>(DEMO_VOICES)
+  const [libraryVoices, setLibraryVoices] = useState<DemoVoice[]>([])
+  const [adding, setAdding] = useState(false)
   const [selectedVoice, setSelectedVoice] = useState<DemoVoice | null>(
     voice.voice_id ? DEMO_VOICES.find((v) => v.voice_id === voice.voice_id) ?? null : null
   )
@@ -265,6 +271,22 @@ export function Step3Voice() {
       .catch(() => {})
     return () => { active = false }
   }, [voice.voice_id])
+
+  // Search the full ElevenLabs shared library (thousands of voices) as the
+  // user types, in addition to the workspace voices.
+  useEffect(() => {
+    if (search.trim().length < 2) { setLibraryVoices([]); return }
+    let active = true
+    const t = setTimeout(() => {
+      fetch(`/api/elevenlabs/voices/library?search=${encodeURIComponent(search.trim())}`)
+        .then((r) => (r.ok ? r.json() : { voices: [] }))
+        .then((d: { voices?: ElevenLabsVoice[] }) => {
+          if (active) setLibraryVoices((d.voices ?? []).map(mapVoice))
+        })
+        .catch(() => {})
+    }, 400)
+    return () => { active = false; clearTimeout(t) }
+  }, [search])
 
   useEffect(() => () => {
     if (intervalRef.current) clearInterval(intervalRef.current)
@@ -311,18 +333,59 @@ export function Step3Voice() {
     }, 100)
   }
 
-  const filtered = voices.filter((v) => {
+  const workspaceFiltered = voices.filter((v) => {
     const matchSearch = !search || v.name.toLowerCase().includes(search.toLowerCase()) || v.accent.toLowerCase().includes(search.toLowerCase())
     const matchLang   = langFilter === 'All' || v.language === langFilter
     const matchGender = genderFilter === 'All' || v.gender === genderFilter
     const matchAge    = ageFilter === 'All' || v.age === ageFilter
     return matchSearch && matchLang && matchGender && matchAge
   })
+  // Merge in shared-library matches (already server-filtered by the search term).
+  const seen = new Set(workspaceFiltered.map((v) => v.voice_id))
+  const filtered = [
+    ...workspaceFiltered,
+    ...libraryVoices.filter((v) => {
+      if (seen.has(v.voice_id)) return false
+      const matchGender = genderFilter === 'All' || v.gender === genderFilter
+      return matchGender
+    }),
+  ]
 
-  function handleContinue() {
+  async function handleContinue() {
     if (!selectedVoice) return
+    let voiceId = selectedVoice.voice_id
+
+    // Library voices must be added to the workspace before an agent can use them.
+    if (selectedVoice.public_owner_id) {
+      setAdding(true)
+      try {
+        const res = await fetch('/api/elevenlabs/voices/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            public_owner_id: selectedVoice.public_owner_id,
+            voice_id: selectedVoice.voice_id,
+            name: selectedVoice.name,
+          }),
+        })
+        const data = await res.json()
+        if (res.ok && data.voice_id) {
+          voiceId = data.voice_id
+        } else {
+          toast.error(data.error ?? 'Could not add this voice to your account')
+          setAdding(false)
+          return
+        }
+      } catch {
+        toast.error('Could not add this voice — try another one')
+        setAdding(false)
+        return
+      }
+      setAdding(false)
+    }
+
     setVoice({
-      voice_id: selectedVoice.voice_id,
+      voice_id: voiceId,
       voice_name: selectedVoice.name,
       preview_url: selectedVoice.preview_url ?? '',
     })
@@ -462,11 +525,15 @@ export function Step3Voice() {
         </Button>
         <Button
           onClick={handleContinue}
-          disabled={!selectedVoice}
+          disabled={!selectedVoice || adding}
           className="purple-glow px-6"
           title={!selectedVoice ? 'Please select a voice to continue' : undefined}
         >
-          Continue <ArrowRight className="ml-2 h-4 w-4" />
+          {adding ? (
+            <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Adding voice…</>
+          ) : (
+            <>Continue <ArrowRight className="ml-2 h-4 w-4" /></>
+          )}
         </Button>
       </div>
     </div>

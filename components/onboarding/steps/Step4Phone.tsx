@@ -9,6 +9,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
 import { cn, formatPhoneNumber } from '@/lib/utils'
+import { toast } from 'sonner'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface AvailableNumber {
@@ -58,18 +59,25 @@ export function Step4Phone() {
   function handlePurchase() {
     if (!selectedNumber) return
     startTransition(async () => {
-      const res = await fetch('/api/onboarding/phone', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          number: selectedNumber.number,
-          country,
-          skipped: false,
-        }),
-      })
-      const data = await res.json()
-      if (res.ok && data.number) {
-        setPurchasedNumber({ number: data.number, twilio_sid: data.twilio_sid ?? '' })
+      try {
+        const res = await fetch('/api/onboarding/phone', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            number: selectedNumber.number,
+            country,
+            skipped: false,
+          }),
+        })
+        const data = await res.json()
+        if (res.ok && data.number) {
+          setPurchasedNumber({ number: data.number, twilio_sid: data.twilio_sid ?? '' })
+          toast.success('Number purchased')
+        } else {
+          toast.error(data.error ?? 'Could not purchase this number. Check that Twilio is configured, or pick another number.')
+        }
+      } catch {
+        toast.error('Purchase failed — please try again.')
       }
     })
   }

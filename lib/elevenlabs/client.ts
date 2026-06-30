@@ -490,6 +490,55 @@ export const voices = {
   },
 }
 
+// ─── Shared voice library (community voices — thousands) ──────────────────────
+
+export interface ELSharedVoice {
+  voice_id: string
+  public_owner_id: string
+  name: string
+  category?: string
+  description?: string | null
+  preview_url?: string | null
+  language?: string
+  accent?: string
+  gender?: string
+  age?: string
+  use_case?: string
+  [key: string]: unknown
+}
+
+export const sharedVoices = {
+  list(params?: {
+    page_size?: number
+    search?: string
+    language?: string
+    gender?: string
+    category?: string
+    page?: number
+  }) {
+    const qs = new URLSearchParams()
+    qs.set('page_size', String(Math.min(params?.page_size ?? 100, 100)))
+    if (params?.search) qs.set('search', params.search)
+    if (params?.language) qs.set('language', params.language)
+    if (params?.gender) qs.set('gender', params.gender)
+    if (params?.category) qs.set('category', params.category)
+    if (params?.page) qs.set('page', String(params.page))
+    return request<{ voices: ELSharedVoice[]; has_more?: boolean }>(
+      'GET',
+      `/v1/shared-voices?${qs.toString()}`
+    )
+  },
+
+  /** Add a shared/library voice to the workspace; returns the usable voice_id. */
+  add(publicOwnerId: string, voiceId: string, newName: string) {
+    return request<{ voice_id: string }>(
+      'POST',
+      `/v1/voices/add/${publicOwnerId}/${voiceId}`,
+      { new_name: newName }
+    )
+  },
+}
+
 // ─── Text-to-Speech ──────────────────────────────────────────────────────────
 
 export async function textToSpeech(
