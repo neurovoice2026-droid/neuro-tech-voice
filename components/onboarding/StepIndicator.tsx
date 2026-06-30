@@ -18,7 +18,7 @@ interface StepIndicatorProps {
 
 export function StepIndicator({ currentStep }: StepIndicatorProps) {
   return (
-    <div className="flex items-start justify-center mb-10">
+    <div className="flex items-start justify-center mb-8 sm:mb-10 overflow-x-auto">
       {STEPS.map((step, idx) => {
         const isCompleted = step.num < currentStep
         const isCurrent = step.num === currentStep
@@ -30,7 +30,7 @@ export function StepIndicator({ currentStep }: StepIndicatorProps) {
             {idx > 0 && (
               <div
                 className={cn(
-                  'mt-4 h-px w-10 shrink-0 transition-colors duration-300 sm:w-14',
+                  'mt-4 h-px w-5 shrink-0 transition-colors duration-300 sm:w-14',
                   isCompleted || isCurrent ? 'bg-primary' : 'bg-gray-200'
                 )}
               />

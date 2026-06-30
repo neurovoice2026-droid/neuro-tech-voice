@@ -243,6 +243,7 @@ export function Step3Voice() {
   const [ageFilter, setAgeFilter]       = useState<'All' | 'Young' | 'Middle Aged' | 'Mature'>('All')
   const [voices, setVoices] = useState<DemoVoice[]>(DEMO_VOICES)
   const [libraryVoices, setLibraryVoices] = useState<DemoVoice[]>([])
+  const [libLoading, setLibLoading] = useState(true)
   const [adding, setAdding] = useState(false)
   const [selectedVoice, setSelectedVoice] = useState<DemoVoice | null>(
     voice.voice_id ? DEMO_VOICES.find((v) => v.voice_id === voice.voice_id) ?? null : null
@@ -272,19 +273,25 @@ export function Step3Voice() {
     return () => { active = false }
   }, [voice.voice_id])
 
-  // Search the full ElevenLabs shared library (thousands of voices) as the
-  // user types, in addition to the workspace voices.
+  // Browse the full ElevenLabs shared library (thousands of voices): a popular
+  // page by default, and search results as the user types. This guarantees a
+  // rich list even on a brand-new account with no custom voices.
   useEffect(() => {
-    if (search.trim().length < 2) { setLibraryVoices([]); return }
     let active = true
+    const q = search.trim()
+    const url = q.length >= 2
+      ? `/api/elevenlabs/voices/library?search=${encodeURIComponent(q)}`
+      : '/api/elevenlabs/voices/library'
+    setLibLoading(true)
     const t = setTimeout(() => {
-      fetch(`/api/elevenlabs/voices/library?search=${encodeURIComponent(search.trim())}`)
+      fetch(url)
         .then((r) => (r.ok ? r.json() : { voices: [] }))
         .then((d: { voices?: ElevenLabsVoice[] }) => {
           if (active) setLibraryVoices((d.voices ?? []).map(mapVoice))
         })
         .catch(() => {})
-    }, 400)
+        .finally(() => { if (active) setLibLoading(false) })
+    }, q ? 400 : 0)
     return () => { active = false; clearTimeout(t) }
   }, [search])
 
@@ -346,8 +353,10 @@ export function Step3Voice() {
     ...workspaceFiltered,
     ...libraryVoices.filter((v) => {
       if (seen.has(v.voice_id)) return false
+      const matchLang   = langFilter === 'All' || v.language === langFilter
       const matchGender = genderFilter === 'All' || v.gender === genderFilter
-      return matchGender
+      const matchAge    = ageFilter === 'All' || v.age === ageFilter
+      return matchLang && matchGender && matchAge
     }),
   ]
 
@@ -470,20 +479,30 @@ export function Step3Voice() {
 
       {/* Results count */}
       <p className="text-xs text-muted-foreground">
-        {filtered.length} voice{filtered.length !== 1 ? 's' : ''} found
+        {libLoading && filtered.length === 0
+          ? 'Loading voices…'
+          : `${filtered.length} voice${filtered.length !== 1 ? 's' : ''} found`}
       </p>
 
       {/* Voice grid */}
       {filtered.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-12 text-center">
-          <MicOff className="h-8 w-8 text-muted-foreground/50" />
-          <p className="text-sm text-muted-foreground">No voices match your filters</p>
-          <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setLangFilter('All'); setGenderFilter('All'); setAgeFilter('All') }}>
-            Clear all filters
-          </Button>
-        </div>
+        libLoading ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-[150px] animate-pulse rounded-xl bg-muted" />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-12 text-center">
+            <MicOff className="h-8 w-8 text-muted-foreground/50" />
+            <p className="text-sm text-muted-foreground">No voices match your filters</p>
+            <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setLangFilter('All'); setGenderFilter('All'); setAgeFilter('All') }}>
+              Clear all filters
+            </Button>
+          </div>
+        )
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((v) => (
             <VoiceCard
               key={v.voice_id}
