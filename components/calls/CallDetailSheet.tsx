@@ -286,8 +286,29 @@ export function CallDetailSheet({ callId, onClose, onDeleted, defaultTab = 'over
   const [tab, setTab] = useState(defaultTab)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  // gmail = email-to-owner via Resend (always available); the Google actions
+  // require their integration to be connected.
+  const [connected, setConnected] = useState<Record<string, boolean>>({
+    gmail: true, google_docs: false, google_sheets: false,
+  })
 
   useEffect(() => { setTab(defaultTab) }, [defaultTab, callId])
+
+  useEffect(() => {
+    if (!callId) return
+    let active = true
+    Promise.all(
+      ['google_docs', 'google_sheets'].map((t) =>
+        fetch(`/api/integrations/${t}`)
+          .then((r) => (r.ok ? r.json() : { connected: false }))
+          .then((d) => [t, !!d.connected] as const)
+          .catch(() => [t, false] as const)
+      )
+    ).then((entries) => {
+      if (active) setConnected((prev) => ({ ...prev, ...Object.fromEntries(entries) }))
+    })
+    return () => { active = false }
+  }, [callId])
 
   function copyNumber() {
     if (!call?.caller_number) return
@@ -429,20 +450,20 @@ export function CallDetailSheet({ callId, onClose, onDeleted, defaultTab = 'over
                     <IntegrationAction
                       icon={Table2} iconColor="text-green-600"
                       label="Log to Google Sheets"
-                      description="Add this call to your connected spreadsheet"
-                      buttonLabel="Send" callId={call.id} type="google_sheets" connected={false}
+                      description="Add this call to your call-log spreadsheet"
+                      buttonLabel="Send" callId={call.id} type="google_sheets" connected={connected.google_sheets}
                     />
                     <IntegrationAction
                       icon={FileText} iconColor="text-blue-600"
                       label="Create call report"
                       description="Generate a formatted report in Google Docs"
-                      buttonLabel="Create" callId={call.id} type="google_docs" connected={false}
+                      buttonLabel="Create" callId={call.id} type="google_docs" connected={connected.google_docs}
                     />
                     <IntegrationAction
                       icon={Mail} iconColor="text-red-500"
                       label="Email summary"
                       description="Send call summary to your email"
-                      buttonLabel="Send email" callId={call.id} type="gmail" connected={false}
+                      buttonLabel="Send email" callId={call.id} type="gmail" connected={connected.gmail}
                     />
                   </div>
                 </div>

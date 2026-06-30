@@ -81,7 +81,6 @@ export async function GET(request: Request) {
     try {
       const elParams: Record<string, unknown> = {
         agent_id: agent.elevenlabs_agent_id,
-        page_size: limit,
       }
 
       if (search) elParams.search = search
@@ -89,8 +88,24 @@ export async function GET(request: Request) {
       if (dateTo) elParams.call_start_before_unix = Math.floor(new Date(dateTo).getTime() / 1000)
       if (minDuration > 0) elParams.call_duration_min_secs = minDuration
 
-      const data = await conversations.list(elParams as Parameters<typeof conversations.list>[0])
-      let calls = (data.conversations ?? []).map(mapConversation)
+      // ElevenLabs paginates by cursor. Follow cursors (capped) so page numbers
+      // beyond the first work and totals are accurate, then slice locally.
+      const MAX_FETCH = 500
+      const accumulated: ELConversationListItem[] = []
+      let cursor: string | undefined
+      let hasMoreUpstream = false
+      do {
+        const data = await conversations.list({
+          ...(elParams as Parameters<typeof conversations.list>[0]),
+          page_size: 100,
+          cursor,
+        })
+        accumulated.push(...(data.conversations ?? []))
+        cursor = data.next_cursor
+        if (accumulated.length >= MAX_FETCH && cursor) { hasMoreUpstream = true; break }
+      } while (cursor)
+
+      let calls = accumulated.map(mapConversation)
 
       // Client-side filtering for fields ElevenLabs doesn't filter
       if (status !== 'all') calls = calls.filter((c) => c.status === status)
@@ -122,7 +137,7 @@ export async function GET(request: Request) {
         total,
         page,
         totalPages,
-        hasMore: page < totalPages,
+        hasMore: page < totalPages || hasMoreUpstream,
       })
     } catch (err) {
       console.error('ElevenLabs conversations.list failed, falling back to DB:', err)

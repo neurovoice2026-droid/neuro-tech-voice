@@ -68,7 +68,8 @@ export async function GET(
           })),
           sentiment,
           summary: analysis.transcript_summary ?? null,
-          recording_url: null, // Audio fetched separately
+          // Streamed through our proxy (enforces ownership, hides the API key).
+          recording_url: `/api/calls/${conv.conversation_id}/audio`,
           started_at: startedAt,
           ended_at: endedAt,
           created_at: startedAt,
