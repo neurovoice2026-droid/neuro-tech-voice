@@ -9,8 +9,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
 import { cn } from '@/lib/utils'
+import type { ElevenLabsVoice } from '@/types'
 
-// ─── Demo voice data ───────────────────────────────────────────────────────────
+// ─── Voice shape used by the picker ──────────────────────────────────────────
 interface DemoVoice {
   voice_id: string
   name: string
@@ -21,6 +22,36 @@ interface DemoVoice {
   age: 'Young' | 'Middle Aged' | 'Mature'
   style: string
   featured?: boolean
+  preview_url?: string
+}
+
+function titleCase(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s
+}
+
+// Map a real ElevenLabs voice into the picker shape, deriving display metadata
+// from its labels. This is what makes the selected voice_id a REAL voice id.
+function mapVoice(v: ElevenLabsVoice): DemoVoice {
+  const labels = v.labels ?? {}
+  const gender: 'Male' | 'Female' = (labels.gender ?? '').toLowerCase().includes('female') ? 'Female' : 'Male'
+  const ageRaw = (labels.age ?? '').toLowerCase()
+  const age: DemoVoice['age'] = ageRaw.includes('old') || ageRaw.includes('mature')
+    ? 'Mature'
+    : ageRaw.includes('middle')
+      ? 'Middle Aged'
+      : 'Young'
+  return {
+    voice_id: v.voice_id,
+    name: v.name,
+    language: titleCase(labels.language ?? 'English'),
+    flag: '🎙️',
+    accent: titleCase(labels.accent ?? labels.descriptive ?? 'Neutral'),
+    gender,
+    age,
+    style: titleCase(labels.use_case ?? labels.description ?? 'Conversational'),
+    featured: v.category === 'premade',
+    preview_url: v.preview_url ?? undefined,
+  }
 }
 
 const DEMO_VOICES: DemoVoice[] = [
@@ -206,17 +237,43 @@ export function Step3Voice() {
   const [langFilter, setLangFilter]     = useState('All')
   const [genderFilter, setGenderFilter] = useState<'All' | 'Male' | 'Female'>('All')
   const [ageFilter, setAgeFilter]       = useState<'All' | 'Young' | 'Middle Aged' | 'Mature'>('All')
+  const [voices, setVoices] = useState<DemoVoice[]>(DEMO_VOICES)
   const [selectedVoice, setSelectedVoice] = useState<DemoVoice | null>(
     voice.voice_id ? DEMO_VOICES.find((v) => v.voice_id === voice.voice_id) ?? null : null
   )
   const [playingId, setPlayingId]         = useState<string | null>(null)
   const [playingProgress, setPlayingProgress] = useState(0)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  useEffect(() => () => { if (intervalRef.current) clearInterval(intervalRef.current) }, [])
+  // Load real ElevenLabs voices; fall back to the bundled list only when
+  // ElevenLabs isn't configured (demo mode, where no real agent is created).
+  useEffect(() => {
+    let active = true
+    fetch('/api/elevenlabs/voices')
+      .then((r) => (r.ok ? r.json() : { voices: [] }))
+      .then((d: { voices?: ElevenLabsVoice[] }) => {
+        if (!active) return
+        const mapped = (d.voices ?? []).map(mapVoice)
+        if (mapped.length > 0) {
+          setVoices(mapped)
+          setSelectedVoice((cur) =>
+            cur ?? (voice.voice_id ? mapped.find((v) => v.voice_id === voice.voice_id) ?? null : null)
+          )
+        }
+      })
+      .catch(() => {})
+    return () => { active = false }
+  }, [voice.voice_id])
+
+  useEffect(() => () => {
+    if (intervalRef.current) clearInterval(intervalRef.current)
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null }
+  }, [])
 
   function togglePlay(v: DemoVoice) {
     if (intervalRef.current) clearInterval(intervalRef.current)
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null }
 
     if (playingId === v.voice_id) {
       setPlayingId(null)
@@ -226,6 +283,22 @@ export function Step3Voice() {
 
     setPlayingId(v.voice_id)
     setPlayingProgress(0)
+
+    // Real preview audio when ElevenLabs provides a URL.
+    if (v.preview_url) {
+      const audio = new Audio(v.preview_url)
+      audioRef.current = audio
+      audio.addEventListener('timeupdate', () => {
+        setPlayingProgress(audio.duration ? (audio.currentTime / audio.duration) * 100 : 0)
+      })
+      audio.addEventListener('ended', () => {
+        setPlayingId(null); setPlayingProgress(0); audioRef.current = null
+      })
+      audio.play().catch(() => { setPlayingId(null); setPlayingProgress(0) })
+      return
+    }
+
+    // Fallback progress animation when there's no preview audio.
     let progress = 0
     intervalRef.current = setInterval(() => {
       progress += 2
@@ -238,7 +311,7 @@ export function Step3Voice() {
     }, 100)
   }
 
-  const filtered = DEMO_VOICES.filter((v) => {
+  const filtered = voices.filter((v) => {
     const matchSearch = !search || v.name.toLowerCase().includes(search.toLowerCase()) || v.accent.toLowerCase().includes(search.toLowerCase())
     const matchLang   = langFilter === 'All' || v.language === langFilter
     const matchGender = genderFilter === 'All' || v.gender === genderFilter
@@ -248,7 +321,11 @@ export function Step3Voice() {
 
   function handleContinue() {
     if (!selectedVoice) return
-    setVoice({ voice_id: selectedVoice.voice_id, voice_name: selectedVoice.name, preview_url: '' })
+    setVoice({
+      voice_id: selectedVoice.voice_id,
+      voice_name: selectedVoice.name,
+      preview_url: selectedVoice.preview_url ?? '',
+    })
     setStep(4)
   }
 
@@ -262,7 +339,7 @@ export function Step3Voice() {
         <div>
           <h2 className="text-2xl font-bold text-foreground">Choose your agent&apos;s voice</h2>
           <p className="mt-1 text-muted-foreground">
-            {DEMO_VOICES.length}+ voices across {LANGUAGES.length - 1} languages — preview before selecting
+            {voices.length}+ voices across multiple languages — preview before selecting
           </p>
         </div>
       </div>
