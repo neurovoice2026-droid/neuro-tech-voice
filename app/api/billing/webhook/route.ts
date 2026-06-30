@@ -4,6 +4,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { getStripeClient, planFromPriceId } from '@/lib/stripe/client'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { emitInvoiceForStripePayment } from '@/lib/smartbill/emit'
+import { sendEmail } from '@/lib/email/client'
+import { paymentSuccessEmail, paymentFailedEmail } from '@/lib/email/templates'
 import { PLANS } from '@/types'
 import type { Plan } from '@/types'
 
@@ -57,8 +59,24 @@ export async function POST(request: Request) {
         break
       }
       case 'invoice.paid': {
-        // A subscription payment cleared → emit the SmartBill fiscal invoice.
-        await emitInvoiceForStripePayment(supabase, event.data.object as Stripe.Invoice)
+        // A subscription payment cleared → emit the SmartBill fiscal invoice,
+        // then email the customer a confirmation.
+        const invoice = event.data.object as Stripe.Invoice
+        await emitInvoiceForStripePayment(supabase, invoice)
+        await sendPaymentSuccess(supabase, invoice)
+        break
+      }
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as Stripe.Invoice
+        if (invoice.customer_email) {
+          await sendEmail({
+            to: invoice.customer_email,
+            ...paymentFailedEmail({
+              amount: (invoice.amount_due ?? 0) / 100,
+              currency: invoice.currency ?? undefined,
+            }),
+          })
+        }
         break
       }
       default:
@@ -73,6 +91,45 @@ export async function POST(request: Request) {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+async function sendPaymentSuccess(supabase: SupabaseClient, invoice: Stripe.Invoice) {
+  if (!invoice.customer_email) return
+
+  // Pull the SmartBill invoice we just emitted (if any) for the email.
+  let invoiceNumber: string | null = null
+  let invoiceUrl: string | null = null
+  if (invoice.id) {
+    const { data } = await supabase
+      .from('invoices')
+      .select('smartbill_series, smartbill_number, pdf_url, status')
+      .eq('stripe_invoice_id', invoice.id)
+      .maybeSingle()
+    if (data?.status === 'issued' && data.smartbill_number) {
+      invoiceNumber = `${data.smartbill_series ?? ''}${data.smartbill_number}`
+      invoiceUrl = data.pdf_url ?? null
+    }
+  }
+
+  // The Stripe line item exposes the price under `price` (older) or
+  // `pricing.price_details.price` (newer) — read defensively.
+  const line = invoice.lines?.data?.[0] as unknown as {
+    price?: { id?: string }
+    pricing?: { price_details?: { price?: string } }
+  } | undefined
+  const priceId = line?.price?.id ?? line?.pricing?.price_details?.price
+  const plan = planFromPriceId(priceId)
+
+  await sendEmail({
+    to: invoice.customer_email,
+    ...paymentSuccessEmail({
+      amount: (invoice.amount_paid ?? 0) / 100,
+      currency: invoice.currency ?? 'usd',
+      planName: plan ? PLANS[plan].name : undefined,
+      invoiceNumber,
+      invoiceUrl,
+    }),
+  })
+}
 
 function customerIdOf(subscription: Stripe.Subscription): string {
   return typeof subscription.customer === 'string'

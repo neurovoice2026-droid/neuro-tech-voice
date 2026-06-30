@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getStripeClient, isStripeConfigured } from '@/lib/stripe/client'
 import { agents as elAgents, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { sendEmail } from '@/lib/email/client'
+import { welcomeEmail } from '@/lib/email/templates'
 import { PLANS, stripePriceId } from '@/types'
 import type { Plan, BillingInterval } from '@/types'
 
@@ -81,6 +83,14 @@ export async function POST(request: Request) {
       minutes_limit: PLANS[effectivePlan].minutes_limit,
     })
     .eq('user_id', user.id)
+
+  // Welcome email (best-effort — never blocks onboarding).
+  if (user.email) {
+    void sendEmail({
+      to: user.email,
+      ...welcomeEmail({ name: org.name ?? undefined, agentName: agent?.name }),
+    })
+  }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
