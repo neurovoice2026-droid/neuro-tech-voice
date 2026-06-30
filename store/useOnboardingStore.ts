@@ -69,7 +69,7 @@ const defaults: Omit<OnboardingState, keyof Pick<OnboardingState,
   },
   voice: { voice_id: '', voice_name: '', preview_url: '' },
   phone: { number: '', twilio_sid: '', skipped: false },
-  plan: 'free',
+  plan: 'starter',
 }
 
 export const useOnboardingStore = create<OnboardingState>((set) => ({

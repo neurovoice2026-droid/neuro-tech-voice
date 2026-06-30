@@ -95,7 +95,16 @@ function SummaryRow({ icon: Icon, label, value, muted = false }: {
 // ─── Plan Cards (horizontal stacked) ─────────────────────────────────────────
 interface PlanCardProps { id: Plan; selected: boolean; onSelect: () => void; annual: boolean }
 
-function FreePlanCard({ selected, onSelect }: PlanCardProps) {
+// Annual billing = pay for 10 months (2 months free).
+function priceFor(id: Plan, annual: boolean): number {
+  const monthly = PLANS[id].price_monthly
+  return annual ? Math.round((monthly * 10) / 12) : monthly
+}
+
+// Generic light card used for the self-serve paid tiers (Starter, Business).
+function LightPlanCard({ id, selected, onSelect, annual, icon: Icon }: PlanCardProps & { icon: React.ElementType }) {
+  const p = PLANS[id]
+  const price = priceFor(id, annual)
   return (
     <div
       onClick={onSelect}
@@ -110,16 +119,18 @@ function FreePlanCard({ selected, onSelect }: PlanCardProps) {
         {/* Left identity panel */}
         <div className="flex w-52 flex-shrink-0 flex-col justify-between bg-gray-50 p-5 transition-colors group-hover:bg-gray-100/70">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-200">
-            <Layers className="h-4.5 w-4.5 text-gray-500" />
+            <Icon className="h-4.5 w-4.5 text-gray-500" />
           </div>
           <div>
-            <p className="text-lg font-bold text-foreground">Free</p>
-            <p className="text-xs text-muted-foreground">Try before you buy</p>
+            <p className="text-lg font-bold text-foreground">{p.name}</p>
+            <p className="text-xs text-muted-foreground">{p.minutes_limit.toLocaleString()} minutes/month</p>
           </div>
           <div>
-            <span className="text-3xl font-black text-foreground">$0</span>
+            <span className="text-3xl font-black text-foreground">${price}</span>
             <span className="ml-1 text-xs text-muted-foreground">/ month</span>
-            <p className="text-[11px] text-muted-foreground">Forever free, no card needed</p>
+            <p className="text-[11px] text-muted-foreground">
+              {annual ? 'billed annually · 2 months free' : '14-day free trial'}
+            </p>
           </div>
         </div>
 
@@ -129,7 +140,7 @@ function FreePlanCard({ selected, onSelect }: PlanCardProps) {
         {/* Features + CTA */}
         <div className="flex flex-1 items-center gap-4 px-6 py-5">
           <ul className="flex-1 grid grid-cols-2 gap-x-4 gap-y-2">
-            {PLANS.free.features.map((f) => (
+            {p.features.map((f) => (
               <li key={f} className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Check className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
                 {f}
@@ -141,7 +152,7 @@ function FreePlanCard({ selected, onSelect }: PlanCardProps) {
             onClick={(e) => { e.stopPropagation(); onSelect() }}
             className={cn('shrink-0 px-5', selected && 'border-primary text-primary')}
           >
-            Get started
+            {selected ? 'Selected' : 'Choose'}
           </Button>
         </div>
       </div>
@@ -150,8 +161,8 @@ function FreePlanCard({ selected, onSelect }: PlanCardProps) {
 }
 
 function ProPlanCard({ selected, onSelect, annual }: PlanCardProps) {
-  const monthly = 49
-  const price   = annual ? Math.round(monthly * 0.8) : monthly
+  const monthly = PLANS.pro.price_monthly
+  const price   = priceFor('pro', annual)
 
   return (
     <div
@@ -180,14 +191,14 @@ function ProPlanCard({ selected, onSelect, annual }: PlanCardProps) {
           </div>
           <div>
             <p className="text-lg font-bold text-white">Pro</p>
-            <p className="text-xs text-purple-200">For growing businesses</p>
+            <p className="text-xs text-purple-200">{PLANS.pro.minutes_limit.toLocaleString()} minutes/month</p>
           </div>
           <div>
             <span className="text-3xl font-black text-white">${price}</span>
             <span className="ml-1 text-xs text-purple-200">/ month</span>
             {annual ? (
               <p className="text-[11px] text-purple-300 mt-0.5">
-                <span className="line-through opacity-60">${monthly}/mo</span> · 20% off
+                <span className="line-through opacity-60">${monthly}/mo</span> · 2 months free
               </p>
             ) : (
               <p className="text-[11px] text-purple-300">14-day free trial</p>
@@ -222,7 +233,7 @@ function ProPlanCard({ selected, onSelect, annual }: PlanCardProps) {
   )
 }
 
-function EnterprisePlanCard({ selected, onSelect }: PlanCardProps) {
+function CustomPlanCard({ selected, onSelect }: PlanCardProps) {
   return (
     <div
       onClick={onSelect}
@@ -244,20 +255,20 @@ function EnterprisePlanCard({ selected, onSelect }: PlanCardProps) {
             <Shield className="h-4.5 w-4.5 text-purple-400" />
           </div>
           <div>
-            <p className="text-lg font-bold text-white">Enterprise</p>
+            <p className="text-lg font-bold text-white">Custom</p>
             <p className="text-xs text-gray-400">For large teams & agencies</p>
           </div>
           <div>
-            <span className="text-3xl font-black text-white">$199</span>
+            <span className="text-3xl font-black text-white">${PLANS.custom.price_monthly}+</span>
             <span className="ml-1 text-xs text-gray-400">/ month</span>
-            <p className="text-[11px] text-gray-500">Custom pricing available</p>
+            <p className="text-[11px] text-gray-500">Volume pricing · let&apos;s talk</p>
           </div>
         </div>
 
         {/* Features + CTA */}
         <div className="flex flex-1 items-center gap-4 px-6 py-5">
           <ul className="flex-1 grid grid-cols-2 gap-x-4 gap-y-2">
-            {PLANS.enterprise.features.map((f) => (
+            {PLANS.custom.features.map((f) => (
               <li key={f} className="flex items-center gap-1.5 text-xs text-gray-400">
                 <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-purple-900/60">
                   <Check className="h-2.5 w-2.5 text-purple-400" />
@@ -394,7 +405,7 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
             Annual
             {annual && (
               <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700">
-                SAVE 20%
+                2 MONTHS FREE
               </span>
             )}
           </span>
@@ -402,9 +413,10 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
 
         {/* Plan cards — stacked horizontal */}
         <div className="space-y-4">
-          <FreePlanCard       id="free"       selected={plan === 'free'}       onSelect={() => setPlan('free')}       annual={annual} />
-          <ProPlanCard        id="pro"        selected={plan === 'pro'}        onSelect={() => setPlan('pro')}        annual={annual} />
-          <EnterprisePlanCard id="enterprise" selected={plan === 'enterprise'} onSelect={() => setPlan('enterprise')} annual={annual} />
+          <LightPlanCard  id="starter"  icon={Layers}    selected={plan === 'starter'}  onSelect={() => setPlan('starter')}  annual={annual} />
+          <ProPlanCard    id="pro"                       selected={plan === 'pro'}      onSelect={() => setPlan('pro')}      annual={annual} />
+          <LightPlanCard  id="business" icon={Building2}  selected={plan === 'business'} onSelect={() => setPlan('business')} annual={annual} />
+          <CustomPlanCard id="custom"                     selected={plan === 'custom'}   onSelect={() => setPlan('custom')}   annual={annual} />
         </div>
 
         {/* Summary */}

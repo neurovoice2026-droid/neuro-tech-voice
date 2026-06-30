@@ -53,7 +53,7 @@ export async function POST(request: Request) {
         break
       }
       case 'customer.subscription.deleted': {
-        await downgradeToFree(supabase, event.data.object as Stripe.Subscription)
+        await downgradeToTrial(supabase, event.data.object as Stripe.Subscription)
         break
       }
       case 'invoice.paid': {
@@ -89,7 +89,7 @@ async function applySubscription(
   const orgId = subscription.metadata?.org_id ?? fallbackOrgId
   const priceId = subscription.items.data[0]?.price.id
   const active = subscription.status === 'active' || subscription.status === 'trialing'
-  const plan: Plan = active ? planFromPriceId(priceId) ?? 'free' : 'free'
+  const plan: Plan = active ? planFromPriceId(priceId) ?? 'trial' : 'trial'
 
   await updateOrg(supabase, orgId, customerId, {
     plan,
@@ -99,14 +99,14 @@ async function applySubscription(
   })
 }
 
-async function downgradeToFree(
+async function downgradeToTrial(
   supabase: SupabaseClient,
   subscription: Stripe.Subscription
 ) {
   const customerId = customerIdOf(subscription)
   await updateOrg(supabase, subscription.metadata?.org_id, customerId, {
-    plan: 'free',
-    minutes_limit: PLANS.free.minutes_limit,
+    plan: 'trial',
+    minutes_limit: PLANS.trial.minutes_limit,
     stripe_subscription_id: null,
   })
 }

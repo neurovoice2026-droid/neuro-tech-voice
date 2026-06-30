@@ -125,9 +125,11 @@ export function DashboardShell({ children, org, userEmail }: DashboardShellProps
           variant="outline"
           className={cn(
             'text-xs capitalize w-full justify-center py-1',
-            org.plan === 'enterprise' && 'border-purple-300 bg-purple-50 text-purple-700',
+            org.plan === 'custom' && 'border-purple-300 bg-purple-50 text-purple-700',
+            org.plan === 'business' && 'border-indigo-200 bg-indigo-50 text-indigo-700',
             org.plan === 'pro' && 'border-blue-200 bg-blue-50 text-blue-700',
-            org.plan === 'free' && 'border-gray-200 bg-gray-50 text-gray-500'
+            org.plan === 'starter' && 'border-emerald-200 bg-emerald-50 text-emerald-700',
+            org.plan === 'trial' && 'border-gray-200 bg-gray-50 text-gray-500'
           )}
         >
           {org.plan} plan

@@ -1,6 +1,6 @@
 // ─── Organization ────────────────────────────────────────────────────────────
 
-export type Plan = 'free' | 'pro' | 'enterprise'
+export type Plan = 'trial' | 'starter' | 'pro' | 'business' | 'custom'
 
 export interface Organization {
   id: string
@@ -215,40 +215,68 @@ export type CallStats = {
 
 export interface PlanConfig {
   name: string
+  /** Monthly list price in USD. */
   price_monthly: number
   minutes_limit: number
   max_agents: number
   max_phone_numbers: number
+  /** Per-minute charge once the included minutes are exhausted (USD). */
+  overage_per_min: number
   features: string[]
   stripe_price_id: string
+  /** Custom tier — routes to "contact sales" instead of Stripe checkout. */
+  contact_sales?: boolean
 }
 
+// Pricing model: blended COGS ≈ $0.10/min (ElevenLabs voice + Twilio telephony).
+// Each paid tier is sized so the gross margin stays ≥ 60% even at full usage;
+// overage is billed at the marginal sell price (~$0.25/min) to protect margin.
 export const PLANS: Record<Plan, PlanConfig> = {
-  free: {
-    name: 'Free',
+  trial: {
+    name: 'Trial',
     price_monthly: 0,
-    minutes_limit: 100,
+    minutes_limit: 30,
     max_agents: 1,
     max_phone_numbers: 1,
+    overage_per_min: 0,
     features: [
-      '100 minutes/month',
+      '30 minutes free',
+      '14-day trial',
       '1 AI voice agent',
       '1 phone number',
       'Basic analytics',
-      'Email support',
     ],
     stripe_price_id: '',
   },
+  starter: {
+    name: 'Starter',
+    price_monthly: 49,
+    minutes_limit: 150,
+    max_agents: 1,
+    max_phone_numbers: 1,
+    overage_per_min: 0.25,
+    features: [
+      '150 minutes/month',
+      '1 AI voice agent',
+      '1 phone number',
+      'Overage at $0.25/min',
+      'Basic analytics',
+      'Email support',
+    ],
+    stripe_price_id: process.env.STRIPE_STARTER_PRICE_ID ?? '',
+  },
   pro: {
     name: 'Pro',
-    price_monthly: 49,
-    minutes_limit: 1000,
-    max_agents: 5,
-    max_phone_numbers: 5,
+    price_monthly: 249,
+    minutes_limit: 850,
+    max_agents: 3,
+    max_phone_numbers: 3,
+    overage_per_min: 0.25,
     features: [
-      '1,000 minutes/month',
-      '5 AI voice agents',
-      '5 phone numbers',
+      '850 minutes/month',
+      '3 AI voice agents',
+      '3 phone numbers',
+      'Overage at $0.25/min',
       'Advanced analytics',
       'Call recordings',
       'Google integrations',
@@ -256,23 +284,41 @@ export const PLANS: Record<Plan, PlanConfig> = {
     ],
     stripe_price_id: process.env.STRIPE_PRO_PRICE_ID ?? '',
   },
-  enterprise: {
-    name: 'Enterprise',
-    price_monthly: 199,
-    minutes_limit: 5000,
-    max_agents: 20,
-    max_phone_numbers: 20,
+  business: {
+    name: 'Business',
+    price_monthly: 499,
+    minutes_limit: 1750,
+    max_agents: 10,
+    max_phone_numbers: 5,
+    overage_per_min: 0.22,
     features: [
-      '5,000 minutes/month',
-      '20 AI voice agents',
-      '20 phone numbers',
+      '1,750 minutes/month',
+      '10 AI voice agents',
+      '5 phone numbers',
+      'Overage at $0.22/min',
       'Full analytics suite',
       'Call recordings',
       'All integrations',
-      'Custom prompts',
-      'Dedicated support',
-      'SLA guarantee',
+      'Priority support',
     ],
-    stripe_price_id: process.env.STRIPE_ENTERPRISE_PRICE_ID ?? '',
+    stripe_price_id: process.env.STRIPE_BUSINESS_PRICE_ID ?? '',
+  },
+  custom: {
+    name: 'Custom',
+    price_monthly: 999,
+    minutes_limit: 3500,
+    max_agents: 999,
+    max_phone_numbers: 999,
+    overage_per_min: 0.18,
+    features: [
+      'From 3,500 minutes/month',
+      'Unlimited AI voice agents',
+      'Volume phone numbers',
+      'Overage from $0.18/min',
+      'Custom prompts & SLA',
+      'Dedicated support',
+    ],
+    stripe_price_id: '',
+    contact_sales: true,
   },
 }

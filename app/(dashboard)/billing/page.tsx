@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import {
-  CreditCard, Zap, Shield, Layers, Clock,
+  CreditCard, Zap, Shield, Layers, Clock, Building2,
   AlertTriangle, ArrowUpRight, ExternalLink, Loader2, Settings,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -15,9 +15,18 @@ import { PLANS } from '@/types'
 import type { Plan } from '@/types'
 
 const PLAN_META: Record<Plan, { icon: LucideIcon; iconBg: string; iconColor: string }> = {
-  free: { icon: Layers, iconBg: 'bg-gray-100', iconColor: 'text-gray-500' },
+  trial: { icon: Layers, iconBg: 'bg-gray-100', iconColor: 'text-gray-500' },
+  starter: { icon: Layers, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' },
   pro: { icon: Zap, iconBg: 'bg-purple-100', iconColor: 'text-purple-600' },
-  enterprise: { icon: Shield, iconBg: 'bg-gray-900', iconColor: 'text-purple-400' },
+  business: { icon: Building2, iconBg: 'bg-indigo-100', iconColor: 'text-indigo-600' },
+  custom: { icon: Shield, iconBg: 'bg-gray-900', iconColor: 'text-purple-400' },
+}
+
+// Self-serve upgrade path (custom is sales-led, trial is the entry tier).
+const UPGRADE_NEXT: Partial<Record<Plan, Plan>> = {
+  trial: 'starter',
+  starter: 'pro',
+  pro: 'business',
 }
 
 export default function BillingPage() {
@@ -69,14 +78,14 @@ export default function BillingPage() {
     )
   }
 
-  const currentPlan = (org.plan ?? 'free') as Plan
+  const currentPlan = (org.plan ?? 'trial') as Plan
   const planCfg = PLANS[currentPlan]
   const minutesUsed = org.minutes_used ?? 0
   const minutesLimit = org.minutes_limit ?? planCfg.minutes_limit
   const usagePct = minutesLimit > 0 ? Math.min(100, Math.round((minutesUsed / minutesLimit) * 100)) : 0
   const hasBilling = !!org.stripe_customer_id
   const PlanIcon = PLAN_META[currentPlan].icon
-  const nextTier: Plan | null = currentPlan === 'free' ? 'pro' : currentPlan === 'pro' ? 'enterprise' : null
+  const nextTier: Plan | null = UPGRADE_NEXT[currentPlan] ?? null
   const busy = pending !== null
 
   return (
@@ -100,7 +109,7 @@ export default function BillingPage() {
                 <div className="flex items-center gap-2">
                   <h2 className="text-lg font-bold text-white">{planCfg.name} Plan</h2>
                   <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[11px] font-semibold text-white">
-                    {currentPlan === 'free' ? 'Free' : 'Active'}
+                    {currentPlan === 'trial' ? 'Trial' : 'Active'}
                   </span>
                 </div>
                 <p className="text-sm text-purple-200">
@@ -162,14 +171,14 @@ export default function BillingPage() {
             const meta = PLAN_META[planId]
             const Icon = meta.icon
             const isCurrent = planId === currentPlan
-            const isEnterprise = planId === 'enterprise'
+            const isCustom = planId === 'custom'
 
             return (
               <div
                 key={planId}
                 className={cn(
                   'relative rounded-xl border-2 p-4 transition-all',
-                  isEnterprise ? 'bg-gray-950 border-gray-800' : isCurrent ? 'border-primary bg-purple-50/60' : 'border-border'
+                  isCustom ? 'bg-gray-950 border-gray-800' : isCurrent ? 'border-primary bg-purple-50/60' : 'border-border'
                 )}
               >
                 {isCurrent && (
@@ -182,38 +191,42 @@ export default function BillingPage() {
                     <Icon className={cn('h-4 w-4', meta.iconColor)} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <span className={cn('font-semibold text-sm', isEnterprise ? 'text-white' : 'text-foreground')}>
+                    <span className={cn('font-semibold text-sm', isCustom ? 'text-white' : 'text-foreground')}>
                       {cfg.name}
                     </span>
                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
                       {cfg.features.slice(0, 3).map((f) => (
-                        <span key={f} className={cn('text-[11px]', isEnterprise ? 'text-gray-400' : 'text-muted-foreground')}>
+                        <span key={f} className={cn('text-[11px]', isCustom ? 'text-gray-400' : 'text-muted-foreground')}>
                           · {f}
                         </span>
                       ))}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className={cn('text-lg font-black', isEnterprise ? 'text-white' : 'text-foreground')}>
-                      ${cfg.price_monthly}
-                      <span className={cn('text-xs font-normal ml-0.5', isEnterprise ? 'text-gray-400' : 'text-muted-foreground')}>/mo</span>
+                    <p className={cn('text-lg font-black', isCustom ? 'text-white' : 'text-foreground')}>
+                      ${cfg.price_monthly}{isCustom && '+'}
+                      <span className={cn('text-xs font-normal ml-0.5', isCustom ? 'text-gray-400' : 'text-muted-foreground')}>/mo</span>
                     </p>
-                    {!isCurrent && planId !== 'free' && (
+                    {!isCurrent && isCustom && (
+                      <a
+                        href="mailto:sales@neuro-tech-voice.com?subject=Custom%20plan%20enquiry"
+                        className="mt-1.5 inline-flex h-7 items-center rounded-md border border-gray-600 px-3 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
+                      >
+                        Contact sales
+                      </a>
+                    )}
+                    {!isCurrent && !isCustom && planId !== 'trial' && (
                       <Button
                         size="sm"
-                        variant={isEnterprise ? 'outline' : 'default'}
-                        className={cn(
-                          'mt-1.5 h-7 text-xs',
-                          planId === 'pro' && 'purple-glow',
-                          isEnterprise && 'border-gray-600 text-gray-300 hover:bg-gray-800 hover:text-white'
-                        )}
+                        variant="default"
+                        className={cn('mt-1.5 h-7 text-xs', planId === 'pro' && 'purple-glow')}
                         onClick={() => goToCheckout(planId)}
                         disabled={busy}
                       >
                         {pending === planId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Upgrade'}
                       </Button>
                     )}
-                    {!isCurrent && planId === 'free' && hasBilling && (
+                    {!isCurrent && planId === 'trial' && hasBilling && (
                       <Button size="sm" variant="ghost" className="mt-1.5 h-7 text-xs text-muted-foreground" onClick={openPortal} disabled={busy}>
                         Downgrade
                       </Button>

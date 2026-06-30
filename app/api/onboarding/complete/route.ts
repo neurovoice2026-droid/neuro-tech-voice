@@ -64,8 +64,10 @@ export async function POST(request: Request) {
   // payment/trial actually starts. In demo mode (no Stripe) we grant it directly
   // so the product is usable without a payment provider.
   const planConfig = PLANS[plan]
-  const willCheckout = plan !== 'free' && !!planConfig.stripe_price_id && isStripeConfigured()
-  const effectivePlan: Plan = willCheckout ? 'free' : plan
+  // Self-serve paid tiers go through Stripe checkout; trial and custom (which
+  // have no price id) land on the trial tier until billing/sales takes over.
+  const willCheckout = !!planConfig.stripe_price_id && isStripeConfigured()
+  const effectivePlan: Plan = willCheckout || planConfig.contact_sales ? 'trial' : plan
 
   await supabase
     .from('organizations')
@@ -105,6 +107,10 @@ export async function POST(request: Request) {
         line_items: [{ price: planConfig.stripe_price_id, quantity: 1 }],
         success_url: `${appUrl}/dashboard?welcome=true&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${appUrl}/onboarding`,
+        // Collect billing address + fiscal code (CUI) for SmartBill B2B invoicing.
+        billing_address_collection: 'required',
+        tax_id_collection: { enabled: true },
+        customer_update: { address: 'auto', name: 'auto' },
         metadata: { org_id: org.id },
         subscription_data: {
           trial_period_days: 14,

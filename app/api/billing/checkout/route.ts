@@ -16,7 +16,8 @@ export async function POST(request: Request) {
   }
 
   const { plan } = (await request.json().catch(() => ({}))) as { plan?: Plan }
-  if (plan !== 'pro' && plan !== 'enterprise') {
+  // Custom is sales-led; trial has no checkout. Only the self-serve paid tiers.
+  if (plan !== 'starter' && plan !== 'pro' && plan !== 'business') {
     return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
   }
 
