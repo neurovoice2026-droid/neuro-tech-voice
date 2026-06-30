@@ -27,6 +27,7 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -48,73 +49,71 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ─── Ghost Purple Brand Palette ─────────────────────────────────────────── */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background:            hsl(0 0% 100%);
+  --foreground:            hsl(263 15% 10%);
+  --card:                  hsl(0 0% 100%);
+  --card-foreground:       hsl(263 15% 10%);
+  --popover:               hsl(0 0% 100%);
+  --popover-foreground:    hsl(263 15% 10%);
+  --primary:               hsl(263 70% 58%);
+  --primary-foreground:    hsl(0 0% 100%);
+  --secondary:             hsl(263 30% 96%);
+  --secondary-foreground:  hsl(263 40% 30%);
+  --muted:                 hsl(263 20% 96%);
+  --muted-foreground:      hsl(263 15% 50%);
+  --accent:                hsl(263 30% 94%);
+  --accent-foreground:     hsl(263 50% 35%);
+  --destructive:           hsl(0 84% 60%);
+  --destructive-foreground: hsl(0 0% 100%);
+  --border:                hsl(263 20% 90%);
+  --input:                 hsl(263 20% 90%);
+  --ring:                  hsl(263 70% 58%);
+  --radius:                0.75rem;
+
+  /* Charts — purple scale */
+  --chart-1: hsl(263 70% 58%);
+  --chart-2: hsl(263 55% 68%);
+  --chart-3: hsl(263 40% 75%);
+  --chart-4: hsl(263 30% 82%);
+  --chart-5: hsl(263 20% 90%);
+
+  /* Sidebar */
+  --sidebar:                    hsl(263 20% 98%);
+  --sidebar-foreground:         hsl(263 15% 10%);
+  --sidebar-primary:            hsl(263 70% 58%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent:             hsl(263 30% 94%);
+  --sidebar-accent-foreground:  hsl(263 50% 35%);
+  --sidebar-border:             hsl(263 20% 90%);
+  --sidebar-ring:               hsl(263 70% 58%);
+
+  /* Font */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Light-only design — .dark mirrors :root */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background:            hsl(0 0% 100%);
+  --foreground:            hsl(263 15% 10%);
+  --card:                  hsl(0 0% 100%);
+  --card-foreground:       hsl(263 15% 10%);
+  --popover:               hsl(0 0% 100%);
+  --popover-foreground:    hsl(263 15% 10%);
+  --primary:               hsl(263 70% 58%);
+  --primary-foreground:    hsl(0 0% 100%);
+  --secondary:             hsl(263 30% 96%);
+  --secondary-foreground:  hsl(263 40% 30%);
+  --muted:                 hsl(263 20% 96%);
+  --muted-foreground:      hsl(263 15% 50%);
+  --accent:                hsl(263 30% 94%);
+  --accent-foreground:     hsl(263 50% 35%);
+  --destructive:           hsl(0 84% 60%);
+  --destructive-foreground: hsl(0 0% 100%);
+  --border:                hsl(263 20% 90%);
+  --input:                 hsl(263 20% 90%);
+  --ring:                  hsl(263 70% 58%);
 }
 
 @layer base {
@@ -125,6 +124,55 @@
     @apply bg-background text-foreground;
   }
   html {
-    @apply font-sans;
+    @apply font-sans antialiased;
   }
+}
+
+/* ─── Custom Utility Classes ─────────────────────────────────────────────── */
+
+/* Subtle radial gradient background for auth pages */
+.auth-gradient {
+  background: radial-gradient(ellipse at top left, #ede9fe 0%, #ffffff 50%, #f5f3ff 100%);
+}
+
+/* Frosted glass card effect */
+.glass-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(124, 58, 237, 0.12);
+  box-shadow: 0 4px 24px rgba(124, 58, 237, 0.08);
+}
+
+/* Purple glow hover effect for primary CTA buttons */
+.purple-glow {
+  box-shadow: 0 0 0 0 rgba(124, 58, 237, 0);
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.purple-glow:hover {
+  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.35);
+}
+
+.purple-glow:active {
+  transform: translateY(1px);
+}
+
+/* ─── Onboarding Step Animations ─────────────────────────────────────────── */
+@keyframes step-enter {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes step-enter-back {
+  from { opacity: 0; transform: translateX(-20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.animate-step-enter {
+  animation: step-enter 300ms ease-out forwards;
+}
+
+.animate-step-enter-back {
+  animation: step-enter-back 300ms ease-out forwards;
 }

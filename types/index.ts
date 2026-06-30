@@ -1,0 +1,278 @@
+// ─── Organization ────────────────────────────────────────────────────────────
+
+export type Plan = 'free' | 'pro' | 'enterprise'
+
+export interface Organization {
+  id: string
+  user_id: string
+  name: string | null
+  industry: string | null
+  website: string | null
+  description: string | null
+  logo_url: string | null
+  onboarding_completed: boolean
+  onboarding_step: number
+  plan: Plan
+  stripe_customer_id: string | null
+  stripe_subscription_id: string | null
+  minutes_used: number
+  minutes_limit: number
+  created_at: string
+  updated_at: string
+}
+
+// ─── Agent ───────────────────────────────────────────────────────────────────
+
+export interface WorkingHourSlot {
+  start: string   // "09:00"
+  end: string     // "18:00"
+  enabled: boolean
+}
+
+export type WorkingHours = Record<string, WorkingHourSlot>
+
+export interface BehaviorSettings {
+  allow_interruptions: boolean
+  auto_end_call: boolean
+  auto_end_silence_seconds: number
+  max_call_duration_enabled: boolean
+  max_call_duration_minutes: number
+  record_calls: boolean
+  voicemail_detection: boolean
+}
+
+export interface OutsideHoursConfig {
+  type: 'message' | 'voicemail' | 'always_answer'
+  message: string
+  notify_email: string
+}
+
+export interface HolidayMode {
+  enabled: boolean
+  from: string
+  to: string
+  message: string
+}
+
+export interface Agent {
+  id: string
+  org_id: string
+  elevenlabs_agent_id: string | null
+  name: string
+  voice_id: string | null
+  voice_name: string | null
+  language: string
+  system_prompt: string | null
+  first_message: string | null
+  is_active: boolean
+  working_hours: WorkingHours
+  fallback_message: string
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+// ─── Knowledge ────────────────────────────────────────────────────────────────
+
+export type KnowledgeDocument = {
+  id: string
+  agent_id: string
+  org_id: string
+  elevenlabs_doc_id: string | null
+  name: string
+  type: 'pdf' | 'txt' | 'docx' | 'md' | 'url'
+  url: string | null
+  storage_path: string | null
+  size_bytes: number
+  character_count: number
+  status: 'processing' | 'ready' | 'failed'
+  error_message: string | null
+  created_at: string
+}
+
+// ─── Phone Number ─────────────────────────────────────────────────────────────
+
+export interface PhoneNumber {
+  id: string
+  org_id: string
+  twilio_sid: string | null
+  number: string
+  friendly_name: string | null
+  agent_id: string | null
+  country: string
+  is_active: boolean
+  is_verified: boolean
+  monthly_cost: number
+  created_at: string
+}
+
+// ─── Call ─────────────────────────────────────────────────────────────────────
+
+export interface TranscriptEntry {
+  role: 'agent' | 'user'
+  message: string
+  time_in_call_secs: number
+}
+
+export type CallDirection = 'inbound' | 'outbound'
+export type CallStatus = 'completed' | 'failed' | 'busy' | 'no-answer' | 'in-progress'
+export type Sentiment = 'positive' | 'neutral' | 'negative'
+
+export interface Call {
+  id: string
+  org_id: string
+  agent_id: string | null
+  phone_number_id: string | null
+  twilio_call_sid: string | null
+  elevenlabs_conversation_id: string | null
+  caller_number: string | null
+  direction: CallDirection
+  duration_seconds: number
+  status: CallStatus
+  transcript: TranscriptEntry[]
+  sentiment: Sentiment | null
+  summary: string | null
+  recording_url: string | null
+  started_at: string
+  ended_at: string | null
+  created_at: string
+}
+
+// ─── Integration ──────────────────────────────────────────────────────────────
+
+export type IntegrationType =
+  | 'google_sheets'
+  | 'google_docs'
+  | 'google_calendar'
+  | 'gmail'
+  | 'webhook'
+
+export interface Integration {
+  id: string
+  org_id: string
+  type: IntegrationType
+  config: Record<string, unknown>
+  is_active: boolean
+  connected_at: string
+  created_at: string
+}
+
+// ─── ElevenLabs ───────────────────────────────────────────────────────────────
+
+export interface ElevenLabsVoice {
+  voice_id: string
+  name: string
+  category: string
+  description: string | null
+  preview_url: string | null
+  labels: Record<string, string>
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+
+export interface DashboardMetrics {
+  total_calls: number
+  total_duration_seconds: number
+  avg_duration_seconds: number
+  calls_today: number
+  calls_this_week: number
+  calls_this_month: number
+  sentiment_breakdown: {
+    positive: number
+    neutral: number
+    negative: number
+  }
+  peak_hour: number
+  success_rate: number
+  minutes_used: number
+  minutes_limit: number
+}
+
+// ─── Call Filters ─────────────────────────────────────────────────────────────
+
+export type CallFilters = {
+  search: string
+  status: 'all' | 'completed' | 'failed' | 'busy' | 'no-answer'
+  direction: 'all' | 'inbound' | 'outbound'
+  sentiment: 'all' | 'positive' | 'neutral' | 'negative'
+  dateFrom: string
+  dateTo: string
+  minDuration: number
+  sortBy: 'created_at' | 'duration_seconds' | 'caller_number'
+  sortOrder: 'asc' | 'desc'
+}
+
+export type CallStats = {
+  total_calls: number
+  calls_this_month: number
+  calls_last_month: number
+  month_trend: number
+  avg_duration_seconds: number
+  total_duration_seconds: number
+}
+
+// ─── Plans ────────────────────────────────────────────────────────────────────
+
+export interface PlanConfig {
+  name: string
+  price_monthly: number
+  minutes_limit: number
+  max_agents: number
+  max_phone_numbers: number
+  features: string[]
+  stripe_price_id: string
+}
+
+export const PLANS: Record<Plan, PlanConfig> = {
+  free: {
+    name: 'Free',
+    price_monthly: 0,
+    minutes_limit: 100,
+    max_agents: 1,
+    max_phone_numbers: 1,
+    features: [
+      '100 minutes/month',
+      '1 AI voice agent',
+      '1 phone number',
+      'Basic analytics',
+      'Email support',
+    ],
+    stripe_price_id: '',
+  },
+  pro: {
+    name: 'Pro',
+    price_monthly: 49,
+    minutes_limit: 1000,
+    max_agents: 5,
+    max_phone_numbers: 5,
+    features: [
+      '1,000 minutes/month',
+      '5 AI voice agents',
+      '5 phone numbers',
+      'Advanced analytics',
+      'Call recordings',
+      'Google integrations',
+      'Priority support',
+    ],
+    stripe_price_id: process.env.STRIPE_PRO_PRICE_ID ?? '',
+  },
+  enterprise: {
+    name: 'Enterprise',
+    price_monthly: 199,
+    minutes_limit: 5000,
+    max_agents: 20,
+    max_phone_numbers: 20,
+    features: [
+      '5,000 minutes/month',
+      '20 AI voice agents',
+      '20 phone numbers',
+      'Full analytics suite',
+      'Call recordings',
+      'All integrations',
+      'Custom prompts',
+      'Dedicated support',
+      'SLA guarantee',
+    ],
+    stripe_price_id: process.env.STRIPE_ENTERPRISE_PRICE_ID ?? '',
+  },
+}

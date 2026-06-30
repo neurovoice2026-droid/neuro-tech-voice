@@ -2,7 +2,28 @@
   "permissions": {
     "allow": [
       "Bash(npm install:*)",
-      "Bash(npx:*)"
+      "Bash(npx:*)",
+      "Bash(grep -r \"Neuro Tech Voice\\\\|NTV\\\\|logo\\\\|Logo\" /c/Users/iorda/Desktop/neuro-tech-voice/app --include=*.tsx --include=*.ts)",
+      "Bash(grep -r \"Neuro Tech Voice\\\\|NTV\\\\|logo\\\\|Logo\" /c/Users/iorda/Desktop/neuro-tech-voice/components --include=*.tsx --include=*.ts)",
+      "Bash(xargs grep:*)",
+      "Bash(grep -r \"logo\\\\.png\\\\|/logo\\\\|public/\" /c/Users/iorda/Desktop/neuro-tech-voice --include=*.tsx --include=*.ts)",
+      "Bash(grep -r \"/logo\\\\|public/\" /c/Users/iorda/Desktop/neuro-tech-voice/app --include=*.tsx)",
+      "Bash(grep -r Logo /c/Users/iorda/Desktop/neuro-tech-voice/app --include=*.tsx --include=*.ts)",
+      "Bash(npm run:*)",
+      "WebFetch(domain:elevenlabs.io)",
+      "WebFetch(domain:api.elevenlabs.io)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(git -C \"C:/Users/iorda/Desktop/neuro-tech-voice\" ls-files --cached --others --exclude-standard)",
+      "Bash(npm run *)",
+      "Bash(echo \"BUILD_EXIT=$?\")",
+      "Bash(grep -iE '\\\\.env\\\\.local|\\\\.env$'s)",
+      "Bash(grep -E \"^[A-Z]:\\\\\\\\\\\\\\\\|error\")",
+      "Bash(echo \"BUILD EXIT: $?\")",
+      "Read(//tmp/**)",
+      "Bash(rm -rf .next)",
+      "Bash(rm -f components/agent/tabs/TabSchedule.tsx)",
+      "Bash(rm -rf app/api/agent/schedule)",
+      "PowerShell(git *)"
     ]
   }
 }
