@@ -57,6 +57,11 @@ export async function POST(request: Request) {
       success_url: `${appUrl}/billing?success=true`,
       cancel_url: `${appUrl}/billing?canceled=true`,
       allow_promotion_codes: true,
+      // Collect the buyer's billing address + fiscal code (CUI) so the SmartBill
+      // invoice emitted on payment has the data Romanian B2B invoicing requires.
+      billing_address_collection: 'required',
+      tax_id_collection: { enabled: true },
+      customer_update: { address: 'auto', name: 'auto' },
       metadata: { org_id: org.id },
       subscription_data: { metadata: { org_id: org.id } },
     })

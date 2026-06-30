@@ -3,6 +3,7 @@ import type Stripe from 'stripe'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getStripeClient, planFromPriceId } from '@/lib/stripe/client'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { emitInvoiceForStripePayment } from '@/lib/smartbill/emit'
 import { PLANS } from '@/types'
 import type { Plan } from '@/types'
 
@@ -53,6 +54,11 @@ export async function POST(request: Request) {
       }
       case 'customer.subscription.deleted': {
         await downgradeToFree(supabase, event.data.object as Stripe.Subscription)
+        break
+      }
+      case 'invoice.paid': {
+        // A subscription payment cleared → emit the SmartBill fiscal invoice.
+        await emitInvoiceForStripePayment(supabase, event.data.object as Stripe.Invoice)
         break
       }
       default:
