@@ -364,7 +364,7 @@ export function Step2Agent() {
 
       {/* Template picker dialog */}
       <Dialog open={templateOpen} onOpenChange={setTemplateOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <div className="flex items-center justify-between">
               <DialogTitle className="text-lg font-bold">Choose a template</DialogTitle>

@@ -315,7 +315,7 @@ function CreateWorkflowDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Create Workflow</DialogTitle>
         </DialogHeader>

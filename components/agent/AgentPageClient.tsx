@@ -116,7 +116,7 @@ export function AgentPageClient({ initialAgent, phoneNumbers }: AgentPageClientP
       <div className="flex-1 overflow-auto">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <div className="border-b bg-card px-6">
-            <TabsList variant="line" className="h-11 w-full justify-start gap-0 rounded-none bg-transparent p-0">
+            <TabsList variant="line" className="h-11 w-full justify-start gap-0 rounded-none bg-transparent p-0 overflow-x-auto">
               {[
                 { value: 'general', label: 'General', icon: Settings2 },
                 { value: 'conversation', label: 'Conversation', icon: Bot },

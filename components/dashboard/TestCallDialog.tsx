@@ -27,7 +27,7 @@ export function TestCallDialog({ open, onOpenChange, phoneNumber, agentName }: T
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className="rounded-full bg-purple-100 p-1.5">
