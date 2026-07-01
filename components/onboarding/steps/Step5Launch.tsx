@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import {
   Rocket, Check, Building2, Bot, Mic2, Phone, CreditCard,
-  ArrowLeft, Zap, Shield, Star, Layers,
+  ArrowLeft, Zap, Shield, Star, Layers, Gift,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -291,6 +291,59 @@ function CustomPlanCard({ selected, onSelect }: PlanCardProps) {
   )
 }
 
+// ─── Free Trial card (no card required) ──────────────────────────────────────
+function TrialPlanCard({ selected, onSelect }: { selected: boolean; onSelect: () => void }) {
+  const p = PLANS.trial
+  return (
+    <div
+      onClick={onSelect}
+      className={cn(
+        'group cursor-pointer overflow-hidden rounded-2xl border-2 transition-all duration-200',
+        selected
+          ? 'border-primary bg-purple-50 ring-2 ring-primary ring-offset-2 shadow-lg'
+          : 'border-emerald-300 bg-emerald-50/40 hover:border-emerald-400 hover:shadow-md'
+      )}
+    >
+      <div className="flex items-center justify-center gap-1.5 bg-emerald-500/10 py-1.5 text-[11px] font-bold uppercase tracking-widest text-emerald-700">
+        <Star className="h-3 w-3 fill-current" /> Best to start · no card required
+      </div>
+      <div className="flex flex-col sm:flex-row sm:items-stretch">
+        <div className="flex w-full sm:w-52 sm:flex-shrink-0 flex-col justify-between p-5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100">
+            <Gift className="h-4.5 w-4.5 text-emerald-600" />
+          </div>
+          <div>
+            <p className="text-lg font-bold text-foreground">Free Trial</p>
+            <p className="text-xs text-muted-foreground">Set everything up, no payment</p>
+          </div>
+          <div>
+            <span className="text-3xl font-black text-foreground">$0</span>
+            <p className="text-[11px] text-muted-foreground">{p.minutes_limit} minutes · 14 days</p>
+          </div>
+        </div>
+        <div className="hidden sm:block w-px flex-shrink-0 bg-emerald-100" />
+        <div className="flex flex-1 flex-col sm:flex-row sm:items-center gap-4 px-6 py-5">
+          <ul className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+            {p.features.map((f) => (
+              <li key={f} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Check className="h-3.5 w-3.5 flex-shrink-0 text-emerald-500" />
+                {f}
+              </li>
+            ))}
+          </ul>
+          <Button
+            variant={selected ? 'default' : 'outline'}
+            onClick={(e) => { e.stopPropagation(); onSelect() }}
+            className={cn('shrink-0 px-5', selected ? 'purple-glow' : 'border-emerald-400 text-emerald-700 hover:bg-emerald-50')}
+          >
+            {selected ? 'Selected' : 'Start free'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Success screen ───────────────────────────────────────────────────────────
 function SuccessScreen({ agentName }: { agentName: string }) {
   return (
@@ -402,6 +455,7 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
 
         {/* Plan cards — stacked horizontal */}
         <div className="space-y-4">
+          <TrialPlanCard selected={plan === 'trial'} onSelect={() => setPlan('trial')} />
           <LightPlanCard  id="starter"  icon={Layers}    selected={plan === 'starter'}  onSelect={() => setPlan('starter')}  annual={annual} />
           <ProPlanCard    id="pro"                       selected={plan === 'pro'}      onSelect={() => setPlan('pro')}      annual={annual} />
           <LightPlanCard  id="business" icon={Building2}  selected={plan === 'business'} onSelect={() => setPlan('business')} annual={annual} />

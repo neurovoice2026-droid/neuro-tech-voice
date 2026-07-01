@@ -74,11 +74,14 @@ export async function POST(request: Request) {
   const willCheckout = !!priceId && isStripeConfigured()
   const effectivePlan: Plan = willCheckout || planConfig.contact_sales ? 'trial' : plan
 
+  // Only mark onboarding complete now if we're NOT sending the user to Stripe.
+  // For paid checkout it's completed on payment success (billing webhook), so a
+  // cancelled checkout returns to onboarding instead of dumping them in the app.
   await supabase
     .from('organizations')
     .update({
-      onboarding_completed: true,
-      onboarding_step: 5,
+      onboarding_completed: !willCheckout,
+      onboarding_step: 6,
       plan: effectivePlan,
       minutes_limit: PLANS[effectivePlan].minutes_limit,
     })
@@ -133,8 +136,12 @@ export async function POST(request: Request) {
 
       return NextResponse.json({ success: true, checkout_url: session.url })
     } catch (err) {
-      // Stripe failed — fall through to the dashboard on the free tier.
+      // Stripe failed — grant the trial so the user isn't stuck, then continue.
       console.error('Stripe error:', err)
+      await supabase
+        .from('organizations')
+        .update({ onboarding_completed: true, plan: 'trial', minutes_limit: PLANS.trial.minutes_limit })
+        .eq('user_id', user.id)
     }
   }
 

@@ -153,6 +153,8 @@ async function applySubscription(
     minutes_limit: PLANS[plan].minutes_limit,
     stripe_customer_id: customerId,
     stripe_subscription_id: subscription.id,
+    // Payment/trial started → the paid onboarding path is now complete.
+    ...(active ? { onboarding_completed: true } : {}),
   })
 }
 
