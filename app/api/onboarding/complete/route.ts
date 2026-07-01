@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getStripeClient, isStripeConfigured } from '@/lib/stripe/client'
 import { agents as elAgents, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { linkNumbersToAgent } from '@/lib/phone/link'
 import { sendEmail } from '@/lib/email/client'
 import { welcomeEmail } from '@/lib/email/templates'
 import { PLANS, stripePriceId } from '@/types'
@@ -99,6 +100,11 @@ export async function POST(request: Request) {
       .from('agents')
       .update({ elevenlabs_agent_id: elevenLabsAgentId, is_active: !!elevenLabsAgentId })
       .eq('id', agentId)
+
+    // Link the org's phone number(s) to the new agent so inbound calls route to it.
+    if (elevenLabsAgentId) {
+      await linkNumbersToAgent(supabase, org.id, agentId, elevenLabsAgentId)
+    }
   }
 
   // Mark onboarding complete. For a paid plan with Stripe configured we do NOT

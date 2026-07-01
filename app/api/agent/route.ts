@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { agents as elAgents, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { linkNumbersToAgent } from '@/lib/phone/link'
 
 export async function GET() {
   const supabase = await createClient()
@@ -116,6 +117,12 @@ export async function PATCH(request: Request) {
     } catch (e) {
       console.error('ElevenLabs agent create on patch failed:', e)
     }
+  }
+
+  // Ensure the org's phone number(s) route to this agent in ElevenLabs
+  // (idempotent — fixes numbers bought during onboarding before the agent existed).
+  if (elConfigured() && agent.elevenlabs_agent_id) {
+    await linkNumbersToAgent(supabase, org.id, agent.id, agent.elevenlabs_agent_id)
   }
 
   // Sync to ElevenLabs if agent has elevenlabs_agent_id and relevant fields changed
