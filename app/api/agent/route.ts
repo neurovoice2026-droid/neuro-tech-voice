@@ -142,7 +142,7 @@ export async function PATCH(request: Request) {
             }),
           },
           ...(updates.voice_id !== undefined && {
-            tts: { voice_id: updates.voice_id as string },
+            tts: { voice_id: updates.voice_id as string, model_id: 'eleven_turbo_v2_5' },
           }),
         },
       })

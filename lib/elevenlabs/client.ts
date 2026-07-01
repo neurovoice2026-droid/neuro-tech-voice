@@ -136,7 +136,7 @@ export interface CreateAgentParams {
       first_message?: string
       language?: string
     }
-    tts?: { voice_id: string }
+    tts?: { voice_id?: string; model_id?: string }
   }
   platform_settings?: Record<string, unknown>
 }
@@ -148,7 +148,7 @@ export interface UpdateAgentParams {
       first_message?: string
       language?: string
     }
-    tts?: { voice_id: string }
+    tts?: { voice_id?: string; model_id?: string }
   }
   name?: string
   platform_settings?: Record<string, unknown>

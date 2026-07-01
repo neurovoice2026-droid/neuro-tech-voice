@@ -8,15 +8,22 @@ export interface AgentInput {
   voice_id?: string | null
 }
 
+// Multilingual TTS model. ElevenLabs requires turbo/flash v2_5 for non-English
+// agents, and it works for English too — so we always use it.
+const TTS_MODEL = 'eleven_turbo_v2_5'
+
+function msg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}
+
 /**
- * Creates an ElevenLabs conversational agent. If creating with the chosen voice
- * fails (the usual cause of a silent failure — e.g. a library voice not usable
- * for the account), it retries with the default voice so the agent still gets
- * created and can take calls. Returns the agent id (or null) + any voice error.
+ * Creates an ElevenLabs conversational agent with the multilingual TTS model.
+ * If creating with the chosen voice fails, retries without the voice so the
+ * agent is still created and can take calls.
  */
 export async function createAgentWithFallback(
   params: AgentInput
-): Promise<{ agent_id: string | null; voiceError?: string }> {
+): Promise<{ agent_id: string | null; voiceError?: string; error?: string }> {
   const base = {
     agent: {
       prompt: { prompt: params.system_prompt ?? 'You are a helpful assistant.' },
@@ -30,17 +37,20 @@ export async function createAgentWithFallback(
       name: params.name,
       conversation_config: {
         ...base,
-        ...(params.voice_id ? { tts: { voice_id: params.voice_id } } : {}),
+        tts: { model_id: TTS_MODEL, ...(params.voice_id ? { voice_id: params.voice_id } : {}) },
       },
     })
     return { agent_id: created.agent_id ?? null }
   } catch (e1) {
     try {
-      const created = await elAgents.create({ name: params.name, conversation_config: base })
-      return { agent_id: created.agent_id ?? null, voiceError: e1 instanceof Error ? e1.message : String(e1) }
+      const created = await elAgents.create({
+        name: params.name,
+        conversation_config: { ...base, tts: { model_id: TTS_MODEL } },
+      })
+      return { agent_id: created.agent_id ?? null, voiceError: msg(e1) }
     } catch (e2) {
       console.error('ElevenLabs agent creation failed (with and without voice):', e2)
-      return { agent_id: null }
+      return { agent_id: null, error: msg(e2) }
     }
   }
 }

@@ -34,7 +34,7 @@ export async function PATCH(request: Request) {
   if (elConfigured() && agent.elevenlabs_agent_id) {
     try {
       await elAgents.update(agent.elevenlabs_agent_id, {
-        conversation_config: { tts: { voice_id } },
+        conversation_config: { tts: { voice_id, model_id: 'eleven_turbo_v2_5' } },
       })
     } catch {
       // Non-fatal

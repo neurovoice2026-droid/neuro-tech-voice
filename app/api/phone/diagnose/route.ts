@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { agents as elAgents, phoneNumbers as elPhone, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { phoneNumbers as elPhone, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { createAgentWithFallback } from '@/lib/elevenlabs/create-agent'
 
 // Diagnostic + repair endpoint for phone routing. Open in the browser while
 // logged in: it reports the DB + ElevenLabs state and tries to (re)link each
@@ -59,33 +60,15 @@ export async function GET() {
 
   // ── Step 1: create the ElevenLabs agent if it's missing ──────────────────
   if (elConfigured() && agent && !elAgentId) {
-    const base = {
-      agent: {
-        prompt: { prompt: agent.system_prompt ?? `You are a helpful assistant.` },
-        first_message: agent.first_message ?? 'Hello! How can I help you today?',
-        language: agent.language ?? 'en',
-      },
-    }
-    try {
-      const created = await elAgents.create({
-        name: agent.name,
-        conversation_config: {
-          ...base,
-          ...(agent.voice_id ? { tts: { voice_id: agent.voice_id as string } } : {}),
-        },
-      })
-      elAgentId = created.agent_id ?? null
-      repair.push({ step: 'create_agent', ok: true, with_voice: !!agent.voice_id })
-    } catch (e1) {
-      // The voice is the usual culprit — retry with the default voice.
-      try {
-        const created = await elAgents.create({ name: agent.name, conversation_config: base })
-        elAgentId = created.agent_id ?? null
-        repair.push({ step: 'create_agent', ok: true, with_voice: false, voice_error: e1 instanceof Error ? e1.message : String(e1) })
-      } catch (e2) {
-        repair.push({ step: 'create_agent', ok: false, error: e2 instanceof Error ? e2.message : String(e2) })
-      }
-    }
+    const result = await createAgentWithFallback({
+      name: agent.name,
+      system_prompt: agent.system_prompt,
+      first_message: agent.first_message,
+      language: agent.language,
+      voice_id: agent.voice_id,
+    })
+    elAgentId = result.agent_id
+    repair.push({ step: 'create_agent', ok: !!elAgentId, voice_error: result.voiceError, error: result.error })
     if (elAgentId) {
       await supabase.from('agents').update({ elevenlabs_agent_id: elAgentId, is_active: true }).eq('id', agent.id)
     }
