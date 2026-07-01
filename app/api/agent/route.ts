@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { agents as elAgents, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { createAgentWithFallback } from '@/lib/elevenlabs/create-agent'
 import { linkNumbersToAgent } from '@/lib/phone/link'
 
 export async function GET() {
@@ -95,27 +96,19 @@ export async function PATCH(request: Request) {
   // Self-heal: if this agent has no ElevenLabs agent yet, create one now so
   // calls/test-calls work (covers accounts from the pre-fix onboarding).
   if (elConfigured() && !agent.elevenlabs_agent_id && agent.name) {
-    try {
-      const elAgent = await elAgents.create({
-        name: agent.name,
-        conversation_config: {
-          agent: {
-            prompt: { prompt: agent.system_prompt ?? 'You are a helpful assistant.' },
-            first_message: agent.first_message ?? 'Hello! How can I help you today?',
-            language: agent.language ?? 'en',
-          },
-          ...(agent.voice_id ? { tts: { voice_id: agent.voice_id } } : {}),
-        },
-      })
-      if (elAgent.agent_id) {
-        await supabase
-          .from('agents')
-          .update({ elevenlabs_agent_id: elAgent.agent_id, is_active: true })
-          .eq('id', agent.id)
-        agent.elevenlabs_agent_id = elAgent.agent_id
-      }
-    } catch (e) {
-      console.error('ElevenLabs agent create on patch failed:', e)
+    const { agent_id } = await createAgentWithFallback({
+      name: agent.name,
+      system_prompt: agent.system_prompt,
+      first_message: agent.first_message,
+      language: agent.language,
+      voice_id: agent.voice_id,
+    })
+    if (agent_id) {
+      await supabase
+        .from('agents')
+        .update({ elevenlabs_agent_id: agent_id, is_active: true })
+        .eq('id', agent.id)
+      agent.elevenlabs_agent_id = agent_id
     }
   }
 

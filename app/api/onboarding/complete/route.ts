@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getStripeClient, isStripeConfigured } from '@/lib/stripe/client'
-import { agents as elAgents, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { createAgentWithFallback } from '@/lib/elevenlabs/create-agent'
 import { linkNumbersToAgent } from '@/lib/phone/link'
 import { sendEmail } from '@/lib/email/client'
 import { welcomeEmail } from '@/lib/email/templates'
@@ -76,25 +77,13 @@ export async function POST(request: Request) {
 
   // ── Create the ElevenLabs conversational agent ───────────────────────────
   if (agentId && elConfigured()) {
-    let elevenLabsAgentId: string | null = null
-    try {
-      const elAgent = await elAgents.create({
-        name: agentData.name,
-        conversation_config: {
-          agent: {
-            prompt: {
-              prompt: agentData.system_prompt ?? `You are a helpful assistant for ${body.company?.name ?? org.name ?? 'our company'}.`,
-            },
-            first_message: agentData.first_message,
-            language: agentData.language,
-          },
-          ...(agentData.voice_id ? { tts: { voice_id: agentData.voice_id } } : {}),
-        },
-      })
-      elevenLabsAgentId = elAgent.agent_id ?? null
-    } catch (err) {
-      console.error('ElevenLabs agent creation failed:', err)
-    }
+    const { agent_id: elevenLabsAgentId } = await createAgentWithFallback({
+      name: agentData.name,
+      system_prompt: agentData.system_prompt ?? `You are a helpful assistant for ${body.company?.name ?? org.name ?? 'our company'}.`,
+      first_message: agentData.first_message,
+      language: agentData.language,
+      voice_id: agentData.voice_id,
+    })
 
     await supabase
       .from('agents')
