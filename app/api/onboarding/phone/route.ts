@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getTwilioClient } from '@/lib/twilio/client'
 import { phoneNumbers, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { checkNumberAllowance } from '@/lib/phone/limits'
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -27,6 +28,12 @@ export async function POST(request: Request) {
 
   if (body.skipped) {
     return NextResponse.json({ success: true, skipped: true })
+  }
+
+  // Numbers are included in paid plans only — a trial user must pick a plan first.
+  const allowance = await checkNumberAllowance(supabase, org.id)
+  if (!allowance.allowed) {
+    return NextResponse.json({ error: allowance.error }, { status: allowance.status })
   }
 
   const { number, country } = body

@@ -136,7 +136,7 @@ export function Step4Phone() {
                 </Badge>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                Get a dedicated phone number instantly. Starting at $1.15/month.
+                A dedicated number is <strong>included with every paid plan</strong>. Pick a plan on the next step, then add your number — here or from the dashboard.
               </p>
             </div>
           </div>
