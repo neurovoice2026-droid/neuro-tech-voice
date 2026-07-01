@@ -74,20 +74,24 @@ export async function GET() {
     }
   }
 
-  // ── Step 2: link/import each number to the agent ─────────────────────────
+  // ── Step 2: link each number to the agent ────────────────────────────────
   if (elConfigured() && agent && elAgentId) {
-    const known = new Set(
-      ((report.elevenlabs_phone_numbers as { phone_number_id: string }[] | undefined) ?? []).map((p) => p.phone_number_id)
-    )
     for (const n of numbers ?? []) {
-      try {
-        // Assign if the number is present in this ElevenLabs account.
-        if (n.elevenlabs_phone_number_id && known.has(n.elevenlabs_phone_number_id as string)) {
+      // 1) The number already has an ElevenLabs id → just assign the agent.
+      if (n.elevenlabs_phone_number_id) {
+        try {
           await elPhone.update(n.elevenlabs_phone_number_id as string, { agent_id: elAgentId })
           await supabase.from('phone_numbers').update({ agent_id: agent.id }).eq('id', n.id)
           repair.push({ number: n.number, action: 'assigned_agent', ok: true })
-        } else if (n.twilio_sid && !String(n.twilio_sid).startsWith('mock')) {
-          // Not in this account (or import was stale) → (re)import fresh.
+          continue
+        } catch (e) {
+          repair.push({ number: n.number, action: 'assign_failed', ok: false, error: e instanceof Error ? e.message : String(e) })
+          // fall through to import attempt only if it's a "not found"
+        }
+      }
+      // 2) No id (or stale) → import from Twilio.
+      if (n.twilio_sid && !String(n.twilio_sid).startsWith('mock')) {
+        try {
           const imported = await elPhone.create({
             phone_number: n.number as string,
             label: `${org.id}-${n.number}`,
@@ -104,12 +108,10 @@ export async function GET() {
             .from('phone_numbers')
             .update({ elevenlabs_phone_number_id: imported.phone_number_id, agent_id: agent.id })
             .eq('id', n.id)
-          repair.push({ number: n.number, action: 'reimported_and_assigned', ok: true, phone_number_id: imported.phone_number_id })
-        } else {
-          repair.push({ number: n.number, action: 'skipped', ok: false, reason: 'mock/no twilio_sid' })
+          repair.push({ number: n.number, action: 'imported_and_assigned', ok: true, phone_number_id: imported.phone_number_id })
+        } catch (e) {
+          repair.push({ number: n.number, action: 'import_error', ok: false, error: e instanceof Error ? e.message : String(e) })
         }
-      } catch (e) {
-        repair.push({ number: n.number, action: 'error', ok: false, error: e instanceof Error ? e.message : String(e) })
       }
     }
   } else if (!elAgentId) {
