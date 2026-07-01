@@ -91,6 +91,33 @@ export async function PATCH(request: Request) {
     agent = data
   }
 
+  // Self-heal: if this agent has no ElevenLabs agent yet, create one now so
+  // calls/test-calls work (covers accounts from the pre-fix onboarding).
+  if (elConfigured() && !agent.elevenlabs_agent_id && agent.name) {
+    try {
+      const elAgent = await elAgents.create({
+        name: agent.name,
+        conversation_config: {
+          agent: {
+            prompt: { prompt: agent.system_prompt ?? 'You are a helpful assistant.' },
+            first_message: agent.first_message ?? 'Hello! How can I help you today?',
+            language: agent.language ?? 'en',
+          },
+          ...(agent.voice_id ? { tts: { voice_id: agent.voice_id } } : {}),
+        },
+      })
+      if (elAgent.agent_id) {
+        await supabase
+          .from('agents')
+          .update({ elevenlabs_agent_id: elAgent.agent_id, is_active: true })
+          .eq('id', agent.id)
+        agent.elevenlabs_agent_id = elAgent.agent_id
+      }
+    } catch (e) {
+      console.error('ElevenLabs agent create on patch failed:', e)
+    }
+  }
+
   // Sync to ElevenLabs if agent has elevenlabs_agent_id and relevant fields changed
   const elId = agent.elevenlabs_agent_id
   const needsSync = elConfigured() && elId && (

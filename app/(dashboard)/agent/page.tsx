@@ -10,17 +10,18 @@ export default async function AgentPage() {
 
   const { data: org } = await supabase
     .from('organizations')
-    .select('id')
+    .select('id, name')
     .eq('user_id', user.id)
     .single()
 
   if (!org) return null
 
-  const [{ data: agent }, { data: phoneNumbers }] = await Promise.all([
+  const [{ data: existingAgent }, { data: phoneNumbers }] = await Promise.all([
     supabase
       .from('agents')
       .select('*')
       .eq('org_id', org.id)
+      .limit(1)
       .maybeSingle(),
     supabase
       .from('phone_numbers')
@@ -28,6 +29,17 @@ export default async function AgentPage() {
       .eq('org_id', org.id)
       .order('created_at', { ascending: false }),
   ])
+
+  // Ensure the org always has an agent to edit (older accounts may lack one).
+  let agent = existingAgent
+  if (!agent) {
+    const { data: created } = await supabase
+      .from('agents')
+      .insert({ org_id: org.id, name: org.name ? `${org.name} Agent` : 'My Agent' })
+      .select('*')
+      .single()
+    agent = created
+  }
 
   return (
     <AgentPageClient
