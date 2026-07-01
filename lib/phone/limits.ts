@@ -7,9 +7,9 @@ export type Allowance =
   | { allowed: false; error: string; status: number }
 
 /**
- * Enforces the "numbers are included in the plan" model:
- * - trial/free users must upgrade before buying a real (paid) number,
- * - paid users can hold up to their plan's included number count.
+ * Enforces the "numbers are included in the plan" model. Every tier — including
+ * the free trial — can hold up to its plan's included number count (trial = 1).
+ * Buying beyond the limit requires upgrading. Custom has no hard cap.
  */
 export async function checkNumberAllowance(
   supabase: SupabaseClient,
@@ -23,11 +23,7 @@ export async function checkNumberAllowance(
 
   const plan = (org?.plan ?? 'trial') as Plan
 
-  if (plan === 'trial' || plan === 'custom') {
-    return plan === 'trial'
-      ? { allowed: false, status: 402, error: 'Upgrade to a paid plan to add a phone number.' }
-      : { allowed: true } // custom is negotiated — no hard cap
-  }
+  if (plan === 'custom') return { allowed: true } // negotiated — no hard cap
 
   const { count } = await supabase
     .from('phone_numbers')

@@ -136,7 +136,7 @@ export function Step4Phone() {
                 </Badge>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                A dedicated number is <strong>included with every paid plan</strong>. Pick a plan on the next step, then add your number — here or from the dashboard.
+                Get a dedicated number so your agent can receive calls — <strong>included in your plan</strong>.
               </p>
             </div>
           </div>
