@@ -10,7 +10,7 @@ export async function GET() {
 
   const { data: org } = await supabase
     .from('organizations')
-    .select('id')
+    .select('id, name')
     .eq('user_id', user.id)
     .single()
 
@@ -20,9 +20,21 @@ export async function GET() {
     .from('agents')
     .select('*')
     .eq('org_id', org.id)
-    .single()
+    .limit(1)
+    .maybeSingle()
 
-  return NextResponse.json(agent ?? null)
+  // Safety net: accounts created before the onboarding-persistence fix may not
+  // have an agent row yet. Auto-create a default one so the page always works.
+  if (!agent) {
+    const { data: created } = await supabase
+      .from('agents')
+      .insert({ org_id: org.id, name: org.name ? `${org.name} Agent` : 'My Agent' })
+      .select('*')
+      .single()
+    return NextResponse.json(created ?? null)
+  }
+
+  return NextResponse.json(agent)
 }
 
 export async function PATCH(request: Request) {
@@ -51,14 +63,33 @@ export async function PATCH(request: Request) {
     if (key in body) updates[key] = body[key]
   }
 
-  const { data: agent, error } = await supabase
+  // Find-or-create: update the org's agent, or create one if none exists yet.
+  const { data: existing } = await supabase
     .from('agents')
-    .update(updates)
+    .select('id')
     .eq('org_id', org.id)
-    .select()
-    .single()
+    .limit(1)
+    .maybeSingle()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  let agent
+  if (existing) {
+    const { data, error } = await supabase
+      .from('agents')
+      .update(updates)
+      .eq('id', existing.id)
+      .select()
+      .single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    agent = data
+  } else {
+    const { data, error } = await supabase
+      .from('agents')
+      .insert({ org_id: org.id, name: (updates.name as string) || 'My Agent', ...updates })
+      .select()
+      .single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    agent = data
+  }
 
   // Sync to ElevenLabs if agent has elevenlabs_agent_id and relevant fields changed
   const elId = agent.elevenlabs_agent_id

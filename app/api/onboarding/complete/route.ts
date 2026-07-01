@@ -21,45 +21,84 @@ export async function POST(request: Request) {
 
   if (!org) return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
 
-  const { plan, annual } = (await request.json()) as { plan: Plan; annual?: boolean }
+  const body = (await request.json()) as {
+    plan: Plan
+    annual?: boolean
+    company?: { name?: string; industry?: string; website?: string; description?: string }
+    agent?: { name?: string; language?: string; system_prompt?: string; first_message?: string }
+    voice?: { voice_id?: string; voice_name?: string }
+  }
+  const { plan, annual } = body
   const interval: BillingInterval = annual ? 'year' : 'month'
 
-  // Get agent — non-fatal in demo mode; ElevenLabs setup is skipped if missing
-  const { data: agent } = await supabase
+  // ── Persist the company details entered during onboarding ────────────────
+  if (body.company) {
+    await supabase
+      .from('organizations')
+      .update({
+        name:        body.company.name ?? org.name,
+        industry:    body.company.industry ?? org.industry,
+        website:     body.company.website ?? org.website,
+        description: body.company.description ?? org.description,
+      })
+      .eq('id', org.id)
+  }
+
+  // ── Upsert the agent row with the full onboarding config ─────────────────
+  const agentData = {
+    name:          body.agent?.name || 'My Agent',
+    language:      body.agent?.language || 'en',
+    system_prompt: body.agent?.system_prompt || null,
+    first_message: body.agent?.first_message || 'Hello! How can I help you today?',
+    voice_id:      body.voice?.voice_id || null,
+    voice_name:    body.voice?.voice_name || null,
+  }
+
+  const { data: existingAgent } = await supabase
     .from('agents')
-    .select('*')
+    .select('id')
     .eq('org_id', org.id)
+    .limit(1)
     .maybeSingle()
 
-  if (agent) {
-    // ── Create ElevenLabs conversational agent ─────────────────────────────
-    let elevenLabsAgentId: string | null = null
+  let agentId: string | null = existingAgent?.id ?? null
+  if (existingAgent) {
+    await supabase.from('agents').update(agentData).eq('id', existingAgent.id)
+  } else {
+    const { data: newAgent } = await supabase
+      .from('agents')
+      .insert({ org_id: org.id, ...agentData })
+      .select('id')
+      .single()
+    agentId = newAgent?.id ?? null
+  }
 
-    if (elConfigured()) {
-      try {
-        const elAgent = await elAgents.create({
-          name: agent.name,
-          conversation_config: {
-            agent: {
-              prompt: {
-                prompt: agent.system_prompt ?? `You are a helpful assistant for ${org.name ?? 'our company'}.`,
-              },
-              first_message: agent.first_message ?? 'Hello! How can I help you today?',
-              language: agent.language ?? 'en',
+  // ── Create the ElevenLabs conversational agent ───────────────────────────
+  if (agentId && elConfigured()) {
+    let elevenLabsAgentId: string | null = null
+    try {
+      const elAgent = await elAgents.create({
+        name: agentData.name,
+        conversation_config: {
+          agent: {
+            prompt: {
+              prompt: agentData.system_prompt ?? `You are a helpful assistant for ${body.company?.name ?? org.name ?? 'our company'}.`,
             },
-            tts: { voice_id: agent.voice_id ?? '' },
+            first_message: agentData.first_message,
+            language: agentData.language,
           },
-        })
-        elevenLabsAgentId = elAgent.agent_id ?? null
-      } catch {
-        // Non-fatal — agent won't have an ElevenLabs ID yet
-      }
+          ...(agentData.voice_id ? { tts: { voice_id: agentData.voice_id } } : {}),
+        },
+      })
+      elevenLabsAgentId = elAgent.agent_id ?? null
+    } catch (err) {
+      console.error('ElevenLabs agent creation failed:', err)
     }
 
     await supabase
       .from('agents')
       .update({ elevenlabs_agent_id: elevenLabsAgentId, is_active: !!elevenLabsAgentId })
-      .eq('id', agent.id)
+      .eq('id', agentId)
   }
 
   // Mark onboarding complete. For a paid plan with Stripe configured we do NOT
@@ -91,7 +130,7 @@ export async function POST(request: Request) {
   if (user.email) {
     void sendEmail({
       to: user.email,
-      ...welcomeEmail({ name: org.name ?? undefined, agentName: agent?.name }),
+      ...welcomeEmail({ name: body.company?.name ?? org.name ?? undefined, agentName: agentData.name }),
     })
   }
 

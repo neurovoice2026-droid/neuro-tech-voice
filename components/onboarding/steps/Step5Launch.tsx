@@ -386,7 +386,23 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
       const res = await fetch('/api/onboarding/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan, annual }),
+        body: JSON.stringify({
+          plan,
+          annual,
+          company: {
+            name: company.name,
+            industry: company.industry,
+            website: company.website,
+            description: company.description,
+          },
+          agent: {
+            name: agent.name,
+            language: agent.language,
+            system_prompt: agent.system_prompt,
+            first_message: agent.first_message,
+          },
+          voice: { voice_id: voice.voice_id, voice_name: voice.voice_name },
+        }),
       })
       const data = await res.json()
 
