@@ -7,8 +7,12 @@ import { getTwilioClient } from '@/lib/twilio/client'
 // Diagnostic + repair endpoint for phone routing. Open in the browser while
 // logged in: it reports the DB + ElevenLabs state and tries to (re)link each
 // number to the agent, surfacing the real ElevenLabs error if any.
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient()
+
+  // ?reconnect=1 → delete + re-import numbers so ElevenLabs reconfigures the
+  // Twilio voice webhook (fixes numbers imported before an agent existed).
+  const reconnect = new URL(request.url).searchParams.get('reconnect') === '1'
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -78,6 +82,19 @@ export async function GET() {
   // ── Step 2: link each number to the agent ────────────────────────────────
   if (elConfigured() && agent && elAgentId) {
     for (const n of numbers ?? []) {
+      // Force reconnect: drop the existing EL number so it can be re-imported
+      // fresh (which makes ElevenLabs reconfigure the Twilio voice webhook).
+      if (reconnect && n.elevenlabs_phone_number_id) {
+        try {
+          await elPhone.delete(n.elevenlabs_phone_number_id as string)
+          repair.push({ number: n.number, action: 'deleted_for_reconnect', ok: true })
+        } catch (e) {
+          repair.push({ number: n.number, action: 'delete_failed', ok: false, error: e instanceof Error ? e.message : String(e) })
+        }
+        await supabase.from('phone_numbers').update({ elevenlabs_phone_number_id: null }).eq('id', n.id)
+        n.elevenlabs_phone_number_id = null
+      }
+
       // 1) The number already has an ElevenLabs id → just assign the agent.
       if (n.elevenlabs_phone_number_id) {
         try {
