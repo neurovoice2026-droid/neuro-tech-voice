@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { phoneNumbers as elPhone, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
 import { createAgentWithFallback } from '@/lib/elevenlabs/create-agent'
+import { getTwilioClient } from '@/lib/twilio/client'
 
 // Diagnostic + repair endpoint for phone routing. Open in the browser while
 // logged in: it reports the DB + ElevenLabs state and tries to (re)link each
@@ -119,5 +120,33 @@ export async function GET() {
   }
 
   report.repair_results = repair
+
+  // ── Step 3: inspect the Twilio number's actual voice routing ─────────────
+  // If voiceUrl is empty, Twilio has no instructions for inbound calls, so the
+  // call just fails silently even though ElevenLabs has the agent assigned.
+  const twSidSet = (report.twilio_env as { account_sid_set: boolean }).account_sid_set
+  if (twSidSet) {
+    const twInfo: unknown[] = []
+    for (const n of numbers ?? []) {
+      if (!n.twilio_sid || String(n.twilio_sid).startsWith('mock')) continue
+      try {
+        const tw = await getTwilioClient().incomingPhoneNumbers(n.twilio_sid as string).fetch()
+        twInfo.push({
+          number: n.number,
+          status: tw.status,
+          voiceUrl: tw.voiceUrl || null,
+          voiceMethod: tw.voiceMethod || null,
+          voiceApplicationSid: tw.voiceApplicationSid || null,
+          voiceReceiveMode: (tw as unknown as { voiceReceiveMode?: string }).voiceReceiveMode ?? null,
+          capabilities: tw.capabilities,
+          trunkSid: (tw as unknown as { trunkSid?: string }).trunkSid ?? null,
+        })
+      } catch (e) {
+        twInfo.push({ number: n.number, error: e instanceof Error ? e.message : String(e) })
+      }
+    }
+    report.twilio_numbers = twInfo
+  }
+
   return NextResponse.json(report, { headers: { 'Cache-Control': 'no-store' } })
 }
