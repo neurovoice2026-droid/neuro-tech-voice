@@ -138,6 +138,26 @@ export async function GET(request: Request) {
 
   report.repair_results = repair
 
+  // ── Step 2b: (reconnect) point the Twilio number's voice webhook at
+  // ElevenLabs so inbound calls actually route to the assigned agent. This is
+  // what the native integration is supposed to do automatically.
+  const EL_INBOUND_URL = 'https://api.us.elevenlabs.io/twilio/inbound_call'
+  if (reconnect && (report.twilio_env as { account_sid_set: boolean }).account_sid_set) {
+    const webhookResults: unknown[] = []
+    for (const n of numbers ?? []) {
+      if (!n.twilio_sid || String(n.twilio_sid).startsWith('mock')) continue
+      try {
+        const updated = await getTwilioClient()
+          .incomingPhoneNumbers(n.twilio_sid as string)
+          .update({ voiceUrl: EL_INBOUND_URL, voiceMethod: 'POST' })
+        webhookResults.push({ number: n.number, set_voice_url: updated.voiceUrl, ok: true })
+      } catch (e) {
+        webhookResults.push({ number: n.number, ok: false, error: e instanceof Error ? e.message : String(e) })
+      }
+    }
+    report.twilio_webhook_set = webhookResults
+  }
+
   // ── Step 3: inspect the Twilio number's actual voice routing ─────────────
   // If voiceUrl is empty, Twilio has no instructions for inbound calls, so the
   // call just fails silently even though ElevenLabs has the agent assigned.
