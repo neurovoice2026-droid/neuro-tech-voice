@@ -61,12 +61,12 @@ export function Hero() {
           </p>
 
           {/* CTAs */}
-          <div className="mt-8 flex animate-in fade-in slide-in-from-bottom-4 flex-col items-stretch gap-3 duration-700 delay-300 sm:flex-row sm:items-center">
+          <div className="mt-8 flex animate-in fade-in slide-in-from-bottom-4 flex-row items-center gap-3 duration-700 delay-300">
             <Link
               href="/register"
               className={cn(
                 buttonVariants({ size: 'lg' }),
-                'purple-glow h-12 rounded-full px-7 text-base'
+                'purple-glow h-12 rounded-full px-5 text-base sm:px-7'
               )}
             >
               Start free
@@ -76,7 +76,7 @@ export function Hero() {
               href="/login"
               className={cn(
                 buttonVariants({ variant: 'outline', size: 'lg' }),
-                'h-12 rounded-full px-7 text-base'
+                'h-12 rounded-full px-5 text-base sm:px-7'
               )}
             >
               Sign in

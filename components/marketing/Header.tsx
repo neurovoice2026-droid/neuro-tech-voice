@@ -23,7 +23,7 @@ export function Header() {
     <header className="sticky top-4 z-40 mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
       <div className="flex h-16 items-center justify-between rounded-full border border-white/60 bg-white/50 px-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.8),0_8px_30px_-8px_rgba(88,28,135,0.3)] backdrop-blur-2xl sm:px-6">
         <Link href="/" aria-label="Neuro Tech Voice home">
-          <Logo size="sm" />
+          <Logo size="xs" />
         </Link>
 
         <nav className="hidden items-center gap-8 md:flex">
@@ -74,7 +74,7 @@ export function Header() {
         <SheetContent side="right" className="w-72">
           <SheetHeader>
             <SheetTitle>
-              <Logo size="sm" />
+              <Logo size="xs" />
             </SheetTitle>
           </SheetHeader>
           <nav className="flex flex-col gap-1 px-4">

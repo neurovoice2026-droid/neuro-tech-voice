@@ -2,7 +2,7 @@ import Image from 'next/image'
 import { cn } from '@/lib/utils'
 
 interface LogoProps {
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'xs' | 'sm' | 'md' | 'lg'
   /** @deprecated — logo.png already includes the brand name */
   showText?: boolean
   /** 'white' inverts the logo for dark backgrounds */
@@ -12,6 +12,7 @@ interface LogoProps {
 
 // width-ul controlează dimensiunea — height e auto ca să păstreze aspect ratio-ul corect
 const sizeConfig = {
+  xs: 52,
   sm: 80,
   md: 120,
   lg: 170,
