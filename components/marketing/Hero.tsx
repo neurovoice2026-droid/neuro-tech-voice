@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { LiveDot } from '@/components/shared/LiveDot'
 import { SplineScene } from '@/components/ui/splite'
 import { cn } from '@/lib/utils'
@@ -10,24 +11,11 @@ const ROBOT_SCENE_URL = 'https://prod.spline.design/kZDDjO5HuC9GJUM2/scene.splin
 export function Hero() {
   return (
     <section className="relative overflow-hidden">
-      {/* Ambient color field the glass panels blur/refract against */}
-      <div aria-hidden="true" className="absolute inset-0 -z-10">
-        <div className="absolute left-1/4 top-0 -translate-x-1/2">
-          <div className="h-[28rem] w-[28rem] rounded-full bg-primary/30 blur-3xl motion-safe:animate-[float_11s_ease-in-out_infinite]" />
-        </div>
-        <div className="absolute right-0 top-1/3 translate-x-1/3">
-          <div className="h-[24rem] w-[24rem] rounded-full bg-[hsl(280_65%_70%)]/25 blur-3xl motion-safe:animate-[float_13s_ease-in-out_infinite_1.5s]" />
-        </div>
-        <div className="absolute bottom-0 left-1/3">
-          <div className="h-[22rem] w-[22rem] rounded-full bg-[hsl(250_55%_45%)]/20 blur-3xl motion-safe:animate-[float_10s_ease-in-out_infinite_0.7s]" />
-        </div>
-      </div>
-
-      <div className="mx-auto grid max-w-7xl grid-cols-1 items-stretch gap-6 px-4 py-16 sm:px-6 md:py-24 lg:grid-cols-2 lg:gap-8 lg:px-8">
-        {/* Left: glass panel with copy */}
-        <div className="relative flex animate-in fade-in slide-in-from-bottom-4 flex-col justify-center overflow-hidden rounded-[2rem] border border-white/60 bg-white/40 p-8 text-left shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7),0_20px_50px_-20px_rgba(88,28,135,0.25)] backdrop-blur-2xl duration-700 sm:p-10 lg:p-12">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-4 py-20 sm:px-6 md:py-28 lg:grid-cols-2 lg:px-8">
+        {/* Left: copy */}
+        <div className="flex flex-col items-start text-left">
           {/* Badge */}
-          <div className="mb-6 inline-flex w-fit items-center gap-2 rounded-full border border-white/90 bg-white/80 px-4 py-1.5 shadow-sm">
+          <div className="mb-6 inline-flex animate-in fade-in slide-in-from-bottom-2 items-center gap-2 rounded-full border border-border bg-white/70 px-4 py-1.5 backdrop-blur-md duration-700">
             <LiveDot />
             <span className="text-sm font-medium text-foreground/80">
               Your AI agent is always on
@@ -35,7 +23,7 @@ export function Hero() {
           </div>
 
           {/* Headline */}
-          <h1 className="max-w-xl text-balance text-4xl font-semibold leading-[1.2] tracking-tight md:text-5xl lg:text-6xl">
+          <h1 className="max-w-xl animate-in fade-in slide-in-from-bottom-4 text-balance text-4xl font-semibold leading-[1.2] tracking-tight duration-700 delay-100 md:text-5xl lg:text-6xl">
             Your AI agent turns missed calls into{' '}
             <span className="relative inline-block">
               booked
@@ -67,18 +55,18 @@ export function Hero() {
           </h1>
 
           {/* Subtext */}
-          <p className="mt-6 max-w-lg text-lg text-muted-foreground">
+          <p className="mt-6 max-w-lg animate-in fade-in slide-in-from-bottom-4 text-lg text-muted-foreground duration-700 delay-200">
             Neuro Tech Voice answers, qualifies, and books your customers automatically
             with a natural-sounding AI voice agent, live on your business number in minutes.
           </p>
 
           {/* CTAs */}
-          <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+          <div className="mt-8 flex animate-in fade-in slide-in-from-bottom-4 flex-col items-stretch gap-3 duration-700 delay-300 sm:flex-row sm:items-center">
             <Link
               href="/register"
               className={cn(
                 buttonVariants({ size: 'lg' }),
-                'purple-glow h-12 rounded-full px-7 text-base shadow-[inset_0_1px_0_0_rgba(255,255,255,0.4),0_12px_28px_-8px_rgba(124,58,237,0.55)]'
+                'purple-glow h-12 rounded-full px-7 text-base'
               )}
             >
               Start free
@@ -88,24 +76,24 @@ export function Hero() {
               href="/login"
               className={cn(
                 buttonVariants({ variant: 'outline', size: 'lg' }),
-                'h-12 rounded-full border-white/70 bg-white/50 px-7 text-base text-foreground shadow-sm backdrop-blur-xl hover:bg-white/70'
+                'h-12 rounded-full px-7 text-base'
               )}
             >
               Sign in
             </Link>
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">
+          <p className="mt-3 animate-in fade-in duration-700 delay-500 text-xs text-muted-foreground">
             No credit card required · 5 free minutes every month
           </p>
         </div>
 
-        {/* Right: glass stage with interactive 3D agent */}
-        <div className="relative min-h-[420px] animate-in fade-in slide-in-from-right-4 overflow-hidden rounded-[2rem] border border-white/10 bg-neutral-950/85 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12),0_25px_60px_-15px_rgba(88,28,135,0.45)] backdrop-blur-2xl duration-700 delay-150 sm:min-h-[480px] lg:min-h-0">
+        {/* Right: interactive 3D agent */}
+        <Card className="relative h-[420px] w-full animate-in fade-in slide-in-from-right-4 overflow-hidden rounded-3xl border-0 bg-neutral-950 duration-700 delay-300 sm:h-[480px] lg:h-[560px]">
           <div aria-hidden="true" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
             <div className="h-80 w-80 rounded-full bg-primary/40 blur-3xl motion-safe:animate-[float_9s_ease-in-out_infinite]" />
           </div>
           <SplineScene scene={ROBOT_SCENE_URL} className="relative z-10 h-full w-full" />
-        </div>
+        </Card>
       </div>
     </section>
   )
