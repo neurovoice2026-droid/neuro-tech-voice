@@ -5,12 +5,13 @@ import { LiveDot } from '@/components/shared/LiveDot'
 import { cn } from '@/lib/utils'
 import { HeroStats } from '@/components/marketing/HeroStats'
 import { HeroVisual } from '@/components/marketing/HeroVisual'
+import { ConstellationBackground } from '@/components/marketing/ConstellationBackground'
 
 export function Hero() {
   return (
     <section className="relative overflow-hidden">
-      {/* pt-28/36 reserves room for the sticky marketing nav, added in a later pass */}
-      <div className="mx-auto flex w-full max-w-7xl flex-col items-center px-4 pb-20 pt-28 text-center sm:px-6 md:pb-28 md:pt-36 lg:px-8">
+      <ConstellationBackground />
+      <div className="mx-auto flex w-full max-w-7xl flex-col items-center px-4 pb-20 pt-16 text-center sm:px-6 md:pb-28 md:pt-24 lg:px-8">
         {/* Badge */}
         <div className="mb-6 inline-flex animate-in fade-in slide-in-from-bottom-2 items-center gap-2 rounded-full border border-border bg-white/70 px-4 py-1.5 backdrop-blur-md duration-700">
           <LiveDot />
