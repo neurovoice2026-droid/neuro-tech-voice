@@ -186,3 +186,8 @@
 @keyframes draw-underline {
   to { stroke-dashoffset: 0; }
 }
+
+@keyframes waveform {
+  0%, 100% { transform: scaleY(0.4); }
+  50%      { transform: scaleY(1); }
+}

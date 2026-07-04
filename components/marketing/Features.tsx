@@ -1,42 +1,58 @@
-import { Mic, PhoneCall, CalendarCheck2, ChartColumn, BookOpen, Plug, Sparkles } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 import { Reveal } from '@/components/marketing/Reveal'
+import { FeatureRow } from '@/components/marketing/FeatureRow'
+import {
+  AvailabilityVisual, VoiceVisual, SchedulingVisual, AnalyticsVisual,
+} from '@/components/marketing/FeatureVisuals'
 
-const FEATURES = [
+const FEATURE_ROWS = [
   {
-    icon: PhoneCall,
-    title: '24/7 Availability',
+    eyebrow: 'Always on',
+    title: 'Never let a call go to voicemail again',
     description:
-      'Your AI agent answers every single call, day or night, weekends included. No more missed opportunities.',
+      'Your AI agent picks up instantly, any hour, any day, so every customer gets a real conversation instead of an answering machine.',
+    points: [
+      'No missed calls, ever',
+      'Handles nights, weekends, and holidays',
+      'Instant pickup, zero hold time',
+    ],
+    visual: <AvailabilityVisual />,
   },
   {
-    icon: Mic,
-    title: 'Natural Voice',
+    eyebrow: 'Sounds human',
+    title: 'A voice callers actually enjoy talking to',
     description:
-      "Powered by ElevenLabs' most realistic voices. Callers talk to it like a real person, not a robot.",
+      "Built on ElevenLabs' most realistic voice models, your agent speaks naturally, understands context, and responds like a real team member would.",
+    points: [
+      'Lifelike, natural-sounding voice',
+      'Understands context mid-conversation',
+      'Multiple languages and accents',
+    ],
+    visual: <VoiceVisual />,
   },
   {
-    icon: CalendarCheck2,
-    title: 'Smart Scheduling',
+    eyebrow: 'Automatic booking',
+    title: 'Meetings booked before you even wake up',
     description:
-      'Books meetings directly into Google Calendar mid-call, no back-and-forth emails required.',
+      'The agent checks your real availability and books directly into Google Calendar during the call, no forms, no follow-up emails, no double-booking.',
+    points: [
+      'Syncs live with Google Calendar',
+      'Confirms instantly, no back-and-forth',
+      'Zero double-bookings',
+    ],
+    visual: <SchedulingVisual />,
   },
   {
-    icon: ChartColumn,
-    title: 'Real-Time Analytics',
+    eyebrow: 'Full visibility',
+    title: 'Every call, transcribed and analyzed instantly',
     description:
-      'Full transcripts, sentiment analysis, and call history in a live dashboard.',
-  },
-  {
-    icon: BookOpen,
-    title: 'Knowledge Base',
-    description:
-      'Upload your docs, FAQs, and policies. Your agent learns your business in minutes.',
-  },
-  {
-    icon: Plug,
-    title: 'Native Integrations',
-    description:
-      'Google Calendar, Gmail, Sheets, and Docs, connected out of the box.',
+      'Full transcripts, sentiment scoring, and call trends land in your dashboard the moment a call ends, so you always know how your business sounds.',
+    points: [
+      'Full transcripts for every call',
+      'Sentiment analysis built in',
+      'Live dashboard, updated in real time',
+    ],
+    visual: <AnalyticsVisual />,
   },
 ]
 
@@ -57,17 +73,9 @@ export function Features() {
           </p>
         </Reveal>
 
-        <div className="mt-16 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map((feature, i) => (
-            <Reveal key={feature.title} delay={i * 80}>
-              <div className="group h-full rounded-3xl border border-border bg-card p-8 transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 hover:shadow-xl hover:shadow-primary/10">
-                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-colors duration-300 group-hover:bg-primary group-hover:text-primary-foreground">
-                  <feature.icon className="h-6 w-6" />
-                </div>
-                <h3 className="mt-5 text-lg font-semibold text-foreground">{feature.title}</h3>
-                <p className="mt-2 text-muted-foreground">{feature.description}</p>
-              </div>
-            </Reveal>
+        <div className="mt-20 flex flex-col gap-20 md:mt-28 md:gap-28">
+          {FEATURE_ROWS.map((row, i) => (
+            <FeatureRow key={row.title} {...row} reverse={i % 2 === 1} />
           ))}
         </div>
       </div>
