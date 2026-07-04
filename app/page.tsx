@@ -1,5 +1,9 @@
-import { redirect } from 'next/navigation'
+import { Hero } from '@/components/marketing/Hero'
 
 export default function Home() {
-  redirect('/login')
+  return (
+    <main>
+      <Hero />
+    </main>
+  )
 }

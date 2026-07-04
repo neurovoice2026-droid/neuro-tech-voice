@@ -176,3 +176,18 @@
 .animate-step-enter-back {
   animation: step-enter-back 300ms ease-out forwards;
 }
+
+/* ─── Marketing Hero Animations ──────────────────────────────────────────── */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-16px); }
+}
+
+@keyframes waveform {
+  0%, 100% { transform: scaleY(0.4); }
+  50%      { transform: scaleY(1); }
+}
+
+@keyframes draw-underline {
+  to { stroke-dashoffset: 0; }
+}
