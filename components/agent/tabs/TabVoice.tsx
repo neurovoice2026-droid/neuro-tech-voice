@@ -151,7 +151,7 @@ export function TabVoice({ agent, onUpdateVoice, isSaving }: TabVoiceProps) {
         <CardHeader>
           <CardTitle className="text-base">Select Voice</CardTitle>
           <CardDescription>
-            Browse and preview voices from ElevenLabs.
+            Browse and preview our full voice library.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -259,7 +259,7 @@ export function TabVoice({ agent, onUpdateVoice, isSaving }: TabVoiceProps) {
         <CardContent className="py-4 flex gap-3">
           <Info className="size-4 text-muted-foreground mt-0.5 shrink-0" />
           <p className="text-xs text-muted-foreground">
-            Voice changes are synced to ElevenLabs and take effect on the next call.
+            Voice changes are saved automatically and take effect on the next call.
             Preview voices before committing to ensure they match your brand.
           </p>
         </CardContent>

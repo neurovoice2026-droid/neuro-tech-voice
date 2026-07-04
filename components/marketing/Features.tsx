@@ -22,7 +22,7 @@ const FEATURE_ROWS = [
     eyebrow: 'Sounds human',
     title: 'A voice callers actually enjoy talking to',
     description:
-      "Built on ElevenLabs' most realistic voice models, your agent speaks naturally, understands context, and responds like a real team member would.",
+      "Built on state-of-the-art voice AI, your agent speaks naturally, understands context, and responds like a real team member would.",
     points: [
       'Lifelike, natural-sounding voice',
       'Understands context mid-conversation',

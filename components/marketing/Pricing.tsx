@@ -9,7 +9,7 @@ import { PLANS } from '@/types'
 import type { Plan } from '@/types'
 import { cn } from '@/lib/utils'
 
-// Annual billing = pay for 10 months (2 months free) — same formula the
+// Annual billing = pay for 10 months (2 months free) - same formula the
 // onboarding plan picker uses (Step5Launch.tsx priceFor), kept identical so
 // the marketing price never drifts from what checkout actually charges.
 function priceFor(plan: Plan, annual: boolean): number {
@@ -140,12 +140,12 @@ function PricingCard({ tier, annual }: { tier: Tier; annual: boolean }) {
               </li>
             ))}
           </ul>
-          <Link
-            href="/register"
+          <a
+            href="tel:+40774566367"
             className="mt-8 flex items-center justify-center rounded-xl border border-purple-600/50 bg-purple-950/60 px-5 py-3 text-sm font-semibold text-purple-300 transition-all hover:border-purple-500 hover:bg-purple-900/60 hover:text-purple-200"
           >
             Contact sales →
-          </Link>
+          </a>
         </div>
       </div>
     )

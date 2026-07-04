@@ -304,7 +304,7 @@ export default function PhonePage() {
       {!loading && numbers.length > 0 && (
         <p className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
           <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-          Inbound calls are handled by ElevenLabs once a number is assigned to an agent.
+          Inbound calls are handled automatically once a number is assigned to an agent.
         </p>
       )}
 

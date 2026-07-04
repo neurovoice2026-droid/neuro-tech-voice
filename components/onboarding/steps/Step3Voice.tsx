@@ -311,7 +311,7 @@ export function Step3Voice() {
         <div>
           <h2 className="text-2xl font-bold text-foreground">Choose your agent&apos;s voice</h2>
           <p className="mt-1 text-muted-foreground">
-            Browse thousands of ElevenLabs voices — preview and pick the perfect one.
+            Browse thousands of natural-sounding voices, preview and pick the perfect one.
           </p>
         </div>
       </div>

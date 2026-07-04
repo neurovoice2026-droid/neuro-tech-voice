@@ -9,7 +9,7 @@ interface RevealProps {
   className?: string
 }
 
-// Reusable scroll-reveal wrapper for marketing sections below the fold —
+// Reusable scroll-reveal wrapper for marketing sections below the fold -
 // fades/slides content in once it enters the viewport, only once.
 export function Reveal({ children, delay = 0, className }: RevealProps) {
   const ref = useRef<HTMLDivElement>(null)

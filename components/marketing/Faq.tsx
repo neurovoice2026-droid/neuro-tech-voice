@@ -16,7 +16,7 @@ const FAQS = [
   },
   {
     question: 'What languages does the agent support?',
-    answer: "Your agent can speak in multiple languages and accents, powered by ElevenLabs' multilingual voice models.",
+    answer: "Your agent can speak in multiple languages and accents, powered by advanced multilingual voice AI.",
   },
   {
     question: 'What happens if I go over my included minutes?',
