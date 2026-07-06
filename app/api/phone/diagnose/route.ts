@@ -105,7 +105,28 @@ export async function GET() {
           .from('phone_numbers')
           .update({ elevenlabs_phone_number_id: imported.phone_number_id, agent_id: agent.id })
           .eq('id', n.id)
-        repair.push({ number: n.number, action: 'imported_and_assigned', ok: true, phone_number_id: imported.phone_number_id })
+
+        // Don't just trust that create() succeeding means agent_id actually
+        // stuck - read the record back from ElevenLabs directly and report
+        // exactly what it says, so this is a real confirmation, not an
+        // assumption based on a 2xx response.
+        let confirmedAgentId: string | null | undefined = undefined
+        try {
+          const fetched = await elPhone.get(imported.phone_number_id)
+          confirmedAgentId = (fetched.agent_id as string | undefined) ?? null
+        } catch (e) {
+          confirmedAgentId = undefined
+          repair.push({ number: n.number, action: 'verify_fetch_failed', ok: false, error: e instanceof Error ? e.message : String(e) })
+        }
+
+        repair.push({
+          number: n.number,
+          action: 'imported_and_assigned',
+          ok: confirmedAgentId === elAgentId,
+          phone_number_id: imported.phone_number_id,
+          requested_agent_id: elAgentId,
+          confirmed_agent_id: confirmedAgentId,
+        })
       } catch (e) {
         repair.push({ number: n.number, action: 'import_error', ok: false, error: e instanceof Error ? e.message : String(e) })
       }
