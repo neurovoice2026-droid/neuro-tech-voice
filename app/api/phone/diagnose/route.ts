@@ -51,11 +51,11 @@ export async function GET(request: Request) {
   if (elConfigured()) {
     try {
       const list = await elPhone.list()
-      report.elevenlabs_phone_numbers = list.phone_numbers?.map((p) => ({
+      report.elevenlabs_phone_numbers = list.map((p) => ({
         phone_number_id: p.phone_number_id,
         phone_number: p.phone_number,
         agent_id: p.agent_id ?? null,
-      })) ?? []
+      }))
     } catch (e) {
       report.elevenlabs_list_error = e instanceof Error ? e.message : String(e)
     }

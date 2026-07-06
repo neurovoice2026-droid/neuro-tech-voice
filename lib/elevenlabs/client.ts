@@ -323,11 +323,12 @@ export interface ImportPhoneNumberParams {
 }
 
 export const phoneNumbers = {
+  // Unlike every other list endpoint in this file (agents, conversations,
+  // voices, knowledge-base, webhooks all wrap their array in an object), this
+  // one returns a bare array at the top level - confirmed against ElevenLabs'
+  // actual API reference. Do not "fix" this to match the others.
   list() {
-    return request<{ phone_numbers: ELPhoneNumber[] }>(
-      'GET',
-      '/v1/convai/phone-numbers'
-    )
+    return request<ELPhoneNumber[]>('GET', '/v1/convai/phone-numbers')
   },
 
   get(phoneNumberId: string) {
