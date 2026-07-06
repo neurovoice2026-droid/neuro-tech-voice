@@ -5,7 +5,7 @@ import {
   GitBranch, Plus, Play, Trash2, ChevronRight,
   Phone, Mail, Calendar, FileText, Zap, Bell, Clock,
   ArrowRight, MoreVertical, Copy, Search,
-  PhoneIncoming, PhoneOutgoing, MessageSquare, Star,
+  PhoneIncoming, Star,
   CheckCircle2, AlertCircle, Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -23,11 +23,16 @@ import { cn } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+// Only triggers the executor (lib/workflows/executor.ts) actually fires from
+// the ElevenLabs webhook. call_started and voicemail_left were previously
+// offered here too, but nothing in the system ever fires them: ElevenLabs
+// only sends post-call webhooks (no realtime "call started" event exists to
+// wire up), and there's no distinguishable "voicemail was left" signal in the
+// data it sends. Offering them was a trap - a workflow built on either would
+// silently never run.
 type TriggerType =
   | 'call_ended'
   | 'call_missed'
-  | 'call_started'
-  | 'voicemail_left'
   | 'sentiment_negative'
   | 'keyword_detected'
 
@@ -66,8 +71,6 @@ interface Workflow {
 const TRIGGER_META: Record<TriggerType, { label: string; icon: React.FC<{ className?: string }>; color: string; description: string }> = {
   call_ended:         { label: 'Call Ended',          icon: Phone,          color: 'text-blue-600 bg-blue-50',    description: 'Triggers when any call finishes' },
   call_missed:        { label: 'Missed Call',         icon: PhoneIncoming,  color: 'text-red-600 bg-red-50',      description: 'Triggers when a call goes unanswered' },
-  call_started:       { label: 'Call Started',        icon: PhoneOutgoing,  color: 'text-green-600 bg-green-50',  description: 'Triggers at the start of every call' },
-  voicemail_left:     { label: 'Voicemail Left',      icon: MessageSquare,  color: 'text-orange-600 bg-orange-50',description: 'Triggers when a voicemail is recorded' },
   sentiment_negative: { label: 'Negative Sentiment',  icon: AlertCircle,    color: 'text-red-600 bg-red-50',      description: 'Triggers when AI detects a frustrated caller' },
   keyword_detected:   { label: 'Keyword Detected',    icon: Star,           color: 'text-purple-600 bg-purple-50',description: 'Triggers when a specific word is spoken' },
 }
@@ -93,7 +96,7 @@ const WIZARD_STEPS = [
 
 const AVAILABLE_ACTIONS: ActionType[] = [
   'send_email', 'add_to_sheet', 'create_calendar_event',
-  'send_webhook', 'create_doc', 'add_tag', 'wait',
+  'send_webhook', 'create_doc', 'notify_slack', 'add_tag', 'wait',
 ]
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -264,6 +267,7 @@ function CreateWorkflowDialog({
   const [description, setDescription] = useState('')
   const [keyword, setKeyword] = useState('')
   const [webhookUrl, setWebhookUrl] = useState('')
+  const [slackWebhookUrl, setSlackWebhookUrl] = useState('')
   const [tagValue, setTagValue] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -275,6 +279,7 @@ function CreateWorkflowDialog({
     setDescription('')
     setKeyword('')
     setWebhookUrl('')
+    setSlackWebhookUrl('')
     setTagValue('')
     setSaving(false)
   }
@@ -291,6 +296,7 @@ function CreateWorkflowDialog({
       const actions: WorkflowAction[] = selectedActions.map((type, i) => {
         const config: Record<string, string> = {}
         if (type === 'send_webhook' && webhookUrl) config.url = webhookUrl
+        if (type === 'notify_slack' && slackWebhookUrl) config.webhook_url = slackWebhookUrl
         if (type === 'add_tag' && tagValue) config.tag = tagValue
         return { id: `a${i}`, type, config }
       })
@@ -426,6 +432,17 @@ function CreateWorkflowDialog({
                   placeholder="https://your-app.com/webhook"
                   value={webhookUrl}
                   onChange={(e) => setWebhookUrl(e.target.value)}
+                  className="text-sm"
+                />
+              </div>
+            )}
+            {selectedActions.includes('notify_slack') && (
+              <div className="mt-3">
+                <label className="text-xs font-medium text-foreground mb-1.5 block">Slack webhook URL</label>
+                <Input
+                  placeholder="https://hooks.slack.com/services/..."
+                  value={slackWebhookUrl}
+                  onChange={(e) => setSlackWebhookUrl(e.target.value)}
                   className="text-sm"
                 />
               </div>
@@ -736,8 +753,8 @@ export default function WorkflowsPage() {
       <div className="mt-8 flex items-start gap-2.5 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4">
         <Zap className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Workflows run automatically after each call. Actions execute in order — if one fails, subsequent actions are skipped and the run is marked as failed.
-          Currently supported actions: <strong>Send Webhook</strong> and <strong>Add Tag</strong>. Email, Sheets, Calendar, and Docs actions require Google integration to be connected.
+          Workflows run automatically after each call. Actions execute in order, if one fails, subsequent actions are skipped and the run is marked as failed.
+          <strong> Send Webhook</strong>, <strong>Add Tag</strong>, and <strong>Wait</strong> always work. <strong>Send Email</strong>, <strong>Log to Sheets</strong>, <strong>Create Calendar Event</strong>, and <strong>Create Doc</strong> require the matching Google integration to be connected. <strong>Notify Slack</strong> needs a Slack incoming webhook URL.
         </p>
       </div>
 

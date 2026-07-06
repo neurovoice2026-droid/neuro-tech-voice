@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { agents as elAgents, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
 import { createAgentWithFallback } from '@/lib/elevenlabs/create-agent'
+import { composeSystemPrompt } from '@/lib/elevenlabs/prompt'
 import { linkNumbersToAgent } from '@/lib/phone/link'
 
 export async function GET() {
@@ -102,6 +103,7 @@ export async function PATCH(request: Request) {
       first_message: agent.first_message,
       language: agent.language,
       voice_id: agent.voice_id,
+      fallback_message: agent.fallback_message,
     })
     if (agent_id) {
       await supabase
@@ -118,11 +120,16 @@ export async function PATCH(request: Request) {
     await linkNumbersToAgent(supabase, org.id, agent.id, agent.elevenlabs_agent_id)
   }
 
-  // Sync to ElevenLabs if agent has elevenlabs_agent_id and relevant fields changed
+  // Sync to ElevenLabs if agent has elevenlabs_agent_id and relevant fields changed.
+  // system_prompt/language/fallback_message all feed into the SAME composed
+  // prompt (see lib/elevenlabs/prompt.ts), so any of the three requires
+  // recomposing from the agent's full current state, not just the changed field,
+  // otherwise a fallback_message-only edit would never reach ElevenLabs at all.
   const elId = agent.elevenlabs_agent_id
+  const promptFieldsChanged =
+    'system_prompt' in updates || 'language' in updates || 'fallback_message' in updates
   const needsSync = elConfigured() && elId && (
-    'system_prompt' in updates || 'first_message' in updates ||
-    'language' in updates || 'voice_id' in updates || 'name' in updates
+    promptFieldsChanged || 'first_message' in updates || 'voice_id' in updates || 'name' in updates
   )
 
   if (needsSync) {
@@ -131,8 +138,14 @@ export async function PATCH(request: Request) {
         ...('name' in updates && { name: updates.name as string }),
         conversation_config: {
           agent: {
-            ...(updates.system_prompt !== undefined && {
-              prompt: { prompt: updates.system_prompt as string },
+            ...(promptFieldsChanged && {
+              prompt: {
+                prompt: composeSystemPrompt({
+                  system_prompt: agent.system_prompt,
+                  language: agent.language,
+                  fallback_message: agent.fallback_message,
+                }),
+              },
             }),
             ...(updates.first_message !== undefined && {
               first_message: updates.first_message as string,

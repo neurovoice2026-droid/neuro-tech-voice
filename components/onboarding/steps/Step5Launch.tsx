@@ -2,13 +2,13 @@
 // Step 6 — Launch & Pricing
 import { useState, useMemo } from 'react'
 import {
-  Rocket, Check, Building2, Bot, Mic2, Phone, CreditCard,
+  Rocket, Check, Building2, Bot, Mic2, CreditCard,
   ArrowLeft, Zap, Shield, Star, Layers, Gift,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
-import { cn, formatPhoneNumber } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { PLANS } from '@/types'
 import type { Plan, Organization } from '@/types'
 
@@ -372,7 +372,7 @@ function SuccessScreen({ agentName }: { agentName: string }) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export function Step6Launch({ organization }: Step6LaunchProps) {
-  const { plan, setPlan, setStep, agent, voice, phone, company } = useOnboardingStore()
+  const { plan, setPlan, setStep, agent, voice, company } = useOnboardingStore()
   const [annual, setAnnual]             = useState(false)
   const [isLaunching, setIsLaunching]   = useState(false)
   const [showConfetti, setShowConfetti] = useState(false)
@@ -485,11 +485,6 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
             <SummaryRow icon={Building2} label="Company"      value={displayCompanyName} />
             <SummaryRow icon={Bot}       label="Agent name"   value={agent.name ? `${agent.name} · ${agent.personality}` : '—'} />
             <SummaryRow icon={Mic2}      label="Voice"        value={voice.voice_name || '—'} />
-            <SummaryRow
-              icon={Phone}  label="Phone number"
-              value={phone.skipped || !phone.number ? 'Will be added later' : formatPhoneNumber(phone.number)}
-              muted={phone.skipped || !phone.number}
-            />
             <SummaryRow icon={CreditCard} label="Plan" value={PLANS[plan].name} />
           </div>
         </div>
@@ -512,7 +507,7 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
 
         {/* Back */}
         <div className="flex justify-center">
-          <Button variant="ghost" size="sm" onClick={() => setStep(5)} disabled={isLaunching} className="gap-2 text-muted-foreground">
+          <Button variant="ghost" size="sm" onClick={() => setStep(4)} disabled={isLaunching} className="gap-2 text-muted-foreground">
             <ArrowLeft className="h-4 w-4" /> Back
           </Button>
         </div>

@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useOnboardingStore, type Personality } from '@/store/useOnboardingStore'
 import { cn } from '@/lib/utils'
+import { AGENT_LANGUAGES } from '@/lib/agent-languages'
 
 const schema = z.object({
   personality:   z.string().min(1),
@@ -36,20 +37,6 @@ const PERSONALITIES = [
   { id: 'empathetic'   as Personality, icon: HeartHandshake, name: 'Empathetic',   desc: 'Compassionate, patient, supportive' },
 ]
 
-const LANGUAGES = [
-  { value: 'en', label: 'English',    flag: '🇺🇸' },
-  { value: 'ro', label: 'Romanian',   flag: '🇷🇴' },
-  { value: 'es', label: 'Spanish',    flag: '🇪🇸' },
-  { value: 'fr', label: 'French',     flag: '🇫🇷' },
-  { value: 'de', label: 'German',     flag: '🇩🇪' },
-  { value: 'it', label: 'Italian',    flag: '🇮🇹' },
-  { value: 'pt', label: 'Portuguese', flag: '🇵🇹' },
-  { value: 'ja', label: 'Japanese',   flag: '🇯🇵' },
-  { value: 'ko', label: 'Korean',     flag: '🇰🇷' },
-  { value: 'ar', label: 'Arabic',     flag: '🇸🇦' },
-  { value: 'pl', label: 'Polish',     flag: '🇵🇱' },
-  { value: 'nl', label: 'Dutch',      flag: '🇳🇱' },
-]
 
 const TEMPLATES = [
   {
@@ -256,7 +243,7 @@ export function Step2Agent() {
             name="language"
             render={({ field }) => (
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {LANGUAGES.map((lang) => {
+                {AGENT_LANGUAGES.map((lang) => {
                   const isSelected = field.value === lang.value
                   return (
                     <button

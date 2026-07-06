@@ -221,7 +221,6 @@ export interface PlanConfig {
   price_annual: number
   minutes_limit: number
   max_agents: number
-  max_phone_numbers: number
   /** Per-minute charge once the included minutes are exhausted (USD). */
   overage_per_min: number
   features: string[]
@@ -233,6 +232,8 @@ export interface PlanConfig {
 
 export type BillingInterval = 'month' | 'year'
 
+// Phone numbers are NOT included in any plan — every number is purchased
+// separately regardless of tier (see app/(dashboard)/phone).
 // Pricing model: blended COGS ≈ $0.10/min (ElevenLabs voice + Twilio telephony).
 // Each paid tier is sized so the gross margin stays ≥ 60% even at full usage;
 // overage is billed at the marginal sell price (~$0.25/min) to protect margin.
@@ -241,15 +242,13 @@ export const PLANS: Record<Plan, PlanConfig> = {
     name: 'Trial',
     price_monthly: 0,
     price_annual: 0,
-    minutes_limit: 30,
+    minutes_limit: 5,
     max_agents: 1,
-    max_phone_numbers: 1,
     overage_per_min: 0,
     features: [
-      '30 minutes free',
+      '5 minutes free',
       '14-day trial',
       '1 AI voice agent',
-      '1 phone number',
       'Basic analytics',
     ],
     stripe_price_id: '',
@@ -261,12 +260,10 @@ export const PLANS: Record<Plan, PlanConfig> = {
     price_annual: 490,
     minutes_limit: 150,
     max_agents: 1,
-    max_phone_numbers: 1,
     overage_per_min: 0.25,
     features: [
       '150 minutes/month',
       '1 AI voice agent',
-      '1 phone number',
       'Overage at $0.25/min',
       'Basic analytics',
       'Email support',
@@ -280,12 +277,10 @@ export const PLANS: Record<Plan, PlanConfig> = {
     price_annual: 2490,
     minutes_limit: 850,
     max_agents: 3,
-    max_phone_numbers: 3,
     overage_per_min: 0.25,
     features: [
       '850 minutes/month',
       '3 AI voice agents',
-      '3 phone numbers',
       'Overage at $0.25/min',
       'Advanced analytics',
       'Call recordings',
@@ -301,12 +296,10 @@ export const PLANS: Record<Plan, PlanConfig> = {
     price_annual: 4990,
     minutes_limit: 1750,
     max_agents: 10,
-    max_phone_numbers: 5,
     overage_per_min: 0.22,
     features: [
       '1,750 minutes/month',
       '10 AI voice agents',
-      '5 phone numbers',
       'Overage at $0.22/min',
       'Full analytics suite',
       'Call recordings',
@@ -322,12 +315,10 @@ export const PLANS: Record<Plan, PlanConfig> = {
     price_annual: 9990,
     minutes_limit: 3500,
     max_agents: 999,
-    max_phone_numbers: 999,
     overage_per_min: 0.18,
     features: [
       'From 3,500 minutes/month',
       'Unlimited AI voice agents',
-      'Volume phone numbers',
       'Overage from $0.18/min',
       'Custom prompts & SLA',
       'Dedicated support',

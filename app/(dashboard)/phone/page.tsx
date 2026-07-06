@@ -35,13 +35,34 @@ interface SearchResult {
   price: string
 }
 
+// Countries offered here are ones that can typically get an instant number
+// with no Twilio regulatory bundle / address proof required. This list is a
+// starting point, not an authoritative guarantee — the real guarantee is
+// server-side in /api/phone/search, which only ever returns numbers where
+// Twilio's own address_requirements is "none". Romania is deliberately
+// excluded since it requires a regulatory bundle.
 const COUNTRIES = [
   { value: 'US', label: '🇺🇸 United States' },
+  { value: 'CA', label: '🇨🇦 Canada' },
   { value: 'GB', label: '🇬🇧 United Kingdom' },
-  { value: 'RO', label: '🇷🇴 Romania' },
-  { value: 'DE', label: '🇩🇪 Germany' },
-  { value: 'FR', label: '🇫🇷 France' },
-  { value: 'AU', label: '🇦🇺 Australia' },
+  { value: 'NZ', label: '🇳🇿 New Zealand' },
+  { value: 'AT', label: '🇦🇹 Austria' },
+  { value: 'BE', label: '🇧🇪 Belgium' },
+  { value: 'CH', label: '🇨🇭 Switzerland' },
+  { value: 'CZ', label: '🇨🇿 Czechia' },
+  { value: 'DK', label: '🇩🇰 Denmark' },
+  { value: 'FI', label: '🇫🇮 Finland' },
+  { value: 'HU', label: '🇭🇺 Hungary' },
+  { value: 'LU', label: '🇱🇺 Luxembourg' },
+  { value: 'NO', label: '🇳🇴 Norway' },
+  { value: 'PT', label: '🇵🇹 Portugal' },
+  { value: 'SE', label: '🇸🇪 Sweden' },
+  { value: 'SK', label: '🇸🇰 Slovakia' },
+  { value: 'SG', label: '🇸🇬 Singapore' },
+  { value: 'JP', label: '🇯🇵 Japan' },
+  { value: 'IN', label: '🇮🇳 India' },
+  { value: 'BR', label: '🇧🇷 Brazil' },
+  { value: 'ZA', label: '🇿🇦 South Africa' },
 ]
 
 // ─── Buy dialog ───────────────────────────────────────────────────────────────
@@ -57,6 +78,7 @@ function AddNumberDialog({
   const [results, setResults]       = useState<SearchResult[]>([])
   const [selected, setSelected]     = useState<string | null>(null)
   const [purchasing, setPurchasing] = useState(false)
+  const [hasSearched, setHasSearched] = useState(false)
 
   async function handleSearch() {
     setSearching(true); setSelected(null); setResults([])
@@ -68,6 +90,7 @@ function AddNumberDialog({
       toast.error('Search failed')
     } finally {
       setSearching(false)
+      setHasSearched(true)
     }
   }
 
@@ -111,7 +134,7 @@ function AddNumberDialog({
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">Country</label>
             <div className="flex gap-2">
-              <Select value={country} onValueChange={(v) => { setCountry(v ?? 'US'); setResults([]); setSelected(null) }}>
+              <Select value={country} onValueChange={(v) => { setCountry(v ?? 'US'); setResults([]); setSelected(null); setHasSearched(false) }}>
                 <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {COUNTRIES.map((c) => (
@@ -125,6 +148,12 @@ function AddNumberDialog({
               </Button>
             </div>
           </div>
+
+          {hasSearched && !searching && results.length === 0 && (
+            <p className="rounded-lg bg-muted/60 px-3 py-2.5 text-xs text-muted-foreground">
+              No instantly-available numbers for this country right now. Try another country.
+            </p>
+          )}
 
           {results.length > 0 && (
             <div className="space-y-1.5 max-h-64 overflow-y-auto">

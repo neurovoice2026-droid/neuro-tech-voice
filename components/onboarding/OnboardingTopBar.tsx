@@ -24,7 +24,7 @@ export function OnboardingTopBar() {
     <div className="fixed left-0 right-0 top-0 z-50">
       {/* Top bar */}
       <div className="flex h-16 items-center justify-between border-b bg-white/80 px-4 backdrop-blur-md lg:px-8">
-        <div className="flex items-center h-8 overflow-hidden">
+        <div className="flex items-center">
           <Logo size="sm" showText />
         </div>
         <div className="flex items-center gap-4">

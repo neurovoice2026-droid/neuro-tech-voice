@@ -39,15 +39,21 @@ export async function GET(request: Request) {
     const twilio = getTwilioClient()
     const available = await twilio
       .availablePhoneNumbers(country)
-      .local.list({ voiceEnabled: true, limit: 5 })
+      .local.list({ voiceEnabled: true, limit: 20 })
 
-    const results: PhoneResult[] = available.map((n) => ({
-      number:        n.phoneNumber,
-      friendly_name: n.friendlyName,
-      locality:      n.locality ?? '',
-      region:        n.region ?? '',
-      price:         '$1.15/mo',
-    }))
+    // Only offer numbers Twilio can provision instantly. Anything requiring
+    // a regulatory bundle (address_requirements !== 'none') is excluded so we
+    // never promise a number the org can't actually complete the purchase of.
+    const results: PhoneResult[] = available
+      .filter((n) => n.addressRequirements === 'none')
+      .slice(0, 5)
+      .map((n) => ({
+        number:        n.phoneNumber,
+        friendly_name: n.friendlyName,
+        locality:      n.locality ?? '',
+        region:        n.region ?? '',
+        price:         '$1.15/mo',
+      }))
 
     return NextResponse.json(results)
   } catch {

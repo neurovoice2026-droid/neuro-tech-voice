@@ -26,11 +26,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
     .limit(1)
     .maybeSingle()
 
+  const { count: activeNumbers } = await supabase
+    .from('phone_numbers')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', org.id)
+    .eq('is_active', true)
+
   return (
     <DashboardShell
       org={org as Organization}
       agent={agent as Agent | null}
       userEmail={user.email ?? ''}
+      hasPhoneNumber={(activeNumbers ?? 0) > 0}
     >
       {children}
     </DashboardShell>

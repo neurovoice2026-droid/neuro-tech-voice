@@ -15,14 +15,34 @@ import { Textarea } from '@/components/ui/textarea'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
 import { cn } from '@/lib/utils'
 
+// Accepts "www.site.com" or "site.com" as well as fully-qualified URLs by
+// checking validity against the https://-prefixed form, without changing the
+// field's input/output type (a z.preprocess here breaks zodResolver's type
+// inference for an optional field). The actual normalization happens in
+// onSubmit, once the value is known to be valid.
+function normalizeUrl(value: string): string {
+  return /^https?:\/\//i.test(value) ? value : `https://${value}`
+}
+
+function isValidWebsite(value: string): boolean {
+  try {
+    new URL(normalizeUrl(value))
+    return true
+  } catch {
+    return false
+  }
+}
+
 const schema = z.object({
   name: z.string().min(2, 'Company name must be at least 2 characters'),
   industry: z.string().min(1, 'Please select an industry'),
   website: z
     .string()
-    .url('Please enter a valid URL (e.g. https://yoursite.com)')
     .optional()
-    .or(z.literal('')),
+    .or(z.literal(''))
+    .refine((val) => !val || isValidWebsite(val), {
+      message: 'Please enter a valid URL (e.g. www.yoursite.com)',
+    }),
   description: z
     .string()
     .min(20, 'Please add at least 20 characters')
@@ -60,7 +80,10 @@ export function Step1Company() {
   const description = form.watch('description') ?? ''
 
   function onSubmit(values: FormValues) {
-    setCompany(values)
+    setCompany({
+      ...values,
+      website: values.website ? normalizeUrl(values.website) : values.website,
+    })
     setStep(2)
   }
 
@@ -160,8 +183,8 @@ export function Step1Company() {
             <Globe className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               id="website"
-              type="url"
-              placeholder="https://yourcompany.com"
+              type="text"
+              placeholder="www.yourcompany.com"
               {...form.register('website')}
               className={cn('h-11 pl-9', form.formState.errors.website && 'border-destructive')}
             />

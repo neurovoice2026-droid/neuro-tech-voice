@@ -1,4 +1,5 @@
 import { agents as elAgents } from './client'
+import { composeSystemPrompt } from './prompt'
 
 export interface AgentInput {
   name: string
@@ -6,6 +7,7 @@ export interface AgentInput {
   first_message?: string | null
   language?: string | null
   voice_id?: string | null
+  fallback_message?: string | null
 }
 
 // Multilingual TTS model. ElevenLabs requires turbo/flash v2_5 for non-English
@@ -26,7 +28,13 @@ export async function createAgentWithFallback(
 ): Promise<{ agent_id: string | null; voiceError?: string; error?: string }> {
   const base = {
     agent: {
-      prompt: { prompt: params.system_prompt ?? 'You are a helpful assistant.' },
+      prompt: {
+        prompt: composeSystemPrompt({
+          system_prompt: params.system_prompt,
+          language: params.language,
+          fallback_message: params.fallback_message,
+        }),
+      },
       first_message: params.first_message ?? 'Hello! How can I help you today?',
       language: params.language ?? 'en',
     },

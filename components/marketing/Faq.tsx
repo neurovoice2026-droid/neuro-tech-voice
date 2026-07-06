@@ -12,7 +12,7 @@ const FAQS = [
   },
   {
     question: 'How long does it take to set up my AI agent?',
-    answer: "Most businesses are live in under 10 minutes: pick a personality and voice, connect a phone number, and your agent starts answering calls immediately.",
+    answer: "Most businesses are set up in under 10 minutes: pick a personality and voice and your agent is ready to configure. Add a phone number from your dashboard whenever you're ready, your agent can't take calls until one is connected.",
   },
   {
     question: 'What languages does the agent support?',
@@ -32,7 +32,7 @@ const FAQS = [
   },
   {
     question: 'Do I need a new phone number, or can I use my existing one?',
-    answer: "You'll get a dedicated business number in seconds as part of setup. Porting in an existing number isn't supported yet.",
+    answer: "You'll need a dedicated business number, which you can purchase separately from your dashboard in seconds, it isn't bundled into any plan. Porting in an existing number isn't supported yet.",
   },
 ]
 

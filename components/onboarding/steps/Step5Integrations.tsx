@@ -230,18 +230,18 @@ export function Step5Integrations() {
 
       {/* Navigation */}
       <div className="flex justify-between">
-        <Button variant="ghost" onClick={() => setStep(4)} className="gap-2">
+        <Button variant="ghost" onClick={() => setStep(3)} className="gap-2">
           <ArrowLeft className="h-4 w-4" /> Back
         </Button>
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => setStep(6)}
+            onClick={() => setStep(5)}
             className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-2"
           >
             Skip for now
           </button>
-          <Button onClick={() => setStep(6)} className="purple-glow px-6">
+          <Button onClick={() => setStep(5)} className="purple-glow px-6">
             Continue <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
         </div>

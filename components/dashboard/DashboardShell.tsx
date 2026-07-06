@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, PhoneCall, Bot, Phone, Plug, CreditCard,
-  LogOut, Menu, X, ChevronRight, GitBranch,
+  LogOut, Menu, X, ChevronRight, GitBranch, TriangleAlert,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -35,6 +35,7 @@ interface DashboardShellProps {
   org: Organization
   agent: Agent | null
   userEmail: string
+  hasPhoneNumber: boolean
 }
 
 function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
@@ -108,7 +109,7 @@ function UserMenu({ org, userEmail }: { org: Organization; userEmail: string }) 
   )
 }
 
-export function DashboardShell({ children, org, userEmail }: DashboardShellProps) {
+export function DashboardShell({ children, org, userEmail, hasPhoneNumber }: DashboardShellProps) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -195,6 +196,21 @@ export function DashboardShell({ children, org, userEmail }: DashboardShellProps
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
+          {!hasPhoneNumber && (
+            <div className="flex items-center gap-3 bg-red-600 px-4 py-3 text-sm text-white">
+              <TriangleAlert className="h-5 w-5 shrink-0" />
+              <p className="flex-1">
+                <strong className="font-semibold">Your agent can&apos;t take calls yet.</strong>{' '}
+                Add a phone number to start answering and making calls.
+              </p>
+              <Link
+                href="/phone"
+                className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-50"
+              >
+                Add a number
+              </Link>
+            </div>
+          )}
           {children}
         </main>
       </div>

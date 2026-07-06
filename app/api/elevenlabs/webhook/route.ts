@@ -71,8 +71,13 @@ export async function POST(request: Request) {
   const eventType = body.type ?? body.event_type ?? ''
   const data = body.data ?? body
 
-  // Handle conversation.completed event
-  if (eventType === 'conversation.completed' || data.conversation_id) {
+  // ElevenLabs sends 3 distinct post-call event types: post_call_transcription
+  // (the one with transcript/metadata/analysis, handled below), post_call_audio
+  // (only agent_id/conversation_id/full_audio, no transcript, must NOT be
+  // processed as a full call record or it would overwrite the real one with
+  // empty data, so it's silently ignored), and call_initiation_failure
+  // (busy/no-answer/unknown, handled further below).
+  if (eventType === 'post_call_transcription') {
     try {
       // Webhook context (no user) → service-role client to bypass RLS.
       const supabase = createAdminClient()
@@ -207,6 +212,77 @@ export async function POST(request: Request) {
       }
     } catch (err) {
       console.error('Webhook processing error:', err)
+    }
+  } else if (eventType === 'call_initiation_failure') {
+    // A call that never connected (busy/no-answer/unknown), logged as a call
+    // record with no transcript, and triggers the "call_missed" workflow
+    // trigger (previously dead: the workflow builder let Customers pick this
+    // trigger, but nothing ever fired it after telephony moved to native
+    // ElevenLabs and this event type went unhandled).
+    try {
+      const supabase = createAdminClient()
+      const agentId = data.agent_id ?? ''
+      const conversationId = data.conversation_id ?? ''
+      if (!agentId) return NextResponse.json({ received: true })
+
+      const { data: agent } = await supabase
+        .from('agents')
+        .select('id, org_id')
+        .eq('elevenlabs_agent_id', agentId)
+        .single()
+
+      if (!agent) return NextResponse.json({ received: true })
+
+      const failureReason = String(data.failure_reason ?? 'unknown')
+      const status = failureReason === 'busy' ? 'busy' : failureReason === 'no-answer' ? 'no-answer' : 'failed'
+
+      const meta = (data.metadata ?? {}) as Record<string, unknown>
+      const providerBody = (meta.body ?? {}) as Record<string, unknown>
+      const callerNumber = (providerBody.From ?? providerBody.from ?? null) as string | null
+      const now = new Date().toISOString()
+
+      const callCtx: CallContext = {
+        org_id: agent.org_id,
+        conversation_id: conversationId,
+        caller_number: callerNumber,
+        direction: 'inbound',
+        duration_seconds: 0,
+        status,
+        sentiment: null,
+        summary: null,
+        transcript: [],
+        started_at: now,
+      }
+
+      if (conversationId) {
+        const { data: upserted, error } = await supabase
+          .from('calls')
+          .upsert(
+            {
+              org_id: agent.org_id,
+              agent_id: agent.id,
+              elevenlabs_conversation_id: conversationId,
+              caller_number: callerNumber,
+              direction: 'inbound',
+              duration_seconds: 0,
+              status,
+              transcript: [],
+              sentiment: null,
+              summary: null,
+              started_at: now,
+              ended_at: now,
+            },
+            { onConflict: 'elevenlabs_conversation_id', ignoreDuplicates: false }
+          )
+          .select('id')
+          .single()
+        if (error) console.error('Webhook: failed to upsert missed call:', error)
+        if (upserted) callCtx.call_id = upserted.id
+      }
+
+      await executeWorkflows('call_missed', callCtx)
+    } catch (err) {
+      console.error('Webhook call_initiation_failure processing error:', err)
     }
   }
 

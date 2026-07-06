@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getTwilioClient } from '@/lib/twilio/client'
 import { phoneNumbers as elPhoneNumbers, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
-import { checkNumberAllowance } from '@/lib/phone/limits'
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -17,12 +16,6 @@ export async function POST(request: Request) {
     .single()
 
   if (!org) return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
-
-  // Enforce plan limits: numbers are included in paid plans; trial must upgrade.
-  const allowance = await checkNumberAllowance(supabase, org.id)
-  if (!allowance.allowed) {
-    return NextResponse.json({ error: allowance.error }, { status: allowance.status })
-  }
 
   const { number, country, agent_id } = (await request.json()) as {
     number: string

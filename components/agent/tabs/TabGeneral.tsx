@@ -13,6 +13,7 @@ import { Separator } from '@/components/ui/separator'
 import { Phone, Smile, Briefcase, HeartHandshake, Zap, BookOpen } from 'lucide-react'
 import type { Agent, PhoneNumber } from '@/types'
 import type { useAgent } from '@/hooks/useAgent'
+import { AGENT_LANGUAGES } from '@/lib/agent-languages'
 
 const PERSONALITIES = [
   { id: 'professional', label: 'Professional', icon: Briefcase, description: 'Formal, precise, business-focused' },
@@ -20,21 +21,6 @@ const PERSONALITIES = [
   { id: 'empathetic', label: 'Empathetic', icon: HeartHandshake, description: 'Caring, patient, understanding' },
   { id: 'energetic', label: 'Energetic', icon: Zap, description: 'Enthusiastic, upbeat, motivating' },
   { id: 'educational', label: 'Educational', icon: BookOpen, description: 'Clear, informative, instructive' },
-]
-
-const LANGUAGES = [
-  { value: 'en', label: 'English' },
-  { value: 'es', label: 'Spanish' },
-  { value: 'fr', label: 'French' },
-  { value: 'de', label: 'German' },
-  { value: 'it', label: 'Italian' },
-  { value: 'pt', label: 'Portuguese' },
-  { value: 'pl', label: 'Polish' },
-  { value: 'hi', label: 'Hindi' },
-  { value: 'ja', label: 'Japanese' },
-  { value: 'ko', label: 'Korean' },
-  { value: 'zh', label: 'Chinese (Mandarin)' },
-  { value: 'ar', label: 'Arabic' },
 ]
 
 type AgentHook = ReturnType<typeof useAgent>
@@ -135,8 +121,8 @@ export function TabGeneral({ agent, phoneNumbers, onUpdate, isSaving }: TabGener
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {LANGUAGES.map(l => (
-                <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
+              {AGENT_LANGUAGES.map(l => (
+                <SelectItem key={l.value} value={l.value}>{l.flag} {l.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>

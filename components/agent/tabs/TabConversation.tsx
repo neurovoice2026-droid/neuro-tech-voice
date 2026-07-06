@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Play, Square, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
 import type { Agent, BehaviorSettings } from '@/types'
 import type { useAgent } from '@/hooks/useAgent'
+import { defaultFallbackMessage } from '@/lib/elevenlabs/prompt'
 
 const PROMPT_TEMPLATES = [
   {
@@ -291,10 +292,13 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
           <Textarea
             value={fallbackMessage}
             onChange={e => setFallbackMessage(e.target.value)}
-            placeholder="I'm sorry, I didn't quite catch that. Could you please repeat?"
+            placeholder={defaultFallbackMessage(agent.language)}
             rows={3}
             className="resize-none"
           />
+          <p className="text-xs text-muted-foreground">
+            Leave blank to use the default fallback phrase in your agent&apos;s language.
+          </p>
         </CardContent>
       </Card>
 
