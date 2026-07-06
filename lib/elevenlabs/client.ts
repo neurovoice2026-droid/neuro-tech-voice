@@ -309,17 +309,22 @@ export interface ELPhoneNumber {
   [key: string]: unknown
 }
 
+// Flat, sibling fields - confirmed against ElevenLabs' actual API reference
+// (CreateTwilioPhoneNumberRequest schema + a same-shaped Exotel example on the
+// same page). There is NO provider_config wrapper object; sid/token are the
+// Twilio Account SID/Auth Token directly. A previous version of this
+// interface nested them under provider_config.twilio.{account_sid,
+// auth_token, phone_number_sid} - that shape doesn't exist in ElevenLabs'
+// schema at all, meaning every past import silently never sent valid Twilio
+// credentials, however plausible the extra fields being ignored made it look
+// like it worked (2xx response, but agent_id also never actually persisted).
 export interface ImportPhoneNumberParams {
   phone_number: string
-  label?: string
-  agent_id?: string
-  provider_config: {
-    twilio: {
-      account_sid: string
-      auth_token: string
-      phone_number_sid: string
-    }
-  }
+  label: string
+  provider: 'twilio'
+  agent_id?: string | null
+  sid: string
+  token: string
 }
 
 export const phoneNumbers = {

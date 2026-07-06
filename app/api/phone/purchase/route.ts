@@ -67,14 +67,10 @@ export async function POST(request: Request) {
         const elPhone = await elPhoneNumbers.create({
           phone_number: purchased.phoneNumber,
           label: `${org.id}-${purchased.friendlyName ?? number}`,
+          provider: 'twilio',
           agent_id: elevenlabsAgentId ?? undefined,
-          provider_config: {
-            twilio: {
-              account_sid: process.env.TWILIO_ACCOUNT_SID!,
-              auth_token: process.env.TWILIO_AUTH_TOKEN!,
-              phone_number_sid: purchased.sid,
-            },
-          },
+          sid: process.env.TWILIO_ACCOUNT_SID!,
+          token: process.env.TWILIO_AUTH_TOKEN!,
         })
         elevenlabsPhoneNumberId = elPhone.phone_number_id
       } catch (err) {

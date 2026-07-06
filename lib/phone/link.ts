@@ -6,18 +6,24 @@ import { phoneNumbers as elPhoneNumbers } from '@/lib/elevenlabs/client'
  * assigned to the given agent, so inbound calls route to it. Best-effort —
  * never throws.
  *
- * IMPORTANT: ElevenLabs only auto-configures the Twilio voice webhook during
- * import (their documented behavior - "ElevenLabs automatically configures
- * the Twilio phone number with the correct settings"). A plain PATCH that
- * only changes agent_id on an already-imported number does NOT reliably
- * retrigger that configuration. So whenever a number needs to move to a
- * different agent, it's deleted from ElevenLabs and re-imported fresh with
- * the new agent_id already attached, rather than patched in place. An
- * earlier version of this function called a hand-set static webhook URL
- * instead (lib/phone/webhook.ts) - that produced Twilio's generic
- * "application error" tone for at least one real number, so don't reintroduce
- * a hardcoded ElevenLabs URL here without solid evidence it's correct for
- * the account in question.
+ * Two bugs compounded here historically, in order discovered:
+ * 1. An earlier version force-set a hand-written static Twilio voiceUrl
+ *    (lib/phone/webhook.ts, deleted) - Twilio confirmed with a real 404 on
+ *    that exact URL, so it was simply wrong, not a config/region issue.
+ * 2. The real bug: ElevenLabs' phone-number import request was shaped wrong.
+ *    Twilio credentials were nested under provider_config.twilio.{account_sid,
+ *    auth_token, phone_number_sid} - that shape doesn't exist in ElevenLabs'
+ *    API at all (confirmed against their reference: it's flat top-level
+ *    `sid`/`token`, no provider_config wrapper). Every past import silently
+ *    never sent valid Twilio credentials, so ElevenLabs never had real access
+ *    to configure anything on the Twilio side, regardless of agent_id.
+ *
+ * Also: a plain PATCH that only changes agent_id on an already-imported
+ * number is not known to retrigger ElevenLabs' auto webhook configuration
+ * (which their docs describe as an import-time behavior), so whenever a
+ * number needs to move to a different agent, it's deleted from ElevenLabs and
+ * re-imported fresh with the new agent_id already attached, rather than
+ * patched in place.
  */
 export async function linkNumbersToAgent(
   supabase: SupabaseClient,
@@ -54,14 +60,10 @@ export async function linkNumbersToAgent(
         const imported = await elPhoneNumbers.create({
           phone_number: n.number as string,
           label: `${orgId}-${n.number}`,
+          provider: 'twilio',
           agent_id: elAgentId,
-          provider_config: {
-            twilio: {
-              account_sid: process.env.TWILIO_ACCOUNT_SID!,
-              auth_token: process.env.TWILIO_AUTH_TOKEN!,
-              phone_number_sid: twilioSid,
-            },
-          },
+          sid: process.env.TWILIO_ACCOUNT_SID!,
+          token: process.env.TWILIO_AUTH_TOKEN!,
         })
         await supabase
           .from('phone_numbers')

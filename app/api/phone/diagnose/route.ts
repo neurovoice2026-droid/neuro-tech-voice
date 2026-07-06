@@ -8,17 +8,25 @@ import { getTwilioClient } from '@/lib/twilio/client'
 // logged in: it reports the DB + ElevenLabs state and tries to (re)link each
 // number to the agent, surfacing the real ElevenLabs error if any.
 //
-// IMPORTANT: ElevenLabs only auto-configures the Twilio voice webhook during
-// import (their documented behavior - "ElevenLabs automatically configures
-// the Twilio phone number with the correct settings"). A plain PATCH that
-// only changes agent_id on an already-imported number does not reliably
-// retrigger that configuration, so every repair here deletes the existing
-// ElevenLabs phone number (if any) and re-imports it fresh with the agent_id
-// already attached, rather than patching in place. A previous version of
-// this endpoint instead force-set a hand-written static webhook URL - that
-// produced Twilio's generic "application error" tone for at least one real
-// number, so don't reintroduce a hardcoded ElevenLabs URL without solid
-// evidence it's correct for the account in question.
+// Root cause chain found debugging a real broken number (2026-07-06):
+// 1. First suspect: ElevenLabs' auto-configured Twilio webhook wasn't set.
+//    Fixed by force-setting a hand-written static URL - Twilio's own error
+//    log then showed a real HTTP 404 on that exact URL, proving it was
+//    simply wrong, not a config/region issue. Reverted.
+// 2. Second suspect: a plain PATCH that only changes agent_id doesn't
+//    retrigger ElevenLabs' import-time auto-configuration. Switched every
+//    repair here to delete + re-import fresh instead of patching in place.
+//    Confirmed-agent-id verification (added below) still showed null after
+//    a "successful" import.
+// 3. Actual root cause: the phone-number import request body was shaped
+//    wrong. Twilio credentials were nested under
+//    provider_config.twilio.{account_sid, auth_token, phone_number_sid} -
+//    that shape doesn't exist in ElevenLabs' API at all (confirmed against
+//    their reference: flat top-level `sid`/`token`, no provider_config
+//    wrapper). Every past import silently never sent valid Twilio
+//    credentials, so ElevenLabs never had real access to configure the
+//    Twilio side, regardless of agent_id or create-vs-update. Fixed in
+//    lib/elevenlabs/client.ts's ImportPhoneNumberParams.
 export async function GET() {
   const supabase = await createClient()
 
@@ -92,14 +100,10 @@ export async function GET() {
         const imported = await elPhone.create({
           phone_number: n.number as string,
           label: `${org.id}-${n.number}`,
+          provider: 'twilio',
           agent_id: elAgentId,
-          provider_config: {
-            twilio: {
-              account_sid: process.env.TWILIO_ACCOUNT_SID!,
-              auth_token: process.env.TWILIO_AUTH_TOKEN!,
-              phone_number_sid: n.twilio_sid as string,
-            },
-          },
+          sid: process.env.TWILIO_ACCOUNT_SID!,
+          token: process.env.TWILIO_AUTH_TOKEN!,
         })
         await supabase
           .from('phone_numbers')
