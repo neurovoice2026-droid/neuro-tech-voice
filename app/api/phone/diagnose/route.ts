@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { phoneNumbers as elPhone, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
 import { createAgentWithFallback } from '@/lib/elevenlabs/create-agent'
 import { getTwilioClient } from '@/lib/twilio/client'
+import { ensureTwilioVoiceWebhook } from '@/lib/phone/webhook'
 
 // Diagnostic + repair endpoint for phone routing. Open in the browser while
 // logged in: it reports the DB + ElevenLabs state and tries to (re)link each
@@ -138,19 +139,19 @@ export async function GET(request: Request) {
 
   report.repair_results = repair
 
-  // ── Step 2b: (reconnect) point the Twilio number's voice webhook at
-  // ElevenLabs so inbound calls actually route to the assigned agent. This is
-  // what the native integration is supposed to do automatically.
-  const EL_INBOUND_URL = 'https://api.us.elevenlabs.io/twilio/inbound_call'
-  if (reconnect && (report.twilio_env as { account_sid_set: boolean }).account_sid_set) {
+  // ── Step 2b: point the Twilio number's voice webhook at ElevenLabs so
+  // inbound calls actually route to the assigned agent. This is what the
+  // native integration is supposed to do automatically on import, but doesn't
+  // reliably. Runs every time now (not just ?reconnect=1) since it's cheap
+  // and idempotent - purchase/link already do this for new numbers, this is
+  // what fixes numbers that were imported before that existed.
+  if ((report.twilio_env as { account_sid_set: boolean }).account_sid_set) {
     const webhookResults: unknown[] = []
     for (const n of numbers ?? []) {
       if (!n.twilio_sid || String(n.twilio_sid).startsWith('mock')) continue
       try {
-        const updated = await getTwilioClient()
-          .incomingPhoneNumbers(n.twilio_sid as string)
-          .update({ voiceUrl: EL_INBOUND_URL, voiceMethod: 'POST' })
-        webhookResults.push({ number: n.number, set_voice_url: updated.voiceUrl, ok: true })
+        await ensureTwilioVoiceWebhook(n.twilio_sid as string)
+        webhookResults.push({ number: n.number, ok: true })
       } catch (e) {
         webhookResults.push({ number: n.number, ok: false, error: e instanceof Error ? e.message : String(e) })
       }

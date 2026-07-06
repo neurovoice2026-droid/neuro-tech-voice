@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getTwilioClient } from '@/lib/twilio/client'
 import { phoneNumbers as elPhoneNumbers, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { ensureTwilioVoiceWebhook } from '@/lib/phone/webhook'
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -53,9 +54,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Step 1: Provision the bare number from Twilio. We deliberately do NOT set
-    // voiceUrl/statusCallback — ElevenLabs takes over routing when the number is
-    // imported below (native Twilio integration), so the app never handles inbound.
+    // Step 1: Provision the bare number from Twilio.
     const twilio = getTwilioClient()
     const purchased = await twilio.incomingPhoneNumbers.create({
       phoneNumber: number,
@@ -79,6 +78,11 @@ export async function POST(request: Request) {
           },
         })
         elevenlabsPhoneNumberId = elPhone.phone_number_id
+
+        // ElevenLabs is documented to auto-configure Twilio's voice webhook on
+        // import, but that doesn't reliably happen - set it explicitly so a
+        // fresh number never ends up silently unroutable.
+        await ensureTwilioVoiceWebhook(purchased.sid)
       } catch (err) {
         console.error('ElevenLabs phone import failed:', err)
       }

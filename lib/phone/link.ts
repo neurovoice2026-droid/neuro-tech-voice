@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { phoneNumbers as elPhoneNumbers } from '@/lib/elevenlabs/client'
+import { ensureTwilioVoiceWebhook } from '@/lib/phone/webhook'
 
 /**
  * Ensures every phone number the org owns is imported into ElevenLabs and
@@ -18,11 +19,13 @@ export async function linkNumbersToAgent(
     .eq('org_id', orgId)
 
   for (const n of nums ?? []) {
+    const twilioSid = n.twilio_sid && !String(n.twilio_sid).startsWith('mock') ? (n.twilio_sid as string) : null
+
     try {
       if (n.elevenlabs_phone_number_id) {
         await elPhoneNumbers.update(n.elevenlabs_phone_number_id as string, { agent_id: elAgentId })
         await supabase.from('phone_numbers').update({ agent_id: localAgentId }).eq('id', n.id)
-      } else if (n.twilio_sid && !String(n.twilio_sid).startsWith('mock')) {
+      } else if (twilioSid) {
         const imported = await elPhoneNumbers.create({
           phone_number: n.number as string,
           label: `${orgId}-${n.number}`,
@@ -31,7 +34,7 @@ export async function linkNumbersToAgent(
             twilio: {
               account_sid: process.env.TWILIO_ACCOUNT_SID!,
               auth_token: process.env.TWILIO_AUTH_TOKEN!,
-              phone_number_sid: n.twilio_sid as string,
+              phone_number_sid: twilioSid,
             },
           },
         })
@@ -40,6 +43,10 @@ export async function linkNumbersToAgent(
           .update({ elevenlabs_phone_number_id: imported.phone_number_id, agent_id: localAgentId })
           .eq('id', n.id)
       }
+
+      // Don't rely on ElevenLabs having auto-configured the Twilio webhook -
+      // set it explicitly every time a number is (re)linked to an agent.
+      if (twilioSid) await ensureTwilioVoiceWebhook(twilioSid)
     } catch (e) {
       console.error('Failed to link phone number to agent:', e)
     }
