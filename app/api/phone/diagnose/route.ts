@@ -3,17 +3,24 @@ import { createClient } from '@/lib/supabase/server'
 import { phoneNumbers as elPhone, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
 import { createAgentWithFallback } from '@/lib/elevenlabs/create-agent'
 import { getTwilioClient } from '@/lib/twilio/client'
-import { ensureTwilioVoiceWebhook } from '@/lib/phone/webhook'
 
 // Diagnostic + repair endpoint for phone routing. Open in the browser while
 // logged in: it reports the DB + ElevenLabs state and tries to (re)link each
 // number to the agent, surfacing the real ElevenLabs error if any.
-export async function GET(request: Request) {
+//
+// IMPORTANT: ElevenLabs only auto-configures the Twilio voice webhook during
+// import (their documented behavior - "ElevenLabs automatically configures
+// the Twilio phone number with the correct settings"). A plain PATCH that
+// only changes agent_id on an already-imported number does not reliably
+// retrigger that configuration, so every repair here deletes the existing
+// ElevenLabs phone number (if any) and re-imports it fresh with the agent_id
+// already attached, rather than patching in place. A previous version of
+// this endpoint instead force-set a hand-written static webhook URL - that
+// produced Twilio's generic "application error" tone for at least one real
+// number, so don't reintroduce a hardcoded ElevenLabs URL without solid
+// evidence it's correct for the account in question.
+export async function GET() {
   const supabase = await createClient()
-
-  // ?reconnect=1 → delete + re-import numbers so ElevenLabs reconfigures the
-  // Twilio voice webhook (fixes numbers imported before an agent existed).
-  const reconnect = new URL(request.url).searchParams.get('reconnect') === '1'
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -80,57 +87,41 @@ export async function GET(request: Request) {
     }
   }
 
-  // ── Step 2: link each number to the agent ────────────────────────────────
+  // ── Step 2: delete + re-import each number so ElevenLabs reconfigures the
+  // Twilio voice webhook fresh, then assign the agent at creation time ──────
   if (elConfigured() && agent && elAgentId) {
     for (const n of numbers ?? []) {
-      // Force reconnect: drop the existing EL number so it can be re-imported
-      // fresh (which makes ElevenLabs reconfigure the Twilio voice webhook).
-      if (reconnect && n.elevenlabs_phone_number_id) {
+      if (n.elevenlabs_phone_number_id) {
         try {
           await elPhone.delete(n.elevenlabs_phone_number_id as string)
-          repair.push({ number: n.number, action: 'deleted_for_reconnect', ok: true })
         } catch (e) {
           repair.push({ number: n.number, action: 'delete_failed', ok: false, error: e instanceof Error ? e.message : String(e) })
         }
         await supabase.from('phone_numbers').update({ elevenlabs_phone_number_id: null }).eq('id', n.id)
-        n.elevenlabs_phone_number_id = null
       }
 
-      // 1) The number already has an ElevenLabs id → just assign the agent.
-      if (n.elevenlabs_phone_number_id) {
-        try {
-          await elPhone.update(n.elevenlabs_phone_number_id as string, { agent_id: elAgentId })
-          await supabase.from('phone_numbers').update({ agent_id: agent.id }).eq('id', n.id)
-          repair.push({ number: n.number, action: 'assigned_agent', ok: true })
-          continue
-        } catch (e) {
-          repair.push({ number: n.number, action: 'assign_failed', ok: false, error: e instanceof Error ? e.message : String(e) })
-          // fall through to import attempt only if it's a "not found"
-        }
-      }
-      // 2) No id (or stale) → import from Twilio.
-      if (n.twilio_sid && !String(n.twilio_sid).startsWith('mock')) {
-        try {
-          const imported = await elPhone.create({
-            phone_number: n.number as string,
-            label: `${org.id}-${n.number}`,
-            agent_id: elAgentId,
-            provider_config: {
-              twilio: {
-                account_sid: process.env.TWILIO_ACCOUNT_SID!,
-                auth_token: process.env.TWILIO_AUTH_TOKEN!,
-                phone_number_sid: n.twilio_sid as string,
-              },
+      if (!n.twilio_sid || String(n.twilio_sid).startsWith('mock')) continue
+
+      try {
+        const imported = await elPhone.create({
+          phone_number: n.number as string,
+          label: `${org.id}-${n.number}`,
+          agent_id: elAgentId,
+          provider_config: {
+            twilio: {
+              account_sid: process.env.TWILIO_ACCOUNT_SID!,
+              auth_token: process.env.TWILIO_AUTH_TOKEN!,
+              phone_number_sid: n.twilio_sid as string,
             },
-          })
-          await supabase
-            .from('phone_numbers')
-            .update({ elevenlabs_phone_number_id: imported.phone_number_id, agent_id: agent.id })
-            .eq('id', n.id)
-          repair.push({ number: n.number, action: 'imported_and_assigned', ok: true, phone_number_id: imported.phone_number_id })
-        } catch (e) {
-          repair.push({ number: n.number, action: 'import_error', ok: false, error: e instanceof Error ? e.message : String(e) })
-        }
+          },
+        })
+        await supabase
+          .from('phone_numbers')
+          .update({ elevenlabs_phone_number_id: imported.phone_number_id, agent_id: agent.id })
+          .eq('id', n.id)
+        repair.push({ number: n.number, action: 'imported_and_assigned', ok: true, phone_number_id: imported.phone_number_id })
+      } catch (e) {
+        repair.push({ number: n.number, action: 'import_error', ok: false, error: e instanceof Error ? e.message : String(e) })
       }
     }
   } else if (!elAgentId) {
@@ -139,29 +130,10 @@ export async function GET(request: Request) {
 
   report.repair_results = repair
 
-  // ── Step 2b: point the Twilio number's voice webhook at ElevenLabs so
-  // inbound calls actually route to the assigned agent. This is what the
-  // native integration is supposed to do automatically on import, but doesn't
-  // reliably. Runs every time now (not just ?reconnect=1) since it's cheap
-  // and idempotent - purchase/link already do this for new numbers, this is
-  // what fixes numbers that were imported before that existed.
-  if ((report.twilio_env as { account_sid_set: boolean }).account_sid_set) {
-    const webhookResults: unknown[] = []
-    for (const n of numbers ?? []) {
-      if (!n.twilio_sid || String(n.twilio_sid).startsWith('mock')) continue
-      try {
-        await ensureTwilioVoiceWebhook(n.twilio_sid as string)
-        webhookResults.push({ number: n.number, ok: true })
-      } catch (e) {
-        webhookResults.push({ number: n.number, ok: false, error: e instanceof Error ? e.message : String(e) })
-      }
-    }
-    report.twilio_webhook_set = webhookResults
-  }
-
   // ── Step 3: inspect the Twilio number's actual voice routing ─────────────
   // If voiceUrl is empty, Twilio has no instructions for inbound calls, so the
   // call just fails silently even though ElevenLabs has the agent assigned.
+  // If it's set but the call still errors, the value itself is worth seeing.
   const twSidSet = (report.twilio_env as { account_sid_set: boolean }).account_sid_set
   if (twSidSet) {
     const twInfo: unknown[] = []
