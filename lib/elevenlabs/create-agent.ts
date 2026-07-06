@@ -11,8 +11,15 @@ export interface AgentInput {
 }
 
 // Multilingual TTS model. ElevenLabs requires turbo/flash v2_5 for non-English
-// agents, and it works for English too — so we always use it.
-const TTS_MODEL = 'eleven_turbo_v2_5'
+// agents, and it works for English too — so we always use it. Exported so the
+// PATCH sync path (app/api/agent/route.ts) uses the exact same values instead
+// of a second hardcoded copy.
+export const TTS_MODEL = 'eleven_turbo_v2_5'
+
+// gpt-5.4-mini: GPT-5-tier quality at "mini" latency/cost, the right balance
+// for a real-time phone conversation (a receptionist-style agent needs to
+// respond fast far more than it needs maximum reasoning depth).
+export const LLM_MODEL = 'gpt-5.4-mini'
 
 function msg(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
@@ -34,6 +41,7 @@ export async function createAgentWithFallback(
           language: params.language,
           fallback_message: params.fallback_message,
         }),
+        llm: LLM_MODEL,
       },
       first_message: params.first_message ?? 'Hello! How can I help you today?',
       language: params.language ?? 'en',
@@ -45,7 +53,11 @@ export async function createAgentWithFallback(
       name: params.name,
       conversation_config: {
         ...base,
-        tts: { model_id: TTS_MODEL, ...(params.voice_id ? { voice_id: params.voice_id } : {}) },
+        tts: {
+          model_id: TTS_MODEL,
+          expressive_mode: true,
+          ...(params.voice_id ? { voice_id: params.voice_id } : {}),
+        },
       },
     })
     return { agent_id: created.agent_id ?? null }
@@ -53,7 +65,7 @@ export async function createAgentWithFallback(
     try {
       const created = await elAgents.create({
         name: params.name,
-        conversation_config: { ...base, tts: { model_id: TTS_MODEL } },
+        conversation_config: { ...base, tts: { model_id: TTS_MODEL, expressive_mode: true } },
       })
       return { agent_id: created.agent_id ?? null, voiceError: msg(e1) }
     } catch (e2) {

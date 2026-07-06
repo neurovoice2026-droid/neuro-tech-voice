@@ -117,11 +117,11 @@ export interface ELAgent {
   name: string
   conversation_config: {
     agent?: {
-      prompt?: { prompt?: string }
+      prompt?: { prompt?: string; llm?: string }
       first_message?: string
       language?: string
     }
-    tts?: { voice_id?: string }
+    tts?: { voice_id?: string; expressive_mode?: boolean }
   }
   platform_settings?: Record<string, unknown>
   metadata?: Record<string, unknown>
@@ -132,11 +132,11 @@ export interface CreateAgentParams {
   name: string
   conversation_config: {
     agent: {
-      prompt?: { prompt: string }
+      prompt?: { prompt: string; llm?: string }
       first_message?: string
       language?: string
     }
-    tts?: { voice_id?: string; model_id?: string }
+    tts?: { voice_id?: string; model_id?: string; expressive_mode?: boolean }
   }
   platform_settings?: Record<string, unknown>
 }
@@ -144,11 +144,11 @@ export interface CreateAgentParams {
 export interface UpdateAgentParams {
   conversation_config?: {
     agent?: {
-      prompt?: { prompt: string }
+      prompt?: { prompt: string; llm?: string }
       first_message?: string
       language?: string
     }
-    tts?: { voice_id?: string; model_id?: string }
+    tts?: { voice_id?: string; model_id?: string; expressive_mode?: boolean }
   }
   name?: string
   platform_settings?: Record<string, unknown>
@@ -300,11 +300,20 @@ export const conversations = {
 
 // ─── Phone Numbers ───────────────────────────────────────────────────────────
 
+// The agent assigned to a number is NOT a flat `agent_id` field in
+// responses - confirmed against ElevenLabs' actual API reference, it's
+// nested under `assigned_agent`. (The CREATE/UPDATE *request* body does take
+// a flat top-level `agent_id` - request and response shapes differ here.)
 export interface ELPhoneNumber {
   phone_number_id: string
   phone_number: string
   label?: string
-  agent_id?: string
+  assigned_agent?: {
+    agent_id: string
+    agent_name?: string
+    environment?: string | null
+    branch_id?: string | null
+  } | null
   provider?: string
   [key: string]: unknown
 }

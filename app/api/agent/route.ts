@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { agents as elAgents, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
-import { createAgentWithFallback } from '@/lib/elevenlabs/create-agent'
+import { createAgentWithFallback, TTS_MODEL, LLM_MODEL } from '@/lib/elevenlabs/create-agent'
 import { composeSystemPrompt } from '@/lib/elevenlabs/prompt'
 import { linkNumbersToAgent } from '@/lib/phone/link'
 
@@ -145,6 +145,7 @@ export async function PATCH(request: Request) {
                   language: agent.language,
                   fallback_message: agent.fallback_message,
                 }),
+                llm: LLM_MODEL,
               },
             }),
             ...(updates.first_message !== undefined && {
@@ -155,7 +156,7 @@ export async function PATCH(request: Request) {
             }),
           },
           ...(updates.voice_id !== undefined && {
-            tts: { voice_id: updates.voice_id as string, model_id: 'eleven_turbo_v2_5' },
+            tts: { voice_id: updates.voice_id as string, model_id: TTS_MODEL, expressive_mode: true },
           }),
         },
       })

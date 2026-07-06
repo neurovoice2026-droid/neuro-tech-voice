@@ -1,29 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
-  Bot, ArrowRight, ArrowLeft, Sparkles, FileText, CheckCircle2, X,
+  Bot, ArrowRight, ArrowLeft, Sparkles, RefreshCw, CheckCircle2,
   Briefcase, Heart, Award, Coffee, Zap, HeartHandshake,
-  Stethoscope, Home, Headphones, UtensilsCrossed, Scale, ShoppingCart, Hotel, Code2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useOnboardingStore, type Personality } from '@/store/useOnboardingStore'
 import { cn } from '@/lib/utils'
 import { AGENT_LANGUAGES } from '@/lib/agent-languages'
+import { buildIndustrySystemPrompt } from '@/lib/agent-prompts'
 
 const schema = z.object({
   personality:   z.string().min(1),
   name:          z.string().min(2, 'Name must be at least 2 characters').max(30, 'Max 30 characters'),
   language:      z.string().min(1, 'Please select a language'),
   first_message: z.string().min(10, 'Greeting must be at least 10 characters'),
-  system_prompt: z.string().max(2000, 'Max 2000 characters').optional(),
+  system_prompt: z.string().max(4000, 'Max 4000 characters').optional(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -37,89 +36,6 @@ const PERSONALITIES = [
   { id: 'empathetic'   as Personality, icon: HeartHandshake, name: 'Empathetic',   desc: 'Compassionate, patient, supportive' },
 ]
 
-
-const TEMPLATES = [
-  {
-    id: 'healthcare',
-    name: 'Healthcare Receptionist',
-    icon: Stethoscope,
-    color: 'text-rose-600',
-    bg: 'bg-rose-50',
-    category: 'Healthcare',
-    desc: 'Appointment scheduling, patient info, office hours',
-    prompt: (c: string) => `You are a professional medical receptionist for ${c}. Your responsibilities include scheduling appointments, answering questions about office hours and services, collecting basic patient information, and directing urgent matters appropriately. Always be empathetic and professional. Never provide medical advice or diagnose conditions. If a caller describes a medical emergency, instruct them to call emergency services immediately.`,
-  },
-  {
-    id: 'real_estate',
-    name: 'Real Estate Agent',
-    icon: Home,
-    color: 'text-green-600',
-    bg: 'bg-green-50',
-    category: 'Real Estate',
-    desc: 'Property inquiries, viewings, agent scheduling',
-    prompt: (c: string) => `You are a real estate assistant for ${c}. Help callers with property inquiries, scheduling viewings, providing basic property information, and connecting them with agents. Be knowledgeable, helpful, and professional. Collect caller details for follow-up and always confirm next steps clearly.`,
-  },
-  {
-    id: 'customer_service',
-    name: 'Customer Support',
-    icon: Headphones,
-    color: 'text-blue-600',
-    bg: 'bg-blue-50',
-    category: 'General',
-    desc: 'Product support, FAQs, ticket creation',
-    prompt: (c: string) => `You are a customer service representative for ${c}. Your goal is to resolve customer issues efficiently and professionally. Answer questions about products and services, assist with troubleshooting, escalate complex issues to human agents when needed, and always leave the customer feeling heard and valued.`,
-  },
-  {
-    id: 'restaurant',
-    name: 'Restaurant Booking',
-    icon: UtensilsCrossed,
-    color: 'text-orange-600',
-    bg: 'bg-orange-50',
-    category: 'Hospitality',
-    desc: 'Reservations, menu info, special requests',
-    prompt: (c: string) => `You are a reservation agent for ${c}. Help guests make table reservations, answer questions about the menu, operating hours, and accommodate special dietary requirements or occasions. Confirm bookings clearly, including date, time, party size, and any special notes. Always be warm and welcoming.`,
-  },
-  {
-    id: 'legal',
-    name: 'Legal Office',
-    icon: Scale,
-    color: 'text-slate-600',
-    bg: 'bg-slate-50',
-    category: 'Legal',
-    desc: 'Appointment booking, case intake, consultations',
-    prompt: (c: string) => `You are an intake assistant for ${c}. Help callers schedule consultations with attorneys, collect basic case information, and answer general questions about the firm's practice areas. Do not provide legal advice. Always maintain confidentiality and treat every caller's situation with sensitivity and respect.`,
-  },
-  {
-    id: 'ecommerce',
-    name: 'E-Commerce Support',
-    icon: ShoppingCart,
-    color: 'text-purple-600',
-    bg: 'bg-purple-50',
-    category: 'Retail',
-    desc: 'Orders, returns, product info, tracking',
-    prompt: (c: string) => `You are a customer support agent for ${c}'s online store. Help customers track orders, process returns or exchanges, answer product questions, and resolve purchase issues. Be efficient, friendly, and solution-focused. Always verify the customer's order details before making any changes.`,
-  },
-  {
-    id: 'hotel',
-    name: 'Hotel Concierge',
-    icon: Hotel,
-    color: 'text-amber-600',
-    bg: 'bg-amber-50',
-    category: 'Hospitality',
-    desc: 'Reservations, amenities, local recommendations',
-    prompt: (c: string) => `You are a concierge for ${c}. Assist guests with room reservations, check-in and check-out inquiries, information about hotel amenities, and local recommendations. Provide a personalized, premium experience. Handle special requests graciously and ensure every guest feels welcome and well taken care of.`,
-  },
-  {
-    id: 'tech_support',
-    name: 'Tech Support',
-    icon: Code2,
-    color: 'text-cyan-600',
-    bg: 'bg-cyan-50',
-    category: 'Technology',
-    desc: 'Troubleshooting, onboarding, feature guidance',
-    prompt: (c: string) => `You are a technical support specialist for ${c}. Help users troubleshoot issues, guide them through product features, and answer technical questions. Break down complex solutions into clear, simple steps. If a problem cannot be resolved on the call, create a detailed support ticket and set clear expectations for follow-up.`,
-  },
-]
 
 // Localized greeting templates, keyed by language code, so "Auto-generate"
 // respects the selected language.
@@ -140,7 +56,6 @@ const GREETINGS: Record<string, (company: string, agent: string) => string> = {
 
 export function Step2Agent() {
   const { agent, company, setAgent, setStep } = useOnboardingStore()
-  const [templateOpen, setTemplateOpen] = useState(false)
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -157,6 +72,20 @@ export function Step2Agent() {
   const agentName    = form.watch('name')
   const personality  = form.watch('personality')
 
+  // Auto-fill a detailed, industry-specific system prompt the first time this
+  // step is reached (empty field only) - the agent should already be well
+  // configured without the user having to write or pick anything themselves.
+  useEffect(() => {
+    if (!form.getValues('system_prompt')?.trim()) {
+      form.setValue(
+        'system_prompt',
+        buildIndustrySystemPrompt({ name: company.name, description: company.description, industry: company.industry }),
+        { shouldValidate: true }
+      )
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   function autoGenerateGreeting() {
     const companyName = company.name || 'our company'
     const an = agentName || 'your assistant'
@@ -165,9 +94,12 @@ export function Step2Agent() {
     form.setValue('first_message', build(companyName, an), { shouldValidate: true })
   }
 
-  function applyTemplate(templateFn: (c: string) => string) {
-    form.setValue('system_prompt', templateFn(company.name || 'our company'), { shouldValidate: true })
-    setTemplateOpen(false)
+  function regenerateSystemPrompt() {
+    form.setValue(
+      'system_prompt',
+      buildIndustrySystemPrompt({ name: company.name, description: company.description, industry: company.industry }),
+      { shouldValidate: true }
+    )
   }
 
   function onSubmit(values: FormValues) {
@@ -304,36 +236,37 @@ export function Step2Agent() {
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <Label htmlFor="system_prompt" className="text-sm font-medium">
-              Agent instructions{' '}
-              <span className="ml-1 font-normal text-muted-foreground">(optional)</span>
+              Agent instructions
             </Label>
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => setTemplateOpen(true)}
+              onClick={regenerateSystemPrompt}
               className="h-7 gap-1.5 text-xs text-primary hover:bg-purple-50"
             >
-              <FileText className="h-3.5 w-3.5" />
-              Use template
+              <RefreshCw className="h-3.5 w-3.5" />
+              Regenerate
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Pre-filled based on your industry, edit anything you&apos;d like to change.
+          </p>
           <Textarea
             id="system_prompt"
-            rows={5}
-            placeholder={`You are a helpful assistant for ${company.name || '[Company]'}. Your main tasks are: answering questions about our services, scheduling appointments, and handling customer inquiries...`}
+            rows={10}
             {...form.register('system_prompt')}
-            className="resize-none"
+            className="resize-none font-mono text-sm"
           />
           <div className="flex justify-between">
             <p className="text-xs text-muted-foreground">Advanced: define exactly how your agent should behave</p>
             <span
               className={cn(
                 'text-xs tabular-nums',
-                systemPrompt.length > 1800 ? 'text-orange-500' : 'text-muted-foreground'
+                systemPrompt.length > 3600 ? 'text-orange-500' : 'text-muted-foreground'
               )}
             >
-              {systemPrompt.length}/2000
+              {systemPrompt.length}/4000
             </span>
           </div>
         </div>
@@ -348,53 +281,6 @@ export function Step2Agent() {
           </Button>
         </div>
       </form>
-
-      {/* Template picker dialog */}
-      <Dialog open={templateOpen} onOpenChange={setTemplateOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <div className="flex items-center justify-between">
-              <DialogTitle className="text-lg font-bold">Choose a template</DialogTitle>
-              <button
-                onClick={() => setTemplateOpen(false)}
-                className="rounded-md p-1 text-muted-foreground hover:bg-gray-100 hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Select an industry template as a starting point — you can customize it after.
-            </p>
-          </DialogHeader>
-
-          <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 max-h-[60vh] overflow-y-auto pr-1">
-            {TEMPLATES.map((t) => {
-              const Icon = t.icon
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => applyTemplate(t.prompt)}
-                  className="flex items-start gap-3 rounded-xl border p-4 text-left transition-all hover:border-primary hover:bg-purple-50/50 hover:shadow-sm group"
-                >
-                  <div className={cn('mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg', t.bg)}>
-                    <Icon className={cn('h-4.5 w-4.5', t.color)} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold text-foreground">{t.name}</p>
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                        {t.category}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{t.desc}</p>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

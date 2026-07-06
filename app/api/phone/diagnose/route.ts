@@ -18,15 +18,23 @@ import { getTwilioClient } from '@/lib/twilio/client'
 //    repair here to delete + re-import fresh instead of patching in place.
 //    Confirmed-agent-id verification (added below) still showed null after
 //    a "successful" import.
-// 3. Actual root cause: the phone-number import request body was shaped
-//    wrong. Twilio credentials were nested under
+// 3. Real fix, found by checking ElevenLabs' exact schema instead of
+//    assuming: the import request body nested Twilio credentials under
 //    provider_config.twilio.{account_sid, auth_token, phone_number_sid} -
 //    that shape doesn't exist in ElevenLabs' API at all (confirmed against
 //    their reference: flat top-level `sid`/`token`, no provider_config
-//    wrapper). Every past import silently never sent valid Twilio
-//    credentials, so ElevenLabs never had real access to configure the
-//    Twilio side, regardless of agent_id or create-vs-update. Fixed in
-//    lib/elevenlabs/client.ts's ImportPhoneNumberParams.
+//    wrapper). Fixed in lib/elevenlabs/client.ts's ImportPhoneNumberParams.
+//    Confirmed working: after this fix, ElevenLabs' auto-configured voiceUrl
+//    changed on its own to a different (and presumably correct) value than
+//    the hand-written one from step 1 - real proof it now has working
+//    Twilio access it didn't have before.
+// 4. But confirmed_agent_id still showed null even after step 3's fix. Turned
+//    out to be a second, independent bug: the phone-number GET/list response
+//    puts the assigned agent under `assigned_agent.agent_id`, not a flat
+//    `agent_id` like the *request* body uses - request and response shapes
+//    differ. This verification code was reading the wrong path the whole
+//    time, so agent assignment may have been working correctly already and
+//    this was a false alarm from my own reporting, not a real failure.
 export async function GET() {
   const supabase = await createClient()
 
@@ -117,7 +125,7 @@ export async function GET() {
         let confirmedAgentId: string | null | undefined = undefined
         try {
           const fetched = await elPhone.get(imported.phone_number_id)
-          confirmedAgentId = (fetched.agent_id as string | undefined) ?? null
+          confirmedAgentId = fetched.assigned_agent?.agent_id ?? null
         } catch (e) {
           confirmedAgentId = undefined
           repair.push({ number: n.number, action: 'verify_fetch_failed', ok: false, error: e instanceof Error ? e.message : String(e) })
@@ -150,7 +158,7 @@ export async function GET() {
       report.elevenlabs_phone_numbers = list.map((p) => ({
         phone_number_id: p.phone_number_id,
         phone_number: p.phone_number,
-        agent_id: p.agent_id ?? null,
+        agent_id: p.assigned_agent?.agent_id ?? null,
       }))
     } catch (e) {
       report.elevenlabs_list_error = e instanceof Error ? e.message : String(e)
