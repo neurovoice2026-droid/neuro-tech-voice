@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { cn, formatPhoneNumber } from '@/lib/utils'
+import { PHONE_NUMBER_MONTHLY_PRICE_USD } from '@/lib/phone/pricing'
 
 interface PhoneNumber {
   id: string
@@ -32,7 +33,6 @@ interface SearchResult {
   friendly_name: string
   locality: string
   region: string
-  price: string
 }
 
 // Countries offered here are ones that can typically get an instant number
@@ -98,22 +98,20 @@ function AddNumberDialog({
     if (!selected) return
     setPurchasing(true)
     try {
-      const res = await fetch('/api/phone/purchase', {
+      const res = await fetch('/api/phone/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ number: selected, country }),
       })
       const data = await res.json()
-      if (res.ok && data.success) {
-        toast.success('Number purchased')
-        onPurchased()
-        onClose()
+      if (res.ok && data.url) {
+        window.location.href = data.url
       } else {
-        toast.error(data.error ?? 'Purchase failed')
+        toast.error(data.error ?? 'Could not start checkout')
+        setPurchasing(false)
       }
     } catch {
-      toast.error('Purchase failed')
-    } finally {
+      toast.error('Could not start checkout')
       setPurchasing(false)
     }
   }
@@ -170,7 +168,6 @@ function AddNumberDialog({
                     <p className="font-mono text-sm font-medium">{formatPhoneNumber(r.number)}</p>
                     <p className="text-xs text-muted-foreground">{[r.locality, r.region].filter(Boolean).join(', ') || 'Local number'}</p>
                   </div>
-                  <span className="text-xs text-muted-foreground">{r.price}</span>
                 </button>
               ))}
             </div>
@@ -178,8 +175,15 @@ function AddNumberDialog({
 
           <Button className="w-full purple-glow gap-2" disabled={!selected || purchasing} onClick={handlePurchase}>
             {purchasing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Phone className="h-4 w-4" />}
-            {selected ? `Buy ${formatPhoneNumber(selected)}` : 'Select a number'}
+            {purchasing
+              ? 'Redirecting to checkout...'
+              : selected
+                ? `Buy ${formatPhoneNumber(selected)} for $${PHONE_NUMBER_MONTHLY_PRICE_USD}/mo`
+                : 'Select a number'}
           </Button>
+          <p className="text-center text-xs text-muted-foreground">
+            ${PHONE_NUMBER_MONTHLY_PRICE_USD}/month, billed automatically via Stripe. Cancel anytime from your billing settings.
+          </p>
         </div>
       </DialogContent>
     </Dialog>

@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { emitInvoiceForStripePayment } from '@/lib/smartbill/emit'
 import { sendEmail } from '@/lib/email/client'
 import { paymentSuccessEmail, paymentFailedEmail } from '@/lib/email/templates'
+import { provisionPhoneNumber } from '@/lib/phone/provision'
 import { PLANS } from '@/types'
 import type { Plan } from '@/types'
 
@@ -39,6 +40,12 @@ export async function POST(request: Request) {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session
+
+        if (session.metadata?.type === 'phone_number') {
+          await provisionPurchasedNumber(supabase, session)
+          break
+        }
+
         const subscriptionId =
           typeof session.subscription === 'string'
             ? session.subscription
@@ -55,7 +62,12 @@ export async function POST(request: Request) {
         break
       }
       case 'customer.subscription.deleted': {
-        await downgradeToTrial(supabase, event.data.object as Stripe.Subscription)
+        const subscription = event.data.object as Stripe.Subscription
+        if (subscription.metadata?.type === 'phone_number') {
+          await releasePhoneNumber(supabase, subscription)
+        } else {
+          await downgradeToTrial(supabase, subscription)
+        }
         break
       }
       case 'invoice.paid': {
@@ -91,6 +103,58 @@ export async function POST(request: Request) {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// The Customer has already paid by the time this runs (checkout.session.completed
+// only fires on success) - if provisioning fails here the number was paid for but
+// never delivered, so this logs loudly rather than failing silently. There's no
+// automatic refund/retry yet, a failure here needs a human to look at the logs.
+async function provisionPurchasedNumber(supabase: SupabaseClient, session: Stripe.Checkout.Session) {
+  const { org_id: orgId, number, country, agent_id: agentId } = session.metadata ?? {}
+  if (!orgId || !number) {
+    console.error('Phone number checkout completed but metadata is missing org_id/number:', session.id)
+    return
+  }
+
+  const stripeSubscriptionId =
+    typeof session.subscription === 'string' ? session.subscription : session.subscription?.id ?? null
+
+  try {
+    await provisionPhoneNumber(supabase, { orgId, number, country, agentId, stripeSubscriptionId })
+  } catch (err) {
+    console.error(
+      `PAID BUT NOT PROVISIONED: phone number ${number} for org ${orgId} (checkout session ${session.id}). ` +
+      `Customer has been charged. Needs manual follow-up.`,
+      err
+    )
+  }
+}
+
+// Phone-number subscriptions are cancelled for various reasons: the Customer
+// deliberately released the number, or Stripe gave up retrying after repeated
+// payment failures. Either way, nobody's paying for it anymore, so it's
+// deactivated here rather than left silently costing us Twilio's monthly fee
+// forever. Left in the DB (not deleted) so call history stays intact.
+async function releasePhoneNumber(supabase: SupabaseClient, subscription: Stripe.Subscription) {
+  const { data: phone } = await supabase
+    .from('phone_numbers')
+    .select('id, number')
+    .eq('stripe_subscription_id', subscription.id)
+    .maybeSingle()
+
+  if (!phone) {
+    console.warn(`Phone number subscription ${subscription.id} cancelled but no matching number found.`)
+    return
+  }
+
+  const { error } = await supabase
+    .from('phone_numbers')
+    .update({ is_active: false })
+    .eq('id', phone.id)
+
+  if (error) {
+    console.error(`Failed to deactivate phone number ${phone.number} after subscription cancellation:`, error.message)
+  }
+}
 
 async function sendPaymentSuccess(supabase: SupabaseClient, invoice: Stripe.Invoice) {
   if (!invoice.customer_email) return
@@ -142,6 +206,13 @@ async function applySubscription(
   subscription: Stripe.Subscription,
   fallbackOrgId?: string
 ) {
+  // Phone number subscriptions are a completely separate concern from the
+  // org's plan (each number is its own subscription - see app/api/phone/checkout).
+  // Provisioning already happened off checkout.session.completed; there's
+  // nothing to sync here on creation/update, and treating its price as a plan
+  // price would wrongly reset the org to trial.
+  if (subscription.metadata?.type === 'phone_number') return
+
   const customerId = customerIdOf(subscription)
   const orgId = subscription.metadata?.org_id ?? fallbackOrgId
   const priceId = subscription.items.data[0]?.price.id

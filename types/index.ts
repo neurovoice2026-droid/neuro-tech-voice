@@ -66,7 +66,7 @@ export interface Agent {
   first_message: string | null
   is_active: boolean
   working_hours: WorkingHours
-  fallback_message: string
+  fallback_message: string | null
   metadata: Record<string, unknown>
   created_at: string
   updated_at: string

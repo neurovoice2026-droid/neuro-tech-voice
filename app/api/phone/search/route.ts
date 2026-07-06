@@ -6,7 +6,6 @@ interface PhoneResult {
   friendly_name: string
   locality: string
   region: string
-  price: string
 }
 
 // Mock numbers for dev / Twilio not configured
@@ -20,7 +19,6 @@ function getMockNumbers(country: string): PhoneResult[] {
     friendly_name: `${country} Local`,
     locality: ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix'][i],
     region: ['NY', 'CA', 'IL', 'TX', 'AZ'][i],
-    price: '$1.15/mo',
   }))
 }
 
@@ -52,7 +50,6 @@ export async function GET(request: Request) {
         friendly_name: n.friendlyName,
         locality:      n.locality ?? '',
         region:        n.region ?? '',
-        price:         '$1.15/mo',
       }))
 
     return NextResponse.json(results)

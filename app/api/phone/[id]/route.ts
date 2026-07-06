@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getTwilioClient } from '@/lib/twilio/client'
 import { phoneNumbers as elPhone, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { getStripeClient, isStripeConfigured } from '@/lib/stripe/client'
 
-// Release a phone number: detach from ElevenLabs, release from Twilio, drop the row.
+// Release a phone number: detach from ElevenLabs, release from Twilio, cancel
+// its Stripe subscription, drop the row.
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -25,7 +27,7 @@ export async function DELETE(
 
   const { data: num } = await supabase
     .from('phone_numbers')
-    .select('id, twilio_sid, elevenlabs_phone_number_id')
+    .select('id, twilio_sid, elevenlabs_phone_number_id, stripe_subscription_id')
     .eq('id', id)
     .eq('org_id', org.id)
     .maybeSingle()
@@ -38,6 +40,13 @@ export async function DELETE(
   }
   if (num.twilio_sid && !String(num.twilio_sid).startsWith('mock')) {
     try { await getTwilioClient().incomingPhoneNumbers(num.twilio_sid as string).remove() } catch { /* ignore */ }
+  }
+  // Cancel billing so releasing a number here doesn't leave the Customer
+  // charged $1.15/mo forever for a number that's already gone. The
+  // subscription.deleted webhook also flips is_active off, harmless since
+  // this row is about to be deleted anyway.
+  if (isStripeConfigured() && num.stripe_subscription_id) {
+    try { await getStripeClient().subscriptions.cancel(num.stripe_subscription_id) } catch { /* ignore */ }
   }
 
   const { error } = await supabase
