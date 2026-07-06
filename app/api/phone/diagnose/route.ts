@@ -54,20 +54,6 @@ export async function GET() {
     db_numbers: numbers ?? [],
   }
 
-  // What does ElevenLabs actually have?
-  if (elConfigured()) {
-    try {
-      const list = await elPhone.list()
-      report.elevenlabs_phone_numbers = list.map((p) => ({
-        phone_number_id: p.phone_number_id,
-        phone_number: p.phone_number,
-        agent_id: p.agent_id ?? null,
-      }))
-    } catch (e) {
-      report.elevenlabs_list_error = e instanceof Error ? e.message : String(e)
-    }
-  }
-
   const repair: unknown[] = []
   let elAgentId: string | null = (agent?.elevenlabs_agent_id as string) ?? null
 
@@ -129,6 +115,22 @@ export async function GET() {
   }
 
   report.repair_results = repair
+
+  // ── Step 2c: confirm what ElevenLabs actually has AFTER repair (not a
+  // stale pre-repair snapshot - a previous version of this report queried
+  // the list before running repairs, so it always showed last run's state) ─
+  if (elConfigured()) {
+    try {
+      const list = await elPhone.list()
+      report.elevenlabs_phone_numbers = list.map((p) => ({
+        phone_number_id: p.phone_number_id,
+        phone_number: p.phone_number,
+        agent_id: p.agent_id ?? null,
+      }))
+    } catch (e) {
+      report.elevenlabs_list_error = e instanceof Error ? e.message : String(e)
+    }
+  }
 
   // ── Step 3: inspect the Twilio number's actual voice routing ─────────────
   // If voiceUrl is empty, Twilio has no instructions for inbound calls, so the
