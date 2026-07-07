@@ -311,19 +311,23 @@ export function CallsTable({
 
                     {/* Agent */}
                     <TableCell className="hidden xl:table-cell">
-                      <span className="text-xs text-muted-foreground">—</span>
+                      <span className="text-xs text-muted-foreground">{call.agent_name ?? '—'}</span>
                     </TableCell>
 
                     {/* Date */}
                     <TableCell className="text-right">
-                      <div>
-                        <p className="text-xs font-medium">
-                          {formatDistanceToNow(new Date(call.started_at), { addSuffix: true })}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {formatDate(call.started_at)}
-                        </p>
-                      </div>
+                      {call.started_at ? (
+                        <div>
+                          <p className="text-xs font-medium">
+                            {formatDistanceToNow(new Date(call.started_at), { addSuffix: true })}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {formatDate(call.started_at)}
+                          </p>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
 
                     {/* Actions dropdown */}
@@ -335,15 +339,13 @@ export function CallsTable({
                           <MoreHorizontal className="h-4 w-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-44">
-                          <DropdownMenuItem onSelect={() => openDetail(call.id, 'overview')}>
+                          <DropdownMenuItem onClick={() => openDetail(call.id, 'overview')}>
                             <Eye className="mr-2 h-4 w-4" /> View details
                           </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => openDetail(call.id, 'transcript')}>
+                          <DropdownMenuItem onClick={() => openDetail(call.id, 'transcript')}>
                             <FileText className="mr-2 h-4 w-4" /> View transcript
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={(e) => copyNumber(call, e as unknown as React.MouseEvent)}
-                          >
+                          <DropdownMenuItem onClick={(e) => copyNumber(call, e)}>
                             {copiedId === call.id
                               ? <><CheckCheck className="mr-2 h-4 w-4 text-green-500" /> Copied!</>
                               : <><Copy className="mr-2 h-4 w-4" /> Copy number</>}
@@ -351,7 +353,7 @@ export function CallsTable({
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             variant="destructive"
-                            onSelect={() => setDeleteTarget(call.id)}
+                            onClick={() => setDeleteTarget(call.id)}
                           >
                             <Trash2 className="mr-2 h-4 w-4" /> Delete call
                           </DropdownMenuItem>

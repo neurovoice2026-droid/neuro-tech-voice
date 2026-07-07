@@ -376,7 +376,7 @@ export function CallDetailSheet({ callId, onClose, onDeleted, defaultTab = 'over
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground mb-0.5">Started</p>
-                      <p className="font-medium text-xs">{formatDate(call.started_at)}</p>
+                      <p className="font-medium text-xs">{call.started_at ? formatDate(call.started_at) : '—'}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground mb-0.5">Ended</p>

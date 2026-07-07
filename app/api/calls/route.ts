@@ -3,8 +3,11 @@ import { createClient } from '@/lib/supabase/server'
 import { conversations, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
 import type { ELConversationListItem } from '@/lib/elevenlabs/client'
 
-// Map ElevenLabs conversation to our Call shape
-function mapConversation(c: ELConversationListItem) {
+// Map ElevenLabs conversation to our Call shape. started_at is left null
+// (rather than a fabricated "now" or epoch) when ElevenLabs doesn't supply
+// start_time_unix - the frontend must handle a missing date, not compute a
+// relative time from a made-up value.
+function mapConversation(c: ELConversationListItem, agentName: string | null) {
   const startedAt = c.start_time_unix
     ? new Date(c.start_time_unix * 1000).toISOString()
     : null
@@ -31,6 +34,7 @@ function mapConversation(c: ELConversationListItem) {
     id: c.conversation_id,
     elevenlabs_conversation_id: c.conversation_id,
     agent_id: c.agent_id,
+    agent_name: agentName,
     caller_number: c.from_phone_number ?? c.to_phone_number ?? null,
     direction,
     duration_seconds: Math.round(c.call_duration_secs ?? 0),
@@ -38,7 +42,7 @@ function mapConversation(c: ELConversationListItem) {
     sentiment,
     started_at: startedAt,
     ended_at: endedAt,
-    created_at: startedAt,
+    created_at: startedAt ?? new Date(0).toISOString(),
   }
 }
 
@@ -72,7 +76,7 @@ export async function GET(request: Request) {
   // Get the org's agent to scope by ElevenLabs agent_id
   const { data: agent } = await supabase
     .from('agents')
-    .select('elevenlabs_agent_id')
+    .select('name, elevenlabs_agent_id')
     .eq('org_id', org.id)
     .single()
 
@@ -105,7 +109,7 @@ export async function GET(request: Request) {
         if (accumulated.length >= MAX_FETCH && cursor) { hasMoreUpstream = true; break }
       } while (cursor)
 
-      let calls = accumulated.map(mapConversation)
+      let calls = accumulated.map((c) => mapConversation(c, agent.name ?? null))
 
       // Client-side filtering for fields ElevenLabs doesn't filter
       if (status !== 'all') calls = calls.filter((c) => c.status === status)
@@ -167,8 +171,16 @@ export async function GET(request: Request) {
   const { data: calls, count, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // Flatten the joined agents(name) into a top-level agent_name, matching the
+  // shape mapConversation() returns above, so the frontend only ever needs to
+  // read one consistent field regardless of which path served the data.
+  const flattened = (calls ?? []).map((c) => {
+    const { agents, ...rest } = c as typeof c & { agents?: { name?: string | null } | null }
+    return { ...rest, agent_name: agents?.name ?? null }
+  })
+
   return NextResponse.json({
-    calls: calls ?? [],
+    calls: flattened,
     total: count ?? 0,
     page,
     totalPages: Math.ceil((count ?? 0) / limit),

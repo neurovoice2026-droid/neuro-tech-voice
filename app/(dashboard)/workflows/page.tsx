@@ -20,6 +20,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -98,6 +99,24 @@ const AVAILABLE_ACTIONS: ActionType[] = [
   'send_email', 'add_to_sheet', 'create_calendar_event',
   'send_webhook', 'create_doc', 'notify_slack', 'add_tag', 'wait',
 ]
+
+// Actions that call a Google API need that integration connected first, or
+// they'd fail on every run (lib/workflows/executor.ts returns "not connected"
+// errors for these today, but the builder still let you pick them anyway).
+// send_webhook/notify_slack/add_tag/wait need no OAuth connection at all.
+const ACTION_REQUIRES_INTEGRATION: Partial<Record<ActionType, string>> = {
+  send_email: 'gmail',
+  add_to_sheet: 'google_sheets',
+  create_calendar_event: 'google_calendar',
+  create_doc: 'google_docs',
+}
+
+const INTEGRATION_LABEL: Record<string, string> = {
+  gmail: 'Gmail',
+  google_sheets: 'Google Sheets',
+  google_calendar: 'Google Calendar',
+  google_docs: 'Google Docs',
+}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -255,10 +274,12 @@ function CreateWorkflowDialog({
   open,
   onClose,
   onCreate,
+  connectedIntegrations,
 }: {
   open: boolean
   onClose: () => void
   onCreate: (data: { name: string; description: string; trigger: TriggerType; trigger_config: Record<string, string>; actions: WorkflowAction[] }) => Promise<void>
+  connectedIntegrations: Set<string>
 }) {
   const [step, setStep] = useState(1)
   const [selectedTrigger, setSelectedTrigger] = useState<TriggerType | null>(null)
@@ -405,24 +426,42 @@ function CreateWorkflowDialog({
                 const meta = ACTION_META[type]
                 const Icon = meta.icon
                 const selected = selectedActions.includes(type)
+                const requiredIntegration = ACTION_REQUIRES_INTEGRATION[type]
+                const locked = !!requiredIntegration && !connectedIntegrations.has(requiredIntegration)
                 return (
                   <button
                     key={type}
-                    onClick={() => toggleAction(type)}
+                    onClick={() => !locked && toggleAction(type)}
+                    disabled={locked}
+                    title={locked ? `Connect ${INTEGRATION_LABEL[requiredIntegration!]} first` : undefined}
                     className={cn(
                       'flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-left transition-all',
-                      selected
-                        ? 'border-purple-500 bg-purple-50'
-                        : 'border-border hover:border-purple-200 hover:bg-muted/40'
+                      locked
+                        ? 'opacity-50 cursor-not-allowed border-border'
+                        : selected
+                          ? 'border-purple-500 bg-purple-50'
+                          : 'border-border hover:border-purple-200 hover:bg-muted/40'
                     )}
                   >
                     <Icon className={cn('h-4 w-4 shrink-0', meta.color)} />
-                    <span className="text-xs font-medium text-foreground">{meta.label}</span>
-                    {selected && <CheckCircle2 className="ml-auto h-3.5 w-3.5 text-purple-600 shrink-0" />}
+                    <span className="text-xs font-medium text-foreground">
+                      {meta.label}
+                      {locked && <span className="block text-[10px] font-normal text-muted-foreground">Not connected</span>}
+                    </span>
+                    {selected && !locked && <CheckCircle2 className="ml-auto h-3.5 w-3.5 text-purple-600 shrink-0" />}
                   </button>
                 )
               })}
             </div>
+            {AVAILABLE_ACTIONS.some((t) => {
+              const req = ACTION_REQUIRES_INTEGRATION[t]
+              return req && !connectedIntegrations.has(req)
+            }) && (
+              <p className="text-[11px] text-muted-foreground">
+                Some actions are locked because their integration isn&apos;t connected yet.{' '}
+                <a href="/integrations" className="text-purple-600 hover:underline">Connect integrations</a>
+              </p>
+            )}
 
             {/* Config for selected actions */}
             {selectedActions.includes('send_webhook') && (
@@ -563,6 +602,7 @@ export default function WorkflowsPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'active' | 'paused'>('all')
+  const [connectedIntegrations, setConnectedIntegrations] = useState<Set<string>>(new Set())
 
   const fetchWorkflows = useCallback(async () => {
     try {
@@ -577,6 +617,16 @@ export default function WorkflowsPage() {
   }, [])
 
   useEffect(() => { fetchWorkflows() }, [fetchWorkflows])
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.from('integrations').select('type, is_active').then(({ data }) => {
+      const connected = new Set(
+        (data ?? []).filter((row) => row.is_active).map((row) => row.type as string)
+      )
+      setConnectedIntegrations(connected)
+    })
+  }, [])
 
   const filtered = useMemo(() => {
     return workflows.filter((w) => {
@@ -762,6 +812,7 @@ export default function WorkflowsPage() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreate={handleCreate}
+        connectedIntegrations={connectedIntegrations}
       />
     </div>
   )

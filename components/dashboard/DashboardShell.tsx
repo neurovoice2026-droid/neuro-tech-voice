@@ -183,7 +183,7 @@ export function DashboardShell({ children, org, userEmail, hasPhoneNumber }: Das
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Mobile header */}
         <header className="flex h-14 items-center justify-between border-b bg-card/50 px-4 lg:hidden">
-          <Logo size="sm" showText />
+          <Logo size="xs" showText />
           <Button
             variant="ghost"
             size="icon"

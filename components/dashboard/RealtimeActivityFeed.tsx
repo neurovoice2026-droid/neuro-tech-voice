@@ -13,7 +13,8 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   'in-progress': <PhoneIncoming className="h-4 w-4 text-purple-500 animate-pulse" />,
 }
 
-function timeAgo(date: string) {
+function timeAgo(date: string | null) {
+  if (!date) return '—'
   const diff = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
   if (diff < 60) return `${diff}s ago`
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`

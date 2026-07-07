@@ -110,7 +110,9 @@ export function RecentCallsTable({ calls, isLoading }: RecentCallsTableProps) {
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell">
                       <span className="text-xs text-muted-foreground">
-                        {new Date(call.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {call.started_at
+                          ? new Date(call.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                          : '—'}
                       </span>
                     </td>
                   </tr>
