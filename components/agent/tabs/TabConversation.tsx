@@ -106,7 +106,8 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
         body: JSON.stringify({ text: firstMessage, voice_id: agent.voice_id }),
       })
       if (!res.ok) {
-        toast.error('Could not generate voice preview')
+        const detail = await res.text().catch(() => '')
+        toast.error('Could not generate voice preview', detail ? { description: detail.slice(0, 200) } : undefined)
         setIsPreviewingTTS(false)
         return
       }

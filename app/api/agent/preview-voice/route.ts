@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { textToSpeech, isConfigured } from '@/lib/elevenlabs/client'
+import { textToSpeech, isConfigured, ElevenLabsError } from '@/lib/elevenlabs/client'
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -25,7 +25,11 @@ export async function POST(request: Request) {
     return new Response(audio, {
       headers: { 'Content-Type': 'audio/mpeg' },
     })
-  } catch {
-    return new Response('TTS generation failed', { status: 502 })
+  } catch (err) {
+    const detail = err instanceof ElevenLabsError
+      ? `ElevenLabs ${err.status} on ${err.path}: ${err.body.slice(0, 300)}`
+      : err instanceof Error ? err.message : 'Unknown error'
+    console.error('TTS preview failed:', detail)
+    return new Response(detail, { status: 502 })
   }
 }

@@ -95,7 +95,8 @@ export function TabVoice({ agent, onUpdateVoice, isSaving }: TabVoiceProps) {
         body: JSON.stringify({ text: 'Hello! I am your AI voice agent. How can I help you today?', voice_id: voice.voice_id }),
       })
       if (!res.ok) {
-        toast.error('Could not generate voice preview')
+        const detail = await res.text().catch(() => '')
+        toast.error('Could not generate voice preview', detail ? { description: detail.slice(0, 200) } : undefined)
         return
       }
 
