@@ -106,8 +106,16 @@ export function VoiceVisual() {
 }
 
 export function SchedulingVisual() {
-  const cells = Array.from({ length: 35 })
-  const bookedIndex = 17
+  const year = 2026
+  const month = 6 // July (0-indexed)
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const firstWeekday = new Date(year, month, 1).getDay() // 0 = Sunday, matches the S M T W T F S header
+  const bookedDay = 18
+
+  const cells: (number | null)[] = [
+    ...Array.from({ length: firstWeekday }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ]
 
   return (
     <MockupWindow path="app.neurotechvoice.com/calendar">
@@ -125,20 +133,24 @@ export function SchedulingVisual() {
             {d}
           </span>
         ))}
-        {cells.map((_, i) => (
+        {cells.map((day, i) => (
           <div key={i} className="relative aspect-square">
-            <div
-              className={cn(
-                'flex h-full w-full items-center justify-center rounded-lg text-xs',
-                i === bookedIndex
-                  ? 'bg-primary font-semibold text-primary-foreground'
-                  : 'text-foreground/50'
-              )}
-            >
-              {i + 1}
-            </div>
-            {i === bookedIndex && (
-              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-white ring-2 ring-primary" />
+            {day !== null && (
+              <>
+                <div
+                  className={cn(
+                    'flex h-full w-full items-center justify-center rounded-lg text-xs',
+                    day === bookedDay
+                      ? 'bg-primary font-semibold text-primary-foreground'
+                      : 'text-foreground/50'
+                  )}
+                >
+                  {day}
+                </div>
+                {day === bookedDay && (
+                  <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-white ring-2 ring-primary" />
+                )}
+              </>
             )}
           </div>
         ))}

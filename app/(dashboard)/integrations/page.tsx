@@ -6,6 +6,7 @@ import { CheckCircle2, Link2, ExternalLink, Webhook, Loader2 } from 'lucide-reac
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { WorkInProgressBadge } from '@/components/shared/WorkInProgressBadge'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 
@@ -19,6 +20,7 @@ interface IntegrationDef {
   logoBg: string
   category: string
   recommended?: boolean
+  workInProgress?: boolean
 }
 
 const INTEGRATIONS: IntegrationDef[] = [
@@ -30,6 +32,7 @@ const INTEGRATIONS: IntegrationDef[] = [
     logoSrc: '/integrari/google_calendar.svg',
     logoBg: 'bg-blue-50',
     category: 'Google Workspace',
+    workInProgress: true,
     recommended: true,
   },
   {
@@ -40,6 +43,7 @@ const INTEGRATIONS: IntegrationDef[] = [
     logoSrc: '/integrari/google_mail.svg',
     logoBg: 'bg-red-50',
     category: 'Google Workspace',
+    workInProgress: true,
     recommended: true,
   },
   {
@@ -50,6 +54,7 @@ const INTEGRATIONS: IntegrationDef[] = [
     logoSrc: '/integrari/google_sheets.svg',
     logoBg: 'bg-green-50',
     category: 'Google Workspace',
+    workInProgress: true,
   },
   {
     id: 'google_docs',
@@ -59,6 +64,7 @@ const INTEGRATIONS: IntegrationDef[] = [
     logoSrc: '/integrari/google_docs.svg',
     logoBg: 'bg-blue-50',
     category: 'Google Workspace',
+    workInProgress: true,
   },
   {
     id: 'google_drive',
@@ -68,6 +74,7 @@ const INTEGRATIONS: IntegrationDef[] = [
     logoSrc: '/integrari/google_drive.svg',
     logoBg: 'bg-yellow-50',
     category: 'Google Workspace',
+    workInProgress: true,
   },
   {
     id: 'webhook',
@@ -115,6 +122,7 @@ function IntegrationCard({
             Recommended
           </span>
         )}
+        {integration.workInProgress && <WorkInProgressBadge />}
       </div>
 
       <div className="flex items-start justify-between gap-4">

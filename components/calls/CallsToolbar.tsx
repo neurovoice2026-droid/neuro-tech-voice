@@ -148,7 +148,9 @@ export function CallsToolbar({
         {/* Status */}
         <Select value={filters.status} onValueChange={(v) => v && update({ status: v as CallFilters['status'] })}>
           <SelectTrigger className="h-9 w-36">
-            <SelectValue placeholder="All statuses" />
+            <SelectValue placeholder="All statuses">
+              {(value: string) => STATUS_OPTS.find((o) => o.value === value)?.label ?? value}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {STATUS_OPTS.map((o) => (
@@ -160,7 +162,9 @@ export function CallsToolbar({
         {/* Direction */}
         <Select value={filters.direction} onValueChange={(v) => v && update({ direction: v as CallFilters['direction'] })}>
           <SelectTrigger className="h-9 w-36">
-            <SelectValue placeholder="All directions" />
+            <SelectValue placeholder="All directions">
+              {(value: string) => DIRECTION_OPTS.find((o) => o.value === value)?.label ?? value}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {DIRECTION_OPTS.map((o) => (
@@ -172,7 +176,9 @@ export function CallsToolbar({
         {/* Sentiment */}
         <Select value={filters.sentiment} onValueChange={(v) => v && update({ sentiment: v as CallFilters['sentiment'] })}>
           <SelectTrigger className="h-9 w-40">
-            <SelectValue placeholder="All sentiments" />
+            <SelectValue placeholder="All sentiments">
+              {(value: string) => SENTIMENT_OPTS.find((o) => o.value === value)?.label ?? value}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {SENTIMENT_OPTS.map((o) => (
@@ -281,7 +287,9 @@ export function CallsToolbar({
           <span className="text-sm text-muted-foreground hidden sm:inline">Sort by:</span>
           <Select value={sortValue} onValueChange={(v) => v && handleSort(v)}>
             <SelectTrigger className="h-8 w-40">
-              <SelectValue />
+              <SelectValue>
+                {(value: string) => SORT_OPTS.find((o) => o.value === value)?.label ?? value}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {SORT_OPTS.map((o) => (

@@ -1,4 +1,4 @@
-import { agents as elAgents } from './client'
+import { agents as elAgents, TTS_MODEL } from './client'
 import { composeSystemPrompt } from './prompt'
 
 export interface AgentInput {
@@ -10,11 +10,11 @@ export interface AgentInput {
   fallback_message?: string | null
 }
 
-// Multilingual TTS model. ElevenLabs requires turbo/flash v2_5 for non-English
-// agents, and it works for English too — so we always use it. Exported so the
-// PATCH sync path (app/api/agent/route.ts) uses the exact same values instead
-// of a second hardcoded copy.
-export const TTS_MODEL = 'eleven_turbo_v2_5'
+// Re-exported so the PATCH sync path (app/api/agent/route.ts) and other
+// existing importers keep working - TTS_MODEL's canonical definition now
+// lives in ./client since textToSpeech() (the voice-preview endpoint) needs
+// it too and client.ts must not import from this higher-level module.
+export { TTS_MODEL }
 
 // gpt-5.4-mini: GPT-5-tier quality at "mini" latency/cost, the right balance
 // for a real-time phone conversation (a receptionist-style agent needs to

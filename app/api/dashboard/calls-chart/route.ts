@@ -53,7 +53,7 @@ export async function GET() {
         const dayEndUnix = dayStartUnix + 86400
 
         const dayCalls = convs.filter((c) => {
-          const t = c.start_time_unix ?? 0
+          const t = c.start_time_unix_secs ?? 0
           return t >= dayStartUnix && t < dayEndUnix
         })
 

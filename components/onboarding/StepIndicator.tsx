@@ -7,8 +7,7 @@ const STEPS = [
   { num: 1, label: 'Company' },
   { num: 2, label: 'Agent' },
   { num: 3, label: 'Voice' },
-  { num: 4, label: 'Integrations' },
-  { num: 5, label: 'Launch' },
+  { num: 4, label: 'Launch' },
 ]
 
 interface StepIndicatorProps {

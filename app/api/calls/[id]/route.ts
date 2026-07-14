@@ -38,11 +38,11 @@ export async function GET(
         const metadata = conv.metadata ?? {}
         const analysis = conv.analysis ?? {}
 
-        const startedAt = metadata.start_time_unix
-          ? new Date(metadata.start_time_unix * 1000).toISOString()
+        const startedAt = metadata.start_time_unix_secs
+          ? new Date(metadata.start_time_unix_secs * 1000).toISOString()
           : null
-        const endedAt = metadata.end_time_unix
-          ? new Date(metadata.end_time_unix * 1000).toISOString()
+        const endedAt = metadata.start_time_unix_secs && metadata.call_duration_secs
+          ? new Date((metadata.start_time_unix_secs + metadata.call_duration_secs) * 1000).toISOString()
           : null
 
         let sentiment: string | null = 'neutral'

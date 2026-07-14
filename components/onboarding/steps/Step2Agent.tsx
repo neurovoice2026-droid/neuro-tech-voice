@@ -16,6 +16,7 @@ import { useOnboardingStore, type Personality } from '@/store/useOnboardingStore
 import { cn } from '@/lib/utils'
 import { AGENT_LANGUAGES } from '@/lib/agent-languages'
 import { buildIndustrySystemPrompt } from '@/lib/agent-prompts'
+import { FlagIcon } from '@/components/shared/FlagIcon'
 
 const schema = z.object({
   personality:   z.string().min(1),
@@ -189,7 +190,7 @@ export function Step2Agent() {
                           : 'border-border hover:border-purple-200 hover:bg-purple-50/30'
                       )}
                     >
-                      <span className="text-lg leading-none">{lang.flag}</span>
+                      <FlagIcon country={lang.country} className="h-4 w-6" />
                       <span className={cn('text-xs font-medium', isSelected ? 'text-foreground' : 'text-muted-foreground')}>
                         {lang.label}
                       </span>

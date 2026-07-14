@@ -6,7 +6,6 @@ import { StepIndicator } from './StepIndicator'
 import { Step1Company } from './steps/Step1Company'
 import { Step2Agent } from './steps/Step2Agent'
 import { Step3Voice } from './steps/Step3Voice'
-import { Step5Integrations } from './steps/Step5Integrations'
 import { Step6Launch } from './steps/Step5Launch'
 import type { Organization } from '@/types'
 
@@ -50,8 +49,7 @@ export function OnboardingWrapper({ initialStep, organization }: OnboardingWrapp
         {currentStep === 1 && <Step1Company />}
         {currentStep === 2 && <Step2Agent />}
         {currentStep === 3 && <Step3Voice />}
-        {currentStep === 4 && <Step5Integrations />}
-        {currentStep === 5 && <Step6Launch organization={organization} />}
+        {currentStep === 4 && <Step6Launch organization={organization} />}
       </div>
     </>
   )

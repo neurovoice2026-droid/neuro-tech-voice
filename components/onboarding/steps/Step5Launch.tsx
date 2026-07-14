@@ -507,7 +507,7 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
 
         {/* Back */}
         <div className="flex justify-center">
-          <Button variant="ghost" size="sm" onClick={() => setStep(4)} disabled={isLaunching} className="gap-2 text-muted-foreground">
+          <Button variant="ghost" size="sm" onClick={() => setStep(3)} disabled={isLaunching} className="gap-2 text-muted-foreground">
             <ArrowLeft className="h-4 w-4" /> Back
           </Button>
         </div>

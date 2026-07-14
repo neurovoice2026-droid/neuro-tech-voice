@@ -145,6 +145,7 @@ export type IntegrationType =
   | 'google_sheets'
   | 'google_docs'
   | 'google_calendar'
+  | 'google_drive'
   | 'gmail'
   | 'webhook'
 

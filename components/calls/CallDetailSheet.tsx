@@ -10,6 +10,7 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
+import { WorkInProgressBadge } from '@/components/shared/WorkInProgressBadge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
@@ -226,10 +227,10 @@ function TranscriptView({ transcript }: { transcript: TranscriptEntry[] }) {
 }
 
 function IntegrationAction({
-  icon: Icon, iconColor, label, description, buttonLabel, callId, type, connected,
+  icon: Icon, iconColor, label, description, buttonLabel, callId, type, connected, workInProgress,
 }: {
   icon: typeof Bot; iconColor: string; label: string; description: string
-  buttonLabel: string; callId: string; type: string; connected: boolean
+  buttonLabel: string; callId: string; type: string; connected: boolean; workInProgress?: boolean
 }) {
   const [sent, setSent] = useState(false)
   const [isPending, start] = useTransition()
@@ -251,7 +252,10 @@ function IntegrationAction({
       <div className="flex items-start gap-3">
         <Icon className={cn('h-5 w-5 mt-0.5 flex-shrink-0', iconColor)} />
         <div>
-          <p className="text-sm font-medium">{label}</p>
+          <p className="flex items-center gap-1.5 text-sm font-medium">
+            {label}
+            {workInProgress && <WorkInProgressBadge />}
+          </p>
           <p className="text-xs text-muted-foreground">{description}</p>
         </div>
       </div>
@@ -452,12 +456,14 @@ export function CallDetailSheet({ callId, onClose, onDeleted, defaultTab = 'over
                       label="Log to Google Sheets"
                       description="Add this call to your call-log spreadsheet"
                       buttonLabel="Send" callId={call.id} type="google_sheets" connected={connected.google_sheets}
+                      workInProgress
                     />
                     <IntegrationAction
                       icon={FileText} iconColor="text-blue-600"
                       label="Create call report"
                       description="Generate a formatted report in Google Docs"
                       buttonLabel="Create" callId={call.id} type="google_docs" connected={connected.google_docs}
+                      workInProgress
                     />
                     <IntegrationAction
                       icon={Mail} iconColor="text-red-500"

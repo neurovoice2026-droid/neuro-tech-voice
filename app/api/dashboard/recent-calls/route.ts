@@ -34,11 +34,11 @@ export async function GET(request: Request) {
       })
 
       const calls = (data.conversations ?? []).map((c) => {
-        const startedAt = c.start_time_unix
-          ? new Date(c.start_time_unix * 1000).toISOString()
+        const startedAt = c.start_time_unix_secs
+          ? new Date(c.start_time_unix_secs * 1000).toISOString()
           : new Date().toISOString()
-        const endedAt = c.end_time_unix
-          ? new Date(c.end_time_unix * 1000).toISOString()
+        const endedAt = c.start_time_unix_secs && c.call_duration_secs
+          ? new Date((c.start_time_unix_secs + c.call_duration_secs) * 1000).toISOString()
           : null
 
         let sentiment: string | null = 'neutral'

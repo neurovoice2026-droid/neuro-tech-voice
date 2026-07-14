@@ -14,6 +14,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { FlagIcon } from '@/components/shared/FlagIcon'
 import { toast } from 'sonner'
 import { cn, formatPhoneNumber } from '@/lib/utils'
 import { PHONE_NUMBER_MONTHLY_PRICE_USD } from '@/lib/phone/pricing'
@@ -41,28 +42,29 @@ interface SearchResult {
 // server-side in /api/phone/search, which only ever returns numbers where
 // Twilio's own address_requirements is "none". Romania is deliberately
 // excluded since it requires a regulatory bundle.
+// `value` is the ISO 3166-1 alpha-2 code, reused directly for <FlagIcon />.
 const COUNTRIES = [
-  { value: 'US', label: '🇺🇸 United States' },
-  { value: 'CA', label: '🇨🇦 Canada' },
-  { value: 'GB', label: '🇬🇧 United Kingdom' },
-  { value: 'NZ', label: '🇳🇿 New Zealand' },
-  { value: 'AT', label: '🇦🇹 Austria' },
-  { value: 'BE', label: '🇧🇪 Belgium' },
-  { value: 'CH', label: '🇨🇭 Switzerland' },
-  { value: 'CZ', label: '🇨🇿 Czechia' },
-  { value: 'DK', label: '🇩🇰 Denmark' },
-  { value: 'FI', label: '🇫🇮 Finland' },
-  { value: 'HU', label: '🇭🇺 Hungary' },
-  { value: 'LU', label: '🇱🇺 Luxembourg' },
-  { value: 'NO', label: '🇳🇴 Norway' },
-  { value: 'PT', label: '🇵🇹 Portugal' },
-  { value: 'SE', label: '🇸🇪 Sweden' },
-  { value: 'SK', label: '🇸🇰 Slovakia' },
-  { value: 'SG', label: '🇸🇬 Singapore' },
-  { value: 'JP', label: '🇯🇵 Japan' },
-  { value: 'IN', label: '🇮🇳 India' },
-  { value: 'BR', label: '🇧🇷 Brazil' },
-  { value: 'ZA', label: '🇿🇦 South Africa' },
+  { value: 'US', label: 'United States' },
+  { value: 'CA', label: 'Canada' },
+  { value: 'GB', label: 'United Kingdom' },
+  { value: 'NZ', label: 'New Zealand' },
+  { value: 'AT', label: 'Austria' },
+  { value: 'BE', label: 'Belgium' },
+  { value: 'CH', label: 'Switzerland' },
+  { value: 'CZ', label: 'Czechia' },
+  { value: 'DK', label: 'Denmark' },
+  { value: 'FI', label: 'Finland' },
+  { value: 'HU', label: 'Hungary' },
+  { value: 'LU', label: 'Luxembourg' },
+  { value: 'NO', label: 'Norway' },
+  { value: 'PT', label: 'Portugal' },
+  { value: 'SE', label: 'Sweden' },
+  { value: 'SK', label: 'Slovakia' },
+  { value: 'SG', label: 'Singapore' },
+  { value: 'JP', label: 'Japan' },
+  { value: 'IN', label: 'India' },
+  { value: 'BR', label: 'Brazil' },
+  { value: 'ZA', label: 'South Africa' },
 ]
 
 // ─── Buy dialog ───────────────────────────────────────────────────────────────
@@ -133,10 +135,27 @@ function AddNumberDialog({
             <label className="text-sm font-medium text-foreground">Country</label>
             <div className="flex gap-2">
               <Select value={country} onValueChange={(v) => { setCountry(v ?? 'US'); setResults([]); setSelected(null); setHasSearched(false) }}>
-                <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-10">
+                  <SelectValue>
+                    {(value: string) => {
+                      const c = COUNTRIES.find((o) => o.value === value)
+                      return c ? (
+                        <span className="flex items-center gap-2">
+                          <FlagIcon country={c.value} />
+                          {c.label}
+                        </span>
+                      ) : value
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
                 <SelectContent>
                   {COUNTRIES.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                    <SelectItem key={c.value} value={c.value}>
+                      <span className="flex items-center gap-2">
+                        <FlagIcon country={c.value} />
+                        {c.label}
+                      </span>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

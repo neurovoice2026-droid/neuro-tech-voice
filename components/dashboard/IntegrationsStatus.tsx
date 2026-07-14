@@ -1,20 +1,23 @@
 import Image from 'next/image'
 import { CheckCircle2, XCircle, ExternalLink, Link2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { WorkInProgressBadge } from '@/components/shared/WorkInProgressBadge'
 import type { Integration, IntegrationType } from '@/types'
 
 interface IntegrationMeta {
   label: string
   logoSrc?: string   // path in /public
   logoBg: string
+  workInProgress?: boolean
 }
 
 const INTEGRATION_META: Record<IntegrationType, IntegrationMeta> = {
-  google_calendar: { label: 'Google Calendar', logoSrc: '/integrari/google_calendar.svg', logoBg: 'bg-blue-50' },
-  gmail:           { label: 'Gmail',            logoSrc: '/integrari/google_mail.svg',     logoBg: 'bg-red-50'  },
-  google_sheets:   { label: 'Google Sheets',    logoSrc: '/integrari/google_sheets.svg',   logoBg: 'bg-green-50' },
-  google_docs:     { label: 'Google Docs',      logoSrc: '/integrari/google_docs.svg',     logoBg: 'bg-blue-50'  },
-  webhook:         { label: 'Webhook',           logoBg: 'bg-gray-100'                                          },
+  google_calendar: { label: 'Google Calendar', logoSrc: '/integrari/google_calendar.svg', logoBg: 'bg-blue-50',   workInProgress: true },
+  gmail:           { label: 'Gmail',            logoSrc: '/integrari/google_mail.svg',     logoBg: 'bg-red-50',    workInProgress: true },
+  google_sheets:   { label: 'Google Sheets',    logoSrc: '/integrari/google_sheets.svg',   logoBg: 'bg-green-50',  workInProgress: true },
+  google_docs:     { label: 'Google Docs',      logoSrc: '/integrari/google_docs.svg',     logoBg: 'bg-blue-50',   workInProgress: true },
+  google_drive:    { label: 'Google Drive',     logoSrc: '/integrari/google_drive.svg',    logoBg: 'bg-yellow-50', workInProgress: true },
+  webhook:         { label: 'Webhook',           logoBg: 'bg-gray-100'                                                                  },
 }
 
 interface IntegrationsStatusProps {
@@ -22,7 +25,7 @@ interface IntegrationsStatusProps {
 }
 
 export function IntegrationsStatus({ integrations }: IntegrationsStatusProps) {
-  const all: IntegrationType[] = ['google_calendar', 'gmail', 'google_sheets', 'google_docs', 'webhook']
+  const all: IntegrationType[] = ['google_calendar', 'gmail', 'google_sheets', 'google_docs', 'google_drive', 'webhook']
   const connectedMap = new Map(integrations.map((i) => [i.type, i]))
 
   return (
@@ -60,6 +63,7 @@ export function IntegrationsStatus({ integrations }: IntegrationsStatusProps) {
                   )}
                 </div>
                 <span className="text-sm font-medium">{meta.label}</span>
+                {meta.workInProgress && <WorkInProgressBadge />}
               </div>
               {isConnected ? (
                 <CheckCircle2 className="h-4 w-4 text-green-500" />

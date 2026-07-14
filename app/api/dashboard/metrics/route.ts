@@ -48,9 +48,9 @@ export async function GET() {
       const weekUnix = Math.floor(weekStart.getTime() / 1000)
       const monthUnix = Math.floor(monthStart.getTime() / 1000)
 
-      const callsToday = all.filter((c) => (c.start_time_unix ?? 0) >= todayUnix).length
-      const callsThisWeek = all.filter((c) => (c.start_time_unix ?? 0) >= weekUnix).length
-      const callsThisMonth = all.filter((c) => (c.start_time_unix ?? 0) >= monthUnix).length
+      const callsToday = all.filter((c) => (c.start_time_unix_secs ?? 0) >= todayUnix).length
+      const callsThisWeek = all.filter((c) => (c.start_time_unix_secs ?? 0) >= weekUnix).length
+      const callsThisMonth = all.filter((c) => (c.start_time_unix_secs ?? 0) >= monthUnix).length
 
       const sentimentBreakdown = {
         positive: all.filter((c) => c.call_successful === 'true').length,
@@ -61,8 +61,8 @@ export async function GET() {
       // Peak hour
       const hourCounts = new Array(24).fill(0)
       completed.forEach((c) => {
-        if (c.start_time_unix) {
-          const h = new Date(c.start_time_unix * 1000).getHours()
+        if (c.start_time_unix_secs) {
+          const h = new Date(c.start_time_unix_secs * 1000).getHours()
           hourCounts[h]++
         }
       })

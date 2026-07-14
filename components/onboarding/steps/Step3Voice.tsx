@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
 import { cn } from '@/lib/utils'
 import type { ElevenLabsVoice } from '@/types'
+import { FlagIcon } from '@/components/shared/FlagIcon'
 
 // ─── Types & language config ─────────────────────────────────────────────────
 interface Voice {
@@ -21,7 +22,7 @@ interface Voice {
   name: string
   language: string       // display name, e.g. "Romanian"
   languageCode: string   // e.g. "ro"
-  flag: string
+  flagCountry: string | null // ISO 3166-1 alpha-2 for <FlagIcon />, null if unknown
   accent: string
   gender: 'Male' | 'Female' | 'Neutral'
   age: string
@@ -32,26 +33,36 @@ interface Voice {
   public_owner_id?: string // present → library voice, must be added on select
 }
 
+// `country` is an ISO 3166-1 alpha-2 code for <FlagIcon />, not the language
+// itself - flags represent countries, not languages. null → no flag (the
+// "all languages" pseudo-entry renders a globe glyph instead).
 const LANGS = [
-  { code: 'all', name: 'All languages', flag: '🌐' },
-  { code: 'en', name: 'English', flag: '🇬🇧' },
-  { code: 'ro', name: 'Romanian', flag: '🇷🇴' },
-  { code: 'es', name: 'Spanish', flag: '🇪🇸' },
-  { code: 'fr', name: 'French', flag: '🇫🇷' },
-  { code: 'de', name: 'German', flag: '🇩🇪' },
-  { code: 'it', name: 'Italian', flag: '🇮🇹' },
-  { code: 'pt', name: 'Portuguese', flag: '🇵🇹' },
-  { code: 'nl', name: 'Dutch', flag: '🇳🇱' },
-  { code: 'pl', name: 'Polish', flag: '🇵🇱' },
-  { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
-  { code: 'ko', name: 'Korean', flag: '🇰🇷' },
-  { code: 'zh', name: 'Chinese', flag: '🇨🇳' },
-  { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
-  { code: 'hi', name: 'Hindi', flag: '🇮🇳' },
-  { code: 'tr', name: 'Turkish', flag: '🇹🇷' },
+  { code: 'all', name: 'All languages', country: null as string | null },
+  { code: 'en', name: 'English', country: 'GB' },
+  { code: 'ro', name: 'Romanian', country: 'RO' },
+  { code: 'es', name: 'Spanish', country: 'ES' },
+  { code: 'fr', name: 'French', country: 'FR' },
+  { code: 'de', name: 'German', country: 'DE' },
+  { code: 'it', name: 'Italian', country: 'IT' },
+  { code: 'pt', name: 'Portuguese', country: 'PT' },
+  { code: 'nl', name: 'Dutch', country: 'NL' },
+  { code: 'pl', name: 'Polish', country: 'PL' },
+  { code: 'ja', name: 'Japanese', country: 'JP' },
+  { code: 'ko', name: 'Korean', country: 'KR' },
+  { code: 'zh', name: 'Chinese', country: 'CN' },
+  { code: 'ar', name: 'Arabic', country: 'SA' },
+  { code: 'hi', name: 'Hindi', country: 'IN' },
+  { code: 'tr', name: 'Turkish', country: 'TR' },
 ]
-const LANG_MAP: Record<string, { code: string; name: string; flag: string }> =
+const LANG_MAP: Record<string, { code: string; name: string; country: string | null }> =
   Object.fromEntries(LANGS.map((l) => [l.code, l]))
+
+// Renders a real flag SVG for a country code, the globe glyph for the "all
+// languages" entry (country === null), or nothing for a fully unknown code.
+function LangGlyph({ country }: { country: string | null }) {
+  if (country === null) return <span className="text-sm leading-none">🌐</span>
+  return <FlagIcon country={country} className="h-3.5 w-5" />
+}
 
 const GENDERS: Array<'All' | 'Female' | 'Male'> = ['All', 'Female', 'Male']
 
@@ -83,7 +94,7 @@ function mapVoice(v: ElevenLabsVoice): Voice {
     name: v.name.split(' - ')[0], // strip long marketing descriptors
     language: lang?.name ?? titleCase(code),
     languageCode: code,
-    flag: lang?.flag ?? '🎙️',
+    flagCountry: lang?.country ?? null,
     accent: titleCase(labels.accent ?? ''),
     gender,
     age,
@@ -140,7 +151,7 @@ function VoiceCard({
             )}
           </div>
           <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-            <span className="text-sm leading-none">{voice.flag}</span>
+            {voice.flagCountry ? <FlagIcon country={voice.flagCountry} className="h-3.5 w-5" /> : <span className="leading-none">🎙️</span>}
             <span className="truncate">{voice.language}{voice.accent ? ` · ${voice.accent}` : ''}</span>
           </p>
         </div>
@@ -335,10 +346,27 @@ export function Step3Voice() {
           </div>
 
           <Select value={langCode} onValueChange={(v) => v && setLangCode(v)}>
-            <SelectTrigger className="h-10 sm:w-48"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-10 sm:w-48">
+              <SelectValue>
+                {(value: string) => {
+                  const l = LANG_MAP[value]
+                  return l ? (
+                    <span className="flex items-center gap-2">
+                      <LangGlyph country={l.country} />
+                      {l.name}
+                    </span>
+                  ) : value
+                }}
+              </SelectValue>
+            </SelectTrigger>
             <SelectContent>
               {LANGS.map((l) => (
-                <SelectItem key={l.code} value={l.code}>{l.flag} {l.name}</SelectItem>
+                <SelectItem key={l.code} value={l.code}>
+                  <span className="flex items-center gap-2">
+                    <LangGlyph country={l.country} />
+                    {l.name}
+                  </span>
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -419,7 +447,10 @@ export function Step3Voice() {
               <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-primary" />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-foreground">{selected.name}</p>
-                <p className="truncate text-xs text-muted-foreground">{selected.flag} {selected.language}{selected.accent ? ` · ${selected.accent}` : ''}</p>
+                <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+                  {selected.flagCountry ? <FlagIcon country={selected.flagCountry} className="h-3 w-4.5" /> : <span className="leading-none">🎙️</span>}
+                  <span className="truncate">{selected.language}{selected.accent ? ` · ${selected.accent}` : ''}</span>
+                </p>
               </div>
             </div>
           ) : (

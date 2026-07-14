@@ -14,6 +14,7 @@ import { Phone, Smile, Briefcase, HeartHandshake, Zap, BookOpen } from 'lucide-r
 import type { Agent, PhoneNumber } from '@/types'
 import type { useAgent } from '@/hooks/useAgent'
 import { AGENT_LANGUAGES } from '@/lib/agent-languages'
+import { FlagIcon } from '@/components/shared/FlagIcon'
 
 const PERSONALITIES = [
   { id: 'professional', label: 'Professional', icon: Briefcase, description: 'Formal, precise, business-focused' },
@@ -118,11 +119,26 @@ export function TabGeneral({ agent, phoneNumbers, onUpdate, isSaving }: TabGener
         <CardContent>
           <Select value={language} onValueChange={v => v && setLanguage(v)}>
             <SelectTrigger className="w-[220px]">
-              <SelectValue />
+              <SelectValue>
+                {(value: string) => {
+                  const l = AGENT_LANGUAGES.find(o => o.value === value)
+                  return l ? (
+                    <span className="flex items-center gap-2">
+                      <FlagIcon country={l.country} />
+                      {l.label}
+                    </span>
+                  ) : value
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {AGENT_LANGUAGES.map(l => (
-                <SelectItem key={l.value} value={l.value}>{l.flag} {l.label}</SelectItem>
+                <SelectItem key={l.value} value={l.value}>
+                  <span className="flex items-center gap-2">
+                    <FlagIcon country={l.country} />
+                    {l.label}
+                  </span>
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>

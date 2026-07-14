@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
 import { signOut } from '@/lib/auth/actions'
 
-const TOTAL_STEPS = 5
+const TOTAL_STEPS = 4
 
 export function OnboardingTopBar() {
   const currentStep = useOnboardingStore((s) => s.currentStep)

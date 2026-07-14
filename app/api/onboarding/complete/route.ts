@@ -115,7 +115,7 @@ export async function POST(request: Request) {
     .from('organizations')
     .update({
       onboarding_completed: !willCheckout,
-      onboarding_step: 5,
+      onboarding_step: 4,
       plan: effectivePlan,
       minutes_limit: PLANS[effectivePlan].minutes_limit,
     })

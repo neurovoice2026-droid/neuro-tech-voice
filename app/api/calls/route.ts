@@ -5,14 +5,15 @@ import type { ELConversationListItem } from '@/lib/elevenlabs/client'
 
 // Map ElevenLabs conversation to our Call shape. started_at is left null
 // (rather than a fabricated "now" or epoch) when ElevenLabs doesn't supply
-// start_time_unix - the frontend must handle a missing date, not compute a
-// relative time from a made-up value.
+// start_time_unix_secs - the frontend must handle a missing date, not compute
+// a relative time from a made-up value. ElevenLabs has no end-time field on
+// either endpoint - it's derived from start + duration when both are known.
 function mapConversation(c: ELConversationListItem, agentName: string | null) {
-  const startedAt = c.start_time_unix
-    ? new Date(c.start_time_unix * 1000).toISOString()
+  const startedAt = c.start_time_unix_secs
+    ? new Date(c.start_time_unix_secs * 1000).toISOString()
     : null
-  const endedAt = c.end_time_unix
-    ? new Date(c.end_time_unix * 1000).toISOString()
+  const endedAt = c.start_time_unix_secs && c.call_duration_secs
+    ? new Date((c.start_time_unix_secs + c.call_duration_secs) * 1000).toISOString()
     : null
 
   // Determine status

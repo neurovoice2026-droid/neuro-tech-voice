@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Search, Play, Square, Check, Volume2, Mic, Info } from 'lucide-react'
+import { toast } from 'sonner'
 import type { Agent, ElevenLabsVoice } from '@/types'
 import type { useAgent } from '@/hooks/useAgent'
 
@@ -93,7 +94,10 @@ export function TabVoice({ agent, onUpdateVoice, isSaving }: TabVoiceProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: 'Hello! I am your AI voice agent. How can I help you today?', voice_id: voice.voice_id }),
       })
-      if (!res.ok) return
+      if (!res.ok) {
+        toast.error('Could not generate voice preview')
+        return
+      }
 
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
@@ -106,6 +110,8 @@ export function TabVoice({ agent, onUpdateVoice, isSaving }: TabVoiceProps) {
         audioRef.current = null
         URL.revokeObjectURL(url)
       })
+    } catch {
+      toast.error('Could not generate voice preview')
     } finally {
       setPreviewingId(null)
     }

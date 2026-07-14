@@ -125,11 +125,11 @@ export async function POST(request: Request) {
         sentiment = 'neutral'
       }
 
-      const startedAt = metadata.start_time_unix
-        ? new Date(metadata.start_time_unix * 1000).toISOString()
+      const startedAt = metadata.start_time_unix_secs
+        ? new Date(metadata.start_time_unix_secs * 1000).toISOString()
         : new Date().toISOString()
-      const endedAt = metadata.end_time_unix
-        ? new Date(metadata.end_time_unix * 1000).toISOString()
+      const endedAt = metadata.start_time_unix_secs
+        ? new Date((metadata.start_time_unix_secs + duration) * 1000).toISOString()
         : new Date().toISOString()
 
       // Upsert call record — use elevenlabs_conversation_id as unique key

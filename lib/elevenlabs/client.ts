@@ -196,8 +196,7 @@ export interface ELConversation {
     time_in_call_secs?: number
   }>
   metadata?: {
-    start_time_unix?: number
-    end_time_unix?: number
+    start_time_unix_secs?: number
     call_duration_secs?: number
     cost?: number
     from_number?: string
@@ -220,8 +219,7 @@ export interface ELConversationListItem {
   conversation_id: string
   agent_id: string
   status: string
-  start_time_unix?: number
-  end_time_unix?: number
+  start_time_unix_secs?: number
   call_duration_secs?: number
   message_count?: number
   call_successful?: string
@@ -556,10 +554,17 @@ export const sharedVoices = {
 
 // ─── Text-to-Speech ──────────────────────────────────────────────────────────
 
+// Multilingual TTS model. ElevenLabs requires turbo/flash v2_5 for non-English
+// agents, and it works for English too — so we always use it. This is the one
+// place it's declared; lib/elevenlabs/create-agent.ts re-exports it so every
+// TTS call (live agent creation/update and this preview endpoint) stays on
+// the exact same model.
+export const TTS_MODEL = 'eleven_turbo_v2_5'
+
 export async function textToSpeech(
   voiceId: string,
   text: string,
-  modelId = 'eleven_turbo_v2'
+  modelId = TTS_MODEL
 ): Promise<ArrayBuffer> {
   const res = await fetch(`${BASE}/v1/text-to-speech/${voiceId}`, {
     method: 'POST',

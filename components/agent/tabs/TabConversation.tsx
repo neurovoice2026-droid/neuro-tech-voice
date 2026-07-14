@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { Play, Square, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
+import { toast } from 'sonner'
 import type { Agent, BehaviorSettings } from '@/types'
 import type { useAgent } from '@/hooks/useAgent'
 import { defaultFallbackMessage } from '@/lib/elevenlabs/prompt'
@@ -104,20 +105,26 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: firstMessage, voice_id: agent.voice_id }),
       })
-      if (!res.ok) return
+      if (!res.ok) {
+        toast.error('Could not generate voice preview')
+        setIsPreviewingTTS(false)
+        return
+      }
 
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const audio = new Audio(url)
-      setAudioRef(audio)
-      audio.play()
       audio.addEventListener('ended', () => {
         setIsPreviewingTTS(false)
         setAudioRef(null)
         URL.revokeObjectURL(url)
       })
-    } finally {
+      setAudioRef(audio)
+      await audio.play()
+    } catch {
+      toast.error('Could not generate voice preview')
       setIsPreviewingTTS(false)
+      setAudioRef(null)
     }
   }
 

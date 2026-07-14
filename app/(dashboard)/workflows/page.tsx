@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { WorkInProgressBadge } from '@/components/shared/WorkInProgressBadge'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -444,9 +445,10 @@ function CreateWorkflowDialog({
                     )}
                   >
                     <Icon className={cn('h-4 w-4 shrink-0', meta.color)} />
-                    <span className="text-xs font-medium text-foreground">
+                    <span className="min-w-0 text-xs font-medium text-foreground">
                       {meta.label}
                       {locked && <span className="block text-[10px] font-normal text-muted-foreground">Not connected</span>}
+                      {requiredIntegration && <WorkInProgressBadge className="mt-1" />}
                     </span>
                     {selected && !locked && <CheckCircle2 className="ml-auto h-3.5 w-3.5 text-purple-600 shrink-0" />}
                   </button>
