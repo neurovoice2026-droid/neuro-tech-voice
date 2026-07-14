@@ -156,7 +156,8 @@ function IntegrationCard({
         <Button
           size="sm"
           variant={connected ? 'outline' : 'default'}
-          disabled={busy}
+          disabled={busy || integration.workInProgress}
+          title={integration.workInProgress ? 'Coming soon' : undefined}
           onClick={() => (connected ? onDisconnect(integration) : onConnect(integration))}
           className={cn(
             'shrink-0',
@@ -170,7 +171,7 @@ function IntegrationCard({
       </div>
 
       {/* Capabilities */}
-      <div className="mt-4 grid grid-cols-2 gap-1.5">
+      <div className={cn('mt-4 grid grid-cols-2 gap-1.5', integration.workInProgress && 'opacity-60')}>
         {integration.capabilities.map((cap) => (
           <div key={cap} className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <div className={cn('h-1.5 w-1.5 flex-shrink-0 rounded-full', connected ? 'bg-green-500' : 'bg-gray-300')} />

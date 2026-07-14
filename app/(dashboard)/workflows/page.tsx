@@ -428,16 +428,18 @@ function CreateWorkflowDialog({
                 const Icon = meta.icon
                 const selected = selectedActions.includes(type)
                 const requiredIntegration = ACTION_REQUIRES_INTEGRATION[type]
-                const locked = !!requiredIntegration && !connectedIntegrations.has(requiredIntegration)
+                const isWorkInProgress = !!requiredIntegration
+                const notConnected = !!requiredIntegration && !connectedIntegrations.has(requiredIntegration)
+                const disabled = isWorkInProgress || notConnected
                 return (
                   <button
                     key={type}
-                    onClick={() => !locked && toggleAction(type)}
-                    disabled={locked}
-                    title={locked ? `Connect ${INTEGRATION_LABEL[requiredIntegration!]} first` : undefined}
+                    onClick={() => !disabled && toggleAction(type)}
+                    disabled={disabled}
+                    title={isWorkInProgress ? 'Coming soon' : notConnected ? `Connect ${INTEGRATION_LABEL[requiredIntegration!]} first` : undefined}
                     className={cn(
                       'flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-left transition-all',
-                      locked
+                      disabled
                         ? 'opacity-50 cursor-not-allowed border-border'
                         : selected
                           ? 'border-purple-500 bg-purple-50'
@@ -447,21 +449,18 @@ function CreateWorkflowDialog({
                     <Icon className={cn('h-4 w-4 shrink-0', meta.color)} />
                     <span className="min-w-0 text-xs font-medium text-foreground">
                       {meta.label}
-                      {locked && <span className="block text-[10px] font-normal text-muted-foreground">Not connected</span>}
-                      {requiredIntegration && <WorkInProgressBadge className="mt-1" />}
+                      {notConnected && <span className="block text-[10px] font-normal text-muted-foreground">Not connected</span>}
+                      {isWorkInProgress && <WorkInProgressBadge className="mt-1" />}
                     </span>
-                    {selected && !locked && <CheckCircle2 className="ml-auto h-3.5 w-3.5 text-purple-600 shrink-0" />}
+                    {selected && !disabled && <CheckCircle2 className="ml-auto h-3.5 w-3.5 text-purple-600 shrink-0" />}
                   </button>
                 )
               })}
             </div>
-            {AVAILABLE_ACTIONS.some((t) => {
-              const req = ACTION_REQUIRES_INTEGRATION[t]
-              return req && !connectedIntegrations.has(req)
-            }) && (
+            {AVAILABLE_ACTIONS.some((t) => ACTION_REQUIRES_INTEGRATION[t]) && (
               <p className="text-[11px] text-muted-foreground">
-                Some actions are locked because their integration isn&apos;t connected yet.{' '}
-                <a href="/integrations" className="text-purple-600 hover:underline">Connect integrations</a>
+                Actions that need a Google integration are temporarily disabled while that integration is work in progress.{' '}
+                <a href="/integrations" className="text-purple-600 hover:underline">See integrations</a>
               </p>
             )}
 

@@ -267,9 +267,9 @@ function IntegrationAction({
         <Button
           variant="outline"
           size="sm"
-          disabled={!connected || isPending}
+          disabled={!connected || isPending || workInProgress}
           onClick={handleSend}
-          title={!connected ? 'Connect this integration first' : undefined}
+          title={workInProgress ? 'Coming soon' : !connected ? 'Connect this integration first' : undefined}
         >
           {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : buttonLabel}
         </Button>
