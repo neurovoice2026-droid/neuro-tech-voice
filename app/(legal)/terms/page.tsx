@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { LegalHeader, LegalSection } from '@/components/marketing/LegalContent'
 
 export const metadata: Metadata = {
-  title: 'Terms of Service - Neuro Tech Voice',
+  title: 'Terms of Service',
   description: 'The terms governing your use of Neuro Tech Voice.',
 }
 

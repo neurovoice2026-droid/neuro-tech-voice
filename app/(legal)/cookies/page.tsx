@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { LegalHeader, LegalSection } from '@/components/marketing/LegalContent'
 
 export const metadata: Metadata = {
-  title: 'Cookie Policy - Neuro Tech Voice',
+  title: 'Cookie Policy',
   description: 'How Neuro Tech Voice uses cookies and similar technologies.',
 }
 

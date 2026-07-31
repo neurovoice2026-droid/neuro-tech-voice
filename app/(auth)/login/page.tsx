@@ -3,7 +3,7 @@ import { Logo } from '@/components/shared/Logo'
 import { LoginForm } from '@/components/auth/LoginForm'
 
 export const metadata: Metadata = {
-  title: 'Sign in — Neuro Tech Voice',
+  title: 'Sign in',
 }
 
 export default function LoginPage() {

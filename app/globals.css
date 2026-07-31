@@ -36,6 +36,11 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  /* Purple ramp + ink — used by the marketing site's editorial cover. */
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-strong: var(--primary-strong);
+  --color-primary-deep: var(--primary-deep);
+  --color-ink: var(--ink);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -47,6 +52,10 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  --animate-blob: blob 18s ease-in-out infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-marquee: marquee 32s linear infinite;
 }
 
 /* ─── Ghost Purple Brand Palette ─────────────────────────────────────────── */
@@ -91,6 +100,19 @@
 
   /* Font */
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+
+  /* ── Marketing site additions ──────────────────────────────────────────
+     The palette above is unchanged; these are extra tokens the editorial
+     cover composes with — the primary as rgb channels (for glows built out
+     of rgba), the lighter/darker steps of the ramp, and the deep
+     purple-black the cover is printed on. */
+  --primary-rgb: 124, 58, 237;
+  --primary-soft: #b39bf0;
+  --primary-strong: #6d34cf;
+  --primary-deep: #4c1d95;
+
+  --ink: #120a24;
+  --ink-rgb: 18, 10, 36;
 }
 
 /* Light-only design — .dark mirrors :root */
@@ -122,9 +144,66 @@
   }
   body {
     @apply bg-background text-foreground;
+    /*
+      `clip`, not `hidden`.
+
+      Both stop a stray wide child from scrolling the page sideways, but
+      `overflow-x: hidden` computes overflow-y to `auto`, which makes body a
+      scroll container — and a scroll container that never scrolls is what
+      every `position: sticky` descendant then measures itself against, so
+      sticky silently stops engaging anywhere on the site. The marketing
+      spread's field is the first thing to need it.
+
+      `clip` has no scrollport, so it clips without any of that. The
+      x/visible pair is legal precisely because `clip` is exempt from the
+      coercion rule that catches `hidden`.
+    */
+    overflow-x: clip;
+    overflow-y: visible;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   html {
     @apply font-sans antialiased;
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 22%, transparent);
+    color: var(--primary-strong);
+  }
+
+  ::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(24, 16, 40, 0.16);
+    border-radius: 999px;
+    border: 3px solid #fff;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(var(--primary-rgb), 0.5);
+    background-clip: padding-box;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
   }
 }
 
@@ -180,7 +259,7 @@
 /* ─── Marketing Hero Animations ──────────────────────────────────────────── */
 @keyframes float {
   0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-16px); }
+  50%      { transform: translateY(-10px); }
 }
 
 @keyframes draw-underline {
@@ -190,4 +269,332 @@
 @keyframes waveform {
   0%, 100% { transform: scaleY(0.4); }
   50%      { transform: scaleY(1); }
+}
+
+@keyframes blob {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(4%, -6%) scale(1.08);
+  }
+  66% {
+    transform: translate(-4%, 4%) scale(0.96);
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* ─── Marketing Site Utilities ───────────────────────────────────────────── */
+@layer utilities {
+  /* Soft purple glow blob behind sections — the depth cue of the whole site */
+  .glow-blob {
+    background: radial-gradient(
+      circle at center,
+      rgba(var(--primary-rgb), 0.55),
+      rgba(var(--primary-rgb), 0) 70%
+    );
+    filter: blur(60px);
+  }
+
+  /* Subtle purple mesh backdrop for light sections */
+  .bg-mesh {
+    background:
+      radial-gradient(
+        42% 55% at 12% 0%,
+        rgba(var(--primary-rgb), 0.1),
+        transparent 70%
+      ),
+      radial-gradient(
+        45% 55% at 100% 18%,
+        rgba(var(--primary-rgb), 0.08),
+        transparent 72%
+      );
+  }
+
+  /* Dot-grid texture for the dark section */
+  .bg-dots-dark {
+    background-image: radial-gradient(
+      rgba(255, 255, 255, 0.07) 1px,
+      transparent 1px
+    );
+    background-size: 26px 26px;
+  }
+
+  /* Big soft aurora glow for the dark section */
+  .aurora {
+    background: radial-gradient(
+      circle at center,
+      rgba(var(--primary-rgb), 0.9),
+      rgba(var(--primary-rgb), 0) 68%
+    );
+    filter: blur(80px);
+  }
+
+  /* Purple text gradient for the odd emphasised word */
+  .text-gradient {
+    background: linear-gradient(
+      100deg,
+      var(--primary) 0%,
+      var(--primary-soft) 55%,
+      var(--primary) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Faint dotted texture for section backdrops */
+  .bg-dots {
+    background-image: radial-gradient(
+      rgba(24, 16, 40, 0.06) 1px,
+      transparent 1px
+    );
+    background-size: 22px 22px;
+  }
+
+  .mono {
+    font-family: var(--font-mono);
+    font-feature-settings: "tnum" 1, "zero" 1;
+  }
+
+  /* mask helper for marquee edge-fade */
+  .mask-edges-x {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 8%,
+      #000 92%,
+      transparent
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 8%,
+      #000 92%,
+      transparent
+    );
+  }
+}
+
+/* ==================================================================== *
+ * EDITORIAL COVER — the dark full-bleed hero.
+ *
+ * Its own colour world: near-black paper, warm-grey ink, and a single
+ * deep purple. That purple is the site's accent re-toned to the same
+ * darkness and saturation as an oxblood red — hsl(272 68% 32%) — so it
+ * reads as pigment rather than as a UI highlight.
+ * ==================================================================== */
+.cover {
+  --cover-ink: #06040a;
+  --cover-paper: #dedce0;
+  --cover-brand: #551a89;
+  --cover-brand-rgb: 85, 26, 137;
+
+  /*
+    THE FIELD — the cover's three tones, measured rather than invented.
+
+    Sampled straight off /hero-robot.webp with the cover's own grade
+    applied (brightness .82 / contrast 1.18 / saturate .88), because the
+    cover's colour does not come from these tokens at all — it comes from
+    the artwork, and the tokens only ever tinted it. Reading the file is
+    the only way to carry it anywhere else.
+
+    What the samples say, and it is not what --cover-brand implies:
+
+      · the backlight is a warm silver-grey — #c4c0ba, #a19e97, #7b7a7d.
+        The cover is not a black page with a glow on it; most of the
+        frame is grey, and the black is only its edges.
+      · the purple you actually see is MUTED — #634164, #523552, #3e2d4b
+        sit at 21–29% saturation. --cover-brand is 68%. The pigment was
+        never on screen as a colour, only as a 16% wash, so building a
+        field out of it produced a violet nothing in the cover has.
+
+    So: low is the black, washed off zero and carrying the mauve rather
+    than sitting under it; mid is the face's purple at the cover's own
+    saturation; high is the backlight, held at #4b4451 because that is
+    where --cover-paper at 80% still clears 4.5:1 — the cover can run its
+    grey up to #c4c0ba since its type sits on the dark bottom third,
+    while a spread has text everywhere and the brightest the field may go
+    is set by the body copy on top of it.
+  */
+  --cover-field-low: #171520;
+  --cover-field-mid: #3b2f4a;
+  --cover-field-high: #4b4451;
+
+  /*
+    Marks on the field. The cover has no bright purple in it — its
+    lightest is the face at #634164 — but a chart fill has to clear a
+    contrast floor to be a mark at all, and the cover's mauve at 21%
+    saturation would read as grey. So these hold the cover's HUE (~272,
+    off #3e2d4b and #2f1f38) and give up only as much saturation as
+    legibility costs: 43% here against the pigment's 68%.
+    4.55:1 on the brightest the field reaches, so it survives small text
+    at the worst point on the page rather than the average one.
+  */
+  --cover-brand-lit: #c0ace0;
+
+  /*
+    Coverage ramp for the plates' figures — magnitude, so one hue in
+    monotone lightness steps, and on this ground the anchor flips: more is
+    brighter. Validated as an ordinal ramp against the plate pool
+    (#24212c) — monotone L, adjacent ΔL >= 0.06, hue spread 2°, and the
+    low step at 2.14:1 so a covered cell can never read as an empty one,
+    which is the entire argument Fig. 01 is making. Re-validated when the
+    ground moved off #06040a: the surface is an input to the check, so a
+    ramp that passed on black is not passing here by inheritance.
+  */
+  --cover-load-1: #5d5070;
+  --cover-load-2: #8a6cb8;
+  --cover-load-3: #b79edc;
+
+  /*
+    The plate pool — the surface the product panels are drawn on.
+
+    Not invented: it is the ground the coverage ramp above was already
+    validated against, so panels sit on exactly the stock those steps were
+    measured for. Solid rather than translucent for the same reason — the
+    field behind it breathes, and a panel that breathes with it would move
+    the ramp's ground every frame.
+
+    --cover-paper on it is 11.4:1, --cover-brand-lit 7.7:1.
+  */
+  --cover-panel: #24212c;
+
+  /*
+    The demo orb's emissive ramp.
+
+    The only place on this page allowed to run the pigment hot. Every other
+    purple here is constrained by legibility — --cover-brand-lit gives up
+    saturation down to 43% precisely so small text on it clears 4.5:1. The
+    orb carries no text, so that constraint does not apply to it, and the
+    globals above already spell out the reasoning: hold the cover's hue,
+    give up only as much saturation as the job costs. The orb's job is to
+    emit light, so it keeps the hue (~272°) and none of the saturation.
+
+    Two speakers, told apart by the cover's own two-tone story rather than
+    by a borrowed second hue: the agent is the pigment, the caller is the
+    backlight — #4b4451 lifted to emit and cooled just enough to read as a
+    different voice. `-hot` is where filaments and the nucleus peak.
+  */
+  --cover-orb-a: #7b4fd4;
+  --cover-orb-b: #b98ae8;
+  --cover-orb-hot: #ede4fb;
+  --cover-orb-alt-a: #5d6480;
+  --cover-orb-alt-b: #9aa4bd;
+  --cover-orb-alt-hot: #e2e8f2;
+
+  /*
+    The one non-purple mark on the page, and it is spent only on the two
+    places the live product uses green as a *reading* rather than as
+    decoration: the agent's online dot and the week's trend. Toned the way
+    --cover-brand was — pulled down to this paper's darkness and off full
+    saturation — so it reads as pigment rather than as a status LED.
+    8.9:1 on --cover-panel.
+  */
+  --cover-mint: #93d3ae;
+
+  /*
+    Fluid em-scaling: every length inside the cover is authored in `em`,
+    so the whole composition scales with the viewport rather than
+    snapping between breakpoints.
+
+    The reference derives this from `100dvw / (1920/16)`, re-based at
+    each breakpoint. That has two problems: the design shrinks in direct
+    proportion to width — a 1100px window renders everything at 57%,
+    with a ~9px base — and re-basing at 991px makes the value jump by 2x
+    across a single pixel of resize.
+
+    This is the same idea expressed as one continuous ramp: identical
+    16px base at 1920 (so the full-screen composition is unchanged), but
+    it decays gently instead of linearly and never falls below 11.5px.
+  */
+  --size-container: min(100dvw, 2240px);
+  font-size: clamp(11.5px, calc(0.296vw + 10.32px), 17px);
+}
+
+/* 35mm grain over the portrait — kills banding in the dark falloff. */
+.cover-grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.15;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='160' height='160' filter='url(%23g)'/></svg>");
+}
+
+/*
+  The field, standing still.
+
+  What's underneath <CoverField>, so a browser without WebGL2 — or a
+  visitor who asked for reduced motion before the canvas resolved — still
+  gets the cover's composition rather than a flat black band. These are
+  the same two radials the shader evaluates and the hero layers in CSS:
+  the pigment wash at 52%/32%, the vignette at 50%/46%.
+*/
+.cover-field-still {
+  background:
+    radial-gradient(
+      62% 50% at 52% 32%,
+      var(--cover-field-high),
+      var(--cover-field-mid) 46%,
+      transparent 72%
+    ),
+    radial-gradient(
+      105% 88% at 50% 46%,
+      transparent 34%,
+      color-mix(in srgb, var(--cover-field-low) 55%, transparent) 76%,
+      var(--cover-field-low) 100%
+    );
+}
+
+/* Link underline that wipes in from the left, as on the reference. */
+.cover-link {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 0% 1px;
+  transition: background-size 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.cover-link:hover,
+.cover-link:focus-visible {
+  background-size: 100% 1px;
+}
+
+/* The demo orb's two counter-rotating rings, and the halo that pulses off
+   its play button while the call is not running. */
+@keyframes orbSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes orbHalo {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+@keyframes equalize {
+  0%,
+  100% {
+    transform: scaleY(0.28);
+  }
+  50% {
+    transform: scaleY(1);
+  }
 }

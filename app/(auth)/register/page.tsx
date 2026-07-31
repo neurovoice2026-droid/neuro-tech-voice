@@ -3,7 +3,7 @@ import { Logo } from '@/components/shared/Logo'
 import { RegisterForm } from '@/components/auth/RegisterForm'
 
 export const metadata: Metadata = {
-  title: 'Create account — Neuro Tech Voice',
+  title: 'Create account',
 }
 
 export default function RegisterPage() {

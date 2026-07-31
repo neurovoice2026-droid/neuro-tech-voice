@@ -3,7 +3,7 @@ import { LegalHeader, LegalSection } from '@/components/marketing/LegalContent'
 import { PLANS } from '@/types'
 
 export const metadata: Metadata = {
-  title: 'Refund & Cancellation Policy - Neuro Tech Voice',
+  title: 'Refund & Cancellation Policy',
   description: 'Our policy on trials, billing, cancellations, and refunds.',
 }
 
