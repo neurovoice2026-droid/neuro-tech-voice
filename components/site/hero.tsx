@@ -12,6 +12,7 @@ import {
 } from "framer-motion";
 import { HERO_COVER as C, COVER_ART, COVER_FOCAL } from "@/lib/site";
 import { DepthPortrait } from "./depth-portrait";
+import { CursorCta } from "./cursor-cta";
 import { CornerDot } from "./ui";
 import { cn } from "@/lib/utils";
 
@@ -448,6 +449,10 @@ export function Hero() {
   const reduce = useReducedMotion();
   const ref = useRef<HTMLElement>(null);
 
+  // True while the pointer is carrying the CTA. The corner button and the
+  // cursor are one control in two states, so exactly one of them shows.
+  const [cursorArmed, setCursorArmed] = useState(false);
+
   /* One crop at every width. The cover used to art-direct a taller crop
      onto phones, which kept the whole silhouette in frame but rendered the
      head about a third smaller — and the dissolve scales with the head, so
@@ -473,7 +478,11 @@ export function Hero() {
       id="top"
       ref={ref}
       className="cover relative isolate min-h-[100dvh] overflow-clip bg-[var(--cover-ink)] text-[var(--cover-paper)]"
-      style={{ fontFamily: "var(--font-display)" }}
+      style={{
+        fontFamily: "var(--font-display)",
+        // The chip IS the cursor while it is armed, so the native one goes.
+        cursor: cursorArmed ? "none" : undefined,
+      }}
     >
       {/* Portrait */}
       <motion.div
@@ -544,7 +553,14 @@ export function Hero() {
         {/* Headline block sits on columns 5–9, leaving room for the
             corner marks to bracket it and for the CTA to sit far left. */}
         <div className="relative flex flex-col items-center gap-[1.5em] sm:gap-[3em] md:grid md:grid-cols-12 md:items-end md:gap-0">
-          <div className="order-2 md:absolute md:left-0 md:top-0 md:order-none md:pt-[1em]">
+          {/* Steps aside while the pointer carries the same action — but
+              comes back for a keyboard, which has no pointer to carry it. */}
+          <div
+            className={cn(
+              "order-2 transition-opacity duration-300 focus-within:opacity-100 md:absolute md:left-0 md:top-0 md:order-none md:pt-[1em]",
+              cursorArmed && "opacity-0",
+            )}
+          >
             <CoverCta />
           </div>
 
@@ -568,6 +584,17 @@ export function Hero() {
           </div>
         </div>
       </motion.div>
+
+      {/* Deliberately outside the content layer: that layer carries the
+          parallax transform, and a transformed ancestor becomes the
+          containing block for `fixed` children — the chip would then track
+          the drifting layer instead of the pointer. */}
+      <CursorCta
+        targetRef={ref}
+        href={C.cta.href}
+        label={C.cta.label}
+        onArmedChange={setCursorArmed}
+      />
     </section>
   );
 }

@@ -108,7 +108,7 @@ export const COVER_COLUMNS: CoverColumn[] = [
   },
   {
     glyph: "square",
-    label: "Liaison",
+    label: "Contact",
     links: [
       { label: "Talk to sales", href: AUTH.contactSales },
       { label: "Sign in", href: AUTH.signin },
