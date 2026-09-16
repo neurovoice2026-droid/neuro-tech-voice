@@ -1856,22 +1856,23 @@ export const PRODUCT_GROUPS: NavGroup[] = [
       {
         id: "integrations",
         label: "Integrations",
-        description: "Writes into your tools mid-call.",
+        // Workflows run once a call has ended (post-call webhooks only), and
+        // today they reach webhooks and Slack; Google Workspace is still in
+        // development. The preview says only that.
+        description: "Passes every call on to your tools.",
         icon: Blocks,
         href: "/product/integrations",
         lens: "call",
         moment: {
-          context: "Written back during the call",
+          context: "Passed on when the call ends",
           turns: [
-            { sp: "client", t: "Can you put me in for Wednesday at three?" },
+            { sp: "client", t: "Water's coming through the ceiling — is this the emergency line?" },
             {
               sp: "agent",
-              t: "Done — Wednesday at 15:00, and a confirmation text is on its way.",
+              t: "It is. I have your address, and I'm marking this as an emergency for the on-call team.",
             },
           ],
-          // Read off the integration list rather than typed out, so the menu
-          // cannot name a tool the product no longer connects to.
-          outcome: `${INTEGRATIONS[0].label} · event created · SMS sent`,
+          outcome: "Keyword “emergency” · #on-call · message posted",
         },
       },
     ],
