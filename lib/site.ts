@@ -20,6 +20,25 @@ import {
   Car,
   Truck,
   Building2,
+  BookOpenText,
+  Blocks,
+  LibraryBig,
+  MicVocal,
+  Speech,
+  Captions,
+  ShieldCheck,
+  KeyRound,
+  Hotel,
+  Landmark,
+  ShoppingBag,
+  GraduationCap,
+  Dumbbell,
+  PawPrint,
+  BrainCircuit,
+  PanelsTopLeft,
+  Workflow,
+  Smartphone,
+  Database,
 } from "lucide-react";
 
 /**
@@ -55,12 +74,6 @@ export const AUTH = {
  */
 export const SITE_TIME_ZONE = "Europe/Bucharest";
 
-export const NAV_LINKS: { label: string; href: string }[] = [
-  { label: "Features", href: "#features" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "FAQ", href: "#faq" },
-];
-
 /* ------------------------------------------------------------------ *
  * Hero
  * ------------------------------------------------------------------ */
@@ -78,47 +91,13 @@ export const HERO = {
 
 /* ------------------------------------------------------------------ *
  * Editorial hero — the full-bleed dark cover.
- * Copy is deliberately spare: a utility quick-nav on top, one centred
- * statement at the bottom, everything else carried by the portrait.
+ *
+ * Copy is deliberately spare: one centred statement at the bottom,
+ * everything else carried by the portrait. The utility row that used to
+ * sit across the top is now the site header, which is a page-level
+ * element rather than part of the cover — see SITE_HEADER below.
  * ------------------------------------------------------------------ */
-export type CoverColumn = {
-  glyph: "triangle" | "circle" | "square";
-  label: string;
-  links: { label: string; href: string }[];
-};
-
-/** Quick-nav columns, each flagged by a geometric glyph. */
-export const COVER_COLUMNS: CoverColumn[] = [
-  {
-    glyph: "triangle",
-    label: "Capabilities",
-    links: [
-      { label: "Features", href: "#features" },
-      { label: "Live demo", href: "#demo" },
-    ],
-  },
-  {
-    glyph: "circle",
-    label: "Narrative",
-    links: [
-      { label: "How it works", href: "#how" },
-      { label: "Who it's for", href: "#use-cases" },
-      { label: "Pricing", href: "#pricing" },
-    ],
-  },
-  {
-    glyph: "square",
-    label: "Contact",
-    links: [
-      { label: "Talk to sales", href: AUTH.contactSales },
-      { label: "Sign in", href: AUTH.signin },
-      { label: "FAQ", href: "#faq" },
-    ],
-  },
-];
-
 export const HERO_COVER = {
-  wordmark: "NEUROVOICE",
   /** Line breaks are authored, not wrapped — each line is a beat. */
   headline: [
     "Neuro Tech Voice.",
@@ -127,11 +106,6 @@ export const HERO_COVER = {
   ],
   era: "2026—Future",
   cta: { label: "Start free", href: AUTH.signup },
-  columns: COVER_COLUMNS,
-  /** Clock is rendered in the company's own timezone. */
-  timeZone: SITE_TIME_ZONE,
-  place: "RES",
-  scrollLabel: "Discover",
   portrait: "/hero-robot.webp",
   /** Greyscale depth map driving the parallax (white = near). */
   portraitDepth: "/hero-robot-depth.webp",
@@ -1766,9 +1740,10 @@ export const CTA_CLOSE = {
 export const FOOTER = {
   tagline: "AI voice agents that answer, qualify, and book your customers, 24/7.",
   product: [
-    { label: "Features", href: "#features" },
-    { label: "Pricing", href: "#pricing" },
-    { label: "FAQ", href: "#faq" },
+    // Rooted, so they still land on the homepage's sections from a subpage.
+    { label: "Features", href: "/#features" },
+    { label: "Pricing", href: "/#pricing" },
+    { label: "FAQ", href: "/#faq" },
   ],
   legal: [
     { label: "Privacy Policy", href: "/privacy" },
@@ -1776,4 +1751,437 @@ export const FOOTER = {
     { label: "Cookie Policy", href: "/cookies" },
     { label: "Refund & Cancellation Policy", href: "/refund-policy" },
   ],
+} as const;
+
+/* ------------------------------------------------------------------ *
+ * Site header — the bar, its two mega menus, and the sheet below lg.
+ *
+ * Last in the file on purpose: NAV_INDUSTRIES reads INDUSTRIES and the
+ * Product menu's footer reads TIERS, both at module load, and a const
+ * referenced before its initialiser is a crash at import time rather
+ * than a bug at render time.
+ * ------------------------------------------------------------------ */
+
+export type HeaderNavEntry =
+  | { kind: "menu"; id: "product" | "solutions"; label: string }
+  | { kind: "link"; id: string; label: string; href: string };
+
+export const HEADER_NAV: HeaderNavEntry[] = [
+  { kind: "menu", id: "product", label: "Product" },
+  { kind: "menu", id: "solutions", label: "Solutions" },
+  { kind: "link", id: "pricing", label: "Pricing", href: "/#pricing" },
+  { kind: "link", id: "case-studies", label: "Case Studies", href: "/case-studies" },
+  { kind: "link", id: "contact", label: "Contact", href: "/contact" },
+];
+
+export const SITE_HEADER = {
+  navLabel: "Main",
+  skip: "Skip to content",
+  menu: { open: "Menu", close: "Close" },
+  signin: { label: "Sign in", href: AUTH.signin },
+  signup: { label: "Start free", href: AUTH.signup },
+  headings: {
+    agents: "Agents",
+    voice: "Voice",
+    industries: "Industries",
+    solutions: "Custom builds",
+  },
+  preview: { callerTag: "Caller", agentTag: "Agent" },
+} as const;
+
+/** A card in a mega-menu column. */
+export type NavItem = {
+  id: string;
+  label: string;
+  /**
+   * One line. It must never wrap, and the column truncates rather than
+   * rewraps, so this is a hard budget: ≤ 40 chars in Product, ≤ 58 in
+   * Solutions — measured against the narrower Product column, not against
+   * the popup.
+   */
+  description: string;
+  icon: LucideIcon;
+  href: string;
+};
+
+/** How the Product preview reads the call while a row is under the pointer. */
+export type NavLens = "industry" | "call" | "voices" | "transcribe";
+
+/** A moment on a call, in the live demo's own turn format. */
+export type CallMoment = {
+  /** Kicker text; upper-cased at render. */
+  context: string;
+  turns: DemoTurn[];
+  outcome: string;
+  /** When set, the kicker is composed from this SETUP_VOICES entry instead. */
+  voiceId?: string;
+};
+
+export type ProductItem = NavItem & { lens: NavLens; moment?: CallMoment };
+
+export type NavGroup = { id: "agents" | "voice"; label: string; items: ProductItem[] };
+
+export const PRODUCT_GROUPS: NavGroup[] = [
+  {
+    id: "agents",
+    label: SITE_HEADER.headings.agents,
+    items: [
+      {
+        id: "ai-agents",
+        label: "AI Agents",
+        description: "Answers, qualifies, books the job.",
+        icon: Bot,
+        href: "/product/ai-agents",
+        lens: "industry",
+      },
+      {
+        id: "knowledge-base",
+        label: "Knowledge Base",
+        description: "Answers from your prices and policies.",
+        icon: BookOpenText,
+        href: "/product/knowledge-base",
+        lens: "call",
+        moment: {
+          context: "Answered from your documents",
+          turns: [
+            { sp: "client", t: "If I cancel the day before, do I still pay?" },
+            {
+              sp: "agent",
+              t: "Cancellations inside 24 hours are charged at half — but I can move you to Thursday at no cost.",
+            },
+          ],
+          outcome: "Source · Cancellation policy, §2",
+        },
+      },
+      {
+        id: "integrations",
+        label: "Integrations",
+        description: "Writes into your tools mid-call.",
+        icon: Blocks,
+        href: "/product/integrations",
+        lens: "call",
+        moment: {
+          context: "Written back during the call",
+          turns: [
+            { sp: "client", t: "Can you put me in for Wednesday at three?" },
+            {
+              sp: "agent",
+              t: "Done — Wednesday at 15:00, and a confirmation text is on its way.",
+            },
+          ],
+          // Read off the integration list rather than typed out, so the menu
+          // cannot name a tool the product no longer connects to.
+          outcome: `${INTEGRATIONS[0].label} · event created · SMS sent`,
+        },
+      },
+    ],
+  },
+  {
+    id: "voice",
+    label: SITE_HEADER.headings.voice,
+    items: [
+      {
+        id: "voice-library",
+        label: "Voice Library",
+        description: "Pick a voice by accent and pace.",
+        icon: LibraryBig,
+        href: "/product/voice-library",
+        lens: "voices",
+        moment: { context: "Voice library", turns: [], outcome: "" },
+      },
+      {
+        id: "voice-cloning",
+        label: "Voice Cloning",
+        description: "Your own voice, from one recording.",
+        icon: MicVocal,
+        href: "/product/voice-cloning",
+        lens: "call",
+        moment: {
+          context: "Your cloned voice · outbound reminder",
+          turns: [
+            {
+              sp: "agent",
+              // Discloses itself on purpose: an agent that calls a person
+              // says what it is, here and in the product.
+              t: "Hi, this is the virtual assistant at Northside Dental, confirming your cleaning tomorrow at nine.",
+            },
+            { sp: "client", t: "Yes, that still works." },
+          ],
+          outcome: "Reminder delivered · appointment confirmed",
+        },
+      },
+      {
+        id: "text-to-speech",
+        label: "Text to Speech",
+        description: "Turn any script into lifelike speech.",
+        icon: Speech,
+        href: "/product/text-to-speech",
+        lens: "call",
+        moment: {
+          context: "Text to speech",
+          voiceId: "sarah",
+          turns: [
+            { sp: "agent", t: "Your table for six is confirmed for Friday at 8:45." },
+          ],
+          // No synthesis-latency number: the product has never published
+          // one, and a figure a prospect can quote back is not worth the
+          // half-second it buys in a menu.
+          outcome: "Streamed to the call as it is written",
+        },
+      },
+      {
+        id: "speech-to-text",
+        label: "Speech to Text",
+        description: "Live transcripts, even on a noisy line.",
+        icon: Captions,
+        href: "/product/speech-to-text",
+        lens: "transcribe",
+        // The turns are read from a real trade's own words; these are the
+        // two lines around them.
+        moment: {
+          context: "Transcribed as the caller speaks",
+          turns: [],
+          outcome: "Live transcript · every call, searchable",
+        },
+      },
+    ],
+  },
+];
+
+/** One row of the industries picker. `caller`/`agent`/`outcome` drive the preview. */
+export type NavIndustry = {
+  slug: string;
+  label: string;
+  icon: LucideIcon;
+  /** ≤ 90 chars: it clamps to three lines and the pane never resizes. */
+  caller: string;
+  /** ≤ 120 chars, same reason. */
+  agent: string;
+  outcome: string;
+};
+
+/**
+ * Reuses a trade's own words from INDUSTRIES so the header and the
+ * "Who it's for" panel cannot drift apart. Throws at import time if an id
+ * is renamed — a loud failure beats a silently empty preview.
+ */
+function fromUseCase(id: string, slug: string): NavIndustry {
+  const i = INDUSTRIES.find((x) => x.id === id);
+  if (!i) throw new Error(`Unknown industry id: ${id}`);
+  return {
+    slug,
+    label: i.label,
+    icon: i.icon,
+    caller: i.caller,
+    agent: i.agent,
+    outcome: i.outcome,
+  };
+}
+
+/**
+ * Sixteen trades, fifteen of them outside healthcare, and healthcare last
+ * in reading order — the product is industry-agnostic and the list has to
+ * say so before the any-industry field underneath it does.
+ */
+export const NAV_INDUSTRIES: NavIndustry[] = [
+  fromUseCase("trades", "home-services"),
+  fromUseCase("realestate", "real-estate"),
+  fromUseCase("restaurants", "restaurants"),
+  fromUseCase("law", "law-firms"),
+  fromUseCase("auto", "automotive"),
+  fromUseCase("logistics", "logistics"),
+  fromUseCase("salons", "salons-spas"),
+  {
+    slug: "veterinary",
+    label: "Veterinary",
+    icon: PawPrint,
+    caller: "My dog ate something off the counter and he's being sick.",
+    agent:
+      "Please bring him straight in — I've told the vet you're on your way. Do you know what he ate?",
+    outcome: "Urgent visit flagged · vet notified",
+  },
+  {
+    slug: "insurance",
+    label: "Insurance",
+    icon: ShieldCheck,
+    caller: "Someone reversed into my car this morning. How do I start a claim?",
+    agent:
+      "I can open it now. Is everyone okay? Then I'll take your policy number and the other driver's details.",
+    outcome: "Claim opened · adjuster assigned",
+  },
+  {
+    slug: "property-management",
+    label: "Property management",
+    icon: KeyRound,
+    caller: "There's water coming through my ceiling from the flat upstairs.",
+    agent:
+      "I'm logging that as an emergency and paging the on-call plumber. Can you reach the stopcock?",
+    outcome: "Emergency work order · plumber paged",
+  },
+  {
+    slug: "hospitality",
+    label: "Hotels & hospitality",
+    icon: Hotel,
+    caller: "Do you have a double free this Saturday night?",
+    agent:
+      "I do — a double with breakfast, or a courtyard room for twenty more. Shall I hold one for you?",
+    outcome: "Room held · Sat, 1 night",
+  },
+  {
+    slug: "financial-services",
+    label: "Financial services",
+    icon: Landmark,
+    caller: "I'd like to talk to someone about refinancing before rates move again.",
+    agent:
+      "Of course. I can book you with an advisor Thursday at ten or Friday at two — which suits you?",
+    outcome: "Advisor call booked · Thursday 10:00",
+  },
+  {
+    slug: "retail",
+    label: "Retail & e-commerce",
+    icon: ShoppingBag,
+    caller: "My order says delivered, but it isn't here.",
+    agent:
+      "Let me check. It was left at the side door at ten past two — if it isn't there I'll send a replacement today.",
+    outcome: "Replacement authorised · no ticket raised",
+  },
+  {
+    slug: "education",
+    label: "Schools & tutoring",
+    icon: GraduationCap,
+    caller: "Do you still have places on the autumn maths course?",
+    agent:
+      "We do — three left in the Tuesday evening group. Can I take your child's name and school year?",
+    outcome: "Place held · enrolment link sent",
+  },
+  {
+    slug: "fitness",
+    label: "Gyms & studios",
+    icon: Dumbbell,
+    caller: "Is there space in the six o'clock spin class tomorrow?",
+    agent:
+      "Two spots left. I've put you in one and texted the confirmation — shall I add Thursday as well?",
+    outcome: "Class booked · confirmation sent",
+  },
+  fromUseCase("clinics", "clinics-dental"),
+];
+
+export const NAV_INDUSTRY_DEFAULT = "home-services";
+
+export const NAV_ANY_INDUSTRY = {
+  note: "Same agent, your vocabulary",
+  fieldLabel: "Your industry",
+  formLabel: "See the agent for your industry",
+  placeholder: "Not listed? Type your industry",
+  submit: "See it",
+  submitLabel: (label: string) => `See it for ${label}`,
+  action: "/industries",
+  param: "trade",
+  minLength: 2,
+  maxLength: 40,
+} as const;
+
+export const PRODUCT_MENU = {
+  autoplayMs: 3200,
+  hoverIntentMs: 70,
+  // "Sample", not "Live": the same call shapes are disclosed as modelled
+  // in the "Who it's for" section, and a pulsing dot over the word "live"
+  // in the nav would undercut the one section that was careful about it.
+  liveKicker: (label: string) => `Sample call · ${label}`,
+  seeItFor: (label: string) => `See it for ${label}`,
+  demo: { label: "Hear the agent take a real call", href: "/#demo" },
+  // Read off the price list, so the menu can never quote a plan that moved.
+  price: { label: (monthly: number) => `Plans from $${monthly} a month`, href: "/#pricing" },
+} as const;
+
+export type SolutionItem = NavItem & {
+  promise: string;
+  deliverables: [string, string, string];
+  stack: [string, string, string, string];
+};
+
+export const SOLUTION_ITEMS: SolutionItem[] = [
+  {
+    id: "custom-ai-agents",
+    label: "Custom AI Agents",
+    description: "Agents built on your scripts, data and systems.",
+    icon: BrainCircuit,
+    href: "/solutions/custom-ai-agents",
+    promise: "A voice or chat agent trained on how your business actually works.",
+    deliverables: [
+      "Call flows written with your team",
+      "Connected to your CRM, calendar and helpdesk",
+      "Tested on real calls before launch",
+    ],
+    stack: ["Voice", "Model", "Telephony", "Your CRM"],
+  },
+  {
+    id: "custom-saas-platforms",
+    label: "Custom SaaS Platforms",
+    description: "Your product idea, built into software customers pay for.",
+    icon: PanelsTopLeft,
+    href: "/solutions/custom-saas-platforms",
+    promise: "A production platform, from first prototype to paying customers.",
+    deliverables: [
+      "A clickable prototype before any code",
+      "Accounts, billing and admin built in",
+      "Hosted, monitored, code handed over",
+    ],
+    stack: ["Web app", "Database", "Payments", "Hosting"],
+  },
+  {
+    id: "custom-automations",
+    label: "Custom Automations",
+    description: "The manual work between your tools, done by software.",
+    icon: Workflow,
+    href: "/solutions/custom-automations",
+    promise:
+      "Every copy-paste between your tools, replaced by a workflow that runs itself.",
+    deliverables: [
+      "A map of the manual steps worth automating",
+      "Workflows across inbox, sheets, CRM and APIs",
+      "Alerts the moment something needs a person",
+    ],
+    stack: ["Inbox", "Spreadsheets", "CRM", "Webhooks"],
+  },
+  {
+    id: "custom-mobile-applications",
+    label: "Custom Mobile Applications",
+    description: "iOS and Android apps, designed, built and published.",
+    icon: Smartphone,
+    href: "/solutions/custom-mobile-applications",
+    promise: "An app your customers keep on their home screen.",
+    deliverables: [
+      "Designed for iOS and Android",
+      "Sign-in, payments and push built in",
+      "Published to both app stores",
+    ],
+    stack: ["iOS", "Android", "Push", "Payments"],
+  },
+  {
+    id: "crm-erp",
+    label: "Custom CRM & ERP",
+    description: "One system for customers, orders and operations.",
+    icon: Database,
+    href: "/solutions/crm-erp",
+    promise: "A CRM or ERP shaped around your process, not the other way round.",
+    deliverables: [
+      "Pipeline, stock and invoicing in one place",
+      "Migrated off spreadsheets and legacy tools",
+      "Every agent call logged against the customer",
+    ],
+    stack: ["Sales", "Inventory", "Invoicing", "Reporting"],
+  },
+];
+
+export const SOLUTIONS_MENU = {
+  sheetKicker: (label: string) => `What you get · ${label}`,
+  cta: {
+    label: "Book a scoping call",
+    href: (id: string) => `/contact?topic=${id}`,
+  },
+  footer: {
+    text: "Not sure what you need?",
+    link: { label: "Tell us the problem", href: "/contact" },
+  },
 } as const;

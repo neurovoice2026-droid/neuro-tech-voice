@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono, Inter_Tight } from 'next/font/google'
+import { Geist, Geist_Mono, Inter, Inter_Tight } from 'next/font/google'
 import { Toaster } from '@/components/ui/sonner'
+import { HEADER_BOOT } from '@/lib/header-dock'
 import './globals.css'
 
 const geistSans = Geist({
@@ -13,6 +14,8 @@ const geistMono = Geist_Mono({
   variable: '--font-geist-mono',
   subsets: ['latin'],
   display: 'swap',
+  // Never part of a first screen; not worth a preload on every route.
+  preload: false,
 })
 
 /**
@@ -23,6 +26,16 @@ const geistMono = Geist_Mono({
  */
 const display = Inter_Tight({
   variable: '--font-display',
+  subsets: ['latin'],
+  display: 'swap',
+})
+
+/**
+ * The site header's face: Inter, the variable build Google Fonts serves —
+ * the same files the reference's nav and mega menus are painted with.
+ */
+const header = Inter({
+  variable: '--font-header',
   subsets: ['latin'],
   display: 'swap',
 })
@@ -76,9 +89,23 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} ${display.variable} h-full`}
+      className={`${geistSans.variable} ${geistMono.variable} ${display.variable} ${header.variable} h-full`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground antialiased">
+        {/*
+          The header's phase, decided during HTML parsing.
+
+          A raw inline script rather than next/script: `beforeInteractive`
+          does not execute inline content during parsing, it queues it on
+          `self.__next_s` for the Next runtime to run, which is after the
+          first paint — and the first paint is the entire point. Reloading
+          halfway down the page has to paint the detached pill on frame
+          one rather than paint the docked bar and correct it.
+
+          Inert on every route but the homepage; <html> already carries
+          suppressHydrationWarning, so the attribute it writes is fine.
+        */}
+        <script id="ntv-nav-boot" dangerouslySetInnerHTML={{ __html: HEADER_BOOT }} />
         {children}
         <Toaster richColors position="top-right" />
       </body>

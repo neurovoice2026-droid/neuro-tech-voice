@@ -1,5 +1,5 @@
 import { ScrollProgress } from '@/components/site/reveal'
-import { Navbar } from '@/components/site/navbar'
+import { SiteHeader } from '@/components/site/header'
 import { Hero } from '@/components/site/hero'
 import { Marquee } from '@/components/site/marquee'
 import { CoverSpread } from '@/components/site/cover-spread'
@@ -18,8 +18,11 @@ export default function Home() {
   return (
     <>
       <ScrollProgress />
-      <Navbar />
-      <main className="relative">
+      <SiteHeader />
+      {/* Named and focusable so the header's skip link has somewhere to
+          land, and so a hash jump out of the mega menu can move focus as
+          well as the viewport. */}
+      <main id="content" tabIndex={-1} className="relative">
         <Hero />
         <Marquee />
         {/* One field behind both, so the interior reads as a single spread

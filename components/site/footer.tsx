@@ -1,7 +1,7 @@
-import Link from "next/link";
 import Image from "next/image";
 import { Phone } from "lucide-react";
 import { FOOTER, COMPANY } from "@/lib/site";
+import { IntentLink } from "./intent-link";
 import { CornerDot } from "./ui";
 
 /**
@@ -35,12 +35,12 @@ function LinkColumn({
       <ul className="flex flex-col gap-[0.7em]">
         {links.map((l) => (
           <li key={l.href}>
-            <Link
+            <IntentLink
               href={l.href}
               className="text-[0.85em] text-[var(--cover-paper)]/55 transition-colors duration-200 hover:text-[var(--cover-brand-lit)]"
             >
               {l.label}
-            </Link>
+            </IntentLink>
           </li>
         ))}
       </ul>
@@ -57,8 +57,8 @@ export function Footer() {
       <div className="mx-auto max-w-[76em] px-[1.6em] py-[4.5em]">
         <div className="grid gap-[3em] md:grid-cols-[1.7fr_1fr_1fr]">
           <div className="flex flex-col gap-[1.3em]">
-            <Link
-              href="#top"
+            <IntentLink
+              href="/#top"
               className="flex items-center"
               aria-label={COMPANY.name}
             >
@@ -69,7 +69,7 @@ export function Footer() {
                 height={2148}
                 className="h-[2.2em] w-auto"
               />
-            </Link>
+            </IntentLink>
 
             <p className="max-w-[22em] text-[0.88em] leading-[1.6] text-[var(--cover-paper)]/50">
               {FOOTER.tagline}

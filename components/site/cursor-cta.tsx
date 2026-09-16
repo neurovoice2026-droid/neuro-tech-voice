@@ -51,7 +51,12 @@ export function CursorCta({ targetRef, href, label, onArmedChange }: Props) {
   const [armed, setArmed] = useState(false);
   const [flip, setFlip] = useState(false);
   const chipRef = useRef<HTMLDivElement>(null);
-  const point = useRef({ x: 0, y: 0 });
+  /** `armed`, readable from a listener without re-subscribing it. */
+  const live = useRef(false);
+  // Null whenever the pointer's position is unknown — it left the document,
+  // or it has never been here. A stale coordinate is worse than none: the
+  // scroll re-evaluation would arm the chip somewhere nobody is pointing.
+  const point = useRef<{ x: number; y: number } | null>(null);
 
   const rawX = useMotionValue(0);
   const rawY = useMotionValue(0);
@@ -65,13 +70,32 @@ export function CursorCta({ targetRef, href, label, onArmedChange }: Props) {
     const el = targetRef.current;
     if (!el) return false;
 
-    const { x: px, y: py } = point.current;
-    const r = el.getBoundingClientRect();
-    if (px < r.left || px > r.right || py < r.top || py > r.bottom) return false;
+    const p = point.current;
+    if (!p) return false;
 
-    // A quick-nav link under the pointer wins: it gets its own cursor back
-    // and its own destination, rather than being overruled by the cover.
-    return !document.elementFromPoint(px, py)?.closest(INTERACTIVE);
+    // While a menu or the sheet is open, the click that dismisses it must
+    // dismiss it — not land on the cover and navigate to /register.
+    if (document.documentElement.hasAttribute("data-nav-hold")) return false;
+
+    const r = el.getBoundingClientRect();
+    if (p.x < r.left || p.x > r.right || p.y < r.top || p.y > r.bottom) {
+      return false;
+    }
+
+    const hit = document.elementFromPoint(p.x, p.y);
+    if (!hit) return false;
+
+    // The header floats over the cover without being part of it, and so
+    // will anything else that ever does — a panel, the sheet, a toast.
+    // Testing containment rather than naming them fixes the class of bug:
+    // whatever is on top owns the pointer, and only the cover's own
+    // pixels arm the chip.
+    if (!el.contains(hit)) return false;
+    if (hit.closest('[data-cursor-cta="off"]')) return false;
+
+    // A link under the pointer wins: it gets its own cursor back and its
+    // own destination, rather than being overruled by the cover.
+    return !hit.closest(INTERACTIVE);
   }, [targetRef]);
 
   useEffect(() => {
@@ -83,12 +107,39 @@ export function CursorCta({ targetRef, href, label, onArmedChange }: Props) {
     if (!el) return;
     if (!window.matchMedia(FINE_POINTER).matches) return;
 
+    /**
+     * The expensive half — a hit test and a layout read — so it runs at
+     * most once a frame, however fast the mouse reports.
+     */
+    let frame = 0;
+    const schedule = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        sync();
+      });
+    };
+
     const sync = () => {
-      setArmed(evaluate());
+      const next = evaluate();
+      // The chip arrives at the pointer, not at wherever it was last
+      // seen: while it is down the springs are not being fed.
+      if (next && !live.current) {
+        const p = point.current;
+        if (p) {
+          rawX.set(p.x);
+          rawY.set(p.y);
+          x.jump(p.x);
+          y.jump(p.y);
+        }
+      }
+      live.current = next;
+      setArmed(next);
       // Near the right edge the chip would run off the viewport, so it
       // swaps to the other side of the pointer.
       const w = chipRef.current?.offsetWidth ?? 0;
-      setFlip(point.current.x + OFFSET * 2 + w > window.innerWidth);
+      const px = point.current?.x ?? 0;
+      setFlip(px + OFFSET * 2 + w > window.innerWidth);
     };
 
     /** Drop the chip at the pointer rather than sweeping it across the page. */
@@ -105,14 +156,31 @@ export function CursorCta({ targetRef, href, label, onArmedChange }: Props) {
       sync();
     };
 
+    // Tracked at the window rather than on the cover: a pointer moving
+    // across the header is still moving, and the cover would never hear
+    // about it.
     const onMove = (e: PointerEvent) => {
       point.current = { x: e.clientX, y: e.clientY };
-      rawX.set(e.clientX);
-      rawY.set(e.clientY);
-      sync();
+      // Only while the chip is up: two springs animating for something
+      // nobody can see is two springs animating on every mouse move
+      // anywhere on the site, including across the header's own menus.
+      if (live.current) {
+        rawX.set(e.clientX);
+        rawY.set(e.clientY);
+      }
+      schedule();
     };
 
-    const onLeave = () => setArmed(false);
+    const onLeave = () => {
+      point.current = null;
+      live.current = false;
+      setArmed(false);
+    };
+
+    const onBlur = () => {
+      live.current = false;
+      setArmed(false);
+    };
 
     const onClick = (e: MouseEvent) => {
       // Only the bare cover navigates; a real link inside it keeps its own.
@@ -123,22 +191,26 @@ export function CursorCta({ targetRef, href, label, onArmedChange }: Props) {
 
     // Scrolling moves the cover out from under a stationary pointer, and
     // that fires no pointer event of its own.
-    const onScroll = () => sync();
+    const onScroll = () => {
+      if (!point.current) return;
+      schedule();
+    };
 
     el.addEventListener("pointerenter", onEnter);
-    el.addEventListener("pointermove", onMove);
-    el.addEventListener("pointerleave", onLeave);
     el.addEventListener("click", onClick);
+    window.addEventListener("pointermove", onMove);
+    document.documentElement.addEventListener("pointerleave", onLeave);
     window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("blur", onLeave);
+    window.addEventListener("blur", onBlur);
 
     return () => {
       el.removeEventListener("pointerenter", onEnter);
-      el.removeEventListener("pointermove", onMove);
-      el.removeEventListener("pointerleave", onLeave);
       el.removeEventListener("click", onClick);
+      window.removeEventListener("pointermove", onMove);
+      document.documentElement.removeEventListener("pointerleave", onLeave);
       window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("blur", onLeave);
+      window.removeEventListener("blur", onBlur);
+      cancelAnimationFrame(frame);
     };
   }, [evaluate, href, rawX, rawY, router, targetRef, x, y]);
 

@@ -20,6 +20,14 @@ const nextConfig: NextConfig = {
   // Don't advertise the framework.
   poweredByHeader: false,
 
+  experimental: {
+    // Turbopack's on-disk dev cache (.next/dev) kept serving a stale
+    // app/globals.css on Windows — edits never reached the browser, not even
+    // across a restart, until the folder was deleted. A cold compile on each
+    // `next dev` is the cheaper trade. Production builds are unaffected.
+    turbopackFileSystemCacheForDev: false,
+  },
+
   // Allow optimizing images served from Supabase Storage (org logos) and Google
   // account avatars. All other remote hosts are blocked by next/image by default.
   images: {
