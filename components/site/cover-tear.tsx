@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   COVER_FLOW,
@@ -316,10 +316,28 @@ export function TornEdge({
 }) {
   const hostRef = useRef<HTMLCanvasElement>(null);
 
+  /* The rule has to exist even when the tear cannot draw it.
+     This component is the page's structural rule vocabulary, not decoration:
+     where it appears, a hairline is carrying the division between one plate
+     and the next. Two readers never see the canvas — someone who asked for
+     reduced motion, and someone whose browser gave us no WebGL2 context —
+     and both of them were getting a zero-height wrapper with nothing in it,
+     which loses the structure rather than the effect.
+     It is a flag rather than an unconditional background because the canvas
+     covers the wrapper and the mass it paints is only ~60% opaque: a paper
+     hairline sitting behind it would bleed through as a lighter 1px seam
+     along the top of the tear, and only along the top, since the rest of the
+     curtain hangs over nothing. So the fallback is drawn exactly when the
+     canvas is not. */
+  const [inert, setInert] = useState(false);
+
   useEffect(() => {
     const canvas = hostRef.current;
     if (!canvas) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setInert(true);
+      return;
+    }
 
     let handle: Handle | null = null;
     let io: IntersectionObserver | null = null;
@@ -331,6 +349,8 @@ export function TornEdge({
       handle?.stop();
       handle = null;
       const r = getRenderer();
+      // No context, no tear — the same silence reduced motion asks for.
+      if (!r) setInert(true);
       if (!r || disposed) return;
 
       const cs = getComputedStyle(canvas);
@@ -461,7 +481,13 @@ export function TornEdge({
      depth out in the flow would push every plate apart by half a screen to
      make room for something that is mostly empty. */
   return (
-    <div className={cn("relative h-px w-full", className)}>
+    <div
+      className={cn(
+        "relative h-px w-full",
+        inert && "bg-[var(--cover-paper)]/12",
+        className,
+      )}
+    >
       <canvas
         ref={hostRef}
         aria-hidden

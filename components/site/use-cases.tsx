@@ -1,15 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  // React's own, not the DOM global it shadows — `FormEvent` is deprecated
-  // in these types on the grounds that no such event exists.
-  type SubmitEvent,
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   motion,
   AnimatePresence,
@@ -18,22 +9,17 @@ import {
   useMotionValue,
   useReducedMotion,
 } from "framer-motion";
-import { createPortal } from "react-dom";
-import {
-  ArrowRight,
-  Building2,
-  Clock,
-  Radio,
-  RotateCcw,
-  X,
-} from "lucide-react";
+import { ArrowRight, Clock } from "lucide-react";
 import {
   INDUSTRIES,
+  INDUSTRIES_GATEWAY,
+  NAV_INDUSTRIES,
   USE_CASES_INTRO,
-  customIndustry,
   type Industry,
 } from "@/lib/site";
 import { cn } from "@/lib/utils";
+import { CornerDot } from "./corner-dot";
+import { IntentLink } from "./intent-link";
 import { Reveal, EASE } from "./reveal";
 
 /**
@@ -47,35 +33,54 @@ import { Reveal, EASE } from "./reveal";
  * how it starts, and a staffed front desk structurally cannot hear all of
  * it.* A grid cannot argue that. A day can.
  *
- * So the section is one instrument instead. Pick a trade and it re-models
- * the day: 24 hourly bars of real call shape, the hours a human is
- * actually at the desk, and one toggle that fills in what the agent picks
- * up. The toggle is the whole section in one gesture — the same day, twice,
- * and the difference between them is the product.
+ * So the section is one instrument instead: 24 hourly bars of real call
+ * shape, the hours a human is actually at the desk, and one toggle that
+ * fills in what the agent picks up. The toggle is the whole section in one
+ * gesture — the same day, twice, and the difference between them is the
+ * product.
  *
- * Three decisions worth keeping:
+ * Four decisions worth keeping.
  *
- *  · **It plays itself first.** The panel arrives in "without" and flips
- *    on its own about a second and a half later, then walks the trades.
- *    Anything that waits to be clicked on a landing page is not seen. The
- *    first interaction of any kind takes the controls for good — autoplay
- *    that fights the reader is worse than none.
+ *  · **It sits on the open field, between hairlines.** It used to be drawn
+ *    inside a rounded panel, and so was every other section on this page —
+ *    the same border, the same pool colour, the same shadow, six times.
+ *    That is what made a landing page read as a brochure. Nothing here is
+ *    grouped by a card any more; it is grouped by rules and by space, and
+ *    the reader's eye travels down one object rather than across six.
+ *  · **It plays itself first.** The day arrives uncovered and flips on its
+ *    own about a second and a half later, then walks the trades. Anything
+ *    that waits to be clicked on a landing page is not seen. The first
+ *    interaction of any kind takes the controls for good — autoplay that
+ *    fights the reader is worse than none.
+ *  · **The dial is not behind a click.** It used to be the third level of
+ *    a modal, which is to say roughly nine readers in ten never saw the
+ *    single best thing in the file. It is in the section permanently now,
+ *    opened on the busiest hour, and it carries the argument the bar chart
+ *    cannot make: *one ring without an agent, because there is one line —
+ *    a ring per simultaneous conversation with it.* The difference between
+ *    the two modes stops being a colour and becomes a shape.
  *  · **It never claims to be telemetry.** The shapes are true to each
  *    trade and the arithmetic is real arithmetic over them, but they are a
- *    model, and the panel's footer says so. A fabricated dashboard buys
+ *    model, and the strip at the foot says so. A fabricated dashboard buys
  *    one scroll and costs the whole page's credibility.
- *  · **The "not on the list" field is the coverage claim, made payable.**
- *    Type any trade and the instrument answers with a generic day and a
- *    generic script — honestly generic, because we do not know that
- *    business yet. That is the actual product promise: not a vertical, a
- *    briefing.
  *
- * Colour and scale are the interior spread's, unchanged — --cover-panel
- * for the instrument, --cover-brand-lit as the only accent, the
- * --cover-load-* ramp for the bars (it was validated as an ordinal ramp
- * against exactly this panel colour), and every length in `em` off
- * `.cover`'s fluid base so the whole thing breathes with the viewport.
+ * What was deliberately removed, because removal was the work: the brief
+ * column (a third scripted call on a page whose demo section owns that
+ * job), the hour modal and its player, and the free-text "not on the
+ * list" field. That field interpolated a raw label into "Hi — I'm calling
+ * about veterinary" and handed a sceptic something visibly thinner than
+ * the eight written trades at exactly the moment they went looking for the
+ * seam. The gateway band at the foot answers the same objection with
+ * sixteen doors that actually open.
+ *
+ * Colour and scale are the interior spread's — --cover-brand-lit as the
+ * only accent, the --cover-load-* ramp for the bars, and every length in
+ * `em` off `.cover`'s fluid base so the whole thing breathes with the
+ * viewport.
  */
+
+/** This section's place in the spread. */
+const NUMERAL = "04";
 
 /* ---------------------------------------------------------------- *
  * The model
@@ -96,7 +101,6 @@ type DayModel = {
   answeredWithout: number;
   missed: number;
   offHoursShare: number;
-  recoveredValue: number;
 };
 
 /**
@@ -138,13 +142,10 @@ function modelDay(ind: Industry): DayModel {
     answeredWithout,
     missed,
     offHoursShare: total ? offHours / total : 0,
-    recoveredValue: missed * ind.value,
   };
 }
 
 const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
-const hhmm = (h: number, m: number) =>
-  `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 
 /* ---------------------------------------------------------------- *
  * One hour, call by call
@@ -155,7 +156,7 @@ const hhmm = (h: number, m: number) =>
  *
  * Seeded off the trade and the hour rather than random, for three reasons
  * that all matter: the same bar always opens the same hour, so a reader who
- * closes and reopens is not told a different story about it; the day model
+ * looks away and back is not told a different story about it; the day model
  * above can call this twenty-four times and get a stable total; and nothing
  * here can differ between the server's render and the client's.
  */
@@ -305,6 +306,7 @@ function DayChart({
   covered,
   staffed,
   label,
+  picked,
   onPick,
 }: {
   day: DayModel;
@@ -312,6 +314,8 @@ function DayChart({
   covered: boolean;
   staffed: [number, number];
   label: string;
+  /** The hour currently open on the dial, so the chart can mark it. */
+  picked: number;
   onPick: (hour: number) => void;
 }) {
   const reduce = useReducedMotion();
@@ -339,7 +343,7 @@ function DayChart({
   // is focusable, which would make the whole page hostile to keyboard use
   // to reach one feature — so the group takes a single stop and the arrows
   // move inside it. Until the reader moves, that stop is the busiest hour,
-  // which is the one worth opening anyway.
+  // which is the one the dial is already showing.
   //
   // The walk runs over the hours that actually rang. Empty ones are
   // disabled and so cannot take focus, which meant stepping onto one moved
@@ -382,7 +386,7 @@ function DayChart({
       <div
         ref={plot}
         role="group"
-        aria-label={`Calls per hour across one day for ${label} — choose an hour to open it.`}
+        aria-label={`Calls per hour across one day for ${label} — choose an hour to open it on the dial.`}
         className="relative h-[13em] select-none"
         onPointerMove={track}
         onPointerLeave={() => setHover(null)}
@@ -404,9 +408,35 @@ function DayChart({
         >
           {day.cells.map((c, i) => {
             const barPct = day.peak ? (c.calls / day.peak) * 100 : 0;
-            const fillPct = c.calls
-              ? ((covered ? c.calls : c.answered) / c.calls) * 100
-              : 0;
+            // The share a staffed desk gets to. It does not move when the
+            // toggle does — it is the constant the flip is measured
+            // against, which is why both layers below can be driven from
+            // it without either of them recomputing the day.
+            const ansPct = c.calls ? (c.answered / c.calls) * 100 : 0;
+
+            /**
+             * The flip, and why it is two layers rather than one height.
+             *
+             * A single bar whose fill grows on the toggle is a bar that
+             * *changes*; it is not a bar that catches anything. So the
+             * missed remainder is its own block sitting on top of the
+             * answered mass, and on the flip it translates down by its own
+             * height — into the mass — while the mass rises to meet it.
+             * The reader watches one quantity move into another instead of
+             * watching two states cross-fade, which is the entire claim of
+             * this section rendered as a motion rather than as a colour.
+             *
+             * The stagger is 0.035 and not 0.014. At 0.014 the whole day
+             * is 0.32s wide against a 0.55s per-bar duration — every bar is
+             * mid-flight at every moment, and the promised left-to-right
+             * sweep across the day never renders at all.
+             */
+            const flip = reduce
+              ? // Reduced motion gets the flip, because the flip is the
+                // section — it just gets it once, slowly, with no stagger
+                // and nothing translating across the screen.
+                { duration: 1.1, ease: EASE }
+              : { duration: 0.55, delay: i * 0.035, ease: EASE };
 
             return (
               <button
@@ -417,10 +447,16 @@ function DayChart({
                 }}
                 tabIndex={i === focusIdx ? 0 : -1}
                 disabled={!c.calls}
-                aria-label={`${hh(c.hour)}, ${c.calls} calls — open this hour`}
+                aria-label={`${hh(c.hour)}, ${c.calls} calls — open this hour on the dial`}
+                aria-current={picked === i ? "true" : undefined}
                 onFocus={() => {
                   setRoved(i);
                   setHover(i);
+                  // Focus, not just click: arrowing along the chart is the
+                  // only way a keyboard reader moves the dial, and a stop
+                  // that lights a bar without opening it would leave them
+                  // driving half the instrument.
+                  if (c.calls) onPick(c.hour);
                 }}
                 onClick={() => onPick(c.hour)}
                 className="group relative flex h-full flex-1 items-end rounded-t-[0.25em] outline-none focus-visible:ring-2 focus-visible:ring-[var(--cover-brand-lit)] enabled:cursor-pointer"
@@ -429,14 +465,31 @@ function DayChart({
                 <span aria-hidden className="absolute inset-0" />
 
                 <div
-                  className={cn(
-                    "relative w-full overflow-hidden rounded-t-[0.25em] transition-colors duration-200",
-                    // The uncovered remainder: an empty column, outlined.
-                    "border-t border-[var(--cover-paper)]/20 bg-[var(--cover-paper)]/[0.07]",
-                    hover === i && "border-[var(--cover-paper)]/50",
-                  )}
+                  className="relative w-full overflow-hidden rounded-t-[0.25em]"
                   style={{ height: `${barPct}%` }}
                 >
+                  {/* What the desk never got to. */}
+                  <motion.span
+                    aria-hidden
+                    className={cn(
+                      "absolute inset-x-0 border-t bg-[var(--cover-paper)]/[0.07] transition-colors duration-200",
+                      hover === i
+                        ? "border-[var(--cover-paper)]/50"
+                        : "border-[var(--cover-paper)]/20",
+                    )}
+                    style={{
+                      bottom: `${ansPct}%`,
+                      height: `${100 - ansPct}%`,
+                    }}
+                    initial={false}
+                    animate={{
+                      y: reduce ? 0 : covered ? "100%" : "0%",
+                      opacity: covered ? 0 : 1,
+                    }}
+                    transition={flip}
+                  />
+
+                  {/* What it did. */}
                   <motion.div
                     className="absolute inset-x-0 bottom-0"
                     style={{
@@ -444,19 +497,10 @@ function DayChart({
                         "linear-gradient(to top, var(--cover-load-2), var(--cover-load-3))",
                     }}
                     initial={false}
-                    animate={{ height: `${fillPct}%` }}
-                    transition={
-                      reduce
-                        ? { duration: 0 }
-                        : {
-                            duration: 0.55,
-                            // Left-to-right sweep across the day — the
-                            // moment the toggle is actually selling.
-                            delay: i * 0.014,
-                            ease: EASE,
-                          }
-                    }
+                    animate={{ height: `${covered ? 100 : ansPct}%` }}
+                    transition={flip}
                   />
+
                   {/* Hover wash, so a bar reads as a thing you can open. */}
                   <span
                     aria-hidden
@@ -466,6 +510,16 @@ function DayChart({
                     )}
                   />
                 </div>
+
+                {/* The hour the dial is holding, marked on the day. Without
+                    it the dial below is a claim about an hour the reader
+                    cannot locate in the chart they just read. */}
+                {picked === i && (
+                  <span
+                    aria-hidden
+                    className="absolute inset-x-0 -bottom-[0.45em] h-[0.15em] bg-[var(--cover-brand-lit)]"
+                  />
+                )}
               </button>
             );
           })}
@@ -498,7 +552,7 @@ function DayChart({
                   )}%)`,
                 }}
               >
-                <span className="mono text-[var(--cover-paper)]/55">
+                <span className="mono text-[var(--cover-paper)]/75">
                   {hh(cell.hour)}
                 </span>
                 <span className="mx-[0.5em] text-[var(--cover-paper)]/25">
@@ -510,7 +564,7 @@ function DayChart({
                     "0 calls / 0 answered" would light the accent on the
                     strength of 0 === 0. A silent hour just says so. */}
                 {cell.calls === 0 ? (
-                  <span className="text-[var(--cover-paper)]/45">
+                  <span className="text-[var(--cover-paper)]/75">
                     the phone didn&rsquo;t ring
                   </span>
                 ) : (
@@ -525,7 +579,7 @@ function DayChart({
                       className={
                         covered || cell.answered === cell.calls
                           ? "text-[var(--cover-brand-lit)]"
-                          : "text-[var(--cover-paper)]/45"
+                          : "text-[var(--cover-paper)]/75"
                       }
                     >
                       {covered ? cell.calls : cell.answered} answered
@@ -539,12 +593,12 @@ function DayChart({
       </div>
 
       {/* axis */}
-      <div className="relative mt-[0.6em] h-[1em] border-t border-[var(--cover-paper)]/12">
+      <div className="relative mt-[0.9em] h-[1em] border-t border-[var(--cover-paper)]/12">
         {AXIS_HOURS.map((h) => (
           <span
             key={h}
             aria-hidden
-            className="mono absolute top-[0.35em] -translate-x-1/2 text-[0.62em] tracking-[0.08em] text-[var(--cover-paper)]/35"
+            className="mono absolute top-[0.35em] -translate-x-1/2 text-[0.62em] tracking-[0.08em] text-[var(--cover-paper)]/45"
             style={{ left: `${((h + 0.5) / 24) * 100}%` }}
           >
             {String(h).padStart(2, "0")}
@@ -553,98 +607,21 @@ function DayChart({
       </div>
 
       <div className="mt-[1.9em] flex flex-wrap items-center justify-between gap-x-[1.2em] gap-y-[0.5em]">
-        <p className="flex items-center gap-[0.6em] text-[0.72em] text-[var(--cover-paper)]/45">
+        <p className="flex items-center gap-[0.6em] text-[0.72em] text-[var(--cover-paper)]/75">
           <span
             aria-hidden
             className="inline-block h-[0.85em] w-[1.6em] shrink-0 rounded-[0.15em] border border-dashed border-[var(--cover-paper)]/25 bg-[var(--cover-paper)]/[0.05]"
           />
           Front desk staffed {hh(staffed[0])}–{hh(staffed[1])} ·{" "}
-          <span className="text-[var(--cover-paper)]/70">
-            {Math.round(day.offHoursShare * 100)}% of the day&rsquo;s calls
-            arrive outside it
-          </span>
+          {Math.round(day.offHoursShare * 100)}% of the day&rsquo;s calls
+          arrive outside it
         </p>
 
-        <p className="flex items-center gap-[0.4em] text-[0.72em] text-[var(--cover-brand-lit)]/75">
-          Click any hour to watch it play out
-          <ArrowRight className="size-[1.1em]" strokeWidth={2} />
+        <p className="mono text-[0.66em] uppercase tracking-[0.18em] text-[var(--cover-paper)]/45">
+          Any hour opens on the dial below
         </p>
       </div>
     </div>
-  );
-}
-
-/* ---------------------------------------------------------------- *
- * The brief — what this trade's caller actually says
- * ---------------------------------------------------------------- */
-
-function Brief({ ind }: { ind: Industry }) {
-  const reduce = useReducedMotion();
-  const Icon = ind.icon;
-
-  return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={ind.id + ind.label}
-        initial={reduce ? false : { opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        // `mode="wait"` empties this column until the outgoing brief is
-        // gone, so the exit is deliberately about half the entrance: any
-        // longer and the panel reads as a hole between two trades.
-        exit={
-          reduce
-            ? undefined
-            : { opacity: 0, y: -8, transition: { duration: 0.16 } }
-        }
-        transition={{ duration: 0.35, ease: EASE }}
-      >
-        <div className="flex items-center gap-[0.7em] text-[var(--cover-brand-lit)]">
-          <Icon className="size-[1.15em] shrink-0" strokeWidth={1.9} />
-          <span className="text-[0.78em] font-semibold uppercase leading-none tracking-[0.16em]">
-            {ind.label}
-          </span>
-        </div>
-
-        <p className="mono mt-[2em] text-[0.62em] uppercase tracking-[0.22em] text-[var(--cover-paper)]/35">
-          The call
-        </p>
-        <p className="mt-[0.7em] text-balance text-[1.15em] leading-[1.4] tracking-[-0.02em] text-[var(--cover-paper)]/90">
-          &ldquo;{ind.caller}&rdquo;
-        </p>
-
-        <p className="mono mt-[1.7em] text-[0.62em] uppercase tracking-[0.22em] text-[var(--cover-paper)]/35">
-          The answer
-        </p>
-        <p className="mt-[0.7em] text-balance text-[1.05em] leading-[1.45] tracking-[-0.015em] text-[var(--cover-brand-lit)]">
-          &ldquo;{ind.agent}&rdquo;
-        </p>
-
-        <ul className="mt-[1.8em] flex flex-col gap-[0.7em] border-t border-[var(--cover-paper)]/10 pt-[1.4em]">
-          {ind.jobs.map((j, i) => (
-            <motion.li
-              key={j}
-              initial={reduce ? false : { opacity: 0, x: -6 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.4, delay: 0.1 + i * 0.07, ease: EASE }}
-              className="flex items-baseline gap-[0.8em] text-[0.85em] leading-[1.5] text-[var(--cover-paper)]/70"
-            >
-              <span className="mono shrink-0 text-[0.8em] text-[var(--cover-brand-lit)]/70">
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              {j}
-            </motion.li>
-          ))}
-        </ul>
-
-        <p className="mt-[1.6em] flex items-center gap-[0.6em] text-[0.8em] text-[var(--cover-paper)]/55">
-          <ArrowRight
-            className="size-[1.1em] shrink-0 text-[var(--cover-brand-lit)]"
-            strokeWidth={2}
-          />
-          {ind.outcome}
-        </p>
-      </motion.div>
-    </AnimatePresence>
   );
 }
 
@@ -667,9 +644,10 @@ const PLAY = 5.5;
  * The rings carry the argument. Each concentric ring is one conversation
  * running at the same time as the others, so the two modes are not the same
  * picture in different colours — without an agent everything that got
- * through sits on a single outer ring, because there is one line and it can
- * only ever hold one call; with the agent the hour fills inward, a ring per
- * simultaneous conversation. You do not read that difference. You see it.
+ * through sits on a single ring, because there is one line and it can only
+ * ever hold one call; with the agent that ring splits, and the hour fills
+ * inward, a ring per simultaneous conversation. You do not read that
+ * difference. You see it happen, over 700ms, on the same beat as the bars.
  *
  * Every arc draws over the real length of its call, so the sweep is not
  * decoration either: it is the hour passing at ninety-two milliseconds to
@@ -680,16 +658,29 @@ const PLAY = 5.5;
  * Ring radii by concurrency depth, in the 0–100 viewBox.
  *
  * Everything is pulled well inside 50 on purpose: the quarter labels sit at
- * r=47.5 and are drawn *inside* the same viewBox, so a ring stack that runs
+ * r=47.3 and are drawn *inside* the same viewBox, so a ring stack that runs
  * out to 37 leaves no room and the labels get clipped at the frame.
  */
 const LANE_R = [34, 29, 24, 19, 14];
 const laneR = (l: number) => LANE_R[Math.min(l, LANE_R.length - 1)];
 
-/** Minute → point on a circle of radius r, with :00 at the top. */
+/**
+ * Minute → point on a circle of radius r, with :00 at the top.
+ *
+ * Rounded, and that is a correctness fix rather than tidiness. These
+ * coordinates land straight in SVG attributes, so React compares the
+ * server's serialisation of the double against the client's own. The two
+ * runtimes evaluate `Math.cos`/`Math.sin` to different last bits — server
+ * rendered `20.274206980904232`, the browser computed `20.274206980904236`
+ * — and React reports that as a hydration mismatch and refuses to patch
+ * the tree. Three decimals in a 0–100 viewBox is a thousandth of a unit,
+ * far under a device pixel at any width this dial is drawn at, and it is
+ * identical on both sides.
+ */
 function pt(minute: number, r: number): [number, number] {
   const a = (minute / 60) * Math.PI * 2 - Math.PI / 2;
-  return [50 + r * Math.cos(a), 50 + r * Math.sin(a)];
+  const round = (n: number) => Math.round(n * 1000) / 1000;
+  return [round(50 + r * Math.cos(a)), round(50 + r * Math.sin(a))];
 }
 
 function arcPath(from: number, to: number, r: number) {
@@ -713,6 +704,11 @@ function HourDial({
   handled: number;
   reduce: boolean | null;
 }) {
+  const lanes = useMemo(
+    () => [...new Set(calls.map((c) => c.lane))].sort((a, b) => a - b),
+    [calls],
+  );
+
   return (
     <div className="relative mx-auto aspect-square w-full max-w-[17em]">
       <svg viewBox="0 0 100 100" className="absolute inset-0 size-full">
@@ -739,23 +735,31 @@ function HourDial({
         </defs>
 
         {/* The lines themselves, drawn whether or not anything is on them.
-            This is the argument standing still: one ring without an agent,
-            because there is one line — a ring per simultaneous conversation
-            with it. The reader sees the difference before a single arc has
-            started to draw. */}
-        {(covered
-          ? [...new Set(calls.map((c) => c.lane))].sort((a, b) => a - b)
-          : [0]
-        ).map((l) => (
-          <circle
+            This is the argument standing still — and then moving: without
+            an agent every ring is collapsed onto the outermost one and only
+            that one is visible, because there is one line. On the flip they
+            split apart, one per simultaneous conversation, over 700ms. The
+            reader sees the difference before a single arc has redrawn. */}
+        {lanes.map((l) => (
+          <motion.circle
             key={`ring${l}`}
             cx="50"
             cy="50"
-            r={laneR(l)}
+            // The attribute as well as the target: the server renders this
+            // markup with no JavaScript, and a circle whose radius only
+            // exists inside an animation target is a circle that is not
+            // there until hydration.
+            r={laneR(0)}
             fill="none"
             stroke="var(--cover-paper)"
             strokeOpacity="0.1"
             strokeWidth="3"
+            initial={false}
+            animate={{
+              r: covered ? laneR(l) : laneR(0),
+              opacity: covered || l === 0 ? 1 : 0,
+            }}
+            transition={{ duration: reduce ? 0 : 0.7, ease: EASE }}
           />
         ))}
 
@@ -782,135 +786,139 @@ function HourDial({
           })}
         </g>
 
-        {/* The hour completing, as an outer ring. */}
-        <g transform="rotate(-90 50 50)">
-          <circle
-            cx="50"
-            cy="50"
-            r="44.2"
-            fill="none"
-            stroke="var(--cover-paper)"
-            strokeOpacity="0.08"
-            strokeWidth="0.5"
-          />
-          <motion.circle
-            cx="50"
-            cy="50"
-            r="44.2"
-            fill="none"
-            stroke="var(--cover-brand-lit)"
-            strokeOpacity="0.55"
-            strokeWidth="0.7"
-            strokeLinecap="round"
-            initial={reduce ? false : { pathLength: 0 }}
-            animate={{ pathLength: 1 }}
-            transition={{ duration: reduce ? 0 : PLAY, ease: "linear" }}
-          />
-        </g>
+        {/* Everything below is keyed on the mode, so flipping the toggle
+            remounts it and the hour replays onto the rings it has just
+            split into. A path's `d` cannot be tweened between two radii
+            without morphing the command string, and a set of arcs that
+            silently teleported inward while the rings glided would read as
+            a rendering fault rather than as a change of shape. */}
+        <g key={covered ? "with" : "without"}>
+          {/* The hour completing, as an outer ring. */}
+          <g transform="rotate(-90 50 50)">
+            <circle
+              cx="50"
+              cy="50"
+              r="44.2"
+              fill="none"
+              stroke="var(--cover-paper)"
+              strokeOpacity="0.08"
+              strokeWidth="0.5"
+            />
+            <motion.circle
+              cx="50"
+              cy="50"
+              r="44.2"
+              fill="none"
+              stroke="var(--cover-brand-lit)"
+              strokeOpacity="0.55"
+              strokeWidth="0.7"
+              strokeLinecap="round"
+              initial={reduce ? false : { pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ duration: reduce ? 0 : PLAY, ease: "linear" }}
+            />
+          </g>
 
-        {/* Ghost tracks — where each call will land, so the hour has a
-            shape before a single arc has drawn. */}
-        {calls.map((c, i) => {
-          const r = covered ? laneR(c.lane) : laneR(0);
-          return (
+          {/* Ghost tracks — where each call will land, so the hour has a
+              shape before a single arc has drawn. */}
+          {calls.map((c, i) => (
             <path
               key={`g${i}`}
-              d={arcPath(c.start, c.start + c.dur, r)}
+              d={arcPath(
+                c.start,
+                c.start + c.dur,
+                covered ? laneR(c.lane) : laneR(0),
+              )}
               fill="none"
               stroke="var(--cover-paper)"
               strokeOpacity="0.09"
               strokeWidth="3"
               strokeLinecap="round"
             />
-          );
-        })}
+          ))}
 
-        {calls.map((c, i) => {
-          // Without an agent, everything that got through is on one ring,
-          // because there is one line. With the agent, the hour fills
-          // inward. The radius is the whole argument.
-          const on = covered || c.answered;
-          const r = covered ? laneR(c.lane) : laneR(0);
-          const d = arcPath(c.start, c.start + c.dur, r);
-          const at = reduce ? 0 : (c.start / 60) * PLAY;
-          const over = reduce ? 0 : (c.dur / 60) * PLAY;
+          {calls.map((c, i) => {
+            // Without an agent, everything that got through is on one ring,
+            // because there is one line. With the agent, the hour fills
+            // inward. The radius is the whole argument.
+            const on = covered || c.answered;
+            const r = covered ? laneR(c.lane) : laneR(0);
+            const d = arcPath(c.start, c.start + c.dur, r);
+            const at = reduce ? 0 : (c.start / 60) * PLAY;
+            const over = reduce ? 0 : (c.dur / 60) * PLAY;
 
-          if (!on) {
+            if (!on) {
+              return (
+                <motion.path
+                  key={`m${i}`}
+                  d={d}
+                  fill="none"
+                  stroke="var(--cover-paper)"
+                  strokeWidth="3"
+                  strokeLinecap="butt"
+                  strokeDasharray="0.9 1.8"
+                  initial={reduce ? false : { strokeOpacity: 0 }}
+                  animate={{ strokeOpacity: 0.3 }}
+                  transition={{ duration: 0.3, delay: at }}
+                />
+              );
+            }
+
             return (
-              <motion.path
-                key={`m${i}`}
-                d={d}
-                fill="none"
-                stroke="var(--cover-paper)"
-                strokeWidth="3"
-                strokeLinecap="butt"
-                strokeDasharray="0.9 1.8"
-                initial={reduce ? false : { strokeOpacity: 0 }}
-                animate={{ strokeOpacity: 0.3 }}
-                transition={{ duration: 0.3, delay: at }}
-              />
+              <g key={`h${i}`}>
+                {/* bloom, then the line itself */}
+                <motion.path
+                  d={d}
+                  fill="none"
+                  stroke="var(--cover-brand-lit)"
+                  strokeOpacity="0.18"
+                  strokeWidth="6.5"
+                  strokeLinecap="round"
+                  initial={reduce ? false : { pathLength: 0 }}
+                  animate={{ pathLength: 1 }}
+                  transition={{ duration: over, delay: at, ease: "linear" }}
+                />
+                <motion.path
+                  d={d}
+                  fill="none"
+                  stroke="var(--cover-brand-lit)"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  initial={reduce ? false : { pathLength: 0 }}
+                  animate={{ pathLength: 1 }}
+                  transition={{ duration: over, delay: at, ease: "linear" }}
+                />
+              </g>
             );
-          }
+          })}
 
-          return (
-            <g key={`h${i}`}>
-              {/* bloom, then the line itself */}
-              <motion.path
-                d={d}
-                fill="none"
-                stroke="var(--cover-brand-lit)"
-                strokeOpacity="0.18"
-                strokeWidth="6.5"
-                strokeLinecap="round"
-                initial={reduce ? false : { pathLength: 0 }}
-                animate={{ pathLength: 1 }}
-                transition={{ duration: over, delay: at, ease: "linear" }}
+          {/* The sweep. A bounding rect gives the group a full-dial bbox, so
+              `fill-box` puts the rotation origin at the centre rather than
+              at the middle of the hand. */}
+          {!reduce && (
+            <motion.g
+              style={{ transformBox: "fill-box", transformOrigin: "center" }}
+              initial={{ rotate: 0, opacity: 0 }}
+              animate={{ rotate: 360, opacity: [0, 1, 1, 0] }}
+              transition={{
+                duration: PLAY,
+                ease: "linear",
+                opacity: { duration: PLAY, times: [0, 0.02, 0.94, 1] },
+              }}
+            >
+              <rect x="0" y="0" width="100" height="100" fill="none" />
+              <line
+                x1="50"
+                y1="6"
+                x2="50"
+                y2="50"
+                stroke="url(#ntv-sweep)"
+                strokeWidth="0.9"
               />
-              <motion.path
-                d={d}
-                fill="none"
-                stroke="var(--cover-brand-lit)"
-                strokeWidth="3"
-                strokeLinecap="round"
-                initial={reduce ? false : { pathLength: 0 }}
-                animate={{ pathLength: 1 }}
-                transition={{ duration: over, delay: at, ease: "linear" }}
-              />
-            </g>
-          );
-        })}
-
-        {/* The sweep. A bounding rect gives the group a full-dial bbox, so
-            `fill-box` puts the rotation origin at the centre rather than at
-            the middle of the hand. */}
-        {!reduce && (
-          <motion.g
-            style={{ transformBox: "fill-box", transformOrigin: "center" }}
-            initial={{ rotate: 0, opacity: 0 }}
-            animate={{ rotate: 360, opacity: [0, 1, 1, 0] }}
-            transition={{
-              duration: PLAY,
-              ease: "linear",
-              opacity: { duration: PLAY, times: [0, 0.02, 0.94, 1] },
-            }}
-          >
-            <rect x="0" y="0" width="100" height="100" fill="none" />
-            <line
-              x1="50"
-              y1="6"
-              x2="50"
-              y2="50"
-              stroke="url(#ntv-sweep)"
-              strokeWidth="0.9"
-            />
-            <circle
-              cx="50"
-              cy="6.4"
-              r="1.5"
-              fill="var(--cover-brand-lit)"
-            />
-          </motion.g>
-        )}
+              <circle cx="50" cy="6.4" r="1.5" fill="var(--cover-brand-lit)" />
+            </motion.g>
+          )}
+        </g>
 
         {QUARTERS.map((m) => {
           const [x, y] = pt(m, 47.3);
@@ -933,13 +941,14 @@ function HourDial({
 
       <div className="pointer-events-none absolute inset-0 grid place-items-center">
         <div className="text-center">
-          <p className="text-[3em] font-medium leading-none tracking-[-0.05em] text-[var(--cover-brand-lit)]">
-            {handled}
-          </p>
+          <Tally
+            value={handled}
+            className="block text-[3em] font-medium leading-none tracking-[-0.05em] text-[var(--cover-brand-lit)]"
+          />
           <p className="mono mt-[0.7em] text-[0.58em] uppercase tracking-[0.24em] text-[var(--cover-paper)]/45">
             handled
           </p>
-          <p className="mono mt-[0.35em] text-[0.58em] tracking-[0.14em] text-[var(--cover-paper)]/30">
+          <p className="mono mt-[0.35em] text-[0.58em] tracking-[0.14em] text-[var(--cover-paper)]/45">
             of {calls.length}
           </p>
         </div>
@@ -948,7 +957,17 @@ function HourDial({
   );
 }
 
-function HourPlayer({
+/**
+ * The hour, and the sentence that explains it.
+ *
+ * Four branches, and which one is true depends on the hour rather than on
+ * the pitch: a quiet hour has no overlap to point at, an hour with the
+ * doors shut has a better argument than either, and an in-hours miss is
+ * only believable if the page can say what the team was doing instead —
+ * which is what `busyReason` is for. Copy that asserts the same claim at
+ * every hour is copy a reader stops reading at the second hour.
+ */
+function PeakHour({
   ind,
   cell,
   covered,
@@ -961,9 +980,19 @@ function HourPlayer({
   const calls = useMemo(() => hourCalls(ind, cell.hour), [ind, cell.hour]);
   const [landed, setLanded] = useState(0);
 
-  // One timer per call, fired as the sweep reaches it. The component is
-  // remounted by its key whenever the hour or the mode changes, so this
-  // never has to reset anything — it only ever counts up from zero.
+  // The dial restarts on the flip, so the count narrating it restarts too.
+  // Adjusted during render rather than from an effect: the reset is a pure
+  // function of a prop we already hold, and doing it in an effect would
+  // paint one frame of the old hour's total against the new hour's arcs.
+  const [mode, setMode] = useState(covered);
+  if (mode !== covered) {
+    setMode(covered);
+    setLanded(0);
+  }
+
+  // One timer per call, fired as the sweep reaches it, so the number in the
+  // middle of the dial is counting the same arcs the reader is watching
+  // draw.
   useEffect(() => {
     if (reduce) return;
     const timers = calls.map((c, i) =>
@@ -973,18 +1002,16 @@ function HourPlayer({
       ),
     );
     return () => timers.forEach(clearTimeout);
-  }, [calls, reduce]);
+  }, [calls, reduce, covered]);
 
   const shown = reduce ? calls.length : landed;
-  const seen = calls.slice(0, shown);
-  const handled = seen.filter((c) => covered || c.answered).length;
-  const lost = shown - handled;
-  const lanes = covered
-    ? Math.max(1, ...calls.map((c) => c.lane + 1))
-    : 1;
+  const handled = calls
+    .slice(0, shown)
+    .filter((c) => covered || c.answered).length;
+  const lanes = covered ? Math.max(1, ...calls.map((c) => c.lane + 1)) : 1;
 
   return (
-    <div className="grid gap-[2em] md:grid-cols-[17em_1fr] md:items-center md:gap-[2.5em]">
+    <div className="grid gap-[2.4em] md:grid-cols-[17em_minmax(0,1fr)] md:items-center md:gap-[3.2em]">
       <HourDial
         calls={calls}
         covered={covered}
@@ -993,331 +1020,150 @@ function HourPlayer({
       />
 
       <div>
-        {/* The manifest. The dial says how the hour went; this says who was
-            on the other end of it, which is the part a business recognises
-            as its own. */}
-        <div className="mono flex items-center justify-between text-[0.58em] uppercase tracking-[0.22em] text-[var(--cover-paper)]/30">
-          <span>Inbound</span>
-          <span>{covered ? "Neuro Tech Voice" : "One line"}</span>
-        </div>
+        <p className="mono text-[0.66em] uppercase tracking-[0.22em] text-[var(--cover-paper)]/45">
+          {cell.calls === Math.max(...ind.volume) ? "Busiest hour" : "This hour"}
+        </p>
+        <p className="mt-[0.6em] text-[1.9em] font-medium leading-none tracking-[-0.04em]">
+          {hh(cell.hour)}–{hh((cell.hour + 1) % 24)}
+        </p>
 
-        <ul className="mt-[1.1em] flex flex-col">
-          {calls.map((c, i) => {
-            const on = covered || c.answered;
-            const at = reduce ? 0 : (c.start / 60) * PLAY;
-            return (
-              <motion.li
-                key={i}
-                className="grid grid-cols-[0.9em_3.4em_1fr_auto] items-baseline gap-[0.7em] border-b border-[var(--cover-paper)]/[0.07] py-[0.6em] last:border-b-0"
-                // A row waits as a ghost rather than as nothing: empty space
-                // that fills over six seconds reads as a panel still
-                // loading, and the hour's shape should be legible from the
-                // first frame.
-                initial={reduce ? false : { opacity: 0.16 }}
-                animate={{ opacity: on ? 1 : 0.62 }}
-                transition={{ duration: 0.32, delay: at, ease: EASE }}
-              >
-                <span
-                  aria-hidden
-                  className={cn(
-                    "mt-[0.35em] size-[0.5em] shrink-0 rounded-full",
-                    on
-                      ? "bg-[var(--cover-brand-lit)]"
-                      : "border border-[var(--cover-paper)]/40",
-                  )}
-                />
-                <span className="mono text-[0.68em] text-[var(--cover-paper)]/40">
-                  {hhmm(cell.hour, c.start)}
-                </span>
-                <span
-                  className={cn(
-                    "truncate text-[0.82em] leading-tight",
-                    on
-                      ? "text-[var(--cover-paper)]/80"
-                      : "text-[var(--cover-paper)]/40",
-                  )}
-                >
-                  &ldquo;{c.about}&rdquo;
-                </span>
-                <span
-                  className={cn(
-                    "mono text-[0.6em] uppercase tracking-[0.14em]",
-                    on
-                      ? "text-[var(--cover-brand-lit)]/80"
-                      : "text-[var(--cover-paper)]/35",
-                  )}
-                >
-                  {on ? <span className="normal-case">{c.dur} min</span> : "missed"}
-                </span>
-              </motion.li>
-            );
-          })}
-        </ul>
-
-        <div className="mt-[1.4em] flex flex-wrap items-baseline gap-x-[1.6em] gap-y-[0.4em]">
-          <p className="mono text-[0.62em] uppercase tracking-[0.16em] text-[var(--cover-paper)]/40">
-            {covered ? "Concurrent lines" : "Lines available"}
-            <span className="ml-[0.8em] text-[1.5em] tracking-normal text-[var(--cover-brand-lit)]">
-              {lanes}
-            </span>
-          </p>
-          {lost > 0 && (
-            <p className="mono text-[0.62em] uppercase tracking-[0.16em] text-[var(--cover-paper)]/40">
-              To voicemail
-              <span className="ml-[0.8em] text-[1.5em] tracking-normal text-[var(--cover-paper)]/60">
-                {lost}
-              </span>
-            </p>
+        <p className="mt-[1.2em] max-w-[30em] text-pretty text-[0.95em] leading-[1.6] text-[var(--cover-paper)]/75">
+          {covered && !cell.staffed ? (
+            <>
+              Answered at {hh(cell.hour)}, with the front desk closed.{" "}
+              <span className="text-[var(--cover-paper)]">
+                Every one of these would have been a voicemail
+              </span>{" "}
+              — and a voicemail at this hour is a customer who has already
+              called somebody else by morning.
+            </>
+          ) : covered && lanes > 1 ? (
+            <>
+              Every call taken, across{" "}
+              <span className="text-[var(--cover-paper)]">
+                {lanes} conversations running at once
+              </span>{" "}
+              — one ring per simultaneous call. A staffed desk has exactly one
+              ring, and that is the whole difference.
+            </>
+          ) : covered ? (
+            <>
+              Every call taken on the first ring,{" "}
+              <span className="text-[var(--cover-paper)]">
+                without anyone stepping off the floor
+              </span>{" "}
+              — no hold, no callback list, nothing queued behind it.
+            </>
+          ) : cell.staffed ? (
+            <>
+              One line, one conversation.{" "}
+              <span className="text-[var(--cover-paper)]">
+                {cell.calls - cell.answered} of these never got through
+              </span>{" "}
+              — the line was still engaged, or {ind.busyReason}.
+            </>
+          ) : (
+            <>
+              Nobody was at the desk.{" "}
+              <span className="text-[var(--cover-paper)]">
+                Every one of these went to voicemail
+              </span>{" "}
+              — the hour is outside {hh(ind.staffed[0])}–{hh(ind.staffed[1])}.
+            </>
           )}
-        </div>
-      </div>
+        </p>
 
-      <p className="text-[0.85em] leading-[1.6] text-[var(--cover-paper)]/55 md:col-span-2">
-        {/* Three different true things, and which one is true depends on the
-            hour. A quiet hour has no overlap to point at, and an hour with
-            the doors shut has a better argument than either — so the copy
-            picks rather than asserting the same claim everywhere. */}
-        {covered && !cell.staffed ? (
-          <>
-            Answered at {hh(cell.hour)}, with the front desk closed.{" "}
-            <span className="text-[var(--cover-paper)]/85">
-              Every one of these would have been a voicemail
-            </span>{" "}
-            — and a voicemail at this hour is a customer who has already
-            called somebody else by morning.
-          </>
-        ) : covered && lanes > 1 ? (
-          <>
-            Every call taken, across{" "}
-            <span className="text-[var(--cover-paper)]/85">
-              {lanes} conversations running at once
-            </span>{" "}
-            — one ring per simultaneous call. A staffed desk has exactly one
-            ring, and that is the whole difference.
-          </>
-        ) : covered ? (
-          <>
-            Every call taken on the first ring,{" "}
-            <span className="text-[var(--cover-paper)]/85">
-              without anyone stepping off the floor
-            </span>{" "}
-            — no hold, no callback list, nothing queued behind it.
-          </>
-        ) : cell.staffed ? (
-          <>
-            One line, one conversation.{" "}
-            <span className="text-[var(--cover-paper)]/85">
-              {cell.calls - cell.answered} of these never got through
-            </span>{" "}
-            — the line was still engaged, or {ind.busyReason}.
-          </>
-        ) : (
-          <>
-            Nobody was at the desk.{" "}
-            <span className="text-[var(--cover-paper)]/85">
-              Every one of these went to voicemail
-            </span>{" "}
-            — the hour is outside {hh(ind.staffed[0])}–{hh(ind.staffed[1])}.
-          </>
-        )}
-      </p>
+        <p className="mono mt-[1.4em] text-[0.64em] uppercase tracking-[0.18em] text-[var(--cover-paper)]/45">
+          {covered ? "Concurrent lines" : "Lines available"}
+          <span className="ml-[0.8em] text-[1.5em] tracking-normal text-[var(--cover-brand-lit)]">
+            {lanes}
+          </span>
+        </p>
+      </div>
     </div>
   );
 }
 
-function HourModal({
-  ind,
-  cell,
-  covered,
-  onCovered,
-  onClose,
-}: {
-  ind: Industry;
-  cell: HourCell;
-  covered: boolean;
-  onCovered: (v: boolean) => void;
-  onClose: () => void;
-}) {
-  const reduce = useReducedMotion();
-  const [run, setRun] = useState(0);
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const panel = useRef<HTMLDivElement>(null);
+/* ---------------------------------------------------------------- *
+ * Sixteen doors
+ * ---------------------------------------------------------------- */
 
-  /**
-   * The three things that separate a dialog from a div drawn on top.
-   *
-   * `aria-modal` announces one; it does not make one. Behind the backdrop
-   * the page was still scrollable — a drag anywhere on a phone moved the
-   * landing page under it, so closing put the reader somewhere else
-   * entirely — Tab walked straight out into the navbar, and closing left
-   * focus on `<body>`, which sends the next Tab back to the top of the
-   * document. A reader who opened 09:00 from the keyboard lost their place
-   * to look at it.
-   *
-   * Runs once per opened hour: `onClose` is memoised upstream so that
-   * toggling the mode inside the modal re-renders the parent without
-   * tearing this down and snatching focus back to the close button.
-   */
-  useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
-    const body = document.body;
-    const prev = {
-      overflow: body.style.overflow,
-      paddingRight: body.style.paddingRight,
-    };
-    // Hiding the overflow reclaims the scrollbar's width, which shunts the
-    // whole page sideways behind a translucent backdrop where it is very
-    // visible. Pad by exactly what the bar was taking so nothing moves.
-    const bar = window.innerWidth - document.documentElement.clientWidth;
-    body.style.overflow = "hidden";
-    if (bar > 0) body.style.paddingRight = `${bar}px`;
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-        return;
-      }
-      if (e.key !== "Tab") return;
-
-      const f = panel.current?.querySelectorAll<HTMLElement>(
-        'button, [href], input, [tabindex]:not([tabindex="-1"])',
-      );
-      if (!f?.length) return;
-      const first = f[0];
-      const last = f[f.length - 1];
-      const on = document.activeElement;
-
-      // Wrap at whichever end we are leaving, and pull focus back in if it
-      // has escaped already — the backdrop is a sibling of the panel, so a
-      // click on it lands focus outside without closing on every browser.
-      if (e.shiftKey && (on === first || !panel.current?.contains(on))) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && (on === last || !panel.current?.contains(on))) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-
-    window.addEventListener("keydown", onKey);
-    closeRef.current?.focus();
-
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      body.style.overflow = prev.overflow;
-      body.style.paddingRight = prev.paddingRight;
-      opener?.focus?.();
-    };
-  }, [onClose]);
-
-  return createPortal(
-    // `.cover` again, on the portal root: the palette and the fluid `em`
-    // base live on that class, and the modal is mounted on <body>, outside
-    // the spread that would otherwise have given it both.
-    <div
-      className="cover fixed inset-0 z-[100] flex items-center justify-center p-[1em] text-[var(--cover-paper)]"
-      style={{ fontFamily: "var(--font-display)" }}
-      role="dialog"
-      aria-modal="true"
-      aria-label={`${ind.label}, ${hh(cell.hour)} — ${cell.calls} calls`}
-    >
-      <motion.div
-        aria-hidden
-        onClick={onClose}
-        className="absolute inset-0 bg-[var(--cover-ink)]/88 backdrop-blur-md"
-        initial={reduce ? false : { opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.25 }}
-      />
-
-      <motion.div
-        ref={panel}
-        className="relative max-h-[88dvh] w-full max-w-[46em] overflow-y-auto overscroll-contain rounded-[1.2em] border border-[var(--cover-paper)]/12 bg-[var(--cover-panel)] shadow-[0_3em_7em_-2em_rgba(0,0,0,0.95)]"
-        initial={reduce ? false : { opacity: 0, y: 18, scale: 0.985 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={reduce ? undefined : { opacity: 0, y: 10, scale: 0.99 }}
-        transition={{ duration: 0.35, ease: EASE }}
-      >
-        <div className="flex items-start justify-between gap-[1em] border-b border-[var(--cover-paper)]/10 p-[1.6em] md:p-[2em]">
-          <div>
-            <p className="mono text-[0.62em] uppercase tracking-[0.22em] text-[var(--cover-brand-lit)]">
-              {ind.label}
-            </p>
-            <h3 className="mt-[0.5em] text-[2em] font-medium leading-none tracking-[-0.04em]">
-              {hh(cell.hour)}–{hh((cell.hour + 1) % 24)}
-            </h3>
-            <p className="mt-[0.7em] text-[0.9em] text-[var(--cover-paper)]/55">
-              {cell.calls} {cell.calls === 1 ? "call" : "calls"} arrived in
-              this hour. Here is every one of them.
-            </p>
-          </div>
-
-          <button
-            ref={closeRef}
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="grid size-[2.4em] shrink-0 place-items-center rounded-full border border-[var(--cover-paper)]/15 text-[var(--cover-paper)]/60 transition-colors duration-200 hover:border-[var(--cover-paper)]/35 hover:text-[var(--cover-paper)]"
-          >
-            <X className="size-[1.1em]" strokeWidth={2} />
-          </button>
+/**
+ * The gateway, and why it is an index rather than sixteen more cards.
+ *
+ * The instrument above holds eight trades because a day can only be
+ * modelled eight ways before the selector stops being readable — and a
+ * reader who does not find their own trade in a list of eight concludes
+ * the product was not built for them, which is the one objection no amount
+ * of craft further down the page can answer. So the section ends with the
+ * whole list, and every entry resolves: `/industries/[slug]` is generated
+ * for all sixteen.
+ *
+ * Doors, not cards. Each one is a hairline, an icon at text size and a
+ * label, on a tight four-column rhythm — the shape of a contents page,
+ * which is exactly what it is. The trade's own outcome line is always in
+ * the DOM (so it is read aloud, and so the row never changes height) and
+ * comes up on hover or focus, which is the only reward the row needs.
+ */
+function IndustriesGateway() {
+  return (
+    <div className="mt-[4.5em] border-t border-[var(--cover-paper)]/12 pt-[2.6em] md:mt-[6em]">
+      <div className="flex flex-wrap items-end justify-between gap-x-[2em] gap-y-[1em]">
+        <div className="max-w-[40em]">
+          <p className="mono text-[0.7em] uppercase tracking-[0.24em] text-[var(--cover-paper)]/45">
+            {INDUSTRIES_GATEWAY.kicker}
+          </p>
+          <h3 className="mt-[0.7em] text-balance text-[1.7em] font-medium leading-[1.12] tracking-[-0.035em]">
+            {INDUSTRIES_GATEWAY.title}
+          </h3>
+          <p className="mt-[0.7em] text-pretty text-[0.95em] leading-[1.6] text-[var(--cover-paper)]/75">
+            {INDUSTRIES_GATEWAY.sub}
+          </p>
         </div>
 
-        <div className="p-[1.6em] md:p-[2em]">
-          <div className="mb-[1.6em] flex flex-wrap items-center justify-between gap-[1em]">
-            <div className="flex rounded-full border border-[var(--cover-paper)]/12 bg-[var(--cover-paper)]/[0.05] p-[0.25em] text-[0.72em]">
-              {[
-                { on: false, label: "Without an agent" },
-                { on: true, label: "With Neuro Tech Voice" },
-              ].map((opt) => (
-                <button
-                  key={opt.label}
-                  type="button"
-                  aria-pressed={covered === opt.on}
-                  onClick={() => onCovered(opt.on)}
-                  className={cn(
-                    "relative rounded-full px-[1em] py-[0.5em] leading-none transition-colors duration-200",
-                    covered === opt.on
-                      ? "text-[var(--cover-ink)]"
-                      : "text-[var(--cover-paper)]/55 hover:text-[var(--cover-paper)]/85",
-                  )}
-                >
-                  {covered === opt.on && (
-                    <motion.span
-                      layoutId="wif-hour-mode"
-                      aria-hidden
-                      className="absolute inset-0 rounded-full bg-[var(--cover-brand-lit)]"
-                      transition={{ duration: reduce ? 0 : 0.4, ease: EASE }}
-                    />
-                  )}
-                  <span className="relative">{opt.label}</span>
-                </button>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setRun((r) => r + 1)}
-              className="flex items-center gap-[0.5em] rounded-full border border-[var(--cover-paper)]/15 px-[1em] py-[0.55em] text-[0.72em] leading-none text-[var(--cover-paper)]/60 transition-colors duration-200 hover:border-[var(--cover-paper)]/35 hover:text-[var(--cover-paper)]"
-            >
-              <RotateCcw className="size-[1.1em]" strokeWidth={2} />
-              Replay
-            </button>
-          </div>
-
-          {/* Remounting is the replay: every timer and every entrance in
-              there is keyed off mount, so a new key is a clean run. */}
-          <HourPlayer
-            key={`${ind.id}-${cell.hour}-${covered}-${run}`}
-            ind={ind}
-            cell={cell}
-            covered={covered}
+        <IntentLink
+          href={INDUSTRIES_GATEWAY.href}
+          className="group flex items-center gap-[0.5em] text-[0.85em] leading-none text-[var(--cover-brand-lit)] transition-opacity duration-500 hover:opacity-70"
+        >
+          {INDUSTRIES_GATEWAY.all}
+          <ArrowRight
+            className="size-[1.1em] transition-transform duration-500 group-hover:translate-x-[0.2em]"
+            strokeWidth={2}
           />
-        </div>
-      </motion.div>
-    </div>,
-    document.body,
+        </IntentLink>
+      </div>
+
+      <ul className="mt-[2.2em] grid grid-cols-1 gap-x-[2em] sm:grid-cols-2 lg:grid-cols-4">
+        {NAV_INDUSTRIES.map((n) => {
+          const Icon = n.icon;
+          return (
+            <li key={n.slug}>
+              <IntentLink
+                href={`/industries/${n.slug}`}
+                className="group grid grid-cols-[1.1em_minmax(0,1fr)] items-start gap-x-[0.7em] border-t border-[var(--cover-paper)]/12 py-[0.85em] transition-colors duration-500 hover:border-[var(--cover-brand-lit)]/45 focus-visible:outline-none focus-visible:border-[var(--cover-brand-lit)]/45"
+              >
+                <Icon
+                  aria-hidden
+                  className="mt-[0.2em] size-[1em] text-[var(--cover-paper)]/45 transition-colors duration-500 group-hover:text-[var(--cover-brand-lit)] group-focus-visible:text-[var(--cover-brand-lit)]"
+                  strokeWidth={1.9}
+                />
+                <span className="min-w-0">
+                  <span className="block truncate text-[0.92em] leading-snug text-[var(--cover-paper)]/75 transition-colors duration-500 group-hover:text-[var(--cover-paper)] group-focus-visible:text-[var(--cover-paper)]">
+                    {n.label}
+                  </span>
+                  {/* Always present, always the same height — the row must
+                      not resize under the cursor, and a screen reader should
+                      hear what the door leads to without having to enter. */}
+                  <span className="mt-[0.2em] block truncate text-[0.72em] leading-snug text-[var(--cover-brand-lit)]/0 transition-colors duration-500 group-hover:text-[var(--cover-brand-lit)]/85 group-focus-visible:text-[var(--cover-brand-lit)]/85">
+                    {n.outcome}
+                  </span>
+                </span>
+              </IntentLink>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -1325,55 +1171,54 @@ function HourModal({
  * Section
  * ---------------------------------------------------------------- */
 
-/** Seconds a trade holds while the panel is playing itself. */
+/** Seconds a trade holds while the instrument is playing itself. */
 const DWELL = 7.8;
 
 export function UseCases() {
   const reduce = useReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-20% 0px -20% 0px" });
+  // Deliberately NOT `once`. With a one-shot observer the 7.8s carousel
+  // stayed armed for the rest of the session — re-rendering a chart three
+  // screens above the reader, behind the FAQ, until they closed the tab.
+  const inView = useInView(ref, { margin: "-20% 0px -20% 0px" });
 
-  const [custom, setCustom] = useState<Industry | null>(null);
   const [activeId, setActiveId] = useState(INDUSTRIES[0].id);
   const [flipped, setFlipped] = useState(false);
   // One flag for the whole autoplay: the first deliberate interaction of
-  // any kind hands the panel over and it never takes it back.
+  // any kind hands the instrument over and it never takes it back.
   const [driving, setDriving] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [openHour, setOpenHour] = useState<number | null>(null);
+  // The hour on the dial. `null` means "whichever is busiest", which is
+  // what the dial opens on and what it falls back to on a change of trade —
+  // an hour picked in one trade means nothing in the next.
+  const [picked, setPicked] = useState<number | null>(null);
 
-  const list = useMemo(
-    () => (custom ? [...INDUSTRIES, custom] : INDUSTRIES),
-    [custom],
-  );
-  const active = list.find((i) => i.id === activeId) ?? list[0];
+  const active = INDUSTRIES.find((i) => i.id === activeId) ?? INDUSTRIES[0];
   const day = useMemo(() => modelDay(active), [active]);
 
-  const takeOver = useCallback(() => setDriving(true), []);
-  // Stable, because the modal's scroll lock and focus trap are keyed to it:
-  // a fresh closure every render would tear both down and re-take focus
-  // every time the mode toggle inside the modal re-rendered this section.
-  const closeHour = useCallback(() => setOpenHour(null), []);
+  const peakIdx = day.cells.findIndex((c) => c.calls === day.peak);
+  const dialIdx = picked !== null && day.cells[picked]?.calls ? picked : peakIdx;
+
+  const takeOver = () => setDriving(true);
 
   // Beat one: the day arrives uncovered, then fills itself. `driving` is a
   // dependency so that a reader who reaches the toggle inside the first
   // second and a half cancels the flip rather than being overruled by it.
+  //
+  // Reduced motion used to be handed `covered = true` outright, which gave
+  // those readers the answer without ever showing them the question — the
+  // uncovered day is the entire setup, and they were skipped past it. They
+  // get the day and the flip, on a longer fuse, with the bars crossing over
+  // slowly and without the stagger.
   useEffect(() => {
-    if (!inView || driving || reduce) return;
-    const t = setTimeout(() => setFlipped(true), 1600);
+    if (!inView || driving) return;
+    const t = setTimeout(() => setFlipped(true), reduce ? 2600 : 1600);
     return () => clearTimeout(t);
   }, [inView, reduce, driving]);
 
-  // Reduced motion has asked us not to run the flip, and the flip is the
-  // entire payoff — so it gets the covered day outright instead. Derived
-  // rather than written into state, so the toggle still works: once the
-  // reader touches anything, `flipped` takes over for both branches.
-  const covered = reduce && !driving ? true : flipped;
+  const covered = flipped;
 
-  // Beat two: walk the trades until the reader takes the controls. An open
-  // hour also halts it — advancing the trade under a modal would swap the
-  // day out from under the hour the reader is watching.
-  const autoplay = inView && !driving && !reduce && openHour === null;
+  // Beat two: walk the trades until the reader takes the controls.
+  const autoplay = inView && !driving && !reduce;
   useEffect(() => {
     if (!autoplay) return;
     const t = setTimeout(() => {
@@ -1386,16 +1231,7 @@ export function UseCases() {
   const pick = (id: string) => {
     takeOver();
     setActiveId(id);
-  };
-
-  const submitCustom = (e: SubmitEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const label = draft.trim().slice(0, 34);
-    if (!label) return;
-    takeOver();
-    setCustom(customIndustry(label));
-    setActiveId("custom");
-    setDraft("");
+    setPicked(null);
   };
 
   const answered = covered ? day.total : day.answeredWithout;
@@ -1406,291 +1242,246 @@ export function UseCases() {
       className="relative scroll-mt-24 px-[1.6em] py-[6em] md:py-[8em]"
     >
       <div className="relative mx-auto max-w-[76em]">
-        {/* header */}
-        <div className="mx-auto flex max-w-[40em] flex-col items-center text-center">
-          <Reveal>
-            <span className="inline-flex items-center gap-[0.55em] rounded-full border border-[var(--cover-brand-lit)]/25 bg-[var(--cover-brand-lit)]/10 px-[1.15em] py-[0.5em] text-[0.72em] font-semibold uppercase leading-none tracking-[0.18em] text-[var(--cover-brand-lit)]">
-              <Radio className="size-[1.25em] shrink-0" strokeWidth={2} />
+        {/* masthead — on the gutter, not centred. Six identical centred
+            headers was the other half of what made this page a brochure. */}
+        <Reveal>
+          <div className="flex items-center gap-[0.75em]">
+            <CornerDot className="size-[0.55em] shrink-0 text-[var(--cover-brand-lit)]" />
+            <span className="mono text-[0.7em] uppercase tracking-[0.24em] text-[var(--cover-paper)]/45">
+              {NUMERAL}
+            </span>
+            <span className="mono text-[0.7em] uppercase tracking-[0.24em] text-[var(--cover-paper)]/45">
               {USE_CASES_INTRO.eyebrow}
             </span>
-          </Reveal>
+          </div>
+        </Reveal>
 
-          <Reveal delay={0.06} className="mt-[1em]">
-            <h2 className="text-balance text-[2.8em] font-medium leading-[1.03] tracking-[-0.045em] md:text-[3.4em]">
-              {USE_CASES_INTRO.title}
-            </h2>
-          </Reveal>
+        <Reveal delay={0.06} className="mt-[0.9em]">
+          <h2 className="text-balance text-[2.8em] font-medium leading-[1.03] tracking-[-0.045em] md:text-[3.4em]">
+            {USE_CASES_INTRO.title}
+          </h2>
+        </Reveal>
 
-          <Reveal
-            delay={0.12}
-            className="mt-[1.1em] max-w-[34em] text-pretty text-[1.05em] leading-[1.6] text-[var(--cover-paper)]/60"
-          >
-            {USE_CASES_INTRO.sub}
-          </Reveal>
-        </div>
+        <Reveal
+          delay={0.12}
+          as="p"
+          className="mt-[1em] max-w-[44em] text-pretty text-[1.05em] leading-[1.6] text-[var(--cover-paper)]/75"
+        >
+          {USE_CASES_INTRO.sub}
+        </Reveal>
+
+        <div className="mt-[2.4em] h-px bg-[var(--cover-paper)]/12" />
 
         {/* the instrument */}
-        <Reveal delay={0.08} y={32} className="mt-[3.5em] md:mt-[4.5em]">
-          <div
-            ref={ref}
-            className="overflow-hidden rounded-[1.2em] border border-[var(--cover-paper)]/12 bg-[var(--cover-panel)] shadow-[0_2em_5em_-1.8em_rgba(0,0,0,0.9)]"
-          >
-            {/* Selector rail. Scrolls as one row on a phone; wraps and
-                centres once there is room, because a centred row inside an
-                overflow container puts its own left end out of reach. */}
-            <div className="flex gap-[0.4em] overflow-x-auto border-b border-[var(--cover-paper)]/10 px-[1.2em] py-[0.9em] [scrollbar-width:none] md:flex-wrap md:justify-center md:overflow-x-visible [&::-webkit-scrollbar]:hidden">
-              {list.map((ind) => {
-                const on = ind.id === activeId;
-                const Icon = ind.icon;
-                return (
-                  <button
-                    key={ind.id}
-                    type="button"
-                    onClick={() => pick(ind.id)}
-                    onPointerEnter={takeOver}
-                    aria-pressed={on}
-                    className={cn(
-                      "relative flex shrink-0 items-center gap-[0.5em] overflow-hidden rounded-full px-[1em] py-[0.55em] text-[0.78em] leading-none transition-colors duration-200",
-                      on
-                        ? "bg-[var(--cover-paper)]/10 text-[var(--cover-paper)]"
-                        : "text-[var(--cover-paper)]/45 hover:bg-[var(--cover-paper)]/[0.06] hover:text-[var(--cover-paper)]/80",
-                    )}
-                  >
-                    <Icon className="size-[1.15em] shrink-0" strokeWidth={1.8} />
-                    {ind.label}
+        <div ref={ref} className="mt-[2.2em]">
+          {/* Selector rail, on a hairline rather than in a row of pills.
+              Scrolls as one row on a phone; the dwell draws itself along
+              the active trade's rule, so the thing that tells the reader
+              the panel is about to move on is the same rule that tells
+              them which trade they are looking at. */}
+          <div className="flex gap-[1.6em] overflow-x-auto border-b border-[var(--cover-paper)]/12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {INDUSTRIES.map((ind) => {
+              const on = ind.id === activeId;
+              const Icon = ind.icon;
+              return (
+                <button
+                  key={ind.id}
+                  type="button"
+                  onClick={() => pick(ind.id)}
+                  onPointerEnter={takeOver}
+                  aria-pressed={on}
+                  className={cn(
+                    "relative flex shrink-0 items-center gap-[0.5em] whitespace-nowrap pb-[0.9em] text-[0.82em] leading-none outline-none transition-colors duration-500 focus-visible:text-[var(--cover-brand-lit)]",
+                    on
+                      ? "text-[var(--cover-paper)]"
+                      : "text-[var(--cover-paper)]/75 hover:text-[var(--cover-paper)]",
+                  )}
+                >
+                  <Icon className="size-[1.15em] shrink-0" strokeWidth={1.9} />
+                  {ind.label}
 
-                    {/* dwell hairline — only while the panel is playing itself */}
-                    {on && autoplay && (
+                  {on &&
+                    (autoplay ? (
                       <motion.span
                         key={ind.id}
                         aria-hidden
-                        className="absolute inset-x-0 bottom-0 h-[1.5px] origin-left bg-[var(--cover-brand-lit)]"
+                        className="absolute inset-x-0 -bottom-px h-px origin-left bg-[var(--cover-brand-lit)]"
                         initial={{ scaleX: 0 }}
                         animate={{ scaleX: 1 }}
                         transition={{ duration: DWELL, ease: "linear" }}
                       />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-5">
-              {/* the brief */}
-              <div className="border-b border-[var(--cover-paper)]/10 p-[1.6em] md:col-span-2 md:border-b-0 md:border-r md:p-[2em]">
-                <Brief ind={active} />
-              </div>
-
-              {/* The day. Reaching the chart at all stops the carousel: a
-                  reader studying an hour must not have the trade swapped
-                  under the cursor between deciding to click and clicking. */}
-              <div
-                className="p-[1.6em] md:col-span-3 md:p-[2em]"
-                onPointerEnter={takeOver}
-              >
-                <div className="flex flex-wrap items-center justify-between gap-[1em]">
-                  <div className="flex items-center gap-[0.55em] text-[var(--cover-paper)]/45">
-                    <Clock className="size-[1em] shrink-0" strokeWidth={1.9} />
-                    <span className="mono text-[0.66em] uppercase tracking-[0.2em]">
-                      One day on the line
-                    </span>
-                  </div>
-
-                  {/* the toggle — the section's whole argument, in one control */}
-                  <div className="flex rounded-full border border-[var(--cover-paper)]/12 bg-[var(--cover-paper)]/[0.05] p-[0.25em] text-[0.72em]">
-                    {[
-                      { on: false, label: "Without an agent" },
-                      { on: true, label: "With Neuro Tech Voice" },
-                    ].map((opt) => (
-                      <button
-                        key={opt.label}
-                        type="button"
-                        aria-pressed={covered === opt.on}
-                        onClick={() => {
-                          takeOver();
-                          setFlipped(opt.on);
-                        }}
-                        className={cn(
-                          "relative rounded-full px-[1em] py-[0.5em] leading-none transition-colors duration-200",
-                          covered === opt.on
-                            ? "text-[var(--cover-ink)]"
-                            : "text-[var(--cover-paper)]/55 hover:text-[var(--cover-paper)]/85",
-                        )}
-                      >
-                        {covered === opt.on && (
-                          <motion.span
-                            layoutId="wif-mode"
-                            aria-hidden
-                            className="absolute inset-0 rounded-full bg-[var(--cover-brand-lit)]"
-                            transition={{
-                              duration: reduce ? 0 : 0.4,
-                              ease: EASE,
-                            }}
-                          />
-                        )}
-                        <span className="relative">{opt.label}</span>
-                      </button>
+                    ) : (
+                      <span
+                        aria-hidden
+                        className="absolute inset-x-0 -bottom-px h-px bg-[var(--cover-brand-lit)]"
+                      />
                     ))}
-                  </div>
-                </div>
+                </button>
+              );
+            })}
+          </div>
 
-                {/* The toggle is the section's whole argument and it was
-                    silent: `aria-pressed` reports the state of a control,
-                    never what flipping it did to the day. This says the
-                    outcome, and says it for a change of trade too.
+          {/* Reaching the instrument at all stops the carousel: a reader
+              studying an hour must not have the trade swapped under the
+              cursor between deciding to click and clicking. */}
+          <div onPointerEnter={takeOver}>
+            <div className="mt-[1.8em] flex flex-wrap items-center justify-between gap-[1em]">
+              <div className="flex items-center gap-[0.55em] text-[var(--cover-paper)]/45">
+                <Clock className="size-[1em] shrink-0" strokeWidth={1.9} />
+                <span className="mono text-[0.66em] uppercase tracking-[0.2em]">
+                  One day on the line
+                </span>
+              </div>
 
-                    Live only once the reader is driving. The panel walks
-                    the trades by itself every 7.8s, and a region that
-                    announced each of those would talk over the page for as
-                    long as the section stayed on screen. Off, it is still
-                    read in place — it just stops interrupting. */}
-                <p aria-live={driving ? "polite" : "off"} className="sr-only">
-                  {active.label}, one day on the line —{" "}
-                  {covered
-                    ? `with Neuro Tech Voice, all ${day.total} calls answered, ${day.missed} of them recovered.`
-                    : `without an agent, ${day.answeredWithout} of ${day.total} calls answered and ${day.missed} to voicemail.`}
-                </p>
-
-                <div className="mt-[1.6em]">
-                  <DayChart
-                    day={day}
-                    covered={covered}
-                    staffed={active.staffed}
-                    label={active.label}
-                    onPick={(h) => {
+              {/* the toggle — the section's whole argument, in one control */}
+              <div className="flex rounded-full border border-[var(--cover-paper)]/12 bg-[var(--cover-paper)]/[0.05] p-[0.25em] text-[0.72em]">
+                {[
+                  { on: false, label: "Without an agent" },
+                  { on: true, label: "With Neuro Tech Voice" },
+                ].map((opt) => (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    aria-pressed={covered === opt.on}
+                    onClick={() => {
                       takeOver();
-                      setOpenHour(h);
+                      setFlipped(opt.on);
                     }}
-                  />
-                </div>
+                    className={cn(
+                      "relative rounded-full px-[1em] py-[0.5em] leading-none transition-colors duration-500",
+                      covered === opt.on
+                        ? "text-[var(--cover-ink)]"
+                        : "text-[var(--cover-paper)]/75 hover:text-[var(--cover-paper)]",
+                    )}
+                  >
+                    {covered === opt.on && (
+                      <motion.span
+                        layoutId="wif-mode"
+                        aria-hidden
+                        className="absolute inset-0 rounded-full bg-[var(--cover-brand-lit)]"
+                        transition={{
+                          duration: reduce ? 0 : 0.4,
+                          ease: EASE,
+                        }}
+                      />
+                    )}
+                    <span className="relative">{opt.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
-                {/* the arithmetic */}
-                <div className="mt-[1.6em] grid grid-cols-2 gap-[1em] border-t border-[var(--cover-paper)]/10 pt-[1.4em] sm:grid-cols-3">
-                  <div>
-                    <p className="mono text-[0.6em] uppercase tracking-[0.2em] text-[var(--cover-paper)]/35">
-                      Calls in
-                    </p>
-                    <Tally
-                      value={day.total}
-                      className="mt-[0.35em] block text-[1.7em] font-medium leading-none tracking-[-0.03em]"
-                    />
-                  </div>
+            {/* The toggle is the section's whole argument and it was
+                silent: `aria-pressed` reports the state of a control,
+                never what flipping it did to the day. This says the
+                outcome, and says it for a change of trade too.
 
-                  <div>
-                    <p className="mono text-[0.6em] uppercase tracking-[0.2em] text-[var(--cover-paper)]/35">
-                      Answered
-                    </p>
-                    <Tally
-                      value={answered}
-                      className={cn(
-                        "mt-[0.35em] block text-[1.7em] font-medium leading-none tracking-[-0.03em] transition-colors duration-500",
-                        covered
-                          ? "text-[var(--cover-brand-lit)]"
-                          : "text-[var(--cover-paper)]",
-                      )}
-                    />
-                  </div>
+                Live only once the reader is driving. The instrument walks
+                the trades by itself every 7.8s, and a region that
+                announced each of those would talk over the page for as
+                long as the section stayed on screen. Off, it is still
+                read in place — it just stops interrupting. */}
+            <p aria-live={driving ? "polite" : "off"} className="sr-only">
+              {active.label}, one day on the line —{" "}
+              {covered
+                ? `with Neuro Tech Voice, all ${day.total} calls answered, ${day.missed} of them recovered.`
+                : `without an agent, ${day.answeredWithout} of ${day.total} calls answered and ${day.missed} to voicemail.`}
+            </p>
 
-                  <div className="col-span-2 sm:col-span-1">
-                    <p className="mono text-[0.6em] uppercase tracking-[0.2em] text-[var(--cover-paper)]/35">
-                      {covered ? "Recovered" : "To voicemail"}
-                    </p>
-                    <div className="mt-[0.35em] flex items-baseline gap-[0.5em]">
-                      <span
-                        className={cn(
-                          "text-[1.7em] font-medium leading-none tracking-[-0.03em] transition-colors duration-500",
-                          covered
-                            ? "text-[var(--cover-brand-lit)]"
-                            : "text-[var(--cover-paper)]/45",
-                        )}
-                      >
-                        {covered ? "+" : "−"}
-                        {day.missed}
-                      </span>
-                      <span
-                        className={cn(
-                          "text-[0.85em] transition-colors duration-500",
-                          covered
-                            ? "text-[var(--cover-paper)]/70"
-                            : "text-[var(--cover-paper)]/35",
-                        )}
-                      >
-                        <Tally value={day.recoveredValue} prefix="$" />
-                        <span className="text-[var(--cover-paper)]/35">
-                          {" "}
-                          / day
-                        </span>
-                      </span>
-                    </div>
-                  </div>
+            <div className="mt-[1.6em]">
+              <DayChart
+                day={day}
+                covered={covered}
+                staffed={active.staffed}
+                label={active.label}
+                picked={dialIdx}
+                onPick={(h) => {
+                  takeOver();
+                  setPicked(h);
+                }}
+              />
+            </div>
+
+            {/* the arithmetic */}
+            <div className="mt-[2.2em] grid grid-cols-2 gap-[1.2em] border-t border-[var(--cover-paper)]/12 pt-[1.6em] sm:grid-cols-3">
+              <div>
+                <p className="mono text-[0.6em] uppercase tracking-[0.2em] text-[var(--cover-paper)]/45">
+                  Calls in
+                </p>
+                <Tally
+                  value={day.total}
+                  className="mt-[0.35em] block text-[1.7em] font-medium leading-none tracking-[-0.03em]"
+                />
+              </div>
+
+              <div>
+                <p className="mono text-[0.6em] uppercase tracking-[0.2em] text-[var(--cover-paper)]/45">
+                  Answered
+                </p>
+                <Tally
+                  value={answered}
+                  className={cn(
+                    "mt-[0.35em] block text-[1.7em] font-medium leading-none tracking-[-0.03em] transition-colors duration-500",
+                    covered
+                      ? "text-[var(--cover-brand-lit)]"
+                      : "text-[var(--cover-paper)]",
+                  )}
+                />
+              </div>
+
+              <div className="col-span-2 sm:col-span-1">
+                <p className="mono text-[0.6em] uppercase tracking-[0.2em] text-[var(--cover-paper)]/45">
+                  {covered ? "Recovered" : "To voicemail"}
+                </p>
+                <div className="mt-[0.35em] flex items-baseline gap-[0.5em]">
+                  <span
+                    className={cn(
+                      "text-[1.7em] font-medium leading-none tracking-[-0.03em] transition-colors duration-500",
+                      covered
+                        ? "text-[var(--cover-brand-lit)]"
+                        : "text-[var(--cover-paper)]",
+                    )}
+                  >
+                    {covered ? "+" : "−"}
+                    {day.missed}
+                  </span>
+                  {/* "a day", not a dollar figure. The money that used to
+                      sit here was `missed × Industry.value`, and every
+                      input to it was ours — see the note on the type.
+                      Beside two counts a reader can check against their own
+                      phone, the invented number was the one they would test
+                      first. */}
+                  <span className="text-[0.85em] text-[var(--cover-paper)]/75">
+                    calls / day
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* provenance — this is a model, and it says so */}
-            <p className="border-t border-[var(--cover-paper)]/10 bg-[var(--cover-paper)]/[0.025] px-[1.6em] py-[0.9em] text-[0.68em] leading-[1.6] text-[var(--cover-paper)]/40 md:px-[2em]">
-              Modelled day, not live telemetry — call shapes are typical of
-              each trade, and the figure is expected booked value per recovered
-              call, already net of the calls that never convert. Your agent
-              runs on your hours, your services and your own calendar.
-            </p>
+            {/* The hour, on the dial. It used to be three levels down,
+                behind a click, which is to say almost nobody saw it. */}
+            <div className="mt-[2.6em] border-t border-[var(--cover-paper)]/12 pt-[2.6em]">
+              <PeakHour
+                key={`${active.id}-${dialIdx}`}
+                ind={active}
+                cell={day.cells[dialIdx]}
+                covered={covered}
+              />
+            </div>
           </div>
-        </Reveal>
 
-        {/* the coverage claim, made payable */}
-        <Reveal
-          delay={0.1}
-          className="mx-auto mt-[3em] flex max-w-[42em] flex-col items-center text-center"
-        >
-          <p className="text-[1.05em] leading-[1.6] text-[var(--cover-paper)]/60">
-            Not on the list? Neuro Tech Voice isn&rsquo;t built for a vertical
-            — it&rsquo;s briefed on yours.
+          {/* provenance — this is a model, and it says so */}
+          <p className="mt-[2.4em] max-w-[52em] border-t border-[var(--cover-paper)]/12 pt-[1.2em] text-[0.7em] leading-[1.7] text-[var(--cover-paper)]/75">
+            Modelled day, not live telemetry — call shapes are typical of each
+            trade, and the counts are what a single line gets through in one,
+            nothing more. What a recovered call is worth is your own
+            arithmetic. Your agent runs on your hours, your services and your
+            own calendar.
           </p>
+        </div>
 
-          <form
-            onSubmit={submitCustom}
-            className="mt-[1.2em] flex w-full max-w-[30em] items-center gap-[0.5em] rounded-full border border-[var(--cover-paper)]/15 bg-[var(--cover-panel)] p-[0.4em] focus-within:border-[var(--cover-brand-lit)]/50"
-          >
-            <label htmlFor="industry-draft" className="sr-only">
-              Your industry
-            </label>
-            <Building2
-              aria-hidden
-              className="ml-[0.7em] size-[1.05em] shrink-0 text-[var(--cover-paper)]/35"
-              strokeWidth={1.9}
-            />
-            <input
-              id="industry-draft"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onFocus={takeOver}
-              maxLength={34}
-              placeholder="Veterinary, gyms, property management…"
-              className="min-w-0 flex-1 bg-transparent text-[0.9em] text-[var(--cover-paper)] outline-none placeholder:text-[var(--cover-paper)]/30"
-            />
-            <button
-              type="submit"
-              className="flex shrink-0 items-center gap-[0.45em] rounded-full bg-[var(--cover-brand-lit)] px-[1.1em] py-[0.65em] text-[0.78em] font-medium leading-none text-[var(--cover-ink)] transition-opacity duration-200 hover:opacity-85"
-            >
-              Brief the agent
-              <ArrowRight className="size-[1.1em]" strokeWidth={2.2} />
-            </button>
-          </form>
-        </Reveal>
+        <IndustriesGateway />
       </div>
-
-      <AnimatePresence>
-        {openHour !== null && (
-          <HourModal
-            key="hour"
-            ind={active}
-            cell={day.cells[openHour]}
-            covered={covered}
-            onCovered={setFlipped}
-            onClose={closeHour}
-          />
-        )}
-      </AnimatePresence>
     </section>
   );
 }

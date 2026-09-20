@@ -1,22 +1,45 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { animate, motion, useMotionValue, useReducedMotion } from "framer-motion";
-import { VOICE_DEMO as C, VOICE_DEMO_SCRIPT as SCRIPT } from "@/lib/site";
+import { motion, useReducedMotion } from "framer-motion";
+import { ArrowRight, ChevronRight, Pause, RotateCcw } from "lucide-react";
+import {
+  VOICE_DEMO as C,
+  VOICE_DEMO_SCRIPT as SCRIPT,
+  type DemoTurn,
+} from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { EASE } from "./reveal";
 
 /**
- * The pre-recorded call, played back.
+ * A real call, reconstructed and replayed. Silently, and it says so.
+ *
+ * There is no recording in this repository. The file used to call itself
+ * "the pre-recorded call, played back", and every label it printed —
+ * "Pre-recorded demo", "Press play", "Playing…" — sold a reader on audio
+ * that has never existed. What actually runs is the transcript, revealed at
+ * the pace the conversation took. That is a genuinely useful thing to show
+ * and a dishonest thing to dress as a recording, so the transport is a rule
+ * and a word rather than a play button, and ./demo states the concession in
+ * the sub above it. `audioSrc` is the seam left open for the day there is
+ * something to hear; nothing here has to move to take it.
  *
  * Two halves that only touch through `OrbApi`. The orb is a self-contained
  * engine — a WebGL plasma sphere with a neural core, plus a 2D layer of
  * particles, synapses, ribbons and an equalizer ring — and it runs on its
  * own rAF outside React entirely, because a 60fps canvas has no business
  * being a render loop. The playback engine is ordinary React state: which
- * line is speaking, how many of its words have landed, which transcript
- * bubbles exist. It tells the orb who is talking and pulses it on every
- * revealed word, and that is the whole contract between them.
+ * line is speaking, how many of its words have landed, which of the four
+ * log rows have been stamped. It tells the orb who is talking and pulses it
+ * on every revealed word, and that is the whole contract between them.
+ *
+ * The page-scroll follow that used to ride the transcript down went with
+ * the transcript. It was careful work — a retargeted spring so consecutive
+ * bubbles read as one camera move, released the instant the reader touched
+ * the wheel — and it has no job left now that the call fits on one screen
+ * and the full script sits behind a disclosure. A section that takes the
+ * scroll position off the reader has to earn it every time, and this one no
+ * longer needs to.
  *
  * Colour is the cover's. The source this is ported from ran its own violet
  * and magenta on its own near-black; here every tone comes from the
@@ -742,8 +765,73 @@ function Orb({ apiRef }: { apiRef: React.RefObject<OrbApi | null> }) {
  * Playback
  * ------------------------------------------------------------------ */
 
+/**
+ * The visible cut of the call.
+ *
+ * The script is nine turns and a hundred and four words, and on screen it
+ * was all of them — a full call read aloud at speaking pace, which is over
+ * a minute of a reader watching words appear before anything is decided.
+ * Four turns carry the entire argument: the caller asks, the agent offers
+ * real times, the caller picks, the agent writes it down. Everything cut
+ * here is still on the page, one disclosure away, unedited.
+ *
+ * Indices rather than copies, because the lines themselves live in
+ * lib/site.ts and there must be exactly one place they are written. The cut
+ * alternates speakers on purpose — two turns from the same voice in a row
+ * reads as a dropped line, not as an edit.
+ */
+const CUT = [1, 4, 5, 6] as const;
+const CALL: DemoTurn[] = CUT.map((i) => SCRIPT[i]);
+
 const GAP_MS = 700;
-const TOTAL_WORDS = SCRIPT.reduce((s, l) => s + l.t.split(" ").length, 0);
+const TOTAL_WORDS = CALL.reduce((s, l) => s + l.t.split(" ").length, 0);
+
+/**
+ * The call log — what the agent DID, stamped as it does it.
+ *
+ * This is the half of the demo that is not a transcript, and it is the half
+ * that sells. Anyone can print a conversation; the claim worth making is
+ * that four things happened to a calendar while it was going on. So the
+ * column beside the orb is an operations log, and each line stays blank
+ * until the moment in the script that earns it.
+ *
+ * `at` is an index into CUT, or one of the two ends of the run. The stamps
+ * are the reconstruction's own clock — elapsed time since the replay
+ * started, paused when it is paused — and not a latency figure we measured
+ * somewhere else and printed here. The section already says what this is;
+ * the log does not get to quietly claim more.
+ */
+type LogRow = { label: string; detail: string; at: number | "start" | "end" };
+
+const LOG: LogRow[] = [
+  { label: "Answered", detail: "First ring. No queue, no menu.", at: "start" },
+  { label: "Calendar read", detail: "Two free slots, offered by name.", at: 1 },
+  { label: "Appointment written", detail: "Wednesday, 3:00 PM.", at: 3 },
+  { label: "Confirmation sent", detail: "Text to the caller's number.", at: "end" },
+];
+
+/**
+ * The stage's own labels.
+ *
+ * Not from lib/site.ts, and that is the point: VOICE_DEMO's strings are
+ * "Pre-recorded demo", "Press play", "Playing…". Every one of them promises
+ * a recording, and there is no recording. The file is frozen, so the honest
+ * words live here until it can be retoned.
+ */
+const TAG = {
+  idle: "Not yet running",
+  paused: "Paused",
+  done: "Call complete",
+} as const;
+
+const RUN = {
+  idle: "Run the call",
+  playing: "Pause",
+  paused: "Resume",
+  done: "Run it again",
+} as const;
+
+const DISCLOSURE = "Read the whole call";
 
 /**
  * Longer words linger, short ones flow — clamped so the rhythm holds.
@@ -760,123 +848,63 @@ function wordDelay(w: string) {
 
 function wordsBefore(line: number, word: number) {
   let c = 0;
-  for (let i = 0; i < line; i++) c += SCRIPT[i].t.split(" ").length;
+  for (let i = 0; i < line; i++) c += CALL[i].t.split(" ").length;
   return c + word;
+}
+
+/** m:ss, from the replay's own clock. */
+function stampOf(ms: number) {
+  const s = Math.round(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
 type Phase = "idle" | "playing" | "paused" | "done";
 
-/** Keys that mean "I am scrolling this page myself". */
-const SCROLL_KEYS = new Set([
-  "ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " ",
-]);
-
-export function VoiceDemo() {
+/**
+ * The call, replayed.
+ *
+ * `audioSrc` is the seam this was rebuilt to leave open. Nothing about the
+ * layout assumes silence — the orb already takes its energy from an
+ * envelope it generates, the transport is a transport, and the clock the
+ * log stamps against is one number. When a cleared recording exists, pass
+ * it: the element below is driven from the same two places the loop is
+ * (start and pause), and the only other change the page needs is the
+ * sentence in ./demo that currently says there is no audio.
+ */
+export function VoiceDemo({ audioSrc }: { audioSrc?: string } = {}) {
   const orbRef = useRef<OrbApi | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const reduce = useReducedMotion();
-
-  /* ---------- follow the transcript ---------- */
-  // The transcript's own box: its bottom edge IS the bottom of the newest
-  // bubble, so no sentinel element is needed to measure against.
-  const tailRef = useRef<HTMLDivElement>(null);
-  const follow = useRef(true);
-  const tween = useRef<{ stop: () => void } | null>(null);
-  const tweening = useRef(false);
-
-  /*
-    The scroll position, held as a motion value rather than passed to
-    `animate` as a plain number. That is the whole reason the follow reads
-    as one continuous camera move: a bubble can land while the previous
-    ride is still in the air, and re-targeting a motion value hands the new
-    animation the velocity the old one had. Animating between two numbers
-    cannot do that — every bubble would start a fresh curve from rest, and
-    the page would visibly stall and re-accelerate at each one.
-  */
-  const scrollMV = useMotionValue(0);
-
-  useEffect(
-    () =>
-      scrollMV.on("change", (v) => {
-        // Only while we own the scroll. `release` clears the flag the
-        // instant the reader reaches for the page, and this goes quiet.
-        if (tweening.current) window.scrollTo({ top: v, behavior: "instant" });
-      }),
-    [scrollMV],
-  );
-
-  useEffect(() => {
-    /*
-      Hand the page back the moment the reader reaches for it.
-      Listening for wheel/touch/keys rather than for `scroll` is the whole
-      trick: our own tween fires `scroll` on every frame, so a scroll
-      listener would read its own output as the user grabbing the page and
-      release on the first step it took.
-    */
-    let settle: ReturnType<typeof setTimeout>;
-
-    const release = () => {
-      follow.current = false;
-      clearTimeout(settle);
-      tween.current?.stop();
-      tween.current = null;
-      tweening.current = false;
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (SCROLL_KEYS.has(e.key)) release();
-    };
-    /*
-      And take it back only when they come to rest at the end of the
-      transcript.
-
-      Both halves of that are load-bearing. "At rest" — because a scroll
-      gesture fires its first event while the page has barely moved, so
-      testing on every event re-arms in the middle of the very gesture that
-      just released, and the reader gets dragged back down as soon as they
-      try to look up. Debouncing waits for the gesture, its momentum and any
-      smooth-scroll animation to finish, then asks once.
-
-      And "at the end" rather than "near it" — someone who has scrolled on
-      to the pricing table is a long way past the tail too, and a test that
-      only measured distance would read that as being back at the bottom.
-    */
-    const rearm = () => {
-      if (tweening.current || follow.current) return;
-      clearTimeout(settle);
-      settle = setTimeout(() => {
-        const rect = tailRef.current?.getBoundingClientRect();
-        if (!rect) return;
-        if (rect.bottom >= 0 && rect.bottom <= window.innerHeight) {
-          follow.current = true;
-        }
-      }, 180);
-    };
-
-    window.addEventListener("wheel", release, { passive: true });
-    window.addEventListener("touchmove", release, { passive: true });
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", rearm, { passive: true });
-    return () => {
-      window.removeEventListener("wheel", release);
-      window.removeEventListener("touchmove", release);
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", rearm);
-      clearTimeout(settle);
-      tween.current?.stop();
-    };
-  }, []);
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [line, setLine] = useState(-1);
   const [revealed, setRevealed] = useState(0);
   /** Words restored on resume — they reappear without re-animating. */
   const [restored, setRestored] = useState(0);
-  const [bubbles, setBubbles] = useState(0);
   const [spoken, setSpoken] = useState(0);
+  /** Elapsed ms at which each log row fired; -1 until it does. */
+  const [stamps, setStamps] = useState<number[]>(() => LOG.map(() => -1));
 
   // The exact resume point, and the flag that unwinds the async loop.
   const pos = useRef({ line: 0, word: 0 });
   const cancelled = useRef(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  /*
+    The replay's clock. Accumulated rather than read off one start time,
+    because the reader can pause: a wall-clock difference would keep
+    counting through the pause and stamp the booking a minute late for
+    someone who stopped to read a line twice.
+  */
+  const clock = useRef({ accum: 0, since: 0 });
+  const elapsed = () =>
+    clock.current.accum +
+    (clock.current.since ? performance.now() - clock.current.since : 0);
+
+  const fire = useCallback((i: number) => {
+    const at = elapsed();
+    setStamps((s) => (s[i] >= 0 ? s : s.map((v, k) => (k === i ? at : v))));
+  }, []);
 
   useEffect(
     () => () => {
@@ -886,55 +914,6 @@ export function VoiceDemo() {
     [],
   );
 
-  /*
-    Every bubble pushes the page taller. Ride it down so the newest line is
-    always on screen — but only as far as it actually needs, and never past
-    what is already visible, so a transcript that still fits does not move
-    the page at all.
-  */
-  useEffect(() => {
-    if (!bubbles || !follow.current) return;
-    const tail = tailRef.current;
-    if (!tail) return;
-
-    // Land the newest bubble a little above the fold rather than flush
-    // against it — a line touching the bottom edge reads as cut off.
-    const gap = Math.round(window.innerHeight * 0.14);
-    const delta = tail.getBoundingClientRect().bottom + gap - window.innerHeight;
-    if (delta <= 1) return;
-
-    const to = window.scrollY + delta;
-
-    if (reduce) {
-      // `instant` matters: `html` carries `scroll-behavior: smooth`, and
-      // without the override the browser would animate this after all.
-      tween.current?.stop();
-      tweening.current = false;
-      window.scrollTo({ top: to, behavior: "instant" });
-      return;
-    }
-
-    // Only resync when we are starting from rest. Mid-flight the motion
-    // value already holds where we are, and `jump` would wipe the velocity
-    // this whole arrangement exists to preserve.
-    if (!tweening.current) scrollMV.jump(window.scrollY);
-    tweening.current = true;
-
-    // A critically damped spring rather than a fixed curve: bounce 0 so it
-    // never overshoots and shows the reader a line it then takes back, and
-    // handing it a new target is a retarget, not a restart — no `stop()`
-    // here, `animate` takes the value over and inherits its motion.
-    tween.current = animate(scrollMV, to, {
-      type: "spring",
-      duration: 1.15,
-      bounce: 0,
-      onComplete: () => {
-        tweening.current = false;
-        tween.current = null;
-      },
-    });
-  }, [bubbles, reduce, scrollMV]);
-
   const wait = (ms: number) =>
     new Promise<void>((res) => {
       timers.current.push(setTimeout(res, ms));
@@ -942,30 +921,42 @@ export function VoiceDemo() {
 
   const play = useCallback(async () => {
     cancelled.current = false;
-    // Pressing play is an explicit "show me this", so it re-arms following
-    // even if the reader had scrolled off earlier in the session.
-    follow.current = true;
     setPhase("playing");
 
     // Start over only if we finished, or were never mid-conversation.
-    if (pos.current.line === 0 && pos.current.word === 0) {
-      setBubbles(0);
+    const fresh = pos.current.line === 0 && pos.current.word === 0;
+    if (fresh) {
       setSpoken(0);
+      setStamps(LOG.map(() => -1));
+      clock.current.accum = 0;
     }
+    clock.current.since = performance.now();
+    if (audioRef.current) void audioRef.current.play().catch(() => {});
+
+    LOG.forEach((row, i) => {
+      if (row.at === "start") fire(i);
+    });
 
     let done = wordsBefore(pos.current.line, pos.current.word);
     setSpoken(done);
 
-    for (let li = pos.current.line; li < SCRIPT.length; li++) {
+    for (let li = pos.current.line; li < CALL.length; li++) {
       if (cancelled.current) return;
-      const turn = SCRIPT[li];
+      const turn = CALL[li];
       const words = turn.t.split(" ");
       const from = li === pos.current.line ? pos.current.word : 0;
 
       orbRef.current?.speak(turn.sp);
       setLine(li);
-      setRestored(from);
+      // Reduced motion gets the sequence without the travel: marking every
+      // word as restored is what switches the reveal to `transition-none`,
+      // so the line still arrives word by word and nothing slides or blurs.
+      setRestored(reduce ? words.length : from);
       setRevealed(from);
+
+      LOG.forEach((row, i) => {
+        if (row.at === li) fire(i);
+      });
 
       for (let i = from; i < words.length; i++) {
         if (cancelled.current) return;
@@ -978,19 +969,23 @@ export function VoiceDemo() {
       }
       if (cancelled.current) return;
 
-      setBubbles(li + 1);
       pos.current = { line: li + 1, word: 0 };
       orbRef.current?.speak(null);
       await wait(GAP_MS);
     }
 
     if (cancelled.current) return;
+    LOG.forEach((row, i) => {
+      if (row.at === "end") fire(i);
+    });
+    clock.current.accum = elapsed();
+    clock.current.since = 0;
     orbRef.current?.speak(null);
     setLine(-1);
     setSpoken(TOTAL_WORDS);
     pos.current = { line: 0, word: 0 };
     setPhase("done");
-  }, []);
+  }, [fire, reduce]);
 
   const toggle = () => {
     if (phase === "playing") {
@@ -998,6 +993,9 @@ export function VoiceDemo() {
       cancelled.current = true;
       timers.current.forEach(clearTimeout);
       timers.current = [];
+      clock.current.accum = elapsed();
+      clock.current.since = 0;
+      audioRef.current?.pause();
       orbRef.current?.speak(null);
       setPhase("paused");
     } else {
@@ -1005,186 +1003,243 @@ export function VoiceDemo() {
     }
   };
 
-  const turn = line >= 0 ? SCRIPT[line] : null;
+  const turn = line >= 0 ? CALL[line] : null;
   const isAgent = turn?.sp === "agent";
   const words = turn ? turn.t.split(" ") : [];
 
   const tag =
-    phase === "paused" ? C.tagPaused
-    : phase === "done" ? C.tagDone
-    : turn ? (isAgent ? C.tagAgent : C.tagCaller)
-    : C.tagIdle;
+    phase === "paused" ? TAG.paused
+    : phase === "done" ? TAG.done
+    : turn ? `${isAgent ? C.agentName : C.callerName} is speaking`
+    : TAG.idle;
 
-  const label =
-    phase === "playing" ? C.labelPlaying
-    : phase === "paused" ? C.labelPaused
-    : phase === "done" ? C.labelDone
-    : C.labelIdle;
+  const RunIcon =
+    phase === "playing" ? Pause : phase === "done" ? RotateCcw : ArrowRight;
 
   return (
-    <div className="mt-[5em] flex flex-col items-center md:mt-[7em]">
-      <span className="inline-flex items-center gap-[0.6em] rounded-full border border-[var(--cover-paper)]/14 bg-[var(--cover-panel)]/60 px-[1em] py-[0.5em] text-[0.68em] font-semibold uppercase leading-none tracking-[0.14em] text-[var(--cover-brand-lit)] backdrop-blur-sm">
-        <span className="size-[0.5em] shrink-0 animate-pulse rounded-full bg-[var(--cover-orb-b)]" />
-        {C.chip}
-      </span>
+    <div className="mt-[3.2em] md:mt-[4.2em]">
+      <div className="grid grid-cols-1 items-start gap-[3.5em] md:grid-cols-[minmax(0,1fr)_minmax(15em,21em)] md:gap-[4em]">
+        {/* ---------- the orb, and the line it is on ---------- */}
+        <div className="flex flex-col items-center">
+          <Orb apiRef={orbRef} />
 
-      <p className="mt-[1.4em] text-center text-[0.68em] font-semibold uppercase leading-none tracking-[0.22em] text-[var(--cover-paper)]/45">
-        {C.kicker}
-      </p>
-
-      <h3 className="mt-[0.9em] max-w-[16em] text-balance text-center text-[1.9em] font-medium leading-[1.15] tracking-[-0.035em] md:text-[2.3em]">
-        {C.title}
-      </h3>
-
-      <Orb apiRef={orbRef} />
-
-      {/* Speaker tag. Sits under the orb rather than inside it — the orb is
-          square and fluid, and overlaying it clipped the tag on narrow
-          screens where the copy is longest. */}
-      <span
-        className={cn(
-          "-mt-[1.5em] inline-flex items-center rounded-full border px-[1em] py-[0.45em] text-[0.65em] font-semibold uppercase leading-none tracking-[0.16em] backdrop-blur-sm transition-colors duration-500",
-          turn && isAgent
-            ? "border-[var(--cover-orb-b)]/45 bg-[var(--cover-ink)]/75 text-[var(--cover-orb-b)]"
-            : turn
-              ? "border-[var(--cover-orb-alt-b)]/45 bg-[var(--cover-ink)]/75 text-[var(--cover-orb-alt-b)]"
-              : "border-[var(--cover-paper)]/14 bg-[var(--cover-ink)]/75 text-[var(--cover-paper)]/50",
-        )}
-      >
-        {tag}
-      </span>
-
-      {/* Caption. Fixed minimum height so the controls below it never jump
-          as lines of different lengths come and go. */}
-      <div className="mt-[1.4em] flex min-h-[7em] w-[min(42em,92vw)] flex-col items-center gap-[0.6em] text-center">
-        <span className="text-[0.6em] font-semibold uppercase leading-none tracking-[0.2em] text-[var(--cover-paper)]/45">
-          {turn ? (isAgent ? C.agentName : C.callerName) : ""}
-        </span>
-
-        <p
-          className={cn(
-            "text-[1.15em] leading-[1.5] tracking-[-0.01em] md:text-[1.35em]",
-            turn && !isAgent && "font-light text-[var(--cover-orb-alt-hot)]",
-          )}
-        >
-          {phase === "done" ? (
-            <span className="text-[var(--cover-brand-lit)]">{C.captionDone}</span>
-          ) : (
-            words.map((w, i) => (
-              /*
-                No scale. It was the one transform the eye could catch:
-                type growing back to size wobbles its own sidebearings, and
-                on a word that is already translating and defocusing it is
-                the part that reads as a pop.
-
-                And a gentler curve than the site's EASE. Expo-out is built
-                for a one-shot arrival — it spends its motion in the first
-                quarter and coasts, which is right for a section sliding
-                into view and wrong here, where the coast is invisible and
-                every word lands on the same hard tick. This spreads the
-                travel across the whole 820ms, so each word is still
-                settling as the next three begin and the line resolves as
-                one continuous movement.
-              */
-              <span
-                key={`${line}-${i}`}
-                className={cn(
-                  "inline-block will-change-[opacity,transform,filter]",
-                  i < revealed
-                    ? "translate-y-0 opacity-100 blur-0"
-                    : "translate-y-[7px] opacity-0 blur-[5px]",
-                  i < restored
-                    ? "transition-none"
-                    : "transition-[opacity,transform,filter] duration-[820ms] ease-[cubic-bezier(.2,.7,.3,1)]",
-                )}
-              >
-                {w}
-                {i < words.length - 1 ? " " : ""}
-              </span>
-            ))
-          )}
-        </p>
-      </div>
-
-      <div className="mt-[1.6em] flex flex-col items-center gap-[0.9em] sm:flex-row sm:gap-[1.2em]">
-        <button
-          type="button"
-          onClick={toggle}
-          aria-label={label}
-          className={cn(
-            "relative grid size-[3.6em] shrink-0 place-items-center rounded-full text-[var(--cover-ink)] transition-transform duration-200",
-            "bg-[linear-gradient(135deg,var(--cover-orb-a),var(--cover-orb-b))]",
-            "shadow-[0_0_2em_rgba(123,79,212,0.55),inset_0_1px_0_rgba(255,255,255,0.35)]",
-            "hover:scale-105 active:scale-95",
-            phase !== "playing" &&
-              "after:absolute after:-inset-[0.35em] after:animate-[orbHalo_2.2s_ease-out_infinite] after:rounded-full after:border after:border-[var(--cover-orb-b)]/40 after:content-['']",
-          )}
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" className="size-[1.4em]">
-            {phase === "playing" ? (
-              <path d="M7 5h4v14H7zM13 5h4v14h-4z" />
-            ) : (
-              <path d="M8 5.5v13l11-6.5z" />
-            )}
-          </svg>
-        </button>
-        {/* Fixed width, or the centred row re-centres every time the label
-            changes length and the button slides out from under the cursor
-            that just pressed it. */}
-        <span className="text-[0.68em] font-semibold uppercase leading-none tracking-[0.16em] text-[var(--cover-paper)]/50 sm:w-[15em] sm:text-left">
-          {label}
-        </span>
-      </div>
-
-      <div className="mt-[1.5em] h-[3px] w-[min(26em,80vw)] overflow-hidden rounded-full bg-[var(--cover-paper)]/12">
-        <div
-          className="h-full rounded-full bg-[linear-gradient(90deg,var(--cover-orb-a),var(--cover-orb-b))] shadow-[0_0_10px_rgba(185,138,232,0.7)] transition-[width] duration-300 ease-linear"
-          style={{ width: `${((spoken / TOTAL_WORDS) * 100).toFixed(1)}%` }}
-        />
-      </div>
-
-      <div
-        ref={tailRef}
-        className="mt-[2.8em] flex w-[min(42em,94vw)] flex-col gap-[0.75em]"
-      >
-        <div className="mb-[0.3em] flex items-center gap-[0.8em]">
-          <h4 className="text-[0.7em] font-semibold uppercase leading-none tracking-[0.14em] text-[var(--cover-brand-lit)]">
-            {C.transcriptTitle}
-          </h4>
-          <span aria-hidden className="h-px flex-1 bg-[var(--cover-paper)]/12" />
-        </div>
-
-        {SCRIPT.slice(0, bubbles).map((b, i) => (
-          <motion.div
-            key={i}
-            /* A bubble is a one-shot arrival, so EASE is right here — but
-               slower, and defocused on the way in so it settles into the
-               page rather than snapping onto it, the same move the caption
-               above makes word by word. */
-            initial={reduce ? false : { opacity: 0, y: 16, filter: "blur(6px)" }}
-            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-            transition={{ duration: 0.85, ease: EASE }}
+          {/* Speaker mark. Under the orb rather than over it — the orb is
+              square and fluid, and overlaying it clipped the label on narrow
+              screens where the copy is longest. */}
+          <span
             className={cn(
-              "max-w-[82%] rounded-[1.1em] border px-[1.1em] py-[0.8em] text-[0.9em] leading-[1.55]",
-              b.sp === "agent"
-                ? "self-start rounded-bl-[0.25em] border-[var(--cover-orb-b)]/30 bg-[linear-gradient(135deg,rgba(123,79,212,0.16),rgba(185,138,232,0.1))]"
-                : "self-end rounded-br-[0.25em] border-[var(--cover-orb-alt-b)]/20 bg-[var(--cover-panel)]/75 text-[var(--cover-orb-alt-hot)]",
+              "mono -mt-[1.2em] flex items-center gap-[0.6em] text-[0.7em] uppercase leading-none tracking-[0.24em] transition-colors duration-500",
+              turn && isAgent
+                ? "text-[var(--cover-orb-b)]"
+                : turn
+                  ? "text-[var(--cover-orb-alt-b)]"
+                  : "text-[var(--cover-paper)]/45",
             )}
           >
             <span
+              aria-hidden
+              className="size-[0.5em] shrink-0 rounded-full bg-current"
+            />
+            {tag}
+          </span>
+
+          {/* The line itself. Fixed minimum height so the transport below
+              never jumps as lines of different lengths come and go. */}
+          <div className="mt-[1.5em] flex min-h-[7.5em] w-[min(38em,92vw)] flex-col items-center gap-[0.7em] text-center">
+            <span className="mono text-[0.62em] uppercase leading-none tracking-[0.24em] text-[var(--cover-paper)]/45">
+              {turn ? (isAgent ? C.agentName : C.callerName) : ""}
+            </span>
+
+            <p
               className={cn(
-                "mb-[0.4em] block text-[0.62em] font-semibold uppercase leading-none tracking-[0.18em]",
-                b.sp === "agent"
-                  ? "text-[var(--cover-orb-b)]"
-                  : "text-[var(--cover-orb-alt-b)]",
+                "text-[1.15em] leading-[1.5] tracking-[-0.01em] md:text-[1.35em]",
+                turn && !isAgent && "font-light text-[var(--cover-orb-alt-hot)]",
               )}
             >
-              {b.sp === "agent" ? C.agentName : C.callerName}
-            </span>
-            {b.t}
-          </motion.div>
-        ))}
+              {phase === "done" ? (
+                <span className="text-[var(--cover-brand-lit)]">
+                  {C.captionDone}
+                </span>
+              ) : (
+                words.map((w, i) => (
+                  /*
+                    No scale. It was the one transform the eye could catch:
+                    type growing back to size wobbles its own sidebearings, and
+                    on a word that is already translating and defocusing it is
+                    the part that reads as a pop.
+
+                    And a gentler curve than the site's EASE. Expo-out is built
+                    for a one-shot arrival — it spends its motion in the first
+                    quarter and coasts, which is right for a section sliding
+                    into view and wrong here, where the coast is invisible and
+                    every word lands on the same hard tick. This spreads the
+                    travel across the whole 820ms, so each word is still
+                    settling as the next three begin and the line resolves as
+                    one continuous movement.
+                  */
+                  <span
+                    key={`${line}-${i}`}
+                    className={cn(
+                      "inline-block will-change-[opacity,transform,filter]",
+                      i < revealed
+                        ? "translate-y-0 opacity-100 blur-0"
+                        : "translate-y-[7px] opacity-0 blur-[5px]",
+                      i < restored
+                        ? "transition-none"
+                        : "transition-[opacity,transform,filter] duration-[820ms] ease-[cubic-bezier(.2,.7,.3,1)]",
+                    )}
+                  >
+                    {w}
+                    {i < words.length - 1 ? " " : ""}
+                  </span>
+                ))
+              )}
+            </p>
+          </div>
+
+          {/* The transport. A rule and a word, not a glowing play button:
+              there is nothing to hear, and a round ▶ on a voice page is a
+              promise of audio however carefully the copy above it is
+              worded. */}
+          <button
+            type="button"
+            onClick={toggle}
+            className="mono mt-[1.6em] inline-flex items-center gap-[0.7em] border-b border-[var(--cover-paper)]/25 pb-[0.5em] text-[0.7em] uppercase leading-none tracking-[0.24em] text-[var(--cover-paper)]/75 transition-colors duration-500 hover:border-[var(--cover-brand-lit)] hover:text-[var(--cover-brand-lit)]"
+          >
+            <RunIcon className="size-[1.15em] shrink-0" strokeWidth={2.2} />
+            {RUN[phase]}
+          </button>
+
+          <div
+            aria-hidden
+            className="mt-[1.8em] h-[2px] w-[min(26em,80vw)] overflow-hidden bg-[var(--cover-paper)]/12"
+          >
+            <div
+              className="h-full bg-[var(--cover-brand-lit)] transition-[width] duration-300 ease-linear"
+              style={{ width: `${((spoken / TOTAL_WORDS) * 100).toFixed(1)}%` }}
+            />
+          </div>
+        </div>
+
+        {/* ---------- the call log ---------- */}
+        <div>
+          <div className="flex items-center gap-[0.8em]">
+            <h3 className="mono text-[0.7em] uppercase leading-none tracking-[0.24em] text-[var(--cover-paper)]/45">
+              Call log
+            </h3>
+            <span aria-hidden className="h-px flex-1 bg-[var(--cover-paper)]/12" />
+          </div>
+
+          {/*
+            Every row is legible before the call runs — the reader who never
+            presses anything still learns what the agent does. The only thing
+            the replay adds is the stamp, and that is the whole animation:
+            the time appears at the instant the script earns it, which is the
+            one fact a static list cannot state.
+          */}
+          <ol className="mt-[1.2em]">
+            {LOG.map((row, i) => {
+              const at = stamps[i];
+              const struck = at >= 0;
+              return (
+                <li
+                  key={row.label}
+                  className="border-t border-[var(--cover-paper)]/12 py-[1.1em] first:border-t-0 first:pt-0"
+                >
+                  <div className="flex items-baseline gap-[0.7em]">
+                    <span
+                      className={cn(
+                        "size-[0.45em] shrink-0 rounded-full transition-colors duration-500",
+                        struck
+                          ? "bg-[var(--cover-brand-lit)]"
+                          : "bg-[var(--cover-paper)]/25",
+                      )}
+                    />
+                    <span className="text-[1em] font-medium leading-[1.3]">
+                      {row.label}
+                    </span>
+                    <span className="mono ml-auto text-[0.68em] tabular-nums leading-none tracking-[0.14em]">
+                      {struck ? (
+                        <motion.span
+                          initial={reduce ? false : { opacity: 0, y: "-0.35em" }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.45, ease: EASE }}
+                          className="block text-[var(--cover-brand-lit)]"
+                        >
+                          {stampOf(at)}
+                        </motion.span>
+                      ) : (
+                        <span className="block text-[var(--cover-paper)]/45">
+                          —:——
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <p className="mt-[0.35em] pl-[1.15em] text-[0.88em] leading-[1.5] text-[var(--cover-paper)]/75">
+                    {row.detail}
+                  </p>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
       </div>
+
+      {/* ---------- the whole call, on request ---------- */}
+      {/*
+        A native `details`, so it works before hydration and so the full
+        script is in the accessibility tree whether or not anyone opens it —
+        which is also the answer to the caption above never being announced:
+        the words stream one at a time up there, and a live region reading
+        them would be unusable.
+
+        The agent sits flush on the gutter and the caller is indented. Two
+        columns of bubbles would have been the obvious move and the wrong
+        one: this section is the one place the page has no panel at all, and
+        a transcript is a script — a rule, a name, a line.
+      */}
+      <details className="group mt-[3.5em] border-t border-[var(--cover-paper)]/12 pt-[1.6em]">
+        <summary className="mono inline-flex cursor-pointer list-none items-center gap-[0.7em] text-[0.7em] uppercase leading-none tracking-[0.24em] text-[var(--cover-paper)]/75 transition-colors duration-500 hover:text-[var(--cover-brand-lit)] [&::-webkit-details-marker]:hidden">
+          <ChevronRight
+            aria-hidden
+            className="size-[1.15em] shrink-0 transition-transform duration-500 group-open:rotate-90"
+            strokeWidth={2.2}
+          />
+          {DISCLOSURE}
+        </summary>
+
+        <ol className="mt-[2em] flex max-w-[46em] flex-col gap-[1.5em]">
+          {SCRIPT.map((b, i) => (
+            <li
+              key={i}
+              className={cn(
+                "border-l pl-[1.2em]",
+                b.sp === "agent"
+                  ? "border-[var(--cover-brand-lit)]/45"
+                  : "border-[var(--cover-paper)]/15 md:ml-[3.5em]",
+              )}
+            >
+              <span
+                className={cn(
+                  "mono block text-[0.62em] uppercase leading-none tracking-[0.24em]",
+                  b.sp === "agent"
+                    ? "text-[var(--cover-brand-lit)]"
+                    : "text-[var(--cover-paper)]/45",
+                )}
+              >
+                {b.sp === "agent" ? C.agentName : C.callerName}
+              </span>
+              <p className="mt-[0.5em] text-[1em] leading-[1.6] text-[var(--cover-paper)]/85">
+                {b.t}
+              </p>
+            </li>
+          ))}
+        </ol>
+      </details>
+
+      {audioSrc ? (
+        <audio ref={audioRef} src={audioSrc} preload="none" className="hidden" />
+      ) : null}
     </div>
   );
 }

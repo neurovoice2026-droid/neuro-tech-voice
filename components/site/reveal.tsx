@@ -104,7 +104,23 @@ export function StaggerItem({
   );
 }
 
-/** Count up to a number once it scrolls into view. */
+/**
+ * Count up to a number once it scrolls into view.
+ *
+ * `track` exists because the default is an ARRIVAL, not a readout. Without
+ * it the animation is seeded from the static `from` prop and re-keyed on
+ * `to`, so a figure that changes while the reader is looking at it snaps
+ * back to `from` and runs the whole approach again — a price that moves from
+ * 240 to 260 drops through zero on its way there, which reads as the number
+ * having been wrong rather than having changed. In `track` mode the start is
+ * the number currently on screen, so every change is a move from where the
+ * eye already is, and `once` is dropped since the figure has to stay live
+ * after the first pass.
+ *
+ * The default path is left exactly as it was: same seed, same deps, same
+ * reduced-motion derivation. Only the ref write is new, and it is inert
+ * when nothing reads it.
+ */
 export function CountUp({
   to,
   from = 0,
@@ -112,6 +128,7 @@ export function CountUp({
   suffix = "",
   prefix = "",
   decimals = 0,
+  track = false,
   className,
 }: {
   to: number;
@@ -120,22 +137,31 @@ export function CountUp({
   suffix?: string;
   prefix?: string;
   decimals?: number;
+  /** Re-animate from the value on screen whenever `to` changes. */
+  track?: boolean;
   className?: string;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-15% 0px" });
+  const inView = useInView(ref, { once: !track, margin: "-15% 0px" });
   const reduce = useReducedMotion();
   const [val, setVal] = useState(from);
+  // The last number actually rendered. A ref and not state: it is read at
+  // the top of the next animation, never during a render.
+  const shownRef = useRef(from);
 
   useEffect(() => {
     if (!inView || reduce) return;
-    const controls = animate(from, to, {
+    const start = track ? shownRef.current : from;
+    const controls = animate(start, to, {
       duration,
       ease: [0.22, 1, 0.36, 1],
-      onUpdate: (v) => setVal(v),
+      onUpdate: (v) => {
+        shownRef.current = v;
+        setVal(v);
+      },
     });
     return () => controls.stop();
-  }, [inView, reduce, from, to, duration]);
+  }, [inView, reduce, from, to, duration, track]);
 
   // Reduced motion gets the destination without the count. Derived here
   // rather than pushed into state from the effect: the value is a pure
@@ -204,6 +230,79 @@ export function WordReveal({
         </span>
       ))}
     </M>
+  );
+}
+
+/**
+ * The cover's word-rise, driven by scroll instead of by mount.
+ *
+ * The hero owns the original as a local `SplitLines`, and this is a
+ * deliberate copy of it rather than a shared import. The hero's version is
+ * the page's first impression and is frozen: it fires on mount, on a delay
+ * ladder tuned against the rest of the opening sequence, and nothing below
+ * the fold may acquire the right to change it. Factoring the two together
+ * would create exactly that coupling — a prop added for a section halfway
+ * down the page landing in the cover. So the geometry is duplicated on
+ * purpose and the hero stays the style contract: if the two ever disagree,
+ * the hero is right and this follows it.
+ *
+ * What differs is the trigger, and only the trigger. `whileInView` with a
+ * one-shot viewport, because a word that has already risen must not sink
+ * back when the reader scrolls past and returns.
+ *
+ * The mask is padded below the baseline so descenders clear it, then pulled
+ * back so line-height is unaffected — the same trick as the hero. The word
+ * counter runs across ALL lines rather than restarting per line, so the
+ * stagger reads as one continuous sweep down the block instead of several
+ * lines each starting over.
+ */
+export function MaskRise({
+  lines,
+  delay = 0,
+  stagger = 0.045,
+  className,
+}: {
+  lines: readonly string[];
+  delay?: number;
+  stagger?: number;
+  className?: string;
+}) {
+  const reduce = useReducedMotion();
+  let n = 0;
+
+  return (
+    <span className={className}>
+      {lines.map((line, li) => (
+        <span key={li} className="block">
+          {line.split(" ").map((word, wi, arr) => {
+            const i = n++;
+            return (
+              <span
+                key={wi}
+                className="inline-block -mb-[0.16em] overflow-hidden pb-[0.16em] align-bottom"
+              >
+                <motion.span
+                  className={cn(
+                    "inline-block",
+                    wi < arr.length - 1 && "pr-[0.24em]",
+                  )}
+                  initial={reduce ? false : { y: "115%" }}
+                  whileInView={{ y: "0%" }}
+                  viewport={{ once: true, margin: "-10% 0px" }}
+                  transition={{
+                    duration: 0.95,
+                    delay: delay + i * stagger,
+                    ease: EASE,
+                  }}
+                >
+                  {word}
+                </motion.span>
+              </span>
+            );
+          })}
+        </span>
+      ))}
+    </span>
   );
 }
 
