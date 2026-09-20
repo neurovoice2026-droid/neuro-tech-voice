@@ -1,10 +1,10 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
 import { SOLUTIONS_INTRO, SOLUTION_ITEMS } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { Frame, PillLink, SectionHeading } from "./product/primitives";
-import { Reveal, EASE } from "./reveal";
+import { holdFor, useInView, usePrefersReducedMotion } from "./product/timing";
 
 /**
  * The second business — the one the homepage never admitted to.
@@ -54,15 +54,32 @@ import { Reveal, EASE } from "./reveal";
  * a secondary pill, because a pill is the site's only button and a lone
  * underlined sentence at the foot of a spec sheet reads as a footnote.
  *
- * **The stack is what arrives.** Motion here is doing one job: the four
- * tokens are the load-bearing evidence in each row, so they land in
- * sequence as their own row crosses into view — the eye is walked across
- * the proof rather than shown a decorative fade. They *slide* in from the
- * left rather than lifting: on white a ledger is read across, and a fade
- * from nothing would read as the page still loading. Nothing loops, nothing
- * fades from zero (a row that never animates must still be readable), and
- * under `useReducedMotion` every element renders in its final state with no
- * scroll binding at all.
+ * **The scene: the ledger fills itself in.** A spec sheet that fades up as
+ * you scroll is a brochure with a transition on it — the movement belongs
+ * to the reader's wheel, not to us. So the section does the thing a
+ * commission actually does: it gets *signed off*, line by line, while you
+ * watch. A head walks the ledger top to bottom; on the row it is standing
+ * on, each deliverable is struck — its hairline lengthens and takes the
+ * violet — at `holdFor()` reading pace, so a line is marked only once you
+ * could have read it; then the four stack tokens land left to right,
+ * because the stack is what the deliverables were built out of and it
+ * should arrive after them, not with them. A violet rule grows along the
+ * row's bottom edge as its four marks land, so the ledger is visibly
+ * ruling itself. The head then moves down, and what it leaves behind stays
+ * struck: the argument is the accumulation, a sheet that was blank when
+ * you arrived and is fully specified by the time you reach the price.
+ *
+ * The pass runs once and rests on the complete sheet — a marketing band
+ * that re-erases its own ledger every thirty seconds is a nervous tic, and
+ * one that keeps a timer alive after it has said everything is a bug.
+ * `useInView` gates it so nothing advances off screen, every timeout is
+ * cleared, and `usePrefersReducedMotion` is handed the finished sheet on
+ * the first frame with no timer at all. The first pointer, focus or key
+ * from the reader ends the pass permanently and completes the sheet in the
+ * same breath — nobody is made to wait for a line they are already reading
+ * — after which hovering a row is the only thing that lights one, because
+ * from then on the ledger is theirs. Nothing here ever starts from zero
+ * opacity: an unplayed row is a legible row, dimmer by a third at worst.
  */
 
 /**
@@ -79,40 +96,61 @@ const lineNo = (i: number) => String(i + 1).padStart(2, "0");
  */
 const FIELD = "text-[11px] leading-4 font-medium tracking-[0.12em] text-pp-muted uppercase";
 
+/**
+ * The score. One beat per deliverable, held at reading pace off its own
+ * text, then one shorter beat for the stack — a list of four names is
+ * scanned, not read, so it does not earn a reading-pace hold. Flat rather
+ * than nested so the playhead is a single integer and "how far has row N
+ * got" is a count, which is what the row rendering wants anyway.
+ */
+const BEATS = SOLUTION_ITEMS.flatMap((item, row) => [
+  ...item.deliverables.map((d) => ({ row, hold: holdFor(d) })),
+  { row, hold: 760 },
+]);
+
+/** Marks in a finished row: every deliverable struck, plus the stack. */
+const MARKS_PER_ROW = (item: (typeof SOLUTION_ITEMS)[number]) => item.deliverables.length + 1;
+
 export function Solutions() {
-  const reduce = useReducedMotion();
+  const reduce = usePrefersReducedMotion();
+  const ledgerRef = useRef<HTMLUListElement>(null);
+  const inView = useInView(ledgerRef, "-10% 0px -10% 0px");
+
+  /** The playhead: how many beats of BEATS have been struck. */
+  const [head, setHead] = useState(0);
+  /** Set by the reader's first pointer/focus/key. Never unset. */
+  const [taken, setTaken] = useState(false);
+  /** Which row the reader is pointing at, once the sheet is theirs. */
+  const [pointed, setPointed] = useState<number | null>(null);
+
+  const settled = reduce || taken || head >= BEATS.length;
+
+  useEffect(() => {
+    if (settled || !inView) return;
+    const id = window.setTimeout(() => setHead((h) => h + 1), BEATS[head].hold);
+    return () => window.clearTimeout(id);
+  }, [settled, inView, head]);
 
   /**
-   * The row settles; it does not appear. Starting from zero opacity would
-   * mean a row that is never animated — a backgrounded tab starves rAF —
-   * stays invisible, and these rows are the section.
+   * The lit row. While the pass runs it is wherever the head stands; once
+   * the sheet is settled it is whatever the reader is pointing at, and
+   * nothing at all when they are pointing at nothing.
    */
-  const row = {
-    rest: reduce ? {} : { opacity: 0.55, y: 8 },
-    enter: { opacity: 1, y: 0, transition: { duration: 0.55, ease: EASE } },
-  };
+  const lit = settled ? pointed : BEATS[head].row;
 
-  /**
-   * The stack tokens, landing left to right behind their own row. The index
-   * comes in as `custom` so the delay is a property of the token's position
-   * rather than of a wrapper, which keeps the four of them on one flex line
-   * instead of inside four staggered boxes. `x` and not `y`: the row is a
-   * line of a specification and is read across.
-   */
-  const token = {
-    rest: reduce ? {} : { opacity: 0.3, x: -5 },
-    enter: (i: number) => ({
-      opacity: 1,
-      x: 0,
-      transition: { duration: 0.45, delay: 0.14 + i * 0.04, ease: EASE },
-    }),
-  };
+  /** Ends the pass for good. Idempotent, so it can sit on every handler. */
+  const takeOver = () => setTaken(true);
 
   return (
-    <section id="solutions" className="scroll-mt-28 py-10 md:py-16">
+    <section
+      id="solutions"
+      className="scroll-mt-28 py-10 md:py-16"
+      onFocusCapture={takeOver}
+      onKeyDownCapture={takeOver}
+    >
       <Frame className="px-6 md:px-12">
         {/* masthead — on the gutter, not centred */}
-        <Reveal>
+        <div className="animate-in fade-in-0 slide-in-from-bottom-2 duration-500 fill-mode-both">
           <SectionHeading eyebrow={SOLUTIONS_INTRO.kicker} className="max-w-[820px]">
             {SOLUTIONS_INTRO.title}
           </SectionHeading>
@@ -120,28 +158,64 @@ export function Solutions() {
           <p className="mt-5 max-w-[620px] text-base leading-[25px] text-pretty text-pp-muted">
             {SOLUTIONS_INTRO.sub}
           </p>
-        </Reveal>
+        </div>
 
         {/* the ledger. Its top edge is the first row's own hairline, so every
             rule in the section sits on one vertical. */}
-        <ul className="mt-10 border-t border-pp-rule md:mt-12">
+        <ul
+          ref={ledgerRef}
+          className="mt-10 border-t border-pp-rule md:mt-12"
+          onPointerLeave={() => setPointed(null)}
+        >
           {SOLUTION_ITEMS.map((item, index) => {
             const Icon = item.icon;
+            const total = MARKS_PER_ROW(item);
+            /* Marks struck in this row: all of them once the sheet is
+               settled, otherwise the beats the head has already played. */
+            const struck = settled
+              ? total
+              : BEATS.slice(0, head).filter((b) => b.row === index).length;
+            const stackIn = struck >= total;
+            const isLit = lit === index;
+
             return (
-              <motion.li
+              <li
                 key={item.id}
-                variants={row}
-                initial={reduce ? false : "rest"}
-                whileInView="enter"
-                viewport={{ once: true, margin: "-12% 0px -8% 0px" }}
-                className="grid gap-x-10 gap-y-5 border-b border-pp-rule py-7 md:grid-cols-[40px_minmax(200px,1fr)_minmax(0,1.35fr)] md:py-9"
+                onPointerEnter={() => {
+                  takeOver();
+                  setPointed(index);
+                }}
+                className={cn(
+                  "relative grid gap-x-10 gap-y-5 border-b border-pp-rule py-7 transition-opacity duration-500 md:grid-cols-[40px_minmax(200px,1fr)_minmax(0,1.35fr)] md:py-9",
+                  isLit ? "opacity-100" : "opacity-[0.72]",
+                )}
               >
+                {/* The row rules itself as its marks land: a violet hairline
+                    growing along the bottom edge, over the grey one. */}
+                <span
+                  aria-hidden
+                  className="absolute inset-x-0 -bottom-px h-px origin-left bg-pp-accent/70 transition-[width] duration-500"
+                  style={{ width: `${(struck / total) * 100}%` }}
+                />
+
                 {/* rail: the mark and the line number */}
                 <div className="flex items-center gap-3 md:block">
-                  <Icon className="size-5 shrink-0 text-pp-accent" strokeWidth={1.75} aria-hidden />
+                  <Icon
+                    className={cn(
+                      "size-5 shrink-0 transition-colors duration-500",
+                      struck > 0 ? "text-pp-accent" : "text-pp-muted/50",
+                    )}
+                    strokeWidth={1.75}
+                    aria-hidden
+                  />
                   {/* 4px down on desktop so the numeral clears the 20px mark
                       without the rail claiming a line of its own. */}
-                  <span className="mono text-[11px] leading-4 tracking-[0.18em] text-pp-muted md:mt-4 md:block">
+                  <span
+                    className={cn(
+                      "mono text-[11px] leading-4 tracking-[0.18em] transition-colors duration-500 md:mt-4 md:block",
+                      isLit ? "text-pp-ink" : "text-pp-muted",
+                    )}
+                  >
                     {lineNo(index)}
                   </span>
                 </div>
@@ -162,15 +236,32 @@ export function Solutions() {
                     {/* 3px down so the 16px label sits on the first 21px item line. */}
                     <p className={cn(FIELD, "sm:pt-[3px]")}>Delivers</p>
                     <ul className="space-y-2">
-                      {item.deliverables.map((d) => (
-                        <li key={d} className="flex gap-3">
-                          {/* A rule, not a bullet — the page groups with
-                              hairlines and this is the smallest one. 10px
-                              down centres it on a 21px line. */}
-                          <span aria-hidden className="mt-[10px] h-px w-3 shrink-0 bg-pp-hair" />
-                          <span className="min-w-0 text-[14px] leading-[21px] text-pp-ink/85">{d}</span>
-                        </li>
-                      ))}
+                      {item.deliverables.map((d, i) => {
+                        const marked = i < struck;
+                        return (
+                          <li key={d} className="flex gap-3">
+                            {/* A rule, not a bullet — the page groups with
+                                hairlines and this is the smallest one. 10px
+                                down centres it on a 21px line. It lengthens
+                                and takes the violet when the line is struck. */}
+                            <span
+                              aria-hidden
+                              className={cn(
+                                "mt-[10px] h-px shrink-0 transition-all duration-300",
+                                marked ? "w-6 bg-pp-accent" : "w-3 bg-pp-hair",
+                              )}
+                            />
+                            <span
+                              className={cn(
+                                "min-w-0 text-[14px] leading-[21px] transition-colors duration-300",
+                                marked ? "text-pp-ink/85" : "text-pp-ink/50",
+                              )}
+                            >
+                              {d}
+                            </span>
+                          </li>
+                        );
+                      })}
                     </ul>
                   </div>
 
@@ -178,22 +269,26 @@ export function Solutions() {
                     <p className={FIELD}>Stack</p>
                     <div className="flex flex-wrap items-center gap-y-2">
                       {item.stack.map((s, i) => (
-                        <motion.span
+                        /* Left to right, 80ms apart — `x` and not `y`: the
+                           row is a line of a specification and is read
+                           across. Never from zero: an unplayed row has to
+                           stay readable. */
+                        <span
                           key={s}
-                          custom={i}
-                          variants={token}
+                          style={{ transitionDelay: stackIn ? `${i * 80}ms` : "0ms" }}
                           className={cn(
-                            "mono text-[11px] leading-4 tracking-[0.14em] text-pp-ink uppercase",
+                            "mono text-[11px] leading-4 tracking-[0.14em] text-pp-ink uppercase transition-all duration-500",
+                            stackIn ? "translate-x-0 opacity-100" : "-translate-x-1 opacity-35",
                             i > 0 && "ml-3 border-l border-pp-hair pl-3",
                           )}
                         >
                           {s}
-                        </motion.span>
+                        </span>
                       ))}
                     </div>
                   </div>
                 </div>
-              </motion.li>
+              </li>
             );
           })}
         </ul>
@@ -203,11 +298,13 @@ export function Solutions() {
           row's: hanging the link off one of five otherwise identical rows
           would imply the other four are links a reader has failed to find.
         */}
-        <Reveal delay={0.05}>
-          <PillLink href={SOLUTIONS_INTRO.href} variant="secondary" className="mt-9">
-            {SOLUTIONS_INTRO.cta}
-          </PillLink>
-        </Reveal>
+        <PillLink
+          href={SOLUTIONS_INTRO.href}
+          variant="secondary"
+          className="mt-9 animate-in fade-in-0 slide-in-from-bottom-2 duration-500 fill-mode-both"
+        >
+          {SOLUTIONS_INTRO.cta}
+        </PillLink>
       </Frame>
     </section>
   );

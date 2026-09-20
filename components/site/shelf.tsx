@@ -8,14 +8,6 @@ import {
   type PointerEvent as ReactPointerEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-import {
-  motion,
-  animate,
-  useMotionValue,
-  useMotionValueEvent,
-  useReducedMotion,
-  useScroll,
-} from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import {
   CALL_FATE,
@@ -28,7 +20,7 @@ import {
 } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { Frame, PillLink, Rule, SectionHeading } from "./product/primitives";
-import { MaskRise, Reveal } from "./reveal";
+import { holdFor, useInView, usePrefersReducedMotion } from "./product/timing";
 
 /**
  * Somebody else's numbers — the shelf, and the drop off the end of it.
@@ -87,14 +79,24 @@ import { MaskRise, Reveal } from "./reveal";
  * stretched SVG circle reads as an error bar and because they now have to
  * sit exactly where the pinned geometry puts them.
  *
- * **The curve draws against the scroll, not against a timer.** An autoplay
- * fired by a one-shot `useInView` on a plate this tall starts while the
- * plot is still below the fold and finishes before it arrives.
- * Scroll-binding makes the reader's own gesture the thing that walks the
- * head down the cliff, with the readout recomputing from `qualifyOddsAt()`
- * at the drawn head, so the number and the shape fall together. Under
- * `useReducedMotion` the curve is simply drawn, resting at the ten-minute
- * mark; nothing is bound.
+ * **The plot plays the wait.** The scene is a call nobody picked up, and
+ * the clock running on it: the head starts at the moment of the call and
+ * walks its measured stops — the call, 5m, 10m, 20m, 30m — drawing the
+ * curve ahead of itself and dropping the readout at each one, then rings
+ * again from zero. It is not an entrance. It is the product's whole
+ * argument acted out at reading pace, so a reader who never touches
+ * anything still watches a lead decay from certain to one-in-twenty-one.
+ *
+ * The clock is the house's: `useInView` gates it, so nothing runs off
+ * screen or in a background tab, and every hold is `holdFor()` of the very
+ * sentence the marker is announcing — the same reading pace the platform
+ * scenes keep. The movement itself is CSS: `left` and `stroke-dashoffset`
+ * transitions carrying React's state from one stop to the next. The reader
+ * keeps the instrument: the first pointer, key or focus takes the marker
+ * for good, the curve completes under their hand, and the timer never
+ * comes back. Under `usePrefersReducedMotion` there is no timer at all and
+ * the plot rests on its last and loudest stop — the half hour — fully
+ * drawn.
  *
  * **`CALL_FATE` is a sentence, and a corrected one.** It was a stacked bar
  * plus the line "six calls in ten never reach the curve above at all",
@@ -212,9 +214,6 @@ const { line, area } = (() => {
   };
 })();
 
-/** Where the marker comes to rest when there is nothing to scroll against. */
-const REST = posOf(600);
-
 /* The x ticks. Only the break and the decade marks — the shelf has no
    internal structure to label, and pretending it does re-introduces exactly
    the false precision the break exists to deny. */
@@ -241,6 +240,41 @@ const POINT_LABEL = [
 ];
 
 /* ---------------------------------------------------------------- *
+ * The scene's clock
+ * ---------------------------------------------------------------- */
+
+/** Everything the plot has to say about one moment of the wait. */
+const readingAt = (sec: number) => {
+  const odds = qualifyOddsAt(sec);
+  const worse = 1 / odds;
+  const onShelf = sec <= SHELF_END;
+  return {
+    odds,
+    worse,
+    onShelf,
+    valuetext: `${fmt(sec)} — ${Math.round(odds * 100)} in 100${
+      onShelf ? ", no worse than answering at once" : `, ${worse.toFixed(1)} times worse`
+    }`,
+  };
+};
+
+/** The stops the unanswered call is walked through: the axis's own marks. */
+const STOPS = TICKS.map((t) => t.at);
+const LAST_STOP = STOPS.length - 1;
+
+/**
+ * How long the marker sits on each stop.
+ *
+ * `holdFor()` of the sentence that stop announces — the same house reading
+ * pace the platform scenes advance a transcript at, so the plot never moves
+ * on before the number under it has been read.
+ */
+const HOLD = STOPS.map((at) => holdFor(readingAt(at).valuetext));
+
+/** The glide between two stops, in ms. Matches `duration-700` on the head. */
+const GLIDE = 700;
+
+/* ---------------------------------------------------------------- *
  * Where the call lands, before any of this
  * ---------------------------------------------------------------- */
 
@@ -260,99 +294,114 @@ const LABEL = "text-[11px] leading-4 font-medium tracking-[0.12em] text-pp-muted
  * ---------------------------------------------------------------- */
 
 export function Shelf() {
-  const reduce = useReducedMotion();
+  const reduce = usePrefersReducedMotion();
   const section = useRef<HTMLElement>(null);
   const plot = useRef<HTMLDivElement>(null);
+  const live = useInView(plot, "0px");
+  const fate = useRef<HTMLDivElement>(null);
+  const fateInView = useInView(fate, "-10% 0px");
+  const [fateShown, setFateShown] = useState(false);
 
   /**
-   * The draw, and the head.
+   * The wait, playing.
    *
-   * `drawn` is the stroke's `pathLength`; `pos` is where the readout is
-   * reading. They are the same number until the reader grabs the marker,
-   * at which point the curve completes and `pos` becomes theirs. `driving`
-   * is mirrored into a ref because the scroll subscription has to refuse
-   * the hand-off on the frame it happens, not on the render after it.
+   * `step` is which measured stop the unanswered call has reached. It
+   * advances on its own while the plot is on screen, and the moment the
+   * reader touches the instrument `taken` latches — from then on the head
+   * is `manual` and no timer ever runs again. `taken` is mirrored into a
+   * ref so a pointer and a key arriving in the same tick cannot both think
+   * they were first.
    */
-  const drawn = useMotionValue(0);
-  const [pos, setPos] = useState(0);
-  const [driving, setDriving] = useState(false);
+  const [step, setStep] = useState(0);
+  const [rung, setRung] = useState(false);
+  const [taken, setTaken] = useState(false);
+  const [manual, setManual] = useState(0);
   const [dragging, setDragging] = useState(false);
-  const drivingRef = useRef(false);
+  const takenRef = useRef(false);
+  const posRef = useRef(0);
 
-  const { scrollYProgress } = useScroll({
-    target: section,
-    offset: ["start 70%", "end 60%"],
-  });
-
-  useMotionValueEvent(scrollYProgress, "change", (v) => {
-    if (reduce || drivingRef.current) return;
-    drawn.set(v);
-    setPos(v);
-  });
-
-  // Mount: the section may already be on screen, and `change` only fires on
-  // a change. Reduced motion skips the binding entirely and takes the end
-  // state — a finished curve, resting on the ten-minute measurement.
+  // The scene: one stop, held for as long as its own sentence takes to
+  // read, then the next. Paused off screen, cleared on unmount, and never
+  // scheduled at all once the reader has the marker.
   useEffect(() => {
-    if (reduce) {
-      drawn.set(1);
-      setPos(REST);
-      return;
-    }
-    if (drivingRef.current) return;
-    const v = scrollYProgress.get();
-    drawn.set(v);
-    setPos(v);
-  }, [reduce, drawn, scrollYProgress]);
+    if (taken || reduce || !live) return;
+    const id = window.setTimeout(
+      () => {
+        setStep((s) => {
+          const next = s + 1;
+          if (next > LAST_STOP) {
+            // The curve has been walked end to end. It stays drawn; only
+            // the head goes back to zero, because the next call is the
+            // same call happening to somebody else.
+            setRung(true);
+            return 0;
+          }
+          return next;
+        });
+      },
+      HOLD[step] + (step ? GLIDE : 0),
+    );
+    return () => window.clearTimeout(id);
+  }, [taken, reduce, live, step]);
 
+  const pos = taken
+    ? manual
+    : posOf(STOPS[reduce ? LAST_STOP : step]);
+  // How much of the stroke exists. It follows the head out and then stays.
+  const drawn = taken || reduce || rung ? 1 : posOf(STOPS[step]);
+
+  useEffect(() => {
+    posRef.current = pos;
+  }, [pos]);
+
+  // The one reveal left in the section, and it is a CSS one: the sentence
+  // under the plot settles once, when it arrives, and stays settled.
+  useEffect(() => {
+    if (fateInView) setFateShown(true);
+  }, [fateInView]);
+
+  /** First pointer, key or focus. The instrument is the reader's after it. */
   const take = useCallback(() => {
-    if (drivingRef.current) return;
-    drivingRef.current = true;
-    setDriving(true);
-    // Finish the drawing rather than snapping it: the reader has just
-    // touched the marker, and a curve that completes under their hand reads
-    // as a response to them.
-    animate(drawn, 1, { duration: reduce ? 0 : 0.45, ease: [0.16, 1, 0.3, 1] });
-  }, [drawn, reduce]);
+    if (takenRef.current) return;
+    takenRef.current = true;
+    setTaken(true);
+    setManual(posRef.current);
+  }, []);
 
   const sec = secOf(pos);
-  const odds = qualifyOddsAt(sec);
-  const worse = 1 / odds;
-  const onShelf = sec <= SHELF_END;
+  const { odds, worse, onShelf, valuetext } = readingAt(sec);
 
   const at = (e: ReactPointerEvent) => {
     const r = plot.current?.getBoundingClientRect();
     if (!r?.width) return;
     take();
-    setPos(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)));
+    setManual(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)));
   };
 
   const key = (e: ReactKeyboardEvent) => {
     const big = e.shiftKey || e.key === "PageUp" || e.key === "PageDown";
     const d = big ? 0.08 : 0.02;
-    const step =
+    const delta =
       e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "PageUp"
         ? d
         : e.key === "ArrowLeft" || e.key === "ArrowDown" || e.key === "PageDown"
           ? -d
           : 0;
     const jump = e.key === "Home" ? 0 : e.key === "End" ? 1 : -1;
-    if (!step && jump < 0) return;
+    if (!delta && jump < 0) return;
     e.preventDefault();
     take();
-    setPos(jump >= 0 ? jump : Math.min(1, Math.max(0, pos + step)));
+    setManual(jump >= 0 ? jump : Math.min(1, Math.max(0, pos + delta)));
   };
-
-  const valuetext = `${fmt(sec)} — ${Math.round(odds * 100)} in 100${
-    onShelf ? ", no worse than answering at once" : `, ${worse.toFixed(1)} times worse`
-  }`;
 
   return (
     <section ref={section} id="why" className="scroll-mt-24">
       {/* ---- the masthead ---- */}
       <Frame className="px-6 pt-20 pb-10 md:px-12 md:pt-28 md:pb-12">
         <SectionHeading eyebrow={STATS_INTRO.eyebrow} titleClassName="max-w-[660px]">
-          <MaskRise lines={[STATS_INTRO.title]} />
+          <span className="block animate-in fade-in-0 slide-in-from-bottom-2 duration-500 fill-mode-both">
+            {STATS_INTRO.title}
+          </span>
         </SectionHeading>
 
         <p className="mt-5 max-w-[680px] text-[17px] leading-7 text-pretty text-pp-muted">
@@ -383,6 +432,7 @@ export function Shelf() {
             aria-valuenow={Math.round(sec)}
             aria-valuetext={valuetext}
             onKeyDown={key}
+            onFocus={take}
             onPointerDown={(e) => {
               e.currentTarget.setPointerCapture(e.pointerId);
               setDragging(true);
@@ -504,16 +554,18 @@ export function Shelf() {
 
               <path d={area} fill="url(#ntv-shelf-fill)" />
 
-              {/* The stroke draws against the scroll. The filled area above
-                  is static on purpose: the shape has to be legible before a
-                  single pixel of script runs, and the draw is emphasis, not
-                  the only way to see it.
+              {/* The stroke is drawn to wherever the wait has got to — a
+                  dash offset carried by a CSS transition, so React only ever
+                  changes a number. The filled area above is static on
+                  purpose: the shape has to be legible before a single pixel
+                  of script runs, and the draw is emphasis, not the only way
+                  to see it.
 
                   1.75px, where the dark plate needed 2.6. Black on white
                   carries at a weight that would have disappeared on ink,
                   and the finer line is what lets the cliff read as a curve
                   rather than as a ribbon. */}
-              <motion.path
+              <path
                 d={line}
                 fill="none"
                 stroke="var(--pp-ink)"
@@ -521,7 +573,13 @@ export function Shelf() {
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 vectorEffect="non-scaling-stroke"
-                style={{ pathLength: drawn }}
+                pathLength={1}
+                strokeDasharray={1}
+                className="transition-[stroke-dashoffset] duration-700 ease-out"
+                style={{
+                  strokeDashoffset: 1 - drawn,
+                  transitionDuration: reduce ? "0ms" : undefined,
+                }}
               />
             </svg>
 
@@ -592,13 +650,24 @@ export function Shelf() {
               className="pointer-events-none absolute inset-y-0 w-px bg-pp-ink/30"
               style={{
                 left: `${pos * 100}%`,
-                transitionProperty: dragging || !driving ? "none" : "left",
-                transitionDuration: dragging || !driving || reduce ? "0ms" : "120ms",
+                transitionProperty: dragging || reduce ? "none" : "left",
+                transitionDuration: dragging || reduce
+                  ? "0ms"
+                  : taken
+                    ? "120ms"
+                    : `${GLIDE}ms`,
               }}
             >
               <span
-                className="absolute size-[11px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-pp-ink bg-pp-bg"
-                style={{ top: `${(Y(odds) / VB_H) * 100}%` }}
+                className="absolute size-[11px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-pp-ink bg-pp-bg transition-[top] ease-out"
+                style={{
+                  top: `${(Y(odds) / VB_H) * 100}%`,
+                  transitionDuration: dragging || reduce
+                    ? "0ms"
+                    : taken
+                      ? "120ms"
+                      : `${GLIDE}ms`,
+                }}
               />
               {/* The one inverted chip in the section: black on white is how
                   this system says "the live value", where the cover said it
@@ -653,7 +722,10 @@ export function Shelf() {
         <div className="mt-12 grid max-w-[860px] grid-cols-2 gap-y-8 border-t border-pp-rule pt-8 sm:grid-cols-3 sm:gap-x-10">
           <div className="sm:border-r sm:border-pp-rule sm:pr-10">
             <p className={LABEL}>Answered after</p>
-            <p className="mono mt-2 text-[28px] leading-none tabular-nums tracking-[-0.02em] text-pp-ink md:text-[32px]">
+            <p
+              key={taken ? "live" : `t${step}`}
+              className="mono mt-2 text-[28px] leading-none tabular-nums tracking-[-0.02em] text-pp-ink animate-in fade-in-0 slide-in-from-bottom-1 duration-300 fill-mode-both md:text-[32px]"
+            >
               {fmt(sec)}
             </p>
           </div>
@@ -661,8 +733,10 @@ export function Shelf() {
           <div className="sm:border-r sm:border-pp-rule sm:pr-10">
             <p className={LABEL}>Odds of qualifying</p>
             <p
+              key={taken ? "live" : `o${step}`}
               className={cn(
-                "mt-2 text-[28px] leading-none font-medium tabular-nums tracking-[-0.03em] transition-colors duration-500 md:text-[32px]",
+                "mt-2 text-[28px] leading-none font-medium tabular-nums tracking-[-0.03em] md:text-[32px]",
+                "animate-in fade-in-0 slide-in-from-bottom-1 duration-300 fill-mode-both",
                 onShelf ? "text-pp-accent" : "text-pp-ink",
               )}
             >
@@ -673,7 +747,10 @@ export function Shelf() {
 
           <div className="col-span-2 sm:col-span-1">
             <p className={LABEL}>Against answering at once</p>
-            <p className="mt-2 text-[28px] leading-none font-medium tabular-nums tracking-[-0.03em] text-pp-ink md:text-[32px]">
+            <p
+              key={taken ? "live" : `w${step}`}
+              className="mt-2 text-[28px] leading-none font-medium tabular-nums tracking-[-0.03em] text-pp-ink animate-in fade-in-0 slide-in-from-bottom-1 duration-300 fill-mode-both md:text-[32px]"
+            >
               {onShelf ? (
                 <span className="text-pp-accent">No difference</span>
               ) : (
@@ -687,7 +764,10 @@ export function Shelf() {
         </div>
 
         {/* the sentence, by where the head sits */}
-        <p className="mt-8 max-w-[760px] text-[17px] leading-7 text-pp-muted">
+        <p
+          key={onShelf ? "window" : sec <= 600 ? "falling" : "gone"}
+          className="mt-8 max-w-[760px] text-[17px] leading-7 text-pp-muted animate-in fade-in-0 slide-in-from-bottom-1 duration-500 fill-mode-both"
+        >
           {onShelf ? (
             <>
               Inside the window a second costs nothing, and{" "}
@@ -721,7 +801,13 @@ export function Shelf() {
       <Rule />
 
       <Frame className="px-6 py-12 md:px-12 md:py-16">
-        <Reveal>
+        <div
+          ref={fate}
+          className={cn(
+            "transition duration-500 ease-out",
+            fateShown || reduce ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0",
+          )}
+        >
           <p className={LABEL}>Before any of that — whether the call is answered at all</p>
 
           {/*
@@ -746,7 +832,7 @@ export function Shelf() {
             that ring out never reach the curve at all.{" "}
             <span className="text-pp-ink">Those callers are not late. They are gone.</span>
           </p>
-        </Reveal>
+        </div>
 
         {/* Provenance on one line, and then out — to the businesses this
             actually happens to. A bibliography is where a reader stops; an

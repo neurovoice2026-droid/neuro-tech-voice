@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { ArrowRight, ChevronRight, Pause, RotateCcw } from "lucide-react";
 import {
   VOICE_DEMO as C,
@@ -10,20 +9,42 @@ import {
 } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { Frame, Orb, ORB_MESHES } from "./product/primitives";
-import { EASE } from "./reveal";
+import { holdFor, useInView, usePrefersReducedMotion } from "./product/timing";
 
 /**
- * A real call, reconstructed and replayed. Silently, and it says so.
+ * THE CALL ANSWERS ITSELF.
  *
- * There is no recording in this repository. The file used to call itself
- * "the pre-recorded call, played back", and every label it printed —
- * "Pre-recorded demo", "Press play", "Playing…" — sold a reader on audio
- * that has never existed. What actually runs is the transcript, revealed at
- * the pace the conversation took. That is a genuinely useful thing to show
- * and a dishonest thing to dress as a recording, so the transport says what
- * it does and ./demo states the concession in the sub above it. `audioSrc`
- * is the seam left open for the day there is something to hear; nothing
- * here has to move to take it.
+ * The scene is a phone call taking place. Scroll the section into view and
+ * the agent picks up on the first beat, the caller asks for an appointment,
+ * the agent reads a calendar out loud, the caller chooses, and the agent
+ * writes the booking down — twenty-one seconds, start to finish, then a
+ * breath and the next call. Beside it the operations log fills in as it
+ * happens: answered, calendar read, appointment written, confirmation sent,
+ * each stamped at the second of the call that earned it.
+ *
+ * That is the argument, and it is why the scene plays rather than arrives.
+ * A section that animates because the reader scrolled is decoration: the
+ * page moved, nothing was demonstrated. This section moves because the
+ * product is working. Nobody has to press anything to find out what Neuro
+ * Tech Voice does — it is doing it, and the log is the receipt.
+ *
+ * **The clock is the house clock.** `holdFor(line)` gives every turn its
+ * length at a reading pace and the words divide that length between them,
+ * so a long line takes longer and no word outruns the eye. `useInView`
+ * gates the whole loop, so a backgrounded tab runs nothing, and the single
+ * timer is cleared on every change and on unmount.
+ *
+ * **The movement is CSS.** React only advances one integer, `head`; the
+ * `animate-in` reveals and the `transition-*` utilities do the animating,
+ * at the house's own 300 and 500ms. There is no framer-motion in this file
+ * and no hand-rolled curve.
+ *
+ * **The reader can take it.** The first pointer, key or focus event inside
+ * the stage hands the transport over for good: the call in progress plays
+ * out, but nothing auto-starts again and the pill below the orb is the only
+ * thing that moves the scene from then on. `usePrefersReducedMotion` readers
+ * get the finished call — every stamp struck, the bar full — the instant it
+ * mounts, and no timer ever starts.
  *
  * **THE ORB IS THE LIGHT SYSTEM'S ORB.** What used to sit here was a WebGL
  * plasma sphere with a neural core, a 2D layer of particles, synapses,
@@ -33,9 +54,9 @@ import { EASE } from "./reveal";
  * does not exist on this section any more. So it is gone, and the page's
  * own `<Orb mesh={ORB_MESHES.violet}>` takes its place — pure CSS, a mesh
  * of the product's violet drifting under a film of grain, breathing on
- * `data-speaking` while a line is being spoken. Three hundred lines of
- * shader for a sphere nobody can hear was never the argument; the argument
- * is the log beside it.
+ * `data-speaking` while a line is being spoken and resting in the silence
+ * between two turns. Three hundred lines of shader for a sphere nobody can
+ * hear was never the argument; the argument is the log beside it.
  *
  * **Two speakers, told apart three ways and never by one.** The label above
  * the line carries the colour (violet for the agent — the product acting;
@@ -46,10 +67,10 @@ import { EASE } from "./reveal";
  * law the light pages set every transcript by, and it is why the orb does
  * not need to change hue to mean something.
  *
- * Motion is scroll- and clock-bound, not decorative. Words still arrive one
- * at a time out of a short blur, the stamps still land at the instant the
- * script earns them, and the bar still tracks words spoken. What is gone is
- * everything that only glowed.
+ * There is no recording in this repository, and nothing here pretends
+ * otherwise: what plays is the transcript, at the pace the conversation
+ * took. `audioSrc` is the seam left open for the day there is something to
+ * hear; nothing in the scene has to move to take it.
  */
 
 /* ------------------------------------------------------------------ *
@@ -72,8 +93,75 @@ import { EASE } from "./reveal";
 const CUT = [1, 4, 5, 6] as const;
 const CALL: DemoTurn[] = CUT.map((i) => SCRIPT[i]);
 
+/** The beat before the first word: the phone being picked up. */
+const ANSWER_MS = 700;
+/** The silence between one speaker stopping and the next starting. */
 const GAP_MS = 700;
-const TOTAL_WORDS = CALL.reduce((s, l) => s + l.t.split(" ").length, 0);
+/** How long the finished call stands before the agent answers the next one. */
+const REPLAY_MS = 3600;
+
+/* ------------------------------------------------------------------ *
+ * The score
+ * ------------------------------------------------------------------ */
+
+/**
+ * The call, written out as beats, once, at module load.
+ *
+ * A beat is one tick of the scene: a word arriving, or the silence at the
+ * end of a turn. The component holds a single integer — which beat we are
+ * on — and everything on screen is read off this table. That is what makes
+ * the scene cheap enough to leave running: one `setTimeout` at a time, one
+ * state update per beat, and every derived value a lookup.
+ *
+ * The pacing is the house's, not a number invented here. `holdFor(line)`
+ * says how long a line of that length should sit before the next one, at a
+ * comfortable reading speed with a 1.4s floor; the words of the line divide
+ * that time between them. A long sentence takes longer to say, a short one
+ * lands and lingers, and the whole call adds up to something a caller would
+ * recognise as a call.
+ */
+type Beat = {
+  /** Which turn of the cut is on screen. */
+  line: number;
+  /** How many of that turn's words have been said. */
+  shown: number;
+  /** Words said in the whole call so far — what the bar tracks. */
+  spoken: number;
+  /** Whether a voice is mid-line right now. The orb breathes on this. */
+  speaks: boolean;
+  /** How long this beat holds before the next one. */
+  wait: number;
+};
+
+const SCORE = (() => {
+  const beats: Beat[] = [];
+  /** ms from the start of the call to the first word of each turn. */
+  const lineAt: number[] = [];
+  let at = ANSWER_MS;
+  let spoken = 0;
+
+  CALL.forEach((turn, line) => {
+    const words = turn.t.split(" ");
+    const per = holdFor(turn.t) / words.length;
+    lineAt[line] = at;
+
+    words.forEach((_, i) => {
+      spoken += 1;
+      beats.push({ line, shown: i + 1, spoken, speaks: true, wait: per });
+      at += per;
+    });
+
+    // The turn ends: the last word stays up, the orb rests, nobody speaks.
+    beats.push({ line, shown: words.length, spoken, speaks: false, wait: GAP_MS });
+    at += GAP_MS;
+  });
+
+  return { beats, lineAt, words: spoken, runMs: at };
+})();
+
+const BEATS = SCORE.beats;
+/** The last head: one past the final beat, where the call reads complete. */
+const END = BEATS.length + 1;
 
 /**
  * The call log — what the agent DID, stamped as it does it.
@@ -81,14 +169,13 @@ const TOTAL_WORDS = CALL.reduce((s, l) => s + l.t.split(" ").length, 0);
  * This is the half of the demo that is not a transcript, and it is the half
  * that sells. Anyone can print a conversation; the claim worth making is
  * that four things happened to a calendar while it was going on. So the
- * column beside the orb is an operations log, and each line stays blank
- * until the moment in the script that earns it.
+ * column beside the orb is an operations log, and each row is unstamped
+ * until the moment in the call that earns it.
  *
  * `at` is an index into CUT, or one of the two ends of the run. The stamps
- * are the reconstruction's own clock — elapsed time since the replay
- * started, paused when it is paused — and not a latency figure we measured
- * somewhere else and printed here. The section already says what this is;
- * the log does not get to quietly claim more.
+ * are the call's own clock, read off the score above — not a latency figure
+ * measured somewhere else and printed here. The section already says what
+ * this is; the log does not get to quietly claim more.
  */
 type LogRow = { label: string; detail: string; at: number | "start" | "end" };
 
@@ -98,6 +185,21 @@ const LOG: LogRow[] = [
   { label: "Appointment written", detail: "Wednesday, 3:00 PM.", at: 3 },
   { label: "Confirmation sent", detail: "Text to the caller's number.", at: "end" },
 ];
+
+/**
+ * When each row fires, in beats and in seconds.
+ *
+ * Both are constants, because the call is the same call every time it runs.
+ * The animation is not the number changing — it is the number LANDING, at
+ * the second of the conversation that produced it, which is the one fact a
+ * static list cannot state.
+ */
+const MARKS = LOG.map((row) => {
+  if (row.at === "start") return { head: 1, ms: 0 };
+  if (row.at === "end") return { head: END, ms: SCORE.runMs };
+  const first = BEATS.findIndex((b) => b.line === row.at);
+  return { head: first + 1, ms: SCORE.lineAt[row.at as number] };
+});
 
 /**
  * The stage's own labels.
@@ -122,26 +224,7 @@ const RUN = {
 
 const DISCLOSURE = "Read the whole call";
 
-/**
- * Longer words linger, short ones flow — clamped so the rhythm holds.
- *
- * The clamp is deliberately narrow. Each word's reveal runs far longer than
- * the gap to the next one, so several are always mid-flight; widening the
- * spread makes that overlap lurch between two and six words and the stream
- * reads as ticking rather than flowing. The average is unchanged, so the
- * call still takes the same time end to end.
- */
-function wordDelay(w: string) {
-  return Math.max(200, Math.min(360, 235 * 0.6 + w.replace(/[^a-zA-Z0-9]/g, "").length * 30));
-}
-
-function wordsBefore(line: number, word: number) {
-  let c = 0;
-  for (let i = 0; i < line; i++) c += CALL[i].t.split(" ").length;
-  return c + word;
-}
-
-/** m:ss, from the replay's own clock. */
+/** m:ss, from the call's own clock. */
 function stampOf(ms: number) {
   const s = Math.round(ms / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -150,151 +233,120 @@ function stampOf(ms: number) {
 type Phase = "idle" | "playing" | "paused" | "done";
 
 /**
- * The call, replayed.
+ * The call, playing.
  *
  * `audioSrc` is the seam this was rebuilt to leave open. Nothing about the
  * layout assumes silence — the orb breathes on a boolean, the transport is
- * a transport, and the clock the log stamps against is one number. When a
- * cleared recording exists, pass it: the element below is driven from the
- * same two places the loop is (start and pause), and the only other change
- * the page needs is the sentence in ./demo that currently says there is no
- * audio.
+ * a transport, and the clock the log stamps against is a table of numbers.
+ * When a cleared recording exists, pass it: the element below is driven
+ * from the one state the scene has, and the only other change the page
+ * needs is the sentence in ./demo that currently says there is no audio.
  */
 export function VoiceDemo({ audioSrc }: { audioSrc?: string } = {}) {
+  const stageRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const reduce = useReducedMotion();
 
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [line, setLine] = useState(-1);
-  const [revealed, setRevealed] = useState(0);
-  /** Words restored on resume — they reappear without re-animating. */
-  const [restored, setRestored] = useState(0);
-  const [spoken, setSpoken] = useState(0);
-  /**
-   * Whether a line is being spoken right now — the orb's breathing, and
-   * nothing else. Explicit state rather than `line >= 0`, because the run
-   * holds the last line on screen through the pause between turns and the
-   * orb must rest there, exactly where the old engine was told `speak(null)`.
-   */
-  const [speaking, setSpeaking] = useState(false);
-  /** Elapsed ms at which each log row fired; -1 until it does. */
-  const [stamps, setStamps] = useState<number[]>(() => LOG.map(() => -1));
+  const inView = useInView(stageRef, "-10% 0px");
+  const reduce = usePrefersReducedMotion();
 
-  // The exact resume point, and the flag that unwinds the async loop.
-  const pos = useRef({ line: 0, word: 0 });
-  const cancelled = useRef(false);
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  /** 0 = the phone ringing, 1..BEATS.length = a beat, END = call complete. */
+  const [head, setHead] = useState(0);
+  const [paused, setPaused] = useState(false);
+  /** The reader has touched the section, so the scene stops driving itself. */
+  const [taken, setTaken] = useState(false);
 
   /*
-    The replay's clock. Accumulated rather than read off one start time,
-    because the reader can pause: a wall-clock difference would keep
-    counting through the pause and stamp the booking a minute late for
-    someone who stopped to read a line twice.
+    Reduced motion: the finished call, immediately and permanently. Every
+    stamp struck, the bar full, the outcome on screen — the most informative
+    state there is, and not one timer to get to it. Derived at render rather
+    than written into state, so there is no effect, no cascading render and
+    no frame in which the scene is blank.
   */
-  const clock = useRef({ accum: 0, since: 0 });
-  const elapsed = () =>
-    clock.current.accum +
-    (clock.current.since ? performance.now() - clock.current.since : 0);
+  const at = reduce ? END : head;
 
-  const fire = useCallback((i: number) => {
-    const at = elapsed();
-    setStamps((s) => (s[i] >= 0 ? s : s.map((v, k) => (k === i ? at : v))));
-  }, []);
+  /** The clock may tick. */
+  const live = inView && !paused && !reduce;
+  /** A call is actually in progress. */
+  const running = live && at < END;
 
-  useEffect(
-    () => () => {
-      cancelled.current = true;
-      timers.current.forEach(clearTimeout);
-    },
-    [],
-  );
+  /*
+    The whole engine. One timer, holding the current beat for as long as the
+    score says, then advancing by one. It does not run off screen, it does
+    not run when the reader has paused it, it does not run under reduced
+    motion, and it does not restart the call once the reader has taken the
+    transport. React strict mode, a resize, a tab switch — every path out of
+    here clears the timeout.
+  */
+  useEffect(() => {
+    if (!live) return;
+    if (head >= END && taken) return;
 
-  const wait = (ms: number) =>
-    new Promise<void>((res) => {
-      timers.current.push(setTimeout(res, ms));
-    });
+    const wait =
+      head === 0 ? ANSWER_MS
+      : head < END ? BEATS[head - 1].wait
+      : REPLAY_MS;
 
-  const play = useCallback(async () => {
-    cancelled.current = false;
-    setPhase("playing");
+    const id = window.setTimeout(
+      () => setHead((h) => (h >= END ? 0 : h + 1)),
+      wait,
+    );
+    return () => window.clearTimeout(id);
+  }, [live, head, taken]);
 
-    // Start over only if we finished, or were never mid-conversation.
-    const fresh = pos.current.line === 0 && pos.current.word === 0;
-    if (fresh) {
-      setSpoken(0);
-      setStamps(LOG.map(() => -1));
-      clock.current.accum = 0;
-    }
-    clock.current.since = performance.now();
-    if (audioRef.current) void audioRef.current.play().catch(() => {});
+  // The audio seam, driven from the same one state.
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (running) void el.play().catch(() => {});
+    else el.pause();
+  }, [running]);
 
-    LOG.forEach((row, i) => {
-      if (row.at === "start") fire(i);
-    });
+  useEffect(() => {
+    if (head === 0 && audioRef.current) audioRef.current.currentTime = 0;
+  }, [head]);
 
-    let done = wordsBefore(pos.current.line, pos.current.word);
-    setSpoken(done);
+  /*
+    The handover. A deliberate pointer, key or focus inside the stage and the
+    scene never starts itself again — the call already running plays out, but
+    the pill below the orb is the reader's from then on, permanently. Hover
+    is not an interaction: passing a mouse over a section should not stop it
+    telling you what the product does.
+  */
+  const take = () => setTaken(true);
 
-    for (let li = pos.current.line; li < CALL.length; li++) {
-      if (cancelled.current) return;
-      const turn = CALL[li];
-      const words = turn.t.split(" ");
-      const from = li === pos.current.line ? pos.current.word : 0;
+  const beat = at > 0 && at < END ? BEATS[at - 1] : null;
+  const line = beat ? beat.line : -1;
+  const shown = beat ? beat.shown : 0;
+  // The orb breathes only while a voice is actually mid-line. Paused, off
+  // screen or complete, it rests — a sphere pulsing at a stopped call is
+  // the kind of movement that means nothing.
+  const speaking = live && beat !== null && beat.speaks;
+  const progress = at >= END ? 1 : beat ? beat.spoken / SCORE.words : 0;
 
-      setSpeaking(true);
-      setLine(li);
-      // Reduced motion gets the sequence without the travel: marking every
-      // word as restored is what switches the reveal to `transition-none`,
-      // so the line still arrives word by word and nothing slides or blurs.
-      setRestored(reduce ? words.length : from);
-      setRevealed(from);
-
-      LOG.forEach((row, i) => {
-        if (row.at === li) fire(i);
-      });
-
-      for (let i = from; i < words.length; i++) {
-        if (cancelled.current) return;
-        setRevealed(i + 1);
-        done++;
-        setSpoken(done);
-        pos.current = { line: li, word: i + 1 };
-        await wait(wordDelay(words[i]));
-      }
-      if (cancelled.current) return;
-
-      pos.current = { line: li + 1, word: 0 };
-      setSpeaking(false);
-      await wait(GAP_MS);
-    }
-
-    if (cancelled.current) return;
-    LOG.forEach((row, i) => {
-      if (row.at === "end") fire(i);
-    });
-    clock.current.accum = elapsed();
-    clock.current.since = 0;
-    setSpeaking(false);
-    setLine(-1);
-    setSpoken(TOTAL_WORDS);
-    pos.current = { line: 0, word: 0 };
-    setPhase("done");
-  }, [fire, reduce]);
+  /*
+    "idle" only when the phone is genuinely not ringing — head 0 AND stopped.
+    The 700ms of ring at the top of every loop is part of the call, so the
+    transport reads "Pause" through it rather than flickering back to
+    "Run the call" once a minute.
+  */
+  const phase: Phase =
+    at >= END ? "done"
+    : at === 0 && !running ? "idle"
+    : paused ? "paused"
+    : "playing";
 
   const toggle = () => {
-    if (phase === "playing") {
-      // Freeze everything; `pos` already holds the exact word to resume on.
-      cancelled.current = true;
-      timers.current.forEach(clearTimeout);
-      timers.current = [];
-      clock.current.accum = elapsed();
-      clock.current.since = 0;
-      audioRef.current?.pause();
-      setSpeaking(false);
-      setPhase("paused");
-    } else {
-      void play();
+    take();
+    // Under reduced motion the call is already complete and nothing is
+    // moving, so there is nothing for the transport to do. It stays on the
+    // page rather than vanishing under a media query.
+    if (reduce) return;
+    if (phase === "done") {
+      setHead(0);
+      setPaused(false);
+      return;
     }
+    setPaused(phase === "playing");
   };
 
   const turn = line >= 0 ? CALL[line] : null;
@@ -310,9 +362,18 @@ export function VoiceDemo({ audioSrc }: { audioSrc?: string } = {}) {
   const RunIcon =
     phase === "playing" ? Pause : phase === "done" ? RotateCcw : ArrowRight;
 
+  /** The row the call is working on right now — lit, but not yet stamped. */
+  const working = running ? MARKS.findIndex((m) => at < m.head) : -1;
+
   return (
     <Frame className="mt-12 md:mt-16">
-      <div className="grid grid-cols-1 items-start gap-10 md:grid-cols-[minmax(0,1fr)_minmax(250px,320px)] md:gap-12">
+      <div
+        ref={stageRef}
+        onPointerDown={take}
+        onKeyDown={take}
+        onFocusCapture={take}
+        className="grid grid-cols-1 items-start gap-10 md:grid-cols-[minmax(0,1fr)_minmax(250px,320px)] md:gap-12"
+      >
         {/* ---------- the stage: the orb, and the line it is on ---------- */}
         {/*
           The one soft surface in the section. A card at --pp-card holds the
@@ -353,7 +414,12 @@ export function VoiceDemo({ audioSrc }: { audioSrc?: string } = {}) {
               )}
             >
               {phase === "done" ? (
-                <span className="inline-flex items-center gap-2.5 text-pp-accent italic">
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-2.5 text-pp-accent italic",
+                    !reduce && "animate-in fade-in-0 duration-500 fill-mode-both",
+                  )}
+                >
                   <span
                     aria-hidden
                     className="inline-block size-2.5 shrink-0 rounded-full bg-pp-accent"
@@ -363,35 +429,40 @@ export function VoiceDemo({ audioSrc }: { audioSrc?: string } = {}) {
               ) : (
                 words.map((w, i) => (
                   /*
-                    No scale. It was the one transform the eye could catch:
-                    type growing back to size wobbles its own sidebearings, and
-                    on a word that is already translating and defocusing it is
-                    the part that reads as a pop.
+                    A word is said, and it arrives: out of a short blur, up
+                    off the baseline, over the house's 500ms. The key carries
+                    the line, so every turn mounts a fresh set of spans and
+                    the first word of a line animates like all the others;
+                    the unsaid ones hold their space at zero opacity so the
+                    line never reflows underneath the one being spoken.
 
-                    And a gentler curve than the site's EASE. Expo-out is built
-                    for a one-shot arrival — it spends its motion in the first
-                    quarter and coasts, which is right for a section sliding
-                    into view and wrong here, where the coast is invisible and
-                    every word lands on the same hard tick. This spreads the
-                    travel across the whole 820ms, so each word is still
-                    settling as the next three begin and the line resolves as
-                    one continuous movement.
+                    No transform on the type itself beyond the lift — scale
+                    was the one thing the eye could catch, because type
+                    growing back to size wobbles its own sidebearings, and on
+                    a word already translating and defocusing that is the
+                    part that reads as a pop.
                   */
-                  <span
-                    key={`${line}-${i}`}
-                    className={cn(
-                      "inline-block will-change-[opacity,transform,filter]",
-                      i < revealed
-                        ? "translate-y-0 opacity-100 blur-0"
-                        : "translate-y-[7px] opacity-0 blur-[5px]",
-                      i < restored
-                        ? "transition-none"
-                        : "transition-[opacity,transform,filter] duration-[820ms] ease-[cubic-bezier(.2,.7,.3,1)]",
-                    )}
-                  >
-                    {w}
+                  /*
+                    The space is a sibling of the word, never a child of it.
+                    Inside the `inline-block` it disappeared: CSS trims
+                    whitespace at the edges of an inline-block box, so every
+                    line rendered as one run-on string — "Theboiler'smaking".
+                    Outside, between two inline-blocks, it is ordinary inline
+                    whitespace and sets exactly as the font intends.
+                  */
+                  <Fragment key={`${line}-${i}`}>
+                    <span
+                      className={cn(
+                        "inline-block",
+                        i < shown
+                          ? "animate-in fade-in-0 blur-in-4 slide-in-from-bottom-1 duration-500 fill-mode-both"
+                          : "opacity-0",
+                      )}
+                    >
+                      {w}
+                    </span>
                     {i < words.length - 1 ? " " : ""}
-                  </span>
+                  </Fragment>
                 ))
               )}
             </p>
@@ -417,9 +488,15 @@ export function VoiceDemo({ audioSrc }: { audioSrc?: string } = {}) {
             aria-hidden
             className="mt-8 h-[2px] w-full max-w-[420px] overflow-hidden rounded-full bg-pp-ink/10"
           >
+            {/*
+              Words spoken, not seconds elapsed, and the only place a length
+              is hard-coded: 300ms of linear width, which is shorter than the
+              beat that moves it, so the bar is always caught up and never
+              sliding on its own.
+            */}
             <div
               className="h-full bg-pp-ink transition-[width] duration-300 ease-linear"
-              style={{ width: `${((spoken / TOTAL_WORDS) * 100).toFixed(1)}%` }}
+              style={{ width: `${(progress * 100).toFixed(1)}%` }}
             />
           </div>
         </div>
@@ -434,16 +511,16 @@ export function VoiceDemo({ audioSrc }: { audioSrc?: string } = {}) {
           </div>
 
           {/*
-            Every row is legible before the call runs — the reader who never
-            presses anything still learns what the agent does. The only thing
-            the replay adds is the stamp, and that is the whole animation:
-            the time appears at the instant the script earns it, which is the
-            one fact a static list cannot state.
+            Every row is legible before the call reaches it — the reader who
+            arrives mid-call still learns what the agent does. What the scene
+            adds is the moment: the node fills and the stamp lands at the
+            second of the conversation that produced it, and the row the
+            agent is working on right now carries an open accent ring until
+            it does.
           */}
           <ol className="mt-4">
             {LOG.map((row, i) => {
-              const at = stamps[i];
-              const struck = at >= 0;
+              const struck = at >= MARKS[i].head;
               return (
                 <li
                   key={row.label}
@@ -456,25 +533,31 @@ export function VoiceDemo({ audioSrc }: { audioSrc?: string } = {}) {
                     <span
                       aria-hidden
                       className={cn(
-                        "size-[9px] shrink-0 rounded-full border-[1.6px] transition-[background-color,border-color] duration-[420ms]",
-                        struck
-                          ? "border-pp-accent bg-pp-accent"
-                          : "border-pp-muted bg-transparent",
+                        "size-[9px] shrink-0 rounded-full border-[1.6px] transition-[background-color,border-color] duration-300",
+                        struck ? "border-pp-accent bg-pp-accent"
+                        : working === i ? "border-pp-accent bg-transparent"
+                        : "border-pp-muted bg-transparent",
                       )}
                     />
-                    <span className="text-[15px] leading-[22px] font-medium text-pp-ink">
+                    <span
+                      className={cn(
+                        "text-[15px] leading-[22px] font-medium transition-colors duration-300",
+                        struck ? "text-pp-ink" : "text-pp-ink/70",
+                      )}
+                    >
                       {row.label}
                     </span>
                     <span className="ml-auto text-[12px] leading-4 tabular-nums tracking-[0.1em]">
                       {struck ? (
-                        <motion.span
-                          initial={reduce ? false : { opacity: 0, y: "-0.35em" }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.45, ease: EASE }}
-                          className="block text-pp-accent"
+                        <span
+                          className={cn(
+                            "block text-pp-accent",
+                            !reduce &&
+                              "animate-in fade-in-0 slide-in-from-top-1 duration-300 fill-mode-both",
+                          )}
                         >
-                          {stampOf(at)}
-                        </motion.span>
+                          {stampOf(MARKS[i].ms)}
+                        </span>
                       ) : (
                         <span className="block text-pp-muted">—:——</span>
                       )}

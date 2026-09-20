@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import {
   PRICING_INTRO,
@@ -13,7 +12,7 @@ import {
 } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { Frame, PillLink, SectionHeading } from "./product/primitives";
-import { CountUp, EASE, Reveal } from "./reveal";
+import { holdFor, useInView, usePrefersReducedMotion } from "./product/timing";
 
 /**
  * Plans — the price list, read against the rate everyone else charges.
@@ -55,10 +54,27 @@ import { CountUp, EASE, Reveal } from "./reveal";
  *    badge, the ticks and our own bar carry #551a89; everything else is
  *    ink and muted. Colouring every number violet would leave the one
  *    number that is an argument looking like decoration.
- *  · **Motion draws and counts.** The matched-rung bars grow from their
- *    left edge and the minute counts run up to meet them, which is the
- *    comparison performing itself. Nothing pulses and nothing glows —
- *    on white that reads as dirt rather than as attention.
+ *  · **The ladder climbs itself.** The section does not perform an
+ *    entrance; it performs the argument. A spotlight walks the five
+ *    rungs on the house clock — Starter, Growth, Pro, Business, Scale —
+ *    and as it lands on each one the rung's rail draws, its column takes
+ *    the card grey, its "% under" badge goes solid violet, and what that
+ *    rung adds over the one below it ticks in line by line. Watch it for
+ *    one pass and you have read the only thing this price list claims:
+ *    the per-minute rate falls as the plan grows, and every rung on the
+ *    way sits under the flat rate everyone else charges. The two
+ *    matched-rung bars draw once beside it, to scale, as the proof that
+ *    the percentages are not rhetoric. Nothing pulses and nothing glows
+ *    — on white that reads as dirt rather than as attention.
+ *
+ *    The clock is `product/timing`: each rung is held for `holdFor` of
+ *    the text it just put on screen, so the walk runs at reading pace
+ *    rather than at a number somebody liked. `useInView` stops it dead
+ *    when the section is off screen, and the first pointer, focus or key
+ *    the reader spends inside the panel hands them the spotlight for
+ *    good — hovering or tabbing a column lights it, and the walk never
+ *    starts again. `usePrefersReducedMotion` skips straight to the
+ *    recommended rung, fully drawn, with no timer running at all.
  *
  * Lengths are rem/px here. The cover's fluid `em` base does not exist on
  * this stock, and an `em` ladder inside a section that also sets type
@@ -107,14 +123,47 @@ const underRival = (t: Tier, annual: boolean) =>
       100,
   );
 
-function Unlock({ children }: { children: React.ReactNode }) {
+/**
+ * One line of what a rung adds. When the spotlight lands on the column
+ * these tick in one after another, which is the rung listing itself
+ * rather than sitting there already listed.
+ */
+function Unlock({
+  children,
+  lit,
+  step,
+  still,
+}: {
+  children: React.ReactNode;
+  lit: boolean;
+  step: number;
+  still: boolean;
+}) {
   return (
-    <li className="flex items-start gap-2.5 text-[13px] leading-5 text-pp-muted">
+    <li
+      className={cn(
+        "flex items-start gap-2.5 text-[13px] leading-5 text-pp-muted",
+        lit &&
+          !still &&
+          "animate-in fade-in-0 slide-in-from-bottom-1 duration-500 fill-mode-both",
+      )}
+      style={still ? undefined : { animationDelay: `${step * 90}ms` }}
+    >
       <Check
-        className="mt-[3px] size-3.5 shrink-0 text-pp-accent"
+        className={cn(
+          "mt-[3px] size-3.5 shrink-0 transition-colors duration-300",
+          lit ? "text-pp-accent" : "text-pp-accent/45",
+        )}
         strokeWidth={2}
       />
-      <span className="text-pretty">{children}</span>
+      <span
+        className={cn(
+          "text-pretty transition-colors duration-300",
+          lit && "text-pp-ink",
+        )}
+      >
+        {children}
+      </span>
     </li>
   );
 }
@@ -122,37 +171,55 @@ function Unlock({ children }: { children: React.ReactNode }) {
 /**
  * One rung, one column.
  *
- * The featured rung is lifted by the card grey and a violet rail across
- * the top of the column rather than by a badge floating over it — the
- * emphasis belongs to the whole column, since what is being recommended
- * is the plan and not its price.
+ * The featured rung keeps the card grey it always had; the spotlight is
+ * a second, louder state on top of it — a violet rail drawn across the
+ * top of the column rather than a badge floating over it, since what is
+ * being pointed at is the whole plan and not its price.
  */
 function PlanColumn({
   tier,
   annual,
   first,
+  lit,
+  still,
+  onTake,
 }: {
   tier: Tier;
   annual: boolean;
   first: boolean;
+  lit: boolean;
+  still: boolean;
+  onTake: () => void;
 }) {
   const featured = !!tier.featured;
   const fee = feeFor(tier, annual);
 
   return (
     <div
+      onPointerEnter={onTake}
+      onFocusCapture={onTake}
       className={cn(
-        "relative flex flex-col px-5 py-7",
+        "relative flex flex-col px-5 py-7 transition-colors duration-500",
         !first && "border-l border-pp-rule",
-        featured && "bg-pp-card",
+        lit ? "bg-pp-card" : featured ? "bg-pp-card/55" : "bg-transparent",
       )}
     >
-      {featured ? (
-        <span aria-hidden className="absolute inset-x-0 top-0 h-[3px] bg-pp-accent" />
-      ) : null}
+      <span
+        aria-hidden
+        className={cn(
+          "absolute inset-x-0 top-0 h-[3px] origin-left bg-pp-accent transition-transform duration-500",
+          lit ? "scale-x-100" : "scale-x-0",
+          still && "transition-none",
+        )}
+      />
 
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] leading-4 font-medium tracking-[0.14em] text-pp-muted uppercase">
+        <span
+          className={cn(
+            "text-[11px] leading-4 font-medium tracking-[0.14em] uppercase transition-colors duration-300",
+            lit ? "text-pp-ink" : "text-pp-muted",
+          )}
+        >
           {tier.name}
         </span>
         {featured ? (
@@ -194,10 +261,22 @@ function PlanColumn({
       </div>
 
       <div className="mt-5 flex flex-col items-start gap-2">
-        <div className="text-[14px] leading-5 font-medium tabular-nums">
+        {/* The rate is the falling number, so it is the one the spotlight
+            promotes: muted while the walk is elsewhere, ink when it lands. */}
+        <div
+          className={cn(
+            "text-[14px] leading-5 font-medium tabular-nums transition-colors duration-300",
+            lit ? "text-pp-ink" : "text-pp-ink/70",
+          )}
+        >
           {cents(effectiveRate(tier, annual))} a minute
         </div>
-        <div className="inline-flex items-center rounded-full bg-pp-accent/10 px-2.5 py-1 text-[11px] leading-4 font-medium tabular-nums text-pp-accent">
+        <div
+          className={cn(
+            "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] leading-4 font-medium tabular-nums transition-colors duration-300",
+            lit ? "bg-pp-accent text-white" : "bg-pp-accent/10 text-pp-accent",
+          )}
+        >
           {underRival(tier, annual)}% under {PRICING_RIVAL.name}
         </div>
         <div className="text-[11px] leading-4 tracking-[0.06em] tabular-nums text-pp-muted uppercase">
@@ -218,9 +297,20 @@ function PlanColumn({
           carried-forward line belongs on every rung except the first —
           there is nothing below Starter to carry. */}
       <ul className="mt-6 flex flex-col gap-2.5">
-        {!first ? <Unlock>Everything below, plus</Unlock> : null}
-        {tier.unlocks.map((u) => (
-          <Unlock key={u}>{u}</Unlock>
+        {!first ? (
+          <Unlock key={`carry-${lit}`} lit={lit} step={0} still={still}>
+            Everything below, plus
+          </Unlock>
+        ) : null}
+        {tier.unlocks.map((u, i) => (
+          <Unlock
+            key={`${u}-${lit}`}
+            lit={lit}
+            step={first ? i : i + 1}
+            still={still}
+          >
+            {u}
+          </Unlock>
         ))}
       </ul>
     </div>
@@ -234,20 +324,26 @@ function PlanColumn({
  * prices. Same money, two minute counts, drawn to scale — the only claim
  * on the page that a reader can check without trusting a percentage.
  *
- * The bars are drawn rather than stated: each grows from its left edge as
- * the card arrives, and the counts run up beside them. Two bars settling
- * at different lengths is the whole argument, performed once.
+ * The bars are drawn rather than stated: theirs runs out first, ours keeps
+ * going past it, and the gap left over is the claim. Two bars settling at
+ * different lengths is the whole argument, performed once — it draws when
+ * the section comes on screen and then stays drawn, because a comparison
+ * that kept re-running would be a screensaver.
  */
 function MatchedRung({
   monthly,
   theirs,
   theirPlan,
   reduce,
+  shown,
+  card,
 }: {
   monthly: number;
   theirs: number;
   theirPlan: string;
   reduce: boolean;
+  shown: boolean;
+  card: number;
 }) {
   const ours = TIERS.find((t) => t.monthly === monthly);
   if (!ours) return null;
@@ -261,7 +357,18 @@ function MatchedRung({
         <span className="text-[17px] leading-6 font-medium tabular-nums">
           {money(monthly)} a month
         </span>
-        <span className="text-[11px] leading-4 font-medium tracking-[0.1em] tabular-nums text-pp-accent uppercase">
+        {/* The gain arrives after the bars have settled — it is the
+            reading of the picture, so it should not precede it. */}
+        <span
+          className={cn(
+            "text-[11px] leading-4 font-medium tracking-[0.1em] tabular-nums text-pp-accent uppercase transition-opacity duration-500",
+            shown ? "opacity-100" : "opacity-0",
+            reduce && "transition-none",
+          )}
+          style={
+            reduce ? undefined : { transitionDelay: `${700 + card * 140}ms` }
+          }
+        >
           +{gain}% minutes
         </span>
       </div>
@@ -291,7 +398,7 @@ function MatchedRung({
                   row.ours ? "text-pp-accent" : "text-pp-muted",
                 )}
               >
-                <CountUp to={row.minutes} duration={1.1} />
+                {num(row.minutes)}
               </span>
             </div>
             {/* Scaled against the larger of the two, so the gap is the
@@ -299,19 +406,17 @@ function MatchedRung({
                 track is white on the card grey: on this stock a darker
                 track would read as a third bar. */}
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white">
-              <motion.div
+              <div
                 className={cn(
-                  "h-full origin-left rounded-full",
+                  "h-full rounded-full transition-[width] duration-700 ease-out",
                   row.ours ? "bg-pp-accent" : "bg-pp-muted/45",
+                  reduce && "transition-none",
                 )}
-                style={{ width: `${(row.minutes / max) * 100}%` }}
-                initial={reduce ? false : { scaleX: 0 }}
-                whileInView={{ scaleX: 1 }}
-                viewport={{ once: true, margin: "-10% 0px" }}
-                transition={{
-                  duration: 0.9,
-                  delay: reduce ? 0 : 0.1 + i * 0.12,
-                  ease: EASE,
+                style={{
+                  width: shown ? `${(row.minutes / max) * 100}%` : "0%",
+                  transitionDelay: reduce
+                    ? undefined
+                    : `${100 + card * 140 + i * 160}ms`,
                 }}
               />
             </div>
@@ -323,12 +428,55 @@ function MatchedRung({
 }
 
 export function PricingPlans() {
-  const reduce = useReducedMotion();
+  const reduce = usePrefersReducedMotion();
   const [annual, setAnnual] = useState(false);
 
+  const rootRef = useRef<HTMLDivElement>(null);
+  const inView = useInView(rootRef, "-12% 0px");
+
   /** `from` marks the rung that is negotiated rather than listed. */
-  const listed = TIERS.filter((t) => !t.from);
+  const listed = useMemo(() => TIERS.filter((t) => !t.from), []);
   const negotiated = TIERS.find((t) => t.from);
+
+  /** The rung the spotlight is on, and whether the reader owns it now. */
+  const featuredAt = Math.max(
+    0,
+    listed.findIndex((t) => t.featured),
+  );
+  const [at, setAt] = useState(0);
+  const [taken, setTaken] = useState(false);
+
+  /**
+   * The walk. Each rung is held for as long as the text it just put on
+   * screen takes to read, so the ladder climbs at the reader's pace. It
+   * only runs while the section is on screen, it stops for good once the
+   * reader touches anything inside it, and it never starts at all for a
+   * reader who asked for less motion.
+   */
+  useEffect(() => {
+    if (taken || reduce || !inView) return;
+    const tier = listed[at];
+    const spoken = [
+      tier.name,
+      `${cents(effectiveRate(tier, annual))} a minute`,
+      `${underRival(tier, annual)}% under ${PRICING_RIVAL.name}`,
+      ...tier.unlocks,
+    ].join(" ");
+    const id = window.setTimeout(
+      () => setAt((i) => (i + 1) % listed.length),
+      holdFor(spoken),
+    );
+    return () => window.clearTimeout(id);
+  }, [at, taken, reduce, inView, annual, listed]);
+
+  /** Reduced motion gets the end of the argument, drawn, straight away. */
+  useEffect(() => {
+    if (reduce) setAt(featuredAt);
+  }, [reduce, featuredAt]);
+
+  const take = () => setTaken(true);
+  /** The scene's drawn state: on screen, or asked for immediately. */
+  const shown = inView || reduce;
 
   return (
     <Frame
@@ -336,52 +484,86 @@ export function PricingPlans() {
       id="pricing"
       className="scroll-mt-24 px-6 py-20 md:px-12 md:py-28"
     >
-      <div className="flex flex-col gap-8 md:flex-row md:items-end md:justify-between">
-        <Reveal className="max-w-[640px]">
-          <SectionHeading eyebrow={PRICING_PLANS_INTRO.eyebrow}>
-            {PRICING_PLANS_INTRO.title}
-          </SectionHeading>
-          <p className="mt-5 text-[17px] leading-7 text-pretty text-pp-muted">
-            {PRICING_PLANS_INTRO.sub}
-          </p>
-        </Reveal>
-
-        <Reveal delay={0.06} className="shrink-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <div
-              role="group"
-              aria-label="Billing period"
-              className="flex w-fit gap-1 rounded-full bg-pp-card p-1"
-            >
-              {[
-                { label: "Monthly", value: false },
-                { label: "Yearly", value: true },
-              ].map((opt) => (
-                <button
-                  key={opt.label}
-                  type="button"
-                  onClick={() => setAnnual(opt.value)}
-                  aria-pressed={annual === opt.value}
-                  className={cn(
-                    "h-9 shrink-0 rounded-full px-4 text-sm transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
-                    annual === opt.value
-                      ? "pp-shadow-btn bg-white text-pp-ink"
-                      : "text-pp-muted hover:text-pp-ink",
-                  )}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <span className="text-[13px] leading-5 text-pp-accent">
-              {PRICING_INTRO.annualNote}
-            </span>
+      <div
+        ref={rootRef}
+        onPointerDown={take}
+        onKeyDownCapture={take}
+        onFocusCapture={take}
+      >
+        <div className="flex flex-col gap-8 md:flex-row md:items-end md:justify-between">
+          <div
+            className={cn(
+              "max-w-[640px]",
+              reduce
+                ? undefined
+                : shown
+                  ? "animate-in fade-in-0 slide-in-from-bottom-2 duration-500 fill-mode-both"
+                  : "opacity-0",
+            )}
+          >
+            <SectionHeading eyebrow={PRICING_PLANS_INTRO.eyebrow}>
+              {PRICING_PLANS_INTRO.title}
+            </SectionHeading>
+            <p className="mt-5 text-[17px] leading-7 text-pretty text-pp-muted">
+              {PRICING_PLANS_INTRO.sub}
+            </p>
           </div>
-        </Reveal>
-      </div>
 
-      <Reveal delay={0.08} y={28}>
-        <div className="mt-12 overflow-hidden rounded-[28px] bg-white shadow-[0_0_0_1px_rgb(24_16_40/0.07),0_32px_64px_-40px_rgb(24_16_40/0.5)] md:mt-16">
+          <div
+            className={cn(
+              "shrink-0",
+              reduce
+                ? undefined
+                : shown
+                  ? "animate-in fade-in-0 slide-in-from-bottom-2 duration-500 fill-mode-both"
+                  : "opacity-0",
+            )}
+            style={reduce ? undefined : { animationDelay: "60ms" }}
+          >
+            <div className="flex flex-wrap items-center gap-3">
+              <div
+                role="group"
+                aria-label="Billing period"
+                className="flex w-fit gap-1 rounded-full bg-pp-card p-1"
+              >
+                {[
+                  { label: "Monthly", value: false },
+                  { label: "Yearly", value: true },
+                ].map((opt) => (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    onClick={() => setAnnual(opt.value)}
+                    aria-pressed={annual === opt.value}
+                    className={cn(
+                      "h-9 shrink-0 rounded-full px-4 text-sm transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
+                      annual === opt.value
+                        ? "pp-shadow-btn bg-white text-pp-ink"
+                        : "text-pp-muted hover:text-pp-ink",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-[13px] leading-5 text-pp-accent">
+                {PRICING_INTRO.annualNote}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            "mt-12 overflow-hidden rounded-[28px] bg-white shadow-[0_0_0_1px_rgb(24_16_40/0.07),0_32px_64px_-40px_rgb(24_16_40/0.5)] md:mt-16",
+            reduce
+              ? undefined
+              : shown
+                ? "animate-in fade-in-0 slide-in-from-bottom-4 duration-500 fill-mode-both"
+                : "opacity-0",
+          )}
+          style={reduce ? undefined : { animationDelay: "80ms" }}
+        >
           {/* Five columns do not survive a phone. The scroller keeps the
               comparison intact rather than restacking it into five
               unrelated cards, which is the one shape that makes a price
@@ -394,6 +576,12 @@ export function PricingPlans() {
                   tier={tier}
                   annual={annual}
                   first={i === 0}
+                  lit={i === at}
+                  still={reduce}
+                  onTake={() => {
+                    setTaken(true);
+                    setAt(i);
+                  }}
                 />
               ))}
             </div>
@@ -422,26 +610,35 @@ export function PricingPlans() {
             </div>
           ) : null}
         </div>
-      </Reveal>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        {PRICING_RIVAL.matched.map((m, i) => (
-          <Reveal key={m.monthly} delay={reduce ? 0 : i * 0.06}>
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          {PRICING_RIVAL.matched.map((m, i) => (
             <MatchedRung
+              key={m.monthly}
               monthly={m.monthly}
               theirs={m.theirs}
               theirPlan={m.theirPlan}
-              reduce={!!reduce}
+              reduce={reduce}
+              shown={shown}
+              card={i}
             />
-          </Reveal>
-        ))}
-      </div>
+          ))}
+        </div>
 
-      <Reveal delay={0.06}>
-        <p className="mt-10 max-w-[860px] text-[12px] leading-[20px] text-pp-muted">
+        <p
+          className={cn(
+            "mt-10 max-w-[860px] text-[12px] leading-[20px] text-pp-muted",
+            reduce
+              ? undefined
+              : shown
+                ? "animate-in fade-in-0 duration-500 fill-mode-both"
+                : "opacity-0",
+          )}
+          style={reduce ? undefined : { animationDelay: "120ms" }}
+        >
           {PRICING_PLANS_NOTE}
         </p>
-      </Reveal>
+      </div>
     </Frame>
   );
 }

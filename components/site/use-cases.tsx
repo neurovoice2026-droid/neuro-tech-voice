@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  motion,
-  AnimatePresence,
-  animate,
-  useInView,
-  useMotionValue,
-  useReducedMotion,
-} from "framer-motion";
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { ArrowRight, Clock } from "lucide-react";
 import {
   INDUSTRIES,
@@ -20,24 +18,45 @@ import {
 import { cn } from "@/lib/utils";
 import { IntentLink } from "./intent-link";
 import { Frame, PillLink, SectionHeading } from "./product/primitives";
-import { Reveal, EASE } from "./reveal";
+import { holdFor, useInView, usePrefersReducedMotion } from "./product/timing";
 
 /**
- * Who it's for — "one day on the line".
+ * Who it's for — "one day on the line", played out.
  *
- * This section used to be six tiles in a grid: an icon, a trade, a
- * sentence. It answered the only question a grid can answer — am I on the
- * list — and it answered it in the same breath for all six, which is why
- * nobody read past the second one. The claim the business actually needs
- * to land here is bigger than membership: *whatever you do, the phone is
- * how it starts, and a staffed front desk structurally cannot hear all of
- * it.* A grid cannot argue that. A day can.
+ * **The scene.** This section is not a chart that arrives; it is a day
+ * that runs. Land on it and the clock starts at midnight and walks the
+ * twenty-four hours of one trade's phone line, an hour at a time. Each
+ * hour rises into the chart as it happens; the dial below opens that same
+ * hour and draws every call in it at its real minute and over its real
+ * length; the three counts at the foot climb as the calls land, because
+ * they are a running total of the hours that have happened rather than a
+ * number counting up at a reader who scrolled past. By 23:00 the day is
+ * whole and the reader has watched it cost itself.
  *
- * So the section is one instrument instead: 24 hourly bars of real call
- * shape, the hours a human is actually at the desk, and one toggle that
- * fills in what the agent picks up. The toggle is the whole section in one
- * gesture — the same day, twice, and the difference between them is the
- * product.
+ * Then the section makes its argument. The clock parks on the busiest
+ * hour and plays it at minute resolution — one line, one conversation,
+ * and the calls that arrived while it was engaged drawn as broken arcs
+ * that never became anything. It holds there long enough to read, and
+ * then it puts the agent on: the toggle slides, the missed remainder of
+ * every bar folds down into the answered mass in one sweep across the
+ * day, and the single ring on the dial splits into one ring per
+ * simultaneous conversation while the same hour redraws onto it, whole.
+ * The same day, twice, and the difference between them is the product.
+ * Then the next trade, and it starts over.
+ *
+ * That is the argument this section could never make as an entrance. A
+ * row that fades in tells the reader the page has loaded. A day that
+ * plays itself out and then gets answered tells them what they are
+ * losing, in their own trade, in the order it happens.
+ *
+ * **How it is built.** On the house clock in `product/timing.ts`:
+ * `useInView` gates every timer, `usePrefersReducedMotion` turns them all
+ * off, and the beat the flipped day holds for is `holdFor` of the very
+ * sentence the live region reads out — reading pace, not a round number.
+ * The movement is CSS. React changes state; `transition-*` durations and
+ * `animate-in` reveals do the animating, and the arcs are drawn with
+ * `pathLength`/`stroke-dashoffset` so a call takes exactly as long to
+ * draw as the call took. No JS animation library is imported here at all.
  *
  * Five decisions worth keeping.
  *
@@ -51,23 +70,21 @@ import { Reveal, EASE } from "./reveal";
  *    the masthead, the gateway — stands on the open field between
  *    hairlines, so the page still reads as one spread rather than as a
  *    stack of boxes.
- *  · **It plays itself first.** The day arrives uncovered and flips on its
- *    own about a second and a half later, then walks the trades. Anything
- *    that waits to be clicked on a landing page is not seen. The first
- *    interaction of any kind takes the controls for good — autoplay that
- *    fights the reader is worse than none.
+ *  · **The reader takes it over for good, on the first real interaction.**
+ *    A pointer *down*, a focus or a key — not a cursor that merely crossed
+ *    the panel on its way down the page. Crossing it only holds the clock
+ *    where it stands, so a trade never swaps under someone reading a
+ *    tooltip; the moment they actually operate something, the day
+ *    completes, the clock stops and never starts again.
  *  · **The dial is not behind a click.** It used to be the third level of
  *    a modal, which is to say roughly nine readers in ten never saw the
  *    single best thing in the file. It is in the section permanently now,
- *    opened on the busiest hour, and it carries the argument the bar chart
- *    cannot make: *one ring without an agent, because there is one line —
- *    a ring per simultaneous conversation with it.* The difference between
- *    the two modes stops being a colour and becomes a shape.
- *  · **On white, the motion draws rather than glows.** The mechanisms are
- *    the cover's, unchanged — the bars still cross over, the rings still
- *    split, the sweep still walks the hour at ninety-two milliseconds to
- *    the minute. What changed is that nothing is lit from behind any more:
- *    a bloom that read as depth on near-black reads as a smudge on
+ *    and it carries the argument the bar chart cannot make: *one ring
+ *    without an agent, because there is one line — a ring per simultaneous
+ *    conversation with it.* The difference between the two modes stops
+ *    being a colour and becomes a shape.
+ *  · **On white, the motion draws rather than glows.** Nothing is lit from
+ *    behind: a bloom that read as depth on near-black reads as a smudge on
  *    #ffffff, so the arcs are ink on paper with only the faintest weight
  *    behind them.
  *  · **It never claims to be telemetry.** The shapes are true to each
@@ -97,6 +114,30 @@ const INK = "#181028";
 /** The house small-caps label, used for every readout caption below. */
 const LABEL =
   "text-[11px] leading-4 font-medium tracking-[0.12em] text-pp-muted uppercase";
+
+/* ---------------------------------------------------------------- *
+ * The clock
+ *
+ * Three beats and nothing else. An hour that rang holds long enough to
+ * register as an event; an hour that was silent is over almost before it
+ * starts, which is what makes the dead stretch before dawn read as dead.
+ * `PLAY` is the house's own 4200ms — the same beat `platform-scenes`
+ * cycles a voice on — and it is how long one hour takes to play out at
+ * minute resolution, so a sixty-minute circle is drawn in 4.2 seconds and
+ * every arc on it is scaled to that.
+ * ---------------------------------------------------------------- */
+
+/** One hour of the day, while the day is running. */
+const HOUR_BEAT = 330;
+/** An hour nobody called in. */
+const QUIET_BEAT = 110;
+/** One hour, played out call by call. */
+const PLAY = 4200;
+/** The pause between two acts. */
+const BEAT = 520;
+
+/** Which act the instrument is in. */
+type Act = "day" | "hour" | "covered";
 
 /* ---------------------------------------------------------------- *
  * The model
@@ -266,49 +307,10 @@ function hourCalls(ind: Industry, hour: number): HourCall[] {
   });
 }
 
-/* ---------------------------------------------------------------- *
- * A number that re-counts every time it changes
- * ---------------------------------------------------------------- */
-
-function Tally({
-  value,
-  prefix = "",
-  className,
-}: {
-  value: number;
-  prefix?: string;
-  className?: string;
-}) {
-  const reduce = useReducedMotion();
-  // The motion value carries the previous number for us, so each change
-  // animates from wherever the last one landed rather than from zero.
-  const mv = useMotionValue(value);
-  const [counted, setCounted] = useState(value);
-
-  useEffect(() => {
-    if (reduce) return;
-    const controls = animate(mv, value, {
-      duration: 0.7,
-      ease: [0.22, 1, 0.36, 1],
-    });
-    const unsub = mv.on("change", (v) => setCounted(v));
-    return () => {
-      controls.stop();
-      unsub();
-    };
-  }, [value, reduce, mv]);
-
-  // Reduced motion reads the prop straight through, as CountUp does: the
-  // number is already in hand, and writing it into state from an effect
-  // only buys a second render to arrive at it.
-  const shown = reduce ? value : counted;
-
-  return (
-    <span className={cn("tabular-nums", className)}>
-      {prefix}
-      {Math.round(shown).toLocaleString("en-US")}
-    </span>
-  );
+/** The last hour at or before `h` that actually rang. */
+function lastRung(cells: HourCell[], h: number, fallback: number) {
+  for (let i = Math.min(h, 23); i >= 0; i--) if (cells[i].calls) return i;
+  return fallback;
 }
 
 /* ---------------------------------------------------------------- *
@@ -317,9 +319,31 @@ function Tally({
 
 const AXIS_HOURS = [0, 3, 6, 9, 12, 15, 18, 21];
 
+/**
+ * The chart, and why nothing in it counts up.
+ *
+ * Every bar is two blocks in a clipped box whose height is zero until the
+ * day's head reaches that hour. So the chart does not appear — it is
+ * *written*, left to right, one hour at a time, and by the time it is
+ * whole the reader has watched it happen rather than watched it arrive.
+ *
+ * The flip is two layers rather than one height, and that is the whole
+ * claim of the section rendered as a motion. A single bar whose fill grows
+ * on the toggle is a bar that *changes*; it is not a bar that catches
+ * anything. So the missed remainder is its own block sitting on top of the
+ * answered mass, and on the flip it translates down by its own height —
+ * into the mass — while the mass rises to meet it. One quantity moving
+ * into another, not two states cross-fading.
+ *
+ * The stagger is 35ms and not 14ms. At 14ms the whole day is 0.32s wide
+ * against a 500ms per-bar duration — every bar is mid-flight at every
+ * moment, and the promised left-to-right sweep across the day never
+ * renders at all.
+ */
 function DayChart({
   day,
   covered,
+  head,
   staffed,
   label,
   picked,
@@ -328,13 +352,14 @@ function DayChart({
   day: DayModel;
   /** True once the agent is on the line: every bar fills. */
   covered: boolean;
+  /** The last hour the day has reached. Bars past it are not up yet. */
+  head: number;
   staffed: [number, number];
   label: string;
   /** The hour currently open on the dial, so the chart can mark it. */
   picked: number;
   onPick: (hour: number) => void;
 }) {
-  const reduce = useReducedMotion();
   const plot = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<number | null>(null);
   const cell = hover === null ? null : day.cells[hover];
@@ -428,30 +453,8 @@ function DayChart({
             // against, which is why both layers below can be driven from
             // it without either of them recomputing the day.
             const ansPct = c.calls ? (c.answered / c.calls) * 100 : 0;
-
-            /**
-             * The flip, and why it is two layers rather than one height.
-             *
-             * A single bar whose fill grows on the toggle is a bar that
-             * *changes*; it is not a bar that catches anything. So the
-             * missed remainder is its own block sitting on top of the
-             * answered mass, and on the flip it translates down by its own
-             * height — into the mass — while the mass rises to meet it.
-             * The reader watches one quantity move into another instead of
-             * watching two states cross-fade, which is the entire claim of
-             * this section rendered as a motion rather than as a colour.
-             *
-             * The stagger is 0.035 and not 0.014. At 0.014 the whole day
-             * is 0.32s wide against a 0.55s per-bar duration — every bar is
-             * mid-flight at every moment, and the promised left-to-right
-             * sweep across the day never renders at all.
-             */
-            const flip = reduce
-              ? // Reduced motion gets the flip, because the flip is the
-                // section — it just gets it once, slowly, with no stagger
-                // and nothing translating across the screen.
-                { duration: 1.1, ease: EASE }
-              : { duration: 0.55, delay: i * 0.035, ease: EASE };
+            /** Has the day got here yet? */
+            const up = head >= i;
 
             return (
               <button
@@ -479,39 +482,40 @@ function DayChart({
                 {/* Full-height hit area, so thin bars are still reachable. */}
                 <span aria-hidden className="absolute inset-0" />
 
+                {/* The hour, as the day reaches it. Height, not opacity:
+                    the bar is written upward out of the axis, which is
+                    what a call arriving looks like. */}
                 <div
-                  className="relative w-full overflow-hidden rounded-t-[3px]"
-                  style={{ height: `${barPct}%` }}
+                  className="relative w-full overflow-hidden rounded-t-[3px] transition-[height] duration-300 ease-out motion-reduce:transition-none"
+                  style={{ height: `${up ? barPct : 0}%` }}
                 >
                   {/* What the desk never got to. A grey block on the card,
                       one step darker than the stock it sits on — the
                       quantity is present but unlit, which is the whole
-                      point of it. */}
-                  <motion.span
+                      point of it. On the flip it drops into the mass. */}
+                  <span
                     aria-hidden
                     className={cn(
-                      "absolute inset-x-0 border-t bg-[rgb(24_16_40/0.09)] transition-colors duration-200",
+                      "absolute inset-x-0 border-t bg-[rgb(24_16_40/0.09)] transition-[transform,opacity] duration-500 motion-reduce:transition-none",
                       hover === i ? "border-pp-ink/45" : "border-pp-hair",
                     )}
                     style={{
                       bottom: `${ansPct}%`,
                       height: `${100 - ansPct}%`,
-                    }}
-                    initial={false}
-                    animate={{
-                      y: reduce ? 0 : covered ? "100%" : "0%",
+                      transform: covered ? "translateY(100%)" : "none",
                       opacity: covered ? 0 : 1,
+                      transitionDelay: `${i * 35}ms`,
                     }}
-                    transition={flip}
                   />
 
                   {/* What it did. Flat violet: on white a gradient reads as
                       a smudge where on near-black it read as depth. */}
-                  <motion.div
-                    className="absolute inset-x-0 bottom-0 bg-pp-accent"
-                    initial={false}
-                    animate={{ height: `${covered ? 100 : ansPct}%` }}
-                    transition={flip}
+                  <div
+                    className="absolute inset-x-0 bottom-0 bg-pp-accent transition-[height] duration-500 motion-reduce:transition-none"
+                    style={{
+                      height: `${covered ? 100 : ansPct}%`,
+                      transitionDelay: `${i * 35}ms`,
+                    }}
                   />
 
                   {/* Hover wash, so a bar reads as a thing you can open. */}
@@ -524,9 +528,9 @@ function DayChart({
                   />
                 </div>
 
-                {/* The hour the dial is holding, marked on the day. Without
-                    it the dial below is a claim about an hour the reader
-                    cannot locate in the chart they just read. */}
+                {/* The hour the dial is holding, marked on the day. While
+                    the day is running that is the hour that just rang, so
+                    this is also the playhead. */}
                 {picked === i && (
                   <span
                     aria-hidden
@@ -541,62 +545,56 @@ function DayChart({
         {/* Read-out for the hovered hour.
 
             Two elements, and the split is load-bearing: the outer one is
-            absolutely placed and carries nothing but opacity, because a
-            motion component writes its own `transform` and would clobber
-            an inline one. The inner shrink-wrapped box does the clamping,
-            translating by a share of its own width so the tip stays inside
-            the plot at either end of the day. */}
-        <AnimatePresence>
-          {cell && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className="pointer-events-none absolute top-0 z-10"
-              style={{ left: `${((cell.hour + 0.5) / 24) * 100}%` }}
+            absolutely placed and carries the reveal, because the inner
+            shrink-wrapped box writes its own `transform` to clamp itself
+            — translating by a share of its own width so the tip stays
+            inside the plot at either end of the day. */}
+        {cell && (
+          <div
+            key={cell.hour}
+            className="pointer-events-none absolute top-0 z-10 animate-in fade-in-0 duration-200 motion-reduce:animate-none"
+            style={{ left: `${((cell.hour + 0.5) / 24) * 100}%` }}
+          >
+            <div
+              className="whitespace-nowrap rounded-[10px] border border-pp-hair bg-white px-3 py-2 text-[12px] leading-tight shadow-[0_12px_28px_-14px_rgb(24_16_40/0.5)]"
+              style={{
+                transform: `translateX(-${Math.min(
+                  92,
+                  Math.max(8, ((cell.hour + 0.5) / 24) * 100),
+                )}%)`,
+              }}
             >
-              <div
-                className="whitespace-nowrap rounded-[10px] border border-pp-hair bg-white px-3 py-2 text-[12px] leading-tight shadow-[0_12px_28px_-14px_rgb(24_16_40/0.5)]"
-                style={{
-                  transform: `translateX(-${Math.min(
-                    92,
-                    Math.max(8, ((cell.hour + 0.5) / 24) * 100),
-                  )}%)`,
-                }}
-              >
-                <span className="mono text-pp-muted">{hh(cell.hour)}</span>
-                <span className="mx-2 text-pp-ink/25">/</span>
+              <span className="mono text-pp-muted">{hh(cell.hour)}</span>
+              <span className="mx-2 text-pp-ink/25">/</span>
 
-                {/* Reading an hour that never rang is now possible — the
-                    plot tracks the pointer across dead bars too — and
-                    "0 calls / 0 answered" would light the accent on the
-                    strength of 0 === 0. A silent hour just says so. */}
-                {cell.calls === 0 ? (
-                  <span className="text-pp-muted">
-                    the phone didn&rsquo;t ring
+              {/* Reading an hour that never rang is now possible — the
+                  plot tracks the pointer across dead bars too — and
+                  "0 calls / 0 answered" would light the accent on the
+                  strength of 0 === 0. A silent hour just says so. */}
+              {cell.calls === 0 ? (
+                <span className="text-pp-muted">
+                  the phone didn&rsquo;t ring
+                </span>
+              ) : (
+                <>
+                  <span className="text-pp-ink">
+                    {cell.calls} {cell.calls === 1 ? "call" : "calls"}
                   </span>
-                ) : (
-                  <>
-                    <span className="text-pp-ink">
-                      {cell.calls} {cell.calls === 1 ? "call" : "calls"}
-                    </span>
-                    <span className="mx-2 text-pp-ink/25">/</span>
-                    <span
-                      className={
-                        covered || cell.answered === cell.calls
-                          ? "font-medium text-pp-accent"
-                          : "text-pp-muted"
-                      }
-                    >
-                      {covered ? cell.calls : cell.answered} answered
-                    </span>
-                  </>
-                )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                  <span className="mx-2 text-pp-ink/25">/</span>
+                  <span
+                    className={
+                      covered || cell.answered === cell.calls
+                        ? "font-medium text-pp-accent"
+                        : "text-pp-muted"
+                    }
+                  >
+                    {covered ? cell.calls : cell.answered} answered
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* axis */}
@@ -634,9 +632,6 @@ function DayChart({
  * The hour, played out
  * ---------------------------------------------------------------- */
 
-/** Seconds the hour takes to play. One minute of real time ≈ 92ms. */
-const PLAY = 5.5;
-
 /**
  * The dial.
  *
@@ -652,11 +647,18 @@ const PLAY = 5.5;
  * through sits on a single ring, because there is one line and it can only
  * ever hold one call; with the agent that ring splits, and the hour fills
  * inward, a ring per simultaneous conversation. You do not read that
- * difference. You see it happen, over 700ms, on the same beat as the bars.
+ * difference. You see it happen, over 500ms, on the same beat as the bars.
  *
- * Every arc draws over the real length of its call, so the sweep is not
- * decoration either: it is the hour passing at ninety-two milliseconds to
- * the minute.
+ * Every arc draws over the real length of its call. That is what `span` is
+ * for: it is how long this whole hour takes, and each call's delay and
+ * duration are its own minute and its own length scaled into it. During
+ * the day's walk `span` is one hour-beat and the hour flicks past; when
+ * the clock parks on an hour it is `PLAY`, and the hour is lived.
+ *
+ * The drawing is `pathLength="1"` with a dash the length of the path and
+ * an offset that goes to zero — one CSS transition per arc, no JS on the
+ * frame loop, and a stroke that is genuinely being laid down rather than
+ * revealed by a mask.
  *
  * Drawn in ink on paper. Every neutral is `INK` at a stated alpha rather
  * than a paper colour at one, because the surface under the dial is the
@@ -706,17 +708,23 @@ function HourDial({
   calls,
   covered,
   handled,
-  reduce,
+  lit,
+  span,
 }: {
   calls: HourCall[];
   covered: boolean;
   handled: number;
-  reduce: boolean | null;
+  /** False for one frame after the hour opens, so every stroke has a start. */
+  lit: boolean;
+  /** Milliseconds this hour takes to play. Zero means "already over". */
+  span: number;
 }) {
   const lanes = useMemo(
     () => [...new Set(calls.map((c) => c.lane))].sort((a, b) => a - b),
     [calls],
   );
+  /** The hand is only legible when the hour is actually being lived. */
+  const sweep = span >= 1000;
 
   return (
     <div className="relative mx-auto aspect-square w-full max-w-[280px]">
@@ -739,30 +747,34 @@ function HourDial({
             This is the argument standing still — and then moving: without
             an agent every ring is collapsed onto the outermost one and only
             that one is visible, because there is one line. On the flip they
-            split apart, one per simultaneous conversation, over 700ms. The
-            reader sees the difference before a single arc has redrawn. */}
-        {lanes.map((l) => (
-          <motion.circle
-            key={`ring${l}`}
-            cx="50"
-            cy="50"
-            // The attribute as well as the target: the server renders this
-            // markup with no JavaScript, and a circle whose radius only
-            // exists inside an animation target is a circle that is not
-            // there until hydration.
-            r={laneR(0)}
-            fill="none"
-            stroke={INK}
-            strokeOpacity="0.1"
-            strokeWidth="3"
-            initial={false}
-            animate={{
-              r: covered ? laneR(l) : laneR(0),
-              opacity: covered || l === 0 ? 1 : 0,
-            }}
-            transition={{ duration: reduce ? 0 : 0.7, ease: EASE }}
-          />
-        ))}
+            split apart, one per simultaneous conversation. The reader sees
+            the difference before a single arc has redrawn.
+
+            The radius is set twice on purpose. As an attribute it is what
+            the server renders and what a browser without the CSS `r`
+            property falls back to; as a style it is what animates. */}
+        {lanes.map((l) => {
+          const r = covered ? laneR(l) : laneR(0);
+          return (
+            <circle
+              key={`ring${l}`}
+              cx="50"
+              cy="50"
+              r={r}
+              fill="none"
+              stroke={INK}
+              strokeOpacity="0.1"
+              strokeWidth="3"
+              className="transition-all duration-500 motion-reduce:transition-none"
+              style={
+                {
+                  r: `${r}px`,
+                  opacity: covered || l === 0 ? 1 : 0,
+                } as CSSProperties
+              }
+            />
+          );
+        })}
 
         {/* Sixty minute ticks. The detail that makes it read as an
             instrument rather than as a doughnut chart. */}
@@ -805,7 +817,7 @@ function HourDial({
               strokeOpacity="0.1"
               strokeWidth="0.5"
             />
-            <motion.circle
+            <circle
               cx="50"
               cy="50"
               r="44.2"
@@ -814,9 +826,12 @@ function HourDial({
               strokeOpacity="0.55"
               strokeWidth="0.7"
               strokeLinecap="round"
-              initial={reduce ? false : { pathLength: 0 }}
-              animate={{ pathLength: 1 }}
-              transition={{ duration: reduce ? 0 : PLAY, ease: "linear" }}
+              pathLength={1}
+              strokeDasharray={1}
+              style={{
+                strokeDashoffset: lit ? 0 : 1,
+                transition: `stroke-dashoffset ${span}ms linear`,
+              }}
             />
           </g>
 
@@ -845,22 +860,29 @@ function HourDial({
             const on = covered || c.answered;
             const r = covered ? laneR(c.lane) : laneR(0);
             const d = arcPath(c.start, c.start + c.dur, r);
-            const at = reduce ? 0 : (c.start / 60) * PLAY;
-            const over = reduce ? 0 : (c.dur / 60) * PLAY;
+            // The call's own minute, and the call's own length, scaled
+            // into however long this hour is taking.
+            const at = span ? Math.round((c.start / 60) * span) : 0;
+            const over = span ? Math.max(60, Math.round((c.dur / 60) * span)) : 0;
 
             if (!on) {
+              // A call that arrived and became nothing: broken, unlit, and
+              // it appears at the minute it rang rather than drawing,
+              // because there was no conversation to draw.
               return (
-                <motion.path
+                <path
                   key={`m${i}`}
                   d={d}
                   fill="none"
                   stroke={INK}
+                  strokeOpacity="0.34"
                   strokeWidth="3"
                   strokeLinecap="butt"
                   strokeDasharray="0.9 1.8"
-                  initial={reduce ? false : { strokeOpacity: 0 }}
-                  animate={{ strokeOpacity: 0.34 }}
-                  transition={{ duration: 0.3, delay: at }}
+                  style={{
+                    opacity: lit ? 1 : 0,
+                    transition: `opacity ${span ? 300 : 0}ms linear ${at}ms`,
+                  }}
                 />
               );
             }
@@ -871,43 +893,47 @@ function HourDial({
                     around it: on white, light thrown outward is a smudge,
                     but a wider stroke of the same ink at low alpha reads
                     as weight. Then the line itself, drawn over it. */}
-                <motion.path
+                <path
                   d={d}
                   fill="none"
                   stroke={VIOLET}
                   strokeOpacity="0.14"
                   strokeWidth="6.5"
                   strokeLinecap="round"
-                  initial={reduce ? false : { pathLength: 0 }}
-                  animate={{ pathLength: 1 }}
-                  transition={{ duration: over, delay: at, ease: "linear" }}
+                  pathLength={1}
+                  strokeDasharray={1}
+                  style={{
+                    strokeDashoffset: lit ? 0 : 1,
+                    transition: `stroke-dashoffset ${over}ms linear ${at}ms`,
+                  }}
                 />
-                <motion.path
+                <path
                   d={d}
                   fill="none"
                   stroke={VIOLET}
                   strokeWidth="3"
                   strokeLinecap="round"
-                  initial={reduce ? false : { pathLength: 0 }}
-                  animate={{ pathLength: 1 }}
-                  transition={{ duration: over, delay: at, ease: "linear" }}
+                  pathLength={1}
+                  strokeDasharray={1}
+                  style={{
+                    strokeDashoffset: lit ? 0 : 1,
+                    transition: `stroke-dashoffset ${over}ms linear ${at}ms`,
+                  }}
                 />
               </g>
             );
           })}
 
-          {/* The sweep. A bounding rect gives the group a full-dial bbox, so
-              `fill-box` puts the rotation origin at the centre rather than
-              at the middle of the hand. */}
-          {!reduce && (
-            <motion.g
-              style={{ transformBox: "fill-box", transformOrigin: "center" }}
-              initial={{ rotate: 0, opacity: 0 }}
-              animate={{ rotate: 360, opacity: [0, 1, 1, 0] }}
-              transition={{
-                duration: PLAY,
-                ease: "linear",
-                opacity: { duration: PLAY, times: [0, 0.02, 0.94, 1] },
+          {/* The hand, walking the hour. A bounding rect gives the group a
+              full-dial bbox, so `fill-box` puts the rotation origin at the
+              centre rather than at the middle of the hand. */}
+          {sweep && (
+            <g
+              style={{
+                transformBox: "fill-box",
+                transformOrigin: "center",
+                transform: `rotate(${lit ? 360 : 0}deg)`,
+                transition: `transform ${span}ms linear`,
               }}
             >
               <rect x="0" y="0" width="100" height="100" fill="none" />
@@ -920,7 +946,7 @@ function HourDial({
                 strokeWidth="0.9"
               />
               <circle cx="50" cy="6.4" r="1.5" fill={VIOLET} />
-            </motion.g>
+            </g>
           )}
         </g>
 
@@ -945,10 +971,12 @@ function HourDial({
 
       <div className="pointer-events-none absolute inset-0 grid place-items-center">
         <div className="text-center">
-          <Tally
-            value={handled}
-            className="block text-[44px] leading-none font-medium tracking-[-0.04em] text-pp-accent md:text-[52px]"
-          />
+          {/* No count-up. This number is a tally of the arcs that have
+              actually landed, so it climbs because the hour is happening
+              rather than because something told it to run to a total. */}
+          <span className="block text-[44px] leading-none font-medium tracking-[-0.04em] text-pp-accent tabular-nums md:text-[52px]">
+            {handled.toLocaleString("en-US")}
+          </span>
           <p className={cn(LABEL, "mt-3")}>handled</p>
           <p className="mono mt-1.5 text-[11px] leading-4 tracking-[0.12em] text-pp-muted">
             of {calls.length}
@@ -973,14 +1001,21 @@ function PeakHour({
   ind,
   cell,
   covered,
+  span,
+  reduce,
 }: {
   ind: Industry;
   cell: HourCell;
   covered: boolean;
+  span: number;
+  reduce: boolean;
 }) {
-  const reduce = useReducedMotion();
   const calls = useMemo(() => hourCalls(ind, cell.hour), [ind, cell.hour]);
   const [landed, setLanded] = useState(0);
+  // Every stroke in the dial needs one frame at its un-drawn length before
+  // the transition to zero offset can run, so the hour opens dark and is
+  // lit a tick later. A reader who prefers no motion is never un-lit.
+  const [drawn, setDrawn] = useState(false);
 
   // The dial restarts on the flip, so the count narrating it restarts too.
   // Adjusted during render rather than from an effect: the reset is a pure
@@ -990,21 +1025,29 @@ function PeakHour({
   if (mode !== covered) {
     setMode(covered);
     setLanded(0);
+    setDrawn(false);
   }
 
-  // One timer per call, fired as the sweep reaches it, so the number in the
+  useEffect(() => {
+    if (reduce || drawn) return;
+    const t = window.setTimeout(() => setDrawn(true), 30);
+    return () => window.clearTimeout(t);
+  }, [drawn, reduce]);
+
+  // One timer per call, fired as the hand reaches it, so the number in the
   // middle of the dial is counting the same arcs the reader is watching
-  // draw.
+  // draw. Cleared whenever the hour, the mode or the pace changes, and on
+  // unmount — nothing here may outlive the dial.
   useEffect(() => {
     if (reduce) return;
     const timers = calls.map((c, i) =>
-      setTimeout(
+      window.setTimeout(
         () => setLanded((n) => Math.max(n, i + 1)),
-        (c.start / 60) * PLAY * 1000 + 140,
+        Math.round((c.start / 60) * span),
       ),
     );
-    return () => timers.forEach(clearTimeout);
-  }, [calls, reduce, covered]);
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  }, [calls, reduce, covered, span]);
 
   const shown = reduce ? calls.length : landed;
   const handled = calls
@@ -1018,18 +1061,28 @@ function PeakHour({
         calls={calls}
         covered={covered}
         handled={handled}
-        reduce={reduce}
+        lit={reduce || drawn}
+        span={reduce ? 0 : span}
       />
 
       <div>
         <p className={LABEL}>
           {cell.calls === Math.max(...ind.volume) ? "Busiest hour" : "This hour"}
         </p>
-        <p className="mt-2.5 text-[30px] leading-none font-medium tracking-[-0.03em] text-pp-ink md:text-[36px]">
+        <p
+          key={cell.hour}
+          className="mt-2.5 text-[30px] leading-none font-medium tracking-[-0.03em] text-pp-ink animate-in fade-in-0 duration-300 motion-reduce:animate-none md:text-[36px]"
+        >
           {hh(cell.hour)}–{hh((cell.hour + 1) % 24)}
         </p>
 
-        <p className="mt-5 max-w-[480px] text-[15px] leading-[24px] text-pretty text-pp-muted md:text-base md:leading-[26px]">
+        {/* Keyed on the mode: the verdict on this hour does not cross-fade
+            into the other one, it is replaced, on the same beat as the
+            rings splitting underneath it. */}
+        <p
+          key={covered ? "with" : "without"}
+          className="mt-5 max-w-[480px] text-[15px] leading-[24px] text-pretty text-pp-muted animate-in fade-in-0 slide-in-from-bottom-2 duration-500 fill-mode-both motion-reduce:animate-none md:text-base md:leading-[26px]"
+        >
           {covered && !cell.staffed ? (
             <>
               Answered at {hh(cell.hour)}, with the front desk closed.{" "}
@@ -1181,102 +1234,187 @@ function IndustriesGateway() {
  * Section
  * ---------------------------------------------------------------- */
 
-/** Seconds a trade holds while the instrument is playing itself. */
-const DWELL = 7.8;
-
 export function UseCases() {
-  const reduce = useReducedMotion();
+  const reduce = usePrefersReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
-  // Deliberately NOT `once`. With a one-shot observer the 7.8s carousel
-  // stayed armed for the rest of the session — re-rendering a chart three
-  // screens above the reader, behind the FAQ, until they closed the tab.
-  const inView = useInView(ref, { margin: "-20% 0px -20% 0px" });
+  const inView = useInView(ref, "-20% 0px -20% 0px");
 
   const [activeId, setActiveId] = useState(INDUSTRIES[0].id);
-  const [flipped, setFlipped] = useState(false);
+  /** How far into the day the clock has got. -1 is midnight, nothing yet. */
+  const [head, setHead] = useState(-1);
+  const [act, setAct] = useState<Act>("day");
+  const [covered, setCovered] = useState(false);
   // One flag for the whole autoplay: the first deliberate interaction of
   // any kind hands the instrument over and it never takes it back.
   const [driving, setDriving] = useState(false);
-  // The hour on the dial. `null` means "whichever is busiest", which is
-  // what the dial opens on and what it falls back to on a change of trade —
-  // an hour picked in one trade means nothing in the next.
+  // A cursor resting on the panel is not an interaction, but it is a reason
+  // not to swap the trade out from under it. Holding is not surrender.
+  const [held, setHeld] = useState(false);
+  // The hour on the dial once the reader is driving. `null` means
+  // "whichever is busiest" — an hour picked in one trade means nothing in
+  // the next, so a change of trade drops it.
   const [picked, setPicked] = useState<number | null>(null);
 
   const active = INDUSTRIES.find((i) => i.id === activeId) ?? INDUSTRIES[0];
   const day = useMemo(() => modelDay(active), [active]);
-
   const peakIdx = day.cells.findIndex((c) => c.calls === day.peak);
-  const dialIdx = picked !== null && day.cells[picked]?.calls ? picked : peakIdx;
 
-  const takeOver = () => setDriving(true);
+  /** Runs only on screen, only before the reader takes over, never on a
+   *  cursor that is resting on the panel, and never under reduced motion. */
+  const playing = inView && !driving && !held && !reduce;
 
-  // Beat one: the day arrives uncovered, then fills itself. `driving` is a
-  // dependency so that a reader who reaches the toggle inside the first
-  // second and a half cancels the flip rather than being overruled by it.
-  //
-  // Reduced motion used to be handed `covered = true` outright, which gave
-  // those readers the answer without ever showing them the question — the
-  // uncovered day is the entire setup, and they were skipped past it. They
-  // get the day and the flip, on a longer fuse, with the bars crossing over
-  // slowly and without the stagger.
-  useEffect(() => {
-    if (!inView || driving) return;
-    const t = setTimeout(() => setFlipped(true), reduce ? 2600 : 1600);
-    return () => clearTimeout(t);
-  }, [inView, reduce, driving]);
+  const takeOver = () => {
+    setDriving(true);
+    // Hand it over whole. Half a day on the screen is worse than no day,
+    // and the reader who just reached for a control wants the instrument,
+    // not the animation they interrupted.
+    setHead(23);
+  };
 
-  const covered = flipped;
-
-  // Beat two: walk the trades until the reader takes the controls.
-  const autoplay = inView && !driving && !reduce;
-  useEffect(() => {
-    if (!autoplay) return;
-    const t = setTimeout(() => {
-      const i = INDUSTRIES.findIndex((x) => x.id === activeId);
-      setActiveId(INDUSTRIES[(i + 1) % INDUSTRIES.length].id);
-    }, DWELL * 1000);
-    return () => clearTimeout(t);
-  }, [autoplay, activeId]);
-
-  const pick = (id: string) => {
+  const pickTrade = (id: string) => {
     takeOver();
     setActiveId(id);
     setPicked(null);
   };
 
-  const answered = covered ? day.total : day.answeredWithout;
+  // Reduced motion gets the end of the scene, immediately: the whole day,
+  // answered, on the busiest hour. Never a blank chart, and no timers.
+  //
+  // Adjusted during render rather than from an effect, and that is the
+  // difference between arriving at the finished state and painting the
+  // empty one first. `usePrefersReducedMotion` is false on the server and
+  // on the first client render so that hydration matches, which means the
+  // instrument does start at midnight — but React re-renders before it
+  // commits, so nobody ever sees it there. The flip is still theirs
+  // afterwards: this fires once, when the preference is learned.
+  const [reduced, setReduced] = useState(reduce);
+  if (reduced !== reduce) {
+    setReduced(reduce);
+    if (reduce) {
+      setHead(23);
+      setAct("covered");
+      setCovered(true);
+    }
+  }
+
+  // What the covered day is holding for: exactly as long as the sentence
+  // that describes it takes to read, at the house's reading pace.
+  const verdict = covered
+    ? `with Neuro Tech Voice, all ${day.total} calls answered, ${day.missed} of them recovered.`
+    : `without an agent, ${day.answeredWithout} of ${day.total} calls answered and ${day.missed} to voicemail.`;
+  const read = holdFor(verdict);
+
+  /**
+   * The clock. One timer at a time, cleared on every change and on
+   * unmount, and it does not exist at all unless the instrument is on
+   * screen and still playing itself.
+   *
+   *   day      the hours walk, one at a time, midnight to midnight
+   *   hour     the clock parks on the busiest hour and lives it
+   *   covered  the agent goes on, the day flips, the hour replays
+   *            — held for as long as the verdict takes to read
+   *   →        the next trade, from midnight
+   */
+  useEffect(() => {
+    if (!playing) return;
+    let t: number;
+
+    if (act === "day") {
+      if (head < 23) {
+        const next = head + 1;
+        t = window.setTimeout(
+          () => setHead(next),
+          active.volume[next] ? HOUR_BEAT : QUIET_BEAT,
+        );
+      } else {
+        t = window.setTimeout(() => setAct("hour"), BEAT);
+      }
+    } else if (act === "hour") {
+      t = window.setTimeout(() => {
+        setCovered(true);
+        setAct("covered");
+      }, PLAY + BEAT);
+    } else {
+      t = window.setTimeout(() => {
+        const i = INDUSTRIES.findIndex((x) => x.id === activeId);
+        setActiveId(INDUSTRIES[(i + 1) % INDUSTRIES.length].id);
+        setHead(-1);
+        setCovered(false);
+        setAct("day");
+      }, PLAY + read);
+    }
+
+    return () => window.clearTimeout(t);
+  }, [playing, act, head, activeId, active, read]);
+
+  // Which hour the dial is holding. While the day walks it is the hour that
+  // just rang — the dial is the chart's playhead, magnified — and from the
+  // moment the clock parks, or the reader takes over, it is theirs.
+  const dialIdx =
+    driving || reduce
+      ? picked !== null && day.cells[picked]?.calls
+        ? picked
+        : peakIdx
+      : act === "day" && head >= 0
+        ? lastRung(day.cells, head, peakIdx)
+        : peakIdx;
+
+  // How long the open hour takes to play: one beat while the day is
+  // running past it, the full 4.2s once the clock stops on it.
+  const span = !driving && act === "day" ? HOUR_BEAT : PLAY;
+
+  // The day so far. The counts at the foot are a running total of the hours
+  // that have happened, which is why nothing in this section counts up at
+  // anybody: the number moves because the day moved.
+  const sofar = day.cells.slice(0, head + 1);
+  const callsIn = sofar.reduce((s, c) => s + c.calls, 0);
+  const gotThrough = sofar.reduce((s, c) => s + c.answered, 0);
+  const answered = covered ? callsIn : gotThrough;
+  const missed = callsIn - gotThrough;
+
+  // The rule under the active trade fills as its day runs, so the thing
+  // that says "this panel is about to move on" is the same rule that says
+  // which trade you are looking at.
+  const progress = act === "day" ? (head + 1) / 24 : 1;
+  const beat = head >= 0 && !active.volume[head] ? QUIET_BEAT : HOUR_BEAT;
 
   return (
     <section id="use-cases" className="scroll-mt-28 py-20 md:py-28">
       {/* masthead — on the gutter, not centred, and in the house opener:
-          violet eyebrow with the corner dot, then the display line. */}
+          violet eyebrow with the corner dot, then the display line. It does
+          not perform an entrance: the instrument below is the motion, and
+          a heading that slides in first only delays it. */}
       <Frame className="px-6 md:px-12">
-        <Reveal>
-          <SectionHeading eyebrow={USE_CASES_INTRO.eyebrow}>
-            {USE_CASES_INTRO.title}
-          </SectionHeading>
-        </Reveal>
+        <SectionHeading eyebrow={USE_CASES_INTRO.eyebrow}>
+          {USE_CASES_INTRO.title}
+        </SectionHeading>
 
-        <Reveal
-          delay={0.08}
-          as="p"
-          className="mt-5 max-w-[620px] text-base leading-[26px] text-pretty text-pp-muted"
-        >
+        <p className="mt-5 max-w-[620px] text-base leading-[26px] text-pretty text-pp-muted">
           {USE_CASES_INTRO.sub}
-        </Reveal>
+        </p>
       </Frame>
 
       {/* the instrument, on the one soft surface in this section */}
       <Frame className="mt-10 px-2 md:mt-14 md:px-4">
         <div
           ref={ref}
+          // A click, a focus or a key is an interaction and takes the
+          // instrument for good. Merely crossing it holds the clock where
+          // it stands — and only for a mouse, because a touch that enters
+          // and never leaves would be a scene frozen for the rest of the
+          // session. `pointerdown` would be that same bug on a phone:
+          // every scroll begins with a finger on this panel.
+          onClickCapture={takeOver}
+          onFocusCapture={takeOver}
+          onKeyDownCapture={takeOver}
+          onPointerEnter={(e) => {
+            if (e.pointerType === "mouse") setHeld(true);
+          }}
+          onPointerLeave={() => setHeld(false)}
           className="rounded-[24px] bg-pp-card p-5 md:rounded-[32px] md:p-9"
         >
           {/* Selector rail, on a hairline rather than in a row of pills.
-              Scrolls as one row on a phone; the dwell draws itself along
-              the active trade's rule, so the thing that tells the reader
-              the panel is about to move on is the same rule that tells
-              them which trade they are looking at. */}
+              Scrolls as one row on a phone. */}
           <div className="flex gap-6 overflow-x-auto border-b border-pp-hair [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {INDUSTRIES.map((ind) => {
               const on = ind.id === activeId;
@@ -1285,8 +1423,7 @@ export function UseCases() {
                 <button
                   key={ind.id}
                   type="button"
-                  onClick={() => pick(ind.id)}
-                  onPointerEnter={takeOver}
+                  onClick={() => pickTrade(ind.id)}
                   aria-pressed={on}
                   className={cn(
                     "relative flex min-h-11 shrink-0 items-center gap-2 pb-3 text-[14px] leading-none whitespace-nowrap outline-none transition-colors duration-500 focus-visible:text-pp-accent",
@@ -1296,72 +1433,63 @@ export function UseCases() {
                   <Icon className="size-4 shrink-0" strokeWidth={1.9} />
                   {ind.label}
 
-                  {on &&
-                    (autoplay ? (
-                      <motion.span
-                        key={ind.id}
-                        aria-hidden
-                        className="absolute inset-x-0 -bottom-px h-[2px] origin-left bg-pp-accent"
-                        initial={{ scaleX: 0 }}
-                        animate={{ scaleX: 1 }}
-                        transition={{ duration: DWELL, ease: "linear" }}
-                      />
-                    ) : (
-                      <span
-                        aria-hidden
-                        className="absolute inset-x-0 -bottom-px h-[2px] bg-pp-accent"
-                      />
-                    ))}
+                  {on && (
+                    <span
+                      aria-hidden
+                      className="absolute inset-x-0 -bottom-px h-[2px] origin-left bg-pp-accent transition-transform ease-linear motion-reduce:transition-none"
+                      style={{
+                        transform: `scaleX(${driving || reduce ? 1 : progress})`,
+                        transitionDuration: `${beat}ms`,
+                      }}
+                    />
+                  )}
                 </button>
               );
             })}
           </div>
 
-          {/* Reaching the instrument at all stops the carousel: a reader
-              studying an hour must not have the trade swapped under the
-              cursor between deciding to click and clicking. */}
-          <div onPointerEnter={takeOver}>
+          <div>
             <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-2.5 text-pp-muted">
                 <Clock className="size-4 shrink-0" strokeWidth={1.9} />
                 <span className={LABEL}>One day on the line</span>
               </div>
 
-              {/* the toggle — the section's whole argument, in one control */}
-              <div className="flex rounded-full border border-pp-hair bg-white p-1 text-[13px]">
-                {[
-                  { on: false, label: "Without an agent" },
-                  { on: true, label: "With Neuro Tech Voice" },
-                ].map((opt) => (
-                  <button
-                    key={opt.label}
-                    type="button"
-                    aria-pressed={covered === opt.on}
-                    onClick={() => {
-                      takeOver();
-                      setFlipped(opt.on);
+              {/* the toggle — the section's whole argument, in one control.
+                  Two equal columns with one pill sliding between them, so
+                  the mode change is a movement rather than a swap. */}
+              <div className="rounded-full border border-pp-hair bg-white p-1 text-[13px]">
+                <div className="relative grid grid-cols-2">
+                  <span
+                    aria-hidden
+                    className="absolute inset-y-0 left-0 w-1/2 rounded-full bg-pp-ink transition-transform duration-300 motion-reduce:transition-none"
+                    style={{
+                      transform: covered ? "translateX(100%)" : "translateX(0)",
                     }}
-                    className={cn(
-                      "relative rounded-full px-4 py-2 leading-none transition-colors duration-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
-                      covered === opt.on
-                        ? "text-white"
-                        : "text-pp-muted hover:text-pp-ink",
-                    )}
-                  >
-                    {covered === opt.on && (
-                      <motion.span
-                        layoutId="wif-mode"
-                        aria-hidden
-                        className="absolute inset-0 rounded-full bg-pp-ink"
-                        transition={{
-                          duration: reduce ? 0 : 0.4,
-                          ease: EASE,
-                        }}
-                      />
-                    )}
-                    <span className="relative">{opt.label}</span>
-                  </button>
-                ))}
+                  />
+                  {[
+                    { on: false, label: "Without an agent" },
+                    { on: true, label: "With Neuro Tech Voice" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.label}
+                      type="button"
+                      aria-pressed={covered === opt.on}
+                      onClick={() => {
+                        takeOver();
+                        setCovered(opt.on);
+                      }}
+                      className={cn(
+                        "relative rounded-full px-4 py-2 leading-none transition-colors duration-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
+                        covered === opt.on
+                          ? "text-white"
+                          : "text-pp-muted hover:text-pp-ink",
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -1370,22 +1498,20 @@ export function UseCases() {
                 never what flipping it did to the day. This says the
                 outcome, and says it for a change of trade too.
 
-                Live only once the reader is driving. The instrument walks
-                the trades by itself every 7.8s, and a region that
-                announced each of those would talk over the page for as
-                long as the section stayed on screen. Off, it is still
+                Live only once the reader is driving. The instrument plays
+                a day and then the next trade's day by itself, and a region
+                that announced each of those would talk over the page for
+                as long as the section stayed on screen. Off, it is still
                 read in place — it just stops interrupting. */}
             <p aria-live={driving ? "polite" : "off"} className="sr-only">
-              {active.label}, one day on the line —{" "}
-              {covered
-                ? `with Neuro Tech Voice, all ${day.total} calls answered, ${day.missed} of them recovered.`
-                : `without an agent, ${day.answeredWithout} of ${day.total} calls answered and ${day.missed} to voicemail.`}
+              {active.label}, one day on the line — {verdict}
             </p>
 
             <div className="mt-7">
               <DayChart
                 day={day}
                 covered={covered}
+                head={head}
                 staffed={active.staffed}
                 label={active.label}
                 picked={dialIdx}
@@ -1396,25 +1522,25 @@ export function UseCases() {
               />
             </div>
 
-            {/* the arithmetic */}
+            {/* the arithmetic, as it accrues */}
             <div className="mt-9 grid grid-cols-2 gap-6 border-t border-pp-hair pt-7 sm:grid-cols-3">
               <div>
                 <p className={LABEL}>Calls in</p>
-                <Tally
-                  value={day.total}
-                  className="mt-2 block text-[28px] leading-none font-medium tracking-[-0.03em] text-pp-ink md:text-[32px]"
-                />
+                <span className="mt-2 block text-[28px] leading-none font-medium tracking-[-0.03em] text-pp-ink tabular-nums md:text-[32px]">
+                  {callsIn.toLocaleString("en-US")}
+                </span>
               </div>
 
               <div>
                 <p className={LABEL}>Answered</p>
-                <Tally
-                  value={answered}
+                <span
                   className={cn(
-                    "mt-2 block text-[28px] leading-none font-medium tracking-[-0.03em] transition-colors duration-500 md:text-[32px]",
+                    "mt-2 block text-[28px] leading-none font-medium tracking-[-0.03em] tabular-nums transition-colors duration-500 md:text-[32px]",
                     covered ? "text-pp-accent" : "text-pp-ink",
                   )}
-                />
+                >
+                  {answered.toLocaleString("en-US")}
+                </span>
               </div>
 
               <div className="col-span-2 sm:col-span-1">
@@ -1429,7 +1555,7 @@ export function UseCases() {
                     )}
                   >
                     {covered ? "+" : "−"}
-                    {day.missed}
+                    {missed}
                   </span>
                   {/* "a day", not a dollar figure. The money that used to
                       sit here was `missed × Industry.value`, and every
@@ -1444,14 +1570,17 @@ export function UseCases() {
               </div>
             </div>
 
-            {/* The hour, on the dial. It used to be three levels down,
-                behind a click, which is to say almost nobody saw it. */}
+            {/* The hour, on the dial. Keyed on the trade, the hour and the
+                pace, so opening a new hour is a fresh set of un-drawn
+                strokes rather than a set of drawn ones being re-aimed. */}
             <div className="mt-10 border-t border-pp-hair pt-10">
               <PeakHour
-                key={`${active.id}-${dialIdx}`}
+                key={`${active.id}-${dialIdx}-${span}`}
                 ind={active}
                 cell={day.cells[dialIdx]}
                 covered={covered}
+                span={span}
+                reduce={reduce}
               />
             </div>
           </div>
