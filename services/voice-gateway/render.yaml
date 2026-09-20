@@ -1,0 +1,54 @@
+# Render Blueprint for the voice gateway (alternative to Fly.io).
+# Render → New → Blueprint → pick this repository → path services/voice-gateway/render.yaml.
+# The Docker build context is the repository root (the image bundles shared app modules).
+services:
+  - type: web
+    name: ntv-voice-gateway
+    runtime: docker
+    rootDir: .
+    dockerfilePath: ./services/voice-gateway/Dockerfile
+    dockerContext: .
+    # Frankfurt is closest to Cartesia/ElevenLabs EU and Twilio's de1 media edge.
+    region: frankfurt
+    # WebSocket calls need an always-on instance: never use a plan that sleeps.
+    plan: standard
+    numInstances: 1
+    healthCheckPath: /health
+    # SIGTERM starts a drain of up to SHUTDOWN_DRAIN_SECONDS; give it room.
+    maxShutdownDelaySeconds: 60
+    autoDeploy: false
+    buildFilter:
+      paths:
+        - services/voice-gateway/**
+        - lib/voice/contracts.ts
+        - lib/voice/greetings.ts
+        - lib/voice/languages.ts
+        - lib/voice/tone.ts
+        - lib/agent-languages.ts
+        - types/index.ts
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: LOG_LEVEL
+        value: info
+      - key: CARTESIA_TTS_MODEL
+        value: sonic-3.6-2026-08-27
+      - key: OPENAI_VOICE_MODEL
+        value: gpt-5.6-luna
+      - key: MAX_CONCURRENT_CALLS
+        value: "40"
+      - key: SHUTDOWN_DRAIN_SECONDS
+        value: "30"
+      # Secrets: set in the Render dashboard (sync: false keeps them out of git).
+      - key: APP_URL
+        sync: false
+      - key: VOICE_GATEWAY_SECRET
+        sync: false
+      - key: CARTESIA_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: BROWSER_ALLOWED_ORIGINS
+        sync: false
