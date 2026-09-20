@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { gsap } from "gsap";
 import { Check, Coins, KeyRound, Wrench } from "lucide-react";
 import {
   COMPARISON_INTRO,
@@ -12,6 +13,7 @@ import {
   type PartState,
 } from "@/lib/site";
 import { cn } from "@/lib/utils";
+import { useKitContext, useMotionKit } from "./product/motion-kit";
 import { Frame, SectionHeading } from "./product/primitives";
 import { holdFor, useInView, usePrefersReducedMotion } from "./product/timing";
 
@@ -74,42 +76,68 @@ import { holdFor, useInView, usePrefersReducedMotion } from "./product/timing";
  *    comparison that adds them together to make a rival's number bigger is
  *    exactly what the source note at the bottom promises we did not do.
  *
- * **THE SCENE: the audit runs itself.**
+ * **THE SIGNATURE MOVEMENT: one column keeps going, and you watch it.**
  *
- * This section used to move because the reader scrolled — an entrance, a
- * count-up, a cascade tied to a scroll position. Scrolling is not an
- * argument. So the board now *performs the count* instead: a reading head
- * walks the bill of materials from layer 01 to layer 10 on the house clock
- * (`holdFor`, floored at 1.4s a layer), gated by `useInView` so it never
- * runs off screen, and three things follow it down the page.
+ * The whole case is a *shape* — four columns that stop halfway down and one
+ * that does not — and a shape argued in prose is a shape nobody counts. So
+ * the board performs the count, and there is exactly one thing moving while
+ * it does: **the audit descending the bill of materials.**
  *
- *   · The row under the head is lit, the way it lights under a pointer —
- *     the scene drives the reader's own instrument, not a second one.
- *   · Every rival cell *below* the head still wears borrowed weight; the
- *     moment the head reads its row, the four rival columns hand that
- *     weight back and go pale, one layer at a time, while ours holds. The
- *     extinction is now paced by the audit rather than by a scroll
- *     position, which is what makes it read as a finding instead of a
- *     transition.
- *   · The ledger at the foot counts what has actually been read. It is not
- *     a number animating to a target; it is a tally incrementing because a
- *     layer just landed on somebody's desk. The label and the colour come
- *     from the final figure, so nothing ever claims "nothing" mid-count.
- *   · Our column's two vertical rules draw down with the head, as one
- *     object, so the column that keeps going visibly keeps going.
+ * It is one GSAP timeline, and it has two hands, which are the two halves
+ * of the same sentence:
  *
- * The movement is CSS throughout — `transition-colors`, `transition-transform`,
- * house durations. React only changes which layer has been read.
+ *   · **Our column's two edges are DRAWN**, from the top of the board to
+ *     the bottom, in one unbroken constant-speed stroke that never pauses
+ *     at a layer and never stops early. `DrawSVGPlugin` on two real SVG
+ *     strokes, each over its own faint ghost — the route was always there;
+ *     the ink is the audit proving it. This is the only thing on the page
+ *     that is literally drawn, and it is the only column that keeps going.
+ *     A `scaleY` on a div would have said the same thing by stretching,
+ *     which is not what a column doing its job looks like.
+ *   · **In its wake, the four rival columns hand back borrowed weight.**
+ *     Every rival cell in the business half carries a held overlay — ink
+ *     glyph, ink hairline, grey ground — over the pale `build` mark that is
+ *     the truth underneath. As the audit reads a layer, that row's four
+ *     overlays fade out on a 0.06s stagger, left to right, so the loss
+ *     sweeps across the board as one finding instead of flipping as four
+ *     simultaneous events. Ours has no overlay: there is nothing to hand
+ *     back.
+ *
+ * At the turn — the moment the audit crosses the rule out of the voice
+ * stack and into the work — the words **"Not a market — work"** arrive one
+ * at a time, `SplitText`, because that clause is the finding and a finding
+ * should reach the reader as language rather than as a block that was
+ * already there. Until the audit gets there the board does not name the
+ * bottom half at all; the rule and the group are drawn, the verdict on them
+ * is not yet in. The label on the stack half never moves: the voice stack
+ * is not contested, it is true for everyone from the first paint, and
+ * animating it too would be decoration wearing the finding's coat.
+ *
+ * No `MotionPathPlugin` here. Nothing in this section travels a route; it
+ * descends a column, and a straight fall dressed up as a path would be a
+ * plugin used for the look of it.
+ *
+ * **The clock is still the house's, and still `holdFor`** — floored at 1.4s
+ * a layer, one `tl.call` per layer. React is told only *which layer has
+ * been read*, and the three things that follow from that are small state
+ * changes the browser tweens, which is what CSS transitions are for: the
+ * row under the head lights the way it lights under a pointer, its numeral
+ * takes accent, and the ledger at the foot ticks. That tally is not a
+ * number animating to a target — it increments because a layer just landed
+ * on somebody's desk — and its wording and colour come from the *final*
+ * figure, so no column ever claims "nothing" mid-count.
  *
  * **The resting markup is the finished board**, and that is load-bearing.
  * The server sends a fully read grid: true tones, full rules, final tally.
- * The scene only rewinds to zero once it has armed on the client, in view,
- * with motion allowed. No JS, a dead effect, or `prefers-reduced-motion`
+ * GSAP is fetched only when the board comes near, and its first act is to
+ * *rewind* that finished board to zero. With `prefers-reduced-motion` the
+ * kit is never fetched at all, so there is nothing to serve a still state
+ * to — the still state is the markup. No JS, a dead effect, a failed import
  * and the reader simply gets the answer.
  *
  * **The reader's first touch ends it for good.** Any pointer, focus or key
- * event on the board stops the clock, finishes the audit instantly, and
- * hands the cross-highlight back to the pointer permanently.
+ * event on the board runs the timeline to its end on the spot, stops the
+ * clock, and hands the cross-highlight back to the pointer permanently.
  */
 
 const ICONS: Record<PartState, typeof Check> = {
@@ -142,16 +170,22 @@ const TONE: Record<PartState, string> = {
 };
 
 /**
- * The weight a rival cell wears until the head has read its layer.
+ * The weight a rival cell wears until the audit has read its layer.
  *
- * Deliberately not one of the four states: it claims nothing. A cell
- * wearing it is already showing the wrench and already announcing "you
- * build it" to a screen reader — only its weight is borrowed, and it is
- * handed back the instant the audit reaches that row.
+ * Deliberately not one of the four states: it claims nothing. It is drawn
+ * as a separate mark laid *over* the true one, `aria-hidden` and resting at
+ * `opacity: 0`, so the cell underneath is showing the wrench and announcing
+ * "you build it" to a screen reader from the first paint. Only the weight
+ * is borrowed, and GSAP fades it off the instant the audit reaches that row.
  *
- * On white it is the *heaviest* tone in play rather than the brightest
- * one: ink glyph, ink hairline, a grey ground. Draining that to `build`'s
- * bare outline is a loss of weight the eye reads as a column going out.
+ * An overlay rather than a colour tween, and that is deliberate too: the
+ * only property the timeline touches is opacity on an element React never
+ * restyles, so the context can revert to the finished board exactly, with
+ * no computed colours to read back and nothing to clear.
+ *
+ * On white it is the *heaviest* tone in play rather than the brightest one:
+ * ink glyph, ink hairline, a grey ground. Losing it down to `build`'s bare
+ * outline is a loss of weight the eye reads as a column going out.
  */
 const HELD = "border-pp-ink/25 bg-pp-ink/[0.06] text-pp-ink";
 
@@ -199,7 +233,6 @@ const ROWS = {
 
 /** The order the head reads in: the voice stack first, then the work. */
 const SEQ = [...ROWS.stack, ...ROWS.business];
-const SEQ_AT = new Map(SEQ.map((l, i) => [l.id, i]));
 
 /**
  * What each vendor leaves you after the first `k` layers have been read —
@@ -226,89 +259,208 @@ const LEDGER = LEDGER_AT.map((steps) => steps[steps.length - 1]);
 
 function Mark({
   state,
-  held,
+  drain,
   size = "md",
 }: {
   state: PartState;
-  /** A rival's business-half cell the head has not reached yet. */
-  held?: boolean;
+  /**
+   * The classes the timeline finds this cell's held overlay by, for a
+   * rival's business-half cell. Absent everywhere else — our column has
+   * nothing to hand back, and the voice stack above the rule is true for
+   * everyone from the first paint.
+   */
+  drain?: string;
   size?: "md" | "sm";
 }) {
   const Icon = ICONS[state];
+  const box = size === "md" ? "size-7 rounded-[9px]" : "size-5 rounded-[7px]";
+  const glyph = size === "md" ? "size-3.5" : "size-2.5";
   return (
-    <span
-      title={PART_STATES[state].label}
-      className={cn(
-        "grid place-items-center border transition-colors duration-500",
-        size === "md" ? "size-7 rounded-[9px]" : "size-5 rounded-[7px]",
-        TONE[state],
-        held && HELD,
+    <span className="relative grid place-items-center">
+      <span
+        title={PART_STATES[state].label}
+        className={cn("grid place-items-center border", box, TONE[state])}
+      >
+        <Icon className={glyph} strokeWidth={2.2} aria-hidden />
+      </span>
+      {drain && (
+        // Rests invisible, which is the finished board. GSAP raises it when
+        // it rewinds and takes it off again as the audit passes. Inline,
+        // because opacity is the one property the timeline writes here and
+        // a utility class would fight it.
+        <span
+          aria-hidden
+          style={{ opacity: 0 }}
+          className={cn(
+            drain,
+            "pointer-events-none absolute inset-0 grid place-items-center border",
+            box,
+            HELD,
+          )}
+        >
+          <Icon className={glyph} strokeWidth={2.2} aria-hidden />
+        </span>
       )}
-    >
-      <Icon
-        className={size === "md" ? "size-3.5" : "size-2.5"}
-        strokeWidth={2.2}
-        aria-hidden
-      />
     </span>
   );
 }
 
+/** A beat, in seconds: the house clock, floored at 1.4s a layer. */
+const BEATS = SEQ.map((l) => holdFor(l.label) / 1000);
+/** A breath before the first layer, so the board is seen before it is read. */
+const LEAD = 0.35;
+/** When the audit lands on each layer, and when it has finished. */
+const AT = BEATS.reduce<number[]>((acc, b) => [...acc, acc[acc.length - 1] + b], [LEAD]);
+const RUN = AT[AT.length - 1];
+/** The turn: the first layer below the rule, where the voice stack ends. */
+const TURN_AT = AT[SEQ.findIndex((l) => l.group === "business")];
+
 export function Comparison() {
-  const reduce = usePrefersReducedMotion();
   const boardRef = useRef<HTMLDivElement>(null);
+  // Two margins, two jobs: `near` fetches GSAP, `inView` plays the audit.
   const inView = useInView(boardRef, "-10% 0px -10% 0px");
+  const near = useInView(boardRef, "25% 0px");
+  const reduce = usePrefersReducedMotion();
+  // `near && !reduce`, not `near`: the markup already rests on the finished
+  // board, so with reduced motion GSAP is never downloaded at all and there
+  // is no still state left for it to set.
+  const kit = useMotionKit(near && !reduce);
+  const tlRef = useRef<gsap.core.Timeline | null>(null);
 
   /**
    * The audit. `head` is how many layers have been read: `SEQ.length` is a
    * finished board, and that is where it rests — on the server, before the
-   * scene arms, and forever after the reader touches it.
+   * timeline rewinds it, and forever after the reader touches it. The
+   * timeline owns it; React only renders it.
    */
-  const [head, setHead] = useState(SEQ.length);
+  const [beat, setBeat] = useState(SEQ.length);
   const [taken, setTaken] = useState(false);
-  const armed = useRef(false);
+  // Derived, not stored, for the two states that end the audit outright:
+  // reduced motion is live and can arrive mid-count, and the reader's first
+  // touch is permanent. Neither has a beat to wait for.
+  const head = reduce || taken ? SEQ.length : beat;
   const running = head < SEQ.length;
 
-  /** Rewind once, the first time the board is on screen and allowed to move. */
-  useEffect(() => {
-    if (reduce || taken || !inView || armed.current) return;
-    armed.current = true;
-    setHead(0);
-  }, [reduce, taken, inView]);
+  useKitContext(
+    kit,
+    ({ gsap, SplitText }) => {
+      // A reverted context rests on the finished board, which is exactly
+      // what reduced motion should see. Nothing to build.
+      if (reduce) return;
+
+      const q = gsap.utils.selector(boardRef);
+      const rules = q(".cp-rule");
+      const turn = q(".cp-turn")[0] as HTMLElement | undefined;
+
+      // Split for motion only: the words stay plain text to a screen
+      // reader, and the context reverts the split — never call .revert().
+      const split = turn ? SplitText.create(turn, { type: "words", aria: "none" }) : null;
+
+      const tl = gsap.timeline({ paused: true });
+
+      // The whole resting state, set at the top, before anything moves.
+      tl.set(q(".cp-drain"), { opacity: 1 }, 0).set(rules, { drawSVG: "0% 0%" }, 0);
+      if (split) {
+        // Each word on its own compositor layer, so the rise and the blur
+        // are GPU work rather than a repaint of the line per frame.
+        gsap.set(split.words, { willChange: "transform, opacity, filter", force3D: true });
+        tl.set(split.words, { autoAlpha: 0 }, 0);
+      }
+
+      // One unbroken stroke, at one speed, for the whole length of the
+      // audit: the column that keeps going does not pause at a layer.
+      tl.to(rules, { drawSVG: "0% 100%", duration: RUN, ease: "none" }, 0);
+
+      SEQ.forEach((l, i) => {
+        const at = AT[i];
+        // The layer has been read. Everything that follows from that — the
+        // lit row, the numeral, the tally — is CSS off one integer.
+        tl.call(() => setBeat(i + 1), [], at);
+
+        // ...and the four rivals hand their borrowed weight back, left to
+        // right across the board, as one sweep rather than four events.
+        const drain = q(`.cp-drain-${l.id}`);
+        if (drain.length) {
+          tl.to(
+            drain,
+            { opacity: 0, duration: 0.45, ease: "power2.out", stagger: 0.06 },
+            at + 0.18,
+          );
+        }
+      });
+
+      // The finding, arriving as language at the moment it is proved.
+      if (split) {
+        tl.fromTo(
+          split.words,
+          { autoAlpha: 0, yPercent: 16, filter: "blur(3px)" },
+          {
+            autoAlpha: 1,
+            yPercent: 0,
+            filter: "blur(0px)",
+            duration: 0.9,
+            ease: "power2.out",
+            stagger: 0.06,
+            immediateRender: false,
+          },
+          TURN_AT - 0.45,
+        );
+      }
+
+      // The board rests on its ending. Written as an empty tween, never a
+      // delay, so the timeline's own length is the truth.
+      tl.to({}, { duration: 0.9 }, RUN);
+
+      // The rewind. Those `set`s at position zero render the moment the
+      // timeline is built, so the tally is wound back with them rather than
+      // a beat later on the first play — a board holding borrowed weight
+      // under a finished count would be the one frame that lies.
+      //
+      // A reader who touched it before GSAP arrived gets the answer instead.
+      if (taken) tl.progress(1);
+      else setBeat(0);
+
+      tlRef.current = tl;
+      return () => {
+        tlRef.current = null;
+      };
+    },
+    // `revertOnUpdate` because the callback splits text and sets inline
+    // styles; reverting puts the finished board back, which is the point.
+    { scope: boardRef, dependencies: [reduce], revertOnUpdate: true },
+  );
 
   /**
-   * One layer at a time, at reading pace. The timer only exists while the
-   * board is on screen and untouched, so scrolling away pauses the audit
-   * where it stands and unmounting or a first touch clears it outright.
+   * Plays while on screen, and never again once the reader has taken over.
+   * `kit` is in the deps because the timeline is built asynchronously,
+   * after the kit arrives.
    */
   useEffect(() => {
-    if (reduce || taken || !inView || !armed.current || !running) return;
-    const t = window.setTimeout(
-      () => setHead((h) => Math.min(SEQ.length, h + 1)),
-      holdFor(SEQ[head].label),
-    );
-    return () => window.clearTimeout(t);
-  }, [reduce, taken, inView, running, head]);
+    const tl = tlRef.current;
+    if (!tl) return;
+    if (inView && !reduce && !taken) tl.play();
+    else tl.pause();
+  }, [inView, reduce, taken, kit]);
 
   /**
    * Cross-highlight, and the handover. Six columns by twelve rows is
    * exactly the size at which the eye loses the row on its way across. The
    * audit lights the row it is reading; the reader's first pointer, focus
-   * or key event finishes the audit on the spot and takes the highlight
-   * over for the rest of the page's life.
+   * or key event runs the timeline to its end on the spot and takes the
+   * highlight over for the rest of the page's life.
    */
   const [at, setAt] = useState<{ row: string; col: number } | null>(null);
   const take = () => {
     if (taken) return;
     setTaken(true);
-    setHead(SEQ.length);
+    // Seeking suppresses the timeline's own callbacks, which is what we
+    // want: the board finishes, the clock does not replay its beats. `head`
+    // is derived from `taken`, so the count finishes with it.
+    tlRef.current?.progress(1).pause();
   };
   const autoRow = !taken && running && head > 0 ? SEQ[head - 1].id : null;
   const rowLit = (row: string) => at?.row === row || autoRow === row;
   const colLit = (col: number) => at?.col === col;
-
-  /** The head's position, for our column's two rules. */
-  const drawn = useMemo(() => head / SEQ.length, [head]);
 
   return (
     <Frame
@@ -450,15 +602,18 @@ export function Comparison() {
                           <span aria-hidden className="mr-3 text-pp-muted/45">
                             /
                           </span>
-                          {g.note}
+                          {/* The turn's note is the one clause on this board
+                              that arrives as language: SplitText reaches for
+                              this leaf, and only on the business half. */}
+                          <span className={g.id === "business" ? "cp-turn" : undefined}>
+                            {g.note}
+                          </span>
                         </span>
                       </span>
                     </th>
                   </tr>
 
                   {ROWS[g.id].map((l) => {
-                    const seq = SEQ_AT.get(l.id) ?? 0;
-                    const read = seq < head;
                     return (
                       <tr
                         key={l.id}
@@ -497,7 +652,10 @@ export function Comparison() {
                           // Only the rivals' business half ever holds.
                           // Ours never drains, and the voice stack above
                           // the rule is true for everyone from first paint.
-                          const held = g.id === "business" && !r.ours && !read;
+                          const drain =
+                            g.id === "business" && !r.ours
+                              ? `cp-drain cp-drain-${l.id}`
+                              : undefined;
                           return (
                             <td
                               key={r.id}
@@ -508,7 +666,7 @@ export function Comparison() {
                               )}
                             >
                               <span className="inline-grid place-items-center">
-                                <Mark state={state} held={held} />
+                                <Mark state={state} drain={drain} />
                                 <span className="sr-only">
                                   {PART_STATES[state].label}
                                 </span>
@@ -581,20 +739,53 @@ export function Comparison() {
             </table>
 
             {/* Above the table, so the rule reads as one unbroken object
-                rather than as something the row hairlines cut through. */}
+                rather than as something the row hairlines cut through.
+
+                Real SVG strokes, and the one thing on this board that is
+                drawn rather than revealed — DrawSVG needs geometry, and
+                the argument needs a stroke that keeps going rather than a
+                box that stretches. Each carries a faint ghost twin over
+                which the ink is laid: the column's route was always there;
+                the audit is what inks it.
+
+                `viewBox="0 0 1 100"` against a one-pixel-wide box, so the
+                stroke is always exactly one device pixel across and the
+                line is always exactly a hundred user units long however
+                tall the board grows. DrawSVG's dash arithmetic is then in
+                those hundred units and survives every reflow. They rest
+                fully drawn, which is what the server sends. */}
             <div
               aria-hidden
               className="pointer-events-none absolute inset-0 z-20"
             >
               {([COLS.oursLeft, COLS.oursRight] as const).map((left) => (
-                <div
+                <svg
                   key={left}
-                  // Drawn to the head, as one object down the full table
-                  // height — twelve stacked cell borders cannot do that.
-                  // Rests fully drawn, which is what the server sends.
-                  className="absolute inset-y-0 w-px origin-top bg-pp-accent/40 transition-transform duration-500"
-                  style={{ left, transform: `scaleY(${drawn})` }}
-                />
+                  className="absolute inset-y-0 w-px"
+                  style={{ left }}
+                  viewBox="0 0 1 100"
+                  preserveAspectRatio="none"
+                  aria-hidden
+                >
+                  <line
+                    className="stroke-pp-accent"
+                    x1="0.5"
+                    x2="0.5"
+                    y1="0"
+                    y2="100"
+                    strokeOpacity="0.1"
+                    strokeWidth="1"
+                  />
+                  <line
+                    className="cp-rule stroke-pp-accent"
+                    x1="0.5"
+                    x2="0.5"
+                    y1="0"
+                    y2="100"
+                    strokeOpacity="0.4"
+                    strokeWidth="1"
+                  />
+                </svg>
               ))}
             </div>
           </div>

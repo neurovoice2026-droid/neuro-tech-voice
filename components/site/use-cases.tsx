@@ -7,6 +7,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import type { gsap } from "gsap";
 import { ArrowRight, Clock } from "lucide-react";
 import {
   INDUSTRIES,
@@ -17,6 +18,7 @@ import {
 } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { IntentLink } from "./intent-link";
+import { useKitContext, useMotionKit } from "./product/motion-kit";
 import { Frame, PillLink, SectionHeading } from "./product/primitives";
 import { holdFor, useInView, usePrefersReducedMotion } from "./product/timing";
 
@@ -49,14 +51,50 @@ import { holdFor, useInView, usePrefersReducedMotion } from "./product/timing";
  * plays itself out and then gets answered tells them what they are
  * losing, in their own trade, in the order it happens.
  *
- * **How it is built.** On the house clock in `product/timing.ts`:
- * `useInView` gates every timer, `usePrefersReducedMotion` turns them all
- * off, and the beat the flipped day holds for is `holdFor` of the very
- * sentence the live region reads out — reading pace, not a round number.
- * The movement is CSS. React changes state; `transition-*` durations and
- * `animate-in` reveals do the animating, and the arcs are drawn with
- * `pathLength`/`stroke-dashoffset` so a call takes exactly as long to
- * draw as the call took. No JS animation library is imported here at all.
+ * **The signature movement: the hour, lived, on one clock.** The dial is
+ * where this section's argument actually happens, so it is the one thing
+ * here built as composed movement rather than as a state change — a single
+ * paused GSAP timeline, per hour, per mode. The hand sweeping the face, the
+ * thin ring closing around the outside, every call drawn as an arc starting
+ * at its own minute and taking its own length, the tally in the middle and
+ * the sentence beside it are all tweens and callbacks of that one timeline.
+ * They are therefore in phase by construction.
+ *
+ * They were not before. Each arc used to carry its own CSS transition with
+ * a hand-computed `transition-delay`, the hand carried another, the ring a
+ * third, and a `setTimeout` per call advanced the count — four independent
+ * clocks that agreed only because they had all been told the same number,
+ * and drifted the moment the tab was throttled or a frame was long. An hour
+ * whose hand and whose calls disagree is not a measurement, it is a
+ * decoration, and this section is only worth anything if it is a
+ * measurement.
+ *
+ * The plugins, and only where they mean something. **DrawSVG** draws the
+ * arcs and the hour ring, because a conversation is a line being laid down
+ * over its own duration, not a shape being revealed; the calls that never
+ * got through are dotted, so they are faded in at the minute they rang —
+ * DrawSVG on a dashed stroke would solidify it. **SplitText** carries the
+ * verdict beside the dial, because that sentence is the reading of the hour
+ * and it should arrive as language, word after word, while the hand is
+ * still going round. Nothing here travels a route that a rotation does not
+ * already describe, so there is no MotionPath: a plugin used for the sake
+ * of using it is the same decoration in a more expensive form.
+ *
+ * **What stays CSS, on purpose.** GSAP owns the composed movement; it does
+ * not own every change of state. The rings splitting apart on the flip is
+ * one radius per ring under a 500ms transition, the bars rise by height as
+ * the day reaches them, the toggle's pill slides, a hovered bar washes. All
+ * of those are one state becoming another and the browser is better at them
+ * than a timeline would be.
+ *
+ * **The rest of the clock is the house's.** `useInView` at two margins —
+ * the outer one fetches GSAP, the inner one plays the timeline; nothing is
+ * fetched until the section is near and nothing plays off screen.
+ * `usePrefersReducedMotion` is served a *finished* hour rather than an
+ * absence: the arcs rest drawn in the markup, so a reader who wants no
+ * motion never downloads GSAP at all and still sees the whole hour. The
+ * beat the flipped day holds for is `holdFor` of the very sentence the live
+ * region reads out — reading pace, not a round number.
  *
  * Five decisions worth keeping.
  *
@@ -649,16 +687,23 @@ function DayChart({
  * inward, a ring per simultaneous conversation. You do not read that
  * difference. You see it happen, over 500ms, on the same beat as the bars.
  *
- * Every arc draws over the real length of its call. That is what `span` is
- * for: it is how long this whole hour takes, and each call's delay and
- * duration are its own minute and its own length scaled into it. During
- * the day's walk `span` is one hour-beat and the hour flicks past; when
- * the clock parks on an hour it is `PLAY`, and the hour is lived.
+ * The ring split is a change of state and stays a CSS transition: one
+ * radius per ring, 500ms, on the same beat as the bars folding. GSAP is
+ * for the hour being lived, not for a toggle.
  *
- * The drawing is `pathLength="1"` with a dash the length of the path and
- * an offset that goes to zero — one CSS transition per arc, no JS on the
- * frame loop, and a stroke that is genuinely being laid down rather than
- * revealed by a mask.
+ * Every arc draws over the real length of its call, and it starts at the
+ * minute it rang. `run` in `PeakHour` is how long this whole hour is
+ * taking, and each call's position and duration on the timeline are its
+ * own minute and its own length scaled into it. During the day's walk that
+ * is one hour-beat and the hour flicks past; when the clock parks on an
+ * hour it is `PLAY`, and the hour is lived.
+ *
+ * The drawing itself belongs to the timeline in `PeakHour`: this component
+ * is the face, and every stroke on it that moves is marked with a class for
+ * that timeline to take hold of. Which is also why nothing here carries an
+ * inline dash — a stroke with no `stroke-dasharray` on it is a stroke that
+ * rests *drawn*, so the hour is whole before GSAP has arrived and stays
+ * whole for a reader who has asked for no motion.
  *
  * Drawn in ink on paper. Every neutral is `INK` at a stated alpha rather
  * than a paper colour at one, because the surface under the dial is the
@@ -708,23 +753,22 @@ function HourDial({
   calls,
   covered,
   handled,
-  lit,
-  span,
+  lived,
 }: {
   calls: HourCall[];
   covered: boolean;
   handled: number;
-  /** False for one frame after the hour opens, so every stroke has a start. */
-  lit: boolean;
-  /** Milliseconds this hour takes to play. Zero means "already over". */
-  span: number;
+  /**
+   * True while this hour is being played out at minute resolution rather
+   * than flicking past under the day's walk. The hand is only legible —
+   * and only honest — when the hour is actually being lived.
+   */
+  lived: boolean;
 }) {
   const lanes = useMemo(
     () => [...new Set(calls.map((c) => c.lane))].sort((a, b) => a - b),
     [calls],
   );
-  /** The hand is only legible when the hour is actually being lived. */
-  const sweep = span >= 1000;
 
   return (
     <div className="relative mx-auto aspect-square w-full max-w-[280px]">
@@ -818,6 +862,7 @@ function HourDial({
               strokeWidth="0.5"
             />
             <circle
+              className="uc-hour-ring"
               cx="50"
               cy="50"
               r="44.2"
@@ -826,12 +871,6 @@ function HourDial({
               strokeOpacity="0.55"
               strokeWidth="0.7"
               strokeLinecap="round"
-              pathLength={1}
-              strokeDasharray={1}
-              style={{
-                strokeDashoffset: lit ? 0 : 1,
-                transition: `stroke-dashoffset ${span}ms linear`,
-              }}
             />
           </g>
 
@@ -860,18 +899,17 @@ function HourDial({
             const on = covered || c.answered;
             const r = covered ? laneR(c.lane) : laneR(0);
             const d = arcPath(c.start, c.start + c.dur, r);
-            // The call's own minute, and the call's own length, scaled
-            // into however long this hour is taking.
-            const at = span ? Math.round((c.start / 60) * span) : 0;
-            const over = span ? Math.max(60, Math.round((c.dur / 60) * span)) : 0;
 
             if (!on) {
               // A call that arrived and became nothing: broken, unlit, and
               // it appears at the minute it rang rather than drawing,
-              // because there was no conversation to draw.
+              // because there was no conversation to draw. Dotted, so the
+              // timeline fades it in — DrawSVG on a dashed stroke writes
+              // over the dash array and solidifies the line.
               return (
                 <path
                   key={`m${i}`}
+                  className={`uc-missed uc-c${i}`}
                   d={d}
                   fill="none"
                   stroke={INK}
@@ -879,10 +917,6 @@ function HourDial({
                   strokeWidth="3"
                   strokeLinecap="butt"
                   strokeDasharray="0.9 1.8"
-                  style={{
-                    opacity: lit ? 1 : 0,
-                    transition: `opacity ${span ? 300 : 0}ms linear ${at}ms`,
-                  }}
                 />
               );
             }
@@ -892,51 +926,36 @@ function HourDial({
                 {/* A faint violet bed under the line rather than a bloom
                     around it: on white, light thrown outward is a smudge,
                     but a wider stroke of the same ink at low alpha reads
-                    as weight. Then the line itself, drawn over it. */}
+                    as weight. Then the line itself, drawn over it. Both
+                    carry the call's class, so one tween draws the pair. */}
                 <path
+                  className={`uc-draw uc-c${i}`}
                   d={d}
                   fill="none"
                   stroke={VIOLET}
                   strokeOpacity="0.14"
                   strokeWidth="6.5"
                   strokeLinecap="round"
-                  pathLength={1}
-                  strokeDasharray={1}
-                  style={{
-                    strokeDashoffset: lit ? 0 : 1,
-                    transition: `stroke-dashoffset ${over}ms linear ${at}ms`,
-                  }}
                 />
                 <path
+                  className={`uc-draw uc-c${i}`}
                   d={d}
                   fill="none"
                   stroke={VIOLET}
                   strokeWidth="3"
                   strokeLinecap="round"
-                  pathLength={1}
-                  strokeDasharray={1}
-                  style={{
-                    strokeDashoffset: lit ? 0 : 1,
-                    transition: `stroke-dashoffset ${over}ms linear ${at}ms`,
-                  }}
                 />
               </g>
             );
           })}
 
-          {/* The hand, walking the hour. A bounding rect gives the group a
-              full-dial bbox, so `fill-box` puts the rotation origin at the
-              centre rather than at the middle of the hand. */}
-          {sweep && (
-            <g
-              style={{
-                transformBox: "fill-box",
-                transformOrigin: "center",
-                transform: `rotate(${lit ? 360 : 0}deg)`,
-                transition: `transform ${span}ms linear`,
-              }}
-            >
-              <rect x="0" y="0" width="100" height="100" fill="none" />
+          {/* The hand, walking the hour. Rotated by the timeline about the
+              dial's own centre with `svgOrigin`, which is why there is no
+              bounding rect here any more: the group's bbox is the hand, and
+              a transform-box trick to work around that is a transform GSAP
+              would then have to fight. */}
+          {lived && (
+            <g className="uc-hand">
               <line
                 x1="50"
                 y1="6"
@@ -996,6 +1015,13 @@ function HourDial({
  * only believable if the page can say what the team was doing instead —
  * which is what `busyReason` is for. Copy that asserts the same claim at
  * every hour is copy a reader stops reading at the second hour.
+ *
+ * **This is where the section's one timeline lives**, because the dial and
+ * the sentence beside it are one event and were being driven as two. The
+ * hand, the closing ring, every arc, the tally under them and the words of
+ * the verdict are now tweens and callbacks of a single paused timeline,
+ * rebuilt whenever the hour, the mode or the pace changes and reverted by
+ * the context before each rebuild.
  */
 function PeakHour({
   ind,
@@ -1010,78 +1036,207 @@ function PeakHour({
   span: number;
   reduce: boolean;
 }) {
-  const calls = useMemo(() => hourCalls(ind, cell.hour), [ind, cell.hour]);
-  const [landed, setLanded] = useState(0);
-  // Every stroke in the dial needs one frame at its un-drawn length before
-  // the transition to zero offset can run, so the hour opens dark and is
-  // lit a tick later. A reader who prefers no motion is never un-lit.
-  const [drawn, setDrawn] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  // Two margins, two jobs: `near` fetches GSAP, `inView` plays the hour.
+  const inView = useInView(ref, "-10% 0px");
+  const near = useInView(ref, "25% 0px");
+  // `near && !reduce`, not `near`: with reduced motion the markup already
+  // rests on the finished hour — every arc drawn, the ring closed, no hand
+  // — so there is nothing for GSAP to put right and no reason to fetch it.
+  const kit = useMotionKit(near && !reduce);
+  const tlRef = useRef<gsap.core.Timeline | null>(null);
 
-  // The dial restarts on the flip, so the count narrating it restarts too.
-  // Adjusted during render rather than from an effect: the reset is a pure
-  // function of a prop we already hold, and doing it in an effect would
-  // paint one frame of the old hour's total against the new hour's arcs.
-  const [mode, setMode] = useState(covered);
-  if (mode !== covered) {
-    setMode(covered);
+  const calls = useMemo(() => hourCalls(ind, cell.hour), [ind, cell.hour]);
+
+  /** Is this hour being lived, or is the day's walk flicking past it? */
+  const lived = !reduce && span >= 1000;
+  /** How long the whole hour takes, in GSAP's units. */
+  const run = (reduce ? 0 : span) / 1000;
+  const hourKey = `${ind.id}:${cell.hour}`;
+
+  const [landed, setLanded] = useState(0);
+
+  // A new hour, a new mode or a new pace is a new scene, and the count
+  // narrating it starts again with it. Adjusted during render rather than
+  // from an effect: the reset is a pure function of props we already hold,
+  // and doing it in an effect would paint one frame of the old hour's total
+  // against the new hour's arcs.
+  const scene = `${hourKey}:${covered}:${run}`;
+  const [built, setBuilt] = useState(scene);
+  if (built !== scene) {
+    setBuilt(scene);
     setLanded(0);
-    setDrawn(false);
   }
 
-  useEffect(() => {
-    if (reduce || drawn) return;
-    const t = window.setTimeout(() => setDrawn(true), 30);
-    return () => window.clearTimeout(t);
-  }, [drawn, reduce]);
+  useKitContext(
+    kit,
+    ({ gsap, SplitText }) => {
+      // A reader can turn the preference on after GSAP has already been
+      // fetched for them, and the kit does not unload. There is nothing to
+      // put right when that happens: the context has just reverted every
+      // inline style this callback ever wrote, and what is left underneath
+      // is the markup — which rests on the hour finished. So the honest
+      // reduced-motion state here is no timeline at all.
+      if (reduce) return;
 
-  // One timer per call, fired as the hand reaches it, so the number in the
-  // middle of the dial is counting the same arcs the reader is watching
-  // draw. Cleared whenever the hour, the mode or the pace changes, and on
-  // unmount — nothing here may outlive the dial.
-  useEffect(() => {
-    if (reduce) return;
-    const timers = calls.map((c, i) =>
-      window.setTimeout(
-        () => setLanded((n) => Math.max(n, i + 1)),
-        Math.round((c.start / 60) * span),
-      ),
-    );
-    return () => timers.forEach((t) => window.clearTimeout(t));
-  }, [calls, reduce, covered, span]);
+      const q = gsap.utils.selector(ref);
+      // Every one of these can legitimately be empty — an hour outside the
+      // staffed window has nothing drawn on it, a covered hour has nothing
+      // dotted, and the hand is only in the DOM while the hour is lived —
+      // and GSAP warns about a tween with no targets. So each is checked
+      // rather than handed over blind.
+      const drawn = q(".uc-draw");
+      const dotted = q(".uc-missed");
+      const hand = q(".uc-hand");
+      const ring = q(".uc-hour-ring");
+      const label = q(".uc-hour-label");
+      const verdict = q(".uc-verdict")[0] as HTMLElement | undefined;
 
-  const shown = reduce ? calls.length : landed;
+      const tl = gsap.timeline({ paused: true });
+
+      // The whole resting state, set at the top: an hour that has not
+      // happened yet. Nothing in the markup says this, because the markup
+      // has to rest on the hour *finished* for anyone GSAP never reaches.
+      tl.set(ring, { drawSVG: "0% 0%" }, 0);
+      if (drawn.length) tl.set(drawn, { drawSVG: "0% 0%" }, 0);
+      if (dotted.length) tl.set(dotted, { autoAlpha: 0 }, 0);
+      if (hand.length) tl.set(hand, { rotation: 0, svgOrigin: "50 50" }, 0);
+
+      if (lived && verdict) {
+        // Split for motion only: the words stay plain text to a screen
+        // reader, and the context reverts the split when it reverts —
+        // never call `.revert()` here. The paragraph carries a React key
+        // that changes with its own text, so the node a split is holding
+        // is never the node React has since rewritten.
+        const split = SplitText.create(verdict, { type: "words", aria: "none" });
+        // Each word on its own compositor layer, so the fade, the rise and
+        // the blur are GPU work rather than a repaint of the line.
+        gsap.set(split.words, {
+          willChange: "transform, opacity, filter",
+          force3D: true,
+        });
+
+        tl.fromTo(
+          label,
+          { autoAlpha: 0, y: 10 },
+          { autoAlpha: 1, y: 0, duration: 0.5, ease: "power3.out" },
+          0,
+        ).fromTo(
+          split.words,
+          { autoAlpha: 0, yPercent: 16, filter: "blur(3px)" },
+          {
+            autoAlpha: 1,
+            yPercent: 0,
+            filter: "blur(0px)",
+            duration: 0.9,
+            ease: "power2.out",
+            stagger: 0.06,
+          },
+          0,
+        );
+      } else {
+        // The day's walk opens a new hour every third of a second. A
+        // sentence that re-staggered at that rate would never be a
+        // sentence, so while the clock is only passing through, the
+        // reading of the hour simply stands there.
+        tl.set([...label, ...(verdict ? [verdict] : [])], { autoAlpha: 1, y: 0 }, 0);
+      }
+
+      // The hour itself, at constant speed, because a minute is a minute:
+      // the hand, the ring closing round the outside and every call on the
+      // face are tweens of this one timeline and cannot drift apart.
+      tl.to(ring, { drawSVG: "0% 100%", duration: run, ease: "none" }, 0);
+      if (hand.length) {
+        tl.to(hand, { rotation: 360, duration: run, ease: "none" }, 0);
+      }
+
+      calls.forEach((c, i) => {
+        // The call's own minute, and the call's own length, scaled into
+        // however long this hour is taking.
+        const at = (c.start / 60) * run;
+        const arc = q(`.uc-c${i}`);
+
+        if (covered || c.answered) {
+          tl.to(
+            arc,
+            {
+              drawSVG: "0% 100%",
+              duration: Math.max(0.06, (c.dur / 60) * run),
+              ease: "none",
+            },
+            at,
+          );
+        } else {
+          tl.to(arc, { autoAlpha: 1, duration: Math.min(0.3, run), ease: "none" }, at);
+        }
+
+        // The tally is a callback on the same clock as the arc it is
+        // counting, which is the whole reason it can be trusted: it is not
+        // a number running to a total, it is the hour being added up as it
+        // happens.
+        tl.call(() => setLanded((n) => Math.max(n, i + 1)), undefined, at);
+      });
+
+      tlRef.current = tl;
+      return () => {
+        tlRef.current = null;
+      };
+    },
+    // `revertOnUpdate` because the callback splits text and sets inline
+    // styles on every stroke in the dial.
+    {
+      scope: ref,
+      dependencies: [hourKey, covered, run, lived, reduce],
+      revertOnUpdate: true,
+    },
+  );
+
+  // Plays while on screen. `kit` is in the deps because the timeline is
+  // built asynchronously, after the kit arrives; the rest are there because
+  // a rebuilt timeline needs telling again.
+  useEffect(() => {
+    const tl = tlRef.current;
+    if (!tl) return;
+    if (inView && !reduce) tl.play();
+    else tl.pause();
+  }, [inView, reduce, kit, hourKey, covered, run, lived]);
+
+  // Until GSAP is here — and for a reader who has asked for no motion —
+  // the markup rests on the finished hour, so the tally has to agree with
+  // it rather than sit at nought under a dial that is already full.
+  const shown = kit && !reduce ? landed : calls.length;
   const handled = calls
     .slice(0, shown)
     .filter((c) => covered || c.answered).length;
   const lanes = covered ? Math.max(1, ...calls.map((c) => c.lane + 1)) : 1;
 
   return (
-    <div className="grid gap-9 md:grid-cols-[280px_minmax(0,1fr)] md:items-center md:gap-14">
+    <div
+      ref={ref}
+      className="grid gap-9 md:grid-cols-[280px_minmax(0,1fr)] md:items-center md:gap-14"
+    >
       <HourDial
         calls={calls}
         covered={covered}
         handled={handled}
-        lit={reduce || drawn}
-        span={reduce ? 0 : span}
+        lived={lived}
       />
 
       <div>
         <p className={LABEL}>
           {cell.calls === Math.max(...ind.volume) ? "Busiest hour" : "This hour"}
         </p>
-        <p
-          key={cell.hour}
-          className="mt-2.5 text-[30px] leading-none font-medium tracking-[-0.03em] text-pp-ink animate-in fade-in-0 duration-300 motion-reduce:animate-none md:text-[36px]"
-        >
+        <p className="uc-hour-label mt-2.5 text-[30px] leading-none font-medium tracking-[-0.03em] text-pp-ink md:text-[36px]">
           {hh(cell.hour)}–{hh((cell.hour + 1) % 24)}
         </p>
 
-        {/* Keyed on the mode: the verdict on this hour does not cross-fade
-            into the other one, it is replaced, on the same beat as the
-            rings splitting underneath it. */}
+        {/* Keyed on the hour and the mode, and that key is load-bearing
+            twice over: the verdict on this hour is replaced rather than
+            cross-faded into the other one, and a SplitText is never left
+            holding a node whose text React has changed underneath it. */}
         <p
-          key={covered ? "with" : "without"}
-          className="mt-5 max-w-[480px] text-[15px] leading-[24px] text-pretty text-pp-muted animate-in fade-in-0 slide-in-from-bottom-2 duration-500 fill-mode-both motion-reduce:animate-none md:text-base md:leading-[26px]"
+          key={`${cell.hour}-${covered}`}
+          className="uc-verdict mt-5 max-w-[480px] text-[15px] leading-[24px] text-pretty text-pp-muted md:text-base md:leading-[26px]"
         >
           {covered && !cell.staffed ? (
             <>
@@ -1570,12 +1725,15 @@ export function UseCases() {
               </div>
             </div>
 
-            {/* The hour, on the dial. Keyed on the trade, the hour and the
-                pace, so opening a new hour is a fresh set of un-drawn
-                strokes rather than a set of drawn ones being re-aimed. */}
+            {/* The hour, on the dial. It used to be keyed on the trade, the
+                hour and the pace so that a new hour arrived as a fresh set
+                of un-drawn strokes — which is what a remount is for when
+                the drawing is a CSS transition that needs a start frame.
+                The timeline inside does that properly now: it is rebuilt on
+                those same three, the context reverts the last one before it
+                does, and the component below is allowed to stay alive. */}
             <div className="mt-10 border-t border-pp-hair pt-10">
               <PeakHour
-                key={`${active.id}-${dialIdx}-${span}`}
                 ind={active}
                 cell={day.cells[dialIdx]}
                 covered={covered}

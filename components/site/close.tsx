@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { gsap } from "gsap";
 import {
   AUTH,
   AVG_CALL_MIN,
@@ -14,6 +15,8 @@ import {
   costFor,
 } from "@/lib/site";
 import { cn } from "@/lib/utils";
+import { ping } from "./product/line-figure";
+import { useKitContext, useMotionKit } from "./product/motion-kit";
 import {
   Eyebrow,
   Frame,
@@ -40,34 +43,61 @@ import { holdFor, useInView, usePrefersReducedMotion } from "./product/timing";
  * to believe. None of the four is typed into this file either; see
  * `FIGURES`.
  *
- * **The scene: a reading head walking the page's own evidence.** This
- * section used to move because the reader scrolled — figures counting
- * themselves in, receipts arriving on a scroll-bound cascade, rules
- * wiping open, the imperative rising under a mask. All of that was an
- * entrance: the page performed for the act of being reached, and said
- * nothing while it did it. What runs here instead is the audit itself. A
- * head steps along the four receipts, one at a time, on the house clock —
- * `holdFor(label)`, so each claim sits for as long as its own sentence
- * takes to read at 230 words a minute, never under 1.4s — and it keeps
- * walking, because the argument is that any one of these four can be
- * picked up and checked, not that they once appeared. The live receipt
- * carries the ink, its rule under the figure, and the lit anchor back to
- * the section that earned it; the other three stay legible and wait their
- * turn. On the top fence, a violet segment sits over whichever column is
- * being read, so the fence is a transport rather than a border.
+ * **The signature movement: a reading head, and the mark it leaves.**
+ * This section used to move because the reader scrolled — figures
+ * counting themselves in, receipts arriving on a scroll-bound cascade,
+ * rules wiping open, the imperative rising under a mask. All of that was
+ * an entrance: the page performed for the act of being reached, and said
+ * nothing while it did it. What replaced it moved because React changed
+ * an integer and a violet quarter jumped a column's width along the
+ * fence, which is the audit *described* rather than the audit happening.
  *
- * The movement is CSS throughout — `transition-colors`, `transition-opacity`,
- * `transition-transform` at the house's 200/300/500 — and React only
- * changes which index is live. Nothing counts: a number ticking up is a
- * number being animated, and these four are meant to be read.
+ * What runs here now is one object on one GSAP timeline. A head travels
+ * the four receipts along a route, comes to rest over each figure, and
+ * rules a line under it. The route is a real path, measured off the grid
+ * the receipts are actually laid out in, so the same walk is right at
+ * either width: at four columns it runs the top fence in one straight
+ * line; at two it reaches the end of the first row, drops a lane and
+ * carries back to the left, which is what a reading head does. This is
+ * the only place on the page where the reading head the whole homepage is
+ * built on can be shown literally, at the end, as a summary of itself —
+ * and the head *is* the transport, where the violet quarter was a
+ * rectangle standing in for one.
+ *
+ * `MotionPathPlugin` carries the head along the route; `DrawSVGPlugin`
+ * draws each receipt's mark and takes it away again as the head leaves;
+ * every arrival is punctuated by the same `ping` every other figure on
+ * this site uses. The clock is the house's and is unchanged: a receipt
+ * holds for `holdFor(label)`, as long as its own sentence takes to read at
+ * 230 words a minute and never under 1.4s. Travel is derived from the
+ * distance between two receipts at one fixed speed, so the short hop and
+ * the long one are the same journey and the only difference is how far
+ * the head had to go.
+ *
+ * **It walks once, and rests on the last receipt.** The version before
+ * this looped, on the argument that any of the four can be picked up and
+ * checked at any time. The anchors say that, and the reader's own hand
+ * says it better; a head going round and round is a screensaver, and
+ * these four are evidence. So the pass ends where it should — on the
+ * daily cost, directly above the block that asks for it.
+ *
+ * Colour stays CSS. The ink on the live figure, its label and its anchor
+ * are `transition-colors` at the house's 300/500, because a state change
+ * that small is not worth a tween. Nothing counts: a number ticking up is
+ * a number being animated, and these four are meant to be read.
  *
  * **The reader takes it, permanently.** Pointer, focus or keyboard on any
- * receipt pins that one and stops the clock for good; the four receipts
- * are then a row the reader steps through themselves, arrow keys and tab
- * included. `useInView` keeps the head from walking off screen and the
- * timeout is cleared on unmount, so the page in a background tab is
- * doing nothing at all. Reduced motion gets the whole row live at once —
- * the scene's final, most informative state — and no timers.
+ * receipt pauses the walk for good and glides the head to that column —
+ * the timeline is scrubbed to that receipt's own stop rather than reset,
+ * so the head, the marks and the ink all still agree wherever the reader
+ * leaves it. The four receipts are then a row they step through
+ * themselves, arrow keys and tab included. GSAP is fetched a quarter
+ * screen early and never before, the walk plays only while the section is
+ * on screen, and the context reverts every tween on unmount, so the page
+ * in a background tab is doing nothing at all. Reduced motion never
+ * downloads GSAP at all: the marks rest drawn, the whole row reads live at
+ * once — the scene's final, most informative state — and the head never
+ * appears.
  *
  * **It closes the way every other page on this site closes.** The earlier
  * version of this section was built on the dark cover's geometry — corner
@@ -191,35 +221,222 @@ function figureText(f: (typeof FIGURES)[number]) {
 }
 
 /* ------------------------------------------------------------------ *
+ * The walk.
+ *
+ * Distances are in CSS pixels, because the route is measured off the
+ * grid rather than authored in a viewBox: the overlay carries no
+ * viewBox, so one user unit is one pixel and nothing has to be scaled.
+ * ------------------------------------------------------------------ */
+
+/** Pixels a second, so a short hop and a long one read at one pace. */
+const SPEED = 520;
+const TRAVEL_MIN = 0.4;
+const TRAVEL_MAX = 1;
+
+/** Where the head parks on a receipt: over the middle of its 48px mark. */
+const PARK = 24;
+
+/**
+ * The lane a second row is read on.
+ *
+ * The first row's lane is the top fence itself, which is why the head
+ * replaces the quarter that used to slide along it. A second row only
+ * exists below `md`, where the grid is two columns with a 40px row gap,
+ * so its lane is the middle of that gap — a fence the layout implies and
+ * does not draw.
+ */
+const LANE_LIFT = 20;
+
+/* ------------------------------------------------------------------ *
  * The section.
  * ------------------------------------------------------------------ */
 
 export function Close() {
   const rootRef = useRef<HTMLDivElement>(null);
+  // Two margins, two jobs: `near` fetches GSAP, `inView` plays the walk.
   const inView = useInView(rootRef, "-10% 0px");
+  const near = useInView(rootRef, "25% 0px");
   const reduce = usePrefersReducedMotion();
+  // `near && !reduce`: with reduced motion the markup already rests in the
+  // scene's finished state, so GSAP is never downloaded.
+  const kit = useMotionKit(near && !reduce);
 
   const count = CTA_CLOSE.receipts.length;
   /** Which receipt is being read. */
   const [head, setHead] = useState(0);
-  /** True once the reader has touched the row; the clock never restarts. */
+  /** True once the reader has touched the row; the walk never restarts. */
   const [taken, setTaken] = useState(false);
+  /**
+   * The grid's measured box.
+   *
+   * The route is real geometry, so anything that reflows the receipts — a
+   * rotation, a breakpoint, a font landing late — has to redraw it. The
+   * string is a cheap identity: an unchanged box sets the same value and
+   * React does not re-render, so the timeline is not rebuilt for nothing.
+   */
+  const [box, setBox] = useState("");
 
-  // The head walks on the house clock: each receipt holds for as long as
-  // its own label takes to read. Paused off screen, cleared on unmount,
-  // stopped for good the moment the reader takes over.
+  const tlRef = useRef<gsap.core.Timeline | null>(null);
+  /** Glides the head to a receipt. Null until the walk has been built. */
+  const seekRef = useRef<((i: number) => void) | null>(null);
+
   useEffect(() => {
-    if (taken || reduce || !inView) return;
-    const id = window.setTimeout(
-      () => setHead((h) => (h + 1) % count),
-      holdFor(CTA_CLOSE.receipts[head].label),
-    );
-    return () => window.clearTimeout(id);
-  }, [head, taken, reduce, inView, count]);
+    const el = rootRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setBox(`${Math.round(width)}x${Math.round(height)}`);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  useKitContext(
+    kit,
+    ({ gsap }) => {
+      const root = rootRef.current;
+      if (!root) return;
+      // Typed back to `Element[]`: the scope is a div, so the selector's
+      // own return type is the HTML element union and everything drawn in
+      // here is SVG.
+      const q: (sel: string) => Element[] = gsap.utils.selector(rootRef);
+      const route = q(".cl-route")[0] as SVGPathElement | undefined;
+      const rider = q(".cl-head")[0] as SVGGElement | undefined;
+      const marks = q(".cl-mark") as SVGLineElement[];
+      const pings = q(".cl-ping") as SVGCircleElement[];
+      const cells = q(".cl-cell") as HTMLElement[];
+      if (!route || !rider || cells.length !== count || marks.length !== count) return;
+
+      if (reduce) {
+        // Nothing walks: every receipt reads as already checked. Only
+        // reachable if the setting is turned on while the page is open —
+        // `useMotionKit` above declines to fetch GSAP in the first place.
+        gsap.set(marks, { opacity: 1, drawSVG: "0% 100%" });
+        gsap.set(rider, { opacity: 0 });
+        return;
+      }
+
+      // Where the head parks on each receipt, and which lane it reads on.
+      const base = root.getBoundingClientRect();
+      const parks = cells.map((cell) => {
+        const b = cell.getBoundingClientRect();
+        return { x: b.left - base.left + PARK, top: b.top - base.top };
+      });
+      const firstTop = parks[0].top;
+      const points = [
+        // A lead-in from the left edge, so the head arrives from the page
+        // above rather than switching itself on over the first figure.
+        { x: 0, y: 0.5 },
+        ...parks.map((p) => ({
+          x: p.x,
+          y: Math.abs(p.top - firstTop) < 1 ? 0.5 : p.top - LANE_LIFT,
+        })),
+      ];
+
+      const legs = points.slice(1).map((p, i) => Math.hypot(p.x - points[i].x, p.y - points[i].y));
+      const run = legs.reduce((a, b) => a + b, 0);
+      if (run < 1) return;
+      // How far along the route each receipt sits, so one tween can carry
+      // the head exactly from one stop to the next.
+      const at: number[] = [0];
+      legs.forEach((leg, i) => at.push(at[i] + leg / run));
+
+      // Through `attr`, which is how this house writes an SVG attribute,
+      // and set here rather than in the timeline: MotionPath reads the
+      // geometry when its tween is built, so the `d` has to be there
+      // first — and a `set` outside the timeline is applied at once.
+      gsap.set(route, {
+        attr: {
+          d: points.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(" "),
+        },
+      });
+      points.slice(1).forEach((p, i) => gsap.set(pings[i], { attr: { cx: p.x, cy: p.y } }));
+
+      const tl = gsap.timeline({ paused: true });
+      /** The time each receipt is parked on, for the reader's own seeks. */
+      const stops: number[] = [];
+
+      // The whole resting state, set at the top, before anything moves.
+      tl.set(marks, { opacity: 1, drawSVG: "0% 0%" }, 0)
+        .set(rider, { opacity: 0 }, 0)
+        .to(rider, { opacity: 1, duration: 0.3 }, 0.15);
+
+      let t = 0.15;
+      for (let i = 0; i < count; i++) {
+        const travel = gsap.utils.clamp(TRAVEL_MIN, TRAVEL_MAX, legs[i] / SPEED);
+        tl.to(
+          rider,
+          {
+            duration: travel,
+            ease: "power2.inOut",
+            motionPath: {
+              path: route,
+              align: route,
+              alignOrigin: [0.5, 0.5],
+              start: at[i],
+              end: at[i + 1],
+            },
+          },
+          t,
+        );
+
+        const arrives = t + travel;
+        tl.call(() => setHead(i), [], arrives);
+        ping(tl, [pings[i]], arrives);
+        tl.to(marks[i], { drawSVG: "0% 100%", duration: 0.5, ease: "power2.out" }, arrives);
+        stops.push(arrives + 0.5);
+
+        // The hold is the receipt's own sentence, at reading pace.
+        t = arrives + holdFor(CTA_CLOSE.receipts[i].label) / 1000;
+        // The mark belongs to the head and leaves with it — except the
+        // last, which is what the pass comes to rest on.
+        if (i < count - 1) {
+          tl.to(marks[i], { drawSVG: "100% 100%", duration: 0.4, ease: "power2.inOut" }, t - 0.4);
+        }
+      }
+      // A rest at the end, written as an empty tween rather than a delay.
+      tl.to({}, { duration: 0.6 });
+
+      // The reader's seek: scrubbed, not cut, so the head is seen going to
+      // the receipt they asked for and the marks stay in step with it.
+      let glide: gsap.core.Tween | null = null;
+      seekRef.current = (i: number) => {
+        glide?.kill();
+        tl.pause();
+        glide = tl.tweenTo(stops[i], { duration: 0.5, ease: "power2.inOut" });
+      };
+
+      // A reflow rebuilds the walk from new measurements. If the reader
+      // already has it, it goes straight back to the receipt they left it
+      // on rather than to the start of a pass they stopped.
+      if (taken) tl.time(stops[head]);
+
+      tlRef.current = tl;
+      return () => {
+        glide?.kill();
+        seekRef.current = null;
+        tlRef.current = null;
+      };
+    },
+    // The callback sets inline styles and measures, so the context reverts
+    // before every rebuild.
+    { scope: rootRef, dependencies: [box, reduce], revertOnUpdate: true },
+  );
+
+  // Plays while on screen, and never again once the reader has taken it.
+  // `kit` and `box` are in the deps because the timeline is built
+  // asynchronously and rebuilt on a reflow; each new one needs telling.
+  useEffect(() => {
+    const tl = tlRef.current;
+    if (!tl) return;
+    if (inView && !reduce && !taken) tl.play();
+    else tl.pause();
+  }, [inView, reduce, taken, kit, box]);
 
   const take = useCallback((i: number) => {
     setTaken(true);
     setHead(i);
+    seekRef.current?.(i);
   }, []);
 
   // Reduced motion reads them all as live: the row's finished state, not
@@ -241,21 +458,44 @@ export function Close() {
           is not a receipt. */}
       <Frame className="px-6 pt-16 pb-6 md:px-12 md:pt-24 md:pb-10">
         <Eyebrow>{EYEBROWS.receipts}</Eyebrow>
-        <div ref={rootRef} className="mt-8 md:mt-10">
-          {/* The upper fence doubles as the transport: a violet quarter
-              sits over the column being read and slides to the next one.
-              Below md the grid is two columns wide and the quarter would
-              lie about which cell is live, so there it is the per-figure
-              rule alone that marks the head. */}
-          <div aria-hidden className="relative h-px bg-pp-rule">
-            <div
-              className={cn(
-                "absolute inset-y-0 left-0 hidden w-1/4 bg-pp-accent transition-[transform,opacity] duration-500 md:block",
-                reduce && "opacity-0",
-              )}
-              style={{ transform: `translateX(${head * 100}%)` }}
-            />
-          </div>
+        <div ref={rootRef} className="relative mt-8 md:mt-10">
+          {/* The head and its route, laid over the grid rather than drawn
+              inside it. No viewBox, so one user unit is one CSS pixel and
+              the measured route needs no scaling at any width. The route
+              is never painted: it exists to be travelled, like every other
+              motion guide in this house. */}
+          <svg
+            aria-hidden
+            className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+            fill="none"
+          >
+            <path className="cl-route" stroke="none" />
+            {CTA_CLOSE.receipts.map((r) => (
+              <circle
+                key={r.label}
+                className="cl-ping"
+                r="4.4"
+                stroke="var(--pp-accent)"
+                strokeWidth="1.6"
+                opacity="0"
+              />
+            ))}
+            {/* Parked at the origin and invisible until the path moves it.
+                The disc of page stock behind it is the house's: the fence
+                stops short of the head instead of running under it. */}
+            <g className="cl-head" opacity="0">
+              <circle r="8" fill="var(--pp-bg)" />
+              <circle r="3.4" fill="var(--pp-accent)" />
+            </g>
+          </svg>
+
+          {/* The upper fence. It is also the first row's lane: the head
+              rides along it, where a violet quarter used to jump a column
+              at a time — and below md, where the grid is two columns and
+              that quarter had to be hidden because it would have lied
+              about which cell was live, the head simply drops a lane and
+              carries on. */}
+          <div aria-hidden className="h-px bg-pp-rule" />
 
           <div className="grid grid-cols-2 gap-x-8 gap-y-10 py-10 md:grid-cols-4 md:gap-x-12 md:py-12">
             {CTA_CLOSE.receipts.map((r, i) => {
@@ -263,7 +503,7 @@ export function Close() {
               return (
                 <div
                   key={r.label}
-                  className="flex flex-col items-start"
+                  className="cl-cell flex flex-col items-start"
                   // First pointer, focus or key anywhere in the cell hands
                   // the row to the reader and never takes it back.
                   onPointerEnter={() => take(i)}
@@ -289,17 +529,44 @@ export function Close() {
                   >
                     {figureText(FIGURES[i])}
                   </p>
-                  {/* The head's own mark under the figure it is reading.
-                      An element and not a border: borders cannot be
-                      scaled, and this one draws out from the left edge of
-                      the numeral at the moment the receipt goes live. */}
-                  <span
+                  {/* The head's own mark under the figure it is reading,
+                      drawn rather than scaled. The ghost and ink pair
+                      every stroke in this house is made of: the faint copy
+                      holds the mark's place — an unread receipt is still a
+                      printed one — and the ink copy is drawn over it,
+                      left to right, as the head arrives, and retracted
+                      through its far end as the head leaves. With no
+                      GSAP, and so with reduced motion, the ink has no
+                      dash of its own and simply rests drawn. */}
+                  <svg
                     aria-hidden
-                    className={cn(
-                      "mt-3 h-px w-12 origin-left bg-pp-accent transition-transform duration-500",
-                      live ? "scale-x-100" : "scale-x-0",
-                    )}
-                  />
+                    className="mt-3 block overflow-visible"
+                    width="48"
+                    height="2"
+                    viewBox="0 0 48 2"
+                    fill="none"
+                  >
+                    <line
+                      x1="1"
+                      y1="1"
+                      x2="47"
+                      y2="1"
+                      stroke="var(--pp-accent)"
+                      strokeOpacity="0.2"
+                      strokeWidth="1.2"
+                      strokeLinecap="round"
+                    />
+                    <line
+                      className="cl-mark opacity-0 motion-reduce:opacity-100"
+                      x1="1"
+                      y1="1"
+                      x2="47"
+                      y2="1"
+                      stroke="var(--pp-accent)"
+                      strokeWidth="1.2"
+                      strokeLinecap="round"
+                    />
+                  </svg>
                   <p
                     className={cn(
                       "mt-4 max-w-[15rem] text-pretty text-[14px] leading-[21px] transition-colors duration-500 md:text-[15px] md:leading-[22px]",

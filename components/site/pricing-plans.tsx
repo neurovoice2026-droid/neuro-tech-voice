@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { gsap } from "gsap";
 import { Check } from "lucide-react";
 import {
   PRICING_INTRO,
@@ -11,6 +12,19 @@ import {
   type Tier,
 } from "@/lib/site";
 import { cn } from "@/lib/utils";
+import {
+  BG,
+  DOTS,
+  LINE,
+  MUTED,
+  Node,
+  Ping,
+  ping,
+  svgProps,
+  useSvgId,
+  VIOLET,
+} from "./product/line-figure";
+import { useKitContext, useMotionKit } from "./product/motion-kit";
 import { Frame, PillLink, SectionHeading } from "./product/primitives";
 import { holdFor, useInView, usePrefersReducedMotion } from "./product/timing";
 
@@ -42,7 +56,7 @@ import { holdFor, useInView, usePrefersReducedMotion } from "./product/timing";
  *    that are by a fifth to advertise a phone call.
  *
  * SET IN THE LIGHT `pp` SYSTEM, like every other marketing page here, and
- * that changes three things about how the argument is drawn:
+ * that changes two things about how the argument is drawn:
  *
  *  · **This is the page's one heavy object, and on white weight is a
  *    shadow rather than a glow.** The panel is white stock lifted off the
@@ -51,30 +65,60 @@ import { holdFor, useInView, usePrefersReducedMotion } from "./product/timing";
  *    top, not by a tinted wash. A dark plate here would read as a hole
  *    cut in the page.
  *  · **Violet is reserved for the comparison.** The eyebrow, the "% under"
- *    badge, the ticks and our own bar carry #551a89; everything else is
- *    ink and muted. Colouring every number violet would leave the one
- *    number that is an argument looking like decoration.
- *  · **The ladder climbs itself.** The section does not perform an
- *    entrance; it performs the argument. A spotlight walks the five
- *    rungs on the house clock — Starter, Growth, Pro, Business, Scale —
- *    and as it lands on each one the rung's rail draws, its column takes
- *    the card grey, its "% under" badge goes solid violet, and what that
- *    rung adds over the one below it ticks in line by line. Watch it for
- *    one pass and you have read the only thing this price list claims:
- *    the per-minute rate falls as the plan grows, and every rung on the
- *    way sits under the flat rate everyone else charges. The two
- *    matched-rung bars draw once beside it, to scale, as the proof that
- *    the percentages are not rhetoric. Nothing pulses and nothing glows
- *    — on white that reads as dirt rather than as attention.
+ *    badge, the ticks, the rate line and our own bars carry #551a89;
+ *    everything else is ink and muted. Colouring every number violet would
+ *    leave the one number that is an argument looking like decoration.
  *
- *    The clock is `product/timing`: each rung is held for `holdFor` of
- *    the text it just put on screen, so the walk runs at reading pace
- *    rather than at a number somebody liked. `useInView` stops it dead
- *    when the section is off screen, and the first pointer, focus or key
- *    the reader spends inside the panel hands them the spotlight for
- *    good — hovering or tabbing a column lights it, and the walk never
- *    starts again. `usePrefersReducedMotion` skips straight to the
- *    recommended rung, fully drawn, with no timer running at all.
+ * THE MOVEMENT: THE SLOPE, DRAWN ONCE, AND THE GAP IT OPENS.
+ *
+ * This section claimed a falling rate in words and then printed five
+ * unconnected columns, which is the one shape that cannot show a slope.
+ * So the slope is now the section's signature object, drawn across the top
+ * of the panel as a figure the five columns stand under.
+ *
+ * A dotted muted line is laid flat across the whole panel first: the rate
+ * the voice platforms charge, the same at every rung, which is precisely
+ * why it is a straight line and ours is not. Our rate is plotted as a
+ * share of theirs — the one number the billing toggle cannot move, because
+ * yearly takes the same two months off both sides — so the picture is the
+ * comparison and not our own list price. A head then sets off from Starter
+ * and walks the five rungs: the violet line draws behind it as it goes, it
+ * stops on each rung to ping it and ink its node, and the field between
+ * the two lines widens behind it, rung by rung. That widening field is the
+ * "% under" badge said once, continuously, instead of five times in five
+ * boxes. At Growth and at Scale — the two rungs where a plan of theirs
+ * costs exactly what a plan of ours costs — the head's arrival is also
+ * what sets the matched bars below drawing, so the minute-for-minute proof
+ * lands on the rung it proves rather than on a delay somebody picked.
+ *
+ * One GSAP timeline owns all of it. SplitText puts the heading's claim up
+ * as language a beat before the figure starts proving it; DrawSVG draws
+ * the rate line, because a rate line should be drawn and not faded in;
+ * MotionPath carries the head along the very path it is drawing, so the
+ * two are the same event by construction rather than by two durations
+ * that happen to agree. The rival's line is dotted, so it grows by its own
+ * end point instead — DrawSVG on a dashed stroke solidifies it.
+ *
+ * It plays once and rests on its ending, fully drawn. A price list that
+ * re-ran its own argument forever would be a screensaver, and the section
+ * already refuses that for the matched bars.
+ *
+ * The clock is still `product/timing`: each rung is held for `holdFor` of
+ * the text it just put on screen, so the walk runs at reading pace rather
+ * than at a number somebody liked. The kit is fetched only when the
+ * section is near, and only for a reader who has not asked for less
+ * motion; `useInView` plays and pauses the timeline, and a hidden tab
+ * stops it because nothing here is driven by anything but the frame clock.
+ * The first pointer, focus or key the reader spends inside the panel runs
+ * the timeline to its end and pauses it for good — hovering or tabbing a
+ * column then lights it and ticks its unlocks in, and the walk never
+ * starts again. With reduced motion GSAP is never fetched at all: the
+ * figure is authored to rest complete — line drawn, field open, every node
+ * inked, both bars at length — with the spotlight on the recommended rung
+ * and no timer running anywhere.
+ *
+ * No scene band. This is hairlines and figures on white stock, and the
+ * legibility of a price list is the whole point of it.
  *
  * Lengths are rem/px here. The cover's fluid `em` base does not exist on
  * this stock, and an `em` ladder inside a section that also sets type
@@ -123,32 +167,224 @@ const underRival = (t: Tier, annual: boolean) =>
       100,
   );
 
+/* ------------------------------------------------------------------ *
+ * The figure: the rate ladder, in coordinates.
+ *
+ * `from` marks the rung that is negotiated rather than listed, so the
+ * figure plots the five that are — and each rung sits at the centre of its
+ * own column, which is what lets the picture and the price list be read as
+ * one object.
+ * ------------------------------------------------------------------ */
+
+const LISTED = TIERS.filter((t) => !t.from);
+const FEATURED_AT = Math.max(
+  0,
+  LISTED.findIndex((t) => t.featured),
+);
+
+const W = 960;
+const H = 132;
+/** Air at each end, so the rival's flat line runs past the outer rungs. */
+const PAD = 40;
+/** The rival's line, and the top of the figure's scale. */
+const RIVAL_Y = 34;
+/** Units of drop per 1.0 of their rate given back. Sets the slope's pitch. */
+const FALL = 169;
+
+/** The centre of column `i`, in the figure's own units. */
+const columnX = (i: number) => (W / LISTED.length) * (i + 0.5);
+
+/**
+ * Our rate as a share of theirs. Yearly scales both sides by the same two
+ * months, so this number — and therefore the whole figure — is the one
+ * thing on the panel the billing toggle cannot move.
+ */
+const share = (t: Tier) => t.monthly / t.minutes / PRICING_RIVAL.perMinute;
+
+const RUNGS = LISTED.map((t, i) => ({
+  x: columnX(i),
+  y: RIVAL_Y + (1 - share(t)) * FALL,
+}));
+
+const LEGS = RUNGS.slice(0, -1).map((a, i) => {
+  const b = RUNGS[i + 1];
+  return {
+    d: `M${a.x.toFixed(2)} ${a.y.toFixed(2)} L${b.x.toFixed(2)} ${b.y.toFixed(2)}`,
+    len: Math.hypot(b.x - a.x, b.y - a.y),
+  };
+});
+
+/** Their line across the top, ours back along the rungs: the saving, as an area. */
+const FIELD = `M${RUNGS[0].x.toFixed(2)} ${RIVAL_Y} L${RUNGS[RUNGS.length - 1].x.toFixed(2)} ${RIVAL_Y} ${[
+  ...RUNGS,
+]
+  .reverse()
+  .map((r) => `L${r.x.toFixed(2)} ${r.y.toFixed(2)}`)
+  .join(" ")} Z`;
+
+/* ------------------------------------------------------------------ *
+ * The score.
+ *
+ * Every hold is `holdFor` of the text that rung has just put on screen —
+ * the same clock the rest of this site walks to — and every move between
+ * two rungs is one house-length travel. The arrival times fall out of the
+ * two; nothing here is a number somebody nudged twice.
+ * ------------------------------------------------------------------ */
+
+/** What a rung says when the spotlight lands on it. */
+const spokenAt = (t: Tier) =>
+  [
+    t.name,
+    `${cents(effectiveRate(t, false))} a minute`,
+    `${underRival(t, false)}% under ${PRICING_RIVAL.name}`,
+    ...t.unlocks,
+  ].join(" ");
+
+const HOLD = LISTED.map((t) => holdFor(spokenAt(t)) / 1000);
+/** The claim, then their flat rate, before the walk sets off. */
+const LEAD = 1.6;
+/** One rung to the next. */
+const LEG = 0.8;
+
+const ARRIVE = (() => {
+  const out: number[] = [];
+  let t = LEAD;
+  LISTED.forEach((_, i) => {
+    out[i] = t;
+    t += HOLD[i] + (i < LISTED.length - 1 ? LEG : 0);
+  });
+  return out;
+})();
+
+const END = ARRIVE[ARRIVE.length - 1] + HOLD[HOLD.length - 1];
+
+/** The two matched-price cards, each tied to the rung it proves. */
+const MATCHED = PRICING_RIVAL.matched.map((m) => ({
+  ...m,
+  rung: Math.max(
+    0,
+    LISTED.findIndex((t) => t.monthly === m.monthly),
+  ),
+}));
+
+/**
+ * The slope, drawn across the top of the panel.
+ *
+ * Ghost first, ink second — the route is there faintly from the start and
+ * the walk visits it, which is how every drawn stroke in this house is
+ * built. With `still` the whole figure is authored complete: the line
+ * carries no dash offset, the field's clip is open to full width, their
+ * line already reaches the far edge and every node is filled.
+ */
+function RateLadder({ annual, still }: { annual: boolean; still: boolean }) {
+  const clip = useSvgId("rl-clip");
+  const rivalRate = PRICING_RIVAL.perMinute * (annual ? ANNUAL : 1);
+
+  return (
+    <div className="aspect-[960/132] w-full border-b border-pp-rule">
+      <svg {...svgProps(W, H)}>
+        <defs>
+          <clipPath id={clip}>
+            {/* The field opens behind the head, rung by rung. */}
+            <rect className="rl-clip" x="0" y="0" width={still ? W : 0} height={H} />
+          </clipPath>
+        </defs>
+
+        {/* Everything between their rate and ours. This is the badge on
+            every column, said once and continuously. */}
+        <path d={FIELD} fill={VIOLET} fillOpacity="0.07" clipPath={`url(#${clip})`} />
+
+        {/* Dotted, so it grows by its end point rather than by DrawSVG,
+            which would solidify it. Flat is the whole point of it. */}
+        <line
+          className="rl-rival"
+          x1={PAD}
+          x2={still ? W - PAD : PAD}
+          y1={RIVAL_Y}
+          y2={RIVAL_Y}
+          stroke={MUTED}
+          strokeWidth={LINE}
+          strokeDasharray={DOTS}
+          strokeLinecap="round"
+        />
+
+        {LEGS.map((leg, i) => (
+          <path
+            key={`ghost-${i}`}
+            d={leg.d}
+            stroke={VIOLET}
+            strokeOpacity="0.14"
+            strokeWidth={LINE}
+            strokeLinecap="round"
+          />
+        ))}
+        {LEGS.map((leg, i) => (
+          <path
+            key={`ink-${i}`}
+            className={`rl-ink rl-leg-${i}`}
+            d={leg.d}
+            stroke={VIOLET}
+            strokeWidth={LINE}
+            strokeLinecap="round"
+            strokeDasharray={`${leg.len.toFixed(2)} ${leg.len.toFixed(2)}`}
+            strokeDashoffset={still ? 0 : leg.len.toFixed(2)}
+          />
+        ))}
+
+        {RUNGS.map((r, i) => (
+          <Ping key={`ping-${i}`} className={`rl-ping-${i}`} x={r.x} y={r.y} color={VIOLET} />
+        ))}
+        {RUNGS.map((r, i) => (
+          <Node
+            key={`node-${i}`}
+            x={r.x}
+            y={r.y}
+            r={4}
+            color={VIOLET}
+            hollow={!still}
+            coreClassName={`rl-core rl-core-${i}`}
+          />
+        ))}
+
+        {/* Parked at the origin and invisible until the walk sets off. */}
+        <Node className="rl-head" hidden r={3.4} color={VIOLET} />
+
+        <text
+          className="rl-cap rl-cap-rival"
+          x={PAD}
+          y={RIVAL_Y - 10}
+          fill={MUTED}
+          fontSize="12.5"
+          opacity={still ? 1 : 0}
+        >
+          {PRICING_RIVAL.name}, {cents(rivalRate)} a minute at every rung
+        </text>
+        <text
+          className="rl-cap rl-cap-ours"
+          x={PAD}
+          y={RUNGS[0].y - 13}
+          fill={VIOLET}
+          fontSize="12.5"
+          opacity={still ? 1 : 0}
+        >
+          Our rate
+        </text>
+      </svg>
+    </div>
+  );
+}
+
 /**
  * One line of what a rung adds. When the spotlight lands on the column
  * these tick in one after another, which is the rung listing itself
- * rather than sitting there already listed.
+ * rather than sitting there already listed. The tick is a stagger on the
+ * lit column's rows, so the reader's hover and the walk are the same
+ * mechanism; the colour change stays a CSS transition, which is all a
+ * colour change ever needs.
  */
-function Unlock({
-  children,
-  lit,
-  step,
-  still,
-}: {
-  children: React.ReactNode;
-  lit: boolean;
-  step: number;
-  still: boolean;
-}) {
+function Unlock({ children, lit }: { children: React.ReactNode; lit: boolean }) {
   return (
-    <li
-      className={cn(
-        "flex items-start gap-2.5 text-[13px] leading-5 text-pp-muted",
-        lit &&
-          !still &&
-          "animate-in fade-in-0 slide-in-from-bottom-1 duration-500 fill-mode-both",
-      )}
-      style={still ? undefined : { animationDelay: `${step * 90}ms` }}
-    >
+    <li className="pl-unlock flex items-start gap-2.5 text-[13px] leading-5 text-pp-muted">
       <Check
         className={cn(
           "mt-[3px] size-3.5 shrink-0 transition-colors duration-300",
@@ -178,6 +414,7 @@ function Unlock({
  */
 function PlanColumn({
   tier,
+  index,
   annual,
   first,
   lit,
@@ -185,6 +422,7 @@ function PlanColumn({
   onTake,
 }: {
   tier: Tier;
+  index: number;
   annual: boolean;
   first: boolean;
   lit: boolean;
@@ -196,6 +434,7 @@ function PlanColumn({
 
   return (
     <div
+      data-rung={index}
       onPointerEnter={onTake}
       onFocusCapture={onTake}
       className={cn(
@@ -297,18 +536,9 @@ function PlanColumn({
           carried-forward line belongs on every rung except the first —
           there is nothing below Starter to carry. */}
       <ul className="mt-6 flex flex-col gap-2.5">
-        {!first ? (
-          <Unlock key={`carry-${lit}`} lit={lit} step={0} still={still}>
-            Everything below, plus
-          </Unlock>
-        ) : null}
-        {tier.unlocks.map((u, i) => (
-          <Unlock
-            key={`${u}-${lit}`}
-            lit={lit}
-            step={first ? i : i + 1}
-            still={still}
-          >
+        {!first ? <Unlock lit={lit}>Everything below, plus</Unlock> : null}
+        {tier.unlocks.map((u) => (
+          <Unlock key={u} lit={lit}>
             {u}
           </Unlock>
         ))}
@@ -325,24 +555,24 @@ function PlanColumn({
  * on the page that a reader can check without trusting a percentage.
  *
  * The bars are drawn rather than stated: theirs runs out first, ours keeps
- * going past it, and the gap left over is the claim. Two bars settling at
- * different lengths is the whole argument, performed once — it draws when
- * the section comes on screen and then stays drawn, because a comparison
- * that kept re-running would be a screensaver.
+ * going past it, and the gap left over is the claim. They draw at the
+ * moment the walk above reaches the rung they belong to, and then stay
+ * drawn — a comparison that kept re-running would be a screensaver.
+ *
+ * It is a transform, never a width: a scale is composited, and nothing
+ * beside the bar moves when it fills.
  */
 function MatchedRung({
   monthly,
   theirs,
   theirPlan,
-  reduce,
-  shown,
+  still,
   card,
 }: {
   monthly: number;
   theirs: number;
   theirPlan: string;
-  reduce: boolean;
-  shown: boolean;
+  still: boolean;
   card: number;
 }) {
   const ours = TIERS.find((t) => t.monthly === monthly);
@@ -361,13 +591,10 @@ function MatchedRung({
             reading of the picture, so it should not precede it. */}
         <span
           className={cn(
-            "text-[11px] leading-4 font-medium tracking-[0.1em] tabular-nums text-pp-accent uppercase transition-opacity duration-500",
-            shown ? "opacity-100" : "opacity-0",
-            reduce && "transition-none",
+            `rg-gain-${card}`,
+            "text-[11px] leading-4 font-medium tracking-[0.1em] tabular-nums text-pp-accent uppercase",
           )}
-          style={
-            reduce ? undefined : { transitionDelay: `${700 + card * 140}ms` }
-          }
+          style={{ opacity: still ? 1 : 0 }}
         >
           +{gain}% minutes
         </span>
@@ -381,7 +608,7 @@ function MatchedRung({
             ours: false,
           },
           { label: `Our ${ours.name}`, minutes: ours.minutes, ours: true },
-        ].map((row, i) => (
+        ].map((row) => (
           <div key={row.label}>
             <div className="flex items-baseline justify-between gap-3">
               <span
@@ -406,17 +633,19 @@ function MatchedRung({
                 track is white on the card grey: on this stock a darker
                 track would read as a third bar. */}
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white">
+              {/* No Tailwind `scale-*` here: Tailwind v4 writes the
+                  standalone `scale` property, which would compose on top of
+                  the `transform` GSAP writes and multiply it back to zero.
+                  The resting value is set inline instead. */}
               <div
+                data-fill={(row.minutes / max).toFixed(4)}
                 className={cn(
-                  "h-full rounded-full transition-[width] duration-700 ease-out",
+                  `rg-bar-${card}`,
+                  "h-full w-full origin-left rounded-full",
                   row.ours ? "bg-pp-accent" : "bg-pp-muted/45",
-                  reduce && "transition-none",
                 )}
                 style={{
-                  width: shown ? `${(row.minutes / max) * 100}%` : "0%",
-                  transitionDelay: reduce
-                    ? undefined
-                    : `${100 + card * 140 + i * 160}ms`,
+                  transform: `scaleX(${still ? row.minutes / max : 0})`,
                 }}
               />
             </div>
@@ -432,51 +661,231 @@ export function PricingPlans() {
   const [annual, setAnnual] = useState(false);
 
   const rootRef = useRef<HTMLDivElement>(null);
-  const inView = useInView(rootRef, "-12% 0px");
+  // Two margins, two jobs: `near` fetches GSAP, `inView` plays the timeline.
+  const inView = useInView(rootRef, "-10% 0px");
+  const near = useInView(rootRef, "25% 0px");
+  // `near && !reduce`, because the figure below is authored to rest
+  // complete: a reader who asked for less motion never downloads GSAP.
+  const kit = useMotionKit(near && !reduce);
+  const tlRef = useRef<gsap.core.Timeline | null>(null);
 
-  /** `from` marks the rung that is negotiated rather than listed. */
-  const listed = useMemo(() => TIERS.filter((t) => !t.from), []);
   const negotiated = TIERS.find((t) => t.from);
 
   /** The rung the spotlight is on, and whether the reader owns it now. */
-  const featuredAt = Math.max(
-    0,
-    listed.findIndex((t) => t.featured),
-  );
   const [at, setAt] = useState(0);
   const [taken, setTaken] = useState(false);
 
   /**
-   * The walk. Each rung is held for as long as the text it just put on
-   * screen takes to read, so the ladder climbs at the reader's pace. It
-   * only runs while the section is on screen, it stops for good once the
-   * reader touches anything inside it, and it never starts at all for a
-   * reader who asked for less motion.
+   * The walk, as one timeline.
+   *
+   * The resting state is set whole at t = 0, then the heading's claim goes
+   * up as language, their flat rate is laid across the panel, and the head
+   * walks the rungs — drawing the line it travels, opening the field
+   * behind it, pinging and inking each rung on arrival, and setting the
+   * matched bars below going at the two rungs those bars are about.
+   */
+  useKitContext(
+    kit,
+    ({ gsap, SplitText }) => {
+      if (reduce) return;
+      const q = gsap.utils.selector(rootRef);
+
+      // `q` is typed off the scope, which is a div; the figure inside it is
+      // SVG, so the path is named at the grab site.
+      const legs = LEGS.map(
+        (_, i) => q(`.rl-leg-${i}`)[0] as unknown as SVGPathElement,
+      );
+      const head = q(".rl-head");
+      if (!legs[0] || head.length === 0) return;
+
+      // Split for motion only: the words stay plain text to a screen
+      // reader, and the context reverts the split — never call .revert().
+      // Nothing above the fold is split here, so by the time `near` fires
+      // and the kit arrives on idle the webfont's line boxes are final.
+      const title = q(".pl-title")[0];
+      const words = title
+        ? SplitText.create(title, { type: "words", aria: "none" }).words
+        : [];
+      // Each word on its own compositor layer, so the fade, the rise and
+      // the light blur are GPU work rather than a repaint of the line.
+      if (words.length)
+        gsap.set(words, {
+          willChange: "transform, opacity, filter",
+          force3D: true,
+        });
+
+      const tl = gsap.timeline({ paused: true });
+
+      // The whole resting state, at the top, before anything moves.
+      tl.set(q(".rl-ink"), { drawSVG: "0% 0%" }, 0)
+        .set(q(".rl-clip"), { attr: { width: 0 } }, 0)
+        .set(q(".rl-rival"), { attr: { x2: PAD } }, 0)
+        .set(q(".rl-cap"), { opacity: 0 }, 0)
+        .set(q(".rl-core"), { attr: { fill: BG } }, 0)
+        .set(head, { opacity: 0 }, 0);
+
+      if (words.length)
+        tl.fromTo(
+          words,
+          { autoAlpha: 0, yPercent: 16, filter: "blur(3px)" },
+          {
+            autoAlpha: 1,
+            yPercent: 0,
+            filter: "blur(0px)",
+            duration: 0.9,
+            ease: "power2.out",
+            stagger: 0.06,
+          },
+          0,
+        );
+
+      // Their rate, laid flat across the whole panel.
+      tl.to(
+        q(".rl-rival"),
+        { attr: { x2: W - PAD }, duration: 0.9, ease: "power2.out" },
+        0.7,
+      )
+        .to(q(".rl-cap-rival"), { opacity: 1, duration: 0.3 }, 1.2)
+        .to(q(".rl-cap-ours"), { opacity: 1, duration: 0.3 }, LEAD - 0.25)
+        // The head is born on Starter rather than flying in from nowhere.
+        .set(head, { x: RUNGS[0].x, y: RUNGS[0].y }, LEAD - 0.4)
+        .to(head, { opacity: 1, duration: 0.3 }, LEAD - 0.4)
+        .to(
+          q(".rl-clip"),
+          { attr: { width: RUNGS[0].x }, duration: 0.5, ease: "power2.out" },
+          ARRIVE[0],
+        );
+
+      // An arrival: the rung inks, rings, and takes the spotlight.
+      RUNGS.forEach((_, i) => {
+        tl.set(q(`.rl-core-${i}`), { attr: { fill: VIOLET } }, ARRIVE[i]);
+        ping(tl, q(`.rl-ping-${i}`), ARRIVE[i], 20);
+        tl.call(() => setAt(i), [], ARRIVE[i]);
+      });
+
+      // A leg: one ease, one duration, shared by the draw, the traveller
+      // and the field, so the three cannot drift apart.
+      LEGS.forEach((_, i) => {
+        const depart = ARRIVE[i] + HOLD[i];
+        tl.to(
+          legs[i],
+          { drawSVG: "0% 100%", duration: LEG, ease: "sine.inOut" },
+          depart,
+        )
+          .to(
+            head,
+            {
+              duration: LEG,
+              ease: "sine.inOut",
+              motionPath: {
+                path: legs[i],
+                align: legs[i],
+                alignOrigin: [0.5, 0.5],
+              },
+            },
+            depart,
+          )
+          .to(
+            q(".rl-clip"),
+            {
+              attr: { width: RUNGS[i + 1].x },
+              duration: LEG,
+              ease: "sine.inOut",
+            },
+            depart,
+          );
+      });
+
+      // The minute-for-minute proof, at the rung it proves.
+      MATCHED.forEach((m, card) => {
+        const when = ARRIVE[m.rung] + 0.25;
+        tl.fromTo(
+          q(`.rg-bar-${card}`),
+          { scaleX: 0 },
+          {
+            scaleX: (_i: number, el: Element) =>
+              Number((el as HTMLElement).dataset.fill ?? 1),
+            transformOrigin: "0% 50%",
+            duration: 0.7,
+            ease: "power2.out",
+            stagger: 0.16,
+            immediateRender: false,
+          },
+          when,
+        ).to(
+          q(`.rg-gain-${card}`),
+          { autoAlpha: 1, duration: 0.4 },
+          when + 1.2,
+        );
+      });
+
+      // The walk is over; the figure rests drawn. A hold, written as an
+      // empty tween — never as a delay.
+      tl.to(head, { opacity: 0, duration: 0.3 }, END).to({}, { duration: 0.6 });
+
+      tlRef.current = tl;
+      return () => {
+        tlRef.current = null;
+      };
+    },
+    // `revertOnUpdate` because the callback splits text and sets inline
+    // styles; `reduce` is live, so flipping it hands the markup back its
+    // own complete resting state.
+    { scope: rootRef, dependencies: [reduce], revertOnUpdate: true },
+  );
+
+  /**
+   * The lit column lists itself. One stagger, driven by whichever put the
+   * spotlight there — the walk, a hover or a tab — so there is one
+   * mechanism and not two.
+   */
+  useKitContext(
+    kit,
+    ({ gsap }) => {
+      if (reduce) return;
+      const q = gsap.utils.selector(rootRef);
+      const rows = q(`[data-rung="${at}"] .pl-unlock`);
+      if (rows.length === 0) return;
+      gsap.fromTo(
+        rows,
+        { autoAlpha: 0, y: 6 },
+        {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.45,
+          ease: "power2.out",
+          stagger: 0.07,
+        },
+      );
+    },
+    { scope: rootRef, dependencies: [at, reduce], revertOnUpdate: true },
+  );
+
+  /**
+   * Plays while on screen. `kit` is in the deps because the timeline is
+   * built asynchronously, after the kit arrives.
+   *
+   * The reader's first move ends the argument rather than interrupting it:
+   * the timeline is run to its end and paused for good, so the figure they
+   * are handed is the finished one and the spotlight is theirs.
    */
   useEffect(() => {
-    if (taken || reduce || !inView) return;
-    const tier = listed[at];
-    const spoken = [
-      tier.name,
-      `${cents(effectiveRate(tier, annual))} a minute`,
-      `${underRival(tier, annual)}% under ${PRICING_RIVAL.name}`,
-      ...tier.unlocks,
-    ].join(" ");
-    const id = window.setTimeout(
-      () => setAt((i) => (i + 1) % listed.length),
-      holdFor(spoken),
-    );
-    return () => window.clearTimeout(id);
-  }, [at, taken, reduce, inView, annual, listed]);
+    const tl = tlRef.current;
+    if (!tl) return;
+    if (taken) {
+      tl.progress(1).pause();
+      return;
+    }
+    if (inView && !reduce) tl.play();
+    else tl.pause();
+  }, [inView, reduce, taken, kit]);
 
   /** Reduced motion gets the end of the argument, drawn, straight away. */
   useEffect(() => {
-    if (reduce) setAt(featuredAt);
-  }, [reduce, featuredAt]);
+    if (reduce) setAt(FEATURED_AT);
+  }, [reduce]);
 
   const take = () => setTaken(true);
-  /** The scene's drawn state: on screen, or asked for immediately. */
-  const shown = inView || reduce;
 
   return (
     <Frame
@@ -491,17 +900,11 @@ export function PricingPlans() {
         onFocusCapture={take}
       >
         <div className="flex flex-col gap-8 md:flex-row md:items-end md:justify-between">
-          <div
-            className={cn(
-              "max-w-[640px]",
-              reduce
-                ? undefined
-                : shown
-                  ? "animate-in fade-in-0 slide-in-from-bottom-2 duration-500 fill-mode-both"
-                  : "opacity-0",
-            )}
-          >
-            <SectionHeading eyebrow={PRICING_PLANS_INTRO.eyebrow}>
+          <div className="max-w-[640px]">
+            <SectionHeading
+              eyebrow={PRICING_PLANS_INTRO.eyebrow}
+              titleClassName="pl-title"
+            >
               {PRICING_PLANS_INTRO.title}
             </SectionHeading>
             <p className="mt-5 text-[17px] leading-7 text-pretty text-pp-muted">
@@ -509,17 +912,7 @@ export function PricingPlans() {
             </p>
           </div>
 
-          <div
-            className={cn(
-              "shrink-0",
-              reduce
-                ? undefined
-                : shown
-                  ? "animate-in fade-in-0 slide-in-from-bottom-2 duration-500 fill-mode-both"
-                  : "opacity-0",
-            )}
-            style={reduce ? undefined : { animationDelay: "60ms" }}
-          >
+          <div className="shrink-0">
             <div className="flex flex-wrap items-center gap-3">
               <div
                 role="group"
@@ -553,37 +946,32 @@ export function PricingPlans() {
           </div>
         </div>
 
-        <div
-          className={cn(
-            "mt-12 overflow-hidden rounded-[28px] bg-white shadow-[0_0_0_1px_rgb(24_16_40/0.07),0_32px_64px_-40px_rgb(24_16_40/0.5)] md:mt-16",
-            reduce
-              ? undefined
-              : shown
-                ? "animate-in fade-in-0 slide-in-from-bottom-4 duration-500 fill-mode-both"
-                : "opacity-0",
-          )}
-          style={reduce ? undefined : { animationDelay: "80ms" }}
-        >
+        <div className="mt-12 overflow-hidden rounded-[28px] bg-white shadow-[0_0_0_1px_rgb(24_16_40/0.07),0_32px_64px_-40px_rgb(24_16_40/0.5)] md:mt-16">
           {/* Five columns do not survive a phone. The scroller keeps the
               comparison intact rather than restacking it into five
               unrelated cards, which is the one shape that makes a price
-              list impossible to read across. */}
+              list impossible to read across. The figure scrolls with them,
+              because a rung and its point on the line are one thing. */}
           <div className="overflow-x-auto [scrollbar-width:thin]">
-            <div className="grid min-w-[960px] grid-cols-5 items-stretch">
-              {listed.map((tier, i) => (
-                <PlanColumn
-                  key={tier.id}
-                  tier={tier}
-                  annual={annual}
-                  first={i === 0}
-                  lit={i === at}
-                  still={reduce}
-                  onTake={() => {
-                    setTaken(true);
-                    setAt(i);
-                  }}
-                />
-              ))}
+            <div className="min-w-[960px]">
+              <RateLadder annual={annual} still={reduce} />
+              <div className="grid grid-cols-5 items-stretch">
+                {LISTED.map((tier, i) => (
+                  <PlanColumn
+                    key={tier.id}
+                    tier={tier}
+                    index={i}
+                    annual={annual}
+                    first={i === 0}
+                    lit={i === at}
+                    still={reduce}
+                    onTake={() => {
+                      setTaken(true);
+                      setAt(i);
+                    }}
+                  />
+                ))}
+              </div>
             </div>
           </div>
 
@@ -612,30 +1000,19 @@ export function PricingPlans() {
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2">
-          {PRICING_RIVAL.matched.map((m, i) => (
+          {MATCHED.map((m, i) => (
             <MatchedRung
               key={m.monthly}
               monthly={m.monthly}
               theirs={m.theirs}
               theirPlan={m.theirPlan}
-              reduce={reduce}
-              shown={shown}
+              still={reduce}
               card={i}
             />
           ))}
         </div>
 
-        <p
-          className={cn(
-            "mt-10 max-w-[860px] text-[12px] leading-[20px] text-pp-muted",
-            reduce
-              ? undefined
-              : shown
-                ? "animate-in fade-in-0 duration-500 fill-mode-both"
-                : "opacity-0",
-          )}
-          style={reduce ? undefined : { animationDelay: "120ms" }}
-        >
+        <p className="mt-10 max-w-[860px] text-[12px] leading-[20px] text-pp-muted">
           {PRICING_PLANS_NOTE}
         </p>
       </div>
