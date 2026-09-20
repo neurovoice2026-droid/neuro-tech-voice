@@ -1,61 +1,35 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { knowledgeBase, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { requireOrgContext } from '@/lib/api/auth'
+import { ApiError, handleRoute, noStore, zUuid } from '@/lib/api/http'
+import { deleteKnowledgeDocument } from '@/lib/knowledge/delete'
+import { RATE_LIMITS, enforceRateLimit } from '@/lib/security/rate-limit'
 
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ docId: string }> }
-) {
-  const supabase = await createClient()
-  const { docId } = await params
+export const runtime = 'nodejs'
+// Provider copies are deleted (in parallel, 15 s timeout each) before the response.
+export const maxDuration = 60
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+type Context = { params: Promise<{ docId: string }> }
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
+/**
+ * DELETE: removes the document everywhere (provider copies, chunks, stored
+ * file). Provider problems are logged and returned as warnings; the document
+ * is removed locally either way so the agent stops using it.
+ */
+export const DELETE = handleRoute(async (_req, ctx: Context) => {
+  const org = await requireOrgContext()
+  await enforceRateLimit(RATE_LIMITS.apiWrite, org.user.id)
+  const { docId } = await ctx.params
+  const id = zUuid.safeParse(docId)
+  if (!id.success) throw new ApiError(404, 'document_not_found', 'This document no longer exists.')
 
-  if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  // Fetch the document — RLS ensures it belongs to this org
-  const { data: doc, error: fetchError } = await supabase
-    .from('knowledge_documents')
-    .select('id, org_id, storage_path, elevenlabs_doc_id')
-    .eq('id', docId)
-    .eq('org_id', org.id)
-    .single()
-
-  if (fetchError || !doc) {
-    return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+  let result: Awaited<ReturnType<typeof deleteKnowledgeDocument>>
+  try {
+    result = await deleteKnowledgeDocument({ orgId: org.org.id, documentId: id.data })
+  } catch (error) {
+    if (error instanceof ApiError) throw error
+    console.error('[knowledge] delete route failed', { documentId: id.data, error: error instanceof Error ? error.message : String(error) })
+    throw new ApiError(500, 'delete_failed', 'We couldn’t remove this document. Please try again.')
   }
-
-  // Remove from Supabase Storage if it has a file
-  if (doc.storage_path) {
-    await supabase.storage
-      .from('knowledge-documents')
-      .remove([doc.storage_path])
-  }
-
-  // Remove from ElevenLabs knowledge base
-  if (elConfigured() && doc.elevenlabs_doc_id) {
-    try {
-      await knowledgeBase.delete(doc.elevenlabs_doc_id)
-    } catch {
-      // Non-fatal
-    }
-  }
-
-  const { error: deleteError } = await supabase
-    .from('knowledge_documents')
-    .delete()
-    .eq('id', docId)
-
-  if (deleteError) {
-    return NextResponse.json({ error: deleteError.message }, { status: 500 })
-  }
-
-  return NextResponse.json({ success: true })
-}
+  if (!result.deleted) throw new ApiError(404, 'document_not_found', 'This document no longer exists.')
+  return noStore(NextResponse.json({ ok: true, warnings: result.warnings }))
+})

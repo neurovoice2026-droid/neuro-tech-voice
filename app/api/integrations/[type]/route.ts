@@ -1,86 +1,88 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { z } from 'zod'
+import { ApiError, handleRoute, noStore } from '@/lib/api/http'
+import { requireOrgContext } from '@/lib/api/auth'
+import { disconnectGoogleIntegration, isGoogleIntegrationType } from '@/lib/google/client'
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/security/rate-limit'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { resyncOrgAgentsAfterResponse } from '@/lib/voice/sync'
+import type { IntegrationType } from '@/types'
 
-const VALID_TYPES = [
-  'google_calendar', 'gmail', 'google_sheets', 'google_docs', 'google_drive', 'webhook',
-]
+export const runtime = 'nodejs'
+// Disconnecting Google Calendar re-syncs the provider agents after the response.
+export const maxDuration = 60
 
 type Params = { params: Promise<{ type: string }> }
 
-async function resolveOrgId(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Unauthorized', status: 401 as const }
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
-  if (!org) return { error: 'Organization not found', status: 404 as const }
-  return { orgId: org.id as string }
+const integrationTypeSchema = z.enum(['google_calendar', 'gmail', 'google_sheets', 'google_docs', 'google_drive', 'webhook'])
+
+/** Never the token columns: they aren't selectable by users after migration 011. */
+const STATUS_COLUMNS = 'type, is_active, account_email, scopes, connected_at, config'
+const LEGACY_STATUS_COLUMNS = 'type, is_active, connected_at, config'
+
+function parseType(raw: string): IntegrationType {
+  const parsed = integrationTypeSchema.safeParse(raw)
+  if (!parsed.success) throw new ApiError(404, 'integration_not_found', 'That integration doesn’t exist.')
+  return parsed.data
 }
 
-// Connection status for a single integration type.
-export async function GET(_request: NextRequest, { params }: Params) {
-  const { type } = await params
-  const supabase = await createClient()
-  const ctx = await resolveOrgId(supabase)
-  if ('error' in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status })
-
-  const { data } = await supabase
-    .from('integrations')
-    .select('type, is_active, config, connected_at')
-    .eq('org_id', ctx.orgId)
-    .eq('type', type)
-    .maybeSingle()
-
-  return NextResponse.json({ connected: !!data?.is_active, integration: data ?? null })
-}
-
-// Connect/configure an integration. Used for the webhook type (Google types use
-// the OAuth connect/callback routes instead).
-export async function POST(request: NextRequest, { params }: Params) {
-  const { type } = await params
-  if (!VALID_TYPES.includes(type)) {
-    return NextResponse.json({ error: 'Invalid integration type' }, { status: 400 })
+// Connection status for one integration type ({ connected, integration }).
+export const GET = handleRoute(async (_req: NextRequest, { params }: Params) => {
+  const type = parseType((await params).type)
+  const ctx = await requireOrgContext()
+  const select = (columns: string) =>
+    ctx.supabase.from('integrations').select(columns).eq('org_id', ctx.org.id).eq('type', type).maybeSingle()
+  let { data, error } = await select(STATUS_COLUMNS)
+  // Migration 010 (account_email, scopes) not applied yet.
+  if (error?.code === '42703') ({ data, error } = await select(LEGACY_STATUS_COLUMNS))
+  if (error) {
+    console.error('[integrations] status lookup failed', type, error.code, error.message)
+    throw new ApiError(500, 'integration_unavailable', 'We couldn’t check this connection. Please try again.')
   }
+  const row = data as { is_active?: boolean } | null
+  return noStore(NextResponse.json({ connected: !!row?.is_active, integration: data ?? null }))
+})
 
-  const supabase = await createClient()
-  const ctx = await resolveOrgId(supabase)
-  if ('error' in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status })
-
-  const body = (await request.json().catch(() => ({}))) as { config?: Record<string, unknown> }
-  const config = body.config ?? {}
-
-  if (type === 'webhook' && !config.url) {
-    return NextResponse.json({ error: 'Webhook URL is required' }, { status: 400 })
-  }
-
-  const { data, error } = await supabase
-    .from('integrations')
-    .upsert(
-      { org_id: ctx.orgId, type, config, is_active: true, connected_at: new Date().toISOString() },
-      { onConflict: 'org_id,type' }
+// Webhooks used to be saved here, but nothing ever sent to that address.
+// They're set up per workflow now, signed and retried, so this answers with
+// directions instead of storing a URL that would never be used.
+export const POST = handleRoute(async (_req: NextRequest, { params }: Params) => {
+  const type = parseType((await params).type)
+  await requireOrgContext()
+  if (type === 'webhook') {
+    throw new ApiError(
+      400,
+      'use_workflows',
+      'Webhooks are set up inside a workflow. Open Workflows and add a “Send webhook” step.'
     )
-    .select('type, is_active, config, connected_at')
-    .single()
+  }
+  throw new ApiError(400, 'use_google_connect', 'Connect Google services from the Integrations page.')
+})
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ connected: true, integration: data })
-}
+// Disconnect. When the last Google service goes, Google's access is revoked
+// too (lib/google/client.ts), so no token with access to the account is left.
+export const DELETE = handleRoute(async (_req: NextRequest, { params }: Params) => {
+  const type = parseType((await params).type)
+  const ctx = await requireOrgContext()
+  await enforceRateLimit(RATE_LIMITS.apiWrite, ctx.user.id)
 
-// Disconnect an integration.
-export async function DELETE(_request: NextRequest, { params }: Params) {
-  const { type } = await params
-  const supabase = await createClient()
-  const ctx = await resolveOrgId(supabase)
-  if ('error' in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status })
+  if (isGoogleIntegrationType(type)) {
+    try {
+      const { revoked } = await disconnectGoogleIntegration(ctx.org.id, type)
+      // Booking tools depend on the calendar connection.
+      if (type === 'google_calendar') await resyncOrgAgentsAfterResponse(ctx.org.id, 'disconnecting Google Calendar')
+      return noStore(NextResponse.json({ connected: false, revoked_google_access: revoked }))
+    } catch (error) {
+      console.error('[integrations] Google disconnect failed', type, error instanceof Error ? error.message : error)
+      throw new ApiError(500, 'disconnect_failed', 'We couldn’t disconnect this right now. Please try again.')
+    }
+  }
 
-  const { error } = await supabase
-    .from('integrations')
-    .delete()
-    .eq('org_id', ctx.orgId)
-    .eq('type', type)
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ connected: false })
-}
+  // The legacy saved webhook address (never used for sending).
+  const { error } = await createAdminClient().from('integrations').delete().eq('org_id', ctx.org.id).eq('type', type)
+  if (error) {
+    console.error('[integrations] disconnect failed', type, error.code, error.message)
+    throw new ApiError(500, 'disconnect_failed', 'We couldn’t remove this right now. Please try again.')
+  }
+  return noStore(NextResponse.json({ connected: false }))
+})

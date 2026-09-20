@@ -1,109 +1,53 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { conversations, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { NextResponse, type NextRequest } from 'next/server'
+import { z } from 'zod'
+import { ApiError, handleRoute, noStore, parseSearchParams } from '@/lib/api/http'
+import { requireOrgContext } from '@/lib/api/auth'
+import { entitlementsFor, requiredPlanFor } from '@/lib/billing/entitlements'
+import { dbError } from '@/app/api/calls/_lib/db'
+import { safeTimeZone } from '@/app/api/calls/_lib/query'
+import { PLANS } from '@/types'
 
-export interface ChartDataPoint {
+// GET /api/dashboard/calls-chart?days=7|30|90 — calls per local day, zero-filled,
+// oldest first (calls_chart). The 30-day view is part of advanced analytics
+// (Pro and up), the 90-day view of the full analytics suite (Business and up).
+
+export const runtime = 'nodejs'
+
+const QuerySchema = z.object({
+  days: z.enum(['7', '30', '90']).optional().default('7').transform(Number),
+})
+
+interface ChartDataPoint {
+  /** Local calendar day, YYYY-MM-DD. */
   date: string
   calls: number
-  duration: number
+  avg_duration_seconds: number
 }
 
-export async function GET() {
-  const supabase = await createClient()
-
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
-
-  if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const { data: agent } = await supabase
-    .from('agents')
-    .select('elevenlabs_agent_id')
-    .eq('org_id', org.id)
-    .single()
-
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  const sevenDaysAgo = new Date()
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
-  sevenDaysAgo.setHours(0, 0, 0, 0)
-
-  // Try ElevenLabs
-  if (elConfigured() && agent?.elevenlabs_agent_id) {
-    try {
-      const data = await conversations.list({
-        agent_id: agent.elevenlabs_agent_id,
-        page_size: 100,
-        call_start_after_unix: Math.floor(sevenDaysAgo.getTime() / 1000),
-      })
-
-      const convs = data.conversations ?? []
-      const result: ChartDataPoint[] = []
-
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date()
-        d.setDate(d.getDate() - i)
-        d.setHours(0, 0, 0, 0)
-        const dayStartUnix = Math.floor(d.getTime() / 1000)
-        const dayEndUnix = dayStartUnix + 86400
-
-        const dayCalls = convs.filter((c) => {
-          const t = c.start_time_unix_secs ?? 0
-          return t >= dayStartUnix && t < dayEndUnix
-        })
-
-        const completed = dayCalls.filter((c) => c.call_duration_secs && c.call_duration_secs > 0)
-        const totalSecs = completed.reduce((s, c) => s + (c.call_duration_secs ?? 0), 0)
-        const avgMins = completed.length > 0
-          ? Math.round((totalSecs / completed.length) / 60 * 10) / 10 : 0
-
-        result.push({
-          date: days[d.getDay()],
-          calls: dayCalls.length,
-          duration: avgMins,
-        })
-      }
-
-      return NextResponse.json(result)
-    } catch (err) {
-      console.error('ElevenLabs calls-chart failed, falling back to DB:', err)
-    }
+export const GET = handleRoute(async (req: NextRequest) => {
+  const ctx = await requireOrgContext()
+  const { days } = parseSearchParams(req.nextUrl, QuerySchema)
+  const entitlements = entitlementsFor(ctx.org.plan)
+  if (days > 30 && !entitlements.fullAnalytics) {
+    const plan = PLANS[requiredPlanFor('fullAnalytics')].name
+    throw new ApiError(403, 'upgrade_required', `The 90-day view is part of the full analytics suite on ${plan} and above.`)
+  }
+  if (days > 7 && !entitlements.advancedAnalytics) {
+    const plan = PLANS[requiredPlanFor('advancedAnalytics')].name
+    throw new ApiError(403, 'upgrade_required', `The 30-day view is part of advanced analytics on ${plan} and above.`)
   }
 
-  // Fallback: Supabase
-  const result: ChartDataPoint[] = []
+  const { data, error } = await ctx.supabase.rpc('calls_chart', {
+    p_org_id: ctx.org.id,
+    p_days: days,
+    p_tz: safeTimeZone(ctx.org.timezone),
+  })
+  if (error) throw dbError(error, 'calls chart')
 
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date()
-    d.setDate(d.getDate() - i)
-    d.setHours(0, 0, 0, 0)
-    const dayStart = d.toISOString()
-    const dayEnd = new Date(d.getTime() + 86400000).toISOString()
-
-    const { data: calls } = await supabase
-      .from('calls')
-      .select('duration_seconds, status')
-      .eq('org_id', org.id)
-      .gte('started_at', dayStart)
-      .lt('started_at', dayEnd)
-
-    const dayCalls = calls ?? []
-    const completed = dayCalls.filter((c) => c.status === 'completed')
-    const totalSecs = completed.reduce((s, c) => s + (c.duration_seconds ?? 0), 0)
-    const avgMins = completed.length > 0
-      ? Math.round((totalSecs / completed.length) / 60 * 10) / 10 : 0
-
-    result.push({
-      date: days[d.getDay()],
-      calls: dayCalls.length,
-      duration: avgMins,
-    })
-  }
-
-  return NextResponse.json(result)
-}
+  const points: ChartDataPoint[] = ((data ?? []) as { day: string; calls: unknown; avg_duration_seconds: unknown }[]).map((row) => ({
+    date: String(row.day).slice(0, 10),
+    calls: Number(row.calls) || 0,
+    avg_duration_seconds: Math.round(Number(row.avg_duration_seconds) || 0),
+  }))
+  return noStore(NextResponse.json({ days, points }))
+})

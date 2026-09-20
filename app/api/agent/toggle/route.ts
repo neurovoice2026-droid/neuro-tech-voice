@@ -1,30 +1,26 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { ApiError, handleRoute, noStore, parseJson } from '@/lib/api/http'
+import { requireOrgContext } from '@/lib/api/auth'
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/security/rate-limit'
+import { loadOrgAgent, saveAgentColumns } from '@/lib/voice/sync/agent-store'
+import { agentToggleSchema } from '@/lib/voice/sync/schemas'
 
-export async function POST(request: Request) {
-  const supabase = await createClient()
+// Pauses or resumes the agent. The call router reads is_active on every call
+// and answers paused agents with the "unavailable" message, so no provider
+// needs to change.
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+export const runtime = 'nodejs'
 
-  const { is_active } = (await request.json()) as { is_active: boolean }
+export const POST = handleRoute(async (req) => {
+  const ctx = await requireOrgContext()
+  await enforceRateLimit(RATE_LIMITS.apiWrite, ctx.user.id)
+  const { is_active } = await parseJson(req, agentToggleSchema, { maxBytes: 1024 })
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
+  const agent = await loadOrgAgent(ctx.supabase, ctx.org.id)
+  if (!agent) {
+    throw new ApiError(404, 'agent_not_found', 'Your AI agent hasn’t been set up yet. Please finish onboarding first.')
+  }
 
-  if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const { data: agent, error } = await supabase
-    .from('agents')
-    .update({ is_active })
-    .eq('org_id', org.id)
-    .select()
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  return NextResponse.json({ agent })
-}
+  await saveAgentColumns(ctx.supabase, { orgId: ctx.org.id, agentId: agent.id }, { update: { is_active }, derived: new Set() })
+  return noStore(NextResponse.json({ agent: { ...agent, is_active } }))
+})
