@@ -2007,8 +2007,8 @@ export const NAV_INDUSTRIES: NavIndustry[] = [
     icon: ShieldCheck,
     caller: "Someone reversed into my car this morning. How do I start a claim?",
     agent:
-      "I can open it now. Is everyone okay? Then I'll take your policy number and the other driver's details.",
-    outcome: "Claim opened · adjuster assigned",
+      "Is everyone okay? I'll take your policy number and the other driver's details, and get them to a handler now.",
+    outcome: "Details taken · claims handler told",
   },
   {
     slug: "property-management",
@@ -2016,8 +2016,8 @@ export const NAV_INDUSTRIES: NavIndustry[] = [
     icon: KeyRound,
     caller: "There's water coming through my ceiling from the flat upstairs.",
     agent:
-      "I'm logging that as an emergency and paging the on-call plumber. Can you reach the stopcock?",
-    outcome: "Emergency work order · plumber paged",
+      "Can you reach the stopcock? I'm taking this down as urgent and telling the on-call team while we speak.",
+    outcome: "Details taken · on-call maintenance told",
   },
   {
     slug: "hospitality",
@@ -2043,8 +2043,8 @@ export const NAV_INDUSTRIES: NavIndustry[] = [
     icon: ShoppingBag,
     caller: "My order says delivered, but it isn't here.",
     agent:
-      "Let me check. It was left at the side door at ten past two — if it isn't there I'll send a replacement today.",
-    outcome: "Replacement authorised · no ticket raised",
+      "I'll take the order number and text you the returns link — then someone here picks it up, rather than you queueing again.",
+    outcome: "Order found · returns link texted",
   },
   {
     slug: "education",
@@ -2053,7 +2053,7 @@ export const NAV_INDUSTRIES: NavIndustry[] = [
     caller: "Do you still have places on the autumn maths course?",
     agent:
       "We do — three left in the Tuesday evening group. Can I take your child's name and school year?",
-    outcome: "Place held · enrolment link sent",
+    outcome: "Place held · enrolment link texted",
   },
   {
     slug: "fitness",
@@ -2108,13 +2108,13 @@ export const SOLUTION_ITEMS: SolutionItem[] = [
     description: "Agents built on your scripts, data and systems.",
     icon: BrainCircuit,
     href: "/solutions/custom-ai-agents",
-    promise: "A voice or chat agent trained on how your business actually works.",
+    promise: "A voice agent built on how your business actually answers the phone.",
     deliverables: [
       "Call flows written with your team",
-      "Connected to your CRM, calendar and helpdesk",
-      "Tested on real calls before launch",
+      "Joined to your systems, with the receiving end built for you",
+      "Tested on real phone calls before launch",
     ],
-    stack: ["Voice", "Model", "Telephony", "Your CRM"],
+    stack: ["Voice", "Model", "Telephony", "Your systems"],
   },
   {
     id: "custom-saas-platforms",
@@ -2177,12 +2177,15 @@ export const SOLUTION_ITEMS: SolutionItem[] = [
 
 export const SOLUTIONS_MENU = {
   sheetKicker: (label: string) => `What you get · ${label}`,
+  // A build starts with a phone call, and /contact does not exist: the
+  // action rings us. The id argument is kept so the panel's call site
+  // (href(active.id)) compiles unchanged.
   cta: {
-    label: "Book a scoping call",
-    href: (id: string) => `/contact?topic=${id}`,
+    label: "Call us about a build",
+    href: (_id: string) => COMPANY.phoneHref,
   },
   footer: {
     text: "Not sure what you need?",
-    link: { label: "Tell us the problem", href: "/contact" },
+    link: { label: "Call us", href: COMPANY.phoneHref },
   },
 } as const;
