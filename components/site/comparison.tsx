@@ -13,7 +13,7 @@ import {
   type PartState,
 } from "@/lib/site";
 import { cn } from "@/lib/utils";
-import { CornerDot } from "./corner-dot";
+import { Frame, SectionHeading } from "./product/primitives";
 import { CountUp, EASE, Reveal } from "./reveal";
 
 /**
@@ -39,12 +39,21 @@ import { CountUp, EASE, Reveal } from "./reveal";
  * reader who never clicks, which is most of them, saw a single vendor and
  * no comparison at all. Everything here is legible without touching it.
  *
+ * **It is set in the light `pp` system, not the cover's dark one.** This
+ * page is the front door to twenty-one routes that are all white stock,
+ * black ink and one violet, and a table drawn in a second palette reads as
+ * a different company's table — which is the last thing a comparison can
+ * afford. So the surfaces are white, the rules are pp hairlines, the
+ * masthead is the shared `SectionHeading`, and every length is rem or px.
+ * The cover's fluid `em` base does not exist under `.pp`; a `1.9em` mark
+ * here would size off whatever text happened to be above it.
+ *
  * Decisions worth keeping, and the ones that replaced the panel:
  *
  *  · **The rule across the middle is the whole argument.** The first five
  *    layers are a voice stack: a solved, competitive, genuinely excellent
  *    market. The last five are one specific business's operations, which
- *    is not a market at all — it is work. Every platform goes dark below
+ *    is not a market at all — it is work. Every platform goes pale below
  *    that rule, and that is not a failing on their part. The bottom half
  *    was never what they sold.
  *  · **It is complimentary on purpose, and that is what makes it land.**
@@ -54,20 +63,20 @@ import { CountUp, EASE, Reveal } from "./reveal";
  *    sneers reads as a comparison that is lying; one that concedes the
  *    other side's strength reads as one that has counted honestly. We only
  *    need the reader to count the bottom five rows.
- *  · **It is a real `<table>` now.** It used to be fifty divs, each with a
+ *  · **It is a real `<table>`.** It used to be fifty divs, each with a
  *    bare `sr-only` state label inside it, which a screen reader announces
  *    as fifty context-free strings — "shipped working, you build it, you
  *    build it" with no way to know whose column or which layer. `<th
  *    scope>` on the vendors and on the layers turns each of those fifty
  *    into "Vapi, reasoning, your account". The grid was never decoration;
  *    it was tabular data pretending not to be.
- *  · **No panel.** The whole board used to sit inside the same rounded,
- *    bordered, shadowed card as five other sections, which is what made
- *    the page read as a brochure rather than as one argument. Hairlines
- *    and space group it now. The card also flattered the table: a scroller
- *    inside a card looks deliberate, a scroller on the open field has to
- *    earn its width, and that pressure is what forced the vendor prose
- *    into the header where it belongs.
+ *  · **No panel.** The board sits on the open field and is grouped by
+ *    hairlines and space, not by a bordered card. On white that matters
+ *    more than it did on ink: a card inside a white page is a second white
+ *    page, and the page already has one. The absence also flatters
+ *    nothing — a scroller on the open field has to earn its width, and
+ *    that pressure is what forced the vendor prose into the header where
+ *    it belongs.
  *  · **Who each vendor is for lives in its own column header.** There used
  *    to be a five-line tail under the board restating, in about two
  *    hundred words, what the header already said — and restating it two
@@ -84,17 +93,16 @@ import { CountUp, EASE, Reveal } from "./reveal";
  *    did not do.
  *
  * The motion is the argument, not decoration (and there is only one piece
- * of it). Every rival's five business-half cells hold at full weight until
- * the second group rule crosses the middle of the viewport, then drop to
- * their true tone on a cascade down each column, four columns falling in
+ * of it). Every rival's five business-half cells hold at full ink until
+ * the second group rule crosses the middle of the viewport, then drain to
+ * their true tone on a cascade down each column, four columns fading in
  * parallel while ours holds and its vertical rules draw down as one
- * object. That extinction *is* the section; what was here before was a
- * per-row 0.4→1 fade across four pixels, imperceptible, and re-indexed
- * inside each group so it did not even cascade.
+ * object. **On white the extinction runs the other way round from the
+ * cover's**: there is no lit fill to put out, so the held state is the
+ * heaviest thing on the board — inked glyph, grey ground, solid edge — and
+ * what the rule takes away is weight, leaving four columns of hairline
+ * outlines. Nothing glows, nothing darkens; the columns simply go pale.
  */
-
-/** The section's place in the page's running order. */
-const SECTION_N = "05";
 
 const ICONS: Record<PartState, typeof Check> = {
   shipped: Check,
@@ -104,27 +112,26 @@ const ICONS: Record<PartState, typeof Check> = {
 };
 
 /**
- * One ramp, from in-the-box to on-your-desk.
+ * One ramp, from in-the-box to on-your-desk, drawn for white stock.
  *
- * Every state carries an icon as well as a weight, and not as decoration:
+ * Every state carries an icon as well as a tone, and not as decoration:
  * encoded in colour alone this grid would be unreadable to anyone who
- * cannot separate the lit fill from the dim one, which is the single most
- * common way a chart like this fails. It is also what lets the extinction
- * below be honest — the wrench is in the cell from the first paint, and
- * only the weight moves.
+ * cannot separate the filled mark from the outlined one, which is the
+ * single most common way a chart like this fails. It is also what lets the
+ * extinction below be honest — the wrench is in the cell from the first
+ * paint, and only the weight moves.
+ *
+ * `build` is the palest mark on the board and it still has a floor. `#8d8899`
+ * is 3.4:1 on white and 3.2:1 on the group band, which is the bar for a
+ * graphic; the reader is meant to see that something is there and that it
+ * is not filled, not to wonder whether the cell is empty. Anything lighter
+ * and the bottom half of the table stops being data and becomes a texture.
  */
 const TONE: Record<PartState, string> = {
-  shipped:
-    "border-[var(--cover-brand-lit)]/55 bg-[var(--cover-brand-lit)] text-[var(--cover-ink)]",
-  metered:
-    "border-[var(--cover-brand-lit)]/45 bg-[var(--cover-brand-lit)]/16 text-[var(--cover-brand-lit)]",
-  byo: "border-dashed border-[var(--cover-paper)]/35 text-[var(--cover-paper)]/75",
-  // Dim is the point, but the glyph still has to clear the contrast floor:
-  // the reader is meant to see that something is there and that it is not
-  // lit, not to wonder whether the cell is empty. So the distance between
-  // lit and dark is carried by the fill and the border, which are
-  // decoration, and not by the mark, which is the data.
-  build: "border-[var(--cover-paper)]/10 text-[var(--cover-paper)]/45",
+  shipped: "border-pp-accent bg-pp-accent text-white",
+  metered: "border-pp-accent/40 bg-pp-accent/10 text-pp-accent",
+  byo: "border-dashed border-pp-muted/60 text-pp-muted",
+  build: "border-pp-hair text-[#8d8899]",
 };
 
 /**
@@ -135,6 +142,12 @@ const TONE: Record<PartState, string> = {
  * build it" to a screen reader — only its weight is borrowed, and it is
  * handed back the moment the rule crosses.
  *
+ * On white it is the *heaviest* tone in play rather than the brightest
+ * one: ink glyph, ink hairline, a grey ground. Draining that to `build`'s
+ * bare outline is a loss of weight the eye reads as a column going out,
+ * where the cover's version read as a light being switched off. Glow would
+ * have been the literal translation and it would have looked like dirt.
+ *
  * Expressed as overrides under `data-hold`, so the resting markup is the
  * true state and the borrowed weight only exists while an attribute says so.
  * That attribute is set from JS, on the client, after a measurement — so
@@ -143,9 +156,9 @@ const TONE: Record<PartState, string> = {
  * theatre.
  */
 const HELD = [
-  "group-data-[hold=on]/board:border-[var(--cover-paper)]/45",
-  "group-data-[hold=on]/board:bg-[var(--cover-paper)]/12",
-  "group-data-[hold=on]/board:text-[var(--cover-paper)]/90",
+  "group-data-[hold=on]/board:border-pp-ink/25",
+  "group-data-[hold=on]/board:bg-pp-ink/[0.06]",
+  "group-data-[hold=on]/board:text-pp-ink",
 ].join(" ");
 
 /**
@@ -173,6 +186,19 @@ const COLS = {
  */
 const EASE_CSS = `cubic-bezier(${EASE.join(",")})`;
 
+/**
+ * The cross-highlight wash, and the group band.
+ *
+ * Both are translucent ink rather than `bg-pp-card`, and that is
+ * load-bearing: our column's violet ground is painted *under* the table,
+ * so an opaque grey cell would erase the one piece of colour the board
+ * has. Tinting instead lets the violet read through every band and every
+ * lit row.
+ */
+const LIT_COL = "bg-[rgb(24_16_40/0.045)]";
+const LIT_ROW = "bg-[rgb(24_16_40/0.03)]";
+const BAND = "bg-[rgb(24_16_40/0.035)]";
+
 const GROUPS = [
   { id: "stack" as const, label: "The voice stack", note: "A solved, competitive market" },
   { id: "business" as const, label: "Your business", note: "Not a market — work" },
@@ -198,11 +224,13 @@ function Mark({
   state,
   holdable,
   delay,
+  size = "md",
 }: {
   state: PartState;
-  /** One of the rival cells that goes out below the second rule. */
-  holdable: boolean;
-  delay: number;
+  /** One of the rival cells that drains below the second rule. */
+  holdable?: boolean;
+  delay?: number;
+  size?: "md" | "sm";
 }) {
   const Icon = ICONS[state];
   return (
@@ -213,17 +241,23 @@ function Mark({
       // as to the extinction. Which is fine: the board only ever arms
       // while the second rule is still below the fold, so every cell that
       // borrows weight does it off-screen.
-      style={{
-        transitionTimingFunction: EASE_CSS,
-        transitionDelay: `${delay}s`,
-      }}
+      style={
+        delay === undefined
+          ? undefined
+          : { transitionTimingFunction: EASE_CSS, transitionDelay: `${delay}s` }
+      }
       className={cn(
-        "grid size-[1.9em] place-items-center rounded-[0.4em] border transition-colors duration-500",
+        "grid place-items-center border transition-colors duration-500",
+        size === "md" ? "size-7 rounded-[9px]" : "size-5 rounded-[7px]",
         TONE[state],
         holdable && HELD,
       )}
     >
-      <Icon className="size-[0.95em]" strokeWidth={2.4} aria-hidden />
+      <Icon
+        className={size === "md" ? "size-3.5" : "size-2.5"}
+        strokeWidth={2.2}
+        aria-hidden
+      />
     </span>
   );
 }
@@ -249,15 +283,15 @@ export function Comparison() {
    * rather than the other way round.
    *
    * Armed, not merely mounted, and the difference is the degradation
-   * story. We borrow the lit weight only after measuring that the second
-   * rule is still below the fold: lighting the rival columns up under a
+   * story. We borrow the heavy weight only after measuring that the second
+   * rule is still below the fold: inking the rival columns up under a
    * reader who has already scrolled to them would play the argument
    * backwards. No JS, no measurement, no borrow. Reduced motion returns
    * before the measurement and the grid is simply finished.
    *
    * The trigger is the second rule itself, because the rule is the claim.
    * `-40%` on both edges narrows the observer's band to a strip across the
-   * middle of the viewport, so the columns go out under the reader's eye
+   * middle of the viewport, so the columns go pale under the reader's eye
    * rather than somewhere off the bottom of the screen.
    */
   const boardRef = useRef<HTMLDivElement>(null);
@@ -295,336 +329,309 @@ export function Comparison() {
   const colLit = (col: number) => at?.col === col;
 
   return (
-    <section
+    <Frame
+      as="section"
       id="difference"
-      className="relative scroll-mt-24 px-[1.6em] py-[6em] md:py-[8em]"
+      className="scroll-mt-28 px-6 py-16 md:px-12 md:py-24"
     >
-      <div className="relative mx-auto max-w-[76em]">
-        {/* masthead */}
-        <Reveal>
-          <span className="mono flex items-center gap-[0.8em] text-[0.7em] uppercase leading-none tracking-[0.24em] text-[var(--cover-paper)]/45">
-            <CornerDot className="size-[0.55em] shrink-0" />
-            {SECTION_N}
-            <span>{COMPARISON_INTRO.eyebrow}</span>
-          </span>
-        </Reveal>
+      {/* masthead — the shared opener, so this section is introduced the
+          same way every other page on the site introduces one. */}
+      <Reveal>
+        <SectionHeading eyebrow={COMPARISON_INTRO.eyebrow} className="max-w-[860px]">
+          {COMPARISON_INTRO.title}
+        </SectionHeading>
+      </Reveal>
 
-        <Reveal delay={0.06} className="mt-[1.1em]">
-          <h2 className="text-balance text-[2.8em] font-medium leading-[1.03] tracking-[-0.045em] md:text-[3.4em]">
-            {COMPARISON_INTRO.title}
-          </h2>
-        </Reveal>
+      <Reveal
+        delay={0.08}
+        as="p"
+        className="mt-5 max-w-[680px] text-[17px] leading-[26px] text-pretty text-pp-muted md:text-[18px] md:leading-[28px]"
+      >
+        {COMPARISON_INTRO.sub}
+      </Reveal>
 
-        <Reveal
-          delay={0.12}
-          as="p"
-          className="mt-[1.1em] max-w-[44em] text-pretty text-[1.05em] leading-[1.6] text-[var(--cover-paper)]/75"
-        >
-          {COMPARISON_INTRO.sub}
-        </Reveal>
+      <div aria-hidden className="mt-10 h-px bg-pp-rule" />
 
-        <div
-          aria-hidden
-          className="mt-[2.2em] h-px bg-[var(--cover-paper)]/12"
-        />
+      {/* the board */}
+      <Reveal delay={0.06} y={24} className="mt-10 md:mt-12">
+        {/* Six columns will not fit a phone, and shrinking them to fit
+            would destroy the one thing the grid exists to show. It
+            scrolls instead, with a floor wide enough to keep the shape
+            intact — and narrow enough that inside the 1176px column it
+            never scrolls on a desktop at all. */}
+        <div className="overflow-x-auto overscroll-x-contain">
+          <div ref={boardRef} className="group/board relative min-w-[980px]">
+            {/* Our column's ground: a violet tint, and two rules that draw
+                down as the rivals drain. Absolutely placed off the same
+                percentages as the colgroup so the rule is one continuous
+                object rather than twelve borders stacked end to end. */}
+            <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
+              <div
+                className="absolute inset-y-0 bg-pp-accent/[0.05]"
+                style={{ left: COLS.oursLeft, width: COLS.rival }}
+              />
+            </div>
 
-        {/* the board */}
-        <Reveal delay={0.08} y={32} className="mt-[2.6em] md:mt-[3.2em]">
-          {/* Six columns will not fit a phone, and shrinking them to fit
-              would destroy the one thing the grid exists to show. It
-              scrolls instead, with a floor wide enough to keep the shape
-              intact — and wide enough that on any desktop it never
-              scrolls at all. */}
-          <div className="overflow-x-auto overscroll-x-contain">
-            <div ref={boardRef} className="group/board relative min-w-[68em]">
-              {/* Our column's ground: a tint, and two rules that draw down
-                  as the rivals go out. Absolutely placed off the same
-                  percentages as the colgroup so the rule is one continuous
-                  object rather than twelve borders stacked end to end. */}
-              <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
-                <div
-                  className="absolute inset-y-0 bg-[var(--cover-brand-lit)]/[0.05]"
-                  style={{ left: COLS.oursLeft, width: COLS.rival }}
-                />
-              </div>
+            <table
+              onMouseLeave={() => setAt(null)}
+              className="relative z-10 w-full table-fixed border-collapse text-left"
+            >
+              <caption className="sr-only">
+                Every layer a working phone agent needs, and who supplies
+                it — {RIVALS.map((r) => r.name).join(", ")}.
+              </caption>
 
-              <table
-                onMouseLeave={() => setAt(null)}
-                className="relative z-10 w-full table-fixed border-collapse text-left"
-              >
-                <caption className="sr-only">
-                  Every layer a working phone agent needs, and who supplies
-                  it — {RIVALS.map((r) => r.name).join(", ")}.
-                </caption>
-
-                <colgroup>
-                  <col style={{ width: COLS.label }} />
-                  {RIVALS.map((r) => (
-                    <col key={r.id} style={{ width: COLS.rival }} />
-                  ))}
-                </colgroup>
-
-                <thead>
-                  <tr className="border-b border-[var(--cover-paper)]/12">
-                    <th
-                      scope="col"
-                      className="align-bottom px-[0.2em] pb-[0.9em] pt-[0.2em] text-left font-normal"
-                    >
-                      <span className="mono text-[0.6em] uppercase tracking-[0.22em] text-[var(--cover-paper)]/45">
-                        What a working phone agent needs
-                      </span>
-                    </th>
-
-                    {RIVALS.map((r, ci) => (
-                      <th
-                        key={r.id}
-                        scope="col"
-                        onMouseEnter={() => setAt({ row: "", col: ci })}
-                        className={cn(
-                          "align-bottom px-[0.6em] pb-[0.9em] pt-[0.2em] text-left font-normal transition-colors duration-300",
-                          colLit(ci) && "bg-[var(--cover-paper)]/[0.05]",
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "block text-center text-[0.92em] leading-tight",
-                            r.ours
-                              ? "font-medium text-[var(--cover-brand-lit)]"
-                              : "text-[var(--cover-paper)]/90",
-                          )}
-                        >
-                          {r.name}
-                        </span>
-                        <span className="mono mt-[0.5em] block text-center text-[0.55em] uppercase leading-[1.45] tracking-[0.12em] text-[var(--cover-paper)]/45">
-                          {r.kind}
-                        </span>
-                        {/* The fairness device, in the vendor's own words,
-                            directly above its own column. No
-                            time-to-first-call clause: `live` was a figure
-                            nobody outside this file could check, and a
-                            claim about somebody else's speed is the one
-                            cell in a comparison a reader is right to
-                            distrust. */}
-                        <span className="mt-[0.9em] block text-[0.62em] leading-[1.45] text-[var(--cover-paper)]/75">
-                          For {r.who.toLowerCase()}.
-                        </span>
-                        <span className="mt-[0.4em] block text-[0.62em] leading-[1.45] text-[var(--cover-paper)]/75">
-                          {r.billing}.
-                        </span>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-
-                {GROUPS.map((g) => (
-                  <tbody key={g.id}>
-                    {/* The rule. Below the second one, four of the five
-                        columns go dark all the way down. */}
-                    <tr
-                      ref={g.id === "business" ? ruleRef : undefined}
-                      className="border-y border-[var(--cover-paper)]/12 bg-[var(--cover-paper)]/[0.03]"
-                    >
-                      <th
-                        scope="rowgroup"
-                        colSpan={RIVALS.length + 1}
-                        className="px-[0.2em] py-[0.7em] text-left font-normal"
-                      >
-                        {/* Two mono labels on one baseline ran together
-                            into a single unreadable string — the tracking
-                            that makes them read as rules is the same
-                            tracking that swallows a plain gap. Hence the
-                            divider, which travels with the note so a wrap
-                            breaks before it rather than leaving it
-                            dangling off the first line. */}
-                        <span className="flex flex-wrap items-baseline gap-x-[0.2em]">
-                          <span className="mono text-[0.6em] uppercase tracking-[0.22em] text-[var(--cover-brand-lit)]/80">
-                            {g.label}
-                          </span>
-                          <span className="mono text-[0.55em] uppercase tracking-[0.14em] text-[var(--cover-paper)]/45">
-                            <span aria-hidden className="mr-[0.9em] opacity-60">
-                              /
-                            </span>
-                            {g.note}
-                          </span>
-                        </span>
-                      </th>
-                    </tr>
-
-                    {ROWS[g.id].map((l, i) => (
-                      <tr
-                        key={l.id}
-                        className={cn(
-                          "border-b border-[var(--cover-paper)]/[0.06] transition-colors duration-300 last:border-b-0",
-                          rowLit(l.id) && "bg-[var(--cover-paper)]/[0.04]",
-                        )}
-                      >
-                        <th
-                          scope="row"
-                          onMouseEnter={() => setAt({ row: l.id, col: -1 })}
-                          className="px-[0.2em] py-[0.55em] text-left align-middle font-normal"
-                        >
-                          <span className="flex items-start gap-[0.8em]">
-                            <span className="mono shrink-0 pt-[0.15em] text-[0.6em] tracking-[0.1em] text-[var(--cover-paper)]/45">
-                              {l.n}
-                            </span>
-                            <span className="min-w-0">
-                              <span className="block text-[0.88em] leading-tight text-[var(--cover-paper)]/95">
-                                {l.label}
-                              </span>
-                              <span className="mt-[0.3em] block text-[0.72em] leading-[1.35] text-[var(--cover-paper)]/75">
-                                {l.note}
-                              </span>
-                            </span>
-                          </span>
-                        </th>
-
-                        {RIVALS.map((r, ci) => {
-                          const state = r.parts[l.id];
-                          // Only the rivals' business half ever holds.
-                          // Ours never dims, and the voice stack above the
-                          // rule is true for everyone from first paint.
-                          const holdable = g.id === "business" && !r.ours;
-                          return (
-                            <td
-                              key={r.id}
-                              onMouseEnter={() => setAt({ row: l.id, col: ci })}
-                              className={cn(
-                                "px-[0.4em] py-[0.55em] text-center transition-colors duration-300",
-                                colLit(ci) && "bg-[var(--cover-paper)]/[0.05]",
-                              )}
-                            >
-                              <span className="inline-grid place-items-center">
-                                <Mark
-                                  state={state}
-                                  holdable={holdable}
-                                  delay={i * 0.06}
-                                />
-                                <span className="sr-only">
-                                  {PART_STATES[state].label}
-                                </span>
-                              </span>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
+              <colgroup>
+                <col style={{ width: COLS.label }} />
+                {RIVALS.map((r) => (
+                  <col key={r.id} style={{ width: COLS.rival }} />
                 ))}
+              </colgroup>
 
-                <tfoot className="border-t border-[var(--cover-paper)]/12">
-                  <tr>
+              <thead>
+                <tr className="border-b border-pp-hair">
+                  <th
+                    scope="col"
+                    className="px-1 pt-1 pb-4 text-left align-bottom font-normal"
+                  >
+                    <span className="block text-[11px] leading-4 font-medium tracking-[0.14em] text-pp-muted uppercase">
+                      What a working phone agent needs
+                    </span>
+                  </th>
+
+                  {RIVALS.map((r, ci) => (
                     <th
-                      scope="row"
-                      className="px-[0.2em] py-[1.1em] text-left align-top font-normal"
+                      key={r.id}
+                      scope="col"
+                      onMouseEnter={() => setAt({ row: "", col: ci })}
+                      className={cn(
+                        "px-3 pt-1 pb-4 text-left align-bottom font-normal transition-colors duration-300",
+                        colLit(ci) && LIT_COL,
+                      )}
                     >
-                      <span className="mono text-[0.6em] uppercase tracking-[0.22em] text-[var(--cover-paper)]/45">
-                        Left on your desk
+                      <span
+                        className={cn(
+                          "block text-center text-[15px] leading-5 text-balance",
+                          r.ours ? "font-medium text-pp-accent" : "text-pp-ink",
+                        )}
+                      >
+                        {r.name}
+                      </span>
+                      <span className="mt-2 block text-center text-[11px] leading-4 font-medium tracking-[0.1em] text-pp-muted uppercase">
+                        {r.kind}
+                      </span>
+                      {/* The fairness device, in the vendor's own words,
+                          directly above its own column. No
+                          time-to-first-call clause: `live` was a figure
+                          nobody outside this file could check, and a
+                          claim about somebody else's speed is the one
+                          cell in a comparison a reader is right to
+                          distrust. */}
+                      <span className="mt-3.5 block text-[12px] leading-[17px] text-pp-muted">
+                        For {r.who.toLowerCase()}.
+                      </span>
+                      <span className="mt-1.5 block text-[12px] leading-[17px] text-pp-muted">
+                        {r.billing}.
                       </span>
                     </th>
+                  ))}
+                </tr>
+              </thead>
 
-                    {RIVALS.map((r, ci) => {
-                      const { build, byo } = LEDGER[ci];
-                      return (
-                        <td
-                          key={r.id}
-                          onMouseEnter={() => setAt({ row: "", col: ci })}
-                          className={cn(
-                            "px-[0.5em] py-[1.1em] text-center align-top transition-colors duration-300",
-                            colLit(ci) && "bg-[var(--cover-paper)]/[0.05]",
-                          )}
-                        >
-                          <p
+              {GROUPS.map((g) => (
+                <tbody key={g.id}>
+                  {/* The rule. Below the second one, four of the five
+                      columns go pale all the way down. */}
+                  <tr
+                    ref={g.id === "business" ? ruleRef : undefined}
+                    className={cn("border-y border-pp-rule", BAND)}
+                  >
+                    <th
+                      scope="rowgroup"
+                      colSpan={RIVALS.length + 1}
+                      className="px-1 py-3 text-left font-normal"
+                    >
+                      {/* Two tracked labels on one baseline ran together
+                          into a single unreadable string — the tracking
+                          that makes them read as rules is the same
+                          tracking that swallows a plain gap. Hence the
+                          divider, which travels with the note so a wrap
+                          breaks before it rather than leaving it
+                          dangling off the first line. */}
+                      <span className="flex flex-wrap items-baseline gap-x-1">
+                        <span className="text-[11px] leading-4 font-medium tracking-[0.14em] text-pp-accent uppercase">
+                          {g.label}
+                        </span>
+                        <span className="text-[11px] leading-4 tracking-[0.1em] text-pp-muted uppercase">
+                          <span aria-hidden className="mr-3 text-pp-muted/45">
+                            /
+                          </span>
+                          {g.note}
+                        </span>
+                      </span>
+                    </th>
+                  </tr>
+
+                  {ROWS[g.id].map((l, i) => (
+                    <tr
+                      key={l.id}
+                      className={cn(
+                        "border-b border-pp-rule transition-colors duration-300 last:border-b-0",
+                        rowLit(l.id) && LIT_ROW,
+                      )}
+                    >
+                      <th
+                        scope="row"
+                        onMouseEnter={() => setAt({ row: l.id, col: -1 })}
+                        className="px-1 py-3 text-left align-middle font-normal"
+                      >
+                        <span className="flex items-start gap-3">
+                          <span className="shrink-0 pt-px text-[11px] leading-5 tracking-[0.08em] text-pp-muted tabular-nums">
+                            {l.n}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-[15px] leading-5 text-pp-ink">
+                              {l.label}
+                            </span>
+                            <span className="mt-1 block text-[12px] leading-[17px] text-pp-muted">
+                              {l.note}
+                            </span>
+                          </span>
+                        </span>
+                      </th>
+
+                      {RIVALS.map((r, ci) => {
+                        const state = r.parts[l.id];
+                        // Only the rivals' business half ever holds.
+                        // Ours never drains, and the voice stack above the
+                        // rule is true for everyone from first paint.
+                        const holdable = g.id === "business" && !r.ours;
+                        return (
+                          <td
+                            key={r.id}
+                            onMouseEnter={() => setAt({ row: l.id, col: ci })}
                             className={cn(
-                              "mono text-[1.9em] leading-none tabular-nums",
-                              build === 0
-                                ? "text-[var(--cover-brand-lit)]"
-                                : "text-[var(--cover-paper)]/90",
+                              "px-2 py-3 text-center transition-colors duration-300",
+                              colLit(ci) && LIT_COL,
                             )}
                           >
-                            <CountUp to={build} duration={0.9} />
-                          </p>
-                          <p className="mono mt-[0.6em] text-[0.55em] uppercase leading-[1.5] tracking-[0.12em] text-[var(--cover-paper)]/45">
-                            {build === 0
-                              ? "nothing"
-                              : `to build, of ${STACK.length}`}
-                          </p>
-                          {/* Counted apart, never added in. An account you
-                              open is a different debt from a layer you
-                              write, and summing them flatters us at the
-                              expense of being true. */}
-                          {byo > 0 && (
-                            <p className="mono mt-[0.5em] text-[0.55em] uppercase leading-[1.5] tracking-[0.12em] text-[var(--cover-paper)]/45">
-                              + {byo} on your own account
-                            </p>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                </tfoot>
-              </table>
+                            <span className="inline-grid place-items-center">
+                              <Mark
+                                state={state}
+                                holdable={holdable}
+                                delay={i * 0.06}
+                              />
+                              <span className="sr-only">
+                                {PART_STATES[state].label}
+                              </span>
+                            </span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
 
-              {/* Above the table, so the rule reads as one unbroken object
-                  rather than as something the row hairlines cut through. */}
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 z-20"
-              >
-                {([COLS.oursLeft, COLS.oursRight] as const).map((left) => (
-                  <div
-                    key={left}
-                    // The resting state is DRAWN, and collapsing it is
-                    // instant because that only ever happens off-screen at
-                    // arm time. One element per edge, full table height:
-                    // the rule has to draw down as a single object, which
-                    // twelve stacked cell borders cannot do.
-                    className="absolute inset-y-0 w-px origin-top scale-y-100 bg-[var(--cover-brand-lit)]/35 transition-transform duration-[900ms] group-data-[hold=on]/board:scale-y-0 group-data-[hold=on]/board:duration-0"
-                    style={{ left, transitionTimingFunction: EASE_CSS }}
-                  />
-                ))}
-              </div>
+              <tfoot className="border-t border-pp-hair">
+                <tr>
+                  <th
+                    scope="row"
+                    className="px-1 py-6 text-left align-top font-normal"
+                  >
+                    <span className="block text-[11px] leading-4 font-medium tracking-[0.14em] text-pp-muted uppercase">
+                      Left on your desk
+                    </span>
+                  </th>
+
+                  {RIVALS.map((r, ci) => {
+                    const { build, byo } = LEDGER[ci];
+                    return (
+                      <td
+                        key={r.id}
+                        onMouseEnter={() => setAt({ row: "", col: ci })}
+                        className={cn(
+                          "px-2 py-6 text-center align-top transition-colors duration-300",
+                          colLit(ci) && LIT_COL,
+                        )}
+                      >
+                        <p
+                          className={cn(
+                            "pp-display text-[34px] leading-none tabular-nums",
+                            build === 0 ? "text-pp-accent" : "text-pp-ink",
+                          )}
+                          // Inline: `.pp-display` sets 360 outside Tailwind's
+                          // layers, which would beat a weight utility.
+                          style={{ fontWeight: 480 }}
+                        >
+                          <CountUp to={build} duration={0.9} />
+                        </p>
+                        <p className="mt-2.5 text-[11px] leading-4 font-medium tracking-[0.1em] text-pp-muted uppercase">
+                          {build === 0
+                            ? "nothing"
+                            : `to build, of ${STACK.length}`}
+                        </p>
+                        {/* Counted apart, never added in. An account you
+                            open is a different debt from a layer you
+                            write, and summing them flatters us at the
+                            expense of being true. */}
+                        {byo > 0 && (
+                          <p className="mt-1.5 text-[11px] leading-4 font-medium tracking-[0.1em] text-pp-muted uppercase">
+                            + {byo} on your own account
+                          </p>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </tfoot>
+            </table>
+
+            {/* Above the table, so the rule reads as one unbroken object
+                rather than as something the row hairlines cut through. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 z-20"
+            >
+              {([COLS.oursLeft, COLS.oursRight] as const).map((left) => (
+                <div
+                  key={left}
+                  // The resting state is DRAWN, and collapsing it is
+                  // instant because that only ever happens off-screen at
+                  // arm time. One element per edge, full table height:
+                  // the rule has to draw down as a single object, which
+                  // twelve stacked cell borders cannot do.
+                  className="absolute inset-y-0 w-px origin-top scale-y-100 bg-pp-accent/40 transition-transform duration-[900ms] group-data-[hold=on]/board:scale-y-0 group-data-[hold=on]/board:duration-0"
+                  style={{ left, transitionTimingFunction: EASE_CSS }}
+                />
+              ))}
             </div>
           </div>
-        </Reveal>
-
-        {/* the legend — four states, spelled out */}
-        <div className="mt-[1.4em] flex flex-wrap gap-x-[1.6em] gap-y-[0.6em] border-t border-[var(--cover-paper)]/12 pt-[1em]">
-          {(["shipped", "metered", "byo", "build"] as PartState[]).map((s) => {
-            const Icon = ICONS[s];
-            return (
-              <span
-                key={s}
-                className="flex items-center gap-[0.5em] text-[0.72em] leading-none"
-              >
-                <span
-                  className={cn(
-                    "grid size-[1.5em] shrink-0 place-items-center rounded-[0.3em] border",
-                    TONE[s],
-                  )}
-                >
-                  <Icon className="size-[0.85em]" strokeWidth={2.4} aria-hidden />
-                </span>
-                <span className="text-[var(--cover-paper)]/90">
-                  {PART_STATES[s].label}
-                </span>
-                <span className="hidden text-[var(--cover-paper)]/45 sm:inline">
-                  — {PART_STATES[s].note}
-                </span>
-              </span>
-            );
-          })}
         </div>
+      </Reveal>
 
-        {/* the concession, and the receipts */}
-        <div className="mt-[1.6em] border-t border-[var(--cover-paper)]/12 pt-[1.4em]">
-          <p className="max-w-[52em] text-[0.82em] leading-[1.65] text-[var(--cover-paper)]/75">
-            {COMPARISON_NOTE}
-          </p>
-          <p className="mt-[0.9em] max-w-[52em] text-[0.68em] leading-[1.6] text-[var(--cover-paper)]/45">
-            {COMPARISON_SOURCE}
-          </p>
-        </div>
+      {/* the legend — four states, spelled out */}
+      <div className="mt-6 flex flex-wrap gap-x-8 gap-y-3 border-t border-pp-rule pt-5">
+        {(["shipped", "metered", "byo", "build"] as PartState[]).map((s) => (
+          <span key={s} className="flex items-center gap-2.5 text-[13px] leading-5">
+            <Mark state={s} size="sm" />
+            <span className="text-pp-ink">{PART_STATES[s].label}</span>
+            <span className="hidden text-pp-muted sm:inline">
+              — {PART_STATES[s].note}
+            </span>
+          </span>
+        ))}
       </div>
-    </section>
+
+      {/* the concession, and the receipts */}
+      <div className="mt-8 border-t border-pp-rule pt-7">
+        <p className="max-w-[720px] text-[15px] leading-[24px] text-pp-muted">
+          {COMPARISON_NOTE}
+        </p>
+        <p className="mt-4 max-w-[720px] text-[13px] leading-[21px] text-pp-muted">
+          {COMPARISON_SOURCE}
+        </p>
+      </div>
+    </Frame>
   );
 }

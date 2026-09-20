@@ -13,16 +13,17 @@ import {
   TIERS,
   costFor,
 } from "@/lib/site";
-import { cn } from "@/lib/utils";
-import { CornerDot } from "./corner-dot";
-import { IntentLink } from "./intent-link";
-import { CountUp, EASE, MaskRise, Magnetic, RevealStagger, StaggerItem } from "./reveal";
+import {
+  Eyebrow,
+  Frame,
+  PillLink,
+  Rule,
+  SectionHeading,
+} from "./product/primitives";
+import { CountUp, MaskRise, EASE, RevealStagger, StaggerItem } from "./reveal";
 
 /**
- * The close — a collection, and a return to the cover.
- *
- * Two decisions carry this section, and both are about position rather
- * than copy.
+ * The close — a collection, then the way in.
  *
  * **It restates nothing.** The call to action this replaces said "Never
  * miss another call. Start booking meetings today", a sentence that could
@@ -38,42 +39,57 @@ import { CountUp, EASE, MaskRise, Magnetic, RevealStagger, StaggerItem } from ".
  * to believe. None of the four is typed into this file either; see
  * `FIGURES`.
  *
- * **It is built on the cover's geometry, not the interior's.** Every
- * section between here and the hero sits on a left-aligned masthead over a
- * 76em measure. This one widens back out to `--size-container`, puts the
- * headline on columns 5–8 with the four corner marks bracketing the type,
- * throws the button out to the far left and hangs the equalizer on column
- * 11 — the cover's exact arrangement. The reader has been reading a
- * document for eleven sections; the last screen returns them to the object
- * they arrived at. The bar in the corner is still ticking, on the same
- * keyframes it started on, and nothing else has to say that it never
- * stops.
+ * **It closes the way every other page on this site closes.** The earlier
+ * version of this section was built on the dark cover's geometry — corner
+ * marks bracketing the type, the button thrown to the far left, the hero's
+ * equalizer still ticking on column 11 — so that the last screen returned
+ * the reader to the object they arrived at. That argument died with the
+ * dark interior. The page is white now, in the same light system as
+ * `/product/*` and `/solutions/*`, and the reader's memory of "how this
+ * company ends a page" comes from those pages, not from the cover. So the
+ * shape here is `ProductStart`'s: a `Frame` column, a violet eyebrow over
+ * the imperative on the left, the two pill actions and their terms on the
+ * right. Nothing on this screen imitates the hero, and nothing tries to
+ * blend into the dark imprint below it — white stock between two dark
+ * ends is how every product page is already built.
  *
  * **The order is evidence, then imperative.** The receipts come first and
- * the headline last, which puts the section's own `h2` after its content —
- * a compromise made with open eyes. The alternative, "Answer it." followed
- * by the proof it rests on, ends the page on a table; and the whole point
- * of the cover block is that it is the final thing on screen. The section
- * is named by `aria-labelledby` so nothing is left unlabelled by it.
+ * the headline last, which puts the section's own heading after its
+ * content — a compromise made with open eyes. The alternative, "Answer
+ * it." followed by the proof it rests on, ends the page on a table. The
+ * section carries an `aria-label` so the region is still named; the pp
+ * `SectionHeading` owns its own `h2` and takes no id, and inventing a
+ * hand-built masthead just to hang one off would put a second, slightly
+ * different heading style on a page whose whole point is that there is
+ * one.
  *
  * **The phone number is printed, and it is not decoration.** A page
  * arguing for the whole length of itself that an unanswered phone costs a
- * business everything cannot end with a form as its only human route.
- * Ours is set as display type, directly under the imperative, and it is
- * answered.
+ * business everything cannot end with a form as its only human route. It
+ * is set as display type directly under the imperative and it is
+ * answered. The secondary pill points at the same `tel:` and says what it
+ * is, so the bare numeral is not asked to label itself.
  *
- * The logo-and-wordmark lockup that used to close this section is gone.
- * It rendered a 600×430 source into a square box, squashing the mark about
- * a third, and the footer repeats the same mark four ems below it.
+ * **Motion, retuned for white.** The mechanisms are the ones this section
+ * already had — the figures count themselves in, the receipts arrive as
+ * four separate events, the fencing rules draw open from the middle, the
+ * imperative rises under a mask — because all four are things being drawn
+ * rather than lit, and drawing is what survives the move off black. The
+ * hover glows and the magnetic pull went with the cover: on white they
+ * read as smudge. Every piece honours `useReducedMotion`.
  */
 
 /**
- * The section's own masthead line. It is not in `lib/site.ts` on purpose:
- * the numeral is a fact about where this section sits on the page, which
- * is `app/page.tsx`'s business and not the copy deck's, and the kicker
- * names what is directly beneath it rather than the section's genre.
+ * The two section labels, held here and not in `lib/site.ts`.
+ *
+ * What used to be here was a masthead — a numeral ("12") and a kicker —
+ * because the dark spread numbered its sections. The light system does
+ * not: a section opens with a violet `Eyebrow` naming what is under it and
+ * nothing else, so the numeral has nowhere to go and the kickers are all
+ * that survive. `ask` is the house word for a closing block; the product
+ * pages all use "Get started" or "Start" in the same slot.
  */
-const MASTHEAD = { numeral: "12", kicker: "The receipts" } as const;
+const EYEBROWS = { receipts: "The receipts", ask: "Start" } as const;
 
 /* ------------------------------------------------------------------ *
  * The four figures, derived here rather than written in `CTA_CLOSE`.
@@ -150,107 +166,22 @@ const FIGURES: {
  * being drawn *under* something, while one opening from the centre reads
  * as a bracket closing around the four figures between them. Borders
  * cannot be transformed on their own, so these are elements.
+ *
+ * `bg-pp-rule` and not the cover's paper-at-12%: on white the fence is
+ * the system's own hairline, the same one `Rule` and every card edge on
+ * the light pages draw.
  */
 function OpeningRule({ delay = 0 }: { delay?: number }) {
   const reduce = useReducedMotion();
   return (
     <motion.div
       aria-hidden
-      className="h-px origin-center bg-[var(--cover-paper)]/12"
+      className="h-px origin-center bg-pp-rule"
       initial={reduce ? false : { scaleX: 0 }}
       whileInView={{ scaleX: 1 }}
       viewport={{ once: true, margin: "-10% 0px" }}
       transition={{ duration: 0.7, delay, ease: EASE }}
     />
-  );
-}
-
-/**
- * The cover's corner marks, at the cover's own offsets.
- *
- * Deliberately a copy of `hero.tsx`'s `CornerMarks` and not a shared
- * import: the hero is frozen, and the page's last motion being a literal
- * re-run of its first is the whole idea — same sizes, same delay ladder,
- * same ease. If the two ever disagree, the hero is right.
- *
- * They fire on mount rather than in view, like the hero's, and they are
- * the one thing here that does: the delay ladder is tuned against the
- * cover's opening sequence, and re-timing it to a scroll position would
- * make it a different animation wearing the same numbers.
- */
-function CornerMarks() {
-  const reduce = useReducedMotion();
-  const at = {
-    tl: "top-[1.375em] right-full mr-[0.7em]",
-    tr: "top-[1.375em] left-full ml-[0.7em]",
-    bl: "bottom-[0.125em] right-full mr-[0.7em]",
-    br: "bottom-[0.125em] left-full ml-[0.7em]",
-  };
-  return (
-    <>
-      {Object.entries(at).map(([k, pos], i) => (
-        <motion.span
-          key={k}
-          aria-hidden
-          className={cn("absolute block size-[0.625em] bg-current", pos)}
-          initial={reduce ? false : { opacity: 0, scale: 0.4 }}
-          animate={reduce ? undefined : { opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, delay: 1.15 + i * 0.07, ease: EASE }}
-        />
-      ))}
-    </>
-  );
-}
-
-/** The cover's four bars, still keeping time. Same keyframes, same rates. */
-function Equalizer() {
-  return (
-    <div
-      aria-hidden
-      className="flex h-[1.1em] w-[2em] items-end justify-center gap-[0.16em]"
-    >
-      {[0.55, 1, 0.4, 0.78].map((h, i) => (
-        <span
-          key={i}
-          className="w-[0.14em] bg-current"
-          style={{
-            height: `${h * 100}%`,
-            transformOrigin: "bottom",
-            animation: `equalize ${0.8 + i * 0.22}s ease-in-out ${i * 0.13}s infinite`,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-/**
- * The primary button, answering the cover's.
- *
- * The hero's CTA is a paper plate with a dot in each corner that flips to
- * the brand on hover; this is that button again at the foot of the page,
- * so the first and last things the reader can click are the same object.
- * Everything moves on `duration-500`, which is the cover's hover speed.
- */
-function CloseCta() {
-  return (
-    <IntentLink
-      href={AUTH.signup}
-      className="group inline-grid select-none text-[1.25em] leading-[1.2] tracking-[-0.04em]"
-    >
-      <span className="col-start-1 row-start-1 grid grid-cols-2 grid-rows-2 rounded-[0.2em] bg-[var(--cover-paper)] p-[0.33em] text-[var(--cover-ink)] transition-colors duration-500 group-hover:bg-[var(--cover-brand)] group-hover:text-[var(--cover-paper)]">
-        <CornerDot className="size-[0.3em] justify-self-start transition-transform duration-500 group-hover:-translate-x-[0.12em] group-hover:-translate-y-[0.12em]" />
-        <CornerDot className="size-[0.3em] justify-self-end transition-transform duration-500 group-hover:-translate-y-[0.12em] group-hover:translate-x-[0.12em]" />
-        <CornerDot className="size-[0.3em] self-end justify-self-start transition-transform duration-500 group-hover:-translate-x-[0.12em] group-hover:translate-y-[0.12em]" />
-        <CornerDot className="size-[0.3em] self-end justify-self-end transition-transform duration-500 group-hover:translate-x-[0.12em] group-hover:translate-y-[0.12em]" />
-      </span>
-      <span className="col-start-1 row-start-1 z-10 flex items-center gap-[0.45em] whitespace-nowrap px-[1em] py-[0.8em] text-[var(--cover-ink)] transition-colors duration-500 group-hover:text-[var(--cover-paper)]">
-        {CTA_CLOSE.primary}
-        <span className="transition-transform duration-500 group-hover:translate-x-[0.25em]">
-          →
-        </span>
-      </span>
-    </IntentLink>
   );
 }
 
@@ -262,35 +193,23 @@ export function Close() {
   return (
     <section
       id="close"
-      aria-labelledby="close-title"
-      className="relative scroll-mt-24 py-[6em] md:py-[8em]"
+      // The heading below belongs to `SectionHeading`, which owns its own
+      // `h2` and takes no id, so the region is named directly.
+      aria-label={CTA_CLOSE.title}
+      className="relative scroll-mt-24"
     >
-      {/* The cover's measure and the cover's gutter, not the interior's
-          76em column. The padding sits inside the max width exactly as
-          `hero.tsx` sets it, so the far-left button lands on the same
-          vertical the cover's button did. */}
-      <div className="relative mx-auto w-full max-w-[var(--size-container)] px-[1.5em]">
-        {/* Masthead. Left on the gutter; the numeral says where on the
-            page this is, the kicker names what is under it. */}
-        <div className="flex items-center gap-[0.55em]">
-          <CornerDot className="size-[0.55em]" />
-          <span className="mono text-[0.7em] uppercase tracking-[0.24em] text-[var(--cover-paper)]/45">
-            {MASTHEAD.numeral}
-          </span>
-          <span className="mono text-[0.7em] uppercase tracking-[0.24em] text-[var(--cover-paper)]/45">
-            {MASTHEAD.kicker}
-          </span>
-        </div>
-        <div className="mt-[1.4em] h-px bg-[var(--cover-paper)]/12" />
+      <Rule />
 
-        {/* The receipts. Each traces back to the section it came from, and
-            the anchor is the link — a receipt the reader cannot get back
-            to is not a receipt. */}
-        <div className="mt-[4.5em]">
+      {/* The receipts. Each traces back to the section it came from, and
+          the anchor is the link — a receipt the reader cannot get back to
+          is not a receipt. */}
+      <Frame className="px-6 pt-16 pb-6 md:px-12 md:pt-24 md:pb-10">
+        <Eyebrow>{EYEBROWS.receipts}</Eyebrow>
+        <div className="mt-8 md:mt-10">
           <OpeningRule />
           <RevealStagger
             stagger={0.1}
-            className="grid grid-cols-2 gap-x-[1.5em] gap-y-[2.6em] py-[2.6em] md:grid-cols-4"
+            className="grid grid-cols-2 gap-x-8 gap-y-10 py-10 md:grid-cols-4 md:gap-x-12 md:py-12"
           >
             {CTA_CLOSE.receipts.map((r, i) => {
               const f = FIGURES[i];
@@ -299,8 +218,19 @@ export function Close() {
                   {/* Its own count, not one fade over all four: the
                       figures are four separate claims from four separate
                       sections, and a single shared reveal asked the reader
-                      to take them as one block. */}
-                  <p className="text-[2.2em] font-medium leading-none tracking-[-0.04em] text-[var(--cover-brand-lit)]">
+                      to take them as one block.
+
+                      Black, not violet. On white the accent is reserved
+                      for the things that are active — the eyebrow and the
+                      anchors under each figure — and four violet numerals
+                      would spend it on the one part of the screen that is
+                      simply a fact. */}
+                  <p
+                    className="pp-display text-[34px] leading-none tracking-[-0.02em] text-pp-ink md:text-[44px]"
+                    // Inline: `.pp-display` sets 360 outside Tailwind's
+                    // layers, which would beat a weight utility.
+                    style={{ fontWeight: 480 }}
+                  >
                     <CountUp
                       to={f.to}
                       prefix={f.prefix}
@@ -308,16 +238,17 @@ export function Close() {
                       decimals={f.decimals}
                     />
                   </p>
-                  <p className="mt-[0.9em] max-w-[13em] text-pretty text-[0.85em] leading-[1.5] text-[var(--cover-paper)]/75">
+                  <p className="mt-4 max-w-[15rem] text-pretty text-[14px] leading-[21px] text-pp-muted md:text-[15px] md:leading-[22px]">
                     {r.label}
                   </p>
                   {/* The anchor set as the section's own name: "#your-bill"
-                      printed at a reader is a URL, and the cover already
-                      speaks in mono caps. A plain anchor and not a router
-                      link — nothing here is a route. */}
+                      printed at a reader is a URL. A plain anchor and not
+                      a router link — nothing here is a route. 24px tall
+                      rather than its 16px line, because a standalone link
+                      gets the WCAG 2.5.8 minimum target. */}
                   <a
                     href={r.where}
-                    className="mono mt-[0.9em] inline-flex items-center gap-[0.45em] text-[0.62em] uppercase tracking-[0.2em] text-[var(--cover-paper)]/55 transition-colors duration-500 hover:text-[var(--cover-brand-lit)]"
+                    className="mt-4 inline-flex min-h-6 items-center gap-2 text-[11px] leading-4 font-medium tracking-[0.14em] text-pp-accent uppercase underline-offset-4 transition-colors hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
                   >
                     <span aria-hidden>↑</span>
                     {r.where.slice(1).replace(/-/g, " ")}
@@ -328,55 +259,43 @@ export function Close() {
           </RevealStagger>
           <OpeningRule delay={0.08} />
         </div>
+      </Frame>
 
-        {/* The cover again: button far left, type centred on columns 5–8
-            with the marks bracketing it, bars on column 11. */}
-        <div className="relative mt-[6em] flex flex-col items-center gap-[3em] md:mt-[8em] md:grid md:grid-cols-12 md:items-end md:gap-0">
-          <div className="order-2 flex flex-col items-center gap-[1.2em] md:absolute md:left-0 md:top-0 md:order-none md:items-start md:pt-[1em]">
-            <Magnetic>
-              <CloseCta />
-            </Magnetic>
-            {/* The terms belong against the button they qualify, not in a
-                line of small print at the bottom of the screen. */}
-            <p className="mono max-w-[16em] text-center text-[0.62em] uppercase leading-[1.7] tracking-[0.2em] text-[var(--cover-paper)]/75 md:text-left">
-              {CTA_CLOSE.note}
-            </p>
-          </div>
-
-          {/* `w-max` mirrors the cover: the block is only as wide as its
-              longest line, so the marks bracket the type and not the grid
-              cell. */}
-          <div className="relative order-1 flex flex-col items-center gap-[1.4em] text-center text-[var(--cover-paper)] md:order-none md:col-span-4 md:col-start-5 md:w-max md:justify-self-center md:gap-[2.2em]">
-            <CornerMarks />
-            <h2
-              id="close-title"
-              className="text-balance text-[2.8em] font-medium leading-[1.03] tracking-[-0.045em] md:text-[3.4em]"
-            >
-              <MaskRise lines={[CTA_CLOSE.title]} />
-            </h2>
-            {/* The human route, printed. The label rides above the number
-                because the number is the thing being offered. */}
-            <a
-              href={AUTH.contactSales}
-              className="group flex flex-col items-center gap-[0.5em]"
-            >
-              <span className="mono text-[0.7em] uppercase tracking-[0.24em] text-[var(--cover-paper)]/75 transition-colors duration-500 group-hover:text-[var(--cover-paper)]">
-                {CTA_CLOSE.secondary}
-              </span>
-              <span className="text-[1.5em] font-medium leading-[1.1] tracking-[-0.03em] transition-colors duration-500 group-hover:text-[var(--cover-brand-lit)] md:text-[1.8em]">
-                {COMPANY.phone}
-              </span>
-            </a>
-          </div>
-
-          {/* Still ticking. Shown on phones too — the last mark on the page
-              is the same mark the cover opened with, and a reader on a
-              phone read the same cover. */}
-          <div className="order-3 flex md:col-span-2 md:col-start-11 md:order-none md:justify-end md:self-end">
-            <Equalizer />
-          </div>
+      {/* The ask, in the shape every light page closes in: the imperative
+          and the human route on the left, the two actions and the terms
+          they qualify on the right. The terms sit against the button
+          rather than in a line of small print at the foot of the screen. */}
+      <Frame className="grid gap-10 px-6 pt-10 pb-20 md:grid-cols-[minmax(0,1fr)_auto] md:items-end md:gap-12 md:px-12 md:pt-14 md:pb-28">
+        <div>
+          <SectionHeading eyebrow={EYEBROWS.ask} className="max-w-[640px]">
+            <MaskRise lines={[CTA_CLOSE.title]} />
+          </SectionHeading>
+          {/* The human route, printed. No label above it: the secondary
+              pill beside it already says what the number is, and the same
+              three words twice on one screen reads as a mistake rather
+              than as emphasis. */}
+          <a
+            href={COMPANY.phoneHref}
+            className="pp-display mt-6 inline-flex min-h-6 items-center text-[28px] leading-[34px] tracking-[-0.02em] text-pp-ink underline-offset-[6px] transition-colors hover:text-pp-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink md:text-[34px] md:leading-[40px]"
+            style={{ fontWeight: 480 }}
+          >
+            {COMPANY.phone}
+          </a>
         </div>
-      </div>
+        <div className="flex flex-col items-start gap-3 md:items-end">
+          {/* gap-y is deliberately larger than gap-x: two pills 8px apart
+              fail the touch-target spacing rule the moment the row wraps. */}
+          <div className="flex flex-wrap gap-x-2 gap-y-6">
+            <PillLink href={AUTH.signup}>{CTA_CLOSE.primary}</PillLink>
+            <PillLink href={AUTH.contactSales} variant="secondary">
+              {CTA_CLOSE.secondary}
+            </PillLink>
+          </div>
+          <p className="max-w-[22rem] text-[13px] leading-[18px] text-pp-muted md:text-right">
+            {CTA_CLOSE.note}
+          </p>
+        </div>
+      </Frame>
     </section>
   );
 }

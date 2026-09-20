@@ -18,8 +18,8 @@ import {
   type Industry,
 } from "@/lib/site";
 import { cn } from "@/lib/utils";
-import { CornerDot } from "./corner-dot";
 import { IntentLink } from "./intent-link";
+import { Frame, PillLink, SectionHeading } from "./product/primitives";
 import { Reveal, EASE } from "./reveal";
 
 /**
@@ -39,14 +39,18 @@ import { Reveal, EASE } from "./reveal";
  * gesture — the same day, twice, and the difference between them is the
  * product.
  *
- * Four decisions worth keeping.
+ * Five decisions worth keeping.
  *
- *  · **It sits on the open field, between hairlines.** It used to be drawn
- *    inside a rounded panel, and so was every other section on this page —
- *    the same border, the same pool colour, the same shadow, six times.
- *    That is what made a landing page read as a brochure. Nothing here is
- *    grouped by a card any more; it is grouped by rules and by space, and
- *    the reader's eye travels down one object rather than across six.
+ *  · **It is set in the light `pp` system, like every other marketing page
+ *    on this site.** White stock, black ink, violet #551a89 for the one
+ *    thing that is active, Onest display over Inter body, and every length
+ *    in px/rem — the cover's fluid `em` base does not exist here. The
+ *    instrument itself sits on one soft `--pp-card` panel, which is the
+ *    house's way of saying "this is an object you operate" without
+ *    reaching for a border and a shadow. Everything else on the section —
+ *    the masthead, the gateway — stands on the open field between
+ *    hairlines, so the page still reads as one spread rather than as a
+ *    stack of boxes.
  *  · **It plays itself first.** The day arrives uncovered and flips on its
  *    own about a second and a half later, then walks the trades. Anything
  *    that waits to be clicked on a landing page is not seen. The first
@@ -59,6 +63,13 @@ import { Reveal, EASE } from "./reveal";
  *    cannot make: *one ring without an agent, because there is one line —
  *    a ring per simultaneous conversation with it.* The difference between
  *    the two modes stops being a colour and becomes a shape.
+ *  · **On white, the motion draws rather than glows.** The mechanisms are
+ *    the cover's, unchanged — the bars still cross over, the rings still
+ *    split, the sweep still walks the hour at ninety-two milliseconds to
+ *    the minute. What changed is that nothing is lit from behind any more:
+ *    a bloom that read as depth on near-black reads as a smudge on
+ *    #ffffff, so the arcs are ink on paper with only the faintest weight
+ *    behind them.
  *  · **It never claims to be telemetry.** The shapes are true to each
  *    trade and the arithmetic is real arithmetic over them, but they are a
  *    model, and the strip at the foot says so. A fabricated dashboard buys
@@ -72,15 +83,20 @@ import { Reveal, EASE } from "./reveal";
  * the eight written trades at exactly the moment they went looking for the
  * seam. The gateway band at the foot answers the same objection with
  * sixteen doors that actually open.
- *
- * Colour and scale are the interior spread's — --cover-brand-lit as the
- * only accent, the --cover-load-* ramp for the bars, and every length in
- * `em` off `.cover`'s fluid base so the whole thing breathes with the
- * viewport.
  */
 
-/** This section's place in the spread. */
-const NUMERAL = "04";
+/* ---------------------------------------------------------------- *
+ * The two inks an SVG stroke needs as a literal
+ * ---------------------------------------------------------------- */
+
+/** `--pp-accent`, for the strokes and fills a Tailwind token cannot reach. */
+const VIOLET = "#551a89";
+/** The ink `--pp-rule` and `--pp-hair` are mixed from, for strokes at our own alpha. */
+const INK = "#181028";
+
+/** The house small-caps label, used for every readout caption below. */
+const LABEL =
+  "text-[11px] leading-4 font-medium tracking-[0.12em] text-pp-muted uppercase";
 
 /* ---------------------------------------------------------------- *
  * The model
@@ -387,25 +403,24 @@ function DayChart({
         ref={plot}
         role="group"
         aria-label={`Calls per hour across one day for ${label} — choose an hour to open it on the dial.`}
-        className="relative h-[13em] select-none"
+        className="relative h-[190px] select-none md:h-[236px]"
         onPointerMove={track}
         onPointerLeave={() => setHover(null)}
       >
         {/* The hours a human is at the desk. Everything outside this band
-            is, without an agent, a call nobody hears. */}
+            is, without an agent, a call nobody hears. White on the card,
+            because on this stock the lit hours are the paper showing
+            through rather than a wash laid over it. */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-y-0 border-x border-dashed border-[var(--cover-paper)]/22 bg-[var(--cover-paper)]/[0.055]"
+          className="pointer-events-none absolute inset-y-0 border-x border-dashed border-pp-hair bg-white/70"
           style={{
             left: `${(staffed[0] / 24) * 100}%`,
             width: `${((staffed[1] - staffed[0]) / 24) * 100}%`,
           }}
         />
 
-        <div
-          className="relative flex h-full items-end gap-[0.18em]"
-          onKeyDown={rove}
-        >
+        <div className="relative flex h-full items-end gap-[2px]" onKeyDown={rove}>
           {day.cells.map((c, i) => {
             const barPct = day.peak ? (c.calls / day.peak) * 100 : 0;
             // The share a staffed desk gets to. It does not move when the
@@ -459,23 +474,24 @@ function DayChart({
                   if (c.calls) onPick(c.hour);
                 }}
                 onClick={() => onPick(c.hour)}
-                className="group relative flex h-full flex-1 items-end rounded-t-[0.25em] outline-none focus-visible:ring-2 focus-visible:ring-[var(--cover-brand-lit)] enabled:cursor-pointer"
+                className="group relative flex h-full flex-1 items-end rounded-t-[3px] outline-none focus-visible:ring-2 focus-visible:ring-pp-accent focus-visible:ring-offset-1 focus-visible:ring-offset-pp-card enabled:cursor-pointer"
               >
                 {/* Full-height hit area, so thin bars are still reachable. */}
                 <span aria-hidden className="absolute inset-0" />
 
                 <div
-                  className="relative w-full overflow-hidden rounded-t-[0.25em]"
+                  className="relative w-full overflow-hidden rounded-t-[3px]"
                   style={{ height: `${barPct}%` }}
                 >
-                  {/* What the desk never got to. */}
+                  {/* What the desk never got to. A grey block on the card,
+                      one step darker than the stock it sits on — the
+                      quantity is present but unlit, which is the whole
+                      point of it. */}
                   <motion.span
                     aria-hidden
                     className={cn(
-                      "absolute inset-x-0 border-t bg-[var(--cover-paper)]/[0.07] transition-colors duration-200",
-                      hover === i
-                        ? "border-[var(--cover-paper)]/50"
-                        : "border-[var(--cover-paper)]/20",
+                      "absolute inset-x-0 border-t bg-[rgb(24_16_40/0.09)] transition-colors duration-200",
+                      hover === i ? "border-pp-ink/45" : "border-pp-hair",
                     )}
                     style={{
                       bottom: `${ansPct}%`,
@@ -489,13 +505,10 @@ function DayChart({
                     transition={flip}
                   />
 
-                  {/* What it did. */}
+                  {/* What it did. Flat violet: on white a gradient reads as
+                      a smudge where on near-black it read as depth. */}
                   <motion.div
-                    className="absolute inset-x-0 bottom-0"
-                    style={{
-                      background:
-                        "linear-gradient(to top, var(--cover-load-2), var(--cover-load-3))",
-                    }}
+                    className="absolute inset-x-0 bottom-0 bg-pp-accent"
                     initial={false}
                     animate={{ height: `${covered ? 100 : ansPct}%` }}
                     transition={flip}
@@ -505,7 +518,7 @@ function DayChart({
                   <span
                     aria-hidden
                     className={cn(
-                      "absolute inset-0 bg-[var(--cover-paper)]/15 opacity-0 transition-opacity duration-200",
+                      "absolute inset-0 bg-pp-ink/[0.07] opacity-0 transition-opacity duration-200",
                       hover === i && "opacity-100",
                     )}
                   />
@@ -517,7 +530,7 @@ function DayChart({
                 {picked === i && (
                   <span
                     aria-hidden
-                    className="absolute inset-x-0 -bottom-[0.45em] h-[0.15em] bg-[var(--cover-brand-lit)]"
+                    className="absolute inset-x-0 -bottom-[6px] h-[2px] bg-pp-accent"
                   />
                 )}
               </button>
@@ -544,7 +557,7 @@ function DayChart({
               style={{ left: `${((cell.hour + 0.5) / 24) * 100}%` }}
             >
               <div
-                className="whitespace-nowrap rounded-[0.5em] border border-[var(--cover-paper)]/15 bg-[var(--cover-ink)]/92 px-[0.7em] py-[0.45em] text-[0.68em] leading-tight shadow-[0_0.8em_2em_-0.6em_rgba(0,0,0,0.9)] backdrop-blur-sm"
+                className="whitespace-nowrap rounded-[10px] border border-pp-hair bg-white px-3 py-2 text-[12px] leading-tight shadow-[0_12px_28px_-14px_rgb(24_16_40/0.5)]"
                 style={{
                   transform: `translateX(-${Math.min(
                     92,
@@ -552,34 +565,28 @@ function DayChart({
                   )}%)`,
                 }}
               >
-                <span className="mono text-[var(--cover-paper)]/75">
-                  {hh(cell.hour)}
-                </span>
-                <span className="mx-[0.5em] text-[var(--cover-paper)]/25">
-                  /
-                </span>
+                <span className="mono text-pp-muted">{hh(cell.hour)}</span>
+                <span className="mx-2 text-pp-ink/25">/</span>
 
                 {/* Reading an hour that never rang is now possible — the
                     plot tracks the pointer across dead bars too — and
                     "0 calls / 0 answered" would light the accent on the
                     strength of 0 === 0. A silent hour just says so. */}
                 {cell.calls === 0 ? (
-                  <span className="text-[var(--cover-paper)]/75">
+                  <span className="text-pp-muted">
                     the phone didn&rsquo;t ring
                   </span>
                 ) : (
                   <>
-                    <span className="text-[var(--cover-paper)]">
+                    <span className="text-pp-ink">
                       {cell.calls} {cell.calls === 1 ? "call" : "calls"}
                     </span>
-                    <span className="mx-[0.5em] text-[var(--cover-paper)]/25">
-                      /
-                    </span>
+                    <span className="mx-2 text-pp-ink/25">/</span>
                     <span
                       className={
                         covered || cell.answered === cell.calls
-                          ? "text-[var(--cover-brand-lit)]"
-                          : "text-[var(--cover-paper)]/75"
+                          ? "font-medium text-pp-accent"
+                          : "text-pp-muted"
                       }
                     >
                       {covered ? cell.calls : cell.answered} answered
@@ -593,12 +600,12 @@ function DayChart({
       </div>
 
       {/* axis */}
-      <div className="relative mt-[0.9em] h-[1em] border-t border-[var(--cover-paper)]/12">
+      <div className="relative mt-3.5 h-4 border-t border-pp-hair">
         {AXIS_HOURS.map((h) => (
           <span
             key={h}
             aria-hidden
-            className="mono absolute top-[0.35em] -translate-x-1/2 text-[0.62em] tracking-[0.08em] text-[var(--cover-paper)]/45"
+            className="mono absolute top-1.5 -translate-x-1/2 text-[11px] leading-4 tracking-[0.08em] text-pp-muted"
             style={{ left: `${((h + 0.5) / 24) * 100}%` }}
           >
             {String(h).padStart(2, "0")}
@@ -606,20 +613,18 @@ function DayChart({
         ))}
       </div>
 
-      <div className="mt-[1.9em] flex flex-wrap items-center justify-between gap-x-[1.2em] gap-y-[0.5em]">
-        <p className="flex items-center gap-[0.6em] text-[0.72em] text-[var(--cover-paper)]/75">
+      <div className="mt-7 flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+        <p className="flex items-center gap-2.5 text-[13px] leading-5 text-pp-muted">
           <span
             aria-hidden
-            className="inline-block h-[0.85em] w-[1.6em] shrink-0 rounded-[0.15em] border border-dashed border-[var(--cover-paper)]/25 bg-[var(--cover-paper)]/[0.05]"
+            className="inline-block h-3 w-6 shrink-0 rounded-[2px] border border-dashed border-pp-hair bg-white"
           />
           Front desk staffed {hh(staffed[0])}–{hh(staffed[1])} ·{" "}
           {Math.round(day.offHoursShare * 100)}% of the day&rsquo;s calls
           arrive outside it
         </p>
 
-        <p className="mono text-[0.66em] uppercase tracking-[0.18em] text-[var(--cover-paper)]/45">
-          Any hour opens on the dial below
-        </p>
+        <p className={LABEL}>Any hour opens on the dial below</p>
       </div>
     </div>
   );
@@ -652,6 +657,10 @@ const PLAY = 5.5;
  * Every arc draws over the real length of its call, so the sweep is not
  * decoration either: it is the hour passing at ninety-two milliseconds to
  * the minute.
+ *
+ * Drawn in ink on paper. Every neutral is `INK` at a stated alpha rather
+ * than a paper colour at one, because the surface under the dial is the
+ * light card and a stroke that lightens toward it disappears.
  */
 
 /**
@@ -710,7 +719,7 @@ function HourDial({
   );
 
   return (
-    <div className="relative mx-auto aspect-square w-full max-w-[17em]">
+    <div className="relative mx-auto aspect-square w-full max-w-[280px]">
       <svg viewBox="0 0 100 100" className="absolute inset-0 size-full">
         <defs>
           <linearGradient
@@ -721,16 +730,8 @@ function HourDial({
             x2="50"
             y2="50"
           >
-            <stop
-              offset="0%"
-              stopColor="var(--cover-brand-lit)"
-              stopOpacity="0.95"
-            />
-            <stop
-              offset="100%"
-              stopColor="var(--cover-brand-lit)"
-              stopOpacity="0"
-            />
+            <stop offset="0%" stopColor={VIOLET} stopOpacity="0.8" />
+            <stop offset="100%" stopColor={VIOLET} stopOpacity="0" />
           </linearGradient>
         </defs>
 
@@ -751,7 +752,7 @@ function HourDial({
             // there until hydration.
             r={laneR(0)}
             fill="none"
-            stroke="var(--cover-paper)"
+            stroke={INK}
             strokeOpacity="0.1"
             strokeWidth="3"
             initial={false}
@@ -777,8 +778,8 @@ function HourDial({
                 y1={y0}
                 x2={x1}
                 y2={y1}
-                stroke="var(--cover-paper)"
-                strokeOpacity={major ? 0.34 : 0.14}
+                stroke={INK}
+                strokeOpacity={major ? 0.36 : 0.16}
                 strokeWidth={major ? 0.7 : 0.4}
                 strokeLinecap="round"
               />
@@ -800,8 +801,8 @@ function HourDial({
               cy="50"
               r="44.2"
               fill="none"
-              stroke="var(--cover-paper)"
-              strokeOpacity="0.08"
+              stroke={INK}
+              strokeOpacity="0.1"
               strokeWidth="0.5"
             />
             <motion.circle
@@ -809,7 +810,7 @@ function HourDial({
               cy="50"
               r="44.2"
               fill="none"
-              stroke="var(--cover-brand-lit)"
+              stroke={VIOLET}
               strokeOpacity="0.55"
               strokeWidth="0.7"
               strokeLinecap="round"
@@ -830,8 +831,8 @@ function HourDial({
                 covered ? laneR(c.lane) : laneR(0),
               )}
               fill="none"
-              stroke="var(--cover-paper)"
-              strokeOpacity="0.09"
+              stroke={INK}
+              strokeOpacity="0.08"
               strokeWidth="3"
               strokeLinecap="round"
             />
@@ -853,12 +854,12 @@ function HourDial({
                   key={`m${i}`}
                   d={d}
                   fill="none"
-                  stroke="var(--cover-paper)"
+                  stroke={INK}
                   strokeWidth="3"
                   strokeLinecap="butt"
                   strokeDasharray="0.9 1.8"
                   initial={reduce ? false : { strokeOpacity: 0 }}
-                  animate={{ strokeOpacity: 0.3 }}
+                  animate={{ strokeOpacity: 0.34 }}
                   transition={{ duration: 0.3, delay: at }}
                 />
               );
@@ -866,12 +867,15 @@ function HourDial({
 
             return (
               <g key={`h${i}`}>
-                {/* bloom, then the line itself */}
+                {/* A faint violet bed under the line rather than a bloom
+                    around it: on white, light thrown outward is a smudge,
+                    but a wider stroke of the same ink at low alpha reads
+                    as weight. Then the line itself, drawn over it. */}
                 <motion.path
                   d={d}
                   fill="none"
-                  stroke="var(--cover-brand-lit)"
-                  strokeOpacity="0.18"
+                  stroke={VIOLET}
+                  strokeOpacity="0.14"
                   strokeWidth="6.5"
                   strokeLinecap="round"
                   initial={reduce ? false : { pathLength: 0 }}
@@ -881,7 +885,7 @@ function HourDial({
                 <motion.path
                   d={d}
                   fill="none"
-                  stroke="var(--cover-brand-lit)"
+                  stroke={VIOLET}
                   strokeWidth="3"
                   strokeLinecap="round"
                   initial={reduce ? false : { pathLength: 0 }}
@@ -915,7 +919,7 @@ function HourDial({
                 stroke="url(#ntv-sweep)"
                 strokeWidth="0.9"
               />
-              <circle cx="50" cy="6.4" r="1.5" fill="var(--cover-brand-lit)" />
+              <circle cx="50" cy="6.4" r="1.5" fill={VIOLET} />
             </motion.g>
           )}
         </g>
@@ -929,8 +933,8 @@ function HourDial({
               y={y}
               textAnchor="middle"
               dominantBaseline="middle"
-              fill="var(--cover-paper)"
-              fillOpacity="0.3"
+              fill={INK}
+              fillOpacity="0.45"
               style={{ fontSize: 3.4, fontFamily: "var(--font-mono)" }}
             >
               {String(m).padStart(2, "0")}
@@ -943,12 +947,10 @@ function HourDial({
         <div className="text-center">
           <Tally
             value={handled}
-            className="block text-[3em] font-medium leading-none tracking-[-0.05em] text-[var(--cover-brand-lit)]"
+            className="block text-[44px] leading-none font-medium tracking-[-0.04em] text-pp-accent md:text-[52px]"
           />
-          <p className="mono mt-[0.7em] text-[0.58em] uppercase tracking-[0.24em] text-[var(--cover-paper)]/45">
-            handled
-          </p>
-          <p className="mono mt-[0.35em] text-[0.58em] tracking-[0.14em] text-[var(--cover-paper)]/45">
+          <p className={cn(LABEL, "mt-3")}>handled</p>
+          <p className="mono mt-1.5 text-[11px] leading-4 tracking-[0.12em] text-pp-muted">
             of {calls.length}
           </p>
         </div>
@@ -1011,7 +1013,7 @@ function PeakHour({
   const lanes = covered ? Math.max(1, ...calls.map((c) => c.lane + 1)) : 1;
 
   return (
-    <div className="grid gap-[2.4em] md:grid-cols-[17em_minmax(0,1fr)] md:items-center md:gap-[3.2em]">
+    <div className="grid gap-9 md:grid-cols-[280px_minmax(0,1fr)] md:items-center md:gap-14">
       <HourDial
         calls={calls}
         covered={covered}
@@ -1020,18 +1022,18 @@ function PeakHour({
       />
 
       <div>
-        <p className="mono text-[0.66em] uppercase tracking-[0.22em] text-[var(--cover-paper)]/45">
+        <p className={LABEL}>
           {cell.calls === Math.max(...ind.volume) ? "Busiest hour" : "This hour"}
         </p>
-        <p className="mt-[0.6em] text-[1.9em] font-medium leading-none tracking-[-0.04em]">
+        <p className="mt-2.5 text-[30px] leading-none font-medium tracking-[-0.03em] text-pp-ink md:text-[36px]">
           {hh(cell.hour)}–{hh((cell.hour + 1) % 24)}
         </p>
 
-        <p className="mt-[1.2em] max-w-[30em] text-pretty text-[0.95em] leading-[1.6] text-[var(--cover-paper)]/75">
+        <p className="mt-5 max-w-[480px] text-[15px] leading-[24px] text-pretty text-pp-muted md:text-base md:leading-[26px]">
           {covered && !cell.staffed ? (
             <>
               Answered at {hh(cell.hour)}, with the front desk closed.{" "}
-              <span className="text-[var(--cover-paper)]">
+              <span className="text-pp-ink">
                 Every one of these would have been a voicemail
               </span>{" "}
               — and a voicemail at this hour is a customer who has already
@@ -1040,7 +1042,7 @@ function PeakHour({
           ) : covered && lanes > 1 ? (
             <>
               Every call taken, across{" "}
-              <span className="text-[var(--cover-paper)]">
+              <span className="text-pp-ink">
                 {lanes} conversations running at once
               </span>{" "}
               — one ring per simultaneous call. A staffed desk has exactly one
@@ -1049,7 +1051,7 @@ function PeakHour({
           ) : covered ? (
             <>
               Every call taken on the first ring,{" "}
-              <span className="text-[var(--cover-paper)]">
+              <span className="text-pp-ink">
                 without anyone stepping off the floor
               </span>{" "}
               — no hold, no callback list, nothing queued behind it.
@@ -1057,7 +1059,7 @@ function PeakHour({
           ) : cell.staffed ? (
             <>
               One line, one conversation.{" "}
-              <span className="text-[var(--cover-paper)]">
+              <span className="text-pp-ink">
                 {cell.calls - cell.answered} of these never got through
               </span>{" "}
               — the line was still engaged, or {ind.busyReason}.
@@ -1065,7 +1067,7 @@ function PeakHour({
           ) : (
             <>
               Nobody was at the desk.{" "}
-              <span className="text-[var(--cover-paper)]">
+              <span className="text-pp-ink">
                 Every one of these went to voicemail
               </span>{" "}
               — the hour is outside {hh(ind.staffed[0])}–{hh(ind.staffed[1])}.
@@ -1073,9 +1075,9 @@ function PeakHour({
           )}
         </p>
 
-        <p className="mono mt-[1.4em] text-[0.64em] uppercase tracking-[0.18em] text-[var(--cover-paper)]/45">
+        <p className={cn(LABEL, "mt-7 flex items-baseline gap-3")}>
           {covered ? "Concurrent lines" : "Lines available"}
-          <span className="ml-[0.8em] text-[1.5em] tracking-normal text-[var(--cover-brand-lit)]">
+          <span className="text-[18px] leading-none tracking-normal text-pp-accent tabular-nums">
             {lanes}
           </span>
         </p>
@@ -1101,60 +1103,68 @@ function PeakHour({
  *
  * Doors, not cards. Each one is a hairline, an icon at text size and a
  * label, on a tight four-column rhythm — the shape of a contents page,
- * which is exactly what it is. The trade's own outcome line is always in
- * the DOM (so it is read aloud, and so the row never changes height) and
- * comes up on hover or focus, which is the only reward the row needs.
+ * which is exactly what it is. It stands on the open white field rather
+ * than in a panel, because the one soft surface in this section is the
+ * instrument and a second one would flatten the difference between
+ * "operate this" and "read this". The trade's own outcome line is always
+ * in the DOM (so it is read aloud, and so the row never changes height)
+ * and comes up on hover or focus, which is the only reward the row needs.
  */
 function IndustriesGateway() {
   return (
-    <div className="mt-[4.5em] border-t border-[var(--cover-paper)]/12 pt-[2.6em] md:mt-[6em]">
-      <div className="flex flex-wrap items-end justify-between gap-x-[2em] gap-y-[1em]">
-        <div className="max-w-[40em]">
-          <p className="mono text-[0.7em] uppercase tracking-[0.24em] text-[var(--cover-paper)]/45">
-            {INDUSTRIES_GATEWAY.kicker}
-          </p>
-          <h3 className="mt-[0.7em] text-balance text-[1.7em] font-medium leading-[1.12] tracking-[-0.035em]">
+    <div className="border-t border-pp-rule pt-12 md:pt-16">
+      <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-6">
+        <div className="max-w-[560px]">
+          <p className={LABEL}>{INDUSTRIES_GATEWAY.kicker}</p>
+          <h3
+            className="pp-display mt-4 text-[26px] leading-[32px] tracking-[-0.025em] text-balance md:text-[32px] md:leading-[38px]"
+            // Inline: `.pp-display` sets 360 outside Tailwind's layers, so
+            // a weight utility would lose to it. Matches SectionHeading.
+            style={{ fontWeight: 480 }}
+          >
             {INDUSTRIES_GATEWAY.title}
           </h3>
-          <p className="mt-[0.7em] text-pretty text-[0.95em] leading-[1.6] text-[var(--cover-paper)]/75">
+          <p className="mt-4 max-w-[520px] text-[15px] leading-[24px] text-pretty text-pp-muted md:text-base md:leading-[26px]">
             {INDUSTRIES_GATEWAY.sub}
           </p>
         </div>
 
-        <IntentLink
+        <PillLink
           href={INDUSTRIES_GATEWAY.href}
-          className="group flex items-center gap-[0.5em] text-[0.85em] leading-none text-[var(--cover-brand-lit)] transition-opacity duration-500 hover:opacity-70"
+          variant="secondary"
+          size="sm"
+          className="group"
         >
           {INDUSTRIES_GATEWAY.all}
           <ArrowRight
-            className="size-[1.1em] transition-transform duration-500 group-hover:translate-x-[0.2em]"
+            className="size-4 transition-transform duration-500 group-hover:translate-x-0.5"
             strokeWidth={2}
           />
-        </IntentLink>
+        </PillLink>
       </div>
 
-      <ul className="mt-[2.2em] grid grid-cols-1 gap-x-[2em] sm:grid-cols-2 lg:grid-cols-4">
+      <ul className="mt-10 grid grid-cols-1 gap-x-10 sm:grid-cols-2 lg:grid-cols-4">
         {NAV_INDUSTRIES.map((n) => {
           const Icon = n.icon;
           return (
             <li key={n.slug}>
               <IntentLink
                 href={`/industries/${n.slug}`}
-                className="group grid grid-cols-[1.1em_minmax(0,1fr)] items-start gap-x-[0.7em] border-t border-[var(--cover-paper)]/12 py-[0.85em] transition-colors duration-500 hover:border-[var(--cover-brand-lit)]/45 focus-visible:outline-none focus-visible:border-[var(--cover-brand-lit)]/45"
+                className="group grid grid-cols-[18px_minmax(0,1fr)] items-start gap-x-3 border-t border-pp-rule py-3.5 transition-colors duration-500 hover:border-pp-accent/45 focus-visible:border-pp-accent/45 focus-visible:outline-none"
               >
                 <Icon
                   aria-hidden
-                  className="mt-[0.2em] size-[1em] text-[var(--cover-paper)]/45 transition-colors duration-500 group-hover:text-[var(--cover-brand-lit)] group-focus-visible:text-[var(--cover-brand-lit)]"
+                  className="mt-0.5 size-4 text-pp-muted transition-colors duration-500 group-hover:text-pp-accent group-focus-visible:text-pp-accent"
                   strokeWidth={1.9}
                 />
                 <span className="min-w-0">
-                  <span className="block truncate text-[0.92em] leading-snug text-[var(--cover-paper)]/75 transition-colors duration-500 group-hover:text-[var(--cover-paper)] group-focus-visible:text-[var(--cover-paper)]">
+                  <span className="block truncate text-[15px] leading-6 text-pp-ink">
                     {n.label}
                   </span>
                   {/* Always present, always the same height — the row must
                       not resize under the cursor, and a screen reader should
                       hear what the door leads to without having to enter. */}
-                  <span className="mt-[0.2em] block truncate text-[0.72em] leading-snug text-[var(--cover-brand-lit)]/0 transition-colors duration-500 group-hover:text-[var(--cover-brand-lit)]/85 group-focus-visible:text-[var(--cover-brand-lit)]/85">
+                  <span className="mt-0.5 block truncate text-[12px] leading-4 text-pp-accent/0 transition-colors duration-500 group-hover:text-pp-accent group-focus-visible:text-pp-accent">
                     {n.outcome}
                   </span>
                 </span>
@@ -1237,49 +1247,37 @@ export function UseCases() {
   const answered = covered ? day.total : day.answeredWithout;
 
   return (
-    <section
-      id="use-cases"
-      className="relative scroll-mt-24 px-[1.6em] py-[6em] md:py-[8em]"
-    >
-      <div className="relative mx-auto max-w-[76em]">
-        {/* masthead — on the gutter, not centred. Six identical centred
-            headers was the other half of what made this page a brochure. */}
+    <section id="use-cases" className="scroll-mt-28 py-20 md:py-28">
+      {/* masthead — on the gutter, not centred, and in the house opener:
+          violet eyebrow with the corner dot, then the display line. */}
+      <Frame className="px-6 md:px-12">
         <Reveal>
-          <div className="flex items-center gap-[0.75em]">
-            <CornerDot className="size-[0.55em] shrink-0 text-[var(--cover-brand-lit)]" />
-            <span className="mono text-[0.7em] uppercase tracking-[0.24em] text-[var(--cover-paper)]/45">
-              {NUMERAL}
-            </span>
-            <span className="mono text-[0.7em] uppercase tracking-[0.24em] text-[var(--cover-paper)]/45">
-              {USE_CASES_INTRO.eyebrow}
-            </span>
-          </div>
-        </Reveal>
-
-        <Reveal delay={0.06} className="mt-[0.9em]">
-          <h2 className="text-balance text-[2.8em] font-medium leading-[1.03] tracking-[-0.045em] md:text-[3.4em]">
+          <SectionHeading eyebrow={USE_CASES_INTRO.eyebrow}>
             {USE_CASES_INTRO.title}
-          </h2>
+          </SectionHeading>
         </Reveal>
 
         <Reveal
-          delay={0.12}
+          delay={0.08}
           as="p"
-          className="mt-[1em] max-w-[44em] text-pretty text-[1.05em] leading-[1.6] text-[var(--cover-paper)]/75"
+          className="mt-5 max-w-[620px] text-base leading-[26px] text-pretty text-pp-muted"
         >
           {USE_CASES_INTRO.sub}
         </Reveal>
+      </Frame>
 
-        <div className="mt-[2.4em] h-px bg-[var(--cover-paper)]/12" />
-
-        {/* the instrument */}
-        <div ref={ref} className="mt-[2.2em]">
+      {/* the instrument, on the one soft surface in this section */}
+      <Frame className="mt-10 px-2 md:mt-14 md:px-4">
+        <div
+          ref={ref}
+          className="rounded-[24px] bg-pp-card p-5 md:rounded-[32px] md:p-9"
+        >
           {/* Selector rail, on a hairline rather than in a row of pills.
               Scrolls as one row on a phone; the dwell draws itself along
               the active trade's rule, so the thing that tells the reader
               the panel is about to move on is the same rule that tells
               them which trade they are looking at. */}
-          <div className="flex gap-[1.6em] overflow-x-auto border-b border-[var(--cover-paper)]/12 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex gap-6 overflow-x-auto border-b border-pp-hair [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {INDUSTRIES.map((ind) => {
               const on = ind.id === activeId;
               const Icon = ind.icon;
@@ -1291,13 +1289,11 @@ export function UseCases() {
                   onPointerEnter={takeOver}
                   aria-pressed={on}
                   className={cn(
-                    "relative flex shrink-0 items-center gap-[0.5em] whitespace-nowrap pb-[0.9em] text-[0.82em] leading-none outline-none transition-colors duration-500 focus-visible:text-[var(--cover-brand-lit)]",
-                    on
-                      ? "text-[var(--cover-paper)]"
-                      : "text-[var(--cover-paper)]/75 hover:text-[var(--cover-paper)]",
+                    "relative flex min-h-11 shrink-0 items-center gap-2 pb-3 text-[14px] leading-none whitespace-nowrap outline-none transition-colors duration-500 focus-visible:text-pp-accent",
+                    on ? "text-pp-ink" : "text-pp-muted hover:text-pp-ink",
                   )}
                 >
-                  <Icon className="size-[1.15em] shrink-0" strokeWidth={1.9} />
+                  <Icon className="size-4 shrink-0" strokeWidth={1.9} />
                   {ind.label}
 
                   {on &&
@@ -1305,7 +1301,7 @@ export function UseCases() {
                       <motion.span
                         key={ind.id}
                         aria-hidden
-                        className="absolute inset-x-0 -bottom-px h-px origin-left bg-[var(--cover-brand-lit)]"
+                        className="absolute inset-x-0 -bottom-px h-[2px] origin-left bg-pp-accent"
                         initial={{ scaleX: 0 }}
                         animate={{ scaleX: 1 }}
                         transition={{ duration: DWELL, ease: "linear" }}
@@ -1313,7 +1309,7 @@ export function UseCases() {
                     ) : (
                       <span
                         aria-hidden
-                        className="absolute inset-x-0 -bottom-px h-px bg-[var(--cover-brand-lit)]"
+                        className="absolute inset-x-0 -bottom-px h-[2px] bg-pp-accent"
                       />
                     ))}
                 </button>
@@ -1325,16 +1321,14 @@ export function UseCases() {
               studying an hour must not have the trade swapped under the
               cursor between deciding to click and clicking. */}
           <div onPointerEnter={takeOver}>
-            <div className="mt-[1.8em] flex flex-wrap items-center justify-between gap-[1em]">
-              <div className="flex items-center gap-[0.55em] text-[var(--cover-paper)]/45">
-                <Clock className="size-[1em] shrink-0" strokeWidth={1.9} />
-                <span className="mono text-[0.66em] uppercase tracking-[0.2em]">
-                  One day on the line
-                </span>
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-2.5 text-pp-muted">
+                <Clock className="size-4 shrink-0" strokeWidth={1.9} />
+                <span className={LABEL}>One day on the line</span>
               </div>
 
               {/* the toggle — the section's whole argument, in one control */}
-              <div className="flex rounded-full border border-[var(--cover-paper)]/12 bg-[var(--cover-paper)]/[0.05] p-[0.25em] text-[0.72em]">
+              <div className="flex rounded-full border border-pp-hair bg-white p-1 text-[13px]">
                 {[
                   { on: false, label: "Without an agent" },
                   { on: true, label: "With Neuro Tech Voice" },
@@ -1348,17 +1342,17 @@ export function UseCases() {
                       setFlipped(opt.on);
                     }}
                     className={cn(
-                      "relative rounded-full px-[1em] py-[0.5em] leading-none transition-colors duration-500",
+                      "relative rounded-full px-4 py-2 leading-none transition-colors duration-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
                       covered === opt.on
-                        ? "text-[var(--cover-ink)]"
-                        : "text-[var(--cover-paper)]/75 hover:text-[var(--cover-paper)]",
+                        ? "text-white"
+                        : "text-pp-muted hover:text-pp-ink",
                     )}
                   >
                     {covered === opt.on && (
                       <motion.span
                         layoutId="wif-mode"
                         aria-hidden
-                        className="absolute inset-0 rounded-full bg-[var(--cover-brand-lit)]"
+                        className="absolute inset-0 rounded-full bg-pp-ink"
                         transition={{
                           duration: reduce ? 0 : 0.4,
                           ease: EASE,
@@ -1388,7 +1382,7 @@ export function UseCases() {
                 : `without an agent, ${day.answeredWithout} of ${day.total} calls answered and ${day.missed} to voicemail.`}
             </p>
 
-            <div className="mt-[1.6em]">
+            <div className="mt-7">
               <DayChart
                 day={day}
                 covered={covered}
@@ -1403,43 +1397,35 @@ export function UseCases() {
             </div>
 
             {/* the arithmetic */}
-            <div className="mt-[2.2em] grid grid-cols-2 gap-[1.2em] border-t border-[var(--cover-paper)]/12 pt-[1.6em] sm:grid-cols-3">
+            <div className="mt-9 grid grid-cols-2 gap-6 border-t border-pp-hair pt-7 sm:grid-cols-3">
               <div>
-                <p className="mono text-[0.6em] uppercase tracking-[0.2em] text-[var(--cover-paper)]/45">
-                  Calls in
-                </p>
+                <p className={LABEL}>Calls in</p>
                 <Tally
                   value={day.total}
-                  className="mt-[0.35em] block text-[1.7em] font-medium leading-none tracking-[-0.03em]"
+                  className="mt-2 block text-[28px] leading-none font-medium tracking-[-0.03em] text-pp-ink md:text-[32px]"
                 />
               </div>
 
               <div>
-                <p className="mono text-[0.6em] uppercase tracking-[0.2em] text-[var(--cover-paper)]/45">
-                  Answered
-                </p>
+                <p className={LABEL}>Answered</p>
                 <Tally
                   value={answered}
                   className={cn(
-                    "mt-[0.35em] block text-[1.7em] font-medium leading-none tracking-[-0.03em] transition-colors duration-500",
-                    covered
-                      ? "text-[var(--cover-brand-lit)]"
-                      : "text-[var(--cover-paper)]",
+                    "mt-2 block text-[28px] leading-none font-medium tracking-[-0.03em] transition-colors duration-500 md:text-[32px]",
+                    covered ? "text-pp-accent" : "text-pp-ink",
                   )}
                 />
               </div>
 
               <div className="col-span-2 sm:col-span-1">
-                <p className="mono text-[0.6em] uppercase tracking-[0.2em] text-[var(--cover-paper)]/45">
+                <p className={LABEL}>
                   {covered ? "Recovered" : "To voicemail"}
                 </p>
-                <div className="mt-[0.35em] flex items-baseline gap-[0.5em]">
+                <div className="mt-2 flex items-baseline gap-2">
                   <span
                     className={cn(
-                      "text-[1.7em] font-medium leading-none tracking-[-0.03em] transition-colors duration-500",
-                      covered
-                        ? "text-[var(--cover-brand-lit)]"
-                        : "text-[var(--cover-paper)]",
+                      "text-[28px] leading-none font-medium tracking-[-0.03em] tabular-nums transition-colors duration-500 md:text-[32px]",
+                      covered ? "text-pp-accent" : "text-pp-ink",
                     )}
                   >
                     {covered ? "+" : "−"}
@@ -1451,7 +1437,7 @@ export function UseCases() {
                       Beside two counts a reader can check against their own
                       phone, the invented number was the one they would test
                       first. */}
-                  <span className="text-[0.85em] text-[var(--cover-paper)]/75">
+                  <span className="text-[14px] leading-5 text-pp-muted">
                     calls / day
                   </span>
                 </div>
@@ -1460,7 +1446,7 @@ export function UseCases() {
 
             {/* The hour, on the dial. It used to be three levels down,
                 behind a click, which is to say almost nobody saw it. */}
-            <div className="mt-[2.6em] border-t border-[var(--cover-paper)]/12 pt-[2.6em]">
+            <div className="mt-10 border-t border-pp-hair pt-10">
               <PeakHour
                 key={`${active.id}-${dialIdx}`}
                 ind={active}
@@ -1471,7 +1457,7 @@ export function UseCases() {
           </div>
 
           {/* provenance — this is a model, and it says so */}
-          <p className="mt-[2.4em] max-w-[52em] border-t border-[var(--cover-paper)]/12 pt-[1.2em] text-[0.7em] leading-[1.7] text-[var(--cover-paper)]/75">
+          <p className="mt-9 max-w-[680px] border-t border-pp-hair pt-5 text-[12px] leading-[20px] text-pp-muted">
             Modelled day, not live telemetry — call shapes are typical of each
             trade, and the counts are what a single line gets through in one,
             nothing more. What a recovered call is worth is your own
@@ -1479,9 +1465,11 @@ export function UseCases() {
             own calendar.
           </p>
         </div>
+      </Frame>
 
+      <Frame className="mt-16 px-6 md:mt-24 md:px-12">
         <IndustriesGateway />
-      </div>
+      </Frame>
     </section>
   );
 }

@@ -27,9 +27,8 @@ import {
   qualifyOddsAt,
 } from "@/lib/site";
 import { cn } from "@/lib/utils";
-import { CornerDot } from "./corner-dot";
-import { TornEdge } from "./cover-tear";
-import { MaskRise } from "./reveal";
+import { Frame, PillLink, Rule, SectionHeading } from "./product/primitives";
+import { MaskRise, Reveal } from "./reveal";
 
 /**
  * Somebody else's numbers — the shelf, and the drop off the end of it.
@@ -37,14 +36,31 @@ import { MaskRise } from "./reveal";
  * Nothing in this section is ours. That is its only asset, and every
  * decision below is in service of not spending it.
  *
- * **The axis is the rebuild.** The previous version put the whole
- * thirty minutes on one logarithmic scale from one second, which sounds
- * rigorous and is in fact the opposite. `ln 300 / ln 1800` is 0.761: three
- * quarters of the plot went to a stretch the study measured as a single
- * flat baseline, so three quarters of the drawing was a horizontal line
- * carrying no information, and the finding — a fourfold fall, then a
- * twenty-one-fold one — was crushed into the last quarter. A reader
- * glancing at it saw a graph that was mostly nothing.
+ * **Set in the light `pp` system**, like the twenty-one other marketing
+ * routes. That is not a coat of paint on the old plate: a chart on white
+ * can be drawn an order of magnitude finer than one on ink, and most of
+ * the redraw below is spending that. Where the dark version needed a
+ * 2.6px stroke and a lit gradient to survive a black field, this one is a
+ * 1.75px line, hairline axes at `--pp-rule`'s own hue, and measured points
+ * as small solid marks knocked out of the page colour — the same node
+ * grammar the product and industry figures already draw. Nothing glows.
+ * On white a glow is dirt.
+ *
+ * **Colour is the page's law, not taste.** Black is the cited measurement
+ * — the curve, its area, its three points. Violet `--pp-accent` is ours,
+ * and inside this plot it is spent on exactly one mark: `SHELF_CLAIM`. A
+ * reviewer checking the citations can find the one line that has none by
+ * looking for the only coloured thing in the frame. (Accent appears once
+ * more below the plot, on the rang-out share, where it is emphasis in
+ * prose rather than a mark on somebody else's graph.)
+ *
+ * **The axis is the rebuild, and it is kept.** An earlier version put the
+ * whole thirty minutes on one logarithmic scale from one second, which
+ * sounds rigorous and is in fact the opposite. `ln 300 / ln 1800` is
+ * 0.761: three quarters of the plot went to a stretch the study measured
+ * as a single flat baseline, so three quarters of the drawing was a
+ * horizontal line carrying no information, and the finding — a fourfold
+ * fall, then a twenty-one-fold one — was crushed into the last quarter.
  *
  * So the axis is broken, visibly, at the study's own baseline:
  *
@@ -62,30 +78,23 @@ import { MaskRise } from "./reveal";
  *    thirds of the width. The tenth minute now lands mid-frame, where the
  *    fourfold fall can actually be seen falling.
  *
- * **The aspect ratio is pinned.** The old plot used
- * `preserveAspectRatio="none"`, which meant the steepness of the cliff —
- * the entire thesis — was a function of the reader's window width. A
- * shape argument cannot be drawn in a box that changes shape. The
- * container carries the viewBox's own ratio and the SVG meets it, so the
- * gradient of that line is the same on a phone and on a monitor. The three
- * measured points stay HTML on top, because a stretched SVG circle reads
- * as an error bar and because they now have to sit exactly where the
- * pinned geometry puts them.
+ * **The aspect ratio is pinned.** `preserveAspectRatio="none"` would make
+ * the steepness of the cliff — the entire thesis — a function of the
+ * reader's window width, and a shape argument cannot be drawn in a box
+ * that changes shape. The container carries the viewBox's own ratio and
+ * the SVG meets it, so the gradient of that line is the same on a phone
+ * and on a monitor. The three measured points stay HTML on top, because a
+ * stretched SVG circle reads as an error bar and because they now have to
+ * sit exactly where the pinned geometry puts them.
  *
- * **`SHELF_CLAIM` is promoted to the loudest mark in the frame.** It used
- * to be a 0.55em dot with a small caption. It is the one thing on this
- * plot that we are asserting rather than citing, so it should be
- * unmissable and unmistakably ours: a full-height brand rule at t=0 with
- * a 1.15em label. Every other mark is grey, cited, and quiet.
- *
- * **The curve draws against the scroll, not against a timer.** The old
- * autoplay was a 4.6-second walk fired by a one-shot `useInView` on a card
- * thirty em tall — which on most screens started while the plot was still
- * below the fold and finished before it arrived. Scroll-binding makes the
- * reader's own gesture the thing that walks the head down the cliff, with
- * the readout recomputing from `qualifyOddsAt()` at the drawn head, so the
- * number and the shape fall together. Under `useReducedMotion` the curve
- * is simply drawn, resting at the ten-minute mark; nothing is bound.
+ * **The curve draws against the scroll, not against a timer.** An autoplay
+ * fired by a one-shot `useInView` on a plate this tall starts while the
+ * plot is still below the fold and finishes before it arrives.
+ * Scroll-binding makes the reader's own gesture the thing that walks the
+ * head down the cliff, with the readout recomputing from `qualifyOddsAt()`
+ * at the drawn head, so the number and the shape fall together. Under
+ * `useReducedMotion` the curve is simply drawn, resting at the ten-minute
+ * mark; nothing is bound.
  *
  * **`CALL_FATE` is a sentence, and a corrected one.** It was a stacked bar
  * plus the line "six calls in ten never reach the curve above at all",
@@ -96,7 +105,7 @@ import { MaskRise } from "./reveal";
  * again, and the bar is gone because a three-segment bar of 37.8 / 37.8 /
  * 24.3 tells the reader nothing a sentence does not.
  *
- * Kept verbatim from the old section, because both were right:
+ * Kept verbatim, because both were right:
  *
  *  · the log–log interpolation between the measured points (`qualifyOddsAt`
  *    in `lib/site`), and
@@ -160,6 +169,20 @@ const GAP = 1.5;
 const SAMPLES = 120;
 
 /**
+ * The inks of the drawing, as literals SVG attributes can carry.
+ *
+ * `--pp-ink` and `--pp-accent` are read straight from the cascade — `.pp`
+ * is an ancestor of this section, and an SVG paint attribute resolves a
+ * custom property like any other. The two greys below are not tokens
+ * because they are not `--pp-rule` and `--pp-hair`'s alphas: they are the
+ * same violet-grey hue (24 16 40) at the weights a *chart* needs, which
+ * sit between a page hairline and body copy. Keeping the hue means the
+ * axis belongs to the same paper as the rules above and below it.
+ */
+const AXIS = "rgb(24 16 40 / 0.22)";
+const AXIS_SOFT = "rgb(24 16 40 / 0.13)";
+
+/**
  * The two arms of the curve, sampled once at module load.
  *
  * A pure function of published constants — identical for every render on
@@ -207,12 +230,14 @@ const TICKS: { at: number; label: string }[] = [
  * Label placement for the three measured points, by their index in
  * `LEAD_DECAY`. Hand-placed because there are exactly three of them and
  * each one has a different neighbour to dodge: the first sits in the
- * break's gap, the last sits hard against the right edge.
+ * break's gap, the last sits hard against the right edge. In px, not em —
+ * these dodge a 15px knock-out and a 1.75px stroke, both of which are
+ * fixed sizes on white.
  */
 const POINT_LABEL = [
-  "-translate-x-1/2 translate-y-[0.5em]",
-  "translate-x-[0.6em] -translate-y-[1.5em]",
-  "-translate-x-[calc(100%_+_0.55em)] -translate-y-[1.5em]",
+  "-translate-x-1/2 translate-y-[11px]",
+  "translate-x-[11px] -translate-y-[20px]",
+  "-translate-x-[calc(100%_+_10px)] -translate-y-[20px]",
 ];
 
 /* ---------------------------------------------------------------- *
@@ -226,6 +251,9 @@ const VOICEMAIL = shareOf("voicemail");
 const RANG_OUT = shareOf("none");
 
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
+
+/** The small tracked label that names a figure or an axis. */
+const LABEL = "text-[11px] leading-4 font-medium tracking-[0.12em] text-pp-muted uppercase";
 
 /* ---------------------------------------------------------------- *
  * Section
@@ -320,45 +348,30 @@ export function Shelf() {
   }`;
 
   return (
-    <section
-      ref={section}
-      id="why"
-      className="relative scroll-mt-24 px-[1.6em] py-[6em] md:py-[8em]"
-    >
-      <div className="relative mx-auto max-w-[76em]">
-        {/* masthead */}
-        <div className="flex items-center gap-[0.75em] text-[var(--cover-paper)]/45">
-          <CornerDot className="size-[0.55em] shrink-0" />
-          <span className="mono text-[0.7em] uppercase tracking-[0.24em] text-[var(--cover-paper)]/45">
-            03
-          </span>
-          <span className="mono text-[0.7em] uppercase tracking-[0.24em] text-[var(--cover-paper)]/45">
-            {STATS_INTRO.eyebrow}
-          </span>
-        </div>
-
-        <h2 className="mt-[0.85em] max-w-[18em] text-balance text-[2.8em] font-medium leading-[1.03] tracking-[-0.045em] md:text-[3.4em]">
+    <section ref={section} id="why" className="scroll-mt-24">
+      {/* ---- the masthead ---- */}
+      <Frame className="px-6 pt-20 pb-10 md:px-12 md:pt-28 md:pb-12">
+        <SectionHeading eyebrow={STATS_INTRO.eyebrow} titleClassName="max-w-[660px]">
           <MaskRise lines={[STATS_INTRO.title]} />
-        </h2>
+        </SectionHeading>
 
-        <p className="mt-[1.05em] max-w-[44em] text-pretty text-[1.05em] leading-[1.6] text-[var(--cover-paper)]/75">
+        <p className="mt-5 max-w-[680px] text-[17px] leading-7 text-pretty text-pp-muted">
           {STATS_INTRO.sub}
         </p>
+      </Frame>
 
-        <div className="mt-[2.4em] h-px bg-[var(--cover-paper)]/12" />
+      {/* A hairline, not a tear. The cover's frayed edge was a dark-field
+          device; here the page already separates by air, and the rule is
+          only there to say the instrument below is a different kind of
+          object from the prose above it. */}
+      <Rule />
 
-        {/* The rule above the plot. Frayed, because the plate below it is
-            the one thing on this page nobody may mistake for decoration —
-            the tear is how the cover says "a division, not a border". */}
-        <TornEdge height={3.2} opacity={0.55} className="mt-[3.2em] mb-[4.2em]" />
+      {/* ---- the instrument, standing on white ---- */}
 
-        {/* ---- the instrument, standing on the open field ---- */}
+      <Frame className="px-6 py-12 md:px-12 md:py-16">
+        <p className={LABEL}>Odds of qualifying a caller, against how long they waited</p>
 
-        <p className="mono text-[0.68em] uppercase leading-[1.5] tracking-[0.22em] text-[var(--cover-paper)]/45">
-          Odds of qualifying a caller, against how long they waited
-        </p>
-
-        <div className="relative mt-[1.6em] w-full max-w-[62em]">
+        <div className="relative mt-6 w-full max-w-[860px]">
           <div
             ref={plot}
             role="slider"
@@ -383,8 +396,8 @@ export function Shelf() {
             onPointerCancel={() => setDragging(false)}
             style={{ aspectRatio: `${VB_W} / ${VB_H}` }}
             className={cn(
-              "relative w-full touch-none select-none rounded-[0.4em] outline-none",
-              "focus-visible:ring-2 focus-visible:ring-[var(--cover-brand-lit)]/60",
+              "relative w-full touch-none select-none rounded-[10px]",
+              "focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-pp-ink",
               dragging ? "cursor-grabbing" : "cursor-ew-resize",
             )}
           >
@@ -403,9 +416,13 @@ export function Shelf() {
               className="absolute inset-0 size-full overflow-visible"
             >
               <defs>
-                {/* Value evaporating left to right: lit under the window,
-                    all but gone past the cliff, so the shape reads before a
-                    single label does. */}
+                {/*
+                  Value evaporating left to right. On ink this was a lit
+                  brand wash; on white the same idea has to be whispered —
+                  a tint of the paper's own violet-grey at a tenth of an
+                  alpha, gone to nothing past the cliff. Anything heavier
+                  reads as a smudge rather than as area under a curve.
+                */}
                 <linearGradient
                   id="ntv-shelf-fill"
                   gradientUnits="userSpaceOnUse"
@@ -414,14 +431,10 @@ export function Shelf() {
                   x2={VB_W}
                   y2="0"
                 >
-                  <stop offset="0%" stopColor="var(--cover-brand-lit)" stopOpacity="0.26" />
-                  <stop
-                    offset={`${BREAK_X}%`}
-                    stopColor="var(--cover-brand-lit)"
-                    stopOpacity="0.2"
-                  />
-                  <stop offset="72%" stopColor="var(--cover-brand-lit)" stopOpacity="0.05" />
-                  <stop offset="100%" stopColor="var(--cover-brand-lit)" stopOpacity="0.02" />
+                  <stop offset="0%" stopColor="#181028" stopOpacity="0.10" />
+                  <stop offset={`${BREAK_X}%`} stopColor="#181028" stopOpacity="0.08" />
+                  <stop offset="72%" stopColor="#181028" stopOpacity="0.025" />
+                  <stop offset="100%" stopColor="#181028" stopOpacity="0.01" />
                 </linearGradient>
               </defs>
 
@@ -433,10 +446,9 @@ export function Shelf() {
                   y1={Y(d.qualify)}
                   x2={posOf(d.at) * VB_W}
                   y2={BOTTOM}
-                  stroke="var(--cover-paper)"
-                  strokeOpacity="0.16"
-                  strokeWidth="0.25"
-                  strokeDasharray="1 1.6"
+                  stroke={AXIS_SOFT}
+                  strokeWidth="1"
+                  strokeDasharray="1.5 2.5"
                   vectorEffect="non-scaling-stroke"
                 />
               ))}
@@ -447,10 +459,9 @@ export function Shelf() {
                 y1={TOP}
                 x2={BREAK_X}
                 y2={BOTTOM + 3}
-                stroke="var(--cover-paper)"
-                strokeOpacity="0.14"
-                strokeWidth="0.25"
-                strokeDasharray="1 1.6"
+                stroke={AXIS_SOFT}
+                strokeWidth="1"
+                strokeDasharray="1.5 2.5"
                 vectorEffect="non-scaling-stroke"
               />
 
@@ -460,8 +471,7 @@ export function Shelf() {
                 y1={BOTTOM}
                 x2={BREAK_X - 1.9}
                 y2={BOTTOM}
-                stroke="var(--cover-paper)"
-                strokeOpacity="0.2"
+                stroke={AXIS}
                 strokeWidth="1"
                 vectorEffect="non-scaling-stroke"
               />
@@ -470,8 +480,7 @@ export function Shelf() {
                 y1={BOTTOM}
                 x2={VB_W}
                 y2={BOTTOM}
-                stroke="var(--cover-paper)"
-                strokeOpacity="0.2"
+                stroke={AXIS}
                 strokeWidth="1"
                 vectorEffect="non-scaling-stroke"
               />
@@ -485,8 +494,8 @@ export function Shelf() {
                   y1={BOTTOM + 2.1}
                   x2={BREAK_X + dx + 1.9}
                   y2={BOTTOM - 2.1}
-                  stroke="var(--cover-paper)"
-                  strokeOpacity="0.45"
+                  stroke="var(--pp-ink)"
+                  strokeOpacity="0.55"
                   strokeWidth="1"
                   strokeLinecap="round"
                   vectorEffect="non-scaling-stroke"
@@ -498,12 +507,17 @@ export function Shelf() {
               {/* The stroke draws against the scroll. The filled area above
                   is static on purpose: the shape has to be legible before a
                   single pixel of script runs, and the draw is emphasis, not
-                  the only way to see it. */}
+                  the only way to see it.
+
+                  1.75px, where the dark plate needed 2.6. Black on white
+                  carries at a weight that would have disappeared on ink,
+                  and the finer line is what lets the cliff read as a curve
+                  rather than as a ribbon. */}
               <motion.path
                 d={line}
                 fill="none"
-                stroke="var(--cover-brand-lit)"
-                strokeWidth="2.6"
+                stroke="var(--pp-ink)"
+                strokeWidth="1.75"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 vectorEffect="non-scaling-stroke"
@@ -511,22 +525,28 @@ export function Shelf() {
               />
             </svg>
 
-            {/* THE CLAIM. Full height, at t = 0, in the only accent the
-                cover has — the loudest mark in the frame, and the only mark
-                on this plot that is ours rather than cited. Read from
-                SHELF_CLAIM so a reviewer checking the citations can find
-                the one sentence that has none. */}
+            {/* THE CLAIM. Full height, at t = 0, in the only accent this
+                system has — and the only mark on this plot that is ours
+                rather than cited. Read from SHELF_CLAIM so a reviewer
+                checking the citations can find the one sentence that has
+                none. */}
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-y-0 left-0 w-px bg-[var(--cover-brand-lit)]"
+              className="pointer-events-none absolute inset-y-0 left-0 w-px bg-pp-accent"
             >
-              <span className="absolute left-[0.7em] top-[42%] w-[7em] text-[1.15em] font-medium leading-[1.2] tracking-[-0.02em] text-[var(--cover-brand-lit)]">
+              <span className="absolute left-3 top-[42%] w-[8.5rem] text-[16px] leading-[21px] font-medium tracking-[-0.01em] text-pp-accent">
                 {SHELF_CLAIM}
               </span>
             </div>
 
             {/* The three measured points, as HTML. A stretched SVG circle
-                reads as an error bar; these stay round at every width. */}
+                reads as an error bar; these stay round at every width.
+
+                Solid marks now, not rings: on white a hollow dot is a hole
+                in the paper, while a filled one is a measurement taken. The
+                white disc around it is a knock-out, so the point cuts the
+                curve instead of the curve running through the point — the
+                same grammar the product pages' figures draw. */}
             {LEAD_DECAY.map((d, i) => (
               <span
                 key={`pt${d.at}`}
@@ -537,10 +557,12 @@ export function Shelf() {
                   top: `${(Y(d.qualify) / VB_H) * 100}%`,
                 }}
               >
-                <span className="absolute block size-[0.62em] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--cover-brand-lit)] bg-[var(--cover-ink)]" />
+                <span className="absolute grid size-[15px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-pp-bg">
+                  <span className="block size-[8px] rounded-full bg-pp-ink" />
+                </span>
                 <span
                   className={cn(
-                    "mono absolute block whitespace-nowrap text-[0.62em] leading-none tracking-[0.08em] text-[var(--cover-paper)]/75",
+                    "mono absolute block whitespace-nowrap text-[11px] leading-none tracking-[0.04em] text-pp-muted",
                     POINT_LABEL[i],
                   )}
                 >
@@ -552,14 +574,14 @@ export function Shelf() {
             {/* what each half of the axis is */}
             <span
               aria-hidden
-              className="mono pointer-events-none absolute bottom-[0.45em] left-0 text-[0.6em] uppercase tracking-[0.2em] text-[var(--cover-paper)]/45"
+              className="pointer-events-none absolute bottom-1.5 left-0 text-[11px] leading-4 tracking-[0.1em] text-pp-muted uppercase"
               style={{ width: `${SHELF_FRAC * 100}%` }}
             >
-              <span className="block pl-[0.5em]">The window · flat</span>
+              <span className="block pl-2">The window · flat</span>
             </span>
             <span
               aria-hidden
-              className="mono pointer-events-none absolute bottom-[0.45em] right-0 text-[0.6em] uppercase tracking-[0.2em] text-[var(--cover-paper)]/45"
+              className="pointer-events-none absolute right-0 bottom-1.5 text-[11px] leading-4 tracking-[0.1em] text-pp-muted uppercase"
             >
               The collapse · log
             </span>
@@ -567,7 +589,7 @@ export function Shelf() {
             {/* the head */}
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-y-0 w-px bg-[var(--cover-paper)]/45"
+              className="pointer-events-none absolute inset-y-0 w-px bg-pp-ink/30"
               style={{
                 left: `${pos * 100}%`,
                 transitionProperty: dragging || !driving ? "none" : "left",
@@ -575,13 +597,16 @@ export function Shelf() {
               }}
             >
               <span
-                className="absolute size-[0.7em] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--cover-paper)] bg-[var(--cover-ink)]"
+                className="absolute size-[11px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-pp-ink bg-pp-bg"
                 style={{ top: `${(Y(odds) / VB_H) * 100}%` }}
               />
+              {/* The one inverted chip in the section: black on white is how
+                  this system says "the live value", where the cover said it
+                  with a lit panel. */}
               <span
                 className={cn(
-                  "mono absolute top-0 whitespace-nowrap rounded-[0.35em] bg-[var(--cover-ink)]/85 px-[0.55em] py-[0.3em] text-[0.62em] leading-none text-[var(--cover-paper)]",
-                  pos > 0.84 ? "right-[0.5em]" : "left-[0.5em]",
+                  "mono absolute top-0 whitespace-nowrap rounded-full bg-pp-ink px-2 py-1 text-[11px] leading-none text-white",
+                  pos > 0.84 ? "right-2" : "left-2",
                 )}
               >
                 {fmt(sec)}
@@ -590,13 +615,13 @@ export function Shelf() {
           </div>
 
           {/* the x axis, and the break named where it happens */}
-          <div className="relative mt-[0.55em] h-[1.3em]">
+          <div className="relative mt-2 h-5">
             {TICKS.map((t) => (
               <span
                 key={t.at}
                 aria-hidden
                 className={cn(
-                  "mono absolute top-0 text-[0.62em] tracking-[0.1em] text-[var(--cover-paper)]/45",
+                  "mono absolute top-0 text-[11px] leading-4 tracking-[0.06em] text-pp-muted",
                   t.at === 0
                     ? "left-0"
                     : t.at === DECAY_MAX
@@ -614,7 +639,7 @@ export function Shelf() {
             ))}
           </div>
 
-          <p className="mt-[0.9em] text-[0.7em] leading-[1.6] text-[var(--cover-paper)]/45">
+          <p className="mt-4 max-w-[640px] text-[12px] leading-[18px] text-pp-muted">
             The axis is broken at the five-minute mark — the study&rsquo;s own
             baseline. Behind the break the scale is linear across that single
             measured window; in front of it, logarithmic to thirty minutes.
@@ -625,44 +650,36 @@ export function Shelf() {
 
         {/* ---- the readout, grouped by rules and space ---- */}
 
-        <div className="mt-[3em] grid max-w-[62em] grid-cols-2 gap-y-[1.6em] border-t border-[var(--cover-paper)]/12 pt-[1.6em] sm:grid-cols-3 sm:gap-x-[2em]">
-          <div className="sm:border-r sm:border-[var(--cover-paper)]/12 sm:pr-[2em]">
-            <p className="mono text-[0.62em] uppercase tracking-[0.22em] text-[var(--cover-paper)]/45">
-              Answered after
-            </p>
-            <p className="mono mt-[0.45em] text-[1.8em] leading-none tabular-nums tracking-[-0.02em]">
+        <div className="mt-12 grid max-w-[860px] grid-cols-2 gap-y-8 border-t border-pp-rule pt-8 sm:grid-cols-3 sm:gap-x-10">
+          <div className="sm:border-r sm:border-pp-rule sm:pr-10">
+            <p className={LABEL}>Answered after</p>
+            <p className="mono mt-2 text-[28px] leading-none tabular-nums tracking-[-0.02em] text-pp-ink md:text-[32px]">
               {fmt(sec)}
             </p>
           </div>
 
-          <div className="sm:border-r sm:border-[var(--cover-paper)]/12 sm:pr-[2em]">
-            <p className="mono text-[0.62em] uppercase tracking-[0.22em] text-[var(--cover-paper)]/45">
-              Odds of qualifying
-            </p>
+          <div className="sm:border-r sm:border-pp-rule sm:pr-10">
+            <p className={LABEL}>Odds of qualifying</p>
             <p
               className={cn(
-                "mt-[0.45em] text-[1.8em] font-medium leading-none tabular-nums tracking-[-0.03em] transition-colors duration-500",
-                onShelf
-                  ? "text-[var(--cover-brand-lit)]"
-                  : "text-[var(--cover-paper)]/75",
+                "mt-2 text-[28px] leading-none font-medium tabular-nums tracking-[-0.03em] transition-colors duration-500 md:text-[32px]",
+                onShelf ? "text-pp-accent" : "text-pp-ink",
               )}
             >
               {Math.round(odds * 100)}
-              <span className="text-[0.5em] text-[var(--cover-paper)]/45"> in 100</span>
+              <span className="text-[14px] text-pp-muted md:text-[16px]"> in 100</span>
             </p>
           </div>
 
           <div className="col-span-2 sm:col-span-1">
-            <p className="mono text-[0.62em] uppercase tracking-[0.22em] text-[var(--cover-paper)]/45">
-              Against answering at once
-            </p>
-            <p className="mt-[0.45em] text-[1.8em] font-medium leading-none tabular-nums tracking-[-0.03em]">
+            <p className={LABEL}>Against answering at once</p>
+            <p className="mt-2 text-[28px] leading-none font-medium tabular-nums tracking-[-0.03em] text-pp-ink md:text-[32px]">
               {onShelf ? (
-                <span className="text-[var(--cover-brand-lit)]">No difference</span>
+                <span className="text-pp-accent">No difference</span>
               ) : (
                 <>
                   {worse.toFixed(worse < 10 ? 1 : 0)}&times;
-                  <span className="text-[0.5em] text-[var(--cover-paper)]/45"> worse</span>
+                  <span className="text-[14px] text-pp-muted md:text-[16px]"> worse</span>
                 </>
               )}
             </p>
@@ -670,11 +687,11 @@ export function Shelf() {
         </div>
 
         {/* the sentence, by where the head sits */}
-        <p className="mt-[1.5em] max-w-[62em] text-[0.98em] leading-[1.65] text-[var(--cover-paper)]/75">
+        <p className="mt-8 max-w-[760px] text-[17px] leading-7 text-pp-muted">
           {onShelf ? (
             <>
               Inside the window a second costs nothing, and{" "}
-              <span className="text-[var(--cover-paper)]">
+              <span className="text-pp-ink">
                 this is the only stretch of the graph where that is true
               </span>
               . It is five minutes wide, it opens at whatever hour the phone
@@ -683,69 +700,59 @@ export function Shelf() {
           ) : sec <= 600 ? (
             <>
               Past the shelf, and falling. MIT measured a{" "}
-              <span className="text-[var(--cover-paper)]">
-                fourfold drop by the tenth minute
-              </span>{" "}
+              <span className="text-pp-ink">fourfold drop by the tenth minute</span>{" "}
               — the caller is still reachable, but they have stopped reaching
               for you. Somebody answered while you were deciding to call back.
             </>
           ) : (
             <>
-              <span className="text-[var(--cover-paper)]">
-                Twenty-one times worse by the half hour
-              </span>{" "}
+              <span className="text-pp-ink">Twenty-one times worse by the half hour</span>{" "}
               — the study&rsquo;s own headline figure, and the reason a callback
               is not a save. By this point it is not your customer being
               followed up. It is somebody else&rsquo;s customer being confirmed.
             </>
           )}
         </p>
+      </Frame>
 
-        {/* The rule below the plot. The argument changes here: everything
-            above is about *when* a call is answered, everything below is
-            about whether it is answered at all. */}
-        <TornEdge height={3.2} opacity={0.55} className="mt-[4.4em] mb-[4.2em]" />
+      {/* The rule below the plot. The argument changes here: everything
+          above is about *when* a call is answered, everything below is
+          about whether it is answered at all. */}
+      <Rule />
 
-        <p className="mono text-[0.68em] uppercase leading-[1.5] tracking-[0.22em] text-[var(--cover-paper)]/45">
-          Before any of that — whether the call is answered at all
-        </p>
+      <Frame className="px-6 py-12 md:px-12 md:py-16">
+        <Reveal>
+          <p className={LABEL}>Before any of that — whether the call is answered at all</p>
 
-        {/*
-          One sentence, assembled from CALL_FATE's own shares.
+          {/*
+            One sentence, assembled from CALL_FATE's own shares.
 
-          The line this replaces said six calls in ten never reach the curve
-          above. They do. A voicemail is a lead with the clock running — it
-          is the exact population a callback curve describes, and calling it
-          lost both overstates the case and misses the sharper one: a
-          quarter of callers are not late, they are gone, and no callback
-          time in the world reaches them.
-        */}
-        <p className="mt-[1.1em] max-w-[52em] text-[1.05em] leading-[1.65] text-[var(--cover-paper)]/75">
-          Of every hundred calls to a small business,{" "}
-          <span className="mono tabular-nums text-[var(--cover-paper)]">
-            {pct(LIVE)}
-          </span>{" "}
-          are picked up by a person and{" "}
-          <span className="mono tabular-nums text-[var(--cover-paper)]">
-            {pct(VOICEMAIL)}
-          </span>{" "}
-          land in voicemail — and voicemail is precisely the population the
-          curve above describes: the clock starts, and the callback lands
-          somewhere on that cliff. Only the{" "}
-          <span className="mono tabular-nums text-[var(--cover-brand-lit)]">
-            {pct(RANG_OUT)}
-          </span>{" "}
-          that ring out never reach the curve at all.{" "}
-          <span className="text-[var(--cover-paper)]">
-            Those callers are not late. They are gone.
-          </span>
-        </p>
+            The line this replaces said six calls in ten never reach the curve
+            above. They do. A voicemail is a lead with the clock running — it
+            is the exact population a callback curve describes, and calling it
+            lost both overstates the case and misses the sharper one: a
+            quarter of callers are not late, they are gone, and no callback
+            time in the world reaches them.
+          */}
+          <p className="mt-5 max-w-[760px] text-[19px] leading-8 text-pp-muted md:text-[21px]">
+            Of every hundred calls to a small business,{" "}
+            <span className="mono tabular-nums text-pp-ink">{pct(LIVE)}</span> are
+            picked up by a person and{" "}
+            <span className="mono tabular-nums text-pp-ink">{pct(VOICEMAIL)}</span>{" "}
+            land in voicemail — and voicemail is precisely the population the
+            curve above describes: the clock starts, and the callback lands
+            somewhere on that cliff. Only the{" "}
+            <span className="mono tabular-nums text-pp-accent">{pct(RANG_OUT)}</span>{" "}
+            that ring out never reach the curve at all.{" "}
+            <span className="text-pp-ink">Those callers are not late. They are gone.</span>
+          </p>
+        </Reveal>
 
         {/* Provenance on one line, and then out — to the businesses this
             actually happens to. A bibliography is where a reader stops; an
             anchor is where they continue. */}
-        <div className="mt-[3em] flex flex-col gap-[1.2em] border-t border-[var(--cover-paper)]/12 pt-[1.2em] md:flex-row md:items-baseline md:justify-between">
-          <p className="max-w-[54em] text-[0.7em] leading-[1.6] text-[var(--cover-paper)]/45">
+        <div className="mt-12 flex flex-col gap-5 border-t border-pp-rule pt-6 md:flex-row md:items-center md:justify-between">
+          <p className="max-w-[640px] text-[12px] leading-[18px] text-pp-muted">
             Measured by{" "}
             {WHY_SOURCES.map((s, i) => (
               <span key={s.work} title={s.detail}>
@@ -755,19 +762,16 @@ export function Shelf() {
             ))}
           </p>
 
-          <a
-            href="#use-cases"
-            className="group inline-flex shrink-0 items-center gap-[0.5em] text-[0.85em] leading-none text-[var(--cover-paper)]/75 transition-colors duration-500 hover:text-[var(--cover-brand-lit)]"
-          >
+          <PillLink href="#use-cases" variant="secondary" size="sm" className="group self-start">
             Whose phone this happens on
             <ArrowRight
-              className="size-[1em] transition-transform duration-500 group-hover:translate-x-[0.2em]"
+              className="size-4 transition-transform duration-300 group-hover:translate-x-0.5"
               strokeWidth={2}
               aria-hidden
             />
-          </a>
+          </PillLink>
         </div>
-      </div>
+      </Frame>
     </section>
   );
 }

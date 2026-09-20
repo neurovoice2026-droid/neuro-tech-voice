@@ -21,7 +21,7 @@ import {
   type Tone,
 } from "@/lib/site";
 import { cn } from "@/lib/utils";
-import { CornerDot } from "./corner-dot";
+import { Frame, SectionHeading } from "./product/primitives";
 import { EASE, MaskRise, Reveal } from "./reveal";
 
 /**
@@ -61,8 +61,7 @@ import { EASE, MaskRise, Reveal } from "./reveal";
  *    perfectly still. Eight words lift out of their clipping boxes and five
  *    do not move at all, and that difference is the whole demonstration —
  *    the reader can see exactly which part of the sentence the control they
- *    have not yet touched is wired to. It is the hero's own word-rise,
- *    spent on causation rather than on arrival.
+ *    have not yet touched is wired to.
  *  · **Nine languages, written rather than translated.** The chips under
  *    the plane carry each language's own name, because that is the evidence
  *    before anyone clicks: the formal register is held in all eight of the
@@ -91,16 +90,38 @@ import { EASE, MaskRise, Reveal } from "./reveal";
  * `#how` is load-bearing and stays: the close's third receipt and the
  * second FAQ answer both point at this id.
  *
- * Two layout notes, both deliberate. The composition draws no card — the
- * section sits on the open field and is grouped by rules and space. The
- * pad's own square is the exception and it is an instrument surface rather
- * than a panel: a scatter plot with no plotting field is unreadable. And
- * the greeting comes *first* in the DOM, ordered back to the right column
- * from `md` up. On a phone the old version put it below the fold while you
- * dragged — you could not see the thing you were changing — and the helper
- * text hard-coded "the greeting on the right" on a screen that has no
- * right. Source order now reads the way the argument does at every width:
- * here is what the caller hears, and here is the control that wrote it.
+ * THE LIGHT SYSTEM. This section was briefly drawn in the cover's dark
+ * tokens and is now set in `pp`, like every other marketing page on the
+ * site: white stock, black ink, one violet, `Frame` for the column and
+ * `SectionHeading` for the opener. Three consequences are worth naming,
+ * because they are not free translations of the dark version:
+ *
+ *  · **The instrument is a card now, and that is correct here.** On the
+ *    dark spread the rule was "one panel on the page, and it is the price
+ *    list" — a bordered card in the dark system reads as a brochure. The
+ *    light system says the opposite: a grey `pp-card` is how a *working*
+ *    surface is marked off from the page, and the pad, the greeting and
+ *    the chips are one instrument that ought to be held together. So the
+ *    instrument sits on grey and the argument around it sits on white.
+ *  · **White is the selected state inside it**, exactly as on the
+ *    keyterm rail: the pad's plotting field is white on the grey card, and
+ *    an unselected chip is a white pill. Ink-filled is chosen. Violet is
+ *    reserved for the thing that is actually moving — the puck, the
+ *    crosshair, the part of the signature already read, the live tone.
+ *  · **Heavy glows are out.** On white, the dark version's halos read as
+ *    dirt. Everything that used to glow now draws, sweeps or fills: the
+ *    signature is swept, the crosshair is a hairline, and the puck's one
+ *    remaining halo is a thin flat ring rather than a bloom.
+ *
+ * Two layout notes, both deliberate. The greeting comes *first* in the DOM,
+ * ordered back to the right column from `md` up. On a phone the old version
+ * put it below the fold while you dragged — you could not see the thing you
+ * were changing — and the helper text hard-coded "the greeting on the
+ * right" on a screen that has no right. Source order now reads the way the
+ * argument does at every width: here is what the caller hears, and here is
+ * the control that wrote it. And the greeting is set in the cinema face,
+ * the house idiom for a spoken line played back on the page — the one thing
+ * in this section that is a voice rather than interface copy.
  */
 
 /* ---------------------------------------------------------------- *
@@ -108,7 +129,7 @@ import { EASE, MaskRise, Reveal } from "./reveal";
  * ---------------------------------------------------------------- */
 
 /**
- * The masthead's words live here rather than in `lib/site.ts`.
+ * The heading's words live here rather than in `lib/site.ts`.
  *
  * The constant that used to supply them, `HOW_INTRO`, went out with the
  * wizard — it was written about a stepper ("four screens, ten minutes")
@@ -140,6 +161,23 @@ const BUDGET = 10 * 60 * 1000;
 const DRIFT_FROM = TONES[1];
 const DRIFT_TO = TONES[3];
 
+/** The house focus ring on the light pages. */
+const FOCUS =
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink";
+
+/** The eleven-pixel field label the light system uses for every instrument. */
+const LABEL =
+  "text-[11px] leading-4 font-medium tracking-[0.12em] text-pp-muted uppercase";
+
+/**
+ * The chip, straight off the keyterm rail: a 44px pill, white at rest on
+ * the grey card, inked when it is the one in force.
+ */
+const CHIP =
+  "inline-flex min-h-11 shrink-0 items-center rounded-full px-4 text-[14px] leading-none whitespace-nowrap transition-colors duration-300";
+const CHIP_ON = "bg-pp-ink text-white";
+const CHIP_OFF = "bg-white text-pp-muted hover:text-pp-ink";
+
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
 const mmss = (ms: number) => {
@@ -160,13 +198,9 @@ function nearestTone(relaxed: number, warm: number): Tone {
   return best;
 }
 
-/** Monospace field label. Held at /45 — the caption floor, not below it. */
+/** Field label. `--pp-muted` on both stocks is 5.6:1, so it needs no floor. */
 function Key({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="mono text-[0.62em] uppercase leading-none tracking-[0.24em] text-[var(--cover-paper)]/45">
-      {children}
-    </p>
-  );
+  return <p className={LABEL}>{children}</p>;
 }
 
 /* ---------------------------------------------------------------- *
@@ -243,8 +277,11 @@ function RegisterPad({
       }}
       onPointerCancel={() => setDragging(false)}
       className={cn(
-        "relative aspect-square w-full max-w-[24em] touch-none select-none rounded-[0.9em] border border-[var(--cover-paper)]/12 bg-[var(--cover-ink)]/30 outline-none",
-        "focus-visible:border-[var(--cover-brand-lit)]/60 focus-visible:ring-2 focus-visible:ring-[var(--cover-brand-lit)]/40",
+        // A white plotting field on the grey card: the light system's
+        // "this is the surface you operate" mark, the same white the
+        // unselected chips are cut from.
+        "relative aspect-square w-full max-w-[380px] touch-none rounded-[20px] border border-pp-hair bg-pp-bg outline-none select-none",
+        FOCUS,
         dragging ? "cursor-grabbing" : "cursor-crosshair",
       )}
     >
@@ -256,7 +293,7 @@ function RegisterPad({
         className="absolute inset-0 size-full"
       >
         {[25, 50, 75].map((p) => (
-          <g key={p} stroke="var(--cover-paper)" strokeOpacity="0.07">
+          <g key={p} stroke="#181028" strokeOpacity="0.08">
             <line x1={p} y1="0" x2={p} y2="100" strokeWidth="0.35" />
             <line x1="0" y1={p} x2="100" y2={p} strokeWidth="0.35" />
           </g>
@@ -266,12 +303,12 @@ function RegisterPad({
       {/* crosshair through the puck */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 w-px bg-[var(--cover-brand-lit)]/20"
+        className="pointer-events-none absolute inset-y-0 w-px bg-pp-accent/25"
         style={{ left: `${relaxed * 100}%` }}
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 h-px bg-[var(--cover-brand-lit)]/20"
+        className="pointer-events-none absolute inset-x-0 h-px bg-pp-accent/25"
         style={{ top: `${(1 - warm) * 100}%` }}
       />
 
@@ -285,12 +322,14 @@ function RegisterPad({
             : t.at[0] < 0.28
               ? "translate(0, -50%)"
               : "translate(-50%, -50%)";
+        // Pixels, not em: the light system has no em base, and these push
+        // a fixed 11px label clear of a fixed 7px dot at every pad width.
         const pad =
           t.at[0] > 0.72
-            ? { paddingRight: "1.35em" }
+            ? { paddingRight: "18px" }
             : t.at[0] < 0.28
-              ? { paddingLeft: "1.35em" }
-              : { paddingTop: "2.1em" };
+              ? { paddingLeft: "18px" }
+              : { paddingTop: "26px" };
 
         return (
           <div key={t.id}>
@@ -301,7 +340,10 @@ function RegisterPad({
                 onChange(t.at[0], t.at[1]);
               }}
               aria-pressed={on}
-              className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full p-[0.5em] outline-none focus-visible:ring-2 focus-visible:ring-[var(--cover-brand-lit)]"
+              className={cn(
+                "absolute -translate-x-1/2 -translate-y-1/2 rounded-full p-2 outline-none",
+                FOCUS,
+              )}
               style={{ left: `${t.at[0] * 100}%`, top: `${(1 - t.at[1]) * 100}%` }}
             >
               <span className="sr-only">
@@ -310,10 +352,8 @@ function RegisterPad({
               <span
                 aria-hidden
                 className={cn(
-                  "block size-[0.42em] rounded-full transition-colors duration-500",
-                  on
-                    ? "bg-[var(--cover-brand-lit)]"
-                    : "bg-[var(--cover-paper)]/45",
+                  "block size-[7px] rounded-full transition-colors duration-500",
+                  on ? "bg-pp-accent" : "bg-pp-muted/45",
                 )}
               />
             </button>
@@ -321,10 +361,8 @@ function RegisterPad({
             <span
               aria-hidden
               className={cn(
-                "pointer-events-none absolute whitespace-nowrap text-[0.62em] leading-none transition-colors duration-500",
-                on
-                  ? "text-[var(--cover-brand-lit)]"
-                  : "text-[var(--cover-paper)]/55",
+                "pointer-events-none absolute text-[11px] leading-4 font-medium tracking-[0.06em] whitespace-nowrap transition-colors duration-500",
+                on ? "text-pp-accent" : "text-pp-muted",
               )}
               style={{
                 left: `${t.at[0] * 100}%`,
@@ -349,13 +387,12 @@ function RegisterPad({
           CSS, it is in the correct place on the first paint whether or
           not anything is animating at all.
 
-          Its halo used to be a literal `rgba(192,172,224,0.12)` — the
-          brand accent written out by hand. `.cover.hdr-light` flips these
-          tokens, and a literal survives the flip as the wrong colour, so
-          it is mixed off the token instead. */}
+          Its ring is a flat 6px of 10% violet rather than the dark
+          version's bloom: on white a soft glow reads as a smudge, and
+          what this mark has to say is only "the puck is here". */}
       <div
         aria-hidden
-        className="pointer-events-none absolute size-[1.15em] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--cover-brand-lit)] bg-[var(--cover-ink)] shadow-[0_0_0_0.35em_color-mix(in_srgb,var(--cover-brand-lit)_12%,transparent)]"
+        className="pointer-events-none absolute size-[18px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-pp-accent bg-pp-bg shadow-[0_0_0_6px_color-mix(in_srgb,var(--pp-accent)_10%,transparent)]"
         style={{
           left: `${relaxed * 100}%`,
           top: `${(1 - warm) * 100}%`,
@@ -371,19 +408,19 @@ function RegisterPad({
       {/* axes */}
       <span
         aria-hidden
-        className="mono pointer-events-none absolute bottom-[0.6em] left-[0.8em] text-[0.55em] uppercase tracking-[0.2em] text-[var(--cover-paper)]/45"
+        className="pointer-events-none absolute bottom-3 left-4 text-[11px] leading-4 tracking-[0.14em] text-pp-muted uppercase"
       >
         measured
       </span>
       <span
         aria-hidden
-        className="mono pointer-events-none absolute bottom-[0.6em] right-[0.8em] text-[0.55em] uppercase tracking-[0.2em] text-[var(--cover-paper)]/45"
+        className="pointer-events-none absolute right-4 bottom-3 text-[11px] leading-4 tracking-[0.14em] text-pp-muted uppercase"
       >
         relaxed
       </span>
       <span
         aria-hidden
-        className="mono pointer-events-none absolute left-[0.8em] top-[0.7em] text-[0.55em] uppercase tracking-[0.2em] text-[var(--cover-paper)]/45"
+        className="pointer-events-none absolute top-3 left-4 text-[11px] leading-4 tracking-[0.14em] text-pp-muted uppercase"
       >
         warm
       </span>
@@ -557,7 +594,12 @@ function SpokenGreeting({
    */
   const line = useMemo(
     () => (
-      <p className="text-[1.8em] font-medium leading-[1.15] tracking-[-0.04em]">
+      /* The cinema face, italic, inside quotation marks: the house idiom
+         for a line that is *heard* rather than read off an interface. */
+      <p className="font-[family-name:var(--font-pp-cinema)] text-[21px] leading-8 text-pp-ink italic md:text-[24px] md:leading-9">
+        <span aria-hidden className="text-pp-muted">
+          &ldquo;
+        </span>
         {words.map((word, i) => (
           <span key={word.key}>
             <MaskRise
@@ -565,15 +607,24 @@ function SpokenGreeting({
               // Every word goes through the same primitive and the same
               // geometry; only the key decides which of them are new, and
               // a word whose key survives never re-runs its rise.
+              //
+              // The padding pair is for the italic: MaskRise clips each
+              // word to its own advance width, which would shave the lean
+              // off a Cormorant f or y permanently, not just during the
+              // rise. 0.08em of room inside the clip box, pulled straight
+              // back out with a matching negative margin, so the tails
+              // survive and the word spacing is unchanged.
               className={cn(
                 "inline-block transition-colors duration-200",
-                i < spokenTo
-                  ? "text-[var(--cover-paper)]"
-                  : "text-[var(--cover-paper)]/75",
+                "[&>span>span]:pr-[0.08em] [&>span>span]:-mr-[0.08em]",
+                i < spokenTo ? "text-pp-ink" : "text-pp-muted",
               )}
             />{" "}
           </span>
         ))}
+        <span aria-hidden className="text-pp-muted">
+          &rdquo;
+        </span>
       </p>
     ),
     [words, spokenTo],
@@ -584,15 +635,15 @@ function SpokenGreeting({
       {line}
 
       {/* The reading. Silent, and the caption says so. */}
-      <div className="mt-[1.4em]">
-        <div className="relative h-[2.4em] w-full">
+      <div className="mt-6">
+        <div className="relative h-10 w-full">
           <svg
             aria-hidden
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
             className="absolute inset-0 size-full"
           >
-            <path d={d} fill="var(--cover-paper)" fillOpacity="0.16" />
+            <path d={d} fill="var(--pp-ink)" fillOpacity="0.1" />
           </svg>
           <div
             aria-hidden
@@ -604,19 +655,19 @@ function SpokenGreeting({
               preserveAspectRatio="none"
               className="absolute inset-0 size-full"
             >
-              <path d={d} fill="var(--cover-brand-lit)" fillOpacity="0.9" />
+              <path d={d} fill="var(--pp-accent)" fillOpacity="0.85" />
             </svg>
           </div>
           {at < 1 && (
             <div
               aria-hidden
-              className="absolute inset-y-0 w-px bg-[var(--cover-brand-lit)]"
+              className="absolute inset-y-0 w-px bg-pp-accent"
               style={{ left: `${at * 100}%` }}
             />
           )}
         </div>
 
-        <p className="mono mt-[0.8em] text-[0.62em] uppercase leading-none tracking-[0.18em] text-[var(--cover-paper)]/45">
+        <p className="mt-3 text-[11px] leading-4 tracking-[0.1em] text-pp-muted tabular-nums uppercase">
           {voice.name} · {voice.wpm} wpm · {secs.toFixed(1)}s · silent on this
           page
         </p>
@@ -740,54 +791,32 @@ export function Register() {
 
   const over = ms > BUDGET;
 
-  const chip =
-    "shrink-0 rounded-[0.5em] border px-[0.85em] py-[0.5em] text-left leading-none transition-colors duration-500 outline-none focus-visible:ring-2 focus-visible:ring-[var(--cover-brand-lit)]/50";
-  const chipOn =
-    "border-[var(--cover-brand-lit)]/55 bg-[var(--cover-brand-lit)]/12 text-[var(--cover-brand-lit)]";
-  const chipOff =
-    "border-[var(--cover-paper)]/12 text-[var(--cover-paper)]/75 hover:border-[var(--cover-paper)]/35 hover:text-[var(--cover-paper)]";
-
   return (
-    <section
-      id="how"
-      className="relative scroll-mt-24 px-[1.6em] py-[6em] md:py-[8em]"
-    >
-      <div className="relative mx-auto max-w-[76em]">
-        {/* masthead */}
+    <section id="how" className="scroll-mt-28 py-20 md:py-28">
+      <Frame className="px-6 md:px-12">
         <Reveal>
-          <div className="flex items-center gap-[0.7em]">
-            <CornerDot className="size-[0.55em]" />
-            <span className="mono text-[0.7em] uppercase tracking-[0.24em] text-[var(--cover-paper)]/45">
-              07
-            </span>
-            <span className="mono text-[0.7em] uppercase tracking-[0.24em] text-[var(--cover-paper)]/45">
-              {KICKER}
-            </span>
-          </div>
-
-          <h2 className="mt-[0.9em] text-balance text-[2.8em] font-medium leading-[1.03] tracking-[-0.045em] md:text-[3.4em]">
-            {TITLE}
-          </h2>
-
-          <p className="mt-[1em] max-w-[44em] text-pretty text-[1.05em] leading-[1.6] text-[var(--cover-paper)]/75">
+          <SectionHeading eyebrow={KICKER}>{TITLE}</SectionHeading>
+          <p className="mt-5 max-w-[620px] text-base leading-[25px] text-pp-muted">
             {SUB}
           </p>
-
-          <div className="mt-[2.2em] h-px bg-[var(--cover-paper)]/12" />
         </Reveal>
+      </Frame>
 
-        {/* the instrument */}
+      {/* The instrument. One grey card holding the pad, the sentence it
+          writes and the two chip rails — they are one object and the card
+          is how the light system says so. */}
+      <Frame className="mt-8 px-2 md:px-4">
         <div
           ref={ref}
-          className="mt-[3em] grid gap-[3em] md:mt-[3.6em] md:grid-cols-12 md:gap-[3.5em]"
+          className="grid gap-9 rounded-[24px] bg-pp-card p-5 md:grid-cols-12 md:gap-10 md:p-8"
         >
           {/* What the caller hears. First in source, right-hand column from
               md up — see the note at the top of the file. Not wrapped in a
               Reveal: its own words rising out of their clipping boxes are
               the arrival, and a fade underneath them would be a second
               animation saying the same thing more quietly. */}
-          <div className="order-1 md:order-2 md:col-span-5">
-            <div className="flex items-baseline justify-between gap-[1em]">
+          <div className="order-1 min-w-0 md:order-2 md:col-span-5">
+            <div className="flex items-baseline justify-between gap-4">
               <Key>Opens with</Key>
               <button
                 type="button"
@@ -795,14 +824,17 @@ export function Register() {
                   engage();
                   setRun((r) => r + 1);
                 }}
-                className="mono flex items-center gap-[0.45em] text-[0.62em] uppercase leading-none tracking-[0.18em] text-[var(--cover-paper)]/45 outline-none transition-colors duration-500 hover:text-[var(--cover-paper)] focus-visible:text-[var(--cover-paper)]"
+                className={cn(
+                  "flex items-center gap-1.5 rounded-full text-[11px] leading-4 font-medium tracking-[0.12em] text-pp-muted uppercase transition-colors duration-300 outline-none hover:text-pp-ink",
+                  FOCUS,
+                )}
               >
-                <RotateCcw className="size-[1.15em]" strokeWidth={2.2} />
+                <RotateCcw className="size-3.5" strokeWidth={2.2} />
                 Read again
               </button>
             </div>
 
-            <div className="mt-[1.1em]">
+            <div className="mt-4">
               <SpokenGreeting
                 greeting={greeting}
                 voice={voice}
@@ -815,9 +847,9 @@ export function Register() {
                 links anywhere: the library, the cloning, the synthesis and
                 the transcription pages do not exist yet, and a capability
                 is better demonstrated than promised. */}
-            <div className="mt-[2.4em] border-t border-[var(--cover-paper)]/12 pt-[1.6em]">
+            <div className="mt-8 border-t border-pp-hair pt-6">
               <Key>Read by</Key>
-              <div className="mt-[0.9em] flex gap-[0.4em] overflow-x-auto pb-[0.3em] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="mt-3 -mx-1 flex gap-2 overflow-x-auto px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {SETUP_VOICES.map((v) => {
                   const on = v.id === voice.id;
                   return (
@@ -830,12 +862,18 @@ export function Register() {
                         setRun((r) => r + 1);
                       }}
                       aria-pressed={on}
-                      className={cn(chip, on ? chipOn : chipOff)}
+                      className={cn(CHIP, FOCUS, on ? CHIP_ON : CHIP_OFF)}
                     >
-                      <span className="block text-[0.85em] leading-none">
-                        {v.name}
-                      </span>
-                      <span className="mono mt-[0.5em] block text-[0.58em] uppercase leading-none tracking-[0.12em] opacity-70">
+                      {v.name}
+                      {/* Softened only on the ink chip: the muted grey on
+                          white is already quiet, and 70% of it drops
+                          under 3:1. */}
+                      <span
+                        className={cn(
+                          "ml-2 text-[11px] tabular-nums",
+                          on && "opacity-70",
+                        )}
+                      >
                         {v.wpm} wpm
                       </span>
                     </button>
@@ -851,7 +889,7 @@ export function Register() {
                 initial={reduce ? false : { opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, ease: EASE }}
-                className="mt-[1.1em] max-w-[28em] text-[0.88em] leading-[1.6] text-[var(--cover-paper)]/75"
+                className="mt-4 max-w-[360px] text-[14px] leading-[22px] text-pp-muted"
               >
                 {voiceNote(voice)}
               </motion.p>
@@ -859,27 +897,25 @@ export function Register() {
           </div>
 
           {/* The control that wrote it. */}
-          <Reveal y={28} className="order-2 md:order-1 md:col-span-7">
-            <div className="flex items-baseline justify-between gap-[1em]">
+          <Reveal y={20} className="order-2 min-w-0 md:order-1 md:col-span-7">
+            <div className="flex items-baseline justify-between gap-4">
               <Key>Register</Key>
-              <span className="flex items-baseline gap-[0.6em]">
+              <span className="flex items-baseline gap-2">
                 <span
                   className={cn(
-                    "mono text-[1.15em] leading-none tabular-nums transition-colors duration-500",
-                    running
-                      ? "text-[var(--cover-paper)]"
-                      : "text-[var(--cover-paper)]/45",
+                    "text-[17px] leading-none tabular-nums transition-colors duration-500",
+                    running ? "text-pp-ink" : "text-pp-muted",
                   )}
                 >
                   {mmss(ms)}
                 </span>
-                <span className="mono text-[0.62em] uppercase leading-none tracking-[0.2em] text-[var(--cover-paper)]/45">
+                <span className="text-[11px] leading-4 tracking-[0.12em] text-pp-muted uppercase">
                   {over ? "past our ten" : running ? "tuning" : "of 10:00"}
                 </span>
               </span>
             </div>
 
-            <div className="mt-[1.1em]">
+            <div className="mt-4">
               <RegisterPad
                 relaxed={relaxed}
                 warm={warm}
@@ -892,19 +928,16 @@ export function Register() {
               />
             </div>
 
-            <p className="mt-[1.2em] max-w-[24em] text-[0.95em] leading-[1.55]">
-              <span className="text-[var(--cover-brand-lit)]">{tone.label}</span>
-              <span className="text-[var(--cover-paper)]/75">
-                {" "}
-                — {tone.blurb.toLowerCase()}.
-              </span>
+            <p className="mt-5 max-w-[380px] text-[15px] leading-[23px]">
+              <span className="text-pp-accent">{tone.label}</span>
+              <span className="text-pp-muted"> — {tone.blurb.toLowerCase()}.</span>
             </p>
 
             {/* Nine languages, under the plane, each in its own writing.
                 The chip is the evidence before anybody clicks it. */}
-            <div className="mt-[2.4em] border-t border-[var(--cover-paper)]/12 pt-[1.6em]">
+            <div className="mt-8 border-t border-pp-hair pt-6">
               <Key>Answers in</Key>
-              <div className="mt-[0.9em] flex flex-wrap gap-[0.35em]">
+              <div className="mt-3 flex flex-wrap gap-2">
                 {SETUP_LANGS.map((l) => {
                   const on = l.code === lang.code;
                   return (
@@ -917,11 +950,7 @@ export function Register() {
                         setRun((r) => r + 1);
                       }}
                       aria-pressed={on}
-                      className={cn(
-                        chip,
-                        "text-[0.85em]",
-                        on ? chipOn : chipOff,
-                      )}
+                      className={cn(CHIP, FOCUS, on ? CHIP_ON : CHIP_OFF)}
                     >
                       {l.name}
                     </button>
@@ -931,30 +960,30 @@ export function Register() {
             </div>
           </Reveal>
         </div>
+      </Frame>
 
-        {/* provenance — the clock is real, and it says what it measures */}
-        <div className="mt-[3.2em] border-t border-[var(--cover-paper)]/12 pt-[1.4em]">
-          <p className="max-w-[52em] text-[0.82em] leading-[1.7] text-[var(--cover-paper)]/75">
-            The clock is your own: it starts when you first touch the pad, it
-            pauses whenever this section is off-screen or the tab is in the
-            background, and nothing here can skip it to the end.{" "}
-            {over ? (
-              <>
-                You are past our ten minutes, and we will take it — you were
-                reading, not setting up.
-              </>
-            ) : (
-              <>
-                Ten minutes is what we claim the whole setup takes; this is the
-                only part of it that needs a decision.
-              </>
-            )}{" "}
-            There is no audio on this page — the envelope under the greeting is
-            the voice&rsquo;s own pitch, and the sentence crosses it at the
-            words per minute that voice really reads at. Nine languages here;
-            the app carries more.
-          </p>
-        </div>
+      {/* provenance — the clock is real, and it says what it measures */}
+      <Frame className="mt-8 px-6 md:px-12">
+        <p className="max-w-[720px] text-[13px] leading-[21px] text-pp-muted">
+          The clock is your own: it starts when you first touch the pad, it
+          pauses whenever this section is off-screen or the tab is in the
+          background, and nothing here can skip it to the end.{" "}
+          {over ? (
+            <>
+              You are past our ten minutes, and we will take it — you were
+              reading, not setting up.
+            </>
+          ) : (
+            <>
+              Ten minutes is what we claim the whole setup takes; this is the
+              only part of it that needs a decision.
+            </>
+          )}{" "}
+          There is no audio on this page — the envelope under the greeting is
+          the voice&rsquo;s own pitch, and the sentence crosses it at the words
+          per minute that voice really reads at. Nine languages here; the app
+          carries more.
+        </p>
 
         {/* One line for a screen reader, on the one thing this section
             exists to state. The tone label is deliberately left out of it:
@@ -963,7 +992,7 @@ export function Register() {
         <p aria-live="polite" className="sr-only">
           {`In ${lang.name}, read by ${voice.name}, ${voice.accent}: “${greeting}”`}
         </p>
-      </div>
+      </Frame>
     </section>
   );
 }
