@@ -1,327 +1,363 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect } from 'react'
-import { Search, X, Download, SlidersHorizontal } from 'lucide-react'
+import { useEffect, useId, useRef, useState } from 'react'
+import { Download, Hash, Loader2, Search, SlidersHorizontal, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { cn } from '@/lib/utils'
+import { activeFilterCount, DEFAULT_CALL_FILTERS } from '@/hooks/useCalls'
 import { ExportDialog } from './ExportDialog'
-import type { CallFilters } from '@/types'
+import { OUTCOME_META, OUTCOME_OPTIONS, SENTIMENT_META, STATUS_META } from './call-display'
+import type { CallFilters, CallOutcome } from '@/types'
 
 interface CallsToolbarProps {
   filters: CallFilters
   onFiltersChange: (filters: CallFilters) => void
-  totalCount: number
+  /** Show dashboard test calls in the list (hidden by default). */
+  includeTest: boolean
+  onIncludeTestChange: (includeTest: boolean) => void
+  /** null while the list couldn't be loaded, so no misleading "0 calls" shows. */
+  totalCount: number | null
   isLoading: boolean
   selectedIds: string[]
 }
 
-const STATUS_OPTS = [
-  { value: 'all',       label: 'All statuses' },
-  { value: 'completed', label: '● Completed',  dotColor: 'text-green-500' },
-  { value: 'failed',    label: '● Failed',     dotColor: 'text-red-500' },
-  { value: 'busy',      label: '● Busy',       dotColor: 'text-amber-500' },
-  { value: 'no-answer', label: '● No answer',  dotColor: 'text-gray-400' },
+const STATUS_OPTS: { value: CallFilters['status']; label: string }[] = [
+  { value: 'all', label: 'Any status' },
+  { value: 'completed', label: STATUS_META.completed.label },
+  { value: 'failed', label: STATUS_META.failed.label },
+  { value: 'busy', label: STATUS_META.busy.label },
+  { value: 'no-answer', label: STATUS_META['no-answer'].label },
 ]
 
-const DIRECTION_OPTS = [
-  { value: 'all',      label: 'All calls' },
-  { value: 'inbound',  label: '↙ Inbound' },
-  { value: 'outbound', label: '↗ Outbound' },
+const DIRECTION_OPTS: { value: CallFilters['direction']; label: string }[] = [
+  { value: 'all', label: 'In & outbound' },
+  { value: 'inbound', label: 'Inbound' },
+  { value: 'outbound', label: 'Outbound' },
 ]
 
-const SENTIMENT_OPTS = [
-  { value: 'all',      label: 'All sentiments' },
-  { value: 'positive', label: '😊 Positive' },
-  { value: 'neutral',  label: '😐 Neutral' },
-  { value: 'negative', label: '😞 Negative' },
+const SENTIMENT_OPTS: { value: CallFilters['sentiment']; label: string }[] = [
+  { value: 'all', label: 'Any sentiment' },
+  { value: 'positive', label: SENTIMENT_META.positive.label },
+  { value: 'neutral', label: SENTIMENT_META.neutral.label },
+  { value: 'negative', label: SENTIMENT_META.negative.label },
+]
+
+const OUTCOME_OPTS: { value: CallFilters['outcome']; label: string }[] = [
+  { value: 'all', label: 'Any outcome' },
+  ...OUTCOME_OPTIONS,
 ]
 
 const SORT_OPTS = [
-  { value: 'created_at:desc',         label: 'Date (newest)' },
-  { value: 'created_at:asc',          label: 'Date (oldest)' },
-  { value: 'duration_seconds:desc',   label: 'Duration' },
-  { value: 'caller_number:asc',       label: 'Phone number' },
+  { value: 'created_at:desc', label: 'Newest first' },
+  { value: 'created_at:asc', label: 'Oldest first' },
+  { value: 'duration_seconds:desc', label: 'Longest first' },
+  { value: 'caller_number:asc', label: 'Phone number' },
 ]
 
-export function CallsToolbar({
-  filters,
-  onFiltersChange,
-  totalCount,
-  isLoading,
-  selectedIds,
-}: CallsToolbarProps) {
-  const [searchInput, setSearchInput] = useState(filters.search)
-  const [showMoreFilters, setShowMoreFilters] = useState(false)
-  const [exportOpen, setExportOpen] = useState(false)
-  const moreFiltersRef = useRef<HTMLDivElement>(null)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+const SEARCH_DEBOUNCE_MS = 350
 
-  // Sync search input with external filter changes
+/**
+ * Text input that reports its value after a pause and follows outside changes
+ * (e.g. "Clear all") without overwriting what the owner is still typing.
+ */
+function useDebouncedField(value: string, onCommit: (value: string) => void) {
+  const [draft, setDraft] = useState(value)
+  const [seen, setSeen] = useState(value)
+  const [committed, setCommitted] = useState(value)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const commitRef = useRef(onCommit)
+
   useEffect(() => {
-    setSearchInput(filters.search)
-  }, [filters.search])
+    commitRef.current = onCommit
+  })
 
-  const update = useCallback(
-    (partial: Partial<CallFilters>) => {
-      onFiltersChange({ ...filters, ...partial })
-    },
-    [filters, onFiltersChange]
+  if (value !== seen) {
+    setSeen(value)
+    if (value !== committed) {
+      setDraft(value)
+      setCommitted(value)
+    }
+  }
+
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current)
+  }, [])
+
+  function change(next: string) {
+    setDraft(next)
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(() => {
+      setCommitted(next)
+      commitRef.current(next)
+    }, SEARCH_DEBOUNCE_MS)
+  }
+
+  /** Sets the field and reports it immediately. */
+  function commitNow(next: string) {
+    reset(next)
+    commitRef.current(next)
+  }
+
+  /** Sets the field without reporting (the caller updates the filters itself). */
+  function reset(next: string) {
+    if (timer.current) clearTimeout(timer.current)
+    setDraft(next)
+    setCommitted(next)
+  }
+
+  return { draft, change, commitNow, reset }
+}
+
+function FilterSelect<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  className,
+}: {
+  label: string
+  value: T
+  options: { value: T; label: string }[]
+  onChange: (value: T) => void
+  className?: string
+}) {
+  return (
+    <Select value={value} onValueChange={(v) => v && onChange(v as T)}>
+      <SelectTrigger aria-label={label} className={cn('h-9 w-full sm:w-40', value !== 'all' && 'border-primary/40 bg-purple-50/50', className)}>
+        <SelectValue>{(v: string) => options.find((o) => o.value === v)?.label ?? v}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((o) => (
+          <SelectItem key={o.value} value={o.value}>
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
+}
 
-  function handleSearch(value: string) {
-    setSearchInput(value)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => {
-      update({ search: value })
-    }, 300)
+export function CallsToolbar({
+  filters, onFiltersChange, includeTest, onIncludeTestChange, totalCount, isLoading, selectedIds,
+}: CallsToolbarProps) {
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
+  const moreId = useId()
+  const fromId = useId()
+  const toId = useId()
+  const minId = useId()
+  const testId = useId()
+
+  // Debounced fields call the latest render's commit handler (useDebouncedField
+  // keeps it in a ref), so a pause-then-commit merges into the current filters.
+  function update(partial: Partial<CallFilters>) {
+    onFiltersChange({ ...filters, ...partial })
   }
 
-  function clearSearch() {
-    setSearchInput('')
-    update({ search: '' })
-  }
+  const search = useDebouncedField(filters.search, (value) => update({ search: value }))
+  const tag = useDebouncedField(filters.tag, (value) => update({ tag: value.replace(/^#/, '') }))
 
-  const sortValue = `${filters.sortBy}:${filters.sortOrder}`
-
-  function handleSort(val: string | null) {
-    if (!val) return
-    const [sortBy, sortOrder] = val.split(':') as [CallFilters['sortBy'], CallFilters['sortOrder']]
-    update({ sortBy, sortOrder })
-  }
-
-  // Active filter count (excluding sort/defaults)
-  const activeCount = [
-    filters.search,
-    filters.status !== 'all',
-    filters.direction !== 'all',
-    filters.sentiment !== 'all',
-    filters.dateFrom,
-    filters.dateTo,
-    filters.minDuration > 0,
-  ].filter(Boolean).length
+  const moreCount = [filters.dateFrom !== '', filters.dateTo !== '', filters.minDuration > 0].filter(Boolean).length
+  const activeCount = activeFilterCount(filters)
 
   function clearAll() {
-    setSearchInput('')
-    onFiltersChange({
-      search: '', status: 'all', direction: 'all', sentiment: 'all',
-      dateFrom: '', dateTo: '', minDuration: 0,
-      sortBy: 'created_at', sortOrder: 'desc',
-    })
+    search.reset('')
+    tag.reset('')
+    onFiltersChange({ ...DEFAULT_CALL_FILTERS, sortBy: filters.sortBy, sortOrder: filters.sortOrder })
   }
 
-  // Active pills
-  const pills: Array<{ label: string; clear: () => void }> = []
-  if (filters.status !== 'all')    pills.push({ label: filters.status, clear: () => update({ status: 'all' }) })
-  if (filters.direction !== 'all') pills.push({ label: filters.direction, clear: () => update({ direction: 'all' }) })
-  if (filters.sentiment !== 'all') pills.push({ label: filters.sentiment, clear: () => update({ sentiment: 'all' }) })
-  if (filters.dateFrom)            pills.push({ label: `From ${filters.dateFrom}`, clear: () => update({ dateFrom: '' }) })
-  if (filters.dateTo)              pills.push({ label: `To ${filters.dateTo}`, clear: () => update({ dateTo: '' }) })
-  if (filters.minDuration > 0)     pills.push({ label: `Min ${filters.minDuration}s`, clear: () => update({ minDuration: 0 }) })
+  const pills: { key: string; label: string; clear: () => void }[] = []
+  if (filters.outcome !== 'all') pills.push({ key: 'outcome', label: OUTCOME_META[filters.outcome as CallOutcome].label, clear: () => update({ outcome: 'all' }) })
+  if (filters.status !== 'all') pills.push({ key: 'status', label: STATUS_META[filters.status].label, clear: () => update({ status: 'all' }) })
+  if (filters.direction !== 'all') pills.push({ key: 'direction', label: filters.direction === 'inbound' ? 'Inbound' : 'Outbound', clear: () => update({ direction: 'all' }) })
+  if (filters.sentiment !== 'all') pills.push({ key: 'sentiment', label: `${SENTIMENT_META[filters.sentiment].label} sentiment`, clear: () => update({ sentiment: 'all' }) })
+  if (filters.tag) pills.push({ key: 'tag', label: `#${filters.tag}`, clear: () => tag.commitNow('') })
+  if (filters.dateFrom) pills.push({ key: 'from', label: `From ${filters.dateFrom}`, clear: () => update({ dateFrom: '' }) })
+  if (filters.dateTo) pills.push({ key: 'to', label: `Until ${filters.dateTo}`, clear: () => update({ dateTo: '' }) })
+  if (filters.minDuration > 0) pills.push({ key: 'min', label: `At least ${filters.minDuration}s`, clear: () => update({ minDuration: 0 }) })
 
   return (
-    <div className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
-      {/* Row 1 */}
-      <div className="flex flex-wrap gap-3">
-        {/* Search */}
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+    <div className="space-y-3 rounded-xl border bg-card p-3 shadow-sm sm:p-4">
+      {/* Search + export */}
+      <div className="flex gap-2">
+        <div className="relative min-w-0 flex-1">
+          <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            value={searchInput}
-            onChange={(e) => handleSearch(e.target.value)}
-            placeholder="Search by phone number..."
-            className="pl-9 pr-8 h-9"
+            type="search"
+            value={search.draft}
+            onChange={(e) => search.change(e.target.value)}
+            placeholder="Search calls"
+            aria-label="Search calls, transcripts and summaries"
+            maxLength={200}
+            className="h-9 pl-9 pr-8"
           />
-          {searchInput && (
+          {search.draft && (
             <button
-              onClick={clearSearch}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              type="button"
+              onClick={() => search.commitNow('')}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
-              <X className="h-4 w-4" />
+              <X className="size-4" />
             </button>
           )}
         </div>
-
-        {/* Status */}
-        <Select value={filters.status} onValueChange={(v) => v && update({ status: v as CallFilters['status'] })}>
-          <SelectTrigger className="h-9 w-36">
-            <SelectValue placeholder="All statuses">
-              {(value: string) => STATUS_OPTS.find((o) => o.value === value)?.label ?? value}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Direction */}
-        <Select value={filters.direction} onValueChange={(v) => v && update({ direction: v as CallFilters['direction'] })}>
-          <SelectTrigger className="h-9 w-36">
-            <SelectValue placeholder="All directions">
-              {(value: string) => DIRECTION_OPTS.find((o) => o.value === value)?.label ?? value}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {DIRECTION_OPTS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Sentiment */}
-        <Select value={filters.sentiment} onValueChange={(v) => v && update({ sentiment: v as CallFilters['sentiment'] })}>
-          <SelectTrigger className="h-9 w-40">
-            <SelectValue placeholder="All sentiments">
-              {(value: string) => SENTIMENT_OPTS.find((o) => o.value === value)?.label ?? value}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {SENTIMENT_OPTS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Date range */}
-        <input
-          type="date"
-          value={filters.dateFrom}
-          onChange={(e) => update({ dateFrom: e.target.value })}
-          className="hidden md:block h-9 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
-        />
-        <input
-          type="date"
-          value={filters.dateTo}
-          onChange={(e) => update({ dateTo: e.target.value })}
-          className="hidden md:block h-9 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
-        />
-
-        {/* More Filters */}
-        <div className="relative" ref={moreFiltersRef}>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 gap-2"
-            onClick={() => setShowMoreFilters(!showMoreFilters)}
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-            More
-            {filters.minDuration > 0 && (
-              <Badge className="ml-1 h-4 w-4 flex items-center justify-center p-0 text-[10px] bg-primary text-primary-foreground">
-                1
-              </Badge>
-            )}
-          </Button>
-          {showMoreFilters && (
-            <div className="absolute top-10 right-0 z-20 w-64 rounded-xl border bg-card shadow-lg p-4 space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">More filters</p>
-              <div>
-                <label className="text-sm font-medium block mb-2">
-                  Min duration: {filters.minDuration}s
-                </label>
-                <input
-                  type="range"
-                  min={0}
-                  max={300}
-                  step={10}
-                  value={filters.minDuration}
-                  onChange={(e) => update({ minDuration: Number(e.target.value) })}
-                  className="w-full accent-primary"
-                />
-                <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                  <span>0s</span><span>300s</span>
-                </div>
-              </div>
-              <div className="md:hidden space-y-2">
-                <p className="text-xs font-medium">Date range</p>
-                <input
-                  type="date"
-                  value={filters.dateFrom}
-                  onChange={(e) => update({ dateFrom: e.target.value })}
-                  className="w-full h-8 rounded-lg border border-input bg-transparent px-3 text-sm outline-none"
-                />
-                <input
-                  type="date"
-                  value={filters.dateTo}
-                  onChange={(e) => update({ dateTo: e.target.value })}
-                  className="w-full h-8 rounded-lg border border-input bg-transparent px-3 text-sm outline-none"
-                />
-              </div>
-              <Button variant="outline" size="sm" className="w-full" onClick={() => setShowMoreFilters(false)}>
-                Done
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {/* Export */}
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-9 gap-2"
-          onClick={() => setExportOpen(true)}
-        >
-          <Download className="h-4 w-4" />
-          Export CSV
+        <Button variant="outline" className="h-9 shrink-0 gap-2" onClick={() => setExportOpen(true)}>
+          <Download aria-hidden="true" className="size-4" />
+          <span className="hidden sm:inline">Export</span>
+          <span className="sr-only sm:hidden">Export calls</span>
         </Button>
       </div>
 
-      {/* Row 2 */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">
-            {isLoading ? 'Loading…' : `${totalCount.toLocaleString()} calls found`}
+      {/* Filters */}
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+        <FilterSelect label="Outcome" value={filters.outcome} options={OUTCOME_OPTS} onChange={(outcome) => update({ outcome })} />
+        <FilterSelect label="Status" value={filters.status} options={STATUS_OPTS} onChange={(status) => update({ status })} />
+        <FilterSelect label="Direction" value={filters.direction} options={DIRECTION_OPTS} onChange={(direction) => update({ direction })} />
+        <FilterSelect label="Sentiment" value={filters.sentiment} options={SENTIMENT_OPTS} onChange={(sentiment) => update({ sentiment })} />
+        <div className="relative col-span-1 sm:w-40">
+          <Hash aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={tag.draft}
+            onChange={(e) => tag.change(e.target.value)}
+            placeholder="Tag"
+            aria-label="Filter by tag"
+            maxLength={64}
+            className={cn('h-9 pl-7', filters.tag && 'border-primary/40 bg-purple-50/50')}
+          />
+        </div>
+        <Button
+          variant="outline"
+          className={cn('h-9 min-w-0 gap-2 px-2.5 sm:px-3', moreCount > 0 && 'border-primary/40 bg-purple-50/50')}
+          aria-expanded={moreOpen}
+          aria-controls={moreId}
+          onClick={() => setMoreOpen((open) => !open)}
+        >
+          <SlidersHorizontal aria-hidden="true" className="size-4" />
+          <span className="truncate sm:hidden">More filters</span>
+          <span className="hidden sm:inline">Dates & length</span>
+          {moreCount > 0 && (
+            <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
+              {moreCount}
+            </span>
+          )}
+        </Button>
+      </div>
+
+      {moreOpen && (
+        <div id={moreId} className="grid gap-3 rounded-lg border bg-muted/30 p-3 sm:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label htmlFor={fromId} className="text-xs">From</Label>
+            <Input
+              id={fromId}
+              type="date"
+              value={filters.dateFrom}
+              max={filters.dateTo || undefined}
+              onChange={(e) => update({ dateFrom: e.target.value })}
+              className="h-9"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={toId} className="text-xs">Until</Label>
+            <Input
+              id={toId}
+              type="date"
+              value={filters.dateTo}
+              min={filters.dateFrom || undefined}
+              onChange={(e) => update({ dateTo: e.target.value })}
+              className="h-9"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={minId} className="text-xs">
+              Shortest call: {filters.minDuration > 0 ? `${filters.minDuration}s` : 'any'}
+            </Label>
+            <input
+              id={minId}
+              type="range"
+              min={0}
+              max={300}
+              step={10}
+              value={filters.minDuration}
+              onChange={(e) => update({ minDuration: Number(e.target.value) })}
+              className="h-9 w-full accent-primary"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Count + sort */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2" aria-live="polite">
+          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            {isLoading && <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />}
+            {isLoading ? 'Updating…' : totalCount === null ? '' : `${totalCount.toLocaleString()} ${totalCount === 1 ? 'call' : 'calls'}`}
           </span>
           {activeCount > 0 && (
-            <button onClick={clearAll} className="text-sm text-primary hover:underline">
+            <button type="button" onClick={clearAll} className="text-sm text-primary hover:underline focus-visible:underline focus-visible:outline-none">
               Clear all filters
             </button>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground hidden sm:inline">Sort by:</span>
-          <Select value={sortValue} onValueChange={(v) => v && handleSort(v)}>
-            <SelectTrigger className="h-8 w-40">
-              <SelectValue>
-                {(value: string) => SORT_OPTS.find((o) => o.value === value)?.label ?? value}
-              </SelectValue>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex items-center gap-2">
+            <Switch id={testId} size="sm" checked={includeTest} onCheckedChange={(checked) => onIncludeTestChange(checked)} />
+            <Label htmlFor={testId} className="cursor-pointer text-sm font-normal text-muted-foreground">
+              Show test calls
+            </Label>
+          </div>
+          <Select
+            value={`${filters.sortBy}:${filters.sortOrder}`}
+            onValueChange={(v) => {
+              if (!v) return
+              const [sortBy, sortOrder] = v.split(':') as [CallFilters['sortBy'], CallFilters['sortOrder']]
+              update({ sortBy, sortOrder })
+            }}
+          >
+            <SelectTrigger aria-label="Sort calls" className="h-8 w-40">
+              <SelectValue>{(v: string) => SORT_OPTS.find((o) => o.value === v)?.label ?? v}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {SORT_OPTS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      {/* Active pills */}
       {pills.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+        <ul className="flex flex-wrap gap-2" aria-label="Active filters">
           {pills.map((p) => (
-            <span
-              key={p.label}
-              className="inline-flex items-center gap-1 rounded-full bg-purple-100 text-purple-700 px-3 py-1 text-xs font-medium"
-            >
-              {p.label}
-              <button onClick={p.clear} className="ml-0.5 hover:text-purple-900">
-                <X className="h-3 w-3" />
-              </button>
-            </span>
+            <li key={p.key}>
+              <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-purple-100 py-1 pl-3 pr-1 text-xs font-medium text-purple-700">
+                <span className="truncate">{p.label}</span>
+                <button
+                  type="button"
+                  onClick={p.clear}
+                  aria-label={`Remove filter ${p.label}`}
+                  className="flex size-5 items-center justify-center rounded-full hover:bg-purple-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                >
+                  <X className="size-3" />
+                </button>
+              </span>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
       <ExportDialog
         open={exportOpen}
         onOpenChange={setExportOpen}
         filters={filters}
-        total={totalCount}
+        includeTest={includeTest}
+        total={totalCount ?? 0}
         selectedIds={selectedIds}
       />
     </div>

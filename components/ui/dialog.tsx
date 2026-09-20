@@ -65,7 +65,7 @@ function DialogContent({
             render={
               <Button
                 variant="ghost"
-                className="absolute top-2 right-2"
+                className="absolute top-2 right-2 after:absolute after:-inset-1.5"
                 size="icon-sm"
               />
             }
@@ -102,7 +102,8 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "-mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end",
+        // Stacked full-width on phones, where 32 px buttons are hard to tap.
+        "-mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 max-sm:[&_[data-slot=button]]:h-10 max-sm:[&>a]:h-10 sm:flex-row sm:justify-end",
         className
       )}
       {...props}

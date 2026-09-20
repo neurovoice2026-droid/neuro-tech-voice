@@ -1,43 +1,40 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { getOrgContext, getSessionUser } from '@/lib/api/auth'
 import { DashboardShell } from '@/components/dashboard/DashboardShell'
-import type { Agent, Organization } from '@/types'
+import { MissingOrganization } from '@/components/shared/MissingOrganization'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient()
+  // React cache(): the page below reuses this same user + organization lookup
+  // instead of repeating the Auth call and the organizations query.
+  const ctx = await getOrgContext()
+  if (!ctx) {
+    if (!(await getSessionUser())) redirect('/login')
+    // Signed in, but the organization row the sign-up trigger creates is
+    // missing. Redirecting anywhere would bounce between /login, /dashboard
+    // and /onboarding, so explain and offer a way out instead.
+    return <MissingOrganization area="dashboard" />
+  }
+  if (!ctx.org.onboarding_completed) redirect('/onboarding')
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
-
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('*')
-    .eq('user_id', user.id)
-    .single()
-
-  if (!org) redirect('/login')
-  if (!org.onboarding_completed) redirect('/onboarding')
-
-  const { data: agent } = await supabase
-    .from('agents')
-    .select('*')
-    .eq('org_id', org.id)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  const { count: activeNumbers } = await supabase
+  // Pages load the agent themselves; the shell only needs the number banner.
+  const activeNumbers = await ctx.supabase
     .from('phone_numbers')
     .select('id', { count: 'exact', head: true })
-    .eq('org_id', org.id)
+    .eq('org_id', ctx.org.id)
     .eq('is_active', true)
+
+  if (activeNumbers.error) {
+    // Only drives the "add a number" banner; don't take the dashboard down for it.
+    console.error('[dashboard] active number count failed', activeNumbers.error.code)
+  }
 
   return (
     <DashboardShell
-      org={org as Organization}
-      agent={agent as Agent | null}
-      userEmail={user.email ?? ''}
-      hasPhoneNumber={(activeNumbers ?? 0) > 0}
+      org={ctx.org}
+      userEmail={ctx.user.email ?? ''}
+      // Unknown (query failed) counts as having a number, so nobody is told
+      // their agent can't take calls because of a transient error.
+      hasPhoneNumber={activeNumbers.error ? true : (activeNumbers.count ?? 0) > 0}
     >
       {children}
     </DashboardShell>

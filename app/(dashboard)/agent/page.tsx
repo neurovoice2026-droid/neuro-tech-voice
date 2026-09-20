@@ -1,50 +1,53 @@
-import { createClient } from '@/lib/supabase/server'
+import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 import { AgentPageClient } from '@/components/agent/AgentPageClient'
-import type { Agent, PhoneNumber } from '@/types'
+import { parseAgentTab } from '@/components/agent/agent-tabs'
+import type { AgentOrgSummary, LinkedPhoneNumber } from '@/components/agent/types'
+import { getOrgAgent, getOrgContext } from '@/lib/api/auth'
+import { entitlementsFor } from '@/lib/billing/entitlements'
 
-export default async function AgentPage() {
-  const supabase = await createClient()
+export const metadata: Metadata = {
+  title: 'Agent',
+}
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
+export default async function AgentPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/login')
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id, name')
-    .eq('user_id', user.id)
-    .single()
-
-  if (!org) return null
-
-  const [{ data: existingAgent }, { data: phoneNumbers }] = await Promise.all([
-    supabase
-      .from('agents')
-      .select('*')
-      .eq('org_id', org.id)
-      .limit(1)
-      .maybeSingle(),
-    supabase
+  const [agent, numbersResult, params] = await Promise.all([
+    getOrgAgent(ctx),
+    ctx.supabase
       .from('phone_numbers')
-      .select('*')
-      .eq('org_id', org.id)
+      .select('id, number, friendly_name, is_active')
+      .eq('org_id', ctx.org.id)
       .order('created_at', { ascending: false }),
+    searchParams,
   ])
 
-  // Ensure the org always has an agent to edit (older accounts may lack one).
-  let agent = existingAgent
-  if (!agent) {
-    const { data: created } = await supabase
-      .from('agents')
-      .insert({ org_id: org.id, name: org.name ? `${org.name} Agent` : 'My Agent' })
-      .select('*')
-      .single()
-    agent = created
+  if (numbersResult.error) {
+    console.error('[agent] phone number lookup failed', numbersResult.error.code, numbersResult.error.message)
   }
 
+  const { org } = ctx
+  const orgSummary: AgentOrgSummary = {
+    id: org.id,
+    name: org.name,
+    industry: org.industry,
+    description: org.description,
+    plan: org.plan,
+    timezone: org.timezone,
+    sms_enabled: org.sms_enabled,
+  }
+
+  // An org without an agent row gets one from GET /api/agent (created with the
+  // service role); the client shows onboarding guidance until then.
   return (
     <AgentPageClient
-      initialAgent={agent as Agent | null}
-      phoneNumbers={(phoneNumbers ?? []) as PhoneNumber[]}
+      initialAgent={agent}
+      org={orgSummary}
+      entitlements={entitlementsFor(org.plan)}
+      phoneNumbers={(numbersResult.data ?? []) as LinkedPhoneNumber[]}
+      initialTab={parseAgentTab(params.tab)}
     />
   )
 }
