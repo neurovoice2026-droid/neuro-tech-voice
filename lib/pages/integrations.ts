@@ -7,16 +7,18 @@ import { AUTH } from "@/lib/site";
  * own marketing:
  *
  *   · Workflows (app/(dashboard)/workflows, lib/workflows/executor.ts) run
- *     after a call, never during one — ElevenLabs only sends post-call
- *     webhooks. Four triggers: call ended, missed call (a call that failed
- *     to connect), negative sentiment, keyword in the transcript.
+ *     after a call, never during one. Four triggers: call ended, missed
+ *     call (a call that failed to connect), negative sentiment, keyword in
+ *     the transcript.
  *   · Live actions: send a webhook (POST, JSON), notify Slack through an
- *     incoming-webhook URL, tag the call (written into its summary as
- *     "[tag:name]"), wait. Actions run in the order
- *     chosen and stop at the first failure; a workflow shows its runs,
- *     success rate and last run.
- *   · The webhook body is the call's metadata and summary — no transcript,
- *     no signature, no automatic retry. The page says so.
+ *     incoming-webhook URL, tag the call (added to the call's tags), wait.
+ *     Actions run in the order chosen and stop at the first failure; a
+ *     workflow shows its runs, success rate and last run.
+ *   · The webhook body is the call's metadata and summary — no transcript.
+ *     Requests are signed (HMAC-SHA256, X-NTV-Signature) and retried up to
+ *     3 attempts on network errors, 408, 429 and 5xx. The page says so.
+ *   · During a call the agent itself can notify the on-call contact or
+ *     transfer the caller (voice tools), separate from workflows.
  *   · Gmail, Sheets, Calendar and Docs are in beta (the owner's call,
  *     2026-09-16), and the page says "beta" and nothing more.
  *
@@ -292,7 +294,7 @@ export const INT_ACTIONS = {
     {
       id: "tag" as ActionKind,
       title: "Tag the call",
-      body: "A label written onto the call's summary — follow-up, escalated, vip — so the calls that need a person stand out as you read through them.",
+      body: "A label added to the call — follow-up, escalated, vip — so the calls that need a person stand out as you read through them.",
       needs: "Needs: a tag name",
     },
     {
@@ -328,8 +330,8 @@ export const INT_PAYLOAD = {
   ],
   notes: [
     { id: "transcript", title: "No transcript in the body", body: "The summary travels; the full transcript stays in your dashboard." },
-    { id: "signature", title: "Not signed yet", body: "Requests carry no signature. Use a long, private URL, and check the conversation id against your records." },
-    { id: "retry", title: "One attempt", body: "A request that fails isn't retried: the run is marked failed and later steps don't run." },
+    { id: "signature", title: "Signed", body: "Requests carry an HMAC-SHA256 signature made with your workflow's own secret, so you can check each one came from us." },
+    { id: "retry", title: "Up to three attempts", body: "If your endpoint is down or busy, the request is tried again, up to 3 attempts; if it still fails, the run is marked failed and later steps don't run." },
   ],
 } as const;
 
@@ -401,7 +403,7 @@ export const INT_FAQ = {
     {
       id: "during",
       q: "Can the agent use my tools during the call?",
-      a: "Not today. Workflows run after a call has ended and its record has arrived, so they suit follow-up — notifying, logging, tagging — rather than looking something up mid-conversation.",
+      a: "Partly. While the call is live, the agent can notify your on-call contact or transfer the caller to them. Workflows run after a call has ended and its record has arrived, so they suit follow-up — notifying, logging, tagging.",
     },
     {
       id: "which",
@@ -426,12 +428,12 @@ export const INT_FAQ = {
     {
       id: "fail",
       q: "What happens if my endpoint is down?",
-      a: "The request isn't retried. The run is marked failed, the steps after it don't run, and the workflow's success rate shows it.",
+      a: "The request is tried again, up to 3 attempts. If it still fails, the run is marked failed, the steps after it don't run, and the workflow's success rate shows it.",
     },
     {
       id: "security",
       q: "Is the data I send protected?",
-      a: "Use an https address and keep it private: requests aren't signed yet. You decide where call data goes, so send it only to systems you're allowed to share it with.",
+      a: "Requests go only to https addresses and are signed with your workflow's own secret, so your system can check they came from us. You decide where call data goes, so send it only to systems you're allowed to share it with.",
     },
     {
       id: "google",

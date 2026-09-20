@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useReducedMotion } from "framer-motion";
 import {
   INDUSTRIES,
   NAV_ANY_INDUSTRY,
@@ -17,6 +16,11 @@ import {
 } from "@/lib/site";
 import { CallPane, GroupHeading, ItemCard, MenuLink, type PaneModel } from "./parts";
 import { IndustryPicker } from "./industry-picker";
+// The site's own hook rather than framer-motion's: this panel is in the
+// header of every page, and one hook was bringing the whole motion library
+// with it. The panel mounts when the menu opens, long after hydration, so
+// this reads the real preference on its first render.
+import { usePrefersReducedMotion } from "../product/timing";
 
 /* ------------------------------------------------------------------ *
  * Product — a directory on the left, an instrument on the right.
@@ -125,7 +129,7 @@ export function ProductPanel({
   /** True while the industry field is holding focus or text. */
   onPinnedChange?: (pinned: boolean) => void;
 }) {
-  const reduce = useReducedMotion();
+  const reduce = usePrefersReducedMotion();
   // Which trade is on screen and which capability is on screen are two
   // different questions, so they are two pieces of state rather than one
   // tagged union with a ref remembering the other half: hovering

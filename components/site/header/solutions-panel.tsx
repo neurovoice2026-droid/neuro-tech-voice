@@ -104,7 +104,9 @@ export function SolutionsPanel() {
                 className="flex h-[36px] items-center justify-center rounded-full bg-[var(--cover-paper)] px-[16px] text-[14px] font-medium text-[var(--cover-ink)] transition-colors duration-300 hover:bg-[var(--cover-brand)]"
               >
                 {SOLUTIONS_MENU.cta.label}
-                <span className="sr-only"> about {active.label}</span>
+                {/* The label already ends "about a build", so the offer is joined
+                    with a colon rather than a second "about". */}
+                <span className="sr-only">: {active.label}</span>
               </MenuLink>
             </div>
           </div>

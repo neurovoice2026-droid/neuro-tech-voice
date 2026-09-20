@@ -1,7 +1,7 @@
 "use client";
 
 import { INTEGRATIONS, INTEGRATIONS_INTRO } from "@/lib/site";
-import { CornerDot } from "./ui";
+import { CornerDot } from "./corner-dot";
 
 /**
  * The colophon strip.

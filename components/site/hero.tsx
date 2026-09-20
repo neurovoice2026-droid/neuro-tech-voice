@@ -6,7 +6,7 @@ import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion
 import { HERO_COVER as C, COVER_ART, COVER_FOCAL } from "@/lib/site";
 import { DepthPortrait } from "./depth-portrait";
 import { CursorCta } from "./cursor-cta";
-import { CornerDot } from "./ui";
+import { CornerDot } from "./corner-dot";
 import { cn } from "@/lib/utils";
 
 /** COVER_FOCAL as numbers, for the shader's cover mapping. */

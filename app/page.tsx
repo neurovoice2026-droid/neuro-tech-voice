@@ -13,6 +13,7 @@ import { Pricing } from '@/components/site/pricing'
 import { Faq } from '@/components/site/faq'
 import { CTA } from '@/components/site/cta'
 import { Footer } from '@/components/site/footer'
+import { siteFontVariables } from '@/components/site/fonts'
 
 export default function Home() {
   return (
@@ -22,7 +23,7 @@ export default function Home() {
       {/* Named and focusable so the header's skip link has somewhere to
           land, and so a hash jump out of the mega menu can move focus as
           well as the viewport. */}
-      <main id="content" tabIndex={-1} className="relative">
+      <main id="content" tabIndex={-1} className={`relative ${siteFontVariables}`}>
         <Hero />
         <Marquee />
         {/* One field behind both, so the interior reads as a single spread

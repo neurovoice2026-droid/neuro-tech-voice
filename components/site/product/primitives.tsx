@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { IntentLink } from "@/components/site/intent-link";
-import { CornerDot } from "@/components/site/ui";
+import { CornerDot } from "@/components/site/corner-dot";
 
 /* ------------------------------------------------------------------ *
  * The light product-page system.
@@ -105,16 +105,22 @@ export function SectionTitle({
   children,
   className,
   as: Tag = "h2",
+  size = Tag === "h1" ? "h1" : "h2",
+  ...rest
 }: {
   children: ReactNode;
   className?: string;
-  as?: "h1" | "h2";
+  /** `p` is for an invisible sizer set exactly like a heading beside it. */
+  as?: "h1" | "h2" | "p";
+  size?: "h1" | "h2";
+  "aria-hidden"?: boolean;
 }) {
   return (
     <Tag
+      {...rest}
       className={cn(
         "pp-display text-balance",
-        Tag === "h1"
+        size === "h1"
           ? "text-[36px] leading-[40px] tracking-[-0.02em] md:text-[48px] md:leading-[52px]"
           : "text-[28px] leading-[34px] md:text-[36px] md:leading-[42px]",
         className,

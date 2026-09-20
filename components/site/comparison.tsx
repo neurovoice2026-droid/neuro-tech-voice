@@ -98,7 +98,12 @@ function Cell({ state, rivalOurs }: { state: PartState; rivalOurs?: boolean }) {
       <span
         title={PART_STATES[state].label}
         className={cn(
-          "grid size-[1.9em] place-items-center rounded-[0.4em] border transition-colors duration-300",
+          // relative: anchors the sr-only label inside the table's scroller.
+          // Without it the label's containing block sits outside the
+          // overflow-x-auto wrapper, escapes its clip, and widens the page
+          // (the rows' transform, which contained it, is removed once
+          // whileInView settles).
+          "relative grid size-[1.9em] place-items-center rounded-[0.4em] border transition-colors duration-300",
           TONE[state],
         )}
       >

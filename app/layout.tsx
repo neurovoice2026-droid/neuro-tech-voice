@@ -28,6 +28,8 @@ const display = Inter_Tight({
   variable: '--font-display',
   subsets: ['latin'],
   display: 'swap',
+  // Preloaded by the marketing pages that paint it (components/site/fonts.ts), not on every route.
+  preload: false,
 })
 
 /**
@@ -38,6 +40,8 @@ const header = Inter({
   variable: '--font-header',
   subsets: ['latin'],
   display: 'swap',
+  // Preloaded by the marketing pages that paint it (components/site/fonts.ts), not on every route.
+  preload: false,
 })
 
 export const metadata: Metadata = {
@@ -104,6 +108,12 @@ export default function RootLayout({
 
           Inert on every route but the homepage; <html> already carries
           suppressHydrationWarning, so the attribute it writes is fine.
+
+          Content-Security-Policy: prerendered pages allow it through
+          'unsafe-inline'; per-request pages (nonce policy) allow it by its
+          sha256, which lib/security/csp.ts computes from HEADER_BOOT itself.
+          Render it verbatim and never read headers() here for a nonce: that
+          would make every route dynamic.
         */}
         <script id="ntv-nav-boot" dangerouslySetInnerHTML={{ __html: HEADER_BOOT }} />
         {children}

@@ -1,0 +1,165 @@
+/* ------------------------------------------------------------------ *
+ * Custom AI Agents page — the few things Tailwind utilities can't say.
+ * Every class is prefixed caa- and every transition has a reduced-motion
+ * pin below. No keyframes live here: motion is transitions on React state
+ * plus the existing ind-swap / ind-land / ind-row / ind-ring.
+ *
+ * Imported once, by app/solutions/custom-ai-agents/page.tsx, so these
+ * rules ship in that route's CSS chunk and nowhere else — globals.css is
+ * shared by every page on the site and is not ours to grow.
+ *
+ * Why transitions and not keyframes: every motion on this page is a
+ * state landing (a strike made, a word inked, a line drawn). A transition
+ * on a class that React toggles lands in the right place whether or not
+ * it got to play, and with reduced motion the pin below simply makes the
+ * final value the only value.
+ * ------------------------------------------------------------------ */
+
+/* The red pen. A background layer rather than text-decoration so the
+   strike sweeps across wrapped lines in reading order; clone gives each
+   line fragment its own copy of the background so it never jumps.
+   58% of the line box puts the stroke through the x-height, where a pen
+   would cross it out, rather than on the baseline where it reads as an
+   underline. */
+.caa-strike {
+  background: linear-gradient(#551a89, #551a89) 0 58% / 0% 1.6px no-repeat;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: background-size 420ms cubic-bezier(0.22, 1, 0.36, 1), color 300ms ease;
+}
+.caa-strike-on { background-size: 100% 1.6px; }
+
+/* The insertion: ink with a violet underline that draws in. A beat
+   slower than the strike (520 vs 420ms) because the words fade in under
+   it and the line should still be arriving as the last word does. */
+.caa-ins {
+  background: linear-gradient(#551a89, #551a89) 0 100% / 0% 1.6px no-repeat;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: background-size 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.caa-ins-on { background-size: 100% 1.6px; }
+/* Opacity only: a word fading in never changes the line's width, so the
+   sizer copy (always inked) and the live copy wrap identically. */
+.caa-ins .caa-word { opacity: 0; transition: opacity 220ms ease; }
+.caa-ins-on .caa-word { opacity: 1; }
+
+/* Dotted violet — "built for you" — as an HTML hairline (horizontal / vertical).
+   A 0.8px dot on a 4.6px pitch matches the SVG branches' dasharray
+   "0.01 4.6" with round caps at stroke 1.6, so a dotted line drawn in
+   HTML and one drawn in SVG are the same line to the eye. */
+.caa-dots-h { height: 1.6px; background: radial-gradient(circle, #551a89 0.8px, transparent 0.9px) 0 50% / 4.6px 1.6px repeat-x; }
+.caa-dots-v { width: 1.6px;  background: radial-gradient(circle, #551a89 0.8px, transparent 0.9px) 50% 0 / 1.6px 4.6px repeat-y; }
+
+/* Draw-on for HTML hairlines. Transform, never width or height: a scale
+   is composited and moves nothing around the line. The horizontal spine
+   takes 1400ms because it is the long stroke the eye follows; the short
+   verticals take 760ms, the same as an SVG branch's dashoffset. */
+.caa-draw-x { transform-origin: left center;  transition: transform 1400ms cubic-bezier(0.22, 1, 0.36, 1); }
+.caa-draw-y { transform-origin: center top;   transition: transform 760ms cubic-bezier(0.22, 1, 0.36, 1); }
+.caa-draw-y-up { transform-origin: center bottom; transition: transform 760ms cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* Reduced motion: no transition runs, and the strike, the underline and
+   the words are pinned to their finished state even if a component's
+   state has not caught up — the reader sees the edit, not the editing. */
+@media (prefers-reduced-motion: reduce) {
+  .caa-strike, .caa-ins, .caa-ins .caa-word,
+  .caa-draw-x, .caa-draw-y, .caa-draw-y-up { transition: none !important; }
+  .caa-strike { background-size: 100% 1.6px; }
+  .caa-ins { background-size: 100% 1.6px; }
+  .caa-ins .caa-word { opacity: 1; }
+}
+
+/* ------------------------------------------------------------------ *
+ * Added interactions (addendum). One rail, one highlight, one calm pin.
+ * ------------------------------------------------------------------ */
+
+/* W1 — the Wiring rail's native range. Drawn invisibly over the rail
+   (opacity 0 on the element); what matters is its hit geometry. The
+   thumb is a fixed 44×64 so (a) iOS Safari, which only drags from the
+   thumb, gets a 44px target and (b) the thumb's centre travels exactly
+   from the input's left edge + 22px to its right edge − 22px. The input
+   is placed 22px wider than the drawn rail on each side, so thumb centre
+   and drawn puck coincide at 0, at 1 and everywhere between. */
+.caa-scrub {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  margin: 0;
+}
+.caa-scrub::-webkit-slider-runnable-track { height: 100%; background: transparent; border: 0; }
+.caa-scrub::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 44px;
+  height: 64px;
+  background: transparent;
+  border: 0;
+}
+.caa-scrub::-moz-range-track { height: 100%; background: transparent; border: 0; }
+.caa-scrub::-moz-range-thumb { width: 44px; height: 64px; background: transparent; border: 0; border-radius: 0; }
+
+/* W1/W2 — while a finger or mouse is dragging the rail, everything in the
+   figure and the payload follows it with no lag: transitions and
+   ind-land entrances run in 0ms. The flag is set on the Wiring <section>
+   only while a pointer drag is moving the value, and is cleared 650ms
+   after release (see W1 §Drag flag) so that any entrance started during
+   the drag has finished before normal durations come back. Keyboard and
+   click steps never set it, so they keep the house easing. */
+[data-caa-drag] .caa-follow,
+[data-caa-drag] .caa-follow * {
+  transition-duration: 0ms !important;
+  transition-delay: 0ms !important;
+  animation-duration: 0ms !important;
+  animation-delay: 0ms !important;
+}
+
+/* N1 — the chip ↔ word pairing. White, the page's "selected = white
+   card" grammar on the grey instrument card; never violet (a preview is
+   not the product acting). Background + box-shadow only: nothing
+   reflows. clone so a highlight that wraps is boxed per line.
+   White alone on the grey card is about 1.07:1 and read as "nothing
+   happened", so the box gets a 1px ink hairline at 10% just outside its
+   3px white pad: the edge, not the fill, is what the eye finds. */
+.caa-peek {
+  border-radius: 4px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+.caa-peek-on {
+  background-color: #fff;
+  box-shadow: 0 0 0 3px #fff, 0 0 0 4px rgb(24 16 40 / 0.10);
+}
+/* The peeked chip wears the same halo as its words, so hand and highlight
+   read as one pair (the chips are all pressed ink, so nothing else on the
+   chip changes). A grey gap first, so the halo sits off the ink pill the
+   way the word's box sits off the card. Box-shadow, not outline: the
+   outline stays free for the focus ring, and a shadow never reflows. */
+.caa-peek-chip {
+  box-shadow: 0 0 0 2px var(--pp-card), 0 0 0 4px #fff, 0 0 0 5px rgb(24 16 40 / 0.10);
+  transition: box-shadow 160ms ease;
+}
+
+/* H1 / R1 — elements whose existing Tailwind transitions now also carry
+   a preview or a staggered stamp. Under reduced motion they change
+   instantly. */
+@media (prefers-reduced-motion: reduce) {
+  .caa-peek,
+  .caa-peek-chip,
+  .caa-calm,
+  .caa-calm > span {
+    transition: none !important;
+  }
+}
+
+/* N2 — below md the chip rail scrolls sideways; fade both edges so a cut
+   chip reads as "more this way" on either side instead of a hard black
+   sliver once the rail has scrolled. Removed from md, where the rail wraps.
+   The left fade is 12px, not 28: at rest the first chip starts at 16px
+   (pl-4) and its focus ring (2px outline + 2px offset) reaches out to
+   12px, so a wider fade would dim that ring; scroll-pl-4 lands a tabbed
+   chip 16px in, clear of it too. */
+@media (width < 48rem) {
+  .caa-rail-fade { mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 28px), transparent); }
+}

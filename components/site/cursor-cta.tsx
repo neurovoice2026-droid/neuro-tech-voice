@@ -9,7 +9,7 @@ import {
   useReducedMotion,
   useSpring,
 } from "framer-motion";
-import { CornerDot } from "./ui";
+import { CornerDot } from "./corner-dot";
 
 /**
  * The cover's primary action, carried by the pointer.

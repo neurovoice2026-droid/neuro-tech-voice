@@ -69,7 +69,11 @@ export function ProductStart({ data }: { data: StartData }) {
           <p className="mt-5 max-w-[560px] text-[16px] leading-[25px] text-pp-ink/80">{data.body}</p>
         </div>
         <div className="flex flex-col items-start gap-3 lg:items-end">
-          <div className="flex flex-wrap gap-2">
+          {/* gap-y is deliberately larger than gap-x: two pills 8px apart
+              fail the touch-target spacing rule the moment the row wraps,
+              and whether it wraps depends on how long the page's own copy
+              is — so it passed on one page and failed on another. */}
+          <div className="flex flex-wrap gap-x-2 gap-y-6">
             <PillLink href={data.primary.href}>{data.primary.label}</PillLink>
             <PillLink href={data.secondary.href} variant="secondary">
               {data.secondary.label}
@@ -78,7 +82,9 @@ export function ProductStart({ data }: { data: StartData }) {
           <p className="text-[13px] leading-[18px] text-pp-muted">{data.note}</p>
           <IntentLink
             href={data.more.href}
-            className="mt-2 text-[14px] leading-5 underline-offset-4 transition-colors hover:text-[#551a89] hover:underline"
+            // 24px tall rather than its 20px line: a standalone link, so it
+            // gets the WCAG 2.5.8 minimum target, not the inline-text exemption.
+            className="mt-1.5 inline-flex min-h-6 items-center text-[14px] leading-5 underline-offset-4 transition-colors hover:text-[#551a89] hover:underline"
           >
             {data.more.label} →
           </IntentLink>
