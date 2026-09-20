@@ -9,6 +9,7 @@ import { UseCases } from '@/components/site/use-cases'
 import { HowItWorks } from '@/components/site/how-it-works'
 import { Stats } from '@/components/site/stats'
 import { Comparison } from '@/components/site/comparison'
+import { PricingPlans } from '@/components/site/pricing-plans'
 import { Pricing } from '@/components/site/pricing'
 import { Faq } from '@/components/site/faq'
 import { CTA } from '@/components/site/cta'
@@ -37,6 +38,11 @@ export default function Home() {
           <HowItWorks />
           <Stats />
           <Comparison />
+          {/* The price list answers "what do I get, and is that good"; the
+              receipt below answers "what will I actually pay". In that
+              order — the second question is only worth asking once the
+              first one has a good answer. */}
+          <PricingPlans />
           <Pricing />
           {/* The spread runs to the end now. Faq and CTA were the last two
               sections on the old white stock, and they were the last two a

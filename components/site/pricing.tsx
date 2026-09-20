@@ -166,8 +166,11 @@ export function Pricing() {
   const pct = (callsDay / PRICING_MAX_CALLS_DAY) * 100;
 
   return (
+    // `#pricing` belongs to the plan list now — that is what a "Pricing"
+    // link is asking for. This section answers the question after it, and
+    // is linkable in its own right for the same reason.
     <section
-      id="pricing"
+      id="your-bill"
       className="relative scroll-mt-24 px-[1.6em] py-[6em] md:py-[8em]"
     >
       <div className="relative mx-auto max-w-[76em]">

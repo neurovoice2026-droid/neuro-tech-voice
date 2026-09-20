@@ -1476,7 +1476,7 @@ export const COMPARISON_SOURCE =
  * Every plan is a fee plus an allowance of minutes plus a rate for the
  * minutes past it, which means the only honest answer to "what does this
  * cost" is a function of call volume, not a number on a card. The section
- * draws that function for all four plans at once.
+ * draws that function for every plan at once.
  *
  * Which is also how the price list gets audited. Run the arithmetic across
  * the range and the plans have to actually order themselves — if a rung's
@@ -1509,14 +1509,45 @@ export type Tier = {
   featured?: boolean;
 };
 
+/**
+ * The rungs, ascending by minutes.
+ *
+ * Two invariants hold this list together, and both are checked by the
+ * sections that render it rather than by a comment:
+ *
+ *  · **A rung's overage rate sits above its own effective rate.** Fee over
+ *    allowance is what a minute costs inside the plan; the overage has to
+ *    cost more, or the rung below is cheaper at every volume and this one
+ *    is dead weight. The receipt in `pricing.tsx` surfaces the gap the
+ *    moment it opens.
+ *  · **Every rung owns a band of volumes where it is genuinely cheapest.**
+ *    The handovers land at roughly 1,464 · 3,958 · 8,667 · 18,927 minutes
+ *    a month — each one inside the next rung's allowance, so the plan a
+ *    customer is pushed onto is always one that actually covers them.
+ *
+ * The effective rate falls as the rungs climb: 6.5¢ · 6.0¢ · 5.5¢ · 5.0¢ ·
+ * 4.5¢. That slope is the offer. A flat rate — which is what the voice
+ * platforms charge, `PRICING_RIVAL` — gives a high-volume customer no
+ * reason to grow on your invoice instead of someone else's.
+ */
 export const TIERS: Tier[] = [
   {
     id: "starter",
     name: "Starter",
     monthly: 49,
-    minutes: 150,
-    overage: 0.25,
+    minutes: 750,
+    overage: 0.07,
     unlocks: ["Basic analytics", "Email support"],
+    cta: "Start free",
+    href: AUTH.signup,
+  },
+  {
+    id: "growth",
+    name: "Growth",
+    monthly: 99,
+    minutes: 1650,
+    overage: 0.065,
+    unlocks: ["Call recordings", "Google integrations"],
     cta: "Start free",
     href: AUTH.signup,
   },
@@ -1524,14 +1555,9 @@ export const TIERS: Tier[] = [
     id: "pro",
     name: "Pro",
     monthly: 249,
-    minutes: 850,
-    overage: 0.25,
-    unlocks: [
-      "Advanced analytics",
-      "Call recordings",
-      "Google integrations",
-      "Priority support",
-    ],
+    minutes: 4500,
+    overage: 0.06,
+    unlocks: ["Advanced analytics", "Priority support"],
     cta: "Start free",
     href: AUTH.signup,
     featured: true,
@@ -1540,24 +1566,71 @@ export const TIERS: Tier[] = [
     id: "business",
     name: "Business",
     monthly: 499,
-    minutes: 1750,
-    overage: 0.22,
+    minutes: 10000,
+    overage: 0.055,
     unlocks: ["Full analytics suite", "Every integration, not only Google"],
+    cta: "Start free",
+    href: AUTH.signup,
+  },
+  {
+    id: "scale",
+    name: "Scale",
+    monthly: 990,
+    minutes: 22000,
+    overage: 0.05,
+    unlocks: ["Concurrency for a full call room", "Priority onboarding"],
     cta: "Start free",
     href: AUTH.signup,
   },
   {
     id: "custom",
     name: "Custom",
-    monthly: 999,
-    minutes: 3500,
-    overage: 0.18,
+    monthly: 1990,
+    minutes: 50000,
+    overage: 0.04,
     from: true,
     unlocks: ["Custom prompts and a written SLA", "A named contact"],
     cta: "Talk to us",
     href: AUTH.contactSales,
   },
 ];
+
+/**
+ * The rate the comparison is made against.
+ *
+ * Only two claims get made from this, and both are checkable. The first is
+ * a rate: the voice platforms bill one flat figure per minute at every
+ * rung, so "this plan is N% under it" is arithmetic, not positioning. The
+ * second is `matched` — the rungs where their sticker price is identical
+ * to one of ours, where the comparison can be minutes against minutes with
+ * nothing interpolated.
+ *
+ * What is deliberately NOT here is a minute count for our other rungs.
+ * They publish no $49 and no $249 plan; dividing their rate into our fee
+ * would invent a plan they do not sell and put words in a competitor's
+ * mouth. The rate comparison already carries that rung, honestly.
+ */
+export const PRICING_RIVAL = {
+  name: "ElevenLabs",
+  /** Their Agents platform, every rung from Free to Business. */
+  perMinute: 0.08,
+  href: "https://elevenlabs.io/pricing/agents",
+  checked: "September 2026",
+  /** Their published plans that cost exactly what one of ours costs. */
+  matched: [
+    { monthly: 99, theirs: 1238, theirPlan: "Pro" },
+    { monthly: 990, theirs: 12375, theirPlan: "Business" },
+  ],
+} as const;
+
+export const PRICING_PLANS_INTRO = {
+  eyebrow: "Plans",
+  title: "The same money buys more minutes here.",
+  sub: "Every plan is a fee, an allowance of minutes, and a published rate for the minutes past it. The rate falls as the plan grows — which is the part a flat per-minute price can't do for you.",
+} as const;
+
+export const PRICING_PLANS_NOTE =
+  `Prices are in US dollars and exclude VAT. Annual billing takes two months off the plan fee; the rate for minutes past the allowance is unchanged. ${PRICING_RIVAL.name} figures are their published ${PRICING_RIVAL.name} Agents plans, checked ${PRICING_RIVAL.checked} — they bill one flat rate at every rung, which is why the per-minute comparison holds across this whole list while the minute-for-minute comparison is made only at the two prices where a plan of theirs costs exactly what a plan of ours costs. On yearly, the two-months-free discount is applied to both sides before the comparison, so the gap is the same one the monthly prices show; the two cards above compare monthly list prices.`;
 
 /**
  * Minutes in an average answered call.
