@@ -184,17 +184,22 @@ export type OrbTint = { a: string; b: string; c: string };
  * Given a `mesh` — five colours, darkest first, usually the palette of the
  * surface it sits on — it is painted as a moving mesh gradient under a film
  * of grain instead of the three-light `tint` version.
+ *
+ * `still` holds the picture where it stands: every animation paused, so
+ * nothing about the orb is recalculated frame after frame.
  */
 export function Orb({
   tint,
   mesh,
   speaking = false,
+  still = false,
   className,
   style,
 }: {
   tint?: OrbTint;
   mesh?: readonly string[];
   speaking?: boolean;
+  still?: boolean;
   className?: string;
   style?: CSSProperties;
 }) {
@@ -207,6 +212,7 @@ export function Orb({
       <span
         aria-hidden
         data-speaking={speaking ? "" : undefined}
+        data-still={still ? "" : undefined}
         className={cn("pp-orb pp-orb-mesh block", className)}
         style={
           {
@@ -232,6 +238,7 @@ export function Orb({
     <span
       aria-hidden
       data-speaking={speaking ? "" : undefined}
+      data-still={still ? "" : undefined}
       className={cn("pp-orb block", className)}
       style={
         {

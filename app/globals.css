@@ -1485,6 +1485,17 @@ html[data-nav="detached"] .hdr-light .hdr-navlist:has([data-popup-open]) .hdr-na
   }
 }
 
+/* A still orb (<Orb still>) holds its picture where it stands. An infinite
+   animation left running costs a style recalculation every frame, even
+   offscreen or under a canvas; FluidOrb's stand-in is held like this
+   whenever it is not the picture anyone is watching. */
+.pp-orb[data-still],
+.pp-orb[data-still]::before,
+.pp-orb[data-still]::after,
+.pp-orb[data-still] .pp-mesh-flow {
+  animation-play-state: paused;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pp-orb::before,
   .pp-orb::after,

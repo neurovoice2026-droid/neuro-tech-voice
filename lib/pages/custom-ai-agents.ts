@@ -4,7 +4,7 @@ import "server-only";
  *
  * Facts are read, never retyped, wherever the source is safe to read:
  *   · menu label from SOLUTION_ITEMS (throws if the item goes missing);
- *   · the Custom plan from TIERS; the trial from PRICING_TRIAL;
+ *   · the Enterprise plan from ENTERPRISE; the trial from PRICING_TRIAL;
  *   · the language count from LANG_COUNT; keyterm limits and which
  *     languages take a list from lib/voice/languages.ts;
  *   · the transfer line from TRANSFER_ANNOUNCE; the disclosure check from
@@ -26,7 +26,7 @@ import "server-only";
  * for this static route — so a fact that drifts under the copy fails the
  * build instead of shipping a sentence that is no longer true.
  * ------------------------------------------------------------------ */
-import { AUTH, COMPANY, PRICING_TRIAL, SOLUTION_ITEMS, TIERS } from "@/lib/site";
+import { AUTH, COMPANY, ENTERPRISE, PRICING_TRIAL, SOLUTION_ITEMS } from "@/lib/site";
 import { LANG_COUNT } from "@/lib/pages/ai-agents";
 import { INT_ACTIONS, INT_GOOGLE } from "@/lib/pages/integrations";
 import { AGENT_LANGUAGES } from "@/lib/agent-languages";
@@ -46,8 +46,6 @@ const CALENDAR_PLAN = PLANS[requiredPlanFor("googleIntegrations")].name;
 
 const ITEM = SOLUTION_ITEMS.find((s) => s.id === "custom-ai-agents");
 if (!ITEM) throw new Error("SOLUTION_ITEMS lost custom-ai-agents");
-const CUSTOM = TIERS.find((t) => t.id === "custom");
-if (!CUSTOM) throw new Error("TIERS lost custom");
 
 /** Keep in step with WEBHOOK_MAX_ATTEMPTS in lib/workflows/webhook.ts. */
 const WEBHOOK_ATTEMPTS = 3;
@@ -555,9 +553,9 @@ export const CAA_RECEIPT = {
 /* ---------- FAQ ---------- */
 
 // Read off the price list so the answer can never quote a plan that moved;
-// lower-cased because they sit mid-sentence ("…, custom prompts and a
-// written SLA, and a named contact").
-const unlocks = CUSTOM.unlocks.map((u) => u.charAt(0).toLowerCase() + u.slice(1));
+// lower-cased because they sit mid-sentence ("…: a written SLA, and a
+// named contact").
+const unlocks = ENTERPRISE.unlocks.map((u) => u.charAt(0).toLowerCase() + u.slice(1));
 
 export const CAA_FAQ = {
   eyebrow: "Questions",
@@ -584,8 +582,8 @@ export const CAA_FAQ = {
       a: "It’s quoted after the call, because both depend on how much writing, testing and connection work your calls need. We won’t put a number here that we’d have to walk back. What’s quoted is our time: the plans still have no setup fee, and connecting the platform’s own integrations still costs nothing.",
     },
     {
-      id: "custom-plan", q: "Is a build the same as the Custom plan?",
-      a: `No. The Custom plan is a subscription for high volumes: from $${CUSTOM.monthly} a month, ${CUSTOM.minutes.toLocaleString("en-US")} minutes, ${unlocks.join(", and ")}. A build is the work of setting an agent up with you, and it’s quoted separately. It runs on whichever plan covers what your calls need — bookings into Google Calendar start on ${CALENDAR_PLAN}.`,
+      id: "custom-plan", q: "Is a build the same as the Enterprise plan?",
+      a: `No. The Enterprise plan is a subscription for high volumes, priced with you on a call: ${unlocks.join(", and ")}. A build is the work of setting an agent up with you, and it’s quoted separately. It runs on whichever plan covers what your calls need — bookings into Google Calendar start on ${CALENDAR_PLAN}.`,
     },
     {
       id: "number", q: "Will it keep my number?",

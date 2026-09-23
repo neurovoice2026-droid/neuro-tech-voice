@@ -1,4 +1,9 @@
+import { requiredPlanFor } from "@/lib/billing/entitlements";
+import { PLANS } from "@/types";
 import type { Trade } from "./schema";
+
+/** Calls are recorded from this plan up; below it, only transcribed. Read off the entitlements. */
+const RECORD_PLAN = PLANS[requiredPlanFor("recordings")].name;
 
 /* ------------------------------------------------------------------ *
  * Law firms — high-street and small general practice, three to eight
@@ -222,7 +227,7 @@ export const lawFirms: Trade = {
     },
     {
       q: "They'll start telling it the whole story anyway. Doesn't that conflict me out regardless?",
-      a: "Less than you think, and the difference is the question that never gets asked. A caller who volunteers three minutes of narrative has told you what they chose to tell you; a caller who is drawn out with “and had he done that to anyone else?” has been walked through the parts that are actually significantly harmful, which is the Rule 1.18 exposure. So it does not interrupt, it does not probe, and the enquiry sheet holds the parties, which side, the kind of matter and any date they read out — nothing else. Where it is honest to be uncomfortable: the call itself is recorded and transcribed, and a recording is information received. That is your retention policy's problem, not a thing a vendor can wave away, and this is the one trade where we would tell you to set that policy short and mean it.",
+      a: "Less than you think, and the difference is the question that never gets asked. A caller who volunteers three minutes of narrative has told you what they chose to tell you; a caller who is drawn out with “and had he done that to anyone else?” has been walked through the parts that are actually significantly harmful, which is the Rule 1.18 exposure. So it does not interrupt, it does not probe, and the enquiry sheet holds the parties, which side, the kind of matter and any date they read out — nothing else. Where it is honest to be uncomfortable: the call itself is transcribed — and recorded, on " + RECORD_PLAN + " and above — and either is information received. That is your retention policy's problem, not a thing a vendor can wave away, and this is the one trade where we would tell you to set that policy short and mean it.",
     },
     {
       q: "Will it say anything at all about a time limit?",

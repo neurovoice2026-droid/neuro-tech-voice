@@ -1,0 +1,509 @@
+/* ------------------------------------------------------------------ *
+ * The landing body — the few things Tailwind utilities can't say.
+ * Every rule sits under .pp and every class is prefixed home-.
+ *
+ * Imported once, by app/page.tsx, so these rules ship in the homepage's
+ * CSS chunk and nowhere else — globals.css is shared by every page on
+ * the site and is not ours to grow (the caa.css precedent).
+ *
+ * Motion here is either a transition on state React toggles, or tied to
+ * the element's own passage through the screen (a view timeline), never
+ * scrubbed by the page's scroll position. Everything that moves has a
+ * reduced-motion answer: the view-timeline rules exist only under
+ * no-preference, and the global rule at globals.css:229 zeroes the rest.
+ *
+ * Colour moves only when state moves (a selection, a booking, a key
+ * phrase settling after its reveal), and only `color`, `background-color`,
+ * `opacity` and `transform` ever animate. No blend modes, no backdrop
+ * filters, no glows: every ground here is one flat paint or one gradient,
+ * or, for #pricing's plan cards and panel, one static stack of radial
+ * gradients that never animates. A plan card's neutral drop shadow is not
+ * a glow.
+ * ------------------------------------------------------------------ */
+
+/* The landing's palette. `.pp.home-body` is the body's wrapper in
+   app/page.tsx; at (0,2,0) it beats `.pp`, and the frozen hero, header and
+   footer sit outside it, so they keep the house tokens. The four --pp-*
+   overrides carry the palette into every `text-pp-*`, `bg-pp-card`,
+   `Eyebrow` and `PillLink` below the hero with no further change.
+   HOME_COLORS (palettes.ts) is the same list for JS; home.test.ts holds
+   the two together and checks the contrast of every pair in use. */
+.pp.home-body {
+  --home-ink: #140a24;
+  --home-muted: #625b7a;
+  --home-chip: #f3f1f8;
+  --home-wash: #f6f3ff;
+  --home-stage: #efe9ff;
+  --home-plum: #551a89;
+  --home-violet: #6d28d9;
+  --home-electric: #7c3aed;
+  --home-lilac: #b9a3ff;
+  --home-indigo: #4f46e5;
+  --home-caller: #3c50c8;
+  --home-caller-lit: #a9bcff;
+  --home-ember: #ee5423;
+  --home-ember-ink: #b23c0e;
+  --home-ember-lit: #ffb877;
+  --home-ember-soft: #ffe9df;
+  --home-rush-ink: #be185d;
+  --home-sunday-ink: #0e7490;
+  --home-closing-ink: #047857;
+  --home-settled: #15784a;
+  --home-settled-lit: #7ee2a8;
+  --home-settled-soft: #e9f6ee;
+  --home-flagged: #8c86a0;
+  --home-night: #06040a;
+  --home-paper: #edecf1;
+  --home-paper-dim: #a8a4b4;
+  --home-on-deep: #f1ecff;
+  --home-on-deep-dim: #d8cdf7;
+  --home-deep: radial-gradient(110% 140% at 100% 100%, #7c3aed 0%, #5b21b6 22%, #3b1478 44%, #1e0a3c 74%, #14062b 100%);
+
+  /* One film grain for every dark ground: the tile .cover-grain uses,
+     composited as plain noise. */
+  --home-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='160' height='160' filter='url(%23g)'/></svg>");
+
+  --pp-ink: #140a24;
+  --pp-muted: #625b7a;
+  --pp-card: #f3f1f8;
+  --pp-accent: #6d28d9;
+}
+
+.pp.home-body ::selection {
+  background: rgb(124 58 237 / 0.18);
+}
+
+/* A display heading or figure that sets no weight of its own. The global
+   `.pp-display` 360 is below Instrument Sans's 400 floor and would clamp. */
+.pp.home-body .pp-display {
+  font-weight: 460;
+}
+
+/* The deep panel: the pricing estimator and #start. Isolated, so its
+   grain can sit under the content (z-index -1) rather than over it: the
+   receipt on it is a white card and stays one. The box is in the
+   components layer so a position utility on the element still wins;
+   unlayered, this `relative` would beat every utility. */
+@layer components {
+  .pp .home-deep {
+    position: relative;
+    isolation: isolate;
+    background: var(--home-deep);
+    color: var(--home-on-deep);
+  }
+}
+
+.pp .home-deep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.1;
+  background-image: var(--home-grain);
+}
+
+/* Grain for any other ground that wants it (a stage, an orb's room): the
+   same tile, normal blend, under the content. Put it on an aria-hidden
+   element that is the ground's first child. */
+.pp .home-grain {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.1;
+  background-image: var(--home-grain);
+}
+
+/* The light stages (#use-cases, #knowledge, #after): a wash that deepens
+   toward the floor, so the stage reads as a room lit from above. */
+.pp .home-stage {
+  background: linear-gradient(180deg, var(--home-wash), var(--home-stage));
+}
+
+/* #how's band: one tinted step in the white page's rhythm, between the
+   trades and the knowledge base. Put it on the <section>: it runs the
+   wrapper's full width and its Frame keeps the measure. The padding is
+   the band's own, inside the section, so the HomeDeferred reserve that
+   holds it must include it. */
+.pp .home-wash-band {
+  background: var(--home-wash);
+  padding-block: 64px;
+}
+
+@media (min-width: 48rem) {
+  .pp .home-wash-band {
+    padding-block: 96px;
+  }
+}
+
+/* The weak-device tier (device-tier.ts mirrors it on <html>) draws no
+   grain at all: a tile the size of a band is a full-screen layer to
+   composite on every scroll frame. */
+:root[data-tier="lite"] .pp .home-deep::after,
+:root[data-tier="lite"] .pp .home-grain {
+  display: none;
+}
+
+/* A heading's one coloured phrase (HomeHeading `titleKey`): violet on
+   light, lilac on night and on the deep panel, muted for the one quiet
+   heading. It uses the heading's own face and weight, never italic.
+   While useLineReveal has the heading split, `data-ink` on the h2 holds
+   the phrase in the heading's ink; once the lines have landed and the
+   split is undone, the attribute goes and the phrase eases into its
+   colour. A heading that is never split is in colour from the start. */
+.pp .home-key {
+  color: var(--home-violet);
+  transition: color 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.15s;
+}
+
+.pp .home-key.home-key-lit {
+  color: var(--home-lilac);
+}
+
+.pp .home-key.home-key-quiet {
+  color: var(--home-muted);
+}
+
+.pp .home-key.home-key-quiet.home-key-lit {
+  color: var(--home-paper-dim);
+}
+
+/* #pricing's phrase: the five plan inks, left to right, clipped to the
+   words. While the heading is split (data-ink below) it is ink; once the
+   lines land, `color` eases to transparent and the spectrum shows. The
+   gradient runs on across a wrap (box-decoration-break stays slice). */
+.pp .home-key.home-key-spectrum {
+  background-image: linear-gradient(90deg, #0a5566 0%, #3730a3 28%, #a21caf 52%, #5b21b6 76%, #842c0d 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@media (forced-colors: active) {
+  .pp .home-key.home-key-spectrum {
+    background: none;
+    color: CanvasText;
+  }
+}
+
+/* Last, and as specific as the tones above, so it wins while it holds. */
+.pp [data-ink] .home-key.home-key {
+  color: inherit;
+  transition: none;
+}
+
+/* Links in running text: violet, underlined at 35% of itself, full violet
+   under the pointer. `home-link-lit` on night or the deep panel. */
+.pp .home-link {
+  color: var(--home-violet);
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+  text-decoration-color: color-mix(in srgb, var(--home-violet) 35%, transparent);
+  transition: text-decoration-color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .home-link.home-link-lit {
+  color: var(--home-lilac);
+  text-decoration-color: color-mix(in srgb, var(--home-lilac) 35%, transparent);
+}
+
+.pp .home-link:hover {
+  text-decoration-color: var(--home-violet);
+}
+
+.pp .home-link.home-link-lit:hover {
+  text-decoration-color: var(--home-lilac);
+}
+
+/* The one warm phrase in #demo ("Wednesday at 15:00", the night call's
+   booking `mark`): paper while the call is under way, ember once it has
+   ended (`data-booked` on the stage). Reduced motion shows the ended
+   state. */
+.pp .home-booked {
+  transition: color 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pp [data-booked] .home-booked {
+  color: var(--home-ember-lit);
+}
+
+/* Spoken lines. Cormorant has Latin only, so the rest of the world's
+   scripts fall through to the system's own serifs: no extra downloads,
+   which the CSP would refuse anyway. */
+.pp .home-cinema {
+  font-family:
+    var(--font-pp-cinema, Georgia), "Songti SC", "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif CJK JP",
+    "Noto Naskh Arabic", "Noto Serif Devanagari", Georgia, serif;
+  font-weight: 500;
+}
+
+/* The AI disclosure inside a greeting: an underline that inks in once the
+   line has landed. text-decoration, not a background, so it follows the
+   words across a wrap and under right-to-left script. Inline text only:
+   an inline-block child takes no part in its parent's decoration. */
+.pp .home-disclose {
+  text-decoration-line: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.28em;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp [data-landed] .home-disclose {
+  text-decoration-color: var(--home-electric);
+}
+
+/* A rail's ends fade out only while there is more to scroll that way: at
+   rest on the first chip the left edge is sharp, so the first chip is
+   never half-faded. The two fade widths are driven by the rail's own
+   scroll timeline; a rail that does not overflow has no timeline, so it
+   has no fade. Without scroll timelines the rail simply clips. */
+@property --home-fade-l {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --home-fade-r {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+.pp .home-fade-x {
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 var(--home-fade-l),
+    #000 calc(100% - var(--home-fade-r)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 var(--home-fade-l),
+    #000 calc(100% - var(--home-fade-r)),
+    transparent
+  );
+}
+
+@supports (animation-timeline: scroll()) {
+  .pp .home-fade-x {
+    animation:
+      home-fade-l linear both,
+      home-fade-r linear both;
+    animation-timeline: scroll(self inline), scroll(self inline);
+    animation-range:
+      0 24px,
+      calc(100% - 24px) 100%;
+  }
+}
+
+@keyframes home-fade-l {
+  from {
+    --home-fade-l: 0px;
+  }
+  to {
+    --home-fade-l: 24px;
+  }
+}
+
+@keyframes home-fade-r {
+  from {
+    --home-fade-r: 24px;
+  }
+  to {
+    --home-fade-r: 0px;
+  }
+}
+
+/* The bill's slider. The input keeps a 44px-tall hit area around a 4px
+   track; the track's plan bands are a hard-stop gradient the component
+   sets inline as --bands. */
+.pp .home-range {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.pp .home-range:focus {
+  outline: none;
+}
+
+.pp .home-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bands, var(--pp-hair));
+}
+
+.pp .home-range::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bands, var(--pp-hair));
+}
+
+/* The thumb is a .pp-shadow-btn control (globals.css:1329). */
+.pp .home-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -8px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 0 1px rgb(0 0 0 / 0.4),
+    0 1px 1px rgb(0 0 0 / 0.04),
+    0 2px 4px rgb(0 0 0 / 0.04);
+}
+
+.pp .home-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 0 1px rgb(0 0 0 / 0.4),
+    0 1px 1px rgb(0 0 0 / 0.04),
+    0 2px 4px rgb(0 0 0 / 0.04);
+}
+
+/* The ring goes on the thumb, the thing that moves, not on the 44px box,
+   in the text colour of the ground: ink on white, on-deep on the panel. */
+.pp .home-range:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.pp .home-range:focus-visible::-moz-range-thumb {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+/* Entrances tied to each element's own passage through the screen. Only
+   transform ever moves — content never fades to nothing — so a browser
+   without view timelines, or a reader who asked for less motion, simply
+   gets the element where it belongs. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .home-rise {
+      animation: home-rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 28%;
+    }
+
+    /* The figure's box carries the timeline (an SVG path has no box of its
+       own to take one from); its paths with pathLength="1" draw on it.
+       A dotted stroke keeps its own dasharray: leave pathLength off it. */
+    .pp .home-draw {
+      view-timeline: --home-draw block;
+    }
+
+    /* "1 3" parked a quarter-length before the start, not "1" at offset
+       1: there, one dash ends exactly at the path's start and the next
+       begins exactly at its end, and round caps paint a dot at both
+       before anything has drawn. */
+    .pp .home-draw path[pathLength] {
+      stroke-dasharray: 1 3;
+      stroke-dashoffset: 1.25;
+      animation: home-draw linear both;
+      animation-timeline: --home-draw;
+      animation-range: entry 10% cover 40%;
+    }
+
+    .pp .home-draw[data-i="1"] path[pathLength] {
+      animation-range: entry 14% cover 44%;
+    }
+
+    .pp .home-draw[data-i="2"] path[pathLength] {
+      animation-range: entry 18% cover 48%;
+    }
+
+    .pp .home-draw[data-i="3"] path[pathLength] {
+      animation-range: entry 22% cover 52%;
+    }
+  }
+}
+
+@keyframes home-rise {
+  from {
+    transform: translateY(40px) scale(0.97);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes home-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* FAQ rows open by easing their height instead of jumping. Native
+   <details> throughout, so find-in-page still opens a closed row. */
+@supports selector(::details-content) {
+  .pp .home-faq {
+    interpolate-size: allow-keywords;
+  }
+
+  .pp .home-faq details::details-content {
+    block-size: 0;
+    overflow: clip;
+    transition:
+      block-size 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+      content-visibility 0.3s allow-discrete;
+  }
+
+  .pp .home-faq details[open]::details-content {
+    block-size: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pp .home-disclose {
+    text-decoration-color: var(--home-electric);
+    transition: none;
+  }
+
+  .pp .home-booked {
+    color: var(--home-ember-lit);
+    transition: none;
+  }
+}
+
+/* HomeDeferred (deferred.tsx): content-visibility with a reserve per
+   Tailwind tier, so anchors land where they should at every width. */
+.pp .home-deferred {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--home-cis-sm);
+}
+
+@media (min-width: 48rem) {
+  .pp .home-deferred {
+    contain-intrinsic-size: auto var(--home-cis-md);
+  }
+}
+
+@media (min-width: 64rem) {
+  .pp .home-deferred {
+    contain-intrinsic-size: auto var(--home-cis-lg);
+  }
+}
+
+@media (min-width: 80rem) {
+  .pp .home-deferred {
+    contain-intrinsic-size: auto var(--home-cis-xl);
+  }
+}

@@ -1597,21 +1597,9 @@ export const COMPARISON_NOTE =
   "None of this is a knock on the platforms. Being infrastructure is what they are for, and the first word on their own pricing pages is build. If you are shipping a product, buy the parts — they are very good parts, and one of the four in this table is inside ours, standing by for the day the primary voice fails. If your phone is ringing and there is nobody to pick it up, the assembly is the whole job.";
 
 /**
- * The date here and `PRICING_RIVAL.checked` disagree on purpose. Do not
- * "fix" one to match the other.
- *
- * This line covers four vendors' packaging, all read on the same day — 29
- * July 2026 — and none of them has been re-read since. `PRICING_RIVAL`
- * covers one number, ElevenLabs' per-minute rate, and that one was
- * independently re-verified in September because the pricing section
- * computes live percentages off it and a stale rate there is a false
- * claim about money rather than a stale description.
- *
- * Retyping either date to match the other would be the actual error: the
- * later date would vouch for four vendors nobody has checked since July,
- * and the earlier one would age a figure that is current. A checked-on
- * date is a claim about what somebody did, so it moves only when somebody
- * does it again.
+ * Four vendors' packaging, all read on the same day — 29 July 2026 — and
+ * none of them re-read since. A checked-on date is a claim about what
+ * somebody did, so it moves only when somebody does it again.
  */
 export const COMPARISON_SOURCE =
   "Compiled from each vendor's own public pricing and positioning pages, checked 29 July 2026. Every row describes how a product is sold, not how well it performs. Vendors change their packaging often — if something here has gone out of date, tell us and we will correct it.";
@@ -1647,8 +1635,9 @@ export const PRICING_INTRO = {
   annualNote: "Two months free",
 } as const;
 
+/** A rung with a published price. Enterprise is not one: see ENTERPRISE. */
 export type Tier = {
-  id: string;
+  id: "starter" | "growth" | "pro" | "business" | "scale";
   name: string;
   /** Plan fee per month, USD, billed monthly. */
   monthly: number;
@@ -1656,110 +1645,79 @@ export type Tier = {
   minutes: number;
   /** USD per minute once the allowance is gone. */
   overage: number;
-  /** Shown as "from" — the rung is negotiated rather than listed. */
-  from?: boolean;
-  /** What this rung adds that the one below it did not have. */
-  unlocks: string[];
   cta: string;
   href: string;
+  /** Our recommendation, shown as "Our pick". A claim about the plan, never about sales. */
   featured?: boolean;
 };
 
 /**
- * The rungs, ascending by minutes.
+ * The listed rungs, ascending by minutes. Enterprise is not one of them: it
+ * has no published fee, allowance or rate (ENTERPRISE), so nothing can
+ * estimate onto it, print "from $X" for it, or divide by its minutes.
  *
- * Two invariants hold this list together, and both are checked by the
- * sections that render it rather than by a comment:
+ * Three invariants hold this list together; home.test.ts checks each, on
+ * monthly and yearly billing:
+ *  · A rung's overage sits above its own effective rate (fee ÷ allowance):
+ *    every rung bills $0.20 past its allowance, over 12.25¢ · 9.9¢ · 8.3¢ ·
+ *    9.98¢ · 6.6¢ inside it.
+ *  · Every rung owns one band of volumes where it is the cheapest: monthly
+ *    1–5 · 6–14 · 15–35 · 36–62 · 63–80 calls a day; yearly 1–5 · 6–13 ·
+ *    14–33 · 34–58 · 59–80.
+ *  · Each handover lands inside the next rung's allowance, so the plan a
+ *    customer is moved onto covers them: 650 · 1,750 · 4,250 · 7,455
+ *    minutes a month.
  *
- *  · **A rung's overage rate sits above its own effective rate.** Fee over
- *    allowance is what a minute costs inside the plan; the overage has to
- *    cost more, or the rung below is cheaper at every volume and this one
- *    is dead weight. The receipt in `pricing.tsx` surfaces the gap the
- *    moment it opens.
- *  · **Every rung owns a band of volumes where it is genuinely cheapest.**
- *    The handovers land at roughly 1,464 · 3,958 · 8,667 · 18,927 minutes
- *    a month — each one inside the next rung's allowance, so the plan a
- *    customer is pushed onto is always one that actually covers them.
+ * The effective rate does NOT fall at every rung, on purpose. Business
+ * (9.98¢) costs more a minute than Pro (8.3¢); it sells on its own
+ * features and owns 36–62 calls a day. No copy may call Business better
+ * value than Pro, or Pro "best value" (Scale, 6.6¢, is the lowest). Against
+ * a flat 8¢ voice platform only Scale is cheaper per included minute, so
+ * the landing names no rival (home.test.ts bans the names).
  *
- * The effective rate falls as the rungs climb: 6.5¢ · 6.0¢ · 5.5¢ · 5.0¢ ·
- * 4.5¢. That slope is the offer. A flat rate — which is what the voice
- * platforms charge, `PRICING_RIVAL` — gives a high-volume customer no
- * reason to grow on your invoice instead of someone else's.
+ * OWNER: fees, minutes, the flat $0.20 overage and Pro's extras are the
+ * owner's (23 Sep 2026). Growth and Scale do not exist in the backend
+ * (types/index.ts PLANS), whose minutes also differ, and its cost note
+ * (~$0.10 a minute) puts Pro and Scale below cost at full use. Checkout
+ * must match this list before launch.
  */
 export const TIERS: Tier[] = [
-  {
-    id: "starter",
-    name: "Starter",
-    monthly: 49,
-    minutes: 750,
-    overage: 0.07,
-    unlocks: ["Basic analytics", "Email support"],
-    cta: "Start free",
-    href: AUTH.signup,
-  },
-  {
-    id: "growth",
-    name: "Growth",
-    monthly: 99,
-    minutes: 1650,
-    overage: 0.065,
-    unlocks: ["Call recordings", "Google integrations"],
-    cta: "Start free",
-    href: AUTH.signup,
-  },
+  { id: "starter", name: "Starter", monthly: 49, minutes: 400, overage: 0.2, cta: "Start free", href: AUTH.signup },
+  { id: "growth", name: "Growth", monthly: 99, minutes: 1000, overage: 0.2, cta: "Start free", href: AUTH.signup },
   {
     id: "pro",
     name: "Pro",
     monthly: 249,
-    minutes: 4500,
-    overage: 0.06,
-    unlocks: ["Advanced analytics", "Priority support"],
+    minutes: 3000,
+    overage: 0.2,
     cta: "Start free",
     href: AUTH.signup,
     featured: true,
   },
-  {
-    id: "business",
-    name: "Business",
-    monthly: 499,
-    minutes: 10000,
-    overage: 0.055,
-    unlocks: ["Full analytics suite", "Every integration, not only Google"],
-    cta: "Start free",
-    href: AUTH.signup,
-  },
-  {
-    id: "scale",
-    name: "Scale",
-    monthly: 990,
-    minutes: 22000,
-    overage: 0.05,
-    unlocks: ["Concurrency for a full call room", "Priority onboarding"],
-    cta: "Start free",
-    href: AUTH.signup,
-  },
-  {
-    id: "custom",
-    name: "Custom",
-    monthly: 1990,
-    minutes: 50000,
-    overage: 0.04,
-    from: true,
-    unlocks: ["Custom prompts and a written SLA", "A named contact"],
-    cta: "Talk to us",
-    href: AUTH.contactSales,
-  },
+  { id: "business", name: "Business", monthly: 499, minutes: 5000, overage: 0.2, cta: "Start free", href: AUTH.signup },
+  { id: "scale", name: "Scale", monthly: 990, minutes: 15000, overage: 0.2, cta: "Start free", href: AUTH.signup },
 ];
+
+/**
+ * The rung above the list. No fee, allowance or rate is published for it, so
+ * none exists here to print, estimate onto or divide by. `id` stays
+ * "custom", the backend's key (types/index.ts PLANS, entitlements).
+ */
+export const ENTERPRISE = {
+  id: "custom",
+  name: "Enterprise",
+  /** OWNER: both pre-date this change and are unverified. No SLA document exists in the repo. */
+  unlocks: ["A written SLA", "A named contact"],
+  cta: "Talk to us",
+  href: AUTH.contactSales,
+} as const;
 
 /**
  * The invoice, as one function, so two sections cannot disagree about it.
  *
- * This lived inside `pricing.tsx` while the bill was the only thing that
- * quoted a price. The close now quotes one too — "a day, at ten calls a
- * day, everything included" — and a second implementation of the same
- * arithmetic a thousand lines away is a guarantee that one day the two
- * numbers differ on the same screen, with no way for a reader to tell
- * which is the real one. One function, both call sites, moved verbatim.
+ * A second implementation of the same arithmetic elsewhere is a
+ * guarantee that one day two numbers differ on the same screen, with no
+ * way for a reader to tell which is the real one.
  *
  * It is deliberately a function and not a table of prices: a plan is a fee
  * plus an allowance plus a rate past it, so what a customer pays is a
@@ -1776,53 +1734,6 @@ export const feeFor = (t: Tier, annual: boolean) =>
 /** The invoice: the fee, plus this plan's own rate past its allowance. */
 export const costFor = (t: Tier, minutes: number, annual: boolean) =>
   feeFor(t, annual) + Math.max(0, minutes - t.minutes) * t.overage;
-
-/**
- * The rate the comparison is made against.
- *
- * Only two claims get made from this, and both are checkable. The first is
- * a rate: the voice platforms bill one flat figure per minute at every
- * rung, so "this plan is N% under it" is arithmetic, not positioning. The
- * second is `matched` — the rungs where their sticker price is identical
- * to one of ours, where the comparison can be minutes against minutes with
- * nothing interpolated.
- *
- * What is deliberately NOT here is a minute count for our other rungs.
- * They publish no $49 and no $249 plan; dividing their rate into our fee
- * would invent a plan they do not sell and put words in a competitor's
- * mouth. The rate comparison already carries that rung, honestly.
- */
-export const PRICING_RIVAL = {
-  name: "ElevenLabs",
-  /** Their Agents platform, every rung from Free to Business. */
-  perMinute: 0.08,
-  href: "https://elevenlabs.io/pricing/agents",
-  checked: "September 2026",
-  /** Their published plans that cost exactly what one of ours costs. */
-  matched: [
-    { monthly: 99, theirs: 1238, theirPlan: "Pro" },
-    { monthly: 990, theirs: 12375, theirPlan: "Business" },
-  ],
-} as const;
-
-export const PRICING_PLANS_INTRO = {
-  eyebrow: "The rungs",
-  title: "The rate falls as the plan climbs.",
-  sub: "Every plan is a fee, an allowance of minutes, and a published rate for the minutes past it. The rate a minute actually costs falls at every rung — which is the one thing a single flat per-minute price cannot do for a business that grows.",
-} as const;
-
-/**
- * The note ends by inviting the correction, and it means it.
- *
- * Every figure on the other side of this comparison is a competitor's
- * own published one, read on a stated day, and competitors reprice
- * without telling us. A comparison that does not say when it was read is
- * a comparison the reader is asked to take on trust; one that does, and
- * asks to be told when it goes stale, is the same claim with the risk
- * moved onto us where it belongs.
- */
-export const PRICING_PLANS_NOTE =
-  `Prices are in US dollars and exclude VAT. Annual billing takes two months off the plan fee; the rate for the minutes past the allowance does not move. The ${PRICING_RIVAL.name} figures are their own published ${PRICING_RIVAL.name} Agents plans, read ${PRICING_RIVAL.checked} — they bill one flat rate at every rung, which is why the per-minute comparison holds all the way down this list while the minute-for-minute one is made only at the two prices where a plan of theirs costs exactly what a plan of ours costs. On yearly, the two months come off both sides before the comparison, so the gap is the one the monthly prices already show; the two cards above compare monthly list prices. They reprice often. If something here has gone out of date, tell us and we will correct it.`;
 
 /**
  * Minutes in an average answered call.
@@ -1855,17 +1766,22 @@ export const PRICING_MAX_CALLS_DAY = 80;
 export const DAYS_PER_MONTH = 30;
 
 /** Volumes worth naming, so nobody has to guess where to start. */
+/**
+ * Each lands exactly on a plan fee with nothing over: 3 → Starter $49,
+ * 8 → Growth $100, 25 → Pro $249 (yearly $40.83 / $83.33 / $207.50).
+ * home.test.ts pins it.
+ */
 export const PRICING_PRESETS: { label: string; callsDay: number }[] = [
-  { label: "A quiet clinic", callsDay: 6 },
-  { label: "A busy salon", callsDay: 15 },
-  { label: "A dispatch room", callsDay: 45 },
+  { label: "A quiet clinic", callsDay: 3 },
+  { label: "A busy salon", callsDay: 8 },
+  { label: "A packed restaurant", callsDay: 25 },
 ];
 
 /**
  * OWNER: the hero and this block describe the same trial differently, and
  * only one of them matches the backend. Somebody has to choose.
  *
- * `HERO.note` and the old `CTA_CLOSE.note` both said "5 free minutes every
+ * `HERO.note` and the old close's note both said "5 free minutes every
  * month" — a recurring monthly allowance. What the code grants is five
  * minutes once, inside a fourteen-day window, never renewed: the plan is
  * literally excluded from the renewal job that rolls everyone else's
@@ -1875,7 +1791,7 @@ export const PRICING_PRESETS: { label: string; callsDay: number }[] = [
  * Every other page on this site already says the correct thing — the
  * product pages, the industry pages, the register page. The hero is frozen
  * copy this pass, so the fix is not available here; what is available is
- * refusing to repeat the wrong version. This block and the close now say
+ * refusing to repeat the wrong version. This block says
  * "five minutes, fourteen days", which is true, and neither says "every
  * month" or "once and never again", so neither stands on the same screen
  * calling the hero a liar. That is a truce, not a resolution. The hero
@@ -1941,6 +1857,21 @@ export const FAQ_INTRO = {
 } as const;
 
 /**
+ * The overage, in words, off the price list: "$0.20 a minute, the same on
+ * every plan" while the rungs share one rate, the entry and top rates if
+ * they ever differ. Written in dollars ("$0.20"), which the owner finds
+ * easier to read than cents.
+ */
+function overageSummary() {
+  const usd = (n: number) => `$${n.toFixed(2)}`;
+  const first = TIERS[0];
+  const last = TIERS[TIERS.length - 1];
+  return TIERS.every((t) => t.overage === first.overage)
+    ? `${usd(first.overage)} a minute, the same on every plan`
+    : `${usd(first.overage)} a minute on ${first.name}, falling to ${usd(last.overage)} on ${last.name}`;
+}
+
+/**
  * `where` is optional and rare on purpose.
  *
  * Two of the five answers end somewhere the reader can actually do the
@@ -1971,7 +1902,7 @@ export const FAQ: { q: string; a: string; where?: { label: string; href: string 
     // that does not learn from its calls is the thing a reader assumes it
     // does, and finding out later feels like a discovery.
     q: "What if it gets something wrong?",
-    a: "You find out the same day, not at the end of the month. Every call is transcribed, and the summary is not allowed to flatter itself: it may only say an appointment was booked, moved or cancelled, or that a call was transferred, if the tool that does it actually succeeded — the model's account of the call is overruled by what happened. If a caller talks over it, the transcript and the agent's own memory are cut back to the words she actually heard, which is where most phone agents start remembering sentences nobody was read. Corrections go into its instructions and take effect on the next call. It does not learn from calls on its own, and we would rather tell you that than let you find out.",
+    a: "You find out the same day, not at the end of the month. Every call is transcribed, and the summary is not allowed to flatter itself: it may only say an appointment was booked, moved or cancelled, or that a call was transferred, if the tool that does it actually succeeded — the model's account of the call is overruled by what happened. If a caller talks over it, the transcript and the agent's own memory are cut back to the words she actually heard. Corrections go into its instructions and take effect on the next call. It does not learn from calls on its own, and we would rather tell you that than let you find out.",
     where: { label: "Set its register yourself", href: "#how" },
   },
   {
@@ -1982,10 +1913,12 @@ export const FAQ: { q: string; a: string; where?: { label: string; href: string 
     // easiest sentence to write here and the one we cannot stand behind.
     //
     // The deletion sentence is the strongest fact in this answer and it
-    // was missing: a delete removes the voice provider's copies first and
-    // aborts the whole operation if it cannot, so nothing is ever marked
-    // deleted here while a transcript is still sitting at a vendor.
-    a: "Transcripts and recordings sit in the EU — the database and the file storage are both in Ireland, eu-west-1. That covers where the call is kept and not every hop it takes: the speech and telephony providers it passes through are their own companies in their own regions, and we are not going to tell you otherwise. A deletion goes to those providers first and stops if it cannot remove their copy, so nothing is marked deleted here while a transcript is still sitting at a vendor. Recordings are a plan entitlement rather than a switch — off on the trial and on Starter, on from Pro upward — while transcripts are kept on every plan.",
+    // was missing: deleting a call removes the voice provider's copies
+    // first and aborts if it cannot (app/api/calls/[id]/route.ts), so no
+    // call is ever marked deleted here while its transcript is still at a
+    // vendor. Scoped to a call on purpose: closing an account logs a
+    // provider failure and carries on (lib/account/deletion-plan.ts).
+    a: "Transcripts and recordings sit in the EU — the database and the file storage are both in Ireland, eu-west-1. That covers where the call is kept and not every hop it takes: the speech and telephony providers it passes through are their own companies in their own regions, and we are not going to tell you otherwise. Deleting a call goes to those providers first and stops if it cannot remove their copy, so no call is marked deleted here while its transcript is still sitting at a vendor. Recordings are a plan entitlement rather than a switch — off on the trial, Starter and Growth, on from Pro upward — while transcripts are kept on every plan.",
   },
   {
     q: "Do I need a new phone number?",
@@ -2010,73 +1943,10 @@ export const FAQ: { q: string; a: string; where?: { label: string; href: string 
     // agent stops taking calls. That belonged in the answer, not in a
     // support ticket.
     q: "What happens if I go over my included minutes?",
-    a: `On a paid plan, nothing stops answering. The extra minutes bill at your own plan's published rate — ${Math.round(
-      TIERS[0].overage * 100,
-    )}¢ a minute on the entry plan, falling to ${Math.round(
-      TIERS[TIERS.length - 1].overage * 100,
-    )}¢ on the largest — and you can change plan at any point; the calculator above says when that is actually cheaper rather than leaving you to work it out off an invoice. The free trial is the other way round, and this is the part worth reading twice: there is no overage on it, so when the five minutes are gone the agent stops answering and your callers hear that the call can't be taken.`,
+    a: `On a paid plan, nothing stops answering. The extra minutes bill at your own plan's published rate — ${overageSummary()} — and you can change plan at any point; the calculator above says when that is actually cheaper rather than leaving you to work it out off an invoice. The free trial is the other way round, and this is the part worth reading twice: there is no overage on it, so when the five minutes are gone the agent stops answering and your callers hear that the call can't be taken.`,
     where: { label: "Work out the bill", href: "#your-bill" },
   },
 ];
-
-/* ------------------------------------------------------------------ *
- * The close.
- *
- * Every figure here was earned somewhere higher up the page, and this
- * block deliberately contains none of them. The labels are here; the
- * numbers are computed in the component from the same constants the
- * sections above drew — CALL_FATE, LEAD_DECAY, SETUP_LANGS, costFor — so
- * the close cannot quote a page that has since changed under it. It had
- * already happened once: the old receipts carried a hand-typed "$10 a
- * day" from a price list that no longer existed, in the one section whose
- * entire job is to be checkable.
- *
- * `where` is an anchor rather than a section name, because a receipt the
- * reader cannot get back to is not a receipt.
- * ------------------------------------------------------------------ */
-export const CTA_CLOSE = {
-  // Three words, and the page's own. "Nobody to pick it up" is the
-  // sentence the comparison note ends on eight sections above; the close
-  // is that sentence with the reader as the subject. Everything before
-  // this point has been the argument, and a close that restates it is a
-  // close that reopens it.
-  title: "Pick it up.",
-  // No sub. The line that was here — "everything below is on this page
-  // above" — was the page talking about its own construction, which is a
-  // thing the writer finds interesting and the reader does not.
-  receipts: [
-    /*
-     * "Never reach a person", not "ring out".
-     *
-     * The figure this carries is voicemail plus rang-out — everything
-     * except the 37.8% a human picks up. It read "ring out unanswered",
-     * which names only the smaller bucket and put 62% under a label the
-     * shelf section had already priced at 24.3% eight sections earlier.
-     * A page that contradicts itself on its own headline number loses
-     * more than the difference between the two.
-     */
-    { label: "of calls to a small business never reach a person", where: "#why" },
-    { label: "is how long the odds hold flat before they fall", where: "#why" },
-    {
-      label: "languages the greeting is written in by people who speak them",
-      where: "#how",
-    },
-    { label: "a day, at ten calls a day, with everything in it", where: "#your-bill" },
-  ],
-  primary: "Start free",
-  secondary: "Talk to a person",
-  // This used to be the hero's offer word for word, on the reasoning that
-  // two descriptions of one trial eleven sections apart is how a reader
-  // decides neither is reliable. The reasoning was right and the offer it
-  // copied was wrong: the backend grants five minutes inside a fourteen-day
-  // window, not five a month, and every other page on this site already
-  // says so. Copying a mistake for the sake of consistency makes it a
-  // policy. This line now matches the product pages, the industry pages
-  // and PRICING_TRIAL — which leaves exactly one sentence on the site still
-  // saying "every month", and it is in the frozen hero. See the note above
-  // PRICING_TRIAL: that one is the owner's to settle.
-  note: "5 free minutes for 14 days · no card · cancel whenever",
-} as const;
 
 /* ------------------------------------------------------------------ *
  * Site header — the bar, its two mega menus, and the sheet below lg.

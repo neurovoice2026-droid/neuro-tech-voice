@@ -217,7 +217,7 @@ export const realEstate: Trade = {
     },
     {
       q: "What actually happens to the calls at half eight at night?",
-      a: "It answers them. It can read the listing, register the applicant, put a viewing or an appraisal in the diary and get a message to whoever is on call. What it cannot do is ring anybody back — there is no outbound calling in it at all — so what the caller gets is a slot and a name, and what you get at nine is a card instead of a voicemail light.",
+      a: "It answers them. It can read the listing, register the applicant, put a viewing or an appraisal in the diary and get a message to whoever is on call. What it cannot do is ring anybody back by itself — a call out happens only when someone on your team starts one from the dashboard — so what the caller gets is a slot and a name, and what you get at nine is a card instead of a voicemail light.",
     },
     {
       q: "Does it work on the lettings side?",

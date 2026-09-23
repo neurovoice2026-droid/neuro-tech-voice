@@ -36,7 +36,7 @@ const PLAN_LABEL: Record<Plan, string> = {
   starter: "Starter",
   pro: "Pro",
   business: "Business",
-  custom: "Custom",
+  custom: "Enterprise",
 };
 
 /**

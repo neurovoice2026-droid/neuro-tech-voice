@@ -1,0 +1,60 @@
+/* ------------------------------------------------------------------ *
+ * #use-cases — the pieces the trade window repeats.
+ *
+ * Every trade's words are in the page (stacked, one shown), so a piece
+ * drawn once per trade is drawn seventeen times, and the page link twice
+ * that. Their styling lives here once instead of in thirty-four class
+ * lists. Scoped under .pp, prefixed home-trades-.
+ * ------------------------------------------------------------------ */
+
+/* The trade's own page: the words underlined, the arrow not; on hover the
+   underline inks in and the arrow steps forward. */
+.pp .home-trades-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--pp-ink);
+}
+
+.pp .home-trades-link:focus-visible {
+  outline: 2px solid var(--pp-ink);
+  outline-offset: 2px;
+}
+
+.pp .home-trades-link > span:first-child {
+  text-decoration-line: underline;
+  text-decoration-color: rgb(0 0 0 / 0.25);
+  text-underline-offset: 4px;
+  transition: text-decoration-color 0.2s;
+}
+
+.pp .home-trades-link > span:last-child {
+  display: inline-block;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .home-trades-link:hover > span:first-child {
+  text-decoration-color: var(--pp-ink);
+}
+
+.pp .home-trades-link:hover > span:last-child {
+  transform: translateX(2px);
+}
+
+/* "Sample", beside the caller's label: a ringed mono tag, not a badge. */
+.pp .home-trades-sample {
+  display: inline-flex;
+  height: 20px;
+  align-items: center;
+  border-radius: 999px;
+  padding-inline: 8px;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  box-shadow: inset 0 0 0 1px var(--pp-hair);
+}

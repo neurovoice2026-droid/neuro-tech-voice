@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef, type MutableRefObject } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { cn } from "@/lib/utils";
-import { whenIdle } from "./motion-kit";
+import { demote, drawsWebGL, slowFrames, useDeviceTier, whenTierSettled } from "./device-tier";
+import { whenIdle, whenIntent } from "./motion-kit";
 import { Orb } from "./primitives";
+import { useInView } from "./timing";
 
 /* ------------------------------------------------------------------ *
  * A voice sphere drawn by a fragment shader.
@@ -25,8 +27,27 @@ import { Orb } from "./primitives";
  *
  * One WebGL2 context per instance: meant for the one large orb on a stage,
  * not for rows of small ones. The context is only created once the orb
- * comes near the screen, in an idle moment; until then, and for good
- * without WebGL, the CSS mesh orb stands in.
+ * comes near the screen, the device tier allows it (full or mid; see
+ * device-tier.ts), and in an idle moment (and, with `gate="intent"`, only
+ * after the visitor's first sign of life); until then, and for good on a
+ * lite or still device, without WebGL or once the context is lost, the
+ * CSS mesh orb stands in. The stand-in is held still whenever it is
+ * offscreen or the orb is meant to be still, and it is removed once the
+ * shader has painted over it: an animation left running under a canvas
+ * costs a style recalculation every frame for the whole visit.
+ *
+ * The shader compiles and links without blocking the main thread: with
+ * KHR_parallel_shader_compile the driver works on its own threads and the
+ * orb asks once a frame whether it is done; without it, the answer is read
+ * in a second idle moment. The stand-in stays until the program is ready.
+ *
+ * The frame loop runs only while it has something to show: it stops
+ * offscreen, in a background tab, and when a `still` orb has finished
+ * easing to its palette, and anything that could change the picture —
+ * coming back on screen, the tab returning, new colours, a resize —
+ * starts it again. On a mid device the pixel ratio is capped at 1.25 and
+ * the grain is off; frames that stay slow drop it to 1, and frames still
+ * slow at 1 demote the whole visit to lite.
  * ------------------------------------------------------------------ */
 
 const VERT = `#version 300 es
@@ -164,101 +185,176 @@ function hexToRgb(hex: string) {
   return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
 
-function compile(gl: WebGL2RenderingContext, type: number, src: string) {
-  const s = gl.createShader(type)!;
-  gl.shaderSource(s, src);
-  gl.compileShader(s);
-  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-    const log = gl.getShaderInfoLog(s);
-    gl.deleteShader(s);
-    throw new Error(log ?? "shader compile failed");
-  }
-  return s;
+/** Compiles and links without asking how it went: asking is what blocks. */
+function link(gl: WebGL2RenderingContext) {
+  const program = gl.createProgram();
+  const shaders = (
+    [
+      [gl.VERTEX_SHADER, VERT],
+      [gl.FRAGMENT_SHADER, FRAG],
+    ] as const
+  ).map(([type, src]) => {
+    const s = gl.createShader(type)!;
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    gl.attachShader(program, s);
+    return s;
+  });
+  gl.bindAttribLocation(program, 0, "aPos");
+  gl.linkProgram(program);
+  // Only flagged while attached; they go with the program.
+  for (const s of shaders) gl.deleteShader(s);
+  // Hand the work to the GPU process now, so it is under way before anyone asks.
+  gl.flush();
+  return program;
 }
+
+/** A palette channel (0–1) this close to its target has arrived. */
+const ARRIVED = 0.002;
+
+/** The pixel ratio a struggling orb falls back to before it gives the visit up to lite. */
+const FLOOR_DPR = 1;
 
 export function FluidOrb({
   colors,
+  shaderColors,
   volume,
   running = true,
   still = false,
   grain = 0.075,
+  gate = "idle",
   className,
 }: {
   /** Five colours, in the mesh orb's slot order. */
   colors: readonly string[];
+  /**
+   * Colours for the shader alone, when they change more often than the CSS
+   * stand-in should: the stand-in cannot ease between palettes, so every
+   * change there is a cut and a repaint of its blurred layers. Defaults to
+   * `colors`.
+   */
+  shaderColors?: readonly string[];
   /** Read every frame, 0–1. */
   volume?: MutableRefObject<number>;
   running?: boolean;
   still?: boolean;
   grain?: number;
+  /** "intent" also waits for the visitor's first sign of life before compiling. Read once. */
+  gate?: "idle" | "intent";
   className?: string;
 }) {
+  const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const placeholderRef = useRef<HTMLDivElement>(null);
-  const target = useRef<number[]>(colors.flatMap(hexToRgb));
+  const shaderPalette = shaderColors ?? colors;
+  const target = useRef<number[]>(shaderPalette.flatMap(hexToRgb));
   const state = useRef({ running, still });
+  // Restarts a stopped frame loop; does nothing until the shader runs.
+  const kick = useRef(() => {});
+  // Lite and still never create a context: the CSS orb, held still, is the orb.
+  const shader = drawsWebGL(useDeviceTier());
+  // Set once the shader has painted over the stand-in, which then goes.
+  const [painted, setPainted] = useState(false);
+  const onScreen = useInView(hostRef);
 
   useEffect(() => {
-    target.current = colors.flatMap(hexToRgb);
-  }, [colors]);
+    target.current = shaderPalette.flatMap(hexToRgb);
+    kick.current();
+  }, [shaderPalette]);
 
   useEffect(() => {
     state.current = { running, still };
+    kick.current();
   }, [running, still]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!shader || !canvas) return;
+    let live = true;
     let teardown: (() => void) | undefined;
     let cancelIdle: (() => void) | undefined;
     const near = new IntersectionObserver(
       ([e]) => {
         if (!e.isIntersecting) return;
         near.disconnect();
-        cancelIdle = whenIdle(() => {
-          teardown = start(canvas);
-        });
+        // The probe's verdict first: a device about to be called lite never compiles.
+        (gate === "intent" ? whenIntent() : Promise.resolve())
+          .then(whenTierSettled)
+          .then((tier) => {
+            if (!live || !drawsWebGL(tier)) return;
+            cancelIdle = whenIdle(() => {
+              teardown = start(canvas, tier === "mid");
+            });
+          });
       },
       { rootMargin: "25% 0px" },
     );
     near.observe(canvas);
     return () => {
+      live = false;
       near.disconnect();
       cancelIdle?.();
       teardown?.();
     };
 
-    function start(canvas: HTMLCanvasElement) {
+    function start(canvas: HTMLCanvasElement, mid: boolean) {
       const gl = canvas.getContext("webgl2", {
         alpha: true,
         premultipliedAlpha: true,
         antialias: false,
       });
-      // Without WebGL the CSS orb underneath simply stays.
-      if (!gl) {
+      // Without WebGL the CSS orb underneath simply stays. So it does for a
+      // context this canvas already had and gave up (the effect running
+      // again on the same canvas, after our own teardown lost it).
+      if (!gl || gl.isContextLost()) {
         canvas.style.display = "none";
         return;
       }
 
-      let program: WebGLProgram;
-      try {
-        program = gl.createProgram()!;
-        gl.attachShader(program, compile(gl, gl.VERTEX_SHADER, VERT));
-        gl.attachShader(program, compile(gl, gl.FRAGMENT_SHADER, FRAG));
-        gl.linkProgram(program);
-        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error("link failed");
-      } catch {
-        canvas.style.display = "none";
-        return;
-      }
+      // Compiled and linked without waiting. With the parallel-compile
+      // extension the driver does it on its own threads and we ask once a
+      // frame whether it is done; without it, the answer is read in a
+      // second idle moment, after the GPU has had the first to itself.
+      const par = gl.getExtension("KHR_parallel_shader_compile");
+      const program = link(gl);
+      let polling = 0;
+      let cancelLink: (() => void) | undefined;
+      let stopRunning: (() => void) | undefined;
 
+      const linked = () => {
+        polling = 0;
+        cancelLink = undefined;
+        if (gl.isContextLost()) return;
+        if (par && !gl.getProgramParameter(program, par.COMPLETION_STATUS_KHR)) {
+          polling = requestAnimationFrame(linked);
+          return;
+        }
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+          canvas.style.display = "none";
+          return;
+        }
+        stopRunning = run(canvas, gl, program, mid);
+      };
+      if (par) polling = requestAnimationFrame(linked);
+      else cancelLink = whenIdle(linked);
+
+      return () => {
+        cancelAnimationFrame(polling);
+        cancelLink?.();
+        stopRunning?.();
+        gl.deleteProgram(program);
+        // Hand the context back now, not whenever the canvas is collected:
+        // browsers cap how many can be alive at once.
+        gl.getExtension("WEBGL_lose_context")?.loseContext();
+      };
+    }
+
+    function run(canvas: HTMLCanvasElement, gl: WebGL2RenderingContext, program: WebGLProgram, mid: boolean) {
       gl.useProgram(program);
       const buf = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, buf);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-      const loc = gl.getAttribLocation(program, "aPos");
-      gl.enableVertexAttribArray(loc);
-      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
       const uRes = gl.getUniformLocation(program, "uRes");
       const uTime = gl.getUniformLocation(program, "uTime");
@@ -266,15 +362,22 @@ export function FluidOrb({
       const uGrain = gl.getUniformLocation(program, "uGrain");
       const uColors = gl.getUniformLocation(program, "uColors");
 
+      // A mid device draws fewer pixels and no grain; a slow one fewer still.
+      let cap = mid ? 1.25 : 2;
+      const film = mid ? 0 : grain;
+      const slow = slowFrames();
+
       const current = new Float32Array(target.current);
       let flowTime = 7.3;
       let vol = 0;
       let raf = 0;
       let prev = performance.now();
-      let visible = true;
+      // Set by the observer below, which reports as soon as it is attached.
+      let onScreen = false;
+      let lost = false;
 
       const resize = () => {
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const dpr = Math.min(window.devicePixelRatio || 1, cap);
         const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
         const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
         if (canvas.width !== w || canvas.height !== h) {
@@ -288,7 +391,7 @@ export function FluidOrb({
         gl.uniform2f(uRes, canvas.width, canvas.height);
         gl.uniform1f(uTime, flowTime);
         gl.uniform1f(uVol, vol);
-        gl.uniform1f(uGrain, grain);
+        gl.uniform1f(uGrain, film);
         gl.uniform3fv(uColors, current);
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
@@ -296,57 +399,114 @@ export function FluidOrb({
       };
 
       const frame = (now: number) => {
-        const dt = Math.min((now - prev) / 1000, 0.05);
+        raf = 0;
+        // Frames that stay slow cost resolution first, then the whole visit's WebGL.
+        if (slow(now - prev)) {
+          if (cap > FLOOR_DPR) {
+            cap = FLOOR_DPR;
+            resize();
+          } else demote();
+        }
+        const dt = Math.max(0, Math.min((now - prev) / 1000, 0.05));
         prev = now;
         const { running: on, still: frozen } = state.current;
 
         // Palette changes ease in over roughly half a second.
         const k = 1 - Math.exp(-dt * 7);
         const goal = target.current;
-        for (let i = 0; i < current.length; i++) current[i] += (goal[i] - current[i]) * k;
+        let arrived = true;
+        for (let i = 0; i < current.length; i++) {
+          current[i] += (goal[i] - current[i]) * k;
+          if (Math.abs(goal[i] - current[i]) > ARRIVED) arrived = false;
+        }
 
         const want = Math.max(0, Math.min(1, volume?.current ?? 0));
         vol += (want - vol) * (1 - Math.exp(-dt * (want > vol ? 14 : 5)));
+        if (Math.abs(want - vol) > ARRIVED) arrived = false;
 
         if (on && !frozen) flowTime += dt * (0.55 + vol * 1.6);
-        if (visible) draw();
+        draw();
+        // A still orb that has arrived would draw this same frame forever.
+        if (frozen && arrived) return;
         raf = requestAnimationFrame(frame);
       };
 
+      const stop = () => {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      };
+
+      // Every restart measures from now, so the time away is not one long step.
+      const play = () => {
+        if (raf || lost || !onScreen || document.hidden) return;
+        prev = performance.now();
+        raf = requestAnimationFrame(frame);
+      };
+      kick.current = play;
+
+      const onVisibility = () => {
+        if (document.hidden) stop();
+        else play();
+      };
+      document.addEventListener("visibilitychange", onVisibility);
+
+      // No restore: the CSS orb takes over for the rest of the visit.
+      const onLost = (e: Event) => {
+        e.preventDefault();
+        lost = true;
+        stop();
+        canvas.style.display = "none";
+        setPainted(false);
+      };
+      canvas.addEventListener("webglcontextlost", onLost);
+
       const ro = new ResizeObserver(() => {
+        if (lost) return;
         resize();
         draw();
+        play();
       });
       ro.observe(canvas);
       const io = new IntersectionObserver(([e]) => {
-        visible = e.isIntersecting;
+        onScreen = e.isIntersecting;
+        if (onScreen) play();
+        else stop();
       });
       io.observe(canvas);
 
       resize();
       draw();
       // The shader has painted: the CSS stand-in can go.
-      if (placeholderRef.current) placeholderRef.current.style.opacity = "0";
-      raf = requestAnimationFrame(frame);
+      setPainted(true);
 
       return () => {
-        cancelAnimationFrame(raf);
+        stop();
+        kick.current = () => {};
         ro.disconnect();
         io.disconnect();
+        document.removeEventListener("visibilitychange", onVisibility);
+        canvas.removeEventListener("webglcontextlost", onLost);
         gl.deleteBuffer(buf);
-        gl.deleteProgram(program);
+        setPainted(false);
       };
     }
-    // The loop reads colours, volume and flags from refs; it is built once.
+    // The loop reads colours, volume and flags from refs; it is built once
+    // per tier that draws (a demotion to lite tears it down for good).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [shader]);
+
+  // The stand-in moves only while it is the picture, on screen, and the orb
+  // is meant to move; otherwise it holds still and costs nothing per frame.
+  const held = !shader || !onScreen || still || !running;
 
   return (
-    <div className={cn("relative", className)}>
-      <div ref={placeholderRef} aria-hidden className="absolute inset-0 transition-opacity duration-500">
-        <Orb mesh={colors} className="size-full" />
-      </div>
-      <canvas ref={canvasRef} aria-hidden className="absolute inset-0 size-full" />
+    <div ref={hostRef} className={cn("relative", className)}>
+      {!painted && (
+        <div aria-hidden className="absolute inset-0">
+          <Orb mesh={colors} still={held} className="size-full" />
+        </div>
+      )}
+      {shader && <canvas ref={canvasRef} aria-hidden className="absolute inset-0 size-full" />}
     </div>
   );
 }

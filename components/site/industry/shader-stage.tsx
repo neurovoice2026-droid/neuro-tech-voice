@@ -96,13 +96,48 @@ uniform float uTier;
 out vec4 fragColor;`;
 
 /** The site's accent, and the darkest colour any scene may draw with. */
-const HOUSE_INK = "#551a89";
+export const HOUSE_INK = "#551a89";
 
 /** Violet on paper: the site's own hand, for a band with no scene yet. */
-const HOUSE_POSTER =
+export const HOUSE_POSTER =
   "radial-gradient(120% 90% at 20% 15%, #ffffff 0%, #f4f3f7 45%, #e4e0ee 75%, #cfc6e4 100%)";
 
-const VERT = `#version 300 es
+/*
+  Two brakes on the raymarched scenes, because a step budget alone is not
+  a guarantee. A step budget bounds the work per FRAGMENT; it says nothing
+  about how many fragments there are, and this band is full-bleed — on a
+  2560px monitor at devicePixelRatio 2 it would otherwise ask a GPU for
+  eleven million marched fragments a frame.
+
+  MAX_PIXELS bounds the area outright, whatever the screen.
+  Then `quality` watches the real frame time and gives up resolution until
+  the frames come back. It only ever degrades: a loop that also climbs back
+  up oscillates, and a band of soft colour at three quarters of the pixels
+  is indistinguishable anyway.
+*/
+export const MAX_PIXELS = 1_500_000;
+export const SLOW_MS = 26;
+
+/*
+  Three tiers, because a tablet is neither of the other two: it has a
+  desktop's pixel count and a phone's power budget, and treating it as a
+  small desktop is how a raymarched band ends up at eight frames a second
+  on an iPad.
+
+    uTier 0.0  phone    24 march steps, no shadow ray
+    uTier 0.5  tablet   36 march steps, no shadow ray
+    uTier 1.0  desktop  48 march steps, one shadow ray
+*/
+export function stageTier(): { tier: 0 | 0.5 | 1; cap: number; base: number } {
+  const wide = window.matchMedia("(min-width: 1024px)").matches;
+  const phone = window.matchMedia("(max-width: 767px)").matches;
+  const tier = phone ? 0 : wide ? 1 : 0.5;
+  const cap = phone ? 1.2 : tier === 0.5 ? 1.5 : 2;
+  const base = phone ? 0.62 : tier === 0.5 ? 0.8 : 1;
+  return { tier, cap, base };
+}
+
+export const VERT = `#version 300 es
 in vec2 aPos;
 void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`;
 
@@ -118,7 +153,7 @@ void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`;
  * read back after it is written, which is what makes this possible without
  * touching a single scene.
  */
-function guarded(frag: string) {
+export function guarded(frag: string) {
   return `${frag.replace("void main(", "void sceneMain(")}
 void main(){
   sceneMain();
@@ -127,12 +162,12 @@ void main(){
 }`;
 }
 
-function hexToRgb(hex: string) {
+export function hexToRgb(hex: string) {
   const n = parseInt(hex.slice(1), 16);
   return [(n >> 16) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
 
-function compile(gl: WebGL2RenderingContext, type: number, src: string) {
+export function compile(gl: WebGL2RenderingContext, type: number, src: string) {
   const s = gl.createShader(type)!;
   gl.shaderSource(s, src);
   gl.compileShader(s);
@@ -268,37 +303,10 @@ function start(canvas: HTMLCanvasElement, scene: Scene, still: boolean) {
   // no mix of its palette could reach. This is the colour it wanted.
   gl.uniform3fv(gl.getUniformLocation(program, "uInk"), new Float32Array(hexToRgb(HOUSE_INK)));
 
-  /*
-    Three tiers, because a tablet is neither of the other two: it has a
-    desktop's pixel count and a phone's power budget, and treating it as a
-    small desktop is how a raymarched band ends up at eight frames a second
-    on an iPad.
+  // The tier, pixel-ratio cap and base scale; see stageTier() above.
+  const { tier, cap, base } = stageTier();
 
-      uTier 0.0  phone    24 march steps, no shadow ray
-      uTier 0.5  tablet   36 march steps, no shadow ray
-      uTier 1.0  desktop  48 march steps, one shadow ray
-  */
-  const wide = window.matchMedia("(min-width: 1024px)").matches;
-  const phone = window.matchMedia("(max-width: 767px)").matches;
-  const tier = phone ? 0 : wide ? 1 : 0.5;
-  const cap = phone ? 1.2 : tier === 0.5 ? 1.5 : 2;
-  const base = phone ? 0.62 : tier === 0.5 ? 0.8 : 1;
-
-  /*
-    Two brakes on the raymarched scenes, because a step budget alone is not
-    a guarantee. A step budget bounds the work per FRAGMENT; it says nothing
-    about how many fragments there are, and this band is full-bleed — on a
-    2560px monitor at devicePixelRatio 2 it would otherwise ask a GPU for
-    eleven million marched fragments a frame.
-
-    MAX_PIXELS bounds the area outright, whatever the screen.
-    Then `quality` watches the real frame time and gives up resolution until
-    the frames come back. It only ever degrades: a loop that also climbs back
-    up oscillates, and a band of soft colour at three quarters of the pixels
-    is indistinguishable anyway.
-  */
-  const MAX_PIXELS = 1_500_000;
-  const SLOW_MS = 26;
+  // Adaptive resolution under MAX_PIXELS and SLOW_MS; see above.
   let quality = 1;
 
   let raf = 0;

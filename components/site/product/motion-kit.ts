@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type DependencyList, type RefObject } from "react";
 import type { gsap as GsapCore } from "gsap";
+import type { Flip as FlipPlugin } from "gsap/Flip";
 import type { SplitText as SplitTextClass } from "gsap/SplitText";
 
 /* ------------------------------------------------------------------ *
@@ -20,10 +21,23 @@ export type Kit = {
   SplitText: typeof SplitTextClass;
 };
 
-let pending: Promise<Kit> | null = null;
+/**
+ * A loader that runs once and is shared, and that never rejects: a failed
+ * fetch (a flaky connection, a deploy that moved the chunk) resolves to
+ * null and forgets itself, so the next call tries again instead of
+ * replaying the failure for the rest of the visit.
+ */
+function shared<T>(load: () => Promise<T>): () => Promise<T | null> {
+  let pending: Promise<T | null> | null = null;
+  return () =>
+    (pending ??= load().catch(() => {
+      pending = null;
+      return null;
+    }));
+}
 
-function loadKit() {
-  pending ??= Promise.all([
+const loadKit = shared<Kit>(() =>
+  Promise.all([
     import("gsap"),
     import("gsap/SplitText"),
     import("gsap/DrawSVGPlugin"),
@@ -31,9 +45,23 @@ function loadKit() {
   ]).then(([{ gsap }, { SplitText }, { DrawSVGPlugin }, { MotionPathPlugin }]) => {
     gsap.registerPlugin(SplitText, DrawSVGPlugin, MotionPathPlugin);
     return { gsap, SplitText };
-  });
-  return pending;
-}
+  }),
+);
+
+/** The kit plus Flip, for a section that moves an element from one layout to another. */
+export type FlipKit = Kit & { Flip: typeof FlipPlugin };
+
+/**
+ * The kit and Flip together, or null if either failed to arrive (call it
+ * again to retry). Flip is its own chunk, requested only from here, so a
+ * page that never flies anything never downloads it.
+ */
+export const loadFlipKit = shared<FlipKit>(async () => {
+  const [kit, { Flip }] = await Promise.all([loadKit(), import("gsap/Flip")]);
+  if (!kit) throw new Error("GSAP did not arrive");
+  kit.gsap.registerPlugin(Flip);
+  return { ...kit, Flip };
+});
 
 /** Runs `run` once the main thread is idle; the returned function cancels it. */
 export function whenIdle(run: () => void) {
@@ -75,25 +103,39 @@ export function whenIntent() {
   return intent;
 }
 
-/** The kit, once `wanted` has been true. Null until it has arrived. */
-export function useMotionKit(wanted: boolean) {
-  const [kit, setKit] = useState<Kit | null>(null);
+/**
+ * What a loader hands back, fetched in the first idle moment after `wanted`
+ * is true and kept from then on. Null until it has arrived; after a failed
+ * fetch, tried again the next time `wanted` turns true.
+ */
+function useLoadedKit<K>(wanted: boolean, load: () => Promise<K | null>) {
+  const [kit, setKit] = useState<K | null>(null);
 
   useEffect(() => {
     if (!wanted || kit) return;
     let live = true;
     const cancel = whenIdle(() => {
-      loadKit().then((k) => {
-        if (live) setKit(k);
+      void load().then((k) => {
+        if (live && k) setKit(k);
       });
     });
     return () => {
       live = false;
       cancel();
     };
-  }, [wanted, kit]);
+  }, [wanted, kit, load]);
 
   return kit;
+}
+
+/** The kit, once `wanted` has been true. Null until it has arrived. */
+export function useMotionKit(wanted: boolean) {
+  return useLoadedKit(wanted, loadKit);
+}
+
+/** `useMotionKit`, with Flip in the kit. Null until it has arrived. */
+export function useFlipKit(wanted: boolean) {
+  return useLoadedKit(wanted, loadFlipKit);
 }
 
 const useIsoLayoutEffect = typeof document !== "undefined" ? useLayoutEffect : useEffect;
@@ -103,10 +145,11 @@ const none: DependencyList = [];
  * `useGSAP`, for a GSAP that arrives late. The callback runs inside a
  * context scoped to `scope` as soon as the kit is there and again whenever
  * `dependencies` change. A function it returns runs when the context reverts.
+ * The callback is handed the kit it was given, Flip included when it has it.
  */
-export function useKitContext(
-  kit: Kit | null,
-  callback: (kit: Kit) => void | (() => void),
+export function useKitContext<K extends Kit>(
+  kit: K | null,
+  callback: (kit: K) => void | (() => void),
   {
     scope,
     dependencies = none,

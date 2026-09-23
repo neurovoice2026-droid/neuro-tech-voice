@@ -1,13 +1,15 @@
 import { AGENT_LANGUAGES } from "@/lib/agent-languages";
+import { requiredPlanFor } from "@/lib/billing/entitlements";
+import { PLANS } from "@/types";
 import {
   AUTH,
   COMPANY,
+  ENTERPRISE,
   INTEGRATIONS,
   PRICING_TRIAL,
   SETUP_LANGS,
   SETUP_VOICES,
   SOLUTION_ITEMS,
-  TIERS,
   TONES,
   type DemoTurn,
 } from "@/lib/site";
@@ -21,8 +23,8 @@ import {
  * page is a sample and is labelled as one.
  * ------------------------------------------------------------------ */
 
-const custom = TIERS.find((t) => t.id === "custom")!;
-const business = TIERS.find((t) => t.id === "business")!;
+/** Bookings into Google Calendar start on this plan. Read off the entitlements, as the landing does. */
+const CALENDAR_PLAN = PLANS[requiredPlanFor("googleIntegrations")].name;
 
 /** Every language the agent can be set to speak, from the app's own list. */
 export const LANG_COUNT = String(AGENT_LANGUAGES.length);
@@ -35,7 +37,7 @@ export const AGENTS_META = {
 
 export const AGENTS_HERO = {
   title: "AI voice agents that answer every call",
-  sub: `Point your calls at an agent that picks up on the first ring. Ready in under ten minutes, fluent in ${LANG_COUNT} languages, booking straight into Google Calendar — and every call written down.`,
+  sub: `Point your calls at an agent that picks up on the first ring. Ready in under ten minutes, fluent in ${LANG_COUNT} languages, booking into Google Calendar on ${CALENDAR_PLAN} and above — and every call written down.`,
   primary: { label: "Start free", href: AUTH.signup },
   secondary: { label: "Talk to sales", href: AUTH.contactSales },
   /** What starting free costs, said where the decision is made. */
@@ -550,7 +552,7 @@ export const GET_STARTED = {
       cta: { label: "Start free", href: PRICING_TRIAL.href, variant: "primary" as const },
       points: [
         "5 free minutes, 14 days, no card",
-        "Books straight into Google Calendar",
+        `Books into Google Calendar on ${CALENDAR_PLAN} and above, in beta`,
         `Natural voices in ${LANG_COUNT} languages`,
         "Transcript and sentiment on every call",
       ],
@@ -558,13 +560,10 @@ export const GET_STARTED = {
     {
       id: "business",
       title: "For busier phones",
-      body: "Higher volumes, custom prompts and a named person on our side.",
-      cta: { label: "Talk to sales", href: custom.href, variant: "secondary" as const },
-      points: [
-        `Up to ${custom.minutes.toLocaleString("en-US")} minutes included`,
-        ...custom.unlocks,
-        business.unlocks[1],
-      ],
+      body: "Higher volumes, a written SLA and a named person on our side.",
+      cta: { label: "Talk to sales", href: ENTERPRISE.href, variant: "secondary" as const },
+      // Enterprise publishes no minutes and no price (lib/site.ts ENTERPRISE).
+      points: ["Minutes and a rate priced with you", ...ENTERPRISE.unlocks, "The largest voice-lab allowance"],
     },
     {
       id: "custom",

@@ -1,4 +1,9 @@
+import { requiredPlanFor } from "@/lib/billing/entitlements";
+import { PLANS } from "@/types";
 import type { Trade } from "./schema";
+
+/** Calls are recorded from this plan up; below it, only transcribed. Read off the entitlements. */
+const RECORD_PLAN = PLANS[requiredPlanFor("recordings")].name;
 
 /* ------------------------------------------------------------------ *
  * Veterinary — first-opinion small-animal practices.
@@ -251,6 +256,6 @@ export const veterinary: Trade = {
   objection: {
     asks: "Most of what my receptionists do on that phone is work out whether that animal comes in now or Thursday. Your machine can't do that — and if it tells someone their cat's just constipated, that cat's dead by morning and it's my name on the RCVS complaint, not yours.",
     answer:
-      "She's right, and the agent is built so that it cannot try. It has no clinical judgement and it is configured so that it cannot form one: it will not assess urgency, will not name a condition, and will not tell anybody that something can wait. The moment a call turns clinical it stops being a receptionist and becomes a routing decision — a person at the desk, the vet on duty, or your out-of-hours provider with the address and the likely initial cost — and it errs towards escalation every single time, which is the same rule your own front desk is already trained on. The value was never that call. It is the other four in five: the booster, the what-time-do-you-close, the flea treatment reorder, the moved-house family who found you on Google — the ones stacked in a hold queue at 8.50 while an RVN is holding a cat, which is precisely why the call at 8.52 rings out. Answering the ordinary ones is what leaves a human free for the one that matters. Three things make that checkable rather than a promise: every line it says is a script you signed off, every call is recorded and transcribed like any other, and asking for a person works on the first attempt with no qualifying questions.",
+      "She's right, and the agent is built so that it cannot try. It has no clinical judgement and it is configured so that it cannot form one: it will not assess urgency, will not name a condition, and will not tell anybody that something can wait. The moment a call turns clinical it stops being a receptionist and becomes a routing decision — a person at the desk, the vet on duty, or your out-of-hours provider with the address and the likely initial cost — and it errs towards escalation every single time, which is the same rule your own front desk is already trained on. The value was never that call. It is the other four in five: the booster, the what-time-do-you-close, the flea treatment reorder, the moved-house family who found you on Google — the ones stacked in a hold queue at 8.50 while an RVN is holding a cat, which is precisely why the call at 8.52 rings out. Answering the ordinary ones is what leaves a human free for the one that matters. Three things make that checkable rather than a promise: every line it says is a script you signed off, every call is transcribed like any other (and recorded, on " + RECORD_PLAN + " and above), and asking for a person works on the first attempt with no qualifying questions.",
   },
 };
