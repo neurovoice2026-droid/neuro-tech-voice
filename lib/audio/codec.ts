@@ -152,32 +152,6 @@ export function downsample16kTo8k(pcm: Buffer): Buffer {
   return out
 }
 
-// ─── Transport encoding ──────────────────────────────────────────────────────
-
-export type TelephonyCodec = 'PCMU' | 'PCMA' | 'L16'
-
-/**
- * Encode 16kHz PCM from the TTS engine for the negotiated transport.
- *
- * L16 is the quality-preserving option and costs nothing to produce, since the
- * engine already emits PCM at that rate. The G.711 paths pay for a downsample
- * and an 8-bit companding step.
- */
-export function encodeForTransport(pcm16k: Buffer, codec: TelephonyCodec): Buffer {
-  if (codec === 'L16') return pcm16k
-  const narrow = downsample16kTo8k(pcm16k)
-  return codec === 'PCMA' ? pcm16ToALaw(narrow) : pcm16ToMuLaw(narrow)
-}
-
-/** Decode whatever the carrier sends into 16-bit PCM for the VAD. */
-export function decodeFromTransport(payload: Buffer, encoding: string): Buffer {
-  const enc = encoding.toUpperCase()
-  if (enc === 'PCMA') return aLawToPcm16(payload)
-  if (enc === 'L16') return payload
-  // PCMU is Telnyx's default and the safest assumption for anything else.
-  return muLawToPcm16(payload)
-}
-
 const ALAW_ENCODE_SEG = [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]
 
 export function pcm16ToALaw(pcm: Buffer): Buffer {
