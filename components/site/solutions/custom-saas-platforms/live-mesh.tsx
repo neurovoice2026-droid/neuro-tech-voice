@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useRef, useSyncExternalStore, type CSSProperties } from "react";
+import { RoundButton } from "@/components/site/home/controls";
 
 /* ------------------------------------------------------------------ *
  * The flowing copy of a lit surface's light (saas.css §3, "The mesh in
@@ -36,10 +37,87 @@ import { useEffect, useRef, type CSSProperties } from "react";
  * runs there; with nothing displayed, the attribute it sets costs nothing.
  *
  * `drift` is the surface's own tempo (1 is #pricing's first card): a
- * higher number is slower. Pools drawn at a fixed px size, like the
- * credentials card's, cross a large surface in a smaller share of it, so
- * they take a slower drift to look the same.
+ * higher number is slower. Pools drawn at a fixed px size (#pricing's
+ * Enterprise band) cross a large surface in a smaller share of it, so
+ * they take a slower drift to look the same; every light on this page is
+ * drawn in %, so every surface here keeps the plan cards' band.
+ *
+ * THE READER'S PAUSE (WCAG 2.2.2). The flow loops for as long as a
+ * surface is on screen, behind text, so the page carries a control that
+ * stops it: `FlowToggle`, in the hero's room, the first surface that
+ * moves. It freezes every pool where it stands (saas.css §3, <html
+ * data-flow="paused">), so nothing jumps, and Play carries on from there.
+ * The choice is the reader's, not the page's: it is kept in localStorage
+ * ("ntv-flow") and set on <html>, so it holds on every later visit and on
+ * any page whose flow honours the attribute. It is applied after mount
+ * (`useSyncExternalStore`, false on the server and while hydrating), so
+ * it never costs a hydration mismatch; before that nothing flows anyway,
+ * because `data-live` is set by the same mount.
  * ------------------------------------------------------------------ */
+
+/** The reader's choice, as localStorage keeps it. */
+const KEY = "ntv-flow";
+
+let paused: boolean | null = null;
+const listeners = new Set<() => void>();
+
+/** Whether the reader paused the flow, read from storage once per document. */
+function isPaused(): boolean {
+  if (paused === null) {
+    try {
+      paused = localStorage.getItem(KEY) === "paused";
+    } catch {
+      paused = false;
+    }
+  }
+  return paused;
+}
+
+/**
+ * Mirrors the choice on <html data-flow="on|paused">, where the CSS reads
+ * it; the attribute being there at all says the toggle has mounted.
+ */
+function mirror() {
+  document.documentElement.dataset.flow = isPaused() ? "paused" : "on";
+}
+
+function subscribe(fn: () => void) {
+  listeners.add(fn);
+  mirror();
+  return () => {
+    listeners.delete(fn);
+  };
+}
+
+function setPaused(next: boolean) {
+  paused = next;
+  try {
+    if (next) localStorage.setItem(KEY, "paused");
+    else localStorage.removeItem(KEY);
+  } catch {}
+  mirror();
+  listeners.forEach((fn) => fn());
+}
+
+/**
+ * Pause and Play for every flowing light on the page: the landing's round
+ * transport button, its label and icon changing with what a press will
+ * do, as the explorer's Pause does. Drawn only where something flows
+ * (saas.css §3: the mesh's gate, once this has mounted), so reduced
+ * motion, the still tier, weak hardware and a page without script never
+ * see a control that would do nothing.
+ */
+export function FlowToggle({ pause, play }: { pause: string; play: string }) {
+  const still = useSyncExternalStore(subscribe, isPaused, () => false);
+  return (
+    <RoundButton
+      icon={still ? "play" : "pause"}
+      label={still ? play : pause}
+      onClick={() => setPaused(!still)}
+      className="saas-flow-toggle"
+    />
+  );
+}
 
 export function LiveMesh({ blobs, drift = 1 }: { blobs: readonly CSSProperties[]; drift?: number }) {
   const ref = useRef<HTMLSpanElement>(null);

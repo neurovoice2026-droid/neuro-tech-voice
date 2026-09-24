@@ -12,7 +12,7 @@ import type { EdgeId, LayerId, PartId } from "@/lib/pages/custom-saas-platforms"
  * inner width is 1112px: a card is 156×49px, and 1u is 1.112px).
  *
  * THE COLUMNS read left to right as a request travels: the people who
- * start something (80), the carriers and the edge that meet them (245),
+ * start something (80), the way in that meets them — phone and web (245),
  * the app on Vercel (410 and 575), the live-call gateway and the
  * database (740), and the providers and services at the far edge (905).
  * The five rows keep the phone call along the top (y 130, with Cartesia

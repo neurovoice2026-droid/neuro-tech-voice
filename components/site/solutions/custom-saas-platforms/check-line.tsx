@@ -27,7 +27,7 @@ import type { Check, CheckKind } from "@/lib/pages/custom-saas-platforms";
  * THE GLYPHS. Now, in this browser: a filled node, the thing itself.
  * On the call: a hollow node, to be shown. At handover: a dotted ring,
  * what you will hold. Marks, never text: the tick colour on a light
- * (3.58 at its worst, flowing), electric on white (5.70) and on a stage
+ * (3.4 at its worst, flowing), electric on white (5.70) and on a stage
  * (4.82). #checks draws its own rows but uses the same `CheckGlyph`.
  *
  * THE TONES. `lit` sits on a pearl light and uses only the light's
@@ -103,7 +103,7 @@ export function CheckLine({
   className?: string;
 }) {
   const { href } = check;
-  const link = cn("home-link inline-flex min-h-6 items-center", TYPE.body, RING);
+  const link = cn("home-link relative inline-flex min-h-6 items-center before:absolute before:inset-x-0 before:-inset-y-2.5", TYPE.body, RING);
   return (
     <div className={cn("min-w-0", className)}>
       <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">

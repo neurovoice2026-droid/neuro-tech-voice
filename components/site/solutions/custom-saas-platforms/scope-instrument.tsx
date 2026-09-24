@@ -7,7 +7,7 @@ import { CHIP, RING_LIGHT, useRovingRadio } from "@/components/site/home/control
 import { TYPE, WEIGHT } from "@/components/site/home/type";
 import { useDeviceTier } from "@/components/site/product/device-tier";
 import { usePrefersReducedMotion } from "@/components/site/product/timing";
-import { Stack, fill } from "@/components/site/solutions/custom-ai-agents/parts";
+import { fill } from "@/components/site/solutions/custom-ai-agents/parts";
 import type { NeedId, OursKind, ScopeData, ScopePart, ScopePartId } from "@/lib/pages/custom-saas-platforms";
 import { CheckLine } from "./check-line";
 import { LiveMesh } from "./live-mesh";
@@ -55,7 +55,8 @@ import { MapLink } from "./map-link";
  * once it has played, so a later hover or pick is never held back by it.
  * Turning a need on also shows its first new part in the inspector (the
  * part the reader just caused), without moving focus; the inspector's
- * copy lands with the house `ind-swap` rise, and so does the summary.
+ * copy lands with the house `ind-swap` rise, and so does the summary
+ * (both from the first change on, never on the first paint).
  * With reduced motion the tiles' transitions are pinned to none (the
  * global rule zeroes durations but not the stagger's delays) and the
  * ping is never rendered; the still tier does the same. Lite keeps it:
@@ -65,11 +66,15 @@ import { MapLink } from "./map-link";
  * of them there because of it — and the inspector on "Each customer’s
  * data, walled off", the part that most often goes wrong silently.
  *
- * NOTHING MOVES WHEN IT CHANGES. The inspector is a `Stack` (the custom
- * AI agents page's reservation stack): every part's copy laid into one
- * grid cell, invisible, with the live one over them, so the inspector is
- * as tall as its tallest part from the first paint and picking another
- * never shifts the page. A tile's outline is a border in both states —
+ * NOTHING ABOVE THE READER MOVES WHEN IT CHANGES. The inspector is as
+ * tall as the part in it, not the tallest part: its parts run from two
+ * short lines to a whole paragraph, and a card reserving the tallest
+ * stood a third empty on the part it opens on. So picking a part can
+ * move what is under the room — the foot line and the sections after
+ * it — and only that, and only on the reader's press (a shift right
+ * after input is not layout shift). Nothing above it moves: on a phone
+ * the needs sit above the room, and from lg they stand beside it, at
+ * the top of the row. A tile's outline is a border in both states —
  * transparent once built, where the white fill runs under it — so
  * filling one never changes its size.
  *
@@ -159,6 +164,8 @@ export function ScopeInstrument({ data, blobs }: { data: ScopeData; blobs: reado
 
   const [needs, setNeeds] = useState<ReadonlySet<NeedId>>(() => new Set(data.initial));
   const [part, setPart] = useState<ScopePartId>(data.initialPart);
+  // Set by the first pick, so the inspector's rise never plays on the first paint.
+  const [moved, setMoved] = useState(false);
   // The tiles the last press flipped, in reading order, and a fresh key
   // for each press, so the pings remount even when the same tiles flip.
   const [changed, setChanged] = useState<{ ids: readonly ScopePartId[]; nonce: number }>({ ids: [], nonce: 0 });
@@ -177,12 +184,19 @@ export function ScopeInstrument({ data, blobs }: { data: ScopeData; blobs: reado
   const built = useMemo(() => builtBy(data.parts, needs), [data.parts, needs]);
   const picked = data.parts.filter((p) => p.needs.length > 0 && built.has(p.id)).length;
   const summary = fill(needs.size > 0 ? data.summary.some : data.summary.none, { n: built.size, k: picked });
+  const shown = byId.get(part) ?? data.parts[0];
+
+  /** Puts a part in the inspector. */
+  function show(id: ScopePartId) {
+    setPart(id);
+    setMoved(true);
+  }
 
   const radio = useRovingRadio({
     count: order.length,
     index: order.indexOf(part),
     orientation: "horizontal",
-    onChange: (i) => setPart(order[i]),
+    onChange: (i) => show(order[i]),
   });
 
   function toggle(id: NeedId) {
@@ -196,7 +210,7 @@ export function ScopeInstrument({ data, blobs }: { data: ScopeData; blobs: reado
     setNeeds(next);
     setChanged((c) => ({ ids: flipped, nonce: c.nonce + 1 }));
     // The part the reader just caused, shown without taking their focus.
-    if (on && flipped.length > 0) setPart(flipped[0]);
+    if (on && flipped.length > 0) show(flipped[0]);
     const label = data.needs.find((n) => n.id === id)?.label ?? "";
     setSaid(fill(on ? data.live.added : data.live.removed, { label, n: after.size }));
 
@@ -208,11 +222,6 @@ export function ScopeInstrument({ data, blobs }: { data: ScopeData; blobs: reado
       flipped.length * STEP_MS + SETTLE_MS,
     );
   }
-
-  const inspected = Math.max(
-    0,
-    data.parts.findIndex((p) => p.id === part),
-  );
 
   return (
     <div
@@ -294,7 +303,10 @@ export function ScopeInstrument({ data, blobs }: { data: ScopeData; blobs: reado
 
       {/* ── The room ── */}
       <div className="min-w-0">
-        <div className="saas-lit saas-light-room-m p-4 md:p-6" data-swap="">
+        {/* Under 360px the room and its tiles give up 4px of padding
+            apiece, so "Subscriptions", the longest word on a tile, still
+            fits its column (the demo's tiles do the same). */}
+        <div className="saas-lit saas-light-room-m p-4 max-[359px]:p-3 md:p-6" data-swap="">
           <LiveMesh blobs={blobs} drift={0.96} />
           <span aria-hidden className="home-grain" />
 
@@ -335,7 +347,7 @@ export function ScopeInstrument({ data, blobs }: { data: ScopeData; blobs: reado
                           style={k >= 0 ? ({ "--k": k } as CSSProperties) : undefined}
                           className={cn(
                             "saas-tile grid min-h-16 cursor-pointer grid-cols-[auto_minmax(0,1fr)] content-start gap-x-2",
-                            "rounded-2xl px-3 py-2.5 text-left",
+                            "rounded-2xl px-3 py-2.5 text-left max-[359px]:px-2",
                             RING_LIGHT,
                           )}
                         >
@@ -355,50 +367,40 @@ export function ScopeInstrument({ data, blobs }: { data: ScopeData; blobs: reado
           </div>
 
           {/* ── The inspector ── white, so the landing's tokens are safe on
-              it. Every part's copy is laid in underneath the live one, so
-              it is always the height of the tallest. */}
+              it. As tall as the part in it: re-keyed on each pick, so the
+              new part's copy lands with the house rise. */}
           <div className="mt-5 rounded-[20px] bg-white p-5 shadow-[0_1px_2px_rgb(20_10_36/0.06)] md:p-6">
-            <Stack
-              items={data.parts}
-              live={inspected}
-              render={(p) => (
+            <div key={shown.id} className={cn("min-w-0", moved && "ind-swap")}>
+              <p className={cn(TYPE.label, "text-(--home-muted)")}>{data.inspector.title}</p>
+              <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <h4 className={cn(TYPE.h3, "text-balance text-(--home-ink)")} style={{ fontWeight: WEIGHT.h3 }}>
+                  {shown.label}
+                </h4>
+                <span className={cn(TYPE.mono, "inline-flex items-center gap-1.5 text-(--home-violet)")}>
+                  <KindGlyph kind={shown.kind} className="text-(--home-electric)" />
+                  {data.kinds[shown.kind]}
+                </span>
+              </div>
+              <dl className="mt-4 grid gap-4 md:grid-cols-2 md:gap-6">
                 <div className="min-w-0">
-                  <p className={cn(TYPE.label, "text-(--home-muted)")}>{data.inspector.title}</p>
-                  <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <h4 className={cn(TYPE.h3, "text-balance text-(--home-ink)")} style={{ fontWeight: WEIGHT.h3 }}>
-                      {p.label}
-                    </h4>
-                    <span className={cn(TYPE.mono, "inline-flex items-center gap-1.5 text-(--home-violet)")}>
-                      <KindGlyph kind={p.kind} className="text-(--home-electric)" />
-                      {data.kinds[p.kind]}
-                    </span>
-                  </div>
-                  <dl className="mt-4 grid gap-4 md:grid-cols-2 md:gap-6">
-                    <div className="min-w-0">
-                      <dt className={cn(TYPE.label, "text-(--home-muted)")}>{data.inspector.breaks}</dt>
-                      <dd className={cn(TYPE.body, "mt-1 text-pretty text-(--home-ink)")}>{p.breaks}</dd>
-                    </div>
-                    <div className="min-w-0">
-                      <dt className={cn(TYPE.label, "text-(--home-muted)")}>{data.inspector.ours}</dt>
-                      <dd className={cn(TYPE.body, "mt-1 text-pretty text-(--home-ink)")}>{p.ours}</dd>
-                    </div>
-                  </dl>
-                  {p.check && <CheckLine check={p.check} kinds={data.checkKinds} tone="white" className="mt-4" />}
-                  {p.map && (
-                    <MapLink
-                      part={p.map}
-                      className={cn(
-                        "home-link group mt-3 inline-block min-h-6 rounded-sm py-px",
-                        TYPE.body,
-                        RING_LIGHT,
-                      )}
-                    >
-                      <Arrowed label={data.inspector.map} />
-                    </MapLink>
-                  )}
+                  <dt className={cn(TYPE.label, "text-(--home-muted)")}>{data.inspector.breaks}</dt>
+                  <dd className={cn(TYPE.body, "mt-1 text-pretty text-(--home-ink)")}>{shown.breaks}</dd>
                 </div>
+                <div className="min-w-0">
+                  <dt className={cn(TYPE.label, "text-(--home-muted)")}>{data.inspector.ours}</dt>
+                  <dd className={cn(TYPE.body, "mt-1 text-pretty text-(--home-ink)")}>{shown.ours}</dd>
+                </div>
+              </dl>
+              {shown.check && <CheckLine check={shown.check} kinds={data.checkKinds} tone="white" className="mt-4" />}
+              {shown.map && (
+                <MapLink
+                  part={shown.map}
+                  className={cn("home-link group relative mt-3 inline-block min-h-6 rounded-sm py-px", "before:absolute before:inset-x-0 before:-inset-y-2.5", TYPE.body, RING_LIGHT)}
+                >
+                  <Arrowed label={data.inspector.map} />
+                </MapLink>
               )}
-            />
+            </div>
           </div>
         </div>
         <p className={cn(TYPE.meta, "mt-4 max-w-[640px] text-pretty")}>{data.foot}</p>

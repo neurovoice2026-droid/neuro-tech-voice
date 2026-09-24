@@ -25,6 +25,18 @@ import type { DeviceTier } from "@/components/site/product/device-tier";
  * started, so a transition that a quicker second press skips cannot pull
  * the attribute out from under the one that replaced it.
  *
+ * NEVER OVER THE HEADER. A named part is drawn in the transition's own
+ * layer, above the whole page, and the fixed site header is part of the
+ * page (the root), which does not move (saas.css §11). So a part under
+ * the header would slide sharp across its wordmark for the transition's
+ * 0.2–0.32s, then drop back under the frosted plate. Naming the header
+ * too would keep it on top, but a named header samples an empty backdrop
+ * and loses its frost for every transition. So a change whose parts are
+ * under the header, before or after it, is made at once instead: before,
+ * by not starting the transition; after (a row whose new place is under
+ * the header), by skipping it once the new DOM is in, which keeps the
+ * change and drops the animation.
+ *
  * TYPES WHERE THEY EXIST. `types: ["forward" | "back"]` lets the CSS
  * mirror the prototype's slide with `:active-view-transition-type()`. The
  * options form is passed only where `ViewTransition.prototype` carries
@@ -55,18 +67,41 @@ const typesSupported = () => typeof ViewTransition !== "undefined" && "types" in
 let latest = 0;
 
 /**
+ * The parts each scope names while it runs (saas-build.css §8, saas-closing.css
+ * §10): the prototype's screen, and #checks' rows with the block under them.
+ */
+const NAMED: Record<VtScope, string> = {
+  proto: ".pp .saas-proto-screen",
+  checks: ".pp .saas-check",
+};
+
+/** True when any part `scope` names is on screen under the fixed site header. */
+function underHeader(scope: VtScope): boolean {
+  // The <header> itself: the menu and the phone sheet carry the attribute too.
+  const bar = document.querySelector("header[data-site-header]")?.getBoundingClientRect();
+  if (!bar || bar.bottom <= 0) return false;
+  for (const part of document.querySelectorAll(NAMED[scope])) {
+    const r = part.getBoundingClientRect();
+    if (r.height > 0 && r.top < bar.bottom && r.bottom > bar.top) return true;
+  }
+  return false;
+}
+
+/**
  * Runs `update` inside document.startViewTransition, React flushed synchronously inside it,
  * with <html data-saas-vt={scope}> set for the transition's life (the scoping hook for saas.css).
  * `types` are passed only where ViewTransition.prototype has "types"; elsewhere the
  * callback form runs and the CSS falls back to the default cross-fade.
- * Not allowed, or startViewTransition throws: `update()` runs directly.
+ * Not allowed, a named part under the header, or startViewTransition throws:
+ * `update()` runs directly. A part under the header once the update is in:
+ * the transition is skipped, the update kept.
  */
 export function withViewTransition(
   scope: VtScope,
   update: () => void,
   o: { allowed: boolean; types?: readonly string[] },
 ): void {
-  if (!o.allowed || !supported()) {
+  if (!o.allowed || !supported() || underHeader(scope)) {
     update();
     return;
   }
@@ -75,9 +110,13 @@ export function withViewTransition(
   const clear = () => {
     if (id === latest) root.removeAttribute("data-saas-vt");
   };
-  const run = () => flushSync(update);
-  root.setAttribute("data-saas-vt", scope);
   let vt: ViewTransition;
+  const run = () => {
+    flushSync(update);
+    // The new picture: a part whose new place is under the header would slide there over it.
+    if (underHeader(scope)) vt.skipTransition();
+  };
+  root.setAttribute("data-saas-vt", scope);
   try {
     vt =
       o.types?.length && typesSupported()

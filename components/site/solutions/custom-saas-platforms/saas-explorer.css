@@ -25,7 +25,9 @@
  * the one the eye follows — is a second ring on ::after whose opacity
  * eases in and out, so a card handing "current" to the next one fades
  * across. A failure's strike grows along itself (`scale`), and the rail
- * fills by `scale`. Reduced motion pins them all at the end of this file
+ * fills by `scale`. The one keyframe is the pick's ring closing in once
+ * (a ::before, by scale and opacity). Reduced motion pins them
+ * all at the end of this file
  * (and saas.css §13 pins the cards, the lines and the switches).
  *
  * COLOUR, measured (saas-platforms test, §6.4): electric on the stage
@@ -96,12 +98,18 @@
    One vocabulary for both. White, with a ring by state: a hairline at
    rest; firmer on the lens's route; ink once passed; and, current, the
    firm ring with an electric one easing in over it. The reader's own
-   pick is a muted outline outside all of them. */
+   pick is an ink ring outside all of them, clear of the electric
+   current ring (the violet would read as the same mark), and it closes
+   in once as it appears, so a part brought here from elsewhere on the
+   page is found at a glance. */
 .pp .saas-card,
 .pp .saas-chip {
   background-color: #fff;
   box-shadow: 0 0 0 1px var(--pp-hair);
   transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Never focused (aria-hidden, tabindex -1), so globals.css's focus
+     margin only pushed "See it on the map" 40px under the middle. */
+  scroll-margin-top: 0;
 }
 
 .pp .saas-card::after,
@@ -133,10 +141,29 @@
   opacity: 1;
 }
 
-.pp .saas-card[data-selected],
-.pp .saas-chip[data-selected] {
-  outline: 2px solid var(--home-muted);
-  outline-offset: 2px;
+/* The pick's ring is a pseudo-element 5px out (2px of ink, 3px clear),
+   so its closing-in is scale and opacity only: the compositor runs it,
+   where an animated outline-offset would repaint every frame. */
+.pp .saas-card[data-selected]::before,
+.pp .saas-chip[data-selected]::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border: 2px solid var(--home-ink);
+  border-radius: 17px;
+  pointer-events: none;
+  animation: saas-picked 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .saas-chip[data-selected]::before {
+  border-radius: 9999px;
+}
+
+@keyframes saas-picked {
+  from {
+    opacity: 0;
+    scale: 1.1;
+  }
 }
 
 @media (hover: hover) {
@@ -196,6 +223,14 @@
   z-index: 1;
 }
 
+/* On a stacked chip the pill stands in the figure's own 14px line (a
+   pixel over each side of it: stack-view.tsx), so it is a size smaller
+   and never touches the name above. */
+.pp .saas-chip .saas-voice {
+  padding: 1px 7px;
+  line-height: 14px;
+}
+
 .pp .saas-tag {
   font-size: 10px;
   font-weight: 500;
@@ -242,5 +277,10 @@
   .pp .saas-slash > span,
   .pp .saas-rail-fill {
     transition: none;
+  }
+
+  .pp .saas-card[data-selected]::before,
+  .pp .saas-chip[data-selected]::before {
+    animation: none;
   }
 }

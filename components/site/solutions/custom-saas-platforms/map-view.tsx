@@ -29,7 +29,9 @@ import { stateOf, type Frame } from "./explorer-frame";
  * A CARD reads its part's state from the frame (saas-explorer.css):
  * at rest a hairline; on the lens's route a firmer one; passed, ink;
  * current, an electric ring that eases in. The reader's own pick in the
- * inspector is a muted outline outside all of those. A grant part
+ * inspector is an ink outline outside all of those, which pulses in
+ * once, so a card brought to the screen from elsewhere on the page is
+ * found at a glance. A grant part
  * (Cartesia, ElevenLabs) carries a violet GRANT tag. A part that has
  * failed has its name struck through in ember — a short stroke that
  * draws itself across the name (a CSS `scale`, so it needs no GSAP and
@@ -43,7 +45,7 @@ import { stateOf, type Frame } from "./explorer-frame";
  * same parts, their words and a "Show it on the drawing" button are in
  * the explorer's index below, which is the keyboard's and the screen
  * reader's way through, and the caption says in words what each step
- * shows. A pointer may still pick a card, which only fills the
+ * shows. A pointer may still pick a card, which holds it in the
  * inspector.
  *
  * PURE: no hooks, no "use client". The explorer renders it with its

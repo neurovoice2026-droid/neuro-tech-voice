@@ -57,7 +57,7 @@ const RING = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visib
 
 export function Terms({ data }: { data: TermsData }) {
   return (
-    <section id="terms" aria-labelledby="terms-title" className="scroll-mt-28">
+    <section id="terms" aria-labelledby="terms-title" className="scroll-mt-8">
       <Frame>
         <HomeHeading id="terms-title" eyebrow={data.eyebrow} title={data.title} titleKey={data.key} sub={data.sub} />
 
@@ -71,7 +71,9 @@ export function Terms({ data }: { data: TermsData }) {
             >
               {/* md–xl: 3px down, so the 16px head sits on the first 21px item line. */}
               <h3 className={cn(TYPE.label, "text-pp-muted md:max-xl:pt-[3px]")}>{col.head}</h3>
-              <ul className="mt-4 space-y-3 md:max-xl:mt-0">
+              {/* Below md, where the four lists stack into one long
+                  column, 8px between items rather than 12. */}
+              <ul className="mt-3 space-y-2 md:mt-4 md:space-y-3 md:max-xl:mt-0">
                 {col.items.map((item) => (
                   <li key={item} className="flex gap-3">
                     {/* 9px down centres a 4px dot on the x-height of a 21px line. */}
@@ -85,15 +87,21 @@ export function Terms({ data }: { data: TermsData }) {
         </div>
 
         <p className="mt-10 max-w-[620px] text-[15px] leading-[23px] text-pretty text-pp-ink">{data.after}</p>
-        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1">
+        {/* 21px of text in a 44px target, as the landing's standalone
+            links are (trades.tsx, doubts.tsx): the row's 2px top and -10px
+            bottom margins hand the targets' extra height back, so the
+            words sit where a 24px target would put them. Where the two
+            wrap onto two lines they stack edge to edge, 44px apart, and
+            never share a pixel of target. */}
+        <div className="mt-0.5 -mb-2.5 flex flex-wrap gap-x-6">
           {data.links.map((l) => (
             <IntentLink
               key={l.href}
               href={l.href}
-              // 21px of text in a 24px target; the underline on the words
-              // only, so it never runs on into the arrow.
+              // The underline on the words only, so it never runs on into
+              // the arrow.
               className={cn(
-                "group inline-flex min-h-6 items-center gap-1.5 rounded-sm text-[14px] leading-[21px] text-pp-ink transition-colors duration-200 hover:text-(--home-plum)",
+                "group inline-flex min-h-11 items-center gap-1.5 rounded-sm text-[14px] leading-[21px] text-pp-ink transition-colors duration-200 hover:text-(--home-plum)",
                 RING,
               )}
             >

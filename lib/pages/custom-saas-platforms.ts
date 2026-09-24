@@ -9,9 +9,10 @@ import "server-only";
  *
  * Read, never retyped, where the source is safe to read: SOLUTION_ITEMS,
  * COMPANY, AUTH, PRICING_TRIAL, SOLUTIONS_MENU, TRUST (by id), HOME_START,
- * AGENT_INTEGRATIONS, CAA_HANDOVER.after, DYNAMIC_APP_ROUTES,
- * VOICE_PIPELINE_MODES, VOICE_TOOL_NAMES, INTERNAL_SIGNATURE_TOLERANCE_SECONDS,
- * WEBHOOK_HEADERS. Retyped in FACTS with a keep-in-step note, and held by
+ * CAA_HANDOVER.after, DYNAMIC_APP_ROUTES,
+ * TOTAL_ONBOARDING_STEPS, VOICE_PIPELINE_MODES, VOICE_TOOL_NAMES,
+ * INTERNAL_SIGNATURE_TOLERANCE_SECONDS, WEBHOOK_HEADERS. Retyped in FACTS
+ * with a keep-in-step note, and held by
  * lib/pages/custom-saas-platforms.test.ts: counts (floors or exact), cron
  * step names, and constants whose modules pull server graphs (the webhook
  * sender, the Twilio client, the breaker store, the gateway's own config).
@@ -30,7 +31,8 @@ import "server-only";
  *
  * No price, date, client, logo, testimonial or badge appears. The
  * accreditations are personal and the grants are the company's; neither
- * is a certification, and the page says so in the homepage's own words.
+ * is a certification. The page says so once for each, beside the claim,
+ * and never contradicts the homepage's TRUST line (guarded below).
  *
  * The throws below run when the module is first evaluated — at build time
  * for this static route — so a fact that drifts under the copy fails the
@@ -38,10 +40,10 @@ import "server-only";
  * evaluates top to bottom, so PARTS, LENSES, DOWN and SCOPE_PARTS are
  * declared before the section consts that hold them.
  * ------------------------------------------------------------------ */
+import { TOTAL_ONBOARDING_STEPS } from "@/app/onboarding/_lib/onboarding-state"; // pure, browser-safe
 import { AUTH, COMPANY, PRICING_TRIAL, SOLUTION_ITEMS, SOLUTIONS_MENU, TRUST } from "@/lib/site";
 import { sentences } from "@/lib/pages/home/source";
 import { HOME_START } from "@/lib/pages/home/start";
-import { AGENT_INTEGRATIONS } from "@/lib/pages/ai-agents";
 import { CAA_HANDOVER } from "@/lib/pages/custom-ai-agents";
 import { DYNAMIC_APP_ROUTES } from "@/lib/security/csp";
 import { INTERNAL_SIGNATURE_TOLERANCE_SECONDS, VOICE_PIPELINE_MODES } from "@/lib/voice/contracts";
@@ -66,7 +68,12 @@ const trustNote = (id: string) => {
   if (!t) throw new Error(`custom-saas-platforms: TRUST lost "${id}"`);
   return t.note;
 };
-/** "There is no certification badge on this site, because we hold none." */
+/**
+ * "There is no certification badge on this site, because we hold none."
+ * Guarded, not quoted: the credentials card says in its own words that the
+ * accreditations aren't a company certification, and this keeps the
+ * homepage saying nothing that card would contradict.
+ */
 export const TRUST_QUOTE = sentences(trustNote("company"), 2, 3);
 if (!TRUST_QUOTE.includes("we hold none")) throw new Error("custom-saas-platforms: TRUST no longer says we hold none");
 if (!trustNote("eu").includes("eu-west-1, Ireland")) throw new Error("custom-saas-platforms: the EU region moved");
@@ -85,6 +92,10 @@ const COUNT_WORD = ["no", "one", "two", "three", "four", "five", "six", "seven",
   "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"];
 const word = (n: number) => COUNT_WORD[n] ?? String(n);
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+// "Onboarding in four screens": read from the steps the onboarding renders.
+// HOME_START.body says it in the landing's own words, so the test holds
+// that sentence to the same count.
+const ONBOARDING = word(TOTAL_ONBOARDING_STEPS); // "four"
 /** "a, b and c": no Oxford comma, as on /solutions/custom-ai-agents. */
 export const listJoin = (xs: readonly string[]) =>
   xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`;
@@ -103,7 +114,7 @@ const keyed = <T extends { title: string; key: string }>(s: T): T => {
  * floor ≥ 0.75 × count. Migrations, Stripe events and cron steps are exact.
  */
 export const FACTS = {
-  routeHandlers: 80, // FLOOR. app/api/**/route.ts (85 at e9e5d5e)
+  routeHandlers: 80, // FLOOR. app/api/**/route.ts (83 after the Telnyx removal)
   testFiles: 120, // FLOOR. *.test.ts(x) repo-wide (127 with this page's test)
   migrations: 12, // EXACT. supabase/migrations/*.sql
   stripeEvents: 7, // EXACT. `case '…':` in app/api/billing/webhook/route.ts
@@ -193,7 +204,7 @@ export type EdgeId = "caller-twilio" | "twilio-router" | "router-gateway" | "gat
 export type Part = { id: PartId; layer: LayerId; label: string; datum: string; does: string; facts?: string; grant?: true; check?: Check };
 export type Hop = EdgeId | { edge: EdgeId; reverse: true };
 export type Step = {
-  id: string; text: string; hops?: readonly Hop[]; ring?: readonly PartId[];
+  id: string; title: string; text: string; hops?: readonly Hop[]; ring?: readonly PartId[];
   fault?: PartId; voice?: "cartesia" | "elevenlabs"; cron?: string; check?: Check;
 };
 export type TourLensId = "signup" | "call" | "failover" | "nightly";
@@ -217,7 +228,7 @@ export type ExplorerData = {
   eyebrow: string; title: string; key: string; sub: string; tag: string;
   lensesAria: string; stepsAria: string;
   transport: { play: string; pause: string; replay: string };
-  stepOf: string; stepsTitle: string; partTitle: string; hint: string; onPaths: string; showIt: string;
+  stepOf: string; stepsTitle: string; partTitle: string; hint: string; picked: string; onPaths: string; showIt: string;
   indexSummary: string; speaking: string; grant: string; grantLink: Link; failed: string; live: string;
   kinds: Record<CheckKind, string>;
   layers: Record<LayerId, string>;
@@ -274,7 +285,8 @@ export type PrototypeData = {
 export type BuildStage = { id: "prototype" | "platform" | "handover"; n: "01" | "02" | "03"; title: string; body: string; hold: string; ours?: string; check: Check };
 export type BuildData = { eyebrow: string; title: string; key: string; sub: string; labels: { stage: string; hold: string; ours: string }; checkKinds: Record<CheckKind, string>; stages: readonly BuildStage[] };
 export type TermsData = { eyebrow: string; title: string; key: string; sub: string; columns: readonly { id: "sets" | "need" | "get" | "upfront"; head: string; items: readonly string[] }[]; after: string; links: readonly Link[] };
-export type CheckRow = { id: string; kind: CheckKind; claim: string; how: string; link?: Link };
+/** `link.lens`: an in-page link to the explorer that also opens that lens (checks.tsx, part-bus.ts `requestLens`). */
+export type CheckRow = { id: string; kind: CheckKind; claim: string; how: string; link?: Link & { lens?: LensId } };
 export type ChecksData = {
   eyebrow: string; title: string; key: string; sub: string;
   filtersAria: string; filters: readonly { id: "all" | CheckKind; label: string }[];
@@ -285,15 +297,14 @@ export type FaqItem = { id: string; q: string; a: string; where?: Link };
 export type FaqData = { eyebrow: string; title: string; key: string; keyTone: "quiet"; talk: Link; phone: string; items: readonly FaqItem[] };
 export type HeroData = {
   eyebrow: string; title: string; key: string; sub: string; primary: Link; secondary: Link; note: string;
-  room: { tag: string; plates: readonly { layer: string; name: string; runs: string; datum: string }[]; foot: string; link: Link };
+  room: { tag: string; plates: readonly { layer: string; name: string; runs: string; datum: string }[]; foot: string; link: Link; flow: { pause: string; play: string } };
   proofLabel: string; proof: readonly { label: string; term: string; detail: string; href: string }[];
 };
 export type CredentialsData = {
   eyebrow: string; title: string; key: string; sub: string; checkKinds: Record<CheckKind, string>;
-  accreditations: { label: string; figure: string; caption: string; title: string; body: string; isnt: string; check: Check };
-  grants: { label: string; kind: string; whereLabel: string; mapLink: string; isnt: string; check: Check;
+  accreditations: { label: string; figure: string; caption: string; body: string; isnt: string; check: Check };
+  grants: { label: string; whereLabel: string; mapLink: string; isnt: string; check: Check;
     rows: readonly { id: GrantId; grantor: string; part: PartId; runs: string }[] };
-  none: { label: string; text: string; link: Link };
 };
 export type StartData = { eyebrow: string; title: string; key: string; body: string; primary: Link; secondary: Link; note: string };
 export type CreditsData = { title: string; items: readonly { term: string; detail: string }[] };
@@ -301,10 +312,15 @@ export type CreditsData = { title: string; items: readonly { term: string; detai
 /* ---------- shared copy ---------- */
 
 // Held to csp.ts by the test: its static branch really does carry
-// 'unsafe-inline', so the page never calls a prerendered policy "strict".
-const CSP_POLICIES =
-  "signed-in screens get a fresh nonce on every request; prerendered pages like this one can’t carry a nonce, so they get a host allowlist that still permits inline scripts";
+// 'unsafe-inline', so the page never calls a prerendered policy "strict",
+// and says so wherever it names the public pages' policy. The nonce is
+// "a one-time token": the word itself is jargon, and a slur in British
+// English.
+const CSP_TOKEN = "a fresh one-time token on every request";
 const CSP_HOW = "Developer tools → Network → this page → Response headers → Content-Security-Policy.";
+// The public pages' policy in plain words: csp.ts's static script-src is
+// 'self' 'unsafe-inline' (the test holds it), so no "allowlist".
+const CSP_PUBLIC = "public pages like this one may load scripts only from this site, and inline scripts still run";
 // There is no /contact page and no form: a build starts with a phone call.
 const CALL: Link = { label: SOLUTIONS_MENU.cta.label, href: COMPANY.phoneHref }; // "Call us about a build"
 /** The three ways a claim is checked, as the check lines print them. Passed as `checkKinds` / `kinds`. */
@@ -312,10 +328,14 @@ export const CHECK_KINDS: Record<CheckKind, string> = { site: "Now, in this brow
 
 /* ---------- meta ---------- */
 
+// The layout's template adds " — Neuro Tech Voice", so the title carries no
+// dash of its own. The description leads with the owner's differentiators
+// and stays near 155 characters, so a search result doesn't cut them.
+// Both go to openGraph and twitter too: without a page's own, those keep
+// the layout's voice-agent copy (metadata merges shallowly).
 export const SAAS_META = {
-  title: "Custom SaaS Platforms — built end to end, like the one you’re on",
-  description:
-    "Complete SaaS platforms — a prototype you click first, then accounts, billing, admin, hosting and the code handed over — built by the team behind this platform. Quoted after a phone call.",
+  title: `${ITEM.label}, like the one you’re on`,
+  description: `Complete SaaS platforms of any complexity, built by people holding ${ACC} Claude accreditations from Anthropic, at a company with ${GRANTORS} grants.`,
 } as const;
 
 /* ---------- #top: hero ---------- */
@@ -324,27 +344,35 @@ export const SAAS_HERO: HeroData = keyed({
   eyebrow: ITEM.label, // "Custom SaaS Platforms"
   title: "We build complete SaaS platforms. You’re on one of them.",
   key: "You’re on one of them.",
-  sub: `${ITEM.description} We design and build the whole platform, whatever the complexity: a prototype you can click first, then accounts, billing, admin, hosting and the hard parts in between — with the code handed over. The proof is the platform behind this site, built by the same team.`,
+  // The owner's three proofs in the first paragraph, before the plates.
+  sub: `${ITEM.description} We design and build the whole platform, whatever the complexity: a prototype you click first, then accounts, billing, admin and hosting, with the code handed over. Our team holds ${ACC} personal Claude accreditations from Anthropic, our company holds startup grants from ${GRANTORS}, and the platform you’re on is our proof.`, // OWNER
   primary: CALL,
   secondary: { label: "Explore the platform", href: "#platform" },
   note: `${COMPANY.phone} · No form: a build starts with a phone call.`,
   room: {
     tag: "Under this site",
     // One plate per layer of the menu's `stack`, in its order (guarded above).
+    // Datums in a founder's words, ≤ 20 characters so each sits on one
+    // line beside its layer label from 360px. The plate's grid gives the
+    // label its own width and the datum the rest (hero.tsx PLATE), so a
+    // longer one balances over two lines, flush right, and never runs
+    // into the label. The developer's terms stay on the drawing's cards.
     plates: [
-      { layer: ITEM.stack[0], name: `Next.js ${FACTS.nextMajor} on Vercel`, runs: "This site, sign-up, onboarding, the dashboard and its API", datum: `${FACTS.routeHandlers}+ route handlers` },
-      { layer: ITEM.stack[1], name: "Supabase Postgres", runs: "Row-level security, sign-in and file storage, in the EU", datum: `${FACTS.migrations} migrations` },
-      { layer: ITEM.stack[2], name: "Stripe and SmartBill", runs: "Subscriptions, checkout, the customer portal and fiscal invoices", datum: `${FACTS.stripeEvents} webhook events` },
-      { layer: ITEM.stack[3], name: "Vercel and Fly.io", runs: `An always-on voice gateway on Node.js ${FACTS.nodeMajor}, and a daily job at ${FACTS.cronAt}`, datum: `${FACTS.cronSteps.length} nightly steps` },
+      { layer: ITEM.stack[0], name: `Next.js ${FACTS.nextMajor} on Vercel`, runs: "This site, sign-up, onboarding, the dashboard and its API", datum: `${FACTS.routeHandlers}+ API routes` },
+      { layer: ITEM.stack[1], name: "Supabase Postgres", runs: "Row-level security, sign-in and file storage, in the EU", datum: `${FACTS.migrations} schema changes` },
+      { layer: ITEM.stack[2], name: "Stripe and SmartBill", runs: "Subscriptions, checkout, the customer portal and fiscal invoices", datum: `${FACTS.stripeEvents} Stripe event types` },
+      { layer: ITEM.stack[3], name: "Vercel and Fly.io", runs: `An always-on voice gateway on Node.js ${FACTS.nodeMajor}, and a daily job at ${FACTS.cronAt}`, datum: `${FACTS.cronSteps.length} scheduled steps` },
     ],
     foot: "Counted from the repository by the site’s own tests. A plus means at least.",
     link: { label: "Explore it", href: "#platform" },
+    flow: { pause: "Pause background motion", play: "Play background motion" },
   },
   proofLabel: "The evidence on this page",
   proof: [
-    { label: "Accreditations", term: `${ACC} Claude accreditations`, detail: "From Anthropic, held personally by the people who build.", href: "#credentials" },
-    { label: "Startup grants", term: GRANTORS, detail: "Awarded to our company.", href: "#credentials" },
-    { label: "The large project", term: "This platform", detail: "Built by us, and drawn from its code below.", href: "#platform" },
+    { label: "Accreditations", term: `${ACC} Claude accreditations`, detail: "From Anthropic, each earned by someone on our team.", href: "#credentials" },
+    { label: "Startup grants", term: GRANTORS, detail: "Awarded to our company. Their technology runs inside this platform.", href: "#credentials" },
+    // OWNER: "large projects delivered". The others belong to the companies they were built for.
+    { label: "Large projects delivered", term: "This platform", detail: "The one that’s ours to show, drawn from its code below.", href: "#platform" },
   ],
 });
 
@@ -353,7 +381,7 @@ export const SAAS_HERO: HeroData = keyed({
 // While there is no public link, the accreditations are shown on the call.
 const accCheck: Check = ACCREDITATIONS.verify
   ? { kind: "site", label: "See the accreditations", href: ACCREDITATIONS.verify.href }
-  : { kind: "call", label: "Ask to see them on the call." }; // OWNER: that we show them on request
+  : { kind: "call", label: "Ask to see the accreditations" }; // OWNER: that we show them on request. The kind tag says "On the call".
 // The first grant with a public link turns the grants' check into a site link.
 const grantLink = GRANTS.find((g) => g.verify)?.verify;
 
@@ -361,33 +389,38 @@ export const SAAS_CREDENTIALS: CredentialsData = keyed({
   eyebrow: "Who builds it",
   title: `The people who build it hold ${ACC} Claude accreditations`,
   key: `${ACC} Claude accreditations`,
-  sub: `Personal accreditations from Anthropic, and startup grants from ${GRANTORS}. What each one is, what it isn’t, and how to see it.`,
+  sub: `Personal accreditations from Anthropic, and startup grants from ${GRANTORS}, whose technology runs inside this platform. What each one is, and how to see it.`,
   checkKinds: CHECK_KINDS,
   accreditations: {
     label: "Personal accreditations",
     figure: ACC, // "20+"
     caption: "Claude accreditations, from Anthropic",
-    title: "Held by the people who build, not by the company",
-    // OWNER: confirm what they cover ("about building with Claude").
-    body: "Each one belongs to the person who earned it: the same people who would design and build your platform. They’re about building with Claude, Anthropic’s AI.",
-    isnt: "They’re personal. They aren’t a security or compliance certification of our company.",
+    // OWNER: confirm what they cover ("about building with Claude"). The
+    // second sentence is why a buyer should care, as "Where it runs here"
+    // is for a grant; it claims no more than that. It reaches only the AI
+    // parts of a build, and the FAQ says AI is optional. If they cover
+    // building software with Claude and you're happy to say this platform
+    // was built with it (the repository's history says so), the second
+    // sentence can become: "We build with it too, this platform included,
+    // so where your product should use AI, the people building it already
+    // know how." Until then it stays as is.
+    body: "Each was earned by one of the people who’d design and build your platform, for building with Claude, Anthropic’s AI. So where your product should use AI, the people building it already know how.",
+    // Said once, here. The homepage's "we hold none" is about badges and
+    // stays guarded above; quoting it under "20+" read as a denial.
+    isnt: "They aren’t a security or compliance certification of our company, and we don’t claim one.",
     check: accCheck,
   },
   grants: {
-    label: "Startup grants",
-    kind: "Startup grant · awarded to our company",
+    label: "Startup grants, awarded to our company",
     whereLabel: "Where it runs here",
     mapLink: "See it on the map",
-    isnt: "A grant is support from the company that awards it. It isn’t an endorsement of this page, or of any build we quote.",
+    // The grants' one non-endorsement line, beside the claim. The FAQ
+    // doesn't repeat it; the credits' trademark line is the legal notice.
+    isnt: "A grant isn’t an endorsement of this page, or of any build we quote.",
     check: grantLink
       ? { kind: "site", label: "See the grants", href: grantLink.href }
-      : { kind: "call", label: "Ask to see them on the call." }, // OWNER
+      : { kind: "call", label: "Ask to see the grants" }, // OWNER
     rows: GRANTS.map((g) => ({ id: g.id, grantor: g.grantor, part: g.part, runs: g.runs })),
-  },
-  none: {
-    label: "What none of these is",
-    text: `None of them is a certification of the company. The homepage says it plainly: “${TRUST_QUOTE}”`,
-    link: { label: "What you can check about the company", href: "/#trust" },
   },
 });
 
@@ -395,8 +428,8 @@ export const SAAS_CREDENTIALS: CredentialsData = keyed({
 
 // The seventeen parts of the drawing. Labels stay ≤ 14 characters and
 // datums ≤ 16 (the cards are 140×44u), and every number is interpolated
-// from FACTS or a read source. Telnyx, KV and Drive are left off on
-// purpose: the runbook's architecture is Twilio only, and 17 stays legible.
+// from FACTS or a read source. KV and Drive are left off on purpose, so
+// 17 stays legible.
 const PARTS: readonly Part[] = [
   { id: "caller", layer: "people", label: "A caller", datum: "any phone",
     does: "Rings a business’s number. Nothing to install, nothing to sign up for." },
@@ -405,22 +438,20 @@ const PARTS: readonly Part[] = [
   { id: "twilio", layer: "edge", label: "Twilio", datum: "numbers · texts",
     does: `Rents the phone numbers, asks the app what to do with every call, reports how each one went, and carries texts. Before it dials out, the app refuses premium-rate and shared-cost numbers, and it cuts a transferred call at ${FACTS.transferCapMinutes} minutes.` },
   { id: "proxy", layer: "edge", label: "Proxy", datum: "sessions · CSP",
-    does: `Runs before every page and API request: refreshes the session, keeps signed-out visitors out of the dashboard, and gives every page its security policy — ${CSP_POLICIES}.`,
-    check: { kind: "site", label: "Check this page’s policy", how: CSP_HOW } },
+    does: `Runs before every page and API request: keeps visitors signed in, keeps signed-out visitors out of the dashboard, and gives every page a security policy. Signed-in screens get ${CSP_TOKEN}; ${CSP_PUBLIC}.` },
   { id: "router", layer: "app", label: "Call router", datum: `${MODES} modes`,
     does: "Answers Twilio within seconds and picks how to run each call: our own pipeline on Cartesia, Cartesia’s managed agent, or ElevenLabs’ standby agent — skipping any path whose breaker is open or whose budget is spent." },
   { id: "dashboard", layer: "app", label: "Dashboard", datum: `${SCREENS} screens`,
-    does: `Onboarding in four screens, then ${word(SCREENS)} screens: ${listJoin(SCREEN_NAMES)}.`,
+    does: `Onboarding in ${ONBOARDING} screens, then ${word(SCREENS)} screens: ${listJoin(SCREEN_NAMES)}.`,
     check: { kind: "site", label: "Walk through it on the free trial", href: PRICING_TRIAL.href } },
   { id: "api", layer: "app", label: "API", datum: `${FACTS.routeHandlers}+ routes`,
-    does: `${FACTS.routeHandlers}+ route handlers, from accounts and billing to telephony and the voice gateway’s calls back to the app. Machine callers — Twilio, Stripe, ElevenLabs, the gateway and the daily job — prove who they are with signatures or secrets, never cookies.` },
+    does: `${FACTS.routeHandlers}+ API routes, from accounts and billing to telephony and the voice gateway’s calls back to the app. Machine callers — Twilio, Stripe, ElevenLabs, the gateway and the daily job — prove who they are with signatures or secrets, never cookies.` },
   { id: "workflows", layer: "app", label: "Workflows", datum: `signed · ${FACTS.webhookAttempts} tries`,
     does: `Rules that fire after a call on what happened: a signed webhook — tried up to ${word(FACTS.webhookAttempts)} times, https only, never to a private address — a Slack post, an email, a row in Google Sheets.` },
   { id: "cron", layer: "app", label: "Daily job", datum: `${FACTS.cronAt}`,
     does: `One job, called by Vercel Cron at ${FACTS.cronAt}. Its ${word(FACTS.cronSteps.length)} steps run on their own, so one failing never stops the others, and each is safe to run twice.` },
   { id: "gateway", layer: "calls", label: "Voice gateway", datum: `Node.js ${FACTS.nodeMajor}`,
-    does: `An always-on service that holds each live call open — which a serverless function can’t — and runs speech in, the conversation and voice out. What it sends the app is signed, and a signature more than ${word(SIGNATURE_MINUTES)} minutes old is refused. On a deploy, calls get up to ${FACTS.drainSeconds} seconds to finish.`,
-    facts: "Its own tests cover the failover, against simulated providers." },
+    does: `An always-on service that holds each live call open — which a serverless function can’t — and runs speech in, the conversation and voice out. What it sends the app is signed, and a signature more than ${word(SIGNATURE_MINUTES)} minutes old is refused. On a deploy, calls get up to ${FACTS.drainSeconds} seconds to finish.` },
   { id: "cartesia", layer: "calls", label: "Cartesia", datum: "hears and speaks", grant: true,
     does: "The main path: Cartesia’s speech recognition hears the caller and its voice speaks the reply. Its managed agents are a second way to run a call." },
   { id: "openai", layer: "calls", label: "OpenAI", datum: `${TOOLS} tools`,
@@ -428,7 +459,8 @@ const PARTS: readonly Part[] = [
   { id: "elevenlabs", layer: "calls", label: "ElevenLabs", datum: "the fallback", grant: true,
     does: "The fallback at every level: its voice or its speech recognition can take over mid-call, and a standby agent can take the whole call." },
   { id: "supabase", layer: "services", label: "Supabase", datum: `${FACTS.migrations} migrations`,
-    does: "The database, sign-in and file storage, in eu-west-1 (Ireland). Row-level security keeps each business’s rows to itself, and a database trigger keeps plan and billing columns out of a customer’s own reach." },
+    // The trigger is told in the sign-up tour, and the scope says both in full.
+    does: "The database, sign-in and file storage, in eu-west-1 (Ireland). Row-level security walls off each business’s rows." },
   { id: "stripe", layer: "services", label: "Stripe", datum: `${FACTS.stripeEvents} events`,
     does: `Checkout, the customer portal, and a signed webhook that keeps the plan in step on ${word(FACTS.stripeEvents)} kinds of event. Card numbers never reach our servers.` },
   { id: "smartbill", layer: "services", label: "SmartBill", datum: "fiscal invoices",
@@ -441,49 +473,51 @@ const PARTS: readonly Part[] = [
 // `ring` pulses parts a step touches without travelling to them; `fault`
 // marks the part that failed; `voice` is who speaks from that step on; the
 // nightly lens's `cron` fields are the daily route's step names, in order.
+// `title` is the step list's short name for a step; the caption alone carries `text`.
 const LENSES: readonly Lens[] = [
   { id: "signup", label: "A business signs up and pays", steps: [
-    { id: "open", hops: ["customer-proxy"], text: "A business opens the sign-up page. The proxy runs first and gives the page its security policy.",
+    { id: "open", title: "The sign-up page opens", hops: ["customer-proxy"], text: "A business opens the sign-up page. The proxy runs first and gives the page its security policy.",
       check: { kind: "site", label: "Open the sign-up page", href: AUTH.signup } },
-    { id: "account", hops: ["proxy-api", "api-supabase"], text: "The app creates the account in Supabase and signs them in." },
-    { id: "onboard", hops: ["proxy-dashboard"], text: `Onboarding. ${HOME_START.body}`,
+    // Email sign-up waits for the confirmation link (lib/auth/actions.ts, "Confirm email" in the runbook).
+    { id: "account", title: "The account is created", hops: ["proxy-api", "api-supabase"], text: "The app creates the account in Supabase; the link in the confirmation email signs them in (Google sign-in does it at once)." },
+    { id: "onboard", title: "Onboarding", hops: ["proxy-dashboard"], text: `Onboarding. ${HOME_START.body}`,
       check: { kind: "site", label: "Walk through it on the free trial", href: PRICING_TRIAL.href } },
-    { id: "checkout", hops: ["dashboard-stripe"], text: "Picking a plan opens Stripe Checkout. The card number goes to Stripe and never reaches our servers." },
-    { id: "webhook", hops: ["stripe-api"], text: `Stripe’s signed webhook comes back. ${cap(word(FACTS.stripeEvents))} kinds of event keep the plan and the invoices in step.` },
-    { id: "plan", hops: ["api-supabase"], text: "The server writes the plan. A trigger in the database keeps a customer’s own session from changing it." },
-    { id: "invoice", hops: ["api-smartbill"], text: "A paid invoice becomes one fiscal invoice in SmartBill, however often the webhook retries." },
+    { id: "checkout", title: "Stripe Checkout", hops: ["dashboard-stripe"], text: "Picking a plan opens Stripe Checkout. The card number goes to Stripe and never reaches our servers." },
+    { id: "webhook", title: "Stripe’s signed webhook", hops: ["stripe-api"], text: `Stripe’s signed webhook comes back. ${cap(word(FACTS.stripeEvents))} kinds of event keep the plan and the invoices in step.` },
+    { id: "plan", title: "The plan is written", hops: ["api-supabase"], text: "The server writes the plan. A trigger in the database keeps a customer’s own session from changing it." },
+    { id: "invoice", title: "A fiscal invoice in SmartBill", hops: ["api-smartbill"], text: "A paid invoice becomes one fiscal invoice in SmartBill, however often the webhook retries." },
   ] },
   { id: "call", label: "A phone call comes in", steps: [
-    { id: "ring", hops: ["caller-twilio"], text: "Someone rings the business’s number." },
-    { id: "route", hops: ["twilio-router"], text: `Twilio asks the app what to do. The router picks one of ${word(MODES)} ways to run this call.` },
-    { id: "stream", hops: ["router-gateway"], voice: "cartesia", text: "The call streams to the voice gateway, with a session token the app has signed." },
-    { id: "hear", hops: ["gateway-cartesia"], text: "Cartesia hears the caller and turns speech into text." },
-    { id: "think", hops: ["gateway-openai"], text: `OpenAI writes the reply, and uses a tool when it needs one: ${word(TOOLS)} of them, from checking the diary to putting the call through.` },
-    { id: "book", hops: ["gateway-api", "api-google"], text: "The tool runs in the app over a signed request. A booking goes into Google Calendar, checked again just before it’s written." },
-    { id: "speak", hops: ["gateway-cartesia"], text: "Cartesia speaks the reply. If the caller talks over it, it stops, and the transcript keeps only what they heard." },
-    { id: "end", hops: ["gateway-api", "api-supabase", "twilio-api"], text: "The call ends. The transcript and a summary are saved, and Twilio’s own record bills the minutes, once." },
-    { id: "after", hops: ["api-workflows", "workflows-google"], text: "Workflows fire on what happened: a signed webhook, a Slack post, a row in Google Sheets." },
+    { id: "ring", title: "Someone rings", hops: ["caller-twilio"], text: "Someone rings the business’s number." },
+    { id: "route", title: "Twilio asks the app", hops: ["twilio-router"], text: `Twilio asks the app what to do. The router picks one of ${word(MODES)} ways to run this call.` },
+    { id: "stream", title: "The call streams to the gateway", hops: ["router-gateway"], voice: "cartesia", text: "The call streams to the voice gateway, with a session token the app has signed." },
+    { id: "hear", title: "Cartesia hears", hops: ["gateway-cartesia"], text: "Cartesia hears the caller and turns speech into text." },
+    { id: "think", title: "OpenAI writes the reply", hops: ["gateway-openai"], text: `OpenAI writes the reply, and uses a tool when it needs one: ${word(TOOLS)} of them, from checking the diary to putting the call through.` },
+    { id: "book", title: "A tool runs in the app", hops: ["gateway-api", "api-google"], text: "The tool runs in the app over a signed request. A booking goes into Google Calendar, checked again just before it’s written." },
+    { id: "speak", title: "Cartesia speaks", hops: ["gateway-cartesia"], text: "Cartesia speaks the reply. If the caller talks over it, it stops, and the transcript keeps only what they heard." },
+    { id: "end", title: "The call ends and is saved", hops: ["gateway-api", "api-supabase", "twilio-api"], text: "The call ends. The transcript and a summary are saved, and Twilio’s own record bills the minutes, once." },
+    { id: "after", title: "Workflows fire", hops: ["api-workflows", "workflows-google"], text: "Workflows fire on what happened: a signed webhook, a Slack post, a row in Google Sheets." },
   ] },
-  { id: "failover", label: "A voice provider fails", foot: "Covered by the gateway’s failover tests, against simulated providers.", steps: [
-    { id: "fault", hops: ["gateway-cartesia"], fault: "cartesia", voice: "cartesia", text: "Mid-call, Cartesia’s voice returns an error." },
-    { id: "switch", hops: ["gateway-elevenlabs"], fault: "cartesia", voice: "elevenlabs", text: "The gateway switches to ElevenLabs’ voice for the rest of the call, and says again what the caller didn’t hear." },
-    { id: "ears", hops: ["gateway-elevenlabs"], text: `If it’s the speech recognition that fails instead, ElevenLabs’ own takes over, replaying the caller’s last ${word(FACTS.sttReplaySeconds)} seconds.` },
-    { id: "model", hops: ["gateway-openai", "gateway-elevenlabs"], fault: "openai", text: "If OpenAI fails before anything was said, the whole call goes to a standby ElevenLabs agent, with the conversation so far." },
-    { id: "breaker", ring: ["router"], text: `${cap(word(FACTS.breakerFailures))} hard failures in a row open a breaker: new calls skip that path for ${FACTS.breakerOpenSeconds} seconds, then longer each time, up to ${word(FACTS.breakerMaxMinutes)} minutes.` },
-    { id: "gateway", hops: ["twilio-router", "router-elevenlabs"], fault: "gateway", text: "If the gateway can’t carry on, it lets go of the call without hanging up, and the app hands the caller to ElevenLabs." },
-    { id: "router", hops: ["twilio-router", "router-elevenlabs"], fault: "router", text: "If the app fails to answer Twilio at all, the number’s fallback route goes straight to ElevenLabs." },
-    { id: "billed", hops: ["twilio-api"], text: "However the call ended up being carried, it’s billed once, from Twilio’s own record." },
+  { id: "failover", label: "A voice provider fails", foot: "The switches, the breaker and the hand-overs are covered by the gateway’s and the app’s tests, against simulated providers.", steps: [
+    { id: "fault", title: "Cartesia’s voice fails", hops: ["gateway-cartesia"], fault: "cartesia", voice: "cartesia", text: "Mid-call, Cartesia’s voice returns an error." },
+    { id: "switch", title: "ElevenLabs’ voice takes over", hops: ["gateway-elevenlabs"], fault: "cartesia", voice: "elevenlabs", text: "The gateway switches to ElevenLabs’ voice for the rest of the call, and says again what the caller didn’t hear." },
+    { id: "ears", title: "If speech recognition fails", hops: ["gateway-elevenlabs"], text: `If it’s the speech recognition that fails instead, ElevenLabs’ own takes over, replaying the caller’s last ${word(FACTS.sttReplaySeconds)} seconds.` },
+    { id: "model", title: "If OpenAI fails", hops: ["gateway-openai", "gateway-elevenlabs"], fault: "openai", text: "If OpenAI fails before the reply has started, the whole call goes to a standby ElevenLabs agent, with the conversation so far." },
+    { id: "breaker", title: "A breaker opens", ring: ["router"], text: `${cap(word(FACTS.breakerFailures))} hard failures in a row open a breaker: new calls skip that path for ${FACTS.breakerOpenSeconds} seconds, then longer each time, up to ${word(FACTS.breakerMaxMinutes)} minutes.` },
+    { id: "gateway", title: "If the gateway can’t carry on", hops: ["twilio-router", "router-elevenlabs"], fault: "gateway", text: "If the gateway can’t carry on, it lets go of the call without hanging up, and the app hands the caller to ElevenLabs." },
+    { id: "router", title: "If the app’s answer fails", hops: ["twilio-router", "router-elevenlabs"], fault: "router", text: "If the app’s answer to Twilio errors or times out, Twilio asks the number’s fallback route, which hands the caller straight to ElevenLabs." },
+    { id: "billed", title: "Billed once, either way", hops: ["twilio-api"], text: "However the call ended up being carried, it’s billed once, from Twilio’s own record." },
   ] },
   { id: "nightly", label: `Every morning at ${FACTS.cronAt}`, foot: "A step that fails shows in the logs and never stops the others.", steps: [
-    { id: "wake", hops: ["cron-api"], text: `Vercel Cron calls the daily job at ${FACTS.cronAt}, with a secret. Its ${word(FACTS.cronSteps.length)} steps run on their own, and each is safe to run twice.` },
-    { id: "reconcile", cron: "reconcile_unbilled_calls", hops: ["api-supabase"], text: "Bills any answered call whose billing didn’t finish — with the same key, so never twice." },
-    { id: "roll", cron: "roll_usage_periods", hops: ["api-supabase"], text: "Starts the next usage period for paid plans." },
-    { id: "overage", cron: "report_overage", hops: [{ edge: "stripe-api", reverse: true }], text: "Reports minutes past the allowance to Stripe." },
-    { id: "reminders", cron: "booking_reminders", hops: [{ edge: "twilio-api", reverse: true }], text: "Texts appointment reminders." },
-    { id: "resync", cron: "resync_stale_agents", ring: ["cartesia", "elevenlabs"], text: `Re-syncs up to ${FACTS.resyncBatch} agents whose copy at Cartesia or ElevenLabs is missing or out of date.` },
-    { id: "purge", cron: "purge_expired_kv", hops: ["api-supabase"], text: "Deletes expired locks and flags." },
-    { id: "uploads", cron: "purge_orphan_uploads", hops: ["api-supabase"], text: "Removes day-old uploads that nothing uses." },
-    { id: "budget", cron: "warm_cartesia_budget", ring: ["cartesia"], text: "Refreshes the cached Cartesia budget." },
+    { id: "wake", title: "Vercel Cron calls the job", hops: ["cron-api"], text: `Vercel Cron calls the daily job at ${FACTS.cronAt}, with a secret. Its ${word(FACTS.cronSteps.length)} steps run on their own, and each is safe to run twice.` },
+    { id: "reconcile", title: "Bills calls left unbilled", cron: "reconcile_unbilled_calls", hops: ["api-supabase"], text: "Bills any answered call whose billing didn’t finish — with the same key, so never twice." },
+    { id: "roll", title: "Starts the next usage period", cron: "roll_usage_periods", hops: ["api-supabase"], text: "Starts the next usage period for paid plans." },
+    { id: "overage", title: "Reports overage to Stripe", cron: "report_overage", hops: [{ edge: "stripe-api", reverse: true }], text: "Reports minutes past the allowance to Stripe." },
+    { id: "reminders", title: "Texts appointment reminders", cron: "booking_reminders", hops: [{ edge: "twilio-api", reverse: true }], text: "Texts appointment reminders." },
+    { id: "resync", title: "Re-syncs stale agents", cron: "resync_stale_agents", ring: ["cartesia", "elevenlabs"], text: `Re-syncs up to ${FACTS.resyncBatch} agents whose copy at Cartesia or ElevenLabs is missing or out of date.` },
+    { id: "purge", title: "Deletes expired locks and flags", cron: "purge_expired_kv", hops: ["api-supabase"], text: "Deletes expired locks and flags." },
+    { id: "uploads", title: "Removes unused uploads", cron: "purge_orphan_uploads", hops: ["api-supabase"], text: "Removes day-old uploads that nothing uses." },
+    { id: "budget", title: "Refreshes the Cartesia budget", cron: "warm_cartesia_budget", ring: ["cartesia"], text: "Refreshes the cached Cartesia budget." },
   ] },
 ];
 
@@ -510,7 +544,8 @@ const DOWN: DownCopy = {
     elevenlabs: { name: "The ElevenLabs standby agent", via: "Straight from the app, with no gateway needed" },
   },
   whys: {
-    credits_available: "Its first choice is up, so the call takes it.",
+    // Also mask 8: the managed agents' breaker is checked only after this answer.
+    credits_available: "It’s the first choice, and it’s still up.",
     gateway_breaker_open: "Both Cartesia routes run through the voice gateway, so with it down the call goes straight to the standby agent.",
     credits_exhausted: "This cycle’s Cartesia credits are used up, so the call skips our own pipeline for the managed agent.",
     self_breaker_open: "Our own pipeline has failed enough times in a row to be taken out of the path, so the call goes to the managed agent.",
@@ -529,10 +564,11 @@ const DOWN: DownCopy = {
 };
 
 export const SAAS_PLATFORM: ExplorerData = keyed({
-  eyebrow: "The large project",
+  eyebrow: "A large project, opened up",
   title: "The platform behind this site, drawn from its code",
   key: "drawn from its code",
-  sub: "Pick something that happens — a business signing up, a phone call, a provider failing, the morning’s jobs — and follow it through the parts that handle it. It’s a drawing of the code, not a live feed, and every figure on it is counted from the repository.",
+  // "Not a live feed" is the tag's, right under the lenses.
+  sub: "Pick something that happens — a business signing up, a phone call, a provider failing, the morning’s jobs — and follow it through the parts that handle it. Every figure on it is counted from the repository.",
   tag: "Drawn from the code · not a live feed",
   lensesAria: "What happens",
   stepsAria: "Every step",
@@ -540,7 +576,8 @@ export const SAAS_PLATFORM: ExplorerData = keyed({
   stepOf: "Step {n} of {total}",
   stepsTitle: "Every step",
   partTitle: "The part",
-  hint: "Pick a part on the drawing to see what it does.",
+  hint: "Showing the highlighted part. Pick any part on the drawing to see what it does.",
+  picked: "Your pick. Pick a step or a path to follow the drawing again.",
   onPaths: "On these paths",
   showIt: "Show it on the drawing",
   indexSummary: "All {n} parts, in words",
@@ -550,13 +587,16 @@ export const SAAS_PLATFORM: ExplorerData = keyed({
   failed: "Failed",
   live: "Step {n} of {total}: {text}",
   kinds: CHECK_KINDS,
-  layers: { people: "People", edge: "Carriers and the edge", app: "The app · on Vercel", calls: "Live calls · on Fly.io", services: "Services it relies on" },
+  layers: { people: "People", edge: "The way in · phone and web", app: "The app · on Vercel", calls: "Live calls · gateway on Fly.io", services: "Services it relies on" },
   parts: PARTS,
   lenses: LENSES,
   // The SaaS-relevant tour, not the phone call: this page sells platforms.
   initial: "signup",
   down: DOWN,
-  foot: "Drawn by us from the platform’s code. The failover is covered by the gateway’s tests against simulated providers; the providers themselves were checked against their documentation, and Cartesia’s speech and voice were checked live.",
+  // The failover's tests are the failover lens's foot and a row in #checks.
+  // Only the providers a call runs on: the runbook's "Known limitations"
+  // names those four, and the test holds the list to it.
+  foot: "The providers a call runs on — Twilio, Cartesia, OpenAI and ElevenLabs — were checked against their documentation and simulated in tests; Cartesia’s speech and voice were also checked live.",
 });
 
 /* ---------- #scope ---------- */
@@ -564,26 +604,29 @@ export const SAAS_PLATFORM: ExplorerData = keyed({
 // The seventeen parts a platform can take, across the menu's four layers.
 // Eight are the bones (`needs: []`); the rest are built when any of their
 // needs is on. Each leads with the plain "what usually breaks" before
-// "what ours does", and where our platform proves nothing the `ours` line
-// opens with "Thin on ours" or "Not on ours" — the test holds both.
+// "what ours does", and where our platform has little or none of a part
+// the `ours` line opens with "Thin on ours" or "Not on ours" — the test
+// holds both, and the glyph beside the card says it without a sentence.
 const SCOPE_PARTS: readonly ScopePart[] = [
   { id: "auth", label: "Sign-up and sign-in", needs: [], kind: "does", map: "proxy",
     breaks: "A page that believes the browser about who’s asking.",
     ours: "A proxy refreshes the session on every request, and every page, route and action checks it again on the server." },
   { id: "screens", label: "Your product’s own screens", needs: [], kind: "does", map: "dashboard",
     breaks: "Nothing a template could save you from: this is the part only yours has.",
-    ours: `${cap(word(SCREENS))} screens and a four-screen onboarding, served by the same app as this page.`,
+    ours: `${cap(word(SCREENS))} screens and a ${ONBOARDING}-screen onboarding, served by the same app as this page.`,
     check: { kind: "site", label: "Walk through them on the free trial", href: PRICING_TRIAL.href } },
+  // "Done on ours" is about the signed-in screens, so the breaks line is
+  // too; the public pages' caveat stays in, beside it.
   { id: "policy", label: "A security policy on every page", needs: [], kind: "does", map: "proxy",
-    breaks: "A script slipped into a page, running as if it were yours.",
-    ours: `Two policies, chosen per route: ${CSP_POLICIES}.`,
-    check: { kind: "site", label: "Check it now", how: CSP_HOW } },
+    breaks: "A script slipped into a signed-in screen, running as if it were yours.",
+    ours: `Two policies, chosen per route. The signed-in screens, where your customers’ data is, get ${CSP_TOKEN}, so only scripts the server sent can run. Public pages like this one are built once, before anyone visits, so they can’t carry one: they may load scripts only from this site, and inline scripts still run.`,
+    check: { kind: "site", label: "How to check it", href: "#checks" } },
   { id: "teams", label: "Teams and roles", needs: ["teams"], kind: "none",
     breaks: "A member who can see what only an owner should.",
     ours: "Not on ours: each business account on it has a single owner. Roles for yours are designed from the prototype on." },
   { id: "admin", label: "An admin for your staff", needs: ["staff"], kind: "thin",
     breaks: "Fixing a customer’s account by hand, in the database.",
-    ours: "Thin on ours: owner settings, and a status check its operators use. Yours gets a real admin." },
+    ours: "Thin on ours: owner settings, and a status check its operators use. Yours gets a full admin for your staff." },
   { id: "connect", label: "Integrations and webhooks", needs: ["connect"], kind: "does", map: "workflows",
     breaks: "A webhook anyone can forge, or one pointed back at your own network.",
     ours: `Google Calendar and Sheets, with the customer’s own account. Outgoing webhooks carry an ${WEBHOOK_HEADERS.signature} header, are tried up to ${word(FACTS.webhookAttempts)} times, go out over https only, and are refused if their address resolves to a private network.` },
@@ -602,7 +645,7 @@ const SCOPE_PARTS: readonly ScopePart[] = [
     check: { kind: "site", label: "Read the privacy policy", href: "/privacy" } },
   { id: "plans", label: "Subscriptions and invoices", needs: ["plans"], kind: "does", map: "stripe",
     breaks: "A plan that changes in your app but not at the payment provider, or the other way round.",
-    ours: `Stripe Checkout and the customer portal, and a signed webhook that keeps the plan in step on ${word(FACTS.stripeEvents)} kinds of event. Card numbers never reach its servers.` },
+    ours: `Stripe Checkout and the customer portal, and a signed webhook that keeps the plan in step on ${word(FACTS.stripeEvents)} kinds of event.` },
   { id: "fiscal", label: "Invoices issued once", needs: ["plans", "usage"], kind: "does", map: "smartbill",
     breaks: "A retried payment notice that issues the same invoice twice.",
     ours: "Each paid Stripe invoice becomes one SmartBill fiscal invoice, however often the webhook retries." },
@@ -613,21 +656,24 @@ const SCOPE_PARTS: readonly ScopePart[] = [
     breaks: "A deploy that cuts off what someone was in the middle of.",
     ours: `The app on Vercel, and an always-on gateway on Fly.io that gives live calls up to ${FACTS.drainSeconds} seconds to finish before a deploy stops it.` },
   { id: "jobs", label: "Scheduled jobs", needs: [], kind: "does", map: "cron",
-    breaks: "A nightly job that fails halfway, then runs twice tomorrow.",
+    breaks: "A daily job that fails halfway, then runs twice the next day.",
     ours: `One daily job at ${FACTS.cronAt} with ${word(FACTS.cronSteps.length)} steps: each runs on its own, so one failing never stops the rest, and each is safe to run twice.` },
-  { id: "watch", label: "Monitoring", needs: [], kind: "does",
+  // What app/api/ops/voice-status returns, and no more (the test holds it):
+  // which services are set up, the Cartesia budget and every breaker. It
+  // is run by hand and alerts no one, so "thin".
+  { id: "watch", label: "Monitoring", needs: [], kind: "thin",
     breaks: "Hearing about an outage from a customer.",
-    ours: "A status check across every provider and every circuit breaker, behind a secret; a failed job shows in the logs." },
+    ours: "Thin on ours: an on-call status check, behind a secret, shows which of its services are set up, the Cartesia budget and the state of every circuit breaker; a failed job shows in the logs. Yours gets alerts that reach a person before a customer does." }, // OWNER: the last sentence rests on the menu's "Hosted, monitored" deliverable.
   { id: "live", label: "Something that stays connected", needs: ["live"], kind: "does", map: "gateway",
     breaks: "A serverless function timing out in the middle of a call.",
-    ours: "Calls stream to an always-on voice gateway, which switches provider mid-call if one fails — tested against simulated providers." },
+    ours: "Calls stream to an always-on voice gateway, which switches provider mid-call if one fails." },
 ];
 
 export const SAAS_SCOPE: ScopeData = keyed({
   eyebrow: "Scope it",
   title: "What goes into a complete platform, and what makes yours harder",
   key: "what makes yours harder",
-  sub: "Pick what your product needs. The parts it takes fill in across the four layers every platform has — each with what usually breaks there, and what ours does about it. There’s no price or date here: the parts you pick are what a quote is made of.",
+  sub: "Pick what your product needs. The parts it takes fill in across the four layers every platform has — each with what usually breaks there, and what ours does about it.",
   needsTitle: "What your product needs",
   checkKinds: CHECK_KINDS,
   partsAria: "The parts",
@@ -665,7 +711,7 @@ export const SAAS_SCOPE: ScopeData = keyed({
   kinds: { does: "Done on ours", thin: "Thin on ours", none: "Not on ours" },
   inspector: { title: "The part", breaks: "What usually breaks", ours: "On ours", map: "See it on the map" },
   live: { added: "Added: {label}. {n} parts in this build.", removed: "Removed: {label}. {n} parts in this build." },
-  foot: "The parts are what a quote is made of, not a quote. The ones marked thin or not on ours are where this platform proves nothing, and we say so.",
+  foot: "The parts are what a quote is made of, not a quote.",
 });
 
 /* ---------- #prototype ---------- */
@@ -682,8 +728,8 @@ export const SAAS_PROTOTYPE: PrototypeData = keyed({
   product: "Your product",
   frameAria: "Sample prototype",
   toggle: "Show what’s clickable",
-  hint: "The violet areas are clickable.",
-  live: "Screen {n} of {total}: {title}",
+  hint: "Every button in the sample opens another screen.",
+  live: "Screen {n} of {total}",
   restart: "Start again",
   settles: {
     title: "What a prototype settles",
@@ -733,14 +779,14 @@ export const SAAS_BUILD: BuildData = keyed({
     { id: "platform", n: "02", title: ITEM.deliverables[1],
       body: "Sign-up and sign-in, onboarding, subscriptions, invoices, settings and the tools your staff need to run it — built in from the start, not bolted on after launch.",
       hold: "The platform, working, to try the way your customers will.",
-      ours: "Supabase sign-in, a four-screen onboarding, Stripe subscriptions, SmartBill invoices and owner settings. Its staff side is thin — a status check and a server shell — and yours gets a real admin.",
+      ours: `Supabase sign-in, a ${ONBOARDING}-screen onboarding, Stripe subscriptions, SmartBill invoices, owner settings and a status check for its operators. Yours adds a full admin for your staff.`,
       check: { kind: "site", label: "Walk through ours on the free trial", href: PRICING_TRIAL.href } },
     { id: "handover", n: "03", title: ITEM.deliverables[2],
       // OWNER: "a guide to running it" in every handover.
       body: "It goes live on managed hosting, with the checks and scheduled jobs that keep it honest, and the repository — code, tests and a guide to running it — is handed over.",
       hold: "The code, and a platform that’s already live.",
-      ours: `Vercel for the app and Fly.io for live calls, a daily job of ${word(FACTS.cronSteps.length)} isolated steps, a status check across every provider, and ${FACTS.testFiles}+ test files.`,
-      check: { kind: "call", label: "Ask how ours is hosted and watched, on the call." } },
+      ours: `Vercel for the app and Fly.io for live calls, a daily job of ${word(FACTS.cronSteps.length)} isolated steps, an on-call status check of its setup and circuit breakers, and ${FACTS.testFiles}+ test files.`,
+      check: { kind: "call", label: "Ask how ours is hosted and watched" } },
   ],
 });
 
@@ -803,31 +849,34 @@ export const SAAS_CHECKS: ChecksData = keyed({
   key: "where to check it",
   sub: "Some you can check now, in this browser. Some we show you on the call. The rest you hold at handover.",
   filtersAria: "Show claims",
+  // One name for each kind, in the filters, the rows and every other check line.
   filters: [
     { id: "all", label: "Every claim" },
-    { id: "site", label: "Now, in this browser" },
-    { id: "call", label: "On the call" },
-    { id: "handover", label: "At handover" },
+    { id: "site", label: CHECK_KINDS.site },
+    { id: "call", label: CHECK_KINDS.call },
+    { id: "handover", label: CHECK_KINDS.handover },
   ],
-  kinds: { site: "Now · here", call: "On the call", handover: "At handover" },
+  kinds: CHECK_KINDS,
   showing: "Showing {n} of {total}",
   rows: [
-    { id: "same-app", kind: "site", claim: "This site and the product are one platform, and we built it.", how: "Start the free trial: the dashboard you land in is served by the same app as this page.", link: { label: PRICING_TRIAL.cta, href: PRICING_TRIAL.href } },
-    { id: "csp", kind: "site", claim: "Every page carries a security policy, chosen for its route.", how: `${CSP_HOW} This page’s is a host allowlist; signed-in screens get a nonce.` },
-    { id: "onboarding", kind: "site", claim: "Onboarding is four screens, then a test call.", how: "Walk through it on the free trial.", link: { label: PRICING_TRIAL.cta, href: PRICING_TRIAL.href } },
+    // A new account lands in onboarding first (proxy.ts, the auth callback), then the dashboard.
+    { id: "same-app", kind: "site", claim: "This site and the product are one platform, and we built it.", how: "Start the free trial: the onboarding and dashboard you land in are served by the same app as this page.", link: { label: PRICING_TRIAL.cta, href: PRICING_TRIAL.href } },
+    { id: "csp", kind: "site", claim: "Every page carries a security policy, chosen for its route.", how: `${CSP_HOW} Signed-in screens get ${CSP_TOKEN}; ${CSP_PUBLIC}.` },
+    { id: "onboarding", kind: "site", claim: `Onboarding is ${ONBOARDING} screens, then a test call.`, how: "Walk through it on the free trial.", link: { label: PRICING_TRIAL.cta, href: PRICING_TRIAL.href } },
     { id: "cards", kind: "site", claim: "Card numbers go to Stripe and never reach our servers.", how: "Choose a plan in the trial: the card form opens on Stripe’s own address." },
-    { id: "routing", kind: "site", claim: "Where the next call goes when a part is down is decided by the platform’s own code.", how: "Take a part down on the drawing above: every answer there is worked out by that code.", link: { label: "Take a part down", href: "#platform" } },
-    { id: "company", kind: "site", claim: "We’re an EU company, registered in Romania.", how: "The legal name, the CUI and the address are at the foot of every page." },
-    { id: "accreditations", kind: ACCREDITATIONS.verify ? "site" : "call", claim: `The people who build hold ${ACC} personal Claude accreditations from Anthropic.`, how: "Ask to see them on the call." }, // OWNER
-    { id: "grants", kind: "call", claim: grantsClaim, how: "Ask to see them on the call." }, // OWNER
-    { id: "counts", kind: "call", claim: `${FACTS.routeHandlers}+ route handlers, ${FACTS.migrations} migrations, ${FACTS.testFiles}+ test files.`, how: "Counted from the repository by a test that fails if a figure stops being true. Ask us to run it." }, // OWNER
+    { id: "routing", kind: "site", claim: "Where the next call goes when a part is down is decided by the platform’s own code.", how: "Take a part down on the drawing above: every answer there is worked out by that code.", link: { label: "Take a part down", href: "#platform", lens: "down" } },
+    // "This page", as TRUST says it: the sign-in, sign-up and app screens carry no site footer.
+    { id: "company", kind: "site", claim: "We’re an EU company, registered in Romania.", how: "The legal name, the CUI and the address are at the foot of this page." },
+    { id: "accreditations", kind: ACCREDITATIONS.verify ? "site" : "call", claim: `Our team holds ${ACC} Claude accreditations from Anthropic.`, how: "Ask to see them." }, // OWNER
+    { id: "grants", kind: "call", claim: grantsClaim, how: "Ask to see them." }, // OWNER
+    { id: "counts", kind: "call", claim: `${FACTS.routeHandlers}+ API routes, ${FACTS.migrations} schema changes, ${FACTS.testFiles}+ test files.`, how: "Counted from the repository by a test that fails if a figure stops being true. Ask us to run it." }, // OWNER
     { id: "failover", kind: "call", claim: "A call can lose a voice provider mid-sentence and carry on.", how: "Ask to see the gateway’s failover tests. They run against simulated providers, not a live outage." },
     { id: "prototype", kind: "handover", claim: "You click a prototype before any code is written.", how: "It’s the first thing a build delivers. You’ve clicked a sample of one above.", link: { label: "The sample", href: "#prototype" } },
     { id: "code", kind: "handover", claim: "The code is handed over.", how: "The repository, its tests and a guide to running it are yours at the end of the build." }, // OWNER
   ],
   missing: {
     label: "The one this page can’t show you",
-    body: "That we’ll build yours well. Everything above is a platform we built for ourselves. The way to find out about yours is a call, then a prototype you can click before any code is written.",
+    body: "That we’ll build yours well. The platform above is the one that’s ours to show. The way to find out about yours is a call, then a prototype you can click before any code is written.",
     cta: CALL,
   },
 });
@@ -845,22 +894,21 @@ export const SAAS_FAQ: FaqData = keyed({
     { id: "complete", q: "What do you mean by a complete SaaS platform?",
       a: "Everything a paying customer touches and everything you need to run it: sign-up and sign-in, the product’s own screens, subscriptions and invoices, the settings and admin behind them, hosting, monitoring and the scheduled jobs. Not just the screens, and not just a prototype — though a prototype comes first." },
     { id: "complex", q: "How complex can it be?",
-      a: "Complex enough that it’s worth a call. The platform on this page takes phone calls in real time through an always-on service, switches voice provider mid-call when one fails — tested against simulated providers — bills by the minute through Stripe and issues fiscal invoices. If yours is harder in a different way, tell us how, and we’ll say plainly whether we’re the right people." },
+      // Also served alone as FAQPage data, so the failover keeps its qualifier here.
+      a: "As complex as your product needs. The platform on this page takes phone calls in real time through an always-on service, switches voice provider mid-call when one fails (tested with simulated outages), bills by the minute through Stripe and issues Romanian fiscal invoices. If yours is complex in a different way, tell us how on the call, and we’ll say plainly how we’d build it." },
     { id: "cost", q: "What does a build cost, and how long does it take?",
       a: "It’s quoted after the call, because both depend on what the product has to do: how many kinds of user it has, how customers pay, what it connects to and whether anything runs live. We won’t put a number here that we’d have to walk back. The prototype comes first, so you’ll have clicked through the product before any code is written." },
     { id: "ai", q: "Does my platform need AI in it?",
-      a: "No. Most of a SaaS platform is accounts, data, payments and screens. Where AI would genuinely help — searching your documents, drafting, answering the phone — we’ll say where; where it wouldn’t, we won’t add it. If it’s a phone agent you want, that’s its own build.",
+      a: "No. Most of a SaaS platform is accounts, data, payments and screens. Where AI would genuinely help (searching your documents, drafting, answering the phone) we’ll say where, and the people who’d build it hold the Claude accreditations above; where it wouldn’t, we won’t add it. If it’s a phone agent you want, that’s its own build.",
       where: { label: CAA_ITEM.label, href: CAA_ITEM.href } },
     { id: "own", q: "Who owns the code?", // OWNER
       a: "You do, once it’s handed over: the repository, its tests and a guide to running it. Whose name the hosting, database and payment accounts are in is agreed before the build starts." },
     { id: "existing", q: "We already have something built. Can you take it on?",
       a: "Show us on the call. We’ll read what’s there and tell you plainly whether we’d extend it or start again, and why." },
-    { id: "personal", q: "Are the Claude accreditations a certification of your company?",
-      a: "No. They’re personal: each belongs to the person who earned it, and they’re about building with Claude, Anthropic’s AI. They aren’t a security or compliance certification — the company holds none, and the homepage says so too." },
     { id: "grants", q: `What are the ${GRANTORS} grants?`,
-      a: `Startup grants awarded to our company. Each grantor’s technology runs in this platform: ${listJoin(GRANTS.map((g) => `${g.grantor} ${g.role}`))}. A grant isn’t an endorsement of this page, or of any build we quote.` },
-    { id: "other", q: "Is this the only thing you’ve built?", // OWNER
-      a: "It’s the one we can show on a public page, because it’s ours. Work we’ve done for others belongs to them; ask on the call about work like yours, and we’ll tell you what we can." },
+      a: `Startup grants awarded to our company. Each grantor’s technology runs in this platform: ${listJoin(GRANTS.map((g) => `${g.grantor} ${g.role}`))}.` },
+    { id: "other", q: "What else have you delivered?", // OWNER: "large projects delivered"
+      a: "Other large projects, for other companies. That work belongs to them, so it isn’t on a public page; this platform is ours, so it is. Ask on the call about work like yours, and we’ll tell you what we can." },
     { id: "data", q: "Where would our data live?",
       a: "Where your product needs it to, chosen with you before anything is built. This platform keeps its database and files in the EU, in eu-west-1 (Ireland); some of the services it uses are outside the European Economic Area, and the privacy policy says how those transfers are safeguarded. We’re an EU company, registered in Romania.",
       where: { label: "Read the privacy policy", href: "/privacy" } },
@@ -880,8 +928,8 @@ export function faqJsonLd(items: readonly FaqItem[]) {
 
 export const SAAS_START: StartData = keyed({
   eyebrow: "Start",
-  title: "Bring the idea, and whatever exists of it",
-  key: "whatever exists of it",
+  title: "Bring the idea, and whatever you already have",
+  key: "whatever you already have",
   body: "A build starts with a phone call, not a form. Tell us who the product is for, how they’ll pay and what it has to connect to. We’ll tell you what we’d build first, what we wouldn’t, and what it would take.",
   primary: CALL,
   secondary: { label: "Try the platform we built", href: PRICING_TRIAL.href },
@@ -899,11 +947,12 @@ export const SAAS_CREDITS: CreditsData = {
     { term: "The figures", detail: "Counted from its repository by the site’s own tests. A figure with a plus is a floor: the real count is at least that." },
     { term: "Take a part down", detail: "Every answer is worked out when the page is built, by the platform’s own routing code. Nothing on this page is really down." },
     { term: "The prototype", detail: "A three-screen sample made for this page, for no product in particular. It stores nothing and charges no one." },
-    { term: "The scope", detail: "The parts it lists are what a quote is made of, not a quote. It prints no price and no date." },
-    { term: "Accreditations and grants", detail: `The accreditations are personal, held by people on the team; the grants were awarded to the company by ${listJoin(GRANTS.map((g) => g.grantor))}. Shown on the call, on request.` }, // OWNER
+    { term: "Accreditations and grants", detail: `The accreditations are held by people on the team; the grants were awarded to the company by ${listJoin(GRANTS.map((g) => g.grantor))}. Both are shown on the call, on request.` }, // OWNER
     { term: "What isn’t here", detail: "No client names, logos, testimonials, prices or dates appear on this page. The one project shown is our own." },
-    { term: "Anthropic and Claude", detail: "Anthropic and Claude are trademarks of Anthropic, PBC. The accreditations are personal; naming them is not an endorsement by Anthropic of this page or of any build." },
-    { term: "The companies named on the drawing", detail: `${listJoin(TRADEMARKS)} are trademarks of their respective owners. We build on them; naming them is not an endorsement, and none of them endorses this page or any build we quote.` },
-    { term: "Google", detail: AGENT_INTEGRATIONS.trademarks },
+    { term: "Anthropic and Claude", detail: "Anthropic and Claude are trademarks of Anthropic, PBC. Naming them is not an endorsement by Anthropic of this page or of any build." },
+    { term: "Other names on this page", detail: `${listJoin(TRADEMARKS)} are trademarks of their respective owners. We build on them; naming them is not an endorsement, and none of them endorses this page or any build we quote.` },
+    // Its own line, naming the marks this page prints: Google on its own,
+    // Calendar and Sheets (the test collects them from the copy).
+    { term: "Google", detail: "Google, Google Calendar and Google Sheets are trademarks of Google LLC. Neuro Tech Voice works with them and is not endorsed by Google." },
   ],
 };

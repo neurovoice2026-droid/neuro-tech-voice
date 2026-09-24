@@ -5,14 +5,16 @@
  *   §8  the prototype: its hotspots (highlighted, pulsed once), and the
  *       same-document view transition that slides one screen into the
  *       next, mirrored on the way back (prototype-demo.tsx, vt.ts)
- *   §9  the build: one registered number, `--saas-rail`, that draws the
- *       rail over the three stage cards and pops each station as the
- *       line reaches it; the dotted connectors between the stacked
- *       cards; the cards' rise a step apart (build.tsx)
+ *   §9  the build: the rail over the three stage cards, its line and a
+ *       station over each card scaled on the track's own view timeline,
+ *       each station popping as the line reaches it; the dotted
+ *       connectors between the stacked cards; the cards' rise a step
+ *       apart; stage 01's drawing of the sample, screen by screen
+ *       (build.tsx)
  *
  * The numbering is the page's (saas.css §0 lists the rest). The lights,
  * the lit surface and its tokens, the mesh in motion, the view-transition
- * root rule (§11) and the lite tier's `.saas-track`, `.saas-link` and
+ * root rule (§11) and the lite tier's rail, `.saas-link` and
  * hotspot-pulse lines (§12) are shared and live in saas.css; this file is
  * imported once by app/solutions/custom-saas-platforms/page.tsx, after
  * saas.css, so it ships with this route only.
@@ -20,9 +22,11 @@
  * Every rule sits under .pp (the shell's <main>), or on <html> where it
  * has to: the view-transition pseudo-elements hang off the root, and the
  * tier is read from it. Every class and keyframe is prefixed saas-. Only
- * transform, translate, scale, opacity and colours ever move, and the one
- * custom property that animates (`--saas-rail`) is read by nothing but
- * `scale`. Anything tied to scroll is a view timeline, inside
+ * transform, translate, scale, opacity and colours ever move, and no
+ * custom property animates, so everything tied to scroll runs on the
+ * compositor — but for the drawing's strokes, which draw with home.css's
+ * own `home-draw`, as every landing figure's do. Anything tied to scroll
+ * is a view timeline, inside
  * `@media (prefers-reduced-motion: no-preference)` and
  * `@supports (animation-timeline: view())`, so a browser without them,
  * or a reader who asked for less motion, gets the finished frame: the
@@ -34,10 +38,12 @@
    A hotspot is a real <button> in the sample screen. With the toggle off
    it is a plain button, the chip grey the screen draws it in; with
    "Show what's clickable" pressed (`data-hotspots` on the device) it
-   wears a 1.5px electric ring over a 12% electric wash, the violet area
-   the hint below the device names. Ink on that wash is well over 15:1;
-   the ring is a mark (electric on white, 5.70). These rules are
-   unlayered, so they win over the chip grey the button's utilities set.
+   wears a 1.5px electric ring over a 12% electric wash. Ink on that wash
+   is well over 15:1; the ring is a mark (electric on white, 5.70). The
+   hint below the device names the buttons, not this colour, and forced
+   colours draw the highlight again as a Highlight border (saas.css §15).
+   These rules are unlayered, so they win over the chip grey the button's
+   utilities set.
 
    Every hotspot is at least 44px tall already (min-h-11); its ::before
    reaches 4px further above and below, so a thumb that lands just off a
@@ -183,53 +189,71 @@ html[data-saas-vt="proto"]::view-transition-new(saas-proto) {
    that draws from left to right as the section comes up the screen,
    with a station over each card that pops as the line reaches it.
 
-   ONE NUMBER DRIVES IT. `--saas-rail` is registered as a <number> so it
-   can animate at all (an unregistered property would flip at 50%), and
-   inherits, so the track animates it once and its four children read
-   it: the line's width is `scale: var(--saas-rail) 1` from its left end,
-   and each station's size is its distance past the station's own place
-   on the rail (`--at`, inline from build.tsx: 0.02, 0.36, 0.70 — about
-   the left edge of each card's copy), twelve times over, held between
-   nothing and whole. So a station starts to grow exactly as the line
-   arrives and is whole by the time the line is a twelfth of the rail
-   past it. The track holds the line and three dots and nothing else,
-   so restyling it every frame costs next to nothing.
+   ONE TIMELINE, SCALE ONLY. The track names its own view timeline
+   (`--saas-track`), and the line and the three stations each animate
+   `scale` on it over one range, so the draw is the compositor's work
+   and never stalls on a busy main thread. The line grows from nothing
+   to whole from its left end. Each station stands at its place on the
+   rail (`--at`, inline from build.tsx: 0.02, 0.36, 0.70 — about the left
+   edge of each card's copy) and runs its own keyframes (picked by
+   `data-i`): nothing until the line reaches that place, then whole a
+   twelfth of the draw later — 2% to 10.333%, 36% to 44.333%, 70% to
+   78.333%. A keyframe's offset can't read a custom property, so those
+   stops repeat build.tsx's STATIONS: change one, change the other.
+   `linear` throughout, so the line and the stops keep time together.
 
-   THE FINISHED FRAME IS THE INITIAL VALUE. The property rests at 1: a
-   full rail with every station shown, wherever the animation doesn't run
-   — reduced motion, the lite tier (saas.css §12), the still tier and
-   weak hardware (below), and any browser without view timelines. One
-   without @property as well has no value for it at all, and the `, 1`
-   fallbacks give it the same full rail. */
-@property --saas-rail {
-  syntax: "<number>";
-  inherits: true;
-  initial-value: 1;
-}
-
+   THE FINISHED FRAME IS THE REST STATE. Nothing but the animation scales
+   the line or a station, so wherever it doesn't run — reduced motion,
+   the lite tier (saas.css §12), the still tier and weak hardware
+   (below), and any browser without view timelines — the rail is full
+   and every station shown. */
 .pp .saas-rail-line {
-  scale: var(--saas-rail, 1) 1;
   transform-origin: left center;
 }
 
 .pp .saas-station {
   left: calc(var(--at) * 100%);
-  scale: clamp(0, (var(--saas-rail, 1) - var(--at)) * 12, 1);
 }
 
 /* The rail draws on the track's own pass up the screen: from 30% of the
    way into its entry to the moment it is halfway up the screen, so the
    line has reached the last card by the time the cards' headings are
-   read. The connectors between the stacked cards (below lg) each grow
-   down from the card above on their own view timeline, 40% into their
-   entry until they are just short of halfway up. Longhands after the
-   shorthand, which resets them. */
+   read. Longhands only, as the tally's (saas-credentials.css §5), with
+   each station's name on a rule of its own: two classes and an
+   attribute, so the lite, still and weak pins (as deep, and <html>
+   besides) still outrank it. The connectors between the stacked cards
+   (below lg) each grow down from the card above on their own view
+   timeline, 40% into their entry until they are just short of halfway
+   up: longhands after the shorthand, which resets them. */
 @media (prefers-reduced-motion: no-preference) {
   @supports (animation-timeline: view()) {
     .pp .saas-track {
-      animation: saas-rail linear both;
-      animation-timeline: view();
+      view-timeline: --saas-track block;
+    }
+
+    .pp .saas-rail-line,
+    .pp .saas-station {
+      animation-duration: auto;
+      animation-timing-function: linear;
+      animation-fill-mode: both;
+      animation-timeline: --saas-track;
       animation-range: entry 30% cover 50%;
+    }
+
+    .pp .saas-rail-line {
+      animation-name: saas-line;
+    }
+
+    .pp .saas-station[data-i="0"] {
+      animation-name: saas-station-0;
+    }
+
+    .pp .saas-station[data-i="1"] {
+      animation-name: saas-station-1;
+    }
+
+    .pp .saas-station[data-i="2"] {
+      animation-name: saas-station-2;
     }
 
     .pp .saas-link {
@@ -255,13 +279,51 @@ html[data-saas-vt="proto"]::view-transition-new(saas-proto) {
   }
 }
 
-@keyframes saas-rail {
+@keyframes saas-line {
   from {
-    --saas-rail: 0;
+    scale: 0 1;
   }
 
   to {
-    --saas-rail: 1;
+    scale: 1 1;
+  }
+}
+
+/* Each station's stops: its STATIONS place (build.tsx) as a percentage,
+   and that plus a twelfth (8.333%). */
+@keyframes saas-station-0 {
+  0%,
+  2% {
+    scale: 0;
+  }
+
+  10.333%,
+  100% {
+    scale: 1;
+  }
+}
+
+@keyframes saas-station-1 {
+  0%,
+  36% {
+    scale: 0;
+  }
+
+  44.333%,
+  100% {
+    scale: 1;
+  }
+}
+
+@keyframes saas-station-2 {
+  0%,
+  70% {
+    scale: 0;
+  }
+
+  78.333%,
+  100% {
+    scale: 1;
   }
 }
 
@@ -275,19 +337,85 @@ html[data-saas-vt="proto"]::view-transition-new(saas-proto) {
   }
 }
 
+/* ─── §9 Build: stage 01's drawing ──────────────────────────────────
+   From lg, the first card's fifth row — where its neighbours say what
+   ours shows — holds the sample above in miniature (build.tsx `Screens`):
+   three screens, and a dotted link from each one's button to the next.
+   It is a landing figure (`.home-draw`): its pathLength="1" strokes draw
+   on its own view timeline with home.css's own `home-draw`, the one
+   thing here that moves a dash rather than a transform, as every landing
+   figure's does. Here each element takes its own slice of that pass
+   instead (`--o` where it starts, `--s` how much it takes, both inline),
+   as the trust figures' do (trust.css), so it goes screen by screen: a
+   frame, its bars, its button, the link on to the next. A screen's white
+   and a dotted link, which a dash draw would wreck, fade in on their
+   slices instead (`.saas-screens-fade`).
+
+   The window opens as the drawing clears the bottom of the screen and
+   closes a third of the way up, after its card has risen. One class and
+   an attribute deeper than home.css's .home-draw rules, so the slices
+   win whatever order the sheets land in; home/tier.css's lite line, and
+   the still and weak lines below, name <html> besides and outrank them. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .saas-screens.home-draw path[pathLength],
+    .pp .saas-screens.home-draw .saas-screens-fade {
+      animation-timeline: --home-draw;
+      animation-range:
+        cover calc(4% + 30% * var(--o, 0))
+        cover calc(4% + 30% * (var(--o, 0) + var(--s, 1)));
+    }
+
+    /* Strokes draw on power2.inOut, the house ease for draws. */
+    .pp .saas-screens.home-draw path[pathLength] {
+      animation-timing-function: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+    }
+
+    .pp .saas-screens.home-draw .saas-screens-fade {
+      animation-name: saas-screens-fade;
+      animation-duration: auto;
+      animation-fill-mode: both;
+      animation-timing-function: linear;
+    }
+  }
+}
+
+@keyframes saas-screens-fade {
+  from {
+    opacity: 0;
+  }
+}
+
 /* ─── The still tier and weak hardware ──────────────────────────────
    A forced ?tier=still that is not a reduced-motion request, and a
    device weak by its hardware (<html data-weak>), land on the finished
    frame too, as the hero's plates and the tally do: the rail full, the
-   connectors whole, no pulse (its ring resting at nothing). Lite is
-   saas.css §12. The pulse rule above is six classes and attributes
-   deep; §12's pulse line and the two below are as deep and name <html>
-   besides, so each outranks it whatever order the sheets land in. */
-html[data-tier="still"] .home-body .saas-track,
+   connectors whole, no pulse (its ring resting at nothing), stage 01's
+   drawing whole. Lite is saas.css §12, and home/tier.css for the
+   drawing's strokes; what fades in it is here, lite with the rest. The pulse
+   rule above is six classes and attributes deep; §12's pulse line and
+   the two below are as deep and name <html> besides, so each outranks
+   it whatever order the sheets land in. */
+html[data-tier="still"] .home-body .saas-rail-line,
+html[data-tier="still"] .home-body .saas-station,
 html[data-tier="still"] .home-body .saas-link,
 html[data-tier="still"] .home-body .saas-proto[data-seen][data-hotspots] .saas-hot::after,
-html[data-weak] .home-body .saas-track,
+html[data-weak] .home-body .saas-rail-line,
+html[data-weak] .home-body .saas-station,
 html[data-weak] .home-body .saas-link,
-html[data-weak] .home-body .saas-proto[data-seen][data-hotspots] .saas-hot::after {
+html[data-weak] .home-body .saas-proto[data-seen][data-hotspots] .saas-hot::after,
+html[data-tier="lite"] .home-body .saas-screens .saas-screens-fade,
+html[data-tier="still"] .home-body .saas-screens .saas-screens-fade,
+html[data-weak] .home-body .saas-screens .saas-screens-fade {
   animation: none;
+}
+
+/* The drawing's strokes are parked off their paths until they draw
+   (home.css), so they are put back whole, as home/tier.css does for
+   lite, rather than just stopped. */
+html[data-tier="still"] .home-body .saas-screens path[pathLength],
+html[data-weak] .home-body .saas-screens path[pathLength] {
+  animation: none;
+  stroke-dasharray: none;
+  stroke-dashoffset: 0;
 }

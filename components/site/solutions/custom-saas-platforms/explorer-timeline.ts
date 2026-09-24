@@ -1,5 +1,5 @@
 import type { gsap as GsapCore } from "gsap";
-import type { Lens, PartId } from "@/lib/pages/custom-saas-platforms";
+import type { EdgeId, Lens, PartId } from "@/lib/pages/custom-saas-platforms";
 import { holdFor } from "@/components/site/product/timing";
 import { EDGE_IDS, PLACE, endsOf } from "./map-geometry";
 import { arrivalOf, edgeOf, isReverse, type Voice } from "./explorer-frame";
@@ -22,7 +22,7 @@ import { arrivalOf, edgeOf, isReverse, type Voice } from "./explorer-frame";
  * it or disagree with it.
  *
  * THE DRAW (xl only, once). The edges draw themselves column by column,
- * the way a request travels — people, then the carriers and the edge,
+ * the way a request travels — people, then the way in (phone and web),
  * the app, the gateway and the database, the providers — each in 0.5s,
  * starting at 0, .25, .5, .8 and 1.05s. Each card sits a touch small
  * (0.92) and settles as the first edge into it lands, so the drawing
@@ -49,7 +49,16 @@ import { arrivalOf, edgeOf, isReverse, type Voice } from "./explorer-frame";
  *
  * The tour starts by calling `onStep(from − 1)`, so whatever frame was
  * showing becomes the one just before its first hop — step −1, the
- * route and nothing travelled, for a tour from the top.
+ * route and nothing travelled, for a tour from the top. With `clear`
+ * (the explorer's word that the drawing is in sight, so the frame on it
+ * may have been seen — the finished route the server drew, or the one a
+ * tour ended on) that isn't a snap: on the map, the traces lit now and
+ * not before the first hop draw themselves back towards their ends as
+ * they fade, 0.3s, and only then does the frame step back, a beat before
+ * the first hop — as the landing's knowledge stage clears its last
+ * answer before it asks again, and as "Take a part down" retracts a
+ * route. Below xl there are no traces, and the rail and the chips ease
+ * back in CSS.
  *
  * Client-only functions and no React. The kit that calls them has
  * registered DrawSVGPlugin and MotionPathPlugin (product/motion-kit.ts),
@@ -70,6 +79,8 @@ const COLUMN_AT = [0, 0.25, 0.5, 0.8, 1.05] as const;
 /** How far a ring grows as it pings: round a map card, and round a chip, which is smaller. */
 const REACH = { map: 1.35, stack: 1.12 } as const;
 const PING = 0.5;
+/** A seen route taking itself back before a tour from the top: the tour's opening beat. */
+const CLEAR = 0.3;
 
 /** Which column of the drawing a part stands in, by its x. */
 function columnOf(id: PartId): number {
@@ -110,6 +121,8 @@ export type TourOptions = {
   from: number;
   /** The map (xl) or the stacked composition. */
   wide: boolean;
+  /** The drawing is in sight: take back what the frame showing has lit, softly, before stepping back. */
+  clear?: boolean;
   /** A step has arrived (−1 or `from − 1` at the start): show it. */
   onStep: (i: number) => void;
   /** A step that changes who is speaking has arrived: record the pill, then `commit()` the step. */
@@ -123,9 +136,37 @@ export function buildTour(gsap: Gsap, root: Element, o: TourOptions): gsap.core.
   const tl = gsap.timeline({ paused: true, onStart: o.onStart, onComplete: o.onDone });
   const { steps } = o.lens;
   const from = Math.max(0, Math.min(steps.length - 1, o.from));
-  tl.call(() => o.onStep(from - 1), undefined, 0);
-
   const view = root.querySelector(`[data-view="${o.wide ? "map" : "stack"}"]`);
+
+  // What the frame before `from` already shows lit, and who is already speaking.
+  const lit = new Set(steps.slice(0, from).flatMap((st) => (st.hops ?? []).map(edgeOf)));
+  let voice: Voice | null = null;
+  for (const st of steps.slice(0, from)) if (st.voice) voice = st.voice;
+
+  // The playhead as the tour is laid out. Pings run on past an arrival
+  // and would stretch the timeline's own duration, so arrivals are placed
+  // by this cursor, never by `tl.duration()`.
+  let t = 0;
+
+  // A route in sight goes back the way it came before the frame steps
+  // back: the traces lit now that the frame before `from` doesn't light.
+  const seen =
+    o.clear && o.wide && view
+      ? [...view.querySelectorAll<SVGPathElement>(".saas-trace[data-on]")].filter(
+          (el) => !lit.has(el.dataset.trace as EdgeId),
+        )
+      : [];
+  if (seen.length) {
+    tl.fromTo(
+      seen,
+      { opacity: 1, drawSVG: "0% 100%" },
+      { opacity: 0, drawSVG: "100% 100%", duration: CLEAR, ease: "power2.in", immediateRender: false },
+      0,
+    );
+    t = CLEAR;
+  }
+  tl.call(() => o.onStep(from - 1), undefined, t);
+
   if (!view) return tl;
   const bead = o.wide ? view.querySelector(".saas-bead") : null;
   const reach = o.wide ? REACH.map : REACH.stack;
@@ -142,15 +183,6 @@ export function buildTour(gsap: Gsap, root: Element, o: TourOptions): gsap.core.
     );
   };
 
-  // What the frame before `from` already shows lit, and who is already speaking.
-  const lit = new Set(steps.slice(0, from).flatMap((st) => (st.hops ?? []).map(edgeOf)));
-  let voice: Voice | null = null;
-  for (const st of steps.slice(0, from)) if (st.voice) voice = st.voice;
-
-  // The playhead as the tour is laid out. Pings run on past an arrival
-  // and would stretch the timeline's own duration, so arrivals are placed
-  // by this cursor, never by `tl.duration()`.
-  let t = 0;
   for (let i = from; i < steps.length; i++) {
     const step = steps[i];
     // A beat before the first hop; after that, time to read the step just shown.

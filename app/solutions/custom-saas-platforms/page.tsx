@@ -70,13 +70,13 @@ import { Start } from "@/components/site/solutions/custom-saas-platforms/start";
  *     hero room's light mirrored, and #build's middle card the mirror of
  *     its neighbours, so no two surfaces in sight of each other match.
  *
- * Why the hero is not deferred: its sub is the LCP, and a
- * content-visibility box above the fold would hold that paint back for
- * nothing. Everything below the cover sits in a `HomeDeferred` box with
- * a reserve per Tailwind tier, as on the landing: `.pp` turns scroll
- * anchoring off, so a reserve far from the truth moves the page under
- * the reader when its box renders, and sends a `#credentials` or
- * `#part-…` jump to the wrong place.
+ * Why the hero is not deferred: it holds the LCP (the h1 from md up, the
+ * sub below md), and a content-visibility box above the fold would hold
+ * that paint back for nothing. Everything below the cover sits in a `HomeDeferred` box with
+ * a reserve per Tailwind tier, as on the landing. A reserve far from the
+ * truth moves the page under the reader when its box first paints, and
+ * lands a jump past it in the wrong place: see the reserves below, and
+ * the one more look every same-page jump gets (jumps.tsx).
  *
  * The CSS is route-scoped and imported here, once, so it ships with this
  * route only: the landing's tokens and shared classes (home.css), its
@@ -92,6 +92,15 @@ export const metadata: Metadata = {
   title: SAAS_META.title,
   description: SAAS_META.description,
   alternates: { canonical: "/solutions/custom-saas-platforms" },
+  // A page's openGraph and twitter replace the layout's whole (metadata merges shallowly), so each is set in full.
+  openGraph: {
+    type: "website",
+    siteName: "Neuro Tech Voice",
+    url: "/solutions/custom-saas-platforms",
+    title: SAAS_META.title,
+    description: SAAS_META.description,
+  },
+  twitter: { card: "summary_large_image", title: SAAS_META.title, description: SAAS_META.description },
 };
 
 /** Each lit surface's pools, worked out once per build. */
@@ -120,76 +129,95 @@ export default function CustomSaasPlatformsPage() {
 
           The grounds keep a rhythm down the page: white with a pearl
           room, a pearl card, a stage, a pearl room, a stage, a wash band
-          with pearl cards, white and still, white, white, then the deep
-          panel and the dark footer.
+          with pearl cards, white and still, white with drawn figures and
+          a pearl card, white, then the deep panel and the dark footer.
 
           Reserves are [<768, md, lg, xl] and are measured, not guessed:
-          each is the box's height at 375, 768, 1024 and 1440 with
+          each is the box's height at 393, 768, 1024 and 1440 with
           ?tier=full, after scrolling the page through so every box has
           rendered — the explorer's tour played out, #checks on "Every
           claim", the explorer's index and every FAQ row closed —
           including the box's trailing Gap (and, for #build, its wash
           band's own padding; for the terms, the Rule and the Gap above
-          them), rounded UP to the next 50. Measured:
-            credentials  1863 · 1611 · 1174 · 1084
-            platform     2736 · 2500 · 2010 · 2195
-            scope        2724 · 1990 · 1684 · 1512
-            prototype    1409 · 1235 ·  762 ·  762
-            build        1982 · 1677 · 1225 · 1049
-            terms        1838 · 1563 · 1437 ·  957
-            checks       2527 · 2117 · 1594 · 1532
-            faq          1309 · 1107 · 1041 ·  929
-            start        1932 · 1358 · 1266 · 1228
+          them), to the pixel, as the landing's are. Measured:
+            credentials  1438 · 1371 · 1010 ·  902
+            platform     2172 · 2076 · 1588 · 1773   (first paint)
+            scope        2436 · 1865 · 1519 · 1365
+            prototype    1303 · 1235 ·  762 ·  762
+            build        1841 · 1677 · 1207 · 1029
+            terms        1749 · 1563 · 1437 ·  957
+            checks       2411 · 1976 · 1831 · 1701
+            faq          1117 · 1027 ·  933 ·  849
+            start        1704 · 1322 · 1314 · 1228
           1280 measures the same as 1440 (the Frame's cap), so the xl
-          figure holds across the tier. The explorer, the scope and the
-          prototype each reserve their tallest state (every lens's list,
-          every caption and inspector, the tallest screen), so the heights
-          are the same on the full and lite tiers and under reduced motion,
-          and hold through autoplay. A result on a boundary takes the next
-          step — the platform's 2500 at md, and #build's 1049 at xl, a pixel
-          short of one, which a font-metric wobble could cross. An
-          underestimate makes the page jump when a box renders, so it is a
-          bug; a modest overestimate only costs a slightly long scrollbar
-          until then. */}
+          figure holds across the tier. The phone figure is taken at 393,
+          the middle of the phones people hold: from 360 to 430 the boxes
+          lose some 1,450px between them, and the figures this page had
+          before, taken at 375 and rounded up to the next 50, were 80–255px
+          over every box at 412–430.
+          The explorer is measured on the lens it opens on (only the
+          reader's own pick changes the lens, and with it the step list's
+          height), and at its first paint: below xl it paints shorter than
+          it ends up on the full tier with motion (2172 at 393, then 2326
+          once the tour has sized it; 2076 then 2142 at 768), and it is the
+          first paint that moves the page when the box renders, the same
+          on every tier. The growth after comes from its own script, which
+          the browser anchors. The prototype reserves its tallest screen;
+          the scope is measured in its opening state (its inspector sizes
+          to the part shown, and only the reader's pick changes it).
+
+          Exact, and never rounded up: a reserve off the truth either way
+          moves something when its box first paints. A box above the
+          screen that paints shorter pulls the page up under a reader
+          scrolling back up after a reload or a deep link (a CLS of 0.61
+          at 390px and 1.02 at 412px, when every reserve here was measured
+          at 375 and rounded up to the next 50), and a jump that passes it
+          lands that much off. Scroll anchoring is back on for this page
+          (saas.css §14), and holds the page still when a box above paints
+          while the reader is still, but Chrome does not anchor a box that
+          paints because the reader scrolled up to it, and Safari anchors
+          nothing. What the reserves cannot catch, jumps.tsx does: every
+          same-page jump gets one more look once it has settled. Any change
+          to a section's height changes its reserve here. */}
       <Hero data={SAAS_HERO} blobs={BLOBS.room} />
       <Gap />
-      <HomeDeferred size={[1900, 1650, 1200, 1100]}>
+      <HomeDeferred size={[1438, 1371, 1010, 902]}>
         <Credentials data={SAAS_CREDENTIALS} blobs={BLOBS.papers} />
         <Gap />
       </HomeDeferred>
-      <HomeDeferred size={[2750, 2550, 2050, 2200]}>
+      <HomeDeferred size={[2172, 2076, 1588, 1773]}>
         <Platform data={SAAS_PLATFORM} down={down} />
         <Gap />
       </HomeDeferred>
-      <HomeDeferred size={[2750, 2000, 1700, 1550]}>
+      <HomeDeferred size={[2436, 1865, 1519, 1365]}>
         <Scope data={SAAS_SCOPE} blobs={BLOBS.roomMirror} />
         <Gap />
       </HomeDeferred>
-      <HomeDeferred size={[1450, 1250, 800, 800]}>
+      <HomeDeferred size={[1303, 1235, 762, 762]}>
         <Prototype data={SAAS_PROTOTYPE} />
         <Gap />
       </HomeDeferred>
-      <HomeDeferred size={[2000, 1700, 1250, 1100]}>
+      <HomeDeferred size={[1841, 1677, 1207, 1029]}>
         <Build data={SAAS_BUILD} blobs={{ stage: BLOBS.stage, mirror: BLOBS.stageMirror }} />
         <Gap />
       </HomeDeferred>
       {/* The only still section: a rule above it marks the change of
           register from instruments to terms. */}
-      <HomeDeferred size={[1850, 1600, 1450, 1000]}>
+      <HomeDeferred size={[1749, 1563, 1437, 957]}>
         <Rule />
         <Gap className="h-16 md:h-24" />
         <Terms data={SAAS_TERMS} />
         <Gap />
       </HomeDeferred>
-      <HomeDeferred size={[2550, 2150, 1600, 1550]}>
+      <HomeDeferred size={[2411, 1976, 1831, 1701]}>
         <Checks data={SAAS_CHECKS} />
         <Gap />
       </HomeDeferred>
-      <HomeDeferred size={[1350, 1150, 1050, 950]}>
+      <HomeDeferred size={[1117, 1027, 933, 849]}>
         <Faq data={SAAS_FAQ} />
         <Gap />
       </HomeDeferred>
-      <HomeDeferred size={[1950, 1400, 1300, 1250]}>
+      <HomeDeferred size={[1704, 1322, 1314, 1228]}>
         <Start data={SAAS_START} credits={SAAS_CREDITS} />
         <Gap className="h-16 md:h-24" />
       </HomeDeferred>

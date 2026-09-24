@@ -149,8 +149,8 @@ hanging up. Twilio then calls `/api/telephony/stream-ended`, which:
 - otherwise dials the on-call team member who accepts transfers, or plays the
   apology line and hangs up.
 
-If the app itself fails to answer Twilio, the number's `voice_fallback_url`
-(`/api/telephony/fallback`) goes straight to ElevenLabs.
+If the app's answer to Twilio errors or times out, the number's
+`voice_fallback_url` (`/api/telephony/fallback`) goes straight to ElevenLabs.
 
 Billing is never affected by a failover: answered calls are billed once from the
 Twilio status callback (`call:twilio:<CallSid>`), including handed-over calls;

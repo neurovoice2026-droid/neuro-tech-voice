@@ -7,7 +7,7 @@ import { stateOf, type Frame } from "./explorer-frame";
 /* ------------------------------------------------------------------ *
  * #platform — the stacked composition (below xl): the same seventeen
  * parts, as five bands, one per layer, top to bottom — the people, the
- * carriers and the edge, the app, the live calls, the services.
+ * way in (phone and web), the app, the live calls, the services.
  *
  * Below 1280px the map's cards would shrink under 156×49px and its
  * lines would crowd, so the drawing gives way to the layers the map is
@@ -29,10 +29,18 @@ import { stateOf, type Frame } from "./explorer-frame";
  *                       one at lg                              172 / 124 / 76
  *
  * A chip is a label over its figure, both truncating before they could
- * wrap, so a 141px chip on a 375px phone holds the longest of them.
+ * wrap, so a 141px chip on a 375px phone holds the longest of them; below
+ * 360px the stage, the bands and the chips give up a little padding and
+ * the figure drops to 10px, so a 120px chip on a 320px phone still does.
+ * The Speaking pill takes the figure's place on the chip whose voice is
+ * speaking, in the figure's own line (a size smaller than on the map,
+ * and a pixel over each side of the line, so the chip's words never
+ * move), and gives way to FAILED where both would be.
+ *
  * Like the map's cards the chips are aria-hidden and out of the tab
  * order; the index is the keyboard's way through. A pointer may pick a
- * chip, which only fills the inspector.
+ * chip, which holds it in the inspector (and, when the inspector is below
+ * the screen, scrolls the page to it: the explorer's `pickPart`).
  *
  * PURE: no hooks, no "use client".
  * ------------------------------------------------------------------ */
@@ -68,14 +76,14 @@ export function StackView({
     <div data-view="stack" className="mt-4 xl:hidden">
       <p className={cn(TYPE.label, "text-pp-muted")}>{data.tag}</p>
 
-      <div className="home-stage relative isolate mt-3 rounded-[28px] p-4 md:p-6">
+      <div className="home-stage relative isolate mt-3 rounded-[28px] p-4 max-[359px]:p-3 md:p-6">
         <span aria-hidden className="home-grain" />
         {LAYERS.map((layer, b) => (
           <div
             key={layer}
             data-band={layer}
             data-on={b <= band ? "" : undefined}
-            className={cn("relative pl-5 md:pl-6", BAND[layer])}
+            className={cn("relative pl-5 max-[359px]:pl-4 md:pl-6", BAND[layer])}
           >
             <span aria-hidden className="saas-rail absolute inset-y-0 left-0 w-0.5 overflow-hidden">
               <span className="saas-rail-fill absolute inset-0" />
@@ -94,13 +102,14 @@ export function StackView({
                 const p = byId.get(id);
                 if (!p) return null;
                 const fault = frame.faults.includes(id);
+                const speaking = frame.voice === id && !fault;
                 return (
                   <button
                     key={id}
                     type="button"
                     tabIndex={-1}
                     aria-hidden
-                    className="saas-chip relative flex h-10 min-w-0 cursor-pointer flex-col items-start justify-center rounded-full px-3.5 text-left"
+                    className="saas-chip relative flex h-10 min-w-0 cursor-pointer flex-col items-start justify-center rounded-full px-3.5 text-left max-[359px]:px-2.5"
                     data-part={id}
                     data-state={stateOf(frame, id)}
                     data-fault={fault ? "" : undefined}
@@ -118,8 +127,8 @@ export function StackView({
                       <span
                         className={cn(
                           MONO,
-                          "truncate text-[11px] leading-[14px] text-(--home-muted) [grid-area:1/1]",
-                          fault && "invisible",
+                          "truncate text-[11px] leading-[14px] text-(--home-muted) [grid-area:1/1] max-[359px]:text-[10px]",
+                          (fault || speaking) && "invisible",
                         )}
                       >
                         {p.datum}
@@ -127,12 +136,12 @@ export function StackView({
                       <span className={cn("saas-tag saas-tag-fault [grid-area:1/1]", !fault && "invisible")}>
                         {faultWord}
                       </span>
+                      {speaking && (
+                        <span className="saas-voice -my-px justify-self-start [grid-area:1/1]" data-flip-id="voice">
+                          {data.speaking}
+                        </span>
+                      )}
                     </span>
-                    {frame.voice === id && (
-                      <span className="saas-voice absolute right-3 -bottom-2" data-flip-id="voice">
-                        {data.speaking}
-                      </span>
-                    )}
                   </button>
                 );
               })}

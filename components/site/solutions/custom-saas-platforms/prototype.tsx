@@ -39,7 +39,7 @@ import { PrototypeDemo } from "./prototype-demo";
 
 export function Prototype({ data }: { data: PrototypeData }) {
   return (
-    <section id="prototype" aria-labelledby="prototype-title" className="scroll-mt-28">
+    <section id="prototype" aria-labelledby="prototype-title" className="scroll-mt-8">
       <Frame
         className={cn(
           "grid gap-10",
@@ -53,6 +53,9 @@ export function Prototype({ data }: { data: PrototypeData }) {
             title={data.title}
             titleKey={data.key}
             sub={data.sub}
+            // Below sm the key may break inside a word rather than run off
+            // a 320px screen under a reader's own text spacing (#build's did).
+            className="max-sm:[&_.home-key]:[overflow-wrap:anywhere]"
           />
         </div>
 

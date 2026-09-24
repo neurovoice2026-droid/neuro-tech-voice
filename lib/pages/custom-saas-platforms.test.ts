@@ -1,7 +1,8 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { AGENT_INTEGRATIONS } from "@/lib/pages/ai-agents";
+import { ORPHAN_MIN_AGE_MS } from "@/app/api/cron/storage-cleanup";
+import { TOTAL_ONBOARDING_STEPS } from "@/app/onboarding/_lib/onboarding-state";
 import { CAA_HANDOVER } from "@/lib/pages/custom-ai-agents";
 import { sentences } from "@/lib/pages/home/source";
 import { HOME_START } from "@/lib/pages/home/start";
@@ -229,16 +230,38 @@ describe("facts read from their sources", () => {
     expect(signup.steps.find((s) => s.id === "onboard")!.text).toContain(HOME_START.body);
   });
 
-  it("quotes the homepage's TRUST line, by id, and never contradicts it", () => {
+  it("reads the homepage's TRUST line by id, and says once, in its own words, what it doesn't contradict", () => {
     const company = TRUST.items.find((i) => i.id === "company")!;
     expect(TRUST_QUOTE).toBe(sentences(company.note, 2, 3));
     expect(TRUST_QUOTE).toContain("we hold none");
-    expect(SAAS_CREDENTIALS.none.text).toContain(TRUST_QUOTE);
+    expect(SAAS_CREDENTIALS.accreditations.isnt).toMatch(/aren’t a security or compliance certification/);
+    // Once: the homepage's line isn't quoted under the "20+" it would read as denying.
+    expect(ALL.filter((s) => s.includes("we hold none"))).toEqual([]);
   });
 
   it("counts the dashboard's screens off the routes that serve them", () => {
     expect(DYNAMIC_APP_ROUTES).toContain("/onboarding");
     expect(part("dashboard").datum).toBe(`${DYNAMIC_APP_ROUTES.length - 1} screens`);
+  });
+
+  it("counts the onboarding's screens off the steps it renders, and the landing's sentence with them", () => {
+    const n = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"][TOTAL_ONBOARDING_STEPS];
+    expect(n).toBeDefined();
+    // HOME_START.body is the landing's own words, quoted by the sign-up tour: it can't read the count, so it is held here.
+    expect(HOME_START.body).toContain(`${n} screens`);
+    expect(part("dashboard").does).toContain(`Onboarding in ${n} screens`);
+    expect(scopePart("screens").ours).toContain(`${n}-screen onboarding`);
+    expect(SAAS_BUILD.stages.find((s) => s.id === "platform")!.ours).toContain(`${n}-screen onboarding`);
+    expect(SAAS_CHECKS.rows.find((r) => r.id === "onboarding")!.claim).toContain(`${n} screens`);
+    // And no other count of them anywhere.
+    const said = ALL.flatMap((s) => [...s.matchAll(/\b(\w+)-screen onboarding|\bonboarding (?:in|is) (\w+) screens/gi)]);
+    expect(said.length).toBeGreaterThanOrEqual(4);
+    for (const m of said) expect(m[1] ?? m[2], m[0]).toBe(n);
+  });
+
+  it("calls an unused upload day-old because the cleanup waits a day", () => {
+    expect(ORPHAN_MIN_AGE_MS).toBe(24 * 60 * 60 * 1000);
+    expect(lens("nightly").steps.find((s) => s.cron === "purge_orphan_uploads")!.text).toContain("day-old");
   });
 
   it("reads the router's modes, the model's tools and the signature window from the voice contracts", () => {
@@ -259,24 +282,42 @@ describe("facts read from their sources", () => {
     }
   });
 
-  it("borrows the Google trademark line and the handover line from their pages", () => {
-    expect(SAAS_CREDITS.items.find((i) => i.term === "Google")!.detail).toBe(AGENT_INTEGRATIONS.trademarks);
+  it("borrows the handover line from the custom AI agents page", () => {
     expect(SAAS_TERMS.columns.find((c) => c.id === "upfront")!.items.at(-1)).toBe(CAA_HANDOVER.after);
   });
 
-  it("calls this page's policy what csp.ts builds for it: a host allowlist that permits inline scripts", () => {
+  it("calls this page's policy what csp.ts builds for it: scripts from this site only, and inline scripts still run", () => {
     const scriptSrc = (csp: string) => csp.split("; ").find((d) => d.startsWith("script-src "))!;
     const options = { dev: false, supabaseUrl: null, gatewayUrl: null, vercelPreview: false };
-    // This page is prerendered, so it gets the static policy...
+    // This page is prerendered, so it gets the static policy: this site's
+    // scripts only ('self'), and inline scripts ('unsafe-inline')...
     expect(classifyPath("/solutions/custom-saas-platforms")).toBe("static");
-    const prerendered = scriptSrc(buildCsp({ nonce: null, ...options }));
-    expect(prerendered).toContain("'unsafe-inline'");
-    expect(prerendered).not.toContain("'nonce-");
+    expect(scriptSrc(buildCsp({ nonce: null, ...options }))).toBe("script-src 'self' 'unsafe-inline'");
     // ...and the signed-in screens a fresh nonce.
     for (const route of DYNAMIC_APP_ROUTES) expect(classifyPath(route), route).toBe("dynamic");
     expect(scriptSrc(buildCsp({ nonce: "A".repeat(24), ...options }))).toMatch(/'nonce-A{24}' 'strict-dynamic'/);
-    expect(part("proxy").does).toContain("permits inline scripts");
-    expect(ALL.filter((s) => /strict (?:allowlist|policy)/i.test(s))).toEqual([]);
+    // Every place that names the public pages' policy keeps the caveat,
+    // the scope's too: it marks the policy "Done on ours" beside the attack it stops.
+    for (const text of [part("proxy").does, scopePart("policy").ours, SAAS_CHECKS.rows.find((r) => r.id === "csp")!.how]) {
+      expect(text).toContain("may load scripts only from this site, and inline scripts still run");
+    }
+    expect(ALL.filter((s) => /strict policy|allowlist/i.test(s))).toEqual([]);
+    // "A one-time token", never "nonce": jargon to a founder, and a slur in British English.
+    expect(ALL.filter((s) => /\bnonce\b/i.test(s))).toEqual([]);
+  });
+
+  it("claims of monitoring only what the status route returns, and calls ours thin", () => {
+    const route = read("app/api/ops/voice-status/route.ts");
+    expect(route).toContain("await requireCronRequest(req"); // behind a secret
+    expect(route).toMatch(/providers: \{[^}]*: is\w+Configured\(\)/); // which services are set up, not whether they're up
+    expect(route).toContain("getCartesiaBudget("); // the Cartesia budget
+    expect(route).toContain("BREAKER_KEYS.map(breakerView)"); // every circuit breaker
+    expect(read("app/api/cron/daily/route.ts")).toContain("console.error('[cron] daily run finished with failures')"); // a failed job in the logs
+    // It is run by hand and alerts no one: thin, and never "every provider".
+    const watch = scopePart("watch");
+    expect(watch.kind).toBe("thin");
+    expect(watch.ours).toContain("which of its services are set up");
+    expect(ALL.filter((s) => /every provider/i.test(s))).toEqual([]);
   });
 });
 
@@ -371,7 +412,34 @@ describe("counts held to the repository", () => {
     ]) {
       expect(runbook, phrase).toContain(phrase);
     }
+  });
+
+  it("credits the failover to the tests that cover it: the gateway's and the app's", () => {
+    expect(lens("failover").foot).toContain("the gateway’s and the app’s tests");
+    // The gateway: the voice and speech switches, the OpenAI hand-off, letting go of the stream.
     expect(existsSync(path.join(ROOT, "services/voice-gateway/test/failover.test.ts"))).toBe(true);
+    // The app: the breaker, the stream-ended hand-over and the number's fallback route.
+    expect(existsSync(path.join(ROOT, "lib/voice/breaker.test.ts"))).toBe(true);
+    const router = read("lib/voice/router.test.ts");
+    expect(router).toContain("describe('handleStreamEnded'");
+    expect(router).toContain("describe('handleFallbackCall'");
+    // Billing once has no test of its own, so the foot doesn't claim it.
+    expect(lens("failover").foot).not.toMatch(/bill/i);
+  });
+
+  it("names as checked only the providers the runbook says were checked", () => {
+    const runbook = read("docs/voice-platform.md").replace(/\s+/g, " ");
+    const at = runbook.indexOf("Not tested against live providers");
+    expect(at).toBeGreaterThan(0);
+    const limits = runbook.slice(at, runbook.indexOf("Watch the first real calls", at));
+    for (const name of ["Twilio", "Cartesia", "OpenAI", "ElevenLabs"]) {
+      expect(SAAS_PLATFORM.foot, name).toContain(name);
+      expect(limits, name).toContain(name);
+    }
+    // The services the app relies on aren't in that paragraph, so the foot leaves them out.
+    const services = SAAS_PLATFORM.parts.filter((p) => p.layer === "services");
+    expect(services.length).toBeGreaterThan(0);
+    for (const p of services) expect(SAAS_PLATFORM.foot, p.label).not.toContain(p.label);
   });
 });
 
@@ -446,6 +514,17 @@ describe("the map and the lenses", () => {
     for (const l of SAAS_PLATFORM.lenses) {
       expect(l.steps.length, l.id).toBeLessThanOrEqual(10);
       expect(new Set(l.steps.map((s) => s.id)).size, l.id).toBe(l.steps.length);
+    }
+  });
+
+  it("names every step shortly in the step list, and leaves the figures to its caption", () => {
+    for (const l of SAAS_PLATFORM.lenses) {
+      for (const s of l.steps) {
+        expect(s.title.length, `${l.id}/${s.id}`).toBeGreaterThan(0);
+        expect(s.title.length, `${l.id}/${s.id}`).toBeLessThanOrEqual(32);
+        expect(s.title, `${l.id}/${s.id}`).not.toMatch(/\d/);
+      }
+      expect(new Set(l.steps.map((s) => s.title)).size, l.id).toBe(l.steps.length);
     }
   });
 
@@ -661,6 +740,36 @@ describe("checks", () => {
     for (const n of counts) expect(n).toBeGreaterThan(0);
     expect(counts.reduce((a, b) => a + b, 0)).toBe(rows.length);
   });
+
+  it("gives each kind one name, the filter's and the tag's alike", () => {
+    expect(SAAS_CHECKS.kinds).toEqual(CHECK_KINDS);
+    for (const f of SAAS_CHECKS.filters) if (f.id !== "all") expect(f.label, f.id).toBe(CHECK_KINDS[f.id]);
+  });
+
+  it("says the sub as one sentence per kind, in the filters' order: the key's words", () => {
+    const sentences = SAAS_CHECKS.sub.split(/(?<=\.)\s+/);
+    const kinds = Object.values(CHECK_KINDS);
+    expect(sentences).toHaveLength(kinds.length);
+    kinds.forEach((k, i) => expect(sentences[i].toLowerCase(), k).toContain(k.toLowerCase()));
+  });
+
+  it("never repeats a check's tag in its words", () => {
+    // A check line prints its kind as a tag, then its words: "ON THE CALL  Ask to see the grants".
+    const found: { kind: keyof typeof CHECK_KINDS; text: string }[] = [];
+    const visit = (v: unknown) => {
+      if (Array.isArray(v)) v.forEach(visit);
+      else if (v && typeof v === "object") {
+        const o = v as Record<string, unknown>;
+        if (typeof o.kind === "string" && o.kind in CHECK_KINDS && (typeof o.label === "string" || typeof o.how === "string")) {
+          found.push({ kind: o.kind as keyof typeof CHECK_KINDS, text: [o.label, o.how].filter(Boolean).join(" ") });
+        }
+        Object.values(o).forEach(visit);
+      }
+    };
+    visit(PAGE);
+    expect(found.length).toBeGreaterThan(rows.length);
+    for (const c of found) expect(c.text.toLowerCase(), c.text).not.toContain(CHECK_KINDS[c.kind].toLowerCase());
+  });
 });
 
 describe("credentials, honestly", () => {
@@ -679,6 +788,14 @@ describe("credentials, honestly", () => {
     "Fly.io",
   ];
   const grantors = GRANTS.map((g) => g.grantor);
+
+  it("names both credentials in the hero's first paragraph and in the page's description", () => {
+    for (const text of [SAAS_HERO.sub, SAAS_META.description]) {
+      expect(text).toContain(`${ACCREDITATIONS.count}+ `);
+      expect(text).toContain(ACCREDITATIONS.issuer);
+      for (const g of grantors) expect(text).toContain(g);
+    }
+  });
 
   it("counts the accreditations as the owner states them, and prints them as a floor", () => {
     expect(ACCREDITATIONS.count).toBeGreaterThanOrEqual(20);
@@ -826,7 +943,7 @@ describe("templates", () => {
     ["the scope's bones", SAAS_SCOPE.summary.none, ["n"]],
     ["the scope's added", SAAS_SCOPE.live.added, ["label", "n"]],
     ["the scope's removed", SAAS_SCOPE.live.removed, ["label", "n"]],
-    ["the prototype's announcement", SAAS_PROTOTYPE.live, ["n", "title", "total"]],
+    ["the prototype's screen position", SAAS_PROTOTYPE.live, ["n", "total"]],
     ["the checks' count", SAAS_CHECKS.showing, ["n", "total"]],
   ];
 
@@ -891,8 +1008,10 @@ describe("credits", () => {
     }
   });
 
+  // Printed means printed outside the credits: a mark the credits alone name
+  // would count itself.
   it("credits every mark it prints", () => {
-    const printed = REGISTRY.filter((mark) => ALL.some((s) => named(mark, s)));
+    const printed = REGISTRY.filter((mark) => OUTSIDE_CREDITS.some((s) => named(mark, s)));
     expect(printed.length).toBeGreaterThan(10);
     const uncredited = printed.filter((mark) => !creditLines.some((l) => named(CREDITED_AS[mark] ?? mark, l)));
     expect(uncredited).toEqual([]);
@@ -902,6 +1021,19 @@ describe("credits", () => {
     expect(tmLine).toBeDefined();
     expect(ALL.filter((s) => s.includes("trademarks of their respective owners"))).toHaveLength(1);
     expect(tmLine.detail).toContain("not an endorsement");
+  });
+
+  it("credits Google in its own line: the mark on its own, and every Google product the page prints", () => {
+    const google = SAAS_CREDITS.items.find((i) => i.term === "Google")!.detail;
+    const product = /\bGoogle (?!LLC\b)[A-Z]\w+/g;
+    const products = new Set(OUTSIDE_CREDITS.flatMap((s) => [...s.matchAll(product)].map((m) => m[0])));
+    expect([...products].sort()).toEqual(["Google Calendar", "Google Sheets"]);
+    // "Google sign-in", "the business's own Google account": the mark on its own, named first.
+    expect(OUTSIDE_CREDITS.some((s) => /\bGoogle\b(?! [A-Z])/.test(s))).toBe(true);
+    expect(google.startsWith("Google, ")).toBe(true);
+    // Each product printed, and none that isn't.
+    expect(new Set([...google.matchAll(product)].map((m) => m[0]))).toEqual(products);
+    expect(google).toContain("trademarks of Google LLC");
   });
 
   it("names Anthropic's owner exactly", () => {
@@ -1059,10 +1191,17 @@ describe("mesh colour", () => {
     [856, 620],
   ];
   const PAPERS: [number, number][] = [
-    [343, 1600],
-    [704, 1150],
-    [944, 780],
-    [1176, 720],
+    [343, 1100],
+    [720, 1010],
+    [944, 620],
+    [1176, 560],
+  ];
+  // #checks' card under the ledger: the papers light, still (no LiveMesh).
+  const CHECKS_CARD: [number, number][] = [
+    [361, 269],
+    [720, 208],
+    [944, 199],
+    [1176, 199],
   ];
   const BUILD_CARDS: [number, number][] = [
     [298, 640],
@@ -1079,10 +1218,10 @@ describe("mesh colour", () => {
       { text: [12.47, 12.02], dim: [7.58, 7.31], accent: [5.86, 5.65], tick: [3.72, 3.58] },
     ],
     [
-      "the credentials card",
+      "the credentials card and #checks' card",
       ["papers"],
-      PAPERS,
-      { text: [12.75, 12.48], dim: [7.75, 7.59], accent: [5.99, 5.87], tick: [3.8, 3.72] },
+      [...PAPERS, ...CHECKS_CARD],
+      { text: [12.64, 11.4], dim: [7.69, 6.93], accent: [5.94, 5.36], tick: [3.77, 3.4] },
     ],
     [
       "the build cards",
@@ -1119,13 +1258,13 @@ describe("mesh colour", () => {
 
   // #start's deep panel (DEEP_PANEL, static): wide and narrow panel sizes,
   // and the zones (fractions of the panel) each colour is allowed in.
-  const WIDE: [number, number][] = [
-    [944, 460],
-    [1176, 420],
-  ];
+  // Side by side from xl (1280 up, the Frame's cap); stacked below, lg included.
+  const WIDE: [number, number][] = [[1176, 441]];
   const NARROW: [number, number][] = [
     [343, 760],
     [704, 600],
+    [944, 559],
+    [1176, 559],
   ];
   const ANYWHERE = [0, 0, 1, 1] as const;
 
@@ -1140,8 +1279,9 @@ describe("mesh colour", () => {
   it.each<[string, string, [number, number][], [number, number, number, number], number]>([
     ["lilac, wide", HOME_COLORS.lilac, WIDE, [0, 0, 0.62, 0.62], 6.25],
     ["lilac, narrow", HOME_COLORS.lilac, NARROW, [0, 0, 1, 0.45], 5.76],
-    ["on-deep-dim, wide", HOME_COLORS.onDeepDim, WIDE, [0, 0, 0.7, 0.8], 7.07],
-    ["on-deep-dim, narrow", HOME_COLORS.onDeepDim, NARROW, [0, 0, 1, 0.6], 6.78],
+    // The body's zones hold where it really ends: 81% down the wide panel, 66% down a narrow one (768).
+    ["on-deep-dim, wide", HOME_COLORS.onDeepDim, WIDE, [0, 0, 0.7, 0.85], 6.88],
+    ["on-deep-dim, narrow", HOME_COLORS.onDeepDim, NARROW, [0, 0, 1, 0.7], 5.92],
   ])("reads on the deep panel: %s inside its zone", (_, fg, boxes, zone, measured) => {
     const worst = worstInZone(DEEP_PANEL, fg, boxes, zone);
     expect(worst).toBeGreaterThanOrEqual(4.5);
@@ -1227,9 +1367,9 @@ describe("the route's stylesheets", () => {
   const isAt = (prelude: string) => prelude.startsWith("@");
   const inKeyframes = (within: string[]) => within.some((p) => p.startsWith("@keyframes"));
   // What may animate: colour, transform, translate, scale and opacity, and
-  // the page's own registered numbers (`@property --saas-rail`).
+  // no custom property: the compositor can't run one.
   const ANIMATABLE =
-    /^(?:opacity|transform|translate|scale|color|background-color|border-color|outline-color|fill|stroke|--saas-[\w-]+|animation-timing-function)$/;
+    /^(?:opacity|transform|translate|scale|color|background-color|border-color|outline-color|fill|stroke|animation-timing-function)$/;
   const TIMELINE = /^(?:view-timeline|view-timeline-name|scroll-timeline|scroll-timeline-name|animation-timeline|timeline-scope)$/;
 
   it("finds the shared stylesheet, and the page imports every sheet once", () => {
@@ -1273,5 +1413,22 @@ describe("the route's stylesheets", () => {
       expect(d.within.some((p) => /^@media\b.*prefers-reduced-motion:\s*no-preference/.test(p)), where).toBe(true);
       expect(d.within.some((p) => /^@supports\b.*animation-timeline:\s*view\(\)/.test(p)), where).toBe(true);
     }
+  });
+
+  it("stops each #build station's keyframes where build.tsx places it", () => {
+    // A keyframe's offset can't read `--at`, so saas-build.css §9 repeats
+    // build.tsx's STATIONS: each station is nothing until the line reaches
+    // its place and whole a twelfth of the draw later.
+    const build = read(`${DIR}/build.tsx`);
+    const css = read(`${DIR}/saas-build.css`);
+    const places = build.match(/const STATIONS = \[([^\]]+)\]/)?.[1].split(",").map(Number) ?? [];
+    expect(places).toHaveLength(3);
+    expect(build).toContain("data-i={i}");
+    places.forEach((at, i) => {
+      const body = css.match(new RegExp(String.raw`@keyframes saas-station-${i} \{([\s\S]*?)\n\}`))?.[1] ?? "";
+      const stops = [...body.matchAll(/([\d.]+)%/g)].map((m) => Number(m[1]));
+      expect(stops, `saas-station-${i}`).toEqual([0, at * 100, (at + 1 / 12) * 100, 100].map((n) => expect.closeTo(n, 2)));
+      expect(css, `station ${i}`).toMatch(new RegExp(String.raw`\.saas-station\[data-i="${i}"\]\s*\{\s*animation-name:\s*saas-station-${i};`));
+    });
   });
 });

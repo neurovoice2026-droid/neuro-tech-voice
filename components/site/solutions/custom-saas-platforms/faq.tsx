@@ -76,7 +76,7 @@ function Where({ where }: { where: NonNullable<FaqItem["where"]> }) {
 
 export function Faq({ data }: { data: FaqData }) {
   return (
-    <section id="faq" aria-labelledby="faq-title" className="scroll-mt-28">
+    <section id="faq" aria-labelledby="faq-title" className="scroll-mt-8">
       <Frame className="grid gap-10 lg:grid-cols-[384px_minmax(0,1fr)] lg:gap-12">
         <div className="lg:sticky lg:top-28 lg:self-start">
           <HomeHeading

@@ -8,7 +8,7 @@ import { Explorer } from "./explorer";
 /* ------------------------------------------------------------------ *
  * #platform — "Is that a real platform or a demo?"
  *
- * The large project the page promises is the one the reader is on, so
+ * The large project the page can show is the one the reader is on, so
  * this section shows it: the platform behind this site, drawn from its
  * code, part by part — the phone carrier and the proxy at its edge, the
  * app on Vercel, the live-call gateway on Fly.io, and the services it
@@ -32,7 +32,7 @@ import { Explorer } from "./explorer";
 
 export function Platform({ data, down }: { data: ExplorerData; down: readonly DownRow[] }) {
   return (
-    <section id="platform" aria-labelledby="platform-title" className="scroll-mt-28">
+    <section id="platform" aria-labelledby="platform-title" className="scroll-mt-8">
       <Frame>
         <HomeHeading id="platform-title" eyebrow={data.eyebrow} title={data.title} titleKey={data.key} sub={data.sub} />
         <Explorer data={data} down={down} />

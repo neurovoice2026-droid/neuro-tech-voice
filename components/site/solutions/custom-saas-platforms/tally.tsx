@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
  * ten pitches plus 24u wide, so a plus after a full row still fits, and
  * it is drawn at 1:1, so every stroke lands on the pixel grid it was
  * drawn for. Marks only, in the light's tick colour (`--saas-tick`,
- * 3.58:1 at its worst on a flowing pool, over the 3:1 a mark needs), and
+ * 3.4:1 at its worst on a flowing pool, over the 3:1 a mark needs), and
  * no halo round the nodes: the pearl is their ground.
  *
  * THE MOTION is CSS alone (saas-credentials.css §5). The tally carries

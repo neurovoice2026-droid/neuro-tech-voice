@@ -5,7 +5,7 @@ import { Frame, PillLink } from "@/components/site/product/primitives";
 import { HomeEyebrow, KeyedTitle } from "@/components/site/home/heading";
 import { TYPE, WEIGHT } from "@/components/site/home/type";
 import type { HeroData } from "@/lib/pages/custom-saas-platforms";
-import { LiveMesh } from "./live-mesh";
+import { FlowToggle, LiveMesh } from "./live-mesh";
 
 /* ------------------------------------------------------------------ *
  * #top — anyone can say "complete SaaS". What have you built?
@@ -27,9 +27,13 @@ import { LiveMesh } from "./live-mesh";
  * this one is on white. Its key phrase is violet from the first paint
  * (`KeyedTitle` with no reveal around it).
  *
- * THE LCP IS THE SUB, in Inter, which the shell preloads. Plain server
- * text with nothing keyed on the clock, and this section is the one not
- * in a Deferred box, so nothing holds its paint back.
+ * THE LCP is the h1 from md up, in Instrument Sans, and the sub below md,
+ * in Inter; the shell preloads both faces. Plain server text with nothing
+ * keyed on the clock, and this section is the one not in a Deferred box,
+ * so nothing holds its paint back. The h1 is drawn in a fallback sized to
+ * the face until the face arrives, Arial's or, where there is no Arial,
+ * Roboto's (shell.tsx, saas.css §0), so its lines break where the face's
+ * will and nothing under it moves when it swaps in.
  *
  * THE ROOM moves in three ways, all of them cheap. Its light flows while
  * it is on screen (`LiveMesh`: #pricing's compositor pools, saas.css §3;
@@ -39,8 +43,14 @@ import { LiveMesh } from "./live-mesh";
  * the top plate lifting and the bottom one dropping (saas.css §4). Both
  * are transform only, so no plate is ever faded, and the second rides the
  * `translate` property so it composes with the first. The room keeps
- * 16px between the plates and what is above and below them, which is the
- * room they come apart into.
+ * 16px between the plates and what is above and below them, and neither
+ * movement leaves it: the plates rise from at most 16px low, so the
+ * room's foot line is never under one, and part by at most 15px.
+ *
+ * THE READER'S PAUSE. The room's light, and every other on the page,
+ * loops while it is on screen, behind text, so the room's heading row
+ * carries the control that stops them all (`FlowToggle`, WCAG 2.2.2): on
+ * the first surface that moves, and drawn only while something flows.
  *
  * THE FINISHED FRAME is the server's markup: reduced motion, the still
  * tier and weak hardware get the plates in place on the light standing
@@ -54,8 +64,8 @@ import { LiveMesh } from "./live-mesh";
  * white, so on them the landing's tokens are safe again and are used:
  * muted labels (6.37 on white) and violet figures (7.10).
  *
- * A server component. The client code is `LiveMesh`'s observer and the
- * two leaves from home/heading. The focus ring is written out here, not
+ * A server component. The client code is `LiveMesh`'s observer, the
+ * pause, and the two leaves from home/heading. The focus ring is written out here, not
  * imported: controls.tsx is a client module, and a server component would
  * get a reference to its RING_LIGHT, not the string.
  * ------------------------------------------------------------------ */
@@ -69,15 +79,38 @@ const DOWN = "ml-1 inline-block transition-transform duration-200 group-hover:tr
 /**
  * A white plate on the pearl: the landing's card shadow, a hairline drawn
  * inside so the plate's edge reads on the palest part of the light.
+ *
+ * The layer's label keeps its own width and the figure takes the rest,
+ * flush right, balanced over two lines where the plate is too narrow for
+ * one. The other way round (the figure `auto`), the figure took the whole
+ * row at 320–329px and the letter-spaced label ran into it:
+ * "PAYMENTS7 Stripe event types".
  */
 const PLATE = cn(
-  "saas-plate grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 rounded-2xl bg-white px-4 py-3",
+  "saas-plate grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 rounded-2xl bg-white px-4 py-3",
   "shadow-[0_1px_2px_rgb(20_10_36/0.06),inset_0_0_0_1px_rgb(20_10_36/0.06)]",
+);
+
+/**
+ * PillLink's secondary pill (product/primitives), spelled out for an
+ * in-page `#…`, as RING is. PillLink sends every href but an external one
+ * through IntentLink, a Next Link, which takes a same-page fragment over
+ * itself: a router push and its own smooth scroll, so the browser's
+ * fragment navigation (the focus start point, `:target`) never happened,
+ * and a click something else had handled was one jumps.tsx leaves alone.
+ * "Explore the platform" landed #platform 211px low at 320 and stayed
+ * there. A plain anchor, as every other in-page link on the page is
+ * (check-line.tsx), gets the browser's jump and the one more look.
+ */
+const PILL_HASH = cn(
+  "inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full px-5 text-base whitespace-nowrap",
+  "pp-shadow-btn bg-white text-pp-ink transition-[background-color,color,scale] duration-200 hover:bg-pp-card active:scale-[0.97]",
+  RING,
 );
 
 export function Hero({ data, blobs }: { data: HeroData; blobs: readonly CSSProperties[] }) {
   return (
-    <section id="top" aria-labelledby="top-title" className="scroll-mt-28">
+    <section id="top" aria-labelledby="top-title" className="scroll-mt-8">
       {/* The header is fixed and see-through while docked, so the hero
           clears it with its own padding (the custom-ai-agents precedent). */}
       <Frame className="pt-28 md:pt-[148px]">
@@ -95,7 +128,7 @@ export function Hero({ data, blobs }: { data: HeroData; blobs: readonly CSSPrope
             <h1 id="top-title" className={cn(TYPE.display, "max-w-[14em]")} style={{ fontWeight: WEIGHT.h2 }}>
               <KeyedTitle title={data.title} titleKey={data.key} />
             </h1>
-            {/* The LCP. */}
+            {/* The LCP below md (the h1 is, from md). */}
             <p className={cn(TYPE.lead, "mt-5 max-w-[34em] text-pretty")}>{data.sub}</p>
 
             {/* Stacked full width on a phone; one row from sm, 8px apart,
@@ -110,19 +143,27 @@ export function Hero({ data, blobs }: { data: HeroData; blobs: readonly CSSPrope
                   →
                 </span>
               </PillLink>
-              <PillLink href={data.secondary.href} variant="secondary">
-                {data.secondary.label}
-              </PillLink>
+              {data.secondary.href.startsWith("#") ? (
+                <a href={data.secondary.href} className={PILL_HASH}>
+                  {data.secondary.label}
+                </a>
+              ) : (
+                <PillLink href={data.secondary.href} variant="secondary">
+                  {data.secondary.label}
+                </PillLink>
+              )}
             </div>
-            {/* Each half kept whole, so a narrow phone breaks the note at
-                its own dot rather than inside the number; the text itself
-                is the note, character for character. */}
+            {/* Each half an inline block, so a narrow phone breaks the note
+                at its own dot rather than inside the number, and a half
+                wider than the column (text spacing overrides at 320px)
+                still wraps inside itself instead of overflowing; the text
+                itself is the note, character for character. */}
             <p className={cn(TYPE.meta, "mt-4 text-pp-ink/70")}>
               {data.note.split(" · ").map((part, i, all) => {
                 const last = i === all.length - 1;
                 return (
                   <Fragment key={part}>
-                    <span className="whitespace-nowrap">{last ? part : `${part} ·`}</span>
+                    <span className="inline-block max-w-full">{last ? part : `${part} ·`}</span>
                     {!last && " "}
                   </Fragment>
                 );
@@ -140,11 +181,16 @@ export function Hero({ data, blobs }: { data: HeroData; blobs: readonly CSSPrope
             <span aria-hidden className="home-grain" />
 
             {/* A heading, so the list below it sits under one: the section's
-                only other heading is the h1. */}
-            <h2 className={cn(TYPE.label, "flex items-center gap-2 text-(--saas-dim)")}>
-              <CornerDot className="size-2.5" />
-              {data.room.tag}
-            </h2>
+                only other heading is the h1. Beside it, the pause for every
+                flowing light on the page; the row keeps the button's 40px
+                whether or not it is drawn, so nothing moves when it is. */}
+            <div className="flex min-h-10 items-center justify-between gap-3">
+              <h2 className={cn(TYPE.label, "flex items-center gap-2 text-(--saas-dim)")}>
+                <CornerDot className="size-2.5" />
+                {data.room.tag}
+              </h2>
+              <FlowToggle pause={data.room.flow.pause} play={data.room.flow.play} />
+            </div>
 
             {/* One list, one plate per layer, in the menu's order. The
                 figure is the plate's first line, read right after its layer:
@@ -154,7 +200,7 @@ export function Hero({ data, blobs }: { data: HeroData; blobs: readonly CSSPrope
               {data.room.plates.map((p, i) => (
                 <div key={p.layer} className={PLATE} style={{ "--i": i } as CSSProperties}>
                   <dt className={cn(TYPE.label, "text-(--home-muted)")}>{p.layer}</dt>
-                  <dd className={cn(TYPE.mono, "text-right text-(--home-violet)")}>{p.datum}</dd>
+                  <dd className={cn(TYPE.mono, "text-right text-balance text-(--home-violet)")}>{p.datum}</dd>
                   <dd className="col-span-2 mt-1 text-[15px] leading-[22px] font-medium text-pp-ink">{p.name}</dd>
                   <dd className={cn(TYPE.meta, "col-span-2 text-pp-ink/70")}>{p.runs}</dd>
                 </div>
@@ -170,7 +216,8 @@ export function Hero({ data, blobs }: { data: HeroData; blobs: readonly CSSPrope
               <a
                 href={data.room.link.href}
                 className={cn(
-                  "home-link group inline-block min-h-6 rounded-sm py-[3px] text-[13px] leading-[18px]",
+                  "home-link group relative inline-block min-h-6 rounded-sm py-[3px] text-[13px] leading-[18px]",
+                  "before:absolute before:inset-x-0 before:-inset-y-2.5",
                   RING,
                 )}
               >

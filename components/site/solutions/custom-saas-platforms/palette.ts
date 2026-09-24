@@ -15,9 +15,11 @@
  *                 lilac → blush → champagne → mint) in one surface
  *   roomMirror    the scope room, the hero's room turned left for right
  *   papers        the credentials card: lilac, champagne, pink pearl,
- *                 periwinkle and cream, in px radii like ENTERPRISE_LIGHT,
- *                 so the wide desktop card and the tall phone card render
- *                 alike
+ *                 periwinkle and cream, laid out as the plan cards are
+ *                 (% radii, a pool in each corner and one between), at
+ *                 about the Scale card's strength: lit from edge to edge
+ *                 at every width, where px pools sized for the Enterprise
+ *                 band left most of a card this big bare floor
  *   stage         #build's cards 01 and 03: a lilac and sky pearl
  *   stageMirror   #build's card 02, the same pearl turned
  *
@@ -44,8 +46,9 @@
 /**
  * The text tokens on every light, the same on all five (saas.css sets them
  * on `.pp .saas-lit`). Measured over every box the page draws a light at,
- * still and at the flow's full reach: text ≥ 12.02, dim ≥ 7.31, accent
- * ≥ 5.65, tick ≥ 3.58 (marks only, never text). The landing's own
+ * still and at the flow's full reach: text ≥ 11.4, dim ≥ 6.93, accent
+ * ≥ 5.36, tick ≥ 3.4 (marks only, never text), all at their lowest on
+ * `papers`, the strongest light. The landing's own
  * `--home-violet` and `--home-muted` fall under 4.7 on a flowing pool,
  * which is why a lit surface re-points the `--pp-*` tokens at these.
  */
@@ -95,8 +98,8 @@ export const SAAS_LIGHTS: Record<SaasLightId, SaasLight> = {
   roomMirror: { ground: mirrorMesh(ROOM.ground), floor: ROOM.floor },
   papers: {
     ground:
-      "radial-gradient(520px 200px at 18% 0%, rgb(255 255 255 / 0.8) 0%, rgb(255 255 255 / 0.668) 20%, rgb(255 255 255 / 0.461) 35%, rgb(255 255 255 / 0.26) 50%, rgb(255 255 255 / 0.12) 65%, rgb(255 255 255 / 0.045) 80%, rgb(255 255 255 / 0) 100%), radial-gradient(460px 280px at 0% 20%, rgb(214 196 255 / 0.9) 0%, rgb(214 196 255 / 0.752) 20%, rgb(214 196 255 / 0.519) 35%, rgb(214 196 255 / 0.292) 50%, rgb(214 196 255 / 0.134) 65%, rgb(214 196 255 / 0.051) 80%, rgb(214 196 255 / 0) 100%), radial-gradient(460px 260px at 34% 100%, rgb(255 226 170 / 0.8) 0%, rgb(255 226 170 / 0.668) 20%, rgb(255 226 170 / 0.461) 35%, rgb(255 226 170 / 0.26) 50%, rgb(255 226 170 / 0.12) 65%, rgb(255 226 170 / 0.045) 80%, rgb(255 226 170 / 0) 100%), radial-gradient(420px 260px at 62% 0%, rgb(246 200 236 / 0.7) 0%, rgb(246 200 236 / 0.585) 20%, rgb(246 200 236 / 0.404) 35%, rgb(246 200 236 / 0.227) 50%, rgb(246 200 236 / 0.105) 65%, rgb(246 200 236 / 0.04) 80%, rgb(246 200 236 / 0) 100%), radial-gradient(460px 280px at 100% 100%, rgb(196 206 255 / 0.85) 0%, rgb(196 206 255 / 0.71) 20%, rgb(196 206 255 / 0.49) 35%, rgb(196 206 255 / 0.276) 50%, rgb(196 206 255 / 0.127) 65%, rgb(196 206 255 / 0.048) 80%, rgb(196 206 255 / 0) 100%), radial-gradient(320px 200px at 86% 30%, rgb(255 240 214 / 0.6) 0%, rgb(255 240 214 / 0.501) 20%, rgb(255 240 214 / 0.346) 35%, rgb(255 240 214 / 0.195) 50%, rgb(255 240 214 / 0.09) 65%, rgb(255 240 214 / 0.034) 80%, rgb(255 240 214 / 0) 100%), #fbf7ff",
-    floor: "#fbf7ff",
+      "radial-gradient(62% 26% at 18% 0%, rgb(255 255 255 / 0.85) 0%, rgb(255 255 255 / 0.71) 20%, rgb(255 255 255 / 0.49) 35%, rgb(255 255 255 / 0.276) 50%, rgb(255 255 255 / 0.127) 65%, rgb(255 255 255 / 0.048) 80%, rgb(255 255 255 / 0) 100%), radial-gradient(95% 42% at 0% 8%, rgb(206 184 255 / 0.9) 0%, rgb(206 184 255 / 0.752) 20%, rgb(206 184 255 / 0.518) 35%, rgb(206 184 255 / 0.293) 50%, rgb(206 184 255 / 0.134) 65%, rgb(206 184 255 / 0.05) 80%, rgb(206 184 255 / 0) 100%), radial-gradient(90% 40% at 100% 18%, rgb(255 218 160 / 0.85) 0%, rgb(255 218 160 / 0.71) 20%, rgb(255 218 160 / 0.49) 35%, rgb(255 218 160 / 0.276) 50%, rgb(255 218 160 / 0.127) 65%, rgb(255 218 160 / 0.048) 80%, rgb(255 218 160 / 0) 100%), radial-gradient(55% 26% at 66% 52%, rgb(246 204 234 / 0.45) 0%, rgb(246 204 234 / 0.376) 20%, rgb(246 204 234 / 0.259) 35%, rgb(246 204 234 / 0.146) 50%, rgb(246 204 234 / 0.067) 65%, rgb(246 204 234 / 0.025) 80%, rgb(246 204 234 / 0) 100%), radial-gradient(105% 44% at 28% 80%, rgb(198 196 255 / 0.8) 0%, rgb(198 196 255 / 0.668) 20%, rgb(198 196 255 / 0.461) 35%, rgb(198 196 255 / 0.26) 50%, rgb(198 196 255 / 0.119) 65%, rgb(198 196 255 / 0.045) 80%, rgb(198 196 255 / 0) 100%), radial-gradient(85% 38% at 100% 100%, rgb(255 222 176 / 0.8) 0%, rgb(255 222 176 / 0.668) 20%, rgb(255 222 176 / 0.461) 35%, rgb(255 222 176 / 0.26) 50%, rgb(255 222 176 / 0.119) 65%, rgb(255 222 176 / 0.045) 80%, rgb(255 222 176 / 0) 100%), #f7f1ff",
+    floor: "#f7f1ff",
   },
   stage: STAGE,
   stageMirror: { ground: mirrorMesh(STAGE.ground), floor: STAGE.floor },

@@ -43,7 +43,7 @@ import { ScopeInstrument } from "./scope-instrument";
 
 export function Scope({ data, blobs }: { data: ScopeData; blobs: readonly CSSProperties[] }) {
   return (
-    <section id="scope" aria-labelledby="scope-title" className="scroll-mt-28">
+    <section id="scope" aria-labelledby="scope-title" className="scroll-mt-8">
       <Frame>
         <HomeHeading id="scope-title" eyebrow={data.eyebrow} title={data.title} titleKey={data.key} sub={data.sub} />
         <ScopeInstrument data={data} blobs={blobs} />

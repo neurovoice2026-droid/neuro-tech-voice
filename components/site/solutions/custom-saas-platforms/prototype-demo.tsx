@@ -38,13 +38,15 @@ import { vtAllowed, withViewTransition } from "./vt";
  * reads the pill still reaches it. "Show what's clickable" is an
  * `aria-pressed` toggle, pressed from the start: the finished frame is
  * the Sign up screen with its hotspot showing. Pressed, every hotspot
- * wears an electric ring over a violet wash (saas-build.css §8), and the
- * line under the device says so; released, they are plain grey buttons
- * and that line keeps its place, empty. The first time the device is
- * well into view its observer sets `data-seen` on it, once, straight on
- * the DOM (no React state, the LiveMesh way), and the highlighted
- * hotspots pulse twice; a screen reached later pulses its own as they
- * arrive.
+ * wears an electric ring over a violet wash (saas-build.css §8), and a
+ * 2px Highlight border in forced colours (saas.css §15); released, they
+ * are plain grey buttons. The line under the device says what they do in
+ * words that hold either way, since it names the buttons, not their
+ * colour: a screen reader, and a forced palette, have no violet to point
+ * at. The first time the device is well into view its observer sets
+ * `data-seen` on it, once, straight on the DOM (no React state, the
+ * LiveMesh way), and the highlighted hotspots pulse twice; a screen
+ * reached later pulses its own as they arrive.
  *
  * A PRESS IS A VIEW TRANSITION (vt.ts `withViewTransition`, the DOM API,
  * not React's component): the old screen is captured, the new one is
@@ -59,14 +61,18 @@ import { vtAllowed, withViewTransition } from "./vt";
  * with reduced motion, or on a lite or still device, it is simply
  * instant.
  *
- * FOCUS AND ANNOUNCEMENTS. The pressed button leaves with its screen, so
- * focus moves to the new screen's heading (a -1 tab stop, scrolled to
+ * FOCUS, AND ONE ANNOUNCEMENT. The pressed button leaves with its screen,
+ * so focus moves to the new screen's heading (a -1 tab stop, scrolled to
  * never), in an effect that runs only after a press — never on the first
- * paint, where it would pull the page. A polite live region says "Screen
- * 2 of 3: Good morning"; it is empty until the first press, so nothing
- * is announced on arrival. "Start again" goes back to the first screen;
- * on the first screen it is invisible but keeps its place, so the line
- * it sits on never reflows.
+ * paint, where it would pull the page. The heading says where the reader
+ * is before its title ("Screen 2 of 3: Good morning", the position for a
+ * screen reader only), so the focus move is the whole announcement, said
+ * once: there is no live region to say it again. From the keyboard the
+ * heading wears the house focus ring, the explorer's inspector heading's
+ * (RING_LIGHT, fitted to the words), since the button that was focused
+ * has gone; a pointer press shows none. "Start again" goes back to the
+ * first screen; on the first screen it is invisible but keeps its place,
+ * so the line it sits on never reflows.
  *
  * NOTHING SHIFTS. The device is 4:5 on a phone and 16:10 from md, but
  * never shorter than its tallest screen: every screen is laid into the
@@ -141,11 +147,14 @@ function Block({ block }: { block: ProtoBlock }) {
 function Screen({
   screen,
   titleRef,
+  position,
   onGo,
 }: {
   screen: ProtoScreen;
   /** The live screen's heading, where focus goes after a press. The copies have none. */
   titleRef?: RefObject<HTMLHeadingElement | null>;
+  /** "Screen 2 of 3", said before the title, for a screen reader only. The copies have none. */
+  position?: string;
   onGo?: (hotspot: ProtoHotspot) => void;
 }) {
   return (
@@ -153,9 +162,10 @@ function Screen({
       <h3
         ref={titleRef}
         tabIndex={titleRef ? -1 : undefined}
-        className={cn(TYPE.h3, "outline-none")}
+        className={cn(TYPE.h3, "w-fit rounded-sm", RING_LIGHT)}
         style={{ fontWeight: WEIGHT.h3 }}
       >
+        {position && <span className="sr-only">{position}: </span>}
         {screen.title}
       </h3>
       <div className="mt-5 grid grid-cols-2 gap-3">
@@ -192,8 +202,6 @@ export function PrototypeDemo({ data }: { data: PrototypeData }) {
   const [shown, setShown] = useState<Shown>({ id: first.id, swap: false });
   // "Show what's clickable": pressed from the start, the finished frame.
   const [marked, setMarked] = useState(true);
-  // What the live region last said: nothing until the first press.
-  const [said, setSaid] = useState("");
   const device = useRef<HTMLDivElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
   // Set by a press, read once by the effect that moves focus after it.
@@ -235,10 +243,7 @@ export function PrototypeDemo({ data }: { data: PrototypeData }) {
     moved.current = true;
     withViewTransition(
       "proto",
-      () => {
-        setShown({ id: next.id, swap });
-        setSaid(fill(data.live, { n: next.n, total: data.screens.length, title: next.title }));
-      },
+      () => setShown({ id: next.id, swap }),
       { allowed, types: [dir] },
     );
   }
@@ -317,7 +322,12 @@ export function PrototypeDemo({ data }: { data: PrototypeData }) {
             key={`live-${screen.id}`}
             className={cn("saas-proto-screen min-w-0 p-5 [grid-area:1/1] md:p-8", shown.swap && "ind-swap")}
           >
-            <Screen screen={screen} titleRef={title} onGo={(h) => go(h.to, h.dir)} />
+            <Screen
+              screen={screen}
+              titleRef={title}
+              position={fill(data.live, { n: screen.n, total: data.screens.length })}
+              onGo={(h) => go(h.to, h.dir)}
+            />
           </div>
           {data.screens.map((s) => (
             <div key={`copy-${s.id}`} aria-hidden inert className="invisible min-w-0 p-5 [grid-area:1/1] md:p-8">
@@ -328,8 +338,10 @@ export function PrototypeDemo({ data }: { data: PrototypeData }) {
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        {/* Only true while the hotspots are showing; its place is kept. */}
-        <p className={cn(TYPE.meta, !marked && "invisible")}>{data.hint}</p>
+        {/* What the hotspots do, in words true with the highlight on or off.
+            It takes the room "Start again" leaves and wraps inside it, so the
+            button keeps its place on the line at every width. */}
+        <p className={cn(TYPE.meta, "min-w-0 flex-1 basis-40 text-pretty")}>{data.hint}</p>
         <button
           type="button"
           onClick={() => go(first.id, "back")}
@@ -346,10 +358,6 @@ export function PrototypeDemo({ data }: { data: PrototypeData }) {
           {data.restart}
         </button>
       </div>
-
-      <p aria-live="polite" className="sr-only">
-        {said}
-      </p>
     </div>
   );
 }

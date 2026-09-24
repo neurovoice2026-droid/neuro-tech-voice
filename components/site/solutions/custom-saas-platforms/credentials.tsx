@@ -1,6 +1,5 @@
 import { Fragment, type CSSProperties } from "react";
 import { cn } from "@/lib/utils";
-import { IntentLink } from "@/components/site/intent-link";
 import { Frame } from "@/components/site/product/primitives";
 import { HomeHeading } from "@/components/site/home/heading";
 import { TYPE, WEIGHT } from "@/components/site/home/type";
@@ -16,22 +15,23 @@ import { Tally } from "./tally";
  *
  * The owner's two strongest cards, laid face up and described exactly.
  * On one pearl card (the `papers` light: lilac, champagne, pink pearl,
- * periwinkle and cream, flowing), two columns and a strip under them:
+ * periwinkle and cream, flowing), two columns:
  *
  *   · Personal accreditations. A tally of one node per accreditation,
  *     the figure "20+" set large in the display face, and then what they
- *     are: held by the people who build, not by the company — so they
- *     are the people who would build yours — and what they are not: a
- *     security or compliance certification of the company.
- *   · Startup grants. Each grantor by name, set as a name and never as
- *     a logo, what the grant is (awarded to the company), and where that
- *     grantor's technology runs on this very platform, with a link to
- *     the same part on the explorer's drawing (`MapLink`). Then what a
- *     grant is not: an endorsement of this page or of any build we quote.
- *   · What none of these is, in the homepage's own words: "There is no
- *     certification badge on this site, because we hold none." The
- *     sentence is read from the TRUST band by id in the data module, so
- *     the two pages can never disagree.
+ *     are: each held by the person who earned it, the people who would
+ *     build yours. Then, once and only here, what they are not: a
+ *     security or compliance certification of the company, which we
+ *     don't claim. Said in the card's own words: the homepage's "we
+ *     hold none" is about badges, and quoted under "20+" it read as a
+ *     denial. The data module still guards that TRUST says it, so the
+ *     two pages can never disagree.
+ *   · Startup grants, awarded to our company: the column's head says so
+ *     once, for every row. Each grantor by name, set as a name and never
+ *     as a logo, and where that grantor's technology runs on this very
+ *     platform, with a link to the same part on the explorer's drawing
+ *     (`MapLink`). Then what a grant is not: an endorsement of this page
+ *     or of any build we quote.
  *
  * Each column ends on how to check it (`CheckLine`): while the owner has
  * no public link to the certificates or the grants, "On the call"; the
@@ -47,9 +47,9 @@ import { Tally } from "./tally";
  * THE MOTION, all of it cheap, and none of it hiding a word for long:
  *   · the card rises as it enters (`home-rise`, the landing's view
  *     timeline; off on lite by tier.css);
- *   · its light flows while it is on screen (`LiveMesh` at 1.5: the pools
- *     are px-sized like #pricing's Enterprise card, so on a card this
- *     wide they take the slower tempo to look the same);
+ *   · its light flows while it is on screen (`LiveMesh` at 1.06, in the
+ *     plan cards' band: the pools are sized in % like theirs, so they
+ *     cross this card in the same share of it);
  *   · the tally's nodes pop in reading order on the tally's own view
  *     timeline (saas-credentials.css §5), the plus last;
  *   · the numeral's line rises once out of its mask (`LineReveal`,
@@ -62,14 +62,14 @@ import { Tally } from "./tally";
  *
  * TEXT ON THE LIGHT uses only its measured tokens (--saas-text, --saas-dim,
  * --saas-accent; palette.ts SAAS_INK) — on `papers` at its worst, flowing:
- * 12.48, 7.59 and 5.87 — and the tick colour for marks only (3.72). The
+ * 11.4, 6.93 and 5.36 — and the tick colour for marks only (3.4). The
  * landing's muted and violet fall under 4.7 on a flowing pool and are
  * never used here; saas.css re-points `--pp-*` and `.home-link` inside a
  * lit surface in case one slips in.
  *
  * LAYOUT. One column on a phone, the grants under a hairline; the same at
- * md with more padding, and the closing strip becomes a label beside its
- * text. From lg the two columns stand side by side, a hairline between.
+ * md with more padding. From lg the two columns stand side by side, a
+ * hairline between.
  *
  * A server component. The client code is `LiveMesh`'s observer, the
  * numeral's reveal, the heading's, and the two map links; the focus ring
@@ -85,9 +85,10 @@ const RING = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visib
 /**
  * An inline link with a trailing arrow that nudges under the pointer. A
  * block, not a flex row, so its underline stops at the words and never
- * runs into the arrow; 22px of line and 1px either side, a 24px target.
+ * runs into the arrow; 22px of line and 1px either side, and a hit area
+ * 10px taller each way (`before:`), a 44px target with no change to layout.
  */
-const LINK = cn("home-link group inline-block min-h-6 rounded-sm py-px", TYPE.body, RING);
+const LINK = cn("home-link group relative inline-block min-h-6 rounded-sm py-px", "before:absolute before:inset-x-0 before:-inset-y-2.5", TYPE.body, RING);
 const ARROW = "ml-1 inline-block transition-transform duration-200 group-hover:translate-x-0.5";
 
 /**
@@ -110,16 +111,18 @@ function Arrowed({ label }: { label: string }) {
 }
 
 /**
- * "Startup grant · awarded to our company", each half kept whole, so a
- * narrow card breaks the line at its own dot rather than leaving a word
- * on its own (the hero note's rule).
+ * "Startup grants, awarded to our company", each half kept whole, so a
+ * narrow card breaks the head at its comma rather than leaving a word on
+ * its own (the hero note's rule). A head with no comma is left to wrap.
  */
 function Halves({ text }: { text: string }) {
-  return text.split(" · ").map((part, i, all) => {
-    const last = i === all.length - 1;
+  const parts = text.split(", ");
+  if (parts.length < 2) return text;
+  return parts.map((part, i) => {
+    const last = i === parts.length - 1;
     return (
       <Fragment key={i}>
-        <span className="whitespace-nowrap">{last ? part : `${part} ·`}</span>
+        <span className="whitespace-nowrap">{last ? part : `${part},`}</span>
         {!last && " "}
       </Fragment>
     );
@@ -138,10 +141,19 @@ export function Credentials({ data, blobs }: { data: CredentialsData; blobs: rea
   const whole = floor ? acc.figure.slice(0, -1) : acc.figure;
 
   return (
-    <section id="credentials" aria-labelledby="credentials-title" className="scroll-mt-28">
+    <section id="credentials" aria-labelledby="credentials-title" className="scroll-mt-8">
       <Frame>
+        {/* The key's held pair, "Claude accreditations", is 289px at 30px
+            and a 320 phone's heading is 288: under 359 the heading steps
+            down to 28px, where the pair fits whole. `overflow-wrap` stays
+            as the last resort for a reader's text-spacing override, which
+            widens the pair past any line. */}
         <HomeHeading
           id="credentials-title"
+          className={cn(
+            "max-[359px]:[&_h2]:text-[28px] max-[359px]:[&_h2]:leading-[34px]",
+            "max-sm:[&_.home-key]:[overflow-wrap:anywhere]",
+          )}
           eyebrow={data.eyebrow}
           title={data.title}
           titleKey={data.key}
@@ -151,7 +163,7 @@ export function Credentials({ data, blobs }: { data: CredentialsData; blobs: rea
         {/* The papers card: its flowing light first, its grain second,
             then the content (saas.css §2). */}
         <div className="saas-lit saas-light-papers home-rise mt-10 p-6 md:p-10 lg:mt-12 lg:p-14">
-          <LiveMesh blobs={blobs} drift={1.5} />
+          <LiveMesh blobs={blobs} drift={1.06} />
           <span aria-hidden className="home-grain" />
 
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-0">
@@ -171,18 +183,19 @@ export function Credentials({ data, blobs }: { data: CredentialsData; blobs: rea
               </LineReveal>
               <p className={cn(TYPE.meta, "mt-1 text-(--saas-dim)")}>{acc.caption}</p>
 
-              {/* A line, not a heading: the column's heading is its label. */}
-              <p className={cn(TYPE.h3, "mt-6 text-balance text-(--saas-text)")} style={{ fontWeight: WEIGHT.h3 }}>
-                {acc.title}
-              </p>
-              <p className={cn(TYPE.body, "mt-2 max-w-[34em] text-pretty text-(--saas-text)")}>{acc.body}</p>
+              <p className={cn(TYPE.body, "mt-6 max-w-[34em] text-pretty text-(--saas-text)")}>{acc.body}</p>
+              {/* The page's one word on what they are not, with the
+                  homepage's own sentence in it. */}
               <p className={cn(TYPE.meta, "mt-4 max-w-[34em] text-pretty text-(--saas-dim)")}>{acc.isnt}</p>
               <CheckLine check={acc.check} kinds={data.checkKinds} tone="lit" className="mt-4" />
             </div>
 
             {/* ── The grants ── */}
             <div className="min-w-0 border-t border-(--saas-rule) pt-10 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-12">
-              <h3 className={HEAD}>{grants.label}</h3>
+              {/* "Startup grants, awarded to our company": said once, for every row. */}
+              <h3 className={HEAD}>
+                <Halves text={grants.label} />
+              </h3>
               <ul className="mt-5 divide-y divide-(--saas-rule)">
                 {grants.rows.map((g) => (
                   <li key={g.id} className="py-5 first:pt-0">
@@ -193,10 +206,7 @@ export function Credentials({ data, blobs }: { data: CredentialsData; blobs: rea
                     >
                       {g.grantor}
                     </p>
-                    <p className={cn(TYPE.label, "mt-1 text-(--saas-dim)")}>
-                      <Halves text={grants.kind} />
-                    </p>
-                    <p className={cn(TYPE.label, "mt-4 text-(--saas-dim)")}>{grants.whereLabel}</p>
+                    <p className={cn(TYPE.label, "mt-3 text-(--saas-dim)")}>{grants.whereLabel}</p>
                     <p className={cn(TYPE.body, "mt-1 max-w-[34em] text-pretty text-(--saas-text)")}>{g.runs}</p>
                     {/* To the same part on the explorer's drawing: a real
                         #part-… anchor, taken over by script (map-link.tsx). */}
@@ -208,18 +218,6 @@ export function Credentials({ data, blobs }: { data: CredentialsData; blobs: rea
               </ul>
               <p className={cn(TYPE.meta, "mt-4 max-w-[34em] text-pretty text-(--saas-dim)")}>{grants.isnt}</p>
               <CheckLine check={grants.check} kinds={data.checkKinds} tone="lit" className="mt-4" />
-            </div>
-          </div>
-
-          {/* ── What none of these is ── the homepage's own sentence, and a
-              way to the company facts it stands beside. */}
-          <div className="mt-10 border-t border-(--saas-rule) pt-6 md:grid md:grid-cols-[200px_minmax(0,1fr)] md:gap-8">
-            <h3 className={HEAD}>{data.none.label}</h3>
-            <div className="mt-3 min-w-0 md:mt-0">
-              <p className={cn(TYPE.body, "max-w-[46em] text-pretty text-(--saas-text)")}>{data.none.text}</p>
-              <IntentLink href={data.none.link.href} className={cn(LINK, "mt-2")}>
-                <Arrowed label={data.none.link.label} />
-              </IntentLink>
             </div>
           </div>
         </div>
