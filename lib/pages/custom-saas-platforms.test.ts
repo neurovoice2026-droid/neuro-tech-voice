@@ -17,6 +17,12 @@ import { WEBHOOK_HEADERS } from "@/lib/workflows/payload";
 import { WEBHOOK_MAX_ATTEMPTS } from "@/lib/workflows/webhook";
 import { CLIP, meshBlobs } from "@/components/site/home/mesh-flow";
 import { DEEP_PANEL, HOME_COLORS } from "@/components/site/home/palettes";
+import {
+  RESERVE_AT,
+  RESERVE_TIERS,
+  RESERVES,
+  reserveStyle,
+} from "@/components/site/solutions/custom-saas-platforms/deferred";
 import { frameOf, pathsFor } from "@/components/site/solutions/custom-saas-platforms/explorer-frame";
 import { CARD, EDGES, LAYER_ORDER, PLACE, VIEW } from "@/components/site/solutions/custom-saas-platforms/map-geometry";
 import {
@@ -68,8 +74,8 @@ import {
 import { buildDownTable } from "./custom-saas-platforms.server";
 
 /* ------------------------------------------------------------------ *
- * /solutions/custom-saas-platforms — every claim the page makes, held to
- * the thing it is about.
+ * /solutions/custom-saas-platforms — the claims the page makes, held to
+ * the things they are about.
  *
  * The page argues that we build complete platforms and that the reader is
  * on one, so its words are only as good as this file. It holds:
@@ -282,6 +288,27 @@ describe("facts read from their sources", () => {
     }
   });
 
+  it("never marks the region done while the call recordings stay with Twilio in the US", () => {
+    // Recordings are never copied into Supabase: the proxy streams each one
+    // from Twilio. api.twilio.com is Twilio's US1 region; a regional host
+    // (api.dublin.ie1.twilio.com) would change what the copy may say.
+    expect(read("app/api/telephony/recording/route.ts")).toContain("recording_sid");
+    const host = read("lib/twilio/calls.ts").match(/https:\/\/(api(?:\.[\w-]+)*\.twilio\.com)\/[^`]*\/Recordings\//)?.[1];
+    expect(host, "where the recordings are fetched from").toBe("api.twilio.com");
+    const region = scopePart("region");
+    expect(region.kind).not.toBe("does");
+    for (const text of [region.ours, SAAS_FAQ.items.find((i) => i.id === "data")!.a]) {
+      expect(text).toContain("recordings stay with Twilio in the US");
+      // "Files" would read as if it covered the recordings.
+      expect(text).toContain("database and file storage");
+    }
+  });
+
+  it("names no provider the platform no longer uses", () => {
+    // The Fish Audio and Telnyx pipeline was removed (82faf6f).
+    expect(ALL.filter((s) => /\bFish\b|\bTelnyx\b/i.test(s))).toEqual([]);
+  });
+
   it("borrows the handover line from the custom AI agents page", () => {
     expect(SAAS_TERMS.columns.find((c) => c.id === "upfront")!.items.at(-1)).toBe(CAA_HANDOVER.after);
   });
@@ -296,10 +323,19 @@ describe("facts read from their sources", () => {
     // ...and the signed-in screens a fresh nonce.
     for (const route of DYNAMIC_APP_ROUTES) expect(classifyPath(route), route).toBe("dynamic");
     expect(scriptSrc(buildCsp({ nonce: "A".repeat(24), ...options }))).toMatch(/'nonce-A{24}' 'strict-dynamic'/);
-    // Every place that names the public pages' policy keeps the caveat,
-    // the scope's too: it marks the policy "Done on ours" beside the attack it stops.
-    for (const text of [part("proxy").does, scopePart("policy").ours, SAAS_CHECKS.rows.find((r) => r.id === "csp")!.how]) {
-      expect(text).toContain("may load scripts only from this site, and inline scripts still run");
+    // The exact caveat is printed once, in the #checks row where the reader
+    // opens the header.
+    const caveat = "may load scripts only from this site, and inline scripts still run";
+    expect(SAAS_CHECKS.rows.find((r) => r.id === "csp")!.how).toContain(caveat);
+    expect(ALL.filter((s) => s.includes(caveat))).toHaveLength(1);
+    // The scope marks the policy "Done on ours" beside the attack it stops,
+    // so it still admits the public pages get less...
+    expect(scopePart("policy").ours).toMatch(/Public pages like this one[^.]*\blighter\b/);
+    // ...and no card gives the one-time token to every page.
+    for (const text of [part("proxy").does, scopePart("policy").ours]) {
+      const token = split(text).filter((s) => s.includes("one-time token"));
+      expect(token.length, text).toBeGreaterThan(0);
+      for (const s of token) expect(s, s).toMatch(/signed-in screens/);
     }
     expect(ALL.filter((s) => /strict policy|allowlist/i.test(s))).toEqual([]);
     // "A one-time token", never "nonce": jargon to a founder, and a slur in British English.
@@ -313,11 +349,25 @@ describe("facts read from their sources", () => {
     expect(route).toContain("getCartesiaBudget("); // the Cartesia budget
     expect(route).toContain("BREAKER_KEYS.map(breakerView)"); // every circuit breaker
     expect(read("app/api/cron/daily/route.ts")).toContain("console.error('[cron] daily run finished with failures')"); // a failed job in the logs
+    // It names the kinds of provider the route reports, and no more: not
+    // SmartBill or Google, which the drawing also shows. A flag added to
+    // the route must be grouped here, and the copy changed with it.
+    const GROUPS: Record<string, string[]> = {
+      voice: ["cartesia", "cartesia_admin", "openai", "elevenlabs", "gateway"],
+      phone: ["twilio"],
+      database: ["supabase_admin", "upstash"],
+      payment: ["stripe"],
+      email: ["resend"],
+    };
+    const reported = [...route.match(/providers: \{([^}]*)\}/)![1].matchAll(/(\w+):/g)].map((m) => m[1]);
+    expect(reported.sort()).toEqual(Object.values(GROUPS).flat().sort());
     // It is run by hand and alerts no one: thin, and never "every provider".
     const watch = scopePart("watch");
     expect(watch.kind).toBe("thin");
-    expect(watch.ours).toContain("which of its services are set up");
-    expect(ALL.filter((s) => /every provider/i.test(s))).toEqual([]);
+    expect(watch.ours).toContain(`which of its ${listJoin(Object.keys(GROUPS))} providers are set up`);
+    expect(ALL.filter((s) => /every provider|which of its services/i.test(s))).toEqual([]);
+    // "On-call" reads as a check on the phone call, and promises a rota there isn't.
+    expect(ALL.filter((s) => /on-call/i.test(s))).toEqual([]);
   });
 });
 
@@ -418,7 +468,7 @@ describe("counts held to the repository", () => {
     expect(lens("failover").foot).toContain("the gateway’s and the app’s tests");
     // The gateway: the voice and speech switches, the OpenAI hand-off, letting go of the stream.
     expect(existsSync(path.join(ROOT, "services/voice-gateway/test/failover.test.ts"))).toBe(true);
-    // The app: the breaker, the stream-ended hand-over and the number's fallback route.
+    // The app: the breaker, the stream-ended hand-off and the number's fallback route.
     expect(existsSync(path.join(ROOT, "lib/voice/breaker.test.ts"))).toBe(true);
     const router = read("lib/voice/router.test.ts");
     expect(router).toContain("describe('handleStreamEnded'");
@@ -1017,10 +1067,10 @@ describe("credits", () => {
     expect(uncredited).toEqual([]);
   });
 
-  it("says it once, and says it is not an endorsement", () => {
+  it("says it once, and says none of them endorses the page", () => {
     expect(tmLine).toBeDefined();
     expect(ALL.filter((s) => s.includes("trademarks of their respective owners"))).toHaveLength(1);
-    expect(tmLine.detail).toContain("not an endorsement");
+    expect(tmLine.detail).toContain("none of them endorses");
   });
 
   it("credits Google in its own line: the mark on its own, and every Google product the page prints", () => {
@@ -1175,39 +1225,70 @@ describe("mesh colour", () => {
     }
   });
 
-  // Every size each light renders at (W × H px, §6.2 of the build spec),
-  // with the figures measured there: [still, flowing], the worst over the set.
+  // Every size each light renders at (W × H px): §6.2 of the build spec's,
+  // then the ones measured on the running page at 320, 390, 768, 1024, 1280
+  // and 1440 (the scope room with the region part open too), with the
+  // figures measured there: [still, flowing], the worst over the set.
   const HERO_ROOM: [number, number][] = [
     [343, 560],
     [704, 480],
     [440, 580],
     [480, 560],
     [560, 520],
+    [288, 656],
+    [358, 620],
+    [560, 527],
+    [440, 592],
+    [500, 574],
   ];
   const SCOPE_ROOM: [number, number][] = [
     [343, 1000],
     [704, 720],
     [808, 640],
     [856, 620],
+    [288, 1488],
+    [358, 1330],
+    [720, 1040],
+    [596, 1094],
+    [808, 1008],
+    [808, 1112],
   ];
   const PAPERS: [number, number][] = [
     [343, 1100],
     [720, 1010],
     [944, 620],
     [1176, 560],
+    [288, 1212],
+    [358, 1084],
+    [720, 988],
+    [944, 619],
+    [1176, 557],
   ];
   // #checks' card under the ledger: the papers light, still (no LiveMesh).
   const CHECKS_CARD: [number, number][] = [
+    [358, 269],
     [361, 269],
-    [720, 208],
+    [720, 233],
     [944, 199],
     [1176, 199],
+    [288, 319],
   ];
   const BUILD_CARDS: [number, number][] = [
     [298, 640],
     [376, 540],
     [343, 600],
     [704, 400],
+    [288, 419],
+    [288, 565],
+    [288, 587],
+    [358, 375],
+    [358, 477],
+    [358, 481],
+    [720, 297],
+    [720, 387],
+    [720, 389],
+    [299, 609],
+    [376, 477],
   ];
   type Measured = Record<keyof typeof SAAS_INK, [number, number]>;
   const SURFACES: [string, SaasLightId[], [number, number][], Measured][] = [
@@ -1221,7 +1302,7 @@ describe("mesh colour", () => {
       "the credentials card and #checks' card",
       ["papers"],
       [...PAPERS, ...CHECKS_CARD],
-      { text: [12.64, 11.4], dim: [7.69, 6.93], accent: [5.94, 5.36], tick: [3.77, 3.4] },
+      { text: [12.62, 11.35], dim: [7.68, 6.9], accent: [5.93, 5.33], tick: [3.76, 3.38] },
     ],
     [
       "the build cards",
@@ -1430,5 +1511,99 @@ describe("the route's stylesheets", () => {
       expect(stops, `saas-station-${i}`).toEqual([0, at * 100, (at + 1 / 12) * 100, 100].map((n) => expect.closeTo(n, 2)));
       expect(css, `station ${i}`).toMatch(new RegExp(String.raw`\.saas-station\[data-i="${i}"\]\s*\{\s*animation-name:\s*saas-station-${i};`));
     });
+  });
+});
+
+describe("the content-visibility reserves", () => {
+  /** A tier's reserve at a window `vw` px wide, worked out as the browser works out its calc(). */
+  const lengthAt = (css: string, vw: number) => {
+    let sum = Number(css.match(/^(?:calc\()?(\d+)px/)?.[1]);
+    for (const [, sign, slope, from, span] of css.matchAll(/([+-]) ([\d.]+) \* clamp\(0px, 100vw - (\d+)px, (\d+)px\)/g)) {
+      sum += (sign === "-" ? -1 : 1) * Number(slope) * Math.min(Math.max(vw - Number(from), 0), Number(span));
+    }
+    return sum;
+  };
+
+  it("measures every tier at its first and last width, and either side of the Frame's step at 640", () => {
+    expect([...RESERVE_AT]).toEqual([...RESERVE_AT].sort((a, b) => a - b));
+    expect(new Set(RESERVE_AT).size).toBe(RESERVE_AT.length);
+    for (const w of [320, 639, 640, 767, 768, 1023, 1024, 1279, 1280]) expect(RESERVE_AT, String(w)).toContain(w);
+  });
+
+  it("fills the custom property home.css reads at each tier, where home.css switches", () => {
+    const home = read("components/site/home/home.css");
+    for (const [name, lo] of RESERVE_TIERS) {
+      const rule = String.raw`\.pp \.home-deferred \{[^}]*contain-intrinsic-size: auto var\(${name}\);`;
+      expect(home, name).toMatch(new RegExp(lo === 0 ? rule : String.raw`@media \(min-width: ${lo / 16}rem\) \{\s*${rule}`));
+    }
+  });
+
+  it("keeps a row for every box on the page, in its order, with a height for every width", () => {
+    const page = read("app/solutions/custom-saas-platforms/page.tsx");
+    expect([...page.matchAll(/<SaasDeferred box="(\w+)">/g)].map((m) => m[1])).toEqual(Object.keys(RESERVES));
+    expect(page).not.toMatch(/<HomeDeferred\b/);
+    for (const [box, row] of Object.entries(RESERVES)) {
+      expect(row, box).toHaveLength(RESERVE_AT.length);
+      for (const h of row) expect(Number.isInteger(h) && h > 0, `${box}: ${h}`).toBe(true);
+    }
+  });
+
+  it("runs each tier's reserve through every height measured in it, flat past its ends", () => {
+    for (const [box, row] of Object.entries(RESERVES)) {
+      const style = reserveStyle(row) as Record<string, string>;
+      for (const [name, lo, hi] of RESERVE_TIERS) {
+        const points = RESERVE_AT.map((w, i) => [w, row[i]] as const).filter(([w]) => w >= lo && w <= hi);
+        for (const [w, h] of points) expect(lengthAt(style[name], w), `${box} at ${w}`).toBeCloseTo(h, 0);
+        expect(lengthAt(style[name], points[0][0] - 40), `${box} under ${name}`).toBeCloseTo(points[0][1], 0);
+        expect(lengthAt(style[name], points.at(-1)![0] + 40), `${box} over ${name}`).toBeCloseTo(points.at(-1)![1], 0);
+      }
+    }
+  });
+});
+
+describe("the fallback faces", () => {
+  // capsize's figures, which next/font works its own fallback faces out from.
+  type Metrics = { ascent: number; descent: number; unitsPerEm: number; xWidthAvg: number };
+  const metrics = JSON.parse(read("node_modules/next/dist/server/capsize-font-metrics.json")) as Record<string, Metrics>;
+  const css = read(`${DIR}/saas.css`);
+  const face = (family: string) => css.match(new RegExp(String.raw`@font-face \{\s*font-family: "${family}";([^}]*)\}`))?.[1] ?? "";
+  const pct = (block: string, prop: string) => Number(block.match(new RegExp(String.raw`${prop}: ([\d.]+)%`))?.[1]);
+
+  it.each([
+    ["Instrument Sans Arial Fallback", "instrumentSans", "arial"],
+    ["Instrument Sans Roboto Fallback", "instrumentSans", "roboto"],
+    ["Inter Arial Fallback", "inter", "arial"],
+    ["Inter Roboto Fallback", "inter", "roboto"],
+  ])("sizes %s to the face it stands in for", (family, key, system) => {
+    const f = metrics[key];
+    const s = metrics[system];
+    const size = f.xWidthAvg / f.unitsPerEm / (s.xWidthAvg / s.unitsPerEm);
+    const block = face(family);
+    expect(block, family).not.toBe("");
+    expect(block).toMatch(
+      system === "arial"
+        ? /src: local\("Arial"\), local\("Arimo"\), local\("Liberation Sans"\);/
+        : /src: local\("Roboto"\), local\("Roboto-Regular"\);/,
+    );
+    expect(pct(block, "size-adjust")).toBeCloseTo(size * 100, 1);
+    expect(pct(block, "ascent-override")).toBeCloseTo((f.ascent / f.unitsPerEm / size) * 100, 1);
+    expect(pct(block, "descent-override")).toBeCloseTo((Math.abs(f.descent) / f.unitsPerEm / size) * 100, 1);
+    expect(pct(block, "line-gap-override")).toBe(0);
+  });
+
+  it("lists both after each face, and a generic family after Inter's", () => {
+    expect(read(`${DIR}/shell.tsx`)).toContain(`fallback: ["'Instrument Sans Arial Fallback'", "'Instrument Sans Roboto Fallback'"]`);
+    expect(css).toMatch(
+      /\.pp\.saas-page \{\s*font-family: var\(--font-header\), "Inter Arial Fallback", "Inter Roboto Fallback", sans-serif;\s*\}/,
+    );
+  });
+});
+
+describe("map links", () => {
+  it("leave the history entry a note and no #part-… fragment", () => {
+    expect(read(`${DIR}/map-link.tsx`)).toMatch(/markPartShown\(part\);/);
+    expect(read(`${DIR}/part-bus.ts`)).toContain(
+      `history.replaceState({ [SHOWN]: id }, "", window.location.pathname + window.location.search);`,
+    );
   });
 });

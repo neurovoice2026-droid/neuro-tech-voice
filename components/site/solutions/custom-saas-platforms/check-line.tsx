@@ -7,8 +7,8 @@ import type { Check, CheckKind } from "@/lib/pages/custom-saas-platforms";
  * How to check a claim, where the claim is made: one line under a
  * credential, a scope part, a build stage or a part on the explorer.
  *
- * The page's argument is that every claim says how it can be checked —
- * now, in this browser; on the call; or at handover — so the line reads
+ * The page's argument is that its claims say how they can be checked —
+ * now, in this browser; on the call; or in your build — so the line reads
  * the same everywhere: a glyph and a mono tag for when (the kind), then
  * what to do (the label: a link when there is somewhere to go, plain
  * words when it happens on the call), then, if there is one, the path to
@@ -25,7 +25,7 @@ import type { Check, CheckKind } from "@/lib/pages/custom-saas-platforms";
  * its constant, not the string.
  *
  * THE GLYPHS. Now, in this browser: a filled node, the thing itself.
- * On the call: a hollow node, to be shown. At handover: a dotted ring,
+ * On the call: a hollow node, to be shown. In your build: a dotted ring,
  * what you will hold. Marks, never text: the tick colour on a light
  * (3.4 at its worst, flowing), electric on white (5.70) and on a stage
  * (4.82). #checks draws its own rows but uses the same `CheckGlyph`.

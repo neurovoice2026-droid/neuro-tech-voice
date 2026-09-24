@@ -74,15 +74,17 @@ import { vtAllowed, withViewTransition } from "./vt";
  * first screen; on the first screen it is invisible but keeps its place,
  * so the line it sits on never reflows.
  *
- * NOTHING SHIFTS. The device is 4:5 on a phone and 16:10 from md, but
- * never shorter than its tallest screen: every screen is laid into the
- * same grid cell, the live one over three invisible, `aria-hidden`,
- * `inert` copies (the custom AI agents page's `Stack`), and the device
- * clips its corners with `overflow: clip`, which, unlike `hidden`, lets
- * a box with an aspect ratio grow to its content. So every screen is the
- * same height at every width and font, from the server's first paint.
- * The copies carry no view-transition name and no focus target: only
- * the live screen is ever captured or focused.
+ * NOTHING SHIFTS. The device is exactly as tall as its tallest screen,
+ * and has no aspect ratio of its own: the screens are content that sits
+ * at the top, not a scene that fills a frame (the landing's trades
+ * window), so a 4:5 frame only left them over a band of empty white that
+ * grew with the width. Every screen is laid into the same grid cell, the
+ * live one over three invisible, `aria-hidden`, `inert` copies (the
+ * custom AI agents page's `Stack`), so every screen is the same height at
+ * every width and font, from the server's first paint; the device clips
+ * its rounded corners with `overflow: clip`. The copies carry no
+ * view-transition name and no focus target: only the live screen is ever
+ * captured or focused.
  *
  * COLOUR. The room is the landing's stage, where muted labels read at
  * 5.39; the device is white, where muted is 6.37 and ink 19.11. The
@@ -280,7 +282,7 @@ export function PrototypeDemo({ data }: { data: PrototypeData }) {
         aria-label={data.frameAria}
         data-hotspots={marked ? "" : undefined}
         className={cn(
-          "saas-proto mt-4 flex aspect-[4/5] flex-col overflow-clip rounded-[18px] bg-white md:aspect-[16/10]",
+          "saas-proto mt-4 flex flex-col overflow-clip rounded-[18px] bg-white",
           "shadow-[0_0_0_1px_var(--pp-rule),0_1px_2px_rgb(20_10_36/0.06),0_24px_48px_-28px_rgb(20_10_36/0.3)]",
         )}
       >

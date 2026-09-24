@@ -3,8 +3,8 @@ import { Instrument_Sans } from "next/font/google";
 import { SiteHeader } from "@/components/site/header";
 import { Footer } from "@/components/site/footer";
 import { siteHeader } from "@/components/site/fonts";
-import { Deferred } from "@/components/site/product/primitives";
 import { Jumps } from "./jumps";
+import { SettleAbove } from "./settle";
 
 /* ------------------------------------------------------------------ *
  * The frame /solutions/custom-saas-platforms is built in: the header in
@@ -28,22 +28,30 @@ import { Jumps } from "./jumps";
  * first appears below the hero. The Inter sub is the other half:
  * `siteHeader.variable` is declared here — the loader called from the
  * page is the one Next preloads — while the root layout's copy of it
- * stays preload-free for the app. Cormorant is not loaded: this page has
- * no spoken lines. Geist Mono comes from the root layout, as everywhere.
+ * stays preload-free for the app. Its fallback is next/font's, on Arial
+ * alone, so saas.css §0 names Arial's twins, Roboto and a generic family
+ * after it on this <main>, as it does for the h1. Cormorant is not
+ * loaded: this page has no spoken lines. Geist Mono comes from the root
+ * layout, as everywhere.
  *
  * `saas-page` names this page's <main> for the few rules that must not
  * reach the landing, whose wrapper is `.pp.home-body` too, and whose
  * sheets stay loaded after a client-side trip from here: scroll anchoring
  * back on, the scroll padding, the instant load-time jump (saas.css §14)
  * and the forced-colours states (§15). `Jumps` gives every same-page
- * jump one more look once it has settled (jumps.tsx).
+ * jump one more look once it has settled (jumps.tsx), and `SettleAbove`
+ * paints the boxes above a page that opens part-way down while the
+ * reader is still (settle.tsx).
  *
  * The header is fixed and see-through while docked, so there is no top
  * padding here: the hero clears it with its own (pt-28 md:pt-[148px],
  * the custom-ai-agents precedent). `overflow-x-clip`, not hidden, so the
  * explorer's and the prototype's sticky columns still stick. The footer
- * sits in a Deferred box exactly as ProductShell has it: it is the last
- * thing on the page and nobody lands on it.
+ * is drawn as the landing draws it, not deferred as ProductShell has it:
+ * a reader at #start, the page's last section, is within a screen of it,
+ * and its 560px reserve, a desktop's figure, is half its height on a
+ * phone (1,050px), so a reload or a Back there came back to a page too
+ * short to scroll to where they were, and landed some 500px up.
  * ------------------------------------------------------------------ */
 
 /**
@@ -85,10 +93,9 @@ export function SaasShell({ children }: { children: ReactNode }) {
       >
         {children}
         <Jumps />
+        <SettleAbove />
       </main>
-      <Deferred size={560}>
-        <Footer />
-      </Deferred>
+      <Footer />
     </>
   );
 }

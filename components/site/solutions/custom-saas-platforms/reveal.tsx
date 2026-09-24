@@ -28,7 +28,7 @@ export function LineReveal({
   style,
   children,
 }: {
-  /** A block element: SplitText cuts lines out of the box it is given. */
+  /** A block element: the reveal cuts lines out of the box it is given. */
   as?: "p" | "div";
   className?: string;
   style?: CSSProperties;

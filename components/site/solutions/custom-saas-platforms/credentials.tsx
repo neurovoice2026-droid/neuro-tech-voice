@@ -53,7 +53,7 @@ import { Tally } from "./tally";
  *   · the tally's nodes pop in reading order on the tally's own view
  *     timeline (saas-credentials.css §5), the plus last;
  *   · the numeral's line rises once out of its mask (`LineReveal`,
- *     SplitText via the landing heading's `useLineReveal`). The whole
+ *     the landing heading's `useLineReveal`). The whole
  *     figure rises already reading "20+": it is never a count-up, which
  *     would show numbers that were never true on the way.
  * The finished frame is the server's markup: reduced motion, the still

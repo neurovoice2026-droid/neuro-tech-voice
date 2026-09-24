@@ -55,7 +55,7 @@
    §11) and is painted under every named group: the #faq heading and its
    first questions would sit in the list's old place, under rows still
    fading there. So the block under the rows is named, and so are the
-   two content-visibility boxes that follow (page.tsx `HomeDeferred`
+   two content-visibility boxes that follow (page.tsx `SaasDeferred`
    around #faq and around #start; the close is named for a tall screen,
    where it can come into view): each slides the list's change in height
    with the list's foot, and nothing below the list moves until the rows

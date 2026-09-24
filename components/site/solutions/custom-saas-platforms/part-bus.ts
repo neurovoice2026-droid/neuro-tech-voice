@@ -98,21 +98,29 @@ export function useLensRequest(): LensRequest | null {
   return request && request.nonce > before ? request : null;
 }
 
-/* ONCE PER HISTORY ENTRY, IN THE ADDRESS BAR TOO. The store above never
-   replays; the address bar would. A map link writes `#part-<id>` there
-   without a jump (map-link.tsx), and the explorer serves any `#part-…`
-   it finds when it mounts: an arrival on a shared or typed link. Left at
-   that, the fragment the page wrote itself was served again on every
-   Back to its entry and every reload, and the reader, gone on to #terms
-   or the FAQ, was carried thousands of pixels back up to #platform with
-   focus taken, where the browser would have kept their place.
+/* ONCE PER HISTORY ENTRY, AND NO FRAGMENT LEFT BEHIND. The store above
+   never replays; the address bar and the browser would. The explorer
+   serves any `#part-…` it finds when it mounts (an arrival on a shared or
+   typed link), and on Back, Chrome takes the reader to the entry's
+   fragment rather than to the place it saved, opening the <details> that
+   holds it. So while a map link wrote `#part-<id>` to the address bar, a
+   reader who went on to an in-page jump (the inspector's "About the
+   grant", "Click the sample above") and pressed Back landed in the
+   explorer's index, opened for them, 1,748px below where they had been
+   at 1440 and 2,568px on a phone.
 
-   So the entry says which part it has already shown: `markPartShown`
-   notes it in `history.state` as the fragment is written (and once the
-   explorer has served an arrival), and the explorer passes over a
-   `#part-…` its entry has already shown (`partShown`). history.state
-   lives with the entry, through a trip away and Back and through a
-   reload; a real arrival on /…#part-<id> starts without it, and is served.
+   So showing a part leaves its entry a note and no fragment:
+   `markPartShown` notes the part in `history.state` and sets the entry's
+   address back to its path and query, without a jump. A map link never
+   writes its fragment (map-link.tsx); an arrival on /…#part-<id> is
+   served once and its fragment taken off as it is. The explorer passes
+   over a part its entry has already shown (`partShown`), so neither Back
+   to the entry nor a reload carries the reader back up to #platform with
+   focus taken, and the browser keeps their place. The links themselves
+   keep their `#part-…` href, for a new tab, a copied link and every jump
+   with no script. history.state lives with the entry, through a trip
+   away and Back and through a reload; a real arrival on /…#part-<id>
+   starts without it.
 
    Only our key goes in. Next's patched replaceState copies its own keys
    (`__NA` and the tree) into the object and has its router follow the
@@ -123,12 +131,12 @@ export function useLensRequest(): LensRequest | null {
 
 const SHOWN = "saasPartShown";
 
-/** Notes on this history entry that `id` has been shown; with `href`, also writes that fragment to the address bar, without a jump. */
-export function markPartShown(id: PartId, href?: string): void {
-  history.replaceState({ [SHOWN]: id }, "", href);
+/** Notes on this history entry that `id` has been shown, and takes any fragment off its address, without a jump. */
+export function markPartShown(id: PartId): void {
+  history.replaceState({ [SHOWN]: id }, "", window.location.pathname + window.location.search);
 }
 
-/** Whether this history entry has already shown `id`: a fragment the page wrote itself, or an arrival already served. */
+/** Whether this history entry has already shown `id`: a map link's, or an arrival already served. */
 export function partShown(id: string): boolean {
   return (history.state as Record<string, unknown> | null)?.[SHOWN] === id;
 }

@@ -32,14 +32,19 @@ import type { TermsData } from "@/lib/pages/custom-saas-platforms";
  * these are terms. The CAA page's `Handover` ledger, in the landing's
  * tokens and with a fourth column.
  *
- * WHY THE BREAKPOINT IS xl, NOT lg. At 1024 the column is 944px and a
+ * WHY FOUR ACROSS ONLY FROM xl. At 1024 the column is 944px and a
  * four-way split leaves each list 188px: "Access to the accounts it has
  * to live in: your domain, your payment provider, your email sender"
  * would set in eight ragged lines of two words. So from md to below xl
- * each list becomes a row of the ledger instead — its head in a fixed
- * 200px left column, its items beside it, a hairline above — which is
- * the same ledger turned on its side. Phones stack plainly, and from xl
- * (1176px, 294 a column) the four stand side by side.
+ * the four sit two by two, as the landing's TRUST does (trust.tsx: two
+ * from md, four from xl), each head over its own list and a hairline
+ * above, the two rules of a row on one line. A list is 336px at 768,
+ * 448 at 1024 and 564 at 1279, so a line stays inside the landing's
+ * 560px measure: 48 characters at 768, 65 at 1024, 82 at most. Turning
+ * each list into a row of the ledger instead (its head in a 200px
+ * column, its items beside it) ran the lines to 773px and 121 characters
+ * by 1180 and made the section 200–270px taller. Phones stack plainly,
+ * and from xl (1176px, 294 a column) the four stand side by side.
  *
  * COLOUR. The bullets are the one mark of violet (`bg-pp-accent`, the
  * body's #6d28d9), small and the same on all four lists, because none of
@@ -61,19 +66,18 @@ export function Terms({ data }: { data: TermsData }) {
       <Frame>
         <HomeHeading id="terms-title" eyebrow={data.eyebrow} title={data.title} titleKey={data.key} sub={data.sub} />
 
-        <div className="mt-10 grid gap-8 xl:grid-cols-4 xl:gap-0 xl:divide-x xl:divide-pp-rule">
+        <div className="mt-10 grid gap-8 md:max-xl:grid-cols-2 md:max-xl:gap-x-12 xl:grid-cols-4 xl:gap-0 xl:divide-x xl:divide-pp-rule">
           {data.columns.map((col) => (
             <div
               key={col.id}
-              // md–xl: a row of the ledger (head left, items right) with a
-              // hairline above; xl: a column with a hairline between.
-              className="min-w-0 md:max-xl:grid md:max-xl:grid-cols-[200px_minmax(0,1fr)] md:max-xl:gap-x-8 md:max-xl:border-t md:max-xl:border-pp-rule md:max-xl:pt-6 xl:px-6 xl:first:pl-0 xl:last:pr-0"
+              // md–xl: two by two, a hairline above each list; xl: a
+              // column with a hairline between.
+              className="min-w-0 md:max-xl:border-t md:max-xl:border-pp-rule md:max-xl:pt-6 xl:px-6 xl:first:pl-0 xl:last:pr-0"
             >
-              {/* md–xl: 3px down, so the 16px head sits on the first 21px item line. */}
-              <h3 className={cn(TYPE.label, "text-pp-muted md:max-xl:pt-[3px]")}>{col.head}</h3>
+              <h3 className={cn(TYPE.label, "text-pp-muted")}>{col.head}</h3>
               {/* Below md, where the four lists stack into one long
                   column, 8px between items rather than 12. */}
-              <ul className="mt-3 space-y-2 md:mt-4 md:space-y-3 md:max-xl:mt-0">
+              <ul className="mt-3 space-y-2 md:mt-4 md:space-y-3">
                 {col.items.map((item) => (
                   <li key={item} className="flex gap-3">
                     {/* 9px down centres a 4px dot on the x-height of a 21px line. */}

@@ -107,8 +107,8 @@ import { Switchboard } from "./switchboard";
  *   - the transport: Pause while a tour plays (WCAG 2.2.2), Play it
  *     while paused or before one has started, Play it again once done;
  *   - a card or chip: the inspector holds that part; below xl, where the
- *     inspector sits under the caption and the steps, the page scrolls
- *     just far enough to show it;
+ *     inspector sits under the caption (and below md under the steps
+ *     too), the page scrolls just far enough to show it;
  *   - a switch: the next call's route, at once;
  *   - focus inside the caption (its check link): the tour holds there
  *     until focus leaves, so the tour never takes a focused link away
@@ -133,7 +133,9 @@ import { Switchboard } from "./switchboard";
  * and the steps are radio groups with one tab stop and arrow keys; the
  * switches are `aria-pressed` toggles. A polite live region speaks what
  * the reader's own choices change — a step, a lens, the next call's
- * route — and never the tour, which would talk over everything.
+ * route — and never the tour, which would talk over everything; arrows
+ * walking the lenses or the steps say theirs once the keys rest, so a
+ * walk is one line.
  *
  * WHAT MAY MOVE. The blocks the tour changes are laid over every variant
  * it can give them, so the tour never moves anything: the caption over
@@ -145,10 +147,11 @@ import { Switchboard } from "./switchboard";
  * while the index under it is off the screen (`roomy`), so the index
  * never jumps in front of a reader who did nothing, whichever way they
  * came, and the first view's tour waits for that room before it plays.
- * From lg the inspector stands beside the step list, sticky under the
- * header as the page's other short columns are, and the list is about as
- * tall as its room or taller (13px short of Proxy's, the tallest part,
- * at 1024), so there the room follows at once. The caption, the step list
+ * From md the inspector stands beside the step list, sticky under the
+ * header as the page's other short columns are, and the list is taller
+ * than its room (the shortest, the opening lens's, is 367px; the tallest
+ * part's room 342 at 768, Twilio's and the API's, and 338 at 1024,
+ * Cartesia's), so there the room follows at once. The caption, the step list
  * and the switches take only the live lens's height: a lens changes only
  * by the reader's own click or key, which the layout-shift score
  * excuses, the server draws the lens the client starts on, and the rail
@@ -162,8 +165,8 @@ type FlipState = ReturnType<FlipKit["Flip"]["getState"]>;
 
 /** The map composition's breakpoint: Tailwind's xl. */
 const XL = "(min-width: 80rem)";
-/** Tailwind's lg: from here the inspector stands beside the step list, not under it. */
-const LG = "(min-width: 64rem)";
+/** Tailwind's md: from here the inspector stands beside the step list, not under it. */
+const MD = "(min-width: 48rem)";
 
 function subscribeWide(onChange: () => void) {
   const mq = window.matchMedia(XL);
@@ -204,6 +207,41 @@ const INSPECTOR_SHOWN = 0.5;
 /** Room kept under the inspector's heading when "See it on the map" brings it on screen: its focus ring and a breath. */
 const HEADING_CLEAR = 24;
 
+/** Arrows walking the lenses or the steps: the live region speaks this long after the last press (the landing's rest). */
+const KEY_REST_MS = 350;
+
+/**
+ * How a choice arrived: a pointer; one key (Enter or Space, which arrive
+ * as clicks with none counted, or a request from elsewhere on the page);
+ * or the arrows (Home, End) walking a radio group, a stop per press.
+ */
+type Via = "pointer" | "key" | "arrow";
+
+/** A radio group's own keys are its arrows, Home and End: a walk. Its Enter and Space arrive as clicks. */
+const walked = (via: "key" | "pointer"): Via => (via === "key" ? "arrow" : via);
+
+/**
+ * What the live region says. Arrows walking the lenses or the steps say
+ * their line once the keys rest, as the landing's radios do
+ * (trades-window.tsx), so a walk is one line, not a line per stop that a
+ * screen reader which queues them reads on after the reader has left.
+ * Everything else says its line at once; and every line, or `hush`,
+ * drops one still waiting, so an old walk's line never lands after a
+ * newer choice.
+ */
+function useLiveLine() {
+  const [said, setSaid] = useState("");
+  const timer = useRef(0);
+  const hush = useCallback(() => window.clearTimeout(timer.current), []);
+  const say = useCallback((line: string, via?: Via) => {
+    window.clearTimeout(timer.current);
+    if (via === "arrow") timer.current = window.setTimeout(() => setSaid(line), KEY_REST_MS);
+    else setSaid(line);
+  }, []);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  return { said, say, hush };
+}
+
 export function Explorer({ data, down }: { data: ExplorerData; down: readonly DownRow[] }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -233,7 +271,7 @@ export function Explorer({ data, down }: { data: ExplorerData; down: readonly Do
   const [part, setPart] = useState<PartId | null>(null);
   const [tour, setTour] = useState<Tour>("idle");
   const [nonce, setNonce] = useState(0);
-  const [said, setSaid] = useState("");
+  const { said, say, hush } = useLiveLine();
   // Focus is inside the caption: the tour waits there, so it never unmounts a focused link.
   const [held, setHeld] = useState(false);
   // A tour is built and hasn't ended: it may still move the inspector.
@@ -269,7 +307,7 @@ export function Explorer({ data, down }: { data: ExplorerData; down: readonly Do
   // An explicit pick plays even while another stage would hold the focus;
   // nothing plays while focus is inside the caption. The first view's tour
   // also waits for the inspector's room (`roomy`), unless the reader holds a
-  // part there: below lg, arriving from below with the index still on
+  // part there: below md, arriving from below with the index still on
   // screen, it starts a scroll later rather than push the index down.
   const run =
     !held && ((playing && (roomy || part !== null)) || (interacted && onScreen && visible && !paused && !reduce));
@@ -295,13 +333,13 @@ export function Explorer({ data, down }: { data: ExplorerData; down: readonly Do
   // itself only while the index under it is off the screen: growing or
   // shrinking it then would move the index in front of a reader who did
   // nothing — GSAP arriving as they scroll up to the stage from below, or
-  // a tour they started ending as they read the part. From lg the list
-  // beside it is about as tall as the room, or taller, so it follows at once.
+  // a tour they started ending as they read the part. From md the list
+  // beside it is taller than the room, so it follows at once.
   useEffect(() => {
     const index = indexRef.current;
     if (roomy === touring || !index) return;
     const io = new IntersectionObserver(([entry]) => {
-      if (!entry.isIntersecting || window.matchMedia(LG).matches) setRoomy(touring);
+      if (!entry.isIntersecting || window.matchMedia(MD).matches) setRoomy(touring);
     });
     io.observe(index);
     return () => io.disconnect();
@@ -435,7 +473,7 @@ export function Explorer({ data, down }: { data: ExplorerData; down: readonly Do
   }, [frame, lens, wide, reduce]);
 
   // A lens pressed by key in the inspector: the caption above it (and below
-  // lg the step list) has just changed height, so the page moves by as
+  // md the step list) has just changed height, so the page moves by as
   // much, and the chip under the reader's focus stays where it was. Run
   // after every commit, not only a new lens's: the press always commits
   // (pickLens bumps `nonce`), so the anchor is spent by the press that set
@@ -469,18 +507,20 @@ export function Explorer({ data, down }: { data: ExplorerData; down: readonly Do
     return fill(data.down.live, { name: data.down.modes[row.mode].name, why: data.down.whys[row.reason] });
   };
 
-  const pickLens = (id: LensId, via: "key" | "pointer") => {
+  const pickLens = (id: LensId, via: Via) => {
     markInteracted();
     wantRef.current = null;
     setLens(id);
     setNonce((n) => n + 1);
     if (id === "down") {
       setTour("idle");
-      setSaid(downLine(mask));
+      say(downLine(mask), via);
       return;
     }
     const last = lensOf(data, id).steps.length - 1;
     if (via === "pointer" && kit && !reduce) {
+      // The tour plays, and says nothing.
+      hush();
       wantRef.current = { lens: id, from: 0 };
       setStep(-1);
       setTour("running");
@@ -489,11 +529,11 @@ export function Explorer({ data, down }: { data: ExplorerData; down: readonly Do
     }
     setStep(last);
     setTour("idle");
-    setSaid(stepLine(id, last));
+    say(stepLine(id, last), via);
   };
 
   /** A lens from the rail: the inspector follows the drawing again. */
-  const pickRail = (i: number, via: "key" | "pointer") => {
+  const pickRail = (i: number, via: Via) => {
     setPart(null);
     pickLens(ids[i], via);
   };
@@ -515,7 +555,7 @@ export function Explorer({ data, down }: { data: ExplorerData; down: readonly Do
     }
   };
 
-  const pickStep = (i: number) => {
+  const pickStep = (i: number, via: Via) => {
     if (!tourLens) return;
     markInteracted();
     wantRef.current = null;
@@ -523,7 +563,7 @@ export function Explorer({ data, down }: { data: ExplorerData; down: readonly Do
     setStep(i);
     setTour("idle");
     setNonce((n) => n + 1);
-    setSaid(stepLine(tourLens.id, i));
+    say(stepLine(tourLens.id, i), via);
   };
 
   const last = tourLens ? tourLens.steps.length - 1 : 0;
@@ -534,6 +574,7 @@ export function Explorer({ data, down }: { data: ExplorerData; down: readonly Do
       return;
     }
     markInteracted();
+    hush();
     setPaused(false);
     setTour("running");
     // The first view's tour, built and waiting for its moment: this is it.
@@ -549,13 +590,13 @@ export function Explorer({ data, down }: { data: ExplorerData; down: readonly Do
     captureVoice(wide);
     const next = mask ^ bit;
     setMask(next);
-    setSaid(downLine(next));
+    say(downLine(next));
   };
 
   const resetDown = () => {
     captureVoice(wide);
     setMask(0);
-    setSaid(downLine(0));
+    say(downLine(0));
     // The reset hides itself; focus goes to the first switch rather than to nothing.
     rootRef.current?.querySelector<HTMLElement>(".saas-toggle")?.focus();
   };
@@ -582,7 +623,7 @@ export function Explorer({ data, down }: { data: ExplorerData; down: readonly Do
     const col = partColRef.current;
     const head = inspectorRef.current;
     if (col && head) {
-      // The heading's own place in the page: from lg the column is sticky, and
+      // The heading's own place in the page: from md the column is sticky, and
       // stuck under the header it sits off it. Unstuck it starts at its row's top.
       const at = getComputedStyle(col).position === "sticky" ? col.parentElement : col;
       const top = (at ?? col).getBoundingClientRect().top;
@@ -616,7 +657,7 @@ export function Explorer({ data, down }: { data: ExplorerData; down: readonly Do
 
   /**
    * A card or chip picked by pointer: the inspector holds it. The
-   * inspector sits under the caption (below lg, under the steps too), so
+   * inspector sits under the caption (below md, under the steps too), so
    * on a phone, a tablet or a short laptop screen it is often below the
    * screen: then the page scrolls just far enough to show it — all of it,
    * or half a screen of it — and a pick is never a tap that seems to do
@@ -644,10 +685,11 @@ export function Explorer({ data, down }: { data: ExplorerData; down: readonly Do
     return () => cancelAnimationFrame(raf);
   }, [request]);
 
-  // Arrived on /…#part-<id>: the same, once per history entry. A fragment
-  // this entry has already shown (a map link wrote it, or an arrival was
-  // served) is passed over, so Back to the entry and a reload keep the
-  // reader's place (part-bus.ts `partShown`).
+  // Arrived on /…#part-<id>: the same, once per history entry, and the
+  // fragment is taken off as it is served (`markPartShown`), so Back to
+  // the entry lands where the reader was, not in the index. A part this
+  // entry has already shown (a map link's, or an arrival already served)
+  // is passed over, so a reload keeps the reader's place too (part-bus.ts).
   useEffect(() => {
     const asked = /^#part-([a-z]+)$/.exec(window.location.hash)?.[1];
     const id = data.parts.find((p) => p.id === asked)?.id;
@@ -706,7 +748,7 @@ export function Explorer({ data, down }: { data: ExplorerData; down: readonly Do
     count: ids.length,
     index: ids.indexOf(lens),
     orientation: "horizontal",
-    onChange: (i, via) => pickRail(i, via),
+    onChange: (i, via) => pickRail(i, walked(via)),
   });
 
   // In "Take a part down" there is no list; the hook still wants a count.
@@ -715,7 +757,7 @@ export function Explorer({ data, down }: { data: ExplorerData; down: readonly Do
     count: listed.steps.length,
     index: tourLens ? step : -1,
     orientation: "vertical",
-    onChange: (i) => pickStep(i),
+    onChange: (i, via) => pickStep(i, walked(via)),
   });
 
   // The live lens's captions: the tour never leaves its lens, and a lens
@@ -824,7 +866,10 @@ export function Explorer({ data, down }: { data: ExplorerData; down: readonly Do
         </div>
       </div>
 
-      <div className="mt-10 grid gap-10 lg:grid-cols-2 lg:gap-12">
+      {/* From md the part stands beside the list; up to lg the list takes the
+          narrower column, as its titles are short and the part's sentences
+          long. Below md the two stack: side by side they'd be too narrow. */}
+      <div className="mt-10 grid gap-10 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] md:gap-8 lg:grid-cols-2 lg:gap-12">
         {/* Every step of the lens, or the switches: only the live one, at its own height. */}
         <div className="min-w-0">
           {tourLens ? (
@@ -865,11 +910,11 @@ export function Explorer({ data, down }: { data: ExplorerData; down: readonly Do
 
         {/* The part: the one the drawing is on, or the reader's pick. Laid
             over every part while a tour may change it, else over its own
-            (`reserveAll`). From lg it stays in sight beside a longer list,
+            (`reserveAll`). From md it stays in sight beside a longer list,
             under the header, as the page's other short columns do. */}
         <div
           ref={partColRef}
-          className="min-w-0 lg:sticky lg:top-28 lg:self-start"
+          className="min-w-0 md:sticky md:top-28 md:self-start"
           onFocusCapture={holdPart}
           onClickCapture={holdPart}
         >

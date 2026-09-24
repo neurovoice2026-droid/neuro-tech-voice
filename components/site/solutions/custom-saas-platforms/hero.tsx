@@ -194,15 +194,17 @@ export function Hero({ data, blobs }: { data: HeroData; blobs: readonly CSSPrope
 
             {/* One list, one plate per layer, in the menu's order. The
                 figure is the plate's first line, read right after its layer:
-                it is what the site's tests hold true. `--i` staggers the
-                assembly and sets how far each plate moves apart. */}
+                it is what the site's tests hold true. The last line is set
+                pretty, so it never ends on one word ("07:00 / UTC" at xl,
+                "fiscal / invoices" at lg). `--i` staggers the assembly and
+                sets how far each plate moves apart. */}
             <dl className="mt-4 grid gap-2">
               {data.room.plates.map((p, i) => (
                 <div key={p.layer} className={PLATE} style={{ "--i": i } as CSSProperties}>
                   <dt className={cn(TYPE.label, "text-(--home-muted)")}>{p.layer}</dt>
                   <dd className={cn(TYPE.mono, "text-right text-balance text-(--home-violet)")}>{p.datum}</dd>
                   <dd className="col-span-2 mt-1 text-[15px] leading-[22px] font-medium text-pp-ink">{p.name}</dd>
-                  <dd className={cn(TYPE.meta, "col-span-2 text-pp-ink/70")}>{p.runs}</dd>
+                  <dd className={cn(TYPE.meta, "col-span-2 text-pretty text-pp-ink/70")}>{p.runs}</dd>
                 </div>
               ))}
             </dl>

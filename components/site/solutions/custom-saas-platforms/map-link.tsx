@@ -17,18 +17,23 @@ import { markPartShown, requestPart } from "./part-bus";
  * entry without a box for the jump to land on; saas.css §14 opens it at
  * once whenever it holds the target.
  *
- * With script, a plain primary click is taken over: the fragment is
- * written to the address bar without a jump (`replaceState`, which Next's
- * router follows) together with a note on the history entry that the
- * part has been shown (`markPartShown`), so neither Back to this entry
- * nor a reload serves the fragment again and carries the reader away
- * from where they had got to. The request goes to the explorer (part-bus.ts),
- * which selects the part on the drawing, scrolls #platform into view and
- * moves focus to its inspector. A jump would land on the index, below the
- * drawing, and a content-visibility box above can land a jump short; the
- * explorer's own scroll corrects for that. A modified click (a new tab, a
- * new window, a download) or any button but the first falls through to
- * the browser, untouched.
+ * With script, a plain primary click is taken over, and the fragment
+ * never reaches the address bar: the history entry gets a note that the
+ * part has been shown (`markPartShown`) and loses any fragment it had
+ * (a #credentials from the hero's link, say). On Back, Chrome takes the
+ * reader to the entry's fragment, not to the place it saved: with
+ * `#part-<id>` written there, a reader who went on to an in-page jump and
+ * pressed Back landed in the index, opened for them, screens below the
+ * drawing they had left. With the note and no fragment, neither Back to
+ * this entry nor a reload carries the reader away from where they had
+ * got to (part-bus.ts). The request goes to the explorer (part-bus.ts),
+ * which selects the part on the drawing, scrolls #platform into view
+ * and moves focus to its inspector. A jump would land on the index,
+ * below the drawing, and a content-visibility box above can land a jump
+ * short; the explorer's own scroll corrects for that. A modified click
+ * (a new tab, a new window, a download) or any button but the first
+ * falls through to the browser, untouched, and copying the link copies
+ * the part's address.
  * ------------------------------------------------------------------ */
 
 export function MapLink({ part, className, children }: { part: PartId; className?: string; children: ReactNode }) {
@@ -36,7 +41,7 @@ export function MapLink({ part, className, children }: { part: PartId; className
   const onClick = (e: MouseEvent<HTMLAnchorElement>) => {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
-    markPartShown(part, href);
+    markPartShown(part);
     requestPart(part);
   };
   return (

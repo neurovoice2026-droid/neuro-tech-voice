@@ -15,19 +15,19 @@ import { requestLens } from "./part-bus";
 import { vtAllowed, withViewTransition } from "./vt";
 
 /* ------------------------------------------------------------------ *
- * #checks — how do I check all this? Every claim on the page, and
- * where to check it.
+ * #checks — how do I check all this? The claims that matter most, and
+ * where to check them.
  *
  * The page's argument, gathered into one ledger: each claim the page
  * makes, when it can be checked — now, in this browser; on the call; or
- * at handover — and how. Twelve rows at HEAD, each with a kind tag (the
+ * in your build — and how. Twelve rows at HEAD, each with a kind tag (the
  * same glyphs as every `CheckLine` above it: a filled node for the thing
  * itself, a hollow one for what is shown on the call, a dotted ring for
  * what you will hold), the claim in ink, and the way to check it in
  * muted, with a link where there is somewhere to go. Then, set apart on
- * a still pearl card, "The one this page can’t show you": that we will
- * build yours well. It is the only claim no page can hold, so it is not
- * dressed as a row, and it ends on the only way to check it, the call.
+ * a still pearl card, "How you check yours": the reader's own build,
+ * from the call through #build's three stages. It is not a claim this
+ * page can hold, so it is not dressed as a row, and it ends on the call.
  *
  * THE KEY heads the ledger: three hairline cells, one per kind in the
  * chips' order, each a small line figure in the landing's #trust
@@ -39,15 +39,15 @@ import { vtAllowed, withViewTransition } from "./vt";
  * muted, so it follows the chips without competing with them.
  *
  * THE FILTER. Four chips, a radio group (`useRovingRadio`: one tab stop,
- * arrows move and pick at once): every claim, or only those of one kind,
+ * arrows move and pick at once): all rows, or only those of one kind,
  * each with its count, worked out from the rows so a row added to the
  * data module counts itself. On a phone the chips run in a rail that
  * scrolls sideways, and the one picked is brought to its middle; from lg
  * they sit beside the heading. A change swaps the list as one same-document
  * View Transition (vt.ts), in three moves that never put text over text:
  * the rows that go fade where they stood; then the rows that stay slide
- * to their new places, and everything under the list — "the one this
- * page can’t show you", #faq, #start — slides the list's change in
+ * to their new places, and everything under the list — "how you check
+ * yours", #faq, #start — slides the list's change in
  * height with them instead of cutting to its new place under rows still
  * fading; then the rows that come rise 6px into theirs. The browser
  * animates snapshots on the compositor; the list itself is simply
@@ -69,13 +69,13 @@ import { vtAllowed, withViewTransition } from "./vt";
  * #prototype's screen change, say — and outside a filter change they
  * carry no name at all.
  *
- * THE FINISHED FRAME is the server's: "Every claim", all rows. Reduced
+ * THE FINISHED FRAME is the server's: "All", all rows. Reduced
  * motion, the lite and still tiers and a browser without the API get an
  * instant filter (`vtAllowed`, read in the handler, never while
  * rendering). With no script at all the chips do nothing and every row is
  * there, which is the frame the chips start on.
  *
- * a11y: the chips are named "Every claim 12" and so on, the group "Show
+ * a11y: the chips are named "All 12" and so on, the group "Show
  * claims"; a polite live region reads "Showing 4 of 12" after a change,
  * and says nothing on load. The kind tag ends in a hidden colon, so a
  * screen reader reads "On the call: Our team holds 20+…". Links
@@ -86,7 +86,7 @@ import { vtAllowed, withViewTransition } from "./vt";
  * COLOUR. White ground, the landing's tokens: ink claims (19.11:1),
  * muted tags and ways (6.37), violet links (7.10); the chips are the
  * landing's (`CHIP`: white on electric 5.70 when picked). The glyphs are
- * marks: electric for "now" and "at handover", violet for "on the call",
+ * marks: electric for "now" and "in your build", violet for "on the call",
  * and the key's figures are ink with the same accent on the glyph and
  * the one mark that says the kind. The key's words are ink at 80%, muted
  * (6.37) while dimmed. The card is the credentials' papers light, still,
@@ -96,7 +96,7 @@ import { vtAllowed, withViewTransition } from "./vt";
 
 type FilterId = ChecksData["filters"][number]["id"];
 
-/** Each kind's mark on white: electric for now and at handover, violet for on the call. */
+/** Each kind's mark on white: electric for now and in your build, violet for on the call. */
 const GLYPH: Record<CheckKind, string> = {
   site: "text-(--home-electric)",
   call: "text-(--home-violet)",
@@ -130,7 +130,7 @@ const fillShowing = (template: string, n: number, total: number) =>
  *     and a check drawn inside it.
  *   · On the call: the hollow node, a line with a voice on it, and the
  *     person it reaches.
- *   · At handover: the dotted ring, a dotted line, and the folder that
+ *   · In your build: the dotted ring, a dotted line, and the folder that
  *     is handed along it.
  *
  * They draw on their own passage up the screen (home.css `.home-draw`,
@@ -265,7 +265,7 @@ function CallFigure() {
   );
 }
 
-/** At handover: a dotted line from the dotted ring, and the folder handed along it. */
+/** In your build: a dotted line from the dotted ring, and the folder handed along it. */
 const FOLDER = { x0: 64, x1: 110, y0: 7, y1: 41, tab: 15 };
 
 function HandoverFigure() {
@@ -378,7 +378,7 @@ function RowLink({ link }: { link: NonNullable<CheckRow["link"]> }) {
     ? (e: MouseEvent<HTMLAnchorElement>) => {
         if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
         e.preventDefault();
-        history.replaceState(null, "", link.href);
+        history.replaceState(null, "", location.pathname + location.search);
         requestLens(lens);
       }
     : undefined;
@@ -570,7 +570,7 @@ export function Checks({ data }: { data: ChecksData }) {
           })}
         </ul>
 
-        {/* ── The one this page can’t show you ── apart from the rows, on
+        {/* ── How you check yours ── apart from the rows, on
             a card of the credentials' pearl, standing still (no flow: it
             is a paper to read, and the page's last light before the deep
             panel), rising once as it comes up the screen. Named with the

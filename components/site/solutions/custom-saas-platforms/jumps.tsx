@@ -7,8 +7,8 @@ import { useEffect } from "react";
  * page's scroll padding plus its own margin (80 + 32 = 112px, saas.css
  * §14), whatever the content-visibility boxes above it do on the way.
  *
- * WHY THEY MISSED. Every section below the hero sits in a HomeDeferred
- * box that holds a reserve until it first paints (page.tsx). A jump works
+ * WHY THEY MISSED. Every section below the hero sits in a SaasDeferred
+ * box that holds a reserve until it first paints (deferred.tsx). A jump works
  * out its end point from the reserves, and every box it passes then
  * paints at its real height mid-flight. Scroll anchoring (back on for
  * this page, saas.css §14) keeps what is on screen in place when a box

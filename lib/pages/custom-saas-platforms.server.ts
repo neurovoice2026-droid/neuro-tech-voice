@@ -26,7 +26,8 @@ import { SAAS_PLATFORM, type DownReason, type DownRow, type RouteMode } from "./
  * labels them:
  *
  *   1  gateway   the voice gateway's breaker is open ("Voice gateway down")
- *   2  credits   this cycle's Cartesia credits are spent
+ *   2  credits   this cycle's Cartesia speech credits are spent (the
+ *                managed agent is paid from its own budget, left full)
  *   4  self      our own pipeline's breaker is open
  *   8  managed   Cartesia's managed agents' breaker is open
  *

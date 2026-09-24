@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Check, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CHIP, RING_LIGHT, useRovingRadio } from "@/components/site/home/controls";
@@ -19,13 +19,17 @@ import { MapLink } from "./map-link";
  *
  * THE NEEDS are eight toggles in four labelled groups (who uses it, how
  * it charges, what it touches, what it has to hold). Each is a real
- * `aria-pressed` button, 44px tall, in the landing's chip colours: the
- * chip grey with a plus while off, electric with a tick while on (white
- * on electric, 5.70:1). The plus and the tick share one slot, so a chip
- * is the same width either way and pressing one never reflows the row.
- * Under them, how many parts the build now has and how many of those are
- * there because of what the reader picked, and a legend for the three
- * marks a part can carry.
+ * `aria-pressed` button in the landing's chip colours: the chip grey
+ * with a plus while off, electric with a tick while on (white on
+ * electric, 5.70:1). The plus and the tick share one slot, so a chip is
+ * the same width either way and pressing one never reflows the row. A
+ * chip is 44px tall on a phone; from lg, where the column stands beside
+ * the room and has to fit a laptop's window under the header, it is a
+ * 36px pill with a 44px hit area. Then the tally: how many parts the
+ * build now has and how many of those are there because of what the
+ * reader picked, and a legend for the three marks a part can carry —
+ * under the needs on a phone, and from lg under the room, over its foot
+ * line, so the column is only the needs.
  *
  * THE ROOM is a lit surface (saas.css §2) in the scope light: the hero
  * room's pearl, mirrored, flowing while on screen (`LiveMesh` at 0.96,
@@ -70,13 +74,17 @@ import { MapLink } from "./map-link";
  * tall as the part in it, not the tallest part: its parts run from two
  * short lines to a whole paragraph, and a card reserving the tallest
  * stood a third empty on the part it opens on. So picking a part can
- * move what is under the room — the foot line and the sections after
- * it — and only that, and only on the reader's press (a shift right
- * after input is not layout shift). Nothing above it moves: on a phone
- * the needs sit above the room, and from lg they stand beside it, at
- * the top of the row. A tile's outline is a border in both states —
- * transparent once built, where the white fill runs under it — so
- * filling one never changes its size.
+ * move what is under the room — from lg the tally, and the foot line and
+ * the sections after it — and only that, and only on the reader's press
+ * (a shift right after input is not layout shift). Nothing above it
+ * moves: on a phone the needs sit above the room, and from lg they stand
+ * beside it, held under the header. One place is the exception: once
+ * the reader has scrolled to where the column rides the row's end, a
+ * need that changes the inspector would move the column, so the page
+ * moves instead and the pressed chip stays put (the layout effect
+ * below). A tile's outline is a border in both states — transparent
+ * once built, where the white fill runs under it — so filling one never
+ * changes its size.
  *
  * KEYBOARD AND SCREEN READERS. The needs are toggles in groups named by
  * their labels. The seventeen tiles are one radio group (`useRovingRadio`:
@@ -105,6 +113,8 @@ import { MapLink } from "./map-link";
 const SETTLE_MS = 700;
 /** The stagger's step: saas-credentials.css §7 multiplies `--k` by the same 45ms. */
 const STEP_MS = 45;
+
+const useIsoLayoutEffect = typeof document !== "undefined" ? useLayoutEffect : useEffect;
 
 /** The map link's arrow: it nudges along under the pointer. */
 const ARROW = "ml-1 inline-block transition-transform duration-200 group-hover:translate-x-0.5";
@@ -172,6 +182,12 @@ export function ScopeInstrument({ data, blobs }: { data: ScopeData; blobs: reado
   // What the live region last said: empty until the reader presses a need.
   const [said, setSaid] = useState("");
   const settle = useRef(0);
+  // The row and the needs column, and the need just pressed: where it
+  // stood, where the row ended, and whether the column was riding that
+  // end (see the layout effect below).
+  const rowRef = useRef<HTMLDivElement>(null);
+  const needsRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<{ el: HTMLElement; top: number; foot: number; riding: boolean } | null>(null);
 
   useEffect(() => {
     const timers = settle;
@@ -199,7 +215,10 @@ export function ScopeInstrument({ data, blobs }: { data: ScopeData; blobs: reado
     onChange: (i) => show(order[i]),
   });
 
-  function toggle(id: NeedId) {
+  function toggle(id: NeedId, chip: HTMLElement) {
+    const foot = rowRef.current?.getBoundingClientRect().bottom ?? 0;
+    const riding = Math.abs((needsRef.current?.getBoundingClientRect().bottom ?? 0) - foot) < 1;
+    anchorRef.current = { el: chip, top: chip.getBoundingClientRect().top, foot, riding };
     const on = !needs.has(id);
     const next = new Set(needs);
     if (on) next.add(id);
@@ -223,21 +242,49 @@ export function ScopeInstrument({ data, blobs }: { data: ScopeData; blobs: reado
     );
   }
 
+  // THE PRESSED NEED STAYS PUT. From lg the needs column is held under the
+  // header until the row's end comes up to its own, and from there it
+  // rides that end; the end moves whenever the inspector changes height.
+  // So a press there moves the column, and the chip under the reader's
+  // pointer or focus with it, unless the page moves by as much, as it
+  // does here (the explorer's lens chips are held the same way). Riding
+  // before the press, the column goes wherever the row's end goes: the
+  // page holds the end where it was. Held under the header before, it
+  // moved only because a shorter inspector brought the end up past it:
+  // the page moves by as much, and it is held again. On a phone, a short
+  // window, or anywhere the column was not moved, this does nothing. Run
+  // after every commit, not only a press's: every press commits (the
+  // nonce), so it spends the anchor.
+  useIsoLayoutEffect(() => {
+    const a = anchorRef.current;
+    anchorRef.current = null;
+    if (!a || !a.el.isConnected) return;
+    const shift = a.el.getBoundingClientRect().top - a.top;
+    if (Math.abs(shift) < 1) return;
+    const by = a.riding ? (rowRef.current?.getBoundingClientRect().bottom ?? a.foot) - a.foot : shift;
+    window.scrollBy({ top: by, behavior: "instant" });
+  });
+
   return (
     <div
+      ref={rowRef}
       className={cn(
-        "mt-10 grid gap-8 lg:mt-12 lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-12",
+        "mt-10 grid lg:mt-12 lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-x-12",
         "xl:grid-cols-[320px_minmax(0,1fr)]",
       )}
     >
-      {/* ── The needs ── on white. From lg, on a screen tall enough to
-          hold the whole column under the header, it holds still while the
-          room beside it is read, so a need is always a press away from
-          the parts it changes; on a shorter one it scrolls, so its foot is
-          never cut off. */}
-      <div className="min-w-0 lg:self-start lg:[@media(min-height:52rem)]:sticky lg:[@media(min-height:52rem)]:top-28">
+      {/* ── The needs ── on white. From lg the column stands down the
+          whole instrument and holds still under the header while the room
+          beside it is read, so every need is a press away from the parts
+          it changes. Its 36px chips keep it to some 510px, so it sticks in
+          any window 39.5rem tall (its 7rem top, the column, and a little
+          air): a 1366×768 laptop's, browser, taskbar and all. In a shorter
+          one it scrolls, so its foot is never cut off. */}
+      <div
+        ref={needsRef}
+        className="min-w-0 lg:col-start-1 lg:row-span-3 lg:row-start-1 lg:self-start lg:[@media(min-height:39.5rem)]:sticky lg:[@media(min-height:39.5rem)]:top-28">
         <h3 className={cn(TYPE.label, "text-pp-muted")}>{data.needsTitle}</h3>
-        <div className="mt-4 grid gap-6 md:grid-cols-2 lg:grid-cols-1">
+        <div className="mt-4 grid gap-6 md:grid-cols-2 lg:grid-cols-1 lg:gap-5">
           {data.groups.map((g) => {
             const labelId = `${uid}-${g.id}`;
             return (
@@ -256,12 +303,18 @@ export function ScopeInstrument({ data, blobs }: { data: ScopeData; blobs: reado
                           key={n.id}
                           type="button"
                           aria-pressed={on}
-                          onClick={() => toggle(n.id)}
+                          onClick={(e) => toggle(n.id, e.currentTarget)}
                           className={cn(
                             // One line is a 44px pill; a label too long for
                             // the column wraps inside it rather than
                             // spilling out of it.
-                            "inline-flex min-h-11 max-w-full cursor-pointer items-center gap-1.5 rounded-[22px] px-4 py-2.5",
+                            "relative inline-flex min-h-11 max-w-full cursor-pointer items-center gap-1.5 rounded-[22px] px-4 py-2.5",
+                            // From lg a 36px pill, as the landing's
+                            // segmented switch draws its options, whose
+                            // hit area still runs 44px tall: 4px into the
+                            // 8px between rows, so two rows' areas meet
+                            // and never overlap.
+                            "lg:min-h-9 lg:rounded-[18px] lg:py-2 lg:before:absolute lg:before:inset-x-0 lg:before:-inset-y-1",
                             "text-left text-[14px] leading-5 active:scale-[0.97]",
                             CHIP.ease,
                             RING_LIGHT,
@@ -278,11 +331,23 @@ export function ScopeInstrument({ data, blobs }: { data: ScopeData; blobs: reado
             );
           })}
         </div>
+      </div>
 
+      {/* ── The tally ── under the needs on a phone, the answer right
+          under the question; from lg under the room, the legend first as
+          a key under the figure it explains, then the count, beside the
+          foot line it goes with. Not focusable, so moving it moves no
+          stop in the tab order, and it reads after the needs either way.
+          From lg it is never the page's scroll anchor: it comes before
+          the room in the document, so Chrome would pick it first, and a
+          press that changed the inspector's height would then hold the
+          tally still and move the room instead. Passed over, the anchor
+          is in the room, and only what is under the room moves. */}
+      <div className="mt-6 flex min-w-0 flex-col gap-4 lg:col-start-2 lg:row-start-2 lg:mt-4 lg:[overflow-anchor:none]">
         {/* The count, re-keyed so it lands with the house rise when it
             changes (never on the first paint). Not a live region: the
             announcement below says it once. */}
-        <p className={cn(TYPE.body, "mt-6 text-pretty text-pp-ink")}>
+        <p className={cn(TYPE.body, "text-pretty text-pp-ink")}>
           <span key={changed.nonce} className={cn("block", changed.nonce > 0 && "ind-swap")}>
             {summary}
           </span>
@@ -291,7 +356,7 @@ export function ScopeInstrument({ data, blobs }: { data: ScopeData; blobs: reado
           {said}
         </p>
 
-        <ul className={cn(TYPE.meta, "mt-4 flex flex-wrap gap-x-5 gap-y-2")}>
+        <ul className={cn(TYPE.meta, "flex flex-wrap gap-x-5 gap-y-2 lg:order-first")}>
           {(Object.keys(data.kinds) as OursKind[]).map((kind) => (
             <li key={kind} className="inline-flex items-center gap-2">
               <KindGlyph kind={kind} className="text-(--home-electric)" />
@@ -302,7 +367,7 @@ export function ScopeInstrument({ data, blobs }: { data: ScopeData; blobs: reado
       </div>
 
       {/* ── The room ── */}
-      <div className="min-w-0">
+      <div className="mt-8 min-w-0 lg:col-start-2 lg:row-start-1 lg:mt-0">
         {/* Under 360px the room and its tiles give up 4px of padding
             apiece, so "Subscriptions", the longest word on a tile, still
             fits its column (the demo's tiles do the same). */}
@@ -403,8 +468,8 @@ export function ScopeInstrument({ data, blobs }: { data: ScopeData; blobs: reado
             </div>
           </div>
         </div>
-        <p className={cn(TYPE.meta, "mt-4 max-w-[640px] text-pretty")}>{data.foot}</p>
       </div>
+      <p className={cn(TYPE.meta, "mt-4 max-w-[640px] text-pretty lg:col-start-2 lg:row-start-3 lg:mt-1")}>{data.foot}</p>
     </div>
   );
 }
