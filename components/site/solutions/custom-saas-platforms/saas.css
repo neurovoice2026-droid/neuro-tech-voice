@@ -1,0 +1,343 @@
+/* ------------------------------------------------------------------ *
+ * §0 /solutions/custom-saas-platforms — the page's shared CSS: the few
+ * things Tailwind utilities can't say that more than one section needs.
+ *
+ *   §1   the five pearl lights, value for value palette.ts SAAS_LIGHTS
+ *   §2   the lit surface: its tokens, its edge, and the guards that keep
+ *        a landing colour that fails on a pool from ever reaching one
+ *   §3   the mesh in motion, #pricing's plan-card flow, copied
+ *   §11  the View Transitions root rule, for #prototype and #checks
+ *   §12  what the lite tier turns off, for every section at once
+ *   §13  reduced-motion pins for state that must read finished
+ *
+ * Each section's own rules (the hero's plates, the tally, the explorer,
+ * the scope tiles, the prototype, the build rail, the checks' filter) live
+ * in that section's own route-scoped file, imported by page.tsx beside
+ * this one; §4–§10 are theirs, so the numbering here keeps the spec's.
+ *
+ * Imported once, by app/solutions/custom-saas-platforms/page.tsx, so these
+ * rules ship with this route only — globals.css and home.css are shared
+ * and are not ours to grow (the caa.css and home.css precedent). Every
+ * rule sits under .pp (the shell's <main>) and every class and keyframe is
+ * prefixed saas-; the only rules outside .pp are the ones that have to
+ * reach <html>: the view-transition pseudo-elements and the tier.
+ *
+ * Motion: only colour, transform, translate, scale and opacity ever
+ * animate. Anything tied to scroll is a view timeline, inside
+ * `@media (prefers-reduced-motion: no-preference)` and
+ * `@supports (animation-timeline: view())`, so a browser without them,
+ * or a reader who asked for less motion, gets the finished frame. The
+ * global rule (globals.css, prefers-reduced-motion) zeroes the rest.
+ * lib/pages/custom-saas-platforms.test.ts reads this file: it holds the
+ * lights to SAAS_LIGHTS, the flow to pricing.css, and every text token to
+ * its contrast on every light, still and flowing.
+ * ------------------------------------------------------------------ */
+
+/* ─── §1 The lights ─────────────────────────────────────────────────
+   One block per light, value for value palette.ts SAAS_LIGHTS; the two
+   mirrors are written out literally (`mirrorMesh` of room and of stage),
+   and the test holds each to its source. A surface wears one with
+   `.saas-lit.saas-light-<room|room-m|papers|stage|stage-m>`. */
+.pp .saas-light-room {
+  /* prettier-ignore */
+  --saas-ground: radial-gradient(62% 26% at 20% 0%, rgb(255 255 255 / 0.85) 0%, rgb(255 255 255 / 0.71) 20%, rgb(255 255 255 / 0.49) 35%, rgb(255 255 255 / 0.276) 50%, rgb(255 255 255 / 0.127) 65%, rgb(255 255 255 / 0.048) 80%, rgb(255 255 255 / 0) 100%), radial-gradient(70% 46% at 0% 10%, rgb(158 232 242 / 0.8) 0%, rgb(158 232 242 / 0.668) 20%, rgb(158 232 242 / 0.461) 35%, rgb(158 232 242 / 0.26) 50%, rgb(158 232 242 / 0.119) 65%, rgb(158 232 242 / 0.045) 80%, rgb(158 232 242 / 0) 100%), radial-gradient(60% 40% at 48% 0%, rgb(190 206 255 / 0.7) 0%, rgb(190 206 255 / 0.584) 20%, rgb(190 206 255 / 0.403) 35%, rgb(190 206 255 / 0.227) 50%, rgb(190 206 255 / 0.104) 65%, rgb(190 206 255 / 0.039) 80%, rgb(190 206 255 / 0) 100%), radial-gradient(62% 50% at 100% 26%, rgb(212 190 255 / 0.85) 0%, rgb(212 190 255 / 0.71) 20%, rgb(212 190 255 / 0.49) 35%, rgb(212 190 255 / 0.276) 50%, rgb(212 190 255 / 0.127) 65%, rgb(212 190 255 / 0.048) 80%, rgb(212 190 255 / 0) 100%), radial-gradient(46% 36% at 60% 66%, rgb(244 200 236 / 0.5) 0%, rgb(244 200 236 / 0.417) 20%, rgb(244 200 236 / 0.288) 35%, rgb(244 200 236 / 0.163) 50%, rgb(244 200 236 / 0.074) 65%, rgb(244 200 236 / 0.028) 80%, rgb(244 200 236 / 0) 100%), radial-gradient(72% 50% at 100% 100%, rgb(255 220 178 / 0.8) 0%, rgb(255 220 178 / 0.668) 20%, rgb(255 220 178 / 0.461) 35%, rgb(255 220 178 / 0.26) 50%, rgb(255 220 178 / 0.119) 65%, rgb(255 220 178 / 0.045) 80%, rgb(255 220 178 / 0) 100%), radial-gradient(62% 44% at 6% 96%, rgb(186 238 222 / 0.7) 0%, rgb(186 238 222 / 0.584) 20%, rgb(186 238 222 / 0.403) 35%, rgb(186 238 222 / 0.227) 50%, rgb(186 238 222 / 0.104) 65%, rgb(186 238 222 / 0.039) 80%, rgb(186 238 222 / 0) 100%), #f7f5ff;
+  --saas-floor: #f7f5ff;
+}
+
+.pp .saas-light-room-m {
+  /* prettier-ignore */
+  --saas-ground: radial-gradient(62% 26% at 80% 0%, rgb(255 255 255 / 0.85) 0%, rgb(255 255 255 / 0.71) 20%, rgb(255 255 255 / 0.49) 35%, rgb(255 255 255 / 0.276) 50%, rgb(255 255 255 / 0.127) 65%, rgb(255 255 255 / 0.048) 80%, rgb(255 255 255 / 0) 100%), radial-gradient(70% 46% at 100% 10%, rgb(158 232 242 / 0.8) 0%, rgb(158 232 242 / 0.668) 20%, rgb(158 232 242 / 0.461) 35%, rgb(158 232 242 / 0.26) 50%, rgb(158 232 242 / 0.119) 65%, rgb(158 232 242 / 0.045) 80%, rgb(158 232 242 / 0) 100%), radial-gradient(60% 40% at 52% 0%, rgb(190 206 255 / 0.7) 0%, rgb(190 206 255 / 0.584) 20%, rgb(190 206 255 / 0.403) 35%, rgb(190 206 255 / 0.227) 50%, rgb(190 206 255 / 0.104) 65%, rgb(190 206 255 / 0.039) 80%, rgb(190 206 255 / 0) 100%), radial-gradient(62% 50% at 0% 26%, rgb(212 190 255 / 0.85) 0%, rgb(212 190 255 / 0.71) 20%, rgb(212 190 255 / 0.49) 35%, rgb(212 190 255 / 0.276) 50%, rgb(212 190 255 / 0.127) 65%, rgb(212 190 255 / 0.048) 80%, rgb(212 190 255 / 0) 100%), radial-gradient(46% 36% at 40% 66%, rgb(244 200 236 / 0.5) 0%, rgb(244 200 236 / 0.417) 20%, rgb(244 200 236 / 0.288) 35%, rgb(244 200 236 / 0.163) 50%, rgb(244 200 236 / 0.074) 65%, rgb(244 200 236 / 0.028) 80%, rgb(244 200 236 / 0) 100%), radial-gradient(72% 50% at 0% 100%, rgb(255 220 178 / 0.8) 0%, rgb(255 220 178 / 0.668) 20%, rgb(255 220 178 / 0.461) 35%, rgb(255 220 178 / 0.26) 50%, rgb(255 220 178 / 0.119) 65%, rgb(255 220 178 / 0.045) 80%, rgb(255 220 178 / 0) 100%), radial-gradient(62% 44% at 94% 96%, rgb(186 238 222 / 0.7) 0%, rgb(186 238 222 / 0.584) 20%, rgb(186 238 222 / 0.403) 35%, rgb(186 238 222 / 0.227) 50%, rgb(186 238 222 / 0.104) 65%, rgb(186 238 222 / 0.039) 80%, rgb(186 238 222 / 0) 100%), #f7f5ff;
+  --saas-floor: #f7f5ff;
+}
+
+.pp .saas-light-papers {
+  /* prettier-ignore */
+  --saas-ground: radial-gradient(520px 200px at 18% 0%, rgb(255 255 255 / 0.8) 0%, rgb(255 255 255 / 0.668) 20%, rgb(255 255 255 / 0.461) 35%, rgb(255 255 255 / 0.26) 50%, rgb(255 255 255 / 0.12) 65%, rgb(255 255 255 / 0.045) 80%, rgb(255 255 255 / 0) 100%), radial-gradient(460px 280px at 0% 20%, rgb(214 196 255 / 0.9) 0%, rgb(214 196 255 / 0.752) 20%, rgb(214 196 255 / 0.519) 35%, rgb(214 196 255 / 0.292) 50%, rgb(214 196 255 / 0.134) 65%, rgb(214 196 255 / 0.051) 80%, rgb(214 196 255 / 0) 100%), radial-gradient(460px 260px at 34% 100%, rgb(255 226 170 / 0.8) 0%, rgb(255 226 170 / 0.668) 20%, rgb(255 226 170 / 0.461) 35%, rgb(255 226 170 / 0.26) 50%, rgb(255 226 170 / 0.12) 65%, rgb(255 226 170 / 0.045) 80%, rgb(255 226 170 / 0) 100%), radial-gradient(420px 260px at 62% 0%, rgb(246 200 236 / 0.7) 0%, rgb(246 200 236 / 0.585) 20%, rgb(246 200 236 / 0.404) 35%, rgb(246 200 236 / 0.227) 50%, rgb(246 200 236 / 0.105) 65%, rgb(246 200 236 / 0.04) 80%, rgb(246 200 236 / 0) 100%), radial-gradient(460px 280px at 100% 100%, rgb(196 206 255 / 0.85) 0%, rgb(196 206 255 / 0.71) 20%, rgb(196 206 255 / 0.49) 35%, rgb(196 206 255 / 0.276) 50%, rgb(196 206 255 / 0.127) 65%, rgb(196 206 255 / 0.048) 80%, rgb(196 206 255 / 0) 100%), radial-gradient(320px 200px at 86% 30%, rgb(255 240 214 / 0.6) 0%, rgb(255 240 214 / 0.501) 20%, rgb(255 240 214 / 0.346) 35%, rgb(255 240 214 / 0.195) 50%, rgb(255 240 214 / 0.09) 65%, rgb(255 240 214 / 0.034) 80%, rgb(255 240 214 / 0) 100%), #fbf7ff;
+  --saas-floor: #fbf7ff;
+}
+
+.pp .saas-light-stage {
+  /* prettier-ignore */
+  --saas-ground: radial-gradient(62% 26% at 20% 0%, rgb(255 255 255 / 0.85) 0%, rgb(255 255 255 / 0.71) 20%, rgb(255 255 255 / 0.49) 35%, rgb(255 255 255 / 0.276) 50%, rgb(255 255 255 / 0.127) 65%, rgb(255 255 255 / 0.048) 80%, rgb(255 255 255 / 0) 100%), radial-gradient(95% 48% at 0% 6%, rgb(207 190 255 / 0.85) 0%, rgb(207 190 255 / 0.71) 20%, rgb(207 190 255 / 0.49) 35%, rgb(207 190 255 / 0.276) 50%, rgb(207 190 255 / 0.127) 65%, rgb(207 190 255 / 0.048) 80%, rgb(207 190 255 / 0) 100%), radial-gradient(85% 44% at 100% 20%, rgb(190 214 255 / 0.75) 0%, rgb(190 214 255 / 0.626) 20%, rgb(190 214 255 / 0.432) 35%, rgb(190 214 255 / 0.244) 50%, rgb(190 214 255 / 0.112) 65%, rgb(190 214 255 / 0.042) 80%, rgb(190 214 255 / 0) 100%), radial-gradient(55% 30% at 70% 55%, rgb(246 212 240 / 0.4) 0%, rgb(246 212 240 / 0.334) 20%, rgb(246 212 240 / 0.23) 35%, rgb(246 212 240 / 0.13) 50%, rgb(246 212 240 / 0.06) 65%, rgb(246 212 240 / 0.022) 80%, rgb(246 212 240 / 0) 100%), radial-gradient(105% 50% at 28% 84%, rgb(214 200 255 / 0.75) 0%, rgb(214 200 255 / 0.626) 20%, rgb(214 200 255 / 0.432) 35%, rgb(214 200 255 / 0.244) 50%, rgb(214 200 255 / 0.112) 65%, rgb(214 200 255 / 0.042) 80%, rgb(214 200 255 / 0) 100%), radial-gradient(85% 44% at 100% 100%, rgb(186 226 250 / 0.7) 0%, rgb(186 226 250 / 0.584) 20%, rgb(186 226 250 / 0.403) 35%, rgb(186 226 250 / 0.227) 50%, rgb(186 226 250 / 0.104) 65%, rgb(186 226 250 / 0.039) 80%, rgb(186 226 250 / 0) 100%), #f6f4ff;
+  --saas-floor: #f6f4ff;
+}
+
+.pp .saas-light-stage-m {
+  /* prettier-ignore */
+  --saas-ground: radial-gradient(62% 26% at 80% 0%, rgb(255 255 255 / 0.85) 0%, rgb(255 255 255 / 0.71) 20%, rgb(255 255 255 / 0.49) 35%, rgb(255 255 255 / 0.276) 50%, rgb(255 255 255 / 0.127) 65%, rgb(255 255 255 / 0.048) 80%, rgb(255 255 255 / 0) 100%), radial-gradient(95% 48% at 100% 6%, rgb(207 190 255 / 0.85) 0%, rgb(207 190 255 / 0.71) 20%, rgb(207 190 255 / 0.49) 35%, rgb(207 190 255 / 0.276) 50%, rgb(207 190 255 / 0.127) 65%, rgb(207 190 255 / 0.048) 80%, rgb(207 190 255 / 0) 100%), radial-gradient(85% 44% at 0% 20%, rgb(190 214 255 / 0.75) 0%, rgb(190 214 255 / 0.626) 20%, rgb(190 214 255 / 0.432) 35%, rgb(190 214 255 / 0.244) 50%, rgb(190 214 255 / 0.112) 65%, rgb(190 214 255 / 0.042) 80%, rgb(190 214 255 / 0) 100%), radial-gradient(55% 30% at 30% 55%, rgb(246 212 240 / 0.4) 0%, rgb(246 212 240 / 0.334) 20%, rgb(246 212 240 / 0.23) 35%, rgb(246 212 240 / 0.13) 50%, rgb(246 212 240 / 0.06) 65%, rgb(246 212 240 / 0.022) 80%, rgb(246 212 240 / 0) 100%), radial-gradient(105% 50% at 72% 84%, rgb(214 200 255 / 0.75) 0%, rgb(214 200 255 / 0.626) 20%, rgb(214 200 255 / 0.432) 35%, rgb(214 200 255 / 0.244) 50%, rgb(214 200 255 / 0.112) 65%, rgb(214 200 255 / 0.042) 80%, rgb(214 200 255 / 0) 100%), radial-gradient(85% 44% at 0% 100%, rgb(186 226 250 / 0.7) 0%, rgb(186 226 250 / 0.584) 20%, rgb(186 226 250 / 0.403) 35%, rgb(186 226 250 / 0.227) 50%, rgb(186 226 250 / 0.104) 65%, rgb(186 226 250 / 0.039) 80%, rgb(186 226 250 / 0) 100%), #f6f4ff;
+  --saas-floor: #f6f4ff;
+}
+
+/* ─── §2 The lit surface ────────────────────────────────────────────
+   A pearl surface with text on it: the hero's room, the credentials
+   card, the scope room and #build's three cards. Its children, in order:
+   `LiveMesh` (the flowing copy, §3), then an aria-hidden `.home-grain`,
+   then the content.
+
+   The box is in the components layer so a position utility on the
+   element still wins (the home-deep precedent); unlayered, this
+   `relative` would beat every utility. Isolated, so the mesh (-2) and
+   the grain (-1) sit under the content and over the ground. */
+@layer components {
+  .pp .saas-lit {
+    position: relative;
+    isolation: isolate;
+  }
+}
+
+/* The tokens are the same on every light (palette.ts SAAS_INK): text,
+   dim and accent are text; tick is for marks only. Measured over every
+   box a light is drawn at, still and at the flow's full reach, none is
+   under 4.7 (text) or 3.2 (marks). The landing's own muted and violet
+   fall under 4.7 on a flowing pool, so the four --pp-* tokens are
+   re-pointed here: Tailwind's @theme inline reads them where they are
+   used, so a `text-pp-muted`, an `Eyebrow` or a `bg-pp-accent` inside a
+   lit surface lands on a measured token instead. A white plate, tile or
+   inspector inside one sets its own ground, where the landing's tokens
+   (muted 6.37, violet 7.10, ink 19.11 on white) are safe again.
+
+   The edge is the plan cards' pearl edge: a lit top line and a hairline
+   (inset, painted with the ground, left showing by the mesh's 1px clip),
+   and a soft neutral drop. `--saas-radius` is set inline where a surface
+   is not 28px, so the mesh's clip follows it. */
+.pp .saas-lit {
+  --saas-radius: 28px;
+  --saas-text: #140a24;
+  --saas-dim: #3d3160;
+  --saas-accent: #5b21b6;
+  --saas-tick: #7c3aed;
+  --saas-rule: rgb(20 10 36 / 0.1);
+  --pp-ink: var(--saas-text);
+  --pp-muted: var(--saas-dim);
+  --pp-accent: var(--saas-accent);
+  --pp-rule: var(--saas-rule);
+  border-radius: var(--saas-radius);
+  background: var(--saas-ground);
+  color: var(--saas-text);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.75),
+    inset 0 0 0 1px rgb(20 10 36 / 0.06),
+    0 1px 2px rgb(20 10 36 / 0.06),
+    0 24px 48px -32px rgb(20 10 36 / 0.25);
+}
+
+/* The grain that keeps soft gradients from banding: fainter on pearl. */
+.pp .saas-lit > .home-grain {
+  opacity: 0.06;
+}
+
+/* Links in running text on a light: the accent, not the landing's violet. */
+.pp .saas-lit .home-link {
+  color: var(--saas-accent);
+  text-decoration-color: color-mix(in srgb, var(--saas-accent) 35%, transparent);
+}
+
+.pp .saas-lit .home-link:hover {
+  text-decoration-color: var(--saas-accent);
+}
+
+/* ─── §3 The mesh in motion ─────────────────────────────────────────
+   pricing.css `.home-plan-mesh`, copied rule for rule; the test holds
+   the copy (the keyframe bodies, the seven clocks, the data-live rule,
+   the gate and the clip). The surface's own light taken apart into its
+   pools (home/mesh-flow.ts `meshBlobs`, worked out on the server): each
+   pool is an element the size of its ellipse over the light's floor,
+   drifting on its own path, sideways on one clock and up and down on
+   another. A pool reaches 16% of its own width either side and 20% of
+   its height; its stops fall to nothing at its rim, so it has no edge to
+   show wherever it goes, and at rest the pools stack back into exactly
+   `--saas-ground`. Each movement is a wave about rest: it leaves rest at
+   full speed and eases into each turn, so a surface is visibly flowing
+   from its first frame and never jumps. Compositor-only (translate,
+   transform).
+
+   No two surfaces move alike: each pool keeps its own tempo and heading,
+   each surface its own tempo (`--drift`, set inline by `LiveMesh`), and a
+   surface with `data-swap` swaps its pools' headings. The hero room and
+   the scope room are one light mirrored, and the middle build card the
+   mirror of its neighbours, so even the pictures differ.
+
+   A surface off screen (no data-live, toggled on it by `LiveMesh`'s
+   IntersectionObserver) has no animation at all, so its layers are
+   dropped; it sits at rest, the still picture, and flows off again from
+   rest when it comes back. Hardware that cannot take it (<html
+   data-weak>: declared weak, or a weak GPU; device-tier.ts), the still
+   tier and reduced motion get the ground alone, which is the same
+   picture standing still. A lite tier from slow frames or the connection
+   alone keeps it: it costs neither the network nor the main thread. */
+.pp .saas-mesh {
+  --drift: 1;
+  position: absolute;
+  inset: 1px;
+  z-index: -2;
+  display: none;
+  overflow: hidden;
+  border-radius: calc(var(--saas-radius) - 1px);
+  pointer-events: none;
+  background: var(--saas-floor);
+}
+
+.pp .saas-mesh > span {
+  position: absolute;
+  animation:
+    saas-flow-x calc(var(--fx) * var(--drift)) linear infinite,
+    saas-flow-y calc(var(--fy) * var(--drift)) linear infinite;
+  animation-direction: var(--dx), var(--dy);
+}
+
+.pp .saas-mesh > span:nth-child(1) {
+  --fx: 4s;
+  --fy: 5.3s;
+  --dx: normal;
+  --dy: reverse;
+}
+
+.pp .saas-mesh > span:nth-child(2) {
+  --fx: 5s;
+  --fy: 4.3s;
+  --dx: reverse;
+  --dy: reverse;
+}
+
+.pp .saas-mesh > span:nth-child(3) {
+  --fx: 5.9s;
+  --fy: 6.4s;
+  --dx: normal;
+  --dy: normal;
+}
+
+.pp .saas-mesh > span:nth-child(4) {
+  --fx: 4.5s;
+  --fy: 5.6s;
+  --dx: reverse;
+  --dy: normal;
+}
+
+.pp .saas-mesh > span:nth-child(5) {
+  --fx: 6.6s;
+  --fy: 4.6s;
+  --dx: normal;
+  --dy: reverse;
+}
+
+.pp .saas-mesh > span:nth-child(6) {
+  --fx: 5.4s;
+  --fy: 7.4s;
+  --dx: reverse;
+  --dy: normal;
+}
+
+.pp .saas-mesh > span:nth-child(7) {
+  --fx: 7.2s;
+  --fy: 6.1s;
+  --dx: normal;
+  --dy: reverse;
+}
+
+.pp .saas-lit[data-swap] > .saas-mesh > span {
+  animation-direction: var(--dy), var(--dx);
+}
+
+.pp .saas-lit:not([data-live]) > .saas-mesh > span {
+  animation-name: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-weak]):not([data-tier="still"]) .pp .saas-mesh {
+    display: block;
+  }
+}
+
+@keyframes saas-flow-x {
+  0%,
+  50% {
+    translate: 0 0;
+    animation-timing-function: cubic-bezier(0.61, 1, 0.88, 1);
+  }
+
+  25% {
+    translate: 16% 0;
+    animation-timing-function: cubic-bezier(0.12, 0, 0.39, 0);
+  }
+
+  75% {
+    translate: -16% 0;
+    animation-timing-function: cubic-bezier(0.12, 0, 0.39, 0);
+  }
+
+  100% {
+    translate: 0 0;
+  }
+}
+
+@keyframes saas-flow-y {
+  0%,
+  50% {
+    transform: translate3d(0, 0%, 0);
+    animation-timing-function: cubic-bezier(0.61, 1, 0.88, 1);
+  }
+
+  25% {
+    transform: translate3d(0, 20%, 0);
+    animation-timing-function: cubic-bezier(0.12, 0, 0.39, 0);
+  }
+
+  75% {
+    transform: translate3d(0, -20%, 0);
+    animation-timing-function: cubic-bezier(0.12, 0, 0.39, 0);
+  }
+
+  100% {
+    transform: translate3d(0, 0%, 0);
+  }
+}
+
+/* ─── §11 The View Transitions root ─────────────────────────────────
+   #prototype's screen change and #checks' filter are same-document view
+   transitions (vt.ts), and only the named parts they own should move.
+   The root is captured too — the fixed header with it — and its default
+   cross-fade blends the old and new snapshots with plus-lighter, which
+   brightens the whole page for a moment. So while one of ours runs
+   (<html data-saas-vt>, set by vt.ts for the transition's life and for
+   no one else's), the root cuts straight to the new frame, unblended. */
+html[data-saas-vt]::view-transition-old(root),
+html[data-saas-vt]::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* ─── §12 The lite tier ─────────────────────────────────────────────
+   device-tier.ts mirrors the tier on <html data-tier> once the page has
+   mounted; home/tier.css (imported by page.tsx) already stops the
+   `home-rise` entrances and hides every grain. On a weak device every
+   section's own entrance stops too, and each lands on its finished frame:
+   the hero's plates in place, every tally node drawn, the build rail full
+   (`--saas-rail` rests at its initial value, 1), the connectors whole, no
+   hotspot pulse. The mesh keeps flowing unless the device is weak by
+   hardware (§3's data-weak gate), as the plan cards do.
+
+   The hotspot pulse's own rule is five classes and attributes deep, so
+   this one names the same chain to outrank it. */
+html[data-tier="lite"] .home-body .saas-plate,
+html[data-tier="lite"] .home-body .saas-pop,
+html[data-tier="lite"] .home-body .saas-track,
+html[data-tier="lite"] .home-body .saas-link,
+html[data-tier="lite"] .home-body .saas-hot::after,
+html[data-tier="lite"] .home-body .saas-proto[data-seen][data-hotspots] .saas-hot::after {
+  animation: none;
+}
+
+/* ─── §13 Reduced-motion pins ───────────────────────────────────────
+   State React sets (a scope tile built, a card on the route, an edge
+   lit, a switch pressed) must read finished at once, even if a
+   transition declared later, or a React commit a frame late, would ease
+   it. The global rule already collapses these to an instant; this makes
+   it explicit where the state itself is the content. */
+@media (prefers-reduced-motion: reduce) {
+  .pp .saas-tile,
+  .pp .saas-card,
+  .pp .saas-edge,
+  .pp .saas-toggle {
+    transition: none;
+  }
+}
