@@ -239,7 +239,7 @@ export const lawFirms: Trade = {
     },
     {
       q: "Legal enquiries carry special category data. What happens to the call?",
-      a: "It is transcribed and the transcript sits with the enquiry, so a partner can read exactly what was asked and what was refused. Before you switch it on, that transcript is a document your DPO has a view about: health, criminal allegations and Article 10 offence data arrive on the first call in this trade. The AI disclosure in the opening line is not a setting and cannot be turned off; the recording notice is a switch, and in a two-party-consent state you turn it on.",
+      a: "It is transcribed and the transcript sits with the enquiry, in our database in Ireland (eu-west-1), so a partner can read exactly what was asked and what was refused. Before you switch it on, that transcript is a document your DPO has a view about: health, criminal allegations and Article 10 offence data arrive on the first call in this trade. The transcript is not the only copy of the call: a recording, on " + RECORD_PLAN + " and above, stays with the provider that captured it, as does any copy a voice provider keeps of the call. Twilio and ElevenLabs keep theirs in the United States; we have not confirmed Cartesia's country. The AI disclosure in the opening line is not a setting and cannot be turned off; the recording notice is a switch, and in a two-party-consent state you turn it on.",
     },
   ],
 

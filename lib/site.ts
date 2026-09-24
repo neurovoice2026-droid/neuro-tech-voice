@@ -1912,13 +1912,63 @@ export const FAQ: { q: string; a: string; where?: { label: string; href: string 
     // whole pipeline is — "your data stays in Europe" is the single
     // easiest sentence to write here and the one we cannot stand behind.
     //
-    // The deletion sentence is the strongest fact in this answer and it
-    // was missing: deleting a call removes the voice provider's copies
-    // first and aborts if it cannot (app/api/calls/[id]/route.ts), so no
-    // call is ever marked deleted here while its transcript is still at a
-    // vendor. Scoped to a call on purpose: closing an account logs a
-    // provider failure and carries on (lib/account/deletion-plan.ts).
-    a: "Transcripts and recordings sit in the EU — the database and the file storage are both in Ireland, eu-west-1. That covers where the call is kept and not every hop it takes: the speech and telephony providers it passes through are their own companies in their own regions, and we are not going to tell you otherwise. Deleting a call goes to those providers first and stops if it cannot remove their copy, so no call is marked deleted here while its transcript is still sitting at a vendor. Recordings are a plan entitlement rather than a switch — off on the trial, Starter and Growth, on from Pro upward — while transcripts are kept on every plan.",
+    // Only the transcripts and summaries are ours, in Supabase eu-west-1
+    // (project region read 2026-09-24). A recording is never copied here:
+    // /api/calls/[id]/audio streams it from the provider that captured it
+    // (app/api/calls/_lib/providers.ts). Each provider is named with the
+    // country its own documentation gives for the endpoint we call, and
+    // with none where it gives none:
+    //   · Twilio: api.twilio.com with no region or edge (lib/twilio/
+    //     client.ts; calls.ts fetches recordings from that host) is its
+    //     default US1 Region, which "is located in the eastern United
+    //     States" (twilio.com/docs/global-infrastructure/understanding-
+    //     twilio-regions); "Call records (along with any related
+    //     recordings, etc) will be stored in US1 when connecting to the
+    //     default US1 Region" (twilio.com/docs/global-infrastructure/use-
+    //     the-programmable-voice-javascript-sdk-with-a-non-us-twilio-
+    //     region). Twilio records only calls that run through the gateway
+    //     (app/api/voice/internal/events, call-control). True while
+    //     external S3 recording storage is off and no number has a non-US
+    //     inbound Region in the Twilio Console.
+    //   · ElevenLabs: api.elevenlabs.io (lib/elevenlabs/client.ts) is its
+    //     standard environment, and "As a standard, ElevenLabs' customer
+    //     data is hosted/stored in the U.S." (elevenlabs.io/docs/overview/
+    //     administration/data-residency). It keeps the conversation of
+    //     every call its agent answers. Audio follows record_voice as of
+    //     the last sync (lib/elevenlabs/create-agent.ts), and the webhook
+    //     sees audio on calls we do not treat as recorded (app/api/
+    //     elevenlabs/webhook/handlers.ts), hence "can". It may process
+    //     data in other countries, so the answer says where it keeps it
+    //     and no more.
+    //   · Cartesia: api.cartesia.ai (lib/cartesia/client.ts). Nothing it
+    //     publishes that we could read names a storage country: its DPA
+    //     points at a sub-processor list in its trust centre, and it
+    //     serves from regional endpoints. So no country is printed, and
+    //     none is ruled out, until Cartesia gives one in writing. Without
+    //     Zero Data Retention, which we never turn on, its DPA lets it
+    //     keep Customer Content, so its speech recognition and voice
+    //     (cartesia_self) are covered as well as its agent. "Can": post-
+    //     call deletes the agent's copy of an unrecorded call, best effort
+    //     (lib/voice/post-call.ts deleteManagedCall).
+    // custom-saas-platforms.test.ts holds both endpoints. Naming
+    // ElevenLabs is the one exception to the homepage's rival-name ban
+    // (home.test.ts): it says who holds a call, compares nothing, and the
+    // owner asked for the names.
+    //
+    // The deletion sentence says only what DELETE /api/calls/[id] does:
+    // it deletes the Twilio recording, the ElevenLabs conversation and the
+    // Cartesia agent's call first, and keeps our row if one of those
+    // requests fails. It does not claim no copy is left anywhere: a
+    // provider whose key is missing on the app is skipped (providers.ts
+    // notConfigured), and the speech services and the summary model have
+    // no delete call. Scoped to a call on purpose: closing an account logs
+    // a provider failure and carries on (lib/account/deletion-plan.ts).
+    //
+    // Recordings: the plan decides whether an agent can record, and each
+    // agent's "Record calls" switch, on by default, can turn it off
+    // (components/agent/tabs/TabConversation.tsx), so the answer no longer
+    // says they are "a plan entitlement rather than a switch".
+    a: "We keep transcripts and call summaries in the EU, in our database in Ireland, eu-west-1; recordings are never copied into it, and we will not pretend every service a call passes through is in the EU. When Twilio, which carries the phone line, records a call, it keeps the recording in the United States. A call answered by ElevenLabs' agent leaves its transcript, and can leave its audio, with ElevenLabs, which keeps them in the United States too. A call that uses Cartesia, for its agent or for speech recognition and voice, can leave its audio and transcript with Cartesia, in a country we have not confirmed. Deleting a call goes to those providers first: Twilio's recording, ElevenLabs' conversation and the call Cartesia's agent ran are deleted before ours, and if one of those deletions fails, the call stays here and you can try again. Recordings come with the plan — off on the trial, Starter and Growth, on from Pro upward, where each agent has a switch to turn them off — while transcripts are kept on every plan.",
   },
   {
     q: "Do I need a new phone number?",
@@ -2508,14 +2558,26 @@ export const INDUSTRIES_GATEWAY = {
  * `company` ends by saying we hold no certification. The band's whole job
  * is to be checkable, and a trust section that quietly omits the absence
  * of a badge is doing the same work as a badge that stands for nothing.
+ *
+ * `eu` said "Your calls are stored in the EU", and the recordings made it
+ * false: none is ever copied into Supabase, each plays from the provider
+ * that captured it, and ElevenLabs keeps its own transcript of a call its
+ * agent answers, in the US. The label now claims only the copy we keep
+ * ("We keep"). The first sentence says the recordings are not in it; the
+ * second sends the reader to the FAQ, which names each provider, and its
+ * country where we have confirmed one. The homepage shows those two
+ * (lib/pages/home/trust.ts). The third, on deleting, says only what
+ * DELETE /api/calls/[id] does, repeats the FAQ and is not shown.
+ * "Deletable by you at any time" went: a live call cannot be deleted
+ * (409), nor one whose provider copy failed to delete.
  */
 export const TRUST = {
   kicker: "Before you hand it your phone",
   items: [
     {
       id: "eu",
-      label: "Your calls are stored in the EU",
-      note: "Database and files in eu-west-1, Ireland, deletable by you at any time — and a deletion that cannot remove the voice provider's copy fails instead of reporting success. The speech and telephony hops are named in the FAQ rather than papered over.",
+      label: "We keep your transcripts in the EU",
+      note: "Transcripts and call summaries are in eu-west-1, Ireland, and are deleted with the call; we never copy recordings there. The providers that keep them, and any voice provider with its own copy of a call, are named in the FAQ rather than papered over, country included where we have confirmed it. Deleting a call first removes the recording, conversation or call record a provider holds for it, and fails instead of reporting success if one of those deletions fails.",
     },
     {
       id: "handover",

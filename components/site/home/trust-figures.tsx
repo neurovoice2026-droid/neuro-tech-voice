@@ -9,8 +9,10 @@ import type { CSSProperties, ReactNode } from "react";
  * merely possible, nodes on a disc of page stock. Ink throughout; the
  * accent appears once, on the one note that is about the AI itself.
  *
- *   · Stored in the EU: a line comes in, crosses a dotted border and
- *     comes to rest at a node inside it.
+ *   · We keep your transcripts in the EU: a line comes in, crosses a
+ *     dotted border and comes to rest at a node inside it. Only our copy
+ *     of the transcript comes to rest there; the note says the
+ *     recordings never do.
  *   · Hands the call over: three ways in converge on the agent, and a
  *     dotted line runs on from it to a person.
  *   · Tells every caller: the opening line as a waveform, its first two
@@ -93,7 +95,7 @@ function Plate({ i, children }: { i: number; children: ReactNode }) {
   );
 }
 
-/* ─── Stored in the EU ───────────────────────────────────────────── */
+/* ─── We keep your transcripts in the EU ─────────────────────────── */
 
 const EU = { left: 46, right: 110, node: 78 };
 

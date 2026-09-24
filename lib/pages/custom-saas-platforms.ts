@@ -647,13 +647,18 @@ const SCOPE_PARTS: readonly ScopePart[] = [
   { id: "import", label: "Data brought over", needs: ["import"], kind: "none",
     breaks: "Duplicates, lost history, or a switch-over nobody rehearsed.",
     ours: "Not on ours: it started empty. For yours, the import is rehearsed on a copy before the real switch." }, // OWNER
-  // Thin: recordings are never copied into Supabase. The proxy streams them
-  // from Twilio's US1 API (lib/twilio/calls.ts, held by the test), and a
-  // call run on Cartesia's or ElevenLabs' own agent can leave a copy there
-  // (deleted after copying when recording is off, so "can").
+  // Thin: recordings are never copied into Supabase. The proxy streams each
+  // from the provider that captured it: Twilio's US1 API (lib/twilio/
+  // calls.ts, held by the test), ElevenLabs' standard environment, which its
+  // data-residency doc stores in the US (api.elevenlabs.io, held by the
+  // test), or Cartesia, whose storage country no Cartesia source we could
+  // read names, so none is printed. ElevenLabs keeps its own transcript of a
+  // call its agent ran, and Cartesia's DPA lets it keep what it processed;
+  // Cartesia's agent copy of an unrecorded call is deleted after copying,
+  // so "can".
   { id: "region", label: "Data kept in one region", needs: ["region"], kind: "thin", map: "supabase",
     breaks: "Finding out after launch that a supplier keeps a copy somewhere else.",
-    ours: "Thin on ours: its database and file storage are in eu-west-1 (Ireland), but call recordings stay with Twilio in the US, and a call run on Cartesia’s or ElevenLabs’ own agent can leave a copy with them; the privacy policy says how those transfers are safeguarded. For yours, suppliers are chosen with the region in mind.",
+    ours: "Thin on ours: its database and file storage are in eu-west-1 (Ireland), but call recordings stay with the provider that captured them, and ElevenLabs or Cartesia can keep their own copy of a call they handled. Twilio and ElevenLabs keep theirs in the US, and we haven’t confirmed Cartesia’s country; the privacy policy says how those transfers are safeguarded. For yours, suppliers are chosen with the region in mind.",
     check: { kind: "site", label: "Read the privacy policy", href: "/privacy" } },
   { id: "plans", label: "Subscriptions and invoices", needs: ["plans"], kind: "does", map: "stripe",
     breaks: "A plan that changes in your app but not at the payment provider, or the other way round.",
@@ -931,9 +936,9 @@ export const SAAS_FAQ: FaqData = keyed({
     // The one place that says why the other projects aren't shown.
     { id: "other", q: "What else have you delivered?", // OWNER: "large projects delivered"
       a: "Other large projects, for other companies. That work belongs to them, so it isn’t on a public page; this platform is ours, so this page opens it up. Ask on the call about work like yours, and we’ll tell you what we can." },
-    // Recordings stay with Twilio in the US (the scope's region card, held by the test).
+    // Each copy of a call where the scope's region card puts it (held by the test).
     { id: "data", q: "Where would our data live?",
-      a: "Where your product needs it to, chosen with you before anything is built. This platform keeps its database and file storage in the EU, in eu-west-1 (Ireland), while its call recordings stay with Twilio in the US; some of the other services it uses are outside the European Economic Area too, and the privacy policy says how those transfers are safeguarded. The company that builds it is in the EU as well, registered in Romania.",
+      a: "Where your product needs it to, chosen with you before anything is built. This platform keeps its database and file storage in the EU, in eu-west-1 (Ireland), while its call recordings stay with the provider that captured them, and ElevenLabs or Cartesia can keep their own copy of a call they handled. Twilio and ElevenLabs keep theirs in the US, and we haven’t confirmed Cartesia’s country. Some of the other services it uses are outside the European Economic Area too, and the privacy policy says how those transfers are safeguarded. The company that builds it is in the EU as well, registered in Romania.",
       where: { label: "Read the privacy policy", href: "/privacy" } },
   ],
 });

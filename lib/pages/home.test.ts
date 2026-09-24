@@ -1162,9 +1162,46 @@ describe("copy", () => {
     // The brackets keep this file out of the repo-wide grep for the same words.
     const banned =
       /Eleven[L]abs|Vap[i]|Retel[l]|Blan[d]|real[ ]call|9[ ]languages|every[ ]month|straight into[ ]Google|Driv[e]|most phone[ ]agents/;
-    const all = strings([HOME, HOME_CREDITS, buildHomeCalls(), await buildHomeTrades(), buildGreetingTable()]);
+    // One exception, for one word in two strings: the FAQ's storage answer
+    // and its trademark credit name the provider that keeps a call's
+    // transcript and audio, because the owner asked where each provider
+    // keeps them. That says who holds a call and compares nothing, so every
+    // other word in the ban still applies to both.
+    const storage = FAQ.find((f) => /recordings and transcripts live/.test(f.q))!.a;
+    const credit = HOME_CREDITS.find((c) => c.term.startsWith("Twilio"))!.term;
+    const unnamed = (s: string) => s.replace(/Eleven[L]abs/g, "");
+    const all = strings([HOME, HOME_CREDITS, buildHomeCalls(), await buildHomeTrades(), buildGreetingTable()]).map((s) =>
+      s === storage || s === credit ? unnamed(s) : s,
+    );
     expect(all.length).toBeGreaterThan(100);
+    expect(all).toEqual(expect.arrayContaining([unnamed(storage), unnamed(credit)]));
     expect(all.filter((s) => banned.test(s))).toEqual([]);
+  });
+
+  it("says where each copy of a call is kept, and names no country for Cartesia", () => {
+    const storage = FAQ.find((f) => /recordings and transcripts live/.test(f.q))!.a;
+    // Ours holds the transcripts and summaries; a recording is never copied in.
+    expect(storage).toContain(
+      "We keep transcripts and call summaries in the EU, in our database in Ireland, eu-west-1; recordings are never copied into it",
+    );
+    expect(storage).not.toMatch(/recordings sit in the EU|file storage|plan entitlement rather than a switch/);
+    // Twilio's default US1 Region and the agent provider's standard
+    // environment: custom-saas-platforms.test.ts holds both endpoints.
+    expect(storage).toContain("records a call, it keeps the recording in the United States");
+    expect(storage).toMatch(/with Eleven[L]abs, which keeps them in the United States too/);
+    // No Cartesia source we could read names a storage country, so no
+    // sentence that names Cartesia names a place.
+    const cartesia = storage.split(/(?<=\.) /).filter((s) => s.includes("Cartesia"));
+    expect(cartesia.length).toBeGreaterThan(0);
+    for (const s of cartesia) expect(s).not.toMatch(/United States|\bUS\b|\bEU\b|Ireland|Europe/);
+    expect(cartesia.join(" ")).toContain("in a country we have not confirmed");
+    // The deletion promise is only what DELETE /api/calls/[id] does.
+    expect(storage).not.toContain("still sitting at a vendor");
+    // The trust card claims only the copy we keep.
+    const eu = TRUST.items.find((i) => i.id === "eu")!;
+    expect(eu.label).toBe("We keep your transcripts in the EU");
+    expect(eu.note).toContain("we never copy recordings there");
+    expect(eu.note).not.toContain("at any time");
   });
 
   it("scopes the FAQ's deletion promise to deleting a call", () => {
@@ -1214,5 +1251,10 @@ describe("credits", () => {
   it("names every third-party mark a trade caller says", async () => {
     const callers = (await buildHomeTrades()).trades.map((t) => t.caller).join("\n");
     expect(/Rightmove/.test(callers)).toBe(/Rightmove/.test(all));
+  });
+
+  it("names every provider the FAQ names", () => {
+    const faq = FAQ.map((f) => f.a).join("\n");
+    for (const mark of [/Twilio/, /Eleven[L]abs/, /Cartesia/]) expect(mark.test(all), String(mark)).toBe(mark.test(faq));
   });
 });

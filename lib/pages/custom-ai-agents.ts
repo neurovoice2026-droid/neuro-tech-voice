@@ -603,7 +603,7 @@ export const CAA_FAQ = {
     },
     {
       id: "data", q: "Where is our data kept?",
-      a: "We’re an EU company, based in Romania. Some of our infrastructure and subprocessors are outside the European Economic Area, including in the United States; those transfers are covered by safeguards such as Standard Contractual Clauses, and the privacy policy lists how. Calls are encrypted in transit, your records are kept apart from other customers’ with row-level security, card numbers are never stored, and a data processing agreement is available on request.",
+      a: "We’re an EU company, based in Romania. We keep transcripts and call summaries in eu-west-1 (Ireland). We don’t copy call recordings there: each stays with the provider that captured it, and ElevenLabs or Cartesia can keep their own copy of a call they handled. Twilio and ElevenLabs keep theirs in the United States; we haven’t confirmed Cartesia’s country. Some of our infrastructure and subprocessors are outside the European Economic Area, including in the United States; those transfers are covered by safeguards such as Standard Contractual Clauses, and the privacy policy says how. Calls are encrypted in transit, your records are kept apart from other customers’ with row-level security, card numbers are never stored, and a data processing agreement is available on request.",
     },
   ],
   privacy: { label: "Read the privacy policy", href: "/privacy" },

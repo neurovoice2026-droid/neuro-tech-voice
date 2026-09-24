@@ -288,19 +288,33 @@ describe("facts read from their sources", () => {
     }
   });
 
-  it("never marks the region done while the call recordings stay with Twilio in the US", () => {
+  it("never marks the region done while the call recordings stay with their providers", () => {
     // Recordings are never copied into Supabase: the proxy streams each one
-    // from Twilio. api.twilio.com is Twilio's US1 region; a regional host
-    // (api.dublin.ie1.twilio.com) would change what the copy may say.
+    // from the provider that captured it. api.twilio.com is Twilio's US1
+    // region; a regional host (api.dublin.ie1.twilio.com) would change what
+    // the copy may say.
     expect(read("app/api/telephony/recording/route.ts")).toContain("recording_sid");
     const host = read("lib/twilio/calls.ts").match(/https:\/\/(api(?:\.[\w-]+)*\.twilio\.com)\/[^`]*\/Recordings\//)?.[1];
     expect(host, "where the recordings are fetched from").toBe("api.twilio.com");
     const region = scopePart("region");
     expect(region.kind).not.toBe("does");
     for (const text of [region.ours, SAAS_FAQ.items.find((i) => i.id === "data")!.a]) {
-      expect(text).toContain("recordings stay with Twilio in the US");
+      expect(text).toContain("call recordings stay with the provider that captured them");
+      expect(text).toContain("Twilio and ElevenLabs keep theirs in the US");
       // "Files" would read as if it covered the recordings.
       expect(text).toContain("database and file storage");
+    }
+  });
+
+  it("places Cartesia’s and ElevenLabs’ copies only as far as their own docs go", () => {
+    // ElevenLabs stores in the US on its standard environment only; an
+    // isolated residency host (api.eu.residency.elevenlabs.io) would change
+    // what this page and the homepage FAQ may say.
+    expect(read("lib/elevenlabs/client.ts")).toContain("ELEVENLABS_API_BASE = 'https://api.elevenlabs.io'");
+    for (const text of [scopePart("region").ours, SAAS_FAQ.items.find((i) => i.id === "data")!.a]) {
+      expect(text).toContain("ElevenLabs or Cartesia can keep their own copy of a call they handled");
+      // No Cartesia source we could read names a storage country.
+      expect(text).toContain("we haven’t confirmed Cartesia’s country");
     }
   });
 

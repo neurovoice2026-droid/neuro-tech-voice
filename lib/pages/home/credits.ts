@@ -46,4 +46,8 @@ export const HOME_CREDITS: readonly { term: string; detail: string }[] = [
     term: "Rightmove",
     detail: "Named in a trade caller's line. Rightmove is a trademark of its owner; Neuro Tech Voice is not affiliated with it.",
   },
+  {
+    term: "Twilio, ElevenLabs and Cartesia",
+    detail: "Named in the FAQ, on where a call is kept. They are trademarks of their respective owners; Neuro Tech Voice runs calls on their services, and none of them endorses this page.",
+  },
 ];

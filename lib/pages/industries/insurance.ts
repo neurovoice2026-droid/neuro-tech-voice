@@ -211,7 +211,7 @@ export const insurance: Trade = {
     },
     {
       q: "These calls carry licence numbers, dates of birth, sometimes injuries. Where does that sit?",
-      a: "On your own infrastructure, in the call record attached to the customer, and nowhere else. It is worth being blunt about the comparison: the thing it replaces is a voicemail box nobody transcribed, on a handset in a shared office, holding the same data with none of the record. Recording consent is a setting, because two-party-consent states and UK PECR are not the same rule, and the greeting changes when you turn it on.",
+      a: "In the call record attached to the customer, in our database in Ireland (eu-west-1), and not only there. A recording, when calls are recorded, stays with the provider that captured it, as does any copy a voice provider keeps of the call. Twilio and ElevenLabs keep theirs in the United States; we have not confirmed Cartesia's country. It is worth being blunt about the comparison: the thing it replaces is a voicemail box nobody transcribed, on a handset in a shared office, holding the same data with none of the record. Recording consent is a setting, because two-party-consent states and UK PECR are not the same rule, and the greeting changes when you turn it on.",
     },
   ],
 
