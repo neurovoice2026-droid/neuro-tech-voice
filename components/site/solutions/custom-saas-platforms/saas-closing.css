@@ -1,0 +1,84 @@
+/* ------------------------------------------------------------------ *
+ * /solutions/custom-saas-platforms — #terms, #checks, #faq and #start:
+ * the one thing Tailwind utilities can't say for the page's close.
+ *
+ *   §10  the checks: the filter's same-document view transition — the
+ *        rows that stay slide to their new places, the rows that go
+ *        fade where they stood, the rows that come rise into theirs
+ *        (checks.tsx, vt.ts)
+ *
+ * Only #checks needs a rule of its own. #terms is still on purpose and
+ * is utilities only; #faq wears the landing's own classes (home.css
+ * `.home-faq`, doubts.css `.home-doubts-*`, imported by faq.tsx); #start
+ * is the landing's deep panel (home.css `.home-deep`, its grain, and
+ * `home-rise`; tier.css turns both off on lite).
+ *
+ * The numbering is the page's (saas.css §0 lists the rest). The
+ * view-transition root rule (§11: the root cuts, never cross-fades) is
+ * shared with #prototype and lives in saas.css; this file is imported
+ * once by app/solutions/custom-saas-platforms/page.tsx, after saas.css,
+ * so it ships with this route only.
+ *
+ * Every rule sits on <html>, because that is where the view-transition
+ * pseudo-elements hang and where vt.ts marks our transition
+ * (`data-saas-vt="checks"`, set before the old picture is taken and
+ * cleared when the transition finishes), or under .pp inside it. Every
+ * class and keyframe is prefixed saas-. Only transform and opacity ever
+ * move; the browser animates the snapshots on the compositor, and the
+ * list itself is simply re-rendered once, inside the transition. Nothing
+ * here is tied to scroll. Reduced motion, the lite and still tiers and a
+ * browser without the API never start a transition at all (vt.ts
+ * `vtAllowed`, in the chip's handler): the filter is instant, and none of
+ * these rules ever applies.
+ * ------------------------------------------------------------------ */
+
+/* ─── §10 Checks: the filter's view transition ──────────────────────
+   NAMED ONLY WHILE OURS RUNS. Each row, and "the one this page can’t
+   show you" under them, carries its name as a custom property
+   (`--saas-vt: saas-check-<id>`, inline from checks.tsx), and becomes a
+   view-transition element only under <html data-saas-vt="checks">.
+   Named all the time, the twelve rows would be captured by any other
+   view transition on the page — #prototype's screen change among them —
+   wherever they happened to be; this way they are captured by ours
+   alone, and carry no name the rest of the time. The block under the
+   rows is named with them so it slides with the list's foot, rather than
+   cutting to its new place (with the root) under rows still fading at
+   their old ones. */
+html[data-saas-vt="checks"] .pp .saas-check {
+  view-transition-name: var(--saas-vt);
+}
+
+/* A row that stays, and the block under the list, slide from where they
+   were to where they are (the browser's own group animation, on its
+   snapshots), on the house out-ease. Its old and new pictures are the
+   same row, so their default cross-fade shows nothing. */
+html[data-saas-vt="checks"]::view-transition-group(*) {
+  animation-duration: 0.32s;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* A row that comes (a new picture with no old one) rises 6px into its
+   place as it appears; a row that goes (an old picture with no new one)
+   fades where it stood, a little quicker, so it is gone before the rows
+   that stay have finished closing over it. Neither ever moves far: the
+   reader's eye stays on the list. */
+html[data-saas-vt="checks"]::view-transition-new(*):only-child {
+  animation: saas-vt-in 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+html[data-saas-vt="checks"]::view-transition-old(*):only-child {
+  animation: saas-vt-out 0.16s ease both;
+}
+
+@keyframes saas-vt-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes saas-vt-out {
+  to {
+    opacity: 0;
+  }
+}

@@ -1,0 +1,293 @@
+/* ------------------------------------------------------------------ *
+ * /solutions/custom-saas-platforms — #prototype and #build: the few
+ * things Tailwind utilities can't say for those two sections.
+ *
+ *   §8  the prototype: its hotspots (highlighted, pulsed once), and the
+ *       same-document view transition that slides one screen into the
+ *       next, mirrored on the way back (prototype-demo.tsx, vt.ts)
+ *   §9  the build: one registered number, `--saas-rail`, that draws the
+ *       rail over the three stage cards and pops each station as the
+ *       line reaches it; the dotted connectors between the stacked
+ *       cards; the cards' rise a step apart (build.tsx)
+ *
+ * The numbering is the page's (saas.css §0 lists the rest). The lights,
+ * the lit surface and its tokens, the mesh in motion, the view-transition
+ * root rule (§11) and the lite tier's `.saas-track`, `.saas-link` and
+ * hotspot-pulse lines (§12) are shared and live in saas.css; this file is
+ * imported once by app/solutions/custom-saas-platforms/page.tsx, after
+ * saas.css, so it ships with this route only.
+ *
+ * Every rule sits under .pp (the shell's <main>), or on <html> where it
+ * has to: the view-transition pseudo-elements hang off the root, and the
+ * tier is read from it. Every class and keyframe is prefixed saas-. Only
+ * transform, translate, scale, opacity and colours ever move, and the one
+ * custom property that animates (`--saas-rail`) is read by nothing but
+ * `scale`. Anything tied to scroll is a view timeline, inside
+ * `@media (prefers-reduced-motion: no-preference)` and
+ * `@supports (animation-timeline: view())`, so a browser without them,
+ * or a reader who asked for less motion, gets the finished frame: the
+ * rail full, every station shown, the connectors whole. The global rule
+ * (globals.css, prefers-reduced-motion) zeroes anything left.
+ * ------------------------------------------------------------------ */
+
+/* ─── §8 Prototype: the hotspots ────────────────────────────────────
+   A hotspot is a real <button> in the sample screen. With the toggle off
+   it is a plain button, the chip grey the screen draws it in; with
+   "Show what's clickable" pressed (`data-hotspots` on the device) it
+   wears a 1.5px electric ring over a 12% electric wash, the violet area
+   the hint below the device names. Ink on that wash is well over 15:1;
+   the ring is a mark (electric on white, 5.70). These rules are
+   unlayered, so they win over the chip grey the button's utilities set.
+
+   Every hotspot is at least 44px tall already (min-h-11); its ::before
+   reaches 4px further above and below, so a thumb that lands just off a
+   pill in a crowded screen still presses it. */
+.pp .saas-hot {
+  position: relative;
+}
+
+.pp .saas-hot::before {
+  content: "";
+  position: absolute;
+  inset: -4px 0;
+}
+
+.pp .saas-proto[data-hotspots] .saas-hot {
+  box-shadow: 0 0 0 1.5px var(--home-electric);
+  background: color-mix(in srgb, var(--home-electric) 12%, transparent);
+}
+
+@media (hover: hover) {
+  .pp .saas-proto[data-hotspots] .saas-hot:hover {
+    background: color-mix(in srgb, var(--home-electric) 18%, transparent);
+  }
+}
+
+/* THE PULSE. The first time the device is well into view, its observer
+   sets `data-seen` on it (once, and never takes it back), and every
+   highlighted hotspot sends out one electric ring, twice: from its own
+   edge outward to 1.35 while it fades. A screen reached later pulses its
+   own hotspots as they arrive, which is where the eye needs sending; a
+   reader who turns the highlight off and on again gets it once more.
+
+   The ring rests at nothing — `opacity: 0` here, and `both` holds the
+   animation's last frame, also nothing — so wherever the animation is
+   stopped (the lite tier, saas.css §12; the still tier and weak hardware,
+   below) there is no ring at all, rather than a second one standing on
+   the highlight. Only the live screen's hotspots pulse, not those of the
+   invisible copies that hold the device at its tallest screen. Transform
+   and opacity only; never with reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .pp .saas-proto[data-seen][data-hotspots] .saas-proto-screen .saas-hot::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: 0 0 0 2px var(--home-electric);
+    opacity: 0;
+    pointer-events: none;
+    animation: saas-hot-pulse 1.2s cubic-bezier(0.16, 1, 0.3, 1) 2 both;
+  }
+}
+
+@keyframes saas-hot-pulse {
+  from {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+/* ─── §8 Prototype: the screen change ───────────────────────────────
+   A hotspot press is a same-document view transition (vt.ts): the old
+   screen is captured, React swaps in the new one synchronously inside
+   the transition, and the two snapshots cross — the old one drifting 4%
+   the way the reader is going and fading in 0.2s, the new one arriving
+   from 4% the other side over 0.28s on the house out-ease. Forward runs
+   right to left; a `back` press (Sign out, Back, Choose Team, Start
+   again) mirrors it, where the browser carries transition types. One
+   without them gets the forward slide both ways, and one without the
+   API at all an instant change (the demo then lands the new screen
+   with the house `ind-swap`).
+
+   SCOPED TO OUR TRANSITION. The screen takes its name only while one of
+   the prototype's transitions runs (<html data-saas-vt="proto">, set by
+   vt.ts before the old picture is taken and cleared when it finishes).
+   Named all the time, it would be captured, and cross-faded, by any
+   other view transition on the page — #checks' filter among them —
+   wherever the prototype happened to be. The root does not animate at
+   all while ours runs (saas.css §11), so only the screen moves: the
+   device's frame, its top bar and everything around it cut straight to
+   their new state.
+
+   The old and new snapshots blend normally (setting their animation
+   drops the UA's plus-lighter), over the device's own white: nothing
+   brightens mid-cross. */
+html[data-saas-vt="proto"] .pp .saas-proto-screen {
+  view-transition-name: saas-proto;
+}
+
+html[data-saas-vt="proto"]::view-transition-old(saas-proto) {
+  animation: saas-proto-out 0.2s ease both;
+}
+
+html[data-saas-vt="proto"]::view-transition-new(saas-proto) {
+  animation: saas-proto-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@supports selector(:active-view-transition-type(back)) {
+  html[data-saas-vt="proto"]:active-view-transition-type(back)::view-transition-old(saas-proto) {
+    animation-name: saas-proto-out-back;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(back)::view-transition-new(saas-proto) {
+    animation-name: saas-proto-in-back;
+  }
+}
+
+@keyframes saas-proto-out {
+  to {
+    opacity: 0;
+    translate: -4% 0;
+  }
+}
+
+@keyframes saas-proto-in {
+  from {
+    opacity: 0;
+    translate: 4% 0;
+  }
+}
+
+@keyframes saas-proto-out-back {
+  to {
+    opacity: 0;
+    translate: 4% 0;
+  }
+}
+
+@keyframes saas-proto-in-back {
+  from {
+    opacity: 0;
+    translate: -4% 0;
+  }
+}
+
+/* ─── §9 Build: the rail ────────────────────────────────────────────
+   From lg, a rail runs over the three stage cards: a hairline in ink at
+   12%, and over it the electric line (5.21 on the wash band, a mark)
+   that draws from left to right as the section comes up the screen,
+   with a station over each card that pops as the line reaches it.
+
+   ONE NUMBER DRIVES IT. `--saas-rail` is registered as a <number> so it
+   can animate at all (an unregistered property would flip at 50%), and
+   inherits, so the track animates it once and its four children read
+   it: the line's width is `scale: var(--saas-rail) 1` from its left end,
+   and each station's size is its distance past the station's own place
+   on the rail (`--at`, inline from build.tsx: 0.02, 0.36, 0.70 — about
+   the left edge of each card's copy), twelve times over, held between
+   nothing and whole. So a station starts to grow exactly as the line
+   arrives and is whole by the time the line is a twelfth of the rail
+   past it. The track holds the line and three dots and nothing else,
+   so restyling it every frame costs next to nothing.
+
+   THE FINISHED FRAME IS THE INITIAL VALUE. The property rests at 1: a
+   full rail with every station shown, wherever the animation doesn't run
+   — reduced motion, the lite tier (saas.css §12), the still tier and
+   weak hardware (below), and any browser without view timelines. One
+   without @property as well has no value for it at all, and the `, 1`
+   fallbacks give it the same full rail. */
+@property --saas-rail {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 1;
+}
+
+.pp .saas-rail-line {
+  scale: var(--saas-rail, 1) 1;
+  transform-origin: left center;
+}
+
+.pp .saas-station {
+  left: calc(var(--at) * 100%);
+  scale: clamp(0, (var(--saas-rail, 1) - var(--at)) * 12, 1);
+}
+
+/* The rail draws on the track's own pass up the screen: from 30% of the
+   way into its entry to the moment it is halfway up the screen, so the
+   line has reached the last card by the time the cards' headings are
+   read. The connectors between the stacked cards (below lg) each grow
+   down from the card above on their own view timeline, 40% into their
+   entry until they are just short of halfway up. Longhands after the
+   shorthand, which resets them. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .saas-track {
+      animation: saas-rail linear both;
+      animation-timeline: view();
+      animation-range: entry 30% cover 50%;
+    }
+
+    .pp .saas-link {
+      transform-origin: top;
+      animation: saas-link linear both;
+      animation-timeline: view();
+      animation-range: entry 40% cover 45%;
+    }
+
+    /* The cards rise (home.css `home-rise`) a step apart once they stand
+       side by side: the middle one 4% and the last one 8% later into its
+       entry, and each a little longer. Stacked, each card simply rises
+       on its own pass, as it comes. */
+    @media (min-width: 64rem) {
+      .pp .saas-lit.home-rise[data-col="1"] {
+        animation-range: entry 4% cover 32%;
+      }
+
+      .pp .saas-lit.home-rise[data-col="2"] {
+        animation-range: entry 8% cover 36%;
+      }
+    }
+  }
+}
+
+@keyframes saas-rail {
+  from {
+    --saas-rail: 0;
+  }
+
+  to {
+    --saas-rail: 1;
+  }
+}
+
+@keyframes saas-link {
+  from {
+    scale: 1 0;
+  }
+
+  to {
+    scale: 1 1;
+  }
+}
+
+/* ─── The still tier and weak hardware ──────────────────────────────
+   A forced ?tier=still that is not a reduced-motion request, and a
+   device weak by its hardware (<html data-weak>), land on the finished
+   frame too, as the hero's plates and the tally do: the rail full, the
+   connectors whole, no pulse (its ring resting at nothing). Lite is
+   saas.css §12. The pulse rule above is six classes and attributes
+   deep; §12's pulse line and the two below are as deep and name <html>
+   besides, so each outranks it whatever order the sheets land in. */
+html[data-tier="still"] .home-body .saas-track,
+html[data-tier="still"] .home-body .saas-link,
+html[data-tier="still"] .home-body .saas-proto[data-seen][data-hotspots] .saas-hot::after,
+html[data-weak] .home-body .saas-track,
+html[data-weak] .home-body .saas-link,
+html[data-weak] .home-body .saas-proto[data-seen][data-hotspots] .saas-hot::after {
+  animation: none;
+}

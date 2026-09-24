@@ -1,0 +1,112 @@
+import { cn } from "@/lib/utils";
+import { IntentLink } from "@/components/site/intent-link";
+import { Frame } from "@/components/site/product/primitives";
+import { HomeHeading } from "@/components/site/home/heading";
+import { TYPE } from "@/components/site/home/type";
+import type { TermsData } from "@/lib/pages/custom-saas-platforms";
+
+/* ------------------------------------------------------------------ *
+ * #terms — what’s the catch? Before it starts.
+ *
+ * By here the reader has seen the platform drawn, the scope worked out,
+ * a prototype clicked and the three stages laid out. What is left is the
+ * practical sceptic: what sets the price and the date, since neither is
+ * on the page; what you will want from me; what I end up holding; and
+ * what you are not telling me. Four lists answer those four questions,
+ * side by side, and nothing else happens here.
+ *
+ * THE ONLY STILL SECTION ON THE PAGE, on purpose, after a hairline (the
+ * page's `Rule`). Every section above it moves when it arrives; after
+ * six of them, stillness reads as the end of the argument and the start
+ * of the terms. So it is a server component with no "use client", no
+ * state and no motion beyond the heading's own line reveal (HomeHeading,
+ * shared by every section): it ships no JavaScript of its own, and has
+ * nothing to reserve, because nothing in it ever swaps. IntentLink is the
+ * site's shared client link, a leaf, not an island this file owns.
+ *
+ * WHY A LEDGER AND NOT A FEATURE GRID. The four heads are four
+ * directions — what moves the quote, theirs to us, ours to them, and
+ * what we say before either is asked — and they read best as a ledger
+ * the eye can cross in one line: a hairline between the columns
+ * (`divide-x`), never cards, because a card says "product tile" and
+ * these are terms. The CAA page's `Handover` ledger, in the landing's
+ * tokens and with a fourth column.
+ *
+ * WHY THE BREAKPOINT IS xl, NOT lg. At 1024 the column is 944px and a
+ * four-way split leaves each list 188px: "Access to the accounts it has
+ * to live in: your domain, your payment provider, your email sender"
+ * would set in eight ragged lines of two words. So from md to below xl
+ * each list becomes a row of the ledger instead — its head in a fixed
+ * 200px left column, its items beside it, a hairline above — which is
+ * the same ledger turned on its side. Phones stack plainly, and from xl
+ * (1176px, 294 a column) the four stand side by side.
+ *
+ * COLOUR. The bullets are the one mark of violet (`bg-pp-accent`, the
+ * body's #6d28d9), small and the same on all four lists, because none of
+ * them matters more than the others. "Said up front" is deliberately not
+ * set as a warning: nothing in it is bad news, only news. The items are
+ * ink at 85% on white, the heads muted (6.37:1 on white).
+ *
+ * THE LAST PARAGRAPH points away from this page for the reader who needs
+ * a phone agent rather than a platform. It sits apart, at reading width,
+ * with its two links under it, so it is never mistaken for a term.
+ * ------------------------------------------------------------------ */
+
+/** controls.tsx RING_LIGHT, spelled out: controls.tsx is a client module. */
+const RING = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink";
+
+export function Terms({ data }: { data: TermsData }) {
+  return (
+    <section id="terms" aria-labelledby="terms-title" className="scroll-mt-28">
+      <Frame>
+        <HomeHeading id="terms-title" eyebrow={data.eyebrow} title={data.title} titleKey={data.key} sub={data.sub} />
+
+        <div className="mt-10 grid gap-8 xl:grid-cols-4 xl:gap-0 xl:divide-x xl:divide-pp-rule">
+          {data.columns.map((col) => (
+            <div
+              key={col.id}
+              // md–xl: a row of the ledger (head left, items right) with a
+              // hairline above; xl: a column with a hairline between.
+              className="min-w-0 md:max-xl:grid md:max-xl:grid-cols-[200px_minmax(0,1fr)] md:max-xl:gap-x-8 md:max-xl:border-t md:max-xl:border-pp-rule md:max-xl:pt-6 xl:px-6 xl:first:pl-0 xl:last:pr-0"
+            >
+              {/* md–xl: 3px down, so the 16px head sits on the first 21px item line. */}
+              <h3 className={cn(TYPE.label, "text-pp-muted md:max-xl:pt-[3px]")}>{col.head}</h3>
+              <ul className="mt-4 space-y-3 md:max-xl:mt-0">
+                {col.items.map((item) => (
+                  <li key={item} className="flex gap-3">
+                    {/* 9px down centres a 4px dot on the x-height of a 21px line. */}
+                    <span aria-hidden className="mt-[9px] size-1 shrink-0 rounded-full bg-pp-accent" />
+                    <span className="min-w-0 text-[14px] leading-[21px] text-pretty text-pp-ink/85">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <p className="mt-10 max-w-[620px] text-[15px] leading-[23px] text-pretty text-pp-ink">{data.after}</p>
+        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1">
+          {data.links.map((l) => (
+            <IntentLink
+              key={l.href}
+              href={l.href}
+              // 21px of text in a 24px target; the underline on the words
+              // only, so it never runs on into the arrow.
+              className={cn(
+                "group inline-flex min-h-6 items-center gap-1.5 rounded-sm text-[14px] leading-[21px] text-pp-ink transition-colors duration-200 hover:text-(--home-plum)",
+                RING,
+              )}
+            >
+              <span className="underline decoration-pp-ink/25 decoration-1 underline-offset-[5px] transition-[text-decoration-color] duration-200 group-hover:decoration-current">
+                {l.label}
+              </span>
+              <span aria-hidden className="inline-block transition-transform duration-200 group-hover:translate-x-0.5">
+                →
+              </span>
+            </IntentLink>
+          ))}
+        </div>
+      </Frame>
+    </section>
+  );
+}

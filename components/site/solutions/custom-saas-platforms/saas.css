@@ -6,14 +6,16 @@
  *   §2   the lit surface: its tokens, its edge, and the guards that keep
  *        a landing colour that fails on a pool from ever reaching one
  *   §3   the mesh in motion, #pricing's plan-card flow, copied
+ *   §4   the hero's plates: assembled on load, apart on the way out
  *   §11  the View Transitions root rule, for #prototype and #checks
  *   §12  what the lite tier turns off, for every section at once
  *   §13  reduced-motion pins for state that must read finished
  *
- * Each section's own rules (the hero's plates, the tally, the explorer,
- * the scope tiles, the prototype, the build rail, the checks' filter) live
- * in that section's own route-scoped file, imported by page.tsx beside
- * this one; §4–§10 are theirs, so the numbering here keeps the spec's.
+ * The other sections' own rules (the tally, the explorer, the scope
+ * tiles, the prototype, the build rail, the checks' filter) live in that
+ * section's own route-scoped file (saas-credentials.css, saas-explorer.css,
+ * saas-build.css, saas-closing.css), imported by page.tsx beside this one;
+ * §5–§10 are theirs, so the numbering here keeps the spec's.
  *
  * Imported once, by app/solutions/custom-saas-platforms/page.tsx, so these
  * rules ship with this route only — globals.css and home.css are shared
@@ -289,6 +291,71 @@
 
   100% {
     transform: translate3d(0, 0%, 0);
+  }
+}
+
+/* ─── §4 Hero: the room's plates ────────────────────────────────────
+   The four plates in the hero's room (hero.tsx) assemble once on load,
+   each rising into place a beat after the one above it, and come apart
+   a little as the room scrolls out of the top of the screen: the top
+   plate lifts, the bottom one drops, the middle two part between them.
+   `--i` (0–3, inline on each plate) sets both the stagger and the
+   spread; the room keeps 16px above and below the plates for it.
+
+   Transform only, and never opacity: a plate is always there to read.
+   The two animations are on separate properties — the assembly on
+   `transform`, the parting on `translate` — so the parting composes with
+   the assembly instead of replacing it, and a reader who scrolls before
+   the plates have landed still sees both.
+
+   The assembly is time-based and needs only motion allowed. The parting
+   rides the room's own view timeline (`--saas-room`, named on the room so
+   the plates inside it can see it), from the moment the room's top meets
+   the top of the screen until 70% of it has gone; before that it holds
+   its first frame, which is no offset at all. A browser without view
+   timelines keeps the assembly alone. Reduced motion gets neither, and
+   the global rule (globals.css) zeroes anything left: the server's frame.
+   Lite stops both (§12); the still tier and weak hardware stop them here,
+   for a forced ?tier=still that is not a reduced-motion request. */
+@media (prefers-reduced-motion: no-preference) {
+  .pp .saas-plate {
+    animation: saas-plate-in 0.9s cubic-bezier(0.16, 1, 0.3, 1) calc(0.15s + var(--i) * 0.09s) both;
+  }
+
+  @supports (animation-timeline: view()) {
+    .pp .saas-room {
+      view-timeline: --saas-room block;
+    }
+
+    /* The timeline and range after the shorthand, which resets them. */
+    .pp .saas-plate {
+      animation:
+        saas-plate-in 0.9s cubic-bezier(0.16, 1, 0.3, 1) calc(0.15s + var(--i) * 0.09s) both,
+        saas-plate-apart linear both;
+      animation-timeline: auto, --saas-room;
+      animation-range: normal, exit 0% exit 70%;
+    }
+  }
+}
+
+html[data-tier="still"] .home-body .saas-plate,
+html[data-weak] .home-body .saas-plate {
+  animation: none;
+}
+
+@keyframes saas-plate-in {
+  from {
+    transform: translateY(calc(10px + var(--i) * 8px));
+  }
+
+  to {
+    transform: none;
+  }
+}
+
+@keyframes saas-plate-apart {
+  to {
+    translate: 0 calc((var(--i) - 1.5) * 10px);
   }
 }
 

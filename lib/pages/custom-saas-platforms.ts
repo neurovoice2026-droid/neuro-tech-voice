@@ -525,7 +525,7 @@ const DOWN: DownCopy = {
   source: "Worked out by the platform’s own routing code, for every combination of switches.",
   sourcePath: "lib/voice/mode.ts",
   foot: "Nothing here is really down.",
-  live: "The next call goes to {name}. {why}",
+  live: "{name} takes the next call. {why}",
 };
 
 export const SAAS_PLATFORM: ExplorerData = keyed({
@@ -586,7 +586,7 @@ const SCOPE_PARTS: readonly ScopePart[] = [
     ours: "Thin on ours: owner settings, and a status check its operators use. Yours gets a real admin." },
   { id: "connect", label: "Integrations and webhooks", needs: ["connect"], kind: "does", map: "workflows",
     breaks: "A webhook anyone can forge, or one pointed back at your own network.",
-    ours: `Google Calendar and Sheets with the customer’s own account, and outgoing webhooks that carry an ${WEBHOOK_HEADERS.signature} header, are tried up to ${word(FACTS.webhookAttempts)} times, go out over https only, and are refused if their address resolves to a private network.` },
+    ours: `Google Calendar and Sheets, with the customer’s own account. Outgoing webhooks carry an ${WEBHOOK_HEADERS.signature} header, are tried up to ${word(FACTS.webhookAttempts)} times, go out over https only, and are refused if their address resolves to a private network.` },
   { id: "data", label: "Each customer’s data, walled off", needs: [], kind: "does", map: "supabase",
     breaks: "One customer seeing another’s rows.",
     ours: "Row-level security keeps each business’s rows to itself, and a database trigger keeps plan and billing columns out of a customer’s own reach." },
@@ -658,7 +658,7 @@ export const SAAS_SCOPE: ScopeData = keyed({
   ],
   parts: SCOPE_PARTS,
   summary: {
-    some: "{n} parts in this build. {k} are there because of what you picked.",
+    some: "{n} parts in this build, {k} of them because of what you picked.",
     none: "{n} parts: the bones every platform has.",
   },
   tags: { always: "Always", added: "Added", off: "Not needed" },
@@ -775,7 +775,7 @@ export const SAAS_TERMS: TermsData = keyed({
       "A prototype isn’t the product: it shows every screen, but stores nothing and charges no one.",
       "Hosting, payments and the other services it runs on bill for what they supply, on top of the build; the quote lists them.", // OWNER
       "Whose name the hosting, database and payment accounts are in is agreed before the build starts.",
-      "We build for the web. A native iOS or Android app is a separate build.",
+      "We build for the web. A native mobile app is a separate build.",
       "If a simpler tool would do the job, we’ll say so on the call.",
       CAA_HANDOVER.after, // "Who makes changes after launch — your team, us, or both — is agreed when the build is quoted."
     ] },
