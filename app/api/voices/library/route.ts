@@ -1,7 +1,24 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { models, isConfigured } from '@/lib/fish/client'
-import { toVoice } from '../route'
+import { models, isConfigured, type FishModel } from '@/lib/fish/client'
+
+// A Fish public model as the picker lists it. Not the provider-neutral `Voice`
+// (types/index.ts): that union names only Cartesia and ElevenLabs, and a Fish
+// model has no gender, accents or app-relative preview route to fill it with.
+// The preview is Fish's own rendered sample, which the model already carries.
+function toVoice(m: FishModel, source: 'library') {
+  return {
+    provider: 'fish' as const,
+    source,
+    id: m._id,
+    name: m.title,
+    description: m.description ?? null,
+    languages: m.languages,
+    tags: m.tags,
+    cover_image: m.cover_image ?? null,
+    preview_url: m.samples?.find((s) => s.audio)?.audio ?? null,
+  }
+}
 
 // Browse Fish Audio's public model catalogue.
 //

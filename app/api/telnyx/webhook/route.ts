@@ -291,11 +291,11 @@ async function handleHangup(payload: TelnyxWebhookEvent['data']['payload']) {
 
   try {
     if (status === 'completed') {
-      await executeWorkflows('call_ended', callCtx)
-      if (sentiment === 'negative') await executeWorkflows('sentiment_negative', callCtx)
-      if (transcript.length > 0) await executeWorkflows('keyword_detected', callCtx)
+      await executeWorkflows(orgId, 'call_ended', callCtx)
+      if (sentiment === 'negative') await executeWorkflows(orgId, 'sentiment_negative', callCtx)
+      if (transcript.length > 0) await executeWorkflows(orgId, 'keyword_detected', callCtx)
     } else {
-      await executeWorkflows('call_missed', callCtx)
+      await executeWorkflows(orgId, 'call_missed', callCtx)
     }
   } catch (wfErr) {
     console.error('Workflow execution error:', wfErr)
