@@ -1,0 +1,275 @@
+/* ------------------------------------------------------------------ *
+ * §0 #work — "Whatever your field, and however hard the work": the
+ * moves panel's skeleton and its motion (work-instrument.tsx).
+ *
+ *   §1  the moves panel: the skeleton down its left gutter, a dot on
+ *       each move and the rail between them
+ *   §2  scroll mode, before any pick: the slice rule, each row on its
+ *       own arrival up the screen
+ *   §3  time mode, after the reader's first pick: the same entrances on
+ *       the clock
+ *   §4  the meters' pips, popping in their order after a pick
+ *   §5  lite, still and weak: the finished frame
+ *   §6  forced colours: a move made or not, in system colours
+ *
+ * Everything else in the section is utilities: the controls are the
+ * landing's (the chips' colours, the segmented switch), the room is the
+ * SaaS page's lit surface (saas.css §2, `saas-light-room-m`), the panels
+ * on it are white plates, and a meter's pip is auto.css §1's. This sheet
+ * holds only what utilities can't say: the skeleton's states, and its
+ * motion.
+ *
+ * THE SLICE RULE, CSS ONLY, so it costs the same on every device and no
+ * script decides when anything plays. Each move row carries its place in
+ * the panel inline, `--o` (0, 1/7 … 5/7: its index in MOVES over seven),
+ * and each block in it its own place in the row, `--b` (0, 1, 2). Before
+ * the reader picks anything, each made move owns its own slice of the
+ * scroll, the stretch in which that row comes up over the bottom of the
+ * window, so the moves play one after another in the order they arrive:
+ * its dot pops, the rail under it grows down to the next dot, and its
+ * blocks rise 6px as each comes up. Transform only, never opacity, as
+ * the SaaS page moves its plates: a block is always there at full
+ * strength, arriving or arrived, and a panel met halfway is never an
+ * empty frame or a grey one. After the first pick (`data-picked` on the
+ * room, and the panel keyed on the sample, so each pick mounts it
+ * afresh) the same three entrances play on the clock instead, row after
+ * row (`--o`, `--b`), and the meters' pips pop in their order: the whole
+ * sample settles in 1.4s. The entrances are auto.css §2's `auto-pop` and
+ * this sheet's `auto-grow-y` and `auto-block-in`.
+ *
+ * A move the sample doesn't make keeps its place and its skeleton, a
+ * ring on a hairline, and never animates: nothing arrives there.
+ *
+ * Imported once, by app/solutions/custom-automations/page.tsx, after
+ * auto.css and auto-running.css. Every rule sits under .pp, or on <html>
+ * where it reads the tier; every class and keyframe of ours is prefixed
+ * auto-. Only scale and translate animate. The view timelines sit
+ * inside `@media (prefers-reduced-motion: no-preference)` and
+ * `@supports (animation-timeline: view())`, and the clock's entrances
+ * inside the first, so reduced motion, and a browser without view
+ * timelines before a pick, get the finished frame. No @property and no
+ * animated custom property: `--o`, `--b` and `--k` are only read.
+ * lib/pages/custom-automations.test.ts reads this sheet and holds all of
+ * that, and that every animation here is stopped on the lite, still and
+ * weak tiers by a pin that wins (§5).
+ * ------------------------------------------------------------------ */
+
+/* ─── §1 The moves panel ────────────────────────────────────────────
+   THE SKELETON runs down the 20px gutter every move row keeps on its
+   left, at every width: an 8px dot level with the move's name (the row's
+   12px padding, the name's 3px, half its 16px line: centred 23px down),
+   and a 2px rail from that dot's centre to the next row's (the row's own
+   height, and the next row's hairline). The rail is drawn first and the
+   dot over it, each dot on a 3px disc of the panel's white, so a dot
+   cuts the rail cleanly instead of the line running through it.
+
+   A MOVE MADE (`data-made` on the row) is a filled electric dot, and the
+   rail under it electric at 40%; a move not made is a 1.5px ring in the
+   landing's muted, and a hairline under it. Filled against hollow, so a
+   move made never rests on colour alone, and forced colours keep the two
+   shapes (§6). Electric on white is 5.70:1 and muted 6.37 (marks, over
+   the 3:1 a mark needs). The panel is white on the pearl, so these name
+   the landing's tokens directly: inside a lit surface `--pp-*` points at
+   the light's.
+
+   The rail grows from its top (`transform-origin`), from the dot it
+   leaves toward the one it reaches, whenever it grows at all (§2, §3). */
+.pp .auto-spine {
+  position: absolute;
+  top: 23px;
+  left: 3px;
+  width: 2px;
+  height: calc(100% + 1px);
+  background-color: var(--pp-hair);
+  transform-origin: top;
+}
+
+.pp .auto-move[data-made] .auto-spine {
+  background-color: color-mix(in srgb, var(--home-electric) 40%, transparent);
+}
+
+.pp .auto-move-dot {
+  position: absolute;
+  top: 19px;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--home-muted);
+  border-radius: 9999px;
+  background-color: #fff;
+  box-shadow: 0 0 0 3px #fff;
+}
+
+.pp .auto-move[data-made] .auto-move-dot {
+  border-color: var(--home-electric);
+  background-color: var(--home-electric);
+}
+
+/* The rail's growth and a block's rise. The house out-ease is the
+   caller's (§2, §3): a keyframe carries no timing. `scale` and
+   `translate`, not `transform`, as auto.css §2's pair. */
+@keyframes auto-grow-y {
+  from {
+    scale: 1 0;
+  }
+
+  to {
+    scale: 1 1;
+  }
+}
+
+@keyframes auto-block-in {
+  from {
+    translate: 0 6px;
+  }
+
+  to {
+    translate: 0 0;
+  }
+}
+
+/* ─── §2 Scroll mode: the slice rule ────────────────────────────────
+   Before the reader's first pick. Each made move's slice is its own
+   row's arrival: the row names its passage up the screen `--auto-move`
+   (the nearest row of that name is the one a dot or a rail reads), and
+   its dot pops and its rail grows from the moment its dot is on screen
+   (the row's top 24px over the fold, `entry 24px`) until its bottom is
+   48px over the fold (`entry calc(100% + 48px)`). Each block rises on
+   its own arrival in the same way (`view()`, from 8px of it showing
+   until its bottom is 40px up), so on a phone, where a move's blocks sit
+   well under its name, they rise as they come up rather than off
+   screen. The next row's dot starts as this row's rail is finishing, so
+   the skeleton still draws down the panel in the moves' order.
+
+   Tied to each row and not to a share of the whole panel's passage, as
+   the spec first had it (`cover 10%` to `cover 50%` of the panel, a
+   seventh each), because a share of the panel lands on a row at one
+   window height only: at 1440×900 a row could sit unfinished up to
+   124px over the fold, and at 1920×1080 two rows did with the whole
+   section in view. Now every row has finished by the time its bottom is
+   48px over the fold, at any window height and in any sample, and a row
+   met at rest higher than that is always whole. Filled both ways: before
+   its slice an element waits in its first frame, after it in its last,
+   and scrolling back runs it back. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .auto-move[data-made] {
+      view-timeline: --auto-move block;
+    }
+
+    .pp .auto-work:not([data-picked]) .auto-move[data-made] .auto-move-dot,
+    .pp .auto-work:not([data-picked]) .auto-move[data-made] .auto-spine,
+    .pp .auto-work:not([data-picked]) .auto-move[data-made] .auto-block {
+      animation-duration: auto;
+      animation-fill-mode: both;
+      animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+      animation-timeline: --auto-move;
+      animation-range: entry 24px entry calc(100% + 48px);
+    }
+
+    .pp .auto-work:not([data-picked]) .auto-move[data-made] .auto-move-dot {
+      animation-name: auto-pop;
+    }
+
+    .pp .auto-work:not([data-picked]) .auto-move[data-made] .auto-spine {
+      animation-name: auto-grow-y;
+    }
+
+    .pp .auto-work:not([data-picked]) .auto-move[data-made] .auto-block {
+      animation-name: auto-block-in;
+      animation-timeline: view();
+      animation-range: entry 8px entry calc(100% + 40px);
+    }
+  }
+}
+
+/* ─── §3 Time mode: after a pick ────────────────────────────────────
+   Once the reader has picked (`data-picked`), the panel is remounted on
+   every pick and the same three entrances play on the clock as it
+   mounts: 0.35s each, a row starting a tenth of a second in plus 1.1s ×
+   its place of seven (some 0.16s after the row above it), and a block
+   60ms after the one above it in its row. The last row starts just under
+   0.9s in, so the sample has settled by 1.4s. Not gated on view
+   timelines: a clock runs everywhere. */
+@media (prefers-reduced-motion: no-preference) {
+  .pp .auto-work[data-picked] .auto-move[data-made] .auto-move-dot,
+  .pp .auto-work[data-picked] .auto-move[data-made] .auto-spine,
+  .pp .auto-work[data-picked] .auto-move[data-made] .auto-block {
+    animation-duration: 0.35s;
+    animation-delay: calc(0.1s + var(--o) * 1.1s + var(--b, 0) * 60ms);
+    animation-fill-mode: both;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    animation-timeline: auto;
+  }
+
+  .pp .auto-work[data-picked] .auto-move[data-made] .auto-move-dot {
+    animation-name: auto-pop;
+  }
+
+  .pp .auto-work[data-picked] .auto-move[data-made] .auto-spine {
+    animation-name: auto-grow-y;
+  }
+
+  .pp .auto-work[data-picked] .auto-move[data-made] .auto-block {
+    animation-name: auto-block-in;
+  }
+}
+
+/* ─── §4 The meters' pips ───────────────────────────────────────────
+   After a pick the room's meter row is remounted with the sample (keyed
+   on it), and its five pips pop in their printed order, 40ms apart
+   (`--k`, set inline by meter-row.tsx), as the sample's rows begin to
+   arrive under them. Before any pick they simply stand. */
+@media (prefers-reduced-motion: no-preference) {
+  .pp .auto-work[data-picked] .auto-pip {
+    animation: auto-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1) calc(var(--k) * 40ms) both;
+  }
+}
+
+/* ─── §5 Lite, still and weak: the finished frame ───────────────────
+   On the lite tier, on the still tier (a forced ?tier=still that is not
+   a reduced-motion request) and on weak hardware, nothing here plays:
+   every made move's dot is whole, every rail is full, every block is in
+   its place at full strength, and every pip stands. A pick is an
+   instant swap. auto.css §3's shared list stops `.auto-block` too, but at
+   the weight of four classes and <html>; the rules above are six classes
+   deep (`.pp .auto-work:not([data-picked]) .auto-move[data-made] …`), so
+   this pin is held at six classes and <html>: `<html>` with the tier,
+   the shell's <main> by two of its classes, the room, and the element
+   under its row. That outranks them whatever order the sheets land in. */
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .auto-work :is(.auto-move .auto-move-dot, .auto-move .auto-spine, .auto-move .auto-block, .auto-pip) {
+  animation: none;
+}
+
+/* ─── §6 Forced colours ─────────────────────────────────────────────
+   A forced palette replaces the fills and the white discs that draw the
+   skeleton, so a dot made and a dot not made would both fall back to the
+   canvas and read alike. Here they opt out of forcing and name system
+   colours: a move made is a disc of CanvasText, a move not made a ring
+   of it, each on a disc of Canvas that still cuts the rail; the rail is
+   CanvasText under a made move and GrayText under one not made. The
+   chips and the segments are radios, which saas.css §15 already edges
+   and fills with Highlight when chosen, and the legend says "Runs here"
+   in words, never by colour alone. Keyed on `.pp.saas-page`, the shell's
+   <main>, and on auto- classes only, which no other page draws. */
+@media (forced-colors: active) {
+  .pp.saas-page .auto-spine {
+    forced-color-adjust: none;
+    background-color: GrayText;
+  }
+
+  .pp.saas-page .auto-move[data-made] .auto-spine {
+    background-color: CanvasText;
+  }
+
+  .pp.saas-page .auto-move-dot {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+    background-color: Canvas;
+    box-shadow: 0 0 0 3px Canvas;
+  }
+
+  .pp.saas-page .auto-move[data-made] .auto-move-dot {
+    background-color: CanvasText;
+  }
+}
