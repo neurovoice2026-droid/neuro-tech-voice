@@ -1,287 +1,408 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useForm, Controller } from 'react-hook-form'
+import { useEffect, useId, useMemo, useState } from 'react'
+import { useForm, useWatch, Controller, type FieldErrors } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import {
-  Bot, ArrowRight, ArrowLeft, Sparkles, RefreshCw, CheckCircle2,
-  Briefcase, Heart, Award, Coffee, Zap, HeartHandshake,
+  Bot, ArrowRight, ArrowLeft, RotateCcw, CheckCircle2, ShieldCheck,
+  Briefcase, Heart, Award, Coffee, Zap, HeartHandshake, type LucideIcon,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { useOnboardingStore, type Personality } from '@/store/useOnboardingStore'
+import { FlagIcon } from '@/components/shared/FlagIcon'
+import { useOnboardingStore } from '@/store/useOnboardingStore'
 import { cn } from '@/lib/utils'
 import { AGENT_LANGUAGES } from '@/lib/agent-languages'
-import { buildIndustrySystemPrompt } from '@/lib/agent-prompts'
-import { FlagIcon } from '@/components/shared/FlagIcon'
+import { INDUSTRY_OPTIONS } from '@/lib/agent-prompts'
+import { AI_DISCLOSURE, localized, mentionsAiDisclosure } from '@/lib/voice/greetings'
+import { TONE_PROFILES } from '@/lib/voice/tone'
+import { AGENT_TONES, type AgentTone } from '@/types'
+import {
+  LIMITS, agentSchema, isGreetingCustomized, isSystemPromptCustomized, resolveGreeting,
+  resolveSystemPrompt, suggestedGreeting, suggestedSystemPrompt, type OnboardingAgent,
+} from '@/app/onboarding/_lib/onboarding-state'
+import { StepHeader } from '../StepHeader'
+import { useRovingRadio } from '../useRovingRadio'
 
-const schema = z.object({
-  personality:   z.string().min(1),
-  name:          z.string().min(2, 'Name must be at least 2 characters').max(30, 'Max 30 characters'),
-  language:      z.string().min(1, 'Please select a language'),
-  first_message: z.string().min(10, 'Greeting must be at least 10 characters'),
-  system_prompt: z.string().max(4000, 'Max 4000 characters').optional(),
-})
+type FormValues = OnboardingAgent
 
-type FormValues = z.infer<typeof schema>
-
-const PERSONALITIES = [
-  { id: 'professional' as Personality, icon: Briefcase,      name: 'Professional', desc: 'Formal, precise, business-focused' },
-  { id: 'friendly'     as Personality, icon: Heart,          name: 'Friendly',     desc: 'Warm, approachable, conversational' },
-  { id: 'formal'       as Personality, icon: Award,          name: 'Formal',       desc: 'Structured, authoritative, serious' },
-  { id: 'casual'       as Personality, icon: Coffee,         name: 'Casual',       desc: 'Relaxed, natural, easy-going' },
-  { id: 'energetic'    as Personality, icon: Zap,            name: 'Energetic',    desc: 'Enthusiastic, upbeat, dynamic' },
-  { id: 'empathetic'   as Personality, icon: HeartHandshake, name: 'Empathetic',   desc: 'Compassionate, patient, supportive' },
-]
-
-
-// Localized greeting templates, keyed by language code, so "Auto-generate"
-// respects the selected language.
-const GREETINGS: Record<string, (company: string, agent: string) => string> = {
-  en: (c, a) => `Hello! Thank you for calling ${c}. I'm ${a}, your virtual assistant. How can I help you today?`,
-  ro: (c, a) => `Bună ziua! Vă mulțumim că ați sunat la ${c}. Sunt ${a}, asistentul dumneavoastră virtual. Cu ce vă pot ajuta astăzi?`,
-  es: (c, a) => `¡Hola! Gracias por llamar a ${c}. Soy ${a}, su asistente virtual. ¿En qué puedo ayudarle hoy?`,
-  fr: (c, a) => `Bonjour ! Merci d'appeler ${c}. Je suis ${a}, votre assistant virtuel. Comment puis-je vous aider aujourd'hui ?`,
-  de: (c, a) => `Hallo! Vielen Dank für Ihren Anruf bei ${c}. Ich bin ${a}, Ihr virtueller Assistent. Wie kann ich Ihnen heute helfen?`,
-  it: (c, a) => `Buongiorno! Grazie per aver chiamato ${c}. Sono ${a}, il suo assistente virtuale. Come posso aiutarla oggi?`,
-  pt: (c, a) => `Olá! Obrigado por ligar para ${c}. Sou ${a}, o seu assistente virtual. Como posso ajudá-lo hoje?`,
-  ja: (c, a) => `もしもし、${c}にお電話いただきありがとうございます。バーチャルアシスタントの${a}です。本日はどのようなご用件でしょうか？`,
-  ko: (c, a) => `안녕하세요! ${c}에 전화해 주셔서 감사합니다. 저는 가상 비서 ${a}입니다. 오늘 무엇을 도와드릴까요?`,
-  ar: (c, a) => `مرحباً! شكراً لاتصالك بـ ${c}. أنا ${a}، مساعدك الافتراضي. كيف يمكنني مساعدتك اليوم؟`,
-  pl: (c, a) => `Dzień dobry! Dziękujemy za telefon do ${c}. Nazywam się ${a} i jestem Twoim wirtualnym asystentem. W czym mogę pomóc?`,
-  nl: (c, a) => `Hallo! Bedankt voor het bellen naar ${c}. Ik ben ${a}, uw virtuele assistent. Hoe kan ik u vandaag helpen?`,
+const TONE_ICONS: Record<AgentTone, LucideIcon> = {
+  formal: Award,
+  professional: Briefcase,
+  empathetic: HeartHandshake,
+  casual: Coffee,
+  friendly: Heart,
+  energetic: Zap,
 }
 
+const LANGUAGE_VALUES = AGENT_LANGUAGES.map((l) => l.value as string)
+
 export function Step2Agent() {
-  const { agent, company, setAgent, setStep } = useOnboardingStore()
+  const agent = useOnboardingStore((s) => s.agent)
+  const company = useOnboardingStore((s) => s.company)
+  const edited = useOnboardingStore((s) => s.edited)
+  const setAgent = useOnboardingStore((s) => s.setAgent)
+  const setEdited = useOnboardingStore((s) => s.setEdited)
+  const setStep = useOnboardingStore((s) => s.setStep)
+  const dropVoiceForOtherLanguage = useOnboardingStore((s) => s.dropVoiceForOtherLanguage)
+
+  const toneLabelId = useId()
+  const languageLabelId = useId()
+  const promptRegionId = useId()
+
+  // Generated text follows the company as it is now (the owner may have
+  // changed industry or name since the last visit); edited text stays.
+  const [initial] = useState(() => {
+    const greeting = resolveGreeting({
+      language: agent.language, tone: agent.tone, company: company.name, agentName: agent.name,
+      current: agent.first_message, edited: edited.first_message,
+    })
+    const prompt = resolveSystemPrompt({
+      name: company.name, description: company.description, industry: company.industry,
+      current: agent.system_prompt, edited: edited.system_prompt,
+    })
+    return {
+      values: { ...agent, first_message: greeting.text, system_prompt: prompt.text },
+      greetingEdited: greeting.edited,
+      promptEdited: prompt.edited,
+    }
+  })
+  const [showPrompt, setShowPrompt] = useState(initial.promptEdited)
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      personality:   agent.personality,
-      name:          agent.name,
-      language:      agent.language,
-      first_message: agent.first_message,
-      system_prompt: agent.system_prompt,
+    resolver: zodResolver(agentSchema),
+    defaultValues: initial.values,
+    mode: 'onTouched',
+  })
+  const { errors } = form.formState
+
+  useEffect(() => {
+    setEdited({ first_message: initial.greetingEdited, system_prompt: initial.promptEdited })
+    return form.subscribe({
+      formState: { values: true },
+      callback: ({ values }) => setAgent(values),
+    })
+  }, [form, initial, setAgent, setEdited])
+
+  // Voices are picked per language: however the owner leaves this step
+  // (Continue, Back, the step list), a voice picked for another language goes.
+  useEffect(() => () => {
+    dropVoiceForOtherLanguage()
+  }, [dropVoiceForOtherLanguage])
+
+  const tone = useWatch({ control: form.control, name: 'tone' })
+  const language = useWatch({ control: form.control, name: 'language' })
+  const agentName = useWatch({ control: form.control, name: 'name' }) ?? ''
+  const greeting = useWatch({ control: form.control, name: 'first_message' }) ?? ''
+  const systemPrompt = useWatch({ control: form.control, name: 'system_prompt' }) ?? ''
+
+  const greetingContext = useMemo(
+    () => ({ language, tone, company: company.name, agentName }),
+    [language, tone, company.name, agentName]
+  )
+  const promptContext = useMemo(
+    () => ({ name: company.name, description: company.description, industry: company.industry }),
+    [company.name, company.description, company.industry]
+  )
+
+  // Regenerate the greeting when tone, language or name change, unless the
+  // owner wrote their own. Only a context change regenerates: an owner who
+  // clears the field to write from scratch doesn't get the suggestion back
+  // mid-typing ("Use suggested greeting" brings it back on request).
+  useEffect(() => {
+    if (useOnboardingStore.getState().edited.first_message) return
+    const next = suggestedGreeting(greetingContext)
+    if (form.getValues('first_message') !== next) {
+      form.setValue('first_message', next, { shouldDirty: true, shouldValidate: form.formState.isSubmitted })
+    }
+  }, [greetingContext, form])
+
+  const industryLabel = INDUSTRY_OPTIONS.find((o) => o.value === company.industry)?.label ?? 'your industry'
+  const disclosesAi = mentionsAiDisclosure(greeting, company.name)
+  const languageLabel = AGENT_LANGUAGES.find((l) => l.value === language)?.label ?? 'this language'
+
+  const greetingField = form.register('first_message', {
+    onChange: (event: { target: { value: string } }) => {
+      setEdited({ first_message: isGreetingCustomized(event.target.value, greetingContext) })
+    },
+  })
+  const promptField = form.register('system_prompt', {
+    onChange: (event: { target: { value: string } }) => {
+      setEdited({ system_prompt: isSystemPromptCustomized(event.target.value, promptContext) })
     },
   })
 
-  const systemPrompt = form.watch('system_prompt') ?? ''
-  const agentName    = form.watch('name')
-  const personality  = form.watch('personality')
-
-  // Auto-fill a detailed, industry-specific system prompt the first time this
-  // step is reached (empty field only) - the agent should already be well
-  // configured without the user having to write or pick anything themselves.
-  useEffect(() => {
-    if (!form.getValues('system_prompt')?.trim()) {
-      form.setValue(
-        'system_prompt',
-        buildIndustrySystemPrompt({ name: company.name, description: company.description, industry: company.industry }),
-        { shouldValidate: true }
-      )
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  function autoGenerateGreeting() {
-    const companyName = company.name || 'our company'
-    const an = agentName || 'your assistant'
-    const lang = form.getValues('language') || 'en'
-    const build = GREETINGS[lang] ?? GREETINGS.en
-    form.setValue('first_message', build(companyName, an), { shouldValidate: true })
+  function applySuggestedGreeting() {
+    form.setValue('first_message', suggestedGreeting(greetingContext), { shouldDirty: true, shouldValidate: true })
+    setEdited({ first_message: false })
   }
 
-  function regenerateSystemPrompt() {
-    form.setValue(
-      'system_prompt',
-      buildIndustrySystemPrompt({ name: company.name, description: company.description, industry: company.industry }),
-      { shouldValidate: true }
-    )
+  function resetInstructions() {
+    const apply = () => {
+      form.setValue('system_prompt', suggestedSystemPrompt(promptContext), { shouldDirty: true, shouldValidate: true })
+      setEdited({ system_prompt: false })
+    }
+    if (!edited.system_prompt) {
+      apply()
+      return
+    }
+    toast('Replace your instructions with the template?', {
+      description: `Your edits will be replaced with the ${industryLabel} template.`,
+      action: { label: 'Replace', onClick: apply },
+    })
   }
 
   function onSubmit(values: FormValues) {
-    setAgent(values as typeof agent)
+    setAgent({ ...values, name: values.name.trim(), first_message: values.first_message.trim() })
+    // An English voice reading Romanian sounds wrong.
+    if (dropVoiceForOtherLanguage()) {
+      toast.info(`Voice reset for ${languageLabel}`, {
+        description: 'You changed the language, so the next step starts with a voice that speaks it natively.',
+      })
+    }
     setStep(3)
+  }
+
+  function onInvalid(invalid: FieldErrors<FormValues>) {
+    // The instructions may be collapsed; open them so the error is visible.
+    if (invalid.system_prompt) setShowPrompt(true)
   }
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col items-start gap-4">
-        <div className="rounded-xl bg-purple-100 p-2.5">
-          <Bot className="h-7 w-7 text-purple-600" />
-        </div>
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Configure your AI agent</h2>
-          <p className="mt-1 text-muted-foreground">Define how your agent thinks and speaks</p>
-        </div>
-      </div>
+      <StepHeader icon={Bot} title="Set up your AI agent" description="Choose how it sounds, what it's called and how it answers" />
 
-      <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-6">
-        {/* Personality */}
+      <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} noValidate className="space-y-7">
+        {/* Tone */}
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Agent personality</Label>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {PERSONALITIES.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => form.setValue('personality', p.id)}
-                className={cn(
-                  'rounded-xl border p-4 text-left transition-all duration-150',
-                  personality === p.id
-                    ? 'border-primary bg-purple-50 ring-2 ring-primary ring-offset-2'
-                    : 'border-border hover:border-purple-300 hover:bg-purple-50/50'
-                )}
-              >
-                <p.icon
-                  className={cn('mb-2 h-5 w-5', personality === p.id ? 'text-primary' : 'text-muted-foreground')}
-                />
-                <p className="text-sm font-semibold">{p.name}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">{p.desc}</p>
-              </button>
-            ))}
-          </div>
+          <Label id={toneLabelId} className="text-sm font-medium">Tone of voice</Label>
+          <Controller
+            control={form.control}
+            name="tone"
+            render={({ field }) => (
+              <ToneGrid labelledBy={toneLabelId} value={field.value} onChange={field.onChange} />
+            )}
+          />
         </div>
 
         {/* Agent Name */}
         <div className="space-y-1.5">
-          <Label htmlFor="agentName" className="text-sm font-medium">
-            Agent name <span className="text-destructive">*</span>
+          <Label htmlFor="agent-name" className="text-sm font-medium">
+            Agent name <span className="text-destructive" aria-hidden="true">*</span>
           </Label>
           <Input
-            id="agentName"
+            id="agent-name"
             placeholder="e.g. Sarah, Alex, Max"
-            maxLength={30}
+            maxLength={LIMITS.agentName.max}
+            autoComplete="off"
+            aria-invalid={errors.name ? true : undefined}
+            aria-describedby="agent-name-hint"
             {...form.register('name')}
-            className={cn('h-11', form.formState.errors.name && 'border-destructive')}
+            className={cn('h-11', errors.name && 'border-destructive')}
           />
-          <p className="text-xs text-muted-foreground">This is what your agent will call itself on calls</p>
-          {form.formState.errors.name && (
-            <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
-          )}
+          <p id="agent-name-hint" className={cn('text-xs', errors.name ? 'text-destructive' : 'text-muted-foreground')}>
+            {errors.name?.message ?? 'What your agent calls itself on calls'}
+          </p>
         </div>
 
-        {/* Language flag cards */}
+        {/* Language */}
         <div className="space-y-2">
-          <Label className="text-sm font-medium">
-            Primary language <span className="text-destructive">*</span>
+          <Label id={languageLabelId} className="text-sm font-medium">
+            Language it speaks <span className="text-destructive" aria-hidden="true">*</span>
           </Label>
           <Controller
             control={form.control}
             name="language"
             render={({ field }) => (
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {AGENT_LANGUAGES.map((lang) => {
-                  const isSelected = field.value === lang.value
-                  return (
-                    <button
-                      key={lang.value}
-                      type="button"
-                      onClick={() => field.onChange(lang.value)}
-                      className={cn(
-                        'flex items-center gap-2 rounded-lg border px-3 py-2.5 transition-all duration-150',
-                        isSelected
-                          ? 'border-primary bg-purple-50 ring-1 ring-primary'
-                          : 'border-border hover:border-purple-200 hover:bg-purple-50/30'
-                      )}
-                    >
-                      <FlagIcon country={lang.country} className="h-4 w-6" />
-                      <span className={cn('text-xs font-medium', isSelected ? 'text-foreground' : 'text-muted-foreground')}>
-                        {lang.label}
-                      </span>
-                      {isSelected && <CheckCircle2 className="ml-auto h-3 w-3 flex-shrink-0 text-primary" />}
-                    </button>
-                  )
-                })}
-              </div>
+              <LanguageGrid labelledBy={languageLabelId} value={field.value} onChange={field.onChange} />
             )}
           />
+          {errors.language && <p className="text-xs text-destructive">{errors.language.message}</p>}
         </div>
 
-        {/* First Message */}
+        {/* Greeting */}
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="first_message" className="text-sm font-medium">
-              Greeting message <span className="text-destructive">*</span>
+          <div className="flex min-h-7 items-center justify-between gap-3">
+            <Label htmlFor="agent-greeting" className="text-sm font-medium">
+              Greeting <span className="text-destructive" aria-hidden="true">*</span>
             </Label>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={autoGenerateGreeting}
-              className="h-7 gap-1.5 text-xs text-primary hover:bg-purple-50"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              Auto-generate
-            </Button>
+            {(edited.first_message || !greeting.trim()) && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={applySuggestedGreeting}
+                className="h-7 gap-1.5 text-xs text-primary hover:bg-purple-50"
+              >
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                Use suggested greeting
+              </Button>
+            )}
           </div>
           <Textarea
-            id="first_message"
+            id="agent-greeting"
             rows={3}
-            placeholder={`Hello! Thank you for calling ${company.name || '[Company Name]'}. I'm Sarah, your virtual assistant. How can I help you today?`}
-            {...form.register('first_message')}
-            className={cn('resize-none', form.formState.errors.first_message && 'border-destructive')}
+            maxLength={LIMITS.firstMessage.max}
+            aria-invalid={errors.first_message ? true : undefined}
+            aria-describedby="agent-greeting-hint agent-greeting-disclosure"
+            {...greetingField}
+            className={cn('resize-none', errors.first_message && 'border-destructive')}
           />
-          <p className="text-xs text-muted-foreground">This is the first thing your agent says when answering a call</p>
-          {form.formState.errors.first_message && (
-            <p className="text-xs text-destructive">{form.formState.errors.first_message.message}</p>
-          )}
-        </div>
-
-        {/* System Prompt */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="system_prompt" className="text-sm font-medium">
-              Agent instructions
-            </Label>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={regenerateSystemPrompt}
-              className="h-7 gap-1.5 text-xs text-primary hover:bg-purple-50"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              Regenerate
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Pre-filled based on your industry, edit anything you&apos;d like to change.
+          <p id="agent-greeting-hint" className={cn('text-xs', errors.first_message ? 'text-destructive' : 'text-muted-foreground')}>
+            {errors.first_message?.message ??
+              (edited.first_message
+                ? 'Your own words. They stay as written if you change the tone or language.'
+                : 'The first thing callers hear. It follows the tone and language you pick until you edit it.')}
           </p>
-          <Textarea
-            id="system_prompt"
-            rows={10}
-            {...form.register('system_prompt')}
-            className="resize-none font-mono text-sm"
-          />
-          <div className="flex justify-between">
-            <p className="text-xs text-muted-foreground">Advanced: define exactly how your agent should behave</p>
-            <span
-              className={cn(
-                'text-xs tabular-nums',
-                systemPrompt.length > 3600 ? 'text-orange-500' : 'text-muted-foreground'
+          <div
+            id="agent-greeting-disclosure"
+            className="flex items-start gap-2 rounded-lg bg-muted/50 px-3 py-2.5 text-xs text-muted-foreground"
+          >
+            <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden="true" />
+            <span>
+              {disclosesAi ? (
+                'Callers are told they’re speaking with an AI assistant, as the law requires in the EU and many other places.'
+              ) : (
+                <>
+                  Your greeting doesn’t say it’s an AI, so your agent adds “{localized(AI_DISCLOSURE, language)}” to it
+                  (before any closing question). Callers must be told they’re speaking with an AI.
+                </>
               )}
-            >
-              {systemPrompt.length}/4000
             </span>
           </div>
         </div>
 
+        {/* Instructions */}
+        <div className="space-y-3 rounded-xl border p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground">Agent instructions</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {edited.system_prompt
+                  ? 'Your own instructions for how the agent handles calls.'
+                  : `Written for ${industryLabel}: what the agent handles, what it never promises, and how it speaks.`}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-expanded={showPrompt}
+              aria-controls={promptRegionId}
+              onClick={() => setShowPrompt((v) => !v)}
+              className="h-8 shrink-0 self-start"
+            >
+              {showPrompt ? 'Hide instructions' : 'Review and edit'}
+            </Button>
+          </div>
+
+          <div id={promptRegionId} hidden={!showPrompt} className="space-y-1.5">
+            <Label htmlFor="agent-instructions" className="sr-only">Agent instructions</Label>
+            <Textarea
+              id="agent-instructions"
+              rows={12}
+              maxLength={LIMITS.systemPrompt.max}
+              aria-invalid={errors.system_prompt ? true : undefined}
+              aria-describedby="agent-instructions-meta"
+              {...promptField}
+              className={cn('max-h-[28rem] resize-y text-sm leading-relaxed', errors.system_prompt && 'border-destructive')}
+            />
+            <div id="agent-instructions-meta" className="flex items-center justify-between gap-3">
+              {errors.system_prompt ? (
+                <p className="text-xs text-destructive">{errors.system_prompt.message}</p>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={resetInstructions}
+                  disabled={!edited.system_prompt && systemPrompt === suggestedSystemPrompt(promptContext)}
+                  className="h-7 gap-1.5 px-2 text-xs text-primary hover:bg-purple-50"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                  Reset to the {industryLabel} template
+                </Button>
+              )}
+              <span
+                className={cn(
+                  'shrink-0 text-xs tabular-nums',
+                  systemPrompt.length > LIMITS.systemPrompt.max * 0.9 ? 'text-orange-500' : 'text-muted-foreground'
+                )}
+              >
+                {systemPrompt.length}/{LIMITS.systemPrompt.max}
+              </span>
+            </div>
+          </div>
+        </div>
+
         {/* Navigation */}
-        <div className="flex justify-between pt-2">
-          <Button type="button" variant="ghost" onClick={() => setStep(1)} className="gap-2">
-            <ArrowLeft className="h-4 w-4" /> Back
+        <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-between">
+          <Button type="button" variant="ghost" onClick={() => setStep(1)} className="h-10 gap-2">
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back
           </Button>
-          <Button type="submit" className="purple-glow px-6">
-            Continue <ArrowRight className="ml-2 h-4 w-4" />
+          <Button type="submit" className="purple-glow h-10 px-6">
+            Continue <ArrowRight className="ml-1 h-4 w-4" aria-hidden="true" />
           </Button>
         </div>
       </form>
+    </div>
+  )
+}
+
+function ToneGrid({ labelledBy, value, onChange }: { labelledBy: string; value: AgentTone; onChange: (tone: AgentTone) => void }) {
+  const itemProps = useRovingRadio({ values: AGENT_TONES, value, onChange })
+  return (
+    <div role="radiogroup" aria-labelledby={labelledBy} className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+      {AGENT_TONES.map((id) => {
+        const profile = TONE_PROFILES[id]
+        const Icon = TONE_ICONS[id]
+        const selected = value === id
+        return (
+          <button
+            key={id}
+            {...itemProps(id)}
+            className={cn(
+              'relative rounded-xl border p-3 text-left outline-none transition-colors duration-150 focus-visible:ring-3 focus-visible:ring-ring/50 sm:p-4',
+              selected ? 'border-primary bg-purple-50 ring-1 ring-primary' : 'border-border hover:border-purple-300 hover:bg-purple-50/50'
+            )}
+          >
+            <Icon className={cn('mb-2 h-5 w-5', selected ? 'text-primary' : 'text-muted-foreground')} aria-hidden="true" />
+            <span className="block text-sm font-semibold">{profile.label}</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">{profile.blurb}</span>
+            {selected && <CheckCircle2 className="absolute right-2 top-2 h-4 w-4 text-primary" aria-hidden="true" />}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function LanguageGrid({ labelledBy, value, onChange }: { labelledBy: string; value: string; onChange: (language: string) => void }) {
+  const itemProps = useRovingRadio({ values: LANGUAGE_VALUES, value, onChange })
+  return (
+    <div role="radiogroup" aria-labelledby={labelledBy} className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      {AGENT_LANGUAGES.map((lang) => {
+        const selected = value === lang.value
+        return (
+          <button
+            key={lang.value}
+            {...itemProps(lang.value)}
+            className={cn(
+              'flex min-h-10 items-center gap-2 rounded-lg border px-3 py-2 text-left outline-none transition-colors duration-150 focus-visible:ring-3 focus-visible:ring-ring/50',
+              selected ? 'border-primary bg-purple-50 ring-1 ring-primary' : 'border-border hover:border-purple-200 hover:bg-purple-50/30'
+            )}
+          >
+            <FlagIcon country={lang.country} className="h-4 w-6" />
+            <span className={cn('min-w-0 text-xs font-medium', selected ? 'text-foreground' : 'text-muted-foreground')}>
+              {lang.label}
+            </span>
+            {selected && <CheckCircle2 className="ml-auto h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />}
+          </button>
+        )
+      })}
     </div>
   )
 }

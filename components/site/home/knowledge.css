@@ -1,0 +1,37 @@
+/* ------------------------------------------------------------------ *
+ * #knowledge — the reading room's grid. Imported by knowledge.tsx.
+ *
+ * On a phone it reads top to bottom in the order of a call: the
+ * question, the five documents, the reader, the line it found, the
+ * answer. From lg the documents run across the top and the question,
+ * the reader and the page share one row, so the beams can fall from
+ * every document into the orb between them.
+ * ------------------------------------------------------------------ */
+
+.pp .home-knowledge-room {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "top" "caller" "docs" "orb" "peek" "answer" "ctrl";
+}
+
+/* A tablet has the width for the reader and its page side by side. */
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  .pp .home-knowledge-room {
+    grid-template-columns: 140px minmax(0, 1fr);
+    column-gap: 32px;
+    grid-template-areas: "top top" "caller caller" "docs docs" "orb peek" "answer answer" "ctrl ctrl";
+  }
+}
+
+@media (min-width: 1024px) {
+  .pp .home-knowledge-room {
+    grid-template-columns: minmax(0, 1fr) 184px minmax(0, 1fr);
+    column-gap: 48px;
+    grid-template-areas:
+      "top top top"
+      "docs docs docs"
+      "caller orb peek"
+      "answer answer answer"
+      "ctrl ctrl ctrl";
+  }
+}

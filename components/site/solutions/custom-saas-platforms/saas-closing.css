@@ -1,0 +1,213 @@
+/* ------------------------------------------------------------------ *
+ * /solutions/custom-saas-platforms — #terms, #checks, #faq and #start:
+ * the few things Tailwind utilities can't say for the page's close.
+ *
+ *   §10  the checks: the filter's same-document view transition — the
+ *        rows that stay slide to their new places, the rows that go
+ *        fade where they stood, the rows that come rise into theirs
+ *        (checks.tsx, vt.ts)
+ *   §10a the checks' key: its three figures draw on their way up the
+ *        screen, element by element (checks.tsx `KindFigure`)
+ *
+ * Only #checks needs rules of its own. #terms is still on purpose and
+ * is utilities only; #faq wears the landing's own classes (home.css
+ * `.home-faq`, doubts.css `.home-doubts-*`, imported by faq.tsx); #start
+ * is the landing's deep panel (home.css `.home-deep`, its grain, and
+ * `home-rise`; tier.css turns both off on lite); the card under the
+ * checks is a lit surface (saas.css §2) that rises with `home-rise`.
+ *
+ * The numbering is the page's (saas.css §0 lists the rest). The
+ * view-transition root rule (§11: the root cuts, never cross-fades) is
+ * shared with #prototype and lives in saas.css; this file is imported
+ * once by app/solutions/custom-saas-platforms/page.tsx, after saas.css,
+ * so it ships with this route only.
+ *
+ * §10's rules sit on <html>, because that is where the view-transition
+ * pseudo-elements hang and where vt.ts marks our transition
+ * (`data-saas-vt="checks"`, set before the old picture is taken and
+ * cleared when the transition finishes), or under .pp inside it; §10a's
+ * sit under .pp, or on <html> where they read the tier. Every class and
+ * keyframe is prefixed saas-. Only transform and opacity ever move (and
+ * the figures' strokes, on home.css's own draw). The filter's transition is the
+ * browser's, on its snapshots, and the list itself is simply re-rendered
+ * once, inside it; reduced motion, the lite and still tiers and a
+ * browser without the API never start one at all (vt.ts `vtAllowed`, in
+ * the chip's handler): the filter is instant, and none of §10 ever
+ * applies. The key's figures are the only thing here tied to scroll, a
+ * view timeline inside `@media (prefers-reduced-motion: no-preference)`
+ * and `@supports (animation-timeline: view())`; without either, and on
+ * the lite and still tiers and weak hardware, they are simply drawn.
+ * ------------------------------------------------------------------ */
+
+/* ─── §10 Checks: the filter's view transition ──────────────────────
+   NAMED ONLY WHILE OURS RUNS. Each row, and "the one this page can’t
+   show you" under them, carries its name as a custom property
+   (`--saas-vt: saas-check-<id>`, inline from checks.tsx), and becomes a
+   view-transition element only under <html data-saas-vt="checks">.
+   Named all the time, the twelve rows would be captured by any other
+   view transition on the page — #prototype's screen change among them —
+   wherever they happened to be; this way they are captured by ours
+   alone, and carry no name the rest of the time.
+
+   EVERYTHING UNDER THE LIST MOVES WITH IT. The list's height changes by
+   up to 850px at 1440 (twelve rows to two) and 1,700 on a phone, and
+   whatever is left in the root cuts to its new place at once (saas.css
+   §11) and is painted under every named group: the #faq heading and its
+   first questions would sit in the list's old place, under rows still
+   fading there. So the block under the rows is named, and so are the
+   two content-visibility boxes that follow (page.tsx `SaasDeferred`
+   around #faq and around #start; the close is named for a tall screen,
+   where it can come into view): each slides the list's change in height
+   with the list's foot, and nothing below the list moves until the rows
+   that go are gone. A box the browser has skipped because it is off the
+   screen is captured blank, so it fades in as it slides up; one that
+   leaves the screen fades out. The boxes, not the sections in them: an
+   element inside a skipped box is never captured, and would cut. */
+html[data-saas-vt="checks"] .pp .saas-check {
+  view-transition-name: var(--saas-vt);
+}
+
+html[data-saas-vt="checks"] .pp .home-deferred:has(> #faq) {
+  view-transition-name: saas-check-faq;
+}
+
+html[data-saas-vt="checks"] .pp .home-deferred:has(> #start) {
+  view-transition-name: saas-check-start;
+}
+
+/* THREE MOVES IN TURN, so text never crosses text:
+     0–0.10s    the rows that go fade where they stood;
+     0.08–0.40s everything that stays slides to its new place — the rows,
+                the block under them, the boxes under that — on the house
+                out-ease (the browser's own group animation, on its
+                snapshots; a row's old and new pictures are the same row,
+                so their cross-fade, which inherits the delay, shows
+                nothing);
+     0.20–0.44s the rows that come rise 6px into their places, by which
+                time what they land among has all but arrived.
+   A row that goes is at 4% by the time anything moves over it; none of
+   the three ever moves far from where the reader is looking. */
+html[data-saas-vt="checks"]::view-transition-group(*) {
+  animation-duration: 0.32s;
+  animation-delay: 0.08s;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html[data-saas-vt="checks"]::view-transition-old(*):only-child {
+  animation: saas-vt-out 0.1s ease both;
+}
+
+html[data-saas-vt="checks"]::view-transition-new(*):only-child {
+  animation: saas-vt-in 0.24s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
+}
+
+@keyframes saas-vt-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes saas-vt-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* ─── §10a Checks: the key's figures draw ───────────────────────────
+   home.css gives every .home-draw figure a view timeline and draws its
+   pathLength="1" strokes across one shared window. Here each element of
+   a key figure takes its own slice of that window instead (`--o` where
+   it starts, `--s` how much it takes, both shares of the window, inline
+   from checks.tsx), the #trust figures' slice rule (home/trust.css): the
+   glyph first, then the line it leads, then what the line reaches. The
+   window opens 2% into the figure's pass up the screen and spans 26%,
+   so a figure is whole while it is still in the lower third. Three
+   across, from md, they start a beat apart, left to right; in a column
+   each has the screen to itself.
+
+   Strokes draw on power2.inOut, the house ease for draws (home.css's
+   own dash draw); nodes, the window's dots and the dots of the one
+   dotted line scale in rather than fade, the line one dot after another,
+   since a dash draw would wreck a dotted stroke. Only under no-preference
+   and view-timeline support, like home.css: otherwise the markup is the
+   finished drawing. The dim a filter gives a kind the list is not
+   showing is an opacity transition on the figure (checks.tsx), never
+   tied to scroll. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .saas-kind-fig {
+      --saas-kind-a: 2%;
+      --saas-kind-w: 26%;
+    }
+
+    @media (min-width: 768px) {
+      .pp .saas-kind-fig[data-i="1"] {
+        --saas-kind-a: 6%;
+      }
+
+      .pp .saas-kind-fig[data-i="2"] {
+        --saas-kind-a: 10%;
+      }
+    }
+
+    /* Above home.css's .home-draw[data-i] rules, so the slices win
+       whatever order the two sheets land in. */
+    .pp .saas-kind-fig.home-draw[data-i] path[pathLength],
+    .pp .saas-kind-fig.home-draw[data-i] circle[pathLength],
+    .pp .saas-kind-fig.home-draw[data-i] .saas-kind-pop {
+      animation-timeline: --home-draw;
+      animation-range:
+        cover calc(var(--saas-kind-a) + var(--saas-kind-w) * var(--o, 0))
+        cover calc(var(--saas-kind-a) + var(--saas-kind-w) * (var(--o, 0) + var(--s, 1)));
+    }
+
+    /* The person's head is a <circle>: home.css draws paths only, so it
+       gets the same parked dash and draw here. */
+    .pp .saas-kind-fig.home-draw[data-i] circle[pathLength] {
+      stroke-dasharray: 1 3;
+      stroke-dashoffset: 1.25;
+      animation-name: home-draw;
+      animation-duration: auto;
+      animation-fill-mode: both;
+    }
+
+    .pp .saas-kind-fig.home-draw[data-i] path[pathLength],
+    .pp .saas-kind-fig.home-draw[data-i] circle[pathLength] {
+      animation-timing-function: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+    }
+
+    .pp .saas-kind-fig .saas-kind-pop {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation-name: saas-kind-pop;
+      animation-duration: auto;
+      animation-fill-mode: both;
+      animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+  }
+}
+
+/* The finished drawing on the lite tier (tier.css already puts the
+   strokes back there; the nodes and the dots are ours), and on
+   the still tier and weak hardware, as the tally and the hero's plates
+   are. Specific enough to beat every rule above whatever the order. */
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .home-body .saas-kind-fig.home-draw :is(path, circle)[pathLength] {
+  animation: none;
+  stroke-dasharray: none;
+  stroke-dashoffset: 0;
+}
+
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .home-body .saas-kind-fig.home-draw .saas-kind-pop {
+  animation: none;
+}
+
+@keyframes saas-kind-pop {
+  from {
+    transform: scale(0);
+  }
+
+  to {
+    transform: none;
+  }
+}

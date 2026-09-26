@@ -1,0 +1,851 @@
+/* ------------------------------------------------------------------ *
+ * #pricing — the plan cards' meshes and layouts, the fitting card's ring
+ * and tab, the estimator panel and its slider, the receipt's line
+ * changes, and the note's disc.
+ *
+ * Every rule sits under .pp and every class is prefixed home-plan- or
+ * home-pricing-. Each card's mesh is a stack of radial pools painted once
+ * as its ground; a copy cut in two flows over it ("The mesh in motion",
+ * below), with its own gate for reduced motion and weak hardware. Reduced
+ * motion otherwise needs nothing here: the global rule (globals.css,
+ * prefers-reduced-motion) zeroes every transition and animation below.
+ * ------------------------------------------------------------------ */
+
+/* ─── The plans' lights ─────────────────────────────────────────────
+   One block per plan, value for value the recipes in palettes.ts
+   (PLAN_LIGHTS, ENTERPRISE_LIGHT); home.test.ts holds the two together.
+   `.home-plan-light[data-plan]` sets the plan's tokens on anything that
+   wears it: a card, the estimator panel, a swatch, a dot. */
+.pp .home-plan-light[data-plan="starter"] {
+  /* prettier-ignore */
+  --plan-ground: radial-gradient(62% 26% at 20% 0%, rgb(255 255 255 / 0.85) 0%, rgb(255 255 255 / 0.71) 20%, rgb(255 255 255 / 0.49) 35%, rgb(255 255 255 / 0.276) 50%, rgb(255 255 255 / 0.127) 65%, rgb(255 255 255 / 0.048) 80%, rgb(255 255 255 / 0) 100%), radial-gradient(95% 42% at 0% 10%, rgb(158 232 242 / 0.9) 0%, rgb(158 232 242 / 0.752) 20%, rgb(158 232 242 / 0.519) 35%, rgb(158 232 242 / 0.292) 50%, rgb(158 232 242 / 0.134) 65%, rgb(158 232 242 / 0.051) 80%, rgb(158 232 242 / 0) 100%), radial-gradient(85% 38% at 100% 28%, rgb(198 212 255 / 0.72) 0%, rgb(198 212 255 / 0.601) 20%, rgb(198 212 255 / 0.415) 35%, rgb(198 212 255 / 0.234) 50%, rgb(198 212 255 / 0.108) 65%, rgb(198 212 255 / 0.04) 80%, rgb(198 212 255 / 0) 100%), radial-gradient(60% 28% at 72% 58%, rgb(230 214 255 / 0.42) 0%, rgb(230 214 255 / 0.351) 20%, rgb(230 214 255 / 0.242) 35%, rgb(230 214 255 / 0.136) 50%, rgb(230 214 255 / 0.063) 65%, rgb(230 214 255 / 0.024) 80%, rgb(230 214 255 / 0) 100%), radial-gradient(105% 44% at 18% 80%, rgb(182 241 218 / 0.85) 0%, rgb(182 241 218 / 0.71) 20%, rgb(182 241 218 / 0.49) 35%, rgb(182 241 218 / 0.276) 50%, rgb(182 241 218 / 0.127) 65%, rgb(182 241 218 / 0.048) 80%, rgb(182 241 218 / 0) 100%), radial-gradient(95% 40% at 100% 100%, rgb(166 226 244 / 0.8) 0%, rgb(166 226 244 / 0.668) 20%, rgb(166 226 244 / 0.461) 35%, rgb(166 226 244 / 0.26) 50%, rgb(166 226 244 / 0.12) 65%, rgb(166 226 244 / 0.045) 80%, rgb(166 226 244 / 0) 100%), #f1fbfc;
+  --plan-floor: #f1fbfc;
+  --plan-text: #140a24;
+  --plan-dim: #35475a;
+  --plan-accent: #0a5566;
+  --plan-tick: #0a5566;
+  --plan-ink: #0a5566;
+  --plan-signal: #0891a6;
+}
+
+.pp .home-plan-light[data-plan="growth"] {
+  /* prettier-ignore */
+  --plan-ground: radial-gradient(62% 26% at 20% 0%, rgb(255 255 255 / 0.85) 0%, rgb(255 255 255 / 0.71) 20%, rgb(255 255 255 / 0.49) 35%, rgb(255 255 255 / 0.276) 50%, rgb(255 255 255 / 0.127) 65%, rgb(255 255 255 / 0.048) 80%, rgb(255 255 255 / 0) 100%), radial-gradient(95% 42% at 0% 8%, rgb(166 214 255 / 0.9) 0%, rgb(166 214 255 / 0.752) 20%, rgb(166 214 255 / 0.519) 35%, rgb(166 214 255 / 0.292) 50%, rgb(166 214 255 / 0.134) 65%, rgb(166 214 255 / 0.051) 80%, rgb(166 214 255 / 0) 100%), radial-gradient(90% 42% at 100% 22%, rgb(169 183 255 / 0.85) 0%, rgb(169 183 255 / 0.71) 20%, rgb(169 183 255 / 0.49) 35%, rgb(169 183 255 / 0.276) 50%, rgb(169 183 255 / 0.127) 65%, rgb(169 183 255 / 0.048) 80%, rgb(169 183 255 / 0) 100%), radial-gradient(55% 26% at 66% 54%, rgb(199 236 255 / 0.45) 0%, rgb(199 236 255 / 0.376) 20%, rgb(199 236 255 / 0.259) 35%, rgb(199 236 255 / 0.146) 50%, rgb(199 236 255 / 0.067) 65%, rgb(199 236 255 / 0.025) 80%, rgb(199 236 255 / 0) 100%), radial-gradient(105% 44% at 26% 80%, rgb(180 198 255 / 0.78) 0%, rgb(180 198 255 / 0.652) 20%, rgb(180 198 255 / 0.449) 35%, rgb(180 198 255 / 0.253) 50%, rgb(180 198 255 / 0.117) 65%, rgb(180 198 255 / 0.044) 80%, rgb(180 198 255 / 0) 100%), radial-gradient(80% 36% at 100% 96%, rgb(157 220 243 / 0.7) 0%, rgb(157 220 243 / 0.585) 20%, rgb(157 220 243 / 0.403) 35%, rgb(157 220 243 / 0.227) 50%, rgb(157 220 243 / 0.105) 65%, rgb(157 220 243 / 0.039) 80%, rgb(157 220 243 / 0) 100%), #f1f6ff;
+  --plan-floor: #f1f6ff;
+  --plan-text: #140a24;
+  --plan-dim: #383a63;
+  --plan-accent: #3730a3;
+  --plan-tick: #3730a3;
+  --plan-ink: #3730a3;
+  --plan-signal: #5b6cf0;
+}
+
+.pp .home-plan-light[data-plan="pro"] {
+  /* prettier-ignore */
+  --plan-ground: radial-gradient(62% 26% at 24% 0%, rgb(255 255 255 / 0.85) 0%, rgb(255 255 255 / 0.71) 20%, rgb(255 255 255 / 0.49) 35%, rgb(255 255 255 / 0.276) 50%, rgb(255 255 255 / 0.127) 65%, rgb(255 255 255 / 0.048) 80%, rgb(255 255 255 / 0) 100%), radial-gradient(100% 44% at 100% 0%, rgb(234 141 245 / 0.95) 0%, rgb(234 141 245 / 0.794) 20%, rgb(234 141 245 / 0.547) 35%, rgb(234 141 245 / 0.308) 50%, rgb(234 141 245 / 0.142) 65%, rgb(234 141 245 / 0.053) 80%, rgb(234 141 245 / 0) 100%), radial-gradient(95% 44% at 0% 30%, rgb(244 146 198 / 0.9) 0%, rgb(244 146 198 / 0.752) 20%, rgb(244 146 198 / 0.519) 35%, rgb(244 146 198 / 0.292) 50%, rgb(244 146 198 / 0.134) 65%, rgb(244 146 198 / 0.051) 80%, rgb(244 146 198 / 0) 100%), radial-gradient(62% 30% at 70% 42%, rgb(220 110 242 / 0.52) 0%, rgb(220 110 242 / 0.434) 20%, rgb(220 110 242 / 0.3) 35%, rgb(220 110 242 / 0.169) 50%, rgb(220 110 242 / 0.078) 65%, rgb(220 110 242 / 0.029) 80%, rgb(220 110 242 / 0) 100%), radial-gradient(100% 42% at 38% 72%, rgb(207 160 255 / 0.85) 0%, rgb(207 160 255 / 0.71) 20%, rgb(207 160 255 / 0.49) 35%, rgb(207 160 255 / 0.276) 50%, rgb(207 160 255 / 0.127) 65%, rgb(207 160 255 / 0.048) 80%, rgb(207 160 255 / 0) 100%), radial-gradient(90% 38% at 100% 92%, rgb(255 142 197 / 0.8) 0%, rgb(255 142 197 / 0.668) 20%, rgb(255 142 197 / 0.461) 35%, rgb(255 142 197 / 0.26) 50%, rgb(255 142 197 / 0.12) 65%, rgb(255 142 197 / 0.045) 80%, rgb(255 142 197 / 0) 100%), radial-gradient(70% 30% at 0% 100%, rgb(240 162 255 / 0.75) 0%, rgb(240 162 255 / 0.626) 20%, rgb(240 162 255 / 0.432) 35%, rgb(240 162 255 / 0.243) 50%, rgb(240 162 255 / 0.112) 65%, rgb(240 162 255 / 0.042) 80%, rgb(240 162 255 / 0) 100%), #fbe6fb;
+  --plan-floor: #fbe6fb;
+  --plan-text: #140a24;
+  --plan-dim: #4a1a4f;
+  --plan-accent: #641269;
+  --plan-tick: #641269;
+  --plan-ink: #a21caf;
+  --plan-signal: #c026d3;
+}
+
+.pp .home-plan-light[data-plan="business"] {
+  /* prettier-ignore */
+  --plan-ground: radial-gradient(62% 26% at 20% 0%, rgb(255 255 255 / 0.85) 0%, rgb(255 255 255 / 0.71) 20%, rgb(255 255 255 / 0.49) 35%, rgb(255 255 255 / 0.276) 50%, rgb(255 255 255 / 0.127) 65%, rgb(255 255 255 / 0.048) 80%, rgb(255 255 255 / 0) 100%), radial-gradient(95% 42% at 0% 6%, rgb(207 182 255 / 0.9) 0%, rgb(207 182 255 / 0.752) 20%, rgb(207 182 255 / 0.519) 35%, rgb(207 182 255 / 0.292) 50%, rgb(207 182 255 / 0.134) 65%, rgb(207 182 255 / 0.051) 80%, rgb(207 182 255 / 0) 100%), radial-gradient(85% 38% at 100% 18%, rgb(232 196 246 / 0.8) 0%, rgb(232 196 246 / 0.668) 20%, rgb(232 196 246 / 0.461) 35%, rgb(232 196 246 / 0.26) 50%, rgb(232 196 246 / 0.12) 65%, rgb(232 196 246 / 0.045) 80%, rgb(232 196 246 / 0) 100%), radial-gradient(55% 26% at 70% 52%, rgb(248 217 238 / 0.45) 0%, rgb(248 217 238 / 0.376) 20%, rgb(248 217 238 / 0.259) 35%, rgb(248 217 238 / 0.146) 50%, rgb(248 217 238 / 0.067) 65%, rgb(248 217 238 / 0.025) 80%, rgb(248 217 238 / 0) 100%), radial-gradient(105% 44% at 30% 76%, rgb(220 195 255 / 0.78) 0%, rgb(220 195 255 / 0.652) 20%, rgb(220 195 255 / 0.449) 35%, rgb(220 195 255 / 0.253) 50%, rgb(220 195 255 / 0.117) 65%, rgb(220 195 255 / 0.044) 80%, rgb(220 195 255 / 0) 100%), radial-gradient(85% 38% at 100% 100%, rgb(199 176 255 / 0.8) 0%, rgb(199 176 255 / 0.668) 20%, rgb(199 176 255 / 0.461) 35%, rgb(199 176 255 / 0.26) 50%, rgb(199 176 255 / 0.12) 65%, rgb(199 176 255 / 0.045) 80%, rgb(199 176 255 / 0) 100%), #f7f1ff;
+  --plan-floor: #f7f1ff;
+  --plan-text: #140a24;
+  --plan-dim: #40345f;
+  --plan-accent: #5b21b6;
+  --plan-tick: #5b21b6;
+  --plan-ink: #5b21b6;
+  --plan-signal: #8b5cf6;
+}
+
+.pp .home-plan-light[data-plan="scale"] {
+  /* prettier-ignore */
+  --plan-ground: radial-gradient(62% 26% at 20% 0%, rgb(255 255 255 / 0.85) 0%, rgb(255 255 255 / 0.71) 20%, rgb(255 255 255 / 0.49) 35%, rgb(255 255 255 / 0.276) 50%, rgb(255 255 255 / 0.127) 65%, rgb(255 255 255 / 0.048) 80%, rgb(255 255 255 / 0) 100%), radial-gradient(95% 42% at 0% 6%, rgb(255 207 174 / 0.9) 0%, rgb(255 207 174 / 0.752) 20%, rgb(255 207 174 / 0.519) 35%, rgb(255 207 174 / 0.292) 50%, rgb(255 207 174 / 0.134) 65%, rgb(255 207 174 / 0.051) 80%, rgb(255 207 174 / 0) 100%), radial-gradient(90% 42% at 100% 16%, rgb(255 224 164 / 0.85) 0%, rgb(255 224 164 / 0.71) 20%, rgb(255 224 164 / 0.49) 35%, rgb(255 224 164 / 0.276) 50%, rgb(255 224 164 / 0.127) 65%, rgb(255 224 164 / 0.048) 80%, rgb(255 224 164 / 0) 100%), radial-gradient(55% 26% at 68% 52%, rgb(241 225 255 / 0.36) 0%, rgb(241 225 255 / 0.301) 20%, rgb(241 225 255 / 0.207) 35%, rgb(241 225 255 / 0.117) 50%, rgb(241 225 255 / 0.054) 65%, rgb(241 225 255 / 0.02) 80%, rgb(241 225 255 / 0) 100%), radial-gradient(105% 44% at 30% 78%, rgb(255 198 212 / 0.72) 0%, rgb(255 198 212 / 0.601) 20%, rgb(255 198 212 / 0.415) 35%, rgb(255 198 212 / 0.234) 50%, rgb(255 198 212 / 0.108) 65%, rgb(255 198 212 / 0.04) 80%, rgb(255 198 212 / 0) 100%), radial-gradient(85% 38% at 100% 100%, rgb(255 215 180 / 0.8) 0%, rgb(255 215 180 / 0.668) 20%, rgb(255 215 180 / 0.461) 35%, rgb(255 215 180 / 0.26) 50%, rgb(255 215 180 / 0.12) 65%, rgb(255 215 180 / 0.045) 80%, rgb(255 215 180 / 0) 100%), #fff7ee;
+  --plan-floor: #fff7ee;
+  --plan-text: #140a24;
+  --plan-dim: #573629;
+  --plan-accent: #842c0d;
+  --plan-tick: #842c0d;
+  --plan-ink: #842c0d;
+  --plan-signal: #d45a1a;
+}
+
+.pp .home-plan-light[data-plan="custom"] {
+  /* prettier-ignore */
+  --plan-ground: radial-gradient(520px 200px at 18% 0%, rgb(255 255 255 / 0.8) 0%, rgb(255 255 255 / 0.668) 20%, rgb(255 255 255 / 0.461) 35%, rgb(255 255 255 / 0.26) 50%, rgb(255 255 255 / 0.12) 65%, rgb(255 255 255 / 0.045) 80%, rgb(255 255 255 / 0) 100%), radial-gradient(460px 280px at 0% 20%, rgb(255 217 138 / 0.9) 0%, rgb(255 217 138 / 0.752) 20%, rgb(255 217 138 / 0.519) 35%, rgb(255 217 138 / 0.292) 50%, rgb(255 217 138 / 0.134) 65%, rgb(255 217 138 / 0.051) 80%, rgb(255 217 138 / 0) 100%), radial-gradient(460px 260px at 34% 100%, rgb(255 231 166 / 0.85) 0%, rgb(255 231 166 / 0.71) 20%, rgb(255 231 166 / 0.49) 35%, rgb(255 231 166 / 0.276) 50%, rgb(255 231 166 / 0.127) 65%, rgb(255 231 166 / 0.048) 80%, rgb(255 231 166 / 0) 100%), radial-gradient(420px 260px at 62% 0%, rgb(255 207 143 / 0.82) 0%, rgb(255 207 143 / 0.685) 20%, rgb(255 207 143 / 0.473) 35%, rgb(255 207 143 / 0.266) 50%, rgb(255 207 143 / 0.122) 65%, rgb(255 207 143 / 0.046) 80%, rgb(255 207 143 / 0) 100%), radial-gradient(460px 280px at 100% 100%, rgb(247 210 122 / 0.85) 0%, rgb(247 210 122 / 0.71) 20%, rgb(247 210 122 / 0.49) 35%, rgb(247 210 122 / 0.276) 50%, rgb(247 210 122 / 0.127) 65%, rgb(247 210 122 / 0.048) 80%, rgb(247 210 122 / 0) 100%), radial-gradient(320px 200px at 86% 30%, rgb(255 240 194 / 0.6) 0%, rgb(255 240 194 / 0.501) 20%, rgb(255 240 194 / 0.346) 35%, rgb(255 240 194 / 0.195) 50%, rgb(255 240 194 / 0.09) 65%, rgb(255 240 194 / 0.034) 80%, rgb(255 240 194 / 0) 100%), #fff8e6;
+  --plan-floor: #fff8e6;
+  --plan-text: #140a24;
+  --plan-dim: #55401a;
+  --plan-accent: #6e4508;
+  --plan-tick: #6e4508;
+}
+
+/* The estimator panel's own ground, whatever plan it is wearing. */
+.pp .home-pricing-panel {
+  /* prettier-ignore */
+  --home-pricing-panel: radial-gradient(55% 110% at 0% 0%, rgb(241 230 255 / 0.95) 0%, rgb(241 230 255 / 0.794) 20%, rgb(241 230 255 / 0.547) 35%, rgb(241 230 255 / 0.308) 50%, rgb(241 230 255 / 0.142) 65%, rgb(241 230 255 / 0.053) 80%, rgb(241 230 255 / 0) 100%), radial-gradient(45% 100% at 100% 100%, rgb(255 229 243 / 0.95) 0%, rgb(255 229 243 / 0.794) 20%, rgb(255 229 243 / 0.547) 35%, rgb(255 229 243 / 0.308) 50%, rgb(255 229 243 / 0.142) 65%, rgb(255 229 243 / 0.053) 80%, rgb(255 229 243 / 0) 100%), radial-gradient(35% 80% at 62% 0%, rgb(227 242 255 / 0.6) 0%, rgb(227 242 255 / 0.501) 20%, rgb(227 242 255 / 0.346) 35%, rgb(227 242 255 / 0.195) 50%, rgb(227 242 255 / 0.09) 65%, rgb(227 242 255 / 0.034) 80%, rgb(227 242 255 / 0) 100%), #fcfaff;
+  background: var(--home-pricing-panel);
+  box-shadow: inset 0 0 0 1px rgb(20 10 36 / 0.06);
+}
+
+.pp .home-plan-swatch {
+  background: var(--plan-ground);
+}
+
+.pp .home-plan-dot {
+  background: var(--plan-signal);
+}
+
+/* The estimator's count, total, name and link ease into the next plan's ink. */
+.pp .home-pricing-tint {
+  transition: color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ─── A card ────────────────────────────────────────────────────────
+   Never overflow: hidden — the tab sits above the top edge and the ring
+   outside the box. The mesh clips to the radius on its own. */
+.pp .home-plan {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  --plan-radius: 26px;
+  border-radius: var(--plan-radius);
+  padding: 24px;
+  background: var(--plan-ground);
+  color: var(--plan-text);
+  --plan-rule: rgb(20 10 36 / 0.1);
+}
+
+/* A pearl card: a lit top edge, a hairline, and a soft neutral drop. The
+   edge is a token so the rail's compact drop below keeps the same one. */
+.pp .home-plan[data-tone="light"] {
+  --plan-edge: inset 0 1px 0 rgb(255 255 255 / 0.75), inset 0 0 0 1px rgb(20 10 36 / 0.06);
+  box-shadow:
+    var(--plan-edge),
+    0 1px 2px rgb(20 10 36 / 0.06),
+    0 24px 48px -32px rgb(20 10 36 / 0.25);
+}
+
+/* Pro's drop carries its own magenta, and its edge is iridescent (below). */
+.pp .home-plan[data-pick] {
+  --plan-edge: inset 0 1px 0 rgb(255 255 255 / 0.8);
+  box-shadow:
+    var(--plan-edge),
+    0 2px 4px rgb(20 10 36 / 0.06),
+    0 36px 64px -34px rgb(162 28 175 / 0.55);
+}
+
+.pp .home-plan[data-tone="dark"] {
+  --plan-rule: rgb(255 255 255 / 0.16);
+  --plan-edge: inset 0 1px 0 rgb(255 255 255 / 0.12), inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  box-shadow:
+    var(--plan-edge),
+    0 2px 4px rgb(20 10 36 / 0.1),
+    0 28px 56px -28px rgb(36 16 79 / 0.55);
+}
+
+/* ─── The mesh in motion ────────────────────────────────────────────
+   The card's own mesh, taken apart into its pools (mesh-flow.ts): each
+   pool is an element the size of its ellipse, over the card's floor, and
+   each drifts on its own path, sideways on one clock and up and down on
+   another, so the colours travel across the card and past one another
+   while every colour stays the card's own. A pool reaches 16% of its own
+   width either side and 20% of its height, so the big corner pools cross
+   about a third of the card, each way in 4-7s; its stops fall to nothing at its rim, so it
+   has no edge to show wherever it goes. Each movement is a wave about
+   rest: it leaves rest at full speed and eases into each turn, so a card
+   is visibly flowing from its first frame and never jumps; at rest the
+   pools stack back into exactly `--plan-ground`. Each pool keeps its own
+   tempo and heading, each card its own tempo (`--drift`), and every other
+   card swaps its pools' headings, so no two cards move alike.
+   Compositor-only properties (translate, transform). home.test.ts holds
+   the reach to being seen, and the text to its contrast wherever the
+   pools can be.
+
+   The flow is clipped 1px inside the card (mesh-flow.ts CLIP), so the
+   card's own edge (its lit top line and hairline, painted with its
+   ground) shows around it unchanged.
+
+   A card off screen (no data-live, set in pricing-cards.tsx) has no
+   animation at all, so its layers are dropped; it sits at rest, the still
+   picture, and flows off again from rest when it comes back. Hardware that
+   cannot take it (<html data-weak>: declared weak, or a weak GPU;
+   device-tier.ts), the still tier and reduced motion get the ground alone.
+   A lite tier from slow frames or the connection alone keeps it: it costs
+   neither the network nor the main thread. */
+.pp .home-plan-mesh {
+  --drift: 1;
+  position: absolute;
+  inset: 1px;
+  z-index: -2;
+  display: none;
+  overflow: hidden;
+  border-radius: calc(var(--plan-radius) - 1px);
+  pointer-events: none;
+  background: var(--plan-floor);
+}
+
+.pp .home-plan-mesh > span {
+  position: absolute;
+  animation:
+    home-plan-flow-x calc(var(--fx) * var(--drift)) linear infinite,
+    home-plan-flow-y calc(var(--fy) * var(--drift)) linear infinite;
+  animation-direction: var(--dx), var(--dy);
+}
+
+.pp .home-plan-mesh > span:nth-child(1) {
+  --fx: 4s;
+  --fy: 5.3s;
+  --dx: normal;
+  --dy: reverse;
+}
+
+.pp .home-plan-mesh > span:nth-child(2) {
+  --fx: 5s;
+  --fy: 4.3s;
+  --dx: reverse;
+  --dy: reverse;
+}
+
+.pp .home-plan-mesh > span:nth-child(3) {
+  --fx: 5.9s;
+  --fy: 6.4s;
+  --dx: normal;
+  --dy: normal;
+}
+
+.pp .home-plan-mesh > span:nth-child(4) {
+  --fx: 4.5s;
+  --fy: 5.6s;
+  --dx: reverse;
+  --dy: normal;
+}
+
+.pp .home-plan-mesh > span:nth-child(5) {
+  --fx: 6.6s;
+  --fy: 4.6s;
+  --dx: normal;
+  --dy: reverse;
+}
+
+.pp .home-plan-mesh > span:nth-child(6) {
+  --fx: 5.4s;
+  --fy: 7.4s;
+  --dx: reverse;
+  --dy: normal;
+}
+
+.pp .home-plan-mesh > span:nth-child(7) {
+  --fx: 7.2s;
+  --fy: 6.1s;
+  --dx: normal;
+  --dy: reverse;
+}
+
+.pp .home-plan:is([data-i="1"], [data-i="3"], [data-i="5"]) > .home-plan-mesh > span {
+  animation-direction: var(--dy), var(--dx);
+}
+
+.pp .home-plan[data-i="1"] > .home-plan-mesh {
+  --drift: 1.12;
+}
+
+.pp .home-plan[data-i="2"] > .home-plan-mesh {
+  --drift: 0.92;
+}
+
+.pp .home-plan[data-i="3"] > .home-plan-mesh {
+  --drift: 1.06;
+}
+
+.pp .home-plan[data-i="4"] > .home-plan-mesh {
+  --drift: 0.96;
+}
+
+/* Enterprise's pools are drawn at a fixed size, larger than a plan card's:
+   the same share of them takes longer to cross. */
+.pp .home-plan[data-i="5"] > .home-plan-mesh {
+  --drift: 1.5;
+}
+
+.pp .home-plan:not([data-live]) > .home-plan-mesh > span {
+  animation-name: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-weak]):not([data-tier="still"]) .pp .home-plan-mesh {
+    display: block;
+  }
+}
+
+@keyframes home-plan-flow-x {
+  0%,
+  50% {
+    translate: 0 0;
+    animation-timing-function: cubic-bezier(0.61, 1, 0.88, 1);
+  }
+
+  25% {
+    translate: 16% 0;
+    animation-timing-function: cubic-bezier(0.12, 0, 0.39, 0);
+  }
+
+  75% {
+    translate: -16% 0;
+    animation-timing-function: cubic-bezier(0.12, 0, 0.39, 0);
+  }
+
+  100% {
+    translate: 0 0;
+  }
+}
+
+@keyframes home-plan-flow-y {
+  0%,
+  50% {
+    transform: translate3d(0, 0%, 0);
+    animation-timing-function: cubic-bezier(0.61, 1, 0.88, 1);
+  }
+
+  25% {
+    transform: translate3d(0, 20%, 0);
+    animation-timing-function: cubic-bezier(0.12, 0, 0.39, 0);
+  }
+
+  75% {
+    transform: translate3d(0, -20%, 0);
+    animation-timing-function: cubic-bezier(0.12, 0, 0.39, 0);
+  }
+
+  100% {
+    transform: translate3d(0, 0%, 0);
+  }
+}
+
+/* The grain that keeps soft gradients from banding: fainter on pearl. */
+.pp .home-plan > .home-grain {
+  opacity: 0.06;
+}
+
+.pp .home-plan[data-tone="dark"] > .home-grain {
+  opacity: 0.1;
+}
+
+/* Pro's iridescent edge: a 1.5px ring of pearl colours, cut out of a
+   gradient with a mask. Static, painted once. */
+.pp .home-plan-ring {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  background: linear-gradient(140deg, #fdf0ff 0%, #e879f9 28%, #fbcfe8 52%, #c4b5fd 78%, #f0abfc 100%);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+
+/* Pro's button: magenta, white on it 6.3:1 at its lightest. */
+.pp .home-plan-cta-pick {
+  background: linear-gradient(135deg, #a21caf 0%, #86198f 100%);
+  color: #fff;
+}
+
+@media (hover: hover) {
+  .pp .home-plan-cta-pick:hover {
+    background: linear-gradient(135deg, #86198f 0%, #701a75 100%);
+  }
+}
+
+.pp .home-plan-fee {
+  font-size: 42px;
+  line-height: 46px;
+}
+
+.pp .home-plan-fee.home-plan-fee-pick {
+  font-size: 50px;
+  line-height: 54px;
+}
+
+/* The perks sit last and take whatever height the card has left. */
+.pp .home-plan > :last-child {
+  flex: 1 1 auto;
+}
+
+/* ─── The fitting card: an ink ring and a tab on its top edge ─────── */
+.pp .home-plan-tab {
+  position: absolute;
+  top: -13px;
+  left: 50%;
+  z-index: 1;
+  height: 26px;
+  padding-inline: 10px;
+  border-radius: 999px;
+  background: var(--home-ink);
+  color: #fff;
+  font-size: 12px;
+  line-height: 26px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  translate: -50% 4px;
+  transition:
+    opacity 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    translate 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pp .home-plan[aria-current] {
+  outline: 2px solid var(--home-ink);
+  outline-offset: 4px;
+}
+
+.pp .home-plan[aria-current] .home-plan-tab {
+  opacity: 1;
+  translate: -50% 0;
+  transition-duration: 0.25s;
+  transition-delay: 0.1s;
+}
+
+/* ─── Layouts ───────────────────────────────────────────────────────
+   Below lg a sideways rail: the top padding is the tab's room, the side
+   padding the ring's. At lg a bento, Pro in the middle over two rows,
+   placed explicitly (auto-flow will not produce it). From xl five
+   columns whose rows line up across the cards (subgrid), Pro the widest,
+   Enterprise a band beneath. */
+.pp .home-plans {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+  margin-inline: -16px;
+  padding: 24px 16px 12px;
+  scroll-padding-inline: 16px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.pp .home-plans::-webkit-scrollbar {
+  display: none;
+}
+
+.pp .home-plans > .home-plan {
+  flex: 0 0 min(calc(100vw - 72px), 336px);
+  scroll-snap-align: center;
+}
+
+@media (min-width: 40rem) {
+  .pp .home-plans {
+    margin-inline: -24px;
+    padding-inline: 24px;
+    scroll-padding-inline: 24px;
+  }
+}
+
+/* On the rail the cards sit in a scroll box whose 12px of bottom padding
+   is all the room a shadow has before it is clipped: a compact drop that
+   has faded out by then, instead of the grid's long one cut off hard. */
+@media (max-width: 63.99rem) {
+  .pp .home-plans > .home-plan[data-tone="light"] {
+    box-shadow:
+      var(--plan-edge),
+      0 4px 8px -4px rgb(20 10 36 / 0.16);
+  }
+
+  .pp .home-plans > .home-plan[data-pick] {
+    box-shadow:
+      var(--plan-edge),
+      0 6px 10px -6px rgb(162 28 175 / 0.4);
+  }
+
+  .pp .home-plans > .home-plan[data-tone="dark"] {
+    box-shadow:
+      var(--plan-edge),
+      0 6px 10px -6px rgb(36 16 79 / 0.4);
+  }
+}
+
+@media (min-width: 64rem) {
+  .pp .home-plans {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: 12px;
+    margin: 40px 0 0;
+    padding: 24px 0 0;
+    overflow: visible;
+    scroll-snap-type: none;
+  }
+
+  .pp .home-plans > .home-plan[data-plan="starter"] {
+    grid-area: 1 / 1;
+  }
+
+  .pp .home-plans > .home-plan[data-plan="growth"] {
+    grid-area: 2 / 1;
+  }
+
+  .pp .home-plans > .home-plan[data-plan="pro"] {
+    grid-area: 1 / 2 / 3 / 3;
+  }
+
+  .pp .home-plans > .home-plan[data-plan="business"] {
+    grid-area: 1 / 3;
+  }
+
+  .pp .home-plans > .home-plan[data-plan="scale"] {
+    grid-area: 2 / 3;
+  }
+
+  .pp .home-plans > .home-plan[data-plan="custom"] {
+    grid-area: 3 / 1 / 4 / 4;
+    margin-top: 4px;
+  }
+
+  .pp .home-plan-fee {
+    font-size: 46px;
+    line-height: 50px;
+  }
+
+  .pp .home-plan-fee.home-plan-fee-pick {
+    font-size: 58px;
+    line-height: 62px;
+  }
+}
+
+@media (min-width: 80rem) {
+  /* The cards step out of the page's column by up to 56px a side where
+     the window has the room, so five of them are not squeezed to 215px. */
+  .pp .home-plans {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.25fr) repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(5, auto) auto;
+    row-gap: 0;
+    column-gap: 12px;
+    padding-top: 32px;
+    margin-inline: calc(-1 * clamp(0px, (100vw - 1176px - 120px) / 2, 56px));
+  }
+
+  .pp .home-plans > .home-plan[data-plan] {
+    grid-row: 1 / span 5;
+    grid-column: auto;
+  }
+
+  /* Clear of Pro's 3% lift and of its fit ring (offset 4, width 2) with air to spare. */
+  .pp .home-plans > .home-plan[data-plan="custom"] {
+    grid-row: 6;
+    grid-column: 1 / -1;
+    margin-top: 28px;
+  }
+
+  .pp .home-plans > .home-plan[data-plan="pro"] {
+    scale: 1.03;
+    z-index: 1;
+  }
+
+  .pp .home-plan-fee {
+    font-size: 42px;
+    line-height: 46px;
+  }
+
+  /* Pro's column is 269–295px here: "$207.50 /mo" holds one line at 50px. */
+  .pp .home-plan-fee.home-plan-fee-pick {
+    font-size: 50px;
+    line-height: 54px;
+  }
+
+  @supports (grid-template-rows: subgrid) {
+    .pp .home-plans > .home-plan:not([data-plan="custom"]) {
+      display: grid;
+      grid-template-rows: subgrid;
+    }
+  }
+}
+
+/* Enterprise: stacked on the rail and the bento; a band from xl. */
+.pp .home-plan-enterprise {
+  gap: 20px;
+}
+
+@media (min-width: 64rem) {
+  .pp .home-plan-enterprise {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto;
+    align-items: center;
+    gap: 32px;
+    padding: 28px;
+  }
+
+  .pp .home-plan-enterprise-cta {
+    min-width: 168px;
+  }
+}
+
+/* ─── Entrances and hover ───────────────────────────────────────────
+   From lg the cards rise into place on their own passage through the
+   screen, a step apart. Transform only: content never fades. */
+@media (prefers-reduced-motion: no-preference) and (min-width: 64rem) {
+  @supports (animation-timeline: view()) {
+    .pp .home-plan-rise {
+      animation: home-rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 22%;
+    }
+
+    .pp .home-plan-rise[data-i="1"] {
+      animation-range: entry 0% cover 25%;
+    }
+
+    .pp .home-plan-rise[data-i="2"] {
+      animation-range: entry 0% cover 28%;
+    }
+
+    .pp .home-plan-rise[data-i="3"] {
+      animation-range: entry 0% cover 31%;
+    }
+
+    .pp .home-plan-rise[data-i="4"] {
+      animation-range: entry 0% cover 34%;
+    }
+
+    .pp .home-plan-rise[data-i="5"] {
+      animation-range: entry 0% cover 37%;
+    }
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :root:not([data-tier="lite"]) .pp .home-plan {
+    transition: translate 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  :root:not([data-tier="lite"]) .pp .home-plan:hover {
+    translate: 0 -4px;
+  }
+
+  /* A light card brightens under the pointer: a white pool over its top,
+     which only ever raises the contrast of its text. */
+  :root:not([data-tier="lite"]) .pp .home-plan[data-tone="light"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(70% 45% at 25% 0%, rgb(255 255 255 / 0.6) 0%, rgb(255 255 255 / 0) 70%);
+    transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  :root:not([data-tier="lite"]) .pp .home-plan[data-tone="light"]:hover::after {
+    opacity: 1;
+  }
+}
+
+@media (forced-colors: active) {
+  .pp .home-plan {
+    border: 1px solid CanvasText;
+  }
+
+  .pp .home-plan-tab {
+    border: 1px solid CanvasText;
+  }
+
+  /* The slider is drawn in gradients and shadows, which forced colours
+     drop: give its track, thumb and notches system colours instead. */
+  .pp .home-range.home-pricing-range::-webkit-slider-runnable-track {
+    background: CanvasText;
+  }
+
+  .pp .home-range.home-pricing-range::-moz-range-track {
+    background: CanvasText;
+  }
+
+  .pp .home-range.home-pricing-range::-webkit-slider-thumb {
+    background: ButtonFace;
+    border: 2px solid ButtonText;
+  }
+
+  .pp .home-range.home-pricing-range::-moz-range-thumb {
+    background: ButtonFace;
+    border: 2px solid ButtonText;
+  }
+
+  .pp .home-pricing-tick {
+    background: CanvasText;
+  }
+}
+
+/* ─── The slider ────────────────────────────────────────────────────
+   The track's plan bands are a hard-stop gradient (home.css paints
+   var(--bands) on the track), each plan in its signal colour. Its stops
+   are registered numbers — the share of the thumb's travel where each
+   plan hands over — so when Yearly moves the handovers the bands slide
+   instead of jumping. The thumb is ringed in the fitting plan's ink. */
+
+@property --home-pricing-b1 {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --home-pricing-b2 {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --home-pricing-b3 {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --home-pricing-b4 {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+.pp .home-pricing-range {
+  --home-pricing-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    --home-pricing-b1 0.45s var(--home-pricing-ease),
+    --home-pricing-b2 0.45s var(--home-pricing-ease),
+    --home-pricing-b3 0.45s var(--home-pricing-ease),
+    --home-pricing-b4 0.45s var(--home-pricing-ease);
+}
+
+.pp .home-range.home-pricing-range::-webkit-slider-runnable-track {
+  height: 6px;
+  box-shadow: inset 0 0 0 1px rgb(24 16 40 / 0.14);
+}
+
+.pp .home-range.home-pricing-range::-moz-range-track {
+  height: 6px;
+  box-shadow: inset 0 0 0 1px rgb(24 16 40 / 0.14);
+}
+
+.pp .home-range.home-pricing-range::-webkit-slider-thumb {
+  width: 24px;
+  height: 24px;
+  margin-top: -9px;
+  box-shadow:
+    0 0 0 3px var(--plan-ink),
+    0 1px 3px rgb(0 0 0 / 0.2);
+  transition: box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .home-range.home-pricing-range::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  box-shadow:
+    0 0 0 3px var(--plan-ink),
+    0 1px 3px rgb(0 0 0 / 0.2);
+}
+
+.pp .home-range.home-pricing-range:focus-visible::-webkit-slider-thumb {
+  outline-offset: 5px;
+}
+
+.pp .home-range.home-pricing-range:focus-visible::-moz-range-thumb {
+  outline-offset: 5px;
+}
+
+/* The notches ride with their handovers. */
+.pp .home-pricing-tick {
+  transition: left 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ─── The receipt ───────────────────────────────────────────────────
+   A line whose wording changes (the plan's name, Yearly) settles in
+   from 6px below. Only after the reader's first change: the server's
+   markup never animates. */
+@keyframes home-pricing-in {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+
+.pp .home-pricing-in {
+  animation: home-pricing-in 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* The allowance line and the overage line share one cell, like two
+   faces of a drum: going over the allowance rolls the drum up, coming
+   back under rolls it down. */
+.pp .home-pricing-face {
+  grid-area: 1 / 1;
+  transition:
+    opacity 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    translate 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pp .home-pricing-face[data-face="under"][aria-hidden="true"] {
+  opacity: 0;
+  translate: 0 -6px;
+}
+
+.pp .home-pricing-face[data-face="over"][aria-hidden="true"] {
+  opacity: 0;
+  translate: 0 6px;
+}
+
+/* ─── The note ──────────────────────────────────────────────────────
+   Styled as an FAQ row: the height eases open in home.css (.home-faq);
+   the disc inks in and its plus turns into a close mark here. */
+.pp .home-pricing-note-q {
+  list-style: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pp .home-pricing-note-q::-webkit-details-marker {
+  display: none;
+}
+
+.pp .home-pricing-disc {
+  background: #fff;
+  color: var(--pp-ink);
+  box-shadow: 0 0 0 1px var(--pp-hair);
+  transition:
+    background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .home-pricing-disc svg {
+  transition: rotate 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (hover: hover) {
+  .pp .home-pricing-note-q:hover .home-pricing-disc {
+    box-shadow:
+      0 0 1px rgb(0 0 0 / 0.4),
+      0 1px 1px rgb(0 0 0 / 0.04),
+      0 2px 4px rgb(0 0 0 / 0.04);
+  }
+}
+
+.pp .home-pricing-note[open] .home-pricing-disc {
+  background: var(--pp-ink);
+  color: #fff;
+  box-shadow: 0 0 0 1px var(--pp-ink);
+}
+
+.pp .home-pricing-note[open] .home-pricing-disc svg {
+  rotate: 45deg;
+}

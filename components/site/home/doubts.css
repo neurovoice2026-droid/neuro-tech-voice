@@ -1,0 +1,149 @@
+/* ------------------------------------------------------------------ *
+ * #faq — the rows' states. Layout and type are utilities in doubts.tsx;
+ * what lives here is what a utility can't say cleanly: the surface
+ * behind a question (a pseudo-element), the open state of a native
+ * <details>, and the answer's entrance on first paint of an open row.
+ *
+ * The height itself eases in home.css (.home-faq ::details-content).
+ * Every rule sits under .pp and every class is prefixed home-doubts-.
+ *
+ * Geometry of a closed, one-line row (80px, hairline included):
+ *   26  question pad
+ *   28  the question (TYPE.h3 line)
+ *   10  summary pad  ┐ 26 below the line,
+ *   15  details pad  │ matching the 26 above
+ *    1  hairline     ┘
+ * The surface behind the question is 56px: 14 clear of the line on
+ * both sides, 12 clear of both hairlines.
+ * ------------------------------------------------------------------ */
+
+.pp .home-doubts-q {
+  position: relative;
+  isolation: isolate;
+  list-style: none;
+  cursor: pointer;
+  outline: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pp .home-doubts-q::-webkit-details-marker {
+  display: none;
+}
+
+/* The surface: invisible at rest, tinted under a pointer, a shade deeper
+   while pressed, ringed for the keyboard. It sits behind the text, inside
+   the summary's own stacking context. */
+.pp .home-doubts-q::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 12px -8px -4px;
+  border-radius: 16px;
+  background-color: transparent;
+  transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (min-width: 768px) {
+  .pp .home-doubts-q::before {
+    inset-inline: -16px;
+  }
+}
+
+@media (hover: hover) {
+  .pp .home-doubts-q:hover::before {
+    background-color: var(--pp-card);
+  }
+
+  .pp .home-doubts-q:hover .home-doubts-disc {
+    box-shadow:
+      0 0 1px rgb(0 0 0 / 0.4),
+      0 1px 1px rgb(0 0 0 / 0.04),
+      0 2px 4px rgb(0 0 0 / 0.04);
+  }
+
+  .pp .home-doubts-q:hover .home-doubts-n {
+    color: var(--pp-ink);
+  }
+}
+
+.pp .home-doubts-q:active::before {
+  background-color: #eceaf2;
+}
+
+.pp .home-doubts-q:focus-visible::before {
+  outline: 2px solid var(--pp-ink);
+  outline-offset: 0;
+}
+
+/* The toggle: a white disc with a ring, a plus inside. Open, the disc
+   inks in and the plus turns 45° into a close mark. */
+.pp .home-doubts-disc {
+  background: #fff;
+  color: var(--pp-ink);
+  box-shadow: 0 0 0 1px var(--pp-hair);
+  transition:
+    background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .home-doubts-disc svg {
+  transition: rotate 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .home-doubts-row[open] .home-doubts-disc {
+  background: var(--pp-ink);
+  color: #fff;
+  box-shadow: 0 0 0 1px var(--pp-ink);
+}
+
+.pp .home-doubts-row[open] .home-doubts-disc svg {
+  rotate: 45deg;
+}
+
+/* The ordinal takes ink while its answer is open. */
+.pp .home-doubts-n {
+  transition: color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .home-doubts-row[open] .home-doubts-n {
+  color: var(--pp-ink);
+}
+
+/* The one link an answer may end on: the arrow leans the way it goes. */
+.pp .home-doubts-where .home-doubts-arrow {
+  display: inline-block;
+  transition: translate 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (hover: hover) {
+  .pp .home-doubts-where:hover .home-doubts-arrow {
+    translate: 3px 0;
+  }
+}
+
+/* The answer settles in as its drawer opens (the drawer's height is
+   home.css's), and leaves a little ahead of it as it closes. Transform
+   and opacity only; a row that is open when it first paints — found with
+   Ctrl+F, say — gets the same short entrance through @starting-style. */
+@media (prefers-reduced-motion: no-preference) {
+  .pp .home-doubts-a {
+    transition:
+      opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+      translate 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .pp .home-doubts-row:not([open]) .home-doubts-a {
+    opacity: 0;
+    translate: 0 -4px;
+    transition-duration: 0.2s;
+  }
+
+  @starting-style {
+    .pp .home-doubts-row[open] .home-doubts-a {
+      opacity: 0;
+      translate: 0 -4px;
+    }
+  }
+}

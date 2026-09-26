@@ -1,11 +1,14 @@
 'use client'
 
-import { Phone, Copy, CheckCheck } from 'lucide-react'
+import Link from 'next/link'
+import { AudioLines, Copy, CheckCheck, Phone } from 'lucide-react'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { TestCallPanel } from '@/components/voice/TestCallPanel'
 import { formatPhoneNumber } from '@/lib/utils'
 
 interface TestCallDialogProps {
@@ -17,64 +20,80 @@ interface TestCallDialogProps {
 
 export function TestCallDialog({ open, onOpenChange, phoneNumber, agentName }: TestCallDialogProps) {
   const [copied, setCopied] = useState(false)
+  const [callActive, setCallActive] = useState(false)
 
   function copy() {
     if (!phoneNumber) return
-    navigator.clipboard.writeText(phoneNumber)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    navigator.clipboard
+      .writeText(phoneNumber)
+      .then(() => {
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 2000)
+      })
+      .catch((error: unknown) => {
+        console.warn('[test-call] copying the number failed', error)
+        toast.error('Couldn’t copy the number. Select it and copy it instead.')
+      })
+  }
+
+  function handleOpenChange(next: boolean) {
+    // Closing ends a live call (the panel hangs up when it unmounts).
+    if (!next) setCallActive(false)
+    onOpenChange(next)
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+    // A stray click outside shouldn't cut a live call; Escape and the close button still work.
+    <Dialog open={open} onOpenChange={handleOpenChange} disablePointerDismissal={callActive}>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <div className="rounded-full bg-purple-100 p-1.5">
-              <Phone className="h-4 w-4 text-purple-600" />
-            </div>
-            Test Your Agent
+            <span className="rounded-full bg-purple-100 p-1.5" aria-hidden="true">
+              <AudioLines className="h-4 w-4 text-purple-600" />
+            </span>
+            Test your agent
           </DialogTitle>
-          <DialogDescription>
-            Call the number below to speak with <strong>{agentName}</strong> directly.
-          </DialogDescription>
+          <DialogDescription>Hear exactly what your callers will hear, before they do.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        {open && (
+          <TestCallPanel
+            agentName={agentName}
+            hasPhoneNumber={phoneNumber !== null}
+            onActiveChange={setCallActive}
+            className="border-0 p-0 sm:p-0"
+          />
+        )}
+
+        <div className="border-t pt-4">
           {phoneNumber ? (
-            <>
-              <div className="flex items-center justify-between rounded-xl border-2 border-primary/20 bg-purple-50 px-5 py-4">
-                <span className="font-mono text-xl font-bold text-foreground">
-                  {formatPhoneNumber(phoneNumber)}
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground">Or call your number from any phone</p>
+              <div className="flex items-center justify-between gap-3 rounded-xl border-2 border-primary/20 bg-purple-50 px-4 py-3">
+                <span className="flex min-w-0 items-center gap-2 font-mono text-base font-bold text-foreground sm:text-lg">
+                  <Phone className="h-4 w-4 shrink-0 text-purple-600" aria-hidden="true" />
+                  <span className="truncate">{formatPhoneNumber(phoneNumber)}</span>
                 </span>
-                <Button size="sm" variant="ghost" onClick={copy} className="gap-1.5">
+                <Button size="sm" variant="ghost" onClick={copy} className="h-8 shrink-0 gap-1.5">
                   {copied ? (
-                    <><CheckCheck className="h-4 w-4 text-green-500" /> Copied</>
+                    <><CheckCheck className="h-4 w-4 text-green-600" aria-hidden="true" /> Copied</>
                   ) : (
-                    <><Copy className="h-4 w-4" /> Copy</>
+                    <><Copy className="h-4 w-4" aria-hidden="true" /> Copy</>
                   )}
                 </Button>
               </div>
-              <ul className="space-y-1.5 text-sm text-muted-foreground">
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 text-purple-500">1.</span>
-                  Call the number from any phone
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 text-purple-500">2.</span>
-                  Speak naturally — the agent will respond
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 text-purple-500">3.</span>
-                  The call will appear in your Recent Calls list
-                </li>
-              </ul>
-            </>
-          ) : (
-            <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
-              No phone number assigned yet. Add one from the{' '}
-              <a href="/phone" className="underline font-medium">Phone Numbers</a> page.
+              <p className="text-xs text-muted-foreground">
+                Calls to your number are real calls: they show up in Calls and count toward your plan minutes.
+              </p>
             </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              To take real calls, {agentName} needs a phone number.{' '}
+              <Link href="/phone" className="font-medium text-primary underline-offset-4 hover:underline">
+                Get a number
+              </Link>{' '}
+              in a few seconds.
+            </p>
           )}
         </div>
       </DialogContent>

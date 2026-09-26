@@ -1,0 +1,286 @@
+/* ------------------------------------------------------------------ *
+ * §6 /solutions/custom-saas-platforms — the explorer (#platform): the
+ * drawing's lines, its cards and chips, the Speaking pill, the tags, the
+ * struck-through part, the stacked composition's rail.
+ *
+ * Imported once, by app/solutions/custom-saas-platforms/page.tsx, beside
+ * saas.css (whose banner §6 points here). Every rule sits under .pp and
+ * every class is prefixed saas-. Layout and type are utilities in
+ * map-view.tsx, stack-view.tsx, switchboard.tsx and explorer.tsx; what
+ * lives here is what a utility can't say cleanly: SVG paint, a state
+ * read from a data attribute, a pseudo-element.
+ *
+ * STATE IS REACT'S, COLOUR IS OURS. The explorer draws `frameOf(...)`
+ * as data attributes — `data-route` and `data-on` on the lines,
+ * `data-state` (rest · route · passed · current), `data-fault` and
+ * `data-selected` on the cards and chips, `data-on` on the rail's bands —
+ * and every rule below reads one. GSAP never writes any of them; it only
+ * dashes a trace, rides the bead, pings a ring and scales a card while
+ * the drawing assembles (explorer-timeline.ts), all things these rules
+ * leave at rest (a trace's dash, the bead and the rings invisible).
+ *
+ * MOTION: colour, opacity and scale only, as transitions on state React
+ * toggles. A card's ring doesn't animate its box-shadow: the resting,
+ * route and passed rings switch at once, and the current one — electric,
+ * the one the eye follows — is a second ring on ::after whose opacity
+ * eases in and out, so a card handing "current" to the next one fades
+ * across. A failure's strike grows along itself (`scale`), and the rail
+ * fills by `scale`. The one keyframe is the pick's ring closing in once
+ * (a ::before, by scale and opacity). Reduced motion pins them
+ * all at the end of this file
+ * (and saas.css §13 pins the cards, the lines and the switches).
+ *
+ * COLOUR, measured (saas-platforms test, §6.4): electric on the stage
+ * #efe9ff 4.82 (a line, a ring, the bead, the rail: marks, ≥ 3); white on
+ * electric 5.70 (the Speaking pill's 11px words); muted on white 6.37 (a
+ * card's figure); violet on white 7.10 (GRANT); ember #ee5423 on white
+ * 3.54 (the strike, a mark); ember-ink on white 5.92, on wash 5.41
+ * (FAILED, DOWN).
+ * ------------------------------------------------------------------ */
+
+/* ─── The lines ─────────────────────────────────────────────────────
+   Hairline ink at rest; a faint electric (35%) while the lens's route
+   runs along it. Its trace, full electric, lies over it and shows once
+   the lens has travelled it. No vector-effect: DrawSVG and MotionPath
+   measure the paths in the drawing's own units. */
+.pp .saas-edge {
+  fill: none;
+  stroke: rgb(20 10 36 / 0.16);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .saas-edge[data-route] {
+  stroke: color-mix(in srgb, var(--home-electric) 35%, transparent);
+}
+
+.pp .saas-trace {
+  fill: none;
+  stroke: var(--home-electric);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+}
+
+.pp .saas-trace[data-on] {
+  opacity: 1;
+}
+
+/* The bead that rides a hop, and the rings that ping on arrival: GSAP's
+   alone, invisible whenever it isn't moving them. */
+.pp .saas-bead {
+  fill: var(--home-electric);
+  stroke: #fff;
+  stroke-width: 2;
+  opacity: 0;
+}
+
+.pp .saas-ring {
+  fill: none;
+  stroke: var(--home-electric);
+  stroke-width: 2;
+  opacity: 0;
+}
+
+.pp .saas-chip-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 2px var(--home-electric);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ─── Cards (the map) and chips (the stacked bands) ─────────────────
+   One vocabulary for both. White, with a ring by state: a hairline at
+   rest; firmer on the lens's route; ink once passed; and, current, the
+   firm ring with an electric one easing in over it. The reader's own
+   pick is an ink ring outside all of them, clear of the electric
+   current ring (the violet would read as the same mark), and it closes
+   in once as it appears, so a part brought here from elsewhere on the
+   page is found at a glance. */
+.pp .saas-card,
+.pp .saas-chip {
+  background-color: #fff;
+  box-shadow: 0 0 0 1px var(--pp-hair);
+  transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Never focused (aria-hidden, tabindex -1), so globals.css's focus
+     margin only pushed "See it on the map" 40px under the middle. */
+  scroll-margin-top: 0;
+}
+
+.pp .saas-card::after,
+.pp .saas-chip::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 2px var(--home-electric);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .saas-card[data-state="route"],
+.pp .saas-chip[data-state="route"],
+.pp .saas-card[data-state="current"],
+.pp .saas-chip[data-state="current"] {
+  box-shadow: 0 0 0 1px rgb(20 10 36 / 0.35);
+}
+
+.pp .saas-card[data-state="passed"],
+.pp .saas-chip[data-state="passed"] {
+  box-shadow: 0 0 0 1.5px var(--home-ink);
+}
+
+.pp .saas-card[data-state="current"]::after,
+.pp .saas-chip[data-state="current"]::after {
+  opacity: 1;
+}
+
+/* The pick's ring is a pseudo-element 5px out (2px of ink, 3px clear),
+   so its closing-in is scale and opacity only: the compositor runs it,
+   where an animated outline-offset would repaint every frame. */
+.pp .saas-card[data-selected]::before,
+.pp .saas-chip[data-selected]::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border: 2px solid var(--home-ink);
+  border-radius: 17px;
+  pointer-events: none;
+  animation: saas-picked 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .saas-chip[data-selected]::before {
+  border-radius: 9999px;
+}
+
+@keyframes saas-picked {
+  from {
+    opacity: 0;
+    scale: 1.1;
+  }
+}
+
+@media (hover: hover) {
+  .pp .saas-card:hover,
+  .pp .saas-chip:hover {
+    background-color: var(--home-wash);
+  }
+}
+
+/* A part that failed (or is down): its name struck through in ember, a
+   short stroke a little off level, as a pen would, turned about its
+   centre and drawn from its left end (the outer span turns, the inner
+   one draws). It crosses the name only, never the tags. With the word
+   FAILED (or DOWN) in place of the figure, so it is never colour alone. */
+.pp .saas-slash {
+  position: absolute;
+  top: 50%;
+  right: -3px;
+  left: -3px;
+  height: 1.6px;
+  margin-top: -0.8px;
+  rotate: -6deg;
+  pointer-events: none;
+}
+
+.pp .saas-slash > span {
+  display: block;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--home-ember);
+  scale: 0 1;
+  transform-origin: left center;
+  transition: scale 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp [data-fault] .saas-slash > span {
+  scale: 1 1;
+}
+
+/* ─── Words on the cards ────────────────────────────────────────────
+   The Speaking pill hangs off the bottom right of whichever voice is
+   speaking; the explorer flies it between cards (Flip). The tags are
+   10px capitals: GRANT in violet on the two grant parts, FAILED or DOWN
+   in ember-ink where the figure was. */
+.pp .saas-voice {
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: var(--home-electric);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgb(20 10 36 / 0.12);
+  pointer-events: none;
+  /* Over the card's current ring, which it hangs across. */
+  z-index: 1;
+}
+
+/* On a stacked chip the pill stands in the figure's own 14px line (a
+   pixel over each side of it: stack-view.tsx), so it is a size smaller
+   and never touches the name above. */
+.pp .saas-chip .saas-voice {
+  padding: 1px 7px;
+  line-height: 14px;
+}
+
+.pp .saas-tag {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 14px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pp .saas-grant {
+  color: var(--home-violet);
+}
+
+.pp .saas-tag-fault {
+  color: var(--home-ember-ink);
+}
+
+/* ─── The stacked composition's rail ────────────────────────────────
+   One 2px segment down the left of each band, joined into one rail.
+   Every band down to the current part's is filled electric, top first
+   within each; the fill eases with the tour as the frame moves. */
+.pp .saas-rail {
+  background: var(--pp-hair);
+}
+
+.pp .saas-rail-fill {
+  background: var(--home-electric);
+  scale: 1 0;
+  transform-origin: top;
+  transition: scale 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp [data-on] > .saas-rail > .saas-rail-fill {
+  scale: 1 1;
+}
+
+/* ─── Reduced motion ────────────────────────────────────────────────
+   Every state above shows finished at once (saas.css §13 does the same
+   for the cards' own transitions, the lines and the switches). */
+@media (prefers-reduced-motion: reduce) {
+  .pp .saas-chip,
+  .pp .saas-card::after,
+  .pp .saas-chip::after,
+  .pp .saas-slash > span,
+  .pp .saas-rail-fill {
+    transition: none;
+  }
+
+  .pp .saas-card[data-selected]::before,
+  .pp .saas-chip[data-selected]::before {
+    animation: none;
+  }
+}

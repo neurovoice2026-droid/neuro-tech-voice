@@ -1,0 +1,15 @@
+# Build context is the repository root. Send only what the gateway image needs.
+**
+
+!lib/voice/contracts.ts
+!lib/voice/greetings.ts
+!lib/voice/languages.ts
+!lib/voice/tone.ts
+!lib/agent-languages.ts
+!types/index.ts
+!services/voice-gateway/**
+
+services/voice-gateway/node_modules
+services/voice-gateway/dist
+services/voice-gateway/**/*.log
+services/voice-gateway/.env*

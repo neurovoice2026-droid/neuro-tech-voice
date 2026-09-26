@@ -1,83 +1,38 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { conversations, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { NextResponse, type NextRequest } from 'next/server'
+import { z } from 'zod'
+import { handleRoute, noStore, parseSearchParams } from '@/lib/api/http'
+import { requireOrgContext } from '@/lib/api/auth'
+import { dbError } from '@/app/api/calls/_lib/db'
+import { CALL_LIST_COLUMNS } from '@/app/api/calls/_lib/query'
 
-export async function GET(request: Request) {
-  const supabase = await createClient()
+// GET /api/dashboard/recent-calls?limit=20 — newest real calls (test calls
+// excluded) for the dashboard table and live activity feed.
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+export const runtime = 'nodejs'
 
-  const { searchParams } = new URL(request.url)
-  const limit = Math.min(Number(searchParams.get('limit') ?? 20), 50)
+const LIST_SELECT: string = `${CALL_LIST_COLUMNS}, agents(name)`
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
+const QuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(50).optional().default(20),
+})
 
-  if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+export const GET = handleRoute(async (req: NextRequest) => {
+  const ctx = await requireOrgContext()
+  const { limit } = parseSearchParams(req.nextUrl, QuerySchema)
 
-  const { data: agent } = await supabase
-    .from('agents')
-    .select('elevenlabs_agent_id')
-    .eq('org_id', org.id)
-    .single()
-
-  // Try ElevenLabs
-  if (elConfigured() && agent?.elevenlabs_agent_id) {
-    try {
-      const data = await conversations.list({
-        agent_id: agent.elevenlabs_agent_id,
-        page_size: limit,
-      })
-
-      const calls = (data.conversations ?? []).map((c) => {
-        const startedAt = c.start_time_unix_secs
-          ? new Date(c.start_time_unix_secs * 1000).toISOString()
-          : new Date().toISOString()
-        const endedAt = c.start_time_unix_secs && c.call_duration_secs
-          ? new Date((c.start_time_unix_secs + c.call_duration_secs) * 1000).toISOString()
-          : null
-
-        let sentiment: string | null = 'neutral'
-        if (c.call_successful === 'true') sentiment = 'positive'
-        else if (c.call_successful === 'false') sentiment = 'negative'
-
-        const source = c.conversation_initiation_source ?? ''
-        const direction = source === 'outbound' || source === 'phone_outbound'
-          ? 'outbound' : 'inbound'
-
-        return {
-          id: c.conversation_id,
-          elevenlabs_conversation_id: c.conversation_id,
-          org_id: org.id,
-          agent_id: c.agent_id,
-          caller_number: c.from_phone_number ?? c.to_phone_number ?? null,
-          direction,
-          duration_seconds: Math.round(c.call_duration_secs ?? 0),
-          status: c.status === 'done' || c.call_duration_secs ? 'completed' : c.status ?? 'completed',
-          sentiment,
-          started_at: startedAt,
-          ended_at: endedAt,
-          created_at: startedAt,
-        }
-      })
-
-      return NextResponse.json(calls)
-    } catch (err) {
-      console.error('ElevenLabs recent-calls failed, falling back to DB:', err)
-    }
-  }
-
-  // Fallback: Supabase
-  const { data: calls } = await supabase
+  const { data, error } = await ctx.supabase
     .from('calls')
-    .select('*')
-    .eq('org_id', org.id)
-    .order('started_at', { ascending: false })
+    .select(LIST_SELECT)
+    .eq('org_id', ctx.org.id)
+    .eq('is_test', false)
+    .order('started_at', { ascending: false, nullsFirst: false })
+    .order('id', { ascending: false })
     .limit(limit)
+  if (error) throw dbError(error, 'recent calls')
 
-  return NextResponse.json(calls ?? [])
-}
+  const calls = (data ?? []).map((row) => {
+    const { agents, ...rest } = row as unknown as Record<string, unknown> & { agents?: { name?: string | null } | null }
+    return { ...rest, agent_name: agents?.name ?? null }
+  })
+  return noStore(NextResponse.json(calls))
+})

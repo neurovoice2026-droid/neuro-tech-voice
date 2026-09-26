@@ -1,12 +1,10 @@
 'use client'
 
 import { useTransition } from 'react'
-import { Trash2, Loader2 } from 'lucide-react'
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
+import { Loader2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 
 interface DeleteCallDialogProps {
   open: boolean
@@ -20,49 +18,48 @@ export function DeleteCallDialog({ open, onOpenChange, callId, onDeleted }: Dele
 
   function handleDelete() {
     startTransition(async () => {
-      const res = await fetch(`/api/calls/${callId}`, { method: 'DELETE' })
-      if (res.ok) {
-        toast.success('Call record deleted')
+      try {
+        const res = await fetch(`/api/calls/${encodeURIComponent(callId)}`, { method: 'DELETE' })
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null
+          toast.error(body?.error?.message ?? 'We couldn’t delete this call. Please try again.')
+          return
+        }
+        toast.success('Call deleted')
         onDeleted(callId)
         onOpenChange(false)
-      } else {
-        toast.error('Failed to delete call record')
+      } catch {
+        toast.error('We couldn’t reach the server. Check your connection and try again.')
       }
     })
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => !isPending && onOpenChange(next)}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <div className="rounded-full bg-red-100 p-1.5">
-              <Trash2 className="h-4 w-4 text-red-600" />
-            </div>
-            Delete call record?
+            <span className="rounded-full bg-red-100 p-1.5">
+              <Trash2 aria-hidden="true" className="size-4 text-red-600" />
+            </span>
+            Delete this call?
           </DialogTitle>
           <DialogDescription>
-            This will permanently delete the call record, transcript, and any associated data.
-            This action cannot be undone.
+            The transcript, summary and recording are removed for good, including the copies kept by our voice
+            providers. Bookings and messages from the call stay in place. This can’t be undone.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex gap-3 pt-2">
-          <Button
-            variant="outline"
-            className="flex-1"
-            onClick={() => onOpenChange(false)}
-            disabled={isPending}
-          >
-            Cancel
+        {/* flex-1 only side by side: in the stacked phone layout it would collapse the buttons to their text height. */}
+        <div className="flex flex-col-reverse gap-2 pt-2 max-sm:[&_[data-slot=button]]:h-10 sm:flex-row sm:gap-3">
+          <Button variant="outline" className="sm:flex-1" onClick={() => onOpenChange(false)} disabled={isPending}>
+            Keep call
           </Button>
-          <Button
-            variant="destructive"
-            className="flex-1"
-            onClick={handleDelete}
-            disabled={isPending}
-          >
+          <Button variant="destructive" className="sm:flex-1" onClick={handleDelete} disabled={isPending}>
             {isPending ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Deleting…</>
+              <>
+                <Loader2 aria-hidden="true" className="mr-2 size-4 animate-spin" />
+                Deleting…
+              </>
             ) : (
               'Delete call'
             )}

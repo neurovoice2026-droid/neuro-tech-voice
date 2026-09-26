@@ -1,28 +1,13 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { handleRoute, noStore } from '@/lib/api/http'
+import { requireOrgContext } from '@/lib/api/auth'
+import { listPhoneNumbersForOrg } from '@/lib/twilio/numbers'
 
-// List the organization's purchased phone numbers.
-export async function GET() {
-  const supabase = await createClient()
+// The organization's phone numbers with routing and texting status.
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+export const runtime = 'nodejs'
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
-
-  if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const { data: numbers, error } = await supabase
-    .from('phone_numbers')
-    .select('*, agents(name)')
-    .eq('org_id', org.id)
-    .order('created_at', { ascending: false })
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  return NextResponse.json(numbers ?? [])
-}
+export const GET = handleRoute(async () => {
+  const ctx = await requireOrgContext()
+  const numbers = await listPhoneNumbersForOrg(ctx.supabase, ctx.org.id)
+  return noStore(Response.json(numbers))
+})

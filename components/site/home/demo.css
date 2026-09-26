@@ -1,0 +1,224 @@
+/* ------------------------------------------------------------------ *
+ * #demo — closed is for the door, not the phone.
+ *
+ * Every copy the stage can show is in the markup, stacked in its own
+ * cell. At rest React marks the ones that make up the finished frame of
+ * the moment on screen with `data-on`, and these rules show exactly
+ * those; while a run plays, the timeline (demo-timeline.ts) holds every
+ * copy inline and CSS has no say. The room's light, the stage's text
+ * colours and the clock's figures follow `data-moment` / `data-tone`
+ * and the `--num` / `--d` properties React sets, as transitions.
+ * ------------------------------------------------------------------ */
+
+/* A copy the stage can show: hidden unless it is part of the frame at rest. */
+.pp .home-demo-anim {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.pp .home-demo-anim[data-on] {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* ─── The sub's four phrases ──────────────────────────────────────── *
+ * Each in its moment's ink. While a run plays only the moment being
+ * dialled keeps its colour; when it stops they light again one after
+ * another, night first, the order the sub reads them in. */
+.pp .home-demo-phrase {
+  transition: color 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .home-demo-phrase[data-m="rush"] {
+  color: var(--home-rush-ink);
+  transition-delay: 0.36s;
+}
+
+.pp .home-demo-phrase[data-m="closing"] {
+  color: var(--home-closing-ink);
+  transition-delay: 0.24s;
+}
+
+.pp .home-demo-phrase[data-m="sunday"] {
+  color: var(--home-sunday-ink);
+  transition-delay: 0.12s;
+}
+
+.pp .home-demo-phrase[data-m="night"] {
+  color: var(--home-violet);
+}
+
+.pp .home-demo[data-live] .home-demo-phrase {
+  transition-delay: 0s;
+}
+
+.pp .home-demo[data-live]:not([data-target="rush"]) .home-demo-phrase[data-m="rush"],
+.pp .home-demo[data-live]:not([data-target="closing"]) .home-demo-phrase[data-m="closing"],
+.pp .home-demo[data-live]:not([data-target="sunday"]) .home-demo-phrase[data-m="sunday"],
+.pp .home-demo[data-live]:not([data-target="night"]) .home-demo-phrase[data-m="night"] {
+  color: inherit;
+}
+
+/* ─── The stage's two tones ───────────────────────────────────────── *
+ * Dark text on the rose, green and teal rooms, paper on the night. Every text
+ * colour on the stage is one of these, so a moment change eases them all
+ * at once. */
+.pp .home-demo-stage {
+  --d-ink: var(--home-ink);
+  --d-dim: var(--home-muted);
+  --d-agent: var(--home-violet);
+  --d-caller: var(--home-caller);
+  --d-answer: var(--home-violet);
+  /* The moved slot in the after-closing call: 6.50:1 on its green room. */
+  --d-moved: #065f46;
+  --d-rule: rgb(20 10 36 / 0.1);
+  --d-tile: rgb(255 255 255 / 0.72);
+  --d-sign-open-bg: var(--home-ink);
+  --d-sign-open-fg: #fff;
+  --d-sign-closed-bg: #fff;
+  --d-sign-closed-fg: var(--home-ink);
+  --d-sign-closed-ring: rgb(20 10 36 / 0.2);
+}
+
+.pp .home-demo-stage[data-tone="night"] {
+  --d-ink: var(--home-paper);
+  --d-dim: var(--home-paper-dim);
+  --d-agent: var(--home-lilac);
+  --d-caller: var(--home-caller-lit);
+  --d-answer: var(--home-lilac);
+  --d-moved: var(--home-settled-lit);
+  --d-rule: rgb(255 255 255 / 0.12);
+  --d-tile: rgb(255 255 255 / 0.08);
+  --d-sign-open-bg: var(--home-paper);
+  --d-sign-open-fg: var(--home-ink);
+  --d-sign-closed-bg: transparent;
+  --d-sign-closed-fg: var(--home-paper);
+  --d-sign-closed-ring: rgb(237 236 241 / 0.4);
+}
+
+.pp .home-demo-tone {
+  transition: color 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* The rooms: four paints, one lit. Opacity only, so the crossfade is a
+   composite, never a repaint of the gradient. */
+.pp .home-demo-ground {
+  opacity: 0;
+  transition: opacity 0.8s cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.pp .home-demo-ground[data-lit] {
+  opacity: 1;
+}
+
+/* The door sign swings from its nail. */
+.pp .home-demo-sign {
+  transform-origin: 50% 0;
+}
+
+.pp .home-demo-sign-face[data-sign="open"] {
+  background: var(--d-sign-open-bg);
+  color: var(--d-sign-open-fg);
+}
+
+.pp .home-demo-sign-face[data-sign="closed"] {
+  background: var(--d-sign-closed-bg);
+  color: var(--d-sign-closed-fg);
+  box-shadow: inset 0 0 0 1px var(--d-sign-closed-ring);
+}
+
+.pp .home-demo-sign-face {
+  transition:
+    background-color 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+    color 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ─── The clock ───────────────────────────────────────────────────── *
+ * Four figures and the orb for a colon, sized off the stage's own width
+ * (the picture box is an inline-size container) so the lockup fits a
+ * 320px phone and tops out on a desktop. A figure column is exactly one
+ * tabular figure wide — Instrument Sans's figures are 0.6em, measured —
+ * and one cell tall; its strip holds 0–9 and 0 again and stands at
+ * `--d` at rest. */
+.pp .home-demo-picture {
+  container-type: inline-size;
+}
+
+.pp .home-demo-lockup {
+  --F: clamp(48px, 20.6cqi, 168px);
+  --O: clamp(104px, 43.4cqi, 232px);
+  --G: clamp(6px, 2.5cqi, 28px);
+  gap: var(--G);
+  font-size: var(--F);
+}
+
+@supports not (width: 1cqi) {
+  .pp .home-demo-lockup {
+    --F: clamp(48px, 17vw, 168px);
+    --O: clamp(104px, 36vw, 232px);
+    --G: clamp(6px, 2vw, 28px);
+  }
+}
+
+.pp .home-demo-col {
+  display: block;
+  width: 0.6em;
+  height: 1.1em;
+  overflow: clip;
+}
+
+.pp .home-demo-strip {
+  display: block;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1em;
+  letter-spacing: 0;
+  text-align: center;
+  transform: translateY(calc(var(--d) * -100% / 11));
+  /* The gradient repeats once per cell, so every figure carries all of it. */
+  background: var(--num) 0 0 / 100% 1.1em repeat-y;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.pp .home-demo-strip > span {
+  display: block;
+  height: 1.1em;
+}
+
+.pp .home-demo-orb {
+  width: var(--O);
+  height: var(--O);
+}
+
+/* The rings that leave the orb when the phone rings. Hidden at rest. */
+.pp .home-demo-wave {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  margin: auto;
+  width: calc(var(--O) * 1.85);
+  height: calc(var(--O) * 1.85);
+  border-radius: 50%;
+  border: 1.5px solid var(--wave);
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(0.54);
+  pointer-events: none;
+}
+
+/* ─── A weak device, and less motion ──────────────────────────────── *
+ * The room and the text cut instead of easing: on a weak device an
+ * opacity crossfade of a gradient the size of the stage is a full-stage
+ * composite a frame, and with reduced motion (also forced as the still
+ * tier) a pick switches to its finished frame at once. */
+:root[data-tier="lite"] .pp .home-demo-ground,
+:root[data-tier="lite"] .pp .home-demo-tone,
+:root[data-tier="lite"] .pp .home-demo-sign-face,
+:root[data-tier="still"] .pp .home-demo-ground,
+:root[data-tier="still"] .pp .home-demo-tone,
+:root[data-tier="still"] .pp .home-demo-sign-face {
+  transition: none;
+}

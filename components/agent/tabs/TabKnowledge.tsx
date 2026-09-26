@@ -1,252 +1,218 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useCallback, useId, useRef, useState } from 'react'
+import { formatDistanceToNow } from 'date-fns'
+import { toast } from 'sonner'
+import {
+  AlertCircle, AlertTriangle, BookOpen, CheckCircle2, ExternalLink, FileText, Globe, Link2, Loader2,
+  MoreHorizontal, RefreshCw, Replace, RotateCcw, Search, Sparkles, Trash2, Upload, X,
+} from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  FileText, Globe, Trash2, Upload, Link2, CheckCircle2,
-  AlertCircle, Loader2, Info, RefreshCw,
-} from 'lucide-react'
-import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import type { KnowledgeDocument } from '@/types'
-import type { useKnowledge, UploadingFile } from '@/hooks/useKnowledge'
-import { formatFileSize } from '@/lib/utils'
-
-type KnowledgeHook = ReturnType<typeof useKnowledge>
-
-const ACCEPTED = '.pdf,.txt,.docx,.md'
-const MAX_SIZE_MB = 10
-const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { useKnowledge, useKnowledgeSearch, type KnowledgeHook, type UploadItem } from '@/hooks/useKnowledge'
+import {
+  KNOWLEDGE_ACCEPT,
+  KNOWLEDGE_MAX_FILE_BYTES,
+  KNOWLEDGE_MAX_QUERY_LENGTH,
+  formatMegabytes,
+  isDocumentInProgress,
+  isSearchableDocument,
+  matchStrength,
+  type KnowledgeDocumentView,
+  type KnowledgeSearchResult,
+} from '@/lib/knowledge/shared'
+import { cn, formatFileSize } from '@/lib/utils'
 
 interface TabKnowledgeProps {
-  hook: KnowledgeHook
+  /** Shared with the page (tab badge); the tab creates its own when omitted. */
+  hook?: KnowledgeHook
+}
+
+const TYPE_LABELS: Record<KnowledgeDocumentView['type'], string> = {
+  pdf: 'PDF',
+  docx: 'Word',
+  txt: 'Text',
+  md: 'Markdown',
+  url: 'Web page',
 }
 
 export function TabKnowledge({ hook }: TabKnowledgeProps) {
-  const { docs, isLoading, uploading, uploadFiles, addUrl, deleteDoc, refetch } = hook
-  const [urlInput, setUrlInput] = useState('')
-  const [isAddingUrl, setIsAddingUrl] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<KnowledgeDocument | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const own = useKnowledge({ enabled: !hook })
+  const kb = hook ?? own
+  const { docs, capabilities, isLoading, loadError } = kb
 
-  const validateFiles = (files: File[]): File[] => {
-    const valid: File[] = []
-    for (const f of files) {
-      const ext = f.name.split('.').pop()?.toLowerCase() ?? ''
-      if (!['pdf', 'txt', 'docx', 'md'].includes(ext)) {
-        continue
-      }
-      if (f.size > MAX_SIZE_BYTES) {
-        continue
-      }
-      valid.push(f)
-    }
-    return valid
-  }
+  const [deleteTarget, setDeleteTarget] = useState<KnowledgeDocumentView | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const replaceInput = useRef<HTMLInputElement>(null)
+  const [replaceTarget, setReplaceTarget] = useState<KnowledgeDocumentView | null>(null)
 
-  const handleFiles = useCallback(async (files: FileList | File[]) => {
-    const arr = Array.from(files)
-    const valid = validateFiles(arr)
-    if (valid.length === 0) return
-    await uploadFiles(valid)
-  }, [uploadFiles])
+  // Documents being refreshed still answer calls with their current version.
+  const readyDocs = docs.filter(isSearchableDocument)
+  const passages = readyDocs.reduce((total, d) => total + d.chunk_count, 0)
+  const aiOff = capabilities !== null && !capabilities.search
 
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
-    if (e.dataTransfer.files.length > 0) {
-      handleFiles(e.dataTransfer.files)
-    }
-  }, [handleFiles])
-
-  const onDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(true)
-  }
-
-  const onDragLeave = () => setIsDragging(false)
-
-  const handleAddUrl = async () => {
-    if (!urlInput.trim()) return
-    setIsAddingUrl(true)
-    const ok = await addUrl(urlInput.trim())
-    if (ok) setUrlInput('')
-    setIsAddingUrl(false)
-  }
-
-  const handleDelete = async () => {
+  const confirmDelete = async () => {
     if (!deleteTarget) return
-    await deleteDoc(deleteTarget.id)
-    setDeleteTarget(null)
+    setIsDeleting(true)
+    const ok = await kb.deleteDoc(deleteTarget.id)
+    setIsDeleting(false)
+    if (ok) setDeleteTarget(null)
   }
 
-  const totalDocs = docs.length
-  const totalSize = docs.reduce((acc, d) => acc + d.size_bytes, 0)
+  const startReplace = (doc: KnowledgeDocumentView) => {
+    setReplaceTarget(doc)
+    replaceInput.current?.click()
+  }
+
+  const onReplaceFile = (files: FileList | null) => {
+    if (files && files.length > 0 && replaceTarget) {
+      const queued = kb.addFiles(files, { replaces: replaceTarget })
+      if (queued > 0) {
+        toast.info(`Uploading the new version of “${replaceTarget.name}”`, {
+          description: 'Your agent keeps using the current version until the new one is ready.',
+        })
+      }
+    }
+    setReplaceTarget(null)
+    if (replaceInput.current) replaceInput.current.value = ''
+  }
 
   return (
     <div className="space-y-6">
-      {/* Stats */}
-      <div className="flex gap-4">
-        <Card className="flex-1">
-          <CardContent className="py-4">
-            <p className="text-2xl font-bold">{totalDocs}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Documents</p>
-          </CardContent>
-        </Card>
-        <Card className="flex-1">
-          <CardContent className="py-4">
-            <p className="text-2xl font-bold">{formatFileSize(totalSize)}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Total size</p>
-          </CardContent>
-        </Card>
-        <Card className="flex-1">
-          <CardContent className="py-4">
-            <p className="text-2xl font-bold">{docs.filter(d => d.status === 'ready').length}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Ready</p>
-          </CardContent>
-        </Card>
+      {/* Summary */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <SummaryStat label="Documents" value={isLoading ? null : docs.length} />
+        <SummaryStat label="Ready for calls" value={isLoading ? null : readyDocs.length} />
+        <SummaryStat label="Passages" value={isLoading ? null : passages} />
       </div>
 
-      {/* Upload Zone */}
+      {aiOff && (
+        <Alert>
+          <Sparkles aria-hidden="true" />
+          <AlertTitle>Documents are saved, answers come next</AlertTitle>
+          <AlertDescription>
+            We read and store everything you add right away. Your agent starts answering from it as soon as the
+            AI service is switched on, and waiting documents finish automatically the next time you open this page.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <AddKnowledgeCard kb={kb} />
+
+      {/* Documents */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Upload Files</CardTitle>
-          <CardDescription>
-            Supported: PDF, TXT, DOCX, MD — max {MAX_SIZE_MB}MB per file
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
-            onClick={() => fileInputRef.current?.click()}
-            className={[
-              'flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 cursor-pointer transition-colors',
-              isDragging ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/50 hover:bg-muted/30',
-            ].join(' ')}
+        <CardHeader className="flex flex-row items-start justify-between gap-3">
+          <div className="min-w-0">
+            <CardTitle className="text-base">Your documents</CardTitle>
+            <CardDescription>What your agent can answer callers from.</CardDescription>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => void kb.refetch()}
+            disabled={kb.isRefreshing || isLoading}
+            aria-label="Refresh the list"
           >
-            <Upload className={['size-8 mb-3', isDragging ? 'text-primary' : 'text-muted-foreground'].join(' ')} />
-            <p className="text-sm font-medium">
-              {isDragging ? 'Drop files here' : 'Click or drag & drop files'}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              PDF, TXT, DOCX, MD up to {MAX_SIZE_MB}MB
-            </p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={ACCEPTED}
-              multiple
-              className="hidden"
-              onChange={e => e.target.files && handleFiles(e.target.files)}
-            />
-          </div>
-
-          {/* Upload progress */}
-          {uploading.length > 0 && (
-            <div className="space-y-2">
-              {uploading.map(u => (
-                <UploadProgress key={u.id} item={u} />
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Add URL */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Add URL</CardTitle>
-          <CardDescription>Scrape a webpage and add it to your knowledge base.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-2">
-            <Input
-              value={urlInput}
-              onChange={e => setUrlInput(e.target.value)}
-              placeholder="https://example.com/faq"
-              className="flex-1"
-              onKeyDown={e => e.key === 'Enter' && handleAddUrl()}
-            />
-            <Button
-              onClick={handleAddUrl}
-              disabled={!urlInput.trim() || isAddingUrl}
-              className="shrink-0"
-            >
-              {isAddingUrl ? <Loader2 className="size-4 animate-spin" /> : <Link2 className="size-4" />}
-              <span className="ml-1.5">{isAddingUrl ? 'Adding…' : 'Add URL'}</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Document List */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-base">Knowledge Base</CardTitle>
-            <CardDescription>Files and URLs your agent can reference.</CardDescription>
-          </div>
-          <Button variant="ghost" size="sm" onClick={refetch}>
-            <RefreshCw className="size-3.5" />
+            <RefreshCw className={cn('size-3.5', kb.isRefreshing && 'animate-spin')} aria-hidden="true" />
           </Button>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="space-y-3">
+            <div className="space-y-2" aria-busy="true" aria-label="Loading documents">
               {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-14 rounded-lg" />
+                <div key={i} className="flex items-center gap-3 rounded-lg border p-3">
+                  <Skeleton className="size-9 shrink-0 rounded-md" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                </div>
               ))}
+            </div>
+          ) : loadError && docs.length === 0 ? (
+            <div role="alert" className="flex flex-col items-center gap-3 py-10 text-center">
+              <AlertCircle className="size-6 text-destructive" aria-hidden="true" />
+              <p className="text-sm text-muted-foreground">{loadError}</p>
+              <Button variant="outline" size="sm" onClick={() => void kb.refetch()} disabled={kb.isRefreshing}>
+                {kb.isRefreshing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RotateCcw aria-hidden="true" />}
+                Try again
+              </Button>
             </div>
           ) : docs.length === 0 ? (
-            <div className="py-12 text-center">
-              <FileText className="size-8 text-muted-foreground mx-auto mb-3" />
-              <p className="text-sm font-medium">No documents yet</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Upload files or add URLs to help your agent answer questions.
-              </p>
-            </div>
+            <EmptyState
+              icon={BookOpen}
+              title="Teach your agent about your business"
+              description="Add your price list, opening hours, policies, FAQs or menu, as files or web pages. Your agent answers callers from them, in its own words."
+            />
           ) : (
-            <div className="space-y-2">
-              {docs.map(doc => (
-                <DocRow key={doc.id} doc={doc} onDelete={() => setDeleteTarget(doc)} />
+            <ul className="space-y-2">
+              {docs.map((doc) => (
+                <DocumentRow
+                  key={doc.id}
+                  doc={doc}
+                  busy={kb.busyIds.includes(doc.id)}
+                  searchAvailable={capabilities?.search ?? false}
+                  onRetry={() => void kb.resyncDoc(doc.id)}
+                  onReplace={() => startReplace(doc)}
+                  onDelete={() => setDeleteTarget(doc)}
+                />
               ))}
-            </div>
+            </ul>
           )}
+          <input
+            ref={replaceInput}
+            type="file"
+            accept={KNOWLEDGE_ACCEPT}
+            className="hidden"
+            tabIndex={-1}
+            aria-hidden="true"
+            onChange={(e) => onReplaceFile(e.target.files)}
+          />
         </CardContent>
       </Card>
 
-      {/* Tips */}
+      <AskDocumentsCard readyCount={readyDocs.length} aiOff={aiOff} loading={isLoading} />
+
       <Card className="border-dashed">
-        <CardContent className="py-4 flex gap-3">
-          <Info className="size-4 text-muted-foreground mt-0.5 shrink-0" />
-          <div className="text-xs text-muted-foreground space-y-1">
-            <p>Your agent uses these documents to answer caller questions accurately.</p>
-            <p>For best results: use clear, well-structured documents. Avoid scanned images.</p>
+        <CardContent className="flex gap-3 text-xs text-muted-foreground">
+          <BookOpen className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <div className="space-y-1">
+            <p>Clear headings and short sections help your agent find the right answer. Text-based PDFs work; scanned pages don’t.</p>
+            <p>Your agent doesn’t learn from calls and never reads a document out word for word. When something isn’t written down, it says so and offers to take a message.</p>
           </div>
         </CardContent>
       </Card>
 
-      {/* Delete confirmation dialog */}
-      <Dialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && !isDeleting && setDeleteTarget(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete document?</DialogTitle>
+            <DialogTitle>Remove this document?</DialogTitle>
             <DialogDescription>
-              &quot;{deleteTarget?.name}&quot; will be removed from your agent&apos;s knowledge base. This cannot be undone.
+              “{deleteTarget?.name}” will be removed from your agent’s knowledge. Calls from now on won’t use it.
+              This can’t be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => void confirmDelete()} disabled={isDeleting}>
+              {isDeleting && <Loader2 className="animate-spin" aria-hidden="true" />}
+              {isDeleting ? 'Removing…' : 'Remove'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -254,65 +220,522 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
   )
 }
 
-function UploadProgress({ item }: { item: UploadingFile }) {
+function SummaryStat({ label, value }: { label: string; value: number | null }) {
   return (
-    <div className="space-y-1.5 rounded-lg border p-3 bg-muted/30">
-      <div className="flex items-center gap-2 text-sm">
-        {item.status === 'error' ? (
-          <AlertCircle className="size-4 text-destructive shrink-0" />
-        ) : item.status === 'done' ? (
-          <CheckCircle2 className="size-4 text-green-500 shrink-0" />
+    <Card size="sm">
+      <CardContent className="px-3 sm:px-4">
+        {value === null ? (
+          <Skeleton className="h-7 w-10" />
         ) : (
-          <Loader2 className="size-4 animate-spin shrink-0" />
+          <p className="text-xl font-semibold tabular-nums sm:text-2xl">{value.toLocaleString('en-US')}</p>
         )}
-        <span className="truncate flex-1 font-medium">{item.name}</span>
-        <span className="text-xs text-muted-foreground shrink-0">
-          {item.status === 'error' ? 'Failed' : item.status === 'done' ? 'Done' : `${item.progress}%`}
-        </span>
-      </div>
-      {item.status === 'uploading' && (
-        <Progress value={item.progress} className="h-1" />
-      )}
-      {item.status === 'error' && item.error && (
-        <p className="text-xs text-destructive">{item.error}</p>
-      )}
-    </div>
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">{label}</p>
+      </CardContent>
+    </Card>
   )
 }
 
-function DocRow({ doc, onDelete }: { doc: KnowledgeDocument; onDelete: () => void }) {
-  const Icon = doc.type === 'url' ? Globe : FileText
-  const statusIcon = {
-    ready: <CheckCircle2 className="size-3.5 text-green-500" />,
-    processing: <Loader2 className="size-3.5 animate-spin text-muted-foreground" />,
-    failed: <AlertCircle className="size-3.5 text-destructive" />,
-  }[doc.status]
+// ─── Add files and pages ─────────────────────────────────────────────────────
+
+function AddKnowledgeCard({ kb }: { kb: KnowledgeHook }) {
+  const [url, setUrl] = useState('')
+  const [isAddingUrl, setIsAddingUrl] = useState(false)
+  const urlId = useId()
+  const hintId = useId()
+
+  const submitUrl = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!url.trim() || isAddingUrl) return
+    setIsAddingUrl(true)
+    const ok = await kb.addUrl(url.trim())
+    setIsAddingUrl(false)
+    if (ok) setUrl('')
+  }
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors">
-      <Icon className="size-5 text-muted-foreground shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{doc.name}</p>
-        <div className="flex items-center gap-2 mt-0.5">
-          {statusIcon}
-          <span className="text-xs text-muted-foreground capitalize">{doc.status}</span>
-          {doc.size_bytes > 0 && (
-            <>
-              <span className="text-xs text-muted-foreground">·</span>
-              <span className="text-xs text-muted-foreground">{formatFileSize(doc.size_bytes)}</span>
-            </>
-          )}
-          <Badge variant="outline" className="text-xs">{doc.type.toUpperCase()}</Badge>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Add knowledge</CardTitle>
+        <CardDescription>Anything a caller might ask about: prices, services, hours, policies, directions.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <FileDropZone onFiles={(files) => kb.addFiles(files)} />
+
+        {kb.uploads.length > 0 && (
+          <ul className="space-y-2" aria-live="polite">
+            {kb.uploads.map((item) => (
+              <KnowledgeUploadRow
+                key={item.id}
+                item={item}
+                onRetry={() => kb.retryUpload(item.id)}
+                onCancel={() => kb.cancelUpload(item.id)}
+                onDismiss={() => kb.dismissUpload(item.id)}
+              />
+            ))}
+          </ul>
+        )}
+
+        <div className="flex items-center gap-3 text-xs text-muted-foreground" aria-hidden="true">
+          <span className="h-px flex-1 bg-border" />
+          or add a web page
+          <span className="h-px flex-1 bg-border" />
         </div>
-      </div>
+
+        <form onSubmit={(e) => void submitUrl(e)} className="space-y-2">
+          <Label htmlFor={urlId}>Web page address</Label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              id={urlId}
+              type="text"
+              inputMode="url"
+              autoComplete="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://yourbusiness.com/faq"
+              aria-describedby={hintId}
+              className="h-9 sm:flex-1"
+              maxLength={2048}
+            />
+            <Button type="submit" className="h-9 shrink-0" disabled={!url.trim() || isAddingUrl}>
+              {isAddingUrl ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Link2 aria-hidden="true" />}
+              {isAddingUrl ? 'Adding…' : 'Add page'}
+            </Button>
+          </div>
+          <p id={hintId} className="text-xs text-muted-foreground">
+            We read the page as it is now. When it changes, use Refresh on it.
+          </p>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
+export function FileDropZone({ onFiles, compact = false }: { onFiles: (files: File[]) => void; compact?: boolean }) {
+  const input = useRef<HTMLInputElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const hintId = useId()
+
+  const onDrop = useCallback((event: React.DragEvent) => {
+    event.preventDefault()
+    setIsDragging(false)
+    if (event.dataTransfer.files.length > 0) onFiles(Array.from(event.dataTransfer.files))
+  }, [onFiles])
+
+  return (
+    <>
       <button
         type="button"
-        onClick={onDelete}
-        className="p-1.5 rounded-md hover:bg-destructive/10 hover:text-destructive transition-colors"
-        title="Delete document"
+        onClick={() => input.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault()
+          setIsDragging(true)
+        }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={onDrop}
+        aria-describedby={hintId}
+        className={cn(
+          'flex w-full flex-col items-center justify-center rounded-xl border-2 border-dashed text-center transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
+          compact ? 'px-4 py-6' : 'px-4 py-8 sm:py-10',
+          isDragging ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/50 hover:bg-muted/30'
+        )}
       >
-        <Trash2 className="size-4" />
+        <Upload className={cn('mb-3 size-7', isDragging ? 'text-primary' : 'text-muted-foreground')} aria-hidden="true" />
+        <span className="text-sm font-medium">{isDragging ? 'Drop to upload' : 'Drop files here or choose them'}</span>
+        <span id={hintId} className="mt-1 text-xs text-muted-foreground">
+          PDF, Word, TXT or Markdown · up to {formatMegabytes(KNOWLEDGE_MAX_FILE_BYTES)} each
+        </span>
       </button>
-    </div>
+      <input
+        ref={input}
+        type="file"
+        accept={KNOWLEDGE_ACCEPT}
+        multiple
+        className="hidden"
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) onFiles(Array.from(e.target.files))
+          e.target.value = ''
+        }}
+      />
+    </>
+  )
+}
+
+const UPLOAD_STAGE_LABELS: Record<UploadItem['stage'], string> = {
+  queued: 'Waiting…',
+  preparing: 'Preparing…',
+  uploading: 'Uploading',
+  registering: 'Saving…',
+  done: 'Uploaded',
+  error: 'Failed',
+}
+
+export function KnowledgeUploadRow({
+  item,
+  doc,
+  onRetry,
+  onCancel,
+  onDismiss,
+}: {
+  item: UploadItem
+  /** The document created by this upload, to show how reading it went. */
+  doc?: KnowledgeDocumentView | null
+  onRetry: () => void
+  onCancel: () => void
+  onDismiss: () => void
+}) {
+  const inFlight = item.stage !== 'done' && item.stage !== 'error'
+  // Once the file is being saved as a document it can't be cancelled (remove the document instead).
+  const cancellable = item.stage === 'queued' || item.stage === 'preparing' || item.stage === 'uploading'
+  return (
+    <li className="rounded-lg border bg-muted/30 p-3">
+      <div className="flex items-center gap-2 text-sm">
+        {item.stage === 'error' ? (
+          <AlertCircle className="size-4 shrink-0 text-destructive" aria-hidden="true" />
+        ) : item.stage === 'done' ? (
+          <CheckCircle2 className="size-4 shrink-0 text-green-600" aria-hidden="true" />
+        ) : (
+          <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
+        )}
+        <span className="min-w-0 flex-1 truncate font-medium" title={item.name}>
+          {item.name}
+        </span>
+        <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+          {item.stage === 'uploading' ? `${item.progress}%` : UPLOAD_STAGE_LABELS[item.stage]}
+        </span>
+        {inFlight ? (
+          cancellable ? (
+            <Button variant="ghost" size="icon-xs" onClick={onCancel} aria-label={`Cancel upload of ${item.name}`}>
+              <X aria-hidden="true" />
+            </Button>
+          ) : (
+            <span className="size-6 shrink-0" aria-hidden="true" />
+          )
+        ) : (
+          <Button variant="ghost" size="icon-xs" onClick={onDismiss} aria-label={`Dismiss ${item.name}`}>
+            <X aria-hidden="true" />
+          </Button>
+        )}
+      </div>
+      {inFlight && (
+        <Progress
+          value={item.stage === 'uploading' || item.stage === 'registering' ? item.progress : null}
+          className="mt-2"
+          aria-label={`Upload progress for ${item.name}`}
+        />
+      )}
+      {item.stage === 'error' && (
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-destructive">{item.error}</p>
+          <Button variant="outline" size="xs" onClick={onRetry}>
+            <RotateCcw aria-hidden="true" />
+            Try again
+          </Button>
+        </div>
+      )}
+      {item.stage === 'done' && doc && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <KnowledgeStatusPill doc={doc} />
+          {doc.state === 'failed' && doc.error_message && <span className="text-destructive">{doc.error_message}</span>}
+        </div>
+      )}
+    </li>
+  )
+}
+
+// ─── Documents ───────────────────────────────────────────────────────────────
+
+export function KnowledgeStatusPill({ doc }: { doc: KnowledgeDocumentView }) {
+  if (doc.state === 'ready') {
+    return (
+      <Badge variant="outline" className="border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400">
+        <CheckCircle2 aria-hidden="true" />
+        Ready · {doc.chunk_count.toLocaleString('en-US')} {doc.chunk_count === 1 ? 'passage' : 'passages'}
+      </Badge>
+    )
+  }
+  if (doc.state === 'failed') {
+    return (
+      <Badge variant="destructive">
+        <AlertCircle aria-hidden="true" />
+        Couldn’t read
+      </Badge>
+    )
+  }
+  if (doc.state === 'refreshing') {
+    return (
+      <Badge variant="secondary">
+        <Loader2 className="animate-spin" aria-hidden="true" />
+        {doc.type === 'url' ? 'Refreshing page…' : 'Reading again…'}
+      </Badge>
+    )
+  }
+  if (doc.state === 'waiting_for_ai') {
+    return (
+      <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300">
+        <Sparkles aria-hidden="true" />
+        Waiting for AI setup
+      </Badge>
+    )
+  }
+  if (doc.stuck) {
+    return (
+      <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300">
+        <AlertTriangle aria-hidden="true" />
+        Taking longer than usual
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="secondary">
+      <Loader2 className="animate-spin" aria-hidden="true" />
+      {doc.type === 'url' ? 'Reading page…' : 'Reading…'}
+    </Badge>
+  )
+}
+
+function updatedLabel(doc: KnowledgeDocumentView): string | null {
+  const at = Date.parse(doc.updated_at ?? doc.created_at)
+  if (!Number.isFinite(at)) return null
+  return `Updated ${formatDistanceToNow(at, { addSuffix: true })}`
+}
+
+function hostOf(url: string | null): string | null {
+  if (!url) return null
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return null
+  }
+}
+
+function DocumentRow({
+  doc,
+  busy,
+  searchAvailable,
+  onRetry,
+  onReplace,
+  onDelete,
+}: {
+  doc: KnowledgeDocumentView
+  busy: boolean
+  searchAvailable: boolean
+  onRetry: () => void
+  onReplace: () => void
+  onDelete: () => void
+}) {
+  const Icon = doc.type === 'url' ? Globe : FileText
+  const updated = updatedLabel(doc)
+  const host = hostOf(doc.url)
+  const processing = isDocumentInProgress(doc)
+  const showRetry = doc.state === 'failed' || doc.stuck || (doc.state === 'waiting_for_ai' && searchAvailable)
+  const refreshWarning = doc.state === 'ready' && doc.error_message
+
+  return (
+    <li className="rounded-lg border p-3 transition-colors hover:bg-muted/30">
+      <div className="flex items-start gap-3">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted" aria-hidden="true">
+          <Icon className="size-4 text-muted-foreground" />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium" title={doc.name}>
+            {doc.name}
+          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <KnowledgeStatusPill doc={doc} />
+            <span>{TYPE_LABELS[doc.type]}</span>
+            {host && <span className="max-w-[12rem] truncate">{host}</span>}
+            {doc.size_bytes > 0 && <span>{formatFileSize(doc.size_bytes)}</span>}
+            {updated && <span className="hidden sm:inline">{updated}</span>}
+          </div>
+
+          {doc.state === 'failed' && doc.error_message && (
+            <p className="mt-2 text-xs text-destructive">{doc.error_message}</p>
+          )}
+          {doc.state === 'waiting_for_ai' && (
+            <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">
+              {searchAvailable
+                ? 'The AI service is on now. Finish this document so your agent can use it.'
+                : 'Read and saved. Your agent can use it once the AI service is switched on.'}
+            </p>
+          )}
+          {doc.state === 'refreshing' && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {`Your agent keeps answering from the current version until this finishes${
+                doc.type === 'url' ? ', then uses what the page says now' : ''
+              }.`}
+            </p>
+          )}
+          {doc.state === 'processing' && doc.stuck && (
+            <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">
+              {doc.type === 'url'
+                ? 'This is taking longer than it should. Try again, and if it keeps happening, add a more specific page.'
+                : 'This is taking longer than it should. Try again, and if it keeps happening, upload a smaller file.'}
+            </p>
+          )}
+          {refreshWarning && <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">{doc.error_message}</p>}
+          {doc.state === 'ready' && !refreshWarning && doc.providers.error && (
+            <p className="mt-2 text-xs text-muted-foreground">{doc.providers.error}</p>
+          )}
+
+          {showRetry && (
+            <Button variant="outline" size="xs" className="mt-2" onClick={onRetry} disabled={busy}>
+              {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RotateCcw aria-hidden="true" />}
+              {doc.state === 'waiting_for_ai' ? 'Finish now' : 'Try again'}
+            </Button>
+          )}
+        </div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="flex size-8 shrink-0 items-center justify-center rounded-md outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
+            aria-label={`Actions for ${doc.name}`}
+            disabled={busy}
+          >
+            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <MoreHorizontal className="size-4" aria-hidden="true" />}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={onRetry} disabled={processing}>
+              <RefreshCw aria-hidden="true" />
+              {doc.type === 'url' ? 'Refresh from website' : 'Read again'}
+            </DropdownMenuItem>
+            {doc.type !== 'url' && (
+              <DropdownMenuItem onClick={onReplace} disabled={processing}>
+                <Replace aria-hidden="true" />
+                Replace with new file
+              </DropdownMenuItem>
+            )}
+            {doc.url && (
+              <DropdownMenuItem onClick={() => window.open(doc.url ?? '', '_blank', 'noopener,noreferrer')}>
+                <ExternalLink aria-hidden="true" />
+                Open page
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={onDelete}>
+              <Trash2 aria-hidden="true" />
+              Remove
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </li>
+  )
+}
+
+// ─── Ask your documents ──────────────────────────────────────────────────────
+
+const STRENGTH_LABELS = { strong: 'Strong match', good: 'Good match', possible: 'Possible match' } as const
+
+function AskDocumentsCard({ readyCount, aiOff, loading }: { readyCount: number; aiOff: boolean; loading: boolean }) {
+  const { results, lastQuery, isSearching, error, search } = useKnowledgeSearch()
+  const [query, setQuery] = useState('')
+  const inputId = useId()
+  const disabled = loading || aiOff || readyCount === 0
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!disabled && query.trim().length >= 2) void search(query)
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Ask your documents</CardTitle>
+        <CardDescription>
+          Type a question a caller might ask. You’ll see the passages your agent would answer from.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <form onSubmit={submit} className="space-y-2">
+          <Label htmlFor={inputId} className="sr-only">
+            Question
+          </Label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              id={inputId}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="e.g. Do you have parking?"
+              maxLength={KNOWLEDGE_MAX_QUERY_LENGTH}
+              disabled={disabled}
+              className="h-9 sm:flex-1"
+            />
+            <Button type="submit" variant="secondary" className="h-9 shrink-0" disabled={disabled || isSearching || query.trim().length < 2}>
+              {isSearching ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Search aria-hidden="true" />}
+              {isSearching ? 'Searching…' : 'Search'}
+            </Button>
+          </div>
+          {!loading && aiOff && (
+            <p className="text-xs text-muted-foreground">Available once the AI service is switched on.</p>
+          )}
+          {!loading && !aiOff && readyCount === 0 && (
+            <p className="text-xs text-muted-foreground">Once a document is ready, you can test questions here.</p>
+          )}
+        </form>
+
+        <div aria-live="polite" aria-busy={isSearching}>
+          {isSearching && !results ? (
+            <div className="space-y-2">
+              <Skeleton className="h-20 w-full rounded-lg" />
+              <Skeleton className="h-20 w-full rounded-lg" />
+            </div>
+          ) : error ? (
+            <p role="alert" className="text-sm text-destructive">{error}</p>
+          ) : results && results.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-4 text-sm">
+              <p className="font-medium">Nothing in your documents answers “{lastQuery}”.</p>
+              <p className="mt-1 text-muted-foreground">
+                On a call, your agent would say it doesn’t have that information and offer to take a message.
+                Add a document that covers it if callers ask this often.
+              </p>
+            </div>
+          ) : results ? (
+            <ol className={cn('space-y-3', isSearching && 'opacity-60')}>
+              {results.map((result, index) => (
+                <SearchResultItem key={result.chunk_id} result={result} rank={index + 1} />
+              ))}
+            </ol>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function SearchResultItem({ result, rank }: { result: KnowledgeSearchResult; rank: number }) {
+  const [expanded, setExpanded] = useState(false)
+  const strength = matchStrength(result.similarity)
+  const long = result.content.length > 320
+  const text = expanded || !long ? result.content : `${result.content.slice(0, 300).trimEnd()}…`
+
+  return (
+    <li className="rounded-lg border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+          <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span className="sr-only">Result {rank}: </span>
+          <span className="truncate">{result.document_name}</span>
+        </p>
+        <Badge
+          variant="outline"
+          className={cn(
+            strength === 'strong' && 'border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400',
+            strength === 'possible' && 'text-muted-foreground'
+          )}
+        >
+          {STRENGTH_LABELS[strength]} · {Math.round(result.similarity * 100)}%
+        </Badge>
+      </div>
+      {result.heading && <p className="mt-1 truncate text-xs text-muted-foreground">{result.heading}</p>}
+      <p className="mt-2 whitespace-pre-line text-sm leading-relaxed">{text}</p>
+      {long && (
+        <Button variant="link" size="xs" className="mt-1 h-auto px-0" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}>
+          {expanded ? 'Show less' : 'Show the whole passage'}
+        </Button>
+      )}
+    </li>
   )
 }

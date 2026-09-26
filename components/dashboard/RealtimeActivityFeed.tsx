@@ -1,87 +1,101 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { PhoneIncoming, CheckCircle2, XCircle, Clock } from 'lucide-react'
+import Link from 'next/link'
+import { PhoneIncoming, PhoneMissed, PhoneOutgoing } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { cn, formatDuration, formatPhoneNumber } from '@/lib/utils'
+import { Skeleton } from '@/components/ui/skeleton'
 import { LiveDot } from '@/components/shared/LiveDot'
-import type { Call } from '@/types'
+import { cn, formatDuration, formatPhoneNumber } from '@/lib/utils'
+import { OutcomeChip, callerLabel } from '@/components/calls/call-display'
+import type { CallListItem } from '@/hooks/useCalls'
 
-const ICON_MAP: Record<string, React.ReactNode> = {
-  completed: <CheckCircle2 className="h-4 w-4 text-green-500" />,
-  failed: <XCircle className="h-4 w-4 text-red-500" />,
-  'in-progress': <PhoneIncoming className="h-4 w-4 text-purple-500 animate-pulse" />,
-}
-
-function timeAgo(date: string | null) {
-  if (!date) return '—'
-  const diff = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
-  if (diff < 60) return `${diff}s ago`
+function timeAgo(date: string | null, now: number): string {
+  if (!date) return ''
+  const diff = Math.max(0, Math.floor((now - new Date(date).getTime()) / 1000))
+  if (diff < 60) return 'just now'
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  return `${Math.floor(diff / 3600)}h ago`
+  if (diff < 86_400) return `${Math.floor(diff / 3600)}h ago`
+  return `${Math.floor(diff / 86_400)}d ago`
 }
 
 interface RealtimeActivityFeedProps {
-  calls: Call[]
+  calls: CallListItem[]
+  isLoading: boolean
+  error: string | null
 }
 
-export function RealtimeActivityFeed({ calls }: RealtimeActivityFeedProps) {
-  const [, setTick] = useState(0)
+export function RealtimeActivityFeed({ calls, isLoading, error }: RealtimeActivityFeedProps) {
+  const [now, setNow] = useState(() => Date.now())
 
-  // Re-render every 30s to update "time ago"
+  // Keeps "5m ago" honest without refetching anything.
   useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 30_000)
+    const id = setInterval(() => setNow(Date.now()), 30_000)
     return () => clearInterval(id)
   }, [])
 
   const recent = calls.slice(0, 8)
-  const inProgress = recent.filter((c) => c.status === 'in-progress')
+  const live = calls.filter((c) => c.status === 'in-progress').length
 
   return (
     <Card className="border shadow-sm">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base font-semibold">Live Activity</CardTitle>
-          {inProgress.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              <LiveDot />
-              <span className="text-xs text-muted-foreground">
-                {inProgress.length} active
-              </span>
-            </div>
-          )}
+          <CardTitle className="text-base font-semibold">Live activity</CardTitle>
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+            <LiveDot active={live > 0} />
+            {live > 0 ? `${live} on a call now` : 'Watching for calls'}
+          </span>
         </div>
       </CardHeader>
-      <CardContent className="space-y-1 p-3">
-        {recent.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted-foreground">No recent activity</p>
+      <CardContent className="p-3">
+        {isLoading && calls.length === 0 ? (
+          <div className="space-y-2" aria-busy="true">
+            {[...Array(4)].map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full rounded-lg" />
+            ))}
+          </div>
+        ) : error && calls.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">{error}</p>
+        ) : recent.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            Nothing yet. New calls show up here the moment they start.
+          </p>
         ) : (
-          recent.map((call) => (
-            <div
-              key={call.id}
-              className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 transition-colors',
-                call.status === 'in-progress' ? 'bg-purple-50' : 'hover:bg-muted/30'
-              )}
-            >
-              {ICON_MAP[call.status] ?? <Clock className="h-4 w-4 text-gray-400" />}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">
-                  {call.caller_number ? formatPhoneNumber(call.caller_number) : 'Unknown'}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {call.direction === 'inbound' ? '↙ Inbound' : '↗ Outbound'}
-                  {' · '}
-                  {call.status === 'in-progress'
-                    ? 'In progress'
-                    : formatDuration(call.duration_seconds)}
-                </p>
-              </div>
-              <span className="text-xs text-muted-foreground flex-shrink-0">
-                {timeAgo(call.started_at)}
-              </span>
-            </div>
-          ))
+          <ul className="space-y-1">
+            {recent.map((call) => {
+              const number = callerLabel(call)
+              const inProgress = call.status === 'in-progress'
+              const missed = call.outcome === 'missed' || call.status === 'no-answer' || call.status === 'busy'
+              const Icon = missed ? PhoneMissed : call.direction === 'outbound' ? PhoneOutgoing : PhoneIncoming
+              return (
+                <li key={call.id}>
+                  <Link
+                    href={`/calls?call=${call.id}`}
+                    className={cn(
+                      'flex items-center gap-3 rounded-lg px-2 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 sm:px-3',
+                      inProgress ? 'bg-purple-50' : 'hover:bg-muted/40'
+                    )}
+                  >
+                    <Icon
+                      aria-hidden="true"
+                      className={cn('size-4 shrink-0', inProgress ? 'animate-pulse text-purple-500' : missed ? 'text-rose-500' : 'text-muted-foreground')}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{number ? formatPhoneNumber(number) : 'Unknown caller'}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {inProgress ? 'On the call now' : call.duration_seconds > 0 ? formatDuration(call.duration_seconds) : 'No conversation'}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      {!inProgress && <OutcomeChip outcome={call.outcome} />}
+                      <span className="text-[11px] text-muted-foreground">{timeAgo(call.started_at, now)}</span>
+                    </div>
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
         )}
       </CardContent>
     </Card>
