@@ -30,25 +30,33 @@ import type { RunLensId } from "@/lib/pages/custom-automations";
  * page, in the same pass as every link that can ask (a content-visibility
  * box skips painting, not rendering), so nothing current is ever dropped.
  *
- * WHAT THE WORKBENCH DOES WITH ONE (spec §5.2.7): it picks the lens as a
- * key would, on its finished frame with nothing playing, scrolls the
- * stage to 112px, focuses the lens's chip and takes one more look after
- * 400ms, as the SaaS explorer's `showLens` does. A request is the
- * reader's own hand, so it ends the first view's tour for good.
+ * WHAT THE WORKBENCH DOES WITH ONE: it picks the lens as the request's
+ * `via` says — a pointer's click plays its whole tour, as a pointer on
+ * the lens's chip does ("Watch it run" promises a run); Enter or Space
+ * on the link, as those keys on the chip do, shows its finished frame
+ * with nothing playing — then scrolls the stage to 112px, focuses the
+ * lens's chip and takes one more look after 400ms, as the SaaS
+ * explorer's `showLens` does. A request is the reader's own hand, so it
+ * ends the first view's tour for good. (Spec §5.2.7 had every request
+ * picked as a key picks it; a link named "Watch it run" landing on a
+ * still frame broke its word.)
  *
  * `RunLensId` is imported as a type only: the data module is
  * server-only, and a value import would pull it into this client chunk.
  * ------------------------------------------------------------------ */
 
-export type RunRequest = { id: RunLensId; nonce: number };
+/** How the asker was pressed: a pointer's click, or a key (Enter or Space, which arrive as clicks with none counted). */
+export type RunVia = "pointer" | "key";
+
+export type RunRequest = { id: RunLensId; via: RunVia; nonce: number };
 
 let current: RunRequest | null = null;
 let nonce = 0;
 const listeners = new Set<() => void>();
 
-/** Asks the workbench to open `lens`: pick it as a key would (nothing plays), bring the stage up, focus its chip. */
-export function requestRun(lens: RunLensId): void {
-  current = { id: lens, nonce: ++nonce };
+/** Asks the workbench to open `lens` — its tour played for a pointer, its finished frame for a key — bring the stage up and focus its chip. */
+export function requestRun(lens: RunLensId, via: RunVia): void {
+  current = { id: lens, via, nonce: ++nonce };
   listeners.forEach((fn) => fn());
 }
 

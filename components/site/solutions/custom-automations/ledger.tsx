@@ -44,10 +44,10 @@ export function Ledger({
 }) {
   return (
     <div className="mt-16">
-      <h3 className={TYPE.h3} style={{ fontWeight: WEIGHT.h3 }}>
-        {ledger.title}
-      </h3>
-      <ul className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {/* A group label, as #breaks' "And the other ways it stays safe" is: small
+          and muted over the cards' display titles. Balanced: under 360px it wraps. */}
+      <h3 className={cn(TYPE.label, "text-balance text-pp-muted")}>{ledger.title}</h3>
+      <ul className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {ledger.cards.map((card, i) => (
           <li
             key={card.id}
@@ -68,9 +68,11 @@ export function Ledger({
               {card.figure && <span className={cn(TYPE.mono, "shrink-0 text-(--home-violet)")}>{card.figure}</span>}
             </p>
             <p className={cn(TYPE.mono, "mt-4 text-[11px] leading-4 text-pp-muted")}>{card.when}</p>
-            <p className={cn(TYPE.h3, "mt-1 text-balance")} style={{ fontWeight: WEIGHT.h3 }}>
+            {/* A heading under the ledger's h3, as #breaks' guards are: the
+                six are reached by heading, not read as paragraphs. */}
+            <h4 className={cn(TYPE.h3, "mt-1 text-balance")} style={{ fontWeight: WEIGHT.h3 }}>
               {card.title}
-            </p>
+            </h4>
             <p className={cn(TYPE.meta, "mt-2 text-pretty text-pp-ink/80")}>{card.body}</p>
             {card.link && (
               <p className="mt-auto pt-4">
@@ -83,6 +85,9 @@ export function Ledger({
                   )}
                 >
                   {card.link.label}
+                  {/* Named for its card in a links list ("See them: Workflows
+                      you set up yourself"), still starting with what it shows. */}
+                  <span className="sr-only">: {card.title}</span>
                   <span
                     aria-hidden
                     className="ml-1 inline-block transition-transform duration-200 group-hover:translate-x-0.5"

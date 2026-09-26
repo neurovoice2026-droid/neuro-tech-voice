@@ -12,10 +12,13 @@ import { fill, pad2, type Frame } from "./workbench-frame";
  * with a title bar (three dots and the tool's plain name: "Invoicing
  * software", never a brand) and the manual steps done in it, in number
  * order. A window's share of the lane is its share of the steps, never
- * less than its title and its longest word need: so a tool with three
- * steps is wide and short rather than tall beside three one-step
- * windows stretched to its height, the lane is as short as its words
- * allow, and no title is cut. Every step has a number disc: hollow while it is still done by
+ * less than its title and its longest word need, and a window whose
+ * share is wide sets its steps side by side, row by row in number order
+ * (each column at least 12.5rem), rather than one short column on a
+ * white sheet: so a tool with three steps is wide and short rather than
+ * tall beside three one-step windows stretched to its height, the lane
+ * is as short as its words allow, and no title is cut. Every step has a
+ * number disc: hollow while it is still done by
  * hand; electric with a tick once it has been handed to a block of the
  * flow (`data-handed`, from the frame), and under its words, in violet,
  * where the run now does it: "now step 06". That line always takes its
@@ -78,7 +81,7 @@ export function ToolLane({
               </span>
               <span className={cn(TYPE.label, "ml-2 min-w-0 truncate text-pp-muted")}>{tool.label}</span>
             </p>
-            <ol className="px-3 pb-2">
+            <ol className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,12.5rem),1fr))] gap-x-3 px-3 pb-2">
               {lens.manual
                 .filter((m) => m.tool === tool.id)
                 .map((m) => {
@@ -106,7 +109,7 @@ export function ToolLane({
                         <Check className="auto-disc-tick size-3 [grid-area:1/1]" strokeWidth={2.5} />
                       </span>
                       <span className="relative min-w-0">
-                        <span className="block text-[13px] leading-[18px] text-pp-ink">{m.text}</span>
+                        <span className="block text-[13px] leading-[18px] text-pretty text-pp-ink">{m.text}</span>
                         {at !== undefined && (
                           <span
                             className={cn(

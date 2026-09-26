@@ -47,7 +47,7 @@ import { buildOrder, currentsOf, handedTo, landingOf, type Phase } from "./workb
  *      along two lines with two beads at once), the block it reaches
  *      pings, and the step arrives — `onStep(i)`, and React makes the
  *      block current; the Running pill is flown to it by the workbench
- *      (Flip). A ring-only step pings its block twice. Below xl the bead
+ *      (a translate). A ring-only step pings its block twice. Below xl the bead
  *      slides down the rail to the current row's ring instead (0.45s).
  *      Each step holds for as long as its caption takes to read
  *      (`holdFor`); after the last, a 0.8s beat, then the tour is done

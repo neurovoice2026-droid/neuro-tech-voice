@@ -33,9 +33,11 @@ import type { RunEdge, RunLens, RunNode } from "@/lib/pages/custom-automations";
  *   · otherwise a Z through the gutter halfway between the two: out of
  *     the right edge at the source's centre, along the gutter, and into
  *     the left edge at the target's (the morning lens's `cron-reconcile`
- *     up the gutter at x 132.5, and `overage-summary` down the empty
- *     fourth column at x 647, where it meets `side-summary` and shares
- *     its last run into the summary: both are lit on the same step).
+ *     up the gutter at x 132.5, and `overage-summary` down the gutter at
+ *     x 720.5, between the empty c4 and c5, where it meets
+ *     `side-summary` and shares its last run into the summary: both are
+ *     lit on the same step). The summary stands in c6, so the morning's
+ *     flow ends at the sheet's right edge, as every other lens's does.
  * Every line runs rightwards or straight up and down; one that would
  * run backwards throws, so a block placed out of order fails the page's
  * test rather than drawing a line through the cards. The test also

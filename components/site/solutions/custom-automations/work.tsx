@@ -29,7 +29,7 @@ import { WorkInstrument } from "./work-instrument";
  * written for this page for no business in particular: no brand, no
  * figure, no client (the data module marks them `// SAMPLE`, and its
  * test holds them free of digits and names). The tag over each says
- * "Sample", and so do the sub and the foot. What is not a sample is
+ * "Sample", and so do the foot and the credits. What is not a sample is
  * the legend: every "Runs here" points at a block this platform runs
  * today, in the workbench or in #breaks.
  *

@@ -5,14 +5,16 @@ import { describe, expect, it } from "vitest";
 import { ORPHAN_MIN_AGE_MS } from "@/app/api/cron/storage-cleanup";
 import { DEEP_PANEL, HOME_COLORS } from "@/components/site/home/palettes";
 import type { Checks } from "@/components/site/solutions/custom-saas-platforms/checks";
-import { RESERVE_AT as SAAS_RESERVE_AT, RESERVE_TIERS, reserveStyle } from "@/components/site/solutions/custom-saas-platforms/deferred";
+import { RESERVE_AT as SAAS_RESERVE_AT, RESERVE_TIERS } from "@/components/site/solutions/custom-saas-platforms/deferred";
 import type { Faq } from "@/components/site/solutions/custom-saas-platforms/faq";
 import type { Hero } from "@/components/site/solutions/custom-saas-platforms/hero";
 import { SAAS_INK, SAAS_LIGHTS, type SaasLightId } from "@/components/site/solutions/custom-saas-platforms/palette";
 import type { Start } from "@/components/site/solutions/custom-saas-platforms/start";
 import type { Terms } from "@/components/site/solutions/custom-saas-platforms/terms";
-import { RESERVE_AT, RESERVES } from "@/components/site/solutions/custom-automations/deferred";
+import { RESERVE_AT, RESERVES, reserveStyle } from "@/components/site/solutions/custom-automations/deferred";
 import { hardCount, metersOf, type Meters } from "@/components/site/solutions/custom-automations/meters";
+import * as frameKit from "@/components/site/solutions/custom-automations/workbench-frame";
+import * as geometry from "@/components/site/solutions/custom-automations/workbench-geometry";
 import { ACTION_META, TRIGGER_META } from "@/components/workflows/meta";
 import { entitlementsFor, requiredPlanFor } from "@/lib/billing/entitlements";
 import { USAGE_THRESHOLDS } from "@/lib/billing/usage";
@@ -129,12 +131,6 @@ import { ENDPOINT_LABEL, buildBreakTable, resultMeta } from "./custom-automation
  *     with a lite, a still and a weak pin that wins;
  *   - the content-visibility reserves to the page's boxes;
  *   - the SaaS leaves this page reuses to the contract it reuses them on.
- *
- * Six groups build this page at once, each in its own files. A block
- * below that holds another group's file (the workbench's frame and
- * geometry, the page, the section sheets, #build's stations) runs once
- * that file exists and stays a todo naming it until then, so this file
- * is green from the data alone and complete once the page is.
  * ------------------------------------------------------------------ */
 
 const ROOT = process.cwd();
@@ -146,22 +142,6 @@ const read = (file: string) => readFileSync(path.join(ROOT, file), "utf8");
 const has = (file: string) => existsSync(path.join(ROOT, file));
 /** A source file's text with its `//` comment lines joined, so a phrase broken across two of them still matches. */
 const said = (file: string) => read(file).replace(/\n\s*\/\/\s*/g, " ");
-
-/**
- * Whether another group's files have landed. Until they have, the block
- * that holds them is a todo that names them, and none of its tests run.
- */
-function landed(what: string, files: readonly string[]): boolean {
-  const missing = files.filter((f) => !has(f));
-  if (missing.length) it.todo(`${what}: waits for ${missing.join(", ")}`);
-  return missing.length === 0;
-}
-
-// The workbench's pure modules (G3), loaded once they exist.
-const FRAME_FILE = `${DIR}/workbench-frame.ts`;
-const GEOMETRY_FILE = `${DIR}/workbench-geometry.ts`;
-const frameKit = has(FRAME_FILE) ? await import("@/components/site/solutions/custom-automations/workbench-frame") : null;
-const geometry = has(GEOMETRY_FILE) ? await import("@/components/site/solutions/custom-automations/workbench-geometry") : null;
 
 const ITEM = SOLUTION_ITEMS.find((s) => s.id === "custom-automations")!;
 const SAAS_ITEM = SOLUTION_ITEMS.find((s) => s.id === "custom-saas-platforms")!;
@@ -426,8 +406,10 @@ describe("facts read from their sources", () => {
     expect(card).toContain(`in ${word(INT_BUILDER.steps.length)} steps, with no build`);
     expect(card).toContain(`Texts to callers start on the ${sms} plan`);
     expect(card).toContain(`the ${word(GOOGLE_KEYS.length)} Google steps, in beta, on ${google}.`);
-    // The five steps it lists are the ones that aren't Google's, in the engine's order.
-    const selfServe = ACTION_TYPES.filter((a) => !GOOGLE_KEYS.includes(a));
+    // The four steps it lists are the ones that aren't Google's, in the engine's order,
+    // less the pause: it sits between steps, and isn't follow-up anyone needs.
+    const selfServe = ACTION_TYPES.filter((a) => !GOOGLE_KEYS.includes(a) && a !== "wait");
+    expect(selfServe).toHaveLength(4);
     expect(card).toContain(`— ${listJoin(selfServe.map((a) => ACTION_WORDS[a]))} —`);
     expect(AUTO_CHECKS.rows.find((r) => r.id === "self")!.how).toContain(`in ${word(INT_BUILDER.steps.length)} steps`);
     expect(AUTO_BUILD.selfServe.link.href).toBe("/product/integrations");
@@ -473,7 +455,7 @@ describe("counts held to the repository", () => {
     expect(GOOGLE_KEYS).toHaveLength(5);
     const card = AUTO_RUNNING.ledger.cards.find((c) => c.id === "workflows")!;
     expect(card.body.startsWith(`${cap(word(TRIGGER_TYPES.length))} moments start one — ${listJoin(TRIGGER_TYPES.map((t) => TRIGGER_WORDS[t]))} —`)).toBe(true);
-    expect(card.body).toContain(`up to ${word(MAX_WORKFLOW_ACTIONS)} steps of ${word(ACTION_TYPES.length)} kinds`);
+    expect(card.body).toContain(`up to ${word(MAX_WORKFLOW_ACTIONS)} steps in order, picked from ${word(ACTION_TYPES.length)} kinds`);
     expect(card.figure).toBe(`${TRIGGER_TYPES.length} triggers · ${ACTION_TYPES.length} kinds`);
     expect(card.more).toBe(
       `The ${word(ACTION_TYPES.length)} kinds: ${listJoin(ACTION_TYPES.map((a) => ACTION_WORDS[a]))}. The ${word(GOOGLE_KEYS.length)} Google steps are in beta.`,
@@ -525,11 +507,11 @@ describe("counts held to the repository", () => {
     expect(AUTO_RUNNING.ledger.cards.find((c) => c.id === "notify")!.figure).toBe(`at most ${MAX_ALERTS_PER_CALL} a call`);
   });
 
-  it("counts the automatic emails, and finds each one sent from somewhere", () => {
+  it("counts the account emails, and finds each one sent from somewhere", () => {
     const templates = read("lib/email/templates.ts");
     const names = [...templates.matchAll(/^export function (\w+Email)\(/gm)].map((m) => m[1]);
     expect(names).toHaveLength(FACTS_AUTO.emails);
-    expect(AUTO_HERO.room.plates[0].datum).toBe(`${FACTS_AUTO.emails} automatic emails`);
+    expect(AUTO_HERO.room.plates[0].datum).toBe(`${FACTS_AUTO.emails} account emails`);
     const callers = [...walk("app"), ...walk("lib")]
       .filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f) && f !== "lib/email/templates.ts")
       .map((f) => read(f));
@@ -552,11 +534,11 @@ describe("counts held to the repository", () => {
     expect(route.indexOf("requireCronRequest(req, 'cron')")).toBeLessThan(route.indexOf("runCronStep("));
     expect(said("app/api/cron/auth.ts")).toContain("503 without a usable CRON_SECRET, 401 for a wrong token");
     expect(node("cron")).toContain("Without the secret, nothing runs");
-    // "Locks and flags whose time has passed", and "the budget the call router checks".
+    // "Markers whose time has passed", and "the same figure the app checks before each call".
     expect(said("app/api/cron/jobs.ts")).toContain("Deletes kv_store rows whose TTL passed");
     expect(node("locks")).toContain("whose time has passed");
     expect(said("lib/voice/budget.ts")).toContain("the router reads the budget");
-    expect(node("budget")).toContain("the call router checks");
+    expect(node("budget")).toContain("before each call");
     expect(KINDS.time.proof).toBe(`${cap(word(FACTS.cronSteps.length))} steps run here every morning at ${FACTS.cronAt}.`);
     expect(AUTO_BREAKS.guards.find((g) => g.id === "alone")!.body).toContain(`${word(FACTS.cronSteps.length)} steps`);
   });
@@ -567,6 +549,11 @@ describe("counts held to the repository", () => {
       expect(ingest, phrase).toContain(phrase);
     }
     expect(said("lib/knowledge/providers.ts")).toContain("best effort");
+    // "Unchanged: … straight to ready and the copies": `unchanged` skips only the indexing.
+    expect(read("lib/knowledge/ingest.ts")).toMatch(/if \(!unchanged\) \{[\s\S]*?\n  \}\n\n  const exists = await updateRow\(admin, doc, \{[\s\S]*?status: 'ready'/);
+    const same = lens("document").nodes.find((n) => n.id === "same")!.detail;
+    expect(same).toContain("ready");
+    expect(same).toContain("the copies");
     expect(said("lib/knowledge/fetch-url.ts")).toContain("https only");
     // "It never ends in silence": the pipeline's own promise.
     expect(ingest).toContain("It never throws: every failure ends on the row as a plain error_message");
@@ -576,6 +563,12 @@ describe("counts held to the repository", () => {
     expect(at("ready")).toBeGreaterThan(0);
     expect(at("copies")).toBe(at("ready") + 1);
     expect(at("swap")).toBeLessThan(at("ready"));
+    // Nothing re-reads a document on its own; a replacement is a new row, always indexed in full.
+    expect(read("app/api/cron/daily/route.ts")).not.toMatch(/knowledge/i);
+    expect(said("app/api/agent/knowledge/[docId]/resync/route.ts")).toContain("reads the document again");
+    expect(read("lib/knowledge/ingest.ts")).toContain("const unchanged = doc.content_sha256 === hash");
+    expect(doc.built).not.toMatch(/kept in step/);
+    expect(doc.nodes.find((n) => n.id === "changed")!.detail).toContain("from the dashboard");
   });
 
   it("takes the call lens from the post-call pipeline as it runs", () => {
@@ -619,15 +612,28 @@ describe("counts held to the repository", () => {
     // "One that fails is recorded too, so it shows in the dashboard."
     expect(emit).toContain("Record the failure so it surfaces in the dashboard");
     expect(read("lib/smartbill/emit.ts")).toContain("status: 'failed'");
-    // "Never two fiscal invoices for one payment": the guard returns on any row, failed ones too.
+    // "Checked before every fiscal invoice": the guard returns on any row, failed ones too. It
+    // reads, then issues, and a read that errors counts as no row, so the page says what it
+    // checks and never promises the outcome outright.
     expect(read("lib/smartbill/emit.ts")).toContain("if (existing) return");
+    expect(read("lib/smartbill/emit.ts")).toContain("const { data: existing }");
     for (const s of strings([AUTO_FAQ, KINDS, AUTO_BUILD, pay])) expect(s).not.toMatch(/exactly one fiscal invoice|there’s one fiscal invoice|One fiscal invoice per payment/i);
+    for (const s of ALL) expect(s).not.toMatch(/never (?:\w+ )?(?:two|a second) fiscal invoices?|isn’t invoiced (?:twice|again)/i);
     expect(detail("fiscal")).toContain("One that fails is recorded too");
+    // Only a throw from dispatch makes the route answer 500 and Stripe resend; SmartBill's errors are caught and recorded, and a receipt that can't be sent is logged, never thrown.
+    expect(read("app/api/billing/webhook/route.ts")).toContain("Stripe will retry it.");
+    expect(read("lib/smartbill/emit.ts")).toMatch(/try \{[\s\S]*sbInvoices\.create[\s\S]*\} catch \(err\)/);
+    expect(said("lib/email/client.ts")).toContain("Never throws");
+    expect(detail("done")).not.toMatch(/Had a step failed/);
+    expect(detail("done")).toContain("Had the renewal failed");
+    expect(detail("done")).toContain("An invoice that fails is recorded");
     // "A link to view the invoice": SmartBill's PDF, or Stripe's own invoice page when there's none.
     expect(handlers).toContain("invoiceUrl = data.pdf_url");
     expect(handlers).toContain("invoiceUrl ?? invoice.hosted_invoice_url");
     expect(read("lib/email/templates.ts")).toContain("'View invoice'");
     expect(detail("email")).toContain("a link to view the invoice");
+    // A repeat is caught while the done marker lives (DONE_TTL_SECONDS), and the caption says for how long.
+    expect(pay.steps.find((s) => s.id === "done")!.caption).toContain(`${FACTS_AUTO.stripeDoneHours} hours`);
     // The renewal first, then the invoice: handlers.ts's order.
     expect(pay.steps.findIndex((s) => s.id === "renew")).toBeLessThan(pay.steps.findIndex((s) => s.id === "fiscal"));
   });
@@ -635,15 +641,24 @@ describe("counts held to the repository", () => {
   it("bills a call's minutes once, from whichever of its two reports lands first", () => {
     expect(said("lib/billing/usage.ts")).toContain("bill it once");
     expect(AUTO_RUNNING.ledger.cards.find((c) => c.id === "minutes")!.files).toContain("app/api/elevenlabs/webhook/handlers.ts");
-    // The morning job bills only what the phone line reported and nobody billed.
+    // The morning job bills only what the phone line reported and nobody billed, and says so in both places.
     expect(read("lib/billing/usage.ts")).toContain(".not('twilio_call_sid', 'is', null)");
+    expect(lens("morning").nodes.find((n) => n.id === "reconcile")!.detail).toContain("phone line");
+    expect(lens("morning").steps.find((s) => s.id === "reconcile")!.caption).toContain("phone line");
+    expect(AUTO_RUNNING.ledger.cards.find((c) => c.id === "minutes")!.body).toContain("phone line reported");
   });
 
   it("says what the FAQ promises about doing a thing twice, and no more", () => {
     expect(AUTO_FAQ.items.find((i) => i.id === "breaks")!.a).not.toContain("nothing is done twice");
     expect(AUTO_FAQ.items.find((i) => i.id === "complex")!.a).not.toContain("independent");
+    // Three of the morning steps run in a chain: isolated, never "on their own".
+    for (const s of strings([AUTO_BREAKS.guards, AUTO_BUILD])) expect(s).not.toMatch(/stand alone|on their own|independent/i);
+    expect(AUTO_BREAKS.guards.map((g) => g.title).join(" ")).not.toMatch(/nothing (is )?done twice/i);
     expect(read("app/api/elevenlabs/webhook/handlers.ts")).toContain("kvIncr(`post-call:workflows:${callId}`");
     expect(read("lib/workflows/executor.ts")).toContain("customerWebhookHeaders({ body, secret, deliveryId,");
+    const breaksAnswer = AUTO_FAQ.items.find((i) => i.id === "breaks")!.a;
+    expect(breaksAnswer).toContain("a webhook that’s tried again carries the same reference");
+    expect(breaksAnswer).not.toContain("a message that’s retried");
   });
 
   it("says of bookings, the waiting list and the team's alerts what their code says", () => {
@@ -651,6 +666,16 @@ describe("counts held to the repository", () => {
     expect(reminders).toContain("is claimed (reminder_sent_at set) before its text goes out");
     expect(reminders).toContain("releases the claim");
     expect(said("lib/scheduling/waitlist.ts")).toContain("can't be promised one slot by the system");
+    // A confirmation text goes out only when the caller agreed to one.
+    expect(read("lib/voice/tools/definitions.ts")).toContain("true only if the caller agreed to receive a text confirmation");
+    const bookings = AUTO_RUNNING.ledger.cards.find((c) => c.id === "bookings")!.body;
+    expect(bookings).toContain("who asks for one");
+    expect(bookings).not.toMatch(/every booking|each booking/i);
+    // A mark that comes off when the send fails, said on both cards that mark before sending.
+    expect(bookings).toContain("the mark comes off if the text fails");
+    expect(said("lib/billing/usage.ts")).toContain("retried by the next billed call");
+    expect(read("lib/billing/usage.ts")).toContain("await kvDel(key)");
+    expect(AUTO_RUNNING.ledger.cards.find((c) => c.id === "usage")!.body).toContain("the next call that adds minutes tries again");
     expect(said("lib/voice/tools/notify.ts")).toContain(
       'only tells the caller "the team has been alerted" when a text or email really went out',
     );
@@ -945,7 +970,6 @@ describe("the workbench", () => {
   });
 
   describe("its frame (workbench-frame.ts)", () => {
-    if (!landed("the frame", [FRAME_FILE]) || !frameKit) return;
     const { blocksOf, buildOrder, currentsOf, fill, frameOf, inspected, lensOf, nodeState, nowSteps } = frameKit;
 
     it("stops each step on the block the data says it arrives at", () => {
@@ -1019,7 +1043,6 @@ describe("the workbench", () => {
   });
 
   describe("its xl drawing (workbench-geometry.ts)", () => {
-    if (!landed("the drawing", [GEOMETRY_FILE]) || !geometry) return;
     const { CARD, END, GROUP_PAD, VIEW, boxOf, edgePath, edgePoints, endBox, groupBox, labelAt, viewH, x, y } = geometry;
     const sides = (b: { x: number; y: number; w: number; h: number }): Box => ({ l: b.x, t: b.y, r: b.x + b.w, b: b.y + b.h });
     /** The line as it is drawn: its `d`, rounded corners and all, read back into points. */
@@ -1288,7 +1311,6 @@ describe("#work", () => {
     expect(text.filter((s) => /\d/.test(s))).toEqual([]);
     const NAMES = [...REGISTRY, "Pipedrive", "Zoho", "Airtable", "Notion", "Mailchimp", "PayPal", "Outlook", "Excel", "Sage", "Monday.com", "Asana", "Trello", "Jira"];
     for (const mark of NAMES) expect(text.filter((s) => named(mark, s)), mark).toEqual([]);
-    expect(AUTO_WORK.sub).toContain("written for this page");
     expect(AUTO_WORK.foot).toContain("written for this page");
     expect(AUTO_WORK.tag.startsWith("Sample")).toBe(true);
     expect(SOURCE).toMatch(/const SAMPLES: readonly Sample\[\] = \[ \/\/ SAMPLE/);
@@ -1324,6 +1346,14 @@ describe("#work", () => {
     const runs = [AUTO_WORK.sub, AUTO_WORK.proofTitle].flatMap(split).filter((s) => /\bruns? (?:here|on this platform)\b/i.test(s));
     expect(runs.length).toBeGreaterThan(0);
     for (const s of runs) expect(s, s).toMatch(/\bwhich\b|\bmost\b/i);
+  });
+
+  it("says 'Watch it run' only on a link that opens a workbench lens, and 'See it on this page' on a jump", () => {
+    expect(AUTO_WORK.watch).toBe("Watch it run");
+    expect(AUTO_WORK.see).toBe("See it on this page");
+    const src = read(`${DIR}/work-instrument.tsx`);
+    expect(src).toContain('label={"lens" in info.show ? data.watch : data.see}');
+    expect(src.match(/data\.watch\b/g)).toHaveLength(1);
   });
 });
 
@@ -1529,8 +1559,8 @@ describe("links go somewhere", () => {
       const counts = AUTO_CHECKS.rows.find((r) => r.id === "counts")!.claim;
       expect(counts).toMatch(/platform/);
       expect(counts).not.toMatch(/every figure on this page/i);
-      expect(AUTO_CHECKS.rows.find((r) => r.id === "map")!.how).toContain(`${cap(word(LENSES.length))} are drawn above.`);
-      expect(AUTO_BUILD.stages[0].check.label).toBe(`See ${word(LENSES.length)} mapped above`);
+      expect(AUTO_CHECKS.rows.find((r) => r.id === "map")!.how).toContain(`${cap(word(LENSES.length))} of ours are drawn above.`);
+      expect(AUTO_BUILD.stages[0].check.label).toBe(`See ${word(LENSES.length)} of ours mapped above`);
     });
 
     it("never repeats a check's tag in its words, anywhere on the page", () => {
@@ -1744,12 +1774,21 @@ describe("colour", () => {
     ["settled on settled-soft: the Succeeded pill", HOME_COLORS.settled, HOME_COLORS.settledSoft, 4.95, 4.5],
     ["ember-ink on ember-soft: the Failed pill", HOME_COLORS.emberInk, HOME_COLORS.emberSoft, 5.07, 4.5],
     ["electric on white: a block's glyph", HOME_COLORS.electric, WHITE, 5.7, 3],
-    ["electric on wash: #build's rail and stations", HOME_COLORS.electric, HOME_COLORS.wash, 5.21, 3],
+    ["electric on wash: #build's rail and stations, the run log's checked row", HOME_COLORS.electric, HOME_COLORS.wash, 5.21, 3],
     ["violet on wash: #build's key phrase", HOME_COLORS.violet, HOME_COLORS.wash, 6.49, 4.5],
   ])("%s clears its bar, as measured", (_, fg, bg, measured, bar) => {
     const ratio = contrast(rgb(fg), rgb(bg));
     expect(ratio).toBeGreaterThanOrEqual(bar);
     expect(ratio).toBeCloseTo(measured, 1);
+  });
+
+  it("marks the run log's checked step with an electric edge, not the wash alone", () => {
+    const src = read(`${DIR}/workbench.tsx`);
+    const on = src.match(/const STEP_ON = "([^"]+)"/)?.[1] ?? "";
+    expect(on).toContain("bg-(--home-wash)");
+    expect(on).toMatch(/shadow-\[inset_0_0_0_1px_var\(--home-electric\)\]/);
+    expect(src).toMatch(/on \? STEP_ON : "hover:bg-\(--home-wash\)\/60"/);
+    expect(contrast(rgb(HOME_COLORS.wash), rgb("#ffffff"))).toBeLessThan(3);
   });
 
   // #start's deep panel (DEEP_PANEL, static): the SaaS test's sizes and zones, then this
@@ -1794,7 +1833,6 @@ describe("colour", () => {
   });
 
   describe("the night room's ground", () => {
-    if (!landed("the night room", [`${DIR}/auto-breaks.css`])) return;
     it("is the static gradient the tokens were measured on", () => {
       const css = read(`${DIR}/auto-breaks.css`).replace(/\/\*[\s\S]*?\*\//g, "");
       const body = css.match(/\.pp \.auto-night \{([^}]*)\}/)?.[1] ?? "";
@@ -2065,7 +2103,6 @@ function sharedSubjects(sheets: readonly { sheet: string; blocks: CssBlock[] }[]
 
 describe("the route's stylesheets", () => {
   const sheets = [DIR, "app/solutions/custom-automations"]
-    .filter((dir) => has(dir))
     .flatMap((dir) => readdirSync(path.join(ROOT, dir)).filter((f) => f.endsWith(".css")).map((f) => `${dir}/${f}`));
   const parsed = sheets.map((sheet) => ({ sheet, blocks: parseCss(read(sheet)) }));
   const isAt = (prelude: string) => prelude.startsWith("@");
@@ -2116,7 +2153,7 @@ describe("the route's stylesheets", () => {
   it("uses no glyph-relative length (ch, ex, ic, cap, lh) and no utility built on one", () => {
     const unit = /(?<![\w-])\d*\.?\d+r?(?:ch|ex|ic|cap|lh)(?![\w-])/;
     const utility = /(?<![\w-])(?:min-w|max-w|w|basis)-prose(?![\w-])/;
-    const files = [...readdirSync(path.join(ROOT, DIR)).filter((f) => /\.(?:tsx?|css)$/.test(f)).map((f) => `${DIR}/${f}`), PAGE_FILE].filter(has);
+    const files = [...readdirSync(path.join(ROOT, DIR)).filter((f) => /\.(?:tsx?|css)$/.test(f)).map((f) => `${DIR}/${f}`), PAGE_FILE];
     for (const f of files) {
       const src = read(f);
       expect(src.match(unit)?.[0], f).toBeUndefined();
@@ -2132,7 +2169,6 @@ describe("the route's stylesheets", () => {
   });
 
   describe("the page's imports", () => {
-    if (!landed("the page's imports", [PAGE_FILE])) return;
     const page = read(PAGE_FILE);
     const imported = (file: string) => {
       const escaped = file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -2170,8 +2206,9 @@ describe("the content-visibility reserves", () => {
     return sum;
   };
 
-  it("measures at the SaaS page's widths, and keeps a height for every box at each", () => {
-    expect(RESERVE_AT).toBe(SAAS_RESERVE_AT);
+  it("measures at the SaaS page's widths and three of its own, in order, and keeps a height for every box at each", () => {
+    expect(RESERVE_AT).toEqual([...SAAS_RESERVE_AT, 325, 330, 335].sort((a, b) => a - b));
+    expect(new Set(RESERVE_AT).size).toBe(RESERVE_AT.length);
     expect(Object.keys(RESERVES)).toEqual(["running", "work", "breaks", "team", "build", "terms", "checks", "faq", "start"]);
     for (const [box, heights] of Object.entries(RESERVES)) {
       expect(heights, box).toHaveLength(RESERVE_AT.length);
@@ -2192,7 +2229,6 @@ describe("the content-visibility reserves", () => {
   });
 
   describe("the page's boxes", () => {
-    if (!landed("the page's boxes", [PAGE_FILE])) return;
     it("keeps a row for every box on the page, in its order, and no other kind of box", () => {
       const page = read(PAGE_FILE);
       expect([...page.matchAll(/<AutoDeferred box="(\w+)">/g)].map((m) => m[1])).toEqual(Object.keys(RESERVES));
@@ -2262,7 +2298,6 @@ describe("the reuse contract", () => {
   });
 
   describe("#build's rail", () => {
-    if (!landed("#build's rail", [`${DIR}/build.tsx`])) return;
     it("stops at the SaaS stations, where saas-build.css's keyframes stop", () => {
       const stations = (file: string) => read(file).match(/const STATIONS = \[([^\]]+)\]/)?.[1].split(",").map(Number) ?? [];
       const ours = stations(`${DIR}/build.tsx`);

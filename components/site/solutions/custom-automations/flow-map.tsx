@@ -34,7 +34,7 @@ import { edgeState, nodeState, type Frame } from "./workbench-frame";
  * route; ink once the run has passed it, with a settled tick in its
  * corner; current, an electric ring that eases in, with the Running
  * pill hanging off its foot (the workbench flies the pill from card to
- * card with Flip). A card says what kind of block it is (the glyph and
+ * card). A card says what kind of block it is (the glyph and
  * its tag, "Once", "Writes"), what it does (its label), a figure where
  * the lens gives one ("signed · 3 tries"), and, as badges, the numbers
  * of the manual steps it replaced: hollow until each is handed over,
@@ -198,7 +198,7 @@ export function FlowMap({
               </span>
             )}
             {n.end ? (
-              <span className="auto-node-label line-clamp-2 text-[12px] leading-4">{n.label}</span>
+              <span className="auto-node-label line-clamp-2 text-[12px] leading-4 text-balance">{n.label}</span>
             ) : (
               <>
                 <span className="flex h-4 min-w-0 items-center gap-1">
@@ -219,7 +219,7 @@ export function FlowMap({
                     ))}
                   </span>
                 </span>
-                <span className="auto-node-label mt-0.5 line-clamp-2 text-[12.5px] leading-4 font-medium">{n.label}</span>
+                <span className="auto-node-label mt-0.5 line-clamp-2 text-[12.5px] leading-4 font-medium text-balance">{n.label}</span>
                 {n.datum && (
                   <span className={cn(MONO, "auto-node-datum truncate text-[10px] leading-[13px]")}>{n.datum}</span>
                 )}
@@ -228,7 +228,6 @@ export function FlowMap({
             {current && (
               <span
                 className="auto-pill absolute right-2 -bottom-2.5 rounded-full px-2 text-[11px] leading-4 font-medium whitespace-nowrap"
-                data-flip-id="auto-pill"
               >
                 {copy.pill}
               </span>

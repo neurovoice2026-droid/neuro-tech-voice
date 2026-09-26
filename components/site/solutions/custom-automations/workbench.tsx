@@ -15,7 +15,7 @@ import {
 import type { gsap as GsapCore } from "gsap";
 import type { RunLens, RunLensId, RunNode, RunningData } from "@/lib/pages/custom-automations";
 import { cn } from "@/lib/utils";
-import { useKitContext, type FlipKit } from "@/components/site/product/motion-kit";
+import { useKitContext, type Kit } from "@/components/site/product/motion-kit";
 import { CHIP, ChipRail, RING_LIGHT, RoundButton, centreInRail, useRovingRadio } from "@/components/site/home/controls";
 import { useDocumentVisible, useStageMotion } from "@/components/site/home/motion";
 import { TYPE, WEIGHT } from "@/components/site/home/type";
@@ -24,7 +24,7 @@ import { CheckLine } from "@/components/site/solutions/custom-saas-platforms/che
 import { FlowGlyph, HandGlyph, KindGlyph } from "./glyphs";
 import { MeterRow } from "./meter-row";
 import { metersOf } from "./meters";
-import { useRunRequest } from "./run-bus";
+import { useRunRequest, type RunVia } from "./run-bus";
 import { FlowList } from "./flow-list";
 import { FlowMap } from "./flow-map";
 import { ToolLane } from "./tool-lane";
@@ -63,25 +63,30 @@ import { buildTour } from "./workbench-timeline";
  * the server) only tells the timelines which one to animate, and a
  * change rebuilds the tour where it was.
  *
- * MOTION is `useStageMotion` (home/motion.ts) with Flip in the kit: GSAP
- * is fetched when the stage comes near, never with reduced motion, and on
- * a lite device only once the reader has tapped or keyed inside the
- * stage. Everything it runs is built in one `useKitContext` callback,
+ * MOTION is `useStageMotion` (home/motion.ts): GSAP is fetched when the
+ * stage comes near, never with reduced motion, and on a lite device only
+ * once the reader has tapped or keyed inside the stage — or asked for a
+ * run from elsewhere on the page. Everything it runs is built in one `useKitContext` callback,
  * rebuilt — and everything before it reverted — whenever the lens, the
  * width class, the reader's hand (`nonce`) or reduced motion changes: the
  * tour, when one is wanted (`wantRef`) — the first view's, until the
  * reader takes over, or one the reader asked for with a pointer pick or
  * the transport. It plays only while the stage has the screen (or the
  * reader's hand), the tab is visible and the reader hasn't paused it.
- * Built with the stage off the screen, it puts the frame back to by hand
- * there and then; built with the stage in sight, where the reader may
- * have seen the finished frame, it takes that frame back softly as it
- * starts (the traces retract, the blocks fade to ghosts). Each arrival
+ * Built with the workbench off the screen, it puts the frame back to by
+ * hand there and then; built with any of it in sight, or focus inside it,
+ * where the reader may have seen the finished frame or be on it, it takes
+ * that frame back softly as it starts (the traces retract, the blocks
+ * fade to ghosts). Each arrival
  * is a callback that sets React's state (`onPhase`, `onBuilt`,
  * `onStep`); GSAP only draws the travel in between
- * (workbench-timeline.ts). The Running pill changes block by Flip: its
- * box is recorded just before React moves it, and flown after the
- * commit, in a layout effect.
+ * (workbench-timeline.ts). The Running pill flies between blocks: its
+ * box is read just before React moves it; after the commit, in a layout
+ * effect, the pill in its new block is set back onto that box by a
+ * translate and flown home (0.6s, power3.inOut, the SaaS pill's). One read
+ * each side: Flip's measure (the SaaS pill's) forced style and layout at
+ * every step, a dropped frame each take-off on a mid-range phone, and its
+ * `absolute` emptied the list row's pill slot mid-flight.
  *
  * THE READER'S HAND, and what it does to the tour:
  *   - a lens by pointer: the whole tour of that lens, hand → build →
@@ -95,13 +100,16 @@ import { buildTour } from "./workbench-timeline";
  *     it, and where the inspector is below the screen, the page scrolls
  *     just far enough to show it, so a pick is never a tap that seems to
  *     do nothing;
- *   - focus inside the caption card, the run log or the inspector: the
- *     tour holds there until focus leaves, so it never swaps a focused
- *     link away (WCAG 2.4.3), nor checks and unchecks the step radio a
- *     screen reader is on, moving the log's tab stop under it; the
- *     reader's hand inside the inspector — a focus, a click — also holds
- *     the block it shows. (The transport still reads Pause while the
- *     tour holds: it is waiting, not paused.)
+ *   - focus on a control inside the caption card, the run log or the
+ *     inspector: the tour holds there until focus leaves, so it never
+ *     swaps a focused link away (WCAG 2.4.3), nor checks and unchecks the
+ *     step radio a screen reader is on, moving the log's tab stop under
+ *     it; the reader's hand inside the inspector — a focus, a click —
+ *     also holds the block it shows. (The transport still reads Pause
+ *     while the tour holds: it is waiting, not paused.) The inspector's
+ *     heading is a focus target, not a control: a block picked while
+ *     focus is on a link in the inspector moves it there before the
+ *     link goes, and focus there never holds the tour.
  * A lens, a step or a block picked ends the first view's autoplay for
  * good (`markInteracted`); a first-view tour still waiting to play is
  * dropped with it, and the frame is the finished one.
@@ -132,10 +140,16 @@ import { buildTour } from "./workbench-timeline";
  * and the rail that changes it sits above the stage.
  *
  * "WATCH IT RUN" from elsewhere on the page (#work's legend) arrives
- * through run-bus.ts: the lens is picked as a key picks it — its finished
- * frame, nothing plays — the stage comes up under the header, focus
- * moves to the lens's chip, and one more look after 400ms catches a
- * content-visibility box above that landed the scroll short.
+ * through run-bus.ts, with how the link was pressed: a pointer's click
+ * picks the lens as a pointer on its chip does — its whole tour plays,
+ * once the stage has the screen — Enter or Space as those keys do — its
+ * finished frame, nothing plays — the stage comes up under the header,
+ * focus moves to the lens's chip, and one more look after 400ms catches
+ * a content-visibility box above that landed the scroll short. The
+ * hero's links here ("Watch one run") are plain jumps while the first
+ * view's tour is still to play; once it has played, or the reader has
+ * taken over, a click on one is taken over the same way, for the lens on
+ * the stage (`onHeroClick`).
  *
  * ACCESSIBILITY. The map and the list are aria-hidden; the keyboard's and
  * the screen reader's path is the hand lane (real text, xl), the run log,
@@ -150,7 +164,7 @@ import { buildTour } from "./workbench-timeline";
  * ------------------------------------------------------------------ */
 
 type Timeline = ReturnType<(typeof GsapCore)["timeline"]>;
-type FlipState = ReturnType<FlipKit["Flip"]["getState"]>;
+type Tween = ReturnType<(typeof GsapCore)["fromTo"]>;
 
 /** What the workbench is handed: everything #running's data holds but the ledger, which the server draws. */
 export type WorkbenchData = Omit<RunningData, "ledger">;
@@ -219,6 +233,17 @@ type Tour = "idle" | "running" | "done";
 /** A step row in the run log: its number, and the step's short title. */
 const STEP_ROW = "grid w-full grid-cols-[28px_minmax(0,1fr)] items-baseline gap-x-2 rounded-xl px-3 py-[13px] text-left";
 
+/**
+ * The checked step row: the wash, and an electric hairline inside its
+ * edge (5.21 on the wash, 5.70 on white), so the row the run is on reads
+ * by a shape as well as a tint — the wash alone is 1.09 against the page,
+ * and a hovered row draws almost the same tint. Inset, so it follows the
+ * row's corners and never meets the focus ring, an ink outline 2px out;
+ * the same electric edge the list's current row wears. (SPEC §5 and the
+ * SaaS explorer's log mark it with the tint alone.)
+ */
+const STEP_ON = "bg-(--home-wash) shadow-[inset_0_0_0_1px_var(--home-electric)]";
+
 /** A lens chip on white: the landing's chip colours, a 44px target round a 36px pill. */
 const LENS_CHIP = cn(
   "relative h-9 cursor-pointer rounded-full px-4 text-[13px] leading-5 whitespace-nowrap",
@@ -255,25 +280,34 @@ const walked = (via: "key" | "pointer"): Via => (via === "key" ? "arrow" : via);
 function useLiveLine() {
   const [said, setSaid] = useState("");
   const timer = useRef(0);
-  const hush = useCallback(() => window.clearTimeout(timer.current), []);
+  // Hushed, the region empties (an emptied polite region says nothing), so
+  // the next line is a change and is spoken, even the one it last held.
+  const hush = useCallback(() => {
+    window.clearTimeout(timer.current);
+    setSaid("");
+  }, []);
+  // A line the region already holds would change nothing in it and never be
+  // spoken: a repeat alternates a trailing no-break space, so the same
+  // choice made again (a step, a block picked, the step again) is heard.
   const say = useCallback((line: string, via?: Via) => {
     window.clearTimeout(timer.current);
-    if (via === "arrow") timer.current = window.setTimeout(() => setSaid(line), KEY_REST_MS);
-    else setSaid(line);
+    const speak = () => setSaid((prev) => (prev === line ? `${line}\u00a0` : line));
+    if (via === "arrow") timer.current = window.setTimeout(speak, KEY_REST_MS);
+    else speak();
   }, []);
   useEffect(() => () => window.clearTimeout(timer.current), []);
   return { said, say, hush };
 }
 
 export function Workbench({ data }: { data: WorkbenchData }) {
+  const benchRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const railRef = useRef<HTMLDivElement>(null);
   const blockColRef = useRef<HTMLDivElement>(null);
   const inspectorRef = useRef<HTMLHeadingElement>(null);
 
-  const { kit, reduce, playing, paused, setPaused, interacted, markInteracted } = useStageMotion(stageRef, {
+  const { kit, reduce, tier, playing, paused, setPaused, interacted, markInteracted } = useStageMotion(stageRef, {
     id: "running",
-    flip: true,
   });
   const wide = useMedia(XL);
   const md = useMedia(MD);
@@ -302,14 +336,15 @@ export function Workbench({ data }: { data: WorkbenchData }) {
   /** What the inspector shows: the reader's pick, or the block the drawing is on (below md, the last while a tour plays). */
   const shown = useMemo(() => inspected(lens, { pick, frame, md, touring }), [lens, pick, frame, md, touring]);
 
-  const kitRef = useRef<FlipKit | null>(null);
+  const kitRef = useRef<Kit | null>(null);
   const tlRef = useRef<Timeline | null>(null);
   // The first view's tour, until the reader takes over or it has played.
   const wantRef = useRef<Want | null>({ lens: data.initial, from: "hand" });
   const runRef = useRef(false);
   const wideRef = useRef(wide);
-  const flipRef = useRef<{ state: FlipState; selector: string } | null>(null);
-  const flipTl = useRef<Timeline | null>(null);
+  // The Running pill's box before a step moves it (null: there was none), and its flight.
+  const pillFrom = useRef<{ box: DOMRect | null; selector: string } | null>(null);
+  const pillTween = useRef<Tween | null>(null);
 
   // An explicit pick plays even while another stage would hold the focus;
   // nothing plays while focus is inside the caption card, the run log or
@@ -330,13 +365,12 @@ export function Workbench({ data }: { data: WorkbenchData }) {
     wideRef.current = wide;
   }, [wide]);
 
-  /** Records the Running pill's box before React moves it, for the Flip after the commit. */
+  /** Reads the Running pill's box before React moves it — where it is seen, mid-flight too — for its flight after the commit. */
   const capturePill = useCallback(() => {
-    const k = kitRef.current;
     const root = stageRef.current;
-    if (!k || !root) return;
+    if (!kitRef.current || !root) return;
     const selector = `[data-view="${wideRef.current ? "map" : "list"}"] .auto-pill`;
-    flipRef.current = { state: k.Flip.getState(root.querySelectorAll(selector)), selector };
+    pillFrom.current = { box: root.querySelector(selector)?.getBoundingClientRect() ?? null, selector };
   }, []);
 
   useKitContext(
@@ -359,12 +393,15 @@ export function Workbench({ data }: { data: WorkbenchData }) {
         return;
       }
       if (!want || want.lens !== lensId) return;
-      const view = root.querySelector(`[data-view="${wide ? "map" : "list"}"]`) ?? root;
-      const r = view.getBoundingClientRect();
-      const seen = r.top < window.innerHeight && r.bottom > 0;
-      // Out of sight the frame goes back to by hand now, so the reader
-      // arrives at the tour's first frame; in sight the tour takes the
-      // frame on screen back softly as it starts.
+      // Seen: any of the workbench on screen — the stage, the caption card,
+      // the run log, the inspector — or focus inside it (`held`, read fresh:
+      // the kit's arrival renders with it), so a frame the reader can see,
+      // or is on, is never swapped out from under them. Out of sight the
+      // frame goes back to by hand now, so the reader arrives at the tour's
+      // first frame; in sight the tour takes the frame back softly as it
+      // starts, which it does only once focus has left (`run`).
+      const r = (benchRef.current ?? root).getBoundingClientRect();
+      const seen = held || (r.top < window.innerHeight && r.bottom > 0);
       if (want.from === "hand" && !seen) {
         setPhase("hand");
         setStep(-1);
@@ -401,30 +438,44 @@ export function Workbench({ data }: { data: WorkbenchData }) {
         tlRef.current = null;
         // The discs in flight are GSAP's own copies: nothing of them outlives the tour.
         root.querySelector("[data-auto-fly]")?.replaceChildren();
-        flipTl.current?.revert();
-        flipTl.current = null;
+        pillTween.current?.revert();
+        pillTween.current = null;
       };
     },
     { scope: stageRef, dependencies: [lensId, wide, nonce, reduce], revertOnUpdate: true },
   );
 
-  // The Running pill flies to its new block once React has moved it. The
-  // capture is consumed whatever happens, so a stale one is never flown.
+  // The Running pill flies to its new block once React has moved it: set
+  // back by a translate onto the box it left, then home, so the one read
+  // after the commit is the new box. The capture is consumed whatever
+  // happens, so a stale one is never flown.
   useIsoLayoutEffect(() => {
-    const capture = flipRef.current;
-    flipRef.current = null;
+    const capture = pillFrom.current;
+    pillFrom.current = null;
     const k = kitRef.current;
     const root = stageRef.current;
     if (!capture || !k || !root || reduce) return;
-    flipTl.current?.revert();
-    flipTl.current = k.Flip.from(capture.state, {
-      targets: root.querySelectorAll(capture.selector),
-      duration: 0.6,
-      ease: "power3.inOut",
-      absolute: true,
+    // A flight still under way lets go first: the box read was where it was seen.
+    pillTween.current?.revert();
+    pillTween.current = null;
+    const pill = root.querySelector<HTMLElement>(capture.selector);
+    if (!pill) return;
+    const from = capture.box;
+    if (!from) {
       // The run's first block has nowhere to fly from: the pill grows in place.
-      onEnter: (els) => k.gsap.fromTo(els, { scale: 0.5 }, { scale: 1, duration: 0.4, ease: "power3.out" }),
-    });
+      pillTween.current = k.gsap.fromTo(
+        pill,
+        { scale: 0.5 },
+        { scale: 1, duration: 0.4, ease: "power3.out", clearProps: "transform" },
+      );
+      return;
+    }
+    const now = pill.getBoundingClientRect();
+    pillTween.current = k.gsap.fromTo(
+      pill,
+      { x: from.left - now.left, y: from.top - now.top },
+      { x: 0, y: 0, duration: 0.6, ease: "power3.inOut", clearProps: "transform" },
+    );
   }, [frame, reduce]);
 
   // The rail keeps the chosen lens in sight wherever it scrolls (the rail
@@ -523,9 +574,19 @@ export function Workbench({ data }: { data: WorkbenchData }) {
    */
   const pickBlock = (id: string) => {
     takeOver();
+    // Focus on a link in the inspector's block (a check's, say: Tab, a
+    // modified click, a right-click put it there) would go down with the
+    // block the pick swaps out, to <body>, and its blur, fired inside
+    // React's commit, never reaches the hold, which would keep the tour
+    // waiting for good: it moves to the inspector's heading first.
+    const col = blockColRef.current;
+    const heading = inspectorRef.current;
+    const active = document.activeElement;
+    if (id !== shown && col && heading && active !== heading && col.contains(active)) {
+      heading.focus({ preventScroll: true });
+    }
     setPick(id);
     requestAnimationFrame(() => {
-      const col = blockColRef.current;
       if (!col) return;
       const r = col.getBoundingClientRect();
       const by = r.top + Math.min(r.height, window.innerHeight * INSPECTOR_SHOWN) - window.innerHeight;
@@ -536,9 +597,15 @@ export function Workbench({ data }: { data: WorkbenchData }) {
   /** The reader's hand inside the inspector — a focus, a click — holds what it shows. */
   const holdBlock = () => setPick((p) => p ?? shown);
 
-  /** Focus inside a block the tour may change: the tour waits until it leaves. */
+  /**
+   * Focus on a control inside a block the tour may change: the tour waits
+   * until it leaves. The inspector's heading is no control — only where a
+   * pick puts focus it would otherwise drop — so focus there (a click on
+   * the words, or that move) never holds it: a stray click on a label
+   * never stills the page's one autoplay under a button reading Pause.
+   */
   const holdProps = {
-    onFocus: () => setHeld(true),
+    onFocus: (e: FocusEvent<HTMLElement>) => setHeld(e.target !== inspectorRef.current),
     onBlur: (e: FocusEvent<HTMLElement>) => {
       if (!e.currentTarget.contains(e.relatedTarget)) setHeld(false);
     },
@@ -546,13 +613,25 @@ export function Workbench({ data }: { data: WorkbenchData }) {
 
   /**
    * A lens asked for from elsewhere on the page (#work's "Watch it run"):
-   * picked as a key picks it — nothing plays, the live region says which
-   * lens — the stage comes up under the header, and focus moves to the
-   * lens's chip. A content-visibility box above may render at its real
-   * height mid-scroll: one more look after 400ms.
+   * picked as the link was pressed — a pointer's click plays its tour, as
+   * a pointer on its chip does, and says nothing; Enter or Space, reduced
+   * motion or the still tier give its finished frame, and the live region
+   * says which lens — the stage comes up under the header, and focus moves
+   * to the lens's chip. The tour plays once the stage has the screen. With
+   * no kit yet (the stage was never near: the reader came to #work by the
+   * menu; or a lite device, where nothing inside the stage was tapped —
+   * the pick is the go-ahead, and fetches it), the tour waits for it from
+   * the finished frame, as the first view's does: a link that says
+   * "Watch it run" costs the fetch, and so it runs. (SPEC §5.2 had lite
+   * before a tap give the finished frame, to save the fetch; a pick fetches
+   * the kit whatever happens, `markInteracted`.) A content-visibility box
+   * above may render at its real height mid-scroll: one more look after
+   * 400ms.
    */
-  const showLens = (id: RunLensId) => {
-    pickLens(id, "key");
+  const showLens = (id: RunLensId, via: RunVia) => {
+    const play = via === "pointer" && !reduce;
+    pickLens(id, play ? "pointer" : "key");
+    if (play && !kit) wantRef.current = { lens: id, from: "hand" };
     const stage = stageRef.current;
     if (!stage) return;
     const go = () => stage.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
@@ -570,12 +649,43 @@ export function Workbench({ data }: { data: WorkbenchData }) {
   };
 
   const request = useRunRequest();
-  const onRequest = useEffectEvent((id: RunLensId) => showLens(id));
+  const onRequest = useEffectEvent((id: RunLensId, via: RunVia) => showLens(id, via));
   useEffect(() => {
     if (!request) return;
-    const raf = requestAnimationFrame(() => onRequest(request.id));
+    const raf = requestAnimationFrame(() => onRequest(request.id, request.via));
     return () => cancelAnimationFrame(raf);
   }, [request]);
+
+  /**
+   * The hero's links here ("Watch one run", "Watch them run", "Running
+   * here") are the shared hero's plain jumps, which the shell's Jumps
+   * lands. While the first view's tour is still to play, a jump is all
+   * they need: the stage arrives, and it plays. Once that tour has played,
+   * or the reader has taken over, a jump would land on a still frame under
+   * a link that promised a run, so a plain primary click is taken over as
+   * a RunLink's is (run-link.tsx): no fragment left, and the lens on the
+   * stage shown as the click asked — a pointer's plays its tour, a key's
+   * gives its finished frame, focus on its chip. So too a pointer's click
+   * on lite before a tap, where the first view's tour would never start.
+   * Never with reduced motion: nothing plays, and the jump stands. On the
+   * document, so it runs before Jumps' listener on the window, which
+   * leaves a click already prevented alone.
+   */
+  const onHeroClick = useEffectEvent((e: MouseEvent) => {
+    if (reduce || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const target = e.target instanceof Element ? e.target : null;
+    if (!target?.closest('#top a[href="#running"]')) return;
+    const via: RunVia = e.detail === 0 ? "key" : "pointer";
+    if (wantRef.current && (kit || tier !== "lite" || via === "key")) return;
+    e.preventDefault();
+    history.replaceState(null, "", location.pathname + location.search);
+    showLens(lensId, via);
+  });
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => onHeroClick(e);
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, []);
 
   /* ─── What the controls and the text blocks show ────────────────── */
 
@@ -602,10 +712,13 @@ export function Workbench({ data }: { data: WorkbenchData }) {
     [data.phase, data.stepOf, lens],
   );
   const captionAt = phase === "hand" ? 0 : step < 0 ? 1 : step + 2;
-  // The xl strip beside "By itself": where the run is, in a line.
+  // The xl strip beside "By itself": where the run is, in a line. Before
+  // the flow is built it says so in its own words: "By hand" there would
+  // read against the lane's label on the same line, and the lane above and
+  // the caption below already say it.
   const strip =
     phase === "hand"
-      ? { mark: data.phase.hand, title: "" }
+      ? { mark: data.phase.waiting, title: "" }
       : step < 0
         ? { mark: data.phase.built, title: "" }
         : { mark: fill(data.stepOf, { n: pad2(step + 1), total: pad2(lens.steps.length) }), title: lens.steps[step].title };
@@ -629,7 +742,7 @@ export function Workbench({ data }: { data: WorkbenchData }) {
         : { icon: "play" as const, label: data.transport.play };
 
   return (
-    <div className="mt-10 md:mt-12">
+    <div ref={benchRef} className="mt-10 md:mt-12">
       {/* scroll-mt: "Watch it run" brings the stage up clear of the header. */}
       <div ref={stageRef} className="scroll-mt-8">
         <div className="flex items-center gap-3">
@@ -650,7 +763,12 @@ export function Workbench({ data }: { data: WorkbenchData }) {
           <RoundButton icon={button.icon} label={button.label} onClick={transport} disabled={reduce} />
         </div>
 
-        <div className="home-stage relative isolate mt-4 rounded-[28px] p-4 max-[359px]:p-3 md:p-6 xl:p-7">
+        {/* data-paused: while a tour waits, what is in flight is hidden, never
+            parked over the words the reader stopped to read (auto-running.css §5). */}
+        <div
+          data-paused={touring && !run ? "" : undefined}
+          className="home-stage relative isolate mt-4 rounded-[28px] p-4 max-[359px]:p-3 md:p-6 xl:p-7"
+        >
           <span aria-hidden className="home-grain" />
 
           {/* xl: the hand lane over the map. */}
@@ -732,7 +850,11 @@ export function Workbench({ data }: { data: WorkbenchData }) {
         {/* Focus in the log holds the tour: it never checks and unchecks the radio a screen reader is on. */}
         <div className="min-w-0" {...holdProps}>
           <h3 className={cn(TYPE.label, "text-pp-muted")}>{data.logTitle}</h3>
-          <div {...stepRadio.groupProps} aria-label={data.logAria} className="-mx-3 mt-3 flex min-w-0 flex-col gap-1">
+          {/* From md the rows hang 12px into the gutter, so their numbers line
+              up with the heading; below md the gutter is 16px, and a checked
+              row's edge (STEP_ON) would sit 4px from the screen's: the rows
+              keep to the column there, their numbers 12px in. */}
+          <div {...stepRadio.groupProps} aria-label={data.logAria} className="mt-3 flex min-w-0 flex-col gap-1 md:-mx-3">
             {lens.steps.map((s, i) => {
               const on = phase === "built" && i === step;
               const done = phase === "built" && i < step;
@@ -743,9 +865,9 @@ export function Workbench({ data }: { data: WorkbenchData }) {
                   {...stepRadio.getItemProps(i)}
                   className={cn(
                     STEP_ROW,
-                    "group cursor-pointer transition-colors duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
+                    "group cursor-pointer transition-[background-color,box-shadow] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
                     RING_LIGHT,
-                    on ? "bg-(--home-wash)" : "hover:bg-(--home-wash)/60",
+                    on ? STEP_ON : "hover:bg-(--home-wash)/60",
                   )}
                 >
                   <span className="flex items-center gap-[3px]">
@@ -790,6 +912,8 @@ export function Workbench({ data }: { data: WorkbenchData }) {
           onClickCapture={holdBlock}
           {...holdProps}
         >
+          {/* Where a pick puts focus that was on a link in the block it swaps
+              out (pickBlock): a target, not a control, so it never holds the tour. */}
           <h3 ref={inspectorRef} tabIndex={-1} className={cn(TYPE.label, "w-fit rounded-sm text-pp-muted", RING_LIGHT)}>
             {data.blockTitle}
             {shownNode && <span className="sr-only">: {shownNode.label}</span>}
@@ -812,7 +936,8 @@ export function Workbench({ data }: { data: WorkbenchData }) {
         </div>
       </div>
 
-      <p aria-live="polite" className="sr-only">
+      {/* Atomic: a repeat that only adds a no-break space is read whole. */}
+      <p aria-live="polite" aria-atomic="true" className="sr-only">
         {said}
       </p>
     </div>

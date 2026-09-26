@@ -15,12 +15,15 @@ import { requestRun } from "./run-bus";
  * its index.
  *
  * With script, a plain primary click is taken over: the lens goes to the
- * workbench (run-bus.ts `requestRun`), which picks it as a key would, on
- * its finished frame with nothing playing, brings the stage up clear of
- * the header and moves focus to the lens's chip. A jump would land on
- * the section's heading, above the lens rail, and a content-visibility
- * box above can land a jump short; the workbench's own scroll corrects
- * for that and takes one more look once it has settled.
+ * workbench (run-bus.ts `requestRun`) with how the link was pressed. A
+ * pointer's click plays the lens's tour, from by hand, as a pointer on
+ * its chip does; Enter or Space (a click with none counted, `detail` 0)
+ * shows its finished frame, as those keys on the chip do. Either way the
+ * workbench brings the stage up clear of the header and moves focus to
+ * the lens's chip. A jump would land on the section's heading, above the
+ * lens rail, and a content-visibility box above can land a jump short;
+ * the workbench's own scroll corrects for that and takes one more look
+ * once it has settled.
  *
  * NO FRAGMENT LEFT BEHIND. The click leaves the history entry's address
  * at its path and query, without a jump, and takes off any fragment it
@@ -44,7 +47,7 @@ export function RunLink({ lens, className, children }: { lens: RunLensId; classN
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
     history.replaceState(null, "", location.pathname + location.search);
-    requestRun(lens);
+    requestRun(lens, e.detail === 0 ? "key" : "pointer");
   };
   return (
     <a href="#running" className={className} onClick={onClick}>

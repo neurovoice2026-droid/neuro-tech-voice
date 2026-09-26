@@ -20,8 +20,8 @@ import { LiveMesh } from "@/components/site/solutions/custom-saas-platforms/live
  * what happens in it, what the reader holds at its end (the hairline
  * block, in the light's accent), where there is one, what this
  * platform's own automations show of that stage ("On ours": signed and
- * retried webhooks, one invoice per payment, a morning job whose steps
- * stand alone; a person texted mid-call, usage emails, every run
+ * retried webhooks, a check before every fiscal invoice, a morning job
+ * where one failing step stops none of the others; a person texted mid-call, usage emails, every run
  * recorded with its outcome), and how to check it
  * (`CheckLine`: the four maps above, a break in #breaks, or the call).
  *

@@ -40,11 +40,19 @@ import { Tally } from "@/components/site/solutions/custom-saas-platforms/tally";
  *     the SaaS page; what a grant is not; how to check it.
  *
  * A hairline in the light's rule colour stands between the columns, the
- * same 40px either side of it. At md the figure sits over its words on
- * the left and the grants stand on the right, one hairline down the
- * middle; on a phone the three stack, a hairline between each. The card
- * is compact on purpose — about 700px at xl, where the SaaS card is 900 —
- * because the SaaS page tells the long version and this one links to it.
+ * same 40px either side of it, and it runs the card's full height, so
+ * the columns are sized to end near one line rather than leave a tall
+ * empty strip beside a full one. From lg the grants' column is a little
+ * wider than the middle one (1.1 to 1): it holds the most, and at that
+ * ratio the three end within about 50px of each other at xl, where 1.2
+ * to 1 the other way left the middle 108px short. At md the figure sits
+ * over its words on the left and the grants stand on the right, one
+ * hairline down the middle, the left column the wider (3 to 2) because
+ * it holds two blocks to the grants' one; at 768 the grants end 12px
+ * short of it, where halves left them 180px short. On a phone the three
+ * stack, a hairline between each. The card is compact on purpose — the
+ * section about 670px at xl, where the SaaS card alone is 900 — because
+ * the SaaS page tells the long version and this one links to it.
  *
  * NOTHING HERE IS A BADGE. No seal, no shield, no logo, no image: the
  * accreditations are personal and the page says so, and a badge-shaped
@@ -181,30 +189,49 @@ export function Team({ data, blobs }: { data: TeamData; blobs: readonly CSSPrope
               md: the figure over its words on the left, the grants on the
               right over both rows (the second row takes whatever height
               the grants need past the figure's, so the words sit right
-              under the figure). lg: three across, the figure's column as
-              wide as its caption's two halves, a hairline before each of
-              the others, 40px either side. */}
+              under the figure); the left column 3 to 2 the wider, so the
+              grants end near where the words do (12px short at 768, 30
+              at 900, where halves left 180 and 134). lg: three across,
+              the figure's column as wide as its caption's two halves,
+              then the words and the grants at 1 to 1.1, a hairline before
+              each, 40px either side. At xl that ends the words 48px short
+              of the grants and the figure 54 (1.2 to 1 the other way left
+              108 and 92), puts the grants' head on one line, and keeps
+              both check lines and the words' `isnt` on one line each. */}
           <div
             className={cn(
               "grid gap-10",
-              "md:grid-cols-2 md:grid-rows-[auto_1fr] md:gap-x-10 md:gap-y-6",
-              "lg:grid-cols-[auto_minmax(0,1.2fr)_minmax(0,1fr)] lg:grid-rows-none lg:gap-10",
+              "md:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] md:grid-rows-[auto_1fr] md:gap-x-10 md:gap-y-6",
+              "lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.1fr)] lg:grid-rows-none lg:gap-10",
             )}
           >
             {/* ── The figure ── */}
             <div className="min-w-0 lg:max-w-56">
               <h3 className={HEAD}>{acc.label}</h3>
               <Tally count={ACCREDITATIONS.count} orMore={ACCREDITATIONS.orMore} className="mt-5" />
-              <LineReveal
-                className={cn(
-                  "pp-display mt-4 text-[72px] leading-[72px] tracking-[-0.04em] text-(--saas-text) tabular-nums",
-                  "md:text-[96px] md:leading-[88px]",
-                )}
-                style={{ fontWeight: WEIGHT.num }}
-              >
-                {whole}
-                {floor && <span className="text-(--saas-accent)">+</span>}
-              </LineReveal>
+              {/* The figure is read once, here, as plain text. The numeral
+                  below is for the eye only: while the reveal waits and
+                  plays, GSAP's SplitText (`aria: "auto"`) puts an
+                  aria-label on the <p> and aria-hidden on every line in it,
+                  and a paragraph cannot carry a name, so a screen reader
+                  would get nothing. Hidden whole, the numeral can do that
+                  without anything lost. The wrapper is a plain block: the
+                  numeral's margin collapses through it and sr-only is taken
+                  out of flow, so nothing moves. (The proper fix is in
+                  useLineReveal/reveal.tsx, which this page cannot change.) */}
+              <p className="sr-only">{acc.figure}</p>
+              <div aria-hidden>
+                <LineReveal
+                  className={cn(
+                    "pp-display mt-4 text-[72px] leading-[72px] tracking-[-0.04em] text-(--saas-text) tabular-nums",
+                    "md:text-[96px] md:leading-[88px]",
+                  )}
+                  style={{ fontWeight: WEIGHT.num }}
+                >
+                  {whole}
+                  {floor && <span className="text-(--saas-accent)">+</span>}
+                </LineReveal>
+              </div>
               <p className={cn(TYPE.meta, "mt-1 text-(--saas-dim)")}>
                 <Halves text={acc.caption} />
               </p>

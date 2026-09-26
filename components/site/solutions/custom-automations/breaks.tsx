@@ -43,7 +43,7 @@ import { triesSentence } from "./trace";
  * THE GUARDS are four hairline cards, each a small line figure that
  * draws on its way up the screen (guard-figures.tsx, auto-breaks.css
  * §5), a title and one sentence: once per call, a time limit on every
- * run, steps that stand alone, nothing done twice. On a phone, a column
+ * run, failures stay contained, a Stripe event done once. On a phone, a column
  * of cards with each figure beside its words; two across from md, the
  * figure over them, and four from xl. No file paths on a card: the checks and the workbench's
  * index carry those.

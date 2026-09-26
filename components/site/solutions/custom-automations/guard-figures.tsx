@@ -11,9 +11,9 @@ import type { BreakGuardId } from "@/lib/pages/custom-automations";
  *     through the gate, the second stops short of it — and one run.
  *   · A time limit on every run: a run's clock, a line running on from
  *     it, and the limit it can't pass.
- *   · Steps that stand alone: three steps setting out from one start,
+ *   · Failures stay contained: three steps setting out from one start,
  *     the middle one failing, the other two reaching their ends.
- *   · Nothing done twice: an event reaching its record, done, and the
+ *   · A Stripe event done once: an event reaching its record, done, and the
  *     same event again, turned back at the door.
  *
  * THE #checks KEY'S LINE VOCABULARY (custom-saas-platforms/checks.tsx
@@ -100,7 +100,7 @@ function BudgetFigure() {
   );
 }
 
-/** Steps that stand alone: three from one start, the middle one failing, the others reaching their ends. */
+/** Failures stay contained: three from one start, the middle one failing, the others reaching their ends. */
 function AloneFigure() {
   return (
     <>
@@ -117,7 +117,7 @@ function AloneFigure() {
   );
 }
 
-/** Nothing done twice: an event reaches its record, done; the same event again is turned back. */
+/** A Stripe event done once: an event reaches its record, done; the same event again is turned back. */
 function TwiceFigure() {
   return (
     <>

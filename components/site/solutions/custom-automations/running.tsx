@@ -94,7 +94,7 @@ function Index({ data }: { data: RunningData }) {
         >
           {/* A heading, as the SaaS FAQ's questions are: the lens and ledger
               h4s below nest under it, not under the ledger's h3 above. */}
-          <h3 className={cn(TYPE.body, "font-medium text-pp-ink")}>{data.indexSummary}</h3>
+          <h3 className={cn(TYPE.body, "font-medium text-balance text-pp-ink")}>{data.indexSummary}</h3>
           <span
             aria-hidden
             className="grid size-8 shrink-0 place-items-center rounded-full bg-(--home-chip) text-pp-ink transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-open:rotate-45"

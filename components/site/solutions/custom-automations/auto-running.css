@@ -8,7 +8,7 @@
  *   §2  the map (xl)
  *   §3  the list (below xl)
  *   §4  the ledger's rise, a step apart by column from lg
- *   §5  lite, still and weak; reduced motion; forced colours
+ *   §5  lite, still and weak; paused; reduced motion; forced colours
  *
  * Imported once, by app/solutions/custom-automations/page.tsx, after
  * auto.css (whose §1–§5 hold the page's shared marks, tiers and forced
@@ -24,7 +24,8 @@
  * on the lane's discs and "now step" lines, the cards' badges and the
  * list's chips, `data-built`, `data-route` and `data-on` on the lines,
  * the branch words and the frames, `data-on` on the rail's segments,
- * `data-picked` on the reader's pick — and every rule below reads one.
+ * `data-picked` on the reader's pick, `data-paused` on the stage while
+ * a tour waits — and every rule below reads one.
  * GSAP never writes any of them (workbench-timeline.ts): it dashes a
  * trace, rides a bead, pings a ring, flies a chip or a disc and settles a
  * card, all things these rules leave at rest (a trace undrawn unless it
@@ -361,7 +362,7 @@
 
 /* The Running pill (Done once the run has ended): white on electric,
    hanging off the current card's foot, or in the current row's tag
-   line. The workbench flies it between blocks (Flip). */
+   line. The workbench flies it between blocks (a translate). */
 .pp .auto-pill {
   background-color: var(--home-electric);
   color: #fff;
@@ -563,7 +564,7 @@
   }
 }
 
-/* ─── §5 Lite, still and weak; reduced motion; forced colours ───────
+/* ─── §5 Lite, still and weak; paused; reduced motion; forced colours
    LITE, STILL AND WEAK: the pick's ring is simply there, and the rail's
    fill and a chip's slide land at once (auto.css §3 holds the page's
    other finished frames; the tour itself waits for a tap on lite, and
@@ -578,6 +579,16 @@ html[data-tier="lite"] .home-body :is(.auto-seg, .auto-was),
 html[data-tier="still"] .home-body :is(.auto-seg, .auto-was),
 html[data-weak] .home-body :is(.auto-seg, .auto-was) {
   transition: none;
+}
+
+/* PAUSED: while a tour waits (the reader's Pause, or focus holding it),
+   a chip or a disc caught in flight would stay parked over the words the
+   reader stopped to read. The stage's `data-paused` hides the flying
+   copies only — the lane's own discs and the badges keep their frame —
+   and Play shows them again mid-flight. Hidden, not removed: GSAP still
+   measures their paths. */
+.pp [data-paused] :is(.auto-chip, .auto-disc.auto-flight) {
+  visibility: hidden;
 }
 
 /* REDUCED MOTION AND THE STILL TIER: every state above reads finished at

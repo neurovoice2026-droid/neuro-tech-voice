@@ -277,6 +277,14 @@ const SCENARIO = cn(
   RING_DARK,
 );
 
+/**
+ * A scenario's code never ends on a lone word: its last two are held
+ * together by a no-break space, so a chip two columns wide splits
+ * "503, / three times", never "503, three / times". (Balancing alone
+ * cannot: it rates 10/5 characters fairer than 4/11.) Said the same.
+ */
+const keepLastPair = (s: string) => s.replace(/ (?=\S+$)/, "\u00a0");
+
 export function BreaksInstrument({ data, table }: { data: BreaksData; table: readonly BreakRow[] }) {
   const roomRef = useRef<HTMLDivElement>(null);
   const traceRef = useRef<HTMLDivElement>(null);
@@ -442,9 +450,12 @@ export function BreaksInstrument({ data, table }: { data: BreaksData; table: rea
                 onClick={(e) => pick(s.id, e.detail === 0 ? "key" : "pointer")}
                 className={SCENARIO}
               >
-                <span className="text-[14px] leading-5">{s.label}</span>
+                {/* Balanced, so a label that wraps splits in halves ("Points inside a /
+                    private network"), never ending on a lone word; its code too
+                    (keepLastPair). */}
+                <span className="text-[14px] leading-5 text-balance">{s.label}</span>
                 <span className="sr-only">, </span>
-                <span className={cn(TYPE.mono, "auto-hint text-[11px] leading-4")}>{s.hint}</span>
+                <span className={cn(TYPE.mono, "auto-hint text-[11px] leading-4 text-balance")}>{keepLastPair(s.hint)}</span>
               </button>
             ))}
           </div>

@@ -26,7 +26,11 @@ import { RunLink } from "./run-link";
  * scrolls sideways edge to edge and brings the chosen one to its middle
  * (the rail only: the page never moves), and from md they wrap. "How
  * hard" is the landing's segmented switch, its white thumb gliding under
- * the level picked, and under it that level's gloss in one line laid
+ * the level picked. Here the thumb carries an electric edge and its
+ * label a heavier weight (`auto-level`, auto-work.css §7), because a
+ * white thumb on the chip-grey track is 1.12:1 and the violet label
+ * against the muted ones differs by hue alone. Under the switch is that
+ * level's gloss in one line laid
  * over the other two (`Stack`), so the line never jumps and nothing
  * under it moves when the level changes. From lg the two stand side by
  * side, the field on the left and the level in a 420px column on the
@@ -62,18 +66,25 @@ import { RunLink } from "./run-link";
  * UNDER THE PANEL, on the light, what is left for a person, and what
  * makes the job hard (a copy-paste has nothing hard, so it has no cell,
  * and the person's line takes the width). Then the legend, white again:
- * one line per kind of block in the sample, in the order the flow first
- * reaches it. A kind this platform runs says "Runs here" (settled green,
- * 5.50), where, and "Watch it run →", which opens the workbench lens
- * where it runs (`RunLink`, through run-bus.ts) or jumps to the section
- * that shows it (#breaks, the ledger's card for the person told
- * mid-call). A kind it runs thinly or not at all says "Short here" or
- * "Built for yours" (violet, 7.10) and nothing more; the one sentence on
- * why (KINDS_NOTE: a pause of at most thirty seconds, nothing that waits
- * for a person's yes) is printed under the legend only when the sample
- * has a wait or an approval in it, so the page says it once and only
- * where it is true. Where a proof in the legend says "webhook", the
- * plain gloss of the word follows it.
+ * one item per kind of block in the sample, in the order the flow first
+ * reaches it, in two columns from md and three from xl. A kind this
+ * platform runs says "Runs here" (settled green, 5.50), then where, in
+ * one sentence that ends in a link, run in on its last line rather than
+ * on a line of its own (a pipeline's legend is nine of them, and it keys
+ * the moves: it must not outgrow them). Where the kind runs in a
+ * workbench lens the link says "Watch it run →" and opens that lens
+ * (`RunLink`, through run-bus.ts: a click plays its tour where motion is
+ * on, Enter shows its finished frame); where it is shown by a section
+ * that doesn't play on arrival (#breaks, the ledger's card for the
+ * person told mid-call) it says "See it on this page →" and is a plain
+ * jump, so the words never promise motion a still frame won't give. A
+ * kind it runs thinly or not at
+ * all says "Short here" or "Built for yours" (violet, 7.10) and nothing
+ * more; the one sentence on why (KINDS_NOTE: a pause of at most thirty
+ * seconds, nothing that waits for a person's yes) is printed under the legend
+ * only when the sample has a wait or an approval in it, so the page says
+ * it once and only where it is true. Where a proof in the legend says
+ * "webhook", the plain gloss of the word follows it.
  *
  * THE MOTION is CSS alone (auto-work.css), the slice rule, so it costs
  * the same on every device. Before any pick, each move row plays on its
@@ -103,8 +114,9 @@ import { RunLink } from "./run-link";
  * caption's own words, whose visible copy is aria-hidden so they are
  * heard once. Each block's tag is followed by a hidden colon ("Rule:
  * Over the approval limit?"), each dot is aria-hidden (the row says
- * whether the move is made in words), and each "Watch it run" link names
- * its kind ("Watch it run: Record"). A pick is announced once, in a
+ * whether the move is made in words), and each legend link names its
+ * kind ("Watch it run: When", "See it on this page: Record"). A pick is
+ * announced once, in a
  * polite live region, after the keys have rested ("Finance, A process:
  * Supplier invoices from the inbox into the accounts. 7 blocks."), and
  * nothing is announced on load.
@@ -144,6 +156,16 @@ const COLUMNS = "md:grid md:grid-cols-[128px_minmax(0,1fr)_minmax(0,1.25fr)] md:
 
 /** A small uppercase word in mono on white: a move's name, a block's tag, a prefix. */
 const MONO_TAG = cn(TYPE.mono, "text-[10px] leading-4 text-(--home-muted) uppercase");
+
+/**
+ * A name that never breaks inside itself: its spaces no-break (U+00A0)
+ * and its hyphens non-breaking (U+2011, which Inter draws as a hyphen),
+ * for the sample's tag, where "A process" and "A copy-paste" are one
+ * name each.
+ */
+function unbroken(name: string): string {
+  return name.replace(/ /g, " ").replace(/-/g, "‑");
+}
 
 /** The sample a field and a level pick: there is one for each pair (the data module's test holds all eighteen). */
 function sampleOf(samples: readonly Sample[], field: FieldId, level: LevelId): Sample {
@@ -264,13 +286,17 @@ export function WorkInstrument({ data, blobs }: { data: WorkData; blobs: readonl
               segments give up their side padding, and under 360px a
               pixel of type, so "A copy-paste" sits inside a third of a
               320px window with air either side: 89px of words at 14px ran
-              past a 93px segment's padding, 82px at 13px don't. */}
+              past a 93px segment's padding, 82px at 13px don't (83px at
+              the chosen label's 500). `auto-level` edges the thumb in
+              electric and sets the chosen label at 500 (auto-work.css
+              §7): the landing's `Segmented` draws neither, and its file
+              is not this page's to change. */}
           <Segmented
             label={data.levelLabel}
             options={data.levels}
             value={choice.level}
             onChange={(level) => show(choice.field, level)}
-            className="mt-3 w-full md:max-w-[420px] max-sm:[&>button]:px-1 max-[359px]:[&>button]:text-[13px]"
+            className="auto-level mt-3 w-full md:max-w-[420px] max-sm:[&>button]:px-1 max-[359px]:[&>button]:text-[13px]"
           />
           {/* The level's gloss, laid over the other two so the line holds
               the tallest and nothing under it moves. No entrance of its own:
@@ -294,9 +320,15 @@ export function WorkInstrument({ data, blobs }: { data: WorkData; blobs: readonl
         <LiveMesh blobs={blobs} drift={0.96} />
         <span aria-hidden className="home-grain" />
 
-        {/* The head: on the light, in its own tokens. */}
+        {/* The head: on the light, in its own tokens. The tag's names are
+            unbroken (`unbroken`), and its template glues each "·" to the
+            word before it, so on a phone it wraps only after a "·":
+            never "A / process", "A copy- / paste", nor a line that opens
+            on the separator. */}
         <div className="min-w-0">
-          <p className={cn(TYPE.label, "text-(--saas-dim)")}>{fill(data.tag, { field: fieldLabel, level: levelLabel })}</p>
+          <p className={cn(TYPE.label, "text-(--saas-dim)")}>
+            {fill(data.tag, { field: unbroken(fieldLabel), level: unbroken(levelLabel) })}
+          </p>
           <h3
             id={titleId}
             className={cn(TYPE.h3, "mt-2 text-balance text-(--saas-text)")}
@@ -327,10 +359,12 @@ export function WorkInstrument({ data, blobs }: { data: WorkData; blobs: readonl
 
         {/* ── The legend ── white: where each kind of block in the sample already runs. */}
         <div className={cn(PLATE, "mt-6 p-4 md:p-6")}>
-          <h4 className={cn(TYPE.label, "text-(--home-muted)")}>{data.proofTitle}</h4>
+          <h4 className={cn(TYPE.label, "text-balance text-(--home-muted)")}>{data.proofTitle}</h4>
           {/* Two columns from md: one would leave the plate's right half
-              empty beside a short proof. */}
-          <ul className="mt-4 grid gap-x-8 gap-y-5 md:grid-cols-2">
+              empty beside a short proof. Three from xl, where two stack a
+              pipeline's nine kinds five rows deep, a key taller than the
+              moves it keys. */}
+          <ul className="mt-4 grid gap-x-8 gap-y-5 md:grid-cols-2 xl:grid-cols-3">
             {kinds.map((k) => (
               <LegendItem key={k} data={data} kind={k} />
             ))}
@@ -359,8 +393,9 @@ function MovesPanel({ data, sample, titleId }: { data: WorkData; sample: Sample;
   return (
     <div className={cn(PLATE, "auto-moves mt-6 p-4 md:p-6")}>
       {/* The caption's words are the first column's header, below: heard
-          there, once. */}
-      <p aria-hidden className={cn(TYPE.label, "text-(--home-muted)")}>
+          there, once. Balanced, so a caption that wraps on a phone never
+          leaves its last word alone. */}
+      <p aria-hidden className={cn(TYPE.label, "text-balance text-(--home-muted)")}>
         {data.movesCaption}
       </p>
       <div role="table" aria-labelledby={titleId} className="mt-3">
@@ -468,17 +503,31 @@ function MovesPanel({ data, sample, titleId }: { data: WorkData; sample: Sample;
   );
 }
 
-/** "Watch it run →", as the #checks rows set their links: 18px of text in a 24px box, a 44px target. */
+/**
+ * The legend's link, run in at the end of the proof it follows, in the
+ * proof's 13/18 type: a link in running text, as the landing's pricing
+ * sets one (`home-link`, the ring hugging the words). Unbroken, so the
+ * arrow never wraps away from its words, a proof whose last line is full
+ * takes the whole link to the next, and the link is one box on one line
+ * for its `before:` to sit exactly on. That box is 16px tall, and the
+ * pseudo makes it a 44px target (16 + 14 + 14, as CheckLine's links
+ * reach), which covers only the proof's line above and the list's 20px
+ * gap below: never another target.
+ */
 const WATCH = cn(
-  "home-link group relative mt-1.5 inline-block min-h-6 rounded-sm py-[3px] text-[13px] leading-[18px]",
-  "before:absolute before:inset-x-0 before:-inset-y-2.5",
+  "home-link group relative rounded-sm whitespace-nowrap before:absolute before:inset-x-0 before:-inset-y-3.5",
   RING_LIGHT,
 );
 
 /**
  * Where a kind runs: a workbench lens opens in the workbench (`RunLink`);
  * an anchor (#breaks, a ledger card) is a plain jump. The link's name
- * carries the kind, so a list of them never reads as six of the same.
+ * carries the kind, so a list of them never reads as six of the same. Its
+ * words are never the proof's own (the proof says what runs, the link
+ * where to see it), and they say what the reader will find there: "Watch
+ * it run" only where a lens plays its tour, "See it on this page" where a
+ * jump lands on a section or a card that stands still until the reader
+ * acts (LegendItem picks which).
  */
 function Watch({ show, label, tag }: { show: KindShow; label: string; tag: string }) {
   const words = (
@@ -504,7 +553,12 @@ function Watch({ show, label, tag }: { show: KindShow; label: string; tag: strin
   );
 }
 
-/** One kind of block in the legend: its glyph and tag, whether it runs here, and if it does, where. */
+/**
+ * One kind of block in the legend: its glyph and tag, whether it runs
+ * here, and if it does, the proof with the way to see it at its end:
+ * "Watch it run" for a workbench lens, which plays, and "See it on this
+ * page" for a jump (#breaks, the ledger's card), which lands on a still.
+ */
 function LegendItem({ data, kind }: { data: WorkData; kind: BlockKind }) {
   const info = data.kinds[kind];
   const runs = info.ours === "does";
@@ -518,10 +572,9 @@ function LegendItem({ data, kind }: { data: WorkData; kind: BlockKind }) {
           <span className={cn(MONO_TAG, runs ? "text-(--home-settled)" : "text-(--home-violet)")}>{data.ours[info.ours]}</span>
         </p>
         {info.ours === "does" && (
-          <>
-            <p className={cn(TYPE.meta, "mt-1 text-pretty text-(--home-ink)/80")}>{info.proof}</p>
-            <Watch show={info.show} label={data.watch} tag={info.tag} />
-          </>
+          <p className={cn(TYPE.meta, "mt-1 text-pretty text-(--home-ink)/80")}>
+            {info.proof} <Watch show={info.show} label={"lens" in info.show ? data.watch : data.see} tag={info.tag} />
+          </p>
         )}
       </div>
     </li>

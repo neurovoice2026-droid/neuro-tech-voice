@@ -196,7 +196,6 @@ export function FlowList({
                         {state === "current" && (
                           <span
                             className="auto-pill rounded-full px-2 text-[11px] leading-4 font-medium whitespace-nowrap"
-                            data-flip-id="auto-pill"
                           >
                             {copy.pill}
                           </span>

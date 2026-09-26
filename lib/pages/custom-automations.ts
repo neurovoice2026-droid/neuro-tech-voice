@@ -119,7 +119,7 @@ if (FACTS.cronSteps.length !== 8) throw new Error("custom-automations: the daily
  * source text. All exact: none of them prints with a "+".
  */
 export const FACTS_AUTO = {
-  emails: 8, // `export function …Email(` in lib/email/templates.ts, each called outside it
+  emails: 8, // the account emails: `export function …Email(` in lib/email/templates.ts, each called outside it
   alertsPerCall: 3, // = MAX_ALERTS_PER_CALL (lib/voice/tools/notify.ts)
   usageMarks: [80, 100], // = USAGE_THRESHOLDS (lib/billing/usage.ts)
   waitMaxSeconds: 30, // waitConfigSchema .max(30 (lib/workflows/schemas.ts)
@@ -157,8 +157,9 @@ export const ACTION_WORDS: Record<ActionType, string> = {
   create_doc: "a call report in Google Docs",
   save_to_drive: "the transcript in Google Drive",
 };
-// The steps an owner sets up without Google: the self-serve card's list.
-const SELF_SERVE_STEPS = ACTION_TYPES.filter((a) => !(a in GOOGLE_ACTION_INTEGRATION)); // five
+// The steps an owner sets up without Google, less the pause (it sits between
+// steps, it isn't follow-up): the self-serve card's list.
+const SELF_SERVE_STEPS = ACTION_TYPES.filter((a) => !(a in GOOGLE_ACTION_INTEGRATION) && a !== "wait"); // four
 
 /* ---------- helpers ---------- */
 
@@ -267,7 +268,7 @@ export type LedgerCard = {
 export type RunningData = {
   eyebrow: string; title: string; key: string; sub: string; tag: string;
   lensesAria: string; transport: { play: string; pause: string; replay: string };
-  lanes: { hand: string; flow: string }; phase: { hand: string; built: string };
+  lanes: { hand: string; flow: string }; phase: { hand: string; waiting: string; built: string };
   stepOf: string; logTitle: string; logAria: string; blockTitle: string; hint: string; hintTour: string; picked: string;
   was: string; code: string; onRun: string; offRun: string; nowStep: string; pill: { running: string; done: string };
   meters: MeterCopy; kinds: Record<BlockKind, KindInfo>; checkKinds: Record<CheckKind, string>;
@@ -296,7 +297,7 @@ export type WorkData = {
   moves: readonly { id: MoveId; label: string }[];
   movesCaption: string; tag: string; hand: string; flow: string; absent: string;
   person: string; hard: string; gloss: string;
-  proofTitle: string; ours: Record<Ours, string>; kindsNote: string; watch: string;
+  proofTitle: string; ours: Record<Ours, string>; kindsNote: string; watch: string; see: string;
   meters: MeterCopy; kinds: Record<BlockKind, KindInfo>;
   live: string; indexSummary: string; foot: string;
   samples: readonly Sample[];
@@ -381,8 +382,10 @@ export const AUTO_META = {
 
 export const AUTO_HERO: HeroData = keyed({
   eyebrow: ITEM.label, // "Custom Automations"
-  title: "Whatever the work, we automate it. This platform runs on ours.",
-  key: "This platform runs on ours.",
+  // The no-break spaces keep "it." on its line and "This platform" whole, so the
+  // violet phrase never starts with a lone "This" (measured 320–1920).
+  title: "Whatever the work, we automate\u00a0it. This\u00a0platform runs on ours.",
+  key: "This\u00a0platform runs on ours.",
   // The owner's claim and both credentials in the first paragraph, before the plates.
   sub: `${ITEM.description} We automate it in any field, however hard: a copy-paste between two tools, or a pipeline across many systems with AI, schedules, retries and a person told the moment they’re needed. Our team holds ${ACC} personal Claude accreditations from Anthropic, our company holds startup grants from ${GRANTORS}, and the automations this platform runs on are our proof.`, // OWNER
   primary: CALL,
@@ -396,7 +399,7 @@ export const AUTO_HERO: HeroData = keyed({
     plates: [
       { layer: ITEM.stack[0], name: "Emails nobody writes by hand",
         runs: "Receipts, failed payments, usage warnings, refunds, a welcome and a goodbye, each sent when it happens",
-        datum: `${FACTS_AUTO.emails} automatic emails` }, // "8 automatic emails"
+        datum: `${FACTS_AUTO.emails} account emails` }, // "8 account emails"
       // valueInputOption 'RAW' (lib/workflows/google.ts): "nothing runs as a formula".
       { layer: ITEM.stack[1], name: "A row in Google Sheets per call",
         runs: "A workflow step that writes each call as plain text, so nothing a caller says runs as a formula. In beta.",
@@ -414,7 +417,7 @@ export const AUTO_HERO: HeroData = keyed({
   },
   proofLabel: "The evidence on this page",
   proof: [
-    { label: "Running here", term: "This platform’s automations", detail: "Taken apart below, from manual to automatic.", href: "#running" },
+    { label: "Running here", term: "This platform’s automations", detail: "Taken apart below, block by block.", href: "#running" },
     { label: "Accreditations", term: `${ACC} Claude accreditations`, detail: "From Anthropic, each earned by someone on our team.", href: "#team" },
     { label: "Startup grants", term: GRANTORS, detail: "Awarded to our company. Their technology runs inside this platform.", href: "#team" },
   ],
@@ -429,12 +432,12 @@ export const AUTO_HERO: HeroData = keyed({
  * said once, in KINDS_NOTE, never beside every kind.
  */
 export const KINDS: Record<BlockKind, KindInfo> = {
-  when: { tag: "When", ours: "does", proof: "A payment, the end of a call, a new document: each starts an automation here.", show: { lens: "pay" } },
+  when: { tag: "When", ours: "does", proof: "A payment, the end of a call, a new document: each starts an automation.", show: { lens: "pay" } },
   time: { tag: "Schedule", ours: "does", proof: `${cap(word(FACTS.cronSteps.length))} steps run here every morning at ${FACTS.cronAt}.`, show: { lens: "morning" } },
-  read: { tag: "Reads", ours: "does", proof: "It reads Stripe’s invoices, uploaded files and web pages.", show: { lens: "document" } },
-  ai: { tag: "AI", ours: "does", proof: "Calls here are written up by AI, and documents indexed with it.", show: { lens: "call" } },
+  read: { tag: "Reads", ours: "does", proof: "Stripe’s invoices, uploaded files and web pages.", show: { lens: "document" } },
+  ai: { tag: "AI", ours: "does", proof: "Calls are written up by AI, and documents indexed with it.", show: { lens: "call" } },
   rule: { tag: "Rule", ours: "does", proof: "A signature, an unhappy caller or a word you listen for decides what runs next.", show: { lens: "call" } },
-  once: { tag: "Once", ours: "does", proof: "Never two fiscal invoices for one payment, however often Stripe sends it.", show: { lens: "pay" } },
+  once: { tag: "Once", ours: "does", proof: "Checked before every fiscal invoice: SmartBill is asked only when none is recorded for that payment.", show: { lens: "pay" } },
   write: { tag: "Writes", ours: "does", proof: "Fiscal invoices in SmartBill, a record on every call, and rows in Google Sheets, in beta.", show: { lens: "pay" } },
   send: { tag: "Sends", ours: "does", proof: "Emails, texts, Slack messages and signed webhooks.", show: { lens: "call" } },
   retry: { tag: "Retries", ours: "does", proof: `Every webhook is tried up to ${word(FACTS.webhookAttempts)} times when the other end is busy.`, show: { href: "#breaks" } },
@@ -573,7 +576,7 @@ const PAY = lens({
       files: ["app/api/billing/webhook/handlers.ts", "lib/billing/usage.ts"] },
     // emit.ts: "Idempotent on the Stripe invoice id", "Idempotency guard."
     { id: "issued", kind: "once", label: "Already invoiced?", at: { c: 4, r: 1 }, was: ["m2"],
-      detail: "SmartBill is asked for an invoice only if none exists for this Stripe invoice yet, so however often Stripe sends it, there’s never a second fiscal invoice.",
+      detail: "SmartBill is asked for an invoice only if none is recorded for this Stripe invoice yet.",
       files: ["lib/smartbill/emit.ts"] },
     { id: "skip", kind: "once", end: true, label: "One invoice already", at: { c: 4, r: 0 },
       detail: "An invoice issued on an earlier try is left as it is.",
@@ -587,7 +590,7 @@ const PAY = lens({
       files: ["app/api/billing/webhook/handlers.ts", "lib/email/templates.ts"] },
     { id: "done", kind: "log", label: "Marked done", at: { c: 6, r: 2 },
       fresh: "By hand, the only record was someone’s memory.",
-      detail: "Had a step failed with an error, the app would have told Stripe, and Stripe would have sent it again later; the earlier checks make that repeat safe.",
+      detail: "The event is marked done, and Stripe is told it arrived, so it stops sending it. Had the renewal failed, the app would have told Stripe so instead, and Stripe would have sent the event again later; the checks before make that repeat safe. An invoice that fails is recorded for the dashboard instead, and a receipt that can’t be sent is let go.",
       files: ["app/api/billing/webhook/route.ts"] },
   ],
   edges: [
@@ -607,10 +610,10 @@ const PAY = lens({
     { id: "sig", title: "The signature matches", hops: ["event-sig"], caption: "The signature matches, so it really is Stripe." },
     { id: "seen", title: "A first delivery", hops: ["sig-seen"], caption: "It’s the first time this event has arrived, so the app carries on, and holds a lock while it works." },
     { id: "renew", title: "The next period starts", hops: ["seen-renew"], caption: "This payment renews a plan, so next month’s minutes come first." },
-    { id: "issued", title: "Not invoiced yet", hops: ["renew-issued"], caption: "No fiscal invoice exists for this payment yet." },
+    { id: "issued", title: "Not invoiced yet", hops: ["renew-issued"], caption: "No fiscal invoice is recorded for this payment yet." },
     { id: "fiscal", title: "SmartBill issues the invoice", hops: ["issued-fiscal"], caption: "The fiscal invoice is issued, with no company details typed by hand." },
     { id: "email", title: "The receipt goes out", hops: ["fiscal-email"], caption: "The customer’s receipt is on its way." },
-    { id: "done", title: "Marked done", hops: ["email-done"], caption: "Done. If Stripe sends this event again, nothing is repeated." },
+    { id: "done", title: "Marked done", hops: ["email-done"], caption: `Done. If Stripe sends this event again within ${FACTS_AUTO.stripeDoneHours} hours, nothing is repeated.` },
   ],
   check: { kind: "call", label: "Ask us to open its code" },
 });
@@ -646,27 +649,28 @@ const MORNING = lens({
       detail: `Vercel Cron calls the job every day at ${FACTS.cronAt}, with a secret. Without the secret, nothing runs.`,
       files: ["vercel.json", "app/api/cron/daily/route.ts", "app/api/cron/auth.ts"] },
     { id: "reconcile", kind: "write", label: "Bill what’s unbilled", at: { c: 1, r: 0 }, group: "order", cron: FACTS.cronSteps[0], was: ["m1"],
-      detail: "Bills any answered call whose billing didn’t finish, without ever billing it twice.", files: ["lib/billing/usage.ts"] },
+      detail: "Bills calls the phone line reported whose billing didn’t finish, without ever billing one twice.", files: ["lib/billing/usage.ts"] },
     { id: "roll", kind: "write", label: "Next usage periods", at: { c: 2, r: 0 }, group: "order", cron: FACTS.cronSteps[1], was: ["m2"],
       detail: "Starts the next usage period for paid plans whose period has ended.", files: ["lib/billing/usage.ts"] },
     { id: "overage", kind: "send", label: "Overage to Stripe", at: { c: 3, r: 0 }, group: "order", cron: FACTS.cronSteps[2], was: ["m3"],
       detail: "Reports minutes past each allowance to Stripe, once for each record.", files: ["lib/billing/usage.ts"] },
-    // reminders.ts: "claimed (reminder_sent_at set) before its text goes out … releases the claim".
+    // reminders.ts: "claimed (reminder_sent_at set) before its text goes out … releases the claim",
+    // said as a mark an operations manager would recognise.
     { id: "remind", kind: "once", label: "Reminders, once each", at: { c: 1, r: 1 }, group: "side", cron: FACTS.cronSteps[3], was: ["m4"],
-      detail: "Texts upcoming appointments a reminder. Each booking is claimed before its text goes out, so two runs can’t text it twice, and a text that fails lets the claim go.",
+      detail: "Texts upcoming appointments a reminder. Each booking is marked as reminded before its text goes out, so two runs can’t text it twice, and the mark comes off if the text fails.",
       files: ["lib/scheduling/reminders.ts"] },
     { id: "resync", kind: "write", label: "Re-sync agents", at: { c: 2, r: 1 }, group: "side", cron: FACTS.cronSteps[4], was: ["m5"],
       detail: `Re-syncs up to ${FACTS.resyncBatch} agents whose copy at Cartesia or ElevenLabs is missing or out of date.`, files: ["lib/voice/sync/index.ts"] },
     { id: "locks", kind: "write", label: "Clear expired locks", at: { c: 3, r: 1 }, group: "side", cron: FACTS.cronSteps[5], was: ["m6"],
-      detail: "Deletes locks and flags whose time has passed.", files: ["app/api/cron/jobs.ts"] },
+      detail: "Deletes the markers whose time has passed: the locks that stop two runs doing one job, and short-lived notes the app keeps.", files: ["app/api/cron/jobs.ts"] },
     // ORPHAN_MIN_AGE_MS = 24 * 60 * 60 * 1000: "day-old".
     { id: "uploads", kind: "write", label: "Remove unused uploads", at: { c: 1, r: 2 }, group: "side", cron: FACTS.cronSteps[6], was: ["m6"],
       detail: "Removes day-old uploads that nothing uses.", files: ["app/api/cron/storage-cleanup.ts"] },
     { id: "budget", kind: "read", label: "Refresh the budget", at: { c: 2, r: 2 }, group: "side", cron: FACTS.cronSteps[7],
       fresh: "A check nobody would make by hand every day.",
-      detail: "Refreshes the cached Cartesia budget that the call router checks.", files: ["lib/voice/budget.ts"] },
+      detail: "Works out how much Cartesia credit is left: the same figure the app checks before each call to pick a voice provider.", files: ["lib/voice/budget.ts"] },
     // The route answers 500 when a step failed, "so it shows up in the Vercel logs".
-    { id: "summary", kind: "log", label: "Summary of the run", at: { c: 5, r: 1 },
+    { id: "summary", kind: "log", label: "Summary of the run", at: { c: 6, r: 1 },
       fresh: "By hand, nobody wrote down what was done.",
       detail: "The job answers with what each step did. If one failed, it answers with an error so it shows in the logs; the rest have carried on, and running the whole job again is safe.",
       files: ["app/api/cron/daily/route.ts", "app/api/cron/jobs.ts"] },
@@ -681,14 +685,14 @@ const MORNING = lens({
   ],
   steps: [
     { id: "start", title: "The job starts", ring: ["cron"], caption: `It’s ${FACTS.cronAt}, and this morning’s run begins.` },
-    { id: "reconcile", title: "Bills calls left unbilled", hops: ["cron-reconcile"], caption: "First in the chain: any call left unbilled is caught up." },
+    { id: "reconcile", title: "Bills calls left unbilled", hops: ["cron-reconcile"], caption: "First in the chain: unbilled calls the phone line reported are caught up." },
     { id: "roll", title: "Starts the next periods", hops: ["reconcile-roll"], caption: "Next in the chain: any paid plan whose month is up gets fresh minutes." },
     { id: "overage", title: "Reports overage", hops: ["roll-overage"], caption: "Last in the chain: Stripe learns of any minutes over plan." },
     { id: "remind", title: "Texts reminders", hops: ["cron-side"], ring: ["remind"], caption: "Alongside the billing, reminder texts go out for upcoming bookings." },
     { id: "resync", title: "Re-syncs agents", ring: ["resync"], caption: "This morning’s batch of agents out of step at a voice provider is re-synced." },
     { id: "locks", title: "Clears expired locks", ring: ["locks"], caption: "Housekeeping: anything expired is cleared out." },
     { id: "uploads", title: "Removes unused uploads", ring: ["uploads"], caption: "More housekeeping, this time in file storage." },
-    { id: "budget", title: "Refreshes the budget", ring: ["budget"], caption: "Today’s calls will be routed on a fresh budget." },
+    { id: "budget", title: "Refreshes the budget", ring: ["budget"], caption: "The day starts with a fresh count of the credit left." },
     { id: "summary", title: "Answers with a summary", hops: ["overage-summary", "side-summary"], caption: `All ${word(FACTS.cronSteps.length)} steps have run, and the job reports back.` },
   ],
   check: { kind: "call", label: "Ask to see a morning’s summary" }, // OWNER: that we show one on request
@@ -700,7 +704,7 @@ const DOCUMENT = lens({
   id: "document",
   label: "A document is added",
   hand: "{n} steps across {k} places, and all of them again whenever the document changes.",
-  built: "The document itself is the source, and the agent is kept in step with it.",
+  built: "The document itself is the source: add or refresh it, and the rest runs by itself.",
   tools: [{ id: "doc", label: "The document" }, { id: "agent", label: "Agent’s instructions" }],
   manual: [
     { id: "m1", tool: "doc", text: "Read the new price list or policy" },
@@ -718,11 +722,12 @@ const DOCUMENT = lens({
       files: ["app/api/agent/knowledge/upload-url/route.ts", "app/api/agent/knowledge/url/route.ts", "lib/knowledge/fetch-url.ts"] },
     { id: "read", kind: "read", label: "Read and cleaned", at: { c: 1, r: 1 }, was: ["m1"],
       detail: "The file is read and checked, and its text is taken out and cleaned up.", files: ["lib/knowledge/extract.ts", "lib/knowledge/ingest.ts"] },
-    // ingest.ts: "hash (skip re-embedding when unchanged)".
+    // ingest.ts: "hash (skip re-embedding when unchanged)"; an unchanged text still
+    // ends ready and sends the copies (`if (!unchanged) {…}` skips only the indexing).
     { id: "changed", kind: "once", label: "Has the text changed?", at: { c: 2, r: 1 }, was: ["m5"],
-      detail: "Text that hasn’t changed since last time isn’t indexed again.", files: ["lib/knowledge/ingest.ts"] },
+      detail: "When a document is read again, or a web page refreshed, from the dashboard, text that hasn’t changed isn’t indexed again.", files: ["lib/knowledge/ingest.ts"] },
     { id: "same", kind: "once", end: true, label: "Nothing re-indexed", at: { c: 2, r: 0 },
-      detail: "Unchanged: the agent keeps what it has.", files: ["lib/knowledge/ingest.ts"] },
+      detail: "Unchanged: nothing is re-indexed, and it goes straight to ready and the copies.", files: ["lib/knowledge/ingest.ts"] },
     { id: "index", kind: "ai", label: "Indexed for search", at: { c: 3, r: 1 }, was: ["m2", "m3"],
       detail: "Cut into passages and indexed with OpenAI, so the agent can search them in the middle of a call.",
       files: ["lib/knowledge/chunk.ts", "lib/knowledge/ingest.ts"] },
@@ -734,10 +739,10 @@ const DOCUMENT = lens({
     { id: "ready", kind: "log", label: "Ready, or why not", at: { c: 5, r: 1 },
       fresh: "By hand, a half-done update looked the same as a finished one.",
       detail: "It never ends in silence: the document is ready, or it carries a plain reason a person can act on.", files: ["lib/knowledge/ingest.ts"] },
-    // providers.ts: best effort, a failure stored on the document.
+    // providers.ts: best effort, a failure stored on the document, never failing it.
     { id: "copies", kind: "send", label: "Copies to providers", at: { c: 6, r: 1 },
       fresh: "Not a step anyone did by hand.",
-      detail: "Copies go to the voice providers’ own knowledge bases. It’s best effort: a provider that fails is noted on the document, and never fails it.",
+      detail: "Copies go to the voice providers’ own knowledge bases. If one can’t take it, that’s noted on the document, and the document stays ready.",
       files: ["lib/knowledge/providers.ts"] },
   ],
   edges: [
@@ -752,7 +757,7 @@ const DOCUMENT = lens({
   steps: [
     { id: "added", title: "A document is added", ring: ["added"], caption: "A new price list is uploaded in the dashboard." },
     { id: "read", title: "Read and cleaned", hops: ["added-read"], caption: "The price list’s words are pulled out of the file." },
-    { id: "changed", title: "It’s new", hops: ["read-changed"], caption: "The text is new, so it’s indexed." },
+    { id: "changed", title: "It’s new", hops: ["read-changed"], caption: "The price list has changed since last time, so nothing is skipped." },
     { id: "index", title: "Indexed for search", hops: ["changed-index"], caption: "The new prices are indexed, ready to swap in." },
     { id: "swap", title: "New in, old out", hops: ["index-swap"], caption: "The old prices are gone, and the agent never saw a gap." },
     { id: "ready", title: "Ready", hops: ["swap-ready"], caption: "The price list shows as ready for calls in the dashboard." },
@@ -791,7 +796,7 @@ const CALL_LENS = lens({
   nodes: [
     { id: "ended", kind: "when", label: "The call ends", at: { c: 0, r: 1 },
       fresh: "By hand, someone first had to notice the call.",
-      detail: "However the call was carried, the app saves its transcript. Voice services retry and webhooks can arrive twice, so saving it is safe to repeat.",
+      detail: "Whichever voice service handled the call, the app saves its transcript. Voice services retry and can report a call twice, so saving it is safe to repeat.",
       files: ["lib/voice/post-call.ts"] },
     { id: "fresh", kind: "once", label: "Not written up yet?", at: { c: 1, r: 1 },
       fresh: "By hand, two people could write up the same call.",
@@ -804,7 +809,7 @@ const CALL_LENS = lens({
       files: ["lib/openai/analysis.ts", "lib/voice/post-call.ts"] },
     { id: "test", kind: "rule", label: "A test call?", at: { c: 3, r: 1 },
       fresh: "By hand, nobody needed to tell a test from a real call.",
-      detail: "Calls made from the dashboard to try the agent are written up too, but go no further: they never reach your systems.",
+      detail: "Calls made from the dashboard to try the agent are written up too, but go no further: no workflow runs for them.",
       files: ["lib/voice/post-call.ts", "lib/workflows/executor.ts"] },
     { id: "stops", kind: "rule", end: true, label: "Stops here", at: { c: 3, r: 0 },
       detail: "A test call’s write-up stays in the dashboard.", files: ["lib/voice/post-call.ts"] },
@@ -815,7 +820,7 @@ const CALL_LENS = lens({
       files: ["lib/voice/post-call.ts", "lib/workflows/keywords.ts", "lib/voice/router.ts"] },
     { id: "once", kind: "once", label: "Once per call", at: { c: 5, r: 1 },
       fresh: "By hand, a repeat was a second message nobody meant to send.",
-      detail: "Each workflow claims the call before it runs, so none can run twice for one call, even when the news of it arrives twice.",
+      detail: "Before running, each workflow marks the call as handled, so none can run twice for one call, even when the call’s end is reported twice.",
       files: ["lib/workflows/executor.ts"] },
     { id: "steps", kind: "send", label: "Your workflows run", at: { c: 6, r: 1 }, datum: `signed · ${FACTS.webhookAttempts} tries`, was: ["m4", "m6"],
       detail: "Their steps run in order — a tag, a signed webhook, a text to the caller — and stop at the first failure. A webhook is tried again when the other end is busy.",
@@ -849,7 +854,7 @@ const CALL_LENS = lens({
     { id: "ai", title: "OpenAI writes it up", hops: ["fresh-ai"], caption: "OpenAI’s write-up is in, and the caller’s mood with it." },
     { id: "test", title: "A real call", hops: ["ai-test"], caption: "It’s a real call, not a test from the dashboard, so it carries on." },
     { id: "fire", title: "Two rules fire", hops: ["test-fire"], caption: `The caller was unhappy, so two rules fire: ‘${T("call_ended")}’ and ‘${T("sentiment_negative")}’.` },
-    { id: "once", title: "Claimed once", hops: ["fire-once"], caption: "Each workflow claims the call; none has run for it before." },
+    { id: "once", title: "Marked once", hops: ["fire-once"], caption: "Each workflow marks the call as handled; none has run for it before." },
     { id: "steps", title: "The workflows run", hops: ["once-steps"], caption: "Their steps run in order: a tag on the call, then a signed webhook to the CRM, tried again if the CRM is busy." },
     { id: "team", title: "The managers hear", hops: ["steps-team"], caption: "The managers hear about it in Slack." },
     { id: "log", title: "Each run recorded", hops: ["steps-log"], caption: "Every step succeeded, and it’s all on record." },
@@ -868,25 +873,26 @@ const LENSES = [PAY, MORNING, DOCUMENT, CALL_LENS] as const;
 const LEDGER: readonly LedgerCard[] = [
   // notify.ts: "only tells the caller "the team has been alerted" when a text or email really went out".
   { id: "notify", kind: "person", when: "A caller needs someone now", title: "The team alerted mid-call",
-    body: `The agent texts or emails the person on call and saves the message. It tells the caller the team knows only once the alert has really gone out, and sends at most ${word(FACTS_AUTO.alertsPerCall)} a call.`,
+    body: `The agent texts or emails the person on call, and the alert is saved to the dashboard’s inbox. It tells the caller the team knows only once an alert has really gone out, and sends at most ${word(FACTS_AUTO.alertsPerCall)} a call.`,
     figure: `at most ${FACTS_AUTO.alertsPerCall} a call`, files: ["lib/voice/tools/notify.ts", "lib/notifications/index.ts"] },
   { id: "bookings", kind: "send", when: "A booking is made, and each morning", title: "Bookings confirmed and reminded",
-    body: "On plans with texts, a text confirms each booking and another reminds the caller before it. Each reminder is claimed before it’s sent, so two runs can’t text it twice.",
+    body: "On plans with texts, a caller who asks for one gets a confirmation text, and a reminder goes out before the appointment. Each reminder is marked before it goes out, so two runs can’t send it twice, and the mark comes off if the text fails.",
     files: ["lib/scheduling/bookings.ts", "lib/scheduling/reminders.ts"] },
   // waitlist.ts: "so two people can't be promised one slot by the system". Said as it says it.
   { id: "waitlist", kind: "rule", when: "A booking is cancelled or moved", title: "A freed slot offered to the waiting list",
     body: "The time is offered by text to the caller who has waited longest for that service. They call back to book it, so the system never promises one slot to two people.",
     files: ["lib/scheduling/waitlist.ts"] },
+  // usage.ts: "an email that failed to send is retried by the next billed call" (kvDel on a failed send).
   { id: "usage", kind: "once", when: "A call adds minutes",
     title: `Usage emails at ${FACTS_AUTO.usageMarks[0]}% and ${FACTS_AUTO.usageMarks[1]}%`,
-    body: "The owner gets at most one email at each mark in a period. Each is claimed before it’s sent, so two calls ending together don’t both send it.",
+    body: "The owner gets at most one email at each mark in a period. Each is marked before it goes out, so two calls ending together don’t both send it, and if one fails to send, the next call that adds minutes tries again.",
     figure: `${FACTS_AUTO.usageMarks[0]}% · ${FACTS_AUTO.usageMarks[1]}%`, files: ["lib/billing/usage.ts", "lib/email/templates.ts"] },
   { id: "minutes", kind: "once", when: "A call ends", title: "Every minute billed once",
-    body: "A call’s minutes are recorded once, from the phone line’s or the voice service’s own record, never both, with any overage worked out as they go in. The morning job catches up any the phone line reported that weren’t billed.",
+    body: "Each call’s minutes are billed once, from the phone line’s count or the voice service’s, never both, and any minutes over the plan are counted call by call. If a call the phone line reported was never billed, the morning job bills it.",
     files: ["lib/billing/usage.ts", "lib/twilio/status.ts", "app/api/elevenlabs/webhook/handlers.ts"] },
   // The self-serve product, counted from the engine: the words come from its lengths.
   { id: "workflows", kind: "log", when: "After a call, on your rules", title: "Workflows you set up yourself",
-    body: `${cap(word(TRIGGER_TYPES.length))} moments start one — ${listJoin(TRIGGER_TYPES.map((t) => TRIGGER_WORDS[t]))} — and each runs up to ${word(MAX_WORKFLOW_ACTIONS)} steps of ${word(ACTION_TYPES.length)} kinds, in order, with every run recorded.`,
+    body: `${cap(word(TRIGGER_TYPES.length))} moments start one — ${listJoin(TRIGGER_TYPES.map((t) => TRIGGER_WORDS[t]))} — and each runs up to ${word(MAX_WORKFLOW_ACTIONS)} steps in order, picked from ${word(ACTION_TYPES.length)} kinds, with every run recorded.`,
     figure: `${TRIGGER_TYPES.length} triggers · ${ACTION_TYPES.length} kinds`,
     more: `The ${word(ACTION_TYPES.length)} kinds: ${listJoin(ACTION_TYPES.map((a) => ACTION_WORDS[a]))}. The ${word(GOOGLE_STEPS.length)} Google steps are in beta.`,
     link: { label: "See them", href: "/product/integrations" },
@@ -899,12 +905,13 @@ export const AUTO_RUNNING: RunningData = keyed({
   eyebrow: "Already running",
   title: "The automations this platform runs on, from manual to automatic",
   key: "from manual to automatic",
-  sub: `${cap(word(LENSES.length))} of them, simplest first. Pick one to see the steps a person would do by hand, the flow that does them instead, and a run from start to finish, drawn from the platform’s code.`,
+  // "Drawn from the code" is the tag's job, as on the SaaS page: said there, not here too.
+  sub: `${cap(word(LENSES.length))} of them, simplest first. Pick one to see the steps a person would do by hand, the flow that does them instead, and a run from start to finish.`,
   tag: "Drawn from the code · not a live feed",
   lensesAria: "Which automation, simplest first",
   transport: { play: "Play it", pause: "Pause", replay: "Play it again" },
   lanes: { hand: "By hand", flow: "By itself" },
-  phase: { hand: "By hand", built: "Built" },
+  phase: { hand: "By hand", waiting: "Not built yet", built: "Built" },
   stepOf: "Step {n} of {total}",
   logTitle: "The run",
   logAria: "Every step of the run",
@@ -929,7 +936,7 @@ export const AUTO_RUNNING: RunningData = keyed({
   initial: "pay",
   lenses: LENSES,
   ledger: { title: "Six more that run by themselves here", cards: LEDGER },
-  foot: "Drawn by the team that built them, from the code. Each block names the file it lives in, for your developers.",
+  foot: "Drawn by the team that built them. Each block names the file it lives in, for your developers.",
 });
 
 /* ---------- #work: the eighteen samples ---------- */
@@ -1001,14 +1008,14 @@ const SAMPLES: readonly Sample[] = [ // SAMPLE: written for this page, for no bu
       decided: { hand: "Chase and decide the lines that don’t match", flow: [
         { kind: "person", text: "The accountant decides the rest, from a short list with suggestions" }] },
     },
-    person: "Decides on the lines that don’t match, starting from a short list with suggestions.",
+    person: "Decides only the lines that don’t match. Nobody ticks off a statement by hand.",
     hard: "References are typed by hand, one payment can cover several invoices, and nothing may be posted twice.",
   }),
   /* ── Sales ── */
   sample("sales", "copy", {
     title: "Website enquiries into the CRM", who: "Someone in sales",
     moves: {
-      arrives: { hand: "Check the enquiries inbox", flow: [{ kind: "when", text: "Someone sends the website’s form" }] },
+      arrives: { hand: "Check the enquiries inbox", flow: [{ kind: "when", text: "Someone fills in the website’s form" }] },
       entered: { hand: "Copy each enquiry into the CRM", flow: [{ kind: "write", text: "A new lead in the CRM" }] },
       passed: { hand: "Reply to say thanks, and tell the team", flow: [
         { kind: "send", text: "A thank-you email to them" }, { kind: "send", text: "A message in the sales channel" }] },
@@ -1156,19 +1163,19 @@ const SAMPLES: readonly Sample[] = [ // SAMPLE: written for this page, for no bu
   sample("people", "pipeline", {
     title: "Joiners and leavers, across every system", who: "HR and IT, system by system",
     moves: {
-      arrives: { hand: "Hear that a contract was signed", flow: [{ kind: "when", text: "A contract is signed, or someone hands in their notice" }] },
-      read: { hand: "Read the contract for the role and the start date", flow: [
-        { kind: "ai", text: "AI reads the contract for the role, the team and the start date" }] },
-      entered: { hand: "Create an account in every tool, and set up payroll", flow: [
-        { kind: "write", text: "Accounts created in each system" }, { kind: "write", text: "A payroll record" }] },
-      passed: { hand: "Order the equipment", flow: [{ kind: "send", text: "Equipment ordered" }] },
+      arrives: { hand: "Hear that someone was hired, or is leaving", flow: [{ kind: "when", text: "A contract is signed, or someone hands in their notice" }] },
+      read: { hand: "Work out the role, the team and the start or leaving date", flow: [
+        { kind: "ai", text: "AI reads the contract or the notice for the role, the team and the date" }] },
+      entered: { hand: "Open or close an account in every tool, and update payroll", flow: [
+        { kind: "write", text: "Accounts opened or closed in each system" }, { kind: "write", text: "Payroll updated" }] },
+      passed: { hand: "Order the equipment, or arrange its return", flow: [{ kind: "send", text: "Equipment ordered, or its return arranged" }] },
       followed: { hand: "Chase the signed documents", flow: [
         { kind: "wait", text: "Waits for each document to be signed, with reminders" },
         { kind: "log", text: "Every step recorded, so leaving undoes exactly what joining did" }] },
       decided: { hand: "Check the right-to-work documents", flow: [{ kind: "approve", text: "HR checks the documents only a person should check" }] },
     },
-    person: "Checks the documents only a person should check.",
-    hard: "Many systems, legal documents, and a leaver whose access must go everywhere at once.",
+    person: "Checks the right-to-work documents. Nobody opens or closes an account by hand.",
+    hard: "Many systems, legal documents, and a leaver whose access must be removed everywhere at once.",
   }),
   /* ── Online shops ── */
   sample("shops", "copy", {
@@ -1199,8 +1206,8 @@ const SAMPLES: readonly Sample[] = [ // SAMPLE: written for this page, for no bu
       arrives: { hand: "Download each marketplace’s payout report", flow: [
         { kind: "when", text: "A marketplace pays out" }, { kind: "read", text: "Its payout report" }] },
       read: { hand: "Match orders, fees and refunds", flow: [{ kind: "ai", text: "Orders, fees and refunds matched line by line" }] },
-      entered: { hand: "Post the totals in the accounting software", flow: [
-        { kind: "once", text: "Posted once, in the accounting software" }, { kind: "retry", text: "A post that fails is tried again" }] },
+      entered: { hand: "Post what matches in the accounting software", flow: [
+        { kind: "once", text: "What matches, posted once in the accounting software" }, { kind: "retry", text: "A post that fails is tried again" }] },
       followed: { hand: "Keep the working for the auditor", flow: [{ kind: "log", text: "Every payout recorded with how it was matched" }] },
       decided: { hand: "Find what’s missing", flow: [{ kind: "person", text: "Anything that doesn’t add up goes to the accountant, listed" }] },
     },
@@ -1217,7 +1224,7 @@ export const AUTO_WORK: WorkData = keyed({
   key: "however hard the work",
   // Not every block runs here (KINDS: a long wait, an approval), so the sub
   // points at the legend, which says which, and never says they all do.
-  sub: "Pick a field and how hard the job is. The work in every field is made of the same six moves; a simple job makes only a few of them. The samples are written for this page, and the legend under each one shows which of its blocks already run on this platform.",
+  sub: "Pick a field and how hard the job is. The work in every field is made of the same six moves; a simple job makes only a few of them. Under each sample, the legend shows which of its blocks already run on this platform.",
   fieldsLabel: "Your field",
   levelLabel: "How hard",
   fields: [
@@ -1232,8 +1239,10 @@ export const AUTO_WORK: WorkData = keyed({
   ],
   initial: { field: "finance", level: "process" },
   moves: MOVES,
-  movesCaption: "The same six moves, in every field",
-  tag: "Sample · {field} · {level}",
+  movesCaption: "The six moves",
+  // A no-break space before each "·": the tag wraps only after one
+  // (work-instrument.tsx fills the names unbroken).
+  tag: "Sample\u00a0· {field}\u00a0· {level}",
   hand: "By hand",
   flow: "As a flow",
   absent: "Not in this one",
@@ -1245,12 +1254,15 @@ export const AUTO_WORK: WorkData = keyed({
   proofTitle: "Which of these blocks already run here",
   ours: { does: "Runs here", thin: "Short here", none: "Built for yours" },
   kindsNote: KINDS_NOTE,
+  // "Watch it run" only on a link that opens a workbench lens (it plays);
+  // a jump (#breaks, the ledger's #run-notify card) lands on a still.
   watch: "Watch it run",
+  see: "See it on this page",
   meters: METER_COPY,
   kinds: KINDS,
   live: "{field}, {level}: {title}. {blocks} blocks.",
   indexSummary: "All {n} samples, in words",
-  foot: "Samples written for this page, for no business in particular. Not your field? That’s the usual case: bring yours to the call.",
+  foot: "Samples written for this page, for no business in particular. Not your field? Bring yours to the call.",
   samples: SAMPLES,
 });
 
@@ -1293,7 +1305,7 @@ export const AUTO_BREAKS: BreaksData = keyed({
     { id: "down", label: "Down all night", hint: "503, three times", url: CRM_URL, answers: [503, 503, 503], expect: { ok: false, attempts: 3 } },
     { id: "slow", label: "Doesn’t answer", hint: "silent, three times", url: CRM_URL, answers: ["timeout"], expect: { ok: false, attempts: 3 } },
     { id: "moved", label: "Has moved", hint: "answers 404", url: CRM_URL, answers: [404], expect: { ok: false, attempts: 1 } },
-    { id: "private", label: "Points inside a private network", hint: "refused before sending", url: PRIVATE_URL, answers: ["unsafe"], expect: { ok: false, attempts: 1 } },
+    { id: "private", label: "Points inside a private network", hint: "never sent", url: PRIVATE_URL, answers: ["unsafe"], expect: { ok: false, attempts: 1 } },
   ],
   initial: "down",
   lanes: { tag: "Tag", crm: "CRM", slack: "Slack" },
@@ -1329,10 +1341,11 @@ export const AUTO_BREAKS: BreaksData = keyed({
   live: "{status}. {message}",
   guardsTitle: "And the other ways it stays safe",
   guards: [
-    { id: "once", title: "Once per call", body: "A workflow runs at most once for a call, even when the news of it arrives twice." },
+    { id: "once", title: "Once per call", body: "A workflow runs at most once for a call, even when the call’s end is reported twice." },
     { id: "budget", title: "A time limit on every run", body: `Each run gets ${word(FACTS_AUTO.runBudgetMinutes)} minutes, so its record always ends as succeeded or failed, never left running.` },
-    { id: "alone", title: "Steps that stand alone", body: `The morning job’s ${word(FACTS.cronSteps.length)} steps run on their own: one failing never stops the others, and running it again is safe.` },
-    { id: "twice", title: "Nothing done twice", body: `A Stripe event that arrives again within ${FACTS_AUTO.stripeDoneHours} hours is acknowledged, not repeated.` },
+    // Isolated, not independent: three of the steps run in a chain (the morning lens).
+    { id: "alone", title: "Failures stay contained", body: `Of the morning job’s ${word(FACTS.cronSteps.length)} steps, one failing never stops the others, and the job is safe to run again.` },
+    { id: "twice", title: "A Stripe event done once", body: `A Stripe event that arrives again within ${FACTS_AUTO.stripeDoneHours} hours is acknowledged, not repeated.` },
   ],
   indexSummary: "All six results, in words",
 });
@@ -1384,12 +1397,12 @@ export const AUTO_BUILD: AutoBuildData = keyed({
     { id: "map", n: "01", title: ITEM.deliverables[0],
       body: "We sit with the people who do the work and write down every step: who does it, in which tool, and where it goes wrong. Then we mark what software should do, and what should stay with a person.",
       hold: "The map: every step, what it becomes, and what stays with a person.",
-      check: { kind: "site", label: `See ${word(AUTO_RUNNING.lenses.length)} mapped above`, href: "#running" } },
+      check: { kind: "site", label: `See ${word(AUTO_RUNNING.lenses.length)} of ours mapped above`, href: "#running" } },
     // The gloss for "APIs and webhooks" rides the sentence that uses them.
     { id: "build", n: "02", title: ITEM.deliverables[1],
       body: "Built as code that talks to your tools through their APIs and webhooks — the ways one system hands something to another without a person — and tried on copies of your real inputs: the odd email, the scanned PDF, the order that arrives twice.",
       hold: "The automations, working on your examples, before anything goes live.", // OWNER
-      ours: `Signed webhooks tried up to ${word(FACTS.webhookAttempts)} times, never two fiscal invoices for one payment, and a morning job whose ${word(FACTS.cronSteps.length)} steps stand alone.`,
+      ours: `Signed webhooks tried up to ${word(FACTS.webhookAttempts)} times, a check before every fiscal invoice that the payment isn’t invoiced already, and a morning job where one failing step never stops the other ${word(FACTS.cronSteps.length - 1)}.`,
       check: { kind: "site", label: "Break one above", href: "#breaks" } },
     { id: "run", n: "03", title: ITEM.deliverables[2],
       body: "It goes live with alerts that reach a person — by email, text or Slack — when a run fails or a case needs a decision, and the code is handed over with its tests and a guide to running it.", // OWNER
@@ -1472,11 +1485,11 @@ export const AUTO_CHECKS: ChecksData = keyed({
   kinds: CHECK_KINDS,
   showing: "Showing {n} of {total}",
   rows: [
-    { id: "same-app", kind: "site", claim: "The automations on this page run on the platform you can try.",
+    { id: "same-app", kind: "site", claim: "The automations under ‘Already running’ run on the platform you can try.",
       how: "Start the free trial: make a test call and read its write-up, or add a document and watch it become ready.", link: TRIAL_LINK },
     // What Send test really shows (TestRunDialog, ActionResultList): each step's message, attempts and time.
     { id: "words", kind: "site", claim: "Every workflow step’s result is written in plain words.",
-      how: `On the trial, add a workflow with a ${A("send_webhook")} step, save it, and press Send test: each step’s result, its attempts and how long it took.`, link: TRIAL_LINK },
+      how: `On the trial, add a workflow with a ‘${A("send_webhook")}’ step, save it, and press Send test: each step’s result, its attempts and how long it took.`, link: TRIAL_LINK },
     { id: "breaks", kind: "site", claim: "The results under ‘When it breaks’ are the platform’s own.",
       how: "Each was worked out by its delivery code when this page was built.", link: { label: "When it breaks", href: "#breaks" } },
     { id: "self", kind: "site", claim: "Follow-up after a call needs no build.",
@@ -1489,10 +1502,10 @@ export const AUTO_CHECKS: ChecksData = keyed({
     { id: "grants", kind: grantLink ? "site" : "call", claim: grantsClaim, how: "Ask to see them.", // OWNER
       ...(grantLink ? { link: { label: "See the grants", href: grantLink.href } } : {}) },
     // Moved to the call: a signature header isn't checkable in a browser.
-    { id: "signed", kind: "call", claim: `Every ${A("send_webhook")} delivery is signed.`, how: `Ask us to show you a delivery’s ${WEBHOOK_HEADERS.signature} header.` },
+    { id: "signed", kind: "call", claim: `Every delivery from a ‘${A("send_webhook")}’ step is signed.`, how: `Ask us to show you a delivery’s ${WEBHOOK_HEADERS.signature} header.` },
     // "About this platform": the accreditations' count is the owner's, not the code's.
     { id: "counts", kind: "call", claim: "Every figure about this platform is counted from its code.", how: "By a test that fails if a figure stops being true. Ask us to run it." },
-    { id: "map", kind: "handover", claim: "You get a map before anything is built.", how: `It’s what stage 01 delivers. ${cap(word(AUTO_RUNNING.lenses.length))} are drawn above.`, link: { label: "How a build goes", href: "#build" } },
+    { id: "map", kind: "handover", claim: "You get a map before anything is built.", how: `It’s what stage 01 delivers. ${cap(word(AUTO_RUNNING.lenses.length))} of ours are drawn above.`, link: { label: "How a build goes", href: "#build" } },
     { id: "alerts", kind: "handover", claim: "Failures reach a person.", how: "It’s what stage 03 delivers: alerts by email, text or Slack, tried on your build before it goes live." }, // OWNER
     { id: "code", kind: "handover", claim: "The code is handed over.", how: "The code, its tests and a guide to running it are yours at the end of the build." }, // OWNER
   ],
@@ -1519,21 +1532,21 @@ export const AUTO_FAQ: FaqData = keyed({
       a: "Any repeated work that moves information between people and tools: emails into systems, documents into data, orders into invoices, a CRM kept in step with everything around it, reports that build themselves, and the checks and reminders in between. If the steps can be described and the information is somewhere software can reach, we can automate it, and we’ll say on the call which parts should stay with a person." }, // OWNER
     // Also served alone as FAQPage data, so it names what runs here in full.
     { id: "complex", q: "How complex can it get?",
-      a: `As complex as the work is. The automations this platform runs on never issue a second fiscal invoice for a payment, however often the payment provider sends it (and record a failed one for a person to see), write up phone calls with AI, and run ${word(FACTS.cronSteps.length)} steps every morning, ${word(FACTS_AUTO.billingChain)} of them in a set order and each isolated so one failing never stops the others. Pipelines across many systems, with AI reading documents, schedules, retries and people deciding the exceptions, are the work we do.` },
+      a: `As complex as the work is. The automations this platform runs on write up phone calls with AI, check before every fiscal invoice that the payment isn’t invoiced already, and run ${word(FACTS.cronSteps.length)} steps every morning, ${word(FACTS_AUTO.billingChain)} of them in a set order; one failing never stops the others. Pipelines across many systems, with schedules, retries, AI that reads documents and people who decide the exceptions, are the work we do.` },
     { id: "cost", q: "What does it cost, and how long does it take?",
       a: "It’s quoted after the call, because both depend on the work: how many steps and tools it passes through, how messy the inputs are, and how many cases need a person. We won’t put a number here that we’d have to walk back. The map comes first, so you’ll know what gets automated before anything is built." },
     { id: "breaks", q: "What happens when something breaks?",
-      a: "It’s built to fail safely: a step that fails is tried again where a retry can help, the steps after it don’t run on bad data, what must never happen twice is guarded (a workflow per call, a fiscal invoice per payment), a retried webhook carries the same delivery id so the other end can ignore a repeat, and every run is recorded with its reason. On yours, an alert then reaches a person. ‘When it breaks’ on this page shows the platform’s own delivery code at work." }, // OWNER (alerts on yours)
+      a: "We build it to fail safely. A step that fails is tried again where a retry can help; if it still fails, the steps after it don’t run, so nothing acts on a failed result. What must never happen twice is checked first — on this platform, whether a call’s workflows have already run, and whether a payment already has its fiscal invoice — and a webhook that’s tried again carries the same reference, so the system receiving it can ignore the repeat. Every run is recorded, and every failure with its reason. On yours, an alert also reaches a person. ‘When it breaks’ on this page shows the platform’s own delivery code at work." }, // OWNER (alerts on yours)
     { id: "tool", q: "Why not a ready-made automation tool?",
-      a: "Often you should use one, and we’ll say so on the call. We build when the work outgrows it: when it has to read messy input, reconcile figures, run exactly once, handle a long chain of exceptions, or stay in your own accounts and code. Where one of those tools is the right piece, we build on it." },
+      a: "We build when the work outgrows one: when it has to read messy input, reconcile figures, run exactly once, handle a long chain of exceptions, or stay in your own accounts and code. When a ready-made tool would do the job, we’ll say so on the call, and where one is the right piece, we build on it." },
     { id: "ai", q: "Does it need AI in it?",
-      a: "Only where it helps. Most automation is moving information reliably. Where a step has to read, sort or draft — an email, a scanned document, a call — AI does it, and where a mistake would cost you, a person checks it. The people who’d build it hold the Claude accreditations above." },
+      a: "Only where it helps. Most automation is moving information reliably. Where a step has to make sense of messy input, like a scanned document, a free-text email or a phone call, AI does it, and where a mistake would cost you, a person checks it. The people who’d build it hold the Claude accreditations above." },
     { id: "own", q: "Who owns it?", // OWNER
-      a: "You do. At handover the code is yours, with its tests and a guide to running it, and it runs in accounts whose names are agreed with you before the build starts." }, // OWNER
+      a: "You do. At handover the code is yours, with its tests and a guide to running it. Which accounts it runs in, and whose name they’re in, are agreed with you before the build starts." }, // OWNER
     { id: "tools", q: "Can you work with the tools we already use?",
       a: "Yes: most tools have a way in for software, an export, or an inbox it can read. Where one has none, we’ll tell you on the call what the options are." },
     { id: "existing", q: "We already have automations that keep breaking. Can you take them on?",
-      a: "Tell us about them on the call, then show us how they’re built. We’ll say plainly whether we’d fix them or rebuild them, and why." },
+      a: "Yes. Tell us about them on the call, then show us how they’re built, and we’ll say plainly whether we’d fix them or rebuild them, and why." }, // OWNER
     // Each copy of a call where the SaaS page puts it, read from its FAQ (REGION above).
     { id: "data", q: "Where would our data live?",
       a: `Only where the work needs it to go, chosen with you before anything is built. ${REGION}`,
