@@ -41,11 +41,13 @@ import { Start } from "@/components/site/solutions/custom-saas-platforms/start";
 /* ------------------------------------------------------------------ *
  * /solutions/custom-saas-platforms — "You’re on one of them".
  *
- * The argument: we build complete SaaS platforms, however complex, and
- * the platform this page is served from is one of them. The claims that
- * matter most say how to check them — now, in this browser; on the call;
- * or in your build — and the credentials say exactly what they are: personal
- * accreditations and company grants, never a certification.
+ * The argument: we build complete SaaS platforms of any kind, for any
+ * business and however complex, and the platform this page is served
+ * from — our own, for AI phone agents — is one of them: the proof, not
+ * the limit. The claims that matter most say how to check them — now, in
+ * this browser; on the call; or in your build — and the credentials say
+ * exactly what they are: personal accreditations and company grants,
+ * never a certification.
  *
  * Why static: nothing here depends on who is looking. No cookies(),
  * headers() or searchParams, so the route prerenders (○) and the copy is

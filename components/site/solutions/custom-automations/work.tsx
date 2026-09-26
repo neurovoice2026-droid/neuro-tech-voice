@@ -10,20 +10,21 @@ import { WorkInstrument } from "./work-instrument";
 /* ------------------------------------------------------------------ *
  * #work — "Can you automate OUR kind of work, however hard?"
  *
- * The workbench above shows what this platform already runs. This is
- * the reader's own work: pick a field (finance, sales, customer service,
- * operations, people and HR, online shops) and how hard the job is (a
- * copy-paste, a process, a pipeline), and a sample of that work appears
- * as the same six moves every job makes — it arrives, it's read, it's
- * entered, it's passed on, it's followed up, and a judgement call — each
- * move once as a person does it by hand and once as the blocks of a flow
- * that does it instead. How hard a job is decides how many of the moves
- * it makes and how many blocks each takes, and the meters over the
- * sample (the workbench's own, worked out from the blocks) climb with
- * it. Under the sample, a legend says where each kind of block in it
- * already runs on this platform, with a way to watch it run; the two
- * kinds this platform runs thinly or not at all (a wait, an approval)
- * are said once, in one sentence, and only under a sample that uses one.
+ * The workbench above shows what this platform already runs. This is the
+ * reader's own work: pick a field (finance, sales, customer service,
+ * logistics, people and HR, online shops) and how hard the job is (a
+ * copy-paste, a process, a pipeline), and a sample of that work
+ * appears as the same six moves every job makes — it arrives, it's
+ * read, it's entered, it's passed on, it's followed up, and a judgement
+ * call — each move once as a person does it by hand and once as the
+ * blocks of a flow that does it instead. How hard a job is decides how
+ * many of the moves it makes and how many blocks each takes, and the
+ * meters over the sample (the workbench's own, worked out from the
+ * blocks) climb with it. Under the sample, a legend says where each kind
+ * of block in it already runs on this platform, with a way to watch it
+ * run; the two kinds this platform runs thinly or not at all (a wait, an
+ * approval) are said once, in one sentence, and only under a sample that
+ * uses one.
  *
  * SAMPLES, AND SAID SO. Eighteen of them, six fields at three levels,
  * written for this page for no business in particular: no brand, no

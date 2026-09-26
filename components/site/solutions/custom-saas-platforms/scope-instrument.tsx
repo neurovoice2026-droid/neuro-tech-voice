@@ -66,9 +66,10 @@ import { MapLink } from "./map-link";
  * ping is never rendered; the still tier does the same. Lite keeps it:
  * colour changes and one small ring are what lite can afford.
  *
- * THE FINISHED FRAME is the server's: Subscriptions on — ten parts, two
- * of them there because of it — and the inspector on "Each customer’s
- * data, walled off", the part that most often goes wrong silently.
+ * THE FINISHED FRAME is the server's: "One-off or monthly payments" on —
+ * ten parts, two of them there because of it — and the inspector on
+ * "Each customer’s data, walled off", the part that most often goes
+ * wrong silently.
  *
  * NOTHING ABOVE THE READER MOVES WHEN IT CHANGES. The inspector is as
  * tall as the part in it, not the tallest part: its parts run from two
@@ -93,9 +94,9 @@ import { MapLink } from "./map-link";
  * label, its tag and its mark in words — "Teams and roles, Not needed,
  * Not on ours" — so colour and outline are never the only signal. Every
  * press of a need is announced once in a polite live region ("Added:
- * Subscriptions. 10 parts in this build."). The visible summary is not a
- * live region too: two regions changing on one press would say the
- * count twice.
+ * One-off or monthly payments. 10 parts in this build."). The visible
+ * summary is not a live region too: two regions changing on one press
+ * would say the count twice.
  *
  * COLOUR. The needs column is on white and uses the landing's tokens.
  * On the pearl, only the light's measured tokens. Built tiles and the
@@ -369,8 +370,9 @@ export function ScopeInstrument({ data, blobs }: { data: ScopeData; blobs: reado
       {/* ── The room ── */}
       <div className="mt-8 min-w-0 lg:col-start-2 lg:row-start-1 lg:mt-0">
         {/* Under 360px the room and its tiles give up 4px of padding
-            apiece, so "Subscriptions", the longest word on a tile, still
-            fits its column (the demo's tiles do the same). */}
+            apiece, so the longest word on a tile ("Integrations", 80px)
+            fits its label's 92px at 320 with room to spare, where full
+            padding would leave it none (the demo's tiles do the same). */}
         <div className="saas-lit saas-light-room-m p-4 max-[359px]:p-3 md:p-6" data-swap="">
           <LiveMesh blobs={blobs} drift={0.96} />
           <span aria-hidden className="home-grain" />

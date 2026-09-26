@@ -4,6 +4,7 @@ import { Frame } from "@/components/site/product/primitives";
 import { HomeHeading } from "@/components/site/home/heading";
 import { TYPE } from "@/components/site/home/type";
 import type { TermsData } from "@/lib/pages/custom-saas-platforms";
+import { LedgerList } from "./ledger-list";
 
 /* ------------------------------------------------------------------ *
  * #terms — what’s the catch? Before it starts.
@@ -52,9 +53,10 @@ import type { TermsData } from "@/lib/pages/custom-saas-platforms";
  * set as a warning: nothing in it is bad news, only news. The items are
  * ink at 85% on white, the heads muted (6.37:1 on white).
  *
- * THE LAST PARAGRAPH points away from this page for the reader who needs
- * a phone agent rather than a platform. It sits apart, at reading width,
- * with its two links under it, so it is never mistaken for a term.
+ * THE LAST PARAGRAPH points away from this page to the same team's other
+ * builds: from the SaaS page an automation or a phone agent, from the
+ * Automations page a platform or a phone agent. It sits apart, at reading
+ * width, with its two links under it, so it is never mistaken for a term.
  * ------------------------------------------------------------------ */
 
 /** controls.tsx RING_LIGHT, spelled out: controls.tsx is a client module. */
@@ -75,17 +77,10 @@ export function Terms({ data }: { data: TermsData }) {
               className="min-w-0 md:max-xl:border-t md:max-xl:border-pp-rule md:max-xl:pt-6 xl:px-6 xl:first:pl-0 xl:last:pr-0"
             >
               <h3 className={cn(TYPE.label, "text-pp-muted")}>{col.head}</h3>
-              {/* Below md, where the four lists stack into one long
-                  column, 8px between items rather than 12. */}
-              <ul className="mt-3 space-y-2 md:mt-4 md:space-y-3">
-                {col.items.map((item) => (
-                  <li key={item} className="flex gap-3">
-                    {/* 9px down centres a 4px dot on the x-height of a 21px line. */}
-                    <span aria-hidden className="mt-[9px] size-1 shrink-0 rounded-full bg-pp-accent" />
-                    <span className="min-w-0 text-[14px] leading-[21px] text-pretty text-pp-ink/85">{item}</span>
-                  </li>
-                ))}
-              </ul>
+              {/* Shared with the hero's range (ledger-list.tsx): below md,
+                  where the four lists stack into one long column, 8px
+                  between items rather than 12. */}
+              <LedgerList items={col.items} />
             </div>
           ))}
         </div>

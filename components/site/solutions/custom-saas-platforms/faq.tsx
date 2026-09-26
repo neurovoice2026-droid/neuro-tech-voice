@@ -7,10 +7,11 @@ import { faqJsonLd, type FaqData, type FaqItem } from "@/lib/pages/custom-saas-p
 import "@/components/site/home/doubts.css";
 
 /* ------------------------------------------------------------------ *
- * #faq — the doubts that remain before a build: what "complete" means,
- * how complex, what it costs, whether it needs AI, who owns the code,
- * what the accreditations and the grants are, and where the data lives.
- * Ten native <details> rows, all closed.
+ * #faq — the doubts that remain before a build: whether we only build
+ * for voice, what "complete" means, how complex, what it costs, whether
+ * it needs AI, who owns the code, what the grants are, and where the
+ * data lives. One native <details> row a question (ten on the SaaS page,
+ * eleven on the Automations page), all closed.
  *
  * THE LANDING'S #faq, COPIED, NOT IMPORTED. The markup is doubts.tsx's,
  * row for row, with this page's words, and it wears the landing's own
@@ -34,7 +35,7 @@ import "@/components/site/home/doubts.css";
  * these are questions, not a payoff.
  *
  * The ordinals number the rows for the eye only; they are hidden from
- * assistive tech, which gets ten h3 questions and no numbering noise.
+ * assistive tech, which gets the h3 questions and no numbering noise.
  *
  * Two answers end somewhere the reader can go (the phone-agent page, the
  * privacy policy). A route goes through IntentLink, which prefetches on

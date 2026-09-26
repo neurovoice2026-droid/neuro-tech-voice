@@ -90,10 +90,11 @@ import { ENDPOINT_LABEL, buildBreakTable, resultMeta } from "./custom-automation
  * /solutions/custom-automations — the claims the page makes, held to
  * the things they are about.
  *
- * The page argues that we automate any work, in any field and at any
- * difficulty, and that this platform runs on automations we built. Its
- * spine is those automations, taken from manual to automatic, so its
- * words are only as good as this file. It holds:
+ * The page argues that we automate any work, for any business, in any
+ * field and at any difficulty, and that this platform — our own, for AI
+ * phone agents — runs on automations we built: the proof, never the
+ * limit. Its spine is those automations, taken from manual to automatic,
+ * so its words are only as good as this file. It holds:
  *
  *   - every word read from a source (the menu item, the phone number,
  *     the trial, the dashboard's own names for triggers and steps, the
@@ -1470,6 +1471,15 @@ describe("honesty", () => {
       "The code, its tests and a guide to running it are yours at the end of the build.",
       "You do. At handover the code is yours",
       "Automations that are live, watched, and yours.",
+      // The owner's "not only for voice" (the breadth pass).
+      "whatever the business",
+      "No. We automate work for any business",
+      "and builds both for any business",
+      "the same team builds those too",
+      "not because calls are all we automate",
+      "Swap the caller for a customer, a patient or a guest",
+      "on yours, it could as well be an order, an invoice or a lead",
+      "Bring any work nobody should do by hand",
     ]) {
       const line = SOURCE.split("\n").find((l) => l.includes(words));
       expect(line, words).toBeDefined();
@@ -1598,8 +1608,8 @@ describe("headings and templates", () => {
   it("builds the FAQ's structured data from the rows the page renders", () => {
     const ld = faqJsonLd(AUTO_FAQ.items);
     expect(ld.mainEntity.map((q) => [q.name, q.acceptedAnswer.text])).toEqual(AUTO_FAQ.items.map((i) => [i.q, i.a]));
-    expect(AUTO_FAQ.items).toHaveLength(10);
-    expect(new Set(AUTO_FAQ.items.map((i) => i.id)).size).toBe(10);
+    expect(AUTO_FAQ.items).toHaveLength(11);
+    expect(new Set(AUTO_FAQ.items.map((i) => i.id)).size).toBe(11);
   });
 
   const slots = (t: string) => [...t.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
@@ -2380,5 +2390,69 @@ describe("the instruments this file measures with", () => {
     expect(sharedSubjects([running, work, shared])).toEqual(["auto-dot: auto-running.css, auto-work.css"]);
     // A class only named on the way to the subject is not styled there.
     expect(sharedSubjects([sheet("auto-running.css", ".pp .auto-move { gap: 0; }"), sheet("auto-work.css", ".pp .auto-move .auto-spine { top: 0; }")])).toEqual([]);
+  });
+});
+
+describe("breadth: any work, for any business, and this platform as the proof", () => {
+  const range = AUTO_HERO.range;
+  const items = range.groups.flatMap((g) => g.items);
+  const lines = SOURCE.split("\n");
+
+  it("says it in the hero, the range, #running, the team, the FAQ, the terms and the credits, each in its own words", () => {
+    expect(AUTO_META.title).toBe(`${ITEM.label}, for any business`);
+    expect(lines.find((l) => /^\s*title: `\$\{ITEM\.label\}, for any business`/.test(l))).toContain("// OWNER");
+    expect(AUTO_HERO.sub).toContain("whatever the business");
+    expect(AUTO_HERO.sub).toContain("our own product, for AI phone agents");
+    expect(range.lead.startsWith("Any work your business")).toBe(true);
+    expect(range.lead.endsWith("Not just calls.")).toBe(true);
+    expect(AUTO_RUNNING.sub).toContain("only the last starts with a phone call");
+    expect(AUTO_RUNNING.lenses.map((l) => l.id)).toEqual(["pay", "morning", "document", "call"]);
+    expect(AUTO_TEAM.sub).toContain("for any business");
+    const calls = AUTO_FAQ.items[1];
+    expect(calls.id).toBe("calls");
+    expect(calls.q).toContain("‘Voice’");
+    expect(COMPANY.name).toMatch(/\bVoice\b/);
+    expect(calls.a.startsWith("No. We automate work for any business")).toBe(true);
+    expect(calls.a).toContain(`${COMPANY.name} is also the name of our own product`);
+    // Its businesses are its own, never the range's fields again; its count is the lenses'.
+    const faqBusinesses = calls.a.split(" — ")[1].split(", ");
+    const heroBusinesses = range.fields.replace(/^For /, "").split(" — ")[0].split(", ");
+    expect(faqBusinesses.length).toBeGreaterThanOrEqual(5);
+    expect(faqBusinesses.filter((b) => heroBusinesses.includes(b))).toEqual([]);
+    expect(calls.a).toContain("three of the four under ‘Already running’ start the way work does in any business");
+    expect(AUTO_RUNNING.lenses.filter((l) => l.id !== "call")).toHaveLength(3);
+    expect(AUTO_RUNNING.foot).toContain("Swap the caller for a customer");
+    expect(AUTO_BREAKS.sub).toContain("on yours, it could as well be an order");
+    expect(AUTO_TERMS.after).toContain("the same team builds those too");
+    expect(AUTO_CREDITS.items.find((i) => i.term === "The automations on this page")!.detail).toContain("not because calls are all we automate");
+  });
+
+  it("lists kinds of work and of business, never past work: three groups of four, calls one line of twelve", () => {
+    expect(range.groups).toHaveLength(3);
+    expect(items).toHaveLength(12);
+    expect(new Set(items).size).toBe(12);
+    expect(items.filter((i) => /\bcalls?\b|\bphone|\bvoice/i.test(i))).toEqual(["Calls written up and acted on, as on this platform"]);
+    expect(range.fields.endsWith("this list doesn’t name.")).toBe(true);
+  });
+
+  it("names no brand and prints no figure in the range, and marks every line of it OWNER", () => {
+    const text = strings(range);
+    for (const mark of REGISTRY) expect(text.filter((s) => named(mark, s)), mark).toEqual([]);
+    expect(text.filter((s) => /\d/.test(s))).toEqual([]);
+    for (const s of [range.lead, range.fields, ...items]) {
+      const line = lines.find((l) => l.includes(`"${s}"`));
+      expect(line, s).toBeDefined();
+      expect(line, s).toContain("// OWNER");
+    }
+  });
+
+  it("points #work's legend at the lenses that don't start with a call", () => {
+    // Each "Watch it run" opens the lens whose blocks the proof names first.
+    const KIND_IDS = Object.keys(KINDS) as BlockKind[];
+    expect(KINDS.ai.show).toEqual({ lens: "document" });
+    expect(KINDS.rule.show).toEqual({ lens: "pay" });
+    expect(KINDS.send.show).toEqual({ lens: "pay" });
+    const shown = KIND_IDS.flatMap((k) => { const s = KINDS[k].show; return s && "lens" in s ? [s.lens] : []; });
+    expect(shown.filter((l) => l === "call")).toEqual([]);
   });
 });

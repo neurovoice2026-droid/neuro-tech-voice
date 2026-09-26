@@ -42,12 +42,14 @@ import { Switchboard } from "./switchboard";
  *
  * THE SPINE OF THE PAGE, AND ITS ONLY AUTOPLAY. The reader picks
  * something that happens — a business signing up and paying (first, and
- * the one that plays on its own: this page sells platforms), a phone
- * call, a voice provider failing, the morning's jobs — and follows it
- * through the parts that handle it, step by step. The fifth lens, "Take
- * a part down", hands the reader four switches instead of steps, and
- * shows where the next call goes, as the platform's own routing code
- * answered it for all sixteen combinations at build time.
+ * the one that plays on its own: this page sells platforms), the
+ * morning's jobs, a phone call, a voice provider failing — and follows
+ * it through the parts that handle it, step by step. The two any
+ * platform has come first; the two only a voice platform has sit
+ * together at the end, beside the fifth lens, "Take a part down", which
+ * hands the reader four switches instead of steps, and shows where the
+ * next call goes, as the platform's own routing code answered it for
+ * all sixteen combinations at build time.
  *
  * STATE is four small values and a selection: the lens, the step, the
  * switches' mask, the part in the inspector. What the drawing shows is

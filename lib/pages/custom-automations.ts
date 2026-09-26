@@ -2,11 +2,12 @@ import "server-only";
 /* ------------------------------------------------------------------ *
  * /solutions/custom-automations — every word on the page.
  *
- * The page's argument is that we automate any work, in any field and at
- * any difficulty, and that this platform runs on automations we built. So
- * its spine is those automations, each taken from the steps a person would
- * do by hand to the flow that does them instead, and every figure is either
- * read from the code or held to it.
+ * The page's argument is that we automate any work, for any business, in
+ * any field and at any difficulty, and that this platform — our own, for
+ * AI phone agents — runs on automations we built: the proof, never the
+ * limit. So its spine is those automations, each taken from the steps a
+ * person would do by hand to the flow that does them instead, and every
+ * figure is either read from the code or held to it.
  *
  * Read, never retyped, where the source is safe to read: SOLUTION_ITEMS
  * (this item, and the SaaS and agent items for links), COMPANY,
@@ -80,6 +81,8 @@ const SAAS_ITEM = SOLUTION_ITEMS.find((s) => s.id === "custom-saas-platforms");
 if (!SAAS_ITEM) throw new Error("custom-automations: SOLUTION_ITEMS lost custom-saas-platforms");
 const CAA_ITEM = SOLUTION_ITEMS.find((s) => s.id === "custom-ai-agents");
 if (!CAA_ITEM) throw new Error("custom-automations: SOLUTION_ITEMS lost custom-ai-agents");
+// The FAQ's second question quotes "Voice" from the company's name: a new name must be re-read there.
+if (!/\bVoice\b/.test(COMPANY.name)) throw new Error("custom-automations: the company name lost “Voice”; re-read AUTO_FAQ’s “calls” row");
 // The hero's plates carry per-layer copy: re-map them if the menu's layers change.
 if (ITEM.stack.join("|") !== "Inbox|Spreadsheets|CRM|Webhooks") throw new Error("custom-automations: ITEM.stack changed");
 // #build's stages and #terms' "What you get" are the three deliverables, in order.
@@ -374,7 +377,7 @@ export type AutoBuildData = {
 // credentials, near 150 characters so a search result doesn't cut them.
 // Both go to openGraph and twitter too (metadata merges shallowly).
 export const AUTO_META = {
-  title: `${ITEM.label}, whatever the work`, // "Custom Automations, whatever the work"
+  title: `${ITEM.label}, for any business`, // OWNER. "Custom Automations, for any business"
   description: `Any manual process, in any field, automated. Our team holds ${ACC} Claude accreditations from Anthropic; ${GRANTORS} gave us ${GRANTS.length === 1 ? "a startup grant" : "startup grants"}.`, // OWNER
 } as const;
 
@@ -386,11 +389,26 @@ export const AUTO_HERO: HeroData = keyed({
   // violet phrase never starts with a lone "This" (measured 320–1920).
   title: "Whatever the work, we automate\u00a0it. This\u00a0platform runs on ours.",
   key: "This\u00a0platform runs on ours.",
-  // The owner's claim and both credentials in the first paragraph, before the plates.
-  sub: `${ITEM.description} We automate it in any field, however hard: a copy-paste between two tools, or a pipeline across many systems with AI, schedules, retries and a person told the moment they’re needed. Our team holds ${ACC} personal Claude accreditations from Anthropic, our company holds startup grants from ${GRANTORS}, and the automations this platform runs on are our proof.`, // OWNER
+  // The owner's claim, then why the proof is calls (the platform is ours,
+  // so we can take its automations apart), then both credentials, all
+  // before the plates.
+  sub: `${ITEM.description} We automate it in any field, however hard, whatever the business: a copy-paste between two tools, or a pipeline across many systems with AI, schedules, retries and a person told the moment they’re needed. This platform is our own product, for AI phone agents, so its automations are the ones we can take apart. Our team holds ${ACC} personal Claude accreditations from Anthropic, and our company holds startup grants from ${GRANTORS}.`, // OWNER
   primary: CALL,
   secondary: { label: "Watch one run", href: "#running" },
   note: `${COMPANY.phone} · No form: a build starts with a phone call.`,
+  // What we automate, said as capability (kinds of work and of business,
+  // never a list of past work), between the room and the evidence. The
+  // benefit first, the owner's point last; calls are one line of twelve.
+  range: {
+    label: "What we automate",
+    lead: "Any work your business still does by hand, whatever it sells and whichever tools it uses. Not just calls.", // OWNER
+    groups: [
+      { head: "Money and paperwork", items: ["Orders turned into invoices and receipts", "Payments matched against the accounts", "Scans, forms and contracts read into your systems", "Reports and summaries, put together for you"] }, // OWNER
+      { head: "Customers and sales", items: ["Leads into the CRM, and followed up", "Bookings, reminders and waiting lists", "Emails and web forms sorted and answered", "Calls written up and acted on, as on this platform"] }, // OWNER
+      { head: "Operations and people", items: ["Stock kept right across every channel", "Orders to the warehouse, shipments tracked", "New starters set up in every tool", "Approvals asked for and chased"] }, // OWNER
+    ],
+    fields: "For an online shop, a finance team, a warehouse, a delivery firm, a clinic, a school, an estate agency, a hotel, a factory — or a business this list doesn’t name.", // OWNER
+  },
   room: {
     tag: "Running on this platform",
     // One plate per ITEM.stack layer, in its order (guarded above). Datums
@@ -401,10 +419,11 @@ export const AUTO_HERO: HeroData = keyed({
         runs: "Receipts, failed payments, usage warnings, refunds, a welcome and a goodbye, each sent when it happens",
         datum: `${FACTS_AUTO.emails} account emails` }, // "8 account emails"
       // valueInputOption 'RAW' (lib/workflows/google.ts): "nothing runs as a formula".
-      { layer: ITEM.stack[1], name: "A row in Google Sheets per call",
-        runs: "A workflow step that writes each call as plain text, so nothing a caller says runs as a formula. In beta.",
+      // Plates 1 and 2 name the capability; the runs say what it is on this platform, as 0 and 3 do.
+      { layer: ITEM.stack[1], name: "A spreadsheet that fills itself",
+        runs: "A workflow step adds each call to Google Sheets as plain text, so nothing a caller says runs as a formula. In beta.",
         datum: `${SHEET_HEADER.length} columns a call` }, // "12 columns a call"
-      { layer: ITEM.stack[2], name: "Calls written up by AI",
+      { layer: ITEM.stack[2], name: "Conversations written up by AI",
         runs: "What the caller wanted, how they felt, what came of it and the details they gave, saved for a workflow to pass on",
         datum: `${CALL_OUTCOMES.length} outcomes` }, // "10 outcomes"
       { layer: ITEM.stack[3], name: "Signed, and tried again",
@@ -435,11 +454,11 @@ export const KINDS: Record<BlockKind, KindInfo> = {
   when: { tag: "When", ours: "does", proof: "A payment, the end of a call, a new document: each starts an automation.", show: { lens: "pay" } },
   time: { tag: "Schedule", ours: "does", proof: `${cap(word(FACTS.cronSteps.length))} steps run here every morning at ${FACTS.cronAt}.`, show: { lens: "morning" } },
   read: { tag: "Reads", ours: "does", proof: "Stripe’s invoices, uploaded files and web pages.", show: { lens: "document" } },
-  ai: { tag: "AI", ours: "does", proof: "Calls are written up by AI, and documents indexed with it.", show: { lens: "call" } },
-  rule: { tag: "Rule", ours: "does", proof: "A signature, an unhappy caller or a word you listen for decides what runs next.", show: { lens: "call" } },
+  ai: { tag: "AI", ours: "does", proof: "Documents are indexed with AI, and calls written up with it.", show: { lens: "document" } },
+  rule: { tag: "Rule", ours: "does", proof: "A signature, an unhappy caller or a word you listen for decides what runs next.", show: { lens: "pay" } },
   once: { tag: "Once", ours: "does", proof: "Checked before every fiscal invoice: SmartBill is asked only when none is recorded for that payment.", show: { lens: "pay" } },
   write: { tag: "Writes", ours: "does", proof: "Fiscal invoices in SmartBill, a record on every call, and rows in Google Sheets, in beta.", show: { lens: "pay" } },
-  send: { tag: "Sends", ours: "does", proof: "Emails, texts, Slack messages and signed webhooks.", show: { lens: "call" } },
+  send: { tag: "Sends", ours: "does", proof: "Emails, texts, Slack messages and signed webhooks.", show: { lens: "pay" } },
   retry: { tag: "Retries", ours: "does", proof: `Every webhook is tried up to ${word(FACTS.webhookAttempts)} times when the other end is busy.`, show: { href: "#breaks" } },
   wait: { tag: "Waits", ours: "thin" },
   person: { tag: "A person", ours: "does", proof: "The person on call is texted or emailed mid-call when a caller needs someone now.", show: { href: "#run-notify" } },
@@ -883,11 +902,11 @@ const LEDGER: readonly LedgerCard[] = [
     body: "The time is offered by text to the caller who has waited longest for that service. They call back to book it, so the system never promises one slot to two people.",
     files: ["lib/scheduling/waitlist.ts"] },
   // usage.ts: "an email that failed to send is retried by the next billed call" (kvDel on a failed send).
-  { id: "usage", kind: "once", when: "A call adds minutes",
+  { id: "usage", kind: "once", when: "Usage passes a mark",
     title: `Usage emails at ${FACTS_AUTO.usageMarks[0]}% and ${FACTS_AUTO.usageMarks[1]}%`,
     body: "The owner gets at most one email at each mark in a period. Each is marked before it goes out, so two calls ending together don’t both send it, and if one fails to send, the next call that adds minutes tries again.",
     figure: `${FACTS_AUTO.usageMarks[0]}% · ${FACTS_AUTO.usageMarks[1]}%`, files: ["lib/billing/usage.ts", "lib/email/templates.ts"] },
-  { id: "minutes", kind: "once", when: "A call ends", title: "Every minute billed once",
+  { id: "minutes", kind: "once", when: "Usage is counted", title: "Every minute billed once",
     body: "Each call’s minutes are billed once, from the phone line’s count or the voice service’s, never both, and any minutes over the plan are counted call by call. If a call the phone line reported was never billed, the morning job bills it.",
     files: ["lib/billing/usage.ts", "lib/twilio/status.ts", "app/api/elevenlabs/webhook/handlers.ts"] },
   // The self-serve product, counted from the engine: the words come from its lengths.
@@ -901,12 +920,16 @@ const LEDGER: readonly LedgerCard[] = [
 
 /* ---------- #running ---------- */
 
+// The sub and the FAQ's "calls" row say only the last lens starts with a
+// call, and what the other three start with: re-read both if the lenses change.
+if (LENSES.map((l) => l.id).join() !== "pay,morning,document,call") throw new Error("custom-automations: the lenses changed; re-read AUTO_RUNNING.sub and AUTO_FAQ’s “calls” row");
+
 export const AUTO_RUNNING: RunningData = keyed({
   eyebrow: "Already running",
   title: "The automations this platform runs on, from manual to automatic",
   key: "from manual to automatic",
   // "Drawn from the code" is the tag's job, as on the SaaS page: said there, not here too.
-  sub: `${cap(word(LENSES.length))} of them, simplest first. Pick one to see the steps a person would do by hand, the flow that does them instead, and a run from start to finish.`,
+  sub: `${cap(word(LENSES.length))} of them, simplest first, and only the last starts with a phone call: the others start with a payment, the time of day and a new document, as work does in any business. Pick one to see the steps a person would do by hand, the flow that does them instead, and a run from start to finish.`,
   tag: "Drawn from the code · not a live feed",
   lensesAria: "Which automation, simplest first",
   transport: { play: "Play it", pause: "Pause", replay: "Play it again" },
@@ -936,7 +959,8 @@ export const AUTO_RUNNING: RunningData = keyed({
   initial: "pay",
   lenses: LENSES,
   ledger: { title: "Six more that run by themselves here", cards: LEDGER },
-  foot: "Drawn by the team that built them. Each block names the file it lives in, for your developers.",
+  // The ledger's six start with a caller: the foot says what they are anywhere else.
+  foot: "Drawn by the team that built them. Swap the caller for a customer, a patient or a guest, and they’re the alerts, reminders, waiting lists and billing most businesses need. Each block names the file it lives in, for your developers.", // OWNER
 });
 
 /* ---------- #work: the eighteen samples ---------- */
@@ -1229,7 +1253,7 @@ export const AUTO_WORK: WorkData = keyed({
   levelLabel: "How hard",
   fields: [
     { id: "finance", label: "Finance" }, { id: "sales", label: "Sales" }, { id: "service", label: "Customer service" },
-    { id: "operations", label: "Operations" }, { id: "people", label: "People and HR" }, { id: "shops", label: "Online shops" },
+    { id: "operations", label: "Logistics" }, { id: "people", label: "People and HR" }, { id: "shops", label: "Online shops" },
   ],
   levels: [
     { id: "copy", label: "A copy-paste", gloss: "Two or three tools, and nothing to decide" },
@@ -1283,7 +1307,8 @@ export const AUTO_BREAKS: BreaksData = keyed({
   eyebrow: "When it breaks",
   title: "What happens when a step fails at 3 a.m.",
   key: "at 3 a.m.",
-  sub: "Pick what the CRM does when this sample workflow sends it a call’s details. Every result below is worked out by this platform’s own delivery code when the page is built; nothing is actually sent.",
+  // The trigger stays the dashboard's own; the sub says what else the same delivery code carries.
+  sub: "Pick what the CRM does when this sample workflow sends it a call’s details; on yours, it could as well be an order, an invoice or a lead. Every result below is worked out by this platform’s own delivery code when the page is built; nothing is actually sent.", // OWNER
   workflow: { // SAMPLE: a workflow written for this page
     tag: "Sample workflow",
     name: "Unhappy callers to the CRM",
@@ -1360,7 +1385,7 @@ export const AUTO_TEAM: TeamData = keyed({
   key: `${ACC} Claude accreditations`,
   // The card's label and caption say "Personal … from Anthropic", and the
   // grants' line says their technology runs inside: each once, not here too.
-  sub: "The team that built this platform, and the automations it runs on.",
+  sub: "The team that built this platform and the automations it runs on, and builds both for any business.", // OWNER
   checkKinds: CHECK_KINDS,
   accreditations: {
     label: "Personal accreditations",
@@ -1414,7 +1439,7 @@ export const AUTO_BUILD: AutoBuildData = keyed({
   // Plans by name, read (never "paid plans"); the Google steps say "in beta".
   selfServe: {
     label: "When you don’t need us",
-    body: `If all you need is follow-up after your AI agent’s calls — ${listJoin(SELF_SERVE_STEPS.map((a) => ACTION_WORDS[a]))} — you can set it up yourself in the dashboard, in ${word(INT_BUILDER.steps.length)} steps, with no build. Texts to callers start on the ${SMS_PLAN} plan, and the ${word(GOOGLE_STEPS.length)} Google steps, in beta, on ${GOOGLE_PLAN}.`, // "…start on the Starter plan, and the five Google steps, in beta, on Pro."
+    body: `If you use our AI phone agent and all you need is follow-up after its calls — ${listJoin(SELF_SERVE_STEPS.map((a) => ACTION_WORDS[a]))} — you can set it up yourself in the dashboard, in ${word(INT_BUILDER.steps.length)} steps, with no build. Texts to callers start on the ${SMS_PLAN} plan, and the ${word(GOOGLE_STEPS.length)} Google steps, in beta, on ${GOOGLE_PLAN}.`, // "…start on the Starter plan, and the five Google steps, in beta, on Pro."
     link: { label: "See what you can set up yourself", href: "/product/integrations" },
   },
 });
@@ -1455,7 +1480,7 @@ export const AUTO_TERMS: TermsData = keyed({
       CAA_HANDOVER.after, // "Who makes changes after launch — your team, us, or both — is agreed when the build is quoted."
     ] },
   ],
-  after: "If it’s a whole platform or a phone agent you need, those are builds of their own.",
+  after: "If it’s a whole platform or a phone agent you need, the same team builds those too.", // OWNER
   links: [
     { label: "How a SaaS platform is built", href: SAAS_ITEM.href },
     { label: "How a custom phone agent is built", href: CAA_ITEM.href },
@@ -1492,7 +1517,7 @@ export const AUTO_CHECKS: ChecksData = keyed({
       how: `On the trial, add a workflow with a ‘${A("send_webhook")}’ step, save it, and press Send test: each step’s result, its attempts and how long it took.`, link: TRIAL_LINK },
     { id: "breaks", kind: "site", claim: "The results under ‘When it breaks’ are the platform’s own.",
       how: "Each was worked out by its delivery code when this page was built.", link: { label: "When it breaks", href: "#breaks" } },
-    { id: "self", kind: "site", claim: "Follow-up after a call needs no build.",
+    { id: "self", kind: "site", claim: "Follow-up after our phone agent’s calls needs no build.",
       how: `Set one up in ${word(INT_BUILDER.steps.length)} steps in the dashboard.`, link: { label: "See what you can set up yourself", href: "/product/integrations" } },
     // "This page", as TRUST says it: the imprint is in the site footer.
     { id: "company", kind: "site", claim: "We’re an EU company, registered in Romania.",
@@ -1530,6 +1555,10 @@ export const AUTO_FAQ: FaqData = keyed({
   items: [
     { id: "what", q: "What can you automate?", // OWNER
       a: "Any repeated work that moves information between people and tools: emails into systems, documents into data, orders into invoices, a CRM kept in step with everything around it, reports that build themselves, and the checks and reminders in between. If the steps can be described and the information is somewhere software can reach, we can automate it, and we’ll say on the call which parts should stay with a person." }, // OWNER
+    // The doubt the page itself raises, and the name behind it, second
+    // (the name is guarded above). Also served alone as FAQPage data.
+    { id: "calls", q: "Your name says ‘Voice’. Do you only automate calls?",
+      a: `No. We automate work for any business — a law firm, a dental practice, a courier firm, a restaurant group, a letting agency, a charity — in the tools it already uses. ${COMPANY.name} is also the name of our own product, a platform for AI phone agents, so some of the automations it runs are about calls; they’re on this page because they’re ours to take apart, not because they’re all we build. Even here, three of the four under ‘Already running’ start the way work does in any business: with a payment, the time of day or a new document.` }, // OWNER
     // Also served alone as FAQPage data, so it names what runs here in full.
     { id: "complex", q: "How complex can it get?",
       a: `As complex as the work is. The automations this platform runs on write up phone calls with AI, check before every fiscal invoice that the payment isn’t invoiced already, and run ${word(FACTS.cronSteps.length)} steps every morning, ${word(FACTS_AUTO.billingChain)} of them in a set order; one failing never stops the others. Pipelines across many systems, with schedules, retries, AI that reads documents and people who decide the exceptions, are the work we do.` },
@@ -1557,12 +1586,12 @@ export const AUTO_FAQ: FaqData = keyed({
 /* ---------- #start, then the credits ---------- */
 
 // The deep panel's colour zones were measured on SAAS_START's copy, so the
-// title, key and body stay at or under its lengths (45, 25, 204; the test holds it).
+// title, key and body stay at or under its lengths (45, 25, 203; the test holds it).
 export const AUTO_START: StartData = keyed({
   eyebrow: "Start",
-  title: "Bring the work nobody should do by hand", // 39 ≤ 45
+  title: "Bring any work nobody should do by hand", // OWNER: "any work". 39 ≤ 45
   key: "nobody should do by hand", // 24 ≤ 25
-  body: "A build starts with a phone call, not a form. Tell us the work, the tools it touches and where it goes wrong. We’ll tell you what we’d automate first, what stays with a person, and what it would take.", // 200 ≤ 204
+  body: "A build starts with a phone call, not a form. Tell us the work, the tools it touches and where it goes wrong. We’ll tell you what we’d automate first, what stays with a person, and what it would take.", // 200 ≤ 203
   primary: CALL,
   secondary: { label: "Try the platform we built", href: PRICING_TRIAL.href },
   note: `${COMPANY.phone} · Quoted after the call, never on the page`,
@@ -1574,7 +1603,7 @@ export const AUTO_TRADEMARKS = ["Cartesia", "ElevenLabs", "OpenAI", "Stripe", "S
 export const AUTO_CREDITS: CreditsData = {
   title: "About this page",
   items: [
-    { term: "The automations on this page", detail: "Neuro Tech Voice’s own, built by the team this page describes. The drawings are ours, made from its code; they’re drawings, not a live feed." },
+    { term: "The automations on this page", detail: "Neuro Tech Voice’s own, built by the team this page describes. They’re shown because they’re ours to take apart, not because calls are all we automate. The drawings are made from its code; they’re drawings, not a live feed." }, // OWNER
     { term: "The figures", detail: "Every figure about the platform is counted from its repository by the site’s own tests." },
     { term: "When it breaks", detail: "Every result is worked out when the page is built, by the platform’s own delivery code, against two addresses that receive nothing: one at example.com and one inside a private network. Nothing is sent. The tag and Slack lines are the platform’s own words for those steps succeeding." },
     { term: "The samples", detail: "The fields, moves and flows under ‘Your kind of work’, and the workflow under ‘When it breaks’, were written for this page, for no business in particular." },

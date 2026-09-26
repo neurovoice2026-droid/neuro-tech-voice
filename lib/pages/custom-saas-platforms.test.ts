@@ -77,8 +77,9 @@ import { buildDownTable } from "./custom-saas-platforms.server";
  * /solutions/custom-saas-platforms — the claims the page makes, held to
  * the things they are about.
  *
- * The page argues that we build complete platforms and that the reader is
- * on one, so its words are only as good as this file. It holds:
+ * The page argues that we build complete platforms of any kind, for any
+ * business, and that the reader is on one, so its words are only as good
+ * as this file. It holds:
  *
  *   - every word read from a source (the menu item, the phone number,
  *     TRUST, HOME_START, the platform's own constants) to that source;
@@ -573,7 +574,8 @@ describe("the map and the lenses", () => {
   });
 
   it("tours at most ten steps a lens, starting on a tour", () => {
-    expect(SAAS_PLATFORM.lenses.map((l) => l.id)).toEqual(["signup", "call", "failover", "nightly"]);
+    // The two tours any platform has first, the two only a voice platform has together at the end, beside "Take a part down".
+    expect(SAAS_PLATFORM.lenses.map((l) => l.id)).toEqual(["signup", "nightly", "call", "failover"]);
     expect(SAAS_PLATFORM.lenses.map((l) => l.id)).toContain(SAAS_PLATFORM.initial);
     for (const l of SAAS_PLATFORM.lenses) {
       expect(l.steps.length, l.id).toBeLessThanOrEqual(10);
@@ -730,7 +732,7 @@ describe("scope", () => {
     for (const p of S.parts) if (p.map) expect(SAAS_PLATFORM.parts.map((q) => q.id), p.id).toContain(p.map);
   });
 
-  it("always builds the bones, and adds what Subscriptions needs", () => {
+  it("always builds the bones, and adds what payments need", () => {
     expect(built([]).map((p) => p.id)).toEqual(["auth", "screens", "policy", "data", "schema", "hosting", "jobs", "watch"]);
     const first = built(S.initial);
     expect(first).toHaveLength(10);
@@ -1619,5 +1621,90 @@ describe("map links", () => {
     expect(read(`${DIR}/part-bus.ts`)).toContain(
       `history.replaceState({ [SHOWN]: id }, "", window.location.pathname + window.location.search);`,
     );
+  });
+});
+
+describe("breadth: any platform, for any business, and this one as the proof", () => {
+  const range = SAAS_HERO.range;
+  const items = range.groups.flatMap((g) => g.items);
+  const SOURCE = read("lib/pages/custom-saas-platforms.ts");
+
+  it("says it in the hero, the range, the explorer, the FAQ, the terms and the credits, each in its own words", () => {
+    expect(SAAS_META.title).toBe(`${ITEM.label}, for any business`);
+    expect(SAAS_META.description).toContain("for any business");
+    expect(SAAS_HERO.title).toContain("of any kind");
+    expect(SAAS_HERO.sub).toContain("our own product, for AI phone agents");
+    expect(SAAS_HERO.sub).toContain("whoever uses it");
+    // The menu's line sells a product to customers; the next says a team's own software is built too.
+    expect(SAAS_HERO.sub.slice(ITEM.description.length)).toMatch(/^ Or the software your own team runs the business on\./);
+    expect(SAAS_CREDENTIALS.sub.startsWith("The team that built this platform, and builds platforms of any kind for any business.")).toBe(true);
+    expect(range.lead.startsWith("Any platform your business needs")).toBe(true);
+    expect(range.lead.endsWith("Not just phone agents.")).toBe(true);
+    expect(SAAS_PLATFORM.sub.startsWith("Take away its phone calls")).toBe(true);
+    expect(SAAS_PLATFORM.sub).toContain("what most platforms are built on");
+    expect(SAAS_FAQ.items[0].id).toBe("breadth");
+    expect(SAAS_FAQ.items[0].q).toContain("‘Voice’");
+    expect(SAAS_FAQ.items[0].a.startsWith("No. We build whatever platform your business needs")).toBe(true);
+    expect(SAAS_FAQ.items[0].a).toContain(`${COMPANY.name} is also the name of our own product`);
+    expect(SAAS_FAQ.items.find((i) => i.id === "ai")!.a).toContain("we build those too");
+    // Served alone as FAQPage data: kinds of complexity any platform can have, before ours.
+    expect(SAAS_FAQ.items.find((i) => i.id === "complex")!.a).toMatch(/^As complex as your product needs: [^.]*\. The platform on this page/);
+    expect(SAAS_TERMS.after).toContain("the same team builds those too");
+    expect(SAAS_CREDITS.items.find((i) => i.term === "The platform on this page")!.detail).toContain("not because voice is all we build");
+  });
+
+  it("never assumes the reader sells subscriptions: the scope's needs, the build and the start", () => {
+    const needs = SAAS_SCOPE.needs.map((n) => n.label);
+    expect(needs).toContain("One-off or monthly payments");
+    expect(needs).toContain("Tools you or your customers use");
+    expect(scopePart("plans").label).toBe("Payments and invoices");
+    for (const s of [...needs, ...SAAS_SCOPE.parts.map((p) => p.label), SAAS_START.body, ...SAAS_BUILD.stages.flatMap((st) => [st.body, st.hold])]) {
+      expect(s, s).not.toMatch(/subscription|your customers will|how they’ll pay/i);
+    }
+  });
+
+  it("links the terms to the team's other two builds, as the Automations page does", () => {
+    const auto = SOLUTION_ITEMS.find((s) => s.id === "custom-automations")!;
+    const caa = SOLUTION_ITEMS.find((s) => s.id === "custom-ai-agents")!;
+    expect(SAAS_TERMS.links.map((l) => l.href)).toEqual([auto.href, caa.href]);
+  });
+
+  it("lists kinds and fields, never past work: three groups of four, voice one line of twelve", () => {
+    expect(range.groups).toHaveLength(3);
+    expect(items).toHaveLength(12);
+    expect(new Set(items).size).toBe(12);
+    expect(items.filter((i) => /\bcalls?\b|\bphone|\bvoice/i.test(i))).toEqual(["Phone-agent platforms, like the one you’re on"]);
+    expect(range.fields.endsWith("this list doesn’t name.")).toBe(true);
+  });
+
+  it("names no mark and prints no figure in the range, and marks every line of it OWNER", () => {
+    const text = strings(range);
+    for (const mark of ["Anthropic", "Claude", "Google", ...TRADEMARKS]) {
+      expect(text.filter((s) => s.includes(mark)), mark).toEqual([]);
+    }
+    expect(text.filter((s) => /\d/.test(s))).toEqual([]);
+    const lines = SOURCE.split("\n");
+    for (const s of [range.lead, range.fields, ...items]) {
+      const line = lines.find((l) => l.includes(`"${s}"`));
+      expect(line, s).toBeDefined();
+      expect(line, s).toContain("// OWNER");
+    }
+  });
+
+  it("marks every other new capability claim OWNER on the line that holds it", () => {
+    const lines = SOURCE.split("\n");
+    const at = (test: (l: string) => boolean, what: string) => {
+      const line = lines.find(test);
+      expect(line, what).toBeDefined();
+      expect(line, what).toContain("// OWNER");
+    };
+    at((l) => /^\s*title: `\$\{ITEM\.label\}, for any business`/.test(l), "the tab title");
+    at((l) => l.includes(`title: "${SAAS_HERO.title}"`), "the h1");
+    for (const words of ["SaaS platforms of any kind, for any business.", "Whatever it does, whoever uses it and however complex",
+      "No. We build whatever platform your business needs", "the same team builds those too", "If it’s a phone agent you want, we build those too.",
+      "not because voice is all we build", "Or the software your own team runs the business on.", "and builds platforms of any kind for any business",
+      "As complex as your product needs: many kinds of user"]) {
+      at((l) => l.includes(words) && !/^\s*(?:\*|\/\/)/.test(l), words);
+    }
   });
 });

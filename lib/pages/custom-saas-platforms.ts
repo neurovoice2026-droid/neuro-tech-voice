@@ -2,11 +2,12 @@ import "server-only";
 /* ------------------------------------------------------------------ *
  * /solutions/custom-saas-platforms — every word on the page.
  *
- * The page's argument is that we build complete SaaS platforms, and that
- * the platform the reader is on is one of them. So the claims that matter
- * most carry the way to check them — now, in this browser; on the call; or
- * in your build — and every figure is either read from the code or held
- * to it.
+ * The page's argument is that we build complete SaaS platforms of any
+ * kind, for any business, and that the platform the reader is on — our
+ * own, for AI phone agents — is one of them: the proof, never the limit.
+ * So the claims that matter most carry the way to check them — now, in
+ * this browser; on the call; or in your build — and every figure is
+ * either read from the code or held to it.
  *
  * Read, never retyped, where the source is safe to read: SOLUTION_ITEMS,
  * COMPANY, AUTH, PRICING_TRIAL, SOLUTIONS_MENU, TRUST (by id), HOME_START,
@@ -57,6 +58,10 @@ const ITEM = SOLUTION_ITEMS.find((s) => s.id === "custom-saas-platforms");
 if (!ITEM) throw new Error("SOLUTION_ITEMS lost custom-saas-platforms");
 const CAA_ITEM = SOLUTION_ITEMS.find((s) => s.id === "custom-ai-agents");
 if (!CAA_ITEM) throw new Error("SOLUTION_ITEMS lost custom-ai-agents");
+const AUTO_ITEM = SOLUTION_ITEMS.find((s) => s.id === "custom-automations");
+if (!AUTO_ITEM) throw new Error("custom-saas-platforms: SOLUTION_ITEMS lost custom-automations");
+// The FAQ's first question quotes "Voice" from the company's name: a new name must be re-read there.
+if (!/\bVoice\b/.test(COMPANY.name)) throw new Error("custom-saas-platforms: the company name lost “Voice”; re-read SAAS_FAQ’s first row");
 // The hero plates and the scope layers carry per-layer copy: re-map them if the menu's layers change.
 if (ITEM.stack.join("|") !== "Web app|Database|Payments|Hosting") throw new Error("custom-saas-platforms: ITEM.stack changed");
 // The build stages and "What you get" are the menu's three deliverables, one each, in order.
@@ -298,6 +303,8 @@ export type FaqItem = { id: string; q: string; a: string; where?: Link };
 export type FaqData = { eyebrow: string; title: string; key: string; keyTone: "quiet"; talk: Link; phone: string; items: readonly FaqItem[] };
 export type HeroData = {
   eyebrow: string; title: string; key: string; sub: string; primary: Link; secondary: Link; note: string;
+  /** What we build (or automate) for anyone: kinds and fields, never past work. Shared by both pages' heroes. */
+  range: { label: string; lead: string; groups: readonly { head: string; items: readonly string[] }[]; fields: string };
   room: { tag: string; plates: readonly { layer: string; name: string; runs: string; datum: string }[]; foot: string; link: Link; flow: { pause: string; play: string } };
   proofLabel: string; proof: readonly { label: string; term: string; detail: string; href: string }[];
 };
@@ -338,21 +345,35 @@ export const CHECK_KINDS: Record<CheckKind, string> = { site: "Now, in this brow
 // doesn't cut them. Both go to openGraph and twitter too: without a page's
 // own, those keep the layout's voice-agent copy (metadata merges shallowly).
 export const SAAS_META = {
-  title: `${ITEM.label}, like the one you’re on`,
-  description: `Complete SaaS platforms, whatever the complexity. Our team holds ${ACC} Claude accreditations from Anthropic; ${GRANTORS} gave us ${GRANTS.length === 1 ? "a startup grant" : "startup grants"}.`, // OWNER
+  title: `${ITEM.label}, for any business`, // OWNER. "Custom SaaS Platforms, for any business"
+  description: `SaaS platforms of any kind, for any business. Our team holds ${ACC} Claude accreditations from Anthropic; ${GRANTORS} gave us ${GRANTS.length === 1 ? "a startup grant" : "startup grants"}.`, // OWNER
 } as const;
 
 /* ---------- #top: hero ---------- */
 
 export const SAAS_HERO: HeroData = keyed({
   eyebrow: ITEM.label, // "Custom SaaS Platforms"
-  title: "We build complete SaaS platforms. You’re on one of them.",
+  title: "We build SaaS platforms of any kind. You’re on one of them.", // OWNER
   key: "You’re on one of them.",
-  // The owner's three proofs in the first paragraph, before the plates.
-  sub: `${ITEM.description} We design and build the whole platform, whatever the complexity: a prototype you click first, then accounts, billing, admin and hosting, with the code handed over. Our team holds ${ACC} personal Claude accreditations from Anthropic, our company holds startup grants from ${GRANTORS}, and the platform you’re on is our proof.`, // OWNER
+  // Breadth first, then why the proof is voice (it's ours, so we can open
+  // it up), then the owner's credentials, all before the plates.
+  sub: `${ITEM.description} Or the software your own team runs the business on. Whatever it does, whoever uses it and however complex, we design and build the whole platform: a prototype you click first, then accounts, billing, admin and hosting, with the code handed over. The platform you’re on is our own product, for AI phone agents, so it’s the one we can open up. Our team holds ${ACC} personal Claude accreditations from Anthropic, and our company holds startup grants from ${GRANTORS}.`, // OWNER
   primary: CALL,
   secondary: { label: "Explore the platform", href: "#platform" },
   note: `${COMPANY.phone} · No form: a build starts with a phone call.`,
+  // What we build, said as capability (kinds and fields, never a list of
+  // past work), between the room and the evidence: the room is ours, and
+  // this says it isn't the limit. Voice is one line of twelve.
+  range: {
+    label: "What we build",
+    lead: "Any platform your business needs, for your customers or your own team. Not just phone agents.", // OWNER
+    groups: [
+      { head: "For your customers", items: ["Online shops and marketplaces", "Portals for customers, suppliers or patients", "Booking, scheduling and memberships", "Courses and learning platforms"] }, // OWNER
+      { head: "For your own team", items: ["Internal tools and back offices", "CRMs and operations dashboards", "Invoicing, finance and reporting", "Stock, logistics and field service"] }, // OWNER
+      { head: "With AI at the centre", items: ["Tools that read and sort documents", "Assistants and search inside your product", "Matching, recommendations and forecasts", "Phone-agent platforms, like the one you’re on"] }, // OWNER
+    ],
+    fields: "In any field: e-commerce, finance, logistics, healthcare, education, real estate, hospitality, manufacturing — or one this list doesn’t name.", // OWNER
+  },
   room: {
     tag: "Under this site",
     // One plate per layer of the menu's `stack`, in its order (guarded above).
@@ -394,8 +415,10 @@ export const SAAS_CREDENTIALS: CredentialsData = keyed({
   eyebrow: "Who builds it",
   title: `The people who build it hold ${ACC} Claude accreditations`,
   key: `${ACC} Claude accreditations`,
-  // The grants' "so what", said once on the page (the FAQ answer stands alone as structured data).
-  sub: `Personal accreditations from Anthropic, and startup grants from ${GRANTORS}, whose technology runs inside this platform: if your product needs to speak or listen, we already build on it. What each one is, and how to see it.`,
+  // Who they build for first, as the Automations page's #team says it;
+  // then the grants' "so what", said once on the page (the FAQ answer
+  // stands alone as structured data).
+  sub: `The team that built this platform, and builds platforms of any kind for any business. Personal accreditations from Anthropic, and startup grants from ${GRANTORS}, whose technology runs inside this platform: if your product needs to speak or listen, we already build on it. What each one is, and how to see it.`, // OWNER
   checkKinds: CHECK_KINDS,
   accreditations: {
     label: "Personal accreditations",
@@ -470,10 +493,13 @@ const PARTS: readonly Part[] = [
     does: "With the business’s own Google account: bookings go into Calendar during a call, and after it, workflows can add a row to Sheets." },
 ];
 
-// The four tours. Each hop names an edge of the drawing (map-geometry.ts);
-// `ring` pulses parts a step touches without travelling to them; `fault`
-// marks the part that failed; `voice` is who speaks from that step on; the
-// nightly lens's `cron` fields are the daily route's step names, in order.
+// The four tours, in the tabs' order: the two any platform has (a sign-up
+// that pays, the morning's jobs) first, then the two only a voice platform
+// has, together and beside "Take a part down" (the test holds the order).
+// Each hop names an edge of the drawing (map-geometry.ts); `ring` pulses
+// parts a step touches without travelling to them; `fault` marks the part
+// that failed; `voice` is who speaks from that step on; the nightly lens's
+// `cron` fields are the daily route's step names, in order.
 // `title` is the step list's short name for a step; the caption alone carries `text`.
 const LENSES: readonly Lens[] = [
   { id: "signup", label: "A business signs up and pays", steps: [
@@ -487,6 +513,17 @@ const LENSES: readonly Lens[] = [
     { id: "webhook", title: "Stripe’s signed webhook", hops: ["stripe-api"], text: `Stripe’s signed webhook comes back. ${cap(word(FACTS.stripeEvents))} kinds of event keep the plan and the invoices in step.` },
     { id: "plan", title: "The plan is written", hops: ["api-supabase"], text: "The server writes the plan. A trigger in the database keeps a customer’s own session from changing it." },
     { id: "invoice", title: "A fiscal invoice in SmartBill", hops: ["api-smartbill"], text: "A paid invoice becomes one fiscal invoice in SmartBill, however often the webhook retries." },
+  ] },
+  { id: "nightly", label: `Every morning at ${FACTS.cronAt}`, foot: "A step that fails shows in the logs and never stops the others.", steps: [
+    { id: "wake", title: "Vercel Cron calls the job", hops: ["cron-api"], text: `Vercel Cron calls the daily job at ${FACTS.cronAt}, with a secret. Its ${word(FACTS.cronSteps.length)} steps run on their own, and each is safe to run twice.` },
+    { id: "reconcile", title: "Bills calls left unbilled", cron: "reconcile_unbilled_calls", hops: ["api-supabase"], text: "Bills any answered call whose billing didn’t finish, without ever billing it twice." },
+    { id: "roll", title: "Starts the next usage period", cron: "roll_usage_periods", hops: ["api-supabase"], text: "Starts the next usage period for paid plans." },
+    { id: "overage", title: "Reports overage to Stripe", cron: "report_overage", hops: [{ edge: "stripe-api", reverse: true }], text: "Reports minutes past the allowance to Stripe." },
+    { id: "reminders", title: "Texts appointment reminders", cron: "booking_reminders", hops: [{ edge: "twilio-api", reverse: true }], text: "Texts appointment reminders." },
+    { id: "resync", title: "Re-syncs stale agents", cron: "resync_stale_agents", ring: ["cartesia", "elevenlabs"], text: `Re-syncs up to ${FACTS.resyncBatch} agents whose copy at Cartesia or ElevenLabs is missing or out of date.` },
+    { id: "purge", title: "Deletes expired locks and flags", cron: "purge_expired_kv", hops: ["api-supabase"], text: "Deletes expired locks and flags." },
+    { id: "uploads", title: "Removes unused uploads", cron: "purge_orphan_uploads", hops: ["api-supabase"], text: "Removes day-old uploads that nothing uses." },
+    { id: "budget", title: "Refreshes the Cartesia budget", cron: "warm_cartesia_budget", ring: ["cartesia"], text: "Refreshes the cached Cartesia budget." },
   ] },
   { id: "call", label: "A phone call comes in", steps: [
     { id: "ring", title: "Someone rings", hops: ["caller-twilio"], text: "Someone rings the business’s number." },
@@ -508,17 +545,6 @@ const LENSES: readonly Lens[] = [
     { id: "gateway", title: "If the gateway can’t carry on", hops: ["twilio-router", "router-elevenlabs"], fault: "gateway", text: "If the gateway can’t carry on, it lets go of the call without hanging up, and the app hands the caller to ElevenLabs." },
     { id: "router", title: "If the app’s answer fails", hops: ["twilio-router", "router-elevenlabs"], fault: "router", text: "If the app’s answer to Twilio errors or times out, Twilio asks the number’s fallback route, which hands the caller straight to ElevenLabs." },
     { id: "billed", title: "Billed once, either way", hops: ["twilio-api"], text: "However the call ended up being carried, it’s billed once, from Twilio’s own record." },
-  ] },
-  { id: "nightly", label: `Every morning at ${FACTS.cronAt}`, foot: "A step that fails shows in the logs and never stops the others.", steps: [
-    { id: "wake", title: "Vercel Cron calls the job", hops: ["cron-api"], text: `Vercel Cron calls the daily job at ${FACTS.cronAt}, with a secret. Its ${word(FACTS.cronSteps.length)} steps run on their own, and each is safe to run twice.` },
-    { id: "reconcile", title: "Bills calls left unbilled", cron: "reconcile_unbilled_calls", hops: ["api-supabase"], text: "Bills any answered call whose billing didn’t finish, without ever billing it twice." },
-    { id: "roll", title: "Starts the next usage period", cron: "roll_usage_periods", hops: ["api-supabase"], text: "Starts the next usage period for paid plans." },
-    { id: "overage", title: "Reports overage to Stripe", cron: "report_overage", hops: [{ edge: "stripe-api", reverse: true }], text: "Reports minutes past the allowance to Stripe." },
-    { id: "reminders", title: "Texts appointment reminders", cron: "booking_reminders", hops: [{ edge: "twilio-api", reverse: true }], text: "Texts appointment reminders." },
-    { id: "resync", title: "Re-syncs stale agents", cron: "resync_stale_agents", ring: ["cartesia", "elevenlabs"], text: `Re-syncs up to ${FACTS.resyncBatch} agents whose copy at Cartesia or ElevenLabs is missing or out of date.` },
-    { id: "purge", title: "Deletes expired locks and flags", cron: "purge_expired_kv", hops: ["api-supabase"], text: "Deletes expired locks and flags." },
-    { id: "uploads", title: "Removes unused uploads", cron: "purge_orphan_uploads", hops: ["api-supabase"], text: "Removes day-old uploads that nothing uses." },
-    { id: "budget", title: "Refreshes the Cartesia budget", cron: "warm_cartesia_budget", ring: ["cartesia"], text: "Refreshes the cached Cartesia budget." },
   ] },
 ];
 
@@ -565,12 +591,20 @@ const DOWN: DownCopy = {
   live: "{name} takes the next call. {why}",
 };
 
+// The sub says the drawing holds, under the calls, what most platforms
+// are built on: keep those parts on it.
+if (!LENSES.some((l) => l.id === "signup")) throw new Error("custom-saas-platforms: the sign-up lens is gone; re-read SAAS_PLATFORM.sub");
+for (const id of ["customer", "stripe", "supabase", "cron"] as const) {
+  if (!PARTS.some((p) => p.id === id)) throw new Error(`custom-saas-platforms: the drawing lost "${id}"; re-read SAAS_PLATFORM.sub`);
+}
+
 export const SAAS_PLATFORM: ExplorerData = keyed({
   eyebrow: "A large project, opened up",
   title: "The platform behind this site, drawn from its code",
   key: "drawn from its code",
-  // "Not a live feed" is the tag's, right under the lenses.
-  sub: "Pick something that happens — a business signing up, a phone call, a provider failing, the morning’s jobs — and follow it through the parts that handle it. Every figure on the drawing is counted from the repository.",
+  // "Not a live feed" is the tag's, right under the lenses. The tabs name
+  // the four things that happen, so the sub says what they run on instead.
+  sub: "Take away its phone calls, and what’s left is what most platforms are built on: sign-up, payments, a database and jobs that run themselves. Pick something that happens and follow it through the parts that handle it. Every figure on the drawing is counted from the repository.",
   tag: "Drawn from the code · not a live feed",
   lensesAria: "What happens",
   stepsAria: "Every step",
@@ -660,8 +694,8 @@ const SCOPE_PARTS: readonly ScopePart[] = [
     breaks: "Finding out after launch that a supplier keeps a copy somewhere else.",
     ours: "Thin on ours: its database and file storage are in eu-west-1 (Ireland), but call recordings stay with the provider that captured them, and ElevenLabs or Cartesia can keep their own copy of a call they handled. Twilio and ElevenLabs keep theirs in the US, and we haven’t confirmed Cartesia’s country; the privacy policy says how those transfers are safeguarded. For yours, suppliers are chosen with the region in mind.",
     check: { kind: "site", label: "Read the privacy policy", href: "/privacy" } },
-  { id: "plans", label: "Subscriptions and invoices", needs: ["plans"], kind: "does", map: "stripe",
-    breaks: "A plan that changes in your app but not at the payment provider, or the other way round.",
+  { id: "plans", label: "Payments and invoices", needs: ["plans"], kind: "does", map: "stripe",
+    breaks: "An order or a plan that changes at the payment provider but not in your app, or the other way round.",
     ours: `Stripe Checkout and the customer portal, and a signed webhook that keeps the plan in step on ${word(FACTS.stripeEvents)} kinds of event.` },
   { id: "fiscal", label: "Invoices issued once", needs: ["plans", "usage"], kind: "does", map: "smartbill",
     breaks: "A retried payment notice that issues the same invoice twice.",
@@ -704,9 +738,9 @@ export const SAAS_SCOPE: ScopeData = keyed({
   needs: [
     { id: "teams", group: "who", label: "Teams, with roles" },
     { id: "staff", group: "who", label: "An admin for your own staff" },
-    { id: "plans", group: "charges", label: "Subscriptions" },
+    { id: "plans", group: "charges", label: "One-off or monthly payments" },
     { id: "usage", group: "charges", label: "Usage or per-seat billing" },
-    { id: "connect", group: "touches", label: "The tools customers already use" },
+    { id: "connect", group: "touches", label: "Tools you or your customers use" },
     { id: "import", group: "touches", label: "Data from what you use now" },
     { id: "live", group: "holds", label: "Something live: calls, chat, long jobs" },
     { id: "region", group: "holds", label: "Data that must stay in one region" },
@@ -797,8 +831,8 @@ export const SAAS_BUILD: BuildData = keyed({
       hold: "A prototype you can click, and show to the people who’ll pay for it.",
       check: { kind: "site", label: "Click the sample above", href: "#prototype" } },
     { id: "platform", n: "02", title: ITEM.deliverables[1],
-      body: "Sign-up and sign-in, onboarding, subscriptions, invoices, settings and the tools your staff need to run it — built in from the start, not bolted on after launch.",
-      hold: "The platform, working, to try the way your customers will.",
+      body: "Sign-up and sign-in, onboarding, payments, invoices, settings and the tools your staff need to run it — built in from the start, not bolted on after launch.",
+      hold: "The platform, working, to try the way the people who’ll use it will.",
       ours: `Supabase sign-in, a ${ONBOARDING}-screen onboarding, Stripe subscriptions, SmartBill invoices, owner settings and a status check for its operators. Yours adds a full admin for your staff.`,
       check: { kind: "site", label: "Walk through ours on the free trial", href: PRICING_TRIAL.href } },
     { id: "handover", n: "03", title: ITEM.deliverables[2],
@@ -846,10 +880,11 @@ export const SAAS_TERMS: TermsData = keyed({
       CAA_HANDOVER.after, // "Who makes changes after launch — your team, us, or both — is agreed when the build is quoted."
     ] },
   ],
-  after: "If it’s a phone agent you need rather than a platform, that’s a different build.",
+  // The Automations page's row, mirrored: the team's other two builds.
+  after: "If it’s an automation or a phone agent you need, the same team builds those too.", // OWNER
   links: [
+    { label: "How a custom automation is built", href: AUTO_ITEM.href },
     { label: "How a custom phone agent is built", href: CAA_ITEM.href },
-    { label: "Try the platform we built", href: PRICING_TRIAL.href },
   ],
 });
 
@@ -916,15 +951,20 @@ export const SAAS_FAQ: FaqData = keyed({
   talk: CALL,
   phone: COMPANY.phone,
   items: [
+    // The doubt the name and the page's own example raise, first (the name
+    // is guarded above). Also served alone as FAQPage data.
+    { id: "breadth", q: "Your name says ‘Voice’. Is voice all you build?",
+      a: `No. We build whatever platform your business needs: a shop or a marketplace, a portal for your customers or suppliers, a booking system, a finance or reporting tool, an internal tool or a back office, or a product built around AI, in any field. ${COMPANY.name} is also the name of our own product, a platform for AI phone agents, and it’s the one this page opens up because it’s ours to show. What it proves — sign-in, each customer’s data walled off, payments, integrations and scheduled jobs — is what most of those are built on too.` }, // OWNER
     { id: "complete", q: "What do you mean by a complete SaaS platform?",
-      a: "Everything a paying customer touches and everything you need to run it: sign-up and sign-in, the product’s own screens, subscriptions and invoices, the settings and admin behind them, hosting, monitoring and the scheduled jobs. Not just the screens, and not just a prototype — though a prototype comes first." },
+      a: "Everything a paying customer touches and everything you need to run it: sign-up and sign-in, the product’s own screens, payments and invoices, the settings and admin behind them, hosting, monitoring and the scheduled jobs. Not just the screens, and not just a prototype — though a prototype comes first." },
     { id: "complex", q: "How complex can it be?",
-      // Also served alone as FAQPage data, so the failover keeps its qualifier here.
-      a: "As complex as your product needs. The platform on this page takes phone calls in real time through an always-on service, switches voice provider mid-call when one fails (tested with simulated outages), bills by the minute through Stripe and issues Romanian fiscal invoices. If yours is complex in a different way, tell us how on the call, and we’ll say plainly how we’d build it." },
+      // Also served alone as FAQPage data, so it names kinds of complexity
+      // any platform can have before ours, and the failover keeps its qualifier.
+      a: "As complex as your product needs: many kinds of user, money moving between several parties, many systems to connect to, or something that runs live. The platform on this page takes phone calls in real time through an always-on service, switches voice provider mid-call when one fails (tested with simulated outages), bills by the minute through Stripe and issues Romanian fiscal invoices. If yours is complex in a different way, tell us how on the call, and we’ll say plainly how we’d build it." }, // OWNER
     { id: "cost", q: "What does a build cost, and how long does it take?",
       a: "It’s quoted after the call, because both depend on what the product has to do: how many kinds of user it has, how customers pay, what it connects to and whether anything runs live. We won’t put a number here that we’d have to walk back. The prototype comes first, so you’ll have clicked through the product before any code is written." },
     { id: "ai", q: "Does my platform need AI in it?",
-      a: "No. Most of a SaaS platform is accounts, data, payments and screens. Where AI would genuinely help (searching your documents, drafting, answering the phone) we’ll say where, and the people who’d build it hold the Claude accreditations above; where it wouldn’t, we won’t add it. If it’s a phone agent you want, that’s its own build.",
+      a: "No. Most of a SaaS platform is accounts, data, payments and screens. Where AI would genuinely help (searching your documents, drafting, answering the phone) we’ll say where, and the people who’d build it hold the Claude accreditations above; where it wouldn’t, we won’t add it. If it’s a phone agent you want, we build those too.", // OWNER
       where: { label: CAA_ITEM.label, href: CAA_ITEM.href } },
     { id: "own", q: "Who owns the code?", // OWNER
       a: "You do. At handover the repository is yours, with its tests and a guide to running it. Before the build starts, we settle with you whose name the hosting, database and payment accounts are opened in." },
@@ -958,7 +998,7 @@ export const SAAS_START: StartData = keyed({
   eyebrow: "Start",
   title: "Bring the idea, and whatever you already have",
   key: "whatever you already have",
-  body: "A build starts with a phone call, not a form. Tell us who the product is for, how they’ll pay and what it has to connect to. We’ll tell you what we’d build first, what we wouldn’t, and what it would take.",
+  body: "A build starts with a phone call, not a form. Tell us who it’s for, what it must do for them and what it has to connect to. We’ll tell you what we’d build first, what we wouldn’t, and what it would take.",
   primary: CALL,
   secondary: { label: "Try the platform we built", href: PRICING_TRIAL.href },
   note: `${COMPANY.phone} · Quoted after the call, never on the page`,
@@ -971,7 +1011,7 @@ export const TRADEMARKS = ["Cartesia", "ElevenLabs", "OpenAI", "Stripe", "SmartB
 export const SAAS_CREDITS: CreditsData = {
   title: "About this page",
   items: [
-    { term: "The platform on this page", detail: "Neuro Tech Voice, built by the team this page describes. The drawing is ours, made from its code; it’s a drawing, not a live feed." },
+    { term: "The platform on this page", detail: "Neuro Tech Voice, our own platform for AI phone agents, built by the team this page describes. It’s the one shown because it’s ours to open up, not because voice is all we build. The drawing is made from its code; it’s a drawing, not a live feed." }, // OWNER
     { term: "The figures", detail: "Counted from its repository by the site’s own tests. A figure with a plus is a floor: the real count is at least that." },
     { term: "Take a part down", detail: "Every answer is worked out when the page is built, by the platform’s own routing code. Nothing on this page is really down." },
     { term: "The prototype", detail: "A three-screen sample made for this page, for no product in particular. It stores nothing and charges no one." },

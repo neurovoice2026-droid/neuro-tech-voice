@@ -45,17 +45,18 @@ import { AutoBuild } from "@/components/site/solutions/custom-automations/build"
 /* ------------------------------------------------------------------ *
  * /solutions/custom-automations — "Already running".
  *
- * The argument: whatever the work, we automate it, and this platform
- * runs on ours. Anyone can say "we automate anything"; this page shows
- * the automations the platform it is served from runs every day, each
- * taken from the steps a person would do by hand to the flow that does
- * them. Then it maps any field and any difficulty onto the same blocks,
- * and breaks a step on purpose so the platform's own delivery code can
- * say what happens. After that: who builds it, how a build goes and when
- * you don't need us, the terms, how to check each claim, and how to
- * start. The credentials are said once, in #team, as what they are —
- * personal accreditations and company grants, never a certification —
- * with a link to the SaaS page's for the rest.
+ * The argument: whatever the work, for any business, we automate it, and
+ * this platform — our own, for AI phone agents — runs on ours: the
+ * proof, not the limit. Anyone can say "we automate anything"; this page
+ * shows the automations the platform it is served from runs every day,
+ * each taken from the steps a person would do by hand to the flow that
+ * does them. Then it maps any field and any difficulty onto the same
+ * blocks, and breaks a step on purpose so the platform's own delivery
+ * code can say what happens. After that: who builds it, how a build goes
+ * and when you don't need us, the terms, how to check each claim, and
+ * how to start. The credentials are said once, in #team, as what they
+ * are — personal accreditations and company grants, never a
+ * certification — with a link to the SaaS page's for the rest.
  *
  * THE DESIGN SYSTEM IS THE SAAS PAGE'S, imported rather than copied, and
  * not one of its lines changes for this page: its shell (the light

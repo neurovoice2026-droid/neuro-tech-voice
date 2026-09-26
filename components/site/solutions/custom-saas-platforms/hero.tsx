@@ -5,20 +5,33 @@ import { Frame, PillLink } from "@/components/site/product/primitives";
 import { HomeEyebrow, KeyedTitle } from "@/components/site/home/heading";
 import { TYPE, WEIGHT } from "@/components/site/home/type";
 import type { HeroData } from "@/lib/pages/custom-saas-platforms";
+import { LedgerList } from "./ledger-list";
 import { FlowToggle, LiveMesh } from "./live-mesh";
 
 /* ------------------------------------------------------------------ *
  * #top — anyone can say "complete SaaS". What have you built?
  *
- * The answer is in the h1 before it is anywhere else: we build complete
- * SaaS platforms, and you are on one of them. Beside it, the proof in
- * one picture: a pearl room (the landing's climb of aqua, sky, lilac,
+ * The answer is in the h1 before it is anywhere else: we build SaaS
+ * platforms of any kind, and you are on one of them. Beside it, the proof
+ * in one picture: a pearl room (the landing's climb of aqua, sky, lilac,
  * blush, champagne and mint in one surface) holding four white plates,
  * one per layer of the menu's stack — web app, database, payments,
  * hosting — each naming what runs that layer under this very site and
- * one figure the site's own tests count from the repository. Under both,
- * a strip of the page's three pieces of evidence, each a link down to
- * where it is shown: the accreditations, the grants, and this platform.
+ * one figure the site's own tests count from the repository.
+ *
+ * THE RANGE, under both: what we build for anyone else. The room is ours,
+ * and ours is a voice platform, so a reader who stopped there could take
+ * the company for a voice shop. The band says, before any evidence, that
+ * the room is one example: a lead, three short lists and one line of
+ * fields that ends open. Its lists are the terms ledger's, shared, not
+ * copied (ledger-list.tsx: a muted head over a list with the violet dot,
+ * ink at 85%, a hairline between the columns from md), and its heading
+ * wears the room's CornerDot; not chips: on these pages a chip is a
+ * control, and these are statements. Static server text, no motion, and
+ * no CSS of its own. The Automations page hands it its own words.
+ *
+ * Then a strip of the page's three pieces of evidence, each a link down
+ * to where it is shown: the accreditations, the grants, and this platform.
  *
  * THE H1 IS NEVER SPLIT. It is on screen at load, and hiding a heading
  * the reader is already looking at to raise it again is a flash, not an
@@ -181,9 +194,9 @@ export function Hero({ data, blobs }: { data: HeroData; blobs: readonly CSSPrope
             <span aria-hidden className="home-grain" />
 
             {/* A heading, so the list below it sits under one: the section's
-                only other heading is the h1. Beside it, the pause for every
-                flowing light on the page; the row keeps the button's 40px
-                whether or not it is drawn, so nothing moves when it is. */}
+                others are the h1 and the range's. Beside it, the pause for
+                every flowing light on the page; the row keeps the button's
+                40px whether or not it is drawn, so nothing moves when it is. */}
             <div className="flex min-h-10 items-center justify-between gap-3">
               <h2 className={cn(TYPE.label, "flex items-center gap-2 text-(--saas-dim)")}>
                 <CornerDot className="size-2.5" />
@@ -230,6 +243,34 @@ export function Hero({ data, blobs }: { data: HeroData; blobs: readonly CSSPrope
               </a>
             </div>
           </div>
+        </div>
+
+        {/* The range: what we build (or automate) for anyone, after the
+            room and before the evidence. Its h2 wears the room's
+            CornerDot, so it reads as the band's heading, never as a
+            fourth head over the columns. One column on a phone; three
+            from md, a hairline between (the terms ledger's divide-x).
+            Its lines are short (≤ 50 characters): a column is about 240px
+            at 768 (a list of 190–215px), where each sets over two lines;
+            315px at 1024, where four or five of the twelve still take
+            two; and 392px from xl, where each sets on one. */}
+        <div className="mt-12 border-t border-pp-rule pt-8 lg:mt-16 lg:pt-10">
+          <h2 className={cn(TYPE.label, "flex items-center gap-2 text-pp-muted")}>
+            <CornerDot className="size-2.5" />
+            {data.range.label}
+          </h2>
+          <p className={cn(TYPE.h3, "mt-3 max-w-[44em] text-balance")} style={{ fontWeight: WEIGHT.h3 }}>
+            {data.range.lead}
+          </p>
+          <div className="mt-8 grid gap-8 md:grid-cols-3 md:gap-0 md:divide-x md:divide-pp-rule">
+            {data.range.groups.map((g) => (
+              <div key={g.head} className="min-w-0 md:px-6 md:first:pl-0 md:last:pr-0">
+                <h3 className={cn(TYPE.label, "text-pp-muted")}>{g.head}</h3>
+                <LedgerList items={g.items} />
+              </div>
+            ))}
+          </div>
+          <p className={cn(TYPE.meta, "mt-8 max-w-[44em] text-pretty text-pp-ink/70")}>{data.range.fields}</p>
         </div>
 
         {/* The evidence, as three ways down the page: a row of three from
