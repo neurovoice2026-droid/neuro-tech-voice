@@ -93,6 +93,7 @@ const LIVE = new Set([
   "/solutions/custom-ai-agents",
   "/solutions/custom-saas-platforms",
   "/solutions/custom-automations",
+  "/solutions/custom-mobile-applications",
   "/industries",
   "/privacy",
   "/terms",

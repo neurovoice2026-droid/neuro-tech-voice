@@ -1,0 +1,702 @@
+/* ------------------------------------------------------------------ *
+ * §0 /solutions/custom-mobile-applications — #hold, the phone you hold:
+ * the stage's layout, the parts beside the phone (the drawing, the lane,
+ * the chips), the rail's dwell, the tour's finger, and the routes'
+ * drawings.
+ *
+ *   §1  the stage's grid, per breakpoint
+ *   §2  the drawing (lg+): its cards, the two strokes of each line, the
+ *       pings, the dots, the port; the dashed lines' fade and the lit
+ *       traces' on the drawing's own `home-draw` timeline
+ *   §3  the lane (md) and the chips (below md)
+ *   §4  the rail's dwell
+ *   §5  the finger and its ripple; the tour paused
+ *   §6  forced colours
+ *   §7  lite, still and weak; reduced motion
+ *
+ * Imported once, by app/solutions/custom-mobile-applications/page.tsx,
+ * after mob.css (the shared keyframes, marks and reduced-motion pins)
+ * and mob-device.css (the phone itself, its screens and its view
+ * transitions). Every rule sits under .pp, or on <html> for the tiers;
+ * every selector names a mob- class. Layout and type are utilities in
+ * phone-stage.tsx, parts-map.tsx, parts-lane.tsx and routes.tsx; what
+ * lives here is what a utility can't say cleanly: grid areas that move
+ * between breakpoints, SVG paint, a state read from a data attribute, a
+ * transition between states, a scroll-tied fade.
+ *
+ * STATE IS REACT'S, COLOUR IS OURS. The stage draws `frameOf(...)`
+ * (phone-frame.ts) as data attributes — `data-state` on the cards, the
+ * lane's rows and the chips (rest · route · lit) and on the rail's fills
+ * (passed · current · later), `data-route` and `data-on` on the lines,
+ * `data-kind="none"` on push, `data-paused` on the stage while a tour
+ * waits — and every rule below reads one. GSAP never writes any of them
+ * (phone-timeline.ts): it draws a trace, rides a dot, pings a ring, runs
+ * a fill and moves the finger, all things these rules leave at rest (a
+ * trace hidden unless lit, the dots, the pings, the finger and the
+ * ripple at nothing).
+ *
+ * MOTION: colour, opacity, scale and box-shadow, as transitions on state
+ * React toggles, in the house out-ease; the fades tied to the drawing's
+ * passage up the screen use mob.css's `mob-fade-in`, behind the
+ * reduced-motion and support gates. Every one is stopped on lite, still
+ * and weak hardware (§7), which get the finished frame.
+ *
+ * COLOUR, measured (the SaaS and Automations pairs, SPEC §5.3): ink on
+ * white 19.1 (the cards' labels); muted on white 6.37 (their figures);
+ * violet on white 7.10 (push's "built for yours"); electric on white
+ * 5.70 and on the stage 4.82 (the rings, the traces, the dots, the
+ * rail's fill: marks); muted on the stage 5.39 (the tags, the port's
+ * name).
+ * ------------------------------------------------------------------ */
+
+/* ─── §1 The stage's grid ───────────────────────────────────────────
+   Below md one column: the phone's (the device, its platform line and
+   its hint), the rail, then the side (the caption card, then the
+   chips). The phone's column keeps to 360px there, so its hint row
+   stays the phone's width rather than the stage's.
+
+   From md two columns: the phone's (260px, sized from lg by the screen's
+   height as well as its width) down the left, and on the right the rail,
+   then the side under it. So the reading order and the DOM's (the phone,
+   the rail, the caption card) are one, and a keyboard never jumps back
+   up the stage from the rail to the caption card. The side is a column
+   of its own that stretches to the row: the caption card, then at md
+   the lane, from lg the drawing. At md the caption card grows to take
+   whatever height the phone's column has over the right one's (its
+   "Talks to" at its foot), so the two columns end level; from lg the
+   drawing takes it instead, as large as that height allows. */
+.pp .mob-stage-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "phone"
+    "rail"
+    "side";
+  row-gap: 24px;
+}
+
+.pp .mob-stage-grid .mob-stage-phone {
+  grid-area: phone;
+  width: 100%;
+  max-width: 360px;
+  margin-inline: auto;
+}
+
+.pp .mob-stage-grid .mob-stage-rail {
+  grid-area: rail;
+}
+
+.pp .mob-stage-grid .mob-stage-side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.pp .mob-stage-side .mob-stage-caption {
+  flex: 1 1 auto;
+}
+
+/* The caption card's foot: "Talks to" and the link to #server on one
+   line, the parts the step talks to under them; from lg, where the card
+   is wide, all three on one line. The parts come between the two in the
+   source, so a screen reader hears "Talks to", the parts, then the link. */
+.pp .mob-stage-caption .mob-stage-talks {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "label link"
+    "parts parts";
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 10px;
+}
+
+.pp .mob-stage-talks .mob-stage-talks-label {
+  grid-area: label;
+}
+
+.pp .mob-stage-talks .mob-stage-talks-parts {
+  grid-area: parts;
+}
+
+.pp .mob-stage-talks .mob-stage-talks-link {
+  grid-area: link;
+}
+
+/* THE PARTS' KEY: the tag ("What it talks to · …") over the chips below
+   md, the lane at md and the drawing from lg — or, from lg, in the band
+   beside the drawing with the kinds' legend under it (below). The legend
+   is the drawing's alone: the chips carry their own, and the lane says
+   "built for yours" on push's row. */
+.pp .mob-stage-parts .mob-stage-key {
+  margin-bottom: 12px;
+}
+
+.pp .mob-stage-key .mob-stage-legend {
+  display: none;
+}
+
+@media (min-width: 48rem) {
+  .pp .mob-stage-grid {
+    grid-template-columns: 260px minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "phone rail"
+      "phone side";
+    column-gap: 32px;
+    row-gap: 24px;
+  }
+
+  .pp .mob-stage-grid .mob-stage-phone {
+    max-width: none;
+    margin-inline: 0;
+  }
+}
+
+@media (min-width: 64rem) {
+  /* ONE SCREEN, AS NEAR AS THE PHONE ALLOWS. While the tour plays, its
+     phone, its words and its rail are read together, so the stage aims
+     to fit the screen under the header (80px): the phone's column is a
+     quarter of the stage and 40px (260px at 1024, 318 once the Frame
+     stops growing at 1256), and never taller than the screen leaves it
+     room for — the stage's padding and controls (132px), the platform
+     line and the hint under the phone (about 120px) — nor under 256px,
+     the spec's device (its screen drawn from a 238px glass). Under that
+     the phone's screen crowds: its words keep to 12px while the rings and
+     pills round them shrink with the glass (at 222px "Don’t Allow" stood
+     2px inside its ring). So from 1440 × 900 the phone is 278px and the
+     stage fits, 318 at 1920 × 1080; on a shorter laptop screen (1280 ×
+     800, 1366 × 768, 1440 × 800) it stays 256px and the stage runs 70–
+     100px past the screen's foot, the device's own foot still in sight. */
+  .pp .mob-stage-grid {
+    grid-template-columns:
+      clamp(256px, min(calc(25% + 40px), calc((100svh - 330px) / 2.05)), 320px)
+      minmax(0, 1fr);
+    column-gap: 40px;
+  }
+
+  /* The caption card keeps its own height, under the rail; the drawing
+     takes the rest of the column, to the foot of the phone's. */
+  .pp .mob-stage-side .mob-stage-caption {
+    flex: none;
+  }
+
+  .pp .mob-stage-side .mob-stage-parts {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+  }
+
+  /* THE DRAWING FITS ITS PLACE. The box it may fill (with its key) is a
+     size container, which lends the column no height of its own (the
+     phone's sets it), and the drawing is as wide as the column or as the
+     box's height allows at its fixed aspect (600 : 416), whichever is
+     less, so every card and line stays where parts-geometry.ts puts it at
+     any size. It stands on the left, its port beside the phone.
+
+     Its key stands over it (the tag, 30px with its gap), unless the box
+     is wide for its height: there the drawing, sized by the height, would
+     leave a band beside it under the full-width caption card (317px at
+     1280–1440 × 800), so the key moves into that band, the kinds' legend
+     under the tag, and the drawing takes the key's 30px of height back.
+     The band is at least 160px (the key's 128 and its 32px gap); from a
+     box 1.72 times as wide as tall (1180 × 820, 1280–1440 × 800, 1440 ×
+     900) the drawing then comes out larger than with the key over it,
+     within a few pixels of where the two ways cross. At least 380px tall (the
+     key and 350px of drawing: 505 wide, a card 125 × 54px): where the
+     phone's column leaves it less (about 1024 to 1080 wide, where the
+     caption card is taller), the stage grows rather than drawing it
+     smaller. */
+  .pp .mob-stage-parts .mob-stage-fit {
+    flex: 1 1 0;
+    min-height: 380px;
+    container: mob-fit / size;
+  }
+
+  .pp .mob-stage-fit .mob-stage-figure {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .pp .mob-stage-fit .mob-map {
+    flex: none;
+    width: min(100cqw, calc((100cqh - 30px) * 600 / 416));
+  }
+
+  @container mob-fit (aspect-ratio >= 1.72) {
+    .pp .mob-stage-fit .mob-stage-figure {
+      flex-direction: row;
+    }
+
+    .pp .mob-stage-fit .mob-stage-key {
+      order: 1;
+      flex: 1 1 0;
+      min-width: 0;
+      margin: 0 0 0 32px;
+    }
+
+    .pp .mob-stage-key .mob-stage-legend {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .pp .mob-stage-fit .mob-map {
+      width: min(calc(100cqw - 160px), calc(100cqh * 600 / 416));
+    }
+  }
+
+  .pp .mob-stage-caption .mob-stage-talks {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "label parts link";
+  }
+
+  /* The parts are a stack of every step's (Stack), as tall as the
+     tallest, which wraps to two rows up to about 1100px: each frame is
+     centred in it, so a one-row step's chips sit on the line the label
+     and the link share, and the cell keeps its height. */
+  .pp .mob-stage-talks .mob-stage-talks-parts > * {
+    align-self: center;
+  }
+}
+
+/* ─── §2 The drawing ────────────────────────────────────────────────
+   A CARD: white, radius 12px, on the stage. At rest a hairline; on the
+   step's way (`route`) a faint electric ring; lit, a 2px electric ring
+   and its glyph in electric. Push is dashed in violet whatever its
+   state, and takes the rings inside its dash. The rings are inset
+   shadows, so a state never moves a word.
+
+   ITS WORDS KEEP THEIR ROOM at every size. A card is 148 × 64u, so its
+   width follows the drawing's (the drawing is an inline-size container,
+   `mob-map`): 12px of padding either side, the glyph and its 6px gap,
+   and the label, one line of 13px ("Emails and texts", the longest, is
+   101px), with its figure under it. Where the drawing is under 596px (a
+   card under 147px, 1024 to about 1180 wide) the label beside its glyph
+   would wrap to two lines, filling the card top to bottom with its ring
+   against the words; there the glyph steps aside and the padding is
+   10px, so every label keeps one line in the card's width and 10px above
+   and below it. The ring still says the state. From 649px (a card of
+   160) the label's line is 18px, as the lane's. */
+.pp .mob-map {
+  container: mob-map / inline-size;
+}
+
+.pp .mob-map .mob-card-body {
+  padding-inline: 12px;
+}
+
+@container mob-map (width < 596px) {
+  .pp .mob-card .mob-card-glyph {
+    display: none;
+  }
+
+  .pp .mob-map .mob-card-body {
+    padding-inline: 10px;
+  }
+}
+
+@container mob-map (width >= 649px) {
+  .pp .mob-card .mob-card-label {
+    line-height: 18px;
+  }
+}
+
+.pp .mob-map .mob-card {
+  background-color: #fff;
+  box-shadow: inset 0 0 0 1px rgb(20 10 36 / 0.1);
+  transition-property: box-shadow;
+  transition-duration: 0.3s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .mob-map .mob-card[data-state="route"] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--home-electric) 40%, transparent);
+}
+
+.pp .mob-map .mob-card[data-state="lit"] {
+  box-shadow: inset 0 0 0 2px var(--home-electric);
+}
+
+/* Push's dash comes out of its padding, not its words: its words keep
+   the same width as every other card's (the figure "built for yours"
+   needs 98.5px, and a dash inside a 12px padding once cut it to "built
+   for you…"). */
+.pp .mob-map .mob-card[data-kind="none"] {
+  border: 1.5px dashed var(--home-violet);
+}
+
+.pp .mob-map .mob-card[data-kind="none"] .mob-card-body {
+  padding-inline: 10.5px;
+}
+
+@container mob-map (width < 596px) {
+  .pp .mob-map .mob-card[data-kind="none"] .mob-card-body {
+    padding-inline: 8.5px;
+  }
+}
+
+.pp .mob-map .mob-card[data-kind="none"][data-state="rest"] {
+  box-shadow: none;
+}
+
+.pp .mob-card .mob-card-glyph {
+  color: var(--home-muted);
+  transition-property: color;
+  transition-duration: 0.3s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .mob-card:is([data-state="route"], [data-state="lit"]) .mob-card-glyph {
+  color: var(--home-electric);
+}
+
+/* The ring that goes out round a card, a lane row or a chip as the step
+   reaches it: GSAP's alone (phone-timeline.ts `ping`), at nothing at
+   rest. */
+.pp .mob-ping {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 2px var(--home-electric);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* A LINE, twice. Its base: a hairline of ink, faint electric while the
+   step is on its way along it (`data-route`), which draws on the
+   drawing's passage up the screen (home.css `home-draw`, the paths with
+   pathLength="1"). Its trace over it: electric, 2u, shown once the step
+   has arrived along it (`data-on`). The trace has no transition: GSAP
+   writes its opacity as the tour draws it, and a transition would drag
+   every frame of that behind. No vector-effect: DrawSVG and MotionPath measure the paths in the
+   drawing's own units. */
+.pp .mob-map-svg .mob-map-edge {
+  stroke: rgb(20 10 36 / 0.16);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition-property: stroke;
+  transition-duration: 0.3s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .mob-map-svg .mob-map-edge[data-route] {
+  stroke: color-mix(in srgb, var(--home-electric) 40%, transparent);
+}
+
+.pp .mob-map-svg .mob-map-trace {
+  stroke: var(--home-electric);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+}
+
+.pp .mob-map-svg .mob-map-trace[data-on] {
+  opacity: 1;
+}
+
+/* The dashed lines keep their dash with round caps turned off, so each
+   dash stays a dash at 1.2u. */
+.pp .mob-map-svg .mob-map-edge[stroke-dasharray],
+.pp .mob-map-svg .mob-map-trace[stroke-dasharray] {
+  stroke-linecap: butt;
+}
+
+/* The phone's port: a ring of white on the drawing's edge; and the dots
+   that ride a hop, GSAP's alone, at nothing at rest. */
+.pp .mob-map-svg .mob-map-port {
+  fill: #fff;
+  stroke: var(--home-electric);
+  stroke-width: 1.5;
+}
+
+.pp .mob-map-svg .mob-map-dot {
+  fill: var(--home-electric);
+  opacity: 0;
+}
+
+/* ON THE DRAWING'S PASSAGE UP THE SCREEN (home.css's `--home-draw`
+   timeline, which the svg carries): the dashed lines, which a dash draw
+   would wreck, fade in over the same stretch the solid ones draw in;
+   then the lit traces fade in over them, so the finished frame's route
+   lights once its lines are there. Each fade ends at the element's own
+   opacity (mob.css §1), so a trace at rest stays at nothing. The lit
+   traces' fade is the server's finished frame's alone: once a press or
+   the tour has moved the phone (`data-played` on the stage), a step's
+   lit lines are React's, whole wherever the drawing sits, since a fade
+   filled both ways would hold a line the tour has just drawn at nothing
+   until the drawing is a third of the way up the screen. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .mob-map-svg .mob-map-fade {
+      animation: mob-fade-in linear both;
+      animation-timeline: --home-draw;
+      animation-range: entry 10% cover 40%;
+    }
+
+    .pp .mob-stage:not([data-played]) .mob-map-svg .mob-map-trace[data-on] {
+      animation: mob-fade-in linear both;
+      animation-timeline: --home-draw;
+      animation-range: cover 34% cover 46%;
+    }
+  }
+}
+
+/* ─── §3 The lane and the chips ─────────────────────────────────────
+   The drawing's card, laid on its side (a row) or stood up small (a
+   chip): the same white, the same rest · route · lit rings, push dashed
+   in violet. The glyph is muted at rest and electric on the step. */
+.pp .mob-lane .mob-row,
+.pp .mob-chips .mob-chip {
+  background-color: #fff;
+  box-shadow: inset 0 0 0 1px rgb(20 10 36 / 0.08);
+  transition-property: box-shadow;
+  transition-duration: 0.3s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .mob-lane .mob-row[data-state="route"],
+.pp .mob-chips .mob-chip[data-state="route"] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--home-electric) 40%, transparent);
+}
+
+.pp .mob-lane .mob-row[data-state="lit"],
+.pp .mob-chips .mob-chip[data-state="lit"] {
+  box-shadow: inset 0 0 0 2px var(--home-electric);
+}
+
+.pp .mob-lane .mob-row[data-kind="none"],
+.pp .mob-chips .mob-chip[data-kind="none"] {
+  border: 1.5px dashed var(--home-violet);
+}
+
+.pp .mob-lane .mob-row[data-kind="none"][data-state="rest"],
+.pp .mob-chips .mob-chip[data-kind="none"][data-state="rest"] {
+  box-shadow: none;
+}
+
+.pp .mob-row .mob-row-glyph,
+.pp .mob-chip .mob-chip-glyph {
+  color: var(--home-muted);
+  transition-property: color;
+  transition-duration: 0.3s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .mob-row:is([data-state="route"], [data-state="lit"]) .mob-row-glyph,
+.pp .mob-chip:is([data-state="route"], [data-state="lit"]) .mob-chip-glyph {
+  color: var(--home-electric);
+}
+
+/* ─── §4 The rail's dwell ───────────────────────────────────────────
+   Under each step a 3px track, and in it an electric fill drawn from the
+   frame: full for a step passed or current, empty for one still to come.
+   During a tour the timeline runs the current step's dwell from nothing
+   to full — an inline transform on the span the fill sits in
+   (`data-mob-dwell`, which no rule here scales, so GSAP never folds this
+   `scale` into the transform it saves and puts back), multiplying the
+   fill's own — and lets go of it as the next step arrives; a pick by
+   hand eases the fills into place. Compositor only: a scale on a 3px
+   bar. */
+.pp .mob-stage-rail .mob-dwell {
+  background-color: rgb(20 10 36 / 0.1);
+}
+
+.pp .mob-dwell .mob-dwell-fill {
+  background-color: var(--home-electric);
+  transform-origin: left center;
+  scale: 0 1;
+  transition-property: scale;
+  transition-duration: 0.35s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .mob-dwell .mob-dwell-fill:is([data-state="passed"], [data-state="current"]) {
+  scale: 1 1;
+}
+
+/* ─── §5 The finger and its ripple ──────────────────────────────────
+   The tour's finger: a 26px disc of ink at 22% with a white ring and an
+   electric hairline outside it (4.82 on the stage, 5.70 on the white
+   screen: a mark), so it reads over the phone's white and the lock
+   screen's night alike. Its ripple: an electric disc under the press,
+   growing and fading. Both absolute in the stage, GSAP's alone, at
+   nothing at rest, and never under the pointer. */
+.pp .mob-stage .mob-finger {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background-color: rgb(20 10 36 / 0.22);
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 3px var(--home-electric),
+    0 4px 10px rgb(20 10 36 / 0.18);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.pp .mob-stage .mob-ripple {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: var(--home-electric);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* PAUSED: while a tour waits (the reader's Pause, focus holding it, a
+   platform switch morphing the phone), the finger caught mid-glide
+   would stay parked over the screen the reader stopped to read. Hidden,
+   not removed: GSAP still measures its way. Play shows it again. */
+.pp .mob-stage[data-paused] :is(.mob-finger, .mob-ripple) {
+  visibility: hidden;
+}
+
+/* ─── §6 Forced colours ─────────────────────────────────────────────
+   Windows High Contrast and every other forced palette drop the shadows
+   that draw a part's state, and keep an SVG's own paint on a ground it
+   was never measured on. So a card, a row and a chip get a real border
+   by state — CanvasText at rest, a 2px Highlight lit — push keeps its
+   dash, in GrayText; their glyphs take the words' colour; the lines are drawn in system colours (a lit trace
+   in Highlight); the rail's fill is Highlight (HighlightText inside the
+   checked radio, which saas.css §15 fills with Highlight); and the dots,
+   the pings, the finger and its ripple, which are motion only, are
+   hidden. The current step's radio is Highlight by saas.css §15. */
+@media (forced-colors: active) {
+  .pp.saas-page .mob-card,
+  .pp.saas-page .mob-row,
+  .pp.saas-page .mob-chip {
+    border: 1px solid CanvasText;
+  }
+
+  .pp.saas-page .mob-card[data-state="route"],
+  .pp.saas-page .mob-row[data-state="route"],
+  .pp.saas-page .mob-chip[data-state="route"] {
+    border-color: Highlight;
+  }
+
+  .pp.saas-page .mob-card[data-state="lit"],
+  .pp.saas-page .mob-row[data-state="lit"],
+  .pp.saas-page .mob-chip[data-state="lit"] {
+    border: 2px solid Highlight;
+  }
+
+  .pp.saas-page .mob-card[data-kind="none"],
+  .pp.saas-page .mob-row[data-kind="none"],
+  .pp.saas-page .mob-chip[data-kind="none"] {
+    border-style: dashed;
+  }
+
+  .pp.saas-page .mob-card[data-kind="none"][data-state="rest"],
+  .pp.saas-page .mob-row[data-kind="none"][data-state="rest"],
+  .pp.saas-page .mob-chip[data-kind="none"][data-state="rest"] {
+    border-color: GrayText;
+  }
+
+  /* A part's glyph takes its line's colour, as mob.css §3 has every glyph
+     do; the state rules above name it more closely, so it is said again. */
+  .pp.saas-page :is(.mob-card, .mob-row, .mob-chip) :is(.mob-card-glyph, .mob-row-glyph, .mob-chip-glyph) {
+    color: inherit;
+  }
+
+  .pp.saas-page .mob-map-svg .mob-map-edge {
+    stroke: GrayText;
+  }
+
+  .pp.saas-page .mob-map-svg .mob-map-edge[data-route] {
+    stroke: CanvasText;
+  }
+
+  .pp.saas-page .mob-map-svg .mob-map-trace {
+    stroke: Highlight;
+  }
+
+  .pp.saas-page .mob-map-svg .mob-map-port {
+    fill: Canvas;
+    stroke: CanvasText;
+  }
+
+  .pp.saas-page .mob-stage-rail .mob-dwell {
+    forced-color-adjust: none;
+    background-color: GrayText;
+  }
+
+  .pp.saas-page .mob-dwell .mob-dwell-fill {
+    forced-color-adjust: none;
+    background-color: Highlight;
+  }
+
+  .pp.saas-page [role="radio"][aria-checked="true"] .mob-dwell .mob-dwell-fill {
+    background-color: HighlightText;
+  }
+
+  .pp.saas-page :is(.mob-map-dot, .mob-ping),
+  .pp.saas-page .mob-stage :is(.mob-finger, .mob-ripple) {
+    display: none;
+  }
+}
+
+/* ─── §7 Lite, still and weak; reduced motion ───────────────────────
+   LITE, STILL AND WEAK (a forced ?tier=still that is not a reduced-
+   motion request, and hardware weak by its own account, <html
+   data-weak>) get the finished frame: the dashed lines and the lit
+   traces simply there, the drawing's and the routes' strokes whole —
+   parked off their paths until they draw (home.css), so they are put
+   back rather than just stopped, as saas-build.css does; home/tier.css
+   does it for lite too — and a pick's state landing at once. Each pin
+   names the element its animation's rule does, and <html>, the tier and
+   the shell's <main> besides, so it outranks that rule whatever order
+   the sheets land in. The strokes are named by classes of ours alone,
+   the drawing's solid base lines and the routes' strokes (`.mob-stroke`),
+   so the pins put back only this section's figures, and never by
+   `[pathLength]`: Chromium restyles an element on a change of <html
+   data-tier> when its selector names it by a class, but not by that
+   camel-case SVG attribute, so a figure styled before the tier landed
+   would go on drawing. The dashed base lines (`.mob-map-fade`) carry no
+   pathLength and keep their dash. The tour itself waits for a tap on
+   lite and never runs on still (home/motion.ts). */
+html[data-tier="lite"] .pp.home-body .mob-map-svg :is(.mob-map-fade, .mob-map-trace[data-on]),
+html[data-tier="still"] .pp.home-body .mob-map-svg :is(.mob-map-fade, .mob-map-trace[data-on]),
+html[data-weak] .pp.home-body .mob-map-svg :is(.mob-map-fade, .mob-map-trace[data-on]) {
+  animation: none;
+}
+
+html[data-tier="lite"] .pp.home-body :is(.mob-map-svg .mob-map-edge:not(.mob-map-fade), .mob-route-fig .mob-stroke),
+html[data-tier="still"] .pp.home-body :is(.mob-map-svg .mob-map-edge:not(.mob-map-fade), .mob-route-fig .mob-stroke),
+html[data-weak] .pp.home-body :is(.mob-map-svg .mob-map-edge:not(.mob-map-fade), .mob-route-fig .mob-stroke) {
+  animation: none;
+  stroke-dasharray: none;
+  stroke-dashoffset: 0;
+}
+
+html[data-tier="lite"] .pp.home-body :is(.mob-card, .mob-row, .mob-chip, .mob-dwell-fill),
+html[data-weak] .pp.home-body :is(.mob-card, .mob-row, .mob-chip, .mob-dwell-fill) {
+  transition: none;
+}
+
+/* REDUCED MOTION AND THE STILL TIER: every state above reads finished at
+   once (mob.css §4 pins the cards, the rows, the chips and the fills;
+   these are this section's own). */
+@media (prefers-reduced-motion: reduce) {
+  .pp.home-body.saas-page :is(.mob-card-glyph, .mob-row-glyph, .mob-chip-glyph, .mob-map-edge) {
+    transition: none;
+  }
+}
+
+html[data-tier="still"] .pp.home-body :is(.mob-card-glyph, .mob-row-glyph, .mob-chip-glyph, .mob-map-edge) {
+  transition: none;
+}

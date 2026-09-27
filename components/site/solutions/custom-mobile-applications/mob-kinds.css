@@ -1,0 +1,314 @@
+/* ------------------------------------------------------------------ *
+ * §0 #kinds — "Whatever the app does, and whoever it’s for": the
+ * storyboard's drawing and its motion, the need tags, and the side
+ * switch (kinds-instrument.tsx, sketch.tsx).
+ *
+ *   §1  the storyboard: the rail's edges from md, the sketch's colours,
+ *       and scroll mode before any pick — each phone on its own slice
+ *       of the board's passage up the screen
+ *   §2  time mode, after the reader's first pick: the phones deal in,
+ *       the need tags pop
+ *   §3  the need tags: "Needs it" filled, "Often" a ring
+ *   §4  lite, still and weak: the finished frame
+ *   §5  forced colours: the tags and the sketch in system colours
+ *
+ * Everything else in the section is utilities: the controls are the
+ * landing's (the chips' colours, the segmented switch), the room is the
+ * SaaS page's lit surface (saas.css §2, `saas-light-room-m`), the cards
+ * on it are white plates, the phones' sizes and the rail below md are
+ * the storyboard's own utilities, and a part's kind tag and its glyph
+ * are mob.css §2's. This sheet holds only what utilities can't say: the
+ * drawing's colours in one place (so §5 can hand them all to the
+ * system), its motion and the need tags' two states. The side switch's
+ * chosen segment is mob.css §5's (`mob-switch`), shared with #hold's
+ * platform switch.
+ *
+ * THE SLICE RULE, CSS ONLY, so it costs the same on every device and no
+ * script decides when anything plays: the SaaS page's stage-01 drawing
+ * (saas-build.css §9) at phone scale. The storyboard is a landing figure
+ * (`.home-draw`: home.css names its view timeline and draws its
+ * pathLength="1" strokes on it with its own `home-draw`). Here each
+ * element takes its own slice of that pass instead, from `--o` for
+ * `--s` (both inline, sketch.tsx), mapped onto the stretch from `cover
+ * 4%` to `cover 34%`: the board's first 4% up the screen to the moment
+ * it is whole and a little more. Phone `i` starts at `i × 0.12` and is
+ * whole 0.3 later, so the five draw left to right as the board rises:
+ * each outline draws, then its glass and chrome, then each block, fade
+ * in on the shared `mob-fade-in` (mob.css §1). Filled both ways: before
+ * its slice an element waits in its first frame, after it in its last,
+ * and scrolling back runs it back.
+ *
+ * After the first pick (`data-picked` on the room) the phones are
+ * mounted afresh on every pick, keyed on the sample, and no longer
+ * sketch themselves: they deal in whole on the clock, and the four need
+ * tags pop (§2). A drawing that replayed on the scroll after a pick
+ * would come up half drawn wherever the board happened to sit.
+ *
+ * Imported once, by app/solutions/custom-mobile-applications/page.tsx,
+ * after mob.css, mob-device.css and mob-hold.css. Every rule sits under
+ * .pp, or on <html> where it reads the tier; every class and keyframe of
+ * ours is prefixed mob-, and a selector names the home- or saas- classes
+ * it sits inside only beside one of ours. Only opacity, translate and
+ * scale animate (the strokes' dash is home.css's own `home-draw`). The
+ * view timelines sit inside `@media (prefers-reduced-motion:
+ * no-preference)` and `@supports (animation-timeline: view())`, and the
+ * clock's entrances inside the first, so reduced motion, and a browser
+ * without view timelines before a pick, get the finished frame. No
+ * @property and no animated custom property: `--o`, `--s` and `--k` are
+ * only read. lib/pages/custom-mobile-applications.test.ts reads this
+ * sheet and holds all of that, and that every animation here is stopped
+ * on the lite, still and weak tiers by a pin that wins (§4).
+ * ------------------------------------------------------------------ */
+
+/* ─── §1 The storyboard ─────────────────────────────────────────────
+   THE RAIL'S EDGES. Below md the board is a rail that scrolls sideways,
+   and home.css's `home-fade-x` fades whichever end has more to show.
+   From md the five phones stand in one row and nothing scrolls, but the
+   fade's mask would still clip whatever paints past the list's box (a
+   phone dealing in from 8px below, §2), so it is taken off there. One
+   class deeper than home.css's rule, so it wins wherever the sheets
+   land. */
+@media (width >= 48rem) {
+  .pp .mob-board.home-fade-x {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+
+/* Below md the rail is a tab stop, and a mask clips everything painted
+   outside the box, a focus ring included, and fades its ends: so while it
+   has focus the mask comes off, and its ring is drawn inside its edge
+   (kinds-instrument.tsx), whole on all four sides. */
+.pp .mob-board.home-fade-x:focus-visible {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+/* THE SKETCH'S COLOURS. The outline in the light's dim (7.3:1 on the
+   pearl at its worst, a mark), 1.6px on screen at every size: it scales
+   with the drawing (a non-scaling stroke would take only 1/scale of its
+   pathLength dash, sketch.tsx), so its width in the drawing's units is
+   1.6 ÷ the scale, `--mob-sk-w`, set beside each size's width on the
+   storyboard's items. The glass white, and in it the landing's
+   grey: chip-grey fills with an ink hairline at 12%, and bars that stand
+   for words in ink at 20% (a title, a button) or 10% (a line under it).
+   The six blocks that need the phone itself (sketch.tsx PHONE_BLOCKS)
+   are drawn in the light's tick violet, `--saas-tick` (electric on the
+   white glass, 5.70, a mark), filled at 9%. A class that draws a line
+   names only its stroke, and its element says `fill="none"`, so the
+   glass and a tick line can share one element (a hollow start on the
+   map, the shutter's ring). */
+.pp .mob-sk-edge {
+  stroke: var(--saas-dim);
+  stroke-width: var(--mob-sk-w, 1.6px);
+}
+
+.pp .mob-sk-glass,
+.pp .mob-sk-knock {
+  fill: #fff;
+}
+
+.pp .mob-sk-grey {
+  fill: var(--home-chip);
+  stroke: rgb(20 10 36 / 0.12);
+}
+
+.pp .mob-sk-line {
+  stroke: rgb(20 10 36 / 0.12);
+}
+
+.pp .mob-sk-mid {
+  stroke: rgb(20 10 36 / 0.26);
+}
+
+.pp .mob-sk-ink {
+  stroke: rgb(20 10 36 / 0.36);
+}
+
+.pp .mob-sk-bar {
+  fill: rgb(20 10 36 / 0.2);
+}
+
+.pp .mob-sk-faint {
+  fill: rgb(20 10 36 / 0.1);
+}
+
+.pp .mob-sk-tick {
+  fill: color-mix(in srgb, var(--saas-tick) 9%, #fff);
+  stroke: var(--saas-tick);
+}
+
+.pp .mob-sk-tickline {
+  stroke: var(--saas-tick);
+}
+
+.pp .mob-sk-ticksolid {
+  fill: var(--saas-tick);
+}
+
+/* SCROLL MODE: before any pick. Three classes deeper than home.css's
+   `.home-draw path[pathLength]`, so the slices win whatever order the
+   sheets land in; §4's pins name <html> besides and outrank them. The
+   outline, the one stroke that draws, is named by its class, not by
+   `[pathLength]`: a change of <html data-tier> or of the room's
+   `data-picked` restyles an element its selector names by class, but
+   not one it names by that camel-case SVG attribute alone. Strokes draw on power2.inOut, the house ease for draws; the
+   fades run linear, as the SaaS drawing's do. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .mob-kinds:not([data-picked]) .mob-board.home-draw .mob-sk-edge,
+    .pp .mob-kinds:not([data-picked]) .mob-board.home-draw .mob-sk-fade {
+      animation-timeline: --home-draw;
+      animation-range:
+        cover calc(4% + 30% * var(--o, 0))
+        cover calc(4% + 30% * (var(--o, 0) + var(--s, 1)));
+    }
+
+    .pp .mob-kinds:not([data-picked]) .mob-board.home-draw .mob-sk-edge {
+      animation-timing-function: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+    }
+
+    .pp .mob-kinds:not([data-picked]) .mob-board.home-draw .mob-sk-fade {
+      animation-name: mob-fade-in;
+      animation-duration: auto;
+      animation-fill-mode: both;
+      animation-timing-function: linear;
+    }
+  }
+}
+
+/* ─── §2 Time mode: after a pick ────────────────────────────────────
+   Once the reader has picked (`data-picked`), each pick mounts the five
+   phones and the four need rows afresh, and the drawing is simply
+   whole: home.css's dash is put back, as the lite tier puts it back
+   (home/tier.css), since a phone that sketched itself again here would
+   do it on the board's passage, which is long over. Then, on the clock
+   and not gated on view timelines (a clock runs everywhere): each phone
+   deals in from 8px below as it fades up, 0.32s on the house out-ease,
+   40ms after the one before it (`--k`, its place of five), and each
+   need tag pops from 60%, 0.2s, 30ms after the one above it (`--k`, its
+   row). The whole sample has settled in half a second. */
+.pp .mob-kinds[data-picked] .mob-board.home-draw .mob-sk-edge {
+  animation: none;
+  stroke-dasharray: none;
+  stroke-dashoffset: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pp .mob-kinds[data-picked] .mob-shot {
+    animation: mob-deal 0.32s cubic-bezier(0.16, 1, 0.3, 1) calc(var(--k) * 40ms) both;
+  }
+
+  .pp .mob-kinds[data-picked] .mob-need {
+    animation: mob-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1) calc(var(--k) * 30ms) both;
+  }
+}
+
+/* The deal: only its far end, as mob.css §1's keyframes, so the phone
+   arrives at its own resting place and strength. */
+@keyframes mob-deal {
+  from {
+    translate: 0 8px;
+    opacity: 0;
+  }
+}
+
+/* ─── §3 The need tags ──────────────────────────────────────────────
+   How much a sample leans on a feature of the phone, said in words and
+   drawn two ways, so the difference never rests on colour: "Needs it"
+   white on an electric pill (5.70:1), "Often" violet inside an electric
+   ring (7.10:1 on the white card). Both carry the same 1.5px edge, so
+   the two are the same size and a row never shifts between samples. */
+.pp .mob-need {
+  border: 1.5px solid var(--home-electric);
+  color: var(--home-violet);
+}
+
+.pp .mob-need[data-need="core"] {
+  background-color: var(--home-electric);
+  color: #fff;
+}
+
+/* ─── §4 Lite, still and weak: the finished frame ───────────────────
+   On the lite tier, on the still tier (a forced ?tier=still that is not
+   a reduced-motion request) and on weak hardware, nothing here plays:
+   every phone drawn whole, every block in place at full strength, every
+   need tag at rest, and a pick an instant swap. The rules above are up
+   to six classes deep (`.pp .mob-kinds:not([data-picked]) .mob-board
+   .home-draw …`); these name <html> with the tier, the shell's <main>
+   by two of its classes, the room and the element under it, seven deep
+   with the heaviest of the `:is()`, so they outrank them whatever order
+   the sheets land in. The strokes are parked off their paths until they
+   draw (home.css), so they are put back whole rather than just stopped,
+   as home/tier.css does for lite and saas-build.css for still and weak. */
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .mob-kinds :is(.mob-shot, .mob-need, .mob-board.home-draw .mob-sk-fade) {
+  animation: none;
+}
+
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .mob-kinds .mob-board.home-draw .mob-sk-edge {
+  animation: none;
+  stroke-dasharray: none;
+  stroke-dashoffset: 0;
+}
+
+/* ─── §5 Forced colours ─────────────────────────────────────────────
+   A forced palette would fill both need tags with the canvas and leave
+   "Needs it" and "Often" alike but for their words. Here they opt out
+   of forcing and name system colours: both edged in ButtonText, "Needs
+   it" filled with CanvasText and its words in Canvas, "Often" hollow.
+
+   An SVG that sets its own colours keeps them under forced colours
+   (Chromium's `preserve-parent-color` only lends it an inherited one),
+   so the sketch's violet and greys would stay on a system ground they
+   were never measured on. They are handed to the system here: the
+   outline and every tick-violet line in CanvasText, the tick blocks'
+   solids too, so the picture still points at what needs the phone; the
+   glass and every fill in Canvas; the grey hairlines, marks and bars in
+   GrayText. The chips and the segments are radios, which saas.css §15
+   already edges and fills with Highlight when chosen; a part's answer is
+   in its words, with its glyph's shape (mob.css §3). Keyed on
+   `.pp.saas-page`, the shell's <main>, and on mob- classes only, which
+   no other page draws. */
+@media (forced-colors: active) {
+  .pp.saas-page .mob-need {
+    forced-color-adjust: none;
+    border-color: ButtonText;
+    background-color: Canvas;
+    color: CanvasText;
+  }
+
+  .pp.saas-page .mob-need[data-need="core"] {
+    background-color: CanvasText;
+    color: Canvas;
+  }
+
+  .pp.saas-page .mob-sketch :is(.mob-sk-edge, .mob-sk-tickline) {
+    stroke: CanvasText;
+  }
+
+  .pp.saas-page .mob-sketch .mob-sk-tick {
+    fill: Canvas;
+    stroke: CanvasText;
+  }
+
+  .pp.saas-page .mob-sketch .mob-sk-ticksolid {
+    fill: CanvasText;
+  }
+
+  .pp.saas-page .mob-sketch :is(.mob-sk-glass, .mob-sk-knock) {
+    fill: Canvas;
+  }
+
+  .pp.saas-page .mob-sketch .mob-sk-grey {
+    fill: Canvas;
+    stroke: GrayText;
+  }
+
+  .pp.saas-page .mob-sketch :is(.mob-sk-line, .mob-sk-mid, .mob-sk-ink) {
+    stroke: GrayText;
+  }
+
+  .pp.saas-page .mob-sketch :is(.mob-sk-bar, .mob-sk-faint) {
+    fill: GrayText;
+  }
+}
