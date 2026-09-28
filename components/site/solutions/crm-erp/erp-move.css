@@ -1,0 +1,316 @@
+/* ------------------------------------------------------------------ *
+ * /solutions/crm-erp — #move: the few things Tailwind utilities and the
+ * SaaS sheets can't say for "Off your spreadsheets and old tools,
+ * without losing a thing".
+ *
+ *   §1  the rehearsal (rehearsal-figure.tsx): its own view timeline,
+ *       `--erp-rehearsal`; the leaders drawn one after another, each
+ *       row's copy sliding into its record (`erp-slide`), the twin's
+ *       merging as it lands (`erp-merge`), and each tag, tick and "?"
+ *       popping as its copy arrives
+ *   §2  stage 01's drawing (mini-lanes.tsx): the lanes, then node by
+ *       node, each on its own slice
+ *   §3  what stays connected, and "Whose it is" below md: each row a
+ *       stacked block
+ *   §4  the lite, still and weak tiers: every piece where it belongs,
+ *       every stroke whole
+ *   §5  forced colours
+ *
+ * Everything else #move draws is the SaaS page's, imported by the page
+ * as it is: the wash band (home.css), the lit cards and their flowing
+ * light (saas.css §1–§3), the rail over the cards, its stations, the
+ * cards' rise a step apart and the stacked cards' dotted connectors
+ * (saas-build.css §9, `[data-col]` and `.saas-link`), their lite tier
+ * (saas.css §12) and their still and weak ones (saas-build.css). Not
+ * one of their lines changes.
+ *
+ * Imported once, by app/solutions/crm-erp/page.tsx, after erp.css and
+ * the sheets of the sections above this one, so it ships with this route
+ * only. Every rule sits under .pp (the shell's <main>), or on <html>
+ * where it reads the tier; every class and keyframe of ours is prefixed
+ * erp-, and a selector names the home- classes it sits beside
+ * (`.home-draw`, `.home-rise`) only beside one of ours. Only translate,
+ * scale and opacity ever animate here, but for the strokes, which draw
+ * with home.css's own `home-draw`, as every landing figure's do. The
+ * pops are erp.css's shared `erp-pop`; this sheet's own two keyframes
+ * are the copies' slide and the twin's merge, and `--dx`, `--dy`, `--o`
+ * and `--s` are only read, never animated. Anything tied to scroll sits
+ * inside `@media (prefers-reduced-motion: no-preference)` and
+ * `@supports (animation-timeline: view())`, so a browser without view
+ * timelines, or a reader who asked for less motion, gets the finished
+ * frame, which is every element's resting style: every copy in its
+ * record and the twin merged, every leader, tag and tick shown, stage
+ * 01's lanes drawn.
+ * ------------------------------------------------------------------ */
+
+/* ─── §1 The rehearsal ──────────────────────────────────────────────
+   AT REST, THE FINISHED FRAME. Each row's copy is drawn where it
+   rests, in its record, so nothing but the animation ever moves it.
+   The twin's copy (`[data-merged]`, the second of the merged pair)
+   rests at opacity 0 over its twin's record: merged into it. It is one
+   of the two things on this page that rest hidden, and it is travel,
+   never content: the record it joins carries the customer. A tick pops
+   about its own centre (`fill-box`: an SVG shape has no box of its own
+   to take an origin from); a tag and the "?" are HTML, centred already.
+
+   THE PASS. The figure's box (both compositions' wrapper, whose height
+   is the one on show) names its own view timeline, and one window on it
+   runs from about 10% into its entry to the moment its middle is
+   halfway up the screen: 3% to 50% of its cover, for a box as tall as
+   either composition draws on a screen as tall as a phone's or a
+   laptop's. So the rehearsal is over while the records are still in
+   the lower half of the screen. Each piece takes its own slice of that
+   window (`--o` where it starts, `--s` how much it takes, both shares,
+   inline from rehearsal-geometry.ts `slices`):
+
+     · the leaders draw one after another, row k from 0.04k for 0.12,
+       each by its mask's one solid stroke (home.css's `home-draw`, on
+       power2.inOut, the house ease for draws), which shows the dotted
+       leader behind it as it goes: a dash draw would wreck the dots;
+     · each copy slides from its row into its record, row k from
+       0.3 + 0.08k for 0.2, keeping time with the scroll (linear): from
+       `translate: var(--dx) var(--dy)` (its row's place less its own,
+       in user units, which an SVG element's `translate` reads as px) to
+       none; the twin's copy the same, and then fades to its resting 0
+       over the last fifth of its slice, as it lands on its twin;
+     · each tag, the row's tick and the record's "?" pop (erp.css
+       `erp-pop`, from 60%: always there to read) as the copy lands,
+       from 0.5 + 0.08k for 0.06, on the house out-ease.
+
+   Longhands only, so nothing resets the timeline or the range. Every
+   rule names the figure's box and the piece; the §4 pins name <html>
+   and the shell's classes besides, and outrank each of these. */
+.pp .erp-rehearsal-fig .erp-move-tick {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.pp .erp-rehearsal-fig .erp-copy[data-merged] {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .erp-rehearsal-fig {
+      view-timeline: --erp-rehearsal block;
+    }
+
+    .pp .erp-rehearsal-fig :is(.erp-move-lead-draw, .erp-copy, .erp-move-tag, .erp-move-tick, .erp-move-ask) {
+      animation-duration: auto;
+      animation-fill-mode: both;
+      animation-timeline: --erp-rehearsal;
+      animation-range:
+        cover calc(3% + 47% * var(--o, 0))
+        cover calc(3% + 47% * (var(--o, 0) + var(--s, 1)));
+    }
+
+    /* "1 3" parked a quarter-length before the start, as home.css parks
+       its own: no round cap paints a dot before anything has drawn. */
+    .pp .erp-rehearsal-fig .erp-move-lead-draw {
+      stroke-dasharray: 1 3;
+      stroke-dashoffset: 1.25;
+      animation-name: home-draw;
+      animation-timing-function: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+    }
+
+    .pp .erp-rehearsal-fig .erp-copy {
+      animation-name: erp-slide;
+      animation-timing-function: linear;
+    }
+
+    .pp .erp-rehearsal-fig .erp-copy[data-merged] {
+      animation-name: erp-merge;
+    }
+
+    .pp .erp-rehearsal-fig :is(.erp-move-tag, .erp-move-tick, .erp-move-ask) {
+      animation-name: erp-pop;
+      animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+  }
+}
+
+/* A copy from its row to its record. The far end is the copy's own
+   resting place, so only the start is named. */
+@keyframes erp-slide {
+  from {
+    translate: var(--dx) var(--dy);
+  }
+}
+
+/* The twin's copy: the same slide over four fifths of its slice, then
+   gone into its twin's record over the last fifth. Its resting opacity
+   is 0 (above), so both ends are named. */
+@keyframes erp-merge {
+  from {
+    translate: var(--dx) var(--dy);
+    opacity: 1;
+  }
+
+  80% {
+    translate: 0 0;
+    opacity: 1;
+  }
+
+  to {
+    translate: 0 0;
+    opacity: 0;
+  }
+}
+
+/* ─── §2 Stage 01's drawing ─────────────────────────────────────────
+   From lg, the first card's fifth row — where its neighbours say what
+   ours shows — holds a process mapped in miniature (mini-lanes.tsx): a
+   landing figure (`.home-draw`), its pathLength="1" strokes drawn with
+   home.css's own `home-draw` on its own view timeline. Each element
+   takes its own slice of one window on that pass (`--o`, `--s`, inline),
+   the #build maps' formula (the Automations page's auto-closing.css §3,
+   the SaaS page's saas-build.css §9, the Mobile page's mob-path.css
+   §3): the window opens 4% into the drawing's pass and spans 30%; the
+   four lanes together first, then each node pops (erp.css `erp-pop`,
+   about its own centre) as the elbow before it arrives, and its own
+   elbow draws on to the next. One class deeper than home.css's
+   `.home-draw` rules, so the slices win whatever order the sheets land
+   in. */
+.pp .erp-mini .erp-mini-node {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .erp-mini.home-draw :is(.erp-mini-draw, .erp-mini-node) {
+      animation-timeline: --home-draw;
+      animation-range:
+        cover calc(4% + 30% * var(--o, 0))
+        cover calc(4% + 30% * (var(--o, 0) + var(--s, 1)));
+    }
+
+    .pp .erp-mini.home-draw .erp-mini-draw {
+      animation-timing-function: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+    }
+
+    .pp .erp-mini.home-draw .erp-mini-node {
+      animation-name: erp-pop;
+      animation-duration: auto;
+      animation-fill-mode: both;
+      animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+  }
+}
+
+/* ─── §3 What stays connected, and whose it is ──────────────────────
+   The two connect lists stand side by side from md with a hairline
+   between them, and one over the other below: utilities (move.tsx),
+   with no rule of their own here.
+
+   "Whose it is" is a three-column table, too wide for a phone, so below
+   md each row becomes a block: what, then whose (its glyph and its
+   words), then how, one under another, with the column headers kept for
+   a screen reader only (move.tsx). The change is to the rows' and
+   cells' display, never the table's, so it stays a table with its
+   caption and its row and column headers to assistive technology. */
+@media (width < 48rem) {
+  .pp .erp-whose tbody tr {
+    display: grid;
+    row-gap: 6px;
+    padding-block: 16px;
+  }
+
+  .pp .erp-whose tbody :is(th, td) {
+    display: block;
+    padding: 0;
+  }
+}
+
+/* ─── §4 Lite, still and weak ───────────────────────────────────────
+   The lite tier, the still tier (a forced ?tier=still that is not a
+   reduced-motion request) and weak hardware (<html data-weak>) land on
+   the finished frame: the leaders' masks put back whole (their strokes
+   are parked off their paths until they draw, so they are un-parked
+   rather than just stopped, as home/tier.css does for the landing's
+   figures on lite), every copy in its record and the twin merged, every
+   tag, tick and "?" at its size, stage 01's lanes drawn, and the
+   rehearsal card and the stage cards in place rather than rising. Each
+   pin names <html> and all of the shell <main>'s classes it needs
+   besides the piece's own chain, so it outranks every rule above
+   whatever order the sheets land in. The strokes are named by their
+   class, never by `[pathLength]`: Chromium restyles an element on a
+   change of <html data-tier> when its selector names it by a class, but
+   not by that camel-case SVG attribute. */
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .erp-rehearsal-fig .erp-move-lead-draw,
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .erp-mini.home-draw .erp-mini-draw {
+  animation: none;
+  stroke-dasharray: none;
+  stroke-dashoffset: 0;
+}
+
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .erp-rehearsal-fig :is(.erp-copy, .erp-move-tag, .erp-move-tick, .erp-move-ask),
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .erp-mini.home-draw .erp-mini-node,
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body :is(.erp-rehearsal, .erp-move-card).home-rise {
+  animation: none;
+}
+
+/* ─── §5 Forced colours ─────────────────────────────────────────────
+   A forced palette paints the page's words and borders in its own
+   colours on its own ground, and leaves an SVG that sets its own colour
+   as it is (Chromium's `preserve-parent-color`): the figure's ink and
+   the light's dim and tick would stay on a ground they were never
+   measured on. So every piece of both drawings takes its line's colour
+   back, as erp.css §3 does for the glyphs, and then:
+
+     · the copies keep their outlines: each bar a CanvasText outline on
+       the Canvas, so the rows that moved read at a glance;
+     · the rows left in the sheet are outlined in GrayText, the old file
+       behind the new;
+     · the records are Canvas with a CanvasText edge (their white would
+       stay white on a dark palette, and hide the copies);
+     · the leaders are GrayText and whole: the mask that draws them is a
+       white stroke, which a palette could leave or turn, so it is not
+       used here at all;
+     · the sheet's frame and rules are GrayText.
+
+   The tags, the "?" and the titles are HTML: their words and borders
+   take the palette's colours on their own, and each outcome is in its
+   words, never in its colour alone. Keyed on `.pp.saas-page`, the
+   shell's <main>, and on erp- classes only. */
+@media (forced-colors: active) {
+  .pp.saas-page .erp-rehearsal-fig :is(svg, g, path, rect, circle),
+  .pp.saas-page .erp-mini,
+  .pp.saas-page .erp-mini :is(g, path, circle) {
+    color: inherit;
+  }
+
+  .pp.saas-page .erp-rehearsal-fig .erp-copy rect {
+    fill: Canvas;
+    stroke: CanvasText;
+    stroke-width: 1.5px;
+  }
+
+  .pp.saas-page .erp-rehearsal-fig .erp-move-row rect {
+    fill: Canvas;
+    stroke: GrayText;
+    stroke-width: 1.5px;
+  }
+
+  .pp.saas-page .erp-rehearsal-fig .erp-move-row {
+    opacity: 1;
+  }
+
+  .pp.saas-page .erp-rehearsal-fig .erp-move-record {
+    fill: Canvas;
+    stroke: CanvasText;
+    stroke-opacity: 1;
+  }
+
+  .pp.saas-page .erp-rehearsal-fig .erp-move-lead {
+    mask: none;
+    stroke: GrayText;
+    stroke-opacity: 1;
+  }
+
+  .pp.saas-page .erp-rehearsal-fig .erp-move-sheet :is(path, rect) {
+    fill: none;
+    stroke: GrayText;
+    stroke-opacity: 1;
+  }
+}

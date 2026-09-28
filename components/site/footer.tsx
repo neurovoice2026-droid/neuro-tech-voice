@@ -94,6 +94,7 @@ const LIVE = new Set([
   "/solutions/custom-saas-platforms",
   "/solutions/custom-automations",
   "/solutions/custom-mobile-applications",
+  "/solutions/crm-erp",
   "/industries",
   "/privacy",
   "/terms",

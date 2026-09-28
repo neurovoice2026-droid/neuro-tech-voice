@@ -1,0 +1,854 @@
+/* ------------------------------------------------------------------ *
+ * §0 /solutions/crm-erp — #process's drawing: the sample business's
+ * eight tools as papers (Today), and the same eight sheets as cards in
+ * lanes of who does what (One system), in its two compositions: the
+ * lanes from lg (process-lanes.tsx), the list below it
+ * (process-list.tsx).
+ *
+ *   §1  the lanes' box, its four bands, their fills and labels
+ *   §2  the sheets: each view's place, the two faces and their
+ *       cross-fade, the states, the dotted "built for yours" card, the
+ *       lit card's own dot, the papers' strip drawings
+ *   §3  the connectors, their traces, the travelling dot
+ *   §4  the hand-offs and their marks (Today)
+ *   §5  the list: its rows and its pile, the rail and its nodes, the
+ *       lanes' chips, its dot, its marks
+ *   §6  the ping round a card that has arrived
+ *   §7  reduced motion, still and weak
+ *   §8  forced colours
+ *
+ * Imported once, by app/solutions/crm-erp/page.tsx, after erp.css and
+ * before erp-process.css (the stage around the drawing: its grid, which
+ * shows the lanes from lg and the list below it, and its rail, whose
+ * cells from lg stand over the lanes' columns). Every rule sits under
+ * .pp; every selector names an erp- class; the classes here are this
+ * sheet's alone.
+ *
+ * THE VIEW IS THE STAGE'S. `data-view` on `.erp-stage` (today · one,
+ * process-stage.tsx) picks each sheet's place and face, the lanes' fills,
+ * the connectors and the hand-offs; `data-state` on each sheet (rest ·
+ * route · lit · visited) and on each trace (rest · route · on) is the
+ * frame's (process-frame.ts). The server paints One system, step 08: so
+ * One system is every element's own style here, and Today the override.
+ *
+ * WHAT MOVES, AND HOW. A sheet's layout box never moves: it stands at
+ * its drawing's top left in both views, and each view's place is a
+ * `transform` of it (a `translate()`, and the paper's turn a `rotate()`),
+ * with the box's size, so a view change is no layout shift. The place
+ * changes at once with the view and is never transitioned: the stage's
+ * timeline flies each sheet from the geometry (process-timeline.ts),
+ * scaling its backing (`.erp-sheet-bg`) between the two sizes while its
+ * faces, each its own size and centred on the sheet, cross. Everything
+ * else is a
+ * transition on what React sets, in the house out-ease: the faces cross
+ * (the paper's out, the card's in from 0.35s), the lanes' fills sweep in
+ * from the left 80ms apart, the connectors, labels and rail fade in from
+ * 0.9s as the sheets land (the first at 0.9s, the last at 1.18s), and a
+ * picked step's lit traces once the last has (process-timeline.ts); back
+ * to Today, the hand-offs and their marks fade in from 0.6s as the papers
+ * land. GSAP owns the travel: a trace's
+ * dash, the dot (resting at opacity 0: the lit card carries the step), a
+ * ping, the marks' pop and flight (a transform no rule here transitions:
+ * the marks transition only their opacity, so the flight and the fade
+ * run together). Colour, opacity, scale and transform only; no
+ * @property, no keyframe.
+ *
+ * COLOUR, measured (SPEC §5.3, §4.2.7): on the stage, muted 5.39 (the
+ * lane labels); on the white sheets and pills, ink 19.11, muted 6.37,
+ * violet 7.10 (the step's number), ember ink 5.92 (a paper's pain, a
+ * mark's words); electric 5.70 and 4.82 for marks only (a glyph, a
+ * trace, the dot, a lit card's edge and wash).
+ * ------------------------------------------------------------------ */
+
+/* ─── §1 The lanes ──────────────────────────────────────────────────
+   A box of fixed aspect, the stage's full width (process-geometry.ts):
+   every place in it is in its units and every face a share of its width
+   (a container: 1u = 0.1cqw, `--u`, across and down), so the drawing is
+   never measured.
+   Four bands, each with a fill that holds its hairline, so the lanes
+   sweep in whole from the left as the sheets fly into one system and
+   sweep out as they fly back: alternately a white wash and ink at 3%,
+   one after the other (`--k`, 80ms apart). The labels stand in the left
+   column, under the rail's empty first cell, and fade in with the
+   connectors. */
+.pp .erp-lanes {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1000 / 272;
+  container: erp-lanes / inline-size;
+}
+
+.pp .erp-lane {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+.pp .erp-lane-fill {
+  position: absolute;
+  inset: 0;
+  border-top: 1px solid rgb(20 10 36 / 0.1);
+  background-color: rgb(255 255 255 / 0.38);
+  transform-origin: left center;
+  transition: scale 0.6s cubic-bezier(0.16, 1, 0.3, 1) calc(var(--k) * 80ms);
+}
+
+.pp .erp-lane-fill[data-odd] {
+  background-color: rgb(20 10 36 / 0.03);
+}
+
+.pp .erp-lane-fill[data-last] {
+  border-bottom: 1px solid rgb(20 10 36 / 0.1);
+}
+
+.pp .erp-stage[data-view="today"] .erp-lane-fill {
+  scale: 0 1;
+}
+
+.pp .erp-lane-label {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  translate: 0 -50%;
+  padding-right: 8px;
+  color: var(--home-muted);
+  white-space: nowrap;
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .erp-stage[data-view="one"] .erp-lane-label {
+  transition-delay: 0.9s;
+}
+
+.pp .erp-stage[data-view="today"] .erp-lane-label {
+  opacity: 0;
+}
+
+/* ─── §2 The sheets ─────────────────────────────────────────────────
+   ONE SYSTEM (their own style): a white card, 10px round, a hairline
+   and the landing's soft drop, at its card's place. TODAY: a paper, 8px
+   round, lifted by a wider shadow, at its paper's place and turned. The
+   white, the edge and the shadow are the sheet's backing
+   (`.erp-sheet-bg`), which fills the sheet's box; the box is the view's
+   size (`--bw`, `--bh`: the card's or the paper's), its layout at the
+   drawing's top left, and the place a `transform` read from the custom
+   properties the drawing sets from the geometry, never transitioned (the
+   stage's timeline flies it).
+
+   TWO FACES in one box, each its own size and centred on the sheet by
+   a `translate` (so neither rewraps while the sheet flies, and the one
+   going out stays where it was while the backing shrinks or grows under
+   it); the view shows one.
+   Into one system the paper's face fades out at once and the card's in
+   from 0.35s, as the sheets near their lanes; back to Today the card's
+   goes at once and the paper's comes from 0.3s. No face clips its words:
+   a reader's own text spacing (WCAG 1.4.12) grows a paper's face down
+   past its backing, and wraps a card's label, rather than cut either;
+   and the ping and the lit card's own dot stand on the sheet's edge.
+
+   THE STATES, one system's (the frame's): at rest the hairline; on the
+   way (`route`) an electric edge at 40%; the step on show (`lit`) a 2px
+   electric edge and a 10% electric wash, and its own dot on its left
+   edge, where the connector into it arrives, so the dot that rode there
+   hands the step to it as it lands; a step passed (`visited`) an ink
+   edge at 40%. A step built for yours has a dotted violet edge, taking
+   the state's colour. Drawn by an overlay's border (the backing's
+   `::after`), so a state never changes the sheet's box. In Today only the lit paper is
+   edged: the step picked, ringed in electric. Colour only, 0.2s. */
+.pp .erp-sheet {
+  --bw: var(--card-w);
+  --bh: var(--card-h);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--bw);
+  height: var(--bh);
+  border-radius: 10px;
+}
+
+.pp .erp-stage[data-view="today"] .erp-sheet {
+  --bw: var(--paper-w);
+  --bh: var(--paper-h);
+  border-radius: 8px;
+}
+
+.pp .erp-sheet-bg {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-color: #fff;
+  box-shadow:
+    0 0 0 1px rgb(20 10 36 / 0.1),
+    0 1px 2px rgb(20 10 36 / 0.06);
+  transition:
+    background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .erp-sheet-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid transparent;
+  border-radius: inherit;
+  pointer-events: none;
+  transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .erp-sheet[data-kind="none"] .erp-sheet-bg::after {
+  border: 1.5px dotted var(--home-violet);
+}
+
+.pp .erp-sheet[data-state="route"] .erp-sheet-bg::after {
+  border-color: rgb(124 58 237 / 0.4);
+}
+
+.pp .erp-sheet[data-state="visited"] .erp-sheet-bg::after {
+  border-color: rgb(20 10 36 / 0.4);
+}
+
+.pp .erp-sheet[data-state="lit"] .erp-sheet-bg {
+  background-color: color-mix(in srgb, var(--home-electric) 10%, #fff);
+}
+
+.pp .erp-sheet[data-state="lit"] .erp-sheet-bg::after {
+  border-width: 2px;
+  border-color: var(--home-electric);
+}
+
+.pp .erp-stage[data-view="today"] .erp-sheet-bg {
+  background-color: #fff;
+  box-shadow:
+    0 0 0 1px rgb(20 10 36 / 0.06),
+    0 6px 18px rgb(20 10 36 / 0.12);
+}
+
+.pp .erp-stage[data-view="today"] .erp-sheet-bg::after {
+  border-color: transparent;
+}
+
+.pp .erp-stage[data-view="today"] .erp-sheet[data-state="lit"] .erp-sheet-bg::after {
+  border: 2px solid var(--home-electric);
+}
+
+/* On the lanes: each view's place, in the box's units. */
+.pp .erp-lanes .erp-sheet {
+  transform: translate(calc(var(--cx) * var(--u)), calc(var(--cy) * var(--u)));
+}
+
+.pp .erp-stage[data-view="today"] .erp-lanes .erp-sheet {
+  transform: translate(calc(var(--px) * var(--u)), calc(var(--py) * var(--u))) rotate(var(--pr));
+}
+
+/* The faces: each its own size, centred on the sheet's box. */
+.pp .erp-sheet-card,
+.pp .erp-sheet-paper {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: inherit;
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .erp-stage[data-view="one"] .erp-sheet-card {
+  transition-delay: 0.35s;
+}
+
+.pp .erp-stage[data-view="one"] .erp-sheet-paper,
+.pp .erp-stage[data-view="today"] .erp-sheet-card {
+  opacity: 0;
+}
+
+.pp .erp-stage[data-view="today"] .erp-sheet-paper {
+  transition-delay: 0.3s;
+}
+
+/* The card face on the lanes: the glyph, the number and the kind's node
+   over the label, which has the card's whole width: 84 × 46px at the
+   1024 frame, and the longest label, "Follow-up", on one line. */
+.pp .erp-sheet-card {
+  width: var(--card-w);
+  height: var(--card-h);
+  translate: calc((var(--bw) - var(--card-w)) / 2) calc((var(--bh) - var(--card-h)) / 2);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "glyph n node"
+    "label label label";
+  align-content: space-between;
+  align-items: center;
+  column-gap: 5px;
+}
+
+.pp .erp-lanes .erp-sheet-card {
+  padding: 5px 8px 5px 9px;
+}
+
+.pp .erp-card-n {
+  grid-area: n;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.pp .erp-card-node {
+  grid-area: node;
+}
+
+.pp .erp-card-glyph {
+  grid-area: glyph;
+}
+
+.pp .erp-card-label {
+  grid-area: label;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--home-ink);
+}
+
+/* The paper face: where the step lives, drawn; its title, where it
+   lives, and what goes wrong there. 185 × 84px at the 1024 frame, each on
+   a line; at least the paper's height, and taller where a reader's own
+   text spacing needs it. */
+.pp .erp-sheet-paper {
+  width: var(--paper-w);
+  min-height: var(--paper-h);
+  translate: calc((var(--bw) - var(--paper-w)) / 2) calc((var(--bh) - var(--paper-h)) / 2);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.pp .erp-lanes .erp-sheet-paper {
+  padding: 8px 8px 7px 9px;
+}
+
+.pp .erp-paper-face {
+  display: block;
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.pp .erp-paper-title {
+  font-size: 13px;
+  line-height: 17px;
+  font-weight: 500;
+  color: var(--home-ink);
+}
+
+.pp .erp-paper-where {
+  font-size: 11px;
+  line-height: 15px;
+  letter-spacing: -0.01em;
+  color: var(--home-muted);
+}
+
+.pp .erp-paper-pain {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--home-ember-ink);
+}
+
+/* The strip's two tones (papers.tsx): lilac for what the thing is,
+   greys for its content and its lines. */
+.pp .erp-face .erp-face-a {
+  fill: var(--home-lilac);
+}
+
+.pp .erp-face .erp-face-b {
+  fill: rgb(20 10 36 / 0.14);
+}
+
+.pp .erp-face .erp-face-c {
+  fill: rgb(20 10 36 / 0.07);
+}
+
+.pp .erp-face .erp-face-line {
+  fill: none;
+  stroke: rgb(20 10 36 / 0.3);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The lit card's own dot, on its left edge where the connector into it
+   arrives: the travelling dot's landing, held (lanes, one system). */
+.pp .erp-sheet-here {
+  position: absolute;
+  left: -5px;
+  top: calc(var(--card-h) / 2);
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  border-radius: 999px;
+  background-color: var(--home-electric);
+  box-shadow: 0 0 0 2px #fff;
+  opacity: 0;
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .erp-stage[data-view="one"] .erp-sheet[data-state="lit"] .erp-sheet-here {
+  opacity: 1;
+}
+
+/* ─── §3 The connectors ─────────────────────────────────────────────
+   One system only. Each twice: a base (ink at 12%, 1.5u), faded in from
+   0.9s as the sheets land and out at once with Today; and its trace
+   (electric, 2u, `pathLength="1"`), by the frame: hidden at rest, faint
+   on the way, on once the step has arrived. Flown into one system with a
+   step picked, the traces it has on wait for the last sheet to land
+   (process-timeline.ts `buildConsolidate`). The tour draws a trace by
+   its dash as the dot rides it (process-timeline.ts), and lets go of it
+   once React holds it on. The dot rests hidden: travel only. */
+.pp .erp-wires,
+.pp .erp-hands {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.pp .erp-wire {
+  stroke: rgb(20 10 36 / 0.12);
+  stroke-width: 1.5;
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.9s;
+}
+
+.pp .erp-stage[data-view="today"] .erp-wire {
+  opacity: 0;
+  transition-delay: 0s;
+}
+
+.pp .erp-trace {
+  stroke: var(--home-electric);
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0;
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .erp-trace[data-state="route"] {
+  opacity: 0.4;
+}
+
+.pp .erp-trace[data-state="on"] {
+  opacity: 1;
+}
+
+.pp .erp-lanes .erp-dot {
+  fill: var(--home-electric);
+  stroke: #fff;
+  stroke-width: 2;
+  opacity: 0;
+}
+
+/* ─── §4 The hand-offs and their marks ──────────────────────────────
+   Today only. Each hand-off a dashed curve (ink at 40%, 4 on 5) from
+   under one paper to the next's edge, with its arrowhead; each mark a
+   white pill with the hand in ember and its words in ember ink (5.92),
+   over everything. Into one system the curves go at once and the marks
+   fade from 0.6s while GSAP flies them into the record's pill; back to
+   Today both fade in from 0.6s, as the papers land. */
+.pp .erp-hands {
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.6s;
+}
+
+.pp .erp-stage[data-view="one"] .erp-hands {
+  opacity: 0;
+  transition-delay: 0s;
+}
+
+.pp .erp-hand,
+.pp .erp-hand-tip {
+  stroke: rgb(20 10 36 / 0.4);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pp .erp-hand {
+  stroke-dasharray: 4 5;
+}
+
+.pp .erp-mark {
+  position: absolute;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px 0 8px;
+  border-radius: 999px;
+  background-color: #fff;
+  box-shadow:
+    0 0 0 1px rgb(20 10 36 / 0.08),
+    0 2px 6px rgb(20 10 36 / 0.08);
+  color: var(--home-ember-ink);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.6s;
+}
+
+.pp .erp-lanes .erp-mark {
+  translate: -50% -50%;
+}
+
+.pp .erp-stage[data-view="one"] .erp-mark {
+  opacity: 0;
+}
+
+/* ─── §5 The list ───────────────────────────────────────────────────
+   Below lg, 512px tall in both views (process-geometry.ts LIST, PILE).
+   ONE SYSTEM: eight rows of 64px; down the left the rail (a 2px
+   hairline through the rows' centres) and a node on each, taking its
+   sheet's state; then the lane's chip (84px); then the card, from 116px
+   to the row's end, 56px tall, its glyph, number, label and node on one
+   line. A chip holds its label however a reader spaces its letters
+   (WCAG 1.4.12): it is at least 84px (74 on a 320 phone's list, with no
+   padding, so its widest label still ends before the card) and grows
+   rightward with its words, never spilling past its own edge or back
+   over the rail's node. TODAY: the rail, the nodes and the chips fade out, and the
+   sheets lie as a pile, two across in 128px cells (8px between), each
+   turned 2° (the drawing sets which way). The strip drawing where each
+   paper lives shows once the list is wide enough for it (440px): below
+   that the paper's words fill its cell. The marks sit on the top corner
+   of the paper each hands to. */
+.pp .erp-list {
+  position: relative;
+  width: 100%;
+  container: erp-list / inline-size;
+}
+
+/* A row's card from 116px to the row's end, 4px down its 64px row; a
+   pile's paper half the list less 4px, 6px down its 128px cell
+   (process-geometry.ts LIST_CARD, PILE_PAPER: the timeline flies them by
+   the same numbers). 100cqw is the list's width. */
+.pp .erp-list .erp-sheet {
+  --card-x: 116px;
+  --card-w: calc(100cqw - 116px);
+  --card-h: 56px;
+  --paper-w: calc(50cqw - 4px);
+  --paper-h: 116px;
+  transform: translate(var(--card-x), calc(var(--ly) + 4px));
+}
+
+.pp .erp-stage[data-view="today"] .erp-list .erp-sheet {
+  transform: translate(var(--qx), calc(var(--qy) + 6px)) rotate(var(--qr));
+}
+
+.pp .erp-list .erp-sheet-card {
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-areas: "glyph n label node";
+  align-content: center;
+  column-gap: 8px;
+  padding: 0 16px 0 14px;
+}
+
+.pp .erp-list .erp-sheet-paper {
+  padding: 10px 11px 10px 12px;
+}
+
+.pp .erp-list .erp-paper-face {
+  display: none;
+}
+
+@container erp-list (width >= 440px) {
+  .pp .erp-list .erp-paper-face {
+    display: block;
+  }
+}
+
+.pp .erp-list-rail {
+  position: absolute;
+  left: 11px;
+  top: 32px;
+  width: 2px;
+  height: calc(100% - 64px);
+  border-radius: 1px;
+  background-color: rgb(20 10 36 / 0.12);
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .erp-list-node {
+  position: absolute;
+  left: 7px;
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  border-radius: 999px;
+  background-color: #fff;
+  box-shadow: inset 0 0 0 1.5px rgb(20 10 36 / 0.28);
+  transition:
+    background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .erp-list-node[data-state="route"] {
+  box-shadow: inset 0 0 0 1.5px rgb(124 58 237 / 0.45);
+}
+
+.pp .erp-list-node[data-state="visited"] {
+  background-color: var(--home-electric);
+  box-shadow: inset 0 0 0 1.5px var(--home-electric);
+}
+
+.pp .erp-list-node[data-state="lit"] {
+  background-color: var(--home-electric);
+  box-shadow:
+    inset 0 0 0 1.5px var(--home-electric),
+    0 0 0 3px #fff,
+    0 0 0 4.5px var(--home-electric);
+}
+
+.pp .erp-list-lane {
+  position: absolute;
+  left: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 84px;
+  height: 24px;
+  margin-top: -12px;
+  padding-inline: 4px;
+  border-radius: 999px;
+  background-color: #fff;
+  box-shadow: 0 0 0 1px rgb(20 10 36 / 0.08);
+  color: var(--home-muted);
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* A list under 300px wide (a 320 phone's): the chips narrower and the
+   card's gaps tighter, so the longest label ("Follow-up") keeps its line
+   beside its number and node. */
+@container erp-list (width < 300px) {
+  .pp .erp-list .erp-sheet {
+    --card-x: 104px;
+    --card-w: calc(100cqw - 104px);
+  }
+
+  .pp .erp-list .erp-sheet-card {
+    column-gap: 6px;
+    padding: 0 12px 0 10px;
+  }
+
+  .pp .erp-list .erp-list-lane {
+    min-width: 74px;
+    padding-inline: 0;
+    letter-spacing: 0;
+  }
+}
+
+.pp .erp-stage[data-view="one"] :is(.erp-list-rail, .erp-list-node, .erp-list-lane) {
+  transition-delay: 0.9s;
+}
+
+.pp .erp-stage[data-view="today"] :is(.erp-list-rail, .erp-list-node, .erp-list-lane) {
+  opacity: 0;
+}
+
+.pp .erp-list .erp-dot {
+  position: absolute;
+  left: 7px;
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  border-radius: 999px;
+  background-color: var(--home-electric);
+  box-shadow: 0 0 0 2px #fff;
+  opacity: 0;
+}
+
+.pp .erp-list .erp-mark {
+  translate: 0 -50%;
+}
+
+/* ─── §6 The ping ───────────────────────────────────────────────────
+   A ring round a card as its step arrives: GSAP grows it from 96% to
+   112% as it fades from 60% (process-timeline.ts). It rests unseen. */
+.pp .erp-ping {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 2px var(--home-electric);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ─── §7 Reduced motion, still and weak ─────────────────────────────
+   Every change here lands at once: no fade, no sweep, no delay. The
+   pins name every element a rule above transitions, keyed on the
+   shell's <main> (`.pp.home-body.saas-page`, and <html> with the tier),
+   heavier than any of those rules, so they win whatever order the sheets
+   land in (erp.css §4 pins the sheets' states and the lanes' fills for
+   reduced motion and the still tier too). No kit is fetched with reduced
+   motion or on the still tier, and none on weak hardware plays the
+   tour: each gets the finished frame, and a switch, a pick or the
+   hotspot lands its frame at once. */
+@media (prefers-reduced-motion: reduce) {
+  .pp.home-body.saas-page
+    :is(
+      .erp-sheet-bg,
+      .erp-sheet-card,
+      .erp-sheet-paper,
+      .erp-sheet-here,
+      .erp-lane-fill,
+      .erp-lane-label,
+      .erp-wire,
+      .erp-trace,
+      .erp-hands,
+      .erp-mark,
+      .erp-list-rail,
+      .erp-list-node,
+      .erp-list-lane
+    ),
+  .pp.home-body.saas-page .erp-sheet-bg::after {
+    transition: none;
+  }
+}
+
+html[data-tier="still"] .pp.home-body
+  :is(
+    .erp-sheet-bg,
+    .erp-sheet-card,
+    .erp-sheet-paper,
+    .erp-sheet-here,
+    .erp-lane-fill,
+    .erp-lane-label,
+    .erp-wire,
+    .erp-trace,
+    .erp-hands,
+    .erp-mark,
+    .erp-list-rail,
+    .erp-list-node,
+    .erp-list-lane
+  ),
+html[data-weak] .pp.home-body
+  :is(
+    .erp-sheet-bg,
+    .erp-sheet-card,
+    .erp-sheet-paper,
+    .erp-sheet-here,
+    .erp-lane-fill,
+    .erp-lane-label,
+    .erp-wire,
+    .erp-trace,
+    .erp-hands,
+    .erp-mark,
+    .erp-list-rail,
+    .erp-list-node,
+    .erp-list-lane
+  ),
+html[data-tier="still"] .pp.home-body .erp-sheet-bg::after,
+html[data-weak] .pp.home-body .erp-sheet-bg::after {
+  transition: none;
+}
+
+/* ─── §8 Forced colours ─────────────────────────────────────────────
+   Windows High Contrast and every other forced palette drop the shadows
+   and washes that draw a sheet and its state, so each is said again in
+   system colours: every sheet edged CanvasText; the lit one Highlight
+   and 2px; a passed one CanvasText; one built for yours keeps its dotted
+   edge. The connectors CanvasText, the traces and the dots Highlight;
+   the rail's nodes filled, ringed or hollow as their sheets are; the
+   marks keep a pill's edge, the hand and their words. */
+@media (forced-colors: active) {
+  .pp.saas-page .erp-sheet-bg::after,
+  .pp.saas-page .erp-stage[data-view="today"] .erp-sheet-bg::after {
+    border-color: CanvasText;
+  }
+
+  .pp.saas-page .erp-sheet[data-state="lit"] .erp-sheet-bg::after,
+  .pp.saas-page .erp-stage[data-view="today"] .erp-sheet[data-state="lit"] .erp-sheet-bg::after {
+    forced-color-adjust: none;
+    border-width: 2px;
+    border-color: Highlight;
+  }
+
+  .pp.saas-page .erp-sheet[data-kind="none"] .erp-sheet-bg::after {
+    border-style: dotted;
+  }
+
+  .pp.saas-page .erp-stage[data-view="one"] .erp-sheet[data-kind="none"] .erp-sheet-bg::after {
+    border-width: 2px;
+  }
+
+  .pp.saas-page .erp-wire,
+  .pp.saas-page .erp-hand,
+  .pp.saas-page .erp-hand-tip {
+    forced-color-adjust: none;
+    stroke: CanvasText;
+  }
+
+  .pp.saas-page .erp-trace {
+    forced-color-adjust: none;
+    stroke: Highlight;
+  }
+
+  .pp.saas-page .erp-lanes .erp-dot {
+    forced-color-adjust: none;
+    fill: Highlight;
+    stroke: Canvas;
+  }
+
+  .pp.saas-page .erp-list .erp-dot,
+  .pp.saas-page .erp-sheet-here {
+    forced-color-adjust: none;
+    background-color: Highlight;
+  }
+
+  .pp.saas-page .erp-list-rail {
+    forced-color-adjust: none;
+    background-color: GrayText;
+  }
+
+  .pp.saas-page .erp-list-node {
+    forced-color-adjust: none;
+    background-color: Canvas;
+    box-shadow: none;
+    border: 1.5px solid CanvasText;
+  }
+
+  .pp.saas-page .erp-list-node[data-state="visited"] {
+    background-color: CanvasText;
+  }
+
+  .pp.saas-page .erp-list-node[data-state="lit"] {
+    border: 2px solid Highlight;
+    background-color: Highlight;
+  }
+
+  .pp.saas-page .erp-list-node[data-state="route"] {
+    border-style: dotted;
+  }
+
+  .pp.saas-page :is(.erp-mark, .erp-list-lane) {
+    border: 1px solid CanvasText;
+  }
+
+  .pp.saas-page .erp-lane-fill {
+    border-color: GrayText;
+  }
+
+  .pp.saas-page .erp-face :is(.erp-face-a, .erp-face-b, .erp-face-c) {
+    forced-color-adjust: none;
+    fill: GrayText;
+  }
+
+  .pp.saas-page .erp-face .erp-face-line {
+    forced-color-adjust: none;
+    stroke: GrayText;
+  }
+}

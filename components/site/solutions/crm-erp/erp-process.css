@@ -1,0 +1,715 @@
+/* ------------------------------------------------------------------ *
+ * §0 /solutions/crm-erp — #process, your process drawn: the stage
+ * around the drawing (process-stage.tsx), its rail, the caption card and
+ * the record panel (process-panels.tsx, record-screens.tsx).
+ *
+ *   §1  the stage's grid, per breakpoint, and its controls row (the
+ *       slots "Start again" and the transport keep), and the
+ *       transport's dock
+ *   §2  the rail: its cells from lg, and the dwell track and fill
+ *   §3  the caption card: the view's line in ink, the other muted
+ *   §4  the record panel: its two views in one cell, the window's body
+ *       and foot by the window's own width, the screen's entrance, the
+ *       history's rows, the hotspot's ring
+ *   §5  lite, still and weak; reduced motion
+ *   §6  forced colours
+ *
+ * Imported once, by app/solutions/crm-erp/page.tsx, after erp.css (the
+ * shared keyframes, marks, pins and switches) and erp-drawing.css (the
+ * two compositions of the drawing, whose sheets, lanes, connectors, dots
+ * and marks are that sheet's alone). Every rule sits under .pp, or on
+ * <html> for the tiers; every selector names an erp- class. Layout and
+ * type are utilities in the components; what lives here is what a
+ * utility can't say cleanly: grid areas that move between breakpoints, a
+ * container query, a state read from a data attribute, a transition
+ * between states, an entrance only after the first change.
+ *
+ * STATE IS REACT'S, COLOUR IS OURS. The stage draws `frameOf(...)`
+ * (process-frame.ts) as data attributes — `data-view` on the stage
+ * (today · one), `data-state` on the rail's fills (passed · current ·
+ * later) and on the history's rows (reached · current · tocome),
+ * `data-entered` once the frame has changed — and every rule below reads
+ * one. GSAP never writes any of them (process-timeline.ts): it runs the
+ * current step's dwell on the span the fill sits in, which no rule here
+ * scales, and pops the record's pill, which no rule here transforms.
+ *
+ * MOTION: colour and scale as transitions on state React toggles, in the
+ * house out-ease; the window's screen and the record's view entering on
+ * a change, never on the first paint. Every animation is stopped on
+ * lite, still and weak hardware (§5), which get the finished frame, as
+ * does reduced motion (the global rule, and erp.css §4's pins).
+ *
+ * COLOUR, measured (SPEC §5.3): ink on white 19.11 and on the stage's
+ * worst end 16.17 (the rail's labels, the tally, the lines in view);
+ * muted on white 6.37 and on the stage 5.39 (the tag, the rail's
+ * numbers below lg, the line not in view, labels); violet on the stage
+ * 6.01 (the rail's numbers from lg); electric on white 5.70 and on the
+ * stage 4.82 (the dwell's fill, the history's nodes, the hotspot's
+ * ring: marks). White on electric 5.70 (the current chip below lg).
+ * ------------------------------------------------------------------ */
+
+/* ─── §1 The stage's grid ───────────────────────────────────────────
+   The DOM runs controls, rail, lanes, list, legend, caption, record, and
+   never changes: only the drawing and the legend, which hold no control,
+   move between places, so focus runs down the screen at every width.
+
+   BELOW MD one column: the controls, the rail, the caption card, the
+   list (512px, the pile in Today), the legend, the record panel.
+
+   AT MD the list down the left (512px), the caption card and the legend
+   down the right beside it, half and half (a narrower list would pile
+   Today's papers narrower than a phone's, five lines each), then the
+   record panel across the stage: the window at the stage's width sets
+   its screen beside its history (about 440px tall, where half the stage
+   stacks them at 700), so neither the window nor Today's panel in its
+   place stands half empty.
+
+   FROM LG the lanes across the stage (the rail's cells above them are the
+   drawing's columns), the legend under them, and the caption card (a
+   third) beside the record panel (two thirds), the two stretched to one
+   height: the window's history keeps a line a row at that width (§4), so
+   the narrower caption card comes out about as tall as the window, and
+   what it has spare stands at its foot.
+
+   ON A SHORT SCREEN FROM LG (900px tall or less: every laptop's, and a
+   1440 × 900 display's browser window, about 790), the rail and the
+   lanes share one width, 880px at most (the 1024 frame the faces are
+   drawn for: the lanes 239px tall, where the stage's width drew them
+   302), from the stage's left; and where the stage leaves 200px beside
+   them (from xl, and the widest lg), the legend stands there, the tally
+   over the key, instead of a row of its own. With the window's header
+   and foot one line tighter (§4), the rail to the window's hotspot
+   comes to about 700px from xl: the whole stage in view on 1280 × 800
+   and 1536 × 864 with the rail under the header, within a few pixels on
+   1366 × 768, and the tour's arrivals (the caption's lines, the status,
+   the history filling) in view from its first frame, when the transport
+   is under the header. A taller screen keeps the stage's full width, and
+   deferred.tsx's reserve carries the difference. */
+.pp .erp-stage {
+  container: erp-stage / inline-size;
+}
+
+.pp .erp-stage-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "controls"
+    "rail"
+    "caption"
+    "list"
+    "legend"
+    "record";
+  row-gap: 16px;
+}
+
+.pp .erp-stage-grid > .erp-stage-controls {
+  grid-area: controls;
+}
+
+.pp .erp-stage-grid > .erp-stage-rail {
+  grid-area: rail;
+}
+
+.pp .erp-stage-grid > .erp-stage-lanes {
+  grid-area: lanes;
+  display: none;
+}
+
+.pp .erp-stage-grid > .erp-stage-list {
+  grid-area: list;
+}
+
+.pp .erp-stage-grid > .erp-stage-legend {
+  grid-area: legend;
+}
+
+.pp .erp-stage-grid > .erp-stage-caption {
+  grid-area: caption;
+}
+
+.pp .erp-stage-grid > .erp-stage-record {
+  grid-area: record;
+}
+
+/* The legend: the tally over the key below md; from md the tally beside
+   the key where the row is wide enough (lg), under it where it isn't. */
+.pp .erp-stage-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@media (min-width: 48rem) {
+  .pp .erp-stage-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto auto auto 1fr auto;
+    grid-template-areas:
+      "controls controls"
+      "rail rail"
+      "list caption"
+      "list legend"
+      "record record";
+    column-gap: 24px;
+    row-gap: 20px;
+  }
+
+  .pp .erp-stage-grid > .erp-stage-list,
+  .pp .erp-stage-grid > .erp-stage-legend {
+    align-self: start;
+  }
+}
+
+@media (min-width: 64rem) {
+  .pp .erp-stage-grid {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+    grid-template-rows: none;
+    grid-template-areas:
+      "controls controls"
+      "rail rail"
+      "lanes lanes"
+      "legend legend"
+      "caption record";
+    column-gap: 24px;
+    row-gap: 16px;
+  }
+
+  .pp .erp-stage-grid > .erp-stage-lanes {
+    display: block;
+  }
+
+  .pp .erp-stage-grid > .erp-stage-list {
+    display: none;
+  }
+
+  .pp .erp-stage-legend {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    column-gap: 24px;
+  }
+}
+
+/* The short screen from lg (above): the rail and the lanes 880px at
+   most, from the stage's left, over the drawing's one column grid; and
+   where the stage is 1080px wide or more, the legend in the lanes' row,
+   beside them, in what is left of it (200px and up): the tally over the
+   key, the key's tags one under another. The legend's own row goes. */
+@media (min-width: 64rem) and (max-height: 56.25rem) {
+  .pp .erp-stage-grid > :is(.erp-stage-rail, .erp-stage-lanes) {
+    justify-self: start;
+    width: 100%;
+    max-width: 880px;
+  }
+
+  @container erp-stage (width >= 1080px) {
+    .pp .erp-stage-grid {
+      grid-template-areas:
+        "controls controls"
+        "rail rail"
+        "lanes lanes"
+        "caption record";
+    }
+
+    .pp .erp-stage-grid > .erp-stage-legend {
+      grid-area: lanes;
+      justify-self: end;
+      align-self: center;
+      width: calc(100% - 904px);
+    }
+
+    .pp .erp-stage-legend {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 16px;
+    }
+
+    .pp .erp-stage-legend .erp-key {
+      flex-direction: column;
+      flex-wrap: nowrap;
+      align-items: flex-start;
+      row-gap: 8px;
+    }
+  }
+}
+
+/* THE CONTROLS ROW. Below md the switch and the transport on the first
+   line, the tag and "Start again" under them (the switch's cell reaches
+   over "Start again"'s, so a 320 phone's switch keeps the line's width
+   less the transport's); from md all four on one line, the tag taking
+   what the others leave. "Start again" keeps its
+   slot from the first paint (invisible until the reader has touched
+   anything) and the transport its own (an invisible disc where a tour
+   can't run: before hydration, with reduced motion, on the still tier),
+   so nothing in the row moves when either appears. */
+.pp .erp-stage-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "switch switch play"
+    "tag again again";
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 8px;
+}
+
+.pp .erp-stage-controls > .erp-stage-switch {
+  grid-area: switch;
+  min-width: 0;
+}
+
+.pp .erp-stage-controls > .erp-stage-tag {
+  grid-area: tag;
+  min-width: 0;
+}
+
+.pp .erp-stage-controls > .erp-stage-again {
+  grid-area: again;
+  justify-self: end;
+}
+
+.pp .erp-stage-controls > .erp-stage-play {
+  grid-area: play;
+  justify-self: end;
+}
+
+@media (min-width: 48rem) {
+  .pp .erp-stage-controls {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "switch tag again play";
+    column-gap: 16px;
+  }
+}
+
+/* THE TRANSPORT'S DOCK. The transport comes right after the controls in
+   the DOM (focus runs switch, "Start again", transport, rail) but stands
+   in a dock of its own, a direct child of the grid, over its slot at the
+   controls row's end (an invisible disc in the row keeps the room), and
+   there it stays, beside "Start again", whenever no tour has a claim on
+   the screen: lite before a tap, a stage the reader has taken over, a
+   tour that has ended.
+   WHILE A TOUR HAS THE CLAIM (`data-docked` on the stage: the first
+   view's autoplay waiting for the drawing, or a tour under way, paused
+   or not; process-stage.tsx), on a phone, or on any screen too short
+   (under 34rem: a phone on its side) for the controls row and 60% of
+   the drawing to be on it at once, the dock spans every row of the
+   stage's last column and sticks 72px from the top (under the site's
+   56px header) while the stage is on screen: the tour's Pause stays in
+   reach for all of its 36 seconds, and the first view's tour, which
+   waits for its Pause to be on screen, can start once the drawing is.
+   Floating over the stage's words, the disc takes a white ring and the
+   landing's floating drop, so it reads as a control laid over the card,
+   not a collision; it comes back to its slot only once the tour is over,
+   never part-way through it. The dock lets pointers through; its button
+   takes them. */
+.pp .erp-stage-grid > .erp-stage-dock {
+  grid-area: controls;
+  justify-self: end;
+  align-self: start;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  height: 44px;
+  pointer-events: none;
+}
+
+.pp .erp-stage-dock > * {
+  pointer-events: auto;
+}
+
+@media (max-width: 47.999rem), (max-height: 33.999rem) {
+  .pp .erp-stage[data-docked] > .erp-stage-grid > .erp-stage-dock {
+    grid-area: 1 / -2 / -1 / -1;
+    position: sticky;
+    top: 72px;
+  }
+
+  /* The disc's own edge (globals.css `.pp-shadow-btn`), then the white ring and the drop. */
+  .pp .erp-stage[data-docked] .erp-stage-dock .erp-stage-transport {
+    box-shadow:
+      0 0 1px rgb(0 0 0 / 0.4),
+      0 0 0 2px #fff,
+      0 4px 14px rgb(20 10 36 / 0.18),
+      0 1px 3px rgb(20 10 36 / 0.08);
+  }
+}
+
+/* ─── §2 The rail ───────────────────────────────────────────────────
+   One radio group at every width (the landing's ChipRail, re-laid from
+   lg by its utilities): below lg a row of chips that scrolls, the
+   current one centred; from lg the drawing's column grid, each step
+   over its lane's column, the first cell empty over the lane labels.
+
+   THE DWELL. Under each step a 2px track, and in it an electric fill
+   drawn from the frame: full for a step passed or current, empty for one
+   still to come. During a tour the timeline runs the current step's
+   dwell from nothing to full — an inline transform on the span the fill
+   sits in (`data-erp-run`, which no rule here scales, so GSAP never folds
+   this `scale` into the transform it saves and puts back), multiplying
+   the fill's own — and lets go of it as the next step leaves; a pick by
+   hand eases the fills into place. Compositor only: a scale on a 2px
+   bar. On the current chip below lg, which is electric, the track and
+   the fill are white. */
+.pp .erp-rail .erp-dwell {
+  background-color: rgb(20 10 36 / 0.1);
+}
+
+.pp .erp-rail [data-erp-dwell] {
+  background-color: var(--home-electric);
+  transform-origin: left center;
+  scale: 0 1;
+  transition-property: scale;
+  transition-duration: 0.35s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .erp-rail [data-erp-dwell]:is([data-state="passed"], [data-state="current"]) {
+  scale: 1 1;
+}
+
+@media (max-width: 63.999rem) {
+  .pp .erp-rail [aria-checked="true"] .erp-dwell {
+    background-color: rgb(255 255 255 / 0.35);
+  }
+
+  .pp .erp-rail [aria-checked="true"] [data-erp-dwell] {
+    background-color: #fff;
+  }
+}
+
+/* ─── §3 The caption card ───────────────────────────────────────────
+   Both lines of a step are always printed, Today's and In one system's;
+   the view on show sets its own in ink, the other muted. Colour only, so
+   a switch never changes the card's height. */
+.pp .erp-caption .erp-line-text {
+  color: var(--home-muted);
+  transition-property: color;
+  transition-duration: 0.3s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .erp-stage[data-view="today"] .erp-line[data-line="today"] .erp-line-text,
+.pp .erp-stage[data-view="one"] .erp-line[data-line="one"] .erp-line-text {
+  color: var(--home-ink);
+}
+
+/* ─── §4 The record panel ───────────────────────────────────────────
+   ITS TWO VIEWS IN ONE CELL, as tall as the taller (the window): the one
+   the stage isn't on is hidden, not unmounted, so the hotspot is one
+   persistent button, and `visibility` takes the hidden one out of the
+   tab order and the accessibility tree. Once the view has changed
+   (`data-switched`: a switch, "Start again", the tour), the view coming
+   in fades up (erp.css's `erp-fade-in`); never on the first paint, and
+   never on a pick or a press, which leave the view as it is. */
+.pp .erp-record > .erp-record-today,
+.pp .erp-record > .erp-record-one {
+  grid-area: 1 / 1;
+}
+
+.pp .erp-stage[data-view="one"] .erp-record-today,
+.pp .erp-stage[data-view="today"] .erp-record-one {
+  visibility: hidden;
+}
+
+.pp .erp-stage[data-switched][data-view="today"] .erp-record-today,
+.pp .erp-stage[data-switched][data-view="one"] .erp-record-one {
+  animation: erp-fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* THE WINDOW'S BODY AND THE FEET, by the panel's own width (a
+   container: two thirds of the stage from lg, all of it below). From
+   480px the step's screen beside the customer's history, a hairline
+   between: 13rem, 15rem from 520px, six elevenths of the body from 560px
+   (the panel at 1024, two thirds of the stage) and half of it from
+   640px, the gaps a little tighter under 640, so a row keeps its line
+   ("Enquiry, with what they asked" the longest) wherever it can, and the
+   window comes out no taller than it must; under 480px, the screen over
+   the history. A
+   foot's hint (the window's and Today's) stands beside its ringed button
+   from 480px and under it below: the hotspot keeps the room of its
+   longest label (process-panels.tsx), so the hint never rewraps as its
+   words change. The foot is 7px round the button, whose focus ring (5px
+   out, 2px wide) just clears the card's clip; 12px under a hint below it. */
+.pp .erp-record {
+  container: erp-record / inline-size;
+}
+
+.pp .erp-window .erp-window-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 20px;
+}
+
+.pp .erp-window .erp-window-history {
+  border-top: 1px solid var(--pp-rule);
+  padding-top: 16px;
+}
+
+.pp .erp-record .erp-window-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding-bottom: 12px;
+}
+
+@container erp-record (width >= 480px) {
+  .pp .erp-window .erp-window-body {
+    grid-template-columns: minmax(0, 1fr) 13rem;
+    column-gap: 20px;
+  }
+
+  .pp .erp-window .erp-window-history {
+    border-top: 0;
+    border-left: 1px solid var(--pp-rule);
+    padding-top: 0;
+    padding-left: 20px;
+  }
+
+  .pp .erp-record .erp-window-foot {
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    padding-bottom: 7px;
+  }
+}
+
+@container erp-record (width >= 520px) {
+  .pp .erp-window .erp-window-body {
+    grid-template-columns: minmax(0, 1fr) 15rem;
+  }
+}
+
+@container erp-record (width >= 560px) {
+  .pp .erp-window .erp-window-body {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    column-gap: 16px;
+  }
+
+  .pp .erp-window .erp-window-history {
+    padding-left: 16px;
+  }
+
+  /* The header strip on the avatar's one line: the pill and the customer
+     side by side (process-panels.tsx), and the order's label beside its
+     status, not over it. */
+  .pp .erp-window .erp-record-status {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+  }
+}
+
+@container erp-record (width >= 640px) {
+  .pp .erp-window .erp-window-body {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 24px;
+  }
+
+  .pp .erp-window .erp-window-history {
+    padding-left: 24px;
+  }
+}
+
+/* THE HEADER STRIP, by the window's width. The pill ("One customer
+   record") keeps its one line in its 20px: under 330px the avatar goes,
+   giving the customer's column its 48px; under 290px (a 320 phone's) the
+   order's status drops under the customer, its label beside its chip. */
+@container erp-record (width < 330px) {
+  .pp .erp-window .erp-record-avatar {
+    display: none;
+  }
+}
+
+@container erp-record (width < 290px) {
+  .pp .erp-window .erp-record-head {
+    flex-wrap: wrap;
+  }
+
+  .pp .erp-window .erp-record-status {
+    flex-basis: 100%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+/* THE SCREEN'S ENTRANCE. The body changes as a step arrives, under a
+   header strip that stays put: the new screen slides in 12px and fades
+   up. Only once the frame has changed (`data-entered`): the stack
+   re-mounts its live screen on each change, so it plays once per step,
+   and never on the server's first paint. */
+@keyframes erp-screen-in {
+  from {
+    translate: 12px 0;
+    opacity: 0;
+  }
+}
+
+.pp .erp-stage[data-entered] .erp-window-screen .erp-screen {
+  animation: erp-screen-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* THE HISTORY'S ROWS. A step reached: its node filled electric, its
+   words in ink. The current one: its node an electric ring, its words in
+   ink. One to come: its node a dotted ring, its words muted, and "To
+   come" where the lane would be. The node never changes size, so a state
+   moves nothing. */
+.pp .erp-row .erp-row-node {
+  border: 1.5px solid var(--home-electric);
+  background-color: var(--home-electric);
+  transition-property: background-color, border-color;
+  transition-duration: 0.3s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .erp-row[data-state="current"] .erp-row-node {
+  border-width: 2px;
+  background-color: #fff;
+}
+
+.pp .erp-row[data-state="tocome"] .erp-row-node {
+  border-style: dotted;
+  border-color: var(--home-muted);
+  background-color: transparent;
+}
+
+.pp .erp-row .erp-row-text {
+  color: var(--home-ink);
+  transition-property: color;
+  transition-duration: 0.3s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .erp-row[data-state="current"] .erp-row-text {
+  font-weight: 500;
+}
+
+.pp .erp-row[data-state="tocome"] .erp-row-text {
+  color: var(--home-muted);
+}
+
+/* THE HOTSPOT (and Today's way into one system, in its place): a white
+   pill ringed in electric, 2px clear of it, so it reads as the thing to
+   press. A ring of shadows, so the focus outline (ink, outside it) still
+   shows when it has focus. */
+.pp .erp-record .erp-hot {
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px var(--home-electric),
+    0 2px 8px rgb(20 10 36 / 0.1);
+}
+
+/* ─── §5 Lite, still and weak; reduced motion ───────────────────────
+   LITE, STILL AND WEAK get the finished frame: the screen and the
+   record's views simply there. Each pin names the element its
+   animation's rule does, and <html>, the tier and the shell's <main>
+   besides, so it outranks that rule whatever order the sheets land in.
+   The tour itself waits for a tap on lite and never runs on still
+   (home/motion.ts). A state's transition is stopped on lite and weak
+   hardware too, so a pick lands at once. */
+html[data-tier="lite"] .pp.home-body.saas-page .erp-stage :is(.erp-screen, .erp-record-today, .erp-record-one),
+html[data-tier="still"] .pp.home-body.saas-page .erp-stage :is(.erp-screen, .erp-record-today, .erp-record-one),
+html[data-weak] .pp.home-body.saas-page .erp-stage :is(.erp-screen, .erp-record-today, .erp-record-one) {
+  animation: none;
+}
+
+html[data-tier="lite"] .pp.home-body :is(.erp-line-text, .erp-row-node, .erp-row-text, .erp-rail .erp-dwell),
+html[data-tier="still"] .pp.home-body :is(.erp-line-text, .erp-row-node, .erp-row-text, .erp-rail .erp-dwell),
+html[data-weak] .pp.home-body :is(.erp-line-text, .erp-row-node, .erp-row-text, .erp-rail .erp-dwell) {
+  transition: none;
+}
+
+/* A fill's own transition, on lite and weak (erp.css §4 pins it for
+   reduced motion and the still tier). */
+html[data-tier="lite"] .pp.home-body .erp-rail [data-erp-dwell],
+html[data-weak] .pp.home-body .erp-rail [data-erp-dwell] {
+  transition: none;
+}
+
+/* REDUCED MOTION: every state above reads finished at once (erp.css §4
+   pins the rail's fills and the history's rows; these are this
+   section's own). */
+@media (prefers-reduced-motion: reduce) {
+  .pp.home-body.saas-page :is(.erp-line-text, .erp-row-node, .erp-row-text) {
+    transition: none;
+  }
+}
+
+/* ─── §6 Forced colours ─────────────────────────────────────────────
+   Windows High Contrast and every other forced palette drop the shadows
+   and the fills that draw a state, so each is said again in system
+   colours: the rail's fill Highlight on a GrayText track (HighlightText
+   inside the checked radio, which saas.css §15 fills with Highlight); a
+   history row's node filled CanvasText when reached, ringed Highlight
+   when current, dotted GrayText when to come, beside its words and "To
+   come"; the hotspot outlined in ButtonText; the record's pill and the
+   screens' pills bordered, so they stay shapes, and the screens' bars
+   drawn in GrayText. */
+@media (forced-colors: active) {
+  .pp.saas-page .erp-rail .erp-dwell {
+    forced-color-adjust: none;
+    background-color: GrayText;
+  }
+
+  .pp.saas-page .erp-rail [data-erp-dwell] {
+    forced-color-adjust: none;
+    background-color: Highlight;
+  }
+
+  .pp.saas-page .erp-rail [role="radio"][aria-checked="true"] [data-erp-dwell] {
+    background-color: HighlightText;
+  }
+
+  .pp.saas-page .erp-row .erp-row-node {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+    background-color: CanvasText;
+  }
+
+  .pp.saas-page .erp-row[data-state="current"] .erp-row-node {
+    border-color: Highlight;
+    background-color: Canvas;
+  }
+
+  .pp.saas-page .erp-row[data-state="tocome"] .erp-row-node {
+    border-color: GrayText;
+    background-color: Canvas;
+  }
+
+  .pp.saas-page .erp-record .erp-hot {
+    outline: 2px solid ButtonText;
+    outline-offset: 2px;
+  }
+
+  /* Focus on it: the outline moves out and turns Highlight, so focus still shows. */
+  .pp.saas-page .erp-record .erp-hot:focus-visible {
+    outline-color: Highlight;
+    outline-offset: 5px;
+  }
+
+  .pp.saas-page .erp-window .erp-pill {
+    border: 1px solid CanvasText;
+  }
+
+  /* A screen's values stay drawn: its grey bars and empty slots in
+     GrayText, the booked slot and the sketches' marks in Highlight. */
+  .pp.saas-page .erp-screen .erp-bar {
+    forced-color-adjust: none;
+    background-color: GrayText;
+  }
+
+  .pp.saas-page .erp-screen .erp-bar[data-on] {
+    background-color: Highlight;
+  }
+
+  /* A screen's pills keep their shape, and the order's current stage its fill. */
+  .pp.saas-page .erp-screen li {
+    border: 1px solid CanvasText;
+  }
+
+  .pp.saas-page .erp-screen [aria-current="step"] {
+    forced-color-adjust: none;
+    background-color: Highlight;
+    color: HighlightText;
+  }
+}

@@ -1,0 +1,364 @@
+/* ------------------------------------------------------------------ *
+ * §0 #shape — "Shaped around your business": the business chips, the
+ * card's groups, rails and part rows, the pipeline and its motion, and
+ * the ledger's figures (shape-instrument.tsx, shape-card.tsx,
+ * ledger.tsx, ledger-figures.tsx).
+ *
+ *   §1  the controls: the business chips' rail, unmasked where it wraps
+ *   §2  the card: the group heads' state chips, the group rails and
+ *       their fills (emptied and filled with the scope, a group after
+ *       the next), the part rows in the build or later, and their nodes
+ *   §3  the pipeline: its line and nodes, drawn on the pipeline's own
+ *       passage up the screen before any pick, popping in order after one
+ *   §4  the ledger's figures: each element on its own slice of the
+ *       figure's passage (saas-closing.css §10a's rule)
+ *   §5  lite, still and weak: the finished frame, and no easing
+ *   §6  forced colours: the states in system colours
+ *
+ * Everything else in the section is utilities: the controls are the
+ * landing's (the chips' colours, the segmented switch, whose edge and
+ * weight are erp.css §5's `erp-switch`), the room is the SaaS page's lit
+ * surface (saas.css §2, `saas-light-room-m`), the card is white, and the
+ * ledger's grid, subgrid and hairlines are the ledger's own utilities. A
+ * part's kind tag and its glyph are erp.css §2's. The card's slide on a
+ * business pick is saas-build.css §8's, as it is: this sheet writes no
+ * view-transition rule, and names no view-transition part.
+ *
+ * Imported once, by app/solutions/crm-erp/page.tsx, after erp.css,
+ * erp-drawing.css and erp-process.css. Every rule sits under .pp, or on
+ * <html> where it reads the tier; every class and keyframe of ours is
+ * prefixed erp-, and a selector names the home- or saas- classes it sits
+ * inside only beside one of ours. Only colours, scale and opacity move
+ * (and the figures' strokes, on home.css's own `home-draw`). The view
+ * timelines sit inside `@media (prefers-reduced-motion: no-preference)`
+ * and `@supports (animation-timeline: view())`, and the pipeline's
+ * entrance after a pick inside the first, so reduced motion, and a
+ * browser without view timelines before a pick, get the finished frame:
+ * every stage on its line, every figure drawn. No @property and no
+ * animated custom property: `--g`, `--k`, `--o` and `--s` are only read.
+ * lib/pages/crm-erp.test.ts reads this sheet and holds all of that, and
+ * that every animation here is stopped on the lite, still and weak tiers
+ * by a pin that wins (§5).
+ * ------------------------------------------------------------------ */
+
+/* ─── §1 The controls ───────────────────────────────────────────────
+   Below lg the six business chips run in a rail that scrolls sideways,
+   and home.css's `home-fade-x` fades whichever end has more to show.
+   From lg they wrap and nothing scrolls, but a mask still clips whatever
+   paints past the rail's box — a chip's focus ring on the wrapped row's
+   edge, the press's scale — so it comes off there, as it does on the
+   Mobile page's storyboard. One class deeper than home.css's rule, so
+   it wins wherever the sheets land. */
+@media (width >= 64rem) {
+  .pp .erp-shape-chips.home-fade-x {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+
+/* ─── §2 The card ───────────────────────────────────────────────────
+   A GROUP (Sales, Operations, Back office) is in the build or later
+   (`data-state`, set from the scope the reader picked). Its head's chip
+   says which in words: "In this build" in settled green on its soft
+   ground (4.95), "Later" in muted on the chip grey (5.69); the words swap
+   at once.
+
+   THE RAIL down each group's left edge is an ink-8% track with an
+   electric fill (5.70 on white, a mark), whole in the build and scaled
+   to nothing from its top when later: `scale` on the compositor, never a
+   height. A scope change eases it over 0.35s on the house out-ease, the
+   groups one after another, 60ms apart (`--g`, the group's place, set
+   inline): top to bottom as the scope grows, so the build fills
+   downwards, and bottom to top as it shrinks, so it empties back
+   upwards (`data-dir` on the card, set with the scope). A business pick
+   mounts the card afresh, so its rails simply stand as they are.
+
+   A PART ROW eases its colour over 0.3s with its group, a beat after
+   the group above it: ink in the build, muted when later (6.37). Its
+   node is a filled electric dot or a dotted muted ring (shape-card.tsx
+   draws the one its state calls for), on a white disc that cuts the
+   rail, so the state never rests on colour.
+
+   erp.css §4 pins `.erp-part[data-state]` and `.erp-group-fill` to no
+   transition under reduced motion and on the still tier, outranking
+   every rule here (four classes at most); §5 does the same for lite and
+   weak hardware. */
+.pp .erp-group-chip {
+  background-color: var(--home-settled-soft);
+  color: var(--home-settled);
+}
+
+.pp .erp-group[data-state="later"] .erp-group-chip {
+  background-color: var(--home-chip);
+  color: var(--home-muted);
+}
+
+.pp .erp-group-rail {
+  background-color: rgb(20 10 36 / 0.08);
+}
+
+.pp .erp-group-fill {
+  background-color: var(--home-electric);
+  transform-origin: top;
+  transition: scale 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .erp-group[data-state="later"] .erp-group-fill {
+  scale: 1 0;
+}
+
+.pp .erp-part {
+  transition: color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .erp-part[data-state="in"] {
+  color: var(--home-ink);
+}
+
+.pp .erp-part[data-state="later"] {
+  color: var(--home-muted);
+}
+
+.pp .erp-shape-card[data-dir="grow"] :is(.erp-group-fill, .erp-part) {
+  transition-delay: calc(var(--g, 0) * 60ms);
+}
+
+.pp .erp-shape-card[data-dir="shrink"] :is(.erp-group-fill, .erp-part) {
+  transition-delay: calc((2 - var(--g, 0)) * 60ms);
+}
+
+.pp .erp-part-knock {
+  fill: #fff;
+}
+
+.pp .erp-part-dot {
+  fill: var(--home-electric);
+}
+
+.pp .erp-part-ring {
+  stroke: var(--home-muted);
+}
+
+/* ─── §3 The pipeline ───────────────────────────────────────────────
+   Six stages on a 2px electric line, each a 10px electric node on a
+   white ring that cuts the line (marks, 5.70 on white).
+
+   BEFORE ANY PICK the pipeline draws itself on its own passage up the
+   screen: it names its view timeline (`--erp-shape`), and on its window,
+   from `cover 3%` (a few pixels in: `entry 10%`, for a block this size
+   on any screen) to `cover 35%` (the block well into the lower half),
+   the line grows from its top (`erp-grow-y`, `scale` 1 0 → 1 1) and
+   each node pops (`erp-pop`, from 60%, erp.css §1) on its own slice:
+   node k from k/6 × 0.8 of the window, over a fifth of it. The timeline
+   is the pipeline's own, not the room's: on a phone it sits under eleven
+   parts, most of a room's height down, and would have drawn itself off
+   the screen. Filled both ways: before its slice a node waits at 60%,
+   after it whole, and scrolling back runs it back. A browser without
+   view timelines, and a reader who asked for less motion, get the
+   stages drawn.
+
+   AFTER THE FIRST BUSINESS PICK (`data-picked` on the room) the card is
+   mounted afresh on every pick, and the line simply stands; the nodes
+   pop on the clock instead, 0.3s on the house out-ease, 40ms apart
+   (`--k`), so the new sample's stages arrive in order inside the card's
+   slide. Not gated on view timelines (a clock runs everywhere), only on
+   motion. A scope change mounts nothing, and nothing here replays. */
+.pp .erp-pipe-line {
+  background-color: var(--home-electric);
+  transform-origin: top;
+}
+
+.pp .erp-pipe-node {
+  background-color: var(--home-electric);
+  box-shadow: 0 0 0 3px #fff;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .erp-pipe {
+      view-timeline: --erp-shape block;
+    }
+
+    .pp .erp-room:not([data-picked]) .erp-pipe-line {
+      animation: erp-grow-y linear both;
+      animation-timeline: --erp-shape;
+      animation-range: cover 3% cover 35%;
+    }
+
+    .pp .erp-room:not([data-picked]) .erp-pipe-node {
+      animation: erp-pop cubic-bezier(0.16, 1, 0.3, 1) both;
+      animation-timeline: --erp-shape;
+      animation-range:
+        cover calc(3% + 32% * var(--k, 0) * 0.8 / 6)
+        cover calc(3% + 32% * (var(--k, 0) * 0.8 / 6 + 0.2));
+    }
+  }
+
+  .pp .erp-room[data-picked] .erp-pipe-node {
+    animation: erp-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1) calc(var(--k, 0) * 40ms) both;
+  }
+}
+
+/* The line's growth: only its far end, as erp.css §1's keyframes, so it
+   grows to its own resting length. */
+@keyframes erp-grow-y {
+  from {
+    scale: 1 0;
+  }
+}
+
+/* ─── §4 The ledger's figures ───────────────────────────────────────
+   home.css gives every .home-draw figure a view timeline and draws its
+   pathLength="1" strokes across one shared window. Here each element of
+   a route's figure takes its own slice of that window instead (`--o`
+   where it starts, `--s` how much it takes, both shares of the window,
+   inline from ledger-figures.tsx), the #checks key's rule
+   (saas-closing.css §10a): the box, then its rules, then the process
+   through it; or the process, its steps, then the box round it. The
+   window opens 2% into the figure's pass up the screen and spans 28%, so
+   a figure is whole while it is still in the lower third. Three across,
+   from lg, they start a beat apart, left to right; stacked, each has the
+   screen to itself.
+
+   Strokes draw on power2.inOut, the house ease for draws (home.css's own
+   dash draw); the steps pop from 60% (`erp-pop`, erp.css §1) on the
+   house out-ease. The strokes are named by their class, not by
+   `[pathLength]`, and five classes deep, above home.css's
+   `.home-draw[data-i] path[pathLength]`, so the slices win whatever
+   order the sheets land in. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .erp-route-fig {
+      --erp-fig-a: 2%;
+    }
+
+    @media (width >= 64rem) {
+      .pp .erp-route-fig[data-i="1"] {
+        --erp-fig-a: 6%;
+      }
+
+      .pp .erp-route-fig[data-i="2"] {
+        --erp-fig-a: 10%;
+      }
+    }
+
+    .pp .erp-route-fig.home-draw[data-i] .erp-route-line,
+    .pp .erp-route-fig.home-draw[data-i] .erp-route-pop {
+      animation-timeline: --home-draw;
+      animation-range:
+        cover calc(var(--erp-fig-a) + 28% * var(--o, 0))
+        cover calc(var(--erp-fig-a) + 28% * (var(--o, 0) + var(--s, 1)));
+    }
+
+    .pp .erp-route-fig.home-draw[data-i] .erp-route-line {
+      animation-timing-function: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+    }
+
+    .pp .erp-route-fig.home-draw[data-i] .erp-route-pop {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation-name: erp-pop;
+      animation-duration: auto;
+      animation-fill-mode: both;
+      animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+  }
+}
+
+/* ─── §5 Lite, still and weak: the finished frame ───────────────────
+   On the lite tier, on the still tier (a forced ?tier=still that is not
+   a reduced-motion request) and on weak hardware, nothing here plays:
+   the room in place rather than rising (home/tier.css stops its rise on
+   lite; the still and weak ones are here), every stage on its whole
+   line, every figure drawn, and a scope change an instant swap, as a
+   business pick already is there (vt.ts refuses the slide on lite and
+   still). The rules above are up to five classes
+   deep; these name <html> with the tier, the shell's <main> by two of
+   its classes, and the block and the element under it, so they outrank
+   them whatever order the sheets land in. The strokes are parked off
+   their paths until they draw (home.css), so they are put back whole
+   rather than just stopped, as home/tier.css does for lite and
+   saas-closing.css for the #checks key. Each subject is named by its
+   class, never by `[pathLength]`: a change of <html data-tier>
+   restyles an element a selector names by class, but not one it names
+   by that camel-case SVG attribute alone. */
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .erp-room.home-rise,
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .erp-room :is(.erp-pipe-line, .erp-pipe-node) {
+  animation: none;
+}
+
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .erp-route-fig.home-draw .erp-route-line {
+  animation: none;
+  stroke-dasharray: none;
+  stroke-dashoffset: 0;
+}
+
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .erp-route-fig.home-draw .erp-route-pop {
+  animation: none;
+}
+
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .erp-shape-card :is(.erp-group-fill, .erp-part) {
+  transition: none;
+}
+
+/* ─── §6 Forced colours ─────────────────────────────────────────────
+   A forced palette drops the backgrounds a rail's fill and a node are
+   drawn with, and would leave every group looking alike. Here they opt
+   out of forcing and name system colours: a rail's track in GrayText
+   and its fill in Highlight, so a group in the build carries a Highlight
+   bar and a later one a grey one; the pipeline's line and nodes in
+   CanvasText. A part's node keeps its shape — a CanvasText dot in the
+   build, a GrayText dotted ring when later — on a Canvas disc, and the
+   group's chip keeps its words ("In this build", "Later") inside a
+   CanvasText edge.
+
+   An SVG that sets its own colours keeps them under forced colours
+   (Chromium's `preserve-parent-color` only lends it an inherited one),
+   so the figures' ink and electric would stay on a system ground they
+   were never measured on: every stroke and step takes CanvasText there,
+   on a Canvas disc. The chips and the segments are radios, which
+   saas.css §15 already edges and fills with Highlight when chosen, and
+   erp.css §3 edges the switch's thumb. Keyed on `.pp.saas-page`, the
+   shell's <main>, and on erp- classes only, which no other page draws. */
+@media (forced-colors: active) {
+  .pp.saas-page .erp-group-chip {
+    border: 1px solid CanvasText;
+  }
+
+  .pp.saas-page .erp-group-rail {
+    forced-color-adjust: none;
+    background-color: GrayText;
+  }
+
+  .pp.saas-page .erp-group-fill {
+    forced-color-adjust: none;
+    background-color: Highlight;
+  }
+
+  .pp.saas-page .erp-part-knock {
+    fill: Canvas;
+  }
+
+  .pp.saas-page .erp-part[data-state="in"] .erp-part-dot {
+    fill: CanvasText;
+  }
+
+  .pp.saas-page .erp-part[data-state="later"] .erp-part-ring {
+    stroke: GrayText;
+  }
+
+  .pp.saas-page .erp-pipe-line,
+  .pp.saas-page .erp-pipe-node {
+    forced-color-adjust: none;
+    background-color: CanvasText;
+  }
+
+  .pp.saas-page .erp-route-fig,
+  .pp.saas-page .erp-route-fig :is(.erp-route-line, .erp-route-pop) {
+    color: CanvasText;
+  }
+
+  .pp.saas-page .erp-route-fig .erp-route-knock {
+    fill: Canvas;
+  }
+}
