@@ -1,0 +1,278 @@
+/* ------------------------------------------------------------------ *
+ * §0 /solutions/custom-automations — the page's shared CSS: the few
+ * things Tailwind utilities can't say that more than one section needs.
+ *
+ *   §1  the marks: a meter's pip (meter-row.tsx) and a block kind's
+ *       glyph (glyphs.tsx)
+ *   §2  the shared entrances, `auto-pop` and `auto-rise-in`: every
+ *       section that pops a mark or raises a line in uses these two and
+ *       defines no copy of its own
+ *   §3  the lite, still and weak finished frame for the page's
+ *       animations, in one list
+ *   §4  reduced-motion pins for the state React sets
+ *   §5  forced colours: the workbench's node states, a handed step, a
+ *       meter's answer and a run's status, drawn in system colours
+ *
+ * The design system is the SaaS page's, and so is most of the CSS: the
+ * page imports home.css, tier.css, saas.css, saas-credentials.css,
+ * saas-build.css and saas-closing.css as they are (the shell, the
+ * lights, the lit surface, the mesh in motion, the lite tier, the jumps,
+ * the forced-colour radios, the tally, the build rail, the checks'
+ * filter), and not one of their lines changes. This file and each
+ * section's own sheet (auto-running.css, auto-work.css, auto-breaks.css,
+ * auto-closing.css) hold only what those don't: each section's rules
+ * live in its own file, imported by page.tsx after this one.
+ *
+ * Imported once, by app/solutions/custom-automations/page.tsx, so these
+ * rules ship with this route only — globals.css and home.css are shared
+ * and are not ours to grow. Every rule sits under .pp (the shell's
+ * <main>), or on <html> where it has to read the tier; every class and
+ * keyframe of ours is prefixed auto-, and a selector names the home- or
+ * saas- classes it sits inside only beside one of ours. The SaaS page's
+ * <main> and the landing's wrapper are `.pp.home-body` too (and the SaaS
+ * page's `.saas-page`), and this sheet stays loaded after a trip from
+ * here to either; every rule names an auto- class, which only this page
+ * draws, so none of it ever reaches them.
+ *
+ * Motion: only colour, transform, translate, scale and opacity ever
+ * animate or transition. Anything tied to scroll is a view timeline,
+ * inside `@media (prefers-reduced-motion: no-preference)` and
+ * `@supports (animation-timeline: view())`, in the section's own sheet,
+ * so a browser without them, or a reader who asked for less motion, gets
+ * the finished frame. The global rule (globals.css, prefers-reduced-
+ * motion) zeroes the rest. No @property and no animated custom property:
+ * the compositor can't run one. lib/pages/custom-automations.test.ts
+ * reads every sheet in this folder and holds all of that.
+ * ------------------------------------------------------------------ */
+
+/* ─── §1 Marks ──────────────────────────────────────────────────────
+   A METER'S PIP (meter-row.tsx): an 8px circle after each of the five
+   "What makes it hard" words, filled when the flow has it (`data-on`)
+   and a 1.5px ring when it doesn't. Filled against hollow, so the answer
+   never rests on colour; the words beside it say ": yes" / ": no" to a
+   screen reader. The ring is a border, not a shadow, so forced colours
+   keep it (§5), and the pip is the same size either way: a row never
+   shifts when a lens or a sample changes its answers.
+
+   The pip is drawn in `currentColor`, and its colour follows the
+   ground: on white and on a stage the row sets it to the landing's
+   electric (5.70 on white, 4.82 on the stage); inside a pearl light it
+   is the light's tick (3.40 at its worst on a flowing pool, over the 3:1
+   a mark needs), set here so a pip needs to know nothing of the light it
+   sits on. The two are one colour today (#7c3aed), so a white panel
+   inside a light draws its pips the same either way.
+
+   A change of answer eases its fill over a quarter of a second, pinned
+   for reduced motion and the still tier (§4). A section that pops its
+   pips in on a change does it with `auto-pop` (§2) and each pip's `--k`,
+   in its own sheet. */
+.pp .auto-pip {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid currentColor;
+  border-radius: 9999px;
+  background-color: transparent;
+  transition-property: background-color;
+  transition-duration: 0.25s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .auto-pip[data-on] {
+  background-color: currentColor;
+}
+
+.pp .saas-lit .auto-pip {
+  color: var(--saas-tick);
+}
+
+/* A BLOCK KIND'S GLYPH (glyphs.tsx): lucide's 14px line icon, always
+   beside the kind's tag in words. It keeps its size beside a label long
+   enough to wrap, where a flex row would otherwise squeeze it; its size
+   and alignment are otherwise the caller's, through utilities. */
+.pp .auto-kind {
+  flex: none;
+}
+
+/* ─── §2 The shared entrances ───────────────────────────────────────
+   Two keyframes, and only these two are shared: each section applies
+   them to its own classes, with its own timing, in its own sheet (the
+   #work skeleton's dots on its view timeline, a meter's pips after a
+   pick, a line that arrives). A section never
+   declares its own copy of either, so a pop or a rise looks the same
+   wherever it plays on the page.
+
+   `auto-pop` scales a mark up from 60%, never from nothing and never
+   through opacity: the mark is always there to read, arriving or
+   arrived. `auto-rise-in` raises a line 6px into place as it fades in.
+   The `scale` and `translate` properties, not `transform`, so either
+   composes with a transform the element already has (a GSAP one, a
+   centring one) instead of replacing it. The house out-ease is the
+   caller's: a keyframe carries no timing. */
+@keyframes auto-pop {
+  from {
+    scale: 0.6;
+  }
+
+  to {
+    scale: 1;
+  }
+}
+
+@keyframes auto-rise-in {
+  from {
+    translate: 0 6px;
+    opacity: 0;
+  }
+
+  to {
+    translate: 0 0;
+    opacity: 1;
+  }
+}
+
+/* ─── §3 Lite, still and weak: the finished frame ───────────────────
+   device-tier.ts mirrors the tier on <html data-tier> once the page has
+   mounted, and weak hardware on <html data-weak>; tier.css (imported by
+   page.tsx) already stops the `home-rise` entrances and hides every
+   grain, and saas.css §12 and its siblings stop the SaaS pieces this
+   page reuses. On the lite tier, on the still tier (a forced ?tier=still
+   that is not a reduced-motion request) and on weak hardware, every
+   entrance of ours stops too, and each lands on its finished frame: the
+   #work skeleton's moves made and its blocks in place, a run's marks on
+   its trace, the #build map drawn whole, a record's rows where they
+   belong.
+
+   One list for the page, so a section added later has one place to be
+   checked against; each section also names its own classes in its own
+   sheet's lite block (as the SaaS sheets do), and outranks its own
+   animation rules there. The `:is()` takes the weight of its heaviest
+   entry, so every class in the list is held at the weight of four
+   classes and <html>, which outranks a section's own rules up to four
+   classes deep whatever order the sheets land in; a section whose rule
+   is deeper (#work's scroll mode is six) pins it in its own sheet.
+
+   The #build map's strokes are parked off their paths until they draw
+   (home.css's `home-draw`), so on these tiers they are put back whole
+   rather than just stopped, as tier.css does for the landing's figures.
+
+   A record's rows arrive by a transition from their starting style
+   (`.auto-row-in`, auto-breaks.css §4), not an animation, so they get
+   `transition: none` as well: on these tiers a row is simply there. */
+html[data-tier="lite"] .home-body :is(.auto-pop, .auto-seg, .auto-move, .auto-block, .auto-mark, .auto-map-fig .auto-map-fade, .auto-row-in),
+html[data-tier="still"] .home-body :is(.auto-pop, .auto-seg, .auto-move, .auto-block, .auto-mark, .auto-map-fig .auto-map-fade, .auto-row-in),
+html[data-weak] .home-body :is(.auto-pop, .auto-seg, .auto-move, .auto-block, .auto-mark, .auto-map-fig .auto-map-fade, .auto-row-in) {
+  animation: none;
+}
+
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .home-body .auto-map-fig.home-draw path[pathLength] {
+  animation: none;
+  stroke-dasharray: none;
+  stroke-dashoffset: 0;
+}
+
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .home-body .auto-row-in {
+  transition: none;
+}
+
+/* ─── §4 Reduced-motion pins ────────────────────────────────────────
+   State React sets (a workbench node built, passed or current, a rail
+   segment filled, a manual step handed over, a meter answered, a
+   scenario chosen) must read finished at once, even if a transition
+   declared in a section's sheet, or a React commit a frame late, would
+   ease it. The global rule collapses durations to an instant but not
+   delays, so a staggered change would still wait its turn and then
+   snap; here the state is simply the state. The still tier (forced, or
+   set for reduced motion) gets the same, as saas-credentials.css pins
+   the scope's tiles.
+
+   The section sheets load after this one, so the pins can't win on
+   order. They win on weight: keyed on all three of the shell <main>'s
+   classes (`.pp.home-body.saas-page`), four classes deep with the pinned
+   one, they outrank a section's transition declared up to three classes
+   deep (`.pp .auto-node`, `.pp .auto-row .auto-seg`) whatever order the
+   sheets land in; the still tier's adds <html> to that. A section that
+   declares a transition deeper pins it in its own sheet. */
+@media (prefers-reduced-motion: reduce) {
+  .pp.home-body.saas-page :is(.auto-node, .auto-seg, .auto-disc, .auto-pip, .auto-scenario) {
+    transition: none;
+  }
+}
+
+html[data-tier="still"] .pp.home-body :is(.auto-node, .auto-seg, .auto-disc, .auto-pip, .auto-scenario) {
+  transition: none;
+}
+
+/* ─── §5 Forced colours ─────────────────────────────────────────────
+   Windows High Contrast and every other forced palette replace the
+   colours, backgrounds and shadows that draw this page's states. The
+   controls themselves (the lens and step radios, the #work chips and
+   levels, the #breaks scenarios) are radios, which saas.css §15 already
+   edges and fills with Highlight when chosen; this draws what is
+   not a control in system colours, so every state still shows. Each is
+   in the words as well (the run log, the inspector, the index, the
+   meters' ": yes"), and this keeps the drawing honest with them.
+
+   THE WORKBENCH'S BLOCKS (auto-running.css §2): the block the run is on
+   is ringed in Highlight, a block the run has passed takes the button
+   edge, and a block not built yet or off this run stays dashed in
+   GrayText, so built and not built never rest on a fill. An outline,
+   not a border, for the current block, so its box keeps its size.
+
+   A HANDED STEP (the tool lane's number disc once its block is built):
+   filled with Highlight and its tick in HighlightText. It opts out of
+   forcing, or its fill would be forced back to the canvas and the tick
+   with it.
+
+   A METER'S PIP: a ring or a disc in CanvasText, filled or hollow as its
+   answer. It opts out of forcing for the same reason, and names both
+   colours.
+
+   A RUN'S STATUS (the Succeeded and Failed pills in #breaks' record):
+   its tint is gone under forcing, so it takes an edge and still reads
+   as a pill.
+
+   Keyed on `.pp.saas-page`, the shell's <main>, and on auto- classes
+   only, which no other page draws. */
+@media (forced-colors: active) {
+  .pp.saas-page .auto-node[data-state="current"] {
+    outline: 2px solid Highlight;
+  }
+
+  .pp.saas-page .auto-node[data-state="passed"] {
+    border-color: ButtonText;
+  }
+
+  .pp.saas-page .auto-node:is([data-state="ghost"], [data-state="off"]) {
+    border: 1px dashed GrayText;
+  }
+
+  .pp.saas-page .auto-disc[data-handed] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .pp.saas-page .auto-pip {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+    background-color: transparent;
+  }
+
+  .pp.saas-page .auto-pip[data-on] {
+    background-color: CanvasText;
+  }
+
+  .pp.saas-page .auto-status {
+    border: 1px solid CanvasText;
+  }
+
+  /* A block's glyph takes its line's system colour, as the words beside
+     it do. An SVG that sets its own colour keeps it under forced colours
+     (Chromium's `preserve-parent-color` only lends it an inherited one),
+     so the electric and lilac the callers give it are handed back here. */
+  .pp.saas-page .auto-kind {
+    color: inherit;
+  }
+}

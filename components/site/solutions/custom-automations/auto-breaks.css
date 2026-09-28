@@ -1,0 +1,427 @@
+/* ------------------------------------------------------------------ *
+ * /solutions/custom-automations — #breaks: the few things Tailwind
+ * utilities can't say for "When it breaks".
+ *
+ *   §1  the night room: the still gradient the section's instrument sits
+ *       on, and its grain
+ *   §2  the scenarios on the night: chosen, hovered, and the chips they
+ *       are below lg
+ *   §3  the trace: its lanes' tracks, a try's mark, a wait, a silence,
+ *       a skipped step, and the bead and the countdown ring a play
+ *       carries (trace.tsx)
+ *   §4  the run history: the source's node, the rows rising into place
+ *       after a played pick, the status pill's cross-fade
+ *   §5  the guards' figures, drawing on their way up the screen
+ *   §6  lite, still and weak; reduced motion
+ *   §7  forced colours
+ *
+ * The section's motion is GSAP's (breaks-instrument.tsx), and only on
+ * the reader's pointer pick: it writes inline styles on the parts this
+ * sheet draws at rest, and ends on exactly the frame drawn here. So the
+ * resting state of every part below is its finished state — a mark whole,
+ * a wait's words shown, a silence's bar full — and the two things only a
+ * play shows, the bead and the countdown ring, rest invisible. The
+ * sheet's own motion is small: a chosen scenario eases its colours, the
+ * run history's rows rise 6px into place after a played pick (a
+ * transition from @starting-style), the status pill cross-fades, and the
+ * guards' figures draw on their own view timeline. Only colour, opacity
+ * and translate transition; only the figures' strokes and their nodes'
+ * scale animate.
+ *
+ * THE NIGHT'S TOKENS were measured against both of the gradient's stops
+ * (spec §6.3; lib/pages/custom-automations.test.ts holds them, and this
+ * gradient): on-deep for text, on-deep-dim for what is secondary, lilac
+ * for labels, waits and the bead, ember-lit for a failure's mark and
+ * settled-lit for a success's. The electric is never text here.
+ *
+ * Imported once, by app/solutions/custom-automations/page.tsx, after
+ * auto.css, so these rules ship with this route only. Every rule sits
+ * under .pp, or on <html> where it reads the tier; every class of ours is
+ * prefixed auto-, and every selector names one. One keyframe of its
+ * own, `auto-guard-pop` (§5): the figures' nodes grow from nothing as
+ * their strokes draw on home.css's `home-draw`, as the SaaS page's kind
+ * figures' do. It is a figure's node, not one of auto.css's marks, so
+ * auto.css's `auto-pop` (from 60%) is not the one it wants.
+ * ------------------------------------------------------------------ */
+
+/* ─── §1 The night room ─────────────────────────────────────────────
+   The landing's ink to the deep panel's violet, top to bottom, still: no
+   mesh and no flow, so the tokens on it hold at one measured value each
+   and nothing here ever needs a light's margin. Isolated, so its grain
+   (the landing's tile, `.home-grain`, the room's first child) sits under
+   its content, as on the deep panel; lite hides the grain (home.css). */
+.pp .auto-night {
+  background: linear-gradient(180deg, #140a24 0%, #1e0a3c 100%);
+  border-radius: 28px;
+  isolation: isolate;
+  color: var(--home-on-deep);
+}
+
+.pp .auto-night > .home-grain {
+  opacity: 0.1;
+}
+
+/* ─── §2 The scenarios ──────────────────────────────────────────────
+   Six radios on the night. At rest a row is the night itself, its
+   answer in on-deep and its code in on-deep-dim; a hover lays white at
+   8% under them (13.78:1 and up); the chosen one is white with ink
+   (19.1:1) and its code muted (6.37). Below lg, where they are chips in a
+   grid rather than a list, each keeps a faint white edge so it reads as a
+   control on the dark; from lg the list is edged by its column. The
+   colours ease over 180ms, the landing's chip ease, pinned for reduced
+   motion and the still tier (auto.css §4, and §6 below for the code). A
+   chosen radio is filled with Highlight under forced colours (saas.css
+   §15). */
+.pp .auto-scenario {
+  color: var(--home-on-deep);
+  background-color: transparent;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
+  transition-property: background-color, color;
+  transition-duration: 0.18s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .auto-scenario .auto-hint {
+  color: var(--home-on-deep-dim);
+  transition-property: color;
+  transition-duration: 0.18s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (hover: hover) {
+  .pp .auto-scenario:hover {
+    background-color: rgb(255 255 255 / 0.08);
+  }
+}
+
+/* After the hover, at its weight, so a chosen row stays white under the pointer. */
+.pp .auto-scenario[aria-checked="true"] {
+  background-color: #fff;
+  color: var(--home-ink);
+}
+
+.pp .auto-scenario[aria-checked="true"] .auto-hint {
+  color: var(--home-muted);
+}
+
+@media (min-width: 1024px) {
+  .pp .auto-scenario {
+    box-shadow: none;
+  }
+}
+
+/* ─── §3 The trace ──────────────────────────────────────────────────
+   A LANE'S TRACK is a white hairline at 15% across its middle, a border
+   rather than a fill, so forced colours keep it. Everything on it is
+   placed by trace.tsx in shares of the track, 10px in from each end.
+
+   A TRY'S MARK is a 20px disc ringed and glyphed in its colour — settled-
+   lit for an answer taken, ember-lit for one tried again after or the
+   last one failed, lilac for an address refused — over a fill of that
+   colour at 18% on the night's ink, opaque, so the track and a wait's
+   dots never show through it. The glyph always says it too (a tick, a
+   turning arrow, a cross, a barred circle): colour is never the only
+   sign.
+
+   A WAIT is a dotted lilac span between two tries; a SILENCE, a 4px
+   lilac bar from the try nobody answered; a SKIPPED step, a hatch of
+   on-deep-dim at 40% across its whole lane. Both grow from their left
+   edge when a play brings them in (GSAP's scaleX).
+
+   THE BEAD rides a runner the width of the track, which a play moves by
+   shares of itself (trace.tsx `Runway`, clipped to the track); at rest
+   it is invisible, as is the COUNTDOWN RING beside it, whose arc a play
+   drains over each real wait (DrawSVG). */
+.pp .auto-track::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  border-top: 1px solid rgb(255 255 255 / 0.15);
+}
+
+.pp .auto-mark {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid currentColor;
+  border-radius: 9999px;
+  background-color: color-mix(in oklab, currentColor 18%, #140a24);
+}
+
+.pp .auto-mark[data-kind="ok"] {
+  color: var(--home-settled-lit);
+}
+
+.pp .auto-mark:is([data-kind="retry"], [data-kind="fail"]) {
+  color: var(--home-ember-lit);
+}
+
+.pp .auto-mark[data-kind="refused"] {
+  color: var(--home-lilac);
+}
+
+.pp .auto-wait {
+  position: absolute;
+  top: 50%;
+  height: 0;
+  margin-top: -1px;
+  border-top: 2px dotted var(--home-lilac);
+}
+
+.pp .auto-silence {
+  position: absolute;
+  top: 50%;
+  height: 0;
+  margin-top: -2px;
+  border-top: 4px solid var(--home-lilac);
+  border-radius: 2px;
+  transform-origin: left center;
+}
+
+.pp .auto-hatch {
+  position: absolute;
+  top: 50%;
+  height: 10px;
+  margin-top: -5px;
+  border-radius: 3px;
+  background-image: repeating-linear-gradient(45deg, rgb(216 205 247 / 0.4) 0 1.5px, transparent 1.5px 5px);
+  transform-origin: left center;
+}
+
+.pp .auto-runner {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  right: 10px;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pp .auto-runner-bead {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background-color: var(--home-lilac);
+}
+
+/* Beside the bead, past the half of a mark it may be sitting under. */
+.pp .auto-countdown {
+  position: absolute;
+  top: -7px;
+  left: 13px;
+  width: 14px;
+  height: 14px;
+  overflow: visible;
+  color: var(--home-lilac);
+  opacity: 0;
+}
+
+/* ─── §4 The run history ────────────────────────────────────────────
+   A ROW'S SOURCE, the node before its state: filled where the platform's
+   code worked the line out, hollow where the line is the sample's own —
+   filled against hollow, never colour alone, and each row says which in
+   words for a screen reader. Electric on white: a mark (5.70). The
+   legend under the list uses the same node.
+
+   AFTER A PLAYED PICK the list is mounted afresh, and each row rises 6px
+   into place from nothing, 60ms after the one before (`--k`, its place),
+   through @starting-style; a pick by keys, or with no GSAP, mounts it
+   without the class, so the rows are simply there. The status pills sit
+   in one cell and cross-fade, only after a played pick (`data-played`).
+   Both only with no preference for less motion; lite, still and weak
+   pin them off (auto.css §3 for the rows, §6 here for the pill). */
+.pp .auto-src {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--home-electric);
+  border-radius: 9999px;
+  background-color: transparent;
+}
+
+.pp .auto-src[data-src="code"] {
+  background-color: var(--home-electric);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pp .auto-row-in {
+    transition-property: opacity, translate;
+    transition-duration: 0.3s;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    transition-delay: calc(var(--k, 0) * 60ms);
+  }
+
+  @starting-style {
+    .pp .auto-row-in {
+      opacity: 0;
+      translate: 0 6px;
+    }
+  }
+
+  .pp .auto-record[data-played] .auto-status {
+    transition-property: opacity;
+    transition-duration: 0.3s;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+/* ─── §5 The guards' figures ────────────────────────────────────────
+   home.css gives every .home-draw figure a view timeline and draws its
+   pathLength="1" strokes across one shared window. Here each element of
+   a guard's figure takes its own slice of that window (`--o` where it
+   starts, `--s` how much it takes, both shares, inline from
+   guard-figures.tsx), as saas-closing.css §10a slices the #checks key's
+   figures: what arrives, then the line it takes, then what it reaches.
+   The window opens 4% into the figure's pass up the screen and spans
+   30%, so a figure is whole while it is still in the lower third. Where
+   the cards stand side by side they start a beat apart, left to right:
+   two across from md, four from xl.
+
+   Strokes draw on power2.inOut, the house ease for draws; the nodes pop
+   in with `auto-guard-pop` (from nothing, so a node never floats before
+   its first stroke). Only
+   under no-preference and view-timeline support, like home.css:
+   otherwise the markup is the finished drawing. The selectors carry the
+   figure's `[data-i]`, so they outrank home.css's own `.home-draw[data-i]`
+   ranges whatever order the sheets land in. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .auto-guard-fig {
+      --auto-guard-a: 4%;
+      --auto-guard-w: 30%;
+    }
+
+    @media (min-width: 768px) {
+      .pp .auto-guard-fig:is([data-i="1"], [data-i="3"]) {
+        --auto-guard-a: 8%;
+      }
+    }
+
+    @media (min-width: 1280px) {
+      .pp .auto-guard-fig[data-i="2"] {
+        --auto-guard-a: 12%;
+      }
+
+      .pp .auto-guard-fig[data-i="3"] {
+        --auto-guard-a: 16%;
+      }
+    }
+
+    .pp .auto-guard-fig.home-draw[data-i] path[pathLength],
+    .pp .auto-guard-fig.home-draw[data-i] .auto-guard-pop {
+      animation-timeline: --home-draw;
+      animation-range:
+        cover calc(var(--auto-guard-a) + var(--auto-guard-w) * var(--o, 0))
+        cover calc(var(--auto-guard-a) + var(--auto-guard-w) * (var(--o, 0) + var(--s, 1)));
+    }
+
+    .pp .auto-guard-fig.home-draw[data-i] path[pathLength] {
+      animation-timing-function: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+    }
+
+    .pp .auto-guard-fig .auto-guard-pop {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation-name: auto-guard-pop;
+      animation-duration: auto;
+      animation-fill-mode: both;
+      animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+  }
+}
+
+/* A figure's node, growing from nothing with its strokes (§5). `scale`,
+   not `transform`, so it composes with the node's own placement. */
+@keyframes auto-guard-pop {
+  from {
+    scale: 0;
+  }
+
+  to {
+    scale: 1;
+  }
+}
+
+/* ─── §6 Lite, still and weak; reduced motion ───────────────────────
+   On the lite tier, on the still tier and on weak hardware the guards'
+   figures are simply drawn: the strokes put back whole (they are parked
+   off their paths until they draw) and the nodes where they belong, as
+   saas-closing.css does for the #checks key and auto.css for the #build
+   map; the status pill changes at once. Heavier than every rule above,
+   whatever order the sheets land in. The trace's own motion is GSAP's,
+   which the stage's motion hook never fetches with reduced motion or on
+   the still tier, nor on lite before a tap.
+
+   A scenario's code keeps its colour change out of reduced motion and
+   the still tier, as auto.css §4 pins the scenario itself. */
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .home-body .auto-guard-fig.home-draw path[pathLength] {
+  animation: none;
+  stroke-dasharray: none;
+  stroke-dashoffset: 0;
+}
+
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .home-body .auto-guard-fig.home-draw .auto-guard-pop {
+  animation: none;
+}
+
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .auto-record .auto-status {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pp.home-body.saas-page .auto-scenario .auto-hint {
+    transition: none;
+  }
+}
+
+html[data-tier="still"] .pp.home-body .auto-scenario .auto-hint {
+  transition: none;
+}
+
+/* ─── §7 Forced colours ─────────────────────────────────────────────
+   A forced palette drops the night's gradient's colours but may keep the
+   gradient itself, which would leave forced text on a dark picture: the
+   room goes to the canvas. The trace keeps its drawing in borders and
+   glyphs (tracks, marks, waits, silences), which forcing recolours and
+   keeps; the hatch, a picture, becomes a dashed edge; the bead is filled
+   with Highlight. A row's source node opts out of forcing, a ring or a
+   disc in CanvasText as it is hollow or filled, so the two stay apart.
+   The workflow's blocks lose their tint and their ring (a shadow), so
+   each gets an edge. auto.css §5 edges the status pill; saas.css §15
+   edges the scenarios and fills the chosen one. */
+@media (forced-colors: active) {
+  .pp.saas-page .auto-night {
+    background-image: none;
+  }
+
+  .pp.saas-page .auto-step {
+    border: 1px solid CanvasText;
+  }
+
+  .pp.saas-page .auto-hatch {
+    background-image: none;
+    border: 1px dashed CanvasText;
+  }
+
+  .pp.saas-page .auto-runner-bead {
+    forced-color-adjust: none;
+    background-color: Highlight;
+  }
+
+  .pp.saas-page .auto-src {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+    background-color: Canvas;
+  }
+
+  .pp.saas-page .auto-src[data-src="code"] {
+    background-color: CanvasText;
+  }
+}

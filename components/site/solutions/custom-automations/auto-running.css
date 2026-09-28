@@ -1,0 +1,685 @@
+/* ------------------------------------------------------------------ *
+ * §0 /solutions/custom-automations — the workbench (#running): the hand
+ * lane's windows and discs, the copy chips and the discs in flight, the
+ * map's lines, frames, cards and pill, the list's rail and rows, and the
+ * ledger's staggered rise.
+ *
+ *   §1  the tool lane (xl)
+ *   §2  the map (xl)
+ *   §3  the list (below xl)
+ *   §4  the ledger's rise, a step apart by column from lg
+ *   §5  lite, still and weak; paused; reduced motion; forced colours
+ *
+ * Imported once, by app/solutions/custom-automations/page.tsx, after
+ * auto.css (whose §1–§5 hold the page's shared marks, tiers and forced
+ * colours). Every rule sits under .pp, or on <html> for the tiers; every
+ * selector names an auto- class. Layout and type are utilities in
+ * tool-lane.tsx, flow-map.tsx, flow-list.tsx and workbench.tsx; what
+ * lives here is what a utility can't say cleanly: SVG paint, a state read
+ * from a data attribute, a pseudo-element, a transition between states.
+ *
+ * STATE IS REACT'S, COLOUR IS OURS. The workbench draws `frameOf(...)`
+ * as data attributes — `data-state` on the cards, the rows and their
+ * rings (ghost · built · route · passed · current · off), `data-handed`
+ * on the lane's discs and "now step" lines, the cards' badges and the
+ * list's chips, `data-built`, `data-route` and `data-on` on the lines,
+ * the branch words and the frames, `data-on` on the rail's segments,
+ * `data-picked` on the reader's pick, `data-paused` on the stage while
+ * a tour waits — and every rule below reads one.
+ * GSAP never writes any of them (workbench-timeline.ts): it dashes a
+ * trace, rides a bead, pings a ring, flies a chip or a disc and settles a
+ * card, all things these rules leave at rest (a trace undrawn unless it
+ * is lit, the beads, the rings and the chips invisible).
+ *
+ * MOTION: colour, opacity, scale, translate and box-shadow, as
+ * transitions on state React toggles, in the house out-ease. A ghost's
+ * dashed edge can't ease into a solid one, so the solid edge is a
+ * pseudo-element whose opacity eases over the dashes. The one keyframe
+ * is the pick's ring closing in once. Every one of them is pinned for
+ * reduced motion and the still tier, and the rail's fill and the chips'
+ * slide for lite and weak hardware too (§5).
+ *
+ * COLOUR, measured (lib/pages/custom-automations.test.ts §8.10, the SaaS
+ * page's pairs): muted on the stage 5.39 (the lane's labels, the tag, the
+ * frames' tabs); electric on the stage 4.82 (the lines, the beads, the
+ * rings, the rail's fill, the branch words beside their line: marks);
+ * white on electric 5.70 (the Running pill, a handed disc and badge);
+ * muted on white 6.37 (a card's tag and figure); violet on white 7.10
+ * ("now step 06"); settled on white 5.50 (a passed card's tick); electric
+ * on white 5.70 (a handed chip's number).
+ * ------------------------------------------------------------------ */
+
+/* ─── §1 The tool lane ──────────────────────────────────────────────
+   A step's number disc: a hollow ring and its number while the step is
+   done by hand; electric with a tick once it is handed to a block
+   (`data-handed`), the number fading as the tick grows in. Its "now
+   step 06" keeps its line either way and shows once handed. */
+.pp .auto-disc {
+  background-color: #fff;
+  box-shadow: inset 0 0 0 1px rgb(20 10 36 / 0.3);
+  color: var(--home-ink);
+  transition-property: background-color, box-shadow, color;
+  transition-duration: 0.25s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .auto-disc[data-handed] {
+  background-color: var(--home-electric);
+  box-shadow: inset 0 0 0 1px var(--home-electric);
+  color: #fff;
+}
+
+.pp .auto-disc .auto-disc-n,
+.pp .auto-disc .auto-disc-tick {
+  transition-property: opacity, scale;
+  transition-duration: 0.25s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .auto-disc .auto-disc-tick {
+  opacity: 0;
+  scale: 0.6;
+}
+
+.pp .auto-disc[data-handed] .auto-disc-tick {
+  opacity: 1;
+  scale: 1;
+}
+
+.pp .auto-disc[data-handed] .auto-disc-n {
+  opacity: 0;
+}
+
+.pp .auto-nowstep {
+  visibility: hidden;
+  opacity: 0;
+  transition-property: opacity;
+  transition-duration: 0.25s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .auto-nowstep[data-handed] {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* The step the run is doing now, in the block that replaced it: its row
+   lights in the wash (violet on wash 6.49, ink on wash well over). */
+.pp .auto-manual {
+  transition-property: background-color;
+  transition-duration: 0.3s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .auto-manual[data-now] {
+  background-color: var(--home-wash);
+}
+
+/* The row a copy chip lands on flashes (GSAP drives the opacity). It
+   sits under the row's words, which are positioned after it. */
+.pp .auto-flash {
+  background-color: var(--home-wash);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* A copy chip: a white pill with its label and a grey bar where the
+   value would be. Invisible at rest; GSAP places it and flies it. */
+.pp .auto-chip {
+  opacity: 0;
+  box-shadow:
+    0 0 0 1px rgb(20 10 36 / 0.1),
+    0 2px 6px rgb(20 10 36 / 0.08);
+  z-index: 1;
+}
+
+/* A disc in flight from the lane to its block: GSAP's own copy, in the
+   stage's flight layer, invisible until its flight starts. It flies
+   electric, its number white (5.70), already the block's. */
+.pp .auto-disc.auto-flight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  margin: 0;
+  background-color: var(--home-electric);
+  box-shadow: 0 2px 6px rgb(20 10 36 / 0.18);
+  color: #fff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* ─── §2 The map ────────────────────────────────────────────────────
+   The box the SVG and the cards share is as tall as its lens's rows
+   (workbench-geometry.ts `viewH`), so its aspect ratio is set inline, by
+   flow-map.tsx, with the viewBox it matches. */
+
+/* The morning lens's frames, "In order" and "Side by side": dashed, and
+   faint electric once the run has entered them. Their tabs knock out
+   the stage behind them. */
+.pp .auto-frame {
+  fill: none;
+  stroke: rgb(20 10 36 / 0.25);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  transition-property: stroke;
+  transition-duration: 0.3s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .auto-frame[data-on] {
+  stroke: color-mix(in srgb, var(--home-electric) 50%, transparent);
+}
+
+.pp .auto-group-tab {
+  border-radius: 6px;
+  background-color: color-mix(in srgb, var(--home-wash) 35%, var(--home-stage));
+  color: var(--home-muted);
+  transition-property: color;
+  transition-duration: 0.3s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .auto-group-tab[data-on] {
+  color: var(--home-ink);
+}
+
+/* The lines: a hairline once both ends are laid, faint electric (35%)
+   while the run's route lies along it; its trace, full electric, lies
+   over it and shows once the run has travelled it. No vector-effect:
+   DrawSVG and MotionPath measure the paths in the map's own units. */
+.pp .auto-edge {
+  fill: none;
+  stroke: rgb(20 10 36 / 0.16);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  transition-property: opacity, stroke;
+  transition-duration: 0.2s, 0.3s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .auto-edge[data-built] {
+  opacity: 1;
+}
+
+.pp .auto-edge[data-route] {
+  stroke: color-mix(in srgb, var(--home-electric) 35%, transparent);
+}
+
+.pp .auto-trace {
+  fill: none;
+  stroke: var(--home-electric);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+}
+
+.pp .auto-trace[data-on] {
+  opacity: 1;
+}
+
+/* A branch's word beside its line: electric, the word itself carrying
+   the meaning. It shows with its line. */
+.pp .auto-branch {
+  color: var(--home-electric);
+}
+
+.pp .auto-map .auto-branch {
+  opacity: 0;
+  transition-property: opacity;
+  transition-duration: 0.2s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .auto-map .auto-branch[data-built] {
+  opacity: 1;
+}
+
+/* The bead that rides a hop and the rings that ping on arrival: GSAP's
+   alone, invisible whenever it isn't moving them. */
+.pp .auto-bead {
+  fill: var(--home-electric);
+  opacity: 0;
+}
+
+.pp .auto-bead .auto-bead-halo {
+  opacity: 0.22;
+}
+
+.pp .auto-ring {
+  fill: none;
+  stroke: var(--home-electric);
+  stroke-width: 2;
+  opacity: 0;
+}
+
+/* A card. A ghost is dashed on a veil of white, its words muted; laid,
+   it is white with a solid edge that eases in over the dashes (::after)
+   in its state's colour: a hairline built, faint electric on the route,
+   ink once passed, electric when current — with a 2px electric ring
+   easing in round it. A branch that ends stays dashed (off). */
+.pp .auto-node {
+  border: 1px dashed rgb(20 10 36 / 0.3);
+  background-color: rgb(255 255 255 / 0.6);
+  color: var(--home-muted);
+  box-shadow: 0 0 0 0 transparent;
+  transition-property: border-color, box-shadow, background-color, color;
+  transition-duration: 0.3s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Never focused (aria-hidden, tabindex -1). */
+  scroll-margin-top: 0;
+}
+
+.pp .auto-node::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgb(20 10 36 / 0.14);
+  opacity: 0;
+  pointer-events: none;
+  transition-property: opacity;
+  transition-duration: 0.3s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .auto-node:is([data-state="built"], [data-state="route"], [data-state="passed"], [data-state="current"]) {
+  border-color: transparent;
+  background-color: #fff;
+  color: var(--home-ink);
+}
+
+.pp .auto-node:is([data-state="built"], [data-state="route"], [data-state="passed"], [data-state="current"])::after {
+  opacity: 1;
+}
+
+.pp .auto-node[data-state="route"]::after {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--home-electric) 35%, transparent);
+}
+
+.pp .auto-node[data-state="passed"]::after {
+  box-shadow: inset 0 0 0 1px var(--home-ink);
+}
+
+.pp .auto-node[data-state="current"] {
+  box-shadow: 0 0 0 2px var(--home-electric);
+}
+
+.pp .auto-node[data-state="current"]::after {
+  box-shadow: inset 0 0 0 1px var(--home-electric);
+}
+
+.pp .auto-node[data-state="off"] {
+  background-color: rgb(255 255 255 / 0.7);
+}
+
+.pp .auto-node .auto-node-tag,
+.pp .auto-node .auto-node-datum {
+  color: var(--home-muted);
+}
+
+@media (hover: hover) {
+  .pp .auto-node:hover {
+    background-color: var(--home-wash);
+  }
+}
+
+/* A card's badges: the numbers of the manual steps it replaced, hollow
+   until each is handed over, electric after. A passed card's tick
+   settles onto its top right corner, ringed in the card's ink edge. */
+.pp .auto-badge {
+  background-color: #fff;
+  box-shadow: inset 0 0 0 1px rgb(20 10 36 / 0.3);
+  color: var(--home-muted);
+  transition-property: background-color, box-shadow, color;
+  transition-duration: 0.25s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .auto-badge[data-handed] {
+  background-color: var(--home-electric);
+  box-shadow: inset 0 0 0 1px var(--home-electric);
+  color: #fff;
+}
+
+.pp .auto-node .auto-tick {
+  box-shadow: 0 0 0 1px var(--home-ink);
+  color: var(--home-settled);
+  opacity: 0;
+  scale: 0.6;
+  transition-property: opacity, scale;
+  transition-duration: 0.3s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .auto-node[data-state="passed"] .auto-tick {
+  opacity: 1;
+  scale: 1;
+}
+
+/* The Running pill (Done once the run has ended): white on electric,
+   hanging off the current card's foot, or in the current row's tag
+   line. The workbench flies it between blocks (a translate). */
+.pp .auto-pill {
+  background-color: var(--home-electric);
+  color: #fff;
+  box-shadow: 0 1px 2px rgb(20 10 36 / 0.12);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* The reader's pick: an ink ring 5px outside the card or row (2px of
+   ink, 3px clear of the current ring), which closes in once. A
+   pseudo-element's scale and opacity, so the compositor runs it. */
+.pp .auto-pick {
+  position: absolute;
+  inset: -5px;
+  border: 2px solid var(--home-ink);
+  border-radius: 17px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pp [data-picked] > .auto-pick {
+  opacity: 1;
+  animation: auto-picked 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes auto-picked {
+  from {
+    opacity: 0;
+    scale: 1.1;
+  }
+}
+
+/* ─── §3 The list ───────────────────────────────────────────────────
+   A row's label, muted while its block is a ghost. The row the run is on
+   lifts onto a veil of white inside a 1.5px electric ring, as the map's
+   current card does: translucent, so the row's handed "was" chips (white
+   on an 8% hairline) still stand out on it, and the ring sits in the 3px
+   between the row and the reader's pick ring. */
+.pp .auto-row {
+  box-shadow: 0 0 0 0 transparent;
+  transition-property: background-color, box-shadow;
+  transition-duration: 0.2s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  scroll-margin-top: 0;
+}
+
+@media (hover: hover) {
+  .pp .auto-row:hover {
+    background-color: rgb(255 255 255 / 0.55);
+  }
+}
+
+.pp .auto-row[data-state="current"] {
+  background-color: rgb(255 255 255 / 0.7);
+  box-shadow: 0 0 0 1.5px var(--home-electric);
+}
+
+.pp .auto-row .auto-row-label {
+  color: var(--home-ink);
+  transition-property: color;
+  transition-duration: 0.3s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .auto-row[data-state="ghost"] .auto-row-label {
+  color: var(--home-muted);
+}
+
+/* The rail: a hairline track down the gutter, and each row's segment
+   below its ring, which fills electric, top first, once the run has
+   passed its block. The rings sit over both. */
+.pp .auto-rail {
+  background-color: rgb(20 10 36 / 0.12);
+  z-index: 0;
+}
+
+.pp .auto-seg {
+  background-color: var(--home-electric);
+  scale: 1 0;
+  transform-origin: top;
+  transition-property: scale;
+  transition-duration: 0.35s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 1;
+}
+
+.pp .auto-seg[data-on] {
+  scale: 1 1;
+}
+
+/* A block's ring on the rail: dashed while a ghost, a firm ring once
+   laid, faint electric on the route, filled once passed, and current an
+   electric ring round a white core with a soft halo. */
+.pp .auto-rail-dot {
+  border: 1.5px solid rgb(20 10 36 / 0.35);
+  background-color: #fff;
+  box-shadow: 0 0 0 0 transparent;
+  transition-property: border-color, background-color, box-shadow;
+  transition-duration: 0.3s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 2;
+}
+
+.pp .auto-rail-dot[data-state="ghost"] {
+  border-style: dashed;
+  background-color: transparent;
+}
+
+.pp .auto-rail-dot[data-state="route"] {
+  border-color: color-mix(in srgb, var(--home-electric) 60%, transparent);
+}
+
+.pp .auto-rail-dot[data-state="passed"] {
+  border-color: var(--home-electric);
+  background-color: var(--home-electric);
+}
+
+.pp .auto-rail-dot[data-state="current"] {
+  border-color: var(--home-electric);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--home-electric) 22%, transparent);
+}
+
+/* The ring that pings round a row's ring as the run reaches it (GSAP). */
+.pp .auto-ring-dot {
+  box-shadow: 0 0 0 1.5px var(--home-electric);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* The bead that rides the rail in the tour: GSAP's alone. */
+.pp .auto-bead-list {
+  background-color: var(--home-electric);
+  box-shadow: 0 0 0 3px rgb(255 255 255 / 0.9);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* A "was" chip: the manual step a block replaced. Hollow and 8px short
+   of its place while the block is a ghost; handed over, it slides into
+   place on white, its hand and number turning electric. */
+.pp .auto-was {
+  border: 1px dashed rgb(20 10 36 / 0.25);
+  background-color: transparent;
+  translate: -8px 0;
+  transition-property: translate, background-color, border-color;
+  transition-duration: 0.25s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .auto-was[data-handed] {
+  border-style: solid;
+  border-color: rgb(20 10 36 / 0.08);
+  background-color: #fff;
+  translate: 0 0;
+}
+
+.pp .auto-was .auto-was-hand,
+.pp .auto-was .auto-was-n {
+  color: var(--home-muted);
+  transition-property: color;
+  transition-duration: 0.25s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .auto-was[data-handed] .auto-was-hand,
+.pp .auto-was[data-handed] .auto-was-n {
+  color: var(--home-electric);
+}
+
+/* The morning lens's bracket down a group's rows, and a branch that
+   ends: its dashed hook from the rail and its dashed dot. */
+.pp .auto-bracket {
+  background-color: rgb(20 10 36 / 0.14);
+}
+
+.pp .auto-hook,
+.pp .auto-end-dot {
+  border-color: rgb(20 10 36 / 0.3);
+}
+
+/* ─── §4 The ledger ─────────────────────────────────────────────────
+   The cards rise (home.css `home-rise`) a step apart once three stand
+   side by side: the middle one 4% and the last 8% later into its entry,
+   each a little longer, as the SaaS #build cards do. Stacked or in two
+   columns, each card simply rises on its own pass. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    @media (min-width: 64rem) {
+      .pp .auto-ledger.home-rise[data-col="1"] {
+        animation-range: entry 4% cover 32%;
+      }
+
+      .pp .auto-ledger.home-rise[data-col="2"] {
+        animation-range: entry 8% cover 36%;
+      }
+    }
+  }
+}
+
+/* ─── §5 Lite, still and weak; paused; reduced motion; forced colours
+   LITE, STILL AND WEAK: the pick's ring is simply there, and the rail's
+   fill and a chip's slide land at once (auto.css §3 holds the page's
+   other finished frames; the tour itself waits for a tap on lite, and
+   never runs on still). */
+html[data-tier="lite"] .home-body .auto-pick,
+html[data-tier="still"] .home-body .auto-pick,
+html[data-weak] .home-body .auto-pick {
+  animation: none;
+}
+
+html[data-tier="lite"] .home-body :is(.auto-seg, .auto-was),
+html[data-tier="still"] .home-body :is(.auto-seg, .auto-was),
+html[data-weak] .home-body :is(.auto-seg, .auto-was) {
+  transition: none;
+}
+
+/* PAUSED: while a tour waits (the reader's Pause, or focus holding it),
+   a chip or a disc caught in flight would stay parked over the words the
+   reader stopped to read. The stage's `data-paused` hides the flying
+   copies only — the lane's own discs and the badges keep their frame —
+   and Play shows them again mid-flight. Hidden, not removed: GSAP still
+   measures their paths. */
+.pp [data-paused] :is(.auto-chip, .auto-disc.auto-flight) {
+  visibility: hidden;
+}
+
+/* REDUCED MOTION AND THE STILL TIER: every state above reads finished at
+   once (auto.css §4 pins the cards, the rail's fill, the discs and the
+   pips; these are this section's own). Keyed on the shell's <main>, so
+   they outrank the rules above whatever order the sheets land in. */
+@media (prefers-reduced-motion: reduce) {
+  .pp.saas-page .auto-node::after,
+  .pp.saas-page :is(.auto-tick, .auto-badge, .auto-disc-n, .auto-disc-tick, .auto-nowstep, .auto-edge, .auto-branch),
+  .pp.saas-page :is(.auto-frame, .auto-group-tab, .auto-row-label, .auto-rail-dot, .auto-was, .auto-was-hand, .auto-was-n),
+  .pp.saas-page :is(.auto-manual, .auto-row) {
+    transition: none;
+  }
+
+  .pp.saas-page [data-picked] > .auto-pick {
+    animation: none;
+  }
+}
+
+html[data-tier="still"] .pp.saas-page .auto-node::after,
+html[data-tier="still"] .pp.saas-page :is(.auto-tick, .auto-badge, .auto-disc-n, .auto-disc-tick, .auto-nowstep, .auto-edge, .auto-branch),
+html[data-tier="still"] .pp.saas-page :is(.auto-frame, .auto-group-tab, .auto-row-label, .auto-rail-dot, .auto-was, .auto-was-hand, .auto-was-n),
+html[data-tier="still"] .pp.saas-page :is(.auto-manual, .auto-row) {
+  transition: none;
+}
+
+/* FORCED COLOURS. auto.css §5 draws the cards' current, passed and ghost
+   states and a handed disc in system colours; this adds what is the
+   workbench's alone. A laid card keeps a solid edge (its ::after ring is
+   a shadow, which forcing drops); a disc and a badge keep their ring; a
+   handed badge is filled as a handed disc is; the pill stays a pill; the
+   list's rail, its fill and its rings are drawn in system colours, the
+   rings by state (dashed while a ghost, filled once passed, Highlight
+   when current), and the row the run is on is outlined in Highlight (its
+   ring is a shadow, which forcing drops); a "was" chip handed over is
+   edged solid. */
+@media (forced-colors: active) {
+  .pp.saas-page .auto-node {
+    border: 1px solid CanvasText;
+  }
+
+  .pp.saas-page .auto-disc,
+  .pp.saas-page .auto-badge {
+    border: 1px solid CanvasText;
+  }
+
+  .pp.saas-page .auto-badge[data-handed],
+  .pp.saas-page .auto-pill {
+    forced-color-adjust: none;
+    background-color: Highlight;
+    color: HighlightText;
+  }
+
+  .pp.saas-page .auto-rail,
+  .pp.saas-page .auto-seg,
+  .pp.saas-page .auto-rail-dot {
+    forced-color-adjust: none;
+  }
+
+  .pp.saas-page .auto-rail {
+    background-color: GrayText;
+  }
+
+  .pp.saas-page .auto-seg {
+    background-color: Highlight;
+  }
+
+  .pp.saas-page .auto-rail-dot {
+    border-color: CanvasText;
+    background-color: Canvas;
+  }
+
+  .pp.saas-page .auto-rail-dot[data-state="ghost"] {
+    border-color: GrayText;
+  }
+
+  .pp.saas-page .auto-rail-dot[data-state="passed"] {
+    background-color: CanvasText;
+  }
+
+  .pp.saas-page .auto-rail-dot[data-state="current"] {
+    border-color: Highlight;
+    background-color: Highlight;
+  }
+
+  .pp.saas-page .auto-row[data-state="current"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  .pp.saas-page .auto-was[data-handed] {
+    border-color: CanvasText;
+  }
+}

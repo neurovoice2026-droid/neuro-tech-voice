@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { format } from 'date-fns'
+import { countryCallingCode, isE164 } from '@/lib/phone/e164'
 import type { Plan, PlanConfig } from '@/types'
 import { PLANS } from '@/types'
 
@@ -18,6 +18,19 @@ export function formatDuration(seconds: number): string {
 }
 
 // ─── Phone number formatting ──────────────────────────────────────────────────
+/** Digits in groups of three, ending on a group of three or four: 364401234 → "364 401 234". */
+function groupDigits(digits: string): string {
+  const groups: string[] = []
+  let rest = digits
+  while (rest.length > 4) {
+    const take = rest.length === 8 ? 4 : 3
+    groups.push(rest.slice(0, take))
+    rest = rest.slice(take)
+  }
+  groups.push(rest)
+  return groups.join(' ')
+}
+
 export function formatPhoneNumber(phone: string): string {
   // E.164 → readable: +14155551234 → +1 (415) 555-1234
   const cleaned = phone.replace(/\D/g, '')
@@ -25,13 +38,30 @@ export function formatPhoneNumber(phone: string): string {
     const [, area, prefix, line] = cleaned.match(/^1(\d{3})(\d{3})(\d{4})$/) ?? []
     if (area) return `+1 (${area}) ${prefix}-${line}`
   }
-  // Fallback: just return with a space after country code
-  return phone
+  // Other countries: calling code, then the national number in readable groups
+  // (+40364401234 → +40 364 401 234). Anything that isn't E.164 is shown as typed.
+  const e164 = phone.trim()
+  const code = isE164(e164) ? countryCallingCode(e164) : null
+  if (!code) return phone
+  return `+${code} ${groupDigits(e164.slice(1 + code.length))}`
 }
 
 // ─── Date formatting ──────────────────────────────────────────────────────────
+// Intl instead of date-fns: this module is in almost every page's bundle.
+const DATE_TIME = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+})
+
+/** "Sep 17, 2026 3:05 PM" in the viewer's time zone. */
 export function formatDate(date: string | Date): string {
-  return format(new Date(date), 'MMM d, yyyy h:mm a')
+  const parts: Partial<Record<Intl.DateTimeFormatPartTypes, string>> = {}
+  for (const part of DATE_TIME.formatToParts(new Date(date))) parts[part.type] = part.value
+  return `${parts.month} ${parts.day}, ${parts.year} ${parts.hour}:${parts.minute} ${parts.dayPeriod}`
 }
 
 // ─── Sentiment color ──────────────────────────────────────────────────────────

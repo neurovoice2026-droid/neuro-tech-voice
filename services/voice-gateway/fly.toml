@@ -1,0 +1,59 @@
+# Fly.io config for the voice gateway. Deploy from the REPOSITORY ROOT (the image
+# bundles shared app modules), see README.md "Deploy to Fly.io":
+#
+#   fly deploy . --config services/voice-gateway/fly.toml \
+#     --dockerfile services/voice-gateway/Dockerfile \
+#     --ignorefile services/voice-gateway/Dockerfile.dockerignore
+#
+# Secrets (never in this file): fly secrets set APP_URL=… VOICE_GATEWAY_SECRET=… \
+#   CARTESIA_API_KEY=… OPENAI_API_KEY=… ELEVENLABS_API_KEY=…
+
+app = "ntv-voice-gateway"
+# Frankfurt: close to Cartesia's and ElevenLabs' EU edges and Twilio's de1 media
+# edge. "otp" (Bucharest) is the alternative when most callers are in Romania.
+primary_region = "fra"
+
+# Calls get time to finish on deploys: SIGTERM → stop accepting → drain ≤ 30 s.
+kill_signal = "SIGTERM"
+kill_timeout = "45s"
+
+[build]
+  dockerfile = "Dockerfile"
+  ignorefile = "Dockerfile.dockerignore"
+
+[env]
+  PORT = "8080"
+  LOG_LEVEL = "info"
+  CARTESIA_TTS_MODEL = "sonic-3.6-2026-08-27"
+  OPENAI_VOICE_MODEL = "gpt-5.6-luna"
+  # Keep at or below what the Cartesia plan allows (STT streams: Pro 12,
+  # Startup 20, Scale 60) summed over all machines. See README "Scaling".
+  MAX_CONCURRENT_CALLS = "40"
+  SHUTDOWN_DRAIN_SECONDS = "30"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # A phone call is a long-lived WebSocket: machines must never be stopped
+  # while idle, or the next call waits for a cold start.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.concurrency]
+    # Each call is one WebSocket connection (plus health checks).
+    type = "connections"
+    soft_limit = 40
+    hard_limit = 60
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "15s"
+    timeout = "3s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "1gb"

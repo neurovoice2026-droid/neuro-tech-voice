@@ -38,7 +38,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             {features.map((f) => (
               <li key={f} className="flex items-center gap-3 text-white">
                 <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-white/15">
-                  <CheckCircle2 className="h-4 w-4 text-purple-200" />
+                  <CheckCircle2 className="h-4 w-4 text-purple-200" aria-hidden="true" />
                 </span>
                 <span className="text-base">{f}</span>
               </li>
@@ -46,36 +46,18 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           </ul>
         </div>
 
-        {/* Bottom: floating stats card */}
+        {/* Bottom: what the agent does, not a made-up number */}
         <div className="relative z-10">
-          <div className="glass-card inline-flex items-center gap-5 rounded-2xl px-6 py-4">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/20">
-              <PhoneCall className="h-5 w-5 text-primary" />
+          <div className="glass-card inline-flex max-w-sm items-center gap-4 rounded-2xl px-6 py-4">
+            <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-primary/20">
+              <PhoneCall className="h-5 w-5 text-primary" aria-hidden="true" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">This month</p>
-              <p className="text-2xl font-bold text-foreground">1,284</p>
-              <p className="text-xs text-muted-foreground">calls handled</p>
+              <p className="text-sm font-semibold text-foreground">Every call answered</p>
+              <p className="text-xs text-muted-foreground">
+                Books appointments, answers questions and takes messages, day and night.
+              </p>
             </div>
-            {/* Mini sparkline */}
-            <svg
-              width="72"
-              height="36"
-              viewBox="0 0 72 36"
-              fill="none"
-              className="ml-1"
-              aria-hidden="true"
-            >
-              <polyline
-                points="0,30 10,24 20,27 30,14 42,18 54,9 64,6 72,8"
-                stroke="hsl(263 70% 58%)"
-                strokeWidth="2"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <circle cx="72" cy="8" r="3" fill="hsl(263 70% 58%)" />
-            </svg>
           </div>
         </div>
 
@@ -100,7 +82,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       </div>
 
       {/* ── Right: form column ────────────────────────────────────────────── */}
-      <div className="flex min-h-screen items-center justify-center p-8 lg:p-12">
+      <div className="flex min-h-screen items-center justify-center px-4 py-8 sm:p-8 lg:p-12">
         <div className="w-full max-w-[440px]">{children}</div>
       </div>
     </div>

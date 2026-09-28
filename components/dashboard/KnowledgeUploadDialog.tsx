@@ -1,135 +1,94 @@
 'use client'
 
-import { useState, useRef, useTransition } from 'react'
-import { UploadCloud, FileText, X, CheckCircle2, Loader2 } from 'lucide-react'
+import Link from 'next/link'
+import { UploadCloud } from 'lucide-react'
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { FileDropZone, KnowledgeUploadRow } from '@/components/agent/tabs/TabKnowledge'
+import { useKnowledge } from '@/hooks/useKnowledge'
 
 interface KnowledgeUploadDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-const ACCEPTED = '.pdf,.txt,.md,.docx'
-const MAX_MB = 10
-
+/**
+ * Quick upload from the dashboard. Same upload path as the Knowledge tab
+ * (signed upload straight to storage, then indexing), and it shows how reading
+ * each file went, not just that the bytes arrived.
+ */
 export function KnowledgeUploadDialog({ open, onOpenChange }: KnowledgeUploadDialogProps) {
-  const [files, setFiles] = useState<File[]>([])
-  const [isDragging, setIsDragging] = useState(false)
-  const [uploaded, setUploaded] = useState(false)
-  const [isPending, startTransition] = useTransition()
-  const inputRef = useRef<HTMLInputElement>(null)
+  const kb = useKnowledge({ enabled: open, keepFinishedUploads: true })
+  const uploading = kb.uploads.some((u) => u.stage !== 'done' && u.stage !== 'error')
+  const readingIds = new Set(
+    kb.docs.filter((d) => d.state === 'processing' && !d.stuck).map((d) => d.id)
+  )
+  const stillReading = kb.uploads.some((u) => u.documentId !== null && readingIds.has(u.documentId))
 
-  function addFiles(incoming: FileList | null) {
-    if (!incoming) return
-    const valid = Array.from(incoming).filter(
-      (f) => f.size <= MAX_MB * 1024 * 1024
-    )
-    setFiles((prev) => {
-      const names = new Set(prev.map((f) => f.name))
-      return [...prev, ...valid.filter((f) => !names.has(f.name))]
-    })
-  }
-
-  function handleDrop(e: React.DragEvent) {
-    e.preventDefault()
-    setIsDragging(false)
-    addFiles(e.dataTransfer.files)
-  }
-
-  function handleUpload() {
-    if (files.length === 0) return
-    startTransition(async () => {
-      const form = new FormData()
-      files.forEach((f) => form.append('files', f))
-      await fetch('/api/agent/knowledge', { method: 'POST', body: form })
-      setUploaded(true)
-      setTimeout(() => {
-        setFiles([])
-        setUploaded(false)
-        onOpenChange(false)
-      }, 1500)
-    })
+  const handleOpenChange = (next: boolean) => {
+    // Uploads keep going in the background; finished results are cleared on close.
+    if (!next) kb.clearFinishedUploads()
+    onOpenChange(next)
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <div className="rounded-full bg-purple-100 p-1.5">
-              <UploadCloud className="h-4 w-4 text-purple-600" />
-            </div>
-            Upload Knowledge Base
+            <span className="rounded-full bg-primary/10 p-1.5">
+              <UploadCloud className="size-4 text-primary" aria-hidden="true" />
+            </span>
+            Add to your knowledge base
           </DialogTitle>
           <DialogDescription>
-            Add documents to give your agent context about your business.
+            Price lists, policies, FAQs and menus. Your agent answers callers from them.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          {/* Drop zone */}
-          <div
-            onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={handleDrop}
-            onClick={() => inputRef.current?.click()}
-            className={cn(
-              'cursor-pointer rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors',
-              isDragging ? 'border-primary bg-purple-50' : 'border-border hover:border-purple-300 hover:bg-purple-50/30'
-            )}
-          >
-            <UploadCloud className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-            <p className="text-sm font-medium">Drop files here or click to browse</p>
-            <p className="text-xs text-muted-foreground mt-1">PDF, TXT, MD, DOCX — max {MAX_MB}MB each</p>
-            <input
-              ref={inputRef}
-              type="file"
-              multiple
-              accept={ACCEPTED}
-              className="hidden"
-              onChange={(e) => addFiles(e.target.files)}
-            />
-          </div>
+        <div className="space-y-3">
+          <FileDropZone compact onFiles={(files) => kb.addFiles(files)} />
 
-          {/* File list */}
-          {files.length > 0 && (
-            <div className="space-y-1.5">
-              {files.map((f) => (
-                <div key={f.name} className="flex items-center gap-2 rounded-lg border px-3 py-2">
-                  <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <span className="flex-1 truncate text-sm">{f.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {(f.size / 1024).toFixed(0)}KB
-                  </span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setFiles((p) => p.filter((x) => x.name !== f.name)) }}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+          {kb.uploads.length > 0 && (
+            <ul className="max-h-64 space-y-2 overflow-y-auto" aria-live="polite">
+              {kb.uploads.map((item) => (
+                <KnowledgeUploadRow
+                  key={item.id}
+                  item={item}
+                  doc={item.documentId ? kb.docs.find((d) => d.id === item.documentId) ?? null : null}
+                  onRetry={() => kb.retryUpload(item.id)}
+                  onCancel={() => kb.cancelUpload(item.id)}
+                  onDismiss={() => kb.dismissUpload(item.id)}
+                />
               ))}
-            </div>
+            </ul>
           )}
 
-          <Button
-            className="w-full purple-glow"
-            disabled={files.length === 0 || isPending || uploaded}
-            onClick={handleUpload}
-          >
-            {uploaded ? (
-              <><CheckCircle2 className="mr-2 h-4 w-4 text-green-400" />Uploaded!</>
-            ) : isPending ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading…</>
-            ) : (
-              `Upload ${files.length > 0 ? `${files.length} file${files.length > 1 ? 's' : ''}` : 'files'}`
-            )}
-          </Button>
+          {uploading ? (
+            <p className="text-xs text-muted-foreground">
+              Stay on this page until the uploads finish. Reading them carries on by itself after that.
+            </p>
+          ) : stillReading ? (
+            <p className="text-xs text-muted-foreground">
+              You can close this window. Reading carries on, and results appear on the Agent page.
+            </p>
+          ) : null}
         </div>
+
+        <DialogFooter>
+          {uploading ? (
+            <Button variant="outline" disabled>
+              Manage documents
+            </Button>
+          ) : (
+            <Link href="/agent?tab=knowledge" className={buttonVariants({ variant: 'outline' })} onClick={() => handleOpenChange(false)}>
+              Manage documents
+            </Link>
+          )}
+          <Button onClick={() => handleOpenChange(false)}>Done</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

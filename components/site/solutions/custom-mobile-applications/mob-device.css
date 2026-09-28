@@ -1,0 +1,1820 @@
+/* ------------------------------------------------------------------ *
+ * §0 /solutions/custom-mobile-applications — #hold's phone: the device,
+ * its five screens and their overlays, the hotspots, the lock screen,
+ * and the view transitions that move one screen into the next the way
+ * each platform does.
+ *
+ *   §1  the device and its chrome, per `[data-platform]`: the bezel, the
+ *       glass (the container every size inside is measured against) and
+ *       its ground, the status bar, the cutout, the home bar; the
+ *       screen, its bar at the top, its body, its fields, its primary
+ *       button, its tab or navigation bar
+ *   §2  the screens' own parts: the time of day and the free times; the
+ *       sheet and the page behind it; the booked screen and the
+ *       permission dialog; their entries
+ *   §3  the hotspots: the ring, the 44px target, the pulse
+ *   §4  the lock screen and the notification, and its entry
+ *   §5  the view transitions: each platform's own moves under vt.ts's
+ *       `"proto"` scope
+ *   §6  lite, still and weak
+ *   §7  reduced motion
+ *   §8  forced colours
+ *
+ * Imported once, by app/solutions/custom-mobile-applications/page.tsx,
+ * after mob.css (the shared keyframes) and before mob-hold.css (the
+ * stage around the phone). Every rule sits under .pp, or on <html> for
+ * the tiers and the view transitions; every selector names a mob- class
+ * or a mob- transition type. The markup is device.tsx and screens.tsx.
+ *
+ * SIZES. Radii that a view transition clips to are px, per platform
+ * (iOS: bezel 45, glass 36; Android: 35 and 26). Everything inside the
+ * glass is in container units: `.mob-glass` is an inline-size container,
+ * so 1cqi is a hundredth of the glass's width, and the screen scales as
+ * one picture from the 238px glass of a 256px phone at 320 to the 302px
+ * glass of the 320px phone the stage grows to from lg. Text never drops
+ * under 12px: the body is max(12px, 4.4cqi) and the small lines
+ * max(12px, 3.6cqi); only the drawn tab labels, aria-hidden, run
+ * smaller, as a phone's own do.
+ *
+ * COLOUR, measured (SPEC §5.3): ink on white 19.1; muted on white 6.37
+ * and on the chip grey 5.9; white on electric 5.70 (the primary button);
+ * electric on white 5.70 (the text buttons, the rings: marks); on-deep
+ * on the deep panel's darkest third 13+ (the lock screen's heading, set
+ * where the gradient is darkest); ink on the notification's white at 92%
+ * over the deep panel 17+.
+ *
+ * MOTION: only opacity, scale and translate animate (the pulse, the
+ * dialog's and the notification's entries, the view transitions), and
+ * colours transition (the glass's ground and its marks as a screen
+ * changes). Entries play only once the stage has set `data-enter` (a
+ * press or a tour arrival), never on the server's paint; the pulse only
+ * once `data-seen` is set. Every one is behind
+ * `prefers-reduced-motion: no-preference` and stopped on lite, still and
+ * weak (§6), which get the finished frame: the screen, its overlays in
+ * place, no ring pulsing.
+ * ------------------------------------------------------------------ */
+
+/* ─── §1 The device ─────────────────────────────────────────────────
+   The bezel is the device itself: a 9px frame in the landing's night,
+   with a hairline of light inside its edge and the SaaS prototype's
+   shadow under it. The aspect is fixed (1 : 2.05, the border box), so
+   every screen fills one box and the stage's height never moves. */
+.pp .mob-device {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 2.05;
+  padding: 9px;
+  border-radius: 45px;
+  background-color: var(--home-night);
+  box-shadow:
+    inset 0 0 0 1.5px rgb(255 255 255 / 0.1),
+    0 0 0 1px rgb(20 10 36 / 0.08),
+    0 1px 2px rgb(20 10 36 / 0.06),
+    0 32px 56px -30px rgb(20 10 36 / 0.45);
+}
+
+.pp .mob-device[data-platform="android"] {
+  border-radius: 35px;
+}
+
+/* THE GLASS: white, clipped to its radius, and the container. Its ground
+   follows the screen (`data-tone`, device.tsx): the night behind iOS's
+   sheet card, the deep panel as the lock screen's wallpaper (`.mob-wall`,
+   a layer faded in over the white, since a gradient can't transition).
+   Both change softly under the screen's own transition, and the status
+   bar's marks and the home bar turn white with them. */
+.pp .mob-device .mob-glass {
+  position: relative;
+  height: 100%;
+  overflow: clip;
+  border-radius: 36px;
+  background-color: #fff;
+  color: var(--home-ink);
+  container-type: inline-size;
+  transition: background-color 0.36s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.pp .mob-device[data-platform="android"] .mob-glass {
+  border-radius: 26px;
+}
+
+.pp .mob-device .mob-glass[data-tone="night"] {
+  background-color: var(--home-night);
+}
+
+/* DIMMED: while a dialog or Android's payment sheet is up, its scrim (ink
+   at 35%) dims the screen, which starts under the status bar; the band
+   the bar stands on dims with it, the same ink at 35% over the white, as
+   the scrim fades in (0.24s). */
+.pp .mob-device .mob-glass[data-tone="dim"] {
+  background-color: color-mix(in srgb, var(--home-ink) 35%, #fff);
+  transition-duration: 0.24s;
+}
+
+.pp .mob-glass .mob-wall {
+  position: absolute;
+  inset: 0;
+  background: var(--home-deep);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.pp .mob-glass[data-tone="deep"] .mob-wall {
+  opacity: 1;
+}
+
+/* THE STATUS BAR, 12cqi tall: a bar where the time would be, and drawn
+   signal, wifi and battery, in its colour (ink, or white on the dark
+   grounds). The screen starts under it, so a screen's move never takes
+   it along, as neither platform's does. */
+.pp .mob-glass .mob-status {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 3;
+  display: flex;
+  height: 12cqi;
+  align-items: center;
+  justify-content: space-between;
+  padding-inline: 9cqi 6.5cqi;
+  color: var(--home-ink);
+  transition: color 0.3s ease;
+}
+
+.pp .mob-device[data-platform="android"] .mob-status {
+  padding-inline: 6.5cqi 6cqi;
+}
+
+.pp .mob-glass:is([data-tone="night"], [data-tone="deep"]) .mob-status {
+  color: #fff;
+}
+
+.pp .mob-status .mob-status-time {
+  display: block;
+  width: 9cqi;
+  height: 2.8cqi;
+  border-radius: 999px;
+  background-color: currentColor;
+}
+
+.pp .mob-status .mob-status-marks {
+  width: 16cqi;
+  height: auto;
+}
+
+/* THE CUTOUT: iOS's pill, 30 × 8.5cqi, 2.5cqi from the top; Android's
+   punch-hole, a 4.5cqi circle in the middle of the status bar. */
+.pp .mob-glass .mob-cutout {
+  position: absolute;
+  top: 2.5cqi;
+  left: 50%;
+  z-index: 4;
+  width: 30cqi;
+  height: 8.5cqi;
+  translate: -50% 0;
+  border-radius: 999px;
+  background-color: var(--home-night);
+}
+
+.pp .mob-device[data-platform="android"] .mob-cutout {
+  top: 3.75cqi;
+  width: 4.5cqi;
+  height: 4.5cqi;
+}
+
+/* THE HOME BAR at the foot: iOS's home indicator, 36 × 1.4cqi; Android's
+   gesture handle, 28 × 1.2cqi. Over the screen, never in it, and named in
+   every move's transition (§5), so it stays over the moving screen. */
+.pp .mob-glass .mob-home {
+  position: absolute;
+  bottom: 2cqi;
+  left: 50%;
+  z-index: 4;
+  width: 36cqi;
+  height: 1.4cqi;
+  translate: -50% 0;
+  border-radius: 999px;
+  background-color: var(--home-ink);
+  transition: background-color 0.3s ease;
+}
+
+.pp .mob-device[data-platform="android"] .mob-home {
+  width: 28cqi;
+  height: 1.2cqi;
+}
+
+/* White only on the lock screen's wallpaper. Behind iOS's sheet the glass
+   is night at the top, but the foot the bar stands on is the sheet's
+   white, so it stays ink there. */
+.pp .mob-glass[data-tone="deep"] .mob-home {
+  background-color: #fff;
+}
+
+/* THE SCREEN: everything under the status bar, a column, white but for
+   the lock screen and iOS's sheet (whose grounds are the glass's). The
+   sizes the screens share are custom properties, set here, where 1cqi is
+   the glass's. */
+.pp .mob-glass .mob-screen {
+  --mob-pad: 5.5cqi;
+  --mob-body: max(12px, 4.4cqi);
+  --mob-meta: max(12px, 3.6cqi);
+  position: absolute;
+  inset: 12cqi 0 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: #fff;
+  color: var(--home-ink);
+  font-size: var(--mob-body);
+  line-height: 1.35;
+}
+
+.pp .mob-glass .mob-screen[data-screen="lock"],
+.pp .mob-device[data-platform="ios"] .mob-screen[data-screen="pay"] {
+  background-color: transparent;
+}
+
+.pp .mob-screen .mob-page {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  background-color: #fff;
+}
+
+.pp .mob-screen .mob-meta {
+  font-size: var(--mob-meta);
+  line-height: 1.35;
+  color: var(--home-muted);
+}
+
+.pp .mob-screen .mob-bar {
+  display: block;
+  flex: none;
+  border-radius: 999px;
+  background-color: rgb(20 10 36 / 0.08);
+}
+
+.pp .mob-screen .mob-bar-sm {
+  width: 22cqi;
+  height: 2.6cqi;
+}
+
+.pp .mob-screen .mob-bar-md {
+  width: 34cqi;
+  height: 2.6cqi;
+}
+
+.pp .mob-screen .mob-bar-lg {
+  width: 48cqi;
+  height: 2.6cqi;
+}
+
+/* The app's mark over sign-in's title: an electric square, no logo. */
+.pp .mob-screen .mob-mark {
+  flex: none;
+  width: 11cqi;
+  height: 11cqi;
+  margin: 7cqi var(--mob-pad) 0;
+  border-radius: 3cqi;
+  background-color: var(--home-electric);
+}
+
+/* THE TOP OF A SCREEN. iOS: a large title, left-aligned, 8cqi at 600.
+   Android: a top app bar 15cqi tall with a 5.6cqi title at 500. */
+.pp .mob-screen .mob-appbar {
+  flex: none;
+  padding: 3cqi var(--mob-pad) 1cqi;
+}
+
+.pp .mob-screen .mob-title {
+  width: fit-content;
+  font-family: var(--font-pp-display), var(--font-header), sans-serif;
+}
+
+.pp .mob-device[data-platform="ios"] .mob-title {
+  font-size: 8cqi;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.pp .mob-device[data-platform="android"] .mob-appbar {
+  display: flex;
+  min-height: 15cqi;
+  align-items: center;
+  padding-block: 0;
+}
+
+.pp .mob-device[data-platform="android"] .mob-title {
+  font-size: 5.6cqi;
+  line-height: 1.3;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* THE BODY: a column with the primary button at its foot, clear of the
+   home bar where the screen has no tab bar under it. */
+.pp .mob-screen .mob-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: 3.5cqi;
+  padding: 3cqi var(--mob-pad) 4cqi;
+}
+
+.pp .mob-screen[data-screen="signin"] .mob-body {
+  padding-bottom: 9cqi;
+}
+
+/* A FIELD, empty: iOS fills it grey with a 10px radius; Android draws it
+   outlined, 4px. */
+.pp .mob-screen .mob-field {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5cqi;
+}
+
+.pp .mob-field .mob-field-box {
+  display: block;
+  height: 11cqi;
+  border-radius: 10px;
+  background-color: rgb(20 10 36 / 0.05);
+}
+
+.pp .mob-device[data-platform="android"] .mob-field-box {
+  height: 12cqi;
+  border-radius: 4px;
+  background-color: transparent;
+  box-shadow: inset 0 0 0 1px rgb(20 10 36 / 0.4);
+}
+
+/* THE PRIMARY BUTTON: electric, white words at 600 (5.70). iOS: full
+   width, 12.5cqi, a 12px radius. Android: a full pill, 11cqi, at 500. At
+   the foot of its screen; in the sheet, after the last field. */
+.pp .mob-screen .mob-cta {
+  --mob-r: 12px;
+  --mob-pulse: 1.06 1.35;
+  display: flex;
+  flex: none;
+  width: 100%;
+  height: 12.5cqi;
+  margin-top: auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background-color: var(--home-electric);
+  color: #fff;
+  font-size: var(--mob-body);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.pp .mob-device[data-platform="android"] .mob-cta {
+  --mob-r: 999px;
+  height: 11cqi;
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+@media (hover: hover) {
+  .pp .mob-screen button.mob-cta:hover {
+    background-color: var(--home-violet);
+  }
+}
+
+/* A TEXT BUTTON (the sheet's way back): electric words, a mark on white. */
+.pp .mob-screen .mob-text-btn {
+  --mob-r: 8px;
+  display: inline-flex;
+  min-height: 7cqi;
+  align-items: center;
+  gap: 1.2cqi;
+  padding-inline: 1.5cqi;
+  margin-inline: -1.5cqi;
+  border-radius: 8px;
+  color: var(--home-electric);
+  font-size: var(--mob-body);
+  font-weight: 500;
+}
+
+/* THE TAB BAR (iOS) and THE NAVIGATION BAR (Android), drawn: three items,
+   the current one lit. iOS: a hairline over a 21cqi bar (the home
+   indicator's room in it), an icon over a small label, the current one
+   electric. Android: a 22cqi bar on the chip grey (the gesture handle's
+   room under its labels), the current icon in a pill of electric at 14%,
+   labels under. Both keep their labels 8px and more clear of the bar at
+   the foot at every size of the glass: the label never drops under 10px,
+   so on the 238px glass it is taller than 3.2cqi, and the bars are
+   sized for that. */
+.pp .mob-screen .mob-nav {
+  display: grid;
+  flex: none;
+  height: 21cqi;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  padding-top: 2cqi;
+  box-shadow: inset 0 1px 0 rgb(20 10 36 / 0.08);
+  background-color: #fff;
+}
+
+.pp .mob-nav .mob-nav-item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6cqi;
+  color: var(--home-muted);
+}
+
+.pp .mob-nav .mob-nav-item[data-current] {
+  color: var(--home-electric);
+}
+
+.pp .mob-nav .mob-nav-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pp .mob-nav .mob-nav-glyph {
+  width: 5.4cqi;
+  height: 5.4cqi;
+}
+
+.pp .mob-nav .mob-nav-label {
+  font-size: max(10px, 3.2cqi);
+  line-height: 1.2;
+  font-weight: 500;
+}
+
+.pp .mob-device[data-platform="android"] .mob-nav {
+  height: 22cqi;
+  padding-top: 2.2cqi;
+  box-shadow: none;
+  background-color: var(--home-chip);
+}
+
+.pp .mob-device[data-platform="android"] .mob-nav-item {
+  gap: 0.8cqi;
+  color: var(--home-muted);
+}
+
+.pp .mob-device[data-platform="android"] .mob-nav-item[data-current] {
+  color: var(--home-ink);
+}
+
+.pp .mob-device[data-platform="android"] .mob-nav-pill {
+  width: 13cqi;
+  height: 6.8cqi;
+  border-radius: 999px;
+}
+
+.pp .mob-device[data-platform="android"] .mob-nav-item[data-current] .mob-nav-pill {
+  background-color: color-mix(in srgb, var(--home-electric) 14%, transparent);
+}
+
+/* ─── §2 The screens' own parts ─────────────────────────────────────
+   "WELCOME BACK": the fields, the button straight under them, then
+   another way in, drawn — a rule with a grey dot in it, an outlined
+   button with a grey bar where a provider's name would be (no logo, no
+   words) — and at the foot a line of grey where "New here?" would be. */
+.pp .mob-screen[data-screen="signin"] .mob-cta {
+  margin-top: 1.5cqi;
+}
+
+.pp .mob-screen .mob-or {
+  display: flex;
+  align-items: center;
+  gap: 3cqi;
+  margin-block: 1cqi;
+}
+
+.pp .mob-screen .mob-or::before,
+.pp .mob-screen .mob-or::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background-color: rgb(20 10 36 / 0.1);
+}
+
+.pp .mob-or .mob-or-dot {
+  width: 5cqi;
+  height: 2.4cqi;
+}
+
+.pp .mob-screen .mob-alt {
+  display: flex;
+  height: 12.5cqi;
+  align-items: center;
+  justify-content: center;
+  gap: 2.4cqi;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px rgb(20 10 36 / 0.16);
+}
+
+.pp .mob-device[data-platform="android"] .mob-alt {
+  height: 11cqi;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgb(20 10 36 / 0.4);
+}
+
+.pp .mob-alt .mob-alt-icon {
+  width: 4.6cqi;
+  height: 4.6cqi;
+  border-radius: 999px;
+  background-color: rgb(20 10 36 / 0.14);
+}
+
+.pp .mob-screen .mob-foot {
+  display: flex;
+  margin-top: auto;
+  justify-content: center;
+  gap: 1.6cqi;
+}
+
+/* "BOOK A TIME": the week, a grey bar where each day's name and date
+   would be, the picked day filled electric (its bars white); then the
+   time of day and the free times (below). */
+.pp .mob-screen .mob-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 1.4cqi;
+}
+
+.pp .mob-week .mob-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.6cqi;
+  padding-block: 2.2cqi;
+  border-radius: 10px;
+}
+
+.pp .mob-device[data-platform="android"] .mob-day {
+  border-radius: 999px;
+}
+
+.pp .mob-week .mob-day[data-current] {
+  background-color: var(--home-electric);
+}
+
+.pp .mob-day .mob-day-name {
+  width: 5cqi;
+  height: 1.8cqi;
+}
+
+.pp .mob-day .mob-day-date {
+  width: 6cqi;
+  height: 3.2cqi;
+  background-color: rgb(20 10 36 / 0.14);
+}
+
+.pp .mob-day[data-current] :is(.mob-day-name, .mob-day-date) {
+  background-color: rgb(255 255 255 / 0.7);
+}
+
+/* The time of day, a three-part control with the middle one
+   picked — iOS's segmented control (a grey track, the picked part a white
+   thumb), Android's segmented buttons (an outline, the picked part
+   tinted) — then six free times, one ringed in electric, with grey bars
+   where the times would be. */
+.pp .mob-screen .mob-segment {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 0.7cqi;
+  border-radius: 9px;
+  background-color: rgb(20 10 36 / 0.06);
+}
+
+.pp .mob-segment .mob-segment-item {
+  min-width: 0;
+  padding-block: 1.7cqi;
+  border-radius: 7px;
+  font-size: var(--mob-meta);
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.pp .mob-segment .mob-segment-item[data-current] {
+  background-color: #fff;
+  box-shadow:
+    0 0 0 0.5px rgb(20 10 36 / 0.06),
+    0 1px 3px rgb(20 10 36 / 0.14);
+  font-weight: 600;
+}
+
+.pp .mob-device[data-platform="android"] .mob-segment {
+  padding: 0;
+  border-radius: 999px;
+  background-color: transparent;
+  box-shadow: inset 0 0 0 1px rgb(20 10 36 / 0.4);
+}
+
+.pp .mob-device[data-platform="android"] .mob-segment-item {
+  border-radius: 0;
+  box-shadow: inset 1px 0 0 rgb(20 10 36 / 0.4);
+}
+
+.pp .mob-device[data-platform="android"] .mob-segment-item:first-child {
+  box-shadow: none;
+}
+
+.pp .mob-device[data-platform="android"] .mob-segment-item[data-current] {
+  background-color: color-mix(in srgb, var(--home-electric) 14%, transparent);
+  box-shadow: inset 1px 0 0 rgb(20 10 36 / 0.4);
+  font-weight: 500;
+}
+
+.pp .mob-screen .mob-slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2.5cqi;
+}
+
+.pp .mob-slots .mob-slot {
+  display: flex;
+  height: 10cqi;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px rgb(20 10 36 / 0.1);
+}
+
+.pp .mob-device[data-platform="android"] .mob-slot {
+  border-radius: 999px;
+}
+
+.pp .mob-slots .mob-slot[data-current] {
+  background-color: color-mix(in srgb, var(--home-electric) 8%, #fff);
+  box-shadow: inset 0 0 0 1.5px var(--home-electric);
+}
+
+.pp .mob-slot .mob-slot-bar {
+  width: 12cqi;
+  height: 2.4cqi;
+}
+
+.pp .mob-slot[data-current] .mob-slot-bar {
+  background-color: color-mix(in srgb, var(--home-electric) 35%, transparent);
+}
+
+/* Who the booking is with, drawn: a grey disc, and bars for a name and a
+   place, on a hairline card. */
+.pp .mob-screen .mob-with {
+  display: flex;
+  align-items: center;
+  gap: 3cqi;
+  padding: 3.4cqi;
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1px rgb(20 10 36 / 0.1);
+}
+
+.pp .mob-device[data-platform="android"] .mob-with {
+  border-radius: 12px;
+}
+
+.pp .mob-with .mob-with-disc {
+  flex: none;
+  width: 9cqi;
+  height: 9cqi;
+  border-radius: 999px;
+  background-color: rgb(20 10 36 / 0.1);
+}
+
+.pp .mob-with .mob-with-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 1.6cqi;
+}
+
+/* "CONFIRM AND PAY": a sheet over the page it rose from. Behind it, the
+   "Book a time" page, a picture: on iOS scaled back to 0.94 from its top,
+   its top corners rounded, on the glass's night — the card presentation;
+   on Android left full size. Over it a scrim of ink at 35%. The sheet
+   rises from the foot: iOS's white with a 10px top radius and a
+   grabber, Android's on the chip grey with a 28px radius and a drag
+   handle. In it the way back (iOS's "Cancel", Android's "← Back"), the
+   heading, the booking and the deposit as grey bars, the card field and
+   Pay. */
+.pp .mob-screen .mob-behind {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pp .mob-device[data-platform="ios"] .mob-behind .mob-page {
+  overflow: clip;
+  border-radius: 10px 10px 0 0;
+  transform-origin: 50% 0;
+  scale: 0.94;
+  translate: 0 2cqi;
+}
+
+.pp .mob-screen .mob-scrim {
+  position: absolute;
+  inset: 0;
+  background-color: rgb(20 10 36 / 0.35);
+}
+
+.pp .mob-screen .mob-sheet {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3cqi;
+  padding: 2cqi var(--mob-pad) 9cqi;
+  border-radius: 10px 10px 0 0;
+  background-color: #fff;
+}
+
+.pp .mob-device[data-platform="android"] .mob-sheet {
+  border-radius: 28px 28px 0 0;
+  background-color: var(--home-chip);
+}
+
+.pp .mob-sheet .mob-grab {
+  display: block;
+  flex: none;
+  width: 10cqi;
+  height: 1.3cqi;
+  margin-inline: auto;
+  border-radius: 999px;
+  background-color: rgb(20 10 36 / 0.18);
+}
+
+.pp .mob-device[data-platform="android"] .mob-grab {
+  width: 9cqi;
+  height: 1.3cqi;
+  margin-top: 1cqi;
+  background-color: rgb(20 10 36 / 0.4);
+}
+
+.pp .mob-sheet .mob-sheet-head {
+  display: flex;
+  align-items: center;
+}
+
+.pp .mob-sheet .mob-arrow {
+  font-size: 1.15em;
+  line-height: 1;
+}
+
+/* 1.5cqi more above it than the sheet's gap, so the way back's dashed ring
+   (4.5px under its words) clears the title's line by at least 4px. */
+.pp .mob-device[data-platform] .mob-sheet .mob-sheet-title {
+  margin-top: 1.5cqi;
+  font-size: 6.2cqi;
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.pp .mob-device[data-platform="android"] .mob-sheet .mob-sheet-title {
+  font-weight: 500;
+}
+
+.pp .mob-sheet .mob-sheet-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5cqi;
+  padding-block: 1cqi;
+  box-shadow:
+    inset 0 1px 0 rgb(20 10 36 / 0.08),
+    inset 0 -1px 0 rgb(20 10 36 / 0.08);
+}
+
+.pp .mob-sheet .mob-sheet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3cqi;
+  padding-block: 1cqi;
+}
+
+.pp .mob-sheet .mob-sheet-bars {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1.4cqi;
+}
+
+/* "YOU’RE BOOKED": an electric disc with a white tick, the promise, the
+   booking drawn as grey bars in a card, and "Add to calendar" drawn as
+   an outlined pill that is not a button (only ringed things are). */
+.pp .mob-screen .mob-done {
+  display: flex;
+  flex-direction: column;
+  gap: 3cqi;
+}
+
+.pp .mob-done .mob-done-disc {
+  display: flex;
+  width: 13cqi;
+  height: 13cqi;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background-color: var(--home-electric);
+  color: #fff;
+}
+
+.pp .mob-done .mob-done-tick {
+  width: 7cqi;
+  height: 7cqi;
+}
+
+.pp .mob-screen .mob-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2.4cqi;
+  padding: 4.5cqi;
+  border-radius: 14px;
+  background-color: rgb(20 10 36 / 0.035);
+}
+
+.pp .mob-device[data-platform="android"] .mob-summary {
+  border-radius: 12px;
+  background-color: transparent;
+  box-shadow: inset 0 0 0 1px rgb(20 10 36 / 0.14);
+}
+
+.pp .mob-screen .mob-cal {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 1.6cqi;
+  padding: 1.8cqi 3.6cqi;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgb(20 10 36 / 0.16);
+  font-size: var(--mob-meta);
+  line-height: 1.2;
+}
+
+.pp .mob-cal .mob-cal-glyph {
+  width: 4.2cqi;
+  height: 4.2cqi;
+  color: var(--home-muted);
+}
+
+/* THE PERMISSION DIALOG, over a scrim of ink at 35%, while the reader
+   hasn't answered. iOS: a centred 72cqi alert, 14px radius, its title at
+   600 and under it the system's own message drawn as two grey bars (an
+   app can't write in that alert, so the page doesn't put words there),
+   its two answers side by side under a hairline, Allow at 600. Android:
+   an 84cqi dialog on the chip grey, 28px radius, its title left (all an
+   app's name fills in), its two answers stacked, full width, tonal.
+
+   NOTHING CLIPS THE ALERT, so each answer's 44px target (§3) reaches
+   past its foot and its focus ring draws whole; the answers take the
+   alert's bottom corners themselves, so a ring round one follows them. */
+.pp .mob-screen .mob-ask {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pp .mob-ask .mob-dialog {
+  position: relative;
+  width: 72cqi;
+  border-radius: 14px;
+  background-color: #f7f6fa;
+  text-align: center;
+  box-shadow: 0 10px 30px -12px rgb(20 10 36 / 0.45);
+}
+
+.pp .mob-dialog .mob-dialog-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4cqi;
+  padding: 5cqi 4.5cqi 4.5cqi;
+}
+
+.pp .mob-dialog .mob-dialog-title {
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.pp .mob-dialog .mob-dialog-bars {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.8cqi;
+  padding-block: 0.6cqi;
+}
+
+.pp .mob-dialog .mob-dialog-bars .mob-bar {
+  background-color: rgb(20 10 36 / 0.12);
+}
+
+.pp .mob-dialog .mob-dialog-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  box-shadow: inset 0 1px 0 rgb(20 10 36 / 0.14);
+}
+
+.pp .mob-dialog .mob-dialog-btn {
+  --mob-r: 6px;
+  --mob-ring: 4px;
+  --mob-pulse: 1.03 1.1;
+  display: flex;
+  min-height: 11cqi;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 2cqi;
+  color: var(--home-electric);
+  font-size: var(--mob-body);
+  line-height: 1.2;
+}
+
+/* The hairline between the two answers is the first one's right edge, so
+   neither's rounded corner carries a sliver of it. */
+.pp .mob-dialog .mob-dialog-btn:first-child {
+  border-end-start-radius: 14px;
+  box-shadow: inset -1px 0 0 rgb(20 10 36 / 0.14);
+}
+
+.pp .mob-dialog .mob-dialog-btn:last-child {
+  border-end-end-radius: 14px;
+}
+
+/* Keyboard focus: the ring inside the answer, clear of its dashed ring
+   (4px in), where it can't cross the alert's hairlines or its edge. */
+.pp .mob-device[data-platform="ios"] .mob-dialog .mob-dialog-btn:focus-visible {
+  outline-offset: -2px;
+}
+
+.pp .mob-dialog .mob-dialog-yes {
+  font-weight: 600;
+}
+
+.pp .mob-device[data-platform="android"] .mob-dialog {
+  width: 84cqi;
+  padding: 6cqi 5.5cqi 5.5cqi;
+  border-radius: 28px;
+  background-color: var(--home-chip);
+  text-align: left;
+}
+
+.pp .mob-device[data-platform="android"] .mob-dialog-title {
+  font-weight: 500;
+}
+
+/* The stacked answers stand far enough apart that their 44px targets
+   (§3) never overlap, with a pixel to spare on each: 46px less an
+   answer's 11cqi, 20px on the 238px glass, 13px on the 302px one. */
+.pp .mob-device[data-platform="android"] .mob-dialog-actions {
+  grid-template-columns: minmax(0, 1fr);
+  gap: max(2cqi, calc(46px - 11cqi));
+  margin-top: 5cqi;
+  box-shadow: none;
+}
+
+.pp .mob-device[data-platform="android"] .mob-dialog-btn {
+  --mob-r: 999px;
+  --mob-ring: -4.5px;
+  --mob-pulse: 1.05 1.3;
+  border-radius: 999px;
+  background-color: color-mix(in srgb, var(--home-electric) 12%, transparent);
+  color: var(--home-ink);
+  font-weight: 500;
+}
+
+.pp .mob-device[data-platform="android"] .mob-dialog .mob-dialog-btn:first-child {
+  box-shadow: none;
+}
+
+.pp .mob-device[data-platform="android"] .mob-dialog-yes {
+  font-weight: 600;
+}
+
+/* THE ENTRIES, on mount, once the stage has set `data-enter` (a press or
+   a tour arrival, never the first paint): iOS's alert settles from 1.1
+   as it fades in, Android's dialog grows from 0.92, the scrim fades.
+   Only the finished frame without them. */
+@media (prefers-reduced-motion: no-preference) {
+  .pp [data-enter] .mob-ask .mob-scrim {
+    animation: mob-fade-in 0.24s ease both;
+  }
+
+  .pp [data-enter] .mob-device[data-platform="ios"] .mob-dialog {
+    animation: mob-dialog-ios 0.24s cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  .pp [data-enter] .mob-device[data-platform="android"] .mob-dialog {
+    animation: mob-dialog-and 0.2s cubic-bezier(0.05, 0.7, 0.1, 1) both;
+  }
+}
+
+@keyframes mob-dialog-ios {
+  from {
+    opacity: 0;
+    scale: 1.1;
+  }
+}
+
+@keyframes mob-dialog-and {
+  from {
+    opacity: 0;
+    scale: 0.92;
+  }
+}
+
+/* ─── §3 The hotspots ───────────────────────────────────────────────
+   Every button that moves the app along, forward or back, wears a ring,
+   which the hint under the phone names: 1.5px dashed electric, 3px off the button (the
+   dialog's side-by-side answers keep it 4px inside, where the alert's
+   edge is), white on the lock screen (at least 5.70 anywhere on the deep
+   panel). The ring is an aria-hidden child, so it pulses without
+   touching the button, and its radius follows the button's (`--mob-r`).
+
+   THE TARGET. A hotspot's ::before runs its width and reaches 44px tall,
+   as far above its middle as below it (a taller one is its own box), so a
+   thumb that lands just off a small button still presses it, and where
+   two stand stacked their targets meet halfway, never one over the
+   other. A press gives under the finger (0.97). */
+.pp .mob-screen .mob-hot {
+  position: relative;
+  transition: scale 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease;
+}
+
+.pp .mob-screen .mob-hot::before {
+  content: "";
+  position: absolute;
+  inset-block: min(0px, calc(50% - 22px));
+  inset-inline: 0;
+}
+
+/* The pay sheet's way back (Cancel, ← Back) stands 16–21px tall right
+   over the sheet's title, a heading and no control: grown down, its
+   target covered the top of "Confirm and pay" (up to a fifth of its
+   words at 1024), and a tap there left the sheet. So its 44px grow only
+   upward, over the grabber and the scrim just above the sheet's edge,
+   where nothing else is pressed; none of it lies over the title. */
+.pp .mob-screen .mob-sheet-back::before {
+  inset-block: auto 0;
+  height: max(100%, 44px);
+}
+
+.pp .mob-screen button.mob-hot:active {
+  scale: 0.97;
+}
+
+/* `--mob-ring` is where the ring's outer edge stands: 4.5px out (the
+   1.5px line 3px off), or 4px in (the alert's answers, whose pulse then
+   grows only as far as their own edge). */
+.pp .mob-hot .mob-hot-ring {
+  position: absolute;
+  inset: var(--mob-ring, -4.5px);
+  border: 1.5px dashed var(--home-electric);
+  border-radius: calc(var(--mob-r, 12px) + 4.5px);
+  pointer-events: none;
+}
+
+.pp .mob-dialog .mob-hot .mob-hot-ring {
+  border-radius: var(--mob-r);
+}
+
+.pp .mob-device[data-platform="android"] .mob-dialog .mob-hot .mob-hot-ring {
+  border-radius: 999px;
+}
+
+.pp .mob-lockface .mob-hot .mob-hot-ring {
+  border-color: #fff;
+}
+
+/* THE PULSE. The first time most of the phone is on screen the stage sets
+   `data-seen` on it (once, never taken back), and every ring on the live
+   screen sends out a ring of its own, twice, growing as it fades (the
+   SaaS prototype's hotspot pulse, saas-build.css §8); a screen reached
+   later pulses its own as it arrives. A wide button grows less across
+   than up (`--mob-pulse`), so the ring never runs off the glass. It rests
+   at nothing, so wherever it's stopped (§6) there is no second ring. */
+@media (prefers-reduced-motion: no-preference) {
+  .pp .mob-device[data-seen] .mob-screen[data-live] .mob-hot-ring::after {
+    content: "";
+    position: absolute;
+    inset: -1.5px;
+    border-radius: inherit;
+    box-shadow: 0 0 0 2px var(--home-electric);
+    opacity: 0;
+    pointer-events: none;
+    animation: mob-hot-pulse 1.2s cubic-bezier(0.16, 1, 0.3, 1) 2 both;
+  }
+
+  .pp .mob-device[data-seen] .mob-lockface .mob-hot-ring::after {
+    box-shadow: 0 0 0 2px #fff;
+  }
+}
+
+@keyframes mob-hot-pulse {
+  from {
+    opacity: 0.5;
+    scale: 1;
+  }
+
+  to {
+    opacity: 0;
+    scale: var(--mob-pulse, 1.3);
+  }
+}
+
+/* ─── §4 The lock screen ────────────────────────────────────────────
+   Later, the phone locked: the deep panel for a wallpaper (the glass's,
+   §1), the heading in on-deep where the time's date would be (centred on
+   iOS, left on Android), the time as a white bar at 50% (iOS centred,
+   40 × 11cqi; Android left, 30 × 9cqi), and 4cqi under it, once the step
+   has arrived, the notification: white at 92%, 20px radius on iOS and
+   24px on Android; the app's electric icon and "Your app · now", or the
+   texts' grey one and "Text message · now", then its words. iOS keeps its
+   two round buttons at the foot. */
+.pp .mob-screen .mob-lockface {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  padding: 5cqi var(--mob-pad) 8cqi;
+  color: var(--home-on-deep);
+}
+
+.pp .mob-device[data-platform] .mob-lockface .mob-title {
+  font-family: inherit;
+  font-size: max(12px, 4.2cqi);
+  line-height: 1.3;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.pp .mob-lockface .mob-clock {
+  width: 40cqi;
+  height: 11cqi;
+  margin-top: 2cqi;
+  border-radius: 3cqi;
+  background-color: #fff;
+  opacity: 0.5;
+}
+
+.pp .mob-device[data-platform="android"] .mob-lockface {
+  align-items: flex-start;
+}
+
+.pp .mob-device[data-platform="android"] .mob-lockface .mob-title {
+  text-align: left;
+}
+
+.pp .mob-device[data-platform="android"] .mob-clock {
+  width: 30cqi;
+  height: 9cqi;
+}
+
+.pp .mob-lockface .mob-note {
+  --mob-r: 20px;
+  --mob-pulse: 1.04 1.12;
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 1.6cqi;
+  margin-top: 4cqi;
+  padding: 3.4cqi 3.8cqi 3.8cqi;
+  border-radius: 20px;
+  background-color: rgb(255 255 255 / 0.92);
+  color: var(--home-ink);
+  text-align: left;
+  font-size: var(--mob-body);
+  line-height: 1.35;
+}
+
+.pp .mob-device[data-platform="android"] .mob-note {
+  --mob-r: 24px;
+  border-radius: 24px;
+}
+
+.pp .mob-note .mob-note-head {
+  display: flex;
+  align-items: center;
+  gap: 2cqi;
+}
+
+.pp .mob-note .mob-note-icon {
+  display: flex;
+  flex: none;
+  width: 7cqi;
+  height: 7cqi;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1.8cqi;
+  background-color: var(--home-electric);
+}
+
+.pp .mob-note .mob-note-icon[data-kind="text"] {
+  background-color: rgb(20 10 36 / 0.08);
+  color: var(--home-muted);
+}
+
+.pp .mob-note .mob-note-glyph {
+  width: 4.4cqi;
+  height: 4.4cqi;
+}
+
+.pp .mob-note .mob-note-when {
+  display: inline-block;
+  width: 16cqi;
+  height: 3cqi;
+  margin-inline: 0.6cqi;
+  vertical-align: middle;
+  background-color: rgb(20 10 36 / 0.12);
+}
+
+.pp .mob-lockface .mob-lock-keys {
+  display: flex;
+  width: 100%;
+  margin-top: auto;
+  justify-content: space-between;
+  padding-inline: 3cqi;
+}
+
+.pp .mob-lock-keys > span {
+  display: block;
+  width: 11cqi;
+  height: 11cqi;
+  border-radius: 999px;
+  background-color: rgb(255 255 255 / 0.14);
+}
+
+.pp .mob-device[data-platform="android"] .mob-lock-keys {
+  display: none;
+}
+
+/* THE NOTIFICATION'S ENTRY, on mount (the step arrived, with `data-enter`
+   set). iOS: it drops from above the bar, overshoots a touch and settles,
+   0.5s. Android: a heads-up, sliding down its own height as it fades in,
+   0.3s. A switch of platform on the lock screen lands it again, the other
+   platform's way: the difference, shown. */
+@media (prefers-reduced-motion: no-preference) {
+  .pp [data-enter] .mob-device[data-platform="ios"] .mob-note {
+    animation: mob-note-ios 0.5s cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  .pp [data-enter] .mob-device[data-platform="android"] .mob-note {
+    animation: mob-note-and 0.3s cubic-bezier(0.05, 0.7, 0.1, 1) both;
+  }
+}
+
+@keyframes mob-note-ios {
+  from {
+    translate: 0 -120%;
+  }
+
+  70% {
+    translate: 0 3%;
+  }
+}
+
+@keyframes mob-note-and {
+  from {
+    opacity: 0;
+    translate: 0 -100%;
+  }
+}
+
+/* ─── §5 The view transitions ───────────────────────────────────────
+   Every change of screen a reader makes is one of vt.ts's `"proto"`
+   transitions (the tour's own are entries instead, at the end of §5): the
+   live screen wears `saas-proto-screen`, which saas-build.css §8 names
+   `saas-proto` while <html data-saas-vt="proto"> is set, and saas.css
+   §11 keeps the page's root still. The stage passes two types with every
+   press: the platform (`mob-ios` or `mob-android`) and the move
+   (`mob-forward`, `mob-back`, `mob-sheet-up`, `mob-sheet-down`,
+   `mob-lock`, `mob-unlock`), or `mob-platform` with the new platform for
+   a switch. Every rule here reads a mob- type, inside the @supports that
+   asks for types, so the SaaS page's prototype and #checks never pick
+   one up. A browser with the API but no types gets saas-build.css's own
+   4% slide; one without the API, reduced motion, lite, still, or a
+   screen under the header, an instant change (vt.ts).
+
+   CLIPPED TO THE GLASS. A transition's pictures are drawn above the
+   page, outside every ancestor's clip, so each group that could show
+   past the glass is clipped to the screen's box with the glass's own
+   bottom corners (36px, 26px): the screen's pair, the sheet, the scrim,
+   the page behind, the navigation bar. */
+@supports selector(:active-view-transition-type(mob-ios)) {
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-ios)::view-transition-image-pair(saas-proto),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-ios)::view-transition-group(mob-page),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-ios)::view-transition-group(mob-sheet),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-ios)::view-transition-group(mob-scrim),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-ios)::view-transition-group(mob-nav) {
+    overflow: clip;
+    border-radius: 0 0 36px 36px;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-android)::view-transition-image-pair(saas-proto),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-android)::view-transition-group(mob-page),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-android)::view-transition-group(mob-sheet),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-android)::view-transition-group(mob-scrim),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-android)::view-transition-group(mob-nav) {
+    overflow: clip;
+    border-radius: 0 0 26px 26px;
+  }
+
+  /* iOS: A PUSH. Forward, the old screen slides a third of the way left
+     and dims as the new one slides in over it from the right edge; back,
+     the old one slides off to the right over the new one, which comes
+     back from the left. 0.36s on iOS's own curve. */
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-ios):active-view-transition-type(mob-forward)::view-transition-old(saas-proto) {
+    animation: mob-ios-out 0.36s cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-ios):active-view-transition-type(mob-forward)::view-transition-new(saas-proto) {
+    animation: mob-ios-in 0.36s cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-ios):active-view-transition-type(mob-back)::view-transition-old(saas-proto) {
+    z-index: 1;
+    animation: mob-ios-out-back 0.36s cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-ios):active-view-transition-type(mob-back)::view-transition-new(saas-proto) {
+    animation: mob-ios-in-back 0.36s cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  /* Android: MATERIAL'S SHARED AXIS X. The old screen fades out in the
+     first 30% as it drifts 30px the way the reader is going; the new one
+     waits out that 30%, then fades in as it arrives from 30px the other
+     side. Mirrored for back. 0.3s on Material's standard curve. */
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-android):active-view-transition-type(mob-forward)::view-transition-old(saas-proto) {
+    animation: mob-and-out 0.3s cubic-bezier(0.2, 0, 0, 1) both;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-android):active-view-transition-type(mob-forward)::view-transition-new(saas-proto) {
+    animation: mob-and-in 0.3s cubic-bezier(0.2, 0, 0, 1) both;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-android):active-view-transition-type(mob-back)::view-transition-old(saas-proto) {
+    animation: mob-and-out-back 0.3s cubic-bezier(0.2, 0, 0, 1) both;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-android):active-view-transition-type(mob-back)::view-transition-new(saas-proto) {
+    animation: mob-and-in-back 0.3s cubic-bezier(0.2, 0, 0, 1) both;
+  }
+
+  /* THE SHEET. Up: the page, the sheet and the scrim are named apart from
+     the screen; the page moves from the old screen to its place behind
+     the sheet (iOS scales it back to its card, Android leaves it), the
+     scrim fades in and the sheet rises from the foot, while the rest of
+     each screen cross-fades. Down: the same, mirrored. The page behind
+     the sheet is the only .mob-page in its screen, and the choose
+     screen's the only one in its, so each name is worn once. */
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-sheet-up, mob-sheet-down) .pp .mob-screen[data-live] .mob-page {
+    view-transition-name: mob-page;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-sheet-up, mob-sheet-down) .pp .mob-screen[data-live] .mob-sheet {
+    view-transition-name: mob-sheet;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-sheet-up, mob-sheet-down) .pp .mob-screen[data-live] .mob-behind + .mob-scrim {
+    view-transition-name: mob-scrim;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-sheet-up, mob-sheet-down)::view-transition-old(saas-proto) {
+    animation: mob-fade-out 0.2s ease both;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-sheet-up, mob-sheet-down)::view-transition-new(saas-proto) {
+    animation: mob-fade-in 0.2s ease both;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-sheet-up, mob-sheet-down)::view-transition-group(mob-page) {
+    animation-duration: 0.36s;
+    animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-sheet-up)::view-transition-new(mob-sheet) {
+    animation: mob-sheet-in 0.36s cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-sheet-up)::view-transition-new(mob-scrim) {
+    animation: mob-fade-in 0.36s ease both;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-sheet-down)::view-transition-old(mob-sheet) {
+    animation: mob-sheet-out 0.36s cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-sheet-down)::view-transition-old(mob-scrim) {
+    animation: mob-fade-out 0.36s ease both;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-android):active-view-transition-type(mob-sheet-up, mob-sheet-down)::view-transition-group(mob-page) {
+    animation-duration: 0.3s;
+    animation-timing-function: cubic-bezier(0.05, 0.7, 0.1, 1);
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-android):active-view-transition-type(mob-sheet-up)::view-transition-new(mob-sheet),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-android):active-view-transition-type(mob-sheet-down)::view-transition-old(mob-sheet),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-android):active-view-transition-type(mob-sheet-up)::view-transition-new(mob-scrim),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-android):active-view-transition-type(mob-sheet-down)::view-transition-old(mob-scrim) {
+    animation-duration: 0.3s;
+    animation-timing-function: cubic-bezier(0.05, 0.7, 0.1, 1);
+  }
+
+  /* THE LOCK SCREEN. Locking: the screen fades out, the lock screen fades
+     in a beat later over the wallpaper, which the glass fades in beneath
+     both (§1). Unlocking: quicker, no beat. */
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-lock)::view-transition-old(saas-proto) {
+    animation: mob-fade-out 0.2s ease both;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-lock)::view-transition-new(saas-proto) {
+    animation: mob-fade-in 0.3s ease 0.1s both;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-unlock)::view-transition-old(saas-proto) {
+    animation: mob-fade-out 0.2s ease both;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-unlock)::view-transition-new(saas-proto) {
+    animation: mob-fade-in 0.28s ease both;
+  }
+
+  /* THE HOME BAR stays over every move: it sits over the screen, so left
+     in the page's picture it would drop under the moving screen's and
+     blink out for the move. Named, its own group paints over the
+     screen's (it comes later in the DOM), still. */
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-ios, mob-android) .pp .mob-device .mob-home {
+    view-transition-name: mob-home;
+  }
+
+  /* THE SWITCH. The frame, the cutout, the home bar, the screen's top bar,
+     its primary button and its tab bar are each named, so each morphs from
+     one platform's shape to the other's — the pill to the punch-hole, the
+     large title to the app bar, the rounded button to the pill — while
+     the rest of the screen cross-fades, all at 0.42s on the house out-ease.
+     The picture behind the sheet is left out, so every name is worn once. */
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform) .pp .mob-device {
+    view-transition-name: mob-bezel;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform) .pp .mob-device .mob-cutout {
+    view-transition-name: mob-cutout;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform) .pp .mob-device .mob-home {
+    view-transition-name: mob-home;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform) .pp .mob-screen[data-live] .mob-appbar:not(.mob-behind *) {
+    view-transition-name: mob-appbar;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform) .pp .mob-screen[data-live] .mob-cta:not(.mob-behind *) {
+    view-transition-name: mob-cta;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform) .pp .mob-screen[data-live] .mob-nav:not(.mob-behind *) {
+    view-transition-name: mob-nav;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-group(mob-bezel),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-group(mob-cutout),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-group(mob-home),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-group(mob-appbar),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-group(mob-cta),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-group(mob-nav),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-group(saas-proto) {
+    animation-duration: 0.42s;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Old and new cross-fade additively, as the browser's own morph does, so
+     nothing thins out halfway where the two platforms' shapes overlap. */
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-old(mob-bezel),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-old(mob-cutout),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-old(mob-home),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-old(mob-appbar),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-old(mob-cta),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-old(mob-nav),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-old(saas-proto) {
+    animation: mob-fade-out 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+    mix-blend-mode: plus-lighter;
+  }
+
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-new(mob-bezel),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-new(mob-cutout),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-new(mob-home),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-new(mob-appbar),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-new(mob-cta),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-new(mob-nav),
+  html[data-saas-vt="proto"]:active-view-transition-type(mob-platform)::view-transition-new(saas-proto) {
+    animation: mob-fade-in 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+    mix-blend-mode: plus-lighter;
+  }
+}
+
+/* THE TOUR'S OWN MOVES start no view transition (phone-stage.tsx
+   `change`): while one runs the browser hit-tests the whole page as
+   <html>, so one the reader didn't start would swallow their click, the
+   tour's Pause among them, and a scroll during it would leave the
+   screen's picture behind. The stage marks the move it made on the
+   phone's wrapper (`data-move`, set only for these), and the new screen,
+   mounted afresh for its step, makes it as its entry with the same
+   keyframes and curves, inside the glass's own clip: iOS's push and
+   Android's shared axis in; the sheet rising over its scrim, iOS's page
+   behind it scaling back to its card; the lock screen fading up, a beat
+   late, over its wallpaper.
+
+   THE SCREEN AN iOS PUSH LEAVES. The old screen goes with its step, and
+   a push moves both: so for the push's 0.36s the stage draws the screen
+   it left once more (`.mob-screen-out`, device.tsx: a still picture,
+   aria-hidden and inert, with no `data-live` and no transition name),
+   and it makes the push's other half with the view transition's own
+   keyframes — going forward, under the new screen, a third of the way
+   left and dimming; going back, over it, off to the right — and is gone
+   when its slide ends. So the glass never stands empty between two
+   screens. Nothing inside it makes an entry of its own (a dialog, a
+   notification): it is the picture of a screen already there. Android's
+   shared axis fades through an empty frame by design, and has none. A
+   reader's press has both pictures from its view transition (above).
+   Stopped on lite, still and weak (§6), and hidden with reduced motion
+   (§7). */
+@media (prefers-reduced-motion: no-preference) {
+  .pp [data-move="mob-forward"] .mob-device[data-platform="ios"] .mob-screen[data-live] {
+    animation: mob-ios-in 0.36s cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  .pp [data-move="mob-back"] .mob-device[data-platform="ios"] .mob-screen[data-live] {
+    animation: mob-ios-in-back 0.36s cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  .pp [data-move="mob-forward"] .mob-device[data-platform="ios"] .mob-screen.mob-screen-out {
+    animation: mob-ios-out 0.36s cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  .pp [data-move="mob-back"] .mob-device[data-platform="ios"] .mob-screen.mob-screen-out {
+    z-index: 2;
+    animation: mob-ios-out-back 0.36s cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  .pp [data-mob-phone] .mob-device .mob-glass .mob-screen.mob-screen-out * {
+    animation: none;
+  }
+
+  /* It keeps its own ground, which the glass under it has already left
+     for the new screen's: the lock screen's wallpaper, the night behind
+     iOS's sheet. */
+  .pp .mob-glass .mob-screen.mob-screen-out[data-screen="lock"] {
+    background: var(--home-deep);
+  }
+
+  .pp .mob-device[data-platform="ios"] .mob-screen.mob-screen-out[data-screen="pay"] {
+    background-color: var(--home-night);
+  }
+
+  .pp [data-move="mob-forward"] .mob-device[data-platform="android"] .mob-screen {
+    animation: mob-and-in 0.3s cubic-bezier(0.2, 0, 0, 1) both;
+  }
+
+  .pp [data-move="mob-back"] .mob-device[data-platform="android"] .mob-screen {
+    animation: mob-and-in-back 0.3s cubic-bezier(0.2, 0, 0, 1) both;
+  }
+
+  .pp [data-move="mob-sheet-up"] .mob-device[data-platform="ios"] .mob-screen .mob-sheet {
+    animation: mob-sheet-in 0.36s cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  .pp [data-move="mob-sheet-up"] .mob-device[data-platform="android"] .mob-screen .mob-sheet {
+    animation: mob-sheet-in 0.3s cubic-bezier(0.05, 0.7, 0.1, 1) both;
+  }
+
+  .pp [data-move="mob-sheet-up"] .mob-device .mob-screen .mob-behind + .mob-scrim {
+    animation: mob-fade-in 0.3s ease both;
+  }
+
+  .pp [data-move="mob-sheet-up"] .mob-device[data-platform="ios"] .mob-behind .mob-page {
+    animation: mob-card-back 0.36s cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+
+  .pp [data-move="mob-sheet-down"] .mob-device .mob-screen {
+    animation: mob-fade-in 0.2s ease both;
+  }
+
+  .pp [data-move="mob-lock"] .mob-device .mob-screen {
+    animation: mob-fade-in 0.3s ease 0.1s both;
+  }
+
+  .pp [data-move="mob-unlock"] .mob-device .mob-screen {
+    animation: mob-fade-in 0.28s ease both;
+  }
+}
+
+@keyframes mob-card-back {
+  from {
+    scale: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes mob-ios-out {
+  to {
+    opacity: 0.7;
+    translate: -30% 0;
+  }
+}
+
+@keyframes mob-ios-in {
+  from {
+    translate: 100% 0;
+  }
+}
+
+@keyframes mob-ios-out-back {
+  to {
+    translate: 100% 0;
+  }
+}
+
+@keyframes mob-ios-in-back {
+  from {
+    opacity: 0.7;
+    translate: -30% 0;
+  }
+}
+
+@keyframes mob-and-out {
+  30% {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 0;
+    translate: -30px 0;
+  }
+}
+
+@keyframes mob-and-in {
+  from {
+    opacity: 0;
+    translate: 30px 0;
+  }
+
+  30% {
+    opacity: 0;
+  }
+}
+
+@keyframes mob-and-out-back {
+  30% {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 0;
+    translate: 30px 0;
+  }
+}
+
+@keyframes mob-and-in-back {
+  from {
+    opacity: 0;
+    translate: -30px 0;
+  }
+
+  30% {
+    opacity: 0;
+  }
+}
+
+@keyframes mob-sheet-in {
+  from {
+    translate: 0 100%;
+  }
+}
+
+@keyframes mob-sheet-out {
+  to {
+    translate: 0 100%;
+  }
+}
+
+/* ─── §6 Lite, still and weak ───────────────────────────────────────
+   The finished frame: the dialog and the notification simply there, no
+   ring pulsing, the glass's ground changing at once, and a screen the
+   tour moves to there at once. (No view transition runs on these tiers:
+   vt.ts's `vtAllowed` refuses it.) Each pin names
+   the element its animation's rule does, and <html>, the tier and the
+   shell's <main> besides, so it outranks that rule whatever order the
+   sheets land in. */
+html[data-tier="lite"] .pp.home-body .mob-device .mob-screen .mob-hot-ring::after,
+html[data-tier="still"] .pp.home-body .mob-device .mob-screen .mob-hot-ring::after,
+html[data-weak] .pp.home-body .mob-device .mob-screen .mob-hot-ring::after {
+  animation: none;
+}
+
+html[data-tier="lite"] .pp.home-body .mob-device .mob-dialog,
+html[data-tier="still"] .pp.home-body .mob-device .mob-dialog,
+html[data-weak] .pp.home-body .mob-device .mob-dialog,
+html[data-tier="lite"] .pp.home-body .mob-device .mob-note,
+html[data-tier="still"] .pp.home-body .mob-device .mob-note,
+html[data-weak] .pp.home-body .mob-device .mob-note {
+  animation: none;
+}
+
+html[data-tier="lite"] .pp.home-body .mob-device .mob-ask .mob-scrim,
+html[data-tier="still"] .pp.home-body .mob-device .mob-ask .mob-scrim,
+html[data-weak] .pp.home-body .mob-device .mob-ask .mob-scrim {
+  animation: none;
+}
+
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .mob-device :is(.mob-glass, .mob-wall, .mob-status, .mob-home, .mob-hot) {
+  transition: none;
+}
+
+/* The tour's moves (§5): the new screen simply there, and no picture of
+   the one it left. */
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body [data-move] .mob-device :is(.mob-screen, .mob-sheet, .mob-scrim, .mob-page) {
+  animation: none;
+}
+
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .mob-device .mob-glass .mob-screen.mob-screen-out {
+  display: none;
+}
+
+/* ─── §7 Reduced motion ─────────────────────────────────────────────
+   The entries and the pulse only run with `no-preference` (§2–§4); the
+   glass's ground and a press's give change at once. */
+@media (prefers-reduced-motion: reduce) {
+  .pp.home-body.saas-page .mob-device :is(.mob-glass, .mob-wall, .mob-status, .mob-home, .mob-hot) {
+    transition: none;
+  }
+
+  /* No push, so no screen leaving (§5). */
+  .pp.home-body.saas-page .mob-device .mob-glass .mob-screen.mob-screen-out {
+    display: none;
+  }
+}
+
+/* ─── §8 Forced colours ─────────────────────────────────────────────
+   Windows High Contrast and every other forced palette drop the
+   wallpaper's gradient, the bezel's night and every shadow the screens
+   draw with. So the glass gets a CanvasText edge; the wallpaper is
+   Canvas; the grey bars, the drawn fields and the slots stand in
+   GrayText; what is picked (the time of day, the free time, the current
+   tab) is Highlight; every hotspot gets a 2px dashed Highlight border
+   (its ring and pulse, colour only, are hidden); and the notification
+   stands on the Canvas wallpaper as a card with its own border. */
+@media (forced-colors: active) {
+  .pp.saas-page .mob-device .mob-glass {
+    outline: 1px solid CanvasText;
+  }
+
+  .pp.saas-page .mob-device .mob-wall {
+    background: Canvas;
+  }
+
+  .pp.saas-page .mob-device .mob-status {
+    color: CanvasText;
+  }
+
+  .pp.saas-page .mob-device :is(.mob-bar, .mob-cutout, .mob-home, .mob-status-time) {
+    forced-color-adjust: none;
+    background-color: GrayText;
+  }
+
+  .pp.saas-page .mob-device :is(.mob-field-box, .mob-slot, .mob-segment, .mob-summary, .mob-with, .mob-alt, .mob-cal, .mob-sheet, .mob-dialog) {
+    border: 1px solid GrayText;
+  }
+
+  .pp.saas-page .mob-device :is(.mob-segment-item, .mob-slot)[data-current] {
+    border: 2px solid Highlight;
+  }
+
+  .pp.saas-page .mob-device .mob-nav-item[data-current] {
+    color: Highlight;
+  }
+
+  .pp.saas-page .mob-device .mob-hot {
+    border: 2px dashed Highlight;
+  }
+
+  .pp.saas-page .mob-device .mob-note {
+    border: 2px dashed Highlight;
+    background-color: Canvas;
+    color: CanvasText;
+  }
+
+  .pp.saas-page .mob-device .mob-note-from {
+    color: CanvasText;
+  }
+
+  .pp.saas-page .mob-device .mob-hot-ring {
+    display: none;
+  }
+}

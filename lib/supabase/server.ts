@@ -1,3 +1,4 @@
+import 'server-only'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
@@ -19,7 +20,7 @@ export async function createClient() {
             )
           } catch {
             // Called from a Server Component — cookies cannot be mutated.
-            // Middleware handles session refresh instead.
+            // proxy.ts refreshes the session before render instead.
           }
         },
       },

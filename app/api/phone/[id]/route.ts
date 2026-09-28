@@ -1,95 +1,62 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { getTwilioClient } from '@/lib/twilio/client'
-import { phoneNumbers as elPhone, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
-import { getStripeClient, isStripeConfigured } from '@/lib/stripe/client'
+import type { NextRequest } from 'next/server'
+import { z } from 'zod'
+import { ApiError, handleRoute, noStore, parseJson, zUuid } from '@/lib/api/http'
+import { requireOrgContext } from '@/lib/api/auth'
+import { RATE_LIMITS, enforceRateLimit } from '@/lib/security/rate-limit'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { getPhoneNumberView, releasePhoneNumber } from '@/lib/twilio/numbers'
 
-// Release a phone number: detach from ElevenLabs, release from Twilio, cancel
-// its Stripe subscription, drop the row.
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const supabase = await createClient()
+export const runtime = 'nodejs'
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+type Params = { params: Promise<{ id: string }> }
 
-  const { id } = await params
-
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
-
-  if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const { data: num } = await supabase
-    .from('phone_numbers')
-    .select('id, twilio_sid, elevenlabs_phone_number_id, stripe_subscription_id')
-    .eq('id', id)
-    .eq('org_id', org.id)
-    .maybeSingle()
-
-  if (!num) return NextResponse.json({ error: 'Number not found' }, { status: 404 })
-
-  // Best-effort cleanup with the providers — never block the DB delete on these.
-  if (elConfigured() && num.elevenlabs_phone_number_id) {
-    try { await elPhone.delete(num.elevenlabs_phone_number_id as string) } catch { /* ignore */ }
-  }
-  if (num.twilio_sid && !String(num.twilio_sid).startsWith('mock')) {
-    try { await getTwilioClient().incomingPhoneNumbers(num.twilio_sid as string).remove() } catch { /* ignore */ }
-  }
-  // Cancel billing so releasing a number here doesn't leave the Customer
-  // charged $1.15/mo forever for a number that's already gone. The
-  // subscription.deleted webhook also flips is_active off, harmless since
-  // this row is about to be deleted anyway.
-  if (isStripeConfigured() && num.stripe_subscription_id) {
-    try { await getStripeClient().subscriptions.cancel(num.stripe_subscription_id) } catch { /* ignore */ }
-  }
-
-  const { error } = await supabase
-    .from('phone_numbers')
-    .delete()
-    .eq('id', id)
-    .eq('org_id', org.id)
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  return NextResponse.json({ success: true })
+async function phoneNumberId(ctx: Params): Promise<string> {
+  const { id } = await ctx.params
+  const parsed = zUuid.safeParse(id)
+  if (!parsed.success) throw new ApiError(404, 'not_found', 'Phone number not found.')
+  return parsed.data
 }
 
-// Toggle a number active/inactive.
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const supabase = await createClient()
+// Release a number: Twilio first (so it stops costing money), then its Stripe
+// subscription and the row. If Twilio refuses, nothing changes and the owner
+// can simply try again.
+export const DELETE = handleRoute(async (_req: NextRequest, ctx: Params) => {
+  const org = await requireOrgContext()
+  const id = await phoneNumberId(ctx)
+  await enforceRateLimit(RATE_LIMITS.apiWrite, org.user.id)
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const result = await releasePhoneNumber({ phoneNumberId: id, orgId: org.org.id, cancelSubscription: true })
+  if (!result.ok) {
+    const status = { not_found: 404, not_configured: 503, provider_error: 502, database_error: 500 }[result.code]
+    throw new ApiError(status, result.code, result.error)
+  }
+  return noStore(Response.json({ success: true, billing_warning: result.billingWarning }))
+})
 
-  const { id } = await params
-  const { is_active } = (await request.json()) as { is_active?: boolean }
+const PatchSchema = z.object({ is_active: z.boolean() }).strict()
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
+// Pause or resume a number. A paused number still rings, but the router
+// answers with a short "can't take your call" message and logs a missed call.
+export const PATCH = handleRoute(async (req: NextRequest, ctx: Params) => {
+  const org = await requireOrgContext()
+  const id = await phoneNumberId(ctx)
+  const body = await parseJson(req, PatchSchema)
+  await enforceRateLimit(RATE_LIMITS.apiWrite, org.user.id)
 
-  if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const { data, error } = await supabase
+  // phone_numbers is read-only for browser sessions after migration 011.
+  const { data, error } = await createAdminClient()
     .from('phone_numbers')
-    .update({ is_active: !!is_active })
+    .update({ is_active: body.is_active })
     .eq('id', id)
-    .eq('org_id', org.id)
-    .select('*, agents(name)')
-    .single()
+    .eq('org_id', org.org.id)
+    .select('id')
+  if (error) {
+    console.error('[telephony] phone number update failed', error.code, error.message)
+    throw new ApiError(500, 'internal_error', 'We couldn’t update this number. Please try again.')
+  }
+  if (!data || data.length === 0) throw new ApiError(404, 'not_found', 'Phone number not found.')
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  return NextResponse.json(data)
-}
+  const view = await getPhoneNumberView(org.supabase, org.org.id, id)
+  if (!view) throw new ApiError(404, 'not_found', 'Phone number not found.')
+  return noStore(Response.json(view))
+})

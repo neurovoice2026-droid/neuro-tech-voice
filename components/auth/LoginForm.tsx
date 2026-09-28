@@ -1,25 +1,19 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { Suspense, useState, useTransition } from 'react'
 import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import Link from 'next/link'
+import { unstable_rethrow } from 'next/navigation'
 import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AuthNotice } from '@/components/auth/AuthNotice'
 import { signInWithEmail, signInWithGoogle } from '@/lib/auth/actions'
+import { AUTH_MESSAGES } from '@/lib/auth/errors'
+import { formResolver, signInSchema, type SignInInput } from '@/lib/auth/schemas'
 import { cn } from '@/lib/utils'
-
-// ─── Schema ───────────────────────────────────────────────────────────────────
-const loginSchema = z.object({
-  email: z.string().email('Please enter a valid email'),
-  password: z.string().min(1, 'Password is required'),
-})
-
-type LoginValues = z.infer<typeof loginSchema>
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export function LoginForm() {
@@ -28,24 +22,39 @@ export function LoginForm() {
   const [error, setError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
 
-  const form = useForm<LoginValues>({
-    resolver: zodResolver(loginSchema),
+  const form = useForm<SignInInput>({
+    resolver: formResolver(signInSchema),
     defaultValues: { email: '', password: '' },
   })
 
-  function onSubmit(values: LoginValues) {
+  function onSubmit(values: SignInInput) {
     setError(null)
+    // Where the proxy sent us from, e.g. /login?next=/calls. The server
+    // action only follows same-site paths.
+    const next = new URLSearchParams(window.location.search).get('next')
     startTransition(async () => {
-      const result = await signInWithEmail(values.email, values.password)
-      if (result?.error) setError(result.error)
+      try {
+        const result = await signInWithEmail({ ...values, next })
+        if (result && 'error' in result) setError(result.error)
+      } catch (err) {
+        // A successful sign-in ends in a redirect, which Next delivers as a
+        // rejection it must handle itself. Anything else never reached us.
+        unstable_rethrow(err)
+        setError(AUTH_MESSAGES.connectionFailed)
+      }
     })
   }
 
   function handleGoogle() {
     setError(null)
     startGoogleTransition(async () => {
-      const result = await signInWithGoogle()
-      if (result?.error) setError(result.error)
+      try {
+        const result = await signInWithGoogle()
+        if (result && 'error' in result) setError(result.error)
+      } catch (err) {
+        unstable_rethrow(err)
+        setError(AUTH_MESSAGES.connectionFailed)
+      }
     })
   }
 
@@ -76,12 +85,16 @@ export function LoginForm() {
         <div className="flex-1 border-t border-border" />
       </div>
 
-      {/* Server error */}
-      {error && (
+      {/* Server error, or the one the OAuth callback redirected back with */}
+      {error ? (
         <Alert variant="destructive" className="py-3">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
+      ) : (
+        <Suspense fallback={null}>
+          <AuthNotice />
+        </Suspense>
       )}
 
       {/* Form */}
@@ -97,6 +110,8 @@ export function LoginForm() {
             placeholder="you@company.com"
             autoComplete="email"
             disabled={isPending}
+            aria-invalid={!!form.formState.errors.email}
+            aria-describedby={form.formState.errors.email ? 'email-error' : undefined}
             {...form.register('email')}
             className={cn(
               'h-11',
@@ -105,7 +120,7 @@ export function LoginForm() {
             )}
           />
           {form.formState.errors.email && (
-            <p className="text-xs text-destructive">
+            <p id="email-error" className="text-xs text-destructive">
               {form.formState.errors.email.message}
             </p>
           )}
@@ -130,6 +145,8 @@ export function LoginForm() {
               type={showPassword ? 'text' : 'password'}
               autoComplete="current-password"
               disabled={isPending}
+              aria-invalid={!!form.formState.errors.password}
+              aria-describedby={form.formState.errors.password ? 'password-error' : undefined}
               {...form.register('password')}
               className={cn(
                 'h-11 pr-10',
@@ -139,9 +156,8 @@ export function LoginForm() {
             />
             <button
               type="button"
-              tabIndex={-1}
               onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+              className="absolute right-1 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
               {showPassword ? (
@@ -152,7 +168,7 @@ export function LoginForm() {
             </button>
           </div>
           {form.formState.errors.password && (
-            <p className="text-xs text-destructive">
+            <p id="password-error" className="text-xs text-destructive">
               {form.formState.errors.password.message}
             </p>
           )}

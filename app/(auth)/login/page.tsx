@@ -12,7 +12,7 @@ export default function LoginPage() {
       {/* Header */}
       <div className="space-y-2">
         <div className="flex justify-center mb-6">
-          <Logo size="sm" showText />
+          <Logo size="sm" />
         </div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">
           Welcome back

@@ -1,282 +1,708 @@
 'use client'
 
-import { useState, useRef, useEffect, useTransition } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import {
-  PhoneIncoming, PhoneOutgoing, Bot, User, Copy, CheckCheck,
-  Play, Pause, Download, Loader2, Mail, FileText, Table2,
-  Trash2, Search, ChevronDown,
+  AlertTriangle, BookOpen, Bot, CalendarCheck, CheckCheck, CheckCircle2, ChevronDown, Copy, Download,
+  FileText, Loader2, Mail, MessageSquare, PhoneIncoming, PhoneOff, PhoneOutgoing, RefreshCw, Scissors,
+  Search, Table2, Trash2, User, Wrench, XCircle,
 } from 'lucide-react'
-import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
-} from '@/components/ui/sheet'
-import { Badge } from '@/components/ui/badge'
-import { WorkInProgressBadge } from '@/components/shared/WorkInProgressBadge'
+import { toast } from 'sonner'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { cn, formatDuration, formatDate, formatPhoneNumber } from '@/lib/utils'
-import { toast } from 'sonner'
-import { useCallDetail } from '@/hooks/useCallDetail'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { UpgradeNotice } from '@/components/shared/UpgradeNotice'
+import { cn, formatDate, formatDuration, formatPhoneNumber } from '@/lib/utils'
+import { useCallDetail, type CallDetail } from '@/hooks/useCallDetail'
 import { DeleteCallDialog } from './DeleteCallDialog'
+import {
+  callerLabel, endReasonLabel, FallbackBadge, formatIntent, OutcomeChip, SENTIMENT_META, StatusBadge,
+  TagChips, TestBadge, toolLabel,
+} from './call-display'
 import type { TranscriptEntry } from '@/types'
 
-const STATUS_BADGE: Record<string, string> = {
-  completed:   'border-green-200 bg-green-50 text-green-700',
-  failed:      'border-red-200 bg-red-50 text-red-700',
-  busy:        'border-amber-200 bg-amber-50 text-amber-700',
-  'no-answer': 'border-gray-200 bg-gray-100 text-gray-600',
-  'in-progress': 'border-blue-200 bg-blue-50 text-blue-700',
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function clock(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds))
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
 }
 
-function AudioPlayer({ url }: { url: string }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-  const [playing, setPlaying] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const [duration, setDuration] = useState(0)
-  const [current, setCurrent] = useState(0)
+function humanKey(key: string): string {
+  const text = key.replace(/[_-]+/g, ' ').trim()
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
 
-  useEffect(() => {
-    const audio = new Audio(url)
-    audioRef.current = audio
-    audio.addEventListener('loadedmetadata', () => setDuration(audio.duration))
-    audio.addEventListener('timeupdate', () => {
-      setCurrent(audio.currentTime)
-      setProgress(audio.duration ? (audio.currentTime / audio.duration) * 100 : 0)
-    })
-    audio.addEventListener('ended', () => setPlaying(false))
-    return () => { audio.pause(); audio.src = '' }
-  }, [url])
+function transcriptAsText(call: CallDetail): string {
+  const who = (t: TranscriptEntry) => (t.role === 'agent' ? call.agent_name || 'Agent' : 'Caller')
+  return (call.transcript ?? []).map((t) => `[${clock(t.time_in_call_secs)}] ${who(t)}: ${t.message}`).join('\n')
+}
 
-  function toggle() {
-    const audio = audioRef.current
-    if (!audio) return
-    if (playing) { audio.pause(); setPlaying(false) }
-    else { audio.play(); setPlaying(true) }
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{children}</h3>
+}
+
+// ─── Recording ────────────────────────────────────────────────────────────────
+
+function RecordingSection({ call }: { call: CallDetail }) {
+  const [failed, setFailed] = useState(false)
+
+  if (call.recording_url) {
+    return (
+      <div className="space-y-2 rounded-xl border bg-muted/30 p-3">
+        {failed ? (
+          <p className="text-sm text-muted-foreground">The recording couldn’t be loaded right now. Please try again in a moment.</p>
+        ) : (
+          // Native controls: keyboard, screen reader and seeking support for free.
+          <audio
+            controls
+            preload="none"
+            src={call.recording_url}
+            onError={() => setFailed(true)}
+            className="w-full"
+            aria-label="Call recording"
+          />
+        )}
+        <a
+          href={call.recording_url}
+          download
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+        >
+          <Download aria-hidden="true" className="size-3.5" /> Download recording
+        </a>
+      </div>
+    )
   }
-
-  function seek(e: React.MouseEvent<HTMLDivElement>) {
-    const audio = audioRef.current
-    if (!audio || !duration) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const ratio = (e.clientX - rect.left) / rect.width
-    audio.currentTime = ratio * duration
+  if (call.recording_available && !call.recordings_entitled) {
+    return (
+      <UpgradeNotice
+        compact
+        feature="Call recordings"
+        requiredPlan={call.recordings_required_plan}
+      />
+    )
   }
+  return <p className="text-sm text-muted-foreground">This call wasn’t recorded.</p>
+}
 
-  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+// ─── Overview ─────────────────────────────────────────────────────────────────
+
+function Overview({ call }: { call: CallDetail }) {
+  const analysis = call.analysis
+  const sentiment = call.sentiment ? SENTIMENT_META[call.sentiment] : null
+  const labels = new Map(call.lead_fields.map((f) => [f.key, f.label]))
+  const extracted = Object.entries(call.extracted ?? {}).filter(([, v]) => typeof v === 'string' && v.trim())
+  const documents = Array.from(new Map((call.knowledge_sources ?? []).map((s) => [s.document_id, s.document_name])).values())
+  const intent = formatIntent(call.intent)
+  const inProgress = call.status === 'in-progress'
+  const hasTranscript = (call.transcript ?? []).length > 0
 
   return (
-    <div className="rounded-xl bg-gray-50 border p-4 flex items-center gap-3">
-      <button
-        onClick={toggle}
-        className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-      >
-        {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
-      </button>
-      <div className="flex-1 min-w-0">
-        <div
-          onClick={seek}
-          className="h-2 w-full rounded-full bg-gray-200 cursor-pointer overflow-hidden"
-        >
-          <div
-            className="h-full rounded-full bg-primary transition-all duration-100"
-            style={{ width: `${progress}%` }}
-          />
+    <div className="space-y-5">
+      {inProgress && (
+        <p className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+          <Loader2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 animate-spin" />
+          This call is still going. The summary and outcome appear a moment after it ends.
+        </p>
+      )}
+
+      <section>
+        <SectionTitle>Summary</SectionTitle>
+        {call.summary ? (
+          <div className="rounded-xl border border-purple-100 bg-purple-50 p-4">
+            <p className="text-sm leading-relaxed">{call.summary}</p>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {inProgress
+              ? 'Not ready yet.'
+              : hasTranscript
+                ? 'The summary is being prepared. Check back in a minute.'
+                : 'There was no conversation to summarise.'}
+          </p>
+        )}
+      </section>
+
+      <section className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-xl border p-3">
+          <p className="mb-1.5 text-xs text-muted-foreground">Outcome</p>
+          <OutcomeChip outcome={call.outcome} />
+          {intent && <p className="mt-2 text-sm"><span className="text-muted-foreground">Reason: </span>{intent}</p>}
         </div>
-        <div className="flex justify-between text-xs text-muted-foreground mt-1">
-          <span>{fmt(current)}</span>
-          <span>{fmt(duration)}</span>
+        <div className="rounded-xl border p-3">
+          <p className="mb-1.5 text-xs text-muted-foreground">Caller sentiment</p>
+          {sentiment ? (
+            <p className={cn('flex items-center gap-2 text-sm font-medium', sentiment.text)}>
+              <span aria-hidden="true" className={cn('size-2.5 rounded-full', sentiment.dot)} />
+              {sentiment.label}
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">Not analysed yet</p>
+          )}
+          {analysis?.sentiment_reason && <p className="mt-1.5 text-sm text-muted-foreground">{analysis.sentiment_reason}</p>}
         </div>
-      </div>
-      <a href={url} download className="text-muted-foreground hover:text-foreground">
-        <Download className="h-4 w-4" />
-      </a>
+      </section>
+
+      {(analysis?.flag_reason || analysis?.follow_up_required) && (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <p className="flex items-center gap-2 font-medium">
+            <AlertTriangle aria-hidden="true" className="size-4" />
+            {analysis.flag_reason ? 'Needs your attention' : 'Follow-up suggested'}
+          </p>
+          <p className="mt-1">{analysis.flag_reason ?? analysis.follow_up_reason ?? 'Someone should get back to this caller.'}</p>
+        </section>
+      )}
+
+      {(extracted.length > 0 || analysis?.caller_name) && (
+        <section>
+          <SectionTitle>Details collected</SectionTitle>
+          <dl className="divide-y rounded-xl border">
+            {analysis?.caller_name && !extracted.some(([k]) => k === 'name') && (
+              <div className="flex flex-col gap-0.5 px-3 py-2 sm:flex-row sm:gap-3">
+                <dt className="text-xs text-muted-foreground sm:w-36 sm:shrink-0 sm:text-sm">Name</dt>
+                <dd className="text-sm break-words">{analysis.caller_name}</dd>
+              </div>
+            )}
+            {extracted.map(([key, value]) => (
+              <div key={key} className="flex flex-col gap-0.5 px-3 py-2 sm:flex-row sm:gap-3">
+                <dt className="text-xs text-muted-foreground sm:w-36 sm:shrink-0 sm:text-sm">{labels.get(key) ?? humanKey(key)}</dt>
+                <dd className="text-sm break-words">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
+
+      {(call.tags ?? []).length > 0 && (
+        <section>
+          <SectionTitle>Tags</SectionTitle>
+          <TagChips tags={call.tags} max={20} />
+        </section>
+      )}
+
+      <section>
+        <SectionTitle>Recording</SectionTitle>
+        <RecordingSection call={call} />
+      </section>
+
+      {documents.length > 0 && (
+        <section>
+          <SectionTitle>Answered from your documents</SectionTitle>
+          <ul className="flex flex-wrap gap-1.5">
+            {documents.map((name) => (
+              <li key={name} className="inline-flex max-w-full items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs">
+                <BookOpen aria-hidden="true" className="size-3.5 shrink-0 text-purple-600" />
+                <span className="truncate">{name}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className="rounded-xl border bg-muted/30 p-4">
+        <dl className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <dt className="mb-0.5 text-xs text-muted-foreground">Direction</dt>
+            <dd className="flex items-center gap-1.5 font-medium">
+              {call.direction === 'outbound' ? (
+                <><PhoneOutgoing aria-hidden="true" className="size-4 text-purple-500" /> Outbound</>
+              ) : (
+                <><PhoneIncoming aria-hidden="true" className="size-4 text-blue-500" /> Inbound</>
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className="mb-0.5 text-xs text-muted-foreground">Duration</dt>
+            <dd className="font-medium">{call.duration_seconds > 0 ? formatDuration(call.duration_seconds) : '—'}</dd>
+          </div>
+          <div>
+            <dt className="mb-0.5 text-xs text-muted-foreground">Started</dt>
+            <dd className="text-xs font-medium">{call.started_at ? formatDate(call.started_at) : '—'}</dd>
+          </div>
+          <div>
+            <dt className="mb-0.5 text-xs text-muted-foreground">Ended</dt>
+            <dd className="text-xs font-medium">{call.ended_at ? formatDate(call.ended_at) : '—'}</dd>
+          </div>
+          {call.agent_name && (
+            <div>
+              <dt className="mb-0.5 text-xs text-muted-foreground">Agent</dt>
+              <dd className="font-medium">{call.agent_name}</dd>
+            </div>
+          )}
+          {endReasonLabel(call.end_reason) && (
+            <div>
+              <dt className="mb-0.5 text-xs text-muted-foreground">How it ended</dt>
+              <dd className="font-medium">{endReasonLabel(call.end_reason)}</dd>
+            </div>
+          )}
+        </dl>
+      </section>
     </div>
   )
 }
 
-function TranscriptView({ transcript }: { transcript: TranscriptEntry[] }) {
-  const [search, setSearch] = useState('')
+// ─── Transcript ───────────────────────────────────────────────────────────────
+
+function highlight(text: string, query: string): React.ReactNode {
+  if (!query) return text
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
+  return parts.map((part, i) =>
+    part.toLowerCase() === query.toLowerCase() ? (
+      <mark key={i} className="rounded bg-yellow-200 px-0.5">{part}</mark>
+    ) : (
+      part
+    )
+  )
+}
+
+function TranscriptView({ call }: { call: CallDetail }) {
+  const transcript = useMemo(() => call.transcript ?? [], [call.transcript])
+  const [query, setQuery] = useState('')
   const [atBottom, setAtBottom] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  function highlightText(text: string) {
-    if (!search) return text
-    const parts = text.split(new RegExp(`(${search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'))
-    return parts.map((part, i) =>
-      part.toLowerCase() === search.toLowerCase()
-        ? <mark key={i} className="bg-yellow-200 rounded px-0.5">{part}</mark>
-        : part
-    )
+  const matches = query.trim()
+    ? transcript.filter((t) => t.message.toLowerCase().includes(query.trim().toLowerCase())).length
+    : null
+
+  async function copyAll() {
+    try {
+      await navigator.clipboard.writeText(transcriptAsText(call))
+      toast.success('Transcript copied')
+    } catch {
+      toast.error('Couldn’t copy. Your browser blocked clipboard access.')
+    }
   }
 
-  function copyAll() {
-    const text = transcript.map((t) => `${t.role === 'agent' ? 'Agent' : 'Caller'}: ${t.message}`).join('\n')
-    navigator.clipboard.writeText(text)
-    toast.success('Transcript copied')
-  }
-
-  function downloadTxt() {
-    const text = transcript.map((t) => `[${t.role === 'agent' ? 'Agent' : 'Caller'}] ${t.message}`).join('\n')
+  function download() {
+    const url = URL.createObjectURL(new Blob([transcriptAsText(call)], { type: 'text/plain;charset=utf-8' }))
     const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
-    a.download = 'transcript.txt'
+    a.href = url
+    a.download = `transcript-${call.started_at?.slice(0, 10) ?? call.id}.txt`
     a.click()
-  }
-
-  function handleScroll() {
-    const el = scrollRef.current
-    if (!el) return
-    setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 40)
-  }
-
-  function scrollToBottom() {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
+    URL.revokeObjectURL(url)
   }
 
   if (transcript.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-        <FileText className="h-8 w-8 mb-2 opacity-40" />
-        <p className="text-sm">No transcript available</p>
-      </div>
+      <EmptyState
+        icon={FileText}
+        title="No transcript"
+        description={call.status === 'in-progress' ? 'The transcript appears when the call ends.' : 'Nothing was said on this call.'}
+      />
     )
   }
 
-  const agentWords  = transcript.filter((t) => t.role === 'agent').reduce((s, t) => s + t.message.split(' ').length, 0)
-  const callerWords = transcript.filter((t) => t.role === 'user').reduce((s, t) => s + t.message.split(' ').length, 0)
-  const total = agentWords + callerWords || 1
-  const agentPct  = Math.round((agentWords / total) * 100)
-  const callerPct = 100 - agentPct
+  const words = (role: TranscriptEntry['role']) =>
+    transcript.filter((t) => t.role === role).reduce((sum, t) => sum + t.message.split(/\s+/).filter(Boolean).length, 0)
+  const agentWords = words('agent')
+  const total = agentWords + words('user') || 1
+  const agentPct = Math.round((agentWords / total) * 100)
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Toolbar */}
       <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <div className="relative min-w-0 flex-1">
+          <Search aria-hidden="true" className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search transcript…"
-            className="pl-8 h-8 text-sm"
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search this transcript"
+            aria-label="Search this transcript"
+            className="h-8 pl-8 text-sm"
           />
         </div>
-        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={copyAll}>
-          <Copy className="h-3.5 w-3.5" />
+        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => void copyAll()} aria-label="Copy transcript">
+          <Copy aria-hidden="true" className="size-3.5" />
           <span className="hidden sm:inline">Copy</span>
         </Button>
-        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={downloadTxt}>
-          <Download className="h-3.5 w-3.5" />
+        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={download} aria-label="Download transcript">
+          <Download aria-hidden="true" className="size-3.5" />
           <span className="hidden sm:inline">Download</span>
         </Button>
       </div>
+      {matches !== null && (
+        <p className="text-xs text-muted-foreground" aria-live="polite">
+          {matches === 0 ? 'No matches' : `${matches} ${matches === 1 ? 'message matches' : 'messages match'}`}
+        </p>
+      )}
 
-      {/* Messages */}
       <div
         ref={scrollRef}
-        onScroll={handleScroll}
-        className="relative max-h-[420px] overflow-y-auto space-y-3 pr-1"
+        onScroll={() => {
+          const el = scrollRef.current
+          if (el) setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 40)
+        }}
+        className="relative max-h-[60vh] space-y-3 overflow-y-auto pr-1"
+        role="log"
+        aria-label="Call transcript"
       >
         {transcript.map((msg, i) => {
           const isAgent = msg.role === 'agent'
+          const docs = isAgent
+            ? Array.from(new Map((msg.sources ?? []).map((s) => [s.document_id, s])).values())
+            : []
           return (
-            <div key={i} className={cn('flex items-end gap-2', isAgent ? '' : 'flex-row-reverse')}>
-              <div className={cn(
-                'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full',
-                isAgent ? 'bg-purple-100' : 'bg-gray-100'
-              )}>
-                {isAgent
-                  ? <Bot className="h-3.5 w-3.5 text-purple-600" />
-                  : <User className="h-3.5 w-3.5 text-gray-500" />}
+            <div key={i} className={cn('flex items-end gap-2', !isAgent && 'flex-row-reverse')}>
+              <div className={cn('flex size-7 shrink-0 items-center justify-center rounded-full', isAgent ? 'bg-purple-100' : 'bg-gray-100')}>
+                {isAgent ? <Bot aria-hidden="true" className="size-3.5 text-purple-600" /> : <User aria-hidden="true" className="size-3.5 text-gray-500" />}
               </div>
-              <div className={cn('flex flex-col gap-1 max-w-[85%]', isAgent ? 'items-start' : 'items-end')}>
-                <div className={cn(
-                  'rounded-xl px-3 py-2 text-sm leading-relaxed',
-                  isAgent
-                    ? 'bg-purple-50 border border-purple-100 rounded-tl-sm'
-                    : 'bg-white border border-gray-200 rounded-tr-sm'
-                )}>
-                  {highlightText(msg.message)}
-                </div>
-                <span className="text-[11px] text-muted-foreground px-1">
-                  at {formatDuration(msg.time_in_call_secs)}
-                </span>
+              <div className={cn('flex min-w-0 max-w-[85%] flex-col gap-1', isAgent ? 'items-start' : 'items-end')}>
+                <span className="sr-only">{isAgent ? 'Agent' : 'Caller'}:</span>
+                {msg.message && (
+                  <div
+                    className={cn(
+                      'rounded-xl px-3 py-2 text-sm leading-relaxed break-words',
+                      isAgent ? 'rounded-tl-sm border border-purple-100 bg-purple-50' : 'rounded-tr-sm border border-gray-200 bg-white'
+                    )}
+                  >
+                    {highlight(msg.message, query.trim())}
+                    {msg.interrupted && (
+                      <span className="ml-1.5 inline-flex items-center gap-1 align-middle text-[11px] text-muted-foreground" title="The caller spoke over the agent here">
+                        <Scissors aria-hidden="true" className="size-3" /> interrupted
+                      </span>
+                    )}
+                  </div>
+                )}
+                {(msg.tool_calls ?? []).length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {(msg.tool_calls ?? []).map((tool, j) => (
+                      <span
+                        key={j}
+                        className={cn(
+                          'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px]',
+                          tool.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                        )}
+                      >
+                        {tool.ok ? <CheckCircle2 aria-hidden="true" className="size-3" /> : <XCircle aria-hidden="true" className="size-3" />}
+                        {toolLabel(tool.name)}
+                        {!tool.ok && <span className="sr-only">(didn’t work)</span>}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {docs.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {docs.map((doc) => (
+                      <span
+                        key={doc.document_id}
+                        title={doc.excerpt || undefined}
+                        className="inline-flex max-w-full items-center gap-1 rounded-md border bg-background px-1.5 py-0.5 text-[11px] text-muted-foreground"
+                      >
+                        <BookOpen aria-hidden="true" className="size-3 shrink-0 text-purple-600" />
+                        <span className="truncate">Answered from {doc.document_name}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <span className="px-1 text-[11px] text-muted-foreground">{clock(msg.time_in_call_secs)}</span>
               </div>
             </div>
           )
         })}
-
-        {/* Scroll to bottom */}
         {!atBottom && (
           <button
-            onClick={scrollToBottom}
-            className="sticky bottom-2 ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-muted shadow-sm border hover:bg-muted/80"
+            type="button"
+            onClick={() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })}
+            aria-label="Scroll to the end of the transcript"
+            className="sticky bottom-2 ml-auto flex size-7 items-center justify-center rounded-full border bg-muted shadow-sm hover:bg-muted/80"
           >
-            <ChevronDown className="h-4 w-4" />
+            <ChevronDown className="size-4" />
           </button>
         )}
       </div>
 
-      {/* Stats */}
       <p className="text-xs text-muted-foreground">
-        {transcript.length} messages · Agent spoke {agentPct}% · Caller spoke {callerPct}%
+        {transcript.length} messages · Agent spoke {agentPct}% · Caller spoke {100 - agentPct}%
       </p>
     </div>
   )
 }
 
+// ─── Activity timeline ────────────────────────────────────────────────────────
+
+interface TimelineItem {
+  key: string
+  at: number | null
+  icon: typeof Bot
+  tone: 'ok' | 'fail' | 'info' | 'warn'
+  title: string
+  detail?: string | null
+}
+
+function secondsInto(call: CallDetail, iso: string): number | null {
+  const start = Date.parse(call.started_at ?? '')
+  const at = Date.parse(iso)
+  if (!Number.isFinite(start) || !Number.isFinite(at)) return null
+  return Math.max(0, Math.round((at - start) / 1000))
+}
+
+function buildTimeline(call: CallDetail): TimelineItem[] {
+  const items: TimelineItem[] = []
+
+  if (call.tool_invocations.length > 0) {
+    for (const inv of call.tool_invocations) {
+      if (inv.tool_name === 'get_call_context') continue
+      items.push({
+        key: `tool-${inv.id}`,
+        at: secondsInto(call, inv.created_at),
+        icon: Wrench,
+        tone: inv.ok ? 'ok' : 'fail',
+        title: inv.ok ? toolLabel(inv.tool_name) : `${toolLabel(inv.tool_name)} (didn’t work)`,
+        detail: inv.result_summary,
+      })
+    }
+  } else {
+    ;(call.transcript ?? []).forEach((turn, i) => {
+      ;(turn.tool_calls ?? []).forEach((tool, j) => {
+        if (tool.name === 'get_call_context') return
+        items.push({
+          key: `turn-${i}-${j}`,
+          at: turn.time_in_call_secs,
+          icon: Wrench,
+          tone: tool.ok ? 'ok' : 'fail',
+          title: tool.ok ? toolLabel(tool.name) : `${toolLabel(tool.name)} (didn’t work)`,
+        })
+      })
+    })
+  }
+
+  for (const booking of call.bookings) {
+    let when = booking.starts_at
+    try {
+      when = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short', timeZone: booking.timezone }).format(new Date(booking.starts_at))
+    } catch {
+      // Unknown time zone on an old row: show the stored timestamp.
+    }
+    items.push({
+      key: `booking-${booking.id}`,
+      at: secondsInto(call, booking.created_at),
+      icon: CalendarCheck,
+      tone: booking.status === 'cancelled' ? 'warn' : 'ok',
+      title: `${booking.status === 'cancelled' ? 'Appointment cancelled' : booking.status === 'rescheduled' ? 'Appointment rescheduled' : 'Appointment booked'}${booking.service ? `: ${booking.service}` : ''}`,
+      detail: `${booking.caller_name} · ${when}`,
+    })
+  }
+
+  for (const message of call.messages) {
+    items.push({
+      key: `message-${message.id}`,
+      at: secondsInto(call, message.created_at),
+      icon: MessageSquare,
+      tone: message.urgency === 'urgent' ? 'warn' : 'info',
+      title: `${message.urgency === 'urgent' ? 'Urgent message' : 'Message'}${message.recipient_name ? ` for ${message.recipient_name}` : ''}`,
+      detail: message.body,
+    })
+  }
+
+  items.sort((a, b) => (a.at ?? Number.MAX_SAFE_INTEGER) - (b.at ?? Number.MAX_SAFE_INTEGER))
+
+  const ended = endReasonLabel(call.end_reason)
+  if (ended && call.status !== 'in-progress') {
+    items.push({ key: 'ended', at: call.duration_seconds || null, icon: PhoneOff, tone: 'info', title: ended })
+  }
+  return items
+}
+
+const TONE_CLASSES: Record<TimelineItem['tone'], string> = {
+  ok: 'bg-emerald-100 text-emerald-700',
+  fail: 'bg-red-100 text-red-700',
+  info: 'bg-blue-100 text-blue-700',
+  warn: 'bg-amber-100 text-amber-800',
+}
+
+function Activity({ call }: { call: CallDetail }) {
+  const items = buildTimeline(call)
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        icon={Wrench}
+        title="No actions on this call"
+        description="Bookings, messages, transfers and other things your agent does during a call show up here."
+      />
+    )
+  }
+  return (
+    <ol className="relative space-y-4 border-l pl-5">
+      {items.map((item) => (
+        <li key={item.key} className="relative">
+          <span className={cn('absolute -left-[31px] flex size-5 items-center justify-center rounded-full ring-4 ring-background', TONE_CLASSES[item.tone])}>
+            <item.icon aria-hidden="true" className="size-3" />
+          </span>
+          <p className="text-sm font-medium">{item.title}</p>
+          {item.detail && <p className="mt-0.5 text-sm break-words text-muted-foreground">{item.detail}</p>}
+          {item.at !== null && <p className="mt-0.5 text-[11px] text-muted-foreground">at {clock(item.at)}</p>}
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+// ─── Actions ──────────────────────────────────────────────────────────────────
+
 function IntegrationAction({
-  icon: Icon, iconColor, label, description, buttonLabel, callId, type, connected, workInProgress,
+  icon: Icon, iconColor, label, description, buttonLabel, callId, type, available, unavailableReason,
 }: {
-  icon: typeof Bot; iconColor: string; label: string; description: string
-  buttonLabel: string; callId: string; type: string; connected: boolean; workInProgress?: boolean
+  icon: typeof Bot
+  iconColor: string
+  label: string
+  description: string
+  buttonLabel: string
+  callId: string
+  type: 'email' | 'google_docs' | 'google_sheets'
+  available: boolean
+  unavailableReason?: string
 }) {
   const [sent, setSent] = useState(false)
   const [isPending, start] = useTransition()
 
-  function handleSend() {
+  function send() {
     start(async () => {
-      const res = await fetch(`/api/calls/${callId}/integrations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type }),
-      })
-      if (res.ok) { setSent(true); toast.success('Sent successfully!') }
-      else { toast.error('Integration not connected') }
+      try {
+        const res = await fetch(`/api/calls/${callId}/integrations`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type }),
+        })
+        const body = (await res.json().catch(() => null)) as { message?: string; error?: { message?: string } } | null
+        if (!res.ok) {
+          toast.error(body?.error?.message ?? 'That didn’t work. Please try again.')
+          return
+        }
+        setSent(true)
+        toast.success(body?.message ?? 'Sent')
+      } catch {
+        toast.error('We couldn’t reach the server. Check your connection and try again.')
+      }
     })
   }
 
   return (
-    <div className="flex items-center justify-between py-3 border-b last:border-0">
+    <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-start gap-3">
-        <Icon className={cn('h-5 w-5 mt-0.5 flex-shrink-0', iconColor)} />
+        <Icon aria-hidden="true" className={cn('mt-0.5 size-5 shrink-0', iconColor)} />
         <div>
-          <p className="flex items-center gap-1.5 text-sm font-medium">
-            {label}
-            {workInProgress && <WorkInProgressBadge />}
-          </p>
-          <p className="text-xs text-muted-foreground">{description}</p>
+          <p className="text-sm font-medium">{label}</p>
+          <p className="text-xs text-muted-foreground">{available ? description : unavailableReason}</p>
         </div>
       </div>
       {sent ? (
-        <span className="text-xs text-green-600 flex items-center gap-1">
-          <CheckCheck className="h-3.5 w-3.5" /> Sent!
+        <span className="flex items-center gap-1 text-xs text-green-600">
+          <CheckCheck aria-hidden="true" className="size-3.5" /> Done
         </span>
       ) : (
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!connected || isPending || workInProgress}
-          onClick={handleSend}
-          title={workInProgress ? 'Coming soon' : !connected ? 'Connect this integration first' : undefined}
-        >
-          {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : buttonLabel}
+        <Button variant="outline" size="sm" disabled={!available || isPending} onClick={send} className="self-start sm:self-auto">
+          {isPending ? <Loader2 aria-hidden="true" className="size-3.5 animate-spin" /> : null}
+          {isPending ? 'Sending…' : buttonLabel}
         </Button>
       )}
     </div>
   )
 }
+
+function Actions({ call, onDelete }: { call: CallDetail; onDelete: () => void }) {
+  const [connected, setConnected] = useState<{ callId: string; docs: boolean; sheets: boolean } | null>(null)
+  const [copied, setCopied] = useState(false)
+  const number = callerLabel(call)
+
+  useEffect(() => {
+    if (!call.integrations_entitled) return
+    const controller = new AbortController()
+    const check = (type: string) =>
+      fetch(`/api/integrations/${type}`, { signal: controller.signal, cache: 'no-store' })
+        .then((r) => (r.ok ? (r.json() as Promise<{ connected?: boolean }>) : { connected: false }))
+        .then((d) => !!d.connected)
+        .catch(() => false)
+    Promise.all([check('google_docs'), check('google_sheets')]).then(([docs, sheets]) => {
+      if (!controller.signal.aborted) setConnected({ callId: call.id, docs, sheets })
+    })
+    return () => controller.abort()
+  }, [call.id, call.integrations_entitled])
+
+  const status = connected?.callId === call.id ? connected : null
+
+  async function copyNumber() {
+    if (!number) return
+    try {
+      await navigator.clipboard.writeText(number)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast.error('Couldn’t copy. Your browser blocked clipboard access.')
+    }
+  }
+
+  const googleReason = !call.integrations_entitled
+    ? 'Part of a higher plan.'
+    : status === null
+      ? 'Checking the connection…'
+      : 'Connect it first on the Integrations page.'
+
+  return (
+    <div className="space-y-5">
+      <section>
+        <SectionTitle>Send this call</SectionTitle>
+        <div className="divide-y rounded-xl border px-3">
+          <IntegrationAction
+            icon={Mail} iconColor="text-red-500" label="Email the summary"
+            description="Sends the summary and details to your account email"
+            buttonLabel="Send email" callId={call.id} type="email" available
+          />
+          <IntegrationAction
+            icon={FileText} iconColor="text-blue-600" label="Create a call report"
+            description="A formatted report in Google Docs"
+            buttonLabel="Create" callId={call.id} type="google_docs"
+            available={!!status?.docs} unavailableReason={googleReason}
+          />
+          <IntegrationAction
+            icon={Table2} iconColor="text-green-600" label="Log to Google Sheets"
+            description="Adds a row to your call-log spreadsheet"
+            buttonLabel="Add row" callId={call.id} type="google_sheets"
+            available={!!status?.sheets} unavailableReason={googleReason}
+          />
+        </div>
+        {!call.integrations_entitled && (
+          <UpgradeNotice compact className="mt-2" feature="Google integrations" requiredPlan={call.integrations_required_plan} />
+        )}
+      </section>
+
+      <section>
+        <SectionTitle>Caller</SectionTitle>
+        <Button variant="outline" size="sm" className="w-full justify-start gap-2" onClick={() => void copyNumber()} disabled={!number}>
+          {copied ? <CheckCheck aria-hidden="true" className="size-4 text-green-500" /> : <Copy aria-hidden="true" className="size-4" />}
+          {copied ? 'Copied' : 'Copy caller number'}
+        </Button>
+      </section>
+
+      <section className="border-t pt-4">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-red-600">Delete</h3>
+        <div className="flex flex-col gap-3 rounded-xl border border-red-100 p-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="flex items-center gap-1.5 text-sm font-medium">
+              <Trash2 aria-hidden="true" className="size-4 text-red-500" /> Delete this call
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Removes the transcript, summary and recording, including the copies kept by our voice providers.
+            </p>
+          </div>
+          <Button variant="destructive" size="sm" onClick={onDelete} className="self-start">
+            Delete
+          </Button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+// ─── Sheet ────────────────────────────────────────────────────────────────────
+
+const PENDING_REFRESH_MS = 10_000
+/** About three minutes of automatic refreshes per opened call. */
+const MAX_PENDING_REFRESHES = 18
 
 interface CallDetailSheetProps {
   callId: string | null
@@ -286,235 +712,100 @@ interface CallDetailSheetProps {
 }
 
 export function CallDetailSheet({ callId, onClose, onDeleted, defaultTab = 'overview' }: CallDetailSheetProps) {
-  const { call, isLoading } = useCallDetail(callId)
-  const [tab, setTab] = useState(defaultTab)
+  const { call, isLoading, error, refetch } = useCallDetail(callId)
+  const [tabState, setTabState] = useState<{ key: string; tab: string }>({ key: '', tab: defaultTab })
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [copied, setCopied] = useState(false)
-  // gmail = email-to-owner via Resend (always available); the Google actions
-  // require their integration to be connected.
-  const [connected, setConnected] = useState<Record<string, boolean>>({
-    gmail: true, google_docs: false, google_sheets: false,
-  })
+  const [refreshes, setRefreshes] = useState<{ callId: string | null; count: number }>({ callId: null, count: 0 })
 
-  useEffect(() => { setTab(defaultTab) }, [defaultTab, callId])
-
+  // A call that is still going, or whose summary is being written, refreshes
+  // itself for a few minutes so the owner doesn't have to reopen it.
+  const pending = !!call && (call.status === 'in-progress' || (!call.outcome && (call.transcript ?? []).length > 0))
+  const refreshCount = refreshes.callId === callId ? refreshes.count : 0
   useEffect(() => {
-    if (!callId) return
-    let active = true
-    Promise.all(
-      ['google_docs', 'google_sheets'].map((t) =>
-        fetch(`/api/integrations/${t}`)
-          .then((r) => (r.ok ? r.json() : { connected: false }))
-          .then((d) => [t, !!d.connected] as const)
-          .catch(() => [t, false] as const)
-      )
-    ).then((entries) => {
-      if (active) setConnected((prev) => ({ ...prev, ...Object.fromEntries(entries) }))
-    })
-    return () => { active = false }
-  }, [callId])
+    if (!pending || !callId || isLoading || refreshCount >= MAX_PENDING_REFRESHES) return
+    const timer = setTimeout(() => {
+      setRefreshes({ callId, count: refreshCount + 1 })
+      refetch()
+    }, PENDING_REFRESH_MS)
+    return () => clearTimeout(timer)
+  }, [pending, callId, isLoading, refreshCount, refetch])
 
-  function copyNumber() {
-    if (!call?.caller_number) return
-    navigator.clipboard.writeText(call.caller_number)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  const SENTIMENT_DATA = {
-    positive: { emoji: '😊', label: 'Positive', color: 'text-green-600', desc: 'Customer seemed happy and satisfied' },
-    neutral:  { emoji: '😐', label: 'Neutral',  color: 'text-gray-700', desc: 'Conversation was balanced' },
-    negative: { emoji: '😞', label: 'Negative', color: 'text-red-600',  desc: 'Customer seemed frustrated' },
-  }
+  // A new call (or a new requested tab) starts on the requested tab.
+  const tabKey = `${callId}:${defaultTab}`
+  const tab = tabState.key === tabKey ? tabState.tab : defaultTab
+  const number = call ? callerLabel(call) : null
 
   return (
     <>
       <Sheet open={!!callId} onOpenChange={(open) => !open && onClose()}>
-        <SheetContent side="right" className="w-full sm:max-w-xl flex flex-col p-0 gap-0 overflow-hidden">
-          {/* Header */}
-          <SheetHeader className="px-5 py-4 border-b flex-shrink-0">
-            <div className="flex items-center justify-between pr-6">
-              <div>
-                <SheetTitle>Call details</SheetTitle>
-                <SheetDescription className="font-mono">
-                  {call?.caller_number ? formatPhoneNumber(call.caller_number) : 'Loading…'}
+        <SheetContent side="right" className="flex flex-col gap-0 overflow-hidden p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-xl">
+          <SheetHeader className="shrink-0 border-b px-4 py-4 sm:px-5">
+            <div className="flex items-start justify-between gap-3 pr-8">
+              <div className="min-w-0">
+                <SheetTitle className={cn('truncate', call && number && 'font-mono')}>
+                  {call ? (number ? formatPhoneNumber(number) : 'Unknown caller') : 'Call details'}
+                </SheetTitle>
+                <SheetDescription>
+                  {call?.started_at ? formatDate(call.started_at) : isLoading ? 'Loading…' : ' '}
                 </SheetDescription>
               </div>
-              {call && (
-                <Badge variant="outline" className={cn('capitalize', STATUS_BADGE[call.status])}>
-                  {call.status}
-                </Badge>
-              )}
+              {call && <StatusBadge status={call.status} className="shrink-0" />}
             </div>
+            {call && (call.is_test || call.fallback_used) && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {call.is_test && <TestBadge />}
+                {call.fallback_used && <FallbackBadge />}
+              </div>
+            )}
           </SheetHeader>
 
-          {isLoading || !call ? (
-            <div className="p-5 space-y-3 flex-1">
-              {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
+          {error && !call ? (
+            <div className="flex-1 p-5">
+              <EmptyState
+                icon={PhoneOff}
+                title="We couldn’t open this call"
+                description={error}
+                action={
+                  <Button variant="outline" onClick={refetch} className="gap-2">
+                    <RefreshCw aria-hidden="true" className="size-4" /> Try again
+                  </Button>
+                }
+              />
+            </div>
+          ) : !call ? (
+            <div className="flex-1 space-y-4 p-5" aria-busy="true" aria-label="Loading call">
+              <Skeleton className="h-8 w-2/3" />
+              <Skeleton className="h-24 w-full rounded-xl" />
+              <div className="grid grid-cols-2 gap-3">
+                <Skeleton className="h-20 rounded-xl" />
+                <Skeleton className="h-20 rounded-xl" />
+              </div>
+              <Skeleton className="h-12 w-full rounded-xl" />
+              <Skeleton className="h-28 w-full rounded-xl" />
             </div>
           ) : (
-            <Tabs value={tab} onValueChange={setTab} className="flex flex-col flex-1 overflow-hidden">
-              <TabsList variant="line" className="px-5 pt-1 flex-shrink-0 border-b rounded-none w-full justify-start">
+            <Tabs
+              value={tab}
+              onValueChange={(value) => setTabState({ key: tabKey, tab: String(value) })}
+              className="flex flex-1 flex-col overflow-hidden"
+            >
+              <TabsList variant="line" className="w-full shrink-0 justify-start overflow-x-auto rounded-none border-b px-3 group-data-horizontal/tabs:h-11 sm:px-5">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="transcript">Transcript</TabsTrigger>
+                <TabsTrigger value="activity">Activity</TabsTrigger>
                 <TabsTrigger value="actions">Actions</TabsTrigger>
               </TabsList>
-
-              {/* --- OVERVIEW --- */}
-              <TabsContent value="overview" className="flex-1 overflow-y-auto p-5 space-y-5">
-                {/* Call info grid */}
-                <div className="rounded-xl bg-gray-50 border p-4">
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-0.5">Direction</p>
-                      <p className="flex items-center gap-1.5 font-medium">
-                        {call.direction === 'inbound'
-                          ? <PhoneIncoming className="h-4 w-4 text-blue-500" />
-                          : <PhoneOutgoing className="h-4 w-4 text-purple-500" />}
-                        {call.direction === 'inbound' ? 'Inbound' : 'Outbound'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-0.5">Duration</p>
-                      <p className="font-medium">{formatDuration(call.duration_seconds)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-0.5">Started</p>
-                      <p className="font-medium text-xs">{call.started_at ? formatDate(call.started_at) : '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-0.5">Ended</p>
-                      <p className="font-medium text-xs">{call.ended_at ? formatDate(call.ended_at) : '—'}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Sentiment */}
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-                    Sentiment analysis
-                  </p>
-                  {call.sentiment ? (() => {
-                    const s = SENTIMENT_DATA[call.sentiment as keyof typeof SENTIMENT_DATA]
-                    return (
-                      <div className="flex flex-col items-center py-4 rounded-xl bg-gray-50 border gap-2">
-                        <span className="text-4xl">{s.emoji}</span>
-                        <p className={cn('text-xl font-bold', s.color)}>{s.label}</p>
-                        <p className="text-sm text-muted-foreground">{s.desc}</p>
-                      </div>
-                    )
-                  })() : (
-                    <p className="text-sm text-muted-foreground">Analysis pending…</p>
-                  )}
-                </div>
-
-                {/* Summary */}
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-                    Call summary
-                  </p>
-                  {call.summary ? (
-                    <div className="rounded-xl bg-purple-50 border border-purple-100 p-4">
-                      <p className="flex items-center gap-1.5 text-xs text-purple-600 font-medium mb-2">
-                        <Bot className="h-3.5 w-3.5" /> AI Summary
-                      </p>
-                      <p className="text-sm leading-relaxed">{call.summary}</p>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">Summary not available</p>
-                  )}
-                </div>
-
-                {/* Recording */}
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-                    Recording
-                  </p>
-                  {call.recording_url ? (
-                    <AudioPlayer url={call.recording_url} />
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No recording available</p>
-                  )}
-                </div>
+              <TabsContent value="overview" className="flex-1 overflow-y-auto p-4 sm:p-5">
+                <Overview call={call} />
               </TabsContent>
-
-              {/* --- TRANSCRIPT --- */}
-              <TabsContent value="transcript" className="flex-1 overflow-y-auto p-5">
-                <TranscriptView transcript={call.transcript ?? []} />
+              <TabsContent value="transcript" className="flex-1 overflow-y-auto p-4 sm:p-5">
+                <TranscriptView call={call} />
               </TabsContent>
-
-              {/* --- ACTIONS --- */}
-              <TabsContent value="actions" className="flex-1 overflow-y-auto p-5 space-y-5">
-                {/* Integrations */}
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-                    Send to integrations
-                  </p>
-                  <div className="rounded-xl border divide-y">
-                    <IntegrationAction
-                      icon={Table2} iconColor="text-green-600"
-                      label="Log to Google Sheets"
-                      description="Add this call to your call-log spreadsheet"
-                      buttonLabel="Send" callId={call.id} type="google_sheets" connected={connected.google_sheets}
-                      workInProgress
-                    />
-                    <IntegrationAction
-                      icon={FileText} iconColor="text-blue-600"
-                      label="Create call report"
-                      description="Generate a formatted report in Google Docs"
-                      buttonLabel="Create" callId={call.id} type="google_docs" connected={connected.google_docs}
-                      workInProgress
-                    />
-                    <IntegrationAction
-                      icon={Mail} iconColor="text-red-500"
-                      label="Email summary"
-                      description="Send call summary to your email"
-                      buttonLabel="Send email" callId={call.id} type="gmail" connected={connected.gmail}
-                    />
-                  </div>
-                </div>
-
-                {/* Call management */}
-                <div className="border-t pt-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-                    Call management
-                  </p>
-                  <div className="space-y-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start gap-2"
-                      onClick={copyNumber}
-                    >
-                      {copied ? <CheckCheck className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                      {copied ? 'Copied!' : 'Copy caller number'}
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Danger zone */}
-                <div className="border-t pt-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-red-500 mb-3">
-                    Danger zone
-                  </p>
-                  <div className="rounded-xl border border-red-100 p-4 flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-medium flex items-center gap-1.5">
-                        <Trash2 className="h-4 w-4 text-red-500" /> Delete this call record
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Permanently removes the call, transcript, and associated data.
-                      </p>
-                    </div>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => setDeleteOpen(true)}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </div>
+              <TabsContent value="activity" className="flex-1 overflow-y-auto p-4 sm:p-5">
+                <Activity call={call} />
+              </TabsContent>
+              <TabsContent value="actions" className="flex-1 overflow-y-auto p-4 sm:p-5">
+                <Actions call={call} onDelete={() => setDeleteOpen(true)} />
               </TabsContent>
             </Tabs>
           )}
@@ -526,7 +817,10 @@ export function CallDetailSheet({ callId, onClose, onDeleted, defaultTab = 'over
           open={deleteOpen}
           onOpenChange={setDeleteOpen}
           callId={call.id}
-          onDeleted={(id) => { onDeleted(id); onClose() }}
+          onDeleted={(id) => {
+            onDeleted(id)
+            onClose()
+          }}
         />
       )}
     </>

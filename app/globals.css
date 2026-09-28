@@ -4,6 +4,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* The site header's phase, as a variant — the attribute lives on <html>,
+   so it reaches the mega menu and the mobile sheet through their portals
+   as well as the bar itself. */
+@custom-variant detached (&:where(html[data-nav="detached"] *));
+@custom-variant nav-motion (&:where(html[data-nav-motion] *));
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -41,6 +47,15 @@
   --color-primary-strong: var(--primary-strong);
   --color-primary-deep: var(--primary-deep);
   --color-ink: var(--ink);
+  /* Light product pages — the values live on `.pp`, after the header rules. */
+  --color-pp-bg: var(--pp-bg);
+  --color-pp-ink: var(--pp-ink);
+  --color-pp-muted: var(--pp-muted);
+  --color-pp-card: var(--pp-card);
+  --color-pp-rule: var(--pp-rule);
+  --color-pp-hair: var(--pp-hair);
+  --color-pp-band: var(--pp-band);
+  --color-pp-accent: var(--pp-accent);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -170,6 +185,24 @@
     text-rendering: optimizeLegibility;
   }
 
+  /*
+    Keep a focused control clear of the fixed site header.
+
+    Shift+Tab onto something above the fold scrolls it to the viewport's top
+    edge, which is exactly where the header sits (0-56px docked on a phone,
+    floating at about 17-49px on a desktop). The ring and the control vanish
+    behind it, and that fails WCAG 2.4.11 (Focus Not Obscured).
+
+    The margin sits on the focus targets rather than as `scroll-padding-top`
+    on the scroller, so anchor jumps keep their own per-section
+    `scroll-mt-*` offsets. `:where()` keeps specificity at zero, so any
+    component that needs a different offset can still set its own. 5rem
+    clears both header heights, so no breakpoint variant is needed.
+  */
+  :where(a[href], button, summary, input, select, textarea, [tabindex]) {
+    scroll-margin-top: 5rem;
+  }
+
   ::selection {
     background: color-mix(in oklab, var(--primary) 22%, transparent);
     color: var(--primary-strong);
@@ -203,6 +236,14 @@
       animation-duration: 0.001ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.001ms !important;
+    }
+    /* Belt and braces for the header's two glints: they are animations
+       rather than transitions, and a future `animation-play-state` would
+       survive a zeroed duration. */
+    .hdr-crease,
+    .hdr-plate,
+    .hdr-seam {
+      animation: none !important;
     }
   }
 }
@@ -507,8 +548,8 @@
     so the whole composition scales with the viewport rather than
     snapping between breakpoints.
 
-    The reference derives this from `100dvw / (1920/16)`, re-based at
-    each breakpoint. That has two problems: the design shrinks in direct
+    A plain `100dvw / (1920/16)`, re-based at each breakpoint, has two
+    problems: the design shrinks in direct
     proportion to width — a 1100px window renders everything at 57%,
     with a ~9px base — and re-basing at 991px makes the value jump by 2x
     across a single pixel of resize.
@@ -518,7 +559,33 @@
     it decays gently instead of linearly and never falls below 11.5px.
   */
   --size-container: min(100dvw, 2240px);
+
+  /*
+    The header's own two constants.
+
+    The docked bar is as tall as the cover's top margin used to be, and
+    the shared eases are named here so the bar, the menu and the sheet
+    cannot drift from the cover's own timing. `--nav-spring` is a
+    k=300 c=22 m=1 spring sampled over 640ms — one 7.5% overshoot, which
+    is the whole of the header's elevation cue.
+  */
+  --site-header-h: max(4em, 56px);
+  --nav-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --nav-peel: cubic-bezier(0.7, 0, 0.2, 1);
+  --nav-spring: linear(
+    0, 0.052, 0.177, 0.336, 0.504, 0.659, 0.792, 0.897, 0.974, 1.027, 1.058,
+    1.073, 1.075, 1.069, 1.059, 1.047, 1.034, 1.023, 1.013, 1.006, 1.001,
+    0.997, 0.995, 0.994, 0.994, 0.995, 0.996, 0.997, 0.998, 0.998, 0.999, 1, 1
+  );
+
   font-size: clamp(11.5px, calc(0.296vw + 10.32px), 17px);
+}
+
+/* Where the desktop nav appears, the bar gets the taller masthead. */
+@media (width >= 64rem) {
+  .cover {
+    --site-header-h: 4.5em;
+  }
 }
 
 /* 35mm grain over the portrait — kills banding in the dark falloff. */
@@ -557,7 +624,7 @@
     );
 }
 
-/* Link underline that wipes in from the left, as on the reference. */
+/* Link underline that wipes in from the left. */
 .cover-link {
   background-image: linear-gradient(currentColor, currentColor);
   background-repeat: no-repeat;
@@ -596,5 +663,1212 @@
   }
   50% {
     transform: scaleY(1);
+  }
+}
+
+/* ==================================================================== *
+ * SITE HEADER — the cover's masthead, and the plate it peels into.
+ *
+ * At the top of the page the header is not a bar over the cover, it is
+ * the cover's masthead: printed on the portrait, on the hero's own
+ * container grid, with no plate, no blur and no shadow. Past 64px the
+ * masthead is peeled off — a lit crease releases at the logo corner and
+ * travels the width of the cover with frosted glass already behind it,
+ * the two ends gather inward to a pill, the shadow blooms and settles
+ * with one overshoot, and the rim catches the light last.
+ *
+ * What may animate here: clip-path (through five registered <length>
+ * properties), translate, transform and opacity. No width, height, top,
+ * left, margin, padding, font-size or box-shadow animates anywhere in
+ * this block — the geometry tokens change on resize, never on a flip.
+ * ==================================================================== */
+
+/* The plate's four edges and its radius, each carrying its own duration
+   and delay inside one interruptible transition. Registered as <length>
+   and never as a percentage: `cqw` and `em` resolve to absolute px at
+   computed-value time, so every interpolation is px to px and no engine
+   has to interpolate a max() expression. */
+@property --plate-t {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --plate-r {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --plate-b {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --plate-l {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --plate-rad {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+/*
+  Geometry lives on the frame, not on the <header>.
+
+  The header carries `container-type: inline-size` so `100cqw` is the
+  content width *excluding* the 11px classic scrollbar this file styles,
+  which `100vw` gets wrong. But container query units inside a container's
+  own declarations resolve against the next container up rather than
+  against itself — so the tokens are declared one level down, on the
+  frame, where `cqw` means the header.
+*/
+.hdr-frame {
+  --frame-w: min(100cqw, 2240px);
+  --pill-top: 0.625em;
+  --pill-h: max(3.5em, 50px);
+  --pill-w: calc(100cqw - 1.5em);
+  --pill-rad: 0.75em;
+  --plate-blur: 16px;
+
+  --pill-x: calc((var(--frame-w) - var(--pill-w)) / 2);
+  /* How far the brand and the actions ride inward as the ends gather. */
+  --nav-shift: calc(var(--pill-x) + 0.625em - 1.5em);
+  /* The pill's centre line sits below the masthead's, by half the
+     difference in their heights. */
+  --row-shift: calc(
+    var(--pill-top) + var(--pill-h) / 2 - var(--site-header-h) / 2
+  );
+
+  position: relative;
+  margin-inline: auto;
+  width: 100%;
+  max-width: var(--size-container);
+  height: var(--site-header-h);
+  /* Identical to the hero content layer's own px-[1.5em], which is what
+     puts the wordmark on the headline grid's left rule. */
+  padding-inline: 1.5em;
+  /* Docked, the empty parts of the bar still belong to the cover, so the
+     cursor CTA keeps working right up to the top edge. */
+  pointer-events: none;
+}
+
+@media (width >= 40rem) {
+  .hdr-frame {
+    --pill-w: calc(100cqw - 2em);
+  }
+}
+
+@media (width >= 48rem) {
+  .hdr-frame {
+    --pill-top: 0.75em;
+    --pill-rad: 0.875em;
+    --plate-blur: 20px;
+  }
+}
+
+@media (width >= 64rem) {
+  .hdr-frame {
+    --pill-h: 3.5em;
+    /* 1152px at 1920. The 58cqw arm keeps it growing past the em ceiling
+       on very wide screens instead of stranding the pill mid-page. */
+    --pill-w: min(100cqw - 2em, max(72em, 58cqw));
+  }
+}
+
+.hdr-shadow,
+.hdr-plate,
+.hdr-rim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Elevation only: no background and no filter, so it can spring
+   independently of the glass it lifts. */
+.hdr-shadow {
+  inset: var(--pill-top) var(--pill-x) auto;
+  height: var(--pill-h);
+  border-radius: var(--pill-rad);
+  opacity: 0;
+  transform: translateY(-0.375em) scale(0.97);
+  box-shadow:
+    0 0.75em 2.25em -0.75em rgb(0 0 0 / 0.65),
+    0 0.25em 0.5em -0.25em rgb(0 0 0 / 0.35);
+}
+
+/* The only element in the header with a backdrop-filter, and the only
+   one with a clip — no ancestor may add opacity, filter, mask or
+   mix-blend-mode, or the blur samples an empty backdrop. */
+.hdr-plate {
+  --plate-t: 0px;
+  --plate-r: var(--frame-w);
+  --plate-b: 0px;
+  --plate-l: 0px;
+  --plate-rad: 0px;
+
+  opacity: 0;
+  clip-path: inset(
+    var(--plate-t) var(--plate-r) var(--plate-b) var(--plate-l) round
+      var(--plate-rad)
+  );
+  background:
+    linear-gradient(to bottom, rgb(222 220 224 / 0.06), rgb(222 220 224 / 0) 55%),
+    rgb(6 4 10 / 0.6);
+  -webkit-backdrop-filter: blur(var(--plate-blur)) saturate(140%);
+  backdrop-filter: blur(var(--plate-blur)) saturate(140%);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .hdr-plate {
+    background: rgb(6 4 10 / 0.92);
+  }
+}
+
+/*
+  The lit edge of the separation — a child of the plate, and therefore
+  clipped by it, so it can only ever be seen inside the glass. That is
+  what makes it read as a lifted edge rather than as a loading bar.
+*/
+.hdr-crease {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 6em;
+  opacity: 0;
+  translate: -6em 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(222 220 224 / 0.06) 62%,
+    rgb(222 220 224 / 0.34) 97%,
+    transparent
+  );
+}
+
+.hdr-rim {
+  inset: var(--pill-top) var(--pill-x) auto;
+  height: var(--pill-h);
+  border: 1px solid rgb(222 220 224 / 0.1);
+  border-radius: var(--pill-rad);
+  box-shadow: inset 0 1px 0 rgb(222 220 224 / 0.1);
+  opacity: 0;
+}
+
+.hdr-row {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1em;
+  height: 100%;
+  /* Only the three clusters take the pointer; the gaps between them stay
+     the cover's. */
+  pointer-events: none;
+}
+
+.hdr-row > * {
+  pointer-events: auto;
+}
+
+/* ─── Detached ───────────────────────────────────────────────────── */
+
+html[data-nav="detached"] .hdr-plate {
+  opacity: 1;
+  --plate-t: var(--pill-top);
+  --plate-r: var(--pill-x);
+  --plate-b: calc(var(--site-header-h) - var(--pill-top) - var(--pill-h));
+  --plate-l: var(--pill-x);
+  --plate-rad: var(--pill-rad);
+}
+
+html[data-nav="detached"] .hdr-crease {
+  translate: calc(var(--frame-w) - var(--pill-x) - 6em) 0;
+}
+
+html[data-nav="detached"] .hdr-shadow {
+  opacity: 1;
+  transform: none;
+}
+
+html[data-nav="detached"] .hdr-rim {
+  opacity: 1;
+  /*
+    The pill's hit surface — a click on the glass must not fall through to
+    the spread underneath.
+
+    It is the rim that takes the pointer rather than the plate, because
+    the plate is the element that animates: for the half second of the
+    peel its box still spans the whole frame, so the gutters beside the
+    pill would swallow clicks that belong to the cover, and the cover's
+    cursor chip would blink out and back on every detach. The rim already
+    has exactly the pill's geometry and its box never moves.
+  */
+  pointer-events: auto;
+}
+
+html[data-nav="detached"] .hdr-row {
+  translate: 0 var(--row-shift);
+}
+
+html[data-nav="detached"] .hdr-brand {
+  translate: var(--nav-shift) 0;
+}
+
+html[data-nav="detached"] .hdr-actions {
+  translate: calc(-1 * var(--nav-shift)) 0;
+}
+
+/* The wordmark reads at the cover's old 1.6em while it is the masthead,
+   and at bar size once the header is an object on the page. */
+.hdr-wordmark {
+  /* The wordmark is the logo, not header copy: it keeps the cover's face
+     and weight when the header around it moves to --font-header. */
+  font-family: var(--font-display);
+  font-weight: 500;
+  display: inline-block;
+  transform-origin: 0 50%;
+  scale: 1;
+}
+
+@media (width >= 64rem) {
+  html:not([data-nav="detached"]) .hdr-wordmark {
+    scale: 1.3913;
+  }
+}
+
+/* Below sm the primary action is the one thing the docked masthead has
+   no room for; it arrives with the plate. */
+@media (width < 40rem) {
+  .hdr-startfree {
+    opacity: 0;
+    visibility: hidden;
+    translate: 0.4em 0;
+  }
+  html[data-nav="detached"] .hdr-startfree {
+    opacity: 1;
+    visibility: visible;
+    translate: 0 0;
+  }
+  html[data-nav-motion][data-nav="detached"] .hdr-startfree {
+    transition:
+      opacity 260ms var(--nav-ease) 180ms,
+      translate 260ms var(--nav-ease) 180ms;
+  }
+  /* Shorter and undelayed on the way back, matching the re-dock's flatter
+     character — without it the one element the eye is on is the only one
+     that pops rather than eases. */
+  html[data-nav-motion]:not([data-nav="detached"]) .hdr-startfree {
+    transition:
+      opacity 180ms var(--nav-ease),
+      translate 180ms var(--nav-ease);
+  }
+}
+
+/* ─── The opening beat ──────────────────────────────────────────────
+   The row used to fade up from a framer `initial`, which bakes
+   `opacity: 0` into the server markup: a blocked or slow script, and the
+   whole of the page's navigation is invisible but focusable, and a
+   mid-page reload paints the pill correctly and then paints nothing
+   inside it.
+
+   So the markup ships visible and the entrance is opt-in, gated on an
+   attribute the boot script writes during parsing and only when this
+   really is the opening — a fresh load that starts at the top. It is
+   dropped the moment the header moves. */
+html[data-nav-entrance] .hdr-enter {
+  animation: nav-enter 800ms var(--nav-ease) both;
+  animation-delay: calc(var(--i, 0) * 60ms + 100ms);
+}
+
+@keyframes nav-enter {
+  from {
+    opacity: 0;
+    translate: 0 0.6em;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+/* ─── Detach: the peel ───────────────────────────────────────────── */
+
+html[data-nav-motion][data-nav="detached"] .hdr-plate {
+  transition:
+    opacity 1ms linear,
+    --plate-r 480ms var(--nav-peel),
+    --plate-l 560ms var(--nav-ease) 120ms,
+    --plate-t 420ms var(--nav-ease) 160ms,
+    --plate-b 420ms var(--nav-ease) 160ms,
+    --plate-rad 420ms var(--nav-ease) 160ms;
+}
+
+/* Same duration, delay and easing as --plate-r, so the highlight sits on
+   the moving edge at every frame rather than near it. */
+html[data-nav-motion][data-nav="detached"] .hdr-crease {
+  transition: translate 480ms var(--nav-peel);
+}
+
+html[data-nav-motion][data-nav="detached"] .hdr-shadow {
+  transition:
+    opacity 360ms var(--nav-ease) 200ms,
+    transform 640ms var(--nav-spring) 200ms;
+}
+
+html[data-nav-motion][data-nav="detached"] .hdr-rim {
+  transition: opacity 220ms var(--nav-ease) 420ms;
+}
+
+html[data-nav-motion][data-nav="detached"] .hdr-row {
+  transition: translate 420ms var(--nav-ease) 160ms;
+}
+
+html[data-nav-motion][data-nav="detached"] .hdr-brand {
+  transition: translate 560ms var(--nav-ease) 120ms;
+}
+
+html[data-nav-motion][data-nav="detached"] .hdr-actions {
+  transition: translate 440ms var(--nav-peel) 40ms;
+}
+
+html[data-nav-motion][data-nav="detached"] .hdr-wordmark {
+  transition: scale 520ms var(--nav-ease) 120ms;
+}
+
+/* ─── Re-dock: flatter, quicker, no crease lead ──────────────────── */
+
+html[data-nav-motion]:not([data-nav="detached"]) .hdr-plate {
+  transition:
+    opacity 1ms linear 600ms,
+    --plate-t 320ms var(--nav-ease) 60ms,
+    --plate-b 320ms var(--nav-ease) 60ms,
+    --plate-rad 320ms var(--nav-ease) 60ms,
+    --plate-l 480ms var(--nav-ease) 80ms,
+    --plate-r 460ms cubic-bezier(0.4, 0, 0.2, 1) 140ms;
+}
+
+html[data-nav-motion]:not([data-nav="detached"]) .hdr-crease {
+  transition: translate 460ms cubic-bezier(0.4, 0, 0.2, 1) 140ms;
+}
+
+/* The shadow collapses first: the thing lands before its ends spread. */
+html[data-nav-motion]:not([data-nav="detached"]) .hdr-shadow {
+  transition:
+    opacity 240ms var(--nav-ease),
+    transform 280ms cubic-bezier(0.4, 0, 1, 1);
+}
+
+html[data-nav-motion]:not([data-nav="detached"]) .hdr-rim {
+  transition: opacity 120ms linear;
+}
+
+html[data-nav-motion]:not([data-nav="detached"]) .hdr-row {
+  transition: translate 320ms var(--nav-ease) 60ms;
+}
+
+html[data-nav-motion]:not([data-nav="detached"]) .hdr-brand,
+html[data-nav-motion]:not([data-nav="detached"]) .hdr-actions {
+  transition: translate 480ms var(--nav-ease) 80ms;
+}
+
+html[data-nav-motion]:not([data-nav="detached"]) .hdr-wordmark {
+  transition: scale 480ms var(--nav-ease) 80ms;
+}
+
+/*
+  The two glints are gated on a flip having actually happened, not on the
+  state being current: otherwise arming motion two frames after hydration
+  would fire them on a mid-page reload, which is the one load case that
+  must not animate at all.
+*/
+html[data-nav-motion][data-nav-lift] .hdr-crease {
+  animation: nav-crease-in 560ms linear;
+}
+
+html[data-nav-motion][data-nav-land] .hdr-crease {
+  animation: nav-crease-out 600ms linear 140ms;
+}
+
+html[data-nav-motion][data-nav-land] .hdr-seam {
+  animation: nav-seam-contact 520ms var(--nav-ease) 480ms;
+}
+
+@keyframes nav-crease-in {
+  0% {
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  72% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes nav-crease-out {
+  0%,
+  22% {
+    opacity: 0;
+  }
+  34% {
+    opacity: 0.85;
+  }
+  88% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* The rule the masthead was stuck to, flashing once on contact. */
+@keyframes nav-seam-contact {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.55);
+  }
+  35% {
+    opacity: 0.9;
+    transform: scaleX(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+}
+
+/* ─── Bar furniture ─────────────────────────────────────────────── */
+
+/*
+  The header's type, on each of its three roots — the bar, the menu popup
+  and the sheet, which are portalled apart and share no ancestor.
+
+  `text-rendering: auto` undoes the page-wide optimizeLegibility, which
+  loosens Inter's spacing at menu sizes.
+*/
+.hdr-type {
+  font-family: var(--font-header);
+  text-rendering: auto;
+}
+
+.hdr-skip {
+  position: absolute;
+  top: 0.5em;
+  left: 1.5em;
+  z-index: 2;
+  pointer-events: auto;
+  border-radius: 0.5em;
+  background: var(--cover-paper);
+  color: var(--cover-ink);
+  padding: 0.55em 0.9em;
+  font-size: 0.875em;
+  font-weight: 500;
+  line-height: 1;
+  translate: 0 -200%;
+  transition: translate 180ms var(--nav-ease);
+}
+
+.hdr-skip:focus-visible {
+  translate: 0 0;
+}
+
+.hdr-trigger,
+.hdr-navlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  height: 2.25em;
+  padding-inline: 0.75em;
+  border-radius: 0.5em;
+  font-size: 0.875em;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--cover-paper);
+  white-space: nowrap;
+  transition:
+    background-color 150ms ease,
+    color 180ms ease;
+}
+
+.hdr-trigger:hover,
+.hdr-navlink:hover,
+.hdr-trigger[data-popup-open] {
+  background: rgb(222 220 224 / 0.07);
+}
+
+.hdr-chev {
+  display: inline-flex;
+  opacity: 0.6;
+  transition: rotate 200ms cubic-bezier(0.45, 0.05, 0.25, 1);
+}
+
+.hdr-trigger[data-popup-open] .hdr-chev {
+  rotate: 180deg;
+}
+
+/*
+  Sibling dimming is detached-only. Over the portrait's silver backlight a
+  label at 62% does not clear AA; on the glass it measures 5.47:1.
+*/
+html[data-nav="detached"] .hdr-navlist:hover .hdr-trigger:not(:hover):not([data-popup-open]),
+html[data-nav="detached"] .hdr-navlist:hover .hdr-navlink:not(:hover),
+html[data-nav="detached"] .hdr-navlist:has([data-popup-open]) .hdr-trigger:not([data-popup-open]),
+html[data-nav="detached"] .hdr-navlist:has([data-popup-open]) .hdr-navlink:not(:hover) {
+  color: rgb(222 220 224 / 0.62);
+}
+
+.hdr-frame :focus-visible,
+.hdr-sheet :focus-visible,
+.hdr-menu-popup :focus-visible {
+  outline: 2px solid var(--cover-brand-lit);
+  outline-offset: 2px;
+}
+
+/* ─── Light pages ───────────────────────────────────────────────────
+   The same header over the light product pages. The bar is authored in
+   the cover's tokens, so it flips them the way the mega menu does, and
+   only the glass — the one surface with a baked-in colour — is repainted.
+   The sheet carries `.cover` itself, so it stays dark. */
+
+.cover.hdr-light {
+  --cover-paper: #000000;
+  --cover-ink: #ffffff;
+  --cover-brand-lit: var(--cover-brand);
+}
+
+.hdr-light .hdr-plate {
+  background:
+    linear-gradient(to bottom, rgb(255 255 255 / 0.5), rgb(255 255 255 / 0) 60%),
+    rgb(253 252 252 / 0.78);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .hdr-light .hdr-plate {
+    background: rgb(253 252 252 / 0.97);
+  }
+}
+
+.hdr-light .hdr-shadow {
+  box-shadow:
+    0 0.75em 2em -0.75em rgb(0 0 0 / 0.14),
+    0 0.25em 0.5em -0.25em rgb(0 0 0 / 0.06);
+}
+
+.hdr-light .hdr-rim {
+  border-color: rgb(0 0 0 / 0.07);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7);
+}
+
+.hdr-light .hdr-crease {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(0 0 0 / 0.02) 62%,
+    rgb(0 0 0 / 0.07) 97%,
+    transparent
+  );
+}
+
+.hdr-light .hdr-trigger:hover,
+.hdr-light .hdr-navlink:hover,
+.hdr-light .hdr-trigger[data-popup-open] {
+  background: rgb(0 0 0 / 0.05);
+}
+
+html[data-nav="detached"] .hdr-light .hdr-navlist:hover .hdr-trigger:not(:hover):not([data-popup-open]),
+html[data-nav="detached"] .hdr-light .hdr-navlist:hover .hdr-navlink:not(:hover),
+html[data-nav="detached"] .hdr-light .hdr-navlist:has([data-popup-open]) .hdr-trigger:not([data-popup-open]),
+html[data-nav="detached"] .hdr-light .hdr-navlist:has([data-popup-open]) .hdr-navlink:not(:hover) {
+  color: rgb(0 0 0 / 0.55);
+}
+
+/* The primary turns brand on hover; on a black pill the label has to stay
+   white rather than follow --cover-paper to black. */
+.hdr-light .hdr-startfree:hover {
+  color: #ffffff;
+}
+
+/* ─── Product pages ─────────────────────────────────────────────────
+   NeuroVoice's light system for the product pages: white stock, sections
+   banded in a violet-tinted grey, violet-grey secondary type, and the
+   cover's purple kept for the few things that are active or in motion. */
+
+.pp {
+  --pp-bg: #ffffff;
+  --pp-ink: #000000;
+  --pp-muted: #6b6878;
+  --pp-card: #f4f3f7;
+  --pp-band: #f8f7fb;
+  --pp-accent: #551a89;
+  --pp-rule: rgb(24 16 40 / 0.07);
+  --pp-hair: rgb(24 16 40 / 0.1);
+  background: var(--pp-bg);
+  color: var(--pp-ink);
+  font-family: var(--font-header);
+  text-rendering: auto;
+  /* Scroll anchoring off: these pages are full of lines that appear, grow
+     and leave, and Chrome would anchor to one of them and then shift the
+     whole page when it left — a tab click jumped the view ~400px. Nothing
+     here loads in above the fold late enough to need anchoring. */
+  overflow-anchor: none;
+}
+
+/* Display face: Onest, light enough at 360 to carry large headlines
+   without shouting. Section headings below the hero set it heavier. */
+.pp-display {
+  font-family: var(--font-pp-display), var(--font-header), sans-serif;
+  font-weight: 360;
+}
+
+.pp-shadow-btn {
+  box-shadow:
+    0 0 1px rgb(0 0 0 / 0.4),
+    0 1px 1px rgb(0 0 0 / 0.04),
+    0 2px 4px rgb(0 0 0 / 0.04);
+}
+
+.pp-grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+
+/* The orb: three lights turning inside a sphere, breathing while it talks. */
+.pp-orb {
+  position: relative;
+  border-radius: 9999px;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--orb-c);
+  box-shadow:
+    inset 0 -0.6em 1.4em rgb(0 0 0 / 0.18),
+    inset 0 0.5em 1.2em rgb(255 255 255 / 0.35);
+  transition: scale 500ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp-orb::before,
+.pp-orb::after {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  border-radius: inherit;
+  filter: blur(14px);
+  animation: pp-orb-spin 14s linear infinite;
+}
+
+.pp-orb::before {
+  background:
+    radial-gradient(circle at 30% 30%, var(--orb-a) 0 22%, transparent 48%),
+    radial-gradient(circle at 70% 65%, var(--orb-b) 0 20%, transparent 46%);
+}
+
+.pp-orb::after {
+  background: radial-gradient(circle at 60% 25%, rgb(255 255 255 / 0.75) 0 8%, transparent 30%);
+  animation-duration: 9s;
+  animation-direction: reverse;
+  mix-blend-mode: soft-light;
+}
+
+.pp-orb[data-speaking] {
+  animation: pp-orb-talk 1.6s ease-in-out infinite;
+}
+
+@keyframes pp-orb-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@keyframes pp-orb-talk {
+  0%,
+  100% {
+    scale: 1;
+  }
+  30% {
+    scale: 1.035;
+  }
+  55% {
+    scale: 0.99;
+  }
+  75% {
+    scale: 1.02;
+  }
+}
+
+/*
+  The mesh orb: a sphere painted from the palette of the surface under it
+  (--m0 darkest … --m4 lightest), as colour fields that drift through each
+  other, lit from the top left, under a film of grain.
+
+  The orb is its own size container, so the blur and the grain scale in
+  cqw from a 32px dot to a 208px sphere instead of smearing the small one.
+*/
+.pp-orb-mesh {
+  container-type: size;
+  background: var(--m2);
+  box-shadow: none;
+}
+
+.pp-orb-mesh::before,
+.pp-orb-mesh::after {
+  content: none;
+}
+
+.pp-mesh-flow {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(42% 42% at 26% 24%, var(--m4) 0%, transparent 100%),
+    radial-gradient(40% 40% at 80% 26%, var(--m2) 0%, transparent 100%),
+    radial-gradient(46% 46% at 76% 80%, var(--m0) 0%, transparent 100%),
+    radial-gradient(40% 40% at 20% 78%, var(--m3) 0%, transparent 100%),
+    radial-gradient(28% 28% at 50% 52%, var(--m1) 0%, transparent 100%),
+    var(--m2);
+  filter: blur(3.5cqw) saturate(1.35);
+  animation: pp-mesh-drift 14s ease-in-out infinite alternate;
+}
+
+/* A second, looser field turning the other way, so the mesh never repeats. */
+.pp-mesh-flow-b {
+  background:
+    radial-gradient(22% 22% at 62% 40%, var(--m4) 0%, transparent 100%),
+    radial-gradient(24% 24% at 34% 56%, var(--m1) 0%, transparent 100%);
+  opacity: 0.75;
+  filter: blur(4cqw);
+  animation: pp-mesh-turn 21s linear infinite reverse;
+}
+
+/* Lit from the top left; the shadow side falls to the palette's own darkest
+   colour rather than to grey, so it stays the same material. */
+.pp-mesh-shade {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 30% 24%, rgb(255 255 255 / 0.22) 0%, rgb(255 255 255 / 0) 30%),
+    radial-gradient(circle at 50% 44%, transparent 58%, color-mix(in oklab, var(--m0) 55%, transparent) 100%);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
+}
+
+/* Fixed-size grain: it is film on the surface, not part of the picture, so
+   it does not scale up with the sphere. */
+.pp-noise {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.15' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px;
+  mix-blend-mode: overlay;
+  opacity: 0.85;
+}
+
+@keyframes pp-mesh-drift {
+  0% {
+    transform: rotate(0deg) scale(1) translate(0, 0);
+  }
+  50% {
+    transform: rotate(140deg) scale(1.12) translate(4%, -3%);
+  }
+  100% {
+    transform: rotate(280deg) scale(1) translate(-3%, 4%);
+  }
+}
+
+@keyframes pp-mesh-turn {
+  to {
+    rotate: 360deg;
+  }
+}
+
+/* A still orb (<Orb still>) holds its picture where it stands. An infinite
+   animation left running costs a style recalculation every frame, even
+   offscreen or under a canvas; FluidOrb's stand-in is held like this
+   whenever it is not the picture anyone is watching. */
+.pp-orb[data-still],
+.pp-orb[data-still]::before,
+.pp-orb[data-still]::after,
+.pp-orb[data-still] .pp-mesh-flow {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pp-orb::before,
+  .pp-orb::after,
+  .pp-orb[data-speaking],
+  .pp-mesh-flow {
+    animation: none;
+  }
+}
+
+/* ─── Mega menu ─────────────────────────────────────────────────── */
+
+.hdr-menu-popup {
+  /*
+    A light scope: black type on white paper, inside a cover that is the
+    other way round. The panels are authored in the cover's tokens, so the
+    menu flips them here rather than forking every class — `--cover-paper`
+    is still "the colour type is set in", `--cover-ink` still "the colour
+    type is set on". The two marks move to their deep tones, which is
+    where they clear contrast on white.
+  */
+  --cover-paper: #000000;
+  --cover-ink: #ffffff;
+  --cover-panel: #f4f3f6;
+  --cover-brand-lit: var(--cover-brand);
+  --cover-mint: #1f8a55;
+  /* Violet-grey: group labels, descriptions, hovered links. */
+  --cover-muted: #6b6878;
+
+  /*
+    Unlike the rest of the cover, the menu is authored in fixed pixels, so
+    it keeps the same 14px link, 13px label and 24px corner at 1440 as at
+    2560. The 16px here only sizes the call
+    pane, which is shared with the sheet and still speaks `em`.
+  */
+  font-size: 16px;
+
+  width: var(--popup-width);
+  height: var(--popup-height);
+  max-height: calc(var(--available-height) - 16px);
+  overflow: hidden;
+  border-radius: 24px;
+  transform-origin: var(--transform-origin);
+  background: #ffffff;
+  box-shadow:
+    0 10px 20px 1px rgb(0 0 0 / 0.04),
+    0 48px 48px -24px rgb(0 0 0 / 0.02),
+    0 24px 24px -12px rgb(0 0 0 / 0.04),
+    0 12px 12px -6px rgb(0 0 0 / 0.04),
+    0 6px 6px -3px rgb(0 0 0 / 0.06),
+    0 3px 3px -1.5px rgb(0 0 0 / 0.06),
+    0 1px 1px -0.5px rgb(0 0 0 / 0.06),
+    0 0 0 1px rgb(0 0 0 / 0.06);
+  /* Base UI's own size morph. A layout animation, argued: it is a fixed,
+     out-of-flow box that nothing else on the page measures. */
+  transition:
+    width 300ms cubic-bezier(0.45, 0.05, 0.25, 1),
+    height 300ms cubic-bezier(0.45, 0.05, 0.25, 1),
+    opacity 180ms var(--nav-ease),
+    transform 240ms var(--nav-ease);
+}
+
+.hdr-menu-popup[data-starting-style] {
+  opacity: 0;
+  transform: translateY(-0.25em) scale(0.985);
+}
+
+.hdr-menu-popup[data-ending-style] {
+  opacity: 0;
+  transform: translateY(-0.25em) scale(0.99);
+  transition:
+    opacity 150ms cubic-bezier(0.4, 0, 1, 1),
+    transform 150ms cubic-bezier(0.4, 0, 1, 1);
+}
+
+.hdr-menu-viewport {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  /* The popup is capped by `max-height` on a short window. Without a real
+     scroller that cap does not shorten the panel, it clips it — the
+     footer links disappear, while both stay in the tab order off-screen.
+     It scrolls without a visible bar: Base UI measures the popup while the
+     content is briefly taller than the cap, and Windows' 11px scrollbar
+     was being measured into the box, 951px wide where the panel is 940. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.hdr-menu-content {
+  transition:
+    opacity 200ms var(--nav-ease) 40ms,
+    transform 260ms var(--nav-ease);
+}
+
+.hdr-menu-content[data-starting-style] {
+  opacity: 0;
+  transform: translateY(0.25em);
+}
+
+.hdr-menu-content[data-starting-style][data-activation-direction="right"] {
+  transform: translateX(1.5em);
+}
+
+.hdr-menu-content[data-starting-style][data-activation-direction="left"] {
+  transform: translateX(-1.5em);
+}
+
+.hdr-menu-content[data-ending-style] {
+  opacity: 0;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.hdr-menu-content[data-ending-style][data-activation-direction="right"] {
+  transform: translateX(-1.5em);
+}
+
+.hdr-menu-content[data-ending-style][data-activation-direction="left"] {
+  transform: translateX(1.5em);
+}
+
+/* The peel's crease language, one octave quieter, on first open only. */
+.hdr-menu-wipe {
+  transform-origin: left;
+  animation: nav-wipe 260ms var(--nav-ease) both;
+}
+
+@keyframes nav-wipe {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+/* The preview swaps inside a fixed-height pane, so the popup never
+   re-measures while only the transcript changes. */
+.hdr-pane-swap > * {
+  animation: nav-pane-in 180ms var(--nav-ease) both;
+}
+
+/* Each turn arrives on its own beat — the caller, then the agent, then
+   the outcome — so the pane reads as a call unfolding rather than as a
+   card swapping. The delays are set per turn in the component; this is
+   the animation they delay. */
+.hdr-pane-step {
+  animation: nav-pane-in 180ms var(--nav-ease) both;
+}
+
+@keyframes nav-pane-in {
+  from {
+    opacity: 0;
+    translate: 0 0.25em;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+.hdr-word {
+  animation: nav-word-in 220ms var(--nav-ease) both;
+}
+
+@keyframes nav-word-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ─── Mobile sheet ──────────────────────────────────────────────── */
+
+.hdr-sheet {
+  transform-origin: top;
+  transition:
+    opacity 240ms var(--nav-ease),
+    transform 260ms var(--nav-ease);
+}
+
+.hdr-sheet[data-starting-style] {
+  opacity: 0;
+  transform: translateY(-0.5em) scale(0.985);
+}
+
+.hdr-sheet[data-ending-style] {
+  opacity: 0;
+  transition: opacity 180ms cubic-bezier(0.4, 0, 1, 1);
+}
+
+.hdr-sheet-row {
+  transition:
+    opacity 320ms var(--nav-ease),
+    translate 320ms var(--nav-ease);
+  transition-delay: calc(var(--i) * 40ms + 60ms);
+}
+
+.hdr-sheet[data-starting-style] .hdr-sheet-row {
+  opacity: 0;
+  translate: 0 0.6em;
+}
+
+.hdr-acc-panel {
+  height: var(--accordion-panel-height);
+  overflow: hidden;
+  transition: height 280ms var(--nav-ease);
+}
+
+.hdr-acc-panel[data-starting-style],
+.hdr-acc-panel[data-ending-style] {
+  height: 0;
+}
+
+.hdr-strip {
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 1.25em,
+    #000 calc(100% - 1.25em),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 1.25em,
+    #000 calc(100% - 1.25em),
+    transparent
+  );
+}
+
+.hdr-strip::-webkit-scrollbar {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ *
+ * Industry pages.
+ *
+ * Two animations, both short and neither looping. The ring marks pulse
+ * only while the call is unanswered; the heading's question fades up
+ * when the fork is taken. Everything else in the figures is a CSS
+ * transition on stroke-dashoffset, driven by React state — no motion
+ * library is loaded for the hero, which is the LCP element on every one
+ * of these routes.
+ * ------------------------------------------------------------------ */
+
+@keyframes ind-ring {
+  0% {
+    opacity: 0;
+    r: 4.4;
+  }
+  22% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    r: 13;
+  }
+}
+
+.ind-ring {
+  animation: ind-ring 1.45s ease-out infinite;
+}
+
+@keyframes ind-swap {
+  from {
+    opacity: 0;
+    transform: translateY(0.14em);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.ind-swap {
+  animation: ind-swap 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ind-ring {
+    animation: none;
+    opacity: 0.5;
+  }
+
+  .ind-swap {
+    animation: none;
+  }
+}
+
+@keyframes ind-land {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.ind-land {
+  animation: ind-land 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes ind-row {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.ind-row {
+  animation: ind-row 220ms ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ind-land,
+  .ind-row {
+    animation: none;
+  }
+}
+
+/* The agent's half-sentence types itself, then is cut. The caret is the
+   only blinking thing on these pages and it stops the moment it is cut. */
+@keyframes ind-type {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.ind-type {
+  animation: ind-type 1150ms steps(38, end) both;
+}
+
+@keyframes ind-caret {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.ind-caret {
+  animation: ind-caret 900ms steps(1, end) infinite;
+  font-weight: 300;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ind-type {
+    animation: none;
+    clip-path: none;
+  }
+
+  .ind-caret {
+    animation: none;
+    opacity: 0;
   }
 }

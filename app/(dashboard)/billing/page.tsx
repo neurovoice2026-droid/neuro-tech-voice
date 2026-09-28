@@ -1,299 +1,102 @@
-'use client'
+import { Suspense } from 'react'
+import { redirect } from 'next/navigation'
+import { getOrgContext, type OrgContext } from '@/lib/api/auth'
+import { getUsageSummary } from '@/lib/billing/usage'
+import { isStripeConfigured, priceIdFor } from '@/lib/stripe/client'
+import { AUTH } from '@/lib/site'
+import { BillingSkeleton } from '@/components/billing/BillingSkeleton'
+import { CheckoutStatusToast } from '@/components/billing/CheckoutStatusToast'
+import { InvoicesList, type BillingInvoice } from '@/components/billing/InvoicesList'
+import { ManageBillingButton } from '@/components/billing/ManageBillingButton'
+import { PhoneNumbersSummary, type BillingPhoneNumber } from '@/components/billing/PhoneNumbersSummary'
+import { PlanFeatures } from '@/components/billing/PlanFeatures'
+import { PlanPicker, type SelfServePlanId } from '@/components/billing/PlanPicker'
+import { UsageOverview } from '@/components/billing/UsageOverview'
 
-import { useState } from 'react'
-import {
-  CreditCard, Zap, Shield, Layers, Clock, Building2,
-  AlertTriangle, ArrowUpRight, ExternalLink, Loader2, Settings,
-} from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
-import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
-import { cn } from '@/lib/utils'
-import { useOrganization } from '@/hooks/useOrganization'
-import { PLANS } from '@/types'
-import type { Plan, BillingInterval } from '@/types'
+// Billing: usage this period, what the plan includes, plan changes, phone
+// number subscriptions and invoices. Server-rendered from the database; the
+// only client pieces are the plan picker, the portal button and the checkout toast.
 
-const PLAN_META: Record<Plan, { icon: LucideIcon; iconBg: string; iconColor: string }> = {
-  trial: { icon: Layers, iconBg: 'bg-gray-100', iconColor: 'text-gray-500' },
-  starter: { icon: Layers, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' },
-  pro: { icon: Zap, iconBg: 'bg-purple-100', iconColor: 'text-purple-600' },
-  business: { icon: Building2, iconBg: 'bg-indigo-100', iconColor: 'text-indigo-600' },
-  custom: { icon: Shield, iconBg: 'bg-gray-900', iconColor: 'text-purple-400' },
-}
+const INVOICE_COLUMNS = 'id, smartbill_series, smartbill_number, amount, currency, status, pdf_url, issued_at, created_at'
 
-// Self-serve upgrade path (custom is sales-led, trial is the entry tier).
-const UPGRADE_NEXT: Partial<Record<Plan, Plan>> = {
-  trial: 'starter',
-  starter: 'pro',
-  pro: 'business',
-}
+async function BillingOverview({ ctx }: { ctx: OrgContext }) {
+  const { org, supabase } = ctx
 
-export default function BillingPage() {
-  const { organization: org, isLoading } = useOrganization()
-  const [pending, setPending] = useState<string | null>(null)
-  const [cycle, setCycle] = useState<BillingInterval>('month')
+  const [summary, invoices, numbers] = await Promise.all([
+    getUsageSummary(org, { supabase }),
+    supabase.from('invoices').select(INVOICE_COLUMNS).eq('org_id', org.id).order('created_at', { ascending: false }).limit(24),
+    supabase
+      .from('phone_numbers')
+      .select('id, number, country, is_active, monthly_cost')
+      .eq('org_id', org.id)
+      .order('created_at', { ascending: true }),
+  ])
+  if (invoices.error) console.error('[billing] invoices read failed', org.id, invoices.error.code, invoices.error.message)
+  if (numbers.error) console.error('[billing] phone numbers read failed', org.id, numbers.error.code, numbers.error.message)
 
-  async function goToCheckout(plan: Plan) {
-    setPending(plan)
-    try {
-      const res = await fetch('/api/billing/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan, interval: cycle }),
-      })
-      const data = await res.json()
-      if (res.ok && data.url) {
-        window.location.href = data.url
-        return
-      }
-      toast.error(data.error ?? 'Could not start checkout')
-    } catch {
-      toast.error('Could not start checkout')
-    }
-    setPending(null)
-  }
-
-  async function openPortal() {
-    setPending('portal')
-    try {
-      const res = await fetch('/api/billing/portal', { method: 'POST' })
-      const data = await res.json()
-      if (res.ok && data.url) {
-        window.location.href = data.url
-        return
-      }
-      toast.error(data.error ?? 'Could not open billing portal')
-    } catch {
-      toast.error('Could not open billing portal')
-    }
-    setPending(null)
-  }
-
-  if (isLoading || !org) {
-    return (
-      <div className="p-6 max-w-3xl space-y-6">
-        <div className="h-44 animate-pulse rounded-2xl bg-muted" />
-        <div className="h-64 animate-pulse rounded-2xl bg-muted" />
-      </div>
-    )
-  }
-
-  const currentPlan = (org.plan ?? 'trial') as Plan
-  const planCfg = PLANS[currentPlan]
-  const minutesUsed = org.minutes_used ?? 0
-  const minutesLimit = org.minutes_limit ?? planCfg.minutes_limit
-  const usagePct = minutesLimit > 0 ? Math.min(100, Math.round((minutesUsed / minutesLimit) * 100)) : 0
-  const hasBilling = !!org.stripe_customer_id
-  const PlanIcon = PLAN_META[currentPlan].icon
-  const nextTier: Plan | null = UPGRADE_NEXT[currentPlan] ?? null
-  const busy = pending !== null
+  const stripeConfigured = isStripeConfigured()
+  const plans: SelfServePlanId[] = ['starter', 'pro', 'business']
+  const availability = Object.fromEntries(
+    plans.map((plan) => [plan, { month: !!priceIdFor(plan, 'month'), year: !!priceIdFor(plan, 'year') }])
+  ) as Record<SelfServePlanId, { month: boolean; year: boolean }>
 
   return (
-    <div className="p-6 max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Billing</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Manage your subscription, payment method, and billing history.
-        </p>
+    <div className="space-y-6">
+      <UsageOverview summary={summary} timeZone={org.timezone} />
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <PlanFeatures plan={summary.plan} />
+        <PhoneNumbersSummary numbers={(numbers.data ?? []) as BillingPhoneNumber[]} failed={!!numbers.error} />
       </div>
 
-      {/* Current plan + usage */}
-      <div className="rounded-2xl overflow-hidden border-2 border-primary shadow-sm">
-        <div className="bg-gradient-to-r from-purple-600 via-purple-700 to-indigo-700 px-6 py-5">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20">
-                <PlanIcon className="h-5 w-5 text-yellow-300" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-white">{planCfg.name} Plan</h2>
-                  <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[11px] font-semibold text-white">
-                    {currentPlan === 'trial' ? 'Trial' : 'Active'}
-                  </span>
-                </div>
-                <p className="text-sm text-purple-200">
-                  {planCfg.price_monthly === 0 ? 'No subscription' : `$${planCfg.price_monthly}/month`}
-                </p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-2xl font-black text-white">${planCfg.price_monthly}</p>
-              <p className="text-xs text-purple-200">per month</p>
-            </div>
-          </div>
-        </div>
+      <PlanPicker
+        currentPlan={summary.plan}
+        currentInterval={org.billing_interval}
+        hasActiveSubscription={summary.plan !== 'trial' && !!org.stripe_subscription_id}
+        stripeConfigured={stripeConfigured}
+        availability={availability}
+        salesHref={AUTH.contactSales}
+      />
 
-        <div className="bg-card px-6 py-5 space-y-4">
-          <p className="text-sm font-semibold text-foreground">This month&apos;s usage</p>
-          <div>
-            <div className="flex items-center justify-between text-xs mb-1.5">
-              <span className="flex items-center gap-1.5 text-muted-foreground">
-                <Clock className="h-3.5 w-3.5" />
-                Minutes used
-              </span>
-              <span className={cn('font-semibold', usagePct > 80 ? 'text-orange-500' : 'text-foreground')}>
-                {minutesUsed} / {minutesLimit}
-              </span>
-            </div>
-            <Progress value={usagePct} className="h-2" />
-            {usagePct > 80 && (
-              <p className="mt-1 flex items-center gap-1 text-[11px] text-orange-500">
-                <AlertTriangle className="h-3 w-3" />
-                {100 - usagePct}% of minutes remaining — consider upgrading
-              </p>
-            )}
-          </div>
+      <InvoicesList
+        invoices={(invoices.data ?? []) as BillingInvoice[]}
+        failed={!!invoices.error}
+        timeZone={org.timezone}
+        hasBillingAccount={!!org.stripe_customer_id}
+      />
+    </div>
+  )
+}
 
-          <div className="flex flex-wrap gap-2 pt-1">
-            {hasBilling && (
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={openPortal} disabled={busy}>
-                {pending === 'portal' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Settings className="h-3.5 w-3.5" />}
-                Manage subscription
-              </Button>
-            )}
-            {nextTier && (
-              <Button size="sm" className="purple-glow gap-1.5 ml-auto" onClick={() => goToCheckout(nextTier)} disabled={busy}>
-                {pending === nextTier ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
-                Upgrade to {PLANS[nextTier].name}
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
+export default async function BillingPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/login')
 
-      {/* Plan picker */}
-      <div className="rounded-2xl border bg-card p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-foreground">Change plan</h2>
-          {/* Billing cycle toggle */}
-          <div className="flex items-center gap-1 rounded-lg border bg-muted/40 p-0.5 text-xs">
-            <button
-              type="button"
-              onClick={() => setCycle('month')}
-              className={cn('rounded-md px-2.5 py-1 font-medium transition-colors', cycle === 'month' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground')}
-            >
-              Monthly
-            </button>
-            <button
-              type="button"
-              onClick={() => setCycle('year')}
-              className={cn('flex items-center gap-1 rounded-md px-2.5 py-1 font-medium transition-colors', cycle === 'year' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground')}
-            >
-              Annual
-              <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[9px] font-bold text-green-700">2 MO FREE</span>
-            </button>
-          </div>
-        </div>
-        <div className="space-y-3">
-          {(Object.keys(PLANS) as Plan[]).map((planId) => {
-            const cfg = PLANS[planId]
-            const meta = PLAN_META[planId]
-            const Icon = meta.icon
-            const isCurrent = planId === currentPlan
-            const isCustom = planId === 'custom'
-            const isPaid = !isCustom && planId !== 'trial'
-            // Annual shows the monthly-equivalent (yearly total / 12).
-            const displayPrice = cycle === 'year' && isPaid
-              ? Math.round(cfg.price_annual / 12)
-              : cfg.price_monthly
+  const { checkout } = await searchParams
+  const status = checkout === 'success' ? 'success' : checkout === 'canceled' ? 'canceled' : null
+  const showPortal = isStripeConfigured() && !!ctx.org.stripe_customer_id
 
-            return (
-              <div
-                key={planId}
-                className={cn(
-                  'relative rounded-xl border-2 p-4 transition-all',
-                  isCustom ? 'bg-gray-950 border-gray-800' : isCurrent ? 'border-primary bg-purple-50/60' : 'border-border'
-                )}
-              >
-                {isCurrent && (
-                  <span className="absolute -top-2.5 left-4 rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-bold text-primary-foreground">
-                    Current plan
-                  </span>
-                )}
-                <div className="flex items-center gap-3">
-                  <div className={cn('flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl', meta.iconBg)}>
-                    <Icon className={cn('h-4 w-4', meta.iconColor)} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className={cn('font-semibold text-sm', isCustom ? 'text-white' : 'text-foreground')}>
-                      {cfg.name}
-                    </span>
-                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
-                      {cfg.features.slice(0, 3).map((f) => (
-                        <span key={f} className={cn('text-[11px]', isCustom ? 'text-gray-400' : 'text-muted-foreground')}>
-                          · {f}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className={cn('text-lg font-black', isCustom ? 'text-white' : 'text-foreground')}>
-                      ${displayPrice}{isCustom && '+'}
-                      <span className={cn('text-xs font-normal ml-0.5', isCustom ? 'text-gray-400' : 'text-muted-foreground')}>/mo</span>
-                    </p>
-                    {cycle === 'year' && isPaid && (
-                      <p className="text-[10px] text-muted-foreground">${cfg.price_annual}/yr billed annually</p>
-                    )}
-                    {!isCurrent && isCustom && (
-                      <a
-                        href="mailto:sales@neuro-tech-voice.com?subject=Custom%20plan%20enquiry"
-                        className="mt-1.5 inline-flex h-7 items-center rounded-md border border-gray-600 px-3 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
-                      >
-                        Contact sales
-                      </a>
-                    )}
-                    {!isCurrent && !isCustom && planId !== 'trial' && (
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className={cn('mt-1.5 h-7 text-xs', planId === 'pro' && 'purple-glow')}
-                        onClick={() => goToCheckout(planId)}
-                        disabled={busy}
-                      >
-                        {pending === planId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Upgrade'}
-                      </Button>
-                    )}
-                    {!isCurrent && planId === 'trial' && hasBilling && (
-                      <Button size="sm" variant="ghost" className="mt-1.5 h-7 text-xs text-muted-foreground" onClick={openPortal} disabled={busy}>
-                        Downgrade
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Payment method & invoices → Stripe customer portal */}
-      <div className="rounded-2xl border bg-card p-5">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-muted">
-              <CreditCard className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-foreground">Payment method &amp; invoices</p>
-              <p className="text-xs text-muted-foreground">
-                Update your card, download invoices, or cancel — securely via Stripe.
-              </p>
-            </div>
-          </div>
-          <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={openPortal} disabled={busy || !hasBilling}>
-            {pending === 'portal' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
-            Open portal
-          </Button>
-        </div>
-        {!hasBilling && (
-          <p className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <Shield className="h-3.5 w-3.5" />
-            No billing account yet — upgrade to a paid plan to manage payments here.
+  return (
+    <div className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Billing</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Your plan, minutes, phone numbers and invoices in one place.
           </p>
-        )}
+        </div>
+        {showPortal && <ManageBillingButton className="w-full sm:w-auto" />}
       </div>
+
+      <CheckoutStatusToast status={status} plan={ctx.org.plan} />
+
+      <Suspense fallback={<BillingSkeleton />}>
+        <BillingOverview ctx={ctx} />
+      </Suspense>
     </div>
   )
 }

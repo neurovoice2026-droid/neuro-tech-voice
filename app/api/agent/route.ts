@@ -1,169 +1,103 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { agents as elAgents, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
-import { createAgentWithFallback, TTS_MODEL, LLM_MODEL } from '@/lib/elevenlabs/create-agent'
-import { composeSystemPrompt } from '@/lib/elevenlabs/prompt'
-import { linkNumbersToAgent } from '@/lib/phone/link'
+import { ApiError, handleRoute, noStore, parseJson } from '@/lib/api/http'
+import { requireOrgContext, type OrgContext } from '@/lib/api/auth'
+import { isSupabaseAdminConfigured } from '@/lib/env'
+import { kvDel, kvIncr } from '@/lib/kv'
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/security/rate-limit'
+import { createAdminClient } from '@/lib/supabase/admin'
+import type { Agent } from '@/types'
+import { syncAgentAfterResponse } from '@/lib/voice/sync'
+import { loadOrgAgent, saveAgentColumns } from '@/lib/voice/sync/agent-store'
+import { buildAgentUpdate } from '@/lib/voice/sync/agent-update'
+import { providerAgentName } from '@/lib/voice/sync/compose'
+import { agentPatchSchema, patchAffectsProviders } from '@/lib/voice/sync/schemas'
+import { resolveSelectableVoice } from '@/lib/voice/sync/voices'
 
-export async function GET() {
-  const supabase = await createClient()
+// The organisation's single AI agent. GET returns it (creating a default one
+// for accounts that never got a row); PATCH saves settings with the user's
+// own session, then pushes them to the voice providers after the response.
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+export const runtime = 'nodejs'
+// Covers the provider sync that runs in after().
+export const maxDuration = 60
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id, name')
-    .eq('user_id', user.id)
-    .single()
+const NOT_SET_UP = 'Your AI agent hasn’t been set up yet. Please finish onboarding first.'
 
-  if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+const CREATE_LOCK_TTL_SECONDS = 15
+const CREATE_WAIT_STEPS = 6
+const CREATE_WAIT_MS = 500
 
-  const { data: agent } = await supabase
-    .from('agents')
-    .select('*')
-    .eq('org_id', org.id)
-    .limit(1)
-    .maybeSingle()
-
-  // Safety net: accounts created before the onboarding-persistence fix may not
-  // have an agent row yet. Auto-create a default one so the page always works.
-  if (!agent) {
-    const { data: created } = await supabase
-      .from('agents')
-      .insert({ org_id: org.id, name: org.name ? `${org.name} Agent` : 'My Agent' })
-      .select('*')
-      .single()
-    return NextResponse.json(created ?? null)
-  }
-
-  return NextResponse.json(agent)
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-export async function PATCH(request: Request) {
-  const supabase = await createClient()
-
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
-
-  if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const body = await request.json() as Record<string, unknown>
-
-  // Only allow patching known agent columns
-  const allowed = [
-    'name', 'language', 'system_prompt', 'first_message', 'fallback_message',
-    'is_active', 'working_hours', 'voice_id', 'voice_name', 'metadata',
-  ]
-  const updates: Record<string, unknown> = {}
-  for (const key of allowed) {
-    if (key in body) updates[key] = body[key]
-  }
-
-  // Find-or-create: update the org's agent, or create one if none exists yet.
-  const { data: existing } = await supabase
-    .from('agents')
-    .select('id')
-    .eq('org_id', org.id)
-    .limit(1)
-    .maybeSingle()
-
-  let agent
-  if (existing) {
-    const { data, error } = await supabase
-      .from('agents')
-      .update(updates)
-      .eq('id', existing.id)
-      .select()
-      .single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    agent = data
-  } else {
-    const { data, error } = await supabase
-      .from('agents')
-      .insert({ org_id: org.id, name: (updates.name as string) || 'My Agent', ...updates })
-      .select()
-      .single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    agent = data
-  }
-
-  // Self-heal: if this agent has no ElevenLabs agent yet, create one now so
-  // calls/test-calls work (covers accounts from the pre-fix onboarding).
-  if (elConfigured() && !agent.elevenlabs_agent_id && agent.name) {
-    const { agent_id } = await createAgentWithFallback({
-      name: agent.name,
-      system_prompt: agent.system_prompt,
-      first_message: agent.first_message,
-      language: agent.language,
-      voice_id: agent.voice_id,
-      fallback_message: agent.fallback_message,
-    })
-    if (agent_id) {
-      await supabase
-        .from('agents')
-        .update({ elevenlabs_agent_id: agent_id, is_active: true })
-        .eq('id', agent.id)
-      agent.elevenlabs_agent_id = agent_id
+/**
+ * Accounts created before onboarding persisted the agent may have no row. The
+ * service role creates it (provider columns stay server-owned). The agents
+ * table has no one-per-org constraint, so a short per-org lock keeps two tabs
+ * loading at once from creating two agents: the second waits for the first.
+ */
+async function createDefaultAgent(ctx: OrgContext): Promise<Agent> {
+  const client = isSupabaseAdminConfigured() ? createAdminClient() : ctx.supabase
+  const lockKey = `lock:agent-create:${ctx.org.id}`
+  const holders = await kvIncr(lockKey, CREATE_LOCK_TTL_SECONDS)
+  if (holders > 1) {
+    for (let step = 0; step < CREATE_WAIT_STEPS; step++) {
+      await sleep(CREATE_WAIT_MS)
+      const created = await loadOrgAgent(client, ctx.org.id)
+      if (created) return created
     }
+    throw new ApiError(409, 'agent_setup_in_progress', 'Your agent is still being set up. Please refresh in a moment.')
   }
 
-  // Ensure the org's phone number(s) route to this agent in ElevenLabs
-  // (idempotent — fixes numbers bought during onboarding before the agent existed).
-  if (elConfigured() && agent.elevenlabs_agent_id) {
-    await linkNumbersToAgent(supabase, org.id, agent.id, agent.elevenlabs_agent_id)
-  }
+  try {
+    const existing = await loadOrgAgent(client, ctx.org.id)
+    if (existing) return existing
 
-  // Sync to ElevenLabs if agent has elevenlabs_agent_id and relevant fields changed.
-  // system_prompt/language/fallback_message all feed into the SAME composed
-  // prompt (see lib/elevenlabs/prompt.ts), so any of the three requires
-  // recomposing from the agent's full current state, not just the changed field,
-  // otherwise a fallback_message-only edit would never reach ElevenLabs at all.
-  const elId = agent.elevenlabs_agent_id
-  const promptFieldsChanged =
-    'system_prompt' in updates || 'language' in updates || 'fallback_message' in updates
-  const needsSync = elConfigured() && elId && (
-    promptFieldsChanged || 'first_message' in updates || 'voice_id' in updates || 'name' in updates
-  )
-
-  if (needsSync) {
-    try {
-      await elAgents.update(elId, {
-        ...('name' in updates && { name: updates.name as string }),
-        conversation_config: {
-          agent: {
-            ...(promptFieldsChanged && {
-              prompt: {
-                prompt: composeSystemPrompt({
-                  system_prompt: agent.system_prompt,
-                  language: agent.language,
-                  fallback_message: agent.fallback_message,
-                }),
-                llm: LLM_MODEL,
-              },
-            }),
-            ...(updates.first_message !== undefined && {
-              first_message: updates.first_message as string,
-            }),
-            ...(updates.language !== undefined && {
-              language: updates.language as string,
-            }),
-          },
-          ...(updates.voice_id !== undefined && {
-            tts: { voice_id: updates.voice_id as string, model_id: TTS_MODEL, expressive_mode: true },
-          }),
-        },
-      })
-    } catch {
-      // Non-fatal — agent is updated in DB, ElevenLabs sync failed
+    const name = providerAgentName(ctx.org.name ? `${ctx.org.name} Agent` : 'My Agent', null)
+    const { error } = await client.from('agents').insert({ org_id: ctx.org.id, name })
+    if (error) {
+      console.error('[agent]', 'default agent creation failed', error.code, error.message)
+      throw new ApiError(500, 'agent_create_failed', 'We couldn’t set up your agent. Please try again.')
     }
+    const created = await loadOrgAgent(client, ctx.org.id)
+    if (!created) throw new ApiError(500, 'agent_create_failed', 'We couldn’t set up your agent. Please try again.')
+    return created
+  } finally {
+    await kvDel(lockKey)
   }
-
-  return NextResponse.json({ success: true, agent })
 }
+
+export const GET = handleRoute(async () => {
+  const ctx = await requireOrgContext()
+  const agent = (await loadOrgAgent(ctx.supabase, ctx.org.id)) ?? (await createDefaultAgent(ctx))
+  return noStore(NextResponse.json({ agent, provider_sync: agent.provider_sync }))
+})
+
+export const PATCH = handleRoute(async (req) => {
+  const ctx = await requireOrgContext()
+  await enforceRateLimit(RATE_LIMITS.apiWrite, ctx.user.id)
+  const patch = await parseJson(req, agentPatchSchema)
+
+  const current = await loadOrgAgent(ctx.supabase, ctx.org.id)
+  if (!current) throw new ApiError(404, 'agent_not_found', NOT_SET_UP)
+
+  let verifiedVoiceName: string | null = null
+  const voiceChanged = patch.cartesia_voice_id !== undefined && patch.cartesia_voice_id !== current.cartesia_voice_id
+  if (voiceChanged && patch.cartesia_voice_id) {
+    // Clone ownership is readable through the user's own RLS policy.
+    verifiedVoiceName = (await resolveSelectableVoice(ctx.supabase, ctx.org.id, patch.cartesia_voice_id)).name
+  }
+
+  const plan = buildAgentUpdate(patch, current, verifiedVoiceName)
+  if (Object.keys(plan.update).length === 0) {
+    return noStore(NextResponse.json({ agent: current, provider_sync: current.provider_sync }))
+  }
+
+  await saveAgentColumns(ctx.supabase, { orgId: ctx.org.id, agentId: current.id }, plan)
+  const saved = await loadOrgAgent(ctx.supabase, ctx.org.id)
+  if (!saved) throw new ApiError(404, 'agent_not_found', NOT_SET_UP)
+
+  const provider_sync = patchAffectsProviders(patch) ? await syncAgentAfterResponse(saved) : saved.provider_sync
+  return noStore(NextResponse.json({ agent: { ...saved, provider_sync }, provider_sync }))
+})

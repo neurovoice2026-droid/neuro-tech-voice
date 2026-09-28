@@ -1,79 +1,146 @@
-// ─── ElevenLabs Conversational AI Client ─────────────────────────────────────
-// Comprehensive wrapper for all ElevenLabs API endpoints used by the platform.
+import 'server-only'
+import crypto from 'node:crypto'
+import { ApiError } from '@/lib/api/http'
+import { env, isElevenLabsConfigured, isElevenLabsWebhookConfigured } from '@/lib/env'
+import { timingSafeEqualString } from '@/lib/security/signing'
 
-import crypto from 'crypto'
+// ─── ElevenLabs client ───────────────────────────────────────────────────────
+// ElevenLabs is the fallback provider: a warm standby agent per organisation
+// (lib/voice/sync/elevenlabs-standby.ts), register-call for the router, and
+// the legacy conversation history until every call lives in our database.
+//
+// Rules: every request has a timeout (Twilio gives the router seconds, not
+// minutes); a missing key is an ApiError 503 not_configured; errors keep the
+// upstream body for server logs only, and their message never includes it.
 
-const BASE = 'https://api.elevenlabs.io'
+export const ELEVENLABS_API_BASE = 'https://api.elevenlabs.io'
 
-function headers(extra?: Record<string, string>): Record<string, string> {
-  return {
-    'xi-api-key': process.env.ELEVENLABS_API_KEY!,
-    'Content-Type': 'application/json',
-    ...extra,
-  }
-}
-
-async function request<T>(
-  method: string,
-  path: string,
-  body?: unknown,
-  opts?: { rawResponse?: boolean; headers?: Record<string, string> }
-): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: headers(opts?.headers),
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  })
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new ElevenLabsError(res.status, text, path)
-  }
-
-  if (opts?.rawResponse) return res as unknown as T
-
-  const contentType = res.headers.get('content-type') ?? ''
-  if (contentType.includes('application/json')) {
-    return res.json() as Promise<T>
-  }
-  return res.text() as unknown as T
-}
-
-async function requestFormData<T>(path: string, formData: FormData): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'POST',
-    headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY! },
-    body: formData,
-  })
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new ElevenLabsError(res.status, text, path)
-  }
-
-  return res.json() as Promise<T>
-}
+const DEFAULT_TIMEOUT_MS = 15_000
+const UPLOAD_TIMEOUT_MS = 60_000
+const AUDIO_TIMEOUT_MS = 60_000
+const MAX_ERROR_BODY_CHARS = 2_000
 
 export class ElevenLabsError extends Error {
-  constructor(
-    public status: number,
-    public body: string,
-    public path: string
-  ) {
-    super(`ElevenLabs API error ${status} on ${path}: ${body}`)
+  /** HTTP status; 0 when no response arrived (timeout or network failure). */
+  readonly status: number
+  /** Upstream body, truncated. Server logs only: never send it to a browser. */
+  readonly body: string
+  readonly path: string
+  readonly method: string
+
+  constructor(status: number, body: string, path: string, method = 'GET') {
+    super(
+      status === 0
+        ? `ElevenLabs ${method} ${path} ${body === 'timeout' ? 'timed out' : 'could not be reached'}`
+        : `ElevenLabs ${method} ${path} failed (${status})`
+    )
     this.name = 'ElevenLabsError'
+    this.status = status
+    this.body = body.slice(0, MAX_ERROR_BODY_CHARS)
+    this.path = path
+    this.method = method
+  }
+
+  get timedOut(): boolean {
+    return this.status === 0 && this.body === 'timeout'
   }
 }
 
+/** True when ELEVENLABS_API_KEY is set (placeholders don't count). */
 export function isConfigured(): boolean {
-  const key = process.env.ELEVENLABS_API_KEY
-  return !!key && key !== 'your-elevenlabs-api-key'
+  return isElevenLabsConfigured()
 }
 
 /** True when an ElevenLabs webhook signing secret is configured. */
 export function isWebhookConfigured(): boolean {
-  const secret = process.env.ELEVENLABS_WEBHOOK_SECRET
-  return !!secret && secret !== 'your-elevenlabs-webhook-secret'
+  return isElevenLabsWebhookConfigured()
+}
+
+function apiKey(): string {
+  const key = env.ELEVENLABS_API_KEY
+  if (!key) throw new ApiError(503, 'not_configured', 'ElevenLabs is not configured.')
+  return key
+}
+
+export interface ElevenLabsRequestOptions {
+  /** Whole request, default 15 s. */
+  timeoutMs?: number
+  signal?: AbortSignal
+  headers?: Record<string, string>
+  /** Return the Response untouched (audio, TwiML). */
+  rawResponse?: boolean
+}
+
+function withPathQuery(path: string, query?: Record<string, string | number | boolean | undefined | null | readonly string[]>): string {
+  const qs = new URLSearchParams()
+  for (const [key, value] of Object.entries(query ?? {})) {
+    if (value === undefined || value === null || value === '') continue
+    if (Array.isArray(value)) value.forEach((item) => qs.append(key, item))
+    else qs.set(key, String(value))
+  }
+  const q = qs.toString()
+  return q ? `${path}?${q}` : path
+}
+
+async function send(
+  method: string,
+  path: string,
+  body: BodyInit | undefined,
+  contentType: string | null,
+  opts?: ElevenLabsRequestOptions
+): Promise<Response> {
+  const headers: Record<string, string> = { 'xi-api-key': apiKey(), ...opts?.headers }
+  if (contentType) headers['Content-Type'] = contentType
+  const signals = [AbortSignal.timeout(opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS)]
+  if (opts?.signal) signals.push(opts.signal)
+
+  let res: Response
+  try {
+    res = await fetch(`${ELEVENLABS_API_BASE}${path}`, {
+      method,
+      headers,
+      body,
+      signal: AbortSignal.any(signals),
+      cache: 'no-store',
+    })
+  } catch (error) {
+    // A caller cancellation stays an AbortError; our own timeout becomes a typed error.
+    if (opts?.signal?.aborted) throw error
+    const timedOut = error instanceof Error && error.name === 'TimeoutError'
+    throw new ElevenLabsError(0, timedOut ? 'timeout' : 'network_error', path.split('?')[0], method)
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new ElevenLabsError(res.status, text, path.split('?')[0], method)
+  }
+  return res
+}
+
+/** Generic JSON request, exported for modules that need endpoints not wrapped below (register-call). */
+export async function elevenLabsRequest<T>(
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  path: string,
+  body?: unknown,
+  opts?: ElevenLabsRequestOptions
+): Promise<T> {
+  const res = await send(
+    method,
+    path,
+    body === undefined ? undefined : JSON.stringify(body),
+    body === undefined ? null : 'application/json',
+    opts
+  )
+  if (opts?.rawResponse) return res as unknown as T
+  const contentType = res.headers.get('content-type') ?? ''
+  if (contentType.includes('application/json')) return (await res.json()) as T
+  const text = await res.text()
+  return (text ? text : undefined) as unknown as T
+}
+
+async function requestFormData<T>(path: string, formData: FormData, opts?: ElevenLabsRequestOptions): Promise<T> {
+  const res = await send('POST', path, formData, null, { timeoutMs: UPLOAD_TIMEOUT_MS, ...opts })
+  return (await res.json()) as T
 }
 
 /**
@@ -88,7 +155,7 @@ export function verifyWebhookSignature(
   signatureHeader: string | null,
   toleranceSeconds = 1800
 ): boolean {
-  const secret = process.env.ELEVENLABS_WEBHOOK_SECRET
+  const secret = env.ELEVENLABS_WEBHOOK_SECRET
   if (!secret || !signatureHeader) return false
 
   const parts = signatureHeader.split(',')
@@ -100,87 +167,90 @@ export function verifyWebhookSignature(
   if (!Number.isFinite(timestamp)) return false
   if (Math.abs(Date.now() / 1000 - timestamp) > toleranceSeconds) return false
 
-  const expected = crypto
-    .createHmac('sha256', secret)
-    .update(`${t}.${rawBody}`)
-    .digest('hex')
-
-  const a = Buffer.from(expected)
-  const b = Buffer.from(v0)
-  return a.length === b.length && crypto.timingSafeEqual(a, b)
+  const expected = crypto.createHmac('sha256', secret).update(`${t}.${rawBody}`).digest('hex')
+  return timingSafeEqualString(expected, v0)
 }
 
 // ─── Agents ──────────────────────────────────────────────────────────────────
+
+export type ElevenLabsAudioFormat = 'ulaw_8000' | 'pcm_16000' | 'pcm_22050' | 'pcm_24000' | 'pcm_44100'
 
 export interface ELAgent {
   agent_id: string
   name: string
   conversation_config: {
+    asr?: { user_input_audio_format?: string }
     agent?: {
       prompt?: { prompt?: string; llm?: string }
       first_message?: string
       language?: string
     }
-    tts?: { voice_id?: string; expressive_mode?: boolean }
+    tts?: { voice_id?: string; model_id?: string; agent_output_audio_format?: string; expressive_mode?: boolean }
   }
   platform_settings?: Record<string, unknown>
   metadata?: Record<string, unknown>
   [key: string]: unknown
 }
 
+export interface ElevenLabsConversationConfig {
+  asr?: { user_input_audio_format?: ElevenLabsAudioFormat }
+  agent?: {
+    prompt?: { prompt: string; llm?: string }
+    first_message?: string
+    language?: string
+  }
+  tts?: {
+    voice_id?: string
+    model_id?: string
+    agent_output_audio_format?: ElevenLabsAudioFormat
+    expressive_mode?: boolean
+  }
+}
+
+/** Which conversation fields a register-call or WebSocket client may override per call. */
+export interface ElevenLabsOverrideSettings {
+  conversation_config_override: {
+    agent?: { prompt?: { prompt?: boolean }; first_message?: boolean; language?: boolean }
+    tts?: { voice_id?: boolean }
+  }
+}
+
 export interface CreateAgentParams {
   name: string
-  conversation_config: {
-    agent: {
-      prompt?: { prompt: string; llm?: string }
-      first_message?: string
-      language?: string
-    }
-    tts?: { voice_id?: string; model_id?: string; expressive_mode?: boolean }
-  }
-  platform_settings?: Record<string, unknown>
+  conversation_config: ElevenLabsConversationConfig & { agent: NonNullable<ElevenLabsConversationConfig['agent']> }
+  platform_settings?: { overrides?: ElevenLabsOverrideSettings } & Record<string, unknown>
+  tags?: string[]
 }
 
 export interface UpdateAgentParams {
-  conversation_config?: {
-    agent?: {
-      prompt?: { prompt: string; llm?: string }
-      first_message?: string
-      language?: string
-    }
-    tts?: { voice_id?: string; model_id?: string; expressive_mode?: boolean }
-  }
+  conversation_config?: ElevenLabsConversationConfig
   name?: string
-  platform_settings?: Record<string, unknown>
+  platform_settings?: { overrides?: ElevenLabsOverrideSettings } & Record<string, unknown>
+  tags?: string[]
 }
 
 export const agents = {
   create(params: CreateAgentParams) {
-    return request<ELAgent>('POST', '/v1/convai/agents/create', params)
+    return elevenLabsRequest<ELAgent>('POST', '/v1/convai/agents/create', params)
   },
 
   get(agentId: string) {
-    return request<ELAgent>('GET', `/v1/convai/agents/${agentId}`)
+    return elevenLabsRequest<ELAgent>('GET', `/v1/convai/agents/${encodeURIComponent(agentId)}`)
   },
 
   list(params?: { page_size?: number; search?: string; cursor?: string }) {
-    const qs = new URLSearchParams()
-    if (params?.page_size) qs.set('page_size', String(params.page_size))
-    if (params?.search) qs.set('search', params.search)
-    if (params?.cursor) qs.set('cursor', params.cursor)
-    const q = qs.toString()
-    return request<{ agents: ELAgent[]; next_cursor?: string }>(
+    return elevenLabsRequest<{ agents: ELAgent[]; next_cursor?: string }>(
       'GET',
-      `/v1/convai/agents${q ? `?${q}` : ''}`
+      withPathQuery('/v1/convai/agents', params)
     )
   },
 
   update(agentId: string, params: UpdateAgentParams) {
-    return request<ELAgent>('PATCH', `/v1/convai/agents/${agentId}`, params)
+    return elevenLabsRequest<ELAgent>('PATCH', `/v1/convai/agents/${encodeURIComponent(agentId)}`, params)
   },
 
   delete(agentId: string) {
-    return request<void>('DELETE', `/v1/convai/agents/${agentId}`)
+    return elevenLabsRequest<void>('DELETE', `/v1/convai/agents/${encodeURIComponent(agentId)}`)
   },
 }
 
@@ -202,6 +272,13 @@ export interface ELConversation {
     from_number?: string
     to_number?: string
     direction?: string
+    phone_call?: {
+      external_number?: string
+      agent_number?: string
+      direction?: string
+      call_sid?: string
+      [key: string]: unknown
+    }
     [key: string]: unknown
   }
   analysis?: {
@@ -251,57 +328,38 @@ export interface ListConversationsResponse {
 
 export const conversations = {
   list(params?: ListConversationsParams) {
-    const qs = new URLSearchParams()
-    if (params?.agent_id) qs.set('agent_id', params.agent_id)
-    if (params?.page_size) qs.set('page_size', String(params.page_size))
-    if (params?.cursor) qs.set('cursor', params.cursor)
-    if (params?.call_successful) qs.set('call_successful', params.call_successful)
-    if (params?.call_start_after_unix) qs.set('call_start_after_unix', String(params.call_start_after_unix))
-    if (params?.call_start_before_unix) qs.set('call_start_before_unix', String(params.call_start_before_unix))
-    if (params?.call_duration_min_secs) qs.set('call_duration_min_secs', String(params.call_duration_min_secs))
-    if (params?.call_duration_max_secs) qs.set('call_duration_max_secs', String(params.call_duration_max_secs))
-    if (params?.search) qs.set('search', params.search)
-    if (params?.exclude_statuses) {
-      for (const s of params.exclude_statuses) qs.append('exclude_statuses', s)
-    }
-    const q = qs.toString()
-    return request<ListConversationsResponse>(
-      'GET',
-      `/v1/convai/conversations${q ? `?${q}` : ''}`
-    )
+    return elevenLabsRequest<ListConversationsResponse>('GET', withPathQuery('/v1/convai/conversations', { ...params }))
   },
 
   get(conversationId: string) {
-    return request<ELConversation>('GET', `/v1/convai/conversations/${conversationId}`)
+    return elevenLabsRequest<ELConversation>('GET', `/v1/convai/conversations/${encodeURIComponent(conversationId)}`)
   },
 
   delete(conversationId: string) {
-    return request<void>('DELETE', `/v1/convai/conversations/${conversationId}`)
+    return elevenLabsRequest<void>('DELETE', `/v1/convai/conversations/${encodeURIComponent(conversationId)}`)
   },
 
+  /** Upstream URL (needs the API key); only for server-side proxying. */
   async getAudioUrl(conversationId: string): Promise<string> {
-    // Returns a URL that streams the audio — we proxy this
-    return `${BASE}/v1/convai/conversations/${conversationId}/audio`
+    return `${ELEVENLABS_API_BASE}/v1/convai/conversations/${encodeURIComponent(conversationId)}/audio`
   },
 
-  async getAudio(conversationId: string): Promise<Response> {
-    const res = await fetch(
-      `${BASE}/v1/convai/conversations/${conversationId}/audio`,
-      { headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY! } }
-    )
-    if (!res.ok) {
-      throw new ElevenLabsError(res.status, await res.text(), 'conversations/audio')
-    }
-    return res
+  /** The caller streams the body. */
+  getAudio(conversationId: string): Promise<Response> {
+    return send('GET', `/v1/convai/conversations/${encodeURIComponent(conversationId)}/audio`, undefined, null, {
+      timeoutMs: AUDIO_TIMEOUT_MS,
+    })
   },
 }
 
 // ─── Phone Numbers ───────────────────────────────────────────────────────────
+// Legacy native imports. The app router owns every Twilio number now, so the
+// app never imports numbers again; list/get/delete remain for removing the
+// imports that already exist.
 
 // The agent assigned to a number is NOT a flat `agent_id` field in
-// responses - confirmed against ElevenLabs' actual API reference, it's
-// nested under `assigned_agent`. (The CREATE/UPDATE *request* body does take
-// a flat top-level `agent_id` - request and response shapes differ here.)
+// responses: it's nested under `assigned_agent`. (The CREATE/UPDATE request
+// body does take a flat top-level `agent_id`.)
 export interface ELPhoneNumber {
   phone_number_id: string
   phone_number: string
@@ -316,15 +374,8 @@ export interface ELPhoneNumber {
   [key: string]: unknown
 }
 
-// Flat, sibling fields - confirmed against ElevenLabs' actual API reference
-// (CreateTwilioPhoneNumberRequest schema + a same-shaped Exotel example on the
-// same page). There is NO provider_config wrapper object; sid/token are the
-// Twilio Account SID/Auth Token directly. A previous version of this
-// interface nested them under provider_config.twilio.{account_sid,
-// auth_token, phone_number_sid} - that shape doesn't exist in ElevenLabs'
-// schema at all, meaning every past import silently never sent valid Twilio
-// credentials, however plausible the extra fields being ignored made it look
-// like it worked (2xx response, but agent_id also never actually persisted).
+// Flat, sibling fields (no provider_config wrapper): sid/token are the Twilio
+// Account SID and Auth Token.
 export interface ImportPhoneNumberParams {
   phone_number: string
   label: string
@@ -335,35 +386,29 @@ export interface ImportPhoneNumberParams {
 }
 
 export const phoneNumbers = {
-  // Unlike every other list endpoint in this file (agents, conversations,
-  // voices, knowledge-base, webhooks all wrap their array in an object), this
-  // one returns a bare array at the top level - confirmed against ElevenLabs'
-  // actual API reference. Do not "fix" this to match the others.
+  // Unlike the other list endpoints this one returns a bare array.
   list() {
-    return request<ELPhoneNumber[]>('GET', '/v1/convai/phone-numbers')
+    return elevenLabsRequest<ELPhoneNumber[]>('GET', '/v1/convai/phone-numbers')
   },
 
   get(phoneNumberId: string) {
-    return request<ELPhoneNumber>(
-      'GET',
-      `/v1/convai/phone-numbers/${phoneNumberId}`
-    )
+    return elevenLabsRequest<ELPhoneNumber>('GET', `/v1/convai/phone-numbers/${encodeURIComponent(phoneNumberId)}`)
   },
 
   create(params: ImportPhoneNumberParams) {
-    return request<ELPhoneNumber>('POST', '/v1/convai/phone-numbers', params)
+    return elevenLabsRequest<ELPhoneNumber>('POST', '/v1/convai/phone-numbers', params)
   },
 
   update(phoneNumberId: string, params: { agent_id?: string; label?: string }) {
-    return request<ELPhoneNumber>(
+    return elevenLabsRequest<ELPhoneNumber>(
       'PATCH',
-      `/v1/convai/phone-numbers/${phoneNumberId}`,
+      `/v1/convai/phone-numbers/${encodeURIComponent(phoneNumberId)}`,
       params
     )
   },
 
   delete(phoneNumberId: string) {
-    return request<void>('DELETE', `/v1/convai/phone-numbers/${phoneNumberId}`)
+    return elevenLabsRequest<void>('DELETE', `/v1/convai/phone-numbers/${encodeURIComponent(phoneNumberId)}`)
   },
 }
 
@@ -376,13 +421,34 @@ export interface TwilioOutboundCallParams {
   conversation_initiation_client_data?: Record<string, unknown>
 }
 
+/** OpenAPI TwilioOutboundCallResponse: the SID field is `callSid` (camelCase). */
+export interface TwilioOutboundCallResult {
+  success?: boolean
+  message?: string
+  conversation_id: string | null
+  callSid: string | null
+}
+
+export interface RegisterCallParams {
+  agent_id: string
+  from_number: string
+  to_number: string
+  direction?: 'inbound' | 'outbound'
+  conversation_initiation_client_data?: Record<string, unknown>
+}
+
 export const twilioIntegration = {
   outboundCall(params: TwilioOutboundCallParams) {
-    return request<{ conversation_id: string; call_sid?: string }>(
-      'POST',
-      '/v1/convai/twilio/outbound-call',
-      params
-    )
+    return elevenLabsRequest<TwilioOutboundCallResult>('POST', '/v1/convai/twilio/outbound-call', params)
+  },
+
+  /** TwiML (text/html upstream) for a call Twilio is holding; keep the timeout short. */
+  async registerCall(params: RegisterCallParams, opts?: { timeoutMs?: number; signal?: AbortSignal }): Promise<string> {
+    const res = await send('POST', '/v1/convai/twilio/register-call', JSON.stringify(params), 'application/json', {
+      timeoutMs: opts?.timeoutMs ?? 3_000,
+      signal: opts?.signal,
+    })
+    return res.text()
   },
 }
 
@@ -401,30 +467,22 @@ export interface ELDocument {
 
 export const knowledgeBase = {
   list(params?: { page_size?: number; search?: string; cursor?: string; types?: string[] }) {
-    const qs = new URLSearchParams()
-    if (params?.page_size) qs.set('page_size', String(params.page_size))
-    if (params?.search) qs.set('search', params.search)
-    if (params?.cursor) qs.set('cursor', params.cursor)
-    if (params?.types) {
-      for (const t of params.types) qs.append('types', t)
-    }
-    const q = qs.toString()
-    return request<{ documents: ELDocument[]; next_cursor?: string }>(
+    return elevenLabsRequest<{ documents: ELDocument[]; next_cursor?: string }>(
       'GET',
-      `/v1/convai/knowledge-base${q ? `?${q}` : ''}`
+      withPathQuery('/v1/convai/knowledge-base', params)
     )
   },
 
   get(docId: string) {
-    return request<ELDocument>('GET', `/v1/convai/knowledge-base/${docId}`)
+    return elevenLabsRequest<ELDocument>('GET', `/v1/convai/knowledge-base/${encodeURIComponent(docId)}`)
   },
 
   createFromUrl(params: { url: string; name?: string }) {
-    return request<ELDocument>('POST', '/v1/convai/knowledge-base/url', params)
+    return elevenLabsRequest<ELDocument>('POST', '/v1/convai/knowledge-base/url', params)
   },
 
   createFromText(params: { text: string; name?: string }) {
-    return request<ELDocument>('POST', '/v1/convai/knowledge-base/text', params)
+    return elevenLabsRequest<ELDocument>('POST', '/v1/convai/knowledge-base/text', params)
   },
 
   createFromFile(file: File, name?: string) {
@@ -435,22 +493,27 @@ export const knowledgeBase = {
   },
 
   update(docId: string, params: { name?: string; content?: string }) {
-    return request<ELDocument>(
-      'PATCH',
-      `/v1/convai/knowledge-base/${docId}`,
-      params
+    return elevenLabsRequest<ELDocument>('PATCH', `/v1/convai/knowledge-base/${encodeURIComponent(docId)}`, params)
+  },
+
+  /** A document an agent still uses can only be deleted with `force`. */
+  delete(docId: string, opts?: { force?: boolean }) {
+    return elevenLabsRequest<void>(
+      'DELETE',
+      withPathQuery(`/v1/convai/knowledge-base/${encodeURIComponent(docId)}`, { force: opts?.force ? 'true' : undefined })
     )
   },
 
-  delete(docId: string) {
-    return request<void>('DELETE', `/v1/convai/knowledge-base/${docId}`)
+  /** Deletes even when agents still reference the document (detaches it from them). */
+  forceDelete(docId: string) {
+    return knowledgeBase.delete(docId, { force: true })
   },
 
-  // Add a document to an agent's knowledge base (legacy endpoint, still works)
+  /** Legacy endpoint, absent from the current OpenAPI spec. */
   addToAgent(agentId: string, docId: string) {
-    return request<void>(
+    return elevenLabsRequest<void>(
       'POST',
-      `/v1/convai/agents/${agentId}/add-to-knowledge-base`,
+      `/v1/convai/agents/${encodeURIComponent(agentId)}/add-to-knowledge-base`,
       { documentation_id: docId }
     )
   },
@@ -470,8 +533,7 @@ export interface ELVoice {
 
 export const voices = {
   getAll(showLegacy?: boolean) {
-    const qs = showLegacy ? '?show_legacy=true' : ''
-    return request<{ voices: ELVoice[] }>('GET', `/v1/voices${qs}`)
+    return elevenLabsRequest<{ voices: ELVoice[] }>('GET', withPathQuery('/v1/voices', { show_legacy: showLegacy ? 'true' : undefined }))
   },
 
   search(params?: {
@@ -483,27 +545,18 @@ export const voices = {
     sort_direction?: string
     next_page_token?: string
   }) {
-    const qs = new URLSearchParams()
-    if (params?.page_size) qs.set('page_size', String(params.page_size))
-    if (params?.search) qs.set('search', params.search)
-    if (params?.category) qs.set('category', params.category)
-    if (params?.voice_type) qs.set('voice_type', params.voice_type)
-    if (params?.sort) qs.set('sort', params.sort)
-    if (params?.sort_direction) qs.set('sort_direction', params.sort_direction)
-    if (params?.next_page_token) qs.set('next_page_token', params.next_page_token)
-    const q = qs.toString()
-    return request<{ voices: ELVoice[]; has_more?: boolean; next_page_token?: string }>(
+    return elevenLabsRequest<{ voices: ELVoice[]; has_more?: boolean; next_page_token?: string }>(
       'GET',
-      `/v2/voices${q ? `?${q}` : ''}`
+      withPathQuery('/v2/voices', params)
     )
   },
 
   get(voiceId: string) {
-    return request<ELVoice>('GET', `/v1/voices/${voiceId}`)
+    return elevenLabsRequest<ELVoice>('GET', `/v1/voices/${encodeURIComponent(voiceId)}`)
   },
 }
 
-// ─── Shared voice library (community voices — thousands) ──────────────────────
+// ─── Shared voice library (community voices) ─────────────────────────────────
 
 export interface ELSharedVoice {
   voice_id: string
@@ -529,24 +582,17 @@ export const sharedVoices = {
     category?: string
     page?: number
   }) {
-    const qs = new URLSearchParams()
-    qs.set('page_size', String(Math.min(params?.page_size ?? 100, 100)))
-    if (params?.search) qs.set('search', params.search)
-    if (params?.language) qs.set('language', params.language)
-    if (params?.gender) qs.set('gender', params.gender)
-    if (params?.category) qs.set('category', params.category)
-    if (params?.page) qs.set('page', String(params.page))
-    return request<{ voices: ELSharedVoice[]; has_more?: boolean }>(
+    return elevenLabsRequest<{ voices: ELSharedVoice[]; has_more?: boolean }>(
       'GET',
-      `/v1/shared-voices?${qs.toString()}`
+      withPathQuery('/v1/shared-voices', { ...params, page_size: Math.min(params?.page_size ?? 100, 100) })
     )
   },
 
   /** Add a shared/library voice to the workspace; returns the usable voice_id. */
   add(publicOwnerId: string, voiceId: string, newName: string) {
-    return request<{ voice_id: string }>(
+    return elevenLabsRequest<{ voice_id: string }>(
       'POST',
-      `/v1/voices/add/${publicOwnerId}/${voiceId}`,
+      `/v1/voices/add/${encodeURIComponent(publicOwnerId)}/${encodeURIComponent(voiceId)}`,
       { new_name: newName }
     )
   },
@@ -554,40 +600,32 @@ export const sharedVoices = {
 
 // ─── Text-to-Speech ──────────────────────────────────────────────────────────
 
-// Multilingual TTS model. ElevenLabs requires turbo/flash v2_5 for non-English
-// agents, and it works for English too — so we always use it. This is the one
-// place it's declared; lib/elevenlabs/create-agent.ts re-exports it so every
-// TTS call (live agent creation/update and this preview endpoint) stays on
-// the exact same model.
-export const TTS_MODEL = 'eleven_turbo_v2_5'
+// eleven_turbo_v2_5 is deprecated; eleven_flash_v2_5 covers the same languages
+// with lower latency and is what the standby agent and the gateway's component
+// fallback use. Declared once here; create-agent.ts re-exports it.
+export const TTS_MODEL = 'eleven_flash_v2_5'
 
 export async function textToSpeech(
   voiceId: string,
   text: string,
-  modelId = TTS_MODEL
+  modelId = TTS_MODEL,
+  opts?: { outputFormat?: 'mp3_44100_128' | 'ulaw_8000'; timeoutMs?: number; signal?: AbortSignal }
 ): Promise<ArrayBuffer> {
-  const res = await fetch(`${BASE}/v1/text-to-speech/${voiceId}`, {
-    method: 'POST',
-    headers: {
-      'xi-api-key': process.env.ELEVENLABS_API_KEY!,
-      'Content-Type': 'application/json',
-      Accept: 'audio/mpeg',
-    },
-    body: JSON.stringify({
+  const res = await send(
+    'POST',
+    withPathQuery(`/v1/text-to-speech/${encodeURIComponent(voiceId)}`, { output_format: opts?.outputFormat }),
+    JSON.stringify({
       text,
       model_id: modelId,
       voice_settings: { stability: 0.5, similarity_boost: 0.75 },
     }),
-  })
-
-  if (!res.ok) {
-    throw new ElevenLabsError(res.status, await res.text(), 'text-to-speech')
-  }
-
+    'application/json',
+    { headers: { Accept: 'audio/mpeg' }, timeoutMs: opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS, signal: opts?.signal }
+  )
   return res.arrayBuffer()
 }
 
-// ─── Webhooks ────────────────────────────────────────────────────────────────
+// ─── Webhooks (workspace) ────────────────────────────────────────────────────
 
 export interface ELWebhook {
   webhook_id: string
@@ -599,18 +637,18 @@ export interface ELWebhook {
 
 export const webhooks = {
   list() {
-    return request<{ webhooks: ELWebhook[] }>('GET', '/v1/webhooks')
+    return elevenLabsRequest<{ webhooks: ELWebhook[] }>('GET', '/v1/workspace/webhooks')
   },
 
-  create(params: { settings: { url: string; secret?: string } }) {
-    return request<ELWebhook>('POST', '/v1/webhooks', params)
+  create(params: { settings: { url: string; name?: string; auth_type?: string } }) {
+    return elevenLabsRequest<ELWebhook>('POST', '/v1/workspace/webhooks', params)
   },
 
   update(webhookId: string, params: { is_disabled: boolean; name: string }) {
-    return request<ELWebhook>('PATCH', `/v1/webhooks/${webhookId}`, params)
+    return elevenLabsRequest<ELWebhook>('PATCH', `/v1/workspace/webhooks/${encodeURIComponent(webhookId)}`, params)
   },
 
   delete(webhookId: string) {
-    return request<void>('DELETE', `/v1/webhooks/${webhookId}`)
+    return elevenLabsRequest<void>('DELETE', `/v1/workspace/webhooks/${encodeURIComponent(webhookId)}`)
   },
 }

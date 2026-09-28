@@ -1,45 +1,39 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { agents as elAgents, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { ApiError, handleRoute, noStore, parseJson } from '@/lib/api/http'
+import { requireOrgContext } from '@/lib/api/auth'
+import { enforceRateLimit, RATE_LIMITS } from '@/lib/security/rate-limit'
+import { syncAgentAfterResponse } from '@/lib/voice/sync'
+import { loadOrgAgent, saveAgentColumns } from '@/lib/voice/sync/agent-store'
+import { agentVoiceSchema } from '@/lib/voice/sync/schemas'
+import { resolveSelectableVoice } from '@/lib/voice/sync/voices'
 
-export async function PATCH(request: Request) {
-  const supabase = await createClient()
+// Sets the agent's Cartesia voice. The id must be a voice Cartesia serves
+// and, for a cloned voice, one this organisation owns. The providers are
+// updated after the response.
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+export const runtime = 'nodejs'
+// Covers the provider sync that runs in after().
+export const maxDuration = 60
 
-  const { voice_id, voice_name } = (await request.json()) as {
-    voice_id: string
-    voice_name: string
+export const PATCH = handleRoute(async (req) => {
+  const ctx = await requireOrgContext()
+  await enforceRateLimit(RATE_LIMITS.apiWrite, ctx.user.id)
+  const body = await parseJson(req, agentVoiceSchema, { maxBytes: 2048 })
+
+  const agent = await loadOrgAgent(ctx.supabase, ctx.org.id)
+  if (!agent) {
+    throw new ApiError(404, 'agent_not_found', 'Your AI agent hasn’t been set up yet. Please finish onboarding first.')
   }
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
+  const voice = await resolveSelectableVoice(ctx.supabase, ctx.org.id, body.cartesia_voice_id)
+  const cartesia_voice_name = body.cartesia_voice_name?.trim() || voice.name
+  await saveAgentColumns(
+    ctx.supabase,
+    { orgId: ctx.org.id, agentId: agent.id },
+    { update: { cartesia_voice_id: voice.id, cartesia_voice_name }, derived: new Set() }
+  )
 
-  if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const { data: agent, error } = await supabase
-    .from('agents')
-    .update({ voice_id, voice_name })
-    .eq('org_id', org.id)
-    .select()
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  // Sync to ElevenLabs
-  if (elConfigured() && agent.elevenlabs_agent_id) {
-    try {
-      await elAgents.update(agent.elevenlabs_agent_id, {
-        conversation_config: { tts: { voice_id, model_id: 'eleven_turbo_v2_5' } },
-      })
-    } catch {
-      // Non-fatal
-    }
-  }
-
-  return NextResponse.json({ success: true })
-}
+  const saved = { ...agent, cartesia_voice_id: voice.id, cartesia_voice_name }
+  const provider_sync = await syncAgentAfterResponse(saved)
+  return noStore(NextResponse.json({ agent: { ...saved, provider_sync }, provider_sync }))
+})

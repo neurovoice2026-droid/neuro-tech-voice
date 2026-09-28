@@ -1,0 +1,1710 @@
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+import { ORPHAN_MIN_AGE_MS } from "@/app/api/cron/storage-cleanup";
+import { TOTAL_ONBOARDING_STEPS } from "@/app/onboarding/_lib/onboarding-state";
+import { CAA_HANDOVER } from "@/lib/pages/custom-ai-agents";
+import { sentences } from "@/lib/pages/home/source";
+import { HOME_START } from "@/lib/pages/home/start";
+import { buildCsp, classifyPath, DYNAMIC_APP_ROUTES } from "@/lib/security/csp";
+import { AUTH, COMPANY, PRICING_TRIAL, SOLUTION_ITEMS, SOLUTIONS_MENU, TRUST } from "@/lib/site";
+import { TRANSFER_TIME_LIMIT_SECONDS } from "@/lib/twilio/calls";
+import { BREAKER_BASE_OPEN_MS, BREAKER_CONSECUTIVE_FAILURES, BREAKER_MAX_OPEN_MS } from "@/lib/voice/breaker";
+import { INTERNAL_SIGNATURE_TOLERANCE_SECONDS, VOICE_PIPELINE_MODES } from "@/lib/voice/contracts";
+import { decideMode, type ModeInputs } from "@/lib/voice/mode";
+import { VOICE_TOOL_NAMES } from "@/lib/voice/tools/definitions";
+import { WEBHOOK_HEADERS } from "@/lib/workflows/payload";
+import { WEBHOOK_MAX_ATTEMPTS } from "@/lib/workflows/webhook";
+import { CLIP, meshBlobs } from "@/components/site/home/mesh-flow";
+import { DEEP_PANEL, HOME_COLORS } from "@/components/site/home/palettes";
+import {
+  RESERVE_AT,
+  RESERVE_TIERS,
+  RESERVES,
+  reserveStyle,
+} from "@/components/site/solutions/custom-saas-platforms/deferred";
+import { frameOf, pathsFor } from "@/components/site/solutions/custom-saas-platforms/explorer-frame";
+import { CARD, EDGES, LAYER_ORDER, PLACE, VIEW } from "@/components/site/solutions/custom-saas-platforms/map-geometry";
+import {
+  SAAS_INK,
+  SAAS_LIGHTS,
+  mirrorMesh,
+  type SaasLightId,
+} from "@/components/site/solutions/custom-saas-platforms/palette";
+import {
+  contrast,
+  flowReach,
+  keyframesBody,
+  parseMesh,
+  rgb,
+  worstInZone,
+  worstMoving,
+  worstStatic,
+} from "@/lib/testing/mesh-contrast";
+import {
+  ACCREDITATIONS,
+  CHECK_KINDS,
+  FACTS,
+  GRANTS,
+  SAAS_BUILD,
+  SAAS_CHECKS,
+  SAAS_CREDENTIALS,
+  SAAS_CREDITS,
+  SAAS_FAQ,
+  SAAS_HERO,
+  SAAS_META,
+  SAAS_PLATFORM,
+  SAAS_PROTOTYPE,
+  SAAS_SCOPE,
+  SAAS_START,
+  SAAS_TERMS,
+  SECTION_IDS,
+  TRADEMARKS,
+  TRUST_QUOTE,
+  faqJsonLd,
+  listJoin,
+  type DownReason,
+  type Hop,
+  type PartId,
+  type RouteMode,
+  type ScopePartId,
+  type SectionId,
+  type TourLensId,
+} from "./custom-saas-platforms";
+import { buildDownTable } from "./custom-saas-platforms.server";
+
+/* ------------------------------------------------------------------ *
+ * /solutions/custom-saas-platforms — the claims the page makes, held to
+ * the things they are about.
+ *
+ * The page argues that we build complete platforms of any kind, for any
+ * business, and that the reader is on one, so its words are only as good
+ * as this file. It holds:
+ *
+ *   - every word read from a source (the menu item, the phone number,
+ *     TRUST, HOME_START, the platform's own constants) to that source;
+ *   - every count to the repository: floors ("80+") at or under the real
+ *     count and within a quarter of it, exact figures exactly;
+ *   - the drawing (map-geometry.ts) to itself: every part placed once,
+ *     every edge ending on its cards and clear of every other card;
+ *   - "Take a part down" to the platform's own routing policy, re-run for
+ *     all sixteen masks;
+ *   - the scope, the prototype and the checks ledger to their own shape;
+ *   - the honesty rules: no price, date, client or badge; certification
+ *     words only ever negated; grants only from their grantors; every
+ *     third-party mark credited, and every credited mark printed;
+ *   - every link to a section, a part or a route that exists;
+ *   - every colour on every new mesh to its contrast, at rest and while
+ *     the pools flow (lib/testing/mesh-contrast.ts, home.test.ts's maths),
+ *     and the deep panel's colours to the zones they are allowed in;
+ *   - the route's stylesheets to the motion contract: only
+ *     compositor-friendly properties animate, and scroll timelines only
+ *     behind the reduced-motion and support gates.
+ *
+ * A floor means this file never needs editing when unrelated work adds a
+ * route or a test. It does need editing when a migration, a Stripe event
+ * or a cron step changes: those are exact on purpose, and the copy must
+ * change with them.
+ * ------------------------------------------------------------------ */
+
+const ROOT = process.cwd();
+const DIR = "components/site/solutions/custom-saas-platforms";
+const read = (file: string) => readFileSync(path.join(ROOT, file), "utf8");
+
+const ITEM = SOLUTION_ITEMS.find((s) => s.id === "custom-saas-platforms")!;
+const CALL = { label: SOLUTIONS_MENU.cta.label, href: COMPANY.phoneHref };
+
+/** Every string reachable from a value; functions are called with a sample argument (home.test.ts). */
+function strings(value: unknown, out: string[] = []): string[] {
+  if (typeof value === "string") out.push(value);
+  else if (typeof value === "function") strings((value as (...a: number[]) => unknown)(1, 1), out);
+  else if (Array.isArray(value)) for (const v of value) strings(v, out);
+  else if (value && typeof value === "object") for (const v of Object.values(value)) strings(v, out);
+  return out;
+}
+
+/** Each object's own strings read together, so a sentence is judged with the fields printed beside it. */
+function records(value: unknown, out: string[] = []): string[] {
+  if (Array.isArray(value)) {
+    for (const v of value) {
+      if (typeof v === "string") out.push(v);
+      else records(v, out);
+    }
+  } else if (value && typeof value === "object") {
+    const own = Object.values(value).filter((v): v is string => typeof v === "string");
+    if (own.length) out.push(own.join(" · "));
+    for (const v of Object.values(value)) if (v && typeof v === "object") records(v, out);
+  }
+  return out;
+}
+
+/** Every `href` reachable from a value. */
+function hrefs(value: unknown, out: string[] = []): string[] {
+  if (Array.isArray(value)) for (const v of value) hrefs(v, out);
+  else if (value && typeof value === "object") {
+    for (const [k, v] of Object.entries(value)) {
+      if (k === "href" && typeof v === "string") out.push(v);
+      else hrefs(v, out);
+    }
+  }
+  return out;
+}
+
+/** Every link reachable from a value (a Link, or a check or row that links): its label and where it goes. */
+function linksIn(value: unknown, out: { label: string; href: string }[] = []): { label: string; href: string }[] {
+  if (Array.isArray(value)) for (const v of value) linksIn(v, out);
+  else if (value && typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    if (typeof o.label === "string" && typeof o.href === "string") out.push({ label: o.label, href: o.href });
+    for (const v of Object.values(o)) linksIn(v, out);
+  }
+  return out;
+}
+
+/**
+ * Every file under `dir` (repo-relative), never descending into
+ * dependencies, builds or git — nor .claude, where an agent's worktree
+ * would hold a second copy of every test file.
+ */
+function walk(dir: string, skip = ["node_modules", ".next", ".git", ".claude"]): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+    if (skip.includes(entry.name)) continue;
+    const file = path.posix.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...walk(file, skip));
+    else if (entry.isFile()) out.push(file);
+  }
+  return out;
+}
+
+const split = (s: string) => s.split(/(?<=[.!?])\s+/);
+
+const SECTIONS = {
+  top: SAAS_HERO,
+  credentials: SAAS_CREDENTIALS,
+  platform: SAAS_PLATFORM,
+  scope: SAAS_SCOPE,
+  prototype: SAAS_PROTOTYPE,
+  build: SAAS_BUILD,
+  terms: SAAS_TERMS,
+  checks: SAAS_CHECKS,
+  faq: SAAS_FAQ,
+  start: SAAS_START,
+} satisfies Record<SectionId, { title: string; key: string }>;
+
+const PAGE = [SAAS_META, ...Object.values(SECTIONS), SAAS_CREDITS];
+const ALL = strings(PAGE);
+const CREDITS = strings(SAAS_CREDITS);
+const OUTSIDE_CREDITS = strings([SAAS_META, ...Object.values(SECTIONS)]);
+const FAQ_QS = new Set(SAAS_FAQ.items.map((i) => i.q));
+
+const part = (id: PartId) => SAAS_PLATFORM.parts.find((p) => p.id === id)!;
+const lens = (id: TourLensId) => SAAS_PLATFORM.lenses.find((l) => l.id === id)!;
+const scopePart = (id: ScopePartId) => SAAS_SCOPE.parts.find((p) => p.id === id)!;
+const edgeOf = (h: Hop) => (typeof h === "string" ? h : h.edge);
+const down = buildDownTable();
+
+describe("facts read from their sources", () => {
+  it("reads the menu item: its label, description, promise, deliverables and layers", () => {
+    expect(SAAS_HERO.eyebrow).toBe(ITEM.label);
+    expect(SAAS_HERO.sub.startsWith(ITEM.description)).toBe(true);
+    expect(SAAS_BUILD.title).toBe(ITEM.promise);
+    expect(SAAS_BUILD.stages.map((s) => s.title)).toEqual(ITEM.deliverables);
+    expect(SAAS_TERMS.columns.find((c) => c.id === "get")!.items.slice(0, 3)).toEqual(ITEM.deliverables);
+    expect(SAAS_HERO.room.plates.map((p) => p.layer)).toEqual(ITEM.stack);
+    expect(SAAS_SCOPE.layers.map((l) => l.name)).toEqual(ITEM.stack);
+  });
+
+  it("starts every build with the menu's own phone call", () => {
+    expect(SOLUTIONS_MENU.cta.href(ITEM.id)).toBe(COMPANY.phoneHref);
+    for (const link of [SAAS_HERO.primary, SAAS_FAQ.talk, SAAS_START.primary, SAAS_CHECKS.missing.cta]) {
+      expect(link).toEqual(CALL);
+    }
+    expect(SAAS_FAQ.phone).toBe(COMPANY.phone);
+    expect(SAAS_HERO.note.startsWith(COMPANY.phone)).toBe(true);
+    expect(SAAS_START.note.startsWith(COMPANY.phone)).toBe(true);
+  });
+
+  it("sends every trial link to the free trial", () => {
+    const trial = linksIn(PAGE).filter((l) => /free trial|Try the platform|^Start free$/i.test(l.label));
+    expect(trial.length).toBeGreaterThan(3);
+    for (const l of trial) expect(l.href, l.label).toBe(PRICING_TRIAL.href);
+  });
+
+  it("sends the sign-up step to sign-up and quotes onboarding as the landing does", () => {
+    const signup = lens("signup");
+    expect(signup.steps.find((s) => s.id === "open")!.check?.href).toBe(AUTH.signup);
+    expect(signup.steps.find((s) => s.id === "onboard")!.text).toContain(HOME_START.body);
+  });
+
+  it("reads the homepage's TRUST line by id, and says once, in its own words, what it doesn't contradict", () => {
+    const company = TRUST.items.find((i) => i.id === "company")!;
+    expect(TRUST_QUOTE).toBe(sentences(company.note, 2, 3));
+    expect(TRUST_QUOTE).toContain("we hold none");
+    expect(SAAS_CREDENTIALS.accreditations.isnt).toMatch(/aren’t a security or compliance certification/);
+    // Once: the homepage's line isn't quoted under the "20+" it would read as denying.
+    expect(ALL.filter((s) => s.includes("we hold none"))).toEqual([]);
+  });
+
+  it("counts the dashboard's screens off the routes that serve them", () => {
+    expect(DYNAMIC_APP_ROUTES).toContain("/onboarding");
+    expect(part("dashboard").datum).toBe(`${DYNAMIC_APP_ROUTES.length - 1} screens`);
+  });
+
+  it("counts the onboarding's screens off the steps it renders, and the landing's sentence with them", () => {
+    const n = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"][TOTAL_ONBOARDING_STEPS];
+    expect(n).toBeDefined();
+    // HOME_START.body is the landing's own words, quoted by the sign-up tour: it can't read the count, so it is held here.
+    expect(HOME_START.body).toContain(`${n} screens`);
+    expect(part("dashboard").does).toContain(`Onboarding in ${n} screens`);
+    expect(scopePart("screens").ours).toContain(`${n}-screen onboarding`);
+    expect(SAAS_BUILD.stages.find((s) => s.id === "platform")!.ours).toContain(`${n}-screen onboarding`);
+    expect(SAAS_CHECKS.rows.find((r) => r.id === "onboarding")!.claim).toContain(`${n} screens`);
+    // And no other count of them anywhere.
+    const said = ALL.flatMap((s) => [...s.matchAll(/\b(\w+)-screen onboarding|\bonboarding (?:in|is) (\w+) screens/gi)]);
+    expect(said.length).toBeGreaterThanOrEqual(4);
+    for (const m of said) expect(m[1] ?? m[2], m[0]).toBe(n);
+  });
+
+  it("calls an unused upload day-old because the cleanup waits a day", () => {
+    expect(ORPHAN_MIN_AGE_MS).toBe(24 * 60 * 60 * 1000);
+    expect(lens("nightly").steps.find((s) => s.cron === "purge_orphan_uploads")!.text).toContain("day-old");
+  });
+
+  it("reads the router's modes, the model's tools and the signature window from the voice contracts", () => {
+    expect(part("router").datum).toBe(`${VOICE_PIPELINE_MODES.length} modes`);
+    expect(part("openai").datum).toBe(`${VOICE_TOOL_NAMES.length} tools`);
+    expect(INTERNAL_SIGNATURE_TOLERANCE_SECONDS / 60).toBe(5);
+    expect(part("gateway").does).toContain("five minutes");
+  });
+
+  it("names the webhook signature header the workflows really send", () => {
+    expect(scopePart("connect").ours).toContain(WEBHOOK_HEADERS.signature);
+  });
+
+  it("places the data where TRUST places it", () => {
+    expect(TRUST.items.find((i) => i.id === "eu")!.note).toContain("eu-west-1, Ireland");
+    for (const text of [part("supabase").does, scopePart("region").ours, SAAS_FAQ.items.find((i) => i.id === "data")!.a]) {
+      expect(text).toContain("eu-west-1 (Ireland)");
+    }
+  });
+
+  it("never marks the region done while the call recordings stay with their providers", () => {
+    // Recordings are never copied into Supabase: the proxy streams each one
+    // from the provider that captured it. api.twilio.com is Twilio's US1
+    // region; a regional host (api.dublin.ie1.twilio.com) would change what
+    // the copy may say.
+    expect(read("app/api/telephony/recording/route.ts")).toContain("recording_sid");
+    const host = read("lib/twilio/calls.ts").match(/https:\/\/(api(?:\.[\w-]+)*\.twilio\.com)\/[^`]*\/Recordings\//)?.[1];
+    expect(host, "where the recordings are fetched from").toBe("api.twilio.com");
+    const region = scopePart("region");
+    expect(region.kind).not.toBe("does");
+    for (const text of [region.ours, SAAS_FAQ.items.find((i) => i.id === "data")!.a]) {
+      expect(text).toContain("call recordings stay with the provider that captured them");
+      expect(text).toContain("Twilio and ElevenLabs keep theirs in the US");
+      // "Files" would read as if it covered the recordings.
+      expect(text).toContain("database and file storage");
+    }
+  });
+
+  it("places Cartesia’s and ElevenLabs’ copies only as far as their own docs go", () => {
+    // ElevenLabs stores in the US on its standard environment only; an
+    // isolated residency host (api.eu.residency.elevenlabs.io) would change
+    // what this page and the homepage FAQ may say.
+    expect(read("lib/elevenlabs/client.ts")).toContain("ELEVENLABS_API_BASE = 'https://api.elevenlabs.io'");
+    for (const text of [scopePart("region").ours, SAAS_FAQ.items.find((i) => i.id === "data")!.a]) {
+      expect(text).toContain("ElevenLabs or Cartesia can keep their own copy of a call they handled");
+      // No Cartesia source we could read names a storage country.
+      expect(text).toContain("we haven’t confirmed Cartesia’s country");
+    }
+  });
+
+  it("names no provider the platform no longer uses", () => {
+    // The Fish Audio and Telnyx pipeline was removed (82faf6f).
+    expect(ALL.filter((s) => /\bFish\b|\bTelnyx\b/i.test(s))).toEqual([]);
+  });
+
+  it("borrows the handover line from the custom AI agents page", () => {
+    expect(SAAS_TERMS.columns.find((c) => c.id === "upfront")!.items.at(-1)).toBe(CAA_HANDOVER.after);
+  });
+
+  it("calls this page's policy what csp.ts builds for it: scripts from this site only, and inline scripts still run", () => {
+    const scriptSrc = (csp: string) => csp.split("; ").find((d) => d.startsWith("script-src "))!;
+    const options = { dev: false, supabaseUrl: null, gatewayUrl: null, vercelPreview: false };
+    // This page is prerendered, so it gets the static policy: this site's
+    // scripts only ('self'), and inline scripts ('unsafe-inline')...
+    expect(classifyPath("/solutions/custom-saas-platforms")).toBe("static");
+    expect(scriptSrc(buildCsp({ nonce: null, ...options }))).toBe("script-src 'self' 'unsafe-inline'");
+    // ...and the signed-in screens a fresh nonce.
+    for (const route of DYNAMIC_APP_ROUTES) expect(classifyPath(route), route).toBe("dynamic");
+    expect(scriptSrc(buildCsp({ nonce: "A".repeat(24), ...options }))).toMatch(/'nonce-A{24}' 'strict-dynamic'/);
+    // The exact caveat is printed once, in the #checks row where the reader
+    // opens the header.
+    const caveat = "may load scripts only from this site, and inline scripts still run";
+    expect(SAAS_CHECKS.rows.find((r) => r.id === "csp")!.how).toContain(caveat);
+    expect(ALL.filter((s) => s.includes(caveat))).toHaveLength(1);
+    // The scope marks the policy "Done on ours" beside the attack it stops,
+    // so it still admits the public pages get less...
+    expect(scopePart("policy").ours).toMatch(/Public pages like this one[^.]*\blighter\b/);
+    // ...and no card gives the one-time token to every page.
+    for (const text of [part("proxy").does, scopePart("policy").ours]) {
+      const token = split(text).filter((s) => s.includes("one-time token"));
+      expect(token.length, text).toBeGreaterThan(0);
+      for (const s of token) expect(s, s).toMatch(/signed-in screens/);
+    }
+    expect(ALL.filter((s) => /strict policy|allowlist/i.test(s))).toEqual([]);
+    // "A one-time token", never "nonce": jargon to a founder, and a slur in British English.
+    expect(ALL.filter((s) => /\bnonce\b/i.test(s))).toEqual([]);
+  });
+
+  it("claims of monitoring only what the status route returns, and calls ours thin", () => {
+    const route = read("app/api/ops/voice-status/route.ts");
+    expect(route).toContain("await requireCronRequest(req"); // behind a secret
+    expect(route).toMatch(/providers: \{[^}]*: is\w+Configured\(\)/); // which services are set up, not whether they're up
+    expect(route).toContain("getCartesiaBudget("); // the Cartesia budget
+    expect(route).toContain("BREAKER_KEYS.map(breakerView)"); // every circuit breaker
+    expect(read("app/api/cron/daily/route.ts")).toContain("console.error('[cron] daily run finished with failures')"); // a failed job in the logs
+    // It names the kinds of provider the route reports, and no more: not
+    // SmartBill or Google, which the drawing also shows. A flag added to
+    // the route must be grouped here, and the copy changed with it.
+    const GROUPS: Record<string, string[]> = {
+      voice: ["cartesia", "cartesia_admin", "openai", "elevenlabs", "gateway"],
+      phone: ["twilio"],
+      database: ["supabase_admin", "upstash"],
+      payment: ["stripe"],
+      email: ["resend"],
+    };
+    const reported = [...route.match(/providers: \{([^}]*)\}/)![1].matchAll(/(\w+):/g)].map((m) => m[1]);
+    expect(reported.sort()).toEqual(Object.values(GROUPS).flat().sort());
+    // It is run by hand and alerts no one: thin, and never "every provider".
+    const watch = scopePart("watch");
+    expect(watch.kind).toBe("thin");
+    expect(watch.ours).toContain(`which of its ${listJoin(Object.keys(GROUPS))} providers are set up`);
+    expect(ALL.filter((s) => /every provider|which of its services/i.test(s))).toEqual([]);
+    // "On-call" reads as a check on the phone call, and promises a rota there isn't.
+    expect(ALL.filter((s) => /on-call/i.test(s))).toEqual([]);
+  });
+});
+
+describe("counts held to the repository", () => {
+  const floor = (fact: "routeHandlers" | "testFiles", count: number) => {
+    expect(count, `${fact}: the floor went over the real count`).toBeGreaterThanOrEqual(FACTS[fact]);
+    expect(FACTS[fact], `raise FACTS.${fact}: ${count} counted`).toBeGreaterThanOrEqual(0.75 * count);
+  };
+
+  it("keeps the route-handler floor at or under the handlers in app/api", () => {
+    floor("routeHandlers", walk("app/api").filter((f) => f.endsWith("/route.ts")).length);
+  });
+
+  it("keeps the test-file floor at or under the test files in the repository", () => {
+    floor("testFiles", walk(".").filter((f) => /\.test\.tsx?$/.test(f)).length);
+  });
+
+  it("prints a plus only on a floor", () => {
+    const floors = [FACTS.routeHandlers, FACTS.testFiles, ACCREDITATIONS.count].map((n) => `${n}+`);
+    const plus = ALL.flatMap((s) => s.match(/\d+\+/g) ?? []);
+    expect(plus.length).toBeGreaterThan(0);
+    for (const p of plus) expect(floors, p).toContain(p);
+  });
+
+  it("counts the migrations exactly", () => {
+    const sql = readdirSync(path.join(ROOT, "supabase/migrations")).filter((f) => f.endsWith(".sql"));
+    expect(sql.length).toBe(FACTS.migrations);
+  });
+
+  it("counts the Stripe events the webhook handles exactly", () => {
+    const cases = [...read("app/api/billing/webhook/route.ts").matchAll(/case '([^']+)':/g)].map((m) => m[1]);
+    expect(new Set(cases).size).toBe(cases.length);
+    expect(cases.length).toBe(FACTS.stripeEvents);
+  });
+
+  it("names the daily job's steps in the route's order, and the nightly tour follows them", () => {
+    const steps = [...read("app/api/cron/daily/route.ts").matchAll(/runCronStep\('([a-z_]+)'/g)].map((m) => m[1]);
+    expect(steps).toEqual(FACTS.cronSteps);
+    expect(lens("nightly").steps.flatMap((s) => (s.cron ? [s.cron] : []))).toEqual(FACTS.cronSteps);
+  });
+
+  it("times the daily job from vercel.json", () => {
+    const crons = JSON.parse(read("vercel.json")).crons as { path: string; schedule: string }[];
+    expect(crons[0]).toEqual({ path: "/api/cron/daily", schedule: "0 7 * * *" });
+    // Vercel Cron runs on UTC.
+    const [minute, hour] = crons[0].schedule.split(" ");
+    expect(FACTS.cronAt).toBe(`${hour.padStart(2, "0")}:${minute.padStart(2, "0")} UTC`);
+  });
+
+  it("serves every screen it counts, and counts every screen it serves", () => {
+    for (const route of DYNAMIC_APP_ROUTES) {
+      const file = route === "/onboarding" ? "app/onboarding/page.tsx" : `app/(dashboard)${route}/page.tsx`;
+      expect(existsSync(path.join(ROOT, file)), file).toBe(true);
+    }
+    const served = readdirSync(path.join(ROOT, "app/(dashboard)"), { withFileTypes: true })
+      .filter((d) => d.isDirectory() && existsSync(path.join(ROOT, "app/(dashboard)", d.name, "page.tsx")))
+      .map((d) => `/${d.name}`);
+    expect(served.sort()).toEqual(DYNAMIC_APP_ROUTES.filter((r) => r !== "/onboarding").sort());
+  });
+
+  it("reads the resync batch, the replay buffer and the deploy drain from their files", () => {
+    expect(Number(read("lib/voice/sync/index.ts").match(/RESYNC_BATCH = (\d+)/)![1])).toBe(FACTS.resyncBatch);
+    const replay = read("services/voice-gateway/src/config.ts").match(/sttReplayBufferMs: ([\d_]+)/)![1];
+    expect(Number(replay.replaceAll("_", ""))).toBe(FACTS.sttReplaySeconds * 1000);
+    const drain = read("services/voice-gateway/fly.toml").match(/SHUTDOWN_DRAIN_SECONDS = "(\d+)"/)![1];
+    expect(Number(drain)).toBe(FACTS.drainSeconds);
+  });
+
+  it("reads the versions it prints: Next.js from package.json, Node.js from the gateway's", () => {
+    const gateway = JSON.parse(read("services/voice-gateway/package.json")) as { engines: { node: string } };
+    expect(gateway.engines.node).toBe(`>=${FACTS.nodeMajor}`);
+    expect(read("services/voice-gateway/Dockerfile")).toMatch(new RegExp(`^ARG NODE_VERSION=${FACTS.nodeMajor}$`, "m"));
+    const app = JSON.parse(read("package.json")) as { dependencies: { next: string } };
+    expect(Number(app.dependencies.next.match(/\d+/)![0])).toBe(FACTS.nextMajor);
+  });
+
+  it("matches the constants whose modules the copy may not import", () => {
+    expect(WEBHOOK_MAX_ATTEMPTS).toBe(FACTS.webhookAttempts);
+    expect(TRANSFER_TIME_LIMIT_SECONDS / 60).toBe(FACTS.transferCapMinutes);
+    expect(BREAKER_CONSECUTIVE_FAILURES).toBe(FACTS.breakerFailures);
+    expect(BREAKER_BASE_OPEN_MS / 1000).toBe(FACTS.breakerOpenSeconds);
+    expect(BREAKER_MAX_OPEN_MS / 60000).toBe(FACTS.breakerMaxMinutes);
+  });
+
+  it("says of the failover only what the runbook says was tested", () => {
+    const runbook = read("docs/voice-platform.md").replace(/\s+/g, " ");
+    for (const phrase of [
+      "Switches to ElevenLabs TTS for the rest of the call and re-speaks the unheard text",
+      `replaying the last ${FACTS.sttReplaySeconds} s of caller audio`,
+      "verified with mocks and documentation",
+      "Cartesia TTS/STT/voices and agent creation were checked live",
+    ]) {
+      expect(runbook, phrase).toContain(phrase);
+    }
+  });
+
+  it("credits the failover to the tests that cover it: the gateway's and the app's", () => {
+    expect(lens("failover").foot).toContain("the gateway’s and the app’s tests");
+    // The gateway: the voice and speech switches, the OpenAI hand-off, letting go of the stream.
+    expect(existsSync(path.join(ROOT, "services/voice-gateway/test/failover.test.ts"))).toBe(true);
+    // The app: the breaker, the stream-ended hand-off and the number's fallback route.
+    expect(existsSync(path.join(ROOT, "lib/voice/breaker.test.ts"))).toBe(true);
+    const router = read("lib/voice/router.test.ts");
+    expect(router).toContain("describe('handleStreamEnded'");
+    expect(router).toContain("describe('handleFallbackCall'");
+    // Billing once has no test of its own, so the foot doesn't claim it.
+    expect(lens("failover").foot).not.toMatch(/bill/i);
+  });
+
+  it("names as checked only the providers the runbook says were checked", () => {
+    const runbook = read("docs/voice-platform.md").replace(/\s+/g, " ");
+    const at = runbook.indexOf("Not tested against live providers");
+    expect(at).toBeGreaterThan(0);
+    const limits = runbook.slice(at, runbook.indexOf("Watch the first real calls", at));
+    for (const name of ["Twilio", "Cartesia", "OpenAI", "ElevenLabs"]) {
+      expect(SAAS_PLATFORM.foot, name).toContain(name);
+      expect(limits, name).toContain(name);
+    }
+    // The services the app relies on aren't in that paragraph, so the foot leaves them out.
+    const services = SAAS_PLATFORM.parts.filter((p) => p.layer === "services");
+    expect(services.length).toBeGreaterThan(0);
+    for (const p of services) expect(SAAS_PLATFORM.foot, p.label).not.toContain(p.label);
+  });
+});
+
+describe("the map and the lenses", () => {
+  const ids = SAAS_PLATFORM.parts.map((p) => p.id);
+  const box = (id: PartId) => {
+    const [x, y] = PLACE[id];
+    return { l: x - CARD.w / 2, r: x + CARD.w / 2, t: y - CARD.h / 2, b: y + CARD.h / 2 };
+  };
+  type Box = ReturnType<typeof box>;
+  /** How far a point is from a card (0 on or inside it). */
+  const gap = ([x, y]: readonly [number, number], b: Box) =>
+    Math.hypot(Math.max(b.l - x, 0, x - b.r), Math.max(b.t - y, 0, y - b.b));
+  const onBorder = (pt: readonly [number, number], b: Box) =>
+    gap(pt, b) <= 1 &&
+    Math.min(Math.abs(pt[0] - b.l), Math.abs(pt[0] - b.r), Math.abs(pt[1] - b.t), Math.abs(pt[1] - b.b)) <= 1;
+  const ends = (edge: string) => edge.split("-") as [PartId, PartId];
+
+  it("draws each of the seventeen parts once, in its own layer", () => {
+    expect(ids).toHaveLength(17);
+    expect(new Set(ids).size).toBe(17);
+    expect(Object.keys(PLACE).sort()).toEqual([...ids].sort());
+    expect(Object.keys(LAYER_ORDER).sort()).toEqual(Object.keys(SAAS_PLATFORM.layers).sort());
+    const ordered: string[] = Object.values(LAYER_ORDER).flat();
+    expect([...ordered].sort()).toEqual([...ids].sort());
+    for (const p of SAAS_PLATFORM.parts) expect(LAYER_ORDER[p.layer], p.id).toContain(p.id);
+  });
+
+  it("fits every label and datum on its card", () => {
+    for (const p of SAAS_PLATFORM.parts) {
+      expect(p.label.length, p.label).toBeLessThanOrEqual(14);
+      expect(p.datum.length, p.datum).toBeLessThanOrEqual(16);
+    }
+  });
+
+  it("draws every edge a tour or a route travels", () => {
+    const drawn = Object.keys(EDGES);
+    const used = [
+      ...SAAS_PLATFORM.lenses.flatMap((l) => l.steps.flatMap((s) => (s.hops ?? []).map(edgeOf))),
+      ...Object.values(SAAS_PLATFORM.down.routes).flat(),
+    ];
+    for (const e of used) expect(drawn, e).toContain(e);
+  });
+
+  it("starts and ends every edge on its own cards, and keeps it clear of every other", () => {
+    for (const [edge, points] of Object.entries(EDGES)) {
+      const [from, to] = ends(edge);
+      expect(ids, edge).toContain(from);
+      expect(ids, edge).toContain(to);
+      expect(onBorder(points[0], box(from)), `${edge} starts on ${from}`).toBe(true);
+      expect(onBorder(points.at(-1)!, box(to)), `${edge} ends on ${to}`).toBe(true);
+      // Every 1% of every segment.
+      const samples = points.slice(1).flatMap(([x1, y1], k) => {
+        const [x0, y0] = points[k];
+        return Array.from({ length: 101 }, (_, f) => [x0 + ((x1 - x0) * f) / 100, y0 + ((y1 - y0) * f) / 100] as const);
+      });
+      expect(Math.max(...samples.map((pt) => pt[1])), `${edge} below the drawing`).toBeLessThanOrEqual(VIEW.h - 10);
+      for (const id of ids) {
+        if (id === from || id === to) continue;
+        expect(Math.min(...samples.map((pt) => gap(pt, box(id)))), `${edge} runs into ${id}`).toBeGreaterThanOrEqual(4);
+      }
+    }
+    for (const id of ids) {
+      const b = box(id);
+      expect(b.l >= 0 && b.t >= 0 && b.r <= VIEW.w && b.b <= VIEW.h - 10, `${id} inside the drawing`).toBe(true);
+    }
+  });
+
+  it("tours at most ten steps a lens, starting on a tour", () => {
+    // The two tours any platform has first, the two only a voice platform has together at the end, beside "Take a part down".
+    expect(SAAS_PLATFORM.lenses.map((l) => l.id)).toEqual(["signup", "nightly", "call", "failover"]);
+    expect(SAAS_PLATFORM.lenses.map((l) => l.id)).toContain(SAAS_PLATFORM.initial);
+    for (const l of SAAS_PLATFORM.lenses) {
+      expect(l.steps.length, l.id).toBeLessThanOrEqual(10);
+      expect(new Set(l.steps.map((s) => s.id)).size, l.id).toBe(l.steps.length);
+    }
+  });
+
+  it("names every step shortly in the step list, and leaves the figures to its caption", () => {
+    for (const l of SAAS_PLATFORM.lenses) {
+      for (const s of l.steps) {
+        expect(s.title.length, `${l.id}/${s.id}`).toBeGreaterThan(0);
+        expect(s.title.length, `${l.id}/${s.id}`).toBeLessThanOrEqual(32);
+        expect(s.title, `${l.id}/${s.id}`).not.toMatch(/\d/);
+      }
+      expect(new Set(l.steps.map((s) => s.title)).size, l.id).toBe(l.steps.length);
+    }
+  });
+
+  it("faults, rings and arrives only on parts that exist", () => {
+    const named = [
+      ...SAAS_PLATFORM.lenses.flatMap((l) => l.steps.flatMap((s) => [...(s.ring ?? []), ...(s.fault ? [s.fault] : [])])),
+      ...Object.values(SAAS_PLATFORM.down.arrives),
+    ];
+    for (const id of named) expect(ids).toContain(id);
+  });
+
+  it("finishes the opening tour on the frame the server draws", () => {
+    const signup = lens(SAAS_PLATFORM.initial);
+    const end = frameOf(SAAS_PLATFORM, { lens: signup.id, step: signup.steps.length - 1, mask: 0, down });
+    expect(end.current).toBe("smartbill");
+    for (const s of signup.steps) for (const h of s.hops ?? []) expect(end.traversed.has(edgeOf(h)), edgeOf(h)).toBe(true);
+    expect([...end.passed].sort()).toEqual(["api", "customer", "dashboard", "proxy", "stripe", "supabase"]);
+    expect(end.voice).toBeNull();
+  });
+
+  it("hands the voice to ElevenLabs from the switch on, and not before", () => {
+    const failover = lens("failover");
+    const at = failover.steps.findIndex((s) => s.id === "switch");
+    expect(at).toBeGreaterThan(0);
+    failover.steps.forEach((s, step) => {
+      const frame = frameOf(SAAS_PLATFORM, { lens: "failover", step, mask: 0, down });
+      expect(frame.voice, s.id).toBe(step >= at ? "elevenlabs" : "cartesia");
+      expect(frame.faults, s.id).toEqual(s.fault ? [s.fault] : []);
+    });
+  });
+
+  it("draws each of the sixteen masks as the table routes it", () => {
+    for (const row of down) {
+      const frame = frameOf(SAAS_PLATFORM, { lens: "down", step: 0, mask: row.mask, down });
+      const route = SAAS_PLATFORM.down.routes[row.mode];
+      expect(frame.current, `mask ${row.mask}`).toBe(SAAS_PLATFORM.down.arrives[row.mode]);
+      expect([...frame.routeEdges].sort(), `mask ${row.mask}`).toEqual([...route].sort());
+      expect([...frame.traversed].sort(), `mask ${row.mask}`).toEqual([...route].sort());
+      expect(frame.faults, `mask ${row.mask}`).toEqual(row.mask & 1 ? ["gateway"] : []);
+      expect(frame.voice, `mask ${row.mask}`).toBe(row.mode === "elevenlabs" ? "elevenlabs" : "cartesia");
+    }
+    const gatewayDown = frameOf(SAAS_PLATFORM, { lens: "down", step: 0, mask: 1, down });
+    expect(gatewayDown.faults).toContain("gateway");
+    expect(gatewayDown.current).toBe("elevenlabs");
+  });
+
+  it("finds the API on every path", () => {
+    expect(pathsFor(SAAS_PLATFORM, "api")).toEqual(expect.arrayContaining(["signup", "call", "failover", "nightly"]));
+  });
+});
+
+describe("take a part down", () => {
+  const inputs = (mask: number): ModeInputs => ({
+    channel: "twilio",
+    override: null,
+    gatewayConfigured: true,
+    cartesiaConfigured: true,
+    openaiConfigured: true,
+    elevenLabsConfigured: true,
+    hasCartesiaVoice: true,
+    hasManagedAgent: true,
+    hasElevenLabsAgent: true,
+    agentBudgetExhausted: false,
+    gatewayBreakerOpen: Boolean(mask & 1),
+    creditsExhausted: Boolean(mask & 2),
+    selfBreakerOpen: Boolean(mask & 4),
+    managedBreakerOpen: Boolean(mask & 8),
+  });
+  const copy = SAAS_PLATFORM.down;
+
+  it("asks the platform's own routing policy about all sixteen masks", () => {
+    expect(down).toHaveLength(16);
+    down.forEach((row, mask) => {
+      const d = decideMode(inputs(mask));
+      expect(row, `mask ${mask}`).toEqual({ mask, mode: d.mode, reason: d.reason });
+    });
+  });
+
+  it.each<[number, RouteMode, DownReason | undefined]>([
+    [0, "cartesia_self", "credits_available"],
+    [1, "elevenlabs", "gateway_breaker_open"],
+    [2, "cartesia_managed", "credits_exhausted"],
+    [4, "cartesia_managed", "self_breaker_open"],
+    [8, "cartesia_self", undefined],
+    [10, "elevenlabs", "managed_breaker_open"],
+  ])("routes mask %i to %s", (mask, mode, reason) => {
+    expect(down[mask].mode).toBe(mode);
+    if (reason) expect(down[mask].reason).toBe(reason);
+  });
+
+  it("labels each switch with the input its bit sets", () => {
+    expect(Object.fromEntries(copy.switches.map((s) => [s.id, s.bit]))).toEqual({
+      gateway: 1,
+      credits: 2,
+      self: 4,
+      managed: 8,
+    });
+  });
+
+  it("has a sentence for every reason and a name for every mode, and none that never happens", () => {
+    expect([...new Set(down.map((r) => r.reason))].sort()).toEqual(Object.keys(copy.whys).sort());
+    expect([...new Set(down.map((r) => r.mode))].sort()).toEqual(Object.keys(copy.modes).sort());
+    for (const row of down) expect(copy.whys[row.reason].length, row.reason).toBeGreaterThan(0);
+  });
+
+  it("routes every call from the caller to the part it arrives at", () => {
+    for (const [mode, route] of Object.entries(copy.routes) as [keyof typeof copy.routes, readonly string[]][]) {
+      expect(route[0], mode).toBe("caller-twilio");
+      const arrives = copy.arrives[mode];
+      expect(route.some((e) => e.endsWith(`-${arrives}`)), mode).toBe(true);
+    }
+  });
+
+  it("points at the code that decides", () => {
+    expect(existsSync(path.join(ROOT, copy.sourcePath))).toBe(true);
+    expect(read(copy.sourcePath)).toContain("export function decideMode(");
+  });
+});
+
+describe("scope", () => {
+  const S = SAAS_SCOPE;
+  const built = (on: readonly string[]) => S.parts.filter((p) => p.needs.length === 0 || p.needs.some((n) => on.includes(n)));
+
+  it("lays the seventeen parts across the menu's four layers, once each, in order", () => {
+    expect(S.parts).toHaveLength(17);
+    expect(new Set(S.parts.map((p) => p.id)).size).toBe(17);
+    expect(S.layers.flatMap((l) => l.parts)).toEqual(S.parts.map((p) => p.id));
+  });
+
+  it("builds every part from needs that exist, and every need builds something", () => {
+    const needs = S.needs.map((n) => n.id);
+    const groups = S.groups.map((g) => g.id);
+    for (const n of S.needs) expect(groups).toContain(n.group);
+    for (const g of groups) expect(S.needs.some((n) => n.group === g), g).toBe(true);
+    for (const p of S.parts) for (const n of p.needs) expect(needs, p.id).toContain(n);
+    for (const n of needs) expect(S.parts.some((p) => p.needs.includes(n)), n).toBe(true);
+    for (const n of S.initial) expect(needs).toContain(n);
+    expect(S.parts.map((p) => p.id)).toContain(S.initialPart);
+    for (const p of S.parts) if (p.map) expect(SAAS_PLATFORM.parts.map((q) => q.id), p.id).toContain(p.map);
+  });
+
+  it("always builds the bones, and adds what payments need", () => {
+    expect(built([]).map((p) => p.id)).toEqual(["auth", "screens", "policy", "data", "schema", "hosting", "jobs", "watch"]);
+    const first = built(S.initial);
+    expect(first).toHaveLength(10);
+    expect(first.filter((p) => p.needs.length).map((p) => p.id)).toEqual(["plans", "fiscal"]);
+    expect(built(S.needs.map((n) => n.id))).toHaveLength(17);
+  });
+
+  it("says where ours proves nothing, in so many words", () => {
+    for (const p of S.parts) {
+      if (p.kind === "none") expect(p.ours.startsWith("Not on ours"), p.id).toBe(true);
+      else if (p.kind === "thin") expect(p.ours.startsWith("Thin on ours"), p.id).toBe(true);
+      else expect(p.ours, p.id).not.toMatch(/^(?:Not|Thin) on ours/);
+    }
+    expect(Object.keys(S.kinds).sort()).toEqual(["does", "none", "thin"]);
+  });
+});
+
+describe("prototype", () => {
+  const screens = SAAS_PROTOTYPE.screens;
+  const byId = new Map(screens.map((s) => [s.id, s]));
+
+  it("links every screen, from sign-up, with at least one hotspot each", () => {
+    for (const s of screens) {
+      expect(s.hotspots.length, s.id).toBeGreaterThan(0);
+      for (const h of s.hotspots) expect(byId.has(h.to), `${s.id} → ${h.to}`).toBe(true);
+    }
+    const seen = new Set(["signup"]);
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const s of screens) {
+        if (!seen.has(s.id)) continue;
+        for (const h of s.hotspots) {
+          if (seen.has(h.to)) continue;
+          seen.add(h.to);
+          grew = true;
+        }
+      }
+    }
+    expect([...seen].sort()).toEqual(screens.map((s) => s.id).sort());
+    expect(new Set(screens.map((s) => s.title)).size).toBe(screens.length);
+    expect(screens.map((s) => s.n)).toEqual([1, 2, 3]);
+  });
+
+  it("slides each hotspot the way it goes, and names it by its visible label and its destination", () => {
+    for (const s of screens) {
+      for (const h of s.hotspots) {
+        const to = byId.get(h.to)!;
+        expect(h.dir, `${s.id} → ${h.to}`).toBe(to.n > s.n ? "forward" : "back");
+        expect(h.aria, h.aria).toContain(h.label);
+        expect(h.aria, h.aria).toContain(to.step);
+      }
+    }
+  });
+
+  it("invents no figures and no prices", () => {
+    for (const s of screens) expect(strings([s.title, s.blocks]).filter((t) => /\d/.test(t)), s.id).toEqual([]);
+  });
+});
+
+describe("checks", () => {
+  const rows = SAAS_CHECKS.rows;
+
+  it("lists each claim once", () => {
+    expect(new Set(rows.map((r) => r.id)).size).toBe(rows.length);
+  });
+
+  it("filters by the three ways to check, every one of them used", () => {
+    expect(SAAS_CHECKS.filters.map((f) => f.id)).toEqual(["all", ...Object.keys(CHECK_KINDS)]);
+    expect(Object.keys(SAAS_CHECKS.kinds)).toEqual(Object.keys(CHECK_KINDS));
+    const counts = Object.keys(CHECK_KINDS).map((k) => rows.filter((r) => r.kind === k).length);
+    for (const n of counts) expect(n).toBeGreaterThan(0);
+    expect(counts.reduce((a, b) => a + b, 0)).toBe(rows.length);
+  });
+
+  it("gives each kind one name, the filter's and the tag's alike", () => {
+    expect(SAAS_CHECKS.kinds).toEqual(CHECK_KINDS);
+    for (const f of SAAS_CHECKS.filters) if (f.id !== "all") expect(f.label, f.id).toBe(CHECK_KINDS[f.id]);
+  });
+
+  it("says the sub as one sentence per kind, in the filters' order: the key's words", () => {
+    const sentences = SAAS_CHECKS.sub.split(/(?<=\.)\s+/);
+    const kinds = Object.values(CHECK_KINDS);
+    expect(sentences).toHaveLength(kinds.length);
+    kinds.forEach((k, i) => expect(sentences[i].toLowerCase(), k).toContain(k.toLowerCase()));
+  });
+
+  it("never repeats a check's tag in its words", () => {
+    // A check line prints its kind as a tag, then its words: "ON THE CALL  Ask to see the grants".
+    const found: { kind: keyof typeof CHECK_KINDS; text: string }[] = [];
+    const visit = (v: unknown) => {
+      if (Array.isArray(v)) v.forEach(visit);
+      else if (v && typeof v === "object") {
+        const o = v as Record<string, unknown>;
+        if (typeof o.kind === "string" && o.kind in CHECK_KINDS && (typeof o.label === "string" || typeof o.how === "string")) {
+          found.push({ kind: o.kind as keyof typeof CHECK_KINDS, text: [o.label, o.how].filter(Boolean).join(" ") });
+        }
+        Object.values(o).forEach(visit);
+      }
+    };
+    visit(PAGE);
+    expect(found.length).toBeGreaterThan(rows.length);
+    for (const c of found) expect(c.text.toLowerCase(), c.text).not.toContain(CHECK_KINDS[c.kind].toLowerCase());
+  });
+});
+
+describe("credentials, honestly", () => {
+  const COMPANIES = [
+    "Anthropic",
+    "Cartesia",
+    "ElevenLabs",
+    "OpenAI",
+    "Stripe",
+    "SmartBill",
+    "Supabase",
+    "Twilio",
+    "Vercel",
+    "Google",
+    "Slack",
+    "Fly.io",
+  ];
+  const grantors = GRANTS.map((g) => g.grantor);
+
+  it("names both credentials in the hero's first paragraph and in the page's description", () => {
+    for (const text of [SAAS_HERO.sub, SAAS_META.description]) {
+      expect(text).toContain(`${ACCREDITATIONS.count}+ `);
+      expect(text).toContain(ACCREDITATIONS.issuer);
+      for (const g of grantors) expect(text).toContain(g);
+    }
+  });
+
+  it("counts the accreditations as the owner states them, and prints them as a floor", () => {
+    expect(ACCREDITATIONS.count).toBeGreaterThanOrEqual(20);
+    expect(ACCREDITATIONS.holders).toBe("personal");
+    expect(SAAS_CREDENTIALS.accreditations.figure).toBe(`${ACCREDITATIONS.count}+`);
+    const counted = ALL.filter((s) => /accreditation/i.test(s) && /\d/.test(s));
+    expect(counted.length).toBeGreaterThan(0);
+    for (const s of counted) expect(s).toContain(`${ACCREDITATIONS.count}+`);
+  });
+
+  it("names only the grantors in a sentence about grants", () => {
+    const about = ALL.flatMap(split).filter((s) => /\bgrants?\b/i.test(s));
+    expect(about.length).toBeGreaterThan(0);
+    for (const s of about) {
+      for (const c of COMPANIES) {
+        if (grantors.includes(c) || !s.includes(c)) continue;
+        // One exception: the credentials sub names Anthropic's accreditations beside the grants.
+        expect(c === "Anthropic" && /accreditation/i.test(s), s).toBe(true);
+      }
+    }
+    expect(ALL.filter((s) => /grants?[^.]*\bfrom Anthropic|Anthropic[^.]*\bawarded/.test(s))).toEqual([]);
+  });
+
+  it("names Anthropic only beside the Claude accreditations", () => {
+    const naming = records(PAGE).filter((r) => r.includes("Anthropic"));
+    expect(naming.length).toBeGreaterThan(0);
+    for (const r of naming) expect(r, r).toMatch(/Claude|accreditation/);
+  });
+
+  it("uses a certification word only to say there is none", () => {
+    const risky = /certif|badge|\bseal\b|endorse|\bpartner|\bofficial\b|testimonial|\bclients?\b|trusted by/i;
+    const negated = /\b(?:no|not|none|never)\b|n’t\b/i;
+    const claims = ALL.filter((s) => !FAQ_QS.has(s))
+      .flatMap(split)
+      .filter((s) => risky.test(s));
+    expect(claims.length).toBeGreaterThan(0);
+    expect(claims.filter((s) => !negated.test(s))).toEqual([]);
+  });
+
+  it("offers them on the call until there is a public link", () => {
+    const row = SAAS_CHECKS.rows.find((r) => r.id === "accreditations")!;
+    if (ACCREDITATIONS.verify === null) {
+      expect(SAAS_CREDENTIALS.accreditations.check.kind).toBe("call");
+      expect(row.kind).toBe("call");
+    } else {
+      expect(SAAS_CREDENTIALS.accreditations.check).toMatchObject({ kind: "site", href: ACCREDITATIONS.verify.href });
+    }
+    if (GRANTS.every((g) => g.verify === null)) expect(SAAS_CREDENTIALS.grants.check.kind).toBe("call");
+  });
+
+  it("marks on the map exactly the parts the grants run on", () => {
+    expect(new Set(GRANTS.map((g) => g.id)).size).toBe(GRANTS.length);
+    const marked = SAAS_PLATFORM.parts.filter((p) => p.grant).map((p) => p.id);
+    expect([...marked].sort()).toEqual(GRANTS.map((g) => g.part).sort());
+    expect(SAAS_CREDENTIALS.grants.rows).toEqual(
+      GRANTS.map((g) => ({ id: g.id, grantor: g.grantor, part: g.part, runs: g.runs })),
+    );
+    expect(SAAS_HERO.proof.find((p) => p.label === "Startup grants")!.term).toBe(listJoin(grantors));
+  });
+});
+
+describe("no price, date, client or badge", () => {
+  it("prints no price, duration, standard or scale claim", () => {
+    const banned =
+      /[$€£]\s?\d|\b\d+\s*(?:days?|weeks?|months?|years?)\b|\bSOC ?2\b|\bISO ?27001\b|\bHIPAA\b|\bcertified\b|\bin production\b|at scale/i;
+    expect(ALL.filter((s) => banned.test(s))).toEqual([]);
+  });
+
+  it("prints no date", () => {
+    const month = /\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\b/;
+    expect(ALL.filter((s) => /\b(?:19|20)\d{2}\b/.test(s) || month.test(s))).toEqual([]);
+  });
+});
+
+describe("links go somewhere", () => {
+  const routes = walk("app")
+    .filter((f) => /(?:^|\/)page\.tsx$/.test(f))
+    .map((f) => {
+      const segments = f.split("/").slice(1, -1).filter((s) => !/^\(.*\)$/.test(s));
+      return new RegExp(`^/${segments.map((s) => (/^\[.*\]$/.test(s) ? "[^/]+" : s)).join("/")}$`);
+    });
+  const landing = readdirSync(path.join(ROOT, "components/site/home"))
+    .filter((f) => f.endsWith(".tsx"))
+    .map((f) => read(`components/site/home/${f}`))
+    .join("\n");
+  const links = hrefs(PAGE);
+
+  it("finds a link to follow", () => {
+    expect(links.length).toBeGreaterThan(10);
+  });
+
+  it.each(links.map((h) => [h]))("%s resolves", (href) => {
+    if (href.startsWith("tel:")) expect(href).toBe(COMPANY.phoneHref);
+    else if (href.startsWith("#")) {
+      const id = href.slice(1);
+      const partIds: string[] = SAAS_PLATFORM.parts.map((p) => `part-${p.id}`);
+      expect([...SECTION_IDS, ...partIds]).toContain(id);
+    } else if (href.startsWith("/#")) {
+      expect(routes.some((r) => r.test("/"))).toBe(true);
+      expect(landing).toContain(`<section id="${href.slice(2)}"`);
+    } else if (href.startsWith("/")) {
+      const route = href.replace(/[?#].*$/, "");
+      expect(routes.some((r) => r.test(route)), route).toBe(true);
+    } else {
+      expect(href).toMatch(/^https:\/\//);
+    }
+  });
+
+  it("never points to a contact page that does not exist", () => {
+    expect(links.filter((h) => /\/contact\b/.test(h))).toEqual([]);
+  });
+});
+
+describe("headings", () => {
+  it("gives each of the ten sections a key phrase copied from its title", () => {
+    expect(Object.keys(SECTIONS)).toEqual([...SECTION_IDS]);
+    for (const [id, s] of Object.entries(SECTIONS)) {
+      expect(typeof s.title, id).toBe("string");
+      expect(typeof s.key, id).toBe("string");
+      // The payoff, never the first word and never the whole heading.
+      expect(s.title.lastIndexOf(s.key), id).toBeGreaterThan(0);
+      expect(s.key.trim(), id).toBe(s.key);
+    }
+  });
+
+  it("keeps the FAQ's phrase quiet, and only the FAQ's", () => {
+    const toned = Object.entries(SECTIONS).flatMap(([id, s]) => ("keyTone" in s ? [[id, s.keyTone]] : []));
+    expect(toned).toEqual([["faq", "quiet"]]);
+  });
+
+  it("builds the FAQ's structured data from the rows the page renders", () => {
+    const ld = faqJsonLd(SAAS_FAQ.items);
+    expect(ld.mainEntity.map((q) => [q.name, q.acceptedAnswer.text])).toEqual(SAAS_FAQ.items.map((i) => [i.q, i.a]));
+  });
+});
+
+describe("templates", () => {
+  const slots = (t: string) => [...t.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+  const TEMPLATES: [string, string, string[]][] = [
+    ["the explorer's step", SAAS_PLATFORM.stepOf, ["n", "total"]],
+    ["the explorer's announcement", SAAS_PLATFORM.live, ["n", "text", "total"]],
+    ["the explorer's index", SAAS_PLATFORM.indexSummary, ["n"]],
+    ["the switchboard's announcement", SAAS_PLATFORM.down.live, ["name", "why"]],
+    ["the scope's summary", SAAS_SCOPE.summary.some, ["k", "n"]],
+    ["the scope's bones", SAAS_SCOPE.summary.none, ["n"]],
+    ["the scope's added", SAAS_SCOPE.live.added, ["label", "n"]],
+    ["the scope's removed", SAAS_SCOPE.live.removed, ["label", "n"]],
+    ["the prototype's screen position", SAAS_PROTOTYPE.live, ["n", "total"]],
+    ["the checks' count", SAAS_CHECKS.showing, ["n", "total"]],
+  ];
+
+  it.each(TEMPLATES)("%s fills exactly its slots", (_, template, want) => {
+    expect(slots(template)).toEqual(want);
+  });
+
+  it("leaves no slot anywhere else in the copy", () => {
+    const templates = new Set(TEMPLATES.map((t) => t[1]));
+    expect(ALL.filter((s) => /[{}]/.test(s) && !templates.has(s))).toEqual([]);
+  });
+});
+
+describe("credits", () => {
+  // Third-party names a page like this could print. Each one printed must be
+  // credited in a line that says whose trademark it is.
+  const REGISTRY = [
+    "Anthropic",
+    "Claude",
+    "Google",
+    "Gmail",
+    "Android",
+    "Apple",
+    "iOS",
+    "Microsoft",
+    "Amazon",
+    "AWS",
+    "GitHub",
+    "Cartesia",
+    "ElevenLabs",
+    "OpenAI",
+    "Stripe",
+    "SmartBill",
+    "Supabase",
+    "Postgres",
+    "PostgreSQL",
+    "Twilio",
+    "Telnyx",
+    "Vercel",
+    "Next.js",
+    "Node.js",
+    "React",
+    "Fly.io",
+    "Slack",
+    "Upstash",
+    "Redis",
+    "WhatsApp",
+    "Zapier",
+    "HubSpot",
+    "Salesforce",
+  ];
+  /** A printed name and the name its credit uses. */
+  const CREDITED_AS: Record<string, string> = { Postgres: "PostgreSQL" };
+  const named = (mark: string, s: string) => new RegExp(`\\b${mark.replace(/[.]/g, "\\.")}\\b`).test(s);
+  const creditLines = CREDITS.flatMap(split).filter((s) => /trademarks? of/.test(s));
+  const tmLine = SAAS_CREDITS.items.find((i) => i.detail.startsWith(listJoin(TRADEMARKS)))!;
+
+  it("prints every mark it credits", () => {
+    for (const mark of TRADEMARKS) {
+      const printed = mark === "PostgreSQL" ? /\bPostgres(?:QL)?\b/ : new RegExp(`\\b${mark.replace(/[.]/g, "\\.")}\\b`);
+      expect(OUTSIDE_CREDITS.some((s) => printed.test(s)), mark).toBe(true);
+    }
+  });
+
+  // Printed means printed outside the credits: a mark the credits alone name
+  // would count itself.
+  it("credits every mark it prints", () => {
+    const printed = REGISTRY.filter((mark) => OUTSIDE_CREDITS.some((s) => named(mark, s)));
+    expect(printed.length).toBeGreaterThan(10);
+    const uncredited = printed.filter((mark) => !creditLines.some((l) => named(CREDITED_AS[mark] ?? mark, l)));
+    expect(uncredited).toEqual([]);
+  });
+
+  it("says it once, and says none of them endorses the page", () => {
+    expect(tmLine).toBeDefined();
+    expect(ALL.filter((s) => s.includes("trademarks of their respective owners"))).toHaveLength(1);
+    expect(tmLine.detail).toContain("none of them endorses");
+  });
+
+  it("credits Google in its own line: the mark on its own, and every Google product the page prints", () => {
+    const google = SAAS_CREDITS.items.find((i) => i.term === "Google")!.detail;
+    const product = /\bGoogle (?!LLC\b)[A-Z]\w+/g;
+    const products = new Set(OUTSIDE_CREDITS.flatMap((s) => [...s.matchAll(product)].map((m) => m[0])));
+    expect([...products].sort()).toEqual(["Google Calendar", "Google Sheets"]);
+    // "Google sign-in", "the business's own Google account": the mark on its own, named first.
+    expect(OUTSIDE_CREDITS.some((s) => /\bGoogle\b(?! [A-Z])/.test(s))).toBe(true);
+    expect(google.startsWith("Google, ")).toBe(true);
+    // Each product printed, and none that isn't.
+    expect(new Set([...google.matchAll(product)].map((m) => m[0]))).toEqual(products);
+    expect(google).toContain("trademarks of Google LLC");
+  });
+
+  it("names Anthropic's owner exactly", () => {
+    expect(SAAS_CREDITS.items.find((i) => i.term === "Anthropic and Claude")!.detail).toContain("Anthropic, PBC");
+  });
+});
+
+describe("mesh colour", () => {
+  const css = read(`${DIR}/saas.css`);
+  const pricing = read("components/site/home/pricing.css");
+  const CLASS: Record<SaasLightId, string> = {
+    room: "room",
+    roomMirror: "room-m",
+    papers: "papers",
+    stage: "stage",
+    stageMirror: "stage-m",
+  };
+  const LIGHTS = Object.entries(SAAS_LIGHTS) as [SaasLightId, (typeof SAAS_LIGHTS)[SaasLightId]][];
+  /** A rule's body, from its selector to its first closing brace. */
+  const rule = (source: string, selector: string) => {
+    const at = source.indexOf(`${selector} {`);
+    return at < 0 ? "" : source.slice(at, source.indexOf("}", at));
+  };
+  const reach = flowReach(css, "saas-flow-x", "saas-flow-y");
+  const STOP = /rgb\((\d+) (\d+) (\d+) \/ ([\d.]+)\) (\d+)%/g;
+
+  it("declares each light in saas.css, value for value", () => {
+    for (const [id, l] of LIGHTS) {
+      const b = rule(css, `.pp .saas-light-${CLASS[id]}`);
+      expect(b.length, id).toBeGreaterThan(0);
+      expect(b, `${id} ground`).toContain(`--saas-ground: ${l.ground};`);
+      expect(b, `${id} floor`).toContain(`--saas-floor: ${l.floor};`);
+      expect(l.floor, id).toBe(l.ground.match(/, (#[0-9a-f]{6})$/)![1]);
+    }
+  });
+
+  it("mirrors a repeated light, never copies it", () => {
+    expect(SAAS_LIGHTS.roomMirror.ground).toBe(mirrorMesh(SAAS_LIGHTS.room.ground));
+    expect(SAAS_LIGHTS.stageMirror.ground).toBe(mirrorMesh(SAAS_LIGHTS.stage.ground));
+    expect(SAAS_LIGHTS.roomMirror.ground).not.toBe(SAAS_LIGHTS.room.ground);
+    expect(SAAS_LIGHTS.stageMirror.ground).not.toBe(SAAS_LIGHTS.stage.ground);
+    for (const [id, l] of LIGHTS) expect(mirrorMesh(mirrorMesh(l.ground)), id).toBe(l.ground);
+  });
+
+  it("sets the measured tokens on every lit surface, and points the landing's at them", () => {
+    const lit = [...css.matchAll(/\.pp \.saas-lit \{([^}]*)\}/g)].map((m) => m[1]).join("\n");
+    expect(lit).toContain(`--saas-text: ${SAAS_INK.text};`);
+    expect(lit).toContain(`--saas-dim: ${SAAS_INK.dim};`);
+    expect(lit).toContain(`--saas-accent: ${SAAS_INK.accent};`);
+    expect(lit).toContain(`--saas-tick: ${SAAS_INK.tick};`);
+    expect(lit).toContain("--pp-ink: var(--saas-text);");
+    expect(lit).toContain("--pp-muted: var(--saas-dim);");
+    expect(lit).toContain("--pp-accent: var(--saas-accent);");
+    expect(rule(css, ".pp .saas-lit .home-link")).toContain("color: var(--saas-accent);");
+  });
+
+  it("flows exactly as #pricing's plan cards do", () => {
+    for (const axis of ["x", "y"]) {
+      expect(keyframesBody(css, `saas-flow-${axis}`), axis).toBe(keyframesBody(pricing, `home-plan-flow-${axis}`));
+    }
+    const clock = (source: string, selector: string) => {
+      const b = rule(source, selector);
+      return ["fx", "fy", "dx", "dy"].map((k) => b.match(new RegExp(`--${k}: ([^;]+);`))?.[1]);
+    };
+    for (let n = 1; n <= 7; n++) {
+      const ours = clock(css, `.pp .saas-mesh > span:nth-child(${n})`);
+      expect(ours.every(Boolean), `pool ${n}`).toBe(true);
+      expect(ours, `pool ${n}`).toEqual(clock(pricing, `.pp .home-plan-mesh > span:nth-child(${n})`));
+    }
+    for (const [id, l] of LIGHTS) expect(parseMesh(l.ground).pools.length, id).toBeLessThanOrEqual(7);
+    expect(css).toMatch(/\.pp \.saas-lit:not\(\[data-live\]\) > \.saas-mesh > span \{\s*animation-name: none;\s*\}/);
+    expect(rule(css, ".pp .saas-lit[data-swap] > .saas-mesh > span")).toContain("animation-direction: var(--dy), var(--dx);");
+  });
+
+  it("shows the flow only where motion is welcome and the hardware can take it", () => {
+    const gate =
+      /@media \(prefers-reduced-motion: no-preference\) \{\s*:root:not\(\[data-weak\]\):not\(\[data-tier="still"\]\) \.pp \.saas-mesh \{\s*display: block;\s*\}\s*\}/g;
+    expect(css.match(gate)).toHaveLength(1);
+    const mesh = rule(css, ".pp .saas-mesh");
+    expect(mesh).toContain("display: none;");
+    expect(mesh).toContain(`inset: ${CLIP}px;`);
+    // Outside the gate, nothing turns the flow on.
+    const rest = css.replace(gate, "").replace(/\/\*[\s\S]*?\*\//g, "");
+    const shown = [...rest.matchAll(/([^{}]*)\{([^{}]*)\}/g)].filter(
+      (m) => m[1].includes("saas-mesh") && /display:(?!\s*none\b)/.test(m[2]),
+    );
+    expect(shown.map((m) => m[1].trim())).toEqual([]);
+  });
+
+  it("lays each light's pools out as their own elements, stacking back into its ground", () => {
+    // A calc(P% +/- Qpx) inside the clip, as px from the clip's edge (home.test.ts).
+    const inClip = (v: unknown, size: number) => {
+      const m = String(v).match(/^calc\((-?[\d.]+)% ([+-]) ([\d.]+)px\)$|^(-?[\d.]+)px$/)!;
+      return m[4] !== undefined
+        ? Number(m[4])
+        : (Number(m[1]) / 100) * (size - 2 * CLIP) + (m[2] === "-" ? -1 : 1) * Number(m[3]);
+    };
+    for (const [id, l] of LIGHTS) {
+      const pools = parseMesh(l.ground).pools;
+      const blobs = meshBlobs(l.ground);
+      expect(blobs.length, id).toBe(pools.length);
+      for (const [W, H] of [
+        [300, 700],
+        [1176, 720],
+      ]) {
+        // Bottom pool first, so the top one paints last.
+        blobs.forEach((b, n) => {
+          const p = pools[pools.length - 1 - n];
+          const rw = p.rx[1] === "px" ? p.rx[0] : (p.rx[0] / 100) * W;
+          const rh = p.ry[1] === "px" ? p.ry[0] : (p.ry[0] / 100) * H;
+          expect(inClip(b.left, W) + CLIP, `${id} ${n} left`).toBeCloseTo((p.x / 100) * W - rw, 2);
+          expect(inClip(b.top, H) + CLIP, `${id} ${n} top`).toBeCloseTo((p.y / 100) * H - rh, 2);
+          expect(inClip(b.width, W), `${id} ${n} width`).toBeCloseTo(2 * rw, 2);
+          expect(inClip(b.height, H), `${id} ${n} height`).toBeCloseTo(2 * rh, 2);
+          expect(String(b.background)).toMatch(/^radial-gradient\(closest-side, /);
+          expect([...String(b.background).matchAll(STOP)].map((st) => Number(st[4]))).toEqual(p.stops.map((st) => st.a));
+        });
+      }
+    }
+  });
+
+  it("reads every pool off every recipe, each the landing's soft seven-stop falloff", () => {
+    const GAUSS = [1, 0.835, 0.576, 0.325, 0.149, 0.056, 0];
+    for (const [id, l] of LIGHTS) {
+      const pools = parseMesh(l.ground).pools;
+      expect(pools.length, id).toBeGreaterThanOrEqual(5);
+      for (const p of pools) {
+        expect(p.stops.map((s) => s.p), id).toEqual([0, 20, 35, 50, 65, 80, 100]);
+        p.stops.forEach((s, k) => {
+          expect(s.c, id).toEqual(p.stops[0].c);
+          expect(Math.abs(s.a - p.stops[0].a * GAUSS[k]), `${id} stop ${k}`).toBeLessThanOrEqual(0.0015);
+        });
+        expect(p.stops.at(-1)!.a, id).toBe(0);
+      }
+      // Far enough to see: the biggest pool crosses a fifth of the surface each way, or 100px on a px recipe.
+      const px = pools[0].rx[1] === "px";
+      const most = Math.max(...pools.map((p) => 2 * p.rx[0] * reach.x));
+      expect(most, id).toBeGreaterThanOrEqual(px ? 100 : 20);
+    }
+  });
+
+  // Every size each light renders at (W × H px): §6.2 of the build spec's,
+  // then the ones measured on the running page at 320, 390, 768, 1024, 1280
+  // and 1440 (the scope room with the region part open too), with the
+  // figures measured there: [still, flowing], the worst over the set.
+  const HERO_ROOM: [number, number][] = [
+    [343, 560],
+    [704, 480],
+    [440, 580],
+    [480, 560],
+    [560, 520],
+    [288, 656],
+    [358, 620],
+    [560, 527],
+    [440, 592],
+    [500, 574],
+  ];
+  const SCOPE_ROOM: [number, number][] = [
+    [343, 1000],
+    [704, 720],
+    [808, 640],
+    [856, 620],
+    [288, 1488],
+    [358, 1330],
+    [720, 1040],
+    [596, 1094],
+    [808, 1008],
+    [808, 1112],
+  ];
+  const PAPERS: [number, number][] = [
+    [343, 1100],
+    [720, 1010],
+    [944, 620],
+    [1176, 560],
+    [288, 1212],
+    [358, 1084],
+    [720, 988],
+    [944, 619],
+    [1176, 557],
+  ];
+  // #checks' card under the ledger: the papers light, still (no LiveMesh).
+  const CHECKS_CARD: [number, number][] = [
+    [358, 269],
+    [361, 269],
+    [720, 233],
+    [944, 199],
+    [1176, 199],
+    [288, 319],
+  ];
+  const BUILD_CARDS: [number, number][] = [
+    [298, 640],
+    [376, 540],
+    [343, 600],
+    [704, 400],
+    [288, 419],
+    [288, 565],
+    [288, 587],
+    [358, 375],
+    [358, 477],
+    [358, 481],
+    [720, 297],
+    [720, 387],
+    [720, 389],
+    [299, 609],
+    [376, 477],
+  ];
+  type Measured = Record<keyof typeof SAAS_INK, [number, number]>;
+  const SURFACES: [string, SaasLightId[], [number, number][], Measured][] = [
+    [
+      "the hero and scope rooms",
+      ["room", "roomMirror"],
+      [...HERO_ROOM, ...SCOPE_ROOM],
+      { text: [12.47, 12.02], dim: [7.58, 7.31], accent: [5.86, 5.65], tick: [3.72, 3.58] },
+    ],
+    [
+      "the credentials card and #checks' card",
+      ["papers"],
+      [...PAPERS, ...CHECKS_CARD],
+      { text: [12.62, 11.35], dim: [7.68, 6.9], accent: [5.93, 5.33], tick: [3.76, 3.38] },
+    ],
+    [
+      "the build cards",
+      ["stage", "stageMirror"],
+      BUILD_CARDS,
+      { text: [13.53, 12.07], dim: [8.23, 7.34], accent: [6.36, 5.67], tick: [4.03, 3.6] },
+    ],
+  ];
+  const MOVING_MARGIN = 0.2;
+
+  it.each(SURFACES)(
+    "%s: text clears 4.5:1 and marks 3:1, still and flowing, as measured",
+    (_, lights, boxes, measured) => {
+      for (const token of Object.keys(SAAS_INK) as (keyof typeof SAAS_INK)[]) {
+        const fg = SAAS_INK[token];
+        const still = Math.min(...lights.map((id) => worstStatic(SAAS_LIGHTS[id].ground, fg, boxes)));
+        const flowing = Math.min(...lights.map((id) => worstMoving(SAAS_LIGHTS[id].ground, fg, boxes, reach)));
+        const bar = token === "tick" ? 3 : 4.5;
+        expect(still, `${token} still`).toBeGreaterThanOrEqual(bar);
+        expect(flowing, `${token} flowing`).toBeGreaterThanOrEqual(bar + MOVING_MARGIN);
+        expect(still, `${token} still`).toBeCloseTo(measured[token][0], 1);
+        expect(flowing, `${token} flowing`).toBeCloseTo(measured[token][1], 1);
+      }
+    },
+  );
+
+  it("keeps the landing's violet and muted off a flowing light: why the guards exist", () => {
+    for (const fg of [HOME_COLORS.violet, HOME_COLORS.muted]) {
+      expect(worstMoving(SAAS_LIGHTS.room.ground, fg, [...HERO_ROOM, ...SCOPE_ROOM], reach), fg).toBeLessThan(
+        4.5 + MOVING_MARGIN,
+      );
+    }
+  });
+
+  // #start's deep panel (DEEP_PANEL, static): wide and narrow panel sizes,
+  // and the zones (fractions of the panel) each colour is allowed in.
+  // Side by side from xl (1280 up, the Frame's cap); stacked below, lg included.
+  const WIDE: [number, number][] = [[1176, 441]];
+  const NARROW: [number, number][] = [
+    [343, 760],
+    [704, 600],
+    [944, 559],
+    [1176, 559],
+  ];
+  const ANYWHERE = [0, 0, 1, 1] as const;
+
+  it("reads on the deep panel: on-deep and paper anywhere", () => {
+    expect(worstInZone(DEEP_PANEL, HOME_COLORS.onDeep, [...WIDE, ...NARROW], ANYWHERE)).toBeCloseTo(4.93, 1);
+    expect(worstInZone(DEEP_PANEL, HOME_COLORS.paper, [...WIDE, ...NARROW], ANYWHERE)).toBeCloseTo(4.85, 1);
+    for (const fg of [HOME_COLORS.onDeep, HOME_COLORS.paper]) {
+      expect(worstInZone(DEEP_PANEL, fg, [...WIDE, ...NARROW], ANYWHERE), fg).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it.each<[string, string, [number, number][], [number, number, number, number], number]>([
+    ["lilac, wide", HOME_COLORS.lilac, WIDE, [0, 0, 0.62, 0.62], 6.25],
+    ["lilac, narrow", HOME_COLORS.lilac, NARROW, [0, 0, 1, 0.45], 5.76],
+    // The body's zones hold where it really ends: 81% down the wide panel, 66% down a narrow one (768).
+    ["on-deep-dim, wide", HOME_COLORS.onDeepDim, WIDE, [0, 0, 0.7, 0.85], 6.88],
+    ["on-deep-dim, narrow", HOME_COLORS.onDeepDim, NARROW, [0, 0, 1, 0.7], 5.92],
+  ])("reads on the deep panel: %s inside its zone", (_, fg, boxes, zone, measured) => {
+    const worst = worstInZone(DEEP_PANEL, fg, boxes, zone);
+    expect(worst).toBeGreaterThanOrEqual(4.5);
+    expect(worst).toBeCloseTo(measured, 1);
+  });
+
+  it("keeps lilac out of the deep panel's electric corner", () => {
+    expect(worstInZone(DEEP_PANEL, HOME_COLORS.lilac, [...WIDE, ...NARROW], ANYWHERE)).toBeLessThan(4.5);
+    expect(contrast(rgb(HOME_COLORS.lilac), rgb("#5b21b6"))).toBeCloseTo(4.17, 1);
+  });
+
+  const WHITE = "#ffffff";
+  it.each<[string, string, string, number, number]>([
+    ["electric on stage: route edges, the current ring, the bead", HOME_COLORS.electric, HOME_COLORS.stage, 4.82, 3],
+    ["electric on wash: #build's rail and stations", HOME_COLORS.electric, HOME_COLORS.wash, 5.21, 3],
+    ["ember-lit on ink: a pressed switch's dot", HOME_COLORS.emberLit, HOME_COLORS.ink, 11.26, 3],
+    ["ember on white: the fault slash", HOME_COLORS.ember, WHITE, 3.54, 3],
+    ["white on electric: the Speaking pill", WHITE, HOME_COLORS.electric, 5.7, 4.5],
+    ["muted on white: a card's datum", HOME_COLORS.muted, WHITE, 6.37, 4.5],
+    ["violet on white: a plate's datum, a tile's tag", HOME_COLORS.violet, WHITE, 7.1, 4.5],
+    ["muted on stage: labels on the stage", HOME_COLORS.muted, HOME_COLORS.stage, 5.39, 4.5],
+    ["violet on wash: #build's key phrase", HOME_COLORS.violet, HOME_COLORS.wash, 6.49, 4.5],
+  ])("%s clears its bar, as measured", (_, fg, bg, measured, bar) => {
+    const ratio = contrast(rgb(fg), rgb(bg));
+    expect(ratio).toBeGreaterThanOrEqual(bar);
+    expect(ratio).toBeCloseTo(measured, 1);
+  });
+});
+
+describe("the route's stylesheets", () => {
+  // Every stylesheet the route ships: the shared saas.css and each
+  // section's own file beside it (and any in the route's app folder).
+  const sheets = [DIR, "app/solutions/custom-saas-platforms"]
+    .filter((dir) => existsSync(path.join(ROOT, dir)))
+    .flatMap((dir) => readdirSync(path.join(ROOT, dir)).filter((f) => f.endsWith(".css")).map((f) => `${dir}/${f}`));
+
+  /** A stylesheet's blocks and declarations, each with the preludes it sits inside, outermost first. */
+  const scan = (source: string) => {
+    const src = source.replace(/\/\*[\s\S]*?\*\//g, "");
+    const blocks: { prelude: string; within: string[] }[] = [];
+    const decls: { prop: string; value: string; within: string[] }[] = [];
+    const stack: string[] = [];
+    let from = 0;
+    const flush = (to: number) => {
+      const text = src.slice(from, to).trim();
+      const colon = text.indexOf(":");
+      if (stack.length && colon > 0) {
+        decls.push({ prop: text.slice(0, colon).trim(), value: text.slice(colon + 1).trim(), within: [...stack] });
+      }
+    };
+    for (let i = 0; i < src.length; i++) {
+      if (src[i] === "{") {
+        const prelude = src.slice(from, i).trim();
+        blocks.push({ prelude, within: [...stack] });
+        stack.push(prelude);
+        from = i + 1;
+      } else if (src[i] === "}") {
+        flush(i);
+        stack.pop();
+        from = i + 1;
+      } else if (src[i] === ";") {
+        flush(i);
+        from = i + 1;
+      }
+    }
+    return { blocks, decls };
+  };
+  /** Selectors split at their top-level commas. */
+  const selectors = (prelude: string) => {
+    const out: string[] = [];
+    let depth = 0;
+    let from = 0;
+    for (let i = 0; i < prelude.length; i++) {
+      if (prelude[i] === "(" || prelude[i] === "[") depth++;
+      else if (prelude[i] === ")" || prelude[i] === "]") depth--;
+      else if (prelude[i] === "," && depth === 0) {
+        out.push(prelude.slice(from, i).trim());
+        from = i + 1;
+      }
+    }
+    return [...out, prelude.slice(from).trim()];
+  };
+  const isAt = (prelude: string) => prelude.startsWith("@");
+  const inKeyframes = (within: string[]) => within.some((p) => p.startsWith("@keyframes"));
+  // What may animate: colour, transform, translate, scale and opacity, and
+  // no custom property: the compositor can't run one.
+  const ANIMATABLE =
+    /^(?:opacity|transform|translate|scale|color|background-color|border-color|outline-color|fill|stroke|animation-timing-function)$/;
+  const TIMELINE = /^(?:view-timeline|view-timeline-name|scroll-timeline|scroll-timeline-name|animation-timeline|timeline-scope)$/;
+
+  it("finds the shared stylesheet, and the page imports every sheet once", () => {
+    expect(sheets).toContain(`${DIR}/saas.css`);
+    const page = read("app/solutions/custom-saas-platforms/page.tsx");
+    const escaped = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    for (const sheet of sheets) {
+      const from = new RegExp(`^import ["'](?:@/${escaped(sheet)}|\\./${escaped(path.basename(sheet))})["'];`, "gm");
+      expect(page.match(from)?.length ?? 0, sheet).toBe(1);
+    }
+  });
+
+  it.each(sheets.map((s) => [s]))("%s keeps every rule under .pp and every class and keyframe prefixed", (sheet) => {
+    const { blocks } = scan(read(sheet));
+    for (const b of blocks) {
+      if (isAt(b.prelude) || inKeyframes(b.within)) continue;
+      for (const sel of selectors(b.prelude)) {
+        // A top-level rule starts at the page's <main> (.pp), or at <html> for the tier and view transitions.
+        if (b.within.every(isAt)) expect(sel, sheet).toMatch(/^(?:\.pp(?![\w-])|html(?![\w-])|:root(?![\w-]))/);
+        for (const [, cls] of sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)) {
+          expect(cls, `${sheet}: ${sel}`).toMatch(/^(?:saas-|home-)|^pp$/);
+        }
+      }
+    }
+    for (const b of blocks) {
+      const name = b.prelude.match(/^@keyframes\s+(\S+)/)?.[1];
+      if (name) expect(name, sheet).toMatch(/^saas-/);
+    }
+  });
+
+  it.each(sheets.map((s) => [s]))("%s animates only compositor-friendly properties", (sheet) => {
+    const { decls } = scan(read(sheet));
+    for (const d of decls) if (inKeyframes(d.within)) expect(d.prop, `${sheet}: ${d.within.at(-2)}`).toMatch(ANIMATABLE);
+  });
+
+  it.each(sheets.map((s) => [s]))("%s ties motion to scroll only behind the reduced-motion and support gates", (sheet) => {
+    const { decls } = scan(read(sheet));
+    for (const d of decls) {
+      if (!TIMELINE.test(d.prop) || /^auto(?:\s*,\s*auto)*$/.test(d.value)) continue;
+      const where = `${sheet}: ${d.within.at(-1)} { ${d.prop}: ${d.value} }`;
+      expect(d.within.some((p) => /^@media\b.*prefers-reduced-motion:\s*no-preference/.test(p)), where).toBe(true);
+      expect(d.within.some((p) => /^@supports\b.*animation-timeline:\s*view\(\)/.test(p)), where).toBe(true);
+    }
+  });
+
+  it("stops each #build station's keyframes where build.tsx places it", () => {
+    // A keyframe's offset can't read `--at`, so saas-build.css §9 repeats
+    // build.tsx's STATIONS: each station is nothing until the line reaches
+    // its place and whole a twelfth of the draw later.
+    const build = read(`${DIR}/build.tsx`);
+    const css = read(`${DIR}/saas-build.css`);
+    const places = build.match(/const STATIONS = \[([^\]]+)\]/)?.[1].split(",").map(Number) ?? [];
+    expect(places).toHaveLength(3);
+    expect(build).toContain("data-i={i}");
+    places.forEach((at, i) => {
+      const body = css.match(new RegExp(String.raw`@keyframes saas-station-${i} \{([\s\S]*?)\n\}`))?.[1] ?? "";
+      const stops = [...body.matchAll(/([\d.]+)%/g)].map((m) => Number(m[1]));
+      expect(stops, `saas-station-${i}`).toEqual([0, at * 100, (at + 1 / 12) * 100, 100].map((n) => expect.closeTo(n, 2)));
+      expect(css, `station ${i}`).toMatch(new RegExp(String.raw`\.saas-station\[data-i="${i}"\]\s*\{\s*animation-name:\s*saas-station-${i};`));
+    });
+  });
+});
+
+describe("the content-visibility reserves", () => {
+  /** A tier's reserve at a window `vw` px wide, worked out as the browser works out its calc(). */
+  const lengthAt = (css: string, vw: number) => {
+    let sum = Number(css.match(/^(?:calc\()?(\d+)px/)?.[1]);
+    for (const [, sign, slope, from, span] of css.matchAll(/([+-]) ([\d.]+) \* clamp\(0px, 100vw - (\d+)px, (\d+)px\)/g)) {
+      sum += (sign === "-" ? -1 : 1) * Number(slope) * Math.min(Math.max(vw - Number(from), 0), Number(span));
+    }
+    return sum;
+  };
+
+  it("measures every tier at its first and last width, and either side of the Frame's step at 640", () => {
+    expect([...RESERVE_AT]).toEqual([...RESERVE_AT].sort((a, b) => a - b));
+    expect(new Set(RESERVE_AT).size).toBe(RESERVE_AT.length);
+    for (const w of [320, 639, 640, 767, 768, 1023, 1024, 1279, 1280]) expect(RESERVE_AT, String(w)).toContain(w);
+  });
+
+  it("fills the custom property home.css reads at each tier, where home.css switches", () => {
+    const home = read("components/site/home/home.css");
+    for (const [name, lo] of RESERVE_TIERS) {
+      const rule = String.raw`\.pp \.home-deferred \{[^}]*contain-intrinsic-size: auto var\(${name}\);`;
+      expect(home, name).toMatch(new RegExp(lo === 0 ? rule : String.raw`@media \(min-width: ${lo / 16}rem\) \{\s*${rule}`));
+    }
+  });
+
+  it("keeps a row for every box on the page, in its order, with a height for every width", () => {
+    const page = read("app/solutions/custom-saas-platforms/page.tsx");
+    expect([...page.matchAll(/<SaasDeferred box="(\w+)">/g)].map((m) => m[1])).toEqual(Object.keys(RESERVES));
+    expect(page).not.toMatch(/<HomeDeferred\b/);
+    for (const [box, row] of Object.entries(RESERVES)) {
+      expect(row, box).toHaveLength(RESERVE_AT.length);
+      for (const h of row) expect(Number.isInteger(h) && h > 0, `${box}: ${h}`).toBe(true);
+    }
+  });
+
+  it("runs each tier's reserve through every height measured in it, flat past its ends", () => {
+    for (const [box, row] of Object.entries(RESERVES)) {
+      const style = reserveStyle(row) as Record<string, string>;
+      for (const [name, lo, hi] of RESERVE_TIERS) {
+        const points = RESERVE_AT.map((w, i) => [w, row[i]] as const).filter(([w]) => w >= lo && w <= hi);
+        for (const [w, h] of points) expect(lengthAt(style[name], w), `${box} at ${w}`).toBeCloseTo(h, 0);
+        expect(lengthAt(style[name], points[0][0] - 40), `${box} under ${name}`).toBeCloseTo(points[0][1], 0);
+        expect(lengthAt(style[name], points.at(-1)![0] + 40), `${box} over ${name}`).toBeCloseTo(points.at(-1)![1], 0);
+      }
+    }
+  });
+});
+
+describe("the fallback faces", () => {
+  // capsize's figures, which next/font works its own fallback faces out from.
+  type Metrics = { ascent: number; descent: number; unitsPerEm: number; xWidthAvg: number };
+  const metrics = JSON.parse(read("node_modules/next/dist/server/capsize-font-metrics.json")) as Record<string, Metrics>;
+  const css = read(`${DIR}/saas.css`);
+  const face = (family: string) => css.match(new RegExp(String.raw`@font-face \{\s*font-family: "${family}";([^}]*)\}`))?.[1] ?? "";
+  const pct = (block: string, prop: string) => Number(block.match(new RegExp(String.raw`${prop}: ([\d.]+)%`))?.[1]);
+
+  it.each([
+    ["Instrument Sans Arial Fallback", "instrumentSans", "arial"],
+    ["Instrument Sans Roboto Fallback", "instrumentSans", "roboto"],
+    ["Inter Arial Fallback", "inter", "arial"],
+    ["Inter Roboto Fallback", "inter", "roboto"],
+  ])("sizes %s to the face it stands in for", (family, key, system) => {
+    const f = metrics[key];
+    const s = metrics[system];
+    const size = f.xWidthAvg / f.unitsPerEm / (s.xWidthAvg / s.unitsPerEm);
+    const block = face(family);
+    expect(block, family).not.toBe("");
+    expect(block).toMatch(
+      system === "arial"
+        ? /src: local\("Arial"\), local\("Arimo"\), local\("Liberation Sans"\);/
+        : /src: local\("Roboto"\), local\("Roboto-Regular"\);/,
+    );
+    expect(pct(block, "size-adjust")).toBeCloseTo(size * 100, 1);
+    expect(pct(block, "ascent-override")).toBeCloseTo((f.ascent / f.unitsPerEm / size) * 100, 1);
+    expect(pct(block, "descent-override")).toBeCloseTo((Math.abs(f.descent) / f.unitsPerEm / size) * 100, 1);
+    expect(pct(block, "line-gap-override")).toBe(0);
+  });
+
+  it("lists both after each face, and a generic family after Inter's", () => {
+    expect(read(`${DIR}/shell.tsx`)).toContain(`fallback: ["'Instrument Sans Arial Fallback'", "'Instrument Sans Roboto Fallback'"]`);
+    expect(css).toMatch(
+      /\.pp\.saas-page \{\s*font-family: var\(--font-header\), "Inter Arial Fallback", "Inter Roboto Fallback", sans-serif;\s*\}/,
+    );
+  });
+});
+
+describe("map links", () => {
+  it("leave the history entry a note and no #part-… fragment", () => {
+    expect(read(`${DIR}/map-link.tsx`)).toMatch(/markPartShown\(part\);/);
+    expect(read(`${DIR}/part-bus.ts`)).toContain(
+      `history.replaceState({ [SHOWN]: id }, "", window.location.pathname + window.location.search);`,
+    );
+  });
+});
+
+describe("breadth: any platform, for any business, and this one as the proof", () => {
+  const range = SAAS_HERO.range;
+  const items = range.groups.flatMap((g) => g.items);
+  const SOURCE = read("lib/pages/custom-saas-platforms.ts");
+
+  it("says it in the hero, the range, the explorer, the FAQ, the terms and the credits, each in its own words", () => {
+    expect(SAAS_META.title).toBe(`${ITEM.label}, for any business`);
+    expect(SAAS_META.description).toContain("for any business");
+    expect(SAAS_HERO.title).toContain("of any kind");
+    expect(SAAS_HERO.sub).toContain("our own product, for AI phone agents");
+    expect(SAAS_HERO.sub).toContain("whoever uses it");
+    // The menu's line sells a product to customers; the next says a team's own software is built too.
+    expect(SAAS_HERO.sub.slice(ITEM.description.length)).toMatch(/^ Or the software your own team runs the business on\./);
+    expect(SAAS_CREDENTIALS.sub.startsWith("The team that built this platform, and builds platforms of any kind for any business.")).toBe(true);
+    expect(range.lead.startsWith("Any platform your business needs")).toBe(true);
+    expect(range.lead.endsWith("Not just phone agents.")).toBe(true);
+    expect(SAAS_PLATFORM.sub.startsWith("Take away its phone calls")).toBe(true);
+    expect(SAAS_PLATFORM.sub).toContain("what most platforms are built on");
+    expect(SAAS_FAQ.items[0].id).toBe("breadth");
+    expect(SAAS_FAQ.items[0].q).toContain("‘Voice’");
+    expect(SAAS_FAQ.items[0].a.startsWith("No. We build whatever platform your business needs")).toBe(true);
+    expect(SAAS_FAQ.items[0].a).toContain(`${COMPANY.name} is also the name of our own product`);
+    expect(SAAS_FAQ.items.find((i) => i.id === "ai")!.a).toContain("we build those too");
+    // Served alone as FAQPage data: kinds of complexity any platform can have, before ours.
+    expect(SAAS_FAQ.items.find((i) => i.id === "complex")!.a).toMatch(/^As complex as your product needs: [^.]*\. The platform on this page/);
+    expect(SAAS_TERMS.after).toContain("the same team builds those too");
+    expect(SAAS_CREDITS.items.find((i) => i.term === "The platform on this page")!.detail).toContain("not because voice is all we build");
+  });
+
+  it("never assumes the reader sells subscriptions: the scope's needs, the build and the start", () => {
+    const needs = SAAS_SCOPE.needs.map((n) => n.label);
+    expect(needs).toContain("One-off or monthly payments");
+    expect(needs).toContain("Tools you or your customers use");
+    expect(scopePart("plans").label).toBe("Payments and invoices");
+    for (const s of [...needs, ...SAAS_SCOPE.parts.map((p) => p.label), SAAS_START.body, ...SAAS_BUILD.stages.flatMap((st) => [st.body, st.hold])]) {
+      expect(s, s).not.toMatch(/subscription|your customers will|how they’ll pay/i);
+    }
+  });
+
+  it("links the terms to the team's other two builds, as the Automations page does", () => {
+    const auto = SOLUTION_ITEMS.find((s) => s.id === "custom-automations")!;
+    const caa = SOLUTION_ITEMS.find((s) => s.id === "custom-ai-agents")!;
+    expect(SAAS_TERMS.links.map((l) => l.href)).toEqual([auto.href, caa.href]);
+  });
+
+  it("lists kinds and fields, never past work: three groups of four, voice one line of twelve", () => {
+    expect(range.groups).toHaveLength(3);
+    expect(items).toHaveLength(12);
+    expect(new Set(items).size).toBe(12);
+    expect(items.filter((i) => /\bcalls?\b|\bphone|\bvoice/i.test(i))).toEqual(["Phone-agent platforms, like the one you’re on"]);
+    expect(range.fields.endsWith("this list doesn’t name.")).toBe(true);
+  });
+
+  it("names no mark and prints no figure in the range, and marks every line of it OWNER", () => {
+    const text = strings(range);
+    for (const mark of ["Anthropic", "Claude", "Google", ...TRADEMARKS]) {
+      expect(text.filter((s) => s.includes(mark)), mark).toEqual([]);
+    }
+    expect(text.filter((s) => /\d/.test(s))).toEqual([]);
+    const lines = SOURCE.split("\n");
+    for (const s of [range.lead, range.fields, ...items]) {
+      const line = lines.find((l) => l.includes(`"${s}"`));
+      expect(line, s).toBeDefined();
+      expect(line, s).toContain("// OWNER");
+    }
+  });
+
+  it("marks every other new capability claim OWNER on the line that holds it", () => {
+    const lines = SOURCE.split("\n");
+    const at = (test: (l: string) => boolean, what: string) => {
+      const line = lines.find(test);
+      expect(line, what).toBeDefined();
+      expect(line, what).toContain("// OWNER");
+    };
+    at((l) => /^\s*title: `\$\{ITEM\.label\}, for any business`/.test(l), "the tab title");
+    at((l) => l.includes(`title: "${SAAS_HERO.title}"`), "the h1");
+    for (const words of ["SaaS platforms of any kind, for any business.", "Whatever it does, whoever uses it and however complex",
+      "No. We build whatever platform your business needs", "the same team builds those too", "If it’s a phone agent you want, we build those too.",
+      "not because voice is all we build", "Or the software your own team runs the business on.", "and builds platforms of any kind for any business",
+      "As complex as your product needs: many kinds of user"]) {
+      at((l) => l.includes(words) && !/^\s*(?:\*|\/\/)/.test(l), words);
+    }
+  });
+});

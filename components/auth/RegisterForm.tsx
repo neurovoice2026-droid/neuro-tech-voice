@@ -2,39 +2,23 @@
 
 import { useState, useTransition } from 'react'
 import { useForm, Controller } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
 import Link from 'next/link'
-import { Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { unstable_rethrow } from 'next/navigation'
+import { Eye, EyeOff, Loader2, AlertCircle, CheckCircle2, MailCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Checkbox } from '@/components/ui/checkbox'
 import { signUpWithEmail, signInWithGoogle } from '@/lib/auth/actions'
+import { AUTH_MESSAGES } from '@/lib/auth/errors'
+import { formResolver, registerFormSchema, type RegisterFormInput } from '@/lib/auth/schemas'
 import { cn } from '@/lib/utils'
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
-const registerSchema = z
-  .object({
-    fullName: z.string().min(2, 'Name must be at least 2 characters'),
-    email: z.string().email('Please enter a valid email'),
-    password: z
-      .string()
-      .min(8, 'Password must be at least 8 characters')
-      .regex(/[A-Z]/, 'Must contain at least one uppercase letter')
-      .regex(/[0-9]/, 'Must contain at least one number'),
-    confirmPassword: z.string(),
-    terms: z
-      .boolean()
-      .refine((v) => v === true, 'You must accept the terms to continue'),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords don't match",
-    path: ['confirmPassword'],
-  })
-
-type RegisterValues = z.infer<typeof registerSchema>
+// registerFormSchema (lib/auth/schemas): the sign-up rules plus confirmation and
+// terms; the server action re-checks name, email and password.
+type RegisterValues = RegisterFormInput
 
 // ─── Password strength helpers ────────────────────────────────────────────────
 function getPasswordStrength(password: string): number {
@@ -71,11 +55,12 @@ export function RegisterForm() {
   const [isPending, startTransition] = useTransition()
   const [isGooglePending, startGoogleTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
 
   const form = useForm<RegisterValues>({
-    resolver: zodResolver(registerSchema),
+    resolver: formResolver(registerFormSchema),
     defaultValues: {
       fullName: '',
       email: '',
@@ -94,21 +79,62 @@ export function RegisterForm() {
   function onSubmit(values: RegisterValues) {
     setError(null)
     startTransition(async () => {
-      const result = await signUpWithEmail(
-        values.fullName,
-        values.email,
-        values.password
-      )
-      if (result?.error) setError(result.error)
+      try {
+        const result = await signUpWithEmail({
+          fullName: values.fullName,
+          email: values.email,
+          password: values.password,
+        })
+        if ('error' in result) setError(result.error)
+        else setNotice(result.message)
+      } catch (err) {
+        // A new account without email confirmation is redirected to
+        // onboarding; Next delivers that as a rejection it handles itself.
+        unstable_rethrow(err)
+        setError(AUTH_MESSAGES.connectionFailed)
+      }
     })
   }
 
   function handleGoogle() {
     setError(null)
     startGoogleTransition(async () => {
-      const result = await signInWithGoogle()
-      if (result?.error) setError(result.error)
+      try {
+        const result = await signInWithGoogle()
+        if (result && 'error' in result) setError(result.error)
+      } catch (err) {
+        unstable_rethrow(err)
+        setError(AUTH_MESSAGES.connectionFailed)
+      }
     })
+  }
+
+  if (notice) {
+    return (
+      <div className="space-y-6" aria-live="polite">
+        <div className="flex flex-col items-center gap-4 rounded-xl border border-green-200 bg-green-50 p-8 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-green-100">
+            <MailCheck className="h-7 w-7 text-green-600" aria-hidden="true" />
+          </div>
+          <div className="space-y-1">
+            <p className="font-semibold text-foreground">Check your inbox</p>
+            <p className="text-sm text-muted-foreground">{notice}</p>
+            <p className="text-xs text-muted-foreground">
+              Didn&apos;t receive it? Check your spam folder.
+            </p>
+          </div>
+        </div>
+        <p className="text-center text-sm text-muted-foreground">
+          Already confirmed?{' '}
+          <Link
+            href="/login"
+            className="font-medium text-primary transition-colors hover:text-primary/80"
+          >
+            Sign in
+          </Link>
+        </p>
+      </div>
+    )
   }
 
   return (
@@ -159,6 +185,8 @@ export function RegisterForm() {
             placeholder="John Smith"
             autoComplete="name"
             disabled={isPending}
+            aria-invalid={!!form.formState.errors.fullName}
+            aria-describedby={form.formState.errors.fullName ? 'fullName-error' : undefined}
             {...form.register('fullName')}
             className={cn(
               'h-11',
@@ -167,7 +195,7 @@ export function RegisterForm() {
             )}
           />
           {form.formState.errors.fullName && (
-            <p className="text-xs text-destructive">
+            <p id="fullName-error" className="text-xs text-destructive">
               {form.formState.errors.fullName.message}
             </p>
           )}
@@ -184,6 +212,8 @@ export function RegisterForm() {
             placeholder="you@company.com"
             autoComplete="email"
             disabled={isPending}
+            aria-invalid={!!form.formState.errors.email}
+            aria-describedby={form.formState.errors.email ? 'email-error' : undefined}
             {...form.register('email')}
             className={cn(
               'h-11',
@@ -192,7 +222,7 @@ export function RegisterForm() {
             )}
           />
           {form.formState.errors.email && (
-            <p className="text-xs text-destructive">
+            <p id="email-error" className="text-xs text-destructive">
               {form.formState.errors.email.message}
             </p>
           )}
@@ -209,6 +239,8 @@ export function RegisterForm() {
               type={showPassword ? 'text' : 'password'}
               autoComplete="new-password"
               disabled={isPending}
+              aria-invalid={!!form.formState.errors.password}
+              aria-describedby={form.formState.errors.password ? 'password-error' : undefined}
               {...form.register('password')}
               className={cn(
                 'h-11 pr-10',
@@ -218,9 +250,8 @@ export function RegisterForm() {
             />
             <button
               type="button"
-              tabIndex={-1}
               onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+              className="absolute right-1 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
               {showPassword ? (
@@ -254,7 +285,7 @@ export function RegisterForm() {
           )}
 
           {form.formState.errors.password && (
-            <p className="text-xs text-destructive">
+            <p id="password-error" className="text-xs text-destructive">
               {form.formState.errors.password.message}
             </p>
           )}
@@ -271,6 +302,8 @@ export function RegisterForm() {
               type={showConfirm ? 'text' : 'password'}
               autoComplete="new-password"
               disabled={isPending}
+              aria-invalid={!!form.formState.errors.confirmPassword}
+              aria-describedby={form.formState.errors.confirmPassword ? 'confirmPassword-error' : undefined}
               {...form.register('confirmPassword')}
               className={cn(
                 'h-11 pr-16',
@@ -286,9 +319,8 @@ export function RegisterForm() {
             {/* Show/hide toggle */}
             <button
               type="button"
-              tabIndex={-1}
               onClick={() => setShowConfirm((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+              className="absolute right-1 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               aria-label={showConfirm ? 'Hide password' : 'Show password'}
             >
               {showConfirm ? (
@@ -299,7 +331,7 @@ export function RegisterForm() {
             </button>
           </div>
           {form.formState.errors.confirmPassword && (
-            <p className="text-xs text-destructive">
+            <p id="confirmPassword-error" className="text-xs text-destructive">
               {form.formState.errors.confirmPassword.message}
             </p>
           )}
@@ -317,7 +349,9 @@ export function RegisterForm() {
                   checked={field.value}
                   onCheckedChange={field.onChange}
                   disabled={isPending}
-                  className="mt-0.5 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                  aria-invalid={!!form.formState.errors.terms}
+                  aria-describedby={form.formState.errors.terms ? 'terms-error' : undefined}
+                  className="mt-0.5"
                 />
                 <label
                   htmlFor="terms"
@@ -344,7 +378,7 @@ export function RegisterForm() {
             )}
           />
           {form.formState.errors.terms && (
-            <p className="text-xs text-destructive pl-6">
+            <p id="terms-error" className="text-xs text-destructive pl-6">
               {form.formState.errors.terms.message}
             </p>
           )}

@@ -1,0 +1,154 @@
+/* ------------------------------------------------------------------ *
+ * /solutions/custom-automations — #team and #build: the few things
+ * Tailwind utilities and the SaaS sheets can't say for those two
+ * sections.
+ *
+ *   §1  #team's card (team.tsx): nothing of its own. Its grid, its
+ *       hairlines and the numeral's plus are utilities; the tally pops
+ *       on saas-credentials.css §5, the numeral rises with LineReveal,
+ *       the card with home.css's `home-rise`, and the light flows on
+ *       saas.css §3, all imported by the page as they are
+ *   §2  #build's self-serve card (build.tsx): its rise, a little sooner
+ *       than a stage card's
+ *   §3  #build's stage-01 drawing, the map (build.tsx `MapFigure`): the
+ *       steps written down one after another, then the arrows, the rail
+ *       and its nodes, then the people, each on its own slice of the
+ *       figure's pass up the screen; and its finished frame on the
+ *       lite, still and weak tiers
+ *
+ * Everything else these two sections draw is the SaaS page's: the rail,
+ * its stations and the stacked cards' connectors (saas-build.css §9),
+ * the cards' rise a step apart (the same, by `data-col`), the lights and
+ * the lit surface (saas.css §1–§3), the lite tier's rail and tally
+ * (saas.css §12), and the still and weak ones (saas-build.css,
+ * saas-credentials.css). Not one of their lines changes.
+ *
+ * Imported once, by app/solutions/custom-automations/page.tsx, last of
+ * this page's sheets, so it ships with this route only. Every rule sits
+ * under .pp (the shell's <main>), or on <html> where it has to read the
+ * tier; every class and keyframe of ours is prefixed auto-, and a
+ * selector names the home- classes it sits beside (`.home-draw`,
+ * `.home-rise`) only beside one of ours. Only opacity and scale ever
+ * animate here, but for the drawing's strokes, which draw with home.css's
+ * own `home-draw`, as every landing figure's do. Anything tied to scroll
+ * sits inside `@media (prefers-reduced-motion: no-preference)` and
+ * `@supports (animation-timeline: view())`, so a browser without view
+ * timelines, or a reader who asked for less motion, gets the finished
+ * frame: the map drawn whole, the self-serve card in place.
+ * ------------------------------------------------------------------ */
+
+/* ─── §1 #team: the card ────────────────────────────────────────────
+   No rule of its own. The three columns, the hairlines between them,
+   the grants head kept whole at its comma and the numeral's plus in the
+   light's accent are all utilities and markup (team.tsx); what moves is
+   the SaaS page's, imported as it is. The section is listed here so
+   this sheet's numbering stays the spec's. */
+
+/* ─── §2 #build: the self-serve card ────────────────────────────────
+   The card rises once as it comes (home.css `home-rise`), finished by
+   the time it is a quarter of the way up the screen rather than home.css's
+   28%: it is one short card, read in one look, and a reader who has
+   scrolled to it is already on their way past. The range only: the
+   animation, its name and its timeline are home.css's. One class deeper
+   than home.css's rule, so it wins whatever order the sheets land in;
+   tier.css's lite pin is as deep and names <html> besides, and stops it
+   there. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .auto-selfserve.home-rise {
+      animation-range: entry 0% cover 24%;
+    }
+  }
+}
+
+/* ─── §3 #build: the map ────────────────────────────────────────────
+   From lg, the first card's fifth row — where its neighbours say what
+   ours shows — holds a map in miniature (build.tsx `MapFigure`): five
+   steps written down in a row, the middle three taken up by dotted
+   arrows onto a short rail, a node on it for each, and a person standing
+   on each of the other two. It is a landing figure (`.home-draw`): its
+   pathLength="1" strokes draw on its own view timeline with home.css's
+   own `home-draw`, the one thing here that moves a dash rather than a
+   transform, as every landing figure's does.
+
+   THE SLICES. Each element takes its own slice of one window on that
+   pass: `--o` where it starts and `--s` how much it takes, both inline
+   from build.tsx (the SaaS Screens formula, saas-build.css §9). The
+   window opens as the drawing clears the bottom of the screen (4% into
+   its pass) and spans 30% of it, so the map is whole while its card is
+   still low on the screen, just after the card has risen. The five
+   steps are written in turn (0, .12, .24, .36, .48, a tenth each), each
+   bar then the line under it; then the arrows (.6); the rail and its
+   nodes (.68 to .78); the people last (.8 to .95).
+
+   WHAT A DASH DRAW WOULD WRECK. A dotted arrow keeps its own dasharray,
+   so it has no pathLength and fades in on its slice instead
+   (`.auto-map-fade`, opacity only), its head with it. A node is a disc,
+   not a stroke: it fades in and pops from 60% (`auto-pop`, auto.css §2)
+   about its own centre (`fill-box`: an SVG shape has no box of its own
+   to take an origin from), as the landing's nodes arrive.
+
+   Strokes draw on power2.inOut, the house ease for draws; the fades and
+   the pops keep time with the scroll (linear) and land on the house
+   out-ease. Longhands only, so a shorthand never resets the timeline or
+   the range. One class and an attribute deeper than home.css's
+   .home-draw rules, so the slices win whatever order the sheets land in;
+   the lite, still and weak pins below name <html> besides and outrank
+   them. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .auto-map-fig.home-draw path[pathLength],
+    .pp .auto-map-fig.home-draw .auto-map-fade {
+      animation-timeline: --home-draw;
+      animation-range:
+        cover calc(4% + 30% * var(--o, 0))
+        cover calc(4% + 30% * (var(--o, 0) + var(--s, 1)));
+    }
+
+    .pp .auto-map-fig.home-draw path[pathLength] {
+      animation-timing-function: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+    }
+
+    .pp .auto-map-fig.home-draw .auto-map-fade {
+      animation-name: auto-map-fade;
+      animation-duration: auto;
+      animation-fill-mode: both;
+      animation-timing-function: linear;
+    }
+
+    .pp .auto-map-fig.home-draw .auto-map-dot {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation-name: auto-map-fade, auto-pop;
+      animation-timing-function: linear, cubic-bezier(0.16, 1, 0.3, 1);
+    }
+  }
+}
+
+@keyframes auto-map-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* THE FINISHED FRAME on the lite tier, the still tier (a forced
+   ?tier=still that is not a reduced-motion request) and weak hardware
+   (<html data-weak>): the map drawn whole, every arrow, node and person
+   in place. auto.css §3 lists the fades and the strokes for the page;
+   this names the nodes too, and holds every piece of the map at the
+   drawing's own weight, the class and the attribute its rules above
+   carry, and <html> besides, so each pin outranks them whatever order
+   the sheets land in. The strokes are parked off their paths until they
+   draw (home.css), so they are put back whole, as home/tier.css does
+   for the landing's figures, rather than just stopped. */
+html[data-tier="lite"] .home-body .auto-map-fig.home-draw :is(.auto-map-fade, .auto-map-dot),
+html[data-tier="still"] .home-body .auto-map-fig.home-draw :is(.auto-map-fade, .auto-map-dot),
+html[data-weak] .home-body .auto-map-fig.home-draw :is(.auto-map-fade, .auto-map-dot) {
+  animation: none;
+}
+
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .home-body .auto-map-fig.home-draw path[pathLength] {
+  animation: none;
+  stroke-dasharray: none;
+  stroke-dashoffset: 0;
+}

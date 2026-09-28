@@ -1,0 +1,71 @@
+/* ------------------------------------------------------------------ *
+ * #how — what utilities can't say for the spoken line.
+ *
+ * The line is set in inline pieces, never inline-blocks: an inline-block
+ * is a neutral object to the bidi algorithm (so "Northside Studio"
+ * would come out reversed inside Arabic), it adds a break opportunity
+ * between every Japanese character (so 。 could open a line), and it
+ * takes no part in its parent's underline. A relative inline box keeps
+ * all three, and its `top` gives the rise a transform can't.
+ *
+ * Every rule sits under .pp and every class is prefixed home-voice-.
+ * ------------------------------------------------------------------ */
+
+.pp .home-voice-w {
+  position: relative;
+}
+
+/* Cormorant has Latin only, so the company and agent names stay in it
+   while each script falls through to that system's own serif, named
+   per language so a Chinese line never borrows Japanese glyph forms.
+   No downloads: the CSP refuses them, and the sizers use the same
+   faces, so the reserved height is the real one. */
+/* Japanese breaks between phrases rather than anywhere between two kana
+   ("です" never splits), where the browser can; Korean only at its
+   spaces, as Korean is set. */
+.pp .home-voice-script:lang(ja) {
+  font-family:
+    var(--font-pp-cinema, Georgia), "Hiragino Mincho ProN", "Yu Mincho", YuMincho, "Noto Serif JP",
+    "Noto Serif CJK JP", serif;
+  word-break: auto-phrase;
+}
+
+.pp .home-voice-script:lang(zh) {
+  font-family:
+    var(--font-pp-cinema, Georgia), "Songti SC", STSong, "Noto Serif SC", "Noto Serif CJK SC", SimSun, serif;
+}
+
+.pp .home-voice-script:lang(ko) {
+  font-family:
+    var(--font-pp-cinema, Georgia), AppleMyungjo, "Noto Serif KR", "Noto Serif CJK KR", Batang, serif;
+  word-break: keep-all;
+}
+
+.pp .home-voice-script:lang(ar) {
+  font-family: var(--font-pp-cinema, Georgia), "Noto Naskh Arabic", "Geeza Pro", "Times New Roman", serif;
+}
+
+/* Devanagari hangs its vowel signs above the headstroke and below the
+   baseline, so at the cinema leading one line's underline would run
+   into the next line's matras: it gets more room between lines. */
+.pp .home-voice-script:lang(hi) {
+  font-family:
+    var(--font-pp-cinema, Georgia), "Noto Serif Devanagari", "Kohinoor Devanagari", "Nirmala UI", Mangal, serif;
+  line-height: 40px;
+}
+
+@media (width >= 48rem) {
+  .pp .home-voice-script:lang(hi) {
+    line-height: 56px;
+  }
+}
+
+/* The tour's countdown: a hairline that closes around the pause button
+   while a greeting is held, and freezes where it is when paused. Empty
+   until GSAP draws it. */
+.pp .home-voice-ring circle {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  /* An empty dash still leaves a sub-pixel speck where the circle starts. */
+  opacity: 0;
+}
