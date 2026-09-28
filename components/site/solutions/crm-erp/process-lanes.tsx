@@ -19,7 +19,8 @@ import { CARD, DOT, LABEL_W, LANES_BOX, LANE_H, PAPER, cardRect, connector, hand
  * its backing (the white card or paper, its edge and its shadow), its
  * card face (the number, the kind node, the glyph and the label) and its
  * paper face (a drawing of where it lives, its title, where it lives and
- * what goes wrong there), of which the view shows one. Each view's place
+ * what goes wrong there), of which the view shows one; both memoised, so
+ * a new frame restyles a sheet and redraws neither. Each view's place
  * (a `translate()` of the sheet's box from the drawing's top left, and
  * the paper's turn) is read by erp-drawing.css from custom properties set
  * here from the geometry, in its units; the stage's `data-view` picks the
@@ -52,7 +53,8 @@ import { CARD, DOT, LABEL_W, LANES_BOX, LANE_H, PAPER, cardRect, connector, hand
  * spec (§8.1): `.erp-sheet[data-step][data-kind][data-state]` with
  * `.erp-sheet-card`, `.erp-sheet-paper` and `.erp-ping`; `path#erp-c-<i>`
  * and `path.erp-trace[data-edge][data-state][pathLength="1"]`; one
- * `.erp-dot`; `.erp-mark[data-handoff]`; `.erp-lane-fill` with `--k`.
+ * `.erp-dot`; `.erp-mark[data-handoff]` with its `.erp-mark-pop`;
+ * `.erp-lane-fill` with `--k`.
  *
  * aria-hidden, the whole of it: the rail, the caption card, the record
  * panel, the legend and the index say what it shows in words.
@@ -104,7 +106,7 @@ const stepAt = (steps: readonly ProcessStep[], id: string) => steps.findIndex((s
  * (erp-drawing.css §2 and §5): on the lanes the number and the node over
  * the glyph and the label; in the list's rows all four on one line.
  */
-export function SheetCard({ step }: { step: ProcessStep }) {
+export const SheetCard = memo(function SheetCard({ step }: { step: ProcessStep }) {
   return (
     <span className="erp-sheet-card">
       <span className={cn(TYPE.mono, "erp-card-n text-(--home-violet)")}>{step.n}</span>
@@ -113,10 +115,10 @@ export function SheetCard({ step }: { step: ProcessStep }) {
       <span className="erp-card-label">{step.label}</span>
     </span>
   );
-}
+});
 
 /** The paper face: where the step lives today, drawn, then its title, where it lives, and what goes wrong there. */
-export function SheetPaper({ step }: { step: ProcessStep }) {
+export const SheetPaper = memo(function SheetPaper({ step }: { step: ProcessStep }) {
   return (
     <span className="erp-sheet-paper">
       <span className="erp-paper-face">
@@ -127,22 +129,36 @@ export function SheetPaper({ step }: { step: ProcessStep }) {
       <span className="erp-paper-pain">{step.paper.pain}</span>
     </span>
   );
-}
+});
 
 /** A sheet's backing: the white card or paper, its edge (by state) and its shadow, which the flight scales between the two sizes. */
 export function SheetBacking() {
   return <span className="erp-sheet-bg" />;
 }
 
-/** A hand-off's mark: the hand and its words, in a white pill. */
-export function Mark({ index, words, style }: { index: number; words: string; style?: CSSProperties }) {
+type MarkProps = { index: number; words: string; style?: CSSProperties };
+
+/** The same mark, drawn at the same place: its place is a new object on every render, so it is compared by value. */
+const sameMark = (a: MarkProps, b: MarkProps) =>
+  a.index === b.index && a.words === b.words && JSON.stringify(a.style) === JSON.stringify(b.style);
+
+/**
+ * A hand-off's mark: the hand and its words, in a white pill. The mark
+ * is CSS's (its place, centred by a `translate`, and its fade by view);
+ * the pill in it (`.erp-mark-pop`) is what the tour pops and flies, so
+ * GSAP never reads a transform CSS writes. Memoised: its props never change
+ * (`sameMark`).
+ */
+export const Mark = memo(function Mark({ index, words, style }: MarkProps) {
   return (
     <span className="erp-mark" data-handoff={index} style={style}>
-      <HandGlyph className="text-(--home-ember)" />
-      <span>{words}</span>
+      <span className="erp-mark-pop">
+        <HandGlyph className="text-(--home-ember)" />
+        <span>{words}</span>
+      </span>
     </span>
   );
-}
+}, sameMark);
 
 export const ProcessLanes = memo(function ProcessLanes({ steps, lanes, handoffs, marks, frame }: DrawingProps) {
   const onLane = steps.map((s) => laneIndex(lanes, s));

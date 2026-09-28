@@ -1861,6 +1861,12 @@ describe("colour", () => {
     ["#checks' card, still", ["papers"], CHECKS_CARD, { text: [12.64], dim: [7.68], accent: [5.94], tick: [3.77] }],
   ];
 
+  // The flowing check walks every combination of every pool's reach at every
+  // sampled point of every box size (mesh-contrast.ts darkestLum). #path's
+  // cards come at the most sizes, so their walk alone takes about 4.5s — on
+  // the edge of vitest's 5s default, which a busy machine tips over. The work
+  // is deterministic and already remembered per recipe, so it gets room to
+  // finish rather than a thinner check.
   it.each(SURFACES)("%s: text clears 4.5:1 and marks 3:1, as measured", (_, lights, boxes, measured) => {
     for (const token of Object.keys(SAAS_INK) as (keyof typeof SAAS_INK)[]) {
       const fg = SAAS_INK[token];
@@ -1874,7 +1880,7 @@ describe("colour", () => {
       expect(flowing, `${token} flowing`).toBeGreaterThanOrEqual(bar + MOVING_MARGIN);
       expect(flowing, `${token} flowing`).toBeCloseTo(flows, 1);
     }
-  });
+  }, 30_000);
 
   const WHITE = "#ffffff";
   it.each<[string, string, string, number, number]>([

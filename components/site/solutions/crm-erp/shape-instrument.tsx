@@ -168,13 +168,21 @@ export function ShapeInstrument({ data, blobs }: { data: ShapeCopy; blobs: reado
     });
   }
 
+  // Below lg the rail scrolls: the chosen chip comes to its middle (the rail only; the page never moves),
+  // once the pick has committed. Started in the pick itself, an arrow key's smooth scroll was cut short
+  // by the roving focus() that follows it in the same keydown, leaving the chip past the rail's edge.
+  const centred = useRef(bizIndex);
+  useEffect(() => {
+    if (centred.current === bizIndex) return;
+    centred.current = bizIndex;
+    const rail = railRef.current;
+    const chip = rail?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]');
+    if (rail && chip && rail.scrollWidth > rail.clientWidth) centreInRail(rail, chip, reduce);
+  }, [bizIndex, reduce]);
+
   function pickBiz(i: number, via: Via) {
     const next = data.businesses[i]?.id;
     if (!next || next === choice.biz) return;
-    // Below lg the rail scrolls: bring the chosen chip to its middle (the rail only; the page never moves).
-    const rail = railRef.current;
-    const chip = rail?.querySelector<HTMLElement>(`[data-biz="${next}"]`);
-    if (rail && chip && rail.scrollWidth > rail.clientWidth) centreInRail(rail, chip, reduce);
     // The card slides to the new sample (saas-build.css §8), mirrored for a pick to the left.
     withViewTransition("proto", () => setChoice((c) => ({ ...c, biz: next, picked: true })), {
       allowed: vtAllowed(reduce, tier),

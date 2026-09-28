@@ -219,8 +219,8 @@ function Block({ block, at }: { block: ScreenBlock; at: number }) {
 }
 
 /**
- * One screen of the record window: its title (an h3, under the window's
- * header strip, which names the record) and its blocks, in order. A
+ * One screen of the record window: its title (an h4, under the window's
+ * header strip, whose h3 names the record) and its blocks, in order. A
  * field's bar takes its width from the field's place among the screen's
  * fields, so two fields in a row never draw the same bar. Memoised: the
  * window's stack lays all eight, and a new frame redraws none of them.
@@ -230,7 +230,7 @@ export const ScreenView = memo(function ScreenView({ screen, className }: { scre
   const at = screen.blocks.map((b, i) => (b.kind === "field" ? screen.blocks.slice(0, i).filter((x) => x.kind === "field").length : i));
   return (
     <div className={cn("flex min-w-0 flex-col gap-3.5", className)}>
-      <h3 className="text-[15px] leading-[22px] font-medium text-pp-ink">{screen.title}</h3>
+      <h4 className="text-[15px] leading-[22px] font-medium text-pp-ink">{screen.title}</h4>
       {screen.blocks.map((b, i) => (
         <Block key={i} block={b} at={at[i]} />
       ))}

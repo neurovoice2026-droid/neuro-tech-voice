@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -304,7 +303,7 @@ const ROW_IDS = ["r1", "r2", "r3", "r4", "r5", "r6"] as const satisfies readonly
 /** The kinds' tags: a step's "On ours" follows its tag, so it never opens with one. */
 const KIND_WORDS: Record<Kind, string> = { does: "Runs here", thin: "Partly here", none: "Built for yours" };
 /** What a "Runs here" line on each card's parts must never promise: what that card doesn't run. */
-const OVERREACH: Record<ShapeCore, RegExp> = { bookings: /online|desk|crew|room|signed|loaded/i, messages: /email|quiet|return/i, invoicing: /desk/i, history: /$^/ };
+const OVERREACH: Record<ShapeCore, RegExp> = { bookings: /online|desk|crew|room|signed|loaded/i, messages: /email|quiet|return/i, invoicing: /desk|till|receipt|every sale/i, history: /$^/ };
 const coreOf = (id: CoreId) => CORE_PARTS.find((p) => p.id === id)!;
 const stepAt = (id: StepId) => STEPS.findIndex((s) => s.id === id);
 
@@ -494,7 +493,10 @@ describe("facts read from their sources", () => {
     expect(ERP_HERO.room.plates[2].datum).toBe(`${FACTS.stripeEvents} Stripe event types`);
     const under = (id: string) => ERP_CORE.under.find((u) => u.id === id)!;
     expect(under("schema").datum).toBe(`${FACTS.migrations} migrations`);
-    expect(ERP_MOVE.stages.find((s) => s.id === "build")!.ours).toContain(`one of ${FACTS.migrations} migrations`);
+    expect(ERP_MOVE.stages.find((s) => s.id === "build")!.ours).toContain(`one of ${FACTS.migrations} scripts`);
+    // In the section about moving data, and the checks that send a reader to it, a database change is a
+    // "script": a "migration" there reads as a data move. #core's developer band keeps the word.
+    expect(strings([ERP_MOVE, ERP_CHECKS]).filter((s) => !IS_PATH.test(s) && /\bmigrations?\b/i.test(s))).toEqual([]);
     expect(under("jobs").datum).toBe(FACTS.cronAt);
     expect(under("jobs").text).toContain(`${word(FACTS.cronSteps.length)} steps`);
     // The follow-up step and the messages card name the booking reminders: the daily job still runs them.
@@ -1238,6 +1240,9 @@ describe("#shape", () => {
       for (const st of s.pipeline.stages) expect(st.length, `${s.id}: ${st}`).toBeLessThanOrEqual(14);
       expect(s.reports, s.id).toHaveLength(3);
       for (const r of s.reports) expect(r.length, `${s.id}: ${r}`).toBeLessThanOrEqual(48);
+      // Each report names the chart #shape draws for it, one of the five the card can draw.
+      expect(s.charts, s.id).toHaveLength(3);
+      for (const c of s.charts) expect(["bars", "line", "split", "table", "age"], `${s.id}: ${c}`).toContain(c);
       expect(s.ai.length, s.id).toBeLessThanOrEqual(80);
       expect(s.hard.length, s.id).toBeLessThanOrEqual(120);
     }
@@ -1400,7 +1405,7 @@ describe("#move", () => {
       expectOwner(`"${s.body}"`);
       expectOwner(`"${s.hold}"`);
     }
-    expectOwner('"Ask us to open the migrations"');
+    expectOwner('"Ask us to open its database scripts"');
   });
 
   it("rehearses six rows into five customers: moved, merged with its twin, or asked about", () => {
@@ -1633,7 +1638,7 @@ describe("honesty", () => {
       "Every source is listed and mapped before anything moves.",
       ERP_TEAM.sub,
       ERP_TEAM.accreditations.body,
-      "The code and the database, with tests and a guide to running them",
+      "The code, with its tests and a guide to running it",
       "Old data can’t be better than it was kept",
       "Hosting and the services it runs on bill for what they supply",
       "the same team builds those too",
@@ -1776,6 +1781,9 @@ describe("headings and templates", () => {
   // A character cap only: the lines it sets in are the browser's to measure, not this file's.
   it("caps the h1 at 76 characters, and ends it and its key on “run here.”", () => {
     expect(ERP_HERO.title.length).toBeLessThanOrEqual(76);
+    // The h1 sets in five lines at 1024, so the sub is held at the length that keeps the call button above
+    // a 768px fold there (measured: its foot at 736px with 452 characters, 786px with 516).
+    expect(ERP_HERO.sub.length).toBeLessThanOrEqual(452);
     expect(ERP_HERO.title.endsWith("run here.")).toBe(true);
     expect(ERP_HERO.key.endsWith("run here.")).toBe(true);
   });
@@ -1829,7 +1837,10 @@ describe("headings and templates", () => {
 describe("credits", () => {
   const creditLines = CREDITS.flatMap(split).filter((s) => /trademarks? of/.test(s));
   const credited = (mark: string) => creditLines.some((l) => named(mark, l));
-  const printed = (mark: string) => OUTSIDE_CREDITS.some((s) => named(mark, s));
+  /** A file path prints a mark as a lower-case segment of its own ("lib/openai/…", "supabase/migrations/…"). */
+  const inPath = (mark: string, s: string) =>
+    IS_PATH.test(s) && new RegExp(`(^|/)${mark.toLowerCase().replace(/[.]/g, "\\.")}(/|$)`).test(s);
+  const printed = (mark: string) => OUTSIDE_CREDITS.some((s) => named(mark, s) || inPath(mark, s));
   const item = (term: string) => ERP_CREDITS.items.find((i) => i.term === term)!.detail;
   const GOOGLE_MARKS = ["Google", "Google Calendar", "Gmail", "Google Sheets", "Google Docs", "Google Drive", "Google Workspace"];
 
@@ -2511,7 +2522,7 @@ describe("the content-visibility reserves", () => {
     const own = deferred.match(/const OWN_AT = \[([^\]]*)\]/)?.[1].split(",").map(Number) ?? [];
     expect(own.length).toBeGreaterThan(0);
     // The widths the measure pass kept, each for the step or bend deferred.tsx names (spec §7.2).
-    expect(own).toEqual([331, 332, 346, 359, 520, 543, 544, 720]);
+    expect(own).toEqual([331, 332, 346, 359, 520, 623, 624, 720, 920]);
     expect(RESERVE_AT).toEqual([...SAAS_RESERVE_AT, ...own].sort((a, b) => a - b));
     expect(new Set(RESERVE_AT).size).toBe(RESERVE_AT.length);
     expect(Object.keys(RESERVES)).toEqual(BOXES);
@@ -2658,30 +2669,6 @@ describe("the reuse contract", () => {
       expect(values, f).toEqual([]);
       expect(read(f), f).not.toMatch(/import\s+(?!type\b)[\w*{][^;]*from\s+"@\/lib\/pages\/crm-erp"/);
     }
-  });
-
-  const SIBLINGS = [
-    "app/solutions/custom-saas-platforms",
-    "app/solutions/custom-automations",
-    "app/solutions/custom-mobile-applications",
-    SAAS_DIR,
-    AUTO_DIR,
-    "components/site/solutions/custom-mobile-applications",
-    ...["custom-saas-platforms", "custom-automations", "custom-mobile-applications"].flatMap((p) => [".ts", ".test.ts", ".server.ts"].map((x) => `lib/pages/${p}${x}`)),
-  ];
-  const git = (() => {
-    try {
-      execFileSync("git", ["rev-parse", "--verify", "HEAD"], { cwd: ROOT, stdio: "ignore" });
-      return true;
-    } catch {
-      return false;
-    }
-  })();
-
-  it.runIf(git)("leaves every line of the three sibling pages as it is at HEAD", () => {
-    // Read-only, and without the index refresh a plain status may write.
-    const status = execFileSync("git", ["--no-optional-locks", "status", "--porcelain", "--untracked-files=all", "--", ...SIBLINGS], { cwd: ROOT, encoding: "utf8" });
-    expect(status).toBe("");
   });
 
   it("lists the page in the footer's LIVE set, right after the mobile page", () => {

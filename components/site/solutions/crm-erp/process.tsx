@@ -105,9 +105,11 @@ function Step({ data, s, i, words }: { data: ProcessData; s: ProcessStep; i: num
           </div>
           <div>
             <dt className={TERM}>{words.today}</dt>
+            {/* The paper as three short statements, then the Today line: "Quotes: a template, copied.
+                Retyped from price lists. Typed into last month’s template, …". */}
             <dd className={ANSWER}>
-              {s.paper.title}, {s.paper.where.charAt(0).toLowerCase() + s.paper.where.slice(1)}:{" "}
-              <span className="text-(--home-ember-ink)">{s.paper.pain.charAt(0).toLowerCase() + s.paper.pain.slice(1)}</span>. {s.today}
+              {s.paper.title}: {s.paper.where.charAt(0).toLowerCase() + s.paper.where.slice(1)}.{" "}
+              <span className="text-(--home-ember-ink)">{s.paper.pain}.</span> {s.today}
             </dd>
           </div>
           <div>

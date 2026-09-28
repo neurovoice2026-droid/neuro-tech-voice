@@ -1,9 +1,9 @@
 import type { CSSProperties, ReactNode } from "react";
-import { ChartColumn, ChartLine, Table2, type LucideIcon } from "lucide-react";
+import { ChartColumn, ChartColumnDecreasing, ChartColumnStacked, ChartLine, Table2, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TYPE, WEIGHT } from "@/components/site/home/type";
 import { Stack, fill } from "@/components/site/solutions/custom-ai-agents/parts";
-import type { ScopeId, ShapeData, ShapePart, ShapeSample } from "@/lib/pages/crm-erp";
+import type { ReportChart, ScopeId, ShapeData, ShapePart, ShapeSample } from "@/lib/pages/crm-erp";
 import { ErpTag } from "./glyphs";
 
 /* ------------------------------------------------------------------ *
@@ -44,13 +44,15 @@ import { ErpTag } from "./glyphs";
  * name and its six stages on a line (the line grows from the top as the
  * pipeline comes up the screen, and its nodes pop in order, erp-shape.css
  * §3), the three first reports, and the two lines, "With AI" and "What
- * makes it hard". From lg each report is a tile, its name over a sketch
- * of its chart (bars, a line, a table: the record window's "This month"
- * tiles, at the column's width), so the column holds as much as the
- * eleven parts beside it and its hairline never runs on beside nothing;
- * below lg each is a line with the small chart glyph for it.
- * At md, under the parts at the card's width, the pipeline and the
- * reports stand side by side. The name, the reports and the lines are
+ * makes it hard". From md each report is a tile, its name over a sketch
+ * of the chart it is (bars, a line, won against lost, a table, money by
+ * how late it is: the record window's "This month" tiles, at the
+ * column's width), so from lg the column holds as much as the eleven
+ * parts beside it and its hairline never runs on beside nothing, and at
+ * md, where the pipeline and the reports stand side by side under the
+ * parts, the reports' column comes out about as tall as the pipeline's;
+ * below md each is a line with the small glyph for its chart. The name,
+ * the reports and the lines are
  * each a `Stack` over the six samples, and every sample has six stages
  * and three reports, so only a part's why can rewrap on a pick, which is
  * the reader's own input.
@@ -92,12 +94,29 @@ const LINK = cn(
   RING,
 );
 
-/** The three first reports' glyphs, by place: bars, a line, a table. */
-const REPORT_ICON: readonly LucideIcon[] = [ChartColumn, ChartLine, Table2];
+/** Each chart's glyph below md, where a report is a line (the charts: the data module's `ReportChart`). */
+const REPORT_ICON: Record<ReportChart, LucideIcon> = {
+  bars: ChartColumn,
+  line: ChartLine,
+  split: ChartColumnStacked,
+  table: Table2,
+  age: ChartColumnDecreasing,
+};
 
 /** The bars' heights in a report's sketch, in its 32 units: fixed, so it draws the same on every render. */
 const SKETCH_BARS = [10, 15, 12, 18, 14, 21, 17, 24, 19, 26, 22, 29] as const;
-/** The table's three rows, each three cells' [x, width] in its 160 units: the record window's table, smaller. */
+/** Won and lost, six pairs of heights. */
+const SKETCH_SPLIT = [
+  [22, 9],
+  [15, 12],
+  [26, 7],
+  [18, 11],
+  [28, 8],
+  [17, 14],
+] as const;
+/** Money by how late it is: four bars falling away, as the record window's "Money owed" tile draws it. */
+const SKETCH_AGE = [28, 19, 12, 7] as const;
+/** The table's three rows, each three cells' [x, width] in its 160 units: the record window's table, smaller; the last cell the figure. */
 const SKETCH_ROWS = [
   [[0, 62], [78, 30], [124, 36]],
   [[0, 50], [78, 22], [130, 30]],
@@ -105,16 +124,18 @@ const SKETCH_ROWS = [
 ] as const;
 
 /**
- * A first report's sketch, from lg, where the report is a tile (the
+ * A first report's sketch, from md, where the report is a tile (the
  * record window's "This month" tiles, at the column's width): the chart
- * its glyph names below lg, bars, a line or a table, in marks and grey
- * bars, never a figure. Drawn in `currentColor`, so forced colours keep
- * it; stretched to the tile (`preserveAspectRatio="none"`), the line's
- * stroke kept even.
+ * the report is, in the report's own terms — bars over time, a line,
+ * won against lost, a table with its figures, money by how late it is —
+ * in electric marks and the landing's lilac, never a figure, and never
+ * grey alone. Drawn in `currentColor` (the lilac by its own `color`), so
+ * forced colours keep every mark; stretched to the tile
+ * (`preserveAspectRatio="none"`), the line's stroke kept even.
  */
-function ReportSketch({ at }: { at: number }) {
+function ReportSketch({ chart }: { chart: ReportChart }) {
   const svg = "block h-8 w-full overflow-visible";
-  if (at === 1) {
+  if (chart === "line") {
     return (
       <svg aria-hidden viewBox="0 0 160 32" preserveAspectRatio="none" className={cn(svg, "text-(--home-electric)")}>
         <path
@@ -129,12 +150,39 @@ function ReportSketch({ at }: { at: number }) {
       </svg>
     );
   }
-  if (at === 2) {
+  if (chart === "table") {
     return (
       <svg aria-hidden viewBox="0 0 160 32" preserveAspectRatio="none" className={cn(svg, "text-(--home-ink)")}>
         {SKETCH_ROWS.map((row, r) =>
-          row.map(([x, w]) => <rect key={`${r}-${x}`} x={x} y={3 + r * 11} width={w} height={5} rx={1} fill="currentColor" fillOpacity={0.14} />),
+          row.map(([x, w], c) =>
+            c === row.length - 1 ? (
+              <rect key={`${r}-${x}`} x={x} y={3 + r * 11} width={w} height={5} rx={1} fill="currentColor" className="text-(--home-lilac)" />
+            ) : (
+              <rect key={`${r}-${x}`} x={x} y={3 + r * 11} width={w} height={5} rx={1} fill="currentColor" fillOpacity={0.14} />
+            ),
+          ),
         )}
+      </svg>
+    );
+  }
+  if (chart === "split") {
+    return (
+      <svg aria-hidden viewBox="0 0 160 32" preserveAspectRatio="none" className={cn(svg, "text-(--home-electric)")}>
+        {SKETCH_SPLIT.map(([won, lost], i) => (
+          <g key={i}>
+            <rect x={4 + i * 26.5} y={32 - won} width={9} height={won} rx={1} fill="currentColor" />
+            <rect x={15 + i * 26.5} y={32 - lost} width={9} height={lost} rx={1} fill="currentColor" className="text-(--home-lilac)" />
+          </g>
+        ))}
+      </svg>
+    );
+  }
+  if (chart === "age") {
+    return (
+      <svg aria-hidden viewBox="0 0 160 32" preserveAspectRatio="none" className={cn(svg, "text-(--home-lilac)")}>
+        {SKETCH_AGE.map((h, i) => (
+          <rect key={i} x={2 + i * 40} y={32 - h} width={30} height={h} rx={1.5} fill="currentColor" />
+        ))}
       </svg>
     );
   }
@@ -365,18 +413,19 @@ export function ShapeCard({
                   data={data}
                   live={live}
                   render={(s) => (
-                    <ul className="flex flex-col gap-2.5 lg:gap-2">
+                    <ul className="flex flex-col gap-2.5 md:gap-2">
                       {s.reports.map((r, k) => {
-                        const Icon = REPORT_ICON[k] ?? ChartColumn;
+                        const chart = s.charts[k];
+                        const Icon = REPORT_ICON[chart];
                         return (
                           <li
                             key={k}
-                            className="grid min-w-0 grid-cols-[14px_minmax(0,1fr)] gap-x-2.5 lg:grid-cols-1 lg:gap-y-2.5 lg:rounded-xl lg:p-3 lg:shadow-[inset_0_0_0_1px_rgb(20_10_36/0.08)]"
+                            className="grid min-w-0 grid-cols-[14px_minmax(0,1fr)] gap-x-2.5 md:grid-cols-1 md:gap-y-2.5 md:rounded-xl md:p-3 md:shadow-[inset_0_0_0_1px_rgb(20_10_36/0.08)]"
                           >
-                            <Icon aria-hidden size={14} strokeWidth={1.75} className="erp-glyph mt-[3px] text-(--home-electric) lg:hidden" />
+                            <Icon aria-hidden size={14} strokeWidth={1.75} className="erp-glyph mt-[3px] text-(--home-electric) md:hidden" />
                             <span className="text-[14px] leading-5 text-pretty text-(--home-ink)">{r}</span>
-                            <span className="hidden lg:block">
-                              <ReportSketch at={k} />
+                            <span className="hidden md:block">
+                              <ReportSketch chart={chart} />
                             </span>
                           </li>
                         );

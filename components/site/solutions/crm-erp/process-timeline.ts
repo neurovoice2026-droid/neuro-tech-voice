@@ -76,10 +76,16 @@ import { sheetPlace } from "./process-geometry";
  * Client-only functions and no React. The kit that calls them has
  * registered DrawSVG and MotionPath (product/motion-kit.ts). The tour and
  * the hop run inside the stage's `useKitContext`, so a revert takes back
- * everything they did. The flights (`buildConsolidate`, `buildBack`) are
- * built after React's commit, outside it, and are never reverted: the
- * stage completes one it is done with (its end hands every sheet back to
- * its CSS place), and a new one starts from where the last had them.
+ * everything they did, and `letGoOfTravel` then hands what they travel
+ * back to CSS, whatever order the revert undid them in. The flights
+ * (`buildConsolidate`, `buildBack`) are built paused after React's
+ * commit, outside it, played from the next tick, and are never reverted:
+ * a reader's pick or press while one is under way leaves it flying (the
+ * new frame's traces held until it lands, `holdTraces`, and a hop or a
+ * tour built then waiting for it, `flightLeft`); a new flight starts from
+ * where the last had the sheets; and only the stage leaving, the window
+ * crossing lg or reduced motion completes one at once (its end hands
+ * every sheet back to its CSS place).
  * ------------------------------------------------------------------ */
 
 type Gsap = typeof GsapCore;
@@ -209,10 +215,20 @@ function fly(gsap: Gsap, tl: Timeline, root: ParentNode, o: Flight & { view: Pro
   }
 }
 
-/** The composition's hand-off marks, in hand-off order. */
+/**
+ * The composition's hand-off marks, in hand-off order: each one's pill
+ * (`.erp-mark-pop`), which is what the pop and the flight move. The mark
+ * around it is CSS's alone (its place, centred by a `translate`, and its
+ * fade by view), so GSAP never reads a transform CSS writes: were it to
+ * parse the mark, it would fold that `translate` into the transform it
+ * saves, and a revert would put it back on top of CSS's own.
+ */
 function marksOf(root: ParentNode, comp: Comp) {
   const marks = [...root.querySelectorAll<HTMLElement>(`.erp-${comp} .erp-mark`)];
-  return marks.sort((a, b) => Number(a.dataset.handoff ?? 0) - Number(b.dataset.handoff ?? 0));
+  return marks
+    .sort((a, b) => Number(a.dataset.handoff ?? 0) - Number(b.dataset.handoff ?? 0))
+    .map((m) => m.querySelector<HTMLElement>(".erp-mark-pop"))
+    .filter((m): m is HTMLElement => m !== null);
 }
 
 /** An element's centre, in the viewport. */
@@ -327,16 +343,54 @@ function appear(gsap: Gsap, tl: Timeline, root: ParentNode, o: { comp: Comp; ste
   return land;
 }
 
-/** The marks' pop in Today: each grows from 60%, 0.15s after the one before. */
+/** The marks' pop in Today: each pill grows from 60%, 0.15s after the one before (no rule transitions a pill). */
 function popMarks(tl: Timeline, root: ParentNode, comp: Comp, at: number) {
   const marks = marksOf(root, comp);
   if (!marks.length) return;
-  tl.set(marks, { transition: "none" }, at);
   marks.forEach((m, i) => {
     tl.fromTo(m, { scale: 0.6 }, { scale: 1, duration: TIMING.pop.dur, ease: HOUSE, immediateRender: false }, at + i * TIMING.pop.gap);
   });
   const end = at + (marks.length - 1) * TIMING.pop.gap + TIMING.pop.dur;
-  tl.set(marks, { clearProps: "transform,transition" }, end);
+  tl.set(marks, { clearProps: "transform" }, end);
+}
+
+/** When a flight's last sheet lands, on its own clock: into one system (`to` "one"), or back to Today. */
+export function landingOf(to: ProcessView, sheets: number) {
+  const { dur, stagger } = to === "one" ? TIMING.into : TIMING.back;
+  return Math.max(0, sheets - 1) * stagger + dur;
+}
+
+/**
+ * The traces the frame has on (lit, or faint on the way), held back
+ * while the sheets fly: hidden at once, faded to their state's once the
+ * last sheet has landed (`landed`, on the flight's clock), then handed
+ * back to the frame. For the consolidation's own frame (Today at step
+ * 08, then One system), and for a frame a reader's pick or press commits
+ * while a flight is still under way, appended to that flight. Called
+ * from a layout effect, so it hides them before the first paint.
+ */
+export function holdTraces(gsap: Gsap, tl: Timeline, root: ParentNode, comp: Comp, landed: number) {
+  const traces = [...root.querySelectorAll<SVGPathElement>(`.erp-${comp} .erp-trace:not([data-state="rest"])`)];
+  if (!traces.length) return;
+  gsap.set(traces, { opacity: 0, transition: "none" });
+  tl.to(
+    traces,
+    { opacity: (_: number, el: Element) => (el.getAttribute("data-state") === "route" ? 0.4 : 1), duration: TIMING.trace, ease: HOUSE },
+    landed,
+  );
+  tl.set(traces, { clearProps: "opacity,transition" }, landed + TIMING.trace);
+}
+
+/**
+ * How long a flight has still to run, a trace hold appended to it
+ * included: what a hop or a tour built during it waits before it
+ * travels, so the dot never rides a connector over sheets still flying.
+ * Zero once it has ended. A hair over, so a hold's hand-back never lands
+ * in the same tick as the travel that follows it.
+ */
+export function flightLeft(tl: Timeline | null, landed: number) {
+  if (!tl || tl.progress() >= 1) return 0;
+  return Math.max(tl.duration(), landed + TIMING.trace) - tl.time() + 0.05;
 }
 
 /**
@@ -344,32 +398,23 @@ function popMarks(tl: Timeline, root: ParentNode, comp: Comp, at: number) {
  * from where they were drawn into their lanes (or their rows), the
  * "Typed again" marks fly into the record's pill and go (the drawing's
  * CSS fades them by view; the flight only moves them), and the pill
- * pops as they reach it. Built playing, by the stage's layout effect.
+ * pops as they reach it. Built paused, by the stage's layout effect,
+ * with every sheet already at its from-place: the stage plays it from
+ * the next tick, so a slow commit delays the flight rather than skipping
+ * its first frames.
  */
 export function buildConsolidate(kit: Kit, root: HTMLElement, o: Flight): Timeline {
   const { gsap } = kit;
-  const tl = gsap.timeline();
+  const tl = gsap.timeline({ paused: true });
   fly(gsap, tl, root, { ...o, view: "one", dur: TIMING.into.dur, stagger: TIMING.into.stagger, ease: "power3.inOut" });
   // The traces a picked step has on (Today at step 08, then One system): held
-  // back until the last sheet lands, as the lit card's own dot is, then faded
-  // to their state's (on, or faint on the way) and handed back to the frame.
-  // Set before the first paint: this runs in the stage's layout effect.
-  const traces = [...root.querySelectorAll<SVGPathElement>(`.erp-${o.comp} .erp-trace:not([data-state="rest"])`)];
-  if (traces.length && o.width > 0) {
-    const landed = (sheetsOf(root, o.comp).length - 1) * TIMING.into.stagger + TIMING.into.dur;
-    gsap.set(traces, { opacity: 0, transition: "none" });
-    tl.to(
-      traces,
-      { opacity: (_: number, el: Element) => (el.getAttribute("data-state") === "route" ? 0.4 : 1), duration: TIMING.trace, ease: HOUSE },
-      landed,
-    );
-    tl.set(traces, { clearProps: "opacity,transition" }, landed + TIMING.trace);
-  }
+  // back until the last sheet lands, as the lit card's own dot is.
+  if (o.width > 0) holdTraces(gsap, tl, root, o.comp, landingOf("one", sheetsOf(root, o.comp).length));
   const pill = root.querySelector<HTMLElement>(".erp-pill");
   const marks = marksOf(root, o.comp);
   if (pill && marks.length) {
-    // Their opacity is left to the drawing's CSS (it fades them from 0.6s as the view changes, a transition
-    // on opacity alone): stopping their transition here would snap them out before they leave.
+    // Their opacity is left to the drawing's CSS (it fades each mark from 0.6s as the view changes, a
+    // transition on the mark around the pill, which the flight never touches).
     marks.forEach((m, i) => {
       const at = TIMING.fly.at + i * TIMING.fly.gap;
       tl.to(
@@ -393,24 +438,25 @@ export function buildConsolidate(kit: Kit, root: HTMLElement, o: Flight): Timeli
   return tl;
 }
 
-/** The way back: the sheets fly from where they were drawn back to Today's scatter (or pile). The marks fade in by CSS. */
+/** The way back: the sheets fly from where they were drawn back to Today's scatter (or pile). The marks fade in by CSS. Built paused, as the consolidation is. */
 export function buildBack(kit: Kit, root: HTMLElement, o: Flight): Timeline {
-  const tl = kit.gsap.timeline();
+  const tl = kit.gsap.timeline({ paused: true });
   fly(kit.gsap, tl, root, { ...o, view: "today", dur: TIMING.back.dur, stagger: TIMING.back.stagger, ease: "power3.out" });
   return tl;
 }
 
 /**
  * The hop a reader's press on the hotspot plays: the dot rides into step
- * `to` and the step arrives. Built playing: the reader asked for it.
+ * `to` and the step arrives. Built playing: the reader asked for it; it
+ * waits `wait` seconds first while sheets are still flying (`flightLeft`).
  */
 export function buildHop(
   gsap: Gsap,
   root: HTMLElement,
-  o: { comp: Comp; steps: readonly ProcessStep[]; to: StepIndex; onArrive: () => void },
+  o: { comp: Comp; steps: readonly ProcessStep[]; to: StepIndex; wait?: number; onArrive: () => void },
 ): Timeline {
   const tl = gsap.timeline();
-  const land = ride(gsap, tl, root, { comp: o.comp, steps: o.steps, to: o.to, at: 0 });
+  const land = ride(gsap, tl, root, { comp: o.comp, steps: o.steps, to: o.to, at: o.wait ?? 0 });
   tl.call(o.onArrive, undefined, land);
   return tl;
 }
@@ -420,6 +466,39 @@ export function letGoOfDwell(root: ParentNode) {
   for (const run of root.querySelectorAll<HTMLElement>("[data-erp-run]")) run.removeAttribute("style");
 }
 
+/** What the tour and the hop write on what they travel. */
+const TRAVELLED = ["transform", "translate", "rotate", "scale", "transform-origin", "opacity", "transition"] as const;
+
+/**
+ * Hands what the tour and the hop travel back to CSS, as `letGoOfDwell`
+ * does the dwell: the marks' pills, the dot and the pings of both
+ * compositions, their inline styles gone (React writes none there; the
+ * marks' and the list dot's places are on elements GSAP never moves, or
+ * in `left`/`top`, which stay), the SVG dot's transform attribute too,
+ * and GSAP's cache of each let go, so the next run reads them afresh. A
+ * revert puts back what each tween found in the order it undoes them,
+ * which can leave a finished run's middle behind (the dot shown at a
+ * corner); this runs after it, as the context's cleanup. `marks` false
+ * while a flight is under way: the pills are its, and it hands them back
+ * as it lands.
+ */
+export function letGoOfTravel(gsap: Gsap, root: ParentNode, o: { marks: boolean }) {
+  const sel = o.marks ? ".erp-mark-pop, .erp-dot, .erp-ping" : ".erp-dot, .erp-ping";
+  // Only what a revert left something on: a clean hand-back (the usual case) reads nothing.
+  const left = [...root.querySelectorAll<HTMLElement | SVGElement>(`:is(.erp-lanes, .erp-list) :is(${sel})`)].filter(
+    (el) => TRAVELLED.some((p) => el.style.getPropertyValue(p) !== "") || el.hasAttribute("transform"),
+  );
+  if (!left.length) return;
+  gsap.set(left, { clearProps: "transform,transformOrigin,opacity,transition" });
+  for (const el of left) {
+    for (const p of TRAVELLED) el.style.removeProperty(p);
+    if (el instanceof SVGElement) {
+      el.removeAttribute("transform");
+      el.removeAttribute("data-svg-origin");
+    }
+  }
+}
+
 export type TourOptions = {
   steps: readonly ProcessStep[];
   comp: Comp;
@@ -427,6 +506,8 @@ export type TourOptions = {
   from: "today" | StepIndex;
   /** The finished frame on screen may have been seen: fade its lit traces, and fly back to Today. */
   rewind: boolean;
+  /** Seconds to wait before anything travels: sheets still flying (`flightLeft`). */
+  wait?: number;
   /** The intro's words, read by holdFor: Today's dwell. */
   intro: string;
   onStart?: () => void;
@@ -512,6 +593,8 @@ export function buildTour(gsap: Gsap, root: HTMLElement, o: TourOptions): Timeli
     k = next;
     dwellAt = land;
   }
+  // Sheets still flying: everything waits for them to land.
+  if (o.wait && o.wait > 0) tl.shiftChildren(o.wait);
   return tl;
 }
 

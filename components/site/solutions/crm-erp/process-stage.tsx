@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -22,6 +23,7 @@ import { TYPE } from "@/components/site/home/type";
 import { Stack, fill } from "@/components/site/solutions/custom-ai-agents/parts";
 import { ErpTag, HandGlyph } from "./glyphs";
 import { ProcessLanes, laneIndex } from "./process-lanes";
+import { PILE, PILE_PAPER } from "./process-geometry";
 import { ProcessList } from "./process-list";
 import { CaptionCard, RecordPanel, laneWord } from "./process-panels";
 import {
@@ -38,7 +40,22 @@ import {
   type StageData,
   type StepIndex,
 } from "./process-frame";
-import { buildBack, buildConsolidate, buildHop, buildTour, letGoOfDwell, placesNow, widthOf, type Comp, type Flight } from "./process-timeline";
+import {
+  buildBack,
+  buildConsolidate,
+  buildHop,
+  buildTour,
+  flightLeft,
+  holdTraces,
+  landingOf,
+  letGoOfDwell,
+  letGoOfTravel,
+  placesNow,
+  sheetsOf,
+  widthOf,
+  type Comp,
+  type Flight,
+} from "./process-timeline";
 
 /* ------------------------------------------------------------------ *
  * #process — your process, drawn: a sample business's scattered tools
@@ -100,7 +117,12 @@ import { buildBack, buildConsolidate, buildHop, buildTour, letGoOfDwell, placesN
  * after the commit, in a layout effect, from there to its new place
  * (`buildConsolidate` into One system, with the marks and the pill;
  * `buildBack` to Today), by transforms alone: no layout box moves, so
- * nothing shifts. The tour plays only while the stage has the
+ * nothing shifts. Each flight starts on GSAP's tick after the commit, so
+ * a slow phone's long commit delays it rather than eats its first half;
+ * a pick or a press while it flies leaves it flying (the new frame's
+ * traces held until it lands, and a hop or a tour waiting for it), and
+ * only the window crossing lg, reduced motion or the stage leaving
+ * completes it at once. The tour plays only while the stage has the
  * screen (the shared 30% rule) or the reader's hand, the tab is visible,
  * the reader hasn't paused it and no focus is held inside the stage; the
  * first view's waits, besides, for 60% of the drawing on show to be on
@@ -213,6 +235,9 @@ const KEY_REST_MS = 350;
 /** How much of the drawing on show must be on screen before the first view's tour plays. */
 const SEEN_AT = 0.6;
 
+/** What a pile's paper has spare under it in its cell (process-geometry.ts): 128 − 6 − 116. */
+const PILE_SPARE = PILE.cell - PILE_PAPER.top - PILE_PAPER.h;
+
 /** A radio group's arrows (and Home, End) walk; its Enter and Space, and a pointer, arrive as clicks. */
 type Via = "pointer" | "arrow";
 
@@ -265,6 +290,9 @@ function finish(tl: Timeline | null) {
   tl.kill();
 }
 
+/** A flight not yet at its end: started, or built and waiting for its first tick. */
+const inFlight = (tl: Timeline | null) => tl !== null && tl.progress() < 1;
+
 /**
  * A step on the rail. Below lg a chip ("01 Enquiry", 40px drawn, a 44px
  * target) with its dwell track along its foot; from lg a cell of the
@@ -279,6 +307,36 @@ const STEP = cn(
   CHIP.ease,
   RING_LIGHT,
 );
+
+/** A hand-off's mark in the key, as the drawing draws it: the hand and its words in a white pill. */
+function KeyMark({ words }: { words: string }) {
+  return (
+    <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-white pr-2.5 pl-2 text-[12px] leading-4 text-(--home-ember-ink) shadow-[0_0_0_1px_rgb(20_10_36/0.08)]">
+      <HandGlyph className="text-(--home-ember)" />
+      {words}
+    </span>
+  );
+}
+
+/** The drawing's key for a view: the kinds of One system's cards, or the marks on Today's papers. */
+const Key = memo(function Key({ data, view }: { data: StageData; view: ProcessView }) {
+  return (
+    <p className="erp-key flex flex-wrap items-center gap-x-4 gap-y-2 lg:flex-nowrap">
+      {view === "one" ? (
+        <>
+          <ErpTag kind="does" copy={data.kinds} tone="stage" />
+          <ErpTag kind="thin" copy={data.kinds} tone="stage" />
+          <ErpTag kind="none" copy={data.kinds} tone="stage" />
+        </>
+      ) : (
+        <>
+          <KeyMark words={data.legend.typed} />
+          <KeyMark words={data.marks.counted} />
+        </>
+      )}
+    </p>
+  );
+});
 
 export function ProcessStage({ data }: { data: StageData }) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -313,6 +371,10 @@ export function ProcessStage({ data }: { data: StageData }) {
   const [switched, setSwitched] = useState(false);
   // Most of the drawing on show has been on screen once: the first view's tour may play.
   const [seen, setSeen] = useState(false);
+  // Focus is in the transport's dock; and it has floated while focus was there: it stays floating until
+  // focus leaves it.
+  const [dockFocus, setDockFocus] = useState(false);
+  const [dockHeld, setDockHeld] = useState(false);
   // The transport is on screen, clear of the site's header: the first view's tour may start.
   const [transportOn, setTransportOn] = useState(false);
   const { said, say, hush } = useLiveLine();
@@ -335,6 +397,10 @@ export function ProcessStage({ data }: { data: StageData }) {
   const kitRef = useRef<Kit | null>(null);
   const tlRef = useRef<Timeline | null>(null);
   const flightTl = useRef<Timeline | null>(null);
+  // The flight's landing on its own clock; and whether the frame just committed is the one it was built
+  // for, whose traces it holds already.
+  const flightLanded = useRef(0);
+  const ownFrame = useRef(false);
   const captureRef = useRef<Capture | null>(null);
   // The first view's tour, until the reader takes over or it has played.
   const wantRef = useRef<Want | null>({ kind: "tour", from: "today", rewind: false, first: true });
@@ -403,6 +469,49 @@ export function ProcessStage({ data }: { data: StageData }) {
     return () => io.disconnect();
   }, []);
 
+  // A paper whose words, with its strip drawing, outgrow the paper (a
+  // reader's own text spacing, WCAG 1.4.12, on the short screen's papers)
+  // drops the strip (`data-tight`, erp-drawing.css §2) rather than run its
+  // last line past its backing and under a mark; in the pile, rather than
+  // grow past its 128px cell into the next row (a pile paper may take the
+  // 6px its cell has spare under it). What a paper's words still need past
+  // its backing, the backing grows by in Today (`--paper-over` on its
+  // sheet), so no word is ever drawn off the white. Each paper and its
+  // words are watched, so a change of spacing or of width refits them;
+  // every paper in a batch is measured with its strip before any is
+  // marked, then once more marked, so a fit reads two layouts, and it
+  // settles in one more pass (a tight paper, marked, is shorter again).
+  useEffect(() => {
+    const root = stageRef.current;
+    if (!root || typeof ResizeObserver === "undefined") return;
+    const fit = (papers: HTMLElement[]) => {
+      for (const p of papers) p.removeAttribute("data-tight");
+      const backing = papers.map((p) => parseFloat(getComputedStyle(p).minHeight));
+      const room = papers.map((p, i) => backing[i] + (p.closest(".erp-list") ? PILE_SPARE : 0));
+      const tight = papers.map((p, i) => p.offsetHeight > 0 && p.offsetHeight > room[i] + 0.5);
+      papers.forEach((p, i) => tight[i] && p.setAttribute("data-tight", ""));
+      const over = papers.map((p, i) => Math.max(0, Math.ceil(p.offsetHeight - backing[i] - 0.5)));
+      papers.forEach((p, i) => {
+        const sheet = p.parentElement;
+        if (over[i] > 0) sheet?.style.setProperty("--paper-over", `${over[i]}px`);
+        else sheet?.style.removeProperty("--paper-over");
+      });
+    };
+    const ro = new ResizeObserver((entries) => {
+      const papers = new Set<HTMLElement>();
+      for (const e of entries) {
+        const paper = e.target.closest<HTMLElement>(".erp-sheet-paper");
+        if (paper) papers.add(paper);
+      }
+      fit([...papers]);
+    });
+    for (const paper of root.querySelectorAll<HTMLElement>(".erp-sheet-paper")) {
+      ro.observe(paper);
+      for (const words of paper.querySelectorAll(":scope > :is(.erp-paper-title, .erp-paper-where, .erp-paper-pain)")) ro.observe(words);
+    }
+    return () => ro.disconnect();
+  }, []);
+
   /**
    * Notes where every sheet is drawn before React moves them to `to`, for
    * the flight after the commit: from the geometry, measuring none (a
@@ -421,7 +530,7 @@ export function ProcessStage({ data }: { data: StageData }) {
       return;
     }
     const width = widthOf(root, comp);
-    const flying = flightTl.current?.isActive() ?? false;
+    const flying = inFlight(flightTl.current);
     const from = placesNow(k.gsap, root, { comp, view: stateRef.current.view, width, lanes: laneIdx, flying });
     captureRef.current = { to, flight: { comp, width, from, lanes: laneIdx } };
   };
@@ -439,12 +548,15 @@ export function ProcessStage({ data }: { data: StageData }) {
       const root = stageRef.current;
       const want = wantRef.current;
       if (!root) return;
+      // Runs after the revert (the context's cleanup): hands back what the tour or the hop left, and
+      // leaves a flight under way flying (a pick or a press never snaps it to its end).
       const release = () => {
         tlRef.current = null;
-        finish(flightTl.current);
-        flightTl.current = null;
         letGoOfDwell(root);
+        letGoOfTravel(k.gsap, root, { marks: !inFlight(flightTl.current) });
       };
+      // Sheets still flying: whatever travels next waits for them to land.
+      const wait = flightLeft(flightTl.current, flightLanded.current);
       if (reduce) {
         // Reduced motion switched on mid-journey: the step lands where it is.
         if (want) {
@@ -468,6 +580,7 @@ export function ProcessStage({ data }: { data: StageData }) {
           comp,
           steps,
           to,
+          wait,
           onArrive: () => setState((s) => (s.step === to && !s.arrived ? arrive(s) : s)),
         });
         return () => {
@@ -504,6 +617,7 @@ export function ProcessStage({ data }: { data: StageData }) {
         comp,
         from,
         rewind,
+        wait,
         intro: data.intro.text,
         onStart: () => setTour("running"),
         onRewind: () => {
@@ -549,6 +663,10 @@ export function ProcessStage({ data }: { data: StageData }) {
   // system (with the marks' flight and the pill), or back to Today. The
   // capture is consumed whatever happens, so a stale one is never flown.
   // Declared after the kit context, so a rebuild's revert has run first.
+  // Built paused, every sheet already at its from-place, and played from
+  // GSAP's next tick: the commit that changed the view may have been a
+  // long task on a slow phone, and a flight started inside it would come
+  // out of it most of the way there.
   useIsoLayoutEffect(() => {
     const cap = captureRef.current;
     if (!cap || cap.to !== state.view) return;
@@ -557,8 +675,39 @@ export function ProcessStage({ data }: { data: StageData }) {
     const root = stageRef.current;
     if (!k || !root || reduce) return;
     finish(flightTl.current);
-    flightTl.current = cap.to === "one" ? buildConsolidate(k, root, cap.flight) : buildBack(k, root, cap.flight);
+    const tl = cap.to === "one" ? buildConsolidate(k, root, cap.flight) : buildBack(k, root, cap.flight);
+    flightTl.current = tl;
+    flightLanded.current = landingOf(cap.to, sheetsOf(root, cap.flight.comp).length);
+    ownFrame.current = true;
+    k.gsap.delayedCall(0, () => {
+      if (flightTl.current === tl) tl.play(0);
+    });
   }, [state.view, reduce]);
+
+  // A frame a reader's pick or press commits while the sheets are still
+  // flying: its traces are held until they land (the flight's own frame
+  // holds its traces as it is built).
+  useIsoLayoutEffect(() => {
+    if (ownFrame.current) {
+      ownFrame.current = false;
+      return;
+    }
+    const tl = flightTl.current;
+    const k = kitRef.current;
+    const root = stageRef.current;
+    if (!tl || !k || !root || !inFlight(tl)) return;
+    holdTraces(k.gsap, tl, root, comp, flightLanded.current);
+  }, [frame, comp]);
+
+  // A flight is completed at once only when its places no longer hold: the
+  // window crossing lg, reduced motion switched on, or the stage leaving.
+  useIsoLayoutEffect(
+    () => () => {
+      finish(flightTl.current);
+      flightTl.current = null;
+    },
+    [comp, reduce],
+  );
 
   // Focus is never dropped (WCAG 2.4.3), but should a focused element go
   // with a frame, no blur says so: the hold lets go once focus is no
@@ -712,7 +861,15 @@ export function ProcessStage({ data }: { data: StageData }) {
   // A tour has a claim on the screen: the first view's autoplay, awake and waiting for the drawing (never lite
   // before a tap, whose kit waits for it), or a tour under way, paused or not. Only then, on a phone or a short
   // screen, does the transport float at the screen's top (erp-process.css §1); otherwise it keeps its slot.
-  const docked = canTour && (tour === "running" || (tour === "idle" && !interacted && kit !== null));
+  // And while focus that came to it floating is on it: a tour that ends under a keyboard reader's focus
+  // leaves the disc where it is (reading "Play it again") until focus moves on, never snapping it back to
+  // a slot off the screen. (Focus coming to it in its slot never floats it: a press would lose its click.)
+  const claimed = canTour && (tour === "running" || (tour === "idle" && !interacted && kit !== null));
+  const docked = claimed || (canTour && dockHeld);
+  useIsoLayoutEffect(() => {
+    if (!dockFocus) setDockHeld(false);
+    else if (claimed) setDockHeld(true);
+  }, [dockFocus, claimed]);
   const viewAt = Math.max(
     0,
     data.views.findIndex((v) => v.id === frame.view),
@@ -752,15 +909,18 @@ export function ProcessStage({ data }: { data: StageData }) {
               }}
               {...holdProps}
             >
-              {/* Its segments narrow under 390, so the switch and the transport share a 320 phone's line;
-                  there a label a reader's own spacing widens (WCAG 1.4.12) wraps inside its segment,
-                  which grows, rather than run past the thumb and the track. */}
+              {/* Its segments narrow under 390, so the switch and the transport share a 320 phone's line
+                  ("One system" at 500 still on one line in its 82px); there a label a reader's own
+                  spacing widens (WCAG 1.4.12) wraps inside its segment, which grows, rather than run
+                  past the thumb and the track. From md it is at least 236px, over the widest its two
+                  labels make it (231px, "One system" chosen at 500): its width never follows which
+                  segment is chosen, so the tag beside it never moves or rewraps as the view changes. */}
               <Segmented
                 label={data.viewLabel}
                 options={data.views}
                 value={state.view}
                 onChange={switchTo}
-                className="erp-switch max-[389px]:[&>button]:h-auto max-[389px]:[&>button]:min-h-9 max-[389px]:[&>button]:px-2.5 max-[389px]:[&>button]:py-1 max-[389px]:[&>button]:leading-4 max-[389px]:[&>button]:whitespace-normal"
+                className="erp-switch max-[389px]:[&>button]:h-auto max-[389px]:[&>button]:min-h-9 max-[389px]:[&>button]:px-2 max-[389px]:[&>button]:py-1 max-[389px]:[&>button]:leading-4 max-[389px]:[&>button]:whitespace-normal md:min-w-[236px]"
               />
             </div>
             <p className={cn(TYPE.mono, "erp-stage-tag text-pretty text-pp-muted")}>{data.tag.replaceAll(" · ", " · ")}</p>
@@ -787,7 +947,14 @@ export function ProcessStage({ data }: { data: StageData }) {
               short screen, sticky at the screen's top while the stage is on it, so the tour's
               Pause never leaves the reader's reach (erp-process.css §1). Drawn only where a
               tour can run. */}
-          <div ref={dockRef} className="erp-stage-dock">
+          <div
+            ref={dockRef}
+            className="erp-stage-dock"
+            onFocus={() => setDockFocus(true)}
+            onBlur={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget)) setDockFocus(false);
+            }}
+          >
             {canTour && <RoundButton icon={button.icon} label={button.label} onClick={transport} className="erp-stage-transport" />}
           </div>
 
@@ -851,16 +1018,13 @@ export function ProcessStage({ data }: { data: StageData }) {
               swap={swap}
               render={(v) => <p className="text-[14px] leading-5 text-pretty text-pp-ink">{data.tally[v.id]}</p>}
             />
-            {/* From lg the key keeps one line beside the tally, which wraps instead. */}
-            <p aria-hidden className="erp-key flex flex-wrap items-center gap-x-4 gap-y-2 lg:shrink-0 lg:flex-nowrap">
-              <ErpTag kind="does" copy={data.kinds} tone="stage" />
-              <ErpTag kind="thin" copy={data.kinds} tone="stage" />
-              <ErpTag kind="none" copy={data.kinds} tone="stage" />
-              <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-white pr-2.5 pl-2 text-[12px] leading-4 text-(--home-ember-ink) shadow-[0_0_0_1px_rgb(20_10_36/0.08)]">
-                <HandGlyph className="text-(--home-ember)" />
-                {data.legend.typed}
-              </span>
-            </p>
+            {/* The key to the view on show, over the other's (a stack, so it keeps the room of the
+                taller, and nothing moves as the view changes): in One system the three kinds the
+                cards' nodes draw; in Today the two marks the papers carry, since no paper has a
+                node. From lg it keeps one line beside the tally, which wraps instead. */}
+            <div aria-hidden className="min-w-0 lg:shrink-0">
+              <Stack items={data.views} live={viewAt} swap={swap} render={(v) => <Key data={data} view={v.id} />} />
+            </div>
           </div>
 
           {/* The caption card and the record panel. Focus in either holds the tour. */}

@@ -246,10 +246,12 @@ html[data-tier="still"] .pp.home-body :is(.erp-sheet[data-state] .erp-sheet-bg, 
    `erp-deferred`) sets its own mono instead: the face, then monospaced
    faces the platforms carry, each with the face's 0.6em advance (SF Mono
    and Menlo on Apple, Roboto Mono and Droid Sans Mono on Android,
-   DejaVu Sans Mono on Linux), then the generic one. The words take the
-   same width before the face and after it, so the swap never rewraps.
+   DejaVu Sans Mono on Linux, Courier New on Windows, whose own
+   `monospace`, Consolas, is 0.55em, and which Chrome and Edge give no
+   `ui-monospace`), then the generic one. The words take the same width
+   before the face and after it, so the swap never rewraps.
    The hero, above them, keeps the layout's stack: a landing at the top
    shifts nothing as the face arrives. */
 .pp .erp-deferred {
-  --font-geist-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, "Roboto Mono", "Droid Sans Mono", "DejaVu Sans Mono", monospace;
+  --font-geist-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, "Roboto Mono", "Droid Sans Mono", "DejaVu Sans Mono", "Courier New", monospace;
 }

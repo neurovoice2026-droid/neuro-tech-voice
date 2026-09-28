@@ -4,7 +4,7 @@ import { TYPE } from "@/components/site/home/type";
 import { Stack, fill } from "@/components/site/solutions/custom-ai-agents/parts";
 import type { ProcessStep, ProcessView } from "@/lib/pages/crm-erp";
 import { ErpTag, HandGlyph, LaneGlyph } from "./glyphs";
-import { LAST, pad2, type DrawFrame, type StageData } from "./process-frame";
+import { LAST, pad2, type DrawFrame, type RowState, type StageData } from "./process-frame";
 import { ScreenView } from "./record-screens";
 
 /* ------------------------------------------------------------------ *
@@ -27,10 +27,11 @@ import { ScreenView } from "./record-screens";
  *     Today word: "By itself" is someone's hand today), so a switch
  *     changes a colour and a word, and nothing moves;
  *   - the record panel is its two views in one grid cell, as tall as the
- *     taller (the window), the view not on show hidden by the stage's
- *     `data-view` (erp-process.css §4). Hidden, not unmounted: the
- *     hotspot is one persistent button, and a reader's focus on it is
- *     never dropped;
+ *     taller (the window), the view not on show faded out and under the
+ *     other by the stage's `data-view` (erp-process.css §4), and
+ *     `aria-hidden` here, its one button inert. Hidden, not unmounted:
+ *     the hotspot is one persistent button, and a reader's focus on it
+ *     is never dropped;
  *   - in the window, the status chip is a `Stack` over the eight
  *     statuses; the screen a `Stack` over the eight screens; the history
  *     always eight rows, each keeping room for the wider of its lane and
@@ -88,8 +89,14 @@ export function laneWord(data: Pick<StageData, "lanes">, s: ProcessStep, view: P
 
 /* ─── The caption card ────────────────────────────────────────────── */
 
-/** What a step is and who does it, and its two lines: the top of the step's caption. Memoised, as the stacks' leaves all are: a new frame redraws only what it changes. */
-const StepTop = memo(function StepTop({ data, i, view }: { data: StageData; i: number; view: ProcessView }) {
+/**
+ * What a step is and who does it, and its two lines: the top of the
+ * step's caption. Memoised, as the stacks' leaves all are: a new frame
+ * redraws only what it changes, and a switch of view none of it (which
+ * of "Who"'s two words shows, and which line is in ink, is the stage's
+ * `data-view`'s, erp-process.css §3).
+ */
+const StepTop = memo(function StepTop({ data, i }: { data: StageData; i: number }) {
   const s = data.steps[i];
   const words = { today: laneWord(data, s, "today"), one: laneWord(data, s, "one") };
   return (
@@ -100,12 +107,13 @@ const StepTop = memo(function StepTop({ data, i, view }: { data: StageData; i: n
           <span className={LABEL}>{data.caption.who}</span>
           <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-(--home-chip) pr-2.5 pl-2 text-[12px] leading-4 whitespace-nowrap text-pp-ink">
             <LaneGlyph id={s.lane} className="text-(--home-electric)" />
-            {/* Both words in one cell: the chip keeps the wider's room in either view. */}
+            {/* Both words in one cell: the chip keeps the wider's room in either view, and the view
+                not on show hides its word (visibility, so a screen reader skips it too). */}
             <span className="grid">
-              <span className={cn("[grid-area:1/1]", view !== "today" && "invisible")} aria-hidden={view !== "today" || undefined}>
+              <span data-word="today" className="erp-who-word [grid-area:1/1]">
                 {words.today}
               </span>
-              <span className={cn("[grid-area:1/1]", view !== "one" && "invisible")} aria-hidden={view !== "one" || undefined}>
+              <span data-word="one" className="erp-who-word [grid-area:1/1]">
                 {words.one}
               </span>
             </span>
@@ -187,7 +195,8 @@ const IntroCaption = memo(function IntroCaption({ data }: { data: StageData }) {
               {pad2(i + 1)}
             </span>
             <span className="text-pp-ink">{s.paper.title}</span>
-            <span className={cn(TYPE.mono, "min-w-0 truncate text-[11px] leading-[18px] text-pp-muted")}>
+            {/* Never cut: where the row has no room (a 320 phone, a reader's own text spacing) it wraps. */}
+            <span className={cn(TYPE.mono, "min-w-0 text-[11px] leading-[18px] text-pretty text-pp-muted")}>
               <span className="sr-only">, </span>
               {s.paper.where}
             </span>
@@ -234,7 +243,7 @@ export function CaptionCard({
           items={data.steps}
           live={at}
           swap={swap}
-          render={(_, i) => <StepTop data={data} i={i} view={frame.view} />}
+          render={(_, i) => <StepTop data={data} i={i} />}
         />
         <div className="mt-4 flex min-w-0 flex-col border-t border-pp-rule pt-3.5">
           <Stack className="grid-cols-[minmax(0,1fr)]" items={data.steps} live={at} swap={swap} render={(_, i) => <StepOurs data={data} i={i} />} />
@@ -254,55 +263,62 @@ const HOT = cn(
   "focus-visible:outline-2 focus-visible:outline-offset-[5px] focus-visible:outline-pp-ink",
 );
 
+/** Today's hand-offs, their words fixed: memoised, so a switch of view redraws none of them. */
+const TodayList = memo(function TodayList({ data }: { data: StageData }) {
+  const step = (id: ProcessStep["id"]) => data.steps.find((s) => s.id === id);
+  return (
+    <ul className="mt-3 flex flex-col">
+      {data.handoffs.map((h) => {
+        const [from, to] = [step(h.from), step(h.to)];
+        return (
+          <li
+            key={`${h.from}-${h.to}`}
+            className="grid grid-cols-[28px_minmax(0,1fr)] gap-x-2.5 border-t border-pp-rule py-2.5 first:border-t-0"
+          >
+            <span aria-hidden className="mt-px grid size-6 place-items-center rounded-full bg-(--home-ember-soft) text-(--home-ember)">
+              <HandGlyph />
+            </span>
+            <div className="min-w-0">
+              {/* The steps, the two tools the details are copied between, and the mark: one
+                  line where the panel is wide, wrapping where it isn't. */}
+              <p className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                <span className="text-[15px] leading-[22px] font-medium text-pp-ink">
+                  {from?.label} <span aria-hidden>→</span>
+                  <span className="sr-only">to</span> {to?.label}
+                </span>
+                <span className={cn(TYPE.mono, "text-[11px] leading-4 text-pp-muted")}>
+                  {from?.paper.where} <span aria-hidden>→</span>
+                  <span className="sr-only">to</span> {to?.paper.where}
+                </span>
+                <span className="ml-auto text-[12px] leading-4 text-(--home-ember-ink)">{data.marks[h.mark]}</span>
+              </p>
+              <p className="mt-1 text-[13px] leading-[19px] text-pretty text-pp-ink/80">{h.text}</p>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+});
+
 /**
  * Today: where the same details are typed again, or counted by hand, as
  * the work moves — each hand-off with the two tools it runs between —
  * and, at its foot, the way into one system: a ringed button in the
  * hotspot's place, which switches the view as the switch above does.
  */
-function TodayPanel({ data, onView }: { data: StageData; onView: () => void }) {
-  const step = (id: ProcessStep["id"]) => data.steps.find((s) => s.id === id);
+function TodayPanel({ data, hidden, onView }: { data: StageData; hidden: boolean; onView: () => void }) {
   const one = data.views.find((v) => v.id === "one")?.label ?? "";
   return (
-    <div role="group" aria-labelledby="erp-today-title" className="erp-record-today flex min-w-0 flex-col">
+    <div role="group" aria-labelledby="erp-today-title" aria-hidden={hidden || undefined} className="erp-record-today flex min-w-0 flex-col">
       <div className="px-5 pt-5 md:px-6 md:pt-6">
         <h3 id="erp-today-title" className="text-[17px] leading-[24px] font-medium text-balance text-pp-ink">
           {data.record.todayTitle}
         </h3>
-        <ul className="mt-3 flex flex-col">
-          {data.handoffs.map((h) => {
-            const [from, to] = [step(h.from), step(h.to)];
-            return (
-              <li
-                key={`${h.from}-${h.to}`}
-                className="grid grid-cols-[28px_minmax(0,1fr)] gap-x-2.5 border-t border-pp-rule py-2.5 first:border-t-0"
-              >
-                <span aria-hidden className="mt-px grid size-6 place-items-center rounded-full bg-(--home-ember-soft) text-(--home-ember)">
-                  <HandGlyph />
-                </span>
-                <div className="min-w-0">
-                  {/* The steps, the two tools the details are copied between, and the mark: one
-                      line where the panel is wide, wrapping where it isn't. */}
-                  <p className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-                    <span className="text-[15px] leading-[22px] font-medium text-pp-ink">
-                      {from?.label} <span aria-hidden>→</span>
-                      <span className="sr-only">to</span> {to?.label}
-                    </span>
-                    <span className={cn(TYPE.mono, "text-[11px] leading-4 text-pp-muted")}>
-                      {from?.paper.where} <span aria-hidden>→</span>
-                      <span className="sr-only">to</span> {to?.paper.where}
-                    </span>
-                    <span className="ml-auto text-[12px] leading-4 text-(--home-ember-ink)">{data.marks[h.mark]}</span>
-                  </p>
-                  <p className="mt-1 text-[13px] leading-[19px] text-pretty text-pp-ink/80">{h.text}</p>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        <TodayList data={data} />
       </div>
       <div className="erp-window-foot mt-auto border-t border-pp-rule px-4 py-[7px]">
-        <button type="button" onClick={onView} data-erp-hot="view" className={HOT}>
+        <button type="button" onClick={onView} data-erp-hot="view" inert={hidden} className={HOT}>
           {one}
           <span aria-hidden>→</span>
         </button>
@@ -317,11 +333,36 @@ function RowNode() {
   return <span aria-hidden className="erp-row-node mt-[5px] block size-2 shrink-0 rounded-full" />;
 }
 
+/** One row of the customer's history: memoised, so a frame redraws only the rows whose state it changes. */
+const HistoryRow = memo(function HistoryRow({ step, state, lane, toCome }: { step: ProcessStep; state: RowState; lane: string; toCome: string }) {
+  return (
+    <li
+      data-state={state}
+      aria-current={state === "current" ? "step" : undefined}
+      className="erp-row grid grid-cols-[8px_minmax(0,1fr)_auto] gap-x-2.5 text-[13px] leading-[18px]"
+    >
+      <RowNode />
+      <span className="erp-row-text min-w-0 text-pretty">
+        {step.history}
+        {state === "tocome" && <span className="sr-only"> (to come)</span>}
+      </span>
+      {/* The lane, or "To come": both laid in one cell, so the row keeps the wider's room whatever it says. */}
+      <span className={cn(TYPE.mono, "grid text-right text-[11px] leading-[18px] text-pp-muted")}>
+        <span className={cn("[grid-area:1/1]", state === "tocome" && "invisible")}>{lane}</span>
+        <span aria-hidden className={cn("[grid-area:1/1]", state !== "tocome" && "invisible")}>
+          {toCome}
+        </span>
+      </span>
+    </li>
+  );
+});
+
 function RecordWindow({ data, frame, swap, onGo }: { data: StageData; frame: DrawFrame; swap: boolean; onGo: () => void }) {
   const go = data.steps[frame.screen].go;
   const paid = data.steps[LAST].status;
+  const hidden = frame.view !== "one";
   return (
-    <div role="group" aria-labelledby="erp-record-pill" className="erp-record-one erp-window flex min-w-0 flex-col">
+    <div role="group" aria-labelledby="erp-record-pill" aria-hidden={hidden || undefined} className="erp-record-one erp-window flex min-w-0 flex-col">
       {/* The chrome: three dots and the window's name. */}
       <div aria-hidden className="flex h-8 items-center gap-3 border-b border-pp-rule px-4">
         <span className="flex gap-1.5">
@@ -340,14 +381,16 @@ function RecordWindow({ data, frame, swap, onGo }: { data: StageData; frame: Dra
       <div className="erp-record-head flex items-center gap-x-3 gap-y-2 border-b border-pp-rule px-4 py-2.5">
         <span aria-hidden className="erp-record-avatar size-9 shrink-0 rounded-full bg-pp-ink/8" />
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
-          <p className="flex">
+          {/* The window's name, and the panel's heading, as Today's title is in its place: the
+              step's screen under it is an h4 (record-screens.tsx). */}
+          <h3 className="flex">
             <span
               id="erp-record-pill"
-              className="erp-pill inline-flex h-5 items-center rounded-full bg-(--home-electric)/10 px-2 text-[12px] leading-4 whitespace-nowrap text-(--home-violet)"
+              className="erp-pill inline-flex h-5 items-center rounded-full bg-(--home-electric)/10 px-2 text-[12px] leading-4 font-normal whitespace-nowrap text-(--home-violet)"
             >
               {data.record.pill}
             </span>
-          </p>
+          </h3>
           {/* Its words never change, so on a narrow phone it wraps rather than cut off beside the widest status. */}
           <p className="min-w-0 text-[15px] leading-[22px] font-medium text-pretty text-pp-ink">{data.record.customer}</p>
         </div>
@@ -386,31 +429,15 @@ function RecordWindow({ data, frame, swap, onGo }: { data: StageData; frame: Dra
             {data.record.history}
           </p>
           <ul aria-labelledby="erp-history-title" className="mt-2.5 flex flex-col gap-1.5">
-            {data.steps.map((s, i) => {
-              const state = frame.rows[i];
-              const lane = data.lanes.find((l) => l.id === s.lane)?.label ?? s.lane;
-              return (
-                <li
-                  key={s.id}
-                  data-state={state}
-                  aria-current={state === "current" ? "step" : undefined}
-                  className="erp-row grid grid-cols-[8px_minmax(0,1fr)_auto] gap-x-2.5 text-[13px] leading-[18px]"
-                >
-                  <RowNode />
-                  <span className="erp-row-text min-w-0 text-pretty">
-                    {s.history}
-                    {state === "tocome" && <span className="sr-only"> (to come)</span>}
-                  </span>
-                  {/* The lane, or "To come": both laid in one cell, so the row keeps the wider's room whatever it says. */}
-                  <span className={cn(TYPE.mono, "grid text-right text-[11px] leading-[18px] text-pp-muted")}>
-                    <span className={cn("[grid-area:1/1]", state === "tocome" && "invisible")}>{lane}</span>
-                    <span aria-hidden className={cn("[grid-area:1/1]", state !== "tocome" && "invisible")}>
-                      {data.record.toCome}
-                    </span>
-                  </span>
-                </li>
-              );
-            })}
+            {data.steps.map((s, i) => (
+              <HistoryRow
+                key={s.id}
+                step={s}
+                state={frame.rows[i]}
+                lane={data.lanes.find((l) => l.id === s.lane)?.label ?? s.lane}
+                toCome={data.record.toCome}
+              />
+            ))}
           </ul>
         </div>
       </div>
@@ -420,7 +447,7 @@ function RecordWindow({ data, frame, swap, onGo }: { data: StageData; frame: Dra
           and nothing beside it moves. 7px round it: its focus ring (5px
           out, 2px wide) just clear of the card's clip. */}
       <div className="erp-window-foot border-t border-pp-rule px-4 py-[7px]">
-        <button type="button" onClick={onGo} aria-label={go.aria} data-erp-hot="go" className={HOT}>
+        <button type="button" onClick={onGo} aria-label={go.aria} data-erp-hot="go" inert={hidden} className={HOT}>
           <span className="grid">
             <span className="[grid-area:1/1]">{go.label}</span>
             {data.steps.map((s) => (
@@ -461,7 +488,7 @@ export function RecordPanel({
 }) {
   return (
     <div className={cn(CARD, "erp-record grid min-w-0 overflow-clip", className)}>
-      <TodayPanel data={data} onView={onView} />
+      <TodayPanel data={data} hidden={frame.view !== "today"} onView={onView} />
       <RecordWindow data={data} frame={frame} swap={swap} onGo={onGo} />
     </div>
   );

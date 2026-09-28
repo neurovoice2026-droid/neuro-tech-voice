@@ -284,6 +284,8 @@ export type ProcessData = {
 export type BizId = "wholesale" | "trades" | "retail" | "making" | "appointments" | "services";
 export type ScopeId = "sales" | "ops" | "all";
 export type ShapeCore = "history" | "messages" | "bookings" | "invoicing";
+/** What a report draws in #shape: bars, a line, pairs (won against lost, cost against quote), a table, or amounts by age (money by how late, stock by how long unsold). */
+export type ReportChart = "bars" | "line" | "split" | "table" | "age";
 export type ShapePart = { label: string; why: string; level: ScopeId; core?: ShapeCore; kind?: "thin" }; // label ≤ 24, why ≤ 60
 export type ShapeSample = {
   id: BizId;
@@ -292,6 +294,7 @@ export type ShapeSample = {
   parts: readonly ShapePart[]; // 4 sales, 4 ops, 3 all, in that order
   pipeline: { name: string; stages: readonly [string, string, string, string, string, string] }; // name ≤ 44, stage ≤ 14
   reports: readonly [string, string, string]; // ≤ 48 each
+  charts: readonly [ReportChart, ReportChart, ReportChart]; // what each report draws in #shape
   ai: string; // ≤ 80
   hard: string; // ≤ 120
 };
@@ -432,7 +435,7 @@ export const CORE_PARTS: readonly CorePart[] = [
   // sentiment, the peak hour, AND NOT c.is_test, resolve_time_zone(p_tz). calls-chart: z.enum(['7', '30', '90']),
   // gated by entitlements, AND NOT c.is_test too. The screen is "Dashboard" (DashboardShell's nav); a trial's
   // calls are test calls, so its figures read nought there, which is the rule the card states.
-  { id: "reports", layer: 3, kind: "does", title: "Reports in your own time zone", datum: "own time zone",
+  { id: "reports", layer: 3, kind: "does", title: "Figures counted by the database", datum: "own time zone",
     ours: `Headline figures come from one database query — calls today, in the last seven days and this month, their outcomes, how callers felt and the busiest hour — counted in each business’s own time zone with test calls left out, and a chart of calls per day over the last ${listOr(FACTS_ERP.chartDays.map((d) => DAYS_WORD[d]))} days, the longer views on higher plans.`,
     yours: "Sales, stock, margin and what’s owed, always current, never rebuilt at month-end.", // OWNER
     files: ["supabase/migrations/010_voice_platform.sql", "app/api/dashboard/metrics/route.ts", "app/api/dashboard/calls-chart/route.ts"],
@@ -476,7 +479,7 @@ const UNDER: readonly UnderCell[] = [
   { id: "kept", title: "Kept from the browser", datum: "plan · billing",
     text: "Plans, billing, usage and owners can’t be changed by a signed-in session, only by the server: a database trigger keeps them." },
   { id: "schema", title: "Changed only by migration", datum: `${FACTS.migrations} migrations`,
-    text: "Every change to the database’s shape is kept in the repository, so it can be run again, the same way." },
+    text: "Every change to the database’s shape is a numbered script kept in the repository, so it can be run again the same way." },
   { id: "jobs", title: "Jobs that run themselves", datum: FACTS.cronAt,
     text: `One job every morning, ${word(FACTS.cronSteps.length)} steps, each on its own, so one failing never stops the rest.` },
 ];
@@ -568,15 +571,15 @@ export const STEPS: readonly ProcessStep[] = [ // SAMPLE: the sample's words; `o
   { id: "report", n: "08", label: "Report", lane: "auto",
     paper: { title: "Figures", where: "Put together by hand", pain: "Rebuilt every month-end", face: "chart" },
     today: "Copied from every sheet there is, and out of date once read.",
-    system: "Each sale counted as it happens, in your own time zone.",
+    system: "Each sale counted as it happens, never rebuilt by hand.",
     kind: "does", core: "reports",
     ours: "For calls: figures counted in each business’s own time zone, and exports that open safely.",
     files: ["app/api/dashboard/metrics/route.ts", "app/api/calls/export/route.ts"],
     history: "In the month’s figures", status: "Paid",
-    screen: { title: "This month", blocks: [{ kind: "panels", items: ["Sales", "Stock", "Money owed"] }, { kind: "chip", label: "In your own time zone", tone: "done" }] },
+    screen: { title: "This month", blocks: [{ kind: "panels", items: ["Sales", "Stock", "Money owed"] }, { kind: "chip", label: "Up to date", tone: "done" }] },
     go: { label: "Back to the customer", aria: "Back to the customer — opens New enquiry" } },
 ];
-// Lines 46–61 characters (1.33×). holdFor(system): 2.84, 2.84, 3.36, 2.84, 3.36, 2.84, 3.36, 3.36s = 24.8s.
+// Lines 46–61 characters (1.33×). holdFor(system): 2.84, 2.84, 3.1, 2.84, 3.36, 2.84, 3.36, 3.1s = 24.28s.
 // Kinds: thin 3 (enquiry, follow-up, delivery), does 2 (invoice, report), none 3 (quote, order, stock).
 // Each step's kind is the tag #shape gives the same part of the wholesale sample it opens on.
 
@@ -632,7 +635,8 @@ const part = (label: string, why: string, level: ScopeId, core?: ShapeCore, kind
 const LEVEL_OF = { sales: 0, ops: 1, all: 2 } as const satisfies Record<ScopeId, number>;
 /**
  * One sample, checked for the fixed shape the card draws: eleven parts, four
- * then four then three, in level order; six stages; three reports. Throws
+ * then four then three, in level order; six stages; three reports, each with
+ * the chart it draws. Throws
  * otherwise, so a pick never changes the card's structure. Lengths, and no
  * digit, brand or "client", are the test's.
  */
@@ -647,7 +651,7 @@ function sample(s: ShapeSample): ShapeSample {
   }
   if (perLevel.join("/") !== "4/4/3") throw bad("isn’t eleven parts: four sales, four operations, three back office");
   if (new Set(s.parts.map((p) => p.label)).size !== s.parts.length) throw bad("repeats a part");
-  if (s.pipeline.stages.length !== 6 || s.reports.length !== 3) throw bad("isn’t six stages and three reports");
+  if (s.pipeline.stages.length !== 6 || s.reports.length !== 3 || s.charts.length !== 3) throw bad("isn’t six stages, three reports and a chart for each");
   return s;
 }
 const S = "sales", O = "ops", A = "all";
@@ -670,6 +674,7 @@ export const SAMPLES: readonly ShapeSample[] = [ // SAMPLE: written for this pag
     ],
     pipeline: { name: "An order, from enquiry to paid", stages: ["Enquiry", "Quoted", "Accepted", "Picked", "Delivered", "Paid"] },
     reports: ["Quotes won and lost, by who quoted", "Stock below its reorder level, by warehouse", "Money owed, by how late it is"],
+    charts: ["split", "bars", "age"],
     ai: "AI reads an order from an email and drafts it for a person to check",
     hard: "Prices that differ by customer, stock in more than one place, and an order that must never ship twice." }),
   sample({ id: "trades",
@@ -689,6 +694,7 @@ export const SAMPLES: readonly ShapeSample[] = [ // SAMPLE: written for this pag
     ],
     pipeline: { name: "A job, from enquiry to paid", stages: ["Enquiry", "Site visit", "Quoted", "Booked", "Done", "Paid"] },
     reports: ["Jobs booked against each crew’s time", "Quotes won and lost, by kind of job", "Contracts due for renewal"],
+    charts: ["bars", "split", "table"],
     ai: "AI drafts the job report from the engineer’s notes and photos",
     hard: "A day of jobs that moves when one runs late, and parts that have to be on the right van." }),
   sample({ id: "retail",
@@ -701,13 +707,15 @@ export const SAMPLES: readonly ShapeSample[] = [ // SAMPLE: written for this pag
       part("Orders", "From the website and the till, in one list", O),
       part("Stock", "One count for the shop, the stockroom and online", O),
       part("Returns", "Refunded, restocked or written off", O),
-      part("Invoices and receipts", "Issued with every sale, fiscal where the law asks", O, "invoicing"),
+      // "Partly here": ours issues fiscal invoices for card payments, never a till’s receipts.
+      part("Invoices and receipts", "Issued with every sale, fiscal where the law asks", O, "invoicing", "thin"),
       part("Purchasing", "Reorders raised before the shelf is empty", A),
       part("Marketplaces", "Listings kept in step with your stock", A),
       part("Link to your accounts", "Sales and payments in your accounting software", A),
     ],
     pipeline: { name: "An order, from basket to done", stages: ["Placed", "Paid", "Packed", "Shipped", "Delivered", "Reviewed"] },
     reports: ["Best and worst sellers, by channel", "Stock that isn’t moving", "Customers who haven’t come back"],
+    charts: ["bars", "age", "table"],
     ai: "AI answers ‘where is my order?’ from the order itself",
     hard: "Stock that stays right when the shop and the website sell the last one at the same moment." }),
   sample({ id: "making",
@@ -727,6 +735,7 @@ export const SAMPLES: readonly ShapeSample[] = [ // SAMPLE: written for this pag
     ],
     pipeline: { name: "An order, from quote to dispatch", stages: ["Quoted", "Confirmed", "Planned", "On the floor", "Checked", "Dispatched"] },
     reports: ["Orders against the floor’s capacity", "Material cost per order, against the quote", "Late orders, and why they’re late"],
+    charts: ["line", "split", "table"],
     ai: "AI drafts a production plan from the week’s confirmed orders",
     hard: "A plan that changes when one machine stops, and a batch you can trace to every customer who got it." }),
   sample({ id: "appointments",
@@ -746,6 +755,7 @@ export const SAMPLES: readonly ShapeSample[] = [ // SAMPLE: written for this pag
     ],
     pipeline: { name: "A visit, from booking to paid", stages: ["Booked", "Reminded", "Arrived", "Done", "Paid", "Rebooked"] },
     reports: ["Empty slots, by day and by person", "Missed visits, and who missed them", "Customers due for their next visit"],
+    charts: ["bars", "line", "table"],
     ai: "AI answers the phone and books the visit, as this platform does",
     hard: "Two people booking the last free time at once, and a reminder that must go out exactly once." }),
   sample({ id: "services",
@@ -765,6 +775,7 @@ export const SAMPLES: readonly ShapeSample[] = [ // SAMPLE: written for this pag
     ],
     pipeline: { name: "A customer, from first contact to invoiced", stages: ["Lead", "Meeting", "Proposal", "Won", "In progress", "Invoiced"] },
     reports: ["Hours billed against hours worked", "Projects running over budget", "Revenue by customer, month by month"],
+    charts: ["split", "table", "line"],
     ai: "AI drafts a proposal from the notes of the first meeting",
     hard: "Hours that must reach the right invoice, and a project that must stop before it runs over." }),
 ];
@@ -838,10 +849,12 @@ const STAGES: readonly MoveStage[] = [
     body: "The system is built in whatever technology suits it, and your real data is moved into a copy of it — again and again, until every count, total and history matches what you know.", // OWNER
     hold: "The system working on a copy of your own data, and a rehearsal you’ve checked.", // OWNER
     // SAAS_SCOPE's import part (guarded): "Not on ours: it started empty."
-    ours: `This platform started empty, so it had nothing to move. What yours is built on runs here: row-level security on every one of its ${FACTS_ERP.tables} tables, and every change to its shape one of ${FACTS.migrations} migrations kept in the repository.`,
-    check: { kind: "call", label: "Ask us to open the migrations" } }, // OWNER: that we show them on request
+    // "What a move lands on", never "what yours is built on": yours is built in whatever suits it (the body).
+    // "Scripts", never "migrations": in the section about moving data, a migration reads as a data move.
+    ours: `This platform started empty, so it had nothing to move. What a move lands on runs here: each business’s rows walled off in every one of its ${FACTS_ERP.tables} tables, and every change to its database kept in the repository as one of ${FACTS.migrations} scripts that can be run again.`,
+    check: { kind: "call", label: "Ask us to open its database scripts" } }, // OWNER: that we show them on request
   { id: "switch", n: "03", title: ITEM.deliverables[1], // "Migrated off spreadsheets and legacy tools"
-    body: "On a day you choose, the old tools are frozen, the last changes come across, and everyone starts in one system. The old files stay readable, and the code, the database and a guide to running it are handed over.", // OWNER
+    body: "On a day you choose, the old tools are frozen, the last changes come across, and everyone starts in one system. The old files stay readable, and the code, its tests and a guide to running it are handed over.", // OWNER
     hold: "One system in daily use, the old files kept, and the code and the data in your hands.", // OWNER
     // query.ts's ExportQuerySchema and csv.ts's guardFormula; the call's DELETE runs deleteProviderCopies
     // first and deletes nothing when one fails.
@@ -872,9 +885,10 @@ export const ERP_HERO: HeroData = keyed({
   // The menu's description first (read), then breadth, the move, why the
   // proof is a phone-agent platform (it's ours to open up), and both
   // credentials, all before the plates.
-  // It never repeats the h1's halves or lists the plates under it (the CTA clears the fold at 360 and 375);
-  // "A CRM's hard parts", never "Those": the list before it names stock and production, which don't run here.
-  sub: `${ITEM.description} For any business, of any size and however complex, we design and build yours — sales, stock, production, projects, invoicing and reporting — in whatever technology suits it, and move you off your spreadsheets and old tools without losing a thing. A CRM’s hard parts run every day on this platform, our own product for AI phone agents. Our team holds ${ACC} personal Claude accreditations from Anthropic, and our company holds startup grants from ${GRANTORS}.`, // OWNER
+  // It never repeats the h1's halves, lists the plates under it, or lists the kinds of system the range
+  // band lists below it, so the CTA clears the fold at 360, 375 and 1024×768 (where the h1 sets in five
+  // lines). "A CRM's hard parts", never "Those" or "They": stock and production don't run here.
+  sub: `${ITEM.description} For any business, of any size and however complex, we design and build yours in whatever technology suits it, and move you off your spreadsheets and old tools without losing a thing. A CRM’s hard parts run every day on this platform, our own product for AI phone agents. Our team holds ${ACC} personal Claude accreditations from Anthropic, and our company holds startup grants from ${GRANTORS}.`, // OWNER
   primary: CALL,
   secondary: { label: "Follow one customer through it", href: "#process" },
   note: `${COMPANY.phone} · No form: a build starts with a phone call.`,
@@ -957,7 +971,8 @@ export const ERP_PROCESS: ProcessData = keyed({
     statusLabel: "Order",
     history: "Their history",
     toCome: "To come",
-    hint: "The ringed button moves the order on.",
+    // Named by what it does, never by its ring (WCAG 1.3.3): it follows the button in reading order.
+    hint: "This button moves the order on.",
     todayTitle: "Today: typed again, and counted by hand",
     todayFoot: "In one system, nothing here is typed or counted twice.",
   },
@@ -1172,7 +1187,8 @@ export const ERP_TERMS: TermsData = keyed({
       ITEM.deliverables[1], // "Migrated off spreadsheets and legacy tools"
       // The menu's voice-centric deliverable, printed once, as one option among many.
       `If you use a phone agent, ours or another: ${lowerFirst(ITEM.deliverables[2])}`, // "… every agent call logged against the customer"
-      "The code and the database, with tests and a guide to running them", // OWNER
+      // The code, never "the database": whose name its account is in is agreed first (#move's whose table).
+      "The code, with its tests and a guide to running it", // OWNER
     ] },
     { id: "upfront", head: "Said up front", items: [
       "A prototype isn’t the system: you click through it, but it stores nothing.",
@@ -1234,7 +1250,7 @@ export const ERP_CHECKS: ChecksData = keyed({
     { id: "counts", kind: "call", claim: "Every figure about this platform is counted from its code.",
       how: "By a test that fails if a figure stops being true. Ask us to run it." },
     { id: "walls", kind: "call", claim: `Row-level security is on for every one of its ${FACTS_ERP.tables} database tables.`,
-      how: "Ask us to open the migrations: each table switches it on." }, // OWNER: that we show them on request
+      how: "Ask us to open its database scripts: each table switches it on." }, // OWNER: that we show them on request
     // In your build (3)
     { id: "prototype", kind: "handover", claim: "You click through your own process before it’s built.",
       how: "It’s what stage 01 delivers; the drawing above shows the idea.", link: { label: "The drawing", href: "#process" } },
@@ -1307,7 +1323,8 @@ export const ERP_FAQ: FaqData = keyed({
 export const ERP_START: StartData = keyed({
   eyebrow: "Start",
   title: "Bring how you work, and where it lives", // 38 ≤ 45
-  key: "where it lives", // 14 ≤ 25
+  // Over 14 characters, so KeyedTitle holds only "it lives" together and the key can wrap at 320.
+  key: "and where it lives", // 18 ≤ 25
   body: "A build starts with a phone call, not a form. Tell us how the work flows today, where it lives and what it must connect to. We’ll tell you what we’d build first, what we’d move, and what it would take.", // 201 ≤ 203
   primary: CALL,
   secondary: { label: "Try the platform we built", href: PRICING_TRIAL.href },
@@ -1315,7 +1332,8 @@ export const ERP_START: StartData = keyed({
 });
 
 /** Every third-party mark the page prints, apart from Anthropic, Claude and Google's (their own lines). */
-export const ERP_TRADEMARKS = ["Cartesia", "ElevenLabs", "Stripe", "SmartBill", "Twilio", "Slack", "QuickBooks", "Xero", "Shopify", "WooCommerce"] as const;
+// OpenAI and Supabase are printed only in file paths ("lib/openai/…", "supabase/migrations/…"), and still credited.
+export const ERP_TRADEMARKS = ["Cartesia", "ElevenLabs", "OpenAI", "Stripe", "SmartBill", "Supabase", "Twilio", "Slack", "QuickBooks", "Xero", "Shopify", "WooCommerce"] as const;
 
 export const ERP_CREDITS: CreditsData = {
   title: "About this page",

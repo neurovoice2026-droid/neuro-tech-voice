@@ -25,29 +25,32 @@ import {
  * each #core card, #checks back up to #ledger) or a shared link landing
  * deep (#core-yours, #connect, #whose). Text rewraps at every width, so
  * one figure per tier is exact only at the width it was taken at, and
- * this page's phone rows are its longest: #core is 7,363px on a 320px
- * phone, #shape 5,452 and #move 4,958.
+ * this page's phone rows are its longest: #core is 7,381px on a 320px
+ * phone, #shape 5,452 and #move 4,998.
  *
- * WHY 331, 332, 346, 359, 520, 543, 544 AND 720. The SaaS list has
- * nothing between 320 and 340, 340 and 360, 510 and 540, 540 and 570, or
- * 700 and 744, and this page's rows turn inside each of those gaps. Three
- * of them step in one pixel, so each is measured on both sides (a step
- * between two widths is a slope across them): #shape loses 22px from 331
- * to 332, as the card's title and the ledger's lead each take a line
- * fewer; #core gains 176px from 359 to 360, where its nine cards take
- * their full padding (core.tsx); and #process loses 198px from 543 to
- * 544, where the record window sets its screen beside the customer's
- * history (erp-process.css §4: the panel reaches 480px there). 346, 520
- * and 720 are where #process and #core bend inside a gap (at 520, #core's
- * cards' lines give way one after another between 510 and 540: a bend,
- * not a step), the spec's rule: a width wherever a row strays more than
- * 60px from the line through its neighbours. With the SaaS widths and the
- * spec's first guesses (330, 350) the line ran 164px off in #process at
- * 544, 111px in #core at 356 and 70px in #shape at 332: a reload there
- * would have landed the reader that far out; without 520, #core ran 77px
- * off at 520. With these eight, checked every 4px from 320 to 1279, each
- * box is off its line by 4–14px on average and 54px at worst. The test
- * pins the list.
+ * WHY 331, 332, 346, 359, 520, 623, 624, 720 AND 920. The SaaS list has
+ * nothing between 320 and 340, 340 and 360, 510 and 540, 600 and 639,
+ * 700 and 744, or 900 and 950, and this page's rows turn inside each of
+ * those gaps. Three of them step in one pixel, so each is measured on
+ * both sides (a step between two widths is a slope across them): #shape
+ * loses 22px from 331 to 332, as the card's title and the ledger's lead
+ * each take a line fewer; #core gains 176px from 359 to 360, where its
+ * nine cards take their full padding (core.tsx); and #process loses
+ * 274px from 623 to 624, where the record window sets its screen beside
+ * the customer's history (erp-process.css §4: the panel reaches 560px
+ * there; under it the two stack, since beside each other a narrower
+ * window wrapped half the history's rows). 346, 520, 720 and 920 are
+ * where #process and #core bend inside a gap (at 520, #core's cards'
+ * lines give way one after another between 510 and 540; at 920, 108px of
+ * them from 900, 46 of it from 918: bends, not steps), the spec's rule:
+ * a width wherever a row strays more than 60px from the line through its
+ * neighbours. With the SaaS widths and the spec's first guesses (330,
+ * 350) the line ran 164px off in #process at the window's step, 111px in
+ * #core at 356 and 70px in #shape at 332: a reload there would have
+ * landed the reader that far out; without 520, #core ran 77px off at
+ * 520, and without 920, 65px at 920. With these nine, checked every 4px
+ * from 320 to 1279, each box is off its line by 3–13px on average and
+ * 56px at worst (#checks at 408). The test pins the list.
  *
  * MEASURED, NOT GUESSED, and any change to a section's height changes
  * its row. Each row is that box's height at each width in `RESERVE_AT`,
@@ -58,8 +61,8 @@ import {
  * "This month"); #shape on Wholesale · Operations; #checks on "All";
  * every index, `<details>` and FAQ row closed. Each includes the box's
  * trailing Gap (and, for #move, its wash band's own padding; for #terms,
- * the Rule and the Gap above them), and holds 48 heights in `RESERVE_AT`
- * order: 30 for the phone tier (320…767), 9 for md (768…1023), 8 for lg
+ * the Rule and the Gap above them), and holds 49 heights in `RESERVE_AT`
+ * order: 30 for the phone tier (320…767), 10 for md (768…1023), 8 for lg
  * (1024…1279) and 1 for xl, where the Frame is capped and nothing
  * rewraps. Taken by the SaaS method: every box painted at once, with
  * reduced motion so #process stays at its finished frame, and the window
@@ -96,68 +99,68 @@ import {
  * ------------------------------------------------------------------ */
 
 /** This page's own widths, between the SaaS page's where its rows step or bend (above). */
-const OWN_AT = [331, 332, 346, 359, 520, 543, 544, 720] as const;
+const OWN_AT = [331, 332, 346, 359, 520, 623, 624, 720, 920] as const;
 
 /** Where every reserve is measured: the SaaS page's widths and this page's own, in order. */
 export const RESERVE_AT: readonly number[] = [...SAAS_RESERVE_AT, ...OWN_AT].sort((a, b) => a - b);
 
 /** Each box's height at every width in `RESERVE_AT`, in page order, laid out as it is: a line per tier. */
-// 48 widths: 320, 331, 332, 340, 346, 359, 360, 375, 390, 393, 402, 412, 430, 440, 460, 480, 510, 520, 540, 543, 544, 570, 600, 639, 640, 670,
-//            700, 720, 744, 767 | 768, 800, 820, 834, 870, 900, 950, 1000, 1023 | 1024, 1050, 1080, 1112, 1150, 1180, 1230, 1279 | 1280
+// 49 widths: 320, 331, 332, 340, 346, 359, 360, 375, 390, 393, 402, 412, 430, 440, 460, 480, 510, 520, 540, 570, 600, 623, 624, 639, 640, 670,
+//            700, 720, 744, 767 | 768, 800, 820, 834, 870, 900, 920, 950, 1000, 1023 | 1024, 1050, 1080, 1112, 1150, 1180, 1230, 1279 | 1280
 // prettier-ignore
 export const RESERVES = {
   process: [
-    2794, 2750, 2750, 2693, 2632, 2632, 2632, 2600, 2565, 2540, 2540, 2505, 2505, 2505, 2444, 2418, 2418, 2392, 2384, 2384, 2186, 2161, 2143, 2059, 2065, 2059, 2059, 2059, 2059, 2059,
-    1694, 1684, 1684, 1684, 1684, 1684, 1684, 1684, 1684,
-    1468, 1468, 1468, 1463, 1417, 1389, 1349, 1349,
+    2778, 2739, 2739, 2687, 2626, 2626, 2626, 2594, 2559, 2534, 2514, 2479, 2479, 2479, 2418, 2392, 2392, 2392, 2384, 2359, 2359, 2339, 2065, 2059, 2065, 2059, 2059, 2059, 2059, 2059,
+    1688, 1684, 1684, 1684, 1684, 1684, 1684, 1684, 1684, 1684,
+    1468, 1452, 1452, 1447, 1401, 1389, 1349, 1349,
     1366,
   ],
   shape: [
-    5452, 5369, 5347, 5347, 5295, 5149, 5127, 5086, 5039, 5039, 5017, 4979, 4716, 4596, 4542, 4433, 4357, 4335, 4335, 4335, 4335, 4307, 4263, 4238, 4238, 4238, 4238, 4216, 4216, 4172,
-    3890, 3846, 3846, 3846, 3846, 3802, 3758, 3692, 3670,
+    5452, 5369, 5347, 5347, 5295, 5149, 5127, 5086, 5039, 5039, 5017, 4979, 4716, 4596, 4542, 4433, 4357, 4335, 4335, 4307, 4263, 4238, 4238, 4238, 4238, 4238, 4238, 4216, 4216, 4172,
+    3940, 3918, 3898, 3898, 3898, 3854, 3854, 3810, 3744, 3722,
     2937, 2867, 2865, 2865, 2843, 2843, 2821, 2821,
     2821,
   ],
   move: [
-    4958, 4901, 4863, 4854, 4844, 4790, 4792, 4746, 4688, 4678, 4653, 4624, 4522, 4514, 4479, 4395, 4312, 4273, 4200, 4178, 4178, 4178, 4088, 4023, 4023, 4001, 4001, 4001, 4001, 4001,
-    3429, 3443, 3451, 3457, 3451, 3430, 3418, 3420, 3430,
-    3009, 2998, 2989, 2902, 2908, 2921, 2898, 2908,
+    4998, 4897, 4881, 4872, 4862, 4808, 4810, 4764, 4706, 4696, 4693, 4646, 4562, 4532, 4497, 4395, 4312, 4291, 4218, 4196, 4106, 4023, 4023, 4023, 4023, 4001, 4001, 4001, 4001, 4001,
+    3429, 3443, 3451, 3457, 3451, 3430, 3420, 3418, 3420, 3430,
+    3005, 3016, 3007, 2920, 2926, 2917, 2916, 2908,
     2908,
   ],
   core: [
-    7363, 7051, 7051, 6960, 6874, 6624, 6800, 6508, 6215, 6193, 6037, 5889, 5659, 5503, 5372, 5212, 5092, 5074, 4807, 4807, 4807, 4709, 4629, 4505, 4545, 4447, 4407, 4313, 4295, 4207,
-    3626, 3534, 3484, 3450, 3428, 3334, 3244, 3144, 3080,
-    3009, 2969, 2903, 2881, 2782, 2706, 2646, 2598,
+    7381, 7069, 7069, 6978, 6892, 6624, 6800, 6508, 6215, 6193, 6037, 5889, 5705, 5521, 5390, 5212, 5092, 5074, 4807, 4709, 4629, 4545, 4545, 4505, 4545, 4447, 4407, 4313, 4313, 4225,
+    3626, 3562, 3484, 3468, 3446, 3352, 3244, 3244, 3144, 3080,
+    3009, 2969, 2903, 2881, 2782, 2734, 2674, 2598,
     2498,
   ],
   team: [
-    1520, 1520, 1520, 1476, 1454, 1416, 1416, 1416, 1416, 1394, 1318, 1255, 1233, 1233, 1233, 1233, 1193, 1193, 1193, 1193, 1193, 1124, 1124, 1124, 1124, 1124, 1124, 1124, 1124, 1088,
-     890,  890,  890,  890,  868,  868,  868,  846,  800,
+    1520, 1520, 1520, 1476, 1454, 1416, 1416, 1416, 1416, 1394, 1318, 1255, 1233, 1233, 1233, 1233, 1193, 1193, 1193, 1124, 1124, 1124, 1124, 1124, 1124, 1124, 1124, 1124, 1124, 1088,
+     890,  890,  890,  890,  868,  868,  868,  868,  846,  800,
      862,  794,  770,  750,  750,  726,  712,  712,
      712,
   ],
   terms: [
-    2003, 1982, 1982, 1961, 1919, 1894, 1894, 1873, 1873, 1852, 1831, 1831, 1772, 1730, 1621, 1600, 1514, 1472, 1472, 1451, 1451, 1407, 1407, 1365, 1386, 1365, 1365, 1323, 1302, 1302,
-    1425, 1404, 1383, 1362, 1362, 1362, 1299, 1278, 1211,
+    2003, 1982, 1982, 1961, 1919, 1894, 1894, 1852, 1852, 1831, 1810, 1810, 1751, 1709, 1600, 1579, 1514, 1472, 1472, 1407, 1407, 1407, 1386, 1365, 1386, 1365, 1365, 1323, 1302, 1302,
+    1425, 1404, 1383, 1362, 1362, 1362, 1320, 1299, 1278, 1211,
     1278, 1211, 1211, 1125, 1125, 1125, 1125, 1125,
      930,
   ],
   checks: [
-    2897, 2897, 2897, 2853, 2835, 2773, 2773, 2726, 2683, 2683, 2683, 2571, 2571, 2505, 2440, 2422, 2360, 2360, 2277, 2277, 2277, 2277, 2277, 2233, 2233, 2215, 2215, 2193, 2193, 2157,
-    2189, 2146, 2124, 2124, 2099, 2099, 2099, 2077, 2009,
+    2897, 2897, 2897, 2853, 2835, 2773, 2773, 2726, 2701, 2701, 2701, 2571, 2571, 2505, 2440, 2422, 2360, 2360, 2277, 2277, 2277, 2233, 2233, 2233, 2233, 2215, 2215, 2193, 2193, 2157,
+    2189, 2146, 2124, 2124, 2099, 2099, 2099, 2099, 2077, 2009,
     1955, 1933, 1897, 1891, 1847, 1831, 1793, 1775,
     1775,
   ],
   faq: [
-    1587, 1529, 1529, 1529, 1501, 1501, 1501, 1445, 1417, 1417, 1417, 1417, 1361, 1325, 1297, 1241, 1213, 1213, 1213, 1213, 1213, 1213, 1157, 1129, 1157, 1129, 1129, 1129, 1129, 1129,
-    1187, 1187, 1187, 1187, 1187, 1187, 1187, 1187, 1187,
+    1587, 1529, 1529, 1529, 1501, 1501, 1501, 1445, 1417, 1417, 1417, 1417, 1361, 1325, 1297, 1241, 1213, 1213, 1213, 1213, 1157, 1157, 1157, 1129, 1157, 1129, 1129, 1129, 1129, 1129,
+    1187, 1187, 1187, 1187, 1187, 1187, 1187, 1187, 1187, 1187,
     1093, 1093, 1093, 1037, 1037, 1009, 1009, 1009,
     1009,
   ],
   start: [
-    2214, 2160, 2160, 2160, 2099, 2081, 2081, 2045, 1984, 1944, 1926, 1908, 1890, 1890, 1854, 1836, 1800, 1782, 1764, 1764, 1764, 1746, 1746, 1710, 1654, 1636, 1596, 1596, 1542, 1542,
-    1489, 1453, 1435, 1435, 1417, 1417, 1417, 1399, 1399,
-    1463, 1463, 1445, 1427, 1409, 1409, 1409, 1409,
+    2232, 2160, 2160, 2160, 2117, 2081, 2081, 2045, 1984, 1944, 1944, 1908, 1890, 1890, 1854, 1854, 1818, 1800, 1764, 1746, 1746, 1710, 1710, 1710, 1654, 1636, 1596, 1596, 1542, 1542,
+    1489, 1453, 1453, 1453, 1417, 1417, 1417, 1417, 1417, 1417,
+    1481, 1481, 1463, 1427, 1409, 1409, 1409, 1409,
     1395,
   ],
 } as const satisfies Record<string, readonly number[]>;

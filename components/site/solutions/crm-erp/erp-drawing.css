@@ -130,10 +130,13 @@
    round, lifted by a wider shadow, at its paper's place and turned. The
    white, the edge and the shadow are the sheet's backing
    (`.erp-sheet-bg`), which fills the sheet's box; the box is the view's
-   size (`--bw`, `--bh`: the card's or the paper's), its layout at the
-   drawing's top left, and the place a `transform` read from the custom
-   properties the drawing sets from the geometry, never transitioned (the
-   stage's timeline flies it).
+   size (the card's or the paper's), its layout at the drawing's top
+   left, and the place a `transform` read from the custom properties the
+   drawing sets from the geometry, never transitioned (the stage's
+   timeline flies it). The view sets the box's size and each face's
+   offset as plain properties, never as a custom property on the sheet:
+   an inherited one restyles everything inside it, the faces' words and
+   drawings, and on a phone's CPU that was most of a switch's cost.
 
    TWO FACES in one box, each its own size and centred on the sheet by
    a `translate` (so neither rewraps while the sheet flies, and the one
@@ -156,19 +159,17 @@
    `::after`), so a state never changes the sheet's box. In Today only the lit paper is
    edged: the step picked, ringed in electric. Colour only, 0.2s. */
 .pp .erp-sheet {
-  --bw: var(--card-w);
-  --bh: var(--card-h);
   position: absolute;
   left: 0;
   top: 0;
-  width: var(--bw);
-  height: var(--bh);
+  width: var(--card-w);
+  height: var(--card-h);
   border-radius: 10px;
 }
 
 .pp .erp-stage[data-view="today"] .erp-sheet {
-  --bw: var(--paper-w);
-  --bh: var(--paper-h);
+  width: var(--paper-w);
+  height: var(--paper-h);
   border-radius: 8px;
 }
 
@@ -240,7 +241,8 @@
   transform: translate(calc(var(--px) * var(--u)), calc(var(--py) * var(--u))) rotate(var(--pr));
 }
 
-/* The faces: each its own size, centred on the sheet's box. */
+/* The faces: each its own size, centred on the sheet's box (the card's
+   in One system, the paper's in Today). */
 .pp .erp-sheet-card,
 .pp .erp-sheet-paper {
   position: absolute;
@@ -248,6 +250,14 @@
   top: 0;
   border-radius: inherit;
   transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pp .erp-stage[data-view="today"] .erp-sheet-card {
+  translate: calc((var(--paper-w) - var(--card-w)) / 2) calc((var(--paper-h) - var(--card-h)) / 2);
+}
+
+.pp .erp-stage[data-view="one"] .erp-sheet-paper {
+  translate: calc((var(--card-w) - var(--paper-w)) / 2) calc((var(--card-h) - var(--paper-h)) / 2);
 }
 
 .pp .erp-stage[data-view="one"] .erp-sheet-card {
@@ -269,7 +279,6 @@
 .pp .erp-sheet-card {
   width: var(--card-w);
   height: var(--card-h);
-  translate: calc((var(--bw) - var(--card-w)) / 2) calc((var(--bh) - var(--card-h)) / 2);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   grid-template-areas:
@@ -315,7 +324,6 @@
 .pp .erp-sheet-paper {
   width: var(--paper-w);
   min-height: var(--paper-h);
-  translate: calc((var(--bw) - var(--paper-w)) / 2) calc((var(--bh) - var(--paper-h)) / 2);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -350,6 +358,39 @@
   font-size: 12px;
   line-height: 16px;
   color: var(--home-ember-ink);
+}
+
+/* Two lines of a narrow paper balanced ("Whoever answered / knows" reads
+   "Whoever / answered knows"; "month-end" stays whole). */
+.pp :is(.erp-paper-where, .erp-paper-pain) {
+  text-wrap: balance;
+}
+
+/* A paper whose words outgrow it (a reader's own text spacing, WCAG
+   1.4.12, on the short screen's 84px papers, or a phone's pile) drops its
+   strip drawing, which frees 18px, and ends 4px under its words (on
+   the lanes 4px over them too: there a mark stands between the rows, in
+   the pile on the paper's top corner, over its first 12px), which frees
+   up to 7 more, rather than run its last line past its backing and under
+   the next hand-off's mark. The stage sets `data-tight` where the words
+   with the strip would be taller than the paper (process-stage.tsx). */
+.pp .erp-sheet .erp-sheet-paper[data-tight] .erp-paper-face {
+  display: none;
+}
+
+.pp .erp-lanes .erp-sheet-paper[data-tight] {
+  padding-block: 4px;
+}
+
+.pp .erp-list .erp-sheet-paper[data-tight] {
+  padding-bottom: 4px;
+}
+
+/* And what its words need past the backing even then, the backing grows
+   by in Today (`--paper-over`, set with `data-tight`): no word is drawn
+   off the white. */
+.pp .erp-stage[data-view="today"] .erp-sheet-bg {
+  bottom: calc(-1 * var(--paper-over, 0px));
 }
 
 /* The strip's two tones (papers.tsx): lilac for what the thing is,
@@ -475,9 +516,19 @@
   stroke-dasharray: 4 5;
 }
 
+/* The mark is its place (React's `left`/`top`, centred by a `translate`)
+   and its fade by view; the pill inside it is what GSAP pops and flies
+   (process-lanes.tsx `Mark`), so no transform GSAP writes ever meets the
+   `translate` that centres the mark. */
 .pp .erp-mark {
   position: absolute;
   z-index: 2;
+  display: flex;
+  pointer-events: none;
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.6s;
+}
+
+.pp .erp-mark-pop {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -492,8 +543,6 @@
   font-size: 12px;
   line-height: 16px;
   white-space: nowrap;
-  pointer-events: none;
-  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.6s;
 }
 
 .pp .erp-lanes .erp-mark {
@@ -517,9 +566,12 @@
    over the rail's node. TODAY: the rail, the nodes and the chips fade out, and the
    sheets lie as a pile, two across in 128px cells (8px between), each
    turned 2° (the drawing sets which way). The strip drawing where each
-   paper lives shows once the list is wide enough for it (440px): below
-   that the paper's words fill its cell. The marks sit on the top corner
-   of the paper each hands to. */
+   paper lives shows once the list is 290px wide (a 360 phone's is 296, a
+   390's 326: a paper's inside 122–139px, the strip's 140 units, and the
+   papers stay within their cells, 116–119px of 122): under that, on a
+   320 phone, it would grow the paper past its cell, so the paper's words
+   have it to themselves. The marks sit on the top corner of the paper
+   each hands to. */
 .pp .erp-list {
   position: relative;
   width: 100%;
@@ -559,7 +611,7 @@
   display: none;
 }
 
-@container erp-list (width >= 440px) {
+@container erp-list (width >= 290px) {
   .pp .erp-list .erp-paper-face {
     display: block;
   }
@@ -834,7 +886,7 @@ html[data-weak] .pp.home-body .erp-sheet-bg::after {
     border-style: dotted;
   }
 
-  .pp.saas-page :is(.erp-mark, .erp-list-lane) {
+  .pp.saas-page :is(.erp-mark-pop, .erp-list-lane) {
     border: 1px solid CanvasText;
   }
 

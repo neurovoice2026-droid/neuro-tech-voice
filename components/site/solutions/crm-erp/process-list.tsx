@@ -19,8 +19,9 @@ import { Mark, SheetBacking, SheetCard, SheetPaper, sameWhileHidden, type Drawin
  *
  * TODAY: the same sheets as a loose pile of papers, two across and four
  * down in 128px cells, each turned 2° one way or the other; the strip
- * drawing where each lives shows from sm, where the papers are wide
- * enough for it. There are no curves between them here: each hand-off's
+ * drawing where each lives shows once the list is 290px wide (a 360
+ * phone's and up), where the papers are wide enough for it. There are no
+ * curves between them here: each hand-off's
  * mark ("Typed again", "Counted by hand") sits on the corner of the
  * paper it hands to.
  *

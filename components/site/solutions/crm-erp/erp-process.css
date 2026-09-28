@@ -119,6 +119,14 @@
   grid-area: list;
 }
 
+/* The drawing holds no control, and a face the view hides (Today's
+   papers in One system, 30px taller than the list's first row) would
+   otherwise take the lower edge of a rail chip's target above it: it
+   lets every pointer through. */
+.pp .erp-stage-grid > :is(.erp-stage-lanes, .erp-stage-list) {
+  pointer-events: none;
+}
+
 .pp .erp-stage-grid > .erp-stage-legend {
   grid-area: legend;
 }
@@ -190,18 +198,26 @@
 }
 
 /* The short screen from lg (above): the rail and the lanes 880px at
-   most, from the stage's left, over the drawing's one column grid; and
-   where the stage is 1080px wide or more, the legend in the lanes' row,
-   beside them, in what is left of it (200px and up): the tally over the
-   key, the key's tags one under another. The legend's own row goes. */
+   most, over the drawing's one column grid, centred in the stage while
+   what is left beside them is too narrow for the legend (a stage under
+   1080px: 1100–1200px windows, an iPad on its side), so the room is
+   shared either side rather than left as a strip on the right; and
+   where the stage is 1080px wide or more, from the stage's left, with
+   the legend in the lanes' row beside them, in what is left of it (200px
+   and up): the tally over the key, the key's tags one under another. The
+   legend's own row goes. */
 @media (min-width: 64rem) and (max-height: 56.25rem) {
   .pp .erp-stage-grid > :is(.erp-stage-rail, .erp-stage-lanes) {
-    justify-self: start;
+    justify-self: center;
     width: 100%;
     max-width: 880px;
   }
 
   @container erp-stage (width >= 1080px) {
+    .pp .erp-stage-grid > :is(.erp-stage-rail, .erp-stage-lanes) {
+      justify-self: start;
+    }
+
     .pp .erp-stage-grid {
       grid-template-areas:
         "controls controls"
@@ -296,11 +312,16 @@
    56px header) while the stage is on screen: the tour's Pause stays in
    reach for all of its 36 seconds, and the first view's tour, which
    waits for its Pause to be on screen, can start once the drawing is.
-   Floating over the stage's words, the disc takes a white ring and the
-   landing's floating drop, so it reads as a control laid over the card,
-   not a collision; it comes back to its slot only once the tour is over,
-   never part-way through it. The dock lets pointers through; its button
-   takes them. */
+   It floats 28px right of the stage's content edge, in the 32px the
+   stage's padding and the page's gutter leave there (at 390 the disc
+   spans 346–386, at 320 276–316), so it crosses only the cards' inner
+   padding (a paper's 11px, a row's and the window's 16px) and never a
+   word, a node or a chip the tour changes beneath it; the white ring and
+   the landing's floating drop make it read as a control laid over the
+   stage's edge, not a collision. It comes back to its slot only once
+   the tour is over and focus has left it (process-stage.tsx), never
+   part-way through a tour, and never from under a keyboard reader's
+   focus. The dock lets pointers through; its button takes them. */
 .pp .erp-stage-grid > .erp-stage-dock {
   grid-area: controls;
   justify-self: end;
@@ -321,6 +342,7 @@
     grid-area: 1 / -2 / -1 / -1;
     position: sticky;
     top: 72px;
+    translate: 28px 0;
   }
 
   /* The disc's own edge (globals.css `.pp-shadow-btn`), then the white ring and the drop. */
@@ -392,22 +414,41 @@
   color: var(--home-ink);
 }
 
+/* "Who": the lane's word in One system, its Today word in Today, both in
+   one cell (the chip keeps the wider's room); the other hidden, so a
+   screen reader skips it too. Here, not a prop, so a switch redraws none
+   of the caption's nine stacked steps. */
+.pp .erp-stage[data-view="one"] .erp-who-word[data-word="today"],
+.pp .erp-stage[data-view="today"] .erp-who-word[data-word="one"] {
+  visibility: hidden;
+}
+
 /* ─── §4 The record panel ───────────────────────────────────────────
-   ITS TWO VIEWS IN ONE CELL, as tall as the taller (the window): the one
-   the stage isn't on is hidden, not unmounted, so the hotspot is one
-   persistent button, and `visibility` takes the hidden one out of the
-   tab order and the accessibility tree. Once the view has changed
-   (`data-switched`: a switch, "Start again", the tour), the view coming
-   in fades up (erp.css's `erp-fade-in`); never on the first paint, and
-   never on a pick or a press, which leave the view as it is. */
+   ITS TWO VIEWS IN ONE CELL, as tall as the taller (the window), each
+   stretched to fill it: the one the stage isn't on is hidden, not
+   unmounted, so the hotspot is one persistent button. Hidden by opacity,
+   under the other (which takes every pointer), and by the panel's
+   markup: `aria-hidden`, its one button inert (process-panels.tsx). Not
+   by `visibility`, which is inherited, so every flip of the view
+   restyled all 400 elements of both: on a phone's CPU that was half the
+   switch's long task. Once the view has changed (`data-switched`: a
+   switch, "Start again", the tour), the view coming in fades up
+   (erp.css's `erp-fade-in`); never on the first paint, and never on a
+   pick or a press, which leave the view as it is. */
 .pp .erp-record > .erp-record-today,
 .pp .erp-record > .erp-record-one {
+  position: relative;
   grid-area: 1 / 1;
+}
+
+.pp .erp-stage[data-view="today"] .erp-record-today,
+.pp .erp-stage[data-view="one"] .erp-record-one {
+  z-index: 1;
 }
 
 .pp .erp-stage[data-view="one"] .erp-record-today,
 .pp .erp-stage[data-view="today"] .erp-record-one {
-  visibility: hidden;
+  opacity: 0;
 }
 
 .pp .erp-stage[data-switched][data-view="today"] .erp-record-today,
@@ -417,18 +458,19 @@
 
 /* THE WINDOW'S BODY AND THE FEET, by the panel's own width (a
    container: two thirds of the stage from lg, all of it below). From
-   480px the step's screen beside the customer's history, a hairline
-   between: 13rem, 15rem from 520px, six elevenths of the body from 560px
-   (the panel at 1024, two thirds of the stage) and half of it from
-   640px, the gaps a little tighter under 640, so a row keeps its line
-   ("Enquiry, with what they asked" the longest) wherever it can, and the
-   window comes out no taller than it must; under 480px, the screen over
-   the history. A
-   foot's hint (the window's and Today's) stands beside its ringed button
-   from 480px and under it below: the hotspot keeps the room of its
-   longest label (process-panels.tsx), so the hint never rewraps as its
-   words change. The foot is 7px round the button, whose focus ring (5px
-   out, 2px wide) just clears the card's clip; 12px under a hint below it. */
+   560px the step's screen beside the customer's history, a hairline
+   between: six elevenths of the body (the panel at 1024, two thirds of
+   the stage), half of it from 640px, so a row keeps its line ("Enquiry,
+   with what they asked" the longest, its text column 188px and up) and
+   the window comes out no taller than it must; under 560px (a phone, a
+   phone on its side, a small tablet's split screen) the screen over the
+   history, since beside it there a 113–145px column wrapped half the
+   rows beside an empty band. A foot's hint (the window's and Today's)
+   stands beside its ringed button from 560px and under it below: the
+   hotspot keeps the room of its longest label (process-panels.tsx), so
+   the hint never rewraps as its words change. The foot is 7px round the
+   button, whose focus ring (5px out, 2px wide) just clears the card's
+   clip; 12px under a hint below it. */
 .pp .erp-record {
   container: erp-record / inline-size;
 }
@@ -452,33 +494,6 @@
   padding-bottom: 12px;
 }
 
-@container erp-record (width >= 480px) {
-  .pp .erp-window .erp-window-body {
-    grid-template-columns: minmax(0, 1fr) 13rem;
-    column-gap: 20px;
-  }
-
-  .pp .erp-window .erp-window-history {
-    border-top: 0;
-    border-left: 1px solid var(--pp-rule);
-    padding-top: 0;
-    padding-left: 20px;
-  }
-
-  .pp .erp-record .erp-window-foot {
-    flex-direction: row;
-    align-items: center;
-    gap: 16px;
-    padding-bottom: 7px;
-  }
-}
-
-@container erp-record (width >= 520px) {
-  .pp .erp-window .erp-window-body {
-    grid-template-columns: minmax(0, 1fr) 15rem;
-  }
-}
-
 @container erp-record (width >= 560px) {
   .pp .erp-window .erp-window-body {
     grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
@@ -486,7 +501,17 @@
   }
 
   .pp .erp-window .erp-window-history {
+    border-top: 0;
+    border-left: 1px solid var(--pp-rule);
+    padding-top: 0;
     padding-left: 16px;
+  }
+
+  .pp .erp-record .erp-window-foot {
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    padding-bottom: 7px;
   }
 
   /* The header strip on the avatar's one line: the pill and the customer
