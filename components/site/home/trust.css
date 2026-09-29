@@ -1,0 +1,97 @@
+/* ------------------------------------------------------------------ *
+ * #trust — the staging of the four figures' draw.
+ *
+ * home.css gives every .home-draw figure a view timeline and draws its
+ * pathLength="1" strokes across one shared window. Here each element of
+ * a trust figure takes its own slice of that window instead (--o where it
+ * starts, --s how much it takes, both shares of the window), so a figure
+ * assembles in order: the border before the line that crosses it, the
+ * line before the node it arrives at. Figures side by side in a row
+ * start a beat apart, left to right, as home.css's data-i does — but by
+ * column, not by index: in one column each figure has the screen to
+ * itself, and in 2 × 2 the second row does not wait on the first.
+ *
+ * Nodes scale in rather than fade; dotted strokes, which a dash draw
+ * would wreck, are wiped on with a clip instead. Only under
+ * no-preference and view-timeline support, like home.css: otherwise the
+ * markup is the finished drawing.
+ * ------------------------------------------------------------------ */
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .home-trust-fig {
+      /* The window: where it opens, and how much of the pass it spans.
+         Closed by 28% of the pass (the figure in the lower third of the
+         screen), 40% for the last of a row of four. */
+      --home-trust-a: 2%;
+      --home-trust-w: 26%;
+    }
+
+    @media (min-width: 768px) {
+      .pp .home-trust-fig:is([data-i="1"], [data-i="3"]) {
+        --home-trust-a: 6%;
+      }
+    }
+
+    @media (min-width: 1280px) {
+      .pp .home-trust-fig[data-i="2"] {
+        --home-trust-a: 10%;
+      }
+
+      .pp .home-trust-fig[data-i="3"] {
+        --home-trust-a: 14%;
+      }
+    }
+
+    /* Same slice rule for every staged element. Specificity is above
+       home.css's .home-draw[data-i] rules so the slices win whatever
+       order the two sheets land in. */
+    .pp .home-trust-fig.home-draw[data-i] path[pathLength],
+    .pp .home-trust-fig.home-draw[data-i] .home-trust-pop,
+    .pp .home-trust-fig.home-draw[data-i] .home-trust-wipe {
+      animation-timeline: --home-draw;
+      animation-range:
+        cover calc(var(--home-trust-a) + var(--home-trust-w) * var(--o, 0))
+        cover calc(var(--home-trust-a) + var(--home-trust-w) * (var(--o, 0) + var(--s, 1)));
+    }
+
+    /* Strokes draw on power2.inOut, the house ease for draws. */
+    .pp .home-trust-fig.home-draw[data-i] path[pathLength] {
+      animation-timing-function: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+    }
+
+    .pp .home-trust-fig .home-trust-pop {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation-name: home-trust-pop;
+      animation-duration: auto;
+      animation-fill-mode: both;
+      animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .pp .home-trust-fig .home-trust-wipe {
+      animation-name: home-trust-wipe;
+      animation-duration: auto;
+      animation-fill-mode: both;
+      animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+    }
+  }
+}
+
+@keyframes home-trust-pop {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes home-trust-wipe {
+  from {
+    clip-path: inset(-4px calc(100% + 4px) -4px -4px);
+  }
+  to {
+    clip-path: inset(-4px -4px -4px -4px);
+  }
+}

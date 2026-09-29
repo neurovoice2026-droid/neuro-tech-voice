@@ -1,0 +1,257 @@
+/* ------------------------------------------------------------------ *
+ * §0 /solutions/crm-erp — the page's shared CSS: the few things
+ * Tailwind utilities can't say that more than one section needs.
+ *
+ *   §1  the shared keyframes, `erp-pop`, `erp-fade-in` and
+ *       `erp-fade-out`: every section that pops a mark or fades a
+ *       picture uses these three and defines no copy of its own
+ *   §2  the marks: a step's, a part's or a lane's glyph, the hand, and
+ *       a kind tag (glyphs.tsx)
+ *   §3  forced colours for the glyphs, the tags and the switches
+ *   §4  reduced-motion and still pins for the state React sets
+ *   §5  the two switches (#process's view, #shape's scope): an edge on
+ *       the thumb, a weight on the choice
+ *   §6  the mono face's fallback, as wide as the face
+ *
+ * The design system is the SaaS page's, and so is most of the CSS: the
+ * page imports home.css, tier.css, saas.css, saas-credentials.css,
+ * saas-build.css and saas-closing.css as they are (the shell, the
+ * lights, the lit surface, the mesh in motion, the lite tier, the jumps,
+ * the forced-colour radios, the tally, the #shape card's slide and the
+ * #move rail's stations, the checks' filter), and not one of their lines
+ * changes. This file and each section's own sheet (erp-drawing.css,
+ * erp-process.css, erp-shape.css, erp-move.css, erp-core.css) hold only
+ * what those don't: each section's rules live in its own file, imported
+ * by page.tsx after this one, and each section's sheet stops its own
+ * animations on the lite, still and weak tiers. This one runs none.
+ *
+ * Imported once, by app/solutions/crm-erp/page.tsx, so these rules ship
+ * with this route only — globals.css and home.css are shared and are
+ * not ours to grow. Every rule sits under .pp (the shell's <main>);
+ * every class and keyframe of ours is prefixed erp-, and a selector
+ * names the home- or saas- classes it sits inside only beside one of
+ * ours. The SaaS, Automations and Mobile pages' <main> and the landing's
+ * wrapper are `.pp.home-body` too, and this sheet stays loaded after a
+ * trip from here to any of them; every rule names an erp- class (or the
+ * `data-erp-dwell` attribute), which only this page draws, so none of it
+ * ever reaches them.
+ *
+ * Motion: only colour, transform, translate, scale and opacity ever
+ * animate or transition. Anything tied to scroll is a view timeline,
+ * inside `@media (prefers-reduced-motion: no-preference)` and
+ * `@supports (animation-timeline: view())`, in the section's own sheet,
+ * so a browser without them, or a reader who asked for less motion, gets
+ * the finished frame. The global rule (globals.css, prefers-reduced-
+ * motion) zeroes the rest. No @property and no animated custom property:
+ * the compositor can't run one. No `::view-transition` rule either: the
+ * #shape card's slide is saas-build.css §8's, as it is.
+ * lib/pages/crm-erp.test.ts reads every sheet in this folder and holds
+ * all of that.
+ * ------------------------------------------------------------------ */
+
+/* ─── §1 The shared keyframes ───────────────────────────────────────
+   Three keyframes, and only these three are shared: each section applies
+   them to its own classes, with its own timing, in its own sheet (the
+   #shape pipeline's nodes popping on their slices and after a pick, the
+   rehearsal's tags popping as each copy lands, #core's ports popping as
+   the wire reaches them, and any picture a section fades in or out). A
+   sheet never declares its own copy of any of them, so a pop or a fade
+   looks the same wherever it plays.
+
+   `erp-pop` scales a mark up from 60%, never from nothing and never
+   through opacity: the mark is always there to read, arriving or
+   arrived. The `scale` property, not `transform`, so it composes with a
+   transform the element already has (a GSAP one, a centring one) instead
+   of replacing it; an SVG mark that pops sets its own `transform-box`
+   and origin, in its section's sheet.
+
+   Each keyframe names only its far end, as saas-build.css's own slide
+   (`saas-proto-in`, `saas-proto-out`) does: the other is the element's
+   own value. So a mark drawn at 40% (an old row, kept readable) fades
+   in to 40%, not up to full and back; a mark that stands at a scale of
+   its own pops up to it; a picture fading out leaves from wherever it
+   is. It follows that an element resting at opacity 0 is never shown by
+   `erp-fade-in`. Only two things of ours rest hidden, and both are
+   travel, never content: #process's travelling dots (the current card
+   carries the step) and the rehearsal twin's copy (merged into the
+   record it joins). Every other element's resting style is its finished
+   frame, which is all the lite, still and weak tiers keep once they stop
+   every animation. A keyframe carries no timing: the duration, the
+   delay, the fill and the house out-ease are the caller's. */
+@keyframes erp-pop {
+  from {
+    scale: 0.6;
+  }
+}
+
+@keyframes erp-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes erp-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* ─── §2 Marks ──────────────────────────────────────────────────────
+   A GLYPH (glyphs.tsx `StepGlyph`, `CoreGlyph`, `LaneGlyph`,
+   `HandGlyph`): lucide's 14px line icon, always beside its step's,
+   part's or lane's label in words, or the hand-off's. It keeps its size
+   beside a label long enough to wrap, where a flex row would otherwise
+   squeeze it; its size, colour and alignment are otherwise the caller's,
+   through utilities.
+
+   A KIND TAG (glyphs.tsx `ErpTag`): the check glyph and "Runs here",
+   "Partly here" or "Built for yours", in mono capitals. It is the answer
+   at the end of a row whose label may wrap (a #shape part row, the top
+   of a #core card, the caption's "On ours"), so it keeps its width and
+   its one line, and its glyph never parts from its words. */
+.pp .erp-glyph {
+  flex: none;
+}
+
+.pp .erp-tag {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* ─── §3 Forced colours ─────────────────────────────────────────────
+   Windows High Contrast and every other forced palette replace the
+   colours a glyph and a tag are drawn in. A tag's words take the line's
+   system colour on their own, and its answer stays in its glyph's shape
+   (a filled node for "Runs here", a hollow one for "Partly here", a
+   dotted ring for "Built for yours") and in its words, never in the
+   green, the grey or the violet.
+
+   A glyph is an SVG, and an SVG that sets its own colour keeps it under
+   forced colours (Chromium's `preserve-parent-color` only lends it an
+   inherited one), so the electric, lilac, ember or tick a caller gives
+   it would stay on a system ground it was never measured on. It is
+   handed back here: every glyph of ours takes its line's colour, as the
+   words beside it do.
+
+   A SWITCH (§5): the palette drops every box-shadow, and with it the
+   thumb's electric edge, and turns its white to the track's Canvas.
+   saas.css §15 fills the chosen radio with Highlight, and that alone
+   says the choice; but the thumb glides to it (300ms) under the other
+   radios, which are transparent, and would glide there unseen. It keeps
+   its edge as a 1px Highlight outline drawn inside it (so it takes no
+   room and never meets the focus ring outside the radio): the move reads
+   as it does in colour, an outlined pill travelling to the new choice
+   and settling under its fill.
+
+   The sections' own states (a lit card, a trace, the dwell fill, a
+   history row, a later part, the hotspot, the dashed card, the copies)
+   are drawn in system colours in their own sheets. Keyed on
+   `.pp.saas-page`, the shell's <main>, and on erp- classes only, which
+   no other page draws. */
+@media (forced-colors: active) {
+  .pp.saas-page .erp-glyph {
+    color: inherit;
+  }
+
+  .pp.saas-page .erp-switch > span[aria-hidden] {
+    outline: 1px solid Highlight;
+    outline-offset: -1px;
+  }
+}
+
+/* ─── §4 Reduced-motion pins ────────────────────────────────────────
+   State React sets (a sheet on #process's drawing routed, lit or
+   visited, a lane's fill swept in with the view, a history row reached
+   or current, a rail item's dwell track full, a #shape part in the
+   build or later, a group's rail filled or emptied with the scope) must
+   read finished at once, even if a transition declared in a section's
+   sheet, or a React commit a frame late, would ease it. The global rule
+   collapses durations to an instant but not delays, so a staggered
+   change (the lanes' fills 80ms apart, the group rails 60ms apart) would
+   still wait its turn and then snap; here the state is simply the state.
+   The still tier (forced, or set for reduced motion) gets the same, as
+   saas-credentials.css pins the scope's tiles and the Mobile page pins
+   its drawing.
+
+   The section sheets load after this one, so the pins can't win on
+   order. They win on weight: keyed on all three of the shell <main>'s
+   classes (`.pp.home-body.saas-page`) and on the state attribute, five
+   classes deep with the pinned one, they outrank a section's transition
+   declared up to four classes deep (`.pp .erp-stage[data-view="one"]
+   .erp-lane-fill`, `.pp .erp-shape-card[data-dir] .erp-group-fill`)
+   whatever order the sheets land in, since an `:is()` weighs as its
+   heaviest entry for every one; the still tier's adds <html> to that. A
+   section that declares one five classes deep or more pins it in its own
+   sheet. */
+@media (prefers-reduced-motion: reduce) {
+  .pp.home-body.saas-page :is(.erp-sheet[data-state] .erp-sheet-bg, .erp-row[data-state], .erp-part[data-state], .erp-lane-fill, .erp-group-fill, [data-erp-dwell]) {
+    transition: none;
+  }
+}
+
+html[data-tier="still"] .pp.home-body :is(.erp-sheet[data-state] .erp-sheet-bg, .erp-row[data-state], .erp-part[data-state], .erp-lane-fill, .erp-group-fill, [data-erp-dwell]) {
+  transition: none;
+}
+
+/* ─── §5 The two switches ───────────────────────────────────────────
+   #process's "View" (Today · One system, process-stage.tsx) and #shape's
+   "How much goes in" (Sales · Operations · Everything,
+   shape-instrument.tsx) are the landing's `Segmented` (home/controls.tsx):
+   a white thumb under the chosen side on a chip-grey track, and its
+   label in violet beside a muted one. The white on the track is 1.12:1
+   and the thumb's only edge, `.pp-shadow-btn`'s blurred hairline, is
+   about 1.3:1, so the chosen segment misses the 3:1 a state needs; and
+   the violet label is 1.12:1 in lightness against the muted, a hue apart
+   and no more. On both, `erp-switch` gives the thumb an inset electric
+   edge (5.70:1 on the white inside it, about 5.2 on the track outside),
+   under the same soft drop, and the chosen label 500 to the other's 400:
+   the Mobile page's `mob-switch` and the Automations page's level
+   switch (auto-work.css §7), neither of which this page loads. So the
+   page draws the one control one way, as its siblings do. The landing's
+   own switches keep their look: the shared component is not this page's
+   to change. At 320 the 500 "Everything" still fits its third of
+   #shape's switch, whose segments narrow their padding there.
+
+   `.pp-shadow-btn` is an unlayered rule in globals.css, which a Tailwind
+   utility (in @layer utilities) can't outrank; this one is unlayered too
+   and deeper than its one class, so it wins wherever the sheets land.
+   `erp-switch` sits on the switch itself; the thumb is its one
+   aria-hidden span, the segments its radios. Forced colours drop the
+   shadow; §3 draws the edge again in Highlight, and saas.css §15 fills
+   a chosen radio with Highlight there. */
+.pp .erp-switch > span[aria-hidden] {
+  box-shadow:
+    inset 0 0 0 1px var(--home-electric),
+    0 1px 2px rgb(20 10 36 / 0.08);
+}
+
+.pp .erp-switch > [aria-checked="true"] {
+  font-weight: 500;
+}
+
+/* ─── §6 The mono face's fallback ───────────────────────────────────
+   The layout sets `--font-geist-mono` to "Geist Mono" and next/font's
+   "Geist Mono Fallback", which is `local(Arial)` scaled to the face's
+   width, and nothing after it. The face is swapped in, never preloaded
+   (it is on no first screen), so a first visit that lands deep in the
+   page (a shared #core-yours, a search result's fragment) paints this
+   page's mono first in the fallback. Where Arial is missing (Android,
+   most Linux) that is the browser's default proportional face, much
+   narrower than the face: on the Mobile page, whose mono this page's
+   tags, paths, lane labels and rail numbers share, the lines rewrapped
+   as the face arrived, up to 108px of height at 390 and a layout shift
+   of 0.12–0.23.
+
+   Every box below the cover (`ErpDeferred`, deferred.tsx, which wears
+   `erp-deferred`) sets its own mono instead: the face, then monospaced
+   faces the platforms carry, each with the face's 0.6em advance (SF Mono
+   and Menlo on Apple, Roboto Mono and Droid Sans Mono on Android,
+   DejaVu Sans Mono on Linux, Courier New on Windows, whose own
+   `monospace`, Consolas, is 0.55em, and which Chrome and Edge give no
+   `ui-monospace`), then the generic one. The words take the same width
+   before the face and after it, so the swap never rewraps.
+   The hero, above them, keeps the layout's stack: a landing at the top
+   shifts nothing as the face arrives. */
+.pp .erp-deferred {
+  --font-geist-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, "Roboto Mono", "Droid Sans Mono", "DejaVu Sans Mono", "Courier New", monospace;
+}

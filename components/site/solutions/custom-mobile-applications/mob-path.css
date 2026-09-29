@@ -1,0 +1,343 @@
+/* ------------------------------------------------------------------ *
+ * /solutions/custom-mobile-applications — #path: the few things
+ * Tailwind utilities and the SaaS sheets can't say for "From prototype
+ * to both stores".
+ *
+ *   §1  the drawing (path-figure.tsx, lg and up): its own view timeline,
+ *       `--mob-path`; each stroke drawn on its slice, each station
+ *       popping as the line reaches it and its words fading in with it,
+ *       each gate's arms swinging open once the line has passed
+ *   §2  the list below lg (path.tsx `Steps`): the rail drawn down its
+ *       left side, `mob-rail-draw`, and each node popping as the rail
+ *       reaches it
+ *   §3  stage 01's drawing (stage-figure.tsx): one phone, then the
+ *       other, each element on its own slice
+ *   §4  the gates' glyphs (gate-glyphs.tsx)
+ *   §5  "Whose name it's in" below md: each row a stacked block
+ *   §6  the lite, still and weak tiers: every piece where it belongs,
+ *       every stroke whole
+ *   §7  forced colours
+ *
+ * Everything else #path draws is the SaaS page's, imported by the page
+ * as it is: the wash band (home.css), the lit cards and their flowing
+ * light (saas.css §1–§3), the cards' rise a step apart and the stacked
+ * cards' dotted connectors (saas-build.css §9, `[data-col]` and
+ * `.saas-link`), their lite tier (saas.css §12) and their still and weak
+ * ones (saas-build.css). Not one of their lines changes.
+ *
+ * Imported once, by app/solutions/custom-mobile-applications/page.tsx,
+ * after mob.css and the sheets of the sections above this one, so it
+ * ships with this route only. Every rule sits under .pp (the shell's
+ * <main>), or on <html> where it reads the tier; every class and
+ * keyframe of ours is prefixed mob-, and a selector names the home-
+ * classes it sits beside (`.home-draw`, `.home-rise`) only beside one of
+ * ours. Only opacity, transform and scale ever animate here, but for
+ * the strokes, which draw with home.css's own `home-draw`, as every
+ * landing figure's do. The pops and fades are mob.css's shared
+ * `mob-pop` and `mob-fade-in`; the three keyframes of this sheet's own
+ * are the gates' two swings and the rail's draw. Anything tied to scroll
+ * sits inside `@media (prefers-reduced-motion: no-preference)` and
+ * `@supports (animation-timeline: view())`, so a browser without view
+ * timelines, or a reader who asked for less motion, gets the finished
+ * frame, which is every element's resting style: the path whole, every
+ * station and word shown, both gates open, the rail and its nodes in
+ * place, both phones drawn, every glyph drawn.
+ * ------------------------------------------------------------------ */
+
+/* ─── §1 The drawing ────────────────────────────────────────────────
+   AT REST, THE FINISHED FRAME. A station's disc and a gate's posts pop
+   about their own centre, and a gate's arms swing about the post each
+   hangs from (`fill-box`: an SVG shape has no box of its own to take an
+   origin from; an arm is a line, so its box is the line, and its post
+   is its top or its bottom). The arms rest open, 55° towards the way the
+   line goes: the one hung from the upper post turned back (−55°), the
+   one from the lower post turned on (55°), so the two swing apart like
+   a gate's leaves. `transform`, not `rotate`, so the motion contract's
+   list of what may animate holds (the page's test).
+
+   THE PASS. The box names its own view timeline, and one window on it
+   opens 4% into the box's pass up the screen and spans 32% of it, so the
+   drawing is whole while it is still in the lower half of the screen.
+   Each piece takes its own slice of that window (`--o` where it starts,
+   `--s` how much it takes, both shares, inline from path-figure.tsx):
+   the stem (0 for .3), the fork and both lanes (.3 for .45), the join
+   and the end (.75 for .15); each station as the line reaches it (the
+   figure's `SLICES`, which the data module's test holds to these three),
+   its words fading in with it; the lane names with the fork; the gates
+   just after the line has passed their posts (.2 and .53), the stores'
+   review with its station.
+
+   The strokes are parked off their paths and drawn on with home.css's
+   own `home-draw`, on power2.inOut, the house ease for draws; a pop and
+   an arm's swing land on the house out-ease; the words keep time with
+   the scroll (linear). Longhands only, so nothing resets the timeline or
+   the range. Every rule names the figure's box and the piece, so it
+   outranks nothing of the landing's; the §6 pins name <html> besides and
+   outrank each of these. */
+.pp .mob-path-fig .mob-path-pop {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.pp .mob-path-fig .mob-path-arm {
+  transform-box: fill-box;
+}
+
+.pp .mob-path-fig .mob-path-arm[data-arm="l"] {
+  transform-origin: 50% 0%;
+  transform: rotate(-55deg);
+}
+
+.pp .mob-path-fig .mob-path-arm[data-arm="r"] {
+  transform-origin: 50% 100%;
+  transform: rotate(55deg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .mob-path-fig {
+      view-timeline: --mob-path block;
+    }
+
+    .pp .mob-path-fig .mob-path-draw,
+    .pp .mob-path-fig .mob-path-pop,
+    .pp .mob-path-fig .mob-path-label,
+    .pp .mob-path-fig .mob-path-arm {
+      animation-duration: auto;
+      animation-fill-mode: both;
+      animation-timeline: --mob-path;
+      animation-range:
+        cover calc(4% + 32% * var(--o, 0))
+        cover calc(4% + 32% * (var(--o, 0) + var(--s, 1)));
+    }
+
+    .pp .mob-path-fig .mob-path-draw {
+      stroke-dasharray: 1 3;
+      stroke-dashoffset: 1.25;
+      animation-name: home-draw;
+      animation-timing-function: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+    }
+
+    .pp .mob-path-fig .mob-path-pop {
+      animation-name: mob-pop;
+      animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .pp .mob-path-fig .mob-path-label {
+      animation-name: mob-fade-in;
+      animation-timing-function: linear;
+    }
+
+    .pp .mob-path-fig .mob-path-arm[data-arm="l"] {
+      animation-name: mob-gate-l;
+      animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .pp .mob-path-fig .mob-path-arm[data-arm="r"] {
+      animation-name: mob-gate-r;
+      animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+  }
+}
+
+/* A gate's two arms, from closed (both hanging straight across the line,
+   meeting on it) to their resting open. */
+@keyframes mob-gate-l {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(-55deg);
+  }
+}
+
+@keyframes mob-gate-r {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(55deg);
+  }
+}
+
+/* ─── §2 The list below lg ──────────────────────────────────────────
+   The rail down the list's left side (electric on the wash, 5.21, a
+   mark) grows from its top as the list comes up the screen, and each
+   station's node pops (mob.css `mob-pop`, from 60%, so a node is always
+   there to read) as the rail reaches it. One timeline for both, the
+   list's own (`--mob-rail`, named on the box that holds the rail and
+   the list): the rail from 6% into its pass — about the moment its
+   first fifth has come on screen — to halfway, and each node on the
+   stretch of that where the rail reaches it, `--o` being the station's
+   place in the list (i / 7, inline from path.tsx), for a sixth of a
+   step. `scale` only, on the compositor. From lg the list is read by a
+   screen reader only and the rail and nodes aren't drawn. */
+.pp .mob-steps .mob-rail {
+  transform-origin: top;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .mob-steps {
+      view-timeline: --mob-rail block;
+    }
+
+    .pp .mob-steps .mob-rail {
+      animation: mob-rail-draw linear both;
+      animation-timeline: --mob-rail;
+      animation-range: cover 6% cover 50%;
+    }
+
+    .pp .mob-steps .mob-rail-node {
+      animation: mob-pop cubic-bezier(0.16, 1, 0.3, 1) both;
+      animation-timeline: --mob-rail;
+      animation-range:
+        cover calc(6% + 44% * var(--o, 0))
+        cover calc(10% + 44% * var(--o, 0));
+    }
+  }
+}
+
+@keyframes mob-rail-draw {
+  from {
+    scale: 1 0;
+  }
+
+  to {
+    scale: 1 1;
+  }
+}
+
+/* ─── §3 Stage 01's drawing ─────────────────────────────────────────
+   From lg, the first card's fifth row — where its neighbours say what
+   ours shows — holds one screen designed for both platforms (stage-
+   figure.tsx): a landing figure (`.home-draw`), its pathLength="1"
+   strokes drawn with home.css's own `home-draw` on its own view
+   timeline. Each element takes its own slice of one window on that pass
+   (`--o`, `--s`, inline), the #build maps' formula (the Automations
+   page's auto-closing.css §3, the SaaS page's saas-build.css §9): the
+   window opens 4% into the drawing's pass and spans 30%, the left phone
+   in its first 45% and the right one from halfway, each outline, then
+   its title, its bars and its way round. The pill cut, the punch-hole
+   and the tab's pill are fills, which a dash draw can't reach, so they
+   fade in on their slices (`.mob-plat-fade`, mob.css `mob-fade-in`).
+   One class deeper than home.css's `.home-draw` rules, so the slices
+   win whatever order the sheets land in. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .mob-plat-fig.home-draw .mob-path-draw,
+    .pp .mob-plat-fig.home-draw .mob-plat-fade {
+      animation-timeline: --home-draw;
+      animation-range:
+        cover calc(4% + 30% * var(--o, 0))
+        cover calc(4% + 30% * (var(--o, 0) + var(--s, 1)));
+    }
+
+    .pp .mob-plat-fig.home-draw .mob-path-draw {
+      animation-timing-function: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+    }
+
+    .pp .mob-plat-fig.home-draw .mob-plat-fade {
+      animation-name: mob-fade-in;
+      animation-duration: auto;
+      animation-fill-mode: both;
+      animation-timing-function: linear;
+    }
+  }
+}
+
+/* ─── §4 The gates' glyphs ──────────────────────────────────────────
+   No rule of its own while they draw: each glyph is a landing figure
+   (`.home-draw`) and draws whole on home.css's own ranges, a beat apart
+   across a row by its `data-i` (the card's place, mod 4), as the
+   landing's trust figures do. What it needs from this sheet is its
+   finished frame on the still and weak tiers (§6; home/tier.css already
+   gives it the lite one) and its colours under forced colours (§7). The
+   section is listed so this sheet's numbering stays the spec's. */
+
+/* ─── §5 "Whose name it's in", below md ─────────────────────────────
+   A three-column table is too wide for a phone, so below md each row
+   becomes a block: what, then whose (its glyph and its words), then how,
+   one under another, with the column headers kept for a screen reader
+   only (path.tsx). The change is to the rows' and cells' display, never
+   the table's, so it stays a table with its caption and its row and
+   column headers to assistive technology. */
+@media (width < 48rem) {
+  .pp .mob-own tbody tr {
+    display: grid;
+    row-gap: 6px;
+    padding-block: 16px;
+  }
+
+  .pp .mob-own tbody :is(th, td) {
+    display: block;
+    padding: 0;
+  }
+}
+
+/* ─── §6 Lite, still and weak ───────────────────────────────────────
+   The lite tier, the still tier (a forced ?tier=still that is not a
+   reduced-motion request) and weak hardware (<html data-weak>) land on
+   the finished frame: every stroke put back whole (they are parked off
+   their paths until they draw, so they are un-parked rather than just
+   stopped, as home/tier.css does for the landing's figures on lite),
+   every station, post, word and node where it belongs, both gates open,
+   the rail full, both phones and every glyph drawn, and the stage cards
+   in place rather than rising. Each pin names <html> and all of the
+   shell <main>'s classes it needs besides the piece's own chain, so it
+   outranks every rule above whatever order the sheets land in. The
+   strokes are named by their class, `.mob-path-draw` (every pathLength
+   stroke of the three figures wears it), never by `[pathLength]` alone:
+   Chromium restyles an element on a change of <html data-tier> when its
+   selector names it by a class, but not by that camel-case SVG
+   attribute, so a figure styled before the tier landed would go on
+   drawing. */
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .mob-path-fig .mob-path-draw,
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .mob-plat-fig.home-draw .mob-path-draw,
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .mob-gate-glyph.home-draw .mob-path-draw {
+  animation: none;
+  stroke-dasharray: none;
+  stroke-dashoffset: 0;
+}
+
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .mob-path-fig :is(.mob-path-pop, .mob-path-label, .mob-path-arm),
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .mob-steps :is(.mob-rail, .mob-rail-node),
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .mob-plat-fig.home-draw .mob-plat-fade,
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .mob-path-card.home-rise {
+  animation: none;
+}
+
+/* ─── §7 Forced colours ─────────────────────────────────────────────
+   The rail and its nodes are painted boxes, which a forced palette would
+   paint over with the page's ground: they are drawn in CanvasText, each
+   node ringed in Canvas where it sits on the rail. A station's white
+   disc becomes the Canvas, so on a dark palette it reads as a ring on
+   the line, not a white blot. An SVG that sets its own colour keeps it
+   under forced colours (Chromium's `preserve-parent-color`), so every
+   piece of the drawings takes its line's colour back, as mob.css §3
+   does for the glyphs, and a shape drawn in front of another in a
+   glyph is filled with the Canvas rather than white. Keyed on
+   `.pp.saas-page`, the shell's <main>, and on mob- classes only. */
+@media (forced-colors: active) {
+  .pp.saas-page .mob-steps :is(.mob-rail, .mob-rail-node) {
+    forced-color-adjust: none;
+    background-color: CanvasText;
+  }
+
+  .pp.saas-page .mob-steps .mob-rail-node {
+    box-shadow: 0 0 0 3px Canvas;
+  }
+
+  .pp.saas-page :is(.mob-plat-fig, .mob-gate-glyph),
+  .pp.saas-page :is(.mob-path-fig, .mob-plat-fig, .mob-gate-glyph) :is(g, path, circle, rect),
+  .pp.saas-page .mob-steps .mob-glyph path {
+    color: inherit;
+  }
+
+  .pp.saas-page .mob-path-fig .mob-path-stop,
+  .pp.saas-page .mob-gate-glyph path[fill="#fff"] {
+    fill: Canvas;
+  }
+}

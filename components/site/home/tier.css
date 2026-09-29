@@ -1,0 +1,72 @@
+/* ------------------------------------------------------------------ *
+ * What the device tier changes in the landing body's CSS.
+ *
+ * device-tier.ts mirrors the tier on <html data-tier> once the page has
+ * mounted (full | mid | lite | still); until then no rule here applies
+ * and the page is the full one. Imported by motion.ts, so it ships in
+ * the homepage's CSS chunk and nowhere else, and every rule is scoped to
+ * .home-body so the frozen hero, header and footer never see it.
+ *
+ * Mid changes nothing here: its savings are all inside the WebGL loops.
+ * ------------------------------------------------------------------ */
+
+/* Lite: no film grain in the body. Each grain layer is a full-size noise
+   texture that has to be composited again whenever anything beneath it
+   moves; the orb's own film (.pp-noise) blends as an overlay on top. */
+html[data-tier="lite"] .home-body .pp-grain,
+html[data-tier="lite"] .home-body .pp-noise,
+html[data-tier="lite"] .home-body .home-deep::after {
+  display: none;
+}
+
+/* Lite: sections and figures are simply where they belong. The view-
+   timeline entrances (home.css) are the only scroll-linked motion left,
+   and the figure strokes are parked off their paths until they draw, so
+   they are put back whole rather than just stopped. */
+html[data-tier="lite"] .home-body .home-rise {
+  animation: none;
+}
+
+html[data-tier="lite"] .home-body .home-draw path[pathLength] {
+  animation: none;
+  stroke-dasharray: none;
+  stroke-dashoffset: 0;
+}
+
+/*
+  Spinners that turn only while they are spinning.
+
+  An infinite CSS animation runs, and costs a style recalculation every
+  frame, even on an element that is invisible or at opacity 0. So a
+  spinner carries `home-spin` for its look and gets its animation only
+  while it, or an ancestor, has `data-spinning`: the stage's timeline (or
+  React) sets the attribute when a step starts and removes it when the
+  step ends, and a finished or waiting spinner costs nothing.
+
+    <span class="home-spin …" data-spinning={running ? "" : undefined} />
+    <li data-spinning>…<span class="home-spin" />…</li>
+
+  Reduced motion is handled by the global rule (globals.css), which
+  collapses every animation to a single instant iteration.
+*/
+.home-body .home-spin[data-spinning],
+.home-body [data-spinning] .home-spin {
+  animation: home-spin 0.9s linear infinite;
+}
+
+@keyframes home-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+/* #pricing on a weak device: the plan cards arrive where they belong (no
+   view-timeline rise), and the estimator's colours cut to the next plan
+   instead of easing. */
+html[data-tier="lite"] .home-body .home-plan-rise {
+  animation: none;
+}
+
+html[data-tier="lite"] .home-body .home-pricing-tint {
+  transition: none;
+}

@@ -1,43 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState, useSyncExternalStore } from "react";
-import { createPortal } from "react-dom";
-import {
-  AnimatePresence,
-  motion,
-  useReducedMotion,
-  useScroll,
-  useTransform,
-} from "framer-motion";
+import { useRef, useState } from "react";
+import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { HERO_COVER as C, COVER_ART, COVER_FOCAL } from "@/lib/site";
 import { DepthPortrait } from "./depth-portrait";
 import { CursorCta } from "./cursor-cta";
-import { CornerDot } from "./ui";
+import { CornerDot } from "./corner-dot";
 import { cn } from "@/lib/utils";
 
 /** COVER_FOCAL as numbers, for the shader's cover mapping. */
 const FOCAL: [number, number] = [0.5, 0.406];
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-
-/* ------------------------------------------------------------------ *
- * Geometric label glyphs. Each quick-nav column is flagged by one, set
- * outside the column's left edge so it hangs into the gutter.
- * ------------------------------------------------------------------ */
-const GLYPHS = {
-  triangle: <path d="M0 0L14 14H0V0Z" fill="currentColor" />,
-  circle: <circle cx="7" cy="7" r="7" fill="currentColor" />,
-  square: <rect width="14" height="14" fill="currentColor" />,
-} as const;
-
-function Glyph({ name, className }: { name: keyof typeof GLYPHS; className?: string }) {
-  return (
-    <svg viewBox="0 0 14 14" fill="none" aria-hidden className={className}>
-      {GLYPHS[name]}
-    </svg>
-  );
-}
 
 /** The 10px squares that bracket the headline block's four corners. */
 function CornerMarks() {
@@ -121,62 +96,6 @@ function SplitLines({
   );
 }
 
-/* ------------------------------------------------------------------ *
- * Live clock in the company's own timezone.
- * Renders placeholders until mounted so server and client markup agree.
- * ------------------------------------------------------------------ */
-/** Ticks once a second; reports 0 on the server so hydration matches. */
-const SECONDS = {
-  subscribe(onChange: () => void) {
-    const id = setInterval(onChange, 1000);
-    return () => clearInterval(id);
-  },
-  get: () => Math.floor(Date.now() / 1000),
-  getOnServer: () => 0,
-};
-
-function Clock() {
-  const epoch = useSyncExternalStore(
-    SECONDS.subscribe,
-    SECONDS.get,
-    SECONDS.getOnServer,
-  );
-  const now = epoch ? new Date(epoch * 1000) : null;
-
-  const time = now
-    ? new Intl.DateTimeFormat("en-GB", {
-        timeZone: C.timeZone,
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
-      }).format(now)
-    : "--:--:--";
-
-  // Romania runs EET in winter, EEST in summer — read it off the offset.
-  let zone = "";
-  if (now) {
-    const offset =
-      new Intl.DateTimeFormat("en-US", {
-        timeZone: C.timeZone,
-        timeZoneName: "longOffset",
-      })
-        .formatToParts(now)
-        .find((p) => p.type === "timeZoneName")?.value ?? "";
-    zone = offset.includes("+03") ? "EEST" : "EET";
-  }
-
-  return (
-    <div className="flex flex-col items-start gap-[0.25em]">
-      <p className="text-[0.75em] leading-[1.1] tabular-nums">{time}</p>
-      <div className="flex items-center gap-[0.6em] text-[0.75em] leading-[1.1] opacity-60">
-        <span className="min-w-[2.6em]">{zone || " "}</span>
-        <span>{C.place}</span>
-      </div>
-    </div>
-  );
-}
-
 /** Four bars keeping time — a voice product's answer to a sound toggle. */
 function Equalizer() {
   return (
@@ -223,222 +142,6 @@ function CoverCta() {
         </span>
       </span>
     </Link>
-  );
-}
-
-/* ------------------------------------------------------------------ *
- * Mobile menu. Below md the three quick-nav columns cannot sit side by
- * side without crowding the figure, so they move behind a toggle and
- * open as a full-height sheet.
- * ------------------------------------------------------------------ */
-/** false while server-rendering, true once mounted — the portal needs a DOM. */
-const MOUNTED = {
-  subscribe: () => () => {},
-  get: () => true,
-  getOnServer: () => false,
-};
-
-function MobileMenu() {
-  const [open, setOpen] = useState(false);
-  const mounted = useSyncExternalStore(
-    MOUNTED.subscribe,
-    MOUNTED.get,
-    MOUNTED.getOnServer,
-  );
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-expanded={open}
-        // Distinct from the site navbar's toggle, which carries the same
-        // action but lives outside the cover.
-        aria-label="Open cover menu"
-        className="flex items-center gap-[0.5em] text-[0.95em] leading-none tracking-[-0.03em] md:hidden"
-      >
-        <span className="flex flex-col gap-[0.22em]">
-          <span className="block h-px w-[1.35em] bg-current" />
-          <span className="block h-px w-[1.35em] bg-current" />
-        </span>
-        Menu
-      </button>
-
-      {/* Portalled to <body>: the cover's content layer carries a parallax
-          transform, and a transformed ancestor becomes the containing block
-          for `fixed` descendants — the sheet would size and clip to it
-          instead of the viewport. */}
-      {mounted &&
-        createPortal(
-        <AnimatePresence>
-          {open && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.35, ease: EASE }}
-              data-cover-menu
-              style={{ backgroundColor: "rgba(6,4,10,0.985)" }}
-              className="cover fixed inset-0 z-[100] flex flex-col overflow-y-auto px-[1.5em] py-[1.5em] text-[var(--cover-paper)] backdrop-blur-md md:hidden"
-            >
-            <div className="flex items-center justify-between">
-              <span className="text-[1.15em] font-medium leading-none tracking-[-0.07em]">
-                {C.wordmark}
-              </span>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                aria-label="Close menu"
-                className="text-[0.95em] leading-none tracking-[-0.03em]"
-              >
-                Close
-              </button>
-            </div>
-
-            <nav className="mt-[2.5em] flex flex-col gap-[2em]">
-              {C.columns.map((col, i) => (
-                <motion.div
-                  key={col.label}
-                  initial={{ opacity: 0, y: "0.6em" }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.06 + i * 0.06, ease: EASE }}
-                >
-                  <div className="relative mb-[0.7em] flex items-center gap-[0.5em] opacity-60">
-                    <Glyph name={col.glyph} className="size-[0.6em]" />
-                    <span className="text-[0.85em] uppercase tracking-[0.12em]">
-                      {col.label}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-[0.55em]">
-                    {col.links.map((l) => (
-                      <Link
-                        key={l.label}
-                        href={l.href}
-                        onClick={() => setOpen(false)}
-                        className="text-[1.5em] leading-[1.15] tracking-[-0.04em]"
-                      >
-                        {l.label}
-                      </Link>
-                    ))}
-                  </div>
-                </motion.div>
-              ))}
-            </nav>
-
-            <div className="mt-auto pt-[2em]">
-              <CoverCta />
-            </div>
-            </motion.div>
-          )}
-        </AnimatePresence>,
-          document.body,
-        )}
-    </>
-  );
-}
-
-/* ------------------------------------------------------------------ *
- * Quick-nav: the utility grid across the top of the cover.
- * ------------------------------------------------------------------ */
-function QuickNav() {
-  const reduce = useReducedMotion();
-  const fade = (delay: number) => ({
-    initial: reduce ? false : { opacity: 0, y: "0.6em" },
-    animate: reduce ? undefined : { opacity: 1, y: 0 },
-    transition: { duration: 0.8, delay, ease: EASE },
-  });
-
-  // Desktop column starts, lifted verbatim from the reference's grid.
-  const starts = ["md:col-start-3", "md:col-start-5", "md:col-start-7"];
-
-  return (
-    <nav
-      aria-label="Quick links"
-      className="flex w-full items-start justify-between gap-[1em] md:grid md:grid-cols-12 md:gap-[0.25em]"
-    >
-      <motion.div {...fade(0.1)} className="md:col-span-2 md:col-start-1">
-        <Link
-          href="#top"
-          // Held back below lg, where the quick-nav's first column starts
-          // close enough that a full-size wordmark collides with its glyph.
-          className="text-[1.15em] font-medium leading-none tracking-[-0.07em] lg:text-[1.6em]"
-        >
-          {C.wordmark}
-        </Link>
-      </motion.div>
-
-      {C.columns.map((col, i) => (
-        <motion.div
-          key={col.label}
-          {...fade(0.16 + i * 0.06)}
-          className={cn(
-            "hidden md:col-span-2 md:flex md:flex-col md:items-start md:gap-[0.6em] md:pt-[0.5em]",
-            starts[i],
-          )}
-        >
-          <div className="relative flex items-center">
-            <Glyph
-              name={col.glyph}
-              className="absolute right-[calc(100%+0.4em)] size-[0.7em]"
-            />
-            <span className="text-[1.25em] leading-[1.2] tracking-[-0.025em]">
-              {col.label}
-            </span>
-          </div>
-          <div className="flex flex-col items-start gap-[0.4em]">
-            {col.links.map((l) => (
-              <Link
-                key={l.label}
-                href={l.href}
-                className="cover-link text-[0.875em] leading-[1.3] tracking-[-0.03em] opacity-70 transition-opacity hover:opacity-100"
-              >
-                {l.label}
-              </Link>
-            ))}
-          </div>
-        </motion.div>
-      ))}
-
-      {/* `md:contents` dissolves this wrapper at md so the clock rejoins
-          the 12-column grid, while below md it groups with the toggle. */}
-      <div className="flex items-start gap-[1.5em] md:contents">
-        <motion.div
-          {...fade(0.34)}
-          className="md:col-span-2 md:col-start-9 md:pt-[0.5em]"
-        >
-          <Clock />
-        </motion.div>
-        <motion.div {...fade(0.4)}>
-          <MobileMenu />
-        </motion.div>
-      </div>
-
-
-      <motion.div
-        {...fade(0.4)}
-        // "Discover" is the first thing the reference drops (below 991px),
-        // while its three link columns survive all the way down.
-        className="hidden lg:col-span-1 lg:col-start-12 lg:flex lg:flex-col lg:items-end lg:pt-[0.5em]"
-      >
-        <div className="flex items-center gap-[0.8em]">
-          <span className="text-[0.875em] leading-[1.3] tracking-[-0.03em]">
-            {C.scrollLabel}
-          </span>
-          <span className="relative block h-[2.4em] w-px overflow-hidden">
-            <span
-              className="absolute inset-0 bg-current"
-              style={{ opacity: 0.22 }}
-            />
-            <motion.span
-              className="absolute inset-x-0 top-0 h-1/3 bg-current"
-              initial={false}
-              animate={reduce ? undefined : { y: ["-110%", "320%"] }}
-              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-            />
-          </span>
-        </div>
-      </motion.div>
-    </nav>
   );
 }
 
@@ -543,12 +246,34 @@ export function Hero() {
       />
       <div aria-hidden className="cover-grain absolute inset-0 -z-10" />
 
+      {/* The rule the masthead is stuck to.
+          It belongs to the cover rather than to the header, which is the
+          whole point of it: as the plate withdraws to pill width the line
+          is uncovered at both ends — the mark revealed by the departure —
+          and then it scrolls away with the hero. Outside the parallax
+          layer so it holds still under the bar it answers to. */}
+      <div
+        aria-hidden
+        className="absolute inset-x-0 top-[var(--site-header-h)] z-10"
+      >
+        <div className="mx-auto w-full max-w-[var(--size-container)] px-[1.5em]">
+          <div className="relative h-px w-full bg-[var(--cover-paper)]/12">
+            {/* Flashes once, on contact, when the header lands back on it. */}
+            <span className="hdr-seam absolute inset-0 origin-left bg-[var(--cover-brand-lit)] opacity-0" />
+          </div>
+        </div>
+      </div>
+
       {/* Content */}
       <motion.div
         style={{ y: reduce ? 0 : contentY, opacity: reduce ? 1 : contentFade }}
-        className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-[var(--size-container)] flex-col justify-between gap-[4em] px-[1.5em] pb-[2em] pt-[1.5em] md:gap-[6em] md:pt-[0.75em]"
+        className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-[var(--size-container)] flex-col justify-between gap-[4em] px-[1.5em] pb-[2em] pt-0 md:gap-[6em]"
       >
-        <QuickNav />
+        {/* The fixed site header sits over this strip. It is a page-level
+            element — it cannot live in here, because this layer carries a
+            transform and a transformed ancestor becomes the containing
+            block for `fixed` children. */}
+        <div aria-hidden className="h-[var(--site-header-h)] shrink-0" />
 
         {/* Headline block sits on columns 5–9, leaving room for the
             corner marks to bracket it and for the CTA to sit far left. */}

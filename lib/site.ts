@@ -1,16 +1,11 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  PhoneCall,
-  AudioLines,
-  CalendarCheck,
-  BarChart3,
   Calendar,
   Mail,
   Table2,
   FileText,
   FolderOpen,
   Bot,
-  Rocket,
   Stethoscope,
   Scissors,
   Scale,
@@ -20,6 +15,25 @@ import {
   Car,
   Truck,
   Building2,
+  BookOpenText,
+  Blocks,
+  LibraryBig,
+  MicVocal,
+  Speech,
+  Captions,
+  ShieldCheck,
+  KeyRound,
+  Hotel,
+  Landmark,
+  ShoppingBag,
+  GraduationCap,
+  Dumbbell,
+  PawPrint,
+  BrainCircuit,
+  PanelsTopLeft,
+  Workflow,
+  Smartphone,
+  Database,
 } from "lucide-react";
 
 /**
@@ -27,6 +41,22 @@ import {
  * Edit copy here so tone stays consistent across components.
  */
 
+/**
+ * The imprint, and the four fields Romanian law adds to it.
+ *
+ * A Romanian commercial site owes its reader more than a name and a CUI:
+ * a trade-register number, a working contact address, and links to the two
+ * ANPC dispute channels — SAL (alternative resolution) and SOL (the EU's
+ * online platform). ANPC checks for those two links specifically, and a
+ * footer without them is a finding, not a style choice.
+ *
+ * They are empty strings rather than plausible-looking values on purpose.
+ * A registration number is a fact about a company, not copy: invented, it
+ * is worse than missing, because a missing field reads as unfinished and a
+ * wrong one reads as fraud. The footer is expected to skip whatever is
+ * still blank, so the site ships legibly either way — but it does not ship
+ * *correctly* until the owner fills these in.
+ */
 export const COMPANY = {
   name: "Neuro Tech Voice",
   wordmark: "NEUROVOICE",
@@ -37,7 +67,31 @@ export const COMPANY = {
   phone: "+40 774 566 367",
   phoneHref: "tel:+40774566367",
   logo: "/logo.png",
+  /**
+   * OWNER: still required — a monitored support address.
+   *
+   * The phone number is Romanian and answered in Romanian business hours.
+   * On a platform sold internationally that is not a contact route, it is
+   * a contact route for one time zone, so the address is the only way a
+   * customer in another one can reach a person. The footer hides the line
+   * entirely while this is empty rather than printing a dead label.
+   */
+  email: "",
 } as const;
+
+/*
+ * No ANPC SAL/SOL links, and no trade-register number.
+ *
+ * Both were drafted on the assumption that this sells into Romania, where
+ * a commercial site carries the two ANPC dispute-resolution links by law.
+ * It sells internationally, so they are the wrong furniture: ANPC has no
+ * jurisdiction over a customer in Berlin or Chicago, and "J11/…/2026"
+ * identifies the company to a Romanian registrar and to nobody else.
+ *
+ * The legal identity that does travel stays, in the footer: the legal
+ * name, the CUI, and the registered address. If the product is ever sold
+ * into Romania as a consumer service, the ANPC pair comes back.
+ */
 
 export const AUTH = {
   signup: "/register",
@@ -54,12 +108,6 @@ export const AUTH = {
  * about the date on the same screen.
  */
 export const SITE_TIME_ZONE = "Europe/Bucharest";
-
-export const NAV_LINKS: { label: string; href: string }[] = [
-  { label: "Features", href: "#features" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "FAQ", href: "#faq" },
-];
 
 /* ------------------------------------------------------------------ *
  * Hero
@@ -78,47 +126,13 @@ export const HERO = {
 
 /* ------------------------------------------------------------------ *
  * Editorial hero — the full-bleed dark cover.
- * Copy is deliberately spare: a utility quick-nav on top, one centred
- * statement at the bottom, everything else carried by the portrait.
+ *
+ * Copy is deliberately spare: one centred statement at the bottom,
+ * everything else carried by the portrait. The utility row that used to
+ * sit across the top is now the site header, which is a page-level
+ * element rather than part of the cover — see SITE_HEADER below.
  * ------------------------------------------------------------------ */
-export type CoverColumn = {
-  glyph: "triangle" | "circle" | "square";
-  label: string;
-  links: { label: string; href: string }[];
-};
-
-/** Quick-nav columns, each flagged by a geometric glyph. */
-export const COVER_COLUMNS: CoverColumn[] = [
-  {
-    glyph: "triangle",
-    label: "Capabilities",
-    links: [
-      { label: "Features", href: "#features" },
-      { label: "Live demo", href: "#demo" },
-    ],
-  },
-  {
-    glyph: "circle",
-    label: "Narrative",
-    links: [
-      { label: "How it works", href: "#how" },
-      { label: "Who it's for", href: "#use-cases" },
-      { label: "Pricing", href: "#pricing" },
-    ],
-  },
-  {
-    glyph: "square",
-    label: "Contact",
-    links: [
-      { label: "Talk to sales", href: AUTH.contactSales },
-      { label: "Sign in", href: AUTH.signin },
-      { label: "FAQ", href: "#faq" },
-    ],
-  },
-];
-
 export const HERO_COVER = {
-  wordmark: "NEUROVOICE",
   /** Line breaks are authored, not wrapped — each line is a beat. */
   headline: [
     "Neuro Tech Voice.",
@@ -127,11 +141,6 @@ export const HERO_COVER = {
   ],
   era: "2026—Future",
   cta: { label: "Start free", href: AUTH.signup },
-  columns: COVER_COLUMNS,
-  /** Clock is rendered in the company's own timezone. */
-  timeZone: SITE_TIME_ZONE,
-  place: "RES",
-  scrollLabel: "Discover",
   portrait: "/hero-robot.webp",
   /** Greyscale depth map driving the parallax (white = near). */
   portraitDepth: "/hero-robot-depth.webp",
@@ -206,199 +215,163 @@ export const COVER_FOCAL = "50% 40.6%";
 export const COVER_PORTRAIT_QUERY = "(max-width: 767px)";
 
 /* ------------------------------------------------------------------ *
- * Features — four blocks, each paired with a live product mockup.
- * ------------------------------------------------------------------ */
-/**
- * What each feature says. A kicker, a claim, a paragraph, three bullets.
+ * Voice demo — a call reconstructed and replayed in text, under the
+ * "watch a call become an appointment" spread.
  *
- * `id` is what pairs an entry with its panel in `mockups.tsx` — the copy
- * lives here, the picture of the product lives there, and the section only
- * ever joins them by this key.
- */
-export type Feature = {
-  id: "agent" | "voice" | "calendar" | "analytics";
-  icon: LucideIcon;
-  kicker: string;
-  title: string;
-  body: string;
-  bullets: string[];
-};
-
-export const FEATURES_INTRO = {
-  eyebrow: "Features",
-  title: "Everything your AI agent handles for you",
-  sub: "From the first ring to the calendar invite, Neuro Tech Voice covers the whole conversation.",
-} as const;
-
-export const FEATURES: Feature[] = [
-  {
-    id: "agent",
-    icon: PhoneCall,
-    kicker: "Always on",
-    title: "Never let a call go to voicemail again",
-    body: "Your AI agent picks up instantly, any hour, any day, so every customer gets a real conversation instead of an answering machine.",
-    bullets: [
-      "No missed calls, ever",
-      "Handles nights, weekends, and holidays",
-      "Instant pickup, zero hold time",
-    ],
-  },
-  {
-    id: "voice",
-    icon: AudioLines,
-    kicker: "Sounds human",
-    title: "A voice callers actually enjoy talking to",
-    body: "Built on state-of-the-art voice AI, your agent speaks naturally, understands context, and responds like a real team member would.",
-    bullets: [
-      "Lifelike, natural-sounding voice",
-      "Understands context mid-conversation",
-      "Multiple languages and accents",
-    ],
-  },
-  {
-    id: "calendar",
-    icon: CalendarCheck,
-    kicker: "Automatic booking",
-    title: "Meetings booked before you even wake up",
-    body: "The agent checks your real availability and books directly into Google Calendar during the call, no forms, no follow-up emails, no double-booking.",
-    bullets: [
-      "Syncs live with Google Calendar",
-      "Confirms instantly, no back-and-forth",
-      "Zero double-bookings",
-    ],
-  },
-  {
-    id: "analytics",
-    icon: BarChart3,
-    kicker: "Full visibility",
-    title: "Every call, transcribed and analyzed instantly",
-    body: "Full transcripts, sentiment scoring, and call trends land in your dashboard the moment a call ends, so you always know how your business sounds.",
-    bullets: [
-      "Full transcripts for every call",
-      "Sentiment analysis built in",
-      "Live dashboard, updated in real time",
-    ],
-  },
-];
-
-/* ------------------------------------------------------------------ *
- * Voice demo — a pre-recorded call, played back word by word under the
- * "See it in action" spread.
+ * Every word in this block used to promise audio. "Pre-recorded demo",
+ * "Press play", "Playing…", "Play again": four labels selling a recording
+ * that does not exist in this repository and is not going to this pass.
+ * ./voice-demo noticed, wrote honest labels of its own inside the
+ * component, and left a comment saying it had done so because this file
+ * was frozen. It is not frozen now, so the honest words come home and the
+ * component's local copies can go whenever somebody is in there.
+ *
+ * `agentName`, `callerName` and `captionDone` are the three the section
+ * actually renders today. The rest are kept to the letter — same keys,
+ * same order — because a section agent may wire them back up at any time,
+ * and a dormant string that lies is still a string that lies.
  * ------------------------------------------------------------------ */
 export const VOICE_DEMO = {
-  chip: "Pre-recorded demo",
-  kicker: "Real conversation · AI voice agent",
-  title: "Hear what the future of your front desk sounds like",
-  transcriptTitle: "Live transcript",
+  chip: "No audio · a reconstruction",
+  kicker: "One call · replayed at the pace it ran",
+  title: "Watch a call become an appointment",
+  transcriptTitle: "What was said",
   agentName: "Neuro Tech Voice",
   callerName: "Caller",
   /** Speaker tag, under the orb. */
-  tagIdle: "Press play",
+  tagIdle: "Not running yet",
   tagPaused: "Paused",
   tagAgent: "● Neuro Tech Voice is speaking",
   tagCaller: "● Caller is speaking",
-  tagDone: "✓ Call completed · Appointment confirmed",
-  /** Button caption, beside the play control. */
-  labelIdle: "Play the conversation",
-  labelPlaying: "Playing…",
+  tagDone: "✓ Call ended · appointment in the diary",
+  /** Button caption, beside the transport. */
+  labelIdle: "Run the call",
+  labelPlaying: "Running…",
   labelPaused: "Resume",
-  labelDone: "Play again",
-  captionDone: "Appointment created automatically. Confirmation text sent.",
+  labelDone: "Run it again",
+  captionDone:
+    "Booked for the Wednesday while she was still on the line. The confirmation text leaves from the number she rang — on a paid plan, not on the trial.",
 } as const;
 
 export type DemoTurn = { sp: "agent" | "client"; t: string };
 
+/**
+ * Nine turns, and four of them are load-bearing in another file.
+ *
+ * ./voice-demo cuts this script to `[1, 4, 5, 6]` by index and stamps its
+ * call log against those four — "two free slots, offered by name" fires on
+ * turn 4, "Wednesday, 3:00 PM" on turn 6. So the shape here is a contract:
+ * nine turns, agent first, strictly alternating, the ask at 1, two named
+ * times at 4, the pick at 5, the booking read back at 6. Move a line and
+ * the log beside it starts describing a call nobody had.
+ *
+ * What changed is everything else. The old script was a stock demo — "I'd
+ * like to book an appointment, please", a caller called Alex Morgan with
+ * no problem and no gender, three exclamation marks and a "Perfect!".
+ * Nobody rings a business to book an appointment; they ring because
+ * something is wrong. So the caller has a fault, an address and a name,
+ * and the agent behaves the way the code actually makes it behave:
+ *
+ *  · The opening line discloses the AI. Not a flourish — `applyDisclosure`
+ *    in lib/voice/greetings.ts adds it to any greeting that omits it, and
+ *    the demo should show what a caller genuinely hears.
+ *  · It takes the name before it offers a time, because `book_appointment`
+ *    will not write a booking without one.
+ *  · It offers two times, not a list. The tool's own instruction is to
+ *    offer two or three aloud and never read the whole day out.
+ *  · It does not diagnose the boiler and it does not quote a price. That
+ *    refusal is the product, and it is also every industry page's rule.
+ *
+ * The confirmation text is the one future-tense promise on the page, and
+ * it names its mechanism, which is the only kind this voice makes.
+ */
 export const VOICE_DEMO_SCRIPT: DemoTurn[] = [
   {
     sp: "agent",
-    t: "Good afternoon! Thank you for calling. I'm Neuro Tech Voice, your virtual assistant. How can I help you today?",
+    t: "Good afternoon, you're through to the office. You're speaking to an AI assistant — how can I help?",
   },
-  { sp: "client", t: "Hi! I'd like to book an appointment, please." },
-  { sp: "agent", t: "Of course, happy to help. May I have your name, please?" },
-  { sp: "client", t: "Sure, it's Alex Morgan." },
+  {
+    sp: "client",
+    t: "The boiler's making a noise like a kettle and the pressure keeps dropping. Can somebody come and look at it?",
+  },
   {
     sp: "agent",
-    t: "Thank you, Alex. I have Tuesday at 9:00 AM or Wednesday at 3:00 PM available. Which one works best for you?",
+    t: "That's one for an engineer rather than for me over the phone. Can I take your name first?",
   },
-  { sp: "client", t: "Wednesday at 3:00 PM sounds good." },
+  { sp: "client", t: "Yvonne Parr — fourteen Cotham Road." },
   {
     sp: "agent",
-    t: "Perfect! You're booked for Wednesday at 3:00 PM. You'll receive a confirmation text shortly. Is there anything else I can help you with?",
+    t: "Thank you, Mrs Parr. The diary has Tuesday at 9:00 AM, or Wednesday at 3:00 PM. Which of those suits you?",
   },
-  { sp: "client", t: "No, that's all. Thank you!" },
-  { sp: "agent", t: "My pleasure! Have a wonderful day!" },
+  { sp: "client", t: "Wednesday at three, please." },
+  {
+    sp: "agent",
+    t: "Wednesday at 3:00 PM, and it's in the diary now. A confirmation text is on its way to this number. Anything else while I have you?",
+  },
+  { sp: "client", t: "No, that's everything. Thank you." },
+  {
+    sp: "agent",
+    t: "Thank you for ringing. An engineer will see you Wednesday afternoon.",
+  },
 ];
 
 /* ------------------------------------------------------------------ *
- * Integrations — the tools the agent connects to (marquee).
- * ------------------------------------------------------------------ */
-export const INTEGRATIONS_INTRO = {
-  eyebrow: "Integrations",
-  title: "Works with the tools you already use",
-} as const;
-
-export const INTEGRATIONS: { label: string; icon: LucideIcon }[] = [
-  { label: "Google Calendar", icon: Calendar },
-  { label: "Gmail", icon: Mail },
-  { label: "Google Sheets", icon: Table2 },
-  { label: "Google Docs", icon: FileText },
-  { label: "Google Drive", icon: FolderOpen },
-];
-
-/* ------------------------------------------------------------------ *
- * How it works — the real setup, run at the reader's own hands.
+ * Integrations — the tools the agent connects to.
  *
- * The claim this section has to carry is a duration: you do this yourself,
- * and it is over before a sales call would have been scheduled. Three tiles
- * saying "quick" cannot carry a duration — nothing about a tile is timed.
- * So the section hands over the actual four steps and starts a clock, and
- * every decision below is one the wizard really asks for.
+ * "Works with the tools you already use" was a claim about a feature list.
+ * What actually earns the strip is a claim about a call: the integration is
+ * not a logo, it is the reason the appointment exists before the caller has
+ * put the phone down. So the words say that, and the logos stop being the
+ * argument and go back to being evidence for it.
+ *
+ * The line now splits the five logos into the two things they actually are,
+ * because the old one did not and the difference is the whole honesty of
+ * the strip. Only Calendar is reached *during* the call — free times read,
+ * the appointment written back, while the caller is still talking. Gmail,
+ * Sheets, Docs and Drive are post-call workflow steps; they cannot touch a
+ * live conversation and drawing them in one row implied they could.
+ *
+ * Two concessions ride in the sentence rather than in a footnote. Google
+ * Calendar is the only calendar there is — no other provider exists in the
+ * product — and all five of these are badged beta inside the app. A reader
+ * who finds the beta label after signing up has caught us; a reader who
+ * reads it here has been told.
  * ------------------------------------------------------------------ */
-export const HOW_INTRO = {
-  eyebrow: "How it works",
-  title: "Set it up yourself. We'll time you.",
-  sub: "The four steps you'd take after signing up — company, agent, voice, live. Take them here instead, with the clock running. No engineer, no script, no call booked with sales.",
+export const COLOPHON = {
+  kicker: "Wired in",
+  line: "It reads your calendar while she is still talking and writes the appointment back before she hangs up — Google Calendar, which is the only calendar it books into. The other four run once the call has ended: the email, the row on the sheet, the call report, the transcript filed on your Drive. All five are in beta, and the app says so too.",
 } as const;
 
-export type SetupStep = {
-  id: "company" | "agent" | "voice" | "launch";
-  n: string;
-  label: string;
-  /** What this step settles — the rail's second line. */
-  decides: string;
-  icon: LucideIcon;
-};
-
-export const SETUP_STEPS: SetupStep[] = [
-  {
-    id: "company",
-    n: "01",
-    label: "Company",
-    decides: "Who the agent answers for",
-    icon: Building2,
-  },
-  {
-    id: "agent",
-    n: "02",
-    label: "Agent",
-    decides: "Its register and its language",
-    icon: Bot,
-  },
-  {
-    id: "voice",
-    n: "03",
-    label: "Voice",
-    decides: "What the caller actually hears",
-    icon: AudioLines,
-  },
-  {
-    id: "launch",
-    n: "04",
-    label: "Live",
-    decides: "Number, calendar, first call",
-    icon: Rocket,
-  },
+/**
+ * Each tool twice over: its real mark, and a lucide glyph.
+ *
+ * The `mark` is the vendor's own SVG, which is what belongs on the cover —
+ * a monoline phone icon standing in for Google Calendar is a drawing of a
+ * category, and the reader is checking for a *specific* logo. The `icon`
+ * stays because /product/ai-agents renders this same list at a size and in
+ * a tone where a flat brand mark would be the wrong object; it maps the
+ * label to its own logo set and uses the glyph as the fallback.
+ *
+ * Both fields therefore have an owner. Neither is decoration for the other.
+ */
+export const INTEGRATIONS: { label: string; icon: LucideIcon; mark: string }[] = [
+  { label: "Google Calendar", icon: Calendar, mark: "/integrari/google_calendar.svg" },
+  { label: "Gmail", icon: Mail, mark: "/integrari/google_mail.svg" },
+  { label: "Google Sheets", icon: Table2, mark: "/integrari/google_sheets.svg" },
+  { label: "Google Docs", icon: FileText, mark: "/integrari/google_docs.svg" },
+  { label: "Google Drive", icon: FolderOpen, mark: "/integrari/google_drive.svg" },
 ];
+
+/* ------------------------------------------------------------------ *
+ * The agent's own settings — register, language, voice.
+ *
+ * What is left here after the setup-wizard section came out is the part
+ * that was never about setup: these are the three decisions that change
+ * what a caller hears, and they are real app settings, not a stepper's
+ * illustration of one. The header's Product menu reads SETUP_VOICES on
+ * every route of the site, so this block outlives any one section that
+ * happens to draw it.
+ * ------------------------------------------------------------------ */
 
 /**
  * The register pad's six named points.
@@ -693,11 +666,51 @@ export function greetingFor(o: {
  * So the whole section is now somebody else's data, cited, and the shape
  * of it happens to be the entire argument for answering a phone instantly.
  * ------------------------------------------------------------------ */
+/**
+ * The eyebrow carries the argument, so it says whose number it is.
+ *
+ * "Why it works" was a heading about us. The one thing this section has
+ * that no other section on the page has is that none of it is ours, and
+ * that is what the eyebrow should spend itself on.
+ *
+ * The sub states the three measured points outright — 1.00, a quarter of
+ * that at ten minutes, a twenty-first of it at thirty, exactly
+ * `LEAD_DECAY` — rather than telling the reader to drag a marker for
+ * them. A reader who does not drag was being told nothing, and on a phone
+ * the drag was competing with the page's own scroll.
+ *
+ * What the sub now also does is name the conflict of interest in its own
+ * source, before the reader finds it in the citations underneath. The
+ * lead-response study was run with InsideSales.com, a company selling
+ * software that shortens response time: it is measuring the thing it is
+ * paid to sell. That does not make the finding wrong and it is the best
+ * measurement of its kind anybody has published — but the reader is going
+ * to see the name in `WHY_SOURCES` either way, and there are only two
+ * ways for them to meet it. This is the cheaper one.
+ */
 export const STATS_INTRO = {
-  eyebrow: "Why it works",
-  title: "The whole thing is decided in the first five minutes.",
-  sub: "Not our claim — MIT's and Harvard Business Review's. Across 15,000 leads and 100,000 call attempts they found the same shape: the odds of qualifying a caller hold flat for five minutes, then fall off a cliff. Drag the marker and watch it happen.",
+  eyebrow: "None of it is ours",
+  title: "It is decided before the fifth minute is up.",
+  sub: "Three measured points from two published studies, and one of those was run with a company that sells lead-response software — it measured the thing it is paid to shorten, and you should read it knowing that. The odds of qualifying a caller hold flat for five minutes, then fall four times over, then twenty-one.",
 } as const;
+
+/**
+ * The one mark on the plot that is ours, and it is a claim, not a datum.
+ *
+ * Kept as its own export so it can never be mistaken for a fourth study
+ * point: everything else in this section is cited in `WHY_SOURCES`, and
+ * this sentence is the product standing at the left-hand edge of somebody
+ * else's graph. Phrased in the present tense because that is the whole of
+ * the assertion — not faster, not sooner. Here.
+ *
+ * `it`, not "your agent", to match every other sentence on the page about
+ * behaviour. And no figure attached: the mark sits at the flat end of the
+ * curve because that is where answering on the first ring puts it, and
+ * the moment this line carries a number it becomes a latency claim the
+ * product has never measured. It renders into 8.5rem, so it has to be
+ * short anyway — which is the right constraint for this sentence.
+ */
+export const SHELF_CLAIM = "It answers here, on the first ring.";
 
 /**
  * The measured decay of a lead, from the MIT / InsideSales.com Lead
@@ -726,8 +739,14 @@ export const LEAD_DECAY: { at: number; qualify: number }[] = [
   { at: 1800, qualify: 1 / 21 },
 ];
 
-/** Seconds at each end of the plot — the study's measured range. */
-export const DECAY_FLOOR = 300;
+/**
+ * The far end of the plot — where the study's measurements stop.
+ *
+ * There is no matching floor constant. The near end is `LEAD_DECAY[0].at`
+ * and has to be read from the data rather than restated beside it: a
+ * second copy of the number is a second thing to forget when the baseline
+ * window moves, and the one it would silently contradict is the study's.
+ */
 export const DECAY_MAX = 1800;
 
 /**
@@ -813,10 +832,22 @@ export const WHY_SOURCES: { work: string; detail: string }[] = [
  * roof. That rate is what separates a trade that merely closes at five
  * from one that is unreachable at its own busiest hour.
  * ------------------------------------------------------------------ */
+/**
+ * The intro concedes the model before the panel draws it.
+ *
+ * `volume`, `staffed` and `busyMiss` are a stated model of a day, not
+ * telemetry, and the panel says so on its own footer. The sub says it too,
+ * in the sentence a reader meets first, because a modelled shape presented
+ * as a measurement is the one thing that would cost this section its
+ * standing — and the shapes hold up perfectly well when you admit what
+ * they are. The second half of the concession is the house's own move:
+ * point the reader at the evidence they already own. Their handset has the
+ * real version of this chart in it.
+ */
 export const USE_CASES_INTRO = {
-  eyebrow: "Who it's for",
-  title: "Pick your industry. Watch one day on the line.",
-  sub: "Same agent, a different vocabulary. Choose a business below and watch a typical day on its phone line — when it actually rings, what those callers ask for, and how much of it a staffed front desk never hears.",
+  eyebrow: "One day on the line",
+  title: "Pick a trade and watch its phone for a day.",
+  sub: "Same agent, your trade's vocabulary. Choose a business below and the panel walks one phone line through a day — when it actually rings, what those callers want, and the share nobody hears because both hands are busy. The day is modelled and we say which numbers are ours; the real version is in the missed-call list on the phone in your pocket.",
 } as const;
 
 export type Industry = {
@@ -873,23 +904,21 @@ export type Industry = {
    */
   snippets: string[];
   /**
-   * Expected booked value of one recovered call, USD — already net of the
-   * share that never converts.
+   * There is deliberately no money field here.
    *
-   * Deliberately conservative, because this is the number a visitor will
-   * test against their own books and the whole panel loses if it reads as
-   * inflated. Each one is a job value multiplied through a realistic
-   * conversion, not a job value: a recovered dental call is roughly 45% ×
-   * a $250 appointment, a recovered legal call is roughly 12% × a $2,000
-   * matter, a recovered table is roughly 55% × $70 of covers. Most
-   * recovered calls are a question, a reschedule or a browser, and the
-   * figure has to carry that rather than pretend every one closes.
+   * This type used to carry an expected booked value per recovered call,
+   * and the panel multiplied it by the day's missed calls into a dollar
+   * figure. Every input to that figure was ours: the conversion rate, the
+   * job value, the share that never closes. Stacked next to two counts a
+   * reader can sanity-check against their own phone, one invented number
+   * is not a bonus — it is the number they will test first, and the two
+   * honest ones lose their standing when it fails.
    *
-   * Kept as one pre-discounted number instead of a value × rate pair
-   * because the panel never shows the rate, and a factor nobody can see is
-   * a factor that drifts.
+   * The counts stay because they are defensible: `volume`, `staffed` and
+   * `busyMiss` are a stated model of a day, and the panel says so. What a
+   * recovered call is worth is the reader's own arithmetic, done on their
+   * own books, and the page is stronger for leaving the last step to them.
    */
-  value: number;
 };
 
 /**
@@ -935,7 +964,6 @@ export function customIndustry(label: string): Industry {
       "requesting a callback",
       "renewing with you",
     ],
-    value: 80,
   };
 }
 
@@ -976,7 +1004,6 @@ export const INDUSTRIES: Industry[] = [
       "do you see children?",
       "prescription refill",
     ],
-    value: 95,
   },
   {
     id: "salons",
@@ -1013,7 +1040,6 @@ export const INDUSTRIES: Industry[] = [
       "keratin treatment price",
       "running ten minutes late",
     ],
-    value: 35,
   },
   {
     id: "law",
@@ -1051,7 +1077,6 @@ export const INDUSTRIES: Industry[] = [
       "divorce, first steps",
       "I signed under pressure",
     ],
-    value: 200,
   },
   {
     id: "realestate",
@@ -1088,7 +1113,6 @@ export const INDUSTRIES: Industry[] = [
       "renting, not buying",
       "anything cheaper nearby?",
     ],
-    value: 85,
   },
   {
     id: "trades",
@@ -1125,7 +1149,6 @@ export const INDUSTRIES: Industry[] = [
       "gutter is blocked",
       "how soon can you quote?",
     ],
-    value: 120,
   },
   {
     id: "restaurants",
@@ -1162,7 +1185,6 @@ export const INDUSTRIES: Industry[] = [
       "changing ours to four",
       "do you do takeaway?",
     ],
-    value: 40,
   },
   {
     id: "auto",
@@ -1199,7 +1221,6 @@ export const INDUSTRIES: Industry[] = [
       "clutch is slipping",
       "courtesy car available?",
     ],
-    value: 120,
   },
   {
     id: "logistics",
@@ -1236,7 +1257,6 @@ export const INDUSTRIES: Industry[] = [
       "insurance for the load",
       "weekend collection?",
     ],
-    value: 70,
   },
 ];
 
@@ -1264,9 +1284,9 @@ export const INDUSTRIES: Industry[] = [
  * agent actually needs, and for each vendor, who supplies it.
  * ------------------------------------------------------------------ */
 export const COMPARISON_INTRO = {
-  eyebrow: "The difference",
-  title: "They sell the parts. We hand over the answered phone.",
-  sub: "Every platform below is good at what it is for, and what it is for is building. This is what arrives in the box from each of them — and which layers are still sitting on your desk, waiting for somebody on your side to build them.",
+  eyebrow: "What arrives in the box",
+  title: "They sell the parts. The assembly is the job.",
+  sub: "Every platform below is good at what it is for, and what it is for is building. This is what arrives in the box from each of them — and which of the ten layers are still sitting on your desk, waiting for somebody on your side to write them.",
 } as const;
 
 /** Who supplies a given layer. */
@@ -1292,6 +1312,33 @@ export const PART_STATES: Record<
  * the top half and goes dark across the bottom one, because the bottom
  * half was never what they were selling.
  */
+/**
+ * The words that put the ten layers in front of a reader.
+ *
+ * It opens on the count rather than on us, because the count is the only
+ * surprising thing in the section: nobody who has not built one of these
+ * thinks a phone agent has ten parts, and the moment they accept that it
+ * does, the split does the rest of the argument on its own. The second
+ * sentence names the market honestly — four companies really will sell you
+ * those first five layers, and saying so is what buys the right to claim
+ * the other five.
+ *
+ * `title` counts to ten and `sub` splits five and five. Both are checked
+ * against `STACK` by eye today; if a layer is ever added or the `group`
+ * boundary moves, these two sentences move with it. "The four companies
+ * in the table below" is checked the same way, against `RIVALS` minus our
+ * own row — four today.
+ *
+ * The sub ends short on purpose. Long, long, then two words: the second
+ * five are not a product anybody withheld from you, they are work, and
+ * the sentence that says so should cost nothing to read.
+ */
+export const ANATOMY_INTRO = {
+  kicker: "Ten parts, in order",
+  title: "Ten things happen before the caller hears a word.",
+  sub: "Five of them are a market: you can buy them from anyone, and the four companies in the table below will sell you exactly those five. The other five are your rules, your prices, your diary and somebody reading the transcripts — and nobody sells those, because they are not a product. They are work.",
+} as const;
+
 export type StackLayer = {
   id: string;
   n: string;
@@ -1300,76 +1347,97 @@ export type StackLayer = {
   note: string;
 };
 
+/**
+ * The notes are the layer in one line, and one of them was a figure.
+ *
+ * Layer 04 read "barge-in, silence, the half-second before it answers".
+ * Half a second is a latency claim, and there is no measured latency
+ * figure anywhere in this product — not a p50, not a p95, not a
+ * time-to-first-audio. The nearest millisecond constant in the codebase is
+ * a *degradation threshold*: first audio slower than 1.2s counts as a soft
+ * failure against the speech provider's circuit breaker. A prospect who
+ * found that would read 1.2 seconds and hold us to half of it.
+ *
+ * So 04 now describes the mechanism instead, which is the better claim
+ * anyway and is genuinely unusual: the turn detector is tuned for phone
+ * callers rather than for speed, because people on a phone pause in the
+ * middle of a sentence and a system optimised to be quick talks over them.
+ *
+ * The other rewrites are the same discipline at lower stakes — each note
+ * names the concrete thing rather than the category, 08 concedes that the
+ * calendar is Google's and no one else's, and 09 drops the email that only
+ * exists as a workflow step on a plan most readers will not be on.
+ */
 export const STACK: StackLayer[] = [
   {
     id: "voice",
     n: "01",
     group: "stack",
     label: "A voice",
-    note: "The synthesised speech the caller actually hears",
+    note: "The synthesised speech at the other end of the line",
   },
   {
     id: "hearing",
     n: "02",
     group: "stack",
     label: "Hearing",
-    note: "Live transcription, down a noisy phone line",
+    note: "Transcribing a caller live, down a line with a van on it",
   },
   {
     id: "reasoning",
     n: "03",
     group: "stack",
     label: "Reasoning",
-    note: "The model deciding what to say next",
+    note: "The model choosing the next sentence, and the tool under it",
   },
   {
     id: "turns",
     n: "04",
     group: "stack",
     label: "Turn-taking",
-    note: "Barge-in, silence, the half-second before it answers",
+    note: "Knowing she has finished, and stopping when she hasn't",
   },
   {
     id: "number",
     n: "05",
     group: "stack",
     label: "A number that rings",
-    note: "A carrier, a number, and the route into it",
+    note: "A carrier, a number, and the route from the network into it",
   },
   {
     id: "script",
     n: "06",
     group: "business",
     label: "What it says",
-    note: "Your greeting, your rules, your escalation path",
+    note: "Your greeting, your rules, and who it puts a caller through to",
   },
   {
     id: "knows",
     n: "07",
     group: "business",
     label: "What it knows",
-    note: "Your services, prices, hours and policies",
+    note: "Your services, your prices, your hours, out of your own documents",
   },
   {
     id: "calendar",
     n: "08",
     group: "business",
     label: "Your calendar",
-    note: "Availability read, the appointment written back",
+    note: "Free times read mid-call, the appointment written back into Google Calendar",
   },
   {
     id: "followup",
     n: "09",
     group: "business",
     label: "The follow-up",
-    note: "Confirmation by SMS and email, then the reminder",
+    note: "The confirmation text, then the reminder the day before",
   },
   {
     id: "watch",
     n: "10",
     group: "business",
     label: "Someone watching it",
-    note: "Transcripts read, failures caught, prompts corrected",
+    note: "Transcripts read, the wrong answer found, the instruction rewritten",
   },
 ];
 
@@ -1379,6 +1447,15 @@ export const STACK: StackLayer[] = [
  * the only comparison worth putting on a landing page: our opinion of a
  * competitor's quality is worth nothing to a reader, and their own
  * description of who they built it for is worth a great deal.
+ *
+ * There is no time-to-first-call field any more. The row used to say
+ * "engineering days to weeks" against four vendors and "minutes" against
+ * us, and not one of those four publishes such a figure anywhere — we had
+ * inferred it. Sitting directly above a footer that stakes the table on
+ * public sources, one estimated row is enough to make the reader wonder
+ * which of the others we also guessed. The bill of materials survives it
+ * intact: if five layers are marked "you build it", the reader works out
+ * the timeline themselves, and their own arithmetic is not arguable.
  */
 export type Rival = {
   id: string;
@@ -1386,7 +1463,6 @@ export type Rival = {
   kind: string;
   who: string;
   billing: string;
-  live: string;
   parts: Record<string, PartState>;
   ours?: boolean;
 };
@@ -1399,14 +1475,54 @@ const ALL_BUILD = {
   watch: "build",
 } as const;
 
+/**
+ * Ours first, and not out of vanity.
+ *
+ * The table scrolls sideways on a phone — six columns will never fit 390px
+ * — so the last column is the one nobody reaches. Putting the payoff there
+ * meant a reader on a phone saw four vendors going dark down the business
+ * half and then stopped scrolling, having been shown the problem and none
+ * of the answer. First column, and the rest of the row is read against it.
+ */
 export const RIVALS: Rival[] = [
+  {
+    id: "ntv",
+    name: "Neuro Tech Voice",
+    ours: true,
+    kind: "A finished agent, for one business",
+    who: "The business whose phone is ringing on Monday",
+    billing: "A monthly plan with the minutes in it — one line on one invoice",
+    parts: {
+      voice: "shipped",
+      hearing: "shipped",
+      reasoning: "shipped",
+      turns: "shipped",
+      // The one cell we concede. Ten ticks out of ten is a table nobody
+      // believes, including the nine that were earned, and this row has to
+      // survive a reader looking for the catch.
+      //
+      // `metered` rather than `build`, because `build` would be a lie in
+      // our own favour's opposite direction: its label reads "you build
+      // it — your team's prompt, integration and testing", and we do
+      // supply the number. What is true is exactly what `metered` says —
+      // we run it, and it is billed as its own line rather than bundled
+      // into the plan — and the FAQ two sections down says the same thing
+      // in words, along with the part that actually stings: porting an
+      // existing number in is not supported yet.
+      number: "metered",
+      script: "shipped",
+      knows: "shipped",
+      calendar: "shipped",
+      followup: "shipped",
+      watch: "shipped",
+    },
+  },
   {
     id: "elevenlabs",
     name: "ElevenLabs",
     kind: "Voice and agents platform",
     who: "Teams building conversational AI into their own product",
     billing: "Per minute for the agent — the model and the telephony billed on top",
-    live: "Engineering days to weeks",
     parts: {
       voice: "shipped",
       hearing: "shipped",
@@ -1423,7 +1539,6 @@ export const RIVALS: Rival[] = [
     who: "Developers and enterprise engineering teams",
     billing:
       "A platform fee per minute; speech, model and voice at cost — or free if you bring your own keys",
-    live: "Engineering days to weeks",
     parts: {
       voice: "byo",
       hearing: "byo",
@@ -1440,7 +1555,6 @@ export const RIVALS: Rival[] = [
     who: "Support and sales teams automating calls at scale",
     billing:
       "Per minute, itemised — voice, model, speech and telephony each their own line",
-    live: "Engineering days",
     parts: {
       voice: "metered",
       hearing: "metered",
@@ -1457,7 +1571,6 @@ export const RIVALS: Rival[] = [
     who: "Teams running high call volume",
     billing:
       "One per-minute rate covering model, speech and voice; telephony separate",
-    live: "Engineering days",
     parts: {
       voice: "shipped",
       hearing: "shipped",
@@ -1467,32 +1580,27 @@ export const RIVALS: Rival[] = [
       ...ALL_BUILD,
     },
   },
-  {
-    id: "ntv",
-    name: "Neuro Tech Voice",
-    ours: true,
-    kind: "A finished agent, for one business",
-    who: "The business whose phone is ringing on Monday",
-    billing: "A monthly plan with the minutes in it — one line on one invoice",
-    live: "Minutes — the four steps above this section",
-    parts: {
-      voice: "shipped",
-      hearing: "shipped",
-      reasoning: "shipped",
-      turns: "shipped",
-      number: "shipped",
-      script: "shipped",
-      knows: "shipped",
-      calendar: "shipped",
-      followup: "shipped",
-      watch: "shipped",
-    },
-  },
 ];
 
+/**
+ * The concession in the last-but-one sentence is not a courtesy.
+ *
+ * One of the four platforms in this table is inside our own product:
+ * ElevenLabs is the fallback the call moves to when the primary speech
+ * provider fails, and on that path the agent has no tools at all. Printing
+ * that in the section whose whole argument is "they sell parts, we ship
+ * the assembly" costs something, which is exactly why it earns the rest of
+ * the paragraph. A reader who works it out for themselves has caught us
+ * comparing ourselves against a supplier without saying so.
+ */
 export const COMPARISON_NOTE =
-  "None of this is a knock on the platforms. Being infrastructure is what they are for, and the first word on their own pricing pages is build. If you are shipping a product, buy the parts — they are very good parts. If your phone is ringing and there is nobody to pick it up, the assembly is the entire job.";
+  "None of this is a knock on the platforms. Being infrastructure is what they are for, and the first word on their own pricing pages is build. If you are shipping a product, buy the parts — they are very good parts, and one of the four in this table is inside ours, standing by for the day the primary voice fails. If your phone is ringing and there is nobody to pick it up, the assembly is the whole job.";
 
+/**
+ * Four vendors' packaging, all read on the same day — 29 July 2026 — and
+ * none of them re-read since. A checked-on date is a claim about what
+ * somebody did, so it moves only when somebody does it again.
+ */
 export const COMPARISON_SOURCE =
   "Compiled from each vendor's own public pricing and positioning pages, checked 29 July 2026. Every row describes how a product is sold, not how well it performs. Vendors change their packaging often — if something here has gone out of date, tell us and we will correct it.";
 
@@ -1502,7 +1610,7 @@ export const COMPARISON_SOURCE =
  * Every plan is a fee plus an allowance of minutes plus a rate for the
  * minutes past it, which means the only honest answer to "what does this
  * cost" is a function of call volume, not a number on a card. The section
- * draws that function for all four plans at once.
+ * draws that function for every plan at once.
  *
  * Which is also how the price list gets audited. Run the arithmetic across
  * the range and the plans have to actually order themselves — if a rung's
@@ -1510,15 +1618,26 @@ export const COMPARISON_SOURCE =
  * it is cheaper at every volume and the rung is dead weight. Numbers here
  * are the business's to set; the section only refuses to hide them.
  * ------------------------------------------------------------------ */
+/**
+ * "One agent" is in the sub because it is a limit, not a feature.
+ *
+ * A business gets exactly one voice agent on every plan — there is no
+ * mechanism anywhere in the product to create a second, so "an agent per
+ * location" and "one for sales, one for support" are sentences nobody
+ * here can honour. Stated as a limit it also does the work the old "no
+ * seats" clause was doing, and it does it without sounding like a
+ * concession we were pleased to make.
+ */
 export const PRICING_INTRO = {
-  eyebrow: "Pricing",
-  title: "Tell us how busy your phone is.",
-  sub: "You buy minutes — no seats, no per-agent fee, nothing extra for an integration. Say roughly how many calls you get on a normal day and the whole bill is on screen before you sign anything.",
-  annualNote: "2 months free",
+  eyebrow: "What it costs you",
+  title: "Say how busy your phone is and the bill does itself.",
+  sub: "You buy minutes. There is no seat to add, no per-agent fee and nothing extra for an integration — and no second agent to buy either, because a business gets one and it is the same one on every plan. Say roughly how many calls come in on a normal day; the whole bill is on the screen before you sign anything.",
+  annualNote: "Two months free",
 } as const;
 
+/** A rung with a published price. Enterprise is not one: see ENTERPRISE. */
 export type Tier = {
-  id: string;
+  id: "starter" | "growth" | "pro" | "business" | "scale";
   name: string;
   /** Plan fee per month, USD, billed monthly. */
   monthly: number;
@@ -1526,64 +1645,95 @@ export type Tier = {
   minutes: number;
   /** USD per minute once the allowance is gone. */
   overage: number;
-  /** Shown as "from" — the rung is negotiated rather than listed. */
-  from?: boolean;
-  /** What this rung adds that the one below it did not have. */
-  unlocks: string[];
   cta: string;
   href: string;
+  /** Our recommendation, shown as "Our pick". A claim about the plan, never about sales. */
   featured?: boolean;
 };
 
+/**
+ * The listed rungs, ascending by minutes. Enterprise is not one of them: it
+ * has no published fee, allowance or rate (ENTERPRISE), so nothing can
+ * estimate onto it, print "from $X" for it, or divide by its minutes.
+ *
+ * Three invariants hold this list together; home.test.ts checks each, on
+ * monthly and yearly billing:
+ *  · A rung's overage sits above its own effective rate (fee ÷ allowance):
+ *    every rung bills $0.20 past its allowance, over 12.25¢ · 9.9¢ · 8.3¢ ·
+ *    9.98¢ · 6.6¢ inside it.
+ *  · Every rung owns one band of volumes where it is the cheapest: monthly
+ *    1–5 · 6–14 · 15–35 · 36–62 · 63–80 calls a day; yearly 1–5 · 6–13 ·
+ *    14–33 · 34–58 · 59–80.
+ *  · Each handover lands inside the next rung's allowance, so the plan a
+ *    customer is moved onto covers them: 650 · 1,750 · 4,250 · 7,455
+ *    minutes a month.
+ *
+ * The effective rate does NOT fall at every rung, on purpose. Business
+ * (9.98¢) costs more a minute than Pro (8.3¢); it sells on its own
+ * features and owns 36–62 calls a day. No copy may call Business better
+ * value than Pro, or Pro "best value" (Scale, 6.6¢, is the lowest). Against
+ * a flat 8¢ voice platform only Scale is cheaper per included minute, so
+ * the landing names no rival (home.test.ts bans the names).
+ *
+ * OWNER: fees, minutes, the flat $0.20 overage and Pro's extras are the
+ * owner's (23 Sep 2026). Growth and Scale do not exist in the backend
+ * (types/index.ts PLANS), whose minutes also differ, and its cost note
+ * (~$0.10 a minute) puts Pro and Scale below cost at full use. Checkout
+ * must match this list before launch.
+ */
 export const TIERS: Tier[] = [
-  {
-    id: "starter",
-    name: "Starter",
-    monthly: 49,
-    minutes: 150,
-    overage: 0.25,
-    unlocks: ["Basic analytics", "Email support"],
-    cta: "Start free",
-    href: AUTH.signup,
-  },
+  { id: "starter", name: "Starter", monthly: 49, minutes: 400, overage: 0.2, cta: "Start free", href: AUTH.signup },
+  { id: "growth", name: "Growth", monthly: 99, minutes: 1000, overage: 0.2, cta: "Start free", href: AUTH.signup },
   {
     id: "pro",
     name: "Pro",
     monthly: 249,
-    minutes: 850,
-    overage: 0.25,
-    unlocks: [
-      "Advanced analytics",
-      "Call recordings",
-      "Google integrations",
-      "Priority support",
-    ],
+    minutes: 3000,
+    overage: 0.2,
     cta: "Start free",
     href: AUTH.signup,
     featured: true,
   },
-  {
-    id: "business",
-    name: "Business",
-    monthly: 499,
-    minutes: 1750,
-    overage: 0.22,
-    unlocks: ["Full analytics suite", "Every integration, not only Google"],
-    cta: "Start free",
-    href: AUTH.signup,
-  },
-  {
-    id: "custom",
-    name: "Custom",
-    monthly: 999,
-    minutes: 3500,
-    overage: 0.18,
-    from: true,
-    unlocks: ["Custom prompts and a written SLA", "A named contact"],
-    cta: "Talk to us",
-    href: AUTH.contactSales,
-  },
+  { id: "business", name: "Business", monthly: 499, minutes: 5000, overage: 0.2, cta: "Start free", href: AUTH.signup },
+  { id: "scale", name: "Scale", monthly: 990, minutes: 15000, overage: 0.2, cta: "Start free", href: AUTH.signup },
 ];
+
+/**
+ * The rung above the list. No fee, allowance or rate is published for it, so
+ * none exists here to print, estimate onto or divide by. `id` stays
+ * "custom", the backend's key (types/index.ts PLANS, entitlements).
+ */
+export const ENTERPRISE = {
+  id: "custom",
+  name: "Enterprise",
+  /** OWNER: both pre-date this change and are unverified. No SLA document exists in the repo. */
+  unlocks: ["A written SLA", "A named contact"],
+  cta: "Talk to us",
+  href: AUTH.contactSales,
+} as const;
+
+/**
+ * The invoice, as one function, so two sections cannot disagree about it.
+ *
+ * A second implementation of the same arithmetic elsewhere is a
+ * guarantee that one day two numbers differ on the same screen, with no
+ * way for a reader to tell which is the real one.
+ *
+ * It is deliberately a function and not a table of prices: a plan is a fee
+ * plus an allowance plus a rate past it, so what a customer pays is a
+ * function of their call volume and there is no honest single number to
+ * put on a card.
+ */
+
+/** Two months off the plan fee, per `PRICING_INTRO.annualNote`. */
+const ANNUAL = 10 / 12;
+
+export const feeFor = (t: Tier, annual: boolean) =>
+  annual ? t.monthly * ANNUAL : t.monthly;
+
+/** The invoice: the fee, plus this plan's own rate past its allowance. */
+export const costFor = (t: Tier, minutes: number, annual: boolean) =>
+  feeFor(t, annual) + Math.max(0, minutes - t.minutes) * t.overage;
 
 /**
  * Minutes in an average answered call.
@@ -1616,160 +1766,875 @@ export const PRICING_MAX_CALLS_DAY = 80;
 export const DAYS_PER_MONTH = 30;
 
 /** Volumes worth naming, so nobody has to guess where to start. */
+/**
+ * Each lands exactly on a plan fee with nothing over: 3 → Starter $49,
+ * 8 → Growth $100, 25 → Pro $249 (yearly $40.83 / $83.33 / $207.50).
+ * home.test.ts pins it.
+ */
 export const PRICING_PRESETS: { label: string; callsDay: number }[] = [
-  { label: "A quiet clinic", callsDay: 6 },
-  { label: "A busy salon", callsDay: 15 },
-  { label: "A dispatch room", callsDay: 45 },
+  { label: "A quiet clinic", callsDay: 3 },
+  { label: "A busy salon", callsDay: 8 },
+  { label: "A packed restaurant", callsDay: 25 },
 ];
 
+/**
+ * OWNER: the hero and this block describe the same trial differently, and
+ * only one of them matches the backend. Somebody has to choose.
+ *
+ * `HERO.note` and the old close's note both said "5 free minutes every
+ * month" — a recurring monthly allowance. What the code grants is five
+ * minutes once, inside a fourteen-day window, never renewed: the plan is
+ * literally excluded from the renewal job that rolls everyone else's
+ * minutes over. When those five are gone the agent stops answering, because
+ * the trial is the one plan that cannot run into overage.
+ *
+ * Every other page on this site already says the correct thing — the
+ * product pages, the industry pages, the register page. The hero is frozen
+ * copy this pass, so the fix is not available here; what is available is
+ * refusing to repeat the wrong version. This block says
+ * "five minutes, fourteen days", which is true, and neither says "every
+ * month" or "once and never again", so neither stands on the same screen
+ * calling the hero a liar. That is a truce, not a resolution. The hero
+ * still needs changing, and it is the owner's line to change.
+ *
+ * The body carries the concession the old one buried. "Point a number at
+ * it" was not true without a card: a number is its own Stripe purchase, so
+ * a card-free trial cannot receive a single outside call. What it *can* do
+ * is answer you — test calls are real calls on the real agent and they are
+ * never billed against the five minutes, which is a better sentence anyway
+ * because it is the thing a cautious buyer actually wants to do first.
+ *
+ * `cta` stays "Start free" deliberately. It is the same button as the
+ * hero's, the close's and every rung in `TIERS`, and a page that calls one
+ * button four things has a copy problem, not a variety of them.
+ */
 export const PRICING_TRIAL = {
-  headline: "Five minutes free, for fourteen days, without a card.",
-  body: "Set the agent up, point a number at it, and listen to it work. The plan starts when you decide it should — not when the trial runs out.",
+  headline: "Five free minutes, fourteen days, and no card.",
+  body: "Set it up, give it your documents and ring it yourself — test calls run on the real agent and never touch the five minutes. What the free fortnight cannot give you is a line: a number is bought separately, so until you buy one it answers you and nobody else.",
   cta: "Start free",
   href: AUTH.signup,
 } as const;
 
+/**
+ * The rounding sentence is new and it is against us.
+ *
+ * Usage is recorded as `ceil(seconds / 60)`, per call — a ninety-second
+ * call is billed as two minutes and a call that rings off after twenty
+ * seconds is billed as one. The receipt above assumes a four-minute call,
+ * so the rounding does not move its arithmetic; it moves a real invoice,
+ * for a business whose calls are short. A reader who finds that on their
+ * first bill instead of on this page has been handled rather than told.
+ */
 export const PRICING_NOTE =
-  "Prices are in US dollars and exclude VAT. Two assumptions sit on the receipt above so that you can argue with them: a call runs about four minutes, and the agent answers every day of the month, weekends included. Everything else is the plan fee plus that plan's own rate for the minutes past its allowance — the arithmetic that lands on the invoice, not a headline rate. Annual billing takes two months off the plan fee; the per-minute rate is unchanged.";
+  "Prices are in US dollars and exclude VAT. Two assumptions sit on the receipt above so you can argue with them: a call runs about four minutes, and the agent answers every day of the month, weekends included. A third is not an assumption — minutes are rounded up on each call, so ninety seconds costs two. Everything else is the plan fee plus that plan's own rate for the minutes past its allowance, which is the arithmetic that lands on the invoice rather than a headline rate. Annual billing takes two months off the fee; the per-minute rate does not move.";
 
 /* ------------------------------------------------------------------ *
- * FAQ
+ * FAQ — five doubts, flat, in the order they arrive.
+ *
+ * The previous version sorted seven questions into three named stages and
+ * asked the reader to find their own. That was a good model of how doubt
+ * actually arrives and a poor piece of furniture: three headings, three
+ * sub-notes and seven rows is twelve things to read before the first
+ * answer, at the point on the page where the reader is closest to leaving.
+ *
+ * Five, flat, and every one of them a reason somebody has actually walked
+ * away — it fails and nobody notices; it says something wrong; the
+ * recordings; the number; the bill. Two of the old seven were removed
+ * rather than shortened, because "can I cancel" and "is there a setup fee"
+ * are answered in the pricing note a screen above and an FAQ that repeats
+ * the page is an FAQ nobody reads.
+ *
+ * The house rule here is that a concession is the answer, not a caveat at
+ * the end of one. Every item below leads with what the product does *not*
+ * do, where it does not do it.
  * ------------------------------------------------------------------ */
 export const FAQ_INTRO = {
-  eyebrow: "FAQ",
-  title: "The things people ask before they say yes.",
-  sub: "Grouped by when the question actually turns up, and answered in the open — nothing here is worth making you click for.",
+  eyebrow: "What stops people",
+  // No sub. The old one explained the grouping, and there is no grouping
+  // left to explain; a sentence here would only delay five answers that
+  // are already short.
+  title: "Five doubts, in the order they arrive.",
 } as const;
 
 /**
- * Doubts arrive in an order, and it is not the order a list puts them in.
- *
- * "Can I cancel" is a question you have before you hand over an email
- * address. "Do I need a new number" only becomes urgent once you are
- * halfway through setting it up. "What if I go over" is a question you
- * have never had until the agent has been answering for three weeks. A
- * flat accordion of seven items makes every reader scan all seven to find
- * the two that are theirs; grouped by moment, they find their own.
+ * The overage, in words, off the price list: "$0.20 a minute, the same on
+ * every plan" while the rungs share one rate, the entry and top rates if
+ * they ever differ. Written in dollars ("$0.20"), which the owner finds
+ * easier to read than cents.
  */
-export type FaqStage = "before" | "setup" | "live";
+function overageSummary() {
+  const usd = (n: number) => `$${n.toFixed(2)}`;
+  const first = TIERS[0];
+  const last = TIERS[TIERS.length - 1];
+  return TIERS.every((t) => t.overage === first.overage)
+    ? `${usd(first.overage)} a minute, the same on every plan`
+    : `${usd(first.overage)} a minute on ${first.name}, falling to ${usd(last.overage)} on ${last.name}`;
+}
 
-export const FAQ_STAGES: {
-  id: FaqStage;
-  n: string;
-  label: string;
-  note: string;
-}[] = [
+/**
+ * `where` is optional and rare on purpose.
+ *
+ * Two of the five answers end somewhere the reader can actually do the
+ * thing — set the register, work out the bill — and a link there is worth
+ * more than another sentence. The other three have nowhere honest to send
+ * anybody, so they do not pretend to.
+ */
+export const FAQ: { q: string; a: string; where?: { label: string; href: string } }[] = [
   {
-    id: "before",
-    n: "01",
-    label: "Before you start",
-    note: "What it costs to find out",
+    // First, because it is the fear under all the others: not that the
+    // agent is bad, but that it fails silently and the business finds out
+    // from a customer who never came back.
+    //
+    // The sentence that came out of this answer claimed the person picking
+    // up "is not starting from the beginning". They are. It is a blind
+    // transfer: a `<Dial>` to a saved number, no whisper, no briefing,
+    // nothing handed to the colleague but a ringing phone. The transcript
+    // exists, in the dashboard, afterwards — which is not the same thing
+    // and is the exact gap a reader would discover on their first live
+    // hand-over. Twenty-five seconds is the real ring timeout.
+    q: "What happens when it can't handle the call?",
+    a: "It puts the caller through to a person, and only to a person you listed. You name who can take a live transfer and write the conditions in your own words — a complaint, anything about an invoice, a caller who simply asks for somebody — and when one is met it says who it is connecting them to before it dials. What it does not do is brief them. This is a straight transfer, so your colleague picks up cold and reads the transcript afterwards rather than hearing it first. If nobody answers inside twenty-five seconds the caller is told so, and the message goes to the team rather than the line going quiet.",
   },
   {
-    id: "setup",
-    n: "02",
-    label: "Setting it up",
-    note: "The ten minutes",
+    // Two mechanisms, both real, both unusual, and both chosen because
+    // they answer the question with something checkable instead of a
+    // promise to try hard. The last sentence is the concession: an agent
+    // that does not learn from its calls is the thing a reader assumes it
+    // does, and finding out later feels like a discovery.
+    q: "What if it gets something wrong?",
+    a: "You find out the same day, not at the end of the month. Every call is transcribed, and the summary is not allowed to flatter itself: it may only say an appointment was booked, moved or cancelled, or that a call was transferred, if the tool that does it actually succeeded — the model's account of the call is overruled by what happened. If a caller talks over it, the transcript and the agent's own memory are cut back to the words she actually heard. Corrections go into its instructions and take effect on the next call. It does not learn from calls on its own, and we would rather tell you that than let you find out.",
+    where: { label: "Set its register yourself", href: "#how" },
   },
   {
-    id: "live",
-    n: "03",
-    label: "Once it is answering",
-    note: "Living with it",
+    q: "Where do the recordings and transcripts live?",
+    // Scoped hard to storage. The speech and telephony vendors this runs
+    // on are not necessarily EU-hosted and this page must not imply the
+    // whole pipeline is — "your data stays in Europe" is the single
+    // easiest sentence to write here and the one we cannot stand behind.
+    //
+    // Only the transcripts and summaries are ours, in Supabase eu-west-1
+    // (project region read 2026-09-24). A recording is never copied here:
+    // /api/calls/[id]/audio streams it from the provider that captured it
+    // (app/api/calls/_lib/providers.ts). Each provider is named with the
+    // country its own documentation gives for the endpoint we call, and
+    // with none where it gives none:
+    //   · Twilio: api.twilio.com with no region or edge (lib/twilio/
+    //     client.ts; calls.ts fetches recordings from that host) is its
+    //     default US1 Region, which "is located in the eastern United
+    //     States" (twilio.com/docs/global-infrastructure/understanding-
+    //     twilio-regions); "Call records (along with any related
+    //     recordings, etc) will be stored in US1 when connecting to the
+    //     default US1 Region" (twilio.com/docs/global-infrastructure/use-
+    //     the-programmable-voice-javascript-sdk-with-a-non-us-twilio-
+    //     region). Twilio records only calls that run through the gateway
+    //     (app/api/voice/internal/events, call-control). True while
+    //     external S3 recording storage is off and no number has a non-US
+    //     inbound Region in the Twilio Console.
+    //   · ElevenLabs: api.elevenlabs.io (lib/elevenlabs/client.ts) is its
+    //     standard environment, and "As a standard, ElevenLabs' customer
+    //     data is hosted/stored in the U.S." (elevenlabs.io/docs/overview/
+    //     administration/data-residency). It keeps the conversation of
+    //     every call its agent answers. Audio follows record_voice as of
+    //     the last sync (lib/elevenlabs/create-agent.ts), and the webhook
+    //     sees audio on calls we do not treat as recorded (app/api/
+    //     elevenlabs/webhook/handlers.ts), hence "can". It may process
+    //     data in other countries, so the answer says where it keeps it
+    //     and no more.
+    //   · Cartesia: api.cartesia.ai (lib/cartesia/client.ts). Nothing it
+    //     publishes that we could read names a storage country: its DPA
+    //     points at a sub-processor list in its trust centre, and it
+    //     serves from regional endpoints. So no country is printed, and
+    //     none is ruled out, until Cartesia gives one in writing. Without
+    //     Zero Data Retention, which we never turn on, its DPA lets it
+    //     keep Customer Content, so its speech recognition and voice
+    //     (cartesia_self) are covered as well as its agent. "Can": post-
+    //     call deletes the agent's copy of an unrecorded call, best effort
+    //     (lib/voice/post-call.ts deleteManagedCall).
+    // custom-saas-platforms.test.ts holds both endpoints. Naming
+    // ElevenLabs is the one exception to the homepage's rival-name ban
+    // (home.test.ts): it says who holds a call, compares nothing, and the
+    // owner asked for the names.
+    //
+    // The deletion sentence says only what DELETE /api/calls/[id] does:
+    // it deletes the Twilio recording, the ElevenLabs conversation and the
+    // Cartesia agent's call first, and keeps our row if one of those
+    // requests fails. It does not claim no copy is left anywhere: a
+    // provider whose key is missing on the app is skipped (providers.ts
+    // notConfigured), and the speech services and the summary model have
+    // no delete call. Scoped to a call on purpose: closing an account logs
+    // a provider failure and carries on (lib/account/deletion-plan.ts).
+    //
+    // Recordings: the plan decides whether an agent can record, and each
+    // agent's "Record calls" switch, on by default, can turn it off
+    // (components/agent/tabs/TabConversation.tsx), so the answer no longer
+    // says they are "a plan entitlement rather than a switch".
+    a: "We keep transcripts and call summaries in the EU, in our database in Ireland, eu-west-1; recordings are never copied into it, and we will not pretend every service a call passes through is in the EU. When Twilio, which carries the phone line, records a call, it keeps the recording in the United States. A call answered by ElevenLabs' agent leaves its transcript, and can leave its audio, with ElevenLabs, which keeps them in the United States too. A call that uses Cartesia, for its agent or for speech recognition and voice, can leave its audio and transcript with Cartesia, in a country we have not confirmed. Deleting a call goes to those providers first: Twilio's recording, ElevenLabs' conversation and the call Cartesia's agent ran are deleted before ours, and if one of those deletions fails, the call stays here and you can try again. Recordings come with the plan — off on the trial, Starter and Growth, on from Pro upward, where each agent has a switch to turn them off — while transcripts are kept on every plan.",
   },
-];
-
-export const FAQ: { stage: FaqStage; q: string; a: string }[] = [
   {
-    stage: "before",
-    q: "Do I need a credit card to start?",
-    a: "No. The trial runs 14 days with 5 minutes included, and it does not ask for a card. Nothing bills until you choose a plan.",
+    q: "Do I need a new phone number?",
+    // The first sentence of the old answer was already the honest one and
+    // is kept in substance. What is added are the two facts a reader finds
+    // out at checkout otherwise: what a number costs, and that the list of
+    // countries it can be bought in does not include the one this company
+    // is registered in. Romanian numbers need a regulatory bundle nobody
+    // has filed, and a Romanian reader will hit that wall in the dashboard
+    // if they do not hit it here.
+    a: "A new one. You buy a local number inside your dashboard in seconds, on its own monthly subscription at $1.15 — the carrier's own cost, passed through with nothing on top — and you release it whenever you like to stop the charge. Two things go with that and neither is in our favour: porting your existing number in is not supported yet, so today this sits alongside your current line rather than replacing it, and the twenty-one countries you can buy a number in do not include Romania, because Romanian numbers need a regulatory bundle we have not done.",
   },
   {
-    stage: "before",
-    q: "Can I cancel or change my plan anytime?",
-    a: "Yes — upgrade, downgrade or cancel from your billing settings, whenever you like. There is no contract and no notice period.",
-  },
-  {
-    stage: "before",
-    q: "Is there a setup fee, or anything else on the invoice?",
-    a: "No. The plan fee, plus that plan's per-minute rate for anything past its allowance, is the whole bill. No setup fee, no charge per seat or per agent, nothing extra to connect an integration — the receipt in the pricing section shows both lines.",
-  },
-  {
-    stage: "setup",
-    q: "How long does it really take to go live?",
-    a: "The four screens above are the real ones, and most businesses are through them in under ten minutes: the company, the agent's register and language, a voice, and live. Your agent cannot take calls until a number is connected to it.",
-  },
-  {
-    stage: "setup",
-    q: "Do I need a new phone number, or can I use my existing one?",
-    a: "A dedicated business number, bought from your dashboard in seconds. It is not bundled into a plan, and porting an existing number in is not supported yet — so today this sits alongside your current line rather than replacing it.",
-  },
-  {
-    stage: "setup",
-    q: "Which languages can it answer in?",
-    a: "The agent speaks and understands multiple languages and accents. Nine are set up on the panel above with the greeting written natively in each — the app carries more, and the agent's whole instruction sheet follows whichever you pick.",
-  },
-  {
-    stage: "live",
+    // The rate is interpolated from TIERS rather than typed, because the
+    // sentence it replaced quoted "$0.25 down to $0.18" long after the
+    // price list had moved to 7¢ and 4¢. A number written by hand in an
+    // answer is a number that will be wrong by the next price change.
+    //
+    // "Nothing stops answering" was true of every plan and false of the
+    // free trial, which is the one plan the person reading this is on. The
+    // trial cannot run into overage at all: the five minutes go, and the
+    // agent stops taking calls. That belonged in the answer, not in a
+    // support ticket.
     q: "What happens if I go over my included minutes?",
-    a: "Nothing stops. Extra minutes bill at your plan's own rate — from $0.25 down to $0.18 on the higher tiers — and appear as their own line. You can move plan at any point, and the pricing section will tell you when that is actually cheaper.",
-  },
-  {
-    stage: "live",
-    q: "What does it plug into?",
-    a: "Google Calendar, Gmail, Sheets, Docs and Drive, natively. The agent reads your availability, writes the appointment back, sends the confirmation and logs the call without anybody moving it by hand.",
+    a: `On a paid plan, nothing stops answering. The extra minutes bill at your own plan's published rate — ${overageSummary()} — and you can change plan at any point; the calculator above says when that is actually cheaper rather than leaving you to work it out off an invoice. The free trial is the other way round, and this is the part worth reading twice: there is no overage on it, so when the five minutes are gone the agent stops answering and your callers hear that the call can't be taken.`,
+    where: { label: "Work out the bill", href: "#your-bill" },
   },
 ];
 
 /* ------------------------------------------------------------------ *
- * The close.
+ * Site header — the bar, its two mega menus, and the sheet below lg.
  *
- * Every figure below was earned somewhere higher up the page and is
- * labelled with where — the section is a collection, not a fresh set of
- * claims, and a number that appears for the first time in a call to action
- * is a number the reader has no reason to believe.
+ * Last in the file on purpose: NAV_INDUSTRIES reads INDUSTRIES and the
+ * Product menu's footer reads TIERS, both at module load, and a const
+ * referenced before its initialiser is a crash at import time rather
+ * than a bug at render time.
  * ------------------------------------------------------------------ */
-export const CTA_CLOSE = {
-  title: "Your phone is ringing right now.",
-  sub: "Whoever is on the other end has already decided how long they will wait. Everything below is on this page above — this is only the part where you do something about it.",
-  receipts: [
-    {
-      value: "62%",
-      label: "of calls to a small business are never answered",
-      where: "Why it works",
-    },
-    {
-      value: "5 min",
-      label: "is how long the odds hold flat before they collapse",
-      where: "Why it works",
-    },
-    {
-      value: "10 min",
-      label: "is what the setup took, on its own clock",
-      where: "How it works",
-    },
-    {
-      value: "$10",
-      label: "a day, at ten calls a day, everything included",
-      where: "Pricing",
-    },
-  ],
-  primary: "Start free",
-  secondary: "Talk to a person",
-  note: "5 minutes free · 14 days · no card · cancel whenever",
+
+export type HeaderNavEntry =
+  | { kind: "menu"; id: "product" | "solutions"; label: string }
+  | { kind: "link"; id: string; label: string; href: string };
+
+export const HEADER_NAV: HeaderNavEntry[] = [
+  { kind: "menu", id: "product", label: "Product" },
+  { kind: "menu", id: "solutions", label: "Solutions" },
+  { kind: "link", id: "pricing", label: "Pricing", href: "/#pricing" },
+  { kind: "link", id: "case-studies", label: "Case Studies", href: "/case-studies" },
+  { kind: "link", id: "contact", label: "Contact", href: "/contact" },
+];
+
+export const SITE_HEADER = {
+  navLabel: "Main",
+  skip: "Skip to content",
+  menu: { open: "Menu", close: "Close" },
+  signin: { label: "Sign in", href: AUTH.signin },
+  signup: { label: "Start free", href: AUTH.signup },
+  headings: {
+    agents: "Agents",
+    voice: "Voice",
+    industries: "Industries",
+    solutions: "Custom builds",
+  },
+  preview: { callerTag: "Caller", agentTag: "Agent" },
+} as const;
+
+/** A card in a mega-menu column. */
+export type NavItem = {
+  id: string;
+  label: string;
+  /**
+   * One line. It must never wrap, and the column truncates rather than
+   * rewraps, so this is a hard budget: ≤ 40 chars in Product, ≤ 58 in
+   * Solutions — measured against the narrower Product column, not against
+   * the popup.
+   */
+  description: string;
+  icon: LucideIcon;
+  href: string;
+};
+
+/** How the Product preview reads the call while a row is under the pointer. */
+export type NavLens = "industry" | "call" | "voices" | "transcribe";
+
+/** A moment on a call, in the live demo's own turn format. */
+export type CallMoment = {
+  /** Kicker text; upper-cased at render. */
+  context: string;
+  turns: DemoTurn[];
+  outcome: string;
+  /** When set, the kicker is composed from this SETUP_VOICES entry instead. */
+  voiceId?: string;
+};
+
+export type ProductItem = NavItem & { lens: NavLens; moment?: CallMoment };
+
+export type NavGroup = { id: "agents" | "voice"; label: string; items: ProductItem[] };
+
+export const PRODUCT_GROUPS: NavGroup[] = [
+  {
+    id: "agents",
+    label: SITE_HEADER.headings.agents,
+    items: [
+      {
+        id: "ai-agents",
+        label: "AI Agents",
+        description: "Answers, qualifies, books the job.",
+        icon: Bot,
+        href: "/product/ai-agents",
+        lens: "industry",
+      },
+      {
+        id: "knowledge-base",
+        label: "Knowledge Base",
+        description: "Answers from your prices and policies.",
+        icon: BookOpenText,
+        href: "/product/knowledge-base",
+        lens: "call",
+        moment: {
+          context: "Answered from your documents",
+          turns: [
+            { sp: "client", t: "If I cancel the day before, do I still pay?" },
+            {
+              sp: "agent",
+              t: "Cancellations inside 24 hours are charged at half — but I can move you to Thursday at no cost.",
+            },
+          ],
+          outcome: "Source · Cancellation policy, §2",
+        },
+      },
+      {
+        id: "integrations",
+        label: "Integrations",
+        // Workflows run once a call has ended (post-call webhooks only), and
+        // today they reach webhooks and Slack; Google Workspace is still in
+        // development. The preview says only that.
+        description: "Passes every call on to your tools.",
+        icon: Blocks,
+        href: "/product/integrations",
+        lens: "call",
+        moment: {
+          context: "Passed on when the call ends",
+          turns: [
+            { sp: "client", t: "Water's coming through the ceiling — is this the emergency line?" },
+            {
+              sp: "agent",
+              t: "It is. I have your address, and I'm marking this as an emergency for the on-call team.",
+            },
+          ],
+          outcome: "Keyword “emergency” · #on-call · message posted",
+        },
+      },
+    ],
+  },
+  {
+    id: "voice",
+    label: SITE_HEADER.headings.voice,
+    items: [
+      {
+        id: "voice-library",
+        label: "Voice Library",
+        description: "Pick a voice by accent and pace.",
+        icon: LibraryBig,
+        href: "/product/voice-library",
+        lens: "voices",
+        moment: { context: "Voice library", turns: [], outcome: "" },
+      },
+      {
+        id: "voice-cloning",
+        label: "Voice Cloning",
+        description: "Your own voice, from one recording.",
+        icon: MicVocal,
+        href: "/product/voice-cloning",
+        lens: "call",
+        moment: {
+          context: "Your cloned voice · outbound reminder",
+          turns: [
+            {
+              sp: "agent",
+              // Discloses itself on purpose: an agent that calls a person
+              // says what it is, here and in the product.
+              t: "Hi, this is the virtual assistant at Northside Dental, confirming your cleaning tomorrow at nine.",
+            },
+            { sp: "client", t: "Yes, that still works." },
+          ],
+          outcome: "Reminder delivered · appointment confirmed",
+        },
+      },
+      {
+        id: "text-to-speech",
+        label: "Text to Speech",
+        description: "Turn any script into lifelike speech.",
+        icon: Speech,
+        href: "/product/text-to-speech",
+        lens: "call",
+        moment: {
+          context: "Text to speech",
+          voiceId: "sarah",
+          turns: [
+            { sp: "agent", t: "Your table for six is confirmed for Friday at 8:45." },
+          ],
+          // No synthesis-latency number: the product has never published
+          // one, and a figure a prospect can quote back is not worth the
+          // half-second it buys in a menu.
+          outcome: "Streamed to the call as it is written",
+        },
+      },
+      {
+        id: "speech-to-text",
+        label: "Speech to Text",
+        description: "Live transcripts, even on a noisy line.",
+        icon: Captions,
+        href: "/product/speech-to-text",
+        lens: "transcribe",
+        // The turns are read from a real trade's own words; these are the
+        // two lines around them.
+        moment: {
+          context: "Transcribed as the caller speaks",
+          turns: [],
+          outcome: "Live transcript · every call, searchable",
+        },
+      },
+    ],
+  },
+];
+
+/** One row of the industries picker. `caller`/`agent`/`outcome` drive the preview. */
+export type NavIndustry = {
+  slug: string;
+  label: string;
+  icon: LucideIcon;
+  /** ≤ 90 chars: it clamps to three lines and the pane never resizes. */
+  caller: string;
+  /** ≤ 120 chars, same reason. */
+  agent: string;
+  outcome: string;
+};
+
+/**
+ * Reuses a trade's own words from INDUSTRIES so the header and the
+ * "Who it's for" panel cannot drift apart. Throws at import time if an id
+ * is renamed — a loud failure beats a silently empty preview.
+ */
+function fromUseCase(id: string, slug: string): NavIndustry {
+  const i = INDUSTRIES.find((x) => x.id === id);
+  if (!i) throw new Error(`Unknown industry id: ${id}`);
+  return {
+    slug,
+    label: i.label,
+    icon: i.icon,
+    caller: i.caller,
+    agent: i.agent,
+    outcome: i.outcome,
+  };
+}
+
+/**
+ * Sixteen trades, fifteen of them outside healthcare, and healthcare last
+ * in reading order — the product is industry-agnostic and the list has to
+ * say so before the any-industry field underneath it does.
+ */
+export const NAV_INDUSTRIES: NavIndustry[] = [
+  fromUseCase("trades", "home-services"),
+  fromUseCase("realestate", "real-estate"),
+  fromUseCase("restaurants", "restaurants"),
+  fromUseCase("law", "law-firms"),
+  fromUseCase("auto", "automotive"),
+  fromUseCase("logistics", "logistics"),
+  fromUseCase("salons", "salons-spas"),
+  {
+    slug: "veterinary",
+    label: "Veterinary",
+    icon: PawPrint,
+    caller: "My dog ate something off the counter and he's being sick.",
+    agent:
+      "Please bring him straight in — I've told the vet you're on your way. Do you know what he ate?",
+    outcome: "Urgent visit flagged · vet notified",
+  },
+  {
+    slug: "insurance",
+    label: "Insurance",
+    icon: ShieldCheck,
+    caller: "Someone reversed into my car this morning. How do I start a claim?",
+    agent:
+      "Is everyone okay? I'll take your policy number and the other driver's details, and get them to a handler now.",
+    outcome: "Details taken · claims handler told",
+  },
+  {
+    slug: "property-management",
+    label: "Property management",
+    icon: KeyRound,
+    caller: "There's water coming through my ceiling from the flat upstairs.",
+    agent:
+      "Can you reach the stopcock? I'm taking this down as urgent and telling the on-call team while we speak.",
+    outcome: "Details taken · on-call maintenance told",
+  },
+  {
+    slug: "hospitality",
+    label: "Hotels & hospitality",
+    icon: Hotel,
+    caller: "Do you have a double free this Saturday night?",
+    agent:
+      "I do — a double with breakfast, or a courtyard room for twenty more. Shall I hold one for you?",
+    outcome: "Room held · Sat, 1 night",
+  },
+  {
+    slug: "financial-services",
+    label: "Financial services",
+    icon: Landmark,
+    caller: "I'd like to talk to someone about refinancing before rates move again.",
+    agent:
+      "Of course. I can book you with an advisor Thursday at ten or Friday at two — which suits you?",
+    outcome: "Advisor call booked · Thursday 10:00",
+  },
+  {
+    slug: "retail",
+    label: "Retail & e-commerce",
+    icon: ShoppingBag,
+    caller: "My order says delivered, but it isn't here.",
+    agent:
+      "I'll take the order number and text you the returns link — then someone here picks it up, rather than you queueing again.",
+    outcome: "Order found · returns link texted",
+  },
+  {
+    slug: "education",
+    label: "Schools & tutoring",
+    icon: GraduationCap,
+    caller: "Do you still have places on the autumn maths course?",
+    agent:
+      "We do — three left in the Tuesday evening group. Can I take your child's name and school year?",
+    outcome: "Place held · enrolment link texted",
+  },
+  {
+    slug: "fitness",
+    label: "Gyms & studios",
+    icon: Dumbbell,
+    caller: "Is there space in the six o'clock spin class tomorrow?",
+    agent:
+      "Two spots left. I've put you in one and texted the confirmation — shall I add Thursday as well?",
+    outcome: "Class booked · confirmation sent",
+  },
+  fromUseCase("clinics", "clinics-dental"),
+];
+
+export const NAV_INDUSTRY_DEFAULT = "home-services";
+
+export const NAV_ANY_INDUSTRY = {
+  note: "Same agent, your vocabulary",
+  fieldLabel: "Your industry",
+  formLabel: "See the agent for your industry",
+  placeholder: "Not listed? Type your industry",
+  submit: "See it",
+  submitLabel: (label: string) => `See it for ${label}`,
+  action: "/industries",
+  param: "trade",
+  minLength: 2,
+  maxLength: 40,
+} as const;
+
+export const PRODUCT_MENU = {
+  autoplayMs: 3200,
+  hoverIntentMs: 70,
+  // "Sample", not "Live": the same call shapes are disclosed as modelled
+  // in the "Who it's for" section, and a pulsing dot over the word "live"
+  // in the nav would undercut the one section that was careful about it.
+  liveKicker: (label: string) => `Sample call · ${label}`,
+  seeItFor: (label: string) => `See it for ${label}`,
+  demo: { label: "Hear the agent take a real call", href: "/#demo" },
+  // Read off the price list, so the menu can never quote a plan that moved.
+  price: { label: (monthly: number) => `Plans from $${monthly} a month`, href: "/#pricing" },
+} as const;
+
+export type SolutionItem = NavItem & {
+  promise: string;
+  deliverables: [string, string, string];
+  stack: [string, string, string, string];
+};
+
+export const SOLUTION_ITEMS: SolutionItem[] = [
+  {
+    id: "custom-ai-agents",
+    label: "Custom AI Agents",
+    description: "Agents built on your scripts, data and systems.",
+    icon: BrainCircuit,
+    href: "/solutions/custom-ai-agents",
+    promise: "A voice agent built on how your business actually answers the phone.",
+    deliverables: [
+      "Call flows written with your team",
+      "Joined to your systems, with the receiving end built for you",
+      "Tested on real phone calls before launch",
+    ],
+    stack: ["Voice", "Model", "Telephony", "Your systems"],
+  },
+  {
+    id: "custom-saas-platforms",
+    label: "Custom SaaS Platforms",
+    description: "Your product idea, built into software customers pay for.",
+    icon: PanelsTopLeft,
+    href: "/solutions/custom-saas-platforms",
+    promise: "A production platform, from first prototype to paying customers.",
+    deliverables: [
+      "A clickable prototype before any code",
+      "Accounts, billing and admin built in",
+      "Hosted, monitored, code handed over",
+    ],
+    stack: ["Web app", "Database", "Payments", "Hosting"],
+  },
+  {
+    id: "custom-automations",
+    label: "Custom Automations",
+    description: "The manual work between your tools, done by software.",
+    icon: Workflow,
+    href: "/solutions/custom-automations",
+    promise:
+      "Every copy-paste between your tools, replaced by a workflow that runs itself.",
+    deliverables: [
+      "A map of the manual steps worth automating",
+      "Workflows across inbox, sheets, CRM and APIs",
+      "Alerts the moment something needs a person",
+    ],
+    stack: ["Inbox", "Spreadsheets", "CRM", "Webhooks"],
+  },
+  {
+    id: "custom-mobile-applications",
+    label: "Custom Mobile Applications",
+    description: "iOS and Android apps, designed, built and published.",
+    icon: Smartphone,
+    href: "/solutions/custom-mobile-applications",
+    promise: "An app your customers keep on their home screen.",
+    deliverables: [
+      "Designed for iOS and Android",
+      "Sign-in, payments and push built in",
+      "Published to both app stores",
+    ],
+    stack: ["iOS", "Android", "Push", "Payments"],
+  },
+  {
+    id: "crm-erp",
+    label: "Custom CRM & ERP",
+    description: "One system for customers, orders and operations.",
+    icon: Database,
+    href: "/solutions/crm-erp",
+    promise: "A CRM or ERP shaped around your process, not the other way round.",
+    deliverables: [
+      "Pipeline, stock and invoicing in one place",
+      "Migrated off spreadsheets and legacy tools",
+      "Every agent call logged against the customer",
+    ],
+    stack: ["Sales", "Inventory", "Invoicing", "Reporting"],
+  },
+];
+
+export const SOLUTIONS_MENU = {
+  sheetKicker: (label: string) => `What you get · ${label}`,
+  // A build starts with a phone call, and /contact does not exist: the
+  // action rings us. The id argument is kept so the panel's call site
+  // (href(active.id)) compiles unchanged.
+  cta: {
+    label: "Call us about a build",
+    href: (_id: string) => COMPANY.phoneHref,
+  },
+  footer: {
+    text: "Not sure what you need?",
+    link: { label: "Call us", href: COMPANY.phoneHref },
+  },
+} as const;
+
+
+/* ------------------------------------------------------------------ *
+ * Footer — the site's map, not its tagline.
+ *
+ * Last in the file, and for the same reason the header block is: this
+ * reads PRODUCT_GROUPS, NAV_INDUSTRIES and SOLUTION_ITEMS at module load,
+ * and a const referenced before its initialiser is a crash at import time
+ * rather than a bug at render.
+ *
+ * It had to change shape. One imprint closes twenty-one marketing routes —
+ * every /product/*, /solutions/* and /industries/* page reaches it through
+ * ProductShell — and it linked onward to exactly none of them. A reader
+ * who landed on /industries/veterinary from a search result could see the
+ * header's menus, and below the fold the site simply ended. Every one of
+ * those pages was a leaf.
+ *
+ * So the columns are generated from the same three constants the header's
+ * menus are built from, rather than hand-listed. Hand-listing them would
+ * mean a sixteenth industry page shipping with fifteen links under it, and
+ * the one thing worse than a footer that goes nowhere is a footer that
+ * goes to some places.
+ *
+ * `tagline` is gone. It said the product answers, qualifies and books
+ * round the clock — which is the hero's sentence, restated in grey at 50%
+ * opacity after the reader has already decided. A footer's job here is
+ * navigation and the imprint.
+ * ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ *
+ * Solutions — the second business, which the homepage never mentioned.
+ *
+ * The agent is a product you buy. The five entries in `SOLUTION_ITEMS`
+ * are work you commission, and until now a visitor met them only by
+ * opening the mega menu. That is the wrong way round: a company that can
+ * build you a CRM is more credible selling you a phone agent, not less,
+ * and the agent is the cheapest possible proof that the building is real.
+ *
+ * The band states that relationship rather than listing services — each
+ * item already carries its own `promise`, `deliverables` and `stack`, and
+ * the section reads them.
+ *
+ * One live destination on purpose. Four of the five solution pages do not
+ * exist yet; linking a reader into a 404 from a section whose entire job
+ * is to look like we know what we are doing would cost more than the
+ * section earns. The rest are named, not linked, until they are written.
+ * ------------------------------------------------------------------ */
+export const SOLUTIONS_INTRO = {
+  kicker: "The other half",
+  title: "The phone agent is the small end of it.",
+  // No price and no timeline, matching the page this links to, which says
+  // in its own words that both depend on what your calls need and both go
+  // in the quote. A figure invented here would be the first thing the
+  // custom page has to walk back.
+  sub: "Same team, same stack, and the same people who pick up the phone when it breaks. If what you need is a system rather than an agent, it is the same conversation — and there is no price on this band, because what one costs depends on what your calls turn out to need.",
+  cta: "How a custom one gets built",
+  href: "/solutions/custom-ai-agents",
 } as const;
 
 /* ------------------------------------------------------------------ *
- * Footer
+ * Industries — the index, not the instrument.
+ *
+ * The day panel already models one trade hour by hour, and that is the
+ * argument. This is the door list. It exists because the instrument can
+ * only hold eight trades, and a reader who does not find their own in it
+ * concludes the product was not built for them — which is the one
+ * objection no amount of craft further down the page can answer.
+ *
+ * Every entry here resolves: `/industries/[slug]` is generated for all
+ * sixteen, and `/industries` lists them.
  * ------------------------------------------------------------------ */
-export const FOOTER = {
-  tagline: "AI voice agents that answer, qualify, and book your customers, 24/7.",
-  product: [
-    { label: "Features", href: "#features" },
-    { label: "Pricing", href: "#pricing" },
-    { label: "FAQ", href: "#faq" },
+/**
+ * The title counts, and the count is `NAV_INDUSTRIES.length` — sixteen
+ * today, every one of them resolving to a written page. Checked by eye
+ * here rather than interpolated, because the sentence reads better with
+ * the word than the numeral and a hard-coded count in a title is the kind
+ * of thing that survives a seventeenth trade being added. If one is, this
+ * line moves with it.
+ *
+ * `all` deliberately carries no number, so the link cannot drift even if
+ * this sentence does.
+ */
+export const INDUSTRIES_GATEWAY = {
+  kicker: "Yours, written out",
+  title: "Sixteen trades, and the script is different in every one.",
+  sub: "What it asks first, how it asks it and what it does with the answer are not the same for a law firm as for a dental clinic — one stops asking the moment it has the names and the date, the other stops booking the moment anyone says pain. Pick yours and read the one written for it.",
+  all: "Every one of them",
+  href: "/industries",
+} as const;
+
+/* ------------------------------------------------------------------ *
+ * Trust — the four facts a buyer checks before they put their phone
+ * number into something.
+ *
+ * Every one of these is verifiable in this repository, and the section
+ * that renders them derives its counts rather than restating them, so a
+ * language added to `SETUP_LANGS` or a trade added to `NAV_INDUSTRIES`
+ * moves the number here too. What is deliberately absent is a badge wall:
+ * we hold no certification, and drawing a shield that stands for nothing
+ * is the exact opposite of the thing this band is for.
+ * ------------------------------------------------------------------ */
+/**
+ * Four ids, and two of them are read by the section beside the copy.
+ *
+ * `trust.tsx` prints a datum next to each row: `handover` shows "3
+ * triggers" and counts on this note naming exactly three, and `languages`
+ * shows `SETUP_LANGS.length` rather than any number written here. So the
+ * handover note stays a strict triple, and no note in this block quotes a
+ * language count — the one on screen is whatever the greeting library
+ * actually ships, and a figure typed here could only disagree with it.
+ *
+ * `handover` also lost a claim. It said the transcript so far is "already
+ * in your inbox" at the moment of the transfer; it is not. The transfer is
+ * blind and the transcript is written up when the call ends. What replaces
+ * it is what genuinely happens when the transfer fails, which is the part
+ * a buyer is actually worried about.
+ *
+ * `languages` now leads on the AI disclosure. It is the single strongest
+ * compliance fact in this product and it was nowhere on the homepage: the
+ * disclosure is applied in code to every greeting, including a custom one
+ * written without it, and there is no setting that removes it.
+ *
+ * `company` ends by saying we hold no certification. The band's whole job
+ * is to be checkable, and a trust section that quietly omits the absence
+ * of a badge is doing the same work as a badge that stands for nothing.
+ *
+ * `eu` said "Your calls are stored in the EU", and the recordings made it
+ * false: none is ever copied into Supabase, each plays from the provider
+ * that captured it, and ElevenLabs keeps its own transcript of a call its
+ * agent answers, in the US. The label now claims only the copy we keep
+ * ("We keep"). The first sentence says the recordings are not in it; the
+ * second sends the reader to the FAQ, which names each provider, and its
+ * country where we have confirmed one. The homepage shows those two
+ * (lib/pages/home/trust.ts). The third, on deleting, says only what
+ * DELETE /api/calls/[id] does, repeats the FAQ and is not shown.
+ * "Deletable by you at any time" went: a live call cannot be deleted
+ * (409), nor one whose provider copy failed to delete.
+ */
+export const TRUST = {
+  kicker: "Before you hand it your phone",
+  items: [
+    {
+      id: "eu",
+      label: "We keep your transcripts in the EU",
+      note: "Transcripts and call summaries are in eu-west-1, Ireland, and are deleted with the call; we never copy recordings there. The providers that keep them, and any voice provider with its own copy of a call, are named in the FAQ rather than papered over, country included where we have confirmed it. Deleting a call first removes the recording, conversation or call record a provider holds for it, and fails instead of reporting success if one of those deletions fails.",
+    },
+    {
+      id: "handover",
+      label: "It hands the call to a person",
+      note: "Three ways in: a caller asks for somebody, a rule you wrote in your own words is met, or your instructions send that kind of question to a person. It dials only the people you listed, names them before it dials, and if nobody picks up it tells the caller and leaves the team the message.",
+    },
+    {
+      id: "languages",
+      label: "It tells every caller it is an AI",
+      note: "In the language it is answering in, in the opening line, with no setting that turns it off — a custom greeting written without it has it added. Every line it speaks of its own accord is written in each language rather than machine-translated, polite form of address included where the language has one.",
+    },
+    {
+      id: "company",
+      label: "An EU company, under EU law",
+      note: "The GDPR is the law we operate under rather than a page we publish at you. Registered in Romania; the legal name, the CUI and the address are at the foot of this page. There is no certification badge on this site, because we hold none.",
+    },
   ],
+} as const;
+
+export type FooterColumn = {
+  title: string;
+  links: readonly { label: string; href: string }[];
+};
+
+export const FOOTER = {
+  columns: [
+    {
+      title: "Product",
+      // Flattened across both menu groups, in menu order: the footer has
+      // no room for the Agents/Voice split and no pointer to explain it.
+      links: PRODUCT_GROUPS.flatMap((g) =>
+        g.items.map((i) => ({ label: i.label, href: i.href })),
+      ),
+    },
+    {
+      title: "Industries",
+      links: NAV_INDUSTRIES.map((i) => ({
+        label: i.label,
+        href: `/industries/${i.slug}`,
+      })),
+    },
+    {
+      title: "Solutions",
+      links: SOLUTION_ITEMS.map((i) => ({ label: i.label, href: i.href })),
+    },
+    {
+      title: "Company",
+      links: [
+        // Rooted, so they still land on the homepage's sections from a
+        // subpage — which is now the common case, not the exception.
+        { label: "Pricing", href: "/#pricing" },
+        { label: "Case Studies", href: "/case-studies" },
+        { label: "Contact", href: "/contact" },
+        { label: "Sign in", href: AUTH.signin },
+      ],
+    },
+  ] as FooterColumn[],
   legal: [
     { label: "Privacy Policy", href: "/privacy" },
     { label: "Terms of Service", href: "/terms" },

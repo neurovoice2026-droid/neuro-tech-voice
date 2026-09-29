@@ -1,7 +1,8 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
-import { Check, Coins, GitCompare, KeyRound, Wrench } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import type { gsap } from "gsap";
+import { Check, Coins, KeyRound, Wrench } from "lucide-react";
 import {
   COMPARISON_INTRO,
   COMPARISON_NOTE,
@@ -12,7 +13,9 @@ import {
   type PartState,
 } from "@/lib/site";
 import { cn } from "@/lib/utils";
-import { Reveal, EASE } from "./reveal";
+import { useKitContext, useMotionKit } from "./product/motion-kit";
+import { Frame, SectionHeading } from "./product/primitives";
+import { holdFor, useInView, usePrefersReducedMotion } from "./product/timing";
 
 /**
  * The difference — measured against the platforms, not against voicemail.
@@ -37,12 +40,19 @@ import { Reveal, EASE } from "./reveal";
  * reader who never clicks, which is most of them, saw a single vendor and
  * no comparison at all. Everything here is legible without touching it.
  *
- * Two decisions worth keeping:
+ * **It is set in the light `pp` system, not the cover's dark one.** This
+ * page is the front door to twenty-one routes that are all white stock,
+ * black ink and one violet, and a table drawn in a second palette reads as
+ * a different company's table — which is the last thing a comparison can
+ * afford. So the surfaces are white, the rules are pp hairlines, the
+ * masthead is the shared `SectionHeading`, and every length is rem or px.
+ *
+ * Decisions worth keeping, and the ones that replaced the panel:
  *
  *  · **The rule across the middle is the whole argument.** The first five
  *    layers are a voice stack: a solved, competitive, genuinely excellent
  *    market. The last five are one specific business's operations, which
- *    is not a market at all — it is work. Every platform goes dark below
+ *    is not a market at all — it is work. Every platform goes pale below
  *    that rule, and that is not a failing on their part. The bottom half
  *    was never what they sold.
  *  · **It is complimentary on purpose, and that is what makes it land.**
@@ -52,6 +62,82 @@ import { Reveal, EASE } from "./reveal";
  *    sneers reads as a comparison that is lying; one that concedes the
  *    other side's strength reads as one that has counted honestly. We only
  *    need the reader to count the bottom five rows.
+ *  · **It is a real `<table>`.** `<th scope>` on the vendors and on the
+ *    layers turns each of the fifty marks into "Vapi, reasoning, your
+ *    account" rather than a context-free string. The grid was never
+ *    decoration; it was tabular data pretending not to be.
+ *  · **No panel.** The board sits on the open field and is grouped by
+ *    hairlines and space, not by a bordered card. On white a card inside a
+ *    white page is a second white page, and the page already has one.
+ *  · **Who each vendor is for lives in its own column header**, directly
+ *    above the marks a sceptic distrusts, rather than two hundred pixels
+ *    below the column it describes.
+ *  · **The count is split.** Work and a signup are different debts, and a
+ *    comparison that adds them together to make a rival's number bigger is
+ *    exactly what the source note at the bottom promises we did not do.
+ *
+ * **THE SIGNATURE MOVEMENT: one column keeps going, and you watch it.**
+ *
+ * The whole case is a *shape* — four columns that stop halfway down and one
+ * that does not — and a shape argued in prose is a shape nobody counts. So
+ * the board performs the count, and there is exactly one thing moving while
+ * it does: **the audit descending the bill of materials.**
+ *
+ * It is one GSAP timeline, and it has two hands, which are the two halves
+ * of the same sentence:
+ *
+ *   · **Our column's two edges are DRAWN**, from the top of the board to
+ *     the bottom, in one unbroken constant-speed stroke that never pauses
+ *     at a layer and never stops early. `DrawSVGPlugin` on two real SVG
+ *     strokes, each over its own faint ghost — the route was always there;
+ *     the ink is the audit proving it. This is the only thing on the page
+ *     that is literally drawn, and it is the only column that keeps going.
+ *     A `scaleY` on a div would have said the same thing by stretching,
+ *     which is not what a column doing its job looks like.
+ *   · **In its wake, the four rival columns hand back borrowed weight.**
+ *     Every rival cell in the business half carries a held overlay — ink
+ *     glyph, ink hairline, grey ground — over the pale `build` mark that is
+ *     the truth underneath. As the audit reads a layer, that row's four
+ *     overlays fade out on a 0.06s stagger, left to right, so the loss
+ *     sweeps across the board as one finding instead of flipping as four
+ *     simultaneous events. Ours has no overlay: there is nothing to hand
+ *     back.
+ *
+ * At the turn — the moment the audit crosses the rule out of the voice
+ * stack and into the work — the words **"Not a market — work"** arrive one
+ * at a time, `SplitText`, because that clause is the finding and a finding
+ * should reach the reader as language rather than as a block that was
+ * already there. Until the audit gets there the board does not name the
+ * bottom half at all; the rule and the group are drawn, the verdict on them
+ * is not yet in. The label on the stack half never moves: the voice stack
+ * is not contested, it is true for everyone from the first paint, and
+ * animating it too would be decoration wearing the finding's coat.
+ *
+ * No `MotionPathPlugin` here. Nothing in this section travels a route; it
+ * descends a column, and a straight fall dressed up as a path would be a
+ * plugin used for the look of it.
+ *
+ * **The clock is still the house's, and still `holdFor`** — floored at 1.4s
+ * a layer, one `tl.call` per layer. React is told only *which layer has
+ * been read*, and the three things that follow from that are small state
+ * changes the browser tweens, which is what CSS transitions are for: the
+ * row under the head lights the way it lights under a pointer, its numeral
+ * takes accent, and the ledger at the foot ticks. That tally is not a
+ * number animating to a target — it increments because a layer just landed
+ * on somebody's desk — and its wording and colour come from the *final*
+ * figure, so no column ever claims "nothing" mid-count.
+ *
+ * **The resting markup is the finished board**, and that is load-bearing.
+ * The server sends a fully read grid: true tones, full rules, final tally.
+ * GSAP is fetched only when the board comes near, and its first act is to
+ * *rewind* that finished board to zero. With `prefers-reduced-motion` the
+ * kit is never fetched at all, so there is nothing to serve a still state
+ * to — the still state is the markup. No JS, a dead effect, a failed import
+ * and the reader simply gets the answer.
+ *
+ * **The reader's first touch ends it for good.** Any pointer, focus or key
+ * event on the board runs the timeline to its end on the spot, stops the
+ * clock, and hands the cross-highlight back to the pointer permanently.
  */
 
 const ICONS: Record<PartState, typeof Check> = {
@@ -62,357 +148,672 @@ const ICONS: Record<PartState, typeof Check> = {
 };
 
 /**
- * One ramp, from in-the-box to on-your-desk.
+ * One ramp, from in-the-box to on-your-desk, drawn for white stock.
  *
- * Every state carries an icon as well as a weight, and not as decoration:
+ * Every state carries an icon as well as a tone, and not as decoration:
  * encoded in colour alone this grid would be unreadable to anyone who
- * cannot separate the lit fill from the dim one, which is the single most
- * common way a chart like this fails.
+ * cannot separate the filled mark from the outlined one, which is the
+ * single most common way a chart like this fails. It is also what lets the
+ * extinction be honest — the wrench is in the cell from the first paint,
+ * and only the weight moves.
+ *
+ * `build` is the palest mark on the board and it still has a floor. `#8d8899`
+ * is 3.4:1 on white and 3.2:1 on the group band, which is the bar for a
+ * graphic; the reader is meant to see that something is there and that it
+ * is not filled, not to wonder whether the cell is empty.
  */
 const TONE: Record<PartState, string> = {
-  shipped:
-    "border-[var(--cover-brand-lit)]/55 bg-[var(--cover-brand-lit)] text-[var(--cover-ink)]",
-  metered:
-    "border-[var(--cover-brand-lit)]/45 bg-[var(--cover-brand-lit)]/16 text-[var(--cover-brand-lit)]",
-  byo: "border-dashed border-[var(--cover-paper)]/30 text-[var(--cover-paper)]/55",
-  // Dim is the point, but the icon still has to be discernible — the reader
-  // is meant to see that something is there and that it is not lit, not to
-  // wonder whether the cell is empty.
-  build: "border-[var(--cover-paper)]/10 bg-[var(--cover-paper)]/[0.03] text-[var(--cover-paper)]/32",
+  shipped: "border-pp-accent bg-pp-accent text-white",
+  metered: "border-pp-accent/40 bg-pp-accent/10 text-pp-accent",
+  byo: "border-dashed border-pp-muted/60 text-pp-muted",
+  build: "border-pp-hair text-[#8d8899]",
 };
 
-/** Label column, then one per vendor. Kept in one place — five grids use it. */
+/**
+ * The weight a rival cell wears until the audit has read its layer.
+ *
+ * Deliberately not one of the four states: it claims nothing. It is drawn
+ * as a separate mark laid *over* the true one, `aria-hidden` and resting at
+ * `opacity: 0`, so the cell underneath is showing the wrench and announcing
+ * "you build it" to a screen reader from the first paint. Only the weight
+ * is borrowed, and GSAP fades it off the instant the audit reaches that row.
+ *
+ * An overlay rather than a colour tween, and that is deliberate too: the
+ * only property the timeline touches is opacity on an element React never
+ * restyles, so the context can revert to the finished board exactly, with
+ * no computed colours to read back and nothing to clear.
+ *
+ * On white it is the *heaviest* tone in play rather than the brightest one:
+ * ink glyph, ink hairline, a grey ground. Losing it down to `build`'s bare
+ * outline is a loss of weight the eye reads as a column going out.
+ */
+const HELD = "border-pp-ink/25 bg-pp-ink/[0.06] text-pp-ink";
+
+/**
+ * Column geometry, hoisted once. The colgroup, the tint band behind our
+ * column and the two vertical rules all read it, so the rules cannot drift
+ * off the column they are supposed to be drawing.
+ */
+const LABEL_COL = 20;
+const RIVAL_COL = (100 - LABEL_COL) / RIVALS.length;
+const OURS_AT = Math.max(
+  0,
+  RIVALS.findIndex((r) => r.ours),
+);
 const COLS = {
-  gridTemplateColumns: `minmax(11em, 1.85fr) repeat(${RIVALS.length}, minmax(6.4em, 1fr))`,
+  label: `${LABEL_COL}%`,
+  rival: `${RIVAL_COL}%`,
+  oursLeft: `${LABEL_COL + OURS_AT * RIVAL_COL}%`,
+  oursRight: `${LABEL_COL + (OURS_AT + 1) * RIVAL_COL}%`,
 };
 
-function Cell({ state, rivalOurs }: { state: PartState; rivalOurs?: boolean }) {
+/**
+ * The cross-highlight wash, and the group band.
+ *
+ * Both are translucent ink rather than `bg-pp-card`, and that is
+ * load-bearing: our column's violet ground is painted *under* the table,
+ * so an opaque grey cell would erase the one piece of colour the board
+ * has. Tinting instead lets the violet read through every band and every
+ * lit row.
+ */
+const LIT_COL = "bg-[rgb(24_16_40/0.045)]";
+const LIT_ROW = "bg-[rgb(24_16_40/0.03)]";
+const BAND = "bg-[rgb(24_16_40/0.035)]";
+
+const GROUPS = [
+  { id: "stack" as const, label: "The voice stack", note: "A solved, competitive market" },
+  { id: "business" as const, label: "Your business", note: "Not a market — work" },
+];
+
+/** Rows per group, resolved once. */
+const ROWS = {
+  stack: STACK.filter((l) => l.group === "stack"),
+  business: STACK.filter((l) => l.group === "business"),
+};
+
+/** The order the head reads in: the voice stack first, then the work. */
+const SEQ = [...ROWS.stack, ...ROWS.business];
+
+/**
+ * What each vendor leaves you after the first `k` layers have been read —
+ * counted from the same data the marks are drawn from, never a hand-typed
+ * figure that can drift from the grid above it. Index 0 is an unstarted
+ * audit; the last entry is the truth, and the truth is what the server
+ * renders. Two numbers, because work and a signup are not the same debt.
+ */
+const LEDGER_AT = RIVALS.map((r) =>
+  SEQ.reduce(
+    (acc, l) => {
+      const prev = acc[acc.length - 1];
+      const state = r.parts[l.id];
+      acc.push({
+        build: prev.build + (state === "build" ? 1 : 0),
+        byo: prev.byo + (state === "byo" ? 1 : 0),
+      });
+      return acc;
+    },
+    [{ build: 0, byo: 0 }],
+  ),
+);
+const LEDGER = LEDGER_AT.map((steps) => steps[steps.length - 1]);
+
+function Mark({
+  state,
+  drain,
+  size = "md",
+}: {
+  state: PartState;
+  /**
+   * The classes the timeline finds this cell's held overlay by, for a
+   * rival's business-half cell. Absent everywhere else — our column has
+   * nothing to hand back, and the voice stack above the rule is true for
+   * everyone from the first paint.
+   */
+  drain?: string;
+  size?: "md" | "sm";
+}) {
   const Icon = ICONS[state];
+  const box = size === "md" ? "size-7 rounded-[9px]" : "size-5 rounded-[7px]";
+  const glyph = size === "md" ? "size-3.5" : "size-2.5";
   return (
-    <div
-      className={cn(
-        "flex items-center justify-center px-[0.4em] py-[0.55em]",
-        rivalOurs && "bg-[var(--cover-brand-lit)]/[0.05]",
-      )}
-    >
+    <span className="relative grid place-items-center">
       <span
         title={PART_STATES[state].label}
-        className={cn(
-          "grid size-[1.9em] place-items-center rounded-[0.4em] border transition-colors duration-300",
-          TONE[state],
-        )}
+        className={cn("grid place-items-center border", box, TONE[state])}
       >
-        <Icon className="size-[0.95em]" strokeWidth={2.4} aria-hidden />
-        <span className="sr-only">{PART_STATES[state].label}</span>
+        <Icon className={glyph} strokeWidth={2.2} aria-hidden />
       </span>
-    </div>
+      {drain && (
+        // Rests invisible, which is the finished board. GSAP raises it when
+        // it rewinds and takes it off again as the audit passes. Inline,
+        // because opacity is the one property the timeline writes here and
+        // a utility class would fight it.
+        <span
+          aria-hidden
+          style={{ opacity: 0 }}
+          className={cn(
+            drain,
+            "pointer-events-none absolute inset-0 grid place-items-center border",
+            box,
+            HELD,
+          )}
+        >
+          <Icon className={glyph} strokeWidth={2.2} aria-hidden />
+        </span>
+      )}
+    </span>
   );
 }
 
-export function Comparison() {
-  const reduce = useReducedMotion();
+/** A beat, in seconds: the house clock, floored at 1.4s a layer. */
+const BEATS = SEQ.map((l) => holdFor(l.label) / 1000);
+/** A breath before the first layer, so the board is seen before it is read. */
+const LEAD = 0.35;
+/** When the audit lands on each layer, and when it has finished. */
+const AT = BEATS.reduce<number[]>((acc, b) => [...acc, acc[acc.length - 1] + b], [LEAD]);
+const RUN = AT[AT.length - 1];
+/** The turn: the first layer below the rule, where the voice stack ends. */
+const TURN_AT = AT[SEQ.findIndex((l) => l.group === "business")];
 
-  const groups = [
-    {
-      id: "stack" as const,
-      label: "The voice stack",
-      note: "A solved, competitive market",
+export function Comparison() {
+  const boardRef = useRef<HTMLDivElement>(null);
+  // Two margins, two jobs: `near` fetches GSAP, `inView` plays the audit.
+  const inView = useInView(boardRef, "-10% 0px -10% 0px");
+  const near = useInView(boardRef, "25% 0px");
+  const reduce = usePrefersReducedMotion();
+  // `near && !reduce`, not `near`: the markup already rests on the finished
+  // board, so with reduced motion GSAP is never downloaded at all and there
+  // is no still state left for it to set.
+  const kit = useMotionKit(near && !reduce);
+  const tlRef = useRef<gsap.core.Timeline | null>(null);
+
+  /**
+   * The audit. `head` is how many layers have been read: `SEQ.length` is a
+   * finished board, and that is where it rests — on the server, before the
+   * timeline rewinds it, and forever after the reader touches it. The
+   * timeline owns it; React only renders it.
+   */
+  const [beat, setBeat] = useState(SEQ.length);
+  const [taken, setTaken] = useState(false);
+  // Derived, not stored, for the two states that end the audit outright:
+  // reduced motion is live and can arrive mid-count, and the reader's first
+  // touch is permanent. Neither has a beat to wait for.
+  const head = reduce || taken ? SEQ.length : beat;
+  const running = head < SEQ.length;
+
+  useKitContext(
+    kit,
+    ({ gsap, SplitText }) => {
+      // A reverted context rests on the finished board, which is exactly
+      // what reduced motion should see. Nothing to build.
+      if (reduce) return;
+
+      const q = gsap.utils.selector(boardRef);
+      const rules = q(".cp-rule");
+      const turn = q(".cp-turn")[0] as HTMLElement | undefined;
+
+      // Split for motion only: the words stay plain text to a screen
+      // reader, and the context reverts the split — never call .revert().
+      const split = turn ? SplitText.create(turn, { type: "words", aria: "none" }) : null;
+
+      const tl = gsap.timeline({ paused: true });
+
+      // The whole resting state, set at the top, before anything moves.
+      tl.set(q(".cp-drain"), { opacity: 1 }, 0).set(rules, { drawSVG: "0% 0%" }, 0);
+      if (split) {
+        // Each word on its own compositor layer, so the rise and the blur
+        // are GPU work rather than a repaint of the line per frame.
+        gsap.set(split.words, { willChange: "transform, opacity, filter", force3D: true });
+        tl.set(split.words, { autoAlpha: 0 }, 0);
+      }
+
+      // One unbroken stroke, at one speed, for the whole length of the
+      // audit: the column that keeps going does not pause at a layer.
+      tl.to(rules, { drawSVG: "0% 100%", duration: RUN, ease: "none" }, 0);
+
+      SEQ.forEach((l, i) => {
+        const at = AT[i];
+        // The layer has been read. Everything that follows from that — the
+        // lit row, the numeral, the tally — is CSS off one integer.
+        tl.call(() => setBeat(i + 1), [], at);
+
+        // ...and the four rivals hand their borrowed weight back, left to
+        // right across the board, as one sweep rather than four events.
+        const drain = q(`.cp-drain-${l.id}`);
+        if (drain.length) {
+          tl.to(
+            drain,
+            { opacity: 0, duration: 0.45, ease: "power2.out", stagger: 0.06 },
+            at + 0.18,
+          );
+        }
+      });
+
+      // The finding, arriving as language at the moment it is proved.
+      if (split) {
+        tl.fromTo(
+          split.words,
+          { autoAlpha: 0, yPercent: 16, filter: "blur(3px)" },
+          {
+            autoAlpha: 1,
+            yPercent: 0,
+            filter: "blur(0px)",
+            duration: 0.9,
+            ease: "power2.out",
+            stagger: 0.06,
+            immediateRender: false,
+          },
+          TURN_AT - 0.45,
+        );
+      }
+
+      // The board rests on its ending. Written as an empty tween, never a
+      // delay, so the timeline's own length is the truth.
+      tl.to({}, { duration: 0.9 }, RUN);
+
+      // The rewind. Those `set`s at position zero render the moment the
+      // timeline is built, so the tally is wound back with them rather than
+      // a beat later on the first play — a board holding borrowed weight
+      // under a finished count would be the one frame that lies.
+      //
+      // A reader who touched it before GSAP arrived gets the answer instead.
+      if (taken) tl.progress(1);
+      else setBeat(0);
+
+      tlRef.current = tl;
+      return () => {
+        tlRef.current = null;
+      };
     },
-    {
-      id: "business" as const,
-      label: "Your business",
-      note: "Not a market — work",
-    },
-  ];
+    // `revertOnUpdate` because the callback splits text and sets inline
+    // styles; reverting puts the finished board back, which is the point.
+    { scope: boardRef, dependencies: [reduce], revertOnUpdate: true },
+  );
+
+  /**
+   * Plays while on screen, and never again once the reader has taken over.
+   * `kit` is in the deps because the timeline is built asynchronously,
+   * after the kit arrives.
+   */
+  useEffect(() => {
+    const tl = tlRef.current;
+    if (!tl) return;
+    if (inView && !reduce && !taken) tl.play();
+    else tl.pause();
+  }, [inView, reduce, taken, kit]);
+
+  /**
+   * Cross-highlight, and the handover. Six columns by twelve rows is
+   * exactly the size at which the eye loses the row on its way across. The
+   * audit lights the row it is reading; the reader's first pointer, focus
+   * or key event runs the timeline to its end on the spot and takes the
+   * highlight over for the rest of the page's life.
+   */
+  const [at, setAt] = useState<{ row: string; col: number } | null>(null);
+  const take = () => {
+    if (taken) return;
+    setTaken(true);
+    // Seeking suppresses the timeline's own callbacks, which is what we
+    // want: the board finishes, the clock does not replay its beats. `head`
+    // is derived from `taken`, so the count finishes with it.
+    tlRef.current?.progress(1).pause();
+  };
+  const autoRow = !taken && running && head > 0 ? SEQ[head - 1].id : null;
+  const rowLit = (row: string) => at?.row === row || autoRow === row;
+  const colLit = (col: number) => at?.col === col;
 
   return (
-    <section
+    <Frame
+      as="section"
       id="difference"
-      className="relative scroll-mt-24 px-[1.6em] py-[6em] md:py-[8em]"
+      className="scroll-mt-28 px-6 py-16 md:px-12 md:py-24"
     >
-      <div className="relative mx-auto max-w-[76em]">
-        {/* header */}
-        <div className="mx-auto flex max-w-[42em] flex-col items-center text-center">
-          <Reveal>
-            <span className="inline-flex items-center gap-[0.55em] rounded-full border border-[var(--cover-brand-lit)]/25 bg-[var(--cover-brand-lit)]/10 px-[1.15em] py-[0.5em] text-[0.72em] font-semibold uppercase leading-none tracking-[0.18em] text-[var(--cover-brand-lit)]">
-              <GitCompare className="size-[1.25em] shrink-0" strokeWidth={2} />
-              {COMPARISON_INTRO.eyebrow}
-            </span>
-          </Reveal>
+      {/* masthead — the shared opener, so this section is introduced the
+          same way every other page on the site introduces one. */}
+      <SectionHeading eyebrow={COMPARISON_INTRO.eyebrow} className="max-w-[860px]">
+        {COMPARISON_INTRO.title}
+      </SectionHeading>
 
-          <Reveal delay={0.06} className="mt-[1em]">
-            <h2 className="text-balance text-[2.8em] font-medium leading-[1.03] tracking-[-0.045em] md:text-[3.4em]">
-              {COMPARISON_INTRO.title}
-            </h2>
-          </Reveal>
+      <p className="mt-5 max-w-[680px] text-[17px] leading-[26px] text-pretty text-pp-muted md:text-[18px] md:leading-[28px]">
+        {COMPARISON_INTRO.sub}
+      </p>
 
-          <Reveal
-            delay={0.12}
-            className="mt-[1.1em] max-w-[38em] text-pretty text-[1.05em] leading-[1.6] text-[var(--cover-paper)]/60"
+      <div aria-hidden className="mt-10 h-px bg-pp-rule" />
+
+      {/* the board */}
+      <div className="mt-10 md:mt-12">
+        {/* Six columns will not fit a phone, and shrinking them to fit
+            would destroy the one thing the grid exists to show. It
+            scrolls instead, with a floor wide enough to keep the shape
+            intact — and narrow enough that inside the 1176px column it
+            never scrolls on a desktop at all. */}
+        <div className="overflow-x-auto overscroll-x-contain">
+          <div
+            ref={boardRef}
+            // The handover, captured at the top of the board so every
+            // control inside it — hover, focus, keyboard — ends the audit
+            // on its first event and keeps it ended.
+            onPointerDownCapture={take}
+            onPointerMoveCapture={take}
+            onFocusCapture={take}
+            onKeyDownCapture={take}
+            className="relative min-w-[980px]"
           >
-            {COMPARISON_INTRO.sub}
-          </Reveal>
-        </div>
+            {/* Our column's ground: a violet tint, and two rules that draw
+                down with the head. Absolutely placed off the same
+                percentages as the colgroup so the rule is one continuous
+                object rather than twelve borders stacked end to end. */}
+            <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
+              <div
+                className="absolute inset-y-0 bg-pp-accent/[0.05]"
+                style={{ left: COLS.oursLeft, width: COLS.rival }}
+              />
+            </div>
 
-        {/* the board */}
-        <Reveal delay={0.08} y={32} className="mt-[3.5em] md:mt-[4.5em]">
-          <div className="overflow-hidden rounded-[1.2em] border border-[var(--cover-paper)]/12 bg-[var(--cover-panel)] shadow-[0_2em_5em_-1.8em_rgba(0,0,0,0.9)]">
-            {/* Five columns will not fit a phone, and shrinking them to fit
-                would destroy the one thing the grid exists to show. It
-                scrolls instead, with a floor wide enough to keep the shape
-                intact. */}
-            <div className="overflow-x-auto [scrollbar-width:thin]">
-              <div className="min-w-[42em]">
-                {/* vendor headers */}
-                <div
-                  className="grid items-end border-b border-[var(--cover-paper)]/12"
-                  style={COLS}
-                >
-                  <div className="px-[1.4em] pb-[0.9em] pt-[1.4em]">
-                    <p className="mono text-[0.6em] uppercase tracking-[0.22em] text-[var(--cover-paper)]/35">
+            <table
+              onMouseLeave={() => setAt(null)}
+              className="relative z-10 w-full table-fixed border-collapse text-left"
+            >
+              <caption className="sr-only">
+                Every layer a working phone agent needs, and who supplies
+                it — {RIVALS.map((r) => r.name).join(", ")}.
+              </caption>
+
+              <colgroup>
+                <col style={{ width: COLS.label }} />
+                {RIVALS.map((r) => (
+                  <col key={r.id} style={{ width: COLS.rival }} />
+                ))}
+              </colgroup>
+
+              <thead>
+                <tr className="border-b border-pp-hair">
+                  <th
+                    scope="col"
+                    className="px-1 pt-1 pb-4 text-left align-bottom font-normal"
+                  >
+                    <span className="block text-[11px] leading-4 font-medium tracking-[0.14em] text-pp-muted uppercase">
                       What a working phone agent needs
-                    </p>
-                  </div>
+                    </span>
+                  </th>
 
-                  {RIVALS.map((r) => (
-                    <div
+                  {RIVALS.map((r, ci) => (
+                    <th
                       key={r.id}
+                      scope="col"
+                      onMouseEnter={() => setAt({ row: "", col: ci })}
                       className={cn(
-                        "px-[0.5em] pb-[0.9em] pt-[1.4em] text-center",
-                        r.ours &&
-                          "rounded-t-[0.6em] border-x border-t border-[var(--cover-brand-lit)]/25 bg-[var(--cover-brand-lit)]/[0.07]",
+                        "px-3 pt-1 pb-4 text-left align-bottom font-normal transition-colors duration-300",
+                        colLit(ci) && LIT_COL,
                       )}
                     >
-                      <p
+                      <span
                         className={cn(
-                          "text-[0.92em] leading-tight",
-                          r.ours
-                            ? "font-medium text-[var(--cover-brand-lit)]"
-                            : "text-[var(--cover-paper)]/75",
+                          "block text-center text-[15px] leading-5 text-balance",
+                          r.ours ? "font-medium text-pp-accent" : "text-pp-ink",
                         )}
                       >
                         {r.name}
-                      </p>
-                      <p className="mono mt-[0.5em] text-[0.55em] uppercase leading-[1.4] tracking-[0.12em] text-[var(--cover-paper)]/28">
+                      </span>
+                      <span className="mt-2 block text-center text-[11px] leading-4 font-medium tracking-[0.1em] text-pp-muted uppercase">
                         {r.kind}
-                      </p>
-                    </div>
+                      </span>
+                      {/* The fairness device, in the vendor's own words,
+                          directly above its own column. No
+                          time-to-first-call clause: `live` was a figure
+                          nobody outside this file could check, and a
+                          claim about somebody else's speed is the one
+                          cell in a comparison a reader is right to
+                          distrust. */}
+                      <span className="mt-3.5 block text-[12px] leading-[17px] text-pp-muted">
+                        For {r.who.toLowerCase()}.
+                      </span>
+                      <span className="mt-1.5 block text-[12px] leading-[17px] text-pp-muted">
+                        {r.billing}.
+                      </span>
+                    </th>
                   ))}
-                </div>
+                </tr>
+              </thead>
 
-                {groups.map((g) => (
-                  <div key={g.id}>
-                    {/* The rule. Below the second one, four of the five
-                        columns go dark all the way down. */}
-                    <div
-                      className="grid items-center border-b border-[var(--cover-paper)]/10 bg-[var(--cover-paper)]/[0.03]"
-                      style={COLS}
+              {GROUPS.map((g) => (
+                <tbody key={g.id}>
+                  {/* The rule. Below the second one, four of the five
+                      columns go pale all the way down — layer by layer,
+                      as the head reads them. */}
+                  <tr className={cn("border-y border-pp-rule", BAND)}>
+                    <th
+                      scope="rowgroup"
+                      colSpan={RIVALS.length + 1}
+                      className="px-1 py-3 text-left font-normal"
                     >
-                      {/* Two mono labels on one baseline ran together into
-                          a single unreadable string — the tracking that
-                          makes them read as rules is the same tracking that
-                          swallows a plain gap. Hence the divider. */}
-                      <div className="flex flex-wrap items-baseline gap-x-[0.2em] px-[1.4em] py-[0.6em]">
-                        <p className="mono text-[0.6em] uppercase tracking-[0.22em] text-[var(--cover-brand-lit)]/70">
+                      {/* Two tracked labels on one baseline ran together
+                          into a single unreadable string — the tracking
+                          that makes them read as rules is the same
+                          tracking that swallows a plain gap. Hence the
+                          divider, which travels with the note so a wrap
+                          breaks before it rather than leaving it
+                          dangling off the first line. */}
+                      <span className="flex flex-wrap items-baseline gap-x-1">
+                        <span className="text-[11px] leading-4 font-medium tracking-[0.14em] text-pp-accent uppercase">
                           {g.label}
-                        </p>
-                        {/* The rule travels with the note rather than
-                            sitting between the two, so a wrap breaks before
-                            it instead of leaving it dangling off the end of
-                            the first line. */}
-                        <p className="mono text-[0.55em] uppercase tracking-[0.14em] text-[var(--cover-paper)]/28">
-                          <span aria-hidden className="mr-[0.9em] opacity-60">
+                        </span>
+                        <span className="text-[11px] leading-4 tracking-[0.1em] text-pp-muted uppercase">
+                          <span aria-hidden className="mr-3 text-pp-muted/45">
                             /
                           </span>
-                          {g.note}
-                        </p>
-                      </div>
-                      {RIVALS.map((r) => (
-                        <div
-                          key={r.id}
-                          className={cn(
-                            "h-full",
-                            r.ours &&
-                              "border-x border-[var(--cover-brand-lit)]/25 bg-[var(--cover-brand-lit)]/[0.07]",
-                          )}
-                        />
-                      ))}
-                    </div>
-
-                    {STACK.filter((l) => l.group === g.id).map((l, i) => (
-                      <motion.div
-                        key={l.id}
-                        // Never from zero opacity: these rows are the
-                        // section, and anything starting invisible stays
-                        // invisible if the animation does not run — which
-                        // is what a backgrounded tab does to rAF.
-                        initial={reduce ? false : { opacity: 0.4, y: 4 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true, margin: "-10% 0px" }}
-                        transition={{
-                          duration: 0.4,
-                          delay: i * 0.04,
-                          ease: EASE,
-                        }}
-                        className="grid items-stretch border-b border-[var(--cover-paper)]/[0.06] last:border-b-0"
-                        style={COLS}
-                      >
-                        <div className="flex items-center gap-[0.8em] px-[1.4em] py-[0.5em]">
-                          <span className="mono shrink-0 text-[0.6em] tracking-[0.1em] text-[var(--cover-paper)]/25">
-                            {l.n}
+                          {/* The turn's note is the one clause on this board
+                              that arrives as language: SplitText reaches for
+                              this leaf, and only on the business half. */}
+                          <span className={g.id === "business" ? "cp-turn" : undefined}>
+                            {g.note}
                           </span>
-                          <span className="min-w-0">
-                            <span className="block text-[0.88em] leading-tight text-[var(--cover-paper)]/85">
-                              {l.label}
-                            </span>
-                            <span className="mt-[0.25em] block text-[0.72em] leading-tight text-[var(--cover-paper)]/32">
-                              {l.note}
-                            </span>
-                          </span>
-                        </div>
+                        </span>
+                      </span>
+                    </th>
+                  </tr>
 
-                        {RIVALS.map((r) => (
-                          <div
-                            key={r.id}
-                            className={cn(
-                              "flex items-center justify-center",
-                              r.ours &&
-                                "border-x border-[var(--cover-brand-lit)]/25",
-                            )}
-                          >
-                            <Cell state={r.parts[l.id]} rivalOurs={r.ours} />
-                          </div>
-                        ))}
-                      </motion.div>
-                    ))}
-                  </div>
-                ))}
-
-                {/* the count, under each column */}
-                <div
-                  className="grid items-start border-t border-[var(--cover-paper)]/12"
-                  style={COLS}
-                >
-                  <div className="px-[1.4em] py-[1.1em]">
-                    <p className="mono text-[0.6em] uppercase tracking-[0.22em] text-[var(--cover-paper)]/35">
-                      Left on your desk
-                    </p>
-                  </div>
-
-                  {RIVALS.map((r) => {
-                    const build = STACK.filter(
-                      (l) => r.parts[l.id] === "build",
-                    ).length;
-                    const byo = STACK.filter(
-                      (l) => r.parts[l.id] === "byo",
-                    ).length;
+                  {ROWS[g.id].map((l) => {
                     return (
-                      <div
-                        key={r.id}
+                      <tr
+                        key={l.id}
                         className={cn(
-                          "px-[0.5em] py-[1.1em] text-center",
-                          r.ours &&
-                            "rounded-b-[0.6em] border-x border-b border-[var(--cover-brand-lit)]/25 bg-[var(--cover-brand-lit)]/[0.07]",
+                          "border-b border-pp-rule transition-colors duration-300 last:border-b-0",
+                          rowLit(l.id) && LIT_ROW,
+                        )}
+                      >
+                        <th
+                          scope="row"
+                          onMouseEnter={() => setAt({ row: l.id, col: -1 })}
+                          className="px-1 py-3 text-left align-middle font-normal"
+                        >
+                          <span className="flex items-start gap-3">
+                            <span
+                              className={cn(
+                                "shrink-0 pt-px text-[11px] leading-5 tracking-[0.08em] tabular-nums transition-colors duration-300",
+                                autoRow === l.id ? "text-pp-accent" : "text-pp-muted",
+                              )}
+                            >
+                              {l.n}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-[15px] leading-5 text-pp-ink">
+                                {l.label}
+                              </span>
+                              <span className="mt-1 block text-[12px] leading-[17px] text-pp-muted">
+                                {l.note}
+                              </span>
+                            </span>
+                          </span>
+                        </th>
+
+                        {RIVALS.map((r, ci) => {
+                          const state = r.parts[l.id];
+                          // Only the rivals' business half ever holds.
+                          // Ours never drains, and the voice stack above
+                          // the rule is true for everyone from first paint.
+                          const drain =
+                            g.id === "business" && !r.ours
+                              ? `cp-drain cp-drain-${l.id}`
+                              : undefined;
+                          return (
+                            <td
+                              key={r.id}
+                              onMouseEnter={() => setAt({ row: l.id, col: ci })}
+                              className={cn(
+                                "px-2 py-3 text-center transition-colors duration-300",
+                                colLit(ci) && LIT_COL,
+                              )}
+                            >
+                              <span className="inline-grid place-items-center">
+                                <Mark state={state} drain={drain} />
+                                <span className="sr-only">
+                                  {PART_STATES[state].label}
+                                </span>
+                              </span>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              ))}
+
+              <tfoot className="border-t border-pp-hair">
+                <tr>
+                  <th
+                    scope="row"
+                    className="px-1 py-6 text-left align-top font-normal"
+                  >
+                    <span className="block text-[11px] leading-4 font-medium tracking-[0.14em] text-pp-muted uppercase">
+                      Left on your desk
+                    </span>
+                  </th>
+
+                  {RIVALS.map((r, ci) => {
+                    // The tally so far, but the wording and the colour
+                    // come from the final figure: a column mid-count must
+                    // never be allowed to say "nothing" and mean it.
+                    const sofar = LEDGER_AT[ci][head];
+                    const { build, byo } = LEDGER[ci];
+                    return (
+                      <td
+                        key={r.id}
+                        onMouseEnter={() => setAt({ row: "", col: ci })}
+                        className={cn(
+                          "px-2 py-6 text-center align-top transition-colors duration-300",
+                          colLit(ci) && LIT_COL,
                         )}
                       >
                         <p
                           className={cn(
-                            "mono text-[1.9em] leading-none tabular-nums",
-                            build === 0
-                              ? "text-[var(--cover-brand-lit)]"
-                              : "text-[var(--cover-paper)]/80",
+                            "pp-display text-[34px] leading-none tabular-nums",
+                            build === 0 ? "text-pp-accent" : "text-pp-ink",
                           )}
+                          // Inline: `.pp-display` sets 360 outside Tailwind's
+                          // layers, which would beat a weight utility.
+                          style={{ fontWeight: 480 }}
                         >
-                          {build + byo}
+                          {sofar.build}
                         </p>
-                        <p className="mono mt-[0.6em] text-[0.55em] uppercase leading-[1.5] tracking-[0.12em] text-[var(--cover-paper)]/30">
-                          {build === 0 ? "nothing" : `of 10 layers`}
+                        <p className="mt-2.5 text-[11px] leading-4 font-medium tracking-[0.1em] text-pp-muted uppercase">
+                          {build === 0
+                            ? "nothing"
+                            : `to build, of ${STACK.length}`}
                         </p>
-                      </div>
+                        {/* Counted apart, never added in. An account you
+                            open is a different debt from a layer you
+                            write, and summing them flatters us at the
+                            expense of being true. */}
+                        {byo > 0 && (
+                          <p className="mt-1.5 text-[11px] leading-4 font-medium tracking-[0.1em] text-pp-muted uppercase">
+                            + {sofar.byo} on your own account
+                          </p>
+                        )}
+                      </td>
                     );
                   })}
-                </div>
-              </div>
-            </div>
+                </tr>
+              </tfoot>
+            </table>
 
-            {/* the legend — four states, spelled out */}
-            <div className="flex flex-wrap gap-x-[1.6em] gap-y-[0.6em] border-t border-[var(--cover-paper)]/10 px-[1.6em] py-[0.9em] md:px-[2em]">
-              {(["shipped", "metered", "byo", "build"] as PartState[]).map(
-                (s) => {
-                  const Icon = ICONS[s];
-                  return (
-                    <span
-                      key={s}
-                      className="flex items-center gap-[0.5em] text-[0.72em] leading-none text-[var(--cover-paper)]/50"
-                    >
-                      <span
-                        className={cn(
-                          "grid size-[1.5em] shrink-0 place-items-center rounded-[0.3em] border",
-                          TONE[s],
-                        )}
-                      >
-                        <Icon
-                          className="size-[0.85em]"
-                          strokeWidth={2.4}
-                          aria-hidden
-                        />
-                      </span>
-                      <span className="text-[var(--cover-paper)]/80">
-                        {PART_STATES[s].label}
-                      </span>
-                      <span className="hidden text-[var(--cover-paper)]/35 sm:inline">
-                        — {PART_STATES[s].note}
-                      </span>
-                    </span>
-                  );
-                },
-              )}
-            </div>
+            {/* Above the table, so the rule reads as one unbroken object
+                rather than as something the row hairlines cut through.
 
-            {/* Who each one is for, in one line — the fairness device, and
-                the part that stops the grid reading as a hatchet job. */}
-            <div className="border-t border-[var(--cover-paper)]/10 px-[1.6em] py-[1.2em] md:px-[2em]">
-              <ul className="flex flex-col gap-[0.7em]">
-                {RIVALS.map((r) => (
-                  <li
-                    key={r.id}
-                    className={cn(
-                      "text-[0.78em] leading-[1.6]",
-                      r.ours
-                        ? "text-[var(--cover-paper)]/70"
-                        : "text-[var(--cover-paper)]/45",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        r.ours
-                          ? "text-[var(--cover-brand-lit)]"
-                          : "text-[var(--cover-paper)]/80",
-                      )}
-                    >
-                      {r.name}
-                    </span>{" "}
-                    — built for {r.who.toLowerCase()}. {r.billing}.{" "}
-                    <span className="text-[var(--cover-paper)]/30">
-                      First answered call: {r.live.toLowerCase()}.
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+                Real SVG strokes, and the one thing on this board that is
+                drawn rather than revealed — DrawSVG needs geometry, and
+                the argument needs a stroke that keeps going rather than a
+                box that stretches. Each carries a faint ghost twin over
+                which the ink is laid: the column's route was always there;
+                the audit is what inks it.
 
-            {/* the concession, and the receipts */}
-            <div className="border-t border-[var(--cover-paper)]/10 bg-[var(--cover-paper)]/[0.025] px-[1.6em] py-[1.2em] md:px-[2em]">
-              <p className="max-w-[52em] text-[0.82em] leading-[1.65] text-[var(--cover-paper)]/55">
-                {COMPARISON_NOTE}
-              </p>
-              <p className="mt-[0.9em] max-w-[52em] text-[0.68em] leading-[1.6] text-[var(--cover-paper)]/30">
-                {COMPARISON_SOURCE}
-              </p>
+                `viewBox="0 0 1 100"` against a one-pixel-wide box, so the
+                stroke is always exactly one device pixel across and the
+                line is always exactly a hundred user units long however
+                tall the board grows. DrawSVG's dash arithmetic is then in
+                those hundred units and survives every reflow. They rest
+                fully drawn, which is what the server sends. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 z-20"
+            >
+              {([COLS.oursLeft, COLS.oursRight] as const).map((left) => (
+                <svg
+                  key={left}
+                  className="absolute inset-y-0 w-px"
+                  style={{ left }}
+                  viewBox="0 0 1 100"
+                  preserveAspectRatio="none"
+                  aria-hidden
+                >
+                  <line
+                    className="stroke-pp-accent"
+                    x1="0.5"
+                    x2="0.5"
+                    y1="0"
+                    y2="100"
+                    strokeOpacity="0.1"
+                    strokeWidth="1"
+                  />
+                  <line
+                    className="cp-rule stroke-pp-accent"
+                    x1="0.5"
+                    x2="0.5"
+                    y1="0"
+                    y2="100"
+                    strokeOpacity="0.4"
+                    strokeWidth="1"
+                  />
+                </svg>
+              ))}
             </div>
           </div>
-        </Reveal>
+        </div>
       </div>
-    </section>
+
+      {/* the legend — four states, spelled out */}
+      <div className="mt-6 flex flex-wrap gap-x-8 gap-y-3 border-t border-pp-rule pt-5">
+        {(["shipped", "metered", "byo", "build"] as PartState[]).map((s) => (
+          <span key={s} className="flex items-center gap-2.5 text-[13px] leading-5">
+            <Mark state={s} size="sm" />
+            <span className="text-pp-ink">{PART_STATES[s].label}</span>
+            <span className="hidden text-pp-muted sm:inline">
+              — {PART_STATES[s].note}
+            </span>
+          </span>
+        ))}
+      </div>
+
+      {/* the concession, and the receipts */}
+      <div className="mt-8 border-t border-pp-rule pt-7">
+        <p className="max-w-[720px] text-[15px] leading-[24px] text-pp-muted">
+          {COMPARISON_NOTE}
+        </p>
+        <p className="mt-4 max-w-[720px] text-[13px] leading-[21px] text-pp-muted">
+          {COMPARISON_SOURCE}
+        </p>
+      </div>
+    </Frame>
   );
 }
