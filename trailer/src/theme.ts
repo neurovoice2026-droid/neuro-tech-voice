@@ -75,9 +75,94 @@ export const HERO = {
   focal: { x: 0.5024, y: 0.4063 }, // eyes line, lib/site.ts
 } as const;
 
-/** FluidOrb palettes, darkest first (palettes.ts). */
+/* ── The four lights ─────────────────────────────────────────────
+ * #demo's MOMENT_LIGHTS (components/site/home/palettes.ts:130-171), copied
+ * verbatim. On the site the hour is the light: "Answered on the first ring —
+ * at 3 a.m., on a Sunday, just after closing, in the middle of a rush." Each
+ * moment lights the stage, the clock and the orb in a colour of its own; the
+ * night is the poster (the brand violet in an indigo room). Lights are LIGHT
+ * — orb meshes, blooms, rims, grounds — never flat slabs, and one light leads
+ * a moment. Helpers (palette blends, sequences, blooms): src/lib/lights.ts. */
+
+export type LightId = 'rush' | 'closing' | 'sunday' | 'night';
+
+/** A FluidOrb / MeshOrb palette: five colours, darkest first (the mesh orb's slot order). */
+export type Palette = readonly string[];
+
+export type MomentLight = {
+  /** The orb while Ava speaks, and at rest. Darkest first. */
+  orb: Palette;
+  /** The orb while the caller speaks: the same ends, leaning to caller blue. */
+  listen: Palette;
+  /** The stage's ground: lit from the clock outwards (a CSS background). */
+  ground: string;
+  /** The clock's figures (a CSS gradient, one per figure cell). */
+  num: string;
+  /** The dial disc on the moment's key (a CSS gradient). */
+  disc: string;
+  /** The rings that leave the orb when the phone rings (a CSS colour). */
+  wave: string;
+  /** The stage's text tone: dark text on a light room, paper on the night. */
+  tone: 'light' | 'night';
+  /** Text in the moment's colour (on the light rooms / white). */
+  ink: string;
+};
+
+/** The agent's orb at 3 a.m. (palettes.ts INK_MESH): electric opened out into paper. */
+const INK_MESH = ['#14062b', '#4a1a9e', '#7c3aed', '#c4a8ff', '#f7f3ff'] as const;
+
+export const LIGHTS: Record<LightId, MomentLight> = {
+  rush: {
+    orb: ['#2e0620', '#9d174d', '#ec4899', '#f9b4d6', '#fff1f7'],
+    listen: ['#2e0620', '#642374', '#8b4cb3', '#c9b9ef', '#fff1f7'],
+    ground: 'radial-gradient(120% 100% at 50% 40%, #ffd9ec 0%, #ffe8f3 38%, #fff4f9 72%, #fff8fb 100%)',
+    num: 'linear-gradient(180deg, #db2777 0%, #9d174d 100%)',
+    disc: 'linear-gradient(135deg, #f472b6 0%, #be185d 100%)',
+    wave: 'rgb(219 39 119 / 0.45)',
+    tone: 'light',
+    ink: '#be185d', // HOME_COLORS.rushInk
+  },
+  closing: {
+    orb: ['#03281a', '#065f46', '#10b981', '#a7f3d0', '#f0fdf8'],
+    listen: ['#03281a', '#185a74', '#2f8fb0', '#a9dcf0', '#f0fdf8'],
+    ground: 'radial-gradient(120% 100% at 50% 40%, #cdf5e2 0%, #e2faef 38%, #f1fcf6 72%, #f6fefa 100%)',
+    num: 'linear-gradient(180deg, #059669 0%, #065f46 100%)',
+    disc: 'linear-gradient(135deg, #34d399 0%, #047857 100%)',
+    wave: 'rgb(5 150 105 / 0.45)',
+    tone: 'light',
+    ink: '#047857', // HOME_COLORS.closingInk
+  },
+  sunday: {
+    orb: ['#052a33', '#0e7490', '#22b8cf', '#a5eaf5', '#f0fdff'],
+    listen: ['#052a33', '#1c5295', '#307fcb', '#a7cefb', '#f0fdff'],
+    ground: 'radial-gradient(120% 100% at 50% 40%, #cdf1f6 0%, #e2f8fb 38%, #f1fbfd 72%, #f6fdfe 100%)',
+    num: 'linear-gradient(180deg, #0a8aa8 0%, #155e75 100%)',
+    disc: 'linear-gradient(135deg, #22b8cf 0%, #0e7490 100%)',
+    wave: 'rgb(10 138 168 / 0.45)',
+    tone: 'light',
+    ink: '#0e7490', // HOME_COLORS.sundayInk
+  },
+  night: {
+    orb: INK_MESH,
+    listen: ['#14062b', '#3a259c', '#5946d9', '#b4b4ff', '#f7f3ff'],
+    ground: 'radial-gradient(120% 100% at 50% 40%, #34288f 0%, #1f1860 36%, #110c38 68%, #08061c 100%)',
+    num: 'linear-gradient(180deg, #f1ecff 0%, #c4b5fd 55%, #a78bfa 100%)',
+    disc: 'linear-gradient(135deg, #8b5cf6 0%, #4a1a9e 100%)',
+    wave: 'rgb(185 163 255 / 0.45)',
+    tone: 'night',
+    ink: '#6d28d9', // HOME_COLORS.violet
+  },
+};
+
+/** The site's reading order of the four moments: the rush, just after closing, Sunday, 3 a.m. */
+export const LIGHT_ORDER: readonly LightId[] = ['rush', 'closing', 'sunday', 'night'];
+
+/** The reader's orb when the answer is not in the documents (palettes.ts MUTED_MESH). */
+export const MUTED_MESH: Palette = ['#4a4852', '#7a7884', '#a9a7b2', '#d4d2da', '#f3f2f6'];
+
+/** FluidOrb palettes, darkest first (palettes.ts). `ink` IS the night light's orb. */
 export const ORB = {
-  ink: ['#14062b', '#4a1a9e', '#7c3aed', '#c4a8ff', '#f7f3ff'],
+  ink: INK_MESH,
   listen: ['#14062b', '#3a259c', '#5946d9', '#b4b4ff', '#f7f3ff'],
   found: ['#1e1b4b', '#4f46e5', '#8b5cf6', '#c9b8ff', '#f7f5ff'],
 } as const;
