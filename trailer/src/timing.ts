@@ -521,6 +521,8 @@ export const SCALE_LOCAL = (() => {
     langs,
     /** the AI-disclosure underline draws under each language's AI phrase */
     disclose: langs.map((l) => [l + 4, l + 10] as const),
+    /** quarter notes of the wall: every card already up pulses in its light (and the four room lights swell) */
+    beats: [b(1), b(2), b(3)] as const, // 15 30 45
     /** the camera's slow push during the languages, released for the flow */
     push: [b(4), b(7.3), b(7.95)] as const, // 60, 110, 119
     /** "14 languages." wipes out → "After the call." rises */
@@ -551,6 +553,11 @@ export const SCALE_LOCAL = (() => {
     ping: [stations[2], stations[2] + 24] as const, // 135 → 159
     /** slow push-in of the stage about FLOW_END (zoom 1 → 1.04; the heading stays put) */
     flowPush: [b(8.55), b(10.8)] as const, // 128 → 162
+    /** the finished rail streams: the first light mote leaves the call node after the confirm and
+     *  reaches the CRM exactly as the CTA iris opens from it (then one per 8th note) */
+    stream: [stations[2] + 1, SCALE.irisToDark[0] + 3] as const, // 136 → 146
+    /** each language orb's pulse (its greeting "said"): 2 f after the flip lands */
+    orbPulse: langs.map((l) => l + 3), // 78 82 86 89 93 97
   };
 })();
 
@@ -597,10 +604,42 @@ export const CTA_LOCAL = {
   /** impact accents (frames) */
   shake: 6,
   ring: [CTA.logoImpact, CTA.logoImpact + 20] as const,
-  /** halo breath starts under the end card */
+  /** halo breath starts under the end card … */
   breath: CTA.button + 10,
+  /** … and its amplitude eases to 0 into the hold, where it freezes */
+  breathOut: [CTA.finalHold - 10, CTA.finalHold] as const,
   /** dust clears before the hold */
   dustOut: [CTA.finalHold - 15, CTA.finalHold] as const,
+  /** every residual (camera, springs, glows) eases to exact rest over these frames */
+  settle: [CTA.finalHold - 8, CTA.finalHold] as const,
+  /** headline word i starts its mask rise this many frames before its spoken word
+   *  (CTA.line + vWord(lineVoice, lineWords[i])), so it is ~85 % up ON the word */
+  riseLead: 4,
+  /** the eyes after the iris: a slow push-in (1 → 1.04) and a catch-light glint ON her first word */
+  eyePush: [CTA_IRIS_END, CTA.line + 10] as const,
+  glint: [CTA.line, CTA.line + 4] as const,
+  /** THE FOUR LIGHTS — rush, closing, sunday, night pop in on 8ths (light-chime hits) */
+  orbPops: [b(2), b(2.5), b(3), b(3.5)] as const,
+  /** … and tighten their orbit ON "Twenty" "four" "seven" */
+  tighten: [0, 1, 2].map((k) =>
+    CTA.line + vWord(CTA.lineVoice, Math.min(CTA.lineWords[7] + k, VOICE.lines[CTA.lineVoice].words.length - 1)),
+  ) as readonly number[],
+  /** the converge: the orbit swells (anticipation) … */
+  orbSwell: [CTA.converge[0], CTA.converge[0] + 4] as const,
+  /** … then spirals into P, accelerating (motion-blurred) */
+  orbIn: [CTA.converge[0] + 4, CTA.logoImpact - 2] as const,
+  /** as she tears, the figure stops hiding the orbs behind her */
+  unhide: [CTA.converge[0] + 2, CTA.converge[0] + 12] as const,
+  /** the four overlap and become one (the back three go as they are covered) */
+  merge: [CTA.logoImpact - 6, CTA.logoImpact - 1] as const,
+  /** the merged orb blows out into the light as the logo lands */
+  burst: [CTA.logoImpact, CTA.logoImpact + 8] as const,
+  /** the four lights' rim comes up round the halo */
+  rimIn: [CTA.logoImpact + 2, CTA.logoImpact + b(1.5)] as const,
+  /** the URL types one character per this many frames, from CTA.url */
+  urlStep: 0.7,
+  /** the press: down to .94 over this many frames, then back on SPRING.pop */
+  pressDown: 2,
 };
 
 /* ── KNOWLEDGE — fine cuts (knowledge-local frames) ────────────── */

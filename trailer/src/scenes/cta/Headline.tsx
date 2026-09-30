@@ -2,7 +2,8 @@
  * "AI voice agents that book your customers 24/7." — the hero headline
  * (Inter Tight 500, -0.04em, lh 1.04, word masks rising 115 % → 0 on the
  * site spring, 3 px blur-in, words padded 0.24em apart), bracketed by the
- * hero's four corner marks.
+ * hero's four corner marks. Ava SAYS this line: each word rises on its own
+ * spoken word (spec.wordAt, from the real voice timing), "24/7." on "Twenty".
  *
  * LAYOUT: the line is laid out ONCE by the browser (a hidden copy of the
  * exact site markup), measured after the face has loaded (inside a
@@ -30,18 +31,22 @@ export type HeadlineSpec = {
   fontSize: number;
   cy: number;
   P: { x: number; y: number };
-  start: number;
-  stagger: number;
+  /** frame each word's mask rise starts (from its spoken word, Cta.tsx) */
+  wordAt: readonly number[];
   marksAt: number;
   /** collapse: first word leaves at `from`, then one every `step` frames */
   collapse: { from: number; step: number; dur: number; anticip: number };
   marksCollapse: { from: number; dur: number };
-  /** gap between the block and its marks, in em of the headline */
-  markSide: number;
+  /** the marks sit this many px outside the block's cap-height bounds */
+  markGap: number;
 };
 
 const LH = 1.04;
 const MARK = 14;
+/** Inter Tight: cap top and baseline below a 1.04-line row's top, in em
+ *  (ascender .969, descender .242, cap height .727 → half-leading −.085) */
+const CAP_TOP = 0.157;
+const BASELINE = 0.884;
 /** the flight: leaves gently, accelerating into the core (end slope 1.2) — a
  *  third of the way at half time, so the eye can ride it in */
 const FLIGHT = Easing.bezier(0.42, 0, 0.75, 0.7);
@@ -100,7 +105,7 @@ const typeStyle = (fontSize: number): React.CSSProperties => ({
 });
 
 export const Headline: React.FC<{ t: number; spec: HeadlineSpec }> = ({ t, spec }) => {
-  const { lines, fontSize, cy, P, start, stagger } = spec;
+  const { lines, fontSize, cy, P, wordAt } = spec;
   const words = lines.map((l) => l.split(' '));
   const flat = words.flatMap((ws, li) => ws.map((w, j) => ({ text: w, li, last: j === ws.length - 1 })));
   const n = lines.length;
@@ -221,7 +226,7 @@ export const Headline: React.FC<{ t: number; spec: HeadlineSpec }> = ({ t, spec 
   const { from, step, dur, anticip } = spec.collapse;
   const els: React.ReactNode[] = [];
   flat.forEach((wd, i) => {
-    const s0 = start + i * stagger;
+    const s0 = wordAt[Math.min(i, wordAt.length - 1)];
     if (t < s0 - 4) return;
     const wb = m.words[i];
     const mb = m.masks[i];
@@ -308,17 +313,17 @@ export const Headline: React.FC<{ t: number; spec: HeadlineSpec }> = ({ t, spec 
   });
 
   /* ── corner marks: after the words; then they travel into P ────────── */
+  // on the block's cap-height bounds (first row's cap line → last row's
+  // baseline), pushed markGap px out on both axes
   const B = m.block;
-  const side = Math.round(fontSize * spec.markSide);
-  // the site's placement: top pair on the cap line, bottom pair dropped to
-  // the descender line (0.04em off the block bottom) — never on the baseline
-  const capTop = Math.round(fontSize * 0.16);
-  const baseGap = Math.round(fontSize * 0.04);
+  const g = spec.markGap;
+  const top = B.top + fontSize * CAP_TOP - g;
+  const bottom = B.top + fontSize * LH * (n - 1) + fontSize * BASELINE + g;
   const marks = [
-    { x: B.left - side - MARK / 2, y: B.top + capTop + MARK / 2 },
-    { x: B.right + side + MARK / 2, y: B.top + capTop + MARK / 2 },
-    { x: B.left - side - MARK / 2, y: B.bottom - baseGap - MARK / 2 },
-    { x: B.right + side + MARK / 2, y: B.bottom - baseGap - MARK / 2 },
+    { x: B.left - g, y: top },
+    { x: B.right + g, y: top },
+    { x: B.left - g, y: bottom },
+    { x: B.right + g, y: bottom },
   ];
   const mcFrom = spec.marksCollapse.from;
   const mcDur = spec.marksCollapse.dur;

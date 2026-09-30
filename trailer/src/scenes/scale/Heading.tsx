@@ -16,6 +16,7 @@ import { C, FONT, TRACK } from '../../theme';
 import { aos, EASE, tween } from '../../lib/motion';
 import { DirBlur, dirBlurRef, sigmaFor } from './MotionBlur';
 import { Rise } from './Rise';
+import { inkSweep } from './lights';
 import { dspring } from './curves';
 
 export type TitleTiming = { hero: number; swap: number; out: number; after: number };
@@ -28,6 +29,8 @@ const MOVE = { stiffness: 380, damping: 25, mass: 0.8 };
 /** cap centre below the top of a line-height-1 box, in em (Instrument Sans) */
 const CAP_MID = 0.56;
 const HERO = '16 industries.';
+/** the hero line's advance, in em (Instrument Sans 500, −0.04em) — for its motion blur */
+const HERO_W = 5.55;
 
 const face: React.CSSProperties = {
   fontFamily: FONT.ui,
@@ -38,6 +41,19 @@ const face: React.CSSProperties = {
   fontKerning: 'none',
   color: C.ink,
 };
+
+/**
+ * The figure wears the four inks (rose → violet → teal → emerald), one
+ * gradient across both digits: each digit shows its half of it.
+ */
+const sweep = (half: 0 | 1 | number): React.CSSProperties => ({
+  backgroundImage: inkSweep(115),
+  backgroundSize: '200% 100%',
+  backgroundPosition: half === 0 ? '0% 0%' : '100% 0%',
+  WebkitBackgroundClip: 'text',
+  backgroundClip: 'text',
+  color: 'transparent',
+});
 
 /** the slot's pose at f: anchor x (centred → left-aligned), cap-centre y, scale vs the hero size */
 function poseAt(f: number, T: TitleTiming, hero: Pose, band: Pose) {
@@ -63,12 +79,14 @@ export const Titles: React.FC<{
   const w = tween(t, [T.swap, T.swap + 8], [0, 1], EASE.inOut);
   // B leaves (upwards) at T.out
   const q = tween(t, [T.out, T.out + 4], [0, 1], EASE.inOut);
-  // shutter blur: the slot's own speed + the wipe's vertical smear
+  // shutter blur: the GLYPHS' own speed (the anchor travels further than the
+  // text: the −50 % centring unwinds as it goes) + the wipe's vertical smear
   const P0 = poseAt(t - 0.5, T, hero, band);
   const P1 = poseAt(t + 0.5, T, hero, band);
-  const sx = Math.min(16, sigmaFor(P1.x - P0.x));
+  const mid = (P: ReturnType<typeof poseAt>) => P.x + (0.5 - 0.5 * (1 - P.m)) * HERO_W * hero.size * P.s;
+  const sx = Math.min(12, sigmaFor(mid(P1) - mid(P0)));
   const wipeS = 3 * Math.sin(Math.PI * w) + 4 * Math.sin(Math.PI * q);
-  const sy = Math.min(16, Math.hypot(sigmaFor(P1.y - P0.y), wipeS));
+  const sy = Math.min(12, Math.hypot(sigmaFor(P1.y - P0.y), wipeS));
   const blur = dirBlurRef('scale-title', sx / P.s, sy / P.s);
   // a soft white bloom behind the hero title (legibility over the dimmed wall), gone on the move
   const halo = tween(t, [T.hero, T.hero + 4], [0, 1], EASE.out3) * (1 - tween(t, [T.swap, T.swap + 6], [0, 1], EASE.out3));
@@ -109,7 +127,7 @@ export const Titles: React.FC<{
           transformOrigin: '50% 62%',
           opacity: o < 0.999 ? o : undefined,
           filter: bl > 0.15 ? `blur(${bl.toFixed(2)}px)` : undefined,
-          color: i < 2 ? C.violet : undefined,
+          ...(i < 2 ? sweep(i) : null),
         }}
       >
         {ch}
@@ -118,7 +136,8 @@ export const Titles: React.FC<{
   });
   const bandText = (
     <>
-      <span style={{ color: C.violet }}>14</span> languages.
+      <span style={{ display: 'inline-block', ...sweep(0) }}>1</span>
+      <span style={{ display: 'inline-block', ...sweep(1) }}>4</span> languages.
     </>
   );
 

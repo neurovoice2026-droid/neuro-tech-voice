@@ -34,7 +34,7 @@ import React from 'react';
 import { AbsoluteFill, random } from 'remotion';
 import { Camera, Layer } from '../components/Camera';
 import { useLayout } from '../lib/layout';
-import { aos, EASE, mixHex, SPRING, tween } from '../lib/motion';
+import { aos, EASE, SPRING, tween } from '../lib/motion';
 import { useSceneFrame } from '../lib/scene';
 import { C } from '../theme';
 import { SCALE, SCALE_LOCAL } from '../timing';
@@ -48,6 +48,7 @@ import { Rail, StationCards, StationFace, type FlowTiming } from './scale/Flow';
 import { centre, geo, mixRect, type Geo, type Rect } from './scale/geometry';
 import { Titles } from './scale/Heading';
 import { DirBlur, dirBlurRef, sigmaFor } from './scale/MotionBlur';
+import { bodyOf, cardLight, FLOW_LIGHT, LANG_LIGHT, litFill, rgba } from './scale/lights';
 
 const K = SCALE_LOCAL;
 const HERO = SCALE.industriesTitle;
@@ -135,12 +136,11 @@ export const Scale: React.FC = () => {
 
   /* ── the hero hit ─────────────────────────────────────────────── */
   const dim = tween(t, [HERO, HERO + 6], [0, 1], EASE.out3);
-  const lock = t < HERO ? 0 : 1 - tween(t, [HERO, HERO + 6], [0, 1], EASE.out3);
   const wash = t >= HERO && t < HERO + 2 ? (t < HERO + 1 ? 0.08 : 0.05) : 0;
 
   /* ── card metrics ─────────────────────────────────────────────── */
   const ind = { pad: v ? 24 : 32, iconSize: v ? 72 : 80, labelSize: v ? 30 : 40 };
-  const cell = { pad: v ? 24 : 32, labelSize: v ? 28 : 30, leadSize: v ? 44 : 48, aiSize: v ? 72 : 84 };
+  const cell = { pad: v ? 24 : 32, labelSize: v ? 28 : 30, leadSize: v ? 44 : 48, aiSize: v ? 72 : 84, orb: v ? 56 : 64 };
 
   /** the wall-phase filter of card i: attack-frame shutter blur, step blur, hero blur */
   const wallFilter = (i: number, id: string, extraBlur = 0): { f?: string; defs: React.ReactNode } => {
@@ -186,8 +186,16 @@ export const Scale: React.FC = () => {
     rails: K.rails,
     ok: K.ok,
     ping: K.ping,
+    stream: K.stream,
     callIn: K.callIn,
     pill: K.pill,
+  };
+
+  /** does language cell k lie under the centred hero title? */
+  const underTitle = (k: number) => {
+    const h = G.title.hero;
+    const c = G.cells[k];
+    return c.y < h.y + 0.45 * h.size && c.y + c.h > h.y - 0.75 * h.size && c.x < h.x + 2.9 * h.size && c.x + c.w > h.x - 2.9 * h.size;
   };
 
   /* ── one keeper (industry card → language cell → deck) ─────────── */
@@ -219,7 +227,7 @@ export const Scale: React.FC = () => {
       filter = w.f;
       defs = w.defs;
       transform = poseCss(popPose(i, t, v));
-      bg = popFill(t, tickOf(i));
+      bg = popFill(t, tickOf(i), cardLight(i), 0.4);
     } else if (!back) {
       // dimmed industry front: .4 on the hit → .6 over the glide → 1 as it turns
       const up = tween(t, [gs, gs + 10], [0, 1], EASE.inOut);
@@ -253,9 +261,9 @@ export const Scale: React.FC = () => {
       const firstBack = flipAngle(k, t - 1) < 90;
       const nextLive = k < 5 ? K.langs[k + 1] : K.collapse;
       const live = t < nextLive + 3 && t < cs;
-      if (firstBack) bg = mixHex(C.white, C.lilac, 0.28);
-      if (carrier && t >= K.stations[0]) bg = popFill(t, K.stations[0]);
-      if (live) ring = C.lilac;
+      if (firstBack) bg = litFill(LANG_LIGHT[k], 1.1);
+      if (carrier && t >= K.stations[0]) bg = popFill(t, K.stations[0], FLOW_LIGHT);
+      if (live) ring = rgba(bodyOf(LANG_LIGHT[k]), 0.75);
       z = t < K.langs[k] + 8 ? 2 : 1;
       if (t >= cs - 4) {
         lift = carrier ? tween(t, [cs - 3, cs + 4], [0, 1], EASE.out3) * (1 - tween(t, [cs + 6, cs + 14], [0, 1], EASE.inOut)) : 0.4;
@@ -273,7 +281,9 @@ export const Scale: React.FC = () => {
           pad={ind.pad}
           iconSize={ind.iconSize}
           labelSize={ind.labelSize}
-          lock={lock}
+          light={cardLight(i)}
+          lockAt={HERO}
+          beats={K.beats}
           still={t > tickOf(i) + 12}
         />
       );
@@ -283,10 +293,20 @@ export const Scale: React.FC = () => {
         : 0.75 * tween(t, [cs + 3, cs + 6], [0, 1], EASE.inOut);
       const callIn = carrier ? tween(t, [K.callIn - 1, K.callIn + 2], [0, 1], EASE.out3) : 0;
       const lg = LANGS[k];
+      // rack focus: a greeting that lands UNDER the centred hero title stays soft
+      // (like the wall) while the title holds, and comes into focus as it leaves
+      const soft = underTitle(k) ? 1 - tween(t, [K.titleSwap, K.titleSwap + 5], [0, 1], EASE.inOut) : 0;
       face = (
         <>
           {langOut < 1 ? (
-            <div style={{ position: 'absolute', inset: 0, opacity: 1 - langOut }}>
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                opacity: (1 - langOut) * (1 - 0.5 * soft),
+                filter: soft > 0.02 ? `blur(${(4 * soft).toFixed(2)}px)` : undefined,
+              }}
+            >
               <LangFace
                 lang={lg}
                 ai={(v && lg.aiV) || lg.ai}
@@ -297,6 +317,9 @@ export const Scale: React.FC = () => {
                 leadSize={cell.leadSize}
                 aiSize={lg.aiSize ? (v ? lg.aiSize[1] : lg.aiSize[0]) : cell.aiSize}
                 underline={tween(t, K.disclose[k], [0, 1], EASE.house)}
+                light={LANG_LIGHT[k]}
+                orbSize={cell.orb}
+                w={r.w}
               />
             </div>
           ) : null}
@@ -332,7 +355,7 @@ export const Scale: React.FC = () => {
     const f1 = flyAt(i, o, t - 1, u);
     const speed = Math.hypot(f.x - f1.x, f.y - f1.y);
     const w = wallFilter(i, id, Math.min(10, speed * 0.05));
-    const content = (
+    const content = (ghost: boolean) => (
       <IndustryFace
         d={INDUSTRIES[i]}
         t={t}
@@ -341,8 +364,11 @@ export const Scale: React.FC = () => {
         pad={ind.pad}
         iconSize={ind.iconSize}
         labelSize={ind.labelSize}
-        lock={lock}
-        still={t > tickOf(i) + 12}
+        light={cardLight(i)}
+        lockAt={HERO}
+        beats={K.beats}
+        still={ghost || t > tickOf(i) + 12}
+        accents={!ghost}
       />
     );
     const op = 1 - 0.6 * dim;
@@ -352,7 +378,7 @@ export const Scale: React.FC = () => {
         {speed > 10
           ? [0.35, 0.7].map((d, gi) => (
               <Box key={gi} r={G.cards[i]} transform={at(t - d)} opacity={op * [0.3, 0.14][gi]} shadowAlpha={0.4} filter={`blur(${(Math.min(12, speed * 0.06) + 8 * dim).toFixed(2)}px)`}>
-                {content}
+                {content(true)}
               </Box>
             ))
           : null}
@@ -360,11 +386,11 @@ export const Scale: React.FC = () => {
           r={G.cards[i]}
           transform={t < K.flyOut - K.flyAnticip ? poseCss(popPose(i, t, v)) : at(t)}
           opacity={op}
-          bg={popFill(t, tickOf(i))}
+          bg={popFill(t, tickOf(i), cardLight(i), 0.4)}
           filter={w.f}
           lift={f.q > 0 ? 0.6 : 0}
         >
-          {content}
+          {content(false)}
         </Box>
       </React.Fragment>
     );

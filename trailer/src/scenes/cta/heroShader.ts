@@ -15,9 +15,17 @@
  *      thresholds spread over the whole window (outside-in, eyes last), the
  *      torn edge catches the light, the eyes flash lilac as they go
  *   5. REVEAL: from black, the eyes first, then a noisy radial opening
- *   6. the halo: #c4c0ba → #a19e97 → #7b7a7d → night, a round light with a
- *      flatter (superelliptic) underside, grainy falloff like the art's own
- *      backlight — the grain is fixed to the light, so it never boils
+ *   6. the halo: #c4c0ba → #a19e97 → #7b7a7d → night — a clean, soft,
+ *      luminous backlight: one wide monotone falloff (C¹ Hermite through the
+ *      four stops, so no Mach rings), a faint bloom, a symmetric shape and a
+ *      soft floor under the wordmark; ±0.5/255 dither only (the film grain
+ *      is the global overlay). Its light never depends on the tear.
+ *   7. the four lights: two premultiplied orb layers (FluidOrbs drawn in
+ *      THIS context by orbPass.ts): the back one is occluded by the
+ *      figure's own matte (so an orb passing behind her head is hidden and
+ *      its bloom rims the silhouette), the front one sits over everything;
+ *      every orb throws a bloom of its own light; the eyes glow with Ava's
+ *      real voice envelope; the halo carries a faint rim of the four lights
  *
  * Perlin / fbm are the site's (components/site/cover-noise.ts), copied
  * verbatim apart from the octave count, which is a uniform here so the
@@ -60,9 +68,19 @@ uniform vec2  uHaloC;     // halo centre, canvas px (y down)
 uniform vec3  uHaloR;     // rx, ry above, ry below (canvas px)
 uniform float uHaloGain;
 uniform vec4  uFloor;     // y where the floor starts (at the axis), its length (canvas px), strength, rise at ±rx (px)
-uniform vec3  uHaloShape; // underside superellipse power, low-freq wobble, falloff grain
+uniform vec3  uHaloShape; // shape power (2 = round), very-low-frequency rim term (<= 0.01), bloom (0.06)
 uniform vec3  uFrame;     // base zoom, screen y of the eyes (0..1), art glitch-band edge v (0 = none)
 uniform float uSeed;      // frame, for the site dither
+uniform sampler2D uOrbBack;  // premultiplied orb layer behind the figure
+uniform sampler2D uOrbFront; // premultiplied orb layer in front of everything
+uniform float uOrbOn;     // 1 while any orb is drawn
+uniform float uOcc;       // how much the figure hides the back layer (0..1)
+uniform vec4  uGlowP[4];  // orb bloom: centre (canvas px, y down), radius px, strength
+uniform vec3  uGlowC[4];  // orb bloom colour
+uniform float uGlowBack[4]; // 1 = this bloom is behind the figure
+uniform float uEyeGlow;   // the eyes' light, driven by Ava's real voice envelope (0..1)
+uniform vec4  uRim;       // four-light rim: strength, radius (in halo d), width, arc half-span (rad)
+uniform vec3  uRimC[4];   // the four lights' rim colours, left to right over the arc
 
 const vec3 INK        = vec3(6.0, 4.0, 10.0) / 255.0;
 const vec3 SILVER     = vec3(196.0, 192.0, 186.0) / 255.0;
@@ -144,13 +162,24 @@ float scrimA(float y) {
   return mix(0.90, 1.0, clamp((y - 0.82) / 0.18, 0.0, 1.0));
 }
 
-/* The halo ramp: silver core, #a19e97, #7b7a7d, then out to night. */
+/* The halo falloff: #c4c0ba to d .45, #a19e97 by .80, #7b7a7d by .98, INK by
+   1.25 — one monotone C¹ curve (Fritsch–Carlson Hermite slopes at the inner
+   stops, flat at both ends), so the light rolls off without a visible ring
+   at any stop. herm = the weight across segment [a, b] with end-slope
+   ratios s0, s1 (slope × length / rise). */
+float herm(float a, float b, float s0, float s1, float d) {
+  float u = clamp((d - a) / (b - a), 0.0, 1.0);
+  float u2 = u * u, u3 = u2 * u;
+  return (-2.0 * u3 + 3.0 * u2) + s0 * (u3 - 2.0 * u2 + u) + s1 * (u3 - u2);
+}
 vec3 haloRamp(float d) {
   vec3 c = SILVER;
-  c = mix(c, SILVER_MID, smoothstep(0.36, 0.86, d));
-  c = mix(c, SILVER_LOW, smoothstep(0.80, 0.95, d));
-  return mix(c, INK, smoothstep(0.90, 1.14, d));
+  c = mix(c, SILVER_MID, herm(0.45, 0.80, 0.0, 1.357, d));
+  c = mix(c, SILVER_LOW, herm(0.80, 0.98, 0.643, 1.344, d));
+  return mix(c, INK, herm(0.98, 1.25, 0.655, 0.0, d));
 }
+
+vec3 screen(vec3 a, vec3 b) { return 1.0 - (1.0 - a) * (1.0 - clamp(b, 0.0, 1.0)); }
 
 void main() {
   vec2 uv = vec2(vUv.x, 1.0 - vUv.y);          // y down
@@ -158,32 +187,42 @@ void main() {
   float grainN = hash12(gl_FragCoord.xy + fract(uSeed * 0.618) * 311.0) - 0.5;
 
   /* ---- halo ------------------------------------------------------- */
+  // a clean round light (a flatter underside only if uHaloShape.x != 2);
+  // no rim wobble, no halo-space grain: a soft, luminous backlight
   vec2 hd = px - uHaloC;
-  bool under = hd.y > 0.0;
-  vec2 q = abs(hd / vec2(uHaloR.x, under ? uHaloR.z : uHaloR.y));
-  // round above; a flatter superellipse underneath, so the wordmark sits deep
-  // in the light and the frame goes back to night right under it
-  float pw = under ? uHaloShape.x : 2.0;
-  float hr = pow(pow(q.x, pw) + pow(q.y, pw), 1.0 / pw);
-  // the art's backlight is not a clean disc: a gently uneven, grungy rim …
-  vec2 hs = px / uRes.y;
-  hr += (perlin(vec3(hs * 3.2, 1.7)) * uHaloShape.y + perlin(vec3(hs * 9.0, 4.1)) * 0.035) * smoothstep(0.45, 0.95, hr);
-  // … that falls off in grain, not in a clean gradient. The grain is pinned to
-  // the light (halo-space hash, no time term): it moves with it, never boils.
-  float haloGrain = hash12(floor(hd) + vec2(71.0, 113.0)) - 0.5;
-  hr += haloGrain * uHaloShape.z * smoothstep(0.55, 1.0, hr);
+  vec2 q = hd / vec2(uHaloR.x, hd.y > 0.0 ? uHaloR.z : uHaloR.y);
+  float hr = length(q);
+  if (hd.y > 0.0 && uHaloShape.x != 2.0) {
+    float pw = uHaloShape.x;
+    hr = pow(pow(abs(q.x), pw) + pow(abs(q.y), pw), 1.0 / pw);
+  }
+  // (at most a very-low-frequency breath of the edge, <= 0.01; 0 by default)
+  hr += perlin(vec3(px / uRes.y * 1.1, 1.7)) * uHaloShape.y * smoothstep(0.45, 0.95, hr);
   vec3 halo = haloRamp(hr);
+  // a faint bloom of the core: the disc reads as light, not as paint
+  halo += SILVER * uHaloShape.z * exp(-3.0 * hr * hr) * (1.0 - smoothstep(1.05, 1.3, hr));
+  // the four lights, merged: a faint rim of their colours round the upper
+  // edge, clockwise from the top, dying out before the underside
+  if (uRim.x > 0.0) {
+    // the four colours spread over the arc [-span, +span] about the top,
+    // left to right; the underside (where the button sits) stays clean
+    float a = atan(hd.x, -hd.y);                       // 0 at the top, clockwise
+    float f = clamp((a + uRim.w) / (2.0 * uRim.w), 0.0, 1.0) * 3.0;
+    int i = min(int(floor(f)), 2);
+    vec3 rc = mix(uRimC[i], uRimC[i + 1], smoothstep(0.0, 1.0, f - float(i)));
+    float band = exp(-pow((hr - uRim.y) / uRim.z, 2.0));
+    float upper = 1.0 - smoothstep(-0.15, 0.55, q.y);
+    halo = screen(halo, rc * uRim.x * band * upper);
+  }
   // the underside of the light settles under the wordmark once the logo is
   // in: a soft falloff whose edge curves up with the ellipse (no straight seam)
   float fy = uFloor.x - uFloor.w * (hd.x / uHaloR.x) * (hd.x / uHaloR.x);
   halo = mix(halo, INK, uFloor.z * smoothstep(0.0, 1.0, (px.y - fy) / uFloor.y));
   halo *= uHaloGain;
 
-  if (uErase >= 0.999) {
-    fragColor = vec4(clamp(halo + grainN * 0.012, 0.0, 1.0), 1.0);
-    return;
-  }
-
+  vec3 col = halo;
+  float occ = 0.0;     // how much of the back orb layer the figure hides here
+  if (uErase < 0.999) {
   /* ---- 1. dolly + parallax occlusion ------------------------------- */
   vec2 F = vec2(uAxisX, uEye.y);                // the eyes, in the art
   vec2 Fs = vec2(uAxisX, uFrame.y);             // … and where they sit on screen
@@ -258,7 +297,7 @@ void main() {
   warp.x *= side;
 
   vec2 tuv = iuv + warp;
-  vec3 col = texture(uImage, tuv).rgb;
+  col = texture(uImage, tuv).rgb;
   // the portrait crop's top rows are a vertical-streak glitch band: the
   // framing keeps them out of shot, and anything the orbit or the tear still
   // pulls from there is replaced by the backlight just under it, smoothed
@@ -276,6 +315,9 @@ void main() {
   // the art's own backlight (bright, grey) vs the silhouette (dark or purple):
   // inside the figure box the light breaks through first
   float backlit = smoothstep(0.35, 0.6, dot(col, vec3(0.299, 0.587, 0.114))) * (1.0 - smoothstep(0.1, 0.25, sat));
+  // her matte: inside the figure box, whatever is not the art's backlight is
+  // her (the dark silhouette and the lilac-lit face) — an orb behind it hides
+  occ = uOcc * figure * (1.0 - backlit);
   col = mix(col, uBrand * (0.5 + dot(col, vec3(0.299, 0.587, 0.114)) * 1.5),
             0.10 * smoothstep(0.03, 0.30, sat));
   col = grade(col);
@@ -318,6 +360,7 @@ void main() {
     vec3 rimCol = mix(vec3(0.80, 0.77, 0.86) * 0.32 * lit, vec3(0.73, 0.64, 1.0) * 0.75, eyeFlash);
     col = mix(col, halo, m);
     col += rim * rimCol;
+    occ *= 1.0 - m;                    // torn away: nothing left to hide behind
   }
 
   /* ---- 5. reveal from black: the eyes first ------------------------ */
@@ -338,6 +381,43 @@ void main() {
     col *= 1.0 + 0.55 * em * (1.0 - rm);
   }
 
-  col += grainN * 0.016;                      // the site's dither (0.016)
+  /* ---- 6. the eyes carry her voice --------------------------------- */
+  if (uEyeGlow > 0.001) {
+    vec2 eL = vec2(uAxisX - uEye.x * Z, uFrame.y) * uRes;
+    vec2 eR = vec2(uAxisX + uEye.x * Z, uFrame.y) * uRes;
+    float sep = 2.0 * uEye.x * Z * uRes.x;
+    // eyes are wider than tall
+    float dE = min(length((px - eL) * vec2(1.0, 1.7)), length((px - eR) * vec2(1.0, 1.7))) / sep;
+    float core = exp(-pow(dE / 0.1, 2.0));
+    float bloom = exp(-pow(dE / 0.34, 2.0));
+    float g = uEyeGlow * (1.0 - uErase);
+    col *= 1.0 + 1.1 * g * core;
+    col = screen(col, vec3(0.73, 0.64, 1.0) * g * (0.2 * bloom + 0.28 * core));
+  }
+
+  }
+
+  /* ---- 7. the four lights ------------------------------------------ */
+  // every orb throws its own light; a bloom behind the figure only shows
+  // where she does not hide it, so it rims her silhouette
+  vec3 glow = vec3(0.0);
+  for (int i = 0; i < 4; i++) {
+    vec4 g = uGlowP[i];
+    if (g.w <= 0.0) continue;
+    vec2 dd = (px - g.xy) / g.z;
+    float e = exp(-dot(dd, dd)) * g.w;
+    if (uGlowBack[i] > 0.5) e *= 1.0 - occ;
+    glow += uGlowC[i] * e;
+  }
+  col = screen(col, glow);
+  if (uOrbOn > 0.5) {
+    vec4 ob = texture(uOrbBack, vUv) * (1.0 - occ);
+    col = ob.rgb + col * (1.0 - ob.a);
+    vec4 of = texture(uOrbFront, vUv);
+    col = of.rgb + col * (1.0 - of.a);
+  }
+
+  // the site's dither (0.016) on the portrait; ±0.5/255 on the light alone
+  col += grainN * mix(0.016, 0.002, clamp(uErase, 0.0, 1.0));
   fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }`;

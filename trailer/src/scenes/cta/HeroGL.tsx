@@ -1,11 +1,14 @@
 /**
- * The hero portrait + halo, one WebGL2 context (see heroShader.ts).
- * Textures load inside a delayRender; every uniform is a pure function of
- * the frame, passed in by the scene.
+ * The hero portrait + halo + the four lights: ONE WebGL2 context for the
+ * whole CTA (see heroShader.ts, orbPass.ts). Textures load inside a
+ * delayRender; every uniform and every orb is a pure function of the frame,
+ * passed in by the scene.
  */
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { cancelRender, continueRender, delayRender, staticFile } from 'remotion';
+import type { OrbDraw } from '../../components/orbGL';
 import { HERO_FRAG, HERO_VERT } from './heroShader';
+import { OrbPass } from './orbPass';
 
 export type HeroArt = {
   src: string;
@@ -48,15 +51,31 @@ export type HeroUniforms = {
   haloGain: number;
   /** floor under the halo: start y at the axis, length (frame px), strength, rise at ±rx (px) */
   floor: [number, number, number, number];
-  /** underside superellipse power, low-frequency rim wobble, falloff grain */
+  /** shape power (2 = round), very-low-frequency edge term (≤ 0.01), core bloom (0.06) */
   haloShape: [number, number, number];
   /** base zoom, screen y of the eyes (0..1), art glitch-band edge v (0 = none) */
   frame: [number, number, number];
   seed: number;
+  /** how much the figure hides the back orb layer (0..1) */
+  occ: number;
+  /** up to four orb blooms: centre (frame px), radius px, strength, colour, behind the figure? */
+  glows: { x: number; y: number; r: number; s: number; color: [number, number, number]; back: boolean }[];
+  /** the eyes' voice light (0..1) */
+  eyeGlow: number;
+  /** the four-light rim on the halo: strength, radius (halo d), width, arc half-span (rad); colours left to right */
+  rim: [number, number, number, number];
+  rimColors: [number, number, number][];
 };
+
+/** The four lights in the hero's context: back (hidden by the figure) and front layers. */
+export type HeroOrbs = { back: OrbDraw[]; front: OrbDraw[] };
 
 type GL = {
   gl: WebGL2RenderingContext;
+  prog: WebGLProgram;
+  vao: WebGLVertexArrayObject;
+  tex: [WebGLTexture, WebGLTexture];
+  orbs: OrbPass;
   u: Record<string, WebGLUniformLocation | null>;
   imgRes: [number, number];
 };
@@ -65,6 +84,7 @@ const NAMES = [
   'uImage', 'uDepth', 'uRes', 'uImgRes', 'uMouse', 'uAmp', 'uZoom', 'uPan', 'uTime', 'uWarp',
   'uTear', 'uLiquid', 'uErase', 'uReveal', 'uEyes', 'uAxisX', 'uEye', 'uSubject', 'uBrand',
   'uHaloC', 'uHaloR', 'uHaloGain', 'uFloor', 'uHaloShape', 'uFrame', 'uSeed',
+  'uOrbBack', 'uOrbFront', 'uOrbOn', 'uOcc', 'uGlowP', 'uGlowC', 'uGlowBack', 'uEyeGlow', 'uRim', 'uRimC',
 ];
 
 function compile(gl: WebGL2RenderingContext, type: number, src: string) {
@@ -87,7 +107,7 @@ function loadImage(url: string) {
 }
 
 function texture(gl: WebGL2RenderingContext, unit: number, img: HTMLImageElement) {
-  const tex = gl.createTexture();
+  const tex = gl.createTexture()!;
   gl.activeTexture(gl.TEXTURE0 + unit);
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
@@ -95,6 +115,7 @@ function texture(gl: WebGL2RenderingContext, unit: number, img: HTMLImageElement
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  return tex;
 }
 
 export const HeroGL: React.FC<{
@@ -105,8 +126,9 @@ export const HeroGL: React.FC<{
   quality?: number;
   octaves?: number;
   u: HeroUniforms;
+  orbs?: HeroOrbs;
   style?: React.CSSProperties;
-}> = ({ art, width, height, quality = 1, octaves = 6, u, style }) => {
+}> = ({ art, width, height, quality = 1, octaves = 6, u, orbs, style }) => {
   const ref = useRef<HTMLDivElement>(null);
   const state = useRef<GL | null>(null);
   const [handle] = useState(() => delayRender('CTA hero textures'));
@@ -143,17 +165,21 @@ export const HeroGL: React.FC<{
       gl.linkProgram(prog);
       if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(`[cta hero] ${gl.getProgramInfoLog(prog)}`);
       gl.useProgram(prog);
-      gl.bindVertexArray(gl.createVertexArray());
+      const vao = gl.createVertexArray()!;
       const uniforms: GL['u'] = {};
       for (const n of NAMES) uniforms[n] = gl.getUniformLocation(prog, n);
+      const orbPass = new OrbPass(gl);
       Promise.all([loadImage(staticFile(art.src)), loadImage(staticFile(art.depth))])
         .then(([img, dep]) => {
           if (disposed) return;
-          texture(gl, 0, img);
-          texture(gl, 1, dep);
+          const t0 = texture(gl, 0, img);
+          const t1 = texture(gl, 1, dep);
+          gl.useProgram(prog);
           gl.uniform1i(uniforms.uImage, 0);
           gl.uniform1i(uniforms.uDepth, 1);
-          state.current = { gl, u: uniforms, imgRes: [img.naturalWidth, img.naturalHeight] };
+          gl.uniform1i(uniforms.uOrbBack, 2);
+          gl.uniform1i(uniforms.uOrbFront, 3);
+          state.current = { gl, prog, vao, tex: [t0, t1], orbs: orbPass, u: uniforms, imgRes: [img.naturalWidth, img.naturalHeight] };
           setReady(true);
         })
         .catch((e) => cancelRender(e));
@@ -185,6 +211,21 @@ export const HeroGL: React.FC<{
       gl.canvas.width = cw;
       gl.canvas.height = ch;
     }
+    // the four lights, into their two layers (the orb pass leaves the default framebuffer bound)
+    s.orbs.render([orbs?.back ?? [], orbs?.front ?? []], cw, ch, quality, quality);
+    const [lb, lf] = s.orbs.layers(cw, ch);
+    gl.useProgram(s.prog);
+    gl.bindVertexArray(s.vao);
+    gl.disable(gl.BLEND);
+    gl.disable(gl.SCISSOR_TEST);
+    const bind = (unit: number, tex: WebGLTexture) => {
+      gl.activeTexture(gl.TEXTURE0 + unit);
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+    };
+    bind(0, s.tex[0]);
+    bind(1, s.tex[1]);
+    bind(2, lb);
+    bind(3, lf);
     gl.viewport(0, 0, cw, ch);
     gl.uniform2f(L.uRes, cw, ch);
     gl.uniform2f(L.uImgRes, s.imgRes[0], s.imgRes[1]);
@@ -210,6 +251,24 @@ export const HeroGL: React.FC<{
     gl.uniform3f(L.uHaloShape, u.haloShape[0], u.haloShape[1], u.haloShape[2]);
     gl.uniform3f(L.uFrame, u.frame[0], u.frame[1], u.frame[2]);
     gl.uniform1f(L.uSeed, u.seed);
+    gl.uniform1f(L.uOrbOn, s.orbs.on ? 1 : 0);
+    gl.uniform1f(L.uOcc, u.occ);
+    const gp = new Float32Array(16);
+    const gc = new Float32Array(12);
+    const gb = new Float32Array(4);
+    u.glows.slice(0, 4).forEach((g, i) => {
+      gp.set([g.x * quality, g.y * quality, Math.max(1, g.r * quality), g.s], i * 4);
+      gc.set(g.color, i * 3);
+      gb[i] = g.back ? 1 : 0;
+    });
+    gl.uniform4fv(L.uGlowP, gp);
+    gl.uniform3fv(L.uGlowC, gc);
+    gl.uniform1fv(L.uGlowBack, gb);
+    gl.uniform1f(L.uEyeGlow, u.eyeGlow);
+    gl.uniform4f(L.uRim, u.rim[0], u.rim[1], u.rim[2], u.rim[3]);
+    const rc = new Float32Array(12);
+    u.rimColors.slice(0, 4).forEach((c, i) => rc.set(c, i * 3));
+    gl.uniform3fv(L.uRimC, rc);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.finish();
     if (!released.current) {

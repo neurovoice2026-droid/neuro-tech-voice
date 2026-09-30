@@ -19,6 +19,14 @@ import { STATION_ICONS, STATION_NAMES } from './data';
 import type { Geo, Pt } from './geometry';
 import { DirBlur, dirBlurRef, sigmaFor } from './MotionBlur';
 import { Rise } from './Rise';
+import { bodyOf, FLOW_LIGHT, rgba, SETTLED } from './lights';
+import { LIGHTS } from '../../theme';
+
+/** the closing light: emerald = confirmed */
+const FL = LIGHTS[FLOW_LIGHT].orb;
+const BODY = bodyOf(FLOW_LIGHT);
+const DEEP = FL[1];
+const INK = LIGHTS[FLOW_LIGHT].ink;
 
 export type FlowTiming = {
   trackIn: number;
@@ -28,6 +36,8 @@ export type FlowTiming = {
   rails: readonly (readonly [number, number])[];
   ok: number;
   ping: readonly [number, number];
+  /** [first mote leaves the call node, it reaches the CRM] */
+  stream: readonly [number, number];
   callIn: number;
   pill: number;
 };
@@ -35,6 +45,9 @@ export type FlowTiming = {
 const NODE = 40;
 const RAIL = 8;
 const BEAD = 20;
+
+/** the stream along the finished rail: a mote every 8th note from the CRM's confirm (SCALE_LOCAL.stream) */
+const streamAt = (T: FlowTiming) => [0, 1].map((j) => T.stream[0] + j * 7.5);
 
 /** the rail head along segment i at f (EASE.peel: leaves the node slow, arrives slow) */
 const headAt = (f: number, [a, b]: readonly [number, number]) => tween(f, [a, b], [0, 1], EASE.peel);
@@ -68,9 +81,18 @@ export const Rail: React.FC<{ t: number; G: Geo; vertical: boolean; T: FlowTimin
   return (
     <>
       {/* the pale track */}
-      <div style={bar(n0, len * Math.min(1, Math.max(0, reveal)), 'rgba(124,58,237,0.13)')} />
-      {/* the electric fill, node to node */}
-      {segs.map((s) => (s.f > 0 ? <div key={`fill-${s.i}`} style={bar(s.A, s.L * s.f, C.electric)} /> : null))}
+      <div style={bar(n0, len * Math.min(1, Math.max(0, reveal)), rgba(BODY, 0.16))} />
+      {/* the lit fill, node to node (the closing light, glowing) */}
+      {segs.map((s) =>
+        s.f > 0 ? (
+          <div
+            key={`fill-${s.i}`}
+            style={bar(s.A, s.L * s.f, `linear-gradient(${vertical ? '180deg' : '90deg'}, ${BODY}, ${DEEP})`, {
+              boxShadow: `0 0 14px ${rgba(BODY, 0.45)}`,
+            })}
+          />
+        ) : null,
+      )}
       {/* the bead: comet tail + shutter blur while it runs */}
       {segs.map((s) => {
         if (!s.on || s.f >= 1) return null;
@@ -90,7 +112,7 @@ export const Rail: React.FC<{ t: number; G: Geo; vertical: boolean; T: FlowTimin
                     ? { left: head.x - BEAD / 2, top: head.y - tail - BEAD / 2, width: BEAD, height: tail + BEAD }
                     : { left: head.x - tail - BEAD / 2, top: head.y - BEAD / 2, width: tail + BEAD, height: BEAD }),
                   borderRadius: BEAD,
-                  background: `linear-gradient(${vertical ? 'to bottom' : 'to right'}, rgba(124,58,237,0), rgba(124,58,237,0.55) 70%, ${C.electric})`,
+                  background: `linear-gradient(${vertical ? 'to bottom' : 'to right'}, ${rgba(BODY, 0)}, ${rgba(BODY, 0.55)} 70%, ${BODY})`,
                 }}
               />
               <div
@@ -101,12 +123,38 @@ export const Rail: React.FC<{ t: number; G: Geo; vertical: boolean; T: FlowTimin
                   width: BEAD,
                   height: BEAD,
                   borderRadius: '50%',
-                  background: `radial-gradient(circle at 40% 40%, #ffffff 0%, ${C.lilac} 28%, ${C.electric} 70%)`,
-                  boxShadow: '0 0 18px rgba(124,58,237,0.6), 0 0 0 3px rgba(124,58,237,0.18)',
+                  background: `radial-gradient(circle at 40% 40%, #ffffff 0%, ${FL[3]} 30%, ${BODY} 72%)`,
+                  boxShadow: `0 0 18px ${rgba(BODY, 0.6)}, 0 0 36px ${rgba(FL[3], 0.5)}, 0 0 0 3px ${rgba(BODY, 0.18)}`,
                 }}
               />
             </div>
           </React.Fragment>
+        );
+      })}
+
+      {/* the finished rail streams: light motes run call → CRM on the 8th notes (data syncing) */}
+      {streamAt(T).map((a, j) => {
+        const MOTE_DUR = T.stream[1] - T.stream[0];
+        const u = tween(t, [a, a + MOTE_DUR], [0, 1], EASE.inOut);
+        if (t < a || u >= 1) return null;
+        const head = vertical ? { x: n0.x, y: n0.y + len * u } : { x: n0.x + len * u, y: n0.y };
+        const du = tween(t + 0.5, [a, a + MOTE_DUR], [0, 1], EASE.inOut) - tween(t - 0.5, [a, a + MOTE_DUR], [0, 1], EASE.inOut);
+        const ml = 26 + Math.min(90, du * len * 1.4);
+        const fade = Math.min(1, u / 0.12, (1 - u) / 0.1);
+        return (
+          <div
+            key={`mote-${j}`}
+            style={{
+              position: 'absolute',
+              ...(vertical
+                ? { left: head.x - RAIL / 2 - 1, top: head.y - ml, width: RAIL + 2, height: ml }
+                : { left: head.x - ml, top: head.y - RAIL / 2 - 1, width: ml, height: RAIL + 2 }),
+              borderRadius: RAIL,
+              background: `linear-gradient(${vertical ? 'to bottom' : 'to right'}, ${rgba(FL[3], 0)}, ${rgba(FL[3], 0.9)} 70%, #ffffff)`,
+              boxShadow: `0 0 12px ${rgba(FL[3], 0.8)}`,
+              opacity: fade,
+            }}
+          />
         );
       })}
 
@@ -117,11 +165,15 @@ export const Rail: React.FC<{ t: number; G: Geo; vertical: boolean; T: FlowTimin
         const at = T.fills[i];
         const st = T.stations[i];
         const last = i === G.nodes.length - 1;
-        const col = last ? C.settled : C.electric;
+        const col = last ? SETTLED : BODY;
         // fill: 0 → 1.35 on the station frame, then k380 c14 back to 1
         const fill =
           t < at ? 0 : t < st ? tween(t, [at, st], [0, 1.35], EASE.out3) : 1.35 - 0.35 * dspring(t - st, { stiffness: 380, damping: 14, mass: 1 });
         const rings = last ? [[st, st + 12, 2.5, 0.55], [T.ping[0] + 4, T.ping[1], 3.4, 0.35]] : [[st, st + 12, 2.5, 0.5]];
+        // the CRM receives each mote: its glow swells (the node itself never moves: FLOW_END)
+        let recv = 0;
+        const MOTE_DUR = T.stream[1] - T.stream[0];
+        if (last) for (const a of streamAt(T)) recv = Math.max(recv, t < a + MOTE_DUR - 1 ? 0 : 1 - tween(t, [a + MOTE_DUR - 1, a + MOTE_DUR + 7], [0, 1], EASE.out3));
         return (
           <div
             key={`node-${i}`}
@@ -140,7 +192,7 @@ export const Rail: React.FC<{ t: number; G: Geo; vertical: boolean; T: FlowTimin
                 inset: 0,
                 borderRadius: '50%',
                 background: C.white,
-                boxShadow: `inset 0 0 0 3px rgba(124,58,237,0.32), 0 0 0 6px ${C.white}, 0 6px 16px -6px rgba(24,16,40,0.3)`,
+                boxShadow: `inset 0 0 0 3px ${rgba(BODY, 0.38)}, 0 0 0 6px ${C.white}, 0 6px 16px -6px rgba(24,16,40,0.3)`,
               }}
             />
             {rings.map(([a, b, k, o], j) => {
@@ -154,7 +206,7 @@ export const Rail: React.FC<{ t: number; G: Geo; vertical: boolean; T: FlowTimin
                     inset: 0,
                     borderRadius: '50%',
                     boxShadow: `inset 0 0 0 ${(3 / (1 + (k - 1) * p)).toFixed(3)}px ${col}`,
-                    background: last ? 'rgba(31,138,85,0.16)' : 'rgba(124,58,237,0.14)',
+                    background: rgba(last ? SETTLED : BODY, 0.16),
                     opacity: o * (1 - p) * (1 - p) / 0.5,
                     transform: `scale(${(1 + (k - 1) * p).toFixed(4)})`,
                   }}
@@ -169,9 +221,25 @@ export const Rail: React.FC<{ t: number; G: Geo; vertical: boolean; T: FlowTimin
                   borderRadius: '50%',
                   background: col,
                   transform: `scale(${fill.toFixed(4)})`,
-                  boxShadow: `0 0 ${(22 * Math.min(1, fill)).toFixed(1)}px ${last ? 'rgba(31,138,85,0.55)' : 'rgba(124,58,237,0.55)'}`,
+                  boxShadow: `0 0 ${(22 * Math.min(1, fill) * (1 + 0.6 * recv)).toFixed(1)}px ${rgba(last ? SETTLED : BODY, 0.55 + 0.3 * recv)}, 0 0 ${(44 * Math.min(1, fill) * (1 + 0.8 * recv)).toFixed(1)}px ${rgba(FL[3], 0.45 + 0.4 * recv)}`,
                 }}
               />
+            ) : null}
+            {last && t >= st ? (
+              // the confirm: a white check draws inside the CRM node
+              <svg width={NODE} height={NODE} viewBox="0 0 40 40" style={{ position: 'absolute', inset: 0, transform: `scale(${Math.max(0, fill).toFixed(4)})` }}>
+                <path
+                  d="M12 20.5 L17.5 26 L28.5 14.5"
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth={3.6}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  pathLength={1}
+                  strokeDasharray={1}
+                  strokeDashoffset={1 - tween(t, [st + 1, st + 6], [0, 1], EASE.out3)}
+                />
+              </svg>
             ) : null}
           </div>
         );
@@ -220,10 +288,9 @@ const line = (size: number, color: string = C.ink): React.CSSProperties => ({
 const StationIcon: React.FC<{ i: number; t: number; at: number; size: number }> = ({ i, t, at, size }) => {
   const Icon = STATION_ICONS[i];
   const fk = t < at ? 0 : 1 - tween(t, [at, at + 6], [0, 1], EASE.out3);
-  const hot = i === 2 ? C.settled : C.electric;
-  const glow = i === 2 ? '31,138,85' : '124,58,237';
+  const hot = i === 2 ? SETTLED : INK;
   return (
-    <div style={{ width: size, height: size, filter: fk > 0.01 ? `drop-shadow(0 0 26px rgba(${glow},${(0.65 * fk).toFixed(3)}))` : undefined }}>
+    <div style={{ width: size, height: size, filter: fk > 0.01 ? `drop-shadow(0 0 26px ${rgba(i === 2 ? SETTLED : BODY, 0.65 * fk)})` : undefined }}>
       <Icon size={size} strokeWidth={2} color={mixHex(C.ink, hot, fk)} />
     </div>
   );
@@ -325,7 +392,7 @@ export const StationCards: React.FC<{ t: number; G: Geo; vertical: boolean; T: F
             transform={`translateY(${((1 - p) * 40).toFixed(2)}px) scale(${(0.95 + 0.05 * Math.min(1.1, p)).toFixed(4)})`}
             opacity={tween(t, [at - 1, at + 1], [0, 1], EASE.out3)}
             lift={Math.max(0, 1 - p) * 0.8}
-            bg={popFill(t, T.stations[i])}
+            bg={popFill(t, T.stations[i], FLOW_LIGHT)}
             filter={f}
           >
             <StationFace i={i} t={t} T={T} vertical={vertical} />

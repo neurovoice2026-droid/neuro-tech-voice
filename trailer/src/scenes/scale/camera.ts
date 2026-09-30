@@ -2,8 +2,10 @@
  * The SCALE camera, as a 2D affine on the depth-1 layer: screen = A + s·p.
  *
  *   steps   card 01 alone (≈ 3.9×) → 2 × 2 → 3 × 3 → the full wall (1×),
- *           each a 3-frame EASE.peel move framing the block being filled
- *   kicks   quarter notes +1.8 % (e^−u/3) with a 3 px jolt, alternating;
+ *           3-frame moves framing the block being filled (the first peels;
+ *           the two landing on quarters snap into the beat)
+ *   kicks   quarter notes ±1.8 % (e^−u/3) with a 3 px jolt, alternating (a
+ *           quarter that lands a step overshoots it: −1.8 %, then settles);
  *           every other 16th a ≤ 0.5 % micro-kick (e^−u/2); the hero
  *           "16 industries." +2.5 % (e^−u/4); each language flip 0.5 %
  *   push    a slow 2.2 % push over the language grid, released for the flow
@@ -21,8 +23,14 @@ const K = SCALE_LOCAL;
 
 export type Affine = { s: number; ax: number; ay: number; rot: number };
 
-/** 0…3: how far along the three camera steps (fraction = progress of the current step) */
-const level = (t: number) => K.camSteps.reduce((a, st) => a + tween(t, st, [0, 1], EASE.peel), 0);
+/**
+ * 0…3: how far along the three camera steps (fraction = progress of the
+ * current step). The first step (off card 01) peels; the two that land ON a
+ * quarter note accelerate into it (power2.in), so the snap hits the beat and
+ * the quarter kick carries it past the framing (the overshoot) to settle.
+ */
+const lands = (st: readonly [number, number]) => (K.kicks as readonly number[]).includes(st[1]);
+const level = (t: number) => K.camSteps.reduce((a, st) => a + tween(t, st, [0, 1], lands(st) ? EASE.in2 : EASE.peel), 0);
 
 /** the stepped framing: world point F at the screen centre, zoom Z */
 export function baseCam(t: number, G: Geo): { F: Pt; Z: number } {
@@ -68,7 +76,10 @@ export function kicks(t: number): { z: number; jx: number; rot: number } {
     if (t < q) return;
     const e = Math.exp(-(t - q) / 3);
     const side = i % 2 === 0 ? 1 : -1;
-    z += 0.018 * e;
+    // a quarter that lands a camera step is the step's OVERSHOOT (it carries
+    // the pull-back past the framing and settles); the others punch in
+    const lands = K.camSteps.some((st) => st[1] === q);
+    z += (lands ? -1 : 1) * 0.018 * e;
     jx += 3 * side * e;
     // the jolt tips the frame a hair the same way (a hand-held hit)
     rot += 0.4 * side * e;
