@@ -1,0 +1,260 @@
+/* ------------------------------------------------------------------ *
+ * /solutions/custom-mobile-applications — #server: the few things
+ * Tailwind utilities and the SaaS sheets can't say for "The half you
+ * don't see, already running here".
+ *
+ *   §1  the night room: the still gradient the cards sit on
+ *   §2  the wire: the room's view timeline, `--mob-server`; the bus
+ *       drawn from the phone (`mob-bus-draw`), the drops falling from it
+ *       (`mob-drop-draw`), each port popping as its drop reaches it
+ *       (mob.css `mob-pop`); below md, each stretch of the wire drawn on
+ *       its card's own pass
+ *   §3  the cards: their edge, the push card's dashed one, and their
+ *       rise a step apart from lg
+ *   §4  the lite, still and weak tiers
+ *   §5  forced colours
+ *
+ * Imported once, by app/solutions/custom-mobile-applications/page.tsx,
+ * last of this page's sheets, so it ships with this route only. Every
+ * rule sits under .pp (the shell's <main>), or on <html> where it reads
+ * the tier; every class and keyframe of ours is prefixed mob-, and a
+ * selector names the home- classes it sits beside (`.home-rise`) only
+ * beside one of ours. Only scale ever animates here, on the compositor;
+ * the pops are mob.css's shared `mob-pop`, and the two keyframes of this
+ * sheet's own are the wire's draws. Anything tied to scroll sits inside
+ * `@media (prefers-reduced-motion: no-preference)` and
+ * `@supports (animation-timeline: view())`, so a browser without view
+ * timelines, or a reader who asked for less motion, gets the finished
+ * frame, which is every element's resting style: the wire whole, every
+ * port shown, the cards in place.
+ * ------------------------------------------------------------------ */
+
+/* ─── §1 The night room ─────────────────────────────────────────────
+   The landing's ink to the deep panel's violet, top to bottom, still:
+   the gradient the Automations page's #breaks room is painted with, so
+   the night's tokens hold at the figures measured on it (spec §5.4;
+   lib/pages/custom-mobile-applications.test.ts holds this gradient to
+   them): on-deep for text, on-deep-dim for the tag, lilac for the label
+   and the wire, and never the electric as text. No mesh and no flow.
+   Isolated, so its grain (the landing's tile, `.home-grain`, the room's
+   first child, at home.css's 0.1) sits under its content, as on the deep
+   panel; lite hides the grain (home/tier.css). The box is `relative`
+   through its utility, so a position utility still wins. */
+.pp .mob-night {
+  background: linear-gradient(180deg, #140a24 0%, #1e0a3c 100%);
+  border-radius: 28px;
+  isolation: isolate;
+  color: var(--home-on-deep);
+}
+
+/* THE ROOM'S RISE (home.css `home-rise`) ends as its top reaches the top
+   of the screen, before the reader reads it. home.css's range runs to
+   `cover 28%`, measured on the room's own height, which on a phone is
+   4,000–5,000px: the room would still be rising, and its cards sliding
+   with it, a thousand pixels into them. The cards keep their own rise. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .mob-night.home-rise {
+      animation-range: entry 0% entry 100%;
+    }
+  }
+}
+
+/* ─── §2 The wire ───────────────────────────────────────────────────
+   AT REST, WHOLE. The bus grows from the phone's end (its left), a drop
+   or a stretch of wire from its top; a port about its own centre.
+
+   FROM md, ON THE ROOM'S OWN PASS. The room names its view timeline
+   (`--mob-server`). The room is always taller than the screen from md
+   (1,500–2,300px), so its entry is exactly one screen of scroll, and
+   the bus keeps to it: it draws, whole, as the room's top comes from 85%
+   of the way down the screen to its middle (`entry 15%` to `entry 50%`),
+   whatever the room's height. Only then do the drops fall, from there to
+   55% of the pass, so their foot runs a little ahead of the reader's eye
+   down the columns and no drop ever hangs from bus not yet drawn; and a
+   card's port pops (from 60%: always there to read) as its drop reaches
+   its row, over 6% of the pass: its start is the drops' own, `entry 50%`
+   (half a screen, 50vh, into the pass), moved on toward `cover 55%` by
+   `--r-md` or `--r-lg`, the card's row as a share of the rows at that
+   width (inline from server.tsx).
+
+   BELOW md, ON EACH CARD'S OWN PASS. The column is one card wide and
+   some 3,000px tall, too long for one window to keep the wire's foot on
+   screen at every width, so each stretch keeps time with its own card
+   (`--mob-card`, named on each card's <li>): it grows from the card's
+   port down to the next card's as that stretch passes 70% of the way
+   down the screen (the offsets are lengths — 30vh, the port's 28px,
+   the 16px gap — so it holds at any width), and each port pops as the
+   wire's foot arrives. The first stretch, from the phone down to the
+   first card's port, does the same on the room's pass.
+
+   `scale` only, on the compositor. `linear` for the draws, which keep
+   time with the scroll; the pops land on the house out-ease. Each rule
+   names the room and the piece, and the §4 pins name <html> and the
+   shell <main>'s classes besides, so they outrank each one. */
+.pp .mob-night .mob-bus {
+  transform-origin: left center;
+}
+
+.pp .mob-night :is(.mob-drop, .mob-wire, .mob-seg) {
+  transform-origin: top center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .mob-night {
+      view-timeline: --mob-server block;
+    }
+
+    .pp .mob-night .mob-server-item {
+      view-timeline: --mob-card block;
+    }
+
+    .pp .mob-night .mob-wire {
+      animation: mob-drop-draw linear both;
+      animation-timeline: --mob-server;
+      animation-range: cover calc(30vh + 60px) cover calc(30vh + 130px);
+    }
+
+    .pp .mob-night .mob-seg {
+      animation: mob-drop-draw linear both;
+      animation-timeline: --mob-card;
+      animation-range: cover calc(30vh + 28px) entry calc(100% + 30vh + 44px);
+    }
+
+    .pp .mob-night .mob-port {
+      animation: mob-pop cubic-bezier(0.16, 1, 0.3, 1) both;
+      animation-timeline: --mob-card;
+      animation-range: cover calc(30vh + 12px) cover calc(30vh + 44px);
+    }
+
+    @media (min-width: 48rem) {
+      .pp .mob-night .mob-bus {
+        animation: mob-bus-draw linear both;
+        animation-timeline: --mob-server;
+        animation-range: entry 15% entry 50%;
+      }
+
+      .pp .mob-night .mob-drop {
+        animation: mob-drop-draw linear both;
+        animation-timeline: --mob-server;
+        animation-range: entry 50% cover 55%;
+      }
+
+      .pp .mob-night .mob-port {
+        animation-timeline: --mob-server;
+        animation-range:
+          cover calc(50vh + (55% - 50vh) * var(--r-md, 0))
+          cover calc(50vh + (55% - 50vh) * var(--r-md, 0) + 6%);
+      }
+    }
+
+    @media (min-width: 64rem) {
+      .pp .mob-night .mob-port {
+        animation-range:
+          cover calc(50vh + (55% - 50vh) * var(--r-lg, 0))
+          cover calc(50vh + (55% - 50vh) * var(--r-lg, 0) + 6%);
+      }
+    }
+  }
+}
+
+@keyframes mob-bus-draw {
+  from {
+    scale: 0 1;
+  }
+
+  to {
+    scale: 1 1;
+  }
+}
+
+@keyframes mob-drop-draw {
+  from {
+    scale: 1 0;
+  }
+
+  to {
+    scale: 1 1;
+  }
+}
+
+/* ─── §3 The cards ──────────────────────────────────────────────────
+   White on the night, with the plan cards' soft neutral drop. The push
+   card, the part built for yours rather than running here, is edged in
+   a 1.5px dashed violet (7.10 on white; on the night it is the card's
+   edge, a mark) with no shadow: the dotted ring of "Built for yours",
+   at the size of a card. From lg the cards rise a step apart across a
+   row (home.css `home-rise`), the middle column 4% and the last 8%
+   later into its entry, as saas-build.css spaces #build's cards; the
+   range only, the animation and its timeline are home.css's. */
+.pp .mob-night .mob-server-card {
+  box-shadow:
+    0 1px 2px rgb(6 4 10 / 0.3),
+    0 24px 48px -32px rgb(6 4 10 / 0.6);
+}
+
+.pp .mob-night .mob-server-card[data-kind="none"] {
+  border: 1.5px dashed var(--home-violet);
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    @media (min-width: 64rem) {
+      .pp .mob-night .mob-server-card.home-rise[data-col="1"] {
+        animation-range: entry 4% cover 32%;
+      }
+
+      .pp .mob-night .mob-server-card.home-rise[data-col="2"] {
+        animation-range: entry 8% cover 36%;
+      }
+    }
+  }
+}
+
+/* ─── §4 Lite, still and weak ───────────────────────────────────────
+   The lite tier, the still tier (a forced ?tier=still that is not a
+   reduced-motion request) and weak hardware (<html data-weak>) land on
+   the finished frame: the wire whole, every port shown, the room and
+   its cards in place rather than rising (home/tier.css stops the rise
+   on lite; the still and weak ones are here). Each pin names <html> and
+   the shell <main>'s classes besides the piece's own chain, so it
+   outranks every rule above whatever order the sheets land in. */
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .mob-night :is(.mob-bus, .mob-drop, .mob-wire, .mob-seg, .mob-port),
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body :is(.mob-night, .mob-server-card).home-rise {
+  animation: none;
+}
+
+/* ─── §5 Forced colours ─────────────────────────────────────────────
+   A forced palette paints the room's gradient over with the page's own
+   ground, and the text on it follows; the wire and its ports are
+   painted boxes, so they are drawn in CanvasText (a port ringed in it
+   over the Canvas), and the white cards, whose shadows a forced palette
+   drops, are edged in CanvasText instead, the push card's dashed edge
+   in GrayText. Keyed on `.pp.saas-page`, the shell's <main>, and on
+   mob- classes only. */
+@media (forced-colors: active) {
+  .pp.saas-page .mob-night {
+    background-image: none;
+  }
+
+  .pp.saas-page .mob-night :is(.mob-bus, .mob-drop, .mob-wire, .mob-seg) {
+    forced-color-adjust: none;
+    background-color: CanvasText;
+  }
+
+  .pp.saas-page .mob-night .mob-port {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+    background-color: Canvas;
+  }
+
+  .pp.saas-page .mob-night .mob-server-card {
+    border: 1px solid CanvasText;
+  }
+
+  .pp.saas-page .mob-night .mob-server-card[data-kind="none"] {
+    border: 1.5px dashed GrayText;
+  }
+}

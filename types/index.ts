@@ -54,6 +54,19 @@ export interface HolidayMode {
   message: string
 }
 
+/** One tone list for onboarding, the dashboard and the marketing site (lib/site.ts TONES). */
+export type AgentTone = 'formal' | 'professional' | 'empathetic' | 'casual' | 'friendly' | 'energetic'
+
+export const AGENT_TONES: readonly AgentTone[] = [
+  'formal',
+  'professional',
+  'empathetic',
+  'casual',
+  'friendly',
+  'energetic',
+] as const
+
+
 export interface Agent {
   id: string
   org_id: string
@@ -118,6 +131,25 @@ export type CallDirection = 'inbound' | 'outbound'
 export type CallStatus = 'completed' | 'failed' | 'busy' | 'no-answer' | 'in-progress'
 export type Sentiment = 'positive' | 'neutral' | 'negative'
 
+/** What came of a call. Booked / Answered / Flagged are the three the site leads with. */
+export type CallOutcome =
+  | 'booked'
+  | 'rescheduled'
+  | 'cancelled'
+  | 'answered'
+  | 'message_taken'
+  | 'transferred'
+  | 'flagged'
+  | 'missed'
+  | 'spam'
+  | 'other'
+
+export const CALL_OUTCOMES: readonly CallOutcome[] = [
+  'booked', 'rescheduled', 'cancelled', 'answered', 'message_taken',
+  'transferred', 'flagged', 'missed', 'spam', 'other',
+] as const
+
+
 export interface Call {
   id: string
   org_id: string
@@ -158,6 +190,10 @@ export interface Integration {
   connected_at: string
   created_at: string
 }
+
+// ─── Messages ────────────────────────────────────────────────────────────────
+
+export type MessageUrgency = 'normal' | 'urgent'
 
 // ─── ElevenLabs ───────────────────────────────────────────────────────────────
 

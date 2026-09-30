@@ -1,0 +1,358 @@
+/* ------------------------------------------------------------------ *
+ * /solutions/crm-erp — #core: the few things Tailwind utilities and
+ * the SaaS sheets can't say for "What a CRM has to get right, already
+ * running here".
+ *
+ *   §1  the night room: the still gradient the cards sit on, and its
+ *       rise
+ *   §2  the wire: its box's view timeline, `--erp-core`; the bus drawn
+ *       from the customer (`erp-bus-draw`) with the token riding its
+ *       end (`erp-ride-x`), the drops falling from it (`erp-drop-draw`),
+ *       each port popping as its drop reaches it (erp.css `erp-pop`);
+ *       below md, each stretch of the wire drawn on its card's own pass
+ *       (`--erp-card`) and the token riding down with the wire's foot
+ *       (`erp-ride-y`, on its track's `--erp-ride`)
+ *   §3  the cards: their edge, the dashed one built for yours, and
+ *       their rise a step apart from lg
+ *   §4  the lite, still and weak tiers
+ *   §5  forced colours
+ *
+ * Imported once, by app/solutions/crm-erp/page.tsx, last of this page's
+ * sheets, so it ships with this route only. Every rule sits under .pp
+ * (the shell's <main>), or on <html> where it reads the tier; every
+ * class and keyframe of ours is prefixed erp-, and a selector names the
+ * home- class it sits beside (`.home-rise`) only beside one of ours.
+ * Only scale and translate ever animate here, on the compositor; the
+ * pops are erp.css's shared `erp-pop`, and the four keyframes of this
+ * sheet's own are the wire's draws and the token's rides. Anything tied
+ * to scroll sits inside `@media (prefers-reduced-motion: no-preference)`
+ * and `@supports (animation-timeline: view())`, so a browser without
+ * view timelines, or a reader who asked for less motion, gets the
+ * finished frame, which is every element's resting style: the wire
+ * whole, every port shown, the token at the wire's end, the cards in
+ * place. No @property, and no custom property animates: `--r-md` and
+ * `--r-lg` (core.tsx, inline) are only read.
+ * ------------------------------------------------------------------ */
+
+/* ─── §1 The night room ─────────────────────────────────────────────
+   The landing's ink to the deep panel's violet, top to bottom, still:
+   the gradient the Automations page's #breaks and the Mobile page's
+   #server rooms are painted with, so the night's tokens hold at the
+   figures measured on it (spec §5.4; lib/pages/crm-erp.test.ts holds
+   this gradient to them): on-deep for "Under every record", on-deep-dim
+   for the tag, lilac for the label, the wire and the ports, and never
+   the electric as text. No mesh and no flow. Clipped, so nothing the
+   wire carries (the token's box, parked a bus-length along) can widen
+   the page; isolated, so its grain (the landing's tile, `.home-grain`,
+   the room's first child, at home.css's 0.1) sits under its content, as
+   on the deep panel; lite hides the grain (home/tier.css). The box is
+   `relative` through its utility, so a position utility still wins. */
+.pp .erp-night {
+  background: linear-gradient(180deg, #140a24 0%, #1e0a3c 100%);
+  border-radius: 28px;
+  overflow: clip;
+  isolation: isolate;
+  color: var(--home-on-deep);
+}
+
+/* THE ROOM'S RISE (home.css `home-rise`) ends as its top reaches the top
+   of the screen, before the reader reads it. home.css's range runs to
+   `cover 28%`, measured on the room's own height, which on a phone is
+   5,500–6,500px: the room would still be rising, and its cards sliding
+   with it, a thousand pixels into them. The cards keep their own rise. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .erp-night.home-rise {
+      animation-range: entry 0% entry 100%;
+    }
+  }
+}
+
+/* ─── §2 The wire ───────────────────────────────────────────────────
+   AT REST, WHOLE. The bus grows from the customer's end (its left), a
+   drop or a stretch of wire from its top; a port about its own centre.
+   The token's box rests a whole bus-length along (`translate: 100% 0`,
+   the box as wide as the bus), so the token sits at the bus's end, on
+   the last column's drop; below md its box rests a whole track down
+   (`translate: 0 100%`), so the token sits on the last card's port.
+
+   FROM md, ON THE WIRE'S OWN PASS. The wire's box (the person, the bus
+   and the cards, core.tsx `.erp-core-wires`, not the room: "Under every
+   record" hangs from no drop) names its view timeline (`--erp-core`).
+   It is always taller than the screen from md (1,500–2,600px), so its
+   entry is exactly one screen of scroll, and the bus keeps to it: it
+   draws, whole, as the box's top comes from 85% of the way down the
+   screen to its middle (`entry 15%` to `entry 50%`), whatever the box's
+   height, and the token rides its drawing end, its box sliding over the
+   same window from `translate: 0 0`, so they arrive together. Only then
+   do the drops fall, from there until their foot, the box's bottom,
+   stands 70% of the way down the screen (`cover calc(100% - 70vh)`,
+   where the cover range is the box's height and a screen): the foot
+   moves from the middle of the screen to 70% down it while the reader
+   scrolls the cards past, so it stays in sight, a little ahead of the
+   reader's eye, and no drop ever hangs from bus not yet drawn. (The
+   Mobile page's `cover 55%` of its room would, on this box at md, run
+   the foot a screen below the fold.) A card's port pops (from 60%:
+   always there to read) as its drop reaches its row, over 6% of the
+   pass: its start is the drops' own, `entry 50%` (half a screen, 50vh,
+   into the pass), moved on toward their end by `--r-md` or `--r-lg`,
+   the card's row as a share of the rows at that width (inline from
+   core.tsx).
+
+   BELOW md, ON EACH CARD'S OWN PASS. The column is one card wide and
+   some 4,500px tall, too long for one window to keep the wire's foot on
+   screen at every width, so each stretch keeps time with its own card
+   (`--erp-card`, named on each card's <li>): it grows from the card's
+   port (`cover calc(30vh + 28px)`: the port 70% of the way down the
+   screen) down to the next card's (`cover calc(100% - 70vh + 44px)`,
+   counted back from the card's foot leaving the top of the screen, so
+   it holds for a card taller than the screen too, where an `entry`
+   offset would not; the 44px are the 16px gap and the next port's
+   28px), and each port pops as the wire's foot arrives. The first
+   stretch, from the person down to the first card's port (20px to 76px
+   into the wire's box), does the same on the box's pass. The token
+   rides with that foot: its track (`.erp-token-track`) runs from the
+   first card's port to the last one's and names its own timeline
+   (`--erp-ride`), and its box slides from the top of the track
+   (`translate: 0 0`) as the track's top passes 70% of the way down the
+   screen (`cover 30vh`) to its end as the track's bottom does
+   (`cover calc(100% - 70vh)`): the token stays 70% down the screen, on
+   the wire's foot, the whole way.
+
+   THE SCREEN, WHOLE. The page's scroller keeps 5rem of scroll padding
+   under the fixed header (saas.css §14), and a view timeline's inset
+   takes it by default, which would end every range here 80px early
+   (`cover 100%` would be a foot at 80px, not at the top). Each timeline
+   of ours sets its inset to none, so "70% of the way down the screen"
+   is the screen's.
+
+   `scale` and `translate` only, on the compositor. `linear` for the
+   draws and the rides, which keep time with the scroll; the pops land
+   on the house out-ease. Each rule names the room and the piece, and
+   the §4 pins name <html> and the shell <main>'s classes besides, so
+   they outrank each one. */
+.pp .erp-night .erp-core-bus {
+  transform-origin: left center;
+}
+
+.pp .erp-night :is(.erp-core-drop, .erp-core-wire, .erp-core-seg) {
+  transform-origin: top center;
+}
+
+.pp .erp-night .erp-token-x {
+  translate: 100% 0;
+}
+
+.pp .erp-night .erp-token-y {
+  translate: 0 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .pp .erp-night .erp-core-wires {
+      view-timeline: --erp-core block;
+      view-timeline-inset: 0;
+    }
+
+    .pp .erp-night .erp-core-item {
+      view-timeline: --erp-card block;
+      view-timeline-inset: 0;
+    }
+
+    .pp .erp-night .erp-token-track {
+      view-timeline: --erp-ride block;
+      view-timeline-inset: 0;
+    }
+
+    .pp .erp-night .erp-core-wire {
+      animation: erp-drop-draw linear both;
+      animation-timeline: --erp-core;
+      animation-range: cover calc(30vh + 20px) cover calc(30vh + 76px);
+    }
+
+    .pp .erp-night .erp-core-seg {
+      animation: erp-drop-draw linear both;
+      animation-timeline: --erp-card;
+      animation-range: cover calc(30vh + 28px) cover calc(100% - 70vh + 44px);
+    }
+
+    .pp .erp-night .erp-core-port {
+      animation: erp-pop cubic-bezier(0.16, 1, 0.3, 1) both;
+      animation-timeline: --erp-card;
+      animation-range: cover calc(30vh + 12px) cover calc(30vh + 44px);
+    }
+
+    .pp .erp-night .erp-token-y {
+      animation: erp-ride-y linear both;
+      animation-timeline: --erp-ride;
+      animation-range: cover 30vh cover calc(100% - 70vh);
+    }
+
+    @media (min-width: 48rem) {
+      .pp .erp-night .erp-core-bus {
+        animation: erp-bus-draw linear both;
+        animation-timeline: --erp-core;
+        animation-range: entry 15% entry 50%;
+      }
+
+      .pp .erp-night .erp-token-x {
+        animation: erp-ride-x linear both;
+        animation-timeline: --erp-core;
+        animation-range: entry 15% entry 50%;
+      }
+
+      .pp .erp-night .erp-core-drop {
+        animation: erp-drop-draw linear both;
+        animation-timeline: --erp-core;
+        animation-range: entry 50% cover calc(100% - 70vh);
+      }
+
+      .pp .erp-night .erp-core-port {
+        animation-timeline: --erp-core;
+        animation-range:
+          cover calc(50vh + (100% - 120vh) * var(--r-md, 0))
+          cover calc(50vh + (100% - 120vh) * var(--r-md, 0) + 6%);
+      }
+    }
+
+    @media (min-width: 64rem) {
+      .pp .erp-night .erp-core-port {
+        animation-range:
+          cover calc(50vh + (100% - 120vh) * var(--r-lg, 0))
+          cover calc(50vh + (100% - 120vh) * var(--r-lg, 0) + 6%);
+      }
+    }
+  }
+}
+
+@keyframes erp-bus-draw {
+  from {
+    scale: 0 1;
+  }
+
+  to {
+    scale: 1 1;
+  }
+}
+
+@keyframes erp-drop-draw {
+  from {
+    scale: 1 0;
+  }
+
+  to {
+    scale: 1 1;
+  }
+}
+
+/* The token's rides name only where they start: they end at the box's
+   resting place (§2's `translate`), as erp.css's keyframes do. */
+@keyframes erp-ride-x {
+  from {
+    translate: 0 0;
+  }
+}
+
+@keyframes erp-ride-y {
+  from {
+    translate: 0 0;
+  }
+}
+
+/* ─── §3 The cards ──────────────────────────────────────────────────
+   White on the night, with the plan cards' soft neutral drop. The card
+   built for yours rather than running here (stock, orders, purchasing
+   and roles) is edged in a 1.5px dashed violet (7.10 on white; on the
+   night it is the card's edge, a mark) with no shadow: the dotted ring
+   of "Built for yours", at the size of a card. From lg the cards rise a
+   step apart across a row (home.css `home-rise`), the middle column 4%
+   and the last 8% later into its entry, as saas-build.css spaces
+   #build's cards; the range only, the animation and its timeline are
+   home.css's. */
+.pp .erp-night .erp-core-card {
+  box-shadow:
+    0 1px 2px rgb(6 4 10 / 0.3),
+    0 24px 48px -32px rgb(6 4 10 / 0.6);
+}
+
+.pp .erp-night .erp-core-card[data-kind="none"] {
+  border: 1.5px dashed var(--home-violet);
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    @media (min-width: 64rem) {
+      .pp .erp-night .erp-core-card.home-rise[data-col="1"] {
+        animation-range: entry 4% cover 32%;
+      }
+
+      .pp .erp-night .erp-core-card.home-rise[data-col="2"] {
+        animation-range: entry 8% cover 36%;
+      }
+    }
+  }
+}
+
+/* ─── §4 Lite, still and weak ───────────────────────────────────────
+   The lite tier, the still tier (a forced ?tier=still that is not a
+   reduced-motion request) and weak hardware (<html data-weak>) land on
+   the finished frame: the wire whole, every port shown, the token at
+   the wire's end, the room and its cards in place rather than rising
+   (home/tier.css stops the rise on lite; the still and weak ones are
+   here). Each pin names <html> and the shell <main>'s classes besides
+   the piece's own chain, so it outranks every rule above whatever
+   order the sheets land in. */
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body .erp-night :is(.erp-core-bus, .erp-core-drop, .erp-core-wire, .erp-core-seg, .erp-core-port, .erp-token-x, .erp-token-y),
+html:is([data-tier="lite"], [data-tier="still"], [data-weak]) .pp.home-body :is(.erp-night, .erp-core-card).home-rise {
+  animation: none;
+}
+
+/* ─── §5 Forced colours ─────────────────────────────────────────────
+   A forced palette paints the room's gradient over with the page's own
+   ground, and the text on it follows; the wire and its ports are
+   painted boxes, so they are drawn in CanvasText (a port ringed in it
+   over the Canvas), and the token, whose ring is a shadow the palette
+   would drop, is kept as a Highlight disc ringed in CanvasText, so it
+   still reads as the one thing travelling. The white cards and cells,
+   whose shadows and grounds a forced palette drops, are edged in
+   CanvasText instead, the card built for yours keeping its dashes; the
+   usage ledger's bars are drawn in GrayText.
+   Keyed on `.pp.saas-page`, the shell's <main>, and on erp- classes
+   only. */
+@media (forced-colors: active) {
+  .pp.saas-page .erp-night {
+    background-image: none;
+  }
+
+  .pp.saas-page .erp-night :is(.erp-core-bus, .erp-core-drop, .erp-core-wire, .erp-core-seg) {
+    forced-color-adjust: none;
+    background-color: CanvasText;
+  }
+
+  .pp.saas-page .erp-night .erp-core-port {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+    background-color: Canvas;
+  }
+
+  .pp.saas-page .erp-night .erp-token {
+    forced-color-adjust: none;
+    background-color: Highlight;
+    box-shadow: 0 0 0 2px CanvasText;
+  }
+
+  .pp.saas-page .erp-night :is(.erp-core-card, .erp-core-cell) {
+    border: 1px solid CanvasText;
+  }
+
+  .pp.saas-page .erp-night .erp-core-card[data-kind="none"] {
+    border: 1.5px dashed CanvasText;
+  }
+
+  /* The usage ledger's grey bars, which a forced palette would drop, in GrayText. */
+  .pp.saas-page .erp-night .erp-core-bar {
+    forced-color-adjust: none;
+    background-color: GrayText;
+  }
+}
