@@ -249,27 +249,124 @@ function cartesiaVoice(role, v, taken) {
   return pref;
 }
 
-function cartesiaTTS(text, voiceId, { speed, emotion } = {}) {
+/**
+ * One Cartesia generation over SSE (POST /tts/sse, add_timestamps) so every
+ * spoken word comes back with its real start/end — captions then sync to the
+ * actual performance, fillers and pauses included. `text` may carry Sonic
+ * SSML (<emotion value=…/>, <break time=…/>) and [laughter].
+ */
+function cartesiaTTS(text, voiceId, { speed, emotion, volume } = {}) {
   const generation = {};
   if (typeof speed === 'number' && speed !== 1) generation.speed = Math.max(0.6, Math.min(1.5, speed));
-  if (emotion && CARTESIA_EMOTIONS.includes(emotion)) generation.emotion = emotion;
+  if (typeof volume === 'number' && volume !== 1) generation.volume = Math.max(0.5, Math.min(2, volume));
+  if (emotion) generation.emotion = emotion;
+  const SR = 44100;
   const body = {
     model_id: CARTESIA_MODEL(),
     transcript: text,
     voice: voiceId,
     language: 'en',
-    output_format: { container: 'wav', encoding: 'pcm_s16le', sample_rate: 44100 },
+    output_format: { container: 'raw', encoding: 'pcm_s16le', sample_rate: SR },
+    add_timestamps: true,
     ...(Object.keys(generation).length ? { generation_config: generation } : {}),
   };
   const dir = path.join(os.tmpdir(), `ntv-cartesia-body-${process.pid}`);
   mkdirSync(dir, { recursive: true });
   const bfile = path.join(dir, 'b.json');
   writeFileSync(bfile, JSON.stringify(body));
+  let raw;
   try {
-    return decodeWav(cartesiaCurl(['-X', 'POST', `${CARTESIA_API}/tts/bytes`, '--data-binary', `@${bfile}`]));
+    raw = cartesiaCurl(['-N', '-X', 'POST', `${CARTESIA_API}/tts/sse`, '--data-binary', `@${bfile}`]).toString('utf8');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+  const chunks = [];
+  const words = [];
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line.startsWith('data:')) continue;
+    let ev;
+    try { ev = JSON.parse(line.slice(5).trim()); } catch { continue; }
+    if (ev.type === 'chunk' && ev.data) chunks.push(Buffer.from(ev.data, 'base64'));
+    else if (ev.type === 'timestamps' && ev.word_timestamps) {
+      const wt = ev.word_timestamps;
+      (wt.words ?? []).forEach((w, i) => words.push({ w, start: wt.start[i], end: wt.end[i] }));
+    } else if (ev.type === 'error') throw new Error(`[voice] Cartesia: ${ev.title ?? ''} ${ev.message ?? JSON.stringify(ev)}`);
+  }
+  const pcm = Buffer.concat(chunks);
+  if (!pcm.length) throw new Error(`[voice] Cartesia returned no audio: ${raw.slice(0, 400)}`);
+  const n = Math.floor(pcm.length / 2);
+  const samples = new Float32Array(n);
+  for (let i = 0; i < n; i++) samples[i] = pcm.readInt16LE(i * 2) / 32768;
+  return { samples, sampleRate: SR, words };
+}
+
+/** A line may be several takes, each with its own emotion (Cartesia's advice for emotion shifts), joined by a short breath. */
+function cartesiaLine(line, voiceId, v) {
+  const parts = line.parts ?? [{ speak: line.speak ?? line.say, emotion: line.emotion, speed: line.speed }];
+  const gap = line.gap ?? 0.22;
+  const out = [];
+  const words = [];
+  let t = 0;
+  let sr = 44100;
+  parts.forEach((p, i) => {
+    const r = cartesiaTTS(p.speak, voiceId, { speed: p.speed ?? v.cartesia?.speed, emotion: p.emotion ?? v.cartesia?.emotion, volume: p.volume });
+    sr = r.sampleRate;
+    const tr = trimLead(r.samples, sr);
+    for (const w of r.words) words.push({ w: w.w, start: w.start - tr.offset + t, end: w.end - tr.offset + t });
+    out.push(tr.samples);
+    t += tr.samples.length / sr;
+    if (i < parts.length - 1) { const g = new Float32Array(Math.round(gap * sr)); out.push(g); t += gap; }
+  });
+  const n = out.reduce((a, x) => a + x.length, 0);
+  const samples = new Float32Array(n);
+  let o = 0;
+  for (const x of out) { samples.set(x, o); o += x.length; }
+  return { samples, sampleRate: sr, words };
+}
+
+/** Cut leading/trailing silence of one take; report how much was cut at the front (s). */
+function trimLead(s, sr, pad = 0.03) {
+  let peak = 0;
+  for (const x of s) peak = Math.max(peak, Math.abs(x));
+  const thr = 0.01 * (peak || 1);
+  let a = 0, b = s.length - 1;
+  while (a < s.length && Math.abs(s[a]) < thr) a++;
+  while (b > a && Math.abs(s[b]) < thr) b--;
+  const p = Math.round(pad * sr);
+  const start = Math.max(0, a - p);
+  return { samples: s.slice(start, Math.min(s.length, b + p)), offset: start / sr };
+}
+
+/**
+ * Map the canonical words (line.say — what the captions and timing.ts index)
+ * onto the words actually spoken (which may add "um", "oh", "see you then").
+ * Greedy in-order match on letters/digits; unmatched words are interpolated.
+ */
+function alignWords(say, spoken) {
+  const norm = (w) => String(w).toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  const canon = say.split(/\s+/).filter(Boolean);
+  const sp = spoken.map((x) => ({ ...x, n: norm(x.w) }));
+  const out = canon.map((w) => ({ w, t: NaN, end: NaN }));
+  let j = 0;
+  canon.forEach((w, i) => {
+    const n = norm(w);
+    for (let k = j; k < Math.min(sp.length, j + 6); k++) {
+      if (sp[k].n === n || (n.length > 2 && sp[k].n.startsWith(n)) || (sp[k].n.length > 2 && n.startsWith(sp[k].n))) {
+        out[i].t = sp[k].start; out[i].end = sp[k].end; j = k + 1; return;
+      }
+    }
+  });
+  // interpolate the gaps
+  const first = sp.length ? sp[0].start : 0, last = sp.length ? sp[sp.length - 1].end : 0;
+  for (let i = 0; i < out.length; i++) {
+    if (!Number.isNaN(out[i].t)) continue;
+    let a = i - 1; while (a >= 0 && Number.isNaN(out[a].t)) a--;
+    let c = i + 1; while (c < out.length && Number.isNaN(out[c].t)) c++;
+    const ta = a >= 0 ? out[a].end : first, tc = c < out.length ? out[c].t : last;
+    const k = (i - a) / (c - a);
+    out[i].t = ta + (tc - ta) * k; out[i].end = out[i].t + (tc - ta) / (c - a);
+  }
+  return out;
 }
 
 /* ── your own files (voice-src/) ───────────────────────────────── */
@@ -406,6 +503,19 @@ function pauses(s, sr) {
  * match the phrase breaks, phrases snap to them, otherwise they share the
  * voiced time by length. Words share their phrase by length (+1 per word).
  */
+function timingsFromWords(say, aligned, lead) {
+  const phrases = say.split(/(?<=[,.!?])\s+/).filter(Boolean);
+  const words = aligned.map((x) => ({ w: x.w, t: Math.round(Math.max(0, x.t + lead) * 1000) / 1000 }));
+  let k = 0;
+  const ph = phrases.map((p) => {
+    const n = p.split(/\s+/).filter(Boolean).length;
+    const a = aligned[k], z = aligned[k + n - 1];
+    k += n;
+    return { text: p, start: Math.round(Math.max(0, a.t + lead) * 1000) / 1000, end: Math.round(Math.max(0, z.end + lead) * 1000) / 1000 };
+  });
+  return { phrases: ph, words };
+}
+
 function timings(say, dur, ps) {
   const phrases = say.split(/(?<=[,.!?])\s+/).filter(Boolean);
   const weight = (t) => t.replace(/[^\p{L}\p{N}]/gu, '').length + 2;
@@ -449,7 +559,15 @@ function timings(say, dur, ps) {
 const t0 = Date.now();
 const argv = process.argv.slice(2);
 const cfg = JSON.parse(readFileSync(path.join(HERE, 'voice-lines.json'), 'utf8'));
+const cfg_override_ids = {};
 const forced = argv.find((a) => a.startsWith('--engine='))?.split('=')[1];
+const opt = (k) => argv.find((a) => a.startsWith(`--${k}=`))?.split('=').slice(1).join('=');
+/** --out=DIR writes a complete candidate set (DIR/voice/*.wav + DIR/voice.generated.ts + DIR/preview.wav) instead of the live one. */
+const OUT_DIR = opt('out') ? path.resolve(opt('out')) : null;
+for (const [role, flag] of [['ava', 'ava'], ['caller', 'caller'], ['caller2', 'caller2']]) {
+  const id = opt(flag);
+  if (id) cfg_override_ids[role] = id;
+}
 const haveAllFiles = cfg.lines.every((l) => srcFile(l.id));
 const ENGINE =
   forced ?? (haveAllFiles ? 'files' : process.env.CARTESIA_API_KEY ? 'cartesia' : process.env.FISH_API_KEY ? 'fish' : 'kokoro');
@@ -475,12 +593,12 @@ if (ENGINE === 'files') {
   const taken = new Set();
   const voices = {};
   for (const [role, v] of Object.entries(cfg.voices)) {
+    if (cfg_override_ids[role]) v.cartesia = { ...(v.cartesia ?? {}), id: cfg_override_ids[role], name: `(cli ${role})`, env: undefined };
     voices[role] = cartesiaVoice(role, v, taken);
     taken.add(voices[role].id);
     chosen[role] = { engine: 'cartesia', model: CARTESIA_MODEL(), id: voices[role].id, name: voices[role].name };
   }
-  synth = (line, v, role) =>
-    cartesiaTTS(line.say, voices[role].id, { speed: line.speed ?? v.cartesia?.speed ?? 1, emotion: line.emotion ?? v.cartesia?.emotion });
+  synth = (line, v, role) => cartesiaLine(line, voices[role].id, v);
 } else if (ENGINE === 'fish') {
   if (!process.env.FISH_API_KEY) throw new Error('--engine=fish needs FISH_API_KEY');
   const voices = Object.fromEntries(Object.entries(cfg.voices).map(([role, v]) => [role, fishVoice(role, v)]));
@@ -505,18 +623,23 @@ if (ENGINE === 'files') {
   };
 }
 
-mkdirSync(OUT, { recursive: true });
+const VOICE_DIR = OUT_DIR ? path.join(OUT_DIR, 'voice') : OUT;
+mkdirSync(VOICE_DIR, { recursive: true });
 const result = { fps: FPS, engine: ENGINE, voices: chosen, lines: {} };
+const previewParts = [];
 for (const line of cfg.lines) {
   const v = cfg.voices[line.voice];
   const audio = synth(line, v, line.voice);
   const sr = audio.sampleRate;
-  let s = trim(audio.samples, sr);
-  s = v.phone ? phoneLine(s, sr) : clean(s, sr);
+  const tr = trimLead(audio.samples, sr, 0.04);
+  let s = v.phone ? phoneLine(tr.samples, sr) : clean(tr.samples, sr);
   s = fades(normalise(s, PEAK_DB), sr);
-  writeWav(path.join(OUT, `${line.id}.wav`), s, sr);
+  writeWav(path.join(VOICE_DIR, `${line.id}.wav`), s, sr);
+  previewParts.push({ s, sr });
   const dur = s.length / sr;
-  const tm = timings(line.say, dur, pauses(s, sr));
+  const tm = audio.words?.length
+    ? timingsFromWords(line.say, alignWords(line.say, audio.words), -tr.offset)
+    : timings(line.say, dur, pauses(s, sr));
   result.lines[line.id] = {
     file: `voice/${line.id}.wav`,
     voice: line.voice,
@@ -526,10 +649,21 @@ for (const line of cfg.lines) {
     ...tm,
     env: envelope(s, sr),
   };
-  console.log(`[voice] ${ENGINE} ${line.id.padEnd(7)} ${line.voice.padEnd(8)} ${dur.toFixed(2)} s  "${line.say}"`);
+  console.log(`[voice] ${ENGINE} ${line.id.padEnd(7)} ${line.voice.padEnd(8)} ${dur.toFixed(2)} s  "${line.say}"${audio.words?.length ? `  (${audio.words.length} timed words)` : ''}`);
+}
+if (OUT_DIR || argv.includes('--preview')) {
+  // one listenable file: every line in order with short gaps
+  const sr = previewParts[0].sr;
+  const gap = new Float32Array(Math.round(0.45 * sr));
+  const all = previewParts.flatMap((p) => [p.sr === sr ? p.s : p.s, gap]);
+  const n = all.reduce((a, x) => a + x.length, 0);
+  const buf = new Float32Array(n);
+  let o = 0;
+  for (const x of all) { buf.set(x, o); o += x.length; }
+  writeWav(path.join(OUT_DIR ?? path.join(ROOT, 'out'), 'preview.wav'), buf, sr);
 }
 writeFileSync(
-  TS_OUT,
+  OUT_DIR ? path.join(OUT_DIR, 'voice.generated.ts') : TS_OUT,
   '/* GENERATED by scripts/generate-voice.mjs — do not edit. Re-run `npm run voice`. */\n' +
     `export const VOICE = ${JSON.stringify(result)} as const;\n` +
     'export type VoiceId = keyof typeof VOICE.lines;\n',

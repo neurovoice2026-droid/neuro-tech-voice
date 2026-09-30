@@ -174,12 +174,12 @@ const CALL_LINES: readonly CallLine[] = [
     at: CALL_AT[2],
     who: 'agent',
     voice: 'call-3',
-    text: 'Of course. I have 15:00 or 16:30. Which suits you better?',
+    text: 'Of course! I have 15:00 or 16:30. Which one suits you better?',
     captions: [
-      { text: 'Of course.', word: 0 },
-      // "15:00" is revealed on spoken "three", "16:30" on "four"
+      { text: 'Of course!', word: 0 },
+      // "15:00" is revealed on spoken "3 PM", "16:30" on "4:30"
       { text: 'I have 15:00 or 16:30.', word: 2, map: [2, 3, 4, 6, 7] },
-      { text: 'Which suits you better?', word: 9 },
+      { text: 'Which one suits you better?', word: 8 },
     ],
   },
   {
@@ -193,9 +193,9 @@ const CALL_LINES: readonly CallLine[] = [
     at: CALL_AT[4],
     who: 'agent',
     voice: 'call-5',
-    text: "Lovely. You're booked for Wednesday at 15:00.",
+    text: "Lovely! You're booked for Wednesday at 15:00.",
     captions: [
-      { text: 'Lovely.', word: 0 },
+      { text: 'Lovely!', word: 0 },
       { text: "You're booked for Wednesday at 15:00.", word: 1 },
     ],
   },
@@ -205,11 +205,11 @@ export const CALL = {
   /** "Picked up on the first ring." — the big kinetic line, until the orb swallows it and Ava speaks */
   pickedUpText: [0, CALL_AT[0]] as const,
   lines: CALL_LINES,
-  /** Slot chips pop as Ava says "three p.m." / "four thirty" (frames after line 3 starts). */
+  /** Slot chips pop as Ava says "3 PM" / "4:30" (frames after line 3 starts). */
   slotPops: [vWord('call-3', 4), vWord('call-3', 7)] as const,
   /** The caller's pick ("Three o'clock…") selects the 15:00 chip. */
   slotPick: CALL_AT[3] + vWord('call-4', 1),
-  /** "Wednesday at 15:00" ignites ember as Ava says "three p.m." (0.42 s ease). */
+  /** "Wednesday at 15:00" ignites ember as Ava says "3 PM" (0.42 s ease). */
   bookedMark: CALL_AT[4] + vWord('call-5', 6),
   /** the call's own length (= the result's start) */
   length: CALL_LEN,

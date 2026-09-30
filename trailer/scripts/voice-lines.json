@@ -13,10 +13,9 @@
       },
       "cartesia": {
         "env": "CARTESIA_AVA_VOICE",
-        "id": "db6b0ed5-d5d3-463d-ae85-518a07d3c2b4",
-        "name": "Skylar",
-        "gender": "feminine",
-        "emotion": "content"
+        "id": "6ccbfb76-1fc6-48f7-b71d-91ac6298247b",
+        "name": "Tessa (Emotive)",
+        "gender": "feminine"
       }
     },
     "caller": {
@@ -33,10 +32,9 @@
       },
       "cartesia": {
         "env": "CARTESIA_CALLER_VOICE",
-        "id": "47c38ca4-5f35-497b-b1a3-415245fb35e1",
-        "name": "Daniel",
-        "gender": "masculine",
-        "emotion": "neutral"
+        "id": "c961b81c-a935-4c17-bfb3-ba2239de8c2f",
+        "name": "Kyle (Emotive)",
+        "gender": "masculine"
       }
     },
     "caller2": {
@@ -53,10 +51,9 @@
       },
       "cartesia": {
         "env": "CARTESIA_CALLER2_VOICE",
-        "id": "f786b574-daa5-4673-aa0c-cbe3e8534c02",
-        "name": "Katie",
-        "gender": "feminine",
-        "emotion": "neutral"
+        "id": "cc00e582-ed66-4004-8336-0175b85c85f6",
+        "name": "Dana (Emotive)",
+        "gender": "feminine"
       }
     }
   },
@@ -66,63 +63,81 @@
       "voice": "ava",
       "say": "Thank you for calling Northside Studio. This is Ava, an AI assistant. How can I help you today?",
       "direction": "Ava, answering at 3 a.m. and still bright: warm, smiling, calm and professional; a soft, friendly lift on \"How can I help you today?\"",
-      "emotion": "content"
+      "speak": "Hi, thank you for calling Northside Studio! This is Ava, an AI assistant. How can I help you today?",
+      "emotion": "happy"
     },
     {
       "id": "call-2",
       "voice": "caller",
       "say": "Hi! Could I come in on Wednesday afternoon?",
-      "direction": "Caller (on the phone): a little tentative and hopeful, slightly hushed \u2014 it's the middle of the night; relaxed, natural.",
-      "emotion": "neutral"
+      "direction": "Caller (on the phone): a little tentative and hopeful, slightly hushed — it's the middle of the night; relaxed, natural.",
+      "speak": "Oh, hi. Um, could I come in on Wednesday afternoon?",
+      "emotion": "hesitant"
     },
     {
       "id": "call-3",
       "voice": "ava",
-      "say": "Of course. I have three p.m., or four thirty. Which suits you better?",
+      "say": "Of course! I have 3 PM, or 4:30. Which one suits you better?",
       "direction": "Ava: helpful and bright; a tiny beat after \"Of course.\"; offers the two times naturally, a light upturn on \"Which suits you better?\"",
-      "emotion": "content"
+      "speak": "Of course! I have 3 PM, or 4:30. Which one suits you better?",
+      "emotion": "enthusiastic"
     },
     {
       "id": "call-4",
       "voice": "caller",
       "say": "Three o'clock is perfect.",
       "direction": "Caller: pleased and relieved, a small smile in the voice.",
-      "emotion": "content"
+      "speak": "Oh, three o'clock is perfect. Thank you!",
+      "emotion": "grateful"
     },
     {
       "id": "call-5",
       "voice": "ava",
-      "say": "Lovely. You're booked for Wednesday at three p.m.",
-      "direction": "Ava: warm, satisfied, reassuring \u2014 the payoff. A gentle smile on \"Lovely.\"",
-      "emotion": "content"
+      "say": "Lovely! You're booked for Wednesday at 3 PM.",
+      "direction": "Ava: warm, satisfied, reassuring — the payoff. A gentle smile on \"Lovely.\"",
+      "speak": "Lovely! You're all booked for Wednesday at 3 PM. See you then!",
+      "emotion": "happy"
     },
     {
       "id": "kb-1",
       "voice": "caller2",
       "say": "Do you do home visits?",
       "direction": "Second caller (on the phone): curious, casual, friendly.",
-      "emotion": "neutral"
+      "speak": "Hi! Quick question, do you do home visits?",
+      "emotion": "curious"
     },
     {
       "id": "kb-2",
       "voice": "ava",
       "say": "I don't have an answer for that, and I don't want to guess. I'll ask the team to call you back today.",
-      "direction": "Ava: honest and empathetic, never robotic \u2014 a hint of apology on \"I don't want to guess\", then confident and kind on \"I'll ask the team to call you back today.\"",
-      "emotion": "calm"
+      "direction": "Ava: honest and empathetic, never robotic — a hint of apology on \"I don't want to guess\", then confident and kind on \"I'll ask the team to call you back today.\"",
+      "parts": [
+        {
+          "speak": "Hmm, I don't have an answer for that, and I don't want to guess.",
+          "emotion": "apologetic"
+        },
+        {
+          "speak": "I'll ask the team to call you back today.",
+          "emotion": "confident"
+        }
+      ]
     },
     {
       "id": "cta-1",
       "voice": "ava",
       "say": "AI voice agents that book your customers. Twenty four seven.",
       "direction": "Ava as the trailer voice-over (not on a phone): intimate, confident, cinematic, a little slower; a deliberate pause before \"Twenty four seven.\"",
-      "emotion": "calm"
+      "speak": "AI voice agents that book your customers. Twenty four seven.",
+      "emotion": "confident"
     },
     {
       "id": "cta-2",
       "voice": "ava",
       "say": "Neuro Tech Voice.",
       "direction": "Ava voice-over: calm, proud brand sign-off.",
-      "emotion": "calm"
+      "speak": "Neuro Tech Voice.",
+      "emotion": "proud"
     }
-  ]
+  ],
+  "_notes": "say = the canonical words the captions and src/timing.ts index (word k); speak / parts = what the TTS actually performs (Sonic SSML allowed, fillers welcome) — the generator aligns the real word timestamps back onto `say`. emotion: one of Cartesia's Sonic emotions (docs: capability-guides/volume-speed-emotion)."
 }
