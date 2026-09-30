@@ -15,7 +15,8 @@
         "env": "CARTESIA_AVA_VOICE",
         "id": "6ccbfb76-1fc6-48f7-b71d-91ac6298247b",
         "name": "Tessa (Emotive)",
-        "gender": "feminine"
+        "gender": "feminine",
+        "speed": 1.05
       }
     },
     "caller": {
@@ -63,7 +64,7 @@
       "voice": "ava",
       "say": "Thank you for calling Northside Studio. This is Ava, an AI assistant. How can I help you today?",
       "direction": "Ava, answering at 3 a.m. and still bright: warm, smiling, calm and professional; a soft, friendly lift on \"How can I help you today?\"",
-      "speak": "Hi, thank you for calling Northside Studio! This is Ava, an AI assistant. How can I help you today?",
+      "speak": "Thank you for calling Northside Studio! This is Ava, an AI assistant. How can I help you today?",
       "emotion": "happy"
     },
     {
@@ -103,7 +104,7 @@
       "voice": "caller2",
       "say": "Do you do home visits?",
       "direction": "Second caller (on the phone): curious, casual, friendly.",
-      "speak": "Hi! Quick question, do you do home visits?",
+      "speak": "Quick question, do you do home visits?",
       "emotion": "curious"
     },
     {

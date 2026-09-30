@@ -60,6 +60,8 @@ export type CaptionsProps = {
   holdUntil: number;
   /** where a caption that must stay a beat longer moves to (null = it holds in place) */
   echoY: number | null;
+  /** frames [from, to] the echo slot is taken by something else (an echo may not overlap them) */
+  echoBlock?: readonly [number, number];
   /** frames words lead the voice */
   lead?: number;
   align?: 'center' | 'left' | 'right';
@@ -116,7 +118,7 @@ type Plan = {
 };
 
 function plan(p: CaptionsProps): Plan[] {
-  const { lineAt, voice, captions, holdUntil, echoY } = p;
+  const { lineAt, voice, captions, holdUntil, echoY, echoBlock } = p;
   const lead = p.lead ?? 2;
   const idx = (c: Caption, j: number) => c.map?.[j] ?? c.word + j;
   const plans: Plan[] = captions.map((c) => {
@@ -144,7 +146,7 @@ function plan(p: CaptionsProps): Plan[] {
       // leave a touch before the incoming caption's first word (when the beat-after rule allows),
       // so the two never sit on top of each other at full strength
       pl.out = Math.max(minEnd, next - OUT);
-    } else if (echoY !== null) {
+    } else if (echoY !== null && !(echoBlock && next <= echoBlock[1] && minEnd + ECHO_OUT >= echoBlock[0])) {
       pl.mode = 'echo';
       pl.out = next;
       pl.echoOut = minEnd;

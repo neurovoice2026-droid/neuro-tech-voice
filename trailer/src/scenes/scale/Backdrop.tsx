@@ -1,6 +1,7 @@
 /**
- * The far plane of the white act: white stock with slow wash blooms
- * (#f6f3ff / #efe9ff / a breath of lilac) drifting on noise. Pure gradients —
+ * The far plane of the white act (depth 0.4): the lilac wash — white stock
+ * with three slow light blooms (#efe9ff ×2 / a breath of lilac) drifting on
+ * noise. No card shapes: ghost cards would read as empty cells. Pure gradients —
  * no filters — so the full-frame layer costs nothing.
  */
 import React from 'react';
@@ -20,13 +21,11 @@ export const Backdrop: React.FC<{ t: number; L: Layout }> = ({ t, L }) => {
       { x: W * 0.12, y: H * 0.06, r: 820, rgb: '239,233,255', a: 0.7, seed: 'a' },
       { x: W * 0.9, y: H * 0.9, r: 900, rgb: '239,233,255', a: 0.6, seed: 'b' },
       { x: W * 0.66, y: H * 0.3, r: 640, rgb: '185,163,255', a: 0.07, seed: 'c' },
-      { x: W * 0.28, y: H * 0.98, r: 600, rgb: '246,243,255', a: 1, seed: 'd' },
     ],
     [
       { x: W * 0.06, y: H * 0.06, r: 760, rgb: '239,233,255', a: 0.7, seed: 'a' },
       { x: W * 0.98, y: H * 0.74, r: 820, rgb: '239,233,255', a: 0.6, seed: 'b' },
       { x: W * 0.72, y: H * 0.28, r: 560, rgb: '185,163,255', a: 0.07, seed: 'c' },
-      { x: W * 0.2, y: H * 0.96, r: 640, rgb: '246,243,255', a: 1, seed: 'd' },
     ],
   );
   // the blooms open on the downbeat (the white act "breathes in")

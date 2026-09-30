@@ -62,4 +62,4 @@ export const CARD0 = (L: Layout) => ({
 });
 
 /** The final flow node (CRM · 200 OK). The CTA's iris opens from this point. */
-export const FLOW_END = (L: Layout) => L.pick({ x: 1520, y: 560 }, { x: 540, y: 1480 });
+export const FLOW_END = (L: Layout) => L.pick({ x: 1520, y: 560 }, { x: 150, y: 1300 });

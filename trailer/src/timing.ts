@@ -39,8 +39,9 @@ export type Caption = { text: string; word: number; map?: readonly number[] };
 /** Snap a frame count UP to the next half-beat / whole beat / bar (so turns land on the grid). */
 const upHalf = (f: number) => Math.round(Math.ceil(f / (BEAT / 2) - 1e-9) * (BEAT / 2));
 const upBeat = (f: number) => Math.round(Math.ceil(f / BEAT - 1e-9) * BEAT);
-/** Minimum silence between two speakers (frames). */
-const TURN_GAP = 7;
+const upQuarter = (f: number) => Math.round(Math.ceil(f / (BEAT / 4) - 1e-9) * (BEAT / 4));
+/** Minimum silence between two speakers (frames): a real phone turn is ~0.2–0.3 s. */
+const TURN_GAP = 6;
 
 /* ── the voiced timeline, derived from the real voice lengths ──────
  * Swap the voices (npm run voice) and every turn, scene window and the
@@ -51,12 +52,16 @@ const CALL_AT: number[] = [];
   let t = b(2.5); // Ava answers ~1.25 s after the pickup ("Picked up on the first ring." reads first)
   for (const id of ids) {
     CALL_AT.push(t);
-    t = upHalf(t + vFrames(id) + TURN_GAP);
+    t = upQuarter(t + vFrames(id) + TURN_GAP); // turns land on the 16th-note grid
   }
 }
-/** The call lasts until Ava's last word + a short beat for the booked mark. */
-const CALL_LEN = upBeat(CALL_AT[4] + vFrames('call-5') + 10);
-const RESULT_LEN = b(10);
+/** The call cuts a beat after "…at 3 PM" lights the booked mark; Ava's sign-off
+ *  ("See you then!") rides over the cut into the result (an L-cut). */
+const CALL_LEN = Math.min(
+  upBeat(CALL_AT[4] + vFrames('call-5') + 10),
+  upBeat(CALL_AT[4] + vWord('call-5', 6) + b(2)),
+);
+const RESULT_LEN = b(8);
 /** Knowledge: the question, a scan, the honest answer, then the closing title. */
 const KB_ASK = b(2);
 const KB_SCAN0 = upHalf(KB_ASK + Math.round(vFrames('kb-1') * 0.6));
@@ -67,7 +72,7 @@ const KB_CLOSE = upHalf(KB_ANSWER + vFrames('kb-2') + 10); // the last caption g
 const SCALE_LEN = b(10);
 /** CTA: Ava's line, then the converge; the logo lands on a bar downbeat. */
 const CTA_LINE = b(1);
-const CTA_CONVERGE0 = Math.max(b(10), upBeat(CTA_LINE + vFrames('cta-1') + 8));
+const CTA_CONVERGE0 = Math.max(b(9), upBeat(CTA_LINE + vFrames('cta-1') + 6));
 const CTA_IMPACT = CTA_CONVERGE0 + b(2);
 /** The knowledge closing title holds ≥ 3 beats, then a 1-beat whip. Any
  *  slack needed to put the logo impact on a strong beat (1 or 3 of the bar)
@@ -226,7 +231,7 @@ export const RESULT = {
   land: b(2), // …and lands in the slot (ding)
   split: b(3), // split divider draws; "Asleep." lands
   bookedWord: b(4), // "Booked." lands
-  toWhite: [b(9), b(10)] as const, // the booked event opens up into the white act
+  toWhite: [b(7), b(8)] as const, // the booked event opens up into the white act
 };
 
 /* ---------------------------------------------------------------- *
@@ -262,12 +267,12 @@ export const KNOWLEDGE = {
 export const SCALE = {
   industryStep: BEAT / 4, // one industry per 16th note (3.75 f)
   industriesIn: 0,
-  gridSettle: b(3.5),
-  industriesTitle: b(3.5),
-  langMorph: b(4.5), // grid collapses into six language cells
-  langStep: BEAT / 2, // one language per 8th note
+  gridSettle: b(4), // every card snaps to its rect…
+  industriesTitle: b(4), // …as "16 industries." slams: the downbeat the 16-pop run resolves on (hit.wav)
+  langMorph: b(5), // the six keepers flip to their languages…
+  langStep: BEAT / 4, // …one per 16th note (75 / 79 / 83 / 86 / 90 / 94)
   flow: b(8), // call → Slack → CRM
-  flowStep: BEAT / 2,
+  stationStep: BEAT / 2, // one station per 8th note (120 / 128 / 135)
   irisToDark: [b(9.5), b(10) + 8] as const,
 };
 
@@ -477,70 +482,71 @@ export const RESULT_LOCAL = {
 };
 
 /* ── SCALE — fine cuts (scale-local frames) ────────────────────── */
-export const SCALE_LOCAL = {
-  /** one industry pop per 16th note */
-  pops: Array.from({ length: 16 }, (_, i) => Math.round(SCALE.industriesIn + i * SCALE.industryStep)),
-  /** card 01 (and its ring) pop this many frames before the cut, the tray one
-   *  more: t 0 (hit.wav) shows them mid-move instead of an empty white frame */
-  preroll: 2,
-  /** the camera pulls back from the montage close-up to rest */
-  camPull: [b(0.25), b(4)] as const, // 4 → 60
-  /** eyebrows in: "Same agent, your vocabulary" → "What the caller hears" */
-  eyebrow: [b(0.15), b(4.8)] as const, // 2, 72
-  /** …and out (fast; the next rises into a clear slot) */
-  eyebrowOut: [b(4.4), b(7.3)] as const, // 66, 110
-  /** "16 industries." → "14 languages." (a J-cut: the words follow the picture) */
-  titleSwap: b(4.9), // 74
-  /** the ring lets go of card 16 as the grid breaks */
-  ringRelease: b(4.3), // 65
-  /** the ten leaving cards peel off: pull-in from flyOut − flyAnticip, then accelerate out */
-  flyOut: b(4.3), // 65
-  flyAnticip: 3,
-  flyStagger: 0.8,
-  flyDur: 10,
-  /** the six keepers glide + resize into the language grid */
-  glide: b(4.3), // 65
-  glideStagger: 1,
-  /** one language per 8th note */
-  langs: Array.from({ length: 6 }, (_, i) => Math.round(SCALE.langMorph + i * SCALE.langStep)),
-  /** the AI-disclosure underline inks in under "an AI assistant", while English is live */
-  disclose: [SCALE.langMorph + 6, SCALE.langMorph + 11] as const, // 74 → 79
-  /** English dims only after its underline is drawn, and only to 84 % */
-  englishDim: [SCALE.langMorph + 13, SCALE.langMorph + 23] as const, // 81 → 91
-  /** the camera's slow push during the languages, released for the flow */
-  push: [b(4), b(7.3), b(7.95)] as const, // 60, 110, 119
-  /** "14 languages." leaves → "After the call." rolls in; five cells collapse into the deck; tray → after-call stage */
-  titleOut: b(7.3), // 110
-  titleAfter: b(7.4), // 111
-  collapse: b(7.4), // 111
-  collapseStagger: 0.5,
-  /** the Japanese cell (complete) flies onto the deck and becomes the call;
-   *  the ring lets go of it a frame before */
-  carrierFly: b(7.65), // 115
-  ringOut: b(7.6), // 114
-  /** the dotted track + hollow nodes appear */
-  trackIn: b(7.6), // 114
-  /** the call card's number types in; its Booked pill pops */
-  callIn: b(7.8), // 117
-  pill: b(8.2), // 123
-  /** station cues (= the flow cues in timing.ts): each node is solid ON its cue */
-  stations: [0, 1, 2].map((i) => Math.round(SCALE.flow + i * SCALE.flowStep * 1.5)), // 120, 131, 143
-  /** node fills start (the fill spring takes ~2–3 f) */
-  fills: [b(7.85), b(8.6), b(9.35)] as const, // 118, 129, 140
-  /** station labels / cards rise a beat-fraction before their node fills */
-  cardsIn: [b(7.75), b(8.45), b(9.05)] as const, // 116, 127, 136
-  /** the CRM's "200 OK" lands (green by 142) */
-  ok: b(9.25), // 139
-  /** plum fill segments (the bead reaches each node as it fills) */
-  rails: [
-    [b(8.05), b(8.6)],
-    [b(8.75), b(9.35)],
-  ] as const, // 121→129, 131→140
-  /** the final node's ping ring (2.8×) */
-  ping: [b(9.45), b(9.45) + b(1.6)] as const, // 142 → 166
-  /** slow push-in of the stage about FLOW_END (zoom 1 → 1.04; the heading stays put) */
-  flowPush: [b(8.55), b(10.8)] as const, // 128 → 162
-} as const;
+export const SCALE_LOCAL = (() => {
+  /** one language flip per 16th note: 75 79 83 86 90 94 */
+  const langs = Array.from({ length: 6 }, (_, i) => Math.round(SCALE.langMorph + i * SCALE.langStep));
+  /** station cues (= the flow cues): each node is solid ON its cue — 120 128 135 */
+  const stations = [0, 1, 2].map((i) => Math.round(SCALE.flow + i * SCALE.stationStep));
+  /** five cells collapse into the deck; the complete language grid has held ≥ 13 f */
+  const collapse = b(7.5); // 113
+  return {
+    /** one industry pop per 16th note */
+    pops: Array.from({ length: 16 }, (_, i) => Math.round(SCALE.industriesIn + i * SCALE.industryStep)),
+    /** card 01 pops this many frames before the cut: t 0 (pop-2 + tick-0) lands mid-pop */
+    preroll: 2,
+    /** the stepped camera (EASE.peel): card 01 → 2×2 → 3×3 → the full grid */
+    camSteps: [
+      [1, 4],
+      [12, 15],
+      [27, 30],
+    ] as const,
+    /** quarter-note camera kicks (+1.8 %, alternating 3 px jolt) */
+    kicks: [0, b(1), b(2), b(3)] as const, // 0 15 30 45
+    /** "16 industries." → "14 languages.": 8 f mask wipe, the title moves to the top band */
+    titleSwap: b(5.3), // 80 — "16 industries." has held 20 f
+    /** the ten leaving cards peel off: pull-in from flyOut − flyAnticip, then accelerate out */
+    flyOut: b(4.4), // 66
+    flyAnticip: 3,
+    flyStagger: 0.8,
+    flyDur: 10,
+    /** the six keepers glide + resize into the language grid */
+    glide: b(4.4), // 66
+    glideStagger: 1,
+    langs,
+    /** the AI-disclosure underline draws under each language's AI phrase */
+    disclose: langs.map((l) => [l + 4, l + 10] as const),
+    /** the camera's slow push during the languages, released for the flow */
+    push: [b(4), b(7.3), b(7.95)] as const, // 60, 110, 119
+    /** "14 languages." wipes out → "After the call." rises */
+    titleOut: collapse - 1, // 112
+    titleAfter: collapse, // 113
+    collapse,
+    collapseStagger: 0.5,
+    /** the Japanese cell (complete) flies onto the deck and becomes the call */
+    carrierFly: b(7.7), // 116
+    /** the rail's track + hollow nodes appear */
+    trackIn: b(7.7), // 116
+    stations,
+    /** the call card's content is in (under the carrier's blur); its Booked pill pops */
+    callIn: stations[0] - 3, // 117
+    pill: stations[0] + 3, // 123
+    /** station card + content slam in together */
+    cardsIn: stations.map((s) => s - 3), // 117 125 132
+    /** node fills start: solid (1.35) ON the station frame */
+    fills: stations.map((s) => s - 2), // 118 126 133
+    /** electric rail segments (the bead reaches each node a frame before its cue) */
+    rails: [
+      [stations[0] + 1, stations[1] - 1],
+      [stations[1] + 1, stations[2] - 1],
+    ] as const, // 121→127, 129→134
+    /** "Contact saved ✓" confirms a frame before the CRM node */
+    ok: stations[2] - 1, // 134
+    /** the final node's ping */
+    ping: [stations[2], stations[2] + 24] as const, // 135 → 159
+    /** slow push-in of the stage about FLOW_END (zoom 1 → 1.04; the heading stays put) */
+    flowPush: [b(8.55), b(10.8)] as const, // 128 → 162
+  };
+})();
 
 /* ── CTA — fine cuts (cta-local frames) ────────────────────────── */
 /** the white act ends (Trailer's grain switch) exactly as the iris is fully open */
@@ -670,8 +676,8 @@ const langPops: Cue[] = Array.from({ length: 6 }, (_, i) => ({
   vol: 0.75,
 }));
 
-const flowPops: Cue[] = Array.from({ length: 3 }, (_, i) => ({
-  at: at('scale', Math.round(SCALE.flow + i * SCALE.flowStep * 1.5)),
+const flowPops: Cue[] = SCALE_LOCAL.stations.map((s, i) => ({
+  at: at('scale', s),
   file: sfx(i === 2 ? 'confirm.wav' : 'click.wav'),
 }));
 
@@ -723,11 +729,15 @@ export const CUES: Cue[] = [
   // SCALE
   { at: at('scale', 0), file: sfx('pop-2.wav') },
   ...industryTicks,
-  { at: at('scale', SCALE.langMorph) - 3, file: sfx('whoosh-soft.wav'), vol: 0.8 },
+  { at: at('scale', SCALE.industriesTitle), file: sfx('hit.wav'), vol: 0.9 }, // "16 industries." slams
+  // the peel-off: the soft whoosh peaks as the ten cards leave fastest
+  { at: at('scale', SCALE_LOCAL.flyOut + 4) - PK.whooshSoft, file: sfx('whoosh-soft.wav'), vol: 0.8 },
   ...langPops,
-  { at: at('scale', SCALE.flow) - 3, file: sfx('whoosh.wav'), vol: 0.8 },
+  // the Japanese carrier's flight onto the deck
+  { at: at('scale', SCALE_LOCAL.carrierFly + 3) - PK.whoosh, file: sfx('whoosh.wav'), vol: 0.8 },
   ...flowPops,
-  { at: at('scale', SCALE.irisToDark[0]), file: sfx('whoosh-rev.wav') },
+  // peaks on the CTA iris's fastest frames
+  { at: at('scale', SCALE.irisToDark[0] + 9) - PK.whooshRev, file: sfx('whoosh-rev.wav') },
   // CTA
   { at: at('cta', 0), file: sfx('sub.wav') },
   { at: at('cta', CTA.converge[0]), file: sfx('riser.wav') },

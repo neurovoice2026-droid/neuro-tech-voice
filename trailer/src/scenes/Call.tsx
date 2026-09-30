@@ -79,7 +79,7 @@ const PHRASE_RINGS = CALL.lines.flatMap((l) =>
  * phone 260×540, bezel 9 → screen 242×522, scaled S about the avatar) */
 const TWIST_SCREEN = { w: 242, h: 522 };
 
-/** the chips are on screen during lines 2 and 3 (no echo slot then: it is theirs) */
+/** the chips are on screen during lines 2 and 3 (the echo slot is theirs while they are up) */
 const chipsLine = (i: number) => i === 2 || i === 3;
 
 export const Call: React.FC = () => {
@@ -213,6 +213,8 @@ export const Call: React.FC = () => {
 
   // "15:00" / "16:30" flash lilac as they are spoken (linking the words to their chips)
   const pops = [LINES[2].at + CALL.slotPops[0], LINES[2].at + CALL.slotPops[1]] as const;
+  // the chips own the echo slot while they are on screen
+  const chipWindow = [pops[0] - 1, LINES[4].at + 9] as const;
   const flash = (at: number) => tween(t, [at - 2, at], [0, 1], EASE.out3) * (1 - tween(t, [at + 4, at + 10], [0, 1], EASE.inOut));
 
   /* ── the payoff: row B, the booked mark ───────────────────────────── */
@@ -416,7 +418,8 @@ export const Call: React.FC = () => {
                   color={agent ? C.paper : C.callerLit}
                   glow={agent ? 'rgba(185,163,255,0.35)' : 'rgba(169,188,255,0.35)'}
                   holdUntil={holdOf(i)}
-                  echoY={chipsLine(i) ? null : echoY}
+                  echoY={echoY}
+                  echoBlock={chipsLine(i) ? chipWindow : undefined}
                   underline={
                     i === 0
                       ? {

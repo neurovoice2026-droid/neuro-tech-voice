@@ -1,59 +1,57 @@
 /**
- * The nearest plane: soft lilac bokeh drifting past the lens. A copy of
- * components/Dust.tsx (same deterministic drift: random(seed) positions,
- * upward float, sway, twinkle) drawn with radial gradients instead of a CSS
- * blur, so large discs stay clean on the white stock and cost nothing.
- * The discs live mostly in the side margins (the content band stays clean)
- * and are very soft — a 30 % core, a long falloff — so where one does cross a
- * card it reads as depth haze, not a lilac smudge.
+ * The near plane (depth 1.6): 3–4 out-of-focus lilac discs, 160–300 px, a
+ * 10 % core with a soft ~30 px edge — drawn as radial gradients (a flat core
+ * and a smooth falloff, the look of a defocused disc) instead of a CSS blur,
+ * so they cost nothing at any zoom. Placed in the plane's own world so that
+ * they sweep through the frame on the camera's pull-backs (strong parallax)
+ * and rest near the frame edges once the wall is whole; none sits in front
+ * of card 01 at the opener.
  */
 import React from 'react';
-import { AbsoluteFill, random } from 'remotion';
+import { noise2D } from '@remotion/noise';
+import type { Layout } from '../../lib/layout';
 
-export const Bokeh: React.FC<{
-  frame: number;
-  width: number;
-  height: number;
-  count?: number;
-  seed?: string;
-  color?: string;
-  opacity?: number;
-  speed?: number;
-  size?: [number, number];
-  /** 0..1 master fade (the discs fade in after the cut) */
-  fade?: number;
-}> = ({ frame, width, height, count = 8, seed = 'bokeh', color = '124,58,237', opacity = 0.05, speed = 0.5, size = [180, 380], fade = 1 }) => (
-  <AbsoluteFill style={{ pointerEvents: 'none', opacity: fade }}>
-    {Array.from({ length: count }, (_, i) => {
-      const r = (k: string) => random(`${seed}-${i}-${k}`);
-      const d = size[0] + r('s') * (size[1] - size[0]);
-      const depth = r('d');
-      // alternate sides; each disc sits in a band ±18 % around its frame edge
-      const side = i % 2 === 0 ? -1 : 1;
-      const edge = side < 0 ? 0 : width;
-      const x0 = edge + side * (r('x') - 0.35) * width * 0.36;
-      const y0 = r('y') * height;
-      const drift = speed * (0.4 + depth);
-      const span = height + d * 2;
-      const y = (((y0 - frame * drift) % span) + span) % span - d;
-      const x = x0 + Math.sin(frame / (40 + r('p') * 60) + r('ph') * 6.28) * (8 + depth * 18);
-      const tw = 0.6 + 0.4 * Math.sin(frame / (18 + r('t') * 30) + r('tp') * 6.28);
-      const a = opacity * tw * (0.45 + depth * 0.55);
-      const c = (k: number) => `rgba(${color},${(a * k).toFixed(4)})`;
+type Disc = { x: number; y: number; d: number; a: number };
+
+const DISCS = (L: Layout): Disc[] =>
+  L.pick(
+    [
+      { x: 1790, y: 150, d: 300, a: 0.1 },
+      { x: 130, y: 980, d: 240, a: 0.09 },
+      { x: 1210, y: 640, d: 200, a: 0.07 },
+      { x: 820, y: -40, d: 260, a: 0.1 },
+    ],
+    [
+      { x: 1010, y: 300, d: 280, a: 0.1 },
+      { x: 60, y: 1560, d: 300, a: 0.1 },
+      { x: 700, y: 1150, d: 190, a: 0.07 },
+      { x: 520, y: 150, d: 220, a: 0.09 },
+    ],
+  );
+
+export const NearDiscs: React.FC<{ t: number; L: Layout; fade: number }> = ({ t, L, fade }) => (
+  <>
+    {DISCS(L).map((c, i) => {
+      const dx = 26 * noise2D(`scale-disc-x-${i}`, t * 0.012, 0.5);
+      const dy = 20 * noise2D(`scale-disc-y-${i}`, 0.5, t * 0.012) - t * 0.25;
+      const r = c.d / 2;
+      // the defocus edge: ~30 px either side of the rim
+      const e = 30 / r;
+      const col = (k: number) => `rgba(139,92,246,${(c.a * k * fade).toFixed(4)})`;
       return (
         <div
           key={i}
           style={{
             position: 'absolute',
-            left: x - d / 2,
-            top: y - d / 2,
-            width: d,
-            height: d,
+            left: c.x + dx - r - 30,
+            top: c.y + dy - r - 30,
+            width: c.d + 60,
+            height: c.d + 60,
             borderRadius: '50%',
-            background: `radial-gradient(closest-side, ${c(1)} 0%, ${c(0.9)} 30%, ${c(0.5)} 58%, ${c(0.18)} 80%, ${c(0)} 100%)`,
+            background: `radial-gradient(closest-side, ${col(0.85)} 0%, ${col(1)} ${((1 - e) * r / (r + 30) * 100).toFixed(1)}%, ${col(0.45)} ${(r / (r + 30) * 100).toFixed(1)}%, ${col(0)} 100%)`,
           }}
         />
       );
     })}
-  </AbsoluteFill>
+  </>
 );
