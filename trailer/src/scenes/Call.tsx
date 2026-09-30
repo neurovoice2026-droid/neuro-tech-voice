@@ -201,8 +201,11 @@ export const Call: React.FC = () => {
     tracking: 0,
   };
   const echoY = T.y - L.pick(170, 160);
+  // a line's last caption holds until the next speaker — but it is gone BY the cut (the tag
+  // swaps on the cut, and a performed voice may breathe or say "oh" before its first
+  // captioned word), unless the beat-after rule needs it longer (<Captions> enforces that)
   const holdOf = (i: number) =>
-    i + 1 < LINES.length ? LINES[i + 1].at + vWord(LINES[i + 1].voice, 0) : END + 10;
+    i + 1 < LINES.length ? Math.min(LINES[i + 1].at + 2, LINES[i + 1].at + vWord(LINES[i + 1].voice, 0)) : END + 10;
   const turn = turnAt(t);
 
   // the AI disclosure: an electric underline drawn under "an AI assistant" as she says it

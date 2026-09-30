@@ -161,10 +161,11 @@ export const LangFace: React.FC<{
   let ci = 0;
   const chars = (s: string) =>
     Array.from(s).map((ch, i) => {
-      const s0 = at + 3 + 0.45 * ci++;
+      // complete ~6 f after the flip lands, so the whole grid holds before the collapse
+      const s0 = at + 2 + 0.22 * ci++;
       const p = t < s0 ? 0 : dspring(t - s0, { stiffness: 420, damping: 24, mass: 0.8 });
-      const o = tween(t, [s0, s0 + 3], [0, 1], EASE.out3);
-      const bl = tween(t, [s0, s0 + 5], [3, 0], EASE.out3);
+      const o = tween(t, [s0, s0 + 2], [0, 1], EASE.out3);
+      const bl = tween(t, [s0, s0 + 4], [3, 0], EASE.out3);
       return (
         <span
           key={i}

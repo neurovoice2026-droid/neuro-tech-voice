@@ -77,7 +77,7 @@ export function framingAt(t: number, L: Layout): Framing {
     // a wider variant: 10 % bigger, 60 px left, drifting right over the shot
     const k = tween(t, [s.from, s.to], [0, 1], EASE.inOut);
     // (lifted a touch in 16:9 so the slot chips below it have air)
-    return { x: F.A.x - 60 + 44 * k, y: F.A.y - L.pick(34, 0), d: F.A.d * 1.1 };
+    return { x: F.A.x - 60 + 44 * k, y: F.A.y - L.pick(50, 0), d: F.A.d * 1.1 };
   }
   return F.A;
 }

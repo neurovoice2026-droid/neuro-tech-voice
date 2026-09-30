@@ -382,7 +382,7 @@ export const Scale: React.FC = () => {
 
         {/* 1.0 · the wall → cells → flow (pushed about FLOW_END), then the titles */}
         <Layer depth={1}>
-          <AbsoluteFill style={{ transform: stagePush, transformOrigin: `${G.end.x}px ${G.end.y}px` }}>
+          <AbsoluteFill style={{ transform: stagePush, transformOrigin: `${G.end.x}px ${G.end.y}px`, zIndex: 0 }}>
             {flyOrder.map((i, o) => flyer(i, o))}
             {[0, 1, 2, 3, 4].map((k) => keeper(k))}
             <Rail t={t} G={G} vertical={v} T={flowT} />
