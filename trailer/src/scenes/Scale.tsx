@@ -41,7 +41,7 @@ import { useLayout, type Layout } from '../lib/layout';
 import { aos, EASE, SPRING, tween, windowed } from '../lib/motion';
 import { useSceneFrame } from '../lib/scene';
 import { C } from '../theme';
-import { b, FPS, SCALE } from '../timing';
+import { FPS, SCALE, SCALE_LOCAL } from '../timing';
 import { Backdrop } from './scale/Backdrop';
 import { Bokeh } from './scale/Bokeh';
 import { Box, IndustryContent, LangContent, Slot } from './scale/Cards';
@@ -53,71 +53,6 @@ import { Heading } from './scale/Heading';
 import { DirBlur, dirBlurRef, sigmaFor } from './scale/MotionBlur';
 import { ringCentre, ringDraws, type RingStep } from './scale/ring';
 
-// LOCAL TIMING - hoist into timing.ts
-export const SCALE_LOCAL = {
-  /** one industry pop per 16th note */
-  pops: Array.from({ length: 16 }, (_, i) => Math.round(SCALE.industriesIn + i * SCALE.industryStep)),
-  /** card 01 (and its ring) pop this many frames before the cut, the tray one
-   *  more: t 0 (hit.wav) shows them mid-move instead of an empty white frame */
-  preroll: 2,
-  /** the camera pulls back from the montage close-up to rest */
-  camPull: [b(0.25), b(4)] as const, // 4 → 60
-  /** eyebrows in: "Same agent, your vocabulary" → "What the caller hears" */
-  eyebrow: [b(0.15), b(4.8)] as const, // 2, 72
-  /** …and out (fast; the next rises into a clear slot) */
-  eyebrowOut: [b(4.4), b(7.3)] as const, // 66, 110
-  /** "16 industries." → "14 languages." (a J-cut: the words follow the picture) */
-  titleSwap: b(4.9), // 74
-  /** the ring lets go of card 16 as the grid breaks */
-  ringRelease: b(4.3), // 65
-  /** the ten leaving cards peel off: pull-in from flyOut − flyAnticip, then accelerate out */
-  flyOut: b(4.3), // 65
-  flyAnticip: 3,
-  flyStagger: 0.8,
-  flyDur: 10,
-  /** the six keepers glide + resize into the language grid */
-  glide: b(4.3), // 65
-  glideStagger: 1,
-  /** one language per 8th note */
-  langs: Array.from({ length: 6 }, (_, i) => Math.round(SCALE.langMorph + i * SCALE.langStep)),
-  /** the AI-disclosure underline inks in under "an AI assistant", while English is live */
-  disclose: [SCALE.langMorph + 6, SCALE.langMorph + 11] as const, // 74 → 79
-  /** English dims only after its underline is drawn, and only to 84 % */
-  englishDim: [SCALE.langMorph + 13, SCALE.langMorph + 23] as const, // 81 → 91
-  /** the camera's slow push during the languages, released for the flow */
-  push: [b(4), b(7.3), b(7.95)] as const, // 60, 110, 119
-  /** "14 languages." leaves → "After the call." rolls in; five cells collapse into the deck; tray → after-call stage */
-  titleOut: b(7.3), // 110
-  titleAfter: b(7.4), // 111
-  collapse: b(7.4), // 111
-  collapseStagger: 0.5,
-  /** the Japanese cell (complete) flies onto the deck and becomes the call;
-   *  the ring lets go of it a frame before */
-  carrierFly: b(7.65), // 115
-  ringOut: b(7.6), // 114
-  /** the dotted track + hollow nodes appear */
-  trackIn: b(7.6), // 114
-  /** the call card's number types in; its Booked pill pops */
-  callIn: b(7.8), // 117
-  pill: b(8.2), // 123
-  /** station cues (= the flow cues in timing.ts): each node is solid ON its cue */
-  stations: [0, 1, 2].map((i) => Math.round(SCALE.flow + i * SCALE.flowStep * 1.5)), // 120, 131, 143
-  /** node fills start (the fill spring takes ~2–3 f) */
-  fills: [b(7.85), b(8.6), b(9.35)] as const, // 118, 129, 140
-  /** station labels / cards rise a beat-fraction before their node fills */
-  cardsIn: [b(7.75), b(8.45), b(9.05)] as const, // 116, 127, 136
-  /** the CRM's "200 OK" lands (green by 142) */
-  ok: b(9.25), // 139
-  /** plum fill segments (the bead reaches each node as it fills) */
-  rails: [
-    [b(8.05), b(8.6)],
-    [b(8.75), b(9.35)],
-  ] as const, // 121→129, 131→140
-  /** the final node's ping ring (2.8×) */
-  ping: [b(9.45), b(9.45) + b(1.6)] as const, // 142 → 166
-  /** slow push-in of the stage about FLOW_END (zoom 1 → 1.04; the heading stays put) */
-  flowPush: [b(8.55), b(10.8)] as const, // 128 → 162
-} as const;
 const K = SCALE_LOCAL;
 
 /** A bouncier pop than the site spring: ~16 % overshoot (ζ ≈ .5). */

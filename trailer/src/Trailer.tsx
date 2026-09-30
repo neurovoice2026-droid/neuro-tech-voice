@@ -39,7 +39,8 @@ const FilmGrain: React.FC = () => {
   return (
     <>
       <Grain opacity={0.15 * (1 - onWhite)} blend="overlay" />
-      <Grain opacity={0.07 * onWhite} blend="multiply" freq={0.9} />
+      {/* On white, overlay grain would vanish; a whisper of multiply keeps the film texture. */}
+      <Grain opacity={0.025 * onWhite} blend="multiply" freq={0.9} />
     </>
   );
 };

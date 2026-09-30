@@ -41,60 +41,12 @@ import { useLayout, type Layout } from '../lib/layout';
 import { EASE, mix, SPRING, springAt, tween, windowed } from '../lib/motion';
 import { useSceneFrame } from '../lib/scene';
 import { C } from '../theme';
-import { b, CTA, SCALE, SCENES } from '../timing';
+import { b, CTA, CTA_LOCAL } from '../timing';
 import { CoverCta, Note, Url } from './cta/EndCard';
 import { Headline, type HeadlineSpec } from './cta/Headline';
 import { HERO_ART, HeroGL, type HeroUniforms } from './cta/HeroGL';
 import { buildStreaks, Streaks } from './cta/Streaks';
 
-// LOCAL TIMING - hoist into timing.ts
-/** the white act ends (Trailer's grain switch) exactly as the iris is fully open */
-const IRIS_END = SCENES.scale.from + SCALE.irisToDark[1] - SCENES.cta.from; // 8
-/**
- * the iris waits 3 f after the scale's last cue (irisToDark[0], confirm + whoosh-rev,
- * node solid green) so the green node and the first beat of its ping read before
- * the iris swallows them (integration pass: it used to start 1 f BEFORE the cue)
- */
-const IRIS_START = SCENES.scale.from + SCALE.irisToDark[0] + 3 - SCENES.cta.from; // −4
-export const CTA_LOCAL = {
-  /** the dark iris opens from FLOW_END over 12 frames, ending with the white act (−4 → 8) */
-  iris: [IRIS_START, IRIS_END] as const,
-  /** the eyes come out of black first (frames) */
-  eyes: [0, 7] as const,
-  /** radial reveal from the eyes, inside the hero window (4 → 30) */
-  reveal: [CTA.robotIn[0] + 4, CTA.robotIn[1]] as const,
-  /** the site's liquid entry tear settles onto the figure (frames 0 → 24; liquid 0 → 18) */
-  entryTear: [0, 24] as const,
-  liquid: [0, 18] as const,
-  /** corner marks bracket the line right after its last word (41) */
-  marks: b(2.75),
-  /** ON the converge downbeat: a first filament burst (45 → 49) … */
-  tearKick: [CTA.converge[0], CTA.converge[0] + 4] as const,
-  /** … then the tear builds while the figure is erased to the halo (45 → 69) */
-  tear: [CTA.converge[0] + 4, CTA.logoImpact - 6] as const,
-  erase: [CTA.converge[0], CTA.logoImpact - 6] as const,
-  /** words hold until 61, swell for 3 f, leave at 64 + 0.35 f each, 8 f flights (all in by 74.5) */
-  collapse: { from: b(4.25), step: 0.35, dur: 8, anticip: 3 },
-  /** the corner marks travel in behind the words (66 → 74) */
-  marksIn: { from: b(4.25) + 2, dur: 8 },
-  /** streaks + motes pour in from the frame edges (45 → 75) */
-  streaks: [CTA.converge[0], CTA.logoImpact] as const,
-  /** the hook's ring waves, reversed: three rings contract into P (start radius × reach) */
-  rings: [1.25, 1.1, 0.95] as const,
-  /** the eyes' last light (frames): glows up as they tear (62 → 66), then slides into the core (66 → 71) */
-  eyeGlow: [62, 66, 71] as const,
-  /** the core gathers (60 → 75) */
-  core: [b(4), CTA.logoImpact] as const,
-  /** anticipation: everything pulls back (68 → 75) */
-  pullBack: [b(4.5), CTA.logoImpact] as const,
-  /** impact accents (frames) */
-  shake: 6,
-  ring: [CTA.logoImpact, CTA.logoImpact + 20] as const,
-  /** halo breath starts under the end card */
-  breath: CTA.button + 10,
-  /** dust clears before the hold */
-  dustOut: [b(8), CTA.finalHold] as const,
-};
 const K = CTA_LOCAL;
 
 /* ── geometry ─────────────────────────────────────────────────────── */
@@ -118,8 +70,8 @@ function geo(L: Layout) {
      */
     haloR: L.pick([720, 570, 350] as const, [590, 660, 450] as const),
     haloPow: L.pick(2, 2.2),
-    /** the film's overlay grain takes ~14 levels off the light: this puts them back */
-    haloGain: L.pick(1.06, 1.08),
+    /** light gain (1 = the art's own backlight level) */
+    haloGain: L.pick(1.0, 1.0),
     /**
      * 16:9 only: once the logo is in, the light's underside settles under the
      * wordmark to seat the button on the night — start y at the axis,

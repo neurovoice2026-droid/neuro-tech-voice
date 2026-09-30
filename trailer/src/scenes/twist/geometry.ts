@@ -7,45 +7,10 @@ import { noise2D } from '@remotion/noise';
 import { CALL_ORB_START } from '../../lib/handoff';
 import type { Layout } from '../../lib/layout';
 import { EASE, tween } from '../../lib/motion';
-import { TWIST } from '../../timing';
+import { TWIST, TWIST_LOCAL } from '../../timing';
 
-/* LOCAL TIMING - hoist into timing.ts (values are TWIST-local frames; b() = beats) */
-export const TW = {
-  /** anticipation before the break: the line gathers itself (t -8 → 0) */
-  gather: -8,
-  /** "closed" lets go of the hook line and slides into "Closed" (per-letter +0.35) */
-  closedSlide: 4,
-  /** landing (lock-in) frame of the FIRST letter of "is", "for", "the" */
-  wordLand: [16.5, 19.5, 22.5] as const,
-  /** gap between the landings of neighbouring letters inside a word */
-  letterGap: 0.7,
-  /** "door," lands left to right and its comma locks ON the slam */
-  doorGap: 0.55,
-  /** no shard turns round before this (the blast has to read first) */
-  turnMin: 8.5,
-  /** the phone emerges from the dark once "closed" has left it */
-  phoneReveal: [7, 17] as const,
-  /** the on-phone avatar settles from its UI size to CALL_ORB_START/S */
-  avatarShrink: [TWIST.pushToPhone[0] + 12, TWIST.pushToPhone[1] - 2] as const,
-  /** the door creaks a little wider before it swings (anticipation) */
-  doorCreak: 7,
-  /** the swing itself: slow start, accelerating into the slam (EASE.in4) */
-  doorSwing: [12, TWIST.doorSlam] as const,
-  /** screen: line expands, then opens to the full screen */
-  screenLine: [TWIST.phoneOn, TWIST.phoneOn + 3] as const,
-  screenOpen: [TWIST.phoneOn + 2, TWIST.phoneOn + 14] as const,
-  /** phone UI rows */
-  uiLabel: TWIST.phoneOn + 6,
-  uiNumber: TWIST.phoneOn + 10,
-  /** camera: slow push over the hold */
-  push: [TWIST.doorSlam - 2, TWIST.pushToPhone[0] + 2] as const,
-  /** pull-back anticipation of the dive (peaks at [1]) */
-  diveDip: [TWIST.pushToPhone[0] - 5, TWIST.pushToPhone[0] + 3, TWIST.pushToPhone[0] + 10] as const,
-  /** camera aims at the avatar (pan) — leads the zoom */
-  diveAim: [TWIST.pushToPhone[0], TWIST.pushToPhone[1] - 4] as const,
-  /** phone vibration at the second burst */
-  buzz: [TWIST.ring2, TWIST.ring2 + 12] as const,
-};
+/** Twist fine-cut timing lives in timing.ts (TWIST_LOCAL). */
+export const TW = TWIST_LOCAL;
 
 export type Geo = ReturnType<typeof twistGeo>;
 

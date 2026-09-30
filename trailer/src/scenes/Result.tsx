@@ -40,7 +40,7 @@ import { useLayout } from '../lib/layout';
 import { EASE, mixHex, tween } from '../lib/motion';
 import { useSceneFrame } from '../lib/scene';
 import { C, FONT, NIGHT_ROOM } from '../theme';
-import { b, RESULT } from '../timing';
+import { RESULT, RESULT_LOCAL } from '../timing';
 import { DATE_FONT } from './result/Card';
 import { Calendar, eventLookAt } from './result/Calendar';
 import { EventFace, hexA } from './result/Event';
@@ -51,62 +51,6 @@ import { calPoseAt, camAt, camTypeAt, diveAt, type MarkMetrics } from './result/
 import { Motes } from './result/Motes';
 import { Divider, LetterRise, Owner } from './result/Split';
 
-// LOCAL TIMING - hoist into timing.ts
-export const RESULT_LOCAL = {
-  /** the night room knocks the call back (out-curve) */
-  roomIn: [RESULT.lift, b(4 / 3)] as const, // 0 → 20
-  /** the lift spring starts here, after a 2-frame anticipation dip */
-  liftGo: RESULT.lift + b(1 / 8), // 2
-  /** the booked-pill wash blooms around the mark */
-  plateIn: [RESULT.lift + b(1 / 15), RESULT.lift + b(0.3)] as const, // 1 → 5
-  /** " at" folds out of the mark */
-  markCollapse: [RESULT.lift + b(1 / 8), RESULT.lift + b(0.4)] as const, // 2 → 6
-  /** the plate grows pill → card; the mark's words travel onto the card row */
-  morph: [RESULT.lift + b(1 / 8), RESULT.lift + b(2 / 3)] as const, // 2 → 10
-  /** BOOKED + the ember dot rise in */
-  cardReveal: [RESULT.lift + b(0.4), RESULT.lift + b(0.8)] as const, // 6 → 12
-  /** the registered words cross-fade: the mark (Inter) → the card row (Instrument Sans) */
-  markOut: [RESULT.lift + b(0.6), RESULT.lift + b(5 / 6)] as const, // 9 → 13
-  /** the card pulls back before the throw */
-  windUp: [RESULT.fly - b(0.2), RESULT.fly] as const, // 12 → 15
-  /** the sheet's entry spring (3-frame anticipation before it) */
-  sheetIn: RESULT.calendarIn, // 8
-  /** hairlines, labels, hours, bookings build (all in by t≈13–15) */
-  build: [RESULT.calendarIn + b(1 / 15), RESULT.fly] as const, // 9 → 15
-  /** WED highlight */
-  wedIn: [RESULT.calendarIn + b(2 / 15), RESULT.calendarIn + b(0.4)] as const, // 10 → 14
-  /** the dashed slot */
-  slotIn: [RESULT.calendarIn + b(2 / 15), RESULT.calendarIn + b(1 / 3)] as const, // 10 → 13
-  /** …which beckons before the throw */
-  beckon: [RESULT.calendarIn + b(0.2), RESULT.fly] as const, // 11 → 15
-  /** the camera pushes into the close-up with the throw */
-  camIn: [RESULT.fly, RESULT.land + b(2 / 15)] as const, // 15 → 32
-  /** the landing shockwave through the sheet */
-  shock: [RESULT.land, RESULT.land + b(1.4)] as const, // 30 → 51
-  /** the pill's ping on the event's dot */
-  ping: [RESULT.land + b(0.2), RESULT.land + b(1.2)] as const, // 33 → 48
-  /** the calendar recomposes into its half (its anticipation starts 3 f earlier, t 36) */
-  recompose: RESULT.land + b(0.6), // 39
-  recomposeAnticip: b(0.2), // 3
-  /** the split hairline starts drawing */
-  divider: RESULT.split - b(0.25), // 41
-  /** the split's grade: the owner's half cools and darkens */
-  splitGrade: [RESULT.split - b(0.4), RESULT.split + b(14 / 15)] as const, // 39 → 59
-  /** the titles plane moves above the sheet (it sits under it while the sheet recomposes) */
-  titlesOver: RESULT.split + b(1 / 3), // 50
-  /** the owner lockup pops (after "Asleep." lands) */
-  ownerIn: RESULT.split + b(0.2), // 48
-  /** anticipation pulse on the event (peak) */
-  pulse: RESULT.toWhite[0] - b(1 / 3), // 100
-  /** the dive into the event */
-  dive: [RESULT.toWhite[0] - b(1 / 3), RESULT.toWhite[1] - b(0.2)] as const, // 100 → 117
-  /** the event's rect opens past the frame edges (camera does most of it; this is the last few ×) */
-  open: [RESULT.toWhite[0], RESULT.toWhite[1] - b(4 / 15)] as const, // 105 → 116
-  /** the event's fill blooms from its centre: ember → soft ember → white */
-  bloom: [RESULT.toWhite[0] + b(2 / 15), RESULT.toWhite[1] - b(0.2)] as const, // 107 → 117
-  /** the frame is entirely white from here */
-  whiteFull: RESULT.toWhite[1] - b(0.2), // 117
-};
 export type ResultTiming = typeof RESULT_LOCAL;
 
 /** the event's rect opens past the frame */

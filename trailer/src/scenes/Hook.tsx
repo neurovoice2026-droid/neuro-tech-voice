@@ -17,7 +17,7 @@ import { useLayout } from '../lib/layout';
 import { aos, breathe, EASE, mix, mixHex, SPRING, tween } from '../lib/motion';
 import { useSceneFrame } from '../lib/scene';
 import { C, FONT, TRACK } from '../theme';
-import { b, FPS, HOOK, SCENES } from '../timing';
+import { FPS, HOOK, HOOK_LOCAL, SCENES } from '../timing';
 import { ClockLockup, type Roll } from './hook/Clock';
 import { Rings } from './hook/Rings';
 import { StaggerText } from './hook/StaggerText';
@@ -27,28 +27,6 @@ import { rgba } from './hook/color';
 import { MOTES, Motes } from './hook/Motes';
 import { warpTime } from './hook/warp';
 
-// LOCAL TIMING - hoist into timing.ts
-/** The twist mounts (and starts drawing the line) at 112 = SCENES.twist.from − pre.
- *  HOOK.anticipation = b(7.5) rounds to 113; it should be b(7.5) − 1 = 112 = this. */
-const HANDOFF = SCENES.twist.from - SCENES.twist.pre; // 112 (global = hook-local: the hook starts at 0)
-const HOOK_LOCAL = {
-  dustIn: [0, 12] as const, // the faint motes come up out of the black
-  fieldIn: 3, // the cover field starts to bloom
-  orbIn: b(0.25), // 4  — the colon orb lights, alone in the black
-  figuresIn: b(0.6), // 9  — "00 ◉ 00" unfolds dimly out of the orb
-  digitStagger: 2, // frames between the four strips leaving
-  /** Every ring attack leaves this many frames before its beat, so the beat frame is the peak. */
-  ringLead: 1,
-  ringB: b(3) + 7, // 52 — second ring of the burst
-  waveIn: b(2.5), // 38 — the dotted wave row draws out from the centre
-  freezeEase: 3, // frames for world time to stop
-  frozenRate: 0.04, // world speed once frozen (the rings creep, never quite stop)
-  anticipation: HANDOFF, // 112 — the inhale; the hanging rings/wave finish decaying
-  /** 112 → 120: the world defocuses and is gone ON the shatter downbeat (1.5 % left at 119). */
-  out: [HANDOFF, SCENES.hook.to] as const,
-  /** Last frame the hook draws the line is textHandoff − 1. */
-  textHandoff: HANDOFF, // 112 (global)
-};
 
 /** A 1-frame light hit that decays (peaks on `at`). */
 const hit = (f: number, at: number, decay = 4) => (f < at - 1 ? 0 : f < at ? 0.35 : Math.exp(-(f - at) / decay));

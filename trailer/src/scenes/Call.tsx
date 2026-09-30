@@ -37,7 +37,7 @@ import { useLayout } from '../lib/layout';
 import { aos, EASE, SPRING, springAt, tween } from '../lib/motion';
 import { useSceneFrame } from '../lib/scene';
 import { NIGHT_ROOM } from '../theme';
-import { b, CALL } from '../timing';
+import { CALL, CALL_LOCAL } from '../timing';
 import { Bokeh } from './call/Bokeh';
 import { Lockup } from './call/Lockup';
 import { OwnerRow } from './call/Owner';
@@ -46,51 +46,6 @@ import { caretBlink, Chips, MarkRow, TypedLine } from './call/Transcript';
 import { LINES, listenAt, ORB_FRAME0, orbVolumeByIndex, typeDur, volumeAt } from './call/voice';
 import { Waveform } from './call/Waveform';
 
-// LOCAL TIMING - hoist into timing.ts
-const LIFT = b(1.25) + 2; // 21: the big line starts its dive
-const DIVE = 8; // frames of the dive
-const SWALLOW = LIFT + DIVE; // 29: the orb swallows it
-export const CALL_LOCAL = {
-  /** the night room fades in over the twist's (identical) phone screen */
-  roomIn: [-4, 0] as const,
-  /** the zoomed room (the phone screen) pulls back to the whole stage */
-  roomOpen: [2, b(2.6)] as const,
-  /** pickup breath (site): 1 → .965 power2.in 0.16 s, → 1 expo.out 0.9 s */
-  inhale: [0, 5] as const,
-  exhale: [5, 32] as const,
-  /** the orb leaves the centre for the lockup (spring) */
-  glide: 4,
-  /** the figure pairs slide out from behind the orb (spring), on a 16th */
-  unfold: b(0.75), // 11
-  /** the status row swings in (sign), day label letters follow */
-  statusIn: 0,
-  /** the dotted level row draws out from the centre */
-  waveIn: b(1),
-  /** the big line gathers (4 f) then dives into the orb… */
-  lift: LIFT,
-  dive: DIVE,
-  /** …which swallows it (gulp + ping + level blip)… */
-  swallow: SWALLOW,
-  /** …and emits the phase dot from its crown; the label unfolds 4 f later */
-  emit: SWALLOW + 1, // 30 = b(2), the end of CALL.pickedUpText
-  /** rings: the pickup, then every time Ava starts a line */
-  rings: [0, CALL.lines[0].at, CALL.lines[2].at, CALL.lines[4].at] as const,
-  /** the AI-disclosure underline draws once "an AI assistant" is typed */
-  disclose: CALL.lines[0].at + Math.ceil('This is Ava, an AI assistant'.length / CALL.typeRate),
-  /** the stage's floor (owner / call-log row) draws in */
-  ownerIn: b(3), // 45
-  /** status + phase label dim to .58 so the transcript is the single read */
-  dim: [b(3.5), b(4.5)] as const, // 53 → 68
-  /** camera drift settles to rest before the mark is handed over */
-  camSettle: [b(10), b(13)] as const,
-  /** the payoff beat: the mark presses (3 f) and springs back — exactly 1 again by markHide − 1 */
-  payoff: CALL.bookedMark + 1, // 198
-  /** once the mark starts turning ember, everything but the mark recedes */
-  exit: [CALL.bookedMark - 1, b(15.2)] as const, // 196 → 228 (scale, rack focus)
-  exitFade: [CALL.bookedMark - 1, b(15.2) - 2] as const, // 196 → 226 (opacity, front-loaded)
-  /** the result scene draws the mark from here (global 450) */
-  markHide: b(14), // 210
-};
 
 const ROW_A = "You're booked for";
 

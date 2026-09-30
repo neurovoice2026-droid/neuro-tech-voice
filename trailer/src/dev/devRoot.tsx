@@ -21,7 +21,7 @@ export function devRoot(key: SceneKey, Scene: React.FC) {
         <Sequence from={s.from - s.pre} durationInFrames={s.to + s.post - (s.from - s.pre)}>
           <Scene />
         </Sequence>
-        <Grain opacity={key === 'scale' ? 0.06 : 0.15} blend={key === 'scale' ? 'multiply' : 'overlay'} />
+        <Grain opacity={key === 'scale' ? 0.025 : 0.15} blend={key === 'scale' ? 'multiply' : 'overlay'} />
       </AbsoluteFill>
     );
   };

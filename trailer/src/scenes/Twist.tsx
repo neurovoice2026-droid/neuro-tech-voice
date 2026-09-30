@@ -16,16 +16,7 @@
  * door + phone 0.6, text 1.0, dust 1.4.
  */
 
-// LOCAL TIMING - hoist into timing.ts
-// The block lives in ./twist/geometry.ts as `TW` (the sub-components read it
-// too, and a copy here would be a circular import): gather −8, closedSlide 4,
-// wordLand [16.5, 19.5, 22.5] (is, for, the), letterGap 0.7, doorGap 0.55
-// ("door," locks L→R, comma on doorSlam), turnMin 8.5, phoneReveal [7, 17],
-// avatarShrink [pushToPhone0+12, pushToPhone1−2], doorCreak 7, doorSwing
-// [12, doorSlam], screenLine [phoneOn, +3], screenOpen [phoneOn+2, +14],
-// uiLabel phoneOn+6, uiNumber phoneOn+10, push [doorSlam−2, pushToPhone0+2],
-// diveDip [pushToPhone0−5, +3, +10], diveAim [pushToPhone0, pushToPhone1−4],
-// buzz [ring2, ring2+12].
+// Fine-cut timing: TWIST_LOCAL in src/timing.ts (read here via ./twist/geometry `TW`).
 import React, { useMemo } from 'react';
 import { AbsoluteFill } from 'remotion';
 import { Dust } from '../components/Dust';
