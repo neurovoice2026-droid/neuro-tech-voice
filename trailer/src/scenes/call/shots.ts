@@ -111,12 +111,12 @@ export function camAt(t: number, L: Layout): Cam {
   let focus: Pt = { x: F.lock.x, y: F.lock.y };
 
   if (s.kind === 'E') {
-    z = 1 + 0.02 * tween(t, [8, CALL_LOCAL.pushIn[0]], [0, 1], EASE.inOut);
+    z = 1 + 0.04 * tween(t, [8, CALL_LOCAL.pushIn[0]], [0, 1], EASE.inOut);
   } else if (s.kind === 'P') {
     const [p0, p1] = CALL_LOCAL.pushIn;
     // anticipation: a 1.5 % pull-back over the first 3 f, released as the push takes over
     const dip = tween(t, [p0, p0 + 3], [0, 1], EASE.inOut) * (1 - tween(t, [p0 + 3, p0 + 9], [0, 1], EASE.inOut));
-    z = (1.02 - 0.02 * tween(t, [p0, p1], [0, 1], EASE.inOut)) * (1 - 0.015 * dip);
+    z = (1.04 - 0.04 * tween(t, [p0, p1], [0, 1], EASE.inOut)) * (1 - 0.015 * dip);
     S = 1 + 0.06 * pushAt(t);
     const k = pushAt(t);
     focus = { x: lerp(F.lock.x, F.A.x, k), y: lerp(F.lock.y, F.A.y, k) };
