@@ -2,9 +2,13 @@
 /**
  * Neuro Tech Voice trailer — the voices.
  *
- * Synthesises every spoken line in scripts/voice-lines.json with one of two
+ * Produces every spoken line in scripts/voice-lines.json with one of three
  * engines:
  *
+ *   · FILES (preferred for the final cut) — your own recordings or lines
+ *     generated on fish.audio / ElevenLabs, dropped into trailer/voice-src/
+ *     as <id>.wav|mp3|m4a|ogg|flac (see voice-src/README.md). Used
+ *     automatically when every line has a file there.
  *   · FISH AUDIO (ultra-realistic, used when FISH_API_KEY is set) — the
  *     fish.audio TTS API (model s2-pro by default, FISH_MODEL to change),
  *     one voice model per role: FISH_AVA_VOICE, FISH_CALLER_VOICE,
@@ -29,7 +33,9 @@
  * model) into .cache/, or pass KOKORO_DIR=/path/to/kokoro-int8-en-v0_19.
  * The generated WAVs + TS ARE committed, so rendering never needs the model.
  *
- *   npm run voice                       (Fish if FISH_API_KEY is set, else Kokoro)
+ *   npm run voice                       (files if voice-src/ is complete, else Fish
+ *                                        if FISH_API_KEY is set, else Kokoro)
+ *   npm run voice -- --engine=files     (force files; a missing one is an error)
  *   npm run voice -- --engine=kokoro    (force the offline engine)
  *   npm run voice -- --list             (list fish.audio voice candidates)
  */
@@ -194,6 +200,29 @@ function fishTTS(text, voice, speed) {
   }
 }
 
+
+/* ── your own files (voice-src/) ───────────────────────────────── */
+const SRC = path.join(ROOT, 'voice-src');
+const EXTS = ['wav', 'mp3', 'm4a', 'aac', 'ogg', 'opus', 'flac', 'webm'];
+const srcFile = (id) => EXTS.map((e) => path.join(SRC, `${id}.${e}`)).find((f) => existsSync(f));
+
+/** Decode any audio file to mono float (WAV natively, the rest through Remotion's ffmpeg). */
+function decodeFile(file) {
+  if (file.endsWith('.wav')) {
+    try {
+      return decodeWav(readFileSync(file));
+    } catch {
+      /* fall through to ffmpeg (e.g. a compressed WAV) */
+    }
+  }
+  const wav = execFileSync('npx', ['remotion', 'ffmpeg', '-hide_banner', '-loglevel', 'error', '-i', file, '-ac', '1', '-ar', '48000', '-c:a', 'pcm_s16le', '-f', 'wav', '-'], {
+    cwd: ROOT,
+    env: { ...process.env, NTV_SKIP_SFX: '1' },
+    maxBuffer: 1 << 28,
+  });
+  return decodeWav(wav);
+}
+
 /* ── tiny DSP ──────────────────────────────────────────────────── */
 class Biquad {
   constructor(type, f, q, sr) {
@@ -350,7 +379,8 @@ const t0 = Date.now();
 const argv = process.argv.slice(2);
 const cfg = JSON.parse(readFileSync(path.join(HERE, 'voice-lines.json'), 'utf8'));
 const forced = argv.find((a) => a.startsWith('--engine='))?.split('=')[1];
-const ENGINE = forced ?? (process.env.FISH_API_KEY ? 'fish' : 'kokoro');
+const haveAllFiles = cfg.lines.every((l) => srcFile(l.id));
+const ENGINE = forced ?? (haveAllFiles ? 'files' : process.env.FISH_API_KEY ? 'fish' : 'kokoro');
 
 if (argv.includes('--list')) {
   if (!process.env.FISH_API_KEY) throw new Error('--list needs FISH_API_KEY');
@@ -363,7 +393,12 @@ if (argv.includes('--list')) {
 
 let synth;
 const chosen = {};
-if (ENGINE === 'fish') {
+if (ENGINE === 'files') {
+  const missing = cfg.lines.filter((l) => !srcFile(l.id)).map((l) => l.id);
+  if (missing.length) throw new Error(`[voice] voice-src/ is missing: ${missing.join(', ')}`);
+  for (const role of Object.keys(cfg.voices)) chosen[role] = { engine: 'files', dir: 'voice-src' };
+  synth = (line) => decodeFile(srcFile(line.id));
+} else if (ENGINE === 'fish') {
   if (!process.env.FISH_API_KEY) throw new Error('--engine=fish needs FISH_API_KEY');
   const voices = Object.fromEntries(Object.entries(cfg.voices).map(([role, v]) => [role, fishVoice(role, v)]));
   for (const [role, v] of Object.entries(voices)) chosen[role] = { engine: 'fish', model: process.env.FISH_MODEL || 's2-pro', id: v.id, title: v.title };

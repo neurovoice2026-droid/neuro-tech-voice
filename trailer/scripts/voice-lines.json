@@ -43,47 +43,56 @@
     {
       "id": "call-1",
       "voice": "ava",
-      "say": "Thank you for calling Northside Studio. This is Ava, an AI assistant. How can I help you today?"
+      "say": "Thank you for calling Northside Studio. This is Ava, an AI assistant. How can I help you today?",
+      "direction": "Ava, answering at 3 a.m. and still bright: warm, smiling, calm and professional; a soft, friendly lift on \"How can I help you today?\""
     },
     {
       "id": "call-2",
       "voice": "caller",
-      "say": "Hi! Could I come in on Wednesday afternoon?"
+      "say": "Hi! Could I come in on Wednesday afternoon?",
+      "direction": "Caller (on the phone): a little tentative and hopeful, slightly hushed \u2014 it's the middle of the night; relaxed, natural."
     },
     {
       "id": "call-3",
       "voice": "ava",
-      "say": "Of course. I have three p.m., or four thirty. Which suits you better?"
+      "say": "Of course. I have three p.m., or four thirty. Which suits you better?",
+      "direction": "Ava: helpful and bright; a tiny beat after \"Of course.\"; offers the two times naturally, a light upturn on \"Which suits you better?\""
     },
     {
       "id": "call-4",
       "voice": "caller",
-      "say": "Three o'clock is perfect."
+      "say": "Three o'clock is perfect.",
+      "direction": "Caller: pleased and relieved, a small smile in the voice."
     },
     {
       "id": "call-5",
       "voice": "ava",
-      "say": "Lovely. You're booked for Wednesday at three p.m."
+      "say": "Lovely. You're booked for Wednesday at three p.m.",
+      "direction": "Ava: warm, satisfied, reassuring \u2014 the payoff. A gentle smile on \"Lovely.\""
     },
     {
       "id": "kb-1",
       "voice": "caller2",
-      "say": "Do you do home visits?"
+      "say": "Do you do home visits?",
+      "direction": "Second caller (on the phone): curious, casual, friendly."
     },
     {
       "id": "kb-2",
       "voice": "ava",
-      "say": "I don't have an answer for that, and I don't want to guess. I'll ask the team to call you back today."
+      "say": "I don't have an answer for that, and I don't want to guess. I'll ask the team to call you back today.",
+      "direction": "Ava: honest and empathetic, never robotic \u2014 a hint of apology on \"I don't want to guess\", then confident and kind on \"I'll ask the team to call you back today.\""
     },
     {
       "id": "cta-1",
       "voice": "ava",
-      "say": "AI voice agents that book your customers. Twenty four seven."
+      "say": "AI voice agents that book your customers. Twenty four seven.",
+      "direction": "Ava as the trailer voice-over (not on a phone): intimate, confident, cinematic, a little slower; a deliberate pause before \"Twenty four seven.\""
     },
     {
       "id": "cta-2",
       "voice": "ava",
-      "say": "Neuro Tech Voice."
+      "say": "Neuro Tech Voice.",
+      "direction": "Ava voice-over: calm, proud brand sign-off."
     }
   ]
 }
