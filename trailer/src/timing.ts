@@ -32,8 +32,10 @@ export const VERTICAL = { width: 1080, height: 1920 } as const;
 export const vFrames = (id: VoiceId) => VOICE.lines[id].frames;
 /** Frame offset (from the line's start) at which spoken word `k` begins. */
 export const vWord = (id: VoiceId, k: number) => Math.round(VOICE.lines[id].words[k].t * FPS);
-/** A caption: shown from spoken word `word` of its line. */
-export type Caption = { text: string; word: number };
+/** A caption: shown from spoken word `word` of its line. Caption word j is
+ *  revealed on spoken word `map[j]` (when the caption's words differ from the
+ *  spoken ones, e.g. "15:00" on "three"), else on spoken word `word + j`. */
+export type Caption = { text: string; word: number; map?: readonly number[] };
 /** Snap a frame count UP to the next half-beat / whole beat / bar (so turns land on the grid). */
 const upHalf = (f: number) => Math.round(Math.ceil(f / (BEAT / 2) - 1e-9) * (BEAT / 2));
 const upBeat = (f: number) => Math.round(Math.ceil(f / BEAT - 1e-9) * BEAT);
@@ -46,7 +48,7 @@ const TURN_GAP = 7;
 const CALL_AT: number[] = [];
 {
   const ids: VoiceId[] = ['call-1', 'call-2', 'call-3', 'call-4', 'call-5'];
-  let t = b(1.5); // Ava answers ~0.75 s after the pickup
+  let t = b(2.5); // Ava answers ~1.25 s after the pickup ("Picked up on the first ring." reads first)
   for (const id of ids) {
     CALL_AT.push(t);
     t = upHalf(t + vFrames(id) + TURN_GAP);
@@ -59,18 +61,19 @@ const RESULT_LEN = b(10);
 const KB_ASK = b(2);
 const KB_SCAN0 = upHalf(KB_ASK + Math.round(vFrames('kb-1') * 0.6));
 const KB_MISS = KB_SCAN0 + b(1.5);
-const KB_ANSWER = KB_MISS + 7;
-const KB_CLOSE = upHalf(KB_ANSWER + vFrames('kb-2') + 4);
+/* (a longer regenerated kb-1 must still leave its caption ≥ 15 f on screen after the last word) */
+const KB_ANSWER = Math.max(KB_MISS + 7, KB_ASK + vFrames('kb-1') + 19);
+const KB_CLOSE = upHalf(KB_ANSWER + vFrames('kb-2') + 10); // the last caption gets a beat before the closing takes the frame
 const SCALE_LEN = b(10);
 /** CTA: Ava's line, then the converge; the logo lands on a bar downbeat. */
 const CTA_LINE = b(1);
 const CTA_CONVERGE0 = Math.max(b(10), upBeat(CTA_LINE + vFrames('cta-1') + 8));
 const CTA_IMPACT = CTA_CONVERGE0 + b(2);
-/** The knowledge closing title holds ≥ 2.5 beats, then a 1-beat whip. Any
+/** The knowledge closing title holds ≥ 3 beats, then a 1-beat whip. Any
  *  slack needed to put the logo impact on a strong beat (1 or 3 of the bar)
  *  is added to that hold (0–1 beat). */
 const KNOWLEDGE_LEN = (() => {
-  const base = upBeat(KB_CLOSE + b(3.5));
+  const base = upBeat(KB_CLOSE + b(4));
   const impactGlobal = b(8) + b(8) + CALL_LEN + RESULT_LEN + base + SCALE_LEN + CTA_IMPACT;
   const half = 2 * BEAT;
   return base + ((half - (impactGlobal % half)) % half);
@@ -174,7 +177,8 @@ const CALL_LINES: readonly CallLine[] = [
     text: 'Of course. I have 15:00 or 16:30. Which suits you better?',
     captions: [
       { text: 'Of course.', word: 0 },
-      { text: 'I have 15:00 or 16:30.', word: 2 },
+      // "15:00" is revealed on spoken "three", "16:30" on "four"
+      { text: 'I have 15:00 or 16:30.', word: 2, map: [2, 3, 4, 6, 7] },
       { text: 'Which suits you better?', word: 9 },
     ],
   },
@@ -198,9 +202,8 @@ const CALL_LINES: readonly CallLine[] = [
 ];
 export const CALL = {
   pickup: 0,
-  pickedUpText: [0, b(2)] as const, // big kinetic line, then it shrinks into the phase label
-  /** captions reveal word by word with the voice; this is the fallback typing speed */
-  typeRate: 1.6,
+  /** "Picked up on the first ring." — the big kinetic line, until the orb swallows it and Ava speaks */
+  pickedUpText: [0, CALL_AT[0]] as const,
   lines: CALL_LINES,
   /** Slot chips pop as Ava says "three p.m." / "four thirty" (frames after line 3 starts). */
   slotPops: [vWord('call-3', 4), vWord('call-3', 7)] as const,
@@ -289,6 +292,27 @@ export const CTA = {
   finalHold: CTA_HOLD, // from here to the end (1.5 s) nothing moves but grain
 };
 
+/* Captions are timed by the spoken words, so a regenerated voice whose `say`
+ * text drifted from the captions must fail loudly, not silently mis-time. */
+{
+  const norm = (w: string) => w.toLowerCase().replace(/[‘’]/g, "'").replace(/[^a-z0-9']/g, '');
+  const check = (id: VoiceId, caps: readonly Caption[]) => {
+    const words = VOICE.lines[id].words;
+    for (const c of caps) {
+      const n = c.text.split(' ').length;
+      const idx = c.map ?? Array.from({ length: n }, (_, j) => c.word + j);
+      const ok =
+        c.word < words.length &&
+        idx.length === n &&
+        idx.every((k) => k < words.length) &&
+        (c.map !== undefined || norm(c.text.split(' ')[0]) === norm(words[c.word].w));
+      if (!ok) throw new Error(`caption drift in ${id}`);
+    }
+  };
+  for (const l of CALL.lines) check(l.voice, l.captions);
+  check(KNOWLEDGE.answerVoice, KNOWLEDGE.answerCaptions);
+}
+
 /* ================================================================ *
  * FINE CUTS — every scene's internal timing, derived from the beat
  * constants above (b() = beats). Values are LOCAL to their scene.
@@ -356,47 +380,41 @@ export const TWIST_LOCAL = {
 };
 
 /* ── CALL — fine cuts (call-local frames) ──────────────────────── */
-const CALL_LIFT = b(1.25) + 2; // 21: the big line starts its dive
-const CALL_DIVE = 8; // frames of the dive
-const CALL_SWALLOW = CALL_LIFT + CALL_DIVE; // 29: the orb swallows it
+/** the orb swallows the big line 1 f before Ava's first word… */
+const CALL_SWALLOW = CALL_AT[0] - 1;
+/** …after a 6-frame dive (the line gathers 3 f before it) */
+const CALL_DIVE = 6;
+const CALL_LIFT = CALL_SWALLOW - CALL_DIVE;
+/** "This is Ava" — the establishing shot pushes into Ava's close-up */
+const CALL_S2 = CALL.lines[0].at + vWord('call-1', 6);
 export const CALL_LOCAL = {
   /** the night room fades in over the twist's (identical) phone screen */
   roomIn: [-4, 0] as const,
   /** the zoomed room (the phone screen) pulls back to the whole stage */
   roomOpen: [2, b(2.6)] as const,
-  /** pickup breath (site): 1 → .965 power2.in 0.16 s, → 1 expo.out 0.9 s */
-  inhale: [0, 5] as const,
-  exhale: [5, 32] as const,
   /** the orb leaves the centre for the lockup (spring) */
   glide: 4,
-  /** the figure pairs slide out from behind the orb (spring), on a 16th */
-  unfold: b(0.75), // 11
-  /** the status row swings in (sign), day label letters follow */
+  /** the figure pairs spring OUT of the orb right after the gulp (never while the hero line lands) */
+  unfold: CALL_SWALLOW + 1,
+  /** the CLOSED sign swings in (the door callback) */
   statusIn: 0,
-  /** the dotted level row draws out from the centre */
-  waveIn: b(1),
-  /** the big line gathers (4 f) then dives into the orb… */
+  /** the big line gathers (3 f) then dives into the orb… */
   lift: CALL_LIFT,
   dive: CALL_DIVE,
-  /** …which swallows it (gulp + ping + level blip)… */
+  /** …which swallows it (gulp + ping + level blip + pop) */
   swallow: CALL_SWALLOW,
-  /** …and emits the phase dot from its crown; the label unfolds 4 f later */
-  emit: CALL_SWALLOW + 1, // 30 = b(2), the end of CALL.pickedUpText
-  /** rings: the pickup, then every time Ava starts a line */
-  rings: [0, CALL.lines[0].at, CALL.lines[2].at, CALL.lines[4].at] as const,
-  /** the AI-disclosure underline draws as Ava finishes saying "an AI assistant" */
-  disclose: CALL.lines[0].at + vWord('call-1', 12) - 4,
-  /** the stage's floor (owner / call-log row) draws in */
-  ownerIn: b(3), // 45
-  /** status + phase label dim to .58 so the transcript is the single read */
-  dim: [b(3.5), b(4.5)] as const, // 53 → 68
+  /** rings: the pickup (attack 1 f before the beat), then every time Ava starts a line */
+  rings: [-1, CALL.lines[0].at, CALL.lines[2].at, CALL.lines[4].at] as const,
+  /** the AI-disclosure underline draws as Ava says "an AI assistant" */
+  disclose: [CALL.lines[0].at + vWord('call-1', 9) - 2, CALL.lines[0].at + vWord('call-1', 12) - 4] as const,
+  /** establishing → Ava's close-up, as she says "This is Ava" */
+  pushIn: [CALL_S2 - 6, CALL_S2 + 14] as const,
   /** camera drift settles to rest before the mark is handed over */
   camSettle: [CALL_LEN - b(4), CALL_LEN - b(1)] as const,
   /** the payoff beat: the mark presses (3 f) and springs back — exactly 1 again by markHide − 1 */
   payoff: CALL.bookedMark + 1,
-  /** once Ava has finished speaking, everything but the mark recedes */
-  exit: [CALL_LEN - 14, CALL_LEN + 18] as const, // scale, rack focus (into the result's pre-roll)
-  exitFade: [CALL_LEN - 14, CALL_LEN + 16] as const, // opacity, front-loaded
+  /** everything but the mark (and its glow) blows away towards the lens; the room stays */
+  blowAway: [CALL_LEN - 6, CALL_LEN - 1] as const,
   /** the result scene draws the mark from here (= the call's end) */
   markHide: CALL_LEN,
 };
@@ -574,10 +592,44 @@ export const CTA_LOCAL = {
 };
 
 /* ── KNOWLEDGE — fine cuts (knowledge-local frames) ────────────── */
-export const KNOWLEDGE_LOCAL = {
-  /** the white bloom from the result settles into the stage */
-  stageIn: [0, b(0.75)] as const,
-};
+export const KNOWLEDGE_LOCAL = (() => {
+  const K = KNOWLEDGE;
+  return {
+    /** the white bloom from the result settles into the stage (t 0 is pure white: the hit) */
+    stageIn: [0, b(0.75)] as const,
+    /** the heading rises out just before the caller speaks */
+    headingOut: [K.ask - 8, K.ask - 2] as const,
+    /** the orb rises from the heading's place; the status pill pops ("Listening") */
+    orbIn: K.ask - 4,
+    statusIn: K.ask - 4,
+    /** the question leaves (it holds until answer − 2; gone before Ava's first word) */
+    questionOut: [K.answer - 4, K.answer - 1] as const,
+    /** dotted beams draw tile → orb: the window, and the stagger between beams */
+    beams: [K.scan[0], K.scan[0] + 21] as const,
+    beamStagger: 2,
+    /** match bars: tile i starts at fills[0] + i · fillStep, lasting fillDur */
+    fills: [K.scan[0] + 3, 2.4, 18] as const,
+    /** the status dot pulses 1.6× three times, 8 f apart, from scan[0] */
+    dotPulse: [K.scan[0], 8, 3] as const,
+    /** the five 60 % ticks blink 1 → .3 → 1 as the scan comes up short */
+    tickBlink: [K.miss - 10, K.miss] as const,
+    /** the orb drifts to the grey 'miss' palette; the peek page's bars collapse */
+    toGrey: [K.miss, K.miss + 12] as const,
+    peekCollapse: [K.miss, K.miss + 8] as const,
+    /** the tiles step back (.55) so the answer leads */
+    dimDocs: [K.answer, K.answer + 10] as const,
+    /** "Your fallback message" */
+    meta: K.answer + vWord(K.answerVoice, 0) + 8,
+    /** the stage recedes (.12, blur, .97) under the closing title */
+    recede: [K.closing - 4, K.closing + 6] as const,
+    closingKey: K.closing + 18, // after the last of its 7 words is up (2.5 f stagger)
+    closingPush: [K.closing, K.out[0]] as const,
+    /** the whip: a 3 f counter-move, then the stage leaves; clean white from `white` */
+    whipAnticip: [K.out[0] - 3, K.out[0]] as const,
+    whip: [K.out[0], K.out[1] - 3] as const,
+    white: K.out[1] - 2,
+  };
+})();
 
 /* ---------------------------------------------------------------- *
  * SOUND — every cue is an absolute frame on the timeline, computed from
@@ -586,6 +638,7 @@ export const KNOWLEDGE_LOCAL = {
  * SFX files are normalised to a -12 dBFS peak, the bed to -20 dBFS, the
  * voices to -5 dBFS (dialogue leads the mix; the bed ducks under it).
  * ---------------------------------------------------------------- */
+export const PK = { whoosh: 10, whooshSoft: 7, whooshRev: 16, riserShort: 10, riser: 28 } as const;
 const at = (scene: SceneKey, local: number) => SCENES[scene].from + local;
 const sfx = (name: string) => `sfx/${name}`;
 
@@ -646,6 +699,7 @@ export const CUES: Cue[] = [
   { at: at('twist', TWIST.ring2), file: sfx('ring.wav') },
   // CALL (the voices themselves are in VOICES)
   { at: at('call', CALL.pickup), file: sfx('pickup.wav') },
+  { at: at('call', CALL_LOCAL.swallow), file: sfx('pop-2.wav'), vol: 0.7 }, // the gulp
   { at: at('call', CALL.lines[2].at + CALL.slotPops[0]), file: sfx('pop-0.wav'), vol: 0.6 },
   { at: at('call', CALL.lines[2].at + CALL.slotPops[1]), file: sfx('pop-1.wav'), vol: 0.6 },
   { at: at('call', CALL.slotPick), file: sfx('click.wav'), vol: 0.8 },
@@ -663,7 +717,9 @@ export const CUES: Cue[] = [
   ...docTicks,
   { at: at('knowledge', KNOWLEDGE.scan[0]), file: sfx('whoosh-soft.wav'), vol: 0.55 },
   { at: at('knowledge', KNOWLEDGE.miss), file: sfx('land.wav'), vol: 0.6 },
-  { at: at('knowledge', KNOWLEDGE.out[0]), file: sfx('whoosh.wav'), vol: 0.7 },
+  // (no extra tick at statusIn: it coincides with the fifth doc tick)
+  // the whip: the whoosh peaks on its fastest frame
+  { at: at('knowledge', KNOWLEDGE_LOCAL.whip[1] - 1) - PK.whoosh, file: sfx('whoosh.wav'), vol: 0.7 },
   // SCALE
   { at: at('scale', 0), file: sfx('pop-2.wav') },
   ...industryTicks,

@@ -73,6 +73,39 @@ export const BookedMark: React.FC<{
 };
 
 /**
+ * The ember glow under the booked mark (a soft radial, fontSize·11.2 ×
+ * fontSize·2.2, centred on the mark). The call holds it at MARK_GLOW_HANDOFF
+ * through its last frame; the result draws it at the same strength at its t 0
+ * and fades it into its plate — so the glow never pops at the cut.
+ */
+export const MarkGlow: React.FC<{ x?: number; y?: number; fontSize?: number; k: number }> = ({
+  x,
+  y,
+  fontSize,
+  k,
+}) => {
+  const L = useLayout();
+  const M = MARK(L);
+  const fs = fontSize ?? M.fontSize;
+  const cx = x ?? M.x;
+  const cy = y ?? M.y;
+  if (k <= 0.005) return null;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: cx - fs * 5.6,
+        top: cy - fs * 1.1,
+        width: fs * 11.2,
+        height: fs * 2.2,
+        background: `radial-gradient(closest-side, rgba(238,84,35,${(0.42 * k).toFixed(3)}), rgba(238,84,35,${(0.14 * k).toFixed(3)}) 55%, rgba(238,84,35,0))`,
+        pointerEvents: 'none',
+      }}
+    />
+  );
+};
+
+/**
  * The Booked card: the site's call-log pill ("Booked · Wednesday 15:00" —
  * rgb(238 84 35 / .16) wash, #ffb877 text, #ee5423 dot) grown into a card on
  * the cover's plate (#24212c, radius 20). Sized w×h, drawn at its own origin

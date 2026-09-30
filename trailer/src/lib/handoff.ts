@@ -27,11 +27,11 @@ export const CALL_ORB_START = (L: Layout) => ({ x: L.cx, y: L.cy, d: L.pick(300,
 
 /** Transcript geometry in the call (so the result can pick the mark up). */
 export const TRANSCRIPT = (L: Layout) => ({
-  /** current line's vertical centre (single-line lines) */
-  y: L.pick(812, 1236),
-  fontSize: L.pick(54, 58),
+  /** the caption's row A vertical centre (wrapped rows grow downward) */
+  y: L.pick(800, 1180),
+  fontSize: L.pick(76, 68),
   lineHeight: 1.22,
-  maxWidth: L.pick(1300, 900),
+  maxWidth: L.pick(1640, 960),
 });
 
 /**
@@ -45,6 +45,13 @@ export const MARK = (L: Layout) => {
   const T = TRANSCRIPT(L);
   return { x: L.cx, y: T.y + T.fontSize * T.lineHeight, fontSize: T.fontSize };
 };
+
+/**
+ * The ember glow under the mark (<MarkGlow k>) at the cut: the call holds it at
+ * exactly this strength from CALL.bookedMark + 8 to its last frame; the result
+ * draws the same glow at its t 0 and fades it into its plate.
+ */
+export const MARK_GLOW_HANDOFF = 0.6;
 
 /** The Booked card at the moment it is complete (result t ≈ RESULT.fly). Centre + size. */
 export const CARD0 = (L: Layout) => ({

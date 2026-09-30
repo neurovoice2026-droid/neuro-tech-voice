@@ -1,108 +1,88 @@
 /**
- * The call's level, in the site's #trust idiom rather than a generic
- * visualizer: one row of thin round-capped bars (4 px, 8 px gap) that open
- * from the midline both ways, gaussian-weighted to the centre, with dotted
- * tails fading out on both sides. In silence every column is a dot, so the
- * row IS a flat dotted baseline, and the bars grow out of the dots.
+ * The caller's side of the line: a phone-line waveform in callerLit that
+ * fills the reverse shot. It is driven by the caller's REAL envelope
+ * (VOICE.lines[voice].env), so every syllable the viewer hears moves it.
  *
- * The voice radiates: the centre column shows the level now, columns
- * further out show it a little earlier — each word travels outwards.
- * Level + speaker come from the same voice model as the orb (voice.ts).
+ *   bar i  = env(t − line.at − |i − mid|·0.25) × (0.35 + 0.65·noise)
+ *            (the voice radiates from the centre out: outer bars lag)
+ *   telephone character: heights quantised to 6 levels and hard-clipped at
+ *   85 % (a band-limited, compressed line), a 1.5 px baseline at 25 %, and a
+ *   ±4 px deterministic hiss when the line is silent.
  */
 import React from 'react';
 import { noise2D } from '@remotion/noise';
 import { C } from '../../theme';
-import { aos, mixHex, SPRING } from '../../lib/motion';
-import { speakerAt, talkFastAt } from './voice';
+import type { VoiceId } from '../../voice.generated';
+import { env } from './voice';
 
-const smooth01 = (x: number) => {
-  const u = Math.min(1, Math.max(0, x));
-  return u * u * (3 - 2 * u);
-};
+const LEVELS = 6;
+const CLIP = 0.85;
 
 export const Waveform: React.FC<{
   t: number;
-  cx: number;
+  /** frame the caller's line starts */
+  at: number;
+  voice: VoiceId;
+  x0: number;
+  x1: number;
   cy: number;
   bars: number;
-  tail: number;
-  maxH: number; // max half-height of a centre bar
-  drawIn: number; // frame the dotted row starts drawing out from the centre
+  barW: number;
+  /** max half-height (px) */
+  maxH: number;
   opacity: number;
-  blur: number;
-}> = ({ t, cx, cy, bars, tail, maxH, drawIn, opacity, blur }) => {
-  const pitch = 12;
-  const barW = 4;
-  const total = bars + 2 * tail;
-  const W = total * pitch + 8;
-  const H = 2 * maxH + barW + 16;
-  const mid = (total - 1) / 2;
-  const sigma = bars * 0.25;
+}> = ({ t, at, voice, x0, x1, cy, bars, barW, maxH, opacity }) => {
+  if (opacity <= 0.002) return null;
+  const W = x1 - x0;
+  const pitch = (W - barW) / (bars - 1);
+  const mid = (bars - 1) / 2;
+  const H = 2 * maxH + 20;
   let loud = 0;
-
-  const cols: React.ReactNode[] = [];
-  for (let j = 0; j < total; j++) {
-    const d = Math.abs(j - mid);
-    const inBars = d <= (bars - 1) / 2 + 0.01;
-    const appear = aos(t, drawIn + d * 0.34, { anticip: 2, depth: 0.25, config: SPRING.pop });
-    if (appear <= 0.001) continue;
-    const tau = t - d * 0.3;
-    const lv = Math.max(0, (talkFastAt(tau) - 0.12) / 0.7);
-    // gate: below a whisper the column is just its dot (silence = a flat dotted baseline)
-    const gate = smooth01((lv - 0.03) / 0.06);
-    const a = Math.pow(Math.min(1, lv), 0.62) * gate;
-    const g = Math.exp(-0.5 * Math.pow(d / sigma, 2));
-    const tex =
-      0.3 +
-      0.7 *
-        (0.5 + 0.5 * noise2D('call-wave', j * 0.33, t * 0.17)) *
-        (0.78 + 0.22 * Math.sin(j * 1.3 - t * 0.9));
-    const half = inBars ? maxH * a * g * tex : 0;
-    const speaking = Math.min(1, lv * 5) * gate;
-    loud = Math.max(loud, a * g);
-    const voiceCol = mixHex(C.lilac, C.callerLit, speakerAt(tau));
-    const col = mixHex(C.paperDim, voiceCol, speaking);
-    const tailFade = inBars ? 1 : Math.pow(1 - (d - (bars - 1) / 2) / (tail + 1), 1.4);
-    const s = Math.max(0, appear);
-    const h = barW + 2 * half * Math.min(1, s);
-    const x = 4 + j * pitch;
-    const dotSize = barW * Math.min(1.25, s);
-    cols.push(
+  const rects: React.ReactNode[] = [];
+  for (let i = 0; i < bars; i++) {
+    const d = Math.abs(i - mid);
+    const e = env(voice, t - at - d * 0.25);
+    const tex = 0.35 + 0.65 * (0.5 + 0.5 * noise2D('call-line', i * 0.37, t * 0.18));
+    // the edges of the band roll off a little (a phone line has no wide stereo image)
+    const edge = 1 - 0.35 * Math.pow(d / mid, 2);
+    const raw = Math.pow(e, 0.75) * tex * edge;
+    const q = Math.min(CLIP, Math.ceil(raw * LEVELS - 0.15) / LEVELS);
+    let half = Math.max(0, q) * maxH;
+    // hiss: the line is open even when nobody speaks
+    const hiss = 1.5 + 2.5 * (0.5 + 0.5 * noise2D('call-hiss', i * 0.9, t * 0.55));
+    half = Math.max(half, hiss);
+    loud = Math.max(loud, q);
+    const x = i * pitch;
+    rects.push(
       <rect
-        key={j}
-        x={x + (barW - dotSize) / 2}
-        y={H / 2 - Math.max(dotSize, h) / 2}
-        width={dotSize}
-        height={Math.max(dotSize, h)}
-        rx={dotSize / 2}
-        fill={col}
-        opacity={Math.min(1, s) * tailFade * (0.42 + 0.58 * speaking)}
+        key={i}
+        x={x}
+        y={H / 2 - half}
+        width={barW}
+        height={2 * half}
+        rx={Math.min(barW / 2, 2.5)}
+        fill={C.callerLit}
+        opacity={q > 0 ? 0.55 + 0.45 * Math.min(1, q / 0.5) : 0.4}
       />,
     );
   }
-
-  const glow = Math.min(1, loud * 1.3);
-  const filters = [
-    glow > 0.05 ? `drop-shadow(0 0 ${(4 + 8 * glow).toFixed(1)}px rgba(185,163,255,${(0.45 * glow).toFixed(3)}))` : '',
-    blur > 0.1 ? `blur(${blur.toFixed(2)}px)` : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-
+  const glow = Math.min(1, loud * 1.2);
   return (
     <svg
       width={W}
       height={H}
       style={{
         position: 'absolute',
-        left: cx - W / 2,
+        left: x0,
         top: cy - H / 2,
         overflow: 'visible',
         opacity,
-        filter: filters || undefined,
+        filter: glow > 0.05 ? `drop-shadow(0 0 ${(6 + 10 * glow).toFixed(1)}px rgba(169,188,255,${(0.4 * glow).toFixed(3)}))` : undefined,
       }}
     >
-      {cols}
+      {/* the line itself: a 1.5 px baseline at 25 % */}
+      <rect x={0} y={H / 2 - 0.75} width={W} height={1.5} fill={C.callerLit} opacity={0.25} />
+      {rects}
     </svg>
   );
 };

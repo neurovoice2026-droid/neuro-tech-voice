@@ -1,53 +1,56 @@
 /**
- * 8–15 s · CALL — the site's #demo "3 a.m., booked" stage at film scale.
+ * 8 s → ≈ 27.5 s · CALL — the heart of the film: the booking, spoken.
+ * Every voiced moment is read from timing.ts (CALL.lines[i].at, vWord, …)
+ * and from the real voices, so a regenerated voice re-times the scene.
  *
  *   t −4…0   the night room fades in over the twist's phone screen (same
  *            room, same orb, same flow time: the cut is invisible)
- *   t 0      PICKUP on the downbeat: orb breath (1 → .965 → 1), volume
- *            spike, a ring; the zoomed room pulls back to the stage;
- *            status row swings in; "Picked up on the first ring." rises
- *   t 4…30   the orb glides up into the clock lockup "03 ◉ 12"; the figure
- *            pairs spring out from behind it (t 11); the level row draws
- *   t 17…29  Ava takes the line: it gathers, shrinks and dives into the orb
- *            (behind the figures, motion-blurred); the orb gulps it (ping,
- *            level blip) at t 29 and emits the phase dot from its crown;
- *            "PICKED UP ON THE FIRST RING" unfolds out of the dot (t 34)
- *   t 23…    live transcript, one line at a time (CALL.lines): typewriter
- *            with caret, AI-disclosure underline, slot chips, the pick
- *   t 45…    the stage's floor: rule, THE OWNER · Asleep. / the call log
- *   t 53…68  status + phase dim to .58: the transcript is the one read
- *   t 173    "You're booked for / Wednesday at 15:00." — the mark turns
- *            ember at CALL.bookedMark with a press-and-settle beat
- *   t 196…228 everything but the mark recedes (fade front-loaded, rack
- *            focus, scale .94); the period leaves before t 210, when the
- *            mark is handed to the result.
+ *   t 0      PICKUP on the downbeat: squash / pop / glow (lib/pickup.ts), a
+ *            ring; the zoomed room pulls back to the stage; CLOSED swings in;
+ *            "Picked up on the first ring." rises — the only thing to read
+ *   E        the orb glides up into the lockup; the big line gathers, dives
+ *            into the orb, which gulps it (pop); "03 | 12" spring out of the
+ *            orb; Ava's first caption plays under the establishing lockup
+ *   P        "This is Ava": the digits and CLOSED peel off sideways, the
+ *            camera pulls back 1.5 % and pushes into Ava's close-up
+ *   A / C    shot / reverse-shot, hard cuts ON each line: Ava = the big orb
+ *            driven by her real envelope; the caller = the orb small in the
+ *            listen palette + the phone line; live captions, word-synced;
+ *            AI-disclosure underline; slot chips pop on the spoken times,
+ *            15:00 is picked on "o'clock"
+ *   line 5   "You're booked for / Wednesday at 15:00." — 15:00 ignites ember
+ *            ON the spoken "three"; the payoff press; then everything but the
+ *            mark and its glow blows away towards the lens; the result picks
+ *            the mark up at markHide.
  *
- * Parallax: room light 0.3 · lockup 0.8 · level row 0.85 · status 0.9 ·
- * owner row 0.95 · transcript 1.0 · dust 1.3 · bokeh 1.6; the booked mark
- * sits in screen space.
+ * Parallax (camera planes): room + orb light 0.3 · big dim discs 0.5 ·
+ * orb, waveform, establishing type 1.0 · dust 1.3 · lens bokeh 1.6.
+ * Captions, tags, chips and the mark are in screen space.
  */
 import React from 'react';
 import { AbsoluteFill } from 'remotion';
-import { noise2D } from '@remotion/noise';
+import { Captions, type CaptionFont } from '../components/Captions';
 import { Dust } from '../components/Dust';
 import { Vignette } from '../components/Grain';
 import { flowTime } from '../components/Orb';
-import { CALL_ORB_START, MARK, TRANSCRIPT } from '../lib/handoff';
+import { MarkGlow } from '../components/Shared';
+import { MARK, MARK_GLOW_HANDOFF, TRANSCRIPT } from '../lib/handoff';
 import { useLayout } from '../lib/layout';
 import { aos, EASE, SPRING, springAt, tween } from '../lib/motion';
+import { pickupGlow, pickupScale } from '../lib/pickup';
 import { useSceneFrame } from '../lib/scene';
-import { NIGHT_ROOM } from '../theme';
-import { CALL, CALL_LOCAL } from '../timing';
-import { Bokeh } from './call/Bokeh';
-import { Lockup } from './call/Lockup';
-import { OwnerRow } from './call/Owner';
-import { flightAt, PhaseLine, PickupLine, StatusRow } from './call/Status';
-import { caretBlink, Chips, MarkRow, TypedLine } from './call/Transcript';
-import { LINES, listenAt, ORB_FRAME0, orbVolumeByIndex, typeDur, volumeAt } from './call/voice';
+import { C, FONT, NIGHT_ROOM } from '../theme';
+import { CALL, CALL_LOCAL, SCENES, vWord, type Caption } from '../timing';
+import { Bokeh, type Disc } from './call/Bokeh';
+import { Digits, OrbStage, type OrbState } from './call/Lockup';
+import { camAt, framingAt, framings, orbBase, orbToScreen, planeCss, shotAt } from './call/shots';
+import { ClosedSign, flightAt, PickupLine } from './call/Status';
+import { Chips, MarkRow, SpeakerTag } from './call/Transcript';
+import { listenAt, ORB_FRAME0, orbVolumeByIndex, turnAt, volumeAt } from './call/voice';
 import { Waveform } from './call/Waveform';
 
-
-const ROW_A = "You're booked for";
+const LINES = CALL.lines;
+const ROW_A: Caption = { text: "You're booked for", word: 1 };
 
 /** the gulp: a damped kick on the orb's scale (overshoot + settle) */
 const gulpKick = (tt: number) => {
@@ -61,14 +64,20 @@ const gulpLevel = (tt: number) => {
   if (u < 0) return 0;
   return 0.16 * (1 - Math.exp(-u / 1.2)) * Math.exp(-u / 6);
 };
-
-/** frames a line's exit takes: 6, compressed when its hold is short (line 4) */
-const exitDurOf = (i: number) =>
-  Math.max(3, Math.min(6, Math.round(LINES[i + 1].at - (LINES[i].at + typeDur(LINES[i].text)) - 4)));
+/** Ava's talk swell on the orb (eases in after the pickup, so t 0 is exact) */
+const talkSwell = (tt: number) =>
+  1 +
+  0.03 *
+    Math.max(0, (volumeAt(tt) - 0.12) / 0.7) *
+    (0.7 + 0.3 * Math.sin((tt / 48) * Math.PI * 2)) *
+    tween(tt, [0, 6], [0, 1], EASE.house);
 
 /* the twist's phone screen at the end of its dive (twist/geometry.ts:
  * phone 260×540, bezel 9 → screen 242×522, scaled S about the avatar) */
 const TWIST_SCREEN = { w: 242, h: 522 };
+
+/** the chips are on screen during lines 2 and 3 (no echo slot then: it is theirs) */
+const chipsLine = (i: number) => i === 2 || i === 3;
 
 export const Call: React.FC = () => {
   const t = useSceneFrame('call');
@@ -77,333 +86,377 @@ export const Call: React.FC = () => {
 
   const T = TRANSCRIPT(L);
   const M = MARK(L);
-  const O = CALL_ORB_START(L);
-  const Y = {
-    status: L.pick(170, 330),
-    phase: L.pick(228, 392),
-    lock: L.pick(430, 700),
-    wave: L.pick(640, 950),
-    chips: L.pick(T.y + 80, T.y + 140),
-  };
-  /* the stage's floor (owner / call log) */
-  const FLOOR = L.pick(
-    { x0: L.safe.x, x1: L.width - L.safe.x, ruleY: 944, rowY: 984, valueY: 984 },
-    { x0: L.safe.x, x1: L.width - L.safe.x, ruleY: 1590, rowY: 1636, valueY: 1708 },
-  );
-  const F = L.pick(200, 170);
-  const orbFinal = L.pick(250, 220);
-  const gap = L.pick(34, 28);
-  const live = t >= 0;
-
-  /* ── camera: a slow handheld drift, zero at the pickup and at the hand-over ── */
-  const env =
-    tween(t, [0, 40], [0, 1], EASE.inOut) * (1 - tween(t, CALL_LOCAL.camSettle, [0, 1], EASE.inOut));
-  const cam = {
-    x: 18 * noise2D('call-cam-x', t * 0.009, 0.31) * env,
-    y: 10 * noise2D('call-cam-y', 0.77, t * 0.009) * env,
-  };
-  const layer = (depth: number): React.CSSProperties => ({
-    transform: `translate(${(-cam.x * depth).toFixed(2)}px, ${(-cam.y * depth).toFixed(2)}px)`,
-  });
-
-  /* ── exit: everything but the mark recedes ─────────────────────── *
-   * the fade is front-loaded (out3) so by the hand-over (t 210) only the
-   * mark is left to follow; the rack focus (blur) is quick too, the scale
-   * pull-back eases over the whole window */
-  const exOp = tween(t, CALL_LOCAL.exitFade, [0, 1], EASE.out3);
-  const exBlur = tween(t, CALL_LOCAL.exit, [0, 1], EASE.out3);
-  const exScale = tween(t, CALL_LOCAL.exit, [0, 1], EASE.inOut);
-  const lean = tween(t, [CALL_LOCAL.exit[0] - 4, CALL_LOCAL.exit[0] + 4], [0, 1], EASE.inOut) * (1 - exScale);
-  const recede = { opacity: 1 - exOp, blur: 10 * exBlur };
-  const recedeScale = 1 + 0.006 * lean - 0.06 * exScale;
-  const dimK = 1 - 0.42 * tween(t, CALL_LOCAL.dim, [0, 1], EASE.inOut);
-
-  /* ── the voice ───────────────────────────────────────────────────── */
-  const vol = volumeAt(t) + gulpLevel(t);
-  const lvl = Math.max(0, (vol - 0.12) / 0.7);
-  const flow = flowTime(Math.max(0, Math.round(t + ORB_FRAME0)), (fr) => orbVolumeByIndex(fr) + gulpLevel(fr - ORB_FRAME0));
-
-  /* ── the orb: breath, glide into the lockup ─────────────────────── */
-  const breath = (tt: number) =>
-    tt < CALL_LOCAL.inhale[0]
-      ? 1
-      : tt < CALL_LOCAL.inhale[1]
-        ? 1 - 0.035 * tween(tt, CALL_LOCAL.inhale, [0, 1], EASE.in2)
-        : 0.965 + 0.035 * tween(tt, CALL_LOCAL.exhale, [0, 1], EASE.expo);
-  const glideCfg = { stiffness: 110, damping: 17, mass: 1 };
-  const glideAt = (tt: number) => Math.max(0, aos(tt, CALL_LOCAL.glide, { anticip: 0, depth: 0, config: glideCfg }));
-  const orbY = (tt: number) => O.y + (Y.lock - O.y) * glideAt(tt);
-  const orbDAt = (tt: number) => {
-    const g = glideAt(tt);
-    // the talk swell eases in after the pickup, so at t 0 the orb is exactly CALL_ORB_START
-    const talk =
-      1 +
-      0.03 *
-        Math.max(0, (volumeAt(tt) - 0.12) / 0.7) *
-        (0.7 + 0.3 * Math.sin((tt / 48) * Math.PI * 2)) *
-        tween(tt, [0, 6], [0, 1], EASE.house);
-    return (O.d + (orbFinal - O.d) * g) * breath(tt) * (tt >= 0 ? talk : 1) * (1 + 0.05 * gulpKick(tt));
-  };
-  const orbD = orbDAt(t);
-  const dress = tween(t, [0, 12], [0, 1], EASE.house);
-
-  const unfoldAt = (tt: number) => aos(tt, CALL_LOCAL.unfold, { anticip: 3, depth: 0.06, config: SPRING.site });
-  const unfold = unfoldAt(t);
-  const unfoldSpeed = unfoldAt(t + 0.5) - unfoldAt(t - 0.5);
+  const Fr = framings(L);
+  const B = orbBase(L);
+  const g0 = SCENES.call.from;
+  const END = CALL_LOCAL.markHide;
+  const live = t >= 0 && t < END;
+  const cam = camAt(t, L);
+  const shot = shotAt(t);
 
   /* ── the room: the phone screen pulls back into the whole stage ─── */
-  const S = L.pick((L.width / TWIST_SCREEN.w) * 1.1, (L.width / TWIST_SCREEN.w) * 1.12);
+  const S0 = L.pick((L.width / TWIST_SCREEN.w) * 1.1, (L.width / TWIST_SCREEN.w) * 1.12);
   const open = tween(t, CALL_LOCAL.roomOpen, [0, 1], EASE.inOut);
-  const box0 = { w: TWIST_SCREEN.w * S, h: TWIST_SCREEN.h * S };
-  const box1 = { w: L.width * 1.08, h: L.height * 1.08 };
+  const box0 = { w: TWIST_SCREEN.w * S0, h: TWIST_SCREEN.h * S0 };
+  const box1 = { w: L.width * 1.2, h: L.height * 1.2 };
   const room = {
     w: box0.w * Math.pow(box1.w / box0.w, open),
     h: box0.h * Math.pow(box1.h / box0.h, open),
   };
   const roomOp = tween(t, CALL_LOCAL.roomIn, [0, 1], EASE.inOut);
 
-  /* ── the big line's dive into the orb ─────────────────────────── */
-  const flightOpts = {
-    x0: L.cx,
-    y0: T.y,
-    y1: Y.lock,
-    band: 0.62 * F,
-    s1: L.pick(0.1, 0.12),
-    lift: CALL_LOCAL.lift,
-    dive: CALL_LOCAL.dive,
-  };
-  const flight = (tt: number) => flightAt(tt, flightOpts);
+  /* ── blow-away: everything but the mark and its glow (the room stays) ── */
+  const bw = tween(t, CALL_LOCAL.blowAway, [0, 1], EASE.in2);
+  const blow: React.CSSProperties =
+    bw > 0
+      ? {
+          transform: `scale(${(1 + 0.12 * bw).toFixed(5)})`,
+          transformOrigin: `${M.x}px ${M.y}px`,
+          opacity: 1 - bw,
+          filter: `blur(${(12 * bw).toFixed(2)}px)`,
+        }
+      : {};
 
-  /* ── transcript ─────────────────────────────────────────────────── */
+  /* the room alone after the hand-over (under the result, until its own room is in) */
+  const roomLayer = (
+    <AbsoluteFill style={{ ...planeCss(cam, 0.3), opacity: roomOp }}>
+      <div
+        style={{
+          position: 'absolute',
+          left: L.cx - room.w / 2,
+          top: L.cy - room.h / 2,
+          width: room.w,
+          height: room.h,
+          background: NIGHT_ROOM,
+        }}
+      />
+    </AbsoluteFill>
+  );
+  if (t >= END) {
+    return (
+      <AbsoluteFill style={{ overflow: 'hidden' }}>
+        {roomLayer}
+        <Vignette strength={0.55 * open} color="8,6,28" />
+      </AbsoluteFill>
+    );
+  }
+
+  /* ── the voice ───────────────────────────────────────────────────── */
+  const vol = volumeAt(t) + gulpLevel(t);
+  const lvl = Math.max(0, (vol - 0.12) / 0.7);
+  const flow = flowTime(Math.max(0, Math.round(t + ORB_FRAME0)), (fr) => orbVolumeByIndex(fr) + gulpLevel(fr - ORB_FRAME0));
+
+  /* ── the orb, on screen ─────────────────────────────────────────── */
+  const orbAt = (tt: number): OrbState => {
+    const s = orbToScreen(camAt(tt, L), framingAt(tt, L));
+    return { ...s, d: s.d * pickupScale(tt + g0) * (1 + 0.05 * gulpKick(tt)) * talkSwell(tt) };
+  };
+  const orb = orbAt(t);
+  const dress = tween(t, [0, 12], [0, 1], EASE.house);
+  const rim = pickupGlow(t + g0) + 0.25 * lvl * tween(t, [0, 12], [0, 1], EASE.house);
+  const dof = shot.kind === 'C' ? 2 : 0;
+
+  /* ── establishing: the lockup, CLOSED, the big line ─────────────── */
+  const F = L.pick(170, 150);
+  const [p0] = CALL_LOCAL.pushIn;
+  const unfoldAt = (tt: number) => aos(tt, CALL_LOCAL.unfold, { anticip: 4, depth: 0.06, config: SPRING.site });
+  const unfold = unfoldAt(t);
+  const unfoldSpeed = unfoldAt(t + 0.5) - unfoldAt(t - 0.5);
+  const peelAt = (tt: number, a: number) => tween(tt, [a, a + 10], [0, 1], EASE.in2);
+  const digitPeel = peelAt(t, p0);
+  const signPeel = peelAt(t, p0 - 2);
+  const lockY = shot.kind === 'E' ? framingAt(t, L).y : Fr.lock.y;
+  const flight = (tt: number) =>
+    flightAt(tt, {
+      x0: L.cx,
+      y0: T.y,
+      y1: Fr.lock.y,
+      band: 0.62 * F,
+      s1: L.pick(0.1, 0.12),
+      lift: CALL_LOCAL.lift,
+      dive: CALL_LOCAL.dive,
+    });
+
+  /* ── the caller's phone line (reverse shots) ────────────────────── */
+  const W = L.pick({ x0: 600, x1: 1840, cy: 360, bars: 64, maxH: 120 }, { x0: 60, x1: 1020, cy: 780, bars: 44, maxH: 130 });
+
+  /* ── captions ─────────────────────────────────────────────────────── */
+  const avaFont: CaptionFont = { family: FONT.body, weight: 500, size: T.fontSize, lineHeight: 1.22, tracking: '-0.01em' };
+  const callerFont: CaptionFont = {
+    family: FONT.cinema,
+    weight: 500,
+    size: Math.round(T.fontSize * 1.12),
+    italic: true,
+    lineHeight: 1.1,
+    tracking: 0,
+  };
+  const echoY = T.y - L.pick(170, 160);
+  const holdOf = (i: number) =>
+    i + 1 < LINES.length ? LINES[i + 1].at + vWord(LINES[i + 1].voice, 0) : END + 10;
+  const turn = turnAt(t);
+
+  // the AI disclosure: an electric underline drawn under "an AI assistant" as she says it
+  const [d0, d1] = CALL_LOCAL.disclose;
+  const dP = EASE.draw(tween(t, [d0, d1], [0, 1], (x) => x));
+  const dGlow = tween(t, [d0, d0 + 3], [0, 1], EASE.out3) * (1 - tween(t, [d1, d1 + 10], [0, 1], EASE.inOut));
+  const thick = Math.round(T.fontSize * 0.065);
+
+  // "15:00" / "16:30" flash lilac as they are spoken (linking the words to their chips)
+  const pops = [LINES[2].at + CALL.slotPops[0], LINES[2].at + CALL.slotPops[1]] as const;
+  const flash = (at: number) => tween(t, [at - 2, at], [0, 1], EASE.out3) * (1 - tween(t, [at + 4, at + 10], [0, 1], EASE.inOut));
+
+  /* ── the payoff: row B, the booked mark ───────────────────────────── */
   const last = LINES[4];
-  const lastTyped = (t - last.at) * CALL.typeRate;
-  const markStart = ROW_A.length + 1;
-  const lastTypedAt = last.at + last.text.length / CALL.typeRate;
-  const ember = tween(t, [CALL.bookedMark, CALL.bookedMark + 13], [0, 1], EASE.soft);
-  const sheen = t < CALL.bookedMark ? -1 : tween(t, [CALL.bookedMark, CALL_LOCAL.markHide - 1], [0, 1], EASE.inOut);
-  const glow =
-    tween(t, [CALL.bookedMark, CALL.bookedMark + 5], [0, 1], EASE.out3) *
-    (1 - tween(t, [CALL.bookedMark + 8, CALL_LOCAL.markHide + 4], [0, 1], EASE.inOut));
-  // the payoff beat: press 1 → .975 (3 f, power2.in), spring back (pop) — exactly 1 before the hand-over
+  const bm = CALL.bookedMark;
+  const markAppear = [
+    last.at + vWord(last.voice, 4) - 2,
+    last.at + vWord(last.voice, 5) - 2,
+    bm - 2,
+    last.at + vWord(last.voice, 7) - 2,
+  ] as const;
+  const ember = tween(t, [bm, bm + 13], [0, 1], EASE.soft);
+  const sheen = t < bm ? -1 : tween(t, [bm, END - 1], [0, 1], EASE.inOut);
+  // the glow flashes up ON the mark, then HOLDS exactly the hand-over strength (no fade)
+  const glowK =
+    t < bm
+      ? 0
+      : t < bm + 5
+        ? EASE.out3((t - bm) / 5)
+        : t < bm + 8
+          ? 1 - (1 - MARK_GLOW_HANDOFF) * EASE.inOut((t - bm - 5) / 3)
+          : MARK_GLOW_HANDOFF;
+  // the payoff beat: press 1 → .975 (3 f, power2.in), spring back — exactly 1 before the hand-over
   const P = CALL_LOCAL.payoff;
   const pulse =
-    t < P || t >= CALL_LOCAL.markHide - 1
+    t < P || t >= END - 1
       ? 1
       : t < P + 3
         ? 1 - 0.025 * tween(t, [P, P + 3], [0, 1], EASE.in2)
         : 0.975 + 0.025 * springAt(t, P + 3, SPRING.pop);
-  const periodOut = tween(t, [CALL_LOCAL.markHide - 8, CALL_LOCAL.markHide], [0, 1], EASE.in2);
-  const markCaret =
-    lastTyped >= markStart
-      ? caretBlink(t, lastTypedAt) * (1 - tween(t, [CALL.bookedMark - 3, CALL.bookedMark], [0, 1], EASE.in2))
-      : 0;
+  const periodOut = tween(t, [END - 9, END - 1], [0, 1], EASE.in2);
+
+  /* ── planes ──────────────────────────────────────────────────────── */
+  const discsFar: Disc[] = L.pick(
+    [
+      { x: 300, y: 830, r: 440, a: 0.05, soft: 60, seed: 'f1' },
+      { x: 1690, y: 230, r: 380, a: 0.05, soft: 60, seed: 'f2' },
+      { x: 1480, y: 1040, r: 340, a: 0.04, soft: 60, seed: 'f3' },
+    ],
+    [
+      { x: 110, y: 1480, r: 440, a: 0.05, soft: 60, seed: 'f1' },
+      { x: 990, y: 360, r: 380, a: 0.05, soft: 60, seed: 'f2' },
+      { x: 900, y: 1880, r: 340, a: 0.04, soft: 60, seed: 'f3' },
+    ],
+  );
+  const discsNear: Disc[] = L.pick(
+    [
+      { x: 110, y: 190, r: 110, a: 0.1, soft: 30, seed: 'n1' },
+      { x: 1840, y: 610, r: 150, a: 0.09, soft: 40, seed: 'n2' },
+      { x: 1700, y: 1010, r: 90, a: 0.12, soft: 24, seed: 'n3' },
+      { x: 220, y: 1020, r: 130, a: 0.08, soft: 34, seed: 'n4' },
+      { x: 1270, y: 40, r: 70, a: 0.11, soft: 24, seed: 'n5' },
+    ],
+    [
+      { x: 30, y: 250, r: 120, a: 0.1, soft: 30, seed: 'n1' },
+      { x: 1070, y: 900, r: 150, a: 0.09, soft: 40, seed: 'n2' },
+      { x: 50, y: 1710, r: 140, a: 0.08, soft: 34, seed: 'n3' },
+      { x: 1010, y: 1850, r: 100, a: 0.12, soft: 24, seed: 'n4' },
+      { x: 880, y: 90, r: 80, a: 0.11, soft: 24, seed: 'n5' },
+    ],
+  );
 
   return (
     <AbsoluteFill style={{ overflow: 'hidden' }}>
-      {/* ── 0.3 · the room (a slow push once the stage is open) ─────── */}
-      <AbsoluteFill
-        style={{
-          ...layer(0.3),
-          opacity: roomOp,
-          transform: `${layer(0.3).transform} scale(${(1 + 0.035 * tween(t, [20, 220], [0, 1], EASE.inOut)).toFixed(5)})`,
-        }}
-      >
-        <div
-          style={{
-            position: 'absolute',
-            left: L.cx - room.w / 2,
-            top: L.cy - room.h / 2,
-            width: room.w,
-            height: room.h,
-            background: NIGHT_ROOM,
-          }}
-        />
-        {live ? (
+      {/* ── 0.3 · the room + the orb's light on it ─────────────────── */}
+      {roomLayer}
+      {live ? (
+        <AbsoluteFill style={{ ...planeCss(cam, 0.3), opacity: dress * (1 - bw) }}>
           <div
             style={{
               position: 'absolute',
-              left: L.cx - L.pick(1000, 900),
-              top: orbY(t) - L.pick(760, 900),
+              left: orb.x - L.pick(1000, 900),
+              top: orb.y - L.pick(760, 900),
               width: L.pick(2000, 1800),
               height: L.pick(1520, 1800),
               background: `radial-gradient(closest-side, rgba(124,58,237,${(0.1 + 0.2 * lvl).toFixed(3)}), rgba(124,58,237,0) 100%)`,
-              opacity: dress,
             }}
           />
-        ) : null}
-        <Vignette strength={0.55 * open} color="8,6,28" />
-      </AbsoluteFill>
+        </AbsoluteFill>
+      ) : null}
+      <Vignette strength={0.55 * open} color="8,6,28" />
 
-      <AbsoluteFill
-        style={{
-          transform: `scale(${recedeScale.toFixed(5)})`,
-          transformOrigin: `${M.x}px ${M.y}px`,
-        }}
-      >
-        {/* ── 1.0 · the big line — it dives BEHIND the lockup, into the orb ── */}
-        {live && t <= CALL_LOCAL.swallow ? (
-          <AbsoluteFill style={layer(1)}>
-            <PickupLine
+      <AbsoluteFill style={blow}>
+        {/* ── 0.5 · large dim discs, far behind ──────────────────────── */}
+        {live ? (
+          <AbsoluteFill style={{ ...planeCss(cam, 0.5), opacity: dress }}>
+            <Bokeh t={t} discs={discsFar} drift={0.6} />
+          </AbsoluteFill>
+        ) : null}
+
+        {/* ── 1.0 · the establishing type: the big line dives BEHIND the lockup, into the orb ── */}
+        {live && t < p0 + 12 ? (
+          <AbsoluteFill style={planeCss(cam, 1)}>
+            {t <= CALL_LOCAL.swallow ? (
+              <PickupLine t={t} text="Picked up on the first ring." fontSize={L.pick(96, 92)} boxW={L.pick(1500, 940)} flight={flight} />
+            ) : null}
+            <ClosedSign
               t={t}
-              text="Picked up on the first ring."
-              fontSize={L.pick(96, 92)}
-              boxW={L.pick(1500, 940)}
-              flight={flight}
+              cx={L.cx}
+              cy={L.pick(150, 330)}
+              start={CALL_LOCAL.statusIn}
+              fontSize={L.pick(32, 30)}
+              peel={signPeel}
+              peelSpeed={peelAt(t + 0.5, p0 - 2) - peelAt(t - 0.5, p0 - 2)}
+            />
+            <Digits
+              t={t}
+              x={L.cx}
+              y={lockY}
+              orbD={Fr.lock.d}
+              F={F}
+              gap={L.pick(34, 28)}
+              unfold={unfold}
+              unfoldSpeed={unfoldSpeed}
+              unfoldStart={CALL_LOCAL.unfold}
+              peel={digitPeel}
+              peelSpeed={peelAt(t + 0.5, p0) - peelAt(t - 0.5, p0)}
+              sheens={[
+                tween(t, [CALL_LOCAL.unfold + 6, CALL_LOCAL.unfold + 22], [0, 1], EASE.inOut),
+                tween(t, [CALL_LOCAL.unfold + 10, CALL_LOCAL.unfold + 26], [0, 1], EASE.inOut),
+              ]}
             />
           </AbsoluteFill>
         ) : null}
 
-        {/* ── 0.8 · the lockup ─────────────────────────────────────── */}
-        <AbsoluteFill style={layer(0.8)}>
-          <Lockup
-            t={t}
-            x={L.cx}
-            y={orbY(t)}
-            orbBase={O.d}
-            orbScale={orbD / O.d}
-            orbFinal={orbFinal}
-            F={F}
-            gap={gap}
-            unfold={live ? unfold : 0}
-            unfoldSpeed={unfoldSpeed}
-            unfoldStart={CALL_LOCAL.unfold}
-            gulp={CALL_LOCAL.swallow}
-            volume={vol}
-            flow={flow}
-            listen={listenAt(t)}
-            ringStarts={CALL_LOCAL.rings}
-            orbDAt={orbDAt}
-            opacity={recede.opacity}
-            blur={recede.blur}
-            dress={dress}
-            sheens={[
-              tween(t, [CALL_LOCAL.unfold + 6, CALL_LOCAL.unfold + 22], [0, 1], EASE.inOut),
-              tween(t, [CALL_LOCAL.unfold + 10, CALL_LOCAL.unfold + 26], [0, 1], EASE.inOut),
-            ]}
-          />
-        </AbsoluteFill>
+        {/* ── 1.0 · the caller's phone line (reverse shots) ─────────── */}
+        {shot.kind === 'C' ? (
+          <AbsoluteFill style={planeCss(cam, 1)}>
+            <Waveform
+              t={t}
+              at={LINES[shot.line].at}
+              voice={LINES[shot.line].voice}
+              x0={W.x0}
+              x1={W.x1}
+              cy={W.cy}
+              bars={W.bars}
+              barW={8}
+              maxH={W.maxH}
+              opacity={1}
+            />
+          </AbsoluteFill>
+        ) : null}
+
+        {/* ── 1.0 · Ava's orb (screen coordinates from the camera) ──── */}
+        <OrbStage
+          t={t}
+          base={B}
+          orb={orb}
+          orbAt={orbAt}
+          volume={vol}
+          flow={flow}
+          listen={listenAt(t)}
+          rim={rim}
+          dress={dress}
+          dof={dof}
+          ringStarts={CALL_LOCAL.rings}
+          gulp={CALL_LOCAL.swallow}
+          rimIn={roomOp}
+        />
 
         {live ? (
           <>
-            {/* ── 0.85 · the level row ────────────────────────────── */}
-            <AbsoluteFill style={layer(0.85)}>
-              <Waveform
-                t={t}
-                cx={L.cx}
-                cy={Y.wave}
-                bars={L.pick(56, 40)}
-                tail={L.pick(12, 6)}
-                maxH={L.pick(60, 54)}
-                drawIn={CALL_LOCAL.waveIn}
-                opacity={recede.opacity}
-                blur={recede.blur}
-              />
-            </AbsoluteFill>
-
-            {/* ── 0.9 · status ──────────────────────────────────────── */}
-            <AbsoluteFill style={layer(0.9)}>
-              <StatusRow t={t} cx={L.cx} cy={Y.status} start={CALL_LOCAL.statusIn} recede={recede} dim={dimK} />
-            </AbsoluteFill>
-
-            {/* ── 0.95 · the stage's floor: the owner, the call log ─── */}
-            <AbsoluteFill style={layer(0.95)}>
-              <OwnerRow t={t} vertical={L.vertical} {...FLOOR} start={CALL_LOCAL.ownerIn} recede={recede} />
-            </AbsoluteFill>
-
-            {/* ── 1.0 · transcript, chips, the phase line ─────────── */}
-            <AbsoluteFill style={layer(1)}>
-              <PhaseLine
-                t={t}
-                cx={L.cx}
-                cy={Y.phase}
-                fromY={Y.lock - orbFinal / 2 + 4}
-                emit={CALL_LOCAL.emit}
-                recede={recede}
-                dim={dimK}
-              />
-              {LINES.slice(0, 4).map((line, i) => (
-                <TypedLine
-                  key={i}
-                  t={t}
-                  who={line.who}
-                  text={line.text}
-                  at={line.at}
-                  fontSize={T.fontSize}
-                  maxWidth={T.maxWidth}
-                  cx={L.cx}
-                  cy={T.y}
-                  exitAt={LINES[i + 1].at}
-                  exitDur={exitDurOf(i)}
-                  caret
-                  disclose={i === 0 ? { phrase: 'an AI assistant', at: CALL_LOCAL.disclose } : undefined}
-                />
-              ))}
-              <TypedLine
-                t={t}
-                who={last.who}
-                text={ROW_A}
-                at={last.at}
-                fontSize={T.fontSize}
-                maxWidth={T.maxWidth}
-                cx={L.cx}
-                cy={T.y}
-                caret={lastTyped < markStart}
-                recede={recede}
-              />
-              <Chips
-                t={t}
-                cx={L.cx}
-                cy={Y.chips}
-                pops={[LINES[2].at + CALL.slotPops[0], LINES[2].at + CALL.slotPops[1]]}
-                pick={CALL.slotPick}
-                leave={last.at}
-              />
-            </AbsoluteFill>
-
             {/* ── 1.3 · motes ─────────────────────────────────────────── */}
-            <AbsoluteFill style={{ ...layer(1.3), opacity: dress * recede.opacity }}>
+            <AbsoluteFill style={{ ...planeCss(cam, 1.3), opacity: dress }}>
               <Dust count={14} seed="call-motes" color="185,163,255" opacity={0.4} size={[2, 6]} blur={[0.4, 3]} speed={0.3} frame={t + 600} />
             </AbsoluteFill>
-            <AbsoluteFill style={{ ...layer(1.6), opacity: dress * recede.opacity }}>
-              <Bokeh
-                t={t}
-                opacity={1}
-                discs={L.pick(
-                  [
-                    { x: 150, y: 930, r: 170, a: 0.07, seed: 'b1' },
-                    { x: 1800, y: 230, r: 120, a: 0.06, seed: 'b2' },
-                    { x: 1850, y: 690, r: 90, a: 0.08, seed: 'b3' },
-                  ],
-                  [
-                    { x: 30, y: 1450, r: 170, a: 0.07, seed: 'b1' },
-                    { x: 1000, y: 430, r: 120, a: 0.06, seed: 'b2' },
-                    { x: 1040, y: 1880, r: 90, a: 0.08, seed: 'b3' },
-                  ],
-                )}
-              />
+            {/* ── 1.6 · lens bokeh ───────────────────────────────────── */}
+            <AbsoluteFill style={{ ...planeCss(cam, 1.6), opacity: dress }}>
+              <Bokeh t={t} discs={discsNear} />
             </AbsoluteFill>
+
+            {/* ── screen · speaker tag, captions, chips ──────────────── */}
+            {turn >= 0 ? (
+              <SpeakerTag
+                key={turn}
+                t={t}
+                who={LINES[turn].who}
+                at={LINES[turn].at}
+                x={L.cx}
+                y={T.y - L.pick(78, 72)}
+                fontSize={L.pick(32, 30)}
+                dot={22}
+              />
+            ) : null}
+            {LINES.map((line, i) => {
+              if (t < line.at - 4 || t > holdOf(i) + 12) return null;
+              const agent = line.who === 'agent';
+              return (
+                <Captions
+                  key={i}
+                  t={t}
+                  lineAt={line.at}
+                  voice={line.voice}
+                  captions={i === 4 ? [line.captions[0], ROW_A] : line.captions}
+                  x={L.cx}
+                  y={T.y}
+                  maxWidth={T.maxWidth}
+                  font={agent ? avaFont : callerFont}
+                  color={agent ? C.paper : C.callerLit}
+                  glow={agent ? 'rgba(185,163,255,0.35)' : 'rgba(169,188,255,0.35)'}
+                  holdUntil={holdOf(i)}
+                  echoY={chipsLine(i) ? null : echoY}
+                  underline={
+                    i === 0
+                      ? {
+                          caption: 1,
+                          words: [3, 5],
+                          p: dP,
+                          color: C.electric,
+                          thickness: thick,
+                          shadow: dGlow > 0.01 ? `0 0 10px rgba(124,58,237,${(0.6 * dGlow).toFixed(3)})` : undefined,
+                        }
+                      : undefined
+                  }
+                  tint={
+                    i === 2
+                      ? (c, j) => (c === 1 && (j === 2 || j === 4) ? { color: C.lilac, k: flash(pops[j === 2 ? 0 : 1]) } : null)
+                      : undefined
+                  }
+                />
+              );
+            })}
+            <Chips
+              t={t}
+              cx={L.cx}
+              cy={T.y - L.pick(170, 160)}
+              w={L.pick(260, 228)}
+              h={L.pick(104, 92)}
+              fontSize={L.pick(64, 56)}
+              pops={pops}
+              pick={CALL.slotPick}
+              leave={last.at}
+            />
           </>
         ) : null}
       </AbsoluteFill>
 
-      {/* ── screen space · the booked mark (handed to the result at markHide) ── */}
+      {/* ── screen · the booked mark + its glow (handed to the result at markHide) ── */}
       {live ? (
-        <AbsoluteFill style={layer(1)}>
+        <>
+          <MarkGlow x={M.x} y={M.y} fontSize={M.fontSize} k={glowK} />
           <MarkRow
             t={t}
-            typedF={lastTyped - markStart}
+            appear={markAppear}
             ember={ember}
             sheen={sheen}
-            glow={glow}
             pulse={pulse}
-            periodOut={Math.max(periodOut, exOp)}
+            periodOut={periodOut}
             x={M.x}
             y={M.y}
             fontSize={M.fontSize}
-            show={t < CALL_LOCAL.markHide}
-            caret={markCaret}
+            show={t < END}
           />
-        </AbsoluteFill>
+        </>
       ) : null}
     </AbsoluteFill>
   );
