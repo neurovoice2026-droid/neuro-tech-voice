@@ -23,8 +23,6 @@ export const BEAT = (60 / BPM) * FPS;
 /** Beats → frames (rounded to the nearest frame). */
 export const b = (beats: number) => Math.round(beats * BEAT);
 
-export const TOTAL_BEATS = 106;
-export const DURATION = b(TOTAL_BEATS); // 1590 frames = 53 s
 
 export const LANDSCAPE = { width: 1920, height: 1080 } as const;
 export const VERTICAL = { width: 1080, height: 1920 } as const;
@@ -36,21 +34,69 @@ export const vFrames = (id: VoiceId) => VOICE.lines[id].frames;
 export const vWord = (id: VoiceId, k: number) => Math.round(VOICE.lines[id].words[k].t * FPS);
 /** A caption: shown from spoken word `word` of its line. */
 export type Caption = { text: string; word: number };
+/** Snap a frame count UP to the next half-beat / whole beat / bar (so turns land on the grid). */
+const upHalf = (f: number) => Math.round(Math.ceil(f / (BEAT / 2) - 1e-9) * (BEAT / 2));
+const upBeat = (f: number) => Math.round(Math.ceil(f / BEAT - 1e-9) * BEAT);
+/** Minimum silence between two speakers (frames). */
+const TURN_GAP = 7;
+
+/* ── the voiced timeline, derived from the real voice lengths ──────
+ * Swap the voices (npm run voice) and every turn, scene window and the
+ * total length re-time themselves; the logo still lands on a strong beat. */
+const CALL_AT: number[] = [];
+{
+  const ids: VoiceId[] = ['call-1', 'call-2', 'call-3', 'call-4', 'call-5'];
+  let t = b(1.5); // Ava answers ~0.75 s after the pickup
+  for (const id of ids) {
+    CALL_AT.push(t);
+    t = upHalf(t + vFrames(id) + TURN_GAP);
+  }
+}
+/** The call lasts until Ava's last word + a short beat for the booked mark. */
+const CALL_LEN = upBeat(CALL_AT[4] + vFrames('call-5') + 10);
+const RESULT_LEN = b(10);
+/** Knowledge: the question, a scan, the honest answer, then the closing title. */
+const KB_ASK = b(2);
+const KB_SCAN0 = upHalf(KB_ASK + Math.round(vFrames('kb-1') * 0.6));
+const KB_MISS = KB_SCAN0 + b(1.5);
+const KB_ANSWER = KB_MISS + 7;
+const KB_CLOSE = upHalf(KB_ANSWER + vFrames('kb-2') + 4);
+const SCALE_LEN = b(10);
+/** CTA: Ava's line, then the converge; the logo lands on a bar downbeat. */
+const CTA_LINE = b(1);
+const CTA_CONVERGE0 = Math.max(b(10), upBeat(CTA_LINE + vFrames('cta-1') + 8));
+const CTA_IMPACT = CTA_CONVERGE0 + b(2);
+/** The knowledge closing title holds ≥ 2.5 beats, then a 1-beat whip. Any
+ *  slack needed to put the logo impact on a strong beat (1 or 3 of the bar)
+ *  is added to that hold (0–1 beat). */
+const KNOWLEDGE_LEN = (() => {
+  const base = upBeat(KB_CLOSE + b(3.5));
+  const impactGlobal = b(8) + b(8) + CALL_LEN + RESULT_LEN + base + SCALE_LEN + CTA_IMPACT;
+  const half = 2 * BEAT;
+  return base + ((half - (impactGlobal % half)) % half);
+})();
+const CTA_HOLD = Math.max(CTA_IMPACT + b(3), upHalf(CTA_IMPACT + 4 + vFrames('cta-2') + 6));
+const CTA_LEN = CTA_HOLD + b(3); // 1.5 s final hold
 
 /**
  * Scene windows on the absolute timeline. `pre`/`post` are the frames a
  * scene stays mounted before/after its window, for the match cuts where two
  * scenes share a shape.
  */
-export const SCENES = {
-  hook: { from: b(0), to: b(8), pre: 0, post: 6 }, //         0–4 s
-  twist: { from: b(8), to: b(16), pre: 8, post: 12 }, //        4–8 s
-  call: { from: b(16), to: b(53), pre: 12, post: 20 }, //      8–26.5 s
-  result: { from: b(53), to: b(63), pre: 14, post: 10 }, //  26.5–31.5 s
-  knowledge: { from: b(63), to: b(78), pre: 6, post: 8 }, //  31.5–39 s
-  scale: { from: b(78), to: b(88), pre: 6, post: 12 }, //      39–44 s
-  cta: { from: b(88), to: b(106), pre: 12, post: 0 }, //       44–53 s
-} as const;
+export const SCENES = (() => {
+  const w = (from: number, len: number, pre: number, post: number) => ({ from, to: from + len, pre, post });
+  const hook = w(0, b(8), 0, 6); //                       0–4 s
+  const twist = w(hook.to, b(8), 8, 12); //               4–8 s
+  const call = w(twist.to, CALL_LEN, 12, 20); //          8 s → (voice)
+  const result = w(call.to, RESULT_LEN, 14, 10);
+  const knowledge = w(result.to, KNOWLEDGE_LEN, 6, 8);
+  const scale = w(knowledge.to, SCALE_LEN, 6, 12);
+  const cta = w(scale.to, CTA_LEN, 12, 0);
+  return { hook, twist, call, result, knowledge, scale, cta } as const;
+})();
+/** Total length in frames (≈ 53–56 s, set by the voices) and in beats. */
+export const DURATION = SCENES.cta.to;
+export const TOTAL_BEATS = DURATION / BEAT;
 export type SceneKey = keyof typeof SCENES;
 
 /* ---------------------------------------------------------------- *
@@ -87,7 +133,7 @@ export const TWIST = {
 };
 
 /* ---------------------------------------------------------------- *
- * 8–26.5 s · CALL — picked up on the first ring; the booking, spoken.
+ * CALL (from 8 s, ≈ 18 s) — picked up on the first ring; the booking, spoken.
  * Each line starts on a half-beat and lasts exactly as long as its voice.
  * ---------------------------------------------------------------- */
 type CallLine = {
@@ -101,7 +147,7 @@ type CallLine = {
 };
 const CALL_LINES: readonly CallLine[] = [
   {
-    at: b(1.5),
+    at: CALL_AT[0],
     who: 'agent',
     voice: 'call-1',
     text: 'Thank you for calling Northside Studio. This is Ava, an AI assistant. How can I help you today?',
@@ -112,7 +158,7 @@ const CALL_LINES: readonly CallLine[] = [
     ],
   },
   {
-    at: b(12.5),
+    at: CALL_AT[1],
     who: 'caller',
     voice: 'call-2',
     text: 'Hi! Could I come in on Wednesday afternoon?',
@@ -122,7 +168,7 @@ const CALL_LINES: readonly CallLine[] = [
     ],
   },
   {
-    at: b(18.5),
+    at: CALL_AT[2],
     who: 'agent',
     voice: 'call-3',
     text: 'Of course. I have 15:00 or 16:30. Which suits you better?',
@@ -133,14 +179,14 @@ const CALL_LINES: readonly CallLine[] = [
     ],
   },
   {
-    at: b(27),
+    at: CALL_AT[3],
     who: 'caller',
     voice: 'call-4',
     text: "Three o'clock is perfect.",
     captions: [{ text: "Three o'clock is perfect.", word: 0 }],
   },
   {
-    at: b(30.5),
+    at: CALL_AT[4],
     who: 'agent',
     voice: 'call-5',
     text: "Lovely. You're booked for Wednesday at 15:00.",
@@ -159,13 +205,15 @@ export const CALL = {
   /** Slot chips pop as Ava says "three p.m." / "four thirty" (frames after line 3 starts). */
   slotPops: [vWord('call-3', 4), vWord('call-3', 7)] as const,
   /** The caller's pick ("Three o'clock…") selects the 15:00 chip. */
-  slotPick: b(27) + vWord('call-4', 1),
+  slotPick: CALL_AT[3] + vWord('call-4', 1),
   /** "Wednesday at 15:00" ignites ember as Ava says "three p.m." (0.42 s ease). */
-  bookedMark: b(30.5) + vWord('call-5', 6),
+  bookedMark: CALL_AT[4] + vWord('call-5', 6),
+  /** the call's own length (= the result's start) */
+  length: CALL_LEN,
 };
 
 /* ---------------------------------------------------------------- *
- * 26.5–31.5 s · RESULT — the booking flies into the calendar.
+ * RESULT (5 s) — the booking flies into the calendar.
  * Split: owner "Asleep." / calendar "Booked."
  * ---------------------------------------------------------------- */
 export const RESULT = {
@@ -179,19 +227,19 @@ export const RESULT = {
 };
 
 /* ---------------------------------------------------------------- *
- * 31.5–39 s · KNOWLEDGE — a second caller asks what isn't written down;
+ * KNOWLEDGE (≈ 9 s) — a second caller asks what isn't written down;
  * Ava searches the owner's documents and, honestly, doesn't guess.
  * (The site's #knowledge stage, on the white stock.)
  * ---------------------------------------------------------------- */
 export const KNOWLEDGE = {
-  heading: b(0.25), // "Answers from your documents."
+  heading: b(0.25), // "Answers from your own documents."
   docsIn: b(0.75), // five document tiles pop…
   docStep: BEAT / 4, // …one per 16th note
-  ask: b(2), // caller 2: "Do you do home visits?"
+  ask: KB_ASK, // caller 2: "Do you do home visits?"
   askVoice: 'kb-1' as VoiceId,
-  scan: [b(3.25), b(5)] as const, // beams + match bars; nothing reaches the 60 % threshold
-  miss: b(5), // "Not in the documents" — the orb greys
-  answer: b(5.5), // Ava's honest fallback
+  scan: [KB_SCAN0, KB_MISS] as const, // beams + match bars; nothing reaches the 60 % threshold
+  miss: KB_MISS, // "Not in the documents" — the orb greys
+  answer: KB_ANSWER, // Ava's honest fallback
   answerVoice: 'kb-2' as VoiceId,
   answerCaptions: [
     { text: "I don't have an answer for that,", word: 0 },
@@ -199,11 +247,13 @@ export const KNOWLEDGE = {
     { text: "I'll ask the team", word: 13 },
     { text: 'to call you back today.', word: 17 },
   ] as readonly Caption[],
-  out: [b(14), b(15)] as const, // the tiles hand over to the industry wall
+  /** "Where your documents stop, it says so." — the closing title */
+  closing: KB_CLOSE,
+  out: [KNOWLEDGE_LEN - b(1), KNOWLEDGE_LEN] as const, // a whip to clean white; the industry wall takes over
 };
 
 /* ---------------------------------------------------------------- *
- * 39–44 s · SCALE — 16 industries on 16th notes, Ava in six languages,
+ * SCALE (5 s) — 16 industries on 16th notes, Ava in six languages,
  * then a flash of the after-call flow.
  * ---------------------------------------------------------------- */
 export const SCALE = {
@@ -219,24 +269,24 @@ export const SCALE = {
 };
 
 /* ---------------------------------------------------------------- *
- * 44–53 s · CTA — Ava's voice-over; everything converges into the logo.
+ * CTA (≈ 9 s) — Ava's voice-over; everything converges into the logo.
  * ---------------------------------------------------------------- */
 export const CTA = {
   robotIn: [0, b(2)] as const,
-  line: b(1), // "AI voice agents that book your customers 24/7." — spoken by Ava
+  line: CTA_LINE, // "AI voice agents that book your customers 24/7." — spoken by Ava
   lineVoice: 'cta-1' as VoiceId,
   /** headline word i rises on spoken word lineWords[i] ("24/7." on "Twenty") */
   lineWords: [0, 1, 2, 3, 4, 5, 6, 7] as const,
   wordStagger: 3, // fallback stagger
-  converge: [b(10), b(12)] as const,
-  logoImpact: b(12), // on a bar downbeat (global beat 100)
-  brandVoice: b(12) + 4, // Ava: "Neuro Tech Voice."
+  converge: [CTA_CONVERGE0, CTA_IMPACT] as const,
+  logoImpact: CTA_IMPACT, // always on a strong beat (1 or 3) of the music
+  brandVoice: CTA_IMPACT + 4, // Ava: "Neuro Tech Voice."
   brandVoiceId: 'cta-2' as VoiceId,
-  button: b(13),
-  note: b(13.5),
-  url: b(14),
-  press: b(14.5), // the button takes the site's hover (plum) as if clicked
-  finalHold: b(15), // from here to the end (1.5 s) nothing moves but grain
+  button: CTA_IMPACT + b(1),
+  note: CTA_IMPACT + b(1.5),
+  url: CTA_IMPACT + b(2),
+  press: CTA_IMPACT + b(2.5), // the button takes the site's hover (plum) as if clicked
+  finalHold: CTA_HOLD, // from here to the end (1.5 s) nothing moves but grain
 };
 
 /* ================================================================ *
@@ -341,14 +391,14 @@ export const CALL_LOCAL = {
   /** status + phase label dim to .58 so the transcript is the single read */
   dim: [b(3.5), b(4.5)] as const, // 53 → 68
   /** camera drift settles to rest before the mark is handed over */
-  camSettle: [b(33), b(36)] as const,
+  camSettle: [CALL_LEN - b(4), CALL_LEN - b(1)] as const,
   /** the payoff beat: the mark presses (3 f) and springs back — exactly 1 again by markHide − 1 */
   payoff: CALL.bookedMark + 1,
   /** once Ava has finished speaking, everything but the mark recedes */
-  exit: [b(36.1), b(38.2)] as const, // scale, rack focus (into the result's pre-roll)
-  exitFade: [b(36.1), b(38.2) - 2] as const, // opacity, front-loaded
+  exit: [CALL_LEN - 14, CALL_LEN + 18] as const, // scale, rack focus (into the result's pre-roll)
+  exitFade: [CALL_LEN - 14, CALL_LEN + 16] as const, // opacity, front-loaded
   /** the result scene draws the mark from here (= the call's end) */
-  markHide: b(37),
+  markHide: CALL_LEN,
 };
 
 /* ── RESULT — fine cuts (result-local frames) ──────────────────── */

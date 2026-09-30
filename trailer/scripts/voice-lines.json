@@ -1,18 +1,89 @@
 {
   "voices": {
-    "ava": { "sid": 1, "name": "af_bella", "speed": 1.04, "note": "Ava - the AI agent (female, warm, clear)" },
-    "caller": { "sid": 6, "name": "am_michael", "speed": 1.0, "phone": true, "note": "The caller, heard down a phone line" },
-    "caller2": { "sid": 7, "name": "bf_emma", "speed": 1.0, "phone": true, "note": "A second caller (the knowledge-base beat)" }
+    "ava": {
+      "sid": 1,
+      "name": "af_bella",
+      "speed": 1.04,
+      "note": "Ava - the AI agent (female, warm, clear)",
+      "fish": {
+        "env": "FISH_AVA_VOICE",
+        "gender": "female",
+        "id": "",
+        "speed": 1.0
+      }
+    },
+    "caller": {
+      "sid": 6,
+      "name": "am_michael",
+      "speed": 1.0,
+      "phone": true,
+      "note": "The caller, heard down a phone line",
+      "fish": {
+        "env": "FISH_CALLER_VOICE",
+        "gender": "male",
+        "id": "",
+        "speed": 1.0
+      }
+    },
+    "caller2": {
+      "sid": 7,
+      "name": "bf_emma",
+      "speed": 1.0,
+      "phone": true,
+      "note": "A second caller (the knowledge-base beat)",
+      "fish": {
+        "env": "FISH_CALLER2_VOICE",
+        "gender": "female",
+        "id": "",
+        "speed": 1.0
+      }
+    }
   },
   "lines": [
-    { "id": "call-1", "voice": "ava", "say": "Thank you for calling Northside Studio. This is Ava, an AI assistant. How can I help you today?" },
-    { "id": "call-2", "voice": "caller", "say": "Hi! Could I come in on Wednesday afternoon?" },
-    { "id": "call-3", "voice": "ava", "say": "Of course. I have three p.m., or four thirty. Which suits you better?" },
-    { "id": "call-4", "voice": "caller", "say": "Three o'clock is perfect." },
-    { "id": "call-5", "voice": "ava", "say": "Lovely. You're booked for Wednesday at three p.m." },
-    { "id": "kb-1", "voice": "caller2", "say": "Do you do home visits?" },
-    { "id": "kb-2", "voice": "ava", "say": "I don't have an answer for that, and I don't want to guess. I'll ask the team to call you back today." },
-    { "id": "cta-1", "voice": "ava", "say": "AI voice agents that book your customers. Twenty four seven." },
-    { "id": "cta-2", "voice": "ava", "say": "Neuro Tech Voice." }
+    {
+      "id": "call-1",
+      "voice": "ava",
+      "say": "Thank you for calling Northside Studio. This is Ava, an AI assistant. How can I help you today?"
+    },
+    {
+      "id": "call-2",
+      "voice": "caller",
+      "say": "Hi! Could I come in on Wednesday afternoon?"
+    },
+    {
+      "id": "call-3",
+      "voice": "ava",
+      "say": "Of course. I have three p.m., or four thirty. Which suits you better?"
+    },
+    {
+      "id": "call-4",
+      "voice": "caller",
+      "say": "Three o'clock is perfect."
+    },
+    {
+      "id": "call-5",
+      "voice": "ava",
+      "say": "Lovely. You're booked for Wednesday at three p.m."
+    },
+    {
+      "id": "kb-1",
+      "voice": "caller2",
+      "say": "Do you do home visits?"
+    },
+    {
+      "id": "kb-2",
+      "voice": "ava",
+      "say": "I don't have an answer for that, and I don't want to guess. I'll ask the team to call you back today."
+    },
+    {
+      "id": "cta-1",
+      "voice": "ava",
+      "say": "AI voice agents that book your customers. Twenty four seven."
+    },
+    {
+      "id": "cta-2",
+      "voice": "ava",
+      "say": "Neuro Tech Voice."
+    }
   ]
 }

@@ -2,10 +2,21 @@
 /**
  * Neuro Tech Voice trailer — the voices.
  *
- * Synthesises every spoken line in scripts/voice-lines.json with Kokoro-82M
- * (Apache-2.0, open weights), run locally through sherpa-onnx:
- *   · Ava   = af_bella  (female, the AI agent)
- *   · Caller = am_michael, second caller = bf_emma, both through a phone-line EQ
+ * Synthesises every spoken line in scripts/voice-lines.json with one of two
+ * engines:
+ *
+ *   · FISH AUDIO (ultra-realistic, used when FISH_API_KEY is set) — the
+ *     fish.audio TTS API (model s2-pro by default, FISH_MODEL to change),
+ *     one voice model per role: FISH_AVA_VOICE, FISH_CALLER_VOICE,
+ *     FISH_CALLER2_VOICE (fish.audio model IDs), or the `fish.id` in
+ *     voice-lines.json; with no ID the script picks the most-used English
+ *     voice of the right gender from the fish.audio library and prints it
+ *     (pin it in voice-lines.json once you like it). Needs network access to
+ *     api.fish.audio. Check the voice's licence for commercial use.
+ *   · KOKORO-82M (offline fallback, Apache-2.0 open weights) via sherpa-onnx:
+ *     Ava = af_bella, callers = am_michael / bf_emma.
+ *
+ * Callers are always put through a phone-line EQ; Ava stays full-band.
  *
  * Writes:
  *   public/voice/<id>.wav        (trimmed, peak-normalised to -5 dBFS)
@@ -18,10 +29,13 @@
  * model) into .cache/, or pass KOKORO_DIR=/path/to/kokoro-int8-en-v0_19.
  * The generated WAVs + TS ARE committed, so rendering never needs the model.
  *
- *   npm run voice            (≈ 1 min on 4 CPU cores)
+ *   npm run voice                       (Fish if FISH_API_KEY is set, else Kokoro)
+ *   npm run voice -- --engine=kokoro    (force the offline engine)
+ *   npm run voice -- --list             (list fish.audio voice candidates)
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -57,6 +71,127 @@ function modelDir() {
     execFileSync('tar', ['xzf', path.join(cache, out), '-C', cache, 'package/kokoro-int8-en-v0_19']);
   }
   return dir;
+}
+
+
+/* ── Fish Audio (api.fish.audio) ───────────────────────────────── */
+const FISH_API = 'https://api.fish.audio';
+
+/** Minimal MessagePack encoder (the payload shape the official SDK sends). */
+function msgpack(v) {
+  const parts = [];
+  const u8 = (...b) => parts.push(Buffer.from(b));
+  const enc = (x) => {
+    if (x === null || x === undefined) return u8(0xc0);
+    if (x === true) return u8(0xc3);
+    if (x === false) return u8(0xc2);
+    if (typeof x === 'number') {
+      if (Number.isInteger(x) && x >= 0 && x < 128) return u8(x);
+      if (Number.isInteger(x) && x < 0 && x >= -32) return u8(0x100 + x);
+      if (Number.isInteger(x) && x >= 0 && x < 0x100000000) { const b = Buffer.alloc(5); b[0] = 0xce; b.writeUInt32BE(x, 1); return parts.push(b); }
+      const b = Buffer.alloc(9); b[0] = 0xcb; b.writeDoubleBE(x, 1); return parts.push(b);
+    }
+    if (typeof x === 'string') {
+      const s = Buffer.from(x, 'utf8');
+      if (s.length < 32) u8(0xa0 | s.length);
+      else if (s.length < 0x100) u8(0xd9, s.length);
+      else { const h = Buffer.alloc(3); h[0] = 0xda; h.writeUInt16BE(s.length, 1); parts.push(h); }
+      return parts.push(s);
+    }
+    if (Array.isArray(x)) {
+      if (x.length < 16) u8(0x90 | x.length); else { const h = Buffer.alloc(3); h[0] = 0xdc; h.writeUInt16BE(x.length, 1); parts.push(h); }
+      return x.forEach(enc);
+    }
+    const keys = Object.keys(x).filter((k) => x[k] !== undefined);
+    if (keys.length < 16) u8(0x80 | keys.length); else { const h = Buffer.alloc(3); h[0] = 0xde; h.writeUInt16BE(keys.length, 1); parts.push(h); }
+    for (const k of keys) { enc(k); enc(x[k]); }
+  };
+  enc(v);
+  return Buffer.concat(parts);
+}
+
+/** curl honours HTTPS_PROXY and the system CA store on every platform. */
+function curl(args, headers = {}) {
+  const dir = path.join(os.tmpdir(), `ntv-fish-${process.pid}`);
+  mkdirSync(dir, { recursive: true });
+  const hfile = path.join(dir, 'h');
+  writeFileSync(hfile, Object.entries({ Authorization: `Bearer ${process.env.FISH_API_KEY}`, ...headers }).map(([k, v]) => `${k}: ${v}`).join('\n'), { mode: 0o600 });
+  try {
+    return execFileSync('curl', ['-sS', '--fail-with-body', '--max-time', '120', '-H', `@${hfile}`, ...args], { maxBuffer: 1 << 28 });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function fishList({ tag, language = 'en', pageSize = 30 }) {
+  const q = new URLSearchParams({ page_size: String(pageSize), sort_by: 'task_count', language });
+  if (tag) q.append('tag', tag);
+  const res = JSON.parse(curl([`${FISH_API}/model?${q}`]).toString());
+  return (res.items ?? []).map((m) => ({ id: m._id ?? m.id, title: m.title, tags: m.tags ?? [], languages: m.languages ?? [], uses: m.task_count ?? 0, likes: m.like_count ?? 0 }));
+}
+
+/** Resolve a fish.audio voice for a role: env var → voice-lines.json → library pick. */
+function fishVoice(role, v) {
+  const envName = v.fish?.env;
+  const id = (envName && process.env[envName]) || v.fish?.id;
+  if (id) return { id, title: v.fish?.title ?? '(pinned)' };
+  const cands = fishList({ tag: v.fish?.gender, language: 'en' }).filter(
+    (m) => m.languages.includes('en') && !m.tags.some((t) => /(anime|game|meme|cartoon|celebrit|character|asmr)/i.test(t)),
+  );
+  if (!cands.length) throw new Error(`[voice] no fish.audio voice found for ${role}; set ${envName}`);
+  console.log(`[voice] ${role}: no voice pinned — picked "${cands[0].title}" (${cands[0].id}); set ${envName} to override`);
+  return cands[0];
+}
+
+/** Decode a PCM WAV (16/24/32-bit, any channels) to mono float. */
+function decodeWav(buf) {
+  let o = 12, fmt = null, data = null;
+  while (o + 8 <= buf.length) {
+    const id = buf.toString('ascii', o, o + 4), len = buf.readUInt32LE(o + 4);
+    if (id === 'fmt ') fmt = { ch: buf.readUInt16LE(o + 10), sr: buf.readUInt32LE(o + 12), bits: buf.readUInt16LE(o + 22), float: buf.readUInt16LE(o + 8) === 3 };
+    if (id === 'data') { data = buf.subarray(o + 8, o + 8 + Math.min(len, buf.length - o - 8)); break; }
+    o += 8 + len + (len & 1);
+  }
+  if (!fmt || !data) throw new Error('[voice] fish.audio did not return a WAV');
+  const bps = fmt.bits / 8, n = Math.floor(data.length / (bps * fmt.ch));
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    let acc = 0;
+    for (let c = 0; c < fmt.ch; c++) {
+      const p = (i * fmt.ch + c) * bps;
+      acc += fmt.float ? data.readFloatLE(p) : bps === 2 ? data.readInt16LE(p) / 32768 : bps === 3 ? data.readIntLE(p, 3) / 8388608 : data.readInt32LE(p) / 2147483648;
+    }
+    out[i] = acc / fmt.ch;
+  }
+  return { samples: out, sampleRate: fmt.sr };
+}
+
+function fishTTS(text, voice, speed) {
+  const body = msgpack({
+    text,
+    reference_id: voice.id,
+    format: 'wav',
+    sample_rate: 44100,
+    normalize: true,
+    latency: 'normal',
+    chunk_length: 200,
+    temperature: 0.7,
+    top_p: 0.7,
+    prosody: { speed, volume: 0 },
+  });
+  const dir = path.join(os.tmpdir(), `ntv-fish-body-${process.pid}`);
+  mkdirSync(dir, { recursive: true });
+  const bfile = path.join(dir, 'b');
+  writeFileSync(bfile, body);
+  try {
+    const wav = curl(['-X', 'POST', `${FISH_API}/v1/tts`, '--data-binary', `@${bfile}`], {
+      'Content-Type': 'application/msgpack',
+      model: process.env.FISH_MODEL || 's2-pro',
+    });
+    return decodeWav(wav);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 /* ── tiny DSP ──────────────────────────────────────────────────── */
@@ -212,25 +347,53 @@ function timings(say, dur, ps) {
 
 /* ── run ───────────────────────────────────────────────────────── */
 const t0 = Date.now();
+const argv = process.argv.slice(2);
 const cfg = JSON.parse(readFileSync(path.join(HERE, 'voice-lines.json'), 'utf8'));
-const M = modelDir();
-const sherpa = require('sherpa-onnx-node');
-const tts = new sherpa.OfflineTts({
-  model: {
-    kokoro: { model: `${M}/model.int8.onnx`, voices: `${M}/voices.bin`, tokens: `${M}/tokens.txt`, dataDir: `${M}/espeak-ng-data` },
-    numThreads: 4,
-    provider: 'cpu',
-    debug: false,
-  },
-  maxNumSentences: 1,
-});
+const forced = argv.find((a) => a.startsWith('--engine='))?.split('=')[1];
+const ENGINE = forced ?? (process.env.FISH_API_KEY ? 'fish' : 'kokoro');
+
+if (argv.includes('--list')) {
+  if (!process.env.FISH_API_KEY) throw new Error('--list needs FISH_API_KEY');
+  for (const gender of ['female', 'male']) {
+    console.log(`\n${gender.toUpperCase()} (English, most used first):`);
+    for (const m of fishList({ tag: gender })) console.log(`  ${m.id}  ${String(m.uses).padStart(8)} uses  ${m.title}  [${m.tags.join(', ')}]`);
+  }
+  process.exit(0);
+}
+
+let synth;
+const chosen = {};
+if (ENGINE === 'fish') {
+  if (!process.env.FISH_API_KEY) throw new Error('--engine=fish needs FISH_API_KEY');
+  const voices = Object.fromEntries(Object.entries(cfg.voices).map(([role, v]) => [role, fishVoice(role, v)]));
+  for (const [role, v] of Object.entries(voices)) chosen[role] = { engine: 'fish', model: process.env.FISH_MODEL || 's2-pro', id: v.id, title: v.title };
+  synth = (line, v, role) => fishTTS(line.say, voices[role], v.fish?.speed ?? v.speed ?? 1);
+} else {
+  const M = modelDir();
+  const sherpa = require('sherpa-onnx-node');
+  const tts = new sherpa.OfflineTts({
+    model: {
+      kokoro: { model: `${M}/model.int8.onnx`, voices: `${M}/voices.bin`, tokens: `${M}/tokens.txt`, dataDir: `${M}/espeak-ng-data` },
+      numThreads: 4,
+      provider: 'cpu',
+      debug: false,
+    },
+    maxNumSentences: 1,
+  });
+  for (const [role, v] of Object.entries(cfg.voices)) chosen[role] = { engine: 'kokoro', model: 'Kokoro-82M int8 (en v0.19)', voice: v.name };
+  synth = (line, v) => {
+    const a = tts.generate({ text: line.say, sid: v.sid, speed: v.speed });
+    return { samples: Float32Array.from(a.samples), sampleRate: a.sampleRate };
+  };
+}
+
 mkdirSync(OUT, { recursive: true });
-const result = { fps: FPS, model: 'Kokoro-82M int8 (en v0.19) via sherpa-onnx', voices: cfg.voices, lines: {} };
+const result = { fps: FPS, engine: ENGINE, voices: chosen, lines: {} };
 for (const line of cfg.lines) {
   const v = cfg.voices[line.voice];
-  const audio = tts.generate({ text: line.say, sid: v.sid, speed: v.speed });
+  const audio = synth(line, v, line.voice);
   const sr = audio.sampleRate;
-  let s = trim(Float32Array.from(audio.samples), sr);
+  let s = trim(audio.samples, sr);
   s = v.phone ? phoneLine(s, sr) : clean(s, sr);
   s = fades(normalise(s, PEAK_DB), sr);
   writeWav(path.join(OUT, `${line.id}.wav`), s, sr);
@@ -245,7 +408,7 @@ for (const line of cfg.lines) {
     ...tm,
     env: envelope(s, sr),
   };
-  console.log(`[voice] ${line.id.padEnd(7)} ${v.name.padEnd(10)} ${dur.toFixed(2)} s  "${line.say}"`);
+  console.log(`[voice] ${ENGINE} ${line.id.padEnd(7)} ${line.voice.padEnd(8)} ${dur.toFixed(2)} s  "${line.say}"`);
 }
 writeFileSync(
   TS_OUT,
