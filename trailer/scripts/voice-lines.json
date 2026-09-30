@@ -53,7 +53,8 @@
       },
       "cartesia": {
         "env": "CARTESIA_CALLER2_VOICE",
-        "id": "",
+        "id": "f786b574-daa5-4673-aa0c-cbe3e8534c02",
+        "name": "Katie",
         "gender": "feminine",
         "emotion": "neutral"
       }
