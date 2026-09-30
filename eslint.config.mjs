@@ -27,6 +27,8 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "services/**",
+    // The Remotion trailer is its own package with its own toolchain.
+    "trailer/**",
   ]),
 ]);
 

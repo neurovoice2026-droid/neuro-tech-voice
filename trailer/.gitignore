@@ -1,0 +1,5 @@
+node_modules/
+# renders (the final MP4s are delivered separately)
+out/
+# synthesised by scripts/generate-sfx.mjs before every studio/render
+public/sfx/
