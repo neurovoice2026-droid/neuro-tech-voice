@@ -3,13 +3,18 @@
  *
  * The film is cut on a 120 BPM grid: one beat = 0.5 s = 15 frames at 30 fps.
  * All values are written in beats with `b()` and converted to frames, so
- * retiming a moment is a one-number change here; the pictures AND the sound
- * effects (see CUES at the bottom) read the same constants, so they stay
- * locked together.
+ * retiming a moment is a one-number change here; the pictures, the sound
+ * effects, the voices and the music bed (see CUES / VOICES / BED at the
+ * bottom, and scripts/generate-sfx.mjs) all read these same constants.
+ *
+ * Spoken lines come from src/voice.generated.ts (scripts/generate-voice.mjs):
+ * the call is timed by the real voice — each line starts on the grid and
+ * lasts exactly as long as it is spoken; captions start on spoken words.
  *
  * Scene values are LOCAL to the scene (0 = the scene's own start), except
  * SCENES itself and CUES, which are absolute timeline frames.
  */
+import { VOICE, type VoiceId } from './voice.generated.ts';
 
 export const FPS = 30;
 export const BPM = 120;
@@ -18,11 +23,19 @@ export const BEAT = (60 / BPM) * FPS;
 /** Beats → frames (rounded to the nearest frame). */
 export const b = (beats: number) => Math.round(beats * BEAT);
 
-export const TOTAL_BEATS = 60;
-export const DURATION = b(TOTAL_BEATS); // 900 frames = 30 s
+export const TOTAL_BEATS = 106;
+export const DURATION = b(TOTAL_BEATS); // 1590 frames = 53 s
 
 export const LANDSCAPE = { width: 1920, height: 1080 } as const;
 export const VERTICAL = { width: 1080, height: 1920 } as const;
+
+/* ── voices ─────────────────────────────────────────────────────── */
+/** Frames a spoken line lasts. */
+export const vFrames = (id: VoiceId) => VOICE.lines[id].frames;
+/** Frame offset (from the line's start) at which spoken word `k` begins. */
+export const vWord = (id: VoiceId, k: number) => Math.round(VOICE.lines[id].words[k].t * FPS);
+/** A caption: shown from spoken word `word` of its line. */
+export type Caption = { text: string; word: number };
 
 /**
  * Scene windows on the absolute timeline. `pre`/`post` are the frames a
@@ -30,12 +43,13 @@ export const VERTICAL = { width: 1080, height: 1920 } as const;
  * scenes share a shape.
  */
 export const SCENES = {
-  hook: { from: b(0), to: b(8), pre: 0, post: 6 }, //   0–4 s
-  twist: { from: b(8), to: b(16), pre: 8, post: 12 }, //   4–8 s
-  call: { from: b(16), to: b(30), pre: 12, post: 20 }, //  8–15 s
-  result: { from: b(30), to: b(38), pre: 14, post: 10 }, // 15–19 s
-  scale: { from: b(38), to: b(48), pre: 6, post: 12 }, // 19–24 s
-  cta: { from: b(48), to: b(60), pre: 12, post: 0 }, // 24–30 s
+  hook: { from: b(0), to: b(8), pre: 0, post: 6 }, //         0–4 s
+  twist: { from: b(8), to: b(16), pre: 8, post: 12 }, //        4–8 s
+  call: { from: b(16), to: b(53), pre: 12, post: 20 }, //      8–26.5 s
+  result: { from: b(53), to: b(63), pre: 14, post: 10 }, //  26.5–31.5 s
+  knowledge: { from: b(63), to: b(78), pre: 6, post: 8 }, //  31.5–39 s
+  scale: { from: b(78), to: b(88), pre: 6, post: 12 }, //      39–44 s
+  cta: { from: b(88), to: b(106), pre: 12, post: 0 }, //       44–53 s
 } as const;
 export type SceneKey = keyof typeof SCENES;
 
@@ -73,29 +87,85 @@ export const TWIST = {
 };
 
 /* ---------------------------------------------------------------- *
- * 8–15 s · CALL — picked up on the first ring; live transcript.
+ * 8–26.5 s · CALL — picked up on the first ring; the booking, spoken.
+ * Each line starts on a half-beat and lasts exactly as long as its voice.
  * ---------------------------------------------------------------- */
+type CallLine = {
+  at: number;
+  who: 'agent' | 'caller';
+  voice: VoiceId;
+  /** the whole line as the caption shows it (24 h times, as on the site) */
+  text: string;
+  /** caption chunks (≤ 7 words), each starting on a spoken word */
+  captions: readonly Caption[];
+};
+const CALL_LINES: readonly CallLine[] = [
+  {
+    at: b(1.5),
+    who: 'agent',
+    voice: 'call-1',
+    text: 'Thank you for calling Northside Studio. This is Ava, an AI assistant. How can I help you today?',
+    captions: [
+      { text: 'Thank you for calling Northside Studio.', word: 0 },
+      { text: 'This is Ava, an AI assistant.', word: 6 },
+      { text: 'How can I help you today?', word: 12 },
+    ],
+  },
+  {
+    at: b(12.5),
+    who: 'caller',
+    voice: 'call-2',
+    text: 'Hi! Could I come in on Wednesday afternoon?',
+    captions: [
+      { text: 'Hi!', word: 0 },
+      { text: 'Could I come in on Wednesday afternoon?', word: 1 },
+    ],
+  },
+  {
+    at: b(18.5),
+    who: 'agent',
+    voice: 'call-3',
+    text: 'Of course. I have 15:00 or 16:30. Which suits you better?',
+    captions: [
+      { text: 'Of course.', word: 0 },
+      { text: 'I have 15:00 or 16:30.', word: 2 },
+      { text: 'Which suits you better?', word: 9 },
+    ],
+  },
+  {
+    at: b(27),
+    who: 'caller',
+    voice: 'call-4',
+    text: "Three o'clock is perfect.",
+    captions: [{ text: "Three o'clock is perfect.", word: 0 }],
+  },
+  {
+    at: b(30.5),
+    who: 'agent',
+    voice: 'call-5',
+    text: "Lovely. You're booked for Wednesday at 15:00.",
+    captions: [
+      { text: 'Lovely.', word: 0 },
+      { text: "You're booked for Wednesday at 15:00.", word: 1 },
+    ],
+  },
+];
 export const CALL = {
   pickup: 0,
   pickedUpText: [0, b(2)] as const, // big kinetic line, then it shrinks into the phase label
-  typeRate: 1.6, // characters per frame for the typewriter
-  lines: [
-    { at: b(1.5), who: 'agent', text: 'This is Ava, an AI assistant.' },
-    { at: b(4.5), who: 'caller', text: 'Could I come in on Wednesday afternoon?' },
-    { at: b(7.5), who: 'agent', text: 'Of course. I have 15:00 or 16:30.' },
-    { at: b(9.5), who: 'caller', text: "Three o'clock is perfect." },
-    { at: b(11.5), who: 'agent', text: "You're booked for Wednesday at 15:00." },
-  ] as const,
-  /** Slot chips pop as their times are typed in line 3 (frames after line 3 starts). */
-  slotPops: [12, 18] as const,
-  /** The caller's pick selects the 15:00 chip. */
-  slotPick: b(9.5) + 10,
-  /** "Wednesday at 15:00" eases to ember when the booking is made (0.42 s). */
-  bookedMark: b(11.5) + 24,
+  /** captions reveal word by word with the voice; this is the fallback typing speed */
+  typeRate: 1.6,
+  lines: CALL_LINES,
+  /** Slot chips pop as Ava says "three p.m." / "four thirty" (frames after line 3 starts). */
+  slotPops: [vWord('call-3', 4), vWord('call-3', 7)] as const,
+  /** The caller's pick ("Three o'clock…") selects the 15:00 chip. */
+  slotPick: b(27) + vWord('call-4', 1),
+  /** "Wednesday at 15:00" ignites ember as Ava says "three p.m." (0.42 s ease). */
+  bookedMark: b(30.5) + vWord('call-5', 6),
 };
 
 /* ---------------------------------------------------------------- *
- * 15–19 s · RESULT — the booking flies into the calendar.
+ * 26.5–31.5 s · RESULT — the booking flies into the calendar.
  * Split: owner "Asleep." / calendar "Booked."
  * ---------------------------------------------------------------- */
 export const RESULT = {
@@ -105,11 +175,35 @@ export const RESULT = {
   land: b(2), // …and lands in the slot (ding)
   split: b(3), // split divider draws; "Asleep." lands
   bookedWord: b(4), // "Booked." lands
-  toWhite: [b(7), b(8)] as const, // the booked event opens up into the white act
+  toWhite: [b(9), b(10)] as const, // the booked event opens up into the white act
 };
 
 /* ---------------------------------------------------------------- *
- * 19–24 s · SCALE — 16 industries on 16th notes, Ava in six languages,
+ * 31.5–39 s · KNOWLEDGE — a second caller asks what isn't written down;
+ * Ava searches the owner's documents and, honestly, doesn't guess.
+ * (The site's #knowledge stage, on the white stock.)
+ * ---------------------------------------------------------------- */
+export const KNOWLEDGE = {
+  heading: b(0.25), // "Answers from your documents."
+  docsIn: b(0.75), // five document tiles pop…
+  docStep: BEAT / 4, // …one per 16th note
+  ask: b(2), // caller 2: "Do you do home visits?"
+  askVoice: 'kb-1' as VoiceId,
+  scan: [b(3.25), b(5)] as const, // beams + match bars; nothing reaches the 60 % threshold
+  miss: b(5), // "Not in the documents" — the orb greys
+  answer: b(5.5), // Ava's honest fallback
+  answerVoice: 'kb-2' as VoiceId,
+  answerCaptions: [
+    { text: "I don't have an answer for that,", word: 0 },
+    { text: "and I don't want to guess.", word: 7 },
+    { text: "I'll ask the team", word: 13 },
+    { text: 'to call you back today.', word: 17 },
+  ] as readonly Caption[],
+  out: [b(14), b(15)] as const, // the tiles hand over to the industry wall
+};
+
+/* ---------------------------------------------------------------- *
+ * 39–44 s · SCALE — 16 industries on 16th notes, Ava in six languages,
  * then a flash of the after-call flow.
  * ---------------------------------------------------------------- */
 export const SCALE = {
@@ -125,19 +219,24 @@ export const SCALE = {
 };
 
 /* ---------------------------------------------------------------- *
- * 24–30 s · CTA — everything converges into the logo.
+ * 44–53 s · CTA — Ava's voice-over; everything converges into the logo.
  * ---------------------------------------------------------------- */
 export const CTA = {
   robotIn: [0, b(2)] as const,
-  line: b(1), // "AI voice agents that book your customers 24/7."
-  wordStagger: 3,
-  converge: [b(3), b(5)] as const,
-  logoImpact: b(5),
-  button: b(6),
-  note: b(6.5),
-  url: b(7),
-  press: b(7.5), // the button takes the site's hover (plum) as if clicked
-  finalHold: b(9), // from here to the end (1.5 s) nothing moves but grain
+  line: b(1), // "AI voice agents that book your customers 24/7." — spoken by Ava
+  lineVoice: 'cta-1' as VoiceId,
+  /** headline word i rises on spoken word lineWords[i] ("24/7." on "Twenty") */
+  lineWords: [0, 1, 2, 3, 4, 5, 6, 7] as const,
+  wordStagger: 3, // fallback stagger
+  converge: [b(10), b(12)] as const,
+  logoImpact: b(12), // on a bar downbeat (global beat 100)
+  brandVoice: b(12) + 4, // Ava: "Neuro Tech Voice."
+  brandVoiceId: 'cta-2' as VoiceId,
+  button: b(13),
+  note: b(13.5),
+  url: b(14),
+  press: b(14.5), // the button takes the site's hover (plum) as if clicked
+  finalHold: b(15), // from here to the end (1.5 s) nothing moves but grain
 };
 
 /* ================================================================ *
@@ -235,21 +334,21 @@ export const CALL_LOCAL = {
   emit: CALL_SWALLOW + 1, // 30 = b(2), the end of CALL.pickedUpText
   /** rings: the pickup, then every time Ava starts a line */
   rings: [0, CALL.lines[0].at, CALL.lines[2].at, CALL.lines[4].at] as const,
-  /** the AI-disclosure underline draws once "an AI assistant" is typed */
-  disclose: CALL.lines[0].at + Math.ceil('This is Ava, an AI assistant'.length / CALL.typeRate),
+  /** the AI-disclosure underline draws as Ava finishes saying "an AI assistant" */
+  disclose: CALL.lines[0].at + vWord('call-1', 12) - 4,
   /** the stage's floor (owner / call-log row) draws in */
   ownerIn: b(3), // 45
   /** status + phase label dim to .58 so the transcript is the single read */
   dim: [b(3.5), b(4.5)] as const, // 53 → 68
   /** camera drift settles to rest before the mark is handed over */
-  camSettle: [b(10), b(13)] as const,
+  camSettle: [b(33), b(36)] as const,
   /** the payoff beat: the mark presses (3 f) and springs back — exactly 1 again by markHide − 1 */
-  payoff: CALL.bookedMark + 1, // 198
-  /** once the mark starts turning ember, everything but the mark recedes */
-  exit: [CALL.bookedMark - 1, b(15.2)] as const, // 196 → 228 (scale, rack focus)
-  exitFade: [CALL.bookedMark - 1, b(15.2) - 2] as const, // 196 → 226 (opacity, front-loaded)
-  /** the result scene draws the mark from here (global 450) */
-  markHide: b(14), // 210
+  payoff: CALL.bookedMark + 1,
+  /** once Ava has finished speaking, everything but the mark recedes */
+  exit: [b(36.1), b(38.2)] as const, // scale, rack focus (into the result's pre-roll)
+  exitFade: [b(36.1), b(38.2) - 2] as const, // opacity, front-loaded
+  /** the result scene draws the mark from here (= the call's end) */
+  markHide: b(37),
 };
 
 /* ── RESULT — fine cuts (result-local frames) ──────────────────── */
@@ -394,121 +493,143 @@ export const CTA_LOCAL = {
   /** the site's liquid entry tear settles onto the figure (frames 0 → 24; liquid 0 → 18) */
   entryTear: [0, 24] as const,
   liquid: [0, 18] as const,
-  /** corner marks bracket the line right after its last word (41) */
-  marks: b(2.75),
+  /** corner marks bracket the line right after its last spoken word ("seven") */
+  marks: CTA.line + vWord('cta-1', 9) + 6,
   /** ON the converge downbeat: a first filament burst (45 → 49) … */
   tearKick: [CTA.converge[0], CTA.converge[0] + 4] as const,
   /** … then the tear builds while the figure is erased to the halo (45 → 69) */
   tear: [CTA.converge[0] + 4, CTA.logoImpact - 6] as const,
   erase: [CTA.converge[0], CTA.logoImpact - 6] as const,
-  /** words hold until 61, swell for 3 f, leave at 64 + 0.35 f each, 8 f flights (all in by 74.5) */
-  collapse: { from: b(4.25), step: 0.35, dur: 8, anticip: 3 },
-  /** the corner marks travel in behind the words (66 → 74) */
-  marksIn: { from: b(4.25) + 2, dur: 8 },
+  /** words hold, swell for 3 f, leave 19 f into the converge at 0.35 f each, 8 f flights */
+  collapse: { from: CTA.converge[0] + 19, step: 0.35, dur: 8, anticip: 3 },
+  /** the corner marks travel in behind the words */
+  marksIn: { from: CTA.converge[0] + 21, dur: 8 },
   /** streaks + motes pour in from the frame edges (45 → 75) */
   streaks: [CTA.converge[0], CTA.logoImpact] as const,
   /** the hook's ring waves, reversed: three rings contract into P (start radius × reach) */
   rings: [1.25, 1.1, 0.95] as const,
-  /** the eyes' last light (frames): glows up as they tear (62 → 66), then slides into the core (66 → 71) */
-  eyeGlow: [62, 66, 71] as const,
-  /** the core gathers (60 → 75) */
-  core: [b(4), CTA.logoImpact] as const,
-  /** anticipation: everything pulls back (68 → 75) */
-  pullBack: [b(4.5), CTA.logoImpact] as const,
+  /** the eyes' last light: glows up as they tear, then slides into the core */
+  eyeGlow: [CTA.converge[0] + 17, CTA.converge[0] + 21, CTA.converge[0] + 26] as const,
+  /** the core gathers */
+  core: [CTA.converge[0] + 15, CTA.logoImpact] as const,
+  /** anticipation: everything pulls back */
+  pullBack: [CTA.converge[0] + 23, CTA.logoImpact] as const,
   /** impact accents (frames) */
   shake: 6,
   ring: [CTA.logoImpact, CTA.logoImpact + 20] as const,
   /** halo breath starts under the end card */
   breath: CTA.button + 10,
   /** dust clears before the hold */
-  dustOut: [b(8), CTA.finalHold] as const,
+  dustOut: [CTA.finalHold - 15, CTA.finalHold] as const,
+};
+
+/* ── KNOWLEDGE — fine cuts (knowledge-local frames) ────────────── */
+export const KNOWLEDGE_LOCAL = {
+  /** the white bloom from the result settles into the stage */
+  stageIn: [0, b(0.75)] as const,
 };
 
 /* ---------------------------------------------------------------- *
  * SOUND — every cue is an absolute frame on the timeline, computed from
  * the scene constants above so picture and sound can't drift apart.
- * `vol` is linear gain on top of the file (each SFX file is normalised to
- * a -12 dBFS peak by the generator; the bed to -20 dBFS).
+ * `file` is relative to public/. `vol` is linear gain on top of the file:
+ * SFX files are normalised to a -12 dBFS peak, the bed to -20 dBFS, the
+ * voices to -5 dBFS (dialogue leads the mix; the bed ducks under it).
  * ---------------------------------------------------------------- */
 const at = (scene: SceneKey, local: number) => SCENES[scene].from + local;
+const sfx = (name: string) => `sfx/${name}`;
 
 export type Cue = { at: number; file: string; vol?: number };
 
-const transcriptTicks: Cue[] = CALL.lines.flatMap((line, i) => {
-  const chars = line.text.length;
-  const frames = Math.ceil(chars / CALL.typeRate);
-  // one soft key tick every 2 frames while a line types
-  return Array.from({ length: Math.ceil(frames / 2) }, (_, k) => ({
-    at: at('call', line.at + k * 2),
-    file: `tick-${(i + k) % 4}.wav`,
-    vol: 0.55,
-  }));
-});
+/** Every spoken line on the absolute timeline. */
+export const VOICES: { at: number; id: VoiceId }[] = [
+  ...CALL.lines.map((l) => ({ at: at('call', l.at), id: l.voice })),
+  { at: at('knowledge', KNOWLEDGE.ask), id: KNOWLEDGE.askVoice },
+  { at: at('knowledge', KNOWLEDGE.answer), id: KNOWLEDGE.answerVoice },
+  { at: at('cta', CTA.line), id: CTA.lineVoice },
+  { at: at('cta', CTA.brandVoice), id: CTA.brandVoiceId },
+];
+
+/** Speech windows (absolute frames) — the bed ducks under these. */
+export const SPEECH = VOICES.map((v) => [v.at, v.at + vFrames(v.id)] as const);
+/** Bed ducking: gain while speech plays (-7 dB), and the ramp in frames. */
+export const DUCK = { gain: 0.45, ramp: 6 };
 
 const industryTicks: Cue[] = Array.from({ length: 16 }, (_, i) => ({
   at: at('scale', Math.round(SCALE.industriesIn + i * SCALE.industryStep)),
-  file: `tick-${i % 4}.wav`,
+  file: sfx(`tick-${i % 4}.wav`),
   vol: 0.8,
 }));
 
 const langPops: Cue[] = Array.from({ length: 6 }, (_, i) => ({
   at: at('scale', Math.round(SCALE.langMorph + i * SCALE.langStep)),
-  file: `pop-${i % 3}.wav`,
+  file: sfx(`pop-${i % 3}.wav`),
   vol: 0.75,
 }));
 
 const flowPops: Cue[] = Array.from({ length: 3 }, (_, i) => ({
   at: at('scale', Math.round(SCALE.flow + i * SCALE.flowStep * 1.5)),
-  file: i === 2 ? 'confirm.wav' : 'click.wav',
+  file: sfx(i === 2 ? 'confirm.wav' : 'click.wav'),
+}));
+
+const docTicks: Cue[] = Array.from({ length: 5 }, (_, i) => ({
+  at: at('knowledge', Math.round(KNOWLEDGE.docsIn + i * KNOWLEDGE.docStep)),
+  file: sfx(`tick-${(i + 1) % 4}.wav`),
+  vol: 0.7,
 }));
 
 export const CUES: Cue[] = [
   // HOOK
-  { at: at('hook', HOOK.clockIn), file: 'roll.wav' },
-  { at: at('hook', HOOK.clockLand), file: 'land.wav' },
-  { at: at('hook', HOOK.ring), file: 'ring.wav' },
-  { at: at('hook', HOOK.textIn), file: 'whoosh-soft.wav', vol: 0.8 },
-  { at: at('hook', HOOK.anticipation) - 6, file: 'riser-short.wav' },
+  { at: at('hook', HOOK.clockIn), file: sfx('roll.wav') },
+  { at: at('hook', HOOK.clockLand), file: sfx('land.wav') },
+  { at: at('hook', HOOK.ring), file: sfx('ring.wav') },
+  { at: at('hook', HOOK.textIn), file: sfx('whoosh-soft.wav'), vol: 0.8 },
+  { at: at('hook', HOOK.anticipation) - 6, file: sfx('riser-short.wav') },
   // TWIST
-  { at: at('twist', TWIST.shatter), file: 'shatter.wav' },
-  { at: at('twist', TWIST.reassemble[0]), file: 'whoosh-rev.wav', vol: 0.8 },
-  { at: at('twist', TWIST.doorSlam), file: 'door.wav' },
-  { at: at('twist', TWIST.closedSign), file: 'click.wav', vol: 0.7 },
-  { at: at('twist', TWIST.line2), file: 'whoosh-soft.wav', vol: 0.7 },
-  { at: at('twist', TWIST.phoneOn), file: 'power-on.wav' },
-  { at: at('twist', TWIST.pushToPhone[0]), file: 'whoosh.wav' },
-  { at: at('twist', TWIST.ring2), file: 'ring.wav' },
-  // CALL
-  { at: at('call', CALL.pickup), file: 'pickup.wav' },
-  ...transcriptTicks,
-  { at: at('call', CALL.lines[2].at + CALL.slotPops[0]), file: 'pop-0.wav', vol: 0.8 },
-  { at: at('call', CALL.lines[2].at + CALL.slotPops[1]), file: 'pop-1.wav', vol: 0.8 },
-  { at: at('call', CALL.slotPick), file: 'click.wav' },
-  { at: at('call', CALL.bookedMark), file: 'shimmer.wav', vol: 0.8 },
+  { at: at('twist', TWIST.shatter), file: sfx('shatter.wav') },
+  { at: at('twist', TWIST.reassemble[0]), file: sfx('whoosh-rev.wav'), vol: 0.8 },
+  { at: at('twist', TWIST.doorSlam), file: sfx('door.wav') },
+  { at: at('twist', TWIST.closedSign), file: sfx('click.wav'), vol: 0.7 },
+  { at: at('twist', TWIST.line2), file: sfx('whoosh-soft.wav'), vol: 0.7 },
+  { at: at('twist', TWIST.phoneOn), file: sfx('power-on.wav') },
+  { at: at('twist', TWIST.pushToPhone[0]), file: sfx('whoosh.wav') },
+  { at: at('twist', TWIST.ring2), file: sfx('ring.wav') },
+  // CALL (the voices themselves are in VOICES)
+  { at: at('call', CALL.pickup), file: sfx('pickup.wav') },
+  { at: at('call', CALL.lines[2].at + CALL.slotPops[0]), file: sfx('pop-0.wav'), vol: 0.6 },
+  { at: at('call', CALL.lines[2].at + CALL.slotPops[1]), file: sfx('pop-1.wav'), vol: 0.6 },
+  { at: at('call', CALL.slotPick), file: sfx('click.wav'), vol: 0.8 },
+  { at: at('call', CALL.bookedMark), file: sfx('shimmer.wav'), vol: 0.7 },
   // RESULT
-  { at: at('result', RESULT.fly) - 4, file: 'whoosh.wav' },
-  { at: at('result', RESULT.land), file: 'ding.wav' },
-  { at: at('result', RESULT.land), file: 'pop-2.wav', vol: 0.9 },
-  { at: at('result', RESULT.split), file: 'whoosh-soft.wav', vol: 0.7 },
-  { at: at('result', RESULT.bookedWord), file: 'pop-0.wav', vol: 0.8 },
-  { at: at('result', RESULT.toWhite[0]), file: 'riser-short.wav' },
+  { at: at('result', RESULT.fly) - 4, file: sfx('whoosh.wav') },
+  { at: at('result', RESULT.land), file: sfx('ding.wav') },
+  { at: at('result', RESULT.land), file: sfx('pop-2.wav'), vol: 0.9 },
+  { at: at('result', RESULT.split), file: sfx('whoosh-soft.wav'), vol: 0.7 },
+  { at: at('result', RESULT.bookedWord), file: sfx('pop-0.wav'), vol: 0.8 },
+  { at: at('result', RESULT.toWhite[0]), file: sfx('riser-short.wav') },
+  // KNOWLEDGE (the white act begins)
+  { at: at('knowledge', 0), file: sfx('hit.wav') },
+  { at: at('knowledge', KNOWLEDGE.heading), file: sfx('whoosh-soft.wav'), vol: 0.6 },
+  ...docTicks,
+  { at: at('knowledge', KNOWLEDGE.scan[0]), file: sfx('whoosh-soft.wav'), vol: 0.55 },
+  { at: at('knowledge', KNOWLEDGE.miss), file: sfx('land.wav'), vol: 0.6 },
+  { at: at('knowledge', KNOWLEDGE.out[0]), file: sfx('whoosh.wav'), vol: 0.7 },
   // SCALE
-  { at: at('scale', 0), file: 'hit.wav' },
+  { at: at('scale', 0), file: sfx('pop-2.wav') },
   ...industryTicks,
-  { at: at('scale', SCALE.langMorph) - 3, file: 'whoosh-soft.wav', vol: 0.8 },
+  { at: at('scale', SCALE.langMorph) - 3, file: sfx('whoosh-soft.wav'), vol: 0.8 },
   ...langPops,
-  { at: at('scale', SCALE.flow) - 3, file: 'whoosh.wav', vol: 0.8 },
+  { at: at('scale', SCALE.flow) - 3, file: sfx('whoosh.wav'), vol: 0.8 },
   ...flowPops,
-  { at: at('scale', SCALE.irisToDark[0]), file: 'whoosh-rev.wav' },
+  { at: at('scale', SCALE.irisToDark[0]), file: sfx('whoosh-rev.wav') },
   // CTA
-  { at: at('cta', 0), file: 'sub.wav' },
-  { at: at('cta', CTA.line), file: 'whoosh-soft.wav', vol: 0.7 },
-  { at: at('cta', CTA.converge[0]), file: 'riser.wav' },
-  { at: at('cta', CTA.logoImpact), file: 'impact.wav' },
-  { at: at('cta', CTA.button), file: 'pop-1.wav' },
-  { at: at('cta', CTA.url), file: 'tick-2.wav' },
-  { at: at('cta', CTA.press), file: 'click.wav' },
+  { at: at('cta', 0), file: sfx('sub.wav') },
+  { at: at('cta', CTA.converge[0]), file: sfx('riser.wav') },
+  { at: at('cta', CTA.logoImpact), file: sfx('impact.wav') },
+  { at: at('cta', CTA.button), file: sfx('pop-1.wav') },
+  { at: at('cta', CTA.url), file: sfx('tick-2.wav') },
+  { at: at('cta', CTA.press), file: sfx('click.wav') },
 ];
 
-/** The ambient bed (pad + beat), one file covering the whole 30 s. */
-export const BED = { file: 'bed.wav', vol: 1 };
+/** The ambient bed (pad + beat), synthesised to the full length by generate-sfx.mjs. */
+export const BED = { file: sfx('bed.wav'), vol: 1 };

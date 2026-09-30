@@ -6,12 +6,13 @@
  * Writes 48 kHz / 24-bit stereo WAVs into public/sfx:
  *
  *   · every sound effect, each normalised to a -12 dBFS peak
- *   · bed.wav — a 30 s, 120 BPM ambient pad + beat, normalised to -20 dBFS
- *     peak (a placeholder you can swap for a licensed track: same file name,
- *     or change BED in src/timing.ts)
+ *   · bed.wav — a 120 BPM ambient pad + beat as long as the film, following
+ *     its sections (read from src/timing.ts), normalised to -20 dBFS peak.
+ *     A placeholder you can swap for a licensed track: same file name, or
+ *     change BED in src/timing.ts. (It is ducked under the voices at render.)
  *
  * Run automatically by remotion.config.ts before `remotion studio|render`,
- * or by hand: `node scripts/generate-sfx.mjs`.
+ * or by hand: `npm run sfx` (node --experimental-strip-types, Node ≥ 22.6).
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -19,12 +20,14 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(HERE, '..', 'public', 'sfx');
+/** The film's timeline — the bed is built from it. */
+const T = await import(path.join(HERE, '..', 'src', 'timing.ts'));
 const SR = 48000;
-const BPM = 120;
+const BPM = T.BPM;
 const BEAT = 60 / BPM; // seconds
 const SFX_PEAK_DB = -12;
 const BED_PEAK_DB = -20;
-const BED_SECONDS = 30;
+const BED_SECONDS = T.DURATION / T.FPS + 2.5; // + a reverb tail past the last frame
 
 /* ─────────────────────────── DSP kit ─────────────────────────── */
 
@@ -489,56 +492,75 @@ SFX['impact.wav'] = () => {
 
 /* ─────────────────────────── the bed ─────────────────────────── */
 /**
- * 30 s at 120 BPM (60 beats), following the film's sections:
- *   beats  0–8   HOOK   drone + a clock ticking on the beat
- *   beats  8–16  TWIST  pad opens, hats creep in, reverse swell into the call
- *   beats 16–30  CALL   soft kick on 1 & 3, 8th hats, bass pulse
- *   beats 30–38  RESULT lift: brighter chord, half-time
- *   beats 38–48  SCALE  full groove: four-on-the-floor, claps, 16th arp
- *   beats 48–60  CTA    groove drops out, big chord, resolves under the logo
+ * 120 BPM, as long as the film, following its sections (global beats from
+ * SCENES in src/timing.ts):
+ *   HOOK       drone + a clock ticking on the beat
+ *   TWIST      pad opens, hats creep in, reverse swell into the call
+ *   CALL       soft kick on 1 & 3, quiet 8th hats, bass pulse, sparse arp
+ *              (it sits under the dialogue and is ducked there)
+ *   RESULT     lift: brighter chords, half-time
+ *   KNOWLEDGE  hushed and curious: pad, soft 8th pluck, no kick
+ *   SCALE      full groove: four-on-the-floor, claps, 16th arp
+ *   CTA        groove drops out, a big chord builds and resolves ON the logo
  */
 function bed() {
-  const s = buf(BED_SECONDS + 0.001);
+  const s = buf(BED_SECONDS);
   const at = (beat) => beat * BEAT;
   const r = rng(9001);
+  const B = (k) => ({ from: T.SCENES[k].from / T.BEAT, to: T.SCENES[k].to / T.BEAT });
+  const S = { hook: B('hook'), twist: B('twist'), call: B('call'), result: B('result'), knowledge: B('knowledge'), scale: B('scale'), cta: B('cta') };
+  const END = T.TOTAL_BEATS;
+  const IMPACT = S.cta.from + T.CTA.logoImpact / T.BEAT; // global beat of the logo
+  const inS = (beat, k) => beat >= S[k].from && beat < S[k].to;
 
-  // chord per 4 beats (one bar). A minor → F → C → G, lifting at RESULT.
   const CH = {
-    Am: [57, 60, 64, 69], // A3 C4 E4 A4
-    F: [53, 57, 60, 65],
-    C: [48, 55, 60, 64],
-    G: [55, 59, 62, 67],
-    Fmaj7: [53, 57, 60, 64],
-    Cadd9: [48, 55, 62, 64, 67],
+    Am: [57, 60, 64, 69], F: [53, 57, 60, 65], C: [48, 55, 60, 64], G: [55, 59, 62, 67],
+    Fmaj7: [53, 57, 60, 64], Cadd9: [48, 55, 62, 64, 67],
   };
-  const bars = [
-    'Am', 'Am', // hook
-    'F', 'F', // twist
-    'Am', 'F', 'C', 'G', // call (bars 4–7)
-    'F', 'C', // result (bars 7.5–9.5)
-    'Am', 'F', 'C', // scale (bars 9.5–12)
-    'Fmaj7', 'Cadd9', // cta
-  ];
   const roots = { Am: 45, F: 41, C: 36, G: 43, Fmaj7: 41, Cadd9: 36 };
-  // section gain envelope for the pad (per beat)
+  const CYCLE = ['Am', 'F', 'C', 'G'];
+  const nBars = Math.ceil(END / 4) + 1;
+  const chordOfBar = (bar) => {
+    const beat = bar * 4;
+    if (beat < S.twist.from) return 'Am';
+    if (beat < S.call.from) return 'F';
+    if (beat >= IMPACT) return 'Cadd9';
+    if (beat >= IMPACT - 4) return 'G';
+    if (beat >= S.cta.from) return 'Fmaj7';
+    return CYCLE[(bar - S.call.from / 4) % 4 | 0] ?? 'Am';
+  };
+  const bars = Array.from({ length: nBars }, (_, i) => chordOfBar(i));
+  const chordAt = (beat) => bars[Math.min(bars.length - 1, Math.floor(beat / 4))];
+
   const padGain = (beat) => {
-    if (beat < 8) return 0.35 + 0.15 * (beat / 8);
-    if (beat < 16) return 0.5 + 0.3 * ((beat - 8) / 8);
-    if (beat < 30) return 0.6;
-    if (beat < 38) return 0.75;
-    if (beat < 48) return 0.6;
-    if (beat < 53) return 0.7 + 0.2 * ((beat - 48) / 5);
-    return 0.95 * Math.max(0, 1 - (beat - 53) / 9);
+    if (beat < S.hook.to) return 0.35 + 0.15 * (beat / S.hook.to);
+    if (beat < S.twist.to) return 0.5 + 0.3 * ((beat - S.twist.from) / (S.twist.to - S.twist.from));
+    if (beat < S.call.to) return 0.55;
+    if (beat < S.result.to) return 0.75;
+    if (beat < S.knowledge.to) return 0.5;
+    if (beat < S.scale.to) return 0.6;
+    if (beat < IMPACT) return 0.6 + 0.3 * smooth((beat - S.cta.from) / (IMPACT - S.cta.from));
+    return 0.95 * Math.max(0, 1 - (beat - IMPACT) / (END - IMPACT + 5));
+  };
+  const cutoff = (beat) => {
+    if (beat < S.call.from) return 350 + 900 * smooth(Math.min(1, beat / S.call.from));
+    if (beat < S.result.from) return 1200 + 200 * Math.sin(beat * 0.4);
+    if (beat < S.knowledge.from) return 1900;
+    if (beat < S.scale.from) return 1100 + 150 * Math.sin(beat * 0.5);
+    if (beat < S.scale.to) return 2200;
+    if (beat < IMPACT) return 1400 + 2400 * smooth((beat - S.cta.from) / (IMPACT - S.cta.from));
+    return 3200 * Math.max(0.25, 1 - (beat - IMPACT) / 10);
   };
 
-  // PAD: detuned saws → slow low-pass, per bar with crossfades
+  // PAD: detuned saws → slow low-pass, one chord per bar with crossfades
   const padL = new Float32Array(s[0].length);
   const padR = new Float32Array(s[0].length);
-  const phases = [];
+  const phases = {};
   for (let bi = 0; bi < bars.length; bi++) {
     const notes = CH[bars[bi]];
     const t0 = at(bi * 4) - 0.25;
-    const t1 = at(bi * 4 + 4) + (bi === bars.length - 1 ? 6 : 0.35);
+    const last = bi * 4 >= IMPACT;
+    const t1 = at(bi * 4 + 4) + (last && bi === bars.length - 1 ? 3 : 0.35);
     const i0 = Math.max(0, Math.round(t0 * SR));
     const i1 = Math.min(padL.length, Math.round(t1 * SR));
     for (let v = 0; v < notes.length; v++) {
@@ -562,88 +584,82 @@ function bed() {
   const lpL = new Biquad('lp', 600, 0.7);
   const lpR = new Biquad('lp', 600, 0.7);
   for (let i = 0; i < padL.length; i++) {
-    const t = i / SR;
-    const beat = t / BEAT;
-    if (i % 64 === 0) {
-      const open =
-        beat < 16 ? 350 + 900 * smooth(Math.min(1, beat / 16)) :
-        beat < 38 ? 1300 + 300 * Math.sin(beat * 0.4) :
-        beat < 48 ? 2200 :
-        beat < 53 ? 1400 + 2400 * smooth((beat - 48) / 5) : 3200 * Math.max(0.25, 1 - (beat - 53) / 10);
-      lpL.set(open, 0.8); lpR.set(open * 1.03, 0.8);
-    }
+    const beat = i / SR / BEAT;
+    if (i % 64 === 0) { const c = cutoff(beat); lpL.set(c, 0.8); lpR.set(c * 1.03, 0.8); }
     const g = padGain(beat);
     s[0][i] += lpL.run(padL[i]) * g;
     s[1][i] += lpR.run(padR[i]) * g;
   }
 
   // DRONE (hook): A1 sine + fifth, fades into the pad
-  addMono(s, 0, tone(9, () => mtof(33), (t) => smooth(Math.min(1, t / 1.5)) * Math.max(0, 1 - Math.max(0, t - 6) / 3) * 0.35), 1);
-  addMono(s, 0, tone(9, () => mtof(40), (t) => smooth(Math.min(1, t / 2.5)) * Math.max(0, 1 - Math.max(0, t - 6) / 3) * 0.12), 1);
+  const hookEnd = at(S.hook.to);
+  addMono(s, 0, tone(hookEnd + 1, () => mtof(33), (t) => smooth(Math.min(1, t / 1.5)) * Math.max(0, 1 - Math.max(0, t - (hookEnd + 2) * 0.66) / 3) * 0.35), 1);
+  addMono(s, 0, tone(hookEnd + 1, () => mtof(40), (t) => smooth(Math.min(1, t / 2.5)) * Math.max(0, 1 - Math.max(0, t - (hookEnd + 2) * 0.66) / 3) * 0.12), 1);
 
-  // CLOCK TICK on every beat of the hook (tick-tock alternation)
-  for (let beat = 0; beat < 8; beat++) {
+  // CLOCK TICK on every beat of the hook (tick-tock)
+  for (let beat = 0; beat < S.hook.to; beat++) {
     addMono(s, at(beat), clickSig(beat % 2 ? 2100 : 2600, 9100 + beat, 0.03), 0.18, beat % 2 ? 0.25 : -0.25);
   }
 
   // KICK
-  const kick = (gain) =>
-    tone(0.35, (t) => 45 + 95 * expDecay(t, 0.03), (t) => Math.min(1, t / 0.0015) * expDecay(t, 0.11) * gain);
-  for (let beat = 16; beat < 48; beat++) {
-    const inCall = beat < 30 && beat % 2 === 0;
-    const inResult = beat >= 30 && beat < 38 && beat % 4 === 0;
-    const inScale = beat >= 38;
-    if (inCall || inResult || inScale) addMono(s, at(beat), kick(inScale ? 0.9 : 0.55), 1);
+  const kick = (gain) => tone(0.35, (t) => 45 + 95 * expDecay(t, 0.03), (t) => Math.min(1, t / 0.0015) * expDecay(t, 0.11) * gain);
+  for (let beat = S.call.from; beat < S.cta.from; beat++) {
+    const call = inS(beat, 'call') && beat % 2 === 0;
+    const result = inS(beat, 'result') && Math.round(beat) % 4 === 0;
+    const knowledge = inS(beat, 'knowledge') && Math.round(beat) % 4 === 0 && beat >= S.knowledge.from + 6;
+    const scale = inS(beat, 'scale');
+    if (call || result || knowledge || scale) addMono(s, at(beat), kick(scale ? 0.9 : knowledge ? 0.3 : 0.5), 1);
   }
 
-  // BASS pulse on 8ths (call + scale), root of the bar
-  for (let e = 16 * 2; e < 48 * 2; e++) {
+  // BASS pulse on 8ths (call + scale; half-time in the result)
+  for (let e = S.call.from * 2; e < S.cta.from * 2; e++) {
     const beat = e / 2;
-    if (beat >= 30 && beat < 38 && e % 2) continue; // half-time in RESULT
-    const bar = bars[Math.floor(beat / 4)];
-    const f = mtof(roots[bar]);
-    const len = 0.22;
-    const b = tone(len, () => f, (t) => Math.min(1, t / 0.004) * expDecay(t, 0.1) * (beat >= 38 ? 0.28 : 0.2), { shape: 'tri' });
-    addMono(s, at(beat) + (e % 2 ? 0 : 0.01), b, 1);
+    if (inS(beat, 'knowledge')) continue;
+    if (inS(beat, 'result') && e % 2) continue;
+    const f = mtof(roots[chordAt(beat)]);
+    const g = inS(beat, 'scale') ? 0.28 : 0.18;
+    addMono(s, at(beat) + (e % 2 ? 0 : 0.01), tone(0.22, () => f, (t) => Math.min(1, t / 0.004) * expDecay(t, 0.1) * g, { shape: 'tri' }), 1);
   }
 
-  // HATS: creep in during the twist (16ths, quiet), 8ths in the call, 16ths in scale
+  // HATS
   const hat = (seed, gain, open = false) =>
     noise(open ? 0.18 : 0.05, seed, (t) => expDecay(t, open ? 0.05 : 0.012) * gain, { type: 'hp', f: () => 7500, q: () => 0.7 });
-  for (let sx = 12 * 4; sx < 48 * 4; sx++) {
+  for (let sx = (S.twist.to - 4) * 4; sx < S.cta.from * 4; sx++) {
     const beat = sx / 4;
     let g = 0;
-    if (beat < 16) g = ((beat - 12) / 4) * 0.12 * (sx % 2 ? 0.6 : 1);
-    else if (beat < 30) g = sx % 2 === 0 ? (sx % 4 === 2 ? 0.2 : 0.12) : 0;
-    else if (beat < 38) g = sx % 4 === 2 ? 0.14 : 0;
+    if (beat < S.call.from) g = ((beat - (S.twist.to - 4)) / 4) * 0.12 * (sx % 2 ? 0.6 : 1);
+    else if (inS(beat, 'call')) g = sx % 2 === 0 ? (sx % 4 === 2 ? 0.14 : 0.08) : 0;
+    else if (inS(beat, 'result')) g = sx % 4 === 2 ? 0.14 : 0;
+    else if (inS(beat, 'knowledge')) g = sx % 4 === 2 ? 0.07 : 0;
     else g = sx % 4 === 2 ? 0.22 : 0.1;
-    if (g > 0) addMono(s, at(beat), hat(9500 + sx, g, beat >= 38 && sx % 4 === 2), 1, sx % 2 ? 0.3 : -0.3);
+    if (g > 0) addMono(s, at(beat), hat(9500 + sx, g, inS(beat, 'scale') && sx % 4 === 2), 1, sx % 2 ? 0.3 : -0.3);
   }
 
-  // CLAP on 2 & 4 in SCALE
-  for (let beat = 39; beat < 48; beat += 2) {
+  // CLAP on 2 & 4 in the SCALE montage
+  for (let beat = Math.ceil(S.scale.from) + 1; beat < S.scale.to; beat += 2) {
     const clap = noise(0.2, 9700 + beat, (t) => (expDecay(t, 0.04) + (t < 0.02 ? 0.5 : 0)) * 0.35, { type: 'bp', f: () => 1400, q: () => 0.9 });
     addMono(s, at(beat), clap, 1);
   }
 
-  // ARP: 16th plucks in SCALE, quieter 8ths during the call
-  for (let sx = 16 * 4; sx < 48 * 4; sx++) {
+  // ARP: 16ths in SCALE, soft 8ths in CALL and KNOWLEDGE
+  for (let sx = S.call.from * 4; sx < S.cta.from * 4; sx++) {
     const beat = sx / 4;
-    const scale = beat >= 38;
+    const scale = inS(beat, 'scale');
     if (!scale && sx % 2) continue;
-    if (beat >= 30 && beat < 38) continue;
-    const notes = CH[bars[Math.floor(beat / 4)]];
+    if (inS(beat, 'result')) continue;
+    const notes = CH[chordAt(beat)];
     const m = notes[sx % notes.length] + 12 + (Math.floor(sx / 8) % 2 ? 12 : 0);
     const pl = bell(0.3, mtof(m), { ratio: 2, index: 1.1, tau: 0.09, idxTau: 0.05 });
-    addMono(s, at(beat), pl, scale ? 0.1 : 0.06, Math.sin(sx * 0.7) * 0.5);
+    addMono(s, at(beat), pl, scale ? 0.1 : inS(beat, 'knowledge') ? 0.05 : 0.045, Math.sin(sx * 0.7) * 0.5);
   }
 
-  // REVERSE SWELL into the call (beats 14–16)
-  const swell = noise(1.0, 9800, (t) => Math.pow(t / 1.0, 3) * 0.4, { type: 'bp', f: (t) => 800 + 5000 * (t / 1.0), q: () => 0.9 });
-  addMono(s, at(14), swell, 1);
+  // REVERSE SWELLS into the call and into the montage
+  for (const target of [S.call.from, S.scale.from]) {
+    const swell = noise(1.0, 9800 + target, (t) => Math.pow(t / 1.0, 3) * 0.4, { type: 'bp', f: (t) => 800 + 5000 * (t / 1.0), q: () => 0.9 });
+    addMono(s, at(target - 2), swell, 1);
+  }
 
   const wet = reverb(s, { wet: 0.28, dry: 1, room: 0.88, damp: 0.35, width: 1 });
-  // gentle glue: soft clip at the bus
   for (let i = 0; i < wet[0].length; i++) {
     wet[0][i] = softclip(wet[0][i], 1.1);
     wet[1][i] = softclip(wet[1][i], 1.1);

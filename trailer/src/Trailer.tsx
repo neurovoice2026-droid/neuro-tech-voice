@@ -15,6 +15,7 @@ import { Hook } from './scenes/Hook';
 import { Twist } from './scenes/Twist';
 import { Call } from './scenes/Call';
 import { Result } from './scenes/Result';
+import { Knowledge } from './scenes/Knowledge';
 import { Scale } from './scenes/Scale';
 import { Cta } from './scenes/Cta';
 
@@ -23,16 +24,18 @@ export const SCENE_COMPONENTS: Record<SceneKey, React.FC> = {
   twist: Twist,
   call: Call,
   result: Result,
+  knowledge: Knowledge,
   scale: Scale,
   cta: Cta,
 };
 
-export const ORDER: SceneKey[] = ['hook', 'twist', 'call', 'result', 'scale', 'cta'];
+export const ORDER: SceneKey[] = ['hook', 'twist', 'call', 'result', 'knowledge', 'scale', 'cta'];
 
 /** Grain: the cover's overlay grain on the dark; lighter on the white act. */
 const FilmGrain: React.FC = () => {
   const frame = useCurrentFrame();
-  const whiteIn = SCENES.scale.from;
+  // the white act: the knowledge base, then the scale montage, until the CTA iris
+  const whiteIn = SCENES.knowledge.from;
   const whiteOut = SCENES.scale.from + SCALE.irisToDark[1];
   const onWhite =
     tween(frame, [whiteIn - 4, whiteIn + 2], [0, 1]) * (1 - tween(frame, [whiteOut - 10, whiteOut], [0, 1]));

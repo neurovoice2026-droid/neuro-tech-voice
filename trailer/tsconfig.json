@@ -12,6 +12,7 @@
     "forceConsistentCasingInFileNames": true,
     "noUnusedLocals": true,
     "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
     "types": ["node"]
   },
   "include": ["src", "remotion.config.ts", "src/css.d.ts"]
