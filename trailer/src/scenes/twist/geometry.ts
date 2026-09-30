@@ -13,8 +13,20 @@ import { TWIST } from '../../timing';
 export const TW = {
   /** anticipation before the break: the line gathers itself (t -8 → 0) */
   gather: -8,
-  /** word-level landing starts of the rebuilt line (Closed, is, for, the, door,) */
-  wordStarts: [3, 8, 12, 16, 21] as const,
+  /** "closed" lets go of the hook line and slides into "Closed" (per-letter +0.35) */
+  closedSlide: 4,
+  /** landing (lock-in) frame of the FIRST letter of "is", "for", "the" */
+  wordLand: [16.5, 19.5, 22.5] as const,
+  /** gap between the landings of neighbouring letters inside a word */
+  letterGap: 0.7,
+  /** "door," lands left to right and its comma locks ON the slam */
+  doorGap: 0.55,
+  /** no shard turns round before this (the blast has to read first) */
+  turnMin: 8.5,
+  /** the phone emerges from the dark once "closed" has left it */
+  phoneReveal: [7, 17] as const,
+  /** the on-phone avatar settles from its UI size to CALL_ORB_START/S */
+  avatarShrink: [TWIST.pushToPhone[0] + 12, TWIST.pushToPhone[1] - 2] as const,
   /** the door creaks a little wider before it swings (anticipation) */
   doorCreak: 7,
   /** the swing itself: slow start, accelerating into the slam (EASE.in4) */
@@ -47,7 +59,8 @@ export function twistGeo(L: Layout) {
   );
   const floor = door.top + door.h;
 
-  const phone = L.pick({ cx: 1592, cy: 540, w: 260, h: 540 }, { cx: 772, cy: 1484, w: 260, h: 540 });
+  // 9:16: low enough that the hook's "closed" never sits on its rim
+  const phone = L.pick({ cx: 1592, cy: 540, w: 260, h: 540 }, { cx: 772, cy: 1536, w: 260, h: 540 });
   const bezel = 9;
   const screen = { w: phone.w - 2 * bezel, h: phone.h - 2 * bezel, r: 37 };
 
@@ -55,9 +68,22 @@ export function twistGeo(L: Layout) {
   // final zoom of the phone plane: the screen overfills the frame's short
   // dimension across (with margin, so its rounded corners sit off-frame)
   const S = L.pick((L.width / screen.w) * 1.1, (L.width / screen.w) * 1.12);
+  /** avatar diameter on the phone at t ≥ pushToPhone[1] (the contract) */
   const avatarD = orb.d / S;
+  /** …and at rest, as the incoming-call UI draws it (~26 % of the screen) */
+  const avatarRest = L.pick(64, 60);
 
-  return { L, text, door, floor, phone, bezel, screen, orb, S, avatarD };
+  return { L, text, door, floor, phone, bezel, screen, orb, S, avatarD, avatarRest };
+}
+
+/**
+ * Avatar diameter in phone-plane px. At rest it is the call UI's size;
+ * in the second half of the dive it settles to avatarD, so that
+ * avatarD · S = CALL_ORB_START.d exactly when the dive ends.
+ */
+export function avatarOnPhone(t: number, g: Geo): number {
+  const k = tween(t, TW.avatarShrink, [0, 1], EASE.inOut);
+  return g.avatarRest + (g.avatarD - g.avatarRest) * k;
 }
 
 /* ── the camera ─────────────────────────────────────────────────────
@@ -89,14 +115,16 @@ export function camAt(t: number, g: Geo): Cam {
   const dz = (1 - 1 / fPh) / K_PHONE;
 
   // aim: the avatar's screen offset from centre shrinks (1 − w), w eased.
-  // A slight counter-move first (anticipation).
-  const w = tween(t, TW.diveAim, [0, 1], EASE.inOut) - 0.05 * dipU;
+  // Only the dive's own zoom is aimed; the slow push and the pull-back
+  // happen about the frame centre, so the tagline holds centre.
+  const w = tween(t, TW.diveAim, [0, 1], EASE.inOut);
+  const fAim = Math.exp(Math.log(g.S) * dive);
   const A = { x: g.phone.cx, y: g.phone.cy };
   const ax = A.x - L.cx;
   const ay = A.y - L.cy;
-  // avatar screen offset = (A − C)(1 − w) = (A − C)·fPh − c·k·fPh
-  const aimX = (ax * (fPh - 1 + w)) / (K_PHONE * fPh);
-  const aimY = (ay * (fPh - 1 + w)) / (K_PHONE * fPh);
+  // avatar screen offset = (A − C)(1 − w) = (A − C)·f − c·k·f
+  const aimX = (ax * (fAim - 1 + w)) / (K_PHONE * fAim);
+  const aimY = (ay * (fAim - 1 + w)) / (K_PHONE * fAim);
 
   // drift: a breathing handheld, very small
   const bx = 5 * noise2D('twist-cam-x', t * 0.012, 0.2);
@@ -128,8 +156,10 @@ export type LayerXf = { f: number; tx: number; ty: number; alive: boolean };
 
 export function layerXf(cam: Cam, k: number): LayerXf {
   const den = 1 - cam.dz * k;
+  // `alive`: the plane is still comfortably in front of the lens (the text
+  // and dust planes are flown through and hidden before that)
   const alive = den > 0.12;
-  const f = 1 / Math.max(0.12, den);
+  const f = 1 / Math.max(0.01, den);
   return { f, tx: -cam.cx * k * f, ty: -cam.cy * k * f, alive };
 }
 
@@ -141,11 +171,21 @@ export function project(x: LayerXf, L: Layout, px: number, py: number) {
   return { x: L.cx + (px - L.cx) * x.f + x.tx, y: L.cy + (py - L.cy) * x.f + x.ty };
 }
 
-/** Phone vibration at the second burst (screen px). */
-export function buzz(t: number) {
+/**
+ * Phone vibration at the second burst. `f` is the phone plane's zoom: the
+ * buzz lives on the phone, so it grows (sub-linearly) as the camera dives
+ * in and still reads at 5×. Returns screen px + a small rotation (deg)
+ * about the phone's centre (which leaves the avatar where it is).
+ */
+export function buzz(t: number, f = 1) {
   const [a, b] = TW.buzz;
-  if (t < a || t > b) return { x: 0, y: 0 };
+  if (t < a || t > b) return { x: 0, y: 0, rot: 0 };
   const env = tween(t, [a, a + 1.5], [0, 1], EASE.out3) * tween(t, [b - 4, b], [1, 0], EASE.inOut);
   const ph = (t - a) * Math.PI * 1.35;
-  return { x: 3 * env * Math.sin(ph), y: 1.1 * env * Math.sin(ph * 1.7 + 0.8) };
+  const amp = 3 * Math.pow(Math.max(1, f), 0.6);
+  return {
+    x: amp * env * Math.sin(ph),
+    y: 0.37 * amp * env * Math.sin(ph * 1.7 + 0.8),
+    rot: 1.4 * env * Math.sin(ph * 0.92 + 1.9),
+  };
 }

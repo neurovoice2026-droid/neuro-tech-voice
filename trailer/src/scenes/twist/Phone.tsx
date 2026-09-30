@@ -11,7 +11,7 @@ import type { Layout } from '../../lib/layout';
 import { EASE, SPRING, aos, breathe, tween } from '../../lib/motion';
 import { C, FONT, NIGHT_ROOM, TRACK } from '../../theme';
 import { TWIST } from '../../timing';
-import { TW, type Geo } from './geometry';
+import { avatarOnPhone, TW, type Geo } from './geometry';
 
 const LILAC = '185,163,255';
 const ELECTRIC = '124,58,237';
@@ -22,7 +22,7 @@ export function screenState(t: number) {
   const lineW = tween(t, TW.screenLine, [0, 1], EASE.expo);
   const open = tween(t, TW.screenOpen, [0, 1], EASE.house);
   const f0 = TW.screenOpen[0];
-  const flash = t >= f0 && t < f0 + 2 ? 0.85 - (t - f0) * 0.25 : t >= f0 + 2 ? 0.35 * Math.exp(-(t - f0 - 2) / 2) : 0;
+  const flash = t >= f0 && t < f0 + 2 ? 0.7 - (t - f0) * 0.2 : t >= f0 + 2 ? 0.3 * Math.exp(-(t - f0 - 2) / 1.8) : 0;
   const on = tween(t, [TWIST.phoneOn, TW.screenOpen[1]], [0, 1], EASE.house);
   return { lineW, open, flash, on };
 }
@@ -64,10 +64,11 @@ export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number }> = ({ t
   const s = screenState(t);
   const heavy = f < 2.6; // drop big soft effects once we are inside
   const glowBreath = 1 + breathe(t, 60, 0.08);
-  const uiOut = tween(t, [TWIST.pushToPhone[0] + 4, TWIST.pushToPhone[0] + 20], [0, 1], EASE.in2);
+  const uiOut = tween(t, [TWIST.pushToPhone[0] + 3, TWIST.pushToPhone[0] + 15], [0, 1], EASE.inOut);
   const haloOut = tween(t, [TWIST.pushToPhone[0] + 14, TWIST.pushToPhone[1] - 4], [0, 1], EASE.inOut);
 
   const openH = s.open * sh;
+  const av = avatarOnPhone(t, g);
   const clipTop = (sh - openH) / 2;
 
   return (
@@ -156,14 +157,24 @@ export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number }> = ({ t
               clipPath: s.open < 1 ? `inset(${clipTop.toFixed(2)}px 0 ${clipTop.toFixed(2)}px 0)` : undefined,
             }}
           >
+            {s.flash > 0.01 ? (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: `radial-gradient(90% 60% at 50% 50%, rgba(${PAPER},1), rgba(${LILAC},0.6))`,
+                  opacity: s.flash,
+                }}
+              />
+            ) : null}
             {/* avatar halo + glow (the orb itself is drawn by the scene) */}
             <div
               style={{
                 position: 'absolute',
-                left: sw / 2 - g.avatarD * 2.2,
-                top: sh / 2 - g.avatarD * 2.2,
-                width: g.avatarD * 4.4,
-                height: g.avatarD * 4.4,
+                left: sw / 2 - av * 2.2,
+                top: sh / 2 - av * 2.2,
+                width: av * 4.4,
+                height: av * 4.4,
                 background: `radial-gradient(closest-side, rgba(${LILAC},0.34), rgba(${ELECTRIC},0.12) 50%, rgba(${ELECTRIC},0) 100%)`,
                 opacity: (0.8 + 0.2 * glowBreath) * (1 - haloOut),
               }}
@@ -171,10 +182,10 @@ export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number }> = ({ t
             <div
               style={{
                 position: 'absolute',
-                left: sw / 2 - g.avatarD * 0.925,
-                top: sh / 2 - g.avatarD * 0.925,
-                width: g.avatarD * 1.85,
-                height: g.avatarD * 1.85,
+                left: sw / 2 - av * 0.85,
+                top: sh / 2 - av * 0.85,
+                width: av * 1.7,
+                height: av * 1.7,
                 borderRadius: '50%',
                 boxShadow: `inset 0 0 0 1px rgba(${LILAC},0.32)`,
                 opacity: tween(t, [TW.uiLabel, TW.uiLabel + 8], [0, 1], EASE.house) * (1 - haloOut),
@@ -189,7 +200,10 @@ export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number }> = ({ t
                 position: 'absolute',
                 left: 0,
                 right: 0,
-                top: sh / 2 - L.pick(132, 146),
+                top: sh / 2 - 150,
+                // the site's Label: Inter 500, 0.14em, uppercase, paper-dim;
+                // the left pad re-centres the trailing tracking
+                paddingLeft: '0.14em',
                 transform: `translateY(${(-uiOut * 40).toFixed(2)}px)`,
                 fontFamily: FONT.body,
                 fontWeight: 500,
@@ -197,7 +211,7 @@ export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number }> = ({ t
                 lineHeight: 1,
                 letterSpacing: TRACK.label,
                 textTransform: 'uppercase',
-                color: C.paper,
+                color: C.paperDim,
               }}
             />
             <Stagger
@@ -209,7 +223,7 @@ export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number }> = ({ t
                 position: 'absolute',
                 left: 0,
                 right: 0,
-                top: sh / 2 + L.pick(64, 78),
+                top: sh / 2 + 86,
                 transform: `translateY(${(uiOut * 50).toFixed(2)}px)`,
                 fontFamily: FONT.mono,
                 fontWeight: 500,
@@ -230,14 +244,12 @@ export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number }> = ({ t
               width: sw * s.lineW,
               top: sh / 2 - 1.5 - openH / 2,
               height: 3 + openH,
-              background: `linear-gradient(180deg, rgba(${PAPER},0.95), rgba(${LILAC},0.35) 12%, rgba(${LILAC},0) 50%, rgba(${LILAC},0.35) 88%, rgba(${PAPER},0.95))`,
-              opacity: 1 - s.open,
-              boxShadow: `0 0 14px 2px rgba(${LILAC},0.6)`,
+              background: `linear-gradient(180deg, rgba(255,255,255,1), rgba(${LILAC},0.5) 10%, rgba(${LILAC},0) 50%, rgba(${LILAC},0.5) 90%, rgba(255,255,255,1))`,
+              opacity: Math.min(1, 1.6 * (1 - s.open)),
+              boxShadow: `0 0 16px 3px rgba(${LILAC},0.85), 0 0 4px 1px rgba(255,255,255,0.9)`,
+              borderRadius: 2,
             }}
           />
-        ) : null}
-        {s.flash > 0.01 ? (
-          <div style={{ position: 'absolute', inset: 0, background: C.paper, opacity: s.flash * s.open }} />
         ) : null}
         {/* glass */}
         <div
@@ -245,6 +257,7 @@ export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number }> = ({ t
             position: 'absolute',
             inset: 0,
             background: `linear-gradient(118deg, rgba(255,255,255,0) 38%, rgba(255,255,255,0.045) 47%, rgba(255,255,255,0) 58%)`,
+            opacity: 1 - uiOut,
           }}
         />
         {/* island */}

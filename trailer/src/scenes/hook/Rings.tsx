@@ -7,9 +7,11 @@
  */
 import React from 'react';
 import { EASE, tween } from '../../lib/motion';
+import { C } from '../../theme';
+import { rgbOf } from './color';
 import { clamp01 } from './warp';
 
-const WAVE = '185,163,255';
+const WAVE = rgbOf(C.lilac); // rgb(185 163 255), the site's wave
 const LIFE = 28.5; // 0.95 s, as on the site
 
 export type RingSpec = {

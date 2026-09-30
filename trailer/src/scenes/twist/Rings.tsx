@@ -1,8 +1,9 @@
 /**
  * The site's "wave" (as the hook draws it): two thin rings,
  * rgb(185 163 255 / .45), leaving the orb 0.3 s apart — scale 0.54 → 1 of
- * 1.85 × the orb, opacity .5 → 0, 0.95 s power2.out. Fast expansion gets a
- * radial smear (trailing copies at sub-frame positions). Drawn in screen
+ * 1.85 × the orb, opacity .5 → 0, 0.95 s power2.out. One clean ring each,
+ * concentric with the orb (their growth on screen comes from the dive's
+ * zoom, so sub-frame copies would only read as a radar). Drawn in screen
  * space around the avatar, whatever size the dive has made it.
  */
 import React from 'react';
@@ -16,23 +17,26 @@ export const Rings: React.FC<{
   starts: number[];
   /** orb position + diameter at a (sub)frame */
   orbAt: (t: number) => { x: number; y: number; d: number };
-}> = ({ t, starts, orbAt }) => {
+  /** how far the wave travels (screen px diameter) at a (sub)frame — the
+   *  hook draws its rings huge; here they leave the phone into the room */
+  reach: (t: number) => number;
+  /** 0..1 global fade (the hand-over frames stay still) */
+  fade?: number;
+}> = ({ t, starts, orbAt, reach, fade = 1 }) => {
   const ringAt = (tt: number, start: number) => {
     const u = Math.min(1, Math.max(0, (tt - start) / LIFE));
     const e = 1 - (1 - u) * (1 - u);
     const o = orbAt(tt);
-    const d = o.d * 1.85 * (0.54 + 0.46 * e);
+    const d0 = o.d * 1.25;
+    const d = d0 + (Math.max(d0, reach(tt)) - d0) * e;
     const born = tween(tt, [start, start + 1.5], [0, 1], EASE.out3);
-    return { x: o.x, y: o.y, d, op: 0.5 * born * (1 - e) * 2 };
+    return { x: o.x, y: o.y, d, op: born * (1 - e) * fade };
   };
   return (
     <>
       {starts.map((start, i) => {
         if (t < start || t > start + LIFE) return null;
         const r = ringAt(t, start);
-        const prev = ringAt(t - 0.5, start);
-        const speed = Math.abs(r.d - prev.d) * 2;
-        const copies = speed > 8 ? [0.25, 0.5, 0.75] : [];
         const ring = (x: number, y: number, d: number, o: number, key: string) => (
           <div
             key={key}
@@ -51,13 +55,7 @@ export const Rings: React.FC<{
           />
         );
         return (
-          <React.Fragment key={i}>
-            {copies.map((k, j) => {
-              const c = ringAt(t - k, start);
-              return ring(c.x, c.y, c.d, r.op * (0.5 - j * 0.14), `c${j}`);
-            })}
-            {ring(r.x, r.y, r.d, r.op, 'main')}
-          </React.Fragment>
+          <React.Fragment key={i}>{ring(r.x, r.y, r.d, r.op, 'main')}</React.Fragment>
         );
       })}
     </>

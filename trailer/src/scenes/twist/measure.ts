@@ -104,6 +104,7 @@ export function layoutText({
   cy,
   rows,
   align = 'center',
+  trimRowEnd = false,
 }: {
   text: string;
   fontSize: number;
@@ -112,6 +113,9 @@ export function layoutText({
   cy: number;
   rows?: number[][];
   align?: 'center' | 'left';
+  /** centre rows on their ink (drop the last word's padding) — for our own
+   *  layout; <Words> itself keeps the padding */
+  trimRowEnd?: boolean;
 }): TextLayout {
   const words = text.split(' ');
   const pad = WORD_PAD_EM * fontSize;
@@ -126,7 +130,8 @@ export function layoutText({
   const outWords: TextLayout['words'] = [];
   const lines: TextLayout['lines'] = [];
   lineIdx.forEach((ws, li) => {
-    const width = ws.reduce((s, i) => s + boxW[i], 0);
+    const last = ws[ws.length - 1];
+    const width = ws.reduce((s, i) => s + boxW[i], 0) - (trimRowEnd ? boxW[last] - wordW[last] : 0);
     const lineLeft = left + (align === 'center' ? (boxWidth - width) / 2 : 0);
     const lineTop = top + li * lineH;
     lines.push({ left: lineLeft, width, top: lineTop, words: ws });

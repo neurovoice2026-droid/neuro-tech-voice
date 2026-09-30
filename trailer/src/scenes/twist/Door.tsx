@@ -39,9 +39,13 @@ export function doorAngle(t: number): number {
   return 0;
 }
 
-/** Light of the room behind the door (0..1+). */
+/** The door is found by its light: frame + panel come up with the room. */
+const doorOn = (t: number) => tween(t, [-0.5, 6], [0, 1], EASE.out3);
+
+/** Light of the room behind the door (0..1+): switched on by the break, a
+ *  surge at t≈2 (the blast), dies after the slam. */
 function roomLight(t: number) {
-  const reveal = tween(t, [0, 5], [0, 1], EASE.out3) + (t >= 0 ? 0.4 * Math.exp(-t / 2.2) : 0);
+  const reveal = tween(t, [-0.5, 5], [0, 1], EASE.out3) + (t > 0 ? 0.35 * (t / 2) * Math.exp(1 - t / 2) : 0);
   const dies = 1 - tween(t, [TWIST.doorSlam + 3, TWIST.doorSlam + 13], [0, 1], EASE.in2);
   return reveal * dies;
 }
@@ -64,16 +68,20 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
   const lit = Math.max(0, Math.min(w, w - freeX)); // px of doorway still showing light
   const litFrac = lit / w;
   const light = roomLight(t);
+  const on = doorOn(t);
   const slam = TWIST.doorSlam;
   const u = t - slam;
 
   // the slit: gets hotter as it narrows, flashes on the slam, dies
-  const narrow = t < slam ? tween(litFrac, [0.35, 0.02], [0, 1], EASE.in2) * (litFrac > 0.001 ? 1 : 0) : 0;
+  const narrow = t < slam && litFrac > 0.001 ? tween(litFrac, [0.02, 0.4], [1, 0], EASE.out3) : 0;
   const slamFlash = u >= 0 ? Math.exp(-u / 2.4) : 0;
   const leak = u >= 0 && u < 9 ? Math.abs(th) / 3.2 : 0;
-  const slit = Math.min(1.4, narrow * 0.9 + slamFlash * 1.1 + leak * 0.5) * (u < 0 ? light : Math.max(light, 0.001) > 0 ? 1 : 0) *
+  const slit =
+    (u < 0 ? narrow * 0.9 * Math.min(1, light) : Math.min(1.3, slamFlash * 1.1 + leak * 0.5)) *
     (1 - tween(t, [slam + 8, slam + 16], [0, 1], EASE.in2));
   const under = (u >= 0 ? 0.9 * Math.exp(-u / 6) : 0) * (1 - tween(t, [slam + 10, slam + 18], [0, 1], EASE.inOut));
+  // the phone's light reaches the closed door's edge
+  const lilacRim = tween(t, [TWIST.phoneOn + 2, TWIST.phoneOn + 16], [0, 1], EASE.inOut);
 
   // panel ghosts on the fast part of the swing (simulated motion blur)
   const angVel = Math.abs(doorAngle(t) - doorAngle(t - 0.5)) * 2;
@@ -136,7 +144,7 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
             style={{
               position: 'absolute',
               inset: 0,
-              background: `linear-gradient(90deg, rgba(${SILVER},0.02), rgba(${SILVER},0.22))`,
+              background: `linear-gradient(90deg, rgba(${SILVER},0.30), rgba(${SILVER},0.10) 55%, rgba(${SILVER},0.03))`,
               opacity: faceLit,
             }}
           />
@@ -160,7 +168,7 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
   // dust puff from the gap on the slam
   const puff = u >= 0 && u < 40 ? (
     <>
-      {Array.from({ length: 18 }, (_, i) => {
+      {Array.from({ length: 28 }, (_, i) => {
         const r = (k: string) => random(`tw-puff-${i}-${k}`);
         const fromBottom = i % 3 !== 0;
         const x0 = fromBottom ? w * (0.15 + r('x') * 0.95) : w + 2;
@@ -170,8 +178,8 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
         const drag = 1 - Math.exp(-u / (5 + r('d') * 4));
         const x = x0 + vx * drag;
         const y = y0 + vy * drag - u * (0.4 + r('b') * 0.6);
-        const d = 2 + r('s') * 4.5;
-        const op = (0.25 + r('o') * 0.35) * tween(u, [0, 1.5], [0, 1]) * (1 - tween(u, [6 + r('l') * 10, 22 + r('l') * 16], [0, 1], EASE.inOut));
+        const d = 2.5 + r('s') * 6;
+        const op = (0.4 + r('o') * 0.45) * tween(u, [0, 1.5], [0, 1]) * (1 - tween(u, [6 + r('l') * 10, 22 + r('l') * 16], [0, 1], EASE.inOut));
         return (
           <div
             key={i}
@@ -191,7 +199,7 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
       {[0, 1, 2].map((i) => {
         const d = (90 + i * 60) * (0.4 + 0.6 * (1 - Math.exp(-u / 6)));
         const x = w * (0.35 + i * 0.3);
-        const op = 0.16 * tween(u, [0, 2], [0, 1]) * (1 - tween(u, [4, 26], [0, 1], EASE.inOut));
+        const op = 0.3 * tween(u, [0, 2], [0, 1]) * (1 - tween(u, [4, 30], [0, 1], EASE.inOut));
         return (
           <div
             key={`c${i}`}
@@ -224,7 +232,9 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
 
   return (
     <div style={{ position: 'absolute', left, top, width: w, height: h, opacity, filter: dof > 0.1 ? `blur(${dof.toFixed(2)}px)` : undefined }}>
-      {/* wall wash around the doorway */}
+      {/* wall wash around the doorway (not mounted once dark: keeps the
+          blurred container — and its dive ghosts — small) */}
+      {light > 0.005 ? (
       <div
         style={{
           position: 'absolute',
@@ -232,10 +242,11 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
           top: -h * 0.45,
           width: w * 4.4,
           height: h * 1.9,
-          background: `radial-gradient(closest-side, rgba(${SILVER},0.16), rgba(${SILVER},0.05) 50%, rgba(${SILVER},0) 100%)`,
-          opacity: light * (0.35 + 0.65 * litFrac),
+          background: `radial-gradient(closest-side, rgba(${SILVER},0.22), rgba(${SILVER},0.07) 50%, rgba(${SILVER},0) 100%)`,
+          opacity: Math.min(1.2, light) * (0.35 + 0.65 * litFrac),
         }}
       />
+      ) : null}
       {/* threshold / floor line */}
       <div
         style={{
@@ -245,6 +256,7 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
           top: h,
           height: 1,
           background: `linear-gradient(90deg, rgba(${PAPER},0), rgba(${PAPER},0.14) 30%, rgba(${PAPER},0.14) 70%, rgba(${PAPER},0))`,
+          opacity: on,
         }}
       />
       {spill > 0.005 ? (
@@ -268,40 +280,52 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
           inset: -16,
           bottom: 0,
           boxShadow: `inset 0 0 0 1px rgba(${PAPER},0.11)`,
+          opacity: on,
         }}
       />
       {/* the lit room */}
+      {light > 0.005 ? (
       <div
         style={{
           position: 'absolute',
           inset: 0,
           overflow: 'hidden',
           opacity: Math.min(1, light),
-          background: `linear-gradient(180deg, ${C.silver} 0%, #b6b2ac 38%, ${C.silverMid} 66%, ${C.silverLow} 100%)`,
+          background: `linear-gradient(180deg, ${C.coverPaper} 0%, ${C.silver} 42%, ${C.silverMid} 80%, ${C.silverLow} 100%)`,
         }}
       >
-        {/* floor inside the room + a hot core */}
+        {/* the hot core: near white, brighter than the type in front of it */}
+        <div
+          style={{
+            position: 'absolute',
+            left: -w * 0.5,
+            top: -h * 0.12,
+            width: w * 2,
+            height: h * 1.02,
+            background: `radial-gradient(closest-side, rgba(255,255,255,1), rgba(255,255,255,0.78) 38%, rgba(255,255,255,0.22) 72%, rgba(255,255,255,0))`,
+          }}
+        />
+        {/* the floor inside, just a soft falloff (no band) */}
         <div
           style={{
             position: 'absolute',
             left: 0,
             right: 0,
             bottom: 0,
-            height: h * 0.2,
-            background: `linear-gradient(180deg, rgba(90,88,94,0.55), rgba(123,122,125,0.2))`,
+            height: h * 0.22,
+            background: `linear-gradient(180deg, rgba(123,122,125,0), rgba(123,122,125,0.28))`,
           }}
         />
+        {/* the room's far edge: a soft vertical falloff at the jambs */}
         <div
           style={{
             position: 'absolute',
-            left: -w * 0.3,
-            top: h * 0.05,
-            width: w * 1.6,
-            height: h * 0.7,
-            background: `radial-gradient(closest-side, rgba(255,250,242,0.5), rgba(255,250,242,0))`,
+            inset: 0,
+            background: `linear-gradient(90deg, rgba(123,122,125,0.22), rgba(123,122,125,0) 14%, rgba(123,122,125,0) 86%, rgba(123,122,125,0.18))`,
           }}
         />
       </div>
+      ) : null}
       {/* bloom over the part of the doorway still open */}
       {lit > 0.5 && light > 0.01 ? (
         <div
@@ -311,7 +335,7 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
             top: 0,
             width: lit,
             height: h,
-            boxShadow: `0 0 ${50 + 40 * light}px ${6 + 10 * light}px rgba(${SILVER},${(0.32 * Math.min(1, light)).toFixed(3)})`,
+            boxShadow: `0 0 ${50 + 40 * light}px ${14 + 14 * light}px rgba(255,255,255,${(0.34 * Math.min(1, light)).toFixed(3)}), 0 0 ${110 + 50 * light}px ${22 + 18 * light}px rgba(${SILVER},${(0.4 * Math.min(1, light)).toFixed(3)}), 0 0 ${260 + 80 * light}px ${30 + 30 * light}px rgba(${SILVER},${(0.2 * Math.min(1, light)).toFixed(3)})`,
           }}
         />
       ) : null}
@@ -322,6 +346,7 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
           inset: 0,
           perspective: P,
           perspectiveOrigin: `${po.x}px ${po.y}px`,
+          opacity: on,
         }}
       >
         {ghosts.map((k, i) => panel(doorAngle(t - k), 0.32 - i * 0.09, `g${i}`, false))}
@@ -335,9 +360,9 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
               position: 'absolute',
               left: Math.min(w, Math.max(0, freeX)) - 2,
               top: -4,
-              width: 3 + Math.max(0, lit - 1) * 0.15,
+              width: 3,
               height: h + 8,
-              background: `linear-gradient(180deg, rgba(${SILVER},0.5), rgba(255,250,242,1) 40%, rgba(${SILVER},0.6))`,
+              background: `linear-gradient(180deg, rgba(${SILVER},0.5), rgba(255,255,255,1) 40%, rgba(${SILVER},0.6))`,
               opacity: Math.min(1, slit),
               boxShadow: `0 0 18px 3px rgba(${SILVER},${(0.55 * Math.min(1, slit)).toFixed(3)})`,
             }}
@@ -363,11 +388,34 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
             width: w - 8,
             top: h - 2,
             height: 2,
-            background: `rgba(255,250,242,1)`,
+            background: `rgba(255,255,255,1)`,
             opacity: under,
             boxShadow: `0 0 16px 2px rgba(${SILVER},${(0.6 * under).toFixed(3)})`,
           }}
         />
+      ) : null}
+      {lilacRim > 0.01 ? (
+        <>
+          <div
+            style={{
+              position: 'absolute',
+              right: -1,
+              top: 0,
+              width: 2,
+              height: h,
+              background: `linear-gradient(180deg, rgba(185,163,255,0.1), rgba(185,163,255,0.55) 50%, rgba(185,163,255,0.15))`,
+              opacity: lilacRim,
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: `linear-gradient(90deg, rgba(185,163,255,0) 45%, rgba(185,163,255,0.07))`,
+              opacity: lilacRim,
+            }}
+          />
+        </>
       ) : null}
       {puff}
       {/* CLOSED */}

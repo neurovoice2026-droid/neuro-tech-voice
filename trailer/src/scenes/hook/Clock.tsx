@@ -9,7 +9,8 @@
  */
 import React from 'react';
 import { MeshOrb } from '../../components/MeshOrb';
-import { CLOCK_FILL, FONT, ORB } from '../../theme';
+import { C, CLOCK_FILL, FONT, ORB } from '../../theme';
+import { rgba } from './color';
 
 /* ── Roll curve ─────────────────────────────────────────────────────── */
 
@@ -28,6 +29,8 @@ const OMEGA = (2 * Math.PI) / 9; // overshoot period ≈ 9 frames
 const DECAY = 0.3;
 const WIND = 0.07; // anticipation: the strip winds back 7 % of a cell
 const WIND_FRAMES = 3;
+/** Strip speed (cells / frame) below which no motion blur is drawn. */
+const BLUR_FLOOR = 0.16;
 
 /** Strip position in cells (fractional) at frame f. */
 export function rollPos(f: number, r: Roll): number {
@@ -54,7 +57,7 @@ export function rollPos(f: number, r: Roll): number {
 /* ── Figure column ──────────────────────────────────────────────────── */
 
 const SHEEN =
-  'linear-gradient(100deg, rgba(255,255,255,0) 38%, rgba(255,255,255,0.62) 50%, rgba(255,255,255,0) 62%)';
+  `linear-gradient(100deg, ${rgba(C.white, 0)} 40%, ${rgba(C.white, 0.95)} 50%, ${rgba(C.white, 0)} 58%)`;
 
 const Column: React.FC<{
   pos: number;
@@ -68,8 +71,10 @@ const Column: React.FC<{
   const cellW = 0.6 * fontSize;
   const cellH = 1.1 * fontSize;
   const base = Math.floor(pos);
-  // σ ≈ 0.2 × travel per frame (≈ a 180° shutter), capped so it stays a smear
-  const sigma = Math.min(0.42 * cellH, 0.2 * Math.abs(speed) * cellH);
+  // σ ≈ 0.2 × travel per frame (≈ a 180° shutter), capped so it stays a smear.
+  // Below a settle threshold the shutter reads as sharp, so the land frame
+  // (arrival ≈ V_LAND) and the overshoot are crisp — the click is on the beat.
+  const sigma = Math.min(0.42 * cellH, 0.2 * Math.max(0, Math.abs(speed) - BLUR_FLOOR) * cellH);
   const blurOn = sigma > 0.4;
   const cells = [base - 1, base, base + 1, base + 2];
   return (
@@ -206,7 +211,7 @@ export const ClockLockup: React.FC<{
             width: halo,
             height: halo,
             borderRadius: '50%',
-            background: `radial-gradient(closest-side, rgba(124,58,237,${(0.42 + orbFlash * 0.45) * orbOpacity}) 0%, rgba(124,58,237,${(0.14 + orbFlash * 0.2) * orbOpacity}) 45%, rgba(124,58,237,0) 100%)`,
+            background: `radial-gradient(closest-side, ${rgba(C.electric, (0.42 + orbFlash * 0.45) * orbOpacity)} 0%, ${rgba(C.electric, (0.14 + orbFlash * 0.2) * orbOpacity)} 45%, ${rgba(C.electric, 0)} 100%)`,
             transform: `scale(${0.85 + 0.35 * orbScale})`,
           }}
         />
@@ -217,7 +222,7 @@ export const ClockLockup: React.FC<{
           style={{
             transform: `scale(${orbScale.toFixed(4)})`,
             opacity: orbOpacity,
-            boxShadow: `0 0 ${(10 + orbFlash * 26).toFixed(1)}px ${(orbFlash * 4).toFixed(1)}px rgba(196,168,255,${(0.35 + orbFlash * 0.4).toFixed(3)})`,
+            boxShadow: `0 0 ${(10 + orbFlash * 26).toFixed(1)}px ${(orbFlash * 4).toFixed(1)}px ${rgba(C.lilac, 0.35 + orbFlash * 0.4)}`,
           }}
         />
       </div>

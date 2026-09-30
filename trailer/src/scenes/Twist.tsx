@@ -15,6 +15,17 @@
  * Parallax (pinhole dolly, see twist/geometry.ts): bg field 0.2,
  * door + phone 0.6, text 1.0, dust 1.4.
  */
+
+// LOCAL TIMING - hoist into timing.ts
+// The block lives in ./twist/geometry.ts as `TW` (the sub-components read it
+// too, and a copy here would be a circular import): gather −8, closedSlide 4,
+// wordLand [16.5, 19.5, 22.5] (is, for, the), letterGap 0.7, doorGap 0.55
+// ("door," locks L→R, comma on doorSlam), turnMin 8.5, phoneReveal [7, 17],
+// avatarShrink [pushToPhone0+12, pushToPhone1−2], doorCreak 7, doorSwing
+// [12, doorSlam], screenLine [phoneOn, +3], screenOpen [phoneOn+2, +14],
+// uiLabel phoneOn+6, uiNumber phoneOn+10, push [doorSlam−2, pushToPhone0+2],
+// diveDip [pushToPhone0−5, +3, +10], diveAim [pushToPhone0, pushToPhone1−4],
+// buzz [ring2, ring2+12].
 import React, { useMemo } from 'react';
 import { AbsoluteFill } from 'remotion';
 import { Dust } from '../components/Dust';
@@ -27,7 +38,7 @@ import { useSceneFrame } from '../lib/scene';
 import { ORB } from '../theme';
 import { TWIST } from '../timing';
 import { Door } from './twist/Door';
-import { buzz, camAt, layerXf, project, twistGeo, xfCss, type LayerXf } from './twist/geometry';
+import { avatarOnPhone, buzz, camAt, layerXf, project, twistGeo, TW, xfCss, type LayerXf } from './twist/geometry';
 import { useDisplayFontReady, useTextLayout } from './twist/measure';
 import { Phone, screenState } from './twist/Phone';
 import { Rings } from './twist/Rings';
@@ -63,6 +74,7 @@ export const Twist: React.FC = () => {
         [3, 4],
         [5, 6, 7],
       ],
+      trimRowEnd: true,
     },
     ready,
   );
@@ -91,9 +103,9 @@ export const Twist: React.FC = () => {
   const orbAt = (tt: number) => {
     const x = layerXf(camAt(tt, g), K.mid);
     const p = project(x, L, g.phone.cx, g.phone.cy);
-    const bz = buzz(tt);
+    const bz = buzz(tt, x.f);
     const pop = Math.max(0, aos(tt, TWIST.phoneOn + 3, { anticip: 0, depth: 0, config: SPRING.pop }));
-    return { x: p.x + bz.x, y: p.y + bz.y, d: g.avatarD * x.f * pop };
+    return { x: p.x + bz.x, y: p.y + bz.y, d: avatarOnPhone(tt, g) * x.f * pop };
   };
   const orb = orbAt(t);
   const orbOpacity = tween(t, [TWIST.phoneOn + 3, TWIST.phoneOn + 7], [0, 1], EASE.out3);
@@ -102,14 +114,16 @@ export const Twist: React.FC = () => {
     const shiver = tween(tt, [TWIST.ring2, TWIST.ring2 + 4], [0, 1], EASE.out3) * tween(tt, [TWIST.ring2 + 8, TWIST.ring2 + 20], [1, 0], EASE.inOut);
     return 0.12 + 0.12 * shiver + 0.1 * tween(tt, TWIST.pushToPhone, [0, 1], EASE.inOut);
   };
-  const bz = buzz(t);
+  const bz = buzz(t, xMid.f);
+  // the phone is found in the dark once "closed" has slid off it
+  const phoneIn = tween(t, TW.phoneReveal, [0, 1], EASE.inOut);
 
   /* ── focus: door soft, sharpens as it slams, softens as the phone wakes ── */
   const doorDof =
-    1.4 -
-    0.95 * tween(t, [TWIST.doorSlam - 2, TWIST.doorSlam + 6], [0, 1], EASE.inOut) +
-    1.0 * tween(t, [TWIST.phoneOn - 4, TWIST.phoneOn + 10], [0, 1], EASE.inOut);
-  const doorDim = 1 - 0.28 * tween(t, [TWIST.phoneOn, TWIST.phoneOn + 16], [0, 1], EASE.inOut);
+    1.3 -
+    0.9 * tween(t, [TWIST.doorSlam - 2, TWIST.doorSlam + 6], [0, 1], EASE.inOut) +
+    0.2 * tween(t, [TWIST.phoneOn - 4, TWIST.phoneOn + 10], [0, 1], EASE.inOut);
+  const doorDim = 1 - 0.12 * tween(t, [TWIST.phoneOn, TWIST.phoneOn + 16], [0, 1], EASE.inOut);
 
   /* ── motion-blur ghosts for the layers that rush out in the dive ── */
   const layerSpeed = (k: number) => {
@@ -119,7 +133,16 @@ export const Twist: React.FC = () => {
     const pb = project(b, L, g.text.cx, g.text.cy);
     return Math.hypot(pa.x - pb.x, pa.y - pb.y) * 2 + Math.abs(a.f - b.f) * 600;
   };
-  const ghostTimes = (k: number) => (layerSpeed(k) > 14 ? [0.25, 0.5, 0.75] : []);
+  // sub-frame copies, faded in with the layer's speed (no pop), each one
+  // softer and fainter down the shutter: a smear, not a comb
+  const ghosts = (k: number, n: number) => {
+    const w = tween(layerSpeed(k), [14, 40], [0, 1], EASE.inOut);
+    if (w < 0.02) return [];
+    return Array.from({ length: n }, (_, i) => {
+      const u = (i + 1) / (n + 1);
+      return { k: 0.85 * u, op: (w * 0.34 * (1 - u)) / Math.sqrt(n), blur: 2 + 7 * u };
+    });
+  };
   const textFade = 1 - tween(xText.f, [1.5, 3.2], [0, 1], EASE.in2);
   const textBlur = Math.max(0, (xText.f - 1) * 3);
   const dustFade = 1 - tween(xDust.f, [1.3, 2.6], [0, 1], EASE.in2);
@@ -151,10 +174,10 @@ export const Twist: React.FC = () => {
       </LayerX>
 
       {/* 0.6 — the door (with ghosts when it rushes out) */}
-      {xMid.alive
-        ? [...ghostTimes(K.mid).map((k, i) => ({ k, op: 0.34 - i * 0.1 })), { k: 0, op: 1 }].map(({ k, op }) => (
+      {xMid.f < 3.2
+        ? [...ghosts(K.mid, 4), { k: 0, op: 1, blur: 0 }].map(({ k, op, blur }) => (
             <LayerX key={`door${k}`} x={layerXf(camAt(t - k, g), K.mid)} style={{ opacity: op }}>
-              <Door t={t - k} g={g} L={L} dof={doorDof + (k > 0 ? 3 : 0)} opacity={doorDim} />
+              <Door t={t - k} g={g} L={L} dof={doorDof + blur} opacity={doorDim} />
             </LayerX>
           ))
         : null}
@@ -174,14 +197,28 @@ export const Twist: React.FC = () => {
             }}
           />
         ) : null}
-        <div style={{ position: 'absolute', inset: 0, transform: `translate(${(bz.x / xMid.f).toFixed(3)}px, ${(bz.y / xMid.f).toFixed(3)}px)` }}>
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            opacity: phoneIn,
+            transform: `translate(${(bz.x / xMid.f).toFixed(3)}px, ${(bz.y / xMid.f).toFixed(3)}px) rotate(${bz.rot.toFixed(3)}deg)`,
+            transformOrigin: `${g.phone.cx}px ${g.phone.cy}px`,
+          }}
+        >
           <Phone t={t} g={g} L={L} f={xMid.f} />
         </div>
       </LayerX>
 
       {/* screen space — the rings and Ava's orb */}
       <AbsoluteFill>
-        <Rings t={t} starts={[TWIST.ring2, TWIST.ring2 + 9]} orbAt={orbAt} />
+        <Rings
+          t={t}
+          starts={[TWIST.ring2, TWIST.ring2 + 9]}
+          orbAt={orbAt}
+          reach={(tt) => L.pick(640, 540) * layerXf(camAt(tt, g), K.mid).f}
+          fade={1 - tween(t, [TWIST.pushToPhone[1] - 8, TWIST.pushToPhone[1]], [0, 1], EASE.inOut)}
+        />
         {t >= TWIST.phoneOn + 3 && orb.d > 0.5 ? (
           <div
             style={{
@@ -198,9 +235,18 @@ export const Twist: React.FC = () => {
 
       {/* 1.0 — the words (ghosted + blurred as the camera flies through them) */}
       {xText.alive && textFade > 0.01
-        ? [...ghostTimes(K.text).map((k, i) => ({ k, op: 0.4 - i * 0.12 })), { k: 0, op: 1 }].map(({ k, op }) => (
+        ? [...ghosts(K.text, 6), { k: 0, op: 1, blur: 0 }].map(({ k, op, blur }) => (
             <LayerX key={`text${k}`} x={layerXf(camAt(t - k, g), K.text)} style={{ opacity: op * textFade }}>
-              <Shards t={t - k} L={L} hook={hook} tag={tag} shards={shards} ghost={k > 0} extraBlur={textBlur + (k > 0 ? 2 : 0)} />
+              <Shards
+                t={t - k}
+                L={L}
+                hook={hook}
+                tag={tag}
+                shards={shards}
+                ghost={k > 0}
+                extraBlur={k > 0 ? 0 : textBlur}
+                layerBlur={k > 0 ? textBlur + blur : 0}
+              />
             </LayerX>
           ))
         : null}

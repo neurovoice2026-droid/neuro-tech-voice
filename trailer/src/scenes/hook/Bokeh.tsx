@@ -5,29 +5,29 @@
  */
 import React from 'react';
 import { random } from 'remotion';
+import { C } from '../../theme';
+import { rgbOf } from './color';
 
 export const Bokeh: React.FC<{
   t: number;
   width: number;
-  height: number;
   count: number;
   seed: string;
   opacity: number;
-  /** keep discs out of this horizontal band (the type), as [top, bottom] */
-  avoid?: [number, number];
-}> = ({ t, width, height, count, seed, opacity, avoid }) => (
+  /** vertical band the discs live in, as [top, bottom] px (the lit part of the frame) */
+  band: [number, number];
+}> = ({ t, width, count, seed, opacity, band }) => (
   <>
     {Array.from({ length: count }, (_, i) => {
       const r = (k: string) => random(`${seed}-${i}-${k}`);
       const d = 90 + r('d') * 200;
-      let y = r('y') * height;
-      if (avoid && y > avoid[0] - d / 2 && y < avoid[1] + d / 2) {
-        y = r('side') < 0.5 ? avoid[0] - d * 0.7 - r('o') * 120 : avoid[1] + d * 0.7 + r('o') * 160;
-      }
-      const x = (0.08 + r('x') * 0.84) * width + Math.sin(t / (70 + r('p') * 50) + r('ph') * 6.28) * 18;
+      const y = band[0] + r('y') * (band[1] - band[0]);
+      // out to the sides of the frame, never over the centre column
+      const side = r('side') < 0.5 ? -1 : 1;
+      const x = width / 2 + side * (0.24 + r('x') * 0.24) * width + Math.sin(t / (70 + r('p') * 50) + r('ph') * 6.28) * 18;
       const yy = y - t * (0.15 + r('s') * 0.2);
       const lilac = r('c') < 0.6;
-      const col = lilac ? '185,163,255' : '169,188,255';
+      const col = rgbOf(lilac ? C.lilac : C.callerLit);
       const a = opacity * (0.5 + 0.5 * r('a')) * (0.75 + 0.25 * Math.sin(t / 23 + r('tw') * 6.28));
       return (
         <div
