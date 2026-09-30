@@ -28,7 +28,8 @@ export function envAt(id: VoiceId, at: number, t: number) {
 export const lineEnv = (t: number) => envAt(CTA.lineVoice, CTA.line, t);
 export const brandEnv = (t: number) => envAt(CTA.brandVoiceId, CTA.brandVoice, t);
 
-export type Orbit = { rx: number; ry: number; drop: number; tilt: number; d: number };
+/** radii, ring centre drop below the eyes, tilt (rad), orb diameter, how far the three kicks tighten it (1 = to .66) */
+export type Orbit = { rx: number; ry: number; drop: number; tilt: number; d: number; tight: number };
 
 /** an orb pop: ≈12 % overshoot, settled in ~12 f */
 export const ORB_POP = { stiffness: 340, damping: 18, mass: 0.9 };
@@ -60,10 +61,10 @@ export function spinTable(t: number) {
   };
 }
 /** the orbit's radius factor: 1, tightening in three kicks, a swell, then into the core */
-export function radiusAt(t: number) {
+export function radiusAt(t: number, tight = 1) {
   let r = 1;
   const steps = [0.14, 0.11, 0.09];
-  K.tighten.forEach((f, k) => (r -= steps[k] * (t < f ? 0 : springAt(t, f, SPRING.pop))));
+  K.tighten.forEach((f, k) => (r -= tight * steps[k] * (t < f ? 0 : springAt(t, f, SPRING.pop))));
   const swell = windowed(t, K.orbSwell[0], K.orbSwell[1], K.orbSwell[1], K.orbIn[0] + 6, EASE.out3, EASE.inOut);
   return r * (1 + 0.09 * swell) * (1 - tween(t, K.orbIn, [0, 1], EASE.in2));
 }
@@ -82,7 +83,7 @@ export type OrbState = {
 
 export function orbsAt(t: number, G: { P: { x: number; y: number }; orbit: Orbit }, spin: (tt: number) => number): OrbState[] {
   const O = G.orbit;
-  const rho = radiusAt(t);
+  const rho = radiusAt(t, O.tight);
   const inP = tween(t, K.orbIn, [0, 1], EASE.inOut);
   const toAll = tween(t, [K.orbIn[0] + 4, K.merge[1]], [0, 1], EASE.inOut);
   const vol = 0.12 + 0.75 * lineEnv(t);

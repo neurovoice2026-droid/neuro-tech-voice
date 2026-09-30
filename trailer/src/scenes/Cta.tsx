@@ -111,7 +111,11 @@ function geo(L: Layout) {
     note: { y: L.pick(885, 1250), size: 34 },
     url: { y: L.pick(950, 1330), size: 44, dot: 20 },
     /** the four lights' orbit about the eyes: radii, ring centre drop, tilt, orb diameter */
-    orbit: L.pick({ rx: 560, ry: 190, drop: 26, tilt: -0.09, d: 150 }, { rx: 420, ry: 170, drop: 30, tilt: -0.09, d: 132 }),
+    orbit: L.pick(
+      { rx: 560, ry: 190, drop: 26, tilt: -0.09, d: 150, tight: 1 },
+      // 9:16: her head fills the width, so the ring runs wide and tightens less
+      { rx: 452, ry: 210, drop: 40, tilt: -0.08, d: 118, tight: 0.55 },
+    ),
     /** the shockwave leaves from the merged orb, out past the frame */
     ring: [60, L.pick(1150, 1100)] as const,
     iris: FLOW_END(L),
@@ -247,7 +251,7 @@ export const Cta: React.FC = () => {
   const merged = t >= K.merge[0];
   const order = [...now].sort((a, c) => (merged ? (a.i === 3 ? 1 : c.i === 3 ? -1 : a.z - c.z) : a.z - c.z));
   for (const o of order) {
-    const depthPar = 1 + 0.25 * o.z * Math.min(1, radiusAt(t));
+    const depthPar = 1 + 0.25 * o.z * Math.min(1, radiusAt(t, G.orbit.tight));
     const scr = onLayer(L, o, cam, depthPar);
     const pv = prev[o.i];
     const nx = next[o.i];
@@ -290,9 +294,9 @@ export const Cta: React.FC = () => {
     // its bloom
     const tightenFlash = K.tighten.reduce((a, f) => a + (t >= f ? 0.3 * Math.exp(-(t - f) / 4) : 0), 0);
     const s =
-      (0.3 * Math.min(1.15, pop) + 0.9 * flash + tightenFlash) * (1 + 1.1 * tween(t, K.orbIn, [0, 1], EASE.in2)) * opacity +
-      (t >= I ? 1.3 * Math.exp(-(t - I) / 5) : 0);
-    glows.push({ x: scr.x, y: scr.y, r: d * (1.1 + 0.5 * flash) * (t >= I ? 1.4 : 1), s, color: rgb01(glowBody), back: o.z < 0 && !merged });
+      (0.46 * Math.min(1.15, pop) + 0.9 * flash + tightenFlash) * (1 + 0.9 * tween(t, K.orbIn, [0, 1], EASE.in2)) * opacity +
+      (t >= I ? 0.8 * Math.exp(-(t - I) / 4) : 0);
+    glows.push({ x: scr.x, y: scr.y, r: d * (1.35 + 0.5 * flash) * (t >= I ? 1.15 : 1), s, color: rgb01(glowBody), back: o.z < 0 && !merged });
     // the pop's accents: a ring in the light's wave colour and a burst of sparks
     const pu = t - K.orbPops[o.i];
     if (pu >= 0 && pu < 12) {
