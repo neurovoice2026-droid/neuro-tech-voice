@@ -603,7 +603,7 @@ export const KNOWLEDGE_LOCAL = (() => {
     orbIn: K.ask - 4,
     statusIn: K.ask - 4,
     /** the question leaves (it holds until answer − 2; gone before Ava's first word) */
-    questionOut: [K.answer - 4, K.answer - 1] as const,
+    questionOut: [K.answer - 5, K.answer - 1] as const,
     /** dotted beams draw tile → orb: the window, and the stagger between beams */
     beams: [K.scan[0], K.scan[0] + 21] as const,
     beamStagger: 2,

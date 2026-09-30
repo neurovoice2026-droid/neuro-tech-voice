@@ -4,13 +4,10 @@
  * goes quiet on the miss, and breathes with Ava's REAL envelope (kb-2).
  * Levels are the site's (VOL); smoothing is the FluidOrb's own (attack 14/s,
  * release 5/s). Precomputed once into a table of knowledge-local frames.
- *
- * Also: spoken-word timing (start / end of word k of a line, in frames),
- * so captions reveal on the voice and survive a regenerated voice.
  */
 import { Easing } from 'remotion';
 import { EASE, tween } from '../../lib/motion';
-import { FPS, KNOWLEDGE, KNOWLEDGE_LOCAL, SCENES, vFrames, vWord } from '../../timing';
+import { FPS, KNOWLEDGE, KNOWLEDGE_LOCAL, SCENES, vFrames } from '../../timing';
 import { VOICE, type VoiceId } from '../../voice.generated';
 import { VOL } from './geometry';
 
@@ -25,16 +22,6 @@ export function envAt(id: VoiceId, f: number): number {
   const a = e[i];
   const b = i + 1 < e.length ? e[i + 1] : 0;
   return a + (b - a) * (f - i);
-}
-
-/** frame (from the line's start) at which spoken word k starts / ends */
-export const wordStart = (id: VoiceId, k: number) => vWord(id, k);
-export function wordEnd(id: VoiceId, k: number): number {
-  const line = VOICE.lines[id];
-  const t = line.words[k].t;
-  const next = k + 1 < line.words.length ? line.words[k + 1].t : line.duration;
-  const phrase = line.phrases.find((p) => t >= p.start - 1e-6 && t < p.end);
-  return Math.round(Math.min(next, phrase ? phrase.end : next) * FPS);
 }
 
 const sine = Easing.bezier(0.37, 0, 0.63, 1);

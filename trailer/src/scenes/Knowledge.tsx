@@ -39,7 +39,7 @@ import { useSceneFrame } from '../lib/scene';
 import { C, FONT, TRACK } from '../theme';
 import { KNOWLEDGE, KNOWLEDGE_LOCAL } from '../timing';
 import { Beams } from './knowledge/Beams';
-import { Captions } from './knowledge/Captions';
+import { Captions } from '../components/Captions';
 import { Closing, Heading } from './knowledge/Closing';
 import { DOT, geo, type Geo } from './knowledge/geometry';
 import { useFontsReady } from './knowledge/measure';
@@ -52,6 +52,11 @@ import { DirBlur, dirBlurRef, sigmaFor } from './scale/MotionBlur';
 
 const K = KNOWLEDGE;
 const KL = KNOWLEDGE_LOCAL;
+
+/** the caller's question — one caption, word-synced to kb-1 */
+const QUESTION = [{ text: 'Do you do home visits?', word: 0 }] as const;
+/** the spoken word's halo, on the light stock */
+const GLOW = 'rgba(124,58,237,0.16)';
 
 const FONTS = [
   `500 32px ${FONT.body}`,
@@ -245,20 +250,29 @@ export const Knowledge: React.FC = () => {
                 t={t}
                 lineAt={K.ask}
                 voice={K.askVoice}
-                captions={[{ text: 'Do you do home visits?', word: 0 }]}
-                font={{ family: FONT.cinema, size: caller.size, weight: 500, italic: true, lh: caller.lh, color: C.ink }}
-                box={{ x: caller.boxX, w: caller.boxW, align: caller.align }}
-                rowY={caller.rowY}
-                out={KL.questionOut}
+                captions={QUESTION}
+                x={caller.align === 'right' ? caller.boxX + caller.boxW : L.cx}
+                y={caller.rowY}
+                maxWidth={caller.boxW}
+                align={caller.align}
+                font={{ family: FONT.cinema, weight: 500, size: caller.size, italic: true, lineHeight: caller.lh, tracking: 0 }}
+                color={C.ink}
+                glow={GLOW}
+                holdUntil={KL.questionOut[1] + 2}
+                echoY={null}
               />
               <Captions
                 t={t}
                 lineAt={K.answer}
                 voice={K.answerVoice}
                 captions={K.answerCaptions}
-                font={{ family: FONT.cinema, size: answer.size, weight: 500, lh: answer.lh, color: C.ink }}
-                box={{ x: answer.boxX, w: answer.boxW, align: 'center' }}
-                rowY={answer.rowY}
+                x={L.cx}
+                y={answer.rowY}
+                maxWidth={answer.boxW}
+                font={{ family: FONT.cinema, weight: 500, size: answer.size, lineHeight: answer.lh, tracking: 0 }}
+                color={C.ink}
+                glow={GLOW}
+                holdUntil={K.closing}
                 echoY={answer.echoY}
               />
               <Meta t={t} G={G} />
