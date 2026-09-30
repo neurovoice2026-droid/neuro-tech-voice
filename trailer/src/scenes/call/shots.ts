@@ -20,7 +20,7 @@ import { noise2D } from '@remotion/noise';
 import { CALL_ORB_START } from '../../lib/handoff';
 import type { Layout } from '../../lib/layout';
 import { EASE, SPRING, springAt, tween } from '../../lib/motion';
-import { CALL, CALL_LOCAL } from '../../timing';
+import { CALL, CALL_LOCAL, vWord } from '../../timing';
 
 export type Pt = { x: number; y: number };
 export type Framing = Pt & { d: number };
@@ -39,6 +39,8 @@ export const orbBase = (L: Layout) => L.pick(540, 660);
 
 const lines = CALL.lines;
 const END = CALL_LOCAL.markHide;
+/** frames each of Ava's phrases (captions after a line's first) starts */
+const PHRASES = lines.flatMap((l) => (l.who === 'agent' ? l.captions.slice(1).map((c) => l.at + vWord(l.voice, c.word)) : []));
 
 export function shotAt(t: number): Shot {
   const [p0, p1] = CALL_LOCAL.pushIn;
@@ -100,8 +102,8 @@ export function camAt(t: number, L: Layout): Cam {
   const [c0, c1] = CALL_LOCAL.camSettle;
   // the handheld is zero at the pickup (t 0 is the twist's exact frame) and at the hand-over
   const env = tween(t, [0, 40], [0, 1], EASE.inOut) * (1 - tween(t, [c0, c1], [0, 1], EASE.inOut));
-  let dx = 12 * noise2D('call-cam-x', t * 0.02, 0.31) * env;
-  let dy = 8 * noise2D('call-cam-y', 0.77, t * 0.02) * env;
+  let dx = 12 * noise2D('call-cam-x', t * 0.03, 0.31) * env;
+  let dy = 8 * noise2D('call-cam-y', 0.77, t * 0.03) * env;
 
   let S = 1;
   let z = 1;
@@ -131,6 +133,12 @@ export function camAt(t: number, L: Layout): Cam {
       z = land * (1 + 0.04 * (1 - tween(t, [s.from, c1], [0, 1], EASE.inOut)));
     } else {
       z = land * (1 + 0.035 * prog);
+      // Ava's shots re-frame on each new phrase: a small punch-in on the site spring
+      if (s.kind === 'A') {
+        for (const at of PHRASES) {
+          if (at > s.from && at < s.to && t >= at - 2) z *= 1 + 0.028 * springAt(t, at - 2, SPRING.site);
+        }
+      }
     }
     if (k === 0) S = 1.06; // the push's set-up holds for the rest of Ava's first line
     if (s.kind === 'C') {

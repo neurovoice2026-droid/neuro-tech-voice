@@ -67,7 +67,7 @@ const gulpLevel = (tt: number) => {
 /** Ava's talk swell on the orb — her level plus her syllables (eases in after the pickup, so t 0 is exact) */
 const talkSwell = (tt: number) =>
   1 +
-  (0.022 * Math.max(0, (volumeAt(tt) - 0.12) / 0.7) * (0.7 + 0.3 * Math.sin((tt / 48) * Math.PI * 2)) + 0.035 * lightAt(tt)) *
+  (0.022 * Math.max(0, (volumeAt(tt) - 0.12) / 0.7) * (0.7 + 0.3 * Math.sin((tt / 48) * Math.PI * 2)) + 0.045 * lightAt(tt)) *
     tween(tt, [0, 6], [0, 1], EASE.house);
 
 /** Ava's phrases: each caption after the first is "emitted" by the orb with a soft ring */
@@ -288,7 +288,7 @@ export const Call: React.FC = () => {
               top: orb.y - L.pick(760, 900),
               width: L.pick(2000, 1800),
               height: L.pick(1520, 1800),
-              background: `radial-gradient(closest-side, rgba(124,58,237,${(0.08 + 0.12 * lvl + 0.26 * light).toFixed(3)}), rgba(124,58,237,0) 100%)`,
+              background: `radial-gradient(closest-side, rgba(124,58,237,${(0.08 + 0.1 * lvl + 0.36 * light).toFixed(3)}), rgba(124,58,237,0) 100%)`,
             }}
           />
         </AbsoluteFill>
