@@ -85,12 +85,17 @@ const VOL = new Float32Array(N);
 const LISTEN = new Float32Array(N);
 const SPEAKER = new Float32Array(N); // 0 = Ava, 1 = caller (eased)
 const TALK = new Float32Array(N); // speech-only level (no pickup), the orb's smoothing
+const LIGHT = new Float32Array(N); // a fast syllable follower of Ava's voice, for the light she gives off
 
 (() => {
   const aAtk = 1 - Math.exp(-14 / FPS);
   const aRel = 1 - Math.exp(-5 / FPS);
   const aPal = 1 - Math.exp(-7 / FPS);
+  // the light follows syllables: quick attack (≈ 1.5 f), soft release (≈ 4 f)
+  const lAtk = 1 - Math.exp(-40 / FPS);
+  const lRel = 1 - Math.exp(-8 / FPS);
   let s = IDLE;
+  let li = 0;
   let lis = 0;
   let spk = 0;
   let lastWho = 0;
@@ -106,6 +111,10 @@ const TALK = new Float32Array(N); // speech-only level (no pickup), the orb's sm
     }
     const tg = acc / SUB;
     s += (tg - s) * (tg > s ? aAtk : aRel);
+    const k = lineAt(t);
+    const le = k >= 0 ? env(CALL.lines[k].voice, t - CALL.lines[k].at) * (CALL.lines[k].who === 'agent' ? 1 : 0.35) : 0;
+    li += (le - li) * (le > li ? lAtk : lRel);
+    LIGHT[i] = t < 0 ? 0 : li;
     lis += (cal - lis) * aPal;
     spk += (lastWho - spk) * 0.28;
     TALK[i] = s;
@@ -132,6 +141,8 @@ export const listenAt = (t: number) => look(LISTEN, t);
 export const speakerAt = (t: number) => look(SPEAKER, t);
 /** Speech-only level (idle 0.12 … ~0.82), with the orb's release. */
 export const talkAt = (t: number) => look(TALK, t);
+/** 0..1 — a fast follower of the voice's syllables (Ava full, the caller at .35): the light the orb gives off. */
+export const lightAt = (t: number) => look(LIGHT, t);
 
 /**
  * The orb's flow-time integrator input on the frame index the twist uses for

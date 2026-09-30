@@ -139,11 +139,15 @@ export const OrbStage: React.FC<{
   /** depth-of-field blur on the orb (px on screen) */
   dof: number;
   ringStarts: readonly number[];
+  /** softer rings as each of Ava's phrases starts */
+  phraseRings?: readonly number[];
+  /** 0..1 the syllable follower of her voice: the light she gives off */
+  light?: number;
   /** frame the orb swallows the big line: a tight, quick electric ping off its rim */
   gulp: number;
   /** 0..1 the rim/halo come up over the twist's orb (the room's cross-fade) */
   rimIn: number;
-}> = ({ t, base, orb, orbAt, volume, flow, listen, rim, dress, dof, ringStarts, gulp, rimIn }) => {
+}> = ({ t, base, orb, orbAt, volume, flow, listen, rim, dress, dof, ringStarts, phraseRings = [], light = 0, gulp, rimIn }) => {
   const { x, y, d } = orb;
   const lvl = Math.max(0, (volume - 0.12) / 0.7);
 
@@ -157,9 +161,11 @@ export const OrbStage: React.FC<{
     return { x: o.x, y: o.y, d: dd, op: 0.5 * born * (1 - e) };
   };
   const rings: React.ReactNode[] = [];
-  ringStarts.forEach((start, i) => {
+  const all = [...ringStarts.map((s) => ({ s, k: 1 })), ...phraseRings.map((s) => ({ s, k: 0.55 }))];
+  all.forEach(({ s: start, k: strength }, i) => {
     if (t < start || t > start + RING_LIFE) return;
-    const r = ringAt(t, start);
+    const r0 = ringAt(t, start);
+    const r = { ...r0, op: r0.op * strength };
     const prev = ringAt(t - 0.5, start);
     const speed = Math.abs(r.d - prev.d) * 2;
     // sub-frame copies while the ring is fast: a smear, not a comb
@@ -206,7 +212,7 @@ export const OrbStage: React.FC<{
     );
   }
 
-  const halo = d * (3.2 + lvl * 0.5);
+  const halo = d * (3.2 + lvl * 0.4 + light * 0.3);
   const k = d / base;
   return (
     <>
@@ -219,7 +225,7 @@ export const OrbStage: React.FC<{
           width: halo,
           height: halo,
           borderRadius: '50%',
-          background: `radial-gradient(closest-side, rgba(${ELECTRIC},${(0.36 + 0.3 * lvl).toFixed(3)}) 0%, rgba(${ELECTRIC},${(0.12 + 0.1 * lvl).toFixed(3)}) 45%, rgba(${ELECTRIC},0) 100%)`,
+          background: `radial-gradient(closest-side, rgba(${ELECTRIC},${(0.32 + 0.2 * lvl + 0.3 * light).toFixed(3)}) 0%, rgba(${ELECTRIC},${(0.1 + 0.08 * lvl + 0.12 * light).toFixed(3)}) 45%, rgba(${ELECTRIC},0) 100%)`,
           opacity: dress,
         }}
       />

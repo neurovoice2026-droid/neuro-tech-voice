@@ -46,7 +46,7 @@ import { Digits, OrbStage, type OrbState } from './call/Lockup';
 import { camAt, framingAt, framings, orbBase, orbToScreen, planeCss, shotAt } from './call/shots';
 import { ClosedSign, flightAt, PickupLine } from './call/Status';
 import { Chips, MarkRow, SpeakerTag } from './call/Transcript';
-import { listenAt, ORB_FRAME0, orbVolumeByIndex, turnAt, volumeAt } from './call/voice';
+import { lightAt, listenAt, ORB_FRAME0, orbVolumeByIndex, turnAt, volumeAt } from './call/voice';
 import { Waveform } from './call/Waveform';
 
 const LINES = CALL.lines;
@@ -64,13 +64,16 @@ const gulpLevel = (tt: number) => {
   if (u < 0) return 0;
   return 0.16 * (1 - Math.exp(-u / 1.2)) * Math.exp(-u / 6);
 };
-/** Ava's talk swell on the orb (eases in after the pickup, so t 0 is exact) */
+/** Ava's talk swell on the orb — her level plus her syllables (eases in after the pickup, so t 0 is exact) */
 const talkSwell = (tt: number) =>
   1 +
-  0.03 *
-    Math.max(0, (volumeAt(tt) - 0.12) / 0.7) *
-    (0.7 + 0.3 * Math.sin((tt / 48) * Math.PI * 2)) *
+  (0.022 * Math.max(0, (volumeAt(tt) - 0.12) / 0.7) * (0.7 + 0.3 * Math.sin((tt / 48) * Math.PI * 2)) + 0.035 * lightAt(tt)) *
     tween(tt, [0, 6], [0, 1], EASE.house);
+
+/** Ava's phrases: each caption after the first is "emitted" by the orb with a soft ring */
+const PHRASE_RINGS = CALL.lines.flatMap((l) =>
+  l.who === 'agent' ? l.captions.slice(1).map((c) => l.at + vWord(l.voice, c.word) - 1) : [],
+);
 
 /* the twist's phone screen at the end of its dive (twist/geometry.ts:
  * phone 260×540, bezel 9 → screen 242×522, scaled S about the avatar) */
@@ -144,7 +147,14 @@ export const Call: React.FC = () => {
   /* ── the voice ───────────────────────────────────────────────────── */
   const vol = volumeAt(t) + gulpLevel(t);
   const lvl = Math.max(0, (vol - 0.12) / 0.7);
-  const flow = flowTime(Math.max(0, Math.round(t + ORB_FRAME0)), (fr) => orbVolumeByIndex(fr) + gulpLevel(fr - ORB_FRAME0));
+  const light = lightAt(t);
+  // the fluid runs a little quicker once the call is live, and quicker still on her syllables
+  // (flow input only — the shader's own volume stays the site's); 0 at the pickup, so the cut is exact
+  const flowBoost = (tt: number) => tween(tt, [0, 30], [0, 1], EASE.inOut) * (0.3 + 0.7 * lightAt(tt));
+  const flow = flowTime(Math.max(0, Math.round(t + ORB_FRAME0)), (fr) => {
+    const tt = fr - ORB_FRAME0;
+    return orbVolumeByIndex(fr) + gulpLevel(tt) + flowBoost(tt);
+  });
 
   /* ── the orb, on screen ─────────────────────────────────────────── */
   const orbAt = (tt: number): OrbState => {
@@ -153,7 +163,7 @@ export const Call: React.FC = () => {
   };
   const orb = orbAt(t);
   const dress = tween(t, [0, 12], [0, 1], EASE.house);
-  const rim = pickupGlow(t + g0) + 0.25 * lvl * tween(t, [0, 12], [0, 1], EASE.house);
+  const rim = pickupGlow(t + g0) + (0.2 * lvl + 0.3 * light) * tween(t, [0, 12], [0, 1], EASE.house);
   const dof = shot.kind === 'C' ? 2 : 0;
 
   /* ── establishing: the lockup, CLOSED, the big line ─────────────── */
@@ -278,7 +288,7 @@ export const Call: React.FC = () => {
               top: orb.y - L.pick(760, 900),
               width: L.pick(2000, 1800),
               height: L.pick(1520, 1800),
-              background: `radial-gradient(closest-side, rgba(124,58,237,${(0.1 + 0.2 * lvl).toFixed(3)}), rgba(124,58,237,0) 100%)`,
+              background: `radial-gradient(closest-side, rgba(124,58,237,${(0.08 + 0.12 * lvl + 0.26 * light).toFixed(3)}), rgba(124,58,237,0) 100%)`,
             }}
           />
         </AbsoluteFill>
@@ -289,7 +299,7 @@ export const Call: React.FC = () => {
         {/* ── 0.5 · large dim discs, far behind ──────────────────────── */}
         {live ? (
           <AbsoluteFill style={{ ...planeCss(cam, 0.5), opacity: dress }}>
-            <Bokeh t={t} discs={discsFar} drift={0.6} />
+            <Bokeh t={t} discs={discsFar} drift={2.2} />
           </AbsoluteFill>
         ) : null}
 
@@ -359,6 +369,8 @@ export const Call: React.FC = () => {
           dress={dress}
           dof={dof}
           ringStarts={CALL_LOCAL.rings}
+          phraseRings={PHRASE_RINGS}
+          light={light}
           gulp={CALL_LOCAL.swallow}
           rimIn={roomOp}
         />
@@ -367,7 +379,7 @@ export const Call: React.FC = () => {
           <>
             {/* ── 1.3 · motes ─────────────────────────────────────────── */}
             <AbsoluteFill style={{ ...planeCss(cam, 1.3), opacity: dress }}>
-              <Dust count={14} seed="call-motes" color="185,163,255" opacity={0.4} size={[2, 6]} blur={[0.4, 3]} speed={0.3} frame={t + 600} />
+              <Dust count={22} seed="call-motes" color="185,163,255" opacity={0.45} size={[2, 7]} blur={[0.4, 3]} speed={0.45} frame={t + 600} />
             </AbsoluteFill>
             {/* ── 1.6 · lens bokeh ───────────────────────────────────── */}
             <AbsoluteFill style={{ ...planeCss(cam, 1.6), opacity: dress }}>

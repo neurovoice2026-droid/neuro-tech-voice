@@ -100,8 +100,8 @@ export function camAt(t: number, L: Layout): Cam {
   const [c0, c1] = CALL_LOCAL.camSettle;
   // the handheld is zero at the pickup (t 0 is the twist's exact frame) and at the hand-over
   const env = tween(t, [0, 40], [0, 1], EASE.inOut) * (1 - tween(t, [c0, c1], [0, 1], EASE.inOut));
-  let dx = 12 * noise2D('call-cam-x', t * 0.012, 0.31) * env;
-  let dy = 8 * noise2D('call-cam-y', 0.77, t * 0.012) * env;
+  let dx = 12 * noise2D('call-cam-x', t * 0.02, 0.31) * env;
+  let dy = 8 * noise2D('call-cam-y', 0.77, t * 0.02) * env;
 
   let S = 1;
   let z = 1;
@@ -124,8 +124,8 @@ export function camAt(t: number, L: Layout): Cam {
     const land = k >= 1 ? 1 + 0.03 * (1 - springAt(t, s.from, SPRING.site)) : 1;
     // alternate the in-shot travel direction shot to shot
     const dir = k % 2 === 0 ? 1 : -1;
-    dx += dir * L.pick(18, 12) * (2 * prog - 1) * env;
-    dy += dir * L.pick(-6, 10) * (2 * prog - 1) * env;
+    dx += dir * L.pick(30, 18) * (2 * prog - 1) * env;
+    dy += dir * L.pick(-10, 16) * (2 * prog - 1) * env;
     if (k === 4) {
       // the last shot: a slow pull 1.04 → 1.00, exactly at rest by camSettle[1]
       z = land * (1 + 0.04 * (1 - tween(t, [s.from, c1], [0, 1], EASE.inOut)));

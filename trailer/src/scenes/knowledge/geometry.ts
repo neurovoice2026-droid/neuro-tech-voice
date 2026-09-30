@@ -113,7 +113,7 @@ export function geo(L: Layout) {
       : { labelY: 522, align: 'right' as const, boxX: 160, boxW: 640, rowY: 596, size: 88, lh: 1.02 },
     peek: v ? null : { x: 1120, y: 504, w: 480, h: 240 },
     answer: v
-      ? { boxX: 68, boxW: 944, rowY: 1336, echoY: 1256, metaY: 1452, size: 68, lh: 1.1, meta: 28 }
+      ? { boxX: 68, boxW: 944, rowY: 1346, echoY: 1268, metaY: 1446, size: 68, lh: 1.1, meta: 28 }
       : { boxX: 140, boxW: 1640, rowY: 870, echoY: 792, metaY: 962, size: 76, lh: 1.1, meta: 32 },
     heading: v
       ? { cy: 1110, size: 96, lines: ['Answers from', 'your own', 'documents.'] as string[] | null, width: 944 }
