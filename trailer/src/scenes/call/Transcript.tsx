@@ -135,7 +135,8 @@ export const Chips: React.FC<{
         const drop = !selected ? tween(t, [pick, pick + 8], [0, 1], EASE.in2) : 0;
         const ring = tween(t, [pops[i], pops[i] + 10], [0, 1], EASE.out3);
         const baseX = cx + (i === 0 ? -1 : 1) * (w / 2 + gap / 2);
-        const op = Math.min(1, Math.max(0, s * 3)) * (1 - drop) * (1 - lv);
+        // opacity 1 ON the pop frame (the attack, 1 f before, is still at scale ≈ 0)
+        const op = (t >= pops[i] ? 1 : 0) * (1 - drop) * (1 - lv);
         if (op <= 0.002) return null;
         const blur = drop * 6 + lv * 4;
         return (

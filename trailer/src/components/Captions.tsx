@@ -191,8 +191,13 @@ export const Captions: React.FC<CaptionsProps> = (props) => {
           opacity = 1 - u;
         } else if (t >= pl.out && echoY !== null) {
           const s = springAt(t, pl.out, SPRING.site);
-          dy = (echoY - y) * s;
-          scale = 1 - 0.14 * s;
+          // the echo's LAST row lands on echoY (a wrapped caption grows upward from it, so it
+          // never covers what sits under the echo slot): row A goes to echoY − (H − rowH)·.86,
+          // written with the caption's own height H as a % (no measuring needed)
+          const sE = 0.86;
+          dy = (echoY - y + (rowH / 2) * sE + (rowH / 2) * sE) * s;
+          dyPct = -100 * sE * s;
+          scale = 1 - (1 - sE) * s;
           opacity = 1 - 0.58 * Math.min(1, s);
           const u = tween(t, [pl.echoOut, pl.echoOut + ECHO_OUT], [0, 1], EASE.in2);
           dy -= 20 * u;

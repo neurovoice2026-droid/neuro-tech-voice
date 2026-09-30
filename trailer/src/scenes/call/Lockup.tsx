@@ -225,7 +225,7 @@ export const OrbStage: React.FC<{
           width: halo,
           height: halo,
           borderRadius: '50%',
-          background: `radial-gradient(closest-side, rgba(${ELECTRIC},${(0.32 + 0.2 * lvl + 0.3 * light).toFixed(3)}) 0%, rgba(${ELECTRIC},${(0.1 + 0.08 * lvl + 0.12 * light).toFixed(3)}) 45%, rgba(${ELECTRIC},0) 100%)`,
+          background: `radial-gradient(closest-side, rgba(${ELECTRIC},${(0.32 + 0.2 * lvl + 0.42 * light).toFixed(3)}) 0%, rgba(${ELECTRIC},${(0.1 + 0.08 * lvl + 0.18 * light).toFixed(3)}) 45%, rgba(${ELECTRIC},0) 100%)`,
           opacity: dress,
         }}
       />

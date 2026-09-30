@@ -288,7 +288,7 @@ export const Call: React.FC = () => {
               top: orb.y - L.pick(760, 900),
               width: L.pick(2000, 1800),
               height: L.pick(1520, 1800),
-              background: `radial-gradient(closest-side, rgba(124,58,237,${(0.08 + 0.1 * lvl + 0.36 * light).toFixed(3)}), rgba(124,58,237,0) 100%)`,
+              background: `radial-gradient(closest-side, rgba(124,58,237,${(0.08 + 0.1 * lvl + 0.5 * light).toFixed(3)}), rgba(124,58,237,0) 100%)`,
             }}
           />
         </AbsoluteFill>
