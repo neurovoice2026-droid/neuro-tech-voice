@@ -2,13 +2,20 @@
 /**
  * Neuro Tech Voice trailer — the voices.
  *
- * Produces every spoken line in scripts/voice-lines.json with one of three
+ * Produces every spoken line in scripts/voice-lines.json with one of four
  * engines:
  *
  *   · FILES (preferred for the final cut) — your own recordings or lines
  *     generated on fish.audio / ElevenLabs, dropped into trailer/voice-src/
  *     as <id>.wav|mp3|m4a|ogg|flac (see voice-src/README.md). Used
  *     automatically when every line has a file there.
+ *   · CARTESIA SONIC (ultra-realistic, used when CARTESIA_API_KEY is set —
+ *     the same key and API the product's voice gateway uses) — the product's
+ *     own default English agent voices: Ava = Skylar, caller = Daniel
+ *     (lib/voice/voice-map.ts), model sonic-3.6, a per-line emotion
+ *     (neutral | calm | content | sad | angry). Override with
+ *     CARTESIA_AVA_VOICE / CARTESIA_CALLER_VOICE / CARTESIA_CALLER2_VOICE,
+ *     CARTESIA_TTS_MODEL. Needs network access to api.cartesia.ai.
  *   · FISH AUDIO (ultra-realistic, used when FISH_API_KEY is set) — the
  *     fish.audio TTS API (model s2-pro by default, FISH_MODEL to change),
  *     one voice model per role: FISH_AVA_VOICE, FISH_CALLER_VOICE,
@@ -33,8 +40,9 @@
  * model) into .cache/, or pass KOKORO_DIR=/path/to/kokoro-int8-en-v0_19.
  * The generated WAVs + TS ARE committed, so rendering never needs the model.
  *
- *   npm run voice                       (files if voice-src/ is complete, else Fish
- *                                        if FISH_API_KEY is set, else Kokoro)
+ *   npm run voice                       (files if voice-src/ is complete, else
+ *                                        Cartesia / Fish if their key is set, else Kokoro)
+ *   npm run voice -- --engine=cartesia  (force Cartesia)
  *   npm run voice -- --engine=files     (force files; a missing one is an error)
  *   npm run voice -- --engine=kokoro    (force the offline engine)
  *   npm run voice -- --list             (list fish.audio voice candidates)
@@ -200,6 +208,69 @@ function fishTTS(text, voice, speed) {
   }
 }
 
+
+
+/* ── Cartesia Sonic (api.cartesia.ai) ──────────────────────────── */
+// Same API version, model and request shape as the product's own client
+// (lib/cartesia/client.ts, verified live there).
+const CARTESIA_API = 'https://api.cartesia.ai';
+const CARTESIA_VERSION = '2026-08-14';
+const CARTESIA_MODEL = () => process.env.CARTESIA_TTS_MODEL || 'sonic-3.6-2026-08-27';
+const CARTESIA_EMOTIONS = ['neutral', 'calm', 'angry', 'content', 'sad'];
+
+function cartesiaCurl(args) {
+  const dir = path.join(os.tmpdir(), `ntv-cartesia-${process.pid}`);
+  mkdirSync(dir, { recursive: true });
+  const hfile = path.join(dir, 'h');
+  writeFileSync(hfile, [`Authorization: Bearer ${process.env.CARTESIA_API_KEY}`, `Cartesia-Version: ${CARTESIA_VERSION}`, 'Content-Type: application/json'].join('\n'), { mode: 0o600 });
+  try {
+    return execFileSync('curl', ['-sS', '--fail-with-body', '--max-time', '120', '-H', `@${hfile}`, ...args], { maxBuffer: 1 << 28 });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function cartesiaList(gender) {
+  const q = new URLSearchParams({ limit: '100', gender, language: 'en' });
+  const raw = JSON.parse(cartesiaCurl([`${CARTESIA_API}/voices?${q}`]).toString());
+  const items = Array.isArray(raw) ? raw : raw.data ?? [];
+  return items.map((v) => ({ id: v.id, name: v.name, tagline: v.tagline ?? '', description: v.description ?? '', pro: v.is_pro === true, status: v.status ?? 'active' }));
+}
+
+/** Resolve a Cartesia voice for a role: env var → voice-lines.json → library pick. */
+function cartesiaVoice(role, v, taken) {
+  const c = v.cartesia ?? {};
+  const id = (c.env && process.env[c.env]) || c.id;
+  if (id) return { id, name: c.name ?? '(pinned)' };
+  const pick = cartesiaList(c.gender ?? 'feminine').filter((x) => !x.pro && x.status === 'active' && !taken.has(x.id));
+  const pref = pick.find((x) => /(conversational|friendly|casual|natural|warm)/i.test(`${x.tagline} ${x.description}`)) ?? pick[0];
+  if (!pref) throw new Error(`[voice] no Cartesia voice found for ${role}; set ${c.env}`);
+  console.log(`[voice] ${role}: picked Cartesia "${pref.name}" (${pref.id}) — pin it in voice-lines.json to keep it`);
+  return pref;
+}
+
+function cartesiaTTS(text, voiceId, { speed, emotion } = {}) {
+  const generation = {};
+  if (typeof speed === 'number' && speed !== 1) generation.speed = Math.max(0.6, Math.min(1.5, speed));
+  if (emotion && CARTESIA_EMOTIONS.includes(emotion)) generation.emotion = emotion;
+  const body = {
+    model_id: CARTESIA_MODEL(),
+    transcript: text,
+    voice: voiceId,
+    language: 'en',
+    output_format: { container: 'wav', encoding: 'pcm_s16le', sample_rate: 44100 },
+    ...(Object.keys(generation).length ? { generation_config: generation } : {}),
+  };
+  const dir = path.join(os.tmpdir(), `ntv-cartesia-body-${process.pid}`);
+  mkdirSync(dir, { recursive: true });
+  const bfile = path.join(dir, 'b.json');
+  writeFileSync(bfile, JSON.stringify(body));
+  try {
+    return decodeWav(cartesiaCurl(['-X', 'POST', `${CARTESIA_API}/tts/bytes`, '--data-binary', `@${bfile}`]));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 /* ── your own files (voice-src/) ───────────────────────────────── */
 const SRC = path.join(ROOT, 'voice-src');
@@ -380,7 +451,8 @@ const argv = process.argv.slice(2);
 const cfg = JSON.parse(readFileSync(path.join(HERE, 'voice-lines.json'), 'utf8'));
 const forced = argv.find((a) => a.startsWith('--engine='))?.split('=')[1];
 const haveAllFiles = cfg.lines.every((l) => srcFile(l.id));
-const ENGINE = forced ?? (haveAllFiles ? 'files' : process.env.FISH_API_KEY ? 'fish' : 'kokoro');
+const ENGINE =
+  forced ?? (haveAllFiles ? 'files' : process.env.CARTESIA_API_KEY ? 'cartesia' : process.env.FISH_API_KEY ? 'fish' : 'kokoro');
 
 if (argv.includes('--list')) {
   if (!process.env.FISH_API_KEY) throw new Error('--list needs FISH_API_KEY');
@@ -398,6 +470,17 @@ if (ENGINE === 'files') {
   if (missing.length) throw new Error(`[voice] voice-src/ is missing: ${missing.join(', ')}`);
   for (const role of Object.keys(cfg.voices)) chosen[role] = { engine: 'files', dir: 'voice-src' };
   synth = (line) => decodeFile(srcFile(line.id));
+} else if (ENGINE === 'cartesia') {
+  if (!process.env.CARTESIA_API_KEY) throw new Error('--engine=cartesia needs CARTESIA_API_KEY');
+  const taken = new Set();
+  const voices = {};
+  for (const [role, v] of Object.entries(cfg.voices)) {
+    voices[role] = cartesiaVoice(role, v, taken);
+    taken.add(voices[role].id);
+    chosen[role] = { engine: 'cartesia', model: CARTESIA_MODEL(), id: voices[role].id, name: voices[role].name };
+  }
+  synth = (line, v, role) =>
+    cartesiaTTS(line.say, voices[role].id, { speed: line.speed ?? v.cartesia?.speed ?? 1, emotion: line.emotion ?? v.cartesia?.emotion });
 } else if (ENGINE === 'fish') {
   if (!process.env.FISH_API_KEY) throw new Error('--engine=fish needs FISH_API_KEY');
   const voices = Object.fromEntries(Object.entries(cfg.voices).map(([role, v]) => [role, fishVoice(role, v)]));
