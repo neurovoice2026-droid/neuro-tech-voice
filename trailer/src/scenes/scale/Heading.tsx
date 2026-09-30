@@ -62,7 +62,7 @@ export const Titles: React.FC<{
   // the mask wipe (bottom → top): A above the line, B below it
   const w = tween(t, [T.swap, T.swap + 8], [0, 1], EASE.inOut);
   // B leaves (upwards) at T.out
-  const q = tween(t, [T.out, T.out + 5], [0, 1], EASE.in2);
+  const q = tween(t, [T.out, T.out + 4], [0, 1], EASE.inOut);
   // shutter blur: the slot's own speed + the wipe's vertical smear
   const P0 = poseAt(t - 0.5, T, hero, band);
   const P1 = poseAt(t + 0.5, T, hero, band);

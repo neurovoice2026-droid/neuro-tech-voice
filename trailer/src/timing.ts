@@ -63,27 +63,33 @@ const CALL_LEN = Math.min(
 );
 const RESULT_LEN = b(8);
 /** Knowledge: the question, a scan, the honest answer, then the closing title. */
-const KB_ASK = b(2);
+const KB_ASK = b(1.5); // the heading has been up ~0.6 s; the caption itself waits for "Do you…"
 const KB_SCAN0 = upHalf(KB_ASK + Math.round(vFrames('kb-1') * 0.6));
 const KB_MISS = KB_SCAN0 + b(1.5);
 /* (a longer regenerated kb-1 must still leave its caption ≥ 15 f on screen after the last word) */
 const KB_ANSWER = Math.max(KB_MISS + 7, KB_ASK + vFrames('kb-1') + 19);
 const KB_CLOSE = upHalf(KB_ANSWER + vFrames('kb-2') + 10); // the last caption gets a beat before the closing takes the frame
 const SCALE_LEN = b(10);
-/** CTA: Ava's line, then the converge; the logo lands on a bar downbeat. */
+/** The knowledge closing title holds 3 beats before its 1-beat whip. */
+const KB_BASE = upBeat(KB_CLOSE + b(4));
+/** CTA: Ava's line; the four orbs converge right after her last word ("…seven")
+ *  and the logo lands on a strong beat (1 or 3 of the bar). */
 const CTA_LINE = b(1);
-const CTA_CONVERGE0 = Math.max(b(9), upBeat(CTA_LINE + vFrames('cta-1') + 6));
-const CTA_IMPACT = CTA_CONVERGE0 + b(2);
-/** The knowledge closing title holds ≥ 3 beats, then a 1-beat whip. Any
- *  slack needed to put the logo impact on a strong beat (1 or 3 of the bar)
- *  is added to that hold (0–1 beat). */
-const KNOWLEDGE_LEN = (() => {
-  const base = upBeat(KB_CLOSE + b(4));
-  const impactGlobal = b(8) + b(8) + CALL_LEN + RESULT_LEN + base + SCALE_LEN + CTA_IMPACT;
+const CTA_LAST_WORD = CTA_LINE + vWord('cta-1', VOICE.lines['cta-1'].words.length - 1);
+/** Put the impact on a strong beat: start the converge one beat earlier if that
+ *  still starts on/after the last word, else give the knowledge hold one beat. */
+const [CTA_CONVERGE0, KNOWLEDGE_LEN] = (() => {
+  const c = Math.max(b(8), upBeat(CTA_LAST_WORD + 12));
+  const ctaFrom = b(8) + b(8) + CALL_LEN + RESULT_LEN + KB_BASE + SCALE_LEN;
   const half = 2 * BEAT;
-  return base + ((half - (impactGlobal % half)) % half);
+  const off = (ctaFrom + c + b(2)) % half; // 0 or 1 beat: everything sits on the beat grid
+  if (!off) return [c, KB_BASE];
+  if (c - off >= Math.max(b(8), CTA_LAST_WORD)) return [c - off, KB_BASE];
+  return [c, KB_BASE + (half - off)];
 })();
-const CTA_HOLD = Math.max(CTA_IMPACT + b(3), upHalf(CTA_IMPACT + 4 + vFrames('cta-2') + 6));
+const CTA_IMPACT = CTA_CONVERGE0 + b(2);
+/** The still end card starts when Ava's "Neuro Tech Voice." ends (≥ 3 beats after the impact). */
+const CTA_HOLD = CTA_IMPACT + Math.max(b(3), upHalf(4 + vFrames('cta-2')));
 const CTA_LEN = CTA_HOLD + b(3); // 1.5 s final hold
 
 /**

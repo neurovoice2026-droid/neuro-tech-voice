@@ -58,7 +58,7 @@ const POP = { stiffness: 700, damping: 17, mass: 0.6 };
 const FLIP = { stiffness: 234, damping: 19.2, mass: 0.7 };
 /** the five cells into the deck, and the Japanese carrier's flight (fixed-px overshoot) */
 const COLLAPSE = { w: 0.85, z: 0.6, over: 10, anticip: 4, back: 12 };
-const CARRY = { w: 0.72, z: 0.62, over: 12, anticip: 3, back: 18 };
+const CARRY = { w: 0.86, z: 0.62, over: 12, anticip: 3, back: 18 };
 
 const dist = (a: Rect, bb: Rect) => Math.hypot(centre(bb).x - centre(a).x, centre(bb).y - centre(a).y);
 
@@ -278,7 +278,9 @@ export const Scale: React.FC = () => {
         />
       );
     } else {
-      const langOut = carrier ? tween(t, [K.carrierFly - 1, K.carrierFly + 3], [0, 1], EASE.in2) : 0;
+      const langOut = carrier
+        ? tween(t, [K.carrierFly - 1, K.carrierFly + 3], [0, 1], EASE.in2)
+        : 0.75 * tween(t, [cs + 3, cs + 6], [0, 1], EASE.inOut);
       const callIn = carrier ? tween(t, [K.callIn - 1, K.callIn + 2], [0, 1], EASE.out3) : 0;
       const lg = LANGS[k];
       face = (
@@ -374,6 +376,8 @@ export const Scale: React.FC = () => {
 
   return (
     <AbsoluteFill style={{ background: C.white, overflow: 'hidden' }}>
+      {/* the quarter kicks' roll, about the screen centre (every plane alike) */}
+      <AbsoluteFill style={{ transform: cp.rot ? `rotate(${cp.rot.toFixed(4)}deg)` : undefined }}>
       <Camera x={cp.x} y={cp.y} zoom={cp.zoom}>
         {/* 0.4 · the lilac wash + blooms */}
         <Layer depth={0.4}>
@@ -403,6 +407,7 @@ export const Scale: React.FC = () => {
           <NearDiscs t={t} L={L} fade={tween(t, [0, 10], [0, 1], EASE.out3)} />
         </Layer>
       </Camera>
+      </AbsoluteFill>
 
       {/* the hero hit: a 2 f lilac wash over everything */}
       {wash > 0 ? <AbsoluteFill style={{ background: `rgba(185,163,255,${wash})` }} /> : null}

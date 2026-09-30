@@ -19,7 +19,7 @@ import { centre, type Geo, type Pt } from './geometry';
 
 const K = SCALE_LOCAL;
 
-export type Affine = { s: number; ax: number; ay: number };
+export type Affine = { s: number; ax: number; ay: number; rot: number };
 
 /** 0…3: how far along the three camera steps (fraction = progress of the current step) */
 const level = (t: number) => K.camSteps.reduce((a, st) => a + tween(t, st, [0, 1], EASE.peel), 0);
@@ -59,22 +59,27 @@ export function stepSpeed(t: number, G: Geo, L: Layout): number {
   return m;
 }
 
-/** zoom kick (fraction) and x-jolt (px) at t */
-export function kicks(t: number): { z: number; jx: number } {
+/** zoom kick (fraction), x-jolt (px) and roll (deg) at t */
+export function kicks(t: number): { z: number; jx: number; rot: number } {
   let z = 0;
   let jx = 0;
+  let rot = 0;
   K.kicks.forEach((q, i) => {
     if (t < q) return;
     const e = Math.exp(-(t - q) / 3);
+    const side = i % 2 === 0 ? 1 : -1;
     z += 0.018 * e;
-    jx += (i % 2 === 0 ? 3 : -3) * e;
+    jx += 3 * side * e;
+    // the jolt tips the frame a hair the same way (a hand-held hit)
+    rot += 0.4 * side * e;
   });
+  // the other 16ths: a micro-kick (0.3 %, well under the quarters)
   const quarter = (f: number) => (K.kicks as readonly number[]).includes(f);
-  for (const p of K.pops) if (!quarter(p) && t >= p) z += 0.005 * Math.exp(-(t - p) / 2);
+  for (const p of K.pops) if (!quarter(p) && t >= p) z += 0.003 * Math.exp(-(t - p) / 2);
   const H = SCALE.industriesTitle;
   if (t >= H) z += 0.025 * Math.exp(-(t - H) / 4);
   for (const l of K.langs) if (t >= l) z += 0.005 * Math.exp(-(t - l) / 2);
-  return { z, jx };
+  return { z, jx, rot };
 }
 
 /** 1 % toward node i on its station frame: up in 2 f, exactly gone by +7 (the last one stays about FLOW_END) */
@@ -115,7 +120,7 @@ export function camAt(t: number, G: Geo, L: Layout): Affine {
     1 + 0.022 * windowed(t, P[0], P[1], P[1], P[2], EASE.inOut, EASE.inOut));
   // nudges toward each flow node
   K.stations.forEach((st, i) => about(G.nodes[i], 1 + nudge(t, st, i === 2)));
-  return { s, ax, ay };
+  return { s, ax, ay, rot: k.rot };
 }
 
 /** Camera component props for an affine (Camera.tsx: screen = C + (p − C)·zoom − cam) */
@@ -123,4 +128,6 @@ export const cameraProps = (a: Affine, L: Layout) => ({
   x: L.cx * (1 - a.s) - a.ax,
   y: L.cy * (1 - a.s) - a.ay,
   zoom: a.s,
+  /** the quarter kicks' roll (deg), applied about the screen centre by the scene; ~0 long before the flow */
+  rot: Math.abs(a.rot) > 1e-4 ? a.rot : 0,
 });
