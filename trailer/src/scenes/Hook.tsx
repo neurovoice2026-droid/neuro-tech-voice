@@ -14,7 +14,7 @@ import { HookLine } from '../components/Shared';
 import { CornerDot } from '../components/Type';
 import { HOOK_LINE } from '../lib/handoff';
 import { useLayout } from '../lib/layout';
-import { aos, breathe, EASE, SPRING, tween } from '../lib/motion';
+import { aos, breathe, EASE, mix, SPRING, tween } from '../lib/motion';
 import { useSceneFrame } from '../lib/scene';
 import { C, FONT, TRACK } from '../theme';
 import { b, FPS, HOOK, SCENES } from '../timing';
@@ -102,6 +102,19 @@ export const Hook: React.FC = () => {
     land: HOOK.clockLand,
   }));
   const unfold = tween(f, [HOOK_LOCAL.figuresIn, HOOK.clockLand - 3], [0, 1], EASE.house);
+  // a light sweep crosses the figures just after they land (left → right, staggered)
+  const sheens = target.map((_, i) => {
+    const s0 = HOOK.clockLand + 1 + i * 1.5 + (i >= 2 ? 1.5 : 0);
+    return f < s0 ? -1 : f > s0 + 11 ? 2 : tween(f, [s0, s0 + 11], [0, 1], EASE.inOut);
+  });
+  // anamorphic streaks: the orb's birth, and the land
+  const streakBirth = f < HOOK_LOCAL.orbIn ? 0 : Math.exp(-(f - HOOK_LOCAL.orbIn - 1) / 6) * tween(f, [HOOK_LOCAL.orbIn, HOOK_LOCAL.orbIn + 1], [0, 1]);
+  const streakLand = f < HOOK.clockLand ? 0 : Math.exp(-(f - HOOK.clockLand) / 5);
+  const streakW =
+    streakLand > 0.01
+      ? mix(L.pick(700, 560), L.pick(1500, 1000), EASE.expo(Math.min(1, (f - HOOK.clockLand) / 14)))
+      : mix(140, L.pick(640, 520), EASE.expo(Math.min(1, Math.max(0, f - HOOK_LOCAL.orbIn) / 16)));
+  const streakO = Math.min(1, 0.75 * streakBirth + 0.5 * streakLand);
   const figuresOpacity =
     (tween(f, [HOOK_LOCAL.figuresIn, HOOK.clockIn], [0, 0.4], EASE.house) +
       tween(f, [HOOK.clockIn + 2, HOOK.clockLand], [0, 0.6], EASE.inOut)) *
@@ -246,6 +259,7 @@ export const Hook: React.FC = () => {
             <ClockLockup
               frame={f}
               rolls={rolls}
+              sheens={sheens}
               fontSize={F}
               orbSize={orbD}
               gap={gap}
@@ -258,6 +272,30 @@ export const Hook: React.FC = () => {
               orbOpacity={Math.min(1, Math.max(0, born) * 1.2) * (1 - out)}
             />
           </div>
+          {streakO > 0.01 ? (
+            <>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: L.cx - streakW / 2,
+                  top: clockCy + L.pick(4, 3) - 14,
+                  width: streakW,
+                  height: 28,
+                  background: `radial-gradient(50% 50% at 50% 50%, rgba(185,163,255,${(0.28 * streakO).toFixed(3)}), rgba(185,163,255,0))`,
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  left: L.cx - streakW / 2,
+                  top: clockCy + L.pick(4, 3) - 1,
+                  width: streakW,
+                  height: 2,
+                  background: `linear-gradient(90deg, rgba(196,168,255,0), rgba(237,236,241,${(0.85 * streakO).toFixed(3)}) 50%, rgba(196,168,255,0))`,
+                }}
+              />
+            </>
+          ) : null}
           <div
             style={{
               position: 'absolute',

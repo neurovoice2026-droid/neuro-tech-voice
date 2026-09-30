@@ -53,12 +53,18 @@ export function rollPos(f: number, r: Roll): number {
 
 /* ── Figure column ──────────────────────────────────────────────────── */
 
+const SHEEN =
+  'linear-gradient(100deg, rgba(255,255,255,0) 38%, rgba(255,255,255,0.62) 50%, rgba(255,255,255,0) 62%)';
+
 const Column: React.FC<{
   pos: number;
   speed: number; // cells / frame
   fontSize: number;
   id: string;
-}> = ({ pos, speed, fontSize, id }) => {
+  /** 0..1 progress of a light sweep across the figure (left → right); <0 or >1 = none */
+  sheen: number;
+}> = ({ pos, speed, fontSize, id, sheen }) => {
+  const sheenOn = sheen > 0 && sheen < 1;
   const cellW = 0.6 * fontSize;
   const cellH = 1.1 * fontSize;
   const base = Math.floor(pos);
@@ -113,8 +119,10 @@ const Column: React.FC<{
               fontVariantNumeric: 'tabular-nums',
               letterSpacing: 0,
               textAlign: 'center',
-              backgroundImage: CLOCK_FILL,
-              backgroundSize: '100% 100%',
+              backgroundImage: sheenOn ? `${SHEEN}, ${CLOCK_FILL}` : CLOCK_FILL,
+              backgroundSize: sheenOn ? '300% 100%, 100% 100%' : '100% 100%',
+              backgroundPosition: sheenOn ? `${((1 - sheen) * 100).toFixed(2)}% 0, 0 0` : undefined,
+              backgroundRepeat: 'no-repeat',
               WebkitBackgroundClip: 'text',
               backgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
@@ -134,6 +142,8 @@ const Column: React.FC<{
 export const ClockLockup: React.FC<{
   frame: number;
   rolls: Roll[]; // four
+  /** sheen progress per figure (see Column) */
+  sheens: number[];
   fontSize: number;
   orbSize: number;
   gap: number;
@@ -150,6 +160,7 @@ export const ClockLockup: React.FC<{
 }> = ({
   frame,
   rolls,
+  sheens,
   fontSize,
   orbSize,
   gap,
@@ -164,7 +175,9 @@ export const ClockLockup: React.FC<{
   const cols = rolls.map((r, i) => {
     const pos = rollPos(frame, r);
     const speed = rollPos(frame + 0.5, r) - rollPos(frame - 0.5, r);
-    return <Column key={i} pos={pos} speed={speed} fontSize={fontSize} id={`hook-vblur-${i}`} />;
+    return (
+      <Column key={i} pos={pos} speed={speed} fontSize={fontSize} id={`hook-vblur-${i}`} sheen={sheens[i]} />
+    );
   });
   const slide = (1 - unfold) * (0.22 * fontSize);
   const halo = orbSize * 3.4;
