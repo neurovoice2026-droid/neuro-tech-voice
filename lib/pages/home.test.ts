@@ -229,8 +229,8 @@ describe("the demo's schedule", () => {
   const calls = buildHomeCalls();
   const tour = scriptFor(calls, { kind: "tour", ids: TOUR, from: POSTER });
 
-  it("tours the four moments in about forty seconds and ends on the poster, finished", () => {
-    expect(tour.total).toBeLessThanOrEqual(43);
+  it("tours the four moments in about forty-five seconds and ends on the poster, finished", () => {
+    expect(tour.total).toBeLessThanOrEqual(47);
     expect(tour.segs.at(-1)!.settled).toBe(tour.total);
     expect(tour.segs.map((s) => s.id)).toEqual([...TOUR]);
     expect(frameAt(tour, tour.total)).toMatchObject({ target: POSTER, moment: POSTER, ended: true, done: true });

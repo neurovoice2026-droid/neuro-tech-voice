@@ -34,18 +34,29 @@ import "./demo.css";
  * The sub is the index. Its four phrases are the four moments, each in
  * its own ink, and the one being dialled is the one that stays lit.
  *
- * Untouched, the stage tours the four once (busy, just gone, day off,
- * asleep) while it has the screen, and ends on the frame the server drew:
- * 3 a.m., booked.
- * That frame is also what a reader without scripts sees, what reduced
+ * Untouched, the stage tours the four (busy, just gone, day off, asleep)
+ * while it has the screen, on every device, and ends on the frame the
+ * server drew: 3 a.m., booked. It tours again each time it comes back on
+ * screen, and after a rest on that frame while it stays; a pick, Play,
+ * Pause or Replay hands the stage to the reader for good.
+ * That frame is also what a reader without scripts sees, and what reduced
  * motion keeps (picking a moment then switches to its finished frame at
- * once), and what a weak device shows until it is tapped.
+ * once).
  *
  * The run itself is demo-timeline.ts, on demo-script.ts's schedule; this
  * file holds the markup and derives its state from the run's frames.
  * ------------------------------------------------------------------ */
 
 const ORDER = TOUR;
+
+/** How long the untouched stage rests on the finished frame before it tours again. */
+const REST_MS = 6000;
+/**
+ * A press on the transport this soon after the tour started by itself was
+ * aimed at the Play (or Replay) the reader saw, not at the Pause that took
+ * its place under their hand.
+ */
+const TURNED_MS = 600;
 
 /** The eleven cells of a clock figure's strip. */
 const CELLS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
@@ -104,7 +115,9 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
   const { kit, reduce, playing, paused, setPaused, interacted, markInteracted, tier } = m;
   const lite = tier === "lite";
   const liteRef = useRef(lite);
-  // The tour waits for the stage itself to be properly on screen, not the heading above it.
+  // The tour waits for the stage itself to be on screen, not the heading above it: its top
+  // above the bottom 15% of the screen (with the section holding the screen, see useStageMotion),
+  // so it starts for a reader parked on the heading or landing on /#demo, on laptops and phones.
   const stageSeen = useInView(stageRef, "0px 0px -15% 0px");
 
   /** The moment being dialled: the checked key (drawn filled) and the lit phrase of the sub. */
@@ -221,15 +234,29 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
     return c.announce(call.day, call.time, call.outcomeLabel);
   };
 
-  // The tour: once, untouched, once the stage has had the screen for a moment.
+  // The tour, while the reader has not touched a control: once the stage has
+  // had the screen for a moment, again whenever it comes back to it after a
+  // tour, and, while it stays, again after a rest on the finished frame.
+  const showing = playing && stageSeen;
+  const away = useRef(false);
+  /** When the tour last started by itself (see TURNED_MS). */
+  const autoAt = useRef(-Infinity);
   useEffect(() => {
-    if (started || interacted || !kit || !playing || !stageSeen || lite || reduce) return;
-    const id = window.setTimeout(() => {
-      setStarted(true);
-      request({ kind: "tour", ids: TOUR, from: momentRef.current }, false);
-    }, 900);
+    if (!showing && done) away.current = true;
+  }, [showing, done]);
+  useEffect(() => {
+    if (interacted || !kit || !showing || reduce || (started && !done)) return;
+    const id = window.setTimeout(
+      () => {
+        away.current = false;
+        autoAt.current = performance.now();
+        setStarted(true);
+        request({ kind: "tour", ids: TOUR, from: momentRef.current }, false);
+      },
+      !started || away.current ? 900 : REST_MS,
+    );
     return () => window.clearTimeout(id);
-  }, [started, interacted, kit, playing, stageSeen, lite, reduce]);
+  }, [started, done, interacted, kit, showing, reduce]);
 
   // Plays while it has the stage and is not paused by hand.
   useEffect(() => {
@@ -285,8 +312,8 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
     if (!started || done) {
       setPaused(false);
       setStarted(true);
-      // Again what was played: the tour, unless the reader has picked (or the device is weak).
-      const again = pickedRef.current ?? (liteRef.current ? target : null);
+      // Again what was played: the tour, unless the reader has picked.
+      const again = pickedRef.current;
       request(
         again
           ? { kind: "single", ids: [again], from: momentRef.current }
@@ -295,6 +322,10 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
       );
       return;
     }
+    // The tour started by itself a moment ago and turned the Play the reader
+    // was pressing into Pause: the press asked for the tour, so it plays on,
+    // theirs now (no loop after it).
+    if (!paused && performance.now() - autoAt.current < TURNED_MS) return;
     setPaused(!paused);
   };
 

@@ -340,7 +340,9 @@ export function Explorer({ data, down }: { data: ExplorerData; down: readonly Do
   useEffect(() => {
     const index = indexRef.current;
     if (roomy === touring || !index) return;
-    const io = new IntersectionObserver(([entry]) => {
+    const io = new IntersectionObserver((entries) => {
+      // The last entry is the element as it is now: a busy main thread can hand one callback several.
+      const entry = entries[entries.length - 1];
       if (!entry.isIntersecting || window.matchMedia(MD).matches) setRoomy(touring);
     });
     io.observe(index);

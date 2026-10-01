@@ -82,12 +82,10 @@ export function AgentsCalls() {
       // call), so the split adds no labels of its own.
       const splits = lines.map((l) => SplitText.create(l, { type: "words", aria: "none" }));
       const outcomeSplit = SplitText.create(outcome, { type: "words", aria: "none" });
-      // Each word on its own compositor layer, so the fade, the rise and the
-      // light blur are GPU work rather than a repaint of the line per frame.
-      gsap.set([...splits.flatMap((sp) => sp.words), ...outcomeSplit.words], {
-        willChange: "transform, opacity, filter",
-        force3D: true,
-      });
+      // No will-change on the words: a layer held for every word of every
+      // line (57 to 94 of them while a call plays) cost more to keep than the
+      // few words tweening at once cost to paint. The tweens promote the ones
+      // in flight for as long as they move.
 
       const setBar = gsap.quickSetter(barRef.current, "scaleX");
       const setChapter = gsap.quickSetter(chapterRef.current, "scaleX");

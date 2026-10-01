@@ -81,9 +81,19 @@ const saasDisplay = Instrument_Sans({
   fallback: ["'Instrument Sans Arial Fallback'", "'Instrument Sans Roboto Fallback'"],
 });
 
+/**
+ * Marks <html data-saas> as a direct load is parsed, before its first
+ * paint and before the browser's own jump to a fragment; saas.css §14
+ * keys the scroll padding and the instant load-time jump on it. A script
+ * React inserts on a client-side trip never runs: there `Jumps` sets it
+ * as the shell mounts, and a trip that never mounts leaves nothing.
+ */
+const SAAS_BOOT = `document.documentElement.setAttribute("data-saas","")`;
+
 export function SaasShell({ children }: { children: ReactNode }) {
   return (
     <>
+      <script id="ntv-saas-boot" dangerouslySetInnerHTML={{ __html: SAAS_BOOT }} />
       <SiteHeader tone="light" />
       <main
         id="content"

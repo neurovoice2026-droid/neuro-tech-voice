@@ -75,17 +75,35 @@ export function MegaMenu({
   }, []);
 
   // A panel opened by pointer is incidental and should not ride the page
-  // down. One opened by keyboard is being read, so it stays.
+  // down, unless the reader is in it (focus inside: its industry field).
+  // One opened by keyboard is being read, so it stays while the page moves
+  // under it on its own; but not once the reader scrolls the page with a
+  // wheel or a finger, unless they are typing in its field. Its focus is
+  // inside from the start, so that alone cannot keep it; Base UI hands
+  // focus back to the trigger as it closes.
   useEffect(() => {
-    if (!menu || !pointerOpened.current) return;
+    if (!menu) return;
     const from = window.scrollY;
+    // Per opening: a menu that closes and opens again starts unscrolled.
+    let userScrolled = false;
+    const onUserScroll = () => {
+      userScrolled = true;
+    };
     const onScroll = () => {
       if (Math.abs(window.scrollY - from) < SCROLL_CLOSE_PX) return;
-      if (positionerRef.current?.contains(document.activeElement)) return;
+      if (pointerOpened.current) {
+        if (positionerRef.current?.contains(document.activeElement)) return;
+      } else if (!userScrolled || pinned.current) return;
       setMenu(null);
     };
+    window.addEventListener("wheel", onUserScroll, { passive: true });
+    window.addEventListener("touchmove", onUserScroll, { passive: true });
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    return () => {
+      window.removeEventListener("wheel", onUserScroll);
+      window.removeEventListener("touchmove", onUserScroll);
+      window.removeEventListener("scroll", onScroll);
+    };
   }, [menu]);
 
   const handleValueChange = (

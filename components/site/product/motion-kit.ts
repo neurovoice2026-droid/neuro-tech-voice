@@ -44,6 +44,12 @@ const loadKit = shared<Kit>(() =>
     import("gsap/MotionPathPlugin"),
   ]).then(([{ gsap }, { SplitText }, { DrawSVGPlugin }, { MotionPathPlugin }]) => {
     gsap.registerPlugin(SplitText, DrawSVGPlugin, MotionPathPlugin);
+    // Every `autoSleep` frames GSAP looks for anything left to animate, and
+    // stops asking for frames when there is nothing. At its default of 120
+    // a main-thread frame ran for up to two seconds (far longer on a slow
+    // phone) after the last stage paused, say once a reader had scrolled
+    // past it; at 30 it is half a second. Anything that plays wakes it again.
+    gsap.config({ autoSleep: 30 });
     return { gsap, SplitText };
   }),
 );
@@ -76,26 +82,36 @@ export function whenIdle(run: () => void) {
 
 let intent: Promise<void> | null = null;
 
+/** After the page has loaded, someone who only reads is taken to have arrived after this long. */
+const READER_MS = 3000;
+/** A load that never finishes (a request left hanging) holds nothing longer than this. */
+const BACKSTOP_MS = 10000;
+
 /**
  * Resolves on the visitor's first sign of life — a pointer moving, a touch,
- * a key, a scroll — or, for someone who only reads, a few seconds after the
- * page has loaded. Work that would stall the main thread and that the first
- * screen can do without (compiling a WebGL shader) waits for this, so it
- * never competes with the page becoming usable.
+ * a key, a scroll, or a click or a key already in this document — or, for
+ * someone who only reads, a few seconds after the page has loaded (and in
+ * any case BACKSTOP_MS after it was first asked). Work that would stall the
+ * main thread and that the first screen can do without (compiling a WebGL
+ * shader, fetching GSAP) waits for this, so it never competes with the page
+ * becoming usable.
  */
 export function whenIntent() {
   intent ??= new Promise<void>((resolve) => {
+    if (navigator.userActivation?.hasBeenActive) return resolve();
     const events = ["pointermove", "pointerdown", "touchstart", "keydown", "wheel", "scroll"] as const;
     let timer = 0;
     const go = () => {
       events.forEach((e) => window.removeEventListener(e, go, true));
       window.removeEventListener("load", arm);
       clearTimeout(timer);
+      clearTimeout(backstop);
       resolve();
     };
     const arm = () => {
-      timer = window.setTimeout(go, 7000);
+      timer = window.setTimeout(go, READER_MS);
     };
+    const backstop = window.setTimeout(go, BACKSTOP_MS);
     events.forEach((e) => window.addEventListener(e, go, { capture: true, passive: true }));
     if (document.readyState === "complete") arm();
     else window.addEventListener("load", arm, { once: true });

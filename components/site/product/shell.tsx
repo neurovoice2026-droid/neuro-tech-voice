@@ -3,11 +3,14 @@ import { SiteHeader } from "@/components/site/header";
 import { Footer } from "@/components/site/footer";
 import { ppCinema, ppDisplay } from "./fonts";
 import { Deferred } from "./primitives";
+import { HashLanding } from "./hash-landing";
 
 /**
  * The frame every light product page is built in: the header in its light
  * tone, a `.pp` main that owns the tokens and the display face, and the
- * site's imprint underneath.
+ * site's imprint underneath. A link to one of its sections lands on it and
+ * stays there while the deferred blocks around it take their real heights
+ * (see HashLanding).
  */
 export function ProductShell({ children }: { children: ReactNode }) {
   return (
@@ -21,6 +24,7 @@ export function ProductShell({ children }: { children: ReactNode }) {
         className={`pp ${ppDisplay.variable} ${ppCinema.variable} relative flex-1 overflow-x-clip outline-none`}
       >
         {children}
+        <HashLanding />
       </main>
       <Deferred size={560}>
         <Footer />

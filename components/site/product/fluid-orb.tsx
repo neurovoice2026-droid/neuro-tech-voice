@@ -47,7 +47,7 @@ import { useInView } from "./timing";
  * coming back on screen, the tab returning, new colours, a resize —
  * starts it again. On a mid device the pixel ratio is capped at 1.25 and
  * the grain is off; frames that stay slow drop it to 1, and frames still
- * slow at 1 demote the whole visit to lite.
+ * slow at 1 take the visit to mid (device-tier.ts), never to lite.
  * ------------------------------------------------------------------ */
 
 const VERT = `#version 300 es
@@ -212,7 +212,7 @@ function link(gl: WebGL2RenderingContext) {
 /** A palette channel (0–1) this close to its target has arrived. */
 const ARRIVED = 0.002;
 
-/** The pixel ratio a struggling orb falls back to before it gives the visit up to lite. */
+/** The pixel ratio a struggling orb falls back to; still slow there, it takes the visit to mid. */
 const FLOOR_DPR = 1;
 
 export function FluidOrb({
@@ -273,10 +273,11 @@ export function FluidOrb({
     let teardown: (() => void) | undefined;
     let cancelIdle: (() => void) | undefined;
     const near = new IntersectionObserver(
-      ([e]) => {
-        if (!e.isIntersecting) return;
+      (entries) => {
+        // The last entry is the element as it is now: a busy main thread can hand one callback several.
+        if (!entries[entries.length - 1].isIntersecting) return;
         near.disconnect();
-        // The probe's verdict first: a device about to be called lite never compiles.
+        // The GPU check first: a device about to be called lite never compiles.
         (gate === "intent" ? whenIntent() : Promise.resolve())
           .then(whenTierSettled)
           .then((tier) => {
@@ -400,7 +401,7 @@ export function FluidOrb({
 
       const frame = (now: number) => {
         raf = 0;
-        // Frames that stay slow cost resolution first, then the whole visit's WebGL.
+        // Frames that stay slow cost resolution first, then take the visit to mid (never lite).
         if (slow(now - prev)) {
           if (cap > FLOOR_DPR) {
             cap = FLOOR_DPR;
@@ -467,8 +468,9 @@ export function FluidOrb({
         play();
       });
       ro.observe(canvas);
-      const io = new IntersectionObserver(([e]) => {
-        onScreen = e.isIntersecting;
+      const io = new IntersectionObserver((entries) => {
+        // The last entry is the element as it is now: a busy main thread can hand one callback several.
+        onScreen = entries[entries.length - 1].isIntersecting;
         if (onScreen) play();
         else stop();
       });
@@ -491,7 +493,7 @@ export function FluidOrb({
       };
     }
     // The loop reads colours, volume and flags from refs; it is built once
-    // per tier that draws (a demotion to lite tears it down for good).
+    // per tier that draws (a hard lite verdict tears it down for good).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shader]);
 

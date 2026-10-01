@@ -219,7 +219,7 @@ function boxStyle(box: ErpReserveId): CSSProperties {
  */
 export function ErpDeferred({ box, children }: { box: ErpReserveId; children: ReactNode }) {
   return (
-    <div className="home-deferred erp-deferred" style={boxStyle(box)}>
+    <div className="home-deferred erp-deferred" data-box={box} style={boxStyle(box)}>
       {children}
     </div>
   );

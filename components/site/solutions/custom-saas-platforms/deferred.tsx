@@ -174,7 +174,7 @@ export function reserveStyle(heights: Reserve): CSSProperties {
 /** A section below the cover, in a content-visibility box holding `box`'s measured reserve. */
 export function SaasDeferred({ box, children }: { box: ReserveId; children: ReactNode }) {
   return (
-    <div className="home-deferred" style={reserveStyle(RESERVES[box])}>
+    <div className="home-deferred" data-box={box} style={reserveStyle(RESERVES[box])}>
       {children}
     </div>
   );

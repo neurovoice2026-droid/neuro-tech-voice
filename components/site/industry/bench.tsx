@@ -38,6 +38,9 @@ export function Bench({ trade }: { trade: Trade }) {
   // reads as a screensaver and stops being something you operate.
   const started = useRef(false);
   const cycle = useRef(0);
+  const railRef = useRef<HTMLDivElement>(null);
+  /** The last change of chip was the autoplay's, not the reader's. */
+  const stepped = useRef(false);
   // Unmount only — see the note in first-question.tsx.
   useEffect(() => () => window.clearInterval(cycle.current), []);
 
@@ -48,11 +51,32 @@ export function Bench({ trade }: { trade: Trade }) {
     cycle.current = window.setInterval(() => {
       step += 1;
       if (step >= 3) window.clearInterval(cycle.current);
+      stepped.current = true;
       setActive((a) => (a + 1) % Math.min(trade.intents.length, 16));
     }, CYCLE_MS);
   }, [inView, touched, still, trade.intents.length]);
 
+  // On a phone the rail scrolls sideways, and the autoplay can land on a
+  // chip past its edge. Bring that chip in, by scrolling the rail alone:
+  // scrollIntoView would move the page under a reader who is reading.
+  useEffect(() => {
+    if (!stepped.current) return;
+    stepped.current = false;
+    const rail = railRef.current;
+    const chip = rail?.children[active];
+    if (!rail || !(chip instanceof HTMLElement) || rail.scrollWidth <= rail.clientWidth) return;
+    const r = rail.getBoundingClientRect();
+    const c = chip.getBoundingClientRect();
+    // 16px is the rail's own padding: the chip lands where the first one sits.
+    if (c.left >= r.left + 16 && c.right <= r.right - 16) return;
+    rail.scrollTo({ left: rail.scrollLeft + c.left - r.left - 16, behavior: "smooth" });
+  }, [active]);
+
   function pick(i: number) {
+    // The reader's pick is final: the autoplay stops here, even mid-cycle.
+    window.clearInterval(cycle.current);
+    started.current = true;
+    stepped.current = false;
     setTouched(true);
     setActive(i);
     markProved("bench");
@@ -78,7 +102,10 @@ export function Bench({ trade }: { trade: Trade }) {
         <div className="rounded-[24px] bg-pp-card p-4 md:p-7">
           {/* Edge to edge on a phone with the next chip peeking, so it is
               obvious the rail scrolls. Wrapped on a wide screen. */}
-          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] md:mx-0 md:flex-wrap md:overflow-visible md:px-0 [&::-webkit-scrollbar]:hidden">
+          <div
+            ref={railRef}
+            className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] md:mx-0 md:flex-wrap md:overflow-visible md:px-0 [&::-webkit-scrollbar]:hidden"
+          >
             {trade.intents.slice(0, 16).map((x, i) => (
               <button
                 key={x.chip}

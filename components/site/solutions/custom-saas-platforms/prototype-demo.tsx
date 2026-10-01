@@ -217,8 +217,9 @@ export function PrototypeDemo({ data }: { data: PrototypeData }) {
     const el = device.current;
     if (!el) return;
     const io = new IntersectionObserver(
-      ([e]) => {
-        if (!e?.isIntersecting) return;
+      (entries) => {
+        // The last entry is the element as it is now: a busy main thread can hand one callback several.
+        if (!entries[entries.length - 1]?.isIntersecting) return;
         el.setAttribute("data-seen", "");
         io.disconnect();
       },

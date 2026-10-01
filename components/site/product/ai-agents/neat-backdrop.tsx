@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { NeatConfig, NeatGradient } from "@firecms/neat";
+import { gpuIsWeak, whenTierSettled } from "../device-tier";
 import { whenIdle, whenIntent } from "../motion-kit";
 
 /* ------------------------------------------------------------------ *
@@ -202,6 +203,10 @@ export function gradientPoster(config: EditorConfig) {
  * moment: compiling the shader holds the main thread for a moment, and that
  * moment should never be the one in which the page becomes usable. Until
  * then the poster stands in; the canvas fades in over it on its first frame.
+ *
+ * Weak hardware (device-tier's hard "lite") never starts one at all, and a
+ * browser that refuses the context keeps the poster too: the poster is the
+ * panel on those devices, not a gap.
  */
 export function NeatBackdrop({ config }: { config: EditorConfig }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -222,28 +227,40 @@ export function NeatBackdrop({ config }: { config: EditorConfig }) {
     const start = () => {
       if (armed) return;
       armed = true;
-      whenIntent().then(() => {
-        if (cancelled) return;
-        cancelIdle = whenIdle(() => {
-          // Imported here rather than at the top: it is WebGL-only, and this
-          // keeps it out of the server render and off the page's first bundle.
-          import("@firecms/neat").then(({ NeatGradient }) => {
-            if (cancelled) return;
-            const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-            gradient = new NeatGradient({
-              ref: canvas,
-              ...config,
-              ...(still ? { speed: 0 } : null),
-            });
-            window.addEventListener("scroll", onScroll, { passive: true });
-            raf = requestAnimationFrame(() => {
-              raf = requestAnimationFrame(() => {
-                canvas.style.opacity = "1";
-              });
-            });
+      whenIntent()
+        .then(whenTierSettled)
+        .then((tier) => {
+          if (cancelled || tier === "lite" || gpuIsWeak()) return;
+          cancelIdle = whenIdle(() => {
+            // Imported here rather than at the top: it is WebGL-only, and this
+            // keeps it out of the server render and off the page's first bundle.
+            import("@firecms/neat")
+              .then(({ NeatGradient }) => {
+                if (cancelled) return;
+                const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+                try {
+                  gradient = new NeatGradient({
+                    ref: canvas,
+                    ...config,
+                    ...(still ? { speed: 0 } : null),
+                  });
+                } catch {
+                  // No WebGL after all (a refused or blocklisted context):
+                  // the canvas stays transparent and the poster is the panel.
+                  return;
+                }
+                window.addEventListener("scroll", onScroll, { passive: true });
+                raf = requestAnimationFrame(() => {
+                  raf = requestAnimationFrame(() => {
+                    canvas.style.opacity = "1";
+                  });
+                });
+              })
+              // A chunk that failed to arrive leaves the poster, as above.
+              .catch(() => {});
           });
-        });
-      });
+        })
+        .catch(() => {});
     };
 
     let seen = false;
@@ -252,8 +269,10 @@ export function NeatBackdrop({ config }: { config: EditorConfig }) {
       if (seen && sized) start();
     };
     const io = new IntersectionObserver(
-      ([e]) => {
-        seen = e.isIntersecting;
+      (entries) => {
+        // The last entry is the canvas as it is now (a busy main thread can
+        // hand one callback several).
+        seen = entries[entries.length - 1].isIntersecting;
         check();
       },
       { rootMargin: "10% 0px" },

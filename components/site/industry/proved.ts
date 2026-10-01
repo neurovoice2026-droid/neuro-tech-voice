@@ -22,13 +22,27 @@ export type Claim = "fork" | "bench" | "run" | "wall" | "relay" | "rules";
 const proved = new Set<Claim>();
 const listeners = new Set<() => void>();
 
+const EMPTY: readonly Claim[] = [];
+
 /** Identity-stable snapshot: React bails out unless the set really changed. */
-let snapshot: readonly Claim[] = [];
+let snapshot: readonly Claim[] = EMPTY;
 
 export function markProved(claim: Claim) {
   if (proved.has(claim)) return;
   proved.add(claim);
   snapshot = [...proved];
+  listeners.forEach((fn) => fn());
+}
+
+/**
+ * Forgets everything proved. The store outlives a page (it is the module's),
+ * so a trade opened from another trade's menu calls this on arrival, or its
+ * receipt would open with the last trade's rows already inked.
+ */
+export function resetProved() {
+  if (proved.size === 0) return;
+  proved.clear();
+  snapshot = EMPTY;
   listeners.forEach((fn) => fn());
 }
 
@@ -38,8 +52,6 @@ function subscribe(fn: () => void) {
     listeners.delete(fn);
   };
 }
-
-const EMPTY: readonly Claim[] = [];
 
 export function useProved(): readonly Claim[] {
   return useSyncExternalStore(

@@ -127,7 +127,11 @@ export function collect(stage: HTMLElement, SplitText: Split): Room {
   };
 }
 
-/** The beams exist only from lg, and are redrawn on resize, so they are looked up when used. */
+/**
+ * The beams exist only from lg, and are redrawn on resize, so they are looked up when used.
+ * Below lg there are none, and every step on them is skipped: a tween on nothing only makes
+ * GSAP warn, and it never sets the timeline's length (a longer step always runs beside it).
+ */
 function beamsOf(stage: HTMLElement) {
   return {
     groups: all<SVGGElement>(stage, "[data-kb-beam]"),
@@ -142,7 +146,7 @@ export function setBeams(gsap: Gsap, stage: HTMLElement, s: BeamState) {
   b.groups.forEach((g, i) =>
     gsap.set(g, { opacity: !s.drawn ? 1 : s.miss ? BEAM_MISS : s.win < 0 || s.win === i ? 1 : BEAM_LOSE }),
   );
-  gsap.set(b.draws, { strokeDashoffset: s.drawn ? 0 : 1 });
+  if (b.draws.length) gsap.set(b.draws, { strokeDashoffset: s.drawn ? 0 : 1 });
   b.trails.forEach((p, i) => gsap.set(p, { strokeDashoffset: s.drawn && s.win === i ? 0 : 1 }));
   if (b.runner) gsap.set(b.runner, { autoAlpha: 0 });
 }
@@ -243,15 +247,15 @@ export function addClear(tl: Timeline, room: Room, track: Track, hooks: Hooks) {
     .to(room.fills, { scaleX: 0, backgroundColor: FILL_REST, duration: 0.4, ease: "power2.inOut" }, at)
     .to(room.tiles, { y: 0, boxShadow: TILE_REST, opacity: 1, duration: 0.4, ease: "power2.inOut" }, at)
     .to(room.ticks, { opacity: 1, duration: 0.2 }, at)
-    .to(b.groups, { opacity: 0, duration: 0.3, ease: "power2.in" }, at)
-    .set([...b.draws, ...b.trails], { strokeDashoffset: 1 }, at + 0.32)
-    .set(b.groups, { opacity: 1 }, at + 0.32)
     .call(() => void (hooks.beams.current = { drawn: false, win: -1, miss: false }), [], at + 0.32)
     .to(pages, { autoAlpha: 0, duration: 0.3, ease: "power2.in" }, at)
     .set(pages, { clipPath: CLOSED }, at + 0.32)
     .set([...room.marks.values()], { scaleX: 0 }, at + 0.32)
     .call(hooks.setMuted, [false], at)
     .to(hooks.vol, { current: VOL.rest, duration: 0.45, ease: "sine.inOut" }, at);
+  if (b.groups.length) tl.to(b.groups, { opacity: 0, duration: 0.3, ease: "power2.in" }, at).set(b.groups, { opacity: 1 }, at + 0.32);
+  const paths = [...b.draws, ...b.trails];
+  if (paths.length) tl.set(paths, { strokeDashoffset: 1 }, at + 0.32);
   if (b.runner) tl.to(b.runner, { autoAlpha: 0, duration: 0.15 }, at);
   if (room.sheet) tl.to(room.sheet, { autoAlpha: 1, duration: 0.3, ease: "power2.out" }, at + 0.15);
   if (room.sheetLines) tl.to(room.sheetLines, { opacity: 1, duration: 0.3, ease: "power2.out" }, at);
@@ -295,8 +299,8 @@ export function addQuestion(
   status(tl, room, track, "reading", t);
   if (room.dot) tl.to(room.dot, { scale: 1.6, duration: 0.45, ease: "sine.inOut", yoyo: true, repeat: 3 }, t);
   tl.to(room.fills, { scaleX: (i: number) => q.match[i] ?? 0, duration: 0.6, ease: "power2.out", stagger: 0.08 }, t)
-    .to(b.draws, { strokeDashoffset: 0, duration: 0.7, ease: "power2.inOut", stagger: 0.05 }, t)
     .call(() => void (hooks.beams.current = { drawn: true, win: -1, miss: false }), [], t);
+  if (b.draws.length) tl.to(b.draws, { strokeDashoffset: 0, duration: 0.7, ease: "power2.inOut", stagger: 0.05 }, t);
   t += 1.8;
 
   if (hit) {
@@ -305,8 +309,9 @@ export function addQuestion(
     tl.to(room.tiles[best], { y: lg ? LIFT : 0, boxShadow: TILE_LIFT, duration: 0.35, ease: "power2.out" }, t)
       .to(room.fills[best], { backgroundColor: FILL_WIN, duration: 0.35, ease: "power2.out" }, t)
       .to(room.tiles.filter((_, i) => i !== best), { opacity: DIM, duration: 0.3, ease: "power2.out" }, t)
-      .to(b.groups.filter((_, i) => i !== best), { opacity: BEAM_LOSE, duration: 0.3, ease: "power2.out" }, t)
       .call(() => void (hooks.beams.current = { drawn: true, win: best, miss: false }), [], t);
+    const losers = b.groups.filter((_, i) => i !== best);
+    if (losers.length) tl.to(losers, { opacity: BEAM_LOSE, duration: 0.3, ease: "power2.out" }, t);
 
     let open = t + 0.35;
     const path = b.trails[best];
@@ -340,10 +345,10 @@ export function addQuestion(
     // 6 · The honest miss: nothing reaches the tick, and the reader goes quiet and grey.
     status(tl, room, track, "missing", t);
     tl.to(room.ticks, { keyframes: { opacity: [1, 0.3, 1] }, duration: 0.4, ease: "none" }, t)
-      .to(b.groups, { opacity: BEAM_MISS, duration: 0.3, ease: "power2.out" }, t)
       .call(() => void (hooks.beams.current = { drawn: true, win: -1, miss: true }), [], t)
       .call(hooks.setMuted, [true], t)
       .to(hooks.vol, { current: VOL.miss, duration: 0.5, ease: "sine.inOut" }, t);
+    if (b.groups.length) tl.to(b.groups, { opacity: BEAM_MISS, duration: 0.3, ease: "power2.out" }, t);
     if (room.sheetLines) tl.to(room.sheetLines, { opacity: SHEET_DIM, duration: 0.35, ease: "power2.out" }, t);
     if (room.sheetNote) tl.fromTo(room.sheetNote, { autoAlpha: 0, y: 4 }, { autoAlpha: 1, y: 0, duration: 0.35, ease: "power2.out", immediateRender: false }, t + 0.15);
     t += 1.3;

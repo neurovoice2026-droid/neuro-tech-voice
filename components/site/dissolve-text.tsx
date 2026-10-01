@@ -276,7 +276,8 @@ export function DissolveText({
     const io = new IntersectionObserver(
       (entries) => {
         if (disposed) return;
-        if (!entries[0].isIntersecting) {
+        // The last entry is the heading as it is now (a busy main thread can hand one callback several).
+        if (!entries[entries.length - 1].isIntersecting) {
           pauseFn?.();
           return;
         }

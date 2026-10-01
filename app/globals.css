@@ -1378,7 +1378,17 @@ html[data-nav="detached"] .hdr-light .hdr-navlist:has([data-popup-open]) .hdr-na
   animation: pp-orb-talk 1.6s ease-in-out infinite;
 }
 
+/* Both turns name their start as well as their end. With the start left
+   implicit, Chrome takes it from the element's own style, and while an
+   ancestor animates (the orb's talk, a scale on the orb itself) it kept
+   restarting the turn under it: a main-thread frame and a style
+   recalculation every frame for as long as the orb spoke. Spelled out,
+   0deg is what the implicit start already was, so nothing moves
+   differently. */
 @keyframes pp-orb-spin {
+  from {
+    rotate: 0deg;
+  }
   to {
     rotate: 360deg;
   }
@@ -1479,7 +1489,11 @@ html[data-nav="detached"] .hdr-light .hdr-navlist:has([data-popup-open]) .hdr-na
   }
 }
 
+/* An explicit start for the same reason as pp-orb-spin's. */
 @keyframes pp-mesh-turn {
+  from {
+    rotate: 0deg;
+  }
   to {
     rotate: 360deg;
   }
@@ -1494,6 +1508,17 @@ html[data-nav="detached"] .hdr-light .hdr-navlist:has([data-popup-open]) .hdr-na
 .pp-orb[data-still]::after,
 .pp-orb[data-still] .pp-mesh-flow {
   animation-play-state: paused;
+}
+
+/* An orb off screen (OrbInView) has its animations taken off rather than
+   paused: a paused animation keeps its layer, and the layers over it,
+   composited. Every one of them starts from the picture this leaves, so
+   the orb picks up without a jump as it comes back. */
+.pp-orb[data-away],
+.pp-orb[data-away]::before,
+.pp-orb[data-away]::after,
+.pp-orb[data-away] .pp-mesh-flow {
+  animation: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

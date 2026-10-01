@@ -2255,9 +2255,15 @@ describe("the reuse contract", () => {
     for (const light of ["room", "room-m", "papers", "stage", "stage-m"]) expect(css, light).toContain(`.pp .saas-light-${light} {`);
     expect(read(`${SAAS_DIR}/saas-credentials.css`)).toContain(".saas-pop");
     const closing = read(`${SAAS_DIR}/saas-closing.css`);
-    // #checks' view transition names the boxes after it by the ids this page gives them too.
-    expect(closing).toContain(".home-deferred:has(> #faq)");
-    expect(closing).toContain(".home-deferred:has(> #start)");
+    // #checks' view transition names the boxes after it by the `data-box` a page's Deferred
+    // renders (not by `:has(> #faq)`, which costs every insertion): this page's renders it too,
+    // and wraps #faq and #start in boxes of those names.
+    expect(closing).toContain('.home-deferred[data-box="faq"]');
+    expect(closing).toContain('.home-deferred[data-box="start"]');
+    expect(read(`${DIR}/deferred.tsx`)).toContain("data-box={box}");
+    const page = read(PAGE_FILE);
+    expect(page).toContain('<AutoDeferred box="faq">');
+    expect(page).toContain('<AutoDeferred box="start">');
     expect(SECTION_IDS).toContain("faq");
     expect(SECTION_IDS).toContain("start");
   });

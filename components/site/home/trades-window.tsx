@@ -18,7 +18,7 @@ import { useKitContext, type Kit } from "@/components/site/product/motion-kit";
 import type { HomeTrade, HomeTrades } from "@/lib/pages/home.server";
 import { ChipRail, centreInRail, useRovingRadio } from "./controls";
 import { useStageMotion } from "./motion";
-import { loadHomeScene } from "./trade-loaders";
+import { loadHomePosters, loadHomeScene } from "./trade-loaders";
 import { TradeStage, type TradeStageHandle } from "./trade-stage";
 import { TYPE, WEIGHT } from "./type";
 
@@ -481,6 +481,7 @@ export function TradesWindow({ data, copy }: { data: HomeTrades; copy: TradesCop
               ref={stageRef}
               sceneKey={scene}
               load={loadHomeScene}
+              posters={loadHomePosters}
               initialPoster={data.initial.poster}
               initialAlt={data.initial.alt}
               origin={origin}
