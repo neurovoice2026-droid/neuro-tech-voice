@@ -7,7 +7,9 @@
  *               flash, a ring off its rim, a camera kick (in Knowledge.tsx)
  *   caller      the `listen` twin; the orb follows the caller's REAL envelope
  *   scan        small reading pulses; a spark where each beam lands
- *   miss        MUTED_MESH: the light drains, a grey ring closes in
+ *   miss        the drained Sunday mesh (a teal undertone survives): the light
+ *               drains, the fluid (which churned through the search) settles,
+ *               a grey ring closes in
  *   answer      grey through her hum (it still breathes with it); on her
  *               first word the Sunday light floods back (rings leave, the
  *               bloom swells) and the orb breathes with HER real envelope,
@@ -21,7 +23,7 @@ import { breathe, EASE, tween } from '../../lib/motion';
 import { FPS, KNOWLEDGE, KNOWLEDGE_LOCAL } from '../../timing';
 import { flashAt, lifeAt } from './blur';
 import { SUN, VOL, type Geo } from './geometry';
-import { glowAt, greyAt, orbPalette, relitAt } from './light';
+import { glowAt, greyAt, missPhase, orbPalette, relitAt } from './light';
 import { volumeAt } from './voice';
 
 const K = KNOWLEDGE;
@@ -186,7 +188,7 @@ export const Reader: React.FC<{ t: number; G: Geo; part: 'light' | 'orb' }> = ({
             }),
           }}
         />
-        <Orb size={O.d} palette={orbPalette(t)} volume={vol} time={flowTime(Math.max(0, Math.round(t)), volumeAt)} />
+        <Orb size={O.d} palette={orbPalette(t)} volume={vol} time={flowTime(Math.max(0, Math.round(t)), volumeAt) + missPhase(t)} />
       </div>
     </div>
   );

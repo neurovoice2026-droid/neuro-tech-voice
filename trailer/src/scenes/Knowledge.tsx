@@ -11,14 +11,20 @@
  * KNOWLEDGE / KNOWLEDGE_LOCAL in timing.ts, the voiced ones derived from
  * the real voice lengths.)
  *
- *   t 0         pure white (hit.wav): the stage materialises out of the
- *               result's flash (1.035 → 1, the Sunday light blooms)
- *   heading     the eyebrow dot spins in, "KNOWLEDGE BASE" letters rise;
- *               "Answers from your own documents." pops up word by word
- *               where the orb will be; the key phrase turns sunday ink
+ *   dawn        (pre-roll, over the result's last white frames) the white
+ *               flash's ember centre gathers into a seed of Sunday light at
+ *               the reader's place — the match cut on light
+ *   t 0         the hit (hit-white + the Sunday chime): the seed blooms and
+ *               the stage — the white room, bled to the frame edges —
+ *               materialises out of it (1.035 → 1)
+ *   heading     ON the hit "Answers from your own documents." pops up word
+ *               by word where the orb will be; the eyebrow dot spins in,
+ *               "KNOWLEDGE BASE" letters rise; the key phrase turns sunday ink
  *   docPops     five documents pop on 16ths: inhale, overshoot, a glint +
  *               ring, a camera kick each
- *   headingStep the heading lifts, then steps down into the answer slot…
+ *   headingStep 16:9: the heading lifts, then steps down to the answer row
+ *               (9:16 — one column — it holds full size and flicks up out of
+ *               its masks just before the orb springs from its place)…
  *   orbIn       …and the orb springs out of a seed of light ON the beat
  *               (bloom flash, ring, kick); the pill pops "Listening" a 16th
  *               later, the moment tag "☀ SUNDAY · 10:24" an 8th later
@@ -31,11 +37,15 @@
  *               read, the bars fill (none reaches the 60 % tick), the slot's
  *               page shimmers
  *   miss        "Not in the documents" (the pill shakes no): the orb and the
- *               room drain to grey, the beams fall back, the slot says
- *               "0 matches"; the documents step back out of focus
+ *               room drain to a cool grey (the fluid, which churned through
+ *               the search, settles), the beams fall back, the slot says
+ *               "0 matches" — 9:16: the documents step back out of focus and
+ *               the slot opens in front of them, in their place
  *   answer      Ava (kb-2) hums over it in grey; her Sunday light floods back
  *               on her first word; Ava = the call's Inter 500, word-synced,
- *               "guess." and "today." in sunday ink; the orb pushes in
+ *               "guess." and "today." in sunday ink; the orb pushes in; two
+ *               captions never share a frame (CaptionRun); 16:9: the
+ *               documents step back
  *   ticketPop   "I'll ask the team": the slot pops into the team card (the
  *               question and the caller's number write in on her words);
  *               "call": the callback chip; "today.": its check
@@ -59,6 +69,7 @@ import { C, FONT, TRACK } from '../theme';
 import { KNOWLEDGE, KNOWLEDGE_LOCAL } from '../timing';
 import { Beams } from './knowledge/Beams';
 import { Captions } from '../components/Captions';
+import { CaptionRun } from './knowledge/CaptionRun';
 import type { Caption } from '../timing';
 import { Closing, Heading } from './knowledge/Closing';
 import { DirBlur, dirBlurRef, sigmaFor } from './knowledge/blur';
@@ -68,7 +79,7 @@ import { useFontsReady } from './knowledge/measure';
 import { Moment } from './knowledge/Moment';
 import { Reader } from './knowledge/Reader';
 import { Slot } from './knowledge/Slot';
-import { Discs, Eyebrow, Panel } from './knowledge/Stage';
+import { Dawn, Discs, Eyebrow, Panel } from './knowledge/Stage';
 import { Status } from './knowledge/Status';
 import { Tiles } from './knowledge/Tiles';
 
@@ -247,8 +258,22 @@ export const Knowledge: React.FC = () => {
   const t = useSceneFrame('knowledge');
   const L = useLayout();
   useFontsReady(FONTS);
-  if (t < 0) return null;
   if (t >= KL.white) return <AbsoluteFill style={{ background: C.white }} />;
+  if (t < 0) {
+    // the pre-roll: over the result's last white frames, its ember centre gathers into the Sunday seed
+    if (t < KL.dawn[0] - 1) return null;
+    const G0 = geo(L);
+    const c0 = camera(t, G0, L.cx, L.cy);
+    return (
+      <AbsoluteFill style={{ overflow: 'hidden' }}>
+        <Camera x={c0.x} y={c0.y} zoom={c0.zoom}>
+          <Layer depth={0.3}>
+            <Dawn t={t} G={G0} />
+          </Layer>
+        </Camera>
+      </AbsoluteFill>
+    );
+  }
 
   const G = geo(L);
   const W = L.width;
@@ -317,6 +342,7 @@ export const Knowledge: React.FC = () => {
         <AbsoluteFill style={whipStyle}>
           <Layer depth={0.3}>
             <Panel t={t} G={G} />
+            <Dawn t={t} G={G} />
           </Layer>
           {/* one recede wrapper for both content planes (one blur, not two) */}
           <AbsoluteFill style={recede}>
@@ -360,7 +386,7 @@ export const Knowledge: React.FC = () => {
                 echoY={null}
               />
               {answerSets.map((set, i) => (
-                <Captions
+                <CaptionRun
                   key={i}
                   t={t}
                   lineAt={K.answer}

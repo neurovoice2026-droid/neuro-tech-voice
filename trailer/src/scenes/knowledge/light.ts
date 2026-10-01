@@ -6,16 +6,18 @@
  *   rest / reading   Sunday's orb (teal into aqua-white)
  *   caller speaks    Sunday's `listen` twin (leaning to caller blue), eased in
  *                    and out round kb-1 (it is heard from its first breath)
- *   miss             MUTED_MESH: the light drains out of the orb and the room
+ *   miss             SUN_MISS (the Sunday mesh drained, a cool teal undertone left):
+ *                    the light drains out of the orb and the room; the fluid churns
+ *                    harder through the search and settles as it drains (missPhase),
+ *                    so its swirl centre never faces the lens while it sits grey
  *   Ava answers      the Sunday light floods back from her first sound
  *                    (EASE_LIGHT, the site orb's own exponential ease)
  */
 import { EASE, tween } from '../../lib/motion';
 import { EASE_LIGHT, mixColor, mixPalette, type Glow } from '../../lib/lights';
-import { MUTED_MESH } from '../../theme';
 import { KNOWLEDGE, KNOWLEDGE_LOCAL, vFrames } from '../../timing';
 import { VOICE, type VoiceId } from '../../voice.generated';
-import { LISTEN_GLOW, MISS_GLOW, SUN, SUN_GLOW } from './geometry';
+import { LISTEN_GLOW, MISS_GLOW, ORB_MISS, SUN, SUN_GLOW } from './geometry';
 
 const K = KNOWLEDGE;
 const KL = KNOWLEDGE_LOCAL;
@@ -57,9 +59,16 @@ export function orbPalette(t: number): string[] {
   const l = listenAt(t);
   const g = greyAt(t);
   let p: string[] = l > 0 ? mixPalette(SUN.orb, SUN.listen, l) : [...SUN.orb];
-  if (g > 0) p = mixPalette(p, MUTED_MESH, g);
+  if (g > 0) p = mixPalette(p, ORB_MISS, g);
   return p;
 }
+
+/** Extra flow time (s): the fluid churns harder while the reader searches the documents (the scan)
+ *  and settles as the light drains — one smooth extra stretch of flow over [scan, drained], so the
+ *  swirl the grey reader holds through the miss is a lit sphere's folds (light upper left, deep
+ *  lower right), never the face-on bull's-eye. (4.5 s: chosen from a sweep of offsets.) */
+export const MISS_TURN = 4.5;
+export const missPhase = (t: number) => MISS_TURN * tween(t, [K.scan[0], KL.toGrey[1]], [0, 1], EASE.inOut);
 
 /** the reader's glow (bloom body + rim core) at t */
 export function glowAt(t: number): Glow {

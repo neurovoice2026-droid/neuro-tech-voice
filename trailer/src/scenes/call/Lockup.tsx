@@ -44,7 +44,7 @@ export type OrbState = { x: number; y: number; d: number };
  * night-lilac Fresnel rim. All of it grades in with the room (`grade`), so the pickup's first
  * frames are still the twist's exact orb.
  */
-const ORB_LIT: Palette = ['#14062b', '#4a1a9e', '#7c3aed', '#c4a8ff', '#e2d8ff'];
+const ORB_LIT: Palette = ['#14062b', '#4a1a9e', '#7c3aed', '#c4a8ff', '#e0d4ff'];
 const LISTEN_LIT: Palette = ['#14062b', '#3a259c', '#5946d9', '#b4b4ff', '#d9daff'];
 /** limb darkening: 1 − mix(.72, 1, (1 − r²)^.3) at r = stop (the dark is the deep end of the palette) */
 const LIMB = [0, 0.5, 0.7, 0.8, 0.9, 0.95, 0.985, 1].map((r) => [r, 0.28 * (1 - Math.pow(Math.max(0, 1 - r * r), 0.3))] as const);

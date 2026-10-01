@@ -8,7 +8,9 @@
  * read it takes a sunday-ink ring and an aqua sheen. The bars fill with an overshoot and
  * settle — to .22/.14/.10/.30/.26, none reaching the tick — the ticks blink
  * 1 → .3 → 1, and the documents step back (.25, 2 px out of focus) when
- * Ava answers, so her answer leads.
+ * Ava answers, so her answer leads (16:9) — 9:16: on the miss, deeper (.14,
+ * 3 px, closing in about the list's centre) behind the slot that opens in
+ * their place.
  */
 import React from 'react';
 import { spring } from 'remotion';
@@ -16,7 +18,7 @@ import { mixColor, rgba } from '../../lib/lights';
 import { EASE, mix, tween } from '../../lib/motion';
 import { C, FONT } from '../../theme';
 import { FPS, KNOWLEDGE_LOCAL } from '../../timing';
-import { BADGE, DIM, DIM_BLUR, DOCS, INK, MATCH, SUN, SUN_GLOW, THRESHOLD, TRACK_FILL, type Geo } from './geometry';
+import { BADGE, DOCS, INK, MATCH, SUN, SUN_GLOW, THRESHOLD, TRACK_FILL, type Geo } from './geometry';
 
 const KL = KNOWLEDGE_LOCAL;
 
@@ -126,9 +128,13 @@ function readingAt(t: number, i: number) {
 
 export const Tiles: React.FC<{ t: number; G: Geo; cool: number }> = ({ t, G, cool }) => {
   const S = G.tile;
-  const dq = tween(t, KL.dimDocs, [0, 1], EASE.inOut);
-  const dim = mix(1, DIM, dq);
-  const focus = DIM_BLUR * dq;
+  // the documents step back: on her answer (16:9) / on the miss, behind the card that takes their place (9:16)
+  const B = G.docsBack;
+  const dq = tween(t, B.at === 'miss' ? KL.docsBackMiss : KL.dimDocs, [0, 1], EASE.inOut);
+  const dim = mix(1, B.dim, dq);
+  const focus = B.blur * dq;
+  const back = mix(1, B.scale, dq);
+  const listMid = (G.tiles[0].y + G.tiles[G.tiles.length - 1].y + G.tiles[G.tiles.length - 1].h) / 2;
   const tick = tickOpacity(t);
   return (
     <>
@@ -176,7 +182,8 @@ export const Tiles: React.FC<{ t: number; G: Geo; cool: number }> = ({ t, G, coo
               background: C.white,
               boxShadow: shadow,
               opacity: pp.o * dim,
-              transform: `translateY(${pp.y.toFixed(2)}px) scale(${pp.sc.toFixed(4)})`,
+              // (stepping back: the list closes in about its own centre)
+              transform: `translateY(${(pp.y + (1 - back) * (listMid - (r.y + r.h / 2))).toFixed(2)}px) scale(${(pp.sc * back).toFixed(4)})`,
               filter: smear + focus > 0.3 ? `blur(${(smear + focus).toFixed(2)}px)` : undefined,
             }}
           >

@@ -519,7 +519,7 @@ export const CALL_LOCAL = {
   /** the phone's indigo grades down into the MIDNIGHT room (the orb becomes the key light) — it starts inside
    *  the twist's dive (the twist follows this curve on its screen) so the pickup lands on the night, not on an
    *  indigo slab; midnight by the time "Picked up…" has risen */
-  roomGrade: [-10, b(2 / 3)] as const,
+  roomGrade: [-12, b(0.5)] as const,
   /** the CLOSED sign (the door callback) hangs, lifts (anticipation) and swings down to seat ON this 8th
    *  after the pickup: its glint + outline ring leave from here */
   statusIn: b(0.5),
@@ -926,11 +926,16 @@ export const KNOWLEDGE_LOCAL = (() => {
    * chip pops on "call" and its check draws on "today." */
   const ticketPop = aw(13);
   return {
-    /** the white bloom from the result settles into the stage (t 0 is pure white: the hit) */
+    /** the match cut on light: over the result's last white frames (pre-roll, t < 0) the white
+     *  flash's ember centre gathers into a seed of Sunday light at the reader's place (an inhale)… */
+    dawn: [-4, 0] as const,
+    /** …which blooms ON the hit (t 0) and settles as the stage materialises out of it */
     stageIn: [0, b(0.75)] as const,
     /** the eyebrow's CornerDot spins in (its letters follow 0.8 f apart) */
     eyebrowDot: K.heading - 1,
-    /** heading word i rises from K.heading + i · headingStagger (5 words) */
+    /** the heading's first word rises ON the hit (the bloom), not after it */
+    headingAt: 0,
+    /** heading word i rises from headingAt + i · headingStagger (5 words) */
     headingStagger: 2,
     /** the five documents pop on 16ths (= the docTicks): inhale, overshoot, a glint + ring */
     docPops: Array.from({ length: 5 }, (_, i) => Math.round(K.docsIn + i * K.docStep)) as readonly number[],
@@ -945,8 +950,10 @@ export const KNOWLEDGE_LOCAL = (() => {
     momentTag: b(2.5),
     /** "Quick question," (kb-1's unaligned lead-in): its two words' frames, and when it gives way to "Do…" (null = none) */
     lead,
-    /** the heading flicks out of its masks once the caller is talking */
+    /** the heading flicks out of its masks once the caller is talking (16:9: stepped down beside the caller)… */
     headingOut,
+    /** …9:16 (no step: one column): it flicks out just before the orb springs out of its place */
+    headingOutOrb: [b(2) - 7, b(2) - 1] as const,
     /** CALLER pops on the caller's first sound */
     callerIn: lead ? lead.words[0] - 1 : headingOut[1] - 1,
     /** the question holds while Ava hums it over; gone before her first word */
@@ -981,8 +988,11 @@ export const KNOWLEDGE_LOCAL = (() => {
     zeroEcho: aw(4),
     /** Ava answers: her Sunday light floods back on her first word (bloom swell + rings + kick) */
     relight: [relight0, relight0 + b(1)] as const,
-    /** the documents step back (.25, 2 px out of focus) so the answer leads */
+    /** the documents step back (.25, 2 px out of focus) so the answer leads (16:9)… */
     dimDocs: [K.answer, K.answer + 10] as const,
+    /** …9:16: on the miss, deeper, as "0 matches" takes their place (the slot opens over them) */
+    docsBackMiss: [K.miss, K.miss + 9] as const,
+    slotOpenMiss: K.miss + b(0.25) - 3,
     /** "guess." turns sunday ink as it is spoken */
     guessKey: aw(12),
     /** "I'll": the slot inhales (2 f at .95) and pops into the team card (1.08 → 1): glint, ring, kick */
@@ -1308,13 +1318,14 @@ export const HITS: Hit[] = [
   H('knowledge', KL.stageIn[0], 'hit-white', 'sunday', 0.5, 1, 'WHITE: the stage materialises'),
   H('knowledge', KL.stageIn[0], chime('sunday'), 'sunday', 0.5, 2, 'LIGHT: sunday blooms'),
   H('knowledge', KL.eyebrowDot, 'tick', 'sunday', 0.06, 3, 'eyebrow dot spins in'),
-  H('knowledge', KNOWLEDGE.heading + 2, 'swish', 'none', 0.5, 2, '“Answers from your own documents.”'),
+  H('knowledge', KL.headingAt + 2, 'swish', 'none', 0.5, 2, '“Answers from your own documents.” rises out of the bloom'),
   ...KL.docPops.map((f, i) => H('knowledge', f, 'pop', 'sunday', DOC_X[i], 2, `doc ${i + 1} pops`, { semi: DOC_SEMI[i] })),
   H('knowledge', KL.headingStep[0], 'swish', 'none', 0.5, 3, 'the heading steps down'),
-  H('knowledge', KL.orbIn, 'land', 'sunday', 0.5, 1, 'the orb springs out (beat 2)'),
+  // the orb lands under the caller's "Quick question," (kb-1's lead-in, not in its phrase map): a light land, so the words stay in front
+  H('knowledge', KL.orbIn, 'land', 'sunday', 0.5, 3, 'the orb springs out (beat 2)'),
   H('knowledge', KL.orbIn, 'glint', 'sunday', 0.5, 3, 'bloom flash off the rim'),
-  H('knowledge', KL.statusIn, 'pop', 'sunday', 0.89, 2, '“Listening” pill', { semi: 5 }),
-  H('knowledge', KL.momentTag, chime('sunday'), 'sunday', 0.73, 2, '“SUNDAY · 10:24” (LIGHT: sunday)'),
+  H('knowledge', KL.statusIn, 'pop', 'sunday', 0.89, 3, '“Listening” pill (under “question,”)', { semi: 5 }),
+  H('knowledge', KL.momentTag, chime('sunday', true), 'sunday', 0.73, 2, '“SUNDAY · 10:24” (LIGHT: sunday; soft, under “question,”)'),
   H('knowledge', KL.headingOut[0] + 3, 'swish', 'none', 0.5, 3, 'the heading flicks out'),
   H('knowledge', KL.callerIn, 'tick', 'none', 0.33, 3, 'CALLER label + “Quick question,” (the caller’s first sound)'),
   H('knowledge', KL.peekOpen, 'sheen', 'sunday', 0.79, 3, 'the slot’s page scans open'),

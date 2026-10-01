@@ -1,10 +1,12 @@
 /**
- * The stage itself: the site's #knowledge panel on the white stock, lit by
- * #demo's SUNDAY light where the reader sits (a soft aqua tint and the
- * light's pool round the orb — never a full-frame wash; it drains to a faint
- * grey on the miss and comes back with Ava's answer), very soft aqua light
- * discs on the nearest plane, and the eyebrow ("KNOWLEDGE BASE", the site's
- * CornerDot eyebrow, in sunday ink).
+ * The stage itself: the site's #knowledge room on the white stock, bled to
+ * the frame edges and lit by #demo's SUNDAY light where the reader sits (a
+ * soft aqua tint and the light's pool round the orb, a whisper of teal at the
+ * edges — never a full-frame wash; it drains to a faint cool grey on the miss
+ * and comes back with Ava's answer); the dawn (the match cut on light out of
+ * the result's white flash); very soft aqua light discs on the nearest plane;
+ * and the eyebrow ("KNOWLEDGE BASE", the site's CornerDot eyebrow, in sunday
+ * ink).
  */
 import React from 'react';
 import { AbsoluteFill } from 'remotion';
@@ -21,18 +23,68 @@ import { greyAt, relitAt } from './light';
 const K = KNOWLEDGE;
 const KL = KNOWLEDGE_LOCAL;
 
-/** 0 → 1 as the white flash becomes the stage (t 0 is pure white) */
+/** 0 → 1 as the white flash becomes the stage (t 0 is the hit) */
 export const stageIn = (t: number) => tween(t, KL.stageIn, [0, 1], EASE.house);
 
-/** Plane 0.3: the stage — white stock; the Sunday light is LIGHT, not paint: a soft aqua
- *  tint pooled where the reader sits (never a full-frame wash), a hairline and a soft
- *  teal-deep drop shadow. On the miss the tint drains to a faint grey; Ava's answer brings it back. */
+/** the dawn's strength: gathers over the result's last white frames (an accelerating inhale),
+ *  peaks ON the hit, then hands over to the stage's own light */
+export function dawnAt(t: number) {
+  const [a, b] = KL.dawn;
+  if (t < a - 1) return 0;
+  if (t <= b) {
+    const u = (t - (a - 1)) / (b - (a - 1));
+    return u * u;
+  }
+  return Math.exp(-(t - b) / 5.5);
+}
+
+/**
+ * The match cut on light. The result's booked event blooms to white from its
+ * ember centre; over its last white frames (pre-roll, t < 0) that centre
+ * gathers into a seed of SUNDAY light — white-hot, aqua (#a5eaf5), teal at
+ * its edge — that drifts to the reader's place, blooms ON the hit (t 0, with
+ * the white hit and the Sunday chime) and settles into the stage's own pool
+ * of light as the stage materialises out of it. Plane 0.3 (the stage's).
+ */
+export const Dawn: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
+  const k = dawnAt(t);
+  if (k < 0.004) return null;
+  const [a] = KL.dawn;
+  const m = tween(t, [a, 4], [0, 1], EASE.inOut);
+  const x = mix(G.dawn.x0, G.orb.x, m);
+  const y = mix(G.dawn.y0, G.orb.y, m);
+  // the seed opens out as it gathers (inhale) and is widest just after the hit
+  const D = (G.v ? 1500 : 1700) * (0.22 + 0.78 * EASE.out3(Math.min(1, (t - (a - 1)) / (5 + 3))));
+  // two gaussian pools (each falls off monotonically, so their sum can never ring): the aqua core,
+  // and a wider, fainter teal body at its edge — light on the white stock, never a white hole
+  const pool = (hex: string, peak: number, w: number) =>
+    `radial-gradient(closest-side, ${GAUSS.map((r) => `${rgba(hex, Math.min(1, peak * k * Math.exp(-((r / w) ** 2))))} ${(r * 100).toFixed(0)}%`).join(', ')})`;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: x - D / 2,
+        top: y - D / 2,
+        width: D,
+        height: D,
+        background: `${pool(SUN_GLOW.core, 0.8, 0.34)}, ${pool(SUN_GLOW.body, 0.1, 0.56)}`,
+      }}
+    />
+  );
+};
+/** gradient stops for a gaussian falloff (fraction of the radius) */
+const GAUSS = [0, 0.08, 0.16, 0.24, 0.32, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
+
+/** Plane 0.3: the stage — the white stock, bled to the frame edges (a lit room, never a card on a
+ *  page); the Sunday light is LIGHT, not paint: a soft aqua tint pooled where the reader sits, a
+ *  whisper of teal vignette at the edges. On the miss the tint drains to a faint cool grey; Ava's
+ *  answer brings it back. */
 export const Panel: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
   const p = stageIn(t);
   const P = G.panel;
   const grey = greyAt(t);
-  // the light blooms past its rest level as the white gives way, then settles…
-  const bloom = t < 6 ? tween(t, [0, 6], [0, 1.9], EASE.out3) : tween(t, [6, 22], [1.9, 1], EASE.inOut);
+  // the stage's own light comes up out of the dawn's bloom (which carries the peak), then settles…
+  const bloom = tween(t, [0, 24], [1.45, 1], EASE.inOut);
   // …swells as the orb lands and as Ava's light comes back, and drains on the miss
   const swell = 0.5 * flashAt(t, KL.orbIn + 3, 7) + 0.6 * flashAt(t, KL.relight[0] + 2, 9) * relitAt(t);
   const light = 0.16 * (bloom + swell) * (1 - 0.75 * grey);
@@ -42,6 +94,8 @@ export const Panel: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
   const ox = ((G.orb.x - P.x) / P.w) * 100;
   const oy = ((G.orb.y - P.y) / P.h) * 100;
   const [g0, g1] = G.v ? ['70% 42%', '46% 26%'] : ['50% 64%', '30% 40%'];
+  // the vignette: the room's edges lie a touch deeper in the light's teal (6–7 %), cooler on the miss
+  const vig = (0.065 - 0.02 * grey) * p;
   return (
     <AbsoluteFill style={{ opacity: p }}>
       <div
@@ -51,11 +105,10 @@ export const Panel: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
           top: P.y,
           width: P.w,
           height: P.h,
-          borderRadius: P.r,
           background: '#ffffff',
           overflow: 'hidden',
           transform: `scale(${sc.toFixed(5)})`,
-          boxShadow: `0 0 0 1px ${rgba(SUN.orb[1], 0.07 * p)}, 0 40px 80px -50px ${rgba(SUN.orb[0], 0.32 * p)}`,
+          transformOrigin: `${G.orb.x - P.x}px ${G.orb.y - P.y}px`,
         }}
       >
         {/* the aqua tint (the Sunday ground's first stop), pooled round the reader */}
@@ -71,7 +124,7 @@ export const Panel: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
             style={{
               position: 'absolute',
               inset: 0,
-              background: `radial-gradient(${g0} at ${ox.toFixed(1)}% ${oy.toFixed(1)}%, rgba(226,226,232,${(0.75 * grey).toFixed(3)}) 0%, rgba(240,240,244,${(0.4 * grey).toFixed(3)}) 45%, rgba(248,248,250,0) 100%)`,
+              background: `radial-gradient(${g0} at ${ox.toFixed(1)}% ${oy.toFixed(1)}%, rgba(224,230,232,${(0.75 * grey).toFixed(3)}) 0%, rgba(238,242,243,${(0.4 * grey).toFixed(3)}) 45%, rgba(247,249,249,0) 100%)`,
             }}
           />
         ) : null}
@@ -80,6 +133,14 @@ export const Panel: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
             position: 'absolute',
             inset: 0,
             background: `radial-gradient(${g1} at ${ox.toFixed(1)}% ${oy.toFixed(1)}%, ${rgba(SUN_GLOW.body, light)}, ${rgba(SUN_GLOW.body, light * 0.4)} 45%, ${rgba(SUN_GLOW.body, 0)})`,
+          }}
+        />
+        {/* the room's edges (the frame's corners), in the light's teal */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: `radial-gradient(${G.v ? '95% 70%' : '78% 92%'} at ${ox.toFixed(1)}% ${oy.toFixed(1)}%, ${rgba(SUN.orb[1], 0)} 52%, ${rgba(SUN.orb[1], vig * 0.45)} 78%, ${rgba(SUN.orb[1], vig)} 100%)`,
           }}
         />
       </div>

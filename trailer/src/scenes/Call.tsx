@@ -146,9 +146,6 @@ const LINE_OPEN = { stiffness: 380, damping: 20, mass: 0.7 };
 
 /** the far discs lean to the midnight's low, desaturated navy (the colour lives in the orb, not the room) */
 const NAVY = '#2a3352';
-/** (9:16) where the floor under the orb meets the frame (screen y): below the transcript, so the lower
- *  third holds the orb's pool of light and its reflection */
-const FLOOR_Y = 1440;
 /** the phone line is pulled back into the orb over this many frames (from lineClose) */
 const LINE_CLOSE = 6;
 /** sub-frame ghosts for a DOM plane that moves > 25 px a frame: [frames back, opacity] */
@@ -262,16 +259,17 @@ export const Call: React.FC = () => {
     const inh = EASE.inOut(clamp01((tt - i0) / (i1 - i0)));
     const s1 = { x: s.x, y: s.y - 8 * inh, d: s.d * (1 + 0.05 * inh) };
     if (tt <= v0) return s1;
-    // the dive: power3.in on position and (log) size — it is pulled into the mark, fastest on contact
-    const e = EASE.in3(clamp01((tt - v0) / (v1 - v0)));
-    return { x: s1.x + (take.x - s1.x) * e, y: s1.y + (take.y - s1.y) * e, d: s1.d * Math.pow(take.d / s1.d, e) };
+    // the dive: power2.in on its travel (fastest on contact); it keeps its size until it is well on its way,
+    // then shrinks into the mark (log size on travel^1.5) — it is pulled IN, it does not recede
+    const e = EASE.in2(clamp01((tt - v0) / (v1 - v0)));
+    return { x: s1.x + (take.x - s1.x) * e, y: s1.y + (take.y - s1.y) * e, d: s1.d * Math.pow(take.d / s1.d, Math.pow(e, 1.5)) };
   };
-  /** the orb is absorbed over the dive's last 2 frames (gone on contact) */
-  const fadeAt = (tt: number) => 1 - EASE.in2(clamp01((tt - (v1 - 2)) / 2));
+  /** the orb is absorbed as it touches the mark: whole until the frame before contact, half on it, gone after */
+  const fadeAt = (tt: number) => 1 - EASE.in2(clamp01((tt - (v1 - 1)) / 1.5));
   const orb = orbAt(t);
   const orbFade = fadeAt(t);
   // the contact: the mark takes the orb (a hot flash that has all but died by the hand-over)
-  const took = t >= CALL_LOCAL.markTake ? Math.exp(-(t - CALL_LOCAL.markTake) / 1.4) : 0;
+  const took = t >= CALL_LOCAL.markTake ? Math.exp(-(t - CALL_LOCAL.markTake) / 1.1) : 0;
   // 2-3 glow copies trail the dive (each as absorbed as the orb was then), swallowed with it
   const trail =
     t > v0 && t < END
@@ -281,7 +279,7 @@ export const Call: React.FC = () => {
           [3, 0.15],
         ] as const)
           .filter(([dt]) => t - dt > v0)
-          .map(([dt, a]) => [dt, a * fadeAt(t - dt) * (1 - EASE.in2(clamp01((t - v1 + 1) / 3)))] as const)
+          .map(([dt, a]) => [dt, a * fadeAt(t - dt) * (1 - clamp01((t - v1 + 1) / 2))] as const)
       : [];
   const dress = tween(t, [0, 12], [0, 1], EASE.house);
   // THE KEY LIGHT's colour follows the orb's palette: violet while Ava speaks, caller blue while the caller does
@@ -411,7 +409,7 @@ export const Call: React.FC = () => {
   // line's first word rises (on its cut, at + 1), unless the beat-after rule needs it longer
   // (<CallCaptions> enforces that); the last line's row A leaves on CALL_LOCAL.rowOut
   const holdOf = (i: number) =>
-    i + 1 < LINES.length ? LINES[i + 1].at + 2 : CALL_LOCAL.rowOut + exitLength(ROW_A.text.split(' ').length);
+    i + 1 < LINES.length ? LINES[i + 1].at + 1 : CALL_LOCAL.rowOut + exitLength(ROW_A.text.split(' ').length);
   const turn = turnAt(t);
 
   // the AI disclosure: an electric underline drawn under "an AI assistant" as she says it
@@ -618,7 +616,7 @@ export const Call: React.FC = () => {
                 key={`b${gi}`}
                 style={{ ...planeCss(dt ? camAt(t - dt, L) : cam, 1.6), opacity: dress * a, mixBlendMode: 'screen' }}
               >
-                <Bokeh t={t} discs={discsNear} color={triple(mixColor(glow.body, glow.core, 0.2))} rim={triple(glow.core)} />
+                <Bokeh t={t} discs={discsNear} color={triple(glow.body)} rim={triple(glow.core)} />
               </AbsoluteFill>
             ))}
           </>
@@ -741,6 +739,20 @@ export const Call: React.FC = () => {
                   0.55 * Math.exp(-(t - CALL_LOCAL.ember) / 5) * (1 - tween(t, [CALL_LOCAL.ember + 18, CALL_LOCAL.ember + 25], [0, 1], EASE.inOut)),
                   { core: 0.6, coreSize: 0.45 },
                 ),
+                mixBlendMode: 'screen',
+              }}
+            />
+          ) : null}
+          {/* the mark TAKES the orb: its light floods the mark's middle for a moment (all but gone by the hand-over) */}
+          {took > 0.01 ? (
+            <div
+              style={{
+                position: 'absolute',
+                left: take.x - M.fontSize * 5,
+                top: take.y - M.fontSize * 2,
+                width: M.fontSize * 10,
+                height: M.fontSize * 4,
+                background: bloom({ body: C.ember, core: C.emberSoft }, 0.6 * took, { core: 0.7, coreSize: 0.4 }),
                 mixBlendMode: 'screen',
               }}
             />

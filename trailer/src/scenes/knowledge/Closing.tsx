@@ -41,15 +41,18 @@ function stepAt(f: number) {
 }
 
 export const Heading: React.FC<{ t: number; G: Geo; cx: number }> = ({ t, G, cx }) => {
-  if (t < K.heading - 4 || t > KL.headingOut[1] + 2) return null;
   const H = G.heading;
-  const D = H.step.cy - H.cy;
+  const out = H.step ? KL.headingOut : KL.headingOutOrb;
+  if (t < KL.headingAt - 4 || t > out[1] + 2) return null;
+  const step = H.step;
+  const D = step ? step.cy - H.cy : 0;
   const y = (f: number) => {
+    if (!step) return 0;
     const s = stepAt(f);
     return s.lift + D * s.q;
   };
-  const { q } = stepAt(t);
-  const sc = mix(1, H.step.scale, Math.min(1.02, q));
+  const q = step ? stepAt(t).q : 0;
+  const sc = step ? mix(1, step.scale, Math.min(1.02, q)) : 1;
   const v = y(t + 0.5) - y(t - 0.5);
   const sy = Math.min(16, sigmaFor(v));
   const f = dirBlurRef('kb-heading-blur', 0, sy);
@@ -73,10 +76,10 @@ export const Heading: React.FC<{ t: number; G: Geo; cx: number }> = ({ t, G, cx 
           width={H.width}
           cx={cx}
           cy={H.cy}
-          start={K.heading}
+          start={KL.headingAt}
           stagger={KL.headingStagger}
-          keyPhrase={{ text: HEADING_KEY, at: K.heading + 10, color: INK, glint: SUN.orb[2] }}
-          exit={{ at: KL.headingOut[0], stagger: 0.4, dur: KL.headingOut[1] - KL.headingOut[0] - 1.6 }}
+          keyPhrase={{ text: HEADING_KEY, at: KL.headingAt + 10, color: INK, glint: SUN.orb[2] }}
+          exit={{ at: out[0], stagger: 0.4, dur: out[1] - out[0] - 1.6 }}
         />
       </div>
     </>

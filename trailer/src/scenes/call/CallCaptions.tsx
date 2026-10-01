@@ -16,12 +16,14 @@
  *                  18 px on power3.in, fading early; the fastest 2 frames are
  *                  smeared vertically (an SVG gaussian ∝ the word's speed).
  *                  A caption is (all but) gone before the next one rises —
- *                  never a blink, never two on top of each other.
- *                  The same exit takes an echo out of the echo slot.
+ *                  never a blink, never two on top of each other. (Only when
+ *                  the next voice leaves it under ≈ 8 f does it move up to
+ *                  the echo slot; the same exit takes it out of there.)
  *
  * Exports `wordExit` so the booked mark's period leaves with its row.
  */
 import React from 'react';
+import { Easing } from 'remotion';
 import { EASE, mixHex, SPRING, springAt } from '../../lib/motion';
 import { BEAT, FPS, vWord, type Caption } from '../../timing';
 import { VOICE, type VoiceId } from '../../voice.generated';
@@ -91,7 +93,9 @@ const stagger = (n: number) => (n > 1 ? Math.min(1, STAGGER_MAX / (n - 1)) : 0);
 export const exitLength = (n: number) => EXIT_PRE + EXIT_DROP + stagger(n) * (n - 1);
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
-const dropY = (u: number) => -EXIT_LIFT + (EXIT_LIFT + EXIT_FALL) * EASE.in3(u);
+/** power3.in (GSAP) — the drop, the dive */
+export const in3 = Easing.bezier(0.55, 0.055, 0.675, 0.19);
+const dropY = (u: number) => -EXIT_LIFT + (EXIT_LIFT + EXIT_FALL) * in3(u);
 
 /**
  * One word's exit from `at` (its own start, stagger included): the anticipation lifts it 4 px and
@@ -108,7 +112,7 @@ export function wordExit(t: number, at: number): { dy: number; scale: number; op
   return {
     dy: yAt(t),
     scale: 1 + 0.01 * EASE.inOut(pre) - 0.03 * EASE.in2(u),
-    op: Math.pow(1 - u, 1.6),
+    op: Math.pow(1 - u, 2),
     speed: Math.abs(yAt(t + 0.5) - yAt(t - 0.5)),
   };
 }
@@ -135,6 +139,8 @@ type Plan = {
   out: number;
   mode: 'replace' | 'echo';
   echoOut: number;
+  /** 0..1 the share of the word-by-word stagger the exit has room for (1 = all of it) */
+  squeeze: number;
 };
 
 function plan(p: CallCaptionsProps): Plan[] {
@@ -161,6 +167,7 @@ function plan(p: CallCaptionsProps): Plan[] {
       out: Infinity,
       mode: 'replace' as const,
       echoOut: Infinity,
+      squeeze: 1,
     };
   });
   plans.forEach((pl, c) => {
@@ -169,13 +176,19 @@ function plan(p: CallCaptionsProps): Plan[] {
     // the anticipation still reads (the words only lift 4 px): it may sit inside the beat-after
     const minEnd = pl.lastSpoken + HOLD - EXIT_PRE;
     if (isLast) {
-      pl.out = Math.max(minEnd, holdUntil - len);
+      // gone by holdUntil (the next voice's first word): as late as that allows — but when the next
+      // voice cuts in less than a beat after the last word, it may leave early, never before its last
+      // word has been heard and read for ≈ 8 f (the exit's own anticipation still reads)
+      pl.out = Math.max(pl.lastSpoken + 6, holdUntil - len);
+      pl.squeeze = Math.max(0, Math.min(1, (holdUntil - pl.out - EXIT_PRE - EXIT_DROP) / Math.max(1e-6, len - EXIT_PRE - EXIT_DROP)));
       return;
     }
     const next = plans[c + 1].start;
-    // gone (to its faint last two frames) as the next caption's first word rises
+    // gone (to its faint last two frames) as the next caption's first word rises — when the voice moves
+    // on quickly, that may be less than a beat after its last word, never less than ≈ 8 f (the cascade
+    // takes the last word out last); only when even that is not there does it move up to the echo slot
     const want = next - len + 2;
-    if (want >= minEnd) {
+    if (want >= pl.lastSpoken + 6) {
       pl.out = want;
     } else if (echoY !== null && !(echoBlock && next <= echoBlock[1] && minEnd + len >= echoBlock[0])) {
       pl.mode = 'echo';
@@ -209,7 +222,7 @@ export const CallCaptions: React.FC<CallCaptionsProps> = (props) => {
   const blocks = plans.map((pl, c) => {
     if (t < pl.start - 1) return null;
     const exitFrom = pl.mode === 'echo' ? pl.echoOut : pl.out;
-    const st = stagger(pl.words.length);
+    const stg = stagger(pl.words.length) * pl.squeeze;
     if (t > exitFrom + exitLength(pl.words.length)) return null;
 
     /* the echo: the site spring up into the echo slot (scale .86, opacity .42) */
@@ -231,7 +244,7 @@ export const CallCaptions: React.FC<CallCaptionsProps> = (props) => {
       const a = pl.appear[j];
       const u = Math.min(1, Math.max(0, (t - a + 1) / ENTER));
       const e = EASE.out3(u);
-      const ex = wordExit(t, exitFrom + j * st);
+      const ex = wordExit(t, exitFrom + j * stg);
       const speaking = t >= a && t < pl.speakEnd[j] && !echoing && !ex;
       const after = Math.max(0, t - Math.max(pl.speakEnd[j], a + ENTER));
       const dim = speaking ? 1 : 1 - (1 - SPOKEN) * EASE.inOut(Math.min(1, after / SETTLE));

@@ -2,10 +2,13 @@
  * The slot (knowledge-stage.tsx's peek, in both frames): the page the
  * reader is reading, and what becomes of an unanswered question.
  *
- *   peekOpen      the dashed page opens (the site's page reveal: clip from
- *                 the top, a scan line of Sunday light on its edge); its
+ *   peekOpen      (16:9) the dashed page opens (the site's page reveal: clip
+ *                 from the top, a scan line of Sunday light on its edge); its
  *                 skeleton lines shimmer while every document is weighed;
  *                 its dashes march slowly (a page still open, waiting)
+ *   slotOpenMiss  (9:16, where the slot shares the documents' place) it is
+ *                 born on the miss instead: it steps forward out of the
+ *                 receding list (.94 → 1, nearly opaque, a soft shadow)
  *   miss          the lines fold away (bottom up, 1.5 f apart) and
  *                 "0 matches" pops in, in the miss's grey (an inhale, an
  *                 overshoot, a grey ring), then shakes "no" after the pill;
@@ -31,7 +34,7 @@ import { aos, EASE, SPRING, tween } from '../../lib/motion';
 import { C, FONT, TRACK } from '../../theme';
 import { KNOWLEDGE, KNOWLEDGE_LOCAL } from '../../timing';
 import { flashAt, lifeAt } from './blur';
-import { CLOSING_GLOW, CLOSING_INK, DOT, FLAGGED, INK, SUN, SUN_GLOW, TICKET, type Geo } from './geometry';
+import { CLOSING_GLOW, CLOSING_INK, DOT, FLAGGED, INK, SUN, SUN_GLOW, SUN_MISS, TICKET, type Geo } from './geometry';
 import { CHIP_POP } from './Status';
 
 const K = KNOWLEDGE;
@@ -98,23 +101,29 @@ const Typed: React.FC<{ t: number; text: string; at: number; step: number; style
 export const Slot: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
   const S = G.slot;
   const v = G.v;
-  const openAt = KL.peekOpen;
+  // 'peek' (16:9): the page being read opens before the scan; 'miss' (9:16): the slot opens on the
+  // miss, in front of the documents stepping back — no reading page, it is born as the miss
+  const peek = G.slotMode === 'peek';
+  const openAt = peek ? KL.peekOpen : KL.slotOpenMiss;
   if (t < openAt) return null;
   const R = v ? 22 : 24;
 
-  /* ── the page opening ── */
-  const clip = tween(t, [openAt, openAt + 9], [100, 0], EASE.out3);
-  const settle = aos(t, openAt, { anticip: 0, depth: 0, config: SPRING.site });
+  /* ── the page opening (peek: a clip reveal with a scan line; miss: it steps forward out of the list) ── */
+  const clip = peek ? tween(t, [openAt, openAt + 9], [100, 0], EASE.out3) : 0;
+  const settle = peek
+    ? aos(t, openAt, { anticip: 0, depth: 0, config: SPRING.site })
+    : Math.min(1.02, aos(t, openAt, { anticip: 0, depth: 0, config: SPRING.site }));
+  const boxO = peek ? 1 : Math.min(1, Math.max(0, (t - openAt + 1) / 5));
 
   /* ── the card ── */
   const pop = KL.ticketPop;
   const carded = t >= pop;
   const cq = tween(t, [pop, pop + 5], [0, 1], EASE.out3); // dashes → solid ring + shadow
-  const sc = (0.965 + 0.035 * settle) * cardScale(t);
+  const sc = (peek ? 0.965 + 0.035 * settle : 0.94 + 0.06 * settle) * cardScale(t);
   const dx = shake(t, KL.zeroShake, v ? 6 : 7);
 
   /* ── the skeleton lines (reading), folding away on the miss ── */
-  const nBars = v ? 3 : 4;
+  const nBars = peek ? (v ? 3 : 4) : 0;
   const padX = v ? 32 : 40;
   const inner = S.w - padX * 2;
   const barW = [0.34, 0.86, 0.64, 0.78].slice(0, nBars);
@@ -155,7 +164,7 @@ export const Slot: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
 
   const label = v ? 28 : 30;
   const qSize = v ? 66 : 68;
-  const numSize = v ? 24 : 26;
+  const numSize = v ? 28 : 30;
   const chipH = v ? 52 : 58;
   const chipText = v ? 28 : 30;
   const disc = v ? 30 : 34;
@@ -316,8 +325,9 @@ export const Slot: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
     ) : null;
 
   // the dashes: a page being read (Sunday) → the miss (grey) → gone into the card's solid ring
-  const missK = tween(t, [K.miss, K.miss + 8], [0, 1], EASE.out3);
+  const missK = peek ? tween(t, [K.miss, K.miss + 8], [0, 1], EASE.out3) : 1;
   const dashCol = mixColor('#0e7490', '#8a8794', missK);
+  const base = peek ? 0.55 : 0.9;
   const dashA = (0.34 - 0.06 * missK) * (1 - cq);
 
   return (
@@ -330,6 +340,7 @@ export const Slot: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
         height: S.h,
         transform: `translateX(${dx.toFixed(2)}px) scale(${sc.toFixed(4)})`,
         transformOrigin: v ? '50% 50%' : '0% 50%',
+        opacity: boxO,
       }}
     >
       {/* the pop's pool of Sunday light behind the card */}
@@ -352,10 +363,13 @@ export const Slot: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
           position: 'absolute',
           inset: 0,
           borderRadius: R,
-          background: carded ? `rgba(255,255,255,${(0.55 + 0.45 * cq).toFixed(3)})` : 'rgba(255,255,255,0.55)',
+          // (miss mode: it stands in front of the receding documents, so it is nearly opaque and lifts on a soft shadow)
+          background: carded ? `rgba(255,255,255,${(base + (1 - base) * cq).toFixed(3)})` : `rgba(255,255,255,${base})`,
           boxShadow: carded
             ? `0 0 0 1px rgba(24,16,40,${(0.07 * cq).toFixed(3)}), 0 0 ${(30 * flash).toFixed(1)}px ${rgba(SUN_GLOW.body, 0.35 * flash)}, 0 ${(22 * cq).toFixed(1)}px ${(44 * cq).toFixed(1)}px -26px ${rgba(SUN.orb[0], 0.38 * cq)}`
-            : undefined,
+            : peek
+              ? undefined
+              : `0 18px 40px -28px ${rgba(SUN_MISS[0], 0.3)}`,
           clipPath: `inset(0% 0% ${clip.toFixed(2)}% 0% round ${R}px)`,
           overflow: 'hidden',
         }}
@@ -517,7 +531,7 @@ export const Slot: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
             style={{
               position: 'absolute',
               inset: 0,
-              padding: '20px 26px 0 30px',
+              padding: '0 28px 0 32px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
