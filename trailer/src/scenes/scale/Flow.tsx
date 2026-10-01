@@ -13,6 +13,7 @@
  *             9:16 names in the card's top-left
  */
 import React from 'react';
+import { BOOKING } from '../../components/Shared';
 import { C, FONT, R } from '../../theme';
 import { aos, EASE, mixHex, SPRING, tween } from '../../lib/motion';
 import { Box, HitBurst, popFill } from './Cards';
@@ -400,6 +401,9 @@ const Check: React.FC<{ t: number; at: number; size: number }> = ({ t, at, size 
   );
 };
 
+/** the Slack line's booking, short: "Wed 3 PM" (the call's booking, as said) */
+const WHEN = `${BOOKING.day.slice(0, 3)} ${BOOKING.time}`;
+
 /** One station card's content. i: 0 the call, 1 Slack, 2 CRM. */
 export const StationFace: React.FC<{ i: number; t: number; T: FlowTiming; vertical: boolean }> = ({ i, t, T, vertical }) => {
   const pad = vertical ? 36 : 40;
@@ -426,7 +430,7 @@ export const StationFace: React.FC<{ i: number; t: number; T: FlowTiming; vertic
       : i === 1
         ? {
             tag: <div style={{ fontFamily: FONT.mono, fontWeight: 500, fontSize: vertical ? 32 : 34, lineHeight: 1, color: C.muted, whiteSpace: 'nowrap' }}>#front-desk</div>,
-            lines: vertical ? [words('Booked · Wed 3 PM', T.cardsIn[1], body)] : [words('Booked', T.cardsIn[1], body), words('Wed 3 PM', T.cardsIn[1] + 0.8, body)],
+            lines: vertical ? [words(`Booked ${BOOKING.sep} ${WHEN}`, T.cardsIn[1], body)] : [words('Booked', T.cardsIn[1], body), words(WHEN, T.cardsIn[1] + 0.8, body)],
           }
         : { tag: <Check t={t} at={T.ok} size={vertical ? 64 : 68} />, lines: [words('Contact saved', T.cardsIn[2], body, settledInk)] };
   const lines = (
