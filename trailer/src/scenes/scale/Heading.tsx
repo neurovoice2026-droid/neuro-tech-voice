@@ -125,6 +125,11 @@ export const Titles: React.FC<{
     const b = exitAt(t + 0.5, at) ?? -EXIT_EM;
     return (b - a) * hero.size * P.s;
   };
+  // the last 65 % of an exit also fades, so no sliced stems hang at the mask's edge
+  const exitFade = (at: number) => {
+    const u = (t - at - EXIT_A) / EXIT_D;
+    return u <= 0.35 ? 1 : 1 - EASE.inOut(Math.min(1, (u - 0.35) / 0.65));
+  };
   const vA = showA ? exitSpeed(T.exit) : 0;
   const vB = showB ? exitSpeed(T.out) : 0;
   const sy = Math.min(14, Math.hypot(sy0, sigmaFor(vA + vB)));
@@ -206,9 +211,9 @@ export const Titles: React.FC<{
   });
   // the "14"'s landing bloom (the closing light), under the figure
   const bloomB = showB ? (t < T.in + 2 ? 0 : 1 - tween(t, [T.in + 2, T.in + 16], [0, 1], EASE.out3)) : 0;
-  const ghost = (v: number, children: React.ReactNode, dyEm: number, key: string) =>
+  const ghost = (v: number, children: React.ReactNode, dyEm: number, key: string, op: number) =>
     Math.abs(v) > 6
-      ? [0.35, 0.7].map((d, gi) => slot(children, dyEm + (d * Math.abs(v)) / (hero.size * P.s), true, `${key}-g${gi}`, [0.28, 0.12][gi]))
+      ? [0.35, 0.7].map((d, gi) => slot(children, dyEm + (d * Math.abs(v)) / (hero.size * P.s), true, `${key}-g${gi}`, op * [0.28, 0.12][gi]))
       : null;
 
   return (
@@ -251,10 +256,10 @@ export const Titles: React.FC<{
             filter: blur,
           }}
         >
-          {showA ? ghost(vA, heroText, eA ?? 0, 'ga') : null}
-          {showA ? slot(heroText, eA ?? 0, t >= T.exit, 'a') : null}
-          {showB ? ghost(vB, bandText, eB ?? 0, 'gb') : null}
-          {showB ? slot(bandText, eB ?? 0, true, 'b') : null}
+          {showA ? ghost(vA, heroText, eA ?? 0, 'ga', exitFade(T.exit)) : null}
+          {showA ? slot(heroText, eA ?? 0, t >= T.exit, 'a', exitFade(T.exit)) : null}
+          {showB ? ghost(vB, bandText, eB ?? 0, 'gb', exitFade(T.out)) : null}
+          {showB ? slot(bandText, eB ?? 0, true, 'b', exitFade(T.out)) : null}
         </div>
       ) : null}
       {t >= T.after - 3 ? (

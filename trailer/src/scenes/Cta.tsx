@@ -35,7 +35,7 @@
  * ONE WebGL context: HeroGL draws the portrait, the halo AND the four orbs.
  */
 import React from 'react';
-import { AbsoluteFill, Img, random, staticFile } from 'remotion';
+import { AbsoluteFill, Easing, Img, random, staticFile } from 'remotion';
 import { Camera, Layer } from '../components/Camera';
 import { Dust } from '../components/Dust';
 import { flowTime, seedTime } from '../components/Orb';
@@ -69,28 +69,30 @@ const LOGO_RATIO = 2148 / 2999;
 const WORDMARK_TOP = 1905 / 2148;
 
 function geo(L: Layout) {
-  const P = { x: L.cx, y: L.pick(L.cy - 170, 600) };
-  const logoW = L.pick(560, 640);
+  // 9:16: the whole stack sits lower so the frame is used to ~76 % (the
+  // portrait moves with it: her eyes are P)
+  const P = { x: L.cx, y: L.pick(L.cy - 170, 710) };
+  const logoW = L.pick(560, 720);
   const logoH = logoW * LOGO_RATIO;
   const wordmark = { top: P.y - logoH / 2 + logoH * WORDMARK_TOP, bottom: P.y + logoH / 2 };
   // the plate is 2.8em tall: label line (1.2em) + label padding (.8em × 2)
-  const button = { y: L.pick(760, 1110), fontSize: L.pick(56, 60) };
+  const button = { y: L.pick(782, 1212), fontSize: L.pick(60, 66) };
   return {
     P,
     logoW,
     logoH,
     wordmark,
     /** halo centre sits under the logo centre so the wordmark is deep in the light */
-    haloC: { x: P.x, y: P.y + 70 },
+    haloC: { x: P.x, y: P.y + L.pick(70, 80) },
     /**
-     * rx, ry above, ry below: a round light, the art's own backlight, dead
-     * above the button. Tuned (scratchpad halo.py, a replica of the shader)
-     * for the softest roll-off that keeps every wordmark pixel ≥ #a19e97
-     * (luma ≥ 163 here) and the light at the button's top edge ≈ black
-     * (luma ≤ 8), so even with the pressed plate's plum glow that row
-     * stays ≤ #1a1620
+     * rx, ry above, ry below. BEFORE the impact: the art's own wide silver
+     * backlight (the figure is erased to it). AFTER: the merged light, a
+     * smaller lilac-white light hugging the logo (it condenses onto it on
+     * the impact spring): the wordmark stays in the light (hr ≤ .86), the
+     * button's top edge on the night (hr ≥ 1.3)
      */
     haloR: L.pick([720, 570, 205] as const, [620, 660, 290] as const),
+    haloEnd: L.pick([480, 400, 190] as const, [520, 520, 232] as const),
     haloPow: 2,
     /**
      * once the logo is in, the light's underside settles under the wordmark
@@ -98,24 +100,25 @@ function geo(L: Layout) {
      * wordmark (at the axis), its length, strength, and how far its edge
      * curves up at ±rx
      */
-    floor: L.pick({ y: wordmark.bottom + 10, len: 120, k: 0.9, rise: 123 }, { y: wordmark.bottom + 16, len: 200, k: 0.3, rise: 174 }),
+    floor: L.pick({ y: wordmark.bottom + 12, len: 120, k: 0.55, rise: 110 }, { y: wordmark.bottom + 18, len: 160, k: 0.35, rise: 140 }),
     /** the art's framing: base zoom (the portrait crop is pushed in so its glitch band stays out) */
     frame: L.pick({ zoom: 1.02, band: 0 }, { zoom: 1.36, band: 0.15 }),
     headline: {
       lines: L.pick(['AI voice agents that book', 'your customers 24/7.'], ['AI voice agents', 'that book your', 'customers 24/7.']),
       fontSize: L.pick(76, 84),
-      cy: L.pick(880, 1250),
+      cy: L.pick(880, 1490),
       markGap: 28,
     },
     button,
-    note: { y: L.pick(885, 1250), size: 34 },
-    url: { y: L.pick(950, 1330), size: 44, dot: 20 },
-    /** the four lights' orbit about the eyes: radii, ring centre drop, tilt, orb diameter */
+    note: { y: L.pick(906, 1372), size: L.pick(36, 40) },
+    url: { y: L.pick(974, 1458), size: L.pick(46, 50), dot: 20, rule: L.pick(1240, L.width - 2 * L.safe.x) },
+    /** the four lights' orbit about her face: radii, ring centre drop below the eyes, tilt, orb diameter */
     orbit: L.pick(
-      // the front of the ring passes under her chin, the back behind her crown
-      { rx: 560, ry: 270, drop: 30, tilt: -0.09, d: 150, tight: 1 },
+      // the ring's centre sits at her mouth, so its front passes under her
+      // chin (≈ y 730, clear of the headline), its back behind her forehead
+      { rx: 560, ry: 210, drop: 150, tilt: -0.09, d: 130, tight: 0.75, formDrop: 30 },
       // 9:16: her head fills the width, so the ring runs wide and tightens less
-      { rx: 452, ry: 290, drop: 40, tilt: -0.08, d: 138, tight: 0.55 },
+      { rx: 452, ry: 250, drop: 270, tilt: -0.08, d: 132, tight: 0.55, formDrop: 46 },
     ),
     /** the shockwave leaves from the merged orb, out past the frame */
     ring: [60, L.pick(1150, 1100)] as const,
@@ -174,6 +177,8 @@ function onLayer(L: Layout, p: { x: number; y: number }, cam: { x: number; y: nu
 }
 
 const rgb01 = (hex: string) => hexToRgb(hex) as [number, number, number];
+/** the reveal's area curve: starts at ≈1.5× its mean rate, settles softly */
+const REVEAL = Easing.bezier(0.33, 0.5, 0.45, 1);
 
 /* ── the scene ────────────────────────────────────────────────────── */
 export const Cta: React.FC = () => {
@@ -192,10 +197,19 @@ export const Cta: React.FC = () => {
   // the halo breathes under the end card, then its amplitude eases to 0 into the hold, where it freezes
   const breathAmp = tween(t, [K.breath, K.breath + 30], [0, 1], EASE.inOut) * (1 - tween(t, K.breathOut, [0, 1], EASE.inOut));
   const breath = t < K.breath || t >= K.breathOut[1] ? 0 : Math.sin(((t - K.breath) / 75) * Math.PI * 2) * breathAmp;
-  const haloScale = (1 - 0.05 * pull * (t < I ? 1 : 0)) * (t < I ? 1 : mix(1.07, 1, land));
+  // before the impact: the art's wide backlight (a touch smaller in the pull-back);
+  // ON the impact the merged light condenses onto the logo (site spring)
+  const condense = t < I ? 0 : rest(t, springAt(t, I, SPRING.site), 1);
+  const haloScale = 1 - 0.05 * pull * (t < I ? 1 : 0);
   const hC = onLayer(L, G.haloC, cam, 0.3);
-  // the dolly into the eyes, plus the slow push after the iris
-  const eyePush = 1 + 0.04 * tween(t, K.eyePush, [0, 1], EASE.out3);
+  const haloR = [0, 1, 2].map((k) => mix(G.haloR[k], G.haloEnd[k], condense) * hC.z * haloScale) as [number, number, number];
+  // while the lights are in frame the room's silver backlight steps down (they lead);
+  // it returns ON the impact as their merged light
+  const backGain = t < I ? mix(1, 0.45, tween(t, K.backDim, [0, 1], EASE.inOut)) : 1;
+  // the halo takes the merged light's colour as the four become one, fully ON the impact
+  const tint = t < I ? tween(t, [K.merge[0], I], [0, 0.22], EASE.inOut) : 1;
+  // the dolly into the eyes, plus the slow push from the first frame they show
+  const eyePush = 1 + 0.06 * tween(t, K.eyePush, [0, 1], EASE.out3);
   const zoom = mix(1.0, 1.12, tween(t, [-8, I], [0, 1], EASE.inOut)) * eyePush;
   const voiceGlow = brandEnv(t); // "Neuro Tech Voice." — the light answers her
   const u0 = {
@@ -211,19 +225,21 @@ export const Cta: React.FC = () => {
     ),
     liquid: tween(t, K.liquid, [1, 0], EASE.inOut),
     erase: tween(t, K.erase, [0, 1], EASE.draw),
-    reveal: tween(t, K.reveal, [0, 1.9], EASE.inOut),
+    // blooms from the eyes and decelerates into the figure: the radius grows so the lit
+    // AREA (≈ the frame's light) rises evenly, on a gentle out-curve (no dead hold, no slam)
+    reveal: Math.sqrt(0.04 + (1.9 * 1.9 - 0.04) * tween(t, K.reveal, [0, 1], REVEAL)),
     eyes: tween(t, K.eyes, [0, 1], EASE.out3),
     haloC: [hC.x, hC.y] as [number, number],
-    haloR: [G.haloR[0] * hC.z * haloScale, G.haloR[1] * hC.z * haloScale, G.haloR[2] * hC.z * haloScale] as [number, number, number],
+    haloR,
     haloGain: rest(
       t,
-      (1 - 0.06 * pull * (t < I ? 1 : 0)) * (1 + 0.32 * flare) * (1 + 0.009 * breath) * (1 + 0.025 * voiceGlow),
+      (t < I ? backGain * (1 - 0.06 * pull) : 1) * (1 + 0.32 * flare) * (1 + 0.009 * breath) * (1 + 0.025 * voiceGlow),
       1,
     ),
     floor: [
       onLayer(L, { x: L.cx, y: G.floor.y }, cam, 0.3).y,
       G.floor.len * hC.z,
-      G.floor.k * tween(t, [I + 4, CTA.button - 2], [0, 1], EASE.inOut),
+      G.floor.k * tween(t, [I + 4, CTA.button + 10], [0, 1], EASE.inOut),
       G.floor.rise * hC.z,
     ] as [number, number, number, number],
     haloShape: [G.haloPow, 0, 0.06] as [number, number, number],
@@ -238,7 +254,10 @@ export const Cta: React.FC = () => {
   const next = orbsAt(t + 0.5, G, spin);
   const camPrev = cameraAt(t - 0.5);
   const camNext = cameraAt(t + 0.5);
-  const vol = (s: number) => 0.12 + 0.75 * lineEnv(s) + 0.6 * tween(s, K.orbIn, [0, 1], EASE.in2);
+  // the flow follows her voice, quickens in the whirl, and the survivor's mesh swirls hard
+  const survivor = windowed(t, K.merge[0], K.survivor[0], I - 1, I + 4, EASE.out3, EASE.in2);
+  const vol = (s: number) =>
+    0.12 + 0.75 * lineEnv(s) + 0.6 * tween(s, K.orbIn, [0, 1], EASE.in2) + 1.4 * windowed(s, K.merge[0], K.survivor[0], I - 1, I + 4, EASE.out3, EASE.in2);
   const flow = flowTime(Math.max(0, t), vol);
   const burstU = tween(t, K.burst, [0, 1], EASE.out3);
   const back: OrbDraw[] = [];
@@ -248,19 +267,22 @@ export const Cta: React.FC = () => {
   const sparks: { x0: number; y0: number; x1: number; y1: number; color: string; o: number; w: number }[] = [];
   const merged = t >= K.merge[0];
   const order = [...now].sort((a, c) => (merged ? (a.i === 3 ? 1 : c.i === 3 ? -1 : a.z - c.z) : a.z - c.z));
+  const tightenFlash = K.tighten.reduce((a, f) => a + (t >= f ? 0.3 * Math.exp(-(t - f) / 4) : 0), 0);
   for (const o of order) {
     const depthPar = 1 + 0.25 * o.z * Math.min(1, radiusAt(t, G.orbit.tight));
     const scr = onLayer(L, o, cam, depthPar);
-    const pv = prev[o.i];
-    const nx = next[o.i];
-    const sp = onLayer(L, pv, camPrev, depthPar);
-    const sn = onLayer(L, nx, camNext, depthPar);
+    const sp = onLayer(L, prev[o.i], camPrev, depthPar);
+    const sn = onLayer(L, next[o.i], camNext, depthPar);
     const pop = o.pop;
-    const flash = t >= K.orbPops[o.i] ? Math.exp(-(t - K.orbPops[o.i]) / 3) : 0;
+    // the hit frame (pu = 0) is the brightest frame of each light
+    const pu = t - K.orbPops[o.i];
+    const flash = pu >= 0 ? Math.exp(-pu / 3) : 0;
     const light = GLOW[o.id];
-    const toAll = tween(t, [K.merge[0] - 8, K.merge[1]], [0, 1], EASE.inOut);
+    const toAll = o.i === 3 ? tween(t, K.merge, [0, 1], EASE.inOut) : 0;
     // light, not paint: the bloom is the orb's body colour lifted toward its core
     const glowBody = mixColor(mixColor(light.body, light.core, 0.4), ALL_GLOW.body, toAll);
+    // the orb's full size here (its pop aside), for the accents
+    const full = G.orbit.d * scr.z;
     // after the impact only the survivor bursts, then nothing
     let d = o.d * scr.z;
     let opacity = o.opacity;
@@ -269,52 +291,58 @@ export const Cta: React.FC = () => {
       d *= mix(1, 2.8, burstU);
       opacity = t >= K.burst[1] ? 0 : Math.pow(1 - burstU, 2);
     }
-    // anticipation: a point of the light gathers for 3 f before the pop
-    const gather = t < K.orbPops[o.i] && t >= K.orbPops[o.i] - 3 ? Math.sin(((t - (K.orbPops[o.i] - 3)) / 3) * (Math.PI / 2)) : 0;
-    if (gather > 0) {
-      glows.push({ x: scr.x, y: scr.y, r: G.orbit.d * (0.18 + 0.12 * gather), s: 0.95 * gather, color: rgb01(LIGHTS[o.id].orb[3]), back: false });
-      continue;
+    // anticipation: a point of its light gathers over the 3 f before the beat, peaks
+    // ON it (inside the flash) and hands over to the orb over the next 2–3 f
+    const gather = pu < -3 ? 0 : pu < 0 ? Math.sin(((pu + 3) / 3) * (Math.PI / 2)) : Math.max(0, 1 - pu / 2.5);
+    const shown = pop > 0 && d >= 1 && opacity > 0.002;
+    if (shown) {
+      const draw: OrbDraw = {
+        x: scr.x,
+        y: scr.y,
+        d,
+        palette: o.palette,
+        volume: vol(t),
+        time: flow + seedTime(o.i),
+        opacity,
+        smear: [(sn.x - sp.x) * 0.5, (sn.y - sp.y) * 0.5],
+      };
+      // behind her or in front: a soft hand-over around the sides (z ≈ 0)
+      const wFront = merged ? 1 : EASE.inOut(Math.min(1, Math.max(0, (o.z + 0.14) / 0.28)));
+      if (wFront > 0.001) front.push({ ...draw, opacity: opacity * wFront });
+      if (wFront < 0.999) back.unshift({ ...draw, opacity: opacity * (1 - wFront) });
     }
-    if (pop <= 0 || d < 1 || opacity <= 0.002) continue;
-    const draw: OrbDraw = {
-      x: scr.x,
-      y: scr.y,
-      d,
-      palette: o.palette,
-      volume: vol(t),
-      time: flow + seedTime(o.i),
-      opacity,
-      smear: [(sn.x - sp.x) * 0.5, (sn.y - sp.y) * 0.5],
-    };
-    // behind her or in front: a soft hand-over around the sides (z ≈ 0)
-    const wFront = merged ? 1 : EASE.inOut(Math.min(1, Math.max(0, (o.z + 0.14) / 0.28)));
-    if (wFront > 0.001) front.push({ ...draw, opacity: opacity * wFront });
-    if (wFront < 0.999) back.unshift({ ...draw, opacity: opacity * (1 - wFront) });
-    // its bloom
-    const tightenFlash = K.tighten.reduce((a, f) => a + (t >= f ? 0.3 * Math.exp(-(t - f) / 4) : 0), 0);
-    const s =
-      (0.3 * Math.min(1.15, pop) + 0.9 * flash + tightenFlash) * (1 + 0.9 * tween(t, K.orbIn, [0, 1], EASE.in2)) * opacity +
-      (t >= I ? 0.8 * Math.exp(-(t - I) / 3.5) : 0);
-    // (after the impact the bloom stays the merged orb's size: a hot core round the crown, not a wash)
-    const gd = t >= I ? o.d * scr.z * 1.3 : d;
-    glows.push({ x: scr.x, y: scr.y, r: gd * (1.35 + 0.5 * flash), s, color: rgb01(glowBody), back: o.z < 0 && !merged });
+    // ONE bloom per light (the shader has four): the gathering point, the pop's flash,
+    // its steady light (an emitter: ≈.75), the whirl's, the survivor's (≥1.2, 2.2 d)
+    let gs = gather > 0 ? 1.05 * gather : 0;
+    let gr = gather > 0 ? full * (0.22 + 0.3 * gather) : 0;
+    if (shown) {
+      const steady = (0.75 * Math.min(1.15, pop) + 1.1 * flash + tightenFlash) * (1 + 0.3 * tween(t, K.orbIn, [0, 1], EASE.in2)) * opacity;
+      const s = mix(steady, 1.25, o.i === 3 ? survivor : 0) + (t >= I ? 0.8 * Math.exp(-(t - I) / 3.5) : 0);
+      // (after the impact the bloom stays the merged orb's size: a hot core round the crown, not a wash)
+      const gd = t >= I ? o.d * scr.z * 1.3 : Math.max(d, full * 0.8 * Math.min(1, flash * 2));
+      const r = mix(gd * (1.35 + 0.6 * flash), 1.9 * d, o.i === 3 ? survivor : 0);
+      gs += s;
+      gr = Math.max(gr, r);
+    }
+    if (gs > 0.001) glows.push({ x: scr.x, y: scr.y, r: gr, s: gs, color: rgb01(gather > flash && !shown ? LIGHTS[o.id].orb[3] : glowBody), back: o.z < 0 && !merged });
     // ON "Twenty" "four" "seven": each orb answers the word with a thin ring
-    K.tighten.forEach((f) => {
-      const tu = t - f;
-      if (tu < 0 || tu >= 10) return;
-      const e = EASE.out3(tu / 10);
-      ringsDom.push({ x: scr.x, y: scr.y, r: (d / 2) * mix(1.0, 1.55, e), w: mix(2.2, 0.6, e), color: LIGHTS[o.id].orb[3], o: 0.6 * (1 - e) * (o.z < -0.2 ? 0 : 1) });
-    });
-    // the pop's accents: a ring in the light's wave colour and a burst of sparks
-    const pu = t - K.orbPops[o.i];
+    if (shown)
+      K.tighten.forEach((f) => {
+        const tu = t - f;
+        if (tu < 0 || tu >= 10) return;
+        const e = EASE.out3(tu / 10);
+        ringsDom.push({ x: scr.x, y: scr.y, r: (d / 2) * mix(1.0, 1.55, e), w: mix(2.2, 0.6, e), color: LIGHTS[o.id].orb[3], o: 0.6 * (1 - e) * (o.z < -0.2 ? 0 : 1) });
+      });
+    // the pop's accents, from the hit frame on: a ring in the light's colour and a burst of sparks
     if (pu >= 0 && pu < 12) {
       const e = EASE.out3(pu / 12);
-      ringsDom.push({ x: scr.x, y: scr.y, r: (d / 2) * mix(1.02, 1.9, e), w: mix(3.5, 0.8, e), color: LIGHTS[o.id].orb[3], o: 0.85 * (1 - e) * (o.z < -0.2 ? 0.35 : 1) });
+      const hide = o.z < -0.2 ? 0.35 : 1;
+      ringsDom.push({ x: scr.x, y: scr.y, r: (full / 2) * mix(0.75, 1.9, e), w: mix(4, 0.8, e), color: LIGHTS[o.id].orb[3], o: 0.9 * (1 - e) * hide });
       // six sparks fly off the rim, decelerating; each is a tapered streak whose
       // tail is where its head was 2 f ago (motion blur by construction)
       const at = (uu: number, k: number) => {
         const a = (k / 6) * Math.PI * 2 + 0.5 + random(`cta-spark-${o.i}-${k}`) * 0.6;
-        const far = (d / 2) * 1.02 + (46 + 50 * random(`cta-spark-r-${o.i}-${k}`)) * EASE.out3(Math.min(1, Math.max(0, uu) / 10));
+        const far = (full / 2) * 0.8 + (46 + 50 * random(`cta-spark-r-${o.i}-${k}`)) * EASE.out3(Math.min(1, Math.max(0, uu) / 10));
         return { x: scr.x + Math.cos(a) * far, y: scr.y + Math.sin(a) * far };
       };
       for (let k = 0; k < 6; k++) {
@@ -339,8 +367,13 @@ export const Cta: React.FC = () => {
     glows: glows.slice(0, 4),
     // her eyes carry her voice (0.25 · the real envelope, plus a whisper while she speaks)
     eyeGlow: 0.25 * lineEnv(t),
-    rim: [0.22 * tween(t, K.rimIn, [0, 1], EASE.inOut), 0.97, 0.075, 2.25],
-    rimColors: LIGHT_ORDER.map((id) => rgb01(LIGHTS[id].orb[2])),
+    // the four lights as four arcs on the merged light's rim (rose TL, emerald TR, teal BR, violet BL)
+    // (just outside the light's edge, on the night, so each hue stays itself)
+    rim: [0.55 * tween(t, K.rimIn, [0, 1], EASE.inOut), 1.16, 0.1, 0.36],
+    rimColors: LIGHT_ORDER.map((id) => rgb01(mixColor(LIGHTS[id].orb[2], LIGHTS[id].orb[3], 0.25))),
+    backGain,
+    tint,
+    glowOver: 0.45,
   };
 
   /* ── iris ── */
@@ -398,7 +431,9 @@ export const Cta: React.FC = () => {
     <AbsoluteFill>
       <AbsoluteFill style={{ WebkitMaskImage: mask, maskImage: mask, background: C.night }}>
         <HeroGL art={art} width={L.width} height={L.height} u={u} orbs={orbs} />
-        <Glint t={t} x0={eyeX0} off={IRIS.k * eyeOff} y={G.P.y - IRIS.dv * eyeZ * L.height} r={IRIS.r * eyeZ} />
+        {[K.glint0, K.glint].map((win, k) => (
+          <Glint key={k} t={t} win={win} x0={eyeX0} off={IRIS.k * eyeOff} y={G.P.y - IRIS.dv * eyeZ * L.height} r={IRIS.r * eyeZ} />
+        ))}
         {eyeGlowO > 0.01 ? (
           <EyeLight
             o={eyeGlowO}
@@ -484,7 +519,16 @@ export const Cta: React.FC = () => {
               <Note t={t} at={CTA.note} size={G.note.size} rest={rest} />
             </Row>
             <Row y={G.url.y}>
-              <Url t={t} at={CTA.url} size={G.url.size} dot={G.url.dot} ruleW={L.width - 2 * L.safe.x} step={K.urlStep} rest={rest} />
+              <Url
+                t={t}
+                at={CTA.url}
+                chunks={K.urlChunks.map((from, k) => ({ from, at: K.urlAt[k] }))}
+                size={G.url.size}
+                dot={G.url.dot}
+                ruleW={G.url.rule}
+                step={K.urlStep}
+                rest={rest}
+              />
             </Row>
           </Layer>
           {dustO > 0.005 ? (
@@ -528,8 +572,8 @@ const IRIS = { k: 0.877, dv: 0.0053, r: 17.8 };
  * The catch-light: ON her first word a 6 px white glint (60 %) sweeps across
  * both irises in 4 frames, just above their centres, with a sub-frame trail.
  */
-const Glint: React.FC<{ t: number; x0: number; off: number; y: number; r: number }> = ({ t, x0, off, y, r }) => {
-  const [a, c] = K.glint;
+const Glint: React.FC<{ t: number; win: readonly [number, number]; x0: number; off: number; y: number; r: number }> = ({ t, win, x0, off, y, r }) => {
+  const [a, c] = win;
   if (t < a - 0.5 || t > c) return null;
   const at = (tt: number) => tween(tt, [a, c], [-0.8, 0.8], EASE.inOut);
   const o = 0.6 * Math.sin(Math.PI * tween(t, [a - 0.5, c], [0, 1]));

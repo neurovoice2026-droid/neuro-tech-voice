@@ -13,8 +13,10 @@
  *              +8 px — with a 1.5 px brand-lit rim and a plum glow, so it
  *              stays the brightest thing under the logo.
  *  <Note>      "5 free minutes, no card" (pricing copy), Inter 500, 80 % paper.
- *  <Url>       a CornerDot + "neurotechvoice.com" (Geist Mono 500), typed from
- *              its cue frame with a caret; the hairline draws out from it.
+ *  <Url>       a CornerDot + "neurotechvoice.com" (Geist Mono 500), typed ON
+ *              Ava's words in three chunks ("neuro" | "tech" | "voice.com" on
+ *              "Neuro" "Tech" "Voice.") with a caret; the hairline draws out
+ *              from it.
  *
  * `rest(t, v, target)` (from the scene) pins every residual to its exact
  * rest value by CTA.finalHold: the hold is still.
@@ -266,19 +268,30 @@ export const Note: React.FC<{ t: number; at: number; size: number; rest: Rest }>
 export const Url: React.FC<{
   t: number;
   at: number;
+  /** typed in chunks: chunk k starts at character `from` on frame `at` */
+  chunks?: readonly { from: number; at: number }[];
   size: number;
   dot: number;
   ruleW: number;
   step: number;
   rest: Rest;
-}> = ({ t, at, size, dot, ruleW, step, rest }) => {
+}> = ({ t, at, chunks, size, dot, ruleW, step, rest }) => {
   const text = 'neurotechvoice.com';
   if (t < at - 3) return null;
   const d = rest(t, aos(t, at - 1, { anticip: 2, depth: 0.2, config: SPRING.pop }), 1);
   const draw = tween(t, [at + 2, at + 20], [0, 1], EASE.house);
-  const typed = (t - at) / step; // characters typed (fractional)
   const n = text.length;
-  const doneAt = at + (n - 1) * step;
+  const parts = chunks && chunks.length ? chunks : [{ from: 0, at }];
+  /** the frame character i is typed */
+  const charAt = (i: number) => {
+    let c = parts[0];
+    for (const p of parts) if (i >= p.from) c = p;
+    return c.at + (i - c.from) * step;
+  };
+  let typedN = 0;
+  for (let i = 0; i < n; i++) if (t >= charAt(i)) typedN = i + 1;
+  const typed = typedN - 1 + 1e-3; // (whole characters typed, for the caret)
+  const doneAt = charAt(n - 1);
   // caret: on while typing, then a blink off
   const caretO = t < at ? 0 : t <= doneAt + 2 ? 1 : tween(t, [doneAt + 2, doneAt + 5], [1, 0], EASE.in2);
   const rule = (origin: 'left' | 'right') => (
@@ -318,8 +331,8 @@ export const Url: React.FC<{
           }}
         >
           {text.split('').map((ch, i) => {
-            const k = typed - i; // > 0 once typed
-            const up = k < 0 ? 0 : rest(t, springAt(t, at + i * step, SPRING.pop), 1);
+            const k = t - charAt(i); // ≥ 0 once typed
+            const up = k < 0 ? 0 : rest(t, springAt(t, charAt(i), SPRING.pop), 1);
             return (
               <span
                 key={i}

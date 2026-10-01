@@ -24,8 +24,14 @@
  *      THIS context by orbPass.ts): the back one is occluded by the
  *      figure's own matte (so an orb passing behind her head is hidden and
  *      its bloom rims the silhouette), the front one sits over everything;
- *      every orb throws a bloom of its own light; the eyes glow with Ava's
- *      real voice envelope; the halo carries a faint rim of the four lights
+ *      every orb throws a bloom of its own light (and a halation over its own
+ *      body, so it reads as an emitter, not a marble); while they are in
+ *      frame the art's silver backlight is graded down (uBackGain) so the
+ *      lights lead; the eyes glow with Ava's real voice envelope
+ *   8. after the impact the halo IS the merged light (uTint): a lilac-white
+ *      core (#f7f3ff) falling through #c4a8ff to a violet edge, with the four
+ *      lights as four distinct arcs on its rim (rose top-left, emerald
+ *      top-right, teal bottom-right, violet bottom-left), added as light
  *
  * Perlin / fbm are the site's (components/site/cover-noise.ts), copied
  * verbatim apart from the octave count, which is a uniform here so the
@@ -79,13 +85,21 @@ uniform vec4  uGlowP[4];  // orb bloom: centre (canvas px, y down), radius px, s
 uniform vec3  uGlowC[4];  // orb bloom colour
 uniform float uGlowBack[4]; // 1 = this bloom is behind the figure
 uniform float uEyeGlow;   // the eyes' light, driven by Ava's real voice envelope (0..1)
-uniform vec4  uRim;       // four-light rim: strength, radius (in halo d), width, arc half-span (rad)
-uniform vec3  uRimC[4];   // the four lights' rim colours, left to right over the arc
+uniform vec4  uRim;       // four-light arcs: strength, radius (in halo d), radial width, angular half-width (rad)
+uniform vec3  uRimC[4];   // the four lights' arc colours: top-left, top-right, bottom-right, bottom-left
+uniform float uBackGain;  // the art's silver backlight (and the halo before the impact), 1 = as is
+uniform float uTint;      // 0 silver backlight -> 1 the merged light (lilac-white)
+uniform float uGlowOver;  // how much of each orb's bloom also lies over its own body
 
 const vec3 INK        = vec3(6.0, 4.0, 10.0) / 255.0;
 const vec3 SILVER     = vec3(196.0, 192.0, 186.0) / 255.0;
 const vec3 SILVER_MID = vec3(161.0, 158.0, 151.0) / 255.0;
 const vec3 SILVER_LOW = vec3(123.0, 122.0, 125.0) / 255.0;
+// the merged light: #f7f3ff core, #e4d9ff, #c4a8ff (the night's light), a violet edge
+const vec3 LILAC_CORE = vec3(247.0, 243.0, 255.0) / 255.0;
+const vec3 LILAC_HI   = vec3(222.0, 208.0, 255.0) / 255.0;
+const vec3 LILAC      = vec3(180.0, 150.0, 248.0) / 255.0;
+const vec3 LILAC_EDGE = vec3(52.0, 24.0, 108.0) / 255.0;
 
 /* ---- site noise (cover-noise.ts) ------------------------------------ */
 vec3 hash33(vec3 p3) {
@@ -178,6 +192,16 @@ vec3 haloRamp(float d) {
   c = mix(c, SILVER_LOW, herm(0.80, 0.98, 0.643, 1.344, d));
   return mix(c, INK, herm(0.98, 1.25, 0.655, 0.0, d));
 }
+/* the merged light: no plateau — it is brightest at the core and falls the
+   whole way (a light, not a disc), lilac-white to lilac by .8 (where the
+   wordmark sits), through a violet edge, to the night by 1.3 */
+vec3 lilacRamp(float d) {
+  vec3 c = LILAC_CORE;
+  c = mix(c, LILAC_HI, herm(0.0, 0.45, 0.0, 1.2, d));
+  c = mix(c, LILAC, herm(0.45, 0.88, 0.8, 1.3, d));
+  c = mix(c, LILAC_EDGE, herm(0.88, 1.1, 0.7, 1.1, d));
+  return mix(c, INK, herm(1.1, 1.38, 0.8, 0.0, d));
+}
 
 vec3 screen(vec3 a, vec3 b) { return 1.0 - (1.0 - a) * (1.0 - clamp(b, 0.0, 1.0)); }
 
@@ -198,27 +222,28 @@ void main() {
   }
   // (at most a very-low-frequency breath of the edge, <= 0.01; 0 by default)
   if (uHaloShape.y > 0.0) hr += perlin(vec3(px / uRes.y * 1.1, 1.7)) * uHaloShape.y * smoothstep(0.45, 0.95, hr);
-  vec3 halo = haloRamp(hr);
+  vec3 halo = mix(haloRamp(hr), lilacRamp(hr), uTint);
   // a faint bloom of the core: the disc reads as light, not as paint
-  halo += SILVER * uHaloShape.z * exp(-3.0 * hr * hr) * (1.0 - smoothstep(1.05, 1.3, hr));
-  // the four lights, merged: a faint rim of their colours round the upper
-  // edge, clockwise from the top, dying out before the underside
-  if (uRim.x > 0.0) {
-    // the four colours spread over the arc [-span, +span] about the top,
-    // left to right; the underside (where the button sits) stays clean
-    float a = atan(hd.x, -hd.y);                       // 0 at the top, clockwise
-    float f = clamp((a + uRim.w) / (2.0 * uRim.w), 0.0, 1.0) * 3.0;
-    int i = min(int(floor(f)), 2);
-    vec3 rc = mix(uRimC[i], uRimC[i + 1], smoothstep(0.0, 1.0, f - float(i)));
-    float band = exp(-pow((hr - uRim.y) / uRim.z, 2.0));
-    float upper = 1.0 - smoothstep(-0.15, 0.55, q.y);
-    halo = screen(halo, rc * uRim.x * band * upper);
-  }
+  halo += mix(SILVER, LILAC_CORE, uTint) * uHaloShape.z * exp(-3.0 * hr * hr) * (1.0 - smoothstep(1.05, 1.3, hr));
   // the underside of the light settles under the wordmark once the logo is
   // in: a soft falloff whose edge curves up with the ellipse (no straight seam)
   float fy = uFloor.x - uFloor.w * (hd.x / uHaloR.x) * (hd.x / uHaloR.x);
   halo = mix(halo, INK, uFloor.z * smoothstep(0.0, 1.0, (px.y - fy) / uFloor.y));
   halo *= uHaloGain;
+  // the four lights, merged: four distinct arcs of their own colour on the
+  // rim, one per diagonal (rose top-left, emerald top-right, teal
+  // bottom-right, violet bottom-left), added as light over the falloff
+  if (uRim.x > 0.0) {
+    float a = atan(q.x, -q.y);                         // 0 at the top, clockwise
+    float band = exp(-pow((hr - uRim.y) / uRim.z, 2.0));
+    const float ARC_A[4] = float[4](-0.785398, 0.785398, 2.356194, -2.356194);
+    vec3 arcs = vec3(0.0);
+    for (int i = 0; i < 4; i++) {
+      float da = atan(sin(a - ARC_A[i]), cos(a - ARC_A[i]));
+      arcs += uRimC[i] * exp(-pow(da / uRim.w, 2.0));
+    }
+    halo += arcs * uRim.x * band;
+  }
 
   vec3 col = halo;
   float occ = 0.0;     // how much of the back orb layer the figure hides here
@@ -333,9 +358,13 @@ void main() {
   // (inside her head the lit stripes are her too, never backlight)
   float headCore = 1.0 - smoothstep(0.62, 0.82, length((pxA - eyeMidA - vec2(0.0, 0.4 * eo)) / (eo * vec2(2.1, 3.3))));
   occ = uOcc * figure * max(1.0 - backlit, headCore);
+  // while the four lights are in frame the art's own silver backlight steps
+  // down so they are the brightest things in it (her lilac face is kept)
+  float backW = clamp(max(backlit, 1.0 - figure), 0.0, 1.0) * (1.0 - headCore);
   col = mix(col, uBrand * (0.5 + dot(col, vec3(0.299, 0.587, 0.114)) * 1.5),
             0.10 * smoothstep(0.03, 0.30, sat));
   col = grade(col);
+  col *= mix(1.0, uBackGain, backW);
   col = mix(col, INK, scrimA(uv.y));
   {
     float d = length((uv - vec2(0.50, 0.46)) / vec2(1.05, 0.88));
@@ -430,6 +459,9 @@ void main() {
     col = ob.rgb + col * (1.0 - ob.a);
     vec4 of = texture(uOrbFront, vUv);
     col = of.rgb + col * (1.0 - of.a);
+    // halation: part of each light's bloom lies over its own body, so its
+    // dark side glows and its edge melts into its light (an emitter)
+    col = screen(col, glow * uGlowOver);
   }
 
   // the site's dither (0.016) on the portrait; ±0.5/255 on the light alone

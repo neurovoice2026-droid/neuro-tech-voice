@@ -19,7 +19,7 @@ import { C, LIGHTS } from '../../theme';
 import { EASE, tween } from '../../lib/motion';
 import type { Layout } from '../../lib/layout';
 import { SCALE, SCALE_LOCAL } from '../../timing';
-import { LANG_LIGHT, leadAt, leadColor, rgba } from './lights';
+import { LANG_LIGHT, LEAD, leadAt, rgba } from './lights';
 
 const K = SCALE_LOCAL;
 
@@ -37,7 +37,9 @@ export const Backdrop: React.FC<{ t: number; L: Layout }> = ({ t, L }) => {
     [[0.32, 0.3], [0.5, 0.4], [0.7, 0.5], [0.5, 0.68], [0.5, 0.5], [0.6, 0.62]],
   );
   const { i, prev, m } = leadAt(t);
-  const col = leadColor(t, 3);
+  // the hour turns as a crossfade of two pools of light (never a hue sweep through other colours)
+  const colPrev = LIGHTS[LEAD[prev].light].orb[3];
+  const colCur = LIGHTS[LEAD[i].light].orb[3];
   const bx = (at[prev][0] + (at[i][0] - at[prev][0]) * m) * W;
   const by = (at[prev][1] + (at[i][1] - at[prev][1]) * m) * H;
   // the light swells on the hour (the quarter note) and settles
@@ -74,7 +76,8 @@ export const Backdrop: React.FC<{ t: number; L: Layout }> = ({ t, L }) => {
     <AbsoluteFill style={{ background: C.white }}>
       {/* neutral room shading: the corners fall off a hair (depth, no hue) */}
       <AbsoluteFill style={{ background: 'radial-gradient(130% 110% at 50% 45%, rgba(24,16,40,0) 55%, rgba(24,16,40,0.035) 100%)' }} />
-      {blob('wall', bx + d0.dx, by + d0.dy, wallR, col, wallA)}
+      {prev !== i && m < 1 ? blob('wall-prev', bx + d0.dx, by + d0.dy, wallR, colPrev, wallA * (1 - m)) : null}
+      {blob('wall', bx + d0.dx, by + d0.dy, wallR, colCur, wallA * (prev !== i ? m : 1))}
       {flow.map((b) => {
         const d = drift(b.seed);
         return blob(b.seed, b.x + d.dx, b.y + d.dy, b.r, fc, b.a * flowW);

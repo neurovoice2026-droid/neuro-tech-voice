@@ -53,10 +53,11 @@ export function leadAt(t: number): { i: number; prev: number; m: number } {
   return { i, prev: Math.max(0, i - 1), m: m * m * (3 - 2 * m) };
 }
 
-/** the leading light's colour at t (an orb slot: 2 body, 3 pale), turning between keys */
-export const leadColor = (t: number, slot: number) => {
+/** the leading light(s) at t as weighted colours of an orb slot (2 body, 3 pale): a crossfade, never a hue sweep */
+export const leadColors = (t: number, slot: number): { col: string; w: number }[] => {
   const { i, prev, m } = leadAt(t);
-  return mixColor(LIGHTS[LEAD[prev].light].orb[slot], LIGHTS[LEAD[i].light].orb[slot], m);
+  const cur = { col: LIGHTS[LEAD[i].light].orb[slot], w: prev !== i ? m : 1 };
+  return prev !== i && m < 1 ? [{ col: LIGHTS[LEAD[prev].light].orb[slot], w: 1 - m }, cur] : [cur];
 };
 
 /** the pale tint a light throws on white card stock (its light slot) */

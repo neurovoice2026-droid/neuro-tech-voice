@@ -62,9 +62,16 @@ export type HeroUniforms = {
   glows: { x: number; y: number; r: number; s: number; color: [number, number, number]; back: boolean }[];
   /** the eyes' voice light (0..1) */
   eyeGlow: number;
-  /** the four-light rim on the halo: strength, radius (halo d), width, arc half-span (rad); colours left to right */
+  /** the four lights' arcs on the halo rim: strength, radius (halo d), radial width, angular half-width (rad) */
   rim: [number, number, number, number];
+  /** arc colours: top-left, top-right, bottom-right, bottom-left */
   rimColors: [number, number, number][];
+  /** the art's silver backlight gain (1 = as is) */
+  backGain: number;
+  /** 0 silver backlight → 1 the merged light (lilac-white) */
+  tint: number;
+  /** how much of each orb's bloom also lies over its own body (halation) */
+  glowOver: number;
 };
 
 /** The four lights in the hero's context: back (hidden by the figure) and front layers. */
@@ -85,6 +92,7 @@ const NAMES = [
   'uTear', 'uLiquid', 'uErase', 'uReveal', 'uEyes', 'uAxisX', 'uEye', 'uSubject', 'uBrand',
   'uHaloC', 'uHaloR', 'uHaloGain', 'uFloor', 'uHaloShape', 'uFrame', 'uSeed',
   'uOrbBack', 'uOrbFront', 'uOrbOn', 'uOcc', 'uGlowP', 'uGlowC', 'uGlowBack', 'uEyeGlow', 'uRim', 'uRimC',
+  'uBackGain', 'uTint', 'uGlowOver',
 ];
 
 function compile(gl: WebGL2RenderingContext, type: number, src: string) {
@@ -269,6 +277,9 @@ export const HeroGL: React.FC<{
     const rc = new Float32Array(12);
     u.rimColors.slice(0, 4).forEach((c, i) => rc.set(c, i * 3));
     gl.uniform3fv(L.uRimC, rc);
+    gl.uniform1f(L.uBackGain, u.backGain);
+    gl.uniform1f(L.uTint, u.tint);
+    gl.uniform1f(L.uGlowOver, u.glowOver);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.finish();
     if (!released.current) {

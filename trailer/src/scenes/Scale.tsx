@@ -1,34 +1,44 @@
 /**
  * SCALE — the white act montage (scale-local frames; every value from
- * SCALE / SCALE_LOCAL in timing.ts).
+ * SCALE / SCALE_LOCAL in timing.ts). 24/7 = every hour has its own light,
+ * and ONE light leads at a time (scale/lights.ts).
  *
- *   t −2       out of the knowledge whip's clean white: card 01 fills the
+ *   t −3       out of the knowledge whip's clean white: card 01 fills the
  *              frame (≈ 3.9×), mid-pop, carrying the whip's momentum
  *   t 0…56     16 industries, one per 16th: every pop is a hit — opaque on
  *              its tick, .55 → .96 → 1.10 → 1 spring, ±4° and +30 px settle,
- *              a 6 px shutter blur on the attack frame, the icon flashes
- *              electric (glow) and the card 15 % lilac. The camera frames the
- *              block being filled — card 01 → 2 × 2 → 3 × 3 → the whole wall
- *              (EASE.peel steps with a velocity blur) — and kicks on the grid:
- *              +1.8 % + a 3 px jolt on quarters, ≤ 0.5 % on 16ths
- *   t 60       "16 industries." SLAMS (hit.wav): +2.5 % kick, all 16 icons
- *              lock violet, a 2 f lilac wash, the wall dims to 40 % + 8 px blur
- *              and every card snaps exactly to its rect
- *   t 66…80    ten cards peel off; six keepers glide into the language grid
- *              while the title holds
- *   t 75…100   each keeper flips (rotateY, perspective 1600, shutter blur) to
- *              its language on its 16th: the AI phrase big, underlined as it
- *              lands; the live cell rings lilac. At 80 the title springs to
- *              the top band, wiping to "14 languages."
- *   t 113…     five cells collapse into the deck; the Japanese cell flies onto
- *              it and becomes THE CALL; "After the call." rises
- *   t 120/128/135  THE CALL → SLACK → CRM: nodes solid ON the cues (1.35 → 1,
- *              2.5× ping, a 1 % nudge toward each); the green CRM node sits
- *              exactly at FLOW_END; from 128 the stage (not the heading)
- *              pushes in 4 % about FLOW_END for the CTA's iris
+ *              a 6 px shutter blur on the attack frame; its icon disc lights
+ *              in the quarter's light (rush → closing → Sunday → night: the
+ *              hour turns on each quarter note) with a flash pool, ripple and
+ *              sparks, then settles to a neutral pearl disc — white cards, ink
+ *              labels, the newest pop glows, the wall stays calm. On each
+ *              quarter the cards already up pulse once, as a soft wave, in the
+ *              NEW hour's light. The camera frames the block being filled —
+ *              card 01 → 2 × 2 → 3 × 3 → the whole wall — and kicks on the grid
+ *   t 60       "16 industries." SLAMS (hit.wav): +2.5 % kick, the 16 discs
+ *              lock in the night's light as a strum out from the title, a 2 f
+ *              wash, the wall dims to 40 % + 8 px blur
+ *   t 66       thirteen cards peel off; three keepers glide into three big
+ *              cells — and the title lifts to the top band WITH them, out of
+ *              the cell band before any cell turns
+ *   t 75/79/83 page 1: each cell flips (16:9 rotateY · 9:16 rotateX, shutter
+ *              blur) to EN / RO / ES on its 16th; t 90/94/98 page 2: each flips
+ *              again, one beat later, to FR / DE / JA. The whole greeting at
+ *              84 px (16:9) / 80 px (9:16), its AI disclosure underlined, the
+ *              cell's orb in the closing light
+ *   t 76…83    "16 industries." exits up out of its mask (2 f dip, 4 f exit,
+ *              ghost blur); "14 languages." rises into it 1 f after
+ *   t 109…116  "14 languages." exits the same way; the two other cells
+ *              collapse into the deck; the Japanese cell flies onto it and
+ *              becomes THE CALL; "After the call." rises
+ *   t 120/128/135  THE CALL → SLACK → CRM: big cards that fill the frame,
+ *              nodes solid ON the cues (1.35 → 1, 2.5× ping, a 1 % nudge toward
+ *              each); the green CRM node sits exactly at FLOW_END; from 128 the
+ *              stage (not the heading) pushes in 4 % about FLOW_END for the
+ *              CTA's iris
  *
- * Planes: lilac wash + blooms 0.4 · the wall / cells / flow 1.0 · lilac
- * discs 1.6 (+ titles on 1.0, a screen-space lilac wash on the hero hit).
+ * Planes: white room + one bloom of the leading light 0.4 · the wall / cells /
+ * flow 1.0 (+ titles) · out-of-focus discs in the leading light 1.6.
  */
 import React from 'react';
 import { AbsoluteFill, random } from 'remotion';
@@ -48,7 +58,7 @@ import { Rail, StationCards, StationFace, type FlowTiming } from './scale/Flow';
 import { centre, geo, mixRect, type Geo, type Rect } from './scale/geometry';
 import { Titles } from './scale/Heading';
 import { DirBlur, dirBlurRef, sigmaFor } from './scale/MotionBlur';
-import { bodyOf, cardLight, FLOW_LIGHT, HERO_LIGHT, LANG_LIGHT, leadColor, litFill, rgba, tintOf } from './scale/lights';
+import { bodyOf, cardLight, FLOW_LIGHT, HERO_LIGHT, LANG_LIGHT, leadColors, litFill, rgba, tintOf } from './scale/lights';
 
 const K = SCALE_LOCAL;
 const HERO = SCALE.industriesTitle;
@@ -225,7 +235,10 @@ export const Scale: React.FC = () => {
     let z = 1;
     let face: React.ReactNode;
     // the flip's shutter blur: the card's width collapses/opens fast mid-turn
-    const flipS = Math.abs(Math.cos((flipAngle(k, t + 0.5) * Math.PI) / 180) - Math.cos((flipAngle(k, t - 0.5) * Math.PI) / 180)) * (r.w / 2);
+    // 16:9 tall columns turn about their vertical axis; 9:16 wide rows flip about the horizontal one (a split-flap)
+    const axis = v ? 'X' : 'Y';
+    const flipS = Math.abs(Math.cos((flipAngle(k, t + 0.5) * Math.PI) / 180) - Math.cos((flipAngle(k, t - 0.5) * Math.PI) / 180)) * ((v ? r.h : r.w) / 2);
+    const fs = Math.min(14, sigmaFor(flipS));
 
     if (t < HERO) {
       // the wall: the pop
@@ -240,27 +253,28 @@ export const Scale: React.FC = () => {
       const turn = tween(t, [K.langs[k] - 2, K.langs[k]], [0, 1], EASE.out3);
       opacity *= (1 - 0.6 * dim + 0.2 * up) * (1 - turn) + turn;
       const blurPx = (8 * dim - 5.5 * up) * (1 - turn);
-      const sx = Math.min(14, sigmaFor(flipS));
-      const ref = dirBlurRef(id, sx, 0);
-      if (ref) defs = <DirBlur id={id} sx={sx} sy={0} />;
+      const fx = v ? 0 : fs;
+      const fy = v ? fs : 0;
+      const ref = dirBlurRef(id, fx, fy);
+      if (ref) defs = <DirBlur id={id} sx={fx} sy={fy} />;
       filter = [ref, blurPx > 0.2 ? `blur(${(blurPx / cam.s).toFixed(2)}px)` : ''].filter(Boolean).join(' ') || undefined;
-      transform = a !== 0 ? `perspective(1600px) rotateY(${a.toFixed(3)}deg)` : undefined;
+      transform = a !== 0 ? `perspective(1600px) rotate${axis}(${a.toFixed(3)}deg)` : undefined;
       if (a > 0) z = 2;
     } else {
       // a language face (page 1 on the back, page 2 on the front again)
-      let sx = Math.min(14, sigmaFor(flipS));
-      let sy = 0;
+      let sx = v ? 0 : fs;
+      let sy = v ? fs : 0;
       // collapse / carrier flight: a directional shutter blur along the move
       if (t >= cs - 4 && t < cs + 14) {
         const r0 = keeperRect(G, k, t - 0.5);
         sx = Math.max(sx, Math.min(30, sigmaFor(centre(r).x - centre(r0).x)));
-        sy = Math.min(30, sigmaFor(centre(r).y - centre(r0).y));
+        sy = Math.max(sy, Math.min(30, sigmaFor(centre(r).y - centre(r0).y)));
       }
       const ref = dirBlurRef(id, sx, sy);
       if (ref) defs = <DirBlur id={id} sx={sx} sy={sy} />;
       filter = ref;
       const ra = a - (page === k ? 180 : 360);
-      transform = Math.abs(ra) > 0.01 ? `perspective(1600px) rotateY(${ra.toFixed(3)}deg)` : undefined;
+      transform = Math.abs(ra) > 0.01 ? `perspective(1600px) rotate${axis}(${ra.toFixed(3)}deg)` : undefined;
       const L0 = K.langs[page];
       const firstFrame = pageOf(k, flipAngle(k, t - 1)) !== page;
       // the live cell: lit from its landing until the next flip lands (or the collapse)
@@ -298,7 +312,7 @@ export const Scale: React.FC = () => {
     } else {
       const langOut = carrier
         ? tween(t, [K.carrierFly - 1, K.carrierFly + 3], [0, 1], EASE.in2)
-        : 0.75 * tween(t, [cs + 3, cs + 6], [0, 1], EASE.inOut);
+        : tween(t, [cs + 2, cs + 6], [0, 1], EASE.inOut); // the deck under THE CALL is blank stock
       const callIn = carrier ? tween(t, [K.callIn - 1, K.callIn + 2], [0, 1], EASE.out3) : 0;
       const lg = LANGS[page];
       face = (
@@ -344,6 +358,16 @@ export const Scale: React.FC = () => {
     const u = dirOf(i);
     const f = flyAt(i, o, t, u);
     if (f.q >= 0.999) return null;
+    // once a flyer (and its ghosts, which trail it) is wholly off the frame it costs nothing
+    const offScreen = (dx: number, dy: number, sc: number) => {
+      const c = centre(G.cards[i]);
+      const rr = 0.75 * Math.hypot(G.cards[i].w, G.cards[i].h) * sc * cam.s + 40;
+      const x = cam.ax + cam.s * (c.x + dx);
+      const y = cam.ay + cam.s * (c.y + dy);
+      return x + rr < 0 || x - rr > L.width || y + rr < 0 || y - rr > L.height;
+    };
+    const fg = flyAt(i, o, t - 0.7, u);
+    if (offScreen(f.x, f.y, f.sc) && offScreen(fg.x, fg.y, fg.sc)) return null;
     const id = `scale-fl-${i}`;
     const at = (tt: number) => {
       const ff = flyAt(i, o, tt, u);
@@ -430,7 +454,9 @@ export const Scale: React.FC = () => {
 
         {/* 1.6 · out-of-focus lilac discs, nearest the lens */}
         <Layer depth={1.6}>
-          <NearDiscs t={t} L={L} fade={tween(t, [0, 10], [0, 1], EASE.out3)} color={leadColor(t, 2)} />
+          {leadColors(t, 2).map((c, ci) => (
+            <NearDiscs key={ci} t={t} L={L} fade={c.w * tween(t, [0, 10], [0, 1], EASE.out3)} color={c.col} />
+          ))}
         </Layer>
       </Camera>
       </AbsoluteFill>

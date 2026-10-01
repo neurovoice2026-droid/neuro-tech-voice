@@ -89,8 +89,12 @@ const [CTA_CONVERGE0, KNOWLEDGE_LEN] = (() => {
   return [c, KB_BASE + (half - off)];
 })();
 const CTA_IMPACT = CTA_CONVERGE0 + b(2);
-/** The still end card starts when Ava's "Neuro Tech Voice." ends (≥ 3 beats after the impact). */
-const CTA_HOLD = CTA_IMPACT + Math.max(b(3), upHalf(4 + vFrames('cta-2')));
+/** Ava says the name an 8th after the impact, so its transient has cleared before "Neuro". */
+const CTA_BRAND = CTA_IMPACT + b(0.5);
+/** The button is clicked 2 f after her last word ends; the still end card follows an 8th later
+ *  (≥ 3 beats after the impact; on the half-beat grid). */
+const CTA_PRESS = CTA_BRAND + vFrames('cta-2') + 2;
+const CTA_HOLD = CTA_IMPACT + Math.max(b(3), upHalf(CTA_PRESS + b(0.5) - CTA_IMPACT));
 const CTA_LEN = CTA_HOLD + b(3); // 1.5 s final hold
 
 /**
@@ -301,12 +305,15 @@ export const CTA = {
   wordStagger: 3, // fallback stagger
   converge: [CTA_CONVERGE0, CTA_IMPACT] as const,
   logoImpact: CTA_IMPACT, // always on a strong beat (1 or 3) of the music
-  brandVoice: CTA_IMPACT + 4, // Ava: "Neuro Tech Voice."
+  brandVoice: CTA_BRAND, // Ava: "Neuro Tech Voice."
   brandVoiceId: 'cta-2' as VoiceId,
-  button: CTA_IMPACT + b(1),
-  note: CTA_IMPACT + b(1.5),
-  url: CTA_IMPACT + b(2),
-  press: CTA_IMPACT + b(2.5), // the button takes the site's hover (plum) as if clicked
+  /** "Start free →" lands with the logo, a 16th after the impact (the impact carries its sound) */
+  button: CTA_IMPACT + 4,
+  /** the URL types ON her words: "neuro" | "tech" | "voice.com" (cta-2 words 0 / 1 / 2) */
+  url: CTA_BRAND + vWord('cta-2', 0),
+  /** the note once the URL is typed (on the 8th grid, clear of "Voice." onset) */
+  note: CTA_IMPACT + Math.max(b(2), upHalf(b(0.5) + vWord('cta-2', 2) + 7)),
+  press: CTA_PRESS, // the button takes the site's hover (plum) as if clicked — after "…Voice."
   finalHold: CTA_HOLD, // from here to the end (1.5 s) nothing moves but grain
 };
 
@@ -708,8 +715,9 @@ export const CTA_LOCAL = {
   iris: [CTA_IRIS_START, CTA_IRIS_END] as const,
   /** the eyes come out of black first (frames) */
   eyes: [0, 7] as const,
-  /** radial reveal from the eyes, inside the hero window (4 → 30) */
-  reveal: [CTA.robotIn[0] + 4, CTA.robotIn[1]] as const,
+  /** radial reveal from the eyes: it blooms from 4 f before the iris is fully open and
+   *  decelerates into the figure (its lit AREA grows evenly: no dead hold, no slam) (4 → 24) */
+  reveal: [CTA_IRIS_END - 4, CTA.robotIn[1] - 6] as const,
   /** the site's liquid entry tear settles onto the figure (frames 0 → 24; liquid 0 → 18) */
   entryTear: [0, 24] as const,
   liquid: [0, 18] as const,
@@ -744,15 +752,21 @@ export const CTA_LOCAL = {
   /** dust clears before the hold */
   dustOut: [CTA.finalHold - 15, CTA.finalHold] as const,
   /** every residual (camera, springs, glows) eases to exact rest over these frames */
-  settle: [CTA.finalHold - 8, CTA.finalHold] as const,
+  settle: [Math.max(CTA.press + 3, CTA.finalHold - 8), CTA.finalHold] as const,
   /** headline word i starts its mask rise this many frames before its spoken word
    *  (CTA.line + vWord(lineVoice, lineWords[i])), so it is ~85 % up ON the word */
   riseLead: 4,
-  /** the eyes after the iris: a slow push-in (1 → 1.04) and a catch-light glint ON her first word */
-  eyePush: [CTA_IRIS_END, CTA.line + 10] as const,
+  /** the eyes out of the black: a slow push-in (1 → 1.06) from the first frame they show,
+   *  a first catch-light as the iris completes, a second ON her first word */
+  eyePush: [0, CTA.line + 10] as const,
+  glint0: [CTA_IRIS_END + 2, CTA_IRIS_END + 6] as const,
   glint: [CTA.line, CTA.line + 4] as const,
-  /** THE FOUR LIGHTS — rush, closing, sunday, night pop in on 8ths (light-chime hits) */
+  /** THE FOUR LIGHTS — rush, closing, sunday, night pop in on 8ths (each pop is the
+   *  brightest frame of its light: flash bloom, ring, sparks, camera kick) */
   orbPops: [b(2), b(2.5), b(3), b(3.5)] as const,
+  /** as the lights arrive the room's silver backlight dims (to 45 %) so they are the
+   *  brightest things in frame; it comes back ON the impact as the merged light */
+  backDim: [b(2), b(3)] as const,
   /** … and tighten their orbit ON "Twenty" "four" "seven" */
   tighten: [0, 1, 2].map((k) =>
     CTA.line + vWord(CTA.lineVoice, Math.min(CTA.lineWords[7] + k, VOICE.lines[CTA.lineVoice].words.length - 1)),
@@ -760,18 +774,24 @@ export const CTA_LOCAL = {
   /** the converge: the orbit swells (anticipation) … */
   orbSwell: [CTA.converge[0], CTA.converge[0] + 4] as const,
   /** … then spirals into P, accelerating (motion-blurred) */
-  orbIn: [CTA.converge[0] + 4, CTA.logoImpact - 2] as const,
+  orbIn: [CTA.converge[0] + 4, CTA.logoImpact - 9] as const,
   /** the orbs behind her show only where she has torn away (the shader's erase
    *  mask); this closes the last of it as the erase completes */
   unhide: [CTA.logoImpact - 9, CTA.logoImpact - 6] as const,
-  /** the four overlap and become one (the back three go as they are covered) */
-  merge: [CTA.logoImpact - 6, CTA.logoImpact - 1] as const,
+  /** the four overlap and become one: each keeps its own light until contact, then the
+   *  other three pour into the survivor (night), which takes all four hues … */
+  merge: [CTA.logoImpact - 12, CTA.logoImpact - 6] as const,
+  /** … and holds alone, 1.5×, its mesh swirling the four lights, before it bursts */
+  survivor: [CTA.logoImpact - 6, CTA.logoImpact] as const,
   /** the merged orb blows out into the light as the logo lands */
   burst: [CTA.logoImpact, CTA.logoImpact + 8] as const,
   /** the four lights' rim comes up round the halo */
   rimIn: [CTA.logoImpact + 2, CTA.logoImpact + b(1.5)] as const,
-  /** the URL types one character per this many frames, from CTA.url */
-  urlStep: 0.7,
+  /** the URL types ON her words: "neuro" | "tech" | "voice.com" start on cta-2 words 0 / 1 / 2
+   *  (first character index of each chunk, and its frame), one character per urlStep frames */
+  urlChunks: [0, 5, 9] as const,
+  urlAt: [0, 1, 2].map((k) => CTA.brandVoice + vWord(CTA.brandVoiceId, k)) as readonly number[],
+  urlStep: 0.6,
   /** the press: down to .94 over this many frames, then back on SPRING.pop */
   pressDown: 2,
 };
@@ -1276,6 +1296,7 @@ export const HITS: Hit[] = [
   H('cta', CTA_LOCAL.iris[0] + 6, 'whoosh-rev', 'none', [0.79, 0.5], 2, 'the dark iris opens'),
   H('cta', CTA_LOCAL.eyes[0], 'sub', 'night', 0.5, 2, 'her eyes out of the black'),
   H('cta', CTA_LOCAL.reveal[0], 'shimmer', 'none', 0.5, 3, 'radial reveal'),
+  H('cta', CTA_LOCAL.glint0[0], 'glint', 'night', [0.45, 0.55], 3, 'first catch-light as the iris completes'),
   H('cta', CTA_LOCAL.glint[0], 'glint', 'night', [0.4, 0.6], 3, 'catch-light on her first word'),
   ...CTA.lineWords
     .filter((w, i) => i !== 6 && i !== 7) // "customers" rises with "your"; "24/7." below
@@ -1283,7 +1304,9 @@ export const HITS: Hit[] = [
       H('cta', CTA.line + vWord(CTA.lineVoice, w) - CTA_LOCAL.riseLead, 'tap', 'none', [0.31, 0.37, 0.45, 0.55, 0.66, 0.4][i], 3, `headline word ${i + 1} rises`, { db: -4 }),
     ),
   H('cta', CTA.line + vWord(CTA.lineVoice, CTA.lineWords[7]) - CTA_LOCAL.riseLead, 'tap', 'none', 0.63, 2, '“24/7.” rises ON “Twenty”', { db: -3 }),
-  ...CTA_LOCAL.orbPops.map((f, i) => H('cta', f, chime(LIGHT_ORDER4[i]), LIGHT_ORDER4[i], [0.66, 0.71, 0.27, 0.36][i], 1, `${LIGHT_ORDER4[i].toUpperCase()} orb pops (LIGHT)`)),
+  // the four lights pop UNDER Ava's line: a short pitched pop per light (its note), no bell
+  // ring and no delay tail across "agents that book" — the picture carries the accent
+  ...CTA_LOCAL.orbPops.map((f, i) => H('cta', f, 'pop', LIGHT_ORDER4[i], [0.66, 0.71, 0.27, 0.36][i], 3, `${LIGHT_ORDER4[i].toUpperCase()} orb pops (LIGHT)`)),
   // ON “Twenty” “four” “seven”: weight, not clicks — sub kicks under the words
   ...CTA_LOCAL.tighten.map((f, i) => H('cta', f, 'thump', 'none', 0.5, 2, `the orbit tightens (“${['Twenty', 'four', 'seven'][i]}”)`, { db: -1 })),
   H('cta', CTA_LOCAL.marks, 'tick', 'none', 0.5, 3, 'four corner marks pop', { run: { n: 4, step: 2, semi: 0 } }),
@@ -1292,17 +1315,23 @@ export const HITS: Hit[] = [
   H('cta', CTA_LOCAL.collapse.from + 3, 'swish', 'none', 0.5, 3, 'headline words sucked into the core'),
   H('cta', CTA_LOCAL.orbIn[1] - 6, 'whoosh', 'none', [0.3, 0.7], 2, 'the four orbs whirl at top speed'),
   H('cta', CTA_LOCAL.eyeGlow[1], 'glint', 'night', 0.5, 3, 'the eyes’ last light slides into the core'),
+  H('cta', CTA_LOCAL.survivor[0], 'gulp', 'night', 0.5, 2, 'the four lights are one: the survivor holds alone'),
   // the four lights fuse (merge[0]) and the suck-in (impact − 4): the chord's reverse swell, peak ON the impact
   H('cta', CTA.logoImpact, 'chord-rev', 'none', 0.5, 2, 'the four lights fuse', { layer: true }),
   H('cta', CTA.logoImpact, 'impact', 'night', 0.5, 1, 'LOGO IMPACT'),
   H('cta', CTA.logoImpact, 'chord', 'night', 0.5, 1, 'THE FOUR LIGHTS ring together'),
   H('cta', CTA_LOCAL.ring[0], 'shock', 'none', 0.5, 2, 'the shockwave ring sweeps past', { layer: true }),
   H('cta', CTA_LOCAL.rimIn[0], 'shimmer', 'none', 0.5, 3, 'a rim of the four lights'),
-  H('cta', CTA.button - 3, 'glint', 'none', 0.5, 3, 'a point of light gathers'),
-  H('cta', CTA.button, 'pop', 'none', 0.5, 1, '“Start free →” pops'),
+  H('cta', CTA.button, 'pop', 'night', 0.5, 3, '“Start free →” pops with the logo (folded into the impact)'),
   H('cta', CTA.button + 1, 'sheen', 'none', [0.4, 0.6], 3, 'glint across the plate'),
   H('cta', CTA.note, 'tap', 'none', 0.5, 3, '“5 free minutes, no card”', { db: -4 }),
-  H('cta', CTA.url, 'key', 'none', 0.5, 2, 'neurotechvoice.com types', { run: { n: 18, step: CTA_LOCAL.urlStep }, db: -5 }),
+  // the URL types on her words ("neuro" | "tech" | "voice.com"): soft keys under the name
+  ...CTA_LOCAL.urlAt.map((f, k) =>
+    H('cta', f, 'key', 'none', 0.5, 3, `“${['neuro', 'tech', 'voice.com'][k]}” types on “${['Neuro', 'Tech', 'Voice.'][k]}”`, {
+      run: { n: (CTA_LOCAL.urlChunks[k + 1] ?? 18) - CTA_LOCAL.urlChunks[k], step: CTA_LOCAL.urlStep },
+      db: -6,
+    }),
+  ),
   H('cta', CTA.press, 'click', 'night', 0.5, 1, 'the button is clicked'),
   H('cta', CTA.press + CTA_LOCAL.pressDown, 'tap', 'night', 0.5, 3, 'the plate springs back'),
 ];
