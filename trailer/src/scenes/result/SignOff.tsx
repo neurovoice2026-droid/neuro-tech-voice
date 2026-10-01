@@ -15,7 +15,9 @@
  * call's designed caption exit (CallCaptions), before the card is thrown.
  *
  * Drawn by the result (the top layer from its pre-roll), so it carries over
- * the cut untouched. Result-local frames.
+ * the cut untouched; from the cut on it sits UNDER the world plane, so the
+ * calendar (9:16: rising from below onto its row) passes in front of it.
+ * Result-local frames.
  */
 import React from 'react';
 import { AbsoluteFill } from 'remotion';

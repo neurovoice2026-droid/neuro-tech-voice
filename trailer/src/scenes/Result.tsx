@@ -548,6 +548,10 @@ export const Result: React.FC = () => {
       {/* ── 1.0 / 1.05 · the titles plane, UNDER the sheet while it recomposes ── */}
       {titlesUnder ? titles : null}
 
+      {/* ── screen · Ava's "See you then!" (rides the cut, under the mark; the card lifts off
+           above it and the sheet — 9:16: rising from below — passes in front of it) ── */}
+      <SignOff t={t} />
+
       {/* ── 1.0 · the world ─────────────────────────────────────────── */}
       {S0 ? <MarkGlow x={S0.x} y={S0.y} fontSize={G.mark.fontSize} k={glowK} /> : null}
       {smear.slice(0, 2).map((s, i) => world(t - s.dt, `smear${i}`, s.op))}
@@ -620,9 +624,6 @@ export const Result: React.FC = () => {
 
       {/* ── screen · the event opens up into the white act ─────────── */}
       {openEl}
-
-      {/* ── screen · Ava's "See you then!" (rides the cut, under the mark) ── */}
-      <SignOff t={t} />
     </AbsoluteFill>
   );
 };
