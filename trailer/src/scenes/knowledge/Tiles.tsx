@@ -3,25 +3,27 @@
  * (9:16) with the site's DocBadge, the name, and the match bar with its
  * 60 % threshold tick. Each pops on its 16th (the docTicks): a 2 f inhale,
  * then scale .7 → 1.08 → 1 with the ring and shadow growing in and the
- * badge flashing 20 % brighter for 2 f. The bars fill with an overshoot and
+ * badge flashing 20 % brighter for 2 f; ON the hit a glint of Sunday light
+ * crosses the tile and an outline ring leaves its edge. While a document is
+ * read it takes a sunday-ink ring and an aqua sheen. The bars fill with an overshoot and
  * settle — to .22/.14/.10/.30/.26, none reaching the tick — the ticks blink
  * 1 → .3 → 1, and the documents step back (.55) when Ava answers.
  */
 import React from 'react';
 import { spring } from 'remotion';
+import { mixColor, rgba } from '../../lib/lights';
 import { EASE, mix, tween } from '../../lib/motion';
 import { C, FONT } from '../../theme';
-import { FPS, KNOWLEDGE, KNOWLEDGE_LOCAL } from '../../timing';
-import { BADGE, DIM, DOCS, FILL_REST, MATCH, THRESHOLD, TRACK_FILL, type Geo } from './geometry';
+import { FPS, KNOWLEDGE_LOCAL } from '../../timing';
+import { BADGE, DIM, DOCS, INK, MATCH, SUN, SUN_GLOW, THRESHOLD, TRACK_FILL, type Geo } from './geometry';
 
-const K = KNOWLEDGE;
 const KL = KNOWLEDGE_LOCAL;
 
 /** ζ ≈ .38: one 27 % overshoot, so .7 → 1.08 → 1 */
 const POP = { stiffness: 420, damping: 14.5, mass: 0.8 };
 
 /** the frame tile i pops (= its docTick cue) */
-export const popAt = (i: number) => Math.round(K.docsIn + i * K.docStep);
+export const popAt = (i: number) => KL.docPops[i];
 
 /** the pop: spring progress p (0 → ~1.27 → 1), plus the 2 f inhale before it */
 export function tilePop(t: number, i: number) {
@@ -92,7 +94,7 @@ const Bar: React.FC<{ w: number; fill: number; tick: number; cool: number }> = (
         position: 'absolute',
         inset: 0,
         borderRadius: 5,
-        background: cool > 0 ? `rgba(${Math.round(85 + 22 * cool)},${Math.round(26 + 78 * cool)},${Math.round(137 - 17 * cool)},0.3)` : FILL_REST,
+        background: rgba(mixColor(INK, '#6b6878', cool), 0.32 - 0.04 * cool),
         transformOrigin: '0 50%',
         transform: `scaleX(${Math.max(0, fill).toFixed(4)})`,
       }}
@@ -136,9 +138,11 @@ export const Tiles: React.FC<{ t: number; G: Geo; cool: number }> = ({ t, G, coo
         const rd0 = readingAt(t, i);
         const shadow = [
           rd0 > 0.01
-            ? `0 0 0 ${(1 + 1.2 * rd0).toFixed(2)}px rgba(85,26,137,${(0.07 + 0.22 * rd0).toFixed(3)})`
+            ? `0 0 0 ${(1 + 1.4 * rd0).toFixed(2)}px ${rgba(INK, 0.08 + 0.3 * rd0)}`
             : `0 0 0 ${(1 + 1.2 * extra).toFixed(2)}px rgba(24,16,40,${(0.07 * Math.min(1, k) + 0.05 * extra).toFixed(3)})`,
-          `0 ${(14 * Math.min(1.3, k) + 8 * extra).toFixed(1)}px ${(30 * Math.min(1.3, k) + 14 * extra).toFixed(1)}px -20px rgba(24,16,40,${(0.35 * Math.min(1, k)).toFixed(3)})`,
+          // the read throws a little Sunday light round the tile
+          ...(rd0 > 0.01 ? [`0 0 ${(24 * rd0).toFixed(1)}px ${rgba(SUN_GLOW.body, 0.22 * rd0)}`] : []),
+          `0 ${(14 * Math.min(1.3, k) + 8 * extra).toFixed(1)}px ${(30 * Math.min(1.3, k) + 14 * extra).toFixed(1)}px -20px ${rgba(SUN.orb[0], 0.32 * Math.min(1, k))}`,
         ].join(', ');
         const flash = t >= popAt(i) && t < popAt(i) + 2 ? 1 : 0;
         // shutter: the pop's first frames smear with the size change
@@ -150,6 +154,12 @@ export const Tiles: React.FC<{ t: number; G: Geo; cool: number }> = ({ t, G, coo
         const rd = readingAt(t, i);
         const [f0, step] = KL.fills;
         const sheenQ = tween(t, [f0 + i * step - 3, f0 + i * step + 11], [0, 1], EASE.inOut);
+        // ON the hit: a glint of light crosses the tile (fast, power3.out) and a ring leaves its edge
+        const hit = popAt(i);
+        const glintQ = tween(t, [hit, hit + 8], [0, 1], EASE.out3);
+        const ringQ = tween(t, [hit + 1, hit + 12], [0, 1], EASE.out3);
+        const ringO = t > hit && ringQ < 1 ? 0.55 * (1 - ringQ) : 0;
+        const ringK = 4 + 18 * ringQ;
         return (
           <div
             key={d.name}
@@ -167,19 +177,45 @@ export const Tiles: React.FC<{ t: number; G: Geo; cool: number }> = ({ t, G, coo
               filter: smear > 0.3 ? `blur(${smear.toFixed(2)}px)` : undefined,
             }}
           >
-            {sheenQ > 0 && sheenQ < 1 ? (
+            {ringO > 0 ? (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: -ringK,
+                  borderRadius: 21.6 + ringK,
+                  boxShadow: `inset 0 0 0 1.5px ${rgba(SUN.orb[2], ringO)}`,
+                  pointerEvents: 'none',
+                }}
+              />
+            ) : null}
+            {(sheenQ > 0 && sheenQ < 1) || (glintQ > 0 && glintQ < 1) ? (
               <div style={{ position: 'absolute', inset: 0, borderRadius: 21.6, overflow: 'hidden', pointerEvents: 'none' }}>
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: -40,
-                    bottom: -40,
-                    width: 160,
-                    left: -200 + sheenQ * (r.w + 240),
-                    transform: 'rotate(18deg)',
-                    background: `linear-gradient(90deg, rgba(185,163,255,0), rgba(185,163,255,${(0.22 * Math.max(0.2, rd)).toFixed(3)}), rgba(185,163,255,0))`,
-                  }}
-                />
+                {glintQ > 0 && glintQ < 1 ? (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: -60,
+                      bottom: -60,
+                      width: 90,
+                      left: -140 + glintQ * (r.w + 200),
+                      transform: 'rotate(20deg)',
+                      background: `linear-gradient(90deg, ${rgba(SUN_GLOW.core, 0)}, ${rgba(SUN_GLOW.core, 0.75 * (1 - glintQ * 0.5))}, ${rgba('#ffffff', 0.9 * (1 - glintQ * 0.5))} 50%, ${rgba(SUN_GLOW.core, 0.75 * (1 - glintQ * 0.5))}, ${rgba(SUN_GLOW.core, 0)})`,
+                    }}
+                  />
+                ) : null}
+                {sheenQ > 0 && sheenQ < 1 ? (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: -40,
+                      bottom: -40,
+                      width: 160,
+                      left: -200 + sheenQ * (r.w + 240),
+                      transform: 'rotate(18deg)',
+                      background: `linear-gradient(90deg, ${rgba(SUN_GLOW.core, 0)}, ${rgba(SUN_GLOW.core, 0.5 * Math.max(0.2, rd))}, ${rgba(SUN_GLOW.core, 0)})`,
+                    }}
+                  />
+                ) : null}
               </div>
             ) : null}
             {S.kind === 'tile' ? (

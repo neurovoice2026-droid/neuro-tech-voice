@@ -8,7 +8,6 @@
  */
 import React from 'react';
 import { EASE, tween } from '../../lib/motion';
-import { TW } from './geometry';
 
 const WAVE = '185,163,255';
 const LIFE = 28.5;
@@ -64,20 +63,27 @@ export const Rings: React.FC<{
 };
 
 /**
- * The third burst (TWIST_LOCAL.ring3): a faint, tight ring that leaves the
- * avatar as the dive lands — 1.5 px lilac, 40 % → 0, 1× → 2.6× the orb's
- * diameter, power3.out — so the screen is never empty before the pickup
- * (whose ring, ON the cut, is the call's). Two sub-frame copies while it is
- * fast: a smear, not a comb.
+ * A single tight ring burst off the avatar over [a, b]: `w` px lilac,
+ * `op` → 0, 1× → `to`× the orb's diameter, power3.out. Two sub-frame copies
+ * while it is fast: a smear, not a comb. Used for
+ *   ring3     (TWIST_LOCAL.ring3)    1.5 px, 40 %, → 2.6× — the screen is never
+ *             empty before the pickup (whose ring, ON the cut, is the call's)
+ *   avatarPop (TWIST_LOCAL.avatarPop) the orb's pop onto the lit screen
  */
-export const Ring3: React.FC<{ t: number; orbAt: (t: number) => { x: number; y: number; d: number } }> = ({ t, orbAt }) => {
-  const [a, b] = TW.ring3;
+export const Burst: React.FC<{
+  t: number;
+  span: readonly [number, number];
+  orbAt: (t: number) => { x: number; y: number; d: number };
+  to: number;
+  op: number;
+  w?: number;
+}> = ({ t, span: [a, b], orbAt, to, op: op0, w = 1.5 }) => {
   if (t < a || t > b) return null;
   const at = (tt: number) => {
     const u = Math.min(1, Math.max(0, (tt - a) / (b - a)));
     const e = EASE.out3(u);
     const o = orbAt(tt);
-    return { x: o.x, y: o.y, d: o.d * (1 + 1.6 * e), op: 0.4 * (1 - e) * tween(tt, [a, a + 1], [0, 1], EASE.out3) };
+    return { x: o.x, y: o.y, d: o.d * (1 + (to - 1) * e), op: op0 * (1 - e) * tween(tt, [a, a + 1], [0, 1], EASE.out3) };
   };
   const r = at(t);
   const speed = Math.abs(r.d - at(t - 0.5).d) * 2;
@@ -92,7 +98,7 @@ export const Ring3: React.FC<{ t: number; orbAt: (t: number) => { x: number; y: 
         width: c.d,
         height: c.d,
         borderRadius: '50%',
-        border: `1.5px solid rgb(${WAVE})`,
+        border: `${w}px solid rgb(${WAVE})`,
         boxShadow: `0 0 16px rgba(${WAVE},0.22), inset 0 0 16px rgba(${WAVE},0.12)`,
         boxSizing: 'border-box',
         opacity: Math.min(1, o),

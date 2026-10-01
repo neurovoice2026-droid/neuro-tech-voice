@@ -14,12 +14,11 @@
  */
 import React from 'react';
 import { Orb } from '../../components/Orb';
+import { bloom, rgba, rimGlow, ring as waveRing, type Glow } from '../../lib/lights';
 import { EASE, tween } from '../../lib/motion';
 import { ORB_RIM } from '../../lib/pickup';
-import { CLOCK_FILL, FONT, ORB } from '../../theme';
+import { CLOCK_FILL, FONT, LIGHTS } from '../../theme';
 
-const WAVE = '185,163,255';
-const ELECTRIC = '124,58,237';
 const RING_LIFE = 28.5; // 0.95 s
 
 /** power2.out */
@@ -120,8 +119,11 @@ export const Digits: React.FC<{
 };
 
 /**
- * Ava's orb, on screen. `base` is the canvas size (the largest the orb ever
- * gets, so it is never upscaled); every framing is a transform of it.
+ * Ava's orb, on screen — the scene's KEY LIGHT. `base` is the canvas size
+ * (the largest the orb ever gets, so it is never upscaled); every framing is
+ * a transform of it. Its halo is a gaussian pool of its own light (violet
+ * while Ava speaks, caller blue while the caller does: `glow`), its rim the
+ * four-light rimGlow, its rings the night `wave`.
  */
 export const OrbStage: React.FC<{
   t: number;
@@ -143,15 +145,19 @@ export const OrbStage: React.FC<{
   phraseRings?: readonly number[];
   /** 0..1 the syllable follower of her voice: the light she gives off */
   light?: number;
-  /** frame the orb swallows the big line: a tight, quick electric ping off its rim */
+  /** frame the orb swallows the big line: a tight, quick ping off its rim */
   gulp: number;
   /** 0..1 the rim/halo come up over the twist's orb (the room's cross-fade) */
   rimIn: number;
-}> = ({ t, base, orb, orbAt, volume, flow, listen, rim, dress, dof, ringStarts, phraseRings = [], light = 0, gulp, rimIn }) => {
+  /** the light's colours now (follows the orb's palette) */
+  glow: Glow;
+  /** 0..1+ a hit's extra light (pickup, gulp): the halo flares */
+  flash?: number;
+}> = ({ t, base, orb, orbAt, volume, flow, listen, rim, dress, dof, ringStarts, phraseRings = [], light = 0, gulp, rimIn, glow, flash = 0 }) => {
   const { x, y, d } = orb;
   const lvl = Math.max(0, (volume - 0.12) / 0.7);
 
-  /* ── rings ─────────────────────────────────────────────────────── */
+  /* ── rings (the night `wave`) ───────────────────────────────────── */
   const ringAt = (tt: number, start: number) => {
     const o = orbAt(tt);
     const u = Math.min(1, Math.max(0, (tt - start) / RING_LIFE));
@@ -180,8 +186,8 @@ export const OrbStage: React.FC<{
           width: c.d,
           height: c.d,
           borderRadius: '50%',
-          border: `2px solid rgba(${WAVE},0.9)`,
-          boxShadow: `0 0 22px rgba(${WAVE},0.16), inset 0 0 22px rgba(${WAVE},0.12)`,
+          border: `2px solid ${waveRing('night', 0.9)}`,
+          boxShadow: `0 0 22px ${waveRing('night', 0.16)}, inset 0 0 22px ${waveRing('night', 0.12)}`,
           boxSizing: 'border-box',
           opacity: Math.min(1, o),
         }}
@@ -205,33 +211,24 @@ export const OrbStage: React.FC<{
           width: gd,
           height: gd,
           borderRadius: '50%',
-          boxShadow: `inset 0 0 0 ${(3 - 2 * e).toFixed(2)}px rgba(${WAVE},0.95), 0 0 ${(18 * (1 - e)).toFixed(1)}px rgba(${ELECTRIC},0.5)`,
+          boxShadow: `inset 0 0 0 ${(3 - 2 * e).toFixed(2)}px ${waveRing('night', 0.95)}, 0 0 ${(18 * (1 - e)).toFixed(1)}px ${rgba(glow.body, 0.5)}`,
           opacity: 0.85 * (1 - e) * tween(t, [gulp, gulp + 1], [0, 1], EASE.out3),
         }}
       />,
     );
   }
 
-  const halo = d * (3.2 + lvl * 0.4 + light * 0.3);
+  // the halo: a pool of the orb's own light, hugging it (the room's wide spill is <KeyLight>)
+  const halo = d * (2.2 + lvl * 0.2 + light * 0.2 + 0.4 * flash);
+  const haloK = dress * (0.55 + 0.25 * lvl + 0.4 * light) + 0.9 * flash;
   const k = d / base;
-  return (
-    <>
-      {/* the orb's light around it, then the rings */}
+  // the rim: the pickup's ORB_RIM (= the twist's, so the cross-fade over the twist is exact) hands
+  // over to the four-light rimGlow in the orb's current colour as the room dresses
+  const spread = 1 + 1.2 * lvl;
+  const rimBox = (shadow: string, op: number, key: string) =>
+    op <= 0.002 ? null : (
       <div
-        style={{
-          position: 'absolute',
-          left: x - halo / 2,
-          top: y - halo / 2,
-          width: halo,
-          height: halo,
-          borderRadius: '50%',
-          background: `radial-gradient(closest-side, rgba(${ELECTRIC},${(0.32 + 0.2 * lvl + 0.42 * light).toFixed(3)}) 0%, rgba(${ELECTRIC},${(0.1 + 0.08 * lvl + 0.18 * light).toFixed(3)}) 45%, rgba(${ELECTRIC},0) 100%)`,
-          opacity: dress,
-        }}
-      />
-      {rings}
-      {/* rim light + contact shadow (screen space, so it is never scaled) */}
-      <div
+        key={key}
         style={{
           position: 'absolute',
           left: x - d / 2,
@@ -239,11 +236,32 @@ export const OrbStage: React.FC<{
           width: d,
           height: d,
           borderRadius: '50%',
-          boxShadow: ORB_RIM(rim, 1 + 1.2 * lvl),
-          opacity: rimIn,
+          boxShadow: shadow,
+          opacity: op,
           filter: dof > 0.1 ? `blur(${dof.toFixed(2)}px)` : undefined,
         }}
       />
+    );
+  return (
+    <>
+      {/* the orb's light around it, then the rings */}
+      {haloK > 0.003 ? (
+        <div
+          style={{
+            position: 'absolute',
+            left: x - halo / 2,
+            top: y - halo / 2,
+            width: halo,
+            height: halo,
+            background: bloom(glow, haloK, { core: 0.55, coreSize: 0.5 }),
+            mixBlendMode: 'screen',
+          }}
+        />
+      ) : null}
+      {rings}
+      {/* rim light + contact shadow (screen space, so it is never scaled) */}
+      {rimBox(ORB_RIM(rim, spread), rimIn * (1 - dress), 'rim0')}
+      {rimBox(rimGlow(glow, Math.min(1, rim), (d / 400) * spread, { shadow: 1 }), rimIn * dress, 'rim1')}
       {/* the orb: one canvas, framed by transform only */}
       <div
         style={{
@@ -258,7 +276,15 @@ export const OrbStage: React.FC<{
           filter: dof > 0.1 ? `blur(${(dof / k).toFixed(2)}px)` : undefined,
         }}
       >
-        <Orb size={base} palette={ORB.ink} paletteB={ORB.listen} mixB={listen} volume={volume} time={flow} resolution={1.25} />
+        <Orb
+          size={base}
+          palette={LIGHTS.night.orb}
+          paletteB={LIGHTS.night.listen}
+          mixB={listen}
+          volume={volume}
+          time={flow}
+          resolution={1.25}
+        />
       </div>
     </>
   );

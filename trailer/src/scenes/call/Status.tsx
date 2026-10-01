@@ -9,8 +9,10 @@
 import React from 'react';
 import { Easing } from 'remotion';
 import { Words } from '../../components/Type';
-import { aos, EASE, SPRING, springAt, tween } from '../../lib/motion';
+import { inkFor, rgba, textGlow } from '../../lib/lights';
+import { aos, EASE, mixHex, SPRING, tween } from '../../lib/motion';
 import { C, FONT, TRACK } from '../../theme';
+import { glintBg } from './Accents';
 
 /** Per-letter rise + blur-in for small uppercase labels. */
 export const Letters: React.FC<{
@@ -55,11 +57,26 @@ export const ClosedSign: React.FC<{
   /** peel speed (0..1 per frame) for a horizontal smear */
   peelSpeed: number;
 }> = ({ t, cx, cy, start, fontSize, peel, peelSpeed }) => {
-  if (t < start - 3 || peel >= 1) return null;
-  const swing = springAt(t, start, SPRING.land);
-  const signOp = tween(t, [start - 1, start + 4], [0, 1], EASE.out3);
-  const ring = tween(t, [start, start + 8], [0, 1], EASE.house);
-  const smear = Math.min(24, peelSpeed * 700 * 0.12);
+  if (t < start - 5 || peel >= 1) return null;
+  /* the swing, keyed: it drops in hanging (−16°), lifts a little further back (−19°, the
+   * anticipation), swings down and SEATS on `start` (0°, the hit), overshoots +5° and
+   * settles in two dying swings (≈ 12 f) */
+  const u = t - start;
+  const rot =
+    u < -2
+      ? -16 - 3 * EASE.inOut((u + 5) / 3)
+      : u < 0
+        ? -19 * (1 - EASE.in2((u + 2) / 2))
+        : 8 * Math.exp(-u / 3.5) * Math.sin((Math.PI * u) / 4);
+  const drop = u < -2 ? -26 + 8 * EASE.out3((u + 5) / 3) : u < 0 ? -18 * (1 - EASE.in2((u + 2) / 2)) : 0;
+  const signOp = tween(t, [start - 5, start - 2], [0, 1], EASE.out3);
+  // ON the seat: the outline flashes and settles, a ring leaves the pill, a glint crosses it
+  const flash = u < 0 ? 0 : Math.exp(-u / 4);
+  const ringE = u < 0 || u > 12 ? -1 : EASE.out3(u / 12);
+  const glint = glintBg(tween(t, [start, start + 10], [0, 1], EASE.inOut), 0.28);
+  const smear = Math.min(24, Math.abs(peelSpeed) * 700 * 0.12);
+  const away = Math.max(0, peel);
+  const H = Math.round(fontSize * 2.1);
   return (
     <div
       style={{
@@ -67,8 +84,8 @@ export const ClosedSign: React.FC<{
         left: cx + 700 * peel,
         top: cy,
         transform: 'translate(-50%, -50%)',
-        opacity: 1 - peel,
-        filter: peel > 0.005 ? `blur(${(14 * peel).toFixed(2)}px)` : undefined,
+        opacity: 1 - away,
+        filter: away > 0.005 ? `blur(${(14 * away).toFixed(2)}px)` : undefined,
       }}
     >
       {smear > 0.5 ? (
@@ -83,23 +100,50 @@ export const ClosedSign: React.FC<{
       {/* the door sign, night: transparent, inset ring rgb(237 236 241 / .4) */}
       <div
         style={{
-          height: Math.round(fontSize * 2.1),
+          position: 'relative',
+          height: H,
           padding: `0 ${Math.round(fontSize * 0.86)}px 0 ${Math.round(fontSize)}px`,
           borderRadius: 9999,
           display: 'flex',
           alignItems: 'center',
-          boxShadow: `inset 0 0 0 1.5px rgba(237,236,241,${(0.4 * ring).toFixed(3)}), 0 12px 30px -14px rgba(8,6,28,0.8)`,
+          background: `rgba(237,236,241,${(0.03 + 0.07 * flash).toFixed(3)})`,
+          boxShadow:
+            `inset 0 0 0 1.5px rgba(237,236,241,${(0.4 + 0.45 * flash).toFixed(3)}), 0 14px 30px -14px rgba(2,3,14,0.9)` +
+            (flash > 0.02 ? `, 0 0 ${(24 * flash).toFixed(1)}px rgba(196,168,255,${(0.35 * flash).toFixed(3)})` : ''),
           transformOrigin: '50% 0%',
-          transform: `rotate(${(8 * (1 - swing)).toFixed(3)}deg) translateY(${((1 - Math.min(1, swing)) * -6).toFixed(2)}px)`,
+          transform: `translateY(${drop.toFixed(2)}px) rotate(${rot.toFixed(3)}deg)`,
           opacity: signOp,
           filter: smear > 0.5 ? 'url(#call-closed-smear)' : undefined,
         }}
       >
+        {glint ? (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              borderRadius: 9999,
+              backgroundImage: glint.layer,
+              backgroundSize: glint.size,
+              backgroundPosition: glint.pos,
+              backgroundRepeat: 'no-repeat',
+            }}
+          />
+        ) : null}
+        {ringE >= 0 ? (
+          <div
+            style={{
+              position: 'absolute',
+              inset: -(0.32 * H) * ringE,
+              borderRadius: 9999,
+              boxShadow: `inset 0 0 0 ${(1.5 * (1 - 0.4 * ringE)).toFixed(2)}px rgba(196,168,255,${(0.75 * (1 - ringE)).toFixed(3)})`,
+            }}
+          />
+        ) : null}
         <Letters
           text="CLOSED"
           t={t}
-          start={start + 1}
-          step={1}
+          start={start - 4}
+          step={0.8}
           style={{
             fontFamily: FONT.body,
             fontWeight: 600,
@@ -158,15 +202,25 @@ export function flightAt(t: number, o: FlightOpts): Flight {
   return { x: o.x0, y, s, v, q, op };
 }
 
+/** the line's key phrase, in the night's lit ink (lilac on the dark) */
+const KEY = 'first ring.';
+const KEY_INK = inkFor('night', 'dark');
+
 export const PickupLine: React.FC<{
   t: number;
   text: string;
   fontSize: number;
   boxW: number;
   flight: (t: number) => Flight;
-}> = ({ t, text, fontSize, boxW, flight }) => {
+  /** the key phrase ("first ring.") eases to the night's lit ink from here */
+  keyAt: number;
+  /** a light sweep crosses the line, word by word, from here (on the beat) */
+  glintAt: number;
+}> = ({ t, text, fontSize, boxW, flight, keyAt, glintAt }) => {
   const f = flight(t);
   if (f.op <= 0.003) return null;
+  const words = text.split(' ');
+  const keyFrom = words.length - KEY.split(' ').length;
   const speed = Math.abs(f.v);
   // one vertical-only gaussian, capped (screen σ ≤ 7 px), set in the line's own
   // (scaled) space; plus a slight stretch along the path — no ghost copies
@@ -196,7 +250,38 @@ export const PickupLine: React.FC<{
           filter: sigmaScreen > 0.4 ? 'url(#call-vblur)' : undefined,
         }}
       >
-        <Words text={text} start={0} stagger={1.5} frame={t} config={SPRING.pop} style={{ fontSize }} color={C.paper} />
+        <Words
+          text={text}
+          start={0}
+          stagger={1.5}
+          frame={t}
+          config={SPRING.pop}
+          style={{ fontSize, textShadow: textGlow('night', 0.22) }}
+          color={C.paper}
+          keys={[{ text: KEY, color: KEY_INK, at: keyAt }]}
+          wordStyle={(i) => {
+            // the glint: one bright band crossing each word in turn (≈ 2.5 f apart), over its own ink
+            const n = words.length;
+            const p = tween(t, [glintAt, glintAt + 14], [0, 1], EASE.inOut) * (n + 1.6) - i;
+            const pp = Math.min(1, Math.max(0, p / 1.6));
+            const g = glintBg(pp, 0.95, 100);
+            if (!g) return undefined;
+            const key = tween(t, [keyAt, keyAt + 18], [0, 1], EASE.house);
+            // the band passes over a slightly lowered ink, and the word's own glow flares with it
+            const ink = mixHex(i >= keyFrom ? mixHex(C.paper, KEY_INK, key) : C.paper, i >= keyFrom ? '#8d74d6' : '#a49dc4', 0.35 * Math.sin(Math.PI * pp));
+            const flare = Math.sin(Math.PI * pp);
+            return {
+              textShadow: `0 0 ${(14 + 16 * flare).toFixed(1)}px ${rgba(KEY_INK, 0.2 + 0.55 * flare)}`,
+              backgroundImage: `${g.layer}, linear-gradient(${ink}, ${ink})`,
+              backgroundSize: `${g.size}, 100% 100%`,
+              backgroundPosition: `${g.pos}, 0 0`,
+              backgroundRepeat: 'no-repeat',
+              WebkitBackgroundClip: 'text',
+              backgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            };
+          }}
+        />
       </div>
     </>
   );

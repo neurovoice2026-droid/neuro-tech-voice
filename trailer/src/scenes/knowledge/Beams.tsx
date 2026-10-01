@@ -1,14 +1,16 @@
 /**
  * The beams (knowledge-stage.tsx <svg>): dotted cubics from every document
  * into the reader. Each draws through a mask (pathLength 1, EASE.draw, 2 f
- * apart) with a small plum head riding its front; the dots then stream
+ * apart) with a small head of Sunday light riding its front (a sunday-ink
+ * dot in an aqua halo); the dots then stream
  * toward the orb (dash offset). On the miss the stream slows to a stop and
  * the beams fall back to .15.
  */
 import React from 'react';
+import { rgba } from '../../lib/lights';
 import { EASE, mix, tween } from '../../lib/motion';
 import { KNOWLEDGE, KNOWLEDGE_LOCAL } from '../../timing';
-import { ACCENT, BEAM_INK, BEAM_MISS, cubicAt, type Geo } from './geometry';
+import { ACCENT, BEAM_INK, BEAM_MISS, cubicAt, SUN_GLOW, type Geo } from './geometry';
 
 const K = KNOWLEDGE;
 const KL = KNOWLEDGE_LOCAL;
@@ -66,7 +68,8 @@ export const Beams: React.FC<{ t: number; G: Geo; uid: string }> = ({ t, G, uid 
             />
             {head ? (
               <>
-                <circle cx={head.x} cy={head.y} r={11} fill={`rgba(124,58,237,${(0.14 * headO).toFixed(3)})`} />
+                <circle cx={head.x} cy={head.y} r={16} fill={rgba(SUN_GLOW.body, 0.12 * headO)} />
+                <circle cx={head.x} cy={head.y} r={9} fill={rgba(SUN_GLOW.core, 0.5 * headO)} />
                 <circle cx={head.x} cy={head.y} r={4.5} fill={ACCENT} opacity={headO} />
               </>
             ) : null}

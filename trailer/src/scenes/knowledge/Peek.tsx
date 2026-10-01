@@ -7,9 +7,10 @@
  * the pill already says it in words.
  */
 import React from 'react';
+import { rgba } from '../../lib/lights';
 import { aos, EASE, SPRING, tween } from '../../lib/motion';
 import { KNOWLEDGE, KNOWLEDGE_LOCAL } from '../../timing';
-import type { Geo } from './geometry';
+import { SUN, type Geo } from './geometry';
 
 const K = KNOWLEDGE;
 const KL = KNOWLEDGE_LOCAL;
@@ -17,7 +18,7 @@ const KL = KNOWLEDGE_LOCAL;
 export const Peek: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
   const P = G.peek;
   if (!P) return null;
-  const openAt = K.scan[0] - 5;
+  const openAt = KL.peekOpen;
   if (t < openAt) return null;
   const clip = tween(t, [openAt, openAt + 9], [100, 0], EASE.out3);
   const settle = aos(t, openAt, { anticip: 0, depth: 0, config: SPRING.site });
@@ -44,12 +45,29 @@ export const Peek: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
         width: P.w,
         height: P.h,
         borderRadius: 20,
-        border: '2px dashed rgba(24,16,40,0.14)',
+        border: `2px dashed ${rgba(SUN.orb[0], 0.16)}`,
+        background: rgba('#ffffff', 0.35),
         boxSizing: 'border-box',
         clipPath: `inset(0% 0% ${clip.toFixed(2)}% 0% round 20px)`,
         transform: `scale(${sc.toFixed(4)})`,
       }}
     >
+      {/* the reveal edge: a scan line of Sunday light running down as the page opens */}
+      {clip > 0.5 ? (
+        <div
+          style={{
+            position: 'absolute',
+            left: 8,
+            right: 8,
+            top: `calc(${(100 - clip).toFixed(2)}% - 3px)`,
+            height: 3,
+            borderRadius: 2,
+            background: `linear-gradient(90deg, ${rgba(SUN.orb[2], 0)}, ${rgba(SUN.orb[2], 0.9)} 30%, ${rgba(SUN.orb[3], 1)} 50%, ${rgba(SUN.orb[2], 0.9)} 70%, ${rgba(SUN.orb[2], 0)})`,
+            boxShadow: `0 0 14px 2px ${rgba(SUN.orb[2], 0.45)}`,
+            opacity: Math.min(1, clip / 30),
+          }}
+        />
+      ) : null}
       {bars.map((b, i) => {
         const c0 = KL.peekCollapse[0] + i * 2;
         const q = tween(t, [c0, c0 + 6], [0, 1], EASE.in2);
@@ -85,7 +103,7 @@ export const Peek: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
                   bottom: 0,
                   left: gx,
                   width: band,
-                  background: 'linear-gradient(90deg, rgba(124,58,237,0), rgba(124,58,237,0.16), rgba(124,58,237,0))',
+                  background: `linear-gradient(90deg, ${rgba(SUN.orb[2], 0)}, ${rgba(SUN.orb[2], 0.3)}, ${rgba(SUN.orb[2], 0)})`,
                 }}
               />
             ) : null}

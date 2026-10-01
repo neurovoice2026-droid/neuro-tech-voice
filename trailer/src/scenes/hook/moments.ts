@@ -23,7 +23,11 @@ export const MOMENTS: readonly Moment[] = [
   { id: 'night', digits: [0, 3, 1, 2], label: 'Tuesday night' }, // Tuesday 03:12
 ];
 
-const hexes = (g: string) => g.match(/#[0-9a-f]{6}/gi) ?? [];
+/** The hex colours of a CSS gradient, padded with the last one (or paper) to `n`. */
+const hexes = (g: string, n: number): string[] => {
+  const h = g.match(/#[0-9a-f]{6}/gi) ?? [];
+  return Array.from({ length: n }, (_, i) => h[Math.min(i, h.length - 1)] ?? '#f7f3ff');
+};
 
 /**
  * The figures' fill ON THE DARK, as three stops (0 %, 55 %, 100 %).
@@ -36,12 +40,12 @@ const hexes = (g: string) => g.match(/#[0-9a-f]{6}/gi) ?? [];
 export function numStops(id: LightId): [string, string, string] {
   const L = LIGHTS[id];
   if (L.tone === 'night') {
-    const h = hexes(L.num);
-    return [h[0], h[1], h[2]];
+    const [a, b, c] = hexes(L.num, 3);
+    return [a!, b!, c!];
   }
-  const o = L.orb;
-  const ink = hexes(L.num)[0];
-  return [mixColor(o[4], o[3], 0.2), mixColor(o[3], ink, 0.12), mixColor(o[3], ink, 0.62)];
+  const [o3, o4] = [L.orb[3] ?? '#f7f3ff', L.orb[4] ?? '#ffffff'];
+  const [ink] = hexes(L.num, 1);
+  return [mixColor(o4, o3, 0.2), mixColor(o3, ink!, 0.12), mixColor(o3, ink!, 0.62)];
 }
 
 export const NUM_STOPS: Record<LightId, [string, string, string]> = {

@@ -24,32 +24,24 @@ import { Vignette } from '../components/Grain';
 import { Orb, flowTime } from '../components/Orb';
 import { CALL_ORB_START, HOOK_LINE } from '../lib/handoff';
 import { useLayout } from '../lib/layout';
-import { aos, breathe, EASE, SPRING, tween } from '../lib/motion';
-import { ORB_RIM, PICKUP_GLOW, pickupGlow, pickupRimSpread, pickupScale } from '../lib/pickup';
+import { aos, EASE, SPRING, tween } from '../lib/motion';
+import { ORB_RIM, PICKUP_GLOW, pickupGlow, pickupRimSpread } from '../lib/pickup';
 import { useSceneFrame } from '../lib/scene';
 import { ORB } from '../theme';
 import { CALL_LOCAL, SCENES, TWIST } from '../timing';
 import { orbBase } from './call/shots';
 import { BokehPlane, bokehPlanes } from './twist/Bokeh';
 import { Door } from './twist/Door';
-import { avatarOnPhone, buzz, camAt, layerXf, project, twistGeo, TW, xfCss, type LayerXf } from './twist/geometry';
+import { buzz, camAt, layerXf, project, twistGeo, TW, xfCss, type LayerXf } from './twist/geometry';
 import { useDisplayFontReady, useTextLayout } from './twist/measure';
 import { Phone, screenState } from './twist/Phone';
-import { Ring3, Rings } from './twist/Rings';
-import { callOrbAt, callRimAt, orbFlowVolume, orbListen, orbShaderVolume, TP } from './twist/handover';
+import { Burst, Rings } from './twist/Rings';
+import { avatarAt, callRimAt, orbFlowVolume, orbListen, orbShaderVolume, TP } from './twist/handover';
 import { buildShards, Shards } from './twist/Shards';
 
 const K = { bg: 0.2, mid: 0.6, text: 1, dust: 1.4 };
 const G0 = SCENES.twist.from; // global = twist-local + G0
 
-/** One breath before the pickup squash: +2 % on a 2-beat sine, windowed (sin²)
- *  so it leaves and returns to rest with zero speed — the squash takes over from rest. */
-const breath = (tt: number) => {
-  const [a, b] = TW.breath;
-  if (tt <= a || tt >= b) return 0;
-  const w = Math.sin((Math.PI * (tt - a)) / (b - a)) ** 2;
-  return breathe(tt, 30, 0.02, Math.PI) * w;
-};
 
 const LayerX: React.FC<{ x: LayerXf; children: React.ReactNode; style?: React.CSSProperties }> = ({
   x,
@@ -108,24 +100,9 @@ export const Twist: React.FC = () => {
    * On the phone it rides the phone plane; over orbLock it settles onto
    * CALL_ORB_START; from the call's roomIn it IS the call's orb (handover.ts). */
   const O = CALL_ORB_START(L);
-  const orbAt = (tt: number) => {
-    if (tt >= TP + CALL_LOCAL.roomIn[0]) return callOrbAt(tt - TP, L);
-    const x = layerXf(camAt(tt, g), K.mid);
-    const p = project(x, L, g.phone.cx, g.phone.cy);
-    const bz = buzz(tt, x.f);
-    const pop = Math.max(0, aos(tt, TWIST.phoneOn + 3, { anticip: 0, depth: 0, config: SPRING.pop }));
-    const lock = tween(tt, TW.orbLock, [0, 1], EASE.inOut);
-    const px = p.x + bz.x;
-    const py = p.y + bz.y;
-    const d0 = avatarOnPhone(tt, g) * x.f * pop;
-    return {
-      x: px + (O.x - px) * lock,
-      y: py + (O.y - py) * lock,
-      d: (d0 + (O.d - d0) * lock) * (1 + breath(tt)) * pickupScale(tt + G0),
-    };
-  };
+  const orbAt = (tt: number) => avatarAt(tt, g, L);
   const orb = orbAt(t);
-  const orbOpacity = tween(t, [TWIST.phoneOn + 3, TWIST.phoneOn + 7], [0, 1], EASE.out3);
+  const orbOpacity = tween(t, [TW.avatarPop, TW.avatarPop + 4], [0, 1], EASE.out3);
   const orbVol = orbShaderVolume(t);
   const orbFlow = flowTime(Math.max(0, Math.round(t + 8)), orbFlowVolume);
   // the call's canvas (orbBase at 1.25, framed by transform) once the orb is big —
@@ -287,8 +264,9 @@ export const Twist: React.FC = () => {
           reach={(tt) => L.pick(640, 540) * layerXf(camAt(tt, g), K.mid).f}
           fade={1 - tween(t, [TWIST.pushToPhone[1] - 8, TWIST.pushToPhone[1]], [0, 1], EASE.inOut)}
         />
-        <Ring3 t={t} orbAt={orbAt} />
-        {t >= TWIST.phoneOn + 3 && orb.d > 0.5 ? (
+        <Burst t={t} span={[TW.avatarPop, TW.avatarPop + 10]} orbAt={orbAt} to={2.2} op={0.55} />
+        <Burst t={t} span={TW.ring3} orbAt={orbAt} to={2.6} op={0.4} />
+        {t >= TW.avatarPop && orb.d > 0.5 ? (
           <>
             {dress > 0.005 ? (
               <>

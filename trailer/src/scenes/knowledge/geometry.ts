@@ -4,18 +4,40 @@
  * Space only; every moment lives in timing.ts (KNOWLEDGE / KNOWLEDGE_LOCAL).
  */
 import type { Layout } from '../../lib/layout';
+import { GLOW, rgba } from '../../lib/lights';
+import { LIGHTS, MUTED_MESH } from '../../theme';
 
 export type Rect = { x: number; y: number; w: number; h: number };
 
+/* ── THE SUNDAY LIGHT ───────────────────────────────────────────
+ * This second call comes in on a Sunday, so the room wears #demo's Sunday
+ * (palettes.ts MOMENT_LIGHTS.sunday): the aqua ground, the teal orb (its
+ * `listen` twin while the caller asks), the site's sunday ink wherever the
+ * #knowledge stage sets violet. Lights are light: grounds, blooms, rims. */
+export const SUN = LIGHTS.sunday;
+/** sunday ink (#0e7490): key phrases, the eyebrow, live dots, beam heads */
+export const INK = SUN.ink;
+/** the light's two glow colours: body #22b8cf, core #a5eaf5 */
+export const SUN_GLOW = GLOW.sunday;
+/** the caller's light (the `listen` orb's middle) */
+export const LISTEN_GLOW = { body: SUN.listen[2], core: SUN.listen[3] } as const;
+/** a quiet, de-lit glow for the miss (MUTED_MESH's middle) */
+export const MISS_GLOW = { body: MUTED_MESH[2], core: MUTED_MESH[3] } as const;
+/** a pale grey room the Sunday ground drains towards on the miss */
+export const MISS_GROUND =
+  'radial-gradient(120% 100% at 50% 40%, #e6e6ec 0%, #eeeef2 38%, #f5f5f7 72%, #f9f9fa 100%)';
+/** the moment tag */
+export const MOMENT = { day: 'Sunday', time: '10:24' } as const;
+
 /* ── the site's constants (knowledge-timeline.ts, kb.ts, parts.tsx) ── */
-export const ACCENT = '#551a89';
+export const ACCENT = INK;
 /** a bar still reading */
-export const FILL_REST = 'rgba(85,26,137,0.3)';
+export const FILL_REST = rgba(INK, 0.32);
 export const TRACK_FILL = 'rgba(20,10,36,0.08)';
 export const TILE_RING = 'rgba(24,16,40,0.07)';
 export const DOT = {
   listening: 'rgba(24,16,40,0.3)',
-  reading: '#551a89',
+  reading: INK,
   missing: '#6b6878',
 } as const;
 export type StatusKey = keyof typeof DOT;
@@ -24,15 +46,15 @@ export const STATUS_TEXT: Record<StatusKey, string> = {
   reading: 'Looking through 5 documents',
   missing: 'Not in the documents',
 };
-export const BEAM_INK = 'rgb(24 16 40 / 0.34)';
+export const BEAM_INK = rgba(SUN.orb[1], 0.42);
 export const BEAM_MISS = 0.15;
 export const THRESHOLD = 0.6;
 /** the documents that did not answer step back */
 export const DIM = 0.55;
 /** the orb's volume through a question */
 export const VOL = { rest: 0.12, listen: 0.15, speak: 0.7, miss: 0.05 } as const;
-/** FluidOrb 'muted' palette on a miss (palettes.ts:183), darkest first */
-export const ORB_MISS = ['#4a4852', '#7a7884', '#a9a7b2', '#d4d2da', '#f3f2f6'] as const;
+/** FluidOrb 'muted' palette on a miss (palettes.ts MUTED_MESH), darkest first */
+export const ORB_MISS = MUTED_MESH;
 
 export type DocKind = 'PDF' | 'DOCX' | 'MD' | 'TXT' | 'WEB';
 export const DOCS: readonly { name: string; kind: DocKind }[] = [
@@ -63,8 +85,9 @@ export function geo(L: Layout) {
   const panel = v ? { x: 32, y: 150, w: 1016, h: 1620 } : { x: 48, y: 48, w: 1824, h: 984 };
   const orb = v ? { x: 540, y: 1110, d: 240 } : { x: 960, y: 624, d: 240 };
 
+  // (9:16: the list sits a row lower and a touch tighter, so the moment tag fits under the pill)
   const tiles: Rect[] = DOCS.map((_, i) =>
-    v ? { x: 68, y: 330 + i * 116, w: 944, h: 100 } : { x: 112 + i * 344, y: 176, w: 320, h: 212 },
+    v ? { x: 68, y: 374 + i * 106, w: 944, h: 94 } : { x: 112 + i * 344, y: 176, w: 320, h: 212 },
   );
 
   /* beams: dotted cubics from under each tile (16:9) / the list's foot
@@ -76,7 +99,7 @@ export function geo(L: Layout) {
     const ex = orb.x + R * Math.cos(a);
     const ey = orb.y + R * Math.sin(a);
     const sx = v ? 220 + i * 160 : r.x + r.w / 2;
-    const sy = v ? 914 : r.y + r.h + 12;
+    const sy = v ? 906 : r.y + r.h + 12;
     const c1 = { x: sx, y: v ? sy + 42 : 470 };
     const pull = v ? 44 : 60;
     const c2 = { x: ex + Math.cos(a) * pull, y: ey + Math.sin(a) * pull };
@@ -101,6 +124,10 @@ export function geo(L: Layout) {
       pillText: v ? 28 : 32,
       label: v ? 28 : 30,
       dot: 20,
+      /** "☀ SUNDAY · 10:24": left of the pill (16:9, it rides the pill's edge) / under it (9:16) */
+      tag: v
+        ? { mode: 'below' as const, y: 330, size: 28, icon: 30, gap: 0 }
+        : { mode: 'left' as const, y: 112, size: 30, icon: 32, gap: 30 },
     },
     tiles,
     tile: v
@@ -115,9 +142,10 @@ export function geo(L: Layout) {
     answer: v
       ? { boxX: 68, boxW: 944, rowY: 1346, echoY: 1268, metaY: 1446, size: 68, lh: 1.1, meta: 28 }
       : { boxX: 140, boxW: 1640, rowY: 870, echoY: 792, metaY: 962, size: 76, lh: 1.1, meta: 32 },
+    /** the heading rises where the orb will be, then steps down into the answer slot (step) to make way */
     heading: v
-      ? { cy: 1110, size: 96, lines: ['Answers from', 'your own', 'documents.'] as string[] | null, width: 944 }
-      : { cy: 624, size: 104, lines: ['Answers from', 'your own documents.'] as string[] | null, width: 1640 },
+      ? { cy: 1110, size: 92, lines: ['Answers from', 'your own documents.'] as string[] | null, width: 944, step: { cy: 1372, scale: 0.82 } }
+      : { cy: 624, size: 104, lines: ['Answers from', 'your own documents.'] as string[] | null, width: 1640, step: { cy: 878, scale: 0.8 } },
     closing: v
       ? { cy: 960, size: 104, lines: ['Where your', 'documents stop,', 'it says so.'] }
       : { cy: 540, size: 112, lines: ['Where your documents stop,', 'it says so.'] },

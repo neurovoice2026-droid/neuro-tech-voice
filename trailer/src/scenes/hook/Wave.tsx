@@ -34,7 +34,9 @@ export const Wave: React.FC<{
   out: number;
   /** 0..1 one-frame light hiccup (the text beat) */
   tick?: number;
-}> = ({ frame, t, cx, cy, pitch, barW, maxH, drawIn, ring, burst, freeze, decayEnd, out, tick = 0 }) => {
+  /** a beat breath in the hold (signed, ≈ −0.3..1): the frozen bars swell ±20 % and catch light */
+  breath?: number;
+}> = ({ frame, t, cx, cy, pitch, barW, maxH, drawIn, ring, burst, freeze, decayEnd, out, tick = 0, breath = 0 }) => {
   // burst envelope (world time): fast attack, sustain, exponential release
   // the envelope is sampled no later than the freeze: the row HOLDS that shape
   const te = Math.min(t, freeze);
@@ -44,7 +46,9 @@ export const Wave: React.FC<{
   // 25 Hz warble sampled at 30 fps
   const warble = 0.7 + 0.3 * Math.sin((2 * Math.PI * 25 * te) / FPS);
   // after the freeze: the row dims to ~40 % and slowly sinks
-  const dim = Math.min(1, 1 - 0.6 * tween(frame, [freeze, freeze + 10], [0, 1], EASE.house) + 0.45 * tick);
+  const frozen = tween(frame, [freeze, freeze + 10], [0, 1], EASE.house);
+  const dim = Math.min(1, 1 - 0.6 * frozen + 0.45 * tick + 0.22 * Math.max(0, breath) * frozen);
+  const swell = 1 + 0.2 * breath * frozen;
   const sink = 1 - 0.22 * tween(frame, [freeze, decayEnd], [0, 1], EASE.inOut);
   const glow = env * (1 - tween(frame, [freeze, freeze + 8], [0, 1], EASE.house)) + 0.8 * tick;
 
@@ -55,13 +59,13 @@ export const Wave: React.FC<{
     const appear = aos(frame, drawIn + a * 0.32, { anticip: 2, depth: 0.2, config: SPRING.pop });
     if (appear <= 0.001) continue;
     const g = Math.exp(-0.5 * Math.pow(j / 6.2, 2));
-    // texture on the SAME clamped clock as the envelope: once frozen the row
-    // keeps its silhouette and only dims and sinks
+    // texture: on the envelope's clock until the freeze, then on world time,
+    // which crawls — the frozen silhouette creeps, it never quite stops
     const tex =
       0.42 +
-      0.58 * (0.5 + 0.5 * noise2D('hook-wave', j * 0.29, te * 0.2)) *
-        (0.75 + 0.25 * Math.sin(j * 0.9 - te * 1.1));
-    const h = a <= BARS ? maxH * g * env * warble * tex * sink : 0;
+      0.58 * (0.5 + 0.5 * noise2D('hook-wave', j * 0.29, t * 0.2)) *
+        (0.75 + 0.25 * Math.sin(j * 0.9 - t * 1.1));
+    const h = a <= BARS ? maxH * g * env * warble * tex * sink * swell : 0;
     const tailFade = a <= BARS ? 1 : Math.pow(1 - (a - BARS) / (TAIL + 1), 1.5) * 0.75;
     const col = mixHex(C.callerLit, C.lilac, (j + J) / (2 * J));
     const H = barW + 2 * h;

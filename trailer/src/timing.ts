@@ -351,6 +351,10 @@ export const HOOK_LOCAL = {
   flickStagger: 0.4,
   /** the orb/bloom light change starts this many frames before the landing (done on the hit) */
   lightLead: 2,
+  /** the day drum's first row ("MID-RUSH") lands a 16th after the figures unfold (follow-through) */
+  drumIn: b(0.5) + 2, // 10
+  /** after the land, a light sweep crosses the four figures left → right (≈ 11 f each) */
+  sheen: HOOK.clockLand + 1, // 31
   /** Every ring attack leaves this many frames before its beat, so the beat frame is the peak. */
   ringLead: 1,
   ringB: b(3) + 7, // 52 — second ring of the burst
@@ -406,6 +410,10 @@ export const TWIST_LOCAL = {
   buzz: [TWIST.ring2, TWIST.ring2 + 12] as const,
   /** a glint crosses the CLOSED sign as it settles */
   signGlint: [TWIST.closedSign + 3, TWIST.closedSign + 13] as const,
+  /** sound hook: "Closed" seats (its first letter: closedSlide + 0.8 × its 11-frame slide) */
+  closedLand: 4 + 0.8 * 11,
+  /** the avatar orb pops onto the lit screen (SPRING.pop) */
+  avatarPop: TWIST.phoneOn + 3,
   /** the focus beat of the tagline hold: "Closed is for the door," recedes to 45 %,
    *  "not the phone." brightens + swells 1 → 1.03 (on the beat, before the dive at b6) */
   keyFocus: [b(5), b(5) + 8] as const,
@@ -440,23 +448,54 @@ export const CALL_LOCAL = {
   glide: 4,
   /** the figure pairs spring OUT of the orb right after the gulp (never while the hero line lands) */
   unfold: CALL_SWALLOW + 1,
-  /** the CLOSED sign swings in (the door callback) */
-  statusIn: 0,
+  /** the phone's indigo grades down into the MIDNIGHT room (the orb becomes the key light) as the camera pulls back */
+  roomGrade: [2, b(2)] as const,
+  /** the CLOSED sign (the door callback) hangs, lifts (anticipation) and swings down to seat ON this 8th
+   *  after the pickup: its glint + outline ring leave from here */
+  statusIn: b(0.5),
+  /** a light sweep crosses "Picked up on the first ring." on the beat, once it has risen */
+  lineGlint: b(1),
   /** the big line gathers (3 f) then dives into the orb… */
   lift: CALL_LIFT,
   dive: CALL_DIVE,
-  /** …which swallows it (gulp + ping + level blip + pop) */
+  /** …which swallows it (gulp + ping + level blip + light flash + pop) */
   swallow: CALL_SWALLOW,
+  /** the figure pairs cross their rest position (the unfold spring's first crossing; it peaks 2 f later) */
+  digitsLand: CALL_SWALLOW + 1 + 5,
   /** rings: the pickup (attack 1 f before the beat), then every time Ava starts a line */
   rings: [-1, CALL.lines[0].at, CALL.lines[2].at, CALL.lines[4].at] as const,
-  /** the AI-disclosure underline draws as Ava says "an AI assistant" */
+  /** the speaker tag (AVA / CALLER) pops ON Ava's first word and on every cut (dot ring + letters) */
+  tagPops: CALL.lines.map((l) => l.at),
+  /** the caller's phone line opens on its cut: a flare runs along the line, the bars spring up from it */
+  lineOpen: CALL.lines.filter((l) => l.who === 'caller').map((l) => l.at),
+  /** the AI-disclosure underline draws (a hot tip) as Ava says "an AI assistant"… */
   disclose: [CALL.lines[0].at + vWord('call-1', 9) - 2, CALL.lines[0].at + vWord('call-1', 12) - 4] as const,
+  /** …and locks with a flash as it completes */
+  discloseLock: CALL.lines[0].at + vWord('call-1', 12) - 4,
   /** establishing → Ava's close-up, as she says "This is Ava" */
   pushIn: [CALL_S2 - 6, CALL_S2 + 14] as const,
+  /** CLOSED, then the digits, peel off sideways (each after a 3-f inward counter-move) */
+  peel: [CALL_S2 - 8, CALL_S2 - 6] as const,
+  /** the slot chips: a seed 3 f before, the pop's overshoot PEAKS on the spoken "3 PM" / "4:30" (+ ring, glint, sparks) */
+  chipPops: [CALL.lines[2].at + CALL.slotPops[0], CALL.lines[2].at + CALL.slotPops[1]] as const,
+  /** the caller picks 15:00 (squash 2 f → pop → flood, ring, sparks, camera kick)… */
+  pick: CALL.slotPick,
+  /** …and 16:30 lifts 2 f and drops away */
+  chipDrop: CALL.slotPick + 1,
+  /** the 15:00 chip squashes (2 f) and leaves up into the light as Ava starts the last line… */
+  chipsOut: CALL.lines[4].at,
+  /** …and the orb takes it in (a flare + a small gulp) */
+  chipAbsorb: CALL.lines[4].at + 8,
+  /** camera kicks (1–3 px) on the big hits: the pickup, the gulp, the pick, the booked mark */
+  kicks: [0, CALL_SWALLOW, CALL.slotPick, CALL.bookedMark] as const,
   /** camera drift settles to rest before the mark is handed over */
   camSettle: [CALL_LEN - b(4), CALL_LEN - b(1)] as const,
+  /** "15:00" ignites ember ON the spoken "three": a burst of ember sparks + the glow's flash */
+  ember: CALL.bookedMark,
   /** the payoff beat: the mark presses (3 f) and springs back — exactly 1 again by markHide − 1 */
   payoff: CALL.bookedMark + 1,
+  /** the room inhales (everything but the mark eases back 1.5 %) before the blow-away */
+  blowInhale: [CALL_LEN - 9, CALL_LEN - 6] as const,
   /** everything but the mark (and its glow) blows away towards the lens; the room stays */
   blowAway: [CALL_LEN - 6, CALL_LEN - 1] as const,
   /** the result scene draws the mark from here (= the call's end) */
@@ -700,38 +739,76 @@ export const CTA_LOCAL = {
   pressDown: 2,
 };
 
-/* ── KNOWLEDGE — fine cuts (knowledge-local frames) ────────────── */
+/* ── KNOWLEDGE — fine cuts (knowledge-local frames) ──────────────
+ * Every frame the picture HITS on is here (the sound design imports them).
+ * The scene wears the SUNDAY light; voiced moments come from the voices. */
 export const KNOWLEDGE_LOCAL = (() => {
   const K = KNOWLEDGE;
+  /** first frame a line is heard (env > .15: a breath or a hum counts, it is heard) */
+  const onset = (id: VoiceId) => Math.max(0, VOICE.lines[id].env.findIndex((e) => e > 0.15));
+  const askWord = K.ask + vWord(K.askVoice, 0); // the caller's "Do…"
+  const ansWord = K.answer + vWord(K.answerVoice, 0); // Ava's "I…"
+  const headingOut = [askWord - 10, askWord - 4] as const;
+  const beams = [K.scan[0], K.scan[0] + 21] as const;
+  const beamStagger = 2;
+  const beamDraw = beams[1] - beams[0] - 4 * beamStagger;
+  const fills = [K.scan[0] + 3, 2.4, 18] as const;
+  const relight0 = K.answer + onset(K.answerVoice) - 2;
   return {
     /** the white bloom from the result settles into the stage (t 0 is pure white: the hit) */
     stageIn: [0, b(0.75)] as const,
-    /** the heading rises out just before the caller speaks */
-    headingOut: [K.ask - 8, K.ask - 2] as const,
-    /** the orb rises from the heading's place; the status pill pops ("Listening") */
-    orbIn: K.ask - 4,
-    statusIn: K.ask - 4,
-    /** the question leaves (it holds until answer − 2; gone before Ava's first word) */
-    questionOut: [K.answer - 5, K.answer - 1] as const,
+    /** the eyebrow's CornerDot spins in (its letters follow 0.8 f apart) */
+    eyebrowDot: K.heading - 1,
+    /** heading word i rises from K.heading + i · headingStagger (5 words) */
+    headingStagger: 2,
+    /** the five documents pop on 16ths (= the docTicks): inhale, overshoot, a glint + ring */
+    docPops: Array.from({ length: 5 }, (_, i) => Math.round(K.docsIn + i * K.docStep)) as readonly number[],
+    /** the heading steps down into the answer slot (a 2 f lift before), making way for the orb */
+    headingStep: [K.ask + 3, K.ask + 13] as const, // starts on the 16th after the ask (26)
+    /** the orb rises into the centre ON the beat after the doc run: bloom flash, ring, kick */
+    orbIn: b(2),
+    /** the status pill pops "Listening" a 16th later… */
+    statusIn: b(2.25),
+    /** …and the moment tag "SUNDAY · 10:24" an 8th later (the sun spins in, a glint crosses it) */
+    momentTag: b(2.5),
+    /** the heading flicks out of its masks just before the caller's first word */
+    headingOut,
+    /** CALLER pops as the heading clears */
+    callerIn: headingOut[1] - 1,
+    /** the question holds while Ava hums it over; gone before her first word */
+    questionOut: [ansWord - 8, ansWord - 4] as const,
+    /** the peek page opens (16:9) — a scan line of Sunday light runs down its reveal edge */
+    peekOpen: K.scan[0] - b(0.25),
+    /** the pill flips to "Looking through 5 documents" (the box tweens, the words swap, a bump) */
+    scanFlip: K.scan[0],
     /** dotted beams draw tile → orb: the window, and the stagger between beams */
-    beams: [K.scan[0], K.scan[0] + 21] as const,
-    beamStagger: 2,
+    beams,
+    beamStagger,
+    /** beam i's head reaches the orb: a spark on its rim */
+    beamLand: Array.from({ length: 5 }, (_, i) => beams[0] + i * beamStagger + beamDraw) as readonly number[],
     /** match bars: tile i starts at fills[0] + i · fillStep, lasting fillDur */
-    fills: [K.scan[0] + 3, 2.4, 18] as const,
+    fills,
+    /** tile i is being read: its ring and sheen (= its bar starting) */
+    reads: Array.from({ length: 5 }, (_, i) => Math.round(fills[0] + i * fills[1])) as readonly number[],
     /** the status dot pulses 1.6× three times, 8 f apart, from scan[0] */
     dotPulse: [K.scan[0], 8, 3] as const,
     /** the five 60 % ticks blink 1 → .3 → 1 as the scan comes up short */
     tickBlink: [K.miss - 10, K.miss] as const,
-    /** the orb drifts to the grey 'miss' palette; the peek page's bars collapse */
+    /** "Not in the documents": the pill flips, then shakes "no"; the orb greys under a closing ring; a kick */
+    missFlip: K.miss,
+    shake: [K.miss + 3, K.miss + 15] as const,
     toGrey: [K.miss, K.miss + 12] as const,
     peekCollapse: [K.miss, K.miss + 8] as const,
+    /** Ava answers: her Sunday light floods back into the orb from her first sound (bloom swell + ring) */
+    relight: [relight0, relight0 + b(1)] as const,
     /** the tiles step back (.55) so the answer leads */
     dimDocs: [K.answer, K.answer + 10] as const,
     /** "Your fallback message" */
-    meta: K.answer + vWord(K.answerVoice, 0) + 8,
+    meta: ansWord + 8,
     /** the stage recedes (.12, blur, .97) under the closing title */
     recede: [K.closing - 4, K.closing + 6] as const,
-    closingKey: K.closing + 18, // after the last of its 7 words is up (2.5 f stagger)
+    closingStagger: 2.5,
+    closingKey: K.closing + b(1.5), // an 8th after its last word ("so.") is up: "it says so." turns Sunday teal (glint, pool of light, kick)
     closingPush: [K.closing, K.out[0]] as const,
     /** the whip: a 3 f counter-move, then the stage leaves; clean white from `white` */
     whipAnticip: [K.out[0] - 3, K.out[0]] as const,

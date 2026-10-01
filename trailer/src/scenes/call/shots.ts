@@ -152,7 +152,22 @@ export function camAt(t: number, L: Layout): Cam {
   }
   // the pick lands with a 1 % kick
   if (t >= CALL.slotPick) z *= 1 + 0.01 * Math.exp(-(t - CALL.slotPick) / 4);
+  // the big hits jolt the camera (1–3 px, ON the hit frame, settled in ≈ 8 f)
+  dy += kickAt(t);
   return { dx, dy, base, S, z, focus };
+}
+
+/** px per kick (CALL_LOCAL.kicks: pickup, gulp, pick, booked mark) */
+const KICK_PX = [2, 2.2, 1.6, 3] as const;
+/** The camera's jolt on the big hits: full on the hit frame, then a damped settle (one small rebound). */
+export function kickAt(t: number): number {
+  let y = 0;
+  CALL_LOCAL.kicks.forEach((at, i) => {
+    const u = t - at;
+    if (u < 0 || u > 16) return;
+    y += KICK_PX[i] * Math.exp(-u / 2.6) * Math.cos((Math.PI * u) / 3.2);
+  });
+  return y;
 }
 
 /** CSS transform for a parallax plane at `depth` (1 = the orb's plane). */

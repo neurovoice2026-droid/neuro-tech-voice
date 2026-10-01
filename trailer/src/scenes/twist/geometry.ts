@@ -65,11 +65,14 @@ const K_PHONE = 0.6;
 
 export function camAt(t: number, g: Geo): Cam {
   const { L } = g;
-  // slow push while we read; shatter kick; slam shake
+  // slow push while we read; shatter kick; focus kick; slam shake
   const push = 0.04 * tween(t, TW.push, [0, 1], EASE.inOut);
   const kickX = t - TWIST.shatter;
   const kick = kickX > 0 ? 0.022 * (kickX / 2.2) * Math.exp(1 - kickX / 2.2) : 0;
-  const logDrift = Math.log(1 + push + kick);
+  // the focus beat: a small camera kick ON the beat (≈ 0.6 % → 1–3 px on the type)
+  const fkX = t - TW.keyFocus[0];
+  const focusKick = fkX > 0 ? 0.006 * (fkX / 2) * Math.exp(1 - fkX / 2) : 0;
+  const logDrift = Math.log(1 + push + kick + focusKick);
 
   // the dive: anticipation dip, then EASE.peel into the screen
   const [d0, d1, d2] = TW.diveDip;

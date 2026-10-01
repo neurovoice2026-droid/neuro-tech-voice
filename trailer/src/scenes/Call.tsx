@@ -31,17 +31,19 @@ import React from 'react';
 import { AbsoluteFill } from 'remotion';
 import { Captions, type CaptionFont } from '../components/Captions';
 import { Dust } from '../components/Dust';
-import { Vignette } from '../components/Grain';
 import { flowTime } from '../components/Orb';
 import { MarkGlow } from '../components/Shared';
 import { MARK, MARK_GLOW_HANDOFF, TRANSCRIPT } from '../lib/handoff';
 import { useLayout } from '../lib/layout';
-import { aos, EASE, SPRING, springAt, tween } from '../lib/motion';
+import { aos, EASE, mixHex, SPRING, springAt, tween } from '../lib/motion';
 import { pickupGlow, pickupScale } from '../lib/pickup';
 import { useSceneFrame } from '../lib/scene';
-import { C, FONT, NIGHT_ROOM } from '../theme';
+import { C, FONT } from '../theme';
 import { CALL, CALL_LOCAL, SCENES, vWord, type Caption } from '../timing';
+import { bloom, mixColor } from '../lib/lights';
+import { exitCurve, Flare, RingPulse, Sparks } from './call/Accents';
 import { Bokeh, type Disc } from './call/Bokeh';
+import { callGlow, CALLER_GLOW, KeyLight, MidnightVignette, RoomBox, triple } from './call/Light';
 import { Digits, OrbStage, type OrbState } from './call/Lockup';
 import { camAt, framingAt, framings, orbBase, orbToScreen, planeCss, shotAt } from './call/shots';
 import { ClosedSign, flightAt, PickupLine } from './call/Status';
@@ -82,6 +84,29 @@ const TWIST_SCREEN = { w: 242, h: 522 };
 /** the chips are on screen during lines 2 and 3 (the echo slot is theirs while they are up) */
 const chipsLine = (i: number) => i === 2 || i === 3;
 
+/** the hits' light: the pickup's flash and the gulp's (the orb flares, its light floods the room) */
+const pickupFlash = (tt: number) => (tt < 0 ? 0 : 0.55 * Math.exp(-tt / 5));
+const gulpFlash = (tt: number) =>
+  (tt < CALL_LOCAL.swallow ? 0 : 0.5 * Math.exp(-(tt - CALL_LOCAL.swallow) / 4)) +
+  (tt < CALL_LOCAL.chipAbsorb ? 0 : 0.35 * Math.exp(-(tt - CALL_LOCAL.chipAbsorb) / 4));
+/** the orb takes the picked slot in: a small gulp */
+const absorbKick = (tt: number) => {
+  const u = tt - CALL_LOCAL.chipAbsorb;
+  if (u < 0) return 0;
+  return Math.exp(-u / 4) * Math.sin((Math.PI * u) / 4.5);
+};
+
+/** the caller's line opens on its cut: a spring from the centre out (≈ 10 % overshoot, settled ≈ 10 f) */
+const LINE_OPEN = { stiffness: 380, damping: 20, mass: 0.7 };
+
+/** the far discs lean to the midnight's navy */
+const NAVY = '#1c2f7a';
+
+/** "Wednesday at 15:00" in Inter 500 / −0.01em: its width in em (for the ember burst's ellipse) */
+const MARK_EM = 9.45;
+/** …and "15:00" in it: its centre's offset from the mark's centre, and its width (em) */
+const NUM_EM = { dx: 3.46, w: 2.5 };
+
 export const Call: React.FC = () => {
   const t = useSceneFrame('call');
   const L = useLayout();
@@ -107,39 +132,35 @@ export const Call: React.FC = () => {
     h: box0.h * Math.pow(box1.h / box0.h, open),
   };
   const roomOp = tween(t, CALL_LOCAL.roomIn, [0, 1], EASE.inOut);
+  // the phone's indigo grades down into the midnight as the camera pulls back out of the screen
+  const grade = tween(t, CALL_LOCAL.roomGrade, [0, 1], EASE.inOut);
 
   /* ── blow-away: everything but the mark and its glow (the room stays) ── */
   const bw = tween(t, CALL_LOCAL.blowAway, [0, 1], EASE.in2);
+  // …after the inhale: everything eases back 1.5 % (the anticipation), then flies at the lens
+  const inhale = tween(t, CALL_LOCAL.blowInhale, [0, 1], EASE.inOut);
+  const blowS = 1 - 0.015 * inhale * (1 - bw) + 0.12 * bw;
   const blow: React.CSSProperties =
-    bw > 0
+    inhale > 0
       ? {
-          transform: `scale(${(1 + 0.12 * bw).toFixed(5)})`,
+          transform: `scale(${blowS.toFixed(5)})`,
           transformOrigin: `${M.x}px ${M.y}px`,
           opacity: 1 - bw,
-          filter: `blur(${(12 * bw).toFixed(2)}px)`,
+          filter: bw > 0 ? `blur(${(12 * bw).toFixed(2)}px)` : undefined,
         }
       : {};
 
   /* the room alone after the hand-over (under the result, until its own room is in) */
   const roomLayer = (
     <AbsoluteFill style={{ ...planeCss(cam, 0.3), opacity: roomOp }}>
-      <div
-        style={{
-          position: 'absolute',
-          left: L.cx - room.w / 2,
-          top: L.cy - room.h / 2,
-          width: room.w,
-          height: room.h,
-          background: NIGHT_ROOM,
-        }}
-      />
+      <RoomBox x={L.cx} y={L.cy} w={room.w} h={room.h} grade={grade} />
     </AbsoluteFill>
   );
   if (t >= END) {
     return (
       <AbsoluteFill style={{ overflow: 'hidden' }}>
         {roomLayer}
-        <Vignette strength={0.55 * open} color="8,6,28" />
+        <MidnightVignette k={grade} />
       </AbsoluteFill>
     );
   }
@@ -159,10 +180,17 @@ export const Call: React.FC = () => {
   /* ── the orb, on screen ─────────────────────────────────────────── */
   const orbAt = (tt: number): OrbState => {
     const s = orbToScreen(camAt(tt, L), framingAt(tt, L));
-    return { ...s, d: s.d * pickupScale(tt + g0) * (1 + 0.05 * gulpKick(tt)) * talkSwell(tt) };
+    return { ...s, d: s.d * pickupScale(tt + g0) * (1 + 0.05 * gulpKick(tt) + 0.025 * absorbKick(tt)) * talkSwell(tt) };
   };
   const orb = orbAt(t);
   const dress = tween(t, [0, 12], [0, 1], EASE.house);
+  // THE KEY LIGHT's colour follows the orb's palette: violet while Ava speaks, caller blue while the caller does
+  const listen = listenAt(t);
+  const glow = callGlow(listen);
+  const hitFlash = pickupFlash(t) + gulpFlash(t);
+  // …and the caller's line opening floods the room with its blue for a moment
+  const lineFlash = CALL_LOCAL.lineOpen.reduce((a, at) => a + (t >= at ? 0.22 * Math.exp(-(t - at) / 4) : 0), 0);
+  const keyK = (dress * (0.16 + 0.1 * lvl + 0.18 * light) + 0.6 * hitFlash + lineFlash) * (1 - bw);
   const rim = pickupGlow(t + g0) + (0.2 * lvl + 0.3 * light) * tween(t, [0, 12], [0, 1], EASE.house);
   const dof = shot.kind === 'C' ? 2 : 0;
 
@@ -172,9 +200,11 @@ export const Call: React.FC = () => {
   const unfoldAt = (tt: number) => aos(tt, CALL_LOCAL.unfold, { anticip: 4, depth: 0.06, config: SPRING.site });
   const unfold = unfoldAt(t);
   const unfoldSpeed = unfoldAt(t + 0.5) - unfoldAt(t - 0.5);
-  const peelAt = (tt: number, a: number) => tween(tt, [a, a + 10], [0, 1], EASE.in2);
-  const digitPeel = peelAt(t, p0);
-  const signPeel = peelAt(t, p0 - 2);
+  // each peels off after a 3-f inward counter-move (−2.5 % of the 700 px run)
+  const peelAt = (tt: number, a: number) => exitCurve(tt, a, 10, { anticip: 3, dip: 0.025 });
+  const [signPeelAt, digitPeelAt] = CALL_LOCAL.peel;
+  const digitPeel = peelAt(t, digitPeelAt);
+  const signPeel = peelAt(t, signPeelAt);
   const lockY = shot.kind === 'E' ? framingAt(t, L).y : Fr.lock.y;
   const flight = (tt: number) =>
     flightAt(tt, {
@@ -189,6 +219,7 @@ export const Call: React.FC = () => {
 
   /* ── the caller's phone line (reverse shots) ────────────────────── */
   const W = L.pick({ x0: 600, x1: 1840, cy: 360, bars: 64, maxH: 120 }, { x0: 60, x1: 1020, cy: 780, bars: 44, maxH: 130 });
+  const lineOpen = shot.kind === 'C' ? springAt(t, LINES[shot.line].at - 1, LINE_OPEN) : 1;
 
   /* ── captions ─────────────────────────────────────────────────────── */
   const avaFont: CaptionFont = { family: FONT.body, weight: 500, size: T.fontSize, lineHeight: 1.22, tracking: '-0.01em' };
@@ -213,6 +244,15 @@ export const Call: React.FC = () => {
   const dP = EASE.draw(tween(t, [d0, d1], [0, 1], (x) => x));
   const dGlow = tween(t, [d0, d0 + 3], [0, 1], EASE.out3) * (1 - tween(t, [d1, d1 + 10], [0, 1], EASE.inOut));
   const thick = Math.round(T.fontSize * 0.065);
+  // the line draws with a white-hot tip that cools to electric once it locks (with a flash)
+  const lock = t >= CALL_LOCAL.discloseLock ? Math.exp(-(t - CALL_LOCAL.discloseLock) / 4) : 0;
+  const tip = mixHex('#f7f3ff', C.electric, tween(t, [d1, d1 + 8], [0, 1], EASE.inOut));
+  const ulColor = `linear-gradient(90deg, ${C.electric} 0%, ${C.electric} 72%, ${mixHex(C.lilac, C.electric, tween(t, [d1, d1 + 8], [0, 1], EASE.inOut))} 90%, ${tip} 100%)`;
+  const ulShadow =
+    dGlow + lock > 0.01
+      ? `0 0 ${(10 + 14 * lock).toFixed(1)}px rgba(124,58,237,${Math.min(1, 0.6 * dGlow + 0.5 * lock).toFixed(3)})` +
+        (lock > 0.02 ? `, 0 0 4px rgba(247,243,255,${(0.7 * lock).toFixed(3)})` : '')
+      : undefined;
 
   // "15:00" / "16:30" flash lilac as they are spoken (linking the words to their chips)
   const pops = [LINES[2].at + CALL.slotPops[0], LINES[2].at + CALL.slotPops[1]] as const;
@@ -285,26 +325,17 @@ export const Call: React.FC = () => {
       {/* ── 0.3 · the room + the orb's light on it ─────────────────── */}
       {roomLayer}
       {live ? (
-        <AbsoluteFill style={{ ...planeCss(cam, 0.3), opacity: dress * (1 - bw) }}>
-          <div
-            style={{
-              position: 'absolute',
-              left: orb.x - L.pick(1000, 900),
-              top: orb.y - L.pick(760, 900),
-              width: L.pick(2000, 1800),
-              height: L.pick(1520, 1800),
-              background: `radial-gradient(closest-side, rgba(124,58,237,${(0.08 + 0.1 * lvl + 0.5 * light).toFixed(3)}), rgba(124,58,237,0) 100%)`,
-            }}
-          />
+        <AbsoluteFill style={planeCss(cam, 0.3)}>
+          <KeyLight x={orb.x} y={orb.y} d={orb.d} glow={glow} strength={keyK} />
         </AbsoluteFill>
       ) : null}
-      <Vignette strength={0.55 * open} color="8,6,28" />
+      <MidnightVignette k={grade} />
 
       <AbsoluteFill style={blow}>
         {/* ── 0.5 · large dim discs, far behind ──────────────────────── */}
         {live ? (
           <AbsoluteFill style={{ ...planeCss(cam, 0.5), opacity: dress }}>
-            <Bokeh t={t} discs={discsFar} drift={2.2} />
+            <Bokeh t={t} discs={discsFar} drift={2.2} color={triple(mixColor(glow.body, NAVY, 0.45))} />
           </AbsoluteFill>
         ) : null}
 
@@ -312,7 +343,15 @@ export const Call: React.FC = () => {
         {live && t < p0 + 12 ? (
           <AbsoluteFill style={planeCss(cam, 1)}>
             {t <= CALL_LOCAL.swallow ? (
-              <PickupLine t={t} text="Picked up on the first ring." fontSize={L.pick(96, 92)} boxW={L.pick(1500, 940)} flight={flight} />
+              <PickupLine
+                t={t}
+                text="Picked up on the first ring."
+                fontSize={L.pick(96, 92)}
+                boxW={L.pick(1500, 940)}
+                flight={flight}
+                keyAt={CALL_LOCAL.statusIn + 2}
+                glintAt={CALL_LOCAL.lineGlint}
+              />
             ) : null}
             <ClosedSign
               t={t}
@@ -321,7 +360,7 @@ export const Call: React.FC = () => {
               start={CALL_LOCAL.statusIn}
               fontSize={L.pick(32, 30)}
               peel={signPeel}
-              peelSpeed={peelAt(t + 0.5, p0 - 2) - peelAt(t - 0.5, p0 - 2)}
+              peelSpeed={peelAt(t + 0.5, signPeelAt) - peelAt(t - 0.5, signPeelAt)}
             />
             <Digits
               t={t}
@@ -334,7 +373,7 @@ export const Call: React.FC = () => {
               unfoldSpeed={unfoldSpeed}
               unfoldStart={CALL_LOCAL.unfold}
               peel={digitPeel}
-              peelSpeed={peelAt(t + 0.5, p0) - peelAt(t - 0.5, p0)}
+              peelSpeed={peelAt(t + 0.5, digitPeelAt) - peelAt(t - 0.5, digitPeelAt)}
               sheens={[
                 tween(t, [CALL_LOCAL.unfold + 6, CALL_LOCAL.unfold + 22], [0, 1], EASE.inOut),
                 tween(t, [CALL_LOCAL.unfold + 10, CALL_LOCAL.unfold + 26], [0, 1], EASE.inOut),
@@ -357,7 +396,11 @@ export const Call: React.FC = () => {
               barW={8}
               maxH={W.maxH}
               opacity={1}
+              open={lineOpen}
+              color={CALLER_GLOW.core}
             />
+            {/* the line connects: a flare runs out along it on the cut */}
+            <Flare t={t} at={LINES[shot.line].at} x={(W.x0 + W.x1) / 2} y={W.cy} w={(W.x1 - W.x0) * 1.08} color={CALLER_GLOW.core} />
           </AbsoluteFill>
         ) : null}
 
@@ -369,7 +412,7 @@ export const Call: React.FC = () => {
           orbAt={orbAt}
           volume={vol}
           flow={flow}
-          listen={listenAt(t)}
+          listen={listen}
           rim={rim}
           dress={dress}
           dof={dof}
@@ -378,17 +421,19 @@ export const Call: React.FC = () => {
           light={light}
           gulp={CALL_LOCAL.swallow}
           rimIn={roomOp}
+          glow={glow}
+          flash={hitFlash}
         />
 
         {live ? (
           <>
             {/* ── 1.3 · motes ─────────────────────────────────────────── */}
             <AbsoluteFill style={{ ...planeCss(cam, 1.3), opacity: dress }}>
-              <Dust count={22} seed="call-motes" color="185,163,255" opacity={0.45} size={[2, 7]} blur={[0.4, 3]} speed={0.45} frame={t + 600} />
+              <Dust count={22} seed="call-motes" color={triple(glow.core)} opacity={0.45} size={[2, 7]} blur={[0.4, 3]} speed={0.45} frame={t + 600} />
             </AbsoluteFill>
             {/* ── 1.6 · lens bokeh ───────────────────────────────────── */}
-            <AbsoluteFill style={{ ...planeCss(cam, 1.6), opacity: dress }}>
-              <Bokeh t={t} discs={discsNear} />
+            <AbsoluteFill style={{ ...planeCss(cam, 1.6), opacity: 0.7 * dress }}>
+              <Bokeh t={t} discs={discsNear} color={triple(glow.core)} />
             </AbsoluteFill>
 
             {/* ── screen · speaker tag, captions, chips ──────────────── */}
@@ -398,6 +443,8 @@ export const Call: React.FC = () => {
                 t={t}
                 who={LINES[turn].who}
                 at={LINES[turn].at}
+                hit={CALL_LOCAL.tagPops[turn]}
+                next={turn + 1 < LINES.length ? LINES[turn + 1].at : Infinity}
                 x={L.cx}
                 y={T.y - L.pick(78, 72)}
                 fontSize={L.pick(32, 30)}
@@ -429,9 +476,9 @@ export const Call: React.FC = () => {
                           caption: 1,
                           words: [3, 5],
                           p: dP,
-                          color: C.electric,
+                          color: ulColor,
                           thickness: thick,
-                          shadow: dGlow > 0.01 ? `0 0 10px rgba(124,58,237,${(0.6 * dGlow).toFixed(3)})` : undefined,
+                          shadow: ulShadow,
                         }
                       : undefined
                   }
@@ -450,9 +497,11 @@ export const Call: React.FC = () => {
               w={L.pick(260, 228)}
               h={L.pick(104, 92)}
               fontSize={L.pick(64, 56)}
-              pops={pops}
-              pick={CALL.slotPick}
-              leave={last.at}
+              pops={CALL_LOCAL.chipPops}
+              pick={CALL_LOCAL.pick}
+              drop={CALL_LOCAL.chipDrop}
+              leave={CALL_LOCAL.chipsOut}
+              leaveTo={orbAt(CALL_LOCAL.chipsOut + 7)}
             />
           </>
         ) : null}
@@ -461,7 +510,57 @@ export const Call: React.FC = () => {
       {/* ── screen · the booked mark + its glow (handed to the result at markHide) ── */}
       {live ? (
         <>
+          {/* "15:00" ignites: a warm pool of ember light flares behind the mark (gone long before the hand-over) */}
+          {t >= CALL_LOCAL.ember && t < CALL_LOCAL.ember + 26 ? (
+            <div
+              style={{
+                position: 'absolute',
+                left: M.x + M.fontSize * NUM_EM.dx - M.fontSize * 4.2,
+                top: M.y - M.fontSize * 2.1,
+                width: M.fontSize * 8.4,
+                height: M.fontSize * 4.2,
+                background: bloom(
+                  { body: C.ember, core: C.emberLit },
+                  0.55 * Math.exp(-(t - CALL_LOCAL.ember) / 5) * (1 - tween(t, [CALL_LOCAL.ember + 18, CALL_LOCAL.ember + 25], [0, 1], EASE.inOut)),
+                  { core: 0.6, coreSize: 0.45 },
+                ),
+                mixBlendMode: 'screen',
+              }}
+            />
+          ) : null}
           <MarkGlow x={M.x} y={M.y} fontSize={M.fontSize} k={glowK} />
+          {/* "15:00" ignites: a ring leaves the mark, ember sparks fly off its end (away from the type; all gone ≈ 20 f later) */}
+          <RingPulse
+            t={t}
+            at={CALL_LOCAL.ember}
+            x={M.x}
+            y={M.y}
+            w={M.fontSize * (MARK_EM + 0.8)}
+            h={M.fontSize * 1.24}
+            radius={M.fontSize * 0.62}
+            color={C.emberLit}
+            grow={1.25}
+            life={14}
+            width={2}
+            alpha={0.8}
+          />
+          <Sparks
+            t={t}
+            at={CALL_LOCAL.ember}
+            x={M.x + M.fontSize * NUM_EM.dx}
+            y={M.y - M.fontSize * 0.08}
+            color={C.ember}
+            hot={C.emberSoft}
+            n={13}
+            rx={M.fontSize * (NUM_EM.w / 2 + 0.2)}
+            ry={M.fontSize * 0.62}
+            reach={L.pick(120, 100)}
+            life={17}
+            size={4.5}
+            fall={18}
+            arc={[-62, 70]}
+            seed="ember"
+          />
           <MarkRow
             t={t}
             appear={markAppear}

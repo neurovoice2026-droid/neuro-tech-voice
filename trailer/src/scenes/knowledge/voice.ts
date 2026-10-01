@@ -1,7 +1,8 @@
 /**
  * The reader's voice model: ONE per-frame curve drives the orb (volume and
  * flow time), so it listens to the caller's REAL envelope (kb-1), reads,
- * goes quiet on the miss, and breathes with Ava's REAL envelope (kb-2).
+ * goes quiet on the miss, and — relit — breathes with Ava's REAL envelope
+ * (kb-2).
  * Levels are the site's (VOL); smoothing is the FluidOrb's own (attack 14/s,
  * release 5/s). Precomputed once into a table of knowledge-local frames.
  */
@@ -10,6 +11,7 @@ import { EASE, tween } from '../../lib/motion';
 import { FPS, KNOWLEDGE, KNOWLEDGE_LOCAL, SCENES, vFrames } from '../../timing';
 import { VOICE, type VoiceId } from '../../voice.generated';
 import { VOL } from './geometry';
+import { relitAt } from './light';
 
 const K = KNOWLEDGE;
 const KL = KNOWLEDGE_LOCAL;
@@ -40,7 +42,10 @@ export function readPulse(t: number): number {
 function target(t: number): number {
   const askLen = vFrames(K.askVoice);
   const ansLen = vFrames(K.answerVoice);
-  if (t >= K.answer && t < K.answer + ansLen) return VOL.miss + 0.65 * envAt(K.answerVoice, t - K.answer);
+  // relit, she speaks at the orb's full level; quiet in between
+  const lit = VOL.miss + (VOL.rest - VOL.miss) * relitAt(t);
+  if (t >= K.answer && t < K.answer + ansLen) return lit + 0.6 * envAt(K.answerVoice, t - K.answer);
+  if (t >= K.answer) return lit;
   if (t >= K.miss) return VOL.miss + (VOL.rest - VOL.miss) * (1 - tween(t, KL.toGrey, [0, 1], EASE.inOut));
   if (t >= K.scan[0]) return VOL.rest + 0.06 * readPulse(t);
   if (t >= K.ask && t < K.ask + askLen) return VOL.listen + 0.15 * envAt(K.askVoice, t - K.ask);

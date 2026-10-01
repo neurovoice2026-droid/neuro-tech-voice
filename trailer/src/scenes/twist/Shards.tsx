@@ -294,7 +294,20 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
   });
 }
 
-type State = { x: number; y: number; rot: number; size: number; useDst: boolean; op: number; dof: number };
+type State = {
+  x: number;
+  y: number;
+  rot: number;
+  size: number;
+  useDst: boolean;
+  op: number;
+  dof: number;
+  /** 0..1 the lock-in spark: a glyph flares as it seats in its slot, then cools (≈ 8 f) */
+  lock: number;
+};
+
+/** the spark of a glyph seating: up in 1 f, cooling e^(−τ/2.6) */
+const lockSpark = (tau: number) => (tau < 0 ? 0 : Math.min(1, tau / 1) * Math.exp(-Math.max(0, tau - 1) / 2.6));
 
 function shardState(sh: Shard, t: number, hook: TextLayout, tag: TextLayout, L: Layout): State {
   const p0 = breakPos(sh.src, L);
@@ -328,6 +341,7 @@ function shardState(sh: Shard, t: number, hook: TextLayout, tag: TextLayout, L: 
       useDst: t >= sh.swap,
       op: 1,
       dof: 0,
+      lock: lockSpark(tau),
     };
   }
 
@@ -346,6 +360,7 @@ function shardState(sh: Shard, t: number, hook: TextLayout, tag: TextLayout, L: 
       rot: sh.rot * (q + drift * 0.8 + 0.4 * burn),
       size: size0 * (1 + (sh.sOut - 1) * q) * (1 - 0.8 * burn),
       useDst: false,
+      lock: 0,
       op: 1 - tween(t, [8, 26], [0, 1], EASE.inOut),
       dof: 2 + 6 * burn + Math.abs(sh.sOut - 1) * 3,
     };
@@ -378,6 +393,7 @@ function shardState(sh: Shard, t: number, hook: TextLayout, tag: TextLayout, L: 
     useDst: t >= sh.swap,
     op: 1,
     dof: Math.abs(depth - 1) * 3.2 * (1 - rs) + rest,
+    lock: sh.dst ? lockSpark(tau) : 0,
   };
 }
 
@@ -492,6 +508,11 @@ export const Shards: React.FC<{
                       opacity: op,
                       transform: xf,
                       filter: blur > 0.15 ? `blur(${blur.toFixed(2)}px)` : undefined,
+                      // the lock-in spark (main sample only): a white bloom that cools
+                      textShadow:
+                        k === 0 && !ghost && s.lock > 0.02
+                          ? `0 0 ${(0.14 * fs).toFixed(1)}px rgba(255,255,255,${(0.6 * s.lock).toFixed(3)}), 0 0 ${(0.04 * fs).toFixed(1)}px rgba(255,255,255,${(0.5 * s.lock).toFixed(3)})`
+                          : undefined,
                     }}
                   >
                     {g.ch}

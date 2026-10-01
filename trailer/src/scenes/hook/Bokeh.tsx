@@ -10,13 +10,15 @@ import { rgbOf } from './color';
 
 export const Bokeh: React.FC<{
   t: number;
+  /** real time (frames): the discs' light keeps glimmering after the world has frozen */
+  frame: number;
   width: number;
   count: number;
   seed: string;
   opacity: number;
   /** vertical band the discs live in, as [top, bottom] px (the lit part of the frame) */
   band: [number, number];
-}> = ({ t, width, count, seed, opacity, band }) => (
+}> = ({ t, frame, width, count, seed, opacity, band }) => (
   <>
     {Array.from({ length: count }, (_, i) => {
       const r = (k: string) => random(`${seed}-${i}-${k}`);
@@ -28,7 +30,7 @@ export const Bokeh: React.FC<{
       const yy = y - t * (0.15 + r('s') * 0.2);
       const lilac = r('c') < 0.6;
       const col = rgbOf(lilac ? C.lilac : C.callerLit);
-      const a = opacity * (0.5 + 0.5 * r('a')) * (0.75 + 0.25 * Math.sin(t / 23 + r('tw') * 6.28));
+      const a = opacity * (0.5 + 0.5 * r('a')) * (0.7 + 0.3 * Math.sin(frame / (17 + r('tp') * 9) + r('tw') * 6.28));
       return (
         <div
           key={i}

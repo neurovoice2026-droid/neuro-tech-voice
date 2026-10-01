@@ -47,8 +47,10 @@ export const Motes: React.FC<{
   plane: Mote['plane'];
   /** world time (frames) — stops at the freeze */
   t: number;
+  /** real time (frames): their light keeps twinkling after the world has frozen */
+  frame: number;
   opacity: number;
-}> = ({ motes, plane, t, opacity }) => (
+}> = ({ motes, plane, t, frame, opacity }) => (
   <>
     {motes.map((m, i) => {
       if (m.plane !== plane) return null;
@@ -56,7 +58,7 @@ export const Motes: React.FC<{
       // slow rise + a lazy sway, all on world time
       const x = m.x + Math.sin(t / (46 + r('p') * 30) + r('ph') * 6.28) * (5 + r('sx') * 7);
       const y = m.y - t * (0.12 + r('s') * 0.14);
-      const tw = 0.82 + 0.18 * Math.sin(t / (21 + r('t') * 17) + r('tp') * 6.28);
+      const tw = 0.76 + 0.24 * Math.sin(frame / (13 + r('t') * 9) + r('tp') * 6.28);
       const col = rgbOf(r('c') < 0.55 ? C.paper : C.lilac);
       const a = m.a * tw * opacity;
       if (a < 0.004) return null;

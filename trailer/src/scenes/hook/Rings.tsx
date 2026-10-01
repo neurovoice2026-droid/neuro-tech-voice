@@ -11,8 +11,14 @@ import { C } from '../../theme';
 import { rgbOf } from './color';
 import { clamp01 } from './warp';
 
-const WAVE = rgbOf(C.lilac); // rgb(185 163 255), the site's wave
+const WAVE = rgbOf(C.lilac); // rgb(185 163 255), the site's wave (= the night light's `wave`)
 const LIFE = 28.5; // 0.95 s, as on the site
+
+/** How far (0..1, power2.out) a ring has travelled from d0 to d1 at `age` frames of world time. */
+export const ringTravel = (age: number) => {
+  const u = clamp01(age / LIFE);
+  return 1 - Math.pow(1 - u, 2);
+};
 
 export type RingSpec = {
   start: number; // world-time frame it leaves the orb
@@ -35,14 +41,15 @@ export const Rings: React.FC<{
   inhale: number;
   /** diameter the light shock reaches (fast, short-lived). */
   shockD: number;
-}> = ({ frame, tau, rings, cx, cy, d0, d1, freeze, decayEnd, out, inhale, shockD }) => {
+  /** 0..1 a beat breath in the hold: the hanging rings swell 2 % and catch more light */
+  breath?: number;
+}> = ({ frame, tau, rings, cx, cy, d0, d1, freeze, decayEnd, out, inhale, shockD, breath = 0 }) => {
   const frozen = tween(frame, [freeze, freeze + 6], [0, 1], EASE.house);
   const freezeFlash = frame >= freeze ? Math.exp(-(frame - freeze) / 2.2) * tween(frame, [freeze - 1, freeze], [0, 1]) : 0;
   const hangDecay = 1 - 0.3 * tween(frame, [freeze, decayEnd], [0, 1], EASE.inOut);
 
   const state = (t: number, start: number) => {
-    const u = clamp01((t - start) / LIFE);
-    const e = 1 - Math.pow(1 - u, 2); // power2.out
+    const e = ringTravel(t - start); // power2.out
     const d = d0 + (d1 - d0) * e;
     const born = tween(t, [start, start + 1.5], [0, 1], EASE.out3);
     return { d, live: born * (1 - e), started: t >= start };
@@ -54,16 +61,19 @@ export const Rings: React.FC<{
         const t = tau(frame);
         const s = state(t, r.start);
         if (!s.started) return null;
+        // the breath: .35 → .55 → .35 of the ring's light (×1.57 at its peak) on the hanging rings
+        const lift = 1 + 0.57 * breath * frozen;
         const opacity =
           (s.live * (1 - frozen) + r.hang * hangDecay * frozen + freezeFlash * 0.55 * frozen) * (1 - out);
         if (opacity < 0.004) return null;
-        const d = s.d * (1 - 0.07 * inhale);
+        const grow = (1 - 0.07 * inhale) * (1 + 0.02 * breath * frozen);
+        const d = s.d * grow;
         // radial motion blur: a smear band from where the ring was 0.75 frame ago
-        const dPrev = state(tau(frame - 0.75), r.start).d * (1 - 0.07 * inhale);
+        const dPrev = state(tau(frame - 0.75), r.start).d * grow;
         // fresh rings are a touch heavier and brighter; they thin as they travel
         const young = Math.max(0, 1 - (t - r.start) / 10) * (1 - frozen);
         const width = 1.75 + 1.1 * young + 0.5 * freezeFlash;
-        const alpha = 0.45 + 0.25 * young;
+        const alpha = Math.min(1, (0.45 + 0.25 * young) * lift);
         const ring = (dd: number, o: number, key: string) => (
           <div
             key={key}
@@ -75,7 +85,7 @@ export const Rings: React.FC<{
               height: dd,
               borderRadius: '50%',
               border: `${width.toFixed(2)}px solid rgba(${WAVE},${alpha.toFixed(3)})`,
-              boxShadow: `0 0 18px rgba(${WAVE},0.14), inset 0 0 18px rgba(${WAVE},0.10)`,
+              boxShadow: `0 0 18px rgba(${WAVE},${(0.14 * lift).toFixed(3)}), inset 0 0 18px rgba(${WAVE},${(0.1 * lift).toFixed(3)})`,
               opacity: o,
               boxSizing: 'border-box',
             }}

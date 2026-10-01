@@ -196,7 +196,8 @@ export const ClockLockup: React.FC<{
 }) => {
   const cols = [0, 1, 2, 3].map((i) => {
     const pos = posAt(i, frame);
-    const speed = posAt(i, frame + 0.5) - posAt(i, frame - 0.5);
+    // a 180° shutter centred on the frame: the land frame (still arriving at 0.1 cell/f) is crisp
+    const speed = 2 * (posAt(i, frame + 0.25) - posAt(i, frame - 0.25));
     return (
       <Column
         key={i}
