@@ -3,7 +3,10 @@
  *
  *   t 0      the call hands over "Wednesday at 3 PM" (ember) at MARK with its
  *            <MarkGlow> at MARK_GLOW_HANDOFF; the glow cross-fades into the
- *            card's plate (t 1–5); the night room knocks the call back (t 0–20)
+ *            card's plate (t 1–5); the room knocks the call back (t 0–20) and
+ *            stays the call's midnight round the close-up — it warms to the
+ *            night room only with the split grade (t 39–59), so the light only
+ *            ever rises (the night half falls in, then the Booked half lights)
  *   t 0–12   LIFT: a 2-frame dip, then a soft spring up into the card (760/720
  *            × 200), towards the lens and a touch to the side; the pill's wash
  *            grows into the card; the mark's two words travel onto their
