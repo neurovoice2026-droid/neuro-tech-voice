@@ -1,6 +1,6 @@
 /**
  * 0–4 s · HOOK — black. A point of light; the #demo clock unfolds from it
- * and flicks through the site's four moments on 8th notes — the rush, just
+ * and flicks through the site's four moments 3 sixteenths apart — the rush, just
  * after closing, a Sunday — each a hard change of light (the colon orb, the
  * figures, a bloom in the black, the day drum), and LANDS on 03:12 in the
  * night's violet. The phone rings: the colon orb pulses, two rings leave it,
@@ -82,8 +82,8 @@ export const Hook: React.FC = () => {
   const inhale = tween(f, [HOOK_LOCAL.anticipation, HOOK_LOCAL.anticipation + 9], [0, 1], EASE.in4);
 
   /* ── the ring's attack frames (one ahead of the beat) ────────────── */
-  const ringAt = HOOK.ring - HOOK_LOCAL.ringLead; // 44
-  const ringBAt = HOOK_LOCAL.ringB - HOOK_LOCAL.ringLead; // 51
+  const ringAt = HOOK.ring - HOOK_LOCAL.ringLead; // 55
+  const ringBAt = HOOK_LOCAL.ringB - HOOK_LOCAL.ringLead; // 62
 
   /* ── the beat breaths of the frozen world (ON b6, b7) ────────────── */
   const breaths = HOOK_LOCAL.breathBeats;
@@ -100,7 +100,7 @@ export const Hook: React.FC = () => {
     0.035 * tween(f, [HOOK_LOCAL.pushTurn, SCENES.hook.to - 1], [0, 1], EASE.in2) +
     0.005 * flickKick +
     0.014 * bump(f, HOOK.clockLand, 3) +
-    0.012 * bump(f, ringAt, 2) + // peaks on 46, already 82 % on the beat
+    0.012 * bump(f, ringAt, 2) + // peaks 2 f after the attack, already 82 % on the ring frame
     0.008 * bump(f, HOOK.textIn, 2) +
     0.003 * breaths.reduce((s, B) => s + bump(f, B - 1, 2), 0) +
     0.03 * out;

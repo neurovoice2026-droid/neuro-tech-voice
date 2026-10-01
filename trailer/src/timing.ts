@@ -123,12 +123,14 @@ export type SceneKey = keyof typeof SCENES;
  * "Your business is closed."
  * ---------------------------------------------------------------- */
 export const HOOK = {
-  clockIn: b(1), // digit strips start to roll
-  clockLand: b(2), // 03:12 lands (click + thump)
-  ring: b(3), // first burst of the first ring
+  clockIn: b(1), // digit strips start to roll (the first flick leaves ≈ 15)
+  /* the four lights get 3 sixteenths each (HOOK_LOCAL.moments), so the land, the ring and the
+     line sit 3 sixteenths later than the beat they used to be on — the 76 → 112 hold had the slack */
+  clockLand: b(2.75), // 41 — 03:12 lands (click + thump), the 4th light
+  ring: b(3.75), // 56 — first burst of the first ring (15 f after the land)
   ringBurst: 12, // frames the burst lasts (0.4 s, UK cadence)
-  freeze: b(3) + 14, // time "freezes" mid-ring: rings hang in the air
-  textIn: b(4), // "Your business is closed." starts rising
+  freeze: b(3.75) + 14, // 70 — time "freezes" mid-ring: rings hang in the air
+  textIn: b(4.75), // 71 — "Your business is closed." starts rising (settled ≈ 102, before the 112 handoff)
   wordStagger: 3,
   anticipation: b(7.5) - 1, // = 112: the twist mounts and the text gathers itself before it breaks
   cameraPush: [0, b(8)] as const,
@@ -353,11 +355,12 @@ export const HOOK_LOCAL = {
   orbIn: b(0.25), // 4  — the colon orb lights, alone in the black (in the RUSH light)
   figuresIn: b(0.5), // 8  — "17 ◉ 05" unfolds out of the orb in the rush light (= moments[0])
   digitStagger: 2, // (v1 roll) frames between the four strips leaving
-  /** THE FOUR LIGHTS: the clock flicks through the site's four moments on 8th notes, each a hard
-   *  light change (colon orb, figures, bloom, day drum). Each value is the frame the new figures
-   *  LAND (a tick + a light chime; the last is the click + thump on the strong beat).
+  /** THE FOUR LIGHTS: the clock flicks through the site's four moments 3 sixteenths apart
+   *  (≈ 11 f: each light holds ≥ 7 sharp frames + its bloom, so time, light and label all read),
+   *  each a hard light change (colon orb, figures, bloom, day drum). Each value is the frame the
+   *  new figures LAND (a tick + a light chime; the last is the click + thump).
    *  rush 17:05 · closing 20:10 · sunday 10:12 · night 03:12 (home.server.ts) */
-  moments: [b(0.5), HOOK.clockIn, b(1.5), HOOK.clockLand] as const, // 8 15 23 30
+  moments: [b(0.5), b(1.25), b(2), HOOK.clockLand] as const, // 8 19 30 41
   /** frames a flick's strips travel (power3.inOut, a full turn + the difference, as on the site);
    *  each strip winds back for 2 f before it leaves */
   flickTravel: 3,
@@ -368,15 +371,15 @@ export const HOOK_LOCAL = {
   /** the day drum's first row ("MID-RUSH") lands a 16th after the figures unfold (follow-through) */
   drumIn: b(0.5) + 2, // 10
   /** after the land, a light sweep crosses the four figures left → right (≈ 11 f each) */
-  sheen: HOOK.clockLand + 1, // 31
+  sheen: HOOK.clockLand + 1, // 42
   /** Every ring attack leaves this many frames before its beat, so the beat frame is the peak. */
   ringLead: 1,
-  ringB: b(3) + 7, // 52 — second ring of the burst
-  waveIn: b(2.5), // 38 — the dotted wave row draws out from the centre
+  ringB: HOOK.ring + 7, // 63 — second ring of the burst
+  waveIn: b(3.25), // 49 — the dotted wave row draws out from the centre (8 f after the land, 7 before the ring)
   freezeEase: 3, // frames for world time to stop
   frozenRate: 0.12, // world speed once frozen (the hanging rings and motes creep visibly)
   /** the line has settled: the slow push turns into an accelerating inhale into the break */
-  pushTurn: HOOK.textIn + 16, // 76
+  pushTurn: HOOK.textIn + 16, // 87
   /** the frozen world breathes ON these beats: orb +3 %, rings +2 % / brighter, wave ±20 %, the line's glow */
   breathBeats: [b(6), b(7)] as const, // 90 105
   anticipation: HOOK_HANDOFF, // 112 — the inhale; the hanging rings/wave finish decaying
@@ -447,9 +450,10 @@ export const TWIST_LOCAL = {
    *  surroundings leave the frame, the frame's falloff is handed to the call's MidnightVignette — the
    *  dive never lands on a flat indigo field (atmosphere, no cue) */
   roomFalloff: [TWIST.pushToPhone[0] + 12, TWIST.pushToPhone[0] + 22] as const,
-  /** …at this k, held into the pickup. The call draws the SAME floor from its roomIn
-   *  (MidnightVignette k = max(roomVignette · roomOp, grade)), so the hand-over stays exact */
-  roomVignette: 0.6,
+  /** …at this k (the call's own full midnight falloff), held into the pickup. For an exact hand-over
+   *  the call draws the SAME floor, MidnightVignette k = max(roomVignette, grade), inside the group
+   *  that fades its room in over roomIn (opacity roomOp) — the twist keeps its own to its last frame */
+  roomVignette: 1,
 };
 
 /* ── CALL — fine cuts (call-local frames) ──────────────────────── */
