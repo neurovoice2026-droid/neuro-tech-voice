@@ -8,11 +8,11 @@
  * smeared by its own speed, never touching the pill). 9:16: right-aligned
  * under the pill.
  *
- * Entrance (momentTag, an 8th after the pill): the sun inhales for 2 f and
- * springs out spinning its rays in; the letters rise out of their masks
- * 0.7 f apart while the tag pops .5 → 1.12 → 1 about its right edge; ON the
- * hit a pool of Sunday light blooms behind it and a glint crosses the
- * letters left → right.
+ * Entrance (momentTag, an 8th after the pill; the springs lead it by 1 f so
+ * the tag is visibly popping ON it): the sun inhales for 2 f and springs out
+ * spinning its rays in; the letters rise out of their masks 0.7 f apart
+ * while the tag pops .6 → ~1.09 → 1 about its right edge; ON the hit a pool
+ * of Sunday light blooms behind it, then a glint crosses the letters.
  */
 import React from 'react';
 import { spring } from 'remotion';
@@ -69,7 +69,9 @@ const Sun: React.FC<{ size: number; p: number; inhale: number; color: string }> 
 
 export const Moment: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
   const s = KL.momentTag;
-  if (t < s - 2) return null;
+  // the springs start a frame before the hit, so the tag is visibly popping ON it (overshoot at s + 2)
+  const a = s - 1;
+  if (t < a - 2) return null;
   const T = G.top;
   const M = T.tag;
   const W = G.v ? 1080 : 1920;
@@ -81,21 +83,21 @@ export const Moment: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
   const blurId = 'kb-moment-blur';
   const f = dirBlurRef(blurId, sx, 0);
 
-  const inhale = t < s ? (t - (s - 2)) / 2 : 0;
-  const pop = t < s ? 0 : spring({ frame: t - s, fps: FPS, config: CHIP_POP });
-  const sunP = t < s ? 0 : spring({ frame: t - s, fps: FPS, config: { stiffness: 520, damping: 17, mass: 0.7 } });
-  const sc = t < s ? 0.5 : 0.5 + 0.5 * pop;
+  const inhale = t < a ? (t - (a - 2)) / 2 : 0;
+  const pop = t < a ? 0 : spring({ frame: t - a, fps: FPS, config: CHIP_POP });
+  const sunP = t < a ? 0 : spring({ frame: t - a, fps: FPS, config: { stiffness: 520, damping: 17, mass: 0.7 } });
+  const sc = t < a ? 0.6 : 0.6 + 0.4 * pop;
   // the light peaks as the tag reaches its overshoot (2 f in), then decays
-  const hit = t < s ? 0 : t < s + 2 ? (t - s) / 2 : flashAt(t, s + 2, 6);
+  const hit = t < a ? 0 : t < s + 1 ? (t - a) / 2 : flashAt(t, s + 1, 6);
   // the glint crosses the letters (in letter units) from s + 3
   const glint = tween(t, [s + 3, s + 13], [-3, TEXT.length + 3], EASE.inOut);
   const glintOn = t >= s + 3 && t <= s + 13;
   const approxW = M.icon + 14 + TEXT.length * M.size * 0.66 + 40;
-  const sepAt = s + 1 + DAY.length * 0.7;
+  const sepAt = s + DAY.length * 0.7;
   const sepP = aos(t, sepAt, { anticip: 2, depth: 0.2, config: CHIP_POP });
   const letter = (ch: string, i: number) => {
-    const p = aos(t, s + 1 + i * 0.7, { anticip: 2, depth: 0.08, config: SPRING.site });
-    const pp = aos(t - 1, s + 1 + i * 0.7, { anticip: 2, depth: 0.08, config: SPRING.site });
+    const p = aos(t, s + i * 0.7, { anticip: 2, depth: 0.08, config: SPRING.site });
+    const pp = aos(t - 1, s + i * 0.7, { anticip: 2, depth: 0.08, config: SPRING.site });
     const blur = Math.min(3, Math.abs(p - pp) * 4);
     const k = glintOn ? Math.exp(-(((i - glint) / 1.6) ** 2)) : 0;
     return (
@@ -129,7 +131,7 @@ export const Moment: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
 
   return (
     <>
-      {f ? <DirBlur id={blurId} sx={sx} sy={0} /> : null}
+      {f ? <DirBlur id={blurId} sx={sx} sy={0} pad={0.15} /> : null}
       {/* the hit: a pool of Sunday light blooms behind the tag */}
       {hit > 0.01 ? (
         <div
@@ -157,7 +159,7 @@ export const Moment: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
           color: INK,
         }}
       >
-        <div style={{ opacity: t < s ? 0.5 + 0.5 * inhale : 1 }}>
+        <div style={{ opacity: t < a ? 0.5 + 0.5 * inhale : 1 }}>
           <Sun size={M.icon} p={sunP} inhale={inhale} color={INK} />
         </div>
         <div style={mask}>{DAY.split('').map((ch, i) => letter(ch, i))}</div>

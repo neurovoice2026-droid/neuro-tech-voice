@@ -243,13 +243,21 @@ export const Knowledge: React.FC = () => {
   const cam = camera(t, G, L.cx, L.cy);
   const cool = missAt(t); // the documents stay cooled: none of them answered
 
-  // the stage recedes under the closing title
+  // the whip: counter-move, then away with a directional blur ∝ speed
+  const wp = whipPos(t, G);
+  const wv = whipPos(t + 0.5, G) - whipPos(t - 0.5, G);
+  const sig = Math.min(40, sigmaFor(wv));
+
+  // the stage recedes under the closing title (out of focus); once the whip's own smear takes
+  // over (σ 4 → 8) the focus blur hands over to it — invisible under the smear, and one filter
+  // on the frame instead of two nested
   const rc = tween(t, KL.recede, [0, 1], EASE.inOut);
+  const focus = 10 * rc * (1 - Math.min(1, Math.max(0, (sig - 4) / 4)));
   const recede: React.CSSProperties =
     rc > 0
       ? {
           opacity: 1 - 0.88 * rc,
-          filter: `blur(${(10 * rc).toFixed(2)}px)`,
+          filter: focus > 0.3 ? `blur(${focus.toFixed(2)}px)` : undefined,
           transform: `scale(${(1 - 0.03 * rc).toFixed(5)})`,
           transformOrigin: `${L.cx}px ${L.cy}px`,
         }
@@ -263,10 +271,6 @@ export const Knowledge: React.FC = () => {
   const orbOut = 1 - orbQ;
   const orbScale = (1 + 0.04 * orbSwell) * (1 - 0.45 * orbQ);
 
-  // the whip: counter-move, then away with a directional blur ∝ speed
-  const wp = whipPos(t, G);
-  const wv = whipPos(t + 0.5, G) - whipPos(t - 0.5, G);
-  const sig = Math.min(40, sigmaFor(wv));
   const wsx = G.whip.axis === 'x' ? sig : 0;
   const wsy = G.whip.axis === 'y' ? sig : 0;
   const whipF = dirBlurRef('kb-whip', wsx, wsy);

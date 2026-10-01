@@ -817,18 +817,421 @@ export const KNOWLEDGE_LOCAL = (() => {
   };
 })();
 
-/* ---------------------------------------------------------------- *
- * SOUND — every cue is an absolute frame on the timeline, computed from
- * the scene constants above so picture and sound can't drift apart.
- * `file` is relative to public/. `vol` is linear gain on top of the file:
- * SFX files are normalised to a -12 dBFS peak, the bed to -20 dBFS, the
- * voices to -5 dBFS (dialogue leads the mix; the bed ducks under it).
- * ---------------------------------------------------------------- */
-export const PK = { whoosh: 10, whooshSoft: 7, whooshRev: 16, riserShort: 10, riser: 28 } as const;
+/* ================================================================ *
+ * SOUND — the cue sheet, the voices and the master mix.
+ *
+ * HITS lists every visual hit of the picture (absolute frames, computed from the
+ * scene constants above, so picture and sound can't drift). buildCues() turns
+ * them into CUES:
+ *   · the designed sound for the hit (SFX), round-robin variants so repeats never
+ *     sound identical, tuned to the hit's light (THE FOUR LIGHTS are a key:
+ *     rush E · closing G# · sunday B · night E′ — an E-major arpeggio)
+ *   · pre-rolled sounds (whooshes, risers, swells, the flip) land their PEAK on the hit
+ *   · gain by weight (key 0 dB · normal −4 · subtle −9, on the −12 dBFS file peak);
+ *     non-key hits play 5 dB lower while someone is speaking
+ *   · pan by screen x (0..1 → −0.6..0.6), or a pan move
+ *   · same-family hits within 2 frames merge (the heavier one plays)
+ *   · each cue is sent to the room of its act (the dark night room / the bright white act)
+ * scripts/generate-sfx.mjs synthesises every sound, the music bed, and the master
+ * (voices + bed + cues, dialogue bus, ducking, rooms, loudness, true-peak limiter)
+ * into public/sfx/mix.wav, which src/Soundtrack.tsx plays.
+ * ================================================================ */
+
+/** Designed peak of each pre-rolled sound, in frames after it starts (generate-sfx builds them to these). */
+export const PK = {
+  whoosh: 10, whooshSoft: 7, whooshRev: 16, riserShort: 10, riser: b(2), swish: 4, swell: 6, flip: 2, shock: 3, ring: 1, chordRev: 6,
+} as const;
 const at = (scene: SceneKey, local: number) => SCENES[scene].from + local;
 const sfx = (name: string) => `sfx/${name}`;
 
-export type Cue = { at: number; file: string; vol?: number };
+/** THE FOUR LIGHTS as notes (MIDI): rush E5 · closing G#5 · sunday B5 · night E6 — the bed is in E major. */
+export const LIGHT_NOTES = { rush: 76, closing: 80, sunday: 83, night: 88 } as const;
+export type Light = keyof typeof LIGHT_NOTES | 'none';
+/** Tuned families are synthesised on B; a hit in a light plays its light's note. */
+export const LIGHT_SEMI: Record<Light, number> = { rush: -7, closing: -3, sunday: 0, night: 5, none: 0 };
+
+export type Group = 'tr' | 'pop' | 'flip' | 'air' | 'spark' | 'low' | 'bell' | 'sig';
+type SfxDef = {
+  /** round-robin variants (files name-0 … name-(n-1); one file when 1) */
+  n: number;
+  /** frames from the sound's start to its peak (lands on the hit) */
+  pk: number;
+  group: Group;
+  /** loudness trim (dB) so families sit together at the same weight */
+  trim: number;
+  /** room send (dB) and tempo-delay send (dB) */
+  send: number;
+  delay?: number;
+  /** synthesised on B and retuned by the hit's light */
+  tune?: boolean;
+  /** inside a merge, the bigger sound wins a tie */
+  rank?: number;
+};
+const S = (n: number, group: Group, trim: number, send: number, o: Partial<SfxDef> = {}): SfxDef => ({ n, pk: 0, group, trim, send, ...o });
+export const SFX = {
+  // transients
+  click: S(4, 'tr', 0, -18),
+  tick: S(4, 'tr', -1, -18, { tune: true }),
+  tap: S(4, 'tr', 0, -20),
+  key: S(4, 'tr', -2, -22),
+  flick: S(2, 'flip', -2, -20),
+  // bodies
+  pop: S(4, 'pop', 0, -16, { tune: true }),
+  gulp: S(2, 'pop', 0, -16),
+  flip: S(3, 'flip', -1, -16, { pk: PK.flip }),
+  // air
+  swish: S(4, 'air', -5, -16, { pk: PK.swish, rank: 2 }),
+  'whoosh-soft': S(2, 'air', -5, -14, { pk: PK.whooshSoft, rank: 3 }),
+  whoosh: S(3, 'air', -3, -14, { pk: PK.whoosh, rank: 4 }),
+  'whoosh-rev': S(1, 'air', -3, -16, { pk: PK.whooshRev, rank: 4 }),
+  air: S(1, 'air', -5, -14, { rank: 3 }),
+  swell: S(2, 'air', -5, -14, { pk: PK.swell, rank: 1 }),
+  sheen: S(2, 'air', -7, -14, { rank: 1 }),
+  draw: S(1, 'air', -8, -16, { rank: 1 }),
+  'riser-short': S(1, 'air', -3, -12, { pk: PK.riserShort, rank: 5 }),
+  riser: S(1, 'air', -2, -12, { pk: PK.riser, rank: 6 }),
+  // sparkle
+  shimmer: S(2, 'spark', -5, -12, { delay: -20 }),
+  glint: S(3, 'spark', -5, -14),
+  ping: S(2, 'spark', -4, -12, { tune: true, delay: -20 }),
+  ember: S(1, 'spark', -1, -12, { delay: -20 }),
+  // weight
+  thump: S(3, 'low', 0, -20),
+  land: S(2, 'low', 0, -16),
+  breath: S(1, 'low', 0, -22),
+  sub: S(1, 'low', 0, -16),
+  buzz: S(1, 'low', -4, -20),
+  // bells — the four light chimes and their family
+  'chime-rush': S(2, 'bell', -3, -10, { delay: -17 }),
+  'chime-closing': S(2, 'bell', -3, -10, { delay: -17 }),
+  'chime-sunday': S(2, 'bell', -3, -10, { delay: -17 }),
+  'chime-night': S(2, 'bell', -3, -10, { delay: -17 }),
+  'chime-rush-soft': S(1, 'bell', -3, -10, { delay: -18 }),
+  'chime-closing-soft': S(1, 'bell', -3, -10, { delay: -18 }),
+  'chime-sunday-soft': S(1, 'bell', -3, -10, { delay: -18 }),
+  'chime-night-soft': S(1, 'bell', -3, -10, { delay: -18 }),
+  chord: S(1, 'bell', -4, -10, { delay: -18 }),
+  'chord-rev': S(1, 'bell', -3, -14, { pk: PK.chordRev }),
+  strum: S(1, 'bell', -3, -10, { delay: -18 }),
+  ding: S(1, 'bell', -2, -10, { delay: -18 }),
+  'ding-s': S(2, 'bell', -3, -10, { tune: true, delay: -18 }),
+  confirm: S(1, 'bell', -2, -10, { delay: -18, rank: 2 }),
+  // signatures (never merged)
+  drain: S(1, 'sig', -2, -12),
+  freeze: S(1, 'sig', -2, -12, { delay: -20 }),
+  'ring-hook': S(1, 'sig', -2, -12, { pk: PK.ring }),
+  'ring-twist': S(1, 'sig', -2, -12, { pk: PK.ring }),
+  shatter: S(1, 'sig', 0, -12),
+  door: S(1, 'sig', 0, -12),
+  creak: S(1, 'sig', -4, -14),
+  'power-on': S(1, 'sig', -2, -12),
+  pickup: S(1, 'sig', -1, -14),
+  line: S(1, 'sig', -2, -16),
+  shock: S(1, 'sig', -3, -14, { pk: PK.shock }),
+  impact: S(1, 'sig', 0, -14),
+  'hit-white': S(1, 'sig', 0, -12),
+  slam: S(1, 'sig', 0, -14),
+} as const satisfies Record<string, SfxDef>;
+export type Snd = keyof typeof SFX;
+
+type Weight = 1 | 2 | 3;
+type Pan = number | readonly [number, number];
+/** A visual hit: the frame the picture hits, the sound, its light, screen x (or a pan move), weight. */
+export type Hit = {
+  at: number;
+  snd: Snd;
+  light: Light;
+  x: Pan;
+  w: Weight;
+  label: string;
+  /** extra semitones; extra dB; a run (n hits `step` frames apart, rising `semi`); a stereo split; skip merging */
+  semi?: number;
+  db?: number;
+  run?: { n: number; step?: number; semi?: number; semis?: readonly number[]; offs?: readonly number[]; xs?: readonly number[] };
+  split?: boolean;
+  layer?: boolean;
+};
+const H = (scene: SceneKey, local: number, snd: Snd, light: Light, x: Pan, w: Weight, label: string, o: Partial<Hit> = {}): Hit => ({
+  at: at(scene, local),
+  snd,
+  light,
+  x,
+  w,
+  label,
+  ...o,
+});
+const chime = (l: Exclude<Light, 'none'>, soft = false) => `chime-${l}${soft ? '-soft' : ''}` as Snd;
+/** The industry wall's lights, card by card (scale.tsx). */
+const WALL: Exclude<Light, 'none'>[] = ['rush', 'rush', 'rush', 'rush', 'closing', 'closing', 'sunday', 'sunday', 'night', 'closing', 'closing', 'night', 'sunday', 'sunday', 'night', 'night'];
+const WALL_X = [0.5, 0.74, 0.26, 0.74, 0.81, 0.82, 0.18, 0.5, 0.62, 0.87, 0.87, 0.87, 0.12, 0.37, 0.62, 0.87];
+const LANGS: Exclude<Light, 'none'>[] = ['rush', 'closing', 'sunday', 'night', 'rush', 'closing'];
+const LANG_X = [0.17, 0.5, 0.83, 0.16, 0.5, 0.84];
+const LANG_ORB_X = [0.3, 0.63, 0.96, 0.3, 0.63, 0.96];
+/** the five documents' notes: an E-major pentatonic run (E F# G# B C#) */
+const DOC_SEMI = [-7, -5, -3, 0, 2];
+const DOC_X = [0.14, 0.32, 0.5, 0.68, 0.86];
+const KL = KNOWLEDGE_LOCAL;
+/** rush · closing · sunday · night (the CTA orbs' order) */
+const LIGHT_ORDER4 = ['rush', 'closing', 'sunday', 'night'] as const;
+
+/**
+ * EVERY VISUAL HIT (the scene builders' hit lists). Where two hits sit within ~2 frames
+ * they merge in buildCues (or are folded into one designed sound — noted inline).
+ */
+export const HITS: Hit[] = [
+  /* ── HOOK ── */
+  H('hook', HOOK_LOCAL.orbIn, 'shimmer', 'rush', 0.5, 2, 'colon orb born in the rush light'),
+  H('hook', HOOK_LOCAL.moments[0], 'pop', 'rush', 0.5, 2, '17:05 springs out of the orb'),
+  H('hook', HOOK_LOCAL.moments[0], chime('rush'), 'rush', 0.5, 2, 'LIGHT: rush'),
+  H('hook', HOOK_LOCAL.drumIn, 'tick', 'rush', 0.5, 3, 'MID-RUSH drum row rolls up'),
+  H('hook', HOOK_LOCAL.moments[1] - HOOK_LOCAL.flickTravel, 'flick', 'closing', 0.5, 3, 'strips flick'),
+  H('hook', HOOK_LOCAL.moments[1], 'tick', 'closing', 0.5, 2, '20:10 AFTER CLOSING lands'),
+  H('hook', HOOK_LOCAL.moments[1], chime('closing'), 'closing', 0.5, 2, 'LIGHT: closing'),
+  H('hook', HOOK_LOCAL.moments[2] - HOOK_LOCAL.flickTravel, 'flick', 'sunday', 0.5, 3, 'strips flick'),
+  H('hook', HOOK_LOCAL.moments[2], 'tick', 'sunday', 0.5, 2, '10:12 SUNDAY lands'),
+  H('hook', HOOK_LOCAL.moments[2], chime('sunday'), 'sunday', 0.5, 2, 'LIGHT: sunday'),
+  H('hook', HOOK.clockLand - HOOK_LOCAL.flickTravel, 'flick', 'night', 0.5, 3, 'strips spin into the night'),
+  H('hook', HOOK.clockLand, 'click', 'night', 0.5, 1, '03:12 TUESDAY NIGHT lands'),
+  H('hook', HOOK.clockLand, 'thump', 'night', 0.5, 1, 'the land’s body (camera kick)'),
+  H('hook', HOOK.clockLand, chime('night'), 'night', 0.5, 2, 'LIGHT: night'),
+  H('hook', HOOK_LOCAL.sheen, 'sheen', 'night', [0.3, 0.7], 3, 'light sweep across the figures'),
+  H('hook', HOOK_LOCAL.waveIn, 'swish', 'night', 0.5, 3, 'dotted wave draws out both ways', { split: true }),
+  // the ring's two pulses (HOOK.ring, HOOK_LOCAL.ringB) are built into ring-hook
+  H('hook', HOOK.ring, 'ring-hook', 'night', 0.5, 1, 'FIRST RING (both pulses)'),
+  H('hook', HOOK.ring, 'buzz', 'night', 0.5, 3, 'handset buzz'),
+  H('hook', HOOK.freeze, 'freeze', 'night', 0.5, 2, 'time freezes mid-ring'),
+  H('hook', HOOK.textIn + 4, 'whoosh-soft', 'none', 0.5, 2, '“Your business is closed.” rises'),
+  H('hook', HOOK_LOCAL.breathBeats[0], 'breath', 'night', 0.5, 3, 'the frozen world breathes'),
+  H('hook', HOOK_LOCAL.breathBeats[1], 'breath', 'night', 0.5, 3, 'second breath'),
+  // the push into the break + the world's inhale (out[0]) + the twist's gather: one inhale, peak ON the shatter
+  H('hook', SCENES.hook.to - SCENES.hook.from, 'riser-short', 'night', 0.5, 2, 'inhale → peak ON the shatter'),
+
+  /* ── TWIST ── */
+  H('twist', TWIST.shatter, 'shatter', 'none', 0.5, 1, 'SHATTER (downbeat)'),
+  H('twist', TWIST.shatter + 2, 'glint', 'none', 0.175, 3, 'doorway light floods on'),
+  H('twist', TWIST_LOCAL.closedSlide + 2, 'swish', 'none', [0.6, 0.43], 2, '“closed” slides left'),
+  H('twist', TWIST_LOCAL.doorCreak, 'creak', 'none', 0.175, 3, 'the door creaks wider'),
+  H('twist', TWIST.reassemble[1], 'whoosh-rev', 'none', 0.5, 2, 'shards fly back into the tagline'),
+  H('twist', TWIST_LOCAL.closedLand, 'tap', 'none', 0.43, 2, '“Closed” seats'),
+  H('twist', TWIST_LOCAL.wordLand[0], 'tick', 'none', 0.55, 2, '“is” locks', { semi: -5 }),
+  H('twist', TWIST_LOCAL.wordLand[1], 'tick', 'none', 0.63, 2, '“for” locks', { semi: -3 }),
+  H('twist', TWIST_LOCAL.wordLand[2], 'tick', 'none', 0.42, 2, '“the” locks', { semi: 0 }),
+  H('twist', TWIST.doorSlam - 2, 'whoosh-soft', 'none', 0.175, 2, 'door swings shut, accelerating'),
+  H('twist', TWIST.doorSlam, 'door', 'none', 0.175, 1, 'DOOR SLAM'),
+  H('twist', TWIST.closedSign, 'click', 'none', 0.175, 2, 'CLOSED sign swings in'),
+  H('twist', TWIST_LOCAL.signGlint[0], 'glint', 'none', 0.175, 3, 'glint crosses the CLOSED pill'),
+  H('twist', TWIST.line2 + 3, 'whoosh-soft', 'none', 0.5, 2, '“not the phone.” rises'),
+  H('twist', TWIST.keyColor, 'sheen', 'night', [0.4, 0.6], 3, 'paper → lilac'),
+  // screenOpen[0]'s 2-frame white flash is inside power-on
+  H('twist', TWIST.phoneOn, 'power-on', 'night', 0.83, 1, 'PHONE POWERS ON'),
+  H('twist', TWIST.phoneOn, chime('night'), 'night', 0.83, 2, 'LIGHT: night (the screen)'),
+  H('twist', TWIST_LOCAL.avatarPop, 'pop', 'night', 0.83, 2, 'Ava’s orb pops onto the screen'),
+  // INCOMING / CALL and the number type in together: one chatter of keys
+  H('twist', TWIST_LOCAL.uiLabel, 'key', 'night', 0.83, 3, 'INCOMING CALL · +1 555 0129 type in', { run: { n: 16, step: 0.75 } }),
+  H('twist', TWIST_LOCAL.keyFocus[0], 'tick', 'night', 0.5, 2, 'FOCUS BEAT'),
+  H('twist', TWIST_LOCAL.keyGlint[0], 'sheen', 'night', [0.35, 0.65], 2, 'glint sweeps “not the phone.”'),
+  H('twist', TWIST_LOCAL.diveDip[1], 'swell', 'night', 0.83, 2, 'pull-back before the dive'),
+  H('twist', TWIST.pushToPhone[0] + 14, 'whoosh', 'night', [0.75, 0.5], 1, 'DIVE into the phone'),
+  // the ring's second wave (ring2 + 9) and the faint third ring (ring3) are inside ring-twist
+  H('twist', TWIST.ring2, 'ring-twist', 'night', 0.8, 1, 'RING (+ second wave)'),
+  H('twist', TWIST_LOCAL.buzz[0], 'buzz', 'night', 0.8, 2, 'the phone vibrates'),
+  H('twist', Math.round((TWIST_LOCAL.breath[0] + TWIST_LOCAL.breath[1]) / 2), 'swell', 'night', 0.5, 3, 'the orb breathes'),
+  H('call', 0, 'riser-short', 'night', 0.5, 1, 'pickup anticipation → peak ON the pickup'),
+
+  /* ── CALL ── */
+  H('call', CALL.pickup, 'pickup', 'night', 0.5, 1, 'PICKUP on the downbeat'),
+  H('call', CALL.pickup, 'thump', 'night', 0.5, 1, 'pickup body (kick)'),
+  H('call', CALL.pickedUpText[0] + 1, 'swish', 'night', 0.5, 3, '“Picked up on the first ring.” rises'),
+  H('call', CALL_LOCAL.roomOpen[0], 'air', 'night', 0.5, 3, 'camera pulls back into the room', { layer: true }),
+  H('call', CALL_LOCAL.statusIn, 'flip', 'night', 0.5, 2, 'CLOSED sign seats'),
+  H('call', CALL_LOCAL.lineGlint, 'sheen', 'night', [0.3, 0.7], 3, 'glow sweeps the line'),
+  // the line gathers (lift) and dives (CALL_LOCAL.dive) accelerating INTO the gulp; the digits' split is folded in
+  H('call', CALL_LOCAL.swallow - 1, 'swish', 'night', 0.5, 2, 'the line dives into the orb'),
+  H('call', CALL_LOCAL.swallow, 'gulp', 'night', 0.5, 1, 'the orb GULPS the line'),
+  H('call', CALL_LOCAL.unfold, 'swish', 'night', 0.5, 2, '03 / 12 spring out (stereo split)', { split: true }),
+  H('call', CALL_LOCAL.tagPops[0], 'tick', 'night', 0.5, 3, 'AVA tag pops'),
+  H('call', CALL_LOCAL.digitsLand, 'tick', 'night', 0.5, 2, '03 | 12 cross their rest', { split: true }),
+  H('call', CALL_LOCAL.unfold + 6, 'glint', 'night', [0.38, 0.62], 3, 'light sweeps the figure pairs'),
+  H('call', CALL_LOCAL.peel[0], 'whoosh-soft', 'night', [0.55, 0.75], 2, 'CLOSED peels right; push into Ava'),
+  H('call', CALL_LOCAL.peel[1], 'swish', 'night', 0.5, 2, 'digits peel off ±700 px', { split: true }),
+  H('call', CALL_LOCAL.disclose[0], 'draw', 'night', [0.3, 0.8], 3, 'AI-disclosure underline draws'),
+  H('call', CALL_LOCAL.discloseLock, 'tick', 'night', 0.62, 2, 'underline locks'),
+  H('call', CALL_LOCAL.lineOpen[0], 'line', 'night', 0.64, 2, 'CUT: caller line connects'),
+  H('call', CALL_LOCAL.tagPops[2], 'tick', 'night', 0.5, 3, 'CUT back to Ava'),
+  // the chips pop ON the spoken times: an octave down, under the speech band
+  H('call', CALL_LOCAL.chipPops[0], 'pop', 'night', 0.42, 1, 'chip 15:00 on “3 PM”', { semi: -12 }),
+  H('call', CALL_LOCAL.chipPops[1], 'pop', 'night', 0.58, 1, 'chip 16:30 on “4:30”', { semi: -10 }),
+  H('call', CALL_LOCAL.lineOpen[1], 'line', 'night', 0.64, 2, 'CUT: caller line connects'),
+  H('call', CALL_LOCAL.pick - 2, 'tap', 'night', 0.42, 3, '15:00 squashes (wind-up)'),
+  H('call', CALL_LOCAL.pick, 'click', 'night', 0.42, 1, '15:00 PICKED'),
+  H('call', CALL_LOCAL.chipDrop + 2, 'swish', 'night', [0.58, 0.64], 3, '16:30 drops away'),
+  H('call', CALL_LOCAL.chipsOut, 'tick', 'night', 0.5, 3, 'CUT to Ava (line 5)'),
+  H('call', CALL_LOCAL.chipAbsorb - 1, 'swish', 'night', [0.45, 0.5], 2, '15:00 flies up into the orb'),
+  H('call', CALL_LOCAL.chipAbsorb, 'gulp', 'night', 0.5, 2, 'the orb takes the slot in', { semi: -2 }),
+  H('call', CALL_LOCAL.ember, 'ember', 'none', 0.64, 1, 'BOOKED: 15:00 ignites ember (ON “3 PM”)', { db: -3 }),
+  H('call', CALL_LOCAL.payoff, 'thump', 'none', 0.5, 2, 'the mark presses'),
+  H('call', CALL_LOCAL.blowInhale[1], 'swell', 'night', 0.5, 3, 'the room inhales'),
+  H('call', CALL_LOCAL.markHide - 2, 'whoosh', 'night', 0.5, 1, 'everything blows to the lens'),
+
+  /* ── RESULT ── */
+  H('result', RESULT_LOCAL.liftGo + 3, 'swish', 'none', 0.5, 2, 'the mark lifts into the card'),
+  H('result', RESULT_LOCAL.cardReveal[0], 'tick', 'none', 0.42, 3, 'BOOKED row rises'),
+  H('result', RESULT_LOCAL.sheetIn + 3, 'whoosh-soft', 'night', [0.85, 0.65], 2, 'the calendar slides in'),
+  H('result', RESULT_LOCAL.slotIn[0], 'tick', 'night', 0.86, 3, 'WED 15:00 slot pops'),
+  H('result', RESULT.fly + 6, 'whoosh', 'none', [0.75, 0.57], 1, 'the card is thrown'),
+  H('result', RESULT.land, 'ding', 'none', 0.57, 1, 'LANDS in the slot'),
+  H('result', RESULT.land, 'land', 'none', 0.57, 1, 'squash + 9 px jolt'),
+  H('result', RESULT_LOCAL.ping[0], 'ping', 'none', 0.57, 3, 'event dot ping', { semi: -7 }),
+  // the divider (1 f before) is folded into the recompose whoosh
+  H('result', RESULT_LOCAL.recompose + 3, 'whoosh-soft', 'none', 0.72, 2, 'close-up crops into the card'),
+  H('result', RESULT_LOCAL.divider, 'sheen', 'night', 0.5, 2, 'the divider draws'),
+  H('result', RESULT.split, 'land', 'night', 0.25, 1, '“Asleep.” locks', { db: -4.4 }),
+  H('result', RESULT_LOCAL.moon, chime('night'), 'night', 0.25, 2, 'the moon locks (LIGHT: night)'),
+  H('result', RESULT_LOCAL.stars[0], 'tick', 'night', 0.09, 3, 'star 1', { semi: 7 }),
+  H('result', RESULT_LOCAL.stars[1], 'tick', 'night', 0.39, 3, 'star 2', { semi: 12 }),
+  H('result', RESULT.bookedWord, 'pop', 'none', 0.75, 1, '“Booked.” locks'),
+  H('result', RESULT.bookedWord + 1, 'sheen', 'none', [0.6, 0.9], 3, 'sheen across “Booked.”'),
+  H('result', RESULT_LOCAL.check, 'ding-s', 'closing', 0.84, 2, 'the green check pops'),
+  H('result', RESULT_LOCAL.stars[2], 'tick', 'night', 0.44, 3, 'star 3', { semi: 9 }),
+  H('result', RESULT_LOCAL.stars[3], 'tick', 'night', 0.14, 3, 'star 4', { semi: 14 }),
+  H('result', RESULT_LOCAL.sweep[0], 'sheen', 'none', [0.65, 0.9], 2, 'light sweep across 15:00'),
+  H('result', RESULT_LOCAL.pulse, 'swell', 'none', 0.75, 3, 'the event swells (anticipation)'),
+  H('result', RESULT_LOCAL.bloom[0], 'shimmer', 'none', 0.5, 3, 'the event blooms to white'),
+  H('result', RESULT_LOCAL.whiteFull, 'riser-short', 'none', 0.75, 1, 'the event opens past the frame'),
+  H('result', RESULT_LOCAL.whiteFull - 2, 'whoosh', 'none', 0.6, 2, 'the dive into the event', { layer: true, db: -3 }),
+
+  /* ── KNOWLEDGE ── */
+  H('knowledge', KL.stageIn[0], 'hit-white', 'sunday', 0.5, 1, 'WHITE: the stage materialises'),
+  H('knowledge', KL.stageIn[0], chime('sunday'), 'sunday', 0.5, 2, 'LIGHT: sunday blooms'),
+  H('knowledge', KL.eyebrowDot, 'tick', 'sunday', 0.06, 3, 'eyebrow dot spins in'),
+  H('knowledge', KNOWLEDGE.heading + 2, 'swish', 'none', 0.5, 2, '“Answers from your own documents.”'),
+  ...KL.docPops.map((f, i) => H('knowledge', f, 'pop', 'sunday', DOC_X[i], 2, `doc ${i + 1} pops`, { semi: DOC_SEMI[i] })),
+  H('knowledge', KL.headingStep[0], 'swish', 'none', 0.5, 3, 'the heading steps down'),
+  H('knowledge', KL.orbIn, 'land', 'sunday', 0.5, 1, 'the orb springs out (beat 2)'),
+  H('knowledge', KL.orbIn, 'glint', 'sunday', 0.5, 3, 'bloom flash off the rim'),
+  H('knowledge', KL.statusIn, 'pop', 'sunday', 0.89, 2, '“Listening” pill', { semi: 5 }),
+  H('knowledge', KL.momentTag, chime('sunday'), 'sunday', 0.73, 2, '“SUNDAY · 10:24” (LIGHT: sunday)'),
+  H('knowledge', KL.headingOut[0] + 3, 'swish', 'none', 0.5, 3, 'the heading flicks out'),
+  H('knowledge', KL.callerIn, 'tick', 'none', 0.38, 3, 'CALLER label'),
+  H('knowledge', KL.peekOpen, 'sheen', 'sunday', 0.71, 3, 'the peek page scans open'),
+  H('knowledge', KL.scanFlip, 'flip', 'sunday', 0.85, 2, 'pill: “Looking through 5 documents”'),
+  H('knowledge', KL.beams[0], 'shimmer', 'sunday', [0.2, 0.5], 2, 'five beams draw to the orb'),
+  H('knowledge', KL.dotPulse[0], 'tap', 'sunday', 0.84, 3, 'status dot reads', { run: { n: KL.dotPulse[2], step: KL.dotPulse[1] } }),
+  H('knowledge', KL.reads[0], 'tick', 'sunday', DOC_X[0], 3, 'the documents are read', {
+    run: { n: 5, offs: KL.reads.map((f) => f - KL.reads[0]), semis: DOC_SEMI, xs: DOC_X },
+  }),
+  H('knowledge', KL.beamLand[0], 'glint', 'sunday', 0.48, 3, 'beam heads land on the orb', { run: { n: 5, step: KL.beamStagger, semi: 2 } }),
+  H('knowledge', KL.tickBlink[0], 'tap', 'none', 0.5, 3, 'the 60 % ticks blink (doubt)', { layer: true, semi: -6 }),
+  H('knowledge', KL.missFlip, 'drain', 'none', 0.5, 1, 'THE MISS: the light drains to grey'),
+  H('knowledge', KL.missFlip, 'thump', 'none', 0.5, 1, 'the miss: kick'),
+  H('knowledge', KL.missFlip, 'flip', 'none', 0.85, 2, 'pill: “Not in the documents”'),
+  H('knowledge', KL.shake[0], 'tap', 'none', 0.85, 3, 'the pill shakes “no”', { run: { n: 2, step: 4 } }),
+  H('knowledge', KL.peekCollapse[0] + 2, 'swish', 'none', [0.76, 0.68], 3, 'the peek lines collapse'),
+  H('knowledge', KL.relight[0], chime('sunday', true), 'sunday', 0.5, 2, 'LIGHT: sunday floods back (Ava)'),
+  H('knowledge', KL.meta, 'pop', 'none', 0.5, 3, '“Your fallback message”', { semi: -12, db: -4 }),
+  H('knowledge', KL.recede[0], 'swell', 'sunday', 0.5, 2, 'the stage recedes into the title'),
+  H('knowledge', KNOWLEDGE.closing + 3, 'swish', 'none', 0.5, 2, '“Where your documents stop, it says so.”'),
+  H('knowledge', KL.closingKey, chime('sunday'), 'sunday', 0.5, 1, '“it says so.” turns Sunday teal'),
+  H('knowledge', KL.closingKey + 1, 'glint', 'sunday', [0.4, 0.7], 3, 'a glint runs through it'),
+  H('knowledge', KL.whipAnticip[1], 'swell', 'none', 0.5, 3, 'suck-in before the whip'),
+  H('knowledge', KL.whip[1] - 1, 'whoosh', 'none', [0.7, 0.1], 1, 'THE WHIP (pans right → left)'),
+
+  /* ── SCALE ── */
+  // card 01's pre-roll breath (scale.from − preroll) is the whip's tail
+  H('scale', SCALE_LOCAL.pops[0], 'pop', 'rush', 0.5, 1, 'card 01 pops (rush)'),
+  H('scale', SCALE_LOCAL.camSteps[0][1] - 1, 'swish', 'none', 0.5, 3, 'the camera peels back'),
+  ...SCALE_LOCAL.pops.slice(1).map((f, i) => H('scale', f, 'tick', WALL[i + 1], WALL_X[i + 1], 2, `industry ${i + 2} pops (${WALL[i + 1]})`)),
+  H('scale', SCALE_LOCAL.camSteps[1][1], 'whoosh-soft', 'none', 0.5, 2, 'snap-zoom 2×2 → 3×3'),
+  H('scale', SCALE_LOCAL.beats[0], 'thump', 'none', 0.5, 1, 'quarter: the wall pulses'),
+  H('scale', SCALE_LOCAL.camSteps[2][1], 'whoosh-soft', 'none', 0.5, 2, 'snap-zoom → the full wall'),
+  H('scale', SCALE_LOCAL.beats[1], 'thump', 'none', 0.5, 1, 'quarter: the wall pulses'),
+  H('scale', SCALE_LOCAL.beats[2], 'thump', 'none', 0.5, 1, 'quarter: punch-in kick'),
+  H('scale', SCALE.industriesTitle, 'slam', 'none', 0.5, 1, '“16 industries.” SLAMS'),
+  H('scale', SCALE.industriesTitle, 'strum', 'none', 0.5, 2, 'all 16 discs light in the four lights'),
+  H('scale', SCALE.industriesTitle, 'key', 'none', 0.5, 3, '13 letters stamp in', { run: { n: 13, step: 0.6 } }),
+  H('scale', SCALE_LOCAL.flyOut + 4, 'whoosh-soft', 'none', 0.5, 2, 'ten cards peel off outwards', { split: true }),
+  H('scale', SCALE_LOCAL.glide, 'swish', 'none', 0.5, 3, 'keepers glide into the grid'),
+  // each language: the flip, its orb's chime (its greeting lands), then its AI underline —
+  // which falls on the NEXT flip (a 16th later), so all but the last ride inside that flip
+  ...SCALE_LOCAL.langs.map((f, i) => H('scale', f, 'flip', LANGS[i], LANG_X[i], 2, `flips to language ${i + 1}`, i === 0 ? { db: -3 } : {})),
+  ...SCALE_LOCAL.orbPulse.map((f, i) => H('scale', f, chime(LANGS[i], true), LANGS[i], LANG_ORB_X[i], 3, `greeting ${i + 1} lands (LIGHT: ${LANGS[i]})`)),
+  H('scale', SCALE_LOCAL.disclose[5][0], 'swish', 'none', 0.8, 3, 'underline under AIアシスタント'),
+  H('scale', SCALE_LOCAL.titleSwap + 2, 'whoosh-soft', 'none', [0.5, 0.3], 2, '“16 industries.” → “14 languages.”'),
+  H('scale', SCALE_LOCAL.collapse + 3, 'whoosh-soft', 'none', [0.6, 0.3], 2, 'the cells collapse into the deck'),
+  H('scale', SCALE_LOCAL.titleAfter, 'key', 'none', 0.2, 3, '“After the call.” rises', { run: { n: 8, step: 0.7 } }),
+  H('scale', SCALE_LOCAL.trackIn, 'tick', 'closing', 0.5, 3, 'rail track + three nodes', { run: { n: 3, step: 2, semi: 2 } }),
+  H('scale', SCALE_LOCAL.carrierFly + 3, 'whoosh', 'closing', [0.84, 0.21], 2, 'the call flies onto the deck'),
+  H('scale', SCALE_LOCAL.stations[0], 'land', 'closing', 0.21, 1, 'THE CALL lands'),
+  H('scale', SCALE_LOCAL.stations[0], 'click', 'closing', 0.21, 2, 'node 1 fills'),
+  H('scale', SCALE_LOCAL.rails[0][0], 'sheen', 'closing', [0.21, 0.5], 3, 'bead runs call → Slack'),
+  H('scale', SCALE_LOCAL.pill, 'pop', 'none', 0.27, 2, 'ember “Booked” pill', { semi: -7 }),
+  H('scale', SCALE_LOCAL.cardsIn[1], 'land', 'closing', 0.5, 2, 'Slack card slams in'),
+  H('scale', SCALE_LOCAL.stations[1], 'click', 'closing', 0.5, 1, 'Slack node'),
+  H('scale', SCALE_LOCAL.rails[1][0], 'sheen', 'closing', [0.5, 0.79], 3, 'bead runs Slack → CRM'),
+  H('scale', SCALE_LOCAL.cardsIn[2], 'land', 'closing', 0.79, 2, 'CRM card slams in'),
+  H('scale', SCALE_LOCAL.ok, 'ding-s', 'closing', 0.79, 2, '“Contact saved ✓”'),
+  H('scale', SCALE_LOCAL.stations[2], 'confirm', 'closing', 0.79, 1, 'CRM node settles green'),
+  H('scale', SCALE_LOCAL.stream[0], 'sheen', 'closing', [0.21, 0.79], 3, 'a light mote streams to the CRM'),
+  H('scale', SCALE_LOCAL.ping[0] + 4, 'ping', 'closing', 0.79, 3, 'wider ping ring'),
+  H('scale', SCALE_LOCAL.stream[1], 'ding-s', 'closing', 0.79, 2, 'the handoff spark', { semi: 5 }),
+
+  /* ── CTA ── */
+  H('cta', CTA_LOCAL.iris[0] + 6, 'whoosh-rev', 'none', [0.79, 0.5], 2, 'the dark iris opens'),
+  H('cta', CTA_LOCAL.eyes[0], 'sub', 'night', 0.5, 2, 'her eyes out of the black'),
+  H('cta', CTA_LOCAL.reveal[0], 'shimmer', 'none', 0.5, 3, 'radial reveal'),
+  H('cta', CTA_LOCAL.glint[0], 'glint', 'night', [0.4, 0.6], 3, 'catch-light on her first word'),
+  ...CTA.lineWords
+    .filter((w, i) => i !== 6 && i !== 7) // "customers" rises with "your"; "24/7." below
+    .map((w, i) =>
+      H('cta', CTA.line + vWord(CTA.lineVoice, w) - CTA_LOCAL.riseLead, 'tap', 'none', [0.31, 0.37, 0.45, 0.55, 0.66, 0.4][i], 3, `headline word ${i + 1} rises`, { db: -4 }),
+    ),
+  H('cta', CTA.line + vWord(CTA.lineVoice, CTA.lineWords[7]) - CTA_LOCAL.riseLead, 'tap', 'none', 0.63, 2, '“24/7.” rises ON “Twenty”', { db: -3 }),
+  ...CTA_LOCAL.orbPops.map((f, i) => H('cta', f, chime(LIGHT_ORDER4[i]), LIGHT_ORDER4[i], [0.66, 0.71, 0.27, 0.36][i], 1, `${LIGHT_ORDER4[i].toUpperCase()} orb pops (LIGHT)`)),
+  // ON “Twenty” “four” “seven”: weight, not clicks — sub kicks under the words
+  ...CTA_LOCAL.tighten.map((f, i) => H('cta', f, 'thump', 'none', 0.5, 2, `the orbit tightens (“${['Twenty', 'four', 'seven'][i]}”)`, { db: -1 })),
+  H('cta', CTA_LOCAL.marks, 'tick', 'none', 0.5, 3, 'four corner marks pop', { run: { n: 4, step: 2, semi: 0 } }),
+  H('cta', CTA.logoImpact, 'riser', 'none', 0.5, 1, 'CONVERGE → peak ON the impact'),
+  H('cta', CTA_LOCAL.tearKick[0], 'swish', 'none', 0.5, 2, 'the filament burst tears the portrait'),
+  H('cta', CTA_LOCAL.collapse.from + 3, 'swish', 'none', 0.5, 3, 'headline words sucked into the core'),
+  H('cta', CTA_LOCAL.orbIn[1] - 6, 'whoosh', 'none', [0.3, 0.7], 2, 'the four orbs whirl at top speed'),
+  H('cta', CTA_LOCAL.eyeGlow[1], 'glint', 'night', 0.5, 3, 'the eyes’ last light slides into the core'),
+  // the four lights fuse (merge[0]) and the suck-in (impact − 4): the chord's reverse swell, peak ON the impact
+  H('cta', CTA.logoImpact, 'chord-rev', 'none', 0.5, 2, 'the four lights fuse', { layer: true }),
+  H('cta', CTA.logoImpact, 'impact', 'night', 0.5, 1, 'LOGO IMPACT'),
+  H('cta', CTA.logoImpact, 'chord', 'night', 0.5, 1, 'THE FOUR LIGHTS ring together'),
+  H('cta', CTA_LOCAL.ring[0], 'shock', 'none', 0.5, 2, 'the shockwave ring sweeps past', { layer: true }),
+  H('cta', CTA_LOCAL.rimIn[0], 'shimmer', 'none', 0.5, 3, 'a rim of the four lights'),
+  H('cta', CTA.button - 3, 'glint', 'none', 0.5, 3, 'a point of light gathers'),
+  H('cta', CTA.button, 'pop', 'none', 0.5, 1, '“Start free →” pops'),
+  H('cta', CTA.button + 1, 'sheen', 'none', [0.4, 0.6], 3, 'glint across the plate'),
+  H('cta', CTA.note, 'tap', 'none', 0.5, 3, '“5 free minutes, no card”', { db: -4 }),
+  H('cta', CTA.url, 'key', 'none', 0.5, 2, 'neurotechvoice.com types', { run: { n: 18, step: CTA_LOCAL.urlStep }, db: -5 }),
+  H('cta', CTA.press, 'click', 'night', 0.5, 1, 'the button is clicked'),
+  H('cta', CTA.press + CTA_LOCAL.pressDown, 'tap', 'night', 0.5, 3, 'the plate springs back'),
+];
+/* ── voices ── */
+export type Cue = {
+  /** start frame (fractional = sample-accurate in the mix) */
+  at: number;
+  file: string;
+  /** linear gain on the file (files peak at −12 dBFS) */
+  vol: number;
+  /** pan −0.6 … 0.6, or a move [from, to] over `move` frames */
+  pan: Pan;
+  move?: number;
+  /** playback rate: the light's tuning + a round-robin micro-detune */
+  rate: number;
+  room: 'night' | 'white';
+  /** the family's group: bells and sparkles ride their own bus, which steps back under the voice */
+  group: Group;
+  /** room send / tempo-delay send (dB) */
+  send: number;
+  delay?: number;
+  key: boolean;
+  /** the picture's hit this cue answers, and what it is */
+  hit: number;
+  label: string;
+};
 
 /** Every spoken line on the absolute timeline. */
 export const VOICES: { at: number; id: VoiceId }[] = [
@@ -838,94 +1241,103 @@ export const VOICES: { at: number; id: VoiceId }[] = [
   { at: at('cta', CTA.line), id: CTA.lineVoice },
   { at: at('cta', CTA.brandVoice), id: CTA.brandVoiceId },
 ];
-
-/** Speech windows (absolute frames) — the bed ducks under these. */
+/** Speech windows (absolute frames, whole lines) — the bed ducks under these. */
 export const SPEECH = VOICES.map((v) => [v.at, v.at + vFrames(v.id)] as const);
-/** Bed ducking: gain while speech plays (-7 dB), and the ramp in frames. */
-export const DUCK = { gain: 0.45, ramp: 6 };
+/** Spoken phrases (absolute frames) — where someone is actually talking. */
+export const PHRASES = VOICES.flatMap((v) =>
+  VOICE.lines[v.id].phrases.map((p) => [v.at + p.start * FPS, v.at + p.end * FPS] as const),
+);
+/** Is someone speaking at frame f (± a little air around each phrase)? */
+export const speaking = (f: number, before = 3, after = 5) => PHRASES.some(([a, e]) => f >= a - before && f <= e + after);
+/**
+ * Ducking under the voices. The bed drops `bedDb` across each line (ramped `ramp`
+ * frames ahead, released over `release`); wherever the voice is actually sounding
+ * (followed with a `lookahead`-second look-ahead, so first consonants are already clear)
+ * the bed loses `eqDb` and the effects `sfxEqDb` in the speech band (≈1–5 kHz), the
+ * effects' room + delay returns (their tails) drop `tailsDb`, and the sustained tonal
+ * effects (bells, sparkles — they ring across words) drop `tonalDb` broadband.
+ */
+export const DUCK = { bedDb: -6, eqDb: -6, sfxEqDb: -8, tailsDb: -6, tonalDb: -10, lookahead: 0.04, ramp: 6, release: 12 } as const;
 
-const industryTicks: Cue[] = Array.from({ length: 16 }, (_, i) => ({
-  at: at('scale', Math.round(SCALE.industriesIn + i * SCALE.industryStep)),
-  file: sfx(`tick-${i % 4}.wav`),
-  vol: 0.8,
-}));
+/* ── the cue builder ── */
+const W_DB: Record<Weight, number> = { 1: 0, 2: -4, 3: -9 };
+/** non-key hits under speech */
+const SPEECH_DB = -5;
+const DETUNE_CENTS = [0, 7, -6, 4, -8, 5, -3, 8];
+const panOf = (x: number) => Math.max(-0.6, Math.min(0.6, (x - 0.5) * 1.2));
+/** The white act (knowledge → the CTA iris) plays in a short bright room; everything else in the dark room. */
+export const WHITE_ACT = [SCENES.knowledge.from - 1, SCENES.scale.from + SCALE.irisToDark[1] - 4] as const;
+const fileOf = (s: Snd, k: number) => sfx(SFX[s].n > 1 ? `${s}-${k}.wav` : `${s}.wav`);
 
-const langPops: Cue[] = Array.from({ length: 6 }, (_, i) => ({
-  at: at('scale', Math.round(SCALE.langMorph + i * SCALE.langStep)),
-  file: sfx(`pop-${i % 3}.wav`),
-  vol: 0.75,
-}));
+function buildCues(hits: Hit[]): Cue[] {
+  // 1. merge: within a group, hits ≤ 2 frames apart keep only the heavier (then the bigger, then the first)
+  const sorted = [...hits].sort((a, b) => a.at - b.at);
+  const kept: Hit[] = [];
+  for (const h of sorted) {
+    const g = SFX[h.snd].group;
+    if (g === 'sig' || h.layer) {
+      kept.push(h);
+      continue;
+    }
+    const rival = kept.find((k) => !k.layer && SFX[k.snd].group === g && Math.abs(k.at - h.at) <= 2);
+    if (!rival) {
+      kept.push(h);
+      continue;
+    }
+    const score = (x: Hit) => -x.w * 10 + (SFX[x.snd].rank ?? 0);
+    if (score(h) > score(rival)) kept.splice(kept.indexOf(rival), 1, h);
+  }
+  // 2. expand runs and splits, choose variants, tune, gain, pan, room
+  const rr = new Map<Snd, number>();
+  const cues: Cue[] = [];
+  for (const h of kept.sort((a, b) => a.at - b.at)) {
+    // a light chime under speech strikes soft (darker, no mallet): the word stays in front
+    const snd = (/^chime-(rush|closing|sunday|night)$/.test(h.snd) && speaking(h.at) ? `${h.snd}-soft` : h.snd) as Snd;
+    const def: SfxDef = SFX[snd];
+    const run = h.run ?? { n: 1 };
+    for (let j = 0; j < run.n; j++) {
+      const hit = h.at + (run.offs ? run.offs[j] : j * (run.step ?? 0));
+      const x = run.xs ? run.xs[j] : h.x;
+      const parts: Pan[] = h.split ? [[-0.1, -0.55], [0.1, 0.55]] : [typeof x === 'number' ? panOf(x) : [panOf(x[0]), panOf(x[1])]];
+      for (const pan of parts) {
+        const c = rr.get(snd) ?? 0;
+        rr.set(snd, c + 1);
+        const semi = (def.tune ? LIGHT_SEMI[h.light] : 0) + (h.semi ?? 0) + (run.semis ? run.semis[j] : (run.semi ?? 0) * j);
+        const cents = def.n > 1 || def.tune ? DETUNE_CENTS[c % DETUNE_CENTS.length] : 0;
+        const rate = Math.pow(2, (semi + cents / 100) / 12);
+        const key = h.w === 1;
+        const talk = speaking(hit);
+        // under speech: non-key hits −5 dB; sustained tonal sounds (bells, sparkles) a little more, keys included
+        const tonal = def.group === 'bell' || def.group === 'spark';
+        const dB =
+          W_DB[h.w] + def.trim + (h.db ?? 0) + (talk && !key ? SPEECH_DB : 0) + (talk && tonal ? -3 : 0) + (h.split ? -3 : 0) -
+          (run.xs ? 0 : j * (run.n > 3 ? 0.25 : 0.8));
+        const start = hit - def.pk / rate;
+        const room = hit >= WHITE_ACT[0] && hit < WHITE_ACT[1] ? 'white' : 'night';
+        cues.push({
+          at: start,
+          file: fileOf(snd, c % def.n),
+          vol: Math.pow(10, dB / 20),
+          pan: run.n > 3 && !run.xs && typeof pan === 'number' ? Math.max(-0.6, Math.min(0.6, pan + ((j % 3) - 1) * 0.08)) : pan,
+          move: Array.isArray(pan) ? def.pk + 10 : undefined,
+          rate,
+          room,
+          group: def.group,
+          send: def.send,
+          delay: def.delay,
+          key,
+          hit,
+          label: h.label + (run.n > 1 ? ` [${j + 1}/${run.n}]` : ''),
+        });
+      }
+    }
+  }
+  return cues.sort((a, b) => a.at - b.at);
+}
 
-const flowPops: Cue[] = SCALE_LOCAL.stations.map((s, i) => ({
-  at: at('scale', s),
-  file: sfx(i === 2 ? 'confirm.wav' : 'click.wav'),
-}));
+export const CUES: Cue[] = buildCues(HITS);
 
-const docTicks: Cue[] = Array.from({ length: 5 }, (_, i) => ({
-  at: at('knowledge', Math.round(KNOWLEDGE.docsIn + i * KNOWLEDGE.docStep)),
-  file: sfx(`tick-${(i + 1) % 4}.wav`),
-  vol: 0.7,
-}));
-
-export const CUES: Cue[] = [
-  // HOOK
-  { at: at('hook', HOOK.clockIn), file: sfx('roll.wav') },
-  { at: at('hook', HOOK.clockLand), file: sfx('land.wav') },
-  { at: at('hook', HOOK.ring), file: sfx('ring.wav') },
-  { at: at('hook', HOOK.textIn), file: sfx('whoosh-soft.wav'), vol: 0.8 },
-  { at: at('hook', HOOK.anticipation) - 6, file: sfx('riser-short.wav') },
-  // TWIST
-  { at: at('twist', TWIST.shatter), file: sfx('shatter.wav') },
-  { at: at('twist', TWIST.reassemble[0]), file: sfx('whoosh-rev.wav'), vol: 0.8 },
-  { at: at('twist', TWIST.doorSlam), file: sfx('door.wav') },
-  { at: at('twist', TWIST.closedSign), file: sfx('click.wav'), vol: 0.7 },
-  { at: at('twist', TWIST.line2), file: sfx('whoosh-soft.wav'), vol: 0.7 },
-  { at: at('twist', TWIST.phoneOn), file: sfx('power-on.wav') },
-  { at: at('twist', TWIST.pushToPhone[0]), file: sfx('whoosh.wav') },
-  { at: at('twist', TWIST.ring2), file: sfx('ring.wav') },
-  // CALL (the voices themselves are in VOICES)
-  { at: at('call', CALL.pickup), file: sfx('pickup.wav') },
-  { at: at('call', CALL_LOCAL.swallow), file: sfx('pop-2.wav'), vol: 0.7 }, // the gulp
-  { at: at('call', CALL.lines[2].at + CALL.slotPops[0]), file: sfx('pop-0.wav'), vol: 0.6 },
-  { at: at('call', CALL.lines[2].at + CALL.slotPops[1]), file: sfx('pop-1.wav'), vol: 0.6 },
-  { at: at('call', CALL.slotPick), file: sfx('click.wav'), vol: 0.8 },
-  { at: at('call', CALL.bookedMark), file: sfx('shimmer.wav'), vol: 0.7 },
-  // RESULT
-  { at: at('result', RESULT.fly) - 4, file: sfx('whoosh.wav') },
-  { at: at('result', RESULT.land), file: sfx('ding.wav') },
-  { at: at('result', RESULT.land), file: sfx('pop-2.wav'), vol: 0.9 },
-  { at: at('result', RESULT.split), file: sfx('whoosh-soft.wav'), vol: 0.7 },
-  { at: at('result', RESULT.bookedWord), file: sfx('pop-0.wav'), vol: 0.8 },
-  { at: at('result', RESULT.toWhite[0]), file: sfx('riser-short.wav') },
-  // KNOWLEDGE (the white act begins)
-  { at: at('knowledge', 0), file: sfx('hit.wav') },
-  { at: at('knowledge', KNOWLEDGE.heading), file: sfx('whoosh-soft.wav'), vol: 0.6 },
-  ...docTicks,
-  { at: at('knowledge', KNOWLEDGE.scan[0]), file: sfx('whoosh-soft.wav'), vol: 0.55 },
-  { at: at('knowledge', KNOWLEDGE.miss), file: sfx('land.wav'), vol: 0.6 },
-  // (no extra tick at statusIn: it coincides with the fifth doc tick)
-  // the whip: the whoosh peaks on its fastest frame
-  { at: at('knowledge', KNOWLEDGE_LOCAL.whip[1] - 1) - PK.whoosh, file: sfx('whoosh.wav'), vol: 0.7 },
-  // SCALE
-  { at: at('scale', 0), file: sfx('pop-2.wav') },
-  ...industryTicks,
-  { at: at('scale', SCALE.industriesTitle), file: sfx('hit.wav'), vol: 0.9 }, // "16 industries." slams
-  // the peel-off: the soft whoosh peaks as the ten cards leave fastest
-  { at: at('scale', SCALE_LOCAL.flyOut + 4) - PK.whooshSoft, file: sfx('whoosh-soft.wav'), vol: 0.8 },
-  ...langPops,
-  // the Japanese carrier's flight onto the deck
-  { at: at('scale', SCALE_LOCAL.carrierFly + 3) - PK.whoosh, file: sfx('whoosh.wav'), vol: 0.8 },
-  ...flowPops,
-  // peaks on the CTA iris's fastest frames
-  { at: at('scale', SCALE.irisToDark[0] + 9) - PK.whooshRev, file: sfx('whoosh-rev.wav') },
-  // CTA
-  { at: at('cta', 0), file: sfx('sub.wav') },
-  { at: at('cta', CTA.converge[0]), file: sfx('riser.wav') },
-  { at: at('cta', CTA.logoImpact), file: sfx('impact.wav') },
-  { at: at('cta', CTA.button), file: sfx('pop-1.wav') },
-  { at: at('cta', CTA.url), file: sfx('tick-2.wav') },
-  { at: at('cta', CTA.press), file: sfx('click.wav') },
-];
-
-/** The ambient bed (pad + beat), synthesised to the full length by generate-sfx.mjs. */
+/** The music bed (synthesised to the film by generate-sfx.mjs; −20 dBFS peak, ducked in the mix). */
 export const BED = { file: sfx('bed.wav'), vol: 1 };
+/** The master: everything above, mixed to `lufs` integrated with a true-peak ceiling (dBTP). */
+export const MIX = { file: sfx('mix.wav'), lufs: -15, ceiling: -1.5 } as const;

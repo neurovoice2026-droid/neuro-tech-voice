@@ -10,24 +10,28 @@ import React from 'react';
 /** sigma for a smear of `px` pixels (box → Gaussian of equal variance) */
 export const sigmaFor = (px: number) => Math.abs(px) / 3.46;
 
-/** (the filter region grows only along the smear: a full-frame layer filtered over 2.2 × 2.2 its
- *  area is ~5× the pixels of one grown along one axis) */
-export const DirBlur: React.FC<{ id: string; sx: number; sy: number }> = ({ id, sx, sy }) => (
-  <svg width={0} height={0} style={{ position: 'absolute', left: 0, top: 0 }} aria-hidden>
-    <defs>
-      <filter
-        id={id}
-        x={sx > 0.35 ? '-60%' : '-4%'}
-        y={sy > 0.35 ? '-60%' : '-4%'}
-        width={sx > 0.35 ? '220%' : '108%'}
-        height={sy > 0.35 ? '220%' : '108%'}
-        colorInterpolationFilters="sRGB"
-      >
-        <feGaussianBlur stdDeviation={`${Math.max(0, sx).toFixed(2)} ${Math.max(0, sy).toFixed(2)}`} />
-      </filter>
-    </defs>
-  </svg>
-);
+/** (the filter region grows only along the smear, by `pad` of the element's size each side — it
+ *  needs ~3σ: a full-frame layer filtered over 2.2 × 2.2 its area costs ~4× one padded by 10 %) */
+export const DirBlur: React.FC<{ id: string; sx: number; sy: number; pad?: number }> = ({ id, sx, sy, pad = 0.1 }) => {
+  const p = (on: boolean) => (on ? pad : 0.02);
+  const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
+  return (
+    <svg width={0} height={0} style={{ position: 'absolute', left: 0, top: 0 }} aria-hidden>
+      <defs>
+        <filter
+          id={id}
+          x={pct(-p(sx > 0.35))}
+          y={pct(-p(sy > 0.35))}
+          width={pct(1 + 2 * p(sx > 0.35))}
+          height={pct(1 + 2 * p(sy > 0.35))}
+          colorInterpolationFilters="sRGB"
+        >
+          <feGaussianBlur stdDeviation={`${Math.max(0, sx).toFixed(2)} ${Math.max(0, sy).toFixed(2)}`} />
+        </filter>
+      </defs>
+    </svg>
+  );
+};
 
 /** the CSS filter value for a DirBlur, or undefined when it would be invisible */
 export const dirBlurRef = (id: string, sx: number, sy: number) => (sx > 0.35 || sy > 0.35 ? `url(#${id})` : undefined);
@@ -36,4 +40,5 @@ export const dirBlurRef = (id: string, sx: number, sy: number) => (sx > 0.35 || 
 export const flashAt = (t: number, at: number, tau = 4) => (t < at ? 0 : Math.exp(-(t - at) / tau));
 
 /** 0 → 1 → 0 over [a, b] (sine): a ring's life, a glint's pass */
-export const lifeAt = (t: number, a: number, b: number) => (t <= a || t >= b ? 0 : Math.sin((Math.PI * (t - a)) / (b - a)));
+export const lifeAt = (t: number, a: number, b: number) =>
+  t <= a || t >= b ? 0 : Math.sin((Math.PI * (t - a)) / (b - a));

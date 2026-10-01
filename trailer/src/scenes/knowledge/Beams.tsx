@@ -54,12 +54,15 @@ export const Beams: React.FC<{ t: number; G: Geo; uid: string }> = ({ t, G, uid 
         const headO = p < 1 ? Math.min(1, p * 6) * Math.min(1, (1 - p) * 6) : 0;
         return (
           <g key={i} style={{ opacity: fade }}>
-            <mask id={`${uid}-m${i}`} maskUnits="userSpaceOnUse" x={0} y={0} width={G.v ? 1080 : 1920} height={G.v ? 1920 : 1080}>
-              <path d={bm.d} pathLength={1} stroke="#fff" strokeWidth={14} strokeDasharray="1 1" strokeDashoffset={1 - p} />
-            </mask>
+            {/* the draw mask only while drawing (an SVG mask a frame costs; a drawn beam needs none) */}
+            {p < 1 ? (
+              <mask id={`${uid}-m${i}`} maskUnits="userSpaceOnUse" x={0} y={0} width={G.v ? 1080 : 1920} height={G.v ? 1920 : 1080}>
+                <path d={bm.d} pathLength={1} stroke="#fff" strokeWidth={14} strokeDasharray="1 1" strokeDashoffset={1 - p} />
+              </mask>
+            ) : null}
             <path
               d={bm.d}
-              mask={`url(#${uid}-m${i})`}
+              mask={p < 1 ? `url(#${uid}-m${i})` : undefined}
               stroke={BEAM_INK}
               strokeWidth={3}
               strokeDasharray="0.01 9"
