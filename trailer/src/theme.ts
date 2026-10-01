@@ -168,31 +168,112 @@ export const ORB = {
 } as const;
 
 /**
- * Faces, as the site sets them. Loaded from @fontsource in fonts.ts.
- * Variable builds, so the site's in-between weights (440, 460, 520) render
- * exactly rather than rounding to a static cut.
+ * ONE FAMILY ON SCREEN — Instrument Sans (variable), set like the knowledge
+ * heading the client chose as THE look ("Answers from your own documents.":
+ * 460, −0.03em, sentence case, the key phrase in the scene's accent ink).
+ * Japanese falls through to Noto Sans JP (a sans, to match). Geist Mono only
+ * for genuinely technical tokens (a time code, #front-desk), sparingly.
+ * Loaded from @fontsource in lib/fonts.ts. Use the TYPE roles below rather
+ * than setting faces by hand.
  */
+const SANS = '"Instrument Sans Variable", "Instrument Sans", "Noto Sans JP Variable", system-ui, sans-serif';
+
 export const FONT = {
-  /** Inter Tight — the cover's display face (hero headline, CTA, wordmark). */
-  display: '"Inter Tight Variable", "Inter Tight", system-ui, sans-serif',
-  /** Instrument Sans — section display + the clock figures. */
-  ui: '"Instrument Sans Variable", "Instrument Sans", system-ui, sans-serif',
-  /** Inter — body copy, labels, header chrome. */
-  body: '"Inter Variable", Inter, system-ui, sans-serif',
-  /** Cormorant Garamond 500 — spoken lines (the site's "cinema" face). */
-  cinema: '"Cormorant Garamond", "Noto Serif JP", Georgia, serif',
-  /** Geist Mono — measured values, times, ordinals, POST/200 OK. */
+  /** Instrument Sans — EVERY piece of on-screen type (display, headlines, captions, labels). */
+  ui: SANS,
+  /** Japanese: Noto Sans JP first (CJK-only runs / measuring); mixed runs can simply use `ui`. */
+  jp: '"Noto Sans JP Variable", "Instrument Sans Variable", sans-serif',
+  /** Geist Mono — technical tokens only (a time code, #front-desk, 200 OK). */
   mono: '"Geist Mono Variable", "Geist Mono", ui-monospace, monospace',
+  /** @deprecated was Inter Tight — now Instrument Sans (one family). Use TYPE.display / FONT.ui. */
+  display: SANS,
+  /** @deprecated was Inter — now Instrument Sans (one family). Use TYPE.* / FONT.ui. */
+  body: SANS,
+  /** @deprecated was Cormorant Garamond (serif italic) — now Instrument Sans. Captions: TYPE.caption, never italic. */
+  cinema: SANS,
 } as const;
 
 /** Type roles from components/site/home/type.ts, scaled for video. */
 export const TRACK = {
-  display: '-0.04em', // cover headline (the tracking "the design depends on")
+  display: '-0.03em', // was −0.04em (Inter Tight's cover headline); one family now: the section tracking
   wordmark: '-0.07em',
-  section: '-0.03em',
+  section: '-0.03em', // the knowledge heading — THE look
   h3: '-0.01em',
+  /** card / station / industry names (TYPE.title) */
+  title: '-0.02em',
+  /** spoken lines (TYPE.caption) */
+  caption: '-0.02em',
   label: '0.14em',
   tag: '0.16em',
+} as const;
+
+/* ── TYPE: the roles ──────────────────────────────────────────────
+ * Built on the knowledge heading (src/scenes/knowledge/Title.tsx: FONT.ui,
+ * 460, TRACK.section, line-height 1.04). Sizes are [16:9, 9:16] px (both
+ * renders have a 1080 px short side). Legibility floor on a phone: read
+ * text ≥ 64 / 56 px, labels ≥ 30 / 28 px; 9:16 safe zone y 250–1500.
+ *
+ * Light type on a dark ground reads heavier (irradiation): `weightOnDark` is
+ * the same optical weight there. Helpers: lib/type.ts (typeStyle, useType,
+ * captionFont). Two-tone: the key phrase in the scene's accent ink
+ * (LIGHTS[id].ink on paper, lights.ts inkFor(id, 'dark') on night).
+ */
+export type TypeRole = 'display' | 'headline' | 'title' | 'caption' | 'label' | 'meta';
+
+export type TypeSpec = {
+  family: string;
+  /** px [16:9, 9:16] */
+  size: readonly [number, number];
+  weight: number;
+  /** the same optical weight for light type on a dark ground */
+  weightOnDark: number;
+  /** letter-spacing (em) */
+  tracking: string;
+  lineHeight: number;
+  /** UPPERCASE (labels) */
+  upper?: boolean;
+};
+
+export const TYPE: Record<TypeRole, TypeSpec> = {
+  /** The biggest statements: "Your business is closed.", "Asleep. / Booked.", the CTA line. */
+  display: { family: SANS, size: [128, 112], weight: 460, weightOnDark: 440, tracking: TRACK.section, lineHeight: 1.04 },
+  /** Section headings — exactly the knowledge heading: "Answers from your own documents.", "After the call." */
+  headline: { family: SANS, size: [100, 92], weight: 460, weightOnDark: 440, tracking: TRACK.section, lineHeight: 1.06 },
+  /** Names on cards / stations / industries ("Price list", "Dental clinic", "Slack"): the smallest read text. */
+  title: { family: SANS, size: [64, 56], weight: 480, weightOnDark: 460, tracking: TRACK.title, lineHeight: 1.12 },
+  /** Spoken lines — Ava AND the caller (colour + a label say who speaks, never a serif italic). */
+  caption: { family: SANS, size: [76, 68], weight: 460, weightOnDark: 450, tracking: TRACK.caption, lineHeight: 1.18 },
+  /** Small uppercase tracked meta: AVA / CALLER, KNOWLEDGE BASE, TUESDAY NIGHT. */
+  label: { family: SANS, size: [30, 28], weight: 540, weightOnDark: 520, tracking: TRACK.label, lineHeight: 1.2, upper: true },
+  /** Technical tokens in Geist Mono (3:00 PM on a calendar, #front-desk) — sparingly. */
+  meta: { family: '"Geist Mono Variable", "Geist Mono", ui-monospace, monospace', size: [30, 28], weight: 460, weightOnDark: 440, tracking: '0em', lineHeight: 1.2 },
+};
+
+/**
+ * Japanese in a role: CJK glyphs fill the em (they read ~15 % bigger than Latin
+ * at one size) and are never negatively tracked. Apply on top of a role:
+ * size × scale, tracking, weight (Noto Sans JP is darker than Instrument Sans).
+ */
+export const TYPE_JP = { scale: 0.86, tracking: '0.02em', weight: 430, weightOnDark: 410, lineHeight: 1.22 } as const;
+
+/** Who is speaking: the caption ink and the tag (label) ink, on night and on paper. */
+export const VOICE_INK = {
+  ava: { label: 'AVA', night: { text: '#edecf1', tag: '#b9a3ff' }, paper: { text: '#140a24', tag: '#6d28d9' } },
+  caller: { label: 'CALLER', night: { text: '#a9bcff', tag: '#a9bcff' }, paper: { text: '#3c50c8', tag: '#3c50c8' } },
+} as const;
+export type Speaker = keyof typeof VOICE_INK;
+export type Tone = 'night' | 'paper';
+
+/* ── ROOMS: the grounds (components/Atmosphere.tsx) ───────────────
+ * Colour lives in the subject, not the wallpaper: the rooms are neutral and
+ * take colour only from their one key light. */
+export const ROOM = {
+  /** near-black, the faintest cool bias (the cover's ink, a touch deeper) */
+  night: '#050408',
+  /** a warm near-black for the booked side */
+  ember: '#0a0605',
+  /** paper white: the lit centre, the wall in shade, the floor */
+  paper: { lit: '#ffffff', wall: '#ecebe8', floor: '#f6f5f2' },
 } as const;
 
 /** Shadows, verbatim. */
@@ -205,6 +286,23 @@ export const SHADOW = {
   chip: '0 0.8em 2em -0.6em rgba(0,0,0,0.75)', // cursor chip on the cover
   deep: '0 40px 80px -30px rgba(0,0,0,0.8), 0 12px 24px -12px rgba(0,0,0,0.6)',
 } as const;
+
+/**
+ * A real object's shadow on paper, at `lift` (0 = resting, 1 = a card, 2 = held up):
+ * a tight contact shadow + a soft key shadow below + a wide ambient — layered like
+ * light falls (SHADOW.menu's idiom), never one big grey blur. `k` scales the darkness.
+ */
+export function elevation(lift = 1, k = 1): string {
+  const l = Math.max(0, lift);
+  const a = (x: number) => (x * k).toFixed(3);
+  return [
+    `0 0 0 1px rgb(20 16 28 / ${a(0.05)})`,
+    `0 ${(0.5 + l * 0.5).toFixed(1)}px ${(1 + l).toFixed(1)}px rgb(20 16 28 / ${a(0.06)})`,
+    `0 ${(2 + l * 4).toFixed(1)}px ${(4 + l * 8).toFixed(1)}px -${(1 + l * 2).toFixed(1)}px rgb(20 16 28 / ${a(0.07)})`,
+    `0 ${(6 + l * 14).toFixed(1)}px ${(14 + l * 30).toFixed(1)}px -${(4 + l * 8).toFixed(1)}px rgb(20 16 28 / ${a(0.09)})`,
+    `0 ${(14 + l * 30).toFixed(1)}px ${(30 + l * 60).toFixed(1)}px -${(10 + l * 18).toFixed(1)}px rgb(20 16 28 / ${a(0.08)})`,
+  ].join(', ');
+}
 
 /** Radii (the site's --radius 0.75rem scale). */
 export const R = {

@@ -25,6 +25,8 @@ export const EASE = {
   expo: Easing.bezier(0.19, 1, 0.22, 1),
   /** Strong in — the frames before an impact. */
   in4: Easing.bezier(0.895, 0.03, 0.685, 0.22),
+  /** power3.in — type leaving through its mask (accelerates away, no linger). */
+  in3: Easing.bezier(0.55, 0.055, 0.675, 0.19),
 } as const;
 
 /* ── Springs ─────────────────────────────────────────────────────── */
@@ -39,7 +41,44 @@ export const SPRING = {
   heavy: { stiffness: 160, damping: 18, mass: 1.4 },
   /** Critically-damped-ish glide (no overshoot) for camera moves. */
   glide: { stiffness: 90, damping: 26, mass: 1 },
+  /** TYPE: a word / line rising out of its mask. ζ ≈ .8 — 90 % in ≈ .25 s, a 1.4 % overshoot, settled by ≈ .6 s. */
+  text: { stiffness: 170, damping: 21, mass: 1 },
+  /** TYPE: a caption word as it is spoken (quicker: ζ ≈ .87, 90 % in ≈ .18 s, no visible overshoot). */
+  caption: { stiffness: 260, damping: 28, mass: 1 },
+  /** TYPE: big display words — slower, heavier, one soft overshoot (ζ ≈ .72, ≈ 3 %). */
+  display: { stiffness: 140, damping: 17, mass: 1 },
 } satisfies Record<string, Partial<SpringConfig>>;
+
+/**
+ * A spring from 0 to 1, released from rest at dt = 0, in CLOSED FORM: exact and
+ * continuous for any fractional dt (the 120 fps render samples between timeline
+ * frames), no stepping, no cache. dt is in timeline (30 fps) frames; 0 for dt ≤ 0.
+ * Same physics (and units) as remotion's spring(): springUnit(dt, c) ≡ spring({ frame: dt, fps: 30, config: c }).
+ */
+export function springUnit(dt: number, config: Partial<SpringConfig> = SPRING.text): number {
+  if (dt <= 0) return 0;
+  const k = config.stiffness ?? 100;
+  const c = config.damping ?? 10;
+  const m = config.mass ?? 1;
+  const t = dt / FPS;
+  const w0 = Math.sqrt(k / m);
+  const z = c / (2 * Math.sqrt(k * m));
+  let x: number;
+  if (z < 1) {
+    const wd = w0 * Math.sqrt(1 - z * z);
+    x = 1 - Math.exp(-z * w0 * t) * (Math.cos(wd * t) + ((z * w0) / wd) * Math.sin(wd * t));
+  } else {
+    // (remotion treats every ζ ≥ 1 as critically damped at ω0 — mirrored, so the two agree exactly)
+    x = 1 - Math.exp(-w0 * t) * (1 + w0 * t);
+  }
+  return config.overshootClamping ? Math.min(1, x) : x;
+}
+
+/** Hermite smoothstep of x over [a, b] (0 → 1, C1-continuous). */
+export function smooth(a: number, b: number, x: number): number {
+  const u = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return u * u * (3 - 2 * u);
+}
 
 /** Clamped interpolate with an easing — the workhorse. */
 export function tween(
@@ -114,8 +153,9 @@ export function windowed(
 }
 
 /**
- * Velocity of any per-frame function (units per frame), for simulated
- * motion blur: blur length ∝ speed.
+ * Velocity of any per-frame function (units per frame). NOT for simulated
+ * motion blur any more (the film renders at 120 fps; fast moves read crisply):
+ * use it for physics (lean, squash, follow-through).
  */
 export function velocity(fn: (f: number) => number, frame: number): number {
   return (fn(frame + 0.5) - fn(frame - 0.5));
