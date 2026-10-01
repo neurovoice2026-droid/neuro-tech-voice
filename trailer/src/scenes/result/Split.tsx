@@ -1,124 +1,118 @@
 /**
  * The diptych's pieces:
- *   · LetterRise — "Asleep." / "Booked." (Instrument Sans 520, −0.03em), each
- *     letter rising out of its own mask on SPRING.land, 0.6 f apart, the LAST
- *     letter locking ON the given frame; velocity blur + stretch; a glow
- *     flash (and, for "Booked.", a sheen) on the lock
- *   · Divider — the seam: 3 px, lilac → ember, a soft 10–24 px glow, drawn
- *     from one edge of the frame to the other on EASE.house with a hot head and
- *     a travelling bead that fades as it leaves
- *   · Moon / Stars — the night half: a 200 px crescent (#c0ace0 at 80 %, the
- *     ashen disc behind it, a 120 px glow), breathing on the bar; 3–4 stars
- *     that twinkle in on 16ths and shimmer on 8th-note phases
- *   · NightGrade — the half's own sky: #0a0d26 → #171a44 and a faint window light
+ *   · DisplayWord — "Asleep." / "Booked." in TYPE.display (Instrument Sans,
+ *     440 on the dark, −0.03em: the knowledge heading's setting), the whole
+ *     word rising out of its own mask on SPRING.display — kerning intact, no
+ *     blur, no glow — locking (first reaching its rest line) ON the beat. The
+ *     two-tone: "Asleep." in paper, "Booked." in the scene's one accent ink
+ *     (ember, lit for the dark); after it locks a band of lighter ink runs
+ *     once through "Booked." (an ink sweep — crisp, not a glow)
+ *   · Seam — the split: a 1.5 px paper hairline drawn edge to edge on EASE.house
+ *   · Moon — the night half's light: a crisp crescent (a soft terminator, the
+ *     earthshine disc just visible, a faint atmospheric halo), rising into
+ *     place on a soft spring and locking on its 16th
+ *   · Stars — a very sparse, sharp starfield: four points, each lit on its own
+ *     16th, a slow smooth twinkle (no glints, no crosses, no glow)
  */
 import React from 'react';
-import { aos, EASE, mixHex, SPRING, tween } from '../../lib/motion';
-import { C, FONT, TRACK } from '../../theme';
-import { hexA } from './Event';
+import { reveal, subpixel } from '../../components/Type';
+import { EASE, smooth, SPRING, springUnit, tween } from '../../lib/motion';
+import { maskBox, typeStyle } from '../../lib/type';
+import { FPS } from '../../timing';
 
-const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
-
-/** First frame an underdamped spring (from 0, at rest) crosses 1. */
-export function lockFrames(cfg: { stiffness: number; damping: number; mass: number }, fps = 30): number {
+/** Frames from release to an underdamped spring's first crossing of 1 (its "lock"). */
+export function lockFrames(cfg: { stiffness: number; damping: number; mass: number }, fps = FPS): number {
   const w0 = Math.sqrt(cfg.stiffness / cfg.mass);
   const z = cfg.damping / (2 * Math.sqrt(cfg.stiffness * cfg.mass));
   const wd = w0 * Math.sqrt(1 - z * z);
   const a = Math.PI - Math.atan(Math.sqrt(1 - z * z) / z);
   return (a / wd) * fps;
 }
-const LAND_LOCK = lockFrames(SPRING.land);
-const SITE_LOCK = lockFrames(SPRING.site);
-/** a star's pop: ~22 % overshoot (a small chip), first crossing ≈ 3.8 f */
-const STAR = { stiffness: 380, damping: 14, mass: 0.8 };
-const STAR_LOCK = lockFrames(STAR);
+const WORD_LOCK = lockFrames(SPRING.display);
+/** the moon's rise: soft, one small overshoot (ζ ≈ .78) */
+const MOON = { stiffness: 120, damping: 17, mass: 1 };
+const MOON_LOCK = lockFrames(MOON);
+
+/** The word's state at t: its reveal (y %, opacity) — the spring locks ON `land`. */
+export const wordReveal = (t: number, land: number) =>
+  reveal(t, land - WORD_LOCK, { config: SPRING.display, rise: 100, fade: 0.5 });
 
 /**
- * A display word whose letters rise out of masks. The last letter locks
- * (first reaches its rest line) ON `land`; the others lock `stagger` frames
- * apart before it. SPRING.land overshoots ~20 %, so the masks are open well
- * above the cap line (and shut just under the descenders: a waiting letter sits
- * 1.3 em down, wholly out of sight).
+ * A display word, anchored at its horizontal centre + baseline (0, 0) of its box — the caller places
+ * and scales it (`transform`, origin 0 0). `moving`: put it on a sub-pixel layer (slow translations only).
  */
-export const LetterRise: React.FC<{
+export const DisplayWord: React.FC<{
   text: string;
   t: number;
   land: number;
-  size: number;
   color: string;
-  stagger?: number;
-  /** text-shadow colour of the glow (flashes on the lock, then rests at `glowRest`) */
-  glow?: string;
-  glowRest?: number;
-  /** a sheen runs across the letters after the lock (hex of the sheen) */
+  vertical: boolean;
+  /** CSS transform placing the anchor on screen (applied with origin 0 0) */
+  transform: string;
+  moving: boolean;
+  /** an ink sweep (hex of the lighter ink): once, left → right, starting a frame after the lock */
   sheen?: string;
-  /** 0..1 scales the glow (the dive fades it: at 8× its blur would cost more than it shows) */
-  glowScale?: number;
-  style?: React.CSSProperties;
-}> = ({ text, t, land, size, color, stagger = 0.6, glow, glowRest = 0.25, sheen, glowScale = 1, style }) => {
-  const chars = text.split('');
-  const n = chars.length;
-  const flash = t >= land ? Math.exp(-(t - land) / 6) : 0;
-  const glowK = glow ? (glowRest * tween(t, [land - 6, land], [0, 1], EASE.inOut) + 0.55 * flash) * glowScale : 0;
+}> = ({ text, t, land, color, vertical, transform, moving, sheen }) => {
+  const st = typeStyle('display', vertical, { tone: 'night' });
+  const size = st.fontSize as number;
+  const lh = 1.04;
+  // baseline below the line box's top (Instrument Sans: ascender .97, descender .25 → content 1.22 em)
+  const base = ((lh - 1.22) / 2 + 0.97) * size;
+  const r = wordReveal(t, land);
+  if (r.opacity <= 0.001 && t < land) return null;
+  const wordMoving = Math.abs(r.y) > 0.03;
+  // the sweep: a lighter band from −30 % to 130 % of the word, over 14 frames after the lock
+  const sw = sheen ? tween(t, [land + 1, land + 15], [0, 1], EASE.inOut) : 0;
+  const ink: React.CSSProperties =
+    sheen && sw > 0 && sw < 1
+      ? {
+          backgroundImage: `linear-gradient(100deg, ${color} ${(-30 + 160 * sw - 22).toFixed(2)}%, ${sheen} ${(-30 + 160 * sw).toFixed(2)}%, ${color} ${(-30 + 160 * sw + 22).toFixed(2)}%)`,
+          WebkitBackgroundClip: 'text',
+          backgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          color: 'transparent',
+        }
+      : { color };
   return (
     <div
       style={{
-        display: 'flex',
-        fontFamily: FONT.ui,
-        fontWeight: 520,
-        fontSize: size,
-        lineHeight: 1,
-        letterSpacing: TRACK.section,
-        color,
-        whiteSpace: 'pre',
-        ...style,
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        transformOrigin: '0 0',
+        ...subpixel(transform, moving),
       }}
     >
-      {chars.map((ch, i) => {
-        const s = land - LAND_LOCK - (n - 1 - i) * stagger;
-        const cfg = SPRING.land;
-        const p = aos(t, s, { anticip: 3, depth: 0.07, config: cfg });
-        const pp = aos(t - 1, s, { anticip: 3, depth: 0.07, config: cfg });
-        const y = (1 - p) * 130;
-        const speed = Math.abs(p - pp) * size * 1.08;
-        const blur = tween(t, [s, s + 8], [4, 0], EASE.house) + Math.min(9, speed * 0.07);
-        // the sheen: a bright band crossing the word left → right after the lock
-        const sh = sheen ? Math.max(0, 1 - Math.abs(t - (land + 1 + i * 0.9)) / 2.6) : 0;
-        const c = sh > 0 ? mixHex(color, sheen!, EASE.inOut(sh)) : color;
-        return (
+      <div
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: -base,
+          transform: 'translateX(-50%)',
+          ...st,
+          lineHeight: lh,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        <span style={maskBox(0)}>
           <span
-            key={i}
             style={{
               display: 'inline-block',
-              overflow: 'hidden',
-              padding: '0.42em 0.06em 0.14em',
-              margin: '-0.42em -0.06em -0.14em',
+              ...subpixel(wordMoving ? `translateY(${r.y.toFixed(3)}%)` : undefined, wordMoving),
+              opacity: r.opacity >= 0.999 ? undefined : Math.max(0, r.opacity),
+              ...ink,
             }}
           >
-            <span
-              style={{
-                display: 'inline-block',
-                transform: `translateY(${y.toFixed(2)}%) scaleY(${(1 + Math.min(0.08, speed * 0.0009)).toFixed(4)})`,
-                transformOrigin: '50% 100%',
-                color: c,
-                filter: blur > 0.1 ? `blur(${blur.toFixed(2)}px)` : undefined,
-                textShadow:
-                  glow && glowK > 0.005
-                    ? `0 0 ${(0.12 * size).toFixed(1)}px ${hexA(glow, 0.9 * glowK)}, 0 0 ${(0.34 * size).toFixed(1)}px ${hexA(glow, 0.45 * glowK)}`
-                    : undefined,
-              }}
-            >
-              {ch}
-            </span>
+            {text}
           </span>
-        );
-      })}
+        </span>
+      </div>
     </div>
   );
 };
 
-/** The seam: 3 px, lilac → ember along its length, glow, hot head, travelling bead. */
-export const Divider: React.FC<{
+/** The seam: a 1.5 px paper hairline, drawn from one edge of the frame to the other. */
+export const Seam: React.FC<{
   t: number;
   start: number;
   dur: number;
@@ -128,143 +122,72 @@ export const Divider: React.FC<{
   from: number;
   to: number;
 }> = ({ t, start, dur, vertical, at, from, to }) => {
-  if (t < start - 3) return null;
-  const drawAt = (tt: number) => tween(tt, [start, start + dur], [0, 1], EASE.house);
-  const e = drawAt(t);
+  const e = tween(t, [start, start + dur], [0, 1], EASE.house);
+  if (e <= 0) return null;
   const span = to - from;
-  const len = span * e;
-  const speed = Math.abs(drawAt(t + 0.5) - drawAt(t - 0.5)) * span; // px / frame
-  // the bead gathers at the edge (anticipation), rides the tip, fades as it leaves
-  const beadIn = aos(t, start, { anticip: 3, depth: 0, config: SPRING.pop });
-  const beadOut = 1 - tween(t, [start + dur - 4, start + dur + 1], [0, 1], EASE.inOut);
-  const gather = t < start ? tween(t, [start - 3, start], [0, 1], EASE.inOut) : 1;
-  const bead = Math.max(0, Math.min(1.2, beadIn)) * beadOut;
-  const heat = Math.min(1, speed / 60 + 0.25) * (1 - tween(t, [start + dur - 2, start + dur + 10], [0, 1], EASE.inOut) * 0.85);
-  const stretch = 1 + Math.min(2.5, speed / 70);
-  const dir = vertical ? '180deg' : '90deg';
-  const grad = `linear-gradient(${dir}, ${C.lilac} 0%, ${mixHex(C.lilac, C.ember, 0.5)} 55%, ${C.ember} 100%)`;
-  // the full-length gradient, revealed up to the tip (so the tip's colour changes as it travels)
-  const reveal = (w: number, extra: React.CSSProperties) => (
+  const w = 1.5;
+  // the line is a touch brighter while it draws (its head carries the light), then rests quiet
+  const a = 0.2 + 0.14 * (1 - tween(t, [start + dur - 2, start + dur + 10], [0, 1], EASE.inOut));
+  const grad = vertical
+    ? `linear-gradient(180deg, rgba(237,236,241,0) 0%, rgba(237,236,241,${a.toFixed(3)}) 9%, rgba(237,236,241,${a.toFixed(3)}) 91%, rgba(237,236,241,0) 100%)`
+    : `linear-gradient(90deg, rgba(237,236,241,0) 0%, rgba(237,236,241,${a.toFixed(3)}) 9%, rgba(237,236,241,${a.toFixed(3)}) 91%, rgba(237,236,241,0) 100%)`;
+  return (
     <div
       style={{
         position: 'absolute',
-        overflow: 'hidden',
         ...(vertical
-          ? { left: at - w / 2, top: from, width: w, height: len }
-          : { left: from, top: at - w / 2, width: len, height: w }),
-        ...extra,
+          ? { left: at - w / 2, top: from, width: w, height: span }
+          : { left: from, top: at - w / 2, width: span, height: w }),
+        background: grad,
+        transform: vertical ? `scaleY(${e.toFixed(5)})` : `scaleX(${e.toFixed(5)})`,
+        transformOrigin: vertical ? '50% 0' : '0 50%',
       }}
-    >
-      <div
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          ...(vertical ? { width: w, height: span } : { width: span, height: w }),
-          background: grad,
-        }}
-      />
-    </div>
-  );
-  const tip = from + len;
-  const headLen = Math.min(len, 60 + speed * 1.4);
-  const soft = vertical
-    ? 'linear-gradient(90deg, transparent 0%, #000 50%, transparent 100%)'
-    : 'linear-gradient(180deg, transparent 0%, #000 50%, transparent 100%)';
-  return (
-    <>
-      {len > 0.5 ? (
-        <>
-          {/* the glow: 24 px soft, then 10 px */}
-          {reveal(48, { opacity: 0.22, WebkitMaskImage: soft, maskImage: soft })}
-          {reveal(20, { opacity: 0.45, WebkitMaskImage: soft, maskImage: soft })}
-          {/* the line */}
-          {reveal(3, { opacity: 0.95 })}
-          {/* the hot head, cooling behind the bead */}
-          <div
-            style={{
-              position: 'absolute',
-              ...(vertical
-                ? { left: at - 2, top: tip - headLen, width: 4, height: headLen }
-                : { left: tip - headLen, top: at - 2, width: headLen, height: 4 }),
-              background: `linear-gradient(${dir}, rgba(255,246,238,0), rgba(255,246,238,${(0.85 * heat).toFixed(3)}))`,
-              borderRadius: 2,
-            }}
-          />
-        </>
-      ) : null}
-      {/* the bead: a hot point riding the tip, stretched along the stroke by its speed */}
-      {bead > 0.01 ? (
-        <div
-          style={{
-            position: 'absolute',
-            left: vertical ? at : tip,
-            top: vertical ? tip : at,
-            width: 10,
-            height: 10,
-            borderRadius: '50%',
-            background: '#fff6ee',
-            boxShadow: `0 0 10px 2px ${hexA(C.lilac, 0.8 * gather)}, 0 0 26px 6px ${hexA(e > 0.5 ? C.ember : C.lilac, 0.5)}`,
-            transform: `translate(-50%, -50%) ${vertical ? `scaleY(${stretch.toFixed(3)})` : `scaleX(${stretch.toFixed(3)})`} scale(${bead.toFixed(3)})`,
-            opacity: clamp01(bead * 1.2),
-          }}
-        />
-      ) : null}
-    </>
+    />
   );
 };
 
-/** The crescent: the lit limb, the ashen disc behind it, a 120 px glow. Breathes on the bar. */
+/** The crescent: the lit limb (a soft terminator), the earthshine disc, a faint halo. */
 export const Moon: React.FC<{
   t: number;
   x: number;
   y: number;
   d: number;
-  /** lock frame (the moon rises into place on SPRING.site and locks here) */
+  /** lock frame (the moon rises into place and first reaches it here) */
   lock: number;
-  /** downbeat to breathe to (frame of a bar's first beat) */
-  bar: number;
-}> = ({ t, x, y, d, lock, bar }) => {
-  const start = lock - SITE_LOCK;
-  if (t < start - 3) return null;
-  const p = aos(t, start, { anticip: 3, depth: 0.06, config: SPRING.site });
-  const k = t - lock;
-  const flash = k >= 0 ? Math.exp(-k / 6) : 0;
-  const settled = tween(t, [lock, lock + 12], [0, 1], EASE.inOut);
-  const breath = Math.cos((2 * Math.PI * (t - bar)) / 60) * settled;
-  const sc = (0.9 + 0.1 * p) * (1 + 0.02 * breath);
-  const glowK = (1 + 0.15 * breath) * (1 + 0.9 * flash) * clamp01(p);
-  const ring = tween(t, [lock, lock + 36], [0, 1], EASE.out3);
-  const G = d + 240;
+}> = ({ t, x, y, d, lock }) => {
+  const start = lock - MOON_LOCK;
+  if (t < start) return null;
+  const p = springUnit(t - start, MOON);
+  const op = smooth(0, 0.7, p);
+  const dy = (1 - p) * 36;
+  const H = d * 3.2;
+  // the halo: the moon's light in the air round it — a gaussian, faint, no edge
+  const halo: string[] = [];
+  for (let i = 0; i <= 16; i++) {
+    const u = i / 16;
+    const g = Math.exp(-5.2 * u * u) - Math.exp(-5.2);
+    halo.push(`rgba(214,204,236,${(0.11 * g).toFixed(4)}) ${(u * 100).toFixed(1)}%`);
+  }
   return (
-    <>
-      {/* the glow: a 120 px halo round the disc */}
+    <div
+      style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        transform: `translateY(${dy.toFixed(3)}px)`,
+        opacity: op < 0.999 ? op : undefined,
+      }}
+    >
       <div
         style={{
           position: 'absolute',
-          left: x - G / 2,
-          top: y - G / 2,
-          width: G,
-          height: G,
-          borderRadius: '50%',
-          background: `radial-gradient(closest-side, rgba(192,172,224,${(0.25 * glowK).toFixed(3)}) ${((d / G) * 100 * 0.62).toFixed(1)}%, rgba(192,172,224,${(0.1 * glowK).toFixed(3)}) ${((d / G) * 100 * 0.9).toFixed(1)}%, rgba(192,172,224,0) 100%)`,
-          transform: `translateY(${((1 - p) * 40).toFixed(2)}px) scale(${sc.toFixed(4)})`,
+          left: x - H / 2,
+          top: y - H / 2,
+          width: H,
+          height: H,
+          background: `radial-gradient(closest-side, ${halo.join(', ')})`,
         }}
       />
-      {ring > 0 && ring < 1 ? (
-        <div
-          style={{
-            position: 'absolute',
-            left: x - d / 2,
-            top: y - d / 2,
-            width: d,
-            height: d,
-            borderRadius: '50%',
-            boxShadow: `0 0 0 ${(1.5 * (1 - ring) + 0.5).toFixed(2)}px rgba(192,172,224,${(0.45 * (1 - ring) ** 1.4).toFixed(3)})`,
-            transform: `scale(${(1.02 + 0.85 * ring).toFixed(4)})`,
-          }}
-        />
-      ) : null}
       <svg
         viewBox="0 0 200 200"
         width={d}
@@ -273,39 +196,40 @@ export const Moon: React.FC<{
           position: 'absolute',
           left: x - d / 2,
           top: y - d / 2,
-          transform: `translateY(${((1 - p) * 40).toFixed(2)}px) rotate(${((1 - p) * -12 - 18).toFixed(2)}deg) scale(${sc.toFixed(4)})`,
-          opacity: clamp01(p * 1.6),
           overflow: 'visible',
         }}
         aria-hidden
       >
         <defs>
-          <radialGradient id="result-moon-lit" cx="30%" cy="70%" r="85%">
-            <stop offset="0%" stopColor="#efe6ff" />
-            <stop offset="45%" stopColor="#d6c8ef" />
-            <stop offset="100%" stopColor="#a893cf" />
+          <radialGradient id="result-moon-lit" cx="28%" cy="72%" r="90%">
+            <stop offset="0%" stopColor="#f4f0fb" />
+            <stop offset="42%" stopColor="#e2dbef" />
+            <stop offset="100%" stopColor="#a99fc2" />
           </radialGradient>
-          <mask id="result-moon-cut">
+          <radialGradient id="result-moon-earth" cx="34%" cy="66%" r="80%">
+            <stop offset="0%" stopColor="#2a2633" />
+            <stop offset="100%" stopColor="#1a1820" />
+          </radialGradient>
+          {/* the terminator: the shadow disc's edge softened over a few px (the real moon's is never a cut) */}
+          <radialGradient id="result-moon-shadow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#000" />
+            <stop offset="93%" stopColor="#000" />
+            <stop offset="100%" stopColor="#fff" />
+          </radialGradient>
+          <mask id="result-moon-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200">
             <rect x="0" y="0" width="200" height="200" fill="#fff" />
-            <circle cx="138" cy="74" r="80" fill="#000" />
+            <circle cx="134" cy="76" r="84" fill="url(#result-moon-shadow)" />
           </mask>
         </defs>
-        {/* the ashen disc: the dark of the moon, just visible */}
-        <circle cx="100" cy="100" r="92" fill="rgba(192,172,224,0.07)" />
-        <circle
-          cx="100"
-          cy="100"
-          r="92"
-          fill="url(#result-moon-lit)"
-          opacity={0.8 * (1 + 0.25 * flash)}
-          mask="url(#result-moon-cut)"
-        />
+        {/* the dark of the moon: a solid body (it hides the halo behind it), just lit by earthshine */}
+        <circle cx="100" cy="100" r="92" fill="url(#result-moon-earth)" />
+        <circle cx="100" cy="100" r="92" fill="url(#result-moon-lit)" mask="url(#result-moon-cut)" />
       </svg>
-    </>
+    </div>
   );
 };
 
-/** 3–4 stars: they twinkle in (pop, a 4-point glint on the lock) and shimmer on 8th-note phases. */
+/** Four sharp points, each lit on its own 16th; a slow, smooth twinkle. */
 export const Stars: React.FC<{
   t: number;
   stars: ReadonlyArray<{ x: number; y: number; d: number }>;
@@ -314,124 +238,25 @@ export const Stars: React.FC<{
   <>
     {stars.map((s, i) => {
       const lock = locks[i];
-      const start = lock - STAR_LOCK;
-      if (t < start - 2) return null;
-      const p = aos(t, start, { anticip: 2, depth: 0, config: STAR });
-      const k = t - lock;
-      const glint = k >= 0 ? Math.exp(-k / 4) : 0;
-      // 8th-note phases: each star peaks on its own 8th (7.5 f), period one or two beats
-      const period = i % 2 ? 15 : 30;
-      const phase = lock + 7.5 * (i + 1);
-      const tw = 0.78 + 0.22 * Math.cos((2 * Math.PI * (t - phase)) / period);
-      const a = (0.6 + (0.3 * (s.d - 3)) / 2) * tw;
-      const sz = s.d * Math.max(0, p);
-      const G = s.d * 5 * (0.3 + glint);
+      if (t < lock - 3) return null;
+      // it lights over 3 frames up to its 16th, then twinkles gently (each on its own slow period)
+      const on = smooth(lock - 3, lock + 1, t);
+      const tw = 0.82 + 0.18 * Math.cos((2 * Math.PI * (t - lock)) / (36 + 11 * i));
+      const a = (0.55 + 0.35 * ((s.d - 1.6) / 1)) * on * tw;
       return (
-        <React.Fragment key={i}>
-          <div
-            style={{
-              position: 'absolute',
-              left: s.x - sz / 2,
-              top: s.y - sz / 2,
-              width: sz,
-              height: sz,
-              borderRadius: '50%',
-              background: `rgba(237,236,241,${a.toFixed(3)})`,
-              boxShadow: `0 0 ${(s.d * 2).toFixed(1)}px rgba(214,200,255,${(0.5 * a).toFixed(3)})`,
-            }}
-          />
-          {glint > 0.02 ? (
-            <div style={{ position: 'absolute', left: s.x, top: s.y, transform: 'rotate(8deg)', opacity: glint }}>
-              <div
-                style={{
-                  position: 'absolute',
-                  left: -G,
-                  top: -0.75,
-                  width: 2 * G,
-                  height: 1.5,
-                  background: 'linear-gradient(90deg, rgba(237,236,241,0), rgba(237,236,241,0.9), rgba(237,236,241,0))',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  left: -0.75,
-                  top: -G,
-                  width: 1.5,
-                  height: 2 * G,
-                  background: 'linear-gradient(180deg, rgba(237,236,241,0), rgba(237,236,241,0.9), rgba(237,236,241,0))',
-                }}
-              />
-            </div>
-          ) : null}
-        </React.Fragment>
+        <div
+          key={i}
+          style={{
+            position: 'absolute',
+            left: s.x - s.d / 2,
+            top: s.y - s.d / 2,
+            width: s.d,
+            height: s.d,
+            borderRadius: '50%',
+            background: `rgba(240,238,248,${Math.min(1, a).toFixed(3)})`,
+          }}
+        />
       );
     })}
   </>
 );
-
-/** The night half's sky: cooler and darker than the room, a faint window light at 30 % / 25 %. */
-export const NightGrade: React.FC<{ x: number; y: number; w: number; h: number; vertical: boolean }> = ({
-  x,
-  y,
-  w,
-  h,
-  vertical,
-}) => (
-  <div
-    style={{
-      position: 'absolute',
-      left: x,
-      top: y,
-      width: w,
-      height: h,
-      background: [
-        `radial-gradient(${vertical ? '70% 60%' : '60% 55%'} at 30% 25%, rgba(59,47,74,0.35), rgba(59,47,74,0.12) 45%, rgba(59,47,74,0) 100%)`,
-        'linear-gradient(180deg, #0a0d26 0%, #111434 55%, #171a44 100%)',
-      ].join(', '),
-    }}
-  />
-);
-
-/**
- * The Booked half's ground: the #demo night stage's mid range (#1f1860 → #110c38), lit from
- * behind the card — the night light (#7c3aed) as a soft bloom that breathes with the event and
- * swells as "Booked." locks. Cool on purpose: the ember is the event and the word, never the room.
- */
-export const BookedGround: React.FC<{
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  /** the light's centre (layer px) */
-  cx: number;
-  cy: number;
-  vertical: boolean;
-  /** 0..~1.4: the light's level (breath × lock swell) */
-  light: number;
-  /** extra ground on every side (layer px) that only carries the outer colour on: the dive zooms this
-   *  0.15 plane far slower than the seam, which runs ≈ 660 px past the design box towards the night */
-  bleed?: number;
-}> = ({ x, y, w, h, cx, cy, vertical, light, bleed = 0 }) => {
-  const lx = cx - x + bleed;
-  const ly = cy - y + bleed;
-  // the ellipses in px of the DESIGN box (w × h), so the bleed never stretches them
-  const e = (rx: number, ry: number) => `${(rx * w).toFixed(1)}px ${(ry * h).toFixed(1)}px`;
-  const r = vertical ? e(0.62, 0.48) : e(0.58, 0.62);
-  const r2 = vertical ? e(0.95, 0.8) : e(0.85, 0.95);
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        left: x - bleed,
-        top: y - bleed,
-        width: w + 2 * bleed,
-        height: h + 2 * bleed,
-        background: [
-          `radial-gradient(${r} at ${lx.toFixed(1)}px ${ly.toFixed(1)}px, rgba(124,58,237,${(0.2 * light).toFixed(3)}) 0%, rgba(124,58,237,${(0.07 * light).toFixed(3)}) 45%, rgba(124,58,237,0) 100%)`,
-          `radial-gradient(${r2} at ${lx.toFixed(1)}px ${ly.toFixed(1)}px, #1f1860 0%, #19134f 40%, #110c38 100%)`,
-        ].join(', '),
-      }}
-    />
-  );
-};

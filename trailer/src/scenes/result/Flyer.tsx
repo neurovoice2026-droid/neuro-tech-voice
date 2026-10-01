@@ -8,26 +8,26 @@
  *          the side) while the pill grows into the Booked card. Its two
  *          words travel — each scaled to its measured width — onto their
  *          measured places in the card's "Wednesday · 3 PM" row (" at" folds
- *          out between them as the row's "·" folds in); only once registered
- *          do they cross-fade into the card's face. BOOKED + the ember dot
- *          rise in meanwhile.
+ *          out between them as the row's "·" folds in). The mark and the row
+ *          are the same setting (MARK_TYPE), so once registered the words
+ *          simply take the row's paper ink. BOOKED + the ember dot rise in.
  *   throw  the card winds up, lobs into the close-up, tilts, shrinks to the
  *          slot and warms to the event's solid ember (its face turns white).
  *
- * Motion blur: a sub-frame ghost train sampled in SCREEN space (so its
- * length and direction are what the eye sees while the camera follows) +
- * a blur scaled by the screen speed.
+ * No motion blur, no ghosts: the 120 fps render samples the flight four times
+ * per timeline frame; the card is one crisp object on every frame.
  */
 import React from 'react';
 import { BOOKING, BookedMark } from '../../components/Shared';
-import { C, FONT } from '../../theme';
-import { mix } from '../../lib/motion';
+import { MARK_TYPE } from '../../lib/handoff';
+import { mix, mixHex, smooth } from '../../lib/motion';
+import { C } from '../../theme';
 import { RESULT } from '../../timing';
 import type { ResultTiming } from '../Result';
 import { CardFace } from './Card';
 import { EventFace, eventFill, hexA } from './Event';
 import { screenToWorld, type Cam, type Geo } from './geometry';
-import { cardAt, cardSpeed, type CardState, type MarkMetrics, type Word } from './motion';
+import { cardAt, type CardState, type MarkMetrics, type Word } from './motion';
 
 type LL = { cx: number; cy: number };
 
@@ -36,42 +36,45 @@ const plateStyle = (S: CardState): React.CSSProperties => {
   // lengths below are screen px, converted to card units (÷ s)
   const u = 1 / S.s;
   const ringW = mix(1.25, 1, S.warm) * u;
-  const ringA = mix(0.3 + 0.15 * S.pill, 0.55, S.warm);
+  const ringA = mix(0.28 + 0.12 * S.pill, 0.5, S.warm);
   const lift = S.air;
-  const dropY = (3 + 46 * lift) * u;
-  const dropB = (8 + 84 * lift) * u;
-  const dropS = (-3 - 18 * lift) * u;
-  const dropA = 0.5 + 0.3 * Math.min(1, lift);
-  const glow = (30 + 40 * lift) * u;
+  // a real drop shadow under a floating card: a near contact core + a wide soft key shadow, both
+  // growing with its height above the sheet
+  const nearY = (2 + 10 * lift) * u;
+  const nearB = (6 + 18 * lift) * u;
+  const farY = (12 + 46 * lift) * u;
+  const farB = (30 + 90 * lift) * u;
   return {
     position: 'absolute',
     inset: 0,
     borderRadius: S.r,
-    // the site's booked pill (ember 16 % wash) → the card's sheen over the (warming) plate
+    // the site's booked pill (ember 16 % wash) → the card's top light over the (warming) plate
     background: [
       `linear-gradient(${hexA(C.ember, 0.16 * S.pill)}, ${hexA(C.ember, 0.16 * S.pill)})`,
-      `linear-gradient(180deg, rgba(255,255,255,${(0.05 * (1 - S.pill)).toFixed(3)}), rgba(255,255,255,0) 62%)`,
+      `linear-gradient(180deg, rgba(255,255,255,${(0.05 * (1 - S.pill)).toFixed(3)}), rgba(255,255,255,0) 58%)`,
       fill,
     ].join(', '),
     boxShadow: [
       `0 0 0 ${ringW.toFixed(3)}px ${hexA(C.ember, ringA)}`,
-      `inset 0 ${u.toFixed(3)}px 0 rgba(255,255,255,${(0.07 * (1 - S.pill)).toFixed(3)})`,
-      `0 ${dropY.toFixed(2)}px ${dropB.toFixed(2)}px ${dropS.toFixed(2)}px rgba(0,0,0,${dropA.toFixed(3)})`,
-      `0 0 ${glow.toFixed(2)}px ${(-8 * u).toFixed(2)}px ${hexA(C.ember, 0.24 + 0.3 * S.warm)}`,
+      `inset 0 ${u.toFixed(3)}px 0 rgba(255,255,255,${(0.08 * (1 - S.pill)).toFixed(3)})`,
+      `0 ${nearY.toFixed(2)}px ${nearB.toFixed(2)}px ${(-4 * u).toFixed(2)}px rgba(0,0,0,${(0.42 + 0.1 * lift).toFixed(3)})`,
+      `0 ${farY.toFixed(2)}px ${farB.toFixed(2)}px ${(-14 * u).toFixed(2)}px rgba(0,0,0,${(0.4 + 0.2 * Math.min(1, lift)).toFixed(3)})`,
+      // the card's own light: ember, close to its edge (its glow on the room is the room's key light)
+      `0 0 ${(26 * u).toFixed(2)}px ${(-6 * u).toFixed(2)}px ${hexA(C.ember, 0.16 + 0.26 * S.warm)}`,
     ].join(', '),
-    opacity: S.plateOp,
+    opacity: S.plateOp < 0.999 ? S.plateOp : undefined,
   };
 };
 
-/** One of the mark's words, in the mark's own setting (Inter 500, as <BookedMark>). */
+/** One of the mark's words, in the mark's own setting (MARK_TYPE, as <BookedMark>). */
 const MarkWord: React.FC<{
   text: string;
   w: Word;
   S: CardState;
   fontSize: number;
   op: number;
-  blur?: number;
-}> = ({ text, w, S, fontSize, op, blur = 0 }) => (
+  color: string;
+}> = ({ text, w, S, fontSize, op, color }) => (
   <div
     style={{
       position: 'absolute',
@@ -79,14 +82,14 @@ const MarkWord: React.FC<{
       top: S.h / 2 + w.y,
       transform: `translate(-50%, -50%) scale(${w.s.toFixed(5)})`,
       whiteSpace: 'nowrap',
-      fontFamily: FONT.body,
-      fontWeight: 500,
+      fontFamily: MARK_TYPE.family,
+      fontWeight: MARK_TYPE.weight,
       fontSize,
-      lineHeight: 1.22,
-      letterSpacing: '-0.01em',
-      color: C.emberLit,
-      opacity: op,
-      filter: blur > 0.25 ? `blur(${blur.toFixed(2)}px)` : undefined,
+      lineHeight: MARK_TYPE.lineHeight,
+      letterSpacing: MARK_TYPE.tracking,
+      fontKerning: 'normal',
+      color,
+      opacity: op < 0.999 ? op : undefined,
     }}
   >
     {text}
@@ -98,16 +101,13 @@ const Card: React.FC<{
   G: Geo;
   L: LL;
   cam: Cam;
-  op: number;
-  /** screen px */
-  blur: number;
-}> = ({ S, G, L, cam, op, blur }) => {
+  vertical: boolean;
+}> = ({ S, G, L, cam, vertical }) => {
   const P = screenToWorld(cam, L, S);
   const sw = S.s / cam.z;
-  const local = blur / S.s;
   const m = S.morph;
-  // the outgoing face softens as it hands over, so the two cuts never read as a double
-  const fadeBlur = m && m.op < 1 ? 2.2 * (1 - m.op) : 0;
+  // registered on the row, the mark's words take the row's paper ink (same glyphs: no double image)
+  const ink = m ? mixHex(C.emberLit, C.paper, m.ink) : C.paper;
   return (
     <div
       style={{
@@ -116,25 +116,39 @@ const Card: React.FC<{
         top: P.y - S.h / 2,
         width: S.w,
         height: S.h,
-        transform: `rotate(${S.rot.toFixed(3)}deg) scale(${sw.toFixed(5)})`,
+        transform: `rotate(${S.rot.toFixed(4)}deg) scale(${sw.toFixed(5)})`,
         transformOrigin: '50% 50%',
-        opacity: op,
-        filter: local > 0.25 ? `blur(${local.toFixed(2)}px)` : undefined,
       }}
     >
       <div style={plateStyle(S)} />
-      <CardFace w={S.w} h={S.h} ct={G.cardType} p={S.p} row={S.row} />
-      <EventFace size={G.face * S.u} op={S.ev} color={C.white} dotColor={C.white} />
+      {/* the card's face lives inside the card: nothing spills past its edge as it narrows to the slot */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          borderRadius: S.r,
+          overflow: m ? 'visible' : 'hidden',
+        }}
+      >
+        <div style={{ position: 'absolute', inset: 0, transform: S.roll > 0 ? `translateY(${(-0.62 * S.h * S.roll).toFixed(3)}px)` : undefined }}>
+          <CardFace w={S.w} h={S.h} ct={G.cardType} vertical={vertical} p={S.p} row={m ? 0 : 1 - smooth(0.45, 1, S.roll)} />
+        </div>
+        {S.ev > 0.001 ? (
+          <div style={{ position: 'absolute', inset: 0, transform: `translateY(${(0.62 * S.h * (1 - S.roll)).toFixed(3)}px)` }}>
+            <EventFace size={G.face * S.u} op={smooth(0, 0.55, S.ev)} color={C.white} dotColor={C.white} />
+          </div>
+        ) : null}
+      </div>
       {m ? (
         <>
-          <MarkWord text={BOOKING.day} w={m.wed} S={S} fontSize={G.mark.fontSize} op={m.op} blur={fadeBlur} />
+          <MarkWord text={BOOKING.day} w={m.wed} S={S} fontSize={G.mark.fontSize} op={1} color={ink} />
           {m.at.op > 0.001 ? (
-            <MarkWord text={BOOKING.at} w={m.at} S={S} fontSize={G.mark.fontSize} op={m.op * m.at.op} blur={m.at.blur} />
+            <MarkWord text={BOOKING.at} w={m.at} S={S} fontSize={G.mark.fontSize} op={m.at.op} color={ink} />
           ) : null}
           {m.sep.op > 0.001 ? (
-            <MarkWord text={BOOKING.sep} w={m.sep} S={S} fontSize={G.mark.fontSize} op={m.op * m.sep.op} blur={Math.max(m.sep.blur, fadeBlur)} />
+            <MarkWord text={BOOKING.sep} w={m.sep} S={S} fontSize={G.mark.fontSize} op={m.sep.op} color={ink} />
           ) : null}
-          <MarkWord text={BOOKING.time} w={m.num} S={S} fontSize={G.mark.fontSize} op={m.op} blur={fadeBlur} />
+          <MarkWord text={BOOKING.time} w={m.num} S={S} fontSize={G.mark.fontSize} op={1} color={ink} />
         </>
       ) : null}
     </div>
@@ -148,29 +162,10 @@ export const Flyer: React.FC<{
   L: LL;
   cam: Cam;
   MM: MarkMetrics;
-}> = ({ t, G, T, L, cam, MM }) => {
+  vertical: boolean;
+}> = ({ t, G, T, L, cam, MM, vertical }) => {
   if (t < 0 || t >= RESULT.land) return null;
   // t = 0: the call's own mark, untouched (pixel-identical hand-over)
   if (t === 0) return <BookedMark color={C.emberLit} />;
-  const S = cardAt(t, G, L, T, MM);
-  const speed = cardSpeed(t, G, L, T, MM);
-  // shutter: up to ~1 frame behind the card at full speed
-  const shutter = Math.min(1, speed / 40);
-  const n = speed > 6 ? 6 : 0;
-  const ghosts = Array.from({ length: n }, (_, i) => {
-    const k = (i + 1) / n;
-    return { tt: t - shutter * k, op: 0.3 * (1 - k) ** 1.3 };
-  });
-  const blur = Math.min(5, speed * 0.05);
-  return (
-    <>
-      {ghosts
-        .slice()
-        .reverse()
-        .map((g, i) => (
-          <Card key={`g${i}`} S={cardAt(g.tt, G, L, T, MM)} G={G} L={L} cam={cam} op={g.op} blur={blur * 1.4} />
-        ))}
-      <Card S={S} G={G} L={L} cam={cam} op={n ? 0.92 : 1} blur={blur} />
-    </>
-  );
+  return <Card S={cardAt(t, G, L, T, MM)} G={G} L={L} cam={cam} vertical={vertical} />;
 };

@@ -1,21 +1,22 @@
 /**
- * RESULT motion — every moving value in the scene as a pure function of
- * (fractional) local time, so sub-frame ghosts for motion blur can sample
- * the same curves.
+ * RESULT motion — every moving value in the scene as a pure, continuous
+ * function of the (fractional) local time: the 120 fps render samples the
+ * same curves four times per timeline frame. Nothing here exists to fake
+ * motion blur.
  *
  * Cameras, composed outermost-last:
  *   base   the world camera: the push into the close-up with the throw, the
- *          landing jolt, the lean + 6-frame peel back out as the sheet crops
- *          into its card, a whisper of handheld over the split
- *   half   each half of the diptych on top of it: drift apart ±10 px, a
- *          1.2 % kick as its word lands, the Booked half's slow push
+ *          landing's one soft dip, the lean + 6-frame peel back out as the
+ *          sheet crops into its card; locked off over the split (no handheld)
+ *   half   each half of the diptych on top of it: a slow drift apart, ±10 px
+ *          (a pure translation — type is never slowly re-scaled, which would
+ *          make its glyphs shimmer)
  *   dive   both halves (and the seam) zoom into the event together
  *
  * The card is designed in SCREEN space (its path, size, tilt), because the
  * camera pushes into a close-up while it flies; Flyer converts it into the
  * world layer with the camera of the frame being drawn.
  */
-import { noise2D } from '@remotion/noise';
 import { Easing } from 'remotion';
 import { aos, EASE, mix, tween } from '../../lib/motion';
 import { RESULT } from '../../timing';
@@ -75,7 +76,11 @@ export function impactAt(t: number): number {
 /** The whole sheet's pose (entry, impact) — state A of the map. */
 export function calPoseAt(t: number, G: Geo, T: ResultTiming): Pose {
   const e = enterAt(t, T);
-  const pose = { left: G.est.left + G.enter.x * (1 - e), top: G.est.top + G.enter.y * (1 - e), s: G.est.s };
+  const pose = {
+    left: G.est.left + G.enter.x * (1 - e),
+    top: G.est.top + G.enter.y * (1 - e),
+    s: G.est.s,
+  };
   // the hit pushes the sheet back a hair (scale about the slot)
   const d = -0.012 * impactAt(t);
   return {
@@ -115,89 +120,108 @@ export function diveAt(t: number, T: ResultTiming) {
   };
 }
 
-/** A whisper of handheld while the split holds; still for the pulse (screen px). */
-function handheld(t: number, T: ResultTiming): Pt {
-  const env =
-    tween(t, [RESULT.split, RESULT.split + 20], [0, 1], EASE.inOut) *
-    (1 - tween(t, [T.pulseIn[0] - 6, T.pulseIn[0]], [0, 1], EASE.inOut));
-  if (env <= 0) return { x: 0, y: 0 };
-  return { x: 3 * noise2D('result-cam-x', t * 0.013, 0.37) * env, y: 2.2 * noise2D('result-cam-y', 0.83, t * 0.013) * env };
-}
-
 /**
  * The world camera (before the halves and the dive). At rest until the
  * throw (MARK and CARD0 are screen contracts), then: push into the close-up
- * with the card, the impact jolt, the lean, the peel back out as the sheet
- * crops into its card (a 2.5 % overshoot, settled), a whisper of handheld.
+ * with the card, the landing's soft dip, the lean, the peel back out as the
+ * sheet crops into its card (a 2.5 % overshoot, settled).
  */
 export function baseCamAt(t: number, G: Geo, L: LL, T: ResultTiming): Cam {
   if (t <= RESULT.fly) return { x: 0, y: 0, z: 1 };
   const r = recomposeAt(t, T);
   const k = tween(t, T.camIn, [0, 1], CAM_IN) * (1 - r);
   const z1 = Math.exp(Math.log(G.closeZ) * k);
-  const S = { x: mix(G.focus.x, G.close.at.x, k), y: mix(G.focus.y, G.close.at.y, k) };
-  let cam: Cam = { x: L.cx + (G.focus.x - L.cx) * z1 - S.x, y: L.cy + (G.focus.y - L.cy) * z1 - S.y, z: z1 };
+  const S = {
+    x: mix(G.focus.x, G.close.at.x, k),
+    y: mix(G.focus.y, G.close.at.y, k),
+  };
+  let cam: Cam = {
+    x: L.cx + (G.focus.x - L.cx) * z1 - S.x,
+    y: L.cy + (G.focus.y - L.cy) * z1 - S.y,
+    z: z1,
+  };
   // the lean: 3.5 % further into the close-up, about the event, before the peel
   const lean = leanAt(t, T);
   if (lean > 0) cam = zoomScreen(cam, L, G.close.at, 1 + 0.035 * lean);
-  // impact: the frame takes the hit (down), rings out
+  // the landing: the frame takes the weight — one soft dip (≈ 5 px) that settles, never a shake
   if (t >= RESULT.land) {
-    const jolt = 9 * Math.exp(-(t - RESULT.land) / 5) * Math.sin((t - RESULT.land) * 0.8);
-    cam = { ...cam, y: cam.y - jolt };
+    // a single smooth pulse, (k/τ)·e^(1 − k/τ): 0 on the impact, 5 px at τ = 2.5 f, back to rest — no rebound
+    const u = (t - RESULT.land) / 2.5;
+    cam = { ...cam, y: cam.y - 5 * u * Math.exp(1 - u) };
   }
-  const h = handheld(t, T);
-  return { ...cam, x: cam.x + h.x, y: cam.y + h.y };
+  return cam;
 }
 
 /** The diptych's own base: locked to the frame (the words, the night, the seam never ride the close-up). */
-export function frameCamAt(t: number, T: ResultTiming): Cam {
-  const h = handheld(t, T);
-  return { x: h.x, y: h.y, z: 1 };
+export function frameCamAt(): Cam {
+  return { x: 0, y: 0, z: 1 };
 }
 
 export type Side = 'night' | 'booked';
 
-/** A half of the diptych on top of the base camera: drift apart, word kick, the Booked push. */
-export function halfCamAt(t: number, side: Side, base: Cam, G: Geo, L: LL, T: ResultTiming): Cam {
-  if (t < RESULT.split) return base;
-  const sgn = side === 'night' ? -1 : 1;
-  const d = 10 * sgn * tween(t, T.drift, [0, 1], EASE.inOut);
-  let cam = G.sideBySide ? shiftScreen(base, d, 0) : shiftScreen(base, 0, d);
-  const land = side === 'night' ? RESULT.split : RESULT.bookedWord;
-  const kick = t >= land ? 0.012 * Math.exp(-(t - land) / 4) : 0;
-  const push = side === 'booked' ? 0.035 * tween(t, T.hold, [0, 1], EASE.inOut) : 0;
-  const f = (1 + push) * (1 + kick);
-  if (f !== 1) cam = zoomScreen(cam, L, worldToScreen(cam, L, side === 'night' ? G.night : G.booked), f);
-  return cam;
+/** The drift's offset at t (screen px, signed per half) — 0 → ±DRIFT over T.drift. */
+export const DRIFT = 10;
+export const driftAt = (t: number, side: Side, T: ResultTiming) =>
+  t < RESULT.split ? 0 : DRIFT * (side === 'night' ? -1 : 1) * tween(t, T.drift, [0, 1], EASE.inOut);
+
+/** A half of the diptych on top of the base camera: the slow drift apart (a pure translation). */
+export function halfCamAt(t: number, side: Side, base: Cam, G: Geo, T: ResultTiming): Cam {
+  const d = driftAt(t, side, T);
+  if (d === 0) return base;
+  return G.sideBySide ? shiftScreen(base, d, 0) : shiftScreen(base, 0, d);
 }
 
 /**
  * Every camera of a frame, all sharing the dive:
  *   world   the calendar + card (the close-up, the recompose) — the Booked half's motion on top
  *   night   the night half (sky, moon, stars, "Asleep.") — frame-locked + its half's motion
- *   booked  the Booked half's type and atmosphere ("Booked.", discs, motes) — frame-locked + its half's motion
+ *   booked  the Booked half's word ("Booked.") — frame-locked + its half's drift
  *   seam    the divider — frame-locked
- *   base    the raw world camera (room, room light, motes before the split)
+ *   base    the raw world camera (before the halves and the dive)
  */
-export type Cams = { base: Cam; world: Cam; night: Cam; booked: Cam; seam: Cam; dive: ReturnType<typeof diveAt>; q: Pt };
+export type Cams = {
+  base: Cam;
+  world: Cam;
+  night: Cam;
+  booked: Cam;
+  seam: Cam;
+  dive: ReturnType<typeof diveAt>;
+  q: Pt;
+};
 
 export function camsAt(t: number, G: Geo, L: LL, T: ResultTiming): Cams {
   const base = baseCamAt(t, G, L, T);
-  const frame = frameCamAt(t, T);
-  const world0 = halfCamAt(t, 'booked', base, G, L, T);
-  const night0 = halfCamAt(t, 'night', frame, G, L, T);
-  const booked0 = halfCamAt(t, 'booked', frame, G, L, T);
+  const frame = frameCamAt();
+  const world0 = halfCamAt(t, 'booked', base, G, T);
+  const night0 = halfCamAt(t, 'night', frame, G, T);
+  const booked0 = halfCamAt(t, 'booked', frame, G, T);
   const d = diveAt(t, T);
   if (t < T.pulseIn[0])
-    return { base, world: world0, night: night0, booked: booked0, seam: frame, dive: d, q: { x: L.cx, y: L.cy } };
+    return {
+      base,
+      world: world0,
+      night: night0,
+      booked: booked0,
+      seam: frame,
+      dive: d,
+      q: { x: L.cx, y: L.cy },
+    };
   // the dive: all planes zoom about the event's screen point, which travels to the frame centre
   const q = worldToScreen(world0, L, eventWorldAt(t, G, T));
   const q2 = { x: mix(q.x, L.cx, d.centre), y: mix(q.y, L.cy, d.centre) };
   const z = (c: Cam) => zoomScreen(c, L, q, d.f, q2);
-  return { base: z(base), world: z(world0), night: z(night0), booked: z(booked0), seam: z(frame), dive: d, q };
+  return {
+    base: z(base),
+    world: z(world0),
+    night: z(night0),
+    booked: z(booked0),
+    seam: z(frame),
+    dive: d,
+    q,
+  };
 }
 
-/** The calendar's (world) camera alone — the flight and the blur sample it at sub-frames. */
+/** The calendar's (world) camera alone (the flight reads the slot through it). */
 export const camAt = (t: number, G: Geo, L: LL, T: ResultTiming): Cam => camsAt(t, G, L, T).world;
 
 /* ── the card: lift (mark → card) and flight (card → slot) ─────────── */
@@ -210,12 +234,12 @@ export type Word = {
 export type Morph = {
   wed: Word;
   /** " at" folds out between the two words… */
-  at: Word & { op: number; blur: number };
+  at: Word & { op: number };
   /** …and the row's "·" folds in in its place */
-  sep: Word & { op: number; blur: number };
+  sep: Word & { op: number };
   num: Word;
-  /** the mark words' opacity (they cross-fade into the card row) */
-  op: number;
+  /** 0 → 1: registered on the row, the words take the row's ink (ember → paper) */
+  ink: number;
 };
 
 export type CardState = {
@@ -240,6 +264,8 @@ export type CardState = {
   morph: Morph | null;
   /** event face (dot + "3:00 PM") opacity */
   ev: number;
+  /** 0..1 in flight: the date row rolls up out of the card as the event face rolls in */
+  roll: number;
   /** 0..1 the plate warms to the event's solid ember */
   warm: number;
   /** 0..1 height above the page (shadow) */
@@ -254,7 +280,7 @@ export type CardState = {
 
 /** Mark / card-row word metrics (from measure.ts). */
 export type MarkMetrics = {
-  /** mark ("Wednesday at 3 PM", Inter): full width, words' widths + left offsets, cap-centre offset; and
+  /** mark ("Wednesday at 3 PM", MARK_TYPE): full width, words' widths + left offsets, cap-centre offset; and
    *  `row`: the card's row ("Wednesday · 3 PM") set in the mark's own face — what the mark closes up into */
   m: {
     W: number;
@@ -265,8 +291,15 @@ export type MarkMetrics = {
     capOff: number;
     box: number;
   };
-  /** card row ("Wednesday · 3 PM", Instrument Sans): words' widths + left offsets, cap-centre offset */
-  c: { wed: number; sep: number; sepX: number; num: number; numX: number; capOff: number };
+  /** card row ("Wednesday · 3 PM", MARK_TYPE at the card's size): words' widths + left offsets, cap-centre offset */
+  c: {
+    wed: number;
+    sep: number;
+    sepX: number;
+    num: number;
+    numX: number;
+    capOff: number;
+  };
 };
 
 /** ~4 % overshoot, peaking ≈ 9 frames after it starts */
@@ -318,12 +351,27 @@ export function cardAt(tIn: number, G: Geo, L: LL, T: ResultTiming, MM: MarkMetr
   // ("Wednesday · 3 PM") set in its own face — all measured, so any copy registers
   const col = tween(t, T.markCollapse, [0, 1], EASE.inOut);
   const R = MM.m.row;
-  const mWed = { x: mix(-MM.m.W / 2 + MM.m.wed / 2, -R.W / 2 + MM.m.wed / 2, col), y: MM.m.capOff };
-  const mNum = { x: mix(-MM.m.W / 2 + MM.m.numX + MM.m.num / 2, -R.W / 2 + R.numX + MM.m.num / 2, col), y: MM.m.capOff };
+  const mWed = {
+    x: mix(-MM.m.W / 2 + MM.m.wed / 2, -R.W / 2 + MM.m.wed / 2, col),
+    y: MM.m.capOff,
+  };
+  const mNum = {
+    x: mix(-MM.m.W / 2 + MM.m.numX + MM.m.num / 2, -R.W / 2 + R.numX + MM.m.num / 2, col),
+    y: MM.m.capOff,
+  };
   const mSep = { x: -R.W / 2 + R.sepX + R.sep / 2, y: MM.m.capOff };
-  const cWed = { x: -C0.w / 2 + CT.padX + MM.c.wed / 2, y: CT.row1 + MM.c.capOff };
-  const cNum = { x: -C0.w / 2 + CT.padX + MM.c.numX + MM.c.num / 2, y: CT.row1 + MM.c.capOff };
-  const cSep = { x: -C0.w / 2 + CT.padX + MM.c.sepX + MM.c.sep / 2, y: CT.row1 + MM.c.capOff };
+  const cWed = {
+    x: -C0.w / 2 + CT.padX + MM.c.wed / 2,
+    y: CT.row1 + MM.c.capOff,
+  };
+  const cNum = {
+    x: -C0.w / 2 + CT.padX + MM.c.numX + MM.c.num / 2,
+    y: CT.row1 + MM.c.capOff,
+  };
+  const cSep = {
+    x: -C0.w / 2 + CT.padX + MM.c.sepX + MM.c.sep / 2,
+    y: CT.row1 + MM.c.capOff,
+  };
   const sWed = mix(1, MM.c.wed / MM.m.wed, mo);
   const sNum = mix(1, MM.c.num / MM.m.num, mo);
   // (the "·" is too small to take a width ratio from: it scales with the type, mark size → row size)
@@ -340,15 +388,17 @@ export function cardAt(tIn: number, G: Geo, L: LL, T: ResultTiming, MM: MarkMetr
     x: (wed.x + (MM.m.wed / 2) * sWed + (num.x - (MM.m.num / 2) * sNum)) / 2,
     y: mix(0, CT.row1 + MM.c.capOff - MM.m.capOff, mo),
   };
-  // the "·" comes in as " at" goes (a small pop, unblurring), already on its own place in the row
+  // " at" folds away on its centre (it shrinks as it fades); the "·" grows in on its own place in the row
   const sepIn = EASE.out3(clamp01((col - 0.3) / 0.7));
   const sep = word(mSep, cSep, sSep);
+  const atOut = EASE.inOut(clamp01(col * 1.4));
+  const ink = tween(t, T.markOut, [0, 1], EASE.inOut);
   const morph: Morph = {
     wed,
     num,
-    at: { x: atGap.x, y: atGap.y, s: 1 - 0.6 * col, op: 1 - clamp01(col * 1.5), blur: col * 6 },
-    sep: { ...sep, s: sep.s * (0.5 + 0.5 * sepIn), op: sepIn, blur: (1 - sepIn) * 4 },
-    op: 1 - tween(t, T.markOut, [0, 1], EASE.inOut),
+    at: { x: atGap.x, y: atGap.y, s: 1 - 0.55 * atOut, op: 1 - atOut },
+    sep: { ...sep, s: sep.s * (0.4 + 0.6 * sepIn), op: sepIn },
+    ink,
   };
 
   /* wind-up before the throw: pull back, down and away from the target; swell */
@@ -365,6 +415,7 @@ export function cardAt(tIn: number, G: Geo, L: LL, T: ResultTiming, MM: MarkMetr
   let p = tween(t, T.cardReveal, [0, 1], EASE.out3);
   let row = tween(t, T.markOut, [0, 1], EASE.inOut);
   let ev = 0;
+  let roll = 0;
   let warm = 0;
   let air = 0.35 * wu + 0.5 * arcK;
   let calS = G.est.s;
@@ -389,10 +440,15 @@ export function cardAt(tIn: number, G: Geo, L: LL, T: ResultTiming, MM: MarkMetr
     h = C0.h;
     r = mix(24, (CAL.slotRadius * sl.calS) / sF, ks);
     rot = mix(-2.4, 0, clamp01(q * 3)) + 6 * Math.sin(Math.PI * Math.min(1, q * 1.05));
-    p = 1 - tween(q, [0.4, 0.8], [0, 1], EASE.inOut);
-    row = p;
-    ev = tween(q, [0.58, 0.92], [0, 1], EASE.inOut);
-    warm = tween(q, [0.45, 1], [0, 1], EASE.inOut);
+    // the card's face changes while it is still card-shaped: BOOKED sinks back into its band, then the
+    // date row rolls up and out through the card's top edge as "• 3:00 PM" rolls up into it (a flip
+    // board, clipped by the card) — never two settings on top of each other, never an empty plate
+    p = 1 - tween(q, [0.04, 0.24], [0, 1], EASE.in2);
+    roll = tween(q, [0.2, 0.56], [0, 1], EASE.inOut);
+    row = 1 - roll;
+    ev = roll;
+    // it warms as its face turns, so the white face arrives on the ember
+    warm = tween(q, [0.12, 0.8], [0, 1], EASE.inOut);
     air = mix(0.35, 0, q) + Math.sin(Math.PI * q) * 0.9;
   }
 
@@ -408,20 +464,13 @@ export function cardAt(tIn: number, G: Geo, L: LL, T: ResultTiming, MM: MarkMetr
     plateOp: tween(t, T.plateIn, [0, 1], EASE.out3),
     p,
     row,
-    morph: morph.op > 0.001 ? morph : null,
+    morph: t < T.markOut[1] ? morph : null,
     ev,
+    roll,
     warm,
     air: Math.max(0, air),
     u: calS / s,
     calS,
     q,
   };
-}
-
-/** Screen-space speed of the card (px/frame) — drives blur + ghosts. */
-export function cardSpeed(t: number, G: Geo, L: LL, T: ResultTiming, MM: MarkMetrics): number {
-  if (t <= 0.5) return 0;
-  const a = cardAt(t - 0.5, G, L, T, MM);
-  const b = cardAt(t + 0.5, G, L, T, MM);
-  return Math.hypot(b.x - a.x, b.y - a.y) + Math.abs(b.w * b.s - a.w * a.s) * 0.5;
 }

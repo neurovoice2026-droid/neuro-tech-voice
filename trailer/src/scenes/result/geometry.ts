@@ -12,9 +12,9 @@
  *                affine map (CalMap), never a CSS scale, and its type keeps
  *                its own sizes.
  */
-import { CARD0, MARK } from '../../lib/handoff';
+import { CARD0, MARK, MARK_TYPE } from '../../lib/handoff';
 import type { Layout } from '../../lib/layout';
-import { FONT } from '../../theme';
+import { typeSize } from '../../lib/type';
 import type { FontSpec } from './measure';
 
 export type Pt = { x: number; y: number };
@@ -49,7 +49,7 @@ export const BOOKINGS: ReadonlyArray<readonly [number, number, number]> = [
 
 export const CAL = {
   pad: 28,
-  /** the hours gutter: "12 PM" at the label floor (30 / 28 px Geist Mono ≈ 90 px) with air either side */
+  /** the hours gutter: "12 PM" at the label floor (30 / 28 px Instrument Sans ≈ 80 px) with air either side */
   gutter: 120,
   radius: 28,
   dayY: 62, // centre of the day labels (the old "THE OWNER'S CALENDAR" band is gone)
@@ -134,7 +134,15 @@ export function geo(L: Layout) {
         hour: 30,
         face: 48,
       },
-      { card: { x: 90, y: 1204, w: 900, h: 276 }, gutter: 118, header: 60, rows: [13, 17] as const, day: 30, hour: 28, face: 44 },
+      {
+        card: { x: 90, y: 1204, w: 900, h: 276 },
+        gutter: 118,
+        header: 60,
+        rows: [13, 17] as const,
+        day: 30,
+        hour: 28,
+        face: 44,
+      },
     );
     const cols = [1, 4] as const; // TUE … THU
     const colPx = (c.card.w - c.gutter) / (cols[1] - cols[0]);
@@ -165,14 +173,22 @@ export function geo(L: Layout) {
     ...L.pick({ x: 880, y: 560, w: 760, h: 200 }, { x: 540, y: 1080, w: 720, h: 200 }),
   };
   const dateSize = L.pick(68, 64);
+  // the date row is the mark's own setting (MARK_TYPE: TYPE.caption on the dark) at the card's size —
+  // the same glyphs, only smaller, so the mark's words register onto it and the hand-over is a scale
   const cardType: CardType = {
     padX: 36,
     row0: -44,
     row1: 26,
-    label: 32,
-    dot: 14,
+    label: typeSize('label', L.vertical),
+    dot: 12,
     gap: 14,
-    date: { family: FONT.ui, weight: 520, size: dateSize, track: -0.01, lh: 1.05 },
+    date: {
+      family: MARK_TYPE.family,
+      weight: MARK_TYPE.weight,
+      size: dateSize,
+      track: parseFloat(MARK_TYPE.tracking),
+      lh: 1.05,
+    },
     sepAir: 0.1,
   };
 
@@ -214,59 +230,31 @@ export function geo(L: Layout) {
     /** centres of the two halves (the push / kick origins) */
     night: L.pick({ x: 480, y: 540 }, { x: 540, y: 480 }),
     booked: L.pick({ x: 1440, y: 540 }, { x: 540, y: 1440 }),
-    word: L.pick(190, 150),
+    /** "Asleep." / "Booked." — TYPE.display (128 / 112), set like the knowledge heading */
+    word: typeSize('display', L.vertical),
     /** word anchors: horizontal centre + baseline */
-    asleep: L.pick({ cx: 480, base: 820 }, { cx: 540, base: 800 }),
-    bookedWord: L.pick({ cx: 1440, base: 820 }, { cx: 540, base: 1166 }),
+    asleep: L.pick({ cx: 480, base: 812 }, { cx: 540, base: 800 }),
+    bookedWord: L.pick({ cx: 1440, base: 812 }, { cx: 540, base: 1140 }),
     moon: L.pick({ x: 480, y: 350, d: 200 }, { x: 540, y: 360, d: 180 }),
-    /** 3–4 stars, 3–5 px: x, y, d */
+    /** a very sparse, sharp starfield: four points (1.6–2.6 px), each lit on its own 16th (T.stars) */
     stars: L.pick(
       [
-        { x: 172, y: 206, d: 5 },
-        { x: 752, y: 148, d: 3.5 },
-        { x: 846, y: 458, d: 4.5 },
-        { x: 262, y: 528, d: 3 },
+        { x: 168, y: 214, d: 2.6 },
+        { x: 772, y: 152, d: 1.8 },
+        { x: 842, y: 470, d: 2.2 },
+        { x: 236, y: 548, d: 1.6 },
       ],
       [
-        { x: 170, y: 246, d: 5 },
-        { x: 884, y: 186, d: 3.5 },
-        { x: 868, y: 566, d: 4.5 },
-        { x: 226, y: 594, d: 3 },
+        { x: 168, y: 268, d: 2.6 },
+        { x: 896, y: 214, d: 1.8 },
+        { x: 884, y: 590, d: 2.2 },
+        { x: 214, y: 616, d: 1.6 },
       ],
     ),
     /** the seam line: full length, and past the frame's edges (the pulse leans the camera back 3.5 %) */
     divider: L.pick(
       { vertical: true, at: L.cx, from: -60, to: L.height + 60 },
       { vertical: false, at: L.cy, from: -60, to: L.width + 60 },
-    ),
-    /** parallax discs: far (0.5×, 2–3 large, dim) and near (1.6×, out of focus); side 0 = night, 1 = booked */
-    discsFar: L.pick(
-      [
-        { side: 0, x: 250, y: 860, d: 560, a: 0.05 },
-        { side: 1, x: 1640, y: 800, d: 640, a: 0.07 },
-        { side: 1, x: 1160, y: 160, d: 400, a: 0.045 },
-      ],
-      [
-        { side: 0, x: 860, y: 700, d: 560, a: 0.05 },
-        { side: 1, x: 240, y: 1720, d: 640, a: 0.07 },
-        { side: 1, x: 900, y: 1580, d: 440, a: 0.05 },
-      ],
-    ),
-    discsNear: L.pick(
-      [
-        { side: 0, x: 84, y: 300, d: 170, a: 0.1 },
-        { side: 0, x: 880, y: 990, d: 120, a: 0.085 },
-        { side: 1, x: 1870, y: 330, d: 190, a: 0.1 },
-        { side: 1, x: 1070, y: 980, d: 130, a: 0.09 },
-        { side: 1, x: 1790, y: 1020, d: 100, a: 0.12 },
-      ],
-      [
-        { side: 0, x: 60, y: 420, d: 170, a: 0.1 },
-        { side: 0, x: 1020, y: 840, d: 120, a: 0.085 },
-        { side: 1, x: 1040, y: 1110, d: 160, a: 0.1 },
-        { side: 1, x: 70, y: 1560, d: 130, a: 0.09 },
-        { side: 1, x: 900, y: 1850, d: 110, a: 0.12 },
-      ],
     ),
   };
 }
@@ -292,7 +280,10 @@ export type CalMap = {
 
 export const mapX = (m: CalMap, xu: number) => m.ax + xu * m.bx;
 export const mapY = (m: CalMap, yu: number) => m.ay + yu * m.by;
-export const mapPt = (m: CalMap, x: number, y: number): Pt => ({ x: mapX(m, x), y: mapY(m, y) });
+export const mapPt = (m: CalMap, x: number, y: number): Pt => ({
+  x: mapX(m, x),
+  y: mapY(m, y),
+});
 export const mapRect = (m: CalMap, r: Rect): Rect => ({
   x: mapX(m, r.x),
   y: mapY(m, r.y),
@@ -310,7 +301,12 @@ const lerpRect = (a: Rect, b: Rect, k: number): Rect => ({
 /** Whole sheet at `pose` → the card window, by r (may overshoot a little past 1). */
 export function calMap(G: Geo, pose: Pose, r: number): CalMap {
   const B = G.crop;
-  const clipA: Rect = { x: pose.left, y: pose.top, w: G.W * pose.s, h: G.H * pose.s };
+  const clipA: Rect = {
+    x: pose.left,
+    y: pose.top,
+    w: G.W * pose.s,
+    h: G.H * pose.s,
+  };
   return {
     ax: lerp(pose.left, B.ox, r),
     bx: lerp(pose.s, B.sx, r),
@@ -331,16 +327,25 @@ export function layerCss(cam: Cam, depth: number): string {
 }
 /** World (depth-1) point → screen. */
 export function worldToScreen(cam: Cam, L: { cx: number; cy: number }, p: Pt): Pt {
-  return { x: L.cx + (p.x - L.cx) * cam.z - cam.x, y: L.cy + (p.y - L.cy) * cam.z - cam.y };
+  return {
+    x: L.cx + (p.x - L.cx) * cam.z - cam.x,
+    y: L.cy + (p.y - L.cy) * cam.z - cam.y,
+  };
 }
 /** World point → screen for a plane at `depth` (what layerCss(cam, depth) does to it). */
 export function planeToScreen(cam: Cam, L: { cx: number; cy: number }, p: Pt, depth: number): Pt {
   const z = 1 + (cam.z - 1) * depth;
-  return { x: L.cx + (p.x - L.cx) * z - cam.x * depth, y: L.cy + (p.y - L.cy) * z - cam.y * depth };
+  return {
+    x: L.cx + (p.x - L.cx) * z - cam.x * depth,
+    y: L.cy + (p.y - L.cy) * z - cam.y * depth,
+  };
 }
 /** Screen point → world (depth-1). */
 export function screenToWorld(cam: Cam, L: { cx: number; cy: number }, p: Pt): Pt {
-  return { x: L.cx + (p.x - L.cx + cam.x) / cam.z, y: L.cy + (p.y - L.cy + cam.y) / cam.z };
+  return {
+    x: L.cx + (p.x - L.cx + cam.x) / cam.z,
+    y: L.cy + (p.y - L.cy + cam.y) / cam.z,
+  };
 }
 /**
  * Compose an extra zoom `f` about the screen point `q` (which then moves to
@@ -354,4 +359,8 @@ export function zoomScreen(cam: Cam, L: { cx: number; cy: number }, q: Pt, f: nu
   };
 }
 /** Compose a screen-space shift onto a camera. */
-export const shiftScreen = (cam: Cam, dx: number, dy: number): Cam => ({ ...cam, x: cam.x - dx, y: cam.y - dy });
+export const shiftScreen = (cam: Cam, dx: number, dy: number): Cam => ({
+  ...cam,
+  x: cam.x - dx,
+  y: cam.y - dy,
+});

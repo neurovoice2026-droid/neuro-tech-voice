@@ -8,8 +8,9 @@
  * sibilant, "you" / "then!" on the next two dips of the envelope (fixed
  * offsets if the take has none).
  *
- * It sits in the row UNDER the booked mark (row C, the call's caption face,
- * at the legibility floor), so the line reads on as "Wednesday at 3 PM. /
+ * It sits in the row UNDER the booked mark (row C, set exactly as the call
+ * sets Ava's captions: TYPE.caption on the dark, in her paper ink), so the
+ * line reads on as "Wednesday at 3 PM. /
  * See you then!" while the orb dives into the mark above it and the mark
  * lifts away into its card — it never crosses either. It leaves with the
  * call's designed caption exit (CallCaptions), before the card is thrown.
@@ -23,7 +24,8 @@ import React from 'react';
 import { AbsoluteFill } from 'remotion';
 import { MARK, TRANSCRIPT } from '../../lib/handoff';
 import { useLayout } from '../../lib/layout';
-import { C, FONT } from '../../theme';
+import { captionFont } from '../../lib/type';
+import { VOICE_INK } from '../../theme';
 import { CALL, CALL_LOCAL, RESULT, SCENES } from '../../timing';
 import { VOICE } from '../../voice.generated';
 import { CallCaptions, type CallCaption } from '../call/CallCaptions';
@@ -53,7 +55,6 @@ export const SignOff: React.FC<{ t: number }> = ({ t }) => {
   if (t < FIRST || t > HOLD_UNTIL + 2) return null;
   const T = TRANSCRIPT(L);
   const M = MARK(L);
-  const size = L.pick(64, 56);
   return (
     <AbsoluteFill style={{ pointerEvents: 'none' }}>
       <CallCaptions
@@ -65,11 +66,9 @@ export const SignOff: React.FC<{ t: number }> = ({ t }) => {
         x={L.cx}
         y={M.y + T.fontSize * T.lineHeight}
         maxWidth={T.maxWidth}
-        font={{ family: FONT.body, weight: 500, size, lineHeight: 1.22, tracking: '-0.01em' }}
-        color={C.paper}
-        glow="rgba(185,163,255,0.35)"
+        font={captionFont(L.vertical, 'night')}
+        color={VOICE_INK.ava.night.text}
         holdUntil={HOLD_UNTIL}
-        echoY={null}
       />
     </AbsoluteFill>
   );

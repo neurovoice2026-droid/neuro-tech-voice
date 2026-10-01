@@ -9,10 +9,11 @@
  * four lights come forward into a row in front of her (THE FORMATION: all
  * four in view, clear of her eyes and mouth, while "24/7." holds). At the
  * converge the row fans out into four arms, swells (anticipation) and
- * spirals into the core, spinning up as it closes (motion-blurred by the
- * scene). Each keeps its own light until they touch; then the three pour
- * into the survivor (night), which takes all four hues (ALL_LIGHTS), holds
- * alone, is squeezed by the pull-back, and bursts on the impact.
+ * spirals into the core, spinning up as it closes (drawn crisp: the film
+ * renders at 120 fps, no simulated blur). Each keeps its own light until they
+ * touch; then the three pour into the survivor (night), which takes all four
+ * hues (ALL_LIGHTS), holds alone, is squeezed by the pull-back, and gives its
+ * light to the corona on the impact.
  */
 import { ALL_LIGHTS, mixPalette } from '../../lib/lights';
 import { EASE, mix, SPRING, springAt, tween, windowed } from '../../lib/motion';
@@ -62,7 +63,7 @@ export function omega(s: number) {
   let w = 0.026;
   K.tighten.forEach((f) => (w += 0.012 * tween(s, [f, f + 6], [0, 1], EASE.out3)));
   // the swell hesitates (anticipation), then the ring whirls up while it is
-  // still wide (long, motion-blurred sweeps) before it collapses into the core
+  // still wide (long sweeps) before it collapses into the core
   w *= 1 - 0.5 * windowed(s, K.orbSwell[0], K.orbSwell[1], K.orbSwell[1], K.orbIn[0] + 6, EASE.out3, EASE.inOut);
   w += 0.2 * tween(s, K.orbIn, [0, 1], EASE.inOut);
   return w;

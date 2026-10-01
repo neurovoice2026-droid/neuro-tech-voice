@@ -1,7 +1,7 @@
 /**
- * Real font metrics for the mark → card morph, so the two type settings
- * (the call's mark: Inter 500; the card row: Instrument Sans 520) can be
- * registered word by word before they cross-fade.
+ * Real font metrics for the mark → card morph, so the mark's words (the
+ * call's MARK_TYPE at 76 / 68 px) can be registered word by word onto the
+ * card's date row (the same setting at 68 / 64 px).
  *
  * Measured with a 2D canvas (same shaper + font files as the DOM). The
  * numbers are only trusted once the faces are loaded: `useFontsReady`

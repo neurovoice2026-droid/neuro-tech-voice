@@ -2,27 +2,28 @@
  * Local copy of <BookedCard> (components/Shared.tsx) for the morph:
  *   · rows are placed absolutely from the card type (not by flex), so the
  *     morph can register the call's mark onto the date row to the pixel;
- *   · sized for the 76/68 px mark (P2-5): a 760/720 × 200 card, BOOKED at
- *     32 px, the date row at 68/64 px — the mark's words shrink < 15 %;
- *   · the date row has its own opacity (it cross-fades with the mark).
- * Same plate, same type, same pill idiom as the shared card.
+ *   · sized for the 76/68 px mark: a 760/720 × 200 card, BOOKED in TYPE.label
+ *     (30 / 28 px, uppercase, tracked), the date row in the mark's own setting
+ *     (MARK_TYPE) at 68/64 px — the mark's words only scale down onto it;
+ *   · the date row has its own opacity (it takes over from the mark's words).
+ * Same idiom as the shared card: the site's booked pill grown into a card.
  */
 import React from 'react';
 import { BOOKING } from '../../components/Shared';
-import { C, FONT, TRACK } from '../../theme';
+import { typeStyle } from '../../lib/type';
+import { C } from '../../theme';
 import type { CardType } from './geometry';
 
 export const CardFace: React.FC<{
   w: number;
   h: number;
   ct: CardType;
+  vertical: boolean;
   /** 0..1 BOOKED row (dot + label) rises in */
   p: number;
   /** 0..1 date row opacity */
   row: number;
-  /** pill ping 0..1 (-1 none) */
-  ping?: number;
-}> = ({ w, h, ct, p, row, ping = -1 }) => {
+}> = ({ w, h, ct, vertical, p, row }) => {
   const q = Math.min(1, Math.max(0, p));
   const e = 1 - Math.pow(1 - q, 3);
   return (
@@ -33,49 +34,45 @@ export const CardFace: React.FC<{
             position: 'absolute',
             left: ct.padX,
             top: h / 2 + ct.row0,
-            transform: `translateY(calc(-50% + ${((1 - e) * 16).toFixed(2)}px))`,
-            display: 'flex',
-            alignItems: 'center',
-            gap: ct.gap,
-            opacity: e,
+            // the row rises out of its own band (a mask: it never floats over the date)
+            transform: 'translateY(-50%)',
+            overflow: 'hidden',
+            padding: '0.2em 0.2em 0.2em 0',
+            margin: '-0.2em -0.2em -0.2em 0',
+            fontSize: ct.label,
           }}
         >
-          <div style={{ position: 'relative', width: ct.dot, height: ct.dot, flex: 'none' }}>
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                borderRadius: '50%',
-                background: C.ember,
-                boxShadow: '0 0 12px rgba(238,84,35,0.8)',
-              }}
-            />
-            {ping >= 0 && ping < 1 ? (
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  borderRadius: '50%',
-                  background: C.ember,
-                  transform: `scale(${(1 + ping * 1.4).toFixed(3)})`,
-                  opacity: 0.6 * (1 - ping),
-                }}
-              />
-            ) : null}
-          </div>
           <div
             style={{
-              fontFamily: FONT.body,
-              fontWeight: 600,
-              fontSize: ct.label,
-              lineHeight: 1.2,
-              letterSpacing: TRACK.tag,
-              textTransform: 'uppercase',
-              color: C.emberLit,
-              whiteSpace: 'nowrap',
+              display: 'flex',
+              alignItems: 'center',
+              gap: ct.gap,
+              transform: `translateY(${((1 - e) * 110).toFixed(3)}%)`,
+              opacity: Math.min(1, e * 1.6),
             }}
           >
-            Booked
+            <div
+              style={{
+                width: ct.dot,
+                height: ct.dot,
+                flex: 'none',
+                borderRadius: '50%',
+                background: C.ember,
+              }}
+            />
+            <div
+              style={{
+                ...typeStyle('label', vertical, {
+                  tone: 'night',
+                  size: ct.label,
+                }),
+                lineHeight: 1,
+                color: C.emberLit,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Booked
+            </div>
           </div>
         </div>
       ) : null}
@@ -91,9 +88,10 @@ export const CardFace: React.FC<{
             fontSize: ct.date.size,
             lineHeight: ct.date.lh,
             letterSpacing: `${ct.date.track}em`,
+            fontKerning: 'normal',
             color: C.paper,
             whiteSpace: 'nowrap',
-            opacity: row,
+            opacity: row < 0.999 ? row : undefined,
           }}
         >
           {BOOKING.day} <span style={{ margin: `0 ${ct.sepAir}em` }}>{BOOKING.sep}</span> {BOOKING.time}

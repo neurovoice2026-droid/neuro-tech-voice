@@ -608,14 +608,9 @@ export const CALL_LOCAL = {
 
 /* ── RESULT — fine cuts (result-local frames) ──────────────────── */
 export const RESULT_LOCAL = {
-  /** the night room knocks the call back (out-curve) */
+  /** the call's emerald falls away with its orb: the result's warm near-black room (lit by the
+   *  booking itself) comes up over it (in-out) */
   roomIn: [RESULT.lift, b(4 / 3)] as const, // 0 → 20
-  /** the room opens as the call's midnight and STAYS midnight through the close-up (the
-   *  close-up never fills the frame: 9:16 shows half the room above / below the sheet, 16:9 a
-   *  strip — warming there lit them violet on the land and then dropped them to the night
-   *  half's navy, a pump); it warms with the split grade instead, under the Booked half's
-   *  ground as that grades in (= splitGrade) */
-  roomWarm: [RESULT.split - b(0.4), RESULT.split + b(14 / 15)] as const, // 39 → 59
   /** the lift spring starts here, after a 2-frame anticipation dip */
   liftGo: RESULT.lift + b(1 / 8), // 2
   /** the booked-pill wash blooms around the mark; the call's <MarkGlow> (MARK_GLOW_HANDOFF) cross-fades into it */
@@ -626,7 +621,7 @@ export const RESULT_LOCAL = {
   morph: [RESULT.lift + b(1 / 8), RESULT.lift + b(2 / 3)] as const, // 2 → 10
   /** BOOKED + the ember dot rise in */
   cardReveal: [RESULT.lift + b(0.4), RESULT.lift + b(0.8)] as const, // 6 → 12
-  /** the registered words cross-fade: the mark (Inter) → the card row (Instrument Sans) */
+  /** the registered words take the card row's paper ink (the mark and the row are one setting) */
   markOut: [RESULT.lift + b(0.6), RESULT.lift + b(5 / 6)] as const, // 9 → 13
   /** the card pulls back before the throw */
   windUp: [RESULT.fly - b(0.2), RESULT.fly] as const, // 12 → 15
@@ -653,29 +648,23 @@ export const RESULT_LOCAL = {
   recomposeAnticip: b(0.2), // 3  (36 → 39)
   recomposeDur: 6, // 39 → 45
   recomposeSettle: 6, // 45 → 51
-  /** the split: the divider draws top → bottom (16:9) / left → right (9:16) over dividerDraw
-   *  frames (EASE.house) and the night falls in behind its bead */
+  /** the split: the seam (a paper hairline) draws top → bottom (16:9) / left → right (9:16) over
+   *  dividerDraw frames (EASE.house) and the night's moonlit room falls in behind it */
   divider: RESULT.split - b(0.25), // 41
   dividerDraw: 8, // 41 → 49
-  /** the call's violet room light cools out as the halves grade in */
-  splitGrade: [RESULT.split - b(0.4), RESULT.split + b(14 / 15)] as const, // 39 → 59
   /** the titles plane moves above the sheet (it sits under it while the sheet recomposes) */
   titlesOver: RESULT.split + b(1 / 3), // 50
-  /** per-letter stagger of "Asleep." / "Booked." (SPRING.land; the LAST letter locks ON
-   *  RESULT.split / RESULT.bookedWord); each landing kicks its own half 1.2 % */
-  letterStagger: 0.6,
-  /** the moon locks a 16th after "Asleep." (glow flash + one slow ring) */
+  /** (the words "Asleep." / "Booked." rise whole out of their masks on SPRING.display and lock —
+   *  first reach their line — ON RESULT.split / RESULT.bookedWord) */
+  /** the moon rises into place and locks a 16th after "Asleep." */
   moon: RESULT.split + b(0.25), // 49
-  /** the stars twinkle in (lock frames) on 16ths / 8ths */
+  /** four stars light (lock frames) on 16ths / 8ths */
   stars: [b(3.5), b(3.75), b(4.5), b(4.75)] as const, // 53 56 68 71
-  /** the confirmation check (the closing light's green) pops on the event, a 16th after "Booked." */
+  /** the confirmation: the event's dot draws itself into a check, a 16th after "Booked." */
   check: RESULT.bookedWord + b(0.25), // 64
-  /** the parallax discs come up with the split, and clear for the dive */
-  discsIn: [RESULT.split - b(0.25), RESULT.bookedWord] as const, // 41 → 60
-  discsOut: [RESULT.toWhite[0] - b(1 / 3), RESULT.toWhite[0] + b(0.2)] as const, // 100 → 108
   /** the halves drift apart ±10 px (from the split) … */
   drift: [RESULT.split, RESULT.toWhite[0] - b(1)] as const, // 45 → 90
-  /** … while the Booked half pushes in 1 → 1.035 and the night dims 10 % */
+  /** … while the night dims 10 % */
   hold: [RESULT.bookedWord, RESULT.toWhite[0] - b(1)] as const, // 60 → 90
   /** ONE accent in the hold: a light sweep across the event, one beat after "Booked." (on the grid) */
   sweep: [RESULT.bookedWord + b(1), RESULT.bookedWord + b(1) + 8] as const, // 75 → 83
@@ -685,13 +674,12 @@ export const RESULT_LOCAL = {
   pulseIn: [RESULT.toWhite[0] - b(1 / 3) - 10, RESULT.toWhite[0] - b(1 / 3)] as const, // 90 → 100
   /** the dive into the event: it accelerates (EASE.in2) right into the cut — no stall before the white */
   dive: [RESULT.toWhite[0] - b(1 / 3), RESULT.toWhite[1]] as const, // 100 → 120
-  /** the event's rect opens past the frame edges (camera does most of it; this is the last few ×) */
-  open: [RESULT.toWhite[0] + b(4 / 15), RESULT.toWhite[1] - 1] as const, // 109 → 119
-  /** the event's light: a hot core (white → #ffb877) grows from its centre and bleeds past its edge,
-   *  so the chip dissolves into light; white peaks ON the cut (the knowledge's hit-white, the beat) */
+  /** the event's rect opens past the frame edges (camera does most of it; this is the last few ×) —
+   *  it fills the frame (9:16 too) before the light turns it white */
+  open: [RESULT.toWhite[0] + b(0.2), RESULT.toWhite[1] - 2.5] as const, // 108 → 117.5
+  /** the event's light: its fill heats from the centre (ember → #ffb877 → white) and spills past its
+   *  edge, so the chip becomes light; white peaks ON the cut (the knowledge's hit-white, the beat) */
   bloom: [RESULT.toWhite[0] + b(0.4), RESULT.toWhite[1]] as const, // 111 → 120
-  /** "• 3:00 PM" rides the push with the chip and burns out in the last frames before the white */
-  faceBurn: [RESULT.toWhite[1] - 3, RESULT.toWhite[1] - 0.5] as const, // 117 → 119.5
   /** the frame is entirely white from here (= the cut: the knowledge's white stock takes over) */
   whiteFull: RESULT.toWhite[1], // 120
 };
@@ -847,38 +835,23 @@ export const CTA_LOCAL = {
    *  (5 f before it completes) and decelerates into the figure — its light rises evenly
    *  (Cta.tsx revealAt): no dead hold, no slam (3 → 24) */
   reveal: [CTA_IRIS_END - 5, CTA.robotIn[1] - 6] as const,
-  /** the site's entry tear, as LIGHT ARRIVING: a whisper (peak entryTearPeak) held to the head's
-   *  silhouette edge, settled by frame 10 — the eyes, brow and mouth come out clean (liquid 0 → 18) */
-  entryTear: [0, 10] as const,
-  entryTearPeak: 0.25,
-  liquid: [0, 18] as const,
-  /** a line of light draws out under "24/7." right after its last spoken word ("seven") */
-  underline: CTA.line + vWord('cta-1', 9) + 6,
-  /** … over this many frames, from the word's centre out */
-  underlineDraw: 10,
-  /** ON the converge downbeat: a first filament burst (45 → 49) … */
-  tearKick: [CTA.converge[0], CTA.converge[0] + 4] as const,
-  /** … then the tear builds while the figure is erased to the halo (45 → 69) */
-  tear: [CTA.converge[0] + 4, CTA.logoImpact - 6] as const,
-  erase: [CTA.converge[0], CTA.logoImpact - 6] as const,
-  /** words hold, swell for 3 f, leave 19 f into the converge at 0.35 f each, 8 f flights */
-  collapse: { from: CTA.converge[0] + 19, step: 0.35, dur: 8, anticip: 3 },
-  /** the line of light travels in with "24/7." (it leaves a frame after its word) */
-  underlineIn: { from: CTA.converge[0] + 21, dur: 8 },
-  /** streaks + motes pour in from the frame edges (45 → 75) */
-  streaks: [CTA.converge[0], CTA.logoImpact] as const,
-  /** the hook's ring waves, reversed: three rings contract into P (start radius × reach) */
-  rings: [1.25, 1.1, 0.95] as const,
-  /** the eyes' last light: glows up AS they tear (the eyes go with her face, so their light is what
-   *  is left of them — never two sockets), then slides into the core (156 → 163 → 174) */
+  /** ON the converge downbeat the headline leaves up through its masks, one word every `step`
+   *  frames, each over `dur` (power3.in) — the stage is the four lights' (150 → ≈164) */
+  wordsOut: { from: CTA.converge[0], step: 0.7, dur: 9 },
+  /** … and the light closes on her from the edges in — the opening played backwards — her
+   *  eyes last (150 → 162) */
+  close: [CTA.converge[0], CTA.converge[0] + 12] as const,
+  /** the eyes' last light: it lifts out of them as they go (156 → 163), then the two points
+   *  slide into the core (→ 174) */
   eyeGlow: [CTA.converge[0] + 6, CTA.converge[0] + 13, CTA.converge[0] + 24] as const,
   /** the core gathers */
   core: [CTA.converge[0] + 15, CTA.logoImpact] as const,
   /** anticipation: everything pulls back */
   pullBack: [CTA.converge[0] + 23, CTA.logoImpact] as const,
-  /** impact accents (frames) */
-  shake: 6,
+  /** the impact's sound layer (the corona opening out of the core) */
   ring: [CTA.logoImpact, CTA.logoImpact + 20] as const,
+  /** a light crosses the wordmark's letters once they are all in (190 → 212, inOut) */
+  sweep: [CTA.logoImpact + 10, CTA.logoImpact + 32] as const,
   /** the end card's entrances (see CTA_BUTTON_AT): the button, then the note */
   button: CTA_BUTTON_AT,
   note: CTA_NOTE_AT,
@@ -886,8 +859,6 @@ export const CTA_LOCAL = {
   breath: CTA_BUTTON_AT + 10,
   /** … and its amplitude eases to 0 into the hold, where it freezes */
   breathOut: [CTA.finalHold - 10, CTA.finalHold] as const,
-  /** dust clears before the hold */
-  dustOut: [CTA.finalHold - 15, CTA.finalHold] as const,
   /** every residual (camera, springs, glows) eases to exact rest over these frames */
   settle: [Math.max(CTA.press + 3, CTA.finalHold - 8), CTA.finalHold] as const,
   /** headline word i starts its mask rise this many frames before its spoken word
@@ -898,11 +869,11 @@ export const CTA_LOCAL = {
   eyePush: [0, CTA.line + 10] as const,
   glint0: [CTA_IRIS_END + 2, CTA_IRIS_END + 6] as const,
   glint: [CTA.line, CTA.line + 4] as const,
-  /** THE FOUR LIGHTS — rush, closing, sunday, night pop in on 8ths (each pop is the
-   *  brightest frame of its light: flash bloom, ring, sparks, camera kick) */
+  /** THE FOUR LIGHTS — rush, closing, sunday, night arrive on 8ths (each arrival is the
+   *  brightest frame of its light: a short flash of its own light, a camera nudge) */
   orbPops: [b(2), b(2.5), b(3), b(3.5)] as const,
-  /** as the lights arrive the room's silver backlight dims (to 45 %) so they are the
-   *  brightest things in frame; it comes back ON the impact as the merged light */
+  /** as the lights arrive the room's key steps down (to 55 %) and loses its lilac, so they are
+   *  the brightest things in frame */
   backDim: [b(2), b(3)] as const,
   /** … and tighten their orbit ON "Twenty" "four" "seven" */
   tighten: [0, 1, 2].map((k) =>
@@ -910,34 +881,23 @@ export const CTA_LOCAL = {
   ) as readonly number[],
   /** the converge: the orbit swells (anticipation) … */
   orbSwell: [CTA.converge[0], CTA.converge[0] + 4] as const,
-  /** … then spirals into P, accelerating (motion-blurred) */
+  /** … then spirals into P, accelerating */
   orbIn: [CTA.converge[0] + 4, CTA.logoImpact - 9] as const,
-  /** the orbs behind her show only where she has torn away (the shader's erase
-   *  mask); this closes the last of it as the erase completes */
+  /** the orbs behind her are hidden by her matte; this releases the last of it at the core */
   unhide: [CTA.logoImpact - 9, CTA.logoImpact - 6] as const,
   /** the four overlap and become one: each keeps its own light until contact, then the
    *  other three pour into the survivor (night), which takes all four hues … */
   merge: [CTA.logoImpact - 12, CTA.logoImpact - 6] as const,
-  /** … and holds alone, 1.5×, its mesh swirling the four lights, before it bursts */
+  /** … and holds alone, its mesh swirling the four lights, before it gives its light away */
   survivor: [CTA.logoImpact - 6, CTA.logoImpact] as const,
-  /** the merged orb blows out into the light as the logo lands */
-  burst: [CTA.logoImpact, CTA.logoImpact + 8] as const,
-  /** the four lights' arcs come up on the rim once the merged light has bloomed (180 → 206, inOut) */
+  /** the merged orb gives its light to the corona as the wordmark lands */
+  burst: [CTA.logoImpact, CTA.logoImpact + 6] as const,
+  /** the four lights' arcs come up on the corona's rim once it has opened (186 → 206, inOut) */
   rimIn: [CTA.logoImpact + 6, CTA.logoImpact + 26] as const,
-  /** THE STAGE GOES OUT: as the figure is erased its lit backdrop (the art's backlight, then the
-   *  halo it is erased to) collapses radially into the core — scale 1 → .4, light → 0 on an in-cubic —
-   *  so the merge and the survivor play on black, lit only by the four lights (152 → 172; its light is out by 168) */
-  stageOut: [CTA.converge[0] + 2, CTA.logoImpact - 8] as const,
-  /** the merged light blooms OUT of the core onto the logo on a soft spring (≈4 % over, settled ≈16 f):
-   *  the logo lands alone and the light opens behind it before Ava names it */
-  bloomFrom: 0.45,
-  /** the reveal's backlight is graded toward the night's lilac (35 %) until the four lights take
-   *  over; it eases back to the room's silver as they pop (CTA_LOCAL.backDim) */
-  lilacBack: 0.35,
   /** after "…seven" the formation row slowly tightens and leans in (tension before the converge) */
   drift: [CTA.line + vWord(CTA.lineVoice, VOICE.lines[CTA.lineVoice].words.length - 1) + 6, CTA.converge[0]] as const,
-  /** the URL types ON her words: "neuro" | "tech" | "voice.com" start on cta-2 words 0 / 1 / 2
-   *  (first character index of each chunk, and its frame), one character per urlStep frames */
+  /** the URL rises ON her words: "neuro" | "tech" | "voice.com" on cta-2 words 0 / 1 / 2
+   *  (first character index of each chunk, and its frame) */
   urlChunks: CTA_URL_CHUNKS,
   urlAt: CTA_URL_AT as readonly number[],
   urlStep: CTA_URL_STEP,
@@ -947,14 +907,10 @@ export const CTA_LOCAL = {
   noteStep: 2.5,
   /** the press: a hover lift (anticipation) over the 5 f before it … */
   pressLift: [CTA.press - 5, CTA.press] as const,
-  /** … down to .94 over this many frames (in2), then back on a soft spring */
+  /** … down to .96 over this many frames (in2), then back on a soft spring */
   pressDown: 2,
-  /** the plum floods the plate from the arrow (out3): the colour cross */
+  /** the site's hover: the plate floods to plum from the arrow (out3) */
   flood: [CTA.press, CTA.press + 5] as const,
-  /** a plum ripple leaves the arrow, 0 → 1.3 × the button's width (out3) */
-  ripple: [CTA.press, CTA.press + 10] as const,
-  /** then a glint crosses the plum face */
-  pressGlint: [CTA.press + 3, CTA.press + 11] as const,
 };
 
 /* ── KNOWLEDGE — fine cuts (knowledge-local frames) ──────────────
@@ -1410,7 +1366,7 @@ export const HITS: Hit[] = [
   H('result', RESULT_LOCAL.slotIn[0], 'tick', 'night', 0.86, 3, 'WED 3 PM slot pops'),
   H('result', RESULT.fly + 6, 'whoosh', 'none', [0.75, 0.57], 1, 'the card is thrown'),
   H('result', RESULT.land, 'ding', 'none', 0.57, 1, 'LANDS in the slot'),
-  H('result', RESULT.land, 'land', 'none', 0.57, 1, 'squash + 9 px jolt'),
+  H('result', RESULT.land, 'land', 'none', 0.57, 1, 'squash + one soft 5 px dip'),
   H('result', RESULT_LOCAL.ping[0], 'ping', 'none', 0.57, 3, 'event dot ping', { semi: -7 }),
   // the divider (1 f before) is folded into the recompose whoosh
   H('result', RESULT_LOCAL.recompose + 3, 'whoosh-soft', 'none', 0.72, 2, 'close-up crops into the card'),
@@ -1423,12 +1379,12 @@ export const HITS: Hit[] = [
   // the call's payoff lands with weight (+ the bed's E stab on the same downbeat)
   H('result', RESULT.bookedWord, 'land', 'none', 0.75, 1, '“Booked.”: the payoff’s weight', { layer: true }),
   H('result', RESULT.bookedWord + 1, 'sheen', 'none', [0.6, 0.9], 3, 'sheen across “Booked.”'),
-  H('result', RESULT_LOCAL.check, 'ding-s', 'closing', 0.84, 2, 'the green check pops'),
+  H('result', RESULT_LOCAL.check, 'ding-s', 'closing', 0.84, 2, 'the event’s dot draws itself into a check'),
   H('result', RESULT_LOCAL.stars[2], 'tick', 'night', 0.44, 3, 'star 3', { semi: 9 }),
   H('result', RESULT_LOCAL.stars[3], 'tick', 'night', 0.14, 3, 'star 4', { semi: 14 }),
   H('result', RESULT_LOCAL.sweep[0], 'sheen', 'none', [0.65, 0.9], 2, 'light sweep across 3:00 PM'),
   H('result', RESULT_LOCAL.pulse, 'swell', 'none', 0.75, 3, 'the event swells (anticipation)'),
-  H('result', RESULT_LOCAL.bloom[0], 'shimmer', 'none', 0.5, 3, 'the event’s hot core lights (it blooms to white on the cut)'),
+  H('result', RESULT_LOCAL.bloom[0], 'shimmer', 'none', 0.5, 3, 'the event heats from its centre (it is white on the cut)'),
   // the suck-up cuts ON the white = the cut (the knowledge's hit-white lands on its peak); layered, so it
   // never swallows the knowledge's "Answers" swish two frames later
   H('result', RESULT_LOCAL.whiteFull, 'riser-short', 'none', 0.5, 1, 'the event opens past the frame → peak ON the white', { layer: true }),
@@ -1561,12 +1517,10 @@ export const HITS: Hit[] = [
   ...CTA_LOCAL.orbPops.map((f, i) => H('cta', f, chime(LIGHT_ORDER4[i], true), LIGHT_ORDER4[i], [0.66, 0.71, 0.27, 0.36][i], 2, `${LIGHT_ORDER4[i]}: the hook’s chime, recalled`, { layer: true, db: -2 })),
   // ON “Twenty” “four” “seven”: weight, not clicks — sub kicks under the words
   ...CTA_LOCAL.tighten.map((f, i) => H('cta', f, 'thump', 'none', 0.5, 2, `the orbit tightens (“${['Twenty', 'four', 'seven'][i]}”)`, { db: -1 })),
-  H('cta', CTA_LOCAL.underline, 'draw', 'none', [0.54, 0.62], 3, 'a line of light draws out under “24/7.”', { db: -2 }),
   H('cta', CTA.logoImpact, 'riser', 'none', 0.5, 1, 'CONVERGE → peak ON the impact'),
   // THE CONVERGE is the film's biggest build (the bed's 8th kicks, snare roll and sub swell — bed.mjs):
-  // the tear is voiced (+6 dB) and the whirl rides on top of it (+3 dB)
-  H('cta', CTA_LOCAL.tearKick[0], 'swish', 'none', 0.5, 2, 'the filament burst tears the portrait', { db: 6 }),
-  H('cta', CTA_LOCAL.collapse.from + 3, 'swish', 'none', 0.5, 3, 'headline words sucked into the core'),
+  // the downbeat is voiced (+6 dB) and the whirl rides on top of it (+3 dB)
+  H('cta', CTA_LOCAL.wordsOut.from, 'swish', 'none', 0.5, 2, 'the converge: the headline leaves through its masks, the light closes on her', { db: 6 }),
   H('cta', CTA_LOCAL.orbIn[1] - 6, 'whoosh', 'none', [0.3, 0.7], 2, 'the four orbs whirl at top speed', { db: 3 }),
   H('cta', CTA_LOCAL.eyeGlow[1], 'glint', 'night', 0.5, 3, 'the eyes’ last light slides into the core'),
   H('cta', CTA_LOCAL.survivor[0], 'gulp', 'night', 0.5, 2, 'the four lights are one: the survivor holds alone'),
@@ -1576,18 +1530,17 @@ export const HITS: Hit[] = [
   // (with the impact, the chord makes the film's loudest moment through the impact insert —
   // MIX.impact — and the tonal duck, deeper under the name — MIX.name — takes it back for her line)
   H('cta', CTA.logoImpact, 'chord', 'night', 0.5, 1, 'THE FOUR LIGHTS ring together'),
-  H('cta', CTA_LOCAL.ring[0], 'shock', 'none', 0.5, 2, 'the shockwave ring sweeps past', { layer: true }),
-  H('cta', CTA_LOCAL.button, 'pop', 'night', 0.5, 3, '“Start free →” unfolds out of its point of light, once the URL has typed', { db: -2 }),
+  H('cta', CTA_LOCAL.ring[0], 'shock', 'none', 0.5, 2, 'the merged light opens out of the core as a corona round the wordmark', { layer: true }),
+  H('cta', CTA_LOCAL.button, 'pop', 'night', 0.5, 3, '“Start free →” rises, once the URL is in', { db: -2 }),
   H('cta', CTA_LOCAL.note, 'tap', 'none', 0.5, 3, '“5 free minutes, no card”', { db: -4 }),
-  // (the URL types ON her words — "neuro" | "tech" | "voice.com" at CTA_LOCAL.urlAt — and makes
+  // (the URL rises ON her words — "neuro" | "tech" | "voice.com" at CTA_LOCAL.urlAt — and makes
   // no sound of its own: her voice is its sound, so nothing sits on the name; likewise the
-  // four-light rim (rimIn) and the plate's glint ride the impact's chord, unvoiced)
+  // four-light rim (rimIn) and the light crossing the wordmark (sweep) ride the impact's chord, unvoiced)
   // THE PRESS — the film's last action, heard: the click (down), a felt knock under it, the
-  // release a few frames later, and the glint crossing the plum face
-  H('cta', CTA.press, 'click', 'night', 0.5, 1, 'the button is clicked (plum floods from the arrow)'),
-  H('cta', CTA.press, 'thump', 'none', 0.5, 2, 'the click’s felt knock (the ripple leaves)', { db: 1 }),
+  // release a few frames later
+  H('cta', CTA.press, 'click', 'night', 0.5, 1, 'the button is clicked (the plum floods from the arrow)'),
+  H('cta', CTA.press, 'thump', 'none', 0.5, 2, 'the click’s felt knock', { db: 1 }),
   H('cta', CTA.press + CTA_LOCAL.pressDown + 1, 'tap', 'night', 0.5, 3, 'the plate springs back (release)', { db: -5 }),
-  H('cta', CTA_LOCAL.pressGlint[0], 'glint', 'night', [0.45, 0.6], 3, 'a glint crosses the plum face'),
 ];
 /* ── voices ── */
 export type Cue = {
