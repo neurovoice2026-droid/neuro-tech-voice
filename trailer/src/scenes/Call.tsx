@@ -518,20 +518,16 @@ export const Call: React.FC = () => {
 
         {live ? (
           <>
-            {/* ── 1.3 · motes, 1.6 · lens bokeh (both ghosted over a swing's fastest frames) ── */}
-            {[...planeGhosts.map(([dt, a]) => [dt, a] as const), [0, 1] as const].map(([dt, a], gi) => {
-              const cm = dt ? camAt(t - dt, L) : cam;
-              return (
-                <React.Fragment key={`p${gi}`}>
-                  <AbsoluteFill style={{ ...planeCss(cm, 1.3), opacity: dress * a }}>
-                    <Dust count={22} seed="call-motes" color={triple(glow.core)} opacity={0.45} size={[2, 7]} blur={[0.4, 3]} speed={0.45} frame={t + 600} />
-                  </AbsoluteFill>
-                  <AbsoluteFill style={{ ...planeCss(cm, 1.6), opacity: 0.55 * dress * a }}>
-                    <Bokeh t={t} discs={discsNear} color={triple(glow.core)} />
-                  </AbsoluteFill>
-                </React.Fragment>
-              );
-            })}
+            {/* ── 1.3 · motes ─────────────────────────────────────────── */}
+            <AbsoluteFill style={{ ...planeCss(cam, 1.3), opacity: dress }}>
+              <Dust count={22} seed="call-motes" color={triple(glow.core)} opacity={0.45} size={[2, 7]} blur={[0.4, 3]} speed={0.45} frame={t + 600} />
+            </AbsoluteFill>
+            {/* ── 1.6 · lens bokeh (sub-frame ghosts over a swing's fastest frames: the nearest plane moves most) ── */}
+            {[...planeGhosts, [0, 1] as const].map(([dt, a], gi) => (
+              <AbsoluteFill key={`b${gi}`} style={{ ...planeCss(dt ? camAt(t - dt, L) : cam, 1.6), opacity: 0.55 * dress * a }}>
+                <Bokeh t={t} discs={discsNear} color={triple(glow.core)} />
+              </AbsoluteFill>
+            ))}
 
             {/* ── screen · speaker tag, captions, chips ──────────────── */}
             {uiSmear ? (

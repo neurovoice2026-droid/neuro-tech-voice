@@ -155,7 +155,7 @@ type CallLine = {
   at: number;
   who: 'agent' | 'caller';
   voice: VoiceId;
-  /** the whole line as the caption shows it (24 h times, as on the site) */
+  /** the whole line as the caption shows it — as SPOKEN ("3 PM", "4:30"; the viewer reads what they hear) */
   text: string;
   /** caption chunks (≤ 7 words), each starting on a spoken word */
   captions: readonly Caption[];
@@ -607,11 +607,14 @@ export const RESULT_LOCAL = {
 
 /* ── SCALE — fine cuts (scale-local frames) ────────────────────── */
 export const SCALE_LOCAL = (() => {
-  /** one language flip per 16th note: 75 79 83 86 90 94 */
-  const langs = Array.from({ length: 6 }, (_, i) => Math.round(SCALE.langMorph + i * SCALE.langStep));
+  /** six languages on THREE big cells, two pages: each cell flips on a 16th (EN RO ES 75 79 83),
+   *  then flips again exactly one beat later (FR DE JA 90 94 98) — never more than 3 greetings on screen */
+  const langs = Array.from({ length: 6 }, (_, i) => Math.round(SCALE.langMorph + (i % 3) * SCALE.langStep + (i >= 3 ? BEAT : 0)));
+  /** the lights of the wall: ONE leads each quarter note (the hour turns on the beat) — rush → closing → sunday → night */
+  const wallLights = ['rush', 'closing', 'sunday', 'night'] as const;
   /** station cues (= the flow cues): each node is solid ON its cue — 120 128 135 */
   const stations = [0, 1, 2].map((i) => Math.round(SCALE.flow + i * SCALE.stationStep));
-  /** five cells collapse into the deck; the complete language grid has held ≥ 13 f */
+  /** the two other cells collapse into the deck; page 2 (FR DE JA) has held ≥ 15 f */
   const collapse = b(7.5); // 113
   return {
     /** one industry pop per 16th note */
@@ -627,8 +630,19 @@ export const SCALE_LOCAL = (() => {
     ] as const,
     /** quarter-note camera kicks (+1.8 %, alternating 3 px jolt) */
     kicks: [0, b(1), b(2), b(3)] as const, // 0 15 30 45
-    /** "16 industries." → "14 languages.": 8 f mask wipe, the title moves to the top band */
-    titleSwap: b(5.3), // 80 — "16 industries." has held 20 f
+    /** pop i's light = the quarter it pops in (colour follows the hour, never the industry) */
+    wallLight: Array.from({ length: 16 }, (_, i) => wallLights[Math.min(3, Math.floor(i / 4))]),
+    wallLights,
+    /** "16 industries." locks the wall in the last hour's light (3 a.m.) … */
+    heroLight: 'night' as const,
+    /** … then the languages and the after-call flow are in the closing light (one light, to the end) */
+    langLight: 'closing' as const,
+    /** "16 industries." lifts to the top band WITH the fly-out / glide: out of the cell band before any flip */
+    titleSwap: b(4.4), // 66
+    /** "16 industries." exits up out of its mask: 2 f anticipation, 4 f exit (gone at titleIn − 1) … */
+    titleExit: Math.round(b(5.5)) - 7, // 76
+    /** … and "14 languages." rises 1 f after it is gone, on the 16th of the third flip */
+    titleIn: Math.round(b(5.5)), // 83
     /** the ten leaving cards peel off: pull-in from flyOut − flyAnticip, then accelerate out */
     flyOut: b(4.4), // 66
     flyAnticip: 3,
@@ -640,13 +654,13 @@ export const SCALE_LOCAL = (() => {
     langs,
     /** the AI-disclosure underline draws under each language's AI phrase */
     disclose: langs.map((l) => [l + 4, l + 10] as const),
-    /** quarter notes of the wall: every card already up pulses in its light (and the four room lights swell) */
+    /** quarter notes of the wall: the hour turns — every card already up pulses in the NEW quarter's light, the room bloom swells */
     beats: [b(1), b(2), b(3)] as const, // 15 30 45
     /** the camera's slow push during the languages, released for the flow */
     push: [b(4), b(7.3), b(7.95)] as const, // 60, 110, 119
-    /** "14 languages." wipes out → "After the call." rises */
-    titleOut: collapse - 1, // 112
-    titleAfter: collapse, // 113
+    /** "14 languages." exits up (2 f anticipation, 4 f exit) → "After the call." rises 1 f after, on a 16th */
+    titleOut: Math.round(b(7.75)) - 7, // 109
+    titleAfter: Math.round(b(7.75)), // 116
     collapse,
     collapseStagger: 0.5,
     /** the Japanese cell (complete) flies onto the deck and becomes the call */

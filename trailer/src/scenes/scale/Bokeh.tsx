@@ -1,5 +1,6 @@
 /**
- * The near plane (depth 1.6): 3–4 out-of-focus lilac discs, 160–300 px, a
+ * The near plane (depth 1.6): 3–4 out-of-focus discs in the LEADING light
+ * (one light at a time, crossing with the room's bloom), 160–300 px, a
  * 10 % core with a soft ~30 px edge — drawn as radial gradients (a flat core
  * and a smooth falloff, the look of a defocused disc) instead of a CSS blur,
  * so they cost nothing at any zoom. Placed in the plane's own world so that
@@ -10,6 +11,7 @@
 import React from 'react';
 import { noise2D } from '@remotion/noise';
 import type { Layout } from '../../lib/layout';
+import { hexToRgb } from '../../lib/lights';
 
 type Disc = { x: number; y: number; d: number; a: number };
 
@@ -29,7 +31,9 @@ const DISCS = (L: Layout): Disc[] =>
     ],
   );
 
-export const NearDiscs: React.FC<{ t: number; L: Layout; fade: number }> = ({ t, L, fade }) => (
+export const NearDiscs: React.FC<{ t: number; L: Layout; fade: number; color: string }> = ({ t, L, fade, color }) => {
+  const [r0, g0, b0] = hexToRgb(color).map((c) => Math.round(c * 255));
+  return (
   <>
     {DISCS(L).map((c, i) => {
       const dx = 26 * noise2D(`scale-disc-x-${i}`, t * 0.012, 0.5);
@@ -37,7 +41,7 @@ export const NearDiscs: React.FC<{ t: number; L: Layout; fade: number }> = ({ t,
       const r = c.d / 2;
       // the defocus edge: ~30 px either side of the rim
       const e = 30 / r;
-      const col = (k: number) => `rgba(139,92,246,${(c.a * k * fade).toFixed(4)})`;
+      const col = (k: number) => `rgba(${r0},${g0},${b0},${(c.a * k * fade).toFixed(4)})`;
       return (
         <div
           key={i}
@@ -55,3 +59,4 @@ export const NearDiscs: React.FC<{ t: number; L: Layout; fade: number }> = ({ t,
     })}
   </>
 );
+};

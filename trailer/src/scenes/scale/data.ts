@@ -53,30 +53,59 @@ export const INDUSTRIES: Industry[] = [
   { label: 'Clinics & dental', Icon: Stethoscope },
 ];
 
+/** a greeting as it is set in one orientation: its lead lines, then its AI-phrase lines */
+export type Setting = { lead: string[]; ai: string[] };
+
 export type Lang = {
   name: string;
-  /** the name line ("This is Ava,") */
-  lead: string;
-  /** the AI-disclosure phrase, as the lines it is set in (16:9 cells) */
-  ai: string[];
-  /** the same words for the narrower 9:16 cells, when they break differently */
-  aiV?: string[];
+  /** 16:9 — 84 px in a 621 px cell (every line measured ≤ 557 px in Cormorant 500) */
+  h: Setting;
+  /** 9:16 — 72 px in a 1056 px cell (every line ≤ 1008 px) */
+  v: Setting;
   /** Japanese: the AI phrase comes first ("AIアシスタントの / Avaと申します。") */
   aiFirst?: boolean;
   /** reveal per character (Japanese), as the site does */
   perChar?: boolean;
-  /** the AI phrase's size, when the face's optical size differs (CJK) [16:9, 9:16] */
-  aiSize?: [number, number];
+  /** the face size when its optical size differs (CJK fills the em) [16:9, 9:16] */
+  size?: [number, number];
 };
 
+/**
+ * The brief's six, each the product's Professional greeting (lib/voice/greetings.ts,
+ * `intro` with {agent} = Ava), set whole — never trimmed — and never broken inside a
+ * word; the AI disclosure is underlined. German keeps "KI-Assistenten" whole.
+ */
 export const LANGS: Lang[] = [
-  { name: 'English', lead: 'This is Ava,', ai: ['an AI assistant.'] },
-  { name: 'Romanian', lead: 'Sunt Ava, asistentul virtual', ai: ['cu inteligență', 'artificială.'] },
-  { name: 'Spanish', lead: 'Soy Ava, el asistente virtual', ai: ['con inteligencia', 'artificial.'] },
-  { name: 'French', lead: "Ici Ava, l'assistant virtuel", ai: ['basé sur', "l'intelligence", 'artificielle.'] },
-  { name: 'German', lead: 'Sie sprechen mit Ava,', ai: ['dem', 'KI-Assistenten.'] },
-  // CJK glyphs fill the em: 66 / 56 px read as large as the 84 / 72 px Cormorant lines (and fit the cell)
-  { name: 'Japanese', lead: 'Avaと申します。', ai: ['AIアシスタントの'], aiFirst: true, perChar: true, aiSize: [66, 56] },
+  { name: 'English', h: { lead: ['This is Ava,'], ai: ['an AI assistant.'] }, v: { lead: ['This is Ava,'], ai: ['an AI assistant.'] } },
+  {
+    name: 'Romanian',
+    h: { lead: ['Sunt Ava,', 'asistentul virtual'], ai: ['cu inteligență', 'artificială.'] },
+    v: { lead: ['Sunt Ava, asistentul virtual'], ai: ['cu inteligență artificială.'] },
+  },
+  {
+    name: 'Spanish',
+    h: { lead: ['Soy Ava, el', 'asistente virtual'], ai: ['con inteligencia', 'artificial.'] },
+    v: { lead: ['Soy Ava, el asistente virtual'], ai: ['con inteligencia artificial.'] },
+  },
+  {
+    name: 'French',
+    h: { lead: ['Ici Ava,', "l'assistant virtuel"], ai: ['basé sur', "l'intelligence", 'artificielle.'] },
+    v: { lead: ["Ici Ava, l'assistant virtuel"], ai: ["basé sur l'intelligence artificielle."] },
+  },
+  {
+    name: 'German',
+    h: { lead: ['Sie sprechen', 'mit Ava, dem'], ai: ['KI-Assistenten.'] },
+    v: { lead: ['Sie sprechen mit Ava, dem'], ai: ['KI-Assistenten.'] },
+  },
+  // CJK glyphs fill the em: 66 px Noto Serif JP stands taller than 84 px Cormorant (ink height ≈ 58 vs 53 px cap)
+  {
+    name: 'Japanese',
+    h: { lead: ['Avaと申します。'], ai: ['AIアシスタントの'] },
+    v: { lead: ['Avaと申します。'], ai: ['AIアシスタントの'] },
+    aiFirst: true,
+    perChar: true,
+    size: [66, 72],
+  },
 ];
 
 /** the underlined part of an AI-phrase line: the words, not the full stop (nor the Japanese particle) */

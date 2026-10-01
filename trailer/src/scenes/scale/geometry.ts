@@ -8,9 +8,11 @@
  *               safe box, the wash above and below). The cards pop in the
  *               camera's block order (POP_CELL): card 01 alone → 2 × 2 →
  *               3 × 3 → the full wall.
- *   languages   six keepers glide into a 3 × 2 (9:16: 2 × 3) grid under the
- *               title band.
- *   flow        call → Slack → CRM, three big stations on an electric rail.
+ *   languages   THREE keepers glide into three big cells under the title band
+ *               (16:9 three tall columns · 9:16 three full-width rows); each
+ *               cell shows two languages, one page after the other.
+ *   flow        call → Slack → CRM, three big stations on a closing-light rail
+ *               that fill the frame.
  */
 import { FLOW_END } from '../../lib/handoff';
 import type { Layout } from '../../lib/layout';
@@ -68,18 +70,18 @@ export function geo(L: Layout) {
   const zooms = [...blocks.map((b) => 0.94 * Math.min(W / b.w, H / b.h)), 1];
   const focus: Pt[] = [...blocks.map(centre), { x: L.cx, y: L.cy }];
 
-  /* ── the six language cells ─────────────────────────────────────── */
-  const langBox: Rect = L.pick({ x: 16, y: 220, w: 1888, h: 844 }, { x: 12, y: 390, w: 1056, h: 1080 });
-  const cells: Rect[] = cellsOf(langBox, v ? 2 : 3, v ? 3 : 2, 12).flat(); // 621 × 416 · 522 × 352
+  /* ── the three language cells (two pages of three languages) ─────── */
+  const langBox: Rect = L.pick({ x: 16, y: 236, w: 1888, h: 828 }, { x: 12, y: 390, w: 1056, h: 1080 });
+  const cells: Rect[] = cellsOf(langBox, v ? 1 : 3, v ? 3 : 1, 12).flat(); // 621 × 828 · 1056 × 352
   /**
-   * Which industry card becomes which language cell: each cell (in language
-   * order) takes the nearest unused card; Japanese always takes the last
-   * card (POP_CELL[15]), because it becomes the call.
+   * Which industry card becomes which language cell: each cell takes the
+   * nearest unused card; the last cell (Spanish, then Japanese) always takes
+   * the last card (POP_CELL[15]), because it becomes the call.
    */
   const stay: number[] = [];
   {
     const used = new Set<number>([15]);
-    for (let k = 0; k < 5; k++) {
+    for (let k = 0; k < cells.length - 1; k++) {
       const c = centre(cells[k]);
       let best = -1;
       let bd = Infinity;
@@ -102,25 +104,26 @@ export function geo(L: Layout) {
   const title = {
     /** "16 industries." — centred on the wall, size in px */
     hero: L.pick({ x: L.cx, y: L.cy, size: 160 }, { x: L.cx, y: centre(wall).y, size: 140 }),
-    /** "14 languages." — the top band: left edge x, cap-centre y */
-    band: L.pick({ x: 120, y: 120, size: 120 }, { x: 60, y: 290, size: 110 }),
-    /** "After the call." — top-left of its line box */
-    after: L.pick({ x: 120, y: 150, size: 96 }, { x: 60, y: 250, size: 88 }),
+    /** "14 languages." — the top band: left edge x (on the cells' text column), cap-centre y */
+    band: L.pick({ x: 46, y: 116, size: 120 }, { x: 34, y: 290, size: 110 }),
+    /** "After the call." — top-left of its line box (on the station cards' left edge) */
+    after: L.pick({ x: 60, y: 130, size: 96 }, { x: 60, y: 232, size: 88 }),
   };
 
   /* ── the after-call rail ─────────────────────────────────────────
-   * The last node is FLOW_END. 16:9: nodes on a horizontal rail, names above,
-   * 500 × 340 cards under them. 9:16: a vertical rail at x 150, 790 × 300
-   * cards to its right, centred on each node. */
+   * The last node is FLOW_END. 16:9: nodes on a horizontal rail 590 apart,
+   * the names (64 px) above, 560 × 428 cards hanging under them — the frame
+   * filled from 60 to 1800, 612 to 1040. 9:16: a vertical rail at x 150,
+   * nodes 390 apart, 834 × 350 cards to its right. */
   const end = FLOW_END(L);
   const nodes: Pt[] = [0, 1, 2].map((i) =>
-    v ? { x: end.x, y: end.y - (2 - i) * 400 } : { x: end.x - (2 - i) * 560, y: end.y },
+    v ? { x: end.x, y: end.y - (2 - i) * 390 } : { x: end.x - (2 - i) * 590, y: end.y },
   );
   const stations: Rect[] = nodes.map((n) =>
-    v ? { x: 220, y: n.y - 150, w: 790, h: 300 } : { x: n.x - 250, y: 610, w: 500, h: 340 },
+    v ? { x: 226, y: n.y - 165, w: 834, h: 350 } : { x: n.x - 280, y: 612, w: 560, h: 428 },
   );
   /** 16:9: station name centres, above the nodes */
-  const names: Pt[] = nodes.map((n) => ({ x: n.x, y: 500 }));
+  const names: Pt[] = nodes.map((n) => ({ x: n.x, y: 470 }));
 
   return { wall, cards, blocks, zooms, focus, cells, stay, title, nodes, stations, names, end };
 }
