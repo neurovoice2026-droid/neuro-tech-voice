@@ -19,7 +19,7 @@
  */
 import { C, LIGHTS, type LightId } from '../../theme';
 import { mixColor, rgba } from '../../lib/lights';
-import { SCALE_LOCAL } from '../../timing';
+import { SCALE, SCALE_LOCAL } from '../../timing';
 
 /** the light of industry card i: the quarter it pops in */
 export const cardLight = (i: number): LightId => SCALE_LOCAL.wallLight[i];
@@ -33,12 +33,30 @@ export const LANG_LIGHT: LightId = SCALE_LOCAL.langLight;
 /** after the call */
 export const FLOW_LIGHT: LightId = 'closing';
 
-/** the light leading the wall at t (the quarter's light; the hero's from the slam) */
-export const wallLightAt = (t: number, hero: number): LightId => {
-  if (t >= hero) return HERO_LIGHT;
-  let q = 0;
-  for (let i = 0; i < SCALE_LOCAL.kicks.length; i++) if (t >= SCALE_LOCAL.kicks[i]) q = i;
-  return SCALE_LOCAL.wallLights[q];
+/**
+ * The light leading the act, key by key: the four hours on the wall's quarter
+ * notes, the hero's lock, then the closing light from the glide. A key turns
+ * the light over `dur` frames (EASE.house) — one light at a time.
+ */
+export const LEAD: readonly { at: number; light: LightId; dur: number }[] = [
+  ...SCALE_LOCAL.kicks.map((at, i) => ({ at, light: SCALE_LOCAL.wallLights[i] as LightId, dur: 6 })),
+  { at: SCALE.industriesTitle, light: HERO_LIGHT, dur: 6 },
+  { at: SCALE_LOCAL.glide, light: LANG_LIGHT, dur: 14 },
+];
+
+/** where the lead is at t: the key index, the one before it, and the turn's progress 0..1 */
+export function leadAt(t: number): { i: number; prev: number; m: number } {
+  let i = 0;
+  for (let j = 0; j < LEAD.length; j++) if (t >= LEAD[j].at) i = j;
+  const k = LEAD[i];
+  const m = i === 0 ? 1 : Math.min(1, Math.max(0, (t - k.at) / k.dur));
+  return { i, prev: Math.max(0, i - 1), m: m * m * (3 - 2 * m) };
+}
+
+/** the leading light's colour at t (an orb slot: 2 body, 3 pale), turning between keys */
+export const leadColor = (t: number, slot: number) => {
+  const { i, prev, m } = leadAt(t);
+  return mixColor(LIGHTS[LEAD[prev].light].orb[slot], LIGHTS[LEAD[i].light].orb[slot], m);
 };
 
 /** the pale tint a light throws on white card stock (its light slot) */

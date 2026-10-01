@@ -15,54 +15,31 @@
 import React from 'react';
 import { AbsoluteFill } from 'remotion';
 import { noise2D } from '@remotion/noise';
-import { C, LIGHTS, type LightId } from '../../theme';
-import { mixColor } from '../../lib/lights';
+import { C, LIGHTS } from '../../theme';
 import { EASE, tween } from '../../lib/motion';
 import type { Layout } from '../../lib/layout';
 import { SCALE, SCALE_LOCAL } from '../../timing';
-import { HERO_LIGHT, LANG_LIGHT, rgba } from './lights';
+import { LANG_LIGHT, leadAt, leadColor, rgba } from './lights';
 
 const K = SCALE_LOCAL;
 
 const pool = (col: string, a: number) =>
   `radial-gradient(closest-side, ${rgba(col, a)} 0%, ${rgba(col, a * 0.55)} 45%, ${rgba(col, a * 0.16)} 75%, ${rgba(col, 0)} 100%)`;
 
-/** the wall's light keys: [frame, light, bloom centre (fraction of the frame)] */
-type Key = { at: number; light: LightId; x: number; y: number };
-
 export const Backdrop: React.FC<{ t: number; L: Layout }> = ({ t, L }) => {
   const W = L.width;
   const H = L.height;
   const HERO = SCALE.industriesTitle;
-  // the bloom follows the block being filled (card 01 → 2 × 2 → 3 × 3 → the bottom row), one light per quarter
-  const keys: Key[] = L.pick(
-    [
-      { at: K.kicks[0], light: K.wallLights[0], x: 0.3, y: 0.3 },
-      { at: K.kicks[1], light: K.wallLights[1], x: 0.5, y: 0.45 },
-      { at: K.kicks[2], light: K.wallLights[2], x: 0.72, y: 0.5 },
-      { at: K.kicks[3], light: K.wallLights[3], x: 0.55, y: 0.78 },
-      { at: HERO, light: HERO_LIGHT, x: 0.5, y: 0.5 },
-      { at: K.glide, light: LANG_LIGHT, x: 0.62, y: 0.6 },
-    ],
-    [
-      { at: K.kicks[0], light: K.wallLights[0], x: 0.32, y: 0.3 },
-      { at: K.kicks[1], light: K.wallLights[1], x: 0.5, y: 0.4 },
-      { at: K.kicks[2], light: K.wallLights[2], x: 0.7, y: 0.5 },
-      { at: K.kicks[3], light: K.wallLights[3], x: 0.5, y: 0.68 },
-      { at: HERO, light: HERO_LIGHT, x: 0.5, y: 0.5 },
-      { at: K.glide, light: LANG_LIGHT, x: 0.6, y: 0.62 },
-    ],
+  // the bloom's centre per LEAD key (fractions of the frame): it follows the block being filled
+  // (card 01 → 2 × 2 → 3 × 3 → the bottom row), centres on the hero, then sits under the cells
+  const at: readonly (readonly [number, number])[] = L.pick(
+    [[0.3, 0.3], [0.5, 0.45], [0.72, 0.5], [0.55, 0.78], [0.5, 0.5], [0.62, 0.6]],
+    [[0.32, 0.3], [0.5, 0.4], [0.7, 0.5], [0.5, 0.68], [0.5, 0.5], [0.6, 0.62]],
   );
-  // the current key and how far the move into it has gone (6 f, EASE.house: the light turns WITH the beat)
-  let i = 0;
-  for (let j = 0; j < keys.length; j++) if (t >= keys[j].at) i = j;
-  const prev = keys[Math.max(0, i - 1)];
-  const cur = keys[i];
-  const dur = i === keys.length - 1 ? 14 : 6;
-  const m = i === 0 ? 1 : tween(t, [cur.at, cur.at + dur], [0, 1], EASE.house);
-  const col = mixColor(LIGHTS[prev.light].orb[3], LIGHTS[cur.light].orb[3], m);
-  const bx = (prev.x + (cur.x - prev.x) * m) * W;
-  const by = (prev.y + (cur.y - prev.y) * m) * H;
+  const { i, prev, m } = leadAt(t);
+  const col = leadColor(t, 3);
+  const bx = (at[prev][0] + (at[i][0] - at[prev][0]) * m) * W;
+  const by = (at[prev][1] + (at[i][1] - at[prev][1]) * m) * H;
   // the light swells on the hour (the quarter note) and settles
   let swell = 0;
   for (const q of [...K.beats, HERO]) if (t >= q) swell = Math.max(swell, 1 - tween(t, [q, q + 8], [0, 1], EASE.out3));
