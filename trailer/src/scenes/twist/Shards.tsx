@@ -290,7 +290,7 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
         // never ON the phone: it is found in the dark right where they rest (phoneReveal);
         // never on the doorway or its open leaf; never touching a neighbour
         hard += inside(phoneBox, x, y, half);
-        hard += inside(doorBox, x, y, 14 + half);
+        hard += inside(doorBox, x, y, 44 + half);
         for (const q of placed) {
           const d = Math.hypot(x - q.ax, y - q.ay);
           const touch = (half + q.size * 0.4) * 1.25 + 22;
@@ -299,7 +299,7 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
         c += hard * 1e4;
         // soft: clear of the phone's rim and the doorway's surround, with air between neighbours
         c += Math.min(1, inside(phoneBox, x, y, 44 + half) / 20) * 900;
-        c += Math.min(1, inside(doorBox, x, y, 40 + half) / 26) * 500;
+        c += Math.min(1, inside(doorBox, x, y, 80 + half) / 26) * 500;
         for (const q of placed) {
           const d = Math.hypot(x - q.ax, y - q.ay);
           const need = (half + q.size * 0.4) * 1.3 + 60;
