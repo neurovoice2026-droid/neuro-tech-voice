@@ -65,6 +65,7 @@ import { calMapAt, camsAt, cardAt, eventWorldAt, type MarkMetrics } from './resu
 import { Discs, Motes } from './result/Motes';
 import { BookedGround, Divider, LetterRise, Moon, NightGrade, Stars } from './result/Split';
 import { MIDNIGHT_ROOM, MidnightVignette } from './call/Light';
+import { SignOff } from './result/SignOff';
 
 export type ResultTiming = typeof RESULT_LOCAL;
 
@@ -129,7 +130,8 @@ export const Result: React.FC = () => {
   const G = useMemo(() => fitFaces(G0), [G0, ready]); // eslint-disable-line react-hooks/exhaustive-deps
   const MM = useMemo(() => markMetrics(G), [G]);
   const wordBase = useMemo(() => measure('Asleep.', wordFont).base, [G, ready]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (t < 0) return null;
+  // (before the cut only Ava's sign-off caption, over the call's last frames: an L-cut)
+  if (t < 0) return <SignOff t={t} />;
   const T = RESULT_LOCAL;
   // OUT: the white act — exactly #ffffff from whiteFull to the last mounted frame (no vignette, motes, tint)
   if (t >= T.whiteFull) return <AbsoluteFill style={{ background: C.white }} />;
@@ -618,6 +620,9 @@ export const Result: React.FC = () => {
 
       {/* ── screen · the event opens up into the white act ─────────── */}
       {openEl}
+
+      {/* ── screen · Ava's "See you then!" (rides the cut, under the mark) ── */}
+      <SignOff t={t} />
     </AbsoluteFill>
   );
 };

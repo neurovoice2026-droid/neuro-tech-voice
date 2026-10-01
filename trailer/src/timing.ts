@@ -75,18 +75,24 @@ const KB_CLOSE = upHalf(KB_ANSWER + vFrames('kb-2') + 10); // the last caption g
 const SC_HERO = b(6); // the 16-card wall builds over 3 s (8ths, then 16ths into the slam): "16 industries."
 const SC_LANGS = SC_HERO + b(2); // the hero holds 1 s; "14 languages." lands
 /** Ava greets in six languages: English whole, then RO / ES / FR / DE each for ~0.75 s (the next
- *  voice cuts in on the name), Japanese whole. LANG_AT are scale-local starts. */
+ *  voice cuts in on the name), Japanese whole. LANG_AT are scale-local starts.
+ *  (integration: Romanian cuts in on the half-beat English lets go on, and German — whose name comes
+ *  LAST, "Sie sprechen mit Ava," with "Ava" 0.73 s in — holds 2.5 beats so its name is heard whole
+ *  before Japanese; RO / ES / FR keep the dotted 8th. Every switch sits on the 8th-note grid
+ *  (floored, so a half-frame never lands a cut inside a syllable), Japanese on the downbeat at 300,
+ *  and the flow / SCALE_LEN / CTA / DURATION are unchanged.) */
 const LANG_IDS = ['lang-en', 'lang-ro', 'lang-es', 'lang-fr', 'lang-de', 'lang-ja'] as const satisfies readonly VoiceId[];
+/** each quick language's hold, in half-beats (RO · ES · FR · DE) */
+const LANG_HOLD = [3, 3, 3, 5] as const;
 const LANG_AT: number[] = [];
 {
-  let t = SC_LANGS + 4;
-  LANG_AT.push(t);
-  t = upHalf(t + vFrames('lang-en') + 4);
+  LANG_AT.push(SC_LANGS + 4);
+  let t = upHalf(LANG_AT[0] + vFrames('lang-en'));
   for (let i = 1; i < 5; i++) {
-    LANG_AT.push(t);
-    t += b(1.5);
+    LANG_AT.push(Math.floor(t));
+    t += LANG_HOLD[i - 1] * (BEAT / 2);
   }
-  LANG_AT.push(t);
+  LANG_AT.push(Math.floor(t));
 }
 const SC_FLOW = upBeat(LANG_AT[5] + vFrames('lang-ja') + 6); // "After the call." — call → Slack → CRM
 const SCALE_LEN = SC_FLOW + b(5) + b(1); // the flow reads for 2.5 s, then the iris
