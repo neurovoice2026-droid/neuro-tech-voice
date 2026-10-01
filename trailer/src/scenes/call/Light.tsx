@@ -1,28 +1,21 @@
 /**
- * THE CALL'S LIGHT — 3 a.m. is the NIGHT light (theme.ts LIGHTS.night), but
- * never as a violet slab: a deep, near-black midnight in which the ORB is the
- * key light. The colour lives in the orb and its light spill; the room itself
- * is a low-saturation navy-black (#0c0e1f at the heart → #020205 at the
- * edges; outside the spill it averages ≈ 9–11/255 luminance, grain included).
+ * THE MIDNIGHT — the room the call is picked up in: the twist's phone screen
+ * (its NIGHT_ROOM) graded down to a near-black navy, the violet orb its key
+ * light. The call holds it only across the pickup (the cut from the twist is
+ * exact); as the room opens, the emerald gradient mesh (call/Mesh.tsx) lights
+ * up out of the orb over it. The twist and the result read these exports
+ * (MIDNIGHT_ROOM, MidnightVignette, KeyLight, AVA_GLOW), so they stay as
+ * they were.
  *
- *   room       opened from the twist's phone screen: at the pickup it IS the
- *              phone's NIGHT_ROOM (the cut stays invisible) and grades down
- *              into the midnight while the camera pulls back out of the screen
+ *   room       at the pickup it IS the phone's NIGHT_ROOM (the cut stays
+ *              invisible) and grades down into the midnight (roomGrade)
  *   key light  a soft gaussian pool of the orb's own light on the room
- *              (lib/lights bloom, screen-blended), breathing with the voice;
- *              its colour follows the orb's palette: violet (night `orb`)
- *              while Ava speaks, cooler caller blue (night `listen`) while
- *              the caller speaks — on the orb's own 6–8 f palette ease
+ *              (lib/lights bloom, screen-blended)
  *   vignette   a strong falloff to black in screen space
- *   floor      (9:16) the orb's reflection: one soft ellipse of its light on a
- *              glossy floor directly under it, following its framing
- *
- * Everything else that glows in the scene (rim, halo, rings, bokeh, motes,
- * sparks) takes its colour from `callGlow(listen)` so one light leads.
  */
 import React from 'react';
 import { AbsoluteFill } from 'remotion';
-import { bloom, fromOklch, GLOW, hexToRgb, mixColor, rgba, type Glow } from '../../lib/lights';
+import { bloom, fromOklch, GLOW, mixColor, type Glow } from '../../lib/lights';
 import { C, LIGHTS } from '../../theme';
 
 /** Ava's light (the night orb's glow): electric body, lilac core. */
@@ -40,12 +33,6 @@ export const callGlow = (m: number): Glow =>
     : m >= 0.999
       ? CALLER_GLOW
       : { body: mixColor(AVA_GLOW.body, CALLER_GLOW.body, m), core: mixColor(AVA_GLOW.core, CALLER_GLOW.core, m) };
-
-/** '#rrggbb' → 'r,g,b' (for the components that take an rgb triple). */
-export const triple = (hex: string) =>
-  hexToRgb(hex)
-    .map((c) => Math.round(c * 255))
-    .join(',');
 
 /**
  * The midnight room: near-black with a soft, low-saturation navy lift at the
@@ -103,45 +90,6 @@ export const KeyLight: React.FC<{ x: number; y: number; d: number; glow: Glow; s
         width: D,
         height: D,
         background: bloom(glow, strength, { core: 0.32, coreSize: 0.36 }),
-        mixBlendMode: 'screen',
-      }}
-    />
-  );
-};
-
-/**
- * (9:16) The orb's reflection on a glossy floor just under it — ONE soft ellipse of its own light,
- * directly under the orb: placed and sized by its on-screen state (it follows every framing and
- * swing), brightest where the orb's light falls (under its lit side), breathing with its level.
- * Light structure for the vertical frame's middle, never a smudge on its own.
- */
-export const Floor: React.FC<{
-  x: number;
-  y: number;
-  d: number;
-  glow: Glow;
-  /** the key light's strength (the reflection scales with it) */
-  strength: number;
-  /** 0..1+ the voice's level */
-  level: number;
-  /** the orb's depth-of-field blur (the reflection softens with it) */
-  dof: number;
-}> = ({ x, y, d, glow, strength, level, dof }) => {
-  if (strength <= 0.003) return null;
-  const k = Math.min(0.5, 0.3 + 0.12 * level) * Math.min(1, strength / 0.16);
-  const cy = y + d * 0.64;
-  const w = d * (1.12 + 0.06 * level);
-  const h = d * 0.2;
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        left: x - w / 2,
-        top: cy - h / 2,
-        width: w,
-        height: h,
-        background: `radial-gradient(closest-side at 46% 44%, ${rgba(glow.core, 0.85 * k)} 0%, ${rgba(glow.body, 0.62 * k)} 34%, ${rgba(glow.body, 0.22 * k)} 68%, ${rgba(glow.body, 0)} 100%)`,
-        filter: `blur(${(6 + dof * 2).toFixed(1)}px)`,
         mixBlendMode: 'screen',
       }}
     />

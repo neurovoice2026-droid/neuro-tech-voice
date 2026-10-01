@@ -2,10 +2,10 @@
  * Travel curves for SCALE whose overshoot is a FIXED number of pixels,
  * whatever the distance: a spring's natural overshoot is a fraction of the
  * travel, so a 1300 px flight on the site spring lands ~100 px past its
- * target. Here the shape is an analytic under-damped spring (so it can be
- * sampled at sub-frame times for motion blur) whose excursion past 1 is
- * rescaled to `over` px. Anticipation (a small pull-back before the start)
- * is optional and also in pixels.
+ * target. Here the shape is an analytic under-damped spring (closed form:
+ * continuous at the fractional times the 120 fps master samples) whose
+ * excursion past 1 is rescaled to `over` px. Anticipation (a small pull-back
+ * before the start) is optional and also in pixels.
  */
 export type SlideOpts = {
   /** natural frequency, rad per FRAME (1 ≈ a 3-frame move) */
@@ -42,19 +42,4 @@ export function slide(tau: number, dist: number, { w = 1, z = 0.7, over = 8, ant
   // climb out of the anticipation dip over the first frames
   if (back > 0 && anticip > 0) p -= (back / d) * Math.max(0, 1 - tau / 2.5) * (1 - Math.min(1, p));
   return p;
-}
-
-/**
- * An analytic under-damped spring (0 → 1, the same curve as remotion's
- * `spring()` for these configs) that can be sampled at fractional frames —
- * for pops that must hit exact values on exact frames, and for motion blur.
- */
-export function dspring(tau: number, { stiffness: k, damping: c, mass: m }: { stiffness: number; damping: number; mass: number }): number {
-  if (tau <= 0) return 0;
-  const s = tau / 30;
-  const w0 = Math.sqrt(k / m);
-  const z = c / (2 * Math.sqrt(k * m));
-  if (z >= 1) return 1 - Math.exp(-w0 * s) * (1 + w0 * s);
-  const wd = w0 * Math.sqrt(1 - z * z);
-  return 1 - Math.exp(-z * w0 * s) * (Math.cos(wd * s) + ((z * w0) / wd) * Math.sin(wd * s));
 }

@@ -1,262 +1,199 @@
 /**
- * The transcript's screen-space furniture (captions themselves are the
- * shared <Captions>, driven by the voice):
+ * The transcript's furniture (the captions themselves are <CallCaptions>):
  *
- *   <SpeakerTag>  AVA / CALLER, stacked above the caption, led by a small
- *                 mesh orb in the speaker's colours; it swaps on each cut.
- *   <Chips>       the slot chips "3:00 PM" · "4:30 PM": pop ON the spoken words,
- *                 3:00 PM is picked (squash, fill flood, glow), 4:30 PM drops out.
- *   <MarkRow>     row B of the last line — "Wednesday at 3 PM" arrives word
- *                 by word ON the voice, "3 PM" ignites ember on "three", then it
- *                 is the single <BookedMark> the result picks up.
+ *   <TurnLabel>  ● AVA / ● CALLER (TYPE.label) centred over the caption: on
+ *                every turn the old name leaves up through its mask as the new
+ *                one rises out of its own — a counter rolling over, no pop.
+ *   <Chips>      the slot chips "3:00 PM" · "4:30 PM" (TYPE.title figures on
+ *                dark glass): they rise in ON the spoken times; the caller's
+ *                pick fills 3:00 PM with the accent light from its centre;
+ *                4:30 PM settles away; 3:00 PM is taken into the orb.
+ *   <MarkRow>    row B of the last line — "Wednesday at 3 PM" rises word by
+ *                word ON the voice (MARK_TYPE, as <BookedMark>), then "3 PM"
+ *                ignites: the ember (the film's colour for Booked) sweeps the
+ *                mark left → right — it is then the single <BookedMark> the
+ *                result picks up.
  */
 import React from 'react';
-import { MeshOrb } from '../../components/MeshOrb';
 import { BOOKING, BookedMark } from '../../components/Shared';
+import { Reveal, reveal, revealStyle, subpixel } from '../../components/Type';
+import { MARK_TYPE } from '../../lib/handoff';
 import { rgba } from '../../lib/lights';
-import { EASE, mixHex, SPRING, springAt, tween } from '../../lib/motion';
-import { C, FONT, LIGHTS, TRACK } from '../../theme';
-import { exitCurve, glintBg, popOpacity, popScale, RingPulse, Sparks } from './Accents';
-import { AVA_GLOW, CALLER_GLOW } from './Light';
-import type { Who } from './voice';
+import { EASE, mixHex, smooth, SPRING, springUnit, tween } from '../../lib/motion';
+import { maskBox, typeStyle } from '../../lib/type';
+import { C } from '../../theme';
+import { ACCENT, CALLER_INK } from './Mesh';
 
-/** a tag's / chip's light: Ava's lilac core or the caller's blue */
-const tagInk = (who: Who) => (who === 'agent' ? AVA_GLOW.core : CALLER_GLOW.core);
+/* ── the speaker label ─────────────────────────────────────────── */
 
-export const SpeakerTag: React.FC<{
-  t: number;
-  who: Who;
-  /** frame the tag swaps in (the cut) */
-  at: number;
-  /** frame its dot peaks (the pop's hit, 1 f after the cut) */
-  hit: number;
-  /** the next cut (the tag leans back over the 3 f before it), or Infinity */
-  next: number;
-  x: number;
-  y: number;
-  fontSize: number;
-  dot: number;
-}> = ({ t, who, at, hit, next, x, y, fontSize, dot }) => {
-  if (t < at) return null;
-  const label = who === 'agent' ? 'AVA' : 'CALLER';
-  const ink = tagInk(who);
-  const col = who === 'agent' ? C.lilac : C.callerLit;
-  // the dot: a seed on the cut, the pop's peak 1 f later, settled ≈ 10 f on
-  const dotS = popScale(t, hit, 1.18, { from: 0.5, anticip: 1 });
-  // the cut is coming: the tag leans back (the anticipation of its exit, which IS the cut)
-  const lean = tween(t, [next - 3, next], [0, 1], EASE.in2);
-  const spark = t >= hit ? Math.exp(-(t - hit) / 3) : 0;
+export type Turn = { who: 'agent' | 'caller'; at: number; out: number };
+
+/** One label per turn, all in the same place: each rises at its turn and leaves up at the next. */
+export const TurnLabel: React.FC<{ t: number; turns: readonly Turn[]; x: number; y: number; vertical: boolean }> = ({
+  t,
+  turns,
+  x,
+  y,
+  vertical,
+}) => {
+  const st = typeStyle('label', vertical, { tone: 'night' });
+  const fs = st.fontSize as number;
+  const dot = Math.round(fs * 0.3);
   return (
-    <div
-      style={{
-        position: 'absolute',
-        left: x,
-        top: y,
-        transform: `translate(-50%, -50%) scale(${(1 - 0.06 * lean).toFixed(4)})`,
-        display: 'flex',
-        alignItems: 'center',
-        gap: Math.round(fontSize * 0.42),
-        opacity: 0.92 * (1 - 0.45 * lean),
-      }}
-    >
-      <div style={{ position: 'relative', width: dot, height: dot }}>
-        <RingPulse t={t} at={hit} x={dot / 2} y={dot / 2} w={dot} h={dot} radius={dot / 2} color={ink} grow={3.2} life={11} width={1.5} />
-        <div
-          style={{
-            width: dot,
-            height: dot,
-            transform: `scale(${dotS.toFixed(4)})`,
-            borderRadius: '50%',
-            boxShadow: `0 0 ${(12 + 16 * spark).toFixed(1)}px ${rgba(ink, 0.55 + 0.4 * spark)}`,
-          }}
-        >
-          <MeshOrb size={dot} palette={who === 'agent' ? LIGHTS.night.orb : LIGHTS.night.listen} time={t / 30} />
-        </div>
-      </div>
-      <div
-        style={{
-          display: 'flex',
-          fontFamily: FONT.body,
-          fontWeight: 600,
-          fontSize,
-          lineHeight: 1,
-          letterSpacing: TRACK.tag,
-          marginRight: `-${TRACK.tag}`,
-          color: col,
-          textShadow: `0 0 14px ${rgba(ink, 0.35)}`,
-        }}
-      >
-        {label.split('').map((ch, k) => {
-          const a = hit + 1 + k * 0.8;
-          return (
-            <span
-              key={k}
-              style={{
-                display: 'inline-block',
-                opacity: popOpacity(t, a, 2),
-                transform: `scale(${popScale(t, a, 1.14, { from: 0.6, anticip: 2 }).toFixed(4)})`,
-              }}
-            >
-              {ch}
-            </span>
-          );
-        })}
-      </div>
-    </div>
+    <>
+      {turns.map((tu, i) => {
+        if (t < tu.at - 2 || t > tu.out + 8) return null;
+        const ink = tu.who === 'agent' ? ACCENT : CALLER_INK;
+        return (
+          <div
+            key={i}
+            style={{ position: 'absolute', left: x, top: y, transform: 'translate(-50%, -50%)', ...st, color: ink, whiteSpace: 'nowrap' }}
+          >
+            <Reveal t={t} start={tu.at - 1} config={SPRING.caption} rise={90} exit={{ at: tu.out, dur: 5 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5em', marginRight: '-0.14em' }}>
+                <span style={{ display: 'inline-block', width: dot, height: dot, borderRadius: '50%', background: ink, transform: 'translateY(-0.04em)' }} />
+                {tu.who === 'agent' ? 'AVA' : 'CALLER'}
+              </span>
+            </Reveal>
+          </div>
+        );
+      })}
+    </>
   );
 };
 
-/* ── slot chips (line 3): "3:00 PM" · "4:30 PM" (as Ava says them) ─── */
+/* ── slot chips: "3:00 PM" · "4:30 PM" (as Ava says them) ─────────── */
 
-/** a vertical smear filter (id unique per chip) */
-const VSmear: React.FC<{ id: string; sigma: number }> = ({ id, sigma }) => (
-  <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>
-    <defs>
-      <filter id={id} x="-20%" y="-120%" width="140%" height="340%" colorInterpolationFilters="sRGB">
-        <feGaussianBlur stdDeviation={`${(sigma * 0.15).toFixed(2)} ${sigma.toFixed(2)}`} />
-      </filter>
-    </defs>
-  </svg>
-);
+/** the chips' entrance: a soft spring (ζ ≈ .73, ≈ 3 % overshoot) */
+const CHIP_IN = { stiffness: 320, damping: 26, mass: 1 };
+/** the pick's press-and-release */
+const PRESS = { stiffness: 420, damping: 26, mass: 0.8 };
+/** the selected chip's ink: the deep end of the closing light, on the accent fill */
+const ON_ACCENT = '#032b1c';
+
+export type ChipSlot = { x: number; y: number };
 
 export const Chips: React.FC<{
   t: number;
-  cx: number;
-  cy: number;
+  /** the two chips' centres */
+  slots: readonly [ChipSlot, ChipSlot];
   w: number;
   h: number;
   fontSize: number;
-  /** the pop's hit frames (the spoken times): a seed 3 f before, the overshoot peaks ON them */
+  /** the spoken times: the chips are (nearly) in ON them */
   pops: readonly [number, number];
-  /** 3:00 PM is picked (squash 2 f before, the pop ON it) */
+  /** 3:00 PM is picked (a 2 f press, the fill floods ON it) */
   pick: number;
-  /** 4:30 PM lifts (2 f) and drops away from here */
+  /** 4:30 PM settles away from here */
   drop: number;
-  /** the 3:00 PM chip squashes (2 f) and leaves up into the light from here */
+  /** 3:00 PM is taken into the orb from here */
   leave: number;
-  /** where it leaves to (the orb's centre), screen px */
-  leaveTo: { x: number; y: number };
-}> = ({ t, cx, cy, w, h, fontSize, pops, pick, drop, leave, leaveTo }) => {
-  if (t < pops[0] - 3 || t > leave + 12) return null;
+  /** where it is taken to (the orb), screen px, and how big the orb is there */
+  leaveTo: { x: number; y: number; d: number };
+  /** (9:16) once 4:30 PM has gone, the picked chip glides to this x (the frame's axis) */
+  recentre?: number;
+}> = ({ t, slots, w, h, fontSize, pops, pick, drop, leave, leaveTo, recentre }) => {
+  if (t < pops[0] - 4 || t > leave + 14) return null;
   const labels = ['3:00 PM', '4:30 PM'];
-  const gap = 32;
-  const WAVE = AVA_GLOW.core;
   const nodes: React.ReactNode[] = [];
   labels.forEach((lab, i) => {
     const hit = pops[i];
-    if (t < hit - 3) return;
+    if (t < hit - 4) return;
     const selected = i === 0;
-    const baseX = cx + (i === 0 ? -1 : 1) * (w / 2 + gap / 2);
-    // the entrance: seed → anticipation → 1.12 ON the spoken time → settle
-    const s = popScale(t, hit, 1.12, { from: 0.5, anticip: 3 });
-    // pick: 3:00 PM squashes (.92, 2 f), pops to 1.08 ON the pick and settles
-    const press = selected
-      ? t < pick - 2
-        ? 1
-        : t < pick
-          ? 1 - 0.08 * EASE.in2((t - (pick - 2)) / 2)
-          : 1.08 - 0.08 * springAt(t, pick, SPRING.pop)
-      : 1;
-    const fill = selected ? tween(t, [pick, pick + 6], [0, 1], EASE.house) : 0;
-    // 4:30 PM: lifts 2 f (the counter-move), then drops away, tipping
-    const dp = !selected ? exitCurve(t, drop + 2, 8, { anticip: 2, dip: 0.14 }) : 0;
-    // 3:00 PM: squashes 2 f, then leaves up into the orb, stretching along its path
-    const lv = selected ? exitCurve(t, leave + 2, 7, { anticip: 2, dip: 0.1 }) : 0;
-    const lvOut = Math.max(0, lv);
-    const leaveSquash = lv < 0 ? -lv / 0.1 : 0;
-    const dpOut = Math.max(0, dp);
-    // (3:00 PM is gone before it overlaps the orb: absorbed, not pasted on it)
-    const op = popOpacity(t, hit, 3) * (1 - dpOut) * Math.pow(1 - lvOut, 2.2);
+    const s0 = slots[i];
+    // the entrance: released 3 f before the spoken time, rising 28 px and settling from .94
+    const e = springUnit(t - (hit - 3), CHIP_IN);
+    const op0 = smooth(0, 0.6, e);
+    let dx = 0;
+    let dy = 28 * (1 - e);
+    let sc = 0.94 + 0.06 * e;
+    let op = op0;
+    // the pick: a 2 f press to .965, then a quick release (one small overshoot)
+    if (selected && t >= pick - 2) {
+      sc *= t < pick ? 1 - 0.035 * EASE.in2((t - (pick - 2)) / 2) : 0.965 + 0.035 * springUnit(t - pick, PRESS);
+    }
+    const fill = selected ? tween(t, [pick, pick + 7], [0, 1], EASE.house) : 0;
+    // 4:30 PM: a 2 f lift, then it settles away (down 26 px, .96, fading) on power2.in
+    if (!selected && t >= drop) {
+      const lift = tween(t, [drop, drop + 2], [0, 1], EASE.inOut);
+      const q = tween(t, [drop + 2, drop + 11], [0, 1], EASE.in2);
+      dy += -4 * lift * (1 - q) + 26 * q;
+      sc *= 1 - 0.04 * q;
+      op *= 1 - smooth(0.1, 1, q);
+    }
+    // 3:00 PM: taken into the orb (power2.in), shrinking to the orb's heart, gone as it reaches its rim
+    if (selected && t >= leave) {
+      const q = tween(t, [leave + 2, leave + 10], [0, 1], EASE.in2);
+      const pre = tween(t, [leave, leave + 2], [0, 1], EASE.inOut) * (1 - q);
+      dx = (leaveTo.x - s0.x) * q;
+      dy += (leaveTo.y - s0.y) * q + 3 * pre;
+      sc *= (1 - 0.02 * pre) * (1 - 0.62 * q);
+      // gone as it crosses the orb's rim (absorbed, never pasted over it)
+      const dist = Math.hypot(leaveTo.x - s0.x, leaveTo.y - s0.y);
+      const rimAt = dist > 1 ? Math.max(0.2, 1 - (leaveTo.d * 0.5) / dist) : 0.5;
+      op *= 1 - smooth(rimAt * 0.55, rimAt, q);
+    }
     if (op <= 0.002) return;
-    // 3:00 PM flies into the orb (it is fully gone, absorbed, a little short of its centre)
-    const toX = (leaveTo.x - baseX) * 0.8;
-    const toY = (leaveTo.y - cy) * 0.8;
-    const travelX = Math.max(0, lv) * toX;
-    const travelY = dp * 46 + lv * toY;
-    const vY = Math.abs(
-      (!selected ? exitCurve(t + 0.5, drop + 2, 8, { anticip: 2, dip: 0.14 }) * 46 : exitCurve(t + 0.5, leave + 2, 7, { anticip: 2, dip: 0.1 }) * toY) -
-        (!selected ? exitCurve(t - 0.5, drop + 2, 8, { anticip: 2, dip: 0.14 }) * 46 : exitCurve(t - 0.5, leave + 2, 7, { anticip: 2, dip: 0.1 }) * toY),
-    );
-    const smear = vY > 6 ? Math.min(18, vY * 0.35) : 0;
-    const sx = Math.max(0, s) * press * (1 + 0.05 * leaveSquash) * (1 - 0.35 * lvOut) * (1 - 0.06 * dpOut);
-    const sy = Math.max(0, s) * press * (1 - 0.1 * leaveSquash) * (1 - 0.35 * lvOut + 0.3 * lvOut) * (1 - 0.06 * dpOut);
-    const flash = t >= hit ? Math.exp(-(t - hit) / 3.5) : t >= hit - 3 ? 0.6 : 0;
-    const pickFlash = selected && t >= pick ? Math.exp(-(t - pick) / 4) : 0;
-    const glint = glintBg(tween(t, [hit, hit + 9], [0, 1], EASE.inOut), 0.55) ?? (selected ? glintBg(tween(t, [pick + 1, pick + 10], [0, 1], EASE.inOut), 0.7) : null);
-    const id = `call-chip-smear-${i}`;
+    // (9:16) the picked slot takes the axis once it is alone (a soft glide, before it is taken in)
+    if (selected && recentre !== undefined) {
+      const g = springUnit(t - (drop + 6), CHIP_IN);
+      const shift = (recentre - s0.x) * g;
+      // the travel into the orb starts from wherever the glide has got to
+      const q = t >= leave ? tween(t, [leave + 2, leave + 10], [0, 1], EASE.in2) : 0;
+      dx += shift * (1 - q);
+    }
+    const moving = Math.abs(dy) > 0.02 || Math.abs(dx) > 0.02 || Math.abs(sc - 1) > 1e-4;
     nodes.push(
-      <React.Fragment key={lab}>
-        {/* the hit's accent: a ring leaves the pill (the sparks fly up and out over it, below — never across the caption) */}
-        <RingPulse t={t} at={hit} x={baseX} y={cy} w={w} h={h} radius={h / 2} color={WAVE} grow={1.55} life={12} />
-        {selected ? <RingPulse t={t} at={pick} x={baseX} y={cy} w={w} h={h} radius={h / 2} color={C.paper} grow={1.9} life={14} width={2.5} /> : null}
-        {smear > 0.4 ? <VSmear id={id} sigma={smear} /> : null}
+      <div
+        key={lab}
+        style={{
+          position: 'absolute',
+          left: s0.x - w / 2,
+          top: s0.y - h / 2,
+          width: w,
+          height: h,
+          opacity: op < 0.999 ? op : undefined,
+          ...subpixel(`translate(${dx.toFixed(3)}px, ${dy.toFixed(3)}px) scale(${sc.toFixed(5)})`, moving),
+        }}
+      >
         <div
           style={{
             position: 'absolute',
-            left: baseX - w / 2 + travelX,
-            top: cy - h / 2 + travelY,
-            width: w,
-            height: h,
-            opacity: op,
-            transform: `rotate(${(7 * dpOut).toFixed(3)}deg)`,
-            filter: smear > 0.4 ? `url(#${id})` : dpOut > 0.02 ? `blur(${(5 * dpOut).toFixed(2)}px)` : undefined,
+            inset: 0,
+            borderRadius: h / 2,
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            // dark glass on the emerald: a whisper of light in it, a hairline edge lit from above, a soft shadow
+            background: 'linear-gradient(180deg, rgba(236,250,244,0.085) 0%, rgba(236,250,244,0.045) 100%)',
+            boxShadow: [
+              `inset 0 0 0 1.5px rgba(236,250,244,${(0.16 * (1 - fill)).toFixed(3)})`,
+              'inset 0 1px 0 rgba(255,255,255,0.12)',
+              '0 22px 44px -22px rgba(0,10,6,0.85)',
+              fill > 0.01 ? `0 0 ${(30 * fill).toFixed(1)}px ${rgba(ACCENT, 0.22 * fill)}` : '',
+            ]
+              .filter(Boolean)
+              .join(', '),
+            ...typeStyle('title', false, { tone: 'night', size: fontSize, tabular: true }),
+            letterSpacing: '-0.01em',
+            color: mixHex(C.paper, ON_ACCENT, fill),
           }}
         >
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              borderRadius: h / 2,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              overflow: 'hidden',
-              background: `rgba(255,255,255,${(0.08 + 0.14 * flash).toFixed(3)})`,
-              boxShadow:
-                `inset 0 0 0 1.5px ${rgba(WAVE, 0.5 * (1 - fill) + 0.45 * flash)}, inset 0 1px 0 rgba(255,255,255,${(0.1 + 0.3 * fill).toFixed(3)}), 0 18px 36px -18px rgba(2,3,14,0.95)` +
-                `, 0 0 ${(18 + 26 * flash + 30 * fill).toFixed(1)}px ${rgba(WAVE, 0.18 * flash + 0.5 * fill + 0.3 * pickFlash)}`,
-              transform: `scale(${sx.toFixed(4)}, ${sy.toFixed(4)})`,
-              fontFamily: FONT.mono,
-              fontWeight: 500,
-              fontSize,
-              lineHeight: 1,
-              fontVariantNumeric: 'tabular-nums',
-              letterSpacing: '-0.02em',
-              color: mixHex(C.paper, C.ink, fill),
-            }}
-          >
-            {fill > 0.001 ? (
-              /* the selection floods out from the centre (an ink-fill, clipped by the pill) */
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  background: C.paper,
-                  clipPath: `circle(${(14 + (Math.hypot(w, h) / 2 - 10) * fill).toFixed(2)}px at 50% 50%)`,
-                }}
-              />
-            ) : null}
-            {glint ? (
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  backgroundImage: glint.layer,
-                  backgroundSize: glint.size,
-                  backgroundPosition: glint.pos,
-                  backgroundRepeat: 'no-repeat',
-                  mixBlendMode: fill > 0.5 ? 'normal' : 'screen',
-                }}
-              />
-            ) : null}
-            <span style={{ position: 'relative' }}>{lab}</span>
-          </div>
+          {fill > 0.001 ? (
+            /* the pick floods the chip with the accent light, from its centre */
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: `linear-gradient(180deg, ${mixHex(ACCENT, '#ffffff', 0.18)} 0%, ${ACCENT} 100%)`,
+                clipPath: `circle(${(4 + (Math.hypot(w, h) / 2) * EASE.out3(fill)).toFixed(2)}px at 50% 50%)`,
+              }}
+            />
+          ) : null}
+          <span style={{ position: 'relative' }}>{lab}</span>
         </div>
-        <Sparks t={t} at={hit} x={baseX} y={cy} color={WAVE} n={10} rx={w * 0.56} ry={h * 0.62} reach={74} life={13} size={4} arc={[-200, 20]} seed={`chip${i}`} />
-        {selected ? (
-          <Sparks t={t} at={pick} x={baseX} y={cy} color={WAVE} hot={C.paper} n={14} rx={w * 0.56} ry={h * 0.62} reach={104} life={15} size={4.5} arc={[-205, 25]} seed="pick" />
-        ) : null}
-      </React.Fragment>,
+      </div>,
     );
   });
   return <>{nodes}</>;
@@ -264,122 +201,96 @@ export const Chips: React.FC<{
 
 /* ── the last line's row B: the booked mark ─────────────────────── */
 
-/** "Wednesday" · "at" · "3 PM" — the time arrives as one, with the ember, on "three" */
+/** "Wednesday" · "at" · "3 PM" — the time arrives as one */
 const MARK_WORDS = [BOOKING.day, BOOKING.at, BOOKING.time];
-const ENTER = 6;
 
-/** The mark's box, exactly as <BookedMark> sets it (Shared.tsx), so the swap is invisible. */
+/** The mark's box, exactly as <BookedMark> sets it (Shared.tsx, MARK_TYPE), so the swap is invisible. */
 const markBox = (x: number, y: number, fontSize: number): React.CSSProperties => ({
   position: 'absolute',
   left: x,
   top: y,
   transform: 'translate(-50%, -50%)',
   whiteSpace: 'nowrap',
-  fontFamily: FONT.body,
-  fontWeight: 500,
+  fontFamily: MARK_TYPE.family,
+  fontWeight: MARK_TYPE.weight,
   fontSize,
-  lineHeight: 1.22,
-  letterSpacing: '-0.01em',
+  lineHeight: MARK_TYPE.lineHeight,
+  letterSpacing: MARK_TYPE.tracking,
+  fontKerning: 'normal',
 });
 
-/** a word entering in place: opacity, .16em rise, blur 3 → 0 over 6 f (on its appear frame it is 1/6 in) */
-const enterStyle = (t: number, a: number): React.CSSProperties => {
-  const u = Math.min(1, Math.max(0, (t - a + 1) / ENTER));
-  if (u >= 1) return { display: 'inline-block' };
-  const e = EASE.out3(u);
+/** the ember sweep's ink at progress p (0..1, left → right): paper ahead of the front, ember behind it */
+function sweepFill(from: string, to: string, p: number): React.CSSProperties {
+  // the front is a soft 18 % band, travelling from −20 % to 120 % of the mark's width
+  const f = -20 + 140 * p;
   return {
-    display: 'inline-block',
-    opacity: u <= 0 ? 0 : e,
-    transform: `translateY(${(0.16 * (1 - e)).toFixed(4)}em)`,
-    filter: u > 0 ? `blur(${(3 * (1 - e)).toFixed(2)}px)` : undefined,
+    backgroundImage: `linear-gradient(90deg, ${to} 0%, ${to} ${(f - 9).toFixed(2)}%, ${from} ${(f + 9).toFixed(2)}%, ${from} 100%)`,
+    WebkitBackgroundClip: 'text',
+    backgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    color: 'transparent',
   };
-};
+}
 
 export const MarkRow: React.FC<{
   t: number;
   /** appear frames of "Wednesday", "at", "3 PM" and the period */
   appear: readonly [number, number, number, number];
-  /** 0..1 paper → ember */
+  /** the ink the words arrive in */
+  ink: string;
+  /** 0..1 the ember sweeps the mark (left → right) */
   ember: number;
-  /** 0..1 light sweep across the mark (ember turn); <0 or >1 none */
-  sheen: number;
   /** the payoff beat: the mark's scale (exactly 1 before the hand-over) */
   pulse: number;
-  /** the period leaves with its row (the caption's designed exit, CallCaptions.wordExit), or null */
-  periodExit: { dy: number; scale: number; op: number } | null;
-  /** 0..1 the mark takes the orb: it flares (hotter ember, a glow round the letters) */
+  /** the period leaves with its row (frame its exit starts), or Infinity */
+  periodOut: number;
+  /** 0..1 the mark takes the orb: it flares (hotter ember) */
   flare?: number;
   x: number;
   y: number;
   fontSize: number;
-  show: boolean;
-}> = ({ t, appear, ember, sheen, pulse, periodExit, flare = 0, x, y, fontSize, show }) => {
-  if (!show || t < appear[0] - 1) return null;
-  const color = mixHex(mixHex(C.paper, C.emberLit, ember), C.emberSoft, 0.7 * flare);
-  const flareShadow = flare > 0.01 ? `0 0 ${(0.3 + 0.25 * flare).toFixed(3)}em rgba(255,170,110,${(0.75 * flare).toFixed(3)})` : undefined;
-  const sheenOn = sheen > 0 && sheen < 1;
-  const allIn = t >= appear[2] - 1 + ENTER;
-  const pPeriod = Math.min(1, Math.max(0, (t - appear[3] + 1) / ENTER));
-  const scale = `scale(${pulse.toFixed(5)})`;
+}> = ({ t, appear, ink, ember, pulse, periodOut, flare = 0, x, y, fontSize }) => {
+  if (t < appear[0] - 1.5) return null;
+  const done = mixHex(C.emberLit, C.emberSoft, 0.55 * flare);
+  const scale = Math.abs(pulse - 1) > 1e-5 ? ` scale(${pulse.toFixed(5)})` : '';
+  const sweeping = ember > 0.001 && ember < 0.999;
+  const color = ember >= 0.999 ? done : ink;
+  // the words have all risen and settled: the mark is the single <BookedMark> from here on
+  const settled = t >= appear[2] + 14;
+  const words = MARK_WORDS.map((w, i) => {
+    const r = reveal(t, appear[i] - 1, { config: SPRING.caption, rise: 80, fade: 0.5 });
+    return { w, r };
+  });
+  const rPeriod = reveal(t, appear[3] - 1, { config: SPRING.caption, rise: 80, fade: 0.5, exit: { at: periodOut, dur: 5 } });
   return (
     <>
-      {allIn ? (
+      {settled ? (
         <BookedMark
           color={color}
           x={x}
           y={y}
           fontSize={fontSize}
-          style={{
-            transform: `translate(-50%, -50%) ${scale}`,
-            textShadow: flareShadow,
-            ...(sheenOn
-              ? {
-                  backgroundImage: `linear-gradient(100deg, ${color} 0%, ${color} 38%, ${C.emberSoft} 50%, ${color} 62%, ${color} 100%)`,
-                  backgroundSize: '300% 100%',
-                  backgroundPosition: `${((1 - sheen) * 100).toFixed(2)}% 0`,
-                  WebkitBackgroundClip: 'text',
-                  backgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                }
-              : null),
-          }}
+          style={{ ...subpixel(`translate(-50%, -50%)${scale}`, scale !== ''), ...(sweeping ? sweepFill(ink, done, ember) : null) }}
         />
       ) : (
-        /* arriving: the mark's own box, one span per word, each entering on its spoken word */
-        <div style={{ ...markBox(x, y, fontSize), transform: `translate(-50%, -50%) ${scale}`, color }}>
-          {MARK_WORDS.map((w, i) => (
+        /* arriving: the mark's own box, one masked span per word, each rising on its spoken word */
+        <div style={{ ...markBox(x, y, fontSize), transform: `translate(-50%, -50%)${scale}`, color }}>
+          {words.map(({ w, r }, i) => (
             <React.Fragment key={i}>
               {i > 0 ? ' ' : null}
-              <span
-                style={{
-                  ...enterStyle(t, appear[i]),
-                  // "3 PM" arrives with the ember: a hot core that cools into the mark
-                  textShadow:
-                    i === 2 && t >= appear[2] ? `0 0 0.4em rgba(255,184,119,${(0.7 * (1 - ember)).toFixed(3)})` : undefined,
-                }}
-              >
-                {w}
+              <span style={maskBox(0)}>
+                <span style={revealStyle(r)}>{w}</span>
               </span>
             </React.Fragment>
           ))}
         </div>
       )}
-      {/* the period rides a twin of the mark's box (same face / size) */}
-      {pPeriod > 0 && (!periodExit || periodExit.op > 0.002) ? (
-        <div style={{ ...markBox(x, y, fontSize), color: C.paper }}>
+      {/* the period rides a twin of the mark's box (same face / size), in the row's ink — it leaves with row A */}
+      {rPeriod.opacity > 0.002 ? (
+        <div style={{ ...markBox(x, y, fontSize), color: ink }}>
           <span style={{ visibility: 'hidden' }}>{BOOKING.mark}</span>
-          <span
-            style={{
-              position: 'absolute',
-              left: '100%',
-              top: `calc(${((1 - EASE.out3(pPeriod)) * 0.16).toFixed(3)}em + ${(periodExit ? periodExit.dy : 0).toFixed(2)}px)`,
-              opacity: EASE.out3(pPeriod) * (periodExit ? periodExit.op : 1),
-              filter: pPeriod < 1 ? `blur(${(3 * (1 - EASE.out3(pPeriod))).toFixed(2)}px)` : undefined,
-              transform: periodExit ? `scale(${periodExit.scale.toFixed(4)})` : undefined,
-              transformOrigin: '0% 80%',
-            }}
-          >
-            .
+          <span style={{ position: 'absolute', left: '100%', top: 0, ...maskBox(0), marginLeft: '-0.08em' }}>
+            <span style={revealStyle(rPeriod)}>.</span>
           </span>
         </div>
       ) : null}

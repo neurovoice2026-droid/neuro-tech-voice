@@ -10,20 +10,18 @@
  *            air around it → a last breath out (0.975) into the slam. Zoom
  *            (in log) and focus are monotone cubics through those framings,
  *            and the focus is clamped so no popped card ever leaves the box.
- *            It breathes (±0.35 %, a bar) and kicks: every pop 0.25 %, every
- *            turn of the hour 0.9 % with a 2 px jolt and a hair of roll
- *   hero     +2.5 % on the slam, decaying slowly over the hold (τ ≈ 0.5 s)
- *            while a slow push carries the wall from 0.975 back to 1 — the
- *            hold breathes and drifts, never freezes
- *   langs    a slow 2.5 % push on the language card, a 0.5 % kick as each
- *            card lands, released for the flow
+ *            Locked off otherwise: no per-pop pumps, no jolts, no roll, no
+ *            hand-held noise (at 120 fps any step reads as a jitter).
+ *   hero     a soft +1.6 % push on the slam (a 3 f C1 attack), letting go
+ *            over the hold (τ ≈ 0.5 s) while a slow push carries the wall
+ *            from 0.975 back to 1; a 0.2 % breath — never frozen
+ *   langs    a slow 2.5 % push on the language card, released for the flow
  *   flow     at rest (s 1, A 0) — so FLOW_END is the screen point — except
  *            1 % nudges toward each node (about the node; the last one about
  *            FLOW_END, so the CRM node never moves)
  */
 import type { Layout } from '../../lib/layout';
-import { EASE, tween, windowed } from '../../lib/motion';
-import { noise2D } from '@remotion/noise';
+import { EASE, smooth, tween, windowed } from '../../lib/motion';
 import { SCALE, SCALE_LOCAL } from '../../timing';
 import { centre, type Geo, type Pt, type Rect } from './geometry';
 
@@ -120,34 +118,18 @@ export function baseCam(t: number, G: Geo): { F: Pt; Z: number } {
   return { F, Z };
 }
 
-/** zoom kick (fraction), x-jolt (px) and roll (deg) at t */
+/**
+ * The camera's accents at t — continuous, never a step (at 120 fps an instant 0.25 % zoom is a
+ * visible 2–3 px jump at the frame edge): only the slam's soft push, arriving over ≈ 3 f (C1) and
+ * letting go slowly over the hold. No per-pop pumps, no jolts, no roll.
+ */
 export function kicks(t: number): { z: number; jx: number; rot: number } {
   let z = 0;
-  let jx = 0;
-  let rot = 0;
-  // every pop: a micro-kick
-  for (const p of K.pops) if (t >= p && !K.groups.includes(p)) z += 0.0025 * Math.exp(-(t - p) / 2.5);
-  // the hour turns: a kick, a 2 px jolt and a hair of roll, alternating
-  K.groups.forEach((g, j) => {
-    if (j === 0 || t < g) return;
-    const e = Math.exp(-(t - g) / 3);
-    const side = j % 2 === 0 ? 1 : -1;
-    z += 0.009 * e;
-    jx += 2 * side * e;
-    rot += 0.22 * side * e;
-  });
-  if (t >= HERO) {
-    // the slam: the kick lands at once and lets go slowly over the hold (the roll settles fast)
-    z += 0.025 * Math.exp(-(t - HERO) / 14);
-    rot += -0.18 * Math.exp(-(t - HERO) / 4);
+  if (t > HERO - 1) {
+    const a = smooth(HERO - 1, HERO + 2.5, t);
+    z += 0.016 * a * Math.exp(-Math.max(0, t - (HERO + 2.5)) / 16);
   }
-  // each language card lands: 0.5 %
-  const lands = [K.enFlip + 6, ...SCALE.langAt.slice(1).map((a) => a - 1)];
-  for (const l of lands) if (t >= l) z += 0.005 * Math.exp(-(t - l) / 3);
-  // "14 languages." lands: a 2 px jolt
-  const ti = SCALE.langTitle;
-  if (t >= ti) jx += -2 * Math.exp(-(t - ti) / 2.5);
-  return { z, jx, rot };
+  return { z, jx: 0, rot: 0 };
 }
 
 /** 1 % toward node i on its station frame: up in 2 f, exactly gone by +7 (the last one stays about FLOW_END) */
@@ -166,16 +148,15 @@ export function camAt(t: number, G: Geo, L: Layout): Affine {
   // the screen anchor: the framing box's centre (9:16: the safe zone's), = the wall's centre at rest
   const C = G.anchor;
   const { F, Z } = baseCam(t, G);
-  // the wall breathes (a bar) through the build AND the hero's hold, and lets go as the cards peel off;
-  // the hand holding the camera drifts a hair until the flow
+  // the hero's hold breathes (a slow 0.2 %, a bar long) and lets go as the cards peel off — a locked-off
+  // camera otherwise: no hand-held drift, no noise
   const breath =
-    0.0035 * Math.sin(((t + 3) / 30) * Math.PI) * tween(t, [4, 14], [0, 1], EASE.inOut) * (1 - tween(t, [K.flyOut - 8, K.flyOut], [0, 1], EASE.inOut));
-  const hand = 1 - tween(t, [K.collapse, K.stations[0] - 4], [0, 1], EASE.inOut);
-  const hx = 2.5 * noise2D('scale-hand-x', t * 0.02, 0.1) * hand;
-  const hy = 2 * noise2D('scale-hand-y', 0.4, t * 0.02) * hand;
+    0.002 * Math.sin(((t - SCALE.industriesTitle) / 60) * Math.PI) *
+    tween(t, [SCALE.industriesTitle + 4, SCALE.industriesTitle + 16], [0, 1], EASE.inOut) *
+    (1 - tween(t, [K.flyOut - 8, K.flyOut], [0, 1], EASE.inOut));
   let s = Z * (1 + breath);
-  let ax = C.x - F.x * s + hx;
-  let ay = C.y - F.y * s + hy;
+  let ax = C.x - F.x * s;
+  let ay = C.y - F.y * s;
   // kicks (about the screen centre) + jolt
   const k = kicks(t);
   const kz = 1 + k.z;
@@ -197,13 +178,6 @@ export function camAt(t: number, G: Geo, L: Layout): Affine {
   // nudges toward each flow node
   K.stations.forEach((st, i) => about(G.nodes[i], 1 + nudge(t, st, i === 2)));
   return { s, ax, ay, rot: k.rot };
-}
-
-/** the screen velocity (px / frame) of world point p under the camera at t */
-export function screenVel(t: number, p: Pt, G: Geo, L: Layout): { vx: number; vy: number } {
-  const a = camAt(t - 0.5, G, L);
-  const b = camAt(t + 0.5, G, L);
-  return { vx: b.ax + b.s * p.x - (a.ax + a.s * p.x), vy: b.ay + b.s * p.y - (a.ay + a.s * p.y) };
 }
 
 /** Camera component props for an affine (Camera.tsx: screen = C + (p − C)·zoom − cam) */

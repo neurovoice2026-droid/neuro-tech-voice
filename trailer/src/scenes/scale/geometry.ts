@@ -5,7 +5,8 @@
  * exactly FLOW_END.
  *
  *   wall        a 4 × 4 wall of white cards, a composed grid with air around
- *               it (16:9 1760 × 960 · 9:16 960 × 1200 inside the safe box
+ *               and between them (20 / 16 px gutters; 16:9 1760 × 960 · 9:16
+ *               960 × 1200 inside the safe box
  *               y 250…1500), centred on the framing anchor. The cards pop in
  *               the block order (POP_CELL): card 01 alone → 2 × 2 → 3 × 3 →
  *               the wall, while the camera pulls back continuously, always
@@ -19,10 +20,11 @@
  *               rail; the CRM node is FLOW_END. Sized so that with the slow
  *               push about FLOW_END nothing comes nearer than ~110 px (16:9)
  *               / 70 px (9:16) to a frame edge at the iris.
- *   titles      one slot, centred: "16 industries." slams centred on the
- *               wall, then lifts to the band, where "14 languages." and
- *               "After the call." follow it (9:16 cap tops ≥ 290, under the
- *               Reels/TikTok top UI).
+ *   titles      one slot, centred: "16 industries." (152 / 124 px) lands
+ *               centred on the wall, then lifts to the band, where "14
+ *               languages." and "After the call." (the headline role, 100 /
+ *               92 px) follow it (9:16 cap tops ≥ 290, under the Reels/TikTok
+ *               top UI).
  */
 import { FLOW_END } from '../../lib/handoff';
 import type { Layout } from '../../lib/layout';
@@ -73,7 +75,8 @@ export function geo(L: Layout) {
   /** the camera's screen anchor: the framing box's centre (the wall's centre at rest, zoom 1) */
   const anchor: Pt = centre(frame);
   const wall: Rect = L.pick({ x: 80, y: 60, w: 1760, h: 960 }, { x: 60, y: 275, w: 960, h: 1200 });
-  const wallCells = cellsOf(wall, 4, 4, 12); // 431 × 231 · 231 × 291
+  // generous gutters: a composed grid with air between the cards, not a dashboard
+  const wallCells = cellsOf(wall, 4, 4, v ? 16 : 20); // 425 × 225 · 228 × 288
   /** card rect of industry i */
   const cards: Rect[] = POP_CELL.map(([r, c]) => wallCells[r][c]);
   /** the cluster on screen once card i has popped: the bounds of cards 0 … i */
@@ -113,11 +116,11 @@ export function geo(L: Layout) {
   /* ── titles: one centred slot ───────────────────────────────────── */
   const title = {
     /** "16 industries." — centred on the wall (cap centre), size in px */
-    hero: L.pick({ x: L.cx, y: L.cy, size: 160 }, { x: L.cx, y: centre(wall).y, size: 140 }),
+    hero: L.pick({ x: L.cx, y: L.cy, size: 152 }, { x: L.cx, y: centre(wall).y, size: 124 }),
     /** the band: "14 languages." / "After the call." (cap centre; 9:16 cap top ≈ 293) */
-    band: L.pick({ x: L.cx, y: 118, size: 108 }, { x: L.cx, y: 332, size: 104 }),
+    band: L.pick({ x: L.cx, y: 120, size: 100 }, { x: L.cx, y: 334, size: 92 }),
     /** "After the call." — over the rail in 16:9 (the flow hangs off FLOW_END's row) */
-    after: L.pick({ x: L.cx, y: 262, size: 112 }, { x: L.cx, y: 332, size: 104 }),
+    after: L.pick({ x: L.cx, y: 262, size: 100 }, { x: L.cx, y: 334, size: 92 }),
   };
 
   /* ── the after-call rail ─────────────────────────────────────────

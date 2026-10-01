@@ -2,48 +2,49 @@
  * THE LANGUAGES — Ava greets in six languages, one card in focus at a time.
  *
  *   focus     the ACTIVE language: a large white card under the band title.
- *             Top-left, a small orb in the card's light that breathes with
- *             her REAL envelope (VOICE.lines[id].env) and the language's name;
- *             below, the whole greeting in the cinema face (Japanese: its
- *             Latin "AI" / "Ava" in Cormorant, the CJK in Noto Serif JP), the
- *             AI disclosure underlined. The card's light lives in its orb,
- *             a 2 px ring and a small glow under the card.
- *   cascade   English is heard whole (the wall's keeper turns into it): its
- *             words rise ON hers. Then Romanian / Spanish / French / German
- *             slide in from the right, each landing a frame before its voice
- *             cuts in (1 – 1.25 s each): she is cut right after her name, so
- *             the card shows only what is HEARD — "Sunt Ava," … "Sie sprechen
- *             mit Ava," — one glanceable line, settled by landAt + 3, the word
- *             she is saying in the card's ink. Japanese is heard whole (per
- *             character, on her words). Each card lands as LIGHT: its 2 px rim
- *             flares and a sheen of its light sweeps it (never a flood); the
- *             room behind keeps the hero's night.
+ *             Top-left, her small orb (the call's emerald light — one light,
+ *             one Ava) breathing with her REAL envelope (VOICE.lines[id].env)
+ *             beside the language's name as a tracked label; below, the
+ *             greeting in Instrument Sans 460, −0.03em (the knowledge
+ *             heading's face; Japanese in Noto Sans JP, its Latin "AI" /
+ *             "Ava" in Instrument Sans), every word rising out of its own
+ *             mask as she says it. The AI disclosure is the key phrase: it
+ *             turns to the scene's accent as she says it, and a fine rule
+ *             draws under it.
+ *   cascade   English is heard whole (the wall's keeper turns into it). Then
+ *             Romanian / Spanish / French / German slide in from the right,
+ *             each landing a frame before its voice cuts in (1 – 1.25 s
+ *             each): she is cut right after her name, so the card shows only
+ *             what is HEARD — "Sunt Ava," … "Sie sprechen mit Ava," — one
+ *             glanceable line, settled by landAt + 3. Japanese is heard whole
+ *             (per character, on her words).
  *   switch    no switch shows an empty card: every card's first word rises
- *             4 f before it lands (mid-slide; English as its face turns to
- *             us), so its text is up as it covers the card it replaces, and
- *             a leaving card cross-fades its focus face into its gallery
- *             face (always one of them up).
+ *             4 f before it lands, so its text is up as it covers the card it
+ *             replaces; a leaving card hands its focus face over to its
+ *             gallery face (one of them is always up).
  *   gallery   as the next card arrives, the last one recedes into the gallery
- *             (16:9 a row of five under the focus · 9:16 3 + 2), its light
- *             going out — so from Japanese on all six are visible together,
- *             never more than one line big in focus.
+ *             (16:9 a row of five under the focus · 9:16 3 + 2): the name and
+ *             what she said, small — so from Japanese on all six are visible.
  *   flow      the gallery drops away and Japanese flies to the first station:
  *             it becomes THE CALL (Flow.tsx).
+ *
+ * No blur anywhere (no shutter, no defocus): the master's 120 fps carries the
+ * moves; the cards are paper (Cards.tsx), shadows real, no rims or glows.
  */
 import React from 'react';
-import { C, FONT, LIGHTS, TRACK, type LightId } from '../../theme';
-import { bloom, mixColor } from '../../lib/lights';
-import { aos, EASE, SPRING, tween } from '../../lib/motion';
+import { C, FONT, TYPE_JP } from '../../theme';
+import { aos, EASE, mixHex, smooth, SPRING, springUnit, tween } from '../../lib/motion';
+import { maskBox, typeStyle } from '../../lib/type';
+import { reveal, revealStyle } from '../../components/Type';
 import { MeshOrb } from '../../components/MeshOrb';
 import { SCALE, SCALE_LOCAL, vWord } from '../../timing';
 import { VOICE } from '../../voice.generated';
-import { Box, flashAt, HitBurst, IndustryFace, Sheen } from './Cards';
-import { dspring, slide } from './curves';
+import { Card, IND, IndustryFace } from './Cards';
+import { slide } from './curves';
 import { INDUSTRIES, LANGS, scriptRuns, underlined, wordsOf } from './data';
 import { StationFace, type FlowTiming } from './Flow';
 import { centre, mixRect, type Geo, type Rect } from './geometry';
-import { DirBlur, dirBlurRef, sigmaFor } from './MotionBlur';
-import { bodyOf, cardLight, discRest, FLOW_LIGHT, HERO_LIGHT, langLight, rgba } from './lights';
+import { ACCENT, cardLight, META, ORB_PALETTE, rgba } from './lights';
 
 const K = SCALE_LOCAL;
 const LA = SCALE.langAt;
@@ -65,7 +66,7 @@ const heardLines = (k: number, v: boolean) => LANGS[k].heard?.[v ? 1 : 0] ?? LAN
 const heardN = (k: number) => heardLines(k, false).reduce((a, n) => a + n, 0);
 /**
  * frame word j of card k starts to rise in the focus card:
- *  · the quick four: the whole greeting on a stagger as the card lands (K.greetIn … + K.greetSpread)
+ *  · the quick four: the whole fragment on a stagger as the card lands (K.greetIn … + K.greetSpread)
  *  · English / Japanese: ON her words; the first rises with the card (K.greetIn) so the card never
  *    lands empty — it has settled as she starts to speak
  */
@@ -73,83 +74,62 @@ function riseAt(k: number, j: number): number {
   if (isQuick(k)) return K.greetIn[k] + (K.greetSpread * j) / Math.max(1, heardN(k) - 1);
   return j === 0 ? Math.min(K.greetIn[k], wordAt(k, 0)) : wordAt(k, j);
 }
-/** the quick four: 0..1 while she is saying word j (it takes the card's ink), until the next word or the cut */
-function sayingOf(k: number, j: number, t: number): number {
-  const cut = cutAt(k);
-  if (cut === undefined) return 0;
-  const s = wordAt(k, j);
-  if (s >= cut - 1) return 0;
-  const n = wordsOf(LANGS[k]).length;
-  const e = Math.min(cut, j + 1 < n ? wordAt(k, j + 1) : Infinity);
-  return tween(t, [s, s + 2], [0, 1], EASE.out3) * (1 - tween(t, [e, e + 4], [0, 1], EASE.inOut));
-}
 
 /** her loudness at t for card k (0..1), smoothed with a short release; silent before her line and after the cut */
 function envAt(k: number, t: number): number {
   const env = VOICE.lines[LANGS[k].id].env;
   const cut = cutAt(k);
   let e = 0;
-  for (let j = 0; j < 4; j++) {
+  for (let j = 0; j < 5; j++) {
     const f = t - voiceAt(k) - j;
     const i = Math.floor(f);
     if (i < 0 || i >= env.length - 1) continue;
-    if (cut !== undefined && voiceAt(k) + i >= cut) continue;
+    if (cut !== undefined && voiceAt(k) + f >= cut) continue;
     const v = env[i] + (env[i + 1] - env[i]) * (f - i);
-    e = Math.max(e, v * Math.pow(0.7, j));
+    e = Math.max(e, v * Math.pow(0.72, j));
   }
   return e;
 }
 
-/** the card's light: up as it lands, out as it recedes */
-function litOf(k: number, t: number) {
-  const a = arriveAt(k);
-  const up = tween(t, [a - 3, a + 2], [0, 1], EASE.out3);
-  const out =
-    k === CARRIER
-      ? tween(t, [K.carrierFly + 2, K.carrierFly + 10], [0, 1], EASE.inOut)
-      : tween(t, [K.switchOut[k] + 1, K.switchOut[k] + 9], [0, 1], EASE.inOut);
-  return up * (1 - out);
-}
+/** the AI disclosure's key-phrase progress (0..1): English and Japanese only (the quick four are cut before it) */
+const discloseOf = (k: number, t: number) =>
+  k === 0 ? tween(t, K.discloseEn, [0, 1], EASE.draw) : k === CARRIER ? tween(t, K.discloseJa, [0, 1], EASE.draw) : 0;
+/** the phrase's ink: it turns to the accent as she starts to say it (EASE.house over 12 f) */
+const discloseInk = (k: number, t: number) =>
+  k === 0 ? tween(t, [K.discloseEn[0] - 1, K.discloseEn[0] + 11], [0, 1], EASE.house) : k === CARRIER ? tween(t, [K.discloseJa[0] - 1, K.discloseJa[0] + 11], [0, 1], EASE.house) : 0;
 
 /* ── type ────────────────────────────────────────────────────────── */
-/** the site's voice reveal: a unit rises .16 em → 0 and un-blurs 4 px → 0 as it is said */
-function reveal(t: number, s0: number, size: number): React.CSSProperties {
-  if (t < s0) return { display: 'inline-block', whiteSpace: 'pre', visibility: 'hidden' };
-  const p = dspring(t - s0 + 0.5, { stiffness: 460, damping: 22, mass: 0.7 });
-  const op = tween(t, [s0, s0 + 3], [0.15, 1], EASE.out3);
-  const bl = tween(t, [s0, s0 + 5], [4, 0], EASE.out3);
-  return {
-    display: 'inline-block',
-    whiteSpace: 'pre',
-    opacity: op < 0.999 ? op : undefined,
-    transform: p < 0.999 || p > 1.001 ? `translateY(${((1 - p) * size * 0.16).toFixed(2)}px)` : undefined,
-    filter: bl > 0.1 ? `blur(${bl.toFixed(2)}px)` : undefined,
-  };
-}
-
-const CJK_FONT = '"Noto Serif JP", serif';
-const LATIN_FONT = '"Cormorant Garamond", Georgia, serif';
-/** Cormorant beside Noto Serif JP: the Latin runs set 1.2× so their caps stand with the CJK */
-const LATIN_IN_CJK = 1.2;
+/** the Latin runs inside the Japanese line stand with the CJK (TYPE_JP: CJK reads ≈ 1 / .86 bigger) */
+const LATIN_IN_CJK = 1 / TYPE_JP.scale;
+const WORD = { config: SPRING.caption, rise: 100, fade: 0.5 } as const;
 
 type LineOpts = {
   k: number;
   t: number;
   size: number;
-  color: string;
-  /** 0..1 the AI underline */
-  underline: number;
-  /** reveal frame of word j (undefined: shown) */
+  /** reveal frame of word j (undefined: shown, still) */
   at: (j: number) => number | undefined;
-  /** 0..1: word j is being said (set in the light's ink) */
-  saying?: (j: number) => number;
-  /** Japanese: frames word j's characters spread over (default: its spoken span, ≤ 8) */
-  span?: (j: number) => number | undefined;
-  light: LightId;
+  /** 0..1 the AI rule */
+  rule: number;
+  /** 0..1 the AI phrase's accent */
+  key: number;
   thin?: boolean;
+  /** the words leave up through their masks from this frame (the carrier's take-off) */
+  out?: number;
 };
 
-/** one line of a greeting: its words (indices), the AI words grouped under one underline */
+/** one masked unit (a word, or a Japanese character); `out`: it leaves up through its mask from then */
+function Unit({ text, t, s0, out, style }: { text: string; t: number; s0: number | undefined; out?: number; style?: React.CSSProperties }) {
+  if (s0 === undefined) return <span style={{ display: 'inline-block', whiteSpace: 'pre', ...style }}>{text}</span>;
+  const r = reveal(t, s0, { ...WORD, exit: out === undefined ? undefined : { at: out, dur: 3.2 } });
+  return (
+    <span style={{ ...maskBox(0), ...style }}>
+      <span style={{ ...revealStyle(r), whiteSpace: 'pre' }}>{text}</span>
+    </span>
+  );
+}
+
+/** one line of a greeting: its words (indices), the AI words grouped under one rule */
 function GreetingLine({ js, o }: { js: number[]; o: LineOpts }) {
   const l = LANGS[o.k];
   const words = wordsOf(l);
@@ -161,65 +141,59 @@ function GreetingLine({ js, o }: { js: number[]; o: LineOpts }) {
     if (last && last.ai === inAi(j)) last.js.push(j);
     else segs.push({ ai: inAi(j), js: [j] });
   }
-  const ink = LIGHTS[o.light].ink;
-  const body = bodyOf(o.light);
-  /** a word's text as units: per character for Japanese (Latin runs in Cormorant), whole otherwise */
-  const unit = (j: number, text: string) => {
+  const keyCol = mixHex(C.ink, ACCENT, o.key);
+  /** a word's units: whole for Latin; per character for Japanese (its Latin runs in Instrument Sans, larger) */
+  const unit = (j: number, text: string, color?: string) => {
     const s0 = o.at(j);
-    if (!cjk) {
-      const say = o.saying ? o.saying(j) : 0;
-      return (
-        <span
-          key={`w${j}`}
-          style={{
-            ...(s0 === undefined ? { display: 'inline-block', whiteSpace: 'pre' } : reveal(o.t, s0, o.size)),
-            ...(say > 0.001 ? { color: mixColor(o.color, ink, 0.6 * say) } : null),
-          }}
-        >
-          {text}
-        </span>
-      );
-    }
-    // Japanese: the characters of word j spread over its spoken span
+    if (!cjk) return <Unit key={`w${j}`} text={text} t={o.t} s0={s0} out={o.out} style={color ? { color } : undefined} />;
     const chars = Array.from(text);
     const next = j + 1 < words.length ? o.at(j + 1) : undefined;
-    const span = o.span?.(j) ?? (s0 === undefined || next === undefined ? 4 : Math.min(8, Math.max(1, next - s0)));
+    // the characters of word j spread over its spoken span (≤ 8 f); "AI" rises as one unit with the card
+    const span = j === 0 ? 1 : s0 === undefined || next === undefined ? 4 : Math.min(8, Math.max(1, next - s0));
     let ci = 0;
     return (
       <React.Fragment key={`w${j}`}>
         {scriptRuns(text).map((run, ri) =>
-          Array.from(run.s).map((ch, i) => {
-            const c = ci++;
-            const st = s0 === undefined ? undefined : s0 + (span * c) / chars.length;
-            return (
-              <span
-                key={`${ri}-${i}`}
-                style={{
-                  ...(st === undefined ? { display: 'inline-block', whiteSpace: 'pre' } : reveal(o.t, st, o.size)),
-                  fontFamily: run.latin ? LATIN_FONT : CJK_FONT,
-                  fontSize: run.latin ? o.size * LATIN_IN_CJK : o.size,
-                }}
-              >
-                {ch}
-              </span>
-            );
-          }),
+          run.latin ? (
+            // a Latin run rises as one unit (kerned), at the Latin size
+            (() => {
+              const c = ci;
+              ci += run.s.length;
+              const st = s0 === undefined ? undefined : s0 + (span * c) / chars.length;
+              return (
+                <Unit
+                  key={`${ri}`}
+                  text={run.s}
+                  t={o.t}
+                  s0={st}
+                  out={o.out}
+                  style={{ fontFamily: FONT.ui, fontSize: `${LATIN_IN_CJK}em`, letterSpacing: '-0.03em', marginRight: '0.04em', color }}
+                />
+              );
+            })()
+          ) : (
+            Array.from(run.s).map((ch, i) => {
+              const c = ci++;
+              const st = s0 === undefined ? undefined : s0 + (span * c) / chars.length;
+              return <Unit key={`${ri}-${i}`} text={ch} t={o.t} s0={st} out={o.out} style={{ fontFamily: FONT.jp, color }} />;
+            })
+          ),
         )}
       </React.Fragment>
     );
   };
+  const u = Math.min(1, Math.max(0, o.rule));
   return (
-    <div style={{ whiteSpace: 'nowrap', color: o.color }}>
+    <div style={{ whiteSpace: 'nowrap' }}>
       {segs.map((seg, si) => {
         const lastJ = seg.js[seg.js.length - 1];
         const tail = seg.ai ? words[lastJ].slice(underlined(words[lastJ]).length) : '';
         const content = seg.js.map((j, n) => (
           <React.Fragment key={j}>
             {n > 0 && !cjk ? ' ' : null}
-            {unit(j, seg.ai && j === lastJ ? underlined(words[j]) : words[j])}
+            {unit(j, seg.ai && j === lastJ ? underlined(words[j]) : words[j], seg.ai ? keyCol : undefined)}
           </React.Fragment>
         ));
-        const u = Math.min(1, Math.max(0, o.underline));
         return (
           <React.Fragment key={si}>
             {si > 0 && !cjk ? ' ' : null}
@@ -230,13 +204,14 @@ function GreetingLine({ js, o }: { js: number[]; o: LineOpts }) {
                   <span
                     style={{
                       position: 'absolute',
-                      left: 0,
-                      right: 0,
-                      bottom: cjk ? -o.size * 0.06 : o.size * 0.06,
-                      height: Math.max(o.thin ? 3 : 4, Math.round(o.size * (o.thin ? 0.05 : 0.055))),
-                      borderRadius: 3,
-                      background: `linear-gradient(90deg, ${body}, ${ink})`,
-                      boxShadow: `0 0 ${(o.size * 0.14 * (1 - 0.5 * u)).toFixed(1)}px ${rgba(body, 0.5)}`,
+                      left: '0.02em',
+                      right: '0.02em',
+                      // .1 em under the baseline (Instrument Sans at line-height 1.04: baseline .88 em down the box; the
+                      // Japanese line's baseline — set by its larger Latin "AI" — sits ≈ 1.13 em down)
+                      top: cjk ? '1.25em' : '0.98em',
+                      height: Math.max(o.thin ? 2 : 3, Math.round(o.size * 0.032)),
+                      borderRadius: 4,
+                      background: ACCENT,
                       transform: `scaleX(${u.toFixed(4)})`,
                       transformOrigin: '0 50%',
                     }}
@@ -246,9 +221,7 @@ function GreetingLine({ js, o }: { js: number[]; o: LineOpts }) {
             ) : (
               content
             )}
-            {tail ? (
-              <span style={o.at(lastJ) === undefined ? { display: 'inline-block', whiteSpace: 'pre' } : reveal(o.t, o.at(lastJ)!, o.size)}>{tail}</span>
-            ) : null}
+            {tail ? <Unit text={tail} t={o.t} s0={o.at(lastJ)} out={o.out} style={seg.ai ? { color: C.ink } : undefined} /> : null}
           </React.Fragment>
         );
       })}
@@ -262,162 +235,112 @@ const linesOf = (from: number, counts: readonly number[]) => {
   return counts.map((c) => Array.from({ length: c }, () => j++));
 };
 
+/** the greeting's setting: the knowledge heading's face (Japanese: TYPE_JP on top) */
+const greetFace = (v: boolean, size: number, cjk: boolean): React.CSSProperties => ({
+  ...typeStyle('display', v, { tone: 'paper', size, jp: cjk }),
+  ...(cjk ? { lineHeight: 1.22 } : { lineHeight: 1.04 }),
+  color: C.ink,
+});
+
 /* ── the faces ───────────────────────────────────────────────────── */
-/**
- * The focus face, laid out for the focus card (w × h); `lit` is the card's
- * light (0..1), `env` her loudness now.
- */
-export const LangFocusFace: React.FC<{ k: number; t: number; w: number; h: number; vertical: boolean; lit: number }> = ({ k, t, w, h, vertical: v, lit }) => {
+/** her orb + the language's name (a tracked label): the card's speaker line */
+const SpeakerRow: React.FC<{ k: number; t: number; v: boolean; D: number; lit: number; out?: number }> = ({ k, t, v, D, lit, out }) => {
+  const e = envAt(k, t) * lit;
+  const a = arriveAt(k);
+  // the orb lights as the card lands (a soft pop), then breathes with her voice; on `out` it shrinks away
+  const pop = aos(t, a - 2, { anticip: 0, depth: 0, config: { stiffness: 260, damping: 18, mass: 0.7 } });
+  const gone = out === undefined ? 0 : smooth(out, out + 3.5, t);
+  const os = (0.7 + 0.3 * Math.min(1.05, pop)) * (1 + 0.1 * e) * (1 - gone);
+  const lr = out === undefined ? null : reveal(t, -1e6, { ...WORD, exit: { at: out, dur: 3.2 } });
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: Math.round(D * 0.38) }}>
+      <div style={{ position: 'relative', width: D, height: D }}>
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: '50%',
+            transform: `scale(${os.toFixed(4)})`,
+            boxShadow: `0 ${(D * 0.14).toFixed(1)}px ${(D * 0.32).toFixed(1)}px -${(D * 0.12).toFixed(1)}px ${rgba(ORB_PALETTE[0], 0.45)}`,
+          }}
+        >
+          <MeshOrb size={D} palette={ORB_PALETTE} time={t / 30 + k * 2.3} />
+        </div>
+      </div>
+      <div style={{ ...typeStyle('label', v, { tone: 'paper' }), color: META, whiteSpace: 'nowrap' }}>
+        {lr ? (
+          <span style={maskBox(0)}>
+            <span style={revealStyle(lr)}>{LANGS[k].name}</span>
+          </span>
+        ) : (
+          LANGS[k].name
+        )}
+      </div>
+    </div>
+  );
+};
+
+/** The focus face, laid out for the focus card (w × h); `lit` is the card's light (0..1). */
+export const LangFocusFace: React.FC<{ k: number; t: number; w: number; h: number; vertical: boolean; lit: number; out?: number }> = ({
+  k,
+  t,
+  vertical: v,
+  lit,
+  out,
+}) => {
   const l = LANGS[k];
-  const light = langLight(k);
-  const o = LIGHTS[light].orb;
-  const pad = v ? 50 : 60;
-  const D = v ? 104 : 120;
-  const nameSize = v ? 32 : 36;
+  const pad = v ? 48 : 60;
+  const D = v ? 56 : 64;
   const size = l.size[v ? 1 : 0];
   const quick = isQuick(k);
-  // the AI underline as she says it (English, Japanese); the quick four are cut before their AI phrase,
-  // and show only what is heard
-  const ul = quick ? 0 : tween(t, k === 0 ? K.discloseEn : K.discloseJa, [0, 1], EASE.draw);
+  const ul = discloseOf(k, t);
+  const keyInk = discloseInk(k, t);
   const mainLines = linesOf(0, quick ? heardLines(k, v) : l.main[v ? 1 : 0]);
   // a disclosure set over two lines draws on, line by line (each line's share by its words)
   const aiN = l.ai[1] - l.ai[0] + 1;
   const aiIn = (js: number[]) => js.filter((j) => j >= l.ai[0] && j <= l.ai[1]).length;
-  const ulOf = (i: number) => {
+  const ruleOf = (i: number) => {
     const n = aiIn(mainLines[i]);
     const before = mainLines.slice(0, i).reduce((acc, js) => acc + aiIn(js), 0);
-    return n ? Math.min(1, Math.max(0, (ul * aiN - before) / n)) : 0;
+    const draw = n ? Math.min(1, Math.max(0, (ul * aiN - before) / n)) : 0;
+    // (on `out` the rule retracts as its words leave)
+    return out === undefined ? draw : draw * (1 - smooth(out, out + 2.5, t));
   };
-  // the orb: pops as the card lands, then breathes with her voice
-  const a = arriveAt(k);
-  const e = envAt(k, t);
-  const pop = dspring(t - a + 2, { stiffness: 520, damping: 15, mass: 0.6 });
-  const os = (0.55 + 0.45 * pop) * (1 + 0.2 * e * lit);
-  const oc = { x: pad + D / 2, y: pad + D / 2 };
-  const hit = flashAt(t, a, 10);
   return (
     <>
-      {/* the light of her voice: a bloom behind the orb, breathing with the envelope */}
-      <div
-        style={{
-          position: 'absolute',
-          left: oc.x - D * 1.7,
-          top: oc.y - D * 1.7,
-          width: D * 3.4,
-          height: D * 3.4,
-          background: bloom(light, Math.min(1, (0.22 + 0.6 * e + 0.5 * hit) * lit)),
-        }}
-      />
-      {lit > 0.01 ? <HitBurst t={t} at={a} cx={oc.x} cy={oc.y} r={D / 2} light={light} seed={`lang-${k}`} n={8} /> : null}
-      <div
-        style={{
-          position: 'absolute',
-          left: oc.x - D / 2,
-          top: oc.y - D / 2,
-          width: D,
-          height: D,
-          transform: `scale(${Math.max(0, os).toFixed(4)})`,
-          borderRadius: '50%',
-          boxShadow: `0 0 ${(D * (0.25 + 0.35 * e) * lit).toFixed(1)}px ${rgba(o[2], (0.25 + 0.4 * e) * lit)}, 0 ${(D * 0.12).toFixed(1)}px ${(D * 0.3).toFixed(1)}px -${(D * 0.1).toFixed(1)}px ${rgba(o[0], 0.3 * lit)}`,
-        }}
-      >
-        <MeshOrb size={D} palette={o} time={t / 30 + k * 2.3} />
-        {lit < 0.999 ? <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', ...discRest(), opacity: 1 - lit }} /> : null}
+      <div style={{ position: 'absolute', left: pad - 4, top: pad - 4 }}>
+        <SpeakerRow k={k} t={t} v={v} D={D} lit={lit} out={out} />
       </div>
-      <div
-        style={{
-          position: 'absolute',
-          left: pad + D + 26,
-          top: oc.y - nameSize * 0.56,
-          fontFamily: FONT.body,
-          fontWeight: 500,
-          fontSize: nameSize,
-          lineHeight: 1,
-          letterSpacing: TRACK.label,
-          textTransform: 'uppercase',
-          color: mixColor(C.muted, LIGHTS[light].ink, 0.35 * lit),
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {l.name}
-      </div>
-      <div
-        style={{
-          position: 'absolute',
-          left: pad,
-          right: pad,
-          bottom: pad - size * 0.1,
-          fontFamily: FONT.cinema,
-          fontWeight: 500,
-          fontSize: size,
-          lineHeight: 1.06,
-          letterSpacing: '-0.005em',
-        }}
-      >
+      <div style={{ position: 'absolute', left: pad, right: pad, bottom: pad - size * 0.2, ...greetFace(v, size, !!l.cjk) }}>
         {mainLines.map((js, i) => (
-          <GreetingLine
-            key={i}
-            js={js}
-            o={{
-              k,
-              t,
-              size,
-              color: C.ink,
-              underline: ulOf(i),
-              at: (j) => riseAt(k, j),
-              saying: quick ? (j) => sayingOf(k, j, t) : undefined,
-              // Japanese: its first word ("AI") rises with the card as one unit, so the card lands with it
-              span: (j) => (j === 0 ? 1 : undefined),
-              light,
-            }}
-          />
+          <GreetingLine key={i} js={js} o={{ k, t, size, rule: ruleOf(i), key: keyInk, at: (j) => riseAt(k, j), out: out === undefined ? undefined : out + 0.6 * i }} />
         ))}
       </div>
     </>
   );
 };
 
-/** The gallery face: the language's name and the words she said before the next one took over (no light). */
-export const LangGalleryFace: React.FC<{ k: number; vertical: boolean }> = ({ k, vertical: v }) => {
+/**
+ * The gallery face: the language's name and the words she said before the next one took over. It
+ * rises in (label, then each line, out of their masks) from `at`, once the focus face has gone — never
+ * two versions of the same words over each other.
+ */
+export const LangGalleryFace: React.FC<{ k: number; t: number; at: number; vertical: boolean }> = ({ k, t, at, vertical: v }) => {
   const l = LANGS[k];
-  const pad = v ? 20 : 22;
-  const dot = v ? 22 : 24;
-  const nameSize = v ? 28 : 30;
-  const size = v ? 42 : 46;
+  const pad = v ? 20 : 24;
+  const size = v ? 38 : 44;
   const lines = linesOf(0, l.gallery[v ? 1 : 0]);
+  const lr = reveal(t, at, WORD);
   return (
     <>
-      <div style={{ position: 'absolute', left: pad, top: pad, display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ width: dot, height: dot, borderRadius: '50%', ...discRest() }} />
-        <div
-          style={{
-            fontFamily: FONT.body,
-            fontWeight: 500,
-            fontSize: nameSize,
-            lineHeight: 1,
-            letterSpacing: TRACK.label,
-            textTransform: 'uppercase',
-            color: C.muted,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {l.name}
-        </div>
+      <div style={{ position: 'absolute', left: pad, top: pad - 2, ...typeStyle('label', v, { tone: 'paper' }), color: META }}>
+        <span style={maskBox(0)}>
+          <span style={revealStyle(lr)}>{l.name}</span>
+        </span>
       </div>
-      <div
-        style={{
-          position: 'absolute',
-          left: pad,
-          right: pad,
-          bottom: pad - size * 0.12,
-          fontFamily: FONT.cinema,
-          fontWeight: 500,
-          fontSize: size,
-          lineHeight: 1.04,
-        }}
-      >
+      <div style={{ position: 'absolute', left: pad, right: pad - 6, bottom: pad - size * 0.2, ...greetFace(v, l.cjk ? Math.round(size * TYPE_JP.scale) : size, !!l.cjk), letterSpacing: l.cjk ? TYPE_JP.tracking : '-0.02em' }}>
         {lines.map((js, i) => (
-          <GreetingLine key={i} js={js} o={{ k, t: 0, size, color: C.ink, underline: 0, at: () => undefined, light: langLight(k) }} />
+          <GreetingLine key={i} js={js} o={{ k, t, size, rule: 0, key: 0, at: (j) => at + 0.8 + 0.9 * i + 0.4 * (j - js[0]), thin: true }} />
         ))}
       </div>
     </>
@@ -430,32 +353,34 @@ const FLIP = { stiffness: 234, damping: 19.2, mass: 0.7 };
 function halfTurn(L0: number, tt: number) {
   if (tt < L0 - 2) return 0;
   if (tt < L0) return -8 * Math.sin(((tt - (L0 - 2)) / 2) * (Math.PI / 2));
-  return -8 + 188 * dspring(tt - L0 + 0.6, FLIP);
+  // (closed-form spring from rest at −8°: continuous in angle and velocity at L0, at any fractional frame)
+  return -8 + 188 * springUnit(tt - L0, FLIP);
 }
-const SLIDE_IN = { w: 0.5, z: 0.62, over: 16 };
-const TO_GALLERY = { w: 0.5, z: 0.66, over: 8, anticip: 2, back: 12 };
-const CARRY = { w: 0.55, z: 0.62, over: 12, anticip: 3, back: 18 };
+const SLIDE_IN = { w: 0.5, z: 0.7, over: 10 };
+const TO_GALLERY = { w: 0.5, z: 0.72, over: 6, anticip: 2, back: 10 };
+const CARRY = { w: 0.55, z: 0.7, over: 8, anticip: 3, back: 14 };
 
 const focusOf = (G: Geo, k: number) => (k === 0 ? G.langEn : G.lang);
 const dist = (a: Rect, b: Rect) => Math.hypot(centre(b).x - centre(a).x, centre(b).y - centre(a).y);
 
-type Pose = { r: Rect; rot: number; leave: number; drop: number; carry: number };
+type Pose = { r: Rect; rot: number; leave: number; drop: number; carry: number; moving: boolean };
 
 /** where card k is at tt (null: not on stage) */
 export function poseOf(G: Geo, k: number, tt: number): Pose | null {
   const F = focusOf(G, k);
   let r: Rect;
-  let rot = 0;
+  let moving = false;
   if (k === 0) {
     if (tt < K.glide - 4) return null;
     const g = aos(tt, K.glide, { anticip: 4, depth: 0.04, config: SPRING.site });
     r = mixRect(G.cards[G.keeper], F, g);
+    moving = Math.abs(1 - g) > 1e-4;
   } else {
     if (tt < K.switchIn[k]) return null;
-    const from: Rect = { ...F, x: G.W + 60, y: F.y + 24 };
+    const from: Rect = { ...F, x: G.W + 40, y: F.y };
     const p = slide(tt - K.switchIn[k], dist(from, F), SLIDE_IN);
     r = mixRect(from, F, p);
-    rot = 3.2 * (1 - p);
+    moving = Math.abs(1 - p) > 1e-4;
   }
   // recede into the gallery (Japanese: carried to the first station)
   let leave = 0;
@@ -463,75 +388,62 @@ export function poseOf(G: Geo, k: number, tt: number): Pose | null {
   if (k < CARRIER) {
     leave = slide(tt - K.switchOut[k], dist(F, G.gallery[k]), TO_GALLERY);
     r = mixRect(r, G.gallery[k], leave);
+    if (leave > 0 && Math.abs(1 - leave) > 1e-4) moving = true;
   } else {
     carry = slide(tt - K.carrierFly, dist(F, G.stations[0]), CARRY);
     r = mixRect(r, G.stations[0], carry);
+    if (carry !== 0 && Math.abs(1 - carry) > 1e-4) moving = true;
   }
-  // the gallery drops away for the flow
+  // the gallery drops away for the flow: a 3 f lift, then a fall (gravity) as it fades
   let drop = 0;
+  let rot = 0;
   if (k < CARRIER) {
     const s = K.collapse + (G.W < G.H ? (k >= 3 ? 0 : 1 + k) : Math.abs(k - 2)) * K.collapseStagger;
     const A = 3;
     const pre = tt < s - A ? 0 : tt < s ? Math.sin(((tt - (s - A)) / A) * (Math.PI / 2)) : Math.max(0, 1 - (tt - s) / 3);
     drop = tween(tt, [s, s + 12], [0, 1], EASE.in2);
     if (drop >= 1) return null;
-    r = { ...r, y: r.y - 10 * pre + drop * 520 };
-    rot += (k % 2 === 0 ? 1 : -1) * 4 * drop;
+    r = { ...r, y: r.y - 8 * pre + drop * 420 };
+    rot = (k % 2 === 0 ? 1 : -1) * 2 * drop;
+    if (pre > 0 || drop > 0) moving = true;
   }
-  return { r, rot, leave, drop, carry };
+  return { r, rot, leave, drop, carry, moving };
 }
 
 export const LangCards: React.FC<{
   t: number;
   G: Geo;
   vertical: boolean;
-  dim: number;
+  /** the hero's veil on the wall (0..1): the keeper wears it until it glides out */
+  veil: number;
   flowT: FlowTiming;
-  ind: { pad: number; iconSize: number; labelSize: number };
-}> = ({ t, G, vertical: v, dim, flowT, ind }) => {
+}> = ({ t, G, vertical: v, veil, flowT }) => {
   const order = Array.from({ length: N }, (_, k) => k);
   const cards = order.map((k) => {
     const P = poseOf(G, k, t);
     if (!P) return null;
     const F = focusOf(G, k);
     const { r } = P;
-    const id = `scale-lang-${k}`;
-    // motion blur along the card's own travel (centre + size)
-    const P0 = poseOf(G, k, t - 0.5);
-    const P1 = poseOf(G, k, t + 0.5);
-    let sx = 0;
-    let sy = 0;
-    if (P0 && P1) {
-      const c0 = centre(P0.r);
-      const c1 = centre(P1.r);
-      // a 180° shutter: half the frame's travel (the edges' travel when the card grows / shrinks)
-      sx = Math.min(16, 0.5 * (sigmaFor(c1.x - c0.x) + sigmaFor(P1.r.w - P0.r.w) * 0.5));
-      sy = Math.min(16, 0.5 * (sigmaFor(c1.y - c0.y) + sigmaFor(P1.r.h - P0.r.h) * 0.5));
-    }
-    const lit = litOf(k, t);
-    const light = langLight(k);
-    const body = bodyOf(light);
+    // the card's light (her orb): up as it lands, out as it recedes
+    const a = arriveAt(k);
+    const lit =
+      tween(t, [a - 3, a + 2], [0, 1], EASE.out3) *
+      (1 - (k === CARRIER ? tween(t, [K.carrierFly + 2, K.carrierFly + 10], [0, 1], EASE.inOut) : tween(t, [K.switchOut[k] + 1, K.switchOut[k] + 9], [0, 1], EASE.inOut)));
     let transform: string | undefined = Math.abs(P.rot) > 0.01 ? `rotate(${P.rot.toFixed(3)}deg)` : undefined;
-    let face: React.ReactNode;
-    let opacity = 1 - tween(P.drop, [0.35, 1], [0, 1], EASE.inOut);
-    let filter: string | undefined;
+    let face: React.ReactNode = null;
+    let opacity = 1 - tween(P.drop, [0.3, 1], [0, 1], EASE.inOut);
+    let shade = 0;
     let z = P.leave > 0.02 ? 2 : 3;
     // English: the keeper's industry face, until it turns
     if (k === 0) {
-      const a = halfTurn(K.enFlip, t);
+      const ang = halfTurn(K.enFlip, t);
       const axis = v ? 'X' : 'Y';
-      // the turn's shutter blur: the card's width collapses / opens fast mid-turn
-      const a0 = halfTurn(K.enFlip, t - 0.5);
-      const a1 = halfTurn(K.enFlip, t + 0.5);
-      const fs = Math.min(16, sigmaFor(Math.abs(Math.cos((a1 * Math.PI) / 180) - Math.cos((a0 * Math.PI) / 180)) * ((v ? r.h : r.w) / 2)));
-      if (v) sy = Math.max(sy, fs);
-      else sx = Math.max(sx, fs);
-      // the hero's dim lifts as it glides out of the wall
-      const g = tween(t, [K.glide, K.glide + 10], [0, 1], EASE.inOut);
-      opacity *= 1 - 0.42 * dim * (1 - g);
-      const blurPx = 3.5 * dim * (1 - g);
-      if (blurPx > 0.2) filter = `blur(${blurPx.toFixed(2)}px)`;
-      if (a < 90) {
+      // the hero's veil lifts as it glides out of the wall
+      const g = tween(t, [K.glide - 2, K.glide + 8], [0, 1], EASE.inOut);
+      opacity *= 1 - veil * (1 - g);
+      // the face turns from the light: it dims a touch edge-on (never a flat grey)
+      shade = Math.abs(Math.sin((ang * Math.PI) / 180)) * 0.55;
+      if (ang < 90) {
         const i = G.keeper;
         // the industry face grows with the card (it comes forward), until it turns
         const c0 = G.cards[i];
@@ -548,39 +460,26 @@ export const LangCards: React.FC<{
               transformOrigin: '0 0',
             }}
           >
-            <IndustryFace
-              d={INDUSTRIES[i]}
-              t={t}
-              at={K.pops[i]}
-              tick={K.pops[i]}
-              pad={ind.pad}
-              iconSize={ind.iconSize}
-              labelSize={ind.labelSize}
-              light={cardLight(i)}
-              lockAt={SCALE.industriesTitle}
-              lockLight={HERO_LIGHT}
-              still
-            />
+            <IndustryFace d={INDUSTRIES[i]} t={t} at={K.pops[i]} tick={K.pops[i]} light={cardLight(i)} vertical={v} still />
           </div>
         );
-        transform = a !== 0 ? `perspective(2400px) rotate${axis}(${a.toFixed(3)}deg)` : transform;
+        transform = ang !== 0 ? `perspective(2400px) rotate${axis}(${ang.toFixed(3)}deg)` : transform;
       } else {
-        const ra = a - 180;
+        const ra = ang - 180;
         transform = Math.abs(ra) > 0.01 ? `perspective(2400px) rotate${axis}(${ra.toFixed(3)}deg)` : transform;
       }
-      if (a >= 90) face = null; // set below
       if (t < K.glide + 6) z = 4;
     }
-    const ref = dirBlurRef(id, sx, sy);
-    filter = [ref, filter].filter(Boolean).join(' ') || undefined;
     if (!face) {
-      // the focus face, scaled with the card as it recedes; the gallery face takes over (a cross-fade:
-      // one of them is always up, so a leaving card is never empty)
+      // the focus face, scaled with the card as it recedes, goes in the first third of the move; then the
+      // gallery face rises in (its own masks) — a hand-over, never a cross-dissolve of the same words
       const sc = Math.min(r.w / F.w, r.h / F.h);
-      const go = tween(P.leave, [0.25, 0.65], [0, 1], EASE.inOut);
-      const fo = 1 - go;
-      const jaOut = k === CARRIER ? tween(t, [K.carrierFly - 1, K.carrierFly + 4], [0, 1], EASE.in2) : 0;
-      const callIn = k === CARRIER ? tween(t, [K.callIn - 2, K.callIn + 3], [0, 1], EASE.inOut) : 0;
+      const galAt = k < CARRIER ? K.switchOut[k] + 2.2 : Infinity;
+      const fo = k < CARRIER ? 1 - smooth(0, 0.28, P.leave) : 1;
+      // Japanese leaves up through its masks as the carrier takes off; THE CALL's face then rises in its own
+      // masks (StationFace, from callIn − .5): one face after the other, never a dissolve
+      const jaOut = k === CARRIER ? (t > K.carrierFly + 4.5 ? 1 : 0) : 0;
+      const callIn = k === CARRIER && t >= K.callIn - 1.5 ? 1 : 0;
       face = (
         <>
           {fo > 0.004 && jaOut < 1 ? (
@@ -593,57 +492,26 @@ export const LangCards: React.FC<{
                 height: F.h,
                 transform: sc < 0.9999 ? `scale(${sc.toFixed(5)})` : undefined,
                 transformOrigin: '0 0',
-                opacity: fo * (1 - jaOut),
+                opacity: fo < 0.999 ? fo : undefined,
               }}
             >
-              <LangFocusFace k={k} t={t} w={F.w} h={F.h} vertical={v} lit={lit} />
+              <LangFocusFace k={k} t={t} w={F.w} h={F.h} vertical={v} lit={lit} out={k === CARRIER ? K.carrierFly - 1 : undefined} />
             </div>
           ) : null}
-          {go > 0.004 ? (
-            <div style={{ position: 'absolute', inset: 0, opacity: go }}>
-              <LangGalleryFace k={k} vertical={v} />
-            </div>
-          ) : null}
-          {callIn > 0 ? (
-            <div style={{ position: 'absolute', inset: 0, opacity: callIn }}>
-              <StationFace i={0} t={t} T={flowT} vertical={v} />
-            </div>
-          ) : null}
+          {t > galAt - 1 ? <LangGalleryFace k={k} t={t} at={galAt} vertical={v} /> : null}
+          {callIn > 0 ? <StationFace i={0} t={t} T={flowT} vertical={v} /> : null}
         </>
       );
     }
-    // the hit: the card's stock flashes its light as it lands (k ≥ 1; English as it turns)
-    // the landing is LIGHT, not a flood of the stock: the 2 px rim flares and a sheen of the card's light
-    // sweeps it once (k ≥ 1 as it lands; English as its face turns to us)
-    const land = flashAt(t, arriveAt(k), 8);
-    const ringA = Math.min(0.95, 0.5 * lit + 0.45 * land * lit);
-    const ring = ringA > 0.01 ? rgba(body, ringA) : undefined;
-    const glow =
-      lit > 0.01
-        ? `0 0 0 1px ${rgba(body, 0.14 * lit)}, 0 30px 80px -34px ${rgba(body, 0.55 * lit)}, 0 0 60px -10px ${rgba(LIGHTS[light].orb[3], 0.5 * lit)}`
-        : undefined;
     if (k === CARRIER && t >= K.stations[0] - 3) z = 4;
+    // the shadow: a card in flight floats higher; a gallery card rests closer to the wall
+    const lift = P.moving ? 1.6 : P.leave > 0.5 ? 0.7 : 1;
+    const ind = IND(v);
+    const radius = P.leave > 0.5 ? 22 : k === 0 && t < K.enFlip + 2 ? ind.radius : v ? 28 : 32;
     return (
-      <React.Fragment key={`lang-${k}`}>
-        {ref ? <DirBlur id={id} sx={sx} sy={sy} /> : null}
-        <Box
-          r={r}
-          transform={transform}
-          opacity={opacity}
-          lift={P.leave > 0 && P.leave < 1 ? 0.4 : 0}
-          shadowAlpha={P.leave > 0.5 ? 0.75 : 1}
-          bg={C.white}
-          ring={ring}
-          glow={glow}
-          z={z}
-          filter={filter}
-        >
-          {face}
-          {P.leave < 0.05 ? <Sheen t={t} at={arriveAt(k) - 1} light={light} amount={0.9} /> : null}
-          {/* THE CALL lands on its station: the closing light's sheen */}
-          {k === CARRIER ? <Sheen t={t} at={K.stations[0] - 1} light={FLOW_LIGHT} amount={0.9} /> : null}
-        </Box>
-      </React.Fragment>
+      <Card key={`lang-${k}`} r={r} transform={transform} opacity={opacity} lift={lift} shade={shade} radius={radius} z={z} moving={P.moving}>
+        {face}
+      </Card>
     );
   });
   return <>{cards}</>;

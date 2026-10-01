@@ -524,9 +524,8 @@ const CALL_SIGN_OFF = (() => {
   return CALL.lines[4].at + Math.min(f, env.length);
 })();
 export const CALL_LOCAL = {
-  /** the swings: from at − 2 the orb anticipates (squash .95 + a 12 px counter-move away from where it is
-   *  going, the outgoing caption lifts 4 px); from at it travels A ↔ C on SPRING.pop (fastest at + 1…3,
-   *  ghosted / smeared), overshoots ≈ 4 % in size (peak at + 5) and is settled by at + 8 */
+  /** the turns (v7: the orb stays centred; it calms ~14 % smaller in place for the caller and back for
+   *  Ava on a soft spring from at − 2 — call/shots.ts calmAt — no swing, no whip, no smear) */
   swing: CALL_SWING,
   /** the swing's fastest frame (the whoosh's peak) */
   swingFast: CALL_SWING.map(([a]) => a + 3),
@@ -560,9 +559,9 @@ export const CALL_LOCAL = {
   rings: [-1, CALL.lines[0].at, CALL.lines[2].at + 5, CALL.lines[4].at + 5] as const,
   /** the speaker tag (AVA / CALLER) pops ON Ava's first word and on every cut (dot ring + letters) */
   tagPops: CALL.lines.map((l) => l.at),
-  /** the caller's phone line draws OUT of the orb's trailing edge as it arrives (a flare runs along it, the bars spring up) */
+  /** the caller's line (their real envelope) draws out from the centre under the calm orb */
   lineOpen: CALL.lines.filter((l) => l.who === 'caller').map((l) => l.at + 3),
-  /** …and retracts into the orb as it swings back to Ava (from the next swing's anticipation) */
+  /** …and is drawn back into the centre as Ava answers */
   lineClose: CALL.lines.flatMap((l, i) => (l.who === 'caller' && i + 1 < CALL.lines.length ? [CALL.lines[i + 1].at - 2] : [])),
   /** the AI-disclosure underline draws (a hot tip) as Ava says "an AI assistant"… */
   disclose: [CALL.lines[0].at + vWord('call-1', 9) - 2, CALL.lines[0].at + vWord('call-1', 12) - 4] as const,
@@ -570,7 +569,7 @@ export const CALL_LOCAL = {
   discloseLock: CALL.lines[0].at + vWord('call-1', 12) - 4,
   /** establishing → Ava's close-up, as she says "This is Ava" */
   pushIn: [CALL_S2 - 6, CALL_S2 + 14] as const,
-  /** CLOSED, then the digits, peel off sideways (each after a 3-f inward counter-move) */
+  /** CLOSED leaves up through its mask, then the digits fold back into the growing orb */
   peel: [CALL_S2 - 8, CALL_S2 - 6] as const,
   /** the slot chips: a seed 3 f before, the pop's overshoot PEAKS on the spoken "3 PM" / "4:30" (+ ring, glint, sparks) */
   chipPops: [CALL.lines[2].at + CALL.slotPops[0], CALL.lines[2].at + CALL.slotPops[1]] as const,
@@ -601,7 +600,7 @@ export const CALL_LOCAL = {
   orbDive: [CALL_LEN - 9, CALL_LEN - 3] as const,
   /** … which takes it: the mark flashes ember (a ring, a 2 % kick — exactly 1 again by markHide − 1) */
   markTake: CALL_LEN - 3,
-  /** everything else but the mark (and its glow) blows away towards the lens; the room stays */
+  /** (v7: nothing blows away — the room stays, only the orb dives; kept for the cue sheet's timing) */
   blowAway: [CALL_LEN - 9, CALL_LEN - 1] as const,
   /** the result scene draws the mark from here (= the call's end) */
   markHide: CALL_LEN,
@@ -1380,11 +1379,8 @@ export const HITS: Hit[] = [
   H('call', CALL_LOCAL.peel[1], 'swish', 'night', 0.5, 2, 'digits peel off ±700 px', { split: true }),
   H('call', CALL_LOCAL.disclose[0], 'draw', 'night', [0.3, 0.8], 3, 'AI-disclosure underline draws'),
   H('call', CALL_LOCAL.discloseLock, 'tick', 'night', 0.62, 2, 'underline locks'),
-  // shot ↔ reverse shot: every turn is a SWING (anticipation → whip → land); a soft whoosh peaks on its
-  // fastest frame, panned along the orb's travel (16:9: centre ↔ left)
-  ...CALL_LOCAL.swingFast.map((f, i) =>
-    H('call', f, 'whoosh-soft', 'night', CALL.lines[i + 1].who === 'caller' ? [0.5, 0.2] : [0.2, 0.5], 2, `SWING ${CALL.lines[i + 1].who === 'caller' ? 'to the caller' : 'back to Ava'}`),
-  ),
+  // (v7: no shot / reverse shot — the orb stays centred and only calms in place on each turn, so the
+  // turns carry no whoosh: the caller's line opening and the AVA label are their only cues)
   H('call', CALL_LOCAL.lineOpen[0], 'line', 'night', 0.64, 2, 'caller line draws out of the orb'),
   H('call', CALL_LOCAL.tagPops[2], 'tick', 'night', 0.5, 3, 'AVA tag pops (swing back)'),
   // the chips pop ON the spoken times: an octave down, under the speech band
@@ -1404,7 +1400,7 @@ export const HITS: Hit[] = [
   H('call', CALL_LOCAL.blowInhale[1], 'swell', 'night', 0.5, 3, 'the orb inhales'),
   // (w2: Ava's unaligned sign-off "See you then!" is spoken across it — PHRASES — so it steps back under
   // her; −3 dB more: its peak sits on "you", and the goodbye rides over the cut — VOICE_RIDES)
-  H('call', CALL_LOCAL.markTake - 1, 'whoosh', 'night', 0.5, 2, 'the orb dives into the mark (fastest frame); the room blows to the lens', { db: -3 }),
+  H('call', CALL_LOCAL.markTake - 1, 'whoosh', 'night', 0.5, 2, 'the orb dives into the mark (fastest frame)', { db: -3 }),
   H('call', CALL_LOCAL.markTake, 'gulp', 'none', 0.5, 2, 'the mark takes the orb (ember flash)', { semi: -3 }),
 
   /* ── RESULT ── */
@@ -1500,7 +1496,7 @@ export const HITS: Hit[] = [
   ...SCALE_LOCAL.groups.map((f, j) => H('scale', f, chime(SCALE_LOCAL.wallLights[j]), SCALE_LOCAL.wallLights[j], WALL_X[j * 4], 2, `LIGHT: ${SCALE_LOCAL.wallLights[j]} leads four cards`)),
   H('scale', SCALE.industriesTitle, 'riser-short', 'none', 0.5, 2, 'the 16ths build → peak ON the slam'),
   H('scale', SCALE.industriesTitle, 'slam', 'none', 0.5, 1, '“16 industries.” SLAMS'),
-  H('scale', SCALE.industriesTitle, 'strum', SCALE_LOCAL.heroLight, 0.5, 2, 'the sixteen discs lock in the night light'),
+  H('scale', SCALE.industriesTitle, 'strum', SCALE_LOCAL.heroLight, 0.5, 2, 'the wall steps back under its paper veil as the title lands'),
   H('scale', SCALE.industriesTitle, 'key', 'none', 0.5, 3, '13 letters stamp in', { run: { n: 13, step: 0.6 } }),
   // the hold breathes: two beats on, a slow glint crosses "16" (soft, under the groove)
   H('scale', SCALE_LOCAL.heroGlint + 4, 'sheen', SCALE_LOCAL.heroLight, [0.36, 0.46], 3, 'a glint crosses “16” mid-hold', { db: -4 }),
@@ -1534,15 +1530,15 @@ export const HITS: Hit[] = [
   H('scale', SCALE_LOCAL.stations[0], 'land', 'closing', 0.22, 1, 'THE CALL lands'),
   H('scale', SCALE_LOCAL.stations[0], 'click', 'closing', 0.22, 2, 'node 1 fills'),
   H('scale', SCALE_LOCAL.pill, 'pop', 'none', 0.27, 2, 'ember “Booked” pill', { semi: -7 }),
-  H('scale', SCALE_LOCAL.rails[0][0], 'sheen', 'closing', [0.22, 0.5], 3, 'bead runs call → Slack'),
+  H('scale', SCALE_LOCAL.rails[0][0], 'sheen', 'closing', [0.22, 0.5], 3, 'the accent line draws call → Slack'),
   H('scale', SCALE_LOCAL.cardsIn[1], 'land', 'closing', 0.5, 2, 'Slack card slams in'),
   H('scale', SCALE_LOCAL.stations[1], 'click', 'closing', 0.5, 1, 'Slack node'),
-  H('scale', SCALE_LOCAL.rails[1][0], 'sheen', 'closing', [0.5, 0.79], 3, 'bead runs Slack → CRM'),
+  H('scale', SCALE_LOCAL.rails[1][0], 'sheen', 'closing', [0.5, 0.79], 3, 'the accent line draws Slack → CRM'),
   H('scale', SCALE_LOCAL.cardsIn[2], 'land', 'closing', 0.79, 2, 'CRM card slams in'),
   H('scale', SCALE_LOCAL.ok, 'ding-s', 'closing', 0.79, 2, '“Contact saved ✓”'),
   H('scale', SCALE_LOCAL.stations[2], 'confirm', 'closing', 0.79, 1, 'CRM node settles in the closing light'),
   H('scale', SCALE_LOCAL.ping[0] + 4, 'ping', 'closing', 0.79, 3, 'wider ping ring'),
-  H('scale', SCALE_LOCAL.stream[0], 'sheen', 'closing', [0.22, 0.79], 3, 'light motes stream to the CRM'),
+  H('scale', SCALE_LOCAL.stream[0], 'sheen', 'closing', [0.22, 0.79], 3, 'light pulses run along the rail to the CRM'),
   H('scale', SCALE_LOCAL.stream[3] + SCALE_LOCAL.moteDur, 'ding-s', 'closing', 0.79, 2, 'the handoff spark', { semi: 5 }),
 
   /* ── CTA ── */
