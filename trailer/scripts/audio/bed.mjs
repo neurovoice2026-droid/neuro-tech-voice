@@ -625,17 +625,17 @@ export function bed(T) {
   const glued = compress(out, { thr: -20, ratio: 2, knee: 8, att: 0.01, rel: 0.2, rms: 0.01 });
   // THE INHALE: over the survivor's hold (the four lights are one, alone, before they burst) the whole
   // bed and its hall are drawn in, down 9 dB into the frame before the logo — the impact lands out of
-  // a breath (the riser and the chord's reverse swell keep climbing on the effects bus)
+  // a breath (the riser and the chord's reverse swell keep climbing on the effects bus). It is back at
+  // unity ON the hit (a 2 ms return just before it), so the crash's and the kick's attacks are untouched
   {
-    const a = sec(P.survivor);
-    const e = sec(P.impact);
-    const i0 = Math.round(a * SR);
-    const i1 = Math.round(e * SR);
+    const i0 = Math.round(sec(P.survivor) * SR);
+    const i1 = Math.round(sec(P.impact) * SR);
     const back = Math.round(0.002 * SR);
+    const dip = 1 - gain(-9);
+    const down = Math.max(1, i1 - back - i0);
     for (let c = 0; c < 2; c++) {
-      for (let i = i0; i < i1 + back && i < glued[c].length; i++) {
-        const dip = 1 - gain(-9);
-        const g = i < i1 ? 1 - dip * smooth(Math.min(1, (i - i0) / Math.max(1, i1 - i0 - 0.004 * SR))) : 1 - dip * (1 - (i - i1) / back);
+      for (let i = i0; i < i1 && i < glued[c].length; i++) {
+        const g = i < i1 - back ? 1 - dip * smooth((i - i0) / down) : 1 - dip * ((i1 - i) / back);
         glued[c][i] *= g;
       }
     }

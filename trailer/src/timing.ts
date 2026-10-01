@@ -1202,7 +1202,9 @@ export const SFX = {
   thump: S(3, 'low', 0, -20),
   land: S(2, 'low', 0, -16),
   breath: S(1, 'low', 0, -22),
-  sub: S(1, 'low', 0, -16),
+  // (a 2 s sub swell: when a voice starts over it — her first CTA words, 0.5 s after her eyes —
+  // it steps back on the tonal bus instead of inflating the line)
+  sub: S(1, 'low', 0, -16, { tonal: true }),
   buzz: S(1, 'low', -4, -20),
   // bells — the four light chimes and their family
   'chime-rush': S(2, 'bell', -3, -10, { delay: -17 }),
@@ -1837,8 +1839,8 @@ export const BED = {
   ride: [
     [SCENES.scale.from - 2, 0],
     [SCENES.scale.from + 1, 0.5],
-    [at('scale', SCALE.industriesTitle) - 1, 2],
-    [at('scale', SCALE.industriesTitle) + b(1), 2],
+    [at('scale', SCALE.industriesTitle) - 1, 1.5],
+    [at('scale', SCALE.industriesTitle) + b(1), 1.5],
     [at('scale', SCALE.langTitle) - 6, 1.5],
     [at('scale', SCALE.langTitle) + 3, 2],
     [at('scale', SCALE.flow) - 4, 2],
@@ -1846,9 +1848,9 @@ export const BED = {
     [at('scale', SCALE.irisToDark[0]), 3.5],
     [at('scale', SCALE.irisToDark[1]), 0],
     [at('cta', CTA_LOCAL.drift[0]), 0.5],
-    [at('cta', CTA.converge[0]), 3],
-    [at('cta', CTA_LOCAL.orbIn[1] - 4), 5.5],
-    [at('cta', CTA_LOCAL.survivor[0]), 5],
+    [at('cta', CTA.converge[0]), 3.5],
+    [at('cta', CTA_LOCAL.orbIn[1] - 4), 6],
+    [at('cta', CTA_LOCAL.survivor[0]), 5.5],
     [at('cta', CTA.logoImpact), 4],
     [at('cta', CTA.brandVoice) - 2, 2],
     [at('cta', CTA_LOCAL.note), 2.5],
@@ -1903,6 +1905,12 @@ export const MIX = {
    * of the line at an intelligibility (SII) of at least `sii`.
    */
   name: { voice: CTA.brandVoiceId, lookahead: 2, release: 2, tonalDb: -6, tailsDb: -4, sii: 0.9 },
+  /**
+   * THE ARC (check-mix): the converge's second into the logo (1 s loudness) tops every second of the
+   * scale act's music by `lead` LU — the film builds to its end, not to the 16-industries groove — and
+   * the end card's chord still rings `ringDb` dBFS RMS (or more) 10–5 frames before the last frame.
+   */
+  arc: { lead: 0.5, ringDb: -55 },
   dialogueLufs: -20,
   dialogueTol: 0.5,
   /** the dialogue bus's own true-peak ceiling (dBTP after the master gain) */

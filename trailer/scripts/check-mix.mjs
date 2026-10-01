@@ -10,7 +10,10 @@
  *     every phone-line caller keeps its presence (1.4–2.8 kHz ≥ -16 dB of the line's power)
  *   · THE CLIMAX: the momentary loudness (400 ms) from the logo impact beats the loudest dialogue
  *     moment of the master by MIX.impact.lead LU, and the 400 ms before the hit by MIX.impact.suck LU
- *   · THE END: the last 100 ms are below -55 dBFS RMS and the last frame below -60 dBFS
+ *   · THE END: the last 100 ms are below -55 dBFS RMS and the last frame below -60 dBFS — and the end
+ *     card's chord still rings 10–5 frames from the end (≥ MIX.arc.ringDb RMS: it fades WITH the picture)
+ *   · THE ARC peaks at the end: the converge's second into the logo (1 s loudness) beats every second of
+ *     the scale act's music (the wall, the hero's slam and hold, the after-call flow) by MIX.arc.lead LU
  *   · no word is masked: at every spoken word onset (200 ms), an SII-style intelligibility index
  *     (ANSI S3.5 octave-band importances; maskers = the effects stem incl. rooms + the ducked bed)
  *     must be ≥ 0.7 — a key hit designed to land on a word may dip to 0.55 (reported); every word
@@ -24,7 +27,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readWav, lufs, truePeak, peak, db, Biquad, SR } from './audio/dsp.mjs';
 import { buildHash } from './audio/hash.mjs';
-import { integrated, momentary, rmsDb } from './audio/loudness.mjs';
+import { blockPowers, integrated, momentary, rmsDb } from './audio/loudness.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -169,6 +172,23 @@ const end100 = rmsDb(mix, SR, dur - 0.1, dur);
 const endFrame = rmsDb(mix, SR, dur - 1 / T.FPS, dur);
 if (end100 > -55) fails.push(`the end is cut, not resolved: last 100 ms at ${end100.toFixed(1)} dBFS RMS (≤ -55)`);
 if (endFrame > -60) fails.push(`the last frame is at ${endFrame.toFixed(1)} dBFS RMS (≤ -60)`);
+const ARC = T.MIX.arc;
+const ring = rmsDb(mix, SR, (T.DURATION - 10) / T.FPS, (T.DURATION - 5) / T.FPS);
+if (ring < ARC.ringDb) fails.push(`the end: the chord has died before the picture — ${ring.toFixed(1)} dBFS RMS 10–5 frames from the end (≥ ${ARC.ringDb})`);
+
+/* ── the arc peaks at the end: the converge is the loudest second of music ── */
+const S1 = blockPowers(mix, SR, { win: 1, hop: 1 / T.FPS });
+const s1At = (f) => -0.691 + 10 * Math.log10(Math.max(1e-20, S1.p[Math.max(0, Math.min(S1.p.length - 1, Math.round(f)))]));
+const converge1 = s1At(IMP.at - T.FPS);
+const SCs = T.SCENES.scale.from;
+let scaleMax = { v: -Infinity, f: 0 };
+for (const [a, e] of [[SCs, SCs + T.SCALE.langTitle], [SCs + T.SCALE.flow, SCs + T.SCALE.irisToDark[0]]])
+  for (let f = a; f + T.FPS <= e; f++) {
+    const v = s1At(f);
+    if (v > scaleMax.v) scaleMax = { v, f };
+  }
+if (converge1 < scaleMax.v + ARC.lead)
+  fails.push(`arc: the converge into the logo is ${converge1.toFixed(1)} LUFS (1 s), the scale act's music ${scaleMax.v.toFixed(1)} (@${scaleMax.f}) — the build must top it by ${ARC.lead} LU`);
 
 /* ── intelligibility at every word: an SII-style index (ANSI S3.5 octave-band importances) ── */
 const OCT = [[180, 355, 0.0617], [355, 710, 0.1671], [710, 1400, 0.2373], [1400, 2800, 0.2648], [2800, 5600, 0.2142], [5600, 11000, 0.0549]];
@@ -314,7 +334,8 @@ const spread = (o) => { const v = Object.values(o); return v.length ? Math.max(.
 console.log(`dialogue      files ${LV.lufs} LUFS ± ${(spread(fileL) / 2).toFixed(2)} · stem ${Object.entries(stemL).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(' · ')} (spread ${spread(stemL).toFixed(1)} LU)`);
 if (Object.keys(presence).length) console.log(`presence      phone lines 1.4–2.8 kHz: ${Object.entries(presence).map(([k, v]) => `${k} ${v.toFixed(1)} dB`).join(' · ')}`);
 console.log(`climax        logo impact ${impM.toFixed(1)} LUFS-M · loudest dialogue ${dMax.lufs.toFixed(1)} (${dMax.id} @${dMax.f.toFixed(0)}) · lead ${fmt(impM - dMax.lufs)} LU · build before it ${suckM.toFixed(1)}`);
-console.log(`end           last 100 ms ${end100.toFixed(1)} dBFS RMS · last frame ${endFrame.toFixed(1)} dBFS`);
+console.log(`end           last 100 ms ${end100.toFixed(1)} dBFS RMS · last frame ${endFrame.toFixed(1)} dBFS · the chord 10–5 f from the end ${ring.toFixed(1)} dBFS RMS (≥ ${ARC.ringDb})`);
+console.log(`arc           converge (1 s into the logo) ${converge1.toFixed(1)} LUFS · scale act's music max ${scaleMax.v.toFixed(1)} (@${scaleMax.f}) · lead ${fmt(converge1 - scaleMax.v)} LU (≥ ${ARC.lead})`);
 console.log(`cues          ${T.CUES.length}: ${Object.entries(count).map(([k, v]) => `${k} ${v}`).join(' · ')}`);
 if (cascade.length) {
   const sii = (id, re) => scored.filter((r) => r.id === id && re.test(r.w)).map((r) => r.sii.toFixed(2)).join('/') || '—';
