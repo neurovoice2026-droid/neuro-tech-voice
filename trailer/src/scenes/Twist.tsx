@@ -29,6 +29,7 @@ import { ORB_RIM, PICKUP_GLOW, pickupGlow, pickupRimSpread } from '../lib/pickup
 import { useSceneFrame } from '../lib/scene';
 import { ORB } from '../theme';
 import { CALL_LOCAL, SCENES, TWIST } from '../timing';
+import { MidnightVignette } from './call/Light';
 import { orbBase } from './call/shots';
 import { BokehPlane, bokehPlanes } from './twist/Bokeh';
 import { Door } from './twist/Door';
@@ -183,6 +184,15 @@ export const Twist: React.FC = () => {
     swell: 1 + 0.03 * aos(t, TW.keyFocus[0], { anticip: 3, depth: 0.12, config: SPRING.site }),
     glint: gl >= 0 && gl <= 1 ? EASE.inOut(gl) : -1,
   };
+  /* ── the room's falloff: never a flat indigo field ──────────────────
+   * Until the screen overfills the frame, the phone's dark surroundings are
+   * the falloff; as they leave, the cover vignette hands over to the call's
+   * MidnightVignette (roomVignette), which the call holds from its roomIn.
+   * The call's grade (CALL_LOCAL.roomGrade, its own curve) is followed here
+   * too — the screen and the room are the same pixels at the hand-over. */
+  const fall = tween(t, TW.roomFalloff, [0, 1], EASE.inOut);
+  const callGrade = tween(t - TP, CALL_LOCAL.roomGrade, [0, 1], EASE.inOut);
+  const roomK = Math.max(TW.roomVignette * fall, callGrade);
   const textFade = 1 - tween(xText.f, [1.5, 3.2], [0, 1], EASE.in2);
   const textBlur = Math.max(0, (xText.f - 1) * 3);
   const dustFade = 1 - tween(xDust.f, [1.3, 2.6], [0, 1], EASE.in2);
@@ -246,7 +256,7 @@ export const Twist: React.FC = () => {
             transformOrigin: `${g.phone.cx}px ${g.phone.cy}px`,
           }}
         >
-          <Phone t={t} g={g} L={L} f={xMid.f} />
+          <Phone t={t} g={g} L={L} f={xMid.f} grade={callGrade} />
         </div>
       </LayerX>
 
@@ -368,7 +378,9 @@ export const Twist: React.FC = () => {
         </LayerX>
       ) : null}
 
-      <Vignette strength={bgIn * (1 - 0.6 * dive)} />
+      {/* the cover's falloff while the phone sits in the night, then the call's midnight falloff */}
+      <Vignette strength={bgIn * (1 - 0.6 * dive) * (1 - fall)} />
+      <MidnightVignette k={roomK} />
     </AbsoluteFill>
   );
 };

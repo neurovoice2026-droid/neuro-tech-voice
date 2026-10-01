@@ -443,6 +443,13 @@ export const TWIST_LOCAL = {
   ring3: [b(7), b(7) + 8] as const,
   /** two bokeh planes over the screen (0.5× / 1.5× the dive's zoom) */
   bokeh: [TWIST.pushToPhone[0] + 10, TWIST.pushToPhone[1] + 12] as const,
+  /** the screen overfills the frame (both orientations by ≈ pushToPhone[0] + 22): as the phone's dark
+   *  surroundings leave the frame, the frame's falloff is handed to the call's MidnightVignette — the
+   *  dive never lands on a flat indigo field (atmosphere, no cue) */
+  roomFalloff: [TWIST.pushToPhone[0] + 12, TWIST.pushToPhone[0] + 22] as const,
+  /** …at this k, held into the pickup. The call draws the SAME floor from its roomIn
+   *  (MidnightVignette k = max(roomVignette · roomOp, grade)), so the hand-over stays exact */
+  roomVignette: 0.6,
 };
 
 /* ── CALL — fine cuts (call-local frames) ──────────────────────── */
@@ -715,9 +722,10 @@ export const CTA_LOCAL = {
   iris: [CTA_IRIS_START, CTA_IRIS_END] as const,
   /** the eyes come out of black first (frames) */
   eyes: [0, 7] as const,
-  /** radial reveal from the eyes: it blooms from 4 f before the iris is fully open and
-   *  decelerates into the figure (its lit AREA grows evenly: no dead hold, no slam) (4 → 24) */
-  reveal: [CTA_IRIS_END - 4, CTA.robotIn[1] - 6] as const,
+  /** radial reveal from the eyes: it blooms as soon as the iris has swallowed the white
+   *  (5 f before it completes) and decelerates into the figure — its light rises evenly
+   *  (Cta.tsx revealAt): no dead hold, no slam (3 → 24) */
+  reveal: [CTA_IRIS_END - 5, CTA.robotIn[1] - 6] as const,
   /** the site's liquid entry tear settles onto the figure (frames 0 → 24; liquid 0 → 18) */
   entryTear: [0, 24] as const,
   liquid: [0, 18] as const,

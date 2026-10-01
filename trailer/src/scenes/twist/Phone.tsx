@@ -11,6 +11,7 @@ import type { Layout } from '../../lib/layout';
 import { EASE, SPRING, aos, breathe, tween } from '../../lib/motion';
 import { C, FONT, NIGHT_ROOM, TRACK } from '../../theme';
 import { TWIST } from '../../timing';
+import { MIDNIGHT_ROOM } from '../call/Light';
 import { avatarOnPhone, TW, type Geo } from './geometry';
 
 const LILAC = '185,163,255';
@@ -57,7 +58,9 @@ const Stagger: React.FC<{ text: string; t: number; start: number; out: number; s
   </div>
 );
 
-export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number }> = ({ t, g, L, f }) => {
+/** `grade`: the call's roomGrade (0 through the twist unless the call starts its grade early) —
+ *  the screen's night room grades into the midnight exactly as the call's RoomBox does. */
+export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number; grade?: number }> = ({ t, g, L, f, grade = 0 }) => {
   const { w, h } = g.phone;
   const sw = g.screen.w;
   const sh = g.screen.h;
@@ -157,6 +160,9 @@ export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number }> = ({ t
               clipPath: s.open < 1 ? `inset(${clipTop.toFixed(2)}px 0 ${clipTop.toFixed(2)}px 0)` : undefined,
             }}
           >
+            {grade > 0.001 ? (
+              <div style={{ position: 'absolute', inset: 0, background: MIDNIGHT_ROOM, opacity: Math.min(1, grade) }} />
+            ) : null}
             {s.flash > 0.01 ? (
               <div
                 style={{
