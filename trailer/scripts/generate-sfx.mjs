@@ -17,13 +17,14 @@
  * or by hand: `npm run sfx` (add --force to rebuild).
  */
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SR, fades, normalise, writeWav, writeAtomic, peak, db, readWav } from './audio/dsp.mjs';
 import { library, peakTime } from './audio/sounds.mjs';
 import { bed } from './audio/bed.mjs';
 import { master } from './audio/mix.mjs';
+import { buildHash } from './audio/hash.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -38,24 +39,7 @@ const t0 = Date.now();
 const T = await import(path.join(ROOT, 'src', 'timing.ts'));
 
 /* ── skip when nothing that shapes the sound has changed ── */
-const hash = (() => {
-  const h = createHash('sha256');
-  const files = [
-    path.join(ROOT, 'src', 'timing.ts'),
-    path.join(ROOT, 'src', 'voice.generated.ts'),
-    path.join(HERE, 'generate-sfx.mjs'),
-    ...readdirSync(path.join(HERE, 'audio')).map((f) => path.join(HERE, 'audio', f)),
-  ];
-  for (const f of files) h.update(readFileSync(f));
-  // the timeline as evaluated (timing.ts imports the voices) and the voice audio itself
-  h.update(JSON.stringify({ C: T.CUES, V: T.VOICES, S: T.SCENES, D: T.DURATION }));
-  for (const v of T.VOICES) {
-    const p = path.join(PUBLIC, 'voice', `${v.id}.wav`);
-    const s = statSync(p);
-    h.update(`${v.id}:${s.size}:${s.mtimeMs}`);
-  }
-  return h.digest('hex').slice(0, 16);
-})();
+const hash = buildHash(T, ROOT);
 const stamp = path.join(OUT, 'mix.json');
 if (!force && existsSync(stamp) && existsSync(path.join(OUT, 'mix.wav'))) {
   try {
@@ -92,7 +76,7 @@ const loadSt = (f) => {
 
 /* ── the library ── */
 const libKey = keyOf(['sounds.mjs', 'dsp.mjs'], {
-  SFX: T.SFX, notes: T.LIGHT_NOTES, disclose: T.CALL_LOCAL.disclose, ring: [T.HOOK.ring, T.HOOK_LOCAL.ringB], buzz: T.TWIST_LOCAL.buzz, fps: T.FPS,
+  SFX: Object.fromEntries(Object.entries(T.SFX).map(([k, d]) => [k, [d.n, d.pk]])), notes: T.LIGHT_NOTES, disclose: T.CALL_LOCAL.disclose, ring: [T.HOOK.ring, T.HOOK_LOCAL.ringB], buzz: T.TWIST_LOCAL.buzz, fps: T.FPS,
 });
 const libFiles = Object.entries(T.SFX).flatMap(([name, def]) =>
   Array.from({ length: def.n }, (_, k) => `sfx/${def.n > 1 ? `${name}-${k}` : name}.wav`),

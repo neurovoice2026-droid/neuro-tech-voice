@@ -2,7 +2,7 @@
 /**
  * Mix QA (npm run check:audio). Proves the master before a long render:
  *
- *   · public/sfx/mix.wav is current (its build hash matches the timeline + voices) and as long as the film
+ *   · public/sfx/mix.wav is current (its build hash matches the timeline, voices and sound code) and as long as the film
  *   · integrated loudness within MIX.lufs ± 1 LU, true peak ≤ -1.0 dBTP (4× oversampled), no clipping
  *   · every effect file peaks at ≤ -12 dBFS, the bed at ≤ -20 dBFS
  *   · no word is masked: at every spoken word onset (200 ms), an SII-style intelligibility index
@@ -15,7 +15,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readWav, lufs, truePeak, peak, db, Biquad, SR, gain } from './audio/dsp.mjs';
+import { readWav, lufs, truePeak, peak, db, Biquad, SR } from './audio/dsp.mjs';
+import { buildHash } from './audio/hash.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -44,6 +45,7 @@ const mix = st(path.join(PUBLIC, T.MIX.file));
 const wantN = Math.round((T.DURATION / T.FPS) * SR);
 if (mix[0].length !== wantN) fails.push(`mix.wav is ${mix[0].length} samples, the film needs ${wantN} — stale: run \`npm run sfx\``);
 if (stamp.frames !== T.DURATION) fails.push(`mix.wav was built for ${stamp.frames} frames, the film is ${T.DURATION}`);
+if (stamp.hash !== buildHash(T, ROOT)) fails.push('mix.wav is stale (the timeline, the voices or the sound code changed since it was built) — run `npm run sfx`');
 
 /* ── loudness / peaks ── */
 const L = lufs(mix);

@@ -11,6 +11,7 @@
     "render:vertical": "remotion render Trailer-9x16 out/neurotechvoice-trailer-9x16.mp4",
     "render": "npm run render:landscape && npm run render:vertical",
     "typecheck": "tsc --noEmit",
+    "sfx:force": "node --experimental-strip-types --no-warnings scripts/generate-sfx.mjs --force",
     "check:audio": "node --experimental-strip-types --no-warnings scripts/check-mix.mjs",
     "voice": "node scripts/generate-voice.mjs"
   },

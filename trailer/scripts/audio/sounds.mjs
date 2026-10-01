@@ -14,7 +14,7 @@
  */
 import {
   SR, TAU, N, mono, stereo, dup, addMono, addStereo, scale, osc, white, pink, env, ad, mode, filt,
-  filtSt, sweep, noise, spread, fdn, reverse, trimTail, mtof, semis, smooth, rng, clamp, Saw, width, gain,
+  filtSt, sweep, noise, spread, fdn, reverse, trimTail, mtof, semis, smooth, rng, clamp, Saw, width, gain, balance,
 } from './dsp.mjs';
 
 const tanh = Math.tanh;
@@ -100,7 +100,7 @@ function bellVoice(sec, f0, { bright = 1, decay = 1, strike = 1, glass = 1, seed
  */
 function airSweep(seed, {
   peak, tailTau = 0.12, len, f0 = 400, f1 = 3000, f2 = 900, q = 1, rise = 2.2,
-  air = 0.35, whistle = 0.1, low = 0, lowF = [140, 70], color = 'pink', wid = 0.85,
+  air = 0.35, whistle = 0.1, low = 0, lowF = [140, 70], color = 'pink', wid = 0.85, drift = 0,
 }) {
   const sec = len ?? peak + tailTau * 6;
   const a = (t) => (t < peak ? Math.pow(smooth(t / peak), rise) : Math.exp(-(t - peak) / tailTau));
@@ -124,11 +124,14 @@ function airSweep(seed, {
     addMono(st, w, 0, whistle * 1.4, 0);
   }
   if (low > 0) {
-    const lf = (t) => (t < peak ? lowF[0] : lowF[1] + (lowF[0] - lowF[1]) * Math.exp(-(t - peak) / 0.05));
+    // Doppler: the low tone rises a little into the pass, then bends down through it
+    const lf = (t) =>
+      t < peak ? lowF[0] * (0.88 + 0.12 * smooth(t / peak)) : lowF[1] + (lowF[0] - lowF[1]) * Math.exp(-(t - peak) / 0.09);
     addMono(st, osc(sec, lf, a), 0, low, 0);
     addMono(st, env(sweep(pink(sec, seed + 6), 'lp', 160, 0.8), a), 0, low * 1.6, 0);
   }
-  return st;
+  // stereo motion: the sound travels across `drift` (−drift → +drift) through its pass
+  return drift ? balance(st, [-drift, drift], peak + tailTau * 2) : st;
 }
 
 /** A sub thump with a pitch drop, a felt knock and a click. */
@@ -287,16 +290,16 @@ export function library(T) {
   each('swish', (k) =>
     airSweep(1900 + k * 7, {
       peak: pk('swish'), tailTau: 0.06, f0: [900, 800, 1000, 850][k], f1: [3600, 3300, 3900, 3000][k], f2: [1800, 1600, 2000, 1500][k],
-      q: [1.2, 1.0, 1.4, 1.1][k], rise: 2, air: 0.35, whistle: 0.08,
+      q: [1.2, 1.0, 1.4, 1.1][k], rise: 2, air: 0.35, whistle: 0.08, drift: [0.25, -0.25, 0.2, -0.2][k],
     }),
   );
   each('whoosh-soft', (k) =>
-    airSweep(2000 + k * 7, { peak: pk('whoosh-soft'), tailTau: 0.09, f0: [700, 600][k], f1: [2600, 2300][k], f2: [1300, 1100][k], q: 1.3, rise: 2, air: 0.25, whistle: 0.06 }),
+    airSweep(2000 + k * 7, { peak: pk('whoosh-soft'), tailTau: 0.09, f0: [700, 600][k], f1: [2600, 2300][k], f2: [1300, 1100][k], q: 1.3, rise: 2, air: 0.25, whistle: 0.06, drift: [0.3, -0.3][k] }),
   );
   each('whoosh', (k) =>
     airSweep(2100 + k * 7, {
       peak: pk('whoosh'), tailTau: 0.11, f0: [260, 300, 240][k], f1: [4200, 3600, 4600][k], f2: [700, 600, 800][k], q: 0.9, rise: 2.4,
-      air: 0.4, whistle: 0.12, low: 0.32, lowF: [[130, 62], [120, 58], [140, 66]][k],
+      air: 0.4, whistle: 0.12, low: 0.32, lowF: [[130, 62], [120, 58], [140, 66]][k], drift: [0.35, -0.35, 0.3][k],
     }),
   );
   {

@@ -442,6 +442,14 @@ export function bed(T) {
       if (t > fadeA) glued[c][i] *= t > fadeB ? 0 : Math.pow(1 - (t - fadeA) / (fadeB - fadeA), 1.5);
     }
   }
-  const lim = limit(glued, { ceilingDb: -0.5, look: 0.003, rel: 0.12 });
+  // density: drive the bus limiter ~4 dB into its transients (kicks, crashes), so the bed carries
+  // at its −20 dBFS peak instead of spending the headroom on a few hits
+  {
+    let p = 0;
+    for (const c of glued) for (let i = 0; i < c.length; i++) p = Math.max(p, Math.abs(c[i]));
+    const k = p > 0 ? Math.pow(10, 3.5 / 20) / p : 1;
+    for (const c of glued) for (let i = 0; i < c.length; i++) c[i] *= k;
+  }
+  const lim = limit(glued, { ceilingDb: -0.5, look: 0.004, rel: 0.09, relSlow: 0.3 });
   return { st: [lim[0], lim[1]], points: P, segments: seg };
 }

@@ -1228,6 +1228,8 @@ export type Cue = {
   send: number;
   delay?: number;
   key: boolean;
+  /** the hit lands while someone is speaking */
+  speech: boolean;
   /** the picture's hit this cue answers, and what it is */
   hit: number;
   label: string;
@@ -1255,9 +1257,11 @@ export const speaking = (f: number, before = 3, after = 5) => PHRASES.some(([a, 
  * (followed with a `lookahead`-second look-ahead, so first consonants are already clear)
  * the bed loses `eqDb` and the effects `sfxEqDb` in the speech band (≈1–5 kHz), the
  * effects' room + delay returns (their tails) drop `tailsDb`, and the sustained tonal
- * effects (bells, sparkles — they ring across words) drop `tonalDb` broadband.
+ * effects (bells, sparkles — they ring across words) drop `tonalDb` broadband
+ * (`keyTonalDb` for key hits that land ON speech, e.g. the four CTA light chimes under
+ * Ava's line; a key bell struck before a line — the logo chord — steps back the full `tonalDb`).
  */
-export const DUCK = { bedDb: -6, eqDb: -6, sfxEqDb: -8, tailsDb: -6, tonalDb: -10, lookahead: 0.04, ramp: 6, release: 12 } as const;
+export const DUCK = { bedDb: -5, eqDb: -6, sfxEqDb: -8, tailsDb: -6, tonalDb: -10, keyTonalDb: -5, lookahead: 0.04, ramp: 6, release: 12 } as const;
 
 /* ── the cue builder ── */
 const W_DB: Record<Weight, number> = { 1: 0, 2: -4, 3: -9 };
@@ -1326,6 +1330,7 @@ function buildCues(hits: Hit[]): Cue[] {
           send: def.send,
           delay: def.delay,
           key,
+          speech: talk,
           hit,
           label: h.label + (run.n > 1 ? ` [${j + 1}/${run.n}]` : ''),
         });

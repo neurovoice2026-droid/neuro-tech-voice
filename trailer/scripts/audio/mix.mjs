@@ -113,6 +113,7 @@ export function master(T, lib, bedSt, { publicDir }) {
   /* ── effects ── */
   const dry = stereo(n / SR + 0.001);
   const tonal = stereo(n / SR + 0.001);
+  const keyTonal = stereo(n / SR + 0.001);
   const send = { night: stereo(n / SR + 0.001), white: stereo(n / SR + 0.001) };
   const dly = stereo(n / SR + 0.001);
   const missing = new Set();
@@ -151,7 +152,7 @@ export function master(T, lib, bedSt, { publicDir }) {
         }
       }
     };
-    put(c.group === 'bell' || c.group === 'spark' ? tonal : dry, c.vol);
+    put(c.group === 'bell' || c.group === 'spark' ? (c.key && c.speech ? keyTonal : tonal) : dry, c.vol);
     put(send[c.room], c.vol * gain(c.send));
     if (c.delay !== undefined) put(dly, c.vol * gain(c.delay));
   }
@@ -169,7 +170,10 @@ export function master(T, lib, bedSt, { publicDir }) {
   {
     const dT = 1 - gain(T.DUCK.tailsDb);
     const dB = 1 - gain(T.DUCK.tonalDb);
-    for (let c = 0; c < 2; c++) for (let i = 0; i < n; i++) sfx[c][i] += tails[c][i] * (1 - dT * act[i]) + tonal[c][i] * (1 - dB * act[i]);
+    const dK = 1 - gain(T.DUCK.keyTonalDb);
+    for (let c = 0; c < 2; c++) {
+      for (let i = 0; i < n; i++) sfx[c][i] += tails[c][i] * (1 - dT * act[i]) + tonal[c][i] * (1 - dB * act[i]) + keyTonal[c][i] * (1 - dK * act[i]);
+    }
   }
   const fx = dynamicEq([sfx[0].subarray(0, n), sfx[1].subarray(0, n)], act, T.DUCK.sfxEqDb, 2400, 0.6);
 
