@@ -75,6 +75,9 @@ function markMetrics(G: Geo): MarkMetrics {
   const B = BOOKING;
   const a = (s: string) => measure(s, mf).w;
   const c = (s: string) => measure(s, D).w;
+  // the row's "·" has sepAir em of extra air either side (CardFace)
+  const airM = G.cardType.sepAir * mf.size;
+  const airC = G.cardType.sepAir * D.size;
   return {
     m: {
       W: a(B.mark),
@@ -82,16 +85,21 @@ function markMetrics(G: Geo): MarkMetrics {
       num: a(B.time),
       numX: a(`${B.day} ${B.at} `),
       // the card's row, set in the mark's own face: what the mark closes up into as " at" folds out
-      row: { W: a(B.date), sep: a(B.sep), sepX: a(`${B.day} `), numX: a(`${B.day} ${B.sep} `) },
+      row: {
+        W: a(B.date) + 2 * airM,
+        sep: a(B.sep),
+        sepX: a(`${B.day} `) + airM,
+        numX: a(`${B.day} ${B.sep} `) + 2 * airM,
+      },
       capOff: measure('H', mf).capOff,
       box: mf.lh * mf.size,
     },
     c: {
       wed: c(B.day),
       sep: c(B.sep),
-      sepX: c(`${B.day} `),
+      sepX: c(`${B.day} `) + airC,
       num: c(B.time),
-      numX: c(`${B.day} ${B.sep} `),
+      numX: c(`${B.day} ${B.sep} `) + 2 * airC,
       capOff: measure('H', D).capOff,
     },
   };

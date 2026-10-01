@@ -96,7 +96,7 @@ export const CardFace: React.FC<{
             opacity: row,
           }}
         >
-          {BOOKING.date}
+          {BOOKING.day} <span style={{ margin: `0 ${ct.sepAir}em` }}>{BOOKING.sep}</span> {BOOKING.time}
         </div>
       ) : null}
     </div>

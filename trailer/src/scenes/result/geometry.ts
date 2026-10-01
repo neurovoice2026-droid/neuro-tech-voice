@@ -68,6 +68,8 @@ export type CardType = {
   dot: number;
   gap: number;
   date: FontSpec;
+  /** extra air either side of the row's "·" (em of the date size): Instrument Sans sets it tight */
+  sepAir: number;
 };
 
 export function geo(L: Layout) {
@@ -168,6 +170,7 @@ export function geo(L: Layout) {
     dot: 14,
     gap: 14,
     date: { family: FONT.ui, weight: 520, size: dateSize, track: -0.01, lh: 1.05 },
+    sepAir: 0.1,
   };
 
   return {

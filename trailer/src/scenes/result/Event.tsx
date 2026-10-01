@@ -21,14 +21,22 @@ export const EVENT_FONT = (size: number): FontSpec => ({ family: FONT.mono, weig
 /** the dot and the gap after it, in em of the time's size */
 const DOT_EM = 0.2;
 const GAP_EM = 0.26;
+/** "3:00 PM": the figures carry the face; the meridiem is set smaller on their baseline (display
+ *  time, as on a clock face), MER of their size, MER_GAP em after them */
+const [CLOCK, MERIDIEM] = BOOKING.event.split(' ');
+const MER = 0.66;
+const MER_GAP = 0.16;
 /** the face ("• 3:00 PM") never spans more than this share of the event's width */
 const FACE_FILL = 0.8;
+
+/** The face's width in em of its size (measured: dot + gap + figures + meridiem). */
+const faceEm = () =>
+  DOT_EM + GAP_EM + measure(CLOCK, EVENT_FONT(100)).w / 100 + MER_GAP + measure(MERIDIEM, EVENT_FONT(100 * MER)).w / 100;
 
 /** The face's size in a `boxW`-wide event: its design size, or less if "• 3:00 PM" (measured) would
  *  span more than FACE_FILL of the box. Same units in, same units out. */
 export function fitFace(design: number, boxW: number): number {
-  const em = DOT_EM + GAP_EM + measure(BOOKING.event, EVENT_FONT(100)).w / 100;
-  return Math.min(design, (FACE_FILL * boxW) / em);
+  return Math.min(design, (FACE_FILL * boxW) / faceEm());
 }
 
 export const hexA = (hex: string, a: number) => {
@@ -90,7 +98,8 @@ export const EventFace: React.FC<{
           whiteSpace: 'nowrap',
         }}
       >
-        {BOOKING.event}
+        {CLOCK}
+        <span style={{ fontSize: size * MER, marginLeft: size * MER_GAP, letterSpacing: `${f.track}em` }}>{MERIDIEM}</span>
       </div>
     </div>
   );
