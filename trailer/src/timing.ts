@@ -1166,6 +1166,9 @@ type SfxDef = {
   tune?: boolean;
   /** inside a merge, the bigger sound wins a tie */
   rank?: number;
+  /** a sustained TONE outside the bell / sparkle families: it rides the tonal bus too, so it steps
+   *  back under a voice that starts while it rings (DUCK.tonalDb) */
+  tonal?: boolean;
 };
 const S = (n: number, group: Group, trim: number, send: number, o: Partial<SfxDef> = {}): SfxDef => ({ n, pk: 0, group, trim, send, ...o });
 export const SFX = {
@@ -1217,7 +1220,8 @@ export const SFX = {
   'ding-s': S(2, 'bell', -3, -10, { tune: true, delay: -18 }),
   confirm: S(1, 'bell', -2, -10, { delay: -18, rank: 2 }),
   // signatures (never merged)
-  drain: S(1, 'sig', -2, -12),
+  // (THE MISS: its bent B5 rings ≈ 1 s — it ducks under Ava's "Hmm," that follows it)
+  drain: S(1, 'sig', -2, -12, { tonal: true }),
   freeze: S(1, 'sig', -2, -12, { delay: -20 }),
   'ring-hook': S(1, 'sig', -2, -12, { pk: PK.ring }),
   'ring-twist': S(1, 'sig', -2, -12, { pk: PK.ring }),
@@ -1453,9 +1457,10 @@ export const HITS: Hit[] = [
   H('knowledge', KL.missFlip, 'flip', 'none', 0.85, 2, 'pill: “Not in the documents”'),
   H('knowledge', KL.shake[0], 'tap', 'none', 0.85, 3, 'the pill shakes “no”', { run: { n: 2, step: 4 } }),
   H('knowledge', KL.peekCollapse[0] + 2, 'swish', 'none', [0.86, 0.76], 3, 'the slot’s reading lines fold away'),
-  // (the pop and the slot's "no" sit just before / under Ava's thinking "Hmm," — her sound, captioned,
-  // ridden down to her speaking level in VOICE_RIDES — so they step back for it: −3 dB)
-  H('knowledge', KL.zeroPop, 'pop', 'none', 0.8, 2, '“0 matches” pops into the slot', { semi: -7, db: -3 }),
+  H('knowledge', KL.zeroPop, 'pop', 'none', 0.8, 2, '“0 matches” pops into the slot', { semi: -7 }),
+  // (the slot's "no" taps sit under Ava's thinking "Hmm," — her sound, captioned, ridden down to her
+  // speaking level in VOICE_RIDES — so they step back for it: −3 dB; the miss's drain ducks under it
+  // on the tonal bus, SFX.drain)
   H('knowledge', KL.zeroShake[0], 'tap', 'none', 0.8, 3, 'the slot shakes “no”', { run: { n: 2, step: 4 }, db: -3 }),
   H('knowledge', KL.relight[0], chime('sunday', true), 'sunday', 0.5, 2, 'LIGHT: sunday floods back (Ava’s first word)'),
   H('knowledge', KL.relight[0] + 2, 'thump', 'sunday', 0.5, 3, 'relight kick'),
@@ -1594,6 +1599,8 @@ export type Cue = {
   room: 'night' | 'white';
   /** the family's group: bells and sparkles ride their own bus, which steps back under the voice */
   group: Group;
+  /** rides the tonal bus (bells, sparkles, and the sustained tones marked `tonal`) */
+  tonal: boolean;
   /** room send / tempo-delay send (dB) */
   send: number;
   delay?: number;
@@ -1782,7 +1789,7 @@ function buildCues(hits: Hit[]): Cue[] {
         const key = h.w === 1;
         const talk = speaking(hit);
         // under speech: non-key hits −5 dB; sustained tonal sounds (bells, sparkles) a little more, keys included
-        const tonal = def.group === 'bell' || def.group === 'spark';
+        const tonal = def.group === 'bell' || def.group === 'spark' || !!def.tonal;
         const dB =
           W_DB[h.w] + def.trim + (h.db ?? 0) + (talk && !key ? SPEECH_DB : 0) + (talk && tonal ? -3 : 0) + (h.split ? -3 : 0) -
           (run.xs ? 0 : j * (run.n > 3 ? 0.25 : 0.8));
@@ -1797,6 +1804,7 @@ function buildCues(hits: Hit[]): Cue[] {
           rate,
           room,
           group: def.group,
+          tonal,
           send: def.send,
           delay: def.delay,
           key,
@@ -1828,19 +1836,19 @@ export const BED = {
    */
   ride: [
     [SCENES.scale.from - 2, 0],
-    [SCENES.scale.from + 1, 2],
-    [at('scale', SCALE.industriesTitle) - 1, 3.5],
-    [at('scale', SCALE.industriesTitle) + b(1), 3.5],
-    [at('scale', SCALE.langTitle) - 6, 3],
+    [SCENES.scale.from + 1, 0.5],
+    [at('scale', SCALE.industriesTitle) - 1, 2],
+    [at('scale', SCALE.industriesTitle) + b(1), 2],
+    [at('scale', SCALE.langTitle) - 6, 1.5],
     [at('scale', SCALE.langTitle) + 3, 2],
     [at('scale', SCALE.flow) - 4, 2],
     [at('scale', SCALE.flow) + 2, 3],
     [at('scale', SCALE.irisToDark[0]), 3.5],
     [at('scale', SCALE.irisToDark[1]), 0],
-    [at('cta', CTA_LOCAL.drift[0]), 0],
-    [at('cta', CTA.converge[0]), 3.5],
-    [at('cta', CTA_LOCAL.orbIn[1] - 4), 6.5],
-    [at('cta', CTA_LOCAL.survivor[0]), 6],
+    [at('cta', CTA_LOCAL.drift[0]), 0.5],
+    [at('cta', CTA.converge[0]), 3],
+    [at('cta', CTA_LOCAL.orbIn[1] - 4), 5.5],
+    [at('cta', CTA_LOCAL.survivor[0]), 5],
     [at('cta', CTA.logoImpact), 4],
     [at('cta', CTA.brandVoice) - 2, 2],
     [at('cta', CTA_LOCAL.note), 2.5],

@@ -390,7 +390,7 @@ export function bed(T) {
     // the snare: 8ths from the half-beat after her last word ("…seven.") — the run-in — then the
     // converge's roll, 16ths → 32nds
     const drift = Math.ceil(P.drift * 2) / 2;
-    for (let b = drift; b < P.converge - 0.01; b += 0.5) snare(b, 0.1 + 0.08 * ((b - drift) / Math.max(0.5, P.converge - drift)), Math.round(b * 8) + 40);
+    for (let b = drift; b < P.converge - 0.01; b += 0.5) snare(b, 0.16 + 0.1 * ((b - drift) / Math.max(0.5, P.converge - drift)), Math.round(b * 8) + 40);
     for (let b = P.converge; b < P.survivor - 0.01; ) {
       const u = (b - P.converge) / (P.survivor - P.converge);
       snare(b, 0.2 + 0.45 * u * u, Math.round(b * 8));

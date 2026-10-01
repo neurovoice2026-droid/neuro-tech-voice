@@ -277,7 +277,7 @@ export function master(T, lib, bedSt, { publicDir }) {
         }
       }
     };
-    put(c.group === 'bell' || c.group === 'spark' ? (c.key && c.speech ? keyTonal : tonal) : dry, c.vol);
+    put(c.tonal ? (c.key && c.speech ? keyTonal : tonal) : dry, c.vol);
     put(send[c.room], c.vol * gain(c.send));
     if (c.delay !== undefined) put(dly, c.vol * gain(c.delay));
   }
