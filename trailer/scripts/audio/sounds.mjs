@@ -745,22 +745,34 @@ export function library(T) {
     put('shock', 0, st);
   }
   {
-    // THE LOGO IMPACT: a sub drop, a cracking transient, a noise burst whose mids clear in ~0.1 s
-    // (Ava says the name a beat later), and a long, wide stereo tail
+    // THE LOGO IMPACT — the loudest moment of the film. A sub drop, an E3→E2 body punch (it
+    // carries the hit on phone speakers), a cracking transient, a 1.6 kHz snap and a noise burst
+    // whose mids clear in ~0.15 s (Ava says the name 8 frames later), glued by saturating the
+    // layers together (a dense hit: ~5 LU more loudness at the same −12 dBFS peak), then a long,
+    // wide, dark room
     const len = 4.8;
     const st = stereo(len);
-    const sub = osc(len, (t) => 28 + 64 * Math.exp(-t / 0.09), ad(0.001, 1.1));
-    addMono(st, sat(sub, 2), 0, 1.1, 0);
-    addMono(st, osc(len, (t) => 2 * (28 + 64 * Math.exp(-t / 0.09)), ad(0.001, 0.35)), 0, 0.18, 0);
+    const drop = (t) => 28 + 64 * Math.exp(-t / 0.09);
+    addMono(st, sat(osc(len, drop, ad(0.001, 0.9)), 2), 0, 0.8, 0);
+    addMono(st, osc(len, (t) => 2 * drop(t), ad(0.001, 0.35)), 0, 0.18, 0);
+    addMono(st, sat(osc(len, (t) => 82.41 + 82.41 * Math.exp(-t / 0.045), ad(0.0015, 0.2)), 2.4), 0, 0.7, 0);
     addStereo(st, [noise(0.2, 5400, ad(0.0002, 0.004), 'hp', 2200, 0.7), noise(0.2, 5401, ad(0.0002, 0.004), 'hp', 2200, 0.7)], 0, 0.85);
     addMono(st, noise(0.2, 5402, ad(0.0003, 0.012), 'bpn', 900, 1), 0, 0.6, 0);
-    const burst = (sd) => env(sweep(pink(len, sd), 'lp', (t) => 250 + 6500 * Math.exp(-t / 0.045), 0.8), ad(0.0008, 0.06));
-    addStereo(st, [burst(5403), burst(5404)], 0, 0.9);
+    addStereo(st, [noise(0.4, 5407, ad(0.0005, 0.03), 'bpn', 1600, 0.9), noise(0.4, 5408, ad(0.0005, 0.03), 'bpn', 1700, 0.9)], 0, 0.45);
+    const burst = (sd) => env(sweep(pink(len, sd), 'lp', (t) => 250 + 6500 * Math.exp(-t / 0.06), 0.8), ad(0.0008, 0.1));
+    addStereo(st, [burst(5403), burst(5404)], 0, 1);
     const tail = (sd) => env(sweep(white(len, sd), 'hp', 6500, 0.7), (t) => smooth(t / 0.08) * Math.exp(-t / 1.4));
     addStereo(st, [tail(5405), tail(5406)], 0, 0.05);
-    // its own big room, dark (the brand name is spoken 4 frames later: the mids must clear)
+    {
+      // the glue: one saturation stage over the summed layers (drive 3 at full scale)
+      let p = 1e-9;
+      for (const c of st) for (let i = 0; i < c.length; i++) p = Math.max(p, Math.abs(c[i]));
+      const k = 3 / p;
+      for (const c of st) for (let i = 0; i < c.length; i++) c[i] = tanh(c[i] * k) / tanh(3);
+    }
+    // its own big room, dark (the brand name is spoken 8 frames later: the mids must clear)
     const room = fdn(st, { rt60: 3.4, rt60Hi: 0.5, pre: 0.03, size: 1.4, lp: 1800, tail: 0 });
-    addStereo(st, room, 0, 0.4);
+    addStereo(st, room, 0, 0.25);
     put('impact', 0, width(st, 1.2));
   }
   {

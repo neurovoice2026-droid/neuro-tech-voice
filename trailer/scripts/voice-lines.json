@@ -1,4 +1,9 @@
 {
+  "level": {
+    "lufs": -23,
+    "peakMax": -1,
+    "note": "ONE dialogue target for every line: BS.1770 integrated loudness over its phrases (mono file; -20 LUFS dual-mono in the stereo dialogue bus), after the phone line / clean and the role EQ. Not a peak: peak-normalising left a 5 LU spread."
+  },
   "voices": {
     "ava": {
       "sid": 1,
@@ -43,6 +48,21 @@
       "name": "bf_emma",
       "speed": 1.0,
       "phone": true,
+      "eq": [
+        {
+          "type": "peak",
+          "f": 2200,
+          "q": 0.9,
+          "db": 6
+        },
+        {
+          "type": "peak",
+          "f": 500,
+          "q": 1.0,
+          "db": -3
+        }
+      ],
+      "eqNote": "Dana down the phone line was dull and boxy (1.4-2.8 kHz ~7.5 dB under the other caller, 355-710 Hz dominant): a presence lift at 2.2 kHz and a little out of the box at 500 Hz.",
       "note": "A second caller (the knowledge-base beat)",
       "fish": {
         "env": "FISH_CALLER2_VOICE",

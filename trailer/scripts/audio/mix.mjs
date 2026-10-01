@@ -1,16 +1,18 @@
 /**
  * THE MASTER — voices + bed + every cue, mixed offline, sample-accurate.
  *
- *   dialogue bus   the voice WAVs as recorded (sinc-resampled to 48 kHz), a gentle
- *                  2:1 leveller with make-up so their loudness is unchanged
+ *   dialogue bus   the voice WAVs as recorded (sinc-resampled to 48 kHz; every line is already
+ *                  at ONE loudness target), a gentle 2:1 leveller, then make-up per line so
+ *                  each line keeps exactly that loudness
  *   bed            ducked DUCK.bedDb across every line (ramped in ahead of it), and
  *                  DUCK.eqDb in the speech band wherever the voice is actually sounding
  *   effects        each cue retuned (rate), panned / moved, gained; sent to its act's
  *                  room (the dark night room or the short bright white-act room) and the
  *                  bells to a dotted-8th ping-pong; the effects lose DUCK.sfxEqDb in the
  *                  speech band under the voice too (keys keep their weight, words stay clear)
- *   master         a gain to MIX.lufs integrated, then a 4×-oversampled look-ahead
- *                  true-peak limiter at MIX.ceiling dBTP
+ *   master         an exponential fade over the end card's last second (MIX.fadeOut), a gain
+ *                  to MIX.lufs integrated, then a 4×-oversampled look-ahead true-peak
+ *                  limiter at MIX.ceiling dBTP
  */
 import path from 'node:path';
 import {
@@ -82,12 +84,24 @@ export function master(T, lib, bedSt, { publicDir }) {
     addStereo(voice, st, frameS(v.at) / SR, 1);
   }
   const vBefore = lufs(voice);
-  let vox = compress(voice, { thr: -19, ratio: 2, knee: 8, att: 0.004, rel: 0.14, rms: 0.006 });
-  const vAfter = lufs(vox);
+  const vox = compress(voice, { thr: -19, ratio: 2, knee: 8, att: 0.004, rel: 0.14, rms: 0.006 });
+  // make-up PER LINE: the leveller only shapes the syllables; every line comes back to its own
+  // pre-leveller loudness — the one dialogue target the voice files are normalised to
+  // (scripts/generate-voice.mjs) — so no line ends up quieter because it is punchier
+  const lineDb = {};
   {
-    const mk = gain(vBefore - vAfter);
-    for (const c of vox) for (let i = 0; i < c.length; i++) c[i] *= mk;
+    const spans = T.VOICES.map((v) => frameS(v.at)).map((s0, k, all) => [s0, k + 1 < all.length ? all[k + 1] : n]);
+    T.VOICES.forEach((v, k) => {
+      const [s0, s1] = spans[k];
+      const e = Math.min(s1, frameS(v.at + T.vFrames(v.id)) + Math.round(0.2 * SR));
+      const seg = (st) => [st[0].subarray(s0, e), st[1].subarray(s0, e)];
+      const mk = lufs(seg(voice)) - lufs(seg(vox));
+      lineDb[v.id] = mk;
+      const g = gain(mk);
+      for (const c of vox) for (let i = k === 0 ? 0 : s0; i < s1; i++) c[i] *= g;
+    });
   }
+  const vAfter = lufs(vox);
   const act = activity(voice[0], T.DUCK.lookahead);
 
   /* ── bed: line-window duck + speech-band dynamic EQ ── */
@@ -183,9 +197,23 @@ export function master(T, lib, bedSt, { publicDir }) {
     const hp = new Biquad('hp', 18, 0.6);
     for (let i = 0; i < n; i++) sum[c][i] = hp.run(vox[c][i] + bed[c][i] + fx[c][i]);
   }
-  // the last 40 ms fade to digital silence
-  const fadeN = Math.round(0.04 * SR);
-  for (let c = 0; c < 2; c++) for (let i = 0; i < fadeN; i++) sum[c][n - 1 - i] *= i / fadeN;
+  // THE END: the whole mix fades out over the end card's last second (MIX.fadeOut) — an
+  // exponential (dB-linear) curve, offset so it lands on true zero at the last sample — so the
+  // impact's rooms and the chord's ring resolve into silence instead of being cut, and a looping
+  // 9:16 player runs from silence back into the hook's silence
+  {
+    const [fa, fe] = T.MIX.fadeOut;
+    const a = frameS(fa);
+    const e = Math.min(n, frameS(fe));
+    const k = T.MIX.fadeK;
+    const z = Math.exp(-k);
+    for (let c = 0; c < 2; c++) {
+      for (let i = a; i < n; i++) {
+        const u = Math.min(1, (i - a) / Math.max(1, e - 1 - a));
+        sum[c][i] *= (Math.exp(-k * u) - z) / (1 - z);
+      }
+    }
+  }
   const pre = lufs(sum);
   let g = T.MIX.lufs - pre;
   let out = null;
@@ -206,6 +234,7 @@ export function master(T, lib, bedSt, { publicDir }) {
   const report = {
     voiceLufsIn: vBefore,
     dialogueMakeupDb: vBefore - vAfter,
+    lineMakeupDb: lineDb,
     preLufs: pre,
     masterGainDb: g,
     limiterMaxGrDb: out.maxReductionDb,

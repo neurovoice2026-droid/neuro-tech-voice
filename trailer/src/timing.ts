@@ -628,8 +628,12 @@ export const SCALE_LOCAL = (() => {
   /** six languages on THREE big cells, two pages: each cell flips on a 16th (EN RO ES 75 79 83),
    *  then flips again exactly one beat later (FR DE JA 90 94 98) — never more than 3 greetings on screen */
   const langs = Array.from({ length: 6 }, (_, i) => Math.round(SCALE.langMorph + (i % 3) * SCALE.langStep + (i >= 3 ? BEAT : 0)));
-  /** the lights of the wall: ONE leads each quarter note (the hour turns on the beat) — rush → closing → sunday → night */
-  const wallLights = ['rush', 'closing', 'sunday', 'night'] as const;
+  /** THE FOUR ACTS, one light each, in #demo's tour order: the night leads hook → result, Sunday the
+   *  knowledge, the RUSH this wall (sixteen industries on 16th notes — "in the middle of a rush") and
+   *  its "16 industries." lock, then JUST AFTER CLOSING the languages and the after-call flow. So the
+   *  CTA gathers four lights the film has each shown owning an hour. On the wall the quarter notes
+   *  still turn (a rose pulse every beat); the light does not change: one light leads a moment. */
+  const wallLights = ['rush', 'rush', 'rush', 'rush'] as const;
   /** station cues (= the flow cues): each node is solid ON its cue — 120 128 135 */
   const stations = [0, 1, 2].map((i) => Math.round(SCALE.flow + i * SCALE.stationStep));
   /** the two other cells collapse into the deck; page 2 (FR DE JA) has held ≥ 15 f */
@@ -648,12 +652,15 @@ export const SCALE_LOCAL = (() => {
     ] as const,
     /** quarter-note camera kicks (+1.8 %, alternating 3 px jolt) */
     kicks: [0, b(1), b(2), b(3)] as const, // 0 15 30 45
-    /** pop i's light = the quarter it pops in (colour follows the hour, never the industry) */
+    /** pop i's light (the quarter it pops in: all the rush — colour follows the act, never the industry) */
     wallLight: Array.from({ length: 16 }, (_, i) => wallLights[Math.min(3, Math.floor(i / 4))]),
     wallLights,
-    /** "16 industries." locks the wall in the last hour's light (3 a.m.) … */
-    heroLight: 'night' as const,
-    /** … then the languages and the after-call flow are in the closing light (one light, to the end) */
+    /** "16 industries." locks the whole wall in the rush light: the rose act's payoff … */
+    heroLight: 'rush' as const,
+    /** … then the room turns to the closing light (its ground + bloom) on the 8th after the fly-out
+     *  starts, as the title lifts and the ten cards leave — 68 → 82 … */
+    lightTurn: [Math.round(b(4.5)), Math.round(b(4.5)) + 14] as const,
+    /** … and the languages and the after-call flow are in the closing light (one light, to the end) */
     langLight: 'closing' as const,
     /** "16 industries." lifts to the top band WITH the fly-out / glide: out of the cell band before any flip */
     titleSwap: b(4.4), // 66
@@ -1476,5 +1483,22 @@ export const CUES: Cue[] = buildCues(HITS);
 
 /** The music bed (synthesised to the film by generate-sfx.mjs; −20 dBFS peak, ducked in the mix). */
 export const BED = { file: sfx('bed.wav'), vol: 1 };
-/** The master: everything above, mixed to `lufs` integrated with a true-peak ceiling (dBTP). */
-export const MIX = { file: sfx('mix.wav'), lufs: -15, ceiling: -1.5 } as const;
+/**
+ * The master: everything above, mixed to `lufs` integrated with a true-peak ceiling (dBTP).
+ * `fadeOut`: the whole mix fades from one beat into the end card's still hold to the last frame,
+ * exponentially (`fadeK` nepers over the fade, offset to land on true zero), so the impact's
+ * room and the chord's ring resolve into silence (check-mix: last 100 ms < −55 dBFS RMS).
+ * `impactLead`: the logo impact's momentary loudness must beat the loudest dialogue by this (LU).
+ * `dialogueLufs` ± `dialogueTol`: every line in the dialogue stem (the files are at −23 LUFS mono,
+ * scripts/voice-lines.json level.lufs; dual-mono in the stereo bus that reads +3 LU).
+ */
+export const MIX = {
+  file: sfx('mix.wav'),
+  lufs: -15,
+  ceiling: -1.5,
+  fadeOut: [SCENES.cta.from + CTA.finalHold + b(1), DURATION] as const,
+  fadeK: 4.6,
+  impactLead: 1,
+  dialogueLufs: -20,
+  dialogueTol: 0.5,
+} as const;

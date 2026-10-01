@@ -48,7 +48,7 @@ import { aos, EASE, SPRING, tween } from '../lib/motion';
 import { useSceneFrame } from '../lib/scene';
 import { C } from '../theme';
 import { SCALE, SCALE_LOCAL } from '../timing';
-import { Backdrop } from './scale/Backdrop';
+import { Backdrop, Ground } from './scale/Backdrop';
 import { NearDiscs } from './scale/Bokeh';
 import { camAt, cameraProps, stepSpeed } from './scale/camera';
 import { Box, IndustryFace, LangFace, popFill } from './scale/Cards';
@@ -426,6 +426,8 @@ export const Scale: React.FC = () => {
 
   return (
     <AbsoluteFill style={{ background: C.white, overflow: 'hidden' }}>
+      {/* 0 · the act's ground (the rush, then the closing light): screen space, behind the camera */}
+      <Ground t={t} />
       {/* the quarter kicks' roll, about the screen centre (every plane alike) */}
       <AbsoluteFill style={{ transform: cp.rot ? `rotate(${cp.rot.toFixed(4)}deg)` : undefined }}>
       <Camera x={cp.x} y={cp.y} zoom={cp.zoom}>

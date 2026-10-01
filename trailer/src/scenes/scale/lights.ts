@@ -1,18 +1,20 @@
 /**
- * SCALE's four lights (theme.ts LIGHTS, #demo's MOMENT_LIGHTS). The idea is
- * 24/7: every hour has its own light — and ONE light leads at a time.
- * Colour follows the hour (state), never the industry (category).
+ * SCALE's lights (theme.ts LIGHTS, #demo's MOMENT_LIGHTS). The film's idea is
+ * 24/7: every hour has its own light, and each act is owned by one — the
+ * night (hook → result), Sunday (knowledge), then here THE RUSH and JUST
+ * AFTER CLOSING, so the CTA gathers four lights the film has shown. One
+ * light leads at a time, and it lives in light (grounds, blooms, discs).
  *
- *   wall       the hour turns on every quarter note: the four pops of a
- *              quarter hit in that quarter's light — rush, then closing,
- *              Sunday, the night (SCALE_LOCAL.wallLight). The light lives only
- *              in the hit (the lit disc, its flash pool, ripple, sparks and a
- *              small glow); at rest every card is white stock with an ink icon
- *              on a neutral pearl disc, so the newest pop glows and the
- *              accumulated wall stays calm. On each quarter the cards already
- *              up pulse once in the NEW hour's light (the hour turning)
- *   hero       "16 industries." locks the whole wall in the last hour's light
- *              (the night, 3 a.m.) and its figure wears that ink
+ *   wall       the rush: every pop hits in rose (the lit disc, its flash
+ *              pool, ripple, sparks and a small glow); at rest every card is
+ *              white stock with an ink icon on a neutral pearl disc, so the
+ *              newest pop glows and the accumulated wall stays calm. On each
+ *              quarter the cards already up pulse once in rose. The room is
+ *              the rush ground (#demo's rose stage light) under one bloom
+ *   hero       "16 industries." locks the whole wall in the rush light and
+ *              its figure wears the rush ink: the rose act's payoff
+ *   turn       the room turns to the closing light as the title lifts and
+ *              the ten cards leave (SCALE_LOCAL.lightTurn)
  *   languages  the closing light: every greeting's orb, sheen, ring and
  *              underline, and the "14"
  *   flow       the closing light (emerald = confirmed); the CRM settles green
@@ -21,10 +23,10 @@ import { C, LIGHTS, type LightId } from '../../theme';
 import { mixColor, rgba } from '../../lib/lights';
 import { SCALE, SCALE_LOCAL } from '../../timing';
 
-/** the light of industry card i: the quarter it pops in */
+/** the light of industry card i (the rush, every quarter) */
 export const cardLight = (i: number): LightId => SCALE_LOCAL.wallLight[i];
 
-/** the hero lock's light (the last hour) */
+/** the hero lock's light (the rush: the wall's own light) */
 export const HERO_LIGHT: LightId = SCALE_LOCAL.heroLight;
 
 /** the light of every language cell */
@@ -34,14 +36,15 @@ export const LANG_LIGHT: LightId = SCALE_LOCAL.langLight;
 export const FLOW_LIGHT: LightId = 'closing';
 
 /**
- * The light leading the act, key by key: the four hours on the wall's quarter
- * notes, the hero's lock, then the closing light from the glide. A key turns
- * the light over `dur` frames (EASE.house) — one light at a time.
+ * The light leading the act, key by key: the wall's quarter notes (all the
+ * rush), the hero's lock (the rush), then the turn to the closing light. A
+ * key turns the light over `dur` frames (smoothstep) — one light at a time.
+ * (The bloom also moves key by key: it follows the block being filled.)
  */
 export const LEAD: readonly { at: number; light: LightId; dur: number }[] = [
   ...SCALE_LOCAL.kicks.map((at, i) => ({ at, light: SCALE_LOCAL.wallLights[i] as LightId, dur: 6 })),
   { at: SCALE.industriesTitle, light: HERO_LIGHT, dur: 6 },
-  { at: SCALE_LOCAL.glide, light: LANG_LIGHT, dur: 14 },
+  { at: SCALE_LOCAL.lightTurn[0], light: LANG_LIGHT, dur: SCALE_LOCAL.lightTurn[1] - SCALE_LOCAL.lightTurn[0] },
 ];
 
 /** where the lead is at t: the key index, the one before it, and the turn's progress 0..1 */
@@ -53,11 +56,29 @@ export function leadAt(t: number): { i: number; prev: number; m: number } {
   return { i, prev: Math.max(0, i - 1), m: m * m * (3 - 2 * m) };
 }
 
+const smooth = (a: number, b: number, x: number) => {
+  const u = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return u * u * (3 - 2 * u);
+};
+
+/**
+ * The weights of the previous and the current lead key at t. Within one light
+ * it is a plain crossfade (the bloom moving on); between two lights the old
+ * one drains to white stock BEFORE the new one floods in — rose and emerald
+ * (complements) would mix to grey at a 50/50 crossfade.
+ */
+export function leadWeights(t: number): { i: number; prev: number; m: number; wPrev: number; wCur: number } {
+  const { i, prev, m } = leadAt(t);
+  if (prev === i) return { i, prev, m, wPrev: 0, wCur: 1 };
+  if (LEAD[prev].light === LEAD[i].light) return { i, prev, m, wPrev: 1 - m, wCur: m };
+  return { i, prev, m, wPrev: 1 - smooth(0, 0.6, m), wCur: smooth(0.4, 1, m) };
+}
+
 /** the leading light(s) at t as weighted colours of an orb slot (2 body, 3 pale): a crossfade, never a hue sweep */
 export const leadColors = (t: number, slot: number): { col: string; w: number }[] => {
-  const { i, prev, m } = leadAt(t);
-  const cur = { col: LIGHTS[LEAD[i].light].orb[slot], w: prev !== i ? m : 1 };
-  return prev !== i && m < 1 ? [{ col: LIGHTS[LEAD[prev].light].orb[slot], w: 1 - m }, cur] : [cur];
+  const { i, prev, m, wPrev, wCur } = leadWeights(t);
+  const cur = { col: LIGHTS[LEAD[i].light].orb[slot], w: wCur };
+  return prev !== i && m < 1 ? [{ col: LIGHTS[LEAD[prev].light].orb[slot], w: wPrev }, cur] : [cur];
 };
 
 /** the pale tint a light throws on white card stock (its light slot) */

@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "sfx:force": "node --experimental-strip-types --no-warnings scripts/generate-sfx.mjs --force",
     "check:audio": "node --experimental-strip-types --no-warnings scripts/check-mix.mjs",
-    "voice": "node scripts/generate-voice.mjs"
+    "voice": "node scripts/generate-voice.mjs",
+    "voice:remaster": "node scripts/generate-voice.mjs --remaster"
   },
   "dependencies": {
     "@fontsource-variable/geist-mono": "^5.3.0",

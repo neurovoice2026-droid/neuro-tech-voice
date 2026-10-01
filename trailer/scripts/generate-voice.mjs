@@ -27,10 +27,15 @@
  *   · KOKORO-82M (offline fallback, Apache-2.0 open weights) via sherpa-onnx:
  *     Ava = af_bella, callers = am_michael / bf_emma.
  *
- * Callers are always put through a phone-line EQ; Ava stays full-band.
+ * Callers are always put through a phone-line EQ; Ava stays full-band. A role
+ * may carry its own corrective EQ (voices.<role>.eq in voice-lines.json — e.g.
+ * caller2's presence lift). Then EVERY line is loudness-normalised to ONE
+ * dialogue target (level.lufs, BS.1770 integrated over its phrases, mono; it
+ * reads +3 LU dual-mono in the stereo dialogue bus), not to a peak: peak
+ * normalising left a 5 LU spread between lines.
  *
  * Writes:
- *   public/voice/<id>.wav        (trimmed, peak-normalised to -5 dBFS)
+ *   public/voice/<id>.wav        (trimmed, EQ'd, at level.lufs integrated, peak ≤ level.peakMax)
  *   src/voice.generated.ts       durations, phrase + word timings (seconds) and
  *                                a per-frame loudness envelope (0..1) that
  *                                drives the orb and the waveform in sync
@@ -46,6 +51,9 @@
  *   npm run voice -- --engine=files     (force files; a missing one is an error)
  *   npm run voice -- --engine=kokoro    (force the offline engine)
  *   npm run voice -- --list             (list fish.audio voice candidates)
+ *   npm run voice -- --remaster         (no new takes: re-level the current public/voice
+ *                                        lines to level.lufs and apply any role EQ they
+ *                                        don't carry yet; timings are kept)
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -53,6 +61,7 @@ import os from 'node:os';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { integrated } from './audio/loudness.mjs';
 
 const require = createRequire(import.meta.url);
 const peakOf = (arr) => {
@@ -65,7 +74,6 @@ const ROOT = path.join(HERE, '..');
 const OUT = path.join(ROOT, 'public', 'voice');
 const TS_OUT = path.join(ROOT, 'src', 'voice.generated.ts');
 const FPS = 30;
-const PEAK_DB = -5;
 
 /* ── model ─────────────────────────────────────────────────────── */
 function modelDir() {
@@ -393,15 +401,22 @@ function decodeFile(file) {
 
 /* ── tiny DSP ──────────────────────────────────────────────────── */
 class Biquad {
-  constructor(type, f, q, sr) {
+  /** 'lp' | 'hp' | 'peak' (RBJ cookbook; `db` = the peak's gain) */
+  constructor(type, f, q, sr, db = 0) {
     const w = (2 * Math.PI * f) / sr;
     const cos = Math.cos(w);
     const alpha = Math.sin(w) / (2 * q);
-    let b0, b1, b2;
-    if (type === 'lp') [b0, b1, b2] = [(1 - cos) / 2, 1 - cos, (1 - cos) / 2];
-    else [b0, b1, b2] = [(1 + cos) / 2, -(1 + cos), (1 + cos) / 2];
-    const a0 = 1 + alpha;
-    Object.assign(this, { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: (-2 * cos) / a0, a2: (1 - alpha) / a0 });
+    let b0, b1, b2, a0, a2;
+    if (type === 'peak') {
+      const A = Math.pow(10, db / 40);
+      [b0, b1, b2] = [1 + alpha * A, -2 * cos, 1 - alpha * A];
+      [a0, a2] = [1 + alpha / A, 1 - alpha / A];
+    } else {
+      if (type === 'lp') [b0, b1, b2] = [(1 - cos) / 2, 1 - cos, (1 - cos) / 2];
+      else [b0, b1, b2] = [(1 + cos) / 2, -(1 + cos), (1 + cos) / 2];
+      [a0, a2] = [1 + alpha, 1 - alpha];
+    }
+    Object.assign(this, { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: (-2 * cos) / a0, a2: a2 / a0 });
     this.x1 = this.x2 = this.y1 = this.y2 = 0;
   }
   run(x) {
@@ -438,10 +453,33 @@ function trim(s, sr, pad = 0.04) {
   return s.slice(Math.max(0, a - p), Math.min(s.length, b + p));
 }
 
-function normalise(s, db) {
-  const peak = peakOf(s);
-  const g = Math.pow(10, db / 20) / (peak || 1);
-  return Float32Array.from(s, (x) => x * g);
+/** A role's corrective EQ: [{ type: 'peak' | 'hp' | 'lp', f, q, db }] in series. */
+function roleEq(s, sr, eq = []) {
+  if (!eq.length) return s;
+  const bands = eq.map((e) => new Biquad(e.type ?? 'peak', e.f, e.q ?? 0.707, sr, e.db ?? 0));
+  return Float32Array.from(s, (x) => bands.reduce((v, b) => b.run(v), x));
+}
+const eqSignature = (eq = []) => eq.map((e) => `${e.type ?? 'peak'}${e.f}/${e.q ?? 0.707}/${e.db ?? 0}`).join(',');
+
+/**
+ * Loudness-normalise a line to `lufs` (BS.1770 integrated, gated, mono). A peak that would
+ * pass `peakMax` dBFS is caught by a soft knee in its last 2 dB (reported; the voices
+ * have ~5 dB of crest to spare at the dialogue target, so it should never engage).
+ */
+function level(s, sr, { lufs, peakMax = -1 }) {
+  const before = integrated([s], sr);
+  const g = Math.pow(10, (lufs - before) / 20);
+  const ceil = Math.pow(10, peakMax / 20);
+  const knee = ceil * Math.pow(10, -2 / 20);
+  let caught = 0;
+  const out = Float32Array.from(s, (x) => {
+    const y = x * g;
+    const a = Math.abs(y);
+    if (a <= knee) return y;
+    caught++;
+    return Math.sign(y) * (knee + (ceil - knee) * Math.tanh((a - knee) / (ceil - knee)));
+  });
+  return { s: out, gainDb: lufs - before, before, caught };
 }
 
 function fades(s, sr, ms = 12) {
@@ -581,6 +619,43 @@ if (argv.includes('--list')) {
   process.exit(0);
 }
 
+/* ── the dialogue post chain: role EQ → one loudness target → edge fades ── */
+const LEVEL = { lufs: -23, peakMax: -1, ...(cfg.level ?? {}) };
+const r2 = (x) => Math.round(x * 100) / 100;
+const postOf = (v, L) => ({ lufs: LEVEL.lufs, gainDb: r2(L.gainDb), eq: eqSignature(v.eq) });
+const levelLog = (id, L) =>
+  `${r2(L.before).toFixed(2).padStart(7)} → ${LEVEL.lufs} LUFS (${L.gainDb >= 0 ? '+' : ''}${L.gainDb.toFixed(2)} dB)${L.caught ? `  · soft knee caught ${L.caught} samples` : ''}`;
+
+if (argv.includes('--remaster')) {
+  // no new takes: the current lines (already phone-lined / cleaned, trimmed and faded) get the
+  // role EQ they don't carry yet and the dialogue loudness target; timings stay as they are
+  const src = readFileSync(TS_OUT, 'utf8');
+  const prev = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(' as const')));
+  for (const line of cfg.lines) {
+    const v = cfg.voices[line.voice];
+    const old = prev.lines[line.id];
+    if (!old) throw new Error(`[voice] --remaster: ${line.id} is not in src/voice.generated.ts — generate it first`);
+    const file = path.join(OUT, `${line.id}.wav`);
+    const { samples, sampleRate: sr } = decodeWav(readFileSync(file));
+    const want = eqSignature(v.eq);
+    const has = old.post?.eq ?? '';
+    if (has && has !== want) throw new Error(`[voice] --remaster: ${line.id} already carries EQ "${has}" (config: "${want}") — regenerate the take`);
+    const L = level(has === want ? samples : roleEq(samples, sr, v.eq), sr, LEVEL);
+    writeWav(file, L.s, sr);
+    // (gainDb accumulates: the level change since the take's original peak normalisation)
+    prev.lines[line.id] = { ...old, env: envelope(L.s, sr), post: { ...postOf(v, L), gainDb: r2((old.post?.gainDb ?? 0) + L.gainDb) } };
+    console.log(`[voice] remaster ${line.id.padEnd(7)} ${line.voice.padEnd(8)}${has !== want ? ` EQ ${want}` : ''} ${levelLog(line.id, L)}`);
+  }
+  writeFileSync(
+    TS_OUT,
+    '/* GENERATED by scripts/generate-voice.mjs — do not edit. Re-run `npm run voice`. */\n' +
+      `export const VOICE = ${JSON.stringify(prev)} as const;\n` +
+      'export type VoiceId = keyof typeof VOICE.lines;\n',
+  );
+  console.log(`[voice] remastered ${cfg.lines.length} lines (timings kept) in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+  process.exit(0);
+}
+
 let synth;
 const chosen = {};
 if (ENGINE === 'files') {
@@ -632,8 +707,8 @@ for (const line of cfg.lines) {
   const audio = synth(line, v, line.voice);
   const sr = audio.sampleRate;
   const tr = trimLead(audio.samples, sr, 0.04);
-  let s = v.phone ? phoneLine(tr.samples, sr) : clean(tr.samples, sr);
-  s = fades(normalise(s, PEAK_DB), sr);
+  const L = level(roleEq(v.phone ? phoneLine(tr.samples, sr) : clean(tr.samples, sr), sr, v.eq), sr, LEVEL);
+  const s = fades(L.s, sr);
   writeWav(path.join(VOICE_DIR, `${line.id}.wav`), s, sr);
   previewParts.push({ s, sr });
   const dur = s.length / sr;
@@ -648,8 +723,9 @@ for (const line of cfg.lines) {
     frames: Math.ceil(dur * FPS),
     ...tm,
     env: envelope(s, sr),
+    post: postOf(v, L),
   };
-  console.log(`[voice] ${ENGINE} ${line.id.padEnd(7)} ${line.voice.padEnd(8)} ${dur.toFixed(2)} s  "${line.say}"${audio.words?.length ? `  (${audio.words.length} timed words)` : ''}`);
+  console.log(`[voice] ${ENGINE} ${line.id.padEnd(7)} ${line.voice.padEnd(8)} ${dur.toFixed(2)} s  "${line.say}"${audio.words?.length ? `  (${audio.words.length} timed words)` : ''}  ${levelLog(line.id, L)}`);
 }
 if (OUT_DIR || argv.includes('--preview')) {
   // one listenable file: every line in order with short gaps
