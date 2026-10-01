@@ -162,7 +162,10 @@ export function bed(T) {
     if (b < P.flow) return 0.46;
     if (b < P.iris) return lerp(0.46, 0.58, smooth((b - P.flow) / (P.iris - P.flow)));
     if (b < P.cta) return lerp(0.58, 0.12, smooth((b - P.iris) / (P.cta - P.iris)));
-    if (b < P.impact) return 0.35 + 0.5 * smooth((b - P.cta) / (P.impact - P.cta));
+    if (b < P.impact) {
+      const g = 0.35 + 0.5 * smooth((b - P.cta) / (P.impact - P.cta));
+      return b < P.cta + 1 ? lerp(0.12, g, smooth(b - P.cta)) : g; // out of the iris's dark
+    }
     // the end card: the E chord settles onto a held plateau (it rings out in the master's fade)
     return 0.42 + 0.58 * Math.exp(-(b - P.impact) / 2.2);
   };
@@ -239,6 +242,13 @@ export function bed(T) {
     for (let i = 0; i < c.length; i++) k[i] += c[i] * 0.25;
     addMono(drums, k, sec(b), g, 0);
   };
+  /** a felt kick: rounder, lower, no click — a pulse you feel under the voices */
+  const felt = [];
+  const feltKick = (b, g) => {
+    felt.push(sec(b));
+    const k = filt(osc(0.45, (t) => 44 + 38 * Math.exp(-t / 0.045), ad(0.004, 0.2)), ['lp', 180, 0.7]);
+    addMono(drums, k, sec(b), g, 0);
+  };
   const hat = (b, g, open = false, seed = 0) => {
     const len = open ? 0.35 : 0.08;
     const h = noise(len, 7100 + seed, ad(0.0004, open ? 0.11 : 0.017), 'hp', 7200, 0.7);
@@ -285,7 +295,8 @@ export function bed(T) {
   };
   const revCym = (bEnd, beats, g, seed) => {
     const d = sec(beats);
-    const c = (sd) => env(sweep(white(d, sd), 'hp', (t) => 2500 + 6000 * (t / d), 0.7), (t) => Math.pow(t / d, 3.2));
+    // (it stops dead on the downbeat, as a reversed cymbal does — over the last 3 ms, so it never clicks)
+    const c = (sd) => env(sweep(white(d, sd), 'hp', (t) => 2500 + 6000 * (t / d), 0.7), (t) => Math.pow(t / d, 3.2) * Math.min(1, (d - t) / 0.003));
     addStereo(drums, [c(8000 + seed), c(8001 + seed)], sec(bEnd) - d, g);
   };
 
@@ -299,27 +310,50 @@ export function bed(T) {
   // CALL — soft kick on 1 & 3, 8th hats with 16th ghosts
   for (let b = P.call; b < P.result; b += 0.25) {
     const onBar = (b - P.call) % 4;
-    if (b % 1 === 0 && onBar % 2 === 0) kick(b, b >= P.booked ? 0.5 : 0.42);
+    if (b % 1 === 0 && onBar % 2 === 0) kick(b, b >= P.booked ? 0.7 : 0.6);
     if (b % 0.5 === 0) hat(b, b % 1 === 0 ? 0.09 : 0.14, false, Math.round(b * 4));
     else hat(b, 0.035, false, Math.round(b * 4));
   }
-  // RESULT — half time
+  // RESULT — half time; "Booked." gets its own downbeat (the call's payoff: kick + a chord stab below)
   for (let b = Math.ceil(P.result); b < P.white; b += 1) {
-    if (b % 2 === 0) kick(b, 0.4);
+    if (b % 2 === 0 && Math.abs(b - P.bookedWord) > 0.3) kick(b, 0.4);
     hat(b + 0.5, 0.12, false, Math.round(b * 4));
   }
+  kick(P.bookedWord, 0.8);
   // KNOWLEDGE — no drums; a reverse cymbal into the closing title and into the montage
   revCym(P.closing, 2, 0.12, 2);
   revCym(P.scale, 1.5, 0.3, 3);
-  // SCALE — the full groove
-  crash(P.scale, 0.28, 1, 1.1);
-  for (let b = P.scale; b < P.cta - 0.01; b += 0.25) {
-    if (b % 1 === 0) kick(b, 0.75);
-    if (b % 1 === 0 && (b - P.scale) % 2 === 1) clap(b, 0.4, Math.round(b));
+  // SCALE — THE WALL: the groove rises with the pops (8ths, then 16ths from the sunday light), claps
+  // on 2 and 4, a 16th snare run over the last beat; the kick lets go half a beat before the slam
+  crash(P.scale, 0.2, 1, 1.0);
+  for (let b = P.scale; b < P.title - 0.01; b += 0.25) {
+    const u = (b - P.scale) / (P.title - P.scale);
     const sx = Math.round((b - P.scale) * 4);
-    hat(b, sx % 4 === 2 ? 0.2 : sx % 2 ? 0.07 : 0.11, sx % 4 === 2 && (b - P.scale) % 2 >= 1, Math.round(b * 4));
+    const sixteenths = b >= P.wall[2] - 0.01;
+    if (b % 1 === 0 && b < preSlam) kick(b, 0.65 + 0.2 * u);
+    if (b % 1 === 0 && (b - P.scale) % 2 === 1) clap(b, 0.28 + 0.16 * u, Math.round(b));
+    if (sx % 2 === 0 || sixteenths) hat(b, (sx % 4 === 2 ? 0.16 : sx % 2 ? 0.06 : 0.1) * (0.7 + 0.5 * u), sx % 4 === 2 && sixteenths && b < preSlam, Math.round(b * 4));
   }
-  crash(P.title, 0.22, 2, 1.0);
+  for (let b = P.title - 1; b < P.title - 0.01; b += 0.25) {
+    const u = b - (P.title - 1);
+    snare(b, 0.2 + 0.36 * u, Math.round(b * 8) + 900);
+  }
+  // THE HERO: "16 industries." slams on A — crash and kick; the groove carries one more beat, opens out
+  crash(P.title, 0.4, 2, 1.3);
+  kick(P.title, 0.95);
+  kick(P.title + 1, 0.5);
+  hat(P.title + 0.5, 0.1, false, 931);
+  hat(P.title + 1.5, 0.12, true, 933);
+  revCym(P.langs, 1, 0.12, 4);
+  // THE GREETINGS: no hats, no claps — a soft felt pulse on 1 and 3 (the voices are the music)
+  for (let b = P.langs; b < P.flow - 0.01; b += 2) feltKick(b, 0.3);
+  // AFTER THE CALL: the pulse returns — four on the floor and 8th hats, rising into the iris; the
+  // bed drops into the dark as the iris opens (the CTA starts in silence)
+  for (let b = P.flow; b < P.iris - 0.01; b += 0.5) {
+    const u = (b - P.flow) / (P.iris - P.flow);
+    if (b % 1 === 0) kick(b, 0.42 + 0.2 * u);
+    hat(b, (b % 1 === 0 ? 0.06 : 0.11) * (0.8 + 0.5 * u), false, Math.round(b * 4) + 300);
+  }
   // CTA — silence in the dark, then the build: a pulse, 16th hats, a snare roll into the impact
   {
     const b0 = Math.max(P.line + 2, mid);
@@ -362,16 +396,26 @@ export function bed(T) {
   // twist: sustained roots from the shatter
   for (const s of seg.filter((x) => x.a >= P.shatter && x.a < P.call)) bassNote(s.a, s.e - s.a, CH[s.c].root, 0.35, 0.1);
   // call: roots on 1 and 3 (+ an 8th pickup into the next bar)
+  // (+4 dB over the first cut: the groove carries under the dialogue in 40–120 Hz)
   for (let b = P.call; b < P.result; b += 2) {
-    bassNote(b, 1.6, chordAt(b).root, 0.32, 0.25);
-    if ((b - P.call) % 4 === 2) bassNote(b + 1.5, 0.4, chordAt(b + 2).root, 0.18, 0.25);
+    bassNote(b, 1.6, chordAt(b).root, 0.5, 0.25);
+    if ((b - P.call) % 4 === 2) bassNote(b + 1.5, 0.4, chordAt(b + 2).root, 0.28, 0.25);
   }
   // result: sustained roots
   for (const s of seg.filter((x) => x.a >= P.result - 0.6 && x.a < P.kb)) bassNote(Math.max(s.a, P.result), s.e - Math.max(s.a, P.result), CH[s.c].root, 0.3, 0.15);
   // knowledge: only after the answer, soft
   for (const s of seg.filter((x) => x.a >= P.answer && x.a < P.scale)) bassNote(s.a, s.e - s.a, CH[s.c].root, 0.18, 0.08);
-  // scale: 8th-note pumping bass (root / octave)
-  for (let b = P.scale; b < P.cta - 0.01; b += 0.5) bassNote(b, 0.42, chordAt(b).root + ((b * 2) % 2 ? 12 : 0), 0.34, 0.35);
+  // the wall: an 8th-note pumping bass (root / octave), rising; silent over the slam's inhale
+  for (let b = P.scale; b < preSlam - 0.01; b += 0.5) {
+    const u = (b - P.scale) / (P.title - P.scale);
+    bassNote(b, 0.42, chordAt(b).root + ((b * 2) % 2 ? 12 : 0), 0.3 + 0.1 * u, 0.35);
+  }
+  // the hero: the bass drops to A1 under the slam and holds
+  bassNote(P.title, P.langs - P.title, 33, 0.52, 0.22);
+  // the greetings: a soft pulse in the key — the chord's root on the 8ths, short and low
+  for (let b = P.langs; b < P.flow - 0.01; b += 0.5) bassNote(b, 0.28, chordAt(b).root, b % 1 === 0 ? 0.2 : 0.12, 0.06);
+  // after the call: the 8th pump returns into the iris
+  for (let b = P.flow; b < P.iris - 0.01; b += 0.5) bassNote(b, 0.42, chordAt(b).root + ((b * 2) % 2 ? 12 : 0), 0.28, 0.3);
   // cta: the build, then E on the logo (long)
   for (const s of seg.filter((x) => x.a >= P.cta && x.a < P.impact)) bassNote(s.a, s.e - s.a, CH[s.c].root, 0.2 + 0.15 * ((s.a - P.cta) / (P.impact - P.cta)), 0.1);
   bassNote(P.impact, END - P.impact, 28, 0.42, 0.18);
@@ -428,8 +472,21 @@ export function bed(T) {
     const n = chordAt(b).notes;
     pluck(b, n[i % n.length] + 12, b >= P.booked ? 0.05 : 0.038, i % 2 ? 0.35 : -0.35, 0.45, 0.35);
   }
-  // result: the e-piano chord on "Asleep." (soft) and on "Booked."
-  for (const [b, g] of [[P.split, 0.06], [P.bookedWord, 0.1]]) chordAt(b).notes.forEach((m, i) => epiano(b + i * 0.01, m + 12, g, (i - 1.5) * 0.25));
+  // result: the e-piano chord on "Asleep." (soft) and on "Booked." — there with a stab: the E chord
+  // struck short and wide (saws, a fast filter close) over a low E, the call's payoff
+  for (const [b, g] of [[P.split, 0.06], [P.bookedWord, 0.14]]) chordAt(b).notes.forEach((m, i) => epiano(b + i * 0.01, m + 12, g, (i - 1.5) * 0.25));
+  {
+    const len = 0.7;
+    const r = rng(8300);
+    for (const [m, pan] of [[52, 0], [59, -0.3], [64, 0.3], [68, -0.15], [71, 0.15]]) {
+      const sl = new Saw(r());
+      const f = mtof(m);
+      const x = mono(len);
+      for (let i = 0; i < x.length; i++) x[i] = sl.run(f) * Math.min(1, i / (0.002 * SR)) * Math.exp(-i / SR / 0.16);
+      addMono(keys, sweep(x, 'lp', (t) => 400 + 4200 * Math.exp(-t / 0.07), 0.9), sec(P.bookedWord), 0.11, pan);
+    }
+    bassNote(P.bookedWord, 1, 28, 0.45, 0.3);
+  }
   // knowledge: felt piano — a gentle figure until the miss, then silence, then sparser under the answer
   {
     const fig = [0, 1.5, 2.5];
@@ -449,11 +506,17 @@ export function bed(T) {
     // "it says so.": the resolution chord on the key frame
     chordAt(P.key).notes.forEach((m, i) => piano(P.key + i * 0.02, m + 12, 0.08, (i - 1.5) * 0.2));
   }
-  // scale: 16th arp, brighter
-  for (let b = P.scale, i = 0; b < P.cta - 0.01; b += 0.25, i++) {
+  // the wall carries no arp: the sixteen pops are its melody (each tuned to its light's chord)
+  // the greetings: air — one soft, far pluck per beat on the chord's top notes, on the offbeat
+  for (let b = P.langs + 0.5, i = 0; b < P.flow - 0.01; b += 1, i++) {
     const n = chordAt(b).notes;
-    const m = n[i % n.length] + 12 + (Math.floor(i / 8) % 2 ? 12 : 0);
-    pluck(b, m, i % 4 === 0 ? 0.07 : 0.05, Math.sin(i * 0.9) * 0.5, 0.7, 0.25);
+    pluck(b, n[n.length - 1 - (i % 2)] + 12, 0.02, i % 2 ? 0.45 : -0.45, 0.3, 0.6);
+  }
+  // after the call: the light motes' 8ths — an arp up the chord, alternating sides, rising
+  for (let b = P.flow, i = 0; b < P.iris - 0.01; b += 0.5, i++) {
+    const n = chordAt(b).notes;
+    const u = (b - P.flow) / (P.iris - P.flow);
+    pluck(b, n[i % n.length] + 12, 0.034 + 0.024 * u, i % 2 ? 0.35 : -0.35, 0.55, 0.3);
   }
   // cta: the pulse returns under her line (8ths → 16ths at the converge)
   for (let b = Math.max(P.line, P.cta + 1), i = 0; b < P.impact; b += b < P.converge ? 0.5 : 0.25, i++) {
@@ -466,12 +529,24 @@ export function bed(T) {
     epiano(P.impact + i * 0.008, m + 12, 0.07, (i - 2.5) * 0.18);
     piano(P.impact + i * 0.012, m, 0.07, (i - 2.5) * 0.15);
   });
+  // THE END CARD: a halo of the four lights' notes (E5 G#5 B5 E6) breathes in under the button and is
+  // held — slow sines with a slight, unsynchronised shimmer, no attack, no rhythm, nothing that moves
+  {
+    const a = sec(P.button);
+    const len = sec(END) + 0.5 - a;
+    [[76, 0.05, -0.35, 0.13], [80, 0.035, 0.35, 0.17], [83, 0.04, -0.1, 0.11], [88, 0.022, 0.15, 0.19]].forEach(([m, g, pan, lfo], i) => {
+      const f = mtof(m);
+      const sig = osc(len, (t) => f * (1 + 0.0012 * Math.sin(TAU * lfo * t + i)), (t) => smooth(Math.min(1, t / 2.2)) * (0.85 + 0.15 * Math.sin(TAU * lfo * 0.7 * t + i * 2)));
+      addMono(keys, sig, a, g, pan);
+    });
+  }
 
   /* ── sidechain pump in the groove sections (pad + bass + keys duck under the kick) ── */
   const pump = new Float32Array(out[0].length).fill(1);
-  for (const t of kickTimes) {
+  for (const t of [...kickTimes, ...felt]) {
     const b = t / BEAT;
-    const depth = inR(b, P.scale, P.cta) ? 0.45 : inR(b, P.call, P.kb) ? 0.22 : 0.25;
+    // the wall and the hero pump hard; the greetings barely breathe; after the call, a little
+    const depth = inR(b, P.scale, P.langs) ? 0.45 : inR(b, P.langs, P.flow) ? 0.1 : inR(b, P.flow, P.cta) ? 0.3 : inR(b, P.call, P.kb) ? 0.22 : 0.25;
     const i0 = Math.round(t * SR);
     for (let i = 0; i < 0.3 * SR && i0 + i < pump.length; i++) {
       const u = i / SR;

@@ -185,8 +185,39 @@ export function master(T, lib, bedSt, { publicDir }) {
       bedGain[i] = 1 - depth * k;
     }
   }
+  // the fader rides (BED.ride: frame → dB, smoothstep between points)
+  const ride = new Float32Array(n).fill(1);
+  {
+    const R = T.BED.ride;
+    for (let i = 0; i < n; i++) {
+      const f = (i / SR) * F;
+      let d = 0;
+      if (f <= R[0][0]) d = R[0][1];
+      else if (f >= R[R.length - 1][0]) d = R[R.length - 1][1];
+      else {
+        let k = 0;
+        while (R[k + 1][0] < f) k++;
+        d = R[k][1] + (R[k + 1][1] - R[k][1]) * smooth((f - R[k][0]) / (R[k + 1][0] - R[k][0]));
+      }
+      ride[i] = gain(d);
+    }
+  }
+  // the duck, split at DUCK.lowHz (Linkwitz–Riley, 24 dB/oct, sums flat): the lows only dip DUCK.bedLowDb
+  const lowDuck = gain(T.DUCK.bedLowDb);
+  const lowK = (1 - lowDuck) / (1 - gain(T.DUCK.bedDb));
   const bedIn = [new Float32Array(n), new Float32Array(n)];
-  for (let c = 0; c < 2; c++) for (let i = 0; i < n && i < bedSt[c].length; i++) bedIn[c][i] = bedSt[c][i] * T.BED.vol * bedGain[i];
+  for (let c = 0; c < 2; c++) {
+    const lp = [new Biquad('lp', T.DUCK.lowHz, Math.SQRT1_2), new Biquad('lp', T.DUCK.lowHz, Math.SQRT1_2)];
+    const hp = [new Biquad('hp', T.DUCK.lowHz, Math.SQRT1_2), new Biquad('hp', T.DUCK.lowHz, Math.SQRT1_2)];
+    for (let i = 0; i < n; i++) {
+      const x = i < bedSt[c].length ? bedSt[c][i] * T.BED.vol * ride[i] : 0;
+      const lo = lp[1].run(lp[0].run(x));
+      const hi = hp[1].run(hp[0].run(x));
+      // the full-band duck depth (1 − bedGain) scaled down for the lows
+      const gLo = 1 - (1 - bedGain[i]) * lowK;
+      bedIn[c][i] = lo * gLo + hi * bedGain[i];
+    }
+  }
   const bed = dynamicEq(bedIn, act, T.DUCK.eqDb);
 
   /* ── effects ── */

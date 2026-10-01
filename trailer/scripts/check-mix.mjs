@@ -17,7 +17,7 @@
  *     of the brand line, said into the impact's ring, must be ≥ MIX.name.sii
  *   · writes out/audio/cue-timeline.txt: every cue onset/peak and every word onset, in order
  *
- *   node --experimental-strip-types --no-warnings scripts/check-mix.mjs [--quiet]
+ *   node --experimental-strip-types --no-warnings scripts/check-mix.mjs [--quiet] [--words=<line id>]
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -195,10 +195,34 @@ const rms = (m, a, e) => {
  * deliberately unheard (listed, not scored) */
 const words = T.VOICES.flatMap((v) => {
   const cut = T.voiceCut(v);
-  return VOICE.lines[v.id].words.map((w, k) => {
+  const l = VOICE.lines[v.id];
+  const aligned = l.words.map((w, k) => {
     const f = v.at + w.t * T.FPS;
     return { f, w: w.w, id: v.id, k, cutTail: cut ? f + 6 > cut[1] : false, name: cut ? /^ava/i.test(w.w) : false };
   });
+  // the words the alignment does not carry ("Quick question," "Hmm," "Oh," "Um…" "See you then!"): every
+  // voiced run of the line's loudness (env ≥ 0.08 for ≥ 3 frames) that starts away from any aligned word
+  // and outside the aligned phrases is scored at its onset too
+  const extra = [];
+  let s0 = -1;
+  let last = -10;
+  const flush = () => {
+    if (s0 < 0 || last + 1 - s0 < 3) return;
+    const f = v.at + s0;
+    const inPhrase = l.phrases.some((p) => s0 >= p.start * T.FPS - 2 && s0 <= p.end * T.FPS);
+    const nearWord = aligned.some((w) => Math.abs(w.f - f) <= 4);
+    if (!inPhrase && !nearWord) extra.push({ f, w: `(unaligned +${s0} f)`, id: v.id, k: 1000 + s0, cutTail: cut ? f + 6 > cut[1] : false, name: false });
+  };
+  l.env.forEach((x, i) => {
+    if (x < 0.08) return;
+    if (s0 < 0 || i - last > 4) {
+      flush();
+      s0 = i;
+    }
+    last = i;
+  });
+  flush();
+  return [...aligned, ...extra];
 });
 let maskRows = [];
 const SII_OK = 0.7; // ≥ 0.7 ≈ fully intelligible speech
@@ -306,6 +330,9 @@ if (maskRows.length) {
   console.log(`the name      ${T.MIX.name.voice}: ${maskRows.filter((r) => r.id === T.MIX.name.voice).map((r) => `“${r.w}” ${r.sii.toFixed(2)}`).join(' · ')} (≥ ${T.MIX.name.sii})`);
 }
 console.log(`timeline      out/audio/cue-timeline.txt`);
+// --words=<line id>: every word of that line with its intelligibility, all maskers and effects alone
+const wq = process.argv.find((a) => a.startsWith('--words='))?.slice(8);
+if (wq) for (const r of maskRows.filter((x) => x.id === wq)) console.log(`word          ${wq} @${r.f.toFixed(1)} “${r.w}” ${r.cutTail ? '(cut tail) ' : ''}SII ${r.sii.toFixed(2)} · effects alone ${r.siiFx.toFixed(2)} · near: ${r.near.map((c) => path.basename(c.file, '.wav')).join(', ') || '—'}`);
 if (!quiet) for (const n of notes) console.log(`note          ${n}`);
 for (const w of warns) console.log(`WARN          ${w}`);
 for (const f of fails) console.log(`FAIL          ${f}`);

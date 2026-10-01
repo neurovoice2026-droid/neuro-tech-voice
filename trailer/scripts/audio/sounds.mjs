@@ -582,22 +582,23 @@ export function library(T) {
   {
     // the phone ring: a warm electronic trill (E6 ↔ F#6 at 25 Hz) in two pulses that follow the
     // picture's two ring pulses; the attack starts SFX.ring-hook.pk frames before the beat
-    const ring = (pulse2) => {
+    const ring = (pulse2, { only = -1, trillAt = 0 } = {}) => {
       const lead = T.SFX['ring-hook'].pk / F;
       const p1 = Math.min(0.22, pulse2 - 0.035);
-      const pulses = [[0, p1], [pulse2, pulse2 + 0.2]];
-      const len = lead + pulse2 + 0.3;
+      // `only`: render just that pulse (index), keeping its own shape and level, at the start
+      const pulses = only === 1 ? [[0, 0.2, 0.88]] : [[0, p1, 1], [pulse2, pulse2 + 0.2, 0.88]];
+      const len = lead + (only === 1 ? 0 : pulse2) + 0.3;
       const m = mono(len);
       let ph = 0;
       for (let i = 0; i < m.length; i++) {
         const t = i / SR - lead;
-        const trill = Math.sin(TAU * 25 * (t + lead)) > 0;
+        const trill = Math.sin(TAU * 25 * (t + lead + trillAt)) > 0; // (the resumed pulse keeps its trill phase)
         const f = trill ? mtof(88) : mtof(90);
         ph += (TAU * f) / SR;
         let a = 0;
-        for (const [s, e] of pulses) {
+        for (const [s, e, lv] of pulses) {
           const s0 = s - (s === 0 ? lead : 0.008);
-          if (t >= s0 && t < e + 0.012) a = Math.max(a, smooth((t - s0) / (s === 0 ? lead : 0.008)) * (t > e ? 1 - (t - e) / 0.012 : 1) * (s === 0 ? 1 : 0.88));
+          if (t >= s0 && t < e + 0.012) a = Math.max(a, smooth((t - s0) / (s === 0 ? lead : 0.008)) * (t > e ? 1 - (t - e) / 0.012 : 1) * lv);
         }
         m[i] = (Math.sin(ph) * 0.6 + Math.sin(2 * ph) * 0.16 + Math.sin(3 * ph) * 0.05 + Math.sin(ph / 2) * 0.22) * a;
       }
@@ -605,7 +606,9 @@ export function library(T) {
       return spread(shaped, 0.25, 4400);
     };
     put('ring-hook', 0, ring((T.HOOK_LOCAL.ringB - T.HOOK.ring) / F));
-    put('ring-twist', 0, ring(9 / F));
+    // the twist: NOT a second ring — the hook's frozen ring RESUMES. One pulse: ring-hook's second
+    // pulse alone (the same trill, pitch, filter chain and 0.88 level), its attack on the hit frame
+    put('ring-twist', 0, ring(0, { only: 1, trillAt: (T.HOOK_LOCAL.ringB - T.HOOK.ring) / F }));
   }
   {
     // the shatter: a crack, a thump, a spray of glass pings and debris flying wide

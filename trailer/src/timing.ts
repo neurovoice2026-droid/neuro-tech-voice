@@ -1236,11 +1236,15 @@ export const HITS: Hit[] = [
   H('hook', HOOK.textIn + 4, 'whoosh-soft', 'none', 0.5, 2, '“Your business is closed.” rises'),
   H('hook', HOOK_LOCAL.breathBeats[0], 'breath', 'night', 0.5, 3, 'the frozen world breathes'),
   H('hook', HOOK_LOCAL.breathBeats[1], 'breath', 'night', 0.5, 3, 'second breath'),
-  // the push into the break + the world's inhale (out[0]) + the twist's gather: one inhale, peak ON the shatter
-  H('hook', SCENES.hook.to - SCENES.hook.from, 'riser-short', 'night', 0.5, 2, 'inhale → peak ON the shatter'),
+  // the push into the break + the world's inhale (out[0]) + the twist's gather: one inhale that peaks and is
+  // choked ONE frame before the shatter, so the glass's own transient lands on a clean downbeat
+  H('hook', SCENES.hook.to - SCENES.hook.from - 1, 'riser-short', 'night', 0.5, 2, 'inhale → peaks and chokes 1 f before the shatter'),
 
   /* ── TWIST ── */
   H('twist', TWIST.shatter, 'shatter', 'none', 0.5, 1, 'SHATTER (downbeat)'),
+  // the twist's downbeat is a story hit, not an interface one: the glass gets a body and a floor
+  H('twist', TWIST.shatter, 'thump', 'none', 0.5, 1, 'the shatter’s body (kick)', { layer: true }),
+  H('twist', TWIST.shatter, 'sub', 'none', 0.5, 2, 'a sub drops under the shatter', { layer: true }),
   H('twist', TWIST.shatter + 2, 'glint', 'none', 0.175, 3, 'doorway light floods on'),
   H('twist', TWIST_LOCAL.closedSlide + 2, 'swish', 'none', [0.6, 0.43], 2, '“closed” slides left'),
   H('twist', TWIST_LOCAL.doorCreak, 'creak', 'none', 0.175, 3, 'the door creaks wider'),
@@ -1268,7 +1272,8 @@ export const HITS: Hit[] = [
   // NOT a second ring: the hook's first ring, frozen at HOOK.freeze, RESUMES — one wave on screen, and
   // ring-twist should be that same ring's second pulse alone (same trill, pitch and level: ring-hook's
   // pulse 2), so "Picked up on the first ring." stays true; the faint third ring (ring3) is inside it
-  H('twist', TWIST.ring2, 'ring-twist', 'night', 0.8, 1, 'THE FROZEN RING RESUMES (one pulse)'),
+  // (the file is that pulse normalised like every sound: −1.1 dB puts it back at the hook's pulse-2 level, 0.88)
+  H('twist', TWIST.ring2, 'ring-twist', 'night', 0.8, 1, 'THE FROZEN RING RESUMES (one pulse)', { db: -1.1 }),
   H('twist', TWIST_LOCAL.buzz[0], 'buzz', 'night', 0.8, 2, 'the phone vibrates'),
   H('twist', Math.round((TWIST_LOCAL.breath[0] + TWIST_LOCAL.breath[1]) / 2), 'swell', 'night', 0.5, 3, 'the orb breathes'),
   H('call', 0, 'riser-short', 'night', 0.5, 1, 'pickup anticipation → peak ON the pickup'),
@@ -1313,7 +1318,8 @@ export const HITS: Hit[] = [
   H('call', CALL_LOCAL.payoff, 'thump', 'none', 0.5, 2, 'the mark presses'),
   H('call', CALL_LOCAL.rowOut + 2, 'swish', 'none', 0.5, 3, '“You’re all booked for” drops away (on the beat)'),
   H('call', CALL_LOCAL.blowInhale[1], 'swell', 'night', 0.5, 3, 'the orb inhales'),
-  H('call', CALL_LOCAL.markTake - 1, 'whoosh', 'night', 0.5, 1, 'the orb dives into the mark (fastest frame); the room blows to the lens'),
+  // (w2: Ava's unaligned sign-off "See you then!" is spoken across it — PHRASES — so it steps back under her)
+  H('call', CALL_LOCAL.markTake - 1, 'whoosh', 'night', 0.5, 2, 'the orb dives into the mark (fastest frame); the room blows to the lens'),
   H('call', CALL_LOCAL.markTake, 'gulp', 'none', 0.5, 2, 'the mark takes the orb (ember flash)', { semi: -3 }),
 
   /* ── RESULT ── */
@@ -1333,6 +1339,8 @@ export const HITS: Hit[] = [
   H('result', RESULT_LOCAL.stars[0], 'tick', 'night', 0.09, 3, 'star 1', { semi: 7 }),
   H('result', RESULT_LOCAL.stars[1], 'tick', 'night', 0.39, 3, 'star 2', { semi: 12 }),
   H('result', RESULT.bookedWord, 'pop', 'none', 0.75, 1, '“Booked.” locks'),
+  // the call's payoff lands with weight (+ the bed's E stab on the same downbeat)
+  H('result', RESULT.bookedWord, 'land', 'none', 0.75, 1, '“Booked.”: the payoff’s weight', { layer: true }),
   H('result', RESULT.bookedWord + 1, 'sheen', 'none', [0.6, 0.9], 3, 'sheen across “Booked.”'),
   H('result', RESULT_LOCAL.check, 'ding-s', 'closing', 0.84, 2, 'the green check pops'),
   H('result', RESULT_LOCAL.stars[2], 'tick', 'night', 0.44, 3, 'star 3', { semi: 9 }),
@@ -1397,8 +1405,9 @@ export const HITS: Hit[] = [
   // card 01's pre-roll breath (scale.from − preroll) is the whip's tail; the pull-back carries its momentum
   H('scale', 2, 'swish', 'none', [0.5, 0.3], 3, 'the frame opens: the camera pulls back off card 01'),
   // THE WALL: eight pops on the 8th notes, eight ticks on the 16ths, each in its card's light; the hour turns every four cards
+  // (+2 dB: the pops are the wall's melody, in front of the groove the bed rides up under them)
   ...SCALE_LOCAL.pops.map((f, i) =>
-    H('scale', f, i < 8 ? 'pop' : 'tick', WALL[i], WALL_X[i], i === 0 ? 1 : 2, `industry ${i + 1} pops (${WALL[i]})`, { semi: WALL_SEMI[i] }),
+    H('scale', f, i < 8 ? 'pop' : 'tick', WALL[i], WALL_X[i], i === 0 ? 1 : 2, `industry ${i + 1} pops (${WALL[i]})`, { semi: WALL_SEMI[i], db: i === 0 ? 0 : 2 }),
   ),
   ...SCALE_LOCAL.groups.map((f, j) => H('scale', f, chime(SCALE_LOCAL.wallLights[j]), SCALE_LOCAL.wallLights[j], WALL_X[j * 4], 2, `LIGHT: ${SCALE_LOCAL.wallLights[j]} leads four cards`)),
   H('scale', SCALE.industriesTitle, 'riser-short', 'none', 0.5, 2, 'the 16ths build → peak ON the slam'),
@@ -1408,22 +1417,25 @@ export const HITS: Hit[] = [
   H('scale', SCALE_LOCAL.flyOut + 4, 'whoosh-soft', 'none', 0.5, 2, 'fifteen cards peel off outwards', { split: true }),
   H('scale', SCALE_LOCAL.glide + 3, 'swish', 'none', 0.5, 3, 'the keeper glides into the English card'),
   H('scale', SCALE_LOCAL.titleExit + 3, 'swish', 'none', 0.5, 3, '“16 industries.” leaves up'),
-  H('scale', SCALE.langTitle, 'tick', 'rush', 0.5, 2, '“14 languages.” lands'),
-  H('scale', SCALE.langTitle, chime(LANGS[0]), LANGS[0], 0.5, 2, 'LIGHT: rush — English'),
-  H('scale', SCALE_LOCAL.enFlip + 6, 'flip', LANGS[0], 0.5, 2, 'the card turns to English'),
+  // ("14 languages." lands 4 f before her first word: the tick and the card's turn stay light, "This" leads)
+  H('scale', SCALE.langTitle, 'tick', 'rush', 0.5, 3, '“14 languages.” lands'),
+  // (soft and far back: it rings into her first word, "This")
+  H('scale', SCALE.langTitle, chime(LANGS[0], true), LANGS[0], 0.5, 3, 'LIGHT: rush — English'),
+  H('scale', SCALE_LOCAL.enFlip + 6, 'flip', LANGS[0], 0.5, 2, 'the card turns to English', { db: -3 }),
   H('scale', SCALE_LOCAL.discloseEn[0], 'draw', LANGS[0], [0.3, 0.6], 3, '“AI assistant” underlined as she says it'),
   // the quick four + Japanese: each slides in from the right as its voice cuts in, its orb lights in its light
   ...SCALE.langAt.slice(1).flatMap((f, j) => {
     const k = j + 1;
     return [
-      H('scale', f - 1, 'whoosh-soft', 'none', [0.95, 0.5], 2, `${LANG_NAMES[k]} slides in`),
+      // the whoosh peaks on the slide's fastest frame, before the landing: her first sound is on its decay
+      H('scale', f - 4, 'whoosh-soft', 'none', [0.95, 0.5], 2, `${LANG_NAMES[k]} slides in`),
       // the card lands (and its orb lights) a frame before her first word: nothing clicks on the consonant
       H('scale', f - 1, 'tick', LANGS[k], LANG_ORB_X[k], 2, `${LANG_NAMES[k]} lands: the orb lights`),
       H('scale', f - 1, chime(LANGS[k], k < 5), LANGS[k], LANG_ORB_X[k], k < 5 ? 3 : 2, `LIGHT: ${LANGS[k]} — ${LANG_NAMES[k]}`),
     ];
   }),
   // (the card that recedes into the gallery makes no sound of its own: her next word is its sound)
-  H('scale', SCALE_LOCAL.discloseJa[0], 'draw', LANGS[5], [0.3, 0.6], 3, '“AIアシスタント” underlined as she says it'),
+  H('scale', SCALE_LOCAL.discloseJa[0], 'draw', LANGS[5], [0.3, 0.6], 3, '“AIアシスタント” underlined as she says it', { layer: true }),
   // after the call
   H('scale', SCALE_LOCAL.collapse + 3, 'whoosh-soft', 'none', [0.5, 0.5], 2, 'the gallery drops away', { split: true }),
   H('scale', SCALE_LOCAL.carrierFly + 5, 'whoosh', 'closing', [0.5, 0.21], 2, 'Japanese flies to the first station'),
@@ -1458,6 +1470,9 @@ export const HITS: Hit[] = [
   // the four lights pop UNDER Ava's line: a short pitched pop per light (its note), no bell
   // ring and no delay tail across "agents that book" — the picture carries the accent
   ...CTA_LOCAL.orbPops.map((f, i) => H('cta', f, 'pop', LIGHT_ORDER4[i], [0.66, 0.71, 0.27, 0.36][i], 3, `${LIGHT_ORDER4[i].toUpperCase()} orb pops (LIGHT)`)),
+  // …and under each, its light's soft chime, far back: the hook's four lights, recalled (the soft chimes
+  // have no mallet and step back under her voice — the tonal duck — so "agents that book" stays clear)
+  ...CTA_LOCAL.orbPops.map((f, i) => H('cta', f, chime(LIGHT_ORDER4[i], true), LIGHT_ORDER4[i], [0.66, 0.71, 0.27, 0.36][i], 2, `${LIGHT_ORDER4[i]}: the hook’s chime, recalled`, { layer: true, db: -2 })),
   // ON “Twenty” “four” “seven”: weight, not clicks — sub kicks under the words
   ...CTA_LOCAL.tighten.map((f, i) => H('cta', f, 'thump', 'none', 0.5, 2, `the orbit tightens (“${['Twenty', 'four', 'seven'][i]}”)`, { db: -1 })),
   H('cta', CTA_LOCAL.marks, 'tick', 'none', 0.5, 3, 'four corner marks pop', { run: { n: 4, step: 2, semi: 0 } }),
@@ -1605,7 +1620,8 @@ export const PHRASES = VOICES.flatMap((v) => {
 export const speaking = (f: number, before = 3, after = 5) => PHRASES.some(([a, e]) => f >= a - before && f <= e + after);
 /**
  * Ducking under the voices. The bed drops `bedDb` across each line (ramped `ramp`
- * frames ahead, released over `release`); wherever the voice is actually sounding
+ * frames ahead, released over `release`) — below `lowHz` only `bedLowDb` (the kick and the bass keep
+ * the groove under the dialogue; nothing there masks a word); wherever the voice is actually sounding
  * (followed with a `lookahead`-second look-ahead, so first consonants are already clear)
  * the bed loses `eqDb` and the effects `sfxEqDb` in the speech band (≈1–5 kHz), the
  * effects' room + delay returns (their tails) drop `tailsDb`, and the sustained tonal
@@ -1614,7 +1630,7 @@ export const speaking = (f: number, before = 3, after = 5) => PHRASES.some(([a, 
  * Ava's line; a key bell struck before a line — the logo chord — steps back the full `tonalDb`,
  * and further under the brand name: MIX.name).
  */
-export const DUCK = { bedDb: -5, eqDb: -6, sfxEqDb: -8, tailsDb: -6, tonalDb: -10, keyTonalDb: -5, lookahead: 0.04, ramp: 6, release: 12 } as const;
+export const DUCK = { bedDb: -9, bedLowDb: -4, lowHz: 140, eqDb: -6, sfxEqDb: -8, tailsDb: -6, tonalDb: -10, keyTonalDb: -5, lookahead: 0.04, ramp: 6, release: 12 } as const;
 
 /* ── the cue builder ── */
 const W_DB: Record<Weight, number> = { 1: 0, 2: -4, 3: -9 };
@@ -1696,8 +1712,29 @@ function buildCues(hits: Hit[]): Cue[] {
 
 export const CUES: Cue[] = buildCues(HITS);
 
-/** The music bed (synthesised to the film by generate-sfx.mjs; −20 dBFS peak, ducked in the mix). */
-export const BED = { file: sfx('bed.wav'), vol: 1 };
+/** The music bed (synthesised to the film by generate-sfx.mjs; −20 dBFS peak, ducked in the mix).
+ *  `vol` +6 dB with the deeper duck (DUCK.bedDb −9): the bed carries the gaps between the lines
+ *  and steps back under them (≈ −12 LU re the dialogue). */
+export const BED = {
+  file: sfx('bed.wav'),
+  vol: 2,
+  /**
+   * The fader rides (absolute frame, dB; smoothstep between points): the film LIFTS into the scale act —
+   * the wall builds and the hero slams a few dB over the bed's dialogue-act level, the greetings keep a
+   * felt pad under the voices, the after-call pulse drives into the iris, and the CTA is back at unity.
+   */
+  ride: [
+    [SCENES.scale.from - 2, 0],
+    [SCENES.scale.from + 1, 5],
+    [at('scale', SCALE.industriesTitle) - 1, 6.5],
+    [at('scale', SCALE.langTitle) - 6, 6],
+    [at('scale', SCALE.langTitle) + 3, 2],
+    [at('scale', SCALE.flow) - 4, 2],
+    [at('scale', SCALE.flow) + 2, 3.5],
+    [at('scale', SCALE.irisToDark[0]), 4],
+    [at('scale', SCALE.irisToDark[1]), 0],
+  ] as readonly (readonly [number, number])[],
+};
 /**
  * The master: everything above, mixed to `lufs` integrated with a true-peak ceiling (dBTP).
  * (−15.5, not −15: the film is dialogue-driven, so its integrated loudness IS the dialogue; half
