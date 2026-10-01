@@ -1,25 +1,27 @@
 /**
  * After the call: THE CALL → SLACK → CRM, at film scale.
  *
- *   rail      an 8 px electric line node → node, drawn by a 20 px glowing
- *             bead (comet tail + a directional shutter blur while it runs)
- *             over a pale track
- *   nodes     40 px; each fills ON its station frame through 1.35 → 1 (k380
+ *   rail      a 10 px line in the closing light node → node, drawn by a 26 px
+ *             glowing bead (comet tail + a directional shutter blur while it
+ *             runs) over a pale track
+ *   nodes     56 px; each fills ON its station frame through 1.35 → 1 (k380
  *             c14) with a 2.5× ping; the CRM node is green and pings twice
- *   stations  big white cards (a 96 px icon + one plain line) that slam in
- *             with their content (never an empty card); 16:9 names above the
- *             nodes, 9:16 names in the card's top-left
+ *   stations  big white cards that fill the frame, slamming in with their
+ *             content (never an empty card): a pearl icon disc that lights on
+ *             the station frame (ripple + sparks), the line at reading size
+ *             (64 px 16:9 · 60 px 9:16); 16:9 names (64 px) above the nodes,
+ *             9:16 names in the card's top-left
  */
 import React from 'react';
 import { C, FONT, R } from '../../theme';
 import { aos, EASE, mixHex, SPRING, tween } from '../../lib/motion';
-import { Box, popFill } from './Cards';
+import { Box, HitBurst, popFill } from './Cards';
 import { dspring } from './curves';
 import { STATION_ICONS, STATION_NAMES } from './data';
 import type { Geo, Pt } from './geometry';
 import { DirBlur, dirBlurRef, sigmaFor } from './MotionBlur';
 import { Rise } from './Rise';
-import { bodyOf, FLOW_LIGHT, rgba, SETTLED } from './lights';
+import { bodyOf, discHot, discRest, FLOW_LIGHT, rgba, SETTLED } from './lights';
 import { LIGHTS } from '../../theme';
 
 /** the closing light: emerald = confirmed */
@@ -42,9 +44,9 @@ export type FlowTiming = {
   pill: number;
 };
 
-const NODE = 40;
-const RAIL = 8;
-const BEAD = 20;
+const NODE = 56;
+const RAIL = 10;
+const BEAD = 26;
 
 /** the stream along the finished rail: a mote every 8th note from the CRM's confirm (SCALE_LOCAL.stream) */
 const streamAt = (T: FlowTiming) => [0, 1].map((j) => T.stream[0] + j * 7.5);
@@ -255,13 +257,13 @@ export const Rail: React.FC<{ t: number; G: Geo; vertical: boolean; T: FlowTimin
                 position: 'absolute',
                 left: p.x - 300,
                 width: 600,
-                top: p.y - 27,
+                top: p.y - 38,
                 textAlign: 'center',
-                fontFamily: FONT.body,
+                fontFamily: FONT.ui,
                 fontWeight: 500,
-                fontSize: 44,
-                lineHeight: '54px',
-                letterSpacing: '-0.015em',
+                fontSize: 64,
+                lineHeight: '76px',
+                letterSpacing: '-0.025em',
                 color: C.ink,
                 whiteSpace: 'nowrap',
               }}
@@ -278,20 +280,46 @@ const line = (size: number, color: string = C.ink): React.CSSProperties => ({
   fontFamily: FONT.body,
   fontWeight: 500,
   fontSize: size,
-  lineHeight: 1.15,
-  letterSpacing: '-0.012em',
+  lineHeight: 1.08,
+  letterSpacing: '-0.02em',
   color,
   whiteSpace: 'nowrap',
 });
 
-/** the station's icon: ink, flashing electric (settled on the CRM) on its station frame */
-const StationIcon: React.FC<{ i: number; t: number; at: number; size: number }> = ({ i, t, at, size }) => {
+/**
+ * The station's icon on a pearl disc: on its station frame the disc lights
+ * (the closing light; the CRM settles green), the icon turns white, a ripple
+ * and sparks leave it, and it settles back to the pearl disc + the light's ink.
+ */
+const StationIcon: React.FC<{ i: number; t: number; at: number; D: number }> = ({ i, t, at, D }) => {
   const Icon = STATION_ICONS[i];
-  const fk = t < at ? 0 : 1 - tween(t, [at, at + 6], [0, 1], EASE.out3);
-  const hot = i === 2 ? SETTLED : INK;
+  const fk = t < at ? 0 : 1 - tween(t, [at, at + 8], [0, 1], EASE.out3);
+  const crm = i === 2;
+  // the CRM keeps a settled-green disc once it has confirmed
+  const keep = crm && t >= at ? 1 : 0;
+  const hot = crm ? SETTLED : INK;
+  const icon = Math.round(D * 0.52);
+  const pop = t < at ? 1 : 1 + 0.12 * Math.sin(Math.min(1, (t - at) / 6) * Math.PI) * (1 - tween(t, [at, at + 8], [0, 1], EASE.out3));
+  const lit = Math.max(fk, keep);
   return (
-    <div style={{ width: size, height: size, filter: fk > 0.01 ? `drop-shadow(0 0 26px ${rgba(i === 2 ? SETTLED : BODY, 0.65 * fk)})` : undefined }}>
-      <Icon size={size} strokeWidth={2} color={mixHex(C.ink, hot, fk)} />
+    <div style={{ position: 'relative', width: D, height: D, transform: pop !== 1 ? `scale(${pop.toFixed(4)})` : undefined }}>
+      <HitBurst t={t} at={at} cx={D / 2} cy={D / 2} r={D / 2} light={FLOW_LIGHT} seed={`station-${i}`} n={7} />
+      <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', ...discRest() }} />
+      {lit > 0.01 ? (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: '50%',
+            background: crm ? `radial-gradient(90% 90% at 30% 24%, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 42%), linear-gradient(135deg, #34c97e 0%, ${SETTLED} 100%)` : discHot(FLOW_LIGHT),
+            opacity: Math.min(1, lit * 1.15),
+            boxShadow: `0 0 ${(D * 0.35 * Math.max(fk, 0.35 * keep)).toFixed(1)}px ${rgba(crm ? SETTLED : BODY, 0.55)}`,
+          }}
+        />
+      ) : null}
+      <div style={{ position: 'absolute', left: (D - icon) / 2, top: (D - icon) / 2, width: icon, height: icon }}>
+        <Icon size={icon} strokeWidth={2.1} color={lit > 0.5 ? '#ffffff' : mixHex(C.ink, hot, lit * 2)} />
+      </div>
     </div>
   );
 };
@@ -317,7 +345,7 @@ const Pill: React.FC<{ t: number; at: number; size: number }> = ({ t, at, size }
         opacity: tween(t, [at, at + 2], [0, 1], EASE.out3),
         transform: `scale(${Math.max(0, 0.6 + 0.4 * p).toFixed(4)})`,
         transformOrigin: '0% 50%',
-        boxShadow: `0 0 0 ${(8 * Math.max(0, 1 - tween(t, [at, at + 10], [0, 1], EASE.out3))).toFixed(2)}px rgba(238,84,35,0.14)`,
+        boxShadow: `0 0 0 ${(10 * Math.max(0, 1 - tween(t, [at, at + 10], [0, 1], EASE.out3))).toFixed(2)}px rgba(238,84,35,0.16)`,
       }}
     >
       <div style={{ width: size * 0.32, height: size * 0.32, borderRadius: '50%', background: C.ember }} />
@@ -326,48 +354,107 @@ const Pill: React.FC<{ t: number; at: number; size: number }> = ({ t, at, size }
   );
 };
 
+/** the CRM's check badge: pops on the confirm (anticipation, 1.12 overshoot) with a green ring */
+const Check: React.FC<{ t: number; at: number; size: number }> = ({ t, at, size }) => {
+  if (t < at - 2) return null;
+  const p = aos(t, at, { anticip: 2, depth: 0.1, config: { stiffness: 480, damping: 15, mass: 0.6 } });
+  const ringP = tween(t, [at, at + 10], [0, 1], EASE.out3);
+  return (
+    <div style={{ position: 'relative', width: size, height: size }}>
+      {t >= at && ringP < 1 ? (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: '50%',
+            boxShadow: `inset 0 0 0 ${(3 * (1 - ringP) + 1).toFixed(2)}px ${rgba(SETTLED, 0.6 * (1 - ringP))}`,
+            transform: `scale(${(1 + 0.9 * ringP).toFixed(4)})`,
+          }}
+        />
+      ) : null}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          borderRadius: '50%',
+          background: `linear-gradient(135deg, #34c97e 0%, ${SETTLED} 100%)`,
+          boxShadow: `0 6px 16px -6px ${rgba(SETTLED, 0.6)}`,
+          transform: `scale(${Math.max(0, p).toFixed(4)})`,
+        }}
+      >
+        <svg width={size} height={size} viewBox="0 0 40 40" style={{ position: 'absolute', inset: 0 }}>
+          <path
+            d="M12 20.5 L17.5 26 L28.5 14.5"
+            fill="none"
+            stroke="#ffffff"
+            strokeWidth={4}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            pathLength={1}
+            strokeDasharray={1}
+            strokeDashoffset={1 - tween(t, [at, at + 5], [0, 1], EASE.out3)}
+          />
+        </svg>
+      </div>
+    </div>
+  );
+};
+
 /** One station card's content. i: 0 the call, 1 Slack, 2 CRM. */
 export const StationFace: React.FC<{ i: number; t: number; T: FlowTiming; vertical: boolean }> = ({ i, t, T, vertical }) => {
   const pad = vertical ? 36 : 40;
   const st = T.stations[i];
-  const icon = <StationIcon i={i} t={t} at={st} size={96} />;
-  const okP = i === 2 ? dspring(t - T.ok, { stiffness: 480, damping: 15, mass: 0.6 }) : 0;
-  const body =
-    i === 0 ? (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-        <div style={line(40)}>New caller</div>
-        <Pill t={t} at={T.pill} size={30} />
-      </div>
-    ) : i === 1 ? (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={{ fontFamily: FONT.mono, fontWeight: 500, fontSize: 32, lineHeight: 1.1, color: C.muted, whiteSpace: 'nowrap' }}>#front-desk</div>
-        <div style={line(40)}>Booked · Wed 15:00</div>
-      </div>
-    ) : (
-      <div style={{ ...line(40, mixHex(C.ink, C.settled, tween(t, [T.ok, T.ok + 3], [0, 1], EASE.out3))), display: 'flex', alignItems: 'center', gap: 14 }}>
-        Contact saved
-        <span
-          style={{
-            display: 'inline-block',
-            color: C.settled,
-            transform: `scale(${(t < T.ok ? 0 : Math.max(0, okP)).toFixed(4)})`,
-            transformOrigin: '50% 60%',
-          }}
-        >
-          ✓
-        </span>
-      </div>
-    );
+  const body = vertical ? 60 : 64;
+  const D = vertical ? 104 : 112;
+  const icon = <StationIcon i={i} t={t} at={st} D={D} />;
+  const saved = tween(t, [T.ok, T.ok + 3], [0, 1], EASE.out3);
+  // the line's words settle in with the card (0.8 f apart): never an empty card, never a plain fade
+  const words = (s: string, at: number, size: number, color?: string) =>
+    s.split(' ').map((w, j, all) => {
+      const p = dspring(t - at + 1.4 - 0.8 * j, { stiffness: 560, damping: 20, mass: 0.6 });
+      return (
+        <React.Fragment key={j}>
+          <span style={{ display: 'inline-block', color, transform: p < 0.999 ? `translateY(${((1 - p) * size * 0.4).toFixed(2)}px)` : undefined }}>{w}</span>
+          {j < all.length - 1 ? ' ' : null}
+        </React.Fragment>
+      );
+    });
+  const settledInk = mixHex(C.ink, C.settled, saved);
+  const content =
+    i === 0
+      ? { tag: <Pill t={t} at={T.pill} size={vertical ? 34 : 36} />, lines: [words('New caller', T.cardsIn[0], body)] }
+      : i === 1
+        ? {
+            tag: <div style={{ fontFamily: FONT.mono, fontWeight: 500, fontSize: vertical ? 32 : 34, lineHeight: 1, color: C.muted, whiteSpace: 'nowrap' }}>#front-desk</div>,
+            lines: vertical ? [words('Booked · Wed 15:00', T.cardsIn[1], body)] : [words('Booked ·', T.cardsIn[1], body), words('Wed 15:00', T.cardsIn[1] + 1.6, body)],
+          }
+        : { tag: <Check t={t} at={T.ok} size={vertical ? 64 : 68} />, lines: [words('Contact saved', T.cardsIn[2], body, settledInk)] };
+  const lines = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {content.lines.map((l, j) => (
+        <div key={j} style={line(body)}>
+          {l}
+        </div>
+      ))}
+    </div>
+  );
   return vertical ? (
     <>
-      <div style={{ position: 'absolute', left: pad, top: pad - 4, ...line(40) }}>{STATION_NAMES[i]}</div>
-      <div style={{ position: 'absolute', right: pad, top: pad }}>{icon}</div>
-      <div style={{ position: 'absolute', left: pad, bottom: pad - 4 }}>{body}</div>
+      <div style={{ position: 'absolute', left: pad, top: pad - 6, display: 'flex', alignItems: 'center', gap: 22 }}>
+        <div style={line(64)}>{words(STATION_NAMES[i], T.cardsIn[i], 64)}</div>
+        {i === 1 ? content.tag : null}
+      </div>
+      <div style={{ position: 'absolute', right: pad, top: pad - 4 }}>{icon}</div>
+      <div style={{ position: 'absolute', left: pad, bottom: pad - 8, display: 'flex', alignItems: 'center', gap: 22 }}>
+        {lines}
+        {i === 1 ? null : content.tag}
+      </div>
     </>
   ) : (
     <>
       <div style={{ position: 'absolute', left: pad - 4, top: pad - 4 }}>{icon}</div>
-      <div style={{ position: 'absolute', left: pad, bottom: pad - 6 }}>{body}</div>
+      <div style={{ position: 'absolute', right: pad, top: pad + (D - (i === 2 ? 68 : 58)) / 2 }}>{content.tag}</div>
+      <div style={{ position: 'absolute', left: pad, bottom: pad - 10 }}>{lines}</div>
     </>
   );
 };

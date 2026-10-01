@@ -90,6 +90,9 @@ export function kicks(t: number): { z: number; jx: number; rot: number } {
   const H = SCALE.industriesTitle;
   if (t >= H) z += 0.025 * Math.exp(-(t - H) / 4);
   for (const l of K.langs) if (t >= l) z += 0.005 * Math.exp(-(t - l) / 2);
+  // "14 languages." lands (its letters settle ~4 f after the rise starts): a 2 px jolt
+  const ti = K.titleIn + 4;
+  if (t >= ti) jx += -2 * Math.exp(-(t - ti) / 2.5);
   return { z, jx, rot };
 }
 
@@ -127,7 +130,9 @@ export function camAt(t: number, G: Geo, L: Layout): Affine {
   };
   // the slow push over the language grid, released for the flow
   const P = K.push;
-  about(centre({ x: G.cells[0].x, y: G.cells[0].y, w: G.cells[5].x + G.cells[5].w - G.cells[0].x, h: G.cells[5].y + G.cells[5].h - G.cells[0].y }),
+  const c0 = G.cells[0];
+  const c1 = G.cells[G.cells.length - 1];
+  about(centre({ x: c0.x, y: c0.y, w: c1.x + c1.w - c0.x, h: c1.y + c1.h - c0.y }),
     1 + 0.022 * windowed(t, P[0], P[1], P[1], P[2], EASE.inOut, EASE.inOut));
   // nudges toward each flow node
   K.stations.forEach((st, i) => about(G.nodes[i], 1 + nudge(t, st, i === 2)));

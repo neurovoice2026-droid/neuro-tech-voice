@@ -71,8 +71,8 @@ export function geo(L: Layout) {
   const focus: Pt[] = [...blocks.map(centre), { x: L.cx, y: L.cy }];
 
   /* ── the three language cells (two pages of three languages) ─────── */
-  const langBox: Rect = L.pick({ x: 16, y: 236, w: 1888, h: 828 }, { x: 12, y: 390, w: 1056, h: 1080 });
-  const cells: Rect[] = cellsOf(langBox, v ? 1 : 3, v ? 3 : 1, 12).flat(); // 621 × 828 · 1056 × 352
+  const langBox: Rect = L.pick({ x: 16, y: 236, w: 1888, h: 828 }, { x: 12, y: 382, w: 1056, h: 1140 });
+  const cells: Rect[] = cellsOf(langBox, v ? 1 : 3, v ? 3 : 1, 12).flat(); // 621 × 828 · 1056 × 372
   /**
    * Which industry card becomes which language cell: each cell takes the
    * nearest unused card; the last cell (Spanish, then Japanese) always takes
@@ -107,7 +107,7 @@ export function geo(L: Layout) {
     /** "14 languages." — the top band: left edge x (on the cells' text column), cap-centre y */
     band: L.pick({ x: 46, y: 116, size: 120 }, { x: 34, y: 290, size: 110 }),
     /** "After the call." — top-left of its line box (on the station cards' left edge) */
-    after: L.pick({ x: 60, y: 130, size: 96 }, { x: 60, y: 232, size: 88 }),
+    after: L.pick({ x: 60, y: 168, size: 112 }, { x: 60, y: 232, size: 88 }),
   };
 
   /* ── the after-call rail ─────────────────────────────────────────

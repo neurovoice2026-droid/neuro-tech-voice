@@ -48,7 +48,7 @@ import { Rail, StationCards, StationFace, type FlowTiming } from './scale/Flow';
 import { centre, geo, mixRect, type Geo, type Rect } from './scale/geometry';
 import { Titles } from './scale/Heading';
 import { DirBlur, dirBlurRef, sigmaFor } from './scale/MotionBlur';
-import { bodyOf, cardLight, FLOW_LIGHT, LANG_LIGHT, litFill, rgba } from './scale/lights';
+import { bodyOf, cardLight, FLOW_LIGHT, HERO_LIGHT, LANG_LIGHT, leadColor, litFill, rgba, tintOf } from './scale/lights';
 
 const K = SCALE_LOCAL;
 const HERO = SCALE.industriesTitle;
@@ -92,21 +92,26 @@ const poseCss = (p: { sc: number; rot: number; dx: number; dy: number }) =>
 /* ── keepers ─────────────────────────────────────────────────────── */
 const glideStart = (k: number) => K.glide + k * K.glideStagger;
 const glideAt = (k: number, tt: number) => aos(tt, glideStart(k), { anticip: 4, depth: 0.05, config: SPRING.site });
-const collapseStart = (k: number) => (k === 5 ? K.carrierFly : K.collapse + k * K.collapseStagger);
+/** the last cell (Spanish → Japanese) carries on: it becomes THE CALL */
+const CARRIER = 2;
+const collapseStart = (k: number) => (k === CARRIER ? K.carrierFly : K.collapse + k * K.collapseStagger);
 
 function keeperRect(G: Geo, k: number, tt: number): Rect {
   const base = mixRect(G.cards[G.stay[k]], G.cells[k], glideAt(k, tt));
-  const p = slide(tt - collapseStart(k), dist(base, G.stations[0]), k === 5 ? CARRY : COLLAPSE);
+  const p = slide(tt - collapseStart(k), dist(base, G.stations[0]), k === CARRIER ? CARRY : COLLAPSE);
   return mixRect(base, G.stations[0], p);
 }
 
-/** the flip angle (deg): a 2 f −8° anticipation, then −8 → 180 on FLIP */
-function flipAngle(k: number, tt: number) {
-  const L0 = K.langs[k];
+/** one half-turn (deg): a 2 f −8° anticipation, then −8 → 180 on FLIP */
+function halfTurn(L0: number, tt: number) {
   if (tt < L0 - 2) return 0;
   if (tt < L0) return -8 * Math.sin(((tt - (L0 - 2)) / 2) * (Math.PI / 2));
   return -8 + 188 * dspring(tt - L0 + 0.6, FLIP);
 }
+/** cell k turns twice: industry → language k (page 1) → language k + 3 (page 2), one beat apart */
+const flipAngle = (k: number, tt: number) => halfTurn(K.langs[k], tt) + halfTurn(K.langs[k + 3], tt);
+/** which language a cell shows at angle a (−1: still the industry face) */
+const pageOf = (k: number, a: number) => (a < 90 ? -1 : a < 270 ? k : k + 3);
 
 /* ── the ten leaving cards ───────────────────────────────────────── */
 function flyAt(i: number, order: number, tt: number, u: { x: number; y: number }) {
@@ -136,11 +141,12 @@ export const Scale: React.FC = () => {
 
   /* ── the hero hit ─────────────────────────────────────────────── */
   const dim = tween(t, [HERO, HERO + 6], [0, 1], EASE.out3);
-  const wash = t >= HERO && t < HERO + 2 ? (t < HERO + 1 ? 0.08 : 0.05) : 0;
+  const wash = t >= HERO && t < HERO + 2 ? (t < HERO + 1 ? 0.09 : 0.05) : 0;
 
   /* ── card metrics ─────────────────────────────────────────────── */
   const ind = { pad: v ? 24 : 32, iconSize: v ? 72 : 80, labelSize: v ? 30 : 40 };
-  const cell = { pad: v ? 24 : 32, labelSize: v ? 28 : 30, leadSize: v ? 44 : 48, aiSize: v ? 72 : 84, orb: v ? 56 : 64 };
+  // the greetings at reading size: 84 px (16:9) / 80 px (9:16), labels 30 / 28
+  const cell = { pad: v ? 26 : 32, labelSize: v ? 28 : 30, size: v ? 80 : 84, orb: v ? 104 : 168 };
 
   /** the wall-phase filter of card i: attack-frame shutter blur, step blur, hero blur */
   const wallFilter = (i: number, id: string, extraBlur = 0): { f?: string; defs: React.ReactNode } => {
@@ -162,6 +168,11 @@ export const Scale: React.FC = () => {
     if (b > 0.2) parts.push(`blur(${(b / cam.s).toFixed(2)}px)`);
     return { f: parts.length ? parts.join(' ') : undefined, defs };
   };
+
+  /** the hero's lock strums out from the title (the wall centre): 0 → 4 f by distance */
+  const wc0 = centre(G.wall);
+  const far = Math.hypot(G.wall.w, G.wall.h) / 2;
+  const lockDelay = (i: number) => (4 * Math.hypot(centre(G.cards[i]).x - wc0.x, centre(G.cards[i]).y - wc0.y)) / far;
 
   /* ── keepers / flyers ─────────────────────────────────────────── */
   const keeperOf = Array.from({ length: 16 }, (_, i) => G.stay.indexOf(i));
@@ -191,22 +202,15 @@ export const Scale: React.FC = () => {
     pill: K.pill,
   };
 
-  /** does language cell k lie under the centred hero title? */
-  const underTitle = (k: number) => {
-    const h = G.title.hero;
-    const c = G.cells[k];
-    return c.y < h.y + 0.45 * h.size && c.y + c.h > h.y - 0.75 * h.size && c.x < h.x + 2.9 * h.size && c.x + c.w > h.x - 2.9 * h.size;
-  };
-
-  /* ── one keeper (industry card → language cell → deck) ─────────── */
+  /* ── one keeper (industry card → language cell → page 2 → deck) ─── */
   const keeper = (k: number) => {
     const i = G.stay[k];
     if (t < popStart(i)) return null;
-    const carrier = k === 5;
+    const carrier = k === CARRIER;
     const gs = glideStart(k);
     const r = t < gs - 4 ? G.cards[i] : keeperRect(G, k, t);
     const a = flipAngle(k, t);
-    const back = a >= 90;
+    const page = pageOf(k, a);
     const cs = collapseStart(k);
     const hide = carrier ? 0 : tween(t, [K.stations[0] - 1, K.stations[0] + 3], [0, 1]);
     if (hide >= 1) return null;
@@ -220,6 +224,8 @@ export const Scale: React.FC = () => {
     let lift = 0;
     let z = 1;
     let face: React.ReactNode;
+    // the flip's shutter blur: the card's width collapses/opens fast mid-turn
+    const flipS = Math.abs(Math.cos((flipAngle(k, t + 0.5) * Math.PI) / 180) - Math.cos((flipAngle(k, t - 0.5) * Math.PI) / 180)) * (r.w / 2);
 
     if (t < HERO) {
       // the wall: the pop
@@ -228,14 +234,12 @@ export const Scale: React.FC = () => {
       defs = w.defs;
       transform = poseCss(popPose(i, t, v));
       bg = popFill(t, tickOf(i), cardLight(i), 0.4);
-    } else if (!back) {
+    } else if (page < 0) {
       // dimmed industry front: .4 on the hit → .6 over the glide → 1 as it turns
       const up = tween(t, [gs, gs + 10], [0, 1], EASE.inOut);
       const turn = tween(t, [K.langs[k] - 2, K.langs[k]], [0, 1], EASE.out3);
       opacity *= (1 - 0.6 * dim + 0.2 * up) * (1 - turn) + turn;
       const blurPx = (8 * dim - 5.5 * up) * (1 - turn);
-      // the flip's shutter blur: the card's width collapses/opens fast mid-turn
-      const flipS = Math.abs(Math.cos((flipAngle(k, t + 0.5) * Math.PI) / 180) - Math.cos((flipAngle(k, t - 0.5) * Math.PI) / 180)) * (r.w / 2);
       const sx = Math.min(14, sigmaFor(flipS));
       const ref = dirBlurRef(id, sx, 0);
       if (ref) defs = <DirBlur id={id} sx={sx} sy={0} />;
@@ -243,8 +247,7 @@ export const Scale: React.FC = () => {
       transform = a !== 0 ? `perspective(1600px) rotateY(${a.toFixed(3)}deg)` : undefined;
       if (a > 0) z = 2;
     } else {
-      // the language face
-      const flipS = Math.abs(Math.cos((flipAngle(k, t + 0.5) * Math.PI) / 180) - Math.cos((flipAngle(k, t - 0.5) * Math.PI) / 180)) * (r.w / 2);
+      // a language face (page 1 on the back, page 2 on the front again)
       let sx = Math.min(14, sigmaFor(flipS));
       let sy = 0;
       // collapse / carrier flight: a directional shutter blur along the move
@@ -256,22 +259,24 @@ export const Scale: React.FC = () => {
       const ref = dirBlurRef(id, sx, sy);
       if (ref) defs = <DirBlur id={id} sx={sx} sy={sy} />;
       filter = ref;
-      const ra = a - 180;
+      const ra = a - (page === k ? 180 : 360);
       transform = Math.abs(ra) > 0.01 ? `perspective(1600px) rotateY(${ra.toFixed(3)}deg)` : undefined;
-      const firstBack = flipAngle(k, t - 1) < 90;
-      const nextLive = k < 5 ? K.langs[k + 1] : K.collapse;
+      const L0 = K.langs[page];
+      const firstFrame = pageOf(k, flipAngle(k, t - 1)) !== page;
+      // the live cell: lit from its landing until the next flip lands (or the collapse)
+      const nextLive = page + 1 < 6 ? K.langs[page + 1] : K.collapse;
       const live = t < nextLive + 3 && t < cs;
-      if (firstBack) bg = litFill(LANG_LIGHT[k], 1.1);
+      if (firstFrame) bg = litFill(LANG_LIGHT, 1.1);
       if (carrier && t >= K.stations[0]) bg = popFill(t, K.stations[0], FLOW_LIGHT);
-      if (live) ring = rgba(bodyOf(LANG_LIGHT[k]), 0.75);
-      z = t < K.langs[k] + 8 ? 2 : 1;
+      if (live) ring = rgba(bodyOf(LANG_LIGHT), 0.7 * tween(t, [L0, L0 + 3], [0, 1], EASE.out3));
+      z = t < L0 + 8 ? 2 : 1;
       if (t >= cs - 4) {
         lift = carrier ? tween(t, [cs - 3, cs + 4], [0, 1], EASE.out3) * (1 - tween(t, [cs + 6, cs + 14], [0, 1], EASE.inOut)) : 0.4;
         z = carrier ? 4 : 1;
       }
     }
 
-    if (t < HERO || !back) {
+    if (t < HERO || page < 0) {
       face = (
         <IndustryFace
           d={INDUSTRIES[i]}
@@ -283,7 +288,10 @@ export const Scale: React.FC = () => {
           labelSize={ind.labelSize}
           light={cardLight(i)}
           lockAt={HERO}
+          lockLight={HERO_LIGHT}
+          lockDelay={lockDelay(i)}
           beats={K.beats}
+          beatLights={K.wallLights.slice(1)}
           still={t > tickOf(i) + 12}
         />
       );
@@ -292,32 +300,21 @@ export const Scale: React.FC = () => {
         ? tween(t, [K.carrierFly - 1, K.carrierFly + 3], [0, 1], EASE.in2)
         : 0.75 * tween(t, [cs + 3, cs + 6], [0, 1], EASE.inOut);
       const callIn = carrier ? tween(t, [K.callIn - 1, K.callIn + 2], [0, 1], EASE.out3) : 0;
-      const lg = LANGS[k];
-      // rack focus: a greeting that lands UNDER the centred hero title stays soft
-      // (like the wall) while the title holds, and comes into focus as it leaves
-      const soft = underTitle(k) ? 1 - tween(t, [K.titleSwap, K.titleSwap + 5], [0, 1], EASE.inOut) : 0;
+      const lg = LANGS[page];
       face = (
         <>
           {langOut < 1 ? (
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                opacity: (1 - langOut) * (1 - 0.5 * soft),
-                filter: soft > 0.02 ? `blur(${(4 * soft).toFixed(2)}px)` : undefined,
-              }}
-            >
+            <div style={{ position: 'absolute', inset: 0, opacity: 1 - langOut }}>
               <LangFace
                 lang={lg}
-                ai={(v && lg.aiV) || lg.ai}
+                set={v ? lg.v : lg.h}
                 t={t}
-                at={K.langs[k]}
+                at={K.langs[page]}
                 pad={cell.pad}
                 labelSize={cell.labelSize}
-                leadSize={cell.leadSize}
-                aiSize={lg.aiSize ? (v ? lg.aiSize[1] : lg.aiSize[0]) : cell.aiSize}
-                underline={tween(t, K.disclose[k], [0, 1], EASE.house)}
-                light={LANG_LIGHT[k]}
+                size={lg.size ? (v ? lg.size[1] : lg.size[0]) : cell.size}
+                underline={tween(t, K.disclose[page], [0, 1], EASE.house)}
+                light={LANG_LIGHT}
                 orbSize={cell.orb}
                 w={r.w}
               />
@@ -366,7 +363,10 @@ export const Scale: React.FC = () => {
         labelSize={ind.labelSize}
         light={cardLight(i)}
         lockAt={HERO}
+        lockLight={HERO_LIGHT}
+        lockDelay={lockDelay(i)}
         beats={K.beats}
+        beatLights={K.wallLights.slice(1)}
         still={ghost || t > tickOf(i) + 12}
         accents={!ghost}
       />
@@ -414,14 +414,14 @@ export const Scale: React.FC = () => {
         <Layer depth={1}>
           <AbsoluteFill style={{ transform: stagePush, transformOrigin: `${G.end.x}px ${G.end.y}px`, zIndex: 0 }}>
             {flyOrder.map((i, o) => flyer(i, o))}
-            {[0, 1, 2, 3, 4].map((k) => keeper(k))}
+            {[0, 1].map((k) => keeper(k))}
             <Rail t={t} G={G} vertical={v} T={flowT} />
-            {keeper(5)}
+            {keeper(CARRIER)}
             <StationCards t={t} G={G} vertical={v} T={flowT} />
           </AbsoluteFill>
           <Titles
             t={t}
-            T={{ hero: HERO, swap: K.titleSwap, out: K.titleOut, after: K.titleAfter }}
+            T={{ hero: HERO, swap: K.titleSwap, exit: K.titleExit, in: K.titleIn, out: K.titleOut, after: K.titleAfter }}
             hero={G.title.hero}
             band={G.title.band}
             after={G.title.after}
@@ -430,13 +430,13 @@ export const Scale: React.FC = () => {
 
         {/* 1.6 · out-of-focus lilac discs, nearest the lens */}
         <Layer depth={1.6}>
-          <NearDiscs t={t} L={L} fade={tween(t, [0, 10], [0, 1], EASE.out3)} />
+          <NearDiscs t={t} L={L} fade={tween(t, [0, 10], [0, 1], EASE.out3)} color={leadColor(t, 2)} />
         </Layer>
       </Camera>
       </AbsoluteFill>
 
       {/* the hero hit: a 2 f lilac wash over everything */}
-      {wash > 0 ? <AbsoluteFill style={{ background: `rgba(185,163,255,${wash})` }} /> : null}
+      {wash > 0 ? <AbsoluteFill style={{ background: rgba(tintOf(HERO_LIGHT), wash) }} /> : null}
     </AbsoluteFill>
   );
 };

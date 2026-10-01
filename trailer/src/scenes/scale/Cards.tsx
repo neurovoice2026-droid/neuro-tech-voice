@@ -159,8 +159,9 @@ export const IndustryFace: React.FC<{
   light: LightId;
   /** the hero's unison flash: every disc lights on this frame (the wall "locks") */
   lockAt?: number;
-  /** …in this light (one light for the whole wall) */
+  /** …in this light (one light for the whole wall), strummed: this card lights `lockDelay` f after the slam */
   lockLight?: LightId;
+  lockDelay?: number;
   /** the quarter-note pulse: the discs already on the wall light (0.7) on these frames… */
   beats?: readonly number[];
   /** …each in the NEW hour's light (beats[j] → beatLights[j]) */
@@ -169,7 +170,7 @@ export const IndustryFace: React.FC<{
   still?: boolean;
   /** the tick's ripple + sparks (off for ghost copies) */
   accents?: boolean;
-}> = ({ d, t, at, tick, pad, iconSize, labelSize, light: own, lockAt, lockLight, beats, beatLights, still = false, accents = true }) => {
+}> = ({ d, t, at, tick, pad, iconSize, labelSize, light: own, lockAt, lockLight, lockDelay = 0, beats, beatLights, still = false, accents = true }) => {
   const { Icon } = d;
   // ONE light at a time on a disc: its own hit, the hour's pulse, or the hero's lock — whichever is strongest
   let k = flashAt(t, tick, 6);
@@ -177,13 +178,14 @@ export const IndustryFace: React.FC<{
   if (beats)
     beats.forEach((b, j) => {
       if (b <= tick || (lockAt !== undefined && b >= lockAt)) return;
-      const kb = 0.7 * flashAt(t, b, 5);
+      // the hour turns as a soft wave: from the newest card back to card 01 (½ f per 16th of age)
+      const kb = 0.42 * flashAt(t, b + (0.5 * (b - tick)) / 3.75, 6);
       if (kb > k) {
         k = kb;
         light = beatLights?.[j] ?? own;
       }
     });
-  const kl = flashAt(t, lockAt, 7);
+  const kl = flashAt(t, lockAt === undefined ? undefined : lockAt + lockDelay, 7);
   if (kl > k) {
     k = kl;
     light = lockLight ?? own;

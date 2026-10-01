@@ -60,7 +60,7 @@ export type Lang = {
   name: string;
   /** 16:9 — 84 px in a 621 px cell (every line measured ≤ 557 px in Cormorant 500) */
   h: Setting;
-  /** 9:16 — 72 px in a 1056 px cell (every line ≤ 1008 px) */
+  /** 9:16 — 80 px in a 1056 px cell (every line ≤ 1004 px) */
   v: Setting;
   /** Japanese: the AI phrase comes first ("AIアシスタントの / Avaと申します。") */
   aiFirst?: boolean;
@@ -90,7 +90,7 @@ export const LANGS: Lang[] = [
   {
     name: 'French',
     h: { lead: ['Ici Ava,', "l'assistant virtuel"], ai: ['basé sur', "l'intelligence", 'artificielle.'] },
-    v: { lead: ["Ici Ava, l'assistant virtuel"], ai: ["basé sur l'intelligence artificielle."] },
+    v: { lead: ["Ici Ava, l'assistant virtuel"], ai: ["basé sur l'intelligence", 'artificielle.'] },
   },
   {
     name: 'German',
@@ -104,7 +104,7 @@ export const LANGS: Lang[] = [
     v: { lead: ['Avaと申します。'], ai: ['AIアシスタントの'] },
     aiFirst: true,
     perChar: true,
-    size: [66, 72],
+    size: [66, 76],
   },
 ];
 
