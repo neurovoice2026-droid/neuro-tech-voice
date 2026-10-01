@@ -1,8 +1,9 @@
 /**
  * The phone: a real object — a brushed-titanium band (its edge catching the
  * light), black glass, the island. Its screen is dead until TWIST.phoneOn,
- * then wakes the way a phone does: the display comes up from the avatar
- * outward (a radial reveal, EASE.house) onto the #demo night room — Ava's
+ * then wakes the way a phone does: the panel's level comes up as the light
+ * spreads from the avatar outward (a soft radial mask, EASE.house) onto the
+ * #demo night room, lit by Ava's orb and falling off to the glass — Ava's
  * orb (drawn by the scene in screen space, so it can become the call's orb),
  * "INCOMING CALL" (TYPE.label) and the number (Instrument Sans, tabular),
  * each letter rising out of its own mask as the keys chatter. The screen is
@@ -18,7 +19,8 @@ import { EASE, SPRING, tween } from '../../lib/motion';
 import { typeStyle } from '../../lib/type';
 import { C, NIGHT_ROOM } from '../../theme';
 import { TWIST } from '../../timing';
-import { MIDNIGHT_ROOM } from '../call/Light';
+import { bloom } from '../../lib/lights';
+import { AVA_GLOW, MIDNIGHT_ROOM } from '../call/Light';
 import { avatarOnPhone, TW, type Geo } from './geometry';
 
 const LILAC = '185,163,255';
@@ -56,14 +58,27 @@ const Typed: React.FC<{ text: string; t: number; start: number; exitAt: number; 
   </div>
 );
 
-/** `grade`: the call's roomGrade — the screen's night room grades into the midnight exactly as the call's RoomBox does. */
-export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number; grade?: number }> = ({ t, g, L, f, grade = 0 }) => {
+/**
+ * `grade`: the call's roomGrade — the screen's night room grades into the midnight exactly as the call's RoomBox does.
+ * `inner`: the screen's own falloff (1 on the phone, 0 once the frame's falloff has taken over in the dive).
+ * `glow`: the avatar's light on its own display (1 on the phone, 0 once the scene's KeyLight carries it).
+ */
+export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number; grade?: number; inner?: number; glow?: number }> = ({
+  t,
+  g,
+  L,
+  f,
+  grade = 0,
+  inner = 1,
+  glow = 1,
+}) => {
   const { w, h } = g.phone;
   const sw = g.screen.w;
   const sh = g.screen.h;
   const s = screenState(t);
   const near = f > 2.6; // inside: the body's fine detail is off-frame
-  const uiOut0 = TWIST.pushToPhone[0] + 3;
+  // the caller ID clears off the glass during the pull-back, so the dive is the orb alone
+  const uiOut0 = TWIST.pushToPhone[0] - 1;
   const uiOut = tween(t, [uiOut0, uiOut0 + 12], [0, 1], EASE.inOut);
   const haloOut = tween(t, [TWIST.pushToPhone[0] + 14, TWIST.pushToPhone[1] - 4], [0, 1], EASE.inOut);
   const av = avatarOnPhone(t, g);
@@ -133,11 +148,48 @@ export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number; grade?: 
               position: 'absolute',
               inset: 0,
               background: NIGHT_ROOM,
-              clipPath: s.open < 1 ? `circle(${(R * s.open).toFixed(2)}px at 50% 50%)` : undefined,
+              // the light spreads from the avatar: a soft-edged radial wake (a gradient mask, never an iris
+              // line), while the panel's level comes up — a display waking, not a wipe
+              ...(s.open < 1
+                ? (() => {
+                    const F = 0.45 * R;
+                    const r = (R + F) * s.open;
+                    const m = `radial-gradient(circle at 50% 50%, #000 ${Math.max(0, r - F).toFixed(2)}px, rgba(0,0,0,0) ${Math.max(0.01, r).toFixed(2)}px)`;
+                    return { maskImage: m, WebkitMaskImage: m };
+                  })()
+                : null),
+              opacity: s.on < 1 ? 0.3 + 0.7 * s.on : undefined,
             }}
           >
             {grade > 0.001 ? (
               <div style={{ position: 'absolute', inset: 0, background: MIDNIGHT_ROOM, opacity: Math.min(1, grade) }} />
+            ) : null}
+            {/* the display's own depth: the night room is lit from the avatar, falling off to the glass's
+                edges (a dark-mode screen, not a flat colour card); handed to the frame's falloff in the dive */}
+            {inner > 0.002 ? (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background:
+                    'radial-gradient(110% 68% at 50% 50%, rgba(4,3,14,0) 22%, rgba(4,3,14,0.34) 62%, rgba(3,2,9,0.62) 100%)',
+                  opacity: inner < 0.998 ? inner * s.on : s.on,
+                }}
+              />
+            ) : null}
+            {/* the avatar is the display's light: a soft pool of Ava's glow centred on it */}
+            {glow * s.on > 0.003 ? (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: sw / 2 - sw * 0.62,
+                  top: sh / 2 - sw * 0.62,
+                  width: sw * 1.24,
+                  height: sw * 1.24,
+                  background: bloom(AVA_GLOW, 0.2 * glow * s.on, { core: 0.3, coreSize: 0.34 }),
+                  mixBlendMode: 'screen',
+                }}
+              />
             ) : null}
             {/* the avatar's hairline ring (the orb itself is drawn by the scene) */}
             <div

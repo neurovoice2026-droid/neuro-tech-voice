@@ -8,6 +8,12 @@
  *         "Your business is" and "." blow outward — continuous from rest, but
  *         explosive (12 % of the blast in the first 120 fps frame) — drift,
  *         slower and slower, and come to rest exactly when they turn round.
+ *         Each piece is thrown to its own DEPTH (0.6–1.3×; the far ones dim
+ *         as they leave the doorway's light, and paint behind the near ones),
+ *         with a calm tilt (≤ ±38°): where two throws cross they pass one in
+ *         front of the other. No piece comes to rest on the lit doorway or
+ *         its leaf, on the phone, or touching a neighbour. The two letters
+ *         the new line does not need recede into the dark (gone by t 15).
  *         "closed" holds, then slides into the start of the new line; the
  *         hook's lilac leaves it on the way (the accent moves to "not the
  *         phone.").
@@ -17,7 +23,9 @@
  *         one after — the swap is never seen. Row-1 letters wait ABOVE the
  *         tagline and drop in; row-2 letters wait BELOW it and rise in.
  *         "door," locks left to right with its comma ON the slam. "not the
- *         phone." rises out of its masks and takes the night's lilac.
+ *         phone." rises out of its masks and takes the night's lilac — the
+ *         two-tone of the knowledge heading (one accent; no sheen drawn
+ *         across the type: on the focus beat its ink itself lifts).
  *
  * While a letter moves it sits on its own compositor layer (subpixel()), so
  * its settle is a smooth exponential, not 1 px stairs; at rest it is plain,
@@ -83,6 +91,21 @@ export type Shard = {
 export function gather(t: number) {
   const u = Math.min(1, Math.max(0, (t - TW.gather) / -TW.gather));
   return { a: 1 - (1 - A0) * EASE.in2(u), x: 0, y: 0 };
+}
+
+/** How much of the light a piece keeps at its depth (sOut 0.6 far … 1.3 near): the far ones dim to 62 %. */
+const depthInk = (sOut: number) => 0.62 + 0.38 * Math.min(1, Math.max(0, (sOut - 0.6) / 0.5));
+
+/** Paint order: the far pieces first, so a nearer one passes IN FRONT ("closed" sits at the line's own depth). */
+const orderCache = new WeakMap<Shard[], number[]>();
+function depthOrder(shards: Shard[]): number[] {
+  let o = orderCache.get(shards);
+  if (!o) {
+    const z = (sh: Shard) => (sh.kind === 'closed' ? 1 : sh.sOut);
+    o = shards.map((_, i) => i).sort((a, b) => z(shards[a]) - z(shards[b]) || a - b);
+    orderCache.set(shards, o);
+  }
+  return o;
 }
 
 /** Landing recoil: 0 at impact, a forward lobe, back, settled in ~12 f. */
@@ -157,7 +180,14 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
     y0: G.phone.cy - G.phone.h / 2,
     y1: G.phone.cy + G.phone.h / 2,
   };
-  const doorBox: Rect = { x0: G.door.cx - G.door.w / 2, x1: G.door.cx + G.door.w / 2, y0: G.door.top, y1: G.door.top + G.door.h };
+  // the lit doorway AND the leaf standing open toward the camera (its free edge projects ≈ 0.48 w left of
+  // the hinge in 16:9, ≈ 0.1 w in 9:16): paper on the near-white opening would vanish, on the leaf it clutters
+  const doorBox: Rect = {
+    x0: G.door.cx - G.door.w / 2 - G.door.w * L.pick(0.5, 0.12),
+    x1: G.door.cx + G.door.w / 2,
+    y0: G.door.top,
+    y1: G.door.top + G.door.h,
+  };
   const edge = L.pick({ x: 60, y: 44 }, { x: 44, y: 120 });
 
   /* ── pieces + their seeded blast ───────────────────────────────── */
@@ -193,11 +223,14 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
     dx = (dx / len) * 0.75 + Math.cos(ga);
     dy = (dy / len) * 0.75 + Math.sin(ga) - 0.25;
     const l2 = Math.hypot(dx, dy) || 1;
-    // a measured break, not confetti: moderate throws, sizes within ±20 % (a little depth), turns < 130°
+    // a measured break, not confetti: moderate throws, a calm tilt (≤ ±38°) and a slow spin while it
+    // drifts — objects in the dark, not tumbling debris. DEPTH: each piece is thrown nearer or further
+    // (0.6–1.3× its size; the far ones also leave the light, see depthInk) — so where two throws
+    // cross they pass one in front of the other, as things do in a room, never through each other
     const dist = L.pick(330, 260) + r('d') * L.pick(420, 300) + (kind === 'extra' ? 220 : 0);
-    const sOut = 0.84 + r('s') * 0.36;
-    let rot = (r('r') - 0.5) * 2 * (24 + r('rr') * 80);
-    const spin = (r('sp') < 0.5 ? -1 : 1) * (8 + r('sp2') * 18);
+    const sOut = 0.6 + r('s') * 0.7;
+    let rot = (r('r') - 0.5) * 2 * (8 + r('rr') * 30);
+    const spin = (r('sp') < 0.5 ? -1 : 1) * (3 + r('sp2') * 7);
     // an "i" resting upside down reads as "!" — tip it past the flip
     if (src.ch === 'i') {
       const rest = ((((rot + spin) % 360) + 540) % 360) - 180;
@@ -224,7 +257,7 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
   closedG.slice(0, 6).forEach((g) => add(g, 'closed', 0));
   hw[2].forEach((g) => add(g, 'fly', 1));
   const pool = [...hw[0], ...hw[1]];
-  const extras = new Set([0, 4]); // Y, b — they burn out as dust
+  const extras = new Set([0, 4]); // two letters too many: they recede into the dark (the untangle may deal the role on)
   pool.forEach((g, i) => add(g, extras.has(i) ? 'extra' : 'fly', -1));
   add(closedG[6], 'fly', 4); // "." → "," (the sentence goes on)
 
@@ -254,12 +287,19 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
         hard += Math.max(0, edge.y + half - y) + Math.max(0, y - (L.height - edge.y - half));
         if (p.row === 0) hard += Math.max(0, y - (tagBox.y0 - 40 - half));
         if (p.row === 1) hard += Math.max(0, tagBox.y1 + 40 + half - y);
-        // never ON the phone: it is found in the dark right where they rest (phoneReveal)
+        // never ON the phone: it is found in the dark right where they rest (phoneReveal);
+        // never on the doorway or its open leaf; never touching a neighbour
         hard += inside(phoneBox, x, y, half);
+        hard += inside(doorBox, x, y, 14 + half);
+        for (const q of placed) {
+          const d = Math.hypot(x - q.ax, y - q.ay);
+          const touch = (half + q.size * 0.4) * 1.25 + 22;
+          if (d < touch) hard += touch - d;
+        }
         c += hard * 1e4;
-        // soft: clear of the phone's rim, off the lit doorway (paper on near-white would vanish), not on a neighbour
+        // soft: clear of the phone's rim and the doorway's surround, with air between neighbours
         c += Math.min(1, inside(phoneBox, x, y, 44 + half) / 20) * 900;
-        c += Math.min(1, inside(doorBox, x, y, 10 + half) / 30) * 700;
+        c += Math.min(1, inside(doorBox, x, y, 40 + half) / 26) * 500;
         for (const q of placed) {
           const d = Math.hypot(x - q.ax, y - q.ay);
           const need = (half + q.size * 0.4) * 1.3 + 60;
@@ -373,18 +413,20 @@ function shardState(sh: Shard, t: number, hook: TextLayout, tag: TextLayout, L: 
   const q = 1 - Math.pow(1 - u, 4.5);
 
   if (sh.kind === 'extra') {
-    // keeps going, a little smaller, and fades away (it has no place in the new line)
-    const drift = 0.1 * tween(t, [TWIST.shatterOut, TWIST.shatterOut + 22], [0, 1], EASE.out3);
-    const away = tween(t, [4, 26], [0, 1], EASE.in2);
-    const k = BLAST * q + drift;
+    // it has no place in the new line: it travels to its rest point like the others (the same blast
+    // and drift), recedes into the dark on the way (to 70 % of its size) and is gone by t 15 —
+    // before the first word of the tagline lands
+    const D = Math.sin((Math.PI / 2) * Math.min(1, Math.max(0, t / 14)));
+    const k = BLAST * q + (1 - BLAST) * D;
+    const away = tween(t, [3, 15], [0, 1], EASE.inOut);
     return {
-      x: x0 + sh.vx * (k + 0.35 * away),
-      y: y0 + sh.vy * (k + 0.35 * away),
-      rot: sh.rot * (q + drift * 0.8 + 0.3 * away),
+      x: x0 + sh.vx * k,
+      y: y0 + sh.vy * k,
+      rot: sh.rot * (0.85 * q + 0.15 * D) + sh.spin * D,
       turn: 0,
-      size: size0 * (1 + (sh.sOut - 1) * q) * (1 - 0.25 * away),
+      size: size0 * (1 + (sh.sOut - 1) * q) * (1 - 0.3 * away),
       useDst: false,
-      op: 1 - tween(t, [6, 24], [0, 1], EASE.inOut),
+      op: (1 + (depthInk(sh.sOut) - 1) * q) * (1 - away),
       ink,
       moving: true,
     };
@@ -398,6 +440,8 @@ function shardState(sh: Shard, t: number, hook: TextLayout, tag: TextLayout, L: 
   const oy = y0 + sh.vy * k;
   const rotOut = sh.rot * (0.85 * q + 0.15 * D) + sh.spin * D;
   const size = size0 * (1 + (sh.sOut - 1) * q);
+  // further away = further from the doorway's light (eased in with the throw, out with the return)
+  const depthOp = 1 + (depthInk(sh.sOut) - 1) * q * (1 - FLY(Math.min(1, fly / RS_LEAD)));
 
   const ex = FLY(Math.min(1, fly / X_LEAD));
   const ey = FLY(Math.min(1, fly / LAND));
@@ -414,7 +458,7 @@ function shardState(sh: Shard, t: number, hook: TextLayout, tag: TextLayout, L: 
     turn,
     size: (size + (tag.fontSize - size) * rs) * (1 + 0.05 * recoil(tau)),
     useDst: sh.turns ? turn >= 90 : t >= sh.swap,
-    op: 1,
+    op: depthOp,
     ink,
     moving: tau < 16,
   };
@@ -444,12 +488,9 @@ export type Focus = {
   key: number;
   /** its scale about its centre (1 → 1.02, anticipation + spring) */
   swell: number;
-  /** 0..1 a sheen crossing its fill left → right (−1: none) — the fill itself, never a copy */
-  glint: number;
 };
-const NO_FOCUS: Focus = { dim: 1, key: 0, swell: 1, glint: -1 };
+const NO_FOCUS: Focus = { dim: 1, key: 0, swell: 1 };
 const KEY_LIT = mixHex(C.lilac, C.paper, 0.18);
-const SHEEN = mixHex(C.lilac, '#ffffff', 0.7);
 
 export const Shards: React.FC<{
   t: number;
@@ -475,13 +516,11 @@ export const Shards: React.FC<{
   const swelling = Math.abs(focus.swell - 1) > 1e-4 && t < TW.keyFocus[1] + 14;
   // "not the phone." — paper → lilac on keyColor (as <Words> eases it), lighter on the focus beat
   const phraseInk = mixHex(mixHex(C.paper, C.lilac, tween(t, [TWIST.keyColor, TWIST.keyColor + 18], [0, 1], EASE.house)), KEY_LIT, focus.key);
-  const sheenOn = focus.glint > 0 && focus.glint < 1;
   const lineW = line3.width;
-  const band = 0.22 * lineW;
-  const sheenAt = -band + focus.glint * (lineW + 2 * band);
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
-      {shards.map((sh, i) => {
+      {depthOrder(shards).map((i) => {
+        const sh = shards[i];
         const s = shardState(sh, t, hook, tag, L);
         if (s.op < 0.01) return null;
         const g = s.useDst && sh.dst ? sh.dst : sh.src;
@@ -533,28 +572,7 @@ export const Shards: React.FC<{
             config={SPRING_LINE}
             keys={[{ text: 'not the phone.', color: C.lilac, at: TWIST.keyColor }]}
             style={{ fontSize: tag.fontSize, whiteSpace: 'nowrap' }}
-            wordStyle={
-              sheenOn
-                ? (wi) => {
-                    // the sheen: one gradient across the whole line, each word showing its own slice of it
-                    const w = tag.words[5 + wi];
-                    const off = w ? w.left - line3.left : 0;
-                    const c = sheenAt;
-                    return {
-                      backgroundImage: `linear-gradient(90deg, ${phraseInk} 0px, ${phraseInk} ${(c - band).toFixed(1)}px, ${SHEEN} ${c.toFixed(1)}px, ${phraseInk} ${(c + band).toFixed(1)}px, ${phraseInk} ${(lineW + 2 * band).toFixed(1)}px)`,
-                      backgroundSize: `${(lineW + 2 * band).toFixed(1)}px 100%`,
-                      backgroundPosition: `${(-off).toFixed(1)}px 0`,
-                      backgroundRepeat: 'no-repeat',
-                      WebkitBackgroundClip: 'text',
-                      backgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                      color: 'transparent',
-                    };
-                  }
-                : focus.key > 0.001
-                  ? () => ({ color: phraseInk })
-                  : undefined
-            }
+            wordStyle={focus.key > 0.001 ? () => ({ color: phraseInk }) : undefined}
           />
         </div>
       ) : null}

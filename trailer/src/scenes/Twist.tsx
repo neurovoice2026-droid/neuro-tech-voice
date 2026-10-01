@@ -9,8 +9,11 @@
  *   t 30    the door slams as "door," lands; the light dies under it; the
  *           slam sets the CLOSED sign swinging on its cord
  *   t 45    "not the phone." rises, takes the night's lilac at 51
- *   t 53    the phone wakes: Ava's orb, INCOMING CALL, the number
- *   t 75    the focus beat: the setup steps back, the payoff steps forward
+ *   t 53    the phone wakes: its light spreads from the avatar (a soft radial wake), Ava's
+ *           orb pops, INCOMING CALL and the number type in; the screen is lit by the orb and
+ *           falls off to the glass (handed to the frame's falloff in the dive); the ring's
+ *           waves live on the glass (clipped to the screen until it overfills the frame)
+ *   t 75    the focus beat: the setup steps back, the payoff steps forward (its ink lifts; no sheen)
  *   t 90…120 dive into the screen (pull-back, EASE.peel); the frozen ring resumes at 98
  *   t 104…  the screen takes the frame: the orb becomes the room's key light (its pool,
  *           the falloff away from it, a 1.5 % breath push); the pool gathers into the
@@ -137,13 +140,12 @@ export const Twist: React.FC = () => {
   const doorDim = 1 - 0.12 * tween(t, [TWIST.phoneOn, TWIST.phoneOn + 16], [0, 1], EASE.inOut);
 
   /* ── the focus beat of the hold: the 3-word payoff takes the read ── */
+  // (no sheen across the type: the payoff takes the light by its own ink, which lifts on the beat)
   const fk = tween(t, TW.keyFocus, [0, 1], EASE.inOut);
-  const gl = (t - TW.keyGlint[0]) / (TW.keyGlint[1] - TW.keyGlint[0]);
   const focus = {
-    dim: 1 - 0.5 * fk,
+    dim: 1 - 0.48 * fk,
     key: fk,
     swell: 1 + 0.02 * aos(t, TW.keyFocus[0], { anticip: 3, depth: 0.12, config: SPRING.site }),
-    glint: gl >= 0 && gl <= 1 ? EASE.inOut(gl) : -1,
   };
 
   /* ── the room's light: one motivated source at a time ────────────────
@@ -199,6 +201,18 @@ export const Twist: React.FC = () => {
         `rgba(1,1,4,${(0.72 * falloffK).toFixed(3)}) ${(Math.max(L.width, L.height) * 0.75 * fieldPush).toFixed(1)}px)`
       : null;
   const textFade = 1 - tween(xText.f, [1.5, 3.2], [0, 1], EASE.in2);
+  // the ringing lives ON the phone's screen: its waves are clipped to the glass (a no-op once the
+  // screen overfills the frame) — never a UI ring drawn across the phone's body or the room
+  const scrTL = project(xMid, L, g.phone.cx - g.screen.w / 2, g.phone.cy - g.screen.h / 2);
+  const scrClip = (() => {
+    const x0 = scrTL.x + bz.x;
+    const y0 = scrTL.y + bz.y;
+    const w = g.screen.w * xMid.f;
+    const h = g.screen.h * xMid.f;
+    const r = g.screen.r * xMid.f;
+    if (x0 <= 0 && y0 <= 0 && x0 + w >= L.width && y0 + h >= L.height) return undefined;
+    return `inset(${y0.toFixed(2)}px ${(L.width - x0 - w).toFixed(2)}px ${(L.height - y0 - h).toFixed(2)}px ${x0.toFixed(2)}px round ${r.toFixed(2)}px)`;
+  })();
 
   return (
     <AbsoluteFill style={{ overflow: 'hidden' }}>
@@ -233,7 +247,7 @@ export const Twist: React.FC = () => {
             transformOrigin: `${g.phone.cx}px ${g.phone.cy}px`,
           }}
         >
-          <Phone t={t} g={g} L={L} f={xMid.f} grade={callGrade} />
+          <Phone t={t} g={g} L={L} f={xMid.f} grade={callGrade} inner={1 - fall} glow={1 - keyIn} />
         </div>
       </LayerX>
 
@@ -243,15 +257,17 @@ export const Twist: React.FC = () => {
         {falloffCss ? <AbsoluteFill style={{ background: falloffCss }} /> : null}
         {keyK > 0.003 ? <KeyLight x={orb.x} y={orb.y} d={orb.d} glow={AVA_GLOW} strength={keyK} spread={keySpread} /> : null}
         {/* the hook's frozen ring resumes: ONE wave (its second pulse) — the call's line is "Picked up on the first ring." */}
-        <Rings
-          t={t}
-          starts={[TWIST.ring2]}
-          orbAt={orbAt}
-          reach={(tt) => L.pick(640, 540) * layerXf(camAt(tt, g), K.mid).f}
-          fade={1 - tween(t, [TWIST.pushToPhone[1] - 8, TWIST.pushToPhone[1]], [0, 1], EASE.inOut)}
-        />
-        <Burst t={t} span={[TW.avatarPop, TW.avatarPop + 10]} orbAt={orbAt} to={2.2} op={0.5} />
-        <Burst t={t} span={TW.ring3} orbAt={orbAt} to={2.6} op={0.35} />
+        <AbsoluteFill style={{ clipPath: scrClip }}>
+          <Rings
+            t={t}
+            starts={[TWIST.ring2]}
+            orbAt={orbAt}
+            reach={(tt) => L.pick(640, 540) * layerXf(camAt(tt, g), K.mid).f}
+            fade={1 - tween(t, [TWIST.pushToPhone[1] - 8, TWIST.pushToPhone[1]], [0, 1], EASE.inOut)}
+          />
+          <Burst t={t} span={[TW.avatarPop, TW.avatarPop + 10]} orbAt={orbAt} to={2.2} op={0.5} />
+          <Burst t={t} span={TW.ring3} orbAt={orbAt} to={2.6} op={0.35} />
+        </AbsoluteFill>
         {t >= TW.avatarPop && orb.d > 0.5 ? (
           <>
             {/* the rim light — exactly the call's (lib/pickup ORB_RIM), so its cross-fade at roomIn is exact */}

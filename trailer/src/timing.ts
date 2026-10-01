@@ -470,10 +470,10 @@ export const TWIST_LOCAL = {
   closedLand: 4 + 0.8 * 11,
   /** the avatar orb pops onto the lit screen (SPRING.pop) */
   avatarPop: TWIST.phoneOn + 3,
-  /** the focus beat of the tagline hold: "Closed is for the door," recedes to 45 %,
-   *  "not the phone." brightens + swells 1 → 1.03 (on the beat, before the dive at b6) */
+  /** the focus beat of the tagline hold: "Closed is for the door," recedes to 52 %,
+   *  "not the phone." brightens + swells 1 → 1.02 (on the beat, before the dive at b6) */
   keyFocus: [b(5), b(5) + 8] as const,
-  /** …with a glint of light sweeping "not the phone." left → right */
+  /** …its ink lifting into the light (the sound's sheen; no sheen is drawn across the type) */
   keyGlint: [b(5), b(5) + 12] as const,
   /** the orb's rim light + outer glow come up as the screen fills the frame */
   orbDress: [TWIST.pushToPhone[0] + 16, TWIST.pushToPhone[0] + 24] as const,
@@ -1302,7 +1302,7 @@ export const HITS: Hit[] = [
   // INCOMING / CALL and the number type in together: one chatter of keys
   H('twist', TWIST_LOCAL.uiLabel, 'key', 'night', 0.83, 3, 'INCOMING CALL · +1 555 0129 type in', { run: { n: 16, step: 0.75 } }),
   H('twist', TWIST_LOCAL.keyFocus[0], 'tick', 'night', 0.5, 2, 'FOCUS BEAT'),
-  H('twist', TWIST_LOCAL.keyGlint[0], 'sheen', 'night', [0.35, 0.65], 2, 'glint sweeps “not the phone.”'),
+  H('twist', TWIST_LOCAL.keyGlint[0], 'sheen', 'night', [0.35, 0.65], 2, '“not the phone.” takes the light (its ink lifts)'),
   H('twist', TWIST_LOCAL.diveDip[1], 'swell', 'night', 0.83, 2, 'pull-back before the dive'),
   H('twist', TWIST.pushToPhone[0] + 14, 'whoosh', 'night', [0.75, 0.5], 1, 'DIVE into the phone'),
   // NOT a second ring: the hook's first ring, frozen at HOOK.freeze, RESUMES — one wave on screen, and
