@@ -71,6 +71,30 @@ export const popFill = (t: number, tick: number, light: LightId = 'night', amoun
   return litFill(light, amount * (1 - tween(t, [tick, tick + 4], [0, 1], EASE.out3)));
 };
 
+/**
+ * A card's landing accent, as LIGHT (never a flat flood of the stock): a soft
+ * band of the light's pale tint sweeps across the card once (diagonal, ≈ 9 f,
+ * EASE.inOut), brightest as it crosses the middle. Drawn inside the card
+ * (clipped by it), over the face.
+ */
+export const Sheen: React.FC<{ t: number; at: number; light: LightId; dur?: number; amount?: number }> = ({ t, at, light, dur = 9, amount = 1 }) => {
+  if (t < at - 1 || t > at + dur) return null;
+  const u = tween(t, [at - 1, at + dur], [0, 1], EASE.inOut);
+  const x = -30 + 160 * u;
+  const k = amount * Math.sin(Math.PI * Math.min(1, Math.max(0, u)));
+  const o = LIGHTS[light].orb;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        pointerEvents: 'none',
+        background: `linear-gradient(112deg, ${rgba(o[3], 0)} ${(x - 16).toFixed(1)}%, ${rgba(o[3], 0.42 * k)} ${(x - 5).toFixed(1)}%, ${rgba('#ffffff', 0.65 * k)} ${x.toFixed(1)}%, ${rgba(o[3], 0.42 * k)} ${(x + 5).toFixed(1)}%, ${rgba(o[3], 0)} ${(x + 16).toFixed(1)}%)`,
+      }}
+    />
+  );
+};
+
 /** 1 on frame `a`, back to 0 by a + dur (EASE.out3); 0 before */
 export const flashAt = (t: number, a: number | undefined, dur = 6) =>
   a === undefined || t < a ? 0 : 1 - tween(t, [a, a + dur], [0, 1], EASE.out3);

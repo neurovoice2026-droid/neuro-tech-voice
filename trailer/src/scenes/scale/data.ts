@@ -58,8 +58,11 @@ export const INDUSTRIES: Industry[] = [
  * A greeting: the product's Professional greeting (lib/voice/greetings.ts,
  * `intro` with {agent} = Ava), as Ava SAYS it — its words are the voice's
  * own words (src/voice.generated.ts), so the text is verbatim and every word
- * is timed. The focus card shows the WHOLE greeting (`main`), the quick four
- * too: they are cut after ≈ 0.77 s, so their words all rise as the card lands.
+ * is timed. English and Japanese are heard whole: their focus card shows the
+ * whole greeting (`main`). The quick four are cut by the next voice right
+ * after her name, so their focus card shows only what is HEARD (`heard`):
+ * one glanceable line ("Sunt Ava," … "Sie sprechen mit Ava,") that matches
+ * the voice and is read in its second.
  */
 export type Lang = {
   name: string;
@@ -73,26 +76,28 @@ export type Lang = {
   gallery: readonly [readonly number[], readonly number[]];
   /** the big line's size in the focus card [16:9, 9:16] (px; Japanese: the CJK size) */
   size: readonly [number, number];
+  /** the quick four: the heard fragment's line breaks in the focus card [16:9, 9:16] (its first words) */
+  heard?: readonly [readonly number[], readonly number[]];
   /** Japanese: words join with no space and reveal per character */
   cjk?: boolean;
 };
 
 /**
  * The brief's six (each the product's Professional greeting). Line breaks never fall inside a word.
- * The quick four, whole: 16:9 on two lines, the AI disclosure the whole second line (text box 1140 px);
- * 9:16 on three (two for German), the first line what she says before the cut (text box 900 px).
- * Widths are Cormorant 500's at that size; every line is set ≥ 88 px (the floor: 64 px in 16:9, 56 in 9:16).
+ * The quick four show the heard fragment on ONE line, all at one size (16:9 128 px in the 1140 px text
+ * box · 9:16 100 px in 900 px: "Sie sprechen mit Ava," ≈ 1070 / 840 px, Cormorant 500). `main` stays
+ * the whole greeting (the record of what the product says; not shown for the quick four).
  */
 export const LANGS: Lang[] = [
   { name: 'English', id: 'lang-en', ai: [4, 5], main: [[3, 3], [3, 3]], gallery: [[3], [3]], size: [150, 128] },
   // "Sunt Ava, asistentul virtual / cu inteligență artificială." (1051 px) · "Sunt Ava, / asistentul virtual / cu inteligență artificială." (848)
-  { name: 'Romanian', id: 'lang-ro', ai: [4, 6], main: [[4, 3], [2, 2, 3]], gallery: [[2], [2]], size: [100, 90] },
+  { name: 'Romanian', id: 'lang-ro', ai: [4, 6], main: [[4, 3], [2, 2, 3]], gallery: [[2], [2]], size: [128, 100], heard: [[2], [2]] },
   // "Soy Ava, el asistente virtual / con inteligencia artificial." (1061) · "Soy Ava, / el asistente virtual / con inteligencia artificial." (865)
-  { name: 'Spanish', id: 'lang-es', ai: [5, 7], main: [[5, 3], [2, 3, 3]], gallery: [[2], [2]], size: [100, 88] },
+  { name: 'Spanish', id: 'lang-es', ai: [5, 7], main: [[5, 3], [2, 3, 3]], gallery: [[2], [2]], size: [128, 100], heard: [[2], [2]] },
   // "Ici Ava, l'assistant virtuel / basé sur l'intelligence artificielle." (1103) · "Ici Ava, / l'assistant virtuel basé sur / l'intelligence artificielle." (856)
-  { name: 'French', id: 'lang-fr', ai: [4, 7], main: [[4, 4], [2, 4, 2]], gallery: [[2], [2]], size: [88, 88] },
+  { name: 'French', id: 'lang-fr', ai: [4, 7], main: [[4, 4], [2, 4, 2]], gallery: [[2], [2]], size: [128, 100], heard: [[2], [2]] },
   // "Sie sprechen mit Ava, / dem KI-Assistenten." (937 · 837)
-  { name: 'German', id: 'lang-de', ai: [5, 5], main: [[4, 2], [4, 2]], gallery: [[2, 2], [2, 2]], size: [112, 100] },
+  { name: 'German', id: 'lang-de', ai: [5, 5], main: [[4, 2], [4, 2]], gallery: [[2, 2], [2, 2]], size: [128, 100], heard: [[4], [4]] },
   // "AIアシスタントの / Avaと申します。" — the AI phrase comes first
   { name: 'Japanese', id: 'lang-ja', ai: [0, 1], main: [[3, 5], [3, 5]], gallery: [[3, 5], [3, 5]], size: [110, 88], cjk: true },
 ];

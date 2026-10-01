@@ -1,15 +1,17 @@
 /**
  * The far planes of the white act:
  *
- *   Ground (screen space, behind the camera)  the leading light's stage
- *              light (scale/lights.ts groundOf: a radial light from the
+ *   Ground (screen space, behind the camera)  the ROOM's stage light
+ *              (scale/lights.ts ROOM / groundOf: a radial light from the
  *              centre, never a flat slab), arriving out of the knowledge
  *              whip's white and crossfading through white stock between two
- *              lights. Strong on the wall, quieter under the languages (the
- *              active card's own light leads there), back for the flow.
+ *              lights: the wall's hours, then the hero's night HELD through
+ *              the whole language cascade (quieter there — each card brings
+ *              its own light), then the closing light for the flow.
  *   Backdrop (depth 0.4)  ONE soft bloom of the leading light: it pools behind
  *              the block being filled (each light's four cards), centres on
- *              the hero, then sits behind the active language card and swells
+ *              the hero, then — smaller and quieter, a spill of the card's own
+ *              light — sits behind the active language card and swells a hair
  *              as each one arrives; in the flow the light pools under the rail.
  *              Plus a whisper of neutral room shading at the edges.
  *
@@ -22,7 +24,7 @@ import { LIGHTS } from '../../theme';
 import { EASE, tween } from '../../lib/motion';
 import type { Layout } from '../../lib/layout';
 import { SCALE, SCALE_LOCAL } from '../../timing';
-import { FLOW_LIGHT, groundOf, LEAD, leadWeights, rgba, type Where } from './lights';
+import { FLOW_LIGHT, groundOf, LEAD, leadWeights, rgba, ROOM, roomWeights, type Where } from './lights';
 
 const K = SCALE_LOCAL;
 
@@ -61,8 +63,12 @@ export const Backdrop: React.FC<{ t: number; L: Layout }> = ({ t, L }) => {
   // the flow: the light moves under the rail (and a second, quieter pool by the CRM)
   const flowW = tween(t, [K.collapse, K.stations[0] + 6], [0, 1], EASE.inOut);
   const langW = tween(t, [K.enFlip, K.enFlip + 10], [0, 1], EASE.inOut);
-  const wallR = L.pick(760, 660) * open * (1 + 0.1 * swell) * (1 + 0.15 * langW);
-  const wallA = (0.5 - 0.12 * langW) * (1 + 0.5 * swell) * fadeIn * (1 - flowW);
+  // under the languages the bloom is only the active card's spill (the room holds one light)
+  const wallR = L.pick(760, 660) * open * (1 + 0.1 * swell) * (1 - 0.18 * langW);
+  // the hero's hold: the night light behind the title breathes (a bar), so the held frame is alive
+  const holdW = tween(t, [HERO + 6, HERO + 16], [0, 1], EASE.inOut) * (1 - tween(t, [K.flyOut - 6, K.flyOut + 4], [0, 1], EASE.inOut));
+  const holdBreath = 1 + 0.16 * holdW * Math.sin(((t - HERO - 6) / 30) * Math.PI);
+  const wallA = (0.5 - 0.3 * langW) * (1 + (0.5 - 0.25 * langW) * swell) * fadeIn * (1 - flowW) * holdBreath;
   const flow = L.pick(
     [
       { x: W * 0.3, y: H * 0.8, r: 780, a: 0.34, seed: 'f0' },
@@ -103,9 +109,9 @@ export const Backdrop: React.FC<{ t: number; L: Layout }> = ({ t, L }) => {
  * (no zoom or kick can bare an edge): the leading light's stage light.
  */
 export const Ground: React.FC<{ t: number }> = ({ t }) => {
-  const { i, prev, wPrev, wCur } = leadWeights(t);
-  const gPrev = groundOf(LEAD[prev].light);
-  const gCur = groundOf(LEAD[i].light);
+  const { i, prev, wPrev, wCur } = roomWeights(t);
+  const gPrev = groundOf(ROOM[prev].light);
+  const gCur = groundOf(ROOM[i].light);
   const a = groundAmount(t);
   if (a <= 0.004) return null;
   const turning = gPrev !== gCur;

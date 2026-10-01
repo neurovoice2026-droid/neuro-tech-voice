@@ -35,7 +35,7 @@ import { aos, EASE, SPRING, tween } from '../../lib/motion';
 import { MeshOrb } from '../../components/MeshOrb';
 import { SCALE, SCALE_LOCAL, vWord } from '../../timing';
 import { VOICE } from '../../voice.generated';
-import { Box, flashAt, HitBurst, IndustryFace, popFill } from './Cards';
+import { Box, flashAt, HitBurst, IndustryFace, Sheen } from './Cards';
 import { dspring, slide } from './curves';
 import { INDUSTRIES, LANGS, scriptRuns, underlined, wordsOf } from './data';
 import { StationFace, type FlowTiming } from './Flow';
@@ -56,8 +56,11 @@ const cutAt = (k: number) => (k >= 1 && k <= 4 ? LA[k + 1] : undefined);
 const arriveAt = (k: number) => (k === 0 ? K.enFlip + 6 : LA[k] - 1);
 /** frame spoken word j is up (a frame early: it is there as she says it) */
 const wordAt = (k: number, j: number) => voiceAt(k) + vWord(LANGS[k].id, j) - 1;
-/** the quick four: cut after ≈ 0.77 s, so they show their whole greeting at once */
+/** the quick four: cut right after her name, so they show only what is heard, at once */
 const isQuick = (k: number) => cutAt(k) !== undefined;
+/** the quick four's focus line: the heard fragment's line breaks, and its word count */
+const heardLines = (k: number, v: boolean) => LANGS[k].heard?.[v ? 1 : 0] ?? LANGS[k].main[v ? 1 : 0];
+const heardN = (k: number) => heardLines(k, false).reduce((a, n) => a + n, 0);
 /**
  * frame word j of card k starts to rise in the focus card:
  *  · the quick four: the whole greeting on a stagger as the card lands (K.greetIn … + K.greetSpread)
@@ -65,7 +68,7 @@ const isQuick = (k: number) => cutAt(k) !== undefined;
  *    lands empty — it has settled as she starts to speak
  */
 function riseAt(k: number, j: number): number {
-  if (isQuick(k)) return K.greetIn[k] + (K.greetSpread * j) / Math.max(1, wordsOf(LANGS[k]).length - 1);
+  if (isQuick(k)) return K.greetIn[k] + (K.greetSpread * j) / Math.max(1, heardN(k) - 1);
   return j === 0 ? Math.min(K.greetIn[k], wordAt(k, 0)) : wordAt(k, j);
 }
 /** the quick four: 0..1 while she is saying word j (it takes the card's ink), until the next word or the cut */
@@ -270,10 +273,11 @@ export const LangFocusFace: React.FC<{ k: number; t: number; w: number; h: numbe
   const D = v ? 104 : 120;
   const nameSize = v ? 32 : 36;
   const size = l.size[v ? 1 : 0];
-  // the AI underline as she says it (English, Japanese); the quick four are cut before their AI phrase:
-  // theirs draws as the last words settle
-  const ul = tween(t, k === 0 ? K.discloseEn : k === CARRIER ? K.discloseJa : K.discloseQuick[k], [0, 1], EASE.draw);
-  const mainLines = linesOf(0, l.main[v ? 1 : 0]);
+  const quick = isQuick(k);
+  // the AI underline as she says it (English, Japanese); the quick four are cut before their AI phrase,
+  // and show only what is heard
+  const ul = quick ? 0 : tween(t, k === 0 ? K.discloseEn : K.discloseJa, [0, 1], EASE.draw);
+  const mainLines = linesOf(0, quick ? heardLines(k, v) : l.main[v ? 1 : 0]);
   // a disclosure set over two lines draws on, line by line (each line's share by its words)
   const aiN = l.ai[1] - l.ai[0] + 1;
   const aiIn = (js: number[]) => js.filter((j) => j >= l.ai[0] && j <= l.ai[1]).length;
@@ -282,7 +286,6 @@ export const LangFocusFace: React.FC<{ k: number; t: number; w: number; h: numbe
     const before = mainLines.slice(0, i).reduce((acc, js) => acc + aiIn(js), 0);
     return n ? Math.min(1, Math.max(0, (ul * aiN - before) / n)) : 0;
   };
-  const quick = isQuick(k);
   // the orb: pops as the card lands, then breathes with her voice
   const a = arriveAt(k);
   const e = envAt(k, t);
@@ -523,8 +526,8 @@ export const LangCards: React.FC<{
       else sx = Math.max(sx, fs);
       // the hero's dim lifts as it glides out of the wall
       const g = tween(t, [K.glide, K.glide + 10], [0, 1], EASE.inOut);
-      opacity *= 1 - 0.58 * dim * (1 - g);
-      const blurPx = 7 * dim * (1 - g);
+      opacity *= 1 - 0.42 * dim * (1 - g);
+      const blurPx = 3.5 * dim * (1 - g);
       if (blurPx > 0.2) filter = `blur(${blurPx.toFixed(2)}px)`;
       if (a < 90) {
         const i = G.keeper;
@@ -608,11 +611,11 @@ export const LangCards: React.FC<{
       );
     }
     // the hit: the card's stock flashes its light as it lands (k ≥ 1; English as it turns)
-    const land = flashAt(t, arriveAt(k), 7);
-    let bg = land > 0.01 ? mixColor('#ffffff', LIGHTS[light].orb[3], 0.28 * land) : C.white;
-    // THE CALL lands on its station: the closing light's flash
-    if (k === CARRIER && t >= K.stations[0]) bg = popFill(t, K.stations[0], FLOW_LIGHT);
-    const ring = lit > 0.01 ? rgba(body, 0.5 * lit) : undefined;
+    // the landing is LIGHT, not a flood of the stock: the 2 px rim flares and a sheen of the card's light
+    // sweeps it once (k ≥ 1 as it lands; English as its face turns to us)
+    const land = flashAt(t, arriveAt(k), 8);
+    const ringA = Math.min(0.95, 0.5 * lit + 0.45 * land * lit);
+    const ring = ringA > 0.01 ? rgba(body, ringA) : undefined;
     const glow =
       lit > 0.01
         ? `0 0 0 1px ${rgba(body, 0.14 * lit)}, 0 30px 80px -34px ${rgba(body, 0.55 * lit)}, 0 0 60px -10px ${rgba(LIGHTS[light].orb[3], 0.5 * lit)}`
@@ -627,13 +630,16 @@ export const LangCards: React.FC<{
           opacity={opacity}
           lift={P.leave > 0 && P.leave < 1 ? 0.4 : 0}
           shadowAlpha={P.leave > 0.5 ? 0.75 : 1}
-          bg={bg}
+          bg={C.white}
           ring={ring}
           glow={glow}
           z={z}
           filter={filter}
         >
           {face}
+          {P.leave < 0.05 ? <Sheen t={t} at={arriveAt(k) - 1} light={light} amount={0.9} /> : null}
+          {/* THE CALL lands on its station: the closing light's sheen */}
+          {k === CARRIER ? <Sheen t={t} at={K.stations[0] - 1} light={FLOW_LIGHT} amount={0.9} /> : null}
         </Box>
       </React.Fragment>
     );

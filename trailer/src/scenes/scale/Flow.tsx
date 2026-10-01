@@ -8,9 +8,10 @@
  *             c14) with a 2.5× ping; the CRM node confirms in the closing
  *             light's deep ink and pings twice; then the finished rail
  *             streams light motes call → CRM on the 8th notes (the hold)
- *   stations  big white cards that fill the frame, slamming in with their
- *             content (never an empty card): a pearl icon disc that lights on
- *             the station frame (ripple + sparks), the line at reading size
+ *   stations  big white cards, framed with air around them, slamming in
+ *             with their content (never an empty card): a pearl icon disc
+ *             that lights on the station frame (ripple + sparks) as a sheen
+ *             of the closing light sweeps the card, the line at reading size
  *             (64 px 16:9 · 60 px 9:16); 16:9 names (64 px) above the nodes,
  *             9:16 names in the card's top-left
  */
@@ -18,7 +19,7 @@ import React from 'react';
 import { BOOKING } from '../../components/Shared';
 import { C, FONT, R } from '../../theme';
 import { aos, EASE, mixHex, SPRING, tween } from '../../lib/motion';
-import { Box, HitBurst, popFill } from './Cards';
+import { Box, HitBurst, Sheen } from './Cards';
 import { dspring } from './curves';
 import { STATION_ICONS, STATION_NAMES } from './data';
 import type { Geo, Pt } from './geometry';
@@ -484,10 +485,11 @@ export const StationCards: React.FC<{ t: number; G: Geo; vertical: boolean; T: F
             transform={`translateY(${((1 - p) * 40).toFixed(2)}px) scale(${(0.95 + 0.05 * Math.min(1.1, p)).toFixed(4)})`}
             opacity={tween(t, [at - 1, at + 1], [0, 1], EASE.out3)}
             lift={Math.max(0, 1 - p) * 0.8}
-            bg={popFill(t, T.stations[i], FLOW_LIGHT)}
             filter={f}
           >
             <StationFace i={i} t={t} T={T} vertical={vertical} />
+            {/* the station lands as light: a sheen of the closing light sweeps the card once */}
+            <Sheen t={t} at={T.stations[i] - 1} light={FLOW_LIGHT} amount={0.9} />
           </Box>
         </React.Fragment>
       );

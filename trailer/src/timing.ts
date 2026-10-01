@@ -703,8 +703,10 @@ export const SCALE_LOCAL = (() => {
   /** the six greetings: the active card leads; the quick four pass through the four lights (the hook's flick, again)
    *  and Japanese lands in the closing light, which carries on into the flow */
   const langLights = ['rush', 'closing', 'sunday', 'night', 'rush', 'closing'] as const;
-  /** "After the call." on the flow beat; then one station per beat (the call 405 · Slack 420 · CRM 435) */
-  const stations = [0, 1, 2].map((i) => F + (i + 1) * SCALE.stationStep);
+  /** "After the call." on the flow beat; a beat later THE CALL lights, then one station per 2 beats — each
+   *  card's words read before the next lands — so the finished rail holds ≈ 1.8 s before the iris
+   *  (the call 465 · Slack 495 · CRM 525 · iris 580) */
+  const stations = [0, 1, 2].map((i) => F + b(1) + i * SCALE.stationStep);
   /** the CTA iris opens 3 f after the scale's last cue (CTA_LOCAL.iris) */
   const irisOpen = SCALE.irisToDark[0] + 3;
   /** frames a light mote takes along the finished rail (call → CRM) */
@@ -729,8 +731,9 @@ export const SCALE_LOCAL = (() => {
     popX: [0.5, 0.75, 0.26, 0.68, 0.84, 0.81, 0.16, 0.47, 0.62, 0.87, 0.87, 0.87, 0.13, 0.38, 0.62, 0.87] as const,
     /** "16 industries." slams in the light leading at the slam (the night: the last four cards) */
     heroLight: 'night' as const,
-    /** the fifteen other cards peel off outwards (pull-in from flyOut − flyAnticip), the hero still up */
-    flyOut: LT - 15,
+    /** the fifteen other cards peel off outwards (pull-in from flyOut − flyAnticip) as the hero's hold ends
+     *  (the title has been up and still ≈ 1.3 s; it is read on through the peel and the lift) */
+    flyOut: LT - 12,
     flyAnticip: 3,
     flyStagger: 0.6,
     flyDur: 12,
@@ -738,12 +741,12 @@ export const SCALE_LOCAL = (() => {
     glide: LT - 10,
     /** … and turns to English (2 f anticipation, lands ≈ 122, before "This" on 124) */
     enFlip,
-    /** "16 industries." lifts to the band (the hero has held ≈ 0.67 s still, readable through the lift) … */
+    /** "16 industries." lifts to the band (the hero has held ≈ 1.4 s, readable through the lift) … */
     titleSwap: LT - 10,
     /** … exits up out of its mask (2 f dip, 4 f exit, gone at titleIn + 1) … */
     titleExit: LT - 8,
-    /** … and "14 languages." rises into it: its first letters land ON langTitle */
-    titleIn: LT - 3,
+    /** … and "14 languages." rises into it as it leaves (the slot is never empty): its first letters land ON langTitle */
+    titleIn: LT - 5,
     langLights,
     /** each card arrives: English from the flip, the others slide in from the right and land a frame
      *  before their voice cuts in */
@@ -753,16 +756,15 @@ export const SCALE_LOCAL = (() => {
     /** the card's text is up BEFORE it covers the one it replaces (no switch shows an empty card): each
      *  card's first word starts to rise 4 f before the card lands (English as its face turns to us, the
      *  others mid-slide), so it has settled as she starts to speak. English and Japanese then stay ON
-     *  her words; the quick four (cut after ≈ 0.77 s) bring their WHOLE greeting, the words rising on a
-     *  stagger over greetSpread frames, so every word has settled ≤ 9 f after the card lands */
+     *  her words; the quick four (cut after the name) bring only what is HEARD — "Sunt Ava," … "Sie
+     *  sprechen mit Ava," — one glanceable line, its words on a short stagger (greetSpread), all settled
+     *  by landAt + 3 and read for ≈ 0.8 s */
     landAt,
     greetIn: landAt.map((l) => l - 4),
-    greetSpread: 7,
+    greetSpread: 3,
     /** the AI disclosure underlined as she says it: English "AI assistant", Japanese "AIアシスタント" */
     discloseEn: [LA[0] + vWord('lang-en', 4), LA[0] + vFrames('lang-en') - 4] as const,
     discloseJa: [LA[5] + vWord('lang-ja', 0), LA[5] + vWord('lang-ja', 2)] as const,
-    /** the quick four are cut before their AI phrase: it is underlined as their last words settle */
-    discloseQuick: LA.map((a) => [a + 2, a + 10] as const),
     /** the slow push on the focus card through the languages, released for the flow */
     langPush: [LT, F - 6, F + 8] as const,
     /** the gallery drops away (bottom cards first in 9:16), Japanese holding until then */
@@ -797,7 +799,7 @@ export const SCALE_LOCAL = (() => {
      *  exactly as the CTA iris opens from it */
     stream: [3, 2, 1, 0].map((j) => irisOpen - moteDur - j * (BEAT / 2)),
     moteDur,
-    /** slow push-in of the stage about FLOW_END (1 → 1.04) from Slack to the end */
+    /** slow push-in of the stage about FLOW_END (1 → 1.03) from Slack to the end */
     flowPush: [stations[1], SCALE.irisToDark[1]] as const,
   };
 })();
@@ -811,6 +813,18 @@ const CTA_IRIS_END = SCENES.scale.from + SCALE.irisToDark[1] - SCENES.cta.from; 
  * the iris swallows them (integration pass: it used to start 1 f BEFORE the cue)
  */
 const CTA_IRIS_START = SCENES.scale.from + SCALE.irisToDark[0] + 3 - SCENES.cta.from; // −4
+/** the URL types ON her words (cta-2 words 0 / 1 / 2 start "neuro" | "tech" | "voice.com"), one
+ *  character per CTA_URL_STEP frames; it has finished typing at CTA_URL_DONE */
+const CTA_URL_TEXT = 'neurotechvoice.com';
+const CTA_URL_CHUNKS = [0, 5, 9] as const;
+const CTA_URL_AT = [0, 1, 2].map((k) => CTA.brandVoice + vWord(CTA.brandVoiceId, k));
+const CTA_URL_STEP = 0.6;
+const CTA_URL_DONE = CTA_URL_AT[2] + (CTA_URL_TEXT.length - 1 - CTA_URL_CHUNKS[2]) * CTA_URL_STEP;
+/** the end card, ONE entrance at a time (v5 critics: the button used to unfold while the URL was
+ *  still typing): "Start free →" on the half-beat after the URL has typed (225), the note a beat
+ *  later (240); the frames come out of the note → press gap, never out of the final still */
+const CTA_BUTTON_AT = upHalf(CTA_URL_DONE + 2);
+const CTA_NOTE_AT = CTA_BUTTON_AT + b(1);
 export const CTA_LOCAL = {
   /** the dark iris opens from FLOW_END over 12 frames, ending with the white act (−4 → 8) */
   iris: [CTA_IRIS_START, CTA_IRIS_END] as const,
@@ -820,11 +834,15 @@ export const CTA_LOCAL = {
    *  (5 f before it completes) and decelerates into the figure — its light rises evenly
    *  (Cta.tsx revealAt): no dead hold, no slam (3 → 24) */
   reveal: [CTA_IRIS_END - 5, CTA.robotIn[1] - 6] as const,
-  /** the site's liquid entry tear settles onto the figure (frames 0 → 24; liquid 0 → 18) */
-  entryTear: [0, 24] as const,
+  /** the site's entry tear, as LIGHT ARRIVING: a whisper (peak entryTearPeak) held to the head's
+   *  silhouette edge, settled by frame 10 — the eyes, brow and mouth come out clean (liquid 0 → 18) */
+  entryTear: [0, 10] as const,
+  entryTearPeak: 0.25,
   liquid: [0, 18] as const,
-  /** corner marks bracket the line right after its last spoken word ("seven") */
-  marks: CTA.line + vWord('cta-1', 9) + 6,
+  /** a line of light draws out under "24/7." right after its last spoken word ("seven") */
+  underline: CTA.line + vWord('cta-1', 9) + 6,
+  /** … over this many frames, from the word's centre out */
+  underlineDraw: 10,
   /** ON the converge downbeat: a first filament burst (45 → 49) … */
   tearKick: [CTA.converge[0], CTA.converge[0] + 4] as const,
   /** … then the tear builds while the figure is erased to the halo (45 → 69) */
@@ -832,14 +850,15 @@ export const CTA_LOCAL = {
   erase: [CTA.converge[0], CTA.logoImpact - 6] as const,
   /** words hold, swell for 3 f, leave 19 f into the converge at 0.35 f each, 8 f flights */
   collapse: { from: CTA.converge[0] + 19, step: 0.35, dur: 8, anticip: 3 },
-  /** the corner marks travel in behind the words */
-  marksIn: { from: CTA.converge[0] + 21, dur: 8 },
+  /** the line of light travels in with "24/7." (it leaves a frame after its word) */
+  underlineIn: { from: CTA.converge[0] + 21, dur: 8 },
   /** streaks + motes pour in from the frame edges (45 → 75) */
   streaks: [CTA.converge[0], CTA.logoImpact] as const,
   /** the hook's ring waves, reversed: three rings contract into P (start radius × reach) */
   rings: [1.25, 1.1, 0.95] as const,
-  /** the eyes' last light: glows up as they tear, then slides into the core */
-  eyeGlow: [CTA.converge[0] + 12, CTA.converge[0] + 17, CTA.converge[0] + 24] as const,
+  /** the eyes' last light: glows up AS they tear (the eyes go with her face, so their light is what
+   *  is left of them — never two sockets), then slides into the core (156 → 163 → 174) */
+  eyeGlow: [CTA.converge[0] + 6, CTA.converge[0] + 13, CTA.converge[0] + 24] as const,
   /** the core gathers */
   core: [CTA.converge[0] + 15, CTA.logoImpact] as const,
   /** anticipation: everything pulls back */
@@ -847,8 +866,11 @@ export const CTA_LOCAL = {
   /** impact accents (frames) */
   shake: 6,
   ring: [CTA.logoImpact, CTA.logoImpact + 20] as const,
+  /** the end card's entrances (see CTA_BUTTON_AT): the button, then the note */
+  button: CTA_BUTTON_AT,
+  note: CTA_NOTE_AT,
   /** halo breath starts under the end card … */
-  breath: CTA.button + 10,
+  breath: CTA_BUTTON_AT + 10,
   /** … and its amplitude eases to 0 into the hold, where it freezes */
   breathOut: [CTA.finalHold - 10, CTA.finalHold] as const,
   /** dust clears before the hold */
@@ -903,9 +925,11 @@ export const CTA_LOCAL = {
   drift: [CTA.line + vWord(CTA.lineVoice, VOICE.lines[CTA.lineVoice].words.length - 1) + 6, CTA.converge[0]] as const,
   /** the URL types ON her words: "neuro" | "tech" | "voice.com" start on cta-2 words 0 / 1 / 2
    *  (first character index of each chunk, and its frame), one character per urlStep frames */
-  urlChunks: [0, 5, 9] as const,
-  urlAt: [0, 1, 2].map((k) => CTA.brandVoice + vWord(CTA.brandVoiceId, k)) as readonly number[],
-  urlStep: 0.6,
+  urlChunks: CTA_URL_CHUNKS,
+  urlAt: CTA_URL_AT as readonly number[],
+  urlStep: CTA_URL_STEP,
+  urlText: CTA_URL_TEXT,
+  urlDone: CTA_URL_DONE,
   /** "5 free minutes, no card": one word every noteStep frames (a calm read, settled before the press) */
   noteStep: 2.5,
   /** the press: a hover lift (anticipation) over the 5 f before it … */
@@ -1481,7 +1505,7 @@ export const HITS: Hit[] = [
   ...CTA_LOCAL.orbPops.map((f, i) => H('cta', f, chime(LIGHT_ORDER4[i], true), LIGHT_ORDER4[i], [0.66, 0.71, 0.27, 0.36][i], 2, `${LIGHT_ORDER4[i]}: the hook’s chime, recalled`, { layer: true, db: -2 })),
   // ON “Twenty” “four” “seven”: weight, not clicks — sub kicks under the words
   ...CTA_LOCAL.tighten.map((f, i) => H('cta', f, 'thump', 'none', 0.5, 2, `the orbit tightens (“${['Twenty', 'four', 'seven'][i]}”)`, { db: -1 })),
-  H('cta', CTA_LOCAL.marks, 'tick', 'none', 0.5, 3, 'four corner marks pop', { run: { n: 4, step: 2, semi: 0 } }),
+  H('cta', CTA_LOCAL.underline, 'draw', 'none', [0.54, 0.62], 3, 'a line of light draws out under “24/7.”', { db: -2 }),
   H('cta', CTA.logoImpact, 'riser', 'none', 0.5, 1, 'CONVERGE → peak ON the impact'),
   H('cta', CTA_LOCAL.tearKick[0], 'swish', 'none', 0.5, 2, 'the filament burst tears the portrait'),
   H('cta', CTA_LOCAL.collapse.from + 3, 'swish', 'none', 0.5, 3, 'headline words sucked into the core'),
@@ -1495,8 +1519,8 @@ export const HITS: Hit[] = [
   // MIX.impact — and the tonal duck, deeper under the name — MIX.name — takes it back for her line)
   H('cta', CTA.logoImpact, 'chord', 'night', 0.5, 1, 'THE FOUR LIGHTS ring together'),
   H('cta', CTA_LOCAL.ring[0], 'shock', 'none', 0.5, 2, 'the shockwave ring sweeps past', { layer: true }),
-  H('cta', CTA.button, 'pop', 'night', 0.5, 3, '“Start free →” rises on “…Voice.” (its point of light peaks here)', { db: -2 }),
-  H('cta', CTA.note, 'tap', 'none', 0.5, 3, '“5 free minutes, no card”', { db: -4 }),
+  H('cta', CTA_LOCAL.button, 'pop', 'night', 0.5, 3, '“Start free →” unfolds out of its point of light, once the URL has typed', { db: -2 }),
+  H('cta', CTA_LOCAL.note, 'tap', 'none', 0.5, 3, '“5 free minutes, no card”', { db: -4 }),
   // (the URL types ON her words — "neuro" | "tech" | "voice.com" at CTA_LOCAL.urlAt — and makes
   // no sound of its own: her voice is its sound, so nothing sits on the name; likewise the
   // four-light rim (rimIn) and the plate's glint ride the impact's chord, unvoiced)

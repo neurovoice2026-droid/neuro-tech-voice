@@ -30,8 +30,9 @@
  *   converge  after a breath: the row fans into four arms, swells
  *             (anticipation) and spirals into the core, accelerating,
  *             motion-blurred; her HEAD frays in filaments that glow in the
- *             nearest light's colour (capped at her head + 40 px), her eyes go
- *             last as two points of lilac; the stage behind her collapses
+ *             nearest light's colour (capped at her head + 40 px); her eyes go
+ *             with her face and their light lifts out as two points of lilac
+ *             (never two sockets left floating); the stage behind her collapses
  *             radially into the core (stageOut) — the merge plays on black
  *   merge     each keeps its own light until they touch; the three pour into
  *             the survivor, which holds ALONE (survivor) — 2×, its mesh
@@ -47,7 +48,9 @@
  *             RISES on "…Voice." (soft spring); the note follows, word by word;
  *             then the press (hover lift, squash, the plum floods from the
  *             arrow, a ripple, a glint) and it keeps the site's hover
- *   finalHold → end: dead still — nothing moves but the global grain
+ *   finalHold → end: dead still — nothing moves but the global grain; over
+ *             the master's fade (MIX.fadeOut) the light goes out with the
+ *             chord, on the same curve, and the film ends on the night
  *
  * Parallax: art (in-shader orbit) · halo 0.3 · orbs 0.8–1.25 by depth ·
  * type/logo/button 1 · streaks 1.3 · dust 1.5.
@@ -66,7 +69,7 @@ import { ALL_GLOW, GLOW, hexToRgb, mixColor } from '../lib/lights';
 import { EASE, mix, SPRING, springAt, tween, windowed } from '../lib/motion';
 import { useSceneFrame } from '../lib/scene';
 import { C, LIGHTS, LIGHT_ORDER } from '../theme';
-import { b, CTA, CTA_LOCAL, vWord } from '../timing';
+import { b, CTA, CTA_LOCAL, MIX, SCENES, vWord } from '../timing';
 import { CoverCta, Note, Url, type Rest } from './cta/EndCard';
 import { Headline, type HeadlineSpec } from './cta/Headline';
 import { HERO_ART, HeroGL, type HeroOrbs, type HeroUniforms } from './cta/HeroGL';
@@ -75,6 +78,23 @@ import { buildStreaks, Streaks } from './cta/Streaks';
 
 const K = CTA_LOCAL;
 const I = CTA.logoImpact;
+
+/**
+ * THE END: the logo's light goes out WITH its chord. The master fades over MIX.fadeOut
+ * (exponential, fadeK nepers, offset to land on true zero — scripts/audio/mix.mjs); the picture
+ * reads the same window and the same curve, taking the audio gain as the light's intensity
+ * (linear light, so ^(1/2.2) on screen): the card holds, sinks, and the film ends on the night,
+ * frame-for-frame with the silence — the loop runs from black back into the hook's black.
+ * (An end-of-film fade, not a scene transition.)
+ */
+const END_FADE = [MIX.fadeOut[0] - SCENES.cta.from, MIX.fadeOut[1] - SCENES.cta.from] as const;
+function endLight(t: number) {
+  if (t <= END_FADE[0]) return 1;
+  const u = Math.min(1, (t - END_FADE[0]) / Math.max(1, END_FADE[1] - 1 - END_FADE[0]));
+  const z = Math.exp(-MIX.fadeK);
+  const g = Math.max(0, (Math.exp(-MIX.fadeK * u) - z) / (1 - z));
+  return Math.pow(g, 1 / 2.2);
+}
 
 /** Pin a residual to its exact rest value by the final hold (eased over K.settle). */
 const rest: Rest = (t, v, target) => {
@@ -140,7 +160,6 @@ function geo(L: Layout) {
       fontSize: L.pick(76, 84),
       // 9:16: the three rows run ≈ y 1190 – 1450 (marks 1175 – 1465): all above the caption UI
       cy: L.pick(880, 1320),
-      markGap: 28,
     },
     /** a soft dark pool under the headline (radial, ≈40 % ink) so an orb's bloom never washes the type */
     scrim: L.pick({ w: 1500, h: 430 }, { w: 1080, h: 560 }),
@@ -284,7 +303,8 @@ export const Cta: React.FC = () => {
     pan: [0, 0] as [number, number],
     time: 20 + (t / 30) * 4,
     tear: Math.max(
-      tween(t, K.entryTear, [0.55, 0], EASE.out3),
+      // the entry: a whisper of tear on the silhouette's edge only (tearEdge), the face clean
+      tween(t, K.entryTear, [K.entryTearPeak, 0], EASE.out3),
       // the portrait crop's warp is about half as wide in px as the landscape's:
       // it gets more, so the downbeat burst reads the same in both
       (tween(t, K.tearKick, [0, 0.3], EASE.out3) + tween(t, K.tear, [0, 0.7], EASE.draw)) * L.pick(1, 2.8),
@@ -308,7 +328,7 @@ export const Cta: React.FC = () => {
     floor: [
       onLayer(L, { x: L.cx, y: G.floor.y }, cam, 0.3).y,
       G.floor.len * hC.z,
-      G.floor.k * tween(t, [I + 4, CTA.button + 10], [0, 1], EASE.inOut),
+      G.floor.k * tween(t, [I + 4, K.button + 10], [0, 1], EASE.inOut),
       G.floor.rise * hC.z,
     ] as [number, number, number, number],
     haloShape: [G.haloPow, 0, 0.06] as [number, number, number],
@@ -477,6 +497,8 @@ export const Cta: React.FC = () => {
     tearColor: rgb01(C.lilac),
     // … and they stay within ~40 px of her head matte (in head-ellipse units: 2.1 eye offsets)
     headCap: 1 + 40 / (L.width * G.frame.zoom * zoom * 2.1 * art.eye[0]) - 0.22,
+    // the entry's tear stays on the silhouette's edge; the converge tears the whole head
+    tearEdge: t < K.tearKick[0] ? 1 : 0,
   };
 
   /* ── iris ── */
@@ -495,9 +517,9 @@ export const Cta: React.FC = () => {
     ...G.headline,
     P: G.P,
     wordAt: CTA.lineWords.map((w) => CTA.line + vWord(CTA.lineVoice, w) - K.riseLead),
-    marksAt: K.marks,
+    underline: { at: K.underline, dur: K.underlineDraw },
     collapse: K.collapse,
-    marksCollapse: K.marksIn,
+    underlineCollapse: K.underlineIn,
   };
   // the pool under the headline: in with its first word, out as the words are pulled into the core
   const scrimO =
@@ -533,6 +555,7 @@ export const Cta: React.FC = () => {
   const logoO = t < I ? 0 : tween(t, [I, I + 1], [0.8, 1], EASE.out3);
 
   const dustO = 0.6 * (1 - tween(t, K.dustOut, [0, 1], EASE.inOut));
+  const endO = 1 - endLight(t);
 
   return (
     <AbsoluteFill>
@@ -635,7 +658,7 @@ export const Cta: React.FC = () => {
             <Row y={G.button.y}>
               <CoverCta
                 t={t}
-                at={CTA.button}
+                at={K.button}
                 press={CTA.press}
                 fontSize={G.button.fontSize}
                 spec={{ lift: K.pressLift, down: K.pressDown, flood: K.flood, ripple: K.ripple, glint: K.pressGlint }}
@@ -643,12 +666,13 @@ export const Cta: React.FC = () => {
               />
             </Row>
             <Row y={G.note.y}>
-              <Note t={t} at={CTA.note} step={K.noteStep} size={G.note.size} rest={rest} />
+              <Note t={t} at={K.note} step={K.noteStep} size={G.note.size} rest={rest} />
             </Row>
             <Row y={G.url.y}>
               <Url
                 t={t}
                 at={CTA.url}
+                text={K.urlText}
                 chunks={K.urlChunks.map((from, k) => ({ from, at: K.urlAt[k] }))}
                 size={G.url.size}
                 dot={G.url.dot}
@@ -673,6 +697,7 @@ export const Cta: React.FC = () => {
         ) : null}
       </AbsoluteFill>
       {t < K.iris[1] + 1 ? <IrisRim t={t} r={irisR} rPrev={irisAt(t - 0.5)} x={G.iris.x} y={G.iris.y} w={L.width} h={L.height} /> : null}
+      {endO > 0.001 ? <AbsoluteFill style={{ background: C.night, opacity: endO }} /> : null}
     </AbsoluteFill>
   );
 };

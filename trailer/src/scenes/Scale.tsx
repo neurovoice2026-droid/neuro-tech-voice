@@ -52,7 +52,7 @@ import { centre, geo, type Rect } from './scale/geometry';
 import { Titles } from './scale/Heading';
 import { LangCards } from './scale/Langs';
 import { DirBlur, dirBlurRef, sigmaFor } from './scale/MotionBlur';
-import { cardLight, HERO_LIGHT, leadColors, rgba, tintOf } from './scale/lights';
+import { cardLight, HERO_LIGHT, rgba, roomColors, tintOf } from './scale/lights';
 
 const K = SCALE_LOCAL;
 const HERO = SCALE.industriesTitle;
@@ -110,7 +110,8 @@ export const Scale: React.FC = () => {
   const cam = camAt(t, G, L);
 
   /* ── the hero hit ─────────────────────────────────────────────── */
-  const dim = tween(t, [HERO, HERO + 6], [0, 1], EASE.out3);
+  // the wall racks back 2 f BEFORE the slam (already ≈ 55 % at its first glyph: no type over sharp labels)
+  const dim = tween(t, [HERO - 2, HERO + 6], [0, 1], EASE.out3);
   const wash = t >= HERO && t < HERO + 2 ? (t < HERO + 1 ? 0.09 : 0.05) : 0;
 
   /* ── card metrics: labels 40 px (16:9) / 32 px (9:16) ─────────── */
@@ -121,7 +122,7 @@ export const Scale: React.FC = () => {
     const s = popStart(i);
     let sx = 0;
     let sy = 0;
-    if (t < 70) {
+    if (t < HERO - 2) {
       // the pull-back smears each card along its own screen path (a 180° shutter: half the frame's travel; layer px)
       const sv = screenVel(t, centre(G.cards[i]), G, L);
       sx = Math.min(8, 0.5 * sigmaFor(sv.vx)) / cam.s;
@@ -284,14 +285,16 @@ export const Scale: React.FC = () => {
     );
   };
 
-  const fz = 1 + 0.04 * tween(t, K.flowPush, [0, 1], EASE.inOut);
+  const fz = 1 + 0.03 * tween(t, K.flowPush, [0, 1], EASE.inOut);
   const stagePush = fz > 1.00001 ? `scale(${fz.toFixed(5)})` : undefined;
   const cp = cameraProps(cam, L);
   // the wall settles behind the hero: 1.5 % back about its centre
   const settle = 1 - 0.015 * dim;
   const wallOn = t < K.flyOut + K.flyDur + 16;
-  // the hero's defocus on the wall; as the cards peel off, their own motion blur takes over (a rack focus to the move)
-  const defocus = 7 * dim * (1 - tween(t, [K.flyOut - K.flyAnticip, K.flyOut + 5], [0, 1], EASE.inOut));
+  // the hero's LIGHT defocus on the wall (the sixteen still read under the number: ≈ 3.5 px, labels at ≈ 40 %
+  // contrast); as the cards peel off, their own motion blur takes over (a rack focus to the move)
+  const defocus = 3.5 * dim * (1 - tween(t, [K.flyOut - K.flyAnticip, K.flyOut + 5], [0, 1], EASE.inOut));
+  const wallFade = 1 - 0.42 * dim;
 
   return (
     <AbsoluteFill style={{ background: C.white, overflow: 'hidden' }}>
@@ -314,7 +317,7 @@ export const Scale: React.FC = () => {
                     transform: settle < 0.99999 ? `scale(${settle.toFixed(5)})` : undefined,
                     transformOrigin: `${wc.x}px ${wc.y}px`,
                     // the hero's defocus: the whole wall at once (one filter, not sixteen)
-                    opacity: dim > 0.001 ? 1 - 0.58 * dim : undefined,
+                    opacity: dim > 0.001 ? wallFade : undefined,
                     filter: defocus > 0.2 ? `blur(${(defocus / cam.s).toFixed(2)}px)` : undefined,
                   }}
                 >
@@ -334,9 +337,9 @@ export const Scale: React.FC = () => {
             />
           </Layer>
 
-          {/* 1.6 · out-of-focus discs in the leading light, nearest the lens */}
+          {/* 1.6 · out-of-focus discs in the room's light, nearest the lens */}
           <Layer depth={1.6}>
-            {leadColors(t, 2).map((c, ci) => (
+            {roomColors(t, 2).map((c, ci) => (
               <NearDiscs key={ci} t={t} L={L} fade={c.w * tween(t, [0, 10], [0, 1], EASE.out3)} color={c.col} />
             ))}
           </Layer>

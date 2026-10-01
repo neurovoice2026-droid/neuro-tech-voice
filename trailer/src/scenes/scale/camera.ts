@@ -1,16 +1,20 @@
 /**
  * The SCALE camera, as a 2D affine on the depth-1 layer: screen = A + s·p.
  *
- *   wall     a CONTINUOUS pull-back (monotone cubic in log-zoom through
- *            SCALE_LOCAL.pull): card 01 fills the frame out of the whip
- *            (≈ 3.9×) → the 2 × 2 framed as card 2 pops → a slow drift → the
- *            3 × 3 as card 5 pops → drift → the whole wall as the 16ths start
- *            → a last breath out (0.985) into the slam. The focus moves on a
- *            straight screen path (the wall's top-left stays anchored), so
- *            each card pops inside the opening frame. It breathes (±0.35 %,
- *            2 beats) and kicks: every pop 0.25 %, every turn of the hour
- *            0.9 % with a 2 px jolt and a hair of roll
- *   hero     +2.5 % on the slam (e^−u/4), then back to 1 as the cards leave
+ *   wall     a CONTINUOUS pull-back that always FRAMES THE CLUSTER: the cards
+ *            popped so far, plus the next slot a few frames before its card
+ *            pops (lead room), inside the framing box (geometry.ts: ≥ 64 px
+ *            from the 16:9 edges, ≥ 60 px from the 9:16 sides, inside the
+ *            9:16 safe zone) — card 01 fills the box out of the whip → each
+ *            new column / row opens the frame → the whole wall, composed with
+ *            air around it → a last breath out (0.975) into the slam. Zoom
+ *            (in log) and focus are monotone cubics through those framings,
+ *            and the focus is clamped so no popped card ever leaves the box.
+ *            It breathes (±0.35 %, a bar) and kicks: every pop 0.25 %, every
+ *            turn of the hour 0.9 % with a 2 px jolt and a hair of roll
+ *   hero     +2.5 % on the slam, decaying slowly over the hold (τ ≈ 0.5 s)
+ *            while a slow push carries the wall from 0.975 back to 1 — the
+ *            hold breathes and drifts, never freezes
  *   langs    a slow 2.5 % push on the language card, a 0.5 % kick as each
  *            card lands, released for the flow
  *   flow     at rest (s 1, A 0) — so FLOW_END is the screen point — except
@@ -21,10 +25,14 @@ import type { Layout } from '../../lib/layout';
 import { EASE, tween, windowed } from '../../lib/motion';
 import { noise2D } from '@remotion/noise';
 import { SCALE, SCALE_LOCAL } from '../../timing';
-import { centre, type Geo, type Pt } from './geometry';
+import { centre, type Geo, type Pt, type Rect } from './geometry';
 
 const K = SCALE_LOCAL;
 const HERO = SCALE.industriesTitle;
+/** the frame has opened for a card this many frames before it pops (its slot's inhale starts at −2) */
+const LEAD = 3;
+/** the wall's last breath out before the slam (the push of the hold brings it back to 1) */
+const REST = 0.975;
 
 export type Affine = { s: number; ax: number; ay: number; rot: number };
 
@@ -54,25 +62,60 @@ function pchip(xs: readonly number[], ys: readonly number[], x: number): number 
   return h00 * ys[k] + h10 * h[k] * m[k] + h01 * ys[k + 1] + h11 * h[k] * m[k + 1];
 }
 
-/** the wall's pulled-back framing at t: world point F at the screen centre, zoom Z */
+/** the zoom at which rect r fills the framing box (its tighter side) */
+const fitZ = (G: Geo, r: Rect) => Math.min(G.frame.w / r.w, G.frame.h / r.h);
+
+/** the wall's framing keys: one per new column / row of the cluster (LEAD f before its card pops) */
+type Keys = { ts: number[]; lz: number[]; fx: number[]; fy: number[] };
+const KEYS = new Map<string, Keys>();
+function wallKeys(G: Geo): Keys {
+  const id = `${G.W}x${G.H}`;
+  const hit = KEYS.get(id);
+  if (hit) return hit;
+  const c0 = G.cluster[0];
+  const keys: Keys = { ts: [-K.preroll], lz: [Math.log(fitZ(G, c0))], fx: [centre(c0).x], fy: [centre(c0).y] };
+  for (let i = 1; i < 16; i++) {
+    const a = G.cluster[i - 1];
+    const b = G.cluster[i];
+    if (Math.abs(a.w - b.w) < 0.5 && Math.abs(a.h - b.h) < 0.5) continue;
+    const lz = Math.min(keys.lz[keys.lz.length - 1], Math.log(fitZ(G, b)));
+    keys.ts.push(K.pops[i] - LEAD);
+    keys.lz.push(lz);
+    keys.fx.push(centre(b).x);
+    keys.fy.push(centre(b).y);
+  }
+  // the whole wall, then a last breath out into the slam (about the wall's centre = the anchor)
+  keys.ts.push(HERO - 2);
+  keys.lz.push(Math.min(keys.lz[keys.lz.length - 1], Math.log(REST)));
+  keys.fx.push(centre(G.wall).x);
+  keys.fy.push(centre(G.wall).y);
+  KEYS.set(id, keys);
+  return keys;
+}
+
+/** the cluster on screen at t: the bounds of every card whose slot has started to inhale */
+function clusterAt(t: number, G: Geo): Rect {
+  let n = 0;
+  for (let i = 0; i < 16; i++) if (t >= (i === 0 ? -K.preroll : K.pops[i] - 2)) n = i;
+  return G.cluster[n];
+}
+
+/** the wall's pulled-back framing at t: world point F at the screen anchor, zoom Z */
 export function baseCam(t: number, G: Geo): { F: Pt; Z: number } {
-  const [z0, z1, z2] = G.zooms;
-  // an even pull: each key a little past the framing it needs, so no segment is a step
-  const zs = [z0, z1 * 1.04, z1 * 0.9, z2 * 1.065, z2 * 0.94, 1, 0.985];
-  let Z = Math.exp(pchip(K.pull, zs.map(Math.log), t));
-  // after the slam: back to 1 as the cards leave and the keeper glides
-  if (t > HERO) Z += (1 - 0.985) * tween(t, [K.glide, K.switchIn[0] + 10], [0, 1], EASE.inOut);
-  // the focus follows the block being filled: piecewise-linear in the view's size (1 / zoom)
-  const inv = [1 / z0, 1 / z1, 1 / z2, 1];
-  const fs = G.focus;
-  const w = 1 / Z;
-  let F: Pt = fs[3];
-  for (let i = 0; i < 3; i++) {
-    if (w <= inv[i + 1]) {
-      const u = Math.max(0, (w - inv[i]) / (inv[i + 1] - inv[i]));
-      F = { x: fs[i].x + (fs[i + 1].x - fs[i].x) * u, y: fs[i].y + (fs[i + 1].y - fs[i].y) * u };
-      break;
-    }
+  const k = wallKeys(G);
+  let Z = Math.exp(pchip(k.ts, k.lz, t));
+  let F: Pt = { x: pchip(k.ts, k.fx, t), y: pchip(k.ts, k.fy, t) };
+  if (t < HERO) {
+    // no popped card ever leaves the framing box (the focus is clamped into what keeps the cluster in it)
+    const B = clusterAt(t, G);
+    const hw = G.frame.w / 2 / Z;
+    const hh = G.frame.h / 2 / Z;
+    const clamp = (v: number, lo: number, hi: number) => (lo > hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));
+    F = { x: clamp(F.x, B.x + B.w - hw, B.x + hw), y: clamp(F.y, B.y + B.h - hh, B.y + hh) };
+  } else {
+    // the hold: a slow push from the breath-out back to 1 as the cards leave and the keeper glides
+    Z = REST + (1 - REST) * tween(t, [HERO, K.switchIn[0] + 10], [0, 1], EASE.inOut);
+    F = centre(G.wall);
   }
   return { F, Z };
 }
@@ -94,9 +137,9 @@ export function kicks(t: number): { z: number; jx: number; rot: number } {
     rot += 0.22 * side * e;
   });
   if (t >= HERO) {
-    const e = Math.exp(-(t - HERO) / 4);
-    z += 0.025 * e;
-    rot += -0.18 * e;
+    // the slam: the kick lands at once and lets go slowly over the hold (the roll settles fast)
+    z += 0.025 * Math.exp(-(t - HERO) / 14);
+    rot += -0.18 * Math.exp(-(t - HERO) / 4);
   }
   // each language card lands: 0.5 %
   const lands = [K.enFlip + 6, ...SCALE.langAt.slice(1).map((a) => a - 1)];
@@ -119,10 +162,14 @@ export function nudge(t: number, at: number, last: boolean): number {
 
 /** the whole camera at t, as an affine of the depth-1 layer */
 export function camAt(t: number, G: Geo, L: Layout): Affine {
-  const C = { x: L.cx, y: L.cy };
+  void L;
+  // the screen anchor: the framing box's centre (9:16: the safe zone's), = the wall's centre at rest
+  const C = G.anchor;
   const { F, Z } = baseCam(t, G);
-  // the wall breathes (2 beats), and the hand holding the camera drifts a hair until the flow
-  const breath = 0.0035 * Math.sin(((t + 3) / 30) * Math.PI) * tween(t, [4, 14], [0, 1], EASE.inOut) * (1 - tween(t, [80, HERO], [0, 1], EASE.inOut));
+  // the wall breathes (a bar) through the build AND the hero's hold, and lets go as the cards peel off;
+  // the hand holding the camera drifts a hair until the flow
+  const breath =
+    0.0035 * Math.sin(((t + 3) / 30) * Math.PI) * tween(t, [4, 14], [0, 1], EASE.inOut) * (1 - tween(t, [K.flyOut - 8, K.flyOut], [0, 1], EASE.inOut));
   const hand = 1 - tween(t, [K.collapse, K.stations[0] - 4], [0, 1], EASE.inOut);
   const hx = 2.5 * noise2D('scale-hand-x', t * 0.02, 0.1) * hand;
   const hy = 2 * noise2D('scale-hand-y', 0.4, t * 0.02) * hand;

@@ -81,6 +81,8 @@ export type HeroUniforms = {
   tearColor: [number, number, number];
   /** the filaments stay inside the head matte + ~40 px (head-ellipse units; 0 = no cap) */
   headCap: number;
+  /** 0..1: the tear is held to the head's silhouette edge (1 for the entry: the face comes out clean) */
+  tearEdge: number;
 };
 
 /** The four lights in the hero's context: back (hidden by the figure) and front layers. */
@@ -101,7 +103,7 @@ const NAMES = [
   'uTear', 'uLiquid', 'uErase', 'uReveal', 'uEyes', 'uAxisX', 'uEye', 'uSubject', 'uBrand',
   'uHaloC', 'uHaloR', 'uHaloGain', 'uFloor', 'uHaloShape', 'uFrame', 'uSeed',
   'uOrbBack', 'uOrbFront', 'uOrbOn', 'uOcc', 'uGlowP', 'uGlowC', 'uGlowBack', 'uEyeGlow', 'uRim', 'uRimC',
-  'uBackGain', 'uTint', 'uGlowOver', 'uBackLilac', 'uPlateEdge', 'uTearTint', 'uTearC', 'uHeadCap',
+  'uBackGain', 'uTint', 'uGlowOver', 'uBackLilac', 'uPlateEdge', 'uTearTint', 'uTearC', 'uHeadCap', 'uTearEdge',
 ];
 
 function compile(gl: WebGL2RenderingContext, type: number, src: string) {
@@ -294,6 +296,7 @@ export const HeroGL: React.FC<{
     gl.uniform1f(L.uTearTint, u.tearTint);
     gl.uniform3f(L.uTearC, u.tearColor[0], u.tearColor[1], u.tearColor[2]);
     gl.uniform1f(L.uHeadCap, u.headCap);
+    gl.uniform1f(L.uTearEdge, u.tearEdge);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.finish();
     if (!released.current) {

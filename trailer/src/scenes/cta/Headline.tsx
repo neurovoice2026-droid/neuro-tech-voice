@@ -1,9 +1,13 @@
 /**
  * "AI voice agents that book your customers 24/7." — the hero headline
  * (Inter Tight 500, -0.04em, lh 1.04, word masks rising 115 % → 0 on the
- * site spring, 3 px blur-in, words padded 0.24em apart), bracketed by the
- * hero's four corner marks. Ava SAYS this line: each word rises on its own
- * spoken word (spec.wordAt, from the real voice timing), "24/7." on "Twenty".
+ * site spring, 3 px blur-in, words padded 0.24em apart). Ava SAYS this line:
+ * each word rises on its own spoken word (spec.wordAt, from the real voice
+ * timing), "24/7." on "Twenty"; once she has said "…seven." a line of light
+ * draws out under "24/7." from its centre (the night's lilac, white-hot at its
+ * core, with a soft bloom under it — the merged light, foreshadowed). (The
+ * hero's four corner marks are gone: on the film they read as selection
+ * handles, v5 critics.)
  *
  * LAYOUT: the line is laid out ONCE by the browser (a hidden copy of the
  * exact site markup), measured after the face has loaded (inside a
@@ -33,19 +37,17 @@ export type HeadlineSpec = {
   P: { x: number; y: number };
   /** frame each word's mask rise starts (from its spoken word, Cta.tsx) */
   wordAt: readonly number[];
-  marksAt: number;
+  /** the line of light under the last word ("24/7."): draws from its centre at `at` over `dur` frames */
+  underline: { at: number; dur: number };
   /** collapse: first word leaves at `from`, then one every `step` frames */
   collapse: { from: number; step: number; dur: number; anticip: number };
-  marksCollapse: { from: number; dur: number };
-  /** the marks sit this many px outside the block's cap-height bounds */
-  markGap: number;
+  /** the line of light's own flight into P */
+  underlineCollapse: { from: number; dur: number };
 };
 
 const LH = 1.04;
-const MARK = 14;
-/** Inter Tight: cap top and baseline below a 1.04-line row's top, in em
- *  (ascender .969, descender .242, cap height .727 → half-leading −.085) */
-const CAP_TOP = 0.157;
+/** Inter Tight: the baseline below a 1.04-line row's top, in em
+ *  (ascender .969, descender .242 → half-leading −.085) */
 const BASELINE = 0.884;
 /** the flight: leaves gently, accelerating into the core (end slope 1.2) — a
  *  third of the way at half time, so the eye can ride it in */
@@ -59,6 +61,8 @@ type Measure = {
   words: Box[];
   block: { left: number; right: number; top: number; bottom: number };
 };
+/** the last word's trailing "." (Inter Tight 500 at -0.04em: ≈ .27em) — the line runs under "24/7" */
+const PERIOD = 0.27;
 
 /** One word's flight at frame t: c = progress (0 → 1), pre = anticipation swell (0 → 1 → 0). */
 function flightAt(t: number, w0: number, dur: number, anticip: number) {
@@ -312,62 +316,106 @@ export const Headline: React.FC<{ t: number; spec: HeadlineSpec }> = ({ t, spec 
     }
   });
 
-  /* ── corner marks: after the words; then they travel into P ────────── */
-  // on the block's cap-height bounds (first row's cap line → last row's
-  // baseline), pushed markGap px out on both axes
-  const B = m.block;
-  const g = spec.markGap;
-  const top = B.top + fontSize * CAP_TOP - g;
-  const bottom = B.top + fontSize * LH * (n - 1) + fontSize * BASELINE + g;
-  const marks = [
-    { x: B.left - g, y: top },
-    { x: B.right + g, y: top },
-    { x: B.left - g, y: bottom },
-    { x: B.right + g, y: bottom },
-  ];
-  const mcFrom = spec.marksCollapse.from;
-  const mcDur = spec.marksCollapse.dur;
-  marks.forEach((mk, k) => {
-    const a0 = spec.marksAt + k * 2;
-    if (t < a0 - 3) return;
-    const a = aos(t, a0, { anticip: 3, depth: 0.1, config: SPRING.pop });
-    const dir = k % 2 === 0 ? -1 : 1;
-    const markAt = (tt: number) => {
-      const f = flightAt(tt, mcFrom + k * 0.5, mcDur, 3);
-      const pl = place(mk, P, f.c, f.pre, dir);
-      return { ...f, ...pl };
+  /* ── the line of light under "24/7.": after "…seven."; then it travels into P ── */
+  // under the last word's ink ("24/7" — not its period), clear of the slash's descent (.3em below the baseline)
+  const last = flat.length - 1;
+  const lw = m.words[last];
+  const rowTop = m.block.top + fontSize * LH * (n - 1);
+  const ul = {
+    x0: lw.left + 0.03 * fontSize,
+    x1: lw.left + lw.w - PERIOD * fontSize,
+    y: rowTop + fontSize * BASELINE + 0.3 * fontSize,
+  };
+  const U = { x: (ul.x0 + ul.x1) / 2, y: ul.y };
+  const W = ul.x1 - ul.x0;
+  const th = Math.max(2, 0.046 * fontSize);
+  const { at: ua, dur: ud } = spec.underline;
+  if (t >= ua - 3) {
+    // a point of light gathers at the word's centre (3 f), and ON `ua` draws out both ways (house:
+    // fast, then a long settle), white-hot as it draws, cooling to the night's lilac
+    const gather = t < ua ? Math.sin(((t - (ua - 3)) / 3) * (Math.PI / 2)) : 0;
+    const d = tween(t, [ua, ua + ud], [0, 1], EASE.house);
+    const hot = t < ua ? gather : Math.exp(-(t - ua) / 6);
+    const uc = spec.underlineCollapse;
+    const dirU = U.x < P.x ? -1 : 1;
+    const lineAt = (tt: number) => {
+      const f = flightAt(tt, uc.from, uc.dur, 3);
+      return { ...f, ...place(U, P, f.c, f.pre, dirU) };
     };
-    const head = markAt(t);
-    if (head.c >= 0.999) return;
-    const tail = markAt(t - SHUTTER);
-    const trail = Math.hypot(head.x - tail.x, head.y - tail.y);
-    const N = head.c > 0 ? Math.max(1, Math.min(6, Math.ceil(trail / 8) + 1)) : 1;
-    const fade = 1 - tween(head.c, [0.85, 1], [0, 1], EASE.in2);
-    const lil = tween(head.c, [0.2, 0.6], [0, 1], EASE.soft);
-    for (let j = N - 1; j >= 0; j--) {
-      const q = j === 0 ? head : markAt(t - (SHUTTER * j) / (N - 1));
-      const o = Math.min(1, Math.max(0, a * 1.4)) * fade * (j === 0 ? 1 : 0.45 * (1 - j / N));
-      if (o < 0.01) continue;
-      const size = MARK * (1 - 0.35 * q.c) * Math.max(0, 0.4 + 0.6 * a);
-      els.push(
-        <div
-          key={`m${k}-${j}`}
-          style={{
-            position: 'absolute',
-            left: q.x - size / 2,
-            top: q.y - size / 2,
-            width: size,
-            height: size,
-            background: mixHex(C.coverPaper, C.lilac, lil),
-            opacity: o,
-            transform: `rotate(${(45 * q.c).toFixed(2)}deg)`,
-            filter: j > 0 ? `blur(${Math.min(5, trail / N).toFixed(2)}px)` : undefined,
-            boxShadow: j === 0 && q.c > 0.05 ? `0 0 ${(12 * q.c).toFixed(1)}px rgba(185,163,255,${(0.8 * q.c).toFixed(2)})` : undefined,
-          }}
-        />,
-      );
+    const head = lineAt(t);
+    if (head.c < 0.999) {
+      const tail = lineAt(t - SHUTTER);
+      const trail = Math.hypot(head.x - tail.x, head.y - tail.y);
+      const N = head.c > 0 ? Math.max(1, Math.min(6, Math.ceil(trail / 8) + 1)) : 1;
+      const fade = 1 - tween(head.c, [0.85, 1], [0, 1], EASE.in2);
+      const w = Math.max(th, W * d);
+      for (let j = N - 1; j >= 0; j--) {
+        const q = j === 0 ? head : lineAt(t - (SHUTTER * j) / (N - 1));
+        const o = fade * (j === 0 ? 1 : 0.45 * (1 - j / N));
+        if (o < 0.01) continue;
+        const tr = `translate(${(q.x - U.x).toFixed(2)}px, ${(q.y - U.y).toFixed(2)}px) rotate(${q.rot.toFixed(3)}deg) scale(${Math.max(0.001, q.s).toFixed(4)})`;
+        const blurJ = j > 0 ? Math.min(5, trail / N) : 0;
+        // the soft bloom under it (the merged light's lilac), only while it rests
+        if (j === 0 && head.c < 0.6)
+          els.push(
+            <div
+              key="ul-bloom"
+              style={{
+                position: 'absolute',
+                left: U.x - (w * 1.5) / 2,
+                top: U.y - fontSize * 0.42,
+                width: w * 1.5,
+                height: fontSize * 0.84,
+                opacity: o * (1 - head.c / 0.6) * (0.75 + 0.25 * hot),
+                transformOrigin: `${((w * 1.5) / 2).toFixed(2)}px ${(fontSize * 0.42).toFixed(2)}px`,
+                transform: tr,
+                background: 'radial-gradient(closest-side, rgba(185,163,255,0.2) 0%, rgba(124,58,237,0.1) 48%, rgba(124,58,237,0) 100%)',
+              }}
+            />,
+          );
+        els.push(
+          <div
+            key={`ul-${j}`}
+            style={{
+              position: 'absolute',
+              left: U.x - w / 2,
+              top: U.y - th / 2,
+              width: w,
+              height: th,
+              borderRadius: th,
+              opacity: o * (0.9 + 0.1 * hot),
+              transformOrigin: `${(w / 2).toFixed(2)}px ${(th / 2).toFixed(2)}px`,
+              transform: tr,
+              filter: blurJ > 0.1 ? `blur(${blurJ.toFixed(2)}px)` : undefined,
+              // light, not a rule: soft ends, a white-hot core, a lilac glow round it
+              background: `linear-gradient(90deg, rgba(185,163,255,0) 0%, rgba(185,163,255,0.85) 16%, rgba(${Math.round(232 + 15 * hot)},${Math.round(224 + 19 * hot)},255,1) 50%, rgba(185,163,255,0.85) 84%, rgba(185,163,255,0) 100%)`,
+              boxShadow:
+                j === 0
+                  ? `0 0 ${(7 + 9 * hot).toFixed(1)}px ${(1 + 2 * hot).toFixed(1)}px rgba(185,163,255,${(0.5 + 0.35 * hot).toFixed(3)}), 0 0 ${(22 + 18 * hot).toFixed(1)}px ${(3 + 3 * hot).toFixed(1)}px rgba(124,58,237,${(0.3 + 0.2 * hot).toFixed(3)})`
+                  : undefined,
+            }}
+          />,
+        );
+      }
+      if (gather > 0.01)
+        els.push(
+          <div
+            key="ul-gather"
+            style={{
+              position: 'absolute',
+              left: U.x - fontSize * 0.3,
+              top: U.y - fontSize * 0.3,
+              width: fontSize * 0.6,
+              height: fontSize * 0.6,
+              borderRadius: '50%',
+              opacity: gather,
+              transform: `scale(${(0.4 + 0.6 * gather).toFixed(3)})`,
+              background: 'radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(185,163,255,0.6) 22%, rgba(124,58,237,0.18) 50%, rgba(124,58,237,0) 72%)',
+            }}
+          />,
+        );
     }
-  });
+  }
 
   return <AbsoluteFill ref={rootRef}>{els}</AbsoluteFill>;
 };

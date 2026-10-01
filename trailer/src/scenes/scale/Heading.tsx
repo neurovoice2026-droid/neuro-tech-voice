@@ -11,7 +11,7 @@
  *            overshoot, shutter blur) …
  *   exit     … and "16 industries." leaves UP out of its mask: 2 f dip, a 4 f
  *            power2.in exit with a vertical ghost blur (a DirBlur + two
- *            trailing ghosts) — gone the frame before …
+ *            trailing ghosts) — as …
  *   in       … "14 languages." rises into the mask letter by letter (a 4 %-
  *            overshoot spring, 0.3 f apart, velocity blur); its "14" wears
  *            the LEADING light's ink (English's rush as it lands, a glint and
@@ -134,19 +134,20 @@ function riseText(text: string, t: number, at: number, size: number, figure0 = f
 }
 
 export const Titles: React.FC<{ t: number; T: TitleTiming; hero: Pose; band: Pose; after: Pose }> = ({ t, T, hero, band, after }) => {
-  if (t < T.hero - 1) return null;
+  if (t < T.hero - 2) return null;
   const P = poseAt(t, T, hero, band);
   // shutter blur on the slot's travel
   const P0 = poseAt(t - 0.5, T, hero, band);
   const P1 = poseAt(t + 0.5, T, hero, band);
   const sy0 = Math.min(12, sigmaFor(P1.y - P0.y));
 
-  // which title is in the slot: A until it is gone, B from T.in until it is gone, then C
+  // the slot is never empty: B rises in from below as A leaves up out of the mask (a slot-machine swap,
+  // both clipped by it), and C rises as B leaves
   const eA = exitAt(t, T.exit);
   const eB = t < T.in - 3 ? null : exitAt(t, T.out);
   const showA = eA !== null;
-  const showB = eB !== null && !showA;
-  const showC = !showA && !showB && t >= T.after - 3;
+  const showB = eB !== null;
+  const showC = t >= T.after - 3;
   // an exit's own vertical speed (screen px / frame) → its ghost blur
   const exitSpeed = (at: number) => {
     const a = exitAt(t - 0.5, at) ?? -EXIT_EM;
@@ -163,7 +164,8 @@ export const Titles: React.FC<{ t: number; T: TitleTiming; hero: Pose; band: Pos
   const sy = Math.min(14, Math.hypot(sy0, sigmaFor(vA + vB)));
   const blur = dirBlurRef('scale-title', 0, sy / P.s);
   // a soft white bloom behind the hero title (legibility over the dimmed wall), gone on the move
-  const halo = tween(t, [T.hero, T.hero + 4], [0, 1], EASE.out3) * (1 - tween(t, [T.swap, T.swap + 6], [0, 1], EASE.out3));
+  // (it lifts 2 f BEFORE the slam with the wall's rack-back, so the first glyph never lands on a sharp label)
+  const halo = tween(t, [T.hero - 2, T.hero + 3], [0, 1], EASE.out3) * (1 - tween(t, [T.swap, T.swap + 6], [0, 1], EASE.out3));
 
   /** the slot (its own line box, centred); `clip` masks it once a title starts leaving / arriving */
   const slot = (children: React.ReactNode, dyEm: number, clip: boolean, key: string, op = 1) => (
@@ -185,9 +187,12 @@ export const Titles: React.FC<{ t: number; T: TitleTiming; hero: Pose; band: Pos
     </div>
   );
 
-  // A: the slam (letters), "16" in the hero light's ink with a glint as the slam settles
+  // A: the slam (letters), "16" in the hero light's ink with a glint as the slam settles — and a second,
+  // slower one two beats later, mid-hold (the held title stays alive)
   let k = 0;
-  const glintA = tween(t, [T.hero + 3, T.hero + 13], [0, 1], EASE.inOut);
+  const g1 = tween(t, [T.hero + 3, T.hero + 13], [0, 1], EASE.inOut);
+  const g2 = tween(t, [T.hero + 30, T.hero + 44], [0, 1], EASE.inOut);
+  const glintA = g1 > 0 && g1 < 1 ? g1 : g2;
   const heroText = Array.from(HERO).map((ch, i) => {
     if (ch === ' ') return <span key={i}> </span>;
     const s0 = T.hero + 0.6 * k++;

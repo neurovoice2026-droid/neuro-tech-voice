@@ -14,7 +14,8 @@
  *   3. the site's grade (brightness .82 · contrast 1.18 · saturate .88), the
  *      10 % pigment tint, then the hero scrim + wash, exactly as the CSS
  *   4. ERASE: a filament-noise threshold swaps her HEAD for the halo
- *      (outside-in, nearest the lights first, the eyes last); the body and the
+ *      (outside-in, nearest the lights first; the eyes with the middle of the face,
+ *      their light lifting out as two lilac points); the body and the
  *      room go smoothly. Torn filaments never leave the head matte by more than
  *      ~40 px (uHeadCap) and glow in the nearest light's colour (nearLight;
  *      the night's lilac before the lights are in), never grey
@@ -99,6 +100,7 @@ uniform float uPlateEdge; // art v of the portrait's shoulder line (0 = off): it
 uniform float uTearTint;  // 0..1: torn filaments glow in the nearest light's colour (not grey)
 uniform vec3  uTearC;     // the filaments' colour where no light is near (the night's lilac)
 uniform float uHeadCap;   // filaments stay inside the head matte + 40 px (head-ellipse units)
+uniform float uTearEdge;  // 0..1: the tear is held to the head's silhouette edge (the entry: light arriving, the face clean)
 
 const vec3 INK       = vec3(6.0, 4.0, 10.0) / 255.0;
 const vec3 SILVER     = vec3(196.0, 192.0, 186.0) / 255.0;
@@ -349,7 +351,9 @@ void main() {
     warp = fine * mDist * uWarp * uTear * warpScale;
     nn = clamp(0.5 + (r.x * 1.3 + f * 2.2), 0.0, 1.0);
   }
-  warp *= 1.0 - eyeGuard;
+  // (the eyes are guarded while she is whole — the site's hover — but tear WITH her face once the
+  // erase starts: guarded, they lingered as two crisp sockets inside the filaments)
+  warp *= 1.0 - eyeGuard * (1.0 - smoothstep(0.0, 0.3, uErase));
   warp.x *= side;
   // the head matte (1 = its edge, ears to crown, down past the chin): the filaments
   // never leave it by more than ~40 px, so the backdrop never smears into grey streaks
@@ -358,6 +362,9 @@ void main() {
   float hmC = length((pxA - eyeMidA + vec2(0.0, 0.3 * eo)) / (eo * vec2(2.1, 2.85)));
   float headM = uHeadCap > 0.0 ? 1.0 - smoothstep(uHeadCap, uHeadCap + 0.22, hmC) : 1.0;
   warp *= headM;
+  // the entry tear lives on the silhouette's edge only (crown, ears, jaw line): the eyes, the
+  // brow's light stripes, the nose and the mouth come out of the black clean — light arriving
+  warp *= mix(1.0, smoothstep(0.72, 1.0, hm), uTearEdge);
   // how torn this pixel is (0 = in place): the torn filaments glow in the lights' colour
   float fil = smoothstep(0.002, 0.022, length(warp)) * uTearTint;
 
@@ -436,9 +443,9 @@ void main() {
     // Every figure pixel gets its own threshold k, spread over the whole
     // window: filament noise (contrast-remapped to ~0..1) mixed with the
     // distance from the eyes, so the silhouette frays from the outside in,
-    // in vertical filaments, and the eyes go last.
+    // in vertical filaments, the eyes with the middle of the face.
     float dEye = length(pxA - (eyeMidA + vec2(eo, 0.0))) / eo;
-    // (the eyes go last — the eyes alone, not a dark mask round them)
+    // (the eyes' own region — the eyes alone, not a dark mask round them)
     float eyeBias = 1.0 - smoothstep(0.18, 0.62, dEye);
     float dMid = clamp(length((pxA - eyeMidA) / vec2(1.0, 1.15)) / (6.0 * eo), 0.0, 1.0);
     float nr = smoothstep(0.26, 0.74, nn);
@@ -449,8 +456,10 @@ void main() {
     // (never inside the head itself: its highlights are not backlight)
     float head = 1.0 - smoothstep(0.85, 1.2, length((pxA - eyeMidA - vec2(0.0, 0.4 * eo)) / (eo * vec2(2.1, 3.3))));
     k = max(0.0, k - 0.42 * backlit * (1.0 - head));
-    // (they go just before the end, as their light lifts out — CTA_LOCAL.eyeGlow)
-    k = mix(k, 0.72 + 0.14 * nr, eyeBias);
+    // the eyes go WITH the middle of her face (not last: alone in the filaments they read as two
+    // floating sockets) — as they go, their light lifts out as two lilac points (CTA_LOCAL.eyeGlow,
+    // Cta.tsx EyeLight), which carry the eyes into the core
+    k = mix(k, 0.5 + 0.12 * nr, eyeBias);
     const float BAND = 0.1;
     float e = mix(-BAND, 1.0 + BAND, uErase);
     float mFig = smoothstep(k - BAND, k + BAND, e);

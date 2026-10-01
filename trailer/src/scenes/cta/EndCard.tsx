@@ -8,19 +8,22 @@
  *              Ava's words in three chunks ("neuro" | "tech" | "voice.com" on
  *              "Neuro" "Tech" "Voice.") with a caret; the hairline draws out
  *              from it.
- *  <CoverCta>  the hero's "Start free →": a #dedce0 plate (padding .33em,
- *              radius .2em) holding four .3em CornerDots in its corners, the
- *              label (padding .8em 1em, gap .45em) stacked in the same grid
- *              cell. RISES on "…Voice." out of a gathered point of light: a
- *              soft lift (≈40 px, .94 → 1, ≈3 % over, settled in ≈14 f), its
- *              words rising out of masks, a glint crossing the plate as it
- *              settles. At `press` it is CLICKED: a hover lift (anticipation),
- *              .94 in 2 f, back on a soft spring; the site's plum FLOODS the
- *              plate from the arrow (the colour cross, out3) with the label
- *              turning paper exactly where the plum passes, a plum ripple leaves
- *              the arrow (0 → 1.3 × the plate's width), a glint crosses the plum
- *              face; it keeps the site's hover — dots out 4 px, arrow +8 px — with
- *              a 1.5 px brand-lit rim and a plum glow.
+ *  <CoverCta>  "Start free →" as DARK GLASS lit by the halo above it (never a
+ *              flat light slab under the logo, v5 critics): the night's plum at
+ *              ≈75 % over the night, a 1.5 px lilac rim, a specular top edge and
+ *              an inner glow falling from above; the label (padding .8em 1em,
+ *              gap .45em) in paper. It UNFOLDS out of a gathered point of lilac
+ *              light once the URL has typed: the plate opens from the centre
+ *              (wider than tall), over-exposed as it condenses, and its words
+ *              are already rising on its first frame (never a blank plate); a
+ *              soft lift (≈40 px, .94 → 1, ≈3 % over, settled in ≈14 f), a
+ *              sheen crossing the glass as it settles. At `press` it is
+ *              CLICKED: a hover lift (anticipation), .94 in 2 f, back on a soft
+ *              spring; the glass FILLS to the full plum from the arrow (a
+ *              brightness lift — the label stays paper, no colour swap), its
+ *              rim brightens, a plum ripple leaves the arrow (0 → 1.3 × the
+ *              plate's width), a glint crosses the plum face; it keeps the
+ *              site's hover (arrow +8 px) with a plum glow.
  *  <Note>      "5 free minutes, no card" (pricing copy), Inter 500, 82 % paper,
  *              one word every `step` frames on the same soft spring.
  *
@@ -97,6 +100,23 @@ export type PressSpec = {
 /** where the arrow sits in the plate (the click point): right padding 1em + half the arrow */
 const ARROW_X = 'calc(100% - 1.5em)';
 
+/** the glass at rest: the night's plum over the night, lit from above by the halo */
+const GLASS = {
+  fill: [
+    'radial-gradient(120% 150% at 50% -38%, rgba(214,200,250,0.30) 0%, rgba(206,190,240,0.10) 40%, rgba(206,190,240,0) 64%)',
+    'linear-gradient(180deg, rgba(104,46,164,0.80) 0%, rgba(85,26,137,0.74) 46%, rgba(44,13,78,0.80) 100%)',
+  ].join(', '),
+  rim: 'inset 0 0 0 1.5px rgba(192,172,224,0.62), inset 0 1.5px 0 0 rgba(255,255,255,0.22), inset 0 -0.35em 0.6em -0.35em rgba(6,4,10,0.55)',
+};
+/** … and clicked: the full plum, brighter, its rim lit */
+const PLUM = {
+  fill: [
+    'radial-gradient(120% 150% at 50% -38%, rgba(228,218,255,0.40) 0%, rgba(214,200,250,0.14) 42%, rgba(214,200,250,0) 66%)',
+    'linear-gradient(180deg, #7a3cc2 0%, #5f1f9a 50%, #4b1680 100%)',
+  ].join(', '),
+  rim: 'inset 0 0 0 1.5px rgba(222,210,255,0.92), inset 0 1.5px 0 0 rgba(255,255,255,0.36), inset 0 -0.35em 0.6em -0.35em rgba(20,6,40,0.45)',
+};
+
 export const CoverCta: React.FC<{
   t: number;
   at: number;
@@ -106,28 +126,28 @@ export const CoverCta: React.FC<{
   rest: Rest;
 }> = ({ t, at, press, fontSize: F, spec, rest }) => {
   if (t < at - 5) return null;
-  /* ── the rise ── (its words start out of their masks with the plate, so it is never a blank slab) */
+  /* ── the unfold ── */
   const e = t < at ? 0 : springAt(t, at, RISE);
   const ePrev = t - 1 < at ? 0 : springAt(t - 1, at, RISE);
   const y = rest(t, (1 - e) * 0.6 * F, 0);
   const sc0 = rest(t, mix(0.94, 1, e), 1);
   const vy = Math.abs(e - ePrev) * 0.6 * F; // px/frame of the lift
-  // born out of its point of light: opaque within 3 f (never a grey slab fading up over the night),
-  // over-exposed as it condenses, settling to its own paper over 8 f
-  const fadeIn = tween(t, [at - 2, at], [0, 1], EASE.out3);
+  // the glass condenses out of its point of light: in over 2 f, over-exposed (lilac-bright), settling
+  // to its own depth over 8 f — light becoming glass, never a slab
+  const fadeIn = tween(t, [at - 1, at + 1], [0, 1], EASE.out3);
   // … unfolding out of that point (a rounded rect opening from the centre, wider than tall)
-  const open = tween(t, [at - 1.5, at + 3], [0, 1], EASE.out3);
+  const open = tween(t, [at - 1, at + 4], [0, 1], EASE.out3);
   const clip =
     open >= 1 ? undefined : `inset(${((1 - open) * 46).toFixed(2)}% ${((1 - open) * 49).toFixed(2)}% round 0.2em)`;
   const glow = t < at - 1 ? 0 : rest(t, 1 - tween(t, [at, at + 8], [0, 1], EASE.out3), 0);
   const blur = rest(t, tween(t, [at, at + 8], [4, 0], EASE.out3) + Math.min(3, vy * 0.18), 0);
-  // the point of light it rises out of: gathers over 4 f, peaks ON `at`, hands over in 5 f
+  // the point of lilac light it unfolds out of: gathers over 4 f, peaks ON `at`, hands over in 5 f
   const gather = t < at ? Math.sin(((t - (at - 4)) / 4) * (Math.PI / 2)) : Math.max(0, 1 - (t - at) / 5);
-  // the settle's accent: a glint crosses the plate as it comes to rest
+  // the settle's accent: a sheen crosses the glass as it comes to rest
   const s0 = at + 9;
   const s1 = at + 19;
   const sweep = tween(t, [s0, s1], [-0.4, 1.4], EASE.inOut);
-  const sweepO = t > s0 && t < s1 ? 0.5 * Math.sin(Math.PI * tween(t, [s0, s1], [0, 1])) : 0;
+  const sweepO = t > s0 && t < s1 ? 0.3 * Math.sin(Math.PI * tween(t, [s0, s1], [0, 1])) : 0;
 
   /* ── the press ── */
   const lift = t < spec.lift[0] ? 0 : t < press ? SINE(tween(t, spec.lift, [0, 1], (x) => x)) : 0;
@@ -135,10 +155,11 @@ export const CoverCta: React.FC<{
   const u = t - press;
   const down = u < 0 ? 1 + 0.025 * lift : u < D ? mix(1.025, 0.94, EASE.in2(u / D)) : mix(0.94, 1, springAt(t, press + D, BACK));
   const click = rest(t, down, 1);
-  // the hover it takes (and keeps): the flood, then dots/arrow on the site spring
+  // the glass fills to the full plum from the arrow, then the arrow takes the site's hover
   const fl = t < press ? 0 : rest(t, tween(t, spec.flood, [0, 1], EASE.out3), 1);
   const hs = rest(t, t < press ? 0 : springAt(t, press, SPRING.site), 1);
-  const out = 4 * hs;
+  // the click's light: a brightness lift as it goes down, decaying over ≈ 6 f
+  const flash = t < press ? 0 : rest(t, Math.exp(-(t - press) / 4) * Math.min(1, (t - press + 1) / 2), 0);
   // the lift hands over to the hover continuously (no jump on the click frame)
   const liftK = t < press ? lift : rest(t, Math.max(0, 1 - hs), 0);
   const arrowX = 8 * hs + 3 * liftK;
@@ -149,49 +170,32 @@ export const CoverCta: React.FC<{
   const gl = tween(t, [g0, g1], [-0.4, 1.4], EASE.inOut);
   const glO = t > g0 && t < g1 ? 0.42 * Math.sin(Math.PI * tween(t, [g0, g1], [0, 1])) : 0;
 
-  const dot = 0.3 * F;
   // the plate's diagonal reach from the arrow (in em): the flood covers it all at fl = 1
   const reach = 6.2;
   const floodR = fl * reach * F;
   const floodMask =
     fl >= 1 ? undefined : `radial-gradient(circle at ${ARROW_X} 50%, #000 ${Math.max(0, floodR - 10).toFixed(1)}px, transparent ${(floodR + 2).toFixed(1)}px)`;
 
-  /** one face of the plate: the light one (paper plate, night ink) or the pressed one (plum, paper) */
-  const face = (dark: boolean) => {
-    const ink = dark ? C.coverPaper : C.night;
-    const dots: React.CSSProperties[] = [
-      { justifySelf: 'start', alignSelf: 'start', transform: `translate(${-out}px, ${-out}px)` },
-      { justifySelf: 'end', alignSelf: 'start', transform: `translate(${out}px, ${-out}px)` },
-      { justifySelf: 'start', alignSelf: 'end', transform: `translate(${-out}px, ${out}px)` },
-      { justifySelf: 'end', alignSelf: 'end', transform: `translate(${out}px, ${out}px)` },
-    ];
-    const dotPop = (k: number) => rest(t, aos(t, at + 5 + k * 1.5, { anticip: 2, depth: 0.12, config: SPRING.site }), 1);
+  /** one face of the plate: the glass at rest, or the full plum once clicked (the label is paper on both) */
+  const face = (pressed: boolean) => {
+    const look = pressed ? PLUM : GLASS;
     return (
       <span
         style={{
           gridArea: '1 / 1',
           position: 'relative',
-          // each face is its own stacking context: the light face's label never paints over the plum
-          zIndex: dark ? 2 : 1,
+          // each face is its own stacking context: the glass face's label never paints over the plum
+          zIndex: pressed ? 2 : 1,
           isolation: 'isolate',
           display: 'inline-grid',
           borderRadius: '0.2em',
           overflow: 'hidden',
-          background: dark ? C.plum : C.coverPaper,
-          WebkitMaskImage: dark ? floodMask : undefined,
-          maskImage: dark ? floodMask : undefined,
-          boxShadow: dark ? `inset 0 0 0 1.5px rgba(192,172,224,${(0.6 * fl).toFixed(3)})` : undefined,
+          background: look.fill,
+          boxShadow: look.rim,
+          WebkitMaskImage: pressed ? floodMask : undefined,
+          maskImage: pressed ? floodMask : undefined,
         }}
       >
-        <span style={{ gridArea: '1 / 1', display: 'grid', gridTemplate: '1fr 1fr / 1fr 1fr', padding: '0.33em' }}>
-          {dots.map((d, k) => (
-            <span key={k} style={{ ...d, display: 'block', width: dot, height: dot }}>
-              <span style={{ display: 'block', transform: `scale(${Math.max(0, dotPop(k)).toFixed(3)})` }}>
-                <CornerDot size={dot} color={ink} />
-              </span>
-            </span>
-          ))}
-        </span>
         <span
           style={{
             gridArea: '1 / 1',
@@ -200,36 +204,37 @@ export const CoverCta: React.FC<{
             alignItems: 'center',
             gap: '0.45em',
             padding: '0.8em 1em',
-            color: ink,
+            color: pressed ? '#f7f3ff' : C.paper,
             whiteSpace: 'nowrap',
+            textShadow: '0 0.04em 0.12em rgba(6,4,10,0.35)',
           }}
         >
           <span>
-            <MaskRise t={t} at={at - 2} pad="0.24em" rest={rest}>
+            <MaskRise t={t} at={at - 4} pad="0.24em" rest={rest}>
               Start
             </MaskRise>
-            <MaskRise t={t} at={at - 0.5} rest={rest}>
+            <MaskRise t={t} at={at - 2.5} rest={rest}>
               free
             </MaskRise>
           </span>
           <span style={{ display: 'inline-block', transform: arrowX > 0.01 ? `translateX(${arrowX.toFixed(2)}px)` : undefined }}>
-            <MaskRise t={t} at={at + 1} rest={rest}>
+            <MaskRise t={t} at={at - 1} rest={rest}>
               →
             </MaskRise>
           </span>
         </span>
-        {/* the glints: one on the settle (light plate), one across the plum face after the click */}
-        {!dark && sweepO > 0.01 ? (
+        {/* the sheens: one across the glass on the settle, one across the plum face after the click */}
+        {!pressed && sweepO > 0.01 ? (
           <span
             style={{
               gridArea: '1 / 1',
               zIndex: 2,
-              background: `linear-gradient(105deg, rgba(255,255,255,0) ${((sweep - 0.25) * 100).toFixed(1)}%, rgba(255,255,255,${sweepO.toFixed(3)}) ${(sweep * 100).toFixed(1)}%, rgba(255,255,255,0) ${((sweep + 0.25) * 100).toFixed(1)}%)`,
+              background: `linear-gradient(105deg, rgba(233,224,255,0) ${((sweep - 0.25) * 100).toFixed(1)}%, rgba(233,224,255,${sweepO.toFixed(3)}) ${(sweep * 100).toFixed(1)}%, rgba(233,224,255,0) ${((sweep + 0.25) * 100).toFixed(1)}%)`,
               mixBlendMode: 'screen',
             }}
           />
         ) : null}
-        {dark && glO > 0.01 ? (
+        {pressed && glO > 0.01 ? (
           <span
             style={{
               gridArea: '1 / 1',
@@ -243,6 +248,7 @@ export const CoverCta: React.FC<{
     );
   };
 
+  const bright = 1 + 0.6 * glow + 0.3 * flash;
   return (
     <div style={{ position: 'relative', display: 'inline-grid' }}>
       {gather > 0.01 ? (
@@ -257,8 +263,8 @@ export const CoverCta: React.FC<{
             marginTop: -F * 1.3,
             borderRadius: '50%',
             opacity: gather,
-            transform: `translateY(${(0.6 * F * (t < at ? 1 : 1 - e)).toFixed(1)}px) scale(${(t < at ? mix(0.35, 0.85, gather) : 0.85 + 0.5 * (t - at) / 5).toFixed(3)})`,
-            background: 'radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(222,220,224,0.5) 18%, rgba(192,172,224,0.16) 42%, rgba(192,172,224,0) 70%)',
+            transform: `translateY(${(0.6 * F * (t < at ? 1 : 1 - e)).toFixed(1)}px) scale(${(t < at ? mix(0.35, 0.85, gather) : 0.85 + (0.5 * (t - at)) / 5).toFixed(3)})`,
+            background: 'radial-gradient(circle, rgba(247,243,255,0.95) 0%, rgba(185,163,255,0.55) 18%, rgba(124,58,237,0.2) 42%, rgba(124,58,237,0) 70%)',
           }}
         />
       ) : null}
@@ -274,12 +280,13 @@ export const CoverCta: React.FC<{
           opacity: fadeIn,
           clipPath: clip,
           filter:
-            [blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : '', glow > 0.01 ? `brightness(${(1 + 0.45 * glow).toFixed(3)})` : '']
+            [blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : '', bright > 1.005 ? `brightness(${bright.toFixed(3)})` : '']
               .join(' ')
               .trim() || undefined,
           borderRadius: '0.2em',
+          // its light on the night (the plum glow, stronger once clicked) and a soft contact shadow
           boxShadow: [
-            `0 0 ${(48 + 16 * (1 - fl)).toFixed(0)}px rgba(85,26,137,${(0.6 * fl).toFixed(3)})`,
+            `0 0 ${(36 + 22 * fl + 20 * flash).toFixed(0)}px rgba(124,58,237,${(0.2 + 0.28 * fl + 0.2 * flash).toFixed(3)})`,
             `0 ${((0.5 + 0.12 * liftK) * F).toFixed(1)}px ${((1.4 + 0.2 * liftK) * F).toFixed(1)}px ${(-0.5 * F).toFixed(1)}px rgba(0,0,0,0.7)`,
           ].join(', '),
         }}
@@ -361,6 +368,7 @@ export const Note: React.FC<{ t: number; at: number; step: number; size: number;
 export const Url: React.FC<{
   t: number;
   at: number;
+  text: string;
   /** typed in chunks: chunk k starts at character `from` on frame `at` */
   chunks?: readonly { from: number; at: number }[];
   size: number;
@@ -368,8 +376,7 @@ export const Url: React.FC<{
   ruleW: number;
   step: number;
   rest: Rest;
-}> = ({ t, at, chunks, size, dot, ruleW, step, rest }) => {
-  const text = 'neurotechvoice.com';
+}> = ({ t, at, text, chunks, size, dot, ruleW, step, rest }) => {
   if (t < at - 3) return null;
   const d = rest(t, aos(t, at - 1, { anticip: 2, depth: 0.2, config: SPRING.site }), 1);
   const draw = tween(t, [at + 2, at + 24], [0, 1], EASE.house);
