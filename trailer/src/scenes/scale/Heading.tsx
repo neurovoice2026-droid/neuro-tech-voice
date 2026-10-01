@@ -26,7 +26,7 @@ import { DirBlur, dirBlurRef, sigmaFor } from './MotionBlur';
 import { figureInk, HERO_LIGHT, LEAD, leadAt, rgba } from './lights';
 import { dspring } from './curves';
 
-export type TitleTiming = { hero: number; swap: number; exit: number; in: number; out: number; after: number };
+export type TitleTiming = { hero: number; glint: number; swap: number; exit: number; in: number; out: number; after: number };
 type Pose = { x: number; y: number; size: number };
 
 /** 12 % overshoot, settled by +7 */
@@ -191,7 +191,7 @@ export const Titles: React.FC<{ t: number; T: TitleTiming; hero: Pose; band: Pos
   // slower one two beats later, mid-hold (the held title stays alive)
   let k = 0;
   const g1 = tween(t, [T.hero + 3, T.hero + 13], [0, 1], EASE.inOut);
-  const g2 = tween(t, [T.hero + 30, T.hero + 44], [0, 1], EASE.inOut);
+  const g2 = tween(t, [T.glint, T.glint + 14], [0, 1], EASE.inOut);
   const glintA = g1 > 0 && g1 < 1 ? g1 : g2;
   const heroText = Array.from(HERO).map((ch, i) => {
     if (ch === ' ') return <span key={i}> </span>;
@@ -233,12 +233,12 @@ export const Titles: React.FC<{ t: number; T: TitleTiming; hero: Pose; band: Pos
         <div
           style={{
             position: 'absolute',
-            left: hero.x - hero.size * 3.6,
-            top: hero.y - hero.size * 1.6,
-            width: hero.size * 7.2,
-            height: hero.size * 3.2,
+            left: hero.x - hero.size * 4.3,
+            top: hero.y - hero.size * 1.7,
+            width: hero.size * 8.6,
+            height: hero.size * 3.4,
             borderRadius: '50%',
-            background: 'radial-gradient(closest-side, rgba(255,255,255,0.92), rgba(255,255,255,0.6) 55%, rgba(255,255,255,0))',
+            background: 'radial-gradient(closest-side, rgba(255,255,255,0.93), rgba(255,255,255,0.74) 58%, rgba(255,255,255,0.3) 82%, rgba(255,255,255,0))',
             opacity: halo,
           }}
         />

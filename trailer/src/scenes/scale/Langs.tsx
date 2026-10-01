@@ -11,11 +11,13 @@
  *   cascade   English is heard whole (the wall's keeper turns into it): its
  *             words rise ON hers. Then Romanian / Spanish / French / German
  *             slide in from the right, each landing a frame before its voice
- *             cuts in (≈ 0.77 s each): she is cut after "Sunt Ava,", so the
- *             card brings its WHOLE greeting — the words rise on a 7 f
- *             stagger as it lands, the word she is saying in the card's ink,
- *             the AI phrase underlined as the last words settle. Japanese is
- *             heard whole (per character, on her words).
+ *             cuts in (1 – 1.25 s each): she is cut right after her name, so
+ *             the card shows only what is HEARD — "Sunt Ava," … "Sie sprechen
+ *             mit Ava," — one glanceable line, settled by landAt + 3, the word
+ *             she is saying in the card's ink. Japanese is heard whole (per
+ *             character, on her words). Each card lands as LIGHT: its 2 px rim
+ *             flares and a sheen of its light sweeps it (never a flood); the
+ *             room behind keeps the hero's night.
  *   switch    no switch shows an empty card: every card's first word rises
  *             4 f before it lands (mid-slide; English as its face turns to
  *             us), so its text is up as it covers the card it replaces, and

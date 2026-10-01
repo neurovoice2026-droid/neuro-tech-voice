@@ -727,10 +727,13 @@ export const SCALE_LOCAL = (() => {
      *  2 × 2 framed as card 2 pops → drift → the 3 × 3 as card 5 pops → drift → the whole wall as the
      *  16ths start → a last breath out to 0.985 just before the slam */
     pull: [-4, pops[1] - 2, pops[3] - 5, pops[4] - 1, pops[7] - 5, pops[8], HERO - 2] as const,
-    /** pan of each pop (16:9 screen x at its pop: the camera is still pulling back) */
-    popX: [0.5, 0.75, 0.26, 0.68, 0.84, 0.81, 0.16, 0.47, 0.62, 0.87, 0.87, 0.87, 0.13, 0.38, 0.62, 0.87] as const,
+    /** pan of each pop (16:9 screen x at its pop: the camera is still pulling back, framing the cluster) */
+    popX: [0.35, 0.73, 0.25, 0.53, 0.81, 0.81, 0.19, 0.42, 0.62, 0.85, 0.85, 0.85, 0.15, 0.39, 0.61, 0.84] as const,
     /** "16 industries." slams in the light leading at the slam (the night: the last four cards) */
     heroLight: 'night' as const,
+    /** the hold stays alive: two beats after the slam a slow glint crosses "16" (the bloom breathes, the wall
+     *  breathes, the slam's push lets go over the hold) */
+    heroGlint: HERO + b(2),
     /** the fifteen other cards peel off outwards (pull-in from flyOut − flyAnticip) as the hero's hold ends
      *  (the title has been up and still ≈ 1.3 s; it is read on through the peel and the lift) */
     flyOut: LT - 12,
@@ -770,9 +773,10 @@ export const SCALE_LOCAL = (() => {
     /** the gallery drops away (bottom cards first in 9:16), Japanese holding until then */
     collapse: F - 6,
     collapseStagger: 1.2,
-    /** "14 languages." exits up; "After the call." rises in the same slot ON the flow beat */
+    /** "14 languages." exits up; "After the call." rises as it leaves (the slot is never empty), its first
+     *  letters landing ON the flow beat */
     titleOut: F - 8,
-    titleAfter: F,
+    titleAfter: F - 4,
     /** the Japanese card flies to the first station and becomes THE CALL */
     carrierFly: F - 5,
     /** … its Japanese hands over to the call's face mid-flight (under its motion blur) */
@@ -1444,6 +1448,8 @@ export const HITS: Hit[] = [
   H('scale', SCALE.industriesTitle, 'slam', 'none', 0.5, 1, '“16 industries.” SLAMS'),
   H('scale', SCALE.industriesTitle, 'strum', SCALE_LOCAL.heroLight, 0.5, 2, 'the sixteen discs lock in the night light'),
   H('scale', SCALE.industriesTitle, 'key', 'none', 0.5, 3, '13 letters stamp in', { run: { n: 13, step: 0.6 } }),
+  // the hold breathes: two beats on, a slow glint crosses "16" (soft, under the groove)
+  H('scale', SCALE_LOCAL.heroGlint + 4, 'sheen', SCALE_LOCAL.heroLight, [0.36, 0.46], 3, 'a glint crosses “16” mid-hold', { db: -4 }),
   H('scale', SCALE_LOCAL.flyOut + 4, 'whoosh-soft', 'none', 0.5, 2, 'fifteen cards peel off outwards', { split: true }),
   H('scale', SCALE_LOCAL.glide + 3, 'swish', 'none', 0.5, 3, 'the keeper glides into the English card'),
   H('scale', SCALE_LOCAL.titleExit + 3, 'swish', 'none', 0.5, 3, '“16 industries.” leaves up'),
@@ -1471,10 +1477,10 @@ export const HITS: Hit[] = [
   H('scale', SCALE_LOCAL.carrierFly + 5, 'whoosh', 'closing', [0.5, 0.21], 2, 'Japanese flies to the first station'),
   H('scale', SCALE_LOCAL.titleAfter, 'key', 'none', 0.5, 3, '“After the call.” rises', { run: { n: 13, step: 0.7 } }),
   H('scale', SCALE_LOCAL.trackIn, 'tick', 'closing', 0.5, 3, 'rail track + three nodes', { run: { n: 3, step: 2, semi: 2 } }),
-  H('scale', SCALE_LOCAL.stations[0], 'land', 'closing', 0.21, 1, 'THE CALL lands'),
-  H('scale', SCALE_LOCAL.stations[0], 'click', 'closing', 0.21, 2, 'node 1 fills'),
+  H('scale', SCALE_LOCAL.stations[0], 'land', 'closing', 0.22, 1, 'THE CALL lands'),
+  H('scale', SCALE_LOCAL.stations[0], 'click', 'closing', 0.22, 2, 'node 1 fills'),
   H('scale', SCALE_LOCAL.pill, 'pop', 'none', 0.27, 2, 'ember “Booked” pill', { semi: -7 }),
-  H('scale', SCALE_LOCAL.rails[0][0], 'sheen', 'closing', [0.21, 0.5], 3, 'bead runs call → Slack'),
+  H('scale', SCALE_LOCAL.rails[0][0], 'sheen', 'closing', [0.22, 0.5], 3, 'bead runs call → Slack'),
   H('scale', SCALE_LOCAL.cardsIn[1], 'land', 'closing', 0.5, 2, 'Slack card slams in'),
   H('scale', SCALE_LOCAL.stations[1], 'click', 'closing', 0.5, 1, 'Slack node'),
   H('scale', SCALE_LOCAL.rails[1][0], 'sheen', 'closing', [0.5, 0.79], 3, 'bead runs Slack → CRM'),
@@ -1482,7 +1488,7 @@ export const HITS: Hit[] = [
   H('scale', SCALE_LOCAL.ok, 'ding-s', 'closing', 0.79, 2, '“Contact saved ✓”'),
   H('scale', SCALE_LOCAL.stations[2], 'confirm', 'closing', 0.79, 1, 'CRM node settles in the closing light'),
   H('scale', SCALE_LOCAL.ping[0] + 4, 'ping', 'closing', 0.79, 3, 'wider ping ring'),
-  H('scale', SCALE_LOCAL.stream[0], 'sheen', 'closing', [0.21, 0.79], 3, 'light motes stream to the CRM'),
+  H('scale', SCALE_LOCAL.stream[0], 'sheen', 'closing', [0.22, 0.79], 3, 'light motes stream to the CRM'),
   H('scale', SCALE_LOCAL.stream[3] + SCALE_LOCAL.moteDur, 'ding-s', 'closing', 0.79, 2, 'the handoff spark', { semi: 5 }),
 
   /* ── CTA ── */

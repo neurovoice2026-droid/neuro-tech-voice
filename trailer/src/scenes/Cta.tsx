@@ -158,7 +158,7 @@ function geo(L: Layout) {
     headline: {
       lines: L.pick(['AI voice agents that book', 'your customers 24/7.'], ['AI voice agents', 'that book your', 'customers 24/7.']),
       fontSize: L.pick(76, 84),
-      // 9:16: the three rows run ≈ y 1190 – 1450 (marks 1175 – 1465): all above the caption UI
+      // 9:16: the three rows run ≈ y 1190 – 1450 (the line of light under “24/7.” ≈ 1430): all above the caption UI
       cy: L.pick(880, 1320),
     },
     /** a soft dark pool under the headline (radial, ≈40 % ink) so an orb's bloom never washes the type */

@@ -103,8 +103,8 @@ const ARROW_X = 'calc(100% - 1.5em)';
 /** the glass at rest: the night's plum over the night, lit from above by the halo */
 const GLASS = {
   fill: [
-    'radial-gradient(120% 150% at 50% -38%, rgba(214,200,250,0.30) 0%, rgba(206,190,240,0.10) 40%, rgba(206,190,240,0) 64%)',
-    'linear-gradient(180deg, rgba(104,46,164,0.80) 0%, rgba(85,26,137,0.74) 46%, rgba(44,13,78,0.80) 100%)',
+    'radial-gradient(120% 150% at 50% -38%, rgba(214,200,250,0.28) 0%, rgba(206,190,240,0.09) 40%, rgba(206,190,240,0) 64%)',
+    'linear-gradient(180deg, rgba(90,34,148,0.78) 0%, rgba(68,20,112,0.74) 46%, rgba(32,9,58,0.82) 100%)',
   ].join(', '),
   rim: 'inset 0 0 0 1.5px rgba(192,172,224,0.62), inset 0 1.5px 0 0 rgba(255,255,255,0.22), inset 0 -0.35em 0.6em -0.35em rgba(6,4,10,0.55)',
 };

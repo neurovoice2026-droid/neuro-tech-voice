@@ -1,34 +1,44 @@
 /**
- * SCALE — the white act montage, 16 s (scale-local frames; every value from
+ * SCALE — the white act montage, 19.5 s (scale-local frames; every value from
  * SCALE / SCALE_LOCAL in timing.ts). Every business, every language, every
  * system — each with room to be read. ONE light leads at a time
  * (scale/lights.ts); the cards are white stock with ink labels, a card's
- * light lives only in its disc / hit flash / ring / small glow.
+ * light lives only in its disc / hit flash / ring / sheen / small glow.
  *
- *   THE WALL (−3 … 90)  out of the knowledge whip's clean white card 01 fills
- *              the frame (≈ 3.9×), mid-pop, carrying the whip's momentum; the
- *              camera pulls back continuously (and breathes) as sixteen
+ *   THE WALL (−4 … HERO)  out of the knowledge whip's clean white card 01
+ *              fills the framing box, mid-pop, carrying the whip's momentum;
+ *              the camera pulls back continuously (and breathes), always
+ *              FRAMING THE CLUSTER popped so far with lead room for the next
+ *              slot and ≥ 64 / 60 px margins (scale/camera.ts), as sixteen
  *              industries pop in the block order — eight on the 8th notes,
  *              eight on 16ths into the slam. Each pop: a 2 f inhale of the
  *              slot, .55 → 1.08 → 1 with a rotation settle, a shutter blur on
- *              the attack frame, and its hit in the hour's light (disc,
- *              flash pool, ripple, sparks, a glow under the card); the hour
- *              turns every four cards: rush → closing → sunday → night
- *   THE HERO (90 … 120)  "16 industries." SLAMS on the downbeat (+2.5 % kick,
- *              the sixteen discs lock in the night light as a strum out from
- *              the title, a 2 f wash) and HOLDS, still and readable, the wall
- *              settling behind it (dim, defocus, 1.5 % back). Then fifteen
- *              cards peel off outwards, the keeper glides into the English
- *              card and turns to it, the title lifts to the band and "14
- *              languages." rises into it ON 120
- *   THE LANGUAGES (120 … 390)  scale/Langs.tsx: English heard whole; the
- *              quick four slide in, one per voice; Japanese whole; the gallery
- *              fills under the focus until all six are visible together
- *   THE FLOW (390 … 488)  "After the call." in the band; Japanese becomes THE
- *              CALL → SLACK → CRM, one station per beat, "Contact saved ✓" in
- *              the closing light; the hold streams light motes along the rail;
- *              the green node sits exactly at FLOW_END, where the CTA's iris
- *              opens (SCALE.irisToDark)
+ *              the attack frame, and its hit in the hour's light (disc, flash
+ *              pool, ripple, sparks, a glow under the card); the hour turns
+ *              every four cards: rush → closing → sunday → night. The whole
+ *              wall ends composed, with air around it
+ *   THE HERO (HERO … langTitle, 2 s)  the wall racks back 2 f before the
+ *              downbeat; "16 industries." SLAMS on it (+2.5 % kick that lets
+ *              go slowly, the sixteen discs lock in the night light as a strum
+ *              out from the title, a 2 f wash) and HOLDS ≈ 1.4 s, still and
+ *              readable over the wall — which stays legible behind it (a light
+ *              3.5 px defocus, 58 %), breathing, the night bloom breathing, a
+ *              slow glint across "16" two beats in. Then fifteen cards peel
+ *              off outwards, the keeper glides into the English card and turns
+ *              to it, the title lifts to the band and "14 languages." rises
+ *              into the slot as it leaves, landing ON langTitle
+ *   THE LANGUAGES (langTitle … flow)  scale/Langs.tsx: English heard whole;
+ *              the quick four slide in one per voice (1 – 1.25 s each), each
+ *              showing only what is heard ("Sunt Ava," …), landing as light (a
+ *              rim flare + a sheen, never a flood); Japanese whole; the room
+ *              holds the hero's night (no rainbow); the gallery fills under
+ *              the focus until all six are visible together
+ *   THE FLOW (flow … irisToDark)  "After the call." rises as "14 languages."
+ *              leaves; Japanese becomes THE CALL; a beat later it lights, then
+ *              SLACK and CRM one per 2 beats, "Contact saved ✓" in the closing
+ *              light; the finished rail holds ≈ 1.8 s (motes stream along it),
+ *              framed with ≥ 110 / 70 px of air; the green node sits exactly
+ *              at FLOW_END, where the CTA's iris opens (SCALE.irisToDark)
  *
  * Planes: the act's ground (screen space) · one bloom of the leading light
  * 0.4 · the cards / titles 1.0 · out-of-focus discs in the leading light 1.6.
@@ -115,7 +125,7 @@ export const Scale: React.FC = () => {
   const wash = t >= HERO && t < HERO + 2 ? (t < HERO + 1 ? 0.09 : 0.05) : 0;
 
   /* ── card metrics: labels 40 px (16:9) / 32 px (9:16) ─────────── */
-  const ind = { pad: v ? 22 : 32, iconSize: v ? 58 : 68, labelSize: v ? 32 : 40 };
+  const ind = { pad: v ? 22 : 32, iconSize: v ? 58 : 62, labelSize: v ? 32 : 40 };
 
   /** the wall-phase filter of card i: the camera's pull (directional), the attack-frame shutter blur, the hero's defocus */
   const wallFilter = (i: number, id: string, extraBlur = 0): { f?: string; defs: React.ReactNode } => {
@@ -330,7 +340,7 @@ export const Scale: React.FC = () => {
             </AbsoluteFill>
             <Titles
               t={t}
-              T={{ hero: HERO, swap: K.titleSwap, exit: K.titleExit, in: K.titleIn, out: K.titleOut, after: K.titleAfter }}
+              T={{ hero: HERO, glint: K.heroGlint, swap: K.titleSwap, exit: K.titleExit, in: K.titleIn, out: K.titleOut, after: K.titleAfter }}
               hero={G.title.hero}
               band={G.title.band}
               after={G.title.after}
