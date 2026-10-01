@@ -439,8 +439,9 @@ export function PhoneStage({ data }: { data: StageData }) {
     const el = phoneRef.current;
     if (!el || seen) return;
     const io = new IntersectionObserver(
-      ([e]) => {
-        if (!e?.isIntersecting) return;
+      (entries) => {
+        // The last entry is the element as it is now: a busy main thread can hand one callback several.
+        if (!entries[entries.length - 1]?.isIntersecting) return;
         setSeen(true);
         io.disconnect();
       },

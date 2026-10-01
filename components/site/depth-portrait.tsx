@@ -7,6 +7,14 @@ import {
   COVER_NOISE_GLSL,
   coverDissolveAt,
 } from "./cover-noise";
+import {
+  frameCadence,
+  getTier,
+  gpuIsWeak,
+  onTierChange,
+  slowFrames,
+} from "./product/device-tier";
+import { whenIdle } from "./product/motion-kit";
 
 /**
  * Depth-map parallax portrait.
@@ -202,15 +210,43 @@ void main() {
   vec2 drift = vec2(0.0, uTime * 0.005);
   float t = uTime * 0.025;
 
-  vec2 r = vec2(
-    fbm(vec3(st - drift + vec2(1.7, 9.2), t)),
-    fbm(vec3(st - drift + vec2(8.2, 1.3), t))
-  );
-  float f = fbm(vec3(st + r - drift, t)) * 0.35;
-  // Displacement is in image UV, so the same number moves a different
-  // fraction of the head in each crop. Scaling by the head makes the tear
-  // travel the same distance across the face on a phone as on a desktop.
-  vec2 fine = f * 2.0 + r * 0.35;
+  /* ---- Eye guard ---------------------------------------------------
+     The dissolve runs over the whole figure — crown, temples, jaw, the
+     silhouette itself. One thing is exempt: the eyes.
+
+     The guard is built in FOLDED space, which is what makes the symmetry
+     structural rather than tuned. A point and its mirror get the same
+     guard value by construction, so however this is retuned the two eyes
+     cannot come out different — a single ellipse covers the pair.
+
+     Inside the plateau the displacement is exactly zero, not merely
+     small, so nothing here breathes, drifts or oscillates. The ramp
+     outside it is wide: the tear has to arrive at the eyes gradually,
+     or the clean region reads as pasted on rather than as the one part
+     of the face still holding together.
+
+     It is measured here, ahead of the noise, because it decides whether
+     the noise is needed at all: see below. */
+  float eyeD = length((fuv - vec2(uAxisX + uEye.x, uEye.y))
+                      / vec2(uEye.z * 1.5, uEye.z));
+  float eyeGuard = 1.0 - smoothstep(1.15, 2.1, eyeD);
+
+  /* The three fbm stacks are nearly all of this shader's cost, and where
+     the figure mask is zero (the field) or the eye guard is whole (the
+     eyes) their result is multiplied by exactly zero. Skipped there, the
+     picture is identical to the last bit; only the work goes. */
+  vec2 fine = vec2(0.0);
+  if (mDist > 0.0 && eyeGuard < 1.0) {
+    vec2 r = vec2(
+      fbm(vec3(st - drift + vec2(1.7, 9.2), t)),
+      fbm(vec3(st - drift + vec2(8.2, 1.3), t))
+    );
+    float f = fbm(vec3(st + r - drift, t)) * 0.35;
+    // Displacement is in image UV, so the same number moves a different
+    // fraction of the head in each crop. Scaling by the head makes the tear
+    // travel the same distance across the face on a phone as on a desktop.
+    fine = f * 2.0 + r * 0.35;
+  }
 
   /* The field goes with it, but it must FLOW where the figure shreds.
      Displacing the vignette's grain with the eight-octave stack is what
@@ -239,24 +275,7 @@ void main() {
      rather than alongside it. */
   vec2 warp = mix(field, fine, mDist) * uWarp * uDissolve * warpScale;
 
-  /* ---- Eye guard ---------------------------------------------------
-     The dissolve runs over the whole figure — crown, temples, jaw, the
-     silhouette itself. One thing is exempt: the eyes.
-
-     The guard is built in FOLDED space, which is what makes the symmetry
-     structural rather than tuned. A point and its mirror get the same
-     guard value by construction, so however this is retuned the two eyes
-     cannot come out different — a single ellipse covers the pair.
-
-     Inside the plateau the displacement is exactly zero, not merely
-     small, so nothing here breathes, drifts or oscillates. The ramp
-     outside it is wide: the tear has to arrive at the eyes gradually,
-     or the clean region reads as pasted on rather than as the one part
-     of the face still holding together. */
-  float eyeD = length((fuv - vec2(uAxisX + uEye.x, uEye.y))
-                      / vec2(uEye.z * 1.5, uEye.z));
-  float eyeGuard = 1.0 - smoothstep(1.15, 2.1, eyeD);
-
+  // The eyes hold still (the guard is measured above).
   warp *= 1.0 - eyeGuard;
 
   warp.x *= side;                              // un-fold the displacement
@@ -277,39 +296,162 @@ void main() {
   fragColor = vec4(col, 1.0);
 }`;
 
-function compile(gl: WebGL2RenderingContext, type: number, src: string) {
-  const sh = gl.createShader(type);
-  if (!sh) return null;
-  gl.shaderSource(sh, src);
-  gl.compileShader(sh);
-  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-    console.error("[depth-portrait]", gl.getShaderInfoLog(sh));
-    gl.deleteShader(sh);
-    return null;
-  }
-  return sh;
+/* ------------------------------------------------------------------ *
+ * Getting it on screen without holding the page up.
+ *
+ * Nothing here runs inside hydration: the context is created once the
+ * page's first frames are out, in an idle moment, and nothing then waits
+ * for an answer it does not need. The program is linked without asking
+ * how it went and the GPU is asked once a frame whether it is done
+ * (through the parallel-compile extension, or else a fence behind the
+ * link), while the art is fetched and decoded off the main thread. Only a
+ * linked program meets decoded pixels, and the canvas stays hidden until
+ * then (see the style below).
+ * ------------------------------------------------------------------ */
+
+/** Compiles and links without asking how it went: asking is what blocks. */
+function link(gl: WebGL2RenderingContext) {
+  const program = gl.createProgram();
+  const shaders = (
+    [
+      [gl.VERTEX_SHADER, VERT],
+      [gl.FRAGMENT_SHADER, FRAG],
+    ] as const
+  ).map(([type, src]) => {
+    const s = gl.createShader(type)!;
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    gl.attachShader(program, s);
+    return s;
+  });
+  gl.linkProgram(program);
+  // Hand the work to the GPU process now, so it is under way before anyone asks.
+  gl.flush();
+  return { program, shaders };
 }
 
-function loadTexture(gl: WebGL2RenderingContext, url: string) {
-  return new Promise<{ tex: WebGLTexture; w: number; h: number }>(
-    (resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const tex = gl.createTexture();
-        if (!tex) return reject(new Error("no texture"));
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        resolve({ tex, w: img.naturalWidth, h: img.naturalHeight });
-      };
-      img.onerror = () => reject(new Error(`failed: ${url}`));
-      img.src = url;
-    },
-  );
+type Art = { source: TexImageSource; w: number; h: number; close: () => void };
+
+/**
+ * A texture's pixels, decoded off the main thread. The URL is the one the
+ * page's <img> already loaded, so the bytes come out of the cache. Where
+ * createImageBitmap cannot take a blob, the image decodes itself instead.
+ */
+async function decodeArt(url: string): Promise<Art> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`failed: ${url}`);
+    const bitmap = await createImageBitmap(await res.blob());
+    return { source: bitmap, w: bitmap.width, h: bitmap.height, close: () => bitmap.close() };
+  } catch {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    return { source: img, w: img.naturalWidth, h: img.naturalHeight, close: () => {} };
+  }
 }
+
+function upload(gl: WebGL2RenderingContext, unit: number, art: Art) {
+  const tex = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE0 + unit);
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, art.source);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  art.close();
+  return tex;
+}
+
+/** Frame gaps under this, this many in a row, say the page's first frames are out. */
+const STEADY_GAP_MS = 24;
+const STEADY_FRAMES = 8;
+/** However the frames come (a 30Hz display, a slow GPU), the portrait starts by this long after mount. */
+const STEADY_MAX_MS = 3000;
+
+/**
+ * Calls `run` once the page's own first frames are out, and returns the
+ * cancel. A GPU still rasterising them answers a new context late, and the
+ * main thread waits for the answer: in headless Chrome (a software GPU)
+ * getContext blocked for 0.4–1s in the first seconds after navigation and
+ * for 9ms once the frames came steadily. On capable hardware that is a
+ * handful of frames after hydration.
+ */
+function whenSteady(run: () => void) {
+  let raf = 0;
+  let last = 0;
+  let streak = 0;
+  const cap = window.setTimeout(done, STEADY_MAX_MS);
+  function tick(now: number) {
+    streak = last && now - last < STEADY_GAP_MS ? streak + 1 : 0;
+    last = now;
+    if (streak >= STEADY_FRAMES) return done();
+    raf = requestAnimationFrame(tick);
+  }
+  function done() {
+    cancelAnimationFrame(raf);
+    clearTimeout(cap);
+    run();
+  }
+  raf = requestAnimationFrame(tick);
+  return () => {
+    cancelAnimationFrame(raf);
+    clearTimeout(cap);
+  };
+}
+
+/** The canvas' fade over the <img>, in and out. */
+const FADE_MS = 900;
+/** 60 frames a second at most, on any display: past that the eye gains nothing and the GPU pays in full. */
+const FRAME_MS = 1000 / 60;
+/** How early a display's frame may arrive and still be drawn. */
+const FRAME_SLACK_MS = 2;
+/** Each time the frames prove slow, the raster keeps this share of itself… */
+const STEP_DOWN = 0.75;
+/** …down to this share of its budget. Still slow there, the portrait comes whole and holds. */
+const FLOOR = 0.5;
+/** The raster's steps, from the whole budget down to the floor: 1, 0.75, 0.5625, 0.5. */
+const LEVELS = Math.ceil(Math.log(FLOOR) / Math.log(STEP_DOWN));
+/** The dissolve's envelope under this reads as whole. */
+const WHOLE = 0.01;
+/**
+ * Frame gaps left unjudged at the start, and after a pause, a resize or a
+ * hidden tab: those hitches are the page's. This many, or for this long,
+ * whichever ends first, so a GPU at a few frames a second is not given
+ * seconds' grace.
+ */
+const GRACE_FRAMES = 10;
+const GRACE_MS = 600;
+/**
+ * A drawn gap under this, with raster given up, is a frame to spare: one
+ * on time at 60Hz (16.7ms) or on a 48–50Hz panel (20.8, 20), never one
+ * that missed a 60Hz frame (33ms) or, on the 60Hz grid, a 120Hz one
+ * (25ms). No adopted cadence moves it: frameCadence() drops one at the
+ * step down from full, and a 30Hz display gets its raster back by the
+ * reading of its floor instead.
+ */
+const FAST_MS = 24;
+/**
+ * Frames to spare that win back one step of raster. A step back
+ * up that does not last as long as it took to earn doubles the wait for
+ * the next, up to the most (as TradeStage's), so a device on the edge
+ * settles instead of stepping up and down.
+ */
+const RECOVER_FRAMES = 120;
+const RECOVER_MAX_FRAMES = 1920;
+/**
+ * At the floor, how long the frames have to stay slow before the portrait
+ * settles: a burst of the page's own work (a section building as it
+ * scrolls in, a busy machine for a moment) passes well inside it, a GPU
+ * that cannot keep up does not.
+ */
+const FLOOR_PATIENCE_MS = 4000;
+/** Judged frames without a slow verdict after which the slow stretch at the floor is forgotten. */
+const FLOOR_FORGET = 30;
+/** A held portrait tries again, from the floor, after this long; twice as long each time it holds again, up to the most. */
+const REST_MS = 8000;
+const REST_MAX_MS = 64000;
 
 export function DepthPortrait({
   art,
@@ -358,174 +500,520 @@ export function DepthPortrait({
   const objectPosition = focal;
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const el = canvasRef.current;
+    // A device already known to be weak keeps the server's <img>: no
+    // context, no compile, no second download.
+    if (!el || getTier() === "lite") return;
+    const canvas: HTMLCanvasElement = el;
 
     const reduce = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
 
-    const gl = canvas.getContext("webgl2", {
-      antialias: false,
-      alpha: false,
-      powerPreference: "high-performance",
-    });
-    if (!gl) return; // caller keeps the static <Image> visible
-
-    const vs = compile(gl, gl.VERTEX_SHADER, VERT);
-    const fs = compile(gl, gl.FRAGMENT_SHADER, FRAG);
-    if (!vs || !fs) return;
-
-    const prog = gl.createProgram();
-    if (!prog) return;
-    gl.attachShader(prog, vs);
-    gl.attachShader(prog, fs);
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      console.error("[depth-portrait]", gl.getProgramInfoLog(prog));
-      return;
-    }
-    gl.useProgram(prog);
-
-    const u = (n: string) => gl.getUniformLocation(prog, n);
-    const uRes = u("uRes");
-    const uImgRes = u("uImgRes");
-    const uPos = u("uPos");
-    const uMouse = u("uMouse");
-    const uTime = u("uTime");
-    const uMixRadius = u("uMixRadius");
-    const uAmp = u("uAmp");
-    const uDissolve = u("uDissolve");
-
-    gl.uniform1i(u("uImage"), 0);
-    gl.uniform1i(u("uDepth"), 1);
-    gl.uniform2f(uPos, objectPosition[0], objectPosition[1]);
-    gl.uniform1f(uAmp, amplitude);
-    gl.uniform1f(u("uWarp"), warp);
-    gl.uniform1f(u("uAxisX"), axis);
-    gl.uniform3f(u("uEye"), eye[0], eye[1], eye[2]);
-    gl.uniform1f(u("uSubject"), subject);
-    gl.uniform3f(u("uBrand"), 0x55 / 255, 0x1a / 255, 0x89 / 255);
-
-    // Pointer in 0..1, and the heavy inertia the reference runs
-    // (momentum 0.92) — it should lag behind the cursor, not track it.
-    const target = { x: 0.5, y: 0.5 };
-    const smooth = { x: 0.5, y: 0.5 };
-    const onPointer = (e: PointerEvent) => {
-      target.x = e.clientX / window.innerWidth;
-      target.y = e.clientY / window.innerHeight;
-    };
-    if (!reduce) window.addEventListener("pointermove", onPointer, { passive: true });
-
-    let vao: WebGLVertexArrayObject | null = gl.createVertexArray();
-    gl.bindVertexArray(vao);
-
+    let gl: WebGL2RenderingContext | null = null;
+    let program: WebGLProgram | null = null;
+    let shaders: WebGLShader[] = [];
+    let vao: WebGLVertexArrayObject | null = null;
+    const textures: WebGLTexture[] = [];
     let raf = 0;
-    let visible = true;
-    let disposed = false;
-    const start = performance.now();
+    let polling = 0;
+    let loseTimer = 0;
+    // Everything the running portrait hangs on the page, undone in one go.
+    let unhook: (() => void) | undefined;
+    // The decoded art not yet on the GPU, handed back if the run ends first.
+    let release: (() => void) | undefined;
+    // This run is over: unmounted, or taken down for a lite verdict.
+    let dead = false;
 
-    const resize = () => {
-      // 6-octave 3D Perlin runs three times per pixel — cap the raster.
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.25);
-      const w = Math.round(canvas.clientWidth * dpr);
-      const h = Math.round(canvas.clientHeight * dpr);
-      if (w === 0 || h === 0) return;
-      if (canvas.width !== w || canvas.height !== h) {
-        canvas.width = w;
-        canvas.height = h;
-        gl.viewport(0, 0, w, h);
-      }
-      gl.uniform2f(uRes, canvas.width, canvas.height);
-    };
-
-    const ro = new ResizeObserver(resize);
-    ro.observe(canvas);
-
-    // Don't burn a rAF loop on a hero that has scrolled away.
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        visible = entry.isIntersecting;
-        if (visible && !raf && !disposed) raf = requestAnimationFrame(frame);
-      },
-      { threshold: 0 },
-    );
-    io.observe(canvas);
-
-    // The reference's `appear` states: the warp opens at full-frame and
-    // closes to a centred blob while its speed eases off, so the figure
-    // resolves out of liquid noise over the first second.
-    const easeCubic = (s: number) =>
-      s < 0.5 ? 4 * s * s * s : 1 - Math.pow(-2 * s + 2, 3) / 2;
-    const easeQuart = (s: number) =>
-      s < 0.5 ? 8 * s ** 4 : 1 - Math.pow(-2 * s + 2, 4) / 2;
-
-    let shaderTime = 0;
-    let last = performance.now();
-
-    function frame() {
-      raf = 0;
-      if (disposed || !gl) return;
-      const now = performance.now();
-      const dt = Math.min((now - last) / 1000, 1 / 20);
-      last = now;
-      const elapsed = (now - start) / 1000;
-
-      const mixRadius = reduce
-        ? 0.44
-        : 1 + (0.44 - 1) * easeCubic(Math.min(1, elapsed / 1.0));
-      const speed = reduce
-        ? 0
-        : 0.35 + (0.12 - 0.35) * easeQuart(Math.min(1, elapsed / 0.9));
-      shaderTime += dt * speed * COVER_FLOW;
-
-      // momentum: ease toward the pointer rather than snapping to it
-      smooth.x += (target.x - smooth.x) * 0.055;
-      smooth.y += (target.y - smooth.y) * 0.055;
-      // Idle orbit so the portrait still turns on touch, or when the
-      // cursor is parked. Small enough to read as breathing, not drift.
-      const dx = reduce ? 0 : Math.sin(elapsed * 0.21) * 0.09;
-      const dy = reduce ? 0 : Math.cos(elapsed * 0.16) * 0.06;
-
-      gl.uniform2f(uMouse, smooth.x + dx, smooth.y + dy);
-      gl.uniform1f(uTime, shaderTime);
-      gl.uniform1f(uMixRadius, mixRadius);
-      // Reduced motion gets the portrait whole and still, not mid-tear.
-      gl.uniform1f(uDissolve, reduce ? 0 : coverDissolveAt(elapsed));
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-      if (visible && !reduce) raf = requestAnimationFrame(frame);
-    }
-
-    let textures: WebGLTexture[] = [];
-    Promise.all([loadTexture(gl, src), loadTexture(gl, depthSrc)])
-      .then(([image, depth]) => {
-        if (disposed) return;
-        textures = [image.tex, depth.tex];
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, image.tex);
-        gl.activeTexture(gl.TEXTURE1);
-        gl.bindTexture(gl.TEXTURE_2D, depth.tex);
-        gl.uniform2f(uImgRes, image.w, image.h);
-        resize();
-        setReady(true);
-        onReady?.();
-        raf = requestAnimationFrame(frame);
-      })
-      .catch((err) => console.error("[depth-portrait]", err));
+    // Once the page's first frames are out, in the first idle moment after.
+    let cancelStart = whenSteady(() => {
+      cancelStart = whenIdle(begin);
+    });
+    // A lite verdict that lands once the portrait is up takes it down again.
+    const offTier = onTierChange((t) => {
+      if (t === "lite") teardown();
+    });
 
     return () => {
-      disposed = true;
-      if (raf) cancelAnimationFrame(raf);
-      ro.disconnect();
-      io.disconnect();
-      window.removeEventListener("pointermove", onPointer);
-      textures.forEach((t) => gl.deleteTexture(t));
-      gl.deleteProgram(prog);
-      gl.deleteShader(vs);
-      gl.deleteShader(fs);
-      if (vao) gl.deleteVertexArray(vao);
+      offTier();
+      stop();
+      const g = gl;
+      if (g) {
+        textures.forEach((t) => g.deleteTexture(t));
+        if (program) g.deleteProgram(program);
+        shaders.forEach((s) => g.deleteShader(s));
+        if (vao) g.deleteVertexArray(vao);
+      }
       vao = null;
+      if (loseTimer) {
+        clearTimeout(loseTimer);
+        lose();
+      }
     };
+
+    function stop() {
+      dead = true;
+      cancelStart();
+      cancelAnimationFrame(raf);
+      cancelAnimationFrame(polling);
+      release?.();
+      unhook?.();
+    }
+
+    /** A lite verdict: the canvas fades back to the <img> under it (the same art, graded the same). */
+    function teardown() {
+      if (dead) return;
+      stop();
+      setReady(false);
+      // Lost once it has faded: losing it at once would blank it mid-fade.
+      loseTimer = window.setTimeout(lose, FADE_MS + 100);
+    }
+
+    function lose() {
+      loseTimer = 0;
+      gl?.getExtension("WEBGL_lose_context")?.loseContext();
+    }
+
+    function begin() {
+      // Asked now rather than after the visitor's first move, because this
+      // draws on load. A weak GPU keeps the <img> and makes the visit lite.
+      if (dead || gpuIsWeak()) return;
+      // This task asks the GPU for the context and nothing else: every
+      // question waits its turn behind whatever the GPU is drawing, so the
+      // start is spread over tasks of one or two questions each rather than
+      // one long one (see step() below). The extension and the link come in
+      // the next idle moment, in a task of their own.
+      const ctx = canvas.getContext("webgl2", {
+        antialias: false,
+        alpha: false,
+        powerPreference: "high-performance",
+      });
+      // Without WebGL2 the <img> underneath simply stays. So it does for a
+      // context this canvas already had and gave up.
+      if (!ctx || ctx.isContextLost()) return;
+      gl = ctx;
+      cancelStart = whenIdle(() => {
+        if (!dead && !ctx.isContextLost()) build(ctx);
+      });
+    }
+
+    function build(ctx: WebGL2RenderingContext) {
+      // Asked before the link: any question put to the GPU after it waits
+      // for the compile to finish.
+      const par = ctx.getExtension("KHR_parallel_shader_compile");
+      const pictures = Promise.all([decodeArt(src), decodeArt(depthSrc)]);
+      const linked = link(ctx);
+      program = linked.program;
+      shaders = linked.shaders;
+      const prog = linked.program;
+      // A fence behind the link as well: the GPU passes it once it has
+      // worked through the link, and whether it has is free to ask. With
+      // the extension, both have to say so, so that the one question that
+      // is not free (did it link?) never has to wait.
+      const fence = ctx.fenceSync(ctx.SYNC_GPU_COMMANDS_COMPLETE, 0);
+      ctx.flush();
+
+      // Asked once a frame until the program is built; then, in that frame
+      // and on its own, whether it linked.
+      const built = new Promise<boolean>((resolve) => {
+        const check = () => {
+          polling = 0;
+          if (dead || ctx.isContextLost()) return resolve(false);
+          const done =
+            (!par || ctx.getProgramParameter(prog, par.COMPLETION_STATUS_KHR)) &&
+            (!fence || ctx.getSyncParameter(fence, ctx.SYNC_STATUS) === ctx.SIGNALED);
+          if (!done) {
+            polling = requestAnimationFrame(check);
+            return;
+          }
+          if (fence) ctx.deleteSync(fence);
+          // The logs are read only when it failed.
+          const ok = !!ctx.getProgramParameter(prog, ctx.LINK_STATUS);
+          if (!ok) {
+            for (const s of shaders) {
+              if (!ctx.getShaderParameter(s, ctx.COMPILE_STATUS)) {
+                console.error("[depth-portrait]", ctx.getShaderInfoLog(s));
+              }
+            }
+            console.error("[depth-portrait]", ctx.getProgramInfoLog(prog));
+          }
+          resolve(ok);
+        };
+        polling = requestAnimationFrame(check);
+      });
+
+      Promise.all([pictures, built])
+        .then(([[image, depth], ok]) => {
+          if (!ok || dead || ctx.isContextLost()) {
+            image.close();
+            depth.close();
+            return;
+          }
+          run(ctx, prog, image, depth);
+        })
+        .catch((err) => {
+          if (!dead) console.error("[depth-portrait]", err);
+        });
+    }
+
+    /**
+     * Runs the steps one idle moment apart, while this run lives. The next
+     * is cancelled through `cancelStart`, as the start itself is.
+     */
+    function step(steps: (() => void)[]) {
+      const [next, ...rest] = steps;
+      if (!next) return;
+      cancelStart = whenIdle(() => {
+        if (dead || !gl || gl.isContextLost()) return release?.();
+        next();
+        step(rest);
+      });
+    }
+
+    function run(
+      gl: WebGL2RenderingContext,
+      prog: WebGLProgram,
+      image: Art,
+      depth: Art,
+    ) {
+      // The textures each in a task of their own (an upload waits for the
+      // GPU to take the pixels), then the uniforms, then the first frame.
+      let pending = [image, depth];
+      release = () => {
+        pending.forEach((a) => a.close());
+        pending = [];
+      };
+      step([
+        () => {
+          textures.push(upload(gl, 0, image));
+          pending = [depth];
+        },
+        () => {
+          textures.push(upload(gl, 1, depth));
+          pending = [];
+        },
+        () => play(gl, prog, image),
+      ]);
+    }
+
+    function play(gl: WebGL2RenderingContext, prog: WebGLProgram, image: Art) {
+      gl.useProgram(prog);
+
+      const u = (n: string) => gl.getUniformLocation(prog, n);
+      const uRes = u("uRes");
+      const uImgRes = u("uImgRes");
+      const uPos = u("uPos");
+      const uMouse = u("uMouse");
+      const uTime = u("uTime");
+      const uMixRadius = u("uMixRadius");
+      const uAmp = u("uAmp");
+      const uDissolve = u("uDissolve");
+
+      gl.uniform1i(u("uImage"), 0);
+      gl.uniform1i(u("uDepth"), 1);
+      gl.uniform2f(uPos, objectPosition[0], objectPosition[1]);
+      gl.uniform1f(uAmp, amplitude);
+      gl.uniform1f(u("uWarp"), warp);
+      gl.uniform1f(u("uAxisX"), axis);
+      gl.uniform3f(u("uEye"), eye[0], eye[1], eye[2]);
+      gl.uniform1f(u("uSubject"), subject);
+      gl.uniform3f(u("uBrand"), 0x55 / 255, 0x1a / 255, 0x89 / 255);
+
+      vao = gl.createVertexArray();
+      gl.bindVertexArray(vao);
+      gl.uniform2f(uImgRes, image.w, image.h);
+
+      // Pointer in 0..1, and the heavy inertia the reference runs
+      // (momentum 0.92) — it should lag behind the cursor, not track it.
+      const target = { x: 0.5, y: 0.5 };
+      const smooth = { x: 0.5, y: 0.5 };
+      const onPointer = (e: PointerEvent) => {
+        target.x = e.clientX / window.innerWidth;
+        target.y = e.clientY / window.innerHeight;
+      };
+      if (!reduce) window.addEventListener("pointermove", onPointer, { passive: true });
+
+      // How many steps of raster the governor below has given up (0: none),
+      // and the share of its budget that leaves it.
+      let level = 0;
+      let quality = 1;
+      // The artwork's own pixel count: a raster past it only upscales the
+      // art, while the fbm still runs once per pixel.
+      const artPx = image.w * image.h;
+
+      // Its own governor: frames that stay slow cost raster first, a step
+      // at a time, and frames to spare win it back the same way, so a slow
+      // moment is never the whole visit's. At the floor and slow for a
+      // while (FLOOR_PATIENCE_MS), the portrait finishes the breath it is
+      // in and holds there, whole, as its last frame; after a rest, or on
+      // coming back into view, it tries again from the floor. It never
+      // touches the tier.
+      //
+      // Slow and to spare are judged against the display's own cadence,
+      // as the industry band and the trade stage judge them
+      // (frameCadence()). A browser or an OS power saver holds every
+      // frame to 30Hz, where no gap is ever under 20ms: judged against
+      // fixed thresholds alone, the page's own load and scroll work would
+      // step the raster down with nothing to win it back, and the cover
+      // would stay at half raster for the visit. A step that brought no
+      // faster frames than full raster gave before it, at a cadence a
+      // display can have, gives all of the raster back at once; never while
+      // the floor's own slow verdict is under way (slowSince), since frames
+      // slowFrames() calls slow are the GPU's or the page's, and whether the
+      // portrait holds is that verdict's to say.
+      const cadence = frameCadence();
+      let slow = slowFrames();
+      let visible = true;
+      // 0: the next frame draws at once and is not judged (the first, and
+      // the first after a pause, a resize or a hidden tab).
+      let lastDraw = 0;
+      // When the next frame is due, kept on a 60Hz grid: a 120Hz display
+      // draws every other frame, a 75Hz one four in five.
+      let due = 0;
+      // Judged gaps still to be let pass after a start, a pause, a resize or
+      // a hidden tab, and until when.
+      let grace = GRACE_FRAMES;
+      let graceUntil = performance.now() + GRACE_MS;
+      // Frames to spare, counted while raster is given up (see pace()).
+      let fast = 0;
+      // How many of them the next step back up needs.
+      let recoverAfter = RECOVER_FRAMES;
+      // Judged frames left in which a step down means the last step up did not hold.
+      let proving = 0;
+      // When the frames were first found slow at the floor, this stretch (0: they are not)…
+      let slowSince = 0;
+      // …and the judged frames since they last were.
+      let sinceVerdict = 0;
+      let settling = false;
+      let held = false;
+      let heldAt = 0;
+      let rest = REST_MS;
+      let restTimer = 0;
+      let shaderTime = 0;
+      let start = performance.now();
+      let last = start;
+
+      const fresh = () => {
+        lastDraw = 0;
+        due = 0;
+        grace = GRACE_FRAMES;
+        graceUntil = performance.now() + GRACE_MS;
+      };
+
+      const resize = () => {
+        const cw = canvas.clientWidth;
+        const ch = canvas.clientHeight;
+        if (cw === 0 || ch === 0) return;
+        // 6-octave 3D Perlin runs three times per pixel — cap the raster:
+        // at 1.25 device pixels per CSS pixel, and at the artwork's own
+        // pixel count, which no window up to 1920x1080 at 1x, or 1536x864
+        // at 125%, reaches — those draw exactly as many pixels as before.
+        const budget = Math.min(
+          window.devicePixelRatio || 1,
+          1.25,
+          Math.sqrt(artPx / (cw * ch)),
+        );
+        // The held frame is drawn at the full raster, so the still it
+        // leaves is as sharp as the art.
+        const dpr = budget * (held ? 1 : quality);
+        const w = Math.round(cw * dpr);
+        const h = Math.round(ch * dpr);
+        if (w === 0 || h === 0) return;
+        if (canvas.width !== w || canvas.height !== h) {
+          canvas.width = w;
+          canvas.height = h;
+          gl.viewport(0, 0, w, h);
+        }
+        gl.uniform2f(uRes, canvas.width, canvas.height);
+      };
+
+      const setLevel = (next: number) => {
+        level = next;
+        quality = Math.max(FLOOR, STEP_DOWN ** level);
+        resize();
+      };
+
+      /** All of the raster back, judged afresh from full. */
+      const giveBack = () => {
+        fast = 0;
+        proving = 0;
+        slowSince = 0;
+        settling = false;
+        slow = slowFrames();
+        cadence.stepped();
+        setLevel(0);
+      };
+
+      /** Judges one drawn gap: see the governor above. */
+      const pace = (gap: number, now: number) => {
+        if (grace > 0 && now < graceUntil) {
+          grace--;
+          return;
+        }
+        if (proving > 0) proving--;
+        // Past the adopted cadence, if there is one; until then exactly
+        // slowFrames()'s fixed 34ms, since that is over SLOW_MS as well.
+        const over = cadence.slow(gap);
+        if (cadence.read(gap, level > 0, !slowSince)) {
+          // The raster given up came no faster than full raster did before
+          // the step from it: the display is the limit, not the GPU.
+          giveBack();
+          return;
+        }
+        if (slow(over ? gap : 0)) {
+          fast = 0;
+          if (level < LEVELS) {
+            // A step back up that did not hold makes the next one wait
+            // twice as long; after one that held, the wait starts over.
+            recoverAfter = proving > 0 ? Math.min(RECOVER_MAX_FRAMES, recoverAfter * 2) : RECOVER_FRAMES;
+            proving = 0;
+            cadence.stepped(level === 0);
+            setLevel(level + 1);
+          } else {
+            slowSince ||= now;
+            sinceVerdict = 0;
+            if (now - slowSince >= FLOOR_PATIENCE_MS) settling = true;
+          }
+          return;
+        }
+        if (slowSince && ++sinceVerdict > FLOOR_FORGET) slowSince = 0;
+        // Only a slow verdict (above) starts the count over: a busy page's
+        // frames are never all short, and one long one is not a verdict.
+        if (level === 0) fast = 0;
+        else if (gap < FAST_MS) fast++;
+        if (fast >= recoverAfter) {
+          proving = recoverAfter;
+          fast = 0;
+          slowSince = 0;
+          settling = false;
+          cadence.stepped();
+          setLevel(level - 1);
+        }
+      };
+
+      /** A held portrait moves again, from the floor, judged afresh. */
+      const wake = () => {
+        clearTimeout(restTimer);
+        restTimer = 0;
+        if (dead || !held) return;
+        held = false;
+        settling = false;
+        slowSince = 0;
+        slow = slowFrames();
+        // The breath picks up where it was held, not where the clock got to.
+        const now = performance.now();
+        start += now - heldAt;
+        last = now;
+        resize();
+        fresh();
+        if (visible && !raf) raf = requestAnimationFrame(frame);
+      };
+
+      // The reference's `appear` states: the warp opens at full-frame and
+      // closes to a centred blob while its speed eases off, so the figure
+      // resolves out of liquid noise over the first second.
+      const easeCubic = (s: number) =>
+        s < 0.5 ? 4 * s * s * s : 1 - Math.pow(-2 * s + 2, 3) / 2;
+      const easeQuart = (s: number) =>
+        s < 0.5 ? 8 * s ** 4 : 1 - Math.pow(-2 * s + 2, 4) / 2;
+
+      function frame(now: number) {
+        raf = 0;
+        if (dead) return;
+        // Held: the same frame again, after a resize cleared it.
+        if (held) {
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+          return;
+        }
+        if (due && now < due - FRAME_SLACK_MS) {
+          raf = requestAnimationFrame(frame);
+          return;
+        }
+        due = (due > now - FRAME_MS ? due : now) + FRAME_MS;
+        if (lastDraw && !reduce) pace(now - lastDraw, now);
+        lastDraw = now;
+        const dt = Math.min(Math.max(0, now - last) / 1000, 1 / 20);
+        last = now;
+        const elapsed = Math.max(0, now - start) / 1000;
+
+        const mixRadius = reduce
+          ? 0.44
+          : 1 + (0.44 - 1) * easeCubic(Math.min(1, elapsed / 1.0));
+        const speed = reduce
+          ? 0
+          : 0.35 + (0.12 - 0.35) * easeQuart(Math.min(1, elapsed / 0.9));
+        shaderTime += dt * speed * COVER_FLOW;
+
+        // momentum: ease toward the pointer rather than snapping to it —
+        // 0.055 of the way per 60th of a second, at any frame rate
+        const k = 1 - Math.pow(1 - 0.055, dt * 60);
+        smooth.x += (target.x - smooth.x) * k;
+        smooth.y += (target.y - smooth.y) * k;
+        // Idle orbit so the portrait still turns on touch, or when the
+        // cursor is parked. Small enough to read as breathing, not drift.
+        const dx = reduce ? 0 : Math.sin(elapsed * 0.21) * 0.09;
+        const dy = reduce ? 0 : Math.cos(elapsed * 0.16) * 0.06;
+
+        // Reduced motion gets the portrait whole and still, not mid-tear.
+        const dissolve = reduce ? 0 : coverDissolveAt(elapsed);
+        if (settling && dissolve < WHOLE) {
+          held = true;
+          heldAt = now;
+          resize();
+          restTimer = window.setTimeout(wake, rest);
+          rest = Math.min(REST_MAX_MS, rest * 2);
+        }
+        gl.uniform2f(uMouse, smooth.x + dx, smooth.y + dy);
+        gl.uniform1f(uTime, shaderTime);
+        gl.uniform1f(uMixRadius, mixRadius);
+        gl.uniform1f(uDissolve, dissolve);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        if (visible && !reduce && !held) raf = requestAnimationFrame(frame);
+      }
+
+      // A resize clears the canvas, so one that is not looping draws again.
+      const ro = new ResizeObserver(() => {
+        resize();
+        fresh();
+        if (visible && !raf && !dead) raf = requestAnimationFrame(frame);
+      });
+      ro.observe(canvas);
+
+      // Don't burn a rAF loop on a hero that has scrolled away. Under a
+      // fifth of it left, the band still showing sits under the ink scrim,
+      // and keeps its last frame.
+      const io = new IntersectionObserver(
+        (entries) => {
+          const was = visible;
+          // The last entry is the element as it is now: a busy main thread can hand one callback several.
+          visible = entries[entries.length - 1].intersectionRatio >= 0.2;
+          // Back in view, a held portrait tries again at once.
+          if (visible && !was && held) wake();
+          else if (visible && !raf && !dead) {
+            fresh();
+            raf = requestAnimationFrame(frame);
+          }
+        },
+        { threshold: [0, 0.2] },
+      );
+      io.observe(canvas);
+
+      // A hidden tab's gap says nothing about the device.
+      document.addEventListener("visibilitychange", fresh);
+
+      unhook = () => {
+        clearTimeout(restTimer);
+        ro.disconnect();
+        io.disconnect();
+        window.removeEventListener("pointermove", onPointer);
+        document.removeEventListener("visibilitychange", fresh);
+      };
+
+      resize();
+      setReady(true);
+      onReady?.();
+      raf = requestAnimationFrame(frame);
+    }
     // Rebuilt when the art-directed crop changes; otherwise the effect
     // owns the GL context for the component's lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -538,7 +1026,13 @@ export function DepthPortrait({
       className={className}
       style={{
         opacity: ready ? 1 : 0,
-        transition: "opacity 900ms cubic-bezier(0.16,1,0.3,1)",
+        // Hidden, not just transparent, until it is ready: a canvas the
+        // compositor has to draw costs the GPU a pass over the whole cover,
+        // and every question put to the GPU meanwhile (the link, the
+        // uniforms, the upload) waits behind it. Visibility flips at once
+        // on the way in and only after the fade on the way out.
+        visibility: ready ? "visible" : "hidden",
+        transition: `opacity ${FADE_MS}ms cubic-bezier(0.16,1,0.3,1), visibility ${FADE_MS}ms`,
       }}
     />
   );

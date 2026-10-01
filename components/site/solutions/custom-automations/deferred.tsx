@@ -166,7 +166,7 @@ export function reserveStyle(heights: readonly number[]): CSSProperties {
 /** A section below the cover, in a content-visibility box holding `box`'s reserve. */
 export function AutoDeferred({ box, children }: { box: AutoReserveId; children: ReactNode }) {
   return (
-    <div className="home-deferred" style={reserveStyle(RESERVES[box])}>
+    <div className="home-deferred" data-box={box} style={reserveStyle(RESERVES[box])}>
       {children}
     </div>
   );

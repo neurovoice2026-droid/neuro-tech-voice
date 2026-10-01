@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 
 /* ------------------------------------------------------------------ *
  * Same-page jumps that land where they say: a section's top at the
@@ -46,7 +46,17 @@ import { useEffect } from "react";
  * first arrival: a reload or a Back keeps the reader's place, as the
  * browser does, and a later mount (a client-side trip away and back)
  * never looks at the address bar at all.
+ *
+ * ARRIVING AND LEAVING. saas.css §14's padding and load-time `auto` hold
+ * while <html> carries `data-saas`, not while the sheet is loaded: the
+ * sheet stays after a client-side trip from here to "/", and after one
+ * to here that was cut short before the page came. The shell's inline
+ * script sets it as a direct load is parsed (shell.tsx); here it is set
+ * as the shell mounts and cleared as it unmounts, in a layout effect so
+ * it is in place before Next scrolls a navigation to its fragment.
  * ------------------------------------------------------------------ */
+
+const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 /** How far off a landing may be before it is set right: rounding, never a line of text. */
 const SLACK = 4;
@@ -58,6 +68,12 @@ const LOOKS = 2;
 let arrived = false;
 
 export function Jumps() {
+  useIsoLayoutEffect(() => {
+    const html = document.documentElement;
+    html.setAttribute("data-saas", "");
+    return () => html.removeAttribute("data-saas");
+  }, []);
+
   useEffect(() => {
     const html = document.documentElement;
     const main = document.querySelector("main.saas-page");

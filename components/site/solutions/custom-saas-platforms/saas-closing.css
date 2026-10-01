@@ -62,16 +62,19 @@
    that go are gone. A box the browser has skipped because it is off the
    screen is captured blank, so it fades in as it slides up; one that
    leaves the screen fades out. The boxes, not the sections in them: an
-   element inside a skipped box is never captured, and would cut. */
+   element inside a skipped box is never captured, and would cut. A box
+   is picked by the `data-box` its page's Deferred renders, not by
+   `:has(> #faq)`: a `:has()` here puts a check on every node the page
+   inserts. */
 html[data-saas-vt="checks"] .pp .saas-check {
   view-transition-name: var(--saas-vt);
 }
 
-html[data-saas-vt="checks"] .pp .home-deferred:has(> #faq) {
+html[data-saas-vt="checks"] .pp .home-deferred[data-box="faq"] {
   view-transition-name: saas-check-faq;
 }
 
-html[data-saas-vt="checks"] .pp .home-deferred:has(> #start) {
+html[data-saas-vt="checks"] .pp .home-deferred[data-box="start"] {
   view-transition-name: saas-check-start;
 }
 

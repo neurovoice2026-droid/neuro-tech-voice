@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { HERO_COVER as C, COVER_ART, COVER_FOCAL } from "@/lib/site";
 import { DepthPortrait } from "./depth-portrait";
@@ -31,7 +31,12 @@ function CornerMarks() {
         <motion.span
           key={k}
           aria-hidden
-          className={cn("absolute block size-[0.625em] bg-current", pos)}
+          // Reduced motion: shown as they end. The server renders their
+          // starting state, and with nothing to animate nothing clears it.
+          className={cn(
+            "absolute block size-[0.625em] bg-current motion-reduce:opacity-100! motion-reduce:transform-none!",
+            pos,
+          )}
           initial={reduce ? false : { opacity: 0, scale: 0.4 }}
           animate={reduce ? undefined : { opacity: 1, scale: 1 }}
           transition={{ duration: 0.5, delay: 1.15 + i * 0.07, ease: EASE }}
@@ -74,7 +79,10 @@ function SplitLines({
               >
                 <motion.span
                   className={cn(
-                    "inline-block",
+                    // Reduced motion: in place, as the reveal ends. The
+                    // server renders each word below its mask, and with
+                    // nothing to animate nothing would bring it up.
+                    "inline-block motion-reduce:transform-none!",
                     wi < arr.length - 1 && "pr-[0.24em]",
                   )}
                   initial={reduce ? false : { y: "115%" }}
@@ -97,9 +105,34 @@ function SplitLines({
 }
 
 /** Four bars keeping time — a voice product's answer to a sound toggle. */
-function Equalizer() {
+function Equalizer({ cover }: { cover: RefObject<HTMLElement | null> }) {
+  const barsRef = useRef<HTMLDivElement>(null);
+
+  // Held once the cover is three-quarters scrolled away, by which point the
+  // bars have faded out with the rest of its content: an animation that
+  // never ends otherwise costs the main thread a frame every 16ms for the
+  // rest of the visit, wherever the reader is on the page.
+  useEffect(() => {
+    const section = cover.current;
+    const bars = barsRef.current;
+    if (!section || !bars) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        // The last entry is the element as it is now: a busy main thread can hand one callback several.
+        const state = entries[entries.length - 1].intersectionRatio < 0.25 ? "paused" : "running";
+        bars.querySelectorAll<HTMLElement>(":scope > span").forEach((bar) => {
+          bar.style.animationPlayState = state;
+        });
+      },
+      { threshold: [0, 0.25] },
+    );
+    io.observe(section);
+    return () => io.disconnect();
+  }, [cover]);
+
   return (
     <div
+      ref={barsRef}
       aria-hidden
       className="flex h-[1.1em] w-[2em] items-end justify-center gap-[0.16em]"
     >
@@ -199,11 +232,11 @@ export function Hero() {
             One crop at every width, anchored on the eyes, so the phone and
             the desktop are the same picture — full-bleed cover, no bars,
             no drifting face. */}
-        {/* Deliberately a raw <img>, not next/image: DepthPortrait loads
-            this exact file as a WebGL texture via new Image(), so routing
-            it through the optimizer would serve a second, different file
-            and pay for the artwork twice. It is already a hand-derived
-            webp at the size it is displayed at. */}
+        {/* Deliberately a raw <img>, not next/image: DepthPortrait fetches
+            this exact file (out of the cache this <img> filled) as its
+            WebGL texture, so routing it through the optimizer would serve
+            a second, different file and pay for the artwork twice. It is
+            already a hand-derived webp at the size it is displayed at. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={COVER_ART.landscape.src}
@@ -305,7 +338,7 @@ export function Hero() {
           </div>
 
           <div className="order-3 hidden md:col-span-2 md:col-start-11 md:order-none md:flex md:justify-end md:self-end">
-            <Equalizer />
+            <Equalizer cover={ref} />
           </div>
         </div>
       </motion.div>

@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { IntentLink } from "@/components/site/intent-link";
 import { CornerDot } from "@/components/site/corner-dot";
+import { OrbInView } from "./orb-in-view";
 
 /* ------------------------------------------------------------------ *
  * The light product-page system.
@@ -186,7 +187,9 @@ export type OrbTint = { a: string; b: string; c: string };
  * of grain instead of the three-light `tint` version.
  *
  * `still` holds the picture where it stands: every animation paused, so
- * nothing about the orb is recalculated frame after frame.
+ * nothing about the orb is recalculated frame after frame. An orb off
+ * screen rests on its own (see OrbInView), and moves again as it comes
+ * back.
  */
 export function Orb({
   tint,
@@ -209,10 +212,9 @@ export function Orb({
       mesh[Math.round((i * (mesh.length - 1)) / 4)],
     );
     return (
-      <span
-        aria-hidden
-        data-speaking={speaking ? "" : undefined}
-        data-still={still ? "" : undefined}
+      <OrbInView
+        speaking={speaking}
+        still={still}
         className={cn("pp-orb pp-orb-mesh block", className)}
         style={
           {
@@ -229,16 +231,15 @@ export function Orb({
         <span className="pp-mesh-flow pp-mesh-flow-b" />
         <span className="pp-mesh-shade" />
         <span className="pp-noise" />
-      </span>
+      </OrbInView>
     );
   }
 
   const t = tint ?? ORB_TINTS.dusk;
   return (
-    <span
-      aria-hidden
-      data-speaking={speaking ? "" : undefined}
-      data-still={still ? "" : undefined}
+    <OrbInView
+      speaking={speaking}
+      still={still}
       className={cn("pp-orb block", className)}
       style={
         {
@@ -250,7 +251,7 @@ export function Orb({
       }
     >
       <span className="pp-grain absolute inset-0 z-10 opacity-60" />
-    </span>
+    </OrbInView>
   );
 }
 

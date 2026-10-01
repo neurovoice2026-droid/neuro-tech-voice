@@ -11,6 +11,7 @@ import { ROOM } from "@/lib/pages/knowledge-base";
 import { NAV_INDUSTRY_DEFAULT, SOLUTION_ITEMS } from "@/lib/site";
 import { greetingFor, mentionsAiDisclosure } from "@/lib/voice/greetings";
 import { loadScene } from "@/components/site/industry/scenes";
+import { TRADE_POSTERS } from "@/components/site/home/trade-posters";
 
 /* ------------------------------------------------------------------ *
  * The homepage's server-built data: the lines that come out of the
@@ -402,6 +403,14 @@ export async function buildHomeTrades(): Promise<HomeTrades> {
   // Server-side, so the SSR HTML already paints the opening trade's poster.
   const scene = await loadScene(NAV_INDUSTRY_DEFAULT);
   if (!scene) throw new Error(`home.server.ts: no scene for ${NAV_INDUSTRY_DEFAULT}`);
+
+  // Every row has its own poster in the list a posters-only stage (lite,
+  // still, or a scene chunk that failed to load) fetches, so none falls
+  // back to the blank house poster. Checked here, at build; the list itself
+  // is never part of the page.
+  for (const row of rows) {
+    if (!TRADE_POSTERS[row.key]) throw new Error(`home.server.ts: no poster for the ${row.key} row`);
+  }
 
   return {
     trades: rows,
