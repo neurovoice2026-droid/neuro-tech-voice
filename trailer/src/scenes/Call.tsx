@@ -45,7 +45,7 @@ import { aos, EASE, mixHex, SPRING, springAt, tween } from '../lib/motion';
 import { pickupGlow, pickupScale } from '../lib/pickup';
 import { useSceneFrame } from '../lib/scene';
 import { C, FONT } from '../theme';
-import { CALL, CALL_LOCAL, SCENES, vWord, type Caption } from '../timing';
+import { CALL, CALL_LOCAL, SCENES, TWIST_LOCAL, vWord, type Caption } from '../timing';
 import { VOICE } from '../voice.generated';
 import { bloom, mixColor } from '../lib/lights';
 import { exitCurve, Flare, RingPulse, Sparks } from './call/Accents';
@@ -177,10 +177,14 @@ export const Call: React.FC = () => {
 
   /* the room alone after the hand-over (under the result, until its own room is in) */
   const roomLayer = (
-    <AbsoluteFill style={{ ...planeCss(cam, 0.3), opacity: roomOp }}>
+    <AbsoluteFill style={planeCss(cam, 0.3)}>
       <RoomBox x={L.cx} y={L.cy} w={room.w} h={room.h} grade={grade} />
     </AbsoluteFill>
   );
+  // the twist hands over with its room already under the MidnightVignette (TWIST_LOCAL.roomVignette):
+  // the call holds that from its roomIn, and room + light + vignette fade in over roomIn AS ONE GROUP,
+  // so the cross-fade over the twist's identical pixels is exact (no flat, unvignetted room at the cut)
+  const vignetteK = Math.max(TWIST_LOCAL.roomVignette, grade);
   if (t >= END) {
     return (
       <AbsoluteFill style={{ overflow: 'hidden' }}>
@@ -421,15 +425,17 @@ export const Call: React.FC = () => {
 
   return (
     <AbsoluteFill style={{ overflow: 'hidden' }}>
-      {/* ── 0.3 · the room + the orb's light on it ─────────────────── */}
-      {roomLayer}
-      {live ? (
-        <AbsoluteFill style={planeCss(cam, 0.3)}>
-          {/* (9:16: the orb nearly fills the frame's width, so its spill is kept tighter to stay off the edges) */}
-          <KeyLight x={orb.x} y={orb.y} d={orb.d} glow={glow} strength={keyK} spread={L.pick(3.2, 2.6)} />
-        </AbsoluteFill>
-      ) : null}
-      <MidnightVignette k={grade} />
+      {/* ── 0.3 · the room + the orb's light on it (+ the vignette: one group over roomIn) ── */}
+      <AbsoluteFill style={{ opacity: roomOp < 1 ? roomOp : undefined }}>
+        {roomLayer}
+        {live ? (
+          <AbsoluteFill style={planeCss(cam, 0.3)}>
+            {/* (9:16: the orb nearly fills the frame's width, so its spill is kept tighter to stay off the edges) */}
+            <KeyLight x={orb.x} y={orb.y} d={orb.d} glow={glow} strength={keyK} spread={L.pick(3.2, 2.6)} />
+          </AbsoluteFill>
+        ) : null}
+        <MidnightVignette k={vignetteK} />
+      </AbsoluteFill>
 
       <AbsoluteFill style={blow}>
         {/* ── 9:16 · the floor under the orb: its key-light pool and a soft reflection ── */}
