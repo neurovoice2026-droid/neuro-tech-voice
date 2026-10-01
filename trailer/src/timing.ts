@@ -71,30 +71,31 @@ const KB_MISS = KB_SCAN0 + b(1.5);
 const KB_ANSWER = Math.max(KB_MISS + 7, KB_ASK + vFrames('kb-1') + 19);
 const KB_CLOSE = upHalf(KB_ANSWER + vFrames('kb-2') + 10); // the last caption gets a beat before the closing takes the frame
 const SCALE_LEN = b(10);
-/** The knowledge closing title holds 3 beats before its 1-beat whip. */
-const KB_BASE = upBeat(KB_CLOSE + b(4));
-/** CTA: Ava's line; the four orbs converge right after her last word ("…seven")
+/** Knowledge ends on Ava's promise: a short breath after "…today.", then the whip. The closing
+ *  title was cut so the CTA could breathe (client: "the ending is too fast"). */
+const KB_BASE = upBeat(KB_ANSWER + vFrames('kb-2') + b(1));
+/** CTA: Ava's line; the four orbs are pulled in as her line ends ("…seven.")
  *  and the logo lands on a strong beat (1 or 3 of the bar). */
 const CTA_LINE = b(1);
-const CTA_LAST_WORD = CTA_LINE + vWord('cta-1', VOICE.lines['cta-1'].words.length - 1);
-/** Put the impact on a strong beat: start the converge one beat earlier if that
- *  still starts on/after the last word, else give the knowledge hold one beat. */
+const CTA_LINE_END = CTA_LINE + vFrames('cta-1');
+/** Put the impact on a strong beat; if the grid is off by a beat, that beat becomes a breath
+ *  before the converge (the ending is never rushed). */
 const [CTA_CONVERGE0, KNOWLEDGE_LEN] = (() => {
-  const c = Math.max(b(8), upBeat(CTA_LAST_WORD + 12));
+  const c = Math.max(b(8), upBeat(CTA_LINE_END));
   const ctaFrom = b(8) + b(8) + CALL_LEN + RESULT_LEN + KB_BASE + SCALE_LEN;
   const half = 2 * BEAT;
   const off = (ctaFrom + c + b(2)) % half; // 0 or 1 beat: everything sits on the beat grid
-  if (!off) return [c, KB_BASE];
-  if (c - off >= Math.max(b(8), CTA_LAST_WORD)) return [c - off, KB_BASE];
-  return [c, KB_BASE + (half - off)];
+  return [off ? c + (half - off) : c, KB_BASE];
 })();
 const CTA_IMPACT = CTA_CONVERGE0 + b(2);
-/** Ava says the name an 8th after the impact, so its transient has cleared before "Neuro". */
-const CTA_BRAND = CTA_IMPACT + b(0.5);
-/** The button is clicked 2 f after her last word ends; the still end card follows an 8th later
- *  (≥ 3 beats after the impact; on the half-beat grid). */
-const CTA_PRESS = CTA_BRAND + vFrames('cta-2') + 2;
-const CTA_HOLD = CTA_IMPACT + Math.max(b(3), upHalf(CTA_PRESS + b(0.5) - CTA_IMPACT));
+/* After the impact the end card builds calmly, one element at a time (client: "the ending is too fast"):
+ * the logo lands alone → Ava names it a beat later → the button on "…Voice." → the note →
+ * the press → 1.5 s still. */
+const CTA_BRAND = CTA_IMPACT + b(1);
+const CTA_BUTTON = CTA_IMPACT + Math.max(b(2.5), upHalf(b(1) + vWord('cta-2', 2)));
+const CTA_NOTE = CTA_BUTTON + b(1);
+const CTA_PRESS = Math.max(CTA_NOTE + b(2), CTA_BRAND + vFrames('cta-2') + b(1));
+const CTA_HOLD = upHalf(CTA_PRESS + b(1));
 const CTA_LEN = CTA_HOLD + b(3); // 1.5 s final hold
 
 /**
@@ -309,12 +310,12 @@ export const CTA = {
   logoImpact: CTA_IMPACT, // always on a strong beat (1 or 3) of the music
   brandVoice: CTA_BRAND, // Ava: "Neuro Tech Voice."
   brandVoiceId: 'cta-2' as VoiceId,
-  /** "Start free →" lands with the logo, a 16th after the impact (the impact carries its sound) */
-  button: CTA_IMPACT + 4,
+  /** "Start free →" rises on "…Voice.", once the logo has landed and been named */
+  button: CTA_BUTTON,
   /** the URL types ON her words: "neuro" | "tech" | "voice.com" (cta-2 words 0 / 1 / 2) */
   url: CTA_BRAND + vWord('cta-2', 0),
   /** the note once the URL is typed (on the 8th grid, clear of "Voice." onset) */
-  note: CTA_IMPACT + Math.max(b(2), upHalf(b(0.5) + vWord('cta-2', 2) + 7)),
+  note: CTA_NOTE,
   press: CTA_PRESS, // the button takes the site's hover (plum) as if clicked — after "…Voice."
   finalHold: CTA_HOLD, // from here to the end (1.5 s) nothing moves but grain
 };
