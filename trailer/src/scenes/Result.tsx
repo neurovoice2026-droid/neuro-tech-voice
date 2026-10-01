@@ -54,6 +54,7 @@ import { cssFont, measure, useFontsReady, type FontSpec } from './result/measure
 import { calMapAt, camsAt, cardAt, eventWorldAt, type MarkMetrics } from './result/motion';
 import { Discs, Motes } from './result/Motes';
 import { Divider, LetterRise, Moon, NightGrade, Stars } from './result/Split';
+import { MIDNIGHT_ROOM, MidnightVignette } from './call/Light';
 
 export type ResultTiming = typeof RESULT_LOCAL;
 
@@ -110,6 +111,15 @@ export const Result: React.FC = () => {
   const zRateRec = Math.abs(Math.log(scaleScr(t + 0.5) / scaleScr(t - 0.5)));
 
   const roomOp = tween(t, T.roomIn, [0, 1], EASE.out3);
+  /** the call's midnight → the result's night room (hidden behind the sheet's close-up) */
+  const roomWarm = tween(t, T.roomWarm, [0, 1], EASE.inOut);
+  const roomBox: React.CSSProperties = {
+    position: 'absolute',
+    left: L.cx - (L.width * 1.6) / 2,
+    top: L.cy - (L.height * 1.6) / 2,
+    width: L.width * 1.6,
+    height: L.height * 1.6,
+  };
   const splitIn = tween(t, T.splitGrade, [0, 1], EASE.inOut);
   const opening = t >= RESULT.toWhite[0];
   const look = eventLookAt(t, T);
@@ -361,19 +371,29 @@ export const Result: React.FC = () => {
   return (
     <AbsoluteFill style={{ overflow: 'hidden' }}>
       {/* ── 0.15 · the night room ───────────────────────────────────── */}
+      {/* It opens as the call's MIDNIGHT room (the cut stays dark) and warms to the night
+          room only while the calendar sheet fills the frame (T.roomWarm), so nothing brightens
+          in view after the hand-over. */}
       <AbsoluteFill style={{ transform: layerCss(cams.base, 0.15), opacity: roomOp }}>
-        <div
-          style={{
-            position: 'absolute',
-            left: L.cx - (L.width * 1.6) / 2,
-            top: L.cy - (L.height * 1.6) / 2,
-            width: L.width * 1.6,
-            height: L.height * 1.6,
-            background: NIGHT_ROOM.replace('120% 100% at 50% 40%', '81% 67.5% at 50% 43.25%'),
-          }}
-        />
+        {roomWarm < 0.999 ? (
+          <div style={{ ...roomBox, background: MIDNIGHT_ROOM.replace('120% 100% at 50% 40%', '81% 67.5% at 50% 43.25%') }} />
+        ) : null}
+        {roomWarm > 0.001 ? (
+          <div
+            style={{
+              ...roomBox,
+              opacity: roomWarm,
+              background: NIGHT_ROOM.replace('120% 100% at 50% 40%', '81% 67.5% at 50% 43.25%'),
+            }}
+          />
+        ) : null}
         <Vignette strength={0.55} color="8,6,28" />
       </AbsoluteFill>
+      {roomWarm < 0.999 ? (
+        <AbsoluteFill style={{ opacity: roomOp }}>
+          <MidnightVignette k={1 - roomWarm} />
+        </AbsoluteFill>
+      ) : null}
 
       {/* ── 0.4 · room light: the call's violet, cooling out ───────── */}
       <AbsoluteFill style={{ transform: layerCss(cams.base, 0.4), opacity: roomOp }}>

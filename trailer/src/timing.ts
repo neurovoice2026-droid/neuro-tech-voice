@@ -506,6 +506,9 @@ export const CALL_LOCAL = {
 export const RESULT_LOCAL = {
   /** the night room knocks the call back (out-curve) */
   roomIn: [RESULT.lift, b(4 / 3)] as const, // 0 → 20
+  /** the room opens as the call's midnight and warms to the night room only while the
+   *  calendar's close-up fills the frame (landing → before the recompose reveals it) */
+  roomWarm: [RESULT.land - b(0.4), RESULT.land + b(0.5)] as const, // 24 → 38
   /** the lift spring starts here, after a 2-frame anticipation dip */
   liftGo: RESULT.lift + b(1 / 8), // 2
   /** the booked-pill wash blooms around the mark; the call's <MarkGlow> (MARK_GLOW_HANDOFF) cross-fades into it */
@@ -594,8 +597,9 @@ export const SCALE_LOCAL = (() => {
   return {
     /** one industry pop per 16th note */
     pops: Array.from({ length: 16 }, (_, i) => Math.round(SCALE.industriesIn + i * SCALE.industryStep)),
-    /** card 01 pops this many frames before the cut: t 0 (pop-2 + tick-0) lands mid-pop */
-    preroll: 2,
+    /** card 01 pops this many frames before the cut: t 0 (pop-2 + tick-0) lands mid-pop.
+     *  3 = its attack frame is the knowledge whip's last frame, so the whip cut has no blank white frame */
+    preroll: 3,
     /** the stepped camera (EASE.peel): card 01 → 2×2 → 3×3 → the full grid */
     camSteps: [
       [1, 4],
@@ -810,9 +814,11 @@ export const KNOWLEDGE_LOCAL = (() => {
     closingStagger: 2.5,
     closingKey: K.closing + b(1.5), // an 8th after its last word ("so.") is up: "it says so." turns Sunday teal (glint, pool of light, kick)
     closingPush: [K.closing, K.out[0]] as const,
-    /** the whip: a 3 f counter-move, then the stage leaves; clean white from `white` */
+    /** the whip: a 3 f counter-move, then the stage leaves; clean white from `white`.
+     *  Its smeared tail is still in frame until the scale's card 01 whips in on top
+     *  (scale.from − SCALE_LOCAL.preroll), so the cut never shows an empty white frame. */
     whipAnticip: [K.out[0] - 3, K.out[0]] as const,
-    whip: [K.out[0], K.out[1] - 3] as const,
+    whip: [K.out[0], K.out[1] - 2] as const,
     white: K.out[1] - 2,
   };
 })();

@@ -20,7 +20,8 @@
  * Replacement — at s_{c+1} the outgoing caption leaves (−30 % y, 4 px blur,
  * fade, 4 f, power2.in) while the incoming one starts. If that would take it
  * off screen less than a beat (15 f) after its last word, it moves up to
- * `echoY` instead (scale .86, opacity .42, the site spring) and leaves a beat
+ * `echoY` instead (scale .86, opacity .42, the site spring; it starts lifting
+ * 3 f before the incoming caption appears, so they never overlap) and leaves a beat
  * after its last word (−20 px, blur 4, fade, 5 f). One echo at a time. With
  * `echoY = null` it simply holds until s_{c+1}. A line's last caption holds
  * until `holdUntil` (never less than a beat after its last word).
@@ -88,6 +89,7 @@ const SETTLE = 6; // frames a spoken word takes to ease to 86 %
 const SPOKEN = 0.86;
 const OUT = 4; // replacement exit
 const ECHO_OUT = 5;
+const ECHO_LEAD = 3; // frames an echo starts lifting before the incoming caption appears
 const HOLD = BEAT; // a caption stays ≥ 1 beat after its last word
 
 /** Frame (from the line's start) at which spoken word k ends: the next word, or the end of its phrase. */
@@ -148,7 +150,9 @@ function plan(p: CaptionsProps): Plan[] {
       pl.out = Math.max(minEnd, next - OUT);
     } else if (echoY !== null && !(echoBlock && next <= echoBlock[1] && minEnd + ECHO_OUT >= echoBlock[0])) {
       pl.mode = 'echo';
-      pl.out = next;
+      // it starts lifting a few frames before the incoming caption's first word appears, so
+      // the two never sit on top of each other (never before its own last word has started)
+      pl.out = Math.min(next, Math.max(pl.lastSpoken + ECHO_LEAD, next - ECHO_LEAD));
       pl.echoOut = minEnd;
     } else {
       // no echo slot: a caption inside the line holds until the next one starts;
