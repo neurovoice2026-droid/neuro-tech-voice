@@ -4,16 +4,23 @@
  *   focus     the ACTIVE language: a large white card under the band title.
  *             Top-left, a small orb in the card's light that breathes with
  *             her REAL envelope (VOICE.lines[id].env) and the language's name;
- *             below, the greeting in the cinema face, revealed word by word
- *             ON her words (Japanese per character; its Latin "AI" / "Ava" in
- *             Cormorant, the CJK in Noto Serif JP), the AI disclosure
- *             underlined as she says it. The card's light lives in its orb,
+ *             below, the whole greeting in the cinema face (Japanese: its
+ *             Latin "AI" / "Ava" in Cormorant, the CJK in Noto Serif JP), the
+ *             AI disclosure underlined. The card's light lives in its orb,
  *             a 2 px ring and a small glow under the card.
- *   cascade   English is heard whole (the wall's keeper turns into it). Then
- *             Romanian / Spanish / French / German slide in from the right,
- *             each landing a frame before its voice cuts in (≈ 0.75 s each):
- *             the big line is what she says before the cut ("Sunt Ava,") —
- *             at most four words in focus. Japanese is heard whole.
+ *   cascade   English is heard whole (the wall's keeper turns into it): its
+ *             words rise ON hers. Then Romanian / Spanish / French / German
+ *             slide in from the right, each landing a frame before its voice
+ *             cuts in (≈ 0.77 s each): she is cut after "Sunt Ava,", so the
+ *             card brings its WHOLE greeting — the words rise on a 7 f
+ *             stagger as it lands, the word she is saying in the card's ink,
+ *             the AI phrase underlined as the last words settle. Japanese is
+ *             heard whole (per character, on her words).
+ *   switch    no switch shows an empty card: every card's first word rises
+ *             4 f before it lands (mid-slide; English as its face turns to
+ *             us), so its text is up as it covers the card it replaces, and
+ *             a leaving card cross-fades its focus face into its gallery
+ *             face (always one of them up).
  *   gallery   as the next card arrives, the last one recedes into the gallery
  *             (16:9 a row of five under the focus · 9:16 3 + 2), its light
  *             going out — so from Japanese on all six are visible together,
@@ -49,6 +56,28 @@ const cutAt = (k: number) => (k >= 1 && k <= 4 ? LA[k + 1] : undefined);
 const arriveAt = (k: number) => (k === 0 ? K.enFlip + 6 : LA[k] - 1);
 /** frame spoken word j is up (a frame early: it is there as she says it) */
 const wordAt = (k: number, j: number) => voiceAt(k) + vWord(LANGS[k].id, j) - 1;
+/** the quick four: cut after ≈ 0.77 s, so they show their whole greeting at once */
+const isQuick = (k: number) => cutAt(k) !== undefined;
+/**
+ * frame word j of card k starts to rise in the focus card:
+ *  · the quick four: the whole greeting on a stagger as the card lands (K.greetIn … + K.greetSpread)
+ *  · English / Japanese: ON her words; the first rises with the card (K.greetIn) so the card never
+ *    lands empty — it has settled as she starts to speak
+ */
+function riseAt(k: number, j: number): number {
+  if (isQuick(k)) return K.greetIn[k] + (K.greetSpread * j) / Math.max(1, wordsOf(LANGS[k]).length - 1);
+  return j === 0 ? Math.min(K.greetIn[k], wordAt(k, 0)) : wordAt(k, j);
+}
+/** the quick four: 0..1 while she is saying word j (it takes the card's ink), until the next word or the cut */
+function sayingOf(k: number, j: number, t: number): number {
+  const cut = cutAt(k);
+  if (cut === undefined) return 0;
+  const s = wordAt(k, j);
+  if (s >= cut - 1) return 0;
+  const n = wordsOf(LANGS[k]).length;
+  const e = Math.min(cut, j + 1 < n ? wordAt(k, j + 1) : Infinity);
+  return tween(t, [s, s + 2], [0, 1], EASE.out3) * (1 - tween(t, [e, e + 4], [0, 1], EASE.inOut));
+}
 
 /** her loudness at t for card k (0..1), smoothed with a short release; silent before her line and after the cut */
 function envAt(k: number, t: number): number {
@@ -107,6 +136,10 @@ type LineOpts = {
   underline: number;
   /** reveal frame of word j (undefined: shown) */
   at: (j: number) => number | undefined;
+  /** 0..1: word j is being said (set in the light's ink) */
+  saying?: (j: number) => number;
+  /** Japanese: frames word j's characters spread over (default: its spoken span, ≤ 8) */
+  span?: (j: number) => number | undefined;
   light: LightId;
   thin?: boolean;
 };
@@ -128,16 +161,24 @@ function GreetingLine({ js, o }: { js: number[]; o: LineOpts }) {
   /** a word's text as units: per character for Japanese (Latin runs in Cormorant), whole otherwise */
   const unit = (j: number, text: string) => {
     const s0 = o.at(j);
-    if (!cjk)
+    if (!cjk) {
+      const say = o.saying ? o.saying(j) : 0;
       return (
-        <span key={`w${j}`} style={s0 === undefined ? { display: 'inline-block', whiteSpace: 'pre' } : reveal(o.t, s0, o.size)}>
+        <span
+          key={`w${j}`}
+          style={{
+            ...(s0 === undefined ? { display: 'inline-block', whiteSpace: 'pre' } : reveal(o.t, s0, o.size)),
+            ...(say > 0.001 ? { color: mixColor(o.color, ink, 0.6 * say) } : null),
+          }}
+        >
           {text}
         </span>
       );
+    }
     // Japanese: the characters of word j spread over its spoken span
     const chars = Array.from(text);
     const next = j + 1 < words.length ? o.at(j + 1) : undefined;
-    const span = s0 === undefined || next === undefined ? 4 : Math.min(8, Math.max(1, next - s0));
+    const span = o.span?.(j) ?? (s0 === undefined || next === undefined ? 4 : Math.min(8, Math.max(1, next - s0)));
     let ci = 0;
     return (
       <React.Fragment key={`w${j}`}>
@@ -229,9 +270,19 @@ export const LangFocusFace: React.FC<{ k: number; t: number; w: number; h: numbe
   const D = v ? 104 : 120;
   const nameSize = v ? 32 : 36;
   const size = l.size[v ? 1 : 0];
-  // the AI underline as she says it (English, Japanese; the quick four are cut before their AI phrase)
-  const ul = k === 0 ? tween(t, K.discloseEn, [0, 1], EASE.draw) : k === CARRIER ? tween(t, K.discloseJa, [0, 1], EASE.draw) : 0;
+  // the AI underline as she says it (English, Japanese); the quick four are cut before their AI phrase:
+  // theirs draws as the last words settle
+  const ul = tween(t, k === 0 ? K.discloseEn : k === CARRIER ? K.discloseJa : K.discloseQuick[k], [0, 1], EASE.draw);
   const mainLines = linesOf(0, l.main[v ? 1 : 0]);
+  // a disclosure set over two lines draws on, line by line (each line's share by its words)
+  const aiN = l.ai[1] - l.ai[0] + 1;
+  const aiIn = (js: number[]) => js.filter((j) => j >= l.ai[0] && j <= l.ai[1]).length;
+  const ulOf = (i: number) => {
+    const n = aiIn(mainLines[i]);
+    const before = mainLines.slice(0, i).reduce((acc, js) => acc + aiIn(js), 0);
+    return n ? Math.min(1, Math.max(0, (ul * aiN - before) / n)) : 0;
+  };
+  const quick = isQuick(k);
   // the orb: pops as the card lands, then breathes with her voice
   const a = arriveAt(k);
   const e = envAt(k, t);
@@ -299,7 +350,22 @@ export const LangFocusFace: React.FC<{ k: number; t: number; w: number; h: numbe
         }}
       >
         {mainLines.map((js, i) => (
-          <GreetingLine key={i} js={js} o={{ k, t, size, color: C.ink, underline: ul, at: (j) => wordAt(k, j), light }} />
+          <GreetingLine
+            key={i}
+            js={js}
+            o={{
+              k,
+              t,
+              size,
+              color: C.ink,
+              underline: ulOf(i),
+              at: (j) => riseAt(k, j),
+              saying: quick ? (j) => sayingOf(k, j, t) : undefined,
+              // Japanese: its first word ("AI") rises with the card as one unit, so the card lands with it
+              span: (j) => (j === 0 ? 1 : undefined),
+              light,
+            }}
+          />
         ))}
       </div>
     </>
@@ -503,10 +569,11 @@ export const LangCards: React.FC<{
     const ref = dirBlurRef(id, sx, sy);
     filter = [ref, filter].filter(Boolean).join(' ') || undefined;
     if (!face) {
-      // the focus face, scaled with the card as it recedes; the gallery face takes over
+      // the focus face, scaled with the card as it recedes; the gallery face takes over (a cross-fade:
+      // one of them is always up, so a leaving card is never empty)
       const sc = Math.min(r.w / F.w, r.h / F.h);
-      const fo = 1 - tween(P.leave, [0.08, 0.5], [0, 1], EASE.inOut);
-      const go = tween(P.leave, [0.42, 0.85], [0, 1], EASE.inOut);
+      const go = tween(P.leave, [0.25, 0.65], [0, 1], EASE.inOut);
+      const fo = 1 - go;
       const jaOut = k === CARRIER ? tween(t, [K.carrierFly - 1, K.carrierFly + 4], [0, 1], EASE.in2) : 0;
       const callIn = k === CARRIER ? tween(t, [K.callIn - 2, K.callIn + 3], [0, 1], EASE.inOut) : 0;
       face = (

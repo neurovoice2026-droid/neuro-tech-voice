@@ -703,6 +703,9 @@ export const SCALE_LOCAL = (() => {
   const irisOpen = SCALE.irisToDark[0] + 3;
   /** frames a light mote takes along the finished rail (call → CRM) */
   const moteDur = 14;
+  /** the keeper turns to English (2 f anticipation) and lands 6 f later; the others land a frame before their voice */
+  const enFlip = LT - 4;
+  const landAt = LA.map((a, k) => (k === 0 ? enFlip + 6 : a - 1));
   return {
     pops,
     /** card 01 pops this many frames before the cut, over the knowledge whip's tail (9:16 too: no clean white frame) */
@@ -728,7 +731,7 @@ export const SCALE_LOCAL = (() => {
     /** the keeper glides + grows into the English card as the title lifts (it turns mid-glide) … */
     glide: LT - 10,
     /** … and turns to English (2 f anticipation, lands ≈ 122, before "This" on 124) */
-    enFlip: LT - 4,
+    enFlip,
     /** "16 industries." lifts to the band (the hero has held ≈ 0.67 s still, readable through the lift) … */
     titleSwap: LT - 10,
     /** … exits up out of its mask (2 f dip, 4 f exit, gone at titleIn + 1) … */
@@ -741,9 +744,19 @@ export const SCALE_LOCAL = (() => {
     switchIn: LA.map((a, k) => (k === 0 ? LT - 4 : a - 7)),
     /** each card leaves the focus for its gallery slot as the next one arrives (Japanese: becomes the call) */
     switchOut: LA.map((_, k) => (k < 5 ? LA[k + 1] - 6 : F - 5)),
+    /** the card's text is up BEFORE it covers the one it replaces (no switch shows an empty card): each
+     *  card's first word starts to rise 4 f before the card lands (English as its face turns to us, the
+     *  others mid-slide), so it has settled as she starts to speak. English and Japanese then stay ON
+     *  her words; the quick four (cut after ≈ 0.77 s) bring their WHOLE greeting, the words rising on a
+     *  stagger over greetSpread frames, so every word has settled ≤ 9 f after the card lands */
+    landAt,
+    greetIn: landAt.map((l) => l - 4),
+    greetSpread: 7,
     /** the AI disclosure underlined as she says it: English "AI assistant", Japanese "AIアシスタント" */
     discloseEn: [LA[0] + vWord('lang-en', 4), LA[0] + vFrames('lang-en') - 4] as const,
     discloseJa: [LA[5] + vWord('lang-ja', 0), LA[5] + vWord('lang-ja', 2)] as const,
+    /** the quick four are cut before their AI phrase: it is underlined as their last words settle */
+    discloseQuick: LA.map((a) => [a + 2, a + 10] as const),
     /** the slow push on the focus card through the languages, released for the flow */
     langPush: [LT, F - 6, F + 8] as const,
     /** the gallery drops away (bottom cards first in 9:16), Japanese holding until then */
