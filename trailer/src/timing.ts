@@ -846,7 +846,7 @@ export const CTA_LOCAL = {
   stageOut: [CTA.converge[0] + 4, CTA.logoImpact - 6] as const,
   /** the merged light blooms OUT of the core onto the logo on a soft spring (≈4 % over, settled ≈16 f):
    *  the logo lands alone and the light opens behind it before Ava names it */
-  bloomFrom: 0.3,
+  bloomFrom: 0.45,
   /** the reveal's backlight is graded toward the night's lilac (35 %) until the four lights take
    *  over; it eases back to the room's silver as they pop (CTA_LOCAL.backDim) */
   lilacBack: 0.35,

@@ -208,7 +208,7 @@ const rgb01 = (hex: string) => hexToRgb(hex) as [number, number, number];
 /** in-cubic: the stage leaves slowly, then is swallowed */
 const IN3 = Easing.bezier(0.55, 0.055, 0.675, 0.19);
 /** the merged light opening behind the logo: ≈4 % over, settled in ≈16 f (a bloom, not a pop) */
-const BLOOM = { stiffness: 110, damping: 15, mass: 1 };
+const BLOOM = { stiffness: 130, damping: 16.5, mass: 1 };
 /** the reveal's light curve: starts at ≈1.5× its mean rate, settles softly */
 const REVEAL = Easing.bezier(0.33, 0.5, 0.45, 1);
 /**
@@ -382,6 +382,14 @@ export const Cta: React.FC = () => {
       gs = Math.min(1.6, gs + s);
       gr = Math.max(gr, r);
     }
+    // the burst: a white-lilac light from the core, hot for 2–3 frames as the merged
+    // light opens behind the logo — light, never a flat purple disc
+    let burstLight = false;
+    if (t >= I && o.i === 3) {
+      gs = 1.3 * Math.exp(-(t - I) / 2.5);
+      gr = mix(o.d * scr.z * 1.2, G.haloEnd[0] * 0.95, burstU);
+      burstLight = true;
+    }
     if (o.i === 3 && survivor > 0.01 && t < I) {
       // the survivor carries all four: its bloom splits into the four lights' colours,
       // swirling about it with its mesh (the three fading lights hand it their slots)
@@ -399,7 +407,7 @@ export const Cta: React.FC = () => {
       });
       gs *= 1 - 0.55 * survivor;
     }
-    if (gs > 0.001) glows.push({ x: scr.x, y: scr.y, r: gr, s: gs, color: rgb01(gather > flash && !shown ? LIGHTS[o.id].orb[3] : glowBody), back: o.z < 0 && !merged });
+    if (gs > 0.001) glows.push({ x: scr.x, y: scr.y, r: gr, s: gs, color: rgb01(burstLight ? mixColor(ALL_GLOW.body, ALL_GLOW.core, 0.6) : gather > flash && !shown ? LIGHTS[o.id].orb[3] : glowBody), back: o.z < 0 && !merged });
     // ON "Twenty" "four" "seven": each orb answers the word with a thin ring
     if (shown)
       K.tighten.forEach((f) => {
