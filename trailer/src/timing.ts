@@ -70,10 +70,28 @@ const KB_MISS = KB_SCAN0 + b(1.5);
 /* (a longer regenerated kb-1 must still leave its caption ≥ 15 f on screen after the last word) */
 const KB_ANSWER = Math.max(KB_MISS + 7, KB_ASK + vFrames('kb-1') + 19);
 const KB_CLOSE = upHalf(KB_ANSWER + vFrames('kb-2') + 10); // the last caption gets a beat before the closing takes the frame
-const SCALE_LEN = b(10);
-/** Knowledge ends on Ava's promise: a short breath after "…today.", then the whip. The closing
- *  title was cut so the CTA could breathe (client: "the ending is too fast"). */
-const KB_BASE = upBeat(KB_ANSWER + vFrames('kb-2') + b(1));
+/* SCALE (≈ 16 s): every business, every language, every system — each with room to read
+ * (client: "16 industries, 14 languages, CRM — it all goes too fast"). Scale-local frames. */
+const SC_HERO = b(6); // the 16-card wall builds over 3 s (8ths, then 16ths into the slam): "16 industries."
+const SC_LANGS = SC_HERO + b(2); // the hero holds 1 s; "14 languages." lands
+/** Ava greets in six languages: English whole, then RO / ES / FR / DE each for ~0.75 s (the next
+ *  voice cuts in on the name), Japanese whole. LANG_AT are scale-local starts. */
+const LANG_IDS = ['lang-en', 'lang-ro', 'lang-es', 'lang-fr', 'lang-de', 'lang-ja'] as const satisfies readonly VoiceId[];
+const LANG_AT: number[] = [];
+{
+  let t = SC_LANGS + 4;
+  LANG_AT.push(t);
+  t = upHalf(t + vFrames('lang-en') + 4);
+  for (let i = 1; i < 5; i++) {
+    LANG_AT.push(t);
+    t += b(1.5);
+  }
+  LANG_AT.push(t);
+}
+const SC_FLOW = upBeat(LANG_AT[5] + vFrames('lang-ja') + 6); // "After the call." — call → Slack → CRM
+const SCALE_LEN = SC_FLOW + b(5) + b(1); // the flow reads for 2.5 s, then the iris
+/** The knowledge closing title holds 3 beats before its 1-beat whip. */
+const KB_BASE = upBeat(KB_CLOSE + b(4));
 /** CTA: Ava's line; the four orbs are pulled in as her line ends ("…seven.")
  *  and the logo lands on a strong beat (1 or 3 of the bar). */
 const CTA_LINE = b(1);
@@ -285,15 +303,19 @@ export const KNOWLEDGE = {
  * then a flash of the after-call flow.
  * ---------------------------------------------------------------- */
 export const SCALE = {
-  industryStep: BEAT / 4, // one industry per 16th note (3.75 f)
+  industryStep: BEAT / 2, // the wall pops on 8th notes (the rebuild may accelerate the last cards into 16ths)
   industriesIn: 0,
-  gridSettle: b(4), // every card snaps to its rect…
-  industriesTitle: b(4), // …as "16 industries." slams: the downbeat the 16-pop run resolves on (hit.wav)
-  langMorph: b(5), // the six keepers flip to their languages…
-  langStep: BEAT / 4, // …one per 16th note (75 / 79 / 83 / 86 / 90 / 94)
-  flow: b(8), // call → Slack → CRM
-  stationStep: BEAT / 2, // one station per 8th note (120 / 128 / 135)
-  irisToDark: [b(9.5), b(10) + 8] as const,
+  gridSettle: SC_HERO, // every card snaps to its rect…
+  industriesTitle: SC_HERO, // …as "16 industries." slams on the downbeat the pop run resolves on
+  langTitle: SC_LANGS, // "14 languages." lands
+  langMorph: SC_LANGS, // the six keepers flip to their languages…
+  /** …and each lights as Ava greets in its language (scale-local starts of the lang-* voices) */
+  langAt: LANG_AT as readonly number[],
+  langVoices: LANG_IDS,
+  langStep: BEAT / 4, // (legacy: one per 16th — superseded by langAt)
+  flow: SC_FLOW, // "After the call." — call → Slack → CRM
+  stationStep: BEAT, // one station per beat
+  irisToDark: [SCALE_LEN - b(0.5), SCALE_LEN + 8] as const,
 };
 
 /* ---------------------------------------------------------------- *
@@ -1388,10 +1410,15 @@ export type Cue = {
 };
 
 /** Every spoken line on the absolute timeline. */
-export const VOICES: { at: number; id: VoiceId }[] = [
+export const VOICES: { at: number; id: VoiceId; /** the next voice cuts in here (the language cascade) */ until?: number }[] = [
   ...CALL.lines.map((l) => ({ at: at('call', l.at), id: l.voice })),
   { at: at('knowledge', KNOWLEDGE.ask), id: KNOWLEDGE.askVoice },
   { at: at('knowledge', KNOWLEDGE.answer), id: KNOWLEDGE.answerVoice },
+  ...SCALE.langVoices.map((id, i) => ({
+    at: at('scale', SCALE.langAt[i]),
+    id,
+    ...(i > 0 && i < 5 ? { until: at('scale', SCALE.langAt[i + 1]) } : {}),
+  })),
   { at: at('cta', CTA.line), id: CTA.lineVoice },
   { at: at('cta', CTA.brandVoice), id: CTA.brandVoiceId },
 ];
