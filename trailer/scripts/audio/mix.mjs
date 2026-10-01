@@ -23,7 +23,7 @@
 import path from 'node:path';
 import {
   SR, readWav, resample, resampleSt, stereo, addStereo, balance, follower, compress, lufs, limit, truePeak,
-  gain, db, fdnSparse, resampleCubic, early, pingPong, Biquad, smooth, peak, clamp, truePeakTrack,
+  gain, db, fdn, fdnSparse, resampleCubic, early, pingPong, Biquad, smooth, peak, clamp, truePeakTrack,
 } from './dsp.mjs';
 
 const ROOMS = {
@@ -83,14 +83,63 @@ export function master(T, lib, bedSt, { publicDir }) {
 
   /* ── dialogue ── */
   const voice = stereo(n / SR);
-  for (const v of T.VOICES) {
+  // QA: the odd-numbered lines alone (the even ones are voice − odd), so check-mix can hear each line
+  // of the language cascade on its own, with the next voice counted as a masker
+  const odd = stereo(n / SR);
+  const placed = [];
+  const CR = T.MIX.cutRoom;
+  for (const [k, v] of T.VOICES.entries()) {
     const w = readWav(path.join(publicDir, 'voice', `${v.id}.wav`));
     const ch = w.ch.length > 1 ? w.ch : [w.ch[0], w.ch[0]];
-    const st = w.sr === SR ? ch : resampleSt(ch, w.sr / SR, 16);
+    let st = w.sr === SR ? [Float32Array.from(ch[0]), Float32Array.from(ch[1])] : resampleSt(ch, w.sr / SR, 16);
+    const cut = T.voiceCut(v);
+    if (cut) {
+      // THE CASCADE CUT (T.voiceCut): from the next voice's start she lets go like a voice that is
+      // interrupted — an exponential release (−9 dB in the first quarter, MIX.cutRoom.k nepers) that
+      // reaches true zero on her own next dip; the room she is in carries on for a moment
+      // (MIX.cutRoom), so the line lets go into space instead of being gated
+      const a = ((cut[0] - v.at) / F) * SR;
+      const e = ((cut[1] - v.at) / F) * SR;
+      const len = Math.min(st[0].length, Math.ceil(e) + 1);
+      const played = [st[0].slice(0, len), st[1].slice(0, len)];
+      const z = Math.exp(-CR.k);
+      for (let i = Math.max(0, Math.floor(a)); i < len; i++) {
+        const u = Math.max(0, i - a) / (e - a);
+        const g = u >= 1 ? 0 : (Math.exp(-CR.k * u) - z) / (1 - z);
+        played[0][i] *= g;
+        played[1][i] *= g;
+      }
+      const wet = fdn(played, { ...CR.room, tail: CR.room.rt60 * 1.6 });
+      const out = stereo(wet[0].length / SR);
+      const k0 = gain(CR.db);
+      for (let i = 0; i < out[0].length; i++) {
+        const u = i < a ? 0 : i >= e ? 1 : smooth((i - a) / (e - a));
+        out[0][i] = (i < len ? played[0][i] : 0) + wet[0][i] * k0 * u;
+        out[1][i] = (i < len ? played[1][i] : 0) + wet[1][i] * k0 * u;
+      }
+      st = out;
+    }
     addStereo(voice, st, frameS(v.at) / SR, 1);
+    if (k % 2) addStereo(odd, st, frameS(v.at) / SR, 1);
+    placed.push({ s: frameS(v.at), st });
   }
+  /** line k alone over [a, e) samples, through a gain track (or several, multiplied) */
+  const own = (k, a, e, ...tracks) => {
+    const { s, st } = placed[k];
+    const out = [new Float32Array(e - a), new Float32Array(e - a)];
+    for (let i = a; i < e; i++) {
+      const j = i - s;
+      if (j < 0 || j >= st[0].length) continue;
+      let g = 1;
+      for (const t of tracks) g *= t[i];
+      out[0][i - a] = st[0][j] * g;
+      out[1][i - a] = st[1][j] * g;
+    }
+    return out;
+  };
   const vBefore = lufs(voice);
   const voxLev = compress(voice, { thr: -19, ratio: 2, knee: 8, att: 0.004, rel: 0.14, rms: 0.006 });
+  const voxLevGain = voxLev.gain;
   // make-up PER LINE: the leveller only shapes the syllables; every line comes back to its own
   // pre-leveller loudness — the one dialogue target the voice files are normalised to
   // (scripts/generate-voice.mjs) — so no line ends up quieter because it is punchier
@@ -101,15 +150,21 @@ export function master(T, lib, bedSt, { publicDir }) {
     const e = Math.min(s1, frameS(v.at + T.vFrames(v.id)) + Math.round(0.2 * SR));
     return { id: v.id, s0: k === 0 ? 0 : s0, a: s0, s1, e };
   });
-  const seg = (st, sp) => [st[0].subarray(sp.a, sp.e), st[1].subarray(sp.a, sp.e)];
-  for (const sp of spans) sp.target = lufs(seg(voice, sp));
+  // every line is measured ON ITS OWN (the cascade's lines overlap the voice that cuts in over them).
+  // A whole line keeps its own loudness (the files share one target); a cascade fragment — what she
+  // says before the next voice cuts in (its span ends there) — is brought to the dialogue level
+  // itself, so every greeting of the cascade sits exactly where her other lines sit
+  for (const [k, sp] of spans.entries()) {
+    sp.k = k;
+    sp.target = T.VOICES[k].until !== undefined ? T.MIX.dialogueLufs : lufs(own(k, sp.a, sp.e));
+  }
   const trimLines = (st, dbOf) => {
     for (const sp of spans) {
       const g = gain(dbOf(sp));
       for (const c of st) for (let i = sp.s0; i < sp.s1; i++) c[i] *= g;
     }
   };
-  for (const sp of spans) lineDb[sp.id] = sp.target - lufs(seg(voxLev, sp));
+  for (const sp of spans) lineDb[sp.id] = sp.target - lufs(own(sp.k, sp.a, sp.e, voxLev.gain));
   trimLines(voxLev, (sp) => lineDb[sp.id]);
   const vAfter = lufs(voxLev);
   const act = activity(voice[0], T.DUCK.lookahead);
@@ -241,13 +296,30 @@ export function master(T, lib, bedSt, { publicDir }) {
       }
       let worst = 0;
       for (const sp of spans) {
-        const d = sp.target - lufs(seg(vox, sp));
+        const out = own(sp.k, sp.a, sp.e, voxLev.gain, vox.gain);
+        const tg = gain(lineDb[sp.id] + adj[sp.id]);
+        for (const c of out) for (let i = 0; i < c.length; i++) c[i] *= tg;
+        const d = sp.target - lufs(out);
         adj[sp.id] += d;
         worst = Math.max(worst, Math.abs(d));
       }
       if (worst < 0.05) break;
     }
     for (const sp of spans) lineDb[sp.id] += adj[sp.id];
+  }
+  // the odd lines through the same (gain-only, stereo-linked) dialogue chain: leveller × line trims × limiter
+  const oddOut = [new Float32Array(n), new Float32Array(n)];
+  {
+    const trim = new Float32Array(n).fill(1);
+    for (const sp of spans) {
+      const g = gain(lineDb[sp.id]);
+      for (let i = sp.s0; i < sp.s1; i++) trim[i] = g;
+    }
+    for (let i = 0; i < n; i++) {
+      const g = voxLevGain[i] * trim[i] * vox.gain[i];
+      oddOut[0][i] = odd[0][i] * g;
+      oddOut[1][i] = odd[1][i] * g;
+    }
   }
 
   /* ── the logo impact: the film's loudest moment ──
@@ -284,7 +356,10 @@ export function master(T, lib, bedSt, { publicDir }) {
   const sum = [new Float32Array(n), new Float32Array(n)];
   for (let c = 0; c < 2; c++) {
     const hp = new Biquad('hp', 18, 0.6);
-    for (let i = 0; i < n; i++) sum[c][i] = hp.run(vox[c][i] + bed[c][i] + fx[c][i]);
+    // the air ceiling (MIX.airLp): two Butterworth sections, 24 dB/oct
+    const lp1 = new Biquad('lp', T.MIX.airLp, 0.5412);
+    const lp2 = new Biquad('lp', T.MIX.airLp, 1.3066);
+    for (let i = 0; i < n; i++) sum[c][i] = lp2.run(lp1.run(hp.run(vox[c][i] + bed[c][i] + fx[c][i])));
   }
   // THE END: the whole mix fades out over the end card's last second (MIX.fadeOut) — an
   // exponential (dB-linear) curve, offset so it lands on true zero at the last sample — so the
@@ -336,5 +411,5 @@ export function master(T, lib, bedSt, { publicDir }) {
     samplePeakDb: db(peak(out)),
     bedPeakDb: db(peak(bedSt)),
   };
-  return { mix: [out[0], out[1]], stems: { voice: [vox[0], vox[1]], bed, sfx: [fx[0], fx[1]] }, report, gainDb: g };
+  return { mix: [out[0], out[1]], stems: { voice: [vox[0], vox[1]], 'voice-odd': oddOut, bed, sfx: [fx[0], fx[1]] }, report, gainDb: g };
 }

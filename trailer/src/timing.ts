@@ -1512,25 +1512,95 @@ export type Cue = {
   label: string;
 };
 
+/**
+ * THE CASCADE CUT. A line with `until` (the language cascade) is cut where the next voice starts —
+ * and lets go the way a voice does: the fade starts ON `until` and ends on the line's own next dip
+ * (the gap before its next syllable, read from the per-frame loudness `env`) within `max` frames,
+ * or after `fade` frames if no dip comes; at least `min` frames. A line that is already silent at
+ * `until` closes before its next syllable's onset, so no stray syllable leaks under the next voice.
+ * The voice that cuts in waits until the cut one has let go: its first sound comes at least `clear`
+ * frames into the release (a breath of ≤ 1.5 f behind the picture's switch — never a consonant under
+ * the last vowel). (The mix adds a short room bloom over the release: MIX.cutRoom.)
+ */
+export const CUT = { min: 2, max: 8, fade: 6, quiet: 0.05, dip: 0.12, onset: 0.08, clear: 1.5 } as const;
+/** a cut line's fade on the absolute timeline [from, to] (raised cosine 1 → 0); null when it plays whole */
+export function voiceCut(v: { at: number; id: VoiceId; until?: number }): readonly [number, number] | null {
+  if (v.until === undefined) return null;
+  const env = VOICE.lines[v.id].env;
+  const e = (i: number) => env[Math.max(0, Math.min(env.length - 1, i))];
+  const u = v.until - v.at;
+  const iu = Math.round(u);
+  if (iu >= env.length - 1) return null; // the line has ended by then: it plays whole
+  if (e(iu) <= CUT.quiet) {
+    // silent at the cut: close before the next syllable starts
+    let o = iu;
+    while (o < env.length && e(o) <= CUT.onset) o++;
+    const to = Math.min(u + CUT.min, o - 0.5);
+    return [v.at + to - CUT.min, v.at + to] as const;
+  }
+  let to = u + CUT.fade;
+  for (let i = iu + 1; i <= iu + CUT.max && i < env.length; i++) {
+    if (e(i) <= CUT.quiet) { to = i; break; } // she has let go of the syllable
+    if (e(i) <= CUT.dip && e(i + 1) > e(i) + 0.03) { to = i + 0.5; break; } // the gap before the next one
+  }
+  return [v.at + u, v.at + Math.max(u + CUT.min, to)] as const;
+}
 /** Every spoken line on the absolute timeline. */
-export const VOICES: { at: number; id: VoiceId; /** the next voice cuts in here (the language cascade) */ until?: number }[] = [
+type Voiced = { at: number; id: VoiceId; /** the picture's switch: the next voice cuts in here (the language cascade) */ until?: number };
+/** the frames from a line's start to its first sound (its first aligned word or its first voiced frame) */
+const firstSound = (id: VoiceId) => {
+  const l = VOICE.lines[id];
+  const o = l.env.findIndex((x) => x >= CUT.onset);
+  return Math.min(l.words[0].t * FPS, o < 0 ? Infinity : o);
+};
+/** THE LANGUAGE CASCADE: English whole, RO / ES / FR / DE cut by the next voice (`until` = the picture's
+ *  switch), Japanese whole; a voice cutting in over a line that is still sounding waits for its release */
+const CASCADE: Voiced[] = [];
+SCALE.langVoices.forEach((id, i) => {
+  const sw = at('scale', SCALE.langAt[i]);
+  const prev = CASCADE[i - 1];
+  const cut = prev ? voiceCut(prev) : null;
+  const lag = cut && cut[0] >= sw ? Math.max(0, cut[0] + CUT.clear - (sw + firstSound(id))) : 0;
+  CASCADE.push({ at: sw + Math.round(lag * 4) / 4, id, ...(i > 0 && i < 5 ? { until: at('scale', SCALE.langAt[i + 1]) } : {}) });
+});
+export const VOICES: Voiced[] = [
   ...CALL.lines.map((l) => ({ at: at('call', l.at), id: l.voice })),
   { at: at('knowledge', KNOWLEDGE.ask), id: KNOWLEDGE.askVoice },
   { at: at('knowledge', KNOWLEDGE.answer), id: KNOWLEDGE.answerVoice },
-  ...SCALE.langVoices.map((id, i) => ({
-    at: at('scale', SCALE.langAt[i]),
-    id,
-    ...(i > 0 && i < 5 ? { until: at('scale', SCALE.langAt[i + 1]) } : {}),
-  })),
+  ...CASCADE,
   { at: at('cta', CTA.line), id: CTA.lineVoice },
   { at: at('cta', CTA.brandVoice), id: CTA.brandVoiceId },
 ];
-/** Speech windows (absolute frames, whole lines) — the bed ducks under these. */
-export const SPEECH = VOICES.map((v) => [v.at, v.at + vFrames(v.id)] as const);
-/** Spoken phrases (absolute frames) — where someone is actually talking. */
-export const PHRASES = VOICES.flatMap((v) =>
-  VOICE.lines[v.id].phrases.map((p) => [v.at + p.start * FPS, v.at + p.end * FPS] as const),
-);
+/** the frame a line has gone silent (its cut, else its end) */
+export const voiceEnd = (v: { at: number; id: VoiceId; until?: number }) => voiceCut(v)?.[1] ?? v.at + vFrames(v.id);
+/** Speech windows (absolute frames, whole lines; a cut line ends on its cut) — the bed ducks under these. */
+export const SPEECH = VOICES.map((v) => [v.at, voiceEnd(v)] as const);
+/**
+ * Spoken phrases (absolute frames) — where someone is actually talking: the aligned phrases AND every
+ * voiced run of the line's loudness (env ≥ 0.08 for ≥ 3 frames, gaps ≤ 4 frames bridged), so the
+ * unaligned words count too ("Oh," "Um…", "Quick question,", "Hmm,", Ava's "See you then!"); clipped
+ * to a cut line's cut.
+ */
+export const PHRASES = VOICES.flatMap((v) => {
+  const l = VOICE.lines[v.id];
+  const out: (readonly [number, number])[] = l.phrases.map((p) => [v.at + p.start * FPS, v.at + p.end * FPS] as const);
+  let s = -1;
+  let last = -10;
+  const run = () => {
+    if (s >= 0 && last + 1 - s >= 3) out.push([v.at + s, v.at + last + 1] as const);
+  };
+  l.env.forEach((x, i) => {
+    if (x < 0.08) return;
+    if (s < 0 || i - last > 4) {
+      run();
+      s = i;
+    }
+    last = i;
+  });
+  run();
+  const end = voiceEnd(v);
+  return out.filter(([a]) => a < end).map(([a, e]) => [a, Math.min(e, end)] as const);
+});
 /** Is someone speaking at frame f (± a little air around each phrase)? */
 export const speaking = (f: number, before = 3, after = 5) => PHRASES.some(([a, e]) => f >= a - before && f <= e + after);
 /**
@@ -1552,8 +1622,9 @@ const W_DB: Record<Weight, number> = { 1: 0, 2: -4, 3: -9 };
 const SPEECH_DB = -5;
 const DETUNE_CENTS = [0, 7, -6, 4, -8, 5, -3, 8];
 const panOf = (x: number) => Math.max(-0.6, Math.min(0.6, (x - 0.5) * 1.2));
-/** The white act (knowledge → the CTA iris) plays in a short bright room; everything else in the dark room. */
-export const WHITE_ACT = [SCENES.knowledge.from - 1, SCENES.scale.from + SCALE.irisToDark[1] - 4] as const;
+/** The white act (knowledge → the CTA iris) plays in a short bright room; everything else in the dark room
+ *  (the dark takes over halfway through the iris: her eyes come out of the black in the night room). */
+export const WHITE_ACT = [SCENES.knowledge.from - 1, SCENES.scale.from + Math.round((SCALE.irisToDark[0] + SCALE.irisToDark[1]) / 2)] as const;
 const fileOf = (s: Snd, k: number) => sfx(SFX[s].n > 1 ? `${s}-${k}.wav` : `${s}.wav`);
 
 function buildCues(hits: Hit[]): Cue[] {
@@ -1677,4 +1748,13 @@ export const MIX = {
   dialogueTol: 0.5,
   /** the dialogue bus's own true-peak ceiling (dBTP after the master gain) */
   dialogueCeil: -2.5,
+  /**
+   * The cascade cut (CUT / voiceCut): the release is exponential (`k` nepers over it, landing on true
+   * zero), and over it a small, dark room fades in on the cut line (`db` re its dry voice) and rings
+   * on for a moment — the line lets go into the room she is in.
+   */
+  cutRoom: { k: 4.5, db: -8, room: { rt60: 0.42, rt60Hi: 0.22, pre: 0.006, size: 0.45, hp: 280, lp: 5200 } },
+  /** the master's air ceiling (Hz): the MP4's AAC encode drops everything above 18 kHz, so the master does
+   *  too (24 dB/oct) — the WAV and the film match, and the true-peak limiter only works on audible sound */
+  airLp: 18000,
 } as const;

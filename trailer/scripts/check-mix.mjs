@@ -106,14 +106,43 @@ for (const v of T.VOICES) {
     if (presence[v.id] < -16) fails.push(`dialogue: ${v.id} (phone line) is dull — 1.4–2.8 kHz at ${presence[v.id].toFixed(1)} dB of the line (≥ -16)`);
   }
 }
-const stemL = {};
-if (existsSync(path.join(QA, 'stem-voice.wav'))) {
+/* each line on its own: the mixer writes the odd-numbered lines' stem (stem-voice-odd); the even ones
+ * are the dialogue stem minus it — so the language cascade's lines are measured apart from the voice
+ * that cuts in over them */
+const own = {};
+if (['voice', 'voice-odd'].every((k) => existsSync(path.join(QA, `stem-${k}.wav`)))) {
   const vs = st(path.join(QA, 'stem-voice.wav'));
-  for (const v of T.VOICES) {
-    stemL[v.id] = integrated(vs, SR, { from: v.at / T.FPS, to: (v.at + T.vFrames(v.id)) / T.FPS - 0.4 });
-    if (Math.abs(stemL[v.id] - T.MIX.dialogueLufs) > T.MIX.dialogueTol)
-      fails.push(`dialogue: ${v.id} sits at ${stemL[v.id].toFixed(1)} LUFS in the dialogue stem (target ${T.MIX.dialogueLufs} ± ${T.MIX.dialogueTol})`);
-  }
+  const vo = st(path.join(QA, 'stem-voice-odd.wav'));
+  const ve = [0, 1].map((c) => Float32Array.from(vs[c], (x, i) => x - (vo[c][i] ?? 0)));
+  T.VOICES.forEach((v, k) => (own[v.id] = { line: k % 2 ? vo : ve, other: k % 2 ? ve : vo }));
+}
+const stemL = {};
+for (const v of T.VOICES) {
+  if (!own[v.id]) break;
+  const cut = T.voiceCut(v);
+  // a whole line over its length; a cascade fragment over what she says before the next voice cuts in
+  // (`to` is the last 400 ms block's start)
+  const to = (cut ? cut[0] : v.at + T.vFrames(v.id)) / T.FPS - 0.4;
+  stemL[v.id] = integrated(own[v.id].line, SR, { from: v.at / T.FPS, to });
+  if (Math.abs(stemL[v.id] - T.MIX.dialogueLufs) > T.MIX.dialogueTol)
+    fails.push(`dialogue: ${v.id} sits at ${stemL[v.id].toFixed(1)} LUFS in the dialogue stem (target ${T.MIX.dialogueLufs} ± ${T.MIX.dialogueTol})`);
+}
+/* the cascade: what she says before each cut, and how she lets go */
+const cascade = [];
+const warns = [];
+for (const v of T.VOICES) {
+  const cut = T.voiceCut(v);
+  if (!cut) continue;
+  const ws = VOICE.lines[v.id].words;
+  const k = ws.findIndex((w) => /^ava/i.test(w.w));
+  const name = k >= 0 ? v.at + ws[k].t * T.FPS : undefined;
+  cascade.push({ id: v.id, until: v.until, cut, name });
+  // the name must be heard: at least ~130 ms of it before she has let go
+  if (name !== undefined && name + 4 > cut[1])
+    warns.push(
+      `picture timing: “${ws[k].w}” in ${v.id} starts ${(name - v.at).toFixed(1)} f into the line, the next voice cuts in at ${(v.until - v.at).toFixed(0)} f — ` +
+        `the name is cut before it is heard (needs the cascade step ≥ ${Math.ceil(ws[k].t * T.FPS + 12)} f: SCALE.langAt)`,
+    );
 }
 
 /* ── the climax: the logo impact is the loudest moment ── */
@@ -161,23 +190,35 @@ const rms = (m, a, e) => {
   for (let i = i0; i < i1; i++) z += m[i] * m[i];
   return Math.sqrt(z / Math.max(1, i1 - i0));
 };
-const words = T.VOICES.flatMap((v) =>
-  VOICE.lines[v.id].words.map((w, k) => ({ f: v.at + w.t * T.FPS, w: w.w, id: v.id, k })),
-);
+/* the words that must be heard: every word of a whole line; in a cascade fragment every word she says
+ * before she has let go (its 200 ms window inside the release) — the rest of that line is the cut tail,
+ * deliberately unheard (listed, not scored) */
+const words = T.VOICES.flatMap((v) => {
+  const cut = T.voiceCut(v);
+  return VOICE.lines[v.id].words.map((w, k) => {
+    const f = v.at + w.t * T.FPS;
+    return { f, w: w.w, id: v.id, k, cutTail: cut ? f + 6 > cut[1] : false, name: cut ? /^ava/i.test(w.w) : false };
+  });
+});
 let maskRows = [];
 const SII_OK = 0.7; // ≥ 0.7 ≈ fully intelligible speech
 const SII_KEY = 0.55; // a key hit designed to land on a word may dip to this
-if (['voice', 'sfx', 'bed'].every((k) => existsSync(path.join(QA, `stem-${k}.wav`)))) {
-  const v = st(path.join(QA, 'stem-voice.wav'));
+if (['sfx', 'bed'].every((k) => existsSync(path.join(QA, `stem-${k}.wav`))) && Object.keys(own).length) {
   const fx = st(path.join(QA, 'stem-sfx.wav'));
   const bd = st(path.join(QA, 'stem-bed.wav'));
-  const mk = [new Float32Array(fx[0].length), new Float32Array(fx[0].length)];
-  for (let c = 0; c < 2; c++) for (let i = 0; i < mk[c].length; i++) mk[c][i] = fx[c][i] + (bd[c][i] ?? 0);
-  const vb = OCT.map(([lo, hi]) => bandOf(v, lo, hi));
-  const mb = OCT.map(([lo, hi]) => bandOf(mk, lo, hi));
+  // maskers: the effects (with their rooms), the ducked bed — and the other voice (the cascade's next line)
+  const parity = [0, 1].map((p) => {
+    const line = own[T.VOICES[p].id].line;
+    const other = own[T.VOICES[p].id].other;
+    const mk = [new Float32Array(fx[0].length), new Float32Array(fx[0].length)];
+    for (let c = 0; c < 2; c++) for (let i = 0; i < mk[c].length; i++) mk[c][i] = fx[c][i] + (bd[c][i] ?? 0) + (other[c][i] ?? 0);
+    return { vb: OCT.map(([lo, hi]) => bandOf(line, lo, hi)), mb: OCT.map(([lo, hi]) => bandOf(mk, lo, hi)) };
+  });
   const fb = OCT.map(([lo, hi]) => bandOf(fx, lo, hi));
+  const idx = Object.fromEntries(T.VOICES.map((v, k) => [v.id, k]));
   for (const w of words) {
     const t = w.f / T.FPS;
+    const { vb, mb } = parity[idx[w.id] % 2];
     let sii = 0;
     let siiFx = 0;
     for (let k = 0; k < OCT.length; k++) {
@@ -191,6 +232,7 @@ if (['voice', 'sfx', 'bed'].every((k) => existsSync(path.join(QA, `stem-${k}.wav
     maskRows.push({ ...w, sii, siiFx, near });
   }
   for (const r of maskRows) {
+    if (r.cutTail) continue; // the cascade's cut tail: deliberately unheard
     if (r.id === T.MIX.name.voice && r.sii < T.MIX.name.sii)
       fails.push(`the name: “${r.w}” (${r.id} @${r.f.toFixed(0)}) intelligibility ${r.sii.toFixed(2)} (≥ ${T.MIX.name.sii}; effects alone ${r.siiFx.toFixed(2)})`);
     if (r.sii >= SII_OK) continue;
@@ -219,7 +261,8 @@ for (const e of ev) {
   const tc = (f) => `${f.toFixed(1).padStart(7)} f  ${(f / T.FPS).toFixed(3).padStart(7)} s`;
   if (e.kind === 'word') {
     const m = maskRows.find((r) => r.id === e.w.id && r.k === e.w.k);
-    lines.push(`${tc(e.f)}   ▶ “${e.w.w}”  (${e.w.id})${m ? `   intelligibility ${m.sii.toFixed(2)}` : ''}`);
+    if (e.w.cutTail) lines.push(`${tc(e.f)}   ▷ “${e.w.w}”  (${e.w.id})   cut tail — the next voice has cut in (not scored)`);
+    else lines.push(`${tc(e.f)}   ▶ “${e.w.w}”  (${e.w.id})${m ? `   intelligibility ${m.sii.toFixed(2)}` : ''}`);
   } else {
     const c = e.c;
     const pan = Array.isArray(c.pan) ? `${fmt(c.pan[0], 2)}→${fmt(c.pan[1], 2)}` : fmt(c.pan, 2);
@@ -239,7 +282,8 @@ writeFileSync(
 /* ── report ── */
 const count = {};
 for (const c of T.CUES) count[sceneOf(c.hit)] = (count[sceneOf(c.hit)] ?? 0) + 1;
-const worst = [...maskRows].sort((a, b) => a.sii - b.sii).slice(0, 5);
+const scored = maskRows.filter((r) => !r.cutTail);
+const worst = [...scored].sort((a, b) => a.sii - b.sii).slice(0, 5);
 console.log(`master        ${L.toFixed(1)} LUFS integrated · ${tp.toFixed(2)} dBTP true peak · ${sp.toFixed(2)} dBFS sample peak`);
 console.log(`levels        effects ≤ ${sfxMax.toFixed(1)} dBFS · bed ${bedP.toFixed(1)} dBFS · master gain ${fmt(stamp.masterGainDb)} dB · limiter ≤ ${stamp.limiterMaxGrDb.toFixed(1)} dB`);
 const spread = (o) => { const v = Object.values(o); return v.length ? Math.max(...v) - Math.min(...v) : 0; };
@@ -248,13 +292,22 @@ if (Object.keys(presence).length) console.log(`presence      phone lines 1.4–2
 console.log(`climax        logo impact ${impM.toFixed(1)} LUFS-M · loudest dialogue ${dMax.lufs.toFixed(1)} (${dMax.id} @${dMax.f.toFixed(0)}) · lead ${fmt(impM - dMax.lufs)} LU · build before it ${suckM.toFixed(1)}`);
 console.log(`end           last 100 ms ${end100.toFixed(1)} dBFS RMS · last frame ${endFrame.toFixed(1)} dBFS`);
 console.log(`cues          ${T.CUES.length}: ${Object.entries(count).map(([k, v]) => `${k} ${v}`).join(' · ')}`);
+if (cascade.length) {
+  const sii = (id, re) => scored.filter((r) => r.id === id && re.test(r.w)).map((r) => r.sii.toFixed(2)).join('/') || '—';
+  console.log(
+    `cascade       ${cascade.map((c) => `${c.id} cut ${(c.until - T.VOICES.find((v) => v.id === c.id).at).toFixed(0)} f, lets go over ${(c.cut[1] - c.cut[0]).toFixed(1)} f, “Ava” ${sii(c.id, /^ava/i)}`).join(' · ')}`,
+  );
+  const whole = T.VOICES.filter((v) => /^lang-/.test(v.id) && !T.voiceCut(v)).map((v) => `${v.id} whole (min ${Math.min(...scored.filter((r) => r.id === v.id).map((r) => r.sii)).toFixed(2)})`);
+  if (whole.length) console.log(`              ${whole.join(' · ')} · ${maskRows.filter((r) => r.cutTail).length} cut-tail words not scored`);
+}
 if (maskRows.length) {
-  const mean = maskRows.reduce((a, r) => a + r.sii, 0) / maskRows.length;
-  console.log(`words         ${maskRows.length} — intelligibility (SII-style, 1 = clear) mean ${mean.toFixed(2)}, lowest: ${worst.map((r) => `“${r.w}” ${r.sii.toFixed(2)}`).join(', ')}`);
+  const mean = scored.reduce((a, r) => a + r.sii, 0) / scored.length;
+  console.log(`words         ${scored.length} scored — intelligibility (SII-style, 1 = clear) mean ${mean.toFixed(2)}, lowest: ${worst.map((r) => `“${r.w}” ${r.sii.toFixed(2)}`).join(', ')}`);
   console.log(`the name      ${T.MIX.name.voice}: ${maskRows.filter((r) => r.id === T.MIX.name.voice).map((r) => `“${r.w}” ${r.sii.toFixed(2)}`).join(' · ')} (≥ ${T.MIX.name.sii})`);
 }
 console.log(`timeline      out/audio/cue-timeline.txt`);
 if (!quiet) for (const n of notes) console.log(`note          ${n}`);
+for (const w of warns) console.log(`WARN          ${w}`);
 for (const f of fails) console.log(`FAIL          ${f}`);
-console.log(fails.length ? `${fails.length} problem(s)` : 'OK');
+console.log(fails.length ? `${fails.length} problem(s)` : warns.length ? `OK (${warns.length} picture-timing warning(s) the mix cannot fix)` : 'OK');
 process.exit(fails.length ? 1 : 0);

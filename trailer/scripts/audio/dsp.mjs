@@ -634,6 +634,7 @@ export function compress(st, { thr = -18, ratio = 2, knee = 6, att = 0.005, rel 
   const oL = new Float32Array(n);
   const oR = new Float32Array(n);
   const mk = gain(makeup);
+  const gt = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     const x = db(e[i]);
     let over = x - thr;
@@ -641,10 +642,13 @@ export function compress(st, { thr = -18, ratio = 2, knee = 6, att = 0.005, rel 
     if (over > knee / 2) red = over * (1 - 1 / ratio);
     else if (over > -knee / 2) red = ((over + knee / 2) ** 2 / (2 * knee)) * (1 - 1 / ratio);
     const g = gain(-red) * mk;
+    gt[i] = g;
     oL[i] = L[i] * g;
     oR[i] = R[i] * g;
   }
-  return [oL, oR];
+  const out = [oL, oR];
+  out.gain = gt; // the applied gain per sample (stereo-linked): the same processing on any part of the input
+  return out;
 }
 
 /** 4× polyphase interpolator (Kaiser-windowed sinc, 12 taps per phase) for true-peak work. */
@@ -775,16 +779,19 @@ export function limit(st, { ceilingDb = -1.5, look = 0.0015, rel = 0.08, relSlow
   // has g[j] ≤ mn[j] ≤ req[p], so the average AT a peak p is ≤ req[p]: the gain is a
   // linear ramp that has fully arrived when the peak does (no overshoot, no clicks).
   const out = [new Float32Array(n), new Float32Array(n)];
+  const gt = new Float32Array(n);
   let acc = la; // the window starts full of unity gain
   let minG = 1;
   for (let i = 0; i < n; i++) {
     acc += g[i] - (i >= la ? g[i - la] : 1);
     const gg = acc / la;
     if (gg < minG) minG = gg;
+    gt[i] = gg;
     out[0][i] = L[i] * gg;
     out[1][i] = R[i] * gg;
   }
   out.maxReductionDb = -db(minG);
+  out.gain = gt; // the applied gain per sample (stereo-linked)
   return out;
 }
 

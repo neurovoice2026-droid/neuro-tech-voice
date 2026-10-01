@@ -13,10 +13,20 @@
  *   RESULT     half-time: Amaj7 under "Asleep.", E (+ an e-piano chord) on "Booked.", Bsus into white
  *   KNOWLEDGE  the hush: felt piano and pad, no drums; THE MISS drains to a near-silent
  *              F#m7; Ava's answer brings it back; "it says so." resolves to E
- *   SCALE      the full groove: four on the floor, claps, 16th arp, a pumping bass
+ *   SCALE      (16 s, three textures, all read from SCALE / SCALE_LOCAL)
+ *              THE WALL — the groove rises with the pops: the chords follow the cards' lights
+ *                (E · G#m · B · E, as the pops spell them), four on the floor, hats 8ths → 16ths,
+ *                a pumping bass, a snare run into the slam (the kick lets go half a beat before it)
+ *              THE HERO — "16 industries." slams on A: crash, kick, the bass drops to A1, the pad opens
+ *              THE GREETINGS — the voices are the music: an open pad in fifths (E · A · C#m7 · B, turning
+ *                with the cascade), a soft felt pulse and a low 8th pulse in the key, air on top
+ *              AFTER THE CALL — the pulse returns, one station per beat, an 8th arp with the light motes,
+ *                into the iris; the bed drops into the dark as the iris opens
  *   CTA        drops out into the dark, builds under Ava (A maj9 → F#m7 → Bsus → B),
  *              a snare roll into the impact, and E — with a crash — ON the logo (the crash is
- *              choked just before Ava says the name)
+ *              choked just before Ava says the name); then the end card gets space: no fills, the
+ *              E chord held (the pad settles onto a plateau, a soft halo of the four lights' notes
+ *              breathes in under the button) and rings out into the master's fade
  */
 import {
   SR, TAU, stereo, mono, addMono, addStereo, osc, white, pink, env, ad, mode, filt, sweep, noise, spread,
@@ -48,13 +58,26 @@ export function bed(T) {
     whip: fb(S.knowledge.from + K.out[0]),
     scale: fb(S.scale.from),
     title: fb(S.scale.from + T.SCALE.industriesTitle),
+    /** the wall's lights turn (rush · closing · sunday · night) */
+    wall: T.SCALE_LOCAL.groups.map((f) => fb(S.scale.from + f)),
+    langs: fb(S.scale.from + T.SCALE.langTitle),
+    /** the six greetings start (the cascade's switches, on the picture) */
+    lang: T.SCALE.langAt.map((f) => fb(S.scale.from + f)),
     flow: fb(S.scale.from + T.SCALE.flow),
+    stations: T.SCALE_LOCAL.stations.map((f) => fb(S.scale.from + f)),
+    iris: fb(S.scale.from + T.SCALE.irisToDark[0]),
     cta: fb(S.cta.from),
     line: fb(S.cta.from + T.CTA.line),
     converge: fb(S.cta.from + T.CTA.converge[0]),
     impact: fb(S.cta.from + T.CTA.logoImpact),
     name: fb(S.cta.from + T.CTA.brandVoice),
+    button: fb(S.cta.from + T.CTA.button),
+    hold: fb(S.cta.from + T.CTA.finalHold),
   };
+  /** the greetings' chords turn on the half-beat nearest each switch */
+  const LG = P.lang.map(half);
+  /** the wall's last beat: the kick and bass let go half a beat before the slam */
+  const preSlam = P.title - 0.5;
   const inR = (b, a, e) => b >= a && b < e;
   const LEN = sec(END) + 3;
   const out = stereo(LEN);
@@ -72,6 +95,12 @@ export function bed(T) {
     EG: { root: 44, notes: [56, 59, 64, 66] }, // E/G#
     Fsm7: { root: 42, notes: [57, 61, 64, 69] },
     Efin: { root: 40, notes: [52, 59, 64, 68, 71, 78] }, // the resolution: E3 B3 E4 G#4 B4 F#5
+    Gsm: { root: 44, notes: [56, 59, 63, 68] }, // G#m (the closing light's chord)
+    // the greetings: open voicings (fifths and ninths, the thirds high and light) — the voices are the music
+    Eo: { root: 40, notes: [52, 59, 66, 68, 71] }, // E3 B3 F#4 G#4 B4
+    Ao: { root: 45, notes: [57, 64, 71, 73] }, // A3 E4 B4 C#5
+    Csm7o: { root: 37, notes: [56, 61, 64, 71] }, // G#3 C#4 E4 B4 over C#
+    Bo: { root: 47, notes: [59, 66, 71, 75] }, // B3 F#4 B4 D#5
   };
   const seg = [];
   const put = (a, e, c) => {
@@ -98,9 +127,18 @@ export function bed(T) {
   }
   put(P.closing, P.key, 'Bsus');
   put(P.key, P.scale, 'E');
-  put(P.scale, P.title, 'Csm');
-  put(P.title, P.flow, 'A');
-  put(P.flow, P.cta, 'B');
+  // THE WALL: the chords the pops spell, light by light (E · G#m · B · E)
+  ['E', 'Gsm', 'B', 'E'].forEach((c, j) => put(P.wall[j], j + 1 < P.wall.length ? P.wall[j + 1] : P.title, c));
+  // THE HERO: "16 industries." lifts onto the IV
+  put(P.title, P.langs, 'A');
+  // THE GREETINGS: English on E; Romanian · Spanish on A; French · German on C#m7; Japanese on B
+  put(P.langs, LG[1], 'Eo');
+  put(LG[1], LG[3], 'Ao');
+  put(LG[3], LG[5], 'Csm7o');
+  put(LG[5], P.flow, 'Bo');
+  // AFTER THE CALL: home (E) — saved — then the turn (Bsus) that hangs over the iris into the dark
+  put(P.flow, P.stations[2] + 1, 'E');
+  put(P.stations[2] + 1, P.cta, 'Bsus');
   const mid = Math.max(P.cta + 2, Math.min(P.cta + 4, P.converge - 2));
   put(P.cta, mid, 'Amaj9');
   put(mid, P.converge, 'Fsm7');
@@ -119,9 +157,14 @@ export function bed(T) {
     if (b < P.answer) return lerp(0.5, 0.14, smooth((b - P.miss) / 1));
     if (b < P.closing) return lerp(0.14, 0.45, smooth((b - P.answer) / 2));
     if (b < P.scale) return 0.55;
-    if (b < P.cta) return 0.6;
+    if (b < P.title) return lerp(0.42, 0.62, smooth((b - P.scale) / (P.title - P.scale)));
+    if (b < P.langs) return lerp(0.8, 0.6, smooth((b - P.title) / (P.langs - P.title)));
+    if (b < P.flow) return 0.46;
+    if (b < P.iris) return lerp(0.46, 0.58, smooth((b - P.flow) / (P.iris - P.flow)));
+    if (b < P.cta) return lerp(0.58, 0.12, smooth((b - P.iris) / (P.cta - P.iris)));
     if (b < P.impact) return 0.35 + 0.5 * smooth((b - P.cta) / (P.impact - P.cta));
-    return 1.0 * Math.exp(-(b - P.impact) / 5);
+    // the end card: the E chord settles onto a held plateau (it rings out in the master's fade)
+    return 0.42 + 0.58 * Math.exp(-(b - P.impact) / 2.2);
   };
   const padCut = (b) => {
     if (b < P.shatter) return 420 + 380 * smooth(b / P.shatter);
@@ -132,9 +175,13 @@ export function bed(T) {
     if (b < P.answer) return lerp(1900, 520, smooth(b - P.miss));
     if (b < P.closing) return lerp(520, 1500, smooth((b - P.answer) / 3));
     if (b < P.scale) return 2300;
-    if (b < P.cta) return 3000;
+    if (b < P.title) return 1300 * Math.pow(3600 / 1300, smooth((b - P.scale) / (P.title - P.scale)));
+    if (b < P.langs) return lerp(4200, 1500, smooth((b - P.title) / (P.langs - P.title)));
+    if (b < P.flow) return 1150 + 120 * Math.sin(b * 0.7);
+    if (b < P.iris) return lerp(1500, 2800, smooth((b - P.flow) / (P.iris - P.flow)));
+    if (b < P.cta) return lerp(2800, 700, smooth((b - P.iris) / (P.cta - P.iris)));
     if (b < P.impact) return 900 + 4200 * Math.pow(smooth((b - P.cta) / (P.impact - P.cta)), 1.6);
-    return 1400 + 4000 * Math.exp(-(b - P.impact) / 2.5);
+    return 1300 + 4000 * Math.exp(-(b - P.impact) / 2.5);
   };
 
   /* ── PAD: three detuned band-limited saws per note, voice-led crossfades ── */
