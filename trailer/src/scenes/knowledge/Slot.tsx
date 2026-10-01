@@ -113,7 +113,7 @@ export const Slot: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
   const settle = peek
     ? aos(t, openAt, { anticip: 0, depth: 0, config: SPRING.site })
     : Math.min(1.02, aos(t, openAt, { anticip: 0, depth: 0, config: SPRING.site }));
-  const boxO = peek ? 1 : Math.min(1, Math.max(0, (t - openAt + 1) / 5));
+  const boxO = peek ? 1 : Math.min(1, Math.max(0, (t - openAt + 1) / 4));
 
   /* ── the card ── */
   const pop = KL.ticketPop;

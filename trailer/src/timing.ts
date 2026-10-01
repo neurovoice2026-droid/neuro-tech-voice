@@ -992,7 +992,7 @@ export const KNOWLEDGE_LOCAL = (() => {
     dimDocs: [K.answer, K.answer + 10] as const,
     /** …9:16: on the miss, deeper, as "0 matches" takes their place (the slot opens over them) */
     docsBackMiss: [K.miss, K.miss + 9] as const,
-    slotOpenMiss: K.miss + b(0.25) - 3,
+    slotOpenMiss: K.miss,
     /** "guess." turns sunday ink as it is spoken */
     guessKey: aw(12),
     /** "I'll": the slot inhales (2 f at .95) and pops into the team card (1.08 → 1): glint, ring, kick */
