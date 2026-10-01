@@ -199,7 +199,11 @@ export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number; grade?: 
             />
             {/* the site's Label (Inter 500, 0.14em, uppercase, paper-dim) at a readable
                 30 px: two centred rows ("INCOMING" / "CALL") — one row would not fit the
-                242 px screen. paddingLeft re-centres the trailing tracking. */}
+                242 px screen. paddingLeft re-centres the trailing tracking.
+                16:9: label above the orb, the number below it. 9:16: the caller ID sits where
+                a phone puts it — label and number both above the orb — so everything that is
+                read stays above the frame's bottom UI band (y ≤ 1500) while the phone's body
+                runs on below it. */}
             {['Incoming', 'call'].map((word, row) => (
               <Stagger
                 key={word}
@@ -211,7 +215,7 @@ export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number; grade?: 
                   position: 'absolute',
                   left: 0,
                   right: 0,
-                  top: sh / 2 - 168 + row * 36,
+                  top: sh / 2 + L.pick(-168, -196) + row * 36,
                   paddingLeft: '0.14em',
                   transform: `translateY(${(-uiOut * 40).toFixed(2)}px)`,
                   fontFamily: FONT.body,
@@ -233,11 +237,12 @@ export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number; grade?: 
                 position: 'absolute',
                 left: 0,
                 right: 0,
-                top: sh / 2 + 86,
-                transform: `translateY(${(uiOut * 50).toFixed(2)}px)`,
+                top: sh / 2 + L.pick(86, -114),
+                // exits away from the orb with the rest of the UI (down in 16:9, up in 9:16)
+                transform: `translateY(${(uiOut * L.pick(50, -34)).toFixed(2)}px)`,
                 fontFamily: FONT.mono,
                 fontWeight: 500,
-                fontSize: 26,
+                fontSize: 30,
                 lineHeight: 1,
                 fontVariantNumeric: 'tabular-nums',
                 color: C.paper,

@@ -473,10 +473,17 @@ export const TWIST_LOCAL = {
   ring3: [b(7), b(7) + 8] as const,
   /** two bokeh planes over the screen (0.5× / 1.5× the dive's zoom) */
   bokeh: [TWIST.pushToPhone[0] + 10, TWIST.pushToPhone[1] + 12] as const,
-  /** the screen overfills the frame (both orientations by ≈ pushToPhone[0] + 22): as the phone's dark
-   *  surroundings leave the frame, the frame's falloff is handed to the call's MidnightVignette — the
-   *  dive never lands on a flat indigo field (atmosphere, no cue) */
-  roomFalloff: [TWIST.pushToPhone[0] + 12, TWIST.pushToPhone[0] + 22] as const,
+  /** the screen overfills the frame (both orientations by ≈ pushToPhone[0] + 22): the frame's falloff is
+   *  handed to the call's MidnightVignette while the phone's dark surroundings are still leaving, so it is
+   *  already in the screen when the screen holds the frame — the dive never lands on a flat indigo field */
+  roomFalloff: [TWIST.pushToPhone[0] + 6, TWIST.pushToPhone[0] + 16] as const,
+  /** the orb becomes the room's KEY LIGHT as the screen takes the frame: its light pool on the room and the
+   *  falloff away from it (centred on the orb) come up here; the falloff relaxes as the call's grade takes
+   *  the room down to the midnight, and the pool gathers into the orb with the pickup squash (PICKUP − 6),
+   *  so the call's pickup flash is its release (atmosphere, no cue) */
+  keyLight: [TWIST.pushToPhone[0] + 14, TWIST.pushToPhone[1] - 8] as const,
+  /** a 1.5 % breath push of the lit field (pool + falloff + bokeh) about the orb, from the beat into the pickup */
+  fieldPush: [b(7), TWIST.pushToPhone[1]] as const,
   /** …at this k (the call's own full midnight falloff), held into the pickup. For an exact hand-over
    *  the call draws the SAME floor, MidnightVignette k = max(roomVignette, grade), inside the group
    *  that fades its room in over roomIn (opacity roomOp) — the twist keeps its own to its last frame */

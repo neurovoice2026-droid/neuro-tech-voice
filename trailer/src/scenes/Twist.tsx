@@ -9,7 +9,10 @@
  *   t 38    CLOSED swings in on the door
  *   t 45    "not the phone." rises, turns lilac at 51
  *   t 53    the phone powers on: INCOMING CALL, Ava's orb, the number
- *   t 90…120 dive into the screen (pull-back, EASE.peel); ring 2 at 98
+ *   t 90…120 dive into the screen (pull-back, EASE.peel); the frozen ring resumes at 98
+ *   t 104…    the screen takes the frame: the orb becomes the room's key light (its pool,
+ *             the falloff away from it, a 1.5 % breath push); the pool gathers into the
+ *             orb with the pickup squash, and the call's pickup flash releases it
  *   t 120…132 held: the screen fills the frame, the orb is CALL_ORB_START
  *
  * Parallax (pinhole dolly, see twist/geometry.ts): bg field 0.2,
@@ -29,7 +32,7 @@ import { ORB_RIM, PICKUP_GLOW, pickupGlow, pickupRimSpread } from '../lib/pickup
 import { useSceneFrame } from '../lib/scene';
 import { ORB } from '../theme';
 import { CALL_LOCAL, SCENES, TWIST } from '../timing';
-import { MidnightVignette } from './call/Light';
+import { AVA_GLOW, KeyLight, MidnightVignette } from './call/Light';
 import { orbBase } from './call/shots';
 import { BokehPlane, bokehPlanes } from './twist/Bokeh';
 import { Door } from './twist/Door';
@@ -37,7 +40,7 @@ import { buzz, camAt, layerXf, project, twistGeo, TW, xfCss, type LayerXf } from
 import { useDisplayFontReady, useTextLayout } from './twist/measure';
 import { Phone, screenState } from './twist/Phone';
 import { Burst, Rings } from './twist/Rings';
-import { avatarAt, callRimAt, orbFlowVolume, orbListen, orbShaderVolume, TP } from './twist/handover';
+import { avatarAt, breath, callRimAt, orbFlowVolume, orbListen, orbShaderVolume, TP } from './twist/handover';
 import { buildShards, Shards } from './twist/Shards';
 
 const K = { bg: 0.2, mid: 0.6, text: 1, dust: 1.4 };
@@ -125,8 +128,9 @@ export const Twist: React.FC = () => {
   // the rim light + the outer glow (lib/pickup), from orbDress on
   const dress = tween(t, TW.orbDress, [0, 1], EASE.out3);
   const rimA = t >= TP ? callRimAt(t - TP) : pickupGlow(t + G0);
-  // the dive's zoom relative to its end (bokeh parallax)
-  const Z = Math.min(1, xMid.f / g.S);
+  // the dive's zoom relative to its end (bokeh parallax; the field's breath push rides on it)
+  const fieldPush = 1 + 0.015 * tween(t, TW.fieldPush, [0, 1], EASE.inOut);
+  const Z = Math.min(1, xMid.f / g.S) * fieldPush;
   const bokehOp = tween(t, [TW.bokeh[0], TW.bokeh[0] + 8], [0, 1], EASE.inOut);
   const planes = bokehPlanes(L);
   const scrTL = project(xMid, L, g.phone.cx - g.screen.w / 2, g.phone.cy - g.screen.h / 2);
@@ -193,6 +197,25 @@ export const Twist: React.FC = () => {
   const fall = tween(t, TW.roomFalloff, [0, 1], EASE.inOut);
   const callGrade = tween(t - TP, CALL_LOCAL.roomGrade, [0, 1], EASE.inOut);
   const roomK = Math.max(TW.roomVignette * fall, callGrade);
+  /* ── the orb as the room's KEY LIGHT (TW.keyLight) ───────────────────
+   * As the screen takes the frame the indigo stops being a flat field: the room
+   * falls off away from the orb (a darkening centred on it, relaxed as the call's
+   * grade takes the room down to the midnight) and the orb's light pools on it
+   * (the call's KeyLight, Ava's glow). A 1.5 % breath push carries the lit field
+   * into the pickup; the pool breathes with the orb, then gathers into it with the
+   * pickup squash (PICKUP − 6 … PICKUP) — the call's pickup flash is its release. */
+  const keyIn = tween(t, TW.keyLight, [0, 1], EASE.out3);
+  const gather = tween(t, [TP - 6, TP], [0, 1], EASE.in2);
+  const keyK = keyIn * 0.2 * (1 + 4 * breath(t)) * (1 - 0.5 * gather);
+  const keySpread = L.pick(3.2, 2.6) * fieldPush * (1 - 0.2 * gather);
+  const falloffK = keyIn * (1 - callGrade);
+  const orbR = orb.d / 2;
+  const falloffCss =
+    falloffK > 0.003
+      ? `radial-gradient(circle at ${orb.x.toFixed(1)}px ${orb.y.toFixed(1)}px, rgba(2,2,7,0) ${(orbR * 1.3 * fieldPush).toFixed(1)}px, ` +
+        `rgba(2,2,7,${(0.42 * falloffK).toFixed(3)}) ${(orbR * 3.6 * fieldPush).toFixed(1)}px, ` +
+        `rgba(1,1,4,${(0.72 * falloffK).toFixed(3)}) ${(Math.max(L.width, L.height) * 0.75 * fieldPush).toFixed(1)}px)`
+      : null;
   const textFade = 1 - tween(xText.f, [1.5, 3.2], [0, 1], EASE.in2);
   const textBlur = Math.max(0, (xText.f - 1) * 3);
   const dustFade = 1 - tween(xDust.f, [1.3, 2.6], [0, 1], EASE.in2);
@@ -267,9 +290,13 @@ export const Twist: React.FC = () => {
               <BokehPlane t={t - TP} discs={planes.far} Z={Z} k={0.5} c={orb} O={O} opacity={bokehOp} drift={2.2} />,
             )
           : null}
+        {/* the room falls off away from the orb, and the orb's light pools on it (see keyIn) */}
+        {falloffCss ? <AbsoluteFill style={{ background: falloffCss }} /> : null}
+        {keyK > 0.003 ? <KeyLight x={orb.x} y={orb.y} d={orb.d} glow={AVA_GLOW} strength={keyK} spread={keySpread} /> : null}
+        {/* the hook's frozen ring resumes: ONE wave (its second pulse) — the call's line is "Picked up on the first ring." */}
         <Rings
           t={t}
-          starts={[TWIST.ring2, TWIST.ring2 + 9]}
+          starts={[TWIST.ring2]}
           orbAt={orbAt}
           reach={(tt) => L.pick(640, 540) * layerXf(camAt(tt, g), K.mid).f}
           fade={1 - tween(t, [TWIST.pushToPhone[1] - 8, TWIST.pushToPhone[1]], [0, 1], EASE.inOut)}

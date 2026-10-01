@@ -24,8 +24,9 @@ export function twistGeo(L: Layout) {
   );
   const floor = door.top + door.h;
 
-  // 9:16: low enough that the hook's "closed" never sits on its rim
-  const phone = L.pick({ cx: 1592, cy: 540, w: 260, h: 540 }, { cx: 772, cy: 1536, w: 260, h: 540 });
+  // 9:16: under the tagline, its caller ID (label + number, above the orb — Phone.tsx) inside the
+  // safe zone (y ≤ 1500 at the hold's full push); the body runs on into the bottom band
+  const phone = L.pick({ cx: 1592, cy: 540, w: 260, h: 540 }, { cx: 772, cy: 1490, w: 260, h: 540 });
   const bezel = 9;
   const screen = { w: phone.w - 2 * bezel, h: phone.h - 2 * bezel, r: 37 };
 

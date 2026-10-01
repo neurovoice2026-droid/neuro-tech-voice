@@ -28,10 +28,10 @@ import { Rings, ringTravel } from './hook/Rings';
 import { StaggerText } from './hook/StaggerText';
 import { Wave } from './hook/Wave';
 import { Bokeh } from './hook/Bokeh';
-import { rgba } from './hook/color';
+import { rgba, rgbOf } from './hook/color';
 import { MOTES, Motes } from './hook/Motes';
 import { warpTime } from './hook/warp';
-import { DitheredVignette } from './hook/Dither';
+import { DitheredVignette, ditheredRadial } from './hook/Dither';
 
 /** A 1-frame light hit that decays (peaks on `at`). */
 const hit = (f: number, at: number, decay = 4) => (f < at - 1 ? 0 : f < at ? 0.35 : Math.exp(-(f - at) / decay));
@@ -131,6 +131,8 @@ export const Hook: React.FC = () => {
   const textGlowW = L.pick(1500, 1040);
   const textGlowH = L.pick(340, 520);
   const textGlowCol = mixHex(C.paper, C.lilac, 0.45);
+  const textGlowA0 = 0.15 * textHit + 0.22 * glowBreath; // centre
+  const textGlowA55 = 0.05 * textHit + 0.07 * glowBreath; // at 55 % of the radius (→ 0 at the edge)
   const field =
     tween(f, [HOOK_LOCAL.fieldIn, HOOK.clockLand], [0, 0.15], EASE.inOut) +
     tween(f, [HOOK.clockLand, HOOK.cameraPush[1]], [0, 0.25], EASE.inOut) +
@@ -327,17 +329,28 @@ export const Hook: React.FC = () => {
               mixBlendMode: 'screen',
             }}
           />
-          {/* the text beat (and the breaths of the hold): a lilac-white light where the line sits */}
-          <div
-            style={{
-              position: 'absolute',
-              left: L.cx - textGlowW / 2,
-              top: HOOK_LINE(L).cy - textGlowH / 2,
-              width: textGlowW,
-              height: textGlowH,
-              background: `radial-gradient(closest-side, ${rgba(textGlowCol, 0.15 * textHit + 0.22 * glowBreath)}, ${rgba(textGlowCol, 0.05 * textHit + 0.07 * glowBreath)} 55%, ${rgba(textGlowCol, 0)} 100%)`,
-            }}
-          />
+          {/* the text beat (and the breaths of the hold): a lilac-white light where the line sits
+              (dithered at its tail, so its edge never rounds to a ring on the black) */}
+          {textGlowA0 > 0.0004 ? (
+            <div
+              style={{
+                position: 'absolute',
+                left: L.cx - textGlowW / 2,
+                top: HOOK_LINE(L).cy - textGlowH / 2,
+                width: textGlowW,
+                height: textGlowH,
+                ...ditheredRadial({
+                  shape: 'closest-side',
+                  rgb: rgbOf(textGlowCol),
+                  alphaAt: (p) =>
+                    p < 0.55 ? mix(textGlowA0, textGlowA55, p / 0.55) : mix(textGlowA55, 0, (p - 0.55) / 0.45),
+                  levels: 230,
+                  frame: f,
+                  key: 'hook-textglow',
+                }),
+              }}
+            />
+          ) : null}
         </Layer>
 
         {/* 1.0 — the rings (behind the figures, as on the site) */}
