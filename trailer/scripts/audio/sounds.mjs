@@ -371,9 +371,11 @@ export function library(T) {
     put('riser-short', 0, riser(2700, p, { m0: 71, m1: 83, f0: 500, f1: 6500, sub: 0 }));
   }
   {
-    // the big riser into the logo: B3 → B5 glide with accelerating tremolo, rising noise, a sub swell
+    // the big riser into the logo: B3 → B5 glide with accelerating tremolo, rising noise, a sub swell.
+    // It carries the whole converge (the film's biggest build): already ≈ −8 dB (its noise band and glide) re their peak two frames
+    // in (a floor under the curve, faded up over 40 ms), then the 2.4-power climb into the cut
     const p = pk('riser');
-    put('riser', 0, riser(2800, p, { m0: 59, m1: 83, f0: 260, f1: 7000, sub: 0.5 }));
+    put('riser', 0, riser(2800, p, { m0: 59, m1: 83, f0: 260, f1: 7000, sub: 0.5, floor: 0.4 }));
   }
 
   /* ── sparkle ── */
@@ -827,11 +829,12 @@ function fadeOut(st, sec) {
   for (const ch of st) for (let i = 0; i < n && i < ch.length; i++) ch[ch.length - 1 - i] *= i / n;
 }
 
-/** A riser that peaks (and cuts) at `peak` seconds: noise band, tremolo glide, reverse cymbal, sub. */
-function riser(seed, peak, { m0, m1, f0, f1, sub = 0 }) {
+/** A riser that peaks (and cuts) at `peak` seconds: noise band, tremolo glide, reverse cymbal, sub.
+ *  `floor` (0..1): the level it starts from (re its peak), reached over its first 40 ms. */
+function riser(seed, peak, { m0, m1, f0, f1, sub = 0, floor = 0 }) {
   const len = peak + 0.035;
   const st = stereo(len);
-  const a = (t) => (t < peak ? Math.pow(t / peak, 2.4) : Math.exp(-(t - peak) / 0.01));
+  const a = (t) => (t < peak ? smooth(Math.min(1, t / 0.04)) * floor + (1 - floor) * Math.pow(t / peak, 2.4) : Math.exp(-(t - peak) / 0.01));
   const fc = (t) => f0 * Math.pow(f1 / f0, Math.min(1, t / peak));
   addStereo(st, [env(sweep(pink(len, seed), 'bpn', fc, 1.3), a), env(sweep(pink(len, seed + 1), 'bpn', fc, 1.3), a)], 0, 0.8);
   const cym = (sd) => env(sweep(white(len, sd), 'hp', 4500, 0.7), (t) => (t < peak ? Math.pow(t / peak, 4) : Math.exp(-(t - peak) / 0.01)));

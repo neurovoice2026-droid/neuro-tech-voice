@@ -13,24 +13,29 @@
  *   RESULT     half-time: Amaj7 under "Asleep.", E (+ an e-piano chord) on "Booked.", Bsus into white
  *   KNOWLEDGE  the hush: felt piano and pad, no drums; THE MISS drains to a near-silent
  *              F#m7; Ava's answer brings it back; "it says so." resolves to E
- *   SCALE      (16 s, three textures, all read from SCALE / SCALE_LOCAL)
+ *   SCALE      (19.5 s, three textures, all read from SCALE / SCALE_LOCAL)
  *              THE WALL — the groove rises with the pops: the chords follow the cards' lights
  *                (E · G#m · B · E, as the pops spell them), four on the floor, hats 8ths → 16ths,
  *                a pumping bass, a snare run into the slam (the kick lets go half a beat before it)
- *              THE HERO — "16 industries." slams on A: crash, kick, the bass drops to A1, the pad opens
+ *              THE HERO — "16 industries." slams on A: crash, kick, the bass drops to A1, the pad opens;
+ *                the 2 s hold breathes in half time (a kick and the bass re-struck under the glint
+ *                across "16"), a reverse cymbal into "14 languages."
  *              THE GREETINGS — the voices are the music: an open pad in fifths (E · A · C#m7 · B, turning
  *                with the cascade), a soft felt pulse and a low 8th pulse in the key, air on top
- *              AFTER THE CALL — the pulse returns, one station per beat, an 8th arp with the light motes,
+ *              AFTER THE CALL — the pulse returns, phrased one station per 2 beats (a full kick and the
+ *                root held under each station), then the 8th pump under the light motes, an 8th arp,
  *                into the iris; the bed drops into the dark as the iris opens
- *   CTA        drops out into the dark, builds under Ava (A maj9 → F#m7 → Bsus → B),
- *              a snare roll into the impact, and E — with a crash — ON the logo (the crash is
- *              choked just before Ava says the name); then the end card gets space: no fills, the
- *              E chord held (the pad settles onto a plateau, a soft halo of the four lights' notes
- *              breathes in under the button) and rings out into the master's fade
+ *   CTA        drops out into the dark, builds under Ava (A maj9 → F#m7 → Bsus → B); THE CONVERGE is
+ *              the film's biggest build (8th kicks, a snare roll 16ths → 32nds, a sub swelling under
+ *              the whirl), it inhales over the survivor's 6-frame hold, and E — with a crash — lands
+ *              ON the logo (the crash is choked just before Ava says the name); then the end card
+ *              gets space: no fills, the E chord held (the pad settles onto a plateau, a soft halo of
+ *              the four lights' notes breathes in under the button) and rings on to the last frame,
+ *              through the master's fade (MIX.fadeOut — the bed has no fade of its own)
  */
 import {
   SR, TAU, stereo, mono, addMono, addStereo, osc, white, pink, env, ad, mode, filt, sweep, noise, spread,
-  fdn, compress, limit, mtof, smooth, rng, clamp, Saw, Biquad, lerp,
+  fdn, compress, limit, mtof, smooth, rng, clamp, Saw, Biquad, lerp, gain,
 } from './dsp.mjs';
 
 export function bed(T) {
@@ -58,6 +63,8 @@ export function bed(T) {
     whip: fb(S.knowledge.from + K.out[0]),
     scale: fb(S.scale.from),
     title: fb(S.scale.from + T.SCALE.industriesTitle),
+    /** two beats into the hero's hold a glint crosses "16" */
+    glint: fb(S.scale.from + T.SCALE_LOCAL.heroGlint),
     /** the wall's lights turn (rush · closing · sunday · night) */
     wall: T.SCALE_LOCAL.groups.map((f) => fb(S.scale.from + f)),
     langs: fb(S.scale.from + T.SCALE.langTitle),
@@ -68,7 +75,13 @@ export function bed(T) {
     iris: fb(S.scale.from + T.SCALE.irisToDark[0]),
     cta: fb(S.cta.from),
     line: fb(S.cta.from + T.CTA.line),
+    /** after her last word the formation tightens (the run-in) … */
+    drift: fb(S.cta.from + T.CTA_LOCAL.drift[0]),
     converge: fb(S.cta.from + T.CTA.converge[0]),
+    /** the four orbs spiral in (the whirl) … */
+    whirl: fb(S.cta.from + T.CTA_LOCAL.orbIn[0]),
+    /** … and the survivor holds alone before it bursts (the inhale) */
+    survivor: fb(S.cta.from + T.CTA_LOCAL.survivor[0]),
     impact: fb(S.cta.from + T.CTA.logoImpact),
     name: fb(S.cta.from + T.CTA.brandVoice),
     button: fb(S.cta.from + T.CTA.button),
@@ -338,33 +351,49 @@ export function bed(T) {
     const u = b - (P.title - 1);
     snare(b, 0.2 + 0.36 * u, Math.round(b * 8) + 900);
   }
-  // THE HERO: "16 industries." slams on A — crash and kick; the groove carries one more beat, opens out
+  // THE HERO: "16 industries." slams on A — crash and kick; the groove carries one more beat, then the
+  // 2 s hold (it is READ: nothing new happens in it) breathes in half time — a kick under the glint
+  // that crosses "16", soft 8th hats — and a reverse cymbal turns it into "14 languages."
   crash(P.title, 0.4, 2, 1.3);
   kick(P.title, 0.95);
   kick(P.title + 1, 0.5);
+  const heroGlint = P.glint > P.title + 1.4 && P.glint < P.langs - 1 ? P.glint : null;
+  if (heroGlint !== null) kick(heroGlint, 0.46);
   hat(P.title + 0.5, 0.1, false, 931);
   hat(P.title + 1.5, 0.12, true, 933);
+  for (let b = P.title + 2.5; b < P.langs - 0.6; b += 1) hat(b, 0.07, false, 935 + Math.round(b * 4));
   revCym(P.langs, 1, 0.12, 4);
   // THE GREETINGS: no hats, no claps — a soft felt pulse on 1 and 3 (the voices are the music)
   for (let b = P.langs; b < P.flow - 0.01; b += 2) feltKick(b, 0.3);
-  // AFTER THE CALL: the pulse returns — four on the floor and 8th hats, rising into the iris; the
-  // bed drops into the dark as the iris opens (the CTA starts in silence)
+  // AFTER THE CALL: the pulse returns, phrased ONE STATION PER 2 BEATS (SCALE.stationStep): each
+  // station lands on a full kick (the bass holds its root through the phrase, below), the beats
+  // between keep a lighter pulse; 8th hats rise into the iris, where the bed drops into the dark
+  // (the CTA starts in silence)
+  const onStation = (b) => P.stations.some((x) => Math.abs(x - b) < 0.26);
   for (let b = P.flow; b < P.iris - 0.01; b += 0.5) {
     const u = (b - P.flow) / (P.iris - P.flow);
-    if (b % 1 === 0) kick(b, 0.42 + 0.2 * u);
+    if (b % 1 === 0) kick(b, onStation(b) ? 0.66 + 0.08 * u : 0.38 + 0.16 * u);
     hat(b, (b % 1 === 0 ? 0.06 : 0.11) * (0.8 + 0.5 * u), false, Math.round(b * 4) + 300);
   }
-  // CTA — silence in the dark, then the build: a pulse, 16th hats, a snare roll into the impact
+  for (const x of P.stations) if (Math.abs(x - Math.round(x)) > 0.26) kick(x, 0.66);
+  // CTA — silence in the dark, then a pulse under her line (16th hats creeping in), and THE CONVERGE,
+  // the film's biggest build: 8th kicks, a snare roll 16ths → 32nds, the hats at full tilt — all of
+  // it stops for the survivor's hold (the inhale), and the crash lands ON the logo
   {
     const b0 = Math.max(P.line + 2, mid);
-    for (let b = b0; b < P.converge; b += 1) kick(b, 0.25 + 0.3 * ((b - b0) / Math.max(1, P.converge - b0)));
-    for (let b = b0; b < P.impact; b += 0.25) {
-      const u = (b - b0) / (P.impact - b0);
-      hat(b, (0.03 + 0.12 * u) * (b % 0.5 === 0 ? 1 : 0.6), false, Math.round(b * 4) + 500);
+    for (let b = b0; b < P.converge; b += 1) kick(b, 0.45 + 0.17 * ((b - b0) / Math.max(1, P.converge - b0)));
+    for (let b = P.converge; b < P.survivor - 0.3; b += 0.5) kick(b, 0.68 + 0.14 * ((b - P.converge) / Math.max(0.5, P.survivor - P.converge)));
+    for (let b = b0; b < P.survivor - 0.01; b += 0.25) {
+      const u = (b - b0) / (P.survivor - b0);
+      hat(b, (0.03 + 0.14 * u) * (b % 0.5 === 0 ? 1 : 0.6), false, Math.round(b * 4) + 500);
     }
-    for (let b = P.converge; b < P.impact - 0.01; ) {
-      const u = (b - P.converge) / (P.impact - P.converge);
-      snare(b, 0.08 + 0.35 * u * u, Math.round(b * 8));
+    // the snare: 8ths from the half-beat after her last word ("…seven.") — the run-in — then the
+    // converge's roll, 16ths → 32nds
+    const drift = Math.ceil(P.drift * 2) / 2;
+    for (let b = drift; b < P.converge - 0.01; b += 0.5) snare(b, 0.1 + 0.08 * ((b - drift) / Math.max(0.5, P.converge - drift)), Math.round(b * 8) + 40);
+    for (let b = P.converge; b < P.survivor - 0.01; ) {
+      const u = (b - P.converge) / (P.survivor - P.converge);
+      snare(b, 0.2 + 0.45 * u * u, Math.round(b * 8));
       b += u < 0.5 ? 0.25 : 0.125;
     }
     // the logo's crash rings across the hit and is choked 50 ms before Ava says the name: its
@@ -410,14 +439,46 @@ export function bed(T) {
     const u = (b - P.scale) / (P.title - P.scale);
     bassNote(b, 0.42, chordAt(b).root + ((b * 2) % 2 ? 12 : 0), 0.3 + 0.1 * u, 0.35);
   }
-  // the hero: the bass drops to A1 under the slam and holds
-  bassNote(P.title, P.langs - P.title, 33, 0.52, 0.22);
+  // the hero: the bass drops to A1 under the slam and holds — re-struck, softer, under the glint
+  {
+    const re = heroGlint ?? P.langs;
+    bassNote(P.title, re - P.title, 33, 0.52, 0.22);
+    if (re < P.langs) bassNote(re, P.langs - re, 33, 0.36, 0.18);
+  }
   // the greetings: a soft pulse in the key — the chord's root on the 8ths, short and low
   for (let b = P.langs; b < P.flow - 0.01; b += 0.5) bassNote(b, 0.28, chordAt(b).root, b % 1 === 0 ? 0.2 : 0.12, 0.06);
-  // after the call: the 8th pump returns into the iris
-  for (let b = P.flow; b < P.iris - 0.01; b += 0.5) bassNote(b, 0.42, chordAt(b).root + ((b * 2) % 2 ? 12 : 0), 0.28, 0.3);
+  // after the call: the 8th pump up to the first station; then one phrase per station — the root held
+  // under it, an octave 8th as the pickup into the next; after the CRM the 8th pump returns under
+  // the light motes, into the iris
+  {
+    const st = P.stations;
+    const pump8 = (a, e, g) => {
+      for (let b = a; b < e - 0.01; b += 0.5) bassNote(b, 0.42, chordAt(b).root + ((b * 2) % 2 ? 12 : 0), g, 0.3);
+    };
+    pump8(P.flow, st[0], 0.26);
+    st.forEach((x, i) => {
+      const next = i + 1 < st.length ? st[i + 1] : Math.min(x + 1, P.iris);
+      const held = i + 1 < st.length ? next - x - 0.5 : next - x;
+      bassNote(x, held, chordAt(x).root, 0.4, 0.28);
+      if (i + 1 < st.length) bassNote(next - 0.5, 0.4, chordAt(next).root + 12, 0.24, 0.3);
+    });
+    pump8(Math.min(st[st.length - 1] + 1, P.iris), P.iris, 0.3);
+  }
   // cta: the build, then E on the logo (long)
   for (const s of seg.filter((x) => x.a >= P.cta && x.a < P.impact)) bassNote(s.a, s.e - s.a, CH[s.c].root, 0.2 + 0.15 * ((s.a - P.cta) / (P.impact - P.cta)), 0.1);
+  // the converge: a sub swells under the whirl (B1, the V's root, an octave on top for small speakers)
+  // from the orbs' first spiral to the survivor's hold, where it is drawn in with everything else
+  {
+    const a = sec(P.whirl);
+    const d = sec(P.survivor) - a;
+    if (d > 0.1) {
+      const shape = (t) => Math.pow(Math.min(1, t / d), 1.6) * (t < d ? 1 : Math.max(0, 1 - (t - d) / 0.05));
+      const sub = osc(d + 0.06, mtof(35), shape);
+      const oct = osc(d + 0.06, mtof(47), shape);
+      for (let i = 0; i < sub.length; i++) sub[i] = Math.tanh((sub[i] + 0.25 * oct[i]) * 1.6) / Math.tanh(1.6);
+      addMono(bass, sub, a, 0.42, 0);
+    }
+  }
   bassNote(P.impact, END - P.impact, 28, 0.42, 0.18);
 
   /* ── melodic voices ── */
@@ -562,15 +623,25 @@ export function bed(T) {
   const hall = fdn(out, { rt60: 2.4, rt60Hi: 0.9, pre: 0.022, size: 1.2, hp: 200, lp: 7000, tail: 0 });
   for (let c = 0; c < 2; c++) for (let i = 0; i < out[c].length; i++) out[c][i] += hall[c][i] * 0.32;
   const glued = compress(out, { thr: -20, ratio: 2, knee: 8, att: 0.01, rel: 0.2, rms: 0.01 });
-  // fade the tail out over the final hold so the film ends in near-silence
-  const fadeA = sec(END) - 1.2;
-  const fadeB = sec(END) + 0.2;
-  for (let c = 0; c < 2; c++) {
-    for (let i = 0; i < glued[c].length; i++) {
-      const t = i / SR;
-      if (t > fadeA) glued[c][i] *= t > fadeB ? 0 : Math.pow(1 - (t - fadeA) / (fadeB - fadeA), 1.5);
+  // THE INHALE: over the survivor's hold (the four lights are one, alone, before they burst) the whole
+  // bed and its hall are drawn in, down 9 dB into the frame before the logo — the impact lands out of
+  // a breath (the riser and the chord's reverse swell keep climbing on the effects bus)
+  {
+    const a = sec(P.survivor);
+    const e = sec(P.impact);
+    const i0 = Math.round(a * SR);
+    const i1 = Math.round(e * SR);
+    const back = Math.round(0.002 * SR);
+    for (let c = 0; c < 2; c++) {
+      for (let i = i0; i < i1 + back && i < glued[c].length; i++) {
+        const dip = 1 - gain(-9);
+        const g = i < i1 ? 1 - dip * smooth(Math.min(1, (i - i0) / Math.max(1, i1 - i0 - 0.004 * SR))) : 1 - dip * (1 - (i - i1) / back);
+        glued[c][i] *= g;
+      }
     }
   }
+  // (no fade here: the E chord rings on to the last frame, and the master fades it with the picture —
+  // MIX.fadeOut)
   // density: drive the bus limiter ~4 dB into its transients (kicks, crashes), so the bed carries
   // at its −20 dBFS peak instead of spending the headroom on a few hits
   {

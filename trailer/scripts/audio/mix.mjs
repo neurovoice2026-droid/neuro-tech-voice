@@ -2,7 +2,8 @@
  * THE MASTER — voices + bed + every cue, mixed offline, sample-accurate.
  *
  *   dialogue bus   the voice WAVs as recorded (sinc-resampled to 48 kHz; every line is already
- *                  at ONE loudness target), a leveller, then make-up per line so each line
+ *                  at ONE loudness target), the voice post (T.VOICE_RIDES: the hot unaligned
+ *                  sounds ridden down), a leveller, then make-up per line so each line
  *                  keeps exactly that loudness, and a look-ahead true-peak limiter on the bus
  *                  (MIX.dialogueCeil) so voice transients never drive the master limiter
  *   bed            ducked DUCK.bedDb across every line (ramped in ahead of it), and
@@ -92,6 +93,19 @@ export function master(T, lib, bedSt, { publicDir }) {
     const w = readWav(path.join(publicDir, 'voice', `${v.id}.wav`));
     const ch = w.ch.length > 1 ? w.ch : [w.ch[0], w.ch[0]];
     let st = w.sr === SR ? [Float32Array.from(ch[0]), Float32Array.from(ch[1])] : resampleSt(ch, w.sr / SR, 16);
+    // THE VOICE POST (T.VOICE_RIDES): a fader on the hot unaligned parts ("See you then!", "Hmm,"),
+    // smoothstep-ramped inside the silences around them
+    for (const r of T.VOICE_RIDES?.[v.id] ?? []) {
+      const g = gain(r.db);
+      for (let i = 0; i < st[0].length; i++) {
+        const f = (i / SR) * F;
+        if (f < r.from - r.ramp || f > r.to + r.ramp) continue;
+        const u = f < r.from ? smooth((f - (r.from - r.ramp)) / r.ramp) : f <= r.to ? 1 : 1 - smooth((f - r.to) / r.ramp);
+        const k = 1 + (g - 1) * u;
+        st[0][i] *= k;
+        st[1][i] *= k;
+      }
+    }
     const cut = T.voiceCut(v);
     if (cut) {
       // THE CASCADE CUT (T.voiceCut): from the next voice's start she lets go like a voice that is
@@ -156,7 +170,8 @@ export function master(T, lib, bedSt, { publicDir }) {
   // itself, so every greeting of the cascade sits exactly where her other lines sit
   for (const [k, sp] of spans.entries()) {
     sp.k = k;
-    sp.target = T.VOICES[k].until !== undefined ? T.MIX.dialogueLufs : lufs(own(k, sp.a, sp.e));
+    // (a ridden line, too: its body sits on the dialogue target, its hot part below it)
+    sp.target = T.VOICES[k].until !== undefined || T.VOICE_RIDES?.[sp.id] ? T.MIX.dialogueLufs : lufs(own(k, sp.a, sp.e));
   }
   const trimLines = (st, dbOf) => {
     for (const sp of spans) {

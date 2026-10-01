@@ -1389,8 +1389,9 @@ export const HITS: Hit[] = [
   H('call', CALL_LOCAL.payoff, 'thump', 'none', 0.5, 2, 'the mark presses'),
   H('call', CALL_LOCAL.rowOut + 2, 'swish', 'none', 0.5, 3, '“You’re all booked for” drops away (on the beat)'),
   H('call', CALL_LOCAL.blowInhale[1], 'swell', 'night', 0.5, 3, 'the orb inhales'),
-  // (w2: Ava's unaligned sign-off "See you then!" is spoken across it — PHRASES — so it steps back under her)
-  H('call', CALL_LOCAL.markTake - 1, 'whoosh', 'night', 0.5, 2, 'the orb dives into the mark (fastest frame); the room blows to the lens'),
+  // (w2: Ava's unaligned sign-off "See you then!" is spoken across it — PHRASES — so it steps back under
+  // her; −3 dB more: its peak sits on "you", and the goodbye rides over the cut — VOICE_RIDES)
+  H('call', CALL_LOCAL.markTake - 1, 'whoosh', 'night', 0.5, 2, 'the orb dives into the mark (fastest frame); the room blows to the lens', { db: -3 }),
   H('call', CALL_LOCAL.markTake, 'gulp', 'none', 0.5, 2, 'the mark takes the orb (ember flash)', { semi: -3 }),
 
   /* ── RESULT ── */
@@ -1452,8 +1453,10 @@ export const HITS: Hit[] = [
   H('knowledge', KL.missFlip, 'flip', 'none', 0.85, 2, 'pill: “Not in the documents”'),
   H('knowledge', KL.shake[0], 'tap', 'none', 0.85, 3, 'the pill shakes “no”', { run: { n: 2, step: 4 } }),
   H('knowledge', KL.peekCollapse[0] + 2, 'swish', 'none', [0.86, 0.76], 3, 'the slot’s reading lines fold away'),
-  H('knowledge', KL.zeroPop, 'pop', 'none', 0.8, 2, '“0 matches” pops into the slot', { semi: -7 }),
-  H('knowledge', KL.zeroShake[0], 'tap', 'none', 0.8, 3, 'the slot shakes “no”', { run: { n: 2, step: 4 } }),
+  // (the pop and the slot's "no" sit just before / under Ava's thinking "Hmm," — her sound, captioned,
+  // ridden down to her speaking level in VOICE_RIDES — so they step back for it: −3 dB)
+  H('knowledge', KL.zeroPop, 'pop', 'none', 0.8, 2, '“0 matches” pops into the slot', { semi: -7, db: -3 }),
+  H('knowledge', KL.zeroShake[0], 'tap', 'none', 0.8, 3, 'the slot shakes “no”', { run: { n: 2, step: 4 }, db: -3 }),
   H('knowledge', KL.relight[0], chime('sunday', true), 'sunday', 0.5, 2, 'LIGHT: sunday floods back (Ava’s first word)'),
   H('knowledge', KL.relight[0] + 2, 'thump', 'sunday', 0.5, 3, 'relight kick'),
   H('knowledge', KL.zeroEcho, 'ping', 'none', 0.8, 3, '“answer”: a grey ring leaves “0 matches”', { semi: -5, db: -4 }),
@@ -1550,9 +1553,11 @@ export const HITS: Hit[] = [
   ...CTA_LOCAL.tighten.map((f, i) => H('cta', f, 'thump', 'none', 0.5, 2, `the orbit tightens (“${['Twenty', 'four', 'seven'][i]}”)`, { db: -1 })),
   H('cta', CTA_LOCAL.underline, 'draw', 'none', [0.54, 0.62], 3, 'a line of light draws out under “24/7.”', { db: -2 }),
   H('cta', CTA.logoImpact, 'riser', 'none', 0.5, 1, 'CONVERGE → peak ON the impact'),
-  H('cta', CTA_LOCAL.tearKick[0], 'swish', 'none', 0.5, 2, 'the filament burst tears the portrait'),
+  // THE CONVERGE is the film's biggest build (the bed's 8th kicks, snare roll and sub swell — bed.mjs):
+  // the tear is voiced (+6 dB) and the whirl rides on top of it (+3 dB)
+  H('cta', CTA_LOCAL.tearKick[0], 'swish', 'none', 0.5, 2, 'the filament burst tears the portrait', { db: 6 }),
   H('cta', CTA_LOCAL.collapse.from + 3, 'swish', 'none', 0.5, 3, 'headline words sucked into the core'),
-  H('cta', CTA_LOCAL.orbIn[1] - 6, 'whoosh', 'none', [0.3, 0.7], 2, 'the four orbs whirl at top speed'),
+  H('cta', CTA_LOCAL.orbIn[1] - 6, 'whoosh', 'none', [0.3, 0.7], 2, 'the four orbs whirl at top speed', { db: 3 }),
   H('cta', CTA_LOCAL.eyeGlow[1], 'glint', 'night', 0.5, 3, 'the eyes’ last light slides into the core'),
   H('cta', CTA_LOCAL.survivor[0], 'gulp', 'night', 0.5, 2, 'the four lights are one: the survivor holds alone'),
   // the four lights fuse (merge[0]) and the suck-in (impact − 4): the chord's reverse swell, peak ON the impact
@@ -1659,8 +1664,30 @@ export const VOICES: Voiced[] = [
   { at: at('cta', CTA.line), id: CTA.lineVoice },
   { at: at('cta', CTA.brandVoice), id: CTA.brandVoiceId },
 ];
+/**
+ * THE VOICE POST — a fader on part of a line: `db` over the line's frames [from, to) (from the line's
+ * own start), ramped over `ramp` frames outside that span, inside the silences around it. The voice
+ * files are levelled phrase by phrase (scripts/generate-voice.mjs), which misses the sounds the word
+ * alignment does not carry; two came out hot (active-speech level ≈ 3.3–3.8 dB over the rest of their
+ * line) and step back to her speaking level here. The line as a whole stays on the dialogue target
+ * (the mix solves its make-up on the ridden line, MIX.dialogueLufs), so the rest of it does not drop.
+ *   · call-5 — "See you then!", after the last aligned phrase: a goodbye riding the cut, not the
+ *     vocal peak of the call ("…Wednesday at 3 PM." is)
+ *   · kb-2 — her thinking "Hmm," before her first word (KNOWLEDGE_LOCAL.hum): a thought, not a loud,
+ *     close "HMM" on the miss
+ */
+export type VoiceRide = { from: number; to: number; db: number; ramp: number };
+export const VOICE_RIDES: Partial<Record<VoiceId, readonly VoiceRide[]>> = (() => {
+  const c5 = VOICE.lines['call-5'];
+  const hum = KNOWLEDGE_LOCAL.hum;
+  return {
+    'call-5': [{ from: Math.ceil(c5.phrases[c5.phrases.length - 1].end * FPS) + 2, to: c5.frames, db: -3.5, ramp: 3 }],
+    // (no hum in a regenerated kb-2: nothing to ride)
+    ...(hum ? { 'kb-2': [{ from: 0, to: hum.heard[1] - KNOWLEDGE.answer + 3, db: -4, ramp: 3 }] } : {}),
+  };
+})();
 /** the frame a line has gone silent (its cut, else its end) */
-export const voiceEnd = (v: { at: number; id: VoiceId; until?: number }) => voiceCut(v)?.[1] ?? v.at + vFrames(v.id);
+export const voiceEnd =(v: { at: number; id: VoiceId; until?: number }) => voiceCut(v)?.[1] ?? v.at + vFrames(v.id);
 /** Speech windows (absolute frames, whole lines; a cut line ends on its cut) — the bed ducks under these. */
 export const SPEECH = VOICES.map((v) => [v.at, voiceEnd(v)] as const);
 /**
@@ -1792,29 +1819,43 @@ export const BED = {
   file: sfx('bed.wav'),
   vol: 2,
   /**
-   * The fader rides (absolute frame, dB; smoothstep between points): the film LIFTS into the scale act —
-   * the wall builds and the hero slams a few dB over the bed's dialogue-act level, the greetings keep a
-   * felt pad under the voices, the after-call pulse drives into the iris, and the CTA is back at unity.
+   * The fader rides (absolute frame, dB; smoothstep between points). THE ARC PEAKS AT THE END: the
+   * scale act lifts a few dB over the dialogue acts (the wall, the slam and its 2 s hold, the greetings'
+   * felt pad, the after-call pulse into the iris) but stays BELOW the CTA's converge — the film's
+   * loudest sustained passage is the run into the logo (it climbs from her last word through the
+   * whirl; the bed's own inhale takes the survivor's hold), the logo lands on it, the name steps it
+   * back, and the end card's E chord is held a little forward, ringing into the master's fade.
    */
   ride: [
     [SCENES.scale.from - 2, 0],
-    [SCENES.scale.from + 1, 5],
-    [at('scale', SCALE.industriesTitle) - 1, 6.5],
-    [at('scale', SCALE.langTitle) - 6, 6],
+    [SCENES.scale.from + 1, 2],
+    [at('scale', SCALE.industriesTitle) - 1, 3.5],
+    [at('scale', SCALE.industriesTitle) + b(1), 3.5],
+    [at('scale', SCALE.langTitle) - 6, 3],
     [at('scale', SCALE.langTitle) + 3, 2],
     [at('scale', SCALE.flow) - 4, 2],
-    [at('scale', SCALE.flow) + 2, 3.5],
-    [at('scale', SCALE.irisToDark[0]), 4],
+    [at('scale', SCALE.flow) + 2, 3],
+    [at('scale', SCALE.irisToDark[0]), 3.5],
     [at('scale', SCALE.irisToDark[1]), 0],
+    [at('cta', CTA_LOCAL.drift[0]), 0],
+    [at('cta', CTA.converge[0]), 3.5],
+    [at('cta', CTA_LOCAL.orbIn[1] - 4), 6.5],
+    [at('cta', CTA_LOCAL.survivor[0]), 6],
+    [at('cta', CTA.logoImpact), 4],
+    [at('cta', CTA.brandVoice) - 2, 2],
+    [at('cta', CTA_LOCAL.note), 2.5],
   ] as readonly (readonly [number, number])[],
 };
 /**
  * The master: everything above, mixed to `lufs` integrated with a true-peak ceiling (dBTP).
  * (−15.5, not −15: the film is dialogue-driven, so its integrated loudness IS the dialogue; half
  * a LU lower lets the logo impact out-shout the loudest line without crushing the hit.)
- * `fadeOut`: the whole mix fades from one beat into the end card's still hold to the last frame,
- * exponentially (`fadeK` nepers over the fade, offset to land on true zero), so the impact's
- * room and the chord's ring resolve into silence (check-mix: last 100 ms < −55 dBFS RMS).
+ * `fadeOut`: the whole mix fades from one beat into the end card's still hold to the LAST FRAME,
+ * exponentially (`fadeK` nepers over the fade, offset to land on true zero at the last sample) —
+ * the picture dims on the same window and curve (Cta.tsx), so the logo's light goes out with its
+ * chord. The bed has no fade of its own and fadeK is gentle (2: −7 dB a third in, −17 dB two thirds
+ * in), so the E chord rings audibly into the last ten frames instead of dying before the picture
+ * (check-mix: last 100 ms < −55 dBFS RMS, last frame < −60).
  * `dialogueLufs` ± `dialogueTol`: every line in the dialogue stem (the files are at −23 LUFS mono,
  * scripts/voice-lines.json level.lufs; dual-mono in the stereo bus that reads +3 LU).
  */
@@ -1825,7 +1866,7 @@ export const MIX = {
   lufs: -15.5,
   ceiling: -1.5,
   fadeOut: [SCENES.cta.from + CTA.finalHold + b(1), DURATION] as const,
-  fadeK: 3.5,
+  fadeK: 2,
   /**
    * The logo impact is the film's loudest moment: the effects bus rides up `rideDb` from
    * `hold[0]` to `hold[1]` frames around the hit (crossfaded back to the untouched bus by

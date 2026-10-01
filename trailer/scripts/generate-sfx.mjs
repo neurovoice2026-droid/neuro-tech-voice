@@ -111,6 +111,9 @@ for (const f of libFiles) written.add(path.basename(f));
 const bedKey = keyOf(['bed.mjs', 'dsp.mjs'], {
   S: T.SCENES, H: T.HOOK, C: [T.CALL.bookedMark, T.CALL.length], R: T.RESULT, K: T.KNOWLEDGE, KL: T.KNOWLEDGE_LOCAL.closingKey,
   A: T.vWord(T.KNOWLEDGE.answerVoice, 0), SC: T.SCALE, CTA: T.CTA, D: T.DURATION, BPM: T.BPM,
+  // (the scene-local frames the bed reads too: the wall's light groups, the hero's glint, the stations,
+  // the converge's whirl and the survivor's hold)
+  SL: [T.SCALE_LOCAL.groups, T.SCALE_LOCAL.heroGlint, T.SCALE_LOCAL.stations], CL: [T.CTA_LOCAL.drift, T.CTA_LOCAL.orbIn, T.CTA_LOCAL.survivor],
 });
 let bedSt;
 let bedNote = 'cached';
