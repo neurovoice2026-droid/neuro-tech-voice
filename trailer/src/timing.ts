@@ -469,7 +469,7 @@ export const TWIST_LOCAL = {
   orbLock: [TWIST.pushToPhone[1] - 8, TWIST.pushToPhone[1] - 4] as const,
   /** one breath (±2 %, 2-beat sine) before the pickup squash starts (PICKUP − 6) */
   breath: [b(7), TWIST.pushToPhone[1] - 6] as const,
-  /** a faint third ring leaves the avatar (1× → 2.6×) on the beat */
+  /** a faint echo of the resumed ring leaves the avatar (1× → 2.6×) on the beat */
   ring3: [b(7), b(7) + 8] as const,
   /** two bokeh planes over the screen (0.5× / 1.5× the dive's zoom) */
   bokeh: [TWIST.pushToPhone[0] + 10, TWIST.pushToPhone[1] + 12] as const,
@@ -1252,8 +1252,10 @@ export const HITS: Hit[] = [
   H('twist', TWIST_LOCAL.keyGlint[0], 'sheen', 'night', [0.35, 0.65], 2, 'glint sweeps “not the phone.”'),
   H('twist', TWIST_LOCAL.diveDip[1], 'swell', 'night', 0.83, 2, 'pull-back before the dive'),
   H('twist', TWIST.pushToPhone[0] + 14, 'whoosh', 'night', [0.75, 0.5], 1, 'DIVE into the phone'),
-  // the ring's second wave (ring2 + 9) and the faint third ring (ring3) are inside ring-twist
-  H('twist', TWIST.ring2, 'ring-twist', 'night', 0.8, 1, 'RING (+ second wave)'),
+  // NOT a second ring: the hook's first ring, frozen at HOOK.freeze, RESUMES — one wave on screen, and
+  // ring-twist should be that same ring's second pulse alone (same trill, pitch and level: ring-hook's
+  // pulse 2), so "Picked up on the first ring." stays true; the faint third ring (ring3) is inside it
+  H('twist', TWIST.ring2, 'ring-twist', 'night', 0.8, 1, 'THE FROZEN RING RESUMES (one pulse)'),
   H('twist', TWIST_LOCAL.buzz[0], 'buzz', 'night', 0.8, 2, 'the phone vibrates'),
   H('twist', Math.round((TWIST_LOCAL.breath[0] + TWIST_LOCAL.breath[1]) / 2), 'swell', 'night', 0.5, 3, 'the orb breathes'),
   H('call', 0, 'riser-short', 'night', 0.5, 1, 'pickup anticipation → peak ON the pickup'),

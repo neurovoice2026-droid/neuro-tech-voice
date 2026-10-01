@@ -215,7 +215,7 @@ export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number; grade?: 
                   position: 'absolute',
                   left: 0,
                   right: 0,
-                  top: sh / 2 + L.pick(-168, -196) + row * 36,
+                  top: sh / 2 + L.pick(-168, -200) + row * 36,
                   paddingLeft: '0.14em',
                   transform: `translateY(${(-uiOut * 40).toFixed(2)}px)`,
                   fontFamily: FONT.body,
@@ -237,7 +237,7 @@ export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number; grade?: 
                 position: 'absolute',
                 left: 0,
                 right: 0,
-                top: sh / 2 + L.pick(86, -114),
+                top: sh / 2 + L.pick(86, -110),
                 // exits away from the orb with the rest of the UI (down in 16:9, up in 9:16)
                 transform: `translateY(${(uiOut * L.pick(50, -34)).toFixed(2)}px)`,
                 fontFamily: FONT.mono,

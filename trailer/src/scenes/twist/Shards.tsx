@@ -249,8 +249,10 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
         hard += Math.max(0, edge.y + half - y) + Math.max(0, y - (L.height - edge.y - half));
         if (p.row === 0) hard += Math.max(0, y - (tagBox.y0 - 40 - half));
         if (p.row === 1) hard += Math.max(0, tagBox.y1 + 40 + half - y);
+        // never ON the phone: it is found in the dark right where they rest (phoneReveal)
+        hard += inside(phoneBox, x, y, half);
         c += hard * 1e4;
-        // soft: not on the phone, not on a neighbour
+        // soft: clear of the phone's rim, not on a neighbour
         c += Math.min(1, inside(phoneBox, x, y, 44 + half) / 20) * 900;
         for (const q of placed) {
           const d = Math.hypot(x - q.ax, y - q.ay);
