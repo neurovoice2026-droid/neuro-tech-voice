@@ -170,10 +170,11 @@ export function geo(L: Layout) {
     caller: v
       ? { labelY: 1272, align: 'center' as const, boxX: 170, boxW: 740, rowY: 1340, size: 84, lh: 1.0 }
       : { labelY: 508, align: 'right' as const, boxX: 120, boxW: 570, rowY: 594, size: 92, lh: 1.0 },
-    /** Ava's answer (Inter 500, the call's voice): one row under the orb (16:9) / two rows under it (9:16) */
+    /** Ava's answer (Inter 500, the call's voice): one row under the orb (16:9) / two rows under it,
+     *  in the caller's place (9:16) — under her AVA tag (`labelY`, centred; the size of CALLER) */
     answer: v
-      ? { boxX: 68, boxW: 944, rowY: 1318, rowB: 1318 + Math.round(68 * 1.18), size: 68, lh: 1.18 }
-      : { boxX: 80, boxW: 1760, rowY: 954, rowB: null, size: 76, lh: 1.16 },
+      ? { boxX: 68, boxW: 944, rowY: 1340, rowB: 1340 + Math.round(68 * 1.18), size: 68, lh: 1.18, labelY: 1272 }
+      : { boxX: 80, boxW: 1760, rowY: 966, rowB: null, size: 76, lh: 1.16, labelY: 904 },
     /** the slot: the page the reader reads → "0 matches" → the card for the team.
      *  'peek' (16:9): it opens as the page being read before the scan; 'miss' (9:16): it opens on the
      *  miss, over the documents stepping back */

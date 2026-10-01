@@ -10,8 +10,9 @@
  * readable, until just before the caller's first word; then it dips and
  * flicks up out of its masks.
  *
- * The closing holds, alive (a slow 1.00 → 1.03 push and a breath), until
- * the whip takes it away with the stage; ON its key hit a pool of Sunday
+ * The closing arrives on a 1.00 → 1.03 push that decelerates with the build
+ * (power3.out), so the whole line then HOLDS — still but for a breath — for
+ * ≥ 1.5 s, until the whip's counter-move takes it away with the stage; ON its key hit a pool of Sunday
  * light blooms behind "it says so." and stays, low, as a glow.
  */
 import React from 'react';
@@ -89,7 +90,7 @@ export const Heading: React.FC<{ t: number; G: Geo; cx: number }> = ({ t, G, cx 
 export const Closing: React.FC<{ t: number; G: Geo; cx: number }> = ({ t, G, cx }) => {
   if (t < K.closing - 4) return null;
   const Cl = G.closing;
-  const push = 1 + 0.03 * tween(t, KL.closingPush, [0, 1], EASE.inOut);
+  const push = 1 + 0.03 * tween(t, KL.closingPush, [0, 1], EASE.out3);
   const drift = breathe(t - K.closing, 70, 2.2);
   // the key line's centre (rows are size · LH apart, centred on cy)
   const n = Cl.lines.length;

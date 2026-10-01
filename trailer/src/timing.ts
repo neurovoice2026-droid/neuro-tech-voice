@@ -604,9 +604,12 @@ export const CALL_LOCAL = {
 export const RESULT_LOCAL = {
   /** the night room knocks the call back (out-curve) */
   roomIn: [RESULT.lift, b(4 / 3)] as const, // 0 → 20
-  /** the room opens as the call's midnight and warms to the night room only while the
-   *  calendar's close-up fills the frame (landing → before the recompose reveals it) */
-  roomWarm: [RESULT.land - b(0.4), RESULT.land + b(0.5)] as const, // 24 → 38
+  /** the room opens as the call's midnight and STAYS midnight through the close-up (the
+   *  close-up never fills the frame: 9:16 shows half the room above / below the sheet, 16:9 a
+   *  strip — warming there lit them violet on the land and then dropped them to the night
+   *  half's navy, a pump); it warms with the split grade instead, under the Booked half's
+   *  ground as that grades in (= splitGrade) */
+  roomWarm: [RESULT.split - b(0.4), RESULT.split + b(14 / 15)] as const, // 39 → 59
   /** the lift spring starts here, after a 2-frame anticipation dip */
   liftGo: RESULT.lift + b(1 / 8), // 2
   /** the booked-pill wash blooms around the mark; the call's <MarkGlow> (MARK_GLOW_HANDOFF) cross-fades into it */
@@ -976,6 +979,33 @@ export const KNOWLEDGE_LOCAL = (() => {
     return { text: 'Quick question,', words: [K.ask + o, K.ask + w2] as const, out: askWord - 6 };
   })();
   const headingOut = lead ? ([lead.words[1] + 4, lead.words[1] + 10] as const) : ([askWord - 10, askWord - 4] as const);
+  /* kb-2 opens with Ava's thinking "Hmm," — heard, but not in its word alignment. It is HERS,
+   * and reads so: the caller's question and CALLER tag make their exit before its first sound,
+   * the speaker tag swaps to AVA, and "Hmm" writes in on her row on that sound, its three dots
+   * trailing the hum (¼ · ½ · ¾ through it); it leaves (the captions' 4 f replacement exit) on
+   * the frame "I don't have an answer for that," shows. (A regenerated kb-2 without a hum
+   * ≥ 12 f before "I": no hum caption, and the question holds to her first word.) */
+  const hum = (() => {
+    const e = VOICE.lines[K.answerVoice].env;
+    const o = onset(K.answerVoice);
+    const first = vWord(K.answerVoice, 0);
+    if (first - o < 12) return null;
+    let end = o;
+    while (end < first && e[end] > 0.15) end++;
+    const at = K.answer + o;
+    const len = Math.max(6, end - o);
+    return {
+      text: 'Hmm',
+      /** its first sound / when it is no longer heard */
+      heard: [at, K.answer + end] as const,
+      /** the word writes in (the captions' 2 f lead) */
+      appear: at - 2,
+      dots: [0.25, 0.5, 0.75].map((k) => Math.round(at + k * len)) as readonly number[],
+      out: [ansWord - 6, ansWord - 2] as const,
+    };
+  })();
+  /* the question (and its CALLER tag) is gone the frame the hum's caption writes in */
+  const questionOut = hum ? ([hum.appear - 4, hum.appear] as const) : ([ansWord - 8, ansWord - 4] as const);
   const beams = [K.scan[0], K.scan[0] + 21] as const;
   const beamStagger = 2;
   const beamDraw = beams[1] - beams[0] - 4 * beamStagger;
@@ -1017,8 +1047,14 @@ export const KNOWLEDGE_LOCAL = (() => {
     headingOutOrb: [b(2) - 7, b(2) - 1] as const,
     /** CALLER pops on the caller's first sound */
     callerIn: lead ? lead.words[0] - 1 : headingOut[1] - 1,
-    /** the question holds while Ava hums it over; gone before her first word */
-    questionOut: [ansWord - 8, ansWord - 4] as const,
+    /** the question (+ CALLER) leaves before Ava's hum — the hum is hers, never the caller's */
+    questionOut,
+    /** Ava's "Hmm…" (kb-2's unaligned pre-roll): its frames, or null when kb-2 has none */
+    hum,
+    /** the speaker tag swaps to AVA as the caller's leaves (on her first sound; her first word without a hum)… */
+    avaIn: hum ? hum.appear : ansWord - 3,
+    /** …and leaves with her last caption (holdUntil K.closing: its 4 f exit ends 2 f before) */
+    avaOut: [K.closing - 6, K.closing - 2] as const,
     /** the slot opens (the dashed page the reader is reading) — a scan line of Sunday light runs down its reveal edge */
     peekOpen: K.scan[0] - b(0.25),
     /** the pill flips to "Looking through 5 documents" (the box tweens, the words swap, a bump) */
@@ -1068,7 +1104,8 @@ export const KNOWLEDGE_LOCAL = (() => {
     orbPush: [K.answer, K.closing - 4] as const,
     /** the stage recedes (.12, blur, .97) under the closing title */
     recede: [K.closing - 4, K.closing + 6] as const,
-    closingStagger: 2.5,
+    /** 7 words a frame-pair apart: built in ~12 f, so it holds whole and still ≥ 1.5 s before the whip */
+    closingStagger: 2,
     closingKey: K.closing + b(1.5), // an 8th after its last word ("so.") is up: "it says so." turns Sunday teal (glint, pool of light, kick)
     closingPush: [K.closing, K.out[0]] as const,
     /** the whip: a 3 f counter-move, then the stage leaves; clean white from `white`.

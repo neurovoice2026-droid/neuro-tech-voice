@@ -48,7 +48,6 @@
  */
 import React, { useMemo } from 'react';
 import { AbsoluteFill, Easing } from 'remotion';
-import { Vignette } from '../components/Grain';
 import { BOOKING, MarkGlow } from '../components/Shared';
 import { MARK_GLOW_HANDOFF } from '../lib/handoff';
 import { useLayout } from '../lib/layout';
@@ -71,6 +70,10 @@ export type ResultTiming = typeof RESULT_LOCAL;
 
 /** the event's rect opens past the frame */
 const OPEN = Easing.bezier(0.6, 0, 0.8, 0.3);
+/** <Vignette strength={0.55} color="8,6,28"> (105% 88% at 50% 46% of the FRAME) expressed on the 1.6×
+ *  room box: 105 / 1.6, 88 / 1.6, and the centre (0.46 + 0.3) / 1.6 — identical inside the frame, and
+ *  past it the outer stop simply carries on, so no box edge can ever come into view */
+const ROOM_VIGNETTE = `radial-gradient(65.625% 55% at 50% 47.5%, transparent 34%, rgba(8,6,28,${(0.55 * 0.55).toFixed(4)}) 76%, rgba(8,6,28,${(0.92 * 0.55).toFixed(4)}) 100%)`;
 /** a bar's downbeat on the film's grid (bars of 4 beats from global frame 0), in result-local frames —
  *  derived, since the result's start moves with the voices */
 const BAR = 4 * BEAT;
@@ -457,7 +460,10 @@ export const Result: React.FC = () => {
             }}
           />
         ) : null}
-        <Vignette strength={0.55} color="8,6,28" />
+        {/* the room's own vignette (<Vignette strength 0.55>), drawn on the 1.6× room box with its
+            ellipse rescaled to match — a frame-sized box would show its edge (a hard 8/255 step at
+            x ≈ 1880 / y ≈ 1875) as soon as the camera pushes into the close-up */}
+        <div style={{ ...roomBox, background: ROOM_VIGNETTE }} />
       </AbsoluteFill>
       {roomWarm < 0.999 ? (
         <AbsoluteFill style={{ opacity: roomOp }}>
@@ -492,6 +498,7 @@ export const Result: React.FC = () => {
               cy={sbs ? 470 : 1300}
               vertical={L.vertical}
               light={look.breath * (1 + 0.45 * bookedFlash)}
+              bleed={900}
             />
           </AbsoluteFill>
         </AbsoluteFill>

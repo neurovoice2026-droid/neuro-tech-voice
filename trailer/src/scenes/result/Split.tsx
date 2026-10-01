@@ -409,21 +409,27 @@ export const BookedGround: React.FC<{
   vertical: boolean;
   /** 0..~1.4: the light's level (breath × lock swell) */
   light: number;
-}> = ({ x, y, w, h, cx, cy, vertical, light }) => {
-  const lx = cx - x;
-  const ly = cy - y;
-  const r = vertical ? '62% 48%' : '58% 62%';
+  /** extra ground on every side (layer px) that only carries the outer colour on: the dive zooms this
+   *  0.15 plane far slower than the seam, which runs ≈ 660 px past the design box towards the night */
+  bleed?: number;
+}> = ({ x, y, w, h, cx, cy, vertical, light, bleed = 0 }) => {
+  const lx = cx - x + bleed;
+  const ly = cy - y + bleed;
+  // the ellipses in px of the DESIGN box (w × h), so the bleed never stretches them
+  const e = (rx: number, ry: number) => `${(rx * w).toFixed(1)}px ${(ry * h).toFixed(1)}px`;
+  const r = vertical ? e(0.62, 0.48) : e(0.58, 0.62);
+  const r2 = vertical ? e(0.95, 0.8) : e(0.85, 0.95);
   return (
     <div
       style={{
         position: 'absolute',
-        left: x,
-        top: y,
-        width: w,
-        height: h,
+        left: x - bleed,
+        top: y - bleed,
+        width: w + 2 * bleed,
+        height: h + 2 * bleed,
         background: [
           `radial-gradient(${r} at ${lx.toFixed(1)}px ${ly.toFixed(1)}px, rgba(124,58,237,${(0.2 * light).toFixed(3)}) 0%, rgba(124,58,237,${(0.07 * light).toFixed(3)}) 45%, rgba(124,58,237,0) 100%)`,
-          `radial-gradient(${vertical ? '95% 80%' : '85% 95%'} at ${lx.toFixed(1)}px ${ly.toFixed(1)}px, #1f1860 0%, #19134f 40%, #110c38 100%)`,
+          `radial-gradient(${r2} at ${lx.toFixed(1)}px ${ly.toFixed(1)}px, #1f1860 0%, #19134f 40%, #110c38 100%)`,
         ].join(', '),
       }}
     />

@@ -41,8 +41,12 @@
  *               the search, settles), the beams fall back, the slot says
  *               "0 matches" — 9:16: the documents step back out of focus and
  *               the slot opens in front of them, in their place
- *   answer      Ava (kb-2) hums over it in grey; her Sunday light floods back
- *               on her first word; Ava = the call's Inter 500, word-synced,
+ *   hum         the question and CALLER leave before Ava (kb-2) makes a
+ *               sound; the speaker tag swaps to AVA (over her row) and "Hmm"
+ *               writes in on her first sound, its dots popping through the
+ *               hum, while the orb breathes with it in grey
+ *   answer      "Hmm…" gives way to her first word; her Sunday light floods back
+ *               on it; Ava = the call's Inter 500, word-synced,
  *               "guess." and "today." in sunday ink; the orb pushes in; two
  *               captions never share a frame (CaptionRun); 16:9: the
  *               documents step back
@@ -62,7 +66,7 @@ import { AbsoluteFill } from 'remotion';
 import { noise2D } from '@remotion/noise';
 import { Camera, Layer } from '../components/Camera';
 import { useLayout } from '../lib/layout';
-import { aos, EASE, SPRING, tween } from '../lib/motion';
+import { aos, EASE, SPRING, springAt, tween } from '../lib/motion';
 import { useSceneFrame } from '../lib/scene';
 import { rgba } from '../lib/lights';
 import { C, FONT, TRACK } from '../theme';
@@ -141,26 +145,36 @@ function whipPos(f: number, G: Geo) {
   return a + w;
 }
 
-const CallerTag: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
-  const s = KL.callerIn;
-  if (t < s - 2) return null;
-  const Cc = G.caller;
-  const p = aos(t, s, { anticip: 2, depth: 0.08, config: SPRING.site });
-  // exit: a 2 f dip, then up out of the mask
-  const [o0] = KL.questionOut;
+/**
+ * A speaker tag (the scene's dialogue labels): it rises out of its mask on the site spring
+ * (a 2 f anticipation dip), and leaves with a 2 f dip, then up out of the mask (EASE.in2, blur).
+ * CALLER (caller blue) over the question; AVA (sunday ink) over her row once she is heard.
+ */
+const SpeakerTag: React.FC<{
+  t: number;
+  G: Geo;
+  label: string;
+  color: string;
+  at: number;
+  out: readonly [number, number];
+  y: number;
+  /** right-aligned to this x (16:9 caller), else centred on the frame */
+  right?: number;
+}> = ({ t, G, label, color, at, out: [o0, o1], y, right }) => {
+  if (t < at - 2) return null;
+  const p = aos(t, at, { anticip: 2, depth: 0.08, config: SPRING.site });
   const dip = t > o0 - 2 && t < o0 ? 14 * Math.sin(((t - (o0 - 2)) / 2) * (Math.PI / 2)) : 0;
-  const out = tween(t, KL.questionOut, [0, 1], EASE.in2);
+  const out = tween(t, [o0, o1], [0, 1], EASE.in2);
   if (out >= 1) return null;
-  const blur = tween(t, [s, s + 8], [3, 0], EASE.out3) + out * 4;
+  const blur = tween(t, [at, at + 8], [3, 0], EASE.out3) + out * 4;
+  const W = G.v ? 1080 : 1920;
   const style: React.CSSProperties =
-    Cc.align === 'right'
-      ? { right: (G.v ? 1080 : 1920) - (Cc.boxX + Cc.boxW), textAlign: 'right' }
-      : { left: 0, width: G.v ? 1080 : 1920, textAlign: 'center' };
+    right !== undefined ? { right: W - right, textAlign: 'right' } : { left: 0, width: W, textAlign: 'center' };
   return (
     <div
       style={{
         position: 'absolute',
-        top: Cc.labelY,
+        top: y,
         ...style,
         transform: 'translateY(-50%)',
         overflow: 'hidden',
@@ -176,14 +190,107 @@ const CallerTag: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
           lineHeight: 1.12,
           letterSpacing: TRACK.label,
           textTransform: 'uppercase',
-          color: C.caller,
+          color,
           transform: `translateY(${((1 - p) * 110 - out * 60 + dip).toFixed(2)}%)`,
           opacity: 1 - out,
           filter: blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : undefined,
         }}
       >
-        Caller
+        {label}
       </div>
+    </div>
+  );
+};
+
+const CallerTag: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
+  const Cc = G.caller;
+  return (
+    <SpeakerTag
+      t={t}
+      G={G}
+      label="Caller"
+      color={C.caller}
+      at={KL.callerIn}
+      out={KL.questionOut}
+      y={Cc.labelY}
+      right={Cc.align === 'right' ? Cc.boxX + Cc.boxW : undefined}
+    />
+  );
+};
+
+/** AVA — over her row, from her first sound (the hum) to her last caption */
+const AvaTag: React.FC<{ t: number; G: Geo }> = ({ t, G }) => (
+  <SpeakerTag t={t} G={G} label="Ava" color={INK} at={KL.avaIn} out={KL.avaOut} y={G.answer.labelY} />
+);
+
+/**
+ * "Hmm…" — kb-2's thinking pre-roll (not in its word alignment, timed off its envelope:
+ * KL.hum). Set as Ava's captions are (Inter 500, ink, on her row): "Hmm" writes in on its
+ * sound (.16em rise, 3 px blur → 0, 6 f) and glows while it is heard; its three dots pop in
+ * place through the hum (¼ · ½ · ¾ of it, the pop spring); then it eases to the spoken 86 %
+ * and leaves with the captions' replacement exit (−30 %, 4 px blur, fade, 4 f) — gone the
+ * frame "I…" shows.
+ */
+const Hum: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
+  const Hm = KL.hum;
+  if (!Hm || t < Hm.appear - 1) return null;
+  const out = tween(t, Hm.out, [0, 1], EASE.in2);
+  if (out >= 1) return null;
+  const A = G.answer;
+  const rowH = A.size * A.lh;
+  const heard = t >= Hm.appear && t < Hm.heard[1];
+  const after = Math.max(0, t - Math.max(Hm.heard[1], Hm.appear + 6));
+  const dim = heard ? 1 : 1 - 0.14 * EASE.inOut(Math.min(1, after / 6));
+  const g = heard ? 1 : 1 - Math.min(1, after / 6);
+  const e = EASE.out3(Math.min(1, Math.max(0, (t - Hm.appear + 1) / 6)));
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: 0,
+        width: G.v ? 1080 : 1920,
+        top: A.rowY - rowH / 2,
+        textAlign: 'center',
+        whiteSpace: 'nowrap',
+        transform: out > 0 ? `translateY(${(-0.3 * rowH * out).toFixed(2)}px)` : undefined,
+        opacity: (1 - out) * dim,
+        filter: out > 0.01 ? `blur(${(4 * out).toFixed(2)}px)` : undefined,
+        fontFamily: FONT.body,
+        fontWeight: 500,
+        fontSize: A.size,
+        lineHeight: A.lh,
+        letterSpacing: '-0.01em',
+        color: C.ink,
+        textShadow: g > 0.02 && e > 0 ? `0 0 0.35em ${rgba(SUN_GLOW.body, 0.22 * g)}` : undefined,
+      }}
+    >
+      <span
+        style={{
+          display: 'inline-block',
+          opacity: e,
+          transform: e < 1 ? `translateY(${(0.16 * (1 - e)).toFixed(4)}em)` : undefined,
+          filter: e > 0 && e < 1 ? `blur(${(3 * (1 - e)).toFixed(2)}px)` : undefined,
+        }}
+      >
+        {Hm.text}
+      </span>
+      {Hm.dots.map((d, j) => {
+        // each dot pops in place on its own tick of the hum (.3 → ~1.15 → 1, the pop spring)
+        const s = t < d - 1 ? 0 : springAt(t, d - 1, SPRING.pop);
+        return (
+          <span
+            key={j}
+            style={{
+              display: 'inline-block',
+              opacity: Math.min(1, Math.max(0, (t - d + 2) / 2)),
+              transform: s < 1.001 && s > 0.999 ? undefined : `scale(${(0.3 + 0.7 * s).toFixed(4)})`,
+              transformOrigin: '50% 82%',
+            }}
+          >
+            .
+          </span>
+        );
+      })}
     </div>
   );
 };
@@ -363,6 +470,8 @@ export const Knowledge: React.FC = () => {
               <Heading t={t} G={G} cx={L.cx} />
               <CallerTag t={t} G={G} />
               <LeadIn t={t} G={G} cx={L.cx} />
+              <AvaTag t={t} G={G} />
+              <Hum t={t} G={G} />
               <Captions
                 t={t}
                 lineAt={K.ask}
