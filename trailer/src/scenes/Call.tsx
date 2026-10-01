@@ -35,7 +35,6 @@
  */
 import React, { useMemo } from 'react';
 import { AbsoluteFill } from 'remotion';
-import { Captions, type CaptionFont } from '../components/Captions';
 import { Dust } from '../components/Dust';
 import { flowTime } from '../components/Orb';
 import { BOOKING, MarkGlow } from '../components/Shared';
@@ -45,17 +44,18 @@ import { aos, EASE, mixHex, SPRING, springAt, tween } from '../lib/motion';
 import { pickupGlow, pickupScale } from '../lib/pickup';
 import { useSceneFrame } from '../lib/scene';
 import { C, FONT } from '../theme';
-import { CALL, CALL_LOCAL, SCENES, TWIST_LOCAL, vWord, type Caption } from '../timing';
+import { CALL, CALL_LOCAL, FPS, SCENES, TWIST_LOCAL, vWord, type Caption } from '../timing';
 import { VOICE } from '../voice.generated';
 import { bloom, mixColor } from '../lib/lights';
 import { exitCurve, Flare, RingPulse, Sparks } from './call/Accents';
 import { Bokeh, type Disc } from './call/Bokeh';
+import { CallCaptions, exitLength, wordExit, type CallCaption, type CaptionFont } from './call/CallCaptions';
 import { callGlow, CALLER_GLOW, Floor, KeyLight, MidnightVignette, RoomBox, triple } from './call/Light';
 import { Digits, OrbStage, type OrbState } from './call/Lockup';
 import { callerK, camAt, framingAt, framings, orbBase, orbToScreen, planeCss, shotAt, swingAt, type Cam } from './call/shots';
 import { ClosedSign, flightAt, PickupLine } from './call/Status';
 import { Chips, MarkRow, SpeakerTag } from './call/Transcript';
-import { lightAt, listenAt, ORB_FRAME0, orbVolumeByIndex, turnAt, volumeAt } from './call/voice';
+import { lightAt, listenAt, onsets, ORB_FRAME0, orbVolumeByIndex, turnAt, volumeAt } from './call/voice';
 import { Waveform } from './call/Waveform';
 import { measure, useFontsReady, type FontSpec } from './result/measure';
 
@@ -66,6 +66,36 @@ const C5 = VOICE.lines[LINES[4].voice].words.map((w) => w.w.toLowerCase().replac
 const ALL = C5.indexOf('all');
 const ROW_A: Caption =
   ALL > 0 ? { text: "You're all booked for", word: 1, map: [1, ALL, ALL + 1, ALL + 2] } : { text: "You're all booked for", word: 1, map: [1, 1, 2, 3] };
+/**
+ * HEARD = READ. The callers say more than the aligned script: "Oh, hi. Um, could I…" and "Oh, three
+ * o'clock is perfect. Thank you!". Those words have no aligned word of their own, so they are captioned
+ * on the voice's own syllable onsets (call/voice.ts `onsets`) — if a regenerated take drops them, the
+ * caption falls back to the script's.
+ */
+const v2 = VOICE.lines['call-2'];
+const C2_OH = onsets('call-2', 0, vWord('call-2', 0) - 3)[0];
+const C2_UM = onsets('call-2', Math.ceil(v2.phrases[0].end * FPS), vWord('call-2', 1) - 2)[0];
+const v4 = VOICE.lines['call-4'];
+const C4_OH = onsets('call-4', 0, vWord('call-4', 0) - 3)[0];
+const C4_THANKS = onsets('call-4', Math.ceil(v4.phrases[v4.phrases.length - 1].end * FPS) + 1, v4.frames);
+const CAPTIONS: readonly (readonly CallCaption[])[] = LINES.map((l, i) => {
+  if (i === 1 && C2_OH !== undefined && C2_UM !== undefined)
+    return [{ text: 'Oh, hi! Um…', word: 0, map: [0, 0, 0], at: [C2_OH, null, C2_UM] }, ...l.captions.slice(1)];
+  if (i === 3 && C4_OH !== undefined) {
+    const thanks = C4_THANKS.length >= 2;
+    return [
+      {
+        text: `Oh, three o'clock is perfect.${thanks ? ' Thank you!' : ''}`,
+        word: 0,
+        map: [0, 0, 1, 2, 3, 3, 3],
+        at: [C4_OH, null, null, null, null, ...(thanks ? [C4_THANKS[0], C4_THANKS[1]] : [])],
+      },
+    ];
+  }
+  if (i === 4) return [l.captions[0], ROW_A];
+  return l.captions;
+});
+
 /** the caller's lines: when their phone line opens / is pulled back into the orb */
 const CALLER_LINES = LINES.flatMap((l, i) => (l.who === 'caller' ? [i] : []));
 
@@ -172,7 +202,8 @@ export const Call: React.FC = () => {
   // the phone's indigo grades down into the midnight as the camera pulls back out of the screen
   const grade = tween(t, CALL_LOCAL.roomGrade, [0, 1], EASE.inOut);
 
-  /* ── blow-away: everything but the mark and its glow (the room stays) ── */
+  /* ── the end: the orb inhales and dives INTO the mark (orbAt); everything else but the mark and its
+   *    glow blows away towards the lens (the room stays) ── */
   const bw = tween(t, CALL_LOCAL.blowAway, [0, 1], EASE.in2);
   // …after the inhale: everything eases back 1.5 % (the anticipation), then flies at the lens
   const inhale = tween(t, CALL_LOCAL.blowInhale, [0, 1], EASE.inOut);
@@ -219,11 +250,39 @@ export const Call: React.FC = () => {
   });
 
   /* ── the orb, on screen ─────────────────────────────────────────── */
+  const [i0, i1] = CALL_LOCAL.blowInhale;
+  const [v0, v1] = CALL_LOCAL.orbDive;
+  // where the mark takes the orb: just above the middle of "Wednesday at 3 PM", a little smaller than its x-height
+  const take = { x: M.x, y: M.y - 0.06 * M.fontSize, d: 0.45 * M.fontSize };
   const orbAt = (tt: number): OrbState => {
-    const s = orbToScreen(camAt(tt, L), framingAt(tt, L));
-    return { ...s, d: s.d * pickupScale(tt + g0) * (1 + 0.05 * gulpKick(tt) + 0.025 * absorbKick(tt)) * talkSwell(tt) };
+    const s0 = orbToScreen(camAt(tt, L), framingAt(tt, L));
+    const s = { ...s0, d: s0.d * pickupScale(tt + g0) * (1 + 0.05 * gulpKick(tt) + 0.025 * absorbKick(tt)) * talkSwell(tt) };
+    if (tt < i0) return s;
+    // the inhale: the orb swells 5 % and draws back 8 px (away from the mark) — the dive's anticipation
+    const inh = EASE.inOut(clamp01((tt - i0) / (i1 - i0)));
+    const s1 = { x: s.x, y: s.y - 8 * inh, d: s.d * (1 + 0.05 * inh) };
+    if (tt <= v0) return s1;
+    // the dive: power3.in on position and (log) size — it is pulled into the mark, fastest on contact
+    const e = EASE.in3(clamp01((tt - v0) / (v1 - v0)));
+    return { x: s1.x + (take.x - s1.x) * e, y: s1.y + (take.y - s1.y) * e, d: s1.d * Math.pow(take.d / s1.d, e) };
   };
+  /** the orb is absorbed over the dive's last 2 frames (gone on contact) */
+  const fadeAt = (tt: number) => 1 - EASE.in2(clamp01((tt - (v1 - 2)) / 2));
   const orb = orbAt(t);
+  const orbFade = fadeAt(t);
+  // the contact: the mark takes the orb (a hot flash that has all but died by the hand-over)
+  const took = t >= CALL_LOCAL.markTake ? Math.exp(-(t - CALL_LOCAL.markTake) / 1.4) : 0;
+  // 2-3 glow copies trail the dive (each as absorbed as the orb was then), swallowed with it
+  const trail =
+    t > v0 && t < END
+      ? ([
+          [1, 0.45],
+          [2, 0.28],
+          [3, 0.15],
+        ] as const)
+          .filter(([dt]) => t - dt > v0)
+          .map(([dt, a]) => [dt, a * fadeAt(t - dt) * (1 - EASE.in2(clamp01((t - v1 + 1) / 3)))] as const)
+      : [];
   const dress = tween(t, [0, 12], [0, 1], EASE.house);
   // THE KEY LIGHT's colour follows the orb's palette: violet while Ava speaks, caller blue while the caller does
   const listen = listenAt(t);
@@ -231,7 +290,8 @@ export const Call: React.FC = () => {
   const hitFlash = pickupFlash(t) + gulpFlash(t);
   // …and the caller's line opening floods the room with its blue for a moment
   const lineFlash = CALL_LOCAL.lineOpen.reduce((a, at) => a + (t >= at ? 0.22 * Math.exp(-(t - at) / 4) : 0), 0);
-  const keyK = (dress * (0.16 + 0.1 * lvl + 0.18 * light) + 0.6 * hitFlash + lineFlash) * (1 - bw);
+  // (the key light goes where the orb goes: into the mark)
+  const keyK = (dress * (0.16 + 0.1 * lvl + 0.18 * light) + 0.6 * hitFlash + lineFlash) * orbFade;
   const rim = pickupGlow(t + g0) + (0.2 * lvl + 0.3 * light) * tween(t, [0, 12], [0, 1], EASE.house);
   // the caller's framing (0 Ava … 1 caller), carried across each swing: the orb's depth of field
   const dof = 2 * callerK(t);
@@ -347,11 +407,11 @@ export const Call: React.FC = () => {
     tracking: 0,
   };
   const echoY = T.y - L.pick(170, 160);
-  // a line's last caption holds until the next speaker — but it is gone BY the cut (the tag
-  // swaps on the cut, and a performed voice may breathe or say "oh" before its first
-  // captioned word), unless the beat-after rule needs it longer (<Captions> enforces that)
+  // a line's last caption holds until the next speaker — it has (all but) left by the time the next
+  // line's first word rises (on its cut, at + 1), unless the beat-after rule needs it longer
+  // (<CallCaptions> enforces that); the last line's row A leaves on CALL_LOCAL.rowOut
   const holdOf = (i: number) =>
-    i + 1 < LINES.length ? Math.min(LINES[i + 1].at + 2, LINES[i + 1].at + vWord(LINES[i + 1].voice, 0)) : END + 10;
+    i + 1 < LINES.length ? LINES[i + 1].at + 2 : CALL_LOCAL.rowOut + exitLength(ROW_A.text.split(' ').length);
   const turn = turnAt(t);
 
   // the AI disclosure: an electric underline drawn under "an AI assistant" as she says it
@@ -394,16 +454,21 @@ export const Call: React.FC = () => {
         ? EASE.out3((t - bm) / 5)
         : t < bm + 8
           ? 1 - (1 - MARK_GLOW_HANDOFF) * EASE.inOut((t - bm - 5) / 3)
-          : MARK_GLOW_HANDOFF;
+          : MARK_GLOW_HANDOFF + 0.5 * took;
   // the payoff beat: press 1 → .975 (3 f, power2.in), spring back — exactly 1 before the hand-over
   const P = CALL_LOCAL.payoff;
+  // (+ the take: a 2 % gulp ON contact — back to exactly 1 by markHide − 1)
   const pulse =
     t < P || t >= END - 1
       ? 1
-      : t < P + 3
-        ? 1 - 0.025 * tween(t, [P, P + 3], [0, 1], EASE.in2)
-        : 0.975 + 0.025 * springAt(t, P + 3, SPRING.pop);
-  const periodOut = tween(t, [END - 9, END - 1], [0, 1], EASE.in2);
+      : (t < P + 3 ? 1 - 0.025 * tween(t, [P, P + 3], [0, 1], EASE.in2) : 0.975 + 0.025 * springAt(t, P + 3, SPRING.pop)) +
+        0.02 * took;
+  /* row A's exit (CallCaptions), cascading word by word: the AVA tag leads it, the period of
+   * "3 PM." follows it as the cascade's last word — the mark itself stays for the hand-over */
+  const rowWords = ROW_A.text.split(' ').length;
+  const rowStep = Math.min(1, 3 / (rowWords - 1));
+  const periodExit = wordExit(t, CALL_LOCAL.rowOut + rowWords * rowStep);
+  const tagExit = turnAt(t) === LINES.length - 1 ? wordExit(t, CALL_LOCAL.rowOut - 1) : null;
 
   /* ── planes ──────────────────────────────────────────────────────── */
   const discsFar: Disc[] = L.pick(
@@ -418,20 +483,19 @@ export const Call: React.FC = () => {
       { x: 900, y: 1880, r: 340, a: 0.04, soft: 60, seed: 'f3' },
     ],
   );
+  // three large out-of-focus highlights at the frame's edges (the twist's own near discs: the same
+  // place, size and seed, so the room keeps its light across the cut) — drawn as light: a violet body,
+  // a brighter lilac rim, screen-blended (never grey lens dirt)
   const discsNear: Disc[] = L.pick(
     [
-      { x: 110, y: 190, r: 110, a: 0.1, soft: 30, seed: 'n1' },
-      { x: 1840, y: 610, r: 150, a: 0.09, soft: 40, seed: 'n2' },
-      { x: 1700, y: 1010, r: 90, a: 0.12, soft: 24, seed: 'n3' },
-      { x: 220, y: 1020, r: 130, a: 0.08, soft: 34, seed: 'n4' },
-      { x: 1270, y: 40, r: 70, a: 0.11, soft: 24, seed: 'n5' },
+      { x: 110, y: 190, r: 110, a: 0.085, soft: 30, seed: 'n1' },
+      { x: 1840, y: 610, r: 150, a: 0.075, soft: 40, seed: 'n2' },
+      { x: 220, y: 1020, r: 130, a: 0.07, soft: 34, seed: 'n4' },
     ],
     [
-      { x: 30, y: 250, r: 120, a: 0.1, soft: 30, seed: 'n1' },
-      { x: 1070, y: 900, r: 150, a: 0.09, soft: 40, seed: 'n2' },
-      { x: 50, y: 1710, r: 140, a: 0.08, soft: 34, seed: 'n3' },
-      { x: 1010, y: 1850, r: 100, a: 0.12, soft: 24, seed: 'n4' },
-      { x: 880, y: 90, r: 80, a: 0.11, soft: 24, seed: 'n5' },
+      { x: 30, y: 250, r: 120, a: 0.085, soft: 30, seed: 'n1' },
+      { x: 1070, y: 900, r: 150, a: 0.075, soft: 40, seed: 'n2' },
+      { x: 50, y: 1710, r: 140, a: 0.07, soft: 34, seed: 'n3' },
     ],
   );
 
@@ -450,15 +514,15 @@ export const Call: React.FC = () => {
       </AbsoluteFill>
 
       <AbsoluteFill style={blow}>
-        {/* ── 9:16 · the floor under the orb: its key-light pool and a soft reflection ── */}
+        {/* ── 9:16 · the orb's reflection on the floor, directly under it ── */}
         {live && L.vertical ? (
           /* (it belongs to the midnight: it comes up as the phone's screen grades into the room) */
-          <Floor x={orb.x} y={orb.y} d={orb.d} floorY={FLOOR_Y} glow={glow} strength={keyK * grade} level={lvl + 0.6 * light} dof={dof} />
+          <Floor x={orb.x} y={orb.y} d={orb.d} glow={glow} strength={keyK * grade} level={lvl + 0.6 * light} dof={dof} />
         ) : null}
-        {/* ── 0.5 · large dim discs, far behind ──────────────────────── */}
+        {/* ── 0.5 · large dim discs of the orb's light, far behind (screen: they only add light) ── */}
         {live ? (
-          <AbsoluteFill style={{ ...planeCss(cam, 0.5), opacity: dress }}>
-            <Bokeh t={t} discs={discsFar} drift={2.2} color={triple(mixColor(glow.body, NAVY, 0.7))} />
+          <AbsoluteFill style={{ ...planeCss(cam, 0.5), opacity: dress, mixBlendMode: 'screen' }}>
+            <Bokeh t={t} discs={discsFar} drift={2.2} color={triple(mixColor(glow.body, NAVY, 0.25))} />
           </AbsoluteFill>
         ) : null}
 
@@ -513,7 +577,10 @@ export const Call: React.FC = () => {
           </>
         ) : null}
 
-        {/* ── 1.0 · Ava's orb (screen coordinates from the camera) ──── */}
+      </AbsoluteFill>
+
+      {/* ── 1.0 · Ava's orb (screen coordinates from the camera; it leaves INTO the mark, not with the blow) ── */}
+      <AbsoluteFill>
         <OrbStage
           t={t}
           base={B}
@@ -532,8 +599,13 @@ export const Call: React.FC = () => {
           rimIn={roomOp}
           glow={glow}
           flash={hitFlash}
+          grade={dress}
+          fade={orbFade}
+          trail={trail}
         />
+      </AbsoluteFill>
 
+      <AbsoluteFill style={blow}>
         {live ? (
           <>
             {/* ── 1.3 · motes ─────────────────────────────────────────── */}
@@ -542,10 +614,21 @@ export const Call: React.FC = () => {
             </AbsoluteFill>
             {/* ── 1.6 · lens bokeh (sub-frame ghosts over a swing's fastest frames: the nearest plane moves most) ── */}
             {[...planeGhosts, [0, 1] as const].map(([dt, a], gi) => (
-              <AbsoluteFill key={`b${gi}`} style={{ ...planeCss(dt ? camAt(t - dt, L) : cam, 1.6), opacity: 0.55 * dress * a }}>
-                <Bokeh t={t} discs={discsNear} color={triple(glow.core)} />
+              <AbsoluteFill
+                key={`b${gi}`}
+                style={{ ...planeCss(dt ? camAt(t - dt, L) : cam, 1.6), opacity: dress * a, mixBlendMode: 'screen' }}
+              >
+                <Bokeh t={t} discs={discsNear} color={triple(mixColor(glow.body, glow.core, 0.2))} rim={triple(glow.core)} />
               </AbsoluteFill>
             ))}
+          </>
+        ) : null}
+      </AbsoluteFill>
+
+      {/* ── screen · the transcript (each piece leaves by its own designed exit) ── */}
+      <AbsoluteFill>
+        {live ? (
+          <>
 
             {/* ── screen · speaker tag, captions, chips ──────────────── */}
             {uiSmear ? (
@@ -557,8 +640,15 @@ export const Call: React.FC = () => {
                 </defs>
               </svg>
             ) : null}
-            {turn >= 0 ? (
-              <div style={uiStyle}>
+            {turn >= 0 && (!tagExit || tagExit.op > 0.002) ? (
+              <div
+                style={{
+                  ...uiStyle,
+                  opacity: tagExit ? tagExit.op : undefined,
+                  transform: tagExit ? `translateY(${tagExit.dy.toFixed(2)}px) scale(${tagExit.scale.toFixed(4)})` : uiStyle.transform,
+                  transformOrigin: `${L.cx}px ${T.y - L.pick(78, 72)}px`,
+                }}
+              >
               <SpeakerTag
                 key={turn}
                 t={t}
@@ -574,19 +664,17 @@ export const Call: React.FC = () => {
               </div>
             ) : null}
             {LINES.map((line, i) => {
-              if (t < line.at - 4 || t > holdOf(i) + 12) return null;
+              if (t < line.at - 4 || t > holdOf(i) + 30) return null;
               const agent = line.who === 'agent';
-              // the outgoing line lifts 4 px with the swing's anticipation (then <Captions> takes it out)
-              const nextAt = i + 1 < LINES.length ? LINES[i + 1].at : Infinity;
-              const lift = 4 * EASE.inOut(clamp01((t - (nextAt - 2)) / 2));
               return (
-                <div key={i} style={{ position: 'absolute', inset: 0, transform: lift > 0.01 ? `translateY(${(-lift).toFixed(2)}px)` : undefined }}>
-                <Captions
+                <CallCaptions
                   key={i}
+                  id={`call-cap${i}`}
                   t={t}
                   lineAt={line.at}
                   voice={line.voice}
-                  captions={i === 4 ? [line.captions[0], ROW_A] : line.captions}
+                  captions={CAPTIONS[i]}
+                  notBefore={line.at + 1}
                   x={L.cx}
                   y={T.y}
                   maxWidth={T.maxWidth}
@@ -615,7 +703,6 @@ export const Call: React.FC = () => {
                       : undefined
                   }
                 />
-                </div>
               );
             })}
             <div style={uiStyle}>
@@ -697,7 +784,8 @@ export const Call: React.FC = () => {
             ember={ember}
             sheen={sheen}
             pulse={pulse}
-            periodOut={periodOut}
+            periodExit={periodExit}
+            flare={took}
             x={M.x}
             y={M.y}
             fontSize={M.fontSize}

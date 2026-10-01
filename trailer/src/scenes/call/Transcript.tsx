@@ -305,15 +305,18 @@ export const MarkRow: React.FC<{
   sheen: number;
   /** the payoff beat: the mark's scale (exactly 1 before the hand-over) */
   pulse: number;
-  /** 0..1 the period folds out (before the mark is handed over) */
-  periodOut: number;
+  /** the period leaves with its row (the caption's designed exit, CallCaptions.wordExit), or null */
+  periodExit: { dy: number; scale: number; op: number } | null;
+  /** 0..1 the mark takes the orb: it flares (hotter ember, a glow round the letters) */
+  flare?: number;
   x: number;
   y: number;
   fontSize: number;
   show: boolean;
-}> = ({ t, appear, ember, sheen, pulse, periodOut, x, y, fontSize, show }) => {
+}> = ({ t, appear, ember, sheen, pulse, periodExit, flare = 0, x, y, fontSize, show }) => {
   if (!show || t < appear[0] - 1) return null;
-  const color = mixHex(C.paper, C.emberLit, ember);
+  const color = mixHex(mixHex(C.paper, C.emberLit, ember), C.emberSoft, 0.7 * flare);
+  const flareShadow = flare > 0.01 ? `0 0 ${(0.3 + 0.25 * flare).toFixed(3)}em rgba(255,170,110,${(0.75 * flare).toFixed(3)})` : undefined;
   const sheenOn = sheen > 0 && sheen < 1;
   const allIn = t >= appear[2] - 1 + ENTER;
   const pPeriod = Math.min(1, Math.max(0, (t - appear[3] + 1) / ENTER));
@@ -328,6 +331,7 @@ export const MarkRow: React.FC<{
           fontSize={fontSize}
           style={{
             transform: `translate(-50%, -50%) ${scale}`,
+            textShadow: flareShadow,
             ...(sheenOn
               ? {
                   backgroundImage: `linear-gradient(100deg, ${color} 0%, ${color} 38%, ${C.emberSoft} 50%, ${color} 62%, ${color} 100%)`,
@@ -361,17 +365,17 @@ export const MarkRow: React.FC<{
         </div>
       )}
       {/* the period rides a twin of the mark's box (same face / size) */}
-      {pPeriod > 0 && periodOut < 1 ? (
+      {pPeriod > 0 && (!periodExit || periodExit.op > 0.002) ? (
         <div style={{ ...markBox(x, y, fontSize), color: C.paper }}>
           <span style={{ visibility: 'hidden' }}>{BOOKING.mark}</span>
           <span
             style={{
               position: 'absolute',
               left: '100%',
-              top: `${((1 - EASE.out3(pPeriod)) * 0.16).toFixed(3)}em`,
-              opacity: EASE.out3(pPeriod) * (1 - periodOut),
+              top: `calc(${((1 - EASE.out3(pPeriod)) * 0.16).toFixed(3)}em + ${(periodExit ? periodExit.dy : 0).toFixed(2)}px)`,
+              opacity: EASE.out3(pPeriod) * (periodExit ? periodExit.op : 1),
               filter: pPeriod < 1 ? `blur(${(3 * (1 - EASE.out3(pPeriod))).toFixed(2)}px)` : undefined,
-              transform: `scale(${(1 - 0.5 * periodOut).toFixed(3)})`,
+              transform: periodExit ? `scale(${periodExit.scale.toFixed(4)})` : undefined,
               transformOrigin: '0% 80%',
             }}
           >

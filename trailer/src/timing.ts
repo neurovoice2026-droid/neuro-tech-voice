@@ -489,6 +489,16 @@ const CALL_LIFT = CALL_SWALLOW - CALL_DIVE;
 const CALL_S2 = CALL.lines[0].at + vWord('call-1', 6);
 /** shot ↔ reverse shot: a designed swing on every turn (lines 1…4), [at − 2, at + 8] */
 const CALL_SWING = CALL.lines.slice(1).map((l) => [l.at - 2, l.at + 8] as const);
+/** Ava's sign-off ("See you then!") is spoken after the last aligned word and has no word of its own:
+ *  its first vowel is read from the line's loudness (the first frame past the last phrase that climbs
+ *  over .3; the line's end if there is none) — call-local */
+const CALL_SIGN_OFF = (() => {
+  const v = VOICE.lines['call-5'];
+  const env = v.env as readonly number[];
+  let f = Math.ceil(v.phrases[v.phrases.length - 1].end * FPS) + 2;
+  while (f < env.length && env[f] < 0.3) f++;
+  return CALL.lines[4].at + Math.min(f, env.length);
+})();
 export const CALL_LOCAL = {
   /** the swings: from at − 2 the orb anticipates (squash .95 + a 12 px counter-move away from where it is
    *  going, the outgoing caption lifts 4 px); from at it travels A ↔ C on SPRING.pop (fastest at + 1…3,
@@ -506,8 +516,10 @@ export const CALL_LOCAL = {
   glide: 4,
   /** the figure pairs spring OUT of the orb right after the gulp (never while the hero line lands) */
   unfold: CALL_SWALLOW + 1,
-  /** the phone's indigo grades down into the MIDNIGHT room (the orb becomes the key light) as the camera pulls back */
-  roomGrade: [2, b(2)] as const,
+  /** the phone's indigo grades down into the MIDNIGHT room (the orb becomes the key light) — it starts inside
+   *  the twist's dive (the twist follows this curve on its screen) so the pickup lands on the night, not on an
+   *  indigo slab; midnight by the time "Picked up…" has risen */
+  roomGrade: [-10, b(2 / 3)] as const,
   /** the CLOSED sign (the door callback) hangs, lifts (anticipation) and swings down to seat ON this 8th
    *  after the pickup: its glint + outline ring leave from here */
   statusIn: b(0.5),
@@ -554,10 +566,19 @@ export const CALL_LOCAL = {
   ember: CALL.bookedMark,
   /** the payoff beat: the mark presses (3 f) and springs back — exactly 1 again by markHide − 1 */
   payoff: CALL.bookedMark + 1,
-  /** the room inhales (everything but the mark eases back 1.5 %) before the blow-away */
-  blowInhale: [CALL_LEN - 9, CALL_LEN - 6] as const,
-  /** everything but the mark (and its glow) blows away towards the lens; the room stays */
-  blowAway: [CALL_LEN - 6, CALL_LEN - 1] as const,
+  /** Ava's sign-off "See you then!" (its first vowel; it rides the cut into the result, which captions it) */
+  signOff: CALL_SIGN_OFF,
+  /** row A ("You're all booked for"), the period and the AVA tag leave — 2 f anticipation (lift 4 px),
+   *  then a 5 f drop ON the beat, word by word — so the caption row is clear before the sign-off */
+  rowOut: Math.min(CALL_LEN - b(1), CALL_SIGN_OFF - 12),
+  /** the orb inhales (+5 %) while the room eases back 1.5 % … */
+  blowInhale: [CALL_LEN - 12, CALL_LEN - 9] as const,
+  /** … then dives INTO the booked mark (power3.in, trailing glow ghosts, smeared) … */
+  orbDive: [CALL_LEN - 9, CALL_LEN - 3] as const,
+  /** … which takes it: the mark flashes ember (a ring, a 2 % kick — exactly 1 again by markHide − 1) */
+  markTake: CALL_LEN - 3,
+  /** everything else but the mark (and its glow) blows away towards the lens; the room stays */
+  blowAway: [CALL_LEN - 9, CALL_LEN - 1] as const,
   /** the result scene draws the mark from here (= the call's end) */
   markHide: CALL_LEN,
 };
@@ -1239,8 +1260,9 @@ export const HITS: Hit[] = [
   H('call', CALL_LOCAL.lineOpen[0], 'line', 'night', 0.64, 2, 'caller line draws out of the orb'),
   H('call', CALL_LOCAL.tagPops[2], 'tick', 'night', 0.5, 3, 'AVA tag pops (swing back)'),
   // the chips pop ON the spoken times: an octave down, under the speech band
-  H('call', CALL_LOCAL.chipPops[0], 'pop', 'night', 0.41, 1, 'chip 3:00 PM on “3 PM”', { semi: -12 }),
-  H('call', CALL_LOCAL.chipPops[1], 'pop', 'night', 0.59, 1, 'chip 4:30 PM on “4:30”', { semi: -10 }),
+  // (w 2: −9 dB under the voice, so the pops never mask the spoken times themselves)
+  H('call', CALL_LOCAL.chipPops[0], 'pop', 'night', 0.41, 2, 'chip 3:00 PM on “3 PM”', { semi: -12 }),
+  H('call', CALL_LOCAL.chipPops[1], 'pop', 'night', 0.59, 2, 'chip 4:30 PM on “4:30”', { semi: -10 }),
   H('call', CALL_LOCAL.lineOpen[1], 'line', 'night', 0.64, 2, 'caller line draws out of the orb'),
   H('call', CALL_LOCAL.pick - 2, 'tap', 'night', 0.41, 3, '3:00 PM squashes (wind-up)'),
   H('call', CALL_LOCAL.pick, 'click', 'night', 0.41, 1, '3:00 PM PICKED'),
@@ -1250,8 +1272,10 @@ export const HITS: Hit[] = [
   H('call', CALL_LOCAL.chipAbsorb, 'gulp', 'night', 0.5, 2, 'the orb takes the slot in', { semi: -2 }),
   H('call', CALL_LOCAL.ember, 'ember', 'none', 0.64, 1, 'BOOKED: 3 PM ignites ember (ON “3 PM”)', { db: -3 }),
   H('call', CALL_LOCAL.payoff, 'thump', 'none', 0.5, 2, 'the mark presses'),
-  H('call', CALL_LOCAL.blowInhale[1], 'swell', 'night', 0.5, 3, 'the room inhales'),
-  H('call', CALL_LOCAL.markHide - 2, 'whoosh', 'night', 0.5, 1, 'everything blows to the lens'),
+  H('call', CALL_LOCAL.rowOut + 2, 'swish', 'none', 0.5, 3, '“You’re all booked for” drops away (on the beat)'),
+  H('call', CALL_LOCAL.blowInhale[1], 'swell', 'night', 0.5, 3, 'the orb inhales'),
+  H('call', CALL_LOCAL.markTake - 1, 'whoosh', 'night', 0.5, 1, 'the orb dives into the mark (fastest frame); the room blows to the lens'),
+  H('call', CALL_LOCAL.markTake, 'gulp', 'none', 0.5, 2, 'the mark takes the orb (ember flash)', { semi: -3 }),
 
   /* ── RESULT ── */
   H('result', RESULT_LOCAL.liftGo + 3, 'swish', 'none', 0.5, 2, 'the mark lifts into the card'),

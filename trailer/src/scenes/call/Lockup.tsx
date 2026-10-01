@@ -14,10 +14,10 @@
  */
 import React from 'react';
 import { Orb } from '../../components/Orb';
-import { bloom, rgba, rimGlow, ring as waveRing, type Glow } from '../../lib/lights';
+import { bloom, mixPalette, rgba, rimGlow, ring as waveRing, type Glow } from '../../lib/lights';
 import { EASE, tween } from '../../lib/motion';
 import { ORB_RIM } from '../../lib/pickup';
-import { CLOCK_FILL, FONT, LIGHTS } from '../../theme';
+import { CLOCK_FILL, FONT, LIGHTS, type Palette } from '../../theme';
 
 const RING_LIFE = 28.5; // 0.95 s
 /** px / frame above which the orb is smeared (the brief: anything moving > ~25 px a frame) */
@@ -35,6 +35,21 @@ const SHEEN =
   'linear-gradient(100deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0) 58%)';
 
 export type OrbState = { x: number; y: number; d: number };
+
+/**
+ * The key light as a LIT SPHERE, not a clipped disc. The night palettes' paper-white top stop
+ * (#f7f3ff) is rolled off to a lilac-white, so the hot zone keeps its gradation; over the canvas
+ * (all in the orb's own scaled box) sit a limb darkening (mix(.72, 1, (n·v)^.6) as a radial
+ * falloff), a soft specular where the shader's light comes from (upper left) and a 1.5 px
+ * night-lilac Fresnel rim. All of it grades in with the room (`grade`), so the pickup's first
+ * frames are still the twist's exact orb.
+ */
+const ORB_LIT: Palette = ['#14062b', '#4a1a9e', '#7c3aed', '#c4a8ff', '#e2d8ff'];
+const LISTEN_LIT: Palette = ['#14062b', '#3a259c', '#5946d9', '#b4b4ff', '#d9daff'];
+/** limb darkening: 1 − mix(.72, 1, (1 − r²)^.3) at r = stop (the dark is the deep end of the palette) */
+const LIMB = [0, 0.5, 0.7, 0.8, 0.9, 0.95, 0.985, 1].map((r) => [r, 0.28 * (1 - Math.pow(Math.max(0, 1 - r * r), 0.3))] as const);
+const limbBg = (k: number) =>
+  `radial-gradient(closest-side, ${LIMB.map(([r, a]) => `rgba(12,5,32,${(a * k).toFixed(4)}) ${(r * 100).toFixed(1)}%`).join(', ')})`;
 
 const Pair: React.FC<{ digits: string; F: number; blur: number; id: string; sheen: number }> = ({
   digits,
@@ -160,7 +175,13 @@ export const OrbStage: React.FC<{
   glow: Glow;
   /** 0..1+ a hit's extra light (pickup, gulp): the halo flares */
   flash?: number;
-}> = ({ t, base, orb, orbAt, volume, flow, listen, rim, dress, dof, ringStarts, phraseRings = [], light = 0, gulp, rimIn, glow, flash = 0 }) => {
+  /** 0..1 the lit-sphere grade (rolled-off highlight, limb, specular, Fresnel rim) */
+  grade?: number;
+  /** 0..1 the orb's own opacity (it is absorbed at the end of its dive into the mark) */
+  fade?: number;
+  /** frames back of the glow copies trailing the orb (its dive): [frames, opacity][] */
+  trail?: readonly (readonly [number, number])[];
+}> = ({ t, base, orb, orbAt, volume, flow, listen, rim, dress, dof, ringStarts, phraseRings = [], light = 0, gulp, rimIn, glow, flash = 0, grade = 0, fade = 1, trail = [] }) => {
   const { x, y, d } = orb;
   const lvl = Math.max(0, (volume - 0.12) / 0.7);
 
@@ -261,15 +282,35 @@ export const OrbStage: React.FC<{
           height: at.d,
           borderRadius: '50%',
           boxShadow: shadow,
-          opacity: op,
+          opacity: op * fade,
           filter: dof > 0.1 ? `blur(${dof.toFixed(2)}px)` : undefined,
         }}
       />
     );
   return (
     <>
+      {/* the glow copies trailing the orb on its dive (its own violet: never a grey dissolve) */}
+      {trail.map(([dt, a], i) => {
+        const g = orbAt(t - dt);
+        const D = g.d * 1.2;
+        return a <= 0.003 ? null : (
+          <div
+            key={`trail${i}`}
+            style={{
+              position: 'absolute',
+              left: g.x - D / 2,
+              top: g.y - D / 2,
+              width: D,
+              height: D,
+              borderRadius: '50%',
+              background: `radial-gradient(closest-side, ${rgba(glow.core, 0.75 * a)} 0%, ${rgba(glow.body, 0.6 * a)} 48%, ${rgba(glow.body, 0.18 * a)} 78%, ${rgba(glow.body, 0)} 100%)`,
+              mixBlendMode: 'screen',
+            }}
+          />
+        );
+      })}
       {/* the orb's light around it, then the rings */}
-      {haloK > 0.003 ? (
+      {haloK * fade > 0.003 ? (
         <div
           style={{
             position: 'absolute',
@@ -277,7 +318,7 @@ export const OrbStage: React.FC<{
             top: y - vy * 0.25 - haloH / 2,
             width: haloW,
             height: haloH,
-            background: bloom(glow, haloK * (halo / Math.sqrt(haloW * haloH)), { core: 0.55, coreSize: 0.5 }),
+            background: bloom(glow, haloK * fade * (halo / Math.sqrt(haloW * haloH)), { core: 0.55, coreSize: 0.5 }),
             mixBlendMode: 'screen',
           }}
         />
@@ -322,6 +363,7 @@ export const OrbStage: React.FC<{
           height: base,
           transformOrigin: '50% 50%',
           transform: `translate(${(x - base / 2).toFixed(2)}px, ${(y - base / 2).toFixed(2)}px) scale(${k.toFixed(5)})`,
+          opacity: fade < 0.999 ? fade : undefined,
           // the blur is set in the orb's own (scaled) space
           filter:
             [moving ? 'url(#call-orb-smear)' : '', dof > 0.1 ? `blur(${(dof / k).toFixed(2)}px)` : ''].filter(Boolean).join(' ') ||
@@ -330,13 +372,43 @@ export const OrbStage: React.FC<{
       >
         <Orb
           size={base}
-          palette={LIGHTS.night.orb}
-          paletteB={LIGHTS.night.listen}
+          palette={grade > 0.001 ? mixPalette(LIGHTS.night.orb, ORB_LIT, grade) : LIGHTS.night.orb}
+          paletteB={grade > 0.001 ? mixPalette(LIGHTS.night.listen, LISTEN_LIT, grade) : LIGHTS.night.listen}
           mixB={listen}
           volume={volume}
           time={flow}
           resolution={1.25}
         />
+        {grade > 0.001 ? (
+          <>
+            {/* the limb falls off (a sphere, not a plate) */}
+            <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: limbBg(grade) }} />
+            {/* a soft specular where the light comes from */}
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                borderRadius: '50%',
+                background: `radial-gradient(26% 21% at 33% 29%, rgba(255,252,255,${(0.2 * grade).toFixed(3)}) 0%, rgba(240,232,255,${(0.08 * grade).toFixed(3)}) 45%, rgba(240,232,255,0) 100%)`,
+                mixBlendMode: 'screen',
+              }}
+            />
+            {/* the Fresnel rim: a 1.5 px night-lilac line just inside the limb (screen px, in the scaled box) */}
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                borderRadius: '50%',
+                background: (() => {
+                  const R = d / 2;
+                  const at = (px: number) => `${(100 * (1 - px / R)).toFixed(3)}%`;
+                  return `radial-gradient(closest-side, rgba(185,163,255,0) ${at(4.5)}, rgba(185,163,255,${(0.5 * grade).toFixed(3)}) ${at(2)}, rgba(185,163,255,${(0.22 * grade).toFixed(3)}) ${at(0.8)}, rgba(185,163,255,0) 100%)`;
+                })(),
+                mixBlendMode: 'screen',
+              }}
+            />
+          </>
+        ) : null}
       </div>
     </>
   );

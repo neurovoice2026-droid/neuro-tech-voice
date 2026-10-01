@@ -14,9 +14,8 @@
  *              while Ava speaks, cooler caller blue (night `listen`) while
  *              the caller speaks — on the orb's own 6–8 f palette ease
  *   vignette   a strong falloff to black in screen space
- *   floor      (9:16) the orb's key-light pool on a floor below it and a soft,
- *              faint reflection of it (flipped, blurred): light structure for
- *              the lower third of the vertical frame
+ *   floor      (9:16) the orb's reflection: one soft ellipse of its light on a
+ *              glossy floor directly under it, following its framing
  *
  * Everything else that glows in the scene (rim, halo, rings, bokeh, motes,
  * sparks) takes its colour from `callGlow(listen)` so one light leads.
@@ -111,66 +110,40 @@ export const KeyLight: React.FC<{ x: number; y: number; d: number; glow: Glow; s
 };
 
 /**
- * (9:16) The floor under the orb — light structure for the lower third:
- *   pool        a wide, flat ellipse of its light on the floor round the point
- *               under it (`floorY`), screen-blended
- *   reflection  the orb mirrored about the floor line, seen at a grazing angle
- *               (compressed toward the line, squashed), blurred, ≈ 20 %, fading
- *               away from the line — a gradient of the orb's own light (never a
- *               second canvas), its highlight mirrored to the lower side
- * Everything follows the orb's on-screen state and breathes with its level.
+ * (9:16) The orb's reflection on a glossy floor just under it — ONE soft ellipse of its own light,
+ * directly under the orb: placed and sized by its on-screen state (it follows every framing and
+ * swing), brightest where the orb's light falls (under its lit side), breathing with its level.
+ * Light structure for the vertical frame's middle, never a smudge on its own.
  */
 export const Floor: React.FC<{
   x: number;
   y: number;
   d: number;
-  /** where the floor under the orb meets the frame (screen y): the pool's centre, the mirror line */
-  floorY: number;
   glow: Glow;
-  /** the key light's strength (the pool scales with it) */
+  /** the key light's strength (the reflection scales with it) */
   strength: number;
   /** 0..1+ the voice's level */
   level: number;
   /** the orb's depth-of-field blur (the reflection softens with it) */
   dof: number;
-}> = ({ x, y, d, floorY, glow, strength, level, dof }) => {
+}> = ({ x, y, d, glow, strength, level, dof }) => {
   if (strength <= 0.003) return null;
-  // the mirror image, compressed toward the line (the floor is seen at a grazing angle)
-  const ry = floorY + (floorY - y) * 0.3;
-  const rw = d * 0.96;
-  const rh = d * 0.56;
-  const refl = Math.min(0.36, 0.27 + 0.06 * level) * Math.min(1, strength / 0.16);
-  const pw = d * 3.3;
-  const ph = d * 0.52;
+  const k = Math.min(0.5, 0.3 + 0.12 * level) * Math.min(1, strength / 0.16);
+  const cy = y + d * 0.64;
+  const w = d * (1.12 + 0.06 * level);
+  const h = d * 0.2;
   return (
-    <>
-      <div
-        style={{
-          position: 'absolute',
-          left: x - pw / 2,
-          top: floorY + 30 - ph / 2,
-          width: pw,
-          height: ph,
-          background: bloom(glow, 0.95 * strength, { core: 0.25, coreSize: 0.4 }),
-          mixBlendMode: 'screen',
-        }}
-      />
-      <div
-        style={{
-          position: 'absolute',
-          left: x - rw / 2,
-          top: ry - rh / 2,
-          width: rw,
-          height: rh,
-          borderRadius: '50%',
-          background: `radial-gradient(closest-side at 46% 64%, ${rgba(glow.core, 1)} 0%, ${rgba(glow.core, 0.8)} 24%, ${rgba(glow.body, 0.85)} 52%, ${rgba(LIGHTS.night.orb[1], 0.7)} 80%, ${rgba(LIGHTS.night.orb[0], 0)} 100%)`,
-          opacity: refl,
-          filter: `blur(${(11 + dof * 2).toFixed(1)}px)`,
-          maskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.75) 45%, rgba(0,0,0,0.15) 100%)',
-          WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.75) 45%, rgba(0,0,0,0.15) 100%)',
-          mixBlendMode: 'screen',
-        }}
-      />
-    </>
+    <div
+      style={{
+        position: 'absolute',
+        left: x - w / 2,
+        top: cy - h / 2,
+        width: w,
+        height: h,
+        background: `radial-gradient(closest-side at 46% 44%, ${rgba(glow.core, 0.85 * k)} 0%, ${rgba(glow.body, 0.62 * k)} 34%, ${rgba(glow.body, 0.22 * k)} 68%, ${rgba(glow.body, 0)} 100%)`,
+        filter: `blur(${(6 + dof * 2).toFixed(1)}px)`,
+        mixBlendMode: 'screen',
+      }}
+    />
   );
 };

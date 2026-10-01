@@ -33,6 +33,24 @@ export function env(id: VoiceId, f: number): number {
   return a + (b - a) * (f - i);
 }
 
+/**
+ * Syllable onsets in a line's loudness (frames from its start) within [from, to): where it climbs over
+ * `thr` after having been under `thr`·0.6 — for words the voice says but the aligner has no word for
+ * ("Oh,", "Um…", "Thank you!"), so they can be captioned on the real voice.
+ */
+export function onsets(id: VoiceId, from: number, to: number, thr = 0.3): number[] {
+  const e = VOICE.lines[id].env as readonly number[];
+  const out: number[] = [];
+  let low = from <= 0 || (e[Math.max(0, Math.floor(from) - 1)] ?? 0) < thr * 0.6;
+  for (let f = Math.max(0, Math.floor(from)); f < Math.min(e.length, to); f++) {
+    if (low && e[f] >= thr) {
+      out.push(f);
+      low = false;
+    } else if (e[f] < thr * 0.6) low = true;
+  }
+  return out;
+}
+
 /** The line being spoken at call-local frame t (or -1). */
 export function lineAt(t: number): number {
   for (let i = 0; i < CALL.lines.length; i++) {

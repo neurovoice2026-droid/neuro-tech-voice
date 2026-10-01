@@ -146,10 +146,11 @@ function restFraming(s: Shot, t: number, L: Layout): Framing {
   if (s.kind === 'P') return lerpF(F.lock, F.A, pushAt(t));
   if (s.kind === 'C') return F.C;
   if (s.line === 2) {
-    // a wider variant: bigger, 60 px left, drifting right over the shot
-    // (lifted so the slot chips below it have air)
+    // a variant: 60 px left, drifting right over the shot, lifted so the slot chips below it have air
+    // (16:9: a touch smaller, so with the in-shot push, the phrase punch-ins and her talk swell its top
+    // stays ≥ 60 px under the frame's edge and its bottom clears the chips)
     const k = tween(t, [s.from, s.to], [0, 1], EASE.inOut);
-    return { x: F.A.x - 60 + 44 * k, y: F.A.y - L.pick(50, 70), d: F.A.d * L.pick(1.1, 1) };
+    return { x: F.A.x - 60 + 44 * k, y: F.A.y - L.pick(20, 70), d: F.A.d * L.pick(0.93, 1) };
   }
   return F.A;
 }
@@ -237,7 +238,8 @@ function shotCam(s: Shot, t: number, L: Layout): Cam {
       // the last shot: a slow pull 1.04 → 1.00, exactly at rest by camSettle[1]
       z = 1 + 0.04 * (1 - tween(t, [s.from, c1], [0, 1], EASE.inOut));
     } else {
-      z = 1 + 0.035 * prog;
+      // (the chips shot pushes less in 16:9: its framing is tight under the frame's top)
+      z = 1 + (k === 2 ? L.pick(0.018, 0.035) : 0.035) * prog;
       // Ava's shots re-frame on each new phrase: a small punch-in on the site spring
       if (s.kind === 'A') {
         for (const at of PHRASES) {
