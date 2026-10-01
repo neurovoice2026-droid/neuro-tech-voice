@@ -214,7 +214,7 @@ export const Scale: React.FC = () => {
     const u = dirOf(i);
     const f = keeper ? { x: 0, y: 0, rot: 0, sc: 1, q: 0 } : flyAt(i, o, t, u);
     if (f.q >= 0.999) return null;
-    // once a flyer (and its ghosts) is wholly off the frame it costs nothing
+    // once a flyer (and its trail) is wholly off the frame it costs nothing
     const offScreen = (dx: number, dy: number, sc: number) => {
       const c = centre(r);
       const rr = 0.75 * Math.hypot(r.w, r.h) * sc * cam.s + 40;
@@ -236,10 +236,13 @@ export const Scale: React.FC = () => {
     let flyDefs: React.ReactNode = null;
     let flyF: string | undefined;
     if (!keeper && f.q > 0) {
-      const fx = Math.min(24, 0.5 * sigmaFor(f1.x - f0.x));
-      const fy = Math.min(24, 0.5 * sigmaFor(f1.y - f0.y));
-      flyF = dirBlurRef(id + '-f', fx, fy);
-      if (flyF) flyDefs = <DirBlur id={id + '-f'} sx={fx} sy={fy} />;
+      // slow (leaving): a true directional smear; fast: the GPU's blur (the card is a streak by then)
+      const fx = 0.5 * sigmaFor(f1.x - f0.x);
+      const fy = 0.5 * sigmaFor(f1.y - f0.y);
+      if (Math.hypot(fx, fy) < 6) {
+        flyF = dirBlurRef(id + '-f', fx, fy);
+        if (flyF) flyDefs = <DirBlur id={id + '-f'} sx={fx} sy={fy} />;
+      } else flyF = `blur(${Math.min(12, 0.6 * Math.hypot(fx, fy)).toFixed(2)}px)`;
     }
     const light = cardLight(i);
     const content = (still: boolean) => (
@@ -287,6 +290,8 @@ export const Scale: React.FC = () => {
   // the wall settles behind the hero: 1.5 % back about its centre
   const settle = 1 - 0.015 * dim;
   const wallOn = t < K.flyOut + K.flyDur + 16;
+  // the hero's defocus on the wall; as the cards peel off, their own motion blur takes over (a rack focus to the move)
+  const defocus = 7 * dim * (1 - tween(t, [K.flyOut - K.flyAnticip, K.flyOut + 5], [0, 1], EASE.inOut));
 
   return (
     <AbsoluteFill style={{ background: C.white, overflow: 'hidden' }}>
@@ -310,7 +315,7 @@ export const Scale: React.FC = () => {
                     transformOrigin: `${wc.x}px ${wc.y}px`,
                     // the hero's defocus: the whole wall at once (one filter, not sixteen)
                     opacity: dim > 0.001 ? 1 - 0.58 * dim : undefined,
-                    filter: dim > 0.001 ? `blur(${((7 * dim) / cam.s).toFixed(2)}px)` : undefined,
+                    filter: defocus > 0.2 ? `blur(${(defocus / cam.s).toFixed(2)}px)` : undefined,
                   }}
                 >
                   {Array.from({ length: 16 }, (_, i) => wallCard(i, flyOrder.indexOf(i)))}

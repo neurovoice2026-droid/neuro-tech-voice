@@ -668,8 +668,6 @@ export const SCALE_LOCAL = (() => {
   const irisOpen = SCALE.irisToDark[0] + 3;
   /** frames a light mote takes along the finished rail (call → CRM) */
   const moteDur = 14;
-  /** how many of each greeting's words are the big line (the quick four are cut by the next voice before the rest) */
-  const langMain = [6, 2, 2, 2, 4, 8] as const;
   return {
     pops,
     /** card 01 pops this many frames before the cut, over the knowledge whip's tail (9:16 too: no clean white frame) */
@@ -703,7 +701,6 @@ export const SCALE_LOCAL = (() => {
     /** … and "14 languages." rises into it: its first letters land ON langTitle */
     titleIn: LT - 3,
     langLights,
-    langMain,
     /** each card arrives: English from the flip, the others slide in from the right and land a frame
      *  before their voice cuts in */
     switchIn: LA.map((a, k) => (k === 0 ? LT - 4 : a - 7)),
@@ -722,7 +719,8 @@ export const SCALE_LOCAL = (() => {
     titleAfter: F,
     /** the Japanese card flies to the first station and becomes THE CALL */
     carrierFly: F - 5,
-    callIn: F + 1,
+    /** … its Japanese hands over to the call's face mid-flight (under its motion blur) */
+    callIn: F - 2,
     /** the rail's track + hollow nodes appear */
     trackIn: F + 4,
     stations,
@@ -1142,8 +1140,6 @@ const WALL_X = SCALE_LOCAL.popX;
 /** the six greetings' lights (the active card leads; the quick four chime G# · B · E′ · E) */
 const LANGS: Exclude<Light, 'none'>[] = [...SCALE_LOCAL.langLights];
 const LANG_NAMES = ['English', 'Romanian', 'Spanish', 'French', 'German', 'Japanese'];
-/** 16:9 pan of the five gallery slots (each card settles there as the next one takes the focus) */
-const LANG_X = [0.12, 0.31, 0.5, 0.69, 0.88];
 /** the focus card's orb (top-left of the card) */
 const LANG_ORB_X = [0.22, 0.25, 0.25, 0.25, 0.25, 0.25];
 /** the five documents' notes: an E-major pentatonic run (E F# G# B C#) */
@@ -1355,11 +1351,12 @@ export const HITS: Hit[] = [
     const k = j + 1;
     return [
       H('scale', f - 1, 'whoosh-soft', 'none', [0.95, 0.5], 2, `${LANG_NAMES[k]} slides in`),
-      H('scale', f, 'tick', LANGS[k], LANG_ORB_X[k], 2, `${LANG_NAMES[k]}: the orb lights`),
-      H('scale', f, chime(LANGS[k], k < 5), LANGS[k], LANG_ORB_X[k], k < 5 ? 3 : 2, `LIGHT: ${LANGS[k]} — ${LANG_NAMES[k]}`),
+      // the card lands (and its orb lights) a frame before her first word: nothing clicks on the consonant
+      H('scale', f - 1, 'tick', LANGS[k], LANG_ORB_X[k], 2, `${LANG_NAMES[k]} lands: the orb lights`),
+      H('scale', f - 1, chime(LANGS[k], k < 5), LANGS[k], LANG_ORB_X[k], k < 5 ? 3 : 2, `LIGHT: ${LANGS[k]} — ${LANG_NAMES[k]}`),
     ];
   }),
-  ...SCALE_LOCAL.switchOut.slice(0, 5).map((f, k) => H('scale', f + 9, 'tap', 'none', LANG_X[k], 3, `${LANG_NAMES[k]} settles into the gallery`)),
+  // (the card that recedes into the gallery makes no sound of its own: her next word is its sound)
   H('scale', SCALE_LOCAL.discloseJa[0], 'draw', LANGS[5], [0.3, 0.6], 3, '“AIアシスタント” underlined as she says it'),
   // after the call
   H('scale', SCALE_LOCAL.collapse + 3, 'whoosh-soft', 'none', [0.5, 0.5], 2, 'the gallery drops away', { split: true }),

@@ -51,7 +51,7 @@ const arriveAt = (k: number) => (k === 0 ? K.enFlip + 6 : LA[k] - 1);
 const wordAt = (k: number, j: number) => voiceAt(k) + vWord(LANGS[k].id, j) - 1;
 
 /** her loudness at t for card k (0..1), smoothed with a short release; silent before her line and after the cut */
-export function envAt(k: number, t: number): number {
+function envAt(k: number, t: number): number {
   const env = VOICE.lines[LANGS[k].id].env;
   const cut = cutAt(k);
   let e = 0;
@@ -433,8 +433,9 @@ export const LangCards: React.FC<{
     if (P0 && P1) {
       const c0 = centre(P0.r);
       const c1 = centre(P1.r);
-      sx = Math.min(26, sigmaFor(c1.x - c0.x) + sigmaFor(P1.r.w - P0.r.w) * 0.5);
-      sy = Math.min(26, sigmaFor(c1.y - c0.y) + sigmaFor(P1.r.h - P0.r.h) * 0.5);
+      // a 180° shutter: half the frame's travel (the edges' travel when the card grows / shrinks)
+      sx = Math.min(16, 0.5 * (sigmaFor(c1.x - c0.x) + sigmaFor(P1.r.w - P0.r.w) * 0.5));
+      sy = Math.min(16, 0.5 * (sigmaFor(c1.y - c0.y) + sigmaFor(P1.r.h - P0.r.h) * 0.5));
     }
     const lit = litOf(k, t);
     const light = langLight(k);
@@ -507,7 +508,7 @@ export const LangCards: React.FC<{
       const fo = 1 - tween(P.leave, [0.08, 0.5], [0, 1], EASE.inOut);
       const go = tween(P.leave, [0.42, 0.85], [0, 1], EASE.inOut);
       const jaOut = k === CARRIER ? tween(t, [K.carrierFly - 1, K.carrierFly + 4], [0, 1], EASE.in2) : 0;
-      const callIn = k === CARRIER ? tween(t, [K.callIn - 1, K.callIn + 3], [0, 1], EASE.out3) : 0;
+      const callIn = k === CARRIER ? tween(t, [K.callIn - 2, K.callIn + 3], [0, 1], EASE.inOut) : 0;
       face = (
         <>
           {fo > 0.004 && jaOut < 1 ? (
@@ -572,6 +573,3 @@ export const LangCards: React.FC<{
   });
   return <>{cards}</>;
 };
-
-/** the first frame each card is on stage, and the last (for the scene's culling) */
-export const LANG_SPAN = [K.glide - 4, K.stations[0] + 40] as const;

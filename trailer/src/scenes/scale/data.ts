@@ -58,8 +58,8 @@ export const INDUSTRIES: Industry[] = [
  * A greeting: the product's Professional greeting (lib/voice/greetings.ts,
  * `intro` with {agent} = Ava), as Ava SAYS it — its words are the voice's
  * own words (src/voice.generated.ts), so the text is verbatim and every word
- * is timed. The first `SCALE_LOCAL.langMain[k]` words are the big line; the
- * rest (the quick four: cut by the next voice) is the small line.
+ * is timed. The big line is the words in `main` (the quick four: what she
+ * says before the next voice cuts in).
  */
 export type Lang = {
   name: string;
@@ -86,7 +86,7 @@ export const LANGS: Lang[] = [
   // one line in 16:9 (≈ 1040 px at 134), two in 9:16
   { name: 'German', id: 'lang-de', ai: [5, 5], main: [[4], [2, 2]], gallery: [[2, 2], [2, 2]], size: [134, 118] },
   // "AIアシスタントの / Avaと申します。" — the AI phrase comes first
-  { name: 'Japanese', id: 'lang-ja', ai: [0, 1], main: [[3, 5], [3, 5]], gallery: [[3, 5], [3, 5]], size: [112, 100], cjk: true },
+  { name: 'Japanese', id: 'lang-ja', ai: [0, 1], main: [[3, 5], [3, 5]], gallery: [[3, 5], [3, 5]], size: [110, 88], cjk: true },
 ];
 
 /** the spoken words of a greeting (verbatim, with their punctuation) */
