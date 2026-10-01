@@ -69,7 +69,9 @@ const Column: React.FC<{
   id: string;
   /** 0..1 progress of a light sweep across the figure (left → right); <0 or >1 = none */
   sheen: number;
-}> = ({ pos, speed, fontSize, id, sheen }) => {
+  /** the figures' fill (a CSS gradient: the moment's `num`, on the dark) */
+  fill: string;
+}> = ({ pos, speed, fontSize, id, sheen, fill }) => {
   const sheenOn = sheen > 0 && sheen < 1;
   const cellW = 0.6 * fontSize;
   const cellH = 1.1 * fontSize;
@@ -127,7 +129,7 @@ const Column: React.FC<{
               fontVariantNumeric: 'tabular-nums',
               letterSpacing: 0,
               textAlign: 'center',
-              backgroundImage: sheenOn ? `${SHEEN}, ${CLOCK_FILL}` : CLOCK_FILL,
+              backgroundImage: sheenOn ? `${SHEEN}, ${fill}` : fill,
               backgroundSize: sheenOn ? '300% 100%, 100% 100%' : '100% 100%',
               backgroundPosition: sheenOn ? `${((1 - sheen) * 100).toFixed(2)}% 0, 0 0` : undefined,
               backgroundRepeat: 'no-repeat',
@@ -149,7 +151,10 @@ const Column: React.FC<{
 
 export const ClockLockup: React.FC<{
   frame: number;
-  rolls: Roll[]; // four
+  /** strip position (cells) of column c at a (sub)frame */
+  posAt: (col: number, frame: number) => number;
+  /** fill per column (CSS gradient) */
+  fills: readonly string[];
   /** sheen progress per figure (see Column) */
   sheens: number[];
   fontSize: number;
@@ -159,6 +164,11 @@ export const ClockLockup: React.FC<{
   unfold: number;
   orbScale: number;
   orbTime: number;
+  /** the colon orb's palette (the moment's light) */
+  orbPalette: readonly string[];
+  /** the light's glow: body (halo) and core (rim) */
+  glowBody: string;
+  glowCore: string;
   /** 0..1 extra light on the orb halo (ring flashes). */
   orbFlash: number;
   /** vertical nudge of the orb so it sits on the figures' optical centre */
@@ -167,7 +177,8 @@ export const ClockLockup: React.FC<{
   orbOpacity: number;
 }> = ({
   frame,
-  rolls,
+  posAt,
+  fills,
   sheens,
   fontSize,
   orbSize,
@@ -175,16 +186,27 @@ export const ClockLockup: React.FC<{
   unfold,
   orbScale,
   orbTime,
+  orbPalette,
+  glowBody,
+  glowCore,
   orbFlash,
   orbDy,
   figuresOpacity,
   orbOpacity,
 }) => {
-  const cols = rolls.map((r, i) => {
-    const pos = rollPos(frame, r);
-    const speed = rollPos(frame + 0.5, r) - rollPos(frame - 0.5, r);
+  const cols = [0, 1, 2, 3].map((i) => {
+    const pos = posAt(i, frame);
+    const speed = posAt(i, frame + 0.5) - posAt(i, frame - 0.5);
     return (
-      <Column key={i} pos={pos} speed={speed} fontSize={fontSize} id={`hook-vblur-${i}`} sheen={sheens[i]} />
+      <Column
+        key={i}
+        pos={pos}
+        speed={speed}
+        fontSize={fontSize}
+        id={`hook-vblur-${i}`}
+        sheen={sheens[i]}
+        fill={fills[i]}
+      />
     );
   });
   const slide = (1 - unfold) * (0.22 * fontSize);
@@ -214,18 +236,18 @@ export const ClockLockup: React.FC<{
             width: halo,
             height: halo,
             borderRadius: '50%',
-            background: `radial-gradient(closest-side, ${rgba(C.electric, (0.42 + orbFlash * 0.45) * orbOpacity)} 0%, ${rgba(C.electric, (0.14 + orbFlash * 0.2) * orbOpacity)} 45%, ${rgba(C.electric, 0)} 100%)`,
+            background: `radial-gradient(closest-side, ${rgba(glowBody, (0.42 + orbFlash * 0.45) * orbOpacity)} 0%, ${rgba(glowBody, (0.14 + orbFlash * 0.2) * orbOpacity)} 45%, ${rgba(glowBody, 0)} 100%)`,
             transform: `scale(${0.85 + 0.35 * orbScale})`,
           }}
         />
         <MeshOrb
           size={orbSize}
-          palette={ORB.ink}
+          palette={orbPalette}
           time={orbTime}
           style={{
             transform: `scale(${orbScale.toFixed(4)})`,
             opacity: orbOpacity,
-            boxShadow: `0 0 ${(10 + orbFlash * 26).toFixed(1)}px ${(orbFlash * 4).toFixed(1)}px ${rgba(C.lilac, 0.35 + orbFlash * 0.4)}`,
+            boxShadow: `0 0 ${(10 + orbFlash * 26).toFixed(1)}px ${(orbFlash * 4).toFixed(1)}px ${rgba(glowCore, 0.35 + orbFlash * 0.4)}`,
           }}
         />
       </div>
