@@ -8,8 +8,15 @@
 import React from 'react';
 import { CornerDot } from '../../components/Type';
 import { FONT, TRACK } from '../../theme';
+import { rgba } from './color';
 
-export type DrumRow = { text: string; color: string; dot: string };
+export type DrumRow = {
+  text: string;
+  color: string;
+  dot: string;
+  /** the light's body colour: a soft halo so the name reads as lit, not printed */
+  glow?: string;
+};
 
 export const DayDrum: React.FC<{
   rows: readonly DrumRow[];
@@ -71,7 +78,11 @@ export const DayDrum: React.FC<{
                 gap: Math.round(fontSize * 0.42),
               }}
             >
-              <CornerDot size={dotSize} color={r.dot} style={{ marginTop: -1 }} />
+              <CornerDot
+                size={dotSize}
+                color={r.dot}
+                style={{ marginTop: -1, filter: r.glow ? `drop-shadow(0 0 ${Math.round(dotSize * 0.45)}px ${rgba(r.glow, 0.7)})` : undefined }}
+              />
               <span
                 style={{
                   fontFamily: FONT.body,
@@ -82,6 +93,9 @@ export const DayDrum: React.FC<{
                   textTransform: 'uppercase',
                   whiteSpace: 'nowrap',
                   color: r.color,
+                  textShadow: r.glow
+                    ? `0 0 ${Math.round(fontSize * 0.42)}px ${rgba(r.glow, 0.5)}, 0 0 ${Math.round(fontSize * 0.12)}px ${rgba(r.glow, 0.35)}`
+                    : undefined,
                   marginRight: `-${TRACK.label}`,
                 }}
               >

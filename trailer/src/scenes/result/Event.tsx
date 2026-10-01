@@ -44,9 +44,14 @@ export const hexA = (hex: string, a: number) => {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${Math.min(1, Math.max(0, a)).toFixed(3)})`;
 };
 
-/** The flying card's plate warming into the event (panel → solid ember); the landing flash runs it hot. */
+/** The scene's plates (the calendar, the flying card): the cover panel tinted toward the night room
+ *  (#211c33) — lit by the room, never a neutral grey UI mock on the indigo — with a lilac top rim. */
+export const PLATE = '#211c33';
+export const PLATE_RIM = 'rgba(185,163,255,0.06)';
+
+/** The flying card's plate warming into the event (plate → solid ember); the landing flash runs it hot. */
 export const eventFill = (warm: number, flash = 0) =>
-  mixHex(mixHex(C.panel, C.ember, warm), mixHex(C.ember, C.emberLit, 0.8), 0.7 * flash);
+  mixHex(mixHex(PLATE, C.ember, warm), mixHex(C.ember, C.emberLit, 0.8), 0.7 * flash);
 
 /** Dot + "3:00 PM", centred in its box. `size` = the time's font size (px of the drawing layer). */
 export const EventFace: React.FC<{

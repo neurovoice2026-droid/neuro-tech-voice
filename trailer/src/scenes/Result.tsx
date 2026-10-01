@@ -32,8 +32,14 @@
  *            event's glow on half notes, stars on 8ths; ONE sweep across the
  *            event on the downbeat (t 75); motes + two disc planes
  *   t 90–100 everything has settled; the pulse's anticipation (in-out)
- *   t 100–117 the dive into the event → ember bloom → white; exactly #ffffff
- *            from t 117 to the last mounted frame
+ *   t 100–120 the dive into the event, accelerating into the cut; "• 3:00 PM"
+ *            rides it, scaling with the chip (a zoom smear once it is fast);
+ *            from t 111 an amber core (#ffb877) lights inside the chip, a
+ *            white-hot core follows and both bleed past its edge (screen
+ *            bloom; the edge runs hot and goes soft), so the chip dissolves
+ *            into light; the type burns out t 117–119.5; white peaks ON t 120
+ *            = the cut (the knowledge's hit-white, on the beat), where the
+ *            knowledge's white stock takes over (#ffffff here from t 120 on)
  *
  * Parallax: room 0.15 · night sky 0.15 · stars 0.4 · room light 0.4 · far
  * discs 0.5 · moon 0.6 · calendar / card 1.0 · words 1.05 · motes 1.4–1.5 ·
@@ -307,18 +313,20 @@ export const Result: React.FC = () => {
   const titlesUnder = t < T.titlesOver;
 
   /* ── the event, opening up past the frame (screen space) ─────────── */
-  let openEl: React.ReactNode = null;
-  if (opening) {
-    const evW = mapRect(map, G.block(SLOT.day, SLOT.from, SLOT.to));
+  /** the opening chip's screen box and its face size at (fractional) time tt — sampled again for the type's zoom trail */
+  const openAt = (tt: number) => {
+    const m = tt === t ? map : calMapAt(tt, G, T);
+    const cb = tt === t ? cams.world : camsAt(tt, G, L, T).world;
+    const lk = tt === t ? look : eventLookAt(tt, T);
+    const evW = mapRect(m, G.block(SLOT.day, SLOT.from, SLOT.to));
     const ins = 4;
     const ex = { x: evW.x + ins, y: evW.y + ins, w: evW.w - 2 * ins, h: evW.h - 2 * ins };
     const ox = ex.x + ex.w / 2;
     const oy = ex.y + ex.h * 0.6;
-    const cb = cams.world;
-    const a = worldToScreen(cb, L, { x: ox - (ex.w / 2) * look.sx, y: oy - ex.h * 0.6 * look.sy });
-    const z = worldToScreen(cb, L, { x: ox + (ex.w / 2) * look.sx, y: oy + ex.h * 0.4 * look.sy });
+    const a = worldToScreen(cb, L, { x: ox - (ex.w / 2) * lk.sx, y: oy - ex.h * 0.6 * lk.sy });
+    const z = worldToScreen(cb, L, { x: ox + (ex.w / 2) * lk.sx, y: oy + ex.h * 0.4 * lk.sy });
     // the camera does most of the growing (DIVE_Z); the event opens the last few ×
-    const oe = OPEN(Math.min(1, Math.max(0, (t - T.open[0]) / (T.open[1] - T.open[0]))));
+    const oe = OPEN(Math.min(1, Math.max(0, (tt - T.open[0]) / (T.open[1] - T.open[0]))));
     // the event's rect morphs into the frame's (+ margin): all four rounded corners arrive together
     const M = 60;
     const box = {
@@ -327,57 +335,94 @@ export const Result: React.FC = () => {
       x1: z.x + (L.width + M - z.x) * oe,
       y1: z.y + (L.height + M - z.y) * oe,
     };
-    // THE LIGHT: a hot core grows from the event's centre — white → #ffb877 (the ember's own lit tone) →
-    // ember → the event — and bleeds past its edge, so the chip dissolves into light, white ON the cut
+    // "• 3:00 PM" scales with the chip: the camera, and the open on top of it
+    const grow = (box.x1 - box.x0) / Math.max(1, z.x - a.x);
+    return { box, oe, cb, face: G.crop.face * cb.z * lk.sy * grow };
+  };
+  let openEl: React.ReactNode = null;
+  if (opening) {
+    const { box, oe, cb, face: faceSize } = openAt(t);
+    // THE LIGHT: an amber core (#ffb877, the ember's own lit tone) grows from the event's centre from
+    // the bloom's start, a white-hot core follows it late, and both bleed past the chip's edge — the
+    // chip dissolves into light (never a slab), white ON the cut. Radii in % of the farthest corner.
     const bu = Math.min(1, Math.max(0, (t - T.bloom[0]) / (T.bloom[1] - T.bloom[0])));
-    const bloom = Math.pow(bu, 1.6);
-    const core = -72 + 160 * bloom;
+    const bloom = Math.pow(bu, 1.5);
+    const amber = -50 + 160 * bloom;
+    const whiteR = -60 + 155 * Math.pow(bu, 3);
     const hot = mixHex(C.white, C.emberLit, 0.5);
     const hair = 1 - tween(t, [T.whiteFull - 4, T.whiteFull], [0, 1], EASE.inOut);
-    // "• 3:00 PM" rides the push, scaling with the chip (camera + the open), and burns out — runs hot,
-    // then is swallowed — only in the last frames before the white
+    // "• 3:00 PM" rides the push and burns out — runs hot, then is swallowed — only in the last frames
     const burn = tween(t, T.faceBurn, [0, 1], EASE.in2);
     const faceOp = 1 - burn;
-    const grow = (box.x1 - box.x0) / Math.max(1, z.x - a.x);
-    const faceSize = G.crop.face * cb.z * look.sy * grow;
     // the spill past the edge (screen px): amber close in, ember wide — LIGHT on the dark sheet
-    const spill = 40 + 260 * bloom;
+    const spill = 40 + 300 * bloom;
     const boxW = box.x1 - box.x0;
     const boxH = box.y1 - box.y0;
     const bcx = box.x0 + boxW / 2;
     const bcy = box.y0 + boxH * 0.55;
+    // as the light takes over, the chip's own edge runs hot and goes soft: it dissolves
+    const edge = mixHex(look.fill, C.emberLit, 0.75 * bloom);
+    const soft = 22 * bloom * bloom;
+    const R = Math.hypot(boxW, boxH) / 2;
+    const reach = 0.3 + 1.1 * bloom;
+    const radius = 14 * cb.z * (1 + 0.6 * oe);
+    // the type's zoom smear (a 180° shutter): eight samples over the last half frame, fading — only once
+    // the dive is fast enough to smear (≥ 10 % a frame), so it never reads as a double image
+    const rate = faceSize / openAt(t - 1).face;
+    const trail =
+      faceOp > 0.05 && rate > 1.1
+        ? Array.from({ length: 8 }, (_, i) => ({
+            ...openAt(t - (i + 1) / 16),
+            op: 0.16 * Math.pow(1 - i / 8, 1.5) * faceOp * Math.min(1, (rate - 1.1) / 0.1),
+          }))
+        : [];
     openEl = (
       <>
-        <div
-          style={{
-            position: 'absolute',
-            left: box.x0,
-            top: box.y0,
-            width: boxW,
-            height: boxH,
-            borderRadius: 14 * cb.z * (1 + 0.6 * oe),
-            background: [
-              `linear-gradient(180deg, rgba(255,255,255,${(0.12 * (1 - bloom)).toFixed(3)}), rgba(255,255,255,0) 55%)`,
-              `radial-gradient(farthest-corner at 50% 55%, ${C.white} ${core.toFixed(1)}%, ${hot} ${(core + 10).toFixed(1)}%, ${C.emberLit} ${(core + 24).toFixed(1)}%, ${mixHex(C.ember, C.emberLit, 0.35)} ${(core + 44).toFixed(1)}%, ${look.fill} ${(core + 72).toFixed(1)}%)`,
-            ].join(', '),
-            boxShadow: [
-              `0 0 0 1px ${hexA(C.ember, 0.7 * hair)}`,
-              `0 0 ${(spill * 0.45).toFixed(1)}px ${(spill * 0.08).toFixed(1)}px ${hexA(C.emberLit, 0.18 + 0.6 * bloom)}`,
-              `0 0 ${spill.toFixed(1)}px ${(spill * 0.25).toFixed(1)}px ${hexA(C.ember, (0.45 + 0.25 * look.glowPulse) * (1 - 0.3 * bloom))}`,
-            ].join(', '),
-          }}
-        >
+        <div style={{ position: 'absolute', left: box.x0, top: box.y0, width: boxW, height: boxH }}>
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              borderRadius: radius,
+              background: [
+                `linear-gradient(180deg, rgba(255,255,255,${(0.12 * (1 - bloom)).toFixed(3)}), rgba(255,255,255,0) 55%)`,
+                `radial-gradient(farthest-corner at 50% 55%, ${C.white} ${whiteR.toFixed(1)}%, ${hot} ${(whiteR + 10).toFixed(1)}%, ${C.emberLit} ${amber.toFixed(1)}%, ${mixHex(C.ember, C.emberLit, 0.35 + 0.4 * bloom)} ${(amber + 22).toFixed(1)}%, ${edge} ${(amber + 50).toFixed(1)}%)`,
+              ].join(', '),
+              boxShadow: [
+                `0 0 0 1px ${hexA(C.ember, 0.7 * hair)}`,
+                `0 0 ${(spill * 0.4).toFixed(1)}px ${(spill * 0.1).toFixed(1)}px ${hexA(C.emberLit, 0.15 + 0.7 * bloom)}`,
+                `0 0 ${spill.toFixed(1)}px ${(spill * 0.3).toFixed(1)}px ${hexA(C.ember, (0.45 + 0.25 * look.glowPulse) * (1 - 0.2 * bloom))}`,
+              ].join(', '),
+              filter: soft > 0.4 ? `blur(${soft.toFixed(2)}px)` : undefined,
+            }}
+          />
+        </div>
+        {trail.map((g, i) => (
+          <div
+            key={i}
+            style={{
+              position: 'absolute',
+              left: g.box.x0,
+              top: g.box.y0,
+              width: g.box.x1 - g.box.x0,
+              height: g.box.y1 - g.box.y0,
+            }}
+          >
+            <EventFace size={g.face} op={g.op} color={C.white} glow={burn} />
+          </div>
+        ))}
+        <div style={{ position: 'absolute', left: box.x0, top: box.y0, width: boxW, height: boxH }}>
           <EventFace size={faceSize} op={faceOp} color={C.white} glow={burn} />
         </div>
-        {/* the bloom: added light (screen), centred on the core, washing the chip's edge and the sheet
-            round it up to white by the cut */}
+        {/* the bloom: added light (screen) from the core out past the chip's edge, washing the sheet
+            round it — the whole frame is light by the cut */}
         {bloom > 0.01 ? (
           <div
             style={{
               position: 'absolute',
               inset: 0,
               mixBlendMode: 'screen',
-              background: `radial-gradient(circle at ${bcx.toFixed(1)}px ${bcy.toFixed(1)}px, ${hexA(C.white, Math.min(1, 1.15 * bloom))} 0px, ${hexA(hot, 0.85 * bloom)} ${(boxW * 0.32 * (0.35 + bloom)).toFixed(1)}px, ${hexA(C.emberLit, 0.55 * bloom)} ${(boxW * 0.55 * (0.35 + bloom)).toFixed(1)}px, ${hexA(C.ember, 0)} ${(boxW * 0.95 * (0.35 + bloom)).toFixed(1)}px)`,
+              background: `radial-gradient(circle at ${bcx.toFixed(1)}px ${bcy.toFixed(1)}px, ${hexA(C.white, Math.min(1, 1.1 * Math.pow(bu, 2.2)))} 0px, ${hexA(hot, 0.9 * bloom)} ${(R * 0.45 * reach).toFixed(1)}px, ${hexA(C.emberLit, 0.6 * bloom)} ${(R * 0.85 * reach).toFixed(1)}px, ${hexA(C.ember, 0.18 * bloom)} ${(R * 1.25 * reach).toFixed(1)}px, ${hexA(C.ember, 0)} ${(R * 1.7 * reach).toFixed(1)}px)`,
             }}
           />
         ) : null}

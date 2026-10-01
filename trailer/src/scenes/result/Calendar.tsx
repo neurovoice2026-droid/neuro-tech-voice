@@ -1,6 +1,7 @@
 /**
  * The owner's calendar, as a site-style stage on the night room: radius 28,
- * the cover panel (opaque), white/.08 hairlines, uppercase tracked day labels
+ * the cover panel tinted toward the night (#211c33, opaque, a lilac top rim —
+ * lit by the room), white/.08 hairlines, uppercase tracked day labels
  * (WED lit), Geist Mono hours, three muted plain bookings (6 % paper, no
  * borders), and the site's dashed empty slot at WED 3 PM — until the card
  * lands in it and becomes the event: solid ember, white "3:00 PM".
@@ -10,7 +11,8 @@
  * card window TUE–THU × 12–6 PM (16:9) / 1–5 PM (9:16) during the recompose —
  * the plate IS the rounded clip window, the cells take the card's wider
  * proportions, and the type keeps its own sizes (day labels 30 px, hours
- * 26 px "1 PM", the event's "3:00 PM" ≤ 48 / 44 px, fitted to its cell).
+ * 30 / 28 px "1 PM" — the phone label floor, also while the whole week shows —
+ * the event's "3:00 PM" ≤ 48 / 44 px, fitted to its cell).
  *
  * The landing: squash/stretch on the event, the pill's ping, an ember flash,
  * two outline rings, the dashed outline knocked outwards, a soft ember ring
@@ -21,10 +23,10 @@
  */
 import React from 'react';
 import { aos, EASE, mix, mixHex, SPRING, springAt, tween } from '../../lib/motion';
-import { C, FONT, TRACK } from '../../theme';
+import { C, FONT } from '../../theme';
 import { RESULT } from '../../timing';
 import type { ResultTiming } from '../Result';
-import { eventFill, EventFace, hexA } from './Event';
+import { eventFill, EventFace, hexA, PLATE, PLATE_RIM } from './Event';
 import { BOOKINGS, CAL, DAYS, HOURS, SLOT, mapX, mapY, type CalMap, type Geo, type Rect } from './geometry';
 
 const LINE = 'rgba(255,255,255,0.08)';
@@ -107,9 +109,13 @@ export const Calendar: React.FC<{
   const R = (u: Rect): Rect => ({ x: X(u.x), y: Y(u.y), w: u.w * map.bx, h: u.h * map.by });
   const sAvg = (map.bx + map.by) / 2;
 
-  // type sizes (world px): the whole sheet's natural sizes → the card's own
-  const daySize = mix(22 * s, B.day, rr);
-  const hourSize = mix(18 * s, B.hour, rr);
+  // type sizes (world px): the whole sheet's natural sizes → the card's own — never under the phone
+  // label floor ON SCREEN (30 px; the hours 30 / 28 px) while the whole week shows at rest; in the
+  // close-up the camera carries them past it, so they keep their natural size (the event leads)
+  const daySize = mix(Math.max(22 * s, 30 / camZ), B.day, rr);
+  const hourSize = mix(Math.max(18 * s, (vertical ? 28 : 30) / camZ), B.hour, rr);
+  // the day labels' tracking opens up as the columns widen into the card's (0.1em → the label 0.14em)
+  const dayTrack = mix(0.1, 0.14, rr);
   const faceSize = mix(G.face * s, B.face, rr);
 
   // columns cascade in behind the plate (a second plane), fast, one small overshoot
@@ -236,11 +242,12 @@ export const Calendar: React.FC<{
             position: 'absolute',
             inset: 0,
             borderRadius: map.radius,
-            // opaque cover panel: nothing of the room transmits through the card (no mud under it)
-            background: `linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0) 30%), ${C.panel}`,
+            // opaque plate, tinted toward the night (lit by the room): nothing transmits through it;
+            // a lilac rim light along its top edge
+            background: `linear-gradient(180deg, ${PLATE_RIM}, rgba(185,163,255,0) 30%), ${PLATE}`,
             boxShadow: [
-              '0 0 0 1px rgba(255,255,255,0.07)',
-              'inset 0 1px 0 rgba(255,255,255,0.07)',
+              '0 0 0 1px rgba(185,163,255,0.09)',
+              'inset 0 1px 0 rgba(205,190,255,0.16)',
               // deep in the dive the plate's edges are far off-frame: skip its big blurred shadows
               ...(lite
                 ? []
@@ -292,8 +299,8 @@ export const Calendar: React.FC<{
                   fontWeight: j === SLOT.day ? 600 : 500,
                   fontSize: daySize,
                   lineHeight: 1,
-                  letterSpacing: TRACK.label,
-                  marginRight: '-0.14em',
+                  letterSpacing: `${dayTrack.toFixed(3)}em`,
+                  marginRight: `${(-dayTrack).toFixed(3)}em`,
                   textTransform: 'uppercase',
                   color: j === SLOT.day ? C.paper : C.paperDim,
                   whiteSpace: 'nowrap',

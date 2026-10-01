@@ -49,7 +49,8 @@ export const BOOKINGS: ReadonlyArray<readonly [number, number, number]> = [
 
 export const CAL = {
   pad: 28,
-  gutter: 92,
+  /** the hours gutter: "12 PM" at the label floor (30 / 28 px Geist Mono ≈ 90 px) with air either side */
+  gutter: 120,
   radius: 28,
   dayY: 62, // centre of the day labels (the old "THE OWNER'S CALENDAR" band is gone)
   bodyTop: 96,
@@ -73,7 +74,8 @@ export type CardType = {
 };
 
 export function geo(L: Layout) {
-  const W = L.pick(720, 908);
+  // 16:9: a column must hold "MON" at the 30 px label floor with air (≈ 100 units → 97 px at est.s)
+  const W = L.pick(880, 908);
   const H = 548;
   const gridLeft = CAL.pad + CAL.gutter;
   const gridRight = W - CAL.pad;
@@ -116,22 +118,23 @@ export function geo(L: Layout) {
 
   /*
    * THE CARD WINDOW (P0-2): the split crops the sheet to TUE–WED–THU ×
-   * 12–6 PM (16:9, 3 × 6 cells of 240 × 72) / 1–5 PM (9:16, 3 × 4
-   * cells of 263 × 54), with an hours gutter on the left and the day labels in
-   * a header band. World px (= screen at rest).
+   * 12–6 PM (16:9, 3 × 6 cells of 227 × 72) / 1–5 PM (9:16, 3 × 4
+   * cells of 261 × 54), with an hours gutter on the left (wide enough for the
+   * 30 / 28 px label floor) and the day labels in a header band. World px
+   * (= screen at rest).
    */
   const crop = (() => {
     const c = L.pick(
       {
         card: { x: 1030, y: 140, w: 820, h: 500 },
-        gutter: 112,
+        gutter: 140,
         header: 68,
         rows: [12, 18] as const,
         day: 30,
-        hour: 26,
+        hour: 30,
         face: 48,
       },
-      { card: { x: 90, y: 1204, w: 900, h: 276 }, gutter: 118, header: 60, rows: [13, 17] as const, day: 30, hour: 26, face: 44 },
+      { card: { x: 90, y: 1204, w: 900, h: 276 }, gutter: 118, header: 60, rows: [13, 17] as const, day: 30, hour: 28, face: 44 },
     );
     const cols = [1, 4] as const; // TUE … THU
     const colPx = (c.card.w - c.gutter) / (cols[1] - cols[0]);

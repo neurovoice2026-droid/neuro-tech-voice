@@ -393,6 +393,10 @@ export const HOOK_LOCAL = {
   lightLead: 2,
   /** the day drum's first row ("MID-RUSH") lands a 16th after the figures unfold (follow-through) */
   drumIn: b(0.5) + 2, // 10
+  /** the drum is the last part of the mechanism to let go: its later rows leave this many frames
+   *  before the landing (the figures leave ≈ 4 earlier) and snap in ON the same hit, so each
+   *  moment's label stays sharp ≈ 9 of its 11 frames */
+  drumTravel: 2,
   /** after the land, a light sweep crosses the four figures left → right (≈ 11 f each) */
   sheen: HOOK.clockLand + 1, // 42
   /** Every ring attack leaves this many frames before its beat, so the beat frame is the peak. */
@@ -1313,7 +1317,7 @@ export const HITS: Hit[] = [
   H('result', RESULT_LOCAL.stars[3], 'tick', 'night', 0.14, 3, 'star 4', { semi: 14 }),
   H('result', RESULT_LOCAL.sweep[0], 'sheen', 'none', [0.65, 0.9], 2, 'light sweep across 3:00 PM'),
   H('result', RESULT_LOCAL.pulse, 'swell', 'none', 0.75, 3, 'the event swells (anticipation)'),
-  H('result', RESULT_LOCAL.bloom[0], 'shimmer', 'none', 0.5, 3, 'the event blooms to white'),
+  H('result', RESULT_LOCAL.bloom[0], 'shimmer', 'none', 0.5, 3, 'the event’s hot core lights (it blooms to white on the cut)'),
   // the suck-up cuts ON the white = the cut (the knowledge's hit-white lands on its peak); layered, so it
   // never swallows the knowledge's "Answers" swish two frames later
   H('result', RESULT_LOCAL.whiteFull, 'riser-short', 'none', 0.5, 1, 'the event opens past the frame → peak ON the white', { layer: true }),

@@ -13,7 +13,6 @@ import { AbsoluteFill, random } from 'remotion';
 import { noise2D } from '@remotion/noise';
 import { Camera, Layer } from '../components/Camera';
 import { Dust } from '../components/Dust';
-import { Vignette } from '../components/Grain';
 import { HookLine } from '../components/Shared';
 import { HOOK_LINE } from '../lib/handoff';
 import { useLayout } from '../lib/layout';
@@ -32,6 +31,7 @@ import { Bokeh } from './hook/Bokeh';
 import { rgba } from './hook/color';
 import { MOTES, Motes } from './hook/Motes';
 import { warpTime } from './hook/warp';
+import { DitheredVignette } from './hook/Dither';
 
 /** A 1-frame light hit that decays (peaks on `at`). */
 const hit = (f: number, at: number, decay = 4) => (f < at - 1 ? 0 : f < at ? 0.35 : Math.exp(-(f - at) / decay));
@@ -66,10 +66,12 @@ export const Hook: React.FC = () => {
   const orbD = L.pick(56, 48);
   const gap = 0.15 * F;
   const clockCy = L.pick(L.cy - 150, L.cy - 260);
-  const labelFs = L.pick(36, 34);
+  const labelFs = L.pick(36, 34); // RINGING (a status)
   const labelHalf = 0.6 * labelFs; // half the label's line box
+  // the moment names are what plants the four lights: a size up from the status, read on a phone
+  const momentFs = L.pick(48, 44);
   // the labels sit ≥ 34 px (16:9) / 40 px (9:16) clear of the figures, the wave ≥ 26 / 30 px under RINGING
-  const labelCy = clockCy - glyphH / 2 - L.pick(34, 40) - labelHalf;
+  const labelCy = clockCy - glyphH / 2 - L.pick(34, 40) - 0.6 * momentFs;
   const phaseCy = clockCy + glyphH / 2 + L.pick(34, 40) + labelHalf;
   const waveMaxH = L.pick(30, 44);
   const waveCy = phaseCy + labelHalf + L.pick(26, 30) + waveMaxH;
@@ -226,9 +228,11 @@ export const Hook: React.FC = () => {
     0.012 * tween(f, [HOOK.clockLand - 3, HOOK.clockLand], [0, 1], EASE.in2) * (f < HOOK.clockLand ? 1 : 0);
 
   /* ── the day drum (rolls with the strips) ────────────────────────── */
+  // the first row rolls up at the figures' pace; the later rows hold until the figures are
+  // already smeared, then snap in ON the hit (the mechanism's last part to let go)
   const drumFlicks: Flick[] = M.map((H, i) => {
     const land = i === 0 ? HOOK_LOCAL.drumIn : H;
-    return { start: land - HOOK_LOCAL.flickTravel, land, delta: 1 };
+    return { start: land - (i === 0 ? HOOK_LOCAL.flickTravel : HOOK_LOCAL.drumTravel), land, delta: 1 };
   });
   const drumAt = (fr: number) => drumFlicks.reduce((p, k) => p + flickDisp(fr, k), -1);
   const drumPos = drumAt(f);
@@ -237,6 +241,7 @@ export const Hook: React.FC = () => {
     text: m.label,
     color: m.id === 'night' ? C.paper : GLOW[m.id].core,
     dot: GLOW[m.id].core,
+    glow: GLOW[m.id].body,
   }));
 
   /* ── labels ──────────────────────────────────────────────────────── */
@@ -437,9 +442,9 @@ export const Hook: React.FC = () => {
               rows={drumRows}
               pos={drumPos}
               speed={drumSpeed}
-              fontSize={labelFs}
+              fontSize={momentFs}
               width={L.width}
-              dotSize={L.pick(20, 19)}
+              dotSize={L.pick(24, 22)}
             />
           </div>
         </Layer>
@@ -529,7 +534,8 @@ export const Hook: React.FC = () => {
         </Layer>
       </Camera>
 
-      <Vignette strength={1} />
+      {/* the shared vignette, dithered inside its own blend: no 8-bit rings on the near-black */}
+      <DitheredVignette frame={f} />
 
       {/* The line. Screen space, never transformed here — the twist takes it over at 112. */}
       {global < HOOK_LOCAL.textHandoff ? <HookLine start={HOOK.textIn} /> : null}

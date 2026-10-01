@@ -103,8 +103,9 @@ export function diveAt(t: number, T: ResultTiming) {
   // anticipation: everything has settled; the camera leans back a hair while the event swells —
   // an in-out curve, so it never starts at full speed (the v1 jolt)
   const tick = tween(t, T.pulseIn, [0, 1], EASE.inOut) * (1 - tween(t, [T.pulse, T.pulse + 5], [0, 1], EASE.inOut));
-  // accelerating in log space: felt from ~t104, violent at the end
-  const k = tween(t, T.dive, [0, 1], EASE.in2);
+  // accelerating in log space (u^1.7: no jolt out of the pulse, felt from ~t104, ≈ 1.2× a frame into the cut)
+  const u = Math.min(1, Math.max(0, (t - T.dive[0]) / (T.dive[1] - T.dive[0])));
+  const k = Math.pow(u, 1.7);
   return {
     /** camera zoom factor of the dive */
     f: (1 - 0.035 * tick) * Math.exp(Math.log(DIVE_Z) * k),
