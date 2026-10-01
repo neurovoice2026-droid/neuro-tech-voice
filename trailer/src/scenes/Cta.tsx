@@ -1,17 +1,21 @@
 /**
- * CTA (the last ~8.5 s) — Ava's voice-over; the four lights become one; the logo.
- * Every frame below is CTA-local and comes from timing.ts (CTA, CTA_LOCAL),
- * which derives the converge, the impact and the end card from her real voice.
+ * CTA (the last 11 s) — Ava's voice-over; the four lights become one; the logo;
+ * then an end card that builds CALMLY, one element at a time (client: "the
+ * ending is too fast"). Every frame below is CTA-local and comes from timing.ts
+ * (CTA, CTA_LOCAL), which derives the converge, the impact and the end card
+ * from her real voice.
  *
  *   iris      a dark circle opens from FLOW_END (the scale's last node), its
  *             rim smeared and its edge feathered by its own speed
  *   0…24      HERO: the site's cover portrait out of black — the eyes first
  *             (a slow push-in from the first frame, a catch-light as the iris
- *             completes and another ON her first word), then a radial opening
- *             whose light rises evenly (revealAt) while the "liquid" tear settles
+ *             completes and another ON her first word), then a soft radial
+ *             opening whose light rises evenly (revealAt); the room's backlight
+ *             carries the night's lilac until the four lights take over
  *   line      Ava: "AI voice agents that book your customers. Twenty four
  *             seven." — each headline word rises ON its spoken word ("24/7."
- *             on "Twenty"); her eyes glow with her real voice envelope
+ *             on "Twenty") over a soft dark pool (so no orb's bloom washes it);
+ *             her eyes glow with her real voice envelope
  *   orbPops   THE FOUR LIGHTS pop in on 8ths — rush, closing, sunday, night.
  *             Each: a point of its light gathers (3 f), and ON the beat (the
  *             brightest frame) the flash, a ring, six sparks and a camera kick,
@@ -19,26 +23,31 @@
  *             they arrive the room's silver backlight dims to 45 % so they are
  *             the brightest things in frame (blooms + halation: emitters).
  *             They orbit her face in depth — the front of the ring under her
- *             chin, the back behind her head (hidden by her matte, rimming her)
+ *             chin, the back behind her head (hidden by her head, rimming her)
  *   tighten   ON "Twenty" "four" "seven" the ring tightens and the four lights
- *             come forward into a row under her chin: all four in view while
- *             "24/7." holds
- *   converge  the row fans into four arms, swells (anticipation) and spirals
- *             into the core, accelerating, motion-blurred; the portrait frays
- *             away to its backlight; the words are pulled in behind them
+ *             come forward into a row under her chin; while the line is read
+ *             (CTA_LOCAL.drift) the row keeps drawing in, slowly
+ *   converge  after a breath: the row fans into four arms, swells
+ *             (anticipation) and spirals into the core, accelerating,
+ *             motion-blurred; her HEAD frays in filaments that glow in the
+ *             nearest light's colour (capped at her head + 40 px), her eyes go
+ *             last as two points of lilac; the stage behind her collapses
+ *             radially into the core (stageOut) — the merge plays on black
  *   merge     each keeps its own light until they touch; the three pour into
  *             the survivor, which holds ALONE (survivor) — 2×, its mesh
  *             swirling all four hues, its bloom split into the four colours
- *   impact    the survivor blows out into the light: the logo lands 1.25 → 1
- *             on SPRING.heavy, white flash, shockwave, ±6 px shake; the
- *             backlight comes back as THE MERGED LIGHT — a lilac-white halo
- *             that condenses onto the logo, the four lights as four arcs on its
- *             rim; "Start free →" pops a 16th later
- *   brand     Ava: "Neuro Tech Voice." an 8th after the impact; the URL types ON
+ *   impact    the survivor blows out into a white-lilac light: the logo lands
+ *             1.25 → 1 on SPRING.heavy, white flash, shockwave, ±6 px shake; the
+ *             merged light BLOOMS out of the core behind it (round, then
+ *             settling under the wordmark), then the four lights come up as
+ *             four arcs on its rim — the logo lands ALONE
+ *   brand     Ava: "Neuro Tech Voice." a beat after the impact; the URL types ON
  *             her words ("neuro" | "tech" | "voice.com"); the crown glows with
- *             her voice; then the note; 2 f after her last word the button is
- *             clicked and keeps the site's hover (plum)
- *   finalHold → end: nothing moves but the global grain
+ *             her voice; "Start free →" unfolds out of a point of light and
+ *             RISES on "…Voice." (soft spring); the note follows, word by word;
+ *             then the press (hover lift, squash, the plum floods from the
+ *             arrow, a ripple, a glint) and it keeps the site's hover
+ *   finalHold → end: dead still — nothing moves but the global grain
  *
  * Parallax: art (in-shader orbit) · halo 0.3 · orbs 0.8–1.25 by depth ·
  * type/logo/button 1 · streaks 1.3 · dust 1.5.
@@ -84,7 +93,7 @@ function geo(L: Layout) {
   // (y 250 – 1500): her eyes / the logo (P) sit higher, the headline and the
   // end card's last line end above y 1500
   const P = { x: L.cx, y: L.pick(L.cy - 170, 650) };
-  const logoW = L.pick(500, 680);
+  const logoW = L.pick(500, 660);
   const logoH = logoW * LOGO_RATIO;
   const wordmark = { top: P.y - logoH / 2 + logoH * WORDMARK_TOP, bottom: P.y + logoH / 2 };
   // the plate is 2.8em tall: label line (1.2em) + label padding (.8em × 2); phone-legible
@@ -106,7 +115,7 @@ function geo(L: Layout) {
      * of the frame top (16:9: ≥ 90 px), the button on the night
      */
     haloR: L.pick([720, 570, 205] as const, [620, 660, 290] as const),
-    haloEnd: L.pick([410, 318, 176] as const, [520, 470, 240] as const),
+    haloEnd: L.pick([410, 318, 176] as const, [470, 450, 232] as const),
     haloPow: 2,
     /**
      * once the logo is in, the light's underside settles under the wordmark
@@ -136,8 +145,8 @@ function geo(L: Layout) {
     /** a soft dark pool under the headline (radial, ≈40 % ink) so an orb's bloom never washes the type */
     scrim: L.pick({ w: 1500, h: 430 }, { w: 1080, h: 560 }),
     button,
-    note: { y: L.pick(866, 1272), size: L.pick(64, 56) },
-    url: { y: L.pick(977, 1380), size: L.pick(64, 56), dot: L.pick(22, 20), rule: L.pick(1400, L.width - 2 * L.safe.x) },
+    note: { y: L.pick(872, 1272), size: L.pick(64, 56) },
+    url: { y: L.pick(982, 1380), size: L.pick(64, 56), dot: L.pick(22, 20), rule: L.pick(1400, L.width - 2 * L.safe.x) },
     /** the four lights' orbit about her face: radii, ring centre drop below the eyes, tilt, orb diameter */
     orbit: L.pick(
       // the ring's centre sits at her mouth, so its front passes under her
@@ -248,7 +257,7 @@ export const Cta: React.FC = () => {
   // radially into the core (scale 1 → .4, light → 0, in-cubic): the merge plays on black.
   // ON the impact the merged light BLOOMS out of the core onto the logo (soft spring, ≈4 % over)
   const stage = tween(t, K.stageOut, [0, 1], IN3); // its size: leaves slowly, then is swallowed
-  const stageLight = tween(t, K.stageOut, [0, 1], EASE.inOut); // its light: gone with it
+  const stageLight = tween(t, [K.stageOut[0], K.stageOut[1] - 4], [0, 1], EASE.inOut); // its light: out a little before
   const bloomS = t < I ? 0 : rest(t, springAt(t, I, BLOOM), 1);
   const haloScale = t < I ? (1 - 0.05 * pull) * mix(1, 0.4, stage) : mix(K.bloomFrom, 1, bloomS);
   const hC = onLayer(
@@ -257,7 +266,9 @@ export const Cta: React.FC = () => {
     cam,
     0.3,
   );
-  const haloR = [0, 1, 2].map((k) => (t < I ? G.haloR[k] : G.haloEnd[k]) * hC.z * haloScale) as [number, number, number];
+  // (the merged light opens ROUND from the core, then settles into its shape under the wordmark)
+  const haloShape = t < I ? G.haloR : ([G.haloEnd[0], G.haloEnd[1], mix(G.haloEnd[1], G.haloEnd[2], Math.min(1, bloomS))] as const);
+  const haloR = [0, 1, 2].map((k) => haloShape[k] * hC.z * haloScale) as [number, number, number];
   // while the lights are in frame the room's silver backlight steps down (they lead);
   // it returns ON the impact as their merged light
   const backGain = t < I ? mix(1, 0.45, tween(t, K.backDim, [0, 1], EASE.inOut)) : 1;

@@ -1,85 +1,68 @@
 /**
- * SCALE — the white act montage (scale-local frames; every value from
- * SCALE / SCALE_LOCAL in timing.ts). 24/7 = every hour has its own light,
- * and ONE light leads at a time (scale/lights.ts): after the night (hook →
- * result) and Sunday (knowledge), this act gives the RUSH the wall and JUST
- * AFTER CLOSING the languages and the flow — so the CTA gathers four lights
- * the film has each shown owning an hour.
+ * SCALE — the white act montage, 16 s (scale-local frames; every value from
+ * SCALE / SCALE_LOCAL in timing.ts). Every business, every language, every
+ * system — each with room to be read. ONE light leads at a time
+ * (scale/lights.ts); the cards are white stock with ink labels, a card's
+ * light lives only in its disc / hit flash / ring / small glow.
  *
- *   t −3       out of the knowledge whip's clean white: card 01 fills the
- *              frame (≈ 3.9×), mid-pop, carrying the whip's momentum
- *   t 0…56     16 industries, one per 16th: every pop is a hit — opaque on
- *              its tick, .55 → .96 → 1.10 → 1 spring, ±4° and +30 px settle,
- *              a 6 px shutter blur on the attack frame; its icon disc lights
- *              in the rush light (rose, on the rush ground) with a flash pool,
- *              ripple and sparks, then settles to a neutral pearl disc — white
- *              cards, ink labels, the newest pop glows, the wall stays calm. On
- *              each quarter the cards already up pulse once, as a soft wave. The camera frames the block being filled —
- *              card 01 → 2 × 2 → 3 × 3 → the whole wall — and kicks on the grid
- *   t 60       "16 industries." SLAMS (hit.wav): +2.5 % kick, the 16 discs
- *              lock in the rush light as a strum out from the title ("16" in
- *              the rush ink), a 2 f wash, the wall dims to 40 % + 8 px blur
- *   t 66       thirteen cards peel off; three keepers glide into three big
- *              cells — and the title lifts to the top band WITH them, out of
- *              the cell band before any cell turns
- *   t 75/79/83 page 1: each cell flips (16:9 rotateY · 9:16 rotateX, shutter
- *              blur) to EN / RO / ES on its 16th; t 90/94/98 page 2: each flips
- *              again, one beat later, to FR / DE / JA. The whole greeting at
- *              84 px (16:9) / 80 px (9:16), its AI disclosure underlined, the
- *              cell's orb in the closing light. The room turns with them
- *              (SCALE_LOCAL.lightTurn 68 → 82): the rose drains to white stock
- *              and the closing ground floods in as English lands
- *   t 76…83    "16 industries." exits up out of its mask (2 f dip, 4 f exit,
- *              ghost blur); "14 languages." rises into it 1 f after
- *   t 109…116  "14 languages." exits the same way; the two other cells
- *              collapse into the deck; the Japanese cell flies onto it and
- *              becomes THE CALL; "After the call." rises
- *   t 120/128/135  THE CALL → SLACK → CRM: big cards that fill the frame,
- *              nodes solid ON the cues (1.35 → 1, 2.5× ping, a 1 % nudge toward
- *              each); the green CRM node sits exactly at FLOW_END; from 128 the
- *              stage (not the heading) pushes in 4 % about FLOW_END for the
- *              CTA's iris
+ *   THE WALL (−3 … 90)  out of the knowledge whip's clean white card 01 fills
+ *              the frame (≈ 3.9×), mid-pop, carrying the whip's momentum; the
+ *              camera pulls back continuously (and breathes) as sixteen
+ *              industries pop in the block order — eight on the 8th notes,
+ *              eight on 16ths into the slam. Each pop: a 2 f inhale of the
+ *              slot, .55 → 1.08 → 1 with a rotation settle, a shutter blur on
+ *              the attack frame, and its hit in the hour's light (disc,
+ *              flash pool, ripple, sparks, a glow under the card); the hour
+ *              turns every four cards: rush → closing → sunday → night
+ *   THE HERO (90 … 120)  "16 industries." SLAMS on the downbeat (+2.5 % kick,
+ *              the sixteen discs lock in the night light as a strum out from
+ *              the title, a 2 f wash) and HOLDS, still and readable, the wall
+ *              settling behind it (dim, defocus, 1.5 % back). Then fifteen
+ *              cards peel off outwards, the keeper glides into the English
+ *              card and turns to it, the title lifts to the band and "14
+ *              languages." rises into it ON 120
+ *   THE LANGUAGES (120 … 390)  scale/Langs.tsx: English heard whole; the
+ *              quick four slide in, one per voice; Japanese whole; the gallery
+ *              fills under the focus until all six are visible together
+ *   THE FLOW (390 … 488)  "After the call." in the band; Japanese becomes THE
+ *              CALL → SLACK → CRM, one station per beat, "Contact saved ✓" in
+ *              the closing light; the hold streams light motes along the rail;
+ *              the green node sits exactly at FLOW_END, where the CTA's iris
+ *              opens (SCALE.irisToDark)
  *
  * Planes: the act's ground (screen space) · one bloom of the leading light
- * 0.4 · the wall / cells / flow 1.0 (+ titles) · out-of-focus discs in the
- * leading light 1.6.
+ * 0.4 · the cards / titles 1.0 · out-of-focus discs in the leading light 1.6.
  */
 import React from 'react';
 import { AbsoluteFill, random } from 'remotion';
 import { Camera, Layer } from '../components/Camera';
 import { useLayout } from '../lib/layout';
-import { aos, EASE, SPRING, tween } from '../lib/motion';
+import { EASE, SPRING, tween } from '../lib/motion';
 import { useSceneFrame } from '../lib/scene';
-import { C } from '../theme';
+import { C, LIGHTS } from '../theme';
 import { SCALE, SCALE_LOCAL } from '../timing';
 import { Backdrop, Ground } from './scale/Backdrop';
 import { NearDiscs } from './scale/Bokeh';
-import { camAt, cameraProps, stepSpeed } from './scale/camera';
-import { Box, IndustryFace, LangFace, popFill } from './scale/Cards';
-import { dspring, slide } from './scale/curves';
-import { INDUSTRIES, LANGS } from './scale/data';
-import { Rail, StationCards, StationFace, type FlowTiming } from './scale/Flow';
-import { centre, geo, mixRect, type Geo, type Rect } from './scale/geometry';
+import { camAt, cameraProps, screenVel } from './scale/camera';
+import { Box, flashAt, IndustryFace, popFill } from './scale/Cards';
+import { dspring } from './scale/curves';
+import { INDUSTRIES } from './scale/data';
+import { Rail, StationCards, type FlowTiming } from './scale/Flow';
+import { centre, geo, type Rect } from './scale/geometry';
 import { Titles } from './scale/Heading';
+import { LangCards } from './scale/Langs';
 import { DirBlur, dirBlurRef, sigmaFor } from './scale/MotionBlur';
-import { bodyOf, cardLight, FLOW_LIGHT, HERO_LIGHT, LANG_LIGHT, leadColors, litFill, rgba, tintOf } from './scale/lights';
+import { cardLight, HERO_LIGHT, leadColors, rgba, tintOf } from './scale/lights';
 
 const K = SCALE_LOCAL;
 const HERO = SCALE.industriesTitle;
 
-/** the industry pop: k700 c17 m.6 (≈ .96 on the tick, 1.10 at +1…2, settled by +7) */
+/** the industry pop: k700 c17 m.6 (≈ .96 on the tick, 1.08 at +1…2, settled by +7) */
 const POP = { stiffness: 700, damping: 17, mass: 0.6 };
-/** the language flip: ~6 f to 180°, a 3 % overshoot */
-const FLIP = { stiffness: 234, damping: 19.2, mass: 0.7 };
-/** the five cells into the deck, and the Japanese carrier's flight (fixed-px overshoot) */
-const COLLAPSE = { w: 0.85, z: 0.6, over: 10, anticip: 4, back: 12 };
-const CARRY = { w: 0.86, z: 0.62, over: 12, anticip: 3, back: 18 };
-
-const dist = (a: Rect, bb: Rect) => Math.hypot(centre(bb).x - centre(a).x, centre(bb).y - centre(a).y);
 
 /* ── industry pops ───────────────────────────────────────────────── */
 const popStart = (i: number) => (i === 0 ? K.pops[0] - K.preroll : K.pops[i]);
-/** the frame card i's icon flashes (its cue): card 01 pre-rolls, its tick is t 0 */
+/** the frame card i's disc flashes (its cue): card 01 pre-rolls, its tick is t 0 */
 const tickOf = (i: number) => K.pops[i];
 
 function popPose(i: number, tt: number, vertical: boolean) {
@@ -93,7 +76,7 @@ function popPose(i: number, tt: number, vertical: boolean) {
   const m = i === 0 ? 60 * (1 - dspring(tt - s, SPRING.pop)) : 0;
   return {
     sc: 0.55 + 0.45 * p,
-    rot: rot0 * (1 - tween(tt, [s, s + 3], [0, 1], EASE.out3)),
+    rot: rot0 * (1 - tween(tt, [s, s + 4], [0, 1], EASE.out3)),
     dx: vertical ? 0 : m,
     dy: 30 * (1 - q) + (vertical ? m : 0),
   };
@@ -103,37 +86,13 @@ const poseCss = (p: { sc: number; rot: number; dx: number; dy: number }) =>
     ? undefined
     : `translate(${p.dx.toFixed(2)}px, ${p.dy.toFixed(2)}px) rotate(${p.rot.toFixed(3)}deg) scale(${p.sc.toFixed(4)})`;
 
-/* ── keepers ─────────────────────────────────────────────────────── */
-const glideStart = (k: number) => K.glide + k * K.glideStagger;
-const glideAt = (k: number, tt: number) => aos(tt, glideStart(k), { anticip: 4, depth: 0.05, config: SPRING.site });
-/** the last cell (Spanish → Japanese) carries on: it becomes THE CALL */
-const CARRIER = 2;
-const collapseStart = (k: number) => (k === CARRIER ? K.carrierFly : K.collapse + k * K.collapseStagger);
-
-function keeperRect(G: Geo, k: number, tt: number): Rect {
-  const base = mixRect(G.cards[G.stay[k]], G.cells[k], glideAt(k, tt));
-  const p = slide(tt - collapseStart(k), dist(base, G.stations[0]), k === CARRIER ? CARRY : COLLAPSE);
-  return mixRect(base, G.stations[0], p);
-}
-
-/** one half-turn (deg): a 2 f −8° anticipation, then −8 → 180 on FLIP */
-function halfTurn(L0: number, tt: number) {
-  if (tt < L0 - 2) return 0;
-  if (tt < L0) return -8 * Math.sin(((tt - (L0 - 2)) / 2) * (Math.PI / 2));
-  return -8 + 188 * dspring(tt - L0 + 0.6, FLIP);
-}
-/** cell k turns twice: industry → language k (page 1) → language k + 3 (page 2), one beat apart */
-const flipAngle = (k: number, tt: number) => halfTurn(K.langs[k], tt) + halfTurn(K.langs[k + 3], tt);
-/** which language a cell shows at angle a (−1: still the industry face) */
-const pageOf = (k: number, a: number) => (a < 90 ? -1 : a < 270 ? k : k + 3);
-
-/* ── the ten leaving cards ───────────────────────────────────────── */
+/* ── the fifteen leaving cards ───────────────────────────────────── */
 function flyAt(i: number, order: number, tt: number, u: { x: number; y: number }) {
   const s = K.flyOut + order * K.flyStagger;
   const A = K.flyAnticip;
   const pre = tt < s - A ? 0 : tt < s ? Math.sin(((tt - (s - A)) / A) * (Math.PI / 2)) : Math.max(0, 1 - (tt - s) / 3);
   const q = tween(tt, [s, s + K.flyDur], [0, 1], EASE.in2);
-  const d = -14 * pre + q * 2100;
+  const d = -14 * pre + q * 2300;
   const spin = (random(`scale-fly-r-${i}`) > 0.5 ? 1 : -1) * (8 + 10 * random(`scale-fly-rr-${i}`));
   return { x: u.x * d, y: u.y * d, rot: spin * q, sc: 1 - 0.03 * pre + 0.1 * q, q };
 }
@@ -149,49 +108,51 @@ export const Scale: React.FC = () => {
 
   /* ── camera ───────────────────────────────────────────────────── */
   const cam = camAt(t, G, L);
-  // velocity blur on the wall during the camera steps (≤ 5 px on screen)
-  const sp = t < K.camSteps[2][1] + 1 ? stepSpeed(t, G, L) : 0;
-  const stepBlur = Math.min(5, sp / 25);
 
   /* ── the hero hit ─────────────────────────────────────────────── */
   const dim = tween(t, [HERO, HERO + 6], [0, 1], EASE.out3);
   const wash = t >= HERO && t < HERO + 2 ? (t < HERO + 1 ? 0.09 : 0.05) : 0;
 
-  /* ── card metrics ─────────────────────────────────────────────── */
-  const ind = { pad: v ? 24 : 32, iconSize: v ? 72 : 80, labelSize: v ? 30 : 40 };
-  // the greetings at reading size: 84 px (16:9) / 80 px (9:16), labels 30 / 28
-  const cell = { pad: v ? 26 : 32, labelSize: v ? 28 : 30, size: v ? 80 : 84, orb: v ? 104 : 168 };
+  /* ── card metrics: labels 40 px (16:9) / 32 px (9:16) ─────────── */
+  const ind = { pad: v ? 22 : 32, iconSize: v ? 58 : 68, labelSize: v ? 32 : 40 };
 
-  /** the wall-phase filter of card i: attack-frame shutter blur, step blur, hero blur */
+  /** the wall-phase filter of card i: the camera's pull (directional), the attack-frame shutter blur, the hero's defocus */
   const wallFilter = (i: number, id: string, extraBlur = 0): { f?: string; defs: React.ReactNode } => {
     const s = popStart(i);
-    let defs: React.ReactNode = null;
-    const parts: string[] = [];
+    let sx = 0;
+    let sy = 0;
+    if (t < 70) {
+      // the pull-back smears each card along its own screen path (a 180° shutter: half the frame's travel; layer px)
+      const sv = screenVel(t, centre(G.cards[i]), G, L);
+      sx = Math.min(8, 0.5 * sigmaFor(sv.vx)) / cam.s;
+      sy = Math.min(8, 0.5 * sigmaFor(sv.vy)) / cam.s;
+    }
     if (t >= s && t < s + 1 && t < HERO) {
       // 6 px shutter blur on the attack frame (screen px → layer px)
       const mom = i === 0 ? sigmaFor(60 * (dspring(t - s + 0.5, SPRING.pop) - dspring(t - s - 0.5, SPRING.pop))) : 0;
-      const sx = (v ? 1.6 : 1.6 + mom) / cam.s;
-      const sy = (v ? 6 + mom : 6) / cam.s;
-      const ref = dirBlurRef(id, sx, sy);
-      if (ref) {
-        parts.push(ref);
-        defs = <DirBlur id={id} sx={sx} sy={sy} />;
-      }
+      sx = Math.max(sx, (v ? 1.6 : 1.6 + mom) / cam.s);
+      sy = Math.max(sy, (v ? 6 + mom : 6) / cam.s);
     }
-    const b = stepBlur + 8 * dim + extraBlur;
-    if (b > 0.2) parts.push(`blur(${(b / cam.s).toFixed(2)}px)`);
+    sx = Math.min(sx, 14);
+    sy = Math.min(sy, 14);
+    const parts: string[] = [];
+    let defs: React.ReactNode = null;
+    const ref = dirBlurRef(id, sx, sy);
+    if (ref) {
+      parts.push(ref);
+      defs = <DirBlur id={id} sx={sx} sy={sy} />;
+    }
+    if (extraBlur > 0.2) parts.push(`blur(${(extraBlur / cam.s).toFixed(2)}px)`);
     return { f: parts.length ? parts.join(' ') : undefined, defs };
   };
 
   /** the hero's lock strums out from the title (the wall centre): 0 → 4 f by distance */
-  const wc0 = centre(G.wall);
-  const far = Math.hypot(G.wall.w, G.wall.h) / 2;
-  const lockDelay = (i: number) => (4 * Math.hypot(centre(G.cards[i]).x - wc0.x, centre(G.cards[i]).y - wc0.y)) / far;
-
-  /* ── keepers / flyers ─────────────────────────────────────────── */
-  const keeperOf = Array.from({ length: 16 }, (_, i) => G.stay.indexOf(i));
-  const leaving = Array.from({ length: 16 }, (_, i) => i).filter((i) => keeperOf[i] < 0);
   const wc = centre(G.wall);
+  const far = Math.hypot(G.wall.w, G.wall.h) / 2;
+  const lockDelay = (i: number) => (4 * Math.hypot(centre(G.cards[i]).x - wc.x, centre(G.cards[i]).y - wc.y)) / far;
+
+  /* ── the fifteen that leave ───────────────────────────────────── */
+  const leaving = Array.from({ length: 16 }, (_, i) => i).filter((i) => i !== G.keeper);
   const flyOrder = [...leaving].sort((a, bb) => {
     const da = Math.hypot(centre(G.cards[a]).x - wc.x, centre(G.cards[a]).y - wc.y) + random(`scale-fo-${a}`) * 240;
     const db = Math.hypot(centre(G.cards[bb]).x - wc.x, centre(G.cards[bb]).y - wc.y) + random(`scale-fo-${bb}`) * 240;
@@ -212,175 +173,76 @@ export const Scale: React.FC = () => {
     ok: K.ok,
     ping: K.ping,
     stream: K.stream,
+    moteDur: K.moteDur,
     callIn: K.callIn,
     pill: K.pill,
   };
 
-  /* ── one keeper (industry card → language cell → page 2 → deck) ─── */
-  const keeper = (k: number) => {
-    const i = G.stay[k];
-    if (t < popStart(i)) return null;
-    const carrier = k === CARRIER;
-    const gs = glideStart(k);
-    const r = t < gs - 4 ? G.cards[i] : keeperRect(G, k, t);
-    const a = flipAngle(k, t);
-    const page = pageOf(k, a);
-    const cs = collapseStart(k);
-    const hide = carrier ? 0 : tween(t, [K.stations[0] - 1, K.stations[0] + 3], [0, 1]);
-    if (hide >= 1) return null;
-    const id = `scale-kp-${k}`;
-    let filter: string | undefined;
-    let defs: React.ReactNode = null;
-    let transform: string | undefined;
-    let opacity = 1 - hide;
-    let bg: string = C.white;
-    let ring: string | undefined;
-    let lift = 0;
-    let z = 1;
-    let face: React.ReactNode;
-    // the flip's shutter blur: the card's width collapses/opens fast mid-turn
-    // 16:9 tall columns turn about their vertical axis; 9:16 wide rows flip about the horizontal one (a split-flap)
-    const axis = v ? 'X' : 'Y';
-    const flipS = Math.abs(Math.cos((flipAngle(k, t + 0.5) * Math.PI) / 180) - Math.cos((flipAngle(k, t - 0.5) * Math.PI) / 180)) * ((v ? r.h : r.w) / 2);
-    const fs = Math.min(14, sigmaFor(flipS));
-
-    if (t < HERO) {
-      // the wall: the pop
-      const w = wallFilter(i, id);
-      filter = w.f;
-      defs = w.defs;
-      transform = poseCss(popPose(i, t, v));
-      bg = popFill(t, tickOf(i), cardLight(i), 0.4);
-    } else if (page < 0) {
-      // dimmed industry front: .4 on the hit → .6 over the glide → 1 as it turns
-      const up = tween(t, [gs, gs + 10], [0, 1], EASE.inOut);
-      const turn = tween(t, [K.langs[k] - 2, K.langs[k]], [0, 1], EASE.out3);
-      opacity *= (1 - 0.6 * dim + 0.2 * up) * (1 - turn) + turn;
-      const blurPx = (8 * dim - 5.5 * up) * (1 - turn);
-      const fx = v ? 0 : fs;
-      const fy = v ? fs : 0;
-      const ref = dirBlurRef(id, fx, fy);
-      if (ref) defs = <DirBlur id={id} sx={fx} sy={fy} />;
-      filter = [ref, blurPx > 0.2 ? `blur(${(blurPx / cam.s).toFixed(2)}px)` : ''].filter(Boolean).join(' ') || undefined;
-      transform = a !== 0 ? `perspective(1600px) rotate${axis}(${a.toFixed(3)}deg)` : undefined;
-      if (a > 0) z = 2;
-    } else {
-      // a language face (page 1 on the back, page 2 on the front again)
-      let sx = v ? 0 : fs;
-      let sy = v ? fs : 0;
-      // collapse / carrier flight: a directional shutter blur along the move
-      if (t >= cs - 4 && t < cs + 14) {
-        const r0 = keeperRect(G, k, t - 0.5);
-        sx = Math.max(sx, Math.min(30, sigmaFor(centre(r).x - centre(r0).x)));
-        sy = Math.max(sy, Math.min(30, sigmaFor(centre(r).y - centre(r0).y)));
-      }
-      const ref = dirBlurRef(id, sx, sy);
-      if (ref) defs = <DirBlur id={id} sx={sx} sy={sy} />;
-      filter = ref;
-      const ra = a - (page === k ? 180 : 360);
-      transform = Math.abs(ra) > 0.01 ? `perspective(1600px) rotate${axis}(${ra.toFixed(3)}deg)` : undefined;
-      const L0 = K.langs[page];
-      const firstFrame = pageOf(k, flipAngle(k, t - 1)) !== page;
-      // the live cell: lit from its landing until the next flip lands (or the collapse)
-      const nextLive = page + 1 < 6 ? K.langs[page + 1] : K.collapse;
-      const live = t < nextLive + 3 && t < cs;
-      if (firstFrame) bg = litFill(LANG_LIGHT, 1.1);
-      if (carrier && t >= K.stations[0]) bg = popFill(t, K.stations[0], FLOW_LIGHT);
-      if (live) ring = rgba(bodyOf(LANG_LIGHT), 0.7 * tween(t, [L0, L0 + 3], [0, 1], EASE.out3));
-      z = t < L0 + 8 ? 2 : 1;
-      if (t >= cs - 4) {
-        lift = carrier ? tween(t, [cs - 3, cs + 4], [0, 1], EASE.out3) * (1 - tween(t, [cs + 6, cs + 14], [0, 1], EASE.inOut)) : 0.4;
-        z = carrier ? 4 : 1;
-      }
-    }
-
-    if (t < HERO || page < 0) {
-      face = (
-        <IndustryFace
-          d={INDUSTRIES[i]}
-          t={t}
-          at={popStart(i)}
-          tick={tickOf(i)}
-          pad={ind.pad}
-          iconSize={ind.iconSize}
-          labelSize={ind.labelSize}
-          light={cardLight(i)}
-          lockAt={HERO}
-          lockLight={HERO_LIGHT}
-          lockDelay={lockDelay(i)}
-          beats={K.beats}
-          beatLights={K.wallLights.slice(1)}
-          still={t > tickOf(i) + 12}
-        />
-      );
-    } else {
-      const langOut = carrier
-        ? tween(t, [K.carrierFly - 1, K.carrierFly + 3], [0, 1], EASE.in2)
-        : tween(t, [cs + 2, cs + 6], [0, 1], EASE.inOut); // the deck under THE CALL is blank stock
-      const callIn = carrier ? tween(t, [K.callIn - 1, K.callIn + 2], [0, 1], EASE.out3) : 0;
-      const lg = LANGS[page];
-      face = (
-        <>
-          {langOut < 1 ? (
-            <div style={{ position: 'absolute', inset: 0, opacity: 1 - langOut }}>
-              <LangFace
-                lang={lg}
-                set={v ? lg.v : lg.h}
-                t={t}
-                at={K.langs[page]}
-                pad={cell.pad}
-                labelSize={cell.labelSize}
-                size={lg.size ? (v ? lg.size[1] : lg.size[0]) : cell.size}
-                underline={tween(t, K.disclose[page], [0, 1], EASE.house)}
-                light={LANG_LIGHT}
-                orbSize={cell.orb}
-                w={r.w}
-              />
-            </div>
-          ) : null}
-          {callIn > 0 ? (
-            <div style={{ position: 'absolute', inset: 0, opacity: callIn }}>
-              <StationFace i={0} t={t} T={flowT} vertical={v} />
-            </div>
-          ) : null}
-        </>
-      );
-    }
+  /** the slot's inhale before a pop: a soft shadow of the card-to-be and a point of its light (2 f) */
+  const inhale = (i: number, r: Rect) => {
+    const s = popStart(i);
+    if (i === 0 || t < s - 2 || t >= s) return null;
+    const p = (t - (s - 2)) / 2;
+    const c = centre(r);
+    const col = LIGHTS[cardLight(i)].orb[3];
+    const w = r.w * (0.5 - 0.06 * p);
+    const h = r.h * (0.5 - 0.06 * p);
     return (
-      <React.Fragment key={`keep-${k}`}>
-        {defs}
-        <Box r={r} transform={transform} opacity={opacity} lift={lift} bg={bg} ring={ring} z={z} filter={filter}>
-          {face}
-        </Box>
-      </React.Fragment>
+      <div
+        key={`inh-${i}`}
+        style={{
+          position: 'absolute',
+          left: c.x - w / 2,
+          top: c.y - h / 2,
+          width: w,
+          height: h,
+          borderRadius: 18,
+          background: `radial-gradient(closest-side, ${rgba(col, 0.55 * p)}, ${rgba(col, 0)})`,
+          boxShadow: `0 10px 30px -14px rgba(24,16,40,${(0.25 * p).toFixed(3)})`,
+        }}
+      />
     );
   };
 
-  /* ── one leaving card (the wall, then the peel-off) ────────────── */
-  const flyer = (i: number, o: number) => {
-    if (t < popStart(i)) return null;
+  /** one wall card: the pop, the hold, the hero's dim, then (unless it is the keeper) the peel-off */
+  const wallCard = (i: number, o: number) => {
+    if (t < popStart(i) - 2) return null;
+    const r = G.cards[i];
+    if (t < popStart(i)) return inhale(i, r);
+    const keeper = i === G.keeper;
+    if (keeper && t >= K.glide - 4) return null; // the English card (scale/Langs.tsx) takes it from here
     const u = dirOf(i);
-    const f = flyAt(i, o, t, u);
+    const f = keeper ? { x: 0, y: 0, rot: 0, sc: 1, q: 0 } : flyAt(i, o, t, u);
     if (f.q >= 0.999) return null;
-    // once a flyer (and its ghosts, which trail it) is wholly off the frame it costs nothing
+    // once a flyer (and its ghosts) is wholly off the frame it costs nothing
     const offScreen = (dx: number, dy: number, sc: number) => {
-      const c = centre(G.cards[i]);
-      const rr = 0.75 * Math.hypot(G.cards[i].w, G.cards[i].h) * sc * cam.s + 40;
+      const c = centre(r);
+      const rr = 0.75 * Math.hypot(r.w, r.h) * sc * cam.s + 40;
       const x = cam.ax + cam.s * (c.x + dx);
       const y = cam.ay + cam.s * (c.y + dy);
       return x + rr < 0 || x - rr > L.width || y + rr < 0 || y - rr > L.height;
     };
-    const fg = flyAt(i, o, t - 0.7, u);
-    if (offScreen(f.x, f.y, f.sc) && offScreen(fg.x, fg.y, fg.sc)) return null;
-    const id = `scale-fl-${i}`;
+    const fg = keeper ? f : flyAt(i, o, t - 0.7, u);
+    if (!keeper && offScreen(f.x, f.y, f.sc) && offScreen(fg.x, fg.y, fg.sc)) return null;
+    const id = `scale-wc-${i}`;
     const at = (tt: number) => {
       const ff = flyAt(i, o, tt, u);
       return `translate(${ff.x.toFixed(2)}px, ${ff.y.toFixed(2)}px) rotate(${ff.rot.toFixed(3)}deg) scale(${ff.sc.toFixed(4)})`;
     };
-    const f1 = flyAt(i, o, t - 1, u);
-    const speed = Math.hypot(f.x - f1.x, f.y - f1.y);
-    const w = wallFilter(i, id, Math.min(10, speed * 0.05));
-    const content = (ghost: boolean) => (
+    // the flight's shutter blur: half the frame's travel, along the flight (layer px)
+    const f0 = keeper ? f : flyAt(i, o, t - 0.5, u);
+    const f1 = keeper ? f : flyAt(i, o, t + 0.5, u);
+    const w = wallFilter(i, id);
+    let flyDefs: React.ReactNode = null;
+    let flyF: string | undefined;
+    if (!keeper && f.q > 0) {
+      const fx = Math.min(24, 0.5 * sigmaFor(f1.x - f0.x));
+      const fy = Math.min(24, 0.5 * sigmaFor(f1.y - f0.y));
+      flyF = dirBlurRef(id + '-f', fx, fy);
+      if (flyF) flyDefs = <DirBlur id={id + '-f'} sx={fx} sy={fy} />;
+    }
+    const light = cardLight(i);
+    const content = (still: boolean) => (
       <IndustryFace
         d={INDUSTRIES[i]}
         t={t}
@@ -389,34 +251,29 @@ export const Scale: React.FC = () => {
         pad={ind.pad}
         iconSize={ind.iconSize}
         labelSize={ind.labelSize}
-        light={cardLight(i)}
+        light={light}
         lockAt={HERO}
         lockLight={HERO_LIGHT}
         lockDelay={lockDelay(i)}
-        beats={K.beats}
-        beatLights={K.wallLights.slice(1)}
-        still={ghost || t > tickOf(i) + 12}
-        accents={!ghost}
+        still={still || t > tickOf(i) + 12}
       />
     );
-    const op = 1 - 0.6 * dim;
+    // the hit's small glow under the card, in its light
+    const k = flashAt(t, tickOf(i), 12);
+    const glow = k > 0.01 ? `0 18px 60px -18px ${rgba(LIGHTS[light].orb[2], 0.6 * k)}, 0 0 40px -6px ${rgba(tintOf(light), 0.9 * k)}` : undefined;
+    const moving = !keeper && t >= K.flyOut - K.flyAnticip;
     return (
-      <React.Fragment key={`fly-${i}`}>
+      <React.Fragment key={`wc-${i}`}>
         {w.defs}
-        {speed > 10
-          ? [0.35, 0.7].map((d, gi) => (
-              <Box key={gi} r={G.cards[i]} transform={at(t - d)} opacity={op * [0.3, 0.14][gi]} shadowAlpha={0.4} filter={`blur(${(Math.min(12, speed * 0.06) + 8 * dim).toFixed(2)}px)`}>
-                {content(true)}
-              </Box>
-            ))
-          : null}
+        {flyDefs}
         <Box
-          r={G.cards[i]}
-          transform={t < K.flyOut - K.flyAnticip ? poseCss(popPose(i, t, v)) : at(t)}
-          opacity={op}
-          bg={popFill(t, tickOf(i), cardLight(i), 0.4)}
-          filter={w.f}
+          r={r}
+          transform={moving ? at(t) : poseCss(popPose(i, t, v))}
+          bg={popFill(t, tickOf(i), light, 0.45)}
+          glow={glow}
+          filter={flyF ?? w.f}
           lift={f.q > 0 ? 0.6 : 0}
+          z={t < tickOf(i) + 4 ? 2 : 1}
         >
           {content(false)}
         </Box>
@@ -427,47 +284,61 @@ export const Scale: React.FC = () => {
   const fz = 1 + 0.04 * tween(t, K.flowPush, [0, 1], EASE.inOut);
   const stagePush = fz > 1.00001 ? `scale(${fz.toFixed(5)})` : undefined;
   const cp = cameraProps(cam, L);
+  // the wall settles behind the hero: 1.5 % back about its centre
+  const settle = 1 - 0.015 * dim;
+  const wallOn = t < K.flyOut + K.flyDur + 16;
 
   return (
     <AbsoluteFill style={{ background: C.white, overflow: 'hidden' }}>
-      {/* 0 · the act's ground (the rush, then the closing light): screen space, behind the camera */}
+      {/* 0 · the act's ground: screen space, behind the camera */}
       <Ground t={t} />
-      {/* the quarter kicks' roll, about the screen centre (every plane alike) */}
+      {/* the kicks' roll, about the screen centre (every plane alike) */}
       <AbsoluteFill style={{ transform: cp.rot ? `rotate(${cp.rot.toFixed(4)}deg)` : undefined }}>
-      <Camera x={cp.x} y={cp.y} zoom={cp.zoom}>
-        {/* 0.4 · the leading light's bloom + room shading */}
-        <Layer depth={0.4}>
-          <Backdrop t={t} L={L} />
-        </Layer>
+        <Camera x={cp.x} y={cp.y} zoom={cp.zoom}>
+          {/* 0.4 · the leading light's bloom + room shading */}
+          <Layer depth={0.4}>
+            <Backdrop t={t} L={L} />
+          </Layer>
 
-        {/* 1.0 · the wall → cells → flow (pushed about FLOW_END), then the titles */}
-        <Layer depth={1}>
-          <AbsoluteFill style={{ transform: stagePush, transformOrigin: `${G.end.x}px ${G.end.y}px`, zIndex: 0 }}>
-            {flyOrder.map((i, o) => flyer(i, o))}
-            {[0, 1].map((k) => keeper(k))}
-            <Rail t={t} G={G} vertical={v} T={flowT} />
-            {keeper(CARRIER)}
-            <StationCards t={t} G={G} vertical={v} T={flowT} />
-          </AbsoluteFill>
-          <Titles
-            t={t}
-            T={{ hero: HERO, swap: K.titleSwap, exit: K.titleExit, in: K.titleIn, out: K.titleOut, after: K.titleAfter }}
-            hero={G.title.hero}
-            band={G.title.band}
-            after={G.title.after}
-          />
-        </Layer>
+          {/* 1.0 · the wall → the languages → the flow (pushed about FLOW_END), then the titles */}
+          <Layer depth={1}>
+            <AbsoluteFill style={{ transform: stagePush, transformOrigin: `${G.end.x}px ${G.end.y}px`, zIndex: 0 }}>
+              {wallOn ? (
+                <AbsoluteFill
+                  style={{
+                    transform: settle < 0.99999 ? `scale(${settle.toFixed(5)})` : undefined,
+                    transformOrigin: `${wc.x}px ${wc.y}px`,
+                    // the hero's defocus: the whole wall at once (one filter, not sixteen)
+                    opacity: dim > 0.001 ? 1 - 0.58 * dim : undefined,
+                    filter: dim > 0.001 ? `blur(${((7 * dim) / cam.s).toFixed(2)}px)` : undefined,
+                  }}
+                >
+                  {Array.from({ length: 16 }, (_, i) => wallCard(i, flyOrder.indexOf(i)))}
+                </AbsoluteFill>
+              ) : null}
+              <Rail t={t} G={G} vertical={v} T={flowT} />
+              <LangCards t={t} G={G} vertical={v} dim={dim} flowT={flowT} ind={ind} />
+              <StationCards t={t} G={G} vertical={v} T={flowT} />
+            </AbsoluteFill>
+            <Titles
+              t={t}
+              T={{ hero: HERO, swap: K.titleSwap, exit: K.titleExit, in: K.titleIn, out: K.titleOut, after: K.titleAfter }}
+              hero={G.title.hero}
+              band={G.title.band}
+              after={G.title.after}
+            />
+          </Layer>
 
-        {/* 1.6 · out-of-focus discs in the leading light, nearest the lens */}
-        <Layer depth={1.6}>
-          {leadColors(t, 2).map((c, ci) => (
-            <NearDiscs key={ci} t={t} L={L} fade={c.w * tween(t, [0, 10], [0, 1], EASE.out3)} color={c.col} />
-          ))}
-        </Layer>
-      </Camera>
+          {/* 1.6 · out-of-focus discs in the leading light, nearest the lens */}
+          <Layer depth={1.6}>
+            {leadColors(t, 2).map((c, ci) => (
+              <NearDiscs key={ci} t={t} L={L} fade={c.w * tween(t, [0, 10], [0, 1], EASE.out3)} color={c.col} />
+            ))}
+          </Layer>
+        </Camera>
       </AbsoluteFill>
 
-      {/* the hero hit: a 2 f wash of the rush light over everything */}
+      {/* the hero hit: a 2 f wash of the hero light over everything */}
       {wash > 0 ? <AbsoluteFill style={{ background: rgba(tintOf(HERO_LIGHT), wash) }} /> : null}
     </AbsoluteFill>
   );

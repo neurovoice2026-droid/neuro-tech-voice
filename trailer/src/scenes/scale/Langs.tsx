@@ -12,8 +12,8 @@
  *   cascade   English is heard whole (the wall's keeper turns into it). Then
  *             Romanian / Spanish / French / German slide in from the right,
  *             each landing a frame before its voice cuts in (≈ 0.75 s each):
- *             the big line is what she says before the cut ("Sunt Ava,"), the
- *             rest of the line small beneath it. Japanese is heard whole.
+ *             the big line is what she says before the cut ("Sunt Ava,") —
+ *             at most four words in focus. Japanese is heard whole.
  *   gallery   as the next card arrives, the last one recedes into the gallery
  *             (16:9 a row of five under the focus · 9:16 3 + 2), its light
  *             going out — so from Japanese on all six are visible together,
@@ -70,7 +70,10 @@ export function envAt(k: number, t: number): number {
 function litOf(k: number, t: number) {
   const a = arriveAt(k);
   const up = tween(t, [a - 3, a + 2], [0, 1], EASE.out3);
-  const out = k === CARRIER ? tween(t, [K.carrierFly + 2, K.carrierFly + 10], [0, 1], EASE.inOut) : tween(t, [K.switchOut[k] + 1, K.switchOut[k] + 9], [0, 1], EASE.inOut);
+  const out =
+    k === CARRIER
+      ? tween(t, [K.carrierFly + 2, K.carrierFly + 10], [0, 1], EASE.inOut)
+      : tween(t, [K.switchOut[k] + 1, K.switchOut[k] + 9], [0, 1], EASE.inOut);
   return up * (1 - out);
 }
 
@@ -125,7 +128,12 @@ function GreetingLine({ js, o }: { js: number[]; o: LineOpts }) {
   /** a word's text as units: per character for Japanese (Latin runs in Cormorant), whole otherwise */
   const unit = (j: number, text: string) => {
     const s0 = o.at(j);
-    if (!cjk) return <span key={`w${j}`} style={s0 === undefined ? { display: 'inline-block', whiteSpace: 'pre' } : reveal(o.t, s0, o.size)}>{text}</span>;
+    if (!cjk)
+      return (
+        <span key={`w${j}`} style={s0 === undefined ? { display: 'inline-block', whiteSpace: 'pre' } : reveal(o.t, s0, o.size)}>
+          {text}
+        </span>
+      );
     // Japanese: the characters of word j spread over its spoken span
     const chars = Array.from(text);
     const next = j + 1 < words.length ? o.at(j + 1) : undefined;
@@ -192,7 +200,9 @@ function GreetingLine({ js, o }: { js: number[]; o: LineOpts }) {
             ) : (
               content
             )}
-            {tail ? <span style={o.at(lastJ) === undefined ? { display: 'inline-block', whiteSpace: 'pre' } : reveal(o.t, o.at(lastJ)!, o.size)}>{tail}</span> : null}
+            {tail ? (
+              <span style={o.at(lastJ) === undefined ? { display: 'inline-block', whiteSpace: 'pre' } : reveal(o.t, o.at(lastJ)!, o.size)}>{tail}</span>
+            ) : null}
           </React.Fragment>
         );
       })}
@@ -215,23 +225,13 @@ export const LangFocusFace: React.FC<{ k: number; t: number; w: number; h: numbe
   const l = LANGS[k];
   const light = langLight(k);
   const o = LIGHTS[light].orb;
-  const words = wordsOf(l);
-  const nMain = K.langMain[k];
-  const pad = v ? 48 : 56;
-  const D = v ? 92 : 104;
-  const nameSize = v ? 32 : 34;
-  const size = l.cjk ? (v ? 86 : 96) : k === 0 ? (v ? 104 : 124) : v ? 100 : 116;
-  const restSize = v ? 44 : 48;
-  const cut = cutAt(k) !== undefined;
-  // the AI underline: as she says it (English, Japanese); in the small line as it appears (the quick four)
-  const ul =
-    k === 0
-      ? tween(t, K.discloseEn, [0, 1], EASE.draw)
-      : k === CARRIER
-        ? tween(t, K.discloseJa, [0, 1], EASE.draw)
-        : tween(t, [K.rest[k] + 2, K.rest[k] + 12], [0, 1], EASE.draw);
+  const pad = v ? 50 : 60;
+  const D = v ? 104 : 120;
+  const nameSize = v ? 32 : 36;
+  const size = l.size[v ? 1 : 0];
+  // the AI underline as she says it (English, Japanese; the quick four are cut before their AI phrase)
+  const ul = k === 0 ? tween(t, K.discloseEn, [0, 1], EASE.draw) : k === CARRIER ? tween(t, K.discloseJa, [0, 1], EASE.draw) : 0;
   const mainLines = linesOf(0, l.main[v ? 1 : 0]);
-  const restJs = Array.from({ length: words.length - nMain }, (_, i) => nMain + i);
   // the orb: pops as the card lands, then breathes with her voice
   const a = arriveAt(k);
   const e = envAt(k, t);
@@ -301,14 +301,6 @@ export const LangFocusFace: React.FC<{ k: number; t: number; w: number; h: numbe
         {mainLines.map((js, i) => (
           <GreetingLine key={i} js={js} o={{ k, t, size, color: C.ink, underline: ul, at: (j) => wordAt(k, j), light }} />
         ))}
-        {cut && restJs.length ? (
-          <div style={{ fontSize: restSize, lineHeight: 1.2, marginTop: size * 0.1, opacity: 0.62 }}>
-            <GreetingLine
-              js={restJs}
-              o={{ k, t, size: restSize, color: C.muted, underline: ul, at: (j) => K.rest[k] + 0.7 * (j - nMain), light, thin: true }}
-            />
-          </div>
-        ) : null}
       </div>
     </>
   );
@@ -341,7 +333,18 @@ export const LangGalleryFace: React.FC<{ k: number; vertical: boolean }> = ({ k,
           {l.name}
         </div>
       </div>
-      <div style={{ position: 'absolute', left: pad, right: pad, bottom: pad - size * 0.12, fontFamily: FONT.cinema, fontWeight: 500, fontSize: size, lineHeight: 1.04 }}>
+      <div
+        style={{
+          position: 'absolute',
+          left: pad,
+          right: pad,
+          bottom: pad - size * 0.12,
+          fontFamily: FONT.cinema,
+          fontWeight: 500,
+          fontSize: size,
+          lineHeight: 1.04,
+        }}
+      >
         {lines.map((js, i) => (
           <GreetingLine key={i} js={js} o={{ k, t: 0, size, color: C.ink, underline: 0, at: () => undefined, light: langLight(k) }} />
         ))}
@@ -407,14 +410,14 @@ export function poseOf(G: Geo, k: number, tt: number): Pose | null {
   return { r, rot, leave, drop, carry };
 }
 
-export const LangCards: React.FC<{ t: number; G: Geo; vertical: boolean; dim: number; flowT: FlowTiming; ind: { pad: number; iconSize: number; labelSize: number } }> = ({
-  t,
-  G,
-  vertical: v,
-  dim,
-  flowT,
-  ind,
-}) => {
+export const LangCards: React.FC<{
+  t: number;
+  G: Geo;
+  vertical: boolean;
+  dim: number;
+  flowT: FlowTiming;
+  ind: { pad: number; iconSize: number; labelSize: number };
+}> = ({ t, G, vertical: v, dim, flowT, ind }) => {
   const order = Array.from({ length: N }, (_, k) => k);
   const cards = order.map((k) => {
     const P = poseOf(G, k, t);
@@ -458,20 +461,35 @@ export const LangCards: React.FC<{ t: number; G: Geo; vertical: boolean; dim: nu
       if (blurPx > 0.2) filter = `blur(${blurPx.toFixed(2)}px)`;
       if (a < 90) {
         const i = G.keeper;
+        // the industry face grows with the card (it comes forward), until it turns
+        const c0 = G.cards[i];
+        const grow = Math.min(r.w / c0.w, r.h / c0.h);
         face = (
-          <IndustryFace
-            d={INDUSTRIES[i]}
-            t={t}
-            at={K.pops[i]}
-            tick={K.pops[i]}
-            pad={ind.pad}
-            iconSize={ind.iconSize}
-            labelSize={ind.labelSize}
-            light={cardLight(i)}
-            lockAt={SCALE.industriesTitle}
-            lockLight={HERO_LIGHT}
-            still
-          />
+          <div
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: c0.w,
+              height: c0.h,
+              transform: Math.abs(grow - 1) > 1e-4 ? `scale(${grow.toFixed(5)})` : undefined,
+              transformOrigin: '0 0',
+            }}
+          >
+            <IndustryFace
+              d={INDUSTRIES[i]}
+              t={t}
+              at={K.pops[i]}
+              tick={K.pops[i]}
+              pad={ind.pad}
+              iconSize={ind.iconSize}
+              labelSize={ind.labelSize}
+              light={cardLight(i)}
+              lockAt={SCALE.industriesTitle}
+              lockLight={HERO_LIGHT}
+              still
+            />
+          </div>
         );
         transform = a !== 0 ? `perspective(2400px) rotate${axis}(${a.toFixed(3)}deg)` : transform;
       } else {
@@ -493,7 +511,18 @@ export const LangCards: React.FC<{ t: number; G: Geo; vertical: boolean; dim: nu
       face = (
         <>
           {fo > 0.004 && jaOut < 1 ? (
-            <div style={{ position: 'absolute', left: 0, top: 0, width: F.w, height: F.h, transform: sc < 0.9999 ? `scale(${sc.toFixed(5)})` : undefined, transformOrigin: '0 0', opacity: fo * (1 - jaOut) }}>
+            <div
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                width: F.w,
+                height: F.h,
+                transform: sc < 0.9999 ? `scale(${sc.toFixed(5)})` : undefined,
+                transformOrigin: '0 0',
+                opacity: fo * (1 - jaOut),
+              }}
+            >
               <LangFocusFace k={k} t={t} w={F.w} h={F.h} vertical={v} lit={lit} />
             </div>
           ) : null}
@@ -516,12 +545,26 @@ export const LangCards: React.FC<{ t: number; G: Geo; vertical: boolean; dim: nu
     // THE CALL lands on its station: the closing light's flash
     if (k === CARRIER && t >= K.stations[0]) bg = popFill(t, K.stations[0], FLOW_LIGHT);
     const ring = lit > 0.01 ? rgba(body, 0.5 * lit) : undefined;
-    const glow = lit > 0.01 ? `0 0 0 1px ${rgba(body, 0.14 * lit)}, 0 30px 80px -34px ${rgba(body, 0.55 * lit)}, 0 0 60px -10px ${rgba(LIGHTS[light].orb[3], 0.5 * lit)}` : undefined;
+    const glow =
+      lit > 0.01
+        ? `0 0 0 1px ${rgba(body, 0.14 * lit)}, 0 30px 80px -34px ${rgba(body, 0.55 * lit)}, 0 0 60px -10px ${rgba(LIGHTS[light].orb[3], 0.5 * lit)}`
+        : undefined;
     if (k === CARRIER && t >= K.stations[0] - 3) z = 4;
     return (
       <React.Fragment key={`lang-${k}`}>
         {ref ? <DirBlur id={id} sx={sx} sy={sy} /> : null}
-        <Box r={r} transform={transform} opacity={opacity} lift={P.leave > 0 && P.leave < 1 ? 0.4 : 0} shadowAlpha={P.leave > 0.5 ? 0.75 : 1} bg={bg} ring={ring} glow={glow} z={z} filter={filter}>
+        <Box
+          r={r}
+          transform={transform}
+          opacity={opacity}
+          lift={P.leave > 0 && P.leave < 1 ? 0.4 : 0}
+          shadowAlpha={P.leave > 0.5 ? 0.75 : 1}
+          bg={bg}
+          ring={ring}
+          glow={glow}
+          z={z}
+          filter={filter}
+        >
           {face}
         </Box>
       </React.Fragment>

@@ -13,8 +13,9 @@
  *            power2.in exit with a vertical ghost blur (a DirBlur + two
  *            trailing ghosts) — gone the frame before …
  *   in       … "14 languages." rises into the mask letter by letter (a 4 %-
- *            overshoot spring, 0.3 f apart, velocity blur); its "14" in
- *            English's light catches a glint and a soft bloom as it lands
+ *            overshoot spring, 0.3 f apart, velocity blur); its "14" wears
+ *            the LEADING light's ink (English's rush as it lands, a glint and
+ *            a soft bloom; then each language's light as the card turns over)
  *   out      "14 languages." leaves the same way; "After the call." rises
  *            into the same slot on the flow beat.
  */
@@ -22,7 +23,7 @@ import React from 'react';
 import { C, FONT, LIGHTS, type LightId } from '../../theme';
 import { aos, EASE, tween } from '../../lib/motion';
 import { DirBlur, dirBlurRef, sigmaFor } from './MotionBlur';
-import { figureInk, HERO_LIGHT, langLight, rgba } from './lights';
+import { figureInk, HERO_LIGHT, LEAD, leadAt, rgba } from './lights';
 import { dspring } from './curves';
 
 export type TitleTiming = { hero: number; swap: number; exit: number; in: number; out: number; after: number };
@@ -44,8 +45,6 @@ const EXIT_A = 2;
 const EXIT_D = 4;
 /** how far the exit travels (em): clear of the mask's top edge (0.14 em of padding) */
 const EXIT_EM = 1.3;
-/** the band titles' light: English leads as "14 languages." lands */
-const BAND_LIGHT: LightId = langLight(0);
 
 const face: React.CSSProperties = {
   fontFamily: FONT.ui,
@@ -98,9 +97,16 @@ function exitAt(f: number, at: number): number | null {
   return 0.06 * (1 - u) - EXIT_EM * EASE.in2(Math.max(0, u));
 }
 
-/** a band title rising letter by letter into the mask (figure: the first two letters in a light's ink) */
-function riseText(text: string, t: number, at: number, size: number, figLight?: LightId) {
+/** the figure's light at t: the leading light (scale/lights.ts), crossfading on a turn */
+function figureLights(t: number): { a: LightId; b: LightId; m: number } {
+  const { i, prev, m } = leadAt(t);
+  return { a: LEAD[prev].light, b: LEAD[i].light, m: prev === i ? 1 : m };
+}
+
+/** a band title rising letter by letter into the mask (figure: the first two letters in the LEADING light's ink) */
+function riseText(text: string, t: number, at: number, size: number, figure0 = false) {
   const glint = tween(t, [at + 3, at + 13], [0, 1], EASE.inOut);
+  const fl = figureLights(t);
   let k = 0;
   return Array.from(text).map((ch, i) => {
     if (ch === ' ') return <span key={i}> </span>;
@@ -109,23 +115,25 @@ function riseText(text: string, t: number, at: number, size: number, figLight?: 
     const p = P(t);
     const pv = P(t + 0.5) - P(t - 0.5);
     const bl = Math.min(6, Math.abs(pv) * 1.12 * size * 0.09);
+    const style: React.CSSProperties = {
+      display: 'inline-block',
+      position: 'relative',
+      transform: p < 0.9999 || p > 1.0001 ? `translateY(${((1 - p) * 1.12).toFixed(4)}em)` : undefined,
+      filter: bl > 0.15 ? `blur(${bl.toFixed(2)}px)` : undefined,
+    };
+    if (!figure0 || i >= 2) return <span key={i} style={style}>{ch}</span>;
+    const half = i as 0 | 1;
+    const turning = fl.a !== fl.b && fl.m < 1;
     return (
-      <span
-        key={i}
-        style={{
-          display: 'inline-block',
-          transform: p < 0.9999 || p > 1.0001 ? `translateY(${((1 - p) * 1.12).toFixed(4)}em)` : undefined,
-          filter: bl > 0.15 ? `blur(${bl.toFixed(2)}px)` : undefined,
-          ...(figLight && i < 2 ? figure(figLight, i as 0 | 1, glint) : null),
-        }}
-      >
-        {ch}
+      <span key={i} style={style}>
+        <span style={figure(turning ? fl.a : fl.b, half, glint)}>{ch}</span>
+        {turning ? <span style={{ ...figure(fl.b, half, glint), position: 'absolute', left: 0, top: 0, opacity: fl.m }}>{ch}</span> : null}
       </span>
     );
   });
 }
 
-export const Titles: React.FC<{ t: number; T: TitleTiming; hero: Pose; band: Pose }> = ({ t, T, hero, band }) => {
+export const Titles: React.FC<{ t: number; T: TitleTiming; hero: Pose; band: Pose; after: Pose }> = ({ t, T, hero, band, after }) => {
   if (t < T.hero - 1) return null;
   const P = poseAt(t, T, hero, band);
   // shutter blur on the slot's travel
@@ -204,15 +212,15 @@ export const Titles: React.FC<{ t: number; T: TitleTiming; hero: Pose; band: Pos
       </span>
     );
   });
-  const bandText = riseText(BAND, t, T.in, hero.size * P.s, BAND_LIGHT);
-  const afterText = riseText(AFTER, t, T.after, hero.size * P.s);
+  const bandText = riseText(BAND, t, T.in, hero.size * P.s, true);
+  const afterText = riseText(AFTER, t, T.after, after.size);
   // the "14"'s landing bloom (English's light), under the figure
   const bloomB = showB ? (t < T.in + 2 ? 0 : 1 - tween(t, [T.in + 2, T.in + 16], [0, 1], EASE.out3)) : 0;
   const ghost = (v: number, children: React.ReactNode, dyEm: number, key: string, op: number) =>
     Math.abs(v) > 6
       ? [0.35, 0.7].map((d, gi) => slot(children, dyEm + (d * Math.abs(v)) / (hero.size * P.s), true, `${key}-g${gi}`, op * [0.28, 0.12][gi]))
       : null;
-  const pale = LIGHTS[BAND_LIGHT].orb[3];
+  const pale = LIGHTS[LEAD[leadAt(t).i].light].orb[3];
 
   return (
     <>
@@ -243,7 +251,7 @@ export const Titles: React.FC<{ t: number; T: TitleTiming; hero: Pose; band: Pos
         />
       ) : null}
       {blur ? <DirBlur id="scale-title" sx={0} sy={sy / P.s} /> : null}
-      {showA || showB || showC ? (
+      {showA || showB ? (
         <div
           style={{
             position: 'absolute',
@@ -258,7 +266,11 @@ export const Titles: React.FC<{ t: number; T: TitleTiming; hero: Pose; band: Pos
           {showA ? slot(heroText, eA ?? 0, t >= T.exit, 'a', exitFade(T.exit)) : null}
           {showB ? ghost(vB, bandText, eB ?? 0, 'gb', exitFade(T.out)) : null}
           {showB ? slot(bandText, eB ?? 0, true, 'b', exitFade(T.out)) : null}
-          {showC ? slot(afterText, 0, t < T.after + 14, 'c') : null}
+        </div>
+      ) : null}
+      {showC ? (
+        <div style={{ position: 'absolute', left: after.x, top: after.y, transform: `scale(${(after.size / hero.size).toFixed(5)})`, transformOrigin: '0 0' }}>
+          {slot(afterText, 0, t < T.after + 14, 'c')}
         </div>
       ) : null}
     </>

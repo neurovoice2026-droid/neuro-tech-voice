@@ -71,19 +71,22 @@ export type Lang = {
   main: readonly [readonly number[], readonly number[]];
   /** line breaks of the big line in the gallery card [16:9, 9:16] (the gallery shows the big words only) */
   gallery: readonly [readonly number[], readonly number[]];
+  /** the big line's size in the focus card [16:9, 9:16] (px; Japanese: the CJK size) */
+  size: readonly [number, number];
   /** Japanese: words join with no space and reveal per character */
   cjk?: boolean;
 };
 
 /** The brief's six (each the product's Professional greeting). Line breaks never fall inside a word. */
 export const LANGS: Lang[] = [
-  { name: 'English', id: 'lang-en', ai: [4, 5], main: [[3, 3], [3, 3]], gallery: [[3], [3]] },
-  { name: 'Romanian', id: 'lang-ro', ai: [4, 6], main: [[2], [2]], gallery: [[2], [2]] },
-  { name: 'Spanish', id: 'lang-es', ai: [5, 7], main: [[2], [2]], gallery: [[2], [2]] },
-  { name: 'French', id: 'lang-fr', ai: [4, 7], main: [[2], [2]], gallery: [[2], [2]] },
-  { name: 'German', id: 'lang-de', ai: [5, 5], main: [[4], [2, 2]], gallery: [[2, 2], [2, 2]] },
+  { name: 'English', id: 'lang-en', ai: [4, 5], main: [[3, 3], [3, 3]], gallery: [[3], [3]], size: [150, 128] },
+  { name: 'Romanian', id: 'lang-ro', ai: [4, 6], main: [[2], [2]], gallery: [[2], [2]], size: [156, 132] },
+  { name: 'Spanish', id: 'lang-es', ai: [5, 7], main: [[2], [2]], gallery: [[2], [2]], size: [156, 132] },
+  { name: 'French', id: 'lang-fr', ai: [4, 7], main: [[2], [2]], gallery: [[2], [2]], size: [156, 132] },
+  // one line in 16:9 (≈ 1040 px at 134), two in 9:16
+  { name: 'German', id: 'lang-de', ai: [5, 5], main: [[4], [2, 2]], gallery: [[2, 2], [2, 2]], size: [134, 118] },
   // "AIアシスタントの / Avaと申します。" — the AI phrase comes first
-  { name: 'Japanese', id: 'lang-ja', ai: [0, 1], main: [[3, 5], [3, 5]], gallery: [[3, 5], [3, 5]], cjk: true },
+  { name: 'Japanese', id: 'lang-ja', ai: [0, 1], main: [[3, 5], [3, 5]], gallery: [[3, 5], [3, 5]], size: [112, 100], cjk: true },
 ];
 
 /** the spoken words of a greeting (verbatim, with their punctuation) */

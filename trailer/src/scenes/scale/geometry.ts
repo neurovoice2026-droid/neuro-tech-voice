@@ -75,15 +75,15 @@ export function geo(L: Layout) {
 
   /* ── the languages ──────────────────────────────────────────────── */
   /** the active language's card (from Romanian on); English, alone on the stage, is larger */
-  const lang: Rect = L.pick({ x: 360, y: 236, w: 1200, h: 540 }, { x: 40, y: 440, w: 1000, h: 560 });
-  const langEn: Rect = L.pick({ x: 300, y: 250, w: 1320, h: 620 }, { x: 40, y: 470, w: 1000, h: 660 });
+  const lang: Rect = L.pick({ x: 330, y: 212, w: 1260, h: 572 }, { x: 40, y: 436, w: 1000, h: 570 });
+  const langEn: Rect = L.pick({ x: 290, y: 226, w: 1340, h: 640 }, { x: 40, y: 456, w: 1000, h: 680 });
   /** the gallery: the five cards already said, in order */
   const gallery: Rect[] = v
     ? [
         ...[0, 1, 2].map((i) => ({ x: 40 + i * (316 + 26), y: 1036, w: 316, h: 204 })),
         ...[0, 1].map((i) => ({ x: 211 + i * (316 + 26), y: 1262, w: 316, h: 204 })),
       ]
-    : [0, 1, 2, 3, 4].map((i) => ({ x: 62 + i * (340 + 24), y: 816, w: 340, h: 210 }));
+    : [0, 1, 2, 3, 4].map((i) => ({ x: 62 + i * (340 + 24), y: 822, w: 340, h: 184 }));
 
   /**
    * The keeper: the wall card that becomes English — the one nearest the
@@ -108,7 +108,9 @@ export function geo(L: Layout) {
     /** "16 industries." — centred on the wall (cap centre), size in px */
     hero: L.pick({ x: L.cx, y: L.cy, size: 160 }, { x: L.cx, y: centre(wall).y, size: 140 }),
     /** the band: "14 languages." / "After the call." (cap centre; 9:16 cap top ≈ 293) */
-    band: L.pick({ x: L.cx, y: 126, size: 112 }, { x: L.cx, y: 332, size: 104 }),
+    band: L.pick({ x: L.cx, y: 118, size: 108 }, { x: L.cx, y: 332, size: 104 }),
+    /** "After the call." — nearer the rail in 16:9 (the flow hangs off FLOW_END's row) */
+    after: L.pick({ x: L.cx, y: 300, size: 112 }, { x: L.cx, y: 332, size: 104 }),
   };
 
   /* ── the after-call rail ─────────────────────────────────────────

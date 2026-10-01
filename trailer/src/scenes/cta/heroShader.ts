@@ -2,8 +2,10 @@
  * The CTA's single WebGL2 pass: the site's hero portrait (depth-portrait.tsx)
  * rebuilt for the film, plus the silver backlight halo the logo lands on.
  *
- *   0. framing: the art is placed so its eyes sit on the logo centre (the
- *      portrait crop is pushed in so its glitch band, v < 0.14, stays out)
+ *   0. framing: the art is placed so its eyes sit on the logo centre (any of
+ *      the portrait crop's glitch band, v < 0.14, the framing reaches is filled
+ *      from the backlight under it and scrimmed); in 9:16 the backlight
+ *      feathers out above the straight line of her shoulders (uPlateEdge)
  *   1. dolly (push-in about the eyes) + parallax-occlusion march through the
  *      depth map (white = near), driven by a scripted "pointer" orbit — the
  *      site's DepthPortrait with its 0.048 amplitude
@@ -11,9 +13,11 @@
  *      tears into vertical filaments, folded about the face axis, eyes guarded
  *   3. the site's grade (brightness .82 · contrast 1.18 · saturate .88), the
  *      10 % pigment tint, then the hero scrim + wash, exactly as the CSS
- *   4. ERASE: a filament-noise threshold swaps the figure for the halo:
- *      thresholds spread over the whole window (outside-in, eyes last), the
- *      torn edge catches the light, the eyes flash lilac as they go
+ *   4. ERASE: a filament-noise threshold swaps her HEAD for the halo
+ *      (outside-in, nearest the lights first, the eyes last); the body and the
+ *      room go smoothly. Torn filaments never leave the head matte by more than
+ *      ~40 px (uHeadCap) and glow in the nearest light's colour (nearLight;
+ *      the night's lilac before the lights are in), never grey
  *   5. REVEAL: from black, the eyes first, then a noisy radial opening
  *   6. the halo: #c4c0ba → #a19e97 → #7b7a7d → night — a clean, soft,
  *      luminous backlight: one wide monotone falloff (C¹ Hermite through the
@@ -350,7 +354,9 @@ void main() {
   // the head matte (1 = its edge, ears to crown, down past the chin): the filaments
   // never leave it by more than ~40 px, so the backdrop never smears into grey streaks
   float hm = length((pxA - eyeMidA - vec2(0.0, 0.4 * eo)) / (eo * vec2(2.1, 3.3)));
-  float headM = uHeadCap > 0.0 ? 1.0 - smoothstep(uHeadCap, uHeadCap + 0.22, hm) : 1.0;
+  // (the cap's matte is the head itself, crown to chin — measured on both crops — not the neck)
+  float hmC = length((pxA - eyeMidA + vec2(0.0, 0.3 * eo)) / (eo * vec2(2.1, 2.85)));
+  float headM = uHeadCap > 0.0 ? 1.0 - smoothstep(uHeadCap, uHeadCap + 0.22, hmC) : 1.0;
   warp *= headM;
   // how torn this pixel is (0 = in place): the torn filaments glow in the lights' colour
   float fil = smoothstep(0.002, 0.022, length(warp)) * uTearTint;
@@ -443,7 +449,8 @@ void main() {
     // (never inside the head itself: its highlights are not backlight)
     float head = 1.0 - smoothstep(0.85, 1.2, length((pxA - eyeMidA - vec2(0.0, 0.4 * eo)) / (eo * vec2(2.1, 3.3))));
     k = max(0.0, k - 0.42 * backlit * (1.0 - head));
-    k = mix(k, 0.88 + 0.12 * nr, eyeBias);
+    // (they go just before the end, as their light lifts out — CTA_LOCAL.eyeGlow)
+    k = mix(k, 0.72 + 0.14 * nr, eyeBias);
     const float BAND = 0.1;
     float e = mix(-BAND, 1.0 + BAND, uErase);
     float mFig = smoothstep(k - BAND, k + BAND, e);

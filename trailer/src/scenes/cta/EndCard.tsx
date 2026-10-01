@@ -105,14 +105,21 @@ export const CoverCta: React.FC<{
   spec: PressSpec;
   rest: Rest;
 }> = ({ t, at, press, fontSize: F, spec, rest }) => {
-  if (t < at - 4) return null;
-  /* ── the rise ── */
+  if (t < at - 5) return null;
+  /* ── the rise ── (its words start out of their masks with the plate, so it is never a blank slab) */
   const e = t < at ? 0 : springAt(t, at, RISE);
   const ePrev = t - 1 < at ? 0 : springAt(t - 1, at, RISE);
   const y = rest(t, (1 - e) * 0.6 * F, 0);
   const sc0 = rest(t, mix(0.94, 1, e), 1);
   const vy = Math.abs(e - ePrev) * 0.6 * F; // px/frame of the lift
-  const fadeIn = tween(t, [at, at + 5], [0, 1], EASE.out3);
+  // born out of its point of light: opaque within 3 f (never a grey slab fading up over the night),
+  // over-exposed as it condenses, settling to its own paper over 8 f
+  const fadeIn = tween(t, [at - 2, at], [0, 1], EASE.out3);
+  // … unfolding out of that point (a rounded rect opening from the centre, wider than tall)
+  const open = tween(t, [at - 1.5, at + 3], [0, 1], EASE.out3);
+  const clip =
+    open >= 1 ? undefined : `inset(${((1 - open) * 46).toFixed(2)}% ${((1 - open) * 49).toFixed(2)}% round 0.2em)`;
+  const glow = t < at - 1 ? 0 : rest(t, 1 - tween(t, [at, at + 8], [0, 1], EASE.out3), 0);
   const blur = rest(t, tween(t, [at, at + 8], [4, 0], EASE.out3) + Math.min(3, vy * 0.18), 0);
   // the point of light it rises out of: gathers over 4 f, peaks ON `at`, hands over in 5 f
   const gather = t < at ? Math.sin(((t - (at - 4)) / 4) * (Math.PI / 2)) : Math.max(0, 1 - (t - at) / 5);
@@ -158,12 +165,15 @@ export const CoverCta: React.FC<{
       { justifySelf: 'start', alignSelf: 'end', transform: `translate(${-out}px, ${out}px)` },
       { justifySelf: 'end', alignSelf: 'end', transform: `translate(${out}px, ${out}px)` },
     ];
-    const dotPop = (k: number) => rest(t, aos(t, at + 6 + k * 1.5, { anticip: 2, depth: 0.12, config: SPRING.site }), 1);
+    const dotPop = (k: number) => rest(t, aos(t, at + 5 + k * 1.5, { anticip: 2, depth: 0.12, config: SPRING.site }), 1);
     return (
       <span
         style={{
           gridArea: '1 / 1',
           position: 'relative',
+          // each face is its own stacking context: the light face's label never paints over the plum
+          zIndex: dark ? 2 : 1,
+          isolation: 'isolate',
           display: 'inline-grid',
           borderRadius: '0.2em',
           overflow: 'hidden',
@@ -195,15 +205,15 @@ export const CoverCta: React.FC<{
           }}
         >
           <span>
-            <MaskRise t={t} at={at + 2} pad="0.24em" rest={rest}>
+            <MaskRise t={t} at={at - 2} pad="0.24em" rest={rest}>
               Start
             </MaskRise>
-            <MaskRise t={t} at={at + 4} rest={rest}>
+            <MaskRise t={t} at={at - 0.5} rest={rest}>
               free
             </MaskRise>
           </span>
           <span style={{ display: 'inline-block', transform: arrowX > 0.01 ? `translateX(${arrowX.toFixed(2)}px)` : undefined }}>
-            <MaskRise t={t} at={at + 6} rest={rest}>
+            <MaskRise t={t} at={at + 1} rest={rest}>
               →
             </MaskRise>
           </span>
@@ -261,8 +271,12 @@ export const CoverCta: React.FC<{
           lineHeight: 1.2,
           letterSpacing: '-0.04em',
           transform: `translateY(${y.toFixed(2)}px) scale(${(sc0 * click).toFixed(4)})`,
-          opacity: t < at ? 0 : fadeIn,
-          filter: blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : undefined,
+          opacity: fadeIn,
+          clipPath: clip,
+          filter:
+            [blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : '', glow > 0.01 ? `brightness(${(1 + 0.45 * glow).toFixed(3)})` : '']
+              .join(' ')
+              .trim() || undefined,
           borderRadius: '0.2em',
           boxShadow: [
             `0 0 ${(48 + 16 * (1 - fl)).toFixed(0)}px rgba(85,26,137,${(0.6 * fl).toFixed(3)})`,
@@ -304,8 +318,9 @@ const Ripple: React.FC<{ u: number; o: number; F: number }> = ({ u, o, F }) => {
           width: d,
           height: d,
           borderRadius: '50%',
-          border: `${w.toFixed(2)}px solid rgba(192,172,224,${(0.75 * o).toFixed(3)})`,
-          boxShadow: `0 0 ${(18 + 10 * u).toFixed(1)}px ${(4 * (1 - u) + 1).toFixed(1)}px rgba(124,58,237,${(0.45 * o).toFixed(3)}), inset 0 0 ${(20 + 14 * u).toFixed(1)}px rgba(85,26,137,${(0.55 * o).toFixed(3)})`,
+          border: `${w.toFixed(2)}px solid rgba(206,190,240,${(0.9 * o).toFixed(3)})`,
+          background: `radial-gradient(circle, rgba(85,26,137,0) 55%, rgba(124,58,237,${(0.22 * o).toFixed(3)}) 88%, rgba(124,58,237,0) 100%)`,
+          boxShadow: `0 0 ${(20 + 12 * u).toFixed(1)}px ${(5 * (1 - u) + 2).toFixed(1)}px rgba(124,58,237,${(0.55 * o).toFixed(3)}), inset 0 0 ${(22 + 16 * u).toFixed(1)}px rgba(124,58,237,${(0.5 * o).toFixed(3)})`,
         }}
       />
     </div>

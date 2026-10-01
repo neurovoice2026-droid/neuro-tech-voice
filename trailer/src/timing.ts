@@ -668,13 +668,12 @@ export const SCALE_LOCAL = (() => {
   const irisOpen = SCALE.irisToDark[0] + 3;
   /** frames a light mote takes along the finished rail (call → CRM) */
   const moteDur = 14;
-  /** how many of each greeting's words are the big line (the rest is the small line; the quick four are cut by the next voice) */
+  /** how many of each greeting's words are the big line (the quick four are cut by the next voice before the rest) */
   const langMain = [6, 2, 2, 2, 4, 8] as const;
-  const ids = SCALE.langVoices;
   return {
     pops,
-    /** card 01 pops this many frames before the cut: its attack frame is the knowledge whip's last frame */
-    preroll: 3,
+    /** card 01 pops this many frames before the cut, over the knowledge whip's tail (9:16 too: no clean white frame) */
+    preroll: 4,
     wallLights,
     /** card i's light (its group of four) */
     wallLight: pops.map((_, i) => wallLights[i >> 2]),
@@ -683,7 +682,7 @@ export const SCALE_LOCAL = (() => {
     /** the camera's continuous pull-back keys (zooms in scale/camera.ts): card 01 fills the frame → the
      *  2 × 2 framed as card 2 pops → drift → the 3 × 3 as card 5 pops → drift → the whole wall as the
      *  16ths start → a last breath out to 0.985 just before the slam */
-    pull: [-3, pops[1] - 2, pops[3] - 5, pops[4] - 1, pops[7] - 5, pops[8], HERO - 2] as const,
+    pull: [-4, pops[1] - 2, pops[3] - 5, pops[4] - 1, pops[7] - 5, pops[8], HERO - 2] as const,
     /** pan of each pop (16:9 screen x at its pop: the camera is still pulling back) */
     popX: [0.5, 0.75, 0.26, 0.68, 0.84, 0.81, 0.16, 0.47, 0.62, 0.87, 0.87, 0.87, 0.13, 0.38, 0.62, 0.87] as const,
     /** "16 industries." slams in the light leading at the slam (the night: the last four cards) */
@@ -693,12 +692,12 @@ export const SCALE_LOCAL = (() => {
     flyAnticip: 3,
     flyStagger: 0.6,
     flyDur: 12,
-    /** the keeper glides + grows into the English card … */
-    glide: LT - 14,
+    /** the keeper glides + grows into the English card as the title lifts (it turns mid-glide) … */
+    glide: LT - 10,
     /** … and turns to English (2 f anticipation, lands ≈ 122, before "This" on 124) */
     enFlip: LT - 4,
-    /** "16 industries." lifts to the band (the hero has held ≈ 0.6 s still, readable) … */
-    titleSwap: LT - 12,
+    /** "16 industries." lifts to the band (the hero has held ≈ 0.67 s still, readable through the lift) … */
+    titleSwap: LT - 10,
     /** … exits up out of its mask (2 f dip, 4 f exit, gone at titleIn + 1) … */
     titleExit: LT - 8,
     /** … and "14 languages." rises into it: its first letters land ON langTitle */
@@ -710,8 +709,6 @@ export const SCALE_LOCAL = (() => {
     switchIn: LA.map((a, k) => (k === 0 ? LT - 4 : a - 7)),
     /** each card leaves the focus for its gallery slot as the next one arrives (Japanese: becomes the call) */
     switchOut: LA.map((_, k) => (k < 5 ? LA[k + 1] - 6 : F - 5)),
-    /** the quick four: the rest of the line (small) a 16th after the big words are said */
-    rest: LA.map((a, k) => a + vWord(ids[k], langMain[k] - 1) + 4),
     /** the AI disclosure underlined as she says it: English "AI assistant", Japanese "AIアシスタント" */
     discloseEn: [LA[0] + vWord('lang-en', 4), LA[0] + vFrames('lang-en') - 4] as const,
     discloseJa: [LA[5] + vWord('lang-ja', 0), LA[5] + vWord('lang-ja', 2)] as const,
@@ -790,7 +787,7 @@ export const CTA_LOCAL = {
   /** the hook's ring waves, reversed: three rings contract into P (start radius × reach) */
   rings: [1.25, 1.1, 0.95] as const,
   /** the eyes' last light: glows up as they tear, then slides into the core */
-  eyeGlow: [CTA.converge[0] + 17, CTA.converge[0] + 21, CTA.converge[0] + 26] as const,
+  eyeGlow: [CTA.converge[0] + 12, CTA.converge[0] + 17, CTA.converge[0] + 24] as const,
   /** the core gathers */
   core: [CTA.converge[0] + 15, CTA.logoImpact] as const,
   /** anticipation: everything pulls back */
@@ -842,8 +839,8 @@ export const CTA_LOCAL = {
   rimIn: [CTA.logoImpact + 6, CTA.logoImpact + 26] as const,
   /** THE STAGE GOES OUT: as the figure is erased its lit backdrop (the art's backlight, then the
    *  halo it is erased to) collapses radially into the core — scale 1 → .4, light → 0 on an in-cubic —
-   *  so the merge and the survivor play on black, lit only by the four lights (154 → 174) */
-  stageOut: [CTA.converge[0] + 4, CTA.logoImpact - 6] as const,
+   *  so the merge and the survivor play on black, lit only by the four lights (152 → 172; its light is out by 168) */
+  stageOut: [CTA.converge[0] + 2, CTA.logoImpact - 8] as const,
   /** the merged light blooms OUT of the core onto the logo on a soft spring (≈4 % over, settled ≈16 f):
    *  the logo lands alone and the light opens behind it before Ava names it */
   bloomFrom: 0.45,
@@ -1421,8 +1418,8 @@ export const HITS: Hit[] = [
   // four-light rim (rimIn) and the plate's glint ride the impact's chord, unvoiced)
   // THE PRESS — the film's last action, heard: the click (down), a felt knock under it, the
   // release a few frames later, and the glint crossing the plum face
-  H('cta', CTA.press, 'click', 'night', 0.5, 1, 'the button is clicked (plum floods from the arrow)', { db: 5 }),
-  H('cta', CTA.press, 'thump', 'none', 0.5, 3, 'the click’s felt knock (the ripple leaves)', { db: -3 }),
+  H('cta', CTA.press, 'click', 'night', 0.5, 1, 'the button is clicked (plum floods from the arrow)'),
+  H('cta', CTA.press, 'thump', 'none', 0.5, 2, 'the click’s felt knock (the ripple leaves)', { db: 1 }),
   H('cta', CTA.press + CTA_LOCAL.pressDown + 1, 'tap', 'night', 0.5, 3, 'the plate springs back (release)', { db: -5 }),
   H('cta', CTA_LOCAL.pressGlint[0], 'glint', 'night', [0.45, 0.6], 3, 'a glint crosses the plum face'),
 ];

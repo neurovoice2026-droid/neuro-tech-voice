@@ -55,16 +55,25 @@ function pchip(xs: readonly number[], ys: readonly number[], x: number): number 
 }
 
 /** the wall's pulled-back framing at t: world point F at the screen centre, zoom Z */
-export function baseCam(t: number, G: Geo, L: Layout): { F: Pt; Z: number } {
+export function baseCam(t: number, G: Geo): { F: Pt; Z: number } {
   const [z0, z1, z2] = G.zooms;
-  const zs = [z0, z1, z1 * 0.93, z2, z2 * 0.94, 1, 0.985];
+  // an even pull: each key a little past the framing it needs, so no segment is a step
+  const zs = [z0, z1 * 1.04, z1 * 0.9, z2 * 1.065, z2 * 0.94, 1, 0.985];
   let Z = Math.exp(pchip(K.pull, zs.map(Math.log), t));
   // after the slam: back to 1 as the cards leave and the keeper glides
   if (t > HERO) Z += (1 - 0.985) * tween(t, [K.glide, K.switchIn[0] + 10], [0, 1], EASE.inOut);
-  // the focus runs on a straight screen path: linear in the view's size
-  const u = Math.min(1, Math.max(0, (1 / Z - 1 / z0) / (1 - 1 / z0)));
-  const c0 = G.focus[0];
-  const F = { x: c0.x + (L.cx - c0.x) * u, y: c0.y + (L.cy - c0.y) * u };
+  // the focus follows the block being filled: piecewise-linear in the view's size (1 / zoom)
+  const inv = [1 / z0, 1 / z1, 1 / z2, 1];
+  const fs = G.focus;
+  const w = 1 / Z;
+  let F: Pt = fs[3];
+  for (let i = 0; i < 3; i++) {
+    if (w <= inv[i + 1]) {
+      const u = Math.max(0, (w - inv[i]) / (inv[i + 1] - inv[i]));
+      F = { x: fs[i].x + (fs[i + 1].x - fs[i].x) * u, y: fs[i].y + (fs[i + 1].y - fs[i].y) * u };
+      break;
+    }
+  }
   return { F, Z };
 }
 
@@ -111,7 +120,7 @@ export function nudge(t: number, at: number, last: boolean): number {
 /** the whole camera at t, as an affine of the depth-1 layer */
 export function camAt(t: number, G: Geo, L: Layout): Affine {
   const C = { x: L.cx, y: L.cy };
-  const { F, Z } = baseCam(t, G, L);
+  const { F, Z } = baseCam(t, G);
   // the wall breathes (2 beats), and the hand holding the camera drifts a hair until the flow
   const breath = 0.0035 * Math.sin(((t + 3) / 30) * Math.PI) * tween(t, [4, 14], [0, 1], EASE.inOut) * (1 - tween(t, [80, HERO], [0, 1], EASE.inOut));
   const hand = 1 - tween(t, [K.collapse, K.stations[0] - 4], [0, 1], EASE.inOut);
