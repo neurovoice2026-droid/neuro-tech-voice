@@ -4,6 +4,7 @@
  */
 import React from 'react';
 import { AbsoluteFill, random, useCurrentFrame, useVideoConfig } from 'remotion';
+import { useSub } from '../lib/scene';
 
 export const Dust: React.FC<{
   count?: number;
@@ -26,7 +27,7 @@ export const Dust: React.FC<{
   blur = [0, 6],
   frame: fOverride,
 }) => {
-  const current = useCurrentFrame();
+  const current = useCurrentFrame() / useSub();
   const frame = fOverride ?? current;
   const { width, height } = useVideoConfig();
   return (

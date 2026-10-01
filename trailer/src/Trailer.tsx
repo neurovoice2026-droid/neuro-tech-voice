@@ -4,10 +4,11 @@
  * shape can carry across a cut (match cuts); later scenes sit on top.
  */
 import React, { useState } from 'react';
-import { AbsoluteFill, Sequence, useCurrentFrame } from 'remotion';
+import { AbsoluteFill, Sequence } from 'remotion';
 import { Grain } from './components/Grain';
 import { waitForFonts } from './lib/fonts';
 import { tween } from './lib/motion';
+import { useSub, useTimelineFrame } from './lib/scene';
 import { Soundtrack } from './Soundtrack';
 import { SCENES, SCALE, type SceneKey } from './timing';
 import { C } from './theme';
@@ -33,7 +34,7 @@ export const ORDER: SceneKey[] = ['hook', 'twist', 'call', 'result', 'knowledge'
 
 /** Grain: the cover's overlay grain on the dark; lighter on the white act. */
 const FilmGrain: React.FC = () => {
-  const frame = useCurrentFrame();
+  const frame = useTimelineFrame();
   // the white act: the knowledge base, then the scale montage, until the CTA iris
   const whiteIn = SCENES.knowledge.from;
   const whiteOut = SCENES.scale.from + SCALE.irisToDark[1];
@@ -50,6 +51,7 @@ const FilmGrain: React.FC = () => {
 
 export const Trailer: React.FC<{ only?: SceneKey; audio?: boolean }> = ({ only, audio = true }) => {
   useState(() => waitForFonts());
+  const sub = useSub();
   return (
     <AbsoluteFill style={{ background: C.night, overflow: 'hidden' }}>
       {ORDER.filter((k) => !only || k === only).map((key) => {
@@ -59,8 +61,8 @@ export const Trailer: React.FC<{ only?: SceneKey; audio?: boolean }> = ({ only, 
           <Sequence
             key={key}
             name={key}
-            from={s.from - s.pre}
-            durationInFrames={s.to + s.post - (s.from - s.pre)}
+            from={(s.from - s.pre) * sub}
+            durationInFrames={(s.to + s.post - (s.from - s.pre)) * sub}
           >
             <Scene />
           </Sequence>

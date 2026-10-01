@@ -7,6 +7,7 @@
  */
 import React, { useState } from 'react';
 import { AbsoluteFill, Composition, Sequence } from 'remotion';
+import { useSub } from '../lib/scene';
 import { Grain } from '../components/Grain';
 import { waitForFonts } from '../lib/fonts';
 import { C } from '../theme';
@@ -16,9 +17,10 @@ export function devRoot(key: SceneKey, Scene: React.FC) {
   const s = SCENES[key];
   const Comp: React.FC = () => {
     useState(() => waitForFonts());
+    const sub = useSub();
     return (
       <AbsoluteFill style={{ background: C.night, overflow: 'hidden' }}>
-        <Sequence from={s.from - s.pre} durationInFrames={s.to + s.post - (s.from - s.pre)}>
+        <Sequence from={(s.from - s.pre) * sub} durationInFrames={(s.to + s.post - (s.from - s.pre)) * sub}>
           <Scene />
         </Sequence>
         <Grain opacity={key === 'scale' || key === 'knowledge' ? 0.025 : 0.15} blend={key === 'scale' || key === 'knowledge' ? 'multiply' : 'overlay'} />

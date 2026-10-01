@@ -188,7 +188,7 @@ export const Reader: React.FC<{ t: number; G: Geo; part: 'light' | 'orb' }> = ({
             }),
           }}
         />
-        <Orb size={O.d} palette={orbPalette(t)} volume={vol} time={flowTime(Math.max(0, Math.round(t)), volumeAt) + missPhase(t)} />
+        <Orb size={O.d} palette={orbPalette(t)} volume={vol} time={flowTime(Math.max(0, t), volumeAt) + missPhase(t)} />
       </div>
     </div>
   );

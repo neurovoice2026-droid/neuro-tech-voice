@@ -27,7 +27,11 @@ import { OrbRenderer } from './orbGL';
 export function flowTime(frame: number, volumeAt: (f: number) => number): number {
   let t = 7.3;
   const dt = 1 / FPS;
-  for (let f = 0; f < frame; f++) t += dt * (0.55 + volumeAt(f) * 1.6);
+  const whole = Math.floor(frame);
+  for (let f = 0; f < whole; f++) t += dt * (0.55 + volumeAt(f) * 1.6);
+  // the fractional rest (120 fps renders sample between timeline frames)
+  const rest = frame - whole;
+  if (rest > 0) t += rest * dt * (0.55 + volumeAt(frame) * 1.6);
   return t;
 }
 

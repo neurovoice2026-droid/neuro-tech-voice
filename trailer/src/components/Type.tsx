@@ -15,6 +15,7 @@ import React from 'react';
 import { useCurrentFrame } from 'remotion';
 import { C, FONT, TRACK } from '../theme';
 import { aos, EASE, mixHex, SPRING, tween } from '../lib/motion';
+import { useSub } from '../lib/scene';
 import type { SpringConfig } from 'remotion';
 
 export type KeyPhrase = { text: string; color: string; at: number };
@@ -52,7 +53,7 @@ export const Words: React.FC<{
   frame: fOverride,
   wordStyle,
 }) => {
-  const current = useCurrentFrame();
+  const current = useCurrentFrame() / useSub();
   const frame = fOverride ?? current;
   const words = text.split(' ');
 

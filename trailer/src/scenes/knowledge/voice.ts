@@ -75,6 +75,8 @@ function table(): Float32Array {
 /** the orb's (smoothed) volume at knowledge-local frame t */
 export function volumeAt(t: number): number {
   const tb = table();
-  const i = Math.max(0, Math.min(tb.length - 1, Math.floor(t) - T0));
-  return tb[i];
+  const k = Math.max(0, Math.min(tb.length - 1, t - T0));
+  const i = Math.floor(k);
+  const j = Math.min(tb.length - 1, i + 1);
+  return tb[i] + (tb[j] - tb[i]) * (k - i);
 }

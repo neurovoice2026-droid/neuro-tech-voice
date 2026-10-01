@@ -108,7 +108,7 @@ export const Twist: React.FC = () => {
   const orb = orbAt(t);
   const orbOpacity = tween(t, [TW.avatarPop, TW.avatarPop + 4], [0, 1], EASE.out3);
   const orbVol = orbShaderVolume(t);
-  const orbFlow = flowTime(Math.max(0, Math.round(t + 8)), orbFlowVolume);
+  const orbFlow = flowTime(Math.max(0, t + 8), orbFlowVolume);
   // the call's canvas (orbBase at 1.25, framed by transform) once the orb is big —
   // the switch happens inside the dive's fastest frames; from the call's roomIn the
   // two scenes' orbs are then the same pixels

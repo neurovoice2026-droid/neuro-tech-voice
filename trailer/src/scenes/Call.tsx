@@ -241,7 +241,7 @@ export const Call: React.FC = () => {
   // the fluid runs a little quicker once the call is live, and quicker still on her syllables
   // (flow input only — the shader's own volume stays the site's); 0 at the pickup, so the cut is exact
   const flowBoost = (tt: number) => tween(tt, [0, 30], [0, 1], EASE.inOut) * (0.3 + 0.7 * lightAt(tt));
-  const flow = flowTime(Math.max(0, Math.round(t + ORB_FRAME0)), (fr) => {
+  const flow = flowTime(Math.max(0, t + ORB_FRAME0), (fr) => {
     const tt = fr - ORB_FRAME0;
     return orbVolumeByIndex(fr) + gulpLevel(tt) + flowBoost(tt);
   });

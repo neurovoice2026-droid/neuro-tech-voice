@@ -16,7 +16,14 @@
  */
 import { VOICE, type VoiceId } from './voice.generated.ts';
 
+/** The TIMELINE unit: every frame number in this file (and in the scenes) is a 30 fps frame. */
 export const FPS = 30;
+/** The RENDER rate. The film is rendered at 120 fps; scenes read a fractional 30 fps time
+ *  (useSceneFrame / useTimelineFrame), so every move is sampled 4× finer — real smoothness,
+ *  not added blur. Sound and timing stay in 30 fps units. */
+export const RENDER_FPS = 120;
+/** Render frames per timeline frame. */
+export const SUB = RENDER_FPS / FPS;
 export const BPM = 120;
 /** Frames per beat (15 at 120 BPM / 30 fps). */
 export const BEAT = (60 / BPM) * FPS;
