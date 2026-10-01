@@ -55,10 +55,16 @@ export const EventFace: React.FC<{
   ping?: number;
   color?: string;
   dotColor?: string;
-}> = ({ size, op, ping = -1, color = C.white, dotColor = C.white }) => {
+  /** 0..1 the type runs hot: a white core glow + an amber bloom round the glyphs (the white act's burn-out) */
+  glow?: number;
+}> = ({ size, op, ping = -1, color = C.white, dotColor = C.white, glow = 0 }) => {
   if (op <= 0.001) return null;
   const dot = size * DOT_EM;
   const f = EVENT_FONT(size);
+  const hot =
+    glow > 0.001
+      ? `0 0 ${(0.08 * size).toFixed(1)}px ${hexA(C.white, 0.9 * glow)}, 0 0 ${(0.32 * size).toFixed(1)}px ${hexA(C.emberLit, 0.75 * glow)}`
+      : undefined;
   return (
     <div
       style={{
@@ -72,7 +78,7 @@ export const EventFace: React.FC<{
       }}
     >
       <div style={{ position: 'relative', width: dot, height: dot, flex: 'none' }}>
-        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: dotColor }} />
+        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: dotColor, boxShadow: hot }} />
         {ping >= 0 && ping < 1 ? (
           <div
             style={{
@@ -96,6 +102,7 @@ export const EventFace: React.FC<{
           fontVariantNumeric: 'tabular-nums',
           letterSpacing: `${f.track}em`,
           whiteSpace: 'nowrap',
+          textShadow: hot,
         }}
       >
         {CLOCK}

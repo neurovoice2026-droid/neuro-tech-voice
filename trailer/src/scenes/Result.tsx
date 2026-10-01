@@ -327,29 +327,61 @@ export const Result: React.FC = () => {
       x1: z.x + (L.width + M - z.x) * oe,
       y1: z.y + (L.height + M - z.y) * oe,
     };
-    // bloom from the centre: white core → the booked pill's soft ember → ember → the event
-    const bloom = tween(t, T.bloom, [0, 1], EASE.in2);
-    const core = -75 + 165 * bloom;
+    // THE LIGHT: a hot core grows from the event's centre — white → #ffb877 (the ember's own lit tone) →
+    // ember → the event — and bleeds past its edge, so the chip dissolves into light, white ON the cut
+    const bu = Math.min(1, Math.max(0, (t - T.bloom[0]) / (T.bloom[1] - T.bloom[0])));
+    const bloom = Math.pow(bu, 1.6);
+    const core = -72 + 160 * bloom;
+    const hot = mixHex(C.white, C.emberLit, 0.5);
     const hair = 1 - tween(t, [T.whiteFull - 4, T.whiteFull], [0, 1], EASE.inOut);
-    const faceOp = 1 - tween(t, [RESULT.toWhite[0], RESULT.toWhite[0] + 4], [0, 1], EASE.in2);
+    // "• 3:00 PM" rides the push, scaling with the chip (camera + the open), and burns out — runs hot,
+    // then is swallowed — only in the last frames before the white
+    const burn = tween(t, T.faceBurn, [0, 1], EASE.in2);
+    const faceOp = 1 - burn;
+    const grow = (box.x1 - box.x0) / Math.max(1, z.x - a.x);
+    const faceSize = G.crop.face * cb.z * look.sy * grow;
+    // the spill past the edge (screen px): amber close in, ember wide — LIGHT on the dark sheet
+    const spill = 40 + 260 * bloom;
+    const boxW = box.x1 - box.x0;
+    const boxH = box.y1 - box.y0;
+    const bcx = box.x0 + boxW / 2;
+    const bcy = box.y0 + boxH * 0.55;
     openEl = (
-      <div
-        style={{
-          position: 'absolute',
-          left: box.x0,
-          top: box.y0,
-          width: box.x1 - box.x0,
-          height: box.y1 - box.y0,
-          borderRadius: 14 * cb.z * (1 + 0.6 * oe),
-          background: `radial-gradient(farthest-corner at 50% 55%, ${C.white} ${core.toFixed(1)}%, ${C.emberSoft} ${(core + 20).toFixed(1)}%, ${mixHex(C.ember, C.emberLit, 0.35)} ${(core + 46).toFixed(1)}%, ${look.fill} ${(core + 75).toFixed(1)}%)`,
-          boxShadow: [
-            `0 0 0 1px ${hexA(C.ember, 0.7 * hair)}`,
-            `0 0 ${(28 + 50 * oe).toFixed(1)}px ${(4 * oe).toFixed(1)}px ${hexA(C.ember, (0.45 + 0.25 * look.glowPulse) * (1 - bloom))}`,
-          ].join(', '),
-        }}
-      >
-        <EventFace size={G.crop.face * cb.z * Math.min(4, look.sy)} op={faceOp} color={C.white} />
-      </div>
+      <>
+        <div
+          style={{
+            position: 'absolute',
+            left: box.x0,
+            top: box.y0,
+            width: boxW,
+            height: boxH,
+            borderRadius: 14 * cb.z * (1 + 0.6 * oe),
+            background: [
+              `linear-gradient(180deg, rgba(255,255,255,${(0.12 * (1 - bloom)).toFixed(3)}), rgba(255,255,255,0) 55%)`,
+              `radial-gradient(farthest-corner at 50% 55%, ${C.white} ${core.toFixed(1)}%, ${hot} ${(core + 10).toFixed(1)}%, ${C.emberLit} ${(core + 24).toFixed(1)}%, ${mixHex(C.ember, C.emberLit, 0.35)} ${(core + 44).toFixed(1)}%, ${look.fill} ${(core + 72).toFixed(1)}%)`,
+            ].join(', '),
+            boxShadow: [
+              `0 0 0 1px ${hexA(C.ember, 0.7 * hair)}`,
+              `0 0 ${(spill * 0.45).toFixed(1)}px ${(spill * 0.08).toFixed(1)}px ${hexA(C.emberLit, 0.18 + 0.6 * bloom)}`,
+              `0 0 ${spill.toFixed(1)}px ${(spill * 0.25).toFixed(1)}px ${hexA(C.ember, (0.45 + 0.25 * look.glowPulse) * (1 - 0.3 * bloom))}`,
+            ].join(', '),
+          }}
+        >
+          <EventFace size={faceSize} op={faceOp} color={C.white} glow={burn} />
+        </div>
+        {/* the bloom: added light (screen), centred on the core, washing the chip's edge and the sheet
+            round it up to white by the cut */}
+        {bloom > 0.01 ? (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              mixBlendMode: 'screen',
+              background: `radial-gradient(circle at ${bcx.toFixed(1)}px ${bcy.toFixed(1)}px, ${hexA(C.white, Math.min(1, 1.15 * bloom))} 0px, ${hexA(hot, 0.85 * bloom)} ${(boxW * 0.32 * (0.35 + bloom)).toFixed(1)}px, ${hexA(C.emberLit, 0.55 * bloom)} ${(boxW * 0.55 * (0.35 + bloom)).toFixed(1)}px, ${hexA(C.ember, 0)} ${(boxW * 0.95 * (0.35 + bloom)).toFixed(1)}px)`,
+            }}
+          />
+        ) : null}
+      </>
     );
   }
 

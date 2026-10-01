@@ -657,14 +657,17 @@ export const RESULT_LOCAL = {
   pulse: RESULT.toWhite[0] - b(1 / 3), // 100
   /** its anticipation: everything has settled; the camera leans back, the event swells (EASE.inOut) */
   pulseIn: [RESULT.toWhite[0] - b(1 / 3) - 10, RESULT.toWhite[0] - b(1 / 3)] as const, // 90 → 100
-  /** the dive into the event */
-  dive: [RESULT.toWhite[0] - b(1 / 3), RESULT.toWhite[1] - b(0.2)] as const, // 100 → 117
+  /** the dive into the event: it accelerates (EASE.in2) right into the cut — no stall before the white */
+  dive: [RESULT.toWhite[0] - b(1 / 3), RESULT.toWhite[1]] as const, // 100 → 120
   /** the event's rect opens past the frame edges (camera does most of it; this is the last few ×) */
-  open: [RESULT.toWhite[0], RESULT.toWhite[1] - b(4 / 15)] as const, // 105 → 116
-  /** the event's fill blooms from its centre: ember → soft ember → white */
-  bloom: [RESULT.toWhite[0] + b(2 / 15), RESULT.toWhite[1] - b(0.2)] as const, // 107 → 117
-  /** the frame is entirely white from here */
-  whiteFull: RESULT.toWhite[1] - b(0.2), // 117
+  open: [RESULT.toWhite[0] + b(4 / 15), RESULT.toWhite[1] - 1] as const, // 109 → 119
+  /** the event's light: a hot core (white → #ffb877) grows from its centre and bleeds past its edge,
+   *  so the chip dissolves into light; white peaks ON the cut (the knowledge's hit-white, the beat) */
+  bloom: [RESULT.toWhite[0] + b(0.4), RESULT.toWhite[1]] as const, // 111 → 120
+  /** "• 3:00 PM" rides the push with the chip and burns out in the last frames before the white */
+  faceBurn: [RESULT.toWhite[1] - 3, RESULT.toWhite[1] - 0.5] as const, // 117 → 119.5
+  /** the frame is entirely white from here (= the cut: the knowledge's white stock takes over) */
+  whiteFull: RESULT.toWhite[1], // 120
 };
 
 /* ── SCALE — fine cuts (scale-local frames) ────────────────────── */
@@ -1311,7 +1314,9 @@ export const HITS: Hit[] = [
   H('result', RESULT_LOCAL.sweep[0], 'sheen', 'none', [0.65, 0.9], 2, 'light sweep across 3:00 PM'),
   H('result', RESULT_LOCAL.pulse, 'swell', 'none', 0.75, 3, 'the event swells (anticipation)'),
   H('result', RESULT_LOCAL.bloom[0], 'shimmer', 'none', 0.5, 3, 'the event blooms to white'),
-  H('result', RESULT_LOCAL.whiteFull, 'riser-short', 'none', 0.75, 1, 'the event opens past the frame'),
+  // the suck-up cuts ON the white = the cut (the knowledge's hit-white lands on its peak); layered, so it
+  // never swallows the knowledge's "Answers" swish two frames later
+  H('result', RESULT_LOCAL.whiteFull, 'riser-short', 'none', 0.5, 1, 'the event opens past the frame → peak ON the white', { layer: true }),
   H('result', RESULT_LOCAL.whiteFull - 2, 'whoosh', 'none', 0.6, 2, 'the dive into the event', { layer: true, db: -3 }),
 
   /* ── KNOWLEDGE ── */
@@ -1324,8 +1329,8 @@ export const HITS: Hit[] = [
   // the orb lands under the caller's "Quick question," (kb-1's lead-in, not in its phrase map): a light land, so the words stay in front
   H('knowledge', KL.orbIn, 'land', 'sunday', 0.5, 3, 'the orb springs out (beat 2)'),
   H('knowledge', KL.orbIn, 'glint', 'sunday', 0.5, 3, 'bloom flash off the rim'),
-  H('knowledge', KL.statusIn, 'pop', 'sunday', 0.89, 3, '“Listening” pill (under “question,”)', { semi: 5 }),
-  H('knowledge', KL.momentTag, chime('sunday', true), 'sunday', 0.73, 2, '“SUNDAY · 10:24” (LIGHT: sunday; soft, under “question,”)'),
+  H('knowledge', KL.statusIn, 'pop', 'sunday', 0.89, 3, '“Listening” pill (under “question,”)', { semi: 5, db: -3 }),
+  H('knowledge', KL.momentTag, chime('sunday', true), 'sunday', 0.73, 3, '“SUNDAY · 10:24” (LIGHT: sunday; soft, under “question,”)'),
   H('knowledge', KL.headingOut[0] + 3, 'swish', 'none', 0.5, 3, 'the heading flicks out'),
   H('knowledge', KL.callerIn, 'tick', 'none', 0.33, 3, 'CALLER label + “Quick question,” (the caller’s first sound)'),
   H('knowledge', KL.peekOpen, 'sheen', 'sunday', 0.79, 3, 'the slot’s page scans open'),
