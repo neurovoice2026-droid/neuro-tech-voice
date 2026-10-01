@@ -34,7 +34,7 @@ export const vFrames = (id: VoiceId) => VOICE.lines[id].frames;
 export const vWord = (id: VoiceId, k: number) => Math.round(VOICE.lines[id].words[k].t * FPS);
 /** A caption: shown from spoken word `word` of its line. Caption word j is
  *  revealed on spoken word `map[j]` (when the caption's words differ from the
- *  spoken ones, e.g. "15:00" on "three"), else on spoken word `word + j`. */
+ *  spoken ones, e.g. "3 PM" on "three"), else on spoken word `word + j`. */
 export type Caption = { text: string; word: number; map?: readonly number[] };
 /** Snap a frame count UP to the next half-beat / whole beat / bar (so turns land on the grid). */
 const upHalf = (f: number) => Math.round(Math.ceil(f / (BEAT / 2) - 1e-9) * (BEAT / 2));
@@ -231,9 +231,9 @@ export const CALL = {
   lines: CALL_LINES,
   /** Slot chips pop as Ava says "3 PM" / "4:30" (frames after line 3 starts). */
   slotPops: [vWord('call-3', 4), vWord('call-3', 7)] as const,
-  /** The caller's pick ("Three o'clock…") selects the 15:00 chip. */
+  /** The caller's pick ("Three o'clock…") selects the 3:00 PM chip. */
   slotPick: CALL_AT[3] + vWord('call-4', 1),
-  /** "Wednesday at 15:00" ignites ember as Ava says "3 PM" (0.42 s ease). */
+  /** "Wednesday at 3 PM" ignites ember as Ava says "3 PM" (0.42 s ease). */
   bookedMark: CALL_AT[4] + vWord('call-5', 6),
   /** the call's own length (= the result's start) */
   length: CALL_LEN,
@@ -244,7 +244,7 @@ export const CALL = {
  * Split: owner "Asleep." / calendar "Booked."
  * ---------------------------------------------------------------- */
 export const RESULT = {
-  lift: 0, // "Wednesday at 15:00" lifts off the transcript and becomes the card
+  lift: 0, // "Wednesday at 3 PM" lifts off the transcript and becomes the card
   calendarIn: b(0.5),
   fly: b(1), // card leaves on its arc…
   land: b(2), // …and lands in the slot (ding)
@@ -515,9 +515,9 @@ export const CALL_LOCAL = {
   peel: [CALL_S2 - 8, CALL_S2 - 6] as const,
   /** the slot chips: a seed 3 f before, the pop's overshoot PEAKS on the spoken "3 PM" / "4:30" (+ ring, glint, sparks) */
   chipPops: [CALL.lines[2].at + CALL.slotPops[0], CALL.lines[2].at + CALL.slotPops[1]] as const,
-  /** the caller picks 15:00 (squash 2 f → pop → flood, ring, sparks, camera kick)… */
+  /** the caller picks 3:00 PM (squash 2 f → pop → flood, ring, sparks, camera kick)… */
   pick: CALL.slotPick,
-  /** …and 16:30 lifts 2 f and drops away */
+  /** …and 4:30 PM lifts 2 f and drops away */
   chipDrop: CALL.slotPick + 1,
   /** the picked chip squashes (2 f, with the swing's anticipation) and flies into the orb with the swing… */
   chipsOut: CALL.lines[4].at - 2,
@@ -527,7 +527,7 @@ export const CALL_LOCAL = {
   kicks: [0, CALL_SWALLOW, CALL.slotPick, CALL.bookedMark] as const,
   /** camera drift settles to rest before the mark is handed over */
   camSettle: [CALL_LEN - b(4), CALL_LEN - b(1)] as const,
-  /** "15:00" ignites ember ON the spoken "three": a burst of ember sparks + the glow's flash */
+  /** "3 PM" ignites ember ON the spoken "three": a burst of ember sparks + the glow's flash */
   ember: CALL.bookedMark,
   /** the payoff beat: the mark presses (3 f) and springs back — exactly 1 again by markHide − 1 */
   payoff: CALL.bookedMark + 1,
@@ -1197,7 +1197,7 @@ export const HITS: Hit[] = [
   H('call', CALL_LOCAL.chipsOut, 'tick', 'night', 0.41, 3, 'the picked chip squashes (the swing’s anticipation)'),
   H('call', CALL_LOCAL.chipAbsorb - 1, 'swish', 'night', [0.41, 0.5], 2, '3:00 PM flies into the orb with the swing'),
   H('call', CALL_LOCAL.chipAbsorb, 'gulp', 'night', 0.5, 2, 'the orb takes the slot in', { semi: -2 }),
-  H('call', CALL_LOCAL.ember, 'ember', 'none', 0.64, 1, 'BOOKED: 15:00 ignites ember (ON “3 PM”)', { db: -3 }),
+  H('call', CALL_LOCAL.ember, 'ember', 'none', 0.64, 1, 'BOOKED: 3 PM ignites ember (ON “3 PM”)', { db: -3 }),
   H('call', CALL_LOCAL.payoff, 'thump', 'none', 0.5, 2, 'the mark presses'),
   H('call', CALL_LOCAL.blowInhale[1], 'swell', 'night', 0.5, 3, 'the room inhales'),
   H('call', CALL_LOCAL.markHide - 2, 'whoosh', 'night', 0.5, 1, 'everything blows to the lens'),
@@ -1206,7 +1206,7 @@ export const HITS: Hit[] = [
   H('result', RESULT_LOCAL.liftGo + 3, 'swish', 'none', 0.5, 2, 'the mark lifts into the card'),
   H('result', RESULT_LOCAL.cardReveal[0], 'tick', 'none', 0.42, 3, 'BOOKED row rises'),
   H('result', RESULT_LOCAL.sheetIn + 3, 'whoosh-soft', 'night', [0.85, 0.65], 2, 'the calendar slides in'),
-  H('result', RESULT_LOCAL.slotIn[0], 'tick', 'night', 0.86, 3, 'WED 15:00 slot pops'),
+  H('result', RESULT_LOCAL.slotIn[0], 'tick', 'night', 0.86, 3, 'WED 3 PM slot pops'),
   H('result', RESULT.fly + 6, 'whoosh', 'none', [0.75, 0.57], 1, 'the card is thrown'),
   H('result', RESULT.land, 'ding', 'none', 0.57, 1, 'LANDS in the slot'),
   H('result', RESULT.land, 'land', 'none', 0.57, 1, 'squash + 9 px jolt'),
@@ -1223,7 +1223,7 @@ export const HITS: Hit[] = [
   H('result', RESULT_LOCAL.check, 'ding-s', 'closing', 0.84, 2, 'the green check pops'),
   H('result', RESULT_LOCAL.stars[2], 'tick', 'night', 0.44, 3, 'star 3', { semi: 9 }),
   H('result', RESULT_LOCAL.stars[3], 'tick', 'night', 0.14, 3, 'star 4', { semi: 14 }),
-  H('result', RESULT_LOCAL.sweep[0], 'sheen', 'none', [0.65, 0.9], 2, 'light sweep across 15:00'),
+  H('result', RESULT_LOCAL.sweep[0], 'sheen', 'none', [0.65, 0.9], 2, 'light sweep across 3:00 PM'),
   H('result', RESULT_LOCAL.pulse, 'swell', 'none', 0.75, 3, 'the event swells (anticipation)'),
   H('result', RESULT_LOCAL.bloom[0], 'shimmer', 'none', 0.5, 3, 'the event blooms to white'),
   H('result', RESULT_LOCAL.whiteFull, 'riser-short', 'none', 0.75, 1, 'the event opens past the frame'),
@@ -1349,7 +1349,7 @@ export const HITS: Hit[] = [
   H('cta', CTA.logoImpact, 'chord-rev', 'none', 0.5, 2, 'the four lights fuse', { layer: true }),
   H('cta', CTA.logoImpact, 'impact', 'night', 0.5, 1, 'LOGO IMPACT'),
   // (with the impact, the chord makes the film's loudest moment through the impact insert —
-  // MIX.impact — and the tonal duck takes it back for the name)
+  // MIX.impact — and the tonal duck, deeper under the name — MIX.name — takes it back for her line)
   H('cta', CTA.logoImpact, 'chord', 'night', 0.5, 1, 'THE FOUR LIGHTS ring together'),
   H('cta', CTA_LOCAL.ring[0], 'shock', 'none', 0.5, 2, 'the shockwave ring sweeps past', { layer: true }),
   H('cta', CTA.button, 'pop', 'night', 0.5, 3, '“Start free →” pops with the logo (folded into the impact)'),
@@ -1410,7 +1410,8 @@ export const speaking = (f: number, before = 3, after = 5) => PHRASES.some(([a, 
  * effects' room + delay returns (their tails) drop `tailsDb`, and the sustained tonal
  * effects (bells, sparkles — they ring across words) drop `tonalDb` broadband
  * (`keyTonalDb` for key hits that land ON speech, e.g. the four CTA light chimes under
- * Ava's line; a key bell struck before a line — the logo chord — steps back the full `tonalDb`).
+ * Ava's line; a key bell struck before a line — the logo chord — steps back the full `tonalDb`,
+ * and further under the brand name: MIX.name).
  */
 export const DUCK = { bedDb: -5, eqDb: -6, sfxEqDb: -8, tailsDb: -6, tonalDb: -10, keyTonalDb: -5, lookahead: 0.04, ramp: 6, release: 12 } as const;
 
@@ -1531,6 +1532,16 @@ export const MIX = {
     lead: 1,
     suck: 3,
   },
+  /**
+   * THE NAME: Ava says the brand (`voice`) an 8th after the impact, into its ring. Under that line
+   * the voice-driven duck (DUCK, with its look-ahead) goes deeper: the sustained tonal buses (the
+   * logo chord's ring) a further `tonalDb`, the rooms + delay (the tails) a further `tailsDb`. The
+   * extra depth fades in `lookahead` frames before the line and out over `release` frames after it,
+   * before the button's click; the impact's attack and the insert before the name are untouched.
+   * (The bed's crash is choked just before the line: scripts/audio/bed.mjs.) check-mix: every word
+   * of the line at an intelligibility (SII) of at least `sii`.
+   */
+  name: { voice: CTA.brandVoiceId, lookahead: 2, release: 2, tonalDb: -6, tailsDb: -4, sii: 0.9 },
   dialogueLufs: -20,
   dialogueTol: 0.5,
   /** the dialogue bus's own true-peak ceiling (dBTP after the master gain) */

@@ -14,6 +14,8 @@
  *   the impact     the effects bus rides up across the logo impact into a soft-knee clipper
  *                  (MIX.impact): the stacked hit gets dense, the film's loudest moment, and is
  *                  back to the untouched bus before the name
+ *   the name       under the brand line the tails and the tonal buses (the logo chord's ring) duck
+ *                  deeper (MIX.name), so every word of it stays clear of the impact's ring
  *   master         an exponential fade over the end card's last second (MIX.fadeOut), a gain
  *                  to MIX.lufs integrated, then a 4×-oversampled look-ahead true-peak
  *                  limiter at MIX.ceiling dBTP
@@ -187,14 +189,29 @@ export function master(T, lib, bedSt, { publicDir }) {
     addStereo(tails, early(send[room], R.er), 0, R.erGain);
   }
   addStereo(tails, pingPong(dly, { time: (60 / T.BPM) * 0.75, fb: 0.3, lp: 5500, hp: 400, tail: 0 }), 0, 1);
+  // THE NAME (MIX.name): a window over the brand line (faded in `lookahead` frames before it, out
+  // over `release` after it) in which the voice-driven duck of the tails and the tonal buses goes deeper
+  const NM = T.MIX.name;
+  const nameW = new Float32Array(n);
+  {
+    const v = T.VOICES.find((x) => x.id === NM.voice);
+    const a = v.at;
+    const e = v.at + T.vFrames(v.id);
+    for (let i = Math.max(0, frameS(a - NM.lookahead)); i < Math.min(n, frameS(e + NM.release)); i++) {
+      const f = (i / SR) * F;
+      nameW[i] = f < a ? smooth((f - (a - NM.lookahead)) / NM.lookahead) : f <= e ? 1 : 1 - smooth((f - e) / NM.release);
+    }
+  }
   const sfx = stereo(n / SR + 0.001);
   addStereo(sfx, dry, 0, 1);
   {
-    const dT = 1 - gain(T.DUCK.tailsDb);
-    const dB = 1 - gain(T.DUCK.tonalDb);
-    const dK = 1 - gain(T.DUCK.keyTonalDb);
-    for (let c = 0; c < 2; c++) {
-      for (let i = 0; i < n; i++) sfx[c][i] += tails[c][i] * (1 - dT * act[i]) + tonal[c][i] * (1 - dB * act[i]) + keyTonal[c][i] * (1 - dK * act[i]);
+    const depth = (d, x, w) => 1 - gain(d + x * w);
+    for (let i = 0; i < n; i++) {
+      const w = nameW[i];
+      const dT = depth(T.DUCK.tailsDb, NM.tailsDb, w) * act[i];
+      const dB = depth(T.DUCK.tonalDb, NM.tonalDb, w) * act[i];
+      const dK = depth(T.DUCK.keyTonalDb, NM.tonalDb, w) * act[i];
+      for (let c = 0; c < 2; c++) sfx[c][i] += tails[c][i] * (1 - dT) + tonal[c][i] * (1 - dB) + keyTonal[c][i] * (1 - dK);
     }
   }
   const fxEq = dynamicEq([sfx[0].subarray(0, n), sfx[1].subarray(0, n)], act, T.DUCK.sfxEqDb, 2400, 0.6);

@@ -5,7 +5,7 @@
  *
  *   hook → twist   HOOK_LINE      the settled "Your business is closed." line
  *   twist → call   CALL_ORB_START the phone's avatar = the call's orb
- *   call → result  MARK           "Wednesday at 15:00" lifts off the transcript
+ *   call → result  MARK           "Wednesday at 3 PM" lifts off the transcript
  *                  CARD0          …and is the Booked card at result t=0
  *   scale → cta    FLOW_END       the last (CRM) node; the CTA irises open from it
  */
@@ -36,8 +36,8 @@ export const TRANSCRIPT = (L: Layout) => ({
 
 /**
  * The booked mark. The last line is set as two rows:
- *   row A  "You're booked for"      centred at TRANSCRIPT.y
- *   row B  "Wednesday at 15:00."   the mark is its own span, centred on MARK.x
+ *   row A  "You're all booked for"  centred at TRANSCRIPT.y
+ *   row B  "Wednesday at 3 PM."    the mark is its own span, centred on MARK.x
  * The call hides its copy of the mark at result t = 0; the result draws the
  * identical <BookedMark> at MARK and lifts it into the card.
  */

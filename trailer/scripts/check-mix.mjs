@@ -13,7 +13,8 @@
  *   · THE END: the last 100 ms are below -55 dBFS RMS and the last frame below -60 dBFS
  *   · no word is masked: at every spoken word onset (200 ms), an SII-style intelligibility index
  *     (ANSI S3.5 octave-band importances; maskers = the effects stem incl. rooms + the ducked bed)
- *     must be ≥ 0.7 — a key hit designed to land on a word may dip to 0.55 (reported)
+ *     must be ≥ 0.7 — a key hit designed to land on a word may dip to 0.55 (reported); every word
+ *     of the brand line, said into the impact's ring, must be ≥ MIX.name.sii
  *   · writes out/audio/cue-timeline.txt: every cue onset/peak and every word onset, in order
  *
  *   node --experimental-strip-types --no-warnings scripts/check-mix.mjs [--quiet]
@@ -190,6 +191,8 @@ if (['voice', 'sfx', 'bed'].every((k) => existsSync(path.join(QA, `stem-${k}.wav
     maskRows.push({ ...w, sii, siiFx, near });
   }
   for (const r of maskRows) {
+    if (r.id === T.MIX.name.voice && r.sii < T.MIX.name.sii)
+      fails.push(`the name: “${r.w}” (${r.id} @${r.f.toFixed(0)}) intelligibility ${r.sii.toFixed(2)} (≥ ${T.MIX.name.sii}; effects alone ${r.siiFx.toFixed(2)})`);
     if (r.sii >= SII_OK) continue;
     const keys = r.near.filter((c) => c.key);
     const msg = `word “${r.w}” (${r.id} @${r.f.toFixed(0)}): intelligibility ${r.sii.toFixed(2)} (effects alone ${r.siiFx.toFixed(2)}) — ${r.near.map((c) => path.basename(c.file, '.wav')).join(', ') || 'tails / bed'}`;
@@ -248,6 +251,7 @@ console.log(`cues          ${T.CUES.length}: ${Object.entries(count).map(([k, v]
 if (maskRows.length) {
   const mean = maskRows.reduce((a, r) => a + r.sii, 0) / maskRows.length;
   console.log(`words         ${maskRows.length} — intelligibility (SII-style, 1 = clear) mean ${mean.toFixed(2)}, lowest: ${worst.map((r) => `“${r.w}” ${r.sii.toFixed(2)}`).join(', ')}`);
+  console.log(`the name      ${T.MIX.name.voice}: ${maskRows.filter((r) => r.id === T.MIX.name.voice).map((r) => `“${r.w}” ${r.sii.toFixed(2)}`).join(' · ')} (≥ ${T.MIX.name.sii})`);
 }
 console.log(`timeline      out/audio/cue-timeline.txt`);
 if (!quiet) for (const n of notes) console.log(`note          ${n}`);

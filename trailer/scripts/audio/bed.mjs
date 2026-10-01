@@ -15,7 +15,8 @@
  *              F#m7; Ava's answer brings it back; "it says so." resolves to E
  *   SCALE      the full groove: four on the floor, claps, 16th arp, a pumping bass
  *   CTA        drops out into the dark, builds under Ava (A maj9 → F#m7 → Bsus → B),
- *              a snare roll into the impact, and E — with a crash — ON the logo
+ *              a snare roll into the impact, and E — with a crash — ON the logo (the crash is
+ *              choked just before Ava says the name)
  */
 import {
   SR, TAU, stereo, mono, addMono, addStereo, osc, white, pink, env, ad, mode, filt, sweep, noise, spread,
@@ -52,6 +53,7 @@ export function bed(T) {
     line: fb(S.cta.from + T.CTA.line),
     converge: fb(S.cta.from + T.CTA.converge[0]),
     impact: fb(S.cta.from + T.CTA.logoImpact),
+    name: fb(S.cta.from + T.CTA.brandVoice),
   };
   const inR = (b, a, e) => b >= a && b < e;
   const LEN = sec(END) + 3;
@@ -215,7 +217,8 @@ export function bed(T) {
     for (let i = 0; i < s.length; i++) s[i] = s[i] * 0.9 + tn[i] * 0.5;
     addStereo(drums, spread(s, 0.3, 7700 + seed), sec(b), g);
   };
-  const crash = (b, g, seed, tau = 1.4) => {
+  /** a crash; `choke` (s after the hit): a hand grabs it, gone in ~0.1 s (the hall rings on) */
+  const crash = (b, g, seed, tau = 1.4, choke = Infinity) => {
     const len = tau * 3.2;
     const metal = (sd) => {
       const r2 = rng(sd);
@@ -227,7 +230,9 @@ export function bed(T) {
       }
       const n = noise(len, sd + 1, ad(0.002, tau), 'hp', 5200, 0.7);
       for (let i = 0; i < m.length; i++) m[i] = m[i] * 0.5 + n[i];
-      return filt(m, ['hp', 2500, 0.7], ['lp', 14000, 0.7]);
+      const out = filt(m, ['hp', 2500, 0.7], ['lp', 14000, 0.7]);
+      for (let i = Math.max(0, Math.round(choke * SR)); i < out.length; i++) out[i] *= Math.exp(-(i / SR - choke) / 0.02);
+      return out;
     };
     addStereo(drums, [metal(7800 + seed), metal(7900 + seed)], sec(b), g);
   };
@@ -281,7 +286,9 @@ export function bed(T) {
       snare(b, 0.08 + 0.35 * u * u, Math.round(b * 8));
       b += u < 0.5 ? 0.25 : 0.125;
     }
-    crash(P.impact, 0.55, 3, 1.6);
+    // the logo's crash rings across the hit and is choked 50 ms before Ava says the name: its
+    // 3–11 kHz wash would sit on "Neuro … Voice." (the hall carries its decay on, far below)
+    crash(P.impact, 0.55, 3, 1.6, Math.max(0.1, sec(P.name - P.impact) - 0.05));
   }
 
   /* ── bass ── */
