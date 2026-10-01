@@ -22,7 +22,7 @@
  *            captions, word-synced; AI-disclosure underline; slot chips
  *            "3:00 PM" / "4:30 PM" pop on the spoken times, 3:00 PM is picked
  *            on "o'clock" and flies into the orb with the last swing
- *   line 5   "You're all booked for / Wednesday at 15:00." — the time ignites
+ *   line 5   "You're all booked for / Wednesday at 3 PM." — the time ignites
  *            ember ON the spoken "three"; the payoff press; then everything but
  *            the mark and its glow blows away towards the lens; the result
  *            picks the mark up at markHide.
@@ -33,12 +33,12 @@
  * Captions, tags, chips and the mark are in screen space (the tag and the
  * chips follow a swing a little, smeared along it).
  */
-import React from 'react';
+import React, { useMemo } from 'react';
 import { AbsoluteFill } from 'remotion';
 import { Captions, type CaptionFont } from '../components/Captions';
 import { Dust } from '../components/Dust';
 import { flowTime } from '../components/Orb';
-import { MarkGlow } from '../components/Shared';
+import { BOOKING, MarkGlow } from '../components/Shared';
 import { MARK, MARK_GLOW_HANDOFF, TRANSCRIPT } from '../lib/handoff';
 import { useLayout } from '../lib/layout';
 import { aos, EASE, mixHex, SPRING, springAt, tween } from '../lib/motion';
@@ -57,6 +57,7 @@ import { ClosedSign, flightAt, PickupLine } from './call/Status';
 import { Chips, MarkRow, SpeakerTag } from './call/Transcript';
 import { lightAt, listenAt, ORB_FRAME0, orbVolumeByIndex, turnAt, volumeAt } from './call/voice';
 import { Waveform } from './call/Waveform';
+import { measure, useFontsReady, type FontSpec } from './result/measure';
 
 const LINES = CALL.lines;
 /** row A of the last line, as spoken: "You're all booked for" — "all" is heard but (until the voice's
@@ -127,14 +128,25 @@ const GHOSTS = [
 ] as const;
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 
-/** "Wednesday at 15:00" in Inter 500 / −0.01em: its width in em (for the ember burst's ellipse) */
-const MARK_EM = 9.45;
-/** …and "15:00" in it: its centre's offset from the mark's centre, and its width (em) */
-const NUM_EM = { dx: 3.46, w: 2.5 };
+/**
+ * "Wednesday at 3 PM" measured in the mark's own setting (Inter 500 / −0.01em, as <BookedMark>):
+ * its width (for the ember burst's ellipse), and "3 PM" in it — its centre's offset from the
+ * mark's centre and its width (where the sparks fly off) — all in em.
+ */
+function markEm(size: number) {
+  const f: FontSpec = { family: FONT.body, weight: 500, size, track: -0.01, lh: 1.22 };
+  const em = (s: string) => measure(s, f).w / size;
+  const W = em(BOOKING.mark);
+  const w = em(BOOKING.time);
+  return { W, num: { dx: em(`${BOOKING.day} ${BOOKING.at} `) + w / 2 - W / 2, w } };
+}
 
 export const Call: React.FC = () => {
   const t = useSceneFrame('call');
   const L = useLayout();
+  const markSize = MARK(L).fontSize;
+  const fontsReady = useFontsReady([`500 ${markSize}px ${FONT.body}`]);
+  const ME = useMemo(() => markEm(markSize), [markSize, fontsReady]); // eslint-disable-line react-hooks/exhaustive-deps
   if (t < CALL_LOCAL.roomIn[0]) return null;
 
   const T = TRANSCRIPT(L);
@@ -357,7 +369,7 @@ export const Call: React.FC = () => {
         (lock > 0.02 ? `, 0 0 4px rgba(247,243,255,${(0.7 * lock).toFixed(3)})` : '')
       : undefined;
 
-  // "15:00" / "16:30" flash lilac as they are spoken (linking the words to their chips)
+  // "3 PM" / "4:30" flash lilac as they are spoken (linking the words to their chips)
   const pops = [LINES[2].at + CALL.slotPops[0], LINES[2].at + CALL.slotPops[1]] as const;
   // the chips own the echo slot while they are on screen
   const chipWindow = [pops[0] - 1, LINES[4].at + 9] as const;
@@ -628,12 +640,12 @@ export const Call: React.FC = () => {
       {/* ── screen · the booked mark + its glow (handed to the result at markHide) ── */}
       {live ? (
         <>
-          {/* "15:00" ignites: a warm pool of ember light flares behind the mark (gone long before the hand-over) */}
+          {/* "3 PM" ignites: a warm pool of ember light flares behind the mark (gone long before the hand-over) */}
           {t >= CALL_LOCAL.ember && t < CALL_LOCAL.ember + 26 ? (
             <div
               style={{
                 position: 'absolute',
-                left: M.x + M.fontSize * NUM_EM.dx - M.fontSize * 4.2,
+                left: M.x + M.fontSize * ME.num.dx - M.fontSize * 4.2,
                 top: M.y - M.fontSize * 2.1,
                 width: M.fontSize * 8.4,
                 height: M.fontSize * 4.2,
@@ -647,13 +659,13 @@ export const Call: React.FC = () => {
             />
           ) : null}
           <MarkGlow x={M.x} y={M.y} fontSize={M.fontSize} k={glowK} />
-          {/* "15:00" ignites: a ring leaves the mark, ember sparks fly off its end (away from the type; all gone ≈ 20 f later) */}
+          {/* "3 PM" ignites: a ring leaves the mark, ember sparks fly off its end (away from the type; all gone ≈ 20 f later) */}
           <RingPulse
             t={t}
             at={CALL_LOCAL.ember}
             x={M.x}
             y={M.y}
-            w={M.fontSize * (MARK_EM + 0.8)}
+            w={M.fontSize * (ME.W + 0.8)}
             h={M.fontSize * 1.24}
             radius={M.fontSize * 0.62}
             color={C.emberLit}
@@ -665,12 +677,12 @@ export const Call: React.FC = () => {
           <Sparks
             t={t}
             at={CALL_LOCAL.ember}
-            x={M.x + M.fontSize * NUM_EM.dx}
+            x={M.x + M.fontSize * ME.num.dx}
             y={M.y - M.fontSize * 0.08}
             color={C.ember}
             hot={C.emberSoft}
             n={13}
-            rx={M.fontSize * (NUM_EM.w / 2 + 0.2)}
+            rx={M.fontSize * (ME.num.w / 2 + 0.2)}
             ry={M.fontSize * 0.62}
             reach={L.pick(120, 100)}
             life={17}

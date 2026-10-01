@@ -1,13 +1,14 @@
 /**
  * RESULT (8 beats) — the booking flies into the calendar; the diptych.
  *
- *   t 0      the call hands over "Wednesday at 15:00" (ember) at MARK with its
+ *   t 0      the call hands over "Wednesday at 3 PM" (ember) at MARK with its
  *            <MarkGlow> at MARK_GLOW_HANDOFF; the glow cross-fades into the
  *            card's plate (t 1–5); the night room knocks the call back (t 0–20)
  *   t 0–12   LIFT: a 2-frame dip, then a soft spring up into the card (760/720
  *            × 200), towards the lens and a touch to the side; the pill's wash
  *            grows into the card; the mark's two words travel onto their
- *            measured places in the card row, " at" folds out, and —
+ *            measured places in the card row ("Wednesday · 3 PM"), " at"
+ *            folds out and its "·" folds in, and —
  *            registered — they cross-fade (t 9–13); BOOKED + dot rise in
  *   t 8–13   the owner's calendar enters and builds; the dashed slot beckons
  *   t 12–15  the card winds up
@@ -42,7 +43,7 @@
 import React, { useMemo } from 'react';
 import { AbsoluteFill, Easing } from 'remotion';
 import { Vignette } from '../components/Grain';
-import { MarkGlow } from '../components/Shared';
+import { BOOKING, MarkGlow } from '../components/Shared';
 import { MARK_GLOW_HANDOFF } from '../lib/handoff';
 import { useLayout } from '../lib/layout';
 import { EASE, mixHex, tween } from '../lib/motion';
@@ -50,9 +51,9 @@ import { useSceneFrame } from '../lib/scene';
 import { C, FONT, NIGHT_ROOM } from '../theme';
 import { BEAT, RESULT, RESULT_LOCAL, SCENES } from '../timing';
 import { Calendar, eventLookAt } from './result/Calendar';
-import { EventFace, hexA } from './result/Event';
+import { EVENT_FONT, EventFace, fitFace, hexA } from './result/Event';
 import { Flyer } from './result/Flyer';
-import { geo, layerCss, mapRect, planeToScreen, SLOT, worldToScreen, type Cam, type Geo } from './result/geometry';
+import { CAL, geo, layerCss, mapRect, planeToScreen, SLOT, worldToScreen, type Cam, type Geo } from './result/geometry';
 import { cssFont, measure, useFontsReady, type FontSpec } from './result/measure';
 import { calMapAt, camsAt, cardAt, eventWorldAt, type MarkMetrics } from './result/motion';
 import { Discs, Motes } from './result/Motes';
@@ -71,31 +72,48 @@ const DOWNBEAT = (BAR - (SCENES.result.from % BAR)) % BAR;
 function markMetrics(G: Geo): MarkMetrics {
   const mf: FontSpec = { family: FONT.body, weight: 500, size: G.mark.fontSize, track: -0.01, lh: 1.22 };
   const D = G.cardType.date;
+  const B = BOOKING;
   const a = (s: string) => measure(s, mf).w;
   const c = (s: string) => measure(s, D).w;
   return {
     m: {
-      W: a('Wednesday at 15:00'),
-      wed: a('Wednesday'),
-      at: a('at'),
-      atX: a('Wednesday '),
-      num: a('15:00'),
-      numX: a('Wednesday at '),
+      W: a(B.mark),
+      wed: a(B.day),
+      num: a(B.time),
+      numX: a(`${B.day} ${B.at} `),
+      // the card's row, set in the mark's own face: what the mark closes up into as " at" folds out
+      row: { W: a(B.date), sep: a(B.sep), sepX: a(`${B.day} `), numX: a(`${B.day} ${B.sep} `) },
       capOff: measure('H', mf).capOff,
       box: mf.lh * mf.size,
     },
-    c: { wed: c('Wednesday'), num: c('15:00'), numX: c('Wednesday '), capOff: measure('H', D).capOff },
+    c: {
+      wed: c(B.day),
+      sep: c(B.sep),
+      sepX: c(`${B.day} `),
+      num: c(B.time),
+      numX: c(`${B.day} ${B.sep} `),
+      capOff: measure('H', D).capOff,
+    },
   };
 }
+
+/** The event face's sizes, fitted to the event's width ("• 3:00 PM", measured): the whole sheet's slot
+ *  cell (calendar units) and the card window's cell (its event is inset CAL.inset). */
+const fitFaces = (G: Geo): Geo => ({
+  ...G,
+  face: fitFace(G.face, G.slot.w),
+  crop: { ...G.crop, face: fitFace(G.crop.face, G.crop.colPx - 2 * CAL.inset) },
+});
 
 export const Result: React.FC = () => {
   const t = useSceneFrame('result');
   const L = useLayout();
-  const G = useMemo(() => geo(L), [L.vertical]); // eslint-disable-line react-hooks/exhaustive-deps
-  const wordFont: FontSpec = { family: FONT.ui, weight: 520, size: G.word, track: -0.03, lh: 1 };
-  const markFont = `500 ${G.mark.fontSize}px ${FONT.body}`;
-  const ready = useFontsReady([markFont, cssFont(G.cardType.date), cssFont(wordFont)]);
-  const MM = useMemo(() => markMetrics(G), [G, ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  const G0 = useMemo(() => geo(L), [L.vertical]); // eslint-disable-line react-hooks/exhaustive-deps
+  const wordFont: FontSpec = { family: FONT.ui, weight: 520, size: G0.word, track: -0.03, lh: 1 };
+  const markFont = `500 ${G0.mark.fontSize}px ${FONT.body}`;
+  const ready = useFontsReady([markFont, cssFont(G0.cardType.date), cssFont(wordFont), cssFont(EVENT_FONT(G0.crop.face))]);
+  const G = useMemo(() => fitFaces(G0), [G0, ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  const MM = useMemo(() => markMetrics(G), [G]);
   const wordBase = useMemo(() => measure('Asleep.', wordFont).base, [G, ready]); // eslint-disable-line react-hooks/exhaustive-deps
   if (t < 0) return null;
   const T = RESULT_LOCAL;

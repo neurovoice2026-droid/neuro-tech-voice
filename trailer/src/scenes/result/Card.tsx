@@ -8,6 +8,7 @@
  * Same plate, same type, same pill idiom as the shared card.
  */
 import React from 'react';
+import { BOOKING } from '../../components/Shared';
 import { C, FONT, TRACK } from '../../theme';
 import type { CardType } from './geometry';
 
@@ -95,7 +96,7 @@ export const CardFace: React.FC<{
             opacity: row,
           }}
         >
-          Wednesday 15:00
+          {BOOKING.date}
         </div>
       ) : null}
     </div>

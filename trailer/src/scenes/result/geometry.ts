@@ -24,13 +24,13 @@ export type Cam = { x: number; y: number; z: number };
 
 export const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
 export const HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18] as const;
-/** The target: Wednesday (index 2), 15:00–16:00. */
+/** The target: Wednesday (index 2), 3–4 PM (hours are 24-h numbers here; the labels say "3 PM"). */
 export const SLOT = { day: 2, from: 15, to: 16 } as const;
 
 /**
  * Muted existing bookings — plain blocks, no names. [day, from, to]
- * Exactly three of them fall inside the card window (TUE–THU × 12–18 / 13–17):
- * TUE 15:30–17, THU 14–15, THU 16–17.
+ * Exactly three of them fall inside the card window (TUE–THU × 12–6 PM / 1–5 PM):
+ * TUE 3:30–5 PM, THU 2–3 PM, THU 4–5 PM.
  */
 export const BOOKINGS: ReadonlyArray<readonly [number, number, number]> = [
   [0, 9.5, 10.5],
@@ -62,7 +62,7 @@ export type CardType = {
   padX: number;
   /** BOOKED row centre, from the card centre */
   row0: number;
-  /** date row ("Wednesday 15:00") centre, from the card centre */
+  /** date row ("Wednesday · 3 PM") centre, from the card centre */
   row1: number;
   label: number;
   dot: number;
@@ -114,7 +114,7 @@ export function geo(L: Layout) {
 
   /*
    * THE CARD WINDOW (P0-2): the split crops the sheet to TUE–WED–THU ×
-   * 12:00–18:00 (16:9, 3 × 6 cells of 240 × 72) / 13:00–17:00 (9:16, 3 × 4
+   * 12–6 PM (16:9, 3 × 6 cells of 240 × 72) / 1–5 PM (9:16, 3 × 4
    * cells of 263 × 54), with an hours gutter on the left and the day labels in
    * a header band. World px (= screen at rest).
    */
@@ -196,7 +196,8 @@ export function geo(L: Layout) {
     liftArc: L.pick(46, 30),
     /** the throw, in screen px: rise out of the wind-up, drop into the slot */
     arc: L.pick({ rise: 300, drop: 250 }, { rise: 230, drop: 230 }),
-    /** event face ("15:00") size in calendar units while the sheet is whole (≈ 48 px in the close-up) */
+    /** event face ("3:00 PM") DESIGN size in calendar units while the sheet is whole; the scene fits it
+     *  to the slot's width from the measured copy (Event.tsx fitFace) */
     face: L.pick(18.5, 20),
 
     /* ── the diptych ────────────────────────────────────────────── */

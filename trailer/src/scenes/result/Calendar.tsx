@@ -2,15 +2,15 @@
  * The owner's calendar, as a site-style stage on the night room: radius 28,
  * the cover panel (opaque), white/.08 hairlines, uppercase tracked day labels
  * (WED lit), Geist Mono hours, three muted plain bookings (6 % paper, no
- * borders), and the site's dashed empty slot at WED 15:00 — until the card
- * lands in it and becomes the event: solid ember, white "15:00".
+ * borders), and the site's dashed empty slot at WED 3 PM — until the card
+ * lands in it and becomes the event: solid ember, white "3:00 PM".
  *
  * Drawn through a CalMap (cal units → world px, per axis): the whole sheet
  * while the card flies and lands (a uniform pose), then cropped into the
- * card window TUE–THU × 12–18 (16:9) / 13–17 (9:16) during the recompose —
+ * card window TUE–THU × 12–6 PM (16:9) / 1–5 PM (9:16) during the recompose —
  * the plate IS the rounded clip window, the cells take the card's wider
  * proportions, and the type keeps its own sizes (day labels 30 px, hours
- * 26 px, the event's "15:00" 48 / 44 px).
+ * 26 px "1 PM", the event's "3:00 PM" ≤ 48 / 44 px, fitted to its cell).
  *
  * The landing: squash/stretch on the event, the pill's ping, an ember flash,
  * two outline rings, the dashed outline knocked outwards, a soft ember ring
@@ -28,6 +28,8 @@ import { eventFill, EventFace, hexA } from './Event';
 import { BOOKINGS, CAL, DAYS, HOURS, SLOT, mapX, mapY, type CalMap, type Geo, type Rect } from './geometry';
 
 const LINE = 'rgba(255,255,255,0.08)';
+/** an hour label, 12-hour as Ava speaks it: 9 → "9 AM", 15 → "3 PM" */
+const hourLabel = (hr: number) => `${((hr + 11) % 12) + 1} ${hr < 12 ? 'AM' : 'PM'}`;
 /** the night light (#demo's 3 a.m. orb mid-tone) for the card's rim */
 const NIGHT_RIM = '#7c3aed';
 /** the event's bloom reach on screen (px beyond the chip's edge) — ember stays a mark + its light */
@@ -307,7 +309,7 @@ export const Calendar: React.FC<{
             const p = rise(b0 + 0.5 + i * 0.3);
             const right = mix(pose.left + (CAL.pad + CAL.gutter - 18) * s - clip.x, B.card.x + B.gutter - 20 - clip.x, rr);
             const cy = Y(CAL.bodyTop + (i + 0.5) * G.rowH);
-            const lit = hr === 15;
+            const lit = hr === SLOT.from;
             return (
               <div
                 key={hr}
@@ -325,7 +327,7 @@ export const Calendar: React.FC<{
                   opacity: Math.min(1, Math.max(0, p * 1.4)) * (lit ? 1 : 0.8) * (hr >= B.rows[0] && hr < B.rows[1] ? 1 : 1 - rr),
                 }}
               >
-                {String(hr).padStart(2, '0')}:00
+                {hourLabel(hr)}
               </div>
             );
           })}

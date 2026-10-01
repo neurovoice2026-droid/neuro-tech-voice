@@ -6,13 +6,13 @@
  *                 mesh orb in the speaker's colours; it swaps on each cut.
  *   <Chips>       the slot chips "3:00 PM" · "4:30 PM": pop ON the spoken words,
  *                 3:00 PM is picked (squash, fill flood, glow), 4:30 PM drops out.
- *   <MarkRow>     row B of the last line — "Wednesday at 15:00" arrives word
- *                 by word ON the voice, 15:00 ignites ember on "three", then it
+ *   <MarkRow>     row B of the last line — "Wednesday at 3 PM" arrives word
+ *                 by word ON the voice, "3 PM" ignites ember on "three", then it
  *                 is the single <BookedMark> the result picks up.
  */
 import React from 'react';
 import { MeshOrb } from '../../components/MeshOrb';
-import { BookedMark } from '../../components/Shared';
+import { BOOKING, BookedMark } from '../../components/Shared';
 import { rgba } from '../../lib/lights';
 import { EASE, mixHex, SPRING, springAt, tween } from '../../lib/motion';
 import { C, FONT, LIGHTS, TRACK } from '../../theme';
@@ -128,11 +128,11 @@ export const Chips: React.FC<{
   fontSize: number;
   /** the pop's hit frames (the spoken times): a seed 3 f before, the overshoot peaks ON them */
   pops: readonly [number, number];
-  /** 15:00 is picked (squash 2 f before, the pop ON it) */
+  /** 3:00 PM is picked (squash 2 f before, the pop ON it) */
   pick: number;
-  /** 16:30 lifts (2 f) and drops away from here */
+  /** 4:30 PM lifts (2 f) and drops away from here */
   drop: number;
-  /** the 15:00 chip squashes (2 f) and leaves up into the light from here */
+  /** the 3:00 PM chip squashes (2 f) and leaves up into the light from here */
   leave: number;
   /** where it leaves to (the orb's centre), screen px */
   leaveTo: { x: number; y: number };
@@ -149,7 +149,7 @@ export const Chips: React.FC<{
     const baseX = cx + (i === 0 ? -1 : 1) * (w / 2 + gap / 2);
     // the entrance: seed → anticipation → 1.12 ON the spoken time → settle
     const s = popScale(t, hit, 1.12, { from: 0.5, anticip: 3 });
-    // pick: 15:00 squashes (.92, 2 f), pops to 1.08 ON the pick and settles
+    // pick: 3:00 PM squashes (.92, 2 f), pops to 1.08 ON the pick and settles
     const press = selected
       ? t < pick - 2
         ? 1
@@ -158,17 +158,17 @@ export const Chips: React.FC<{
           : 1.08 - 0.08 * springAt(t, pick, SPRING.pop)
       : 1;
     const fill = selected ? tween(t, [pick, pick + 6], [0, 1], EASE.house) : 0;
-    // 16:30: lifts 2 f (the counter-move), then drops away, tipping
+    // 4:30 PM: lifts 2 f (the counter-move), then drops away, tipping
     const dp = !selected ? exitCurve(t, drop + 2, 8, { anticip: 2, dip: 0.14 }) : 0;
-    // 15:00: squashes 2 f, then leaves up into the orb, stretching along its path
+    // 3:00 PM: squashes 2 f, then leaves up into the orb, stretching along its path
     const lv = selected ? exitCurve(t, leave + 2, 7, { anticip: 2, dip: 0.1 }) : 0;
     const lvOut = Math.max(0, lv);
     const leaveSquash = lv < 0 ? -lv / 0.1 : 0;
     const dpOut = Math.max(0, dp);
-    // (15:00 is gone before it overlaps the orb: absorbed, not pasted on it)
+    // (3:00 PM is gone before it overlaps the orb: absorbed, not pasted on it)
     const op = popOpacity(t, hit, 3) * (1 - dpOut) * Math.pow(1 - lvOut, 2.2);
     if (op <= 0.002) return;
-    // 15:00 flies into the orb (it is fully gone, absorbed, a little short of its centre)
+    // 3:00 PM flies into the orb (it is fully gone, absorbed, a little short of its centre)
     const toX = (leaveTo.x - baseX) * 0.8;
     const toY = (leaveTo.y - cy) * 0.8;
     const travelX = Math.max(0, lv) * toX;
@@ -264,7 +264,8 @@ export const Chips: React.FC<{
 
 /* ── the last line's row B: the booked mark ─────────────────────── */
 
-const MARK_WORDS = ['Wednesday', 'at', '15:00'];
+/** "Wednesday" · "at" · "3 PM" — the time arrives as one, with the ember, on "three" */
+const MARK_WORDS = [BOOKING.day, BOOKING.at, BOOKING.time];
 const ENTER = 6;
 
 /** The mark's box, exactly as <BookedMark> sets it (Shared.tsx), so the swap is invisible. */
@@ -296,7 +297,7 @@ const enterStyle = (t: number, a: number): React.CSSProperties => {
 
 export const MarkRow: React.FC<{
   t: number;
-  /** appear frames of "Wednesday", "at", "15:00" and the period */
+  /** appear frames of "Wednesday", "at", "3 PM" and the period */
   appear: readonly [number, number, number, number];
   /** 0..1 paper → ember */
   ember: number;
@@ -348,7 +349,7 @@ export const MarkRow: React.FC<{
               <span
                 style={{
                   ...enterStyle(t, appear[i]),
-                  // "15:00" arrives with the ember: a hot core that cools into the mark
+                  // "3 PM" arrives with the ember: a hot core that cools into the mark
                   textShadow:
                     i === 2 && t >= appear[2] ? `0 0 0.4em rgba(255,184,119,${(0.7 * (1 - ember)).toFixed(3)})` : undefined,
                 }}
@@ -362,7 +363,7 @@ export const MarkRow: React.FC<{
       {/* the period rides a twin of the mark's box (same face / size) */}
       {pPeriod > 0 && periodOut < 1 ? (
         <div style={{ ...markBox(x, y, fontSize), color: C.paper }}>
-          <span style={{ visibility: 'hidden' }}>{MARK_WORDS.join(' ')}</span>
+          <span style={{ visibility: 'hidden' }}>{BOOKING.mark}</span>
           <span
             style={{
               position: 'absolute',

@@ -3,13 +3,14 @@
  * is drawn here inside the world layer, converted with the camera of the
  * frame being drawn.
  *
- *   lift   the ember "Wednesday at 15:00" gets the site's booked-pill wash
+ *   lift   the ember "Wednesday at 3 PM" gets the site's booked-pill wash
  *          around it, dips, and springs up (towards the lens, a little to
  *          the side) while the pill grows into the Booked card. Its two
  *          words travel — each scaled to its measured width — onto their
- *          measured places in the card's "Wednesday 15:00" row (" at" folds
- *          out between them); only once registered do they cross-fade into
- *          the card's face. BOOKED + the ember dot rise in meanwhile.
+ *          measured places in the card's "Wednesday · 3 PM" row (" at" folds
+ *          out between them as the row's "·" folds in); only once registered
+ *          do they cross-fade into the card's face. BOOKED + the ember dot
+ *          rise in meanwhile.
  *   throw  the card winds up, lobs into the close-up, tilts, shrinks to the
  *          slot and warms to the event's solid ember (its face turns white).
  *
@@ -18,7 +19,7 @@
  * a blur scaled by the screen speed.
  */
 import React from 'react';
-import { BookedMark } from '../../components/Shared';
+import { BOOKING, BookedMark } from '../../components/Shared';
 import { C, FONT } from '../../theme';
 import { mix } from '../../lib/motion';
 import { RESULT } from '../../timing';
@@ -126,11 +127,14 @@ const Card: React.FC<{
       <EventFace size={G.face * S.u} op={S.ev} color={C.white} dotColor={C.white} />
       {m ? (
         <>
-          <MarkWord text="Wednesday" w={m.wed} S={S} fontSize={G.mark.fontSize} op={m.op} blur={fadeBlur} />
+          <MarkWord text={BOOKING.day} w={m.wed} S={S} fontSize={G.mark.fontSize} op={m.op} blur={fadeBlur} />
           {m.at.op > 0.001 ? (
-            <MarkWord text="at" w={m.at} S={S} fontSize={G.mark.fontSize} op={m.op * m.at.op} blur={m.at.blur} />
+            <MarkWord text={BOOKING.at} w={m.at} S={S} fontSize={G.mark.fontSize} op={m.op * m.at.op} blur={m.at.blur} />
           ) : null}
-          <MarkWord text="15:00" w={m.num} S={S} fontSize={G.mark.fontSize} op={m.op} blur={fadeBlur} />
+          {m.sep.op > 0.001 ? (
+            <MarkWord text={BOOKING.sep} w={m.sep} S={S} fontSize={G.mark.fontSize} op={m.op * m.sep.op} blur={Math.max(m.sep.blur, fadeBlur)} />
+          ) : null}
+          <MarkWord text={BOOKING.time} w={m.num} S={S} fontSize={G.mark.fontSize} op={m.op} blur={fadeBlur} />
         </>
       ) : null}
     </div>

@@ -40,7 +40,30 @@ export const HookLineStatic: React.FC<{ style?: React.CSSProperties }> = ({ styl
   <HookLine start={-10_000} style={style} />
 );
 
-/** "Wednesday at 15:00" — the ember booked mark, centred on (x, y). */
+const DAY = 'Wednesday';
+const AT = 'at';
+const SEP = '·';
+const TIME = '3 PM';
+/**
+ * The booking, as Ava says it ("…booked for Wednesday at 3 PM."): the day, the
+ * joiner and the time — the mark's three words (the time ignites on "three"),
+ * and the copy everything after the call follows (the spoken 12-hour form).
+ */
+export const BOOKING = {
+  day: DAY,
+  at: AT,
+  /** the card row's separator (the site's call-log idiom) */
+  sep: SEP,
+  time: TIME,
+  /** the mark: "Wednesday at 3 PM" */
+  mark: `${DAY} ${AT} ${TIME}`,
+  /** the Booked card's date row the mark becomes (" at" folds out, a "·" folds in): "Wednesday · 3 PM" */
+  date: `${DAY} ${SEP} ${TIME}`,
+  /** the calendar event's face — the call's picked chip, "3:00 PM" */
+  event: '3:00 PM',
+} as const;
+
+/** "Wednesday at 3 PM" — the ember booked mark, centred on (x, y). */
 export const BookedMark: React.FC<{
   color?: string;
   x?: number;
@@ -67,7 +90,7 @@ export const BookedMark: React.FC<{
         ...style,
       }}
     >
-      Wednesday at 15:00
+      {BOOKING.mark}
     </div>
   );
 };
@@ -106,7 +129,7 @@ export const MarkGlow: React.FC<{ x?: number; y?: number; fontSize?: number; k: 
 };
 
 /**
- * The Booked card: the site's call-log pill ("Booked · Wednesday 15:00" —
+ * The Booked card: the site's call-log pill (BOOKED + "Wednesday · 3 PM" —
  * rgb(238 84 35 / .16) wash, #ffb877 text, #ee5423 dot) grown into a card on
  * the cover's plate (#24212c, radius 20). Sized w×h, drawn at its own origin
  * (position it with a wrapper). `p` 0..1 reveals its inner rows.
@@ -187,7 +210,7 @@ export const BookedCard: React.FC<{
           ...row(1),
         }}
       >
-        Wednesday 15:00
+        {BOOKING.date}
       </div>
     </div>
   );

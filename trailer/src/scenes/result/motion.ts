@@ -208,7 +208,10 @@ export type Word = {
 };
 export type Morph = {
   wed: Word;
+  /** " at" folds out between the two words… */
   at: Word & { op: number; blur: number };
+  /** …and the row's "·" folds in in its place */
+  sep: Word & { op: number; blur: number };
   num: Word;
   /** the mark words' opacity (they cross-fade into the card row) */
   op: number;
@@ -234,7 +237,7 @@ export type CardState = {
   /** date row opacity */
   row: number;
   morph: Morph | null;
-  /** event face (dot + 15:00) opacity */
+  /** event face (dot + "3:00 PM") opacity */
   ev: number;
   /** 0..1 the plate warms to the event's solid ember */
   warm: number;
@@ -250,10 +253,19 @@ export type CardState = {
 
 /** Mark / card-row word metrics (from measure.ts). */
 export type MarkMetrics = {
-  /** mark: full width, words' widths + left offsets, cap-centre offset */
-  m: { W: number; wed: number; at: number; atX: number; num: number; numX: number; capOff: number; box: number };
-  /** card row: words' widths + left offsets, cap-centre offset */
-  c: { wed: number; num: number; numX: number; capOff: number };
+  /** mark ("Wednesday at 3 PM", Inter): full width, words' widths + left offsets, cap-centre offset; and
+   *  `row`: the card's row ("Wednesday · 3 PM") set in the mark's own face — what the mark closes up into */
+  m: {
+    W: number;
+    wed: number;
+    num: number;
+    numX: number;
+    row: { W: number; sep: number; sepX: number; numX: number };
+    capOff: number;
+    box: number;
+  };
+  /** card row ("Wednesday · 3 PM", Instrument Sans): words' widths + left offsets, cap-centre offset */
+  c: { wed: number; sep: number; sepX: number; num: number; numX: number; capOff: number };
 };
 
 /** ~4 % overshoot, peaking ≈ 9 frames after it starts */
@@ -301,15 +313,20 @@ export function cardAt(tIn: number, G: Geo, L: LL, T: ResultTiming, MM: MarkMetr
   let r = mix(h0 / 2, 24, mo);
 
   /* the words: from their places in the mark onto their places in the card row */
-  // " at" folds out: the two words close up on the mark's centre as it goes
+  // " at" folds out and a "·" folds in: the mark closes up, on its centre, into the card's row
+  // ("Wednesday · 3 PM") set in its own face — all measured, so any copy registers
   const col = tween(t, T.markCollapse, [0, 1], EASE.inOut);
-  const Wc = MM.m.wed + (MM.m.atX - MM.m.wed) + MM.m.num;
-  const mWed = { x: mix(-MM.m.W / 2 + MM.m.wed / 2, -Wc / 2 + MM.m.wed / 2, col), y: MM.m.capOff };
-  const mNum = { x: mix(-MM.m.W / 2 + MM.m.numX + MM.m.num / 2, Wc / 2 - MM.m.num / 2, col), y: MM.m.capOff };
+  const R = MM.m.row;
+  const mWed = { x: mix(-MM.m.W / 2 + MM.m.wed / 2, -R.W / 2 + MM.m.wed / 2, col), y: MM.m.capOff };
+  const mNum = { x: mix(-MM.m.W / 2 + MM.m.numX + MM.m.num / 2, -R.W / 2 + R.numX + MM.m.num / 2, col), y: MM.m.capOff };
+  const mSep = { x: -R.W / 2 + R.sepX + R.sep / 2, y: MM.m.capOff };
   const cWed = { x: -C0.w / 2 + CT.padX + MM.c.wed / 2, y: CT.row1 + MM.c.capOff };
   const cNum = { x: -C0.w / 2 + CT.padX + MM.c.numX + MM.c.num / 2, y: CT.row1 + MM.c.capOff };
+  const cSep = { x: -C0.w / 2 + CT.padX + MM.c.sepX + MM.c.sep / 2, y: CT.row1 + MM.c.capOff };
   const sWed = mix(1, MM.c.wed / MM.m.wed, mo);
   const sNum = mix(1, MM.c.num / MM.m.num, mo);
+  // (the "·" is too small to take a width ratio from: it scales with the type, mark size → row size)
+  const sSep = mix(1, CT.date.size / M.fontSize, mo);
   // position = cap centre − the word's own cap offset (scaled)
   const word = (a: Pt, b: Pt, sc: number): Word => ({
     x: mix(a.x, b.x, mo),
@@ -322,10 +339,14 @@ export function cardAt(tIn: number, G: Geo, L: LL, T: ResultTiming, MM: MarkMetr
     x: (wed.x + (MM.m.wed / 2) * sWed + (num.x - (MM.m.num / 2) * sNum)) / 2,
     y: mix(0, CT.row1 + MM.c.capOff - MM.m.capOff, mo),
   };
+  // the "·" comes in as " at" goes (a small pop, unblurring), already on its own place in the row
+  const sepIn = EASE.out3(clamp01((col - 0.3) / 0.7));
+  const sep = word(mSep, cSep, sSep);
   const morph: Morph = {
     wed,
     num,
     at: { x: atGap.x, y: atGap.y, s: 1 - 0.6 * col, op: 1 - clamp01(col * 1.5), blur: col * 6 },
+    sep: { ...sep, s: sep.s * (0.5 + 0.5 * sepIn), op: sepIn, blur: (1 - sepIn) * 4 },
     op: 1 - tween(t, T.markOut, [0, 1], EASE.inOut),
   };
 
