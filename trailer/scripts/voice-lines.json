@@ -158,6 +158,66 @@
       "direction": "Ava voice-over: calm, proud brand sign-off.",
       "speak": "Neuro Tech Voice.",
       "emotion": "proud"
+    },
+    {
+      "id": "lang-en",
+      "voice": "ava",
+      "language": "en",
+      "say": "This is Ava, an AI assistant.",
+      "direction": "Ava's own greeting (lib/voice/greetings.ts), shown verbatim on screen: warm, friendly and smiling, a receptionist greeting a caller; natural pace in the language.",
+      "speak": "This is Ava, an AI assistant.",
+      "emotion": "happy",
+      "speed": 1.0
+    },
+    {
+      "id": "lang-ro",
+      "voice": "ava",
+      "language": "ro",
+      "say": "Sunt Ava, asistentul virtual cu inteligență artificială.",
+      "direction": "Ava's own greeting (lib/voice/greetings.ts), shown verbatim on screen: warm, friendly and smiling, a receptionist greeting a caller; natural pace in the language.",
+      "speak": "Sunt Ava, asistentul virtual cu inteligență artificială.",
+      "emotion": "happy",
+      "speed": 1.0
+    },
+    {
+      "id": "lang-es",
+      "voice": "ava",
+      "language": "es",
+      "say": "Soy Ava, el asistente virtual con inteligencia artificial.",
+      "direction": "Ava's own greeting (lib/voice/greetings.ts), shown verbatim on screen: warm, friendly and smiling, a receptionist greeting a caller; natural pace in the language.",
+      "speak": "Soy Ava, el asistente virtual con inteligencia artificial.",
+      "emotion": "happy",
+      "speed": 1.0
+    },
+    {
+      "id": "lang-fr",
+      "voice": "ava",
+      "language": "fr",
+      "say": "Ici Ava, l'assistant virtuel basé sur l'intelligence artificielle.",
+      "direction": "Ava's own greeting (lib/voice/greetings.ts), shown verbatim on screen: warm, friendly and smiling, a receptionist greeting a caller; natural pace in the language.",
+      "speak": "Ici Ava, l'assistant virtuel basé sur l'intelligence artificielle.",
+      "emotion": "happy",
+      "speed": 1.0
+    },
+    {
+      "id": "lang-de",
+      "voice": "ava",
+      "language": "de",
+      "say": "Sie sprechen mit Ava, dem KI-Assistenten.",
+      "direction": "Ava's own greeting (lib/voice/greetings.ts), shown verbatim on screen: warm, friendly and smiling, a receptionist greeting a caller; natural pace in the language.",
+      "speak": "Sie sprechen mit Ava, dem KI-Assistenten.",
+      "emotion": "happy",
+      "speed": 1.0
+    },
+    {
+      "id": "lang-ja",
+      "voice": "ava",
+      "language": "ja",
+      "say": "AIアシスタントのAvaと申します。",
+      "direction": "Ava's own greeting (lib/voice/greetings.ts), shown verbatim on screen: warm, friendly and smiling, a receptionist greeting a caller; natural pace in the language.",
+      "speak": "AIアシスタントのAvaと申します。",
+      "emotion": "happy",
+      "speed": 1.0
     }
   ],
   "_notes": "say = the canonical words the captions and src/timing.ts index (word k); speak / parts = what the TTS actually performs (Sonic SSML allowed, fillers welcome) — the generator aligns the real word timestamps back onto `say`. emotion: one of Cartesia's Sonic emotions (docs: capability-guides/volume-speed-emotion)."

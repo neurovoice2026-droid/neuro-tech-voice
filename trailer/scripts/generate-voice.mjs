@@ -51,6 +51,8 @@
  *   npm run voice -- --engine=files     (force files; a missing one is an error)
  *   npm run voice -- --engine=kokoro    (force the offline engine)
  *   npm run voice -- --list             (list fish.audio voice candidates)
+ *   npm run voice -- --only=a,b         (just these lines, merged into the live set;
+ *                                        the others are left byte-identical)
  *   npm run voice -- --remaster         (no new takes: re-level the current public/voice
  *                                        lines to level.lufs and apply any role EQ they
  *                                        don't carry yet; timings are kept)
@@ -263,7 +265,7 @@ function cartesiaVoice(role, v, taken) {
  * actual performance, fillers and pauses included. `text` may carry Sonic
  * SSML (<emotion value=…/>, <break time=…/>) and [laughter].
  */
-function cartesiaTTS(text, voiceId, { speed, emotion, volume } = {}) {
+function cartesiaTTS(text, voiceId, { speed, emotion, volume, language = 'en' } = {}) {
   const generation = {};
   if (typeof speed === 'number' && speed !== 1) generation.speed = Math.max(0.6, Math.min(1.5, speed));
   if (typeof volume === 'number' && volume !== 1) generation.volume = Math.max(0.5, Math.min(2, volume));
@@ -273,7 +275,7 @@ function cartesiaTTS(text, voiceId, { speed, emotion, volume } = {}) {
     model_id: CARTESIA_MODEL(),
     transcript: text,
     voice: voiceId,
-    language: 'en',
+    language,
     output_format: { container: 'raw', encoding: 'pcm_s16le', sample_rate: SR },
     add_timestamps: true,
     ...(Object.keys(generation).length ? { generation_config: generation } : {}),
@@ -317,7 +319,7 @@ function cartesiaLine(line, voiceId, v) {
   let t = 0;
   let sr = 44100;
   parts.forEach((p, i) => {
-    const r = cartesiaTTS(p.speak, voiceId, { speed: p.speed ?? v.cartesia?.speed, emotion: p.emotion ?? v.cartesia?.emotion, volume: p.volume });
+    const r = cartesiaTTS(p.speak, voiceId, { speed: p.speed ?? v.cartesia?.speed, emotion: p.emotion ?? v.cartesia?.emotion, volume: p.volume, language: line.language ?? 'en' });
     sr = r.sampleRate;
     const tr = trimLead(r.samples, sr);
     for (const w of r.words) words.push({ w: w.w, start: w.start - tr.offset + t, end: w.end - tr.offset + t });
@@ -346,26 +348,74 @@ function trimLead(s, sr, pad = 0.03) {
 }
 
 /**
- * Map the canonical words (line.say — what the captions and timing.ts index)
- * onto the words actually spoken (which may add "um", "oh", "see you then").
- * Greedy in-order match on letters/digits; unmatched words are interpolated.
+ * The canonical words of `say` (what the captions and timing.ts index, word k).
+ * Spaced scripts split on whitespace; Japanese / Chinese have no spaces, so they
+ * are cut into ICU word segments with punctuation kept on the word before it
+ * (the tokens concatenate back to `say` with no separator).
  */
-function alignWords(say, spoken) {
-  const norm = (w) => String(w).toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
-  const canon = say.split(/\s+/).filter(Boolean);
-  const sp = spoken.map((x) => ({ ...x, n: norm(x.w) }));
+const UNSPACED = new Set(['ja', 'zh']);
+function tokenize(text, language = 'en') {
+  if (!UNSPACED.has(language)) return text.split(/\s+/).filter(Boolean);
+  const out = [];
+  for (const { segment, isWordLike } of new Intl.Segmenter(language, { granularity: 'word' }).segment(text)) {
+    if (!segment.trim()) continue;
+    if (!isWordLike && out.length) out[out.length - 1] += segment;
+    else out.push(segment);
+  }
+  return out;
+}
+const splitPhrases = (say, language = 'en') =>
+  UNSPACED.has(language) ? say.split(/(?<=[、。！？!?])/).filter((p) => p.trim()) : say.split(/(?<=[,.!?])\s+/).filter(Boolean);
+
+/**
+ * Map the canonical words (line.say) onto the words actually spoken (which may
+ * add "um", "oh", "see you then"). Works on a character stream, so it holds
+ * whether Cartesia times whole words, sub-words or single characters (Japanese):
+ * each spoken unit's letters/digits get times spread over its [start, end]; each
+ * canonical word is found in order in that stream (a small look-ahead skips
+ * fillers). Unmatched words are interpolated; if too little matches (e.g. the
+ * model re-spelt "AI" as katakana), the words are laid over the returned
+ * timeline in proportion to their length. The result is always monotonic.
+ */
+function alignWords(say, spoken, language = 'en') {
+  const norm = (w) => String(w).normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  const canon = tokenize(say, language);
+  const stream = [];
+  for (const x of spoken) {
+    const n = [...norm(x.w)];
+    n.forEach((c, i) => stream.push({ c, start: x.start + ((x.end - x.start) * i) / n.length, end: x.start + ((x.end - x.start) * (i + 1)) / n.length }));
+  }
+  const first = spoken.length ? spoken[0].start : 0, last = spoken.length ? spoken[spoken.length - 1].end : 0;
   const out = canon.map((w) => ({ w, t: NaN, end: NaN }));
-  let j = 0;
+  let p = 0, matched = 0;
   canon.forEach((w, i) => {
-    const n = norm(w);
-    for (let k = j; k < Math.min(sp.length, j + 6); k++) {
-      if (sp[k].n === n || (n.length > 2 && sp[k].n.startsWith(n)) || (sp[k].n.length > 2 && n.startsWith(sp[k].n))) {
-        out[i].t = sp[k].start; out[i].end = sp[k].end; j = k + 1; return;
+    const cs = [...norm(w)];
+    if (!cs.length) return;
+    let best = null;
+    for (let s0 = p; s0 < Math.min(stream.length, p + 24); s0++) {
+      if (stream[s0].c !== cs[0]) continue;
+      let k = s0, hit = 1, endAt = s0;
+      for (let ci = 1; ci < cs.length; ci++) {
+        for (let q = k + 1; q < Math.min(stream.length, k + 3); q++) if (stream[q].c === cs[ci]) { k = q; endAt = q; hit++; break; }
       }
+      if (hit / cs.length >= 0.6) { best = { s0, endAt }; break; }
     }
+    if (!best) return;
+    out[i].t = stream[best.s0].start; out[i].end = stream[best.endAt].end; p = best.endAt + 1; matched++;
   });
+  const words = canon.filter((w) => norm(w)).length;
+  if (stream.length && matched < Math.max(1, Math.ceil(words / 2))) {
+    // fall back to the returned timestamps: canonical length → position in the spoken stream
+    const total = canon.reduce((a, w) => a + Math.max(1, [...norm(w)].length), 0);
+    let acc = 0;
+    canon.forEach((w, i) => {
+      const len = Math.max(1, [...norm(w)].length);
+      const a = stream[Math.min(stream.length - 1, Math.floor((acc / total) * stream.length))];
+      const z = stream[Math.min(stream.length - 1, Math.max(0, Math.ceil(((acc + len) / total) * stream.length) - 1))];
+      out[i].t = a.start; out[i].end = z.end; acc += len;
+    });
+  }
   // interpolate the gaps
-  const first = sp.length ? sp[0].start : 0, last = sp.length ? sp[sp.length - 1].end : 0;
   for (let i = 0; i < out.length; i++) {
     if (!Number.isNaN(out[i].t)) continue;
     let a = i - 1; while (a >= 0 && Number.isNaN(out[a].t)) a--;
@@ -373,6 +423,11 @@ function alignWords(say, spoken) {
     const ta = a >= 0 ? out[a].end : first, tc = c < out.length ? out[c].t : last;
     const k = (i - a) / (c - a);
     out[i].t = ta + (tc - ta) * k; out[i].end = out[i].t + (tc - ta) / (c - a);
+  }
+  // monotonic: a start never precedes the one before it, an end never precedes its start
+  for (let i = 0; i < out.length; i++) {
+    if (i > 0 && out[i].t < out[i - 1].t) out[i].t = out[i - 1].t;
+    if (!(out[i].end >= out[i].t)) out[i].end = out[i].t;
   }
   return out;
 }
@@ -541,21 +596,21 @@ function pauses(s, sr) {
  * match the phrase breaks, phrases snap to them, otherwise they share the
  * voiced time by length. Words share their phrase by length (+1 per word).
  */
-function timingsFromWords(say, aligned, lead) {
-  const phrases = say.split(/(?<=[,.!?])\s+/).filter(Boolean);
+function timingsFromWords(say, aligned, lead, language = 'en') {
+  const phrases = splitPhrases(say, language);
   const words = aligned.map((x) => ({ w: x.w, t: Math.round(Math.max(0, x.t + lead) * 1000) / 1000 }));
   let k = 0;
   const ph = phrases.map((p) => {
-    const n = p.split(/\s+/).filter(Boolean).length;
-    const a = aligned[k], z = aligned[k + n - 1];
+    const n = Math.max(1, tokenize(p, language).length);
+    const a = aligned[Math.min(k, aligned.length - 1)], z = aligned[Math.min(k + n - 1, aligned.length - 1)];
     k += n;
     return { text: p, start: Math.round(Math.max(0, a.t + lead) * 1000) / 1000, end: Math.round(Math.max(0, z.end + lead) * 1000) / 1000 };
   });
   return { phrases: ph, words };
 }
 
-function timings(say, dur, ps) {
-  const phrases = say.split(/(?<=[,.!?])\s+/).filter(Boolean);
+function timings(say, dur, ps, language = 'en') {
+  const phrases = splitPhrases(say, language);
   const weight = (t) => t.replace(/[^\p{L}\p{N}]/gu, '').length + 2;
   const total = phrases.reduce((a, p) => a + weight(p), 0);
   const lead = 0.04, tail = 0.04;
@@ -579,7 +634,7 @@ function timings(say, dur, ps) {
   const bounds = phrases.map((_, i) => [i === 0 ? lead : cuts[i - 1][1], i === phrases.length - 1 ? dur - tail : cuts[i][0]]);
   const words = [];
   phrases.forEach((p, i) => {
-    const ws = p.split(/\s+/);
+    const ws = tokenize(p, language);
     const wt = ws.reduce((a, w) => a + weight(w), 0);
     let t = bounds[i][0];
     for (const w of ws) {
@@ -602,11 +657,19 @@ const forced = argv.find((a) => a.startsWith('--engine='))?.split('=')[1];
 const opt = (k) => argv.find((a) => a.startsWith(`--${k}=`))?.split('=').slice(1).join('=');
 /** --out=DIR writes a complete candidate set (DIR/voice/*.wav + DIR/voice.generated.ts + DIR/preview.wav) instead of the live one. */
 const OUT_DIR = opt('out') ? path.resolve(opt('out')) : null;
+/** --only=a,b generates just those lines and merges them into the live set (the other WAVs and their entries stay untouched). */
+const ONLY = opt('only') ? opt('only').split(',').map((x) => x.trim()).filter(Boolean) : null;
+if (ONLY) {
+  const unknown = ONLY.filter((id) => !cfg.lines.some((l) => l.id === id));
+  if (unknown.length) throw new Error(`[voice] --only: no such line(s) in voice-lines.json: ${unknown.join(', ')}`);
+  if (OUT_DIR) throw new Error('[voice] --only merges into the live set; it does not combine with --out');
+}
+const LINES = ONLY ? cfg.lines.filter((l) => ONLY.includes(l.id)) : cfg.lines;
 for (const [role, flag] of [['ava', 'ava'], ['caller', 'caller'], ['caller2', 'caller2']]) {
   const id = opt(flag);
   if (id) cfg_override_ids[role] = id;
 }
-const haveAllFiles = cfg.lines.every((l) => srcFile(l.id));
+const haveAllFiles = LINES.every((l) => srcFile(l.id));
 const ENGINE =
   forced ?? (haveAllFiles ? 'files' : process.env.CARTESIA_API_KEY ? 'cartesia' : process.env.FISH_API_KEY ? 'fish' : 'kokoro');
 
@@ -659,7 +722,7 @@ if (argv.includes('--remaster')) {
 let synth;
 const chosen = {};
 if (ENGINE === 'files') {
-  const missing = cfg.lines.filter((l) => !srcFile(l.id)).map((l) => l.id);
+  const missing = LINES.filter((l) => !srcFile(l.id)).map((l) => l.id);
   if (missing.length) throw new Error(`[voice] voice-src/ is missing: ${missing.join(', ')}`);
   for (const role of Object.keys(cfg.voices)) chosen[role] = { engine: 'files', dir: 'voice-src' };
   synth = (line) => decodeFile(srcFile(line.id));
@@ -702,7 +765,7 @@ const VOICE_DIR = OUT_DIR ? path.join(OUT_DIR, 'voice') : OUT;
 mkdirSync(VOICE_DIR, { recursive: true });
 const result = { fps: FPS, engine: ENGINE, voices: chosen, lines: {} };
 const previewParts = [];
-for (const line of cfg.lines) {
+for (const line of LINES) {
   const v = cfg.voices[line.voice];
   const audio = synth(line, v, line.voice);
   const sr = audio.sampleRate;
@@ -713,12 +776,13 @@ for (const line of cfg.lines) {
   previewParts.push({ s, sr });
   const dur = s.length / sr;
   const tm = audio.words?.length
-    ? timingsFromWords(line.say, alignWords(line.say, audio.words), -tr.offset)
-    : timings(line.say, dur, pauses(s, sr));
+    ? timingsFromWords(line.say, alignWords(line.say, audio.words, line.language), -tr.offset, line.language)
+    : timings(line.say, dur, pauses(s, sr), line.language);
   result.lines[line.id] = {
     file: `voice/${line.id}.wav`,
     voice: line.voice,
     say: line.say,
+    ...(line.language ? { language: line.language } : {}),
     duration: Math.round(dur * 1000) / 1000,
     frames: Math.ceil(dur * FPS),
     ...tm,
@@ -738,10 +802,17 @@ if (OUT_DIR || argv.includes('--preview')) {
   for (const x of all) { buf.set(x, o); o += x.length; }
   writeWav(path.join(OUT_DIR ?? path.join(ROOT, 'out'), 'preview.wav'), buf, sr);
 }
+let written = result;
+if (ONLY) {
+  // merge: the existing entries keep their exact JSON (and position); new ids are appended
+  const src = readFileSync(TS_OUT, 'utf8');
+  const prev = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(' as const')));
+  written = { ...prev, lines: { ...prev.lines, ...result.lines } };
+}
 writeFileSync(
   OUT_DIR ? path.join(OUT_DIR, 'voice.generated.ts') : TS_OUT,
   '/* GENERATED by scripts/generate-voice.mjs — do not edit. Re-run `npm run voice`. */\n' +
-    `export const VOICE = ${JSON.stringify(result)} as const;\n` +
+    `export const VOICE = ${JSON.stringify(written)} as const;\n` +
     'export type VoiceId = keyof typeof VOICE.lines;\n',
 );
-console.log(`[voice] ${cfg.lines.length} lines → public/voice + src/voice.generated.ts in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+console.log(`[voice] ${LINES.length} lines${ONLY ? ' (merged)' : ''} → public/voice + src/voice.generated.ts in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
