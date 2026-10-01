@@ -73,7 +73,7 @@ const KB_CLOSE = upHalf(KB_ANSWER + vFrames('kb-2') + 10); // the last caption g
 /* SCALE (≈ 16 s): every business, every language, every system — each with room to read
  * (client: "16 industries, 14 languages, CRM — it all goes too fast"). Scale-local frames. */
 const SC_HERO = b(6); // the 16-card wall builds over 3 s (8ths, then 16ths into the slam): "16 industries."
-const SC_LANGS = SC_HERO + b(2); // the hero holds 1 s; "14 languages." lands
+const SC_LANGS = SC_HERO + b(4); // "16 industries." holds ~2 s (client: too fast); "14 languages." lands
 /** Ava greets in six languages: English whole, then RO / ES / FR / DE each for ~0.75 s (the next
  *  voice cuts in on the name), Japanese whole. LANG_AT are scale-local starts.
  *  (integration: Romanian cuts in on the half-beat English lets go on, and German — whose name comes
@@ -83,7 +83,7 @@ const SC_LANGS = SC_HERO + b(2); // the hero holds 1 s; "14 languages." lands
  *  and the flow / SCALE_LEN / CTA / DURATION are unchanged.) */
 const LANG_IDS = ['lang-en', 'lang-ro', 'lang-es', 'lang-fr', 'lang-de', 'lang-ja'] as const satisfies readonly VoiceId[];
 /** each quick language's hold, in half-beats (RO · ES · FR · DE) */
-const LANG_HOLD = [3, 3, 3, 5] as const;
+const LANG_HOLD = [4, 4, 4, 5] as const; // RO / ES / FR 1 s each, DE 1.25 s — read, not strobed
 const LANG_AT: number[] = [];
 {
   LANG_AT.push(SC_LANGS + 4);
@@ -95,9 +95,9 @@ const LANG_AT: number[] = [];
   LANG_AT.push(Math.floor(t));
 }
 const SC_FLOW = upBeat(LANG_AT[5] + vFrames('lang-ja') + 6); // "After the call." — call → Slack → CRM
-const SCALE_LEN = SC_FLOW + b(5) + b(1); // the flow reads for 2.5 s, then the iris
-/** The knowledge closing title holds 3 beats before its 1-beat whip. */
-const KB_BASE = upBeat(KB_CLOSE + b(4));
+const SCALE_LEN = SC_FLOW + b(8) + b(1); // the flow reads for 4 s (one station per 2 beats + a hold), then the iris
+/** The knowledge closing title holds 4 beats before its 1-beat whip (it must be read whole). */
+const KB_BASE = upBeat(KB_CLOSE + b(5));
 /** CTA: Ava's line; the four orbs are pulled in as her line ends ("…seven.")
  *  and the logo lands on a strong beat (1 or 3 of the bar). */
 const CTA_LINE = b(1);
@@ -320,7 +320,7 @@ export const SCALE = {
   langVoices: LANG_IDS,
   langStep: BEAT / 4, // (legacy: one per 16th — superseded by langAt)
   flow: SC_FLOW, // "After the call." — call → Slack → CRM
-  stationStep: BEAT, // one station per beat
+  stationStep: b(2), // one station per 2 beats — each is read (client: the CRM part was too fast)
   irisToDark: [SCALE_LEN - b(0.5), SCALE_LEN + 8] as const,
 };
 
