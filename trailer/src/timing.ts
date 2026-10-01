@@ -1082,9 +1082,13 @@ const H = (scene: SceneKey, local: number, snd: Snd, light: Light, x: Pan, w: We
 });
 const chime = (l: Exclude<Light, 'none'>, soft = false) => `chime-${l}${soft ? '-soft' : ''}` as Snd;
 /** The industry wall's lights, card by card (scale.tsx). */
-const WALL: Exclude<Light, 'none'>[] = ['rush', 'rush', 'rush', 'rush', 'closing', 'closing', 'sunday', 'sunday', 'night', 'closing', 'closing', 'night', 'sunday', 'sunday', 'night', 'night'];
+const WALL: Exclude<Light, 'none'>[] = [...SCALE_LOCAL.wallLight];
+/** the rush wall's ticks climb a step every quarter note (E · G# · B · E' over the rush's E): the build into the slam */
+const WALL_SEMI = Array.from({ length: 16 }, (_, i) => [0, 4, 7, 12][Math.min(3, Math.floor(i / 4))]);
 const WALL_X = [0.5, 0.74, 0.26, 0.74, 0.81, 0.82, 0.18, 0.5, 0.62, 0.87, 0.87, 0.87, 0.12, 0.37, 0.62, 0.87];
-const LANGS: Exclude<Light, 'none'>[] = ['rush', 'closing', 'sunday', 'night', 'rush', 'closing'];
+/** the six greetings are all in the closing light (SCALE_LOCAL.langLight); their chimes walk G# B C# | E G# B */
+const LANGS: Exclude<Light, 'none'>[] = Array.from({ length: 6 }, () => SCALE_LOCAL.langLight);
+const LANG_SEMI = [0, 3, 5, -4, 0, 3];
 const LANG_X = [0.17, 0.5, 0.83, 0.16, 0.5, 0.84];
 const LANG_ORB_X = [0.3, 0.63, 0.96, 0.3, 0.63, 0.96];
 /** the five documents' notes: an E-major pentatonic run (E F# G# B C#) */
@@ -1276,21 +1280,27 @@ export const HITS: Hit[] = [
   // card 01's pre-roll breath (scale.from − preroll) is the whip's tail
   H('scale', SCALE_LOCAL.pops[0], 'pop', 'rush', 0.5, 1, 'card 01 pops (rush)'),
   H('scale', SCALE_LOCAL.camSteps[0][1] - 1, 'swish', 'none', 0.5, 3, 'the camera peels back'),
-  ...SCALE_LOCAL.pops.slice(1).map((f, i) => H('scale', f, 'tick', WALL[i + 1], WALL_X[i + 1], 2, `industry ${i + 2} pops (${WALL[i + 1]})`)),
+  H('scale', SCALE_LOCAL.pops[0], chime('rush'), 'rush', 0.5, 2, 'LIGHT: rush — the rose room breathes in (the rush act)'),
+  ...SCALE_LOCAL.pops.slice(1).map((f, i) => H('scale', f, 'tick', WALL[i + 1], WALL_X[i + 1], 2, `industry ${i + 2} pops (${WALL[i + 1]})`, { semi: WALL_SEMI[i + 1] })),
   H('scale', SCALE_LOCAL.camSteps[1][1], 'whoosh-soft', 'none', 0.5, 2, 'snap-zoom 2×2 → 3×3'),
   H('scale', SCALE_LOCAL.beats[0], 'thump', 'none', 0.5, 1, 'quarter: the wall pulses'),
   H('scale', SCALE_LOCAL.camSteps[2][1], 'whoosh-soft', 'none', 0.5, 2, 'snap-zoom → the full wall'),
   H('scale', SCALE_LOCAL.beats[1], 'thump', 'none', 0.5, 1, 'quarter: the wall pulses'),
   H('scale', SCALE_LOCAL.beats[2], 'thump', 'none', 0.5, 1, 'quarter: punch-in kick'),
   H('scale', SCALE.industriesTitle, 'slam', 'none', 0.5, 1, '“16 industries.” SLAMS'),
-  H('scale', SCALE.industriesTitle, 'strum', 'none', 0.5, 2, 'all 16 discs light in the four lights'),
+  H('scale', SCALE.industriesTitle, 'strum', 'rush', 0.5, 2, 'all 16 discs lock in the rush light'),
   H('scale', SCALE.industriesTitle, 'key', 'none', 0.5, 3, '13 letters stamp in', { run: { n: 13, step: 0.6 } }),
   H('scale', SCALE_LOCAL.flyOut + 4, 'whoosh-soft', 'none', 0.5, 2, 'ten cards peel off outwards', { split: true }),
   H('scale', SCALE_LOCAL.glide, 'swish', 'none', 0.5, 3, 'keepers glide into the grid'),
   // each language: the flip, its orb's chime (its greeting lands), then its AI underline —
   // which falls on the NEXT flip (a 16th later), so all but the last ride inside that flip
   ...SCALE_LOCAL.langs.map((f, i) => H('scale', f, 'flip', LANGS[i], LANG_X[i], 2, `flips to language ${i + 1}`, i === 0 ? { db: -3 } : {})),
-  ...SCALE_LOCAL.orbPulse.map((f, i) => H('scale', f, chime(LANGS[i], true), LANGS[i], LANG_ORB_X[i], 3, `greeting ${i + 1} lands (LIGHT: ${LANGS[i]})`)),
+  // the first greeting lands as the closing light floods the room (SCALE_LOCAL.lightTurn): its chime is the act's light change
+  ...SCALE_LOCAL.orbPulse.map((f, i) =>
+    i === 0
+      ? H('scale', f, chime(LANGS[0]), LANGS[0], LANG_ORB_X[0], 2, 'greeting 1 lands — LIGHT: closing floods the room')
+      : H('scale', f, chime(LANGS[i], true), LANGS[i], LANG_ORB_X[i], 3, `greeting ${i + 1} lands (closing)`, { semi: LANG_SEMI[i] }),
+  ),
   H('scale', SCALE_LOCAL.disclose[5][0], 'swish', 'none', 0.8, 3, 'underline under AIアシスタント'),
   H('scale', SCALE_LOCAL.titleSwap + 2, 'whoosh-soft', 'none', [0.5, 0.3], 2, '“16 industries.” → “14 languages.”'),
   H('scale', SCALE_LOCAL.collapse + 3, 'whoosh-soft', 'none', [0.6, 0.3], 2, 'the cells collapse into the deck'),
@@ -1490,7 +1500,6 @@ export const BED = { file: sfx('bed.wav'), vol: 1 };
  * `fadeOut`: the whole mix fades from one beat into the end card's still hold to the last frame,
  * exponentially (`fadeK` nepers over the fade, offset to land on true zero), so the impact's
  * room and the chord's ring resolve into silence (check-mix: last 100 ms < −55 dBFS RMS).
- * `impactLead`: the logo impact's momentary loudness must beat the loudest dialogue by this (LU).
  * `dialogueLufs` ± `dialogueTol`: every line in the dialogue stem (the files are at −23 LUFS mono,
  * scripts/voice-lines.json level.lufs; dual-mono in the stereo bus that reads +3 LU).
  */
@@ -1500,7 +1509,13 @@ export const MIX = {
   ceiling: -1.5,
   fadeOut: [SCENES.cta.from + CTA.finalHold + b(1), DURATION] as const,
   fadeK: 4.6,
-  impactLead: 1,
+  /**
+   * The logo impact is the film's loudest moment: the effects bus rides up `rideDb` from
+   * `hold[0]` to `hold[1]` frames around the hit (back to unity by `release`, before the name at
+   * CTA.brandVoice) into the bus's true-peak limiter at `ceil` dBTP (after the master gain).
+   * check-mix: the momentary loudness (400 ms) from the hit beats the loudest dialogue by `lead` LU.
+   */
+  impact: { at: SCENES.cta.from + CTA.logoImpact, rideDb: 3, hold: [0, 5], release: 9, ceil: -2.5, lead: 1 },
   dialogueLufs: -20,
   dialogueTol: 0.5,
 } as const;

@@ -10,6 +10,8 @@
  *                  room (the dark night room or the short bright white-act room) and the
  *                  bells to a dotted-8th ping-pong; the effects lose DUCK.sfxEqDb in the
  *                  speech band under the voice too (keys keep their weight, words stay clear)
+ *   the impact     the effects bus rides up across the logo impact into its own true-peak
+ *                  limiter (MIX.impact): the climax is the loudest moment, the name stays clean
  *   master         an exponential fade over the end card's last second (MIX.fadeOut), a gain
  *                  to MIX.lufs integrated, then a 4×-oversampled look-ahead true-peak
  *                  limiter at MIX.ceiling dBTP
@@ -189,7 +191,31 @@ export function master(T, lib, bedSt, { publicDir }) {
       for (let i = 0; i < n; i++) sfx[c][i] += tails[c][i] * (1 - dT * act[i]) + tonal[c][i] * (1 - dB * act[i]) + keyTonal[c][i] * (1 - dK * act[i]);
     }
   }
-  const fx = dynamicEq([sfx[0].subarray(0, n), sfx[1].subarray(0, n)], act, T.DUCK.sfxEqDb, 2400, 0.6);
+  const fxEq = dynamicEq([sfx[0].subarray(0, n), sfx[1].subarray(0, n)], act, T.DUCK.sfxEqDb, 2400, 0.6);
+
+  /* ── the logo impact: the film's loudest moment ──
+   * The effects bus rides up MIX.impact.rideDb across the hit (held a few frames, back to unity
+   * before Ava says the name) into the bus's own look-ahead true-peak limiter at MIX.impact.ceil
+   * dBTP (after the master gain): the stacked hit (impact + chord + shock + the build's last
+   * peak) gets dense instead of peaky, and the master limiter no longer pumps the name under it.
+   * (The bus limiter guards every other big hit of the film the same way.) */
+  const I = T.MIX.impact;
+  const ride = new Float32Array(n).fill(1);
+  {
+    const up = gain(I.rideDb);
+    const a0 = I.at + I.hold[0] - 0.5;
+    const a1 = I.at + I.hold[0];
+    const e0 = I.at + I.hold[1];
+    const e1 = I.at + I.release;
+    for (let i = frameS(a0); i < Math.min(n, frameS(e1)); i++) {
+      const f = (i / SR) * F;
+      const u = f < a1 ? smooth((f - a0) / (a1 - a0)) : f <= e0 ? 1 : 1 - smooth((f - e0) / (e1 - e0));
+      ride[i] = 1 + (up - 1) * u;
+    }
+  }
+  const rode = fxEq.map((c) => Float32Array.from(c, (x, i) => x * ride[i]));
+  const g0 = T.MIX.lufs - lufs([0, 1].map((c) => Float32Array.from(vox[c], (x, i) => x + bed[c][i] + rode[c][i])));
+  const fx = limit(rode, { ceilingDb: I.ceil - g0, look: 0.0015, rel: 0.05, relSlow: 0.25 });
 
   /* ── master ── */
   const sum = [new Float32Array(n), new Float32Array(n)];
@@ -235,6 +261,7 @@ export function master(T, lib, bedSt, { publicDir }) {
     voiceLufsIn: vBefore,
     dialogueMakeupDb: vBefore - vAfter,
     lineMakeupDb: lineDb,
+    fxBusLimiterMaxGrDb: fx.maxReductionDb,
     preLufs: pre,
     masterGainDb: g,
     limiterMaxGrDb: out.maxReductionDb,
@@ -243,5 +270,5 @@ export function master(T, lib, bedSt, { publicDir }) {
     samplePeakDb: db(peak(out)),
     bedPeakDb: db(peak(bedSt)),
   };
-  return { mix: [out[0], out[1]], stems: { voice: vox, bed, sfx: fx }, report, gainDb: g };
+  return { mix: [out[0], out[1]], stems: { voice: vox, bed, sfx: [fx[0], fx[1]] }, report, gainDb: g };
 }

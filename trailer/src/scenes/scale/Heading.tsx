@@ -4,8 +4,8 @@
  *
  *   hero     "16 industries." SLAMS centred on the wall on the downbeat the
  *            16-pop run resolves to (hit.wav): letters 1.75 → 1 on a 12 %-
- *            overshoot spring, 0.6 f apart, "16" in the night's ink (the
- *            hour the wall ends on) with a glint across it, velocity blur
+ *            overshoot spring, 0.6 f apart, "16" in the hero light's ink (the
+ *            rush: the wall's own light) with a glint across it, velocity blur
  *   swap     WITH the fly-out the slot lifts to the top band (2 f dip,
  *            small overshoot, shutter blur) — out of the cell band before any
  *            cell turns
@@ -157,7 +157,7 @@ export const Titles: React.FC<{
     </div>
   );
 
-  // A: the slam (letters), "16" in the night's ink with a glint as the slam settles
+  // A: the slam (letters), "16" in the hero light's ink (the rush) with a glint as the slam settles
   let k = 0;
   const glintA = tween(t, [T.hero + 3, T.hero + 13], [0, 1], EASE.inOut);
   const heroText = Array.from(HERO).map((ch, i) => {

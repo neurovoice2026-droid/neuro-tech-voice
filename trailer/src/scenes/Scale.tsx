@@ -1,23 +1,24 @@
 /**
  * SCALE — the white act montage (scale-local frames; every value from
  * SCALE / SCALE_LOCAL in timing.ts). 24/7 = every hour has its own light,
- * and ONE light leads at a time (scale/lights.ts).
+ * and ONE light leads at a time (scale/lights.ts): after the night (hook →
+ * result) and Sunday (knowledge), this act gives the RUSH the wall and JUST
+ * AFTER CLOSING the languages and the flow — so the CTA gathers four lights
+ * the film has each shown owning an hour.
  *
  *   t −3       out of the knowledge whip's clean white: card 01 fills the
  *              frame (≈ 3.9×), mid-pop, carrying the whip's momentum
  *   t 0…56     16 industries, one per 16th: every pop is a hit — opaque on
  *              its tick, .55 → .96 → 1.10 → 1 spring, ±4° and +30 px settle,
  *              a 6 px shutter blur on the attack frame; its icon disc lights
- *              in the quarter's light (rush → closing → Sunday → night: the
- *              hour turns on each quarter note) with a flash pool, ripple and
- *              sparks, then settles to a neutral pearl disc — white cards, ink
- *              labels, the newest pop glows, the wall stays calm. On each
- *              quarter the cards already up pulse once, as a soft wave, in the
- *              NEW hour's light. The camera frames the block being filled —
+ *              in the rush light (rose, on the rush ground) with a flash pool,
+ *              ripple and sparks, then settles to a neutral pearl disc — white
+ *              cards, ink labels, the newest pop glows, the wall stays calm. On
+ *              each quarter the cards already up pulse once, as a soft wave. The camera frames the block being filled —
  *              card 01 → 2 × 2 → 3 × 3 → the whole wall — and kicks on the grid
  *   t 60       "16 industries." SLAMS (hit.wav): +2.5 % kick, the 16 discs
- *              lock in the night's light as a strum out from the title, a 2 f
- *              wash, the wall dims to 40 % + 8 px blur
+ *              lock in the rush light as a strum out from the title ("16" in
+ *              the rush ink), a 2 f wash, the wall dims to 40 % + 8 px blur
  *   t 66       thirteen cards peel off; three keepers glide into three big
  *              cells — and the title lifts to the top band WITH them, out of
  *              the cell band before any cell turns
@@ -25,7 +26,9 @@
  *              blur) to EN / RO / ES on its 16th; t 90/94/98 page 2: each flips
  *              again, one beat later, to FR / DE / JA. The whole greeting at
  *              84 px (16:9) / 80 px (9:16), its AI disclosure underlined, the
- *              cell's orb in the closing light
+ *              cell's orb in the closing light. The room turns with them
+ *              (SCALE_LOCAL.lightTurn 68 → 82): the rose drains to white stock
+ *              and the closing ground floods in as English lands
  *   t 76…83    "16 industries." exits up out of its mask (2 f dip, 4 f exit,
  *              ghost blur); "14 languages." rises into it 1 f after
  *   t 109…116  "14 languages." exits the same way; the two other cells
@@ -37,8 +40,9 @@
  *              stage (not the heading) pushes in 4 % about FLOW_END for the
  *              CTA's iris
  *
- * Planes: white room + one bloom of the leading light 0.4 · the wall / cells /
- * flow 1.0 (+ titles) · out-of-focus discs in the leading light 1.6.
+ * Planes: the act's ground (screen space) · one bloom of the leading light
+ * 0.4 · the wall / cells / flow 1.0 (+ titles) · out-of-focus discs in the
+ * leading light 1.6.
  */
 import React from 'react';
 import { AbsoluteFill, random } from 'remotion';
@@ -431,7 +435,7 @@ export const Scale: React.FC = () => {
       {/* the quarter kicks' roll, about the screen centre (every plane alike) */}
       <AbsoluteFill style={{ transform: cp.rot ? `rotate(${cp.rot.toFixed(4)}deg)` : undefined }}>
       <Camera x={cp.x} y={cp.y} zoom={cp.zoom}>
-        {/* 0.4 · the lilac wash + blooms */}
+        {/* 0.4 · the leading light's bloom + room shading */}
         <Layer depth={0.4}>
           <Backdrop t={t} L={L} />
         </Layer>
@@ -454,7 +458,7 @@ export const Scale: React.FC = () => {
           />
         </Layer>
 
-        {/* 1.6 · out-of-focus lilac discs, nearest the lens */}
+        {/* 1.6 · out-of-focus discs in the leading light, nearest the lens */}
         <Layer depth={1.6}>
           {leadColors(t, 2).map((c, ci) => (
             <NearDiscs key={ci} t={t} L={L} fade={c.w * tween(t, [0, 10], [0, 1], EASE.out3)} color={c.col} />
@@ -463,7 +467,7 @@ export const Scale: React.FC = () => {
       </Camera>
       </AbsoluteFill>
 
-      {/* the hero hit: a 2 f lilac wash over everything */}
+      {/* the hero hit: a 2 f wash of the rush light over everything */}
       {wash > 0 ? <AbsoluteFill style={{ background: rgba(tintOf(HERO_LIGHT), wash) }} /> : null}
     </AbsoluteFill>
   );
