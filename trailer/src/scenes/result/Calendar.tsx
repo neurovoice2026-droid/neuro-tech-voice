@@ -1,6 +1,6 @@
 /**
  * The owner's calendar, as a site-style stage on the night room: radius 28,
- * the cover panel at 92 %, white/.08 hairlines, uppercase tracked day labels
+ * the cover panel (opaque), white/.08 hairlines, uppercase tracked day labels
  * (WED lit), Geist Mono hours, three muted plain bookings (6 % paper, no
  * borders), and the site's dashed empty slot at WED 15:00 — until the card
  * lands in it and becomes the event: solid ember, white "15:00".
@@ -28,6 +28,10 @@ import { eventFill, EventFace, hexA } from './Event';
 import { BOOKINGS, CAL, DAYS, HOURS, SLOT, mapX, mapY, type CalMap, type Geo, type Rect } from './geometry';
 
 const LINE = 'rgba(255,255,255,0.08)';
+/** the night light (#demo's 3 a.m. orb mid-tone) for the card's rim */
+const NIGHT_RIM = '#7c3aed';
+/** the event's bloom reach on screen (px beyond the chip's edge) — ember stays a mark + its light */
+const BLOOM_REACH = 118;
 /** the closing light's green, on the dark (the confirmation accent) */
 const SETTLED = '#7ee2a8';
 /** the check's spring: a small chip, ~12 % overshoot, first crossing ≈ 3.6 f */
@@ -230,7 +234,8 @@ export const Calendar: React.FC<{
             position: 'absolute',
             inset: 0,
             borderRadius: map.radius,
-            background: `linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0) 30%), rgba(36,33,44,0.93)`,
+            // opaque cover panel: nothing of the room transmits through the card (no mud under it)
+            background: `linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0) 30%), ${C.panel}`,
             boxShadow: [
               '0 0 0 1px rgba(255,255,255,0.07)',
               'inset 0 1px 0 rgba(255,255,255,0.07)',
@@ -240,8 +245,8 @@ export const Calendar: React.FC<{
                 : [
                     `0 ${(40 * sAvg).toFixed(1)}px ${(80 * sAvg).toFixed(1)}px ${(-30 * sAvg).toFixed(1)}px rgba(0,0,0,0.8)`,
                     `0 ${(12 * sAvg).toFixed(1)}px ${(24 * sAvg).toFixed(1)}px ${(-12 * sAvg).toFixed(1)}px rgba(0,0,0,0.6)`,
-                    // the event's light, spilling round the card's rim once it is in its half
-                    `0 0 ${(90 * rr).toFixed(1)}px ${(-10 * rr).toFixed(1)}px ${hexA(C.ember, 0.16 * rr * look.breath)}`,
+                    // the night light rims the card once it is in its half (cool: ember stays on the event)
+                    `0 0 ${(90 * rr).toFixed(1)}px ${(-10 * rr).toFixed(1)}px ${hexA(NIGHT_RIM, 0.2 * rr)}`,
                   ]),
             ].join(', '),
           }}
@@ -360,16 +365,24 @@ export const Calendar: React.FC<{
               );
             })}
 
-            {/* the warm light the event throws on the sheet */}
+            {/* the event's bloom: light ADDED round the chip (screen blend), ≤ BLOOM_REACH screen px
+                beyond its edge whatever the zoom — a hot inner rim + a soft falloff, no wash on the sheet */}
             {warmGlow > 0.01 ? (
               <div
                 style={{
                   position: 'absolute',
-                  left: evC.x - 280 * sAvg,
-                  top: evC.y - 200 * sAvg,
-                  width: 560 * sAvg,
-                  height: 400 * sAvg,
-                  background: `radial-gradient(closest-side, ${hexA(C.ember, 0.22 * warmGlow * look.breath)}, ${hexA(C.ember, 0)})`,
+                  left: ev.x,
+                  top: ev.y,
+                  width: ev.w,
+                  height: ev.h,
+                  borderRadius: evRadius,
+                  transform: `scale(${look.sx.toFixed(4)}, ${look.sy.toFixed(4)})`,
+                  transformOrigin: '50% 60%',
+                  mixBlendMode: 'screen',
+                  boxShadow: [
+                    `0 0 ${(26 / camZ).toFixed(2)}px ${(3 / camZ).toFixed(2)}px ${hexA(C.emberLit, 0.3 * warmGlow * look.breath)}`,
+                    `0 0 ${((BLOOM_REACH - 14) / camZ).toFixed(2)}px ${(14 / camZ).toFixed(2)}px ${hexA(C.ember, 0.34 * warmGlow * look.breath)}`,
+                  ].join(', '),
                 }}
               />
             ) : null}

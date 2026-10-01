@@ -18,7 +18,10 @@
  *   t 36–51  the camera leans in (3 f), then peels back out over 6 f while the
  *            sheet crops into its card window (TUE–THU × 12–18 / 13–17),
  *            overshoots 2.5 % and settles; a zoom smear on the fast frames
- *   t 41–49  the seam draws (lilac → ember) and the night falls in behind it
+ *   t 41–49  the seam draws (lilac → ember) and the night falls in behind it;
+ *            the Booked half grades into its own night-violet ground (#1f1860 →
+ *            #110c38, the night light behind the card). Ember is the event, its
+ *            ≤ 118 px bloom and the word's glow only — never a wash on a half
  *   t 45     "Asleep." locks (left / top): the night half kicks 1.2 %
  *   t 49     the moon locks; stars twinkle in on 16ths / 8ths (53 56 68 71)
  *   t 60     "Booked." locks (right / bottom): the Booked half kicks 1.2 %
@@ -53,7 +56,7 @@ import { geo, layerCss, mapRect, planeToScreen, SLOT, worldToScreen, type Cam, t
 import { cssFont, measure, useFontsReady, type FontSpec } from './result/measure';
 import { calMapAt, camsAt, cardAt, eventWorldAt, type MarkMetrics } from './result/motion';
 import { Discs, Motes } from './result/Motes';
-import { Divider, LetterRise, Moon, NightGrade, Stars } from './result/Split';
+import { BookedGround, Divider, LetterRise, Moon, NightGrade, Stars } from './result/Split';
 import { MIDNIGHT_ROOM, MidnightVignette } from './call/Light';
 
 export type ResultTiming = typeof RESULT_LOCAL;
@@ -154,6 +157,8 @@ export const Result: React.FC = () => {
   const dim = 0.1 * tween(t, T.hold, [0, 1], EASE.inOut);
   /** the Booked half's light swells as its word lands (and settles on its own) */
   const bookedFlash = t >= RESULT.bookedWord ? Math.exp(-(t - RESULT.bookedWord) / 7) : 0;
+  /** the Booked half's own ground (the night stage's mid range) grades in behind the seam's bead */
+  const bookedGround = tween(t, [T.divider + 1, T.splitGrade[1]], [0, 1], EASE.inOut);
 
   /* ── smear: the recompose's peel and the dive stream the world out of the event ── */
   const diving = t >= T.dive[0] && cams.dive.k > 0.02;
@@ -175,37 +180,8 @@ export const Result: React.FC = () => {
   const world = (tt: number, key: string, op = 1) => {
     const c = key === 'world' ? cams : camsAt(tt, G, L, T);
     const m = key === 'world' ? map : calMapAt(tt, G, T);
-    const ev = eventWorldAt(tt, G, T);
-    const warm = tt >= RESULT.land ? tween(tt, [RESULT.land, RESULT.land + 14], [0, 1], EASE.out3) : 0;
-    const Bc = { x: G.crop.card.x + G.crop.card.w / 2, y: G.crop.card.y + G.crop.card.h / 2 };
     return (
       <AbsoluteFill key={key} style={{ transform: layerCss(c.world, 1), opacity: op }}>
-        {warm > 0 ? (
-          <div
-            style={{
-              position: 'absolute',
-              left: ev.x - L.pick(700, 640),
-              top: ev.y - L.pick(560, 520),
-              width: L.pick(1400, 1280),
-              height: L.pick(1120, 1040),
-              background: `radial-gradient(closest-side, ${hexA(C.ember, 0.17 * warm)}, ${hexA(C.ember, 0.06 * warm)} 55%, ${hexA(C.ember, 0)})`,
-            }}
-          />
-        ) : null}
-        {/* the Booked half's grade: the room warmed by an ember pool under the card */}
-        {splitIn > 0 ? (
-          <div
-            style={{
-              position: 'absolute',
-              left: Bc.x - L.pick(820, 760),
-              top: Bc.y - L.pick(700, 560),
-              width: L.pick(1640, 1520),
-              height: L.pick(1400, 1120),
-              opacity: splitIn * (1 + 0.35 * bookedFlash),
-              background: `radial-gradient(closest-side, rgba(238,84,35,${(0.18 * look.breath).toFixed(3)}), rgba(238,84,35,0.1) 50%, rgba(238,84,35,0.045) 80%, rgba(238,84,35,0))`,
-            }}
-          />
-        ) : null}
         <Calendar
           t={tt}
           G={G}
@@ -263,17 +239,6 @@ export const Result: React.FC = () => {
         <div
           style={{
             position: 'absolute',
-            left: G.bookedWord.cx - G.word * 2.6,
-            top: G.bookedWord.base - G.word * 1.05,
-            width: G.word * 5.2,
-            height: G.word * 1.5,
-            background: `radial-gradient(closest-side, ${hexA(C.ember, 0.2)}, ${hexA(C.ember, 0)})`,
-            opacity: tween(t, [RESULT.bookedWord - 3, RESULT.bookedWord + 12], [0, 1], EASE.out3) * (0.9 + 0.1 * look.breath),
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
             left: G.bookedWord.cx,
             top: G.bookedWord.base - wordBase,
             transform: 'translateX(-50%)',
@@ -288,7 +253,7 @@ export const Result: React.FC = () => {
             color={C.emberLit}
             stagger={T.letterStagger}
             glow={C.ember}
-            glowRest={0.3}
+            glowRest={0.35}
             glowScale={glowScale * (op < 1 ? 0 : 1)}
             sheen="#fff3e8"
           />
@@ -409,6 +374,24 @@ export const Result: React.FC = () => {
         />
       </AbsoluteFill>
 
+      {/* ── 0.15 · the BOOKED half's ground: night violet, lit from behind the card (no ember wash) ── */}
+      {bookedGround > 0.001 ? (
+        <AbsoluteFill style={{ clipPath: bookedClip, opacity: bookedGround, WebkitMaskImage: wipe, maskImage: wipe }}>
+          <AbsoluteFill style={{ transform: layerCss(cams.booked, 0.15) }}>
+            <BookedGround
+              x={sbs ? G.seam - 140 : -140}
+              y={sbs ? -140 : G.seam - 140}
+              w={sbs ? L.width - G.seam + 280 : L.width + 280}
+              h={sbs ? L.height + 280 : L.height - G.seam + 280}
+              cx={G.booked.x}
+              cy={sbs ? 470 : 1300}
+              vertical={L.vertical}
+              light={look.breath * (1 + 0.45 * bookedFlash)}
+            />
+          </AbsoluteFill>
+        </AbsoluteFill>
+      ) : null}
+
       {/* ── 0.5 · far discs on the Booked half (the night plate covers the other side) ── */}
       <AbsoluteFill style={{ clipPath: bookedClip }}>
         <Discs
@@ -416,7 +399,7 @@ export const Result: React.FC = () => {
           cams={nearCams}
           L={L}
           depth={0.5}
-          colors={['185,163,255', '238,84,35']}
+          colors={['185,163,255', '139,92,246']}
           opacity={discs}
           t={t}
           soft={0.9}
@@ -443,7 +426,7 @@ export const Result: React.FC = () => {
             cams={nearCams}
             L={L}
             depth={0.5}
-            colors={['150,140,230', '238,84,35']}
+            colors={['150,140,230', '139,92,246']}
             opacity={discs}
             t={t}
             soft={0.9}
@@ -493,8 +476,8 @@ export const Result: React.FC = () => {
             height={L.height}
             count={14}
             seed="result-warm"
-            color="255,184,119"
-            opacity={0.5}
+            color="214,200,255"
+            opacity={0.42}
             vy={-0.95}
             keep={(x, y) => (isNight(x, y) ? 0 : 1)}
           />
@@ -508,7 +491,7 @@ export const Result: React.FC = () => {
               cams={nearCams}
               L={L}
               depth={1.6}
-              colors={['185,163,255', '238,84,35']}
+              colors={['185,163,255', '196,168,255']}
               opacity={discs}
               t={t}
             />
@@ -519,7 +502,7 @@ export const Result: React.FC = () => {
               cams={nearCams}
               L={L}
               depth={1.6}
-              colors={['185,163,255', '255,122,72']}
+              colors={['185,163,255', '196,168,255']}
               opacity={discs}
               t={t}
             />

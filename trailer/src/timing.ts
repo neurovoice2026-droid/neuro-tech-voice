@@ -1321,17 +1321,11 @@ export const HITS: Hit[] = [
   H('cta', CTA.logoImpact, 'impact', 'night', 0.5, 1, 'LOGO IMPACT'),
   H('cta', CTA.logoImpact, 'chord', 'night', 0.5, 1, 'THE FOUR LIGHTS ring together'),
   H('cta', CTA_LOCAL.ring[0], 'shock', 'none', 0.5, 2, 'the shockwave ring sweeps past', { layer: true }),
-  H('cta', CTA_LOCAL.rimIn[0], 'shimmer', 'none', 0.5, 3, 'a rim of the four lights'),
   H('cta', CTA.button, 'pop', 'night', 0.5, 3, '“Start free →” pops with the logo (folded into the impact)'),
-  H('cta', CTA.button + 1, 'sheen', 'none', [0.4, 0.6], 3, 'glint across the plate'),
   H('cta', CTA.note, 'tap', 'none', 0.5, 3, '“5 free minutes, no card”', { db: -4 }),
-  // the URL types on her words ("neuro" | "tech" | "voice.com"): soft keys under the name
-  ...CTA_LOCAL.urlAt.map((f, k) =>
-    H('cta', f, 'key', 'none', 0.5, 3, `“${['neuro', 'tech', 'voice.com'][k]}” types on “${['Neuro', 'Tech', 'Voice.'][k]}”`, {
-      run: { n: (CTA_LOCAL.urlChunks[k + 1] ?? 18) - CTA_LOCAL.urlChunks[k], step: CTA_LOCAL.urlStep },
-      db: -6,
-    }),
-  ),
+  // (the URL types ON her words — "neuro" | "tech" | "voice.com" at CTA_LOCAL.urlAt — and makes
+  // no sound of its own: her voice is its sound, so nothing sits on the name; likewise the
+  // four-light rim (rimIn) and the plate's glint ride the impact's chord, unvoiced)
   H('cta', CTA.press, 'click', 'night', 0.5, 1, 'the button is clicked'),
   H('cta', CTA.press + CTA_LOCAL.pressDown, 'tap', 'night', 0.5, 3, 'the plate springs back'),
 ];

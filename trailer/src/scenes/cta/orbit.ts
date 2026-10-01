@@ -34,7 +34,17 @@ export const brandEnv = (t: number) => envAt(CTA.brandVoiceId, CTA.brandVoice, t
 
 /** radii, ring centre drop below the eyes, tilt (rad), orb diameter, how far the three kicks tighten it
  *  (1 = to .66), and how much lower the ring's centre sits in the formation */
-export type Orbit = { rx: number; ry: number; drop: number; tilt: number; d: number; tight: number; formDrop: number };
+export type Orbit = {
+  rx: number;
+  ry: number;
+  drop: number;
+  tilt: number;
+  d: number;
+  tight: number;
+  formDrop: number;
+  /** where each light pops on the ring (θ), so every pop is in view (default POP_PHASE) */
+  phase?: readonly number[];
+};
 
 /** an orb pop: ≈15 % overshoot, settled in ~12 f */
 export const ORB_POP = { stiffness: 340, damping: 18, mass: 0.9 };
@@ -109,12 +119,12 @@ export function radiusAt(t: number, tight = 1) {
  * no two ever cross) by formAt; in the converge the slots fan into four arms
  * that whirl with Θ.
  */
-export function anglesAt(t: number, spin: (tt: number) => number) {
-  const free = LIGHT_ORDER.map((_, i) => POP_PHASE[i] - spin(K.orbPops[i]) + spin(t));
+export function anglesAt(t: number, spin: (tt: number) => number, phase: readonly number[] = POP_PHASE) {
+  const free = LIGHT_ORDER.map((_, i) => phase[i] - spin(K.orbPops[i]) + spin(t));
   const g = formAt(t); // (the word kicks overshoot the row a little, then settle)
   if (g <= 0) return free;
   const tr = FORM_REF();
-  const ref = LIGHT_ORDER.map((_, i) => POP_PHASE[i] - spin(K.orbPops[i]) + spin(tr));
+  const ref = LIGHT_ORDER.map((_, i) => phase[i] - spin(K.orbPops[i]) + spin(tr));
   const rank = ref.map((a, i) => ({ a: wrap(a), i })).sort((p, q) => p.a - q.a);
   const slotOf: number[] = [];
   rank.forEach((r, k) => (slotOf[r.i] = k));
@@ -152,7 +162,7 @@ export function orbsAt(t: number, G: { P: { x: number; y: number }; orbit: Orbit
   const squeeze = 1 - 0.14 * tween(t, [CTA.logoImpact - 4, CTA.logoImpact], [0, 1], EASE.in2);
   // the ring's centre: below the eyes (lower still in the formation), into the core as it collapses
   const drop = (O.drop + O.formDrop * Math.min(1, formAt(t))) * (1 - collapseAt(t));
-  const ths = anglesAt(t, spin);
+  const ths = anglesAt(t, spin, O.phase);
   const pour = tween(t, K.merge, [0, 1], EASE.in2);
   return LIGHT_ORDER.map((id, i) => {
     const th = ths[i];

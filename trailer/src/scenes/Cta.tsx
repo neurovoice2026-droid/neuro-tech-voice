@@ -1,31 +1,42 @@
 /**
- * CTA (the last ~8 s) — Ava's voice-over; the four lights become one; the logo.
+ * CTA (the last ~8.5 s) — Ava's voice-over; the four lights become one; the logo.
  * Every frame below is CTA-local and comes from timing.ts (CTA, CTA_LOCAL),
- * which derives the converge and the impact from her real voice.
+ * which derives the converge, the impact and the end card from her real voice.
  *
  *   iris      a dark circle opens from FLOW_END (the scale's last node), its
  *             rim smeared and its edge feathered by its own speed
- *   0…30      HERO: the site's cover portrait out of black — the eyes first
- *             (a slow push-in, a catch-light glint ON her first word), then a
- *             noisy radial opening while the site's "liquid" tear settles
+ *   0…24      HERO: the site's cover portrait out of black — the eyes first
+ *             (a slow push-in from the first frame, a catch-light as the iris
+ *             completes and another ON her first word), then a radial opening
+ *             whose light rises evenly (revealAt) while the "liquid" tear settles
  *   line      Ava: "AI voice agents that book your customers. Twenty four
  *             seven." — each headline word rises ON its spoken word ("24/7."
  *             on "Twenty"); her eyes glow with her real voice envelope
- *   orbPops   THE FOUR LIGHTS pop in on 8ths — rush, closing, sunday, night —
- *             each a light-chime hit (gather, spring overshoot, flash, ring,
- *             sparks, a camera kick); they orbit her head in depth (the ones
- *             behind her are hidden by her own matte and rim her silhouette),
- *             their flow driven by her voice
- *   tighten   ON "Twenty" "four" "seven" the orbit tightens and quickens
- *   converge  the orbit swells (anticipation), then spirals into the core,
- *             accelerating, motion-blurred; the portrait frays away to its
- *             silver backlight; the words are pulled in behind them
- *   merge     the four overlap and their palettes flow into one (ALL_LIGHTS)
- *   impact    the merged orb blows out into the light: the logo lands 1.25 → 1
- *             on SPRING.heavy, white flash, shockwave, ±6 px shake; Ava:
- *             "Neuro Tech Voice." (the crown glows with her voice); the halo
- *             keeps a faint rim of the four lights
- *   end card  "Start free →" pops → the note → the URL types → the button is
+ *   orbPops   THE FOUR LIGHTS pop in on 8ths — rush, closing, sunday, night.
+ *             Each: a point of its light gathers (3 f), and ON the beat (the
+ *             brightest frame) the flash, a ring, six sparks and a camera kick,
+ *             the orb already ⅓ out, overshooting ≈15 %, settled in ~12 f. As
+ *             they arrive the room's silver backlight dims to 45 % so they are
+ *             the brightest things in frame (blooms + halation: emitters).
+ *             They orbit her face in depth — the front of the ring under her
+ *             chin, the back behind her head (hidden by her matte, rimming her)
+ *   tighten   ON "Twenty" "four" "seven" the ring tightens and the four lights
+ *             come forward into a row under her chin: all four in view while
+ *             "24/7." holds
+ *   converge  the row fans into four arms, swells (anticipation) and spirals
+ *             into the core, accelerating, motion-blurred; the portrait frays
+ *             away to its backlight; the words are pulled in behind them
+ *   merge     each keeps its own light until they touch; the three pour into
+ *             the survivor, which holds ALONE (survivor) — 2×, its mesh
+ *             swirling all four hues, its bloom split into the four colours
+ *   impact    the survivor blows out into the light: the logo lands 1.25 → 1
+ *             on SPRING.heavy, white flash, shockwave, ±6 px shake; the
+ *             backlight comes back as THE MERGED LIGHT — a lilac-white halo
+ *             that condenses onto the logo, the four lights as four arcs on its
+ *             rim; "Start free →" pops a 16th later
+ *   brand     Ava: "Neuro Tech Voice." an 8th after the impact; the URL types ON
+ *             her words ("neuro" | "tech" | "voice.com"); the crown glows with
+ *             her voice; then the note; 2 f after her last word the button is
  *             clicked and keeps the site's hover (plum)
  *   finalHold → end: nothing moves but the global grain
  *
@@ -72,11 +83,11 @@ function geo(L: Layout) {
   // 9:16: the whole stack sits lower so the frame is used to ~76 % (the
   // portrait moves with it: her eyes are P)
   const P = { x: L.cx, y: L.pick(L.cy - 170, 710) };
-  const logoW = L.pick(560, 720);
+  const logoW = L.pick(560, 680);
   const logoH = logoW * LOGO_RATIO;
   const wordmark = { top: P.y - logoH / 2 + logoH * WORDMARK_TOP, bottom: P.y + logoH / 2 };
   // the plate is 2.8em tall: label line (1.2em) + label padding (.8em × 2)
-  const button = { y: L.pick(782, 1212), fontSize: L.pick(60, 66) };
+  const button = { y: L.pick(782, 1222), fontSize: L.pick(60, 66) };
   return {
     P,
     logoW,
@@ -92,7 +103,7 @@ function geo(L: Layout) {
      * button's top edge on the night (hr ≥ 1.3)
      */
     haloR: L.pick([720, 570, 205] as const, [620, 660, 290] as const),
-    haloEnd: L.pick([480, 400, 190] as const, [520, 520, 232] as const),
+    haloEnd: L.pick([460, 390, 192] as const, [540, 500, 248] as const),
     haloPow: 2,
     /**
      * once the logo is in, the light's underside settles under the wordmark
@@ -101,6 +112,8 @@ function geo(L: Layout) {
      * curves up at ±rx
      */
     floor: L.pick({ y: wordmark.bottom + 12, len: 120, k: 0.55, rise: 110 }, { y: wordmark.bottom + 18, len: 160, k: 0.35, rise: 140 }),
+    /** the reveal's light band (half-diagonals), see revealAt */
+    reveal: L.pick([0.22, 0.88] as const, [0.28, 0.86] as const),
     /** the art's framing: base zoom (the portrait crop is pushed in so its glitch band stays out) */
     frame: L.pick({ zoom: 1.02, band: 0 }, { zoom: 1.36, band: 0.15 }),
     headline: {
@@ -110,15 +123,16 @@ function geo(L: Layout) {
       markGap: 28,
     },
     button,
-    note: { y: L.pick(906, 1372), size: L.pick(36, 40) },
-    url: { y: L.pick(974, 1458), size: L.pick(46, 50), dot: 20, rule: L.pick(1240, L.width - 2 * L.safe.x) },
+    note: { y: L.pick(906, 1384), size: L.pick(36, 40) },
+    url: { y: L.pick(974, 1470), size: L.pick(46, 50), dot: 20, rule: L.pick(1240, L.width - 2 * L.safe.x) },
     /** the four lights' orbit about her face: radii, ring centre drop below the eyes, tilt, orb diameter */
     orbit: L.pick(
       // the ring's centre sits at her mouth, so its front passes under her
       // chin (≈ y 730, clear of the headline), its back behind her forehead
       { rx: 560, ry: 210, drop: 150, tilt: -0.09, d: 130, tight: 0.75, formDrop: 30 },
       // 9:16: her head fills the width, so the ring runs wide and tightens less
-      { rx: 452, ry: 250, drop: 270, tilt: -0.08, d: 132, tight: 0.55, formDrop: 46 },
+      // (her head fills the width: the two that pop "behind" pop beside her cheeks, in view)
+      { rx: 452, ry: 250, drop: 270, tilt: -0.08, d: 132, tight: 0.55, formDrop: 46, phase: [0.7, 1.95, 4.35, 5.6] },
     ),
     /** the shockwave leaves from the merged orb, out past the frame */
     ring: [60, L.pick(1150, 1100)] as const,
@@ -177,8 +191,23 @@ function onLayer(L: Layout, p: { x: number; y: number }, cam: { x: number; y: nu
 }
 
 const rgb01 = (hex: string) => hexToRgb(hex) as [number, number, number];
-/** the reveal's area curve: starts at ≈1.5× its mean rate, settles softly */
+/** the reveal's light curve: starts at ≈1.5× its mean rate, settles softly */
 const REVEAL = Easing.bezier(0.33, 0.5, 0.45, 1);
+/**
+ * The radial reveal's radius (frame half-diagonals). The frame's light comes
+ * in between radii lo…hi (measured on the art: her backlight sits just
+ * outside the head), following ≈ smoothstep(lo, hi, R); so R is driven
+ * through the INVERSE of that, and the light rises on the REVEAL curve —
+ * evenly, decelerating — instead of slamming in while R crosses the band.
+ * The last 12 % of the window opens the rest of the frame (no light there).
+ */
+function revealAt(t: number, [lo, hi]: readonly [number, number]) {
+  const u = tween(t, K.reveal, [0, 1], REVEAL);
+  if (u >= 0.88) return mix(hi, 1.9, (u - 0.88) / 0.12);
+  const y = u / 0.88;
+  const x = 0.5 - Math.sin(Math.asin(1 - 2 * y) / 3); // smoothstep⁻¹
+  return mix(lo, hi, x);
+}
 
 /* ── the scene ────────────────────────────────────────────────────── */
 export const Cta: React.FC = () => {
@@ -207,7 +236,7 @@ export const Cta: React.FC = () => {
   // it returns ON the impact as their merged light
   const backGain = t < I ? mix(1, 0.45, tween(t, K.backDim, [0, 1], EASE.inOut)) : 1;
   // the halo takes the merged light's colour as the four become one, fully ON the impact
-  const tint = t < I ? tween(t, [K.merge[0], I], [0, 0.22], EASE.inOut) : 1;
+  const tint = t < I ? tween(t, [K.merge[0], I], [0, 0.12], EASE.inOut) : 1;
   // the dolly into the eyes, plus the slow push from the first frame they show
   const eyePush = 1 + 0.06 * tween(t, K.eyePush, [0, 1], EASE.out3);
   const zoom = mix(1.0, 1.12, tween(t, [-8, I], [0, 1], EASE.inOut)) * eyePush;
@@ -227,7 +256,7 @@ export const Cta: React.FC = () => {
     erase: tween(t, K.erase, [0, 1], EASE.draw),
     // blooms from the eyes and decelerates into the figure: the radius grows so the lit
     // AREA (≈ the frame's light) rises evenly, on a gentle out-curve (no dead hold, no slam)
-    reveal: Math.sqrt(0.04 + (1.9 * 1.9 - 0.04) * tween(t, K.reveal, [0, 1], REVEAL)),
+    reveal: revealAt(t, G.reveal),
     eyes: tween(t, K.eyes, [0, 1], EASE.out3),
     haloC: [hC.x, hC.y] as [number, number],
     haloR,
@@ -313,7 +342,7 @@ export const Cta: React.FC = () => {
     }
     // ONE bloom per light (the shader has four): the gathering point, the pop's flash,
     // its steady light (an emitter: ≈.75), the whirl's, the survivor's (≥1.2, 2.2 d)
-    let gs = gather > 0 ? 1.05 * gather : 0;
+    let gs = gather > 0 ? 0.8 * gather : 0;
     let gr = gather > 0 ? full * (0.22 + 0.3 * gather) : 0;
     if (shown) {
       const steady = (0.75 * Math.min(1.15, pop) + 1.1 * flash + tightenFlash) * (1 + 0.3 * tween(t, K.orbIn, [0, 1], EASE.in2)) * opacity;
@@ -321,8 +350,25 @@ export const Cta: React.FC = () => {
       // (after the impact the bloom stays the merged orb's size: a hot core round the crown, not a wash)
       const gd = t >= I ? o.d * scr.z * 1.3 : Math.max(d, full * 0.8 * Math.min(1, flash * 2));
       const r = mix(gd * (1.35 + 0.6 * flash), 1.9 * d, o.i === 3 ? survivor : 0);
-      gs += s;
+      gs = Math.min(1.6, gs + s);
       gr = Math.max(gr, r);
+    }
+    if (o.i === 3 && survivor > 0.01 && t < I) {
+      // the survivor carries all four: its bloom splits into the four lights' colours,
+      // swirling about it with its mesh (the three fading lights hand it their slots)
+      const sw = (t - K.merge[0]) * 0.32;
+      LIGHT_ORDER.forEach((id, k) => {
+        const a = sw + (k * Math.PI) / 2;
+        glows.push({
+          x: scr.x + Math.cos(a) * d * 0.62,
+          y: scr.y + Math.sin(a) * d * 0.62,
+          r: d * 0.8,
+          s: 0.85 * survivor,
+          color: rgb01(LIGHTS[id].orb[2]),
+          back: false,
+        });
+      });
+      gs *= 1 - 0.55 * survivor;
     }
     if (gs > 0.001) glows.push({ x: scr.x, y: scr.y, r: gr, s: gs, color: rgb01(gather > flash && !shown ? LIGHTS[o.id].orb[3] : glowBody), back: o.z < 0 && !merged });
     // ON "Twenty" "four" "seven": each orb answers the word with a thin ring
@@ -364,12 +410,13 @@ export const Cta: React.FC = () => {
   const u: HeroUniforms = {
     ...u0,
     occ: 1 - tween(t, K.unhide, [0, 1], EASE.inOut),
-    glows: glows.slice(0, 4),
+    // (the shader has four bloom slots: in the survivor's hold its four colours take them all)
+    glows: (survivor > 0.01 && t < I ? [...glows].sort((a, c) => c.s - a.s) : glows).slice(0, 4),
     // her eyes carry her voice (0.25 · the real envelope, plus a whisper while she speaks)
     eyeGlow: 0.25 * lineEnv(t),
     // the four lights as four arcs on the merged light's rim (rose TL, emerald TR, teal BR, violet BL)
     // (just outside the light's edge, on the night, so each hue stays itself)
-    rim: [0.55 * tween(t, K.rimIn, [0, 1], EASE.inOut), 1.16, 0.1, 0.36],
+    rim: [0.6 * tween(t, K.rimIn, [0, 1], EASE.inOut), 1.18, 0.1, 0.3],
     rimColors: LIGHT_ORDER.map((id) => rgb01(mixColor(LIGHTS[id].orb[2], LIGHTS[id].orb[3], 0.25))),
     backGain,
     tint,
@@ -402,8 +449,8 @@ export const Cta: React.FC = () => {
 
   /* the gathering light at the core (the four lights' merged glow) */
   const coreGrow = tween(t, [K.core[0], K.pullBack[0]], [0, 1], EASE.out3);
-  const bloom = t >= I ? 0 : coreGrow * L.pick(640, 580) * (1 - 0.35 * pull);
-  const bloomHot = 0.6 + 0.4 * pull;
+  const bloom = t >= I ? 0 : coreGrow * L.pick(560, 520) * (1 - 0.35 * pull);
+  const bloomHot = (0.6 + 0.4 * pull) * 0.6;
 
   /* the eyes' last light slides into the core (screen space, like the hero) */
   const Pscr = onLayer(L, G.P, cam, 1);

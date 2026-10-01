@@ -392,3 +392,40 @@ export const NightGrade: React.FC<{ x: number; y: number; w: number; h: number; 
     }}
   />
 );
+
+/**
+ * The Booked half's ground: the #demo night stage's mid range (#1f1860 → #110c38), lit from
+ * behind the card — the night light (#7c3aed) as a soft bloom that breathes with the event and
+ * swells as "Booked." locks. Cool on purpose: the ember is the event and the word, never the room.
+ */
+export const BookedGround: React.FC<{
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** the light's centre (layer px) */
+  cx: number;
+  cy: number;
+  vertical: boolean;
+  /** 0..~1.4: the light's level (breath × lock swell) */
+  light: number;
+}> = ({ x, y, w, h, cx, cy, vertical, light }) => {
+  const lx = cx - x;
+  const ly = cy - y;
+  const r = vertical ? '62% 48%' : '58% 62%';
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: x,
+        top: y,
+        width: w,
+        height: h,
+        background: [
+          `radial-gradient(${r} at ${lx.toFixed(1)}px ${ly.toFixed(1)}px, rgba(124,58,237,${(0.2 * light).toFixed(3)}) 0%, rgba(124,58,237,${(0.07 * light).toFixed(3)}) 45%, rgba(124,58,237,0) 100%)`,
+          `radial-gradient(${vertical ? '95% 80%' : '85% 95%'} at ${lx.toFixed(1)}px ${ly.toFixed(1)}px, #1f1860 0%, #19134f 40%, #110c38 100%)`,
+        ].join(', '),
+      }}
+    />
+  );
+};
