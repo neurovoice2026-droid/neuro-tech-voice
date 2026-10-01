@@ -444,9 +444,9 @@ export const Result: React.FC = () => {
   return (
     <AbsoluteFill style={{ overflow: 'hidden' }}>
       {/* ── 0.15 · the night room ───────────────────────────────────── */}
-      {/* It opens as the call's MIDNIGHT room (the cut stays dark) and warms to the night
-          room only while the calendar sheet fills the frame (T.roomWarm), so nothing brightens
-          in view after the hand-over. */}
+      {/* It opens as the call's MIDNIGHT room (the cut stays dark), stays dark round the
+          close-up, and warms to the night room only with the split grade (T.roomWarm), under
+          the Booked half's ground as it grades in — so it never lights up and drops again. */}
       <AbsoluteFill style={{ transform: layerCss(cams.base, 0.15), opacity: roomOp }}>
         {roomWarm < 0.999 ? (
           <div style={{ ...roomBox, background: MIDNIGHT_ROOM.replace('120% 100% at 50% 40%', '81% 67.5% at 50% 43.25%') }} />
