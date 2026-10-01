@@ -1348,9 +1348,9 @@ export const HITS: Hit[] = [
   // the four lights fuse (merge[0]) and the suck-in (impact − 4): the chord's reverse swell, peak ON the impact
   H('cta', CTA.logoImpact, 'chord-rev', 'none', 0.5, 2, 'the four lights fuse', { layer: true }),
   H('cta', CTA.logoImpact, 'impact', 'night', 0.5, 1, 'LOGO IMPACT'),
-  // (the chord rings at unity on the impact: with the impact it makes the film's loudest moment —
-  // MIX.impactLead LU over the loudest dialogue — and the tonal duck takes it back for the name)
-  H('cta', CTA.logoImpact, 'chord', 'night', 0.5, 1, 'THE FOUR LIGHTS ring together', { db: -SFX.chord.trim }),
+  // (with the impact, the chord makes the film's loudest moment through the impact insert —
+  // MIX.impact — and the tonal duck takes it back for the name)
+  H('cta', CTA.logoImpact, 'chord', 'night', 0.5, 1, 'THE FOUR LIGHTS ring together'),
   H('cta', CTA_LOCAL.ring[0], 'shock', 'none', 0.5, 2, 'the shockwave ring sweeps past', { layer: true }),
   H('cta', CTA.button, 'pop', 'night', 0.5, 3, '“Start free →” pops with the logo (folded into the impact)'),
   H('cta', CTA.note, 'tap', 'none', 0.5, 3, '“5 free minutes, no card”', { db: -4 }),
@@ -1497,25 +1497,42 @@ export const CUES: Cue[] = buildCues(HITS);
 export const BED = { file: sfx('bed.wav'), vol: 1 };
 /**
  * The master: everything above, mixed to `lufs` integrated with a true-peak ceiling (dBTP).
+ * (−15.5, not −15: the film is dialogue-driven, so its integrated loudness IS the dialogue; half
+ * a LU lower lets the logo impact out-shout the loudest line without crushing the hit.)
  * `fadeOut`: the whole mix fades from one beat into the end card's still hold to the last frame,
  * exponentially (`fadeK` nepers over the fade, offset to land on true zero), so the impact's
  * room and the chord's ring resolve into silence (check-mix: last 100 ms < −55 dBFS RMS).
  * `dialogueLufs` ± `dialogueTol`: every line in the dialogue stem (the files are at −23 LUFS mono,
  * scripts/voice-lines.json level.lufs; dual-mono in the stereo bus that reads +3 LU).
  */
+/** frames from the logo impact to Ava saying the name (the impact insert is out before it) */
+const NAME_GAP = CTA.brandVoice - CTA.logoImpact;
 export const MIX = {
   file: sfx('mix.wav'),
-  lufs: -15,
+  lufs: -15.5,
   ceiling: -1.5,
   fadeOut: [SCENES.cta.from + CTA.finalHold + b(1), DURATION] as const,
-  fadeK: 4.6,
+  fadeK: 3.5,
   /**
    * The logo impact is the film's loudest moment: the effects bus rides up `rideDb` from
-   * `hold[0]` to `hold[1]` frames around the hit (back to unity by `release`, before the name at
-   * CTA.brandVoice) into the bus's true-peak limiter at `ceil` dBTP (after the master gain).
-   * check-mix: the momentary loudness (400 ms) from the hit beats the loudest dialogue by `lead` LU.
+   * `hold[0]` to `hold[1]` frames around the hit (crossfaded back to the untouched bus by
+   * `release`, before the name at CTA.brandVoice) into a soft-knee clipper whose ceiling is
+   * `ceil` dBTP after the master gain (knee `knee` dB below it). Nothing before the hit is
+   * touched (the build's suck-out stays). check-mix: the momentary loudness (400 ms) from the
+   * hit beats the loudest dialogue by `lead` LU, and the window before it by `suck` LU.
    */
-  impact: { at: SCENES.cta.from + CTA.logoImpact, rideDb: 3, hold: [0, 5], release: 9, ceil: -2.5, lead: 1 },
+  impact: {
+    at: SCENES.cta.from + CTA.logoImpact,
+    rideDb: 7,
+    hold: [0, Math.max(3, NAME_GAP - 2)] as const,
+    release: Math.max(6, NAME_GAP + 1),
+    ceil: -3,
+    knee: 4,
+    lead: 1,
+    suck: 3,
+  },
   dialogueLufs: -20,
   dialogueTol: 0.5,
+  /** the dialogue bus's own true-peak ceiling (dBTP after the master gain) */
+  dialogueCeil: -2.5,
 } as const;

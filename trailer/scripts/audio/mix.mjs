@@ -2,16 +2,18 @@
  * THE MASTER — voices + bed + every cue, mixed offline, sample-accurate.
  *
  *   dialogue bus   the voice WAVs as recorded (sinc-resampled to 48 kHz; every line is already
- *                  at ONE loudness target), a gentle 2:1 leveller, then make-up per line so
- *                  each line keeps exactly that loudness
+ *                  at ONE loudness target), a leveller, then make-up per line so each line
+ *                  keeps exactly that loudness, and a look-ahead true-peak limiter on the bus
+ *                  (MIX.dialogueCeil) so voice transients never drive the master limiter
  *   bed            ducked DUCK.bedDb across every line (ramped in ahead of it), and
  *                  DUCK.eqDb in the speech band wherever the voice is actually sounding
  *   effects        each cue retuned (rate), panned / moved, gained; sent to its act's
  *                  room (the dark night room or the short bright white-act room) and the
  *                  bells to a dotted-8th ping-pong; the effects lose DUCK.sfxEqDb in the
  *                  speech band under the voice too (keys keep their weight, words stay clear)
- *   the impact     the effects bus rides up across the logo impact into its own true-peak
- *                  limiter (MIX.impact): the climax is the loudest moment, the name stays clean
+ *   the impact     the effects bus rides up across the logo impact into a soft-knee clipper
+ *                  (MIX.impact): the stacked hit gets dense, the film's loudest moment, and is
+ *                  back to the untouched bus before the name
  *   master         an exponential fade over the end card's last second (MIX.fadeOut), a gain
  *                  to MIX.lufs integrated, then a 4×-oversampled look-ahead true-peak
  *                  limiter at MIX.ceiling dBTP
@@ -86,24 +88,28 @@ export function master(T, lib, bedSt, { publicDir }) {
     addStereo(voice, st, frameS(v.at) / SR, 1);
   }
   const vBefore = lufs(voice);
-  const vox = compress(voice, { thr: -19, ratio: 2, knee: 8, att: 0.004, rel: 0.14, rms: 0.006 });
+  const voxLev = compress(voice, { thr: -19, ratio: 2, knee: 8, att: 0.004, rel: 0.14, rms: 0.006 });
   // make-up PER LINE: the leveller only shapes the syllables; every line comes back to its own
   // pre-leveller loudness — the one dialogue target the voice files are normalised to
   // (scripts/generate-voice.mjs) — so no line ends up quieter because it is punchier
   const lineDb = {};
-  {
-    const spans = T.VOICES.map((v) => frameS(v.at)).map((s0, k, all) => [s0, k + 1 < all.length ? all[k + 1] : n]);
-    T.VOICES.forEach((v, k) => {
-      const [s0, s1] = spans[k];
-      const e = Math.min(s1, frameS(v.at + T.vFrames(v.id)) + Math.round(0.2 * SR));
-      const seg = (st) => [st[0].subarray(s0, e), st[1].subarray(s0, e)];
-      const mk = lufs(seg(voice)) - lufs(seg(vox));
-      lineDb[v.id] = mk;
-      const g = gain(mk);
-      for (const c of vox) for (let i = k === 0 ? 0 : s0; i < s1; i++) c[i] *= g;
-    });
-  }
-  const vAfter = lufs(vox);
+  const spans = T.VOICES.map((v, k) => {
+    const s0 = frameS(v.at);
+    const s1 = k + 1 < T.VOICES.length ? frameS(T.VOICES[k + 1].at) : n;
+    const e = Math.min(s1, frameS(v.at + T.vFrames(v.id)) + Math.round(0.2 * SR));
+    return { id: v.id, s0: k === 0 ? 0 : s0, a: s0, s1, e };
+  });
+  const seg = (st, sp) => [st[0].subarray(sp.a, sp.e), st[1].subarray(sp.a, sp.e)];
+  for (const sp of spans) sp.target = lufs(seg(voice, sp));
+  const trimLines = (st, dbOf) => {
+    for (const sp of spans) {
+      const g = gain(dbOf(sp));
+      for (const c of st) for (let i = sp.s0; i < sp.s1; i++) c[i] *= g;
+    }
+  };
+  for (const sp of spans) lineDb[sp.id] = sp.target - lufs(seg(voxLev, sp));
+  trimLines(voxLev, (sp) => lineDb[sp.id]);
+  const vAfter = lufs(voxLev);
   const act = activity(voice[0], T.DUCK.lookahead);
 
   /* ── bed: line-window duck + speech-band dynamic EQ ── */
@@ -193,29 +199,69 @@ export function master(T, lib, bedSt, { publicDir }) {
   }
   const fxEq = dynamicEq([sfx[0].subarray(0, n), sfx[1].subarray(0, n)], act, T.DUCK.sfxEqDb, 2400, 0.6);
 
-  /* ── the logo impact: the film's loudest moment ──
-   * The effects bus rides up MIX.impact.rideDb across the hit (held a few frames, back to unity
-   * before Ava says the name) into the bus's own look-ahead true-peak limiter at MIX.impact.ceil
-   * dBTP (after the master gain): the stacked hit (impact + chord + shock + the build's last
-   * peak) gets dense instead of peaky, and the master limiter no longer pumps the name under it.
-   * (The bus limiter guards every other big hit of the film the same way.) */
-  const I = T.MIX.impact;
-  const ride = new Float32Array(n).fill(1);
+  // the master gain to come (the final pass corrects it by a few hundredths of a dB)
+  const g0 = T.MIX.lufs - lufs([0, 1].map((c) => Float32Array.from(voxLev[c], (x, i) => x + bed[c][i] + fxEq[c][i])));
+
+  /* ── dialogue peaks: a look-ahead true-peak limiter on the dialogue bus at MIX.dialogueCeil dBTP
+   * (after the master gain). The lines are loudness-matched, so their peaks differ: the bus catches
+   * plosives and consonant spikes itself, so the master limiter never pulls the bed and the effects
+   * down with them. Each line's trim is re-solved through the limiter (3 passes) so every line still
+   * lands on the dialogue target. */
+  let vox;
   {
-    const up = gain(I.rideDb);
+    const adj = Object.fromEntries(spans.map((sp) => [sp.id, 0]));
+    for (let pass = 0; pass < 3; pass++) {
+      const inp = [Float32Array.from(voxLev[0]), Float32Array.from(voxLev[1])];
+      trimLines(inp, (sp) => adj[sp.id]);
+      vox = limit(inp, { ceilingDb: T.MIX.dialogueCeil - g0, look: 0.002, rel: 0.04, relSlow: 0.2 });
+      for (const sp of spans) {
+        let m = 0;
+        for (let i = sp.a; i < sp.e; i++) {
+          const a = Math.abs(inp[0][i]);
+          if (a > 1e-3) m = Math.max(m, db(a) - db(Math.abs(vox[0][i]) || 1e-9));
+        }
+        sp.gr = m;
+      }
+      let worst = 0;
+      for (const sp of spans) {
+        const d = sp.target - lufs(seg(vox, sp));
+        adj[sp.id] += d;
+        worst = Math.max(worst, Math.abs(d));
+      }
+      if (worst < 0.05) break;
+    }
+    for (const sp of spans) lineDb[sp.id] += adj[sp.id];
+  }
+
+  /* ── the logo impact: the film's loudest moment ──
+   * The hit is a stack of dense layers (the impact, the four lights' chord, the shock ring, the
+   * build's last peak): summed they are peaky (a 9 dB peak-to-loudness ratio), so turning them up
+   * only drives the master limiter — which then pumps Ava's name under it. Instead the effects bus
+   * gets an insert across the hit: it rides up MIX.impact.rideDb into a soft-knee clipper whose
+   * ceiling sits at MIX.impact.ceil dBTP after the master gain (the knee starts `knee` dB below),
+   * held for a few frames and crossfaded back to the untouched bus before the name
+   * (CTA.brandVoice). The stack comes out dense, over the loudest dialogue by MIX.impact.lead. */
+  const I = T.MIX.impact;
+  const fx = [Float32Array.from(fxEq[0]), Float32Array.from(fxEq[1])];
+  const insert = { from: frameS(I.at + I.hold[0] - 0.5), to: Math.min(n, frameS(I.at + I.release)) };
+  {
+    const C = gain(I.ceil - g0);
+    const K = C * gain(-I.knee);
+    const G = gain(I.rideDb);
+    const clip = (x) => {
+      const a = Math.abs(x);
+      return a <= K ? x : Math.sign(x) * (K + (C - K) * Math.tanh((a - K) / (C - K)));
+    };
     const a0 = I.at + I.hold[0] - 0.5;
     const a1 = I.at + I.hold[0];
     const e0 = I.at + I.hold[1];
     const e1 = I.at + I.release;
-    for (let i = frameS(a0); i < Math.min(n, frameS(e1)); i++) {
+    for (let i = insert.from; i < insert.to; i++) {
       const f = (i / SR) * F;
       const u = f < a1 ? smooth((f - a0) / (a1 - a0)) : f <= e0 ? 1 : 1 - smooth((f - e0) / (e1 - e0));
-      ride[i] = 1 + (up - 1) * u;
+      for (let c = 0; c < 2; c++) fx[c][i] += (clip(fxEq[c][i] * G) - fxEq[c][i]) * u;
     }
   }
-  const rode = fxEq.map((c) => Float32Array.from(c, (x, i) => x * ride[i]));
-  const g0 = T.MIX.lufs - lufs([0, 1].map((c) => Float32Array.from(vox[c], (x, i) => x + bed[c][i] + rode[c][i])));
-  const fx = limit(rode, { ceilingDb: I.ceil - g0, look: 0.0015, rel: 0.05, relSlow: 0.25 });
 
   /* ── master ── */
   const sum = [new Float32Array(n), new Float32Array(n)];
@@ -261,7 +307,10 @@ export function master(T, lib, bedSt, { publicDir }) {
     voiceLufsIn: vBefore,
     dialogueMakeupDb: vBefore - vAfter,
     lineMakeupDb: lineDb,
-    fxBusLimiterMaxGrDb: fx.maxReductionDb,
+    impactInsert: insert,
+    provisionalGainDb: g0,
+    dialogueLimiterMaxGrDb: vox.maxReductionDb,
+    dialogueLimiterLineGrDb: Object.fromEntries(spans.map((sp) => [sp.id, Math.round(sp.gr * 10) / 10])),
     preLufs: pre,
     masterGainDb: g,
     limiterMaxGrDb: out.maxReductionDb,
@@ -270,5 +319,5 @@ export function master(T, lib, bedSt, { publicDir }) {
     samplePeakDb: db(peak(out)),
     bedPeakDb: db(peak(bedSt)),
   };
-  return { mix: [out[0], out[1]], stems: { voice: vox, bed, sfx: [fx[0], fx[1]] }, report, gainDb: g };
+  return { mix: [out[0], out[1]], stems: { voice: [vox[0], vox[1]], bed, sfx: [fx[0], fx[1]] }, report, gainDb: g };
 }

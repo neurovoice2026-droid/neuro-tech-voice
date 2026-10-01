@@ -5,6 +5,12 @@
  *   · public/sfx/mix.wav is current (its build hash matches the timeline, voices and sound code) and as long as the film
  *   · integrated loudness within MIX.lufs ± 1 LU, true peak ≤ -1.0 dBTP (4× oversampled), no clipping
  *   · every effect file peaks at ≤ -12 dBFS, the bed at ≤ -20 dBFS
+ *   · DIALOGUE: every voice file at the one dialogue target (voice-lines.json level.lufs ± 0.5,
+ *     BS.1770 integrated, mono) and every line in the dialogue stem at MIX.dialogueLufs ± dialogueTol;
+ *     every phone-line caller keeps its presence (1.4–2.8 kHz ≥ -16 dB of the line's power)
+ *   · THE CLIMAX: the momentary loudness (400 ms) from the logo impact beats the loudest dialogue
+ *     moment of the master by MIX.impact.lead LU, and the 400 ms before the hit by MIX.impact.suck LU
+ *   · THE END: the last 100 ms are below -55 dBFS RMS and the last frame below -60 dBFS
  *   · no word is masked: at every spoken word onset (200 ms), an SII-style intelligibility index
  *     (ANSI S3.5 octave-band importances; maskers = the effects stem incl. rooms + the ducked bed)
  *     must be ≥ 0.7 — a key hit designed to land on a word may dip to 0.55 (reported)
@@ -17,6 +23,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readWav, lufs, truePeak, peak, db, Biquad, SR } from './audio/dsp.mjs';
 import { buildHash } from './audio/hash.mjs';
+import { integrated, momentary, rmsDb } from './audio/loudness.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -65,6 +72,73 @@ for (const f of new Set(T.CUES.map((c) => c.file))) {
 if (sfxMax > -11.95) fails.push(`${sfxWorst} peaks at ${sfxMax.toFixed(2)} dBFS (> -12)`);
 const louderCue = T.CUES.filter((c) => c.vol > 1.0001);
 if (louderCue.length) fails.push(`${louderCue.length} cue(s) play above unity (would exceed the -12 dBFS SFX peak)`);
+
+/* ── dialogue: one loudness for every line ── */
+const vcfg = JSON.parse(readFileSync(path.join(HERE, 'voice-lines.json'), 'utf8'));
+const LV = { lufs: -23, ...(vcfg.level ?? {}) };
+const fileL = {};
+const bandShare = (m, sr, lo, hi) => {
+  const f = [lo, lo, hi, hi].map((x, k) => {
+    const w = (2 * Math.PI * x) / sr, c = Math.cos(w), al = Math.sin(w) / (2 * 0.7), hp = k < 2;
+    const b = hp ? [(1 + c) / 2, -(1 + c), (1 + c) / 2] : [(1 - c) / 2, 1 - c, (1 - c) / 2];
+    const a0 = 1 + al;
+    return { b: b.map((v) => v / a0), a: [(-2 * c) / a0, (1 - al) / a0], x1: 0, x2: 0, y1: 0, y2: 0 };
+  });
+  let zb = 0, zt = 0;
+  for (const x of m) {
+    let v = x;
+    for (const q of f) {
+      const y = q.b[0] * v + q.b[1] * q.x1 + q.b[2] * q.x2 - q.a[0] * q.y1 - q.a[1] * q.y2;
+      q.x2 = q.x1; q.x1 = v; q.y2 = q.y1; q.y1 = y; v = y;
+    }
+    zb += v * v; zt += x * x;
+  }
+  return 10 * Math.log10(zb / zt);
+};
+const presence = {};
+for (const v of T.VOICES) {
+  const w = readWav(path.join(PUBLIC, 'voice', `${v.id}.wav`));
+  fileL[v.id] = integrated([w.ch[0]], w.sr);
+  if (Math.abs(fileL[v.id] - LV.lufs) > 0.5) fails.push(`dialogue: ${v.id}.wav is ${fileL[v.id].toFixed(1)} LUFS (target ${LV.lufs} ± 0.5) — run \`npm run voice:remaster\``);
+  if (vcfg.voices?.[VOICE.lines[v.id].voice]?.phone) {
+    presence[v.id] = bandShare(w.ch[0], w.sr, 1400, 2800);
+    if (presence[v.id] < -16) fails.push(`dialogue: ${v.id} (phone line) is dull — 1.4–2.8 kHz at ${presence[v.id].toFixed(1)} dB of the line (≥ -16)`);
+  }
+}
+const stemL = {};
+if (existsSync(path.join(QA, 'stem-voice.wav'))) {
+  const vs = st(path.join(QA, 'stem-voice.wav'));
+  for (const v of T.VOICES) {
+    stemL[v.id] = integrated(vs, SR, { from: v.at / T.FPS, to: (v.at + T.vFrames(v.id)) / T.FPS - 0.4 });
+    if (Math.abs(stemL[v.id] - T.MIX.dialogueLufs) > T.MIX.dialogueTol)
+      fails.push(`dialogue: ${v.id} sits at ${stemL[v.id].toFixed(1)} LUFS in the dialogue stem (target ${T.MIX.dialogueLufs} ± ${T.MIX.dialogueTol})`);
+  }
+}
+
+/* ── the climax: the logo impact is the loudest moment ── */
+const MM = momentary(mix, SR, { hop: 1 / T.FPS });
+const mAt = (f) => MM[Math.max(0, Math.min(MM.length - 1, Math.round(f)))];
+const IMP = T.MIX.impact;
+let dMax = { lufs: -Infinity, f: 0, id: '' };
+for (const r of MM) {
+  const f0 = r.t * T.FPS;
+  const f1 = f0 + 0.4 * T.FPS;
+  if (f1 > IMP.at && f0 < IMP.at + 0.4 * T.FPS) continue; // the impact's own windows
+  const k = T.SPEECH.findIndex(([a, e]) => f0 >= a && f1 <= e + 3);
+  if (k >= 0 && r.lufs > dMax.lufs) dMax = { lufs: r.lufs, f: f0, id: T.VOICES[k].id };
+}
+const impM = mAt(IMP.at).lufs;
+const suckM = mAt(IMP.at - 0.4 * T.FPS).lufs;
+if (impM < dMax.lufs + IMP.lead)
+  fails.push(`climax: the logo impact is ${impM.toFixed(1)} LUFS-M, the loudest dialogue ${dMax.lufs.toFixed(1)} (${dMax.id} @${dMax.f.toFixed(0)}) — needs ≥ +${IMP.lead} LU`);
+if (impM - suckM < IMP.suck) fails.push(`climax: only ${(impM - suckM).toFixed(1)} LU between the build (${suckM.toFixed(1)}) and the impact (${impM.toFixed(1)}) — needs ≥ ${IMP.suck}`);
+
+/* ── the end resolves into silence ── */
+const dur = mix[0].length / SR;
+const end100 = rmsDb(mix, SR, dur - 0.1, dur);
+const endFrame = rmsDb(mix, SR, dur - 1 / T.FPS, dur);
+if (end100 > -55) fails.push(`the end is cut, not resolved: last 100 ms at ${end100.toFixed(1)} dBFS RMS (≤ -55)`);
+if (endFrame > -60) fails.push(`the last frame is at ${endFrame.toFixed(1)} dBFS RMS (≤ -60)`);
 
 /* ── intelligibility at every word: an SII-style index (ANSI S3.5 octave-band importances) ── */
 const OCT = [[180, 355, 0.0617], [355, 710, 0.1671], [710, 1400, 0.2373], [1400, 2800, 0.2648], [2800, 5600, 0.2142], [5600, 11000, 0.0549]];
@@ -165,6 +239,11 @@ for (const c of T.CUES) count[sceneOf(c.hit)] = (count[sceneOf(c.hit)] ?? 0) + 1
 const worst = [...maskRows].sort((a, b) => a.sii - b.sii).slice(0, 5);
 console.log(`master        ${L.toFixed(1)} LUFS integrated · ${tp.toFixed(2)} dBTP true peak · ${sp.toFixed(2)} dBFS sample peak`);
 console.log(`levels        effects ≤ ${sfxMax.toFixed(1)} dBFS · bed ${bedP.toFixed(1)} dBFS · master gain ${fmt(stamp.masterGainDb)} dB · limiter ≤ ${stamp.limiterMaxGrDb.toFixed(1)} dB`);
+const spread = (o) => { const v = Object.values(o); return v.length ? Math.max(...v) - Math.min(...v) : 0; };
+console.log(`dialogue      files ${LV.lufs} LUFS ± ${(spread(fileL) / 2).toFixed(2)} · stem ${Object.entries(stemL).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(' · ')} (spread ${spread(stemL).toFixed(1)} LU)`);
+if (Object.keys(presence).length) console.log(`presence      phone lines 1.4–2.8 kHz: ${Object.entries(presence).map(([k, v]) => `${k} ${v.toFixed(1)} dB`).join(' · ')}`);
+console.log(`climax        logo impact ${impM.toFixed(1)} LUFS-M · loudest dialogue ${dMax.lufs.toFixed(1)} (${dMax.id} @${dMax.f.toFixed(0)}) · lead ${fmt(impM - dMax.lufs)} LU · build before it ${suckM.toFixed(1)}`);
+console.log(`end           last 100 ms ${end100.toFixed(1)} dBFS RMS · last frame ${endFrame.toFixed(1)} dBFS`);
 console.log(`cues          ${T.CUES.length}: ${Object.entries(count).map(([k, v]) => `${k} ${v}`).join(' · ')}`);
 if (maskRows.length) {
   const mean = maskRows.reduce((a, r) => a + r.sii, 0) / maskRows.length;
