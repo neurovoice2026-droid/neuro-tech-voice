@@ -12,10 +12,10 @@ export type Rect = { x: number; y: number; w: number; h: number };
 /* ── THE SUNDAY LIGHT ───────────────────────────────────────────
  * This second call comes in on a Sunday, so the reader wears #demo's Sunday
  * (palettes.ts MOMENT_LIGHTS.sunday): the teal orb (its `listen` twin while
- * the caller asks), its bloom, a soft aqua tint pooled under it (the
- * ground's first stops — on the white stock, never a full-frame wash), the
- * site's sunday ink wherever the #knowledge stage sets violet. Lights are
- * light: tints, blooms, rims. */
+ * the caller asks) is the room's ONE light — a soft aqua pool on the paper
+ * wall around it, falling off like light (never a wash, never a blob) — and
+ * sunday ink is the scene's ONE accent: the key phrases, the eyebrow, the
+ * live dots. Everything else is paper and ink. */
 export const SUN = LIGHTS.sunday;
 /** sunday ink (#0e7490): key phrases, the eyebrow, live dots, beam heads */
 export const INK = SUN.ink;
@@ -51,9 +51,8 @@ export const STATUS_TEXT: Record<StatusKey, string> = {
 export const BEAM_INK = rgba(SUN.orb[1], 0.42);
 export const BEAM_MISS = 0.15;
 export const THRESHOLD = 0.6;
-/** the documents that did not answer step back (and out of focus) so the answer leads */
+/** the documents that did not answer step back (fade + a touch smaller — never out of focus) so the answer leads */
 export const DIM = 0.25;
-export const DIM_BLUR = 2;
 /** the orb's volume through a question */
 export const VOL = { rest: 0.12, listen: 0.15, speak: 0.7, miss: 0.05 } as const;
 /** the orb's palette on a miss, darkest first (the drained Sunday mesh, not palettes.ts MUTED_MESH's neutral grey) */
@@ -69,15 +68,6 @@ export const DOCS: readonly { name: string; kind: DocKind }[] = [
 ];
 /** "Do you do home visits?" — none reaches the 60 % tick (knowledge-base.ts) */
 export const MATCH = [0.22, 0.14, 0.1, 0.3, 0.26] as const;
-/** DocBadge colours (components/site/product/knowledge-base/parts.tsx) */
-export const BADGE: Record<DocKind, { bg: string; fg: string }> = {
-  PDF: { bg: '#fbe9e4', fg: '#a2391c' },
-  DOCX: { bg: '#e6ecfb', fg: '#2d4f9e' },
-  MD: { bg: '#ecebf1', fg: '#3b3a45' },
-  TXT: { bg: '#eef3e6', fg: '#3f6a24' },
-  WEB: { bg: '#efe7f8', fg: '#551a89' },
-};
-
 export const HEADING = 'Answers from your own documents.';
 /** the card the unanswered question becomes (the site's "flagged" hand-over: a hollow dot) */
 export const TICKET = { label: 'For the team', question: 'Home visits?', number: '+1 555 0142', chip: 'Call back today' } as const;
@@ -148,73 +138,65 @@ export function geo(L: Layout) {
       eyebrowX: v ? 68 : 104,
       pillRight: v ? 1012 : 1816,
       pillH: v ? 56 : 64,
-      pillText: v ? 28 : 32,
+      pillText: v ? 28 : 30,
+      /** TYPE.label */
       label: v ? 28 : 30,
       dot: 20,
       /** "☀ SUNDAY · 10:24": left of the pill (16:9, it rides the pill's edge) / under it (9:16) */
       tag: v
-        ? { mode: 'below' as const, y: 356, size: 28, icon: 30, gap: 0 }
-        : { mode: 'left' as const, y: 98, size: 30, icon: 32, gap: 30 },
+        ? { mode: 'below' as const, y: 356, size: 28, icon: 28, gap: 0 }
+        : { mode: 'left' as const, y: 98, size: 30, icon: 30, gap: 30 },
     },
     tiles,
-    /** 16:9 tiles: the badge and the match bar share the top row, the name (≤ 2 lines) sits under them */
+    /** 16:9 cards: the kind (TYPE.label, muted) and the match bar share the top row; the name (the title
+     *  family, ≤ 2 lines) sits on the card's foot. 9:16 rows: kind · name · bar on one line. */
     tile: v
-      ? { kind: 'row' as const, pad: 18, badgeH: 44, badgeText: 28, badgeMinW: 104, name: 34, nameX: 148, barW: 240, barPadR: 28 }
-      : { kind: 'tile' as const, pad: 22, badgeH: 48, badgeText: 30, badgeMinW: 92, name: 38, nameX: 22, barW: 140, barPadR: 22 },
-    /** when the documents that did not answer step back: on Ava's answer (16:9, they stay legible
-     *  beside the card) / on the miss, deeper, behind the card that takes their place (9:16) */
-    docsBack: v ? { at: 'miss' as const, dim: 0.14, blur: 3, scale: 0.965 } : { at: 'answer' as const, dim: DIM, blur: DIM_BLUR, scale: 1 },
+      ? { kind: 'row' as const, pad: 22, kindText: 28, kindW: 112, name: 40, nameX: 140, barW: 220, barPadR: 26 }
+      : { kind: 'tile' as const, pad: 24, kindText: 30, kindW: 0, name: 42, nameX: 24, barW: 132, barPadR: 24 },
+    /** when the documents that did not answer step back (a fade and a touch smaller — never a blur): on
+     *  Ava's answer (16:9, they stay legible beside the card) / on the miss, deeper, behind the card that
+     *  takes their place (9:16) */
+    docsBack: v ? { at: 'miss' as const, dim: 0.12, scale: 0.965 } : { at: 'answer' as const, dim: DIM, scale: 0.985 },
     orb,
     beams,
-    /** the caller's question (Cormorant italic, caller blue) — left of the orb (16:9) / under it (9:16) */
+    /** the caller's question (TYPE.caption — the same setting as Ava's, told apart by the caller's ink and
+     *  the ● CALLER tag) — left of the orb, right-aligned to it (16:9) / under it (9:16) */
     caller: v
-      ? { labelY: 1272, align: 'center' as const, boxX: 170, boxW: 740, rowY: 1340, size: 84, lh: 1.0 }
-      : { labelY: 508, align: 'right' as const, boxX: 120, boxW: 570, rowY: 594, size: 92, lh: 1.0 },
-    /** Ava's answer (Inter 500, the call's voice): one row under the orb (16:9) / two rows under it,
-     *  in the caller's place (9:16) — under her AVA tag (`labelY`, centred; the size of CALLER) */
+      ? { labelY: 1270, align: 'center' as const, boxX: 140, boxW: 800, rowY: 1340, size: 68, lh: 1.18 }
+      : { labelY: 512, align: 'right' as const, boxX: 120, boxW: 580, rowY: 596, size: 76, lh: 1.18 },
+    /** Ava's answer (TYPE.caption): one row under the orb (16:9) / two rows under it, in the caller's place
+     *  (9:16) — under her ● AVA tag (`labelY`, centred) */
     answer: v
-      ? { boxX: 68, boxW: 944, rowY: 1340, rowB: 1340 + Math.round(68 * 1.18), size: 68, lh: 1.18, labelY: 1272 }
-      : { boxX: 80, boxW: 1760, rowY: 966, rowB: null, size: 76, lh: 1.16, labelY: 904 },
+      ? { boxX: 68, boxW: 944, rowY: 1340, rowB: 1340 + Math.round(68 * 1.18) as number | null, size: 68, lh: 1.18, labelY: 1270 }
+      : { boxX: 80, boxW: 1760, rowY: 970, rowB: null as number | null, size: 76, lh: 1.18, labelY: 900 },
     /** the slot: the page the reader reads → "0 matches" → the card for the team.
      *  'peek' (16:9): it opens as the page being read before the scan; 'miss' (9:16): it opens on the
      *  miss, over the documents stepping back */
     slot: v ? slotV : { x: 1232, y: 506, w: 584, h: 268 },
     slotMode: v ? ('miss' as const) : ('peek' as const),
-    /** the heading rises where the orb will be; 16:9: it steps down to the answer row to make way
-     *  and holds there beside the caller (who speaks on the left) until "question,"; 9:16 (one
-     *  column — a stepped-down heading would sit under the caller's words and read as theirs): it
-     *  holds full size and flicks up out of its masks just before the orb springs from its place */
+    /** the heading (TYPE.headline — THE look) rises where the orb will be; 16:9: it steps down to the
+     *  answer row to make way and holds there beside the caller (who speaks on the left) until
+     *  "question,"; 9:16 (one column — a stepped-down heading would sit under the caller's words and
+     *  read as theirs): it holds full size and leaves up through its masks just before the orb springs
+     *  from its place */
     heading: v
-      ? { cy: orb.y, size: 96, lines: ['Answers from', 'your own documents.'] as string[] | null, width: 944, step: null }
+      ? { cy: orb.y, size: 92, lines: ['Answers from', 'your own documents.'] as string[] | null, width: 944, step: null }
       : {
           cy: 640,
           size: 100,
           lines: ['Answers from your own documents.'] as string[] | null,
           width: 1760,
-          step: { cy: 954, scale: 0.72 } as { cy: number; scale: number } | null,
+          step: { cy: 958, scale: 0.72 } as { cy: number; scale: number } | null,
         },
+    /** the closing title (TYPE.display) */
     closing: v
-      ? { cy: 960, size: 108, lines: ['Where your', 'documents stop,', 'it says so.'] }
-      : { cy: 540, size: 120, lines: ['Where your documents stop,', 'it says so.'] },
-    /** the camera pushes about this point */
-    cam: v
-      ? { ox: 540, oy: 990, push: 0.016, kickPop: 0.002, kickMiss: 0.004 }
-      : { ox: 960, oy: 600, push: 0.04, kickPop: 0.004, kickMiss: 0.007 },
+      ? { cy: 960, size: 112, lines: ['Where your', 'documents stop,', 'it says so.'] }
+      : { cy: 540, size: 128, lines: ['Where your documents stop,', 'it says so.'] },
+    /** the camera pushes about this point (a slow push — no hand-held drift, no kicks) */
+    cam: v ? { ox: 540, oy: 990, push: 0.016 } : { ox: 960, oy: 600, push: 0.035 },
     /** the stage-in: the light of the result's white flash (its ember centre, measured at the cut)
-     *  resolves into the Sunday glow at the reader's place */
+     *  resolves into the Sunday light at the reader's place */
     dawn: v ? { x0: 547, y0: 1031 } : { x0: 1030, y0: 566 },
-    /** very soft Sunday light discs on the nearest plane, at the edges */
-    discs: v
-      ? [
-          { x: 24, y: 1600, r: 210, seed: 'a' },
-          { x: 1056, y: 300, r: 170, seed: 'b' },
-          { x: 990, y: 1800, r: 130, seed: 'c' },
-        ]
-      : [
-          { x: 30, y: 930, r: 220, seed: 'a' },
-          { x: 1890, y: 150, r: 170, seed: 'b' },
-          { x: 1760, y: 1070, r: 130, seed: 'c' },
-        ],
     /** the whip leaves along this axis */
     whip: v ? { axis: 'y' as const, dist: -2600, counter: 24 } : { axis: 'x' as const, dist: -2400, counter: 24 },
   };

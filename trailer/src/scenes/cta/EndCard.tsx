@@ -8,9 +8,10 @@
  *              leading 1, --cover-paper on the dark) — the brand mark, the one
  *              exception to the Instrument Sans rule. The letters are laid out
  *              ONCE as one kerned run (canvas measureText of each prefix, so
- *              the site's kerning survives) and each rises out of its own mask
- *              in the order the merged light reaches it — from the centre out,
- *              as its corona opens behind the word — on a soft display spring.
+ *              the site's kerning survives) and each surfaces — a short rise,
+ *              its opacity over the travel, a whisper of scale — just after the
+ *              merged light has passed it: from the centre out, as the corona
+ *              opens behind the word, on a soft display spring.
  *  <CoverCta>  the site's own primary button (components/site/hero.tsx
  *              CoverCta): a paper plate (--cover-paper, radius .2em) with four
  *              CornerDots in its corners, the label in ink, "Start free →".
@@ -117,7 +118,9 @@ export const Wordmark: React.FC<{ t: number; at: number; spec: WordmarkSpec; rea
         const x1 = (i + 1 < xs.length ? xs[i + 1] : w) * F;
         const mid = (x0 + x1) / 2;
         const start = at + spec.arrive(Math.abs(mid / F - w / 2));
-        const r = reveal(t, start, { config: SPRING.display, rise: 104 });
+        // a short rise (no mask: a full-height rise would cross the corona's line) with the
+        // opacity over most of the travel and a whisper of scale — the letter surfaces in the light
+        const r = reveal(t, start, { config: SPRING.display, rise: 26, fade: 0.8, scaleFrom: 0.97 });
         const fill: React.CSSProperties =
           swO > 0.002
             ? {
@@ -138,9 +141,8 @@ export const Wordmark: React.FC<{ t: number; at: number; spec: WordmarkSpec; rea
               position: 'absolute',
               left: x0,
               top: 0,
-              ...maskBox(0),
-              margin: 0,
-              transform: `translate(-0.08em, -0.16em)`,
+              display: 'block',
+              whiteSpace: 'nowrap',
               fontFamily: WORDMARK_FONT,
               fontWeight: 500,
               fontSize: F,

@@ -1,16 +1,15 @@
 /**
- * The beams (knowledge-stage.tsx <svg>): dotted cubics from every document
- * into the reader. Each draws through a mask (pathLength 1, EASE.draw, 2 f
- * apart) with a small head of Sunday light riding its front (a sunday-ink
- * dot in an aqua halo); the dots then stream
- * toward the orb (dash offset). On the miss the stream slows to a stop and
- * the beams fall back to .15.
+ * The beams (knowledge-stage.tsx <svg>): fine dotted cubics from every
+ * document into the reader. Each draws through a mask (pathLength 1,
+ * EASE.draw, 2 f apart) with a small sunday-ink head riding its front (no
+ * halo); the dots then stream toward the orb (dash offset — the integral of
+ * a smooth speed curve, continuous at any fractional t). On the miss the
+ * stream slows to a stop and the beams fall back to .15.
  */
 import React from 'react';
-import { rgba } from '../../lib/lights';
 import { EASE, mix, tween } from '../../lib/motion';
 import { KNOWLEDGE, KNOWLEDGE_LOCAL } from '../../timing';
-import { ACCENT, BEAM_INK, BEAM_MISS, cubicAt, SUN_GLOW, type Geo } from './geometry';
+import { ACCENT, BEAM_INK, BEAM_MISS, cubicAt, type Geo } from './geometry';
 
 const K = KNOWLEDGE;
 const KL = KNOWLEDGE_LOCAL;
@@ -24,14 +23,20 @@ function drawWin(i: number): [number, number] {
   return [s, s + dur];
 }
 
-/** px the dots have travelled toward the orb by frame t (eased on, eased to a stop on the miss) */
+/** the stream's speed (px / frame): eased on with the scan, eased to a stop on the miss */
+const speed = (f: number) =>
+  1.6 * tween(f, [K.scan[0], K.scan[0] + 12], [0, 1], EASE.out3) * (1 - tween(f, [K.miss, K.miss + 16], [0, 1], EASE.out3));
+
+/** px the dots have travelled toward the orb by frame t: ∫ speed (trapezoids of ¼ f + the exact remainder) */
 function flow(t: number): number {
+  const a = K.scan[0];
+  if (t <= a) return 0;
+  const end = Math.min(t, K.miss + 16);
+  const h = 0.25;
   let x = 0;
-  for (let f = K.scan[0]; f < t; f++) {
-    const on = tween(f, [K.scan[0], K.scan[0] + 12], [0, 1], EASE.out3);
-    const off = 1 - tween(f, [K.miss, K.miss + 16], [0, 1], EASE.out3);
-    x += 1.6 * on * off;
-  }
+  let f = a;
+  for (; f + h <= end; f += h) x += ((speed(f) + speed(f + h)) / 2) * h;
+  if (end > f) x += ((speed(f) + speed(end)) / 2) * (end - f);
   return x;
 }
 
@@ -69,13 +74,7 @@ export const Beams: React.FC<{ t: number; G: Geo; uid: string }> = ({ t, G, uid 
               strokeDashoffset={off}
               strokeLinecap="round"
             />
-            {head ? (
-              <>
-                <circle cx={head.x} cy={head.y} r={16} fill={rgba(SUN_GLOW.body, 0.12 * headO)} />
-                <circle cx={head.x} cy={head.y} r={9} fill={rgba(SUN_GLOW.core, 0.5 * headO)} />
-                <circle cx={head.x} cy={head.y} r={4.5} fill={ACCENT} opacity={headO} />
-              </>
-            ) : null}
+            {head ? <circle cx={head.x} cy={head.y} r={4.5} fill={ACCENT} opacity={headO} /> : null}
           </g>
         );
       })}

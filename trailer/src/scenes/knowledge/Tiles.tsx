@@ -1,43 +1,37 @@
 /**
- * The five documents (knowledge-stage.tsx <ol>): white tiles (16:9) / rows
- * (9:16) with the site's DocBadge, the name, and the match bar with its
- * 60 % threshold tick. Each pops on its 16th (the docTicks): a 2 f inhale,
- * then scale .7 → 1.08 → 1 with the ring and shadow growing in and the
- * badge flashing 20 % brighter for 2 f; ON the hit a glint of Sunday light
- * crosses the tile and an outline ring leaves its edge. While a document is
- * read it takes a sunday-ink ring and an aqua sheen. The bars fill with an overshoot and
- * settle — to .22/.14/.10/.30/.26, none reaching the tick — the ticks blink
- * 1 → .3 → 1, and the documents step back (.25, 2 px out of focus) when
- * Ava answers, so her answer leads (16:9) — 9:16: on the miss, deeper (.14,
- * 3 px, closing in about the list's centre) behind the slot that opens in
- * their place.
+ * The five documents (knowledge-stage.tsx <ol>): paper cards (16:9) / rows
+ * (9:16) set in the scene's one type system — the kind as a small tracked
+ * label in muted ink (no rainbow badges), the name in the title family, and
+ * the match bar with its 60 % threshold tick. A card is a real object: a
+ * layered shadow (theme.ts elevation) that settles as it lands.
+ *
+ * Each card lands on its 16th (the docTicks): it rises a few px and scales
+ * .94 → 1 on the site spring (one small overshoot) as its shadow settles —
+ * no glint, no ring, no flash. While a document is read, a fine sunday-ink
+ * ring breathes round it and its kind turns sunday ink; the bars fill with an
+ * overshoot and settle — to .22/.14/.10/.30/.26, none reaching the tick — and
+ * the ticks blink 1 → .3 → 1. The documents that did not answer step back (a
+ * fade and a touch smaller, never out of focus) when Ava answers (16:9) /
+ * deeper, on the miss, behind the card that takes their place (9:16).
  */
 import React from 'react';
-import { spring } from 'remotion';
+import { subpixel } from '../../components/Type';
 import { mixColor, rgba } from '../../lib/lights';
-import { EASE, mix, tween } from '../../lib/motion';
-import { C, FONT } from '../../theme';
-import { FPS, KNOWLEDGE_LOCAL } from '../../timing';
-import { BADGE, DOCS, INK, MATCH, SUN, SUN_GLOW, THRESHOLD, TRACK_FILL, type Geo } from './geometry';
+import { EASE, mix, smooth, SPRING, springUnit, tween } from '../../lib/motion';
+import { typeStyle } from '../../lib/type';
+import { C, elevation, FONT, R as RADII, TRACK } from '../../theme';
+import { KNOWLEDGE_LOCAL } from '../../timing';
+import { DOCS, INK, MATCH, THRESHOLD, TRACK_FILL, type Geo } from './geometry';
 
 const KL = KNOWLEDGE_LOCAL;
 
-/** ζ ≈ .38: one 27 % overshoot, so .7 → 1.08 → 1 */
-const POP = { stiffness: 420, damping: 14.5, mass: 0.8 };
-
-/** the frame tile i pops (= its docTick cue) */
+/** the frame tile i lands (= its docTick cue) */
 export const popAt = (i: number) => KL.docPops[i];
 
-/** the pop: spring progress p (0 → ~1.27 → 1), plus the 2 f inhale before it */
+/** the landing: spring progress p (0 → ~1.075 → 1), released a frame before the tick so it is visibly moving ON it */
 export function tilePop(t: number, i: number) {
-  const s = popAt(i);
-  if (t < s - 2) return { p: 0, o: 0, sc: 0.7, y: 24, inhale: 0 };
-  if (t < s) {
-    const u = (t - (s - 2)) / 2;
-    return { p: 0, o: 0.3 * u, sc: 0.7 - 0.04 * Math.sin((u * Math.PI) / 2), y: 24 + 4 * u, inhale: u };
-  }
-  const p = spring({ frame: t - s, fps: FPS, config: POP });
-  return { p, o: Math.min(1, 0.3 + (t - s) / 3), sc: 0.7 + 0.3 * p, y: 24 * (1 - p), inhale: 0 };
+  const p = springUnit(t - (popAt(i) - 1), SPRING.site);
+  return { p, o: smooth(0, 0.45, p), sc: 0.94 + 0.06 * p, y: 26 * (1 - p) };
 }
 
 /** the match bar's fill for tile i (overshoot +.03, then settle) */
@@ -60,63 +54,6 @@ function tickOpacity(t: number) {
   return 1 - 0.7 * k;
 }
 
-const Badge: React.FC<{ kind: keyof typeof BADGE; h: number; size: number; minW: number; flash: number }> = ({
-  kind,
-  h,
-  size,
-  minW,
-  flash,
-}) => (
-  <span
-    style={{
-      display: 'inline-grid',
-      placeItems: 'center',
-      height: h,
-      minWidth: minW,
-      padding: '0 14px',
-      boxSizing: 'border-box',
-      borderRadius: 12,
-      background: BADGE[kind].bg,
-      color: BADGE[kind].fg,
-      fontFamily: FONT.body,
-      fontWeight: 500,
-      fontSize: size,
-      letterSpacing: '0.04em',
-      lineHeight: 1,
-      filter: flash > 0 ? `brightness(${(1 + 0.2 * flash).toFixed(3)})` : undefined,
-    }}
-  >
-    {kind}
-  </span>
-);
-
-const Bar: React.FC<{ w: number; fill: number; tick: number; cool: number }> = ({ w, fill, tick, cool }) => (
-  <span style={{ position: 'relative', display: 'block', width: w, height: 10, borderRadius: 5, background: TRACK_FILL }}>
-    <span
-      style={{
-        position: 'absolute',
-        inset: 0,
-        borderRadius: 5,
-        background: rgba(mixColor(INK, '#6b6878', cool), 0.32 - 0.04 * cool),
-        transformOrigin: '0 50%',
-        transform: `scaleX(${Math.max(0, fill).toFixed(4)})`,
-      }}
-    />
-    <span
-      style={{
-        position: 'absolute',
-        left: w * THRESHOLD - 1.5,
-        top: -7,
-        width: 3,
-        height: 24,
-        borderRadius: 1.5,
-        background: 'rgba(20,10,36,0.4)',
-        opacity: tick,
-      }}
-    />
-  </span>
-);
-
 /** 0 → 1 → 0 while tile i is being read (its bar filling) */
 function readingAt(t: number, i: number) {
   const [f0, step, dur] = KL.fills;
@@ -126,49 +63,72 @@ function readingAt(t: number, i: number) {
   return Math.sin(Math.PI * EASE.inOut(u));
 }
 
+const Bar: React.FC<{ w: number; fill: number; tick: number; cool: number }> = ({ w, fill, tick, cool }) => (
+  <span style={{ position: 'relative', display: 'block', width: w, height: 8, borderRadius: 4, background: TRACK_FILL }}>
+    <span
+      style={{
+        position: 'absolute',
+        inset: 0,
+        borderRadius: 4,
+        background: rgba(mixColor(INK, '#6b6878', cool), 0.42 - 0.08 * cool),
+        transformOrigin: '0 50%',
+        transform: `scaleX(${Math.max(0, fill).toFixed(4)})`,
+      }}
+    />
+    <span
+      style={{
+        position: 'absolute',
+        left: w * THRESHOLD - 1,
+        top: -7,
+        width: 2,
+        height: 22,
+        borderRadius: 1,
+        background: 'rgba(20,10,36,0.42)',
+        opacity: tick,
+      }}
+    />
+  </span>
+);
+
 export const Tiles: React.FC<{ t: number; G: Geo; cool: number }> = ({ t, G, cool }) => {
   const S = G.tile;
   // the documents step back: on her answer (16:9) / on the miss, behind the card that takes their place (9:16)
   const B = G.docsBack;
   const dq = tween(t, B.at === 'miss' ? KL.docsBackMiss : KL.dimDocs, [0, 1], EASE.inOut);
   const dim = mix(1, B.dim, dq);
-  const focus = B.blur * dq;
   const back = mix(1, B.scale, dq);
   const listMid = (G.tiles[0].y + G.tiles[G.tiles.length - 1].y + G.tiles[G.tiles.length - 1].h) / 2;
   const tick = tickOpacity(t);
+  const kindStyle = typeStyle('label', G.v, { tone: 'paper', size: S.kindText });
+  const nameStyle: React.CSSProperties = {
+    fontFamily: FONT.ui,
+    fontWeight: 480,
+    fontSize: S.name,
+    letterSpacing: TRACK.title,
+    lineHeight: 1.1,
+    color: C.ink,
+  };
   return (
     <>
       {G.tiles.map((r, i) => {
         const pp = tilePop(t, i);
-        if (pp.o <= 0) return null;
+        if (pp.o <= 0.001) return null;
         const d = DOCS[i];
-        const k = Math.max(0, pp.p);
-        const extra = Math.max(0, k - 1) / 0.27; // 0..1 at the overshoot
-        const rd0 = readingAt(t, i);
-        const shadow = [
-          rd0 > 0.01
-            ? `0 0 0 ${(1 + 1.4 * rd0).toFixed(2)}px ${rgba(INK, 0.08 + 0.3 * rd0)}`
-            : `0 0 0 ${(1 + 1.2 * extra).toFixed(2)}px rgba(24,16,40,${(0.07 * Math.min(1, k) + 0.05 * extra).toFixed(3)})`,
-          // the read throws a little Sunday light round the tile
-          ...(rd0 > 0.01 ? [`0 0 ${(24 * rd0).toFixed(1)}px ${rgba(SUN_GLOW.body, 0.22 * rd0)}`] : []),
-          `0 ${(14 * Math.min(1.3, k) + 8 * extra).toFixed(1)}px ${(30 * Math.min(1.3, k) + 14 * extra).toFixed(1)}px -20px ${rgba(SUN.orb[0], 0.32 * Math.min(1, k))}`,
-        ].join(', ');
-        const flash = t >= popAt(i) && t < popAt(i) + 2 ? 1 : 0;
-        // shutter: the pop's first frames smear with the size change
-        const grow = Math.abs(pp.sc - tilePop(t - 1, i).sc) * Math.max(r.w, r.h);
-        const smear = Math.min(4, grow * 0.08);
-        const badge = <Badge kind={d.kind} h={S.badgeH} size={S.badgeText} minW={S.badgeMinW} flash={flash} />;
-        const bar = <Bar w={S.barW} fill={fillAt(t, i)} tick={tick} cool={cool} />;
-        // being read: a violet ring breathes in and a sheen crosses the tile
         const rd = readingAt(t, i);
-        const [f0, step] = KL.fills;
-        const sheenQ = tween(t, [f0 + i * step - 3, f0 + i * step + 11], [0, 1], EASE.inOut);
-        // ON the hit: a glint of light crosses the tile (fast, power3.out) and a ring leaves its edge
-        const hit = popAt(i);
-        const glintQ = tween(t, [hit, hit + 8], [0, 1], EASE.out3);
-        const ringQ = tween(t, [hit + 1, hit + 12], [0, 1], EASE.out3);
-        const ringO = t > hit && ringQ < 1 ? 0.55 * (1 - ringQ) : 0;
-        const ringK = 4 + 18 * ringQ;
+        const settle = Math.max(0, 1 - pp.p);
+        const shadow = [
+          // being read: a fine sunday-ink ring breathes in round the card
+          ...(rd > 0.01 ? [`0 0 0 ${(1 + 0.5 * rd).toFixed(2)}px ${rgba(INK, 0.5 * rd)}`] : []),
+          elevation(0.8 + 1.6 * settle, 1),
+        ].join(', ');
+        const y = pp.y + (1 - back) * (listMid - (r.y + r.h / 2));
+        const sc = pp.sc * back;
+        const moving = Math.abs(1 - pp.p) > 2e-4 || (dq > 0 && dq < 1);
+        const tf = moving || sc !== 1 || y !== 0 ? `translateY(${y.toFixed(3)}px) scale(${sc.toFixed(5)})` : undefined;
+        const kind = (
+          <span style={{ ...kindStyle, color: mixColor(C.muted, INK, rd), display: 'block' }}>{d.kind}</span>
+        );
+        const bar = <Bar w={S.barW} fill={fillAt(t, i)} tick={tick} cool={cool} />;
         return (
           <div
             key={d.name}
@@ -178,72 +138,24 @@ export const Tiles: React.FC<{ t: number; G: Geo; cool: number }> = ({ t, G, coo
               top: r.y,
               width: r.w,
               height: r.h,
-              borderRadius: 21.6,
+              borderRadius: G.v ? RADII.xl : RADII.x2,
               background: C.white,
               boxShadow: shadow,
               opacity: pp.o * dim,
-              // (stepping back: the list closes in about its own centre)
-              transform: `translateY(${(pp.y + (1 - back) * (listMid - (r.y + r.h / 2))).toFixed(2)}px) scale(${(pp.sc * back).toFixed(4)})`,
-              filter: smear + focus > 0.3 ? `blur(${(smear + focus).toFixed(2)}px)` : undefined,
+              ...subpixel(tf, moving),
             }}
           >
-            {ringO > 0 ? (
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: -ringK,
-                  borderRadius: 21.6 + ringK,
-                  boxShadow: `inset 0 0 0 1.5px ${rgba(SUN.orb[2], ringO)}`,
-                  pointerEvents: 'none',
-                }}
-              />
-            ) : null}
-            {(sheenQ > 0 && sheenQ < 1) || (glintQ > 0 && glintQ < 1) ? (
-              <div style={{ position: 'absolute', inset: 0, borderRadius: 21.6, overflow: 'hidden', pointerEvents: 'none' }}>
-                {glintQ > 0 && glintQ < 1 ? (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: -60,
-                      bottom: -60,
-                      width: 90,
-                      left: -140 + glintQ * (r.w + 200),
-                      transform: 'rotate(20deg)',
-                      background: `linear-gradient(90deg, ${rgba(SUN_GLOW.core, 0)}, ${rgba(SUN_GLOW.core, 0.75 * (1 - glintQ * 0.5))}, ${rgba('#ffffff', 0.9 * (1 - glintQ * 0.5))} 50%, ${rgba(SUN_GLOW.core, 0.75 * (1 - glintQ * 0.5))}, ${rgba(SUN_GLOW.core, 0)})`,
-                    }}
-                  />
-                ) : null}
-                {sheenQ > 0 && sheenQ < 1 ? (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: -40,
-                      bottom: -40,
-                      width: 160,
-                      left: -200 + sheenQ * (r.w + 240),
-                      transform: 'rotate(18deg)',
-                      background: `linear-gradient(90deg, ${rgba(SUN_GLOW.core, 0)}, ${rgba(SUN_GLOW.core, 0.5 * Math.max(0.2, rd))}, ${rgba(SUN_GLOW.core, 0)})`,
-                    }}
-                  />
-                ) : null}
-              </div>
-            ) : null}
             {S.kind === 'tile' ? (
               <>
-                <div style={{ position: 'absolute', left: S.pad, top: S.pad }}>{badge}</div>
-                <div style={{ position: 'absolute', left: r.w - S.barPadR - S.barW, top: S.pad + (S.badgeH - 10) / 2 }}>{bar}</div>
+                <div style={{ position: 'absolute', left: S.pad, top: S.pad - 2 }}>{kind}</div>
+                <div style={{ position: 'absolute', left: r.w - S.barPadR - S.barW, top: S.pad + 9 }}>{bar}</div>
                 <div
                   style={{
                     position: 'absolute',
                     left: S.nameX,
-                    top: S.pad + S.badgeH + 12,
+                    bottom: S.pad - 4,
                     width: r.w - 2 * S.pad,
-                    fontFamily: FONT.body,
-                    fontWeight: 500,
-                    fontSize: S.name,
-                    lineHeight: 1.08,
-                    letterSpacing: '-0.015em',
-                    color: C.ink,
+                    ...nameStyle,
                   }}
                 >
                   {d.name}
@@ -251,7 +163,7 @@ export const Tiles: React.FC<{ t: number; G: Geo; cool: number }> = ({ t, G, coo
               </>
             ) : (
               <>
-                <div style={{ position: 'absolute', left: S.pad, top: (r.h - S.badgeH) / 2 }}>{badge}</div>
+                <div style={{ position: 'absolute', left: S.pad, top: 0, height: r.h, display: 'flex', alignItems: 'center' }}>{kind}</div>
                 <div
                   style={{
                     position: 'absolute',
@@ -260,17 +172,13 @@ export const Tiles: React.FC<{ t: number; G: Geo; cool: number }> = ({ t, G, coo
                     height: r.h,
                     display: 'flex',
                     alignItems: 'center',
-                    fontFamily: FONT.body,
-                    fontWeight: 500,
-                    fontSize: S.name,
-                    letterSpacing: '-0.012em',
-                    color: C.ink,
                     whiteSpace: 'nowrap',
+                    ...nameStyle,
                   }}
                 >
                   {d.name}
                 </div>
-                <div style={{ position: 'absolute', left: r.w - S.barPadR - S.barW, top: (r.h - 10) / 2 }}>{bar}</div>
+                <div style={{ position: 'absolute', left: r.w - S.barPadR - S.barW, top: (r.h - 8) / 2 }}>{bar}</div>
               </>
             )}
           </div>

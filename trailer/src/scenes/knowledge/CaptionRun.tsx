@@ -5,30 +5,86 @@
  * beat after its last word; with no echo slot (this scene has none) it then
  * runs its 4 f exit from the frame the next caption starts — so when the next
  * caption comes sooner than that (kb-2: "…for that," → "and…", 14 f apart),
- * the incoming words rise over the outgoing ones ("I dand't have…").
+ * the incoming words would rise over the outgoing ones.
  *
- * Here the beat-after rule gives way: such a caption is drawn on its own and
- * leaves with the captions' own replacement exit (−30 % of its height, 4 px
- * blur, fade, 4 f, power2.in) so that it is gone on the frame the next
- * caption's first word becomes visible. Every other caption is drawn by
- * <Captions> unchanged. (Mirrors Captions.tsx's plan: HOLD = 1 beat, OUT = 4,
- * words appear `lead` frames before they are spoken.)
+ * Here the beat-after rule gives way: such a caption is drawn on its own (the
+ * same layout, the same word reveal as <Captions>) and its words leave up
+ * through their masks — power3.in, a ≤ 1.4 f left-to-right stagger, fading in
+ * the second half — so that it is gone on the frame the next caption's first
+ * word becomes visible. No blur. Every other caption is drawn by <Captions>
+ * unchanged. (Mirrors Captions.tsx's plan: HOLD = 1 beat, OUT = 4, words
+ * appear `lead` frames before they are spoken, each released a frame early on
+ * SPRING.caption from 80 % of its height.)
  */
 import React from 'react';
-import { AbsoluteFill } from 'remotion';
 import { Captions, type CaptionsProps } from '../../components/Captions';
-import { EASE, tween } from '../../lib/motion';
+import { reveal, revealStyle } from '../../components/Type';
+import { mixHex, SPRING } from '../../lib/motion';
+import { maskBox } from '../../lib/type';
 import { BEAT, vWord, type Caption } from '../../timing';
-import { textWidth } from './measure';
 
 const OUT = 4;
 const HOLD = BEAT;
+const RISE = 80;
 
 const words = (c: Caption) => c.text.split(' ');
 const idx = (c: Caption, j: number) => c.map?.[j] ?? c.word + j;
 
+/** word j of n leaves in a window of `dur` frames from `at`: a small left-to-right stagger inside it */
+function exitOf(at: number, dur: number, j: number, n: number) {
+  const st = n > 1 ? Math.min(0.4, (dur * 0.35) / (n - 1)) : 0;
+  return { at: at + j * st, dur: dur - (n - 1) * st };
+}
+
+/** one caption on its own: in word by word with the voice, out through its masks over [cut − OUT, cut] */
+const CutCaption: React.FC<CaptionsProps & { caption: Caption; cut: number; index: number }> = (props) => {
+  const { t, lineAt, voice, caption: c, cut, index, font, x, y, maxWidth, align = 'center', tint } = props;
+  const lead = props.lead ?? 2;
+  const ws = words(c);
+  const appear = ws.map((_, j) => lineAt + vWord(voice, idx(c, j)) - lead);
+  if (t < Math.min(...appear) - 1 || t > cut) return null;
+  const rowH = font.size * font.lineHeight;
+  const left = align === 'center' ? x - maxWidth / 2 : align === 'left' ? x : x - maxWidth;
+  const color = props.color ?? '#140a24';
+  const n = ws.length;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left,
+        top: y - rowH / 2,
+        width: maxWidth,
+        textAlign: align,
+        textWrap: 'balance',
+        fontFamily: font.family,
+        fontWeight: font.weight,
+        fontStyle: 'normal',
+        fontSize: font.size,
+        lineHeight: font.lineHeight,
+        letterSpacing: typeof font.tracking === 'number' ? `${font.tracking}em` : font.tracking,
+        color,
+        whiteSpace: 'normal',
+      }}
+    >
+      {ws.map((w, j) => {
+        const r = reveal(t, appear[j] - 1, { config: SPRING.caption, rise: RISE, fade: 0.5, exit: exitOf(cut - OUT, OUT, j, n) });
+        const tn = tint?.(index, j);
+        const col = tn && tn.k > 0.001 ? mixHex(color, tn.color, tn.k) : color;
+        return (
+          <React.Fragment key={j}>
+            {j > 0 ? ' ' : null}
+            <span style={maskBox(0)}>
+              <span style={{ ...revealStyle(r), color: col }}>{w}</span>
+            </span>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+};
+
 export const CaptionRun: React.FC<CaptionsProps> = (props) => {
-  const { t, lineAt, voice, captions, font, maxWidth } = props;
+  const { lineAt, voice, captions } = props;
   const lead = props.lead ?? 2;
   const spoken = (c: Caption) => words(c).map((_, j) => lineAt + vWord(voice, idx(c, j)));
   const start = (c: Caption) => Math.min(...spoken(c)) - lead;
@@ -47,48 +103,15 @@ export const CaptionRun: React.FC<CaptionsProps> = (props) => {
   });
   if (cur.length) groups.push({ caps: cur, cut: null });
 
-  const rowH = font.size * font.lineHeight;
-  const fontCss = `${font.italic ? 'italic ' : ''}${font.weight} ${font.size}px ${font.family}`;
-  const trackEm = typeof font.tracking === 'number' ? font.tracking : parseFloat(font.tracking) || 0;
-
   return (
     <>
       {groups.map((g, k) => {
+        // (a group's tint callback still receives the index into the FULL caption list)
+        const off = captions.indexOf(g.caps[0]);
         if (g.cut === null) {
-          // (a group's tint callback still receives the index into the FULL caption list)
-          const off = captions.indexOf(g.caps[0]);
-          return (
-            <Captions
-              key={k}
-              {...props}
-              captions={g.caps}
-              tint={props.tint ? (c, j) => props.tint!(c + off, j) : undefined}
-            />
-          );
+          return <Captions key={k} {...props} captions={g.caps} tint={props.tint ? (c, j) => props.tint!(c + off, j) : undefined} />;
         }
-        // gone (opacity 0) on the frame the next caption's first word shows
-        const u = tween(t, [g.cut - OUT, g.cut], [0, 1], EASE.in2);
-        if (u >= 1) return null;
-        const c = g.caps[0];
-        const rows = Math.max(1, Math.ceil(textWidth(c.text, fontCss, font.size, trackEm) / maxWidth - 0.02));
-        const off = captions.indexOf(c);
-        return (
-          <AbsoluteFill
-            key={k}
-            style={{
-              transform: u > 0 ? `translateY(${(-0.3 * rows * rowH * u).toFixed(2)}px)` : undefined,
-              opacity: 1 - u,
-              filter: u > 0.01 ? `blur(${(4 * u).toFixed(2)}px)` : undefined,
-            }}
-          >
-            <Captions
-              {...props}
-              captions={[c]}
-              holdUntil={g.cut}
-              tint={props.tint ? (_c, j) => props.tint!(off, j) : undefined}
-            />
-          </AbsoluteFill>
-        );
+        return <CutCaption key={k} {...props} caption={g.caps[0]} cut={g.cut} index={off} />;
       })}
     </>
   );

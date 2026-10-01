@@ -1,26 +1,30 @@
 /**
- * The day label above the clock as a drum: one row per moment ("MID-RUSH",
- * "AFTER CLOSING", "SUNDAY", "TUESDAY NIGHT"), each with the brand dot in its
- * light. It rolls with the clock's strips (same flick curve: wind-back,
- * power3 travel, spring overshoot), so day and time change as one mechanism.
- * Vertical motion blur ∝ drum speed; the window's edges are soft.
+ * The moment's name above the clock, as a drum: one row per moment
+ * ("MID-RUSH", "AFTER CLOSING", "SUNDAY", "TUESDAY NIGHT"), each led by the
+ * brand's CornerDot in its light. It rolls with the clock's strips (the same
+ * flick curve), so day and time change as one mechanism.
+ *
+ * Set as the film's label (TYPE.label: Instrument Sans, uppercase, 0.14em),
+ * a size up for the moment names. No glow, no blur: the row passes under the
+ * window's short feather and the motion itself is the transition (120 fps).
  */
 import React from 'react';
-import { CornerDot } from '../../components/Type';
-import { FONT, TRACK } from '../../theme';
-import { rgba } from './color';
+import { CornerDot, subpixel } from '../../components/Type';
+import { useLayout } from '../../lib/layout';
+import { typeStyle } from '../../lib/type';
+import { TRACK } from '../../theme';
 
 export type DrumRow = {
   text: string;
+  /** the label's ink */
   color: string;
+  /** the dot: the light's own colour */
   dot: string;
-  /** the light's body colour: a soft halo so the name reads as lit, not printed */
-  glow?: string;
 };
 
 export const DayDrum: React.FC<{
   rows: readonly DrumRow[];
-  /** drum position in rows (0 = first row centred; −1 = nothing yet) */
+  /** drum position in rows (0 = first row centred; −1 = nothing yet; past the last = gone) */
   pos: number;
   /** rows / frame */
   speed: number;
@@ -28,10 +32,11 @@ export const DayDrum: React.FC<{
   width: number;
   dotSize: number;
 }> = ({ rows, pos, speed, fontSize, width, dotSize }) => {
+  const L = useLayout();
   const rowH = Math.round(fontSize * 1.6);
-  const sigma = Math.min(0.3 * rowH, 0.22 * Math.max(0, Math.abs(speed) - 0.06) * rowH);
-  const blurOn = sigma > 0.4;
-  const mask = 'linear-gradient(180deg, transparent 0%, #000 24%, #000 76%, transparent 100%)';
+  const mask = 'linear-gradient(180deg, transparent 0%, #000 20%, #000 80%, transparent 100%)';
+  const moving = Math.abs(speed) > 4e-4;
+  const label = typeStyle('label', L.vertical, { tone: 'night', size: fontSize });
   return (
     <div
       style={{
@@ -43,68 +48,31 @@ export const DayDrum: React.FC<{
         maskImage: mask,
       }}
     >
-      {blurOn ? (
-        <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>
-          <defs>
-            <filter id="hook-drum-blur" x="-5%" y="-80%" width="110%" height="260%" colorInterpolationFilters="sRGB">
-              <feGaussianBlur stdDeviation={`0 ${sigma.toFixed(2)}`} />
-            </filter>
-          </defs>
-        </svg>
-      ) : null}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          filter: blurOn ? 'url(#hook-drum-blur)' : undefined,
-          opacity: 1 - Math.min(0.3, Math.abs(speed) * 0.12),
-        }}
-      >
-        {rows.map((r, i) => {
-          const d = i - pos;
-          if (Math.abs(d) > 1.35) return null;
-          return (
-            <div
-              key={i}
-              style={{
-                position: 'absolute',
-                left: 0,
-                width,
-                top: d * rowH,
-                height: rowH,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: Math.round(fontSize * 0.42),
-              }}
-            >
-              <CornerDot
-                size={dotSize}
-                color={r.dot}
-                style={{ marginTop: -1, filter: r.glow ? `drop-shadow(0 0 ${Math.round(dotSize * 0.45)}px ${rgba(r.glow, 0.7)})` : undefined }}
-              />
-              <span
-                style={{
-                  fontFamily: FONT.body,
-                  fontWeight: 500,
-                  fontSize,
-                  lineHeight: 1.2,
-                  letterSpacing: TRACK.label,
-                  textTransform: 'uppercase',
-                  whiteSpace: 'nowrap',
-                  color: r.color,
-                  textShadow: r.glow
-                    ? `0 0 ${Math.round(fontSize * 0.42)}px ${rgba(r.glow, 0.5)}, 0 0 ${Math.round(fontSize * 0.12)}px ${rgba(r.glow, 0.35)}`
-                    : undefined,
-                  marginRight: `-${TRACK.label}`,
-                }}
-              >
-                {r.text}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+      {rows.map((r, i) => {
+        const d = i - pos;
+        if (Math.abs(d) > 1.05) return null;
+        const y = d * rowH;
+        return (
+          <div
+            key={i}
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width,
+              height: rowH,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: Math.round(fontSize * 0.46),
+              ...subpixel(Math.abs(y) > 0.004 ? `translateY(${y.toFixed(3)}px)` : undefined, moving),
+            }}
+          >
+            <CornerDot size={dotSize} color={r.dot} style={{ marginTop: -1 }} />
+            <span style={{ ...label, whiteSpace: 'nowrap', color: r.color, marginRight: `-${TRACK.label}` }}>{r.text}</span>
+          </div>
+        );
+      })}
     </div>
   );
 };

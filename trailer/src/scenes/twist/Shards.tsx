@@ -1,37 +1,39 @@
 /**
- * The type breaks and rebuilds.
+ * The type breaks and rebuilds — crisp, every frame (no blur, no smear, no
+ * ghost samples: the master renders at 120 fps and every curve is continuous).
  *
- * t < 0   <HookLineStatic> (identical to the hook's line), gathering itself:
- *         scale 1 → 0.975 about its centre, a micro-tremble.
- * t = 0   per-letter shards. "Your business is" and "." blow outward
- *         (velocity-scaled smear), keep drifting and spinning, slower and
- *         slower, and come to rest exactly when they turn round. "closed"
- *         holds, trembles, then slides into the start of the new line — the
- *         c becoming a C mid-move.
- * t ≥ 8   the shards fly back as "Closed is for the door," (glyph swapped
- *         mid-flight while blurred), word by word, letters left to right.
- *         Row-1 letters wait ABOVE the tagline and drop in from above; row-2
- *         letters wait BELOW it and rise in — so nothing ever parks on, or
- *         flies across, a word that has already landed. "door," locks in
- *         left to right with its comma ON the slam. "not the phone." rises
- *         and turns lilac.
+ * t < 0   <HookLineStatic> (identical to the hook's line) inhales: scale
+ *         1 → 0.975 about its centre (a smooth gather, no tremble).
+ * t = 0   per-letter shards (TYPE.display, Instrument Sans 440 −0.03em).
+ *         "Your business is" and "." blow outward — continuous from rest, but
+ *         explosive (12 % of the blast in the first 120 fps frame) — drift,
+ *         slower and slower, and come to rest exactly when they turn round.
+ *         "closed" holds, then slides into the start of the new line; the
+ *         hook's lilac leaves it on the way (the accent moves to "not the
+ *         phone.").
+ * t ≥ 8   the shards fly back as "Closed is for the door," word by word,
+ *         letters left to right. Each letter turns over in flight like a
+ *         card (rotateY): it shows its old glyph until it is edge-on, its new
+ *         one after — the swap is never seen. Row-1 letters wait ABOVE the
+ *         tagline and drop in; row-2 letters wait BELOW it and rise in.
+ *         "door," locks left to right with its comma ON the slam. "not the
+ *         phone." rises out of its masks and takes the night's lilac.
  *
- * Where each shard rests is solved once (buildShards): the seeded blast
- * point, moved the least distance that clears the tagline's box, the path
- * "closed" slides along, the frame edge, the phone and its neighbours.
+ * While a letter moves it sits on its own compositor layer (subpixel()), so
+ * its settle is a smooth exponential, not 1 px stairs; at rest it is plain,
+ * pixel-crisp text.
  */
 import React from 'react';
 import { Easing, random } from 'remotion';
-import { noise2D } from '@remotion/noise';
 import { HookLineStatic } from '../../components/Shared';
-import { Words } from '../../components/Type';
+import { subpixel, Words } from '../../components/Type';
 import { HOOK_LINE } from '../../lib/handoff';
 import type { Layout } from '../../lib/layout';
 import { EASE, mixHex, tween } from '../../lib/motion';
-import { C, FONT, TRACK } from '../../theme';
+import { C, TYPE } from '../../theme';
 import { TWIST } from '../../timing';
 import { TW, twistGeo } from './geometry';
-import { LINE_H, type Glyph, type TextLayout } from './measure';
+import { DISPLAY_WEIGHT, LINE_H, type Glyph, type TextLayout } from './measure';
 
 const A0 = 0.975; // the line's scale when it breaks
 /** Flight: pulled in hard, then braked into the slot. */
@@ -46,10 +48,12 @@ const X_LEAD = 0.5;
 /** …and it is upright and at type size even earlier, before it enters its
  *  lane (a tilted, oversized glyph would clip the letters beside it). */
 const RS_LEAD = 0.45;
-/** Glyph swap (source → target letter), mid-flight, while fastest. */
-const SWAP = 0.25;
+/** The card turn (source → target glyph): over this share of the flight, edge-on at its middle. */
+const TURN: readonly [number, number] = [0.04, 0.42];
 /** Share of the blast travelled by t = shatterOut; the rest is the drift. */
 const BLAST = 0.8;
+/** the turn's perspective (px): a letter is a thin card in the room */
+const CARD_P = 900;
 
 type Kind = 'closed' | 'fly' | 'extra';
 export type Shard = {
@@ -59,6 +63,7 @@ export type Shard = {
   /** flight start (= the moment it stops drifting and turns round) */
   start: number;
   dur: number;
+  /** the glyph change (the card is edge-on) */
   swap: number;
   /** break position → resting point */
   vx: number;
@@ -68,18 +73,16 @@ export type Shard = {
   spin: number;
   sOut: number;
   seed: string;
+  /** turns over (card flip) to change glyph */
+  turns: boolean;
+  /** starts in the hook's key ink ("closed.") */
+  keyed: boolean;
 };
 
-/** The whole-line gather before the break (t in [-8, 0]). */
+/** The whole-line gather before the break (t in [-8, 0]): an inhale, no tremble. */
 export function gather(t: number) {
   const u = Math.min(1, Math.max(0, (t - TW.gather) / -TW.gather));
-  const a = 1 - (1 - A0) * EASE.in2(u);
-  const amp = 1.8 * u * u;
-  return {
-    a,
-    x: amp * noise2D('gather-x', t * 0.9, 0.1),
-    y: amp * noise2D('gather-y', 0.4, t * 0.9),
-  };
+  return { a: 1 - (1 - A0) * EASE.in2(u), x: 0, y: 0 };
 }
 
 /** Landing recoil: 0 at impact, a forward lobe, back, settled in ~12 f. */
@@ -154,6 +157,7 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
     y0: G.phone.cy - G.phone.h / 2,
     y1: G.phone.cy + G.phone.h / 2,
   };
+  const doorBox: Rect = { x0: G.door.cx - G.door.w / 2, x1: G.door.cx + G.door.w / 2, y0: G.door.top, y1: G.door.top + G.door.h };
   const edge = L.pick({ x: 60, y: 44 }, { x: 44, y: 120 });
 
   /* ── pieces + their seeded blast ───────────────────────────────── */
@@ -189,10 +193,11 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
     dx = (dx / len) * 0.75 + Math.cos(ga);
     dy = (dy / len) * 0.75 + Math.sin(ga) - 0.25;
     const l2 = Math.hypot(dx, dy) || 1;
-    const dist = (L.pick(430, 330) + r('d') * L.pick(520, 360) + (kind === 'extra' ? 260 : 0)) * 1.1;
-    const sOut = 0.55 + r('s') * 1.45;
-    let rot = (r('r') - 0.5) * 2 * (90 + r('rr') * 200);
-    const spin = (r('sp') < 0.5 ? -1 : 1) * (25 + r('sp2') * 45);
+    // a measured break, not confetti: moderate throws, sizes within ±20 % (a little depth), turns < 130°
+    const dist = L.pick(330, 260) + r('d') * L.pick(420, 300) + (kind === 'extra' ? 220 : 0);
+    const sOut = 0.84 + r('s') * 0.36;
+    let rot = (r('r') - 0.5) * 2 * (24 + r('rr') * 80);
+    const spin = (r('sp') < 0.5 ? -1 : 1) * (8 + r('sp2') * 18);
     // an "i" resting upside down reads as "!" — tip it past the flip
     if (src.ch === 'i') {
       const rest = ((((rot + spin) % 360) + 540) % 360) - 180;
@@ -252,8 +257,9 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
         // never ON the phone: it is found in the dark right where they rest (phoneReveal)
         hard += inside(phoneBox, x, y, half);
         c += hard * 1e4;
-        // soft: clear of the phone's rim, not on a neighbour
+        // soft: clear of the phone's rim, off the lit doorway (paper on near-white would vanish), not on a neighbour
         c += Math.min(1, inside(phoneBox, x, y, 44 + half) / 20) * 900;
+        c += Math.min(1, inside(doorBox, x, y, 10 + half) / 30) * 700;
         for (const q of placed) {
           const d = Math.hypot(x - q.ax, y - q.ay);
           const need = (half + q.size * 0.4) * 1.3 + 60;
@@ -280,36 +286,53 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
     });
   }
 
+  const hookKey = hook.glyphs.filter((g) => g.word === 3); // "closed." — the hook's key word, in its ink
   return pieces.map((p, j) => {
-    const base = { src: p.src, vx: p.ax - p.x0, vy: p.ay - p.y0, rot: p.rot, spin: p.spin, sOut: p.sOut, seed: p.seed };
+    const base = {
+      src: p.src,
+      vx: p.ax - p.x0,
+      vy: p.ay - p.y0,
+      rot: p.rot,
+      spin: p.spin,
+      sOut: p.sOut,
+      seed: p.seed,
+      keyed: hookKey.includes(p.src),
+    };
     if (p.kind === 'closed') {
       const start = TW.closedSlide + j * 0.35;
-      return { ...base, dst: tw[0][j], kind: p.kind, start, dur: 11, swap: start + 11 * 0.35, vx: 0, vy: 0 };
+      const dst = tw[0][j];
+      // only "c" → "C" has to change: it turns over as it slides
+      return { ...base, dst, kind: p.kind, start, dur: 11, swap: start + 11 * 0.35, vx: 0, vy: 0, turns: dst.ch !== p.src.ch };
     }
-    if (p.kind === 'extra') return { ...base, dst: null, kind: p.kind, start: 1e9, dur: 10, swap: 1e9 };
+    if (p.kind === 'extra') return { ...base, dst: null, kind: p.kind, start: 1e9, dur: 10, swap: 1e9, turns: false };
     const d = dstOf.get(p)!;
     const dist = Math.hypot(d.g.cx - p.ax, d.g.cy - p.ay);
     let dur = Math.min(12, 9 + dist / 300);
     if (d.land - 0.8 * dur < TW.turnMin) dur = Math.max(7, (d.land - TW.turnMin) / 0.8);
     const start = d.land - 0.8 * dur;
-    return { ...base, dst: d.g, kind: p.kind, start, dur, swap: start + dur * SWAP };
+    const turns = d.g.ch !== p.src.ch;
+    return { ...base, dst: d.g, kind: p.kind, start, dur, swap: start + dur * (TURN[0] + TURN[1]) / 2, turns };
   });
 }
 
 type State = {
   x: number;
   y: number;
+  /** in-plane rotation (deg) */
   rot: number;
+  /** the card turn (deg, rotateY): 0 → 180 over TURN; the glyph changes edge-on */
+  turn: number;
   size: number;
   useDst: boolean;
   op: number;
-  dof: number;
-  /** 0..1 the lock-in spark: a glyph flares as it seats in its slot, then cools (≈ 8 f) */
-  lock: number;
+  /** 0 = the hook's key ink, 1 = paper */
+  ink: number;
+  /** still moving (on a compositor layer, sub-pixel) */
+  moving: boolean;
 };
 
-/** the spark of a glyph seating: up in 1 f, cooling e^(−τ/2.6) */
-const lockSpark = (tau: number) => (tau < 0 ? 0 : Math.min(1, tau / 1) * Math.exp(-Math.max(0, tau - 1) / 2.6));
+/** the card turn at flight progress `fly` (deg) */
+const turnAt = (fly: number) => 180 * EASE.inOut(Math.min(1, Math.max(0, (fly - TURN[0]) / (TURN[1] - TURN[0]))));
 
 function shardState(sh: Shard, t: number, hook: TextLayout, tag: TextLayout, L: Layout): State {
   const p0 = breakPos(sh.src, L);
@@ -320,51 +343,50 @@ function shardState(sh: Shard, t: number, hook: TextLayout, tag: TextLayout, L: 
   const tx = dst ? dst.cx : x0;
   const ty = dst ? dst.cy : y0;
   const fly = Math.min(1, Math.max(0, (t - sh.start) / sh.dur));
-  const tau = t - (sh.start + sh.dur * 0.8);
+  const tau = t - (sh.start + sh.dur * LAND);
+  const ink = sh.keyed ? tween(fly, [0.12, 0.75], [0, 1], EASE.inOut) : 1;
 
   if (sh.kind === 'closed') {
-    // hold + tremble, a small recoil toward camera as the rest is blown away
-    const amp = 2.2 * (1 - tween(t, [sh.start, sh.start + 4], [0, 1], EASE.out3));
-    const trx = amp * noise2D(`${sh.seed}-tx`, t * 0.8, 0);
-    const tr = amp * noise2D(`${sh.seed}-ty`, 0, t * 0.8);
-    const rec = t > 0 ? 0.045 * (t / 2) * Math.exp(1 - t / 2) : 0;
+    // holds while the rest is blown away (a small recoil toward the camera), then slides
+    const rec = t > 0 ? 0.03 * (t / 2) * Math.exp(1 - t / 2) : 0;
     const p = SLIDE(fly);
     const dl = Math.hypot(tx - x0, ty - y0) || 1;
     const over = 9 * recoil(tau);
-    const sx = x0 + trx;
-    const sy = y0 + tr;
     // lean into the move (follow-through), straighten on landing
-    const lean = Math.sin(Math.PI * Math.min(1, fly * 1.15)) * -7 * Math.sign(tx - x0);
+    const lean = Math.sin(Math.PI * Math.min(1, fly * 1.15)) * -6 * Math.sign(tx - x0);
+    const turn = sh.turns ? turnAt(fly) : 0;
     return {
-      x: sx + (tx - sx) * p + ((tx - x0) / dl) * over,
-      y: sy + (ty - sy) * p + ((ty - y0) / dl) * over,
-      rot: 0.9 * amp * noise2D(`${sh.seed}-tr`, t * 0.7, 3) + lean + 2.5 * recoil(tau - 1),
-      size: (size0 * (1 + rec) + (tag.fontSize - size0 * (1 + rec)) * p) * (1 + 0.05 * recoil(tau)),
-      useDst: t >= sh.swap,
+      x: x0 + (tx - x0) * p + ((tx - x0) / dl) * over,
+      y: y0 + (ty - y0) * p + ((ty - y0) / dl) * over,
+      rot: lean + 2.5 * recoil(tau - 1),
+      turn,
+      size: (size0 * (1 + rec) + (tag.fontSize - size0 * (1 + rec)) * p) * (1 + 0.04 * recoil(tau)),
+      useDst: sh.turns ? turn >= 90 : t >= sh.swap,
       op: 1,
-      dof: 0,
-      lock: lockSpark(tau),
+      ink,
+      moving: tau < 16,
     };
   }
 
-  // out: the blast (first frame already ~30 % out — the impact) …
-  const u = Math.min(1, Math.max(0, (t + 1) / (TWIST.shatterOut + 1)));
-  const q = 1 - Math.pow(1 - u, 3.2);
+  // out: the blast — continuous from rest, explosive (12 % in the first 120 fps frame) …
+  const u = Math.min(1, Math.max(0, t / TWIST.shatterOut));
+  const q = 1 - Math.pow(1 - u, 4.5);
 
   if (sh.kind === 'extra') {
-    // keeps going, shrinks, burns out into a mote
+    // keeps going, a little smaller, and fades away (it has no place in the new line)
     const drift = 0.1 * tween(t, [TWIST.shatterOut, TWIST.shatterOut + 22], [0, 1], EASE.out3);
-    const burn = tween(t, [4, 26], [0, 1], EASE.in2);
+    const away = tween(t, [4, 26], [0, 1], EASE.in2);
     const k = BLAST * q + drift;
     return {
-      x: x0 + sh.vx * (k + 0.55 * burn),
-      y: y0 + sh.vy * (k + 0.55 * burn) - 40 * burn,
-      rot: sh.rot * (q + drift * 0.8 + 0.4 * burn),
-      size: size0 * (1 + (sh.sOut - 1) * q) * (1 - 0.8 * burn),
+      x: x0 + sh.vx * (k + 0.35 * away),
+      y: y0 + sh.vy * (k + 0.35 * away),
+      rot: sh.rot * (q + drift * 0.8 + 0.3 * away),
+      turn: 0,
+      size: size0 * (1 + (sh.sOut - 1) * q) * (1 - 0.25 * away),
       useDst: false,
-      lock: 0,
-      op: 1 - tween(t, [8, 26], [0, 1], EASE.inOut),
-      dof: 2 + 6 * burn + Math.abs(sh.sOut - 1) * 3,
+      op: 1 - tween(t, [6, 24], [0, 1], EASE.inOut),
+      ink,
+      moving: true,
     };
   }
 
@@ -382,56 +404,52 @@ function shardState(sh: Shard, t: number, hook: TextLayout, tag: TextLayout, L: 
   const rs = FLY(Math.min(1, fly / RS_LEAD));
   const dx = tx - ox;
   const dy = ty - oy;
-  const over = Math.min(12, 4 + Math.abs(dy) * 0.012) * recoil(tau);
-  const depth = size / size0; // ≠1: off the text plane, softer (resolves with the size)
-  // resting shards sit a touch out of focus (they are not type yet)
-  const rest = 1.4 * tween(t, [3, 9], [0, 1], EASE.inOut) * (1 - ey);
+  const over = Math.min(10, 4 + Math.abs(dy) * 0.01) * recoil(tau);
+  const turn = sh.turns ? turnAt(fly) : 0;
   return {
     x: ox + dx * ex,
     y: oy + dy * ey + Math.sign(dy || 1) * over,
     // upright and at type size by the time it drops into the row
-    rot: rotOut * (1 - rs) + 3 * recoil(tau - 0.5) * Math.sign(dx || 1),
-    size: (size + (tag.fontSize - size) * rs) * (1 + 0.06 * recoil(tau)),
-    useDst: t >= sh.swap,
+    rot: rotOut * (1 - rs) + 2.5 * recoil(tau - 0.5) * Math.sign(dx || 1),
+    turn,
+    size: (size + (tag.fontSize - size) * rs) * (1 + 0.05 * recoil(tau)),
+    useDst: sh.turns ? turn >= 90 : t >= sh.swap,
     op: 1,
-    dof: Math.abs(depth - 1) * 3.2 * (1 - rs) + rest,
-    lock: sh.dst ? lockSpark(tau) : 0,
+    ink,
+    moving: tau < 16,
   };
 }
 
-/** a soft, slanted band of light at p (0 → 1 crosses the line) */
-const glintMask = (p: number) => {
-  const c = -25 + p * 150; // % across the box
-  return `linear-gradient(105deg, rgba(0,0,0,0) ${(c - 16).toFixed(1)}%, rgba(0,0,0,1) ${c.toFixed(1)}%, rgba(0,0,0,0) ${(c + 16).toFixed(1)}%)`;
-};
-
+/** The glyph setting: TYPE.display on the night (exactly what <Words> sets, so the rows read as one line). */
 const glyphStyle = (fontSize: number): React.CSSProperties => ({
   position: 'absolute',
-  fontFamily: FONT.display,
-  fontWeight: 500,
+  left: 0,
+  top: 0,
+  fontFamily: TYPE.display.family,
+  fontWeight: DISPLAY_WEIGHT,
   fontSize,
   lineHeight: `${LINE_H * fontSize}px`,
-  letterSpacing: TRACK.display,
+  letterSpacing: TYPE.display.tracking,
+  fontKerning: 'normal',
   whiteSpace: 'pre',
-  color: C.paper,
   transformOrigin: '50% 50%',
+  backfaceVisibility: 'hidden',
 });
-
-const SHUTTER = 0.6;
 
 /** The focus beat of the hold (TWIST_LOCAL.keyFocus / keyGlint). */
 export type Focus = {
-  /** opacity of the landed "Closed is for the door," (1 → .45) */
+  /** opacity of the landed "Closed is for the door," (1 → .5) */
   dim: number;
-  /** 0..1 "not the phone." brightens: lilac → mix(lilac, paper, .2) */
+  /** 0..1 "not the phone." takes the light: lilac → a lighter lilac */
   key: number;
-  /** its scale about its centre (1 → 1.03, anticipation + spring) */
+  /** its scale about its centre (1 → 1.02, anticipation + spring) */
   swell: number;
-  /** 0..1 a glint crossing it left → right (−1: none) */
+  /** 0..1 a sheen crossing its fill left → right (−1: none) — the fill itself, never a copy */
   glint: number;
 };
 const NO_FOCUS: Focus = { dim: 1, key: 0, swell: 1, glint: -1 };
-const KEY_LIT = mixHex(C.lilac, C.paper, 0.2);
+const KEY_LIT = mixHex(C.lilac, C.paper, 0.18);
+const SHEEN = mixHex(C.lilac, '#ffffff', 0.7);
 
 export const Shards: React.FC<{
   t: number;
@@ -439,90 +457,58 @@ export const Shards: React.FC<{
   hook: TextLayout;
   tag: TextLayout;
   shards: Shard[];
-  /** when true, draw a light single-sample version (ghost copies) */
-  ghost?: boolean;
-  /** extra blur on every glyph (the dive) */
-  extraBlur?: number;
-  /** one blur over the whole layer (ghost copies: one filter pass instead of
-   *  one per glyph, which is what keeps the dive affordable) */
-  layerBlur?: number;
   focus?: Focus;
-}> = ({ t, L, hook, tag, shards, ghost = false, extraBlur = 0, layerBlur = 0, focus = NO_FOCUS }) => {
+}> = ({ t, L, hook, tag, shards, focus = NO_FOCUS }) => {
   if (t < 0) {
     const g = gather(t);
     return (
       <HookLineStatic
         style={{
-          transform: `translate(${g.x.toFixed(3)}px, ${g.y.toFixed(3)}px) translateY(-50%) scale(${g.a.toFixed(5)})`,
+          transform: `translateY(-50%) scale(${g.a.toFixed(5)})`,
         }}
       />
     );
   }
 
+  const keyInk = HOOK_LINE(L).key.color;
   const line3 = tag.lines[2];
+  const swelling = Math.abs(focus.swell - 1) > 1e-4 && t < TW.keyFocus[1] + 14;
+  // "not the phone." — paper → lilac on keyColor (as <Words> eases it), lighter on the focus beat
+  const phraseInk = mixHex(mixHex(C.paper, C.lilac, tween(t, [TWIST.keyColor, TWIST.keyColor + 18], [0, 1], EASE.house)), KEY_LIT, focus.key);
+  const sheenOn = focus.glint > 0 && focus.glint < 1;
+  const lineW = line3.width;
+  const band = 0.22 * lineW;
+  const sheenAt = -band + focus.glint * (lineW + 2 * band);
   return (
-    <div style={{ position: 'absolute', inset: 0, filter: layerBlur > 0.15 ? `blur(${layerBlur.toFixed(2)}px)` : undefined }}>
+    <div style={{ position: 'absolute', inset: 0 }}>
       {shards.map((sh, i) => {
-        const st = shardState(sh, t, hook, tag, L);
-        if (st.op < 0.01) return null;
-        const pv = shardState(sh, t - 0.5, hook, tag, L);
-        const vx = (st.x - pv.x) * 2;
-        const vy = (st.y - pv.y) * 2;
-        const speed = Math.hypot(vx, vy); // px / frame
-        // enough sub-frame samples that neighbours overlap into one smear
-        // (≈ one per 14 px of trail), each softer and fainter down the trail
-        const trail = speed * SHUTTER;
-        const n = ghost || speed < 4 ? 1 : Math.min(7, Math.max(2, Math.ceil(trail / 11) + 1));
-        const phi = (Math.atan2(vy, vx) * 180) / Math.PI;
-        const samples = Array.from({ length: n }, (_, k) =>
-          k === 0 ? st : shardState(sh, t - (k * SHUTTER) / (n - 1), hook, tag, L),
-        );
+        const s = shardState(sh, t, hook, tag, L);
+        if (s.op < 0.01) return null;
+        const g = s.useDst && sh.dst ? sh.dst : sh.src;
+        const fs = s.useDst && sh.dst ? tag.fontSize : hook.fontSize;
+        const lh = LINE_H * fs;
+        const sc = s.size / fs;
+        // past edge-on the card shows its new face: the turn continues from −90 to 0
+        const ry = s.turn >= 90 ? s.turn - 180 : s.turn;
+        const tf =
+          `translate(${(s.x - g.adv / 2).toFixed(3)}px, ${(s.y - lh / 2).toFixed(3)}px)` +
+          (Math.abs(ry) > 0.01 ? ` perspective(${CARD_P}px) rotateY(${ry.toFixed(3)}deg)` : '') +
+          (Math.abs(s.rot) > 0.001 ? ` rotate(${s.rot.toFixed(3)}deg)` : '') +
+          (Math.abs(sc - 1) > 1e-5 ? ` scale(${sc.toFixed(5)})` : '');
+        const op = s.op * (sh.dst ? focus.dim : 1);
         return (
-          <React.Fragment key={i}>
-            {samples
-              .map((s, k) => {
-                const g = s.useDst && sh.dst ? sh.dst : sh.src;
-                const fs = s.useDst && sh.dst ? tag.fontSize : hook.fontSize;
-                const lh = LINE_H * fs;
-                const sc = s.size / fs;
-                // directional smear: stretch along the velocity, blur ∝ speed
-                const stretch = 1 + Math.min(1.6, speed / 150);
-                const kk = n > 1 ? k / (n - 1) : 0;
-                // trailing samples blur by about their own spacing, so they
-                // melt into one streak instead of reading as echoes
-                const blur = s.dof + extraBlur + Math.min(7, speed * 0.035) + kk * Math.min(10, trail * 0.5);
-                const op =
-                  s.op *
-                  (sh.dst ? focus.dim : 1) *
-                  (n === 1 ? 1 : k === 0 ? 0.92 : (0.9 * (1 - k / n)) / (1 + 0.35 * (n - 1)));
-                const xf =
-                  speed > 4
-                    ? `rotate(${phi.toFixed(2)}deg) scaleX(${stretch.toFixed(3)}) rotate(${(-phi).toFixed(2)}deg) rotate(${s.rot.toFixed(2)}deg) scale(${sc.toFixed(4)})`
-                    : `rotate(${s.rot.toFixed(2)}deg) scale(${sc.toFixed(4)})`;
-                return (
-                  <span
-                    key={k}
-                    style={{
-                      ...glyphStyle(fs),
-                      left: s.x - g.adv / 2,
-                      top: s.y - lh / 2,
-                      width: g.adv,
-                      opacity: op,
-                      transform: xf,
-                      filter: blur > 0.15 ? `blur(${blur.toFixed(2)}px)` : undefined,
-                      // the lock-in spark (main sample only): a white bloom that cools
-                      textShadow:
-                        k === 0 && !ghost && s.lock > 0.02
-                          ? `0 0 ${(0.14 * fs).toFixed(1)}px rgba(255,255,255,${(0.6 * s.lock).toFixed(3)}), 0 0 ${(0.04 * fs).toFixed(1)}px rgba(255,255,255,${(0.5 * s.lock).toFixed(3)})`
-                          : undefined,
-                    }}
-                  >
-                    {g.ch}
-                  </span>
-                );
-              })
-              .reverse()}
-          </React.Fragment>
+          <span
+            key={i}
+            style={{
+              ...glyphStyle(fs),
+              width: g.adv,
+              color: s.ink >= 1 ? C.paper : mixHex(keyInk, C.paper, s.ink),
+              opacity: op < 0.999 ? op : undefined,
+              ...subpixel(tf, s.moving),
+            }}
+          >
+            {g.ch}
+          </span>
         );
       })}
       {t >= TWIST.line2 - 6 ? (
@@ -531,57 +517,50 @@ export const Shards: React.FC<{
             position: 'absolute',
             left: line3.left,
             top: line3.top,
-            width: line3.width + 40,
-            filter: extraBlur > 0.15 ? `blur(${extraBlur.toFixed(2)}px)` : undefined,
-            transform: focus.swell !== 1 ? `scale(${focus.swell.toFixed(5)})` : undefined,
-            transformOrigin: `${(line3.width / 2).toFixed(1)}px ${(tag.lineH / 2).toFixed(1)}px`,
+            width: lineW + 40,
+            transformOrigin: `${(lineW / 2).toFixed(1)}px ${(tag.lineH / 2).toFixed(1)}px`,
+            ...subpixel(focus.swell !== 1 ? `scale(${focus.swell.toFixed(5)})` : undefined, swelling),
           }}
         >
-          {/* its light: a soft lilac bloom of the words behind them as they take focus */}
-          {focus.key > 0.01 && !ghost ? (
-            <div style={{ position: 'absolute', inset: 0, filter: `blur(${(0.16 * tag.fontSize).toFixed(1)}px)`, opacity: 0.55 * focus.key }}>
-              <Words text="not the phone." start={TWIST.line2} stagger={3} frame={t} align="left" color={C.lilac} style={{ fontSize: tag.fontSize, whiteSpace: 'nowrap' }} />
-            </div>
-          ) : null}
           <Words
             text="not the phone."
             start={TWIST.line2}
             stagger={3}
             frame={t}
             align="left"
+            role="display"
+            tone="night"
+            config={SPRING_LINE}
             keys={[{ text: 'not the phone.', color: C.lilac, at: TWIST.keyColor }]}
             style={{ fontSize: tag.fontSize, whiteSpace: 'nowrap' }}
             wordStyle={
-              focus.key > 0.001
-                ? () => ({ color: mixHex(C.lilac, KEY_LIT, focus.key) })
-                : undefined
+              sheenOn
+                ? (wi) => {
+                    // the sheen: one gradient across the whole line, each word showing its own slice of it
+                    const w = tag.words[5 + wi];
+                    const off = w ? w.left - line3.left : 0;
+                    const c = sheenAt;
+                    return {
+                      backgroundImage: `linear-gradient(90deg, ${phraseInk} 0px, ${phraseInk} ${(c - band).toFixed(1)}px, ${SHEEN} ${c.toFixed(1)}px, ${phraseInk} ${(c + band).toFixed(1)}px, ${phraseInk} ${(lineW + 2 * band).toFixed(1)}px)`,
+                      backgroundSize: `${(lineW + 2 * band).toFixed(1)}px 100%`,
+                      backgroundPosition: `${(-off).toFixed(1)}px 0`,
+                      backgroundRepeat: 'no-repeat',
+                      WebkitBackgroundClip: 'text',
+                      backgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      color: 'transparent',
+                    };
+                  }
+                : focus.key > 0.001
+                  ? () => ({ color: phraseInk })
+                  : undefined
             }
           />
-          {/* the glint: the same words in white light, seen through a moving band */}
-          {focus.glint >= 0 && focus.glint <= 1 && !ghost ? (
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                mixBlendMode: 'screen',
-                WebkitMaskImage: glintMask(focus.glint),
-                maskImage: glintMask(focus.glint),
-                opacity: 0.9 * Math.sin(Math.PI * Math.min(1, focus.glint * 1.15)),
-              }}
-            >
-              <Words
-                text="not the phone."
-                start={TWIST.line2}
-                stagger={3}
-                frame={t}
-                align="left"
-                color="#ffffff"
-                style={{ fontSize: tag.fontSize, whiteSpace: 'nowrap' }}
-              />
-            </div>
-          ) : null}
         </div>
       ) : null}
     </div>
   );
 };
+
+/** "not the phone." rises on the display spring (heavier, one soft overshoot) */
+const SPRING_LINE = { stiffness: 140, damping: 17, mass: 1 };

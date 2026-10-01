@@ -1,12 +1,12 @@
 /**
- * TWIST geometry + camera. Pure functions of the layout and the (local)
- * frame, so the scene can re-evaluate any layer at a sub-frame time for
- * motion-blur ghosts.
+ * TWIST geometry + camera. Pure functions of the layout and the (local,
+ * fractional) frame — every value is continuous in t (the master renders at
+ * 120 fps), so any layer can be re-evaluated at any sub-frame time.
  */
-import { noise2D } from '@remotion/noise';
 import { CALL_ORB_START } from '../../lib/handoff';
 import type { Layout } from '../../lib/layout';
 import { EASE, tween } from '../../lib/motion';
+import { TYPE } from '../../theme';
 import { TWIST, TWIST_LOCAL } from '../../timing';
 
 /** Twist fine-cut timing lives in timing.ts (TWIST_LOCAL). */
@@ -15,18 +15,22 @@ export const TW = TWIST_LOCAL;
 export type Geo = ReturnType<typeof twistGeo>;
 
 export function twistGeo(L: Layout) {
-  const fontSize = L.pick(118, 104);
+  // the tagline is TYPE.display, the hook line's own size (the letters keep their size as they fly)
+  const fontSize = L.pick(TYPE.display.size[0], TYPE.display.size[1]);
   const text = { fontSize, cx: L.cx, cy: L.pick(L.cy - 6, L.cy + 26), boxWidth: L.pick(1400, 940) };
 
+  // 16:9: the door and the phone flank the tagline at a third of the frame's margin each,
+  // so "not the phone." (≈ 830 px) has air on both sides
   const door = L.pick(
-    { cx: 336, top: 222, w: 300, h: 650 },
+    { cx: 300, top: 222, w: 300, h: 650 },
     { cx: 292, top: 226, w: 250, h: 540 },
   );
   const floor = door.top + door.h;
 
   // 9:16: under the tagline, its caller ID (label + number, above the orb — Phone.tsx) inside the
   // safe zone (y ≤ 1500 at the hold's full push); the body runs on into the bottom band
-  const phone = L.pick({ cx: 1592, cy: 540, w: 260, h: 540 }, { cx: 772, cy: 1490, w: 260, h: 540 });
+  // (260 × 540, bezel 9: the call's RoomBox opens from exactly this screen — Call.tsx TWIST_SCREEN)
+  const phone = L.pick({ cx: 1632, cy: 540, w: 260, h: 540 }, { cx: 772, cy: 1490, w: 260, h: 540 });
   const bezel = 9;
   const screen = { w: phone.w - 2 * bezel, h: phone.h - 2 * bezel, r: 37 };
 
@@ -66,7 +70,7 @@ const K_PHONE = 0.6;
 
 export function camAt(t: number, g: Geo): Cam {
   const { L } = g;
-  // slow push while we read; shatter kick; focus kick; slam shake
+  // slow push while we read; a soft zoom kick on the shatter and on the focus beat (smooth pulses)
   const push = 0.04 * tween(t, TW.push, [0, 1], EASE.inOut);
   const kickX = t - TWIST.shatter;
   const kick = kickX > 0 ? 0.022 * (kickX / 2.2) * Math.exp(1 - kickX / 2.2) : 0;
@@ -95,30 +99,8 @@ export function camAt(t: number, g: Geo): Cam {
   const aimX = (ax * (fAim - 1 + w)) / (K_PHONE * fAim);
   const aimY = (ay * (fAim - 1 + w)) / (K_PHONE * fAim);
 
-  // drift: a breathing handheld, very small
-  const bx = 5 * noise2D('twist-cam-x', t * 0.012, 0.2);
-  const by = 4 * noise2D('twist-cam-y', 0.8, t * 0.012);
-  // handheld is zero at the break (the hook's line hands over untouched)
-  // and gone by the end of the dive (the orb must land exactly)
-  const settle =
-    tween(t, [0, 14], [0, 1], EASE.inOut) *
-    (1 - tween(t, [TWIST.pushToPhone[0], TWIST.pushToPhone[1] - 6], [0, 1], EASE.inOut));
-
-  // slam shake: ±4 px, 4 frames, decaying
-  const s = shake(t);
-
-  return { cx: aimX + bx * settle + s.x, cy: aimY + by * settle + s.y, dz };
-}
-
-export function shake(t: number) {
-  const u = t - TWIST.doorSlam;
-  if (u < 0 || u > 5) return { x: 0, y: 0 };
-  const env = 4 * Math.exp(-u / 1.6);
-  const sgn = Math.round(u) % 2 === 0 ? 1 : -1;
-  return {
-    x: env * sgn * (0.75 + 0.25 * noise2D('shk-x', u, 0)),
-    y: env * -sgn * (0.45 + 0.3 * noise2D('shk-y', 0, u)),
-  };
+  // a locked-off camera: no handheld, no shake — the push, the kicks and the dive are its only moves
+  return { cx: aimX, cy: aimY, dz };
 }
 
 export type LayerXf = { f: number; tx: number; ty: number; alive: boolean };
@@ -141,20 +123,20 @@ export function project(x: LayerXf, L: Layout, px: number, py: number) {
 }
 
 /**
- * Phone vibration at the second burst. `f` is the phone plane's zoom: the
- * buzz lives on the phone, so it grows (sub-linearly) as the camera dives
- * in and still reads at 5×. Returns screen px + a small rotation (deg)
- * about the phone's centre (which leaves the avatar where it is).
+ * Phone vibration at the resumed ring: a smooth, decaying sinusoid (never noise). `f` is the
+ * phone plane's zoom: the buzz lives on the phone, so it grows a little as the camera dives in.
+ * Returns screen px + a small rotation (deg) about the phone's centre (which leaves the avatar
+ * where it is).
  */
 export function buzz(t: number, f = 1) {
   const [a, b] = TW.buzz;
   if (t < a || t > b) return { x: 0, y: 0, rot: 0 };
-  const env = tween(t, [a, a + 1.5], [0, 1], EASE.out3) * tween(t, [b - 4, b], [1, 0], EASE.inOut);
+  const env = tween(t, [a, a + 1.5], [0, 1], EASE.out3) * tween(t, [b - 5, b], [1, 0], EASE.inOut);
   const ph = (t - a) * Math.PI * 1.35;
-  const amp = 3 * Math.pow(Math.max(1, f), 0.6);
+  const amp = 1.6 * Math.pow(Math.max(1, f), 0.45);
   return {
     x: amp * env * Math.sin(ph),
-    y: 0.37 * amp * env * Math.sin(ph * 1.7 + 0.8),
-    rot: 1.4 * env * Math.sin(ph * 0.92 + 1.9),
+    y: 0.3 * amp * env * Math.sin(ph * 1.7 + 0.8),
+    rot: 0.5 * env * Math.sin(ph * 0.92 + 1.9),
   };
 }

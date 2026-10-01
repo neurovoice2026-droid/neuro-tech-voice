@@ -5,9 +5,11 @@
  * both sides. Every column is the same element — at rest a 4 px dot, while
  * it rings a bar — so the bars grow out of the dots.
  *
- * Heights: a deterministic 25 Hz warble (aliased to the frame rate, as a
- * camera would see it) under the burst envelope, textured per bar with
- * noise2D. Colour runs callerLit → lilac across the row.
+ * Heights: a smooth 5 Hz warble (what the old 25 Hz motor read as at 30 fps,
+ * now written at its apparent rate so it is identical at 30 and 120 fps)
+ * under the burst envelope, textured per bar with noise2D. Colour runs
+ * callerLit → lilac across the row. Drawn as SVG (geometry is never
+ * pixel-snapped, so the frozen bars creep by sub-pixels); no glow.
  */
 import React from 'react';
 import { noise2D } from '@remotion/noise';
@@ -17,6 +19,8 @@ import { FPS } from '../../timing';
 
 const BARS = 15; // columns each side of centre that carry signal
 const TAIL = 17; // dotted columns each side beyond them
+/** the warble's apparent frequency (Hz) */
+const WARBLE_HZ = 5;
 
 export const Wave: React.FC<{
   frame: number; // real
@@ -32,27 +36,28 @@ export const Wave: React.FC<{
   freeze: number;
   decayEnd: number;
   out: number;
-  /** 0..1 one-frame light hiccup (the text beat) */
+  /** 0..1 a soft light lift (the text beat) */
   tick?: number;
   /** a beat breath in the hold (signed, ≈ −0.3..1): the frozen bars swell ±20 % and catch light */
   breath?: number;
-}> = ({ frame, t, cx, cy, pitch, barW, maxH, drawIn, ring, burst, freeze, decayEnd, out, tick = 0, breath = 0 }) => {
+  /** the drawing surface (the frame) */
+  width0: number;
+  height0: number;
+}> = ({ frame, t, cx, cy, pitch, barW, maxH, drawIn, ring, burst, freeze, decayEnd, out, tick = 0, breath = 0, width0, height0 }) => {
   // burst envelope (world time): fast attack, sustain, exponential release
   // the envelope is sampled no later than the freeze: the row HOLDS that shape
   const te = Math.min(t, freeze);
   const attack = tween(te, [ring, ring + 2], [0, 1], EASE.out3);
   const release = te > ring + burst ? Math.exp(-(te - (ring + burst)) / 7) : 1;
   const env = te < ring ? 0 : attack * release;
-  // 25 Hz warble sampled at 30 fps
-  const warble = 0.7 + 0.3 * Math.sin((2 * Math.PI * 25 * te) / FPS);
+  const warble = 0.7 + 0.3 * Math.sin((2 * Math.PI * WARBLE_HZ * te) / FPS);
   // after the freeze: the row dims to ~40 % and slowly sinks
   const frozen = tween(frame, [freeze, freeze + 10], [0, 1], EASE.house);
-  const dim = Math.min(1, 1 - 0.6 * frozen + 0.45 * tick + 0.22 * Math.max(0, breath) * frozen);
+  const dim = Math.min(1, 1 - 0.6 * frozen + 0.3 * tick + 0.22 * Math.max(0, breath) * frozen);
   const swell = 1 + 0.2 * breath * frozen;
   const sink = 1 - 0.22 * tween(frame, [freeze, decayEnd], [0, 1], EASE.inOut);
-  const glow = env * (1 - tween(frame, [freeze, freeze + 8], [0, 1], EASE.house)) + 0.8 * tick;
 
-  const cols = [];
+  const bars: React.ReactNode[] = [];
   const J = BARS + TAIL;
   for (let j = -J; j <= J; j++) {
     const a = Math.abs(j);
@@ -63,30 +68,23 @@ export const Wave: React.FC<{
     // which crawls — the frozen silhouette creeps, it never quite stops
     const tex =
       0.42 +
-      0.58 * (0.5 + 0.5 * noise2D('hook-wave', j * 0.29, t * 0.2)) *
-        (0.75 + 0.25 * Math.sin(j * 0.9 - t * 1.1));
+      0.58 * (0.5 + 0.5 * noise2D('hook-wave', j * 0.29, t * 0.2)) * (0.75 + 0.25 * Math.sin(j * 0.9 - t * 1.1));
     const h = a <= BARS ? maxH * g * env * warble * tex * sink * swell : 0;
     const tailFade = a <= BARS ? 1 : Math.pow(1 - (a - BARS) / (TAIL + 1), 1.5) * 0.75;
     const col = mixHex(C.callerLit, C.lilac, (j + J) / (2 * J));
-    const H = barW + 2 * h;
     const s = Math.max(0, appear);
-    cols.push(
-      <div
-        key={j}
-        style={{
-          position: 'absolute',
-          left: cx + j * pitch - barW / 2,
-          top: cy - H / 2,
-          width: barW,
-          height: H,
-          borderRadius: barW / 2,
-          background: col,
-          opacity: Math.min(1, s) * tailFade * dim * (1 - out),
-          transform: `scale(${s.toFixed(3)})`,
-          boxShadow: glow > 0.05 && h > 6 ? `0 0 ${(8 * glow).toFixed(1)}px ${col}88` : undefined,
-        }}
-      />,
+    const w = barW * s;
+    const H = (barW + 2 * h) * s;
+    const o = Math.min(1, s) * tailFade * dim * (1 - out);
+    if (o < 0.003) continue;
+    bars.push(
+      <rect key={j} x={cx + j * pitch - w / 2} y={cy - H / 2} width={w} height={H} rx={w / 2} fill={col} fillOpacity={o} />,
     );
   }
-  return <>{cols}</>;
+  if (bars.length === 0) return null;
+  return (
+    <svg width={width0} height={height0} style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible' }} aria-hidden>
+      {bars}
+    </svg>
+  );
 };

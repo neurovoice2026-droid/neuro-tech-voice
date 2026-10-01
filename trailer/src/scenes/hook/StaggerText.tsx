@@ -1,53 +1,38 @@
 /**
- * Letter-staggered mask rise for the site's uppercase labels: each letter
- * sits in its own clipped box and rides aos() (anticipation, overshoot,
- * settle) up from 110 %, with blur proportional to its speed.
+ * A short uppercase label revealed letter by letter: each letter sits in its
+ * own clipping box and rises out of it on the caption spring (Type.tsx
+ * reveal), staggered — motion only, never blur. Leaves the same way (`exit`).
  */
 import React from 'react';
-import { aos, SPRING } from '../../lib/motion';
+import { reveal, revealStyle, type RevealExit } from '../../components/Type';
+import { SPRING } from '../../lib/motion';
+import { maskBox } from '../../lib/type';
 
 export const StaggerText: React.FC<{
   text: string;
-  frame: number;
+  /** timeline time (fractional) */
+  t: number;
   start: number;
+  /** frames between letters */
   stagger?: number;
+  /** the exit (each letter `exitStagger` frames after the last) */
+  exit?: RevealExit & { stagger?: number };
   style?: React.CSSProperties;
-  letterStyle?: (i: number) => React.CSSProperties | undefined;
-}> = ({ text, frame, start, stagger = 1, style, letterStyle }) => {
+}> = ({ text, t, start, stagger = 0.8, exit, style }) => {
   const chars = Array.from(text);
   return (
     <div style={{ display: 'inline-flex', whiteSpace: 'pre', ...style }}>
       {chars.map((ch, i) => {
-        const s = start + i * stagger;
-        const cfg = { anticip: 3, depth: 0.12, config: SPRING.site };
-        const p = aos(frame, s, cfg);
-        const pp = aos(frame - 1, s, cfg);
-        const y = (1 - p) * 110;
-        const v = Math.abs(p - pp) * 110;
-        const blur = Math.min(5, v * 0.05);
+        const r = reveal(t, start + i * stagger, {
+          config: SPRING.caption,
+          rise: 100,
+          fade: 0.5,
+          exit: exit ? { at: exit.at + i * (exit.stagger ?? 0.5), dur: exit.dur ?? 6, to: exit.to } : undefined,
+        });
         return (
-          <span
-            key={i}
-            style={{
-              display: 'inline-block',
-              overflow: 'hidden',
-              verticalAlign: 'top',
-              paddingTop: '0.18em',
-              marginTop: '-0.18em',
-              paddingBottom: '0.08em',
-              marginBottom: '-0.08em',
-            }}
-          >
-            <span
-              style={{
-                display: 'inline-block',
-                transform: `translateY(${y.toFixed(2)}%)`,
-                filter: blur > 0.1 ? `blur(${blur.toFixed(2)}px)` : undefined,
-                ...letterStyle?.(i),
-              }}
-            >
-              {ch === ' ' ? ' ' : ch}
-            </span>
+          // the letter keeps its own tracking (the label's letter-spacing sits inside the box)
+          <span key={i} style={{ ...maskBox(0), letterSpacing: 'inherit' }}>
+            <span style={revealStyle(r)}>{ch === ' ' ? ' ' : ch}</span>
           </span>
         );
       })}

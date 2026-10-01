@@ -1,87 +1,101 @@
 /**
- * The #demo clock lockup, "03 ◉ 12": four figure columns (0.6em × 1.1em,
- * clipped) on strips of 0-9-0, with the orb as the colon.
+ * The #demo clock lockup, "03 ◉ 12": four figure windows (0.6em × 1.1em,
+ * clipped) with the orb as the colon.
  *
- * THE FOUR LIGHTS: the strips FLICK through the site's four moments — each
- * flick a full turn plus the difference (as the site spins its figures),
- * power3.inOut over a few frames after a short wind-back, landing with a
- * spring overshoot. Flicks are additive (chainPos), so a new one can leave
- * while the last one's overshoot is still settling.
+ * Each window holds a short strip of STATES (blank → 17:05's figure → … →
+ * blank). A figure that changes ROLLS one cell: the old figure leaves
+ * through the top of its window in its own light while the new one rises in
+ * from below in the new light (a short wind-back, power3.inOut travel, a
+ * small damped overshoot on the landing). A figure that stays does not move —
+ * it re-lights. Flicks are additive (chainPos), so a new one can leave while
+ * the last one is still settling.
  *
- * Only the cells near each strip's window are drawn. Vertical motion blur
- * is an SVG feGaussianBlur with stdDeviation "0 σ" (σ ∝ strip speed), so
- * the figures smear along their travel only.
+ * No motion blur, no smear: the film renders at 120 fps and every position
+ * here is a continuous function of fractional time, so a roll reads as a
+ * crisp mechanical move. While a strip moves its figures sit on a compositor
+ * layer (Type.tsx subpixel) so the settle never stair-steps; at rest they are
+ * plain, pixel-crisp text.
  */
 import React from 'react';
 import { MeshOrb } from '../../components/MeshOrb';
+import { subpixel } from '../../components/Type';
 import { C, FONT } from '../../theme';
 import { rgba } from './color';
+import { numFill } from './moments';
 
 /* ── Flick curve ────────────────────────────────────────────────────── */
 
 const inOut3 = (u: number) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
 
 /** One forward flick of a strip: `delta` cells, leaving at `start`, landing ON `land`. */
-export type Flick = { start: number; land: number; delta: number };
+export type Flick = {
+  start: number;
+  land: number;
+  delta: number;
+  /** wind-back before it leaves, in cells (default 7 %; 0 = none) */
+  wind?: number;
+};
 
-/** Arrival speed in cells / frame → the size of the landing overshoot. */
-const V_LAND = 0.1;
+/** Arrival speed in cells / frame → the size of the landing overshoot (≈ 5 % of a cell). */
+const V_LAND = 0.07;
 const OMEGA = (2 * Math.PI) / 9; // overshoot period ≈ 9 frames
 const DECAY = 0.3;
 const WIND = 0.07; // anticipation: the strip winds back 7 % of a cell
 const WIND_FRAMES = 2;
-/** Strip speed (cells / frame) below which no motion blur is drawn. */
-const BLUR_FLOOR = 0.16;
 
 /** Displacement (cells) one flick has added by frame f: wind-back, travel, overshoot + settle. */
-export function flickDisp(f: number, { start, land, delta }: Flick): number {
-  if (f <= start - WIND_FRAMES) return 0;
+export function flickDisp(f: number, { start, land, delta, wind = WIND }: Flick): number {
+  const wf = wind > 0 ? WIND_FRAMES : 0;
+  if (f <= start - wf) return 0;
   if (f < start) {
-    const t = (f - (start - WIND_FRAMES)) / WIND_FRAMES;
-    return -WIND * Math.sin((t * Math.PI) / 2);
+    const t = (f - (start - wf)) / wf;
+    return -wind * Math.sin((t * Math.PI) / 2);
   }
-  const D = delta + WIND;
+  const D = delta + wind;
   const dur = land - start;
   if (f < land) {
     const u = (f - start) / dur;
     // power3.inOut with a little linear mixed in, so the strip arrives with
-    // speed V_LAND and a spring can carry it past the figure
+    // speed V_LAND and the spring carries it a touch past the figure
     const m = Math.min(0.4, (V_LAND * dur) / D);
-    return -WIND + D * ((1 - m) * inOut3(u) + m * u);
+    return -wind + D * ((1 - m) * inOut3(u) + m * u);
   }
   const tau = f - land;
-  return delta + (V_LAND / OMEGA) * Math.exp(-DECAY * tau) * Math.sin(OMEGA * tau);
+  const v = (D * Math.min(0.4, (V_LAND * dur) / D)) / dur; // the actual arrival speed
+  return delta + (v / OMEGA) * Math.exp(-DECAY * tau) * Math.sin(OMEGA * tau);
 }
 
 /** Strip position (cells, fractional) at frame f: `from` plus every flick so far. */
 export const chainPos = (f: number, from: number, flicks: readonly Flick[]) =>
   flicks.reduce((p, k) => p + flickDisp(f, k), from);
 
-/* ── Figure column ──────────────────────────────────────────────────── */
+/* ── Figure window ──────────────────────────────────────────────────── */
 
-const SHEEN =
-  `linear-gradient(100deg, ${rgba(C.white, 0)} 40%, ${rgba(C.white, 0.95)} 50%, ${rgba(C.white, 0)} 58%)`;
+/** One state of a window: its figure (null = blank) and the fill stops of the light it is lit by. */
+export type Cell = { digit: number | null; stops: readonly string[] };
 
-const Column: React.FC<{
+/** A narrow specular band (a light passing over a polished figure), clipped to the glyphs. */
+const SHEEN = `linear-gradient(100deg, ${rgba(C.white, 0)} 42%, ${rgba(C.white, 0.5)} 50%, ${rgba(C.white, 0)} 56%)`;
+
+/** The window's edges: the figures pass under a short feather, never a hard cut line. */
+const WINDOW_MASK = 'linear-gradient(180deg, transparent 0%, #000 11%, #000 89%, transparent 100%)';
+
+const Window: React.FC<{
+  cells: readonly Cell[];
+  /** strip position, cells (fractional) */
   pos: number;
-  speed: number; // cells / frame
+  /** cells / frame (≈ 0 at rest) */
+  speed: number;
   fontSize: number;
-  id: string;
   /** 0..1 progress of a light sweep across the figure (left → right); <0 or >1 = none */
   sheen: number;
-  /** the figures' fill (a CSS gradient: the moment's `num`, on the dark) */
-  fill: string;
-}> = ({ pos, speed, fontSize, id, sheen, fill }) => {
+}> = ({ cells, pos, speed, fontSize, sheen }) => {
   const sheenOn = sheen > 0 && sheen < 1;
   const cellW = 0.6 * fontSize;
   const cellH = 1.1 * fontSize;
   const base = Math.floor(pos);
-  // σ ≈ 0.2 × travel per frame (≈ a 180° shutter), capped so it stays a smear.
-  // Below a settle threshold the shutter reads as sharp, so the land frame
-  // (arrival ≈ V_LAND) and the overshoot are crisp — the click is on the beat.
-  const sigma = Math.min(0.42 * cellH, 0.2 * Math.max(0, Math.abs(speed) - BLUR_FLOOR) * cellH);
-  const blurOn = sigma > 0.4;
-  const cells = [base - 1, base, base + 1, base + 2];
+  const moving = Math.abs(speed) > 4e-4;
+  const shown = [base - 1, base, base + 1, base + 2].filter((k) => k >= 0 && k < cells.length && cells[k].digit !== null);
   return (
     <div
       style={{
@@ -89,37 +103,21 @@ const Column: React.FC<{
         width: cellW,
         height: cellH,
         overflow: 'hidden',
-        // drum edge: figures fade as they enter/leave the window
-        WebkitMaskImage:
-          'linear-gradient(180deg, transparent 0%, #000 13%, #000 87%, transparent 100%)',
-        maskImage: 'linear-gradient(180deg, transparent 0%, #000 13%, #000 87%, transparent 100%)',
+        WebkitMaskImage: WINDOW_MASK,
+        maskImage: WINDOW_MASK,
       }}
     >
-      {blurOn ? (
-        <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>
-          <defs>
-            <filter id={id} x="-10%" y="-60%" width="120%" height="220%" colorInterpolationFilters="sRGB">
-              <feGaussianBlur stdDeviation={`0 ${sigma.toFixed(2)}`} />
-            </filter>
-          </defs>
-        </svg>
-      ) : null}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          filter: blurOn ? `url(#${id})` : undefined,
-          // motion smear loses a little density
-          opacity: 1 - Math.min(0.25, Math.abs(speed) * 0.08),
-        }}
-      >
-        {cells.map((n) => (
+      {shown.map((k) => {
+        const cell = cells[k];
+        const fill = numFill(cell.stops);
+        const y = (k - pos) * cellH;
+        return (
           <span
-            key={n}
+            key={k}
             style={{
               position: 'absolute',
               left: 0,
-              top: (n - pos) * cellH,
+              top: 0,
               width: cellW,
               height: cellH,
               lineHeight: `${cellH}px`,
@@ -137,98 +135,79 @@ const Column: React.FC<{
               backgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
               color: 'transparent',
+              ...subpixel(Math.abs(y) > 0.004 ? `translateY(${y.toFixed(3)}px)` : undefined, moving),
             }}
           >
-            {((n % 10) + 10) % 10}
+            {cell.digit}
           </span>
-        ))}
-      </div>
+        );
+      })}
     </div>
   );
 };
 
 /* ── Lockup ─────────────────────────────────────────────────────────── */
 
+export type Strip = { cells: readonly Cell[]; pos: number; speed: number };
+
 export const ClockLockup: React.FC<{
-  frame: number;
-  /** strip position (cells) of column c at a (sub)frame */
-  posAt: (col: number, frame: number) => number;
-  /** fill per column (CSS gradient) */
-  fills: readonly string[];
-  /** sheen progress per figure (see Column) */
+  /** the four windows, left → right */
+  strips: readonly Strip[];
+  /** sheen progress per figure (see Window) */
   sheens: number[];
   fontSize: number;
   orbSize: number;
   gap: number;
-  /** 0..1 — pairs slide out from under the orb. */
-  unfold: number;
   orbScale: number;
   orbTime: number;
   /** the colon orb's palette (the moment's light) */
   orbPalette: readonly string[];
-  /** the light's glow: body (halo) and core (rim) */
+  /** the light's body colour (the orb's halo) */
   glowBody: string;
-  glowCore: string;
-  /** 0..1 extra light on the orb halo (ring flashes). */
+  /** 0..1 extra light in the orb halo (the hits). */
   orbFlash: number;
   /** vertical nudge of the orb so it sits on the figures' optical centre */
   orbDy: number;
   figuresOpacity: number;
   orbOpacity: number;
+  /** a light hit on the figures (1 = none): brightness, never blur */
+  figuresLift?: number;
 }> = ({
-  frame,
-  posAt,
-  fills,
+  strips,
   sheens,
   fontSize,
   orbSize,
   gap,
-  unfold,
   orbScale,
   orbTime,
   orbPalette,
   glowBody,
-  glowCore,
   orbFlash,
   orbDy,
   figuresOpacity,
   orbOpacity,
+  figuresLift = 1,
 }) => {
-  const cols = [0, 1, 2, 3].map((i) => {
-    const pos = posAt(i, frame);
-    // a 180° shutter centred on the frame: the land frame (still arriving at 0.1 cell/f) is crisp
-    const speed = 2 * (posAt(i, frame + 0.25) - posAt(i, frame - 0.25));
-    return (
-      <Column
-        key={i}
-        pos={pos}
-        speed={speed}
-        fontSize={fontSize}
-        id={`hook-vblur-${i}`}
-        sheen={sheens[i]}
-        fill={fills[i]}
-      />
-    );
-  });
-  const slide = (1 - unfold) * (0.22 * fontSize);
+  const win = (i: number) => (
+    <Window key={i} cells={strips[i].cells} pos={strips[i].pos} speed={strips[i].speed} fontSize={fontSize} sheen={sheens[i]} />
+  );
+  const pair: React.CSSProperties = {
+    display: 'flex',
+    position: 'relative',
+    zIndex: 1,
+    opacity: figuresOpacity,
+    // always on (even at 1), so the figures never switch render paths between frames
+    filter: `brightness(${figuresLift.toFixed(4)})`,
+  };
   const halo = orbSize * 3.4;
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-      <div
-        style={{
-          display: 'flex',
-          marginRight: gap,
-          position: 'relative',
-          zIndex: 1,
-          transform: `translateX(${slide.toFixed(2)}px)`,
-          opacity: figuresOpacity,
-        }}
-      >
-        {cols[0]}
-        {cols[1]}
+      <div style={{ ...pair, marginRight: gap }}>
+        {win(0)}
+        {win(1)}
       </div>
       <div style={{ position: 'relative', zIndex: 2, width: orbSize, height: orbSize, transform: `translateY(${orbDy}px)` }}>
-        {/* halo — a gradient, not a filter */}
+        {/* the source's own bloom — a gradient, not a filter */}
         <div
           style={{
             position: 'absolute',
@@ -237,33 +216,20 @@ export const ClockLockup: React.FC<{
             width: halo,
             height: halo,
             borderRadius: '50%',
-            background: `radial-gradient(closest-side, ${rgba(glowBody, (0.42 + orbFlash * 0.45) * orbOpacity)} 0%, ${rgba(glowBody, (0.14 + orbFlash * 0.2) * orbOpacity)} 45%, ${rgba(glowBody, 0)} 100%)`,
-            transform: `scale(${0.85 + 0.35 * orbScale})`,
+            background: `radial-gradient(closest-side, ${rgba(glowBody, (0.34 + orbFlash * 0.4) * orbOpacity)} 0%, ${rgba(glowBody, (0.1 + orbFlash * 0.16) * orbOpacity)} 42%, ${rgba(glowBody, 0.025 * orbOpacity)} 78%, ${rgba(glowBody, 0)} 100%)`,
+            transform: `scale(${(0.85 + 0.35 * orbScale).toFixed(4)})`,
           }}
         />
         <MeshOrb
           size={orbSize}
           palette={orbPalette}
           time={orbTime}
-          style={{
-            transform: `scale(${orbScale.toFixed(4)})`,
-            opacity: orbOpacity,
-            boxShadow: `0 0 ${(10 + orbFlash * 26).toFixed(1)}px ${(orbFlash * 4).toFixed(1)}px ${rgba(glowCore, 0.35 + orbFlash * 0.4)}`,
-          }}
+          style={{ transform: `scale(${orbScale.toFixed(4)})`, opacity: orbOpacity }}
         />
       </div>
-      <div
-        style={{
-          display: 'flex',
-          marginLeft: gap,
-          position: 'relative',
-          zIndex: 1,
-          transform: `translateX(${(-slide).toFixed(2)}px)`,
-          opacity: figuresOpacity,
-        }}
-      >
-        {cols[2]}
-        {cols[3]}
+      <div style={{ ...pair, marginLeft: gap }}>
+        {win(2)}
+        {win(3)}
       </div>
     </div>
   );

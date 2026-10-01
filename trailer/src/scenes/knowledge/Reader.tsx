@@ -1,27 +1,29 @@
 /**
- * The reader: ONE WebGL FluidOrb (the site's shader) in the SUNDAY light,
- * with its bloom, its rim and its contact shadow.
+ * The reader: ONE WebGL FluidOrb (the site's shader) in the SUNDAY light —
+ * the room's key light (its colour is the aqua pool on the wall, Stage.tsx
+ * Room). Here: the orb, its rim of light, and two quiet rings.
  *
- *   orbIn − 2   a seed of Sunday light inhales where the orb will be…
- *   orbIn       …and the orb springs out of it (0 → 1.06 → 1): a bloom
- *               flash, a ring off its rim, a camera kick (in Knowledge.tsx)
+ *   orbIn − 3   a seed of Sunday light gathers where the orb will be…
+ *   orbIn       …and the orb springs out of it (0 → 1.06 → 1) and a fine
+ *               ring leaves its rim as it lands
  *   caller      the `listen` twin; the orb follows the caller's REAL envelope
- *   scan        small reading pulses; a spark where each beam lands
+ *   scan        small reading pulses
  *   miss        the drained Sunday mesh (a teal undertone survives): the light
- *               drains, the fluid (which churned through the search) settles,
- *               a grey ring closes in
+ *               drains, the fluid (which churned through the search) settles
  *   answer      grey through her hum (it still breathes with it); on her
- *               first word the Sunday light floods back (rings leave, the
- *               bloom swells) and the orb breathes with HER real envelope,
- *               swelling slightly as she speaks, pushing in 1 → 1.05
+ *               first word the Sunday light floods back (one ring leaves the
+ *               rim) and the orb breathes with HER real envelope, swelling
+ *               slightly as she speaks, pushing in 1 → 1.05
+ *
+ * The canvas is drawn at CSS size × 1.5 × devicePixelRatio, so the orb is
+ * sharp in the 4K master (--scale 2).
  */
 import React from 'react';
-import { spring } from 'remotion';
 import { flowTime, Orb } from '../../components/Orb';
 import { bloom, rgba, rimGlow } from '../../lib/lights';
-import { breathe, EASE, tween } from '../../lib/motion';
-import { FPS, KNOWLEDGE, KNOWLEDGE_LOCAL } from '../../timing';
-import { flashAt, lifeAt } from './blur';
+import { breathe, EASE, springUnit, tween } from '../../lib/motion';
+import { KNOWLEDGE, KNOWLEDGE_LOCAL } from '../../timing';
+import { flashAt } from './pulse';
 import { SUN, VOL, type Geo } from './geometry';
 import { glowAt, greyAt, missPhase, orbPalette, relitAt } from './light';
 import { volumeAt } from './voice';
@@ -32,9 +34,12 @@ const KL = KNOWLEDGE_LOCAL;
 const RISE = { stiffness: 210, damping: 19.5, mass: 1 };
 
 /** the orb's rise (0 → ~1.06 → 1); 0 before orbIn */
-export const riseAt = (t: number) => (t < KL.orbIn ? 0 : spring({ frame: t - KL.orbIn, fps: FPS, config: RISE }));
+export const riseAt = (t: number) => springUnit(t - KL.orbIn, RISE);
 
-const Ring: React.FC<{ x: number; y: number; d: number; color: string; w?: number }> = ({ x, y, d, color, w = 2 }) => (
+/** the canvas's device-pixel ratio (the 4K masters render at --scale 2) */
+const dpr = () => (typeof window !== 'undefined' && window.devicePixelRatio > 0 ? window.devicePixelRatio : 1);
+
+const Ring: React.FC<{ x: number; y: number; d: number; color: string; w?: number }> = ({ x, y, d, color, w = 1.5 }) => (
   <div
     style={{
       position: 'absolute',
@@ -48,8 +53,7 @@ const Ring: React.FC<{ x: number; y: number; d: number; color: string; w?: numbe
   />
 );
 
-/** `part`: 'light' = the pool of light behind it (drawn under the type), 'orb' = everything else */
-export const Reader: React.FC<{ t: number; G: Geo; part: 'light' | 'orb' }> = ({ t, G, part }) => {
+export const Reader: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
   if (t < KL.orbIn - 3) return null;
   const O = G.orb;
   const p = riseAt(t);
@@ -65,69 +69,25 @@ export const Reader: React.FC<{ t: number; G: Geo; part: 'light' | 'orb' }> = ({
   const sc = Math.max(0, p) * (1 + 0.05 * speak) * push;
   const lift = (1 - pc) * 22;
 
-  // the seed: 2 f of Sunday light gathering (inhale) before the orb springs out of it
+  // the seed: 3 f of Sunday light gathering before the orb springs out of it
   const seedQ = t < KL.orbIn ? (t - (KL.orbIn - 3)) / 3 : 0;
   const seedO = t < KL.orbIn ? Math.sin((Math.PI / 2) * seedQ) : Math.max(0, 1 - (t - KL.orbIn) / 3);
-  const seedD = 34 * (1 - 0.25 * seedQ);
-
-  // the light pool behind the orb (the pale room: normal blend)
-  const flashIn = flashAt(t, KL.orbIn + 3, 6);
-  const flashRelight = flashAt(t, KL.relight[0] + 2, 8) * relit;
-  const flashMiss = flashAt(t, KL.missFlip, 5);
-  const pool =
-    (0.42 * pc + 0.75 * flashIn + 0.5 * flashRelight + 0.5 * Math.max(0, vol - VOL.rest) + 0.15 * flashMiss) * (1 - 0.55 * grey);
-  const BD = O.d * 3.1 * push;
-
-  // the contact shadow sits under the orb's CURRENT size, and tightens as it bobs down
-  const sk = Math.min(1.06, Math.max(0, sc));
-  const bottom = O.y + (O.d / 2) * sk + lift;
-  const shW = O.d * 0.82 * sk * (1 - 0.015 * bob);
-  const shH = O.d * 0.15 * sk;
-  const deep = SUN.orb[0];
+  const seedD = 30 * (1 - 0.25 * seedQ);
 
   // the arrival ring: off the orb's rim as it lands (from its overshoot)
-  const ringQ = tween(t, [KL.orbIn + 4, KL.orbIn + 20], [0, 1], EASE.out3);
-  const ringO = t > KL.orbIn + 4 && ringQ < 1 ? 0.5 * (1 - ringQ) : 0;
-  // the miss: a grey ring closes in on the reader as it goes quiet
-  const missQ = tween(t, [K.miss, K.miss + 12], [0, 1], EASE.inOut);
-  const missO = t > K.miss && missQ < 1 ? 0.34 * Math.sin(Math.PI * missQ) : 0;
-  const missD = O.d * (1.5 - 0.46 * missQ);
-  // the relight: her light leaves the rim in two rings
-  const rl = (k: number) => {
-    const a = KL.relight[0] + 2 + k * 4;
-    const q = tween(t, [a, a + 16], [0, 1], EASE.out3);
-    return { o: t > a && q < 1 ? (0.5 - 0.18 * k) * (1 - q) : 0, d: O.d * (1.02 + (0.55 + 0.2 * k) * q) };
-  };
+  const ringQ = tween(t, [KL.orbIn + 4, KL.orbIn + 22], [0, 1], EASE.out3);
+  const ringO = t > KL.orbIn + 4 && ringQ < 1 ? 0.4 * (1 - ringQ) : 0;
+  // the relight: her light leaves the rim in one ring
+  const rlA = KL.relight[0] + 2;
+  const rlQ = tween(t, [rlA, rlA + 20], [0, 1], EASE.out3);
+  const rlO = t > rlA && rlQ < 1 ? 0.4 * (1 - rlQ) * relit : 0;
 
-  if (part === 'light') {
-    return pool > 0.004 ? (
-      <div
-        style={{
-          position: 'absolute',
-          left: O.x - BD / 2,
-          top: O.y - BD / 2 + bob * 0.5,
-          width: BD,
-          height: BD,
-          background: bloom(glow, pool, { core: 0.5, coreSize: 0.36 }),
-        }}
-      />
-    ) : null;
-  }
+  const flashIn = flashAt(t, KL.orbIn + 3, 6);
+  const flashRelight = flashAt(t, KL.relight[0] + 2, 8) * relit;
+  const rim = (0.2 + 0.18 * flashIn + 0.16 * flashRelight + 0.22 * Math.max(0, vol - VOL.rest)) * (1 - 0.45 * grey);
+
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
-      {/* the contact shadow (tinted with the light's deep) */}
-      <div
-        style={{
-          position: 'absolute',
-          left: O.x - shW / 2,
-          top: bottom + bob * 0.4 - shH * 0.45,
-          width: shW,
-          height: shH,
-          borderRadius: '50%',
-          background: `radial-gradient(closest-side, ${rgba(deep, 0.2)}, ${rgba(deep, 0.08)} 55%, ${rgba(deep, 0)})`,
-          opacity: Math.min(1, sk),
-        }}
-      />
       {/* the seed of light the orb springs out of */}
       {seedO > 0.01 ? (
         <div
@@ -137,36 +97,12 @@ export const Reader: React.FC<{ t: number; G: Geo; part: 'light' | 'orb' }> = ({
             top: O.y - seedD * 2,
             width: seedD * 4,
             height: seedD * 4,
-            background: bloom(glow, 1.2 * seedO, { core: 1, coreSize: 0.3 }),
+            background: bloom(glow, 1.1 * seedO, { core: 1, coreSize: 0.3 }),
           }}
         />
       ) : null}
-      {ringO > 0 ? <Ring x={O.x} y={O.y + bob} d={O.d * (1.02 + 0.6 * ringQ)} color={rgba(SUN.orb[2], ringO)} /> : null}
-      {missO > 0 ? <Ring x={O.x} y={O.y + bob} d={missD} color={`rgba(107,104,120,${missO.toFixed(3)})`} /> : null}
-      {[0, 1].map((k) => {
-        const r = rl(k);
-        return r.o > 0 ? <Ring key={k} x={O.x} y={O.y + bob} d={r.d} color={rgba(SUN.orb[2], r.o)} w={2.5 - k} /> : null;
-      })}
-      {/* beam landings: a spark of light where each head reaches the rim */}
-      {KL.beamLand.map((f, i) => {
-        const life = lifeAt(t, f - 1, f + 7);
-        if (life <= 0) return null;
-        const e = G.beams[i].p3;
-        const d = 18 + 26 * life;
-        return (
-          <div
-            key={i}
-            style={{
-              position: 'absolute',
-              left: e.x - d,
-              top: e.y - d + bob,
-              width: d * 2,
-              height: d * 2,
-              background: bloom(glow, 1.1 * life * (1 - grey), { core: 1, coreSize: 0.34 }),
-            }}
-          />
-        );
-      })}
+      {ringO > 0.002 ? <Ring x={O.x} y={O.y + bob} d={O.d * (1.03 + 0.5 * ringQ)} color={rgba(SUN.orb[2], ringO)} /> : null}
+      {rlO > 0.002 ? <Ring x={O.x} y={O.y + bob} d={O.d * push * (1.03 + 0.55 * rlQ)} color={rgba(SUN.orb[2], rlO)} /> : null}
       <div
         style={{
           position: 'absolute',
@@ -174,21 +110,25 @@ export const Reader: React.FC<{ t: number; G: Geo; part: 'light' | 'orb' }> = ({
           top: O.y - O.d / 2,
           width: O.d,
           height: O.d,
-          transform: `translateY(${(lift + bob).toFixed(2)}px) scale(${sc.toFixed(4)})`,
+          transform: `translateY(${(lift + bob).toFixed(3)}px) scale(${sc.toFixed(5)})`,
         }}
       >
-        {/* the rim: a halo in the light's core + its body spill (never on the canvas) */}
+        {/* the rim: a halo in the light's core + its body spill (never on the canvas; no drop shadow — it is a light) */}
         <div
           style={{
             position: 'absolute',
             inset: 0,
             borderRadius: '50%',
-            boxShadow: rimGlow(glow, (0.26 + 0.3 * flashIn + 0.25 * flashRelight + 0.3 * Math.max(0, vol - VOL.rest)) * (1 - 0.5 * grey), O.d / 400, {
-              shadow: 0.35 * pc,
-            }),
+            boxShadow: rimGlow(glow, rim, O.d / 400, { shadow: 0 }),
           }}
         />
-        <Orb size={O.d} palette={orbPalette(t)} volume={vol} time={flowTime(Math.max(0, t), volumeAt) + missPhase(t)} />
+        <Orb
+          size={O.d}
+          palette={orbPalette(t)}
+          volume={vol}
+          time={flowTime(Math.max(0, t), volumeAt) + missPhase(t)}
+          resolution={1.5 * dpr()}
+        />
       </div>
     </div>
   );

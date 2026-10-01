@@ -1,89 +1,92 @@
 /**
- * KNOWLEDGE — the white act opens on the site's #knowledge reading room,
- * lit by #demo's SUNDAY: this second call comes in on a Sunday (the moment
- * tag says so), so the orb, its bloom and every live accent wear the Sunday
- * light — on the white stock, as LIGHT: a teal bloom round the hero orb and
- * a soft aqua tint pooled under it, never a wash; its `listen` twin while
- * the caller asks; sunday ink where the site sets violet. A second caller asks
- * what isn't written down; Ava searches the owner's documents and,
- * honestly, doesn't guess: the light drains on the miss, and floods back
- * when she answers. (knowledge-stage.tsx at film scale; every moment is
- * KNOWLEDGE / KNOWLEDGE_LOCAL in timing.ts, the voiced ones derived from
- * the real voice lengths.)
+ * KNOWLEDGE — the white act opens on the site's #knowledge reading room, a
+ * paper room lit by ONE light: the reader's. This second call comes in on a
+ * Sunday (the moment tag says so), so the orb wears #demo's SUNDAY light and
+ * the wall around it takes a soft aqua pool of it — light with a source,
+ * falling off like light (no blobs, no discs, no wash). Sunday ink is the
+ * scene's one accent. A second caller asks what isn't written down; Ava
+ * searches the owner's documents and, honestly, doesn't guess: the light
+ * drains on the miss, and floods back when she answers. (knowledge-stage.tsx
+ * at film scale; every moment is KNOWLEDGE / KNOWLEDGE_LOCAL in timing.ts,
+ * the voiced ones derived from the real voice lengths.)
+ *
+ * ONE TYPE SYSTEM — every word on screen is set like the heading the client
+ * chose ("Answers from your own documents.": Instrument Sans 460, −0.03em,
+ * sentence case, the key phrase in sunday ink): the heading (TYPE.headline),
+ * the closing (TYPE.display), both speakers' captions (TYPE.caption — the
+ * caller told apart by caller blue and ● CALLER, never by an italic), the
+ * labels (TYPE.label), the cards (the title family). Text appears by MOTION:
+ * words rise out of their own masks on soft springs; nothing ever blurs in or
+ * out, and nothing is smeared — the film renders at 120 fps.
  *
  *   dawn        (pre-roll, over the result's last white frames) the white
  *               flash's ember centre gathers into a seed of Sunday light at
  *               the reader's place — the match cut on light
  *   t 0         the hit (hit-white + the Sunday chime): the seed blooms and
- *               the stage — the white room, bled to the frame edges —
- *               materialises out of it (1.035 → 1)
- *   heading     ON the hit "Answers from your own documents." pops up word
- *               by word where the orb will be; the eyebrow dot spins in,
- *               "KNOWLEDGE BASE" letters rise; the key phrase turns sunday ink
- *   docPops     five documents pop on 16ths: inhale, overshoot, a glint +
- *               ring, a camera kick each
- *   headingStep 16:9: the heading lifts, then steps down to the answer row
- *               (9:16 — one column — it holds full size and flicks up out of
- *               its masks just before the orb springs from its place)…
- *   orbIn       …and the orb springs out of a seed of light ON the beat
- *               (bloom flash, ring, kick); the pill pops "Listening" a 16th
- *               later, the moment tag "☀ SUNDAY · 10:24" an 8th later
- *   callerIn    the caller's first sound: CALLER pops, "Quick question,"
- *               (kb-1's lead-in) writes in; the heading flicks out; then
- *               "Do you do home visits?" word-synced; the orb listens (real
- *               envelope). Caller = Cormorant italic in caller blue.
- *   scan        AFTER the question: "Looking through 5 documents": beams
- *               draw into the orb (a spark where each lands), the tiles are
- *               read, the bars fill (none reaches the 60 % tick), the slot's
- *               page shimmers
+ *               the paper room comes up out of it (1.035 → 1)
+ *   heading     ON the hit "Answers from your own documents." rises word by
+ *               word where the orb will be; the eyebrow's dot turns in and
+ *               "KNOWLEDGE BASE" rises; the key phrase turns sunday ink with a
+ *               glint of light running through it
+ *   docPops     five documents land on 16ths (a rise and a settle on the site
+ *               spring, their shadows settling)
+ *   headingStep 16:9: the heading steps down to the answer row (9:16 — one
+ *               column — it holds full size and leaves up through its masks
+ *               just before the orb springs from its place)…
+ *   orbIn       …and the orb springs out of a seed of light ON the beat (a fine
+ *               ring off its rim); the pill opens "Listening" a 16th later, the
+ *               moment tag "☀ SUNDAY · 10:24" an 8th later
+ *   callerIn    the caller's first sound: ● CALLER rises, "Quick question,"
+ *               (kb-1's lead-in) writes in; the heading leaves; then "Do you do
+ *               home visits?" word-synced; the orb listens (real envelope)
+ *   scan        AFTER the question: "Looking through 5 documents": beams draw
+ *               into the orb, the cards are read (a fine sunday-ink ring each),
+ *               the bars fill (none reaches the 60 % tick), a reader's marker
+ *               runs along the page's lines
  *   miss        "Not in the documents" (the pill shakes no): the orb and the
- *               room drain to a cool grey (the fluid, which churned through
- *               the search, settles), the beams fall back, the slot says
- *               "0 matches" — 9:16: the documents step back out of focus and
- *               the slot opens in front of them, in their place
- *   hum         the question and CALLER leave before Ava (kb-2) makes a
- *               sound; the speaker tag swaps to AVA (over her row) and "Hmm"
- *               writes in on her first sound, its dots popping through the
- *               hum, while the orb breathes with it in grey
+ *               room's light drain to a cool grey, the beams fall back, the page
+ *               says "0 matches" — 9:16: the documents step back and the card
+ *               opens in front of them, in their place
+ *   hum         the question and CALLER leave before Ava (kb-2) makes a sound;
+ *               ● AVA rises over her row and "Hmm" writes in on her first sound,
+ *               its dots rising through the hum, while the orb breathes in grey
  *   answer      "Hmm…" gives way to her first word; her Sunday light floods back
- *               on it; Ava = the call's Inter 500, word-synced,
- *               "guess." and "today." in sunday ink; the orb pushes in; two
- *               captions never share a frame (CaptionRun); 16:9: the
- *               documents step back
- *   ticketPop   "I'll ask the team": the slot pops into the team card (the
- *               question and the caller's number write in on her words);
- *               "call": the callback chip; "today.": its check
- *   closing     the stage recedes; "Where your documents stop, it says so."
- *               — "it says so." turns teal with a glint and a pool of light
- *   out         a 3 f counter-move, then the whip: the stage leaves with a
- *               directional blur ∝ speed; clean white from out[1] − 2
+ *               on it; her caption word-synced, "guess." and "today." in sunday
+ *               ink; the orb pushes in; two captions never share a frame
+ *               (CaptionRun); 16:9: the documents step back
+ *   ticketPop   "I'll ask the team": the page becomes the card for the team (the
+ *               question and the caller's number rise in on her words); "call":
+ *               the callback chip; "today.": its check
+ *   closing     the stage recedes (a fade and a touch smaller — never out of
+ *               focus); "Where your documents stop, it says so." — "it says so."
+ *               turns sunday ink with a glint
+ *   out         a 3 f counter-move, then the whip: the stage leaves at speed
+ *               (crisp at 120 fps, no smear); clean white from out[1] − 2
  *
- * Parallax: panel + room light 0.3 · eyebrow, pill, moment tag 0.7 · tiles,
- * beams, slot, orb, captions 1.0 · Sunday light discs 1.4.
+ * Parallax (a slow push only — no hand-held drift, no kicks): room 0.3 ·
+ * eyebrow, pill, moment tag 0.7 · cards, beams, slot, orb, captions 1.0.
  */
 import React from 'react';
 import { AbsoluteFill } from 'remotion';
-import { noise2D } from '@remotion/noise';
 import { Camera, Layer } from '../components/Camera';
-import { useLayout } from '../lib/layout';
-import { aos, EASE, SPRING, springAt, tween } from '../lib/motion';
-import { useSceneFrame } from '../lib/scene';
-import { rgba } from '../lib/lights';
-import { C, FONT, TRACK } from '../theme';
-import { KNOWLEDGE, KNOWLEDGE_LOCAL } from '../timing';
-import { Beams } from './knowledge/Beams';
 import { Captions } from '../components/Captions';
+import { reveal, Reveal, revealStyle } from '../components/Type';
+import { useLayout } from '../lib/layout';
+import { EASE, SPRING, tween } from '../lib/motion';
+import { useSceneFrame } from '../lib/scene';
+import { captionFont, maskBox, typeStyle, type CaptionFont } from '../lib/type';
+import { C, FONT, VOICE_INK } from '../theme';
+import { KNOWLEDGE, KNOWLEDGE_LOCAL, type Caption } from '../timing';
+import { Beams } from './knowledge/Beams';
 import { CaptionRun } from './knowledge/CaptionRun';
-import type { Caption } from '../timing';
 import { Closing, Heading } from './knowledge/Closing';
-import { DirBlur, dirBlurRef, sigmaFor } from './knowledge/blur';
-import { geo, INK, LISTEN_GLOW, SUN_GLOW, type Geo } from './knowledge/geometry';
+import { geo, INK, type Geo } from './knowledge/geometry';
 import { missAt } from './knowledge/light';
 import { useFontsReady } from './knowledge/measure';
 import { Moment } from './knowledge/Moment';
 import { Reader } from './knowledge/Reader';
 import { Slot } from './knowledge/Slot';
-import { Dawn, Discs, Eyebrow, Panel } from './knowledge/Stage';
+import { Dawn, Eyebrow, Room } from './knowledge/Stage';
 import { Status } from './knowledge/Status';
 import { Tiles } from './knowledge/Tiles';
 
@@ -97,45 +100,26 @@ const QUESTION = [{ text: 'Do you do home visits?', word: 0 }] as const;
 const CAPS = K.answerCaptions;
 const contiguous = CAPS[3].word === CAPS[2].word + CAPS[2].text.split(' ').length;
 const MERGED: Caption = { text: `${CAPS[2].text} ${CAPS[3].text}`, word: CAPS[2].word };
-/** the spoken words that turn sunday ink as they are said */
+/** the spoken words that turn sunday ink as they are said ("guess." · "today.") */
 const KEY_WORDS: Record<number, number> = { 12: KL.guessKey, 21: KL.check };
-/** the spoken word's halo, on the light stock: the caller's light / Ava's Sunday light */
-const GLOW_CALLER = rgba(LISTEN_GLOW.body, 0.2);
-const GLOW_AVA = rgba(SUN_GLOW.body, 0.22);
+const CALLER_INK = VOICE_INK.caller.paper.text;
+const CALLER_TAG = VOICE_INK.caller.paper.tag;
 
-const FONTS = [
-  `500 32px ${FONT.body}`,
-  `500 76px ${FONT.body}`,
-  `500 30px ${FONT.mono}`,
-  `italic 500 92px ${FONT.cinema}`,
-  `460 104px ${FONT.ui}`,
-];
+/** every face + weight the scene measures or sets (held until loaded) */
+const FONTS = [`460 76px ${FONT.ui}`, `480 42px ${FONT.ui}`, `480 30px ${FONT.ui}`, `540 30px ${FONT.ui}`];
 
-/** a camera kick: 1 f attack, then e^(−u/4) */
-const kick = (u: number) => (u < 0 ? 0 : u < 1 ? u : Math.exp(-(u - 1) / 4));
+const OUT = 4;
+/** word j of n leaves in a window of `dur` frames from `at`: a small left-to-right stagger inside it (as <Captions>) */
+function exitOf(at: number, dur: number, j: number, n: number) {
+  const st = n > 1 ? Math.min(0.4, (dur * 0.35) / (n - 1)) : 0;
+  return { at: at + j * st, dur: dur - (n - 1) * st };
+}
 
+/** the camera: one slow push about (ox, oy) through the scene — no hand-held drift, no kicks */
 function camera(t: number, G: Geo, cx: number, cy: number) {
-  const push = G.cam.push * tween(t, [0, K.closing], [0, 1], EASE.inOut);
-  let k = 0;
-  // 1–3 px kicks on the hits: the doc pops, the orb's landing, the miss, the relight, the key line
-  for (const f of KL.docPops) k += G.cam.kickPop * kick(t - f);
-  k += G.cam.kickMiss * kick(t - (KL.orbIn + 2));
-  k += G.cam.kickMiss * kick(t - K.miss);
-  k += G.cam.kickPop * kick(t - (KL.relight[0] + 2));
-  k += G.cam.kickPop * 0.9 * kick(t - KL.ticketPop); // the team card: a ~2 px kick
-  k += G.cam.kickPop * 0.45 * kick(t - KL.callback);
-  k += G.cam.kickPop * 1.4 * kick(t - KL.closingKey);
-  const zoom = 1 + push + k;
-  // hand-held drift (reveals the planes), calmed for the closing
-  const calm = 1 - tween(t, [K.closing - 10, K.closing + 10], [0, 0.7], EASE.inOut);
-  const dx = (G.v ? 5 : 9) * noise2D('kb-cam-x', t * 0.012, 0.4) * calm;
-  const dy = (G.v ? 3 : 6) * noise2D('kb-cam-y', 0.9, t * 0.012) * calm;
+  const zoom = 1 + G.cam.push * tween(t, [0, K.closing], [0, 1], EASE.inOut);
   // zoom about (ox, oy): for every plane the point stays put
-  return {
-    x: (G.cam.ox - cx) * (zoom - 1) + dx,
-    y: (G.cam.oy - cy) * (zoom - 1) + dy,
-    zoom,
-  };
+  return { x: (G.cam.ox - cx) * (zoom - 1), y: (G.cam.oy - cy) * (zoom - 1), zoom };
 }
 
 /** the whip's travel along its axis */
@@ -146,218 +130,149 @@ function whipPos(f: number, G: Geo) {
 }
 
 /**
- * A speaker tag (the scene's dialogue labels): it rises out of its mask on the site spring
- * (a 2 f anticipation dip), and leaves with a 2 f dip, then up out of the mask (EASE.in2, blur).
- * CALLER (caller blue) over the question; AVA (sunday ink) over her row once she is heard.
+ * A speaker tag (the call's turn label): ● CALLER in caller blue / ● AVA in sunday ink (TYPE.label),
+ * rising out of its mask on the caption spring and leaving up through it.
  */
 const SpeakerTag: React.FC<{
   t: number;
   G: Geo;
-  label: string;
-  color: string;
+  who: 'ava' | 'caller';
   at: number;
   out: readonly [number, number];
   y: number;
   /** right-aligned to this x (16:9 caller), else centred on the frame */
   right?: number;
-}> = ({ t, G, label, color, at, out: [o0, o1], y, right }) => {
-  if (t < at - 2) return null;
-  const p = aos(t, at, { anticip: 2, depth: 0.08, config: SPRING.site });
-  const dip = t > o0 - 2 && t < o0 ? 14 * Math.sin(((t - (o0 - 2)) / 2) * (Math.PI / 2)) : 0;
-  const out = tween(t, [o0, o1], [0, 1], EASE.in2);
-  if (out >= 1) return null;
-  const blur = tween(t, [at, at + 8], [3, 0], EASE.out3) + out * 4;
+}> = ({ t, G, who, at, out: [o0, o1], y, right }) => {
+  if (t < at - 2 || t > o1 + 1) return null;
+  const st = typeStyle('label', G.v, { tone: 'paper' });
+  const ink = who === 'ava' ? INK : CALLER_TAG;
+  const dot = Math.round((st.fontSize as number) * 0.3);
   const W = G.v ? 1080 : 1920;
-  const style: React.CSSProperties =
-    right !== undefined ? { right: W - right, textAlign: 'right' } : { left: 0, width: W, textAlign: 'center' };
+  const pos: React.CSSProperties = right !== undefined ? { right: W - right, textAlign: 'right' } : { left: 0, width: W, textAlign: 'center' };
   return (
-    <div
-      style={{
-        position: 'absolute',
-        top: y,
-        ...style,
-        transform: 'translateY(-50%)',
-        overflow: 'hidden',
-        paddingTop: '0.1em',
-        paddingBottom: '0.06em',
-      }}
-    >
-      <div
-        style={{
-          fontFamily: FONT.body,
-          fontWeight: 500,
-          fontSize: G.top.label,
-          lineHeight: 1.12,
-          letterSpacing: TRACK.label,
-          textTransform: 'uppercase',
-          color,
-          transform: `translateY(${((1 - p) * 110 - out * 60 + dip).toFixed(2)}%)`,
-          opacity: 1 - out,
-          filter: blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : undefined,
-        }}
-      >
-        {label}
-      </div>
+    <div style={{ position: 'absolute', top: y, ...pos, transform: 'translateY(-50%)', ...st, color: ink, whiteSpace: 'nowrap' }}>
+      <Reveal t={t} start={at - 1} config={SPRING.caption} rise={90} exit={{ at: o0, dur: Math.max(3, o1 - o0) }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5em', marginRight: '-0.14em' }}>
+          <span style={{ display: 'inline-block', width: dot, height: dot, borderRadius: '50%', background: ink, transform: 'translateY(-0.04em)' }} />
+          {who === 'ava' ? 'Ava' : 'Caller'}
+        </span>
+      </Reveal>
     </div>
   );
 };
 
-const CallerTag: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
-  const Cc = G.caller;
-  return (
-    <SpeakerTag
-      t={t}
-      G={G}
-      label="Caller"
-      color={C.caller}
-      at={KL.callerIn}
-      out={KL.questionOut}
-      y={Cc.labelY}
-      right={Cc.align === 'right' ? Cc.boxX + Cc.boxW : undefined}
-    />
-  );
-};
-
-/** AVA — over her row, from her first sound (the hum) to her last caption */
-const AvaTag: React.FC<{ t: number; G: Geo }> = ({ t, G }) => (
-  <SpeakerTag t={t} G={G} label="Ava" color={INK} at={KL.avaIn} out={KL.avaOut} y={G.answer.labelY} />
-);
-
-/**
- * "Hmm…" — kb-2's thinking pre-roll (not in its word alignment, timed off its envelope:
- * KL.hum). Set as Ava's captions are (Inter 500, ink, on her row): "Hmm" writes in on its
- * sound (.16em rise, 3 px blur → 0, 6 f) and glows while it is heard; its three dots pop in
- * place through the hum (¼ · ½ · ¾ of it, the pop spring); then it eases to the spoken 86 %
- * and leaves with the captions' replacement exit (−30 %, 4 px blur, fade, 4 f) — gone the
- * frame "I…" shows.
- */
-const Hum: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
-  const Hm = KL.hum;
-  if (!Hm || t < Hm.appear - 1) return null;
-  const out = tween(t, Hm.out, [0, 1], EASE.in2);
-  if (out >= 1) return null;
-  const A = G.answer;
-  const rowH = A.size * A.lh;
-  const heard = t >= Hm.appear && t < Hm.heard[1];
-  const after = Math.max(0, t - Math.max(Hm.heard[1], Hm.appear + 6));
-  const dim = heard ? 1 : 1 - 0.14 * EASE.inOut(Math.min(1, after / 6));
-  const g = heard ? 1 : 1 - Math.min(1, after / 6);
-  const e = EASE.out3(Math.min(1, Math.max(0, (t - Hm.appear + 1) / 6)));
+/** One line of words set like a caption, each rising on its own frame, all leaving through their masks at `out`. */
+const SpokenRow: React.FC<{
+  t: number;
+  words: readonly string[];
+  /** frame each word appears */
+  at: readonly number[];
+  out: number;
+  outDur?: number;
+  font: CaptionFont;
+  color: string;
+  x: number;
+  y: number;
+  align: 'center' | 'right';
+  W: number;
+  /** a trailing piece after the words (the hum's dots) */
+  after?: (i: number) => React.ReactNode;
+}> = ({ t, words, at, out, outDur = OUT, font, color, x, y, align, W, after }) => {
+  if (t < Math.min(...at) - 2 || t > out + outDur) return null;
+  const rowH = font.size * font.lineHeight;
+  const n = words.length;
   return (
     <div
       style={{
         position: 'absolute',
-        left: 0,
-        width: G.v ? 1080 : 1920,
-        top: A.rowY - rowH / 2,
-        textAlign: 'center',
+        top: y - rowH / 2,
+        ...(align === 'right' ? { right: W - x, textAlign: 'right' } : { left: 0, width: W, textAlign: 'center' }),
         whiteSpace: 'nowrap',
-        transform: out > 0 ? `translateY(${(-0.3 * rowH * out).toFixed(2)}px)` : undefined,
-        opacity: (1 - out) * dim,
-        filter: out > 0.01 ? `blur(${(4 * out).toFixed(2)}px)` : undefined,
-        fontFamily: FONT.body,
-        fontWeight: 500,
-        fontSize: A.size,
-        lineHeight: A.lh,
-        letterSpacing: '-0.01em',
-        color: C.ink,
-        textShadow: g > 0.02 && e > 0 ? `0 0 0.35em ${rgba(SUN_GLOW.body, 0.22 * g)}` : undefined,
-      }}
-    >
-      <span
-        style={{
-          display: 'inline-block',
-          opacity: e,
-          transform: e < 1 ? `translateY(${(0.16 * (1 - e)).toFixed(4)}em)` : undefined,
-          filter: e > 0 && e < 1 ? `blur(${(3 * (1 - e)).toFixed(2)}px)` : undefined,
-        }}
-      >
-        {Hm.text}
-      </span>
-      {Hm.dots.map((d, j) => {
-        // each dot pops in place on its own tick of the hum (.3 → ~1.15 → 1, the pop spring)
-        const s = t < d - 1 ? 0 : springAt(t, d - 1, SPRING.pop);
-        return (
-          <span
-            key={j}
-            style={{
-              display: 'inline-block',
-              opacity: Math.min(1, Math.max(0, (t - d + 2) / 2)),
-              transform: s < 1.001 && s > 0.999 ? undefined : `scale(${(0.3 + 0.7 * s).toFixed(4)})`,
-              transformOrigin: '50% 82%',
-            }}
-          >
-            .
-          </span>
-        );
-      })}
-    </div>
-  );
-};
-
-/**
- * "Quick question," — kb-1's lead-in (not in its word alignment, timed off its
- * envelope: KL.lead). Set exactly like the question's caption (the caller's
- * Cormorant italic, caller blue): each word writes in on its sound (.16em
- * rise, 3 px blur → 0, 6 f), the word being spoken glows; it gives way to
- * "Do you do home visits?" with the captions' own replacement exit.
- */
-const LeadIn: React.FC<{ t: number; G: Geo; cx: number }> = ({ t, G, cx }) => {
-  const Ld = KL.lead;
-  if (!Ld) return null;
-  const [w0, w1] = Ld.words;
-  if (t < w0 - 3) return null;
-  const Cc = G.caller;
-  const out = tween(t, [Ld.out, Ld.out + 4], [0, 1], EASE.in2);
-  if (out >= 1) return null;
-  const words = Ld.text.split(' ');
-  const at = [w0, w1];
-  const x = Cc.align === 'right' ? Cc.boxX + Cc.boxW : cx;
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        top: Cc.rowY,
-        ...(Cc.align === 'right' ? { right: (G.v ? 1080 : 1920) - x } : { left: 0, width: G.v ? 1080 : 1920 }),
-        textAlign: Cc.align === 'right' ? 'right' : 'center',
-        whiteSpace: 'nowrap',
-        transform: `translateY(calc(-50% + ${(-30 * out).toFixed(2)}%))`,
-        opacity: 1 - out,
-        filter: out > 0.02 ? `blur(${(4 * out).toFixed(2)}px)` : undefined,
-        fontFamily: FONT.cinema,
-        fontStyle: 'italic',
-        fontWeight: 500,
-        fontSize: Cc.size,
-        lineHeight: Cc.lh,
-        color: C.caller,
+        fontFamily: font.family,
+        fontWeight: font.weight,
+        fontSize: font.size,
+        lineHeight: font.lineHeight,
+        letterSpacing: typeof font.tracking === 'number' ? `${font.tracking}em` : font.tracking,
+        color,
       }}
     >
       {words.map((w, j) => {
-        const a = at[j] - 2;
-        const u = Math.min(1, Math.max(0, (t - a + 1) / 6));
-        const e = EASE.out3(u);
-        const end = j + 1 < at.length ? at[j + 1] : Ld.out - 6;
-        const speaking = t >= a && t < end;
-        const dim = speaking ? 1 : 1 - 0.14 * EASE.inOut(Math.min(1, Math.max(0, t - Math.max(end, a + 6)) / 6));
-        const g = speaking ? 1 : 1 - Math.min(1, Math.max(0, t - Math.max(end, a + 6)) / 6);
+        const r = reveal(t, at[j] - 1, { config: SPRING.caption, rise: 80, fade: 0.5, exit: exitOf(out, outDur, j, n) });
         return (
           <React.Fragment key={j}>
             {j > 0 ? ' ' : null}
-            <span
-              style={{
-                display: 'inline-block',
-                opacity: u <= 0 ? 0 : e * dim,
-                transform: u < 1 ? `translateY(${(0.16 * (1 - e)).toFixed(4)}em)` : undefined,
-                filter: u > 0 && u < 1 ? `blur(${(3 * (1 - e)).toFixed(2)}px)` : undefined,
-                textShadow: u > 0 && g > 0.02 ? `0 0 0.35em ${rgba(LISTEN_GLOW.body, 0.2 * g)}` : undefined,
-              }}
-            >
-              {w}
+            <span style={maskBox(0)}>
+              <span style={revealStyle(r)}>{w}</span>
             </span>
           </React.Fragment>
         );
       })}
+      {after?.(n)}
     </div>
+  );
+};
+
+/**
+ * "Hmm…" — kb-2's thinking pre-roll (not in its word alignment, timed off its envelope: KL.hum).
+ * Set as Ava's captions are (TYPE.caption, ink, on her row): "Hmm" rises on its sound and its three
+ * dots rise one by one through the hum (¼ · ½ · ¾ of it); it leaves up through its masks on the
+ * frame "I…" shows.
+ */
+const Hum: React.FC<{ t: number; G: Geo; font: CaptionFont }> = ({ t, G, font }) => {
+  const Hm = KL.hum;
+  if (!Hm) return null;
+  const A = G.answer;
+  const [o0, o1] = Hm.out;
+  return (
+    <SpokenRow
+      t={t}
+      words={[Hm.text]}
+      at={[Hm.appear]}
+      out={o0}
+      outDur={o1 - o0}
+      font={font}
+      color={C.ink}
+      x={0}
+      y={A.rowY}
+      align="center"
+      W={G.v ? 1080 : 1920}
+      after={() =>
+        Hm.dots.map((d, j) => {
+          const r = reveal(t, d - 1, { config: SPRING.caption, rise: 80, fade: 0.5, exit: { at: o0 + 0.4 * (j + 1), dur: o1 - o0 - 1.2 } });
+          return (
+            <span key={j} style={{ ...maskBox(0), marginLeft: j === 0 ? '-0.04em' : '-0.16em' }}>
+              <span style={revealStyle(r)}>.</span>
+            </span>
+          );
+        })
+      }
+    />
+  );
+};
+
+/**
+ * "Quick question," — kb-1's lead-in (not in its word alignment, timed off its envelope: KL.lead).
+ * Set exactly like the question's caption (TYPE.caption in caller blue): each word rises on its
+ * sound; it leaves up through its masks before "Do you do home visits?" writes in.
+ */
+const LeadIn: React.FC<{ t: number; G: Geo; font: CaptionFont }> = ({ t, G, font }) => {
+  const Ld = KL.lead;
+  if (!Ld) return null;
+  const Cc = G.caller;
+  const W = G.v ? 1080 : 1920;
+  return (
+    <SpokenRow
+      t={t}
+      words={Ld.text.split(' ')}
+      at={Ld.words.map((w) => w - 2)}
+      out={Ld.out}
+      font={font}
+      color={CALLER_INK}
+      x={Cc.align === 'right' ? Cc.boxX + Cc.boxW : W / 2}
+      y={Cc.rowY}
+      align={Cc.align}
+      W={W}
+    />
   );
 };
 
@@ -370,14 +285,9 @@ export const Knowledge: React.FC = () => {
     // the pre-roll: over the result's last white frames, its ember centre gathers into the Sunday seed
     if (t < KL.dawn[0] - 1) return null;
     const G0 = geo(L);
-    const c0 = camera(t, G0, L.cx, L.cy);
     return (
       <AbsoluteFill style={{ overflow: 'hidden' }}>
-        <Camera x={c0.x} y={c0.y} zoom={c0.zoom}>
-          <Layer depth={0.3}>
-            <Dawn t={t} G={G0} />
-          </Layer>
-        </Camera>
+        <Dawn t={t} G={G0} />
       </AbsoluteFill>
     );
   }
@@ -387,46 +297,33 @@ export const Knowledge: React.FC = () => {
   const cam = camera(t, G, L.cx, L.cy);
   const cool = missAt(t); // the documents stay cooled: none of them answered
 
-  // the whip: counter-move, then away with a directional blur ∝ speed
+  // the whip: a counter-move, then away at speed — no smear (120 fps)
   const wp = whipPos(t, G);
-  const wv = whipPos(t + 0.5, G) - whipPos(t - 0.5, G);
-  const sig = Math.min(40, sigmaFor(wv));
+  const whipStyle: React.CSSProperties =
+    Math.abs(wp) > 0.001 ? { transform: G.whip.axis === 'x' ? `translateX(${wp.toFixed(3)}px)` : `translateY(${wp.toFixed(3)}px)`, willChange: 'transform' } : {};
 
-  // the stage recedes under the closing title (out of focus); once the whip's own smear takes
-  // over (σ 4 → 8) the focus blur hands over to it — invisible under the smear, and one filter
-  // on the frame instead of two nested
+  // the stage recedes under the closing title: it fades out and settles back a touch (never out of focus)
   const rc = tween(t, KL.recede, [0, 1], EASE.inOut);
-  const focus = 10 * rc * (1 - Math.min(1, Math.max(0, (sig - 4) / 4)));
   const recede: React.CSSProperties =
     rc > 0
-      ? {
-          opacity: 1 - 0.88 * rc,
-          filter: focus > 0.3 ? `blur(${focus.toFixed(2)}px)` : undefined,
-          transform: `scale(${(1 - 0.03 * rc).toFixed(5)})`,
-          transformOrigin: `${L.cx}px ${L.cy}px`,
-        }
+      ? { opacity: 1 - rc, transform: `scale(${(1 - 0.03 * rc).toFixed(5)})`, transformOrigin: `${L.cx}px ${L.cy}px` }
       : {};
-  // the orb goes out with the recede: a 3 f swell (anticipation), then it folds away (EASE.in2) and
-  // its light hands over to the closing's key line. It is never inside a blur wrapper — a WebGL
-  // canvas is not to be filtered — and unmounts once gone.
+  // the orb goes out with the recede: a 3 f swell (anticipation), then it folds away (power2.in) and unmounts
   const [r0] = KL.recede;
   const orbSwell = t > r0 - 3 && t < r0 ? Math.sin(((t - (r0 - 3)) / 3) * (Math.PI / 2)) : t >= r0 ? 1 : 0;
   const orbQ = tween(t, [r0, r0 + 9], [0, 1], EASE.in2);
   const orbOut = 1 - orbQ;
-  const orbScale = (1 + 0.04 * orbSwell) * (1 - 0.45 * orbQ);
-
-  const wsx = G.whip.axis === 'x' ? sig : 0;
-  const wsy = G.whip.axis === 'y' ? sig : 0;
-  const whipF = dirBlurRef('kb-whip', wsx, wsy);
-  const whipStyle: React.CSSProperties = {
-    transform: G.whip.axis === 'x' ? `translateX(${wp.toFixed(2)}px)` : `translateY(${wp.toFixed(2)}px)`,
-    filter: whipF,
+  const orbScale = (1 + 0.03 * orbSwell) * (1 - 0.4 * orbQ);
+  const orbWrap: React.CSSProperties = {
+    opacity: orbOut,
+    transform: orbScale !== 1 ? `scale(${orbScale.toFixed(5)})` : undefined,
+    transformOrigin: `${G.orb.x}px ${G.orb.y}px`,
   };
 
   const answer = G.answer;
   const caller = G.caller;
-  // Ava speaks in the call's voice: Inter 500, ink on the white stock
-  const avaFont = { family: FONT.body, weight: 500, size: answer.size, lineHeight: answer.lh, tracking: '-0.01em' };
+  const callerFont = captionFont(L.vertical, 'paper', caller.size);
+  const avaFont = captionFont(L.vertical, 'paper', answer.size);
   const answerSets: { captions: readonly Caption[]; y: number }[] =
     answer.rowB === null && contiguous
       ? [{ captions: [CAPS[0], CAPS[1], MERGED], y: answer.rowY }]
@@ -434,24 +331,17 @@ export const Knowledge: React.FC = () => {
           { captions: [CAPS[0], CAPS[1], CAPS[2]], y: answer.rowY },
           { captions: [CAPS[3]], y: answer.rowB ?? answer.rowY + Math.round(answer.size * answer.lh) },
         ];
-  // the reader's light pool sits BEHIND the type (a bloom over the captions would wash them)
-  const orbWrap: React.CSSProperties = {
-    opacity: orbOut,
-    transform: orbScale !== 1 ? `scale(${orbScale.toFixed(5)})` : undefined,
-    transformOrigin: `${G.orb.x}px ${G.orb.y}px`,
-  };
 
   return (
     <AbsoluteFill style={{ background: C.white, overflow: 'hidden' }}>
-      {whipF ? <DirBlur id="kb-whip" sx={wsx} sy={wsy} /> : null}
       <Camera x={cam.x} y={cam.y} zoom={cam.zoom}>
-        {/* ONE whip wrapper (one filtered layer, not two); the orb has gone with the recede before it moves */}
+        {/* the room stays put under the whip (it goes to clean white): only what stands in it whips away */}
+        <Layer depth={0.3}>
+          <Room t={t} G={G} />
+          <Dawn t={t} G={G} />
+        </Layer>
         <AbsoluteFill style={whipStyle}>
-          <Layer depth={0.3}>
-            <Panel t={t} G={G} />
-            <Dawn t={t} G={G} />
-          </Layer>
-          {/* one recede wrapper for both content planes (one blur, not two) */}
+          {/* one recede wrapper for both content planes */}
           <AbsoluteFill style={recede}>
             <Layer depth={0.7}>
               <Eyebrow t={t} G={G} />
@@ -459,19 +349,22 @@ export const Knowledge: React.FC = () => {
               <Moment t={t} G={G} />
             </Layer>
             <Layer depth={1}>
-              {orbOut > 0.002 ? (
-                <AbsoluteFill style={orbWrap}>
-                  <Reader t={t} G={G} part="light" />
-                </AbsoluteFill>
-              ) : null}
               <Beams t={t} G={G} uid="kb-beam" />
               <Tiles t={t} G={G} cool={cool} />
               <Slot t={t} G={G} />
               <Heading t={t} G={G} cx={L.cx} />
-              <CallerTag t={t} G={G} />
-              <LeadIn t={t} G={G} cx={L.cx} />
-              <AvaTag t={t} G={G} />
-              <Hum t={t} G={G} />
+              <SpeakerTag
+                t={t}
+                G={G}
+                who="caller"
+                at={KL.callerIn}
+                out={KL.questionOut}
+                y={caller.labelY}
+                right={caller.align === 'right' ? caller.boxX + caller.boxW : undefined}
+              />
+              <LeadIn t={t} G={G} font={callerFont} />
+              <SpeakerTag t={t} G={G} who="ava" at={KL.avaIn} out={KL.avaOut} y={answer.labelY} />
+              <Hum t={t} G={G} font={avaFont} />
               <Captions
                 t={t}
                 lineAt={K.ask}
@@ -481,16 +374,9 @@ export const Knowledge: React.FC = () => {
                 y={caller.rowY}
                 maxWidth={caller.boxW}
                 align={caller.align}
-                font={{
-                  family: FONT.cinema,
-                  weight: 500,
-                  size: caller.size,
-                  italic: true,
-                  lineHeight: caller.lh,
-                  tracking: 0,
-                }}
-                color={C.caller}
-                glow={GLOW_CALLER}
+                font={callerFont}
+                tone="paper"
+                color={CALLER_INK}
                 holdUntil={KL.questionOut[1] + 2}
                 echoY={null}
               />
@@ -505,8 +391,8 @@ export const Knowledge: React.FC = () => {
                   y={set.y}
                   maxWidth={answer.boxW}
                   font={avaFont}
+                  tone="paper"
                   color={C.ink}
-                  glow={GLOW_AVA}
                   holdUntil={K.closing}
                   echoY={null}
                   tint={(c, j) => {
@@ -515,18 +401,13 @@ export const Knowledge: React.FC = () => {
                   }}
                 />
               ))}
+              {orbOut > 0.002 ? (
+                <AbsoluteFill style={orbWrap}>
+                  <Reader t={t} G={G} />
+                </AbsoluteFill>
+              ) : null}
             </Layer>
           </AbsoluteFill>
-          {orbOut > 0.002 ? (
-            <Layer depth={1}>
-              <AbsoluteFill style={orbWrap}>
-                <Reader t={t} G={G} part="orb" />
-              </AbsoluteFill>
-            </Layer>
-          ) : null}
-          <Layer depth={1.4}>
-            <Discs t={t} G={G} />
-          </Layer>
           <Layer depth={1}>
             <Closing t={t} G={G} cx={W / 2} />
           </Layer>

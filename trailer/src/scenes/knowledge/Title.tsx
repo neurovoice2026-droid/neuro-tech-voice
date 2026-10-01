@@ -1,46 +1,48 @@
 /**
- * Section display type (Instrument Sans 460, −0.03em — the homepage's
- * .pp-display) with the hero's word-mask rise: each word rises 115 % → 0
- * out of its own mask on the site spring (anticipation dip, one small
- * overshoot) and pops .86 → 1.035 → 1 on a livelier spring (big type's
- * overshoot), blurs in 3 px → 0 and smears with its own speed; the key
- * phrase eases ink → its colour afterwards (home.css key-phrase idiom) and
- * ON that frame a glint of light runs through it and it glows briefly. An
- * optional exit dips 2 f (anticipation), then flicks the words up out of
- * their masks (EASE.in2 + blur ∝ speed).
+ * Section display type — set exactly like the knowledge heading the client
+ * chose as THE look (theme.ts TYPE: Instrument Sans 460, −0.03em, sentence
+ * case, the key phrase in the scene's accent ink), and revealed by MOTION:
+ * each word rises out of its own clipping box on the text spring (opacity up
+ * over the first half of the travel), never by blur. The key phrase eases
+ * ink → sunday ink, and on that frame a glint of light (a brighter teal) runs
+ * through it word by word — colour moving through the type, nothing smeared.
+ * An optional exit lifts the words up out of their masks (power3.in, a small
+ * stagger).
  */
 import React from 'react';
-import { spring } from 'remotion';
+import { reveal, revealStyle } from '../../components/Type';
 import { mixColor } from '../../lib/lights';
-import { aos, EASE, mixHex, SPRING, tween } from '../../lib/motion';
-import { C, FONT, TRACK } from '../../theme';
-import { FPS } from '../../timing';
+import { EASE, mixHex, SPRING, tween } from '../../lib/motion';
+import { maskBox, typeStyle } from '../../lib/type';
+import { C, type TypeRole } from '../../theme';
 
 export type TitleProps = {
   t: number;
-  /** explicit lines, or null to wrap `text` (balanced) inside `width` */
+  /** explicit lines (each kept on one row), or null to wrap `text` (balanced) inside `width` */
   lines: string[] | null;
   text: string;
+  /** the TYPE role (headline: the heading; display: the closing) */
+  role: TypeRole;
+  vertical: boolean;
+  /** px (overrides the role's size) */
   size: number;
   width: number;
   cx: number;
   cy: number;
   start: number;
   stagger: number;
-  /** the key phrase: its colour, and the glint's (brighter) colour + glow on the hit */
-  keyPhrase?: { text: string; at: number; color?: string; glint?: string };
+  /** the key phrase: its colour, and the glint's (brighter) colour running through it on the hit */
+  keyPhrase?: { text: string; at: number; color: string; glint?: string };
   exit?: { at: number; stagger: number; dur: number };
   color?: string;
 };
-
-const LH = 1.04;
-/** ζ ≈ .4: the per-word scale pop (.86 → ~1.035 → 1) */
-const WORD_POP = { stiffness: 300, damping: 14, mass: 1 };
 
 export const Title: React.FC<TitleProps> = ({
   t,
   lines,
   text,
+  role,
+  vertical,
   size,
   width,
   cx,
@@ -51,8 +53,8 @@ export const Title: React.FC<TitleProps> = ({
   exit,
   color = C.ink,
 }) => {
-  const rows = lines ?? [text];
-  const all = rows.flatMap((r) => r.split(' '));
+  const rows = (lines ?? [text]).map((r) => r.split(' '));
+  const all = rows.flat();
   // which words belong to the key phrase (last occurrence)
   const keyIdx = new Set<number>();
   if (keyPhrase) {
@@ -67,64 +69,29 @@ export const Title: React.FC<TitleProps> = ({
   const keyMix = keyPhrase ? tween(t, [keyPhrase.at, keyPhrase.at + 18], [0, 1], EASE.house) : 0;
   const keyList = [...keyIdx].sort((a, b) => a - b);
   // the glint runs through the key words (in word units) right after the hit
-  const glintPos = keyPhrase ? tween(t, [keyPhrase.at, keyPhrase.at + 12], [-1, keyList.length], EASE.inOut) : -9;
-  const glintOn = keyPhrase?.glint !== undefined && t >= keyPhrase.at && t <= keyPhrase.at + 12;
+  const glintPos = keyPhrase ? tween(t, [keyPhrase.at, keyPhrase.at + 14], [-1, keyList.length], EASE.inOut) : -9;
+  const glintOn = keyPhrase?.glint !== undefined && t >= keyPhrase.at && t <= keyPhrase.at + 14;
 
   let n = 0;
   const word = (w: string, last: boolean) => {
     const i = n++;
     const s = start + i * stagger;
-    const p = aos(t, s, { anticip: 3, depth: 0.05, config: SPRING.site });
-    const pp = aos(t - 1, s, { anticip: 3, depth: 0.05, config: SPRING.site });
-    let y = (1 - p) * 115;
-    let speed = Math.abs(p - pp) * 115;
-    let blur = tween(t, [s, s + 12], [3, 0], EASE.house);
-    const ps = t < s ? 0 : spring({ frame: t - s, fps: FPS, config: WORD_POP });
-    const sc = 0.86 + 0.14 * ps;
-    if (exit) {
-      const e = exit.at + i * exit.stagger;
-      // anticipation: a 2 f dip down before the flick up
-      if (t > e - 2 && t < e) y += 9 * Math.sin(((t - (e - 2)) / 2) * Math.PI * 0.5);
-      else if (t >= e && t < e + 2) y += 9 * Math.cos(((t - e) / 2) * Math.PI * 0.5);
-      const q = tween(t, [e, e + exit.dur], [0, 1], EASE.in2);
-      const qp = tween(t - 1, [e, e + exit.dur], [0, 1], EASE.in2);
-      y -= 110 * q;
-      speed += Math.abs(q - qp) * 110;
-      blur += 4 * q;
-    }
-    blur += Math.min(10, speed * (size / 100) * 0.09);
+    const r = reveal(t, s, {
+      config: SPRING.text,
+      rise: 100,
+      fade: 0.55,
+      exit: exit ? { at: exit.at + i * exit.stagger, dur: exit.dur } : undefined,
+    });
     const isKey = keyIdx.has(i);
-    let col = isKey ? mixHex(color, keyPhrase?.color ?? C.violet, keyMix) : color;
-    if (isKey && keyPhrase?.glint) {
-      // (the glow itself is a pool of light behind the line — a text-shadow would clip at the word masks)
+    let col = isKey && keyPhrase ? mixHex(color, keyPhrase.color, keyMix) : color;
+    if (isKey && keyPhrase?.glint && glintOn) {
       const j = keyList.indexOf(i);
-      const k = glintOn ? Math.exp(-(((j - glintPos) / 0.7) ** 2)) : 0;
-      if (k > 0.02) col = mixColor(col, keyPhrase.glint, 0.7 * k);
+      const k = Math.exp(-(((j - glintPos) / 0.7) ** 2));
+      if (k > 0.02) col = mixColor(col, keyPhrase.glint, 0.6 * k);
     }
     return (
-      <span
-        key={i}
-        style={{
-          display: 'inline-block',
-          overflow: 'hidden',
-          verticalAlign: 'top',
-          paddingBottom: '0.16em',
-          marginBottom: '-0.16em',
-          paddingRight: last ? 0 : '0.24em',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        <span
-          style={{
-            display: 'inline-block',
-            transform: `translateY(${y.toFixed(2)}%) scale(${sc.toFixed(4)})`,
-            transformOrigin: '50% 80%',
-            color: col,
-            filter: blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : undefined,
-          }}
-        >
-          {w}
-        </span>
+      <span key={i} style={maskBox(last ? 0 : 0.24)}>
+        <span style={{ ...revealStyle(r), color: col }}>{w}</span>
       </span>
     );
   };
@@ -137,24 +104,17 @@ export const Title: React.FC<TitleProps> = ({
         top: cy,
         width,
         transform: 'translateY(-50%)',
-        fontFamily: FONT.ui,
-        fontWeight: 460,
-        fontSize: size,
-        letterSpacing: TRACK.section,
-        lineHeight: LH,
+        ...typeStyle(role, vertical, { tone: 'paper', size }),
         textAlign: 'center',
         color,
         textWrap: 'balance',
       }}
     >
-      {rows.map((r, li) => {
-        const ws = r.split(' ');
-        return (
-          <div key={li} style={{ whiteSpace: lines ? 'nowrap' : undefined }}>
-            {ws.map((w, k) => word(w, k === ws.length - 1))}
-          </div>
-        );
-      })}
+      {rows.map((ws, li) => (
+        <div key={li} style={{ whiteSpace: lines ? 'nowrap' : undefined }}>
+          {ws.map((w, k) => word(w, k === ws.length - 1))}
+        </div>
+      ))}
     </div>
   );
 };

@@ -10,7 +10,7 @@
  *   scale → cta    FLOW_END       the last (CRM) node; the CTA irises open from it
  */
 import type { Layout } from './layout';
-import { TYPE } from '../theme';
+import { C, TYPE } from '../theme';
 
 /** Hook's line at rest (frames ≥ 100 of the hook). The twist starts from exactly this. */
 export const HOOK_LINE = (L: Layout) => ({
@@ -22,6 +22,12 @@ export const HOOK_LINE = (L: Layout) => ({
   width: L.pick(1600, 940),
   /** vertical centre of the text block */
   cy: L.pick(L.cy + 210, L.cy + 330),
+  /**
+   * The key word, two-tone like the knowledge heading: "closed." in the night's ink. It takes
+   * the light `delay` frames after the line starts (as it lands); <HookLineStatic> is fully lit.
+   * The twist's shards of "closed." start in this colour.
+   */
+  key: { text: 'closed.', color: C.lilac, delay: 17 },
 });
 
 /** Where the call's orb is born: the phone avatar after the dive into the screen. */

@@ -1,18 +1,24 @@
 /**
  * Deterministic letter geometry for the shatter.
  *
- * <Words> lays a line out as inline-block words (padding-right 0.24em, no
- * spaces), Inter Tight 500, tracking -0.04em, line-height 1.04, centred,
- * `text-wrap: balance`. This file replays that layout with canvas
- * measureText on cumulative substrings (same face, same tracking, so the
- * kerning matches) and returns the pen position of every letter.
+ * <Words> lays a line out as inline-block words (a 0.24em gap, no spaces),
+ * TYPE.display on the night — Instrument Sans 440, tracking −0.03em,
+ * line-height 1.04 — centred, `text-wrap: balance`. This file replays that
+ * layout with canvas measureText on cumulative substrings (same face, weight
+ * and tracking, so the kerning matches) and returns the pen position of
+ * every letter.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { continueRender, delayRender } from 'remotion';
+import { TYPE } from '../../theme';
 
-export const DISPLAY_FAMILY = '"Inter Tight Variable"';
-export const TRACKING_EM = -0.04;
-export const LINE_H = 1.04;
+/** the face as canvas names it (the first family of TYPE.display) */
+export const DISPLAY_FAMILY = '"Instrument Sans Variable"';
+/** TYPE.display on the night */
+export const DISPLAY_WEIGHT = TYPE.display.weightOnDark;
+export const TRACKING_EM = parseFloat(TYPE.display.tracking);
+export const LINE_H = TYPE.display.lineHeight;
+/** <Words>' default gap */
 export const WORD_PAD_EM = 0.24;
 
 export type Glyph = {
@@ -44,7 +50,7 @@ export type TextLayout = {
 let canvas: HTMLCanvasElement | null = null;
 const cache = new Map<string, number>();
 
-function measure(text: string, fontSize: number, weight = 500): number {
+function measure(text: string, fontSize: number, weight = DISPLAY_WEIGHT): number {
   const key = `${weight}|${fontSize}|${text}`;
   const hit = cache.get(key);
   if (hit !== undefined) return hit;
@@ -166,7 +172,7 @@ export function layoutText({
  * until it has, then re-render so every frame measures the real face.
  */
 export function useDisplayFontReady(): boolean {
-  const probe = `500 100px ${DISPLAY_FAMILY}`;
+  const probe = `${DISPLAY_WEIGHT} 100px ${DISPLAY_FAMILY}`;
   const [ready, setReady] = useState(() => typeof document !== 'undefined' && document.fonts.check(probe, 'Closed'));
   const [handle] = useState(() => (ready ? null : delayRender('twist: display face for measureText')));
   useEffect(() => {
