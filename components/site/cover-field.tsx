@@ -254,8 +254,9 @@ export function CoverField({ className }: { className?: string }) {
 
     // Don't burn a rAF loop on a spread that has scrolled away.
     const io = new IntersectionObserver(
-      ([entry]) => {
-        visible = entry.isIntersecting;
+      (entries) => {
+        // The last entry is the element as it is now: a busy main thread can hand one callback several.
+        visible = entries[entries.length - 1].isIntersecting;
         if (visible && !raf && !disposed && !reduce) {
           raf = requestAnimationFrame(frame);
         }

@@ -20,6 +20,10 @@
  * `data-nav-lift` / `data-nav-land`  a flip just happened, in that
  *                   direction. The two glints are gated on these so they
  *                   fire on a real flip and never on arming motion.
+ * `data-dock`       the site header is up. Never changes while it is, so
+ *                   what only needs to know that (the focus targets'
+ *                   scroll margin, globals.css) does not key off
+ *                   `data-nav`, whose every flip would restyle it all.
  * ------------------------------------------------------------------ */
 
 /** px — at or past this, the masthead peels off the cover. */
@@ -55,6 +59,7 @@ declare global {
 export const HEADER_BOOT = `(function(){
   if (location.pathname !== '/') return;
   var r = document.documentElement, s = null;
+  r.setAttribute('data-dock', '');
   function read(){
     if (stopped) return;
     if (r.hasAttribute('data-nav-hold') || r.hasAttribute('data-base-ui-scroll-locked')) return;
@@ -105,6 +110,12 @@ let live = false;
 
 function root() {
   return document.documentElement;
+}
+
+/** The constant half: see `data-dock` above. Written only when absent. */
+function mark() {
+  const r = root();
+  if (!r.hasAttribute("data-dock")) r.setAttribute("data-dock", "");
 }
 
 /** Something else owns the scroll position; whatever we'd read is a lie. */
@@ -206,6 +217,9 @@ function start() {
   window.addEventListener("orientationchange", onScroll);
   window.addEventListener("hashchange", onScroll);
   window.addEventListener("pageshow", onPageShow);
+  // A header that mounts as another unmounts has its stop() run after its
+  // own primeDock(), so the marker is put back here too.
+  mark();
   syncDock();
   armMotion();
 }
@@ -227,6 +241,7 @@ function stop() {
   // /login must not inherit the homepage's header state.
   const r = root();
   for (const a of [
+    "data-dock",
     "data-nav",
     "data-nav-motion",
     "data-nav-entrance",
@@ -248,6 +263,7 @@ function stop() {
 export function primeDock() {
   if (typeof window === "undefined") return;
   window.__ntvNavStop?.();
+  mark();
   const booted: DockPhase =
     root().getAttribute("data-nav") === "detached" ? "detached" : "docked";
   if (frozen()) {

@@ -54,32 +54,36 @@ export function RunIt({ trade }: { trade: Trade }) {
 
   // Autoplay: one pass, then it stops dead. It never loops — a looping
   // demonstration reads as a screensaver and stops being evidence.
+  //
+  // The pass runs only while the section is on screen: a reader who scrolls
+  // away mid-call leaves it paused where it was (no frame a second spent on
+  // a rail nobody is looking at), and it plays on from there when they come
+  // back. `finished` only stops a pass that already reached the end from
+  // starting over; a touch stops it for good.
   const raf = useRef(0);
-  const started = useRef(false);
-  // Unmount only. Cancelling the pass when the section leaves the viewport
-  // would strand the call half played, and the `started` guard would then
-  // refuse to run it again.
-  useEffect(() => () => cancelAnimationFrame(raf.current), []);
+  const played = useRef(0);
+  const finished = useRef(false);
 
   useEffect(() => {
     if (still) {
       setProgress(1);
       return;
     }
-    if (!inView || touched || started.current) return;
-    started.current = true;
-    const begin = performance.now();
+    if (!inView || touched || finished.current) return;
+    const begin = performance.now() - played.current * PLAYBACK_SECONDS * 1000;
     const tick = (now: number) => {
       const p = Math.min(1, (now - begin) / (PLAYBACK_SECONDS * 1000));
+      played.current = p;
       setProgress(p);
       if (p < 1) raf.current = requestAnimationFrame(tick);
+      else finished.current = true;
     };
     raf.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf.current);
   }, [inView, still, touched]);
 
   function take(next: number) {
     cancelAnimationFrame(raf.current);
-    started.current = true;
     setTouched(true);
     setProgress(next);
     markProved("run");

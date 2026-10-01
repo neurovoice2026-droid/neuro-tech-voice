@@ -532,10 +532,29 @@ html[data-tier="lite"] .home-body .saas-proto[data-seen][data-hotspots] .saas-ho
    (the landing wraps its body in a div, and keeps its own offsets).
    Scroll padding adds to every target's scroll margin, so this page's
    sections and the explorer's anchors are `scroll-mt-8`: 80 + 32 lands
-   an anchor jump at 112px, where `scroll-mt-28` alone did. Keyed on
-   `main.saas-page` (shell.tsx), which only this page's <main> carries. */
-html:has(main.saas-page) {
+   an anchor jump at 112px, where `scroll-mt-28` alone did.
+
+   ON <html data-saas>, WHILE THIS SHELL IS UP, WITHOUT A :has(). The
+   shell's inline script (shell.tsx) sets it as the page is parsed, so
+   it holds from the first paint; `Jumps` (jumps.tsx) sets it as a shell
+   mounts on a client-side trip and clears it as the shell unmounts. It
+   is keyed on the shell being up, not on this sheet being loaded: the
+   sheet stays in the document after a trip from here to "/", and after
+   a trip to here that never arrived (the reader clicked on before the
+   page came), and there it must not move every jump on the next page
+   80px down and make it instant. It was `html:has(main.saas-page)`, and
+   a :has() on the root, with the one below, cost every node the page
+   inserted a pass over the whole document: about 1ms at 5,000 elements,
+   against 0.2 without. With no script nothing writes `data-saas`, and
+   nothing inserts nodes either, so there the old :has() scope stands
+   in, at no cost, as it does in globals.css. */
+html[data-saas] {
   scroll-padding-top: 5rem;
+}
+@media (scripting: none) {
+  html:has(main.saas-page) {
+    scroll-padding-top: 5rem;
+  }
 }
 
 /* SCROLL ANCHORING BACK ON, for this page's <main> alone. `.pp` turns it
@@ -568,9 +587,15 @@ html:has(main.saas-page) {
    after the end point was fixed: #start landed 618px off at 390. Until
    `Jumps` (jumps.tsx) marks the page loaded, a jump is instant, so it
    lands, and anchoring keeps it there; smooth in-page jumps start after.
-   With no script it stays instant, which lands too. */
-html:has(main.saas-page):not([data-saas-loaded]) {
+   With no script it stays instant, which lands too. Scoped to this shell
+   as the padding above is. */
+html[data-saas]:not([data-saas-loaded]) {
   scroll-behavior: auto;
+}
+@media (scripting: none) {
+  html:has(main.saas-page) {
+    scroll-behavior: auto;
+  }
 }
 
 /* A #PART-… JUMP WITH NO SCRIPT. The explorer's index is a closed

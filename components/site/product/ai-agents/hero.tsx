@@ -355,7 +355,10 @@ function OpenCard({
   const outcome = shown > scene.turns.length;
 
   return (
-    <div className="absolute inset-0 flex flex-col animate-in fade-in-0 duration-300 fill-mode-both">
+    <div className="absolute inset-0 flex flex-col animate-in fade-in-0 duration-300 fill-mode-backwards">
+      {/* Backwards, not both: the fade ends on the card's own style, so
+          holding that end looked the same and only kept the card on a
+          composited layer (a filter animation "in effect") for good. */}
       <CardHeader scene={scene} />
 
       <div className="pointer-events-none flex justify-center pt-1">
@@ -431,9 +434,10 @@ function Words({ text, live }: { text: string; live: boolean }) {
   return (
     <>
       {text.split(" ").map((w, i) => (
+        // Backwards: hidden through its delay, then its own style once in (see the card above).
         <span
           key={i}
-          className="animate-in fade-in-0 fill-mode-both duration-300"
+          className="animate-in fade-in-0 fill-mode-backwards duration-300"
           style={{ animationDelay: `${i * 45}ms` } as CSSProperties}
         >
           {w}{" "}

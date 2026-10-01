@@ -1,6 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  FAST_MS,
+  SLOW_MS,
+  frameCadence,
+  gpuIsWeak,
+  isForced,
+  onTierChange,
+  slowFrames,
+  whenTierSettled,
+} from "../product/device-tier";
 import { whenIdle, whenIntent } from "../product/motion-kit";
 import { loadScene } from "./scenes";
 import { usePrefersReducedMotion } from "../product/timing";
@@ -20,12 +30,18 @@ import { usePrefersReducedMotion } from "../product/timing";
  *  · the scene module is dynamically imported, so only the trade you are
  *    looking at is ever fetched, and only once the stage is near;
  *  · the context is created on the first real intent (pointer, touch,
- *    scroll, key) or seven seconds in — shader compilation is a long
- *    task on ANGLE/D3D and it must never land inside the first paint;
+ *    scroll, key) or a few seconds after load, and only once the device
+ *    check has had its say: weak hardware (device-tier's hard "lite")
+ *    never creates one at all and keeps the poster;
+ *  · with KHR_parallel_shader_compile the driver compiles on its own
+ *    threads and the stage asks once a frame whether it is done, so the
+ *    compile never holds the main thread; without it the compile waits
+ *    for an idle moment, as it always did;
  *  · the loop runs only while the stage is on screen and the tab is
  *    visible, and stops dead otherwise;
  *  · resolution is capped, and capped harder on a phone, so a mid-range
- *    Android is filling a fraction of the pixels a desktop is;
+ *    Android is filling a fraction of the pixels a desktop is; a GPU still
+ *    slow at the lowest resolution gives the band back to its poster;
  *  · reduced motion draws exactly one frame and stops, so the scene is
  *    a still picture rather than an absence;
  *  · no WebGL, a failed compile, or a lost context all fall back to the
@@ -113,10 +129,17 @@ export const HOUSE_POSTER =
   Then `quality` watches the real frame time and gives up resolution until
   the frames come back. It only ever degrades: a loop that also climbs back
   up oscillates, and a band of soft colour at three quarters of the pixels
-  is indistinguishable anyway.
+  is indistinguishable anyway. The one way back is frameCadence()'s: a
+  floor that brought no faster frames gave up the pixels for nothing.
 */
 export const MAX_PIXELS = 1_500_000;
-export const SLOW_MS = 26;
+// The frame-time judgement every GPU loop shares (the cover portrait too), so
+// it lives in device-tier, which the cover already loads: see frameCadence().
+export { FAST_MS, SLOW_MS, frameCadence };
+/** Frames at the lowest resolution, and after a pause, left unjudged. */
+const FLOOR_GRACE = 10;
+/** Judged frames after which a lone slow verdict is forgotten. */
+const FLOOR_FORGET = 30;
 
 /*
   Three tiers, because a tablet is neither of the other two: it has a
@@ -179,6 +202,29 @@ export function compile(gl: WebGL2RenderingContext, type: number, src: string) {
   return s;
 }
 
+/**
+ * Compiles and links without asking how it went: asking is what blocks.
+ * The shaders' own status is read only once the link has failed.
+ */
+function link(gl: WebGL2RenderingContext, frag: string) {
+  const program = gl.createProgram();
+  const shaders = [gl.VERTEX_SHADER, gl.FRAGMENT_SHADER].map((type, i) => {
+    const s = gl.createShader(type)!;
+    gl.shaderSource(s, i ? frag : VERT);
+    gl.compileShader(s);
+    gl.attachShader(program, s);
+    return s;
+  });
+  gl.linkProgram(program);
+  return { program, shaders };
+}
+
+/** Whether the link worked, or null while the driver is still on it. */
+function linked(gl: WebGL2RenderingContext, par: KHR_parallel_shader_compile | null, program: WebGLProgram) {
+  if (par && !gl.getProgramParameter(program, par.COMPLETION_STATUS_KHR)) return null;
+  return Boolean(gl.getProgramParameter(program, gl.LINK_STATUS));
+}
+
 export function ShaderStage({
   slug,
   className,
@@ -205,8 +251,11 @@ export function ShaderStage({
     if (!host) return;
     let live = true;
     const near = new IntersectionObserver(
-      ([e]) => {
-        if (!e.isIntersecting) return;
+      (entries) => {
+        // The last entry is the stage as it is now. When the main thread is
+        // busy, one callback can carry several (not near, then near), and
+        // the first alone would read "not near" for good.
+        if (!entries[entries.length - 1].isIntersecting) return;
         near.disconnect();
         (load ? load() : loadScene(slug))
           .then((s) => {
@@ -234,19 +283,39 @@ export function ShaderStage({
     let cancelIdle: (() => void) | undefined;
     let cancelled = false;
 
-    // Compiling costs a long task, so it waits for the first sign that a
-    // human is here rather than racing the first paint.
-    whenIntent().then(() => {
-      if (cancelled) return;
-      cancelIdle = whenIdle(() => {
-        if (!cancelled) teardown = start(canvas, scene, still);
-      });
-    });
-
-    return () => {
+    const stop = () => {
       cancelled = true;
       cancelIdle?.();
       teardown?.();
+      teardown = undefined;
+    };
+
+    // A device found weak after the stage started (the GPU check can land
+    // late) gives the band back to its poster, context and all.
+    const off = onTierChange((t) => {
+      if (t !== "lite") return;
+      stop();
+      canvas.style.display = "none";
+    });
+
+    // Compiling costs a long task, so it waits for the first sign that a
+    // human is here rather than racing the first paint, and then for the
+    // device check: weak hardware keeps the poster and never pays for a
+    // compile it would throw away. Reduced motion is its own tier ("still")
+    // and keeps its one composed frame, unless the GPU itself is weak.
+    whenIntent()
+      .then(whenTierSettled)
+      .then((t) => {
+        if (cancelled || t === "lite" || gpuIsWeak()) return;
+        cancelIdle = whenIdle(() => {
+          if (!cancelled) teardown = start(canvas, scene, still);
+        });
+      })
+      .catch(() => {});
+
+    return () => {
+      off();
+      stop();
     };
   }, [scene, still]);
 
@@ -264,27 +333,101 @@ export function ShaderStage({
 
 function start(canvas: HTMLCanvasElement, scene: Scene, still: boolean) {
   const gl = canvas.getContext("webgl2", { alpha: true, premultipliedAlpha: true, antialias: false, powerPreference: "low-power" });
-  if (!gl) {
+  // A context that arrives already lost is one this canvas used before (a
+  // remount, or reduced motion toggled): it will never draw again.
+  if (!gl || gl.isContextLost()) {
     canvas.style.display = "none";
     return;
   }
 
-  let program: WebGLProgram;
-  try {
-    program = gl.createProgram()!;
-    gl.attachShader(program, compile(gl, gl.VERTEX_SHADER, VERT));
-    gl.attachShader(program, compile(gl, gl.FRAGMENT_SHADER, guarded(`${SCENE_CONTRACT}\n${scene.frag}`)));
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) ?? "link failed");
-  } catch {
-    // A scene that will not compile is a scene the reader never learns
-    // about: the poster was already underneath it.
-    canvas.style.display = "none";
-    return;
-  }
+  // Nothing is asked of the driver yet: with the parallel extension the
+  // link finishes on the driver's threads, and the loop below starts on the
+  // first frame that finds it done. The poster shows until then.
+  const par = gl.getExtension("KHR_parallel_shader_compile");
+  const { program, shaders } = link(gl, guarded(`${SCENE_CONTRACT}\n${scene.frag}`));
 
+  let disposed = false;
+  let waiting = 0;
+  let loop: { stop: () => void } | null = null;
+  let buf: WebGLBuffer | null = null;
+
+  const onLost = (e: Event) => {
+    e.preventDefault();
+    cancelAnimationFrame(waiting);
+    loop?.stop();
+    canvas.style.display = "none";
+  };
+  canvas.addEventListener("webglcontextlost", onLost);
+
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    cancelAnimationFrame(waiting);
+    loop?.stop();
+    canvas.removeEventListener("webglcontextlost", onLost);
+    for (const s of shaders) gl.deleteShader(s);
+    gl.deleteProgram(program);
+    if (buf) gl.deleteBuffer(buf);
+    if (!gl.isContextLost()) gl.getExtension("WEBGL_lose_context")?.loseContext();
+  };
+
+  const ready = () => {
+    // A lost context answers nothing, and would be asked forever.
+    if (disposed || gl.isContextLost()) return;
+    const ok = linked(gl, par, program);
+    if (ok === null) {
+      waiting = requestAnimationFrame(ready);
+      return;
+    }
+    if (!ok) {
+      // A scene that will not compile is a scene the reader never learns
+      // about: the poster was already underneath it. Only now is it worth
+      // asking why, for whoever is looking at the console.
+      if (process.env.NODE_ENV !== "production") {
+        for (const s of shaders) {
+          if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.warn(gl.getShaderInfoLog(s));
+        }
+        console.warn(gl.getProgramInfoLog(program));
+      }
+      canvas.style.display = "none";
+      dispose();
+      return;
+    }
+    // Only flagged while attached; they go with the program.
+    for (const s of shaders) gl.deleteShader(s);
+    shaders.length = 0;
+    buf = gl.createBuffer();
+    loop = run(gl, canvas, program, buf, scene, still, () => {
+      // Still slow at the lowest resolution: this GPU cannot afford the
+      // scene. The band fades back to its poster, and only this band: the
+      // rest of the visit keeps its tier.
+      canvas.style.transition = "opacity 600ms ease";
+      canvas.style.opacity = "0";
+      window.setTimeout(() => {
+        if (disposed) return;
+        dispose();
+        canvas.style.display = "none";
+      }, 650);
+    });
+  };
+
+  // Without the extension, asking is the compile: it runs here, in the
+  // idle moment this was called in, as it always did.
+  ready();
+  return dispose;
+}
+
+/** The draw loop over a linked program. `giveUp` is called at most once. */
+function run(
+  gl: WebGL2RenderingContext,
+  canvas: HTMLCanvasElement,
+  program: WebGLProgram,
+  buf: WebGLBuffer,
+  scene: Scene,
+  still: boolean,
+  giveUp: () => void,
+) {
   gl.useProgram(program);
-  const buf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
   const loc = gl.getAttribLocation(program, "aPos");
@@ -306,8 +449,21 @@ function start(canvas: HTMLCanvasElement, scene: Scene, still: boolean) {
   // The tier, pixel-ratio cap and base scale; see stageTier() above.
   const { tier, cap, base } = stageTier();
 
-  // Adaptive resolution under MAX_PIXELS and SLOW_MS; see above.
+  // Adaptive resolution under MAX_PIXELS and SLOW_MS, judged against the
+  // display's own cadence; see above.
   let quality = 1;
+  const cadence = frameCadence();
+  // Judges the frames once quality is at its floor, and gives the band back
+  // to its poster only on a verdict it gets twice running: a burst of the
+  // page's own work (a section rendering as it scrolls in) is one verdict at
+  // most, a GPU that cannot keep up is every one. The first frames at the
+  // floor, and after every pause, are the switch's and are not judged. All
+  // of it is off under a forced tier.
+  const slowAtFloor = isForced() ? null : slowFrames();
+  let grace = FLOOR_GRACE;
+  let verdicts = 0;
+  let sinceVerdict = 0;
+  let gaveUp = false;
 
   let raf = 0;
   let onScreen = true;
@@ -341,17 +497,37 @@ function start(canvas: HTMLCanvasElement, scene: Scene, still: boolean) {
   let slow = 0;
 
   const frame = (now: number) => {
+    raf = 0;
     if (!begun) begun = now;
     // Give up resolution rather than frames. Three slow frames in a row is a
     // machine telling us it cannot afford this, and 0.72 either side of the
     // floor halves the fragment count in two steps.
     if (lastFrame && quality > 0.5) {
       const delta = now - lastFrame;
-      slow = delta > SLOW_MS ? slow + 1 : 0;
+      slow = cadence.slow(delta) ? slow + 1 : 0;
+      cadence.read(delta, false);
       if (slow >= 3) {
+        cadence.stepped(quality === 1);
         quality = Math.max(0.5, quality * 0.72);
         slow = 0;
       }
+    } else if (lastFrame && !still && cadence.read(now - lastFrame, true)) {
+      // The floor came no faster than full did: the display's cadence is
+      // the limit, not the GPU, so the pixels come back (frameCadence).
+      quality = 1;
+      slow = 0;
+      cadence.stepped();
+    } else if (lastFrame && !still && slowAtFloor) {
+      if (grace > 0) grace--;
+      else if (!slowAtFloor(now - lastFrame)) {
+        if (++sinceVerdict > FLOOR_FORGET) verdicts = 0;
+      } else if (++verdicts >= 2) {
+        // At the floor and still slow: nothing left to give but the scene.
+        gaveUp = true;
+        stop();
+        giveUp();
+        return;
+      } else sinceVerdict = 0;
     }
     lastFrame = now;
     const t = (now - begun) / 1000;
@@ -368,12 +544,16 @@ function start(canvas: HTMLCanvasElement, scene: Scene, still: boolean) {
   };
 
   const play = () => {
-    if (!raf && onScreen && !still && !document.hidden) raf = requestAnimationFrame(frame);
+    if (raf || gaveUp || !onScreen || still || document.hidden) return;
+    grace = FLOOR_GRACE;
+    raf = requestAnimationFrame(frame);
   };
-  const stop = () => {
+  function stop() {
     cancelAnimationFrame(raf);
     raf = 0;
-  };
+    // The gap across a pause is the pause, not a frame: never judge it.
+    lastFrame = 0;
+  }
 
   // Reduced motion gets one composed frame — the scene at rest, not a
   // blank canvas over the poster.
@@ -386,8 +566,11 @@ function start(canvas: HTMLCanvasElement, scene: Scene, still: boolean) {
     frame(performance.now());
   }
 
-  const onView = new IntersectionObserver(([e]) => {
-    onScreen = e.isIntersecting;
+  const onView = new IntersectionObserver((entries) => {
+    // The last entry, not the first: at a few frames a second one callback
+    // can carry "off screen" and then "on screen", and reading the first
+    // stopped the loop with the stage in full view, for good.
+    onScreen = entries[entries.length - 1].isIntersecting;
     if (onScreen) play();
     else stop();
   });
@@ -408,17 +591,11 @@ function start(canvas: HTMLCanvasElement, scene: Scene, still: boolean) {
     pointer.tx = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
     pointer.ty = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
   };
-  const onLost = (e: Event) => {
-    e.preventDefault();
-    stop();
-    canvas.style.display = "none";
-  };
 
   document.addEventListener("visibilitychange", onVisibility);
   // Passive, and on the stage rather than the window: a scene reacts to a
   // pointer that is actually over it.
   canvas.addEventListener("pointermove", onMove, { passive: true });
-  canvas.addEventListener("webglcontextlost", onLost);
   // Resizing the buffer clears it, so a still scene redraws rather than
   // going blank when only the pixel ratio changes (a window dragged to
   // another monitor), which the size observer does not see.
@@ -426,16 +603,15 @@ function start(canvas: HTMLCanvasElement, scene: Scene, still: boolean) {
   window.addEventListener("resize", onResize, { passive: true });
   play();
 
-  return () => {
-    stop();
-    onView.disconnect();
-    onSize.disconnect();
-    document.removeEventListener("visibilitychange", onVisibility);
-    canvas.removeEventListener("pointermove", onMove);
-    canvas.removeEventListener("webglcontextlost", onLost);
-    window.removeEventListener("resize", onResize);
-    gl.deleteProgram(program);
-    gl.deleteBuffer(buf);
-    gl.getExtension("WEBGL_lose_context")?.loseContext();
+  return {
+    stop: () => {
+      gaveUp = true;
+      stop();
+      onView.disconnect();
+      onSize.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
+      canvas.removeEventListener("pointermove", onMove);
+      window.removeEventListener("resize", onResize);
+    },
   };
 }

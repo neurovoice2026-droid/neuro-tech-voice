@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { Eyebrow, PillLink, SectionTitle } from "../product/primitives";
 import { useInView, usePrefersReducedMotion } from "../product/timing";
 import { EMBER, EMBER_INK } from "./parts";
-import { markProved } from "./proved";
+import { markProved, resetProved } from "./proved";
 
 /* ------------------------------------------------------------------ *
  * §1 — The work that comes in on the phone.
@@ -81,6 +81,12 @@ export function FirstQuestion({ trade }: { trade: Trade }) {
   // call would ring for the life of the page.
   useEffect(() => () => timers.current.forEach(window.clearTimeout), []);
 
+  // This section opens every trade's page, so its arrival is the page's: the
+  // receipt at the bottom starts empty rather than inked by the trade the
+  // reader came from (the store is per document, and a menu link keeps the
+  // document). Before paint, so the old rows are never drawn.
+  useLayoutEffect(() => resetProved(), [trade.slug]);
+
   useEffect(() => {
     if (still) {
       setPhase("forked");
@@ -101,6 +107,10 @@ export function FirstQuestion({ trade }: { trade: Trade }) {
   const answered = phase === "answered" || forked;
 
   function pick(index: number) {
+    // A step of the opening still pending ("answered" at two seconds) must
+    // not land on top of the reader's pick and fold the fork back up.
+    timers.current.forEach(window.clearTimeout);
+    timers.current = [];
     started.current = true;
     setPhase("forked");
     setPicked(index);
@@ -331,6 +341,11 @@ function Fork({
               type="button"
               onClick={() => onPick(i)}
               aria-pressed={on}
+              // Out of the tab order and hidden from assistive tech until the
+              // fork has drawn them: a key can otherwise reach, and press, a
+              // choice nobody can see yet.
+              tabIndex={forked ? undefined : -1}
+              aria-hidden={!forked || undefined}
               className={cn(
                 "absolute flex min-h-11 -translate-y-1/2 items-center rounded-full pr-3 text-left transition-opacity duration-300",
                 "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",

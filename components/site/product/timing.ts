@@ -17,7 +17,10 @@ export function useInView(ref: RefObject<Element | null>, margin = "0px") {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const io = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), {
+    // The last entry is the element as it is now: a busy main thread can
+    // hand one callback several (out, then in), and the first alone would
+    // leave a stage in full view reading "away" for good.
+    const io = new IntersectionObserver((entries) => setInView(entries[entries.length - 1].isIntersecting), {
       rootMargin: margin,
     });
     io.observe(el);

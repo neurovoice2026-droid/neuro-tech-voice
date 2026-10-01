@@ -100,9 +100,9 @@ export function MeterRow({
           <dt>{copy.parts}</dt>
           {/* Two figures' room, so a count of ten never widens the row into a wrap:
               1.2em is two Geist Mono figures at any size (each 0.6em). Never `ch`
-              (or any glyph-relative unit): on this shell, whose saas.css keys
-              rules on `html:has(main.saas-page)`, one such unit in the document
-              makes every DOM insertion restyle the whole page (20–50ms each). */}
+              (or any glyph-relative unit): beside a `:has()` on the root, as
+              saas.css once keyed this shell's rules, one such unit in the document
+              made every DOM insertion restyle the whole page (20–50ms each). */}
           <dd className={cn("min-w-[1.2em]", FIGURE[tone])}>{meters.blocks}</dd>
         </div>
         {METER_FLAGS.map((flag, k) => {

@@ -253,7 +253,7 @@ function buildRun(
 
   // Before the call ends: an empty slot, a dotted rail, every step waiting.
   gsap.set(card, { autoAlpha: 0, y: 12 });
-  gsap.set(hl, { scaleX: 0 });
+  if (hl.length) gsap.set(hl, { scaleX: 0 });
   gsap.set(nodes.flat(), { scale: 0 });
   gsap.set(fills.flat(), { scaleY: 0 });
   gsap.set(ring, { autoAlpha: 0 });
@@ -261,6 +261,8 @@ function buildRun(
   for (const row of steps) {
     gsap.set(layer(row, "wait"), { autoAlpha: 1 });
     gsap.set([...layer(row, "run"), ...layer(row, "done"), ...layer(row, "check")], { autoAlpha: 0 });
+    // The spinner turns only while its step runs (see RuleBlock).
+    gsap.set(layer(row, "run"), { attr: { "data-spinning": "0" } });
   }
   gsap.set(outs, { autoAlpha: 0, y: 8 });
   if (src) gsap.set(src, { autoAlpha: 1 });
@@ -301,13 +303,13 @@ function buildRun(
   t += 0.35;
   // 5 · Each step in order: it runs, then it's done.
   for (const row of steps) {
-    tl.to(layer(row, "wait"), { autoAlpha: 0, duration: 0.15 }, t).to(
-      layer(row, "run"),
-      { autoAlpha: 1, duration: 0.2 },
-      t + 0.05,
-    );
+    tl.to(layer(row, "wait"), { autoAlpha: 0, duration: 0.15 }, t)
+      .set(layer(row, "run"), { attr: { "data-spinning": "1" } }, t)
+      .to(layer(row, "run"), { autoAlpha: 1, duration: 0.2 }, t + 0.05);
     t += 0.9;
     tl.to(layer(row, "run"), { autoAlpha: 0, duration: 0.15 }, t)
+      // Stopped once it has faded out.
+      .set(layer(row, "run"), { attr: { "data-spinning": "0" } }, t + 0.15)
       .to(layer(row, "done"), { autoAlpha: 1, duration: 0.2 }, t + 0.05)
       .fromTo(
         layer(row, "check"),
@@ -674,9 +676,13 @@ function RuleBlock({
             </span>
             <span className="grid size-4 place-items-center [grid-area:i]">
               <span data-s="wait" className="invisible size-1.5 rounded-full bg-pp-ink/20 opacity-0 [grid-area:1/1]" />
+              {/* Spins only while the timeline marks its step running
+                  (data-spinning="1"), and not while the stage is paused.
+                  Hidden, it would otherwise spin unseen for the rest of the
+                  visit, in every row and every sample stacked underneath. */}
               <span
                 data-s="run"
-                className="invisible size-3.5 animate-spin rounded-full border-[1.5px] border-[#551a89]/20 border-t-[#551a89] opacity-0 [grid-area:1/1] group-data-[paused]/stage:[animation-play-state:paused]"
+                className="invisible size-3.5 animate-spin rounded-full border-[1.5px] border-[#551a89]/20 border-t-[#551a89] opacity-0 [grid-area:1/1] not-data-[spinning=1]:[animation-play-state:paused] group-data-[paused]/stage:[animation-play-state:paused]"
               />
               <span
                 data-s="check"

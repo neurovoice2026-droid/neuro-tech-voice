@@ -60,6 +60,10 @@ export function Wall({ trade }: { trade: Trade }) {
   }, [inView, touched, still, wall.retraction.atDetent]);
 
   function pick(i: number) {
+    // The reader's pick is final: a step of the walk still pending must not
+    // land on top of it.
+    timers.current.forEach(window.clearTimeout);
+    timers.current = [];
     started.current = true;
     setTouched(true);
     setAt(i);

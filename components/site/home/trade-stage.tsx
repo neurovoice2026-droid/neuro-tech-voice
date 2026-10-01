@@ -7,8 +7,8 @@ import {
   HOUSE_POSTER,
   MAX_PIXELS,
   SCENE_CONTRACT,
-  SLOW_MS,
   VERT,
+  frameCadence,
   guarded,
   hexToRgb,
   stageTier,
@@ -48,15 +48,18 @@ import { usePrefersReducedMotion } from "../product/timing";
  *
  * The first context waits for the same three things ShaderStage's does:
  * the stage coming near, a first sign of intent, then an idle moment.
- * Tiers, the pixel budget, adaptive quality, the on-screen-only loop and
- * the single settled frame under reduced motion all follow ShaderStage.
+ * Tiers, the pixel budget, adaptive quality (which here also recovers;
+ * see pace()), the on-screen-only loop and the single settled frame under
+ * reduced motion all follow ShaderStage.
  *
  * The device tier (device-tier.ts) comes before all of that: on a lite or
  * still device the stage is posters only. It never imports a scene module
  * and never creates a context; the posters come from `posters`, the page's
- * own list, or failing that the house poster. A demotion to lite while a
- * context runs (this loop's own governor included: quality at its floor
- * and frames still slow) tears the context down to the posters.
+ * own list (fetched once, when first needed, so it is never part of the
+ * page), or failing that the house poster. A hard lite verdict (or
+ * reduced motion) arriving while a context runs tears the context down to
+ * the posters. This loop's own governor (quality at its floor and frames
+ * still slow) only takes the visit to mid, and the scene plays on.
  *
  * `paused` (WCAG 2.2.2) finishes any dissolve, draws one settled frame
  * and stops asking for frames; the scene's clock stops with it and picks
@@ -74,6 +77,8 @@ type Origin = { x: number; y: number };
 
 /** Each scene's poster and alt, known to the page without importing the scene. */
 export type ScenePosters = Readonly<Record<string, { poster: string; alt: string }>>;
+/** Fetches ScenePosters, once and only when needed; must be module-level (stable). */
+export type PosterLoader = () => Promise<ScenePosters>;
 
 /** Scene programs held at once, the one on screen included; fewer on a mid device. */
 const MAX_PROGRAMS = 3;
@@ -81,6 +86,17 @@ const MID_PROGRAMS = 2;
 
 /** How long the iris takes to open. */
 const DISSOLVE_MS = 900;
+
+/** Frame gaps left unjudged after a swap or a compile: that hitch is the switch's, not the device's. */
+const GRACE_FRAMES = 10;
+/**
+ * Frames to spare in a row that win back one step of resolution. A step
+ * back up that does not last as long as it took to earn doubles the wait
+ * for the next, up to the most, so a device on the edge settles instead of
+ * stepping up and down; one that lasts puts the wait back to the start.
+ */
+const RECOVER_FRAMES = 120;
+const RECOVER_MAX_FRAMES = 1920;
 
 /**
  * How far past the iris's radius its ragged edge can reach, in canvas
@@ -193,7 +209,7 @@ type StageIO = {
   /** The latest props, read when needed so a new callback never rebuilds the stage. */
   props: () => {
     load: SceneLoader;
-    posters?: ScenePosters;
+    posters?: PosterLoader;
     initialPoster?: string;
     initialAlt?: string;
     origin?: Origin;
@@ -284,26 +300,70 @@ function createStage(host: HTMLElement, canvas: HTMLCanvasElement, first: string
     return pending;
   };
 
+  /** The page's list of posters, once `posters` has fetched it. */
+  let posterList: ScenePosters | null = null;
+  let posterLoad: Promise<unknown> | null = null;
+  /** Fetches the page's list of posters, once; a failure is tried again next time. */
+  const fetchPosters = () => {
+    if (!posterLoad) {
+      const { posters } = io.props();
+      posterLoad = posters
+        ? Promise.resolve()
+            .then(posters)
+            .then(
+              (list) => {
+                posterList = list;
+              },
+              () => {
+                posterLoad = null;
+              },
+            )
+        : Promise.resolve();
+    }
+    return posterLoad;
+  };
+
+  /** A key's poster from what this stage already holds: the page's list, a scene already here, or the one the server painted. */
+  const posterOf = (key: string) => {
+    const { initialPoster, initialAlt = "" } = io.props();
+    return (
+      posterList?.[key] ??
+      scenes.get(key) ??
+      (key === first && initialPoster ? { poster: initialPoster, alt: initialAlt } : null)
+    );
+  };
+
+  /**
+   * The key's own poster, and no canvas: from what is here, or else from
+   * the page's list, fetched for it (the old poster stays until it comes).
+   */
+  const showPoster = (key: string) => {
+    setShown(false);
+    const put = () => {
+      const known = posterOf(key);
+      io.show(known?.poster ?? HOUSE_POSTER, known?.alt ?? "", !reduce);
+      settle(key);
+    };
+    if (posterOf(key)) return put();
+    void fetchPosters().then(() => {
+      if (!dead && key === want) put();
+    });
+  };
+
   // Poster first, then the program. The poster is what shows while the
   // program compiles (or instead of it), so it changes the moment the
   // module is here; the canvas keeps the old scene until the new one can
   // actually be drawn.
   const request = (key: string) => {
-    if (flat()) {
-      // Posters only: the page's list, a scene already here, or the one the
-      // server painted; never a new import.
-      const { posters, initialPoster, initialAlt = "" } = io.props();
-      const known =
-        posters?.[key] ?? scenes.get(key) ?? (key === first && initialPoster ? { poster: initialPoster, alt: initialAlt } : null);
-      io.show(known?.poster ?? HOUSE_POSTER, known?.alt ?? "", !reduce);
-      setShown(false);
-      settle(key);
-      return;
-    }
+    // Posters only: never a scene import.
+    if (flat()) return showPoster(key);
     fetchScene(key).then((scene) => {
       if (dead || key !== want) return;
-      io.show(scene?.poster ?? HOUSE_POSTER, scene?.alt ?? "", !reduce);
-      if (!scene || broken || failed.has(key)) {
+      // A failed import (a network drop, a tab older than the deploy) still
+      // shows this trade's own poster, from the page's list.
+      if (!scene) return showPoster(key);
+      io.show(scene.poster, scene.alt, !reduce);
+      if (broken || failed.has(key)) {
         setShown(false);
         settle(key);
         return;
@@ -347,8 +407,18 @@ function createStage(host: HTMLElement, canvas: HTMLCanvasElement, first: string
     let quality = 1;
     let lastFrame = 0;
     let slow = 0;
-    /** Judges the frames once quality is at its floor: still slow there demotes the visit. */
+    /** Frame gaps still to be left unjudged after a swap or a compile. */
+    let grace = 0;
+    /** Frames to spare in a row, counted while resolution is given up. */
+    let fast = 0;
+    /** How many of them the next step back up needs. */
+    let recoverAfter = RECOVER_FRAMES;
+    /** Judged frames left in which a step down means the last step up did not hold. */
+    let proving = 0;
+    /** Judges the frames once quality is at its floor: still slow there takes the visit to mid. */
     const slowAtFloor = slowFrames();
+    /** What counts as slow and as to spare, against the display's own cadence; see ShaderStage. */
+    const cadence = frameCadence();
     /** The scene's clock, stopped, while `paused`. */
     let stoppedAt: number | null = null;
     // Kept by an observer, never read in the loop; see ShaderStage.
@@ -379,6 +449,18 @@ function createStage(host: HTMLElement, canvas: HTMLCanvasElement, first: string
     // The iris is compiled with the context. Until it is ready, and for good
     // if it fails, swaps simply cut.
     let iris: { program: WebGLProgram; locs: IrisLocs | null } | null = { program: link(gl, COMPOSITE), locs: null };
+
+    /**
+     * A swap or a compile just happened: the frames it costs are the
+     * switch's, never the device's, so the governor leaves the next few
+     * alone and a click can never cost resolution (or the visit's tier).
+     */
+    const hitch = () => {
+      lastFrame = 0;
+      slow = 0;
+      fast = 0;
+      grace = GRACE_FRAMES;
+    };
 
     const drop = (e: Entry) => {
       e.cancel?.();
@@ -445,12 +527,15 @@ function createStage(host: HTMLElement, canvas: HTMLCanvasElement, first: string
         const e: Entry = { key, scene, program: null, status: "compiling", used: ++clock, locs: null };
         programs.set(key, e);
         const frag = guarded(`${SCENE_CONTRACT}\n${scene.frag}`);
-        if (par) e.program = link(gl, frag);
-        else
+        if (par) {
+          e.program = link(gl, frag);
+          hitch();
+        } else
           e.cancel = whenIdle(() => {
             e.cancel = undefined;
             if (lost || programs.get(key) !== e) return;
             e.program = link(gl, frag);
+            hitch();
             finish(e, e.program);
             schedule();
           });
@@ -545,19 +630,62 @@ function createStage(host: HTMLElement, canvas: HTMLCanvasElement, first: string
       instant = false;
       needsDraw = true;
       if (!shown) setShown(true);
+      // The freeze and the new program's first draw are this swap's cost.
+      hitch();
     };
 
     // Give up resolution rather than frames; see ShaderStage. At the floor,
-    // frames that stay slow give up the visit's WebGL (a demotion to lite).
+    // frames that stay slow take the visit to mid; this scene plays on there.
+    // Unlike ShaderStage's one scene, this stage lives through many swaps:
+    // a swap's or a compile's own hitch is never judged (see hitch()), and
+    // resolution given up comes back a step at a time once frames have been
+    // to spare for long enough, so one slow moment is not the whole visit's.
     const pace = (now: number) => {
-      if (lastFrame && quality > 0.5) {
-        slow = now - lastFrame > SLOW_MS ? slow + 1 : 0;
+      const gap = lastFrame ? now - lastFrame : 0;
+      lastFrame = now;
+      if (!gap) return;
+      if (grace > 0) {
+        grace--;
+        return;
+      }
+      if (proving > 0) proving--;
+      if (quality > 0.5) {
+        slow = cadence.slow(gap) ? slow + 1 : 0;
+        cadence.read(gap, false);
         if (slow >= 3) {
+          // A step back up that did not hold makes the next one wait twice
+          // as long; after one that held, the wait starts over.
+          recoverAfter = proving > 0 ? Math.min(RECOVER_MAX_FRAMES, recoverAfter * 2) : RECOVER_FRAMES;
+          proving = 0;
+          cadence.stepped(quality === 1);
           quality = Math.max(0.5, quality * 0.72);
           slow = 0;
+          fast = 0;
+          return;
         }
-      } else if (lastFrame && slowAtFloor(now - lastFrame)) demote();
-      lastFrame = now;
+      } else if (cadence.read(gap, true)) {
+        // The floor came no faster than full did: the display's cadence is
+        // the limit, not the GPU, so all of the resolution comes back at once.
+        quality = 1;
+        proving = 0;
+        slow = 0;
+        fast = 0;
+        cadence.stepped();
+        return;
+      } else if (slowAtFloor(gap)) {
+        demote();
+        fast = 0;
+        return;
+      }
+      // Frames to spare win the resolution back, a step at a time;
+      // resize() picks the new quality up later in this frame.
+      fast = quality < 1 && cadence.fast(gap) ? fast + 1 : 0;
+      if (fast >= recoverAfter) {
+        quality = Math.min(1, quality / 0.72);
+        proving = recoverAfter;
+        fast = 0;
+        cadence.stepped();
+      }
     };
 
     const frame = (now: number) => {
@@ -565,7 +693,8 @@ function createStage(host: HTMLElement, canvas: HTMLCanvasElement, first: string
       if (lost) return;
       const still = reduce || paused;
       if (!still) pace(now);
-      // The governor may have demoted the visit, and this context with it.
+      // demote() stops at mid, so the governor never takes this context
+      // down; still, nothing draws on one a tier listener has destroyed.
       if (lost) return;
       poll();
       // Reduced motion draws the pointer where it is, never easing toward
@@ -689,8 +818,9 @@ function createStage(host: HTMLElement, canvas: HTMLCanvasElement, first: string
     };
   }
 
-  const view = new IntersectionObserver(([e]) => {
-    onScreen = e.isIntersecting;
+  const view = new IntersectionObserver((entries) => {
+    // The last entry is the element as it is now: a busy main thread can hand one callback several.
+    onScreen = entries[entries.length - 1].isIntersecting;
     if (onScreen) gpu?.schedule();
     else gpu?.pause();
   });
@@ -704,14 +834,21 @@ function createStage(host: HTMLElement, canvas: HTMLCanvasElement, first: string
   // the first compile is a long task on ANGLE/D3D and must not land in
   // anyone's first paint. A posters-only tier stops at the poster.
   const near = new IntersectionObserver(
-    ([e]) => {
-      if (!e.isIntersecting) return;
+    (entries) => {
+      // The last entry is the element as it is now: a busy main thread can hand one callback several.
+      if (!entries[entries.length - 1].isIntersecting) return;
       near.disconnect();
       void whenTierSettled()
         .then(() => {
           if (dead) return;
           request(want);
           if (!flat()) return whenIntent();
+          // Posters only: the page's list comes in the first idle moment,
+          // so the first pick shows its own poster at once.
+          cancelIdle = whenIdle(() => {
+            cancelIdle = undefined;
+            if (!dead) void fetchPosters();
+          });
         })
         .then(() => {
           if (dead || flat() || gpu || broken) return;
@@ -725,7 +862,7 @@ function createStage(host: HTMLElement, canvas: HTMLCanvasElement, first: string
   );
   near.observe(host);
 
-  // A demotion to lite (or reduced motion switched on) mid-visit: the
+  // A hard lite verdict (or reduced motion switched on) mid-visit: the
   // context goes and the posters take over, the current scene's on show.
   const offTier = onTierChange(() => {
     if (dead || !flat()) return;
@@ -793,11 +930,14 @@ export function TradeStage({
   /** Must be a module-level (stable) function; it is read, not depended on. */
   load: SceneLoader;
   /**
-   * Every scene's poster and alt, built on the server: what a lite or still
-   * device shows instead of the scenes, without importing a single one.
-   * Read when needed; a key missing from it gets the house poster.
+   * Fetches every scene's poster and alt: what a lite or still device shows
+   * instead of the scenes, without importing a single one, and what any
+   * device shows for a scene whose module failed to load. Called once, the
+   * first time one of those needs it, so the list is never part of the
+   * page. Must be module-level (stable); a key missing from it gets the
+   * house poster.
    */
-  posters?: ScenePosters;
+  posters?: PosterLoader;
   /** The first scene's poster, rendered on the server so it paints first. */
   initialPoster?: string;
   initialAlt?: string;

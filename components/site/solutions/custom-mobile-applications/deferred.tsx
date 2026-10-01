@@ -204,7 +204,7 @@ function boxStyle(box: MobReserveId): CSSProperties {
  */
 export function MobDeferred({ box, children }: { box: MobReserveId; children: ReactNode }) {
   return (
-    <div className="home-deferred mob-deferred" style={boxStyle(box)}>
+    <div className="home-deferred mob-deferred" data-box={box} style={boxStyle(box)}>
       {children}
     </div>
   );

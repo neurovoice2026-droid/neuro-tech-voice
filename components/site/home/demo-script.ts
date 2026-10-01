@@ -45,7 +45,7 @@ export const BEAT = {
   /** From the last word said to the call's finished frame. */
   settle: 0.75,
   /** The finished frame is read before the tour dials the next moment. */
-  read: 0.6,
+  read: 2.0,
 } as const;
 
 /** The orb's voice when nobody is speaking. */
