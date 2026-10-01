@@ -13,19 +13,25 @@
  *            orb; Ava's first caption plays under the establishing lockup
  *   P        "This is Ava": the digits and CLOSED peel off sideways, the
  *            camera pulls back 1.5 % and pushes into Ava's close-up
- *   A / C    shot / reverse-shot, hard cuts ON each line: Ava = the big orb
- *            driven by her real envelope; the caller = the orb small in the
- *            listen palette + the phone line; live captions, word-synced;
- *            AI-disclosure underline; slot chips pop on the spoken times,
- *            15:00 is picked on "o'clock"
- *   line 5   "You're booked for / Wednesday at 15:00." — 15:00 ignites ember
- *            ON the spoken "three"; the payoff press; then everything but the
- *            mark and its glow blows away towards the lens; the result picks
- *            the mark up at markHide.
+ *   A / C    shot / reverse-shot, SWUNG on each turn (shots.ts, CALL_LOCAL.swing:
+ *            anticipation → SPRING.pop travel → settle, the parallax planes
+ *            swinging with it, ghosted / smeared on the fastest frames): Ava =
+ *            the big orb driven by her real envelope; the caller = the orb
+ *            small in the listen palette + the phone line, which draws out of
+ *            the orb's trailing edge and is pulled back into it; live
+ *            captions, word-synced; AI-disclosure underline; slot chips
+ *            "3:00 PM" / "4:30 PM" pop on the spoken times, 3:00 PM is picked
+ *            on "o'clock" and flies into the orb with the last swing
+ *   line 5   "You're all booked for / Wednesday at 15:00." — the time ignites
+ *            ember ON the spoken "three"; the payoff press; then everything but
+ *            the mark and its glow blows away towards the lens; the result
+ *            picks the mark up at markHide.
  *
  * Parallax (camera planes): room + orb light 0.3 · big dim discs 0.5 ·
- * orb, waveform, establishing type 1.0 · dust 1.3 · lens bokeh 1.6.
- * Captions, tags, chips and the mark are in screen space.
+ * orb, waveform, establishing type 1.0 · dust 1.3 · lens bokeh 1.6; in 9:16
+ * a floor under the orb (its key-light pool and a soft reflection).
+ * Captions, tags, chips and the mark are in screen space (the tag and the
+ * chips follow a swing a little, smeared along it).
  */
 import React from 'react';
 import { AbsoluteFill } from 'remotion';
@@ -40,19 +46,27 @@ import { pickupGlow, pickupScale } from '../lib/pickup';
 import { useSceneFrame } from '../lib/scene';
 import { C, FONT } from '../theme';
 import { CALL, CALL_LOCAL, SCENES, vWord, type Caption } from '../timing';
+import { VOICE } from '../voice.generated';
 import { bloom, mixColor } from '../lib/lights';
 import { exitCurve, Flare, RingPulse, Sparks } from './call/Accents';
 import { Bokeh, type Disc } from './call/Bokeh';
-import { callGlow, CALLER_GLOW, KeyLight, MidnightVignette, RoomBox, triple } from './call/Light';
+import { callGlow, CALLER_GLOW, Floor, KeyLight, MidnightVignette, RoomBox, triple } from './call/Light';
 import { Digits, OrbStage, type OrbState } from './call/Lockup';
-import { camAt, framingAt, framings, orbBase, orbToScreen, planeCss, shotAt } from './call/shots';
+import { callerK, camAt, framingAt, framings, orbBase, orbToScreen, planeCss, shotAt, swingAt, type Cam } from './call/shots';
 import { ClosedSign, flightAt, PickupLine } from './call/Status';
 import { Chips, MarkRow, SpeakerTag } from './call/Transcript';
 import { lightAt, listenAt, ORB_FRAME0, orbVolumeByIndex, turnAt, volumeAt } from './call/voice';
 import { Waveform } from './call/Waveform';
 
 const LINES = CALL.lines;
-const ROW_A: Caption = { text: "You're booked for", word: 1 };
+/** row A of the last line, as spoken: "You're all booked for" — "all" is heard but (until the voice's
+ *  `say` carries it) has no aligned word of its own, so it rides "You're" */
+const C5 = VOICE.lines[LINES[4].voice].words.map((w) => w.w.toLowerCase().replace(/[^a-z']/g, ''));
+const ALL = C5.indexOf('all');
+const ROW_A: Caption =
+  ALL > 0 ? { text: "You're all booked for", word: 1, map: [1, ALL, ALL + 1, ALL + 2] } : { text: "You're all booked for", word: 1, map: [1, 1, 2, 3] };
+/** the caller's lines: when their phone line opens / is pulled back into the orb */
+const CALLER_LINES = LINES.flatMap((l, i) => (l.who === 'caller' ? [i] : []));
 
 /** the gulp: a damped kick on the orb's scale (overshoot + settle) */
 const gulpKick = (tt: number) => {
@@ -99,8 +113,19 @@ const absorbKick = (tt: number) => {
 /** the caller's line opens on its cut: a spring from the centre out (≈ 10 % overshoot, settled ≈ 10 f) */
 const LINE_OPEN = { stiffness: 380, damping: 20, mass: 0.7 };
 
-/** the far discs lean to the midnight's navy */
-const NAVY = '#1c2f7a';
+/** the far discs lean to the midnight's low, desaturated navy (the colour lives in the orb, not the room) */
+const NAVY = '#2a3352';
+/** (9:16) where the floor under the orb meets the frame (screen y): below the transcript, so the lower
+ *  third holds the orb's pool of light and its reflection */
+const FLOOR_Y = 1440;
+/** the phone line is pulled back into the orb over this many frames (from lineClose) */
+const LINE_CLOSE = 6;
+/** sub-frame ghosts for a DOM plane that moves > 25 px a frame: [frames back, opacity] */
+const GHOSTS = [
+  [0.33, 0.42],
+  [0.66, 0.22],
+] as const;
+const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 
 /** "Wednesday at 15:00" in Inter 500 / −0.01em: its width in em (for the ember burst's ellipse) */
 const MARK_EM = 9.45;
@@ -192,7 +217,25 @@ export const Call: React.FC = () => {
   const lineFlash = CALL_LOCAL.lineOpen.reduce((a, at) => a + (t >= at ? 0.22 * Math.exp(-(t - at) / 4) : 0), 0);
   const keyK = (dress * (0.16 + 0.1 * lvl + 0.18 * light) + 0.6 * hitFlash + lineFlash) * (1 - bw);
   const rim = pickupGlow(t + g0) + (0.2 * lvl + 0.3 * light) * tween(t, [0, 12], [0, 1], EASE.house);
-  const dof = shot.kind === 'C' ? 2 : 0;
+  // the caller's framing (0 Ava … 1 caller), carried across each swing: the orb's depth of field
+  const dof = 2 * callerK(t);
+  /* the swing: the orb's on-screen velocity (px / frame) drives the smears of what follows it */
+  const oA = orbAt(t - 0.5);
+  const oB = orbAt(t + 0.5);
+  const ov = { x: oB.x - oA.x, y: oB.y - oA.y };
+  const oSpeed = Math.hypot(ov.x, ov.y);
+  const sw = swingAt(t);
+  // the parallax planes are ghosted over a swing's fastest frames
+  const planeGhosts = sw && sw.speed > 0.15 ? GHOSTS : [];
+  // the screen-space tag + chips follow the whip a little (≤ ≈ 12 px), smeared along it
+  const ui = { x: 0.06 * ov.x, y: 0.06 * ov.y };
+  const uiSmear = oSpeed > 25 ? { x: Math.min(8, Math.abs(ov.x) * 0.035), y: Math.min(8, Math.abs(ov.y) * 0.035) } : null;
+  const uiStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    transform: Math.abs(ui.x) + Math.abs(ui.y) > 0.05 ? `translate(${ui.x.toFixed(2)}px, ${ui.y.toFixed(2)}px)` : undefined,
+    filter: uiSmear ? 'url(#call-ui-smear)' : undefined,
+  };
 
   /* ── establishing: the lockup, CLOSED, the big line ─────────────── */
   const F = L.pick(170, 150);
@@ -217,9 +260,65 @@ export const Call: React.FC = () => {
       dive: CALL_LOCAL.dive,
     });
 
-  /* ── the caller's phone line (reverse shots) ────────────────────── */
-  const W = L.pick({ x0: 600, x1: 1840, cy: 360, bars: 64, maxH: 120 }, { x0: 60, x1: 1020, cy: 780, bars: 44, maxH: 130 });
-  const lineOpen = shot.kind === 'C' ? springAt(t, LINES[shot.line].at - 1, LINE_OPEN) : 1;
+  /* ── the caller's phone line (reverse shots): it draws OUT of the orb's trailing edge as the
+   *    orb lands (16:9: from the end next to it; 9:16: from straight under it) and is pulled
+   *    back INTO it as the orb swings back to Ava ── */
+  const W = L.pick({ x0: 600, x1: 1840, cy: 360, bars: 64, maxH: 120 }, { x0: 60, x1: 1020, cy: 850, bars: 44, maxH: 130 });
+  const lineOrigin: 'start' | 'center' = L.pick('start', 'center');
+  const lineAt = (tt: number) => {
+    for (let j = 0; j < CALLER_LINES.length; j++) {
+      const o = CALL_LOCAL.lineOpen[j];
+      const c = CALL_LOCAL.lineClose[j] ?? Infinity;
+      if (tt >= o - 1 && tt < c + LINE_CLOSE) {
+        // the close: a 2-frame swell (the line inhales with the orb's anticipation), then it is pulled in (power2.in)
+        const close = tt < c + 2 ? -0.04 * Math.sin(((tt - c) / 2) * (Math.PI / 2)) * (tt >= c ? 1 : 0) : EASE.in2(clamp01((tt - c - 2) / (LINE_CLOSE - 2)));
+        return { i: CALLER_LINES[j], o, open: springAt(tt, o - 1, LINE_OPEN), close };
+      }
+    }
+    return null;
+  };
+  const ln = lineAt(t);
+  // how fast the line's drawn end travels (px / frame): ghosted above 25
+  const reachOf = (tt: number) => {
+    const s0 = lineAt(tt);
+    return s0 ? Math.max(0, s0.open) * (1 - Math.max(0, s0.close)) : 0;
+  };
+  const lineSpeed = Math.abs(reachOf(t + 0.5) - reachOf(t - 0.5)) * (W.x1 - W.x0) * (lineOrigin === 'start' ? 1 : 0.5);
+  const lineGhosts = ln && (lineSpeed > 25 || planeGhosts.length) ? GHOSTS : [];
+  const wave = (tt: number, cm: Cam, op: number, key: string) => {
+    const s0 = lineAt(tt);
+    if (!s0) return null;
+    return (
+      <AbsoluteFill key={key} style={{ ...planeCss(cm, 1), opacity: op }}>
+        <Waveform
+          t={tt}
+          at={LINES[s0.i].at}
+          voice={LINES[s0.i].voice}
+          x0={W.x0}
+          x1={W.x1}
+          cy={W.cy}
+          bars={W.bars}
+          barW={8}
+          maxH={W.maxH}
+          opacity={1}
+          open={s0.open}
+          close={s0.close}
+          origin={lineOrigin}
+          color={CALLER_GLOW.core}
+        />
+        {/* the line connects: a flare runs out along it from the orb's side */}
+        <Flare
+          t={tt}
+          at={s0.o}
+          x={lineOrigin === 'start' ? W.x0 - 20 : (W.x0 + W.x1) / 2}
+          anchor={lineOrigin}
+          y={W.cy}
+          w={(W.x1 - W.x0) * 1.08}
+          color={CALLER_GLOW.core}
+        />
+      </AbsoluteFill>
+    );
+  };
 
   /* ── captions ─────────────────────────────────────────────────────── */
   const avaFont: CaptionFont = { family: FONT.body, weight: 500, size: T.fontSize, lineHeight: 1.22, tracking: '-0.01em' };
@@ -326,16 +425,22 @@ export const Call: React.FC = () => {
       {roomLayer}
       {live ? (
         <AbsoluteFill style={planeCss(cam, 0.3)}>
-          <KeyLight x={orb.x} y={orb.y} d={orb.d} glow={glow} strength={keyK} />
+          {/* (9:16: the orb nearly fills the frame's width, so its spill is kept tighter to stay off the edges) */}
+          <KeyLight x={orb.x} y={orb.y} d={orb.d} glow={glow} strength={keyK} spread={L.pick(3.2, 2.6)} />
         </AbsoluteFill>
       ) : null}
       <MidnightVignette k={grade} />
 
       <AbsoluteFill style={blow}>
+        {/* ── 9:16 · the floor under the orb: its key-light pool and a soft reflection ── */}
+        {live && L.vertical ? (
+          /* (it belongs to the midnight: it comes up as the phone's screen grades into the room) */
+          <Floor x={orb.x} y={orb.y} d={orb.d} floorY={FLOOR_Y} glow={glow} strength={keyK * grade} level={lvl + 0.6 * light} dof={dof} />
+        ) : null}
         {/* ── 0.5 · large dim discs, far behind ──────────────────────── */}
         {live ? (
           <AbsoluteFill style={{ ...planeCss(cam, 0.5), opacity: dress }}>
-            <Bokeh t={t} discs={discsFar} drift={2.2} color={triple(mixColor(glow.body, NAVY, 0.45))} />
+            <Bokeh t={t} discs={discsFar} drift={2.2} color={triple(mixColor(glow.body, NAVY, 0.7))} />
           </AbsoluteFill>
         ) : null}
 
@@ -356,7 +461,7 @@ export const Call: React.FC = () => {
             <ClosedSign
               t={t}
               cx={L.cx}
-              cy={L.pick(150, 330)}
+              cy={L.pick(150, 390)}
               start={CALL_LOCAL.statusIn}
               fontSize={L.pick(32, 30)}
               peel={signPeel}
@@ -382,26 +487,12 @@ export const Call: React.FC = () => {
           </AbsoluteFill>
         ) : null}
 
-        {/* ── 1.0 · the caller's phone line (reverse shots) ─────────── */}
-        {shot.kind === 'C' ? (
-          <AbsoluteFill style={planeCss(cam, 1)}>
-            <Waveform
-              t={t}
-              at={LINES[shot.line].at}
-              voice={LINES[shot.line].voice}
-              x0={W.x0}
-              x1={W.x1}
-              cy={W.cy}
-              bars={W.bars}
-              barW={8}
-              maxH={W.maxH}
-              opacity={1}
-              open={lineOpen}
-              color={CALLER_GLOW.core}
-            />
-            {/* the line connects: a flare runs out along it on the cut */}
-            <Flare t={t} at={LINES[shot.line].at} x={(W.x0 + W.x1) / 2} y={W.cy} w={(W.x1 - W.x0) * 1.08} color={CALLER_GLOW.core} />
-          </AbsoluteFill>
+        {/* ── 1.0 · the caller's phone line (sub-frame ghosts while it draws / retracts fast) ── */}
+        {ln ? (
+          <>
+            {lineGhosts.map(([dt, a], gi) => wave(t - dt, camAt(t - dt, L), a, `wg${gi}`))}
+            {wave(t, cam, 1, 'w')}
+          </>
         ) : null}
 
         {/* ── 1.0 · Ava's orb (screen coordinates from the camera) ──── */}
@@ -427,17 +518,33 @@ export const Call: React.FC = () => {
 
         {live ? (
           <>
-            {/* ── 1.3 · motes ─────────────────────────────────────────── */}
-            <AbsoluteFill style={{ ...planeCss(cam, 1.3), opacity: dress }}>
-              <Dust count={22} seed="call-motes" color={triple(glow.core)} opacity={0.45} size={[2, 7]} blur={[0.4, 3]} speed={0.45} frame={t + 600} />
-            </AbsoluteFill>
-            {/* ── 1.6 · lens bokeh ───────────────────────────────────── */}
-            <AbsoluteFill style={{ ...planeCss(cam, 1.6), opacity: 0.7 * dress }}>
-              <Bokeh t={t} discs={discsNear} color={triple(glow.core)} />
-            </AbsoluteFill>
+            {/* ── 1.3 · motes, 1.6 · lens bokeh (both ghosted over a swing's fastest frames) ── */}
+            {[...planeGhosts.map(([dt, a]) => [dt, a] as const), [0, 1] as const].map(([dt, a], gi) => {
+              const cm = dt ? camAt(t - dt, L) : cam;
+              return (
+                <React.Fragment key={`p${gi}`}>
+                  <AbsoluteFill style={{ ...planeCss(cm, 1.3), opacity: dress * a }}>
+                    <Dust count={22} seed="call-motes" color={triple(glow.core)} opacity={0.45} size={[2, 7]} blur={[0.4, 3]} speed={0.45} frame={t + 600} />
+                  </AbsoluteFill>
+                  <AbsoluteFill style={{ ...planeCss(cm, 1.6), opacity: 0.55 * dress * a }}>
+                    <Bokeh t={t} discs={discsNear} color={triple(glow.core)} />
+                  </AbsoluteFill>
+                </React.Fragment>
+              );
+            })}
 
             {/* ── screen · speaker tag, captions, chips ──────────────── */}
+            {uiSmear ? (
+              <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>
+                <defs>
+                  <filter id="call-ui-smear" x="-10%" y="-10%" width="120%" height="120%" colorInterpolationFilters="sRGB">
+                    <feGaussianBlur stdDeviation={`${uiSmear.x.toFixed(2)} ${uiSmear.y.toFixed(2)}`} />
+                  </filter>
+                </defs>
+              </svg>
+            ) : null}
             {turn >= 0 ? (
+              <div style={uiStyle}>
               <SpeakerTag
                 key={turn}
                 t={t}
@@ -450,11 +557,16 @@ export const Call: React.FC = () => {
                 fontSize={L.pick(32, 30)}
                 dot={22}
               />
+              </div>
             ) : null}
             {LINES.map((line, i) => {
               if (t < line.at - 4 || t > holdOf(i) + 12) return null;
               const agent = line.who === 'agent';
+              // the outgoing line lifts 4 px with the swing's anticipation (then <Captions> takes it out)
+              const nextAt = i + 1 < LINES.length ? LINES[i + 1].at : Infinity;
+              const lift = 4 * EASE.inOut(clamp01((t - (nextAt - 2)) / 2));
               return (
+                <div key={i} style={{ position: 'absolute', inset: 0, transform: lift > 0.01 ? `translateY(${(-lift).toFixed(2)}px)` : undefined }}>
                 <Captions
                   key={i}
                   t={t}
@@ -484,25 +596,29 @@ export const Call: React.FC = () => {
                   }
                   tint={
                     i === 2
-                      ? (c, j) => (c === 1 && (j === 2 || j === 4) ? { color: C.lilac, k: flash(pops[j === 2 ? 0 : 1]) } : null)
+                      ? // "3 PM" / "4:30." (caption 1, words 2–3 / 5) flash lilac as they are spoken, linking them to their chips
+                        (c, j) => (c === 1 && (j === 2 || j === 3 || j === 5) ? { color: C.lilac, k: flash(pops[j === 5 ? 1 : 0]) } : null)
                       : undefined
                   }
                 />
+                </div>
               );
             })}
-            <Chips
-              t={t}
-              cx={L.cx}
-              cy={T.y - L.pick(170, 160)}
-              w={L.pick(260, 228)}
-              h={L.pick(104, 92)}
-              fontSize={L.pick(64, 56)}
-              pops={CALL_LOCAL.chipPops}
-              pick={CALL_LOCAL.pick}
-              drop={CALL_LOCAL.chipDrop}
-              leave={CALL_LOCAL.chipsOut}
-              leaveTo={orbAt(CALL_LOCAL.chipsOut + 7)}
-            />
+            <div style={uiStyle}>
+              <Chips
+                t={t}
+                cx={L.cx}
+                cy={T.y - L.pick(170, 160)}
+                w={L.pick(330, 296)}
+                h={L.pick(104, 92)}
+                fontSize={L.pick(64, 56)}
+                pops={CALL_LOCAL.chipPops}
+                pick={CALL_LOCAL.pick}
+                drop={CALL_LOCAL.chipDrop}
+                leave={CALL_LOCAL.chipsOut}
+                leaveTo={orbAt(CALL_LOCAL.chipAbsorb - 1)}
+              />
+            </div>
           </>
         ) : null}
       </AbsoluteFill>

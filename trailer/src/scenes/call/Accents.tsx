@@ -178,40 +178,48 @@ export const RingPulse: React.FC<{
   );
 };
 
-/** A short horizontal streak of light (the phone line connecting): grows from the centre, then thins and fades. */
-export const Flare: React.FC<{ t: number; at: number; x: number; y: number; w: number; color: string; life?: number }> = ({
-  t,
-  at,
-  x,
-  y,
-  w,
-  color,
-  life = 9,
-}) => {
+/** A short horizontal streak of light (the phone line connecting): grows from the centre (or out from
+ *  its start, `anchor: 'start'` — x is then its left end), then thins and fades. */
+export const Flare: React.FC<{
+  t: number;
+  at: number;
+  x: number;
+  y: number;
+  w: number;
+  color: string;
+  life?: number;
+  anchor?: 'center' | 'start';
+}> = ({ t, at, x, y, w, color, life = 9, anchor = 'center' }) => {
   if (t < at - 1 || t > at + life) return null;
   const u = Math.max(0, (t - at + 1) / (life + 1));
   const grow = EASE.out3(Math.min(1, u * 2.2));
   const op = Math.pow(1 - u, 1.3);
   const W = w * (0.2 + 0.8 * grow);
   const H = 3 + 5 * (1 - u);
+  // from the start: the streak runs out to the right, its hot head leading
+  const left = anchor === 'start' ? x : x - W / 2;
+  const head = anchor === 'start' ? x + W * 0.82 : x;
   return (
     <>
       <div
         style={{
           position: 'absolute',
-          left: x - W / 2,
+          left,
           top: y - H / 2,
           width: W,
           height: H,
           borderRadius: H,
-          background: `linear-gradient(90deg, ${rgba(color, 0)} 0%, ${rgba(color, 0.7 * op)} 30%, ${rgba('#ffffff', op)} 50%, ${rgba(color, 0.7 * op)} 70%, ${rgba(color, 0)} 100%)`,
+          background:
+            anchor === 'start'
+              ? `linear-gradient(90deg, ${rgba(color, 0)} 0%, ${rgba(color, 0.55 * op)} 45%, ${rgba('#ffffff', op)} 82%, ${rgba(color, 0.6 * op)} 92%, ${rgba(color, 0)} 100%)`
+              : `linear-gradient(90deg, ${rgba(color, 0)} 0%, ${rgba(color, 0.7 * op)} 30%, ${rgba('#ffffff', op)} 50%, ${rgba(color, 0.7 * op)} 70%, ${rgba(color, 0)} 100%)`,
           boxShadow: `0 0 18px ${rgba(color, 0.5 * op)}`,
         }}
       />
       <div
         style={{
           position: 'absolute',
-          left: x - 70,
+          left: head - 70,
           top: y - 70,
           width: 140,
           height: 140,

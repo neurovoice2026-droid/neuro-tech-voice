@@ -20,6 +20,13 @@ import { ORB_RIM } from '../../lib/pickup';
 import { CLOCK_FILL, FONT, LIGHTS } from '../../theme';
 
 const RING_LIFE = 28.5; // 0.95 s
+/** px / frame above which the orb is smeared (the brief: anything moving > ~25 px a frame) */
+const SMEAR_FROM = 25;
+/** the rim's sub-frame ghosts while it whips: [frames back, opacity] */
+const GHOSTS = [
+  [0.33, 0.4],
+  [0.66, 0.22],
+] as const;
 
 /** power2.out */
 const out2 = (u: number) => 1 - (1 - u) * (1 - u);
@@ -157,6 +164,20 @@ export const OrbStage: React.FC<{
   const { x, y, d } = orb;
   const lvl = Math.max(0, (volume - 0.12) / 0.7);
 
+  /* ── motion: a swing whips the orb up to ≈ 200 px a frame. The canvas gets a
+   * directional blur along its velocity (an SVG gaussian, never CameraMotionBlur),
+   * its rim leaves sub-frame ghosts and its halo stretches along the path. ── */
+  const oA = orbAt(t - 0.5);
+  const oB = orbAt(t + 0.5);
+  const vx = oB.x - oA.x;
+  const vy = oB.y - oA.y;
+  const speed = Math.hypot(vx, vy);
+  const moving = speed > SMEAR_FROM;
+  const smX = moving ? Math.min(36, Math.abs(vx) * 0.16) : 0;
+  const smY = moving ? Math.min(36, Math.abs(vy) * 0.16) : 0;
+  /** half-size of the box the smeared rim is drawn in (the rim's spill + the path) */
+  const rimR = d * 1.25 + 120 + speed;
+
   /* ── rings (the night `wave`) ───────────────────────────────────── */
   const ringAt = (tt: number, start: number) => {
     const o = orbAt(tt);
@@ -219,22 +240,25 @@ export const OrbStage: React.FC<{
   }
 
   // the halo: a pool of the orb's own light, hugging it (the room's wide spill is <KeyLight>)
+  // (stretched along the path while it whips, trailing a little behind)
   const halo = d * (2.2 + lvl * 0.2 + light * 0.2 + 0.4 * flash);
+  const haloW = halo + Math.abs(vx) * 0.9;
+  const haloH = halo + Math.abs(vy) * 0.9;
   const haloK = dress * (0.55 + 0.25 * lvl + 0.4 * light) + 0.9 * flash;
   const k = d / base;
   // the rim: the pickup's ORB_RIM (= the twist's, so the cross-fade over the twist is exact) hands
   // over to the four-light rimGlow in the orb's current colour as the room dresses
   const spread = 1 + 1.2 * lvl;
-  const rimBox = (shadow: string, op: number, key: string) =>
+  const rimBox = (shadow: string, op: number, key: string, at: OrbState = orb) =>
     op <= 0.002 ? null : (
       <div
         key={key}
         style={{
           position: 'absolute',
-          left: x - d / 2,
-          top: y - d / 2,
-          width: d,
-          height: d,
+          left: at.x - at.d / 2,
+          top: at.y - at.d / 2,
+          width: at.d,
+          height: at.d,
           borderRadius: '50%',
           boxShadow: shadow,
           opacity: op,
@@ -249,11 +273,11 @@ export const OrbStage: React.FC<{
         <div
           style={{
             position: 'absolute',
-            left: x - halo / 2,
-            top: y - halo / 2,
-            width: halo,
-            height: halo,
-            background: bloom(glow, haloK, { core: 0.55, coreSize: 0.5 }),
+            left: x - vx * 0.25 - haloW / 2,
+            top: y - vy * 0.25 - haloH / 2,
+            width: haloW,
+            height: haloH,
+            background: bloom(glow, haloK * (halo / Math.sqrt(haloW * haloH)), { core: 0.55, coreSize: 0.5 }),
             mixBlendMode: 'screen',
           }}
         />
@@ -261,7 +285,33 @@ export const OrbStage: React.FC<{
       {rings}
       {/* rim light + contact shadow (screen space, so it is never scaled) */}
       {rimBox(ORB_RIM(rim, spread), rimIn * (1 - dress), 'rim0')}
-      {rimBox(rimGlow(glow, Math.min(1, rim), (d / 400) * spread, { shadow: 1 }), rimIn * dress, 'rim1')}
+      {moving ? (
+        <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>
+          <defs>
+            <filter id="call-orb-smear" x="-45%" y="-45%" width="190%" height="190%" colorInterpolationFilters="sRGB">
+              <feGaussianBlur stdDeviation={`${(smX / k).toFixed(2)} ${(smY / k).toFixed(2)}`} />
+            </filter>
+            <filter id="call-rim-smear" x="-30%" y="-30%" width="160%" height="160%" colorInterpolationFilters="sRGB">
+              <feGaussianBlur stdDeviation={`${smX.toFixed(2)} ${smY.toFixed(2)}`} />
+            </filter>
+          </defs>
+        </svg>
+      ) : null}
+      {moving ? (
+        /* the rim and its sub-frame ghosts, smeared along the path like the canvas (a blur, not a strobe) */
+        <div style={{ position: 'absolute', left: x - rimR, top: y - rimR, width: 2 * rimR, height: 2 * rimR, filter: 'url(#call-rim-smear)' }}>
+          {/* (a box round the orb only, so the filter never runs over the whole frame) */}
+          <div style={{ position: 'absolute', left: rimR - x, top: rimR - y }}>
+            {GHOSTS.map(([dt, a], i) => {
+              const g = orbAt(t - dt);
+              return rimBox(rimGlow(glow, Math.min(1, rim), (g.d / 400) * spread, { shadow: 0 }), a * rimIn * dress, `rimg${i}`, g);
+            })}
+            {rimBox(rimGlow(glow, Math.min(1, rim), (d / 400) * spread, { shadow: 1 }), rimIn * dress, 'rim1')}
+          </div>
+        </div>
+      ) : (
+        rimBox(rimGlow(glow, Math.min(1, rim), (d / 400) * spread, { shadow: 1 }), rimIn * dress, 'rim1')
+      )}
       {/* the orb: one canvas, framed by transform only */}
       <div
         style={{
@@ -273,7 +323,9 @@ export const OrbStage: React.FC<{
           transformOrigin: '50% 50%',
           transform: `translate(${(x - base / 2).toFixed(2)}px, ${(y - base / 2).toFixed(2)}px) scale(${k.toFixed(5)})`,
           // the blur is set in the orb's own (scaled) space
-          filter: dof > 0.1 ? `blur(${(dof / k).toFixed(2)}px)` : undefined,
+          filter:
+            [moving ? 'url(#call-orb-smear)' : '', dof > 0.1 ? `blur(${(dof / k).toFixed(2)}px)` : ''].filter(Boolean).join(' ') ||
+            undefined,
         }}
       >
         <Orb

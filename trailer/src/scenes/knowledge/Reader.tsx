@@ -8,9 +8,10 @@
  *   caller      the `listen` twin; the orb follows the caller's REAL envelope
  *   scan        small reading pulses; a spark where each beam lands
  *   miss        MUTED_MESH: the light drains, a grey ring closes in
- *   relight     Ava's first sound: the Sunday light floods back (a ring
- *               leaves, the bloom swells) and the orb breathes with HER
- *               real envelope, swelling slightly as she speaks
+ *   answer      grey through her hum (it still breathes with it); on her
+ *               first word the Sunday light floods back (rings leave, the
+ *               bloom swells) and the orb breathes with HER real envelope,
+ *               swelling slightly as she speaks, pushing in 1 → 1.05
  */
 import React from 'react';
 import { spring } from 'remotion';
@@ -45,7 +46,8 @@ const Ring: React.FC<{ x: number; y: number; d: number; color: string; w?: numbe
   />
 );
 
-export const Reader: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
+/** `part`: 'light' = the pool of light behind it (drawn under the type), 'orb' = everything else */
+export const Reader: React.FC<{ t: number; G: Geo; part: 'light' | 'orb' }> = ({ t, G, part }) => {
   if (t < KL.orbIn - 3) return null;
   const O = G.orb;
   const p = riseAt(t);
@@ -56,7 +58,9 @@ export const Reader: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
   const vol = volumeAt(t);
   const speak = t >= K.answer ? Math.max(0, (vol - VOL.rest) / 0.6) : 0;
   const bob = breathe(t, 84, 3.2) * pc;
-  const sc = Math.max(0, p) * (1 + 0.035 * speak);
+  // through her answer the reader slowly comes closer (1 → 1.05)
+  const push = 1 + 0.05 * tween(t, KL.orbPush, [0, 1], EASE.inOut);
+  const sc = Math.max(0, p) * (1 + 0.05 * speak) * push;
   const lift = (1 - pc) * 22;
 
   // the seed: 2 f of Sunday light gathering (inhale) before the orb springs out of it
@@ -70,7 +74,7 @@ export const Reader: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
   const flashMiss = flashAt(t, KL.missFlip, 5);
   const pool =
     (0.42 * pc + 0.75 * flashIn + 0.5 * flashRelight + 0.5 * Math.max(0, vol - VOL.rest) + 0.15 * flashMiss) * (1 - 0.55 * grey);
-  const BD = O.d * 3.1;
+  const BD = O.d * 3.1 * push;
 
   // the contact shadow sits under the orb's CURRENT size, and tightens as it bobs down
   const sk = Math.min(1.06, Math.max(0, sc));
@@ -93,21 +97,22 @@ export const Reader: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
     return { o: t > a && q < 1 ? (0.5 - 0.18 * k) * (1 - q) : 0, d: O.d * (1.02 + (0.55 + 0.2 * k) * q) };
   };
 
+  if (part === 'light') {
+    return pool > 0.004 ? (
+      <div
+        style={{
+          position: 'absolute',
+          left: O.x - BD / 2,
+          top: O.y - BD / 2 + bob * 0.5,
+          width: BD,
+          height: BD,
+          background: bloom(glow, pool, { core: 0.5, coreSize: 0.36 }),
+        }}
+      />
+    ) : null;
+  }
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
-      {/* the light pool */}
-      {pool > 0.004 ? (
-        <div
-          style={{
-            position: 'absolute',
-            left: O.x - BD / 2,
-            top: O.y - BD / 2 + bob * 0.5,
-            width: BD,
-            height: BD,
-            background: bloom(glow, pool, { core: 0.5, coreSize: 0.36 }),
-          }}
-        />
-      ) : null}
       {/* the contact shadow (tinted with the light's deep) */}
       <div
         style={{

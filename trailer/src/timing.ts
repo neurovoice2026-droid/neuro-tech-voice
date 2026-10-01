@@ -64,7 +64,8 @@ const CALL_LEN = Math.min(
 const RESULT_LEN = b(8);
 /** Knowledge: the question, a scan, the honest answer, then the closing title. */
 const KB_ASK = b(1.5); // the heading has been up ~0.6 s; the caption itself waits for "Do you…"
-const KB_SCAN0 = upHalf(KB_ASK + Math.round(vFrames('kb-1') * 0.6));
+/* Ava searches AFTER she has heard the question: the scan starts on the 8th after the caller's last word */
+const KB_SCAN0 = upHalf(KB_ASK + vWord('kb-1', VOICE.lines['kb-1'].words.length - 1) + 4);
 const KB_MISS = KB_SCAN0 + b(1.5);
 /* (a longer regenerated kb-1 must still leave its caption ≥ 15 f on screen after the last word) */
 const KB_ANSWER = Math.max(KB_MISS + 7, KB_ASK + vFrames('kb-1') + 19);
@@ -185,11 +186,11 @@ const CALL_LINES: readonly CallLine[] = [
     at: CALL_AT[2],
     who: 'agent',
     voice: 'call-3',
-    text: 'Of course! I have 15:00 or 16:30. Which one suits you better?',
+    text: 'Of course! I have 3 PM or 4:30. Which one suits you better?',
     captions: [
       { text: 'Of course!', word: 0 },
-      // "15:00" is revealed on spoken "3 PM", "16:30" on "4:30"
-      { text: 'I have 15:00 or 16:30.', word: 2, map: [2, 3, 4, 6, 7] },
+      // captioned as spoken (the viewer hears "3 PM" and reads "3 PM")
+      { text: 'I have 3 PM or 4:30.', word: 2 },
       { text: 'Which one suits you better?', word: 8 },
     ],
   },
@@ -204,10 +205,16 @@ const CALL_LINES: readonly CallLine[] = [
     at: CALL_AT[4],
     who: 'agent',
     voice: 'call-5',
-    text: "Lovely! You're booked for Wednesday at 15:00.",
+    text: "Lovely! You're all booked for Wednesday at 3 PM.",
     captions: [
       { text: 'Lovely!', word: 0 },
-      { text: "You're booked for Wednesday at 15:00.", word: 1 },
+      // "all" is spoken but not (yet) in the voice's `say`: it rides "You're" until a regenerated take aligns it
+      (() => {
+        const ws = VOICE.lines['call-5'].words.map((w) => w.w.toLowerCase().replace(/[^a-z']/g, ''));
+        const a = ws.indexOf('all');
+        const map = a > 0 ? [1, a, a + 1, a + 2, a + 3, a + 4, a + 5, a + 6] : [1, 1, 2, 3, 4, 5, 6, 7];
+        return { text: "You're all booked for Wednesday at 3 PM.", word: 1, map };
+      })(),
     ],
   },
 ];
@@ -432,14 +439,24 @@ export const TWIST_LOCAL = {
 };
 
 /* ── CALL — fine cuts (call-local frames) ──────────────────────── */
-/** the orb swallows the big line 1 f before Ava's first word… */
-const CALL_SWALLOW = CALL_AT[0] - 1;
+/** the orb swallows the big line 4 f before Ava's first word (≈ 130 ms of air, so the gulp never masks "Th-ank")… */
+const CALL_SWALLOW = CALL_AT[0] - 4;
 /** …after a 6-frame dive (the line gathers 3 f before it) */
 const CALL_DIVE = 6;
 const CALL_LIFT = CALL_SWALLOW - CALL_DIVE;
 /** "This is Ava" — the establishing shot pushes into Ava's close-up */
 const CALL_S2 = CALL.lines[0].at + vWord('call-1', 6);
+/** shot ↔ reverse shot: a designed swing on every turn (lines 1…4), [at − 2, at + 8] */
+const CALL_SWING = CALL.lines.slice(1).map((l) => [l.at - 2, l.at + 8] as const);
 export const CALL_LOCAL = {
+  /** the swings: from at − 2 the orb anticipates (squash .95 + a 12 px counter-move away from where it is
+   *  going, the outgoing caption lifts 4 px); from at it travels A ↔ C on SPRING.pop (fastest at + 1…3,
+   *  ghosted / smeared), overshoots ≈ 4 % in size (peak at + 5) and is settled by at + 8 */
+  swing: CALL_SWING,
+  /** the swing's fastest frame (the whoosh's peak) */
+  swingFast: CALL_SWING.map(([a]) => a + 3),
+  /** the orb lands: its overshoot peaks (Ava's landings leave a ring) */
+  swingLand: CALL_SWING.map(([a]) => a + 7),
   /** the night room fades in over the twist's (identical) phone screen */
   roomIn: [-4, 0] as const,
   /** the zoomed room (the phone screen) pulls back to the whole stage */
@@ -462,12 +479,14 @@ export const CALL_LOCAL = {
   swallow: CALL_SWALLOW,
   /** the figure pairs cross their rest position (the unfold spring's first crossing; it peaks 2 f later) */
   digitsLand: CALL_SWALLOW + 1 + 5,
-  /** rings: the pickup (attack 1 f before the beat), then every time Ava starts a line */
-  rings: [-1, CALL.lines[0].at, CALL.lines[2].at, CALL.lines[4].at] as const,
+  /** rings: the pickup (attack 1 f before the beat), Ava's first word, then each time her orb LANDS from a swing */
+  rings: [-1, CALL.lines[0].at, CALL.lines[2].at + 5, CALL.lines[4].at + 5] as const,
   /** the speaker tag (AVA / CALLER) pops ON Ava's first word and on every cut (dot ring + letters) */
   tagPops: CALL.lines.map((l) => l.at),
-  /** the caller's phone line opens on its cut: a flare runs along the line, the bars spring up from it */
-  lineOpen: CALL.lines.filter((l) => l.who === 'caller').map((l) => l.at),
+  /** the caller's phone line draws OUT of the orb's trailing edge as it arrives (a flare runs along it, the bars spring up) */
+  lineOpen: CALL.lines.filter((l) => l.who === 'caller').map((l) => l.at + 3),
+  /** …and retracts into the orb as it swings back to Ava (from the next swing's anticipation) */
+  lineClose: CALL.lines.flatMap((l, i) => (l.who === 'caller' && i + 1 < CALL.lines.length ? [CALL.lines[i + 1].at - 2] : [])),
   /** the AI-disclosure underline draws (a hot tip) as Ava says "an AI assistant"… */
   disclose: [CALL.lines[0].at + vWord('call-1', 9) - 2, CALL.lines[0].at + vWord('call-1', 12) - 4] as const,
   /** …and locks with a flash as it completes */
@@ -482,8 +501,8 @@ export const CALL_LOCAL = {
   pick: CALL.slotPick,
   /** …and 16:30 lifts 2 f and drops away */
   chipDrop: CALL.slotPick + 1,
-  /** the 15:00 chip squashes (2 f) and leaves up into the light as Ava starts the last line… */
-  chipsOut: CALL.lines[4].at,
+  /** the picked chip squashes (2 f, with the swing's anticipation) and flies into the orb with the swing… */
+  chipsOut: CALL.lines[4].at - 2,
   /** …and the orb takes it in (a flare + a small gulp) */
   chipAbsorb: CALL.lines[4].at + 8,
   /** camera kicks (1–3 px) on the big hits: the pickup, the gulp, the pick, the booked mark */
@@ -750,14 +769,37 @@ export const KNOWLEDGE_LOCAL = (() => {
   const K = KNOWLEDGE;
   /** first frame a line is heard (env > .15: a breath or a hum counts, it is heard) */
   const onset = (id: VoiceId) => Math.max(0, VOICE.lines[id].env.findIndex((e) => e > 0.15));
-  const askWord = K.ask + vWord(K.askVoice, 0); // the caller's "Do…"
+  const ask = VOICE.lines[K.askVoice];
+  const askWord = K.ask + vWord(K.askVoice, 0); // the caller's first aligned word ("Do…")
   const ansWord = K.answer + vWord(K.answerVoice, 0); // Ava's "I…"
-  const headingOut = [askWord - 10, askWord - 4] as const;
+  const aw = (k: number) => K.answer + vWord(K.answerVoice, k); // Ava's spoken word k (kb-2)
+  /* kb-1 opens with "Quick question," — heard, but not in its word alignment (the caption
+   * starts on "Do"). When ≥ 12 f are heard before the first aligned word, those two words
+   * are captioned from the envelope: "Quick" on the onset, "question," on the first rise
+   * after the first dip. (A regenerated kb-1 without them simply has no lead-in.) */
+  const lead = (() => {
+    const e = ask.env;
+    const o = onset(K.askVoice);
+    const first = vWord(K.askVoice, 0);
+    if (first - o < 12) return null;
+    let i = o;
+    while (i < first && e[i] > 0.1) i++;
+    while (i < first && e[i] < 0.2) i++;
+    const w2 = i < first - 4 ? i : o + Math.round((first - o) * 0.3);
+    // it has left (a 4 f exit) by the time "Do…" starts to write in (2 f before it is heard)
+    return { text: 'Quick question,', words: [K.ask + o, K.ask + w2] as const, out: askWord - 6 };
+  })();
+  const headingOut = lead ? ([lead.words[1] + 4, lead.words[1] + 10] as const) : ([askWord - 10, askWord - 4] as const);
   const beams = [K.scan[0], K.scan[0] + 21] as const;
   const beamStagger = 2;
   const beamDraw = beams[1] - beams[0] - 4 * beamStagger;
   const fills = [K.scan[0] + 3, 2.4, 18] as const;
-  const relight0 = K.answer + onset(K.answerVoice) - 2;
+  /* her light floods back on her first WORD: through the hum the orb stays grey (it
+   * breathes with the hum) — the miss reads for a second before she answers */
+  const relight0 = ansWord - 2;
+  /* the team card: it pops on "I'll", its lines write in on "ask" / "team", the callback
+   * chip pops on "call" and its check draws on "today." */
+  const ticketPop = aw(13);
   return {
     /** the white bloom from the result settles into the stage (t 0 is pure white: the hit) */
     stageIn: [0, b(0.75)] as const,
@@ -767,21 +809,24 @@ export const KNOWLEDGE_LOCAL = (() => {
     headingStagger: 2,
     /** the five documents pop on 16ths (= the docTicks): inhale, overshoot, a glint + ring */
     docPops: Array.from({ length: 5 }, (_, i) => Math.round(K.docsIn + i * K.docStep)) as readonly number[],
-    /** the heading steps down into the answer slot (a 2 f lift before), making way for the orb */
-    headingStep: [K.ask + 3, K.ask + 13] as const, // starts on the 16th after the ask (26)
+    /** the heading steps down (to the answer row / the slot; a 2 f lift before), making way for the
+     *  orb — on the 3rd doc pop, so it has passed the dialogue row before the caller's first sound */
+    headingStep: [b(1.25), b(1.25) + 10] as const,
     /** the orb rises into the centre ON the beat after the doc run: bloom flash, ring, kick */
     orbIn: b(2),
     /** the status pill pops "Listening" a 16th later… */
     statusIn: b(2.25),
     /** …and the moment tag "SUNDAY · 10:24" an 8th later (the sun spins in, a glint crosses it) */
     momentTag: b(2.5),
-    /** the heading flicks out of its masks just before the caller's first word */
+    /** "Quick question," (kb-1's unaligned lead-in): its two words' frames, and when it gives way to "Do…" (null = none) */
+    lead,
+    /** the heading flicks out of its masks once the caller is talking */
     headingOut,
-    /** CALLER pops as the heading clears */
-    callerIn: headingOut[1] - 1,
+    /** CALLER pops on the caller's first sound */
+    callerIn: lead ? lead.words[0] - 1 : headingOut[1] - 1,
     /** the question holds while Ava hums it over; gone before her first word */
     questionOut: [ansWord - 8, ansWord - 4] as const,
-    /** the peek page opens (16:9) — a scan line of Sunday light runs down its reveal edge */
+    /** the slot opens (the dashed page the reader is reading) — a scan line of Sunday light runs down its reveal edge */
     peekOpen: K.scan[0] - b(0.25),
     /** the pill flips to "Looking through 5 documents" (the box tweens, the words swap, a bump) */
     scanFlip: K.scan[0],
@@ -802,13 +847,29 @@ export const KNOWLEDGE_LOCAL = (() => {
     missFlip: K.miss,
     shake: [K.miss + 3, K.miss + 15] as const,
     toGrey: [K.miss, K.miss + 12] as const,
+    /** the slot's reading lines fold away (bottom up, 1.5 f apart)… */
     peekCollapse: [K.miss, K.miss + 8] as const,
-    /** Ava answers: her Sunday light floods back into the orb from her first sound (bloom swell + ring) */
+    /** …and "0 matches" pops into it a 16th after the miss, then shakes "no" after the pill */
+    zeroPop: K.miss + b(0.25),
+    zeroShake: [K.miss + 8, K.miss + 20] as const,
+    /** Ava's "answer" (in "I don't have an answer…"): a soft grey ring leaves "0 matches" */
+    zeroEcho: aw(4),
+    /** Ava answers: her Sunday light floods back on her first word (bloom swell + rings + kick) */
     relight: [relight0, relight0 + b(1)] as const,
-    /** the tiles step back (.55) so the answer leads */
+    /** the documents step back (.25, 2 px out of focus) so the answer leads */
     dimDocs: [K.answer, K.answer + 10] as const,
-    /** "Your fallback message" */
-    meta: ansWord + 8,
+    /** "guess." turns sunday ink as it is spoken */
+    guessKey: aw(12),
+    /** "I'll": the slot inhales (2 f at .95) and pops into the team card (1.08 → 1): glint, ring, kick */
+    ticketPop,
+    /** the card's lines write in, word-synced: "Home visits?" on "ask", the caller's number on "team" */
+    ticketType: [aw(14), aw(16)] as const,
+    /** "call": the callback chip pops (closing green) */
+    callback: aw(18),
+    /** "today.": its check draws, a green flash, a glint across the chip; the word turns sunday ink */
+    check: aw(21),
+    /** the orb pushes in 1 → 1.05 through her answer */
+    orbPush: [K.answer, K.closing - 4] as const,
     /** the stage recedes (.12, blur, .97) under the closing title */
     recede: [K.closing - 4, K.closing + 6] as const,
     closingStagger: 2.5,
@@ -1062,17 +1123,22 @@ export const HITS: Hit[] = [
   H('call', CALL_LOCAL.peel[1], 'swish', 'night', 0.5, 2, 'digits peel off ±700 px', { split: true }),
   H('call', CALL_LOCAL.disclose[0], 'draw', 'night', [0.3, 0.8], 3, 'AI-disclosure underline draws'),
   H('call', CALL_LOCAL.discloseLock, 'tick', 'night', 0.62, 2, 'underline locks'),
-  H('call', CALL_LOCAL.lineOpen[0], 'line', 'night', 0.64, 2, 'CUT: caller line connects'),
-  H('call', CALL_LOCAL.tagPops[2], 'tick', 'night', 0.5, 3, 'CUT back to Ava'),
+  // shot ↔ reverse shot: every turn is a SWING (anticipation → whip → land); a soft whoosh peaks on its
+  // fastest frame, panned along the orb's travel (16:9: centre ↔ left)
+  ...CALL_LOCAL.swingFast.map((f, i) =>
+    H('call', f, 'whoosh-soft', 'night', CALL.lines[i + 1].who === 'caller' ? [0.5, 0.2] : [0.2, 0.5], 2, `SWING ${CALL.lines[i + 1].who === 'caller' ? 'to the caller' : 'back to Ava'}`),
+  ),
+  H('call', CALL_LOCAL.lineOpen[0], 'line', 'night', 0.64, 2, 'caller line draws out of the orb'),
+  H('call', CALL_LOCAL.tagPops[2], 'tick', 'night', 0.5, 3, 'AVA tag pops (swing back)'),
   // the chips pop ON the spoken times: an octave down, under the speech band
-  H('call', CALL_LOCAL.chipPops[0], 'pop', 'night', 0.42, 1, 'chip 15:00 on “3 PM”', { semi: -12 }),
-  H('call', CALL_LOCAL.chipPops[1], 'pop', 'night', 0.58, 1, 'chip 16:30 on “4:30”', { semi: -10 }),
-  H('call', CALL_LOCAL.lineOpen[1], 'line', 'night', 0.64, 2, 'CUT: caller line connects'),
-  H('call', CALL_LOCAL.pick - 2, 'tap', 'night', 0.42, 3, '15:00 squashes (wind-up)'),
-  H('call', CALL_LOCAL.pick, 'click', 'night', 0.42, 1, '15:00 PICKED'),
-  H('call', CALL_LOCAL.chipDrop + 2, 'swish', 'night', [0.58, 0.64], 3, '16:30 drops away'),
-  H('call', CALL_LOCAL.chipsOut, 'tick', 'night', 0.5, 3, 'CUT to Ava (line 5)'),
-  H('call', CALL_LOCAL.chipAbsorb - 1, 'swish', 'night', [0.45, 0.5], 2, '15:00 flies up into the orb'),
+  H('call', CALL_LOCAL.chipPops[0], 'pop', 'night', 0.41, 1, 'chip 3:00 PM on “3 PM”', { semi: -12 }),
+  H('call', CALL_LOCAL.chipPops[1], 'pop', 'night', 0.59, 1, 'chip 4:30 PM on “4:30”', { semi: -10 }),
+  H('call', CALL_LOCAL.lineOpen[1], 'line', 'night', 0.64, 2, 'caller line draws out of the orb'),
+  H('call', CALL_LOCAL.pick - 2, 'tap', 'night', 0.41, 3, '3:00 PM squashes (wind-up)'),
+  H('call', CALL_LOCAL.pick, 'click', 'night', 0.41, 1, '3:00 PM PICKED'),
+  H('call', CALL_LOCAL.chipDrop + 2, 'swish', 'night', [0.59, 0.64], 3, '4:30 PM drops away'),
+  H('call', CALL_LOCAL.chipsOut, 'tick', 'night', 0.41, 3, 'the picked chip squashes (the swing’s anticipation)'),
+  H('call', CALL_LOCAL.chipAbsorb - 1, 'swish', 'night', [0.41, 0.5], 2, '3:00 PM flies into the orb with the swing'),
   H('call', CALL_LOCAL.chipAbsorb, 'gulp', 'night', 0.5, 2, 'the orb takes the slot in', { semi: -2 }),
   H('call', CALL_LOCAL.ember, 'ember', 'none', 0.64, 1, 'BOOKED: 15:00 ignites ember (ON “3 PM”)', { db: -3 }),
   H('call', CALL_LOCAL.payoff, 'thump', 'none', 0.5, 2, 'the mark presses'),
@@ -1118,8 +1184,8 @@ export const HITS: Hit[] = [
   H('knowledge', KL.statusIn, 'pop', 'sunday', 0.89, 2, '“Listening” pill', { semi: 5 }),
   H('knowledge', KL.momentTag, chime('sunday'), 'sunday', 0.73, 2, '“SUNDAY · 10:24” (LIGHT: sunday)'),
   H('knowledge', KL.headingOut[0] + 3, 'swish', 'none', 0.5, 3, 'the heading flicks out'),
-  H('knowledge', KL.callerIn, 'tick', 'none', 0.38, 3, 'CALLER label'),
-  H('knowledge', KL.peekOpen, 'sheen', 'sunday', 0.71, 3, 'the peek page scans open'),
+  H('knowledge', KL.callerIn, 'tick', 'none', 0.33, 3, 'CALLER label + “Quick question,” (the caller’s first sound)'),
+  H('knowledge', KL.peekOpen, 'sheen', 'sunday', 0.79, 3, 'the slot’s page scans open'),
   H('knowledge', KL.scanFlip, 'flip', 'sunday', 0.85, 2, 'pill: “Looking through 5 documents”'),
   H('knowledge', KL.beams[0], 'shimmer', 'sunday', [0.2, 0.5], 2, 'five beams draw to the orb'),
   H('knowledge', KL.dotPulse[0], 'tap', 'sunday', 0.84, 3, 'status dot reads', { run: { n: KL.dotPulse[2], step: KL.dotPulse[1] } }),
@@ -1132,9 +1198,20 @@ export const HITS: Hit[] = [
   H('knowledge', KL.missFlip, 'thump', 'none', 0.5, 1, 'the miss: kick'),
   H('knowledge', KL.missFlip, 'flip', 'none', 0.85, 2, 'pill: “Not in the documents”'),
   H('knowledge', KL.shake[0], 'tap', 'none', 0.85, 3, 'the pill shakes “no”', { run: { n: 2, step: 4 } }),
-  H('knowledge', KL.peekCollapse[0] + 2, 'swish', 'none', [0.76, 0.68], 3, 'the peek lines collapse'),
-  H('knowledge', KL.relight[0], chime('sunday', true), 'sunday', 0.5, 2, 'LIGHT: sunday floods back (Ava)'),
-  H('knowledge', KL.meta, 'pop', 'none', 0.5, 3, '“Your fallback message”', { semi: -12, db: -4 }),
+  H('knowledge', KL.peekCollapse[0] + 2, 'swish', 'none', [0.86, 0.76], 3, 'the slot’s reading lines fold away'),
+  H('knowledge', KL.zeroPop, 'pop', 'none', 0.8, 2, '“0 matches” pops into the slot', { semi: -7 }),
+  H('knowledge', KL.zeroShake[0], 'tap', 'none', 0.8, 3, 'the slot shakes “no”', { run: { n: 2, step: 4 } }),
+  H('knowledge', KL.relight[0], chime('sunday', true), 'sunday', 0.5, 2, 'LIGHT: sunday floods back (Ava’s first word)'),
+  H('knowledge', KL.relight[0] + 2, 'thump', 'sunday', 0.5, 3, 'relight kick'),
+  H('knowledge', KL.zeroEcho, 'ping', 'none', 0.8, 3, '“answer”: a grey ring leaves “0 matches”', { semi: -5, db: -4 }),
+  H('knowledge', KL.guessKey, 'glint', 'sunday', 0.62, 3, '“guess.” turns sunday ink'),
+  H('knowledge', KL.ticketPop - 2, 'swell', 'sunday', 0.8, 3, 'the slot inhales'),
+  H('knowledge', KL.ticketPop, 'pop', 'sunday', 0.8, 2, 'TEAM CARD pops on “I’ll” (kick)', { semi: 5 }),
+  H('knowledge', KL.ticketPop + 1, 'sheen', 'sunday', [0.7, 0.9], 3, 'glint sweeps the card'),
+  H('knowledge', KL.ticketType[0], 'key', 'none', 0.78, 3, '“Home visits?” writes in', { run: { n: 12, step: 0.7 }, db: -4 }),
+  H('knowledge', KL.ticketType[1], 'key', 'none', 0.78, 3, 'the caller’s number writes in', { run: { n: 10, step: 0.6 }, db: -6 }),
+  H('knowledge', KL.callback, 'pop', 'closing', 0.74, 2, 'callback chip pops on “call”'),
+  H('knowledge', KL.check, 'ding-s', 'closing', 0.68, 2, 'the check draws on “today.”'),
   H('knowledge', KL.recede[0], 'swell', 'sunday', 0.5, 2, 'the stage recedes into the title'),
   H('knowledge', KNOWLEDGE.closing + 3, 'swish', 'none', 0.5, 2, '“Where your documents stop, it says so.”'),
   H('knowledge', KL.closingKey, chime('sunday'), 'sunday', 0.5, 1, '“it says so.” turns Sunday teal'),

@@ -8,6 +8,10 @@
  *   telephone character: heights quantised to 6 levels and hard-clipped at
  *   85 % (a band-limited, compressed line), a 1.5 px baseline at 25 %, and a
  *   ±4 px deterministic hiss when the line is silent.
+ *
+ * The line draws OUT of the orb: from its `origin` ('start' = the end next
+ * to the orb, 'center' = straight under it) as `open` springs 0 → 1, and is
+ * pulled back INTO it (`close` 0 → 1) when the orb swings back to Ava.
  */
 import React from 'react';
 import { noise2D } from '@remotion/noise';
@@ -36,27 +40,37 @@ export const Waveform: React.FC<{
   open?: number;
   /** the line's colour (hex) */
   color?: string;
-}> = ({ t, at, voice, x0, x1, cy, bars, barW, maxH, opacity, open = 1, color = C.callerLit }) => {
-  if (opacity <= 0.002) return null;
+  /** where it draws out from: the end next to the orb, or its centre */
+  origin?: 'start' | 'center';
+  /** 0 → 1: the line retracts into its origin (the orb); below 0 it swells first (the anticipation) */
+  close?: number;
+}> = ({ t, at, voice, x0, x1, cy, bars, barW, maxH, opacity, open = 1, color = C.callerLit, origin = 'center', close = 0 }) => {
+  if (opacity <= 0.002 || close >= 1) return null;
   const W = x1 - x0;
   const pitch = (W - barW) / (bars - 1);
   const mid = (bars - 1) / 2;
   const H = 2 * maxH + 20;
   let loud = 0;
   const rects: React.ReactNode[] = [];
-  const reach = Math.max(0, open);
+  const fromStart = origin === 'start';
+  /** the bar distance the line spans from its origin, and how far it is drawn now */
+  const span = fromStart ? bars - 1 : mid;
+  const reach = Math.max(0, open) * (1 - Math.max(0, close));
+  const swell = close < 0 ? 1 - 2 * close : 1;
   for (let i = 0; i < bars; i++) {
     const d = Math.abs(i - mid);
+    const dO = fromStart ? i : d;
     // the opening: a bar comes up as the line's edge passes it; the spring's overshoot lifts them all a touch
-    const gate = Math.min(1, Math.max(0, (reach * (mid + 1.5) - d) / 3)) * (1 + 2 * Math.max(0, open - 1));
+    const gate = Math.min(1, Math.max(0, (reach * (span + 1.5) - dO) / 3)) * (1 + 2 * Math.max(0, open - 1));
     if (gate <= 0) continue;
-    const e = env(voice, t - at - d * 0.25);
+    // the voice radiates from the origin: bars further out lag
+    const e = env(voice, t - at - dO * (fromStart ? 0.14 : 0.25));
     const tex = 0.35 + 0.65 * (0.5 + 0.5 * noise2D('call-line', i * 0.37, t * 0.18));
     // the edges of the band roll off a little (a phone line has no wide stereo image)
     const edge = 1 - 0.35 * Math.pow(d / mid, 2);
     const raw = Math.pow(e, 0.75) * tex * edge;
     const q = Math.min(CLIP, Math.ceil(raw * LEVELS - 0.15) / LEVELS);
-    let half = Math.max(0, q) * maxH * gate;
+    let half = Math.max(0, q) * maxH * gate * swell;
     // hiss: the line is open even when nobody speaks
     const hiss = 1.5 + 2.5 * (0.5 + 0.5 * noise2D('call-hiss', i * 0.9, t * 0.55));
     half = Math.max(half, hiss * Math.min(1, gate));
@@ -89,8 +103,15 @@ export const Waveform: React.FC<{
         filter: glow > 0.05 ? `drop-shadow(0 0 ${(6 + 10 * glow).toFixed(1)}px ${rgba(color, 0.4 * glow)})` : undefined,
       }}
     >
-      {/* the line itself: a 1.5 px baseline at 25 % */}
-      <rect x={(W * (1 - Math.min(1.04, reach))) / 2} y={H / 2 - 0.75} width={W * Math.min(1.04, reach)} height={1.5} fill={color} opacity={0.25 + 0.35 * Math.max(0, 1 - reach)} />
+      {/* the line itself: a 1.5 px baseline at 25 % (drawn from the origin) */}
+      <rect
+        x={fromStart ? 0 : (W * (1 - Math.min(1.04, reach))) / 2}
+        y={H / 2 - 0.75}
+        width={W * Math.min(1.04, reach)}
+        height={1.5}
+        fill={color}
+        opacity={0.25 + 0.35 * Math.max(0, 1 - reach)}
+      />
       {rects}
     </svg>
   );

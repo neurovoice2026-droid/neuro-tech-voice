@@ -4,8 +4,8 @@
  *
  *   <SpeakerTag>  AVA / CALLER, stacked above the caption, led by a small
  *                 mesh orb in the speaker's colours; it swaps on each cut.
- *   <Chips>       the slot chips "15:00" · "16:30": pop ON the spoken words,
- *                 15:00 is picked (squash, fill flood, glow), 16:30 drops out.
+ *   <Chips>       the slot chips "3:00 PM" · "4:30 PM": pop ON the spoken words,
+ *                 3:00 PM is picked (squash, fill flood, glow), 4:30 PM drops out.
  *   <MarkRow>     row B of the last line — "Wednesday at 15:00" arrives word
  *                 by word ON the voice, 15:00 ignites ember on "three", then it
  *                 is the single <BookedMark> the result picks up.
@@ -106,7 +106,7 @@ export const SpeakerTag: React.FC<{
   );
 };
 
-/* ── slot chips (line 3): "15:00" · "16:30" ─────────────────────── */
+/* ── slot chips (line 3): "3:00 PM" · "4:30 PM" (as Ava says them) ─── */
 
 /** a vertical smear filter (id unique per chip) */
 const VSmear: React.FC<{ id: string; sigma: number }> = ({ id, sigma }) => (
@@ -138,7 +138,7 @@ export const Chips: React.FC<{
   leaveTo: { x: number; y: number };
 }> = ({ t, cx, cy, w, h, fontSize, pops, pick, drop, leave, leaveTo }) => {
   if (t < pops[0] - 3 || t > leave + 12) return null;
-  const labels = ['15:00', '16:30'];
+  const labels = ['3:00 PM', '4:30 PM'];
   const gap = 32;
   const WAVE = AVA_GLOW.core;
   const nodes: React.ReactNode[] = [];
@@ -221,7 +221,7 @@ export const Chips: React.FC<{
               fontSize,
               lineHeight: 1,
               fontVariantNumeric: 'tabular-nums',
-              letterSpacing: '0.01em',
+              letterSpacing: '-0.02em',
               color: mixHex(C.paper, C.ink, fill),
             }}
           >

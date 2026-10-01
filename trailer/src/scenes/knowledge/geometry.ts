@@ -10,10 +10,12 @@ import { LIGHTS, MUTED_MESH } from '../../theme';
 export type Rect = { x: number; y: number; w: number; h: number };
 
 /* ── THE SUNDAY LIGHT ───────────────────────────────────────────
- * This second call comes in on a Sunday, so the room wears #demo's Sunday
- * (palettes.ts MOMENT_LIGHTS.sunday): the aqua ground, the teal orb (its
- * `listen` twin while the caller asks), the site's sunday ink wherever the
- * #knowledge stage sets violet. Lights are light: grounds, blooms, rims. */
+ * This second call comes in on a Sunday, so the reader wears #demo's Sunday
+ * (palettes.ts MOMENT_LIGHTS.sunday): the teal orb (its `listen` twin while
+ * the caller asks), its bloom, a soft aqua tint pooled under it (the
+ * ground's first stops — on the white stock, never a full-frame wash), the
+ * site's sunday ink wherever the #knowledge stage sets violet. Lights are
+ * light: tints, blooms, rims. */
 export const SUN = LIGHTS.sunday;
 /** sunday ink (#0e7490): key phrases, the eyebrow, live dots, beam heads */
 export const INK = SUN.ink;
@@ -49,8 +51,9 @@ export const STATUS_TEXT: Record<StatusKey, string> = {
 export const BEAM_INK = rgba(SUN.orb[1], 0.42);
 export const BEAM_MISS = 0.15;
 export const THRESHOLD = 0.6;
-/** the documents that did not answer step back */
-export const DIM = 0.55;
+/** the documents that did not answer step back (and out of focus) so the answer leads */
+export const DIM = 0.25;
+export const DIM_BLUR = 2;
 /** the orb's volume through a question */
 export const VOL = { rest: 0.12, listen: 0.15, speak: 0.7, miss: 0.05 } as const;
 /** FluidOrb 'muted' palette on a miss (palettes.ts MUTED_MESH), darkest first */
@@ -76,18 +79,28 @@ export const BADGE: Record<DocKind, { bg: string; fg: string }> = {
 };
 
 export const HEADING = 'Answers from your own documents.';
+/** the card the unanswered question becomes (the site's "flagged" hand-over: a hollow dot) */
+export const TICKET = { label: 'For the team', question: 'Home visits?', number: '+1 555 0142', chip: 'Call back today' } as const;
+export const FLAGGED = '#8c86a0';
+/** the after-closing green (MOMENT_LIGHTS.closing): the callback is confirmed */
+export const CLOSING_INK = LIGHTS.closing.ink;
+export const CLOSING_GLOW = GLOW.closing;
 export const HEADING_KEY = 'your own documents.';
 export const CLOSING_KEY = 'it says so.';
 
-/* ── layout ──────────────────────────────────────────────────────── */
+/* ── layout ──────────────────────────────────────────────────────
+ * The site's funnel (knowledge-stage.tsx): five documents across the top,
+ * beams falling from each into the reader — the HERO, ~2× the site's
+ * proportion — the caller's question on its left, the page it reads (the
+ * slot) on its right, the answer underneath. 9:16 stacks it: the list, the
+ * orb, the dialogue, and the slot under it, so the phone frame is full. */
 export function geo(L: Layout) {
   const v = L.vertical;
-  const panel = v ? { x: 32, y: 150, w: 1016, h: 1620 } : { x: 48, y: 48, w: 1824, h: 984 };
-  const orb = v ? { x: 540, y: 1110, d: 240 } : { x: 960, y: 624, d: 240 };
+  const panel = v ? { x: 28, y: 132, w: 1024, h: 1684 } : { x: 40, y: 40, w: 1840, h: 1000 };
+  const orb = v ? { x: 540, y: 1110, d: 440 } : { x: 960, y: 640, d: 440 };
 
-  // (9:16: the list sits a row lower and a touch tighter, so the moment tag fits under the pill)
   const tiles: Rect[] = DOCS.map((_, i) =>
-    v ? { x: 68, y: 374 + i * 106, w: 944, h: 94 } : { x: 112 + i * 344, y: 176, w: 320, h: 212 },
+    v ? { x: 68, y: 318 + i * 96, w: 944, h: 84 } : { x: 104 + i * 348, y: 150, w: 320, h: 180 },
   );
 
   /* beams: dotted cubics from under each tile (16:9) / the list's foot
@@ -99,9 +112,9 @@ export function geo(L: Layout) {
     const ex = orb.x + R * Math.cos(a);
     const ey = orb.y + R * Math.sin(a);
     const sx = v ? 220 + i * 160 : r.x + r.w / 2;
-    const sy = v ? 906 : r.y + r.h + 12;
-    const c1 = { x: sx, y: v ? sy + 42 : 470 };
-    const pull = v ? 44 : 60;
+    const sy = v ? 802 : r.y + r.h + 12;
+    const c1 = { x: sx, y: sy + (v ? 34 : 52) };
+    const pull = v ? 34 : 44;
     const c2 = { x: ex + Math.cos(a) * pull, y: ey + Math.sin(a) * pull };
     return {
       p0: { x: sx, y: sy },
@@ -114,56 +127,60 @@ export function geo(L: Layout) {
 
   return {
     v,
-    panel: { ...panel, r: 28 },
+    panel: { ...panel, r: 32 },
     /** eyebrow + status pill share this centre line */
     top: {
-      y: v ? 262 : 112,
-      eyebrowX: v ? 68 : 112,
-      pillRight: v ? 1012 : 1808,
+      y: v ? 212 : 98,
+      eyebrowX: v ? 68 : 104,
+      pillRight: v ? 1012 : 1816,
       pillH: v ? 56 : 64,
       pillText: v ? 28 : 32,
       label: v ? 28 : 30,
       dot: 20,
       /** "☀ SUNDAY · 10:24": left of the pill (16:9, it rides the pill's edge) / under it (9:16) */
       tag: v
-        ? { mode: 'below' as const, y: 330, size: 28, icon: 30, gap: 0 }
-        : { mode: 'left' as const, y: 112, size: 30, icon: 32, gap: 30 },
+        ? { mode: 'below' as const, y: 274, size: 28, icon: 30, gap: 0 }
+        : { mode: 'left' as const, y: 98, size: 30, icon: 32, gap: 30 },
     },
     tiles,
+    /** 16:9 tiles: the badge and the match bar share the top row, the name (≤ 2 lines) sits under them */
     tile: v
-      ? { kind: 'row' as const, pad: 20, badgeH: 48, badgeText: 28, badgeMinW: 112, name: 34, nameX: 156, barW: 260, barPadR: 28 }
-      : { kind: 'tile' as const, pad: 24, badgeH: 52, badgeText: 30, badgeMinW: 90, name: 36, nameX: 24, barW: 272, barPadR: 24 },
+      ? { kind: 'row' as const, pad: 20, badgeH: 46, badgeText: 28, badgeMinW: 108, name: 34, nameX: 152, barW: 240, barPadR: 28 }
+      : { kind: 'tile' as const, pad: 22, badgeH: 48, badgeText: 30, badgeMinW: 92, name: 38, nameX: 22, barW: 140, barPadR: 22 },
     orb,
     beams,
+    /** the caller's question (Cormorant italic, caller blue) — left of the orb (16:9) / under it (9:16) */
     caller: v
-      ? { labelY: 1294, align: 'center' as const, boxX: 250, boxW: 580, rowY: 1356, size: 76, lh: 1.05 }
-      : { labelY: 522, align: 'right' as const, boxX: 160, boxW: 640, rowY: 596, size: 88, lh: 1.02 },
-    peek: v ? null : { x: 1120, y: 504, w: 480, h: 240 },
+      ? { labelY: 1394, align: 'center' as const, boxX: 170, boxW: 740, rowY: 1466, size: 84, lh: 1.0 }
+      : { labelY: 508, align: 'right' as const, boxX: 120, boxW: 570, rowY: 594, size: 92, lh: 1.0 },
+    /** Ava's answer (Inter 500, the call's voice): one row under the orb (16:9) / two rows under it (9:16) */
     answer: v
-      ? { boxX: 68, boxW: 944, rowY: 1346, echoY: 1268, metaY: 1446, size: 68, lh: 1.1, meta: 28 }
-      : { boxX: 140, boxW: 1640, rowY: 870, echoY: 792, metaY: 962, size: 76, lh: 1.1, meta: 32 },
-    /** the heading rises where the orb will be, then steps down into the answer slot (step) to make way */
+      ? { boxX: 68, boxW: 944, rowY: 1466, rowB: 1466 + Math.round(68 * 1.18), size: 68, lh: 1.18 }
+      : { boxX: 80, boxW: 1760, rowY: 954, rowB: null, size: 76, lh: 1.16 },
+    /** the slot: the page the reader reads → "0 matches" → the card for the team */
+    slot: v ? { x: 68, y: 1616, w: 944, h: 168 } : { x: 1240, y: 506, w: 560, h: 268 },
+    /** the heading rises where the orb will be, then steps down (to the answer row / the slot) to make way */
     heading: v
-      ? { cy: 1110, size: 92, lines: ['Answers from', 'your own documents.'] as string[] | null, width: 944, step: { cy: 1372, scale: 0.82 } }
-      : { cy: 624, size: 104, lines: ['Answers from', 'your own documents.'] as string[] | null, width: 1640, step: { cy: 878, scale: 0.8 } },
+      ? { cy: 1110, size: 96, lines: ['Answers from', 'your own documents.'] as string[] | null, width: 944, step: { cy: 1700, scale: 0.62 } }
+      : { cy: 640, size: 100, lines: ['Answers from your own documents.'] as string[] | null, width: 1760, step: { cy: 954, scale: 0.72 } },
     closing: v
-      ? { cy: 960, size: 104, lines: ['Where your', 'documents stop,', 'it says so.'] }
-      : { cy: 540, size: 112, lines: ['Where your documents stop,', 'it says so.'] },
-    /** the camera pushes about this point; 9:16 keeps every read inside x 60–1020 / y 220–1480 */
+      ? { cy: 960, size: 108, lines: ['Where your', 'documents stop,', 'it says so.'] }
+      : { cy: 540, size: 120, lines: ['Where your documents stop,', 'it says so.'] },
+    /** the camera pushes about this point */
     cam: v
-      ? { ox: 540, oy: 850, push: 0.016, kickPop: 0.002, kickMiss: 0.004 }
-      : { ox: 960, oy: 560, push: 0.04, kickPop: 0.005, kickMiss: 0.008 },
-    /** very soft lilac discs on the nearest plane, at the edges */
+      ? { ox: 540, oy: 1000, push: 0.016, kickPop: 0.002, kickMiss: 0.004 }
+      : { ox: 960, oy: 600, push: 0.04, kickPop: 0.004, kickMiss: 0.007 },
+    /** very soft Sunday light discs on the nearest plane, at the edges */
     discs: v
       ? [
-          { x: 24, y: 1640, r: 210, seed: 'a' },
+          { x: 24, y: 1660, r: 210, seed: 'a' },
           { x: 1056, y: 300, r: 170, seed: 'b' },
-          { x: 990, y: 1860, r: 130, seed: 'c' },
+          { x: 990, y: 1880, r: 130, seed: 'c' },
         ]
       : [
           { x: 30, y: 930, r: 220, seed: 'a' },
           { x: 1890, y: 150, r: 170, seed: 'b' },
-          { x: 1720, y: 1070, r: 130, seed: 'c' },
+          { x: 1760, y: 1070, r: 130, seed: 'c' },
         ],
     /** the whip leaves along this axis */
     whip: v ? { axis: 'y' as const, dist: -2600, counter: 24 } : { axis: 'x' as const, dist: -2400, counter: 24 },

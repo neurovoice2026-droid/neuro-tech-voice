@@ -1,26 +1,29 @@
 /**
  * THE CALL'S LIGHT — 3 a.m. is the NIGHT light (theme.ts LIGHTS.night), but
- * not as a flat violet slab: a deep, cinematic midnight in which the ORB is
- * the key light.
+ * never as a violet slab: a deep, near-black midnight in which the ORB is the
+ * key light. The colour lives in the orb and its light spill; the room itself
+ * is a low-saturation navy-black (#0c0e1f at the heart → #020205 at the
+ * edges; outside the spill it averages ≈ 9–11/255 luminance, grain included).
  *
- *   room       the night ground taken much darker and cooler towards the
- *              edges (indigo at the heart → navy → near-black), opened from
- *              the twist's phone screen: at the pickup it IS the phone's
- *              NIGHT_ROOM (the cut stays invisible) and grades down into the
- *              midnight while the camera pulls back out of the screen
+ *   room       opened from the twist's phone screen: at the pickup it IS the
+ *              phone's NIGHT_ROOM (the cut stays invisible) and grades down
+ *              into the midnight while the camera pulls back out of the screen
  *   key light  a soft gaussian pool of the orb's own light on the room
  *              (lib/lights bloom, screen-blended), breathing with the voice;
  *              its colour follows the orb's palette: violet (night `orb`)
  *              while Ava speaks, cooler caller blue (night `listen`) while
  *              the caller speaks — on the orb's own 6–8 f palette ease
- *   vignette   a strong navy falloff in screen space
+ *   vignette   a strong falloff to black in screen space
+ *   floor      (9:16) the orb's key-light pool on a floor below it and a soft,
+ *              faint reflection of it (flipped, blurred): light structure for
+ *              the lower third of the vertical frame
  *
  * Everything else that glows in the scene (rim, halo, rings, bokeh, motes,
  * sparks) takes its colour from `callGlow(listen)` so one light leads.
  */
 import React from 'react';
 import { AbsoluteFill } from 'remotion';
-import { bloom, fromOklch, GLOW, hexToRgb, mixColor, type Glow } from '../../lib/lights';
+import { bloom, fromOklch, GLOW, hexToRgb, mixColor, rgba, type Glow } from '../../lib/lights';
 import { C, LIGHTS } from '../../theme';
 
 /** Ava's light (the night orb's glow): electric body, lilac core. */
@@ -46,19 +49,20 @@ export const triple = (hex: string) =>
     .join(',');
 
 /**
- * The midnight room: the night ground (#34288f → #08061c) taken ~45 % darker,
- * the hue cooling from indigo (282°) at the heart to navy (262°) at the edges.
+ * The midnight room: near-black with a soft, low-saturation navy lift at the
+ * heart (the night ground's hue, a fraction of its chroma) — the orb and its
+ * spill carry the colour. (The result opens on this exact room.)
  */
 export const MIDNIGHT_ROOM =
-  'radial-gradient(120% 100% at 50% 40%, #161140 0%, #0d0b2e 28%, #070822 55%, #03051a 80%, #01020c 100%)';
+  'radial-gradient(120% 100% at 50% 40%, #0c0e1f 0%, #090b18 28%, #060710 55%, #040409 80%, #020205 100%)';
 
-/** The screen-space falloff over the midnight (navy, stronger than the cover's). */
+/** The screen-space falloff over the midnight (to black, stronger than the cover's). */
 export const MidnightVignette: React.FC<{ k: number }> = ({ k }) =>
   k <= 0.002 ? null : (
     <AbsoluteFill
       style={{
         pointerEvents: 'none',
-        background: `radial-gradient(96% 82% at 50% 44%, rgba(2,3,14,0) 26%, rgba(2,3,14,${(0.55 * k).toFixed(3)}) 66%, rgba(1,2,10,${(0.94 * k).toFixed(3)}) 100%)`,
+        background: `radial-gradient(96% 82% at 50% 44%, rgba(2,2,7,0) 26%, rgba(2,2,7,${(0.55 * k).toFixed(3)}) 66%, rgba(1,1,4,${(0.94 * k).toFixed(3)}) 100%)`,
       }}
     />
   );
@@ -103,5 +107,70 @@ export const KeyLight: React.FC<{ x: number; y: number; d: number; glow: Glow; s
         mixBlendMode: 'screen',
       }}
     />
+  );
+};
+
+/**
+ * (9:16) The floor under the orb — light structure for the lower third:
+ *   pool        a wide, flat ellipse of its light on the floor round the point
+ *               under it (`floorY`), screen-blended
+ *   reflection  the orb mirrored about the floor line, seen at a grazing angle
+ *               (compressed toward the line, squashed), blurred, ≈ 20 %, fading
+ *               away from the line — a gradient of the orb's own light (never a
+ *               second canvas), its highlight mirrored to the lower side
+ * Everything follows the orb's on-screen state and breathes with its level.
+ */
+export const Floor: React.FC<{
+  x: number;
+  y: number;
+  d: number;
+  /** where the floor under the orb meets the frame (screen y): the pool's centre, the mirror line */
+  floorY: number;
+  glow: Glow;
+  /** the key light's strength (the pool scales with it) */
+  strength: number;
+  /** 0..1+ the voice's level */
+  level: number;
+  /** the orb's depth-of-field blur (the reflection softens with it) */
+  dof: number;
+}> = ({ x, y, d, floorY, glow, strength, level, dof }) => {
+  if (strength <= 0.003) return null;
+  // the mirror image, compressed toward the line (the floor is seen at a grazing angle)
+  const ry = floorY + (floorY - y) * 0.3;
+  const rw = d * 0.96;
+  const rh = d * 0.56;
+  const refl = Math.min(0.36, 0.27 + 0.06 * level) * Math.min(1, strength / 0.16);
+  const pw = d * 3.3;
+  const ph = d * 0.52;
+  return (
+    <>
+      <div
+        style={{
+          position: 'absolute',
+          left: x - pw / 2,
+          top: floorY + 30 - ph / 2,
+          width: pw,
+          height: ph,
+          background: bloom(glow, 0.95 * strength, { core: 0.25, coreSize: 0.4 }),
+          mixBlendMode: 'screen',
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          left: x - rw / 2,
+          top: ry - rh / 2,
+          width: rw,
+          height: rh,
+          borderRadius: '50%',
+          background: `radial-gradient(closest-side at 46% 64%, ${rgba(glow.core, 1)} 0%, ${rgba(glow.core, 0.8)} 24%, ${rgba(glow.body, 0.85)} 52%, ${rgba(LIGHTS.night.orb[1], 0.7)} 80%, ${rgba(LIGHTS.night.orb[0], 0)} 100%)`,
+          opacity: refl,
+          filter: `blur(${(11 + dof * 2).toFixed(1)}px)`,
+          maskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.75) 45%, rgba(0,0,0,0.15) 100%)',
+          WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.75) 45%, rgba(0,0,0,0.15) 100%)',
+          mixBlendMode: 'screen',
+        }}
+      />
+    </>
   );
 };
