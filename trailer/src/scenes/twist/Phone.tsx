@@ -191,29 +191,33 @@ export const Phone: React.FC<{ t: number; g: Geo; L: Layout; f: number }> = ({ t
                 opacity: tween(t, [TW.uiLabel, TW.uiLabel + 8], [0, 1], EASE.house) * (1 - haloOut),
               }}
             />
-            <Stagger
-              text="Incoming call"
-              t={t}
-              start={TW.uiLabel}
-              out={uiOut}
-              style={{
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                top: sh / 2 - 150,
-                // the site's Label: Inter 500, 0.14em, uppercase, paper-dim;
-                // the left pad re-centres the trailing tracking
-                paddingLeft: '0.14em',
-                transform: `translateY(${(-uiOut * 40).toFixed(2)}px)`,
-                fontFamily: FONT.body,
-                fontWeight: 500,
-                fontSize: 22,
-                lineHeight: 1,
-                letterSpacing: TRACK.label,
-                textTransform: 'uppercase',
-                color: C.paperDim,
-              }}
-            />
+            {/* the site's Label (Inter 500, 0.14em, uppercase, paper-dim) at a readable
+                30 px: two centred rows ("INCOMING" / "CALL") — one row would not fit the
+                242 px screen. paddingLeft re-centres the trailing tracking. */}
+            {['Incoming', 'call'].map((word, row) => (
+              <Stagger
+                key={word}
+                text={word}
+                t={t}
+                start={TW.uiLabel + row * 4}
+                out={uiOut}
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  top: sh / 2 - 168 + row * 36,
+                  paddingLeft: '0.14em',
+                  transform: `translateY(${(-uiOut * 40).toFixed(2)}px)`,
+                  fontFamily: FONT.body,
+                  fontWeight: 500,
+                  fontSize: 30,
+                  lineHeight: 1,
+                  letterSpacing: TRACK.label,
+                  textTransform: 'uppercase',
+                  color: C.paperDim,
+                }}
+              />
+            ))}
             <Stagger
               text="+1 555 0129"
               t={t}

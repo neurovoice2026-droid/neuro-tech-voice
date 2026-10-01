@@ -16,6 +16,7 @@ import { TW, type Geo } from './geometry';
 const P = 1400; // perspective, px
 const SILVER = '196,192,186';
 const PAPER = '237,236,241';
+const LILAC = '185,163,255';
 
 /** GSAP elastic.out(1, 0.45). */
 function elasticOut(x: number, a = 1, p = 0.45) {
@@ -101,14 +102,14 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
         height: h,
         transformOrigin: '0 50%',
         transform: `rotateY(${angle.toFixed(3)}deg)`,
-        background: `linear-gradient(90deg, #120f19 0%, ${C.fieldLow} 55%, #1d1a27 100%)`,
-        boxShadow: `inset 0 0 0 1px rgba(${PAPER},0.07)`,
+        // the leaf: a solid slab, lit across (90deg) and falling off ~20 % top → bottom
+        background: `linear-gradient(180deg, rgba(${SILVER},0.07) 0%, rgba(${SILVER},0.015) 42%, rgba(0,0,0,0.2) 100%), linear-gradient(90deg, #120f19 0%, ${C.fieldLow} 55%, #1d1a27 100%)`,
         opacity: op,
       }}
     >
       {detail ? (
         <>
-          {/* raised panels: hairlines, the site's idiom */}
+          {/* recessed panels: shaded, not outlined (a lit top lip, a shadowed bottom one) */}
           {[
             { t: 0.07, hh: 0.36 },
             { t: 0.5, hh: 0.43 },
@@ -121,11 +122,24 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
                 width: w * 0.74,
                 top: h * p.t,
                 height: h * p.hh,
-                boxShadow: `inset 0 0 0 1px rgba(${PAPER},0.055), inset 0 1px 0 rgba(${PAPER},0.03)`,
+                background: 'linear-gradient(180deg, rgba(0,0,0,0.16), rgba(0,0,0,0.06) 30%, rgba(0,0,0,0.1))',
+                boxShadow: `inset 0 2px 3px -1px rgba(0,0,0,0.45), inset 0 -1px 0 rgba(${PAPER},0.045)`,
                 borderRadius: 3,
               }}
             />
           ))}
+          {/* a cool lilac rim light down the hinge edge (the room's night light) */}
+          <div
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: 2,
+              height: h,
+              background: `linear-gradient(180deg, rgba(${LILAC},0.12), rgba(${LILAC},0.4) 38%, rgba(${LILAC},0.4) 62%, rgba(${LILAC},0.1))`,
+              boxShadow: `0 0 10px rgba(${LILAC},0.12)`,
+            }}
+          />
           {/* handle */}
           <div
             style={{
@@ -224,6 +238,10 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
   const signRot = 8 * (1 - elasticOut(sU));
   const signOp = tween(t, [TWIST.closedSign, TWIST.closedSign + 3], [0, 1], EASE.out3);
   const signDrop = -10 * (1 - EASE.out3(Math.min(1, Math.max(0, sU * 2.2))));
+  // the hit: a flare on the pill's rim as it lands, a glint across it right after
+  const sH = t - TWIST.closedSign;
+  const signFlare = sH < 0 ? 0 : tween(sH, [0, 2], [0, 1], EASE.out3) * Math.exp(-Math.max(0, sH - 2) / 5);
+  const signGlint = tween(t, TW.signGlint, [0, 1], EASE.inOut);
 
   // floor spill: a trapezoid of light from the lit part of the threshold
   const spillH = L.pick(300, 240);
@@ -273,13 +291,15 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
           }}
         />
       ) : null}
-      {/* frame: hairline architrave + jamb */}
+      {/* the frame: one 1.5 px line round the doorway */}
       <div
         style={{
           position: 'absolute',
-          inset: -16,
+          left: -1.5,
+          right: -1.5,
+          top: -1.5,
           bottom: 0,
-          boxShadow: `inset 0 0 0 1px rgba(${PAPER},0.11)`,
+          boxShadow: `inset 0 0 0 1.5px rgba(${PAPER},0.13)`,
           opacity: on,
         }}
       />
@@ -418,7 +438,8 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
         </>
       ) : null}
       {puff}
-      {/* CLOSED */}
+      {/* CLOSED — the site's door sign, swung in from its top edge; on its hit the
+          pill's rim flares and a glint crosses it (TWIST.closedSign) */}
       {signOp > 0 ? (
         <div
           style={{
@@ -428,15 +449,17 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
             transform: `translate(-50%, ${signDrop.toFixed(2)}px) rotate(${signRot.toFixed(3)}deg)`,
             transformOrigin: '50% 0%',
             opacity: signOp,
-            height: 52,
-            padding: '0 22px',
+            height: L.pick(62, 58),
+            padding: `0 ${L.pick(26, 24)}px`,
             borderRadius: 9999,
-            boxShadow: `inset 0 0 0 1px rgba(${PAPER},0.4), 0 10px 22px -12px rgba(0,0,0,0.9)`,
+            overflow: 'hidden',
+            background: `rgba(${PAPER},${(0.03 + 0.06 * signFlare).toFixed(3)})`,
+            boxShadow: `inset 0 0 0 1.5px rgba(${PAPER},${(0.42 + 0.4 * signFlare).toFixed(3)}), 0 0 ${(18 * signFlare).toFixed(1)}px rgba(${PAPER},${(0.18 * signFlare).toFixed(3)}), 0 12px 24px -12px rgba(0,0,0,0.9)`,
             display: 'flex',
             alignItems: 'center',
             fontFamily: FONT.body,
             fontWeight: 600,
-            fontSize: 24,
+            fontSize: L.pick(30, 28),
             lineHeight: 1,
             letterSpacing: '0.16em',
             textTransform: 'uppercase',
@@ -445,6 +468,16 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; dof: number; opacity
           }}
         >
           <span style={{ marginRight: '-0.16em' }}>Closed</span>
+          {signGlint > 0 && signGlint < 1 ? (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: `linear-gradient(105deg, rgba(255,255,255,0) ${(signGlint * 160 - 50).toFixed(1)}%, rgba(255,255,255,0.32) ${(signGlint * 160 - 30).toFixed(1)}%, rgba(255,255,255,0) ${(signGlint * 160 - 10).toFixed(1)}%)`,
+                mixBlendMode: 'screen',
+              }}
+            />
+          ) : null}
         </div>
       ) : null}
     </div>

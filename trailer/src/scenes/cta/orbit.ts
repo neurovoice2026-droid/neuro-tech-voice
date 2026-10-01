@@ -38,13 +38,16 @@ export const ORB_POP = { stiffness: 340, damping: 18, mass: 0.9 };
 export const POP_PHASE = [0.55, 2.3, 4.0, 5.75] as const;
 /** the orbit's angular speed (rad/frame) at CTA-local frame s */
 export function omega(s: number) {
-  let w = 0.02;
+  let w = 0.026;
   K.tighten.forEach((f) => (w += 0.012 * tween(s, [f, f + 6], [0, 1], EASE.out3)));
-  // the swell hesitates (anticipation), then the spiral spins up as it closes in
+  // the swell hesitates (anticipation), then the ring whirls up while it is
+  // still wide (long, motion-blurred sweeps) before it collapses into the core
   w *= 1 - 0.5 * windowed(s, K.orbSwell[0], K.orbSwell[1], K.orbSwell[1], K.orbIn[0] + 6, EASE.out3, EASE.inOut);
-  w += 0.22 * tween(s, K.orbIn, [0, 1], EASE.in2);
+  w += 0.2 * tween(s, K.orbIn, [0, 1], EASE.inOut);
   return w;
 }
+/** the spiral's radius: it holds wide while the whirl builds, then falls into the core */
+const COLLAPSE = (u: number) => Math.pow(u, 2.2);
 /** Θ(t) = ∫ω, tabulated once per frame at quarter frames */
 export function spinTable(t: number) {
   const step = 0.25;
@@ -66,7 +69,7 @@ export function radiusAt(t: number, tight = 1) {
   const steps = [0.14, 0.11, 0.09];
   K.tighten.forEach((f, k) => (r -= tight * steps[k] * (t < f ? 0 : springAt(t, f, SPRING.pop))));
   const swell = windowed(t, K.orbSwell[0], K.orbSwell[1], K.orbSwell[1], K.orbIn[0] + 6, EASE.out3, EASE.inOut);
-  return r * (1 + 0.09 * swell) * (1 - tween(t, K.orbIn, [0, 1], EASE.in2));
+  return r * (1 + 0.09 * swell) * (1 - COLLAPSE(tween(t, K.orbIn, [0, 1], (u) => u)));
 }
 
 export type OrbState = {
@@ -85,7 +88,8 @@ export function orbsAt(t: number, G: { P: { x: number; y: number }; orbit: Orbit
   const O = G.orbit;
   const rho = radiusAt(t, O.tight);
   const inP = tween(t, K.orbIn, [0, 1], EASE.inOut);
-  const toAll = tween(t, [K.orbIn[0] + 4, K.merge[1]], [0, 1], EASE.inOut);
+  // each keeps its own light through the whirl; they flow into one only as they meet
+  const toAll = tween(t, [K.merge[0] - 8, K.merge[1]], [0, 1], EASE.inOut);
   const vol = 0.12 + 0.75 * lineEnv(t);
   const squeeze = 1 - 0.16 * tween(t, [CTA.logoImpact - 4, CTA.logoImpact], [0, 1], EASE.in2);
   return LIGHT_ORDER.map((id, i) => {

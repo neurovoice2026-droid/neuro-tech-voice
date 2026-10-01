@@ -8,6 +8,7 @@
  */
 import React from 'react';
 import { EASE, tween } from '../../lib/motion';
+import { TW } from './geometry';
 
 const WAVE = '185,163,255';
 const LIFE = 28.5;
@@ -58,6 +59,50 @@ export const Rings: React.FC<{
           <React.Fragment key={i}>{ring(r.x, r.y, r.d, r.op, 'main')}</React.Fragment>
         );
       })}
+    </>
+  );
+};
+
+/**
+ * The third burst (TWIST_LOCAL.ring3): a faint, tight ring that leaves the
+ * avatar as the dive lands — 1.5 px lilac, 40 % → 0, 1× → 2.6× the orb's
+ * diameter, power3.out — so the screen is never empty before the pickup
+ * (whose ring, ON the cut, is the call's). Two sub-frame copies while it is
+ * fast: a smear, not a comb.
+ */
+export const Ring3: React.FC<{ t: number; orbAt: (t: number) => { x: number; y: number; d: number } }> = ({ t, orbAt }) => {
+  const [a, b] = TW.ring3;
+  if (t < a || t > b) return null;
+  const at = (tt: number) => {
+    const u = Math.min(1, Math.max(0, (tt - a) / (b - a)));
+    const e = EASE.out3(u);
+    const o = orbAt(tt);
+    return { x: o.x, y: o.y, d: o.d * (1 + 1.6 * e), op: 0.4 * (1 - e) * tween(tt, [a, a + 1], [0, 1], EASE.out3) };
+  };
+  const r = at(t);
+  const speed = Math.abs(r.d - at(t - 0.5).d) * 2;
+  const copies = speed > 12 ? [0.25, 0.5] : [];
+  const ring = (c: ReturnType<typeof at>, o: number, key: string) => (
+    <div
+      key={key}
+      style={{
+        position: 'absolute',
+        left: c.x - c.d / 2,
+        top: c.y - c.d / 2,
+        width: c.d,
+        height: c.d,
+        borderRadius: '50%',
+        border: `1.5px solid rgb(${WAVE})`,
+        boxShadow: `0 0 16px rgba(${WAVE},0.22), inset 0 0 16px rgba(${WAVE},0.12)`,
+        boxSizing: 'border-box',
+        opacity: Math.min(1, o),
+      }}
+    />
+  );
+  return (
+    <>
+      {copies.map((k, i) => ring(at(t - k), r.op * (0.4 - i * 0.14), `c${i}`))}
+      {ring(r, r.op, 'main')}
     </>
   );
 };

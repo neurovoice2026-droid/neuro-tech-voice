@@ -22,20 +22,34 @@ import { AbsoluteFill } from 'remotion';
 import { Dust } from '../components/Dust';
 import { Vignette } from '../components/Grain';
 import { Orb, flowTime } from '../components/Orb';
-import { HOOK_LINE } from '../lib/handoff';
+import { CALL_ORB_START, HOOK_LINE } from '../lib/handoff';
 import { useLayout } from '../lib/layout';
-import { aos, EASE, SPRING, tween } from '../lib/motion';
+import { aos, breathe, EASE, SPRING, tween } from '../lib/motion';
+import { ORB_RIM, PICKUP_GLOW, pickupGlow, pickupRimSpread, pickupScale } from '../lib/pickup';
 import { useSceneFrame } from '../lib/scene';
 import { ORB } from '../theme';
-import { TWIST } from '../timing';
+import { CALL_LOCAL, SCENES, TWIST } from '../timing';
+import { orbBase } from './call/shots';
+import { BokehPlane, bokehPlanes } from './twist/Bokeh';
 import { Door } from './twist/Door';
 import { avatarOnPhone, buzz, camAt, layerXf, project, twistGeo, TW, xfCss, type LayerXf } from './twist/geometry';
 import { useDisplayFontReady, useTextLayout } from './twist/measure';
 import { Phone, screenState } from './twist/Phone';
-import { Rings } from './twist/Rings';
+import { Ring3, Rings } from './twist/Rings';
+import { callOrbAt, callRimAt, orbFlowVolume, orbListen, orbShaderVolume, TP } from './twist/handover';
 import { buildShards, Shards } from './twist/Shards';
 
 const K = { bg: 0.2, mid: 0.6, text: 1, dust: 1.4 };
+const G0 = SCENES.twist.from; // global = twist-local + G0
+
+/** One breath before the pickup squash: +2 % on a 2-beat sine, windowed (sin²)
+ *  so it leaves and returns to rest with zero speed — the squash takes over from rest. */
+const breath = (tt: number) => {
+  const [a, b] = TW.breath;
+  if (tt <= a || tt >= b) return 0;
+  const w = Math.sin((Math.PI * (tt - a)) / (b - a)) ** 2;
+  return breathe(tt, 30, 0.02, Math.PI) * w;
+};
 
 const LayerX: React.FC<{ x: LayerXf; children: React.ReactNode; style?: React.CSSProperties }> = ({
   x,
@@ -90,21 +104,70 @@ export const Twist: React.FC = () => {
   const dive = tween(t, TWIST.pushToPhone, [0, 1], EASE.peel);
   const scr = screenState(t);
 
-  /* ── screen-space avatar (becomes the call's orb) ─────────────────── */
+  /* ── screen-space avatar (becomes the call's orb) ─────────────────── *
+   * On the phone it rides the phone plane; over orbLock it settles onto
+   * CALL_ORB_START; from the call's roomIn it IS the call's orb (handover.ts). */
+  const O = CALL_ORB_START(L);
   const orbAt = (tt: number) => {
+    if (tt >= TP + CALL_LOCAL.roomIn[0]) return callOrbAt(tt - TP, L);
     const x = layerXf(camAt(tt, g), K.mid);
     const p = project(x, L, g.phone.cx, g.phone.cy);
     const bz = buzz(tt, x.f);
     const pop = Math.max(0, aos(tt, TWIST.phoneOn + 3, { anticip: 0, depth: 0, config: SPRING.pop }));
-    return { x: p.x + bz.x, y: p.y + bz.y, d: avatarOnPhone(tt, g) * x.f * pop };
+    const lock = tween(tt, TW.orbLock, [0, 1], EASE.inOut);
+    const px = p.x + bz.x;
+    const py = p.y + bz.y;
+    const d0 = avatarOnPhone(tt, g) * x.f * pop;
+    return {
+      x: px + (O.x - px) * lock,
+      y: py + (O.y - py) * lock,
+      d: (d0 + (O.d - d0) * lock) * (1 + breath(tt)) * pickupScale(tt + G0),
+    };
   };
   const orb = orbAt(t);
   const orbOpacity = tween(t, [TWIST.phoneOn + 3, TWIST.phoneOn + 7], [0, 1], EASE.out3);
-  const volumeAt = (fr: number) => {
-    const tt = fr - 8;
-    const shiver = tween(tt, [TWIST.ring2, TWIST.ring2 + 4], [0, 1], EASE.out3) * tween(tt, [TWIST.ring2 + 8, TWIST.ring2 + 20], [1, 0], EASE.inOut);
-    return 0.12 + 0.12 * shiver + 0.1 * tween(tt, TWIST.pushToPhone, [0, 1], EASE.inOut);
-  };
+  const orbVol = orbShaderVolume(t);
+  const orbFlow = flowTime(Math.max(0, Math.round(t + 8)), orbFlowVolume);
+  // the call's canvas (orbBase at 1.25, framed by transform) once the orb is big —
+  // the switch happens inside the dive's fastest frames; from the call's roomIn the
+  // two scenes' orbs are then the same pixels
+  const B = orbBase(L);
+  const baseMode = orb.d >= 0.3 * B;
+  const kOrb = orb.d / B;
+  // simulated motion blur: the dive throws the avatar sideways and grows it
+  const o0 = orbAt(t - 0.5);
+  const o1 = orbAt(t + 0.5);
+  // gaussian σ ≈ 0.29 × the trail of a 180° shutter (½ the frame's travel); only on fast frames
+  const vX = Math.abs(o1.x - o0.x);
+  const vD = Math.abs(o1.d - o0.d);
+  const smearX = vX > 6 ? Math.min(18, vX * 0.14) : 0;
+  const smearR = vD > 10 ? Math.min(4, vD * 0.03) : 0;
+  // (none once the call draws the same orb: from its roomIn the pixels must match)
+  const smear = smearX + smearR > 0.3 && t < TP + CALL_LOCAL.roomIn[0] ? { x: smearX + smearR, y: smearR } : null;
+  // the rim light + the outer glow (lib/pickup), from orbDress on
+  const dress = tween(t, TW.orbDress, [0, 1], EASE.out3);
+  const rimA = t >= TP ? callRimAt(t - TP) : pickupGlow(t + G0);
+  // the dive's zoom relative to its end (bokeh parallax)
+  const Z = Math.min(1, xMid.f / g.S);
+  const bokehOp = tween(t, [TW.bokeh[0], TW.bokeh[0] + 8], [0, 1], EASE.inOut);
+  const planes = bokehPlanes(L);
+  const scrTL = project(xMid, L, g.phone.cx - g.screen.w / 2, g.phone.cy - g.screen.h / 2);
+  const scrBox = { left: scrTL.x, top: scrTL.y, w: g.screen.w * xMid.f, h: g.screen.h * xMid.f, r: g.screen.r * xMid.f };
+  const screenClip = (children: React.ReactNode) => (
+    <div
+      style={{
+        position: 'absolute',
+        left: scrBox.left,
+        top: scrBox.top,
+        width: scrBox.w,
+        height: scrBox.h,
+        borderRadius: scrBox.r,
+        overflow: 'hidden',
+      }}
+    >
+      <div style={{ position: 'absolute', left: -scrBox.left, top: -scrBox.top, width: L.width, height: L.height }}>{children}</div>
+    </div>
+  );
   const bz = buzz(t, xMid.f);
   // the phone is found in the dark once "closed" has slid off it
   const phoneIn = tween(t, TW.phoneReveal, [0, 1], EASE.inOut);
@@ -133,6 +196,15 @@ export const Twist: React.FC = () => {
       const u = (i + 1) / (n + 1);
       return { k: 0.85 * u, op: (w * 0.34 * (1 - u)) / Math.sqrt(n), blur: 2 + 7 * u };
     });
+  };
+  /* ── the focus beat of the hold: the 3-word payoff takes the read ── */
+  const fk = tween(t, TW.keyFocus, [0, 1], EASE.inOut);
+  const gl = (t - TW.keyGlint[0]) / (TW.keyGlint[1] - TW.keyGlint[0]);
+  const focus = {
+    dim: 1 - 0.55 * fk,
+    key: fk,
+    swell: 1 + 0.03 * aos(t, TW.keyFocus[0], { anticip: 3, depth: 0.12, config: SPRING.site }),
+    glint: gl >= 0 && gl <= 1 ? EASE.inOut(gl) : -1,
   };
   const textFade = 1 - tween(xText.f, [1.5, 3.2], [0, 1], EASE.in2);
   const textBlur = Math.max(0, (xText.f - 1) * 3);
@@ -201,8 +273,13 @@ export const Twist: React.FC = () => {
         </div>
       </LayerX>
 
-      {/* screen space — the rings and Ava's orb */}
+      {/* screen space — the far bokeh (0.5×), the rings, the glow + rim, Ava's orb, the near bokeh (1.5×) */}
       <AbsoluteFill>
+        {bokehOp > 0.005
+          ? screenClip(
+              <BokehPlane t={t - TP} discs={planes.far} Z={Z} k={0.5} c={orb} O={O} opacity={bokehOp} drift={2.2} />,
+            )
+          : null}
         <Rings
           t={t}
           starts={[TWIST.ring2, TWIST.ring2 + 9]}
@@ -210,18 +287,81 @@ export const Twist: React.FC = () => {
           reach={(tt) => L.pick(640, 540) * layerXf(camAt(tt, g), K.mid).f}
           fade={1 - tween(t, [TWIST.pushToPhone[1] - 8, TWIST.pushToPhone[1]], [0, 1], EASE.inOut)}
         />
+        <Ring3 t={t} orbAt={orbAt} />
         {t >= TWIST.phoneOn + 3 && orb.d > 0.5 ? (
-          <div
-            style={{
-              position: 'absolute',
-              left: orb.x - orb.d / 2,
-              top: orb.y - orb.d / 2,
-              opacity: orbOpacity,
-            }}
-          >
-            <Orb size={orb.d} palette={ORB.ink} volume={volumeAt(t + 8)} time={flowTime(Math.max(0, Math.round(t + 8)), volumeAt)} />
-          </div>
+          <>
+            {dress > 0.005 ? (
+              <>
+                {/* the outer glow: a disc behind the canvas (lib/pickup PICKUP_GLOW) */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: orb.x - orb.d / 2,
+                    top: orb.y - orb.d / 2,
+                    width: orb.d,
+                    height: orb.d,
+                    borderRadius: '50%',
+                    boxShadow: PICKUP_GLOW(t + G0, orb.d / 300),
+                    opacity: dress,
+                  }}
+                />
+                {/* the rim light — exactly the call's (lib/pickup ORB_RIM) */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: orb.x - orb.d / 2,
+                    top: orb.y - orb.d / 2,
+                    width: orb.d,
+                    height: orb.d,
+                    borderRadius: '50%',
+                    boxShadow: ORB_RIM(rimA, pickupRimSpread(orbVol)),
+                    opacity: dress,
+                  }}
+                />
+              </>
+            ) : null}
+            {smear ? (
+              <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>
+                <defs>
+                  <filter id="twist-orb-smear" x="-30%" y="-30%" width="160%" height="160%" colorInterpolationFilters="sRGB">
+                    <feGaussianBlur
+                      stdDeviation={`${(smear.x / (baseMode ? kOrb : 1)).toFixed(2)} ${(smear.y / (baseMode ? kOrb : 1)).toFixed(2)}`}
+                    />
+                  </filter>
+                </defs>
+              </svg>
+            ) : null}
+            {/* the orb: one canvas; the call's framing (orbBase, transform) once it is big */}
+            <div
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                width: baseMode ? B : orb.d,
+                height: baseMode ? B : orb.d,
+                transformOrigin: '50% 50%',
+                transform: baseMode
+                  ? `translate(${(orb.x - B / 2).toFixed(2)}px, ${(orb.y - B / 2).toFixed(2)}px) scale(${kOrb.toFixed(5)})`
+                  : `translate(${(orb.x - orb.d / 2).toFixed(2)}px, ${(orb.y - orb.d / 2).toFixed(2)}px)`,
+                opacity: orbOpacity < 1 ? orbOpacity : undefined,
+                filter: smear ? 'url(#twist-orb-smear)' : undefined,
+              }}
+            >
+              <Orb
+                size={baseMode ? B : orb.d}
+                palette={ORB.ink}
+                paletteB={ORB.listen}
+                mixB={orbListen(t)}
+                volume={orbVol}
+                time={orbFlow}
+                resolution={baseMode ? 1.25 : 1.5}
+              />
+            </div>
+          </>
         ) : null}
+        {bokehOp > 0.005
+          ? screenClip(<BokehPlane t={t - TP} discs={planes.near} Z={Z} k={1.5} c={orb} O={O} opacity={bokehOp} />)
+          : null}
       </AbsoluteFill>
 
       {/* 1.0 — the words (ghosted + blurred as the camera flies through them) */}
@@ -237,6 +377,7 @@ export const Twist: React.FC = () => {
                 ghost={k > 0}
                 extraBlur={k > 0 ? 0 : textBlur}
                 layerBlur={k > 0 ? textBlur + blur : 0}
+                focus={focus}
               />
             </LayerX>
           ))

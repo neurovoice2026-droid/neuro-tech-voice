@@ -336,15 +336,31 @@ const HOOK_HANDOFF = SCENES.twist.from - SCENES.twist.pre; // 112 (global = hook
 export const HOOK_LOCAL = {
   dustIn: [0, 12] as const, // the faint motes come up out of the black
   fieldIn: 3, // the cover field starts to bloom
-  orbIn: b(0.25), // 4  — the colon orb lights, alone in the black
-  figuresIn: b(0.6), // 9  — "00 ◉ 00" unfolds dimly out of the orb
-  digitStagger: 2, // frames between the four strips leaving
+  orbIn: b(0.25), // 4  — the colon orb lights, alone in the black (in the RUSH light)
+  figuresIn: b(0.5), // 8  — "17 ◉ 05" unfolds out of the orb in the rush light (= moments[0])
+  digitStagger: 2, // (v1 roll) frames between the four strips leaving
+  /** THE FOUR LIGHTS: the clock flicks through the site's four moments on 8th notes, each a hard
+   *  light change (colon orb, figures, bloom, day drum). Each value is the frame the new figures
+   *  LAND (a tick + a light chime; the last is the click + thump on the strong beat).
+   *  rush 17:05 · closing 20:10 · sunday 10:12 · night 03:12 (home.server.ts) */
+  moments: [b(0.5), HOOK.clockIn, b(1.5), HOOK.clockLand] as const, // 8 15 23 30
+  /** frames a flick's strips travel (power3.inOut, a full turn + the difference, as on the site);
+   *  each strip winds back for 2 f before it leaves */
+  flickTravel: 3,
+  /** the four strips leave left → right this many frames apart; they all land together on the hit */
+  flickStagger: 0.4,
+  /** the orb/bloom light change starts this many frames before the landing (done on the hit) */
+  lightLead: 2,
   /** Every ring attack leaves this many frames before its beat, so the beat frame is the peak. */
   ringLead: 1,
   ringB: b(3) + 7, // 52 — second ring of the burst
   waveIn: b(2.5), // 38 — the dotted wave row draws out from the centre
   freezeEase: 3, // frames for world time to stop
-  frozenRate: 0.04, // world speed once frozen (the rings creep, never quite stop)
+  frozenRate: 0.12, // world speed once frozen (the hanging rings and motes creep visibly)
+  /** the line has settled: the slow push turns into an accelerating inhale into the break */
+  pushTurn: HOOK.textIn + 16, // 76
+  /** the frozen world breathes ON these beats: orb +3 %, rings +2 % / brighter, wave ±20 %, the line's glow */
+  breathBeats: [b(6), b(7)] as const, // 90 105
   anticipation: HOOK_HANDOFF, // 112 — the inhale; the hanging rings/wave finish decaying
   /** 112 → 120: the world defocuses and is gone ON the shatter downbeat (1.5 % left at 119). */
   out: [HOOK_HANDOFF, SCENES.hook.to] as const,
@@ -388,6 +404,23 @@ export const TWIST_LOCAL = {
   diveAim: [TWIST.pushToPhone[0], TWIST.pushToPhone[1] - 4] as const,
   /** phone vibration at the second burst */
   buzz: [TWIST.ring2, TWIST.ring2 + 12] as const,
+  /** a glint crosses the CLOSED sign as it settles */
+  signGlint: [TWIST.closedSign + 3, TWIST.closedSign + 13] as const,
+  /** the focus beat of the tagline hold: "Closed is for the door," recedes to 45 %,
+   *  "not the phone." brightens + swells 1 → 1.03 (on the beat, before the dive at b6) */
+  keyFocus: [b(5), b(5) + 8] as const,
+  /** …with a glint of light sweeping "not the phone." left → right */
+  keyGlint: [b(5), b(5) + 12] as const,
+  /** the orb's rim light + outer glow come up as the screen fills the frame */
+  orbDress: [TWIST.pushToPhone[0] + 16, TWIST.pushToPhone[0] + 24] as const,
+  /** the avatar's size locks to CALL_ORB_START (the call draws the same orb from roomIn) */
+  orbLock: [TWIST.pushToPhone[1] - 8, TWIST.pushToPhone[1] - 4] as const,
+  /** one breath (±2 %, 2-beat sine) before the pickup squash starts (PICKUP − 6) */
+  breath: [b(7), TWIST.pushToPhone[1] - 6] as const,
+  /** a faint third ring leaves the avatar (1× → 2.6×) on the beat */
+  ring3: [b(7), b(7) + 8] as const,
+  /** two bokeh planes over the screen (0.5× / 1.5× the dive's zoom) */
+  bokeh: [TWIST.pushToPhone[0] + 10, TWIST.pushToPhone[1] + 12] as const,
 };
 
 /* ── CALL — fine cuts (call-local frames) ──────────────────────── */
@@ -436,7 +469,7 @@ export const RESULT_LOCAL = {
   roomIn: [RESULT.lift, b(4 / 3)] as const, // 0 → 20
   /** the lift spring starts here, after a 2-frame anticipation dip */
   liftGo: RESULT.lift + b(1 / 8), // 2
-  /** the booked-pill wash blooms around the mark */
+  /** the booked-pill wash blooms around the mark; the call's <MarkGlow> (MARK_GLOW_HANDOFF) cross-fades into it */
   plateIn: [RESULT.lift + b(1 / 15), RESULT.lift + b(0.3)] as const, // 1 → 5
   /** " at" folds out of the mark */
   markCollapse: [RESULT.lift + b(1 / 8), RESULT.lift + b(0.4)] as const, // 2 → 6
@@ -464,19 +497,43 @@ export const RESULT_LOCAL = {
   shock: [RESULT.land, RESULT.land + b(1.4)] as const, // 30 → 51
   /** the pill's ping on the event's dot */
   ping: [RESULT.land + b(0.2), RESULT.land + b(1.2)] as const, // 33 → 48
-  /** the calendar recomposes into its half (its anticipation starts 3 f earlier, t 36) */
+  /** the close-up crops into the calendar card: the camera leans in for recomposeAnticip frames,
+   *  then a recomposeDur-frame EASE.peel zoom-out (fastest ≈ recompose + 3), a 2.5 % overshoot
+   *  that settles over recomposeSettle frames */
   recompose: RESULT.land + b(0.6), // 39
-  recomposeAnticip: b(0.2), // 3
-  /** the split hairline starts drawing */
+  recomposeAnticip: b(0.2), // 3  (36 → 39)
+  recomposeDur: 6, // 39 → 45
+  recomposeSettle: 6, // 45 → 51
+  /** the split: the divider draws top → bottom (16:9) / left → right (9:16) over dividerDraw
+   *  frames (EASE.house) and the night falls in behind its bead */
   divider: RESULT.split - b(0.25), // 41
-  /** the split's grade: the owner's half cools and darkens */
+  dividerDraw: 8, // 41 → 49
+  /** the call's violet room light cools out as the halves grade in */
   splitGrade: [RESULT.split - b(0.4), RESULT.split + b(14 / 15)] as const, // 39 → 59
   /** the titles plane moves above the sheet (it sits under it while the sheet recomposes) */
   titlesOver: RESULT.split + b(1 / 3), // 50
-  /** the owner lockup pops (after "Asleep." lands) */
-  ownerIn: RESULT.split + b(0.2), // 48
+  /** per-letter stagger of "Asleep." / "Booked." (SPRING.land; the LAST letter locks ON
+   *  RESULT.split / RESULT.bookedWord); each landing kicks its own half 1.2 % */
+  letterStagger: 0.6,
+  /** the moon locks a 16th after "Asleep." (glow flash + one slow ring) */
+  moon: RESULT.split + b(0.25), // 49
+  /** the stars twinkle in (lock frames) on 16ths / 8ths */
+  stars: [b(3.5), b(3.75), b(4.5), b(4.75)] as const, // 53 56 68 71
+  /** the confirmation check (the closing light's green) pops on the event, a 16th after "Booked." */
+  check: RESULT.bookedWord + b(0.25), // 64
+  /** the parallax discs come up with the split, and clear for the dive */
+  discsIn: [RESULT.split - b(0.25), RESULT.bookedWord] as const, // 41 → 60
+  discsOut: [RESULT.toWhite[0] - b(1 / 3), RESULT.toWhite[0] + b(0.2)] as const, // 100 → 108
+  /** the halves drift apart ±10 px (from the split) … */
+  drift: [RESULT.split, RESULT.toWhite[0] - b(1)] as const, // 45 → 90
+  /** … while the Booked half pushes in 1 → 1.035 and the night dims 10 % */
+  hold: [RESULT.bookedWord, RESULT.toWhite[0] - b(1)] as const, // 60 → 90
+  /** ONE accent in the hold: a light sweep across the event, one beat after "Booked." (on the grid) */
+  sweep: [RESULT.bookedWord + b(1), RESULT.bookedWord + b(1) + 8] as const, // 75 → 83
   /** anticipation pulse on the event (peak) */
   pulse: RESULT.toWhite[0] - b(1 / 3), // 100
+  /** its anticipation: everything has settled; the camera leans back, the event swells (EASE.inOut) */
+  pulseIn: [RESULT.toWhite[0] - b(1 / 3) - 10, RESULT.toWhite[0] - b(1 / 3)] as const, // 90 → 100
   /** the dive into the event */
   dive: [RESULT.toWhite[0] - b(1 / 3), RESULT.toWhite[1] - b(0.2)] as const, // 100 → 117
   /** the event's rect opens past the frame edges (camera does most of it; this is the last few ×) */
@@ -628,8 +685,9 @@ export const CTA_LOCAL = {
   orbSwell: [CTA.converge[0], CTA.converge[0] + 4] as const,
   /** … then spirals into P, accelerating (motion-blurred) */
   orbIn: [CTA.converge[0] + 4, CTA.logoImpact - 2] as const,
-  /** as she tears, the figure stops hiding the orbs behind her */
-  unhide: [CTA.converge[0] + 2, CTA.converge[0] + 12] as const,
+  /** the orbs behind her show only where she has torn away (the shader's erase
+   *  mask); this closes the last of it as the erase completes */
+  unhide: [CTA.logoImpact - 9, CTA.logoImpact - 6] as const,
   /** the four overlap and become one (the back three go as they are covered) */
   merge: [CTA.logoImpact - 6, CTA.logoImpact - 1] as const,
   /** the merged orb blows out into the light as the logo lands */

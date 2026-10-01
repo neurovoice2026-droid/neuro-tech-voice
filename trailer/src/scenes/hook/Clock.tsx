@@ -1,7 +1,12 @@
 /**
  * The #demo clock lockup, "03 ◉ 12": four figure columns (0.6em × 1.1em,
- * clipped) whose strips of 0-9-0 roll a full turn plus the difference
- * (power3.inOut, staggered per figure), with the orb as the colon.
+ * clipped) on strips of 0-9-0, with the orb as the colon.
+ *
+ * THE FOUR LIGHTS: the strips FLICK through the site's four moments — each
+ * flick a full turn plus the difference (as the site spins its figures),
+ * power3.inOut over a few frames after a short wind-back, landing with a
+ * spring overshoot. Flicks are additive (chainPos), so a new one can leave
+ * while the last one's overshoot is still settling.
  *
  * Only the cells near each strip's window are drawn. Vertical motion blur
  * is an SVG feGaussianBlur with stdDeviation "0 σ" (σ ∝ strip speed), so
@@ -9,50 +14,48 @@
  */
 import React from 'react';
 import { MeshOrb } from '../../components/MeshOrb';
-import { C, CLOCK_FILL, FONT, ORB } from '../../theme';
+import { C, FONT } from '../../theme';
 import { rgba } from './color';
 
-/* ── Roll curve ─────────────────────────────────────────────────────── */
+/* ── Flick curve ────────────────────────────────────────────────────── */
 
 const inOut3 = (u: number) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
 
-export type Roll = {
-  from: number; // figure the strip stands on before the roll
-  to: number; // absolute strip target (from + full turn + difference)
-  start: number; // frame the roll leaves
-  land: number; // frame it lands (overshoot starts here)
-};
+/** One forward flick of a strip: `delta` cells, leaving at `start`, landing ON `land`. */
+export type Flick = { start: number; land: number; delta: number };
 
 /** Arrival speed in cells / frame → the size of the landing overshoot. */
 const V_LAND = 0.1;
 const OMEGA = (2 * Math.PI) / 9; // overshoot period ≈ 9 frames
 const DECAY = 0.3;
 const WIND = 0.07; // anticipation: the strip winds back 7 % of a cell
-const WIND_FRAMES = 3;
+const WIND_FRAMES = 2;
 /** Strip speed (cells / frame) below which no motion blur is drawn. */
 const BLUR_FLOOR = 0.16;
 
-/** Strip position in cells (fractional) at frame f. */
-export function rollPos(f: number, r: Roll): number {
-  const { from, to, start, land } = r;
-  if (f <= start - WIND_FRAMES) return from;
+/** Displacement (cells) one flick has added by frame f: wind-back, travel, overshoot + settle. */
+export function flickDisp(f: number, { start, land, delta }: Flick): number {
+  if (f <= start - WIND_FRAMES) return 0;
   if (f < start) {
     const t = (f - (start - WIND_FRAMES)) / WIND_FRAMES;
-    return from - WIND * Math.sin((t * Math.PI) / 2);
+    return -WIND * Math.sin((t * Math.PI) / 2);
   }
-  const a = from - WIND;
-  const D = to - a;
+  const D = delta + WIND;
   const dur = land - start;
   if (f < land) {
     const u = (f - start) / dur;
     // power3.inOut with a little linear mixed in, so the strip arrives with
-    // speed V_LAND and a spring can carry it past the figure.
+    // speed V_LAND and a spring can carry it past the figure
     const m = Math.min(0.4, (V_LAND * dur) / D);
-    return a + D * ((1 - m) * inOut3(u) + m * u);
+    return -WIND + D * ((1 - m) * inOut3(u) + m * u);
   }
   const tau = f - land;
-  return to + (V_LAND / OMEGA) * Math.exp(-DECAY * tau) * Math.sin(OMEGA * tau);
+  return delta + (V_LAND / OMEGA) * Math.exp(-DECAY * tau) * Math.sin(OMEGA * tau);
 }
+
+/** Strip position (cells, fractional) at frame f: `from` plus every flick so far. */
+export const chainPos = (f: number, from: number, flicks: readonly Flick[]) =>
+  flicks.reduce((p, k) => p + flickDisp(f, k), from);
 
 /* ── Figure column ──────────────────────────────────────────────────── */
 

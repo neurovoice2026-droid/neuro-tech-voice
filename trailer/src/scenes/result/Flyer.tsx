@@ -11,7 +11,7 @@
  *          out between them); only once registered do they cross-fade into
  *          the card's face. BOOKED + the ember dot rise in meanwhile.
  *   throw  the card winds up, lobs into the close-up, tilts, shrinks to the
- *          slot and warms to the event's pill fill.
+ *          slot and warms to the event's solid ember (its face turns white).
  *
  * Motion blur: a sub-frame ghost train sampled in SCREEN space (so its
  * length and direction are what the eye sees while the camera follows) +
@@ -56,7 +56,7 @@ const plateStyle = (S: CardState): React.CSSProperties => {
       `0 0 0 ${ringW.toFixed(3)}px ${hexA(C.ember, ringA)}`,
       `inset 0 ${u.toFixed(3)}px 0 rgba(255,255,255,${(0.07 * (1 - S.pill)).toFixed(3)})`,
       `0 ${dropY.toFixed(2)}px ${dropB.toFixed(2)}px ${dropS.toFixed(2)}px rgba(0,0,0,${dropA.toFixed(3)})`,
-      `0 0 ${glow.toFixed(2)}px ${(-8 * u).toFixed(2)}px ${hexA(C.ember, 0.24)}`,
+      `0 0 ${glow.toFixed(2)}px ${(-8 * u).toFixed(2)}px ${hexA(C.ember, 0.24 + 0.3 * S.warm)}`,
     ].join(', '),
     opacity: S.plateOp,
   };
@@ -122,8 +122,8 @@ const Card: React.FC<{
       }}
     >
       <div style={plateStyle(S)} />
-      <CardFace w={S.w} h={S.h} p={S.p} row={S.row} />
-      <EventFace u={S.u} op={S.ev} size={G.face} />
+      <CardFace w={S.w} h={S.h} ct={G.cardType} p={S.p} row={S.row} />
+      <EventFace size={G.face * S.u} op={S.ev} color={C.white} dotColor={C.white} />
       {m ? (
         <>
           <MarkWord text="Wednesday" w={m.wed} S={S} fontSize={G.mark.fontSize} op={m.op} blur={fadeBlur} />

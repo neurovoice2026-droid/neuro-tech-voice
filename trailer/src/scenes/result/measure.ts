@@ -29,10 +29,12 @@ export type Metrics = {
   w: number;
   /** offset of the cap-height centre from the line box's centre (px, + = down) */
   capOff: number;
+  /** the baseline, from the line box's top (px) */
+  base: number;
 };
 
 export function measure(text: string, f: FontSpec): Metrics {
-  if (typeof document === 'undefined') return { w: text.length * f.size * 0.55, capOff: 0 };
+  if (typeof document === 'undefined') return { w: text.length * f.size * 0.55, capOff: 0, base: f.size * f.lh * 0.8 };
   if (!ctx) ctx = document.createElement('canvas').getContext('2d') as typeof ctx;
   const c = ctx!;
   c.font = cssFont(f);
@@ -43,14 +45,12 @@ export function measure(text: string, f: FontSpec): Metrics {
   const desc = m.fontBoundingBoxDescent;
   const box = f.lh * f.size;
   const baseline = (box - (asc + desc)) / 2 + asc; // from the box top
-  return { w: m.width, capOff: baseline - cap / 2 - box / 2 };
+  return { w: m.width, capOff: baseline - cap / 2 - box / 2, base: baseline };
 }
 
 /** true once every face is loaded; holds the render until then. */
 export function useFontsReady(fonts: string[]): boolean {
-  const [ready, setReady] = useState(
-    () => typeof document !== 'undefined' && fonts.every((f) => document.fonts.check(f)),
-  );
+  const [ready, setReady] = useState(() => typeof document !== 'undefined' && fonts.every((f) => document.fonts.check(f)));
   const [handle] = useState(() => (ready ? null : delayRender('result: font metrics')));
   useEffect(() => {
     if (ready) return;

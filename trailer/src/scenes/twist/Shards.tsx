@@ -27,7 +27,7 @@ import { HookLineStatic } from '../../components/Shared';
 import { Words } from '../../components/Type';
 import { HOOK_LINE } from '../../lib/handoff';
 import type { Layout } from '../../lib/layout';
-import { EASE, tween } from '../../lib/motion';
+import { EASE, mixHex, tween } from '../../lib/motion';
 import { C, FONT, TRACK } from '../../theme';
 import { TWIST } from '../../timing';
 import { TW, twistGeo } from './geometry';
@@ -381,6 +381,12 @@ function shardState(sh: Shard, t: number, hook: TextLayout, tag: TextLayout, L: 
   };
 }
 
+/** a soft, slanted band of light at p (0 → 1 crosses the line) */
+const glintMask = (p: number) => {
+  const c = -25 + p * 150; // % across the box
+  return `linear-gradient(105deg, rgba(0,0,0,0) ${(c - 16).toFixed(1)}%, rgba(0,0,0,1) ${c.toFixed(1)}%, rgba(0,0,0,0) ${(c + 16).toFixed(1)}%)`;
+};
+
 const glyphStyle = (fontSize: number): React.CSSProperties => ({
   position: 'absolute',
   fontFamily: FONT.display,
@@ -395,6 +401,20 @@ const glyphStyle = (fontSize: number): React.CSSProperties => ({
 
 const SHUTTER = 0.6;
 
+/** The focus beat of the hold (TWIST_LOCAL.keyFocus / keyGlint). */
+export type Focus = {
+  /** opacity of the landed "Closed is for the door," (1 → .45) */
+  dim: number;
+  /** 0..1 "not the phone." brightens: lilac → mix(lilac, paper, .2) */
+  key: number;
+  /** its scale about its centre (1 → 1.03, anticipation + spring) */
+  swell: number;
+  /** 0..1 a glint crossing it left → right (−1: none) */
+  glint: number;
+};
+const NO_FOCUS: Focus = { dim: 1, key: 0, swell: 1, glint: -1 };
+const KEY_LIT = mixHex(C.lilac, C.paper, 0.2);
+
 export const Shards: React.FC<{
   t: number;
   L: Layout;
@@ -408,7 +428,8 @@ export const Shards: React.FC<{
   /** one blur over the whole layer (ghost copies: one filter pass instead of
    *  one per glyph, which is what keeps the dive affordable) */
   layerBlur?: number;
-}> = ({ t, L, hook, tag, shards, ghost = false, extraBlur = 0, layerBlur = 0 }) => {
+  focus?: Focus;
+}> = ({ t, L, hook, tag, shards, ghost = false, extraBlur = 0, layerBlur = 0, focus = NO_FOCUS }) => {
   if (t < 0) {
     const g = gather(t);
     return (
@@ -453,7 +474,9 @@ export const Shards: React.FC<{
                 // melt into one streak instead of reading as echoes
                 const blur = s.dof + extraBlur + Math.min(7, speed * 0.035) + kk * Math.min(10, trail * 0.5);
                 const op =
-                  s.op * (n === 1 ? 1 : k === 0 ? 0.92 : (0.9 * (1 - k / n)) / (1 + 0.35 * (n - 1)));
+                  s.op *
+                  (sh.dst ? focus.dim : 1) *
+                  (n === 1 ? 1 : k === 0 ? 0.92 : (0.9 * (1 - k / n)) / (1 + 0.35 * (n - 1)));
                 const xf =
                   speed > 4
                     ? `rotate(${phi.toFixed(2)}deg) scaleX(${stretch.toFixed(3)}) rotate(${(-phi).toFixed(2)}deg) rotate(${s.rot.toFixed(2)}deg) scale(${sc.toFixed(4)})`
@@ -487,8 +510,16 @@ export const Shards: React.FC<{
             top: line3.top,
             width: line3.width + 40,
             filter: extraBlur > 0.15 ? `blur(${extraBlur.toFixed(2)}px)` : undefined,
+            transform: focus.swell !== 1 ? `scale(${focus.swell.toFixed(5)})` : undefined,
+            transformOrigin: `${(line3.width / 2).toFixed(1)}px ${(tag.lineH / 2).toFixed(1)}px`,
           }}
         >
+          {/* its light: a soft lilac bloom of the words behind them as they take focus */}
+          {focus.key > 0.01 && !ghost ? (
+            <div style={{ position: 'absolute', inset: 0, filter: `blur(${(0.16 * tag.fontSize).toFixed(1)}px)`, opacity: 0.55 * focus.key }}>
+              <Words text="not the phone." start={TWIST.line2} stagger={3} frame={t} align="left" color={C.lilac} style={{ fontSize: tag.fontSize, whiteSpace: 'nowrap' }} />
+            </div>
+          ) : null}
           <Words
             text="not the phone."
             start={TWIST.line2}
@@ -497,7 +528,35 @@ export const Shards: React.FC<{
             align="left"
             keys={[{ text: 'not the phone.', color: C.lilac, at: TWIST.keyColor }]}
             style={{ fontSize: tag.fontSize, whiteSpace: 'nowrap' }}
+            wordStyle={
+              focus.key > 0.001
+                ? () => ({ color: mixHex(C.lilac, KEY_LIT, focus.key) })
+                : undefined
+            }
           />
+          {/* the glint: the same words in white light, seen through a moving band */}
+          {focus.glint >= 0 && focus.glint <= 1 && !ghost ? (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                mixBlendMode: 'screen',
+                WebkitMaskImage: glintMask(focus.glint),
+                maskImage: glintMask(focus.glint),
+                opacity: 0.9 * Math.sin(Math.PI * Math.min(1, focus.glint * 1.15)),
+              }}
+            >
+              <Words
+                text="not the phone."
+                start={TWIST.line2}
+                stagger={3}
+                frame={t}
+                align="left"
+                color="#ffffff"
+                style={{ fontSize: tag.fontSize, whiteSpace: 'nowrap' }}
+              />
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

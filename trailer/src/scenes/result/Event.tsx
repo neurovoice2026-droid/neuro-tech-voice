@@ -1,11 +1,12 @@
 /**
- * The booked event — what the card becomes in the calendar. It reads as the
- * site's booked pill turned into a calendar block: the cover plate under the
- * pill's 16 % ember wash, a 1px ember hairline, the #ee5423 dot (with the
- * pill's ping: scale 1 → 2.4, .6 → 0) and the time in Geist Mono, #ffb877.
+ * The booked event — what the card becomes in the calendar (P0-2): a solid
+ * #ee5423 block, full cell width, "15:00" in white Geist Mono 500 with a white
+ * dot (the booked pill's dot, inverted onto the ember; it keeps the pill's
+ * ping: scale 1 → 2.4, .6 → 0), and an ember glow round it.
  *
- * Every size here is in "units": the flyer draws it in card units, the
- * calendar in its natural units, so `u` converts (world px per unit).
+ * Sizes are passed in px of whatever layer draws it (the flyer's card units,
+ * the calendar's world px), so the face keeps its own type size while the
+ * calendar crops and re-proportions around it.
  */
 import React from 'react';
 import { C, FONT } from '../../theme';
@@ -16,23 +17,20 @@ export const hexA = (hex: string, a: number) => {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${Math.min(1, Math.max(0, a)).toFixed(3)})`;
 };
 
-/** The event's resting fill: the panel under the booked pill's 16 % ember wash. */
-export const eventFill = (warm: number, flash = 0) => mixHex(C.panel, C.ember, 0.16 * warm + 0.34 * flash);
+/** The flying card's plate warming into the event (panel → solid ember); the landing flash runs it hot. */
+export const eventFill = (warm: number, flash = 0) =>
+  mixHex(mixHex(C.panel, C.ember, warm), mixHex(C.ember, C.emberLit, 0.8), 0.7 * flash);
 
-/**
- * Dot + "15:00", centred in its box. `u` scales every size (1 = calendar
- * natural units), `size` is the time's size in those units. `ping` 0..1
- * draws the pill's dot ping.
- */
-export const EventFace: React.FC<{ u: number; op: number; size: number; ping?: number; color?: string }> = ({
-  u,
-  op,
-  size,
-  ping = -1,
-  color = C.emberLit,
-}) => {
+/** Dot + "15:00", centred in its box. `size` = the time's font size (px of the drawing layer). */
+export const EventFace: React.FC<{
+  size: number;
+  op: number;
+  ping?: number;
+  color?: string;
+  dotColor?: string;
+}> = ({ size, op, ping = -1, color = C.white, dotColor = C.white }) => {
   if (op <= 0.001) return null;
-  const dot = 8 * u;
+  const dot = size * 0.2;
   return (
     <div
       style={{
@@ -41,19 +39,19 @@ export const EventFace: React.FC<{ u: number; op: number; size: number; ping?: n
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 6 * u,
+        gap: size * 0.26,
         opacity: op,
       }}
     >
       <div style={{ position: 'relative', width: dot, height: dot, flex: 'none' }}>
-        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: C.ember }} />
+        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: dotColor }} />
         {ping >= 0 && ping < 1 ? (
           <div
             style={{
               position: 'absolute',
               inset: 0,
               borderRadius: '50%',
-              background: C.ember,
+              background: dotColor,
               transform: `scale(${(1 + ping * 1.4).toFixed(3)})`,
               opacity: 0.6 * (1 - ping),
             }}
@@ -64,7 +62,7 @@ export const EventFace: React.FC<{ u: number; op: number; size: number; ping?: n
         style={{
           fontFamily: FONT.mono,
           fontWeight: 500,
-          fontSize: size * u,
+          fontSize: size,
           lineHeight: 1,
           color,
           fontVariantNumeric: 'tabular-nums',

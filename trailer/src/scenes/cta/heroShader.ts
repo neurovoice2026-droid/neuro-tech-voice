@@ -197,7 +197,7 @@ void main() {
     hr = pow(pow(abs(q.x), pw) + pow(abs(q.y), pw), 1.0 / pw);
   }
   // (at most a very-low-frequency breath of the edge, <= 0.01; 0 by default)
-  hr += perlin(vec3(px / uRes.y * 1.1, 1.7)) * uHaloShape.y * smoothstep(0.45, 0.95, hr);
+  if (uHaloShape.y > 0.0) hr += perlin(vec3(px / uRes.y * 1.1, 1.7)) * uHaloShape.y * smoothstep(0.45, 0.95, hr);
   vec3 halo = haloRamp(hr);
   // a faint bloom of the core: the disc reads as light, not as paint
   halo += SILVER * uHaloShape.z * exp(-3.0 * hr * hr) * (1.0 - smoothstep(1.05, 1.3, hr));
@@ -298,6 +298,19 @@ void main() {
 
   vec2 tuv = iuv + warp;
   col = texture(uImage, tuv).rgb;
+  // outside her figure, the art's backlight falls off in a sprayed stipple:
+  // two rings of taps (7 and 16 art px) turn it into a clean, soft light
+  if (figure < 0.999) {
+    vec3 acc = col;
+    vec2 tx = 1.0 / uImgRes;
+    for (int k = 0; k < 8; k++) {
+      float a = float(k) * 0.7853982 + 0.39;
+      vec2 dir = vec2(cos(a), sin(a));
+      acc += texture(uImage, tuv + dir * 7.0 * tx).rgb;
+      acc += texture(uImage, tuv + dir.yx * vec2(1.0, -1.0) * 16.0 * tx).rgb;
+    }
+    col = mix(acc / 17.0, col, figure);
+  }
   // the portrait crop's top rows are a vertical-streak glitch band: the
   // framing keeps them out of shot, and anything the orbit or the tear still
   // pulls from there is replaced by the backlight just under it, smoothed
@@ -317,7 +330,9 @@ void main() {
   float backlit = smoothstep(0.35, 0.6, dot(col, vec3(0.299, 0.587, 0.114))) * (1.0 - smoothstep(0.1, 0.25, sat));
   // her matte: inside the figure box, whatever is not the art's backlight is
   // her (the dark silhouette and the lilac-lit face) — an orb behind it hides
-  occ = uOcc * figure * (1.0 - backlit);
+  // (inside her head the lit stripes are her too, never backlight)
+  float headCore = 1.0 - smoothstep(0.62, 0.82, length((pxA - eyeMidA - vec2(0.0, 0.4 * eo)) / (eo * vec2(2.1, 3.3))));
+  occ = uOcc * figure * max(1.0 - backlit, headCore);
   col = mix(col, uBrand * (0.5 + dot(col, vec3(0.299, 0.587, 0.114)) * 1.5),
             0.10 * smoothstep(0.03, 0.30, sat));
   col = grade(col);
@@ -382,19 +397,19 @@ void main() {
   }
 
   /* ---- 6. the eyes carry her voice --------------------------------- */
+  // (the irises sit at .877 of the site's eye offset, .0053 above its eye
+  // line, ~9.5 art px in radius — measured on the art)
   if (uEyeGlow > 0.001) {
-    vec2 eL = vec2(uAxisX - uEye.x * Z, uFrame.y) * uRes;
-    vec2 eR = vec2(uAxisX + uEye.x * Z, uFrame.y) * uRes;
-    float sep = 2.0 * uEye.x * Z * uRes.x;
-    // eyes are wider than tall
-    float dE = min(length((px - eL) * vec2(1.0, 1.7)), length((px - eR) * vec2(1.0, 1.7))) / sep;
-    float core = exp(-pow(dE / 0.1, 2.0));
-    float bloom = exp(-pow(dE / 0.34, 2.0));
+    float rI = 9.5 * (uRes.x / uImgRes.x) * Z;
+    float ey = (uFrame.y - 0.0053 * Z) * uRes.y;
+    vec2 eL = vec2((uAxisX - 0.877 * uEye.x * Z) * uRes.x, ey);
+    vec2 eR = vec2((uAxisX + 0.877 * uEye.x * Z) * uRes.x, ey);
+    float dI = min(length(px - eL), length(px - eR)) / rI;
+    float iris = (1.0 - smoothstep(0.45, 1.12, dI)) * (0.55 + 0.45 * exp(-dI * dI * 3.0));
+    float bloom = exp(-dI * dI / 9.0);
     float g = uEyeGlow * (1.0 - uErase);
-    col *= 1.0 + 1.1 * g * core;
-    col = screen(col, vec3(0.73, 0.64, 1.0) * g * (0.2 * bloom + 0.28 * core));
+    col = screen(col, vec3(0.73, 0.64, 1.0) * g * (2.2 * iris + 0.7 * bloom));
   }
-
   }
 
   /* ---- 7. the four lights ------------------------------------------ */
