@@ -648,97 +648,108 @@ export const RESULT_LOCAL = {
 
 /* ── SCALE — fine cuts (scale-local frames) ────────────────────── */
 export const SCALE_LOCAL = (() => {
-  /** six languages on THREE big cells, two pages: each cell flips on a 16th (EN RO ES 75 79 83),
-   *  then flips again exactly one beat later (FR DE JA 90 94 98) — never more than 3 greetings on screen */
-  const langs = Array.from({ length: 6 }, (_, i) => Math.round(SCALE.langMorph + (i % 3) * SCALE.langStep + (i >= 3 ? BEAT : 0)));
-  /** THE FOUR ACTS, one light each, in #demo's tour order: the night leads hook → result, Sunday the
-   *  knowledge, the RUSH this wall (sixteen industries on 16th notes — "in the middle of a rush") and
-   *  its "16 industries." lock, then JUST AFTER CLOSING the languages and the after-call flow. So the
-   *  CTA gathers four lights the film has each shown owning an hour. On the wall the quarter notes
-   *  still turn (a rose pulse every beat); the light does not change: one light leads a moment. */
-  const wallLights = ['rush', 'rush', 'rush', 'rush'] as const;
-  /** station cues (= the flow cues): each node is solid ON its cue — 120 128 135 */
-  const stations = [0, 1, 2].map((i) => Math.round(SCALE.flow + i * SCALE.stationStep));
-  /** the two other cells collapse into the deck; page 2 (FR DE JA) has held ≥ 15 f */
-  const collapse = b(7.5); // 113
+  const HERO = SCALE.industriesTitle;
+  const LT = SCALE.langTitle;
+  const LA = SCALE.langAt;
+  const F = SCALE.flow;
+  /** THE WALL: eight cards on the 8th notes, then eight on 16ths — the last a 16th before the slam
+   *  (0 8 15 23 30 38 45 53 | 60 64 68 71 75 79 83 86) */
+  const pops = Array.from({ length: 16 }, (_, i) =>
+    Math.round(i < 8 ? SCALE.industriesIn + i * SCALE.industryStep : HERO - (16 - i) * (SCALE.industryStep / 2)),
+  );
+  /** THE FOUR LIGHTS, as the hour: each leads four cards (its hit flash, disc, ripple, glow), in #demo's order */
+  const wallLights = ['rush', 'closing', 'sunday', 'night'] as const;
+  /** the six greetings: the active card leads; the quick four pass through the four lights (the hook's flick, again)
+   *  and Japanese lands in the closing light, which carries on into the flow */
+  const langLights = ['rush', 'closing', 'sunday', 'night', 'rush', 'closing'] as const;
+  /** "After the call." on the flow beat; then one station per beat (the call 405 · Slack 420 · CRM 435) */
+  const stations = [0, 1, 2].map((i) => F + (i + 1) * SCALE.stationStep);
+  /** the CTA iris opens 3 f after the scale's last cue (CTA_LOCAL.iris) */
+  const irisOpen = SCALE.irisToDark[0] + 3;
+  /** frames a light mote takes along the finished rail (call → CRM) */
+  const moteDur = 14;
+  /** how many of each greeting's words are the big line (the rest is the small line; the quick four are cut by the next voice) */
+  const langMain = [6, 2, 2, 2, 4, 8] as const;
+  const ids = SCALE.langVoices;
   return {
-    /** one industry pop per 16th note */
-    pops: Array.from({ length: 16 }, (_, i) => Math.round(SCALE.industriesIn + i * SCALE.industryStep)),
-    /** card 01 pops this many frames before the cut: t 0 (pop-2 + tick-0) lands mid-pop.
-     *  3 = its attack frame is the knowledge whip's last frame, so the whip cut has no blank white frame */
+    pops,
+    /** card 01 pops this many frames before the cut: its attack frame is the knowledge whip's last frame */
     preroll: 3,
-    /** the stepped camera (EASE.peel): card 01 → 2×2 → 3×3 → the full grid */
-    camSteps: [
-      [1, 4],
-      [12, 15],
-      [27, 30],
-    ] as const,
-    /** quarter-note camera kicks (+1.8 %, alternating 3 px jolt) */
-    kicks: [0, b(1), b(2), b(3)] as const, // 0 15 30 45
-    /** pop i's light (the quarter it pops in: all the rush — colour follows the act, never the industry) */
-    wallLight: Array.from({ length: 16 }, (_, i) => wallLights[Math.min(3, Math.floor(i / 4))]),
     wallLights,
-    /** "16 industries." locks the whole wall in the rush light: the rose act's payoff … */
-    heroLight: 'rush' as const,
-    /** … then the room turns to the closing light (its ground + bloom) on the 8th after the fly-out
-     *  starts, as the title lifts and the ten cards leave — 68 → 82 … */
-    lightTurn: [Math.round(b(4.5)), Math.round(b(4.5)) + 14] as const,
-    /** … and the languages and the after-call flow are in the closing light (one light, to the end) */
-    langLight: 'closing' as const,
-    /** "16 industries." lifts to the top band WITH the fly-out / glide: out of the cell band before any flip */
-    titleSwap: b(4.4), // 66
-    /** "16 industries." exits up out of its mask: 2 f anticipation, 4 f exit (gone at titleIn − 1) … */
-    titleExit: Math.round(b(5.5)) - 7, // 76
-    /** … and "14 languages." rises 1 f after it is gone, on the 16th of the third flip */
-    titleIn: Math.round(b(5.5)), // 83
-    /** the ten leaving cards peel off: pull-in from flyOut − flyAnticip, then accelerate out */
-    flyOut: b(4.4), // 66
+    /** card i's light (its group of four) */
+    wallLight: pops.map((_, i) => wallLights[i >> 2]),
+    /** the hour turns (the next light leads) on cards 1 · 5 · 9 · 13 */
+    groups: [0, 4, 8, 12].map((i) => pops[i]),
+    /** the camera's continuous pull-back keys (zooms in scale/camera.ts): card 01 fills the frame → the
+     *  2 × 2 framed as card 2 pops → drift → the 3 × 3 as card 5 pops → drift → the whole wall as the
+     *  16ths start → a last breath out to 0.985 just before the slam */
+    pull: [-3, pops[1] - 2, pops[3] - 5, pops[4] - 1, pops[7] - 5, pops[8], HERO - 2] as const,
+    /** pan of each pop (16:9 screen x at its pop: the camera is still pulling back) */
+    popX: [0.5, 0.75, 0.26, 0.68, 0.84, 0.81, 0.16, 0.47, 0.62, 0.87, 0.87, 0.87, 0.13, 0.38, 0.62, 0.87] as const,
+    /** "16 industries." slams in the light leading at the slam (the night: the last four cards) */
+    heroLight: 'night' as const,
+    /** the fifteen other cards peel off outwards (pull-in from flyOut − flyAnticip), the hero still up */
+    flyOut: LT - 15,
     flyAnticip: 3,
-    flyStagger: 0.8,
-    flyDur: 10,
-    /** the six keepers glide + resize into the language grid */
-    glide: b(4.4), // 66
-    glideStagger: 1,
-    langs,
-    /** the AI-disclosure underline draws under each language's AI phrase */
-    disclose: langs.map((l) => [l + 4, l + 10] as const),
-    /** quarter notes of the wall: the hour turns — every card already up pulses in the NEW quarter's light, the room bloom swells */
-    beats: [b(1), b(2), b(3)] as const, // 15 30 45
-    /** the camera's slow push during the languages, released for the flow */
-    push: [b(4), b(7.3), b(7.95)] as const, // 60, 110, 119
-    /** "14 languages." exits up (2 f anticipation, 4 f exit) → "After the call." rises 1 f after, on a 16th */
-    titleOut: Math.round(b(7.75)) - 7, // 109
-    titleAfter: Math.round(b(7.75)), // 116
-    collapse,
-    collapseStagger: 0.5,
-    /** the Japanese cell (complete) flies onto the deck and becomes the call */
-    carrierFly: b(7.7), // 116
+    flyStagger: 0.6,
+    flyDur: 12,
+    /** the keeper glides + grows into the English card … */
+    glide: LT - 14,
+    /** … and turns to English (2 f anticipation, lands ≈ 122, before "This" on 124) */
+    enFlip: LT - 4,
+    /** "16 industries." lifts to the band (the hero has held ≈ 0.6 s still, readable) … */
+    titleSwap: LT - 12,
+    /** … exits up out of its mask (2 f dip, 4 f exit, gone at titleIn + 1) … */
+    titleExit: LT - 8,
+    /** … and "14 languages." rises into it: its first letters land ON langTitle */
+    titleIn: LT - 3,
+    langLights,
+    langMain,
+    /** each card arrives: English from the flip, the others slide in from the right and land a frame
+     *  before their voice cuts in */
+    switchIn: LA.map((a, k) => (k === 0 ? LT - 4 : a - 7)),
+    /** each card leaves the focus for its gallery slot as the next one arrives (Japanese: becomes the call) */
+    switchOut: LA.map((_, k) => (k < 5 ? LA[k + 1] - 6 : F - 5)),
+    /** the quick four: the rest of the line (small) a 16th after the big words are said */
+    rest: LA.map((a, k) => a + vWord(ids[k], langMain[k] - 1) + 4),
+    /** the AI disclosure underlined as she says it: English "AI assistant", Japanese "AIアシスタント" */
+    discloseEn: [LA[0] + vWord('lang-en', 4), LA[0] + vFrames('lang-en') - 4] as const,
+    discloseJa: [LA[5] + vWord('lang-ja', 0), LA[5] + vWord('lang-ja', 2)] as const,
+    /** the slow push on the focus card through the languages, released for the flow */
+    langPush: [LT, F - 6, F + 8] as const,
+    /** the gallery drops away (bottom cards first in 9:16), Japanese holding until then */
+    collapse: F - 6,
+    collapseStagger: 1.2,
+    /** "14 languages." exits up; "After the call." rises in the same slot ON the flow beat */
+    titleOut: F - 8,
+    titleAfter: F,
+    /** the Japanese card flies to the first station and becomes THE CALL */
+    carrierFly: F - 5,
+    callIn: F + 1,
     /** the rail's track + hollow nodes appear */
-    trackIn: b(7.7), // 116
+    trackIn: F + 4,
     stations,
-    /** the call card's content is in (under the carrier's blur); its Booked pill pops */
-    callIn: stations[0] - 3, // 117
-    pill: stations[0] + 3, // 123
-    /** station card + content slam in together */
-    cardsIn: stations.map((s) => s - 3), // 117 125 132
+    /** the call card's Booked pill pops */
+    pill: stations[0] + 3,
+    /** Slack + CRM: card and content slam in together */
+    cardsIn: stations.map((s) => s - 3),
     /** node fills start: solid (1.35) ON the station frame */
-    fills: stations.map((s) => s - 2), // 118 126 133
+    fills: stations.map((s) => s - 2),
     /** electric rail segments (the bead reaches each node a frame before its cue) */
     rails: [
       [stations[0] + 1, stations[1] - 1],
       [stations[1] + 1, stations[2] - 1],
-    ] as const, // 121→127, 129→134
+    ] as const,
     /** "Contact saved ✓" confirms a frame before the CRM node */
-    ok: stations[2] - 1, // 134
-    /** the final node's ping */
-    ping: [stations[2], stations[2] + 24] as const, // 135 → 159
-    /** slow push-in of the stage about FLOW_END (zoom 1 → 1.04; the heading stays put) */
-    flowPush: [b(8.55), b(10.8)] as const, // 128 → 162
-    /** the finished rail streams: the first light mote leaves the call node after the confirm and
-     *  reaches the CRM exactly as the CTA iris opens from it (then one per 8th note) */
-    stream: [stations[2] + 1, SCALE.irisToDark[0] + 3] as const, // 136 → 146
-    /** each language orb's pulse (its greeting "said"): 2 f after the flip lands */
-    orbPulse: langs.map((l) => l + 3), // 78 82 86 89 93 97
+    ok: stations[2] - 1,
+    /** the final node's two pings */
+    ping: [stations[2], stations[2] + 24] as const,
+    /** the hold: light motes stream call → CRM on the 8th notes (data syncing); the last reaches the CRM
+     *  exactly as the CTA iris opens from it */
+    stream: [3, 2, 1, 0].map((j) => irisOpen - moteDur - j * (BEAT / 2)),
+    moteDur,
+    /** slow push-in of the stage about FLOW_END (1 → 1.04) from Slack to the end */
+    flowPush: [stations[1], SCALE.irisToDark[1]] as const,
   };
 })();
 
@@ -827,15 +838,37 @@ export const CTA_LOCAL = {
   survivor: [CTA.logoImpact - 6, CTA.logoImpact] as const,
   /** the merged orb blows out into the light as the logo lands */
   burst: [CTA.logoImpact, CTA.logoImpact + 8] as const,
-  /** the four lights' rim comes up round the halo */
-  rimIn: [CTA.logoImpact + 2, CTA.logoImpact + b(1.5)] as const,
+  /** the four lights' arcs come up on the rim once the merged light has bloomed (180 → 206, inOut) */
+  rimIn: [CTA.logoImpact + 6, CTA.logoImpact + 26] as const,
+  /** THE STAGE GOES OUT: as the figure is erased its lit backdrop (the art's backlight, then the
+   *  halo it is erased to) collapses radially into the core — scale 1 → .4, light → 0 on an in-cubic —
+   *  so the merge and the survivor play on black, lit only by the four lights (154 → 174) */
+  stageOut: [CTA.converge[0] + 4, CTA.logoImpact - 6] as const,
+  /** the merged light blooms OUT of the core onto the logo on a soft spring (≈4 % over, settled ≈16 f):
+   *  the logo lands alone and the light opens behind it before Ava names it */
+  bloomFrom: 0.3,
+  /** the reveal's backlight is graded toward the night's lilac (35 %) until the four lights take
+   *  over; it eases back to the room's silver as they pop (CTA_LOCAL.backDim) */
+  lilacBack: 0.35,
+  /** after "…seven" the formation row slowly tightens and leans in (tension before the converge) */
+  drift: [CTA.line + vWord(CTA.lineVoice, VOICE.lines[CTA.lineVoice].words.length - 1) + 6, CTA.converge[0]] as const,
   /** the URL types ON her words: "neuro" | "tech" | "voice.com" start on cta-2 words 0 / 1 / 2
    *  (first character index of each chunk, and its frame), one character per urlStep frames */
   urlChunks: [0, 5, 9] as const,
   urlAt: [0, 1, 2].map((k) => CTA.brandVoice + vWord(CTA.brandVoiceId, k)) as readonly number[],
   urlStep: 0.6,
-  /** the press: down to .94 over this many frames, then back on SPRING.pop */
+  /** "5 free minutes, no card": one word every noteStep frames (a calm read, settled before the press) */
+  noteStep: 2.5,
+  /** the press: a hover lift (anticipation) over the 5 f before it … */
+  pressLift: [CTA.press - 5, CTA.press] as const,
+  /** … down to .94 over this many frames (in2), then back on a soft spring */
   pressDown: 2,
+  /** the plum floods the plate from the arrow (out3): the colour cross */
+  flood: [CTA.press, CTA.press + 5] as const,
+  /** a plum ripple leaves the arrow, 0 → 1.3 × the button's width (out3) */
+  ripple: [CTA.press, CTA.press + 10] as const,
+  /** then a glint crosses the plum face */
+  pressGlint: [CTA.press + 3, CTA.press + 11] as const,
 };
 
 /* ── KNOWLEDGE — fine cuts (knowledge-local frames) ──────────────
@@ -1104,16 +1137,18 @@ const H = (scene: SceneKey, local: number, snd: Snd, light: Light, x: Pan, w: We
   ...o,
 });
 const chime = (l: Exclude<Light, 'none'>, soft = false) => `chime-${l}${soft ? '-soft' : ''}` as Snd;
-/** The industry wall's lights, card by card (scale.tsx). */
+/** The industry wall's lights, card by card (scale.tsx): four cards per light, rush → closing → sunday → night. */
 const WALL: Exclude<Light, 'none'>[] = [...SCALE_LOCAL.wallLight];
-/** the rush wall's ticks climb a step every quarter note (E · G# · B · E' over the rush's E): the build into the slam */
-const WALL_SEMI = Array.from({ length: 16 }, (_, i) => [0, 4, 7, 12][Math.min(3, Math.floor(i / 4))]);
-const WALL_X = [0.5, 0.74, 0.26, 0.74, 0.81, 0.82, 0.18, 0.5, 0.62, 0.87, 0.87, 0.87, 0.12, 0.37, 0.62, 0.87];
-/** the six greetings are all in the closing light (SCALE_LOCAL.langLight); their chimes walk G# B C# | E G# B */
-const LANGS: Exclude<Light, 'none'>[] = Array.from({ length: 6 }, () => SCALE_LOCAL.langLight);
-const LANG_SEMI = [0, 3, 5, -4, 0, 3];
-const LANG_X = [0.17, 0.5, 0.83, 0.16, 0.5, 0.84];
-const LANG_ORB_X = [0.3, 0.63, 0.96, 0.3, 0.63, 0.96];
+/** each light's four cards climb its chord in E major (rush E · closing G#m · sunday B · night E, the 16ths an octave down) */
+const WALL_SEMI = Array.from({ length: 16 }, (_, i) => [[0, 4, 7, 12], [0, 3, 7, 12], [-12, -8, -5, 0], [-12, -8, -5, 0]][i >> 2][i % 4]);
+const WALL_X = SCALE_LOCAL.popX;
+/** the six greetings' lights (the active card leads; the quick four chime G# · B · E′ · E) */
+const LANGS: Exclude<Light, 'none'>[] = [...SCALE_LOCAL.langLights];
+const LANG_NAMES = ['English', 'Romanian', 'Spanish', 'French', 'German', 'Japanese'];
+/** 16:9 pan of the five gallery slots (each card settles there as the next one takes the focus) */
+const LANG_X = [0.12, 0.31, 0.5, 0.69, 0.88];
+/** the focus card's orb (top-left of the card) */
+const LANG_ORB_X = [0.22, 0.25, 0.25, 0.25, 0.25, 0.25];
 /** the five documents' notes: an E-major pentatonic run (E F# G# B C#) */
 const DOC_SEMI = [-7, -5, -3, 0, 2];
 const DOC_X = [0.14, 0.32, 0.5, 0.68, 0.86];
@@ -1300,49 +1335,53 @@ export const HITS: Hit[] = [
   H('knowledge', KL.whip[1] - 1, 'whoosh', 'none', [0.7, 0.1], 1, 'THE WHIP (pans right → left)'),
 
   /* ── SCALE ── */
-  // card 01's pre-roll breath (scale.from − preroll) is the whip's tail
-  H('scale', SCALE_LOCAL.pops[0], 'pop', 'rush', 0.5, 1, 'card 01 pops (rush)'),
-  H('scale', SCALE_LOCAL.camSteps[0][1] - 1, 'swish', 'none', 0.5, 3, 'the camera peels back'),
-  H('scale', SCALE_LOCAL.pops[0], chime('rush'), 'rush', 0.5, 2, 'LIGHT: rush — the rose room breathes in (the rush act)'),
-  ...SCALE_LOCAL.pops.slice(1).map((f, i) => H('scale', f, 'tick', WALL[i + 1], WALL_X[i + 1], 2, `industry ${i + 2} pops (${WALL[i + 1]})`, { semi: WALL_SEMI[i + 1] })),
-  H('scale', SCALE_LOCAL.camSteps[1][1], 'whoosh-soft', 'none', 0.5, 2, 'snap-zoom 2×2 → 3×3'),
-  H('scale', SCALE_LOCAL.beats[0], 'thump', 'none', 0.5, 1, 'quarter: the wall pulses'),
-  H('scale', SCALE_LOCAL.camSteps[2][1], 'whoosh-soft', 'none', 0.5, 2, 'snap-zoom → the full wall'),
-  H('scale', SCALE_LOCAL.beats[1], 'thump', 'none', 0.5, 1, 'quarter: the wall pulses'),
-  H('scale', SCALE_LOCAL.beats[2], 'thump', 'none', 0.5, 1, 'quarter: punch-in kick'),
-  H('scale', SCALE.industriesTitle, 'slam', 'none', 0.5, 1, '“16 industries.” SLAMS'),
-  H('scale', SCALE.industriesTitle, 'strum', 'rush', 0.5, 2, 'all 16 discs lock in the rush light'),
-  H('scale', SCALE.industriesTitle, 'key', 'none', 0.5, 3, '13 letters stamp in', { run: { n: 13, step: 0.6 } }),
-  H('scale', SCALE_LOCAL.flyOut + 4, 'whoosh-soft', 'none', 0.5, 2, 'ten cards peel off outwards', { split: true }),
-  H('scale', SCALE_LOCAL.glide, 'swish', 'none', 0.5, 3, 'keepers glide into the grid'),
-  // each language: the flip, its orb's chime (its greeting lands), then its AI underline —
-  // which falls on the NEXT flip (a 16th later), so all but the last ride inside that flip
-  ...SCALE_LOCAL.langs.map((f, i) => H('scale', f, 'flip', LANGS[i], LANG_X[i], 2, `flips to language ${i + 1}`, i === 0 ? { db: -3 } : {})),
-  // the first greeting lands as the closing light floods the room (SCALE_LOCAL.lightTurn): its chime is the act's light change
-  ...SCALE_LOCAL.orbPulse.map((f, i) =>
-    i === 0
-      ? H('scale', f, chime(LANGS[0]), LANGS[0], LANG_ORB_X[0], 2, 'greeting 1 lands — LIGHT: closing floods the room')
-      : H('scale', f, chime(LANGS[i], true), LANGS[i], LANG_ORB_X[i], 3, `greeting ${i + 1} lands (closing)`, { semi: LANG_SEMI[i] }),
+  // card 01's pre-roll breath (scale.from − preroll) is the whip's tail; the pull-back carries its momentum
+  H('scale', 2, 'swish', 'none', [0.5, 0.3], 3, 'the frame opens: the camera pulls back off card 01'),
+  // THE WALL: eight pops on the 8th notes, eight ticks on the 16ths, each in its card's light; the hour turns every four cards
+  ...SCALE_LOCAL.pops.map((f, i) =>
+    H('scale', f, i < 8 ? 'pop' : 'tick', WALL[i], WALL_X[i], i === 0 ? 1 : 2, `industry ${i + 1} pops (${WALL[i]})`, { semi: WALL_SEMI[i] }),
   ),
-  H('scale', SCALE_LOCAL.disclose[5][0], 'swish', 'none', 0.8, 3, 'underline under AIアシスタント'),
-  H('scale', SCALE_LOCAL.titleSwap + 2, 'whoosh-soft', 'none', [0.5, 0.3], 2, '“16 industries.” → “14 languages.”'),
-  H('scale', SCALE_LOCAL.collapse + 3, 'whoosh-soft', 'none', [0.6, 0.3], 2, 'the cells collapse into the deck'),
-  H('scale', SCALE_LOCAL.titleAfter, 'key', 'none', 0.2, 3, '“After the call.” rises', { run: { n: 8, step: 0.7 } }),
+  ...SCALE_LOCAL.groups.map((f, j) => H('scale', f, chime(SCALE_LOCAL.wallLights[j]), SCALE_LOCAL.wallLights[j], WALL_X[j * 4], 2, `LIGHT: ${SCALE_LOCAL.wallLights[j]} leads four cards`)),
+  H('scale', SCALE.industriesTitle, 'riser-short', 'none', 0.5, 2, 'the 16ths build → peak ON the slam'),
+  H('scale', SCALE.industriesTitle, 'slam', 'none', 0.5, 1, '“16 industries.” SLAMS'),
+  H('scale', SCALE.industriesTitle, 'strum', SCALE_LOCAL.heroLight, 0.5, 2, 'the sixteen discs lock in the night light'),
+  H('scale', SCALE.industriesTitle, 'key', 'none', 0.5, 3, '13 letters stamp in', { run: { n: 13, step: 0.6 } }),
+  H('scale', SCALE_LOCAL.flyOut + 4, 'whoosh-soft', 'none', 0.5, 2, 'fifteen cards peel off outwards', { split: true }),
+  H('scale', SCALE_LOCAL.glide + 3, 'swish', 'none', 0.5, 3, 'the keeper glides into the English card'),
+  H('scale', SCALE_LOCAL.titleExit + 3, 'swish', 'none', 0.5, 3, '“16 industries.” leaves up'),
+  H('scale', SCALE.langTitle, 'tick', 'rush', 0.5, 2, '“14 languages.” lands'),
+  H('scale', SCALE.langTitle, chime(LANGS[0]), LANGS[0], 0.5, 2, 'LIGHT: rush — English'),
+  H('scale', SCALE_LOCAL.enFlip + 6, 'flip', LANGS[0], 0.5, 2, 'the card turns to English'),
+  H('scale', SCALE_LOCAL.discloseEn[0], 'draw', LANGS[0], [0.3, 0.6], 3, '“AI assistant” underlined as she says it'),
+  // the quick four + Japanese: each slides in from the right as its voice cuts in, its orb lights in its light
+  ...SCALE.langAt.slice(1).flatMap((f, j) => {
+    const k = j + 1;
+    return [
+      H('scale', f - 1, 'whoosh-soft', 'none', [0.95, 0.5], 2, `${LANG_NAMES[k]} slides in`),
+      H('scale', f, 'tick', LANGS[k], LANG_ORB_X[k], 2, `${LANG_NAMES[k]}: the orb lights`),
+      H('scale', f, chime(LANGS[k], k < 5), LANGS[k], LANG_ORB_X[k], k < 5 ? 3 : 2, `LIGHT: ${LANGS[k]} — ${LANG_NAMES[k]}`),
+    ];
+  }),
+  ...SCALE_LOCAL.switchOut.slice(0, 5).map((f, k) => H('scale', f + 9, 'tap', 'none', LANG_X[k], 3, `${LANG_NAMES[k]} settles into the gallery`)),
+  H('scale', SCALE_LOCAL.discloseJa[0], 'draw', LANGS[5], [0.3, 0.6], 3, '“AIアシスタント” underlined as she says it'),
+  // after the call
+  H('scale', SCALE_LOCAL.collapse + 3, 'whoosh-soft', 'none', [0.5, 0.5], 2, 'the gallery drops away', { split: true }),
+  H('scale', SCALE_LOCAL.carrierFly + 5, 'whoosh', 'closing', [0.5, 0.21], 2, 'Japanese flies to the first station'),
+  H('scale', SCALE_LOCAL.titleAfter, 'key', 'none', 0.5, 3, '“After the call.” rises', { run: { n: 13, step: 0.7 } }),
   H('scale', SCALE_LOCAL.trackIn, 'tick', 'closing', 0.5, 3, 'rail track + three nodes', { run: { n: 3, step: 2, semi: 2 } }),
-  H('scale', SCALE_LOCAL.carrierFly + 3, 'whoosh', 'closing', [0.84, 0.21], 2, 'the call flies onto the deck'),
   H('scale', SCALE_LOCAL.stations[0], 'land', 'closing', 0.21, 1, 'THE CALL lands'),
   H('scale', SCALE_LOCAL.stations[0], 'click', 'closing', 0.21, 2, 'node 1 fills'),
-  H('scale', SCALE_LOCAL.rails[0][0], 'sheen', 'closing', [0.21, 0.5], 3, 'bead runs call → Slack'),
   H('scale', SCALE_LOCAL.pill, 'pop', 'none', 0.27, 2, 'ember “Booked” pill', { semi: -7 }),
+  H('scale', SCALE_LOCAL.rails[0][0], 'sheen', 'closing', [0.21, 0.5], 3, 'bead runs call → Slack'),
   H('scale', SCALE_LOCAL.cardsIn[1], 'land', 'closing', 0.5, 2, 'Slack card slams in'),
   H('scale', SCALE_LOCAL.stations[1], 'click', 'closing', 0.5, 1, 'Slack node'),
   H('scale', SCALE_LOCAL.rails[1][0], 'sheen', 'closing', [0.5, 0.79], 3, 'bead runs Slack → CRM'),
   H('scale', SCALE_LOCAL.cardsIn[2], 'land', 'closing', 0.79, 2, 'CRM card slams in'),
   H('scale', SCALE_LOCAL.ok, 'ding-s', 'closing', 0.79, 2, '“Contact saved ✓”'),
-  H('scale', SCALE_LOCAL.stations[2], 'confirm', 'closing', 0.79, 1, 'CRM node settles green'),
-  H('scale', SCALE_LOCAL.stream[0], 'sheen', 'closing', [0.21, 0.79], 3, 'a light mote streams to the CRM'),
+  H('scale', SCALE_LOCAL.stations[2], 'confirm', 'closing', 0.79, 1, 'CRM node settles in the closing light'),
   H('scale', SCALE_LOCAL.ping[0] + 4, 'ping', 'closing', 0.79, 3, 'wider ping ring'),
-  H('scale', SCALE_LOCAL.stream[1], 'ding-s', 'closing', 0.79, 2, 'the handoff spark', { semi: 5 }),
+  H('scale', SCALE_LOCAL.stream[0], 'sheen', 'closing', [0.21, 0.79], 3, 'light motes stream to the CRM'),
+  H('scale', SCALE_LOCAL.stream[3] + SCALE_LOCAL.moteDur, 'ding-s', 'closing', 0.79, 2, 'the handoff spark', { semi: 5 }),
 
   /* ── CTA ── */
   H('cta', CTA_LOCAL.iris[0] + 6, 'whoosh-rev', 'none', [0.79, 0.5], 2, 'the dark iris opens'),
@@ -1375,13 +1414,17 @@ export const HITS: Hit[] = [
   // MIX.impact — and the tonal duck, deeper under the name — MIX.name — takes it back for her line)
   H('cta', CTA.logoImpact, 'chord', 'night', 0.5, 1, 'THE FOUR LIGHTS ring together'),
   H('cta', CTA_LOCAL.ring[0], 'shock', 'none', 0.5, 2, 'the shockwave ring sweeps past', { layer: true }),
-  H('cta', CTA.button, 'pop', 'night', 0.5, 3, '“Start free →” pops with the logo (folded into the impact)'),
+  H('cta', CTA.button, 'pop', 'night', 0.5, 3, '“Start free →” rises on “…Voice.” (its point of light peaks here)', { db: -2 }),
   H('cta', CTA.note, 'tap', 'none', 0.5, 3, '“5 free minutes, no card”', { db: -4 }),
   // (the URL types ON her words — "neuro" | "tech" | "voice.com" at CTA_LOCAL.urlAt — and makes
   // no sound of its own: her voice is its sound, so nothing sits on the name; likewise the
   // four-light rim (rimIn) and the plate's glint ride the impact's chord, unvoiced)
-  H('cta', CTA.press, 'click', 'night', 0.5, 1, 'the button is clicked'),
-  H('cta', CTA.press + CTA_LOCAL.pressDown, 'tap', 'night', 0.5, 3, 'the plate springs back'),
+  // THE PRESS — the film's last action, heard: the click (down), a felt knock under it, the
+  // release a few frames later, and the glint crossing the plum face
+  H('cta', CTA.press, 'click', 'night', 0.5, 1, 'the button is clicked (plum floods from the arrow)', { db: 5 }),
+  H('cta', CTA.press, 'thump', 'none', 0.5, 3, 'the click’s felt knock (the ripple leaves)', { db: -3 }),
+  H('cta', CTA.press + CTA_LOCAL.pressDown + 1, 'tap', 'night', 0.5, 3, 'the plate springs back (release)', { db: -5 }),
+  H('cta', CTA_LOCAL.pressGlint[0], 'glint', 'night', [0.45, 0.6], 3, 'a glint crosses the plum face'),
 ];
 /* ── voices ── */
 export type Cue = {

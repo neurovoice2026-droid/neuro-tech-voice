@@ -1,29 +1,28 @@
 /**
- * The act's titles, in one slot that travels — and never two titles in it at
- * once:
+ * The act's titles, in ONE centred slot that travels — never two titles in
+ * it at once:
  *
  *   hero     "16 industries." SLAMS centred on the wall on the downbeat the
- *            16-pop run resolves to (hit.wav): letters 1.75 → 1 on a 12 %-
- *            overshoot spring, 0.6 f apart, "16" in the hero light's ink (the
- *            rush: the wall's own light) with a glint across it, velocity blur
- *   swap     WITH the fly-out the slot lifts to the top band (2 f dip,
- *            small overshoot, shutter blur) — out of the cell band before any
- *            cell turns
- *   exit     "16 industries." leaves UP out of its mask: 2 f anticipation (a
- *            dip), a 4 f power2.in exit with a vertical ghost blur (a DirBlur
- *            + two trailing ghosts) — gone the frame before…
- *   in       …"14 languages." rises into the same mask letter by letter (a
- *            4 %-overshoot spring, 0.3 f apart, velocity blur); its "14" in
- *            the closing ink catches a glint and a soft bloom as it lands
+ *            16th-note run resolves to: letters 1.75 → 1 on a 12 %-overshoot
+ *            spring, 0.6 f apart, velocity blur, "16" in the hero light's ink
+ *            (a glint crosses it as the slam settles), a soft white bloom
+ *            behind it over the dimmed wall. It HOLDS, still.
+ *   swap     as the cards leave, the slot lifts to the band (2 f dip, a small
+ *            overshoot, shutter blur) …
+ *   exit     … and "16 industries." leaves UP out of its mask: 2 f dip, a 4 f
+ *            power2.in exit with a vertical ghost blur (a DirBlur + two
+ *            trailing ghosts) — gone the frame before …
+ *   in       … "14 languages." rises into the mask letter by letter (a 4 %-
+ *            overshoot spring, 0.3 f apart, velocity blur); its "14" in
+ *            English's light catches a glint and a soft bloom as it lands
  *   out      "14 languages." leaves the same way; "After the call." rises
- *            letter by letter (the site's heading reveal) 1 f after it is gone
+ *            into the same slot on the flow beat.
  */
 import React from 'react';
-import { C, FONT, LIGHTS, TRACK, type LightId } from '../../theme';
+import { C, FONT, LIGHTS, type LightId } from '../../theme';
 import { aos, EASE, tween } from '../../lib/motion';
 import { DirBlur, dirBlurRef, sigmaFor } from './MotionBlur';
-import { Rise } from './Rise';
-import { figureInk, HERO_LIGHT, LANG_LIGHT, rgba } from './lights';
+import { figureInk, HERO_LIGHT, langLight, rgba } from './lights';
 import { dspring } from './curves';
 
 export type TitleTiming = { hero: number; swap: number; exit: number; in: number; out: number; after: number };
@@ -33,18 +32,20 @@ type Pose = { x: number; y: number; size: number };
 const SLAM = { stiffness: 560, damping: 20.5, mass: 0.6 };
 /** the slot's travel to the band */
 const MOVE = { stiffness: 380, damping: 25, mass: 0.8 };
-/** the band title's letters: ≈ 4 % overshoot, settled in ~8 f */
+/** the band titles' letters: ≈ 4 % overshoot, settled in ~8 f */
 const RISE = { stiffness: 420, damping: 30, mass: 1 };
 /** cap centre below the top of a line-height-1 box, in em (Instrument Sans) */
 const CAP_MID = 0.56;
 const HERO = '16 industries.';
-/** the hero line's advance, in em (Instrument Sans 500, −0.04em) — for its motion blur */
-const HERO_W = 5.55;
+const BAND = '14 languages.';
+const AFTER = 'After the call.';
 /** the exit: 2 f dip, then 4 f up and out of the mask */
 const EXIT_A = 2;
 const EXIT_D = 4;
 /** how far the exit travels (em): clear of the mask's top edge (0.14 em of padding) */
 const EXIT_EM = 1.3;
+/** the band titles' light: English leads as "14 languages." lands */
+const BAND_LIGHT: LightId = langLight(0);
 
 const face: React.CSSProperties = {
   fontFamily: FONT.ui,
@@ -77,7 +78,7 @@ const figure = (light: LightId, half: 0 | 1, glint: number): React.CSSProperties
   };
 };
 
-/** the slot's pose at f: anchor x (centred → left-aligned), cap-centre y, scale vs the hero size */
+/** the slot's pose at f: centre x, cap-centre y, scale vs the hero size */
 function poseAt(f: number, T: TitleTiming, hero: Pose, band: Pose) {
   const m = aos(f, T.swap, { anticip: 2, depth: 0.035, config: MOVE });
   return {
@@ -97,28 +98,47 @@ function exitAt(f: number, at: number): number | null {
   return 0.06 * (1 - u) - EXIT_EM * EASE.in2(Math.max(0, u));
 }
 
-export const Titles: React.FC<{
-  t: number;
-  T: TitleTiming;
-  hero: Pose;
-  band: Pose;
-  after: Pose;
-}> = ({ t, T, hero, band, after }) => {
+/** a band title rising letter by letter into the mask (figure: the first two letters in a light's ink) */
+function riseText(text: string, t: number, at: number, size: number, figLight?: LightId) {
+  const glint = tween(t, [at + 3, at + 13], [0, 1], EASE.inOut);
+  let k = 0;
+  return Array.from(text).map((ch, i) => {
+    if (ch === ' ') return <span key={i}> </span>;
+    const s0 = at + 0.3 * k++;
+    const P = (f: number) => aos(f, s0, { anticip: 2, depth: 0.08, config: RISE });
+    const p = P(t);
+    const pv = P(t + 0.5) - P(t - 0.5);
+    const bl = Math.min(6, Math.abs(pv) * 1.12 * size * 0.09);
+    return (
+      <span
+        key={i}
+        style={{
+          display: 'inline-block',
+          transform: p < 0.9999 || p > 1.0001 ? `translateY(${((1 - p) * 1.12).toFixed(4)}em)` : undefined,
+          filter: bl > 0.15 ? `blur(${bl.toFixed(2)}px)` : undefined,
+          ...(figLight && i < 2 ? figure(figLight, i as 0 | 1, glint) : null),
+        }}
+      >
+        {ch}
+      </span>
+    );
+  });
+}
+
+export const Titles: React.FC<{ t: number; T: TitleTiming; hero: Pose; band: Pose }> = ({ t, T, hero, band }) => {
   if (t < T.hero - 1) return null;
   const P = poseAt(t, T, hero, band);
-  // shutter blur on the travel: the GLYPHS' own speed (the anchor travels
-  // further than the text: the −50 % centring unwinds as it goes)
+  // shutter blur on the slot's travel
   const P0 = poseAt(t - 0.5, T, hero, band);
   const P1 = poseAt(t + 0.5, T, hero, band);
-  const mid = (Q: ReturnType<typeof poseAt>) => Q.x + (0.5 - 0.5 * (1 - Q.m)) * HERO_W * hero.size * Q.s;
-  const sx = Math.min(12, sigmaFor(mid(P1) - mid(P0)));
   const sy0 = Math.min(12, sigmaFor(P1.y - P0.y));
 
-  // which title is in the slot: A until it is gone, B from T.in until it is gone
+  // which title is in the slot: A until it is gone, B from T.in until it is gone, then C
   const eA = exitAt(t, T.exit);
   const eB = t < T.in - 3 ? null : exitAt(t, T.out);
   const showA = eA !== null;
   const showB = eB !== null && !showA;
+  const showC = !showA && !showB && t >= T.after - 3;
   // an exit's own vertical speed (screen px / frame) → its ghost blur
   const exitSpeed = (at: number) => {
     const a = exitAt(t - 0.5, at) ?? -EXIT_EM;
@@ -133,11 +153,11 @@ export const Titles: React.FC<{
   const vA = showA ? exitSpeed(T.exit) : 0;
   const vB = showB ? exitSpeed(T.out) : 0;
   const sy = Math.min(14, Math.hypot(sy0, sigmaFor(vA + vB)));
-  const blur = dirBlurRef('scale-title', sx / P.s, sy / P.s);
+  const blur = dirBlurRef('scale-title', 0, sy / P.s);
   // a soft white bloom behind the hero title (legibility over the dimmed wall), gone on the move
   const halo = tween(t, [T.hero, T.hero + 4], [0, 1], EASE.out3) * (1 - tween(t, [T.swap, T.swap + 6], [0, 1], EASE.out3));
 
-  /** the slot (its own line box); `clip` masks it once a title starts leaving / arriving */
+  /** the slot (its own line box, centred); `clip` masks it once a title starts leaving / arriving */
   const slot = (children: React.ReactNode, dyEm: number, clip: boolean, key: string, op = 1) => (
     <div
       key={key}
@@ -148,7 +168,7 @@ export const Titles: React.FC<{
         fontSize: hero.size,
         ...face,
         padding: '0.14em 0 0.24em',
-        transform: `translate(${(-50 * (1 - P.m)).toFixed(3)}%, ${(-(CAP_MID + 0.14) * hero.size).toFixed(2)}px)`,
+        transform: `translate(-50%, ${(-(CAP_MID + 0.14) * hero.size).toFixed(2)}px)`,
         clipPath: clip ? 'inset(0 -0.2em 0 -0.2em)' : undefined,
         opacity: op < 0.999 ? op : undefined,
       }}
@@ -157,7 +177,7 @@ export const Titles: React.FC<{
     </div>
   );
 
-  // A: the slam (letters), "16" in the hero light's ink (the rush) with a glint as the slam settles
+  // A: the slam (letters), "16" in the hero light's ink with a glint as the slam settles
   let k = 0;
   const glintA = tween(t, [T.hero + 3, T.hero + 13], [0, 1], EASE.inOut);
   const heroText = Array.from(HERO).map((ch, i) => {
@@ -184,37 +204,15 @@ export const Titles: React.FC<{
       </span>
     );
   });
-
-  // B: "14 languages." rises letter by letter into the mask (from below it)
-  const BAND = '14 languages.';
-  const glintB = tween(t, [T.in + 3, T.in + 13], [0, 1], EASE.inOut);
-  let kb = 0;
-  const bandText = Array.from(BAND).map((ch, i) => {
-    if (ch === ' ') return <span key={i}> </span>;
-    const s0 = T.in + 0.3 * kb++;
-    const p = aos(t, s0, { anticip: 2, depth: 0.08, config: RISE });
-    const pv = aos(t + 0.5, s0, { anticip: 2, depth: 0.08, config: RISE }) - aos(t - 0.5, s0, { anticip: 2, depth: 0.08, config: RISE });
-    const bl = Math.min(6, Math.abs(pv) * 1.12 * hero.size * P.s * 0.09);
-    return (
-      <span
-        key={i}
-        style={{
-          display: 'inline-block',
-          transform: p < 0.9999 || p > 1.0001 ? `translateY(${((1 - p) * 1.12).toFixed(4)}em)` : undefined,
-          filter: bl > 0.15 ? `blur(${bl.toFixed(2)}px)` : undefined,
-          ...(i < 2 ? figure(LANG_LIGHT, i as 0 | 1, glintB) : null),
-        }}
-      >
-        {ch}
-      </span>
-    );
-  });
-  // the "14"'s landing bloom (the closing light), under the figure
+  const bandText = riseText(BAND, t, T.in, hero.size * P.s, BAND_LIGHT);
+  const afterText = riseText(AFTER, t, T.after, hero.size * P.s);
+  // the "14"'s landing bloom (English's light), under the figure
   const bloomB = showB ? (t < T.in + 2 ? 0 : 1 - tween(t, [T.in + 2, T.in + 16], [0, 1], EASE.out3)) : 0;
   const ghost = (v: number, children: React.ReactNode, dyEm: number, key: string, op: number) =>
     Math.abs(v) > 6
       ? [0.35, 0.7].map((d, gi) => slot(children, dyEm + (d * Math.abs(v)) / (hero.size * P.s), true, `${key}-g${gi}`, op * [0.28, 0.12][gi]))
       : null;
+  const pale = LIGHTS[BAND_LIGHT].orb[3];
 
   return (
     <>
@@ -236,16 +234,16 @@ export const Titles: React.FC<{
         <div
           style={{
             position: 'absolute',
-            left: band.x - band.size * 0.6,
+            left: band.x - band.size * 3.2,
             top: band.y - band.size * 1.1,
             width: band.size * 2.6,
             height: band.size * 2.2,
-            background: `radial-gradient(closest-side, ${rgba(LIGHTS[LANG_LIGHT].orb[3], 0.7 * bloomB)}, ${rgba(LIGHTS[LANG_LIGHT].orb[3], 0)})`,
+            background: `radial-gradient(closest-side, ${rgba(pale, 0.7 * bloomB)}, ${rgba(pale, 0)})`,
           }}
         />
       ) : null}
-      {blur ? <DirBlur id="scale-title" sx={sx / P.s} sy={sy / P.s} /> : null}
-      {showA || showB ? (
+      {blur ? <DirBlur id="scale-title" sx={0} sy={sy / P.s} /> : null}
+      {showA || showB || showC ? (
         <div
           style={{
             position: 'absolute',
@@ -260,29 +258,9 @@ export const Titles: React.FC<{
           {showA ? slot(heroText, eA ?? 0, t >= T.exit, 'a', exitFade(T.exit)) : null}
           {showB ? ghost(vB, bandText, eB ?? 0, 'gb', exitFade(T.out)) : null}
           {showB ? slot(bandText, eB ?? 0, true, 'b', exitFade(T.out)) : null}
-        </div>
-      ) : null}
-      {t >= T.after - 3 ? (
-        <div
-          style={{
-            position: 'absolute',
-            left: after.x - after.size * 0.04,
-            top: after.y,
-            fontFamily: FONT.ui,
-            fontWeight: 500,
-            fontSize: after.size,
-            lineHeight: 1.04,
-            letterSpacing: TRACK.section,
-            color: C.ink,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          <Rise text="After the call." t={t} at={T.after} stagger={0.35} />
+          {showC ? slot(afterText, 0, t < T.after + 14, 'c') : null}
         </div>
       ) : null}
     </>
   );
 };
-
-/** a small spring pop (0 → 1 with overshoot) for inline accents */
-export const popAt = (t: number, at: number) => dspring(t - at, { stiffness: 420, damping: 18, mass: 0.7 });

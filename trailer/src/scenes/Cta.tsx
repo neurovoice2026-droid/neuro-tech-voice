@@ -80,30 +80,33 @@ const LOGO_RATIO = 2148 / 2999;
 const WORDMARK_TOP = 1905 / 2148;
 
 function geo(L: Layout) {
-  // 9:16: the whole stack sits lower so the frame is used to ~76 % (the
-  // portrait moves with it: her eyes are P)
-  const P = { x: L.cx, y: L.pick(L.cy - 170, 710) };
-  const logoW = L.pick(560, 680);
+  // 9:16: the whole film-to-end-card stack lives inside the social safe zone
+  // (y 250 – 1500): her eyes / the logo (P) sit higher, the headline and the
+  // end card's last line end above y 1500
+  const P = { x: L.cx, y: L.pick(L.cy - 170, 650) };
+  const logoW = L.pick(500, 680);
   const logoH = logoW * LOGO_RATIO;
   const wordmark = { top: P.y - logoH / 2 + logoH * WORDMARK_TOP, bottom: P.y + logoH / 2 };
-  // the plate is 2.8em tall: label line (1.2em) + label padding (.8em × 2)
-  const button = { y: L.pick(782, 1222), fontSize: L.pick(60, 66) };
+  // the plate is 2.8em tall: label line (1.2em) + label padding (.8em × 2); phone-legible
+  // label (≥ 64 / 56 px)
+  const button = { y: L.pick(712, 1112), fontSize: L.pick(68, 66) };
   return {
     P,
     logoW,
     logoH,
     wordmark,
     /** halo centre sits under the logo centre so the wordmark is deep in the light */
-    haloC: { x: P.x, y: P.y + L.pick(70, 80) },
+    haloC: { x: P.x, y: P.y + L.pick(64, 80) },
     /**
      * rx, ry above, ry below. BEFORE the impact: the art's own wide silver
-     * backlight (the figure is erased to it). AFTER: the merged light, a
-     * smaller lilac-white light hugging the logo (it condenses onto it on
-     * the impact spring): the wordmark stays in the light (hr ≤ .86), the
-     * button's top edge on the night (hr ≥ 1.3)
+     * backlight (the figure is erased to it; it collapses into the core with
+     * her — CTA_LOCAL.stageOut). AFTER: the merged light, a lilac-white light
+     * hugging the logo that BLOOMS out of the core on the impact (soft
+     * spring): the wordmark stays in the light (hr ≤ .86), its lit edge clear
+     * of the frame top (16:9: ≥ 90 px), the button on the night
      */
     haloR: L.pick([720, 570, 205] as const, [620, 660, 290] as const),
-    haloEnd: L.pick([460, 390, 192] as const, [540, 500, 248] as const),
+    haloEnd: L.pick([410, 318, 176] as const, [520, 470, 240] as const),
     haloPow: 2,
     /**
      * once the logo is in, the light's underside settles under the wordmark
@@ -114,25 +117,36 @@ function geo(L: Layout) {
     floor: L.pick({ y: wordmark.bottom + 12, len: 120, k: 0.55, rise: 110 }, { y: wordmark.bottom + 18, len: 160, k: 0.35, rise: 140 }),
     /** the reveal's light band (half-diagonals), see revealAt */
     reveal: L.pick([0.22, 0.88] as const, [0.28, 0.86] as const),
-    /** the art's framing: base zoom (the portrait crop is pushed in so its glitch band stays out) */
-    frame: L.pick({ zoom: 1.02, band: 0 }, { zoom: 1.36, band: 0.15 }),
+    /**
+     * the art's framing: base zoom, glitch-band edge (v), and the 9:16 crop's
+     * shoulder line (v) above which its backlight feathers out. 9:16 is drawn
+     * at 1.2 (was 1.36): the 900 × 1600 portrait is upscaled less, so her face
+     * stays crisp; the band the wider crop could reach is filled and scrimmed
+     */
+    frame: L.pick({ zoom: 1.02, band: 0, edge: 0 }, { zoom: 1.2, band: 0.15, edge: 0.632 }),
+    /** the dolly into the eyes over the scene (9:16 pushes less: the crop is already close) */
+    dolly: L.pick(0.12, 0.07),
     headline: {
       lines: L.pick(['AI voice agents that book', 'your customers 24/7.'], ['AI voice agents', 'that book your', 'customers 24/7.']),
       fontSize: L.pick(76, 84),
-      cy: L.pick(880, 1490),
+      // 9:16: the three rows run ≈ y 1190 – 1450 (marks 1175 – 1465): all above the caption UI
+      cy: L.pick(880, 1320),
       markGap: 28,
     },
+    /** a soft dark pool under the headline (radial, ≈40 % ink) so an orb's bloom never washes the type */
+    scrim: L.pick({ w: 1500, h: 430 }, { w: 1080, h: 560 }),
     button,
-    note: { y: L.pick(906, 1384), size: L.pick(36, 40) },
-    url: { y: L.pick(974, 1470), size: L.pick(46, 50), dot: 20, rule: L.pick(1240, L.width - 2 * L.safe.x) },
+    note: { y: L.pick(866, 1272), size: L.pick(64, 56) },
+    url: { y: L.pick(977, 1380), size: L.pick(64, 56), dot: L.pick(22, 20), rule: L.pick(1400, L.width - 2 * L.safe.x) },
     /** the four lights' orbit about her face: radii, ring centre drop below the eyes, tilt, orb diameter */
     orbit: L.pick(
       // the ring's centre sits at her mouth, so its front passes under her
       // chin (≈ y 730, clear of the headline), its back behind her forehead
       { rx: 560, ry: 210, drop: 150, tilt: -0.09, d: 130, tight: 0.75, formDrop: 30 },
-      // 9:16: her head fills the width, so the ring runs wide and tightens less
-      // (her head fills the width: the two that pop "behind" pop beside her cheeks, in view)
-      { rx: 452, ry: 250, drop: 270, tilt: -0.08, d: 132, tight: 0.55, formDrop: 46, phase: [0.7, 1.95, 4.35, 5.6] },
+      // 9:16: the ring runs wide (the two that pop "behind" pop beside her cheeks, in view) and
+      // sits higher, so its front (and the formation row under her chin) stays above the
+      // headline (orb bottoms ≤ y ≈ 1150)
+      { rx: 430, ry: 205, drop: 196, tilt: -0.08, d: 128, tight: 0.55, formDrop: 50, phase: [0.7, 1.95, 4.35, 5.6] },
     ),
     /** the shockwave leaves from the merged orb, out past the frame */
     ring: [60, L.pick(1150, 1100)] as const,
@@ -176,10 +190,10 @@ function cameraAt(t: number) {
       shake = a;
     }
     zoom = mix(1.018, 1, g);
-    // the button's pop and its click each kick the frame
-    if (t >= CTA.button) zoom += 0.004 * Math.exp(-(t - CTA.button) / 3.5) * Math.min(1, (t - CTA.button) / 2);
+    // (the end card builds calmly: no kick on the button's rise) — only the click is felt, a
+    // small push that eases in over 2 f and dies away
     const u = t - (CTA.press + K.pressDown);
-    if (u >= 0) zoom += 0.01 * Math.exp(-u / 4);
+    if (u >= 0) zoom += 0.006 * Math.exp(-u / 5) * Math.min(1, u / 2);
   }
   return { x: rest(t, x, 0), y: rest(t, y, 0), zoom: rest(t, zoom, 1), shake: rest(t, shake, 0) };
 }
@@ -191,6 +205,10 @@ function onLayer(L: Layout, p: { x: number; y: number }, cam: { x: number; y: nu
 }
 
 const rgb01 = (hex: string) => hexToRgb(hex) as [number, number, number];
+/** in-cubic: the stage leaves slowly, then is swallowed */
+const IN3 = Easing.bezier(0.55, 0.055, 0.675, 0.19);
+/** the merged light opening behind the logo: ≈4 % over, settled in ≈16 f (a bloom, not a pop) */
+const BLOOM = { stiffness: 110, damping: 15, mass: 1 };
 /** the reveal's light curve: starts at ≈1.5× its mean rate, settles softly */
 const REVEAL = Easing.bezier(0.33, 0.5, 0.45, 1);
 /**
@@ -226,12 +244,20 @@ export const Cta: React.FC = () => {
   // the halo breathes under the end card, then its amplitude eases to 0 into the hold, where it freezes
   const breathAmp = tween(t, [K.breath, K.breath + 30], [0, 1], EASE.inOut) * (1 - tween(t, K.breathOut, [0, 1], EASE.inOut));
   const breath = t < K.breath || t >= K.breathOut[1] ? 0 : Math.sin(((t - K.breath) / 75) * Math.PI * 2) * breathAmp;
-  // before the impact: the art's wide backlight (a touch smaller in the pull-back);
-  // ON the impact the merged light condenses onto the logo (site spring)
-  const condense = t < I ? 0 : rest(t, springAt(t, I, SPRING.site), 1);
-  const haloScale = 1 - 0.05 * pull * (t < I ? 1 : 0);
-  const hC = onLayer(L, G.haloC, cam, 0.3);
-  const haloR = [0, 1, 2].map((k) => mix(G.haloR[k], G.haloEnd[k], condense) * hC.z * haloScale) as [number, number, number];
+  // BEFORE the impact: the art's wide backlight — the stage. As she is erased it collapses
+  // radially into the core (scale 1 → .4, light → 0, in-cubic): the merge plays on black.
+  // ON the impact the merged light BLOOMS out of the core onto the logo (soft spring, ≈4 % over)
+  const stage = tween(t, K.stageOut, [0, 1], IN3); // its size: leaves slowly, then is swallowed
+  const stageLight = tween(t, K.stageOut, [0, 1], EASE.inOut); // its light: gone with it
+  const bloomS = t < I ? 0 : rest(t, springAt(t, I, BLOOM), 1);
+  const haloScale = t < I ? (1 - 0.05 * pull) * mix(1, 0.4, stage) : mix(K.bloomFrom, 1, bloomS);
+  const hC = onLayer(
+    L,
+    t < I ? { x: G.haloC.x, y: mix(G.haloC.y, G.P.y, stage) } : { x: G.haloC.x, y: mix(G.P.y, G.haloC.y, Math.min(1, bloomS)) },
+    cam,
+    0.3,
+  );
+  const haloR = [0, 1, 2].map((k) => (t < I ? G.haloR[k] : G.haloEnd[k]) * hC.z * haloScale) as [number, number, number];
   // while the lights are in frame the room's silver backlight steps down (they lead);
   // it returns ON the impact as their merged light
   const backGain = t < I ? mix(1, 0.45, tween(t, K.backDim, [0, 1], EASE.inOut)) : 1;
@@ -239,7 +265,7 @@ export const Cta: React.FC = () => {
   const tint = t < I ? tween(t, [K.merge[0], I], [0, 0.12], EASE.inOut) : 1;
   // the dolly into the eyes, plus the slow push from the first frame they show
   const eyePush = 1 + 0.06 * tween(t, K.eyePush, [0, 1], EASE.out3);
-  const zoom = mix(1.0, 1.12, tween(t, [-8, I], [0, 1], EASE.inOut)) * eyePush;
+  const zoom = mix(1.0, 1 + G.dolly, tween(t, [-8, I], [0, 1], EASE.inOut)) * eyePush;
   const voiceGlow = brandEnv(t); // "Neuro Tech Voice." — the light answers her
   const u0 = {
     mouse: [mix(1.2, -0.2, orbit), mix(0.36, 0.62, orbit)] as [number, number],
@@ -262,7 +288,10 @@ export const Cta: React.FC = () => {
     haloR,
     haloGain: rest(
       t,
-      (t < I ? backGain * (1 - 0.06 * pull) : 1) * (1 + 0.32 * flare) * (1 + 0.009 * breath) * (1 + 0.025 * voiceGlow),
+      (t < I ? backGain * (1 - 0.06 * pull) * (1 - stageLight) : mix(0.6, 1, Math.min(1, bloomS))) *
+        (1 + 0.32 * flare) *
+        (1 + 0.009 * breath) *
+        (1 + 0.025 * voiceGlow),
       1,
     ),
     floor: [
@@ -421,6 +450,14 @@ export const Cta: React.FC = () => {
     backGain,
     tint,
     glowOver: 0.45,
+    // the reveal's light carries the night's lilac until the four lights take over (then silver)
+    backLilac: K.lilacBack * (1 - tween(t, K.backDim, [0, 1], EASE.inOut)),
+    plateEdge: G.frame.edge,
+    // the torn filaments are light: the nearest orb's colour (the night's lilac before they are in)
+    tearTint: 1,
+    tearColor: rgb01(C.lilac),
+    // … and they stay within ~40 px of her head matte (in head-ellipse units: 2.1 eye offsets)
+    headCap: 1 + 40 / (L.width * G.frame.zoom * zoom * 2.1 * art.eye[0]) - 0.22,
   };
 
   /* ── iris ── */
@@ -443,6 +480,10 @@ export const Cta: React.FC = () => {
     collapse: K.collapse,
     marksCollapse: K.marksIn,
   };
+  // the pool under the headline: in with its first word, out as the words are pulled into the core
+  const scrimO =
+    tween(t, [spec.wordAt[0] - 4, spec.wordAt[0] + 10], [0, 1], EASE.out3) *
+    (1 - tween(t, [K.collapse.from - 2, K.collapse.from + 8], [0, 1], EASE.inOut));
   const reach = Math.hypot(L.width, L.height) * 0.62;
   const streaks = buildStreaks(K.streaks[0], K.streaks[1], G.P, L.width, L.height);
   const rings = K.rings.map((r0, i) => ({ t0: K.streaks[0] + 4 + i * 5, t1: I - 3 + i, r0: reach * r0 }));
@@ -494,6 +535,19 @@ export const Cta: React.FC = () => {
         <PopAccents rings={ringsDom} sparks={sparks} w={L.width} h={L.height} />
         <Camera x={cam.x} y={cam.y} zoom={cam.zoom}>
           <Layer depth={1}>
+            {scrimO > 0.005 ? (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: L.cx - G.scrim.w / 2,
+                  top: G.headline.cy - G.scrim.h / 2,
+                  width: G.scrim.w,
+                  height: G.scrim.h,
+                  opacity: scrimO,
+                  background: 'radial-gradient(closest-side, rgba(6,4,10,0.46) 0%, rgba(6,4,10,0.38) 42%, rgba(6,4,10,0.14) 76%, rgba(6,4,10,0) 100%)',
+                }}
+              />
+            ) : null}
             <Headline t={t} spec={spec} />
           </Layer>
           <Layer depth={1.3}>
@@ -560,10 +614,17 @@ export const Cta: React.FC = () => {
               </div>
             ) : null}
             <Row y={G.button.y}>
-              <CoverCta t={t} at={CTA.button} press={CTA.press} fontSize={G.button.fontSize} rest={rest} />
+              <CoverCta
+                t={t}
+                at={CTA.button}
+                press={CTA.press}
+                fontSize={G.button.fontSize}
+                spec={{ lift: K.pressLift, down: K.pressDown, flood: K.flood, ripple: K.ripple, glint: K.pressGlint }}
+                rest={rest}
+              />
             </Row>
             <Row y={G.note.y}>
-              <Note t={t} at={CTA.note} size={G.note.size} rest={rest} />
+              <Note t={t} at={CTA.note} step={K.noteStep} size={G.note.size} rest={rest} />
             </Row>
             <Row y={G.url.y}>
               <Url

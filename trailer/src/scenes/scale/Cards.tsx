@@ -1,18 +1,15 @@
 /**
  * The white cards of the white act (site: white, radius 21.6, SHADOW.card
- * plus a long soft drop), and what goes inside them: an industry (lucide
- * icon + label) or a language (label + the greeting in the cinema face,
- * the AI phrase big with the site's electric underline).
+ * plus a long soft drop), and the industry face (lucide icon on a pearl disc
+ * + label). The language faces are in scale/Langs.tsx.
  */
 import React from 'react';
 import { random } from 'remotion';
-import { C, FONT, LIGHTS, R, TRACK, type LightId } from '../../theme';
+import { C, FONT, LIGHTS, R, type LightId } from '../../theme';
 import { bloom, mixColor } from '../../lib/lights';
 import { EASE, tween } from '../../lib/motion';
-import { MeshOrb } from '../../components/MeshOrb';
 import { discHot, discRest, litFill, rgba } from './lights';
-import type { Industry, Lang, Setting } from './data';
-import { underlined } from './data';
+import type { Industry } from './data';
 import type { Rect } from './geometry';
 import { dspring } from './curves';
 
@@ -39,10 +36,12 @@ export const Box: React.FC<{
   z?: number;
   /** CSS filter (blur / a DirBlur url) */
   filter?: string;
-  /** a 2 px ring inside the card (the live language cell) */
+  /** a 2 px ring inside the card (the active language card) */
   ring?: string;
+  /** extra box-shadow: the card's small glow in its light */
+  glow?: string;
   origin?: string;
-}> = ({ r, transform, opacity = 1, lift = 0, shadowAlpha = 1, children, radius = R.x2, bg = C.white, z, filter, ring, origin }) =>
+}> = ({ r, transform, opacity = 1, lift = 0, shadowAlpha = 1, children, radius = R.x2, bg = C.white, z, filter, ring, glow, origin }) =>
   opacity <= 0.004 ? null : (
     <div
       style={{
@@ -53,7 +52,7 @@ export const Box: React.FC<{
         height: r.h,
         borderRadius: radius,
         background: bg,
-        boxShadow: cardShadow(lift, shadowAlpha) + (ring ? `, inset 0 0 0 2px ${ring}` : ''),
+        boxShadow: cardShadow(lift, shadowAlpha) + (ring ? `, inset 0 0 0 2px ${ring}` : '') + (glow ? `, ${glow}` : ''),
         transform,
         transformOrigin: origin,
         opacity: opacity < 0.999 ? opacity : undefined,
@@ -162,29 +161,15 @@ export const IndustryFace: React.FC<{
   /** …in this light (one light for the whole wall), strummed: this card lights `lockDelay` f after the slam */
   lockLight?: LightId;
   lockDelay?: number;
-  /** the quarter-note pulse: the discs already on the wall light (0.7) on these frames… */
-  beats?: readonly number[];
-  /** …each in the NEW hour's light (beats[j] → beatLights[j]) */
-  beatLights?: readonly LightId[];
   /** static: no inner motion (flyers, glides) */
   still?: boolean;
   /** the tick's ripple + sparks (off for ghost copies) */
   accents?: boolean;
-}> = ({ d, t, at, tick, pad, iconSize, labelSize, light: own, lockAt, lockLight, lockDelay = 0, beats, beatLights, still = false, accents = true }) => {
+}> = ({ d, t, at, tick, pad, iconSize, labelSize, light: own, lockAt, lockLight, lockDelay = 0, still = false, accents = true }) => {
   const { Icon } = d;
-  // ONE light at a time on a disc: its own hit, the hour's pulse, or the hero's lock — whichever is strongest
-  let k = flashAt(t, tick, 6);
+  // ONE light at a time on a disc: its own hit or the hero's lock — whichever is strongest
+  let k = flashAt(t, tick, 8);
   let light: LightId = own;
-  if (beats)
-    beats.forEach((b, j) => {
-      if (b <= tick || (lockAt !== undefined && b >= lockAt)) return;
-      // the hour turns as a soft wave: from the newest card back to card 01 (½ f per 16th of age)
-      const kb = 0.42 * flashAt(t, b + (0.5 * (b - tick)) / 3.75, 6);
-      if (kb > k) {
-        k = kb;
-        light = beatLights?.[j] ?? own;
-      }
-    });
   const kl = flashAt(t, lockAt === undefined ? undefined : lockAt + lockDelay, 7);
   if (kl > k) {
     k = kl;
@@ -277,177 +262,3 @@ export const IndustryFace: React.FC<{
   );
 };
 
-/**
- * A language cell's face: the language (label, top-left), Ava's orb in the
- * cell's light (top-right), and the greeting — the WHOLE greeting at reading
- * size (84 px 16:9 · 72 px 9:16), its AI disclosure underlined in the light's
- * ink. Words rise in on the flip's landing (the site's voice reveal: 10 px →
- * 0, 3 px blur → 0); Japanese reveals per character.
- */
-export const LangFace: React.FC<{
-  lang: Lang;
-  /** the greeting as set for this orientation */
-  set: Setting;
-  t: number;
-  /** the flip frame (the text rises in from its landing) */
-  at: number;
-  pad: number;
-  labelSize: number;
-  /** the greeting's size */
-  size: number;
-  /** 0..1 the underline draw */
-  underline: number;
-  /** the greeting's light (its orb, sheen, pulse and underline) */
-  light: LightId;
-  orbSize: number;
-  /** the face's width (the sheen's travel) */
-  w: number;
-}> = ({ lang, set, t, at, pad, labelSize, size, underline, light, orbSize, w }) => {
-  const land = at + 2;
-  const o = LIGHTS[light].orb;
-  const ink = LIGHTS[light].ink;
-  // the site's voice reveal, tightened to the 16th grid: each unit rises 10 px → 0 and un-blurs 3 px → 0
-  let ui = 0;
-  const unit = (s: string, key: string, step: number) => {
-    const s0 = land - 2 + step * ui++;
-    const p = t < s0 ? 0 : dspring(t - s0, { stiffness: 460, damping: 22, mass: 0.7 });
-    const op = tween(t, [s0, s0 + 3], [0, 1], EASE.out3);
-    const bl = tween(t, [s0, s0 + 5], [3, 0], EASE.out3);
-    return (
-      <span
-        key={key}
-        style={{
-          display: 'inline-block',
-          whiteSpace: 'pre',
-          opacity: op < 0.999 ? op : undefined,
-          transform: p < 0.999 ? `translateY(${((1 - p) * size * 0.14).toFixed(2)}px)` : undefined,
-          filter: bl > 0.1 && op > 0 ? `blur(${bl.toFixed(2)}px)` : undefined,
-        }}
-      >
-        {s}
-      </span>
-    );
-  };
-  const units = (s: string, key: string) =>
-    lang.perChar
-      ? Array.from(s).map((ch, i) => unit(ch, `${key}-${i}`, 0.3))
-      : s.split(/( )/).filter((x) => x.length > 0).map((wd, i) => (wd === ' ' ? <span key={`${key}-s${i}`}> </span> : unit(wd, `${key}-${i}`, 0.7)));
-  const n = set.ai.length;
-  const aiLines = set.ai.map((line, j) => {
-    const u = underlined(line);
-    const rest = line.slice(u.length);
-    const draw = Math.min(1, Math.max(0, underline * n - j));
-    return (
-      <div key={`ai-${j}`} style={{ whiteSpace: 'nowrap', color: C.ink }}>
-        <span style={{ position: 'relative', display: 'inline-block' }}>
-          {units(u, `a${j}`)}
-          {draw > 0 ? (
-            <span
-              style={{
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                bottom: lang.perChar ? -size * 0.04 : size * 0.035,
-                height: Math.max(4, Math.round(size * 0.055)),
-                borderRadius: 3,
-                background: `linear-gradient(90deg, ${o[2]}, ${ink})`,
-                boxShadow: `0 0 ${(size * 0.12 * (1 - 0.6 * draw)).toFixed(1)}px ${rgba(o[2], 0.55)}`,
-                transform: `scaleX(${draw.toFixed(4)})`,
-                transformOrigin: '0 50%',
-              }}
-            />
-          ) : null}
-        </span>
-        {rest ? units(rest, `ar${j}`) : null}
-      </div>
-    );
-  });
-  const leadLines = set.lead.map((line, j) => (
-    <div key={`lead-${j}`} style={{ whiteSpace: 'nowrap', color: mixColor(C.ink, '#ffffff', 0.18) }}>
-      {units(line, `l${j}`)}
-    </div>
-  ));
-  // the orb: it pops in with the face, pulses as its greeting lands (the
-  // greeting is "said"), then breathes on the half-beat
-  const pop = dspring(t - land + 1, { stiffness: 520, damping: 15, mass: 0.6 });
-  const pulse = flashAt(t, land + 1, 10) + 0.55 * flashAt(t, land + 8.5, 8);
-  const breath = 0.035 * Math.sin(((t - land) / 15) * 2 * Math.PI) * tween(t, [land + 10, land + 20], [0, 1], EASE.inOut);
-  const os = Math.max(0, (0.45 + 0.55 * pop) * (1 + 0.16 * pulse + breath));
-  const oc = { x: w - pad - orbSize / 2, y: pad + orbSize / 2 };
-  // the sheen: a band of the light's tint sweeps the face as it lands
-  const sh = tween(t, [land - 1, land + 9], [0, 1], EASE.inOut);
-  return (
-    <>
-      {sh > 0 && sh < 1 ? (
-        <div
-          style={{
-            position: 'absolute',
-            top: '-20%',
-            height: '140%',
-            left: 0,
-            width: w * 0.5,
-            transform: `translateX(${(-w * 0.55 + sh * w * 1.1).toFixed(1)}px) skewX(-16deg)`,
-            background: `linear-gradient(90deg, ${rgba(o[3], 0)} 0%, ${rgba(o[3], 0.36)} 48%, ${rgba(o[4], 0.55)} 52%, ${rgba(o[3], 0)} 100%)`,
-          }}
-        />
-      ) : null}
-      <div
-        style={{
-          position: 'absolute',
-          left: oc.x - orbSize * 1.5,
-          top: oc.y - orbSize * 1.5,
-          width: orbSize * 3,
-          height: orbSize * 3,
-          background: bloom(light, (0.25 + 0.6 * pulse) * Math.min(1, pop)),
-        }}
-      />
-      <HitBurst t={t} at={land + 1} cx={oc.x} cy={oc.y} r={orbSize / 2} light={light} seed={`lang-${lang.name}`} n={7} />
-      <div
-        style={{
-          position: 'absolute',
-          left: oc.x - orbSize / 2,
-          top: oc.y - orbSize / 2,
-          width: orbSize,
-          height: orbSize,
-          transform: `scale(${os.toFixed(4)})`,
-          borderRadius: '50%',
-          boxShadow: `0 0 ${(orbSize * 0.35 * (0.4 + pulse)).toFixed(1)}px ${rgba(o[2], 0.3 + 0.3 * pulse)}, 0 ${(orbSize * 0.12).toFixed(1)}px ${(orbSize * 0.3).toFixed(1)}px -${(orbSize * 0.1).toFixed(1)}px ${rgba(o[0], 0.35)}`,
-        }}
-      >
-        <MeshOrb size={orbSize} palette={o} time={t / 30 + at * 0.37} />
-      </div>
-      <div
-        style={{
-          position: 'absolute',
-          left: pad,
-          top: pad + 2,
-          fontFamily: FONT.body,
-          fontWeight: 500,
-          fontSize: labelSize,
-          lineHeight: 1,
-          letterSpacing: TRACK.label,
-          textTransform: 'uppercase',
-          color: C.muted,
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {lang.name}
-      </div>
-      <div
-        style={{
-          position: 'absolute',
-          left: pad,
-          right: pad,
-          bottom: pad - size * 0.08,
-          fontFamily: FONT.cinema,
-          fontWeight: 500,
-          fontSize: size,
-          lineHeight: 1.04,
-          letterSpacing: '-0.005em',
-        }}
-      >
-        {lang.aiFirst ? [...aiLines, ...leadLines] : [...leadLines, ...aiLines]}
-      </div>
-    </>
-  );
-};

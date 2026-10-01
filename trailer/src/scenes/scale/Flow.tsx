@@ -5,7 +5,9 @@
  *             glowing bead (comet tail + a directional shutter blur while it
  *             runs) over a pale track
  *   nodes     56 px; each fills ON its station frame through 1.35 → 1 (k380
- *             c14) with a 2.5× ping; the CRM node is green and pings twice
+ *             c14) with a 2.5× ping; the CRM node confirms in the closing
+ *             light's deep ink and pings twice; then the finished rail
+ *             streams light motes call → CRM on the 8th notes (the hold)
  *   stations  big white cards that fill the frame, slamming in with their
  *             content (never an empty card): a pearl icon disc that lights on
  *             the station frame (ripple + sparks), the line at reading size
@@ -39,8 +41,9 @@ export type FlowTiming = {
   rails: readonly (readonly [number, number])[];
   ok: number;
   ping: readonly [number, number];
-  /** [first mote leaves the call node, it reaches the CRM] */
-  stream: readonly [number, number];
+  /** the frames each light mote leaves the call node (it reaches the CRM `moteDur` later) */
+  stream: readonly number[];
+  moteDur: number;
   callIn: number;
   pill: number;
 };
@@ -49,8 +52,6 @@ const NODE = 56;
 const RAIL = 10;
 const BEAD = 26;
 
-/** the stream along the finished rail: a mote every 8th note from the CRM's confirm (SCALE_LOCAL.stream) */
-const streamAt = (T: FlowTiming) => [0, 1].map((j) => T.stream[0] + j * 7.5);
 
 /** the rail head along segment i at f (EASE.peel: leaves the node slow, arrives slow) */
 const headAt = (f: number, [a, b]: readonly [number, number]) => tween(f, [a, b], [0, 1], EASE.peel);
@@ -136,8 +137,8 @@ export const Rail: React.FC<{ t: number; G: Geo; vertical: boolean; T: FlowTimin
       })}
 
       {/* the finished rail streams: light motes run call → CRM on the 8th notes (data syncing) */}
-      {streamAt(T).map((a, j) => {
-        const MOTE_DUR = T.stream[1] - T.stream[0];
+      {T.stream.map((a, j) => {
+        const MOTE_DUR = T.moteDur;
         const u = tween(t, [a, a + MOTE_DUR], [0, 1], EASE.inOut);
         if (t < a || u >= 1) return null;
         const head = vertical ? { x: n0.x, y: n0.y + len * u } : { x: n0.x + len * u, y: n0.y };
@@ -175,8 +176,8 @@ export const Rail: React.FC<{ t: number; G: Geo; vertical: boolean; T: FlowTimin
         const rings = last ? [[st, st + 12, 2.5, 0.55], [T.ping[0] + 4, T.ping[1], 3.4, 0.35]] : [[st, st + 12, 2.5, 0.5]];
         // the CRM receives each mote: its glow swells (the node itself never moves: FLOW_END)
         let recv = 0;
-        const MOTE_DUR = T.stream[1] - T.stream[0];
-        if (last) for (const a of streamAt(T)) recv = Math.max(recv, t < a + MOTE_DUR - 1 ? 0 : 1 - tween(t, [a + MOTE_DUR - 1, a + MOTE_DUR + 7], [0, 1], EASE.out3));
+        const MOTE_DUR = T.moteDur;
+        if (last) for (const a of T.stream) recv = Math.max(recv, t < a + MOTE_DUR - 1 ? 0 : 1 - tween(t, [a + MOTE_DUR - 1, a + MOTE_DUR + 7], [0, 1], EASE.out3));
         return (
           <div
             key={`node-${i}`}
@@ -312,7 +313,7 @@ const StationIcon: React.FC<{ i: number; t: number; at: number; D: number }> = (
             position: 'absolute',
             inset: 0,
             borderRadius: '50%',
-            background: crm ? `radial-gradient(90% 90% at 30% 24%, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 42%), linear-gradient(135deg, #34c97e 0%, ${SETTLED} 100%)` : discHot(FLOW_LIGHT),
+            background: discHot(FLOW_LIGHT),
             opacity: Math.min(1, lit * 1.15),
             boxShadow: `0 0 ${(D * 0.35 * Math.max(fk, 0.35 * keep)).toFixed(1)}px ${rgba(crm ? SETTLED : BODY, 0.55)}`,
           }}
@@ -378,7 +379,7 @@ const Check: React.FC<{ t: number; at: number; size: number }> = ({ t, at, size 
           position: 'absolute',
           inset: 0,
           borderRadius: '50%',
-          background: `linear-gradient(135deg, #34c97e 0%, ${SETTLED} 100%)`,
+          background: LIGHTS[FLOW_LIGHT].disc,
           boxShadow: `0 6px 16px -6px ${rgba(SETTLED, 0.6)}`,
           transform: `scale(${Math.max(0, p).toFixed(4)})`,
         }}
@@ -423,7 +424,7 @@ export const StationFace: React.FC<{ i: number; t: number; T: FlowTiming; vertic
         </React.Fragment>
       );
     });
-  const settledInk = mixHex(C.ink, C.settled, saved);
+  const settledInk = mixHex(C.ink, SETTLED, saved);
   const content =
     i === 0
       ? { tag: <Pill t={t} at={T.pill} size={vertical ? 34 : 36} />, lines: [words('New caller', T.cardsIn[0], body)] }

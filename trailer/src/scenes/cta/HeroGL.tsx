@@ -72,6 +72,15 @@ export type HeroUniforms = {
   tint: number;
   /** how much of each orb's bloom also lies over its own body (halation) */
   glowOver: number;
+  /** 0..1: the art's backlight graded toward the night's lilac (the reveal, before the lights) */
+  backLilac: number;
+  /** art v of the portrait's shoulder line: its backlight feathers out above it (0 = off) */
+  plateEdge: number;
+  /** 0..1: torn filaments glow in the nearest light's colour; their colour where no light is near */
+  tearTint: number;
+  tearColor: [number, number, number];
+  /** the filaments stay inside the head matte + ~40 px (head-ellipse units; 0 = no cap) */
+  headCap: number;
 };
 
 /** The four lights in the hero's context: back (hidden by the figure) and front layers. */
@@ -92,7 +101,7 @@ const NAMES = [
   'uTear', 'uLiquid', 'uErase', 'uReveal', 'uEyes', 'uAxisX', 'uEye', 'uSubject', 'uBrand',
   'uHaloC', 'uHaloR', 'uHaloGain', 'uFloor', 'uHaloShape', 'uFrame', 'uSeed',
   'uOrbBack', 'uOrbFront', 'uOrbOn', 'uOcc', 'uGlowP', 'uGlowC', 'uGlowBack', 'uEyeGlow', 'uRim', 'uRimC',
-  'uBackGain', 'uTint', 'uGlowOver',
+  'uBackGain', 'uTint', 'uGlowOver', 'uBackLilac', 'uPlateEdge', 'uTearTint', 'uTearC', 'uHeadCap',
 ];
 
 function compile(gl: WebGL2RenderingContext, type: number, src: string) {
@@ -280,6 +289,11 @@ export const HeroGL: React.FC<{
     gl.uniform1f(L.uBackGain, u.backGain);
     gl.uniform1f(L.uTint, u.tint);
     gl.uniform1f(L.uGlowOver, u.glowOver);
+    gl.uniform1f(L.uBackLilac, u.backLilac);
+    gl.uniform1f(L.uPlateEdge, u.plateEdge);
+    gl.uniform1f(L.uTearTint, u.tearTint);
+    gl.uniform3f(L.uTearC, u.tearColor[0], u.tearColor[1], u.tearColor[2]);
+    gl.uniform1f(L.uHeadCap, u.headCap);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.finish();
     if (!released.current) {

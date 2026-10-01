@@ -1,70 +1,71 @@
 /**
  * The SCALE camera, as a 2D affine on the depth-1 layer: screen = A + s·p.
  *
- *   steps   card 01 alone (≈ 3.9×) → 2 × 2 → 3 × 3 → the full wall (1×),
- *           3-frame moves framing the block being filled (the first peels;
- *           the two landing on quarters snap into the beat)
- *   kicks   quarter notes ±1.8 % (e^−u/3) with a 3 px jolt, alternating (a
- *           quarter that lands a step overshoots it: −1.8 %, then settles);
- *           every other 16th a ≤ 0.5 % micro-kick (e^−u/2); the hero
- *           "16 industries." +2.5 % (e^−u/4); each language flip 0.5 %
- *   push    a slow 2.2 % push over the language grid, released for the flow
- *   nudges  1 % toward each flow node on its cue (zoom ABOUT the node, gone
- *           in 7 f; the last one is about FLOW_END, so the CRM node never moves)
- *
- * From the flow on the camera is otherwise at rest (s 1, A 0).
+ *   wall     a CONTINUOUS pull-back (monotone cubic in log-zoom through
+ *            SCALE_LOCAL.pull): card 01 fills the frame out of the whip
+ *            (≈ 3.9×) → the 2 × 2 framed as card 2 pops → a slow drift → the
+ *            3 × 3 as card 5 pops → drift → the whole wall as the 16ths start
+ *            → a last breath out (0.985) into the slam. The focus moves on a
+ *            straight screen path (the wall's top-left stays anchored), so
+ *            each card pops inside the opening frame. It breathes (±0.35 %,
+ *            2 beats) and kicks: every pop 0.25 %, every turn of the hour
+ *            0.9 % with a 2 px jolt and a hair of roll
+ *   hero     +2.5 % on the slam (e^−u/4), then back to 1 as the cards leave
+ *   langs    a slow 2.5 % push on the language card, a 0.5 % kick as each
+ *            card lands, released for the flow
+ *   flow     at rest (s 1, A 0) — so FLOW_END is the screen point — except
+ *            1 % nudges toward each node (about the node; the last one about
+ *            FLOW_END, so the CRM node never moves)
  */
 import type { Layout } from '../../lib/layout';
 import { EASE, tween, windowed } from '../../lib/motion';
+import { noise2D } from '@remotion/noise';
 import { SCALE, SCALE_LOCAL } from '../../timing';
 import { centre, type Geo, type Pt } from './geometry';
 
 const K = SCALE_LOCAL;
+const HERO = SCALE.industriesTitle;
 
 export type Affine = { s: number; ax: number; ay: number; rot: number };
 
-/**
- * 0…3: how far along the three camera steps (fraction = progress of the
- * current step). The first step (off card 01) peels; the two that land ON a
- * quarter note accelerate into it (power2.in), so the snap hits the beat and
- * the quarter kick carries it past the framing (the overshoot) to settle.
- */
-const lands = (st: readonly [number, number]) => (K.kicks as readonly number[]).includes(st[1]);
-const level = (t: number) => K.camSteps.reduce((a, st) => a + tween(t, st, [0, 1], lands(st) ? EASE.in2 : EASE.peel), 0);
-
-/** the stepped framing: world point F at the screen centre, zoom Z */
-export function baseCam(t: number, G: Geo): { F: Pt; Z: number } {
-  const lv = level(t);
-  const i = Math.min(2, Math.floor(lv));
-  const f = lv - i;
-  const Z = Math.exp(Math.log(G.zooms[i]) + (Math.log(G.zooms[i + 1]) - Math.log(G.zooms[i])) * f);
-  // the focus moves so the screen path is straight in log-zoom space
-  const w = (1 / G.zooms[i] - 1 / Z) / (1 / G.zooms[i] - 1 / G.zooms[i + 1] || 1);
-  const F = {
-    x: G.focus[i].x + (G.focus[i + 1].x - G.focus[i].x) * w,
-    y: G.focus[i].y + (G.focus[i + 1].y - G.focus[i].y) * w,
-  };
-  return { F, Z };
+/** monotone cubic (Fritsch–Carlson) through (xs, ys), clamped at the ends */
+function pchip(xs: readonly number[], ys: readonly number[], x: number): number {
+  const n = xs.length;
+  if (x <= xs[0]) return ys[0];
+  if (x >= xs[n - 1]) return ys[n - 1];
+  const h = xs.slice(1).map((v, i) => v - xs[i]);
+  const d = h.map((hi, i) => (ys[i + 1] - ys[i]) / hi);
+  const m = xs.map((_, i) => {
+    if (i === 0) return d[0];
+    if (i === n - 1) return d[n - 2];
+    if (d[i - 1] * d[i] <= 0) return 0;
+    const w1 = 2 * h[i] + h[i - 1];
+    const w2 = h[i] + 2 * h[i - 1];
+    return (w1 + w2) / (w1 / d[i - 1] + w2 / d[i]);
+  });
+  // the first key leaves with its momentum (the whip): an eased start would stall the cut
+  let k = 0;
+  while (x > xs[k + 1]) k++;
+  const u = (x - xs[k]) / h[k];
+  const h00 = 2 * u ** 3 - 3 * u ** 2 + 1;
+  const h10 = u ** 3 - 2 * u ** 2 + u;
+  const h01 = -2 * u ** 3 + 3 * u ** 2;
+  const h11 = u ** 3 - u ** 2;
+  return h00 * ys[k] + h10 * h[k] * m[k] + h01 * ys[k + 1] + h11 * h[k] * m[k + 1];
 }
 
-/** screen speed (px / frame) of the frame corners under the stepped camera — drives the step blur */
-export function stepSpeed(t: number, G: Geo, L: Layout): number {
-  const a = baseCam(t - 0.5, G);
-  const b = baseCam(t + 0.5, G);
-  let m = 0;
-  for (const q of [
-    { x: 0, y: 0 },
-    { x: L.width, y: 0 },
-    { x: 0, y: L.height },
-    { x: L.width, y: L.height },
-  ]) {
-    const wx = a.F.x + (q.x - L.cx) / a.Z;
-    const wy = a.F.y + (q.y - L.cy) / a.Z;
-    const sx = L.cx + (wx - b.F.x) * b.Z;
-    const sy = L.cy + (wy - b.F.y) * b.Z;
-    m = Math.max(m, Math.hypot(sx - q.x, sy - q.y));
-  }
-  return m;
+/** the wall's pulled-back framing at t: world point F at the screen centre, zoom Z */
+export function baseCam(t: number, G: Geo, L: Layout): { F: Pt; Z: number } {
+  const [z0, z1, z2] = G.zooms;
+  const zs = [z0, z1, z1 * 0.93, z2, z2 * 0.94, 1, 0.985];
+  let Z = Math.exp(pchip(K.pull, zs.map(Math.log), t));
+  // after the slam: back to 1 as the cards leave and the keeper glides
+  if (t > HERO) Z += (1 - 0.985) * tween(t, [K.glide, K.switchIn[0] + 10], [0, 1], EASE.inOut);
+  // the focus runs on a straight screen path: linear in the view's size
+  const u = Math.min(1, Math.max(0, (1 / Z - 1 / z0) / (1 - 1 / z0)));
+  const c0 = G.focus[0];
+  const F = { x: c0.x + (L.cx - c0.x) * u, y: c0.y + (L.cy - c0.y) * u };
+  return { F, Z };
 }
 
 /** zoom kick (fraction), x-jolt (px) and roll (deg) at t */
@@ -72,26 +73,27 @@ export function kicks(t: number): { z: number; jx: number; rot: number } {
   let z = 0;
   let jx = 0;
   let rot = 0;
-  K.kicks.forEach((q, i) => {
-    if (t < q) return;
-    const e = Math.exp(-(t - q) / 3);
-    const side = i % 2 === 0 ? 1 : -1;
-    // a quarter that lands a camera step is the step's OVERSHOOT (it carries
-    // the pull-back past the framing and settles); the others punch in
-    const lands = K.camSteps.some((st) => st[1] === q);
-    z += (lands ? -1 : 1) * 0.018 * e;
-    jx += 3 * side * e;
-    // the jolt tips the frame a hair the same way (a hand-held hit)
-    rot += 0.4 * side * e;
+  // every pop: a micro-kick
+  for (const p of K.pops) if (t >= p && !K.groups.includes(p)) z += 0.0025 * Math.exp(-(t - p) / 2.5);
+  // the hour turns: a kick, a 2 px jolt and a hair of roll, alternating
+  K.groups.forEach((g, j) => {
+    if (j === 0 || t < g) return;
+    const e = Math.exp(-(t - g) / 3);
+    const side = j % 2 === 0 ? 1 : -1;
+    z += 0.009 * e;
+    jx += 2 * side * e;
+    rot += 0.22 * side * e;
   });
-  // the other 16ths: a micro-kick (0.3 %, well under the quarters)
-  const quarter = (f: number) => (K.kicks as readonly number[]).includes(f);
-  for (const p of K.pops) if (!quarter(p) && t >= p) z += 0.003 * Math.exp(-(t - p) / 2);
-  const H = SCALE.industriesTitle;
-  if (t >= H) z += 0.025 * Math.exp(-(t - H) / 4);
-  for (const l of K.langs) if (t >= l) z += 0.005 * Math.exp(-(t - l) / 2);
-  // "14 languages." lands (its letters settle ~4 f after the rise starts): a 2 px jolt
-  const ti = K.titleIn + 4;
+  if (t >= HERO) {
+    const e = Math.exp(-(t - HERO) / 4);
+    z += 0.025 * e;
+    rot += -0.18 * e;
+  }
+  // each language card lands: 0.5 %
+  const lands = [K.enFlip + 6, ...SCALE.langAt.slice(1).map((a) => a - 1)];
+  for (const l of lands) if (t >= l) z += 0.005 * Math.exp(-(t - l) / 3);
+  // "14 languages." lands: a 2 px jolt
+  const ti = SCALE.langTitle;
   if (t >= ti) jx += -2 * Math.exp(-(t - ti) / 2.5);
   return { z, jx, rot };
 }
@@ -109,10 +111,15 @@ export function nudge(t: number, at: number, last: boolean): number {
 /** the whole camera at t, as an affine of the depth-1 layer */
 export function camAt(t: number, G: Geo, L: Layout): Affine {
   const C = { x: L.cx, y: L.cy };
-  const { F, Z } = baseCam(t, G);
-  let s = Z;
-  let ax = C.x - F.x * Z;
-  let ay = C.y - F.y * Z;
+  const { F, Z } = baseCam(t, G, L);
+  // the wall breathes (2 beats), and the hand holding the camera drifts a hair until the flow
+  const breath = 0.0035 * Math.sin(((t + 3) / 30) * Math.PI) * tween(t, [4, 14], [0, 1], EASE.inOut) * (1 - tween(t, [80, HERO], [0, 1], EASE.inOut));
+  const hand = 1 - tween(t, [K.collapse, K.stations[0] - 4], [0, 1], EASE.inOut);
+  const hx = 2.5 * noise2D('scale-hand-x', t * 0.02, 0.1) * hand;
+  const hy = 2 * noise2D('scale-hand-y', 0.4, t * 0.02) * hand;
+  let s = Z * (1 + breath);
+  let ax = C.x - F.x * s + hx;
+  let ay = C.y - F.y * s + hy;
   // kicks (about the screen centre) + jolt
   const k = kicks(t);
   const kz = 1 + k.z;
@@ -128,15 +135,19 @@ export function camAt(t: number, G: Geo, L: Layout): Affine {
     ay = sy + (ay - sy) * q;
     s *= q;
   };
-  // the slow push over the language grid, released for the flow
-  const P = K.push;
-  const c0 = G.cells[0];
-  const c1 = G.cells[G.cells.length - 1];
-  about(centre({ x: c0.x, y: c0.y, w: c1.x + c1.w - c0.x, h: c1.y + c1.h - c0.y }),
-    1 + 0.022 * windowed(t, P[0], P[1], P[1], P[2], EASE.inOut, EASE.inOut));
+  // the slow push on the language card, released for the flow
+  const P = K.langPush;
+  about(centre(G.lang), 1 + 0.025 * windowed(t, P[0], P[1], P[1], P[2], EASE.inOut, EASE.inOut));
   // nudges toward each flow node
   K.stations.forEach((st, i) => about(G.nodes[i], 1 + nudge(t, st, i === 2)));
   return { s, ax, ay, rot: k.rot };
+}
+
+/** the screen velocity (px / frame) of world point p under the camera at t */
+export function screenVel(t: number, p: Pt, G: Geo, L: Layout): { vx: number; vy: number } {
+  const a = camAt(t - 0.5, G, L);
+  const b = camAt(t + 0.5, G, L);
+  return { vx: b.ax + b.s * p.x - (a.ax + a.s * p.x), vy: b.ay + b.s * p.y - (a.ay + a.s * p.y) };
 }
 
 /** Camera component props for an affine (Camera.tsx: screen = C + (p − C)·zoom − cam) */
@@ -144,6 +155,6 @@ export const cameraProps = (a: Affine, L: Layout) => ({
   x: L.cx * (1 - a.s) - a.ax,
   y: L.cy * (1 - a.s) - a.ay,
   zoom: a.s,
-  /** the quarter kicks' roll (deg), applied about the screen centre by the scene; ~0 long before the flow */
+  /** the kicks' roll (deg), applied about the screen centre by the scene */
   rot: Math.abs(a.rot) > 1e-4 ? a.rot : 0,
 });

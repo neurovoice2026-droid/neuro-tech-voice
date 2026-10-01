@@ -4,15 +4,20 @@
  * (zoom 1, no offset — the flow) world = screen, so the rail's last node is
  * exactly FLOW_END.
  *
- *   industries  a 4 × 4 wall of white cards, edge to edge (9:16: inside the
- *               safe box, the wash above and below). The cards pop in the
- *               camera's block order (POP_CELL): card 01 alone → 2 × 2 →
- *               3 × 3 → the full wall.
- *   languages   THREE keepers glide into three big cells under the title band
- *               (16:9 three tall columns · 9:16 three full-width rows); each
- *               cell shows two languages, one page after the other.
- *   flow        call → Slack → CRM, three big stations on a closing-light rail
- *               that fill the frame.
+ *   wall        a 4 × 4 wall of white cards, edge to edge (9:16: inside the
+ *               safe box y 262…1490). The cards pop in the camera's block
+ *               order (POP_CELL): card 01 alone → 2 × 2 → 3 × 3 → the wall,
+ *               while the camera pulls back continuously.
+ *   languages   ONE card in focus (the active language, large, under the
+ *               title band; English, the first, larger still) and a gallery
+ *               of the ones already said (16:9 a row of five under it · 9:16
+ *               3 + 2 under it), so by Japanese all six are visible together.
+ *   flow        call → Slack → CRM: three big stations on a closing-light
+ *               rail; the CRM node is FLOW_END.
+ *   titles      one slot, centred: "16 industries." slams centred on the
+ *               wall, then lifts to the band, where "14 languages." and
+ *               "After the call." follow it (9:16 cap tops ≥ 290, under the
+ *               Reels/TikTok top UI).
  */
 import { FLOW_END } from '../../lib/handoff';
 import type { Layout } from '../../lib/layout';
@@ -41,8 +46,6 @@ export const POP_CELL: readonly (readonly [number, number])[] = [
   [0, 2], [1, 2], [2, 0], [2, 1], [2, 2],
   [0, 3], [1, 3], [2, 3], [3, 0], [3, 1], [3, 2], [3, 3],
 ];
-/** the last card of each camera block (the block is complete when it lands) */
-export const BLOCK_END = [0, 3, 8, 15] as const;
 
 /** a cols × rows grid inside `box`, `gap` between cells */
 function cellsOf(box: Rect, cols: number, rows: number, gap: number): Rect[][] {
@@ -59,72 +62,70 @@ export function geo(L: Layout) {
   const H = L.height;
 
   /* ── the industry wall (4 × 4) ──────────────────────────────────── */
-  const wall: Rect = L.pick({ x: 16, y: 16, w: 1888, h: 1048 }, { x: 12, y: 220, w: 1056, h: 1260 });
-  const wallCells = cellsOf(wall, 4, 4, 12); // 463 × 253 · 255 × 306
+  const wall: Rect = L.pick({ x: 16, y: 16, w: 1888, h: 1048 }, { x: 16, y: 262, w: 1048, h: 1228 });
+  const wallCells = cellsOf(wall, 4, 4, 12); // 463 × 253 · 253 × 298
   /** card rect of industry i */
   const cards: Rect[] = POP_CELL.map(([r, c]) => wallCells[r][c]);
 
-  /** the camera's blocks: card 01 → 2 × 2 → 3 × 3 → the whole frame */
+  /** the camera's framings: card 01 → 2 × 2 → 3 × 3 → the whole frame */
   const blocks: Rect[] = [1, 2, 3].map((n) => bounds(wallCells.slice(0, n).flatMap((row) => row.slice(0, n))));
   /** zoom that frames each block (0.94 of the tighter side); the last is the frame itself */
   const zooms = [...blocks.map((b) => 0.94 * Math.min(W / b.w, H / b.h)), 1];
   const focus: Pt[] = [...blocks.map(centre), { x: L.cx, y: L.cy }];
 
-  /* ── the three language cells (two pages of three languages) ─────── */
-  const langBox: Rect = L.pick({ x: 16, y: 236, w: 1888, h: 828 }, { x: 12, y: 382, w: 1056, h: 1140 });
-  const cells: Rect[] = cellsOf(langBox, v ? 1 : 3, v ? 3 : 1, 12).flat(); // 621 × 828 · 1056 × 372
+  /* ── the languages ──────────────────────────────────────────────── */
+  /** the active language's card (from Romanian on); English, alone on the stage, is larger */
+  const lang: Rect = L.pick({ x: 360, y: 236, w: 1200, h: 540 }, { x: 40, y: 440, w: 1000, h: 560 });
+  const langEn: Rect = L.pick({ x: 300, y: 250, w: 1320, h: 620 }, { x: 40, y: 470, w: 1000, h: 660 });
+  /** the gallery: the five cards already said, in order */
+  const gallery: Rect[] = v
+    ? [
+        ...[0, 1, 2].map((i) => ({ x: 40 + i * (316 + 26), y: 1036, w: 316, h: 204 })),
+        ...[0, 1].map((i) => ({ x: 211 + i * (316 + 26), y: 1262, w: 316, h: 204 })),
+      ]
+    : [0, 1, 2, 3, 4].map((i) => ({ x: 62 + i * (340 + 24), y: 816, w: 340, h: 210 }));
+
   /**
-   * Which industry card becomes which language cell: each cell takes the
-   * nearest unused card; the last cell (Spanish, then Japanese) always takes
-   * the last card (POP_CELL[15]), because it becomes the call.
+   * The keeper: the wall card that becomes English — the one nearest the
+   * English card's centre (a centre card, so its glide is short).
    */
-  const stay: number[] = [];
+  let keeper = 0;
   {
-    const used = new Set<number>([15]);
-    for (let k = 0; k < cells.length - 1; k++) {
-      const c = centre(cells[k]);
-      let best = -1;
-      let bd = Infinity;
-      for (let i = 0; i < 16; i++) {
-        if (used.has(i)) continue;
-        const p = centre(cards[i]);
-        const d = Math.hypot(p.x - c.x, p.y - c.y);
-        if (d < bd - 0.5) {
-          bd = d;
-          best = i;
-        }
+    const c = centre(langEn);
+    let bd = Infinity;
+    cards.forEach((r, i) => {
+      const p = centre(r);
+      const d = Math.hypot(p.x - c.x, p.y - c.y);
+      if (d < bd - 0.5) {
+        bd = d;
+        keeper = i;
       }
-      used.add(best);
-      stay.push(best);
-    }
-    stay.push(15);
+    });
   }
 
-  /* ── titles ─────────────────────────────────────────────────────── */
+  /* ── titles: one centred slot ───────────────────────────────────── */
   const title = {
-    /** "16 industries." — centred on the wall, size in px */
+    /** "16 industries." — centred on the wall (cap centre), size in px */
     hero: L.pick({ x: L.cx, y: L.cy, size: 160 }, { x: L.cx, y: centre(wall).y, size: 140 }),
-    /** "14 languages." — the top band: left edge x (on the cells' text column), cap-centre y */
-    band: L.pick({ x: 46, y: 116, size: 120 }, { x: 34, y: 290, size: 110 }),
-    /** "After the call." — top-left of its line box (on the station cards' left edge) */
-    after: L.pick({ x: 60, y: 168, size: 112 }, { x: 60, y: 232, size: 88 }),
+    /** the band: "14 languages." / "After the call." (cap centre; 9:16 cap top ≈ 293) */
+    band: L.pick({ x: L.cx, y: 126, size: 112 }, { x: L.cx, y: 332, size: 104 }),
   };
 
   /* ── the after-call rail ─────────────────────────────────────────
    * The last node is FLOW_END. 16:9: nodes on a horizontal rail 590 apart,
-   * the names (64 px) above, 560 × 428 cards hanging under them — the frame
-   * filled from 60 to 1800, 612 to 1040. 9:16: a vertical rail at x 150,
-   * nodes 390 apart, 834 × 350 cards to its right. */
+   * the names (64 px) above, 560 × 428 cards hanging under them. 9:16: a
+   * vertical rail at x 150, nodes 356 apart, 818 × 330 cards to its right
+   * (y 423 … 1465, inside the safe box, clear of the band title). */
   const end = FLOW_END(L);
   const nodes: Pt[] = [0, 1, 2].map((i) =>
-    v ? { x: end.x, y: end.y - (2 - i) * 390 } : { x: end.x - (2 - i) * 590, y: end.y },
+    v ? { x: end.x, y: end.y - (2 - i) * 356 } : { x: end.x - (2 - i) * 590, y: end.y },
   );
   const stations: Rect[] = nodes.map((n) =>
-    v ? { x: 226, y: n.y - 165, w: 834, h: 350 } : { x: n.x - 280, y: 612, w: 560, h: 428 },
+    v ? { x: 222, y: n.y - 165, w: 818, h: 330 } : { x: n.x - 280, y: 612, w: 560, h: 428 },
   );
   /** 16:9: station name centres, above the nodes */
   const names: Pt[] = nodes.map((n) => ({ x: n.x, y: 470 }));
 
-  return { wall, cards, blocks, zooms, focus, cells, stay, title, nodes, stations, names, end };
+  return { W, H, wall, cards, blocks, zooms, focus, lang, langEn, gallery, keeper, title, nodes, stations, names, end };
 }
 export type Geo = ReturnType<typeof geo>;

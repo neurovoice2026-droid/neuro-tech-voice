@@ -84,6 +84,8 @@ export function formAt(t: number) {
   const k2 = t < w2 ? 0 : 0.14 * springAt(t, w2, SPRING.pop);
   return pre + k1 + k2;
 }
+/** the slow tightening between "…seven" and the converge (0 → 1, eased; it holds through the converge) */
+export const driftAt = (t: number) => tween(t, K.drift, [0, 1], EASE.inOut);
 /** the row fans out into the four arms as the orbit swells */
 const fanAt = (t: number) => tween(t, [K.orbSwell[0], K.orbIn[0] + 8], [0, 1], EASE.inOut);
 /** where the formation starts (its slots are dealt out here, in the lights' order round the ring) */
@@ -110,7 +112,9 @@ export function radiusAt(t: number, tight = 1) {
   const steps = [0.14, 0.11, 0.09];
   K.tighten.forEach((f, k) => (r -= tight * steps[k] * (t < f ? 0 : springAt(t, f, SPRING.pop))));
   const swell = windowed(t, K.orbSwell[0], K.orbSwell[1], K.orbSwell[1], K.orbIn[0] + 6, EASE.out3, EASE.inOut);
-  return r * (1 + 0.09 * swell) * (1 - collapseAt(t));
+  // after "…seven" the ring keeps drawing in, slowly (tension while the line is read)
+  const drift = 1 - 0.07 * driftAt(t);
+  return r * drift * (1 + 0.09 * swell) * (1 - collapseAt(t));
 }
 
 /**
@@ -135,7 +139,8 @@ export function anglesAt(t: number, spin: (tt: number) => number, phase: readonl
     const k = slotOf[i];
     // the slot, as the nearest turn to where this light was when the formation began
     const turn = 2 * Math.PI * Math.round((ref[i] - FORM[k]) / (2 * Math.PI));
-    const slot = mix(FORM[k], ARMS[k], fan) + turn + whirl;
+    // (while it drifts the row closes up a little: the four lights lean toward each other)
+    const slot = mix(FORM[k] * (1 - 0.1 * driftAt(t)), ARMS[k], fan) + turn + whirl;
     return th + g * (slot - th);
   });
 }

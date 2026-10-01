@@ -1,45 +1,48 @@
 /**
  * The end card's type, in the site's idiom — every size is the site's own
- * ratio of its font size (hero.tsx CoverCta):
+ * ratio of its font size (hero.tsx CoverCta). It builds CALMLY, one element at
+ * a time, each on a soft spring that has settled before the next one moves
+ * (client: "the ending is too fast"):
  *
- *  <CoverCta>  the hero's "Start free →": a #dedce0 plate (padding .33em,
- *              radius .2em) holding four .3em CornerDots in its corners, the
- *              label (padding .8em 1em, gap .45em) stacked in the same grid
- *              cell. Enters from a gathered point of light (3 f), pops on a
- *              card spring (≈1.08 peak), a glint sweeps the plate on the hit;
- *              label words rise out of masks. At `press` it is CLICKED:
- *              .94 in 2 f, back on SPRING.pop, and it takes the site's hover
- *              and keeps it — plum plate, paper text, dots out 4 px, arrow
- *              +8 px — with a 1.5 px brand-lit rim and a plum glow, so it
- *              stays the brightest thing under the logo.
- *  <Note>      "5 free minutes, no card" (pricing copy), Inter 500, 80 % paper.
  *  <Url>       a CornerDot + "neurotechvoice.com" (Geist Mono 500), typed ON
  *              Ava's words in three chunks ("neuro" | "tech" | "voice.com" on
  *              "Neuro" "Tech" "Voice.") with a caret; the hairline draws out
  *              from it.
+ *  <CoverCta>  the hero's "Start free →": a #dedce0 plate (padding .33em,
+ *              radius .2em) holding four .3em CornerDots in its corners, the
+ *              label (padding .8em 1em, gap .45em) stacked in the same grid
+ *              cell. RISES on "…Voice." out of a gathered point of light: a
+ *              soft lift (≈40 px, .94 → 1, ≈3 % over, settled in ≈14 f), its
+ *              words rising out of masks, a glint crossing the plate as it
+ *              settles. At `press` it is CLICKED: a hover lift (anticipation),
+ *              .94 in 2 f, back on a soft spring; the site's plum FLOODS the
+ *              plate from the arrow (the colour cross, out3) with the label
+ *              turning paper exactly where the plum passes, a plum ripple leaves
+ *              the arrow (0 → 1.3 × the plate's width), a glint crosses the plum
+ *              face; it keeps the site's hover — dots out 4 px, arrow +8 px — with
+ *              a 1.5 px brand-lit rim and a plum glow.
+ *  <Note>      "5 free minutes, no card" (pricing copy), Inter 500, 82 % paper,
+ *              one word every `step` frames on the same soft spring.
  *
  * `rest(t, v, target)` (from the scene) pins every residual to its exact
- * rest value by CTA.finalHold: the hold is still.
+ * rest value by CTA.finalHold: the hold is dead still.
  */
 import React from 'react';
-import { aos, EASE, mix, mixHex, SPRING, springAt, tween } from '../../lib/motion';
+import { Easing } from 'remotion';
+import { aos, EASE, mix, SPRING, springAt, tween } from '../../lib/motion';
 import { CornerDot } from '../../components/Type';
 import { C, FONT } from '../../theme';
 
 export type Rest = (t: number, v: number, target: number) => number;
 
-/** WCAG relative luminance of a #rrggbb colour. */
-function luminance(hex: string) {
-  const n = parseInt(hex.slice(1), 16);
-  const lin = (c: number) => {
-    const v = c / 255;
-    return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-  };
-  return 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
-}
-
-/** a card pop: ≈10 % overshoot, settled (±1 %) in 13 f */
-const CARD = { stiffness: 360, damping: 21, mass: 0.9 };
+/** the plate's rise: ≈3 % over, settled (±1 %) in ≈14 f — premium, not snappy */
+const RISE = { stiffness: 130, damping: 17, mass: 1 };
+/** words out of their masks: ≈2 % over, settled in ≈13 f */
+const SOFT = { stiffness: 150, damping: 19, mass: 1 };
+/** the plate back from the click: one soft ≈5 % overshoot, settled in ≈12 f */
+const BACK = { stiffness: 230, damping: 21, mass: 1 };
+/** ease-in-out sine for the hover lift */
+const SINE = Easing.bezier(0.37, 0, 0.63, 1);
 
 const MaskRise: React.FC<{
   t: number;
@@ -49,9 +52,9 @@ const MaskRise: React.FC<{
   config?: typeof SPRING.site;
   blur?: number;
   rest: Rest;
-}> = ({ t, at, children, pad = 0, config = SPRING.site, blur = 3, rest }) => {
-  const p = rest(t, aos(t, at, { anticip: 3, depth: 0.06, config }), 1);
-  const pPrev = aos(t - 1, at, { anticip: 3, depth: 0.06, config });
+}> = ({ t, at, children, pad = 0, config = SOFT, blur = 3, rest }) => {
+  const p = rest(t, aos(t, at, { anticip: 3, depth: 0.05, config }), 1);
+  const pPrev = aos(t - 1, at, { anticip: 3, depth: 0.05, config });
   const b = rest(t, tween(t, [at, at + 10], [blur, 0], EASE.house) + Math.min(6, Math.abs(p - pPrev) * 110 * 0.1), 0);
   return (
     <span
@@ -78,52 +81,157 @@ const MaskRise: React.FC<{
   );
 };
 
+export type PressSpec = {
+  /** the hover lift before the click (anticipation) */
+  lift: readonly [number, number];
+  /** frames down to .94 */
+  down: number;
+  /** the plum floods the plate from the arrow */
+  flood: readonly [number, number];
+  /** the plum ripple leaves the arrow */
+  ripple: readonly [number, number];
+  /** the glint across the plum face */
+  glint: readonly [number, number];
+};
+
+/** where the arrow sits in the plate (the click point): right padding 1em + half the arrow */
+const ARROW_X = 'calc(100% - 1.5em)';
+
 export const CoverCta: React.FC<{
   t: number;
   at: number;
   press: number;
   fontSize: number;
+  spec: PressSpec;
   rest: Rest;
-}> = ({ t, at, press, fontSize: F, rest }) => {
+}> = ({ t, at, press, fontSize: F, spec, rest }) => {
   if (t < at - 4) return null;
-  // entrance: a point of light gathers (3 f), then the plate pops out of it
-  const e = t < at ? 0 : springAt(t, at, CARD);
-  const ePrev = t - 1 < at ? 0 : springAt(t - 1, at, CARD);
-  const sc = rest(t, t < at ? 0 : mix(0.2, 1, e), 1);
-  const y = rest(t, (1 - Math.min(1, e)) * 26, 0);
-  const vy = Math.abs(e - ePrev) * 0.8 * F * 4; // px/frame of the plate's growing edge
-  const gather = t < at ? Math.sin(((t - (at - 4)) / 4) * (Math.PI / 2)) : Math.max(0, 1 - (t - at) / 3);
+  /* ── the rise ── */
+  const e = t < at ? 0 : springAt(t, at, RISE);
+  const ePrev = t - 1 < at ? 0 : springAt(t - 1, at, RISE);
+  const y = rest(t, (1 - e) * 0.6 * F, 0);
+  const sc0 = rest(t, mix(0.94, 1, e), 1);
+  const vy = Math.abs(e - ePrev) * 0.6 * F; // px/frame of the lift
+  const fadeIn = tween(t, [at, at + 5], [0, 1], EASE.out3);
+  const blur = rest(t, tween(t, [at, at + 8], [4, 0], EASE.out3) + Math.min(3, vy * 0.18), 0);
+  // the point of light it rises out of: gathers over 4 f, peaks ON `at`, hands over in 5 f
+  const gather = t < at ? Math.sin(((t - (at - 4)) / 4) * (Math.PI / 2)) : Math.max(0, 1 - (t - at) / 5);
+  // the settle's accent: a glint crosses the plate as it comes to rest
+  const s0 = at + 9;
+  const s1 = at + 19;
+  const sweep = tween(t, [s0, s1], [-0.4, 1.4], EASE.inOut);
+  const sweepO = t > s0 && t < s1 ? 0.5 * Math.sin(Math.PI * tween(t, [s0, s1], [0, 1])) : 0;
 
-  // the click: .94 in 2 f (in2), then back on the pop spring
-  const D = 2;
+  /* ── the press ── */
+  const lift = t < spec.lift[0] ? 0 : t < press ? SINE(tween(t, spec.lift, [0, 1], (x) => x)) : 0;
+  const D = spec.down;
   const u = t - press;
-  const click = rest(
-    t,
-    u < 0 ? 1 : u < D ? mix(1, 0.94, EASE.in2(u / D)) : mix(0.94, 1, springAt(t, press + D, SPRING.pop)),
-    1,
-  );
-  // the hover it takes (and keeps): colour ON the click, dots/arrow on the site spring
-  const h = tween(t, [press, press + 7], [0, 1], EASE.house);
+  const down = u < 0 ? 1 + 0.025 * lift : u < D ? mix(1.025, 0.94, EASE.in2(u / D)) : mix(0.94, 1, springAt(t, press + D, BACK));
+  const click = rest(t, down, 1);
+  // the hover it takes (and keeps): the flood, then dots/arrow on the site spring
+  const fl = t < press ? 0 : rest(t, tween(t, spec.flood, [0, 1], EASE.out3), 1);
   const hs = rest(t, t < press ? 0 : springAt(t, press, SPRING.site), 1);
-  const bg = mixHex(C.coverPaper, C.plum, h);
-  // the label stays night while the plate is light, flips to paper as soon as
-  // the plate is dark enough for it (night ≥ 5:1 before, paper ≥ 4:1 after)
-  const fg = luminance(bg) > 0.165 ? C.night : C.coverPaper;
-  const dot = 0.3 * F;
   const out = 4 * hs;
-  const dots: React.CSSProperties[] = [
-    { justifySelf: 'start', alignSelf: 'start', transform: `translate(${-out}px, ${-out}px)` },
-    { justifySelf: 'end', alignSelf: 'start', transform: `translate(${out}px, ${-out}px)` },
-    { justifySelf: 'start', alignSelf: 'end', transform: `translate(${-out}px, ${out}px)` },
-    { justifySelf: 'end', alignSelf: 'end', transform: `translate(${out}px, ${out}px)` },
-  ];
-  const dotPop = (k: number) => rest(t, aos(t, at + 3 + k * 1.5, { anticip: 2, depth: 0.15, config: SPRING.pop }), 1);
-  // the hit's accent: a glint sweeps the plate (at +1 … +9)
-  const sweep = tween(t, [at + 1, at + 9], [-0.4, 1.4], EASE.inOut);
-  const sweepO = t > at && t < at + 9 ? 0.55 * Math.sin(Math.PI * tween(t, [at + 1, at + 9], [0, 1])) : 0;
-  // the click's accent: a brand-lit ring leaves the plate
-  const ringU = tween(t, [press, press + 10], [0, 1], EASE.out3);
-  const ringO = t >= press && t < press + 10 ? (1 - ringU) * 0.7 : 0;
+  // the lift hands over to the hover continuously (no jump on the click frame)
+  const liftK = t < press ? lift : rest(t, Math.max(0, 1 - hs), 0);
+  const arrowX = 8 * hs + 3 * liftK;
+  const rippleU = tween(t, spec.ripple, [0, 1], EASE.out3);
+  const rippleO = t >= press && t < spec.ripple[1] ? Math.pow(1 - rippleU, 1.4) : 0;
+  const g0 = spec.glint[0];
+  const g1 = spec.glint[1];
+  const gl = tween(t, [g0, g1], [-0.4, 1.4], EASE.inOut);
+  const glO = t > g0 && t < g1 ? 0.42 * Math.sin(Math.PI * tween(t, [g0, g1], [0, 1])) : 0;
+
+  const dot = 0.3 * F;
+  // the plate's diagonal reach from the arrow (in em): the flood covers it all at fl = 1
+  const reach = 6.2;
+  const floodR = fl * reach * F;
+  const floodMask =
+    fl >= 1 ? undefined : `radial-gradient(circle at ${ARROW_X} 50%, #000 ${Math.max(0, floodR - 10).toFixed(1)}px, transparent ${(floodR + 2).toFixed(1)}px)`;
+
+  /** one face of the plate: the light one (paper plate, night ink) or the pressed one (plum, paper) */
+  const face = (dark: boolean) => {
+    const ink = dark ? C.coverPaper : C.night;
+    const dots: React.CSSProperties[] = [
+      { justifySelf: 'start', alignSelf: 'start', transform: `translate(${-out}px, ${-out}px)` },
+      { justifySelf: 'end', alignSelf: 'start', transform: `translate(${out}px, ${-out}px)` },
+      { justifySelf: 'start', alignSelf: 'end', transform: `translate(${-out}px, ${out}px)` },
+      { justifySelf: 'end', alignSelf: 'end', transform: `translate(${out}px, ${out}px)` },
+    ];
+    const dotPop = (k: number) => rest(t, aos(t, at + 6 + k * 1.5, { anticip: 2, depth: 0.12, config: SPRING.site }), 1);
+    return (
+      <span
+        style={{
+          gridArea: '1 / 1',
+          position: 'relative',
+          display: 'inline-grid',
+          borderRadius: '0.2em',
+          overflow: 'hidden',
+          background: dark ? C.plum : C.coverPaper,
+          WebkitMaskImage: dark ? floodMask : undefined,
+          maskImage: dark ? floodMask : undefined,
+          boxShadow: dark ? `inset 0 0 0 1.5px rgba(192,172,224,${(0.6 * fl).toFixed(3)})` : undefined,
+        }}
+      >
+        <span style={{ gridArea: '1 / 1', display: 'grid', gridTemplate: '1fr 1fr / 1fr 1fr', padding: '0.33em' }}>
+          {dots.map((d, k) => (
+            <span key={k} style={{ ...d, display: 'block', width: dot, height: dot }}>
+              <span style={{ display: 'block', transform: `scale(${Math.max(0, dotPop(k)).toFixed(3)})` }}>
+                <CornerDot size={dot} color={ink} />
+              </span>
+            </span>
+          ))}
+        </span>
+        <span
+          style={{
+            gridArea: '1 / 1',
+            zIndex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.45em',
+            padding: '0.8em 1em',
+            color: ink,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <span>
+            <MaskRise t={t} at={at + 2} pad="0.24em" rest={rest}>
+              Start
+            </MaskRise>
+            <MaskRise t={t} at={at + 4} rest={rest}>
+              free
+            </MaskRise>
+          </span>
+          <span style={{ display: 'inline-block', transform: arrowX > 0.01 ? `translateX(${arrowX.toFixed(2)}px)` : undefined }}>
+            <MaskRise t={t} at={at + 6} rest={rest}>
+              →
+            </MaskRise>
+          </span>
+        </span>
+        {/* the glints: one on the settle (light plate), one across the plum face after the click */}
+        {!dark && sweepO > 0.01 ? (
+          <span
+            style={{
+              gridArea: '1 / 1',
+              zIndex: 2,
+              background: `linear-gradient(105deg, rgba(255,255,255,0) ${((sweep - 0.25) * 100).toFixed(1)}%, rgba(255,255,255,${sweepO.toFixed(3)}) ${(sweep * 100).toFixed(1)}%, rgba(255,255,255,0) ${((sweep + 0.25) * 100).toFixed(1)}%)`,
+              mixBlendMode: 'screen',
+            }}
+          />
+        ) : null}
+        {dark && glO > 0.01 ? (
+          <span
+            style={{
+              gridArea: '1 / 1',
+              zIndex: 2,
+              background: `linear-gradient(105deg, rgba(233,224,255,0) ${((gl - 0.22) * 100).toFixed(1)}%, rgba(233,224,255,${glO.toFixed(3)}) ${(gl * 100).toFixed(1)}%, rgba(233,224,255,0) ${((gl + 0.22) * 100).toFixed(1)}%)`,
+              mixBlendMode: 'screen',
+            }}
+          />
+        ) : null}
+      </span>
+    );
+  };
 
   return (
     <div style={{ position: 'relative', display: 'inline-grid' }}>
@@ -133,14 +241,14 @@ export const CoverCta: React.FC<{
             position: 'absolute',
             left: '50%',
             top: '50%',
-            width: F * 2.4,
-            height: F * 2.4,
-            marginLeft: -F * 1.2,
-            marginTop: -F * 1.2,
+            width: F * 2.6,
+            height: F * 2.6,
+            marginLeft: -F * 1.3,
+            marginTop: -F * 1.3,
             borderRadius: '50%',
             opacity: gather,
-            transform: `scale(${(t < at ? mix(0.35, 0.8, gather) : 0.8 + 0.6 * (t - at) / 3).toFixed(3)})`,
-            background: 'radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(222,220,224,0.55) 18%, rgba(192,172,224,0.18) 42%, rgba(192,172,224,0) 70%)',
+            transform: `translateY(${(0.6 * F * (t < at ? 1 : 1 - e)).toFixed(1)}px) scale(${(t < at ? mix(0.35, 0.85, gather) : 0.85 + 0.5 * (t - at) / 5).toFixed(3)})`,
+            background: 'radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(222,220,224,0.5) 18%, rgba(192,172,224,0.16) 42%, rgba(192,172,224,0) 70%)',
           }}
         />
       ) : null}
@@ -152,90 +260,59 @@ export const CoverCta: React.FC<{
           fontSize: F,
           lineHeight: 1.2,
           letterSpacing: '-0.04em',
-          transform: `translateY(${y.toFixed(2)}px) scale(${(sc * click).toFixed(4)})`,
-          opacity: t < at ? 0 : Math.min(1, e * 3),
-          filter: vy > 3 && t < at + 8 ? `blur(${Math.min(3, vy * 0.04).toFixed(2)}px)` : undefined,
+          transform: `translateY(${y.toFixed(2)}px) scale(${(sc0 * click).toFixed(4)})`,
+          opacity: t < at ? 0 : fadeIn,
+          filter: blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : undefined,
+          borderRadius: '0.2em',
+          boxShadow: [
+            `0 0 ${(48 + 16 * (1 - fl)).toFixed(0)}px rgba(85,26,137,${(0.6 * fl).toFixed(3)})`,
+            `0 ${((0.5 + 0.12 * liftK) * F).toFixed(1)}px ${((1.4 + 0.2 * liftK) * F).toFixed(1)}px ${(-0.5 * F).toFixed(1)}px rgba(0,0,0,0.7)`,
+          ].join(', '),
         }}
       >
-        <span
-          style={{
-            gridArea: '1 / 1',
-            position: 'relative',
-            overflow: 'hidden',
-            display: 'grid',
-            gridTemplate: '1fr 1fr / 1fr 1fr',
-            borderRadius: '0.2em',
-            padding: '0.33em',
-            background: bg,
-            color: C.night,
-            boxShadow: [
-              `inset 0 0 0 1.5px rgba(192,172,224,${(0.6 * h).toFixed(3)})`,
-              `0 0 48px rgba(85,26,137,${(0.6 * h).toFixed(3)})`,
-              `0 ${0.5 * F}px ${1.4 * F}px ${-0.5 * F}px rgba(0,0,0,0.7)`,
-            ].join(', '),
-          }}
-        >
-          {dots.map((d, k) => (
-            <span key={k} style={{ ...d, display: 'block', width: dot, height: dot }}>
-              <span style={{ display: 'block', transform: `scale(${Math.max(0, dotPop(k)).toFixed(3)})` }}>
-                <CornerDot size={dot} color={fg} />
-              </span>
-            </span>
-          ))}
-          {sweepO > 0.01 ? (
-            <span
-              style={{
-                position: 'absolute',
-                inset: 0,
-                background: `linear-gradient(105deg, rgba(255,255,255,0) ${((sweep - 0.25) * 100).toFixed(1)}%, rgba(255,255,255,${sweepO.toFixed(3)}) ${(sweep * 100).toFixed(1)}%, rgba(255,255,255,0) ${((sweep + 0.25) * 100).toFixed(1)}%)`,
-                mixBlendMode: 'screen',
-              }}
-            />
-          ) : null}
-        </span>
-        <span
-          style={{
-            gridArea: '1 / 1',
-            zIndex: 1,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.45em',
-            padding: '0.8em 1em',
-            color: fg,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          <span>
-            <MaskRise t={t} at={at} pad="0.24em" config={SPRING.pop} rest={rest}>
-              Start
-            </MaskRise>
-            <MaskRise t={t} at={at + 1.5} config={SPRING.pop} rest={rest}>
-              free
-            </MaskRise>
-          </span>
-          <span style={{ display: 'inline-block', transform: `translateX(${(8 * hs).toFixed(2)}px)` }}>
-            <MaskRise t={t} at={at + 3} config={SPRING.pop} rest={rest}>
-              →
-            </MaskRise>
-          </span>
-        </span>
+        {face(false)}
+        {fl > 0 ? face(true) : null}
       </div>
-      {ringO > 0.01 ? (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            borderRadius: `${0.2 * F + 6 + 26 * ringU}px`,
-            transform: `scale(${(1 + 0.18 * ringU).toFixed(4)}, ${(1 + 0.5 * ringU).toFixed(4)})`,
-            boxShadow: `0 0 0 ${(2 * (1 - ringU) + 1).toFixed(2)}px rgba(192,172,224,${ringO.toFixed(3)})`,
-          }}
-        />
-      ) : null}
+      {rippleO > 0.01 ? <Ripple u={rippleU} o={rippleO} F={F} /> : null}
     </div>
   );
 };
 
-export const Note: React.FC<{ t: number; at: number; size: number; rest: Rest }> = ({ t, at, size, rest }) => {
+/**
+ * The click's ripple: a plum ring with a lilac edge leaving the arrow, out to
+ * 1.3 × the plate's width (≈ 8.4em at "Start free →"), thinning as it goes.
+ */
+const Ripple: React.FC<{ u: number; o: number; F: number }> = ({ u, o, F }) => {
+  const d = mix(0.4, 8.4, u) * F;
+  const w = mix(3, 1, u);
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        right: `${1.5 * F}px`,
+        top: '50%',
+        width: 0,
+        height: 0,
+        pointerEvents: 'none',
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          left: -d / 2,
+          top: -d / 2,
+          width: d,
+          height: d,
+          borderRadius: '50%',
+          border: `${w.toFixed(2)}px solid rgba(192,172,224,${(0.75 * o).toFixed(3)})`,
+          boxShadow: `0 0 ${(18 + 10 * u).toFixed(1)}px ${(4 * (1 - u) + 1).toFixed(1)}px rgba(124,58,237,${(0.45 * o).toFixed(3)}), inset 0 0 ${(20 + 14 * u).toFixed(1)}px rgba(85,26,137,${(0.55 * o).toFixed(3)})`,
+        }}
+      />
+    </div>
+  );
+};
+
+export const Note: React.FC<{ t: number; at: number; step: number; size: number; rest: Rest }> = ({ t, at, step, size, rest }) => {
   const words = '5 free minutes, no card'.split(' ');
   if (t < at - 4) return null;
   return (
@@ -245,12 +322,13 @@ export const Note: React.FC<{ t: number; at: number; size: number; rest: Rest }>
         fontWeight: 500,
         fontSize: size,
         lineHeight: 1.3,
-        color: 'rgba(237,236,241,0.8)',
+        letterSpacing: '-0.01em',
+        color: 'rgba(237,236,241,0.82)',
         whiteSpace: 'nowrap',
       }}
     >
       {words.map((w, i) => (
-        <MaskRise key={i} t={t} at={at + i * 1.5} pad={i < words.length - 1 ? '0.26em' : 0} rest={rest}>
+        <MaskRise key={i} t={t} at={at + i * step} pad={i < words.length - 1 ? '0.26em' : 0} rest={rest}>
           {w}
         </MaskRise>
       ))}
@@ -278,8 +356,8 @@ export const Url: React.FC<{
 }> = ({ t, at, chunks, size, dot, ruleW, step, rest }) => {
   const text = 'neurotechvoice.com';
   if (t < at - 3) return null;
-  const d = rest(t, aos(t, at - 1, { anticip: 2, depth: 0.2, config: SPRING.pop }), 1);
-  const draw = tween(t, [at + 2, at + 20], [0, 1], EASE.house);
+  const d = rest(t, aos(t, at - 1, { anticip: 2, depth: 0.2, config: SPRING.site }), 1);
+  const draw = tween(t, [at + 2, at + 24], [0, 1], EASE.house);
   const n = text.length;
   const parts = chunks && chunks.length ? chunks : [{ from: 0, at }];
   /** the frame character i is typed */
@@ -293,7 +371,7 @@ export const Url: React.FC<{
   const typed = typedN - 1 + 1e-3; // (whole characters typed, for the caret)
   const doneAt = charAt(n - 1);
   // caret: on while typing, then a blink off
-  const caretO = t < at ? 0 : t <= doneAt + 2 ? 1 : tween(t, [doneAt + 2, doneAt + 5], [1, 0], EASE.in2);
+  const caretO = t < at ? 0 : t <= doneAt + 2 ? 1 : tween(t, [doneAt + 2, doneAt + 6], [1, 0], EASE.in2);
   const rule = (origin: 'left' | 'right') => (
     <div
       style={{

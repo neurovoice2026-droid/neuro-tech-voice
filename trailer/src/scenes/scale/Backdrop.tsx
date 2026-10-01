@@ -1,21 +1,19 @@
 /**
- * The far plane of the white act (depth 0.4): the act's GROUND — #demo's
- * stage light for the hour (theme LIGHTS[..].ground, a radial light from the
- * centre, never a flat slab) — under at most ONE soft bloom:
+ * The far planes of the white act:
  *
- *   wall       the rush ground (rose), breathing in from the knowledge
- *              whip's white; one rose bloom sweeps with the fill — behind the
- *              block being filled — and swells on each quarter note; the
- *              hero holds the rush
- *   turn       as the title lifts and the cards leave, the rose drains to
- *              white stock and the closing ground (emerald) floods in with
- *              the first greeting (SCALE_LOCAL.lightTurn) — through white,
- *              never a rose/emerald mix
- *   languages  the closing ground + bloom
- *   flow       the closing ground; the light pools round the rail
+ *   Ground (screen space, behind the camera)  the leading light's stage
+ *              light (scale/lights.ts groundOf: a radial light from the
+ *              centre, never a flat slab), arriving out of the knowledge
+ *              whip's white and crossfading through white stock between two
+ *              lights. Strong on the wall, quieter under the languages (the
+ *              active card's own light leads there), back for the flow.
+ *   Backdrop (depth 0.4)  ONE soft bloom of the leading light: it pools behind
+ *              the block being filled (each light's four cards), centres on
+ *              the hero, then sits behind the active language card and swells
+ *              as each one arrives; in the flow the light pools under the rail.
+ *              Plus a whisper of neutral room shading at the edges.
  *
- * Plus a whisper of neutral room shading at the edges (depth, not colour).
- * Pure gradients — no filters — so the full-frame layer costs nothing.
+ * Pure gradients — no filters — so the full-frame layers cost nothing.
  */
 import React from 'react';
 import { AbsoluteFill } from 'remotion';
@@ -24,42 +22,47 @@ import { LIGHTS } from '../../theme';
 import { EASE, tween } from '../../lib/motion';
 import type { Layout } from '../../lib/layout';
 import { SCALE, SCALE_LOCAL } from '../../timing';
-import { LANG_LIGHT, LEAD, leadWeights, rgba } from './lights';
+import { FLOW_LIGHT, groundOf, LEAD, leadWeights, rgba, type Where } from './lights';
 
 const K = SCALE_LOCAL;
 
-/** how much of the act's ground lights the room (1 = #demo's stage verbatim) */
-const GROUND = 0.85;
-
 const pool = (col: string, a: number) =>
   `radial-gradient(closest-side, ${rgba(col, a)} 0%, ${rgba(col, a * 0.55)} 45%, ${rgba(col, a * 0.16)} 75%, ${rgba(col, 0)} 100%)`;
+
+/** how much of the leading light's ground lights the room at t */
+function groundAmount(t: number) {
+  const inA = tween(t, [0, 14], [0, 1], EASE.house);
+  const langs = tween(t, [K.enFlip, K.enFlip + 14], [0, 1], EASE.inOut);
+  const flow = tween(t, [K.collapse, K.stations[0]], [0, 1], EASE.inOut);
+  return inA * (0.72 - 0.24 * langs + 0.12 * flow);
+}
 
 export const Backdrop: React.FC<{ t: number; L: Layout }> = ({ t, L }) => {
   const W = L.width;
   const H = L.height;
   const HERO = SCALE.industriesTitle;
-  // the bloom's centre per LEAD key (fractions of the frame): it follows the block being filled
-  // (card 01 → 2 × 2 → 3 × 3 → the bottom row), centres on the hero, then sits under the cells
-  const at: readonly (readonly [number, number])[] = L.pick(
-    [[0.3, 0.3], [0.5, 0.45], [0.72, 0.5], [0.55, 0.78], [0.5, 0.5], [0.62, 0.6]],
-    [[0.32, 0.3], [0.5, 0.4], [0.7, 0.5], [0.5, 0.68], [0.5, 0.5], [0.6, 0.62]],
+  // the bloom's centre per lead key (fractions of the frame)
+  const P: Record<Where, readonly [number, number]> = L.pick(
+    { g0: [0.3, 0.32], g1: [0.55, 0.45], g2: [0.42, 0.66], g3: [0.66, 0.72], hero: [0.5, 0.5], lang: [0.5, 0.46] },
+    { g0: [0.3, 0.34], g1: [0.55, 0.42], g2: [0.42, 0.58], g3: [0.64, 0.66], hero: [0.5, 0.46], lang: [0.5, 0.4] },
   );
   const { i, prev, m, wPrev, wCur } = leadWeights(t);
-  // the light turns as a crossfade of two pools of light, through white between two lights (never a hue sweep)
   const colPrev = LIGHTS[LEAD[prev].light].orb[3];
   const colCur = LIGHTS[LEAD[i].light].orb[3];
-  const bx = (at[prev][0] + (at[i][0] - at[prev][0]) * m) * W;
-  const by = (at[prev][1] + (at[i][1] - at[prev][1]) * m) * H;
-  // the light swells on the hour (the quarter note), on the hero and on the turn, and settles
+  const a0 = P[LEAD[prev].where];
+  const a1 = P[LEAD[i].where];
+  const bx = (a0[0] + (a1[0] - a0[0]) * m) * W;
+  const by = (a0[1] + (a1[1] - a0[1]) * m) * H;
+  // the light swells as the hour turns, on the hero, and as each language arrives — then settles
   let swell = 0;
-  for (const q of [...K.beats, HERO, K.langs[0]]) if (t >= q) swell = Math.max(swell, 1 - tween(t, [q, q + 8], [0, 1], EASE.out3));
-  // the white act "breathes in" from the cut: the white is continuous, the light arrives
+  for (const q of [...K.groups, HERO, ...SCALE.langAt]) if (t >= q) swell = Math.max(swell, 1 - tween(t, [q, q + 10], [0, 1], EASE.out3));
   const fadeIn = tween(t, [0, 8], [0, 1], EASE.out3);
-  const open = tween(t, [0, 24], [0.82, 1], EASE.house);
+  const open = tween(t, [0, 30], [0.8, 1], EASE.house);
   // the flow: the light moves under the rail (and a second, quieter pool by the CRM)
   const flowW = tween(t, [K.collapse, K.stations[0] + 6], [0, 1], EASE.inOut);
-  const wallR = L.pick(760, 640) * open * (1 + 0.12 * swell);
-  const wallA = 0.5 * (1 + 0.6 * swell) * fadeIn * (1 - flowW);
+  const langW = tween(t, [K.enFlip, K.enFlip + 10], [0, 1], EASE.inOut);
+  const wallR = L.pick(760, 660) * open * (1 + 0.1 * swell) * (1 + 0.15 * langW);
+  const wallA = (0.5 - 0.12 * langW) * (1 + 0.5 * swell) * fadeIn * (1 - flowW);
   const flow = L.pick(
     [
       { x: W * 0.3, y: H * 0.8, r: 780, a: 0.34, seed: 'f0' },
@@ -79,14 +82,14 @@ export const Backdrop: React.FC<{ t: number; L: Layout }> = ({ t, L }) => {
       <div key={key} style={{ position: 'absolute', left: x - r, top: y - r, width: r * 2, height: r * 2, background: pool(c, Math.min(0.95, a)) }} />
     );
   const d0 = drift('w');
-  const fc = LIGHTS[LANG_LIGHT].orb[3];
-  // transparent: the act's Ground (screen space, behind the camera) shows through
+  const fc = LIGHTS[FLOW_LIGHT].orb[3];
+  const turning = prev !== i && m < 1;
   return (
     <AbsoluteFill>
       {/* neutral room shading: the corners fall off a hair (depth, no hue) */}
       <AbsoluteFill style={{ background: 'radial-gradient(130% 110% at 50% 45%, rgba(24,16,40,0) 55%, rgba(24,16,40,0.035) 100%)' }} />
-      {prev !== i && m < 1 ? blob('wall-prev', bx + d0.dx, by + d0.dy, wallR, colPrev, wallA * wPrev) : null}
-      {blob('wall', bx + d0.dx, by + d0.dy, wallR, colCur, wallA * wCur)}
+      {turning ? blob('wall-prev', bx + d0.dx, by + d0.dy, wallR, colPrev, wallA * (LEAD[prev].light === LEAD[i].light ? 1 - m : wPrev)) : null}
+      {blob('wall', bx + d0.dx, by + d0.dy, wallR, colCur, wallA * (turning ? (LEAD[prev].light === LEAD[i].light ? m : wCur) : 1))}
       {flow.map((b) => {
         const d = drift(b.seed);
         return blob(b.seed, b.x + d.dx, b.y + d.dy, b.r, fc, b.a * flowW);
@@ -96,21 +99,19 @@ export const Backdrop: React.FC<{ t: number; L: Layout }> = ({ t, L }) => {
 };
 
 /**
- * The act's GROUND — the farthest plane, so it sits in screen space behind
- * the camera (it never moves, and no camera zoom or kick can bare an edge):
- * the leading light's #demo stage light, crossfading on the light turn and
- * arriving with the light out of the knowledge whip's white.
+ * The act's GROUND — the farthest plane, in screen space behind the camera
+ * (no zoom or kick can bare an edge): the leading light's stage light.
  */
 export const Ground: React.FC<{ t: number }> = ({ t }) => {
   const { i, prev, wPrev, wCur } = leadWeights(t);
-  const gPrev = LIGHTS[LEAD[prev].light].ground;
-  const gCur = LIGHTS[LEAD[i].light].ground;
-  const a = GROUND * tween(t, [0, 14], [0, 1], EASE.house);
+  const gPrev = groundOf(LEAD[prev].light);
+  const gCur = groundOf(LEAD[i].light);
+  const a = groundAmount(t);
   if (a <= 0.004) return null;
   const turning = gPrev !== gCur;
   return (
     <AbsoluteFill style={{ opacity: a }}>
-      {/* on the turn the old room drains to white stock before the new light floods in */}
+      {/* on a turn the old room drains to white stock before the new light floods in */}
       {turning && wPrev > 0.004 ? <AbsoluteFill style={{ background: gPrev, opacity: wPrev }} /> : null}
       {!turning || wCur > 0.004 ? <AbsoluteFill style={{ background: gCur, opacity: turning ? wCur : 1 }} /> : null}
     </AbsoluteFill>
