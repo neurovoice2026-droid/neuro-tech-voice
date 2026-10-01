@@ -2,7 +2,12 @@
  * A 2.5D camera for parallax. Wrap a scene in <Camera x y zoom rot> and put
  * its content in <Layer depth>: depth 0 = infinitely far (never moves),
  * 1 = the focal plane (moves exactly with the camera), >1 = foreground
- * (moves faster, e.g. dust). Every scene uses ≥3 layers.
+ * (moves faster). Every scene uses ≥3 layers.
+ *
+ * `dof` is an OPTICAL treatment of a background plane — a constant (or very
+ * slowly changing) depth-of-field softness. Never animate it as a transition
+ * and never put type on a dof layer: text appears by motion, not by blur.
+ * Moving text inside a moving layer: see components/Type.tsx subpixel().
  */
 import React, { createContext, useContext } from 'react';
 import { AbsoluteFill } from 'remotion';
@@ -24,7 +29,7 @@ export const Layer: React.FC<{
   depth: number;
   children: React.ReactNode;
   style?: React.CSSProperties;
-  /** Extra blur for depth-of-field, in px. */
+  /** Static depth-of-field softness for a BACKGROUND plane, px (never animated as a transition, never on type). */
   dof?: number;
 }> = ({ depth, children, style, dof = 0 }) => {
   const c = useCamera();

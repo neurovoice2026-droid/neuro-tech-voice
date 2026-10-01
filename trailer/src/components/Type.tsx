@@ -75,15 +75,31 @@ export function reveal(t: number, start: number, o: RevealOptions = {}) {
   return { p, y, opacity, scale };
 }
 
-/** The inner (moving) span's style for a reveal state. */
+/**
+ * SUB-PIXEL MOTION for text. Chrome snaps glyphs to whole pixels vertically, so a slow
+ * translateY moves type in 1 px stairs (measured: 0, 0, 1, 1, 1, 1, 2 … for a ¼ px/frame
+ * move) — at 120 fps the tail of every settle would step. While an element MOVES, this puts
+ * it on its own compositor layer with a non-translation matrix (rotate .02° — invisible:
+ * ≤ .1 px across a word), which the compositor resamples at the exact sub-pixel offset
+ * (measured: 0, .25, .5, .75, 1 …). At rest it is plain, pixel-crisp text again (a layer
+ * keeps its raster scale, so it must not linger under a camera zoom).
+ *
+ *   <span style={{ ...subpixel(`translateY(${y}px)`, moving) }}>
+ */
+export function subpixel(transform: string | undefined, moving: boolean): React.CSSProperties {
+  if (!transform) return {};
+  return moving ? { transform: `${transform} rotate(0.02deg)`, willChange: 'transform' } : { transform };
+}
+
+/** The inner (moving) span's style for a reveal state (sub-pixel while it moves, crisp at rest). */
 export function revealStyle(r: ReturnType<typeof reveal>, origin = '50% 85%'): React.CSSProperties {
-  const tf =
-    Math.abs(r.y) > 1e-4 || Math.abs(r.scale - 1) > 1e-5
-      ? `translateY(${r.y.toFixed(3)}%)${Math.abs(r.scale - 1) > 1e-5 ? ` scale(${r.scale.toFixed(5)})` : ''}`
-      : undefined;
+  const sc = Math.abs(r.scale - 1) > 1e-5;
+  // |y| ≤ .03 % (≤ .04 px at 128 px) reads as rest: the text drops back to pixel-crisp
+  const moving = Math.abs(r.y) > 0.03 || sc;
+  const tf = moving ? `translateY(${r.y.toFixed(3)}%)${sc ? ` scale(${r.scale.toFixed(5)})` : ''}` : undefined;
   return {
     display: 'inline-block',
-    transform: tf,
+    ...subpixel(tf, moving),
     transformOrigin: origin,
     opacity: r.opacity >= 0.999 ? undefined : Math.max(0, r.opacity),
   };
@@ -193,7 +209,7 @@ export const Words: React.FC<WordsProps> = ({
     const k = keyOf[i];
     return k ? mixHex(color, k.color, tween(t, [k.at, k.at + 18], [0, 1], EASE.house)) : color;
   };
-  const opts = (s: number, e: number | null): RevealOptions => ({
+  const opts = (e: number | null): RevealOptions => ({
     config,
     rise,
     from,
@@ -208,7 +224,7 @@ export const Words: React.FC<WordsProps> = ({
       ? rows.map((ws, li) => {
           const s = start + li * stagger;
           const e = exit ? exit.at + li * (exit.stagger ?? 2) : null;
-          const r = reveal(t, s, opts(s, e));
+          const r = reveal(t, s, opts(e));
           const first = n;
           n += ws.length;
           return (
@@ -230,7 +246,7 @@ export const Words: React.FC<WordsProps> = ({
             const i = n++;
             const s = start + i * stagger;
             const e = exit ? exit.at + i * (exit.stagger ?? 2) : null;
-            const r = reveal(t, s, opts(s, e));
+            const r = reveal(t, s, opts(e));
             const last = j === ws.length - 1 && li === rows.length - 1;
             return (
               <span key={i} style={maskBox(last ? 0 : gap)}>

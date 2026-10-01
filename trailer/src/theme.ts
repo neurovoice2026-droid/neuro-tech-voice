@@ -254,7 +254,7 @@ export const TYPE: Record<TypeRole, TypeSpec> = {
  * at one size) and are never negatively tracked. Apply on top of a role:
  * size × scale, tracking, weight (Noto Sans JP is darker than Instrument Sans).
  */
-export const TYPE_JP = { scale: 0.86, tracking: '0.02em', weight: 430, weightOnDark: 410, lineHeight: 1.22 } as const;
+export const TYPE_JP = { scale: 0.86, tracking: '0.02em', weight: 460, weightOnDark: 440, lineHeight: 1.22 } as const;
 
 /** Who is speaking: the caption ink and the tag (label) ink, on night and on paper. */
 export const VOICE_INK = {

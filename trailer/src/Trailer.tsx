@@ -5,7 +5,7 @@
  */
 import React, { useState } from 'react';
 import { AbsoluteFill, Sequence } from 'remotion';
-import { Grain } from './components/Grain';
+import { FilmGrain as Finish } from './components/Grain';
 import { waitForFonts } from './lib/fonts';
 import { tween } from './lib/motion';
 import { useSub, useTimelineFrame } from './lib/scene';
@@ -32,7 +32,10 @@ export const SCENE_COMPONENTS: Record<SceneKey, React.FC> = {
 
 export const ORDER: SceneKey[] = ['hook', 'twist', 'call', 'result', 'knowledge', 'scale', 'cta'];
 
-/** Grain: the cover's overlay grain on the dark; lighter on the white act. */
+/**
+ * The finishing grain (components/Grain.tsx FilmGrain): fine overlay grain + a dark
+ * dither on the night, a whisper of multiply on the white act. Re-seeded every render frame.
+ */
 const FilmGrain: React.FC = () => {
   const frame = useTimelineFrame();
   // the white act: the knowledge base, then the scale montage, until the CTA iris
@@ -40,13 +43,7 @@ const FilmGrain: React.FC = () => {
   const whiteOut = SCENES.scale.from + SCALE.irisToDark[1];
   const onWhite =
     tween(frame, [whiteIn - 4, whiteIn + 2], [0, 1]) * (1 - tween(frame, [whiteOut - 10, whiteOut], [0, 1]));
-  return (
-    <>
-      <Grain opacity={0.15 * (1 - onWhite)} blend="overlay" />
-      {/* On white, overlay grain would vanish; a whisper of multiply keeps the film texture. */}
-      <Grain opacity={0.04 * onWhite} blend="multiply" freq={0.9} />
-    </>
-  );
+  return <Finish white={onWhite} />;
 };
 
 export const Trailer: React.FC<{ only?: SceneKey; audio?: boolean }> = ({ only, audio = true }) => {

@@ -8,7 +8,7 @@
 import React, { useState } from 'react';
 import { AbsoluteFill, Composition, Sequence } from 'remotion';
 import { useSub } from '../lib/scene';
-import { Grain } from '../components/Grain';
+import { FilmGrain } from '../components/Grain';
 import { waitForFonts } from '../lib/fonts';
 import { C } from '../theme';
 import { DURATION, FPS, LANDSCAPE, SCENES, VERTICAL, type SceneKey } from '../timing';
@@ -23,7 +23,7 @@ export function devRoot(key: SceneKey, Scene: React.FC) {
         <Sequence from={(s.from - s.pre) * sub} durationInFrames={(s.to + s.post - (s.from - s.pre)) * sub}>
           <Scene />
         </Sequence>
-        <Grain opacity={key === 'scale' || key === 'knowledge' ? 0.025 : 0.15} blend={key === 'scale' || key === 'knowledge' ? 'multiply' : 'overlay'} />
+        <FilmGrain white={key === 'scale' || key === 'knowledge' ? 1 : 0} />
       </AbsoluteFill>
     );
   };

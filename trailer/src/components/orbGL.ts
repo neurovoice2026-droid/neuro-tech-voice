@@ -12,15 +12,13 @@
  * ONE / ONE_MINUS_SRC_ALPHA, so overlapping or touching orbs blend without
  * dark fringes.
  *
- * Optional motion blur: an orb given a `smear` is drawn into an offscreen
- * layer, then laid onto the canvas through a box filter along its motion
- * (a real shutter for a translating object: the orb's pattern moves with
- * it). Wrapping a WebGL canvas in <CameraMotionBlur> is never an option.
+ * No motion blur: the film renders at 120 fps and a moving orb reads crisply
+ * (the old `smear` pass is gone; the field is accepted and ignored).
  *
  * Third-party shader code kept with its notices, as on the site:
  * 3D simplex noise from webgl-noise (Copyright (C) 2011 Ashima Arts, Stefan
  * Gustavson, MIT) and "Hash without Sine" (Copyright (c) 2014 David Hoskins,
- * MIT).
+ * MIT) — see ORB_FRAG.
  */
 import type { Palette } from '../theme';
 import { hexToRgb, mixPalette } from '../lib/lights';
@@ -158,44 +156,6 @@ void main() {
   outColor = vec4(clamp(col, 0.0, 1.0) * mask, mask) * uAlpha;
 }`;
 
-/**
- * The motion-blur pass: a box filter along the smear over a premultiplied
- * layer. The orb is drawn into the layer without grain and the grain goes on
- * after the blur (grain sits on the film, it does not streak with the orb).
- */
-const SMEAR_FRAG = `#version 300 es
-precision highp float;
-uniform sampler2D uTex;
-uniform vec2 uSize;
-uniform vec2 uSmear;
-uniform float uTaps;
-uniform float uAlpha;
-uniform float uGrain;
-uniform float uTime;
-out vec4 outColor;
-
-// "Hash without Sine", Copyright (c) 2014 David Hoskins. MIT License.
-// https://www.shadertoy.com/view/4djSRW
-float hash12(vec2 p) {
-  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-  p3 += dot(p3, p3.yzx + 33.33);
-  return fract((p3.x + p3.y) * p3.z);
-}
-
-void main() {
-  vec2 p = gl_FragCoord.xy;
-  vec4 acc = vec4(0.0);
-  for (int i = 0; i < 64; i++) {
-    if (float(i) >= uTaps) break;
-    float k = (float(i) + 0.5) / uTaps - 0.5;
-    acc += texture(uTex, (p + uSmear * k) / uSize);
-  }
-  vec4 c = acc / uTaps;
-  float g = hash12(p + floor(uTime * 24.0) * 37.0) - 0.5;
-  c.rgb = clamp(c.rgb + g * uGrain * c.a, 0.0, c.a);
-  outColor = c * uAlpha;
-}`;
-
 /** One orb for the renderer, in canvas CSS pixels (y down). */
 export type OrbDraw = {
   /** Centre. */
@@ -211,7 +171,7 @@ export type OrbDraw = {
   time: number;
   grain?: number;
   opacity?: number;
-  /** Motion blur: the distance (CSS px, y down) the orb travels while the shutter is open. */
+  /** @deprecated ignored — no simulated motion blur (the film renders at 120 fps). */
   smear?: readonly [number, number];
 };
 
@@ -258,7 +218,6 @@ const uniforms = <K extends string>(gl: WebGL2RenderingContext, p: WebGLProgram,
   Object.fromEntries(names.map((n) => [n, gl.getUniformLocation(p, n)])) as Record<K, WebGLUniformLocation | null>;
 
 const ORB_U = ['uRes', 'uOrigin', 'uTime', 'uVol', 'uGrain', 'uAlpha', 'uColors'] as const;
-const SMEAR_U = ['uTex', 'uSize', 'uSmear', 'uTaps', 'uAlpha', 'uGrain', 'uTime'] as const;
 
 /**
  * One WebGL2 context on one canvas, drawing any number of orbs per frame.
@@ -266,9 +225,6 @@ const SMEAR_U = ['uTex', 'uSize', 'uSmear', 'uTaps', 'uAlpha', 'uGrain', 'uTime'
  * CSS pixels onto it with the given scale.
  */
 export class OrbRenderer {
-  private layer: { tex: WebGLTexture; fb: WebGLFramebuffer; w: number; h: number } | null = null;
-  private smearProg: { p: WebGLProgram; u: Record<(typeof SMEAR_U)[number], WebGLUniformLocation | null> } | null | undefined;
-
   private constructor(
     readonly gl: WebGL2RenderingContext,
     private readonly orb: { p: WebGLProgram; u: Record<(typeof ORB_U)[number], WebGLUniformLocation | null> },
@@ -293,36 +249,6 @@ export class OrbRenderer {
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     return new OrbRenderer(gl, { p, u: uniforms(gl, p, ORB_U) });
-  }
-
-  private smear() {
-    if (this.smearProg === undefined) {
-      const p = compile(this.gl, SMEAR_FRAG);
-      this.smearProg = p ? { p, u: uniforms(this.gl, p, SMEAR_U) } : null;
-    }
-    return this.smearProg;
-  }
-
-  private target(w: number, h: number) {
-    const gl = this.gl;
-    if (this.layer && this.layer.w === w && this.layer.h === h) return this.layer;
-    if (this.layer) {
-      gl.deleteTexture(this.layer.tex);
-      gl.deleteFramebuffer(this.layer.fb);
-    }
-    const tex = gl.createTexture()!;
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    const fb = gl.createFramebuffer()!;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    this.layer = { tex, fb, w, h };
-    return this.layer;
   }
 
   /**
@@ -356,61 +282,18 @@ export class OrbRenderer {
       const res = o.d * sx; // diameter in device px
       const ox = (o.x - o.d / 2) * sx; // box corner, GL coords (y up)
       const oy = H - (o.y + o.d / 2) * sy;
-      const smx = (o.smear?.[0] ?? 0) * sx;
-      const smy = -(o.smear?.[1] ?? 0) * sy;
-      const len = Math.hypot(smx, smy);
-      const sm = len >= 0.75 ? this.smear() : null;
-
       const orbBox = box(ox - 1, oy - 1, ox + res + 1, oy + res + 1);
+      if (!orbBox) continue;
       const u = this.orb.u;
-      const film = o.grain ?? grain;
-      const drawOrb = (a: number, g: number) => {
-        gl.useProgram(this.orb.p);
-        gl.uniform2f(u.uRes, res, res);
-        gl.uniform2f(u.uOrigin, ox, oy);
-        gl.uniform1f(u.uTime, o.time);
-        gl.uniform1f(u.uVol, o.volume);
-        gl.uniform1f(u.uGrain, g);
-        gl.uniform1f(u.uAlpha, a);
-        gl.uniform3fv(u.uColors, paletteUniform(o.palette, o.paletteB, o.mixB ?? 0));
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
-      };
-
-      if (!sm) {
-        if (!orbBox) continue;
-        gl.scissor(...orbBox);
-        drawOrb(alpha, film);
-        continue;
-      }
-
-      // motion blur: the orb alone on the offscreen layer, then smeared onto the canvas
-      const hx = Math.abs(smx) / 2 + 2;
-      const hy = Math.abs(smy) / 2 + 2;
-      const outBox = box(ox - hx, oy - hy, ox + res + hx, oy + res + hy);
-      if (!outBox || !orbBox) continue;
-      const layer = this.target(W, H);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, layer.fb);
-      // the whole layer: the filter reads half a smear beyond the output box,
-      // where an earlier orb's layer would otherwise still be
-      gl.disable(gl.SCISSOR_TEST);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.enable(gl.SCISSOR_TEST);
-      gl.disable(gl.BLEND);
       gl.scissor(...orbBox);
-      drawOrb(1, 0);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.enable(gl.BLEND);
-      gl.scissor(...outBox);
-      gl.useProgram(sm.p);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, layer.tex);
-      gl.uniform1i(sm.u.uTex, 0);
-      gl.uniform2f(sm.u.uSize, W, H);
-      gl.uniform2f(sm.u.uSmear, smx, smy);
-      gl.uniform1f(sm.u.uTaps, Math.min(64, Math.max(2, Math.ceil(len / 1.25) + 1)));
-      gl.uniform1f(sm.u.uAlpha, alpha);
-      gl.uniform1f(sm.u.uGrain, film);
-      gl.uniform1f(sm.u.uTime, o.time);
+      gl.useProgram(this.orb.p);
+      gl.uniform2f(u.uRes, res, res);
+      gl.uniform2f(u.uOrigin, ox, oy);
+      gl.uniform1f(u.uTime, o.time);
+      gl.uniform1f(u.uVol, o.volume);
+      gl.uniform1f(u.uGrain, o.grain ?? grain);
+      gl.uniform1f(u.uAlpha, alpha);
+      gl.uniform3fv(u.uColors, paletteUniform(o.palette, o.paletteB, o.mixB ?? 0));
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     gl.disable(gl.SCISSOR_TEST);

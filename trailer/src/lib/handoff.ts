@@ -10,11 +10,13 @@
  *   scale → cta    FLOW_END       the last (CRM) node; the CTA irises open from it
  */
 import type { Layout } from './layout';
+import { TYPE } from '../theme';
 
 /** Hook's line at rest (frames ≥ 100 of the hook). The twist starts from exactly this. */
 export const HOOK_LINE = (L: Layout) => ({
   text: 'Your business is closed.',
-  fontSize: L.pick(132, 128),
+  /** TYPE.display */
+  fontSize: L.pick(TYPE.display.size[0], TYPE.display.size[1]),
   /** box the line is laid out in (centred text, balanced wrap) */
   left: L.pick(160, 70),
   width: L.pick(1600, 940),
@@ -25,14 +27,26 @@ export const HOOK_LINE = (L: Layout) => ({
 /** Where the call's orb is born: the phone avatar after the dive into the screen. */
 export const CALL_ORB_START = (L: Layout) => ({ x: L.cx, y: L.cy, d: L.pick(300, 240) });
 
-/** Transcript geometry in the call (so the result can pick the mark up). */
+/** Transcript geometry in the call (so the result can pick the mark up). Set in TYPE.caption. */
 export const TRANSCRIPT = (L: Layout) => ({
   /** the caption's row A vertical centre (wrapped rows grow downward) */
   y: L.pick(800, 1180),
-  fontSize: L.pick(76, 68),
-  lineHeight: 1.22,
+  fontSize: L.pick(TYPE.caption.size[0], TYPE.caption.size[1]),
+  lineHeight: TYPE.caption.lineHeight,
   maxWidth: L.pick(1640, 960),
 });
+
+/**
+ * The booked mark's setting — the call's caption setting on the night (TYPE.caption,
+ * weightOnDark): the call's captions (lib/type.ts captionFont(L.vertical, 'night')), <BookedMark>
+ * and the result's flyer words all use exactly this, so the mark hands over pixel-identical.
+ */
+export const MARK_TYPE = {
+  family: TYPE.caption.family,
+  weight: TYPE.caption.weightOnDark,
+  tracking: TYPE.caption.tracking,
+  lineHeight: TYPE.caption.lineHeight,
+} as const;
 
 /**
  * The booked mark. The last line is set as two rows:

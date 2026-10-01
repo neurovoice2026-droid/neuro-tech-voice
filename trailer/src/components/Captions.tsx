@@ -2,7 +2,11 @@
  * Live captions, driven by the real voice (src/voice.generated.ts).
  *
  * Shared by the CALL and the KNOWLEDGE scenes. Everything is a pure
- * function of `t` (the same frame space as `lineAt`).
+ * function of `t` (the same frame space as `lineAt`, fractional at 120 fps).
+ *
+ * Set in TYPE.caption (Instrument Sans, like the knowledge heading) for BOTH
+ * speakers: the speaker is told by colour (theme.ts VOICE_INK) and an
+ * optional ● AVA / ● CALLER label above row A — never by a serif italic.
  *
  * Timing
  *   caption c starts at  s_c = lineAt + vWord(voice, c.word)
@@ -11,35 +15,34 @@
  *
  * Layout — each caption is laid out once (text-wrap: balance); row A is
  * centred on `y`, wrapped rows grow downward. Unrevealed words sit in place
- * at opacity 0: nothing ever reflows.
+ * (inside their masks, at opacity 0): nothing ever reflows.
  *
- * Words — the site's WORD_FROM → WORD_TO, compressed: opacity 0 → 1,
- * translateY .16em → 0, blur 3 → 0 px over 6 f (power3.out). The word being
- * spoken is at 100 % with a soft glow; words already spoken ease to 86 %.
+ * Words — each word rises out of its own clipping box on SPRING.caption
+ * (from 80 % of its height, opacity up over the first half of the travel),
+ * released a frame before it appears. NO blur, no glow, no ghost copies.
+ * Optionally (spokenOpacity < 1) words already spoken ease down to that
+ * opacity once the voice moves on.
  *
- * Replacement — at s_{c+1} the outgoing caption leaves (−30 % y, 4 px blur,
- * fade, 4 f, power2.in) while the incoming one starts. If that would take it
- * off screen less than a beat (15 f) after its last word, it moves up to
+ * Replacement — at s_{c+1} the outgoing caption leaves in OUT (4) frames:
+ * its words rise up out of their masks (power3.in, fading in the second
+ * half, a ≤ 1.4 f left-to-right stagger inside the 4 f). If that would take
+ * it off screen less than a beat (15 f) after its last word, it moves up to
  * `echoY` instead (scale .86, opacity .42, the site spring; it starts lifting
- * 3 f before the incoming caption appears, so they never overlap) and leaves a beat
- * after its last word (−20 px, blur 4, fade, 5 f). One echo at a time. With
- * `echoY = null` it simply holds until s_{c+1}. A line's last caption holds
- * until `holdUntil` (never less than a beat after its last word).
+ * 3 f before the incoming caption appears, so they never overlap) and leaves
+ * a beat after its last word the same way (ECHO_OUT, 5 f). One echo at a time.
+ * With `echoY = null` it simply holds until s_{c+1}. A line's last caption
+ * holds until `holdUntil` (never less than a beat after its last word).
  */
 import React from 'react';
 import { EASE, mixHex, SPRING, springAt, tween } from '../lib/motion';
+import { useLayout } from '../lib/layout';
+import { baselineEm, captionFont, maskBox, type CaptionFont } from '../lib/type';
 import { BEAT, FPS, vWord, type Caption } from '../timing';
+import { VOICE_INK, type Speaker, type Tone } from '../theme';
 import { VOICE, type VoiceId } from '../voice.generated';
+import { reveal, revealStyle, SpeakerLabel } from './Type';
 
-export type CaptionFont = {
-  family: string;
-  weight: number;
-  size: number;
-  italic?: boolean;
-  lineHeight: number;
-  /** letter-spacing: a CSS length, or a number in em */
-  tracking: string | number;
-};
+export type { CaptionFont } from '../lib/type';
 
 export type CaptionsProps = {
   t: number;
@@ -52,11 +55,20 @@ export type CaptionsProps = {
   /** centre of row A */
   y: number;
   maxWidth: number;
+  /** TYPE.caption: captionFont(L.vertical, tone) (lib/type.ts). Optional on <Captions> itself (CaptionsInput). */
   font: CaptionFont;
-  /** hex */
-  color: string;
-  /** rgba() — the glow around the word being spoken */
-  glow: string;
+  /** hex. Default: the speaker's caption ink on `tone` (VOICE_INK) */
+  color?: string;
+  /** @deprecated ignored — captions no longer glow */
+  glow?: string;
+  /** the ground: 'night' (default) or 'paper' — picks the default ink / weight */
+  tone?: Tone;
+  /** who speaks: draws ● AVA / ● CALLER above row A while the line is on screen ({label, color} for a custom tag) */
+  speaker?: Speaker | { who: Speaker; text?: string; color?: string };
+  /** px between the speaker label and the top of row A (default .36 × the caption size) */
+  speakerGap?: number;
+  /** words already spoken ease to this opacity (default 1 = they stay at full ink) */
+  spokenOpacity?: number;
   /** the line's last caption stays until here (never less than its last word + 1 beat) */
   holdUntil: number;
   /** where a caption that must stay a beat longer moves to (null = it holds in place) */
@@ -77,20 +89,20 @@ export type CaptionsProps = {
     p: number;
     color: string;
     thickness: number;
-    /** CSS box-shadow for the line (its glow), or undefined */
+    /** CSS box-shadow for the line, or undefined */
     shadow?: string;
-    /** top of the line, in em from the top of the row (default: .16em under an Inter baseline) */
+    /** top of the line, in em from the top of the row (default: .14em under the Instrument Sans baseline) */
     topEm?: number;
   };
 };
 
-const ENTER = 6; // frames a word takes to enter
-const SETTLE = 6; // frames a spoken word takes to ease to 86 %
-const SPOKEN = 0.86;
+const SETTLE = 6; // frames a spoken word takes to ease to `spokenOpacity`
 const OUT = 4; // replacement exit
 const ECHO_OUT = 5;
 const ECHO_LEAD = 3; // frames an echo starts lifting before the incoming caption appears
 const HOLD = BEAT; // a caption stays ≥ 1 beat after its last word
+/** a word's reveal: rises from 80 % of its height out of its mask, on the caption spring */
+const RISE = 80;
 
 /** Frame (from the line's start) at which spoken word k ends: the next word, or the end of its phrase. */
 function wordEnd(voice: VoiceId, k: number): number {
@@ -119,7 +131,10 @@ type Plan = {
   echoOut: number;
 };
 
-function plan(p: CaptionsProps): Plan[] {
+/** <Captions>' own props: `font` may be left out (TYPE.caption for the orientation and tone). */
+export type CaptionsInput = Omit<CaptionsProps, 'font'> & { font?: CaptionFont };
+
+function plan(p: CaptionsInput): Plan[] {
   const { lineAt, voice, captions, holdUntil, echoY, echoBlock } = p;
   const lead = p.lead ?? 2;
   const idx = (c: Caption, j: number) => c.map?.[j] ?? c.word + j;
@@ -170,71 +185,130 @@ function plan(p: CaptionsProps): Plan[] {
   return plans;
 }
 
-export const Captions: React.FC<CaptionsProps> = (props) => {
-  const { t, x, y, maxWidth, font, color, glow, echoY, align = 'center', tint, underline } = props;
+/** Word j of n leaves in a window of `dur` frames from `at`: a small left-to-right stagger inside it. */
+function exitOf(at: number, dur: number, j: number, n: number) {
+  const st = n > 1 ? Math.min(0.4, (dur * 0.35) / (n - 1)) : 0;
+  return { at: at + j * st, dur: dur - (n - 1) * st };
+}
+
+export const Captions: React.FC<CaptionsInput> = (props) => {
+  const L = useLayout();
+  const {
+    t,
+    x,
+    y,
+    maxWidth,
+    echoY,
+    align = 'center',
+    tint,
+    underline,
+    tone = 'night',
+    speaker,
+    spokenOpacity = 1,
+  } = props;
+  const who: Speaker = typeof speaker === 'string' ? speaker : speaker?.who ?? 'ava';
+  const font = props.font ?? captionFont(L.vertical, tone);
+  const color = props.color ?? VOICE_INK[who][tone].text;
   const plans = plan(props);
   const rowH = font.size * font.lineHeight;
   const tracking = typeof font.tracking === 'number' ? `${font.tracking}em` : font.tracking;
   const left = align === 'center' ? x - maxWidth / 2 : align === 'left' ? x : x - maxWidth;
 
+  /* the speaker label: in with the first caption, out with the last */
+  let tag: React.ReactNode = null;
+  if (speaker && plans.length) {
+    const first = plans[0];
+    const last = plans[plans.length - 1];
+    const tagIn = first.start - 2;
+    const tagOut = last.mode === 'echo' ? last.echoOut : last.out;
+    const tagDur = last.mode === 'echo' ? ECHO_OUT : OUT;
+    if (t >= tagIn - 1 && t <= tagOut + tagDur) {
+      const gap = props.speakerGap ?? Math.round(font.size * 0.36);
+      const sp = typeof speaker === 'string' ? undefined : speaker;
+      tag = (
+        <div
+          style={{
+            position: 'absolute',
+            left,
+            width: maxWidth,
+            top: y - rowH / 2 - gap,
+            transform: 'translateY(-100%)',
+            textAlign: align,
+          }}
+        >
+          <SpeakerLabel
+            who={who}
+            tone={tone}
+            t={t}
+            start={tagIn}
+            exit={{ at: tagOut, dur: tagDur }}
+            text={sp?.text}
+            color={sp?.color}
+            style={{ display: 'inline-block' }}
+          />
+        </div>
+      );
+    }
+  }
+
   return (
     <>
+      {tag}
       {plans.map((pl, c) => {
         if (t < pl.start - 1) return null;
         const end = pl.mode === 'echo' ? pl.echoOut + ECHO_OUT : pl.out + OUT;
         if (t > end) return null;
 
-        /* where the caption is: in place, leaving, or in the echo slot */
+        /* where the caption is: in place, or moving to / sitting in the echo slot */
         let dy = 0;
         let dyPct = 0;
         let scale = 1;
         let opacity = 1;
-        let blur = 0;
+        let exitAt = Infinity;
+        let exitDur = OUT;
         if (pl.mode === 'replace') {
-          const u = tween(t, [pl.out, pl.out + OUT], [0, 1], EASE.in2);
-          dyPct = -30 * u;
-          blur = 4 * u;
-          opacity = 1 - u;
-        } else if (t >= pl.out && echoY !== null) {
-          const s = springAt(t, pl.out, SPRING.site);
-          // the echo's LAST row lands on echoY (a wrapped caption grows upward from it, so it
-          // never covers what sits under the echo slot): row A goes to echoY − (H − rowH)·.86,
-          // written with the caption's own height H as a % (no measuring needed)
-          const sE = 0.86;
-          dy = (echoY - y + (rowH / 2) * sE + (rowH / 2) * sE) * s;
-          dyPct = -100 * sE * s;
-          scale = 1 - (1 - sE) * s;
-          opacity = 1 - 0.58 * Math.min(1, s);
-          const u = tween(t, [pl.echoOut, pl.echoOut + ECHO_OUT], [0, 1], EASE.in2);
-          dy -= 20 * u;
-          blur = 4 * u;
-          opacity *= 1 - u;
+          exitAt = pl.out;
+        } else if (echoY !== null) {
+          if (t >= pl.out) {
+            const s = springAt(t, pl.out, SPRING.site);
+            // the echo's LAST row lands on echoY (a wrapped caption grows upward from it, so it
+            // never covers what sits under the echo slot): row A goes to echoY − (H − rowH)·.86,
+            // written with the caption's own height H as a % (no measuring needed)
+            const sE = 0.86;
+            dy = (echoY - y + (rowH / 2) * sE + (rowH / 2) * sE) * s;
+            dyPct = -100 * sE * s;
+            scale = 1 - (1 - sE) * s;
+            opacity = 1 - 0.58 * Math.min(1, s);
+            // the echo lifts away a touch as its words leave
+            dy -= 20 * tween(t, [pl.echoOut, pl.echoOut + ECHO_OUT], [0, 1], EASE.in2);
+          }
+          exitAt = pl.echoOut;
+          exitDur = ECHO_OUT;
         }
-        if (opacity <= 0.002) return null;
         const echoing = pl.mode === 'echo' && t >= pl.out;
 
+        const n = pl.words.length;
         const words = pl.words.map((w, j) => {
           const a = pl.appear[j];
-          const u = Math.min(1, Math.max(0, (t - a + 1) / ENTER));
-          const e = EASE.out3(u);
-          // the word being spoken: from its appearance until the voice moves on
-          const speaking = t >= a && t < pl.speakEnd[j] && !echoing;
-          const after = Math.max(0, t - Math.max(pl.speakEnd[j], a + ENTER));
-          const dim = speaking ? 1 : 1 - (1 - SPOKEN) * EASE.inOut(Math.min(1, after / SETTLE));
+          const ex = exitAt < Infinity ? exitOf(exitAt, exitDur, j, n) : undefined;
+          const r = reveal(t, a - 1, { config: SPRING.caption, rise: RISE, fade: 0.5, exit: ex });
+          // once spoken (the voice has moved on), a word may ease down to `spokenOpacity`
+          let dim = 1;
+          if (spokenOpacity < 1) {
+            const speaking = t >= a && t < pl.speakEnd[j] && !echoing;
+            const after = Math.max(0, t - Math.max(pl.speakEnd[j], a + 6));
+            dim = speaking ? 1 : 1 - (1 - spokenOpacity) * EASE.inOut(Math.min(1, after / SETTLE));
+          }
           const tn = tint?.(c, j);
           const col = tn && tn.k > 0.001 ? mixHex(color, tn.color, tn.k) : color;
-          // the glow eases off with the dim (no pop)
-          const g = speaking ? 1 : 1 - Math.min(1, after / SETTLE);
-          const st: React.CSSProperties = {
-            display: 'inline-block',
-            opacity: u <= 0 ? 0 : e * dim,
-            color: col,
-            transform: u < 1 ? `translateY(${(0.16 * (1 - e)).toFixed(4)}em)` : undefined,
-            filter: u > 0 && u < 1 ? `blur(${(3 * (1 - e)).toFixed(2)}px)` : undefined,
-            textShadow: u > 0 && g > 0.02 ? `0 0 0.35em ${scaleAlpha(glow, g)}` : undefined,
-          };
-          return { w, st };
+          const st = revealStyle({ ...r, opacity: r.opacity * dim });
+          return { w, st: { ...st, color: col } as React.CSSProperties };
         });
+        const word = (k: number) => (
+          <span key={k} style={maskBox(0)}>
+            <span style={words[k].st}>{words[k].w}</span>
+          </span>
+        );
 
         /* the words, with the optional underlined phrase grouped (it never breaks) */
         const nodes: React.ReactNode[] = [];
@@ -245,15 +319,10 @@ export const Captions: React.FC<CaptionsProps> = (props) => {
             const inner: React.ReactNode[] = [];
             for (let k = ul.words[0]; k <= ul.words[1]; k++) {
               if (k > ul.words[0]) inner.push(' ');
-              inner.push(
-                <span key={k} style={words[k].st}>
-                  {words[k].w}
-                </span>,
-              );
+              inner.push(word(k));
             }
             const p = Math.min(1, Math.max(0, ul.p));
-            // Inter: ascender .96875 em; the row's half-leading on top
-            const topEm = ul.topEm ?? (font.lineHeight - 1.2109) / 2 + 0.96875 + 0.16;
+            const topEm = ul.topEm ?? baselineEm(font.lineHeight) + 0.14;
             nodes.push(
               <span key={`ul${j}`} style={{ display: 'inline-block', position: 'relative', whiteSpace: 'nowrap' }}>
                 {inner}
@@ -269,6 +338,8 @@ export const Captions: React.FC<CaptionsProps> = (props) => {
                       borderRadius: ul.thickness / 2,
                       background: ul.color,
                       boxShadow: ul.shadow,
+                      // the line leaves with its words
+                      opacity: Math.min(...words.slice(ul.words[0], ul.words[1] + 1).map((x) => (x.st.opacity as number | undefined) ?? 1)),
                     }}
                   />
                 ) : null}
@@ -277,11 +348,7 @@ export const Captions: React.FC<CaptionsProps> = (props) => {
             j = ul.words[1];
             continue;
           }
-          nodes.push(
-            <span key={j} style={words[j].st}>
-              {words[j].w}
-            </span>,
-          );
+          nodes.push(word(j));
         }
 
         return (
@@ -292,10 +359,12 @@ export const Captions: React.FC<CaptionsProps> = (props) => {
               left,
               top: y - rowH / 2,
               width: maxWidth,
-              transform: `translateY(calc(${dy.toFixed(2)}px + ${dyPct.toFixed(2)}%)) scale(${scale.toFixed(4)})`,
+              transform:
+                dy !== 0 || dyPct !== 0 || scale !== 1
+                  ? `translateY(calc(${dy.toFixed(3)}px + ${dyPct.toFixed(3)}%)) scale(${scale.toFixed(5)})`
+                  : undefined,
               transformOrigin: `${(x - left).toFixed(1)}px ${(rowH / 2).toFixed(1)}px`,
-              opacity,
-              filter: blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : undefined,
+              opacity: opacity >= 0.999 ? undefined : opacity,
               textAlign: align,
               textWrap: 'balance',
               fontFamily: font.family,
@@ -315,15 +384,6 @@ export const Captions: React.FC<CaptionsProps> = (props) => {
     </>
   );
 };
-
-/** Multiply the alpha of an rgba() / rgb() colour string by k. */
-function scaleAlpha(rgba: string, k: number): string {
-  const m = rgba.match(/rgba?\(([^)]+)\)/);
-  if (!m) return rgba;
-  const parts = m[1].split(',').map((s) => s.trim());
-  const a = parts.length > 3 ? parseFloat(parts[3]) : 1;
-  return `rgba(${parts[0]},${parts[1]},${parts[2]},${(a * k).toFixed(3)})`;
-}
 
 /** Timing helper: the frame caption c's word j appears (for scenes that sync to caption words). */
 export function captionWordAt(lineAt: number, voice: VoiceId, c: Caption, j: number, lead = 2): number {

@@ -3,9 +3,10 @@
  * component with the same props, so the handover is pixel-identical.
  */
 import React from 'react';
-import { C, FONT, TRACK } from '../theme';
+import { C, TYPE } from '../theme';
 import { useLayout } from '../lib/layout';
-import { HOOK_LINE, MARK } from '../lib/handoff';
+import { HOOK_LINE, MARK, MARK_TYPE } from '../lib/handoff';
+import { typeStyle } from '../lib/type';
 import { Words } from './Type';
 
 /**
@@ -81,11 +82,11 @@ export const BookedMark: React.FC<{
         top: y ?? M.y,
         transform: 'translate(-50%, -50%)',
         whiteSpace: 'nowrap',
-        fontFamily: FONT.body,
-        fontWeight: 500,
+        fontFamily: MARK_TYPE.family,
+        fontWeight: MARK_TYPE.weight,
         fontSize: fontSize ?? M.fontSize,
-        lineHeight: 1.22,
-        letterSpacing: '-0.01em',
+        lineHeight: MARK_TYPE.lineHeight,
+        letterSpacing: MARK_TYPE.tracking,
         color,
         ...style,
       }}
@@ -143,8 +144,13 @@ export const BookedCard: React.FC<{
   glow?: number;
   /** ping ring scale 1→2.4, opacity .6→0 — pass 0..1 progress, or -1 for none. */
   ping?: number;
+  /** the date row's size (px, default 52 — TYPE.title's setting at the card's scale) */
+  dateSize?: number;
+  /** the BOOKED label's size (px, default TYPE.label for the orientation) */
+  labelSize?: number;
   style?: React.CSSProperties;
-}> = ({ w = 560, h = 168, p = 1, glow = 0, ping = -1, style }) => {
+}> = ({ w = 560, h = 168, p = 1, glow = 0, ping = -1, dateSize = 52, labelSize, style }) => {
+  const L = useLayout();
   const row = (k: number) => {
     const q = Math.min(1, Math.max(0, p * 1.6 - k * 0.3));
     const e = 1 - Math.pow(1 - q, 3);
@@ -185,26 +191,17 @@ export const BookedCard: React.FC<{
             />
           ) : null}
         </div>
-        <div
-          style={{
-            fontFamily: FONT.body,
-            fontWeight: 600,
-            fontSize: 20,
-            letterSpacing: TRACK.tag,
-            textTransform: 'uppercase',
-            color: C.emberLit,
-          }}
-        >
+        <div style={{ ...typeStyle('label', L.vertical, { tone: 'night', size: labelSize }), lineHeight: 1, color: C.emberLit }}>
           Booked
         </div>
       </div>
       <div
         style={{
-          fontFamily: FONT.ui,
-          fontWeight: 520,
-          fontSize: 52,
+          fontFamily: TYPE.title.family,
+          fontWeight: TYPE.title.weightOnDark,
+          fontSize: dateSize,
           lineHeight: 1.05,
-          letterSpacing: TRACK.h3,
+          letterSpacing: TYPE.title.tracking,
           color: C.paper,
           whiteSpace: 'nowrap',
           ...row(1),

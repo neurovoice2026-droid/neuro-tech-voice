@@ -38,7 +38,7 @@ const FACES: Array<[string, string]> = [
   ['460 40px "Instrument Sans Variable"', SAMPLE],
   ['540 40px "Instrument Sans Variable"', SAMPLE],
   ['italic 460 40px "Instrument Sans Variable"', SAMPLE],
-  ['430 40px "Noto Sans JP Variable"', JP_GLYPHS],
+  ['440 40px "Noto Sans JP Variable"', JP_GLYPHS],
   ['500 40px "Geist Mono Variable"', SAMPLE],
   // legacy (see above)
   ['500 40px "Cormorant Garamond"', SAMPLE],

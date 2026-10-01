@@ -48,11 +48,7 @@ export type GroupOrb = {
   seed?: number;
   /** Film grain for this orb (default: the group's). */
   grain?: number;
-  /**
-   * Motion blur: how far (CSS px, [dx, dy], y down) the orb moves while the
-   * shutter is open — velocity in px/frame × 0.5 for a 180° shutter
-   * (motion.ts velocity()). Leave it out when the orb is slow (< 1 px).
-   */
+  /** @deprecated ignored — no simulated motion blur (the film renders at 120 fps; moving orbs read crisply). */
   blur?: readonly [number, number];
 };
 
@@ -94,7 +90,6 @@ export const OrbGroup: React.FC<{
         time: o.time + seedTime(o.seed ?? 0),
         grain: o.grain,
         opacity: o.opacity,
-        smear: o.blur,
       })),
       W / width,
       H / height,
