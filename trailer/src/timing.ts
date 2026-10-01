@@ -1338,7 +1338,9 @@ export const HITS: Hit[] = [
   // the four lights fuse (merge[0]) and the suck-in (impact − 4): the chord's reverse swell, peak ON the impact
   H('cta', CTA.logoImpact, 'chord-rev', 'none', 0.5, 2, 'the four lights fuse', { layer: true }),
   H('cta', CTA.logoImpact, 'impact', 'night', 0.5, 1, 'LOGO IMPACT'),
-  H('cta', CTA.logoImpact, 'chord', 'night', 0.5, 1, 'THE FOUR LIGHTS ring together'),
+  // (the chord rings at unity on the impact: with the impact it makes the film's loudest moment —
+  // MIX.impactLead LU over the loudest dialogue — and the tonal duck takes it back for the name)
+  H('cta', CTA.logoImpact, 'chord', 'night', 0.5, 1, 'THE FOUR LIGHTS ring together', { db: -SFX.chord.trim }),
   H('cta', CTA_LOCAL.ring[0], 'shock', 'none', 0.5, 2, 'the shockwave ring sweeps past', { layer: true }),
   H('cta', CTA.button, 'pop', 'night', 0.5, 3, '“Start free →” pops with the logo (folded into the impact)'),
   H('cta', CTA.note, 'tap', 'none', 0.5, 3, '“5 free minutes, no card”', { db: -4 }),
