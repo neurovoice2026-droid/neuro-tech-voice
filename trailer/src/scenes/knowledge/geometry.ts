@@ -28,14 +28,16 @@ export const LISTEN_GLOW = { body: SUN.listen[2], core: SUN.listen[3] } as const
 export const SUN_MISS = ['#2b3c41', '#57717a', '#86a7ad', '#c1d6d9', '#f3f8f9'] as const;
 /** a quiet, de-lit glow for the miss (SUN_MISS's middle) */
 export const MISS_GLOW = { body: SUN_MISS[2], core: SUN_MISS[3] } as const;
-/** the moment tag */
+/** the moment tag (Moment.tsx — no longer on screen: one status, the pill) */
 export const MOMENT = { day: 'Sunday', time: '10:24' } as const;
+
+/** The caller's ink on the paper (in place of theme.ts VOICE_INK.caller.paper's saturated indigo): a
+ *  desaturated slate, so the speaker still reads by colour (and by ● CALLER) without a second
+ *  chromatic ink beside sunday teal — the scene's ONE accent. */
+export const CALLER = { text: '#3b4a63', tag: '#5b6b84' } as const;
 
 /* ── the site's constants (knowledge-timeline.ts, kb.ts, parts.tsx) ── */
 export const ACCENT = INK;
-/** a bar still reading */
-export const FILL_REST = rgba(INK, 0.32);
-export const TRACK_FILL = 'rgba(20,10,36,0.08)';
 export const TILE_RING = 'rgba(24,16,40,0.07)';
 export const DOT = {
   listening: 'rgba(24,16,40,0.3)',
@@ -49,8 +51,6 @@ export const STATUS_TEXT: Record<StatusKey, string> = {
   missing: 'Not in the documents',
 };
 export const BEAM_INK = rgba(SUN.orb[1], 0.42);
-export const BEAM_MISS = 0.15;
-export const THRESHOLD = 0.6;
 /** the documents that did not answer step back (fade + a touch smaller — never out of focus) so the answer leads */
 export const DIM = 0.25;
 /** the orb's volume through a question */
@@ -66,15 +66,10 @@ export const DOCS: readonly { name: string; kind: DocKind }[] = [
   { name: 'Opening hours', kind: 'TXT' },
   { name: 'FAQ page', kind: 'WEB' },
 ];
-/** "Do you do home visits?" — none reaches the 60 % tick (knowledge-base.ts) */
-export const MATCH = [0.22, 0.14, 0.1, 0.3, 0.26] as const;
 export const HEADING = 'Answers from your own documents.';
 /** the card the unanswered question becomes (the site's "flagged" hand-over: a hollow dot) */
 export const TICKET = { label: 'For the team', question: 'Home visits?', number: '+1 555 0142', chip: 'Call back today' } as const;
 export const FLAGGED = '#8c86a0';
-/** the after-closing green (MOMENT_LIGHTS.closing): the callback is confirmed */
-export const CLOSING_INK = LIGHTS.closing.ink;
-export const CLOSING_GLOW = GLOW.closing;
 export const HEADING_KEY = 'your own documents.';
 export const CLOSING_KEY = 'it says so.';
 
@@ -97,10 +92,13 @@ export function geo(L: Layout) {
   const H = v ? 1920 : 1080;
   /** the stage bleeds past the frame (no edge is ever seen, even under the camera's drift and kicks) */
   const panel = { x: -64, y: -64, w: W + 128, h: H + 128 };
-  const orb = v ? { x: 540, y: 1040, d: 380 } : { x: 960, y: 640, d: 440 };
+  /* the reader: a key light, not a billboard — 340 px (16:9) sits clear of the documents above and of
+   * ● AVA + her caption below (the label clears the orb at its fullest — push × voice swell ≈ 1.1 — by
+   * ≥ 48 px, and the caption's baseline sits at ≤ 950, above the title-unsafe band) */
+  const orb = v ? { x: 540, y: 1018, d: 340 } : { x: 960, y: 588, d: 340 };
 
   const tiles: Rect[] = DOCS.map((_, i) =>
-    v ? { x: 68, y: 398 + i * 72, w: 944, h: 62 } : { x: 104 + i * 348, y: 150, w: 320, h: 180 },
+    v ? { x: 68, y: 380 + i * 72, w: 944, h: 62 } : { x: 104 + i * 348, y: 150, w: 320, h: 180 },
   );
   const listFoot = tiles[tiles.length - 1].y + tiles[tiles.length - 1].h;
 
@@ -142,17 +140,17 @@ export function geo(L: Layout) {
       /** TYPE.label */
       label: v ? 28 : 30,
       dot: 20,
-      /** "☀ SUNDAY · 10:24": left of the pill (16:9, it rides the pill's edge) / under it (9:16) */
+      /** (Moment.tsx, unused — one status on screen: the pill) "☀ SUNDAY · 10:24" */
       tag: v
         ? { mode: 'below' as const, y: 356, size: 28, icon: 28, gap: 0 }
         : { mode: 'left' as const, y: 98, size: 30, icon: 30, gap: 30 },
     },
     tiles,
-    /** 16:9 cards: the kind (TYPE.label, muted) and the match bar share the top row; the name (the title
-     *  family, ≤ 2 lines) sits on the card's foot. 9:16 rows: kind · name · bar on one line. */
+    /** 16:9 cards: the kind (TYPE.label, muted) on the top row, the name (the title family, ≤ 2 lines) on
+     *  the card's foot. 9:16 rows: kind · name on one line. Nothing else: a document is its name. */
     tile: v
-      ? { kind: 'row' as const, pad: 22, kindText: 28, kindW: 112, name: 40, nameX: 140, barW: 220, barPadR: 26 }
-      : { kind: 'tile' as const, pad: 24, kindText: 30, kindW: 0, name: 42, nameX: 24, barW: 132, barPadR: 24 },
+      ? { kind: 'row' as const, pad: 22, kindText: 28, kindW: 112, name: 40, nameX: 140 }
+      : { kind: 'tile' as const, pad: 24, kindText: 30, kindW: 0, name: 42, nameX: 24 },
     /** when the documents that did not answer step back (a fade and a touch smaller — never a blur): on
      *  Ava's answer (16:9, they stay legible beside the card) / on the miss, deeper, behind the card that
      *  takes their place (9:16) */
@@ -163,17 +161,16 @@ export function geo(L: Layout) {
      *  the ● CALLER tag) — left of the orb, right-aligned to it (16:9) / under it (9:16) */
     caller: v
       ? { labelY: 1270, align: 'center' as const, boxX: 140, boxW: 800, rowY: 1340, size: 68, lh: 1.18 }
-      : { labelY: 512, align: 'right' as const, boxX: 120, boxW: 580, rowY: 596, size: 76, lh: 1.18 },
+      : { labelY: 459, align: 'right' as const, boxX: 136, boxW: 590, rowY: 543, size: 76, lh: 1.18 },
     /** Ava's answer (TYPE.caption): one row under the orb (16:9) / two rows under it, in the caller's place
      *  (9:16) — under her ● AVA tag (`labelY`, centred) */
     answer: v
       ? { boxX: 68, boxW: 944, rowY: 1340, rowB: 1340 + Math.round(68 * 1.18) as number | null, size: 68, lh: 1.18, labelY: 1270 }
-      : { boxX: 80, boxW: 1760, rowY: 970, rowB: null as number | null, size: 76, lh: 1.18, labelY: 900 },
-    /** the slot: the page the reader reads → "0 matches" → the card for the team.
-     *  'peek' (16:9): it opens as the page being read before the scan; 'miss' (9:16): it opens on the
-     *  miss, over the documents stepping back */
-    slot: v ? slotV : { x: 1232, y: 506, w: 584, h: 268 },
-    slotMode: v ? ('miss' as const) : ('peek' as const),
+      : { boxX: 80, boxW: 1760, rowY: 904, rowB: null as number | null, size: 76, lh: 1.18, labelY: 838 },
+    /** the slot: "0 matches" → the card for the team. It is born ON the miss (nothing stands in its
+     *  place while the documents are read): 16:9 right of the reader, centred on it; 9:16 over the
+     *  documents stepping back */
+    slot: v ? slotV : { x: 1232, y: orb.y - 134, w: 584, h: 268 },
     /** the heading (TYPE.headline — THE look) rises where the orb will be; 16:9: it steps down to the
      *  answer row to make way and holds there beside the caller (who speaks on the left) until
      *  "question,"; 9:16 (one column — a stepped-down heading would sit under the caller's words and
@@ -182,21 +179,20 @@ export function geo(L: Layout) {
     heading: v
       ? { cy: orb.y, size: 92, lines: ['Answers from', 'your own documents.'] as string[] | null, width: 944, step: null }
       : {
-          cy: 640,
+          cy: orb.y,
           size: 100,
           lines: ['Answers from your own documents.'] as string[] | null,
           width: 1760,
-          step: { cy: 958, scale: 0.72 } as { cy: number; scale: number } | null,
+          step: { cy: 892, scale: 0.72 } as { cy: number; scale: number } | null,
         },
     /** the closing title (TYPE.display) */
+    /** 16:9: set so that, at the camera's full push (× 1.035) and the title's own (× 1.025), the long line
+     *  spans ≤ 1400 px — margins ≥ 260, the reference's negative space (≈ 108 px on screen) */
     closing: v
-      ? { cy: 960, size: 112, lines: ['Where your', 'documents stop,', 'it says so.'] }
-      : { cy: 540, size: 128, lines: ['Where your documents stop,', 'it says so.'] },
+      ? { cy: 960, size: 112, width: 1000, lines: ['Where your', 'documents stop,', 'it says so.'] }
+      : { cy: 540, size: 102, width: 1400, lines: ['Where your documents stop,', 'it says so.'] },
     /** the camera pushes about this point (a slow push — no hand-held drift, no kicks) */
-    cam: v ? { ox: 540, oy: 990, push: 0.016 } : { ox: 960, oy: 600, push: 0.035 },
-    /** the stage-in: the light of the result's white flash (its ember centre, measured at the cut)
-     *  resolves into the Sunday light at the reader's place */
-    dawn: v ? { x0: 547, y0: 1031 } : { x0: 1030, y0: 566 },
+    cam: v ? { ox: 540, oy: 990, push: 0.016 } : { ox: 960, oy: 580, push: 0.035 },
     /** the whip leaves along this axis */
     whip: v ? { axis: 'y' as const, dist: -2600, counter: 24 } : { axis: 'x' as const, dist: -2400, counter: 24 },
   };

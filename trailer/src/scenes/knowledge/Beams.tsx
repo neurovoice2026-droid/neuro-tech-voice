@@ -4,12 +4,14 @@
  * EASE.draw, 2 f apart) with a small sunday-ink head riding its front (no
  * halo); the dots then stream toward the orb (dash offset — the integral of
  * a smooth speed curve, continuous at any fractional t). On the miss the
- * stream slows to a stop and the beams fall back to .15.
+ * stream slows to a stop and the beams fall back — all the way: none of the
+ * documents answered, so nothing is left connecting them to the reader
+ * (the answer's frames carry the reader, the card and her words only).
  */
 import React from 'react';
 import { EASE, mix, tween } from '../../lib/motion';
 import { KNOWLEDGE, KNOWLEDGE_LOCAL } from '../../timing';
-import { ACCENT, BEAM_INK, BEAM_MISS, cubicAt, type Geo } from './geometry';
+import { ACCENT, BEAM_INK, cubicAt, type Geo } from './geometry';
 
 const K = KNOWLEDGE;
 const KL = KNOWLEDGE_LOCAL;
@@ -42,7 +44,9 @@ function flow(t: number): number {
 
 export const Beams: React.FC<{ t: number; G: Geo; uid: string }> = ({ t, G, uid }) => {
   if (t < KL.beams[0] - 1) return null;
-  const fade = mix(1, BEAM_MISS, tween(t, [K.miss, K.miss + 8], [0, 1], EASE.out3));
+  // they fall back on the miss: a quick drop to a trace with the drain, then the trace goes (inOut)
+  const fade = mix(1, 0.15, tween(t, [K.miss, K.miss + 8], [0, 1], EASE.out3)) * (1 - tween(t, [K.miss + 6, K.miss + 20], [0, 1], EASE.inOut));
+  if (fade < 0.002) return null;
   const off = -flow(t);
   return (
     <svg

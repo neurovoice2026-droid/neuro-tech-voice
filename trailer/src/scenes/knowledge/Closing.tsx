@@ -13,7 +13,9 @@
  *
  * The closing arrives on the stage's recede and HOLDS, still but for a slow
  * 1.00 → 1.025 push and a breath, for ≥ 1.5 s, until the whip takes it away
- * with the stage. ON its key hit "it says so." turns sunday ink — no pool of
+ * with the stage. It is set with the reference's negative space: 16:9 at
+ * 102 px (≈ 108 on screen under the camera's push), the long line ≤ 1400 px
+ * wide even at the end of the push — margins ≥ 260. ON its key hit "it says so." turns sunday ink — no pool of
  * light behind it: the colour is in the words.
  */
 import React from 'react';
@@ -92,7 +94,7 @@ export const Closing: React.FC<{ t: number; G: Geo; cx: number }> = ({ t, G, cx 
         role="display"
         vertical={G.v}
         size={Cl.size}
-        width={G.v ? 1000 : 1800}
+        width={Cl.width}
         cx={cx}
         cy={Cl.cy}
         start={K.closing}

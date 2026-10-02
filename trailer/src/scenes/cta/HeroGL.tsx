@@ -55,10 +55,8 @@ export type HeroUniforms = {
   haloC: [number, number];
   haloR: [number, number, number];
   haloGain: number;
-  /** the merged light: corona inner width (frame px), outer width (frame px), body level, ring gain */
+  /** the backlight: body gain, rim peak (≤ .75), rim spill past the edge, core lift */
   merge: [number, number, number, number];
-  /** the corona's finish: crest gain, outer glow gain, outer glow width (× outer width), ring saturation (0 white-lilac … 1 lilac) */
-  merge2: [number, number, number, number];
   /** floor under the halo: start y at the axis, length (frame px), strength, rise at ±rx (px) */
   floor: [number, number, number, number];
   /** base zoom, screen y of the eyes (0..1), art glitch-band edge v (0 = none) */
@@ -66,8 +64,17 @@ export type HeroUniforms = {
   seed: number;
   /** how much the figure hides the back orb layer (0..1) */
   occ: number;
-  /** up to four orb blooms: centre (frame px), radius px, strength, colour, behind the figure? */
-  glows: { x: number; y: number; r: number; s: number; color: [number, number, number]; back: boolean }[];
+  /** the four lights' slots (slot k = light k, always): bloom centre (frame px), bloom radius px,
+   *  bloom strength, colour, how far behind the figure (0..1), and its key on her face (spill) */
+  glows: { x: number; y: number; r: number; s: number; color: [number, number, number]; back: number; spill: number; spillColor: [number, number, number] }[];
+  /** the key: its reach (frame px), gain */
+  spill: [number, number];
+  /** her matte: centre drop below the eyes, radii x / y (eye offsets), feather (frame px) */
+  vig: [number, number, number, number];
+  /** her face: de-stipple radius (art px), de-stipple amount, shadow lift, her purple calmed (0..1) */
+  face: [number, number, number, number];
+  /** the wall falls dark toward her silhouette over this much of the head matte (0 = off) */
+  wallNear: number;
   /** the eyes' voice light (0..1) */
   eyeGlow: number;
   /** the four lights on the corona (its colour at each diagonal): strength 0..1, (unused), (unused), angular half-width (rad) */
@@ -94,9 +101,9 @@ type GL = {
 const NAMES = [
   'uImage', 'uDepth', 'uRes', 'uImgRes', 'uPxScale', 'uMouse', 'uAmp', 'uZoom', 'uPan', 'uTime',
   'uArt', 'uReveal', 'uEyes', 'uAxisX', 'uEye', 'uSubject', 'uBrand', 'uWall', 'uWallC',
-  'uHaloC', 'uHaloR', 'uHaloGain', 'uMerge', 'uMerge2', 'uFloor', 'uFrame', 'uSeed',
+  'uHaloC', 'uHaloR', 'uHaloGain', 'uMerge', 'uFloor', 'uFrame', 'uSeed',
   'uOrbBack', 'uOrbFront', 'uOrbOn', 'uOcc', 'uGlowP', 'uGlowC', 'uGlowBack', 'uEyeGlow', 'uRim', 'uRimC',
-  'uGlowOver',
+  'uGlowOver', 'uGlowSpill', 'uSpillC', 'uSpill', 'uVig', 'uFace', 'uWallNear',
 ];
 
 /** The canvas's device-pixel ratio (the 4K masters render at --scale 2): the backing store follows it. */
@@ -263,8 +270,7 @@ export const HeroGL: React.FC<{
     gl.uniform2f(L.uHaloC, u.haloC[0] * q, u.haloC[1] * q);
     gl.uniform3f(L.uHaloR, u.haloR[0] * q, u.haloR[1] * q, u.haloR[2] * q);
     gl.uniform1f(L.uHaloGain, u.haloGain);
-    gl.uniform4f(L.uMerge, u.merge[0] * q, u.merge[1] * q, u.merge[2], u.merge[3]);
-    gl.uniform4f(L.uMerge2, u.merge2[0], u.merge2[1], u.merge2[2], u.merge2[3]);
+    gl.uniform4f(L.uMerge, u.merge[0], u.merge[1], u.merge[2], u.merge[3]);
     gl.uniform4f(L.uFloor, u.floor[0] * q, u.floor[1] * q, u.floor[2], u.floor[3] * q);
     gl.uniform3f(L.uFrame, u.frame[0], u.frame[1], u.frame[2]);
     gl.uniform1f(L.uSeed, u.seed);
@@ -273,14 +279,24 @@ export const HeroGL: React.FC<{
     const gp = new Float32Array(16);
     const gc = new Float32Array(12);
     const gb = new Float32Array(4);
+    const gsp = new Float32Array(4);
+    const gsc = new Float32Array(12);
     u.glows.slice(0, 4).forEach((g, i) => {
+      gsc.set(g.spillColor, i * 3);
       gp.set([g.x * q, g.y * q, Math.max(1, g.r * q), g.s], i * 4);
       gc.set(g.color, i * 3);
-      gb[i] = g.back ? 1 : 0;
+      gb[i] = Math.min(1, Math.max(0, g.back));
+      gsp[i] = Math.max(0, g.spill);
     });
     gl.uniform4fv(L.uGlowP, gp);
     gl.uniform3fv(L.uGlowC, gc);
     gl.uniform1fv(L.uGlowBack, gb);
+    gl.uniform1fv(L.uGlowSpill, gsp);
+    gl.uniform3fv(L.uSpillC, gsc);
+    gl.uniform2f(L.uSpill, u.spill[0], u.spill[1]);
+    gl.uniform4f(L.uVig, u.vig[0], u.vig[1], u.vig[2], u.vig[3]);
+    gl.uniform4f(L.uFace, u.face[0], u.face[1], u.face[2], u.face[3]);
+    gl.uniform1f(L.uWallNear, u.wallNear);
     gl.uniform1f(L.uEyeGlow, u.eyeGlow);
     gl.uniform4f(L.uRim, u.rim[0], u.rim[1], u.rim[2], u.rim[3]);
     const rc = new Float32Array(12);

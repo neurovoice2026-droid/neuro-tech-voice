@@ -3,13 +3,13 @@
  * #demo clock's figures rise into their windows around it and the clock
  * flicks through the site's four moments 3 sixteenths apart — the rush, just
  * after closing, a Sunday — each a hard change of LIGHT (the orb, the light
- * it throws on the wall, the figures, the moment's dot), and lands on 03:12
- * in the night's violet. The phone rings: the orb pulses, two hairline rings
- * leave it, the line goes live. Time freezes mid-ring — the rings hang in the
- * air and creep — and "Your business is closed." rises underneath, its key
- * word in the night's ink. The frozen world breathes on the beats; then the
- * clock rolls out of its windows, the light goes out, and the camera inhales
- * into the break.
+ * it throws on the wall, the figures' flat ink, the moment's dot), and lands
+ * on 03:12 in the night's violet. The phone rings: the orb pulses, one
+ * hairline ring leaves it, the line goes live. Time freezes mid-ring — the
+ * ring is caught and dissolves, the wave holds its shape and creeps — and
+ * "Your business is closed." rises underneath, its key word in the night's
+ * ink. The frozen world breathes on the beats; then the clock rolls out of its
+ * windows, the light goes out, and the camera inhales into the break.
  *
  * The room is near-black (Atmosphere NightRoom) lit by ONE source: the orb.
  * No bokeh, no motes, no washes, no glows on type, no blur of any kind —
@@ -30,8 +30,9 @@ import { C, ROOM, TRACK } from '../theme';
 import { FPS, HOOK, HOOK_LOCAL, SCENES } from '../timing';
 import { chainPos, ClockLockup, type Cell, type Flick, flickDisp, type Strip } from './hook/Clock';
 import { DayDrum, type DrumRow } from './hook/DayDrum';
-import { MOMENTS, mixStops, NUM_STOPS } from './hook/moments';
-import { Rings, ringTravel } from './hook/Rings';
+import { mixColor } from '../lib/lights';
+import { FIGURE_INK, MOMENTS } from './hook/moments';
+import { RingPulse } from './hook/Rings';
 import { StaggerText } from './hook/StaggerText';
 import { Wave } from './hook/Wave';
 import { warpTime } from './hook/warp';
@@ -85,7 +86,6 @@ export const Hook: React.FC = () => {
   /* ── the end ─────────────────────────────────────────────────────── */
   const out = global >= SCENES.hook.to ? 1 : tween(f, HOOK_LOCAL.out, [0, 1], EASE.inOut);
   const lightsOut = global >= SCENES.hook.to ? 1 : tween(f, [OUT0, SCENES.hook.to - 1], [0, 1], EASE.in2);
-  const inhale = tween(f, [HOOK_LOCAL.anticipation, HOOK_LOCAL.anticipation + 9], [0, 1], EASE.in4);
 
   /* ── the ring's attack frames (one ahead of the beat) ────────────── */
   const ringAt = HOOK.ring - HOOK_LOCAL.ringLead; // 55
@@ -94,7 +94,6 @@ export const Hook: React.FC = () => {
   /* ── the beat breaths of the frozen world (ON b6, b7) ────────────── */
   const breaths = HOOK_LOCAL.breathBeats;
   const pulseB = breaths.reduce((s, B) => s + spike(f, B), 0); // orb, wave
-  const ringBreath = breaths.reduce((s, B) => s + swellOn(f, B, 3, 5), 0); // rings: 8 f
   const lightBreath = breaths.reduce((s, B) => s + swellOn(f, B, 4, 6), 0); // the room light
 
   /* ── camera: a slow push, small kicks on the hits, an inhale into the break ── */
@@ -156,19 +155,21 @@ export const Hook: React.FC = () => {
     states.push({ digit: null, m: MOMENTS.length - 1 });
     const exitAt = OUT0 + 0.8 * inner(c);
     const posAt = (fr: number) => chainPos(fr, 0, flicks) + tween(fr, [exitAt, exitAt + 5], [0, 1], EASE.in3);
-    // each state is lit by its own moment; one that outlives a moment (the figure stays) re-lights
+    // each state is lit by its own moment (one flat ink); one that outlives a moment (the figure
+    // stays) re-lights
     const cells: Cell[] = states.map((s, k) => {
       const next = k + 1 < states.length - 1 ? states[k + 1].m : MOMENTS.length;
-      let stops: readonly string[] = NUM_STOPS[MOMENTS[s.m].id];
-      for (let j = s.m + 1; j < next; j++) stops = mixStops(stops, NUM_STOPS[MOMENTS[j].id], lightIn(j));
-      return { digit: s.digit, stops };
+      let ink = FIGURE_INK[MOMENTS[s.m].id];
+      for (let j = s.m + 1; j < next; j++) ink = mixColor(ink, FIGURE_INK[MOMENTS[j].id], lightIn(j));
+      return { digit: s.digit, ink };
     });
     return { cells, pos: posAt(f), speed: 2 * (posAt(f + 0.25) - posAt(f - 0.25)) };
   });
-  // a light sweep crosses the figures just after they land (left → right, staggered)
-  const sheens = [0, 1, 2, 3].map((i) => {
+  // just after they land the light passes over the figures left → right: each one's flat ink lifts
+  // towards paper and settles back (a colour change, never a highlight band or a gradient)
+  const lifts = [0, 1, 2, 3].map((i) => {
     const s0 = HOOK_LOCAL.sheen + i * 1.5 + (i >= 2 ? 1.5 : 0);
-    return f < s0 ? -1 : f > s0 + 11 ? 2 : tween(f, [s0, s0 + 11], [0, 1], EASE.inOut);
+    return Math.sin(Math.PI * tween(f, [s0, s0 + 11], [0, 1], EASE.inOut));
   });
   // the figures take the light of the hits (brightness — never blur) and step back for the line
   const figuresLift = (1 + 0.12 * land + 0.08 * flickHit + 0.06 * ringHit) * (1 - 0.16 * rack);
@@ -264,12 +265,11 @@ export const Hook: React.FC = () => {
   const phaseDot = L.pick(12, 11);
   const dotOut = tween(f, [OUT0 + 0.5, OUT0 + 5], [0, 1], EASE.in3);
 
-  /* ── the rings: the outer one hangs at a set radius by the end of the hold (its top stays
-        inside the frame through the push); their lower arcs dissolve before RINGING, the wave
-        and the headline ───────────────────────────────────────────── */
+  /* ── the ring: ONE pulse off the orb on the first ring's attack; it opens out past the figures
+        and is gone (caught by the freeze, it dissolves — nothing hangs). Its lower arc dissolves
+        before RINGING and the wave ──────────────────────────────── */
   const ringD0 = orbD * 1.25;
-  const ringR = L.pick(330, 370); // ring A's radius at the last frame of the hold
-  const ringD1 = ringD0 + (2 * ringR - ringD0) / ringTravel(tau(HOOK_LOCAL.textHandoff - 1) - ringAt);
+  const ringD1 = 2 * L.pick(520, 470); // its radius at full travel
   const ringMask = `linear-gradient(180deg, #000 0px, #000 ${(clockCy + cellH * 0.5).toFixed(1)}px, rgba(0,0,0,0.4) ${phaseCy.toFixed(1)}px, transparent ${(waveCy - 8).toFixed(1)}px)`;
 
   return (
@@ -290,24 +290,19 @@ export const Hook: React.FC = () => {
       />
 
       <Camera x={camX} y={camY} zoom={zoom}>
-        {/* the rings (behind the figures, as on the site) */}
+        {/* the ring (behind the figures, as on the site) */}
         <Layer depth={1} style={{ maskImage: ringMask, WebkitMaskImage: ringMask }}>
-          <Rings
+          <RingPulse
             frame={f}
-            tau={tau}
-            rings={[
-              { start: ringAt, hang: 0.74 },
-              { start: ringBAt, hang: 0.95 },
-            ]}
+            t={t}
+            start={ringAt}
             cx={L.cx}
             cy={clockCy}
             d0={ringD0}
             d1={ringD1}
             freeze={HOOK.freeze}
-            decayEnd={HOOK_LOCAL.anticipation}
+            dissolve={7}
             out={out}
-            inhale={inhale}
-            breath={ringBreath}
             width0={L.width}
             height0={L.height}
           />
@@ -329,7 +324,7 @@ export const Hook: React.FC = () => {
           >
             <ClockLockup
               strips={strips}
-              sheens={sheens}
+              lifts={lifts}
               fontSize={F}
               orbSize={orbD}
               gap={gap}

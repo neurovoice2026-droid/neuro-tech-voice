@@ -1,44 +1,40 @@
 /**
- * The slot (knowledge-stage.tsx's peek, in both frames): the page the
- * reader is reading, and what becomes of an unanswered question. A paper
- * card (theme.ts elevation) in the scene's one type system.
+ * The slot (knowledge-stage.tsx's peek, in both frames): what becomes of an
+ * unanswered question. A paper card (theme.ts elevation) in the scene's one
+ * type system. Nothing stands in its place while the documents are read (no
+ * placeholder page, no skeleton lines): it is born as the miss.
  *
- *   peekOpen      (16:9) the page opens (a clip from the top, on the house
- *                 ease): four lines of text, quiet hairlines of ink
- *   scan          the reader reads it: a sunday-ink highlight runs along each
- *                 line in turn, as a reader's marker would
- *   slotOpenMiss  (9:16, where the slot shares the documents' place) it is
- *                 born on the miss instead: it steps forward out of the
- *                 receding list (.96 → 1)
- *   miss          the lines fold away (bottom up, 1.5 f apart) and
- *                 "0 matches" rises into the page in the miss's grey, then the
- *                 card shakes "no" after the pill; on Ava's "answer" the words
- *                 give a small nod (1 → 1.03 → 1)
+ *   slotOpenMiss  2 f after the miss it steps forward (.96 → 1, a fade on the
+ *                 site spring) — 16:9 right of the reader, from its side; 9:16
+ *                 out of the receding list, in the documents' place — and
+ *                 "0 matches" rises into it as it settles (never an empty card)
+ *   miss          "0 matches" rises into it in the miss's grey, then the card
+ *                 shakes "no" after the pill; on Ava's "answer" the words give
+ *                 a small nod (1 → 1.03 → 1)
  *   ticketPop     "I'll…": "0 matches" leaves up through its mask and the page
  *                 becomes the card for the team — it lifts (its shadow deepens)
  *                 and settles on a soft spring
  *   ticketType    its lines rise in on the spoken words: the caller's
  *                 question on "ask", the caller's number on "team"
- *   callback      "call": the callback chip opens (the after-closing green is
- *                 a confirmation: the check only)
- *   check         "today.": its check draws
+ *   callback      "call": the callback chip opens — a hairline of sunday ink,
+ *                 the scene's one accent (no second, green ink on the paper)
+ *   check         "today.": its check draws in the sunday disc
  *
  * No glints, no rings, no blooms: the card is an object, the light is the orb's.
  */
 import React from 'react';
 import { Reveal, reveal, revealStyle, subpixel } from '../../components/Type';
-import { mixColor, rgba } from '../../lib/lights';
+import { rgba } from '../../lib/lights';
 import { EASE, smooth, SPRING, springUnit, tween } from '../../lib/motion';
 import { maskBox, typeStyle } from '../../lib/type';
-import { C, elevation, FONT, R as RADII, TRACK, VOICE_INK } from '../../theme';
-import { KNOWLEDGE, KNOWLEDGE_LOCAL } from '../../timing';
-import { CLOSING_INK, DOT, FLAGGED, INK, TICKET, type Geo } from './geometry';
+import { C, elevation, FONT, R as RADII, TRACK } from '../../theme';
+import { KNOWLEDGE_LOCAL } from '../../timing';
+import { CALLER, DOT, FLAGGED, INK, TICKET, type Geo } from './geometry';
 import { CHIP_POP } from './Status';
 
-const K = KNOWLEDGE;
 const KL = KNOWLEDGE_LOCAL;
 const GREY = DOT.missing; // #6b6878
-const CALLER_INK = VOICE_INK.caller.paper.text;
+const CALLER_INK = CALLER.text;
 
 /** ζ ≈ .78: the card settles with a ~2 % overshoot */
 const CARD = { stiffness: 260, damping: 25, mass: 1 };
@@ -78,39 +74,27 @@ const RiseWords: React.FC<{ t: number; text: string; at: number; step: number; s
 export const Slot: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
   const S = G.slot;
   const v = G.v;
-  // 'peek' (16:9): the page being read opens before the scan; 'miss' (9:16): the slot opens on the
-  // miss, in front of the documents stepping back — no reading page, it is born as the miss
-  const peek = G.slotMode === 'peek';
-  const openAt = peek ? KL.peekOpen : KL.slotOpenMiss;
+  // born as the miss: it steps forward with it (16:9 beside the reader; 9:16 out of the receding list)
+  const openAt = KL.slotOpenMiss;
   if (t < openAt - 1) return null;
   const R = v ? RADII.xl : RADII.x2;
 
-  /* ── the page opening (peek: a clip reveal from the top; miss: it steps forward out of the list) ── */
-  const clip = peek ? tween(t, [openAt, openAt + 10], [100, 0], EASE.house) : 0;
+  /* ── the card stepping forward (.96 → 1 and a fade, on the site spring) ── */
   const settle = springUnit(t - (openAt - 1), SPRING.site);
-  const boxO = peek ? (t >= openAt ? 1 : 0) : smooth(0, 0.5, settle);
+  const boxO = smooth(0, 0.5, settle);
 
   /* ── the card ── */
   const pop = KL.ticketPop;
   const carded = t >= pop;
   const cq = springUnit(t - pop, CARD); // the lift into a card
-  const sc = (peek ? 1 : 0.96 + 0.04 * Math.min(1, settle)) * cardScale(t);
+  const sc = (0.96 + 0.04 * Math.min(1, settle)) * cardScale(t);
   const dx = shake(t, KL.zeroShake, 5);
   const lift = 0.7 + 0.8 * Math.min(1.05, cq); // a page on the stage → a card held up for the team
 
-  /* ── the page's lines (reading), folding away on the miss ── */
-  const nLines = peek ? 4 : 0;
-  const padX = v ? 32 : 40;
-  const inner = S.w - padX * 2;
-  const lineW = [0.42, 0.88, 0.7, 0.8].slice(0, nLines);
-  const lineY = (i: number) => (v ? 46 + i * 36 : 60 + i * 48);
-  // the reader's marker runs along line i over its window (they share the scan, one after another)
-  const [s0, s1] = [K.scan[0] + 2, K.miss - 2];
-  const per = (s1 - s0) / Math.max(1, nLines);
-
   /* ── "0 matches" ── */
   const z = KL.zeroPop;
-  const zr = reveal(t, z, { config: SPRING.text, rise: 100, fade: 0.55, exit: { at: pop - 3, dur: 5 } });
+  // (released a frame early, as every pop in the film, so the words are visibly rising ON the hit)
+  const zr = reveal(t, z - 1, { config: SPRING.text, rise: 100, fade: 0.55, exit: { at: pop - 3, dur: 5 } });
   const nod = 0.03 * Math.sin(Math.min(1, Math.max(0, (t - KL.zeroEcho) / 12)) * Math.PI);
   const zStyle = typeStyle('title', v, { tone: 'paper', tabular: true });
 
@@ -182,7 +166,7 @@ export const Slot: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
           padding: `0 ${v ? 22 : 24}px 0 ${(chipH - disc) / 2}px`,
           borderRadius: 9999,
           background: C.white,
-          boxShadow: `0 0 0 1.5px ${rgba('#047857', 0.22)}, ${elevation(0.4, 0.8)}`,
+          boxShadow: `0 0 0 1.5px ${rgba(INK, 0.22)}, ${elevation(0.4, 0.8)}`,
           ...subpixel(chipS !== 1 ? `scale(${chipS.toFixed(5)})` : undefined, Math.abs(1 - chipP) > 2e-4),
           transformOrigin: '50% 50%',
           opacity: chipO,
@@ -190,7 +174,7 @@ export const Slot: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
           fontWeight: 480,
           fontSize: chipText,
           letterSpacing: TRACK.h3,
-          color: CLOSING_INK,
+          color: C.ink,
           whiteSpace: 'nowrap',
           flex: 'none',
         }}
@@ -201,7 +185,7 @@ export const Slot: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
             width: disc,
             height: disc,
             borderRadius: '50%',
-            background: mixColor('#0e9f6e', '#047857', 0.5),
+            background: INK,
             transform: discK !== 1 ? `scale(${discK.toFixed(4)})` : undefined,
             flex: 'none',
           }}
@@ -245,56 +229,11 @@ export const Slot: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
           borderRadius: R,
           background: C.white,
           boxShadow: elevation(lift, 1),
-          // (the page opens from the top; the clip reaches past the sides and the foot so its shadow is never cut)
-          clipPath: clip > 0.01 ? `inset(-3px -40% ${(clip * 1.4 - 40).toFixed(3)}% -40%)` : undefined,
           overflow: 'hidden',
         }}
       >
-        {/* the page's lines — the reader's marker runs along each in turn; they fold away on the miss */}
-        {lineW.map((lw, i) => {
-          const c0 = KL.peekCollapse[0] + (nLines - 1 - i) * 1.5;
-          const q = tween(t, [c0, c0 + 5], [0, 1], EASE.in3);
-          if (q >= 1) return null;
-          const w = inner * lw;
-          const m0 = s0 + i * per;
-          const mark = tween(t, [m0, m0 + per * 1.1], [0, 1], EASE.inOut);
-          const markO = 1 - tween(t, [K.miss - 2, K.miss + 4], [0, 1], EASE.inOut);
-          return (
-            <div
-              key={i}
-              style={{
-                position: 'absolute',
-                left: padX,
-                top: lineY(i),
-                width: w,
-                height: 12,
-                borderRadius: 6,
-                overflow: 'hidden',
-                background: `rgba(20,10,36,${i === 0 ? 0.09 : 0.06})`,
-                transformOrigin: '0% 50%',
-                transform: q > 0 ? `scaleX(${(1 - q).toFixed(4)})` : undefined,
-              }}
-            >
-              {mark > 0 && markO > 0 ? (
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: 0,
-                    top: 0,
-                    bottom: 0,
-                    width: '100%',
-                    background: rgba(INK, 0.34 * markO),
-                    transformOrigin: '0% 50%',
-                    transform: `scaleX(${mark.toFixed(4)})`,
-                  }}
-                />
-              ) : null}
-            </div>
-          );
-        })}
-
         {/* "0 matches": the miss, in its grey */}
-        {t >= z - 1 && zr.opacity > 0.001 ? (
+        {t >= z - 2 && zr.opacity > 0.001 ? (
           <div
             style={{
               position: 'absolute',

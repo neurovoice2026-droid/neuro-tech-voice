@@ -8,9 +8,11 @@
  *             in the light's own colour (teal → the caller's blue while they
  *             speak → drained to a cool grey on the miss → teal again when Ava
  *             answers). Multiplied into the paper like a coloured light, with a
- *             physical falloff: no edge, no blob, no disc.
- *   dawn      (the match cut on light) the result's white flash gathers into a
- *             seed of Sunday light at the reader's place and blooms ON the hit
+ *             physical falloff: no edge, no blob, no disc. It exists only with
+ *             its source: until the orb springs out (orbIn) the room is clean
+ *             white paper — the cut out of the result's white-out stays hard
+ *             and clean — and the pool comes up WITH the orb, its reach growing
+ *             with the sphere's size.
  *   eyebrow   ● KNOWLEDGE BASE (the site's CornerDot eyebrow, TYPE.label in sunday ink)
  *
  * Every layer is a many-stop gradient sampled from a smooth curve (the film
@@ -21,31 +23,20 @@ import { AbsoluteFill } from 'remotion';
 import { CornerDot, Reveal } from '../../components/Type';
 import { Vignette2 } from '../../components/Atmosphere';
 import { Grain } from '../../components/Grain';
-import { hexToRgb, rgba } from '../../lib/lights';
+import { hexToRgb } from '../../lib/lights';
 import { EASE, mix, SPRING, tween } from '../../lib/motion';
 import { typeStyle } from '../../lib/type';
 import { KNOWLEDGE, KNOWLEDGE_LOCAL } from '../../timing';
 import { flashAt } from './pulse';
-import { INK, SUN_GLOW, type Geo } from './geometry';
+import { INK, type Geo } from './geometry';
 import { glowAt, greyAt, relitAt } from './light';
+import { riseAt } from './Reader';
 
 const K = KNOWLEDGE;
 const KL = KNOWLEDGE_LOCAL;
 
 /** 0 → 1 as the white flash becomes the stage (t 0 is the hit) */
 export const stageIn = (t: number) => tween(t, KL.stageIn, [0, 1], EASE.house);
-
-/** the dawn's strength: gathers over the result's last white frames (an accelerating inhale),
- *  peaks ON the hit, then hands over to the stage's own light */
-export function dawnAt(t: number) {
-  const [a, b] = KL.dawn;
-  if (t < a - 1) return 0;
-  if (t <= b) {
-    const u = (t - (a - 1)) / (b - (a - 1));
-    return u * u;
-  }
-  return Math.exp(-(t - b) / 5.5);
-}
 
 /* ── light maths (the same model as components/Atmosphere.tsx) ───── */
 
@@ -74,16 +65,20 @@ const LIT = [255, 255, 255] as const;
 /** the wall's dither (overlay grain opacity) */
 const PAPER_DITHER = 0.5;
 
+/** the light's source: 0 before the orb, rising with the sphere as it springs out (no overshoot — light
+ *  does not bounce; the pool's reach follows the orb's size) */
+const sourceAt = (t: number) => Math.min(1, Math.max(0, riseAt(t)));
+
 /** the Sunday light's strength on the wall at t (multiply alpha at its centre) */
 function tintAt(t: number) {
+  const src = sourceAt(t);
+  if (src <= 0) return 0;
   const grey = greyAt(t);
   // it swells as the orb lands and as Ava's light comes back; it drains on the miss
   const swell = 0.45 * flashAt(t, KL.orbIn + 3, 9) + 0.5 * flashAt(t, KL.relight[0] + 2, 12) * relitAt(t);
-  // before the orb, the light is the heading's (the dawn's settle): a touch quieter; once the orb has
-  // folded away (the recede) its light lingers, lower, under the closing line
-  const orb = tween(t, [KL.orbIn - 2, KL.orbIn + 10], [0.75, 1], EASE.inOut);
+  // once the orb has folded away (the recede) its light lingers, lower, under the closing line
   const gone = 1 - 0.4 * tween(t, [KL.recede[0], KL.recede[1] + 8], [0, 1], EASE.inOut);
-  return 0.24 * orb * gone * (1 + swell) * (1 - 0.55 * grey);
+  return 0.24 * EASE.out3(src) * gone * (1 + swell) * (1 - 0.55 * grey);
 }
 
 /**
@@ -106,10 +101,10 @@ export const Room: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
   // the white: a big soft source, so the corners fall to the cool paper (depth, not a vignette ring)
   const hW = G.v ? 1.15 * W : 0.6 * W;
   const aW = G.v ? 0.85 : 1.3;
-  // the Sunday light: a tighter pool round the orb, in its colour now
+  // the Sunday light: a tighter pool round the orb, in its colour now — its reach grows with the sphere
   const glow = glowAt(t);
   const tint = tintAt(t);
-  const hT = G.v ? 330 : 380;
+  const hT = (G.v ? 300 : 320) * (0.35 + 0.65 * sourceAt(t));
   const aT = G.v ? 0.95 : 1.2;
   const sc = mix(1.035, 1, stageIn(t));
   return (
@@ -147,43 +142,6 @@ export const Room: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
         <Grain opacity={PAPER_DITHER} blend="overlay" seed="kbpaper" />
       </div>
     </AbsoluteFill>
-  );
-};
-
-/** gradient stops for a gaussian falloff (fraction of the radius) */
-const GAUSS = [0, 0.08, 0.16, 0.24, 0.32, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
-
-/**
- * The match cut on light. The result's booked event blooms to white from its
- * ember centre; over its last white frames (pre-roll, t < 0) that centre
- * gathers into a seed of SUNDAY light — aqua (#a5eaf5), teal at its edge —
- * that drifts to the reader's place, blooms ON the hit (t 0, with the white
- * hit and the Sunday chime) and settles into the room's own light as the
- * room comes up out of it. Two gaussians (each falls off monotonically, so
- * their sum can never ring): light on the white stock, never a disc.
- */
-export const Dawn: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
-  const k = dawnAt(t);
-  if (k < 0.004) return null;
-  const [a] = KL.dawn;
-  const m = tween(t, [a, 4], [0, 1], EASE.inOut);
-  const x = mix(G.dawn.x0, G.orb.x, m);
-  const y = mix(G.dawn.y0, G.orb.y, m);
-  // the seed opens out as it gathers (inhale) and is widest just after the hit
-  const D = (G.v ? 1500 : 1700) * (0.22 + 0.78 * EASE.out3(Math.min(1, (t - (a - 1)) / 8)));
-  const pool = (hex: string, peak: number, w: number) =>
-    `radial-gradient(closest-side, ${GAUSS.map((r) => `${rgba(hex, Math.min(1, peak * k * Math.exp(-((r / w) ** 2))))} ${(r * 100).toFixed(0)}%`).join(', ')})`;
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        left: x - D / 2,
-        top: y - D / 2,
-        width: D,
-        height: D,
-        background: `${pool(SUN_GLOW.core, 0.62, 0.32)}, ${pool(SUN_GLOW.body, 0.09, 0.56)}`,
-      }}
-    />
   );
 };
 

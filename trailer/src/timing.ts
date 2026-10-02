@@ -410,19 +410,20 @@ export const HOOK_LOCAL = {
    *  before the landing (the figures leave ≈ 4 earlier) and snap in ON the same hit, so each
    *  moment's label stays sharp ≈ 9 of its 11 frames */
   drumTravel: 2,
-  /** after the land, a light sweep crosses the four figures left → right (≈ 11 f each) */
+  /** after the land, the light passes over the four figures left → right: each one's flat ink
+   *  lifts towards paper and settles (≈ 11 f each; a colour change, no highlight band) */
   sheen: HOOK.clockLand + 1, // 42
   /** Every ring attack leaves this many frames before its beat, so the beat frame is the peak. */
   ringLead: 1,
-  ringB: HOOK.ring + 7, // 63 — second ring of the burst
+  ringB: HOOK.ring + 7, // 63 — second pulse of the burst (the orb pulses; only the first pulse sends a ring)
   waveIn: b(3.25), // 49 — the dotted wave row draws out from the centre (8 f after the land, 7 before the ring)
   freezeEase: 3, // frames for world time to stop
-  frozenRate: 0.12, // world speed once frozen (the hanging rings and motes creep visibly)
+  frozenRate: 0.12, // world speed once frozen (the held wave creeps visibly)
   /** the line has settled: the slow push turns into an accelerating inhale into the break */
   pushTurn: HOOK.textIn + 16, // 87
-  /** the frozen world breathes ON these beats: orb +3 %, rings +2 % / brighter, wave ±20 %, the line's glow */
+  /** the frozen world breathes ON these beats: orb +3 %, wave ±20 %, the room's light */
   breathBeats: [b(6), b(7)] as const, // 90 105
-  anticipation: HOOK_HANDOFF, // 112 — the inhale; the hanging rings/wave finish decaying
+  anticipation: HOOK_HANDOFF, // 112 — the inhale; the held wave finishes decaying
   /** 112 → 120: the world defocuses and is gone ON the shatter downbeat (1.5 % left at 119). */
   out: [HOOK_HANDOFF, SCENES.hook.to] as const,
   /** Last frame the hook draws the line is textHandoff − 1. */
@@ -865,17 +866,29 @@ export const CTA_LOCAL = {
   eyePush: [0, CTA.line + 10] as const,
   glint0: [CTA_IRIS_END + 2, CTA_IRIS_END + 6] as const,
   glint: [CTA.line, CTA.line + 4] as const,
-  /** THE FOUR LIGHTS — rush, closing, sunday, night arrive on 8ths (each arrival is the
-   *  brightest frame of its light: a short flash of its own light, a camera nudge) */
-  orbPops: [b(2), b(2.5), b(3), b(3.5)] as const,
+  /** THE FOUR LIGHTS — rush, closing, sunday, night — ONE AT A TIME, a turn of two beats
+   *  each, on the downbeats (client: "one at a time"): each arrives (a point of its light
+   *  gathers, the orb springs out of it ON the beat), keys her face from its side … */
+  orbPops: [b(2), b(4), b(6), b(8)] as const,
+  /** … and, its turn over, draws back into a point and goes out over these frames after its
+   *  pop (gone 3 f before the next one gathers; the night stays on into the converge) */
+  turnOut: [20, 27] as const,
+  /** … from its side: rush left, closing right, sunday left, night right (−1 / +1), and the
+   *  pan of its sound (its screen x) */
+  lightSide: [-1, 1, -1, 1] as const,
+  lightPan: [0.32, 0.68, 0.32, 0.68] as const,
   /** as the lights arrive the room's key steps down (to 55 %) and loses its lilac, so they are
    *  the brightest things in frame */
   backDim: [b(2), b(3)] as const,
-  /** … and tighten their orbit ON "Twenty" "four" "seven" */
+  /** … and the light in turn answers "Twenty" "four" "seven" (a lift of its light) */
   tighten: [0, 1, 2].map((k) =>
     CTA.line + vWord(CTA.lineVoice, Math.min(CTA.lineWords[7] + k, VOICE.lines[CTA.lineVoice].words.length - 1)),
   ) as readonly number[],
-  /** the converge: the orbit swells (anticipation) … */
+  /** the converge: once the light has closed on her (K.close), the three that went out come back
+   *  round the core (rush, closing, sunday, 2 f apart) — all four together only now, for the
+   *  merge … */
+  reIn: [CTA.converge[0] + 7, CTA.converge[0] + 9, CTA.converge[0] + 11] as const,
+  /** … the orbit swells (anticipation) … */
   orbSwell: [CTA.converge[0], CTA.converge[0] + 4] as const,
   /** … then spirals into P, accelerating */
   orbIn: [CTA.converge[0] + 4, CTA.logoImpact - 9] as const,
@@ -890,7 +903,7 @@ export const CTA_LOCAL = {
   burst: [CTA.logoImpact, CTA.logoImpact + 6] as const,
   /** the four lights' arcs come up on the corona's rim once it has opened (186 → 206, inOut) */
   rimIn: [CTA.logoImpact + 6, CTA.logoImpact + 26] as const,
-  /** after "…seven" the formation row slowly tightens and leans in (tension before the converge) */
+  /** after "…seven" the night's light slowly draws in toward her (tension before the converge) */
   drift: [CTA.line + vWord(CTA.lineVoice, VOICE.lines[CTA.lineVoice].words.length - 1) + 6, CTA.converge[0]] as const,
   /** the URL rises ON her words: "neuro" | "tech" | "voice.com" on cta-2 words 0 / 1 / 2
    *  (first character index of each chunk, and its frame) */
@@ -975,10 +988,9 @@ export const KNOWLEDGE_LOCAL = (() => {
    * chip pops on "call" and its check draws on "today." */
   const ticketPop = aw(13);
   return {
-    /** the match cut on light: over the result's last white frames (pre-roll, t < 0) the white
-     *  flash's ember centre gathers into a seed of Sunday light at the reader's place (an inhale)… */
+    /** (v8: not drawn — the result's white-out holds clean to the cut; the Sunday light comes with the orb) */
     dawn: [-4, 0] as const,
-    /** …which blooms ON the hit (t 0) and settles as the stage materialises out of it */
+    /** the paper room comes up out of the white ON the hit (t 0) */
     stageIn: [0, b(0.75)] as const,
     /** the eyebrow's CornerDot spins in (its letters follow 0.8 f apart) */
     eyebrowDot: K.heading - 1,
@@ -995,7 +1007,7 @@ export const KNOWLEDGE_LOCAL = (() => {
     orbIn: b(2),
     /** the status pill pops "Listening" a 16th later… */
     statusIn: b(2.25),
-    /** …and the moment tag "SUNDAY · 10:24" an 8th later (the sun spins in, a glint crosses it) */
+    /** (v8: not drawn — one status on screen, the pill) the moment tag "SUNDAY · 10:24" */
     momentTag: b(2.5),
     /** "Quick question," (kb-1's unaligned lead-in): its two words' frames, and when it gives way to "Do…" (null = none) */
     lead,
@@ -1013,7 +1025,7 @@ export const KNOWLEDGE_LOCAL = (() => {
     avaIn: hum ? hum.appear : ansWord - 3,
     /** …and leaves with her last caption (holdUntil K.closing: its 4 f exit ends 2 f before) */
     avaOut: [K.closing - 6, K.closing - 2] as const,
-    /** the slot opens (the dashed page the reader is reading) — a scan line of Sunday light runs down its reveal edge */
+    /** (v8: not drawn — the slot is born on the miss in both frames, no placeholder page) */
     peekOpen: K.scan[0] - b(0.25),
     /** the pill flips to "Looking through 5 documents" (the box tweens, the words swap, a bump) */
     scanFlip: K.scan[0],
@@ -1028,13 +1040,13 @@ export const KNOWLEDGE_LOCAL = (() => {
     reads: Array.from({ length: 5 }, (_, i) => Math.round(fills[0] + i * fills[1])) as readonly number[],
     /** the status dot pulses 1.6× three times, 8 f apart, from scan[0] */
     dotPulse: [K.scan[0], 8, 3] as const,
-    /** the five 60 % ticks blink 1 → .3 → 1 as the scan comes up short */
+    /** (v8: not drawn — the documents carry no meters) */
     tickBlink: [K.miss - 10, K.miss] as const,
     /** "Not in the documents": the pill flips, then shakes "no"; the orb greys under a closing ring; a kick */
     missFlip: K.miss,
     shake: [K.miss + 3, K.miss + 15] as const,
     toGrey: [K.miss, K.miss + 12] as const,
-    /** the slot's reading lines fold away (bottom up, 1.5 f apart)… */
+    /** (v8: not drawn — no reading lines) */
     peekCollapse: [K.miss, K.miss + 8] as const,
     /** …and "0 matches" pops into it a 16th after the miss, then shakes "no" after the pill */
     zeroPop: K.miss + b(0.25),
@@ -1047,7 +1059,9 @@ export const KNOWLEDGE_LOCAL = (() => {
     dimDocs: [K.answer, K.answer + 10] as const,
     /** …9:16: on the miss, deeper, as "0 matches" takes their place (the slot opens over them) */
     docsBackMiss: [K.miss, K.miss + 9] as const,
-    slotOpenMiss: K.miss,
+    /** the "0 matches" card steps forward 2 f after the miss (both frames), so it is never an empty card:
+     *  "0 matches" rises into it as it settles */
+    slotOpenMiss: K.miss + 2,
     /** "guess." turns sunday ink as it is spoken */
     guessKey: aw(12),
     /** "I'll": the slot inhales (2 f at .95) and pops into the team card (1.08 → 1): glint, ring, kick */
@@ -1262,7 +1276,7 @@ export const HITS: Hit[] = [
   H('hook', HOOK.clockLand, 'click', 'night', 0.5, 1, '03:12 TUESDAY NIGHT lands'),
   H('hook', HOOK.clockLand, 'thump', 'night', 0.5, 1, 'the land’s body (camera kick)'),
   H('hook', HOOK.clockLand, chime('night'), 'night', 0.5, 2, 'LIGHT: night'),
-  H('hook', HOOK_LOCAL.sheen, 'sheen', 'night', [0.3, 0.7], 3, 'light sweep across the figures'),
+  H('hook', HOOK_LOCAL.sheen, 'sheen', 'night', [0.3, 0.7], 3, 'the figures’ flat ink lifts left → right'),
   H('hook', HOOK_LOCAL.waveIn, 'swish', 'night', 0.5, 3, 'dotted wave draws out both ways', { split: true }),
   // the ring's two pulses (HOOK.ring, HOOK_LOCAL.ringB) are built into ring-hook
   H('hook', HOOK.ring, 'ring-hook', 'night', 0.5, 1, 'FIRST RING (both pulses)'),
@@ -1377,20 +1391,18 @@ export const HITS: Hit[] = [
   H('result', RESULT_LOCAL.whiteFull - 2, 'whoosh', 'none', 0.6, 2, 'the dive into the event', { layer: true, db: -3 }),
 
   /* ── KNOWLEDGE ── */
-  H('knowledge', KL.stageIn[0], 'hit-white', 'sunday', 0.5, 1, 'WHITE: the stage materialises'),
-  H('knowledge', KL.stageIn[0], chime('sunday'), 'sunday', 0.5, 2, 'LIGHT: sunday blooms'),
+  H('knowledge', KL.stageIn[0], 'hit-white', 'sunday', 0.5, 1, 'WHITE: the stage materialises (clean paper — the light comes with the orb)'),
   H('knowledge', KL.eyebrowDot, 'tick', 'sunday', 0.06, 3, 'eyebrow dot spins in'),
-  H('knowledge', KL.headingAt + 2, 'swish', 'none', 0.5, 2, '“Answers from your own documents.” rises out of the bloom'),
+  H('knowledge', KL.headingAt + 2, 'swish', 'none', 0.5, 2, '“Answers from your own documents.” rises on the hit'),
   ...KL.docPops.map((f, i) => H('knowledge', f, 'pop', 'sunday', DOC_X[i], 2, `doc ${i + 1} pops`, { semi: DOC_SEMI[i] })),
   H('knowledge', KL.headingStep[0], 'swish', 'none', 0.5, 3, 'the heading steps down'),
   // the orb lands under the caller's "Quick question," (kb-1's lead-in, not in its phrase map): a light land, so the words stay in front
   H('knowledge', KL.orbIn, 'land', 'sunday', 0.5, 3, 'the orb springs out (beat 2)'),
   H('knowledge', KL.orbIn, 'glint', 'sunday', 0.5, 3, 'bloom flash off the rim'),
+  H('knowledge', KL.orbIn, chime('sunday'), 'sunday', 0.5, 2, 'LIGHT: sunday arrives with its source (the orb and its pool on the wall)'),
   H('knowledge', KL.statusIn, 'pop', 'sunday', 0.89, 3, '“Listening” pill (under “question,”)', { semi: 5, db: -3 }),
-  H('knowledge', KL.momentTag, chime('sunday', true), 'sunday', 0.73, 3, '“SUNDAY · 10:24” (LIGHT: sunday; soft, under “question,”)'),
   H('knowledge', KL.headingOut[0] + 3, 'swish', 'none', 0.5, 3, 'the heading flicks out'),
   H('knowledge', KL.callerIn, 'tick', 'none', 0.33, 3, 'CALLER label + “Quick question,” (the caller’s first sound)'),
-  H('knowledge', KL.peekOpen, 'sheen', 'sunday', 0.79, 3, 'the slot’s page scans open'),
   H('knowledge', KL.scanFlip, 'flip', 'sunday', 0.85, 2, 'pill: “Looking through 5 documents”'),
   H('knowledge', KL.beams[0], 'shimmer', 'sunday', [0.2, 0.5], 2, 'five beams draw to the orb'),
   H('knowledge', KL.dotPulse[0], 'tap', 'sunday', 0.84, 3, 'status dot reads', { run: { n: KL.dotPulse[2], step: KL.dotPulse[1] } }),
@@ -1398,12 +1410,11 @@ export const HITS: Hit[] = [
     run: { n: 5, offs: KL.reads.map((f) => f - KL.reads[0]), semis: DOC_SEMI, xs: DOC_X },
   }),
   H('knowledge', KL.beamLand[0], 'glint', 'sunday', 0.48, 3, 'beam heads land on the orb', { run: { n: 5, step: KL.beamStagger, semi: 2 } }),
-  H('knowledge', KL.tickBlink[0], 'tap', 'none', 0.5, 3, 'the 60 % ticks blink (doubt)', { layer: true, semi: -6 }),
   H('knowledge', KL.missFlip, 'drain', 'none', 0.5, 1, 'THE MISS: the light drains to grey'),
   H('knowledge', KL.missFlip, 'thump', 'none', 0.5, 1, 'the miss: kick'),
   H('knowledge', KL.missFlip, 'flip', 'none', 0.85, 2, 'pill: “Not in the documents”'),
   H('knowledge', KL.shake[0], 'tap', 'none', 0.85, 3, 'the pill shakes “no”', { run: { n: 2, step: 4 } }),
-  H('knowledge', KL.peekCollapse[0] + 2, 'swish', 'none', [0.86, 0.76], 3, 'the slot’s reading lines fold away'),
+  H('knowledge', KL.slotOpenMiss, 'swish', 'none', [0.86, 0.76], 3, 'the “0 matches” card steps forward (born on the miss)'),
   H('knowledge', KL.zeroPop, 'pop', 'none', 0.8, 2, '“0 matches” pops into the slot', { semi: -7 }),
   // (the slot's "no" taps sit under Ava's thinking "Hmm," — her sound, captioned, ridden down to her
   // speaking level in VOICE_RIDES — so they step back for it: −3 dB; the miss's drain ducks under it
@@ -1418,8 +1429,8 @@ export const HITS: Hit[] = [
   H('knowledge', KL.ticketPop + 1, 'sheen', 'sunday', [0.7, 0.9], 3, 'glint sweeps the card'),
   H('knowledge', KL.ticketType[0], 'key', 'none', 0.78, 3, '“Home visits?” writes in', { run: { n: 12, step: 0.7 }, db: -4 }),
   H('knowledge', KL.ticketType[1], 'key', 'none', 0.78, 3, 'the caller’s number writes in', { run: { n: 10, step: 0.6 }, db: -6 }),
-  H('knowledge', KL.callback, 'pop', 'closing', 0.74, 2, 'callback chip pops on “call”'),
-  H('knowledge', KL.check, 'ding-s', 'closing', 0.68, 2, 'the check draws on “today.”'),
+  H('knowledge', KL.callback, 'pop', 'sunday', 0.74, 2, 'callback chip pops on “call”'),
+  H('knowledge', KL.check, 'ding-s', 'sunday', 0.68, 2, 'the check draws on “today.” (sunday ink: the scene’s one accent)'),
   H('knowledge', KL.recede[0], 'swell', 'sunday', 0.5, 2, 'the stage recedes into the title'),
   H('knowledge', KNOWLEDGE.closing + 3, 'swish', 'none', 0.5, 2, '“Where your documents stop, it says so.”'),
   H('knowledge', KL.closingKey, chime('sunday'), 'sunday', 0.5, 1, '“it says so.” turns Sunday teal'),
@@ -1493,14 +1504,16 @@ export const HITS: Hit[] = [
       H('cta', CTA.line + vWord(CTA.lineVoice, w) - CTA_LOCAL.riseLead, 'tap', 'none', [0.31, 0.37, 0.45, 0.55, 0.66, 0.4][i], 3, `headline word ${i + 1} rises`, { db: -4 }),
     ),
   H('cta', CTA.line + vWord(CTA.lineVoice, CTA.lineWords[7]) - CTA_LOCAL.riseLead, 'tap', 'none', 0.63, 2, '“24/7.” rises ON “Twenty”', { db: -3 }),
-  // the four lights pop UNDER Ava's line: a short pitched pop per light (its note), no bell
-  // ring and no delay tail across "agents that book" — the picture carries the accent
-  ...CTA_LOCAL.orbPops.map((f, i) => H('cta', f, 'pop', LIGHT_ORDER4[i], [0.66, 0.71, 0.27, 0.36][i], 3, `${LIGHT_ORDER4[i].toUpperCase()} orb pops (LIGHT)`)),
+  // the four lights arrive UNDER Ava's line, one at a time (a turn of two beats each, on the
+  // downbeats): a short pitched pop per light (its note), no bell ring and no delay tail across
+  // "agents that book" — the picture carries the accent. Panned to the side each one keys her from
+  // (rush left, closing right, sunday left, night right: CTA_LOCAL.lightPan)
+  ...CTA_LOCAL.orbPops.map((f, i) => H('cta', f, 'pop', LIGHT_ORDER4[i], CTA_LOCAL.lightPan[i], 3, `${LIGHT_ORDER4[i].toUpperCase()} orb arrives (LIGHT), keys her from its side`)),
   // …and under each, its light's soft chime, far back: the hook's four lights, recalled (the soft chimes
   // have no mallet and step back under her voice — the tonal duck — so "agents that book" stays clear)
-  ...CTA_LOCAL.orbPops.map((f, i) => H('cta', f, chime(LIGHT_ORDER4[i], true), LIGHT_ORDER4[i], [0.66, 0.71, 0.27, 0.36][i], 2, `${LIGHT_ORDER4[i]}: the hook’s chime, recalled`, { layer: true, db: -2 })),
-  // ON “Twenty” “four” “seven”: weight, not clicks — sub kicks under the words
-  ...CTA_LOCAL.tighten.map((f, i) => H('cta', f, 'thump', 'none', 0.5, 2, `the orbit tightens (“${['Twenty', 'four', 'seven'][i]}”)`, { db: -1 })),
+  ...CTA_LOCAL.orbPops.map((f, i) => H('cta', f, chime(LIGHT_ORDER4[i], true), LIGHT_ORDER4[i], CTA_LOCAL.lightPan[i], 2, `${LIGHT_ORDER4[i]}: the hook’s chime, recalled`, { layer: true, db: -2 })),
+  // ON “Twenty” “four” “seven”: weight, not clicks — sub kicks under the words (the light in turn lifts)
+  ...CTA_LOCAL.tighten.map((f, i) => H('cta', f, 'thump', 'none', 0.5, 2, `the light answers “${['Twenty', 'four', 'seven'][i]}”`, { db: -1 })),
   H('cta', CTA.logoImpact, 'riser', 'none', 0.5, 1, 'CONVERGE → peak ON the impact'),
   // THE CONVERGE is the film's biggest build (the bed's 8th kicks, snare roll and sub swell — bed.mjs):
   // the downbeat is voiced (+6 dB) and the whirl rides on top of it (+3 dB)

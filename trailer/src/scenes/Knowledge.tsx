@@ -1,10 +1,12 @@
 /**
  * KNOWLEDGE — the white act opens on the site's #knowledge reading room, a
  * paper room lit by ONE light: the reader's. This second call comes in on a
- * Sunday (the moment tag says so), so the orb wears #demo's SUNDAY light and
- * the wall around it takes a soft aqua pool of it — light with a source,
- * falling off like light (no blobs, no discs, no wash). Sunday ink is the
- * scene's one accent. A second caller asks what isn't written down; Ava
+ * Sunday, so the orb wears #demo's SUNDAY light and the wall around it takes a
+ * soft aqua pool of it — light with a source (it exists only once the orb
+ * does), falling off like light (no blobs, no discs, no wash). Sunday ink is
+ * the scene's one accent; the caller reads in a quiet slate, never a second
+ * chromatic ink. One idea per frame: the documents, the reader, who is
+ * speaking — no meters, no placeholder pages. A second caller asks what isn't written down; Ava
  * searches the owner's documents and, honestly, doesn't guess: the light
  * drains on the miss, and floods back when she answers. (knowledge-stage.tsx
  * at film scale; every moment is KNOWLEDGE / KNOWLEDGE_LOCAL in timing.ts,
@@ -14,16 +16,15 @@
  * chose ("Answers from your own documents.": Instrument Sans 460, −0.03em,
  * sentence case, the key phrase in sunday ink): the heading (TYPE.headline),
  * the closing (TYPE.display), both speakers' captions (TYPE.caption — the
- * caller told apart by caller blue and ● CALLER, never by an italic), the
+ * caller told apart by slate ink and ● CALLER, never by an italic), the
  * labels (TYPE.label), the cards (the title family). Text appears by MOTION:
  * words rise out of their own masks on soft springs; nothing ever blurs in or
  * out, and nothing is smeared — the film renders at 120 fps.
  *
- *   dawn        (pre-roll, over the result's last white frames) the white
- *               flash's ember centre gathers into a seed of Sunday light at
- *               the reader's place — the match cut on light
- *   t 0         the hit (hit-white + the Sunday chime): the seed blooms and
- *               the paper room comes up out of it (1.035 → 1)
+ *   t 0         the hit (hit-white): a hard, clean cut out of the result's
+ *               white-out — the paper room comes up out of the white (1.035 →
+ *               1), clean paper and no light yet: the light comes with its
+ *               source
  *   heading     ON the hit "Answers from your own documents." rises word by
  *               word where the orb will be; the eyebrow's dot turns in and
  *               "KNOWLEDGE BASE" rises; the key phrase turns sunday ink with a
@@ -34,19 +35,19 @@
  *               column — it holds full size and leaves up through its masks
  *               just before the orb springs from its place)…
  *   orbIn       …and the orb springs out of a seed of light ON the beat (a fine
- *               ring off its rim); the pill opens "Listening" a 16th later, the
- *               moment tag "☀ SUNDAY · 10:24" an 8th later
+ *               ring off its rim; the Sunday chime) and its pool of light comes
+ *               up on the wall with it; the pill opens "Listening" a 16th later
+ *               (the scene's one status)
  *   callerIn    the caller's first sound: ● CALLER rises, "Quick question,"
  *               (kb-1's lead-in) writes in; the heading leaves; then "Do you do
  *               home visits?" word-synced; the orb listens (real envelope)
  *   scan        AFTER the question: "Looking through 5 documents": beams draw
- *               into the orb, the cards are read (a fine sunday-ink ring each),
- *               the bars fill (none reaches the 60 % tick), a reader's marker
- *               runs along the page's lines
+ *               into the orb, the cards are read one after another (a fine
+ *               sunday-ink ring each, its kind turning sunday ink)
  *   miss        "Not in the documents" (the pill shakes no): the orb and the
- *               room's light drain to a cool grey, the beams fall back, the page
- *               says "0 matches" — 9:16: the documents step back and the card
- *               opens in front of them, in their place
+ *               room's light drain to a cool grey, the beams fall back, and the
+ *               card is born: "0 matches" — 16:9 beside the reader; 9:16 the
+ *               documents step back and it opens in front of them, in their place
  *   hum         the question and CALLER leave before Ava (kb-2) makes a sound;
  *               ● AVA rises over her row and "Hmm" writes in on her first sound,
  *               its dots rising through the hum, while the orb breathes in grey
@@ -56,7 +57,7 @@
  *               (CaptionRun); 16:9: the documents step back
  *   ticketPop   "I'll ask the team": the page becomes the card for the team (the
  *               question and the caller's number rise in on her words); "call":
- *               the callback chip; "today.": its check
+ *               the callback chip; "today.": its check (sunday ink — one accent)
  *   closing     the stage recedes (a fade and a touch smaller — never out of
  *               focus); "Where your documents stop, it says so." — "it says so."
  *               turns sunday ink with a glint
@@ -64,7 +65,7 @@
  *               (crisp at 120 fps, no smear); clean white from out[1] − 2
  *
  * Parallax (a slow push only — no hand-held drift, no kicks): room 0.3 ·
- * eyebrow, pill, moment tag 0.7 · cards, beams, slot, orb, captions 1.0.
+ * eyebrow, pill 0.7 · cards, beams, slot, orb, captions 1.0.
  */
 import React from 'react';
 import { AbsoluteFill } from 'remotion';
@@ -75,18 +76,16 @@ import { useLayout } from '../lib/layout';
 import { EASE, SPRING, tween } from '../lib/motion';
 import { useSceneFrame } from '../lib/scene';
 import { captionFont, maskBox, typeStyle, type CaptionFont } from '../lib/type';
-import { C, FONT, VOICE_INK } from '../theme';
+import { C, FONT } from '../theme';
 import { KNOWLEDGE, KNOWLEDGE_LOCAL, type Caption } from '../timing';
 import { Beams } from './knowledge/Beams';
 import { CaptionRun } from './knowledge/CaptionRun';
 import { Closing, Heading } from './knowledge/Closing';
-import { geo, INK, type Geo } from './knowledge/geometry';
-import { missAt } from './knowledge/light';
+import { CALLER, geo, INK, type Geo } from './knowledge/geometry';
 import { useFontsReady } from './knowledge/measure';
-import { Moment } from './knowledge/Moment';
 import { Reader } from './knowledge/Reader';
 import { Slot } from './knowledge/Slot';
-import { Dawn, Eyebrow, Room } from './knowledge/Stage';
+import { Eyebrow, Room } from './knowledge/Stage';
 import { Status } from './knowledge/Status';
 import { Tiles } from './knowledge/Tiles';
 
@@ -102,8 +101,9 @@ const contiguous = CAPS[3].word === CAPS[2].word + CAPS[2].text.split(' ').lengt
 const MERGED: Caption = { text: `${CAPS[2].text} ${CAPS[3].text}`, word: CAPS[2].word };
 /** the spoken words that turn sunday ink as they are said ("guess." · "today.") */
 const KEY_WORDS: Record<number, number> = { 12: KL.guessKey, 21: KL.check };
-const CALLER_INK = VOICE_INK.caller.paper.text;
-const CALLER_TAG = VOICE_INK.caller.paper.tag;
+/** the caller's slate (geometry.ts CALLER): the speaker reads, without a second chromatic ink beside sunday teal */
+const CALLER_INK = CALLER.text;
+const CALLER_TAG = CALLER.tag;
 
 /** every face + weight the scene measures or sets (held until loaded) */
 const FONTS = [`460 76px ${FONT.ui}`, `480 42px ${FONT.ui}`, `480 30px ${FONT.ui}`, `540 30px ${FONT.ui}`];
@@ -130,7 +130,7 @@ function whipPos(f: number, G: Geo) {
 }
 
 /**
- * A speaker tag (the call's turn label): ● CALLER in caller blue / ● AVA in sunday ink (TYPE.label),
+ * A speaker tag (the call's turn label): ● CALLER in caller slate / ● AVA in sunday ink (TYPE.label),
  * rising out of its mask on the caption spring and leaving up through it.
  */
 const SpeakerTag: React.FC<{
@@ -252,7 +252,7 @@ const Hum: React.FC<{ t: number; G: Geo; font: CaptionFont }> = ({ t, G, font })
 
 /**
  * "Quick question," — kb-1's lead-in (not in its word alignment, timed off its envelope: KL.lead).
- * Set exactly like the question's caption (TYPE.caption in caller blue): each word rises on its
+ * Set exactly like the question's caption (TYPE.caption in caller slate): each word rises on its
  * sound; it leaves up through its masks before "Do you do home visits?" writes in.
  */
 const LeadIn: React.FC<{ t: number; G: Geo; font: CaptionFont }> = ({ t, G, font }) => {
@@ -281,21 +281,12 @@ export const Knowledge: React.FC = () => {
   const L = useLayout();
   useFontsReady(FONTS);
   if (t >= KL.white) return <AbsoluteFill style={{ background: C.white }} />;
-  if (t < 0) {
-    // the pre-roll: over the result's last white frames, its ember centre gathers into the Sunday seed
-    if (t < KL.dawn[0] - 1) return null;
-    const G0 = geo(L);
-    return (
-      <AbsoluteFill style={{ overflow: 'hidden' }}>
-        <Dawn t={t} G={G0} />
-      </AbsoluteFill>
-    );
-  }
+  // (the pre-roll is the result's own: its white-out holds clean to the cut — no light before its source)
+  if (t < 0) return null;
 
   const G = geo(L);
   const W = L.width;
   const cam = camera(t, G, L.cx, L.cy);
-  const cool = missAt(t); // the documents stay cooled: none of them answered
 
   // the whip: a counter-move, then away at speed — no smear (120 fps)
   const wp = whipPos(t, G);
@@ -338,19 +329,18 @@ export const Knowledge: React.FC = () => {
         {/* the room stays put under the whip (it goes to clean white): only what stands in it whips away */}
         <Layer depth={0.3}>
           <Room t={t} G={G} />
-          <Dawn t={t} G={G} />
         </Layer>
         <AbsoluteFill style={whipStyle}>
           {/* one recede wrapper for both content planes */}
           <AbsoluteFill style={recede}>
             <Layer depth={0.7}>
               <Eyebrow t={t} G={G} />
+              {/* one status: the pill (no moment tag, no sun) */}
               <Status t={t} G={G} />
-              <Moment t={t} G={G} />
             </Layer>
             <Layer depth={1}>
               <Beams t={t} G={G} uid="kb-beam" />
-              <Tiles t={t} G={G} cool={cool} />
+              <Tiles t={t} G={G} />
               <Slot t={t} G={G} />
               <Heading t={t} G={G} cx={L.cx} />
               <SpeakerTag

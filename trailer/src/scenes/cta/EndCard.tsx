@@ -5,21 +5,21 @@
  *
  *  <Wordmark>  "NEUROVOICE" exactly as the site's header sets it (lib/site.ts
  *              COMPANY.wordmark; .hdr-wordmark: Inter Tight 500, −0.07em,
- *              leading 1, --cover-paper on the dark) — the brand mark, the one
- *              exception to the Instrument Sans rule. The letters are laid out
- *              ONCE as one kerned run (canvas measureText of each prefix, so
- *              the site's kerning survives) and each surfaces — a short rise,
- *              its opacity over the travel, a whisper of scale — just after the
- *              merged light has passed it: from the centre out, as the corona
- *              opens behind the word, on a soft display spring.
- *  <CoverCta>  the site's own primary button (components/site/hero.tsx
- *              CoverCta): a paper plate (--cover-paper, radius .2em) with four
- *              CornerDots in its corners, the label in ink, "Start free →".
- *              It rises once the URL has typed; at `press` it is CLICKED: a
- *              hover lift (anticipation), .96 in 2 f, back on a soft spring,
- *              and it takes the site's hover — the plate floods to the brand
- *              plum from the arrow (a crisp radial edge), the label turns
- *              paper, the corner dots step out, the arrow moves .25em.
+ *              leading 1) — the brand mark, the one exception to the
+ *              Instrument Sans rule — set in dark ink ON the backlight (as the
+ *              crown logo's wordmark sat dark on its light). The letters are
+ *              laid out ONCE as one kerned run (canvas measureText of each
+ *              prefix, so the site's kerning survives) and each surfaces — a
+ *              short rise, its opacity over the travel, a whisper of scale —
+ *              just after the light has reached it: from the centre out, as the
+ *              backlight opens behind the word, on a soft display spring.
+ *  <StartFree> the site header's own button (components/site/header/
+ *              site-header.tsx .hdr-startfree): a --cover-paper plate, radius
+ *              .5em, the label in --cover-ink, weight 500, "Start free →" —
+ *              no ornaments. It rises once the URL has typed; then it is
+ *              CLICKED as on the site: the hover (transition-colors 300 ms,
+ *              the plate to the brand plum, the label to paper, the arrow
+ *              .2em on), then active:scale(.97) and back on a soft spring.
  *  <Note>      "5 free minutes, no card" (pricing copy), Instrument Sans,
  *              paper-dim, one word at a time.
  *  <Url>       the colophon: a hairline to the safe margins, broken by a
@@ -48,6 +48,8 @@ export const WORDMARK_TEXT = 'NEUROVOICE';
 const IT_CAP = 0.7275;
 const IT_ASC = 0.96875;
 const IT_DESC = 0.2412;
+/** the wordmark's ink on the backlight: the night's deepest plum (the crown logo's wordmark sat dark on its light) */
+export const WORDMARK_INK = '#1e0b38';
 /** the cap line's centre below the top of a line-height-1 box (em) */
 const CAP_MID = (1 - IT_ASC - IT_DESC) / 2 + IT_ASC - IT_CAP / 2;
 
@@ -80,10 +82,8 @@ export type WordmarkSpec = {
   y: number;
   /** font size (px) */
   size: number;
-  /** when the merged light reaches |x| (frames after `at`, from the corona's spring): x in em from the centre → frame */
+  /** when the backlight reaches |x| (frames after `at`, from its spring): x in em from the centre → frame */
   arrive: (xEm: number) => number;
-  /** a light crossing the letters once they are in: [start, end] frames */
-  sweep: readonly [number, number];
   color: string;
 };
 
@@ -97,9 +97,6 @@ export const Wordmark: React.FC<{ t: number; at: number; spec: WordmarkSpec; rea
   const land = rest(t, springUnit(t - at, SPRING.heavy), 1);
   const scale = mix(1.035, 1, land);
   const moving = Math.abs(scale - 1) > 1e-4;
-  // the light crossing the letters: a soft band of white across the paper (in word space)
-  const sw = tween(t, spec.sweep, [-0.25, 1.25], EASE.inOut);
-  const swO = t > spec.sweep[0] && t < spec.sweep[1] ? Math.sin(Math.PI * tween(t, spec.sweep, [0, 1])) : 0;
   const wPx = w * F;
   return (
     <div
@@ -118,22 +115,10 @@ export const Wordmark: React.FC<{ t: number; at: number; spec: WordmarkSpec; rea
         const x1 = (i + 1 < xs.length ? xs[i + 1] : w) * F;
         const mid = (x0 + x1) / 2;
         const start = at + spec.arrive(Math.abs(mid / F - w / 2));
-        // a short rise (no mask: a full-height rise would cross the corona's line) with the
-        // opacity over most of the travel and a whisper of scale — the letter surfaces in the light
+        // a short rise (no mask: the light is the reveal — dark ink appears as the light opens behind
+        // it) with the opacity over most of the travel and a whisper of scale
         const r = reveal(t, start, { config: SPRING.display, rise: 26, fade: 0.8, scaleFrom: 0.97 });
-        const fill: React.CSSProperties =
-          swO > 0.002
-            ? {
-                // the sweep in word coordinates: each letter shows its slice of one band
-                backgroundImage: `linear-gradient(100deg, ${spec.color} ${((sw - 0.16) * 100).toFixed(2)}%, rgba(255,255,255,1) ${(sw * 100).toFixed(2)}%, ${spec.color} ${((sw + 0.16) * 100).toFixed(2)}%)`,
-                backgroundSize: `${wPx.toFixed(2)}px ${F}px`,
-                backgroundPosition: `${(-x0).toFixed(2)}px 0px`,
-                backgroundRepeat: 'no-repeat',
-                WebkitBackgroundClip: 'text',
-                backgroundClip: 'text',
-                color: 'transparent',
-              }
-            : { color: spec.color };
+        const fill: React.CSSProperties = { color: spec.color };
         return (
           <span
             key={i}
@@ -162,23 +147,29 @@ export const Wordmark: React.FC<{ t: number; at: number; spec: WordmarkSpec; rea
 /* ── the site's button ────────────────────────────────────────── */
 
 export type PressSpec = {
-  /** the hover lift before the click (anticipation) */
-  lift: readonly [number, number];
-  /** frames down to .96 */
+  /** the hover: the pointer arrives and the site's transition-colors (300 ms) runs from here */
+  hover: number;
+  /** frames down to .97 (active:scale) */
   down: number;
-  /** the plum floods the plate from the arrow */
-  flood: readonly [number, number];
 };
 
 /** the plate back from the click: one soft ≈4 % overshoot, settled in ≈12 f */
 const BACK = { stiffness: 230, damping: 21, mass: 1 };
-/** ease-in-out sine for the hover lift */
-const SINE = Easing.bezier(0.37, 0, 0.63, 1);
+/** Tailwind's transition timing (cubic-bezier(.4, 0, .2, 1)) over its 300 ms */
+const TW = Easing.bezier(0.4, 0, 0.2, 1);
+const TW_FRAMES = 9;
 const INK = '#06040a'; // --cover-ink
 const PAPER_PLATE = C.coverPaper; // --cover-paper
 const PLUM = C.plum; // --cover-brand (the site's hover)
+const rgbOf = (hex: string) => [1, 3, 5].map((k) => parseInt(hex.slice(k, k + 2), 16));
+/** a CSS colour transition: sRGB channels, as the browser runs transition-colors */
+const lerpCss = (a: string, b: string, u: number) => {
+  const A = rgbOf(a);
+  const B = rgbOf(b);
+  return `rgb(${A.map((x, k) => (x + (B[k] - x) * u).toFixed(2)).join(' ')})`;
+};
 
-export const CoverCta: React.FC<{
+export const StartFree: React.FC<{
   t: number;
   at: number;
   press: number;
@@ -193,106 +184,52 @@ export const CoverCta: React.FC<{
   const e = rest(t, springUnit(t - at, SPRING.text), 1);
   const y = (1 - e) * 0.55 * F;
   const sc0 = mix(0.97, 1, Math.min(1, Math.max(0, e)));
-  // (the plate is opaque within its first quarter of travel: paper, never a grey veil)
-  const plateO = smooth(0, 0.25, e);
+  // (the plate is opaque within the first 40 % of its travel: paper, never a lingering grey veil)
+  const plateO = smooth(0, 0.4, e);
 
-  /* ── the press ── */
-  const lift = t < spec.lift[0] || t >= press ? 0 : SINE(tween(t, spec.lift, [0, 1], (x) => x));
-  const D = spec.down;
+  /* ── the click, as on the site: hover (colours over 300 ms, the arrow .2em), then active:scale(.97) ── */
+  const h = rest(t, tween(t, [spec.hover, spec.hover + TW_FRAMES], [0, 1], TW), 1);
   const u = t - press;
-  const down = u < 0 ? 1 + 0.02 * lift : u < D ? mix(1.02, 0.96, EASE.in2(u / D)) : mix(0.96, 1, springUnit(t - (press + D), BACK));
+  const down =
+    u < 0 ? 1 : u < spec.down ? mix(1, 0.97, EASE.out3(u / spec.down)) : mix(0.97, 1, springUnit(u - spec.down, BACK));
   const click = rest(t, down, 1);
-  // the site's hover: the plate floods to plum from the arrow, the dots step out, the arrow moves
-  const fl = t < press ? 0 : rest(t, tween(t, spec.flood, [0, 1], EASE.out3), 1);
-  const hs = rest(t, t < press ? 0 : springUnit(t - press, SPRING.text), 1);
-  const dotOut = 0.12 * hs;
-  const arrowX = 0.25 * hs + 0.06 * lift;
-  const reach = 7.5; // em: the plate's diagonal reach from the arrow — the flood covers it all at fl = 1
-  const floodR = fl * reach * F;
-  const floodMask =
-    fl >= 1 || fl <= 0
-      ? undefined
-      : `radial-gradient(circle at calc(100% - 1.6em) 50%, #000 ${Math.max(0, floodR - 1).toFixed(2)}px, transparent ${(floodR + 1).toFixed(2)}px)`;
+  const arrowX = 0.2 * h;
 
-  const label = typeStyle('title', vertical, { tone: 'paper', size: F });
+  const label = typeStyle('title', vertical, { tone: 'paper', size: F, weight: 500 });
   const moving = Math.abs(y) > 0.02 || Math.abs(sc0 * click - 1) > 1e-4;
   const tf = moving ? `translateY(${y.toFixed(3)}px) scale(${(sc0 * click).toFixed(5)})` : undefined;
-
-  /** one face: paper at rest, plum once clicked (each with its own label colour) */
-  const face = (pressed: boolean) => (
-    <span
-      style={{
-        gridArea: '1 / 1',
-        position: 'relative',
-        display: 'inline-grid',
-        borderRadius: '0.2em',
-        background: pressed ? PLUM : PAPER_PLATE,
-        WebkitMaskImage: pressed ? floodMask : undefined,
-        maskImage: pressed ? floodMask : undefined,
-        zIndex: pressed ? 2 : 1,
-      }}
-    >
-      {/* the four corner dots (the site's p-[.33em] grid), stepping out on the hover */}
-      {[
-        [-1, -1],
-        [1, -1],
-        [-1, 1],
-        [1, 1],
-      ].map(([sx, sy], k) => (
-        <span
-          key={k}
-          style={{
-            position: 'absolute',
-            [sx < 0 ? 'left' : 'right']: '0.33em',
-            [sy < 0 ? 'top' : 'bottom']: '0.33em',
-            width: '0.3em',
-            height: '0.3em',
-            transform: pressed && dotOut > 1e-4 ? `translate(${(sx * dotOut).toFixed(4)}em, ${(sy * dotOut).toFixed(4)}em)` : undefined,
-          }}
-        >
-          <CornerDot size={0.3 * F} color={pressed ? C.paper : INK} />
-        </span>
-      ))}
-      <span
-        style={{
-          gridArea: '1 / 1',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.45em',
-          padding: '0.62em 1em',
-          color: pressed ? C.paper : INK,
-          whiteSpace: 'nowrap',
-        }}
-      >
-        <span>
-          <Rise t={t} at={at - 0.5} gap={0.24} quick>
-            Start
-          </Rise>
-          <Rise t={t} at={at + 0.5} quick>
-            free
-          </Rise>
-        </span>
-        <span style={{ display: 'inline-block', transform: arrowX > 1e-4 ? `translateX(${arrowX.toFixed(4)}em)` : undefined }}>
-          <Rise t={t} at={at + 1.5} quick>
-            →
-          </Rise>
-        </span>
-      </span>
-    </span>
-  );
 
   return (
     <div
       style={{
-        display: 'inline-grid',
         ...label,
-        lineHeight: 1.2,
+        lineHeight: 1,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '0.4em',
+        height: '2.25em',
+        padding: '0 1.125em',
+        borderRadius: '0.5em',
+        background: h <= 0 ? PAPER_PLATE : lerpCss(PAPER_PLATE, PLUM, h),
+        color: h <= 0 ? INK : lerpCss(INK, PAPER_PLATE, h),
+        whiteSpace: 'nowrap',
         opacity: plateO >= 0.999 ? undefined : plateO,
         ...subpixel(tf, moving),
       }}
     >
-      {face(false)}
-      {fl > 0 ? face(true) : null}
+      <span>
+        <Rise t={t} at={at - 0.5} gap={0.24} quick>
+          Start
+        </Rise>
+        <Rise t={t} at={at + 0.5} quick>
+          free
+        </Rise>
+      </span>
+      <span style={{ display: 'inline-block', transform: arrowX > 1e-4 ? `translateX(${arrowX.toFixed(4)}em)` : undefined }}>
+        <Rise t={t} at={at + 1.5} quick>
+          →
+        </Rise>
+      </span>
     </div>
   );
 };

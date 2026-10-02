@@ -1,16 +1,15 @@
 /**
  * The five documents (knowledge-stage.tsx <ol>): paper cards (16:9) / rows
  * (9:16) set in the scene's one type system — the kind as a small tracked
- * label in muted ink (no rainbow badges), the name in the title family, and
- * the match bar with its 60 % threshold tick. A card is a real object: a
- * layered shadow (theme.ts elevation) that settles as it lands.
+ * label in muted ink (no rainbow badges) and the name in the title family.
+ * Nothing else: no meters, no scrubbers — a document is its name. A card is a
+ * real object: a layered shadow (theme.ts elevation) that settles as it lands.
  *
  * Each card lands on its 16th (the docTicks): it rises a few px and scales
  * .94 → 1 on the site spring (one small overshoot) as its shadow settles —
  * no glint, no ring, no flash. While a document is read, a fine sunday-ink
- * ring breathes round it and its kind turns sunday ink; the bars fill with an
- * overshoot and settle — to .22/.14/.10/.30/.26, none reaching the tick — and
- * the ticks blink 1 → .3 → 1. The documents that did not answer step back (a
+ * ring breathes round it and its kind turns sunday ink (one after another,
+ * KL.fills — the reading). The documents that did not answer step back (a
  * fade and a touch smaller, never out of focus) when Ava answers (16:9) /
  * deeper, on the miss, behind the card that takes their place (9:16).
  */
@@ -21,7 +20,7 @@ import { EASE, mix, smooth, SPRING, springUnit, tween } from '../../lib/motion';
 import { typeStyle } from '../../lib/type';
 import { C, elevation, FONT, R as RADII, TRACK } from '../../theme';
 import { KNOWLEDGE_LOCAL } from '../../timing';
-import { DOCS, INK, MATCH, THRESHOLD, TRACK_FILL, type Geo } from './geometry';
+import { DOCS, INK, type Geo } from './geometry';
 
 const KL = KNOWLEDGE_LOCAL;
 
@@ -34,27 +33,7 @@ export function tilePop(t: number, i: number) {
   return { p, o: smooth(0, 0.45, p), sc: 0.94 + 0.06 * p, y: 26 * (1 - p) };
 }
 
-/** the match bar's fill for tile i (overshoot +.03, then settle) */
-function fillAt(t: number, i: number) {
-  const [f0, step, dur] = KL.fills;
-  const s = f0 + i * step;
-  const m = MATCH[i];
-  const u = (t - s) / dur;
-  if (u <= 0) return 0;
-  if (u < 0.62) return (m + 0.03) * EASE.out3(u / 0.62);
-  return mix(m + 0.03, m, EASE.inOut(Math.min(1, (u - 0.62) / 0.38)));
-}
-
-/** the ticks' blink: 1 → .3 → 1 over tickBlink */
-function tickOpacity(t: number) {
-  const [a, b] = KL.tickBlink;
-  if (t <= a || t >= b) return 1;
-  const u = (t - a) / (b - a);
-  const k = u < 0.5 ? EASE.inOut(u * 2) : EASE.inOut(2 - u * 2);
-  return 1 - 0.7 * k;
-}
-
-/** 0 → 1 → 0 while tile i is being read (its bar filling) */
+/** 0 → 1 → 0 while tile i is being read (KL.fills: one after another, 2.4 f apart) */
 function readingAt(t: number, i: number) {
   const [f0, step, dur] = KL.fills;
   const s = f0 + i * step - 2;
@@ -63,34 +42,7 @@ function readingAt(t: number, i: number) {
   return Math.sin(Math.PI * EASE.inOut(u));
 }
 
-const Bar: React.FC<{ w: number; fill: number; tick: number; cool: number }> = ({ w, fill, tick, cool }) => (
-  <span style={{ position: 'relative', display: 'block', width: w, height: 8, borderRadius: 4, background: TRACK_FILL }}>
-    <span
-      style={{
-        position: 'absolute',
-        inset: 0,
-        borderRadius: 4,
-        background: rgba(mixColor(INK, '#6b6878', cool), 0.42 - 0.08 * cool),
-        transformOrigin: '0 50%',
-        transform: `scaleX(${Math.max(0, fill).toFixed(4)})`,
-      }}
-    />
-    <span
-      style={{
-        position: 'absolute',
-        left: w * THRESHOLD - 1,
-        top: -7,
-        width: 2,
-        height: 22,
-        borderRadius: 1,
-        background: 'rgba(20,10,36,0.42)',
-        opacity: tick,
-      }}
-    />
-  </span>
-);
-
-export const Tiles: React.FC<{ t: number; G: Geo; cool: number }> = ({ t, G, cool }) => {
+export const Tiles: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
   const S = G.tile;
   // the documents step back: on her answer (16:9) / on the miss, behind the card that takes their place (9:16)
   const B = G.docsBack;
@@ -98,7 +50,6 @@ export const Tiles: React.FC<{ t: number; G: Geo; cool: number }> = ({ t, G, coo
   const dim = mix(1, B.dim, dq);
   const back = mix(1, B.scale, dq);
   const listMid = (G.tiles[0].y + G.tiles[G.tiles.length - 1].y + G.tiles[G.tiles.length - 1].h) / 2;
-  const tick = tickOpacity(t);
   const kindStyle = typeStyle('label', G.v, { tone: 'paper', size: S.kindText });
   const nameStyle: React.CSSProperties = {
     fontFamily: FONT.ui,
@@ -128,7 +79,6 @@ export const Tiles: React.FC<{ t: number; G: Geo; cool: number }> = ({ t, G, coo
         const kind = (
           <span style={{ ...kindStyle, color: mixColor(C.muted, INK, rd), display: 'block' }}>{d.kind}</span>
         );
-        const bar = <Bar w={S.barW} fill={fillAt(t, i)} tick={tick} cool={cool} />;
         return (
           <div
             key={d.name}
@@ -148,7 +98,6 @@ export const Tiles: React.FC<{ t: number; G: Geo; cool: number }> = ({ t, G, coo
             {S.kind === 'tile' ? (
               <>
                 <div style={{ position: 'absolute', left: S.pad, top: S.pad - 2 }}>{kind}</div>
-                <div style={{ position: 'absolute', left: r.w - S.barPadR - S.barW, top: S.pad + 9 }}>{bar}</div>
                 <div
                   style={{
                     position: 'absolute',
@@ -178,7 +127,6 @@ export const Tiles: React.FC<{ t: number; G: Geo; cool: number }> = ({ t, G, coo
                 >
                   {d.name}
                 </div>
-                <div style={{ position: 'absolute', left: r.w - S.barPadR - S.barW, top: (r.h - 8) / 2 }}>{bar}</div>
               </>
             )}
           </div>

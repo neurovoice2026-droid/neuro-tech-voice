@@ -1,22 +1,31 @@
 /**
- * THE FOUR LIGHTS' choreography (pure: a function of the CTA-local frame).
+ * THE FOUR LIGHTS' choreography (pure: a function of the fractional CTA-local frame).
  *
- * The four orbs — rush, closing, sunday, night — pop in on 8ths at their
- * places on a tilted ring about her face and orbit it in depth (z = cos θ:
- * in front of her at θ = 0, behind her head at θ = π). The ring's centre
- * sits below her eyes, so its front passes under her chin, never over her
- * mouth. On "Twenty" "four" "seven" the ring tightens in three kicks and the
- * four lights come forward into a row in front of her (THE FORMATION: all
- * four in view, clear of her eyes and mouth, while "24/7." holds). At the
- * converge the row fans out into four arms, swells (anticipation) and
- * spirals into the core, spinning up as it closes (drawn crisp: the film
- * renders at 120 fps, no simulated blur). Each keeps its own light until they
- * touch; then the three pour into the survivor (night), which takes all four
- * hues (ALL_LIGHTS), holds alone, is squeezed by the pull-back, and gives its
- * light to the corona on the impact.
+ * ONE AT A TIME (client: "one at a time"; v8 director: four candy spheres in front of her
+ * face at once was the rainbow look the brief bans). Rush, closing, sunday, night each get a
+ * TURN of two beats (K.orbPops, on the downbeats):
+ *
+ *   arrive   a point of its light gathers over the 3 f before its beat; ON the beat the orb
+ *            springs out of it, beside her face, on its own side (K.lightSide: rush left,
+ *            closing right, sunday left, night right) — its light comes up with a short
+ *            attack (never a one-frame strobe at 120 fps)
+ *   key      it keys her face from that side: a slow arc on a small ring about her head (a
+ *            little in front of her, cheek to eye height), rising and turning back as it goes;
+ *            its spill is the only colour on her face (heroShader.ts, the key)
+ *   go       its turn over (K.turnOut), it draws back into a point of its own light and goes
+ *            out — gone before the next one gathers. The night (Ava's own light) stays: it
+ *            holds on through the end of her line and slowly draws in (K.drift)
+ *
+ * THE CONVERGE: the three that went out come back (K.reIn, on 16ths) — all four together only
+ * now — at four arms a quarter turn apart round her (the night glides into its arm), the ring
+ * swells (anticipation), whirls up while it is still wide and spirals into the core, spinning
+ * up as it closes (drawn crisp: the film renders at 120 fps, no simulated blur). Each keeps
+ * its own light until they touch; then the three pour into the survivor (night), which takes
+ * all four hues (ALL_LIGHTS), holds alone, is squeezed by the pull-back, and gives its light
+ * to the backlight on the impact.
  */
 import { ALL_LIGHTS, mixPalette } from '../../lib/lights';
-import { EASE, mix, SPRING, springAt, tween, windowed } from '../../lib/motion';
+import { EASE, mix, springAt, tween, windowed } from '../../lib/motion';
 import { LIGHTS, LIGHT_ORDER, type LightId, type Palette } from '../../theme';
 import { CTA, CTA_LOCAL as K } from '../../timing';
 import { VOICE, type VoiceId } from '../../voice.generated';
@@ -33,159 +42,165 @@ export function envAt(id: VoiceId, at: number, t: number) {
 export const lineEnv = (t: number) => envAt(CTA.lineVoice, CTA.line, t);
 export const brandEnv = (t: number) => envAt(CTA.brandVoiceId, CTA.brandVoice, t);
 
-/** radii, ring centre drop below the eyes, tilt (rad), orb diameter, how far the three kicks tighten it
- *  (1 = to .66), and how much lower the ring's centre sits in the formation */
+/**
+ * The geometry (frame px, about her eyes E):
+ *  the converge ring — radii, its centre's drop below the eyes, tilt (rad), orb diameter;
+ *  key — a light's turn: the small ring it arcs on (radii, centre drop below the eyes), the
+ *  angle it arrives at (θ from the front, 0 = in front of her, π/2 = beside her) and its
+ *  angular speed (rad / frame).
+ */
 export type Orbit = {
   rx: number;
   ry: number;
   drop: number;
   tilt: number;
   d: number;
-  tight: number;
-  formDrop: number;
-  /** where each light pops on the ring (θ), so every pop is in view (default POP_PHASE) */
-  phase?: readonly number[];
+  key: { rx: number; ry: number; drop: number; a0: number; w: number };
 };
 
 /** an orb pop: ≈15 % overshoot, settled in ~12 f */
 export const ORB_POP = { stiffness: 340, damping: 18, mass: 0.9 };
-/** the pop's spring starts this many frames BEFORE its beat, so ON the beat (the
- *  hit frame, the brightest) the orb is already ~⅓ out inside its flash */
+/** the pop's spring starts this many frames BEFORE its beat, so ON the beat the orb is
+ *  already ~⅓ out of its point of light */
 export const POP_LEAD = 1.5;
-/** the pop's progress (0 before; the spring after; overshoots ≈1.15) */
-export const popAt = (t: number, i: number) =>
-  t < K.orbPops[i] - POP_LEAD ? 0 : springAt(t, K.orbPops[i] - POP_LEAD, ORB_POP);
-/** where each orb pops on the ring (θ: 0 = in front of her, π = behind her
- *  head): front-right, back-right, back-left, front-left — all clear of her */
-export const POP_PHASE = [0.55, 2.3, 4.0, 5.75] as const;
-/** the orbit's angular speed (rad/frame) at CTA-local frame s */
+
+/**
+ * A light's hit with an attack: 0 before the beat, up over ≈ 1 frame (τ = .5 f), down
+ * over ≈ 3 (τ = 3 f) — normalised so its peak (≈ 1 f after the beat) is 1. At 120 fps the
+ * peak grows over ≈ 4 render frames: a bloom, not a one-frame strobe.
+ */
+export const att = (u: number) => (u <= 0 ? 0 : 1 - Math.exp(-u / 0.5));
+/** att(u)·e^(−u/D) at its maximum (u* = ln(1 + 2D) / 2) */
+const hitPeak = (D: number) => ((2 * D) / (1 + 2 * D)) * Math.pow(1 + 2 * D, -1 / (2 * D));
+export const hit = (u: number, decay = 3) => (u <= 0 || !Number.isFinite(u) ? 0 : (att(u) * Math.exp(-u / decay)) / hitPeak(decay));
+
+/** the arrival's anticipation: a point of its light gathers over the 3 f before the beat, peaks
+ *  ON it (inside the flash) and hands over to the orb over the next 2.5 f */
+const gatherAt = (u: number) => (u < -3 ? 0 : u < 0 ? Math.sin(((u + 3) / 3) * (Math.PI / 2)) : Math.max(0, 1 - u / 2.5));
+
+/** the night stays on; the others go out at the end of their turn */
+const STAYS = 3;
+/** 0 → 1 as light i draws back into a point at the end of its turn */
+const goneAt = (t: number, i: number) => (i === STAYS ? 0 : tween(t, [K.orbPops[i] + K.turnOut[0], K.orbPops[i] + K.turnOut[1]], [0, 1], EASE.in2));
+/** the converge's re-entry frame of light i (the night never left) */
+const reInAt = (i: number) => (i < STAYS ? K.reIn[i] : -Infinity);
+
+/** the converge ring's angular speed (rad/frame) at CTA-local frame s */
 export function omega(s: number) {
-  let w = 0.026;
-  K.tighten.forEach((f) => (w += 0.012 * tween(s, [f, f + 6], [0, 1], EASE.out3)));
-  // the swell hesitates (anticipation), then the ring whirls up while it is
-  // still wide (long sweeps) before it collapses into the core
+  let w = 0.03;
+  // the swell hesitates (anticipation), then the ring whirls up while it is still wide
+  // (long sweeps) before it collapses into the core
   w *= 1 - 0.5 * windowed(s, K.orbSwell[0], K.orbSwell[1], K.orbSwell[1], K.orbIn[0] + 6, EASE.out3, EASE.inOut);
   w += 0.2 * tween(s, K.orbIn, [0, 1], EASE.inOut);
   return w;
 }
 /** the spiral's radius: it holds wide while the whirl builds, then falls into the core */
 const COLLAPSE = (u: number) => Math.pow(u, 2.2);
-const collapseAt = (t: number) => COLLAPSE(tween(t, K.orbIn, [0, 1], (u) => u));
+export const collapseAt = (t: number) => COLLAPSE(tween(t, K.orbIn, [0, 1], (u) => u));
 
-/** THE FORMATION: the four lights' places on the front of the ring, left to right (θ) */
-const FORM = [-1.22, -0.4, 0.4, 1.22] as const;
-/** … and at the converge, four arms a quarter turn apart (centred on the front) */
-const ARMS = [-2.356, -0.785, 0.785, 2.356] as const;
-/** how far into the formation (0 free orbit → 1 the row): it eases in from 16 f before
- *  "Twenty" (so no light is behind her when the number lands) and each word kicks it */
-export function formAt(t: number) {
-  const [w0, w1, w2] = K.tighten;
-  const pre = tween(t, [w0 - 16, w0], [0, 0.62], EASE.inOut);
-  const k1 = t < w1 ? 0 : 0.24 * springAt(t, w1, SPRING.pop);
-  const k2 = t < w2 ? 0 : 0.14 * springAt(t, w2, SPRING.pop);
-  return pre + k1 + k2;
-}
-/** the slow tightening between "…seven" and the converge (0 → 1, eased; it holds through the converge) */
-export const driftAt = (t: number) => tween(t, K.drift, [0, 1], EASE.inOut);
-/** the row fans out into the four arms as the orbit swells */
-const fanAt = (t: number) => tween(t, [K.orbSwell[0], K.orbIn[0] + 8], [0, 1], EASE.inOut);
-/** where the formation starts (its slots are dealt out here, in the lights' order round the ring) */
-const FORM_REF = () => K.tighten[0] - 16;
-const wrap = (a: number) => a - 2 * Math.PI * Math.round(a / (2 * Math.PI));
-/** Θ(t) = ∫ω, tabulated once per frame at quarter frames */
+/** the converge: four arms a quarter turn apart, each on its light's side (rush L-back,
+ *  closing R-front, sunday L-front, night R-back) */
+const ARMS = [-2.356, 0.785, -0.785, 2.356] as const;
+/** Θ(t) = ∫ω from the converge, tabulated at quarter frames */
 export function spinTable(t: number) {
   const step = 0.25;
-  const n = Math.ceil((t + 2) / step) + 1;
+  const s0 = K.orbSwell[0] - 8;
+  const n = Math.ceil((Math.max(s0, t) + 2 - s0) / step) + 1;
   const tab = new Float64Array(Math.max(2, n));
-  for (let k = 1; k < tab.length; k++) {
-    const s = (k - 0.5) * step;
-    tab[k] = tab[k - 1] + omega(s) * step;
-  }
+  for (let k = 1; k < tab.length; k++) tab[k] = tab[k - 1] + omega(s0 + (k - 0.5) * step) * step;
   return (tt: number) => {
-    const x = Math.max(0, tt) / step;
+    const x = Math.max(0, tt - s0) / step;
     const k = Math.min(tab.length - 2, Math.floor(x));
     return tab[k] + (tab[k + 1] - tab[k]) * (x - k);
   };
 }
-/** the orbit's radius factor: 1, tightening in three kicks, a swell, then into the core */
-export function radiusAt(t: number, tight = 1) {
-  let r = 1;
-  const steps = [0.14, 0.11, 0.09];
-  K.tighten.forEach((f, k) => (r -= tight * steps[k] * (t < f ? 0 : springAt(t, f, SPRING.pop))));
+/** the converge ring's radius factor: 1, a swell, then into the core */
+export function radiusAt(t: number) {
   const swell = windowed(t, K.orbSwell[0], K.orbSwell[1], K.orbSwell[1], K.orbIn[0] + 6, EASE.out3, EASE.inOut);
-  // after "…seven" the ring keeps drawing in, slowly (tension while the line is read)
-  const drift = 1 - 0.07 * driftAt(t);
-  return r * drift * (1 + 0.09 * swell) * (1 - collapseAt(t));
+  return (1 + 0.09 * swell) * (1 - collapseAt(t));
 }
-
-/**
- * Each light's angle on the ring at t: the free orbit (its pop place, carried
- * round by Θ), blended toward its formation slot (dealt out in ring order, so
- * no two ever cross) by formAt; in the converge the slots fan into four arms
- * that whirl with Θ.
- */
-export function anglesAt(t: number, spin: (tt: number) => number, phase: readonly number[] = POP_PHASE) {
-  const free = LIGHT_ORDER.map((_, i) => phase[i] - spin(K.orbPops[i]) + spin(t));
-  const g = formAt(t); // (the word kicks overshoot the row a little, then settle)
-  if (g <= 0) return free;
-  const tr = FORM_REF();
-  const ref = LIGHT_ORDER.map((_, i) => phase[i] - spin(K.orbPops[i]) + spin(tr));
-  const rank = ref.map((a, i) => ({ a: wrap(a), i })).sort((p, q) => p.a - q.a);
-  const slotOf: number[] = [];
-  rank.forEach((r, k) => (slotOf[r.i] = k));
-  // the whirl: Θ's turn since the converge began (0 before)
-  const whirl = t > K.orbSwell[0] ? spin(t) - spin(K.orbSwell[0]) : 0;
-  const fan = fanAt(t);
-  return free.map((th, i) => {
-    const k = slotOf[i];
-    // the slot, as the nearest turn to where this light was when the formation began
-    const turn = 2 * Math.PI * Math.round((ref[i] - FORM[k]) / (2 * Math.PI));
-    // (while it drifts the row closes up a little: the four lights lean toward each other)
-    const slot = mix(FORM[k] * (1 - 0.1 * driftAt(t)), ARMS[k], fan) + turn + whirl;
-    return th + g * (slot - th);
-  });
-}
+/** the night glides from the end of its turn into its arm as the converge opens */
+const toArmAt = (t: number) => tween(t, [K.orbSwell[0] - 2, K.orbIn[0] + 6], [0, 1], EASE.inOut);
 
 export type OrbState = {
   id: LightId;
   i: number;
   x: number;
   y: number;
+  /** drawn diameter (px, before the camera's layer zoom) */
   d: number;
   z: number;
+  /** its size factor (the pop spring; 0 while it is out) */
   pop: number;
   opacity: number;
   palette: Palette;
+  /** how lit it is (0 out … 1 keying her), the arrival flash (peak 1) and the gathering point */
+  light: number;
+  flash: number;
+  gather: number;
+  /** its side of her (−1 left, +1 right) */
+  side: number;
 };
 
-export function orbsAt(t: number, G: { P: { x: number; y: number }; orbit: Orbit }, spin: (tt: number) => number): OrbState[] {
+type Pt = { x: number; y: number; z: number };
+
+export function orbsAt(t: number, G: { E: { x: number; y: number }; P: { x: number; y: number }; orbit: Orbit }, spin: (tt: number) => number): OrbState[] {
   const O = G.orbit;
-  const rho = radiusAt(t, O.tight);
+  const k = O.key;
+  const rho = radiusAt(t);
+  const col = collapseAt(t);
   const inP = tween(t, K.orbIn, [0, 1], EASE.inOut);
-  // each keeps its own light until they touch; only the survivor takes all four
   const toAll = tween(t, K.merge, [0, 1], EASE.inOut);
   const vol = 0.12 + 0.75 * lineEnv(t);
   const squeeze = 1 - 0.14 * tween(t, [CTA.logoImpact - 4, CTA.logoImpact], [0, 1], EASE.in2);
-  // the ring's centre: below the eyes (lower still in the formation), into the core as it collapses
-  const drop = (O.drop + O.formDrop * Math.min(1, formAt(t))) * (1 - collapseAt(t));
-  const ths = anglesAt(t, spin, O.phase);
   const pour = tween(t, K.merge, [0, 1], EASE.in2);
-  return LIGHT_ORDER.map((id, i) => {
-    const th = ths[i];
+  const whirl = t > K.orbSwell[0] - 8 ? spin(t) - spin(K.orbSwell[0]) : 0;
+  // the night draws in a little after "…seven" (tension before the converge)
+  const drift = tween(t, K.drift, [0, 1], EASE.inOut);
+  // a point on a ring (its centre c, radii, angle θ; tilted)
+  const onRing = (c: { x: number; y: number }, rx: number, ry: number, th: number): Pt => {
     const z = Math.cos(th);
-    const dx = O.rx * rho * Math.sin(th);
-    const dy = O.ry * rho * z + drop;
-    const x = G.P.x + dx * Math.cos(O.tilt) - dy * Math.sin(O.tilt);
-    const y = G.P.y + dx * Math.sin(O.tilt) + dy * Math.cos(O.tilt);
-    const pop = popAt(t, i);
-    const depth = 1 + 0.24 * z * Math.min(1, rho);
+    const dx = rx * Math.sin(th);
+    const dy = ry * z;
+    return {
+      x: c.x + dx * Math.cos(O.tilt) - dy * Math.sin(O.tilt),
+      y: c.y + dx * Math.sin(O.tilt) + dy * Math.cos(O.tilt),
+      z,
+    };
+  };
+  // the converge ring's centre: under her eyes, into the core P as it collapses
+  const ringC = { x: mix(G.E.x, G.P.x, col), y: mix(G.E.y + O.drop, G.P.y, col) };
+  const keyC = { x: G.E.x, y: G.E.y + k.drop };
+
+  return LIGHT_ORDER.map((id, i) => {
+    const side = K.lightSide[i];
+    const p0 = K.orbPops[i];
+    /* ── its turn: a slow arc beside her face ── */
+    const draw = i === STAYS ? 1 - 0.12 * drift : 1;
+    const thKey = side * (k.a0 + k.w * Math.max(0, t - p0) - (i === STAYS ? 0.25 * drift : 0));
+    const key = onRing(keyC, k.rx * draw, k.ry * draw, thKey);
+    /* ── the converge: its arm, whirling in ── */
+    const arm = onRing(ringC, O.rx * rho, O.ry * rho, ARMS[i] + whirl);
+    const w = i === STAYS ? toArmAt(t) : t >= reInAt(i) - 3 ? 1 : 0;
+    const pt: Pt = { x: mix(key.x, arm.x, w), y: mix(key.y, arm.y, w), z: mix(key.z, arm.z, w) };
+
+    /* ── its size: the turn's pop, out into a point, the converge's re-entry ── */
+    const turnPop = t < p0 - POP_LEAD ? 0 : springAt(t, p0 - POP_LEAD, ORB_POP);
+    const gone = goneAt(t, i);
+    const re = i === STAYS || t < reInAt(i) - POP_LEAD ? 0 : springAt(t, reInAt(i) - POP_LEAD, ORB_POP);
+    const pop = turnPop * (1 - gone) + re;
+    /* ── its light ── */
+    const flash = hit(t - p0) + 0.6 * hit(t - reInAt(i));
+    const gather = Math.max(gatherAt(t - p0), 0.6 * gatherAt(t - reInAt(i)));
+    const light = Math.min(1.15, turnPop) * Math.pow(1 - gone, 2) + Math.min(1.15, re);
+
+    const depth = 1 + 0.24 * pt.z * Math.min(1, w > 0 ? rho : 1);
     // the survivor (night) takes the others' light as they pour in: it grows to 2× its
-    // in-spiral size (≈1.45× its orbit size), holds, then is squeezed (anticipation)
-    const grow = i === 3 ? 1 + 1.0 * tween(t, K.merge, [0, 1], EASE.out3) : 1 - 0.55 * pour;
-    const d = O.d * depth * pop * (1 + 0.04 * vol) * mix(1, 0.72, inP) * grow * (i === 3 ? squeeze : 1);
-    const opacity = i < 3 ? 1 - tween(t, K.merge, [0, 1], EASE.inOut) : 1;
-    const palette = i === 3 ? mixPalette(LIGHTS[id].orb, ALL_LIGHTS, toAll) : [...LIGHTS[id].orb];
-    return { id, i, x, y, d, z, pop, opacity, palette };
+    // in-spiral size, holds, then is squeezed (anticipation)
+    const grow = i === STAYS ? 1 + 1.0 * tween(t, K.merge, [0, 1], EASE.out3) : 1 - 0.55 * pour;
+    const d = O.d * depth * pop * (1 + 0.04 * vol) * mix(1, 0.72, inP) * grow * (i === STAYS ? squeeze : 1);
+    const opacity = i < STAYS ? 1 - tween(t, K.merge, [0, 1], EASE.inOut) : 1;
+    const palette = i === STAYS ? mixPalette(LIGHTS[id].orb, ALL_LIGHTS, toAll) : [...LIGHTS[id].orb];
+    return { id, i, x: pt.x, y: pt.y, d, z: pt.z, pop, opacity, palette, light, flash, gather, side };
   });
 }
-

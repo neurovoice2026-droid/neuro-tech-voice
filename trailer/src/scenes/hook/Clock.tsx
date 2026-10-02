@@ -10,6 +10,12 @@
  * it re-lights. Flicks are additive (chainPos), so a new one can leave while
  * the last one is still settling.
  *
+ * The figures are FLAT, OPAQUE INK — the light's own ink on the dark at ≈ 90 %
+ * (moments.ts FIGURE_INK), set like the reference type (no gradient fill, no
+ * specular gloss). The colon
+ * orb's light does the colour; a light hit lifts the ink (a flat colour
+ * change), never a highlight band.
+ *
  * No motion blur, no smear: the film renders at 120 fps and every position
  * here is a continuous function of fractional time, so a roll reads as a
  * crisp mechanical move. While a strip moves its figures sit on a compositor
@@ -19,9 +25,9 @@
 import React from 'react';
 import { MeshOrb } from '../../components/MeshOrb';
 import { subpixel } from '../../components/Type';
+import { mixColor } from '../../lib/lights';
 import { C, FONT } from '../../theme';
 import { rgba } from './color';
-import { numFill } from './moments';
 
 /* ── Flick curve ────────────────────────────────────────────────────── */
 
@@ -71,11 +77,11 @@ export const chainPos = (f: number, from: number, flicks: readonly Flick[]) =>
 
 /* ── Figure window ──────────────────────────────────────────────────── */
 
-/** One state of a window: its figure (null = blank) and the fill stops of the light it is lit by. */
-export type Cell = { digit: number | null; stops: readonly string[] };
+/** One state of a window: its figure (null = blank) and the flat ink of the light it is lit by. */
+export type Cell = { digit: number | null; ink: string };
 
-/** A narrow specular band (a light passing over a polished figure), clipped to the glyphs. */
-const SHEEN = `linear-gradient(100deg, ${rgba(C.white, 0)} 42%, ${rgba(C.white, 0.5)} 50%, ${rgba(C.white, 0)} 56%)`;
+/** How far a full ink lift (lift = 1) carries the figure's ink towards paper. */
+const LIFT_TO_PAPER = 0.34;
 
 /** The window's edges: the figures pass under a short feather, never a hard cut line. */
 const WINDOW_MASK = 'linear-gradient(180deg, transparent 0%, #000 11%, #000 89%, transparent 100%)';
@@ -87,10 +93,9 @@ const Window: React.FC<{
   /** cells / frame (≈ 0 at rest) */
   speed: number;
   fontSize: number;
-  /** 0..1 progress of a light sweep across the figure (left → right); <0 or >1 = none */
-  sheen: number;
-}> = ({ cells, pos, speed, fontSize, sheen }) => {
-  const sheenOn = sheen > 0 && sheen < 1;
+  /** 0..1 the light lifts this figure's ink towards paper (a flat colour change, no band) */
+  lift: number;
+}> = ({ cells, pos, speed, fontSize, lift }) => {
   const cellW = 0.6 * fontSize;
   const cellH = 1.1 * fontSize;
   const base = Math.floor(pos);
@@ -109,7 +114,7 @@ const Window: React.FC<{
     >
       {shown.map((k) => {
         const cell = cells[k];
-        const fill = numFill(cell.stops);
+        const ink = lift > 1e-4 ? mixColor(cell.ink, C.paper, LIFT_TO_PAPER * Math.min(1, lift)) : cell.ink;
         const y = (k - pos) * cellH;
         return (
           <span
@@ -127,14 +132,7 @@ const Window: React.FC<{
               fontVariantNumeric: 'tabular-nums',
               letterSpacing: 0,
               textAlign: 'center',
-              backgroundImage: sheenOn ? `${SHEEN}, ${fill}` : fill,
-              backgroundSize: sheenOn ? '300% 100%, 100% 100%' : '100% 100%',
-              backgroundPosition: sheenOn ? `${((1 - sheen) * 100).toFixed(2)}% 0, 0 0` : undefined,
-              backgroundRepeat: 'no-repeat',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              color: 'transparent',
+              color: ink,
               ...subpixel(Math.abs(y) > 0.004 ? `translateY(${y.toFixed(3)}px)` : undefined, moving),
             }}
           >
@@ -153,8 +151,8 @@ export type Strip = { cells: readonly Cell[]; pos: number; speed: number };
 export const ClockLockup: React.FC<{
   /** the four windows, left → right */
   strips: readonly Strip[];
-  /** sheen progress per figure (see Window) */
-  sheens: number[];
+  /** ink lift per figure, 0..1 (see Window) */
+  lifts: readonly number[];
   fontSize: number;
   orbSize: number;
   gap: number;
@@ -174,7 +172,7 @@ export const ClockLockup: React.FC<{
   figuresLift?: number;
 }> = ({
   strips,
-  sheens,
+  lifts,
   fontSize,
   orbSize,
   gap,
@@ -189,7 +187,7 @@ export const ClockLockup: React.FC<{
   figuresLift = 1,
 }) => {
   const win = (i: number) => (
-    <Window key={i} cells={strips[i].cells} pos={strips[i].pos} speed={strips[i].speed} fontSize={fontSize} sheen={sheens[i]} />
+    <Window key={i} cells={strips[i].cells} pos={strips[i].pos} speed={strips[i].speed} fontSize={fontSize} lift={lifts[i]} />
   );
   const pair: React.CSSProperties = {
     display: 'flex',
