@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Master render (npm run render:master -- [16x9|9x16 …] [--scale=2] [--chunk=960] [--crf=16]).
+ * Master render (npm run render:master -- [16x9|9x16 …] [--scale=2] [--chunk=960] [--crf=16] [--concurrency=1]).
  *
  * The delivery masters: 3840×2160 / 2160×3840 at RENDER_FPS (120), HEVC Main
  * (hvc1, so QuickTime / iOS / Android / Windows play it), BT.709 limited range,
@@ -13,6 +13,11 @@
  * chunks are then joined losslessly (same encoder, same parameter sets) and the
  * master mix is muxed once. FFmpeg's native AAC encoder writes the edit list
  * that trims its priming, so the sound starts on frame 0 (check-render proves it).
+ *
+ * Why --concurrency=1 by default: each render tab rasterises the glide layers
+ * (lib/glide.ts) on its own; two tabs can round a re-raster differently, so on
+ * a zoom the text alternated ±0.9 px between neighbouring frames. One tab
+ * renders every frame the same way: text moves only as far as the camera does.
  *
  * Why HEVC: H.264 at 3840×2160 × 120 fps needs level 6.x, which most hardware
  * decoders refuse; HEVC Main level 5.2 covers 4K120 (it is what phones record).
@@ -33,6 +38,7 @@ const opt = (k, d) => {
 const scale = Number(opt('scale', '2'));
 const chunk = Number(opt('chunk', '960'));
 const crf = Number(opt('crf', '16'));
+const concurrency = opt('concurrency', '1');
 const formats = args.filter((a) => !a.startsWith('--'));
 const comps = (formats.length ? formats : ['16x9', '9x16']).map((f) => `Trailer-${f}`);
 
@@ -67,7 +73,7 @@ for (const comp of comps) {
     npx([
       'render', bundle, comp, tmp,
       `--frames=${a}-${b}`, `--scale=${scale}`, '--muted',
-      '--codec=h265', `--crf=${crf}`,
+      '--codec=h265', `--crf=${crf}`, `--concurrency=${concurrency}`,
     ]);
     renameSync(tmp, file);
     writeFileSync(`${file}.done`, '');
