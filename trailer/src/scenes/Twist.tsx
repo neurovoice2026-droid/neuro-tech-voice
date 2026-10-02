@@ -22,7 +22,9 @@
  *
  * THE LOOK — a premium night: a near-black room (Atmosphere NightRoom) lit by
  * one motivated source at a time — the doorway's warm silver, then the
- * phone's screen. Type in TYPE.display (Instrument Sans 440, −0.03em), the
+ * phone's screen (the shop's downlight over the door stays on, low: it is
+ * what models the closed door — twist/Door.tsx). A wall and a floor in both
+ * orientations, the junction running the whole width. Type in TYPE.display (Instrument Sans 440, −0.03em), the
  * key phrase in the night's lilac. Nothing is blurred, smeared or ghosted;
  * there is no bokeh, no dust, no shake: the 120 fps master and continuous
  * curves carry every move. Text and the planes it sits on go on a compositor
@@ -218,12 +220,22 @@ export const Twist: React.FC = () => {
     <AbsoluteFill style={{ overflow: 'hidden' }}>
       {/* the room (comes up over the hook's black, under the shards) */}
       <AbsoluteFill style={{ opacity: bgIn < 1 ? bgIn : undefined }}>
-        <NightRoom
-          light={doorKey}
-          lights={[phoneKey]}
-          floor={L.vertical ? null : { y: floorY, strength: 0.55, sheen: 0.5, bounce: 0.4, feather: 40 }}
-          vignette={0.5}
-        />
+        {L.vertical ? (
+          <>
+            {/* 9:16: the wall stops at a feathered horizon across the whole width and the floor takes the
+                doorway's spill (the door stands at the top of the frame, the type and the phone in front
+                of it, on the floor) — the phone's light is its own, never cut by the horizon */}
+            <NightRoom light={doorKey} floor={{ y: floorY, strength: 0.5, sheen: 0.4, bounce: 0.5, feather: 70 }} vignette={0} />
+            <NightRoom base="transparent" light={phoneKey} vignette={0.5} />
+          </>
+        ) : (
+          <NightRoom
+            light={doorKey}
+            lights={[phoneKey]}
+            floor={{ y: floorY, strength: 0.55, sheen: 0.5, bounce: 0.4, feather: 40 }}
+            vignette={0.5}
+          />
+        )}
       </AbsoluteFill>
 
       {/* 0.6 — the door */}

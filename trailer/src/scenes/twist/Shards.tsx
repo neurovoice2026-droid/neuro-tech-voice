@@ -8,12 +8,17 @@
  *         "Your business is" and "." blow outward — continuous from rest, but
  *         explosive (12 % of the blast in the first 120 fps frame) — drift,
  *         slower and slower, and come to rest exactly when they turn round.
- *         Each piece is thrown to its own DEPTH (0.6–1.3×; the far ones dim
- *         as they leave the doorway's light, and paint behind the near ones),
- *         with a calm tilt (≤ ±38°): where two throws cross they pass one in
- *         front of the other. No piece comes to rest on the lit doorway or
- *         its leaf, on the phone, or touching a neighbour. The two letters
- *         the new line does not need recede into the dark (gone by t 15).
+ *         A measured break: every piece rests with its ink inside the central
+ *         70 % of the frame (the throws are fitted to it proportionally, never
+ *         clamped to its edge), tilted by at most ±12°, at a narrow depth
+ *         (0.88–1.1×; the far ones a touch dimmer, painted behind the near
+ *         ones). They part into two loose groups — the letters of the first
+ *         row above it (or level with it, past its end), the second row's
+ *         below — opening the gap the new line forms in; no piece rests on the
+ *         lit doorway or its leaf, on the phone, in a landing lane or touching
+ *         a neighbour, and neighbours never line up into a row of type. The
+ *         two letters the new line does not need recede into the dark (gone
+ *         by t 15).
  *         "closed" holds, then slides into the start of the new line; the
  *         hook's lilac leaves it on the way (the accent moves to "not the
  *         phone.").
@@ -21,7 +26,9 @@
  *         letters left to right. Each letter turns over in flight like a
  *         card (rotateY): it shows its old glyph until it is edge-on, its new
  *         one after — the swap is never seen. Row-1 letters wait ABOVE the
- *         tagline and drop in; row-2 letters wait BELOW it and rise in.
+ *         tagline and drop in; row-2 letters wait BELOW it and rise in; a
+ *         letter waiting past a row's right end slides in over slots that
+ *         fill after it.
  *         "door," locks left to right with its comma ON the slam. "not the
  *         phone." rises out of its masks and takes the night's lilac — the
  *         two-tone of the knowledge heading (one accent; no sheen drawn
@@ -76,6 +83,10 @@ export type Shard = {
   /** break position → resting point */
   vx: number;
   vy: number;
+  /** the throw's bend (px): it arcs round "closed" — position = p0 + v·k + 2k(1−k)·b (a quadratic
+   *  Bézier through the same ends; no bend at rest, k = 1) */
+  bx: number;
+  by: number;
   rot: number;
   /** extra slow spin while it drifts (deg, reached at `start`) */
   spin: number;
@@ -93,8 +104,8 @@ export function gather(t: number) {
   return { a: 1 - (1 - A0) * EASE.in2(u), x: 0, y: 0 };
 }
 
-/** How much of the light a piece keeps at its depth (sOut 0.6 far … 1.3 near): the far ones dim to 62 %. */
-const depthInk = (sOut: number) => 0.62 + 0.38 * Math.min(1, Math.max(0, (sOut - 0.6) / 0.5));
+/** How much of the light a piece keeps at its depth (sOut 0.88 far … 1.1 near): the far ones dim to 80 %. */
+const depthInk = (sOut: number) => 0.8 + 0.2 * Math.min(1, Math.max(0, (sOut - 0.88) / 0.22));
 
 /** Paint order: the far pieces first, so a nearer one passes IN FRONT ("closed" sits at the line's own depth). */
 const orderCache = new WeakMap<Shard[], number[]>();
@@ -120,9 +131,9 @@ function breakPos(g: Glyph, L: Layout) {
 }
 
 type Rect = { x0: number; y0: number; x1: number; y1: number };
-// DEBUG (temporary)
-let DEBUG_KEEP: Record<string, Rect | Rect[]> = {};
-const DEBUG = true;
+/** half the height a piece's ink takes (×size): a letter ≈ .4, the full stop a dot on the baseline */
+const inkHalf = (ch: string) => (ch === '.' || ch === ',' ? 0.18 : 0.4);
+
 /** How far (px) a point sits inside a rect grown by `m` (0 = outside). */
 const inside = (r: Rect, x: number, y: number, m: number) =>
   Math.max(0, Math.min(x - (r.x0 - m), r.x1 + m - x, y - (r.y0 - m), r.y1 + m - y));
@@ -141,14 +152,17 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
   // the scatter field: the central 70 % of the frame (15 % margins). A measured break: no glyph is
   // flung toward the frame's edges — every piece rests with its ink inside this box
   const field: Rect = { x0: 0.15 * L.width, x1: 0.85 * L.width, y0: 0.15 * L.height, y1: 0.85 * L.height };
-  const rowG = tag.glyphs.filter((g) => g.line < 2);
-  const tagBox: Rect = {
-    x0: Math.min(...rowG.map((g) => g.x)),
-    x1: Math.max(...rowG.map((g) => g.x + g.adv)),
-    y0: tag.lines[0].top,
-    y1: tag.lines[1].top + tag.lineH,
-  };
-  // the swept path of "closed" → "Closed" (its box at six points of the slide)
+  // the tagline's first two rows (where the letters land), each its own box
+  const rowBox = [0, 1].map((li): Rect => {
+    const gl = tag.glyphs.filter((g) => g.line === li);
+    return {
+      x0: Math.min(...gl.map((g) => g.x)),
+      x1: Math.max(...gl.map((g) => g.x + g.adv)),
+      y0: tag.lines[li].top,
+      y1: tag.lines[li].top + tag.lineH,
+    };
+  });
+  // the swept path of "closed" → "Closed" (its box at thirteen points of the slide: no gaps between them)
   const cSrc = closedG.slice(0, 6).map((g) => breakPos(g, L));
   const cBox0: Rect = {
     x0: cSrc[0].x - size0 * 0.3,
@@ -162,7 +176,7 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
     y0: tw[0][0].cy - tag.fontSize * 0.42,
     y1: tw[0][0].cy + tag.fontSize * 0.42,
   };
-  const sweep: Rect[] = [0, 0.2, 0.4, 0.6, 0.8, 1].map((p) => ({
+  const sweep: Rect[] = Array.from({ length: 13 }, (_, i) => i / 12).map((p) => ({
     x0: cBox0.x0 + (cBox1.x0 - cBox0.x0) * p,
     x1: cBox0.x1 + (cBox1.x1 - cBox0.x1) * p,
     y0: cBox0.y0 + (cBox1.y0 - cBox0.y0) * p,
@@ -180,10 +194,17 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
       y1: dir < 0 ? top : top + tag.lineH + hgt,
     };
   };
-  const lanes = [
-    lane([...tw[1], ...tw[2]], 0, -1, L.pick(120, 170)),
-    lane([...tw[3], ...tw[4]], 1, 1, L.pick(110, 200)),
+  // per word over row 1 ("is", "for": a piece ignores its own word's lane — it drops into it, in
+  // x order), the whole of row 2 under it
+  const lanes: { r: Rect; word: number }[] = [
+    { r: lane(tw[1], 0, -1, L.pick(120, 170)), word: 1 },
+    { r: lane(tw[2], 0, -1, L.pick(120, 170)), word: 2 },
+    { r: lane([...tw[3], ...tw[4]], 1, 1, L.pick(84, 150)), word: -1 },
   ];
+  /** where the row-1 words' letters wait: "is" right over its slots (it lands first, straight down,
+   *  crossing nothing); "for" over its own slots or past them (never left of them: it would cross "is") */
+  const colIs = { x0: lane(tw[1], 0, -1, 0).x0 - L.pick(70, 56), x1: lane(tw[1], 0, -1, 0).x1 + L.pick(70, 56) };
+  const colFor = lane(tw[2], 0, -1, 0).x0;
   const phoneBox: Rect = {
     x0: G.phone.cx - G.phone.w / 2,
     x1: G.phone.cx + G.phone.w / 2,
@@ -199,8 +220,7 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
     y1: G.door.top + G.door.h,
   };
   /** air (px) between a resting piece and the tagline rows / the "closed" slide / the doorway */
-  const air = { tag: L.pick(14, 36), sweep: L.pick(34, 56), door: L.pick(40, 44) };
-  DEBUG_KEEP = { field, tagBox, sweep, lanes, phoneBox, doorBox };
+  const air = { tag: L.pick(14, 36), sweep: L.pick(0, 18), door: L.pick(40, 44), phone: 24 };
 
   /* ── pieces + their seeded blast ───────────────────────────────── */
   type Piece = {
@@ -219,6 +239,8 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
     spin: number;
     sOut: number;
     seed: string;
+    bx: number;
+    by: number;
   };
   const pieces: Piece[] = [];
   const add = (src: Glyph, kind: Kind, word: number) => {
@@ -260,6 +282,8 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
       spin,
       sOut,
       seed,
+      bx: 0,
+      by: 0,
     });
   };
   closedG.slice(0, 6).forEach((g) => add(g, 'closed', 0));
@@ -269,6 +293,29 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
   pool.forEach((g, i) => add(g, extras.has(i) ? 'extra' : 'fly', -1));
   add(closedG[6], 'fly', 4); // "." → "," (the sentence goes on)
 
+  // the throws, fitted into the field PROPORTIONALLY (per direction, the farthest throw just reaches
+  // the field's edge, the others in proportion) — never clamped, so the pieces keep the spread of
+  // the blast instead of lining up along the field's edge
+  {
+    const moving = pieces.filter((p) => p.kind !== 'closed');
+    const off = moving.map((p) => ({ x: p.raw.x - p.x0, y: p.raw.y - p.y0 }));
+    const most = (sel: (o: { x: number; y: number }) => number) => Math.max(1, ...off.map(sel));
+    const M = { r: most((o) => o.x), l: most((o) => -o.x), d: most((o) => o.y), u: most((o) => -o.y) };
+    moving.forEach((p, i) => {
+      const o = off[i];
+      const half = p.size * inkHalf(p.src.ch);
+      const room = {
+        r: field.x1 - half - p.x0,
+        l: p.x0 - (field.x0 + half),
+        d: field.y1 - half - p.y0,
+        u: p.y0 - (field.y0 + half),
+      };
+      const kx = o.x >= 0 ? Math.min(1, (0.96 * Math.max(0, room.r)) / M.r) : Math.min(1, (0.96 * Math.max(0, room.l)) / M.l);
+      const ky = o.y >= 0 ? Math.min(1, (0.96 * Math.max(0, room.d)) / M.d) : Math.min(1, (0.96 * Math.max(0, room.u)) / M.u);
+      p.raw = { x: p.x0 + o.x * kx, y: p.y0 + o.y * ky };
+    });
+  }
+
   // rows: "is" + the three pool pieces thrown highest go to row 1 ("for"),
   // the other seven + "." go to row 2 ("the door,")
   const free = pieces.filter((p) => p.kind === 'fly' && p.word === -1);
@@ -277,11 +324,25 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
   for (const p of pieces) if (p.kind === 'fly') p.row = p.word <= 2 ? 0 : 1;
 
   /* ── rest points: the least move that clears every keep-out ─────── */
+  // a piece's footprint: its own advance (an "i" is narrow, an "m" wide) plus the reach of its tilt
+  // (≤ 12°), by the height of a letter with its ascender
+  const foot = (p: Piece) => {
+    const h = 1.8 * inkHalf(p.src.ch) * p.size;
+    return { w: p.src.adv * (p.size / hook.fontSize) + 0.21 * h, h };
+  };
+  /** how far two footprints overlap once grown by `gap` (0 = clear) */
+  const overlap = (ax: number, ay: number, fa: { w: number; h: number }, q: Piece, gap: number) => {
+    const fq = foot(q);
+    const ox = (fa.w + fq.w) / 2 + gap - Math.abs(ax - q.ax);
+    const oy = (fa.h + fq.h) / 2 + gap - Math.abs(ay - q.ay);
+    return ox > 0 && oy > 0 ? Math.min(ox, oy) : 0;
+  };
   const placed: Piece[] = [];
-  const STEP = 18;
-  for (const p of pieces) {
-    if (p.kind === 'closed') continue;
-    const half = p.size * 0.4;
+  const STEP = 12;
+  // the letters the new line needs take their places first; the two extras (gone by t 15) the room left
+  for (const p of [...pieces.filter((q) => q.kind === 'fly'), ...pieces.filter((q) => q.kind === 'extra')]) {
+    const half = p.size * inkHalf(p.src.ch);
+    const fp = foot(p);
     let best = { x: p.raw.x, y: p.raw.y, c: Infinity };
     for (let y = 0; y <= L.height; y += STEP) {
       for (let x = 0; x <= L.width; x += STEP) {
@@ -289,30 +350,42 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
         // hard: the field (ink inside the central 70 %), the tagline, the "closed" slide, the
         // landing lanes over row 1 / under row 2
         let hard =
-          Math.max(0, field.x0 + half - x) + Math.max(0, x - (field.x1 - half)) +
+          Math.max(0, field.x0 + fp.w / 2 - x) + Math.max(0, x - (field.x1 - fp.w / 2)) +
           Math.max(0, field.y0 + half - y) + Math.max(0, y - (field.y1 - half));
-        hard += inside(tagBox, x, y, air.tag + half);
+        for (const r of rowBox) hard += inside(r, x, y, air.tag + half);
         for (const r of sweep) hard += inside(r, x, y, air.sweep + half);
-        for (const r of lanes) hard += inside(r, x, y, 12 + half);
-        if (p.row === 0) hard += Math.max(0, y - (tagBox.y0 - air.tag - half));
-        if (p.row === 1) hard += Math.max(0, tagBox.y1 + air.tag + half - y);
+        for (const l of lanes) if (l.word !== p.word) hard += inside(l.r, x, y, 12 + half);
+        if (p.word === 1) hard += Math.max(0, colIs.x0 - x) + Math.max(0, x - colIs.x1);
+        if (p.word === 2) hard += Math.max(0, colFor - x);
+        // a row-1 letter waits ABOVE its row (and drops in) or level with it, past its right end
+        // (and slides in over slots that fill after it); a row-2 letter BELOW its row (rises in) or
+        // past its right end
+        const past = (li: number) => Math.max(0, rowBox[li].x1 + air.tag + fp.w / 2 - x);
+        if (p.word === 1) hard += Math.max(0, y - (rowBox[0].y0 - air.tag - half));
+        if (p.word === 2)
+          hard += Math.min(Math.max(0, y - (rowBox[0].y0 - air.tag - half)), past(0) + Math.max(0, y - rowBox[0].y1));
+        if (p.row === 1)
+          hard += Math.min(Math.max(0, rowBox[1].y1 + air.tag + half - y), past(1) + Math.max(0, rowBox[1].y0 - y));
         // never ON the phone: it is found in the dark right where they rest (phoneReveal);
         // never on the doorway or its open leaf; never touching a neighbour
-        hard += inside(phoneBox, x, y, half);
+        hard += inside(phoneBox, x, y, air.phone + half);
         hard += inside(doorBox, x, y, air.door + half);
-        for (const q of placed) {
-          const d = Math.hypot(x - q.ax, y - q.ay);
-          const touch = (half + q.size * 0.4) * 1.2 + 16;
-          if (d < touch) hard += touch - d;
-        }
+        for (const q of placed) hard += overlap(x, y, fp, q, 44);
         c += hard * 1e4;
-        // soft: clear of the phone's rim and the doorway's surround, with air between neighbours
+        // the blast carries no piece across "closed" (it holds there until the slide) — strongly
+        // preferred, but never at the price of a piece touching a neighbour (where "closed" sits under
+        // "business", 9:16, a far piece may pass behind it)
+        for (let k = 0.12; k < 0.95; k += 0.12) c += 60 * inside(cBox0, p.x0 + (x - p.x0) * k, p.y0 + (y - p.y0) * k, 0.22 * p.size);
+        // soft: clear of the phone's rim and the doorway's surround, with air between neighbours —
+        // and never in a row with them: a neighbour close across sits higher or lower (a scatter,
+        // not a line of type)
         c += Math.min(1, inside(phoneBox, x, y, 44 + half) / 20) * 900;
         c += Math.min(1, inside(doorBox, x, y, 80 + half) / 26) * 500;
         for (const q of placed) {
-          const d = Math.hypot(x - q.ax, y - q.ay);
-          const need = (half + q.size * 0.4) * 1.3 + 44;
-          if (d < need) c += (need - d) * 9;
+          c += overlap(x, y, fp, q, 84) * 9;
+          if (Math.abs(x - q.ax) < 2.4 * p.size) c += Math.max(0, 0.34 * p.size - Math.abs(y - q.ay)) * 5;
+          // …nor in a column with them (no grid)
+          if (Math.abs(y - q.ay) < 2 * p.size) c += Math.max(0, 0.3 * p.size - Math.abs(x - q.ax)) * 4;
         }
         if (c < best.c) best = { x, y, c };
       }
@@ -320,6 +393,43 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
     p.ax = best.x;
     p.ay = best.y;
     placed.push(p);
+  }
+  // a throw that would still pass across "closed" (9:16: it sits right under "business") ARCS round
+  // it — the least bend that clears the word (a quadratic Bézier through the same two ends); if no
+  // bend clears it, the piece is thrown FAR and passes behind the word (painted before it, dimmer)
+  for (const p of placed) {
+    const vx = p.ax - p.x0;
+    const vy = p.ay - p.y0;
+    const len = Math.hypot(vx, vy) || 1;
+    const nx = -vy / len;
+    const ny = vx / len;
+    // (a piece that starts AT the word — the full stop — simply leaves it: no bend)
+    if (inside(cBox0, p.x0, p.y0, 0.24 * p.size) > 0) continue;
+    const hit = (b: number) => {
+      let sum = 0;
+      for (let k = 0.04; k < 1; k += 0.04) {
+        const w = 2 * k * (1 - k) * b;
+        const x = p.x0 + vx * k + nx * w;
+        const y = p.y0 + vy * k + ny * w;
+        sum += inside(cBox0, x, y, 0.24 * p.size);
+        // …and the arc stays in the field too
+        if (b !== 0) sum += Math.max(0, field.x0 - x, x - field.x1, field.y0 - y, y - field.y1);
+      }
+      return sum;
+    };
+    if (hit(0) === 0) continue;
+    let best = { b: 0, h: hit(0) };
+    for (let m = 40; m <= 520 && best.h > 0; m += 40)
+      for (const b of [m, -m]) {
+        const h = hit(b);
+        if (h < best.h) best = { b, h };
+      }
+    p.bx = nx * best.b;
+    p.by = ny * best.b;
+    if (best.h > 0 && p.sOut > 0.92) {
+      p.sOut = 0.88 + (p.sOut - 0.88) * 0.15;
+      p.size = size0 * p.sOut;
+    }
   }
 
   /* ── targets: left to right within each word, by where they rest ── */
@@ -341,6 +451,8 @@ export function buildShards(hook: TextLayout, tag: TextLayout, L: Layout): Shard
       src: p.src,
       vx: p.ax - p.x0,
       vy: p.ay - p.y0,
+      bx: p.bx,
+      by: p.by,
       rot: p.rot,
       spin: p.spin,
       sOut: p.sOut,
@@ -429,8 +541,8 @@ function shardState(sh: Shard, t: number, hook: TextLayout, tag: TextLayout, L: 
     const k = BLAST * q + (1 - BLAST) * D;
     const away = tween(t, [3, 15], [0, 1], EASE.inOut);
     return {
-      x: x0 + sh.vx * k,
-      y: y0 + sh.vy * k,
+      x: x0 + sh.vx * k + 2 * k * (1 - k) * sh.bx,
+      y: y0 + sh.vy * k + 2 * k * (1 - k) * sh.by,
       rot: sh.rot * (0.85 * q + 0.15 * D) + sh.spin * D,
       turn: 0,
       size: size0 * (1 + (sh.sOut - 1) * q) * (1 - 0.3 * away),
@@ -445,8 +557,8 @@ function shardState(sh: Shard, t: number, hook: TextLayout, tag: TextLayout, L: 
   // exactly when the shard turns round (sine-out: no velocity at `start`)
   const D = Math.sin((Math.PI / 2) * Math.min(1, Math.max(0, t / sh.start)));
   const k = BLAST * q + (1 - BLAST) * D;
-  const ox = x0 + sh.vx * k;
-  const oy = y0 + sh.vy * k;
+  const ox = x0 + sh.vx * k + 2 * k * (1 - k) * sh.bx;
+  const oy = y0 + sh.vy * k + 2 * k * (1 - k) * sh.by;
   const rotOut = sh.rot * (0.85 * q + 0.15 * D) + sh.spin * D;
   const size = size0 * (1 + (sh.sOut - 1) * q);
   // further away = further from the doorway's light (eased in with the throw, out with the return)
@@ -559,18 +671,6 @@ export const Shards: React.FC<{
           </span>
         );
       })}
-      {DEBUG ? (
-        <svg width={L.width} height={L.height} style={{ position: 'absolute', inset: 0 }}>
-          {Object.entries(DEBUG_KEEP).flatMap(([k, v]) =>
-            (Array.isArray(v) ? v : [v]).map((r, j) => (
-              <rect key={k + j} x={r.x0} y={r.y0} width={r.x1 - r.x0} height={r.y1 - r.y0} fill="none" stroke={k === 'field' ? '#0f0' : k === 'lanes' ? '#f80' : k === 'sweep' ? '#08f' : '#f0f'} strokeWidth={1.5} />
-            )),
-          )}
-          {shards.map((sh, i) => (
-            <circle key={i} cx={sh.vx + breakPos(sh.src, L).x} cy={sh.vy + breakPos(sh.src, L).y} r={6} fill={sh.kind === 'extra' ? '#f00' : sh.dst && sh.dst.line === 0 ? '#ff0' : '#0ff'} />
-          ))}
-        </svg>
-      ) : null}
       {t >= TWIST.line2 - 6 ? (
         <div
           style={{

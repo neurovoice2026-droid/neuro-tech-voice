@@ -11,8 +11,15 @@
  * catches the light as it tilts (TW.signGlint).
  *
  * Light, not glow: the opening is the source (an overexposed interior, a
- * tight halation), the floor takes its spill. No blur (the door is in focus),
- * no ghost panels, no dust — the 120 fps master carries the swing.
+ * tight halation), the floor takes its spill. Outside, ONE motivated light
+ * stays on all night: the shop's downlight over the door (implied, off the
+ * top of the frame). It washes the wall above the head in a soft scallop,
+ * falls off down the painted face (top-down, so the recesses' lower lips
+ * and the handle catch it and the sign casts down), puts a 1 px lit edge on
+ * the frame's head and the tops of its jambs, and leaves a faint pool on the
+ * floor in front of the threshold. The wall/floor junction runs across the
+ * whole frame (a hairline that never ends in shot). No blur (the door is in
+ * focus), no ghost panels, no dust — the 120 fps master carries the swing.
  */
 import React from 'react';
 import type { Layout } from '../../lib/layout';
@@ -27,6 +34,19 @@ const SILVER = '196,192,186';
 const WARM = '255,248,238';
 const PAPER = '237,236,241';
 const LILAC = '185,163,255';
+/** the downlight over the door: a warm neutral (a lamp, not a gel) */
+const LAMP = '232,226,216';
+
+/** Gaussian stops, exactly 0 at the edge (no ring, no band): for the lamp's wash and pools. */
+function gauss(rgb: string, a: number, n = 14, k = 3.2): string {
+  const e = Math.exp(-k);
+  const out: string[] = [];
+  for (let i = 0; i <= n; i++) {
+    const r = i / n;
+    out.push(`rgba(${rgb},${Math.max(0, (a * (Math.exp(-k * r * r) - e)) / (1 - e)).toFixed(4)}) ${(r * 100).toFixed(1)}%`);
+  }
+  return out.join(', ');
+}
 
 /** Panel angle in degrees (negative = open toward the camera). */
 export function doorAngle(t: number): number {
@@ -119,7 +139,7 @@ const ClosedSign: React.FC<{ t: number; w: number; h: number; L: Layout }> = ({ 
           borderRadius: plate.h / 2,
           overflow: 'hidden',
           background: 'linear-gradient(180deg, #24212c 0%, #1a1820 100%)',
-          boxShadow: `inset 0 0 0 1.5px rgba(${PAPER},0.42), inset 0 1px 0 rgba(255,255,255,0.08), 0 10px 18px -10px rgba(0,0,0,0.9), 0 2px 4px rgba(0,0,0,0.5)`,
+          boxShadow: `inset 0 0 0 1.5px rgba(${PAPER},0.42), inset 0 1px 0 rgba(${LAMP},0.2), 0 14px 20px -11px rgba(0,0,0,0.95), 0 3px 5px rgba(0,0,0,0.55)`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -144,12 +164,16 @@ const ClosedSign: React.FC<{ t: number; w: number; h: number; L: Layout }> = ({ 
 
 /* ── the slab ─────────────────────────────────────────────────────── */
 
-/** two recessed panels, shaded (a lit top lip, a shadowed bottom one), never outlined */
-const Recesses: React.FC<{ w: number; h: number; lit?: number }> = ({ w, h, lit = 0 }) => (
+/**
+ * Two recessed panels, shaded, never outlined: the rail above throws a shadow into each (its top
+ * inner edge), the lower lip faces up and catches the light (`lit`, and `top` from above — the
+ * downlight: the upper panel more than the lower).
+ */
+const Recesses: React.FC<{ w: number; h: number; lit?: number; top?: number }> = ({ w, h, lit = 0, top = 0 }) => (
   <>
     {[
-      { t: 0.07, hh: 0.36 },
-      { t: 0.5, hh: 0.43 },
+      { t: 0.07, hh: 0.36, k: 1 },
+      { t: 0.5, hh: 0.43, k: 0.45 },
     ].map((p, i) => (
       <div
         key={i}
@@ -160,8 +184,11 @@ const Recesses: React.FC<{ w: number; h: number; lit?: number }> = ({ w, h, lit 
           top: h * p.t,
           height: h * p.hh,
           borderRadius: 3,
-          background: `linear-gradient(180deg, rgba(0,0,0,${(0.2 - 0.08 * lit).toFixed(3)}), rgba(0,0,0,0.05) 30%, rgba(0,0,0,0.1))`,
-          boxShadow: `inset 0 3px 4px -2px rgba(0,0,0,0.55), inset 0 -1px 0 rgba(${PAPER},${(0.05 + 0.08 * lit).toFixed(3)})`,
+          background: `linear-gradient(180deg, rgba(0,0,0,${(0.2 - 0.08 * lit + 0.1 * top * p.k).toFixed(3)}), rgba(0,0,0,0.05) 30%, rgba(0,0,0,0.1))`,
+          boxShadow:
+            `inset 0 3px 4px -2px rgba(0,0,0,${(0.55 + 0.2 * top * p.k).toFixed(3)}), ` +
+            `inset 0 -1px 0 rgba(${PAPER},${(0.05 + 0.08 * lit).toFixed(3)}), ` +
+            `inset 0 -1px 0 rgba(${LAMP},${(0.2 * top * p.k).toFixed(3)})`,
         }}
       />
     ))}
@@ -202,6 +229,25 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; opacity?: number }> 
   const sx0 = w - lit;
   const spill = Math.min(1, light) * Math.min(1, litFrac * 1.4 + narrow * 0.2);
 
+  // the downlight over the door: on all night (found with the room), dims with the door when the phone wakes
+  const lamp = on;
+  // the wall/floor junction: a hairline across the WHOLE frame — it never ends in shot, at any camera
+  // move of the scene (the push, the pull-back and the dive's aim slide this plane well over a frame
+  // width), lit where the door's light and the lamp reach it, a faint ambient catch elsewhere
+  const hair = (() => {
+    const x0 = -left - 1.6 * L.width;
+    const span = 4.2 * L.width;
+    const dc = w / 2 - x0; // the door's centre along the line
+    const stops: string[] = [];
+    for (let i = 0; i <= 48; i++) {
+      const x = (i / 48) * span;
+      const near = Math.exp(-Math.pow((x - dc) / (1.25 * w), 2));
+      const edge = Math.min(1, x / (0.25 * L.width), (span - x) / (0.25 * L.width));
+      stops.push(`rgba(${PAPER},${((0.025 + 0.1 * near) * edge).toFixed(4)}) ${((x / span) * 100).toFixed(2)}%`);
+    }
+    return { x0, span, bg: `linear-gradient(90deg, ${stops.join(', ')})` };
+  })();
+
   const face = (back: boolean): React.CSSProperties => ({
     position: 'absolute',
     inset: 0,
@@ -212,15 +258,42 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; opacity?: number }> 
 
   return (
     <div style={{ position: 'absolute', left, top, width: w, height: h, opacity: opacity < 1 ? opacity : undefined }}>
-      {/* threshold: a hairline where the floor meets the doorway */}
+      {/* the downlight's scallop on the wall: strongest just over the head, cut off above (the fixture's
+          cone), falling away down the wall either side of the frame */}
       <div
         style={{
           position: 'absolute',
-          left: -w * 0.9,
-          width: w * 2.8,
+          left: -w * 0.8,
+          width: w * 2.6,
+          top: -h * 0.5,
+          height: h * 1.5,
+          background: `radial-gradient(${(w * 1.05).toFixed(1)}px ${(h * 0.66).toFixed(1)}px at ${(w * 1.3).toFixed(1)}px ${(h * 0.47).toFixed(1)}px, ${gauss(LAMP, 0.11)}, transparent)`,
+          maskImage: `linear-gradient(to bottom, transparent 0, #000 ${(h * 0.26).toFixed(1)}px, #000 100%)`,
+          WebkitMaskImage: `linear-gradient(to bottom, transparent 0, #000 ${(h * 0.26).toFixed(1)}px, #000 100%)`,
+          opacity: lamp,
+        }}
+      />
+      {/* …and its faint pool on the floor in front of the threshold */}
+      <div
+        style={{
+          position: 'absolute',
+          left: -w * 0.7,
+          width: w * 2.4,
+          top: h,
+          height: h * 0.32,
+          background: `radial-gradient(${(w * 1.1).toFixed(1)}px ${(h * 0.26).toFixed(1)}px at ${(w * 1.2).toFixed(1)}px 0px, ${gauss(LAMP, 0.065)}, transparent)`,
+          opacity: lamp,
+        }}
+      />
+      {/* the wall/floor junction, across the whole frame */}
+      <div
+        style={{
+          position: 'absolute',
+          left: hair.x0,
+          width: hair.span,
           top: h,
           height: 1,
-          background: `linear-gradient(90deg, rgba(${PAPER},0), rgba(${PAPER},0.12) 32%, rgba(${PAPER},0.12) 68%, rgba(${PAPER},0))`,
+          background: hair.bg,
           opacity: on,
         }}
       />
@@ -251,6 +324,33 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; opacity?: number }> 
           opacity: on,
         }}
       />
+      {/* the downlight on the frame: a 1 px lit edge along the head (its top catches the light square-on)
+          and down the jambs' outer edges, grazing, so it falls away within the top third */}
+      <div
+        style={{
+          position: 'absolute',
+          left: -7,
+          width: w + 14,
+          top: -7,
+          height: 1,
+          background: `linear-gradient(90deg, rgba(${LAMP},0.08), rgba(${LAMP},0.5) 22%, rgba(${LAMP},0.62) 50%, rgba(${LAMP},0.5) 78%, rgba(${LAMP},0.08))`,
+          opacity: lamp,
+        }}
+      />
+      {[-7, w + 6].map((x) => (
+        <div
+          key={x}
+          style={{
+            position: 'absolute',
+            left: x,
+            width: 1,
+            top: -7,
+            height: h * 0.62,
+            background: `linear-gradient(180deg, rgba(${LAMP},0.42), rgba(${LAMP},0.16) 30%, rgba(${LAMP},0.04) 70%, rgba(${LAMP},0))`,
+            opacity: lamp,
+          }}
+        />
+      ))}
       {/* the lit room */}
       {light > 0.005 ? (
         <div
@@ -315,14 +415,21 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; opacity?: number }> 
             transformStyle: 'preserve-3d',
           }}
         >
-          {/* the outside face: painted near-black, a soft fall-off top → bottom */}
+          {/* the outside face: satin near-black paint under the downlight — a soft top-down falloff (the
+              lamp's cone, centred over the door, a touch brighter mid-face than at the stiles), the
+              bottom in the floor's shade */}
           <div
             style={{
               ...face(false),
-              background: `linear-gradient(180deg, rgba(${SILVER},0.05) 0%, rgba(${SILVER},0.012) 45%, rgba(0,0,0,0.22) 100%), linear-gradient(90deg, #121019 0%, #17151f 55%, #1b1824 100%)`,
+              background:
+                `radial-gradient(${(w * 0.95).toFixed(1)}px ${(h * 0.78).toFixed(1)}px at 50% ${(-h * 0.1).toFixed(1)}px, ${gauss(LAMP, 0.21 * lamp, 16, 2.6)}, transparent), ` +
+                `linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(0,0,0,0.28) 100%), ` +
+                `linear-gradient(90deg, #121118 0%, #16141c 55%, #18161f 100%)`,
             }}
           >
-            <Recesses w={w} h={h} />
+            <Recesses w={w} h={h} top={lamp} />
+            {/* the door's foot: a dark gap over the threshold (no light from the room any more) */}
+            <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: 'rgba(0,0,0,0.55)' }} />
             {/* the free edge catches the room's light while there is any */}
             <div
               style={{
@@ -356,8 +463,8 @@ export const Door: React.FC<{ t: number; g: Geo; L: Layout; opacity?: number }> 
                 width: L.pick(46, 40),
                 height: 7,
                 borderRadius: 4,
-                background: `linear-gradient(180deg, #8d8a93 0%, #4a4852 55%, #2c2a33 100%)`,
-                boxShadow: '0 5px 7px -3px rgba(0,0,0,0.85)',
+                background: `linear-gradient(180deg, #a19d98 0%, #5a5760 40%, #2c2a33 100%)`,
+                boxShadow: `inset 0 1px 0 rgba(${LAMP},0.35), 0 6px 8px -3px rgba(0,0,0,0.9)`,
               }}
             />
             {/* the phone's lilac reaches the closed door's free edge */}
