@@ -43,7 +43,7 @@ const formats = args.filter((a) => !a.startsWith('--'));
 const comps = (formats.length ? formats : ['16x9', '9x16']).map((f) => `Trailer-${f}`);
 
 const total = T.DURATION * T.SUB;
-const env = { ...process.env, NTV_SKIP_SFX: '1' };
+const env = { ...process.env, NTV_SKIP_SFX: '1', NTV_HEVC: '1' };
 const npx = (a, opts = {}) => execFileSync('npx', ['remotion', ...a], { cwd: ROOT, env, stdio: 'inherit', ...opts });
 const log = (m) => console.log(`[master ${new Date().toISOString().slice(11, 19)}] ${m}`);
 

@@ -43,7 +43,8 @@ Config.setPixelFormat('yuv420p');
 // bt470bg, unknown primaries/transfer. 'bt709' runs zscale to BT.709 limited
 // range in the encoder and tags all four colour properties.
 Config.setColorSpace('bt709');
-Config.setX264Preset('slow');
+// The HEVC masters (scripts/render-master.mjs sets NTV_HEVC): Remotion refuses an x264 preset with h265.
+if (!process.env.NTV_HEVC) Config.setX264Preset('slow');
 Config.setCrf(14);
 Config.setAudioCodec('aac');
 Config.setAudioBitrate('320k');
@@ -85,7 +86,15 @@ const fdkPrimingFix = (args: string[]): string[] => {
   }
   return [...args.slice(0, i), '-itsoffset', (-FDK_LC_PRIMING / rate).toFixed(7), ...args.slice(i)];
 };
-Config.overrideFfmpegCommand(({ type, args }) => (type === 'stitcher' ? fdkPrimingFix(args) : args));
+/**
+ * HEVC masters: x265's auto-variance AQ biased to dark blocks (aq-mode=3), so the 9–21-level
+ * midnight room and the halo's long falloffs get the bits that keep them free of banding.
+ */
+const x265Tune = (args: string[]): string[] => {
+  const i = args.indexOf('libx265');
+  return i < 0 || args.includes('-x265-params') ? args : [...args.slice(0, i + 1), '-x265-params', 'aq-mode=3:log-level=error', ...args.slice(i + 1)];
+};
+Config.overrideFfmpegCommand(({ type, args }) => x265Tune(type === 'stitcher' ? fdkPrimingFix(args) : args));
 Config.setChromiumOpenGlRenderer('angle');
 Config.setOverwriteOutput(true);
 
