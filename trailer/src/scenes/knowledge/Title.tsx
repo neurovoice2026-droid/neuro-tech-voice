@@ -10,7 +10,7 @@
  * stagger).
  */
 import React from 'react';
-import { reveal, revealStyle } from '../../components/Type';
+import { reveal, revealStyle, useGlide } from '../../components/Type';
 import { mixColor } from '../../lib/lights';
 import { EASE, mixHex, SPRING, tween } from '../../lib/motion';
 import { maskBox, typeStyle } from '../../lib/type';
@@ -53,6 +53,7 @@ export const Title: React.FC<TitleProps> = ({
   exit,
   color = C.ink,
 }) => {
+  const glide = useGlide(); // under the scene's slow push each word holds its own sub-pixel layer
   const rows = (lines ?? [text]).map((r) => r.split(' '));
   const all = rows.flat();
   // which words belong to the key phrase (last occurrence)
@@ -91,7 +92,7 @@ export const Title: React.FC<TitleProps> = ({
     }
     return (
       <span key={i} style={maskBox(last ? 0 : 0.24)}>
-        <span style={{ ...revealStyle(r), color: col }}>{w}</span>
+        <span style={{ ...revealStyle(r, undefined, glide), color: col }}>{w}</span>
       </span>
     );
   };

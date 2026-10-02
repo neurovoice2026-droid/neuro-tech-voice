@@ -23,7 +23,7 @@
  * No glints, no rings, no blooms: the card is an object, the light is the orb's.
  */
 import React from 'react';
-import { Reveal, reveal, revealStyle, subpixel } from '../../components/Type';
+import { glideStyle, Reveal, reveal, revealStyle, subpixel, useGlide } from '../../components/Type';
 import { rgba } from '../../lib/lights';
 import { EASE, smooth, SPRING, springUnit, tween } from '../../lib/motion';
 import { maskBox, typeStyle } from '../../lib/type';
@@ -56,6 +56,7 @@ function shake(t: number, [a, b]: readonly [number, number], amp: number) {
 
 /** words that rise out of their masks from `at`, `step` frames apart */
 const RiseWords: React.FC<{ t: number; text: string; at: number; step: number; style?: React.CSSProperties }> = ({ t, text, at, step, style }) => {
+  const glide = useGlide(); // under the scene's slow push each word holds its own sub-pixel layer
   const ws = text.split(' ');
   return (
     <div style={{ whiteSpace: 'nowrap', ...style }}>
@@ -63,7 +64,7 @@ const RiseWords: React.FC<{ t: number; text: string; at: number; step: number; s
         const r = reveal(t, at + i * step, { config: SPRING.caption, rise: 90, fade: 0.5 });
         return (
           <span key={i} style={maskBox(i < ws.length - 1 ? 0.24 : 0)}>
-            <span style={revealStyle(r)}>{w}</span>
+            <span style={revealStyle(r, undefined, glide)}>{w}</span>
           </span>
         );
       })}
@@ -72,6 +73,7 @@ const RiseWords: React.FC<{ t: number; text: string; at: number; step: number; s
 };
 
 export const Slot: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
+  const glide = useGlide(); // under the scene's slow push the card rides its own small layer
   const S = G.slot;
   const v = G.v;
   // born as the miss: it steps forward with it (16:9 beside the reader; 9:16 out of the receding list)
@@ -217,7 +219,7 @@ export const Slot: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
         top: S.y,
         width: S.w,
         height: S.h,
-        ...subpixel(moving ? `translateX(${dx.toFixed(3)}px) scale(${sc.toFixed(5)})` : undefined, moving),
+        ...glideStyle(moving ? `translateX(${dx.toFixed(3)}px) scale(${sc.toFixed(5)})` : undefined, moving || glide),
         transformOrigin: v ? '50% 50%' : '0% 50%',
         opacity: boxO,
       }}

@@ -4,7 +4,7 @@
  * reveal), staggered — motion only, never blur. Leaves the same way (`exit`).
  */
 import React from 'react';
-import { reveal, revealStyle, type RevealExit } from '../../components/Type';
+import { reveal, revealStyle, useGlide, type RevealExit } from '../../components/Type';
 import { SPRING } from '../../lib/motion';
 import { maskBox } from '../../lib/type';
 
@@ -19,6 +19,7 @@ export const StaggerText: React.FC<{
   exit?: RevealExit & { stagger?: number };
   style?: React.CSSProperties;
 }> = ({ text, t, start, stagger = 0.8, exit, style }) => {
+  const glide = useGlide(); // under the hook's push each letter holds its own small layer
   const chars = Array.from(text);
   return (
     <div style={{ display: 'inline-flex', whiteSpace: 'pre', ...style }}>
@@ -32,7 +33,7 @@ export const StaggerText: React.FC<{
         return (
           // the letter keeps its own tracking (the label's letter-spacing sits inside the box)
           <span key={i} style={{ ...maskBox(0), letterSpacing: 'inherit' }}>
-            <span style={revealStyle(r)}>{ch === ' ' ? ' ' : ch}</span>
+            <span style={revealStyle(r, undefined, glide)}>{ch === ' ' ? ' ' : ch}</span>
           </span>
         );
       })}

@@ -13,7 +13,7 @@ import React from 'react';
 import { Easing } from 'remotion';
 import { Reveal, Words } from '../../components/Type';
 import { EASE, SPRING, tween } from '../../lib/motion';
-import { typeStyle } from '../../lib/type';
+import { typeStyle, UNIT_STAGGER } from '../../lib/type';
 import { C } from '../../theme';
 import { ACCENT } from './Mesh';
 
@@ -134,7 +134,7 @@ export const PickupLine: React.FC<{
       <Words
         text={text}
         start={0}
-        stagger={1.6}
+        stagger={UNIT_STAGGER}
         frame={t}
         role="headline"
         tone="night"

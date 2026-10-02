@@ -113,5 +113,36 @@ export function maskBox(gap = 0): CSSProperties {
   };
 }
 
+/**
+ * A centred line rises AS A UNIT: all its words out of their masks together, this many frames apart
+ * (a ripple, not a typewriter). Revealing a centred line word by word over a second leaves the first
+ * words hanging off-centre under the label until the line fills — it reads as broken alignment.
+ */
+export const UNIT_STAGGER = 0.5;
+
 /** Instrument Sans: the baseline's depth below the top of a line box of line-height `lh` (em). */
 export const baselineEm = (lh: number) => (lh - 1.22) / 2 + 0.97;
+
+/* ── Measuring (canvas measureText, the same face / weight / tracking as the DOM) ── */
+let measureCtx: CanvasRenderingContext2D | null = null;
+const WIDTHS = new Map<string, number>();
+
+/**
+ * The advance width (px) of `text` set in `family` at `weight` / `size` px with `trackingEm` letter-
+ * spacing (em). Cached only once the face is loaded (use lib/fonts.ts useFaceReady to re-render).
+ */
+export function textWidth(text: string, family: string, weight: number, size: number, trackingEm = 0): number {
+  const font = `${weight} ${size}px ${family}`;
+  const key = `${font}|${trackingEm}|${text}`;
+  const hit = WIDTHS.get(key);
+  if (hit !== undefined) return hit;
+  if (typeof document === 'undefined') return text.length * size * 0.5;
+  if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d');
+  if (!measureCtx) return text.length * size * 0.5;
+  measureCtx.font = font;
+  (measureCtx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${trackingEm * size}px`;
+  measureCtx.fontKerning = 'normal';
+  const w = measureCtx.measureText(text).width;
+  if (document.fonts.check(font, text)) WIDTHS.set(key, w);
+  return w;
+}

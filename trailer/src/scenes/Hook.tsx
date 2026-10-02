@@ -289,7 +289,8 @@ export const Hook: React.FC = () => {
         vignette={0.5}
       />
 
-      <Camera x={camX} y={camY} zoom={zoom}>
+      {/* the push + drift never rest: the planes glide on sub-pixel layers (Camera.tsx) — no 1 px ticks on the figures */}
+      <Camera x={camX} y={camY} zoom={zoom} moving>
         {/* the ring (behind the figures, as on the site) */}
         <Layer depth={1} style={{ maskImage: ringMask, WebkitMaskImage: ringMask }}>
           <RingPulse

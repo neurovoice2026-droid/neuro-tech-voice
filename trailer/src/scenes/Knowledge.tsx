@@ -69,9 +69,9 @@
  */
 import React from 'react';
 import { AbsoluteFill } from 'remotion';
-import { Camera, Layer } from '../components/Camera';
+import { Camera, camMoving, Layer } from '../components/Camera';
 import { Captions } from '../components/Captions';
-import { reveal, Reveal, revealStyle } from '../components/Type';
+import { reveal, Reveal, revealStyle, useGlide } from '../components/Type';
 import { useLayout } from '../lib/layout';
 import { EASE, SPRING, tween } from '../lib/motion';
 import { useSceneFrame } from '../lib/scene';
@@ -178,6 +178,7 @@ const SpokenRow: React.FC<{
   /** a trailing piece after the words (the hum's dots) */
   after?: (i: number) => React.ReactNode;
 }> = ({ t, words, at, out, outDur = OUT, font, color, x, y, align, W, after }) => {
+  const glide = useGlide(); // under the scene's slow push each word holds its own small layer
   if (t < Math.min(...at) - 2 || t > out + outDur) return null;
   const rowH = font.size * font.lineHeight;
   const n = words.length;
@@ -202,7 +203,7 @@ const SpokenRow: React.FC<{
           <React.Fragment key={j}>
             {j > 0 ? ' ' : null}
             <span style={maskBox(0)}>
-              <span style={revealStyle(r)}>{w}</span>
+              <span style={revealStyle(r, undefined, glide)}>{w}</span>
             </span>
           </React.Fragment>
         );
@@ -325,7 +326,8 @@ export const Knowledge: React.FC = () => {
 
   return (
     <AbsoluteFill style={{ background: C.white, overflow: 'hidden' }}>
-      <Camera x={cam.x} y={cam.y} zoom={cam.zoom}>
+      {/* the slow push glides: while it runs, the planes and the type on them ride sub-pixel layers (Camera.tsx) */}
+      <Camera x={cam.x} y={cam.y} zoom={cam.zoom} moving={false && camMoving((tt) => camera(tt, G, L.cx, L.cy), t)}>
         {/* the room stays put under the whip (it goes to clean white): only what stands in it whips away */}
         <Layer depth={0.3}>
           <Room t={t} G={G} />

@@ -58,9 +58,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AbsoluteFill, cancelRender, continueRender, delayRender } from 'remotion';
 import './cta/font/wordmark.css';
-import { Camera, Layer } from '../components/Camera';
+import { Camera, camMoving, Layer, useGlide } from '../components/Camera';
 import { flowTime, seedTime } from '../components/Orb';
 import type { OrbDraw } from '../components/orbGL';
+import { glideStyle } from '../lib/glide';
 import { FLOW_END } from '../lib/handoff';
 import { useLayout, type Layout } from '../lib/layout';
 import { ALL_GLOW, GLOW, fromOklch, hexToRgb, inkFor, mixColor, toOklch } from '../lib/lights';
@@ -491,7 +492,8 @@ export const Cta: React.FC = () => {
               />
             ))
           : null}
-        <Camera x={cam.x} y={cam.y} zoom={cam.zoom}>
+        {/* while it moves, its plane (and the headline / end-card rows on it) glide at their exact sub-pixel position */}
+        <Camera x={cam.x} y={cam.y} zoom={cam.zoom} moving={camMoving(cameraAt, t)}>
           <Layer depth={1}>
             {scrimO > 0.005 ? (
               <div
@@ -609,11 +611,16 @@ const rgbaHex = (hex: string, a: number) => {
   return `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(bb * 255)},${Math.max(0, a).toFixed(3)})`;
 };
 
-const Row: React.FC<{ y: number; children: React.ReactNode }> = ({ y, children }) => (
-  <div style={{ position: 'absolute', left: 0, right: 0, top: y, display: 'flex', justifyContent: 'center', transform: 'translateY(-50%)' }}>
-    {children}
-  </div>
-);
+/** an end-card row; while the camera settles its content rides its own small, content-sized layer
+ *  (no 1 px hop on the way to rest; a frame-wide layer can be re-rastered differently per render tab) */
+const Row: React.FC<{ y: number; children: React.ReactNode }> = ({ y, children }) => {
+  const glide = useGlide();
+  return (
+    <div style={{ position: 'absolute', left: 0, right: 0, top: y, display: 'flex', justifyContent: 'center', transform: 'translateY(-50%)' }}>
+      <div style={{ display: 'flex', ...glideStyle(undefined, glide) }}>{children}</div>
+    </div>
+  );
+};
 
 /**
  * The irises, measured on the art: centres at .877 of the site's eye offset

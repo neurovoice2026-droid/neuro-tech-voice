@@ -18,8 +18,10 @@
  * (inside their masks, at opacity 0): nothing ever reflows.
  *
  * Words — each word rises out of its own clipping box on SPRING.caption
- * (from 80 % of its height, opacity up over the first half of the travel),
- * released a frame before it appears. NO blur, no glow, no ghost copies.
+ * (from 80 % of its height, opacity up over the first half of the travel);
+ * a caption rises AS A UNIT, released a frame before its first word appears,
+ * its words UNIT_STAGGER (½ f) apart — a centred line never hangs half-filled.
+ * NO blur, no glow, no ghost copies.
  * Optionally (spokenOpacity < 1) words already spoken ease down to that
  * opacity once the voice moves on.
  *
@@ -36,11 +38,11 @@
 import React from 'react';
 import { EASE, mixHex, SPRING, springAt, tween } from '../lib/motion';
 import { useLayout } from '../lib/layout';
-import { baselineEm, captionFont, maskBox, type CaptionFont } from '../lib/type';
+import { baselineEm, captionFont, maskBox, UNIT_STAGGER, type CaptionFont } from '../lib/type';
 import { BEAT, FPS, vWord, type Caption } from '../timing';
 import { VOICE_INK, type Speaker, type Tone } from '../theme';
 import { VOICE, type VoiceId } from '../voice.generated';
-import { reveal, revealStyle, SpeakerLabel } from './Type';
+import { reveal, revealStyle, SpeakerLabel, useGlide } from './Type';
 
 export type { CaptionFont } from '../lib/type';
 
@@ -193,6 +195,8 @@ function exitOf(at: number, dur: number, j: number, n: number) {
 
 export const Captions: React.FC<CaptionsInput> = (props) => {
   const L = useLayout();
+  // carried by a moving camera plane: every word holds its own sub-pixel layer (no 1 px ticks)
+  const glide = useGlide();
   const {
     t,
     x,
@@ -291,7 +295,9 @@ export const Captions: React.FC<CaptionsInput> = (props) => {
         const words = pl.words.map((w, j) => {
           const a = pl.appear[j];
           const ex = exitAt < Infinity ? exitOf(exitAt, exitDur, j, n) : undefined;
-          const r = reveal(t, a - 1, { config: SPRING.caption, rise: RISE, fade: 0.5, exit: ex });
+          // the caption rises as a unit on its first spoken word (a ½ f ripple): a centred line never
+          // hangs half-filled off-centre while the voice catches up
+          const r = reveal(t, pl.start - 1 + j * UNIT_STAGGER, { config: SPRING.caption, rise: RISE, fade: 0.5, exit: ex });
           // once spoken (the voice has moved on), a word may ease down to `spokenOpacity`
           let dim = 1;
           if (spokenOpacity < 1) {
@@ -301,7 +307,7 @@ export const Captions: React.FC<CaptionsInput> = (props) => {
           }
           const tn = tint?.(c, j);
           const col = tn && tn.k > 0.001 ? mixHex(color, tn.color, tn.k) : color;
-          const st = revealStyle({ ...r, opacity: r.opacity * dim });
+          const st = revealStyle({ ...r, opacity: r.opacity * dim }, undefined, glide);
           return { w, st: { ...st, color: col } as React.CSSProperties };
         });
         const word = (k: number) => (

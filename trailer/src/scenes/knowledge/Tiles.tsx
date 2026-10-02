@@ -14,7 +14,7 @@
  * deeper, on the miss, behind the card that takes their place (9:16).
  */
 import React from 'react';
-import { subpixel } from '../../components/Type';
+import { glideStyle, useGlide } from '../../components/Type';
 import { mixColor, rgba } from '../../lib/lights';
 import { EASE, mix, smooth, SPRING, springUnit, tween } from '../../lib/motion';
 import { typeStyle } from '../../lib/type';
@@ -43,6 +43,7 @@ function readingAt(t: number, i: number) {
 }
 
 export const Tiles: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
+  const glide = useGlide(); // under the scene's slow push each tile rides its own small layer
   const S = G.tile;
   // the documents step back: on her answer (16:9) / on the miss, behind the card that takes their place (9:16)
   const B = G.docsBack;
@@ -92,7 +93,7 @@ export const Tiles: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
               background: C.white,
               boxShadow: shadow,
               opacity: pp.o * dim,
-              ...subpixel(tf, moving),
+              ...glideStyle(tf, moving || glide),
             }}
           >
             {S.kind === 'tile' ? (

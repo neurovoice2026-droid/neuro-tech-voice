@@ -4,8 +4,11 @@
  *   <TurnLabel>  ● AVA / ● CALLER (TYPE.label) centred over the caption: on
  *                every turn the old name leaves up through its mask as the new
  *                one rises out of its own — a counter rolling over, no pop.
- *   <MarkRow>    row B of the last line — "Wednesday at 3 PM" rises word by
- *                word ON the voice (MARK_TYPE, as <BookedMark>), in the call's
+ *   <MarkRow>    row B of the last line — "Wednesday at" rises as a unit ON
+ *                the spoken "Wednesday", centred on itself; "3 PM" lands ON the
+ *                spoken "three" (the payoff's beat) and the row glides left on
+ *                the same spring into its final centre — never a half-filled
+ *                row hanging off-centre (MARK_TYPE, as <BookedMark>), in the call's
  *                one accent ink (the knowledge heading's two-tone: the key
  *                phrase in the accent, the rest of the line in paper). It holds
  *                mint until the orb dives into it: on the contact the ember
@@ -19,8 +22,9 @@ import React from 'react';
 import { BOOKING, BookedMark } from '../../components/Shared';
 import { reveal, revealStyle, subpixel } from '../../components/Type';
 import { MARK_TYPE } from '../../lib/handoff';
-import { mixHex, SPRING } from '../../lib/motion';
-import { maskBox, typeStyle } from '../../lib/type';
+import { useFaceReady } from '../../lib/fonts';
+import { mixHex, SPRING, springUnit } from '../../lib/motion';
+import { maskBox, textWidth, typeStyle, UNIT_STAGGER } from '../../lib/type';
 import { C } from '../../theme';
 import { ACCENT, CALLER_INK } from './Mesh';
 
@@ -120,7 +124,16 @@ export const MarkRow: React.FC<{
   y: number;
   fontSize: number;
 }> = ({ t, appear, ink, ignite, igniteAt = [50, 44], pulse, periodOut, flare = 0, x, y, fontSize }) => {
+  // the row is centred on what is visible: "Wednesday at" alone sits centred (shifted right by half the
+  // width of " 3 PM"), and glides into the mark's centre as "3 PM" lands (measured in the mark's face)
+  const ready = useFaceReady(`${MARK_TYPE.weight} ${Math.round(fontSize)}px ${MARK_TYPE.family}`, BOOKING.mark);
   if (t < appear[0] - 1.5) return null;
+  const trackEm = parseFloat(String(MARK_TYPE.tracking)) || 0;
+  const wide = (s: string) => textWidth(s, MARK_TYPE.family, MARK_TYPE.weight, fontSize, trackEm);
+  const half = ready ? (wide(BOOKING.mark) - wide(`${BOOKING.day} ${BOOKING.at}`)) / 2 : 0;
+  const land = t < appear[2] - 1 ? 0 : springUnit(t - (appear[2] - 1), SPRING.caption);
+  const dx = half * (1 - land);
+  const shift = Math.abs(dx) > 0.0005 ? ` translateX(${dx.toFixed(3)}px)` : '';
   const done = mixHex(C.emberLit, C.emberSoft, 0.55 * flare);
   const scale = Math.abs(pulse - 1) > 1e-5 ? ` scale(${pulse.toFixed(5)})` : '';
   const igniting = ignite > 0.001 && ignite < 0.999;
@@ -129,8 +142,10 @@ export const MarkRow: React.FC<{
   // it holds; it becomes the single <BookedMark> the result picks up only as the ember ignites — the
   // swap of raster happens under the ignition's front and the orb's impact, never on a still mark
   const settled = ignite > 0.001;
+  // "Wednesday at" as a unit on "Wednesday" (a ½ f ripple); "3 PM" on "three"
+  const starts = [appear[0] - 1, appear[0] - 1 + UNIT_STAGGER, appear[2] - 1];
   const words = MARK_WORDS.map((w, i) => {
-    const r = reveal(t, appear[i] - 1, { config: SPRING.caption, rise: 80, fade: 0.5 });
+    const r = reveal(t, starts[i], { config: SPRING.caption, rise: 80, fade: 0.5 });
     return { w, r };
   });
   const rPeriod = reveal(t, appear[3] - 1, { config: SPRING.caption, rise: 80, fade: 0.5, exit: { at: periodOut, dur: 5 } });
@@ -147,7 +162,7 @@ export const MarkRow: React.FC<{
         />
       ) : (
         /* arriving: the mark's own box, one masked span per word, each rising on its spoken word */
-        <div style={{ ...markBox(x, y, fontSize), transform: `translate(-50%, -50%)${scale}`, color }}>
+        <div style={{ ...markBox(x, y, fontSize), transform: `translate(-50%, -50%)${shift}${scale}`, color }}>
           {words.map(({ w, r }, i) => (
             <React.Fragment key={i}>
               {i > 0 ? ' ' : null}
@@ -160,7 +175,7 @@ export const MarkRow: React.FC<{
       )}
       {/* the period rides a twin of the mark's box (same face / size), in the phrase's ink — it leaves with row A */}
       {rPeriod.opacity > 0.002 ? (
-        <div style={{ ...markBox(x, y, fontSize), color: ink }}>
+        <div style={{ ...markBox(x, y, fontSize), transform: `translate(-50%, -50%)${shift}`, color: ink }}>
           <span style={{ visibility: 'hidden' }}>{BOOKING.mark}</span>
           <span style={{ position: 'absolute', left: '100%', top: 0, ...maskBox(0), marginLeft: '-0.08em' }}>
             <span style={revealStyle(rPeriod, undefined, true)}>.</span>

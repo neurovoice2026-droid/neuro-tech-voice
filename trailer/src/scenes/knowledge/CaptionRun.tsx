@@ -18,9 +18,9 @@
  */
 import React from 'react';
 import { Captions, type CaptionsProps } from '../../components/Captions';
-import { reveal, revealStyle } from '../../components/Type';
+import { reveal, revealStyle, useGlide } from '../../components/Type';
 import { mixHex, SPRING } from '../../lib/motion';
-import { maskBox } from '../../lib/type';
+import { maskBox, UNIT_STAGGER } from '../../lib/type';
 import { BEAT, vWord, type Caption } from '../../timing';
 
 const OUT = 4;
@@ -39,6 +39,7 @@ function exitOf(at: number, dur: number, j: number, n: number) {
 /** one caption on its own: in word by word with the voice, out through its masks over [cut − OUT, cut] */
 const CutCaption: React.FC<CaptionsProps & { caption: Caption; cut: number; index: number }> = (props) => {
   const { t, lineAt, voice, caption: c, cut, index, font, x, y, maxWidth, align = 'center', tint } = props;
+  const glide = useGlide(); // under the scene's slow push each word holds its own sub-pixel layer
   const lead = props.lead ?? 2;
   const ws = words(c);
   const appear = ws.map((_, j) => lineAt + vWord(voice, idx(c, j)) - lead);
@@ -67,14 +68,15 @@ const CutCaption: React.FC<CaptionsProps & { caption: Caption; cut: number; inde
       }}
     >
       {ws.map((w, j) => {
-        const r = reveal(t, appear[j] - 1, { config: SPRING.caption, rise: RISE, fade: 0.5, exit: exitOf(cut - OUT, OUT, j, n) });
+        // as <Captions>: the caption rises as a unit on its first spoken word (a ½ f ripple)
+        const r = reveal(t, Math.min(...appear) - 1 + j * UNIT_STAGGER, { config: SPRING.caption, rise: RISE, fade: 0.5, exit: exitOf(cut - OUT, OUT, j, n) });
         const tn = tint?.(index, j);
         const col = tn && tn.k > 0.001 ? mixHex(color, tn.color, tn.k) : color;
         return (
           <React.Fragment key={j}>
             {j > 0 ? ' ' : null}
             <span style={maskBox(0)}>
-              <span style={{ ...revealStyle(r), color: col }}>{w}</span>
+              <span style={{ ...revealStyle(r, undefined, glide), color: col }}>{w}</span>
             </span>
           </React.Fragment>
         );

@@ -23,7 +23,7 @@ import { BOOKING } from '../../components/Shared';
 import { C, R } from '../../theme';
 import { aos, EASE, mixHex, smooth, SPRING, springUnit, tween } from '../../lib/motion';
 import { maskBox, typeStyle } from '../../lib/type';
-import { reveal, revealStyle } from '../../components/Type';
+import { reveal, revealStyle, useGlide } from '../../components/Type';
 import { Card, DrawIcon } from './Cards';
 import { STATION_ICONS, STATION_NAMES } from './data';
 import type { Geo, Pt } from './geometry';
@@ -249,6 +249,8 @@ export const Rail: React.FC<{ t: number; G: Geo; vertical: boolean; T: FlowTimin
 /* ── type ────────────────────────────────────────────────────────── */
 /** words rising out of their masks (0.8 f apart) — never an empty card, never a plain fade */
 const MaskWords: React.FC<{ text: string; t: number; at: number; color?: string }> = ({ text, t, at, color }) => {
+  // under the flow's push / nudges each word holds its own sub-pixel layer (no 1 px ticks)
+  const glide = useGlide();
   const ws = text.split(' ');
   return (
     <>
@@ -256,7 +258,7 @@ const MaskWords: React.FC<{ text: string; t: number; at: number; color?: string 
         const r = reveal(t, at + 0.8 * j, { config: SPRING.caption, rise: 100, fade: 0.5 });
         return (
           <span key={j} style={maskBox(j < ws.length - 1 ? 0.24 : 0)}>
-            <span style={{ ...revealStyle(r), color }}>{w}</span>
+            <span style={{ ...revealStyle(r, undefined, glide), color }}>{w}</span>
           </span>
         );
       })}

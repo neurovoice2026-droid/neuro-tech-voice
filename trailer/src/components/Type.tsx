@@ -24,6 +24,7 @@ import { EASE, mixHex, smooth, SPRING, springUnit, tween } from '../lib/motion';
 import { useLayout } from '../lib/layout';
 import { useSub } from '../lib/scene';
 import { maskBox, typeStyle } from '../lib/type';
+import { glideStyle, subpixel, useGlide } from '../lib/glide';
 
 /* ── the curve ─────────────────────────────────────────────────── */
 
@@ -76,26 +77,24 @@ export function reveal(t: number, start: number, o: RevealOptions = {}) {
 }
 
 /**
- * SUB-PIXEL MOTION for text. Chrome snaps glyphs to whole pixels vertically, so a slow
- * translateY moves type in 1 px stairs (measured: 0, 0, 1, 1, 1, 1, 2 … for a ¼ px/frame
- * move) — at 120 fps the tail of every settle would step. While an element MOVES, this puts
- * it on its own compositor layer with a non-translation matrix (rotate .02° — invisible:
- * ≤ .1 px across a word), which the compositor resamples at the exact sub-pixel offset
- * (measured: 0, .25, .5, .75, 1 …). At rest it is plain, pixel-crisp text again (a layer
- * keeps its raster scale, so it must not linger under a camera zoom).
+ * SUB-PIXEL MOTION for text (lib/glide.ts): while an element MOVES it rides its own compositor
+ * layer with a non-axis-aligned matrix (rotate .002° — invisible), which the compositor resamples
+ * at the exact sub-pixel offset (no 1 px stairs: Chrome snaps glyphs in plain transforms). At rest
+ * it is plain, pixel-crisp text again.
  *
  *   <span style={{ ...subpixel(`translateY(${y}px)`, moving) }}>
+ *
+ * Inside a moving camera plane (Camera.tsx `useGlide()`), the reveals, captions and labels below
+ * hold their own layers too, so a slow push never makes them tick.
  */
-export function subpixel(transform: string | undefined, moving: boolean): React.CSSProperties {
-  if (!transform) return {};
-  return moving ? { transform: `${transform} rotate(0.02deg)`, willChange: 'transform' } : { transform };
-}
+export { glideStyle, subpixel, useGlide };
 
 /**
  * The inner (moving) span's style for a reveal state (sub-pixel while it moves, crisp at rest).
  * `hold`: keep the word on its sub-pixel layer from its entrance to its exit, never dropping back
  * to plain text while it is on screen — the layer → plain switch re-rasterises the glyphs, a
- * visible one-frame "tick" on a word that has long landed. Only where no camera zoom acts on it.
+ * visible one-frame "tick" on a word that has long landed. Also while a camera plane carries it
+ * (`useGlide()`): small layers are exact under a push (lib/glide.ts). Not through a large zoom.
  */
 export function revealStyle(r: ReturnType<typeof reveal>, origin = '50% 85%', hold = false): React.CSSProperties {
   const sc = Math.abs(r.scale - 1) > 1e-5;
@@ -123,11 +122,12 @@ export const Reveal: React.FC<
     innerStyle?: React.CSSProperties;
   }
 > = ({ t, start, children, gap = 0, mask = true, style, innerStyle, ...o }) => {
+  const glide = useGlide();
   const r = reveal(t, start, o);
   if (r.opacity <= 0.001 && !mask) return null;
   return (
     <span style={{ ...(mask ? maskBox(gap) : { display: 'inline-block', marginRight: `${gap}em` }), ...style }}>
-      <span style={{ ...revealStyle(r), ...innerStyle }}>{children}</span>
+      <span style={{ ...revealStyle(r, undefined, glide), ...innerStyle }}>{children}</span>
     </span>
   );
 };
@@ -172,6 +172,9 @@ export type WordsProps = {
   anticip?: number;
   /** word gap, em (default .24 — the site's padding-right) */
   gap?: number;
+  /** keep each word on its sub-pixel layer from entrance to exit (revealStyle `hold`): a landed word
+   *  never re-rasterises (no late tick). On by itself while a camera plane carries the line. */
+  hold?: boolean;
 };
 
 export const Words: React.FC<WordsProps> = ({
@@ -195,7 +198,9 @@ export const Words: React.FC<WordsProps> = ({
   scaleFrom = 1,
   anticip = 0,
   gap = 0.24,
+  hold: holdProp = false,
 }) => {
+  const hold = useGlide() || holdProp;
   const current = useCurrentFrame() / useSub();
   const t = fOverride ?? current;
   const L = useLayout();
@@ -235,7 +240,7 @@ export const Words: React.FC<WordsProps> = ({
           return (
             <div key={li} style={{ whiteSpace: 'nowrap' }}>
               <span style={maskBox(0)}>
-                <span style={revealStyle(r)}>
+                <span style={revealStyle(r, undefined, hold)}>
                   {ws.map((w, j) => (
                     <span key={j} style={{ color: inkOf(first + j), paddingRight: j < ws.length - 1 ? `${gap}em` : 0, ...wordStyle?.(first + j, w) }}>
                       {w}
@@ -255,7 +260,7 @@ export const Words: React.FC<WordsProps> = ({
             const last = j === ws.length - 1 && li === rows.length - 1;
             return (
               <span key={i} style={maskBox(last ? 0 : gap)}>
-                <span style={{ ...revealStyle(r), color: inkOf(i), ...wordStyle?.(i, w) }}>{w}</span>
+                <span style={{ ...revealStyle(r, undefined, hold), color: inkOf(i), ...wordStyle?.(i, w) }}>{w}</span>
               </span>
             );
           });
@@ -294,8 +299,9 @@ export const Label: React.FC<{
   style?: React.CSSProperties;
 }> = ({ children, size, color = C.paperDim, tone = 'night', style }) => {
   const L = useLayout();
+  const glide = useGlide();
   return (
-    <div style={{ ...typeStyle('label', L.vertical, { tone, size }), color, whiteSpace: 'nowrap', ...style }}>
+    <div style={{ ...typeStyle('label', L.vertical, { tone, size }), color, whiteSpace: 'nowrap', ...glideStyle(undefined, glide), ...style }}>
       {children}
     </div>
   );
@@ -319,6 +325,7 @@ export const SpeakerLabel: React.FC<{
   style?: React.CSSProperties;
 }> = ({ who, tone = 'night', t, start, exit, size, dot = true, color, text, style }) => {
   const L = useLayout();
+  const glide = useGlide();
   const ink = color ?? VOICE_INK[who][tone].tag;
   const st = typeStyle('label', L.vertical, { tone, size });
   const fs = (st.fontSize as number) ?? TYPE.label.size[0];
@@ -340,7 +347,7 @@ export const SpeakerLabel: React.FC<{
     </span>
   );
   return (
-    <div style={{ ...st, color: ink, whiteSpace: 'nowrap', ...style }}>
+    <div style={{ ...st, color: ink, whiteSpace: 'nowrap', ...(t === undefined ? glideStyle(undefined, glide) : null), ...style }}>
       {t !== undefined && start !== undefined ? (
         <Reveal t={t} start={start} exit={exit} config={SPRING.caption}>
           {content}

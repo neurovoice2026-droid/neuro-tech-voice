@@ -11,7 +11,7 @@
  * Entrance (statusIn): the capsule opens out of its dot on a soft spring.
  */
 import React from 'react';
-import { subpixel } from '../../components/Type';
+import { glideStyle, subpixel, useGlide } from '../../components/Type';
 import { rgba } from '../../lib/lights';
 import { EASE, springUnit, tween } from '../../lib/motion';
 import { C, elevation, FONT } from '../../theme';
@@ -97,6 +97,7 @@ function bumpAt(t: number) {
 }
 
 export const Status: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
+  const glide = useGlide(); // under the scene's slow push the pill rides its own small layer
   const T = G.top;
   if (t < KL.statusIn - 1) return null;
   const { cur, prev } = stepAt(t);
@@ -154,7 +155,7 @@ export const Status: React.FC<{ t: number; G: Geo }> = ({ t, G }) => {
         paddingLeft: PAD,
         gap: GAP,
         transformOrigin: `${PAD + DOTD / 2}px 50%`,
-        ...subpixel(tf, moving),
+        ...glideStyle(tf, moving || glide),
         opacity: capO,
         fontFamily: FONT.ui,
         fontWeight: PILL_WEIGHT,

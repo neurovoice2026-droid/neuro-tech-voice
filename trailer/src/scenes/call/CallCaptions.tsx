@@ -2,8 +2,10 @@
  * The call's live captions — set in TYPE.caption (Instrument Sans, like the
  * knowledge heading) for BOTH speakers, and moved like every other piece of
  * type in the film (components/Type.tsx): each word sits in its own clipping
- * box and RISES out of it on SPRING.caption as it is spoken, its opacity
- * coming up over the first half of the travel; it LEAVES the same way, up
+ * box, and a caption RISES AS A UNIT when its first word is spoken — all its
+ * words out of their masks on SPRING.caption, UNIT_STAGGER (½ f) apart, so a
+ * centred line never hangs half-filled off-centre under the speaker label —
+ * its opacity coming up over the first half of the travel; it LEAVES the same way, up
  * out of its mask (power3.in, fading in the second half), word by word with
  * a small left-to-right stagger. No blur, no glow, no smear, no ghosts — the
  * 120 fps render and the curves carry the motion. Everything is a pure
@@ -27,7 +29,7 @@
 import React from 'react';
 import { reveal, revealStyle } from '../../components/Type';
 import { mixHex, smooth, SPRING } from '../../lib/motion';
-import { baselineEm, maskBox, type CaptionFont as LibCaptionFont } from '../../lib/type';
+import { baselineEm, maskBox, UNIT_STAGGER, type CaptionFont as LibCaptionFont } from '../../lib/type';
 import { vWord, type Caption } from '../../timing';
 import { type VoiceId } from '../../voice.generated';
 
@@ -144,7 +146,8 @@ export const CallCaptions: React.FC<CallCaptionsProps> = (props) => {
     if (t > pl.out + exitLength(n) + 0.5) return null;
 
     const words = pl.words.map((w, j) => {
-      const r = reveal(t, pl.appear[j] - 1, { config: SPRING.caption, rise: RISE, fade: 0.5, exit: { at: pl.out + j * stg, dur: EXIT_DUR } });
+      // the caption rises as a unit on its first spoken word (a ½ f ripple across its words)
+      const r = reveal(t, pl.start - 1 + j * UNIT_STAGGER, { config: SPRING.caption, rise: RISE, fade: 0.5, exit: { at: pl.out + j * stg, dur: EXIT_DUR } });
       const key = keys?.(c, j);
       let col = key ?? color;
       const tn = tint?.(c, j);

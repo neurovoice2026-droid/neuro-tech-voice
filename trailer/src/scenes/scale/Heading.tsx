@@ -28,7 +28,7 @@ import React from 'react';
 import { C } from '../../theme';
 import { aos, EASE, mixHex, tween } from '../../lib/motion';
 import { baselineEm, maskBox, typeStyle } from '../../lib/type';
-import { reveal, revealStyle, subpixel } from '../../components/Type';
+import { reveal, revealStyle, subpixel, useGlide } from '../../components/Type';
 import { mixColor } from '../../lib/lights';
 import { ACCENT, ACCENT_LIT } from './lights';
 
@@ -112,6 +112,9 @@ export const Titles: React.FC<{ t: number; T: TitleTiming; hero: Pose; band: Pos
   after,
   vertical: v,
 }) => {
+  // carried by a moving camera (the hero push, the language push, the flow nudges): each title block
+  // rides its own small sub-pixel layer, so a slow push never ticks it a pixel at a time
+  const glide = useGlide();
   if (t < T.hero - 4) return null;
   const face = (size: number): React.CSSProperties => ({ ...typeStyle('display', v, { tone: 'paper', size }), lineHeight: LH, color: C.ink });
 
@@ -152,7 +155,7 @@ export const Titles: React.FC<{ t: number; T: TitleTiming; hero: Pose; band: Pos
   const block = (key: string, x: number, y: number, size: number, s: number, moving: boolean, children: React.ReactNode) => {
     const tf = `translate(${x.toFixed(3)}px, ${y.toFixed(3)}px) scale(${s.toFixed(5)}) translate(-50%, ${(-CAP_MID * size).toFixed(3)}px)`;
     return (
-      <div key={key} style={{ position: 'absolute', left: 0, top: 0, ...face(size), ...subpixel(tf, moving), transformOrigin: '0 0' }}>
+      <div key={key} style={{ position: 'absolute', left: 0, top: 0, ...face(size), ...subpixel(tf, moving || glide), transformOrigin: '0 0' }}>
         {children}
       </div>
     );

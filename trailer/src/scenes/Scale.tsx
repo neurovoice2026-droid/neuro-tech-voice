@@ -39,7 +39,7 @@
  */
 import React from 'react';
 import { AbsoluteFill } from 'remotion';
-import { Camera, Layer } from '../components/Camera';
+import { Camera, camMoving, Layer } from '../components/Camera';
 import { useLayout } from '../lib/layout';
 import { EASE, tween } from '../lib/motion';
 import { useSceneFrame } from '../lib/scene';
@@ -82,8 +82,14 @@ export const Scale: React.FC = () => {
   };
 
   // the slow push of the flow about FLOW_END (1 → 1.03): the CRM node never moves
-  const fz = 1 + 0.03 * tween(t, K.flowPush, [0, 1], EASE.inOut);
+  const fzAt = (tt: number) => 1 + 0.03 * tween(tt, K.flowPush, [0, 1], EASE.inOut);
+  const fz = fzAt(t);
+  const pushing = Math.abs(fzAt(t + 0.25) - fzAt(t - 0.25)) > 1e-6;
   const stagePush = fz > 1.00001 ? `scale(${fz.toFixed(5)})` : undefined;
+  // the slow moves (the hero push, the language push, the flow nudges and the stage push) glide: the
+  // type on the planes rides its own small sub-pixel layers while they move (Camera.tsx useGlide — the
+  // cards, the titles, the station names). The index's pull-back is fast and spans a 4× zoom: plain.
+  const moving = t >= HERO - 2 && (pushing || camMoving((tt) => cameraProps(camAt(tt, G, L), L), t));
   // out of the knowledge whip's clean white: the room's shading comes up over the first frames
   const fromWhite = 1 - tween(t, [-K.preroll, 12], [0, 1], EASE.inOut);
 
@@ -92,7 +98,7 @@ export const Scale: React.FC = () => {
       {/* 0 · the paper room: screen space, behind the camera */}
       <Room t={t} L={L} />
       {fromWhite > 0.002 ? <AbsoluteFill style={{ background: '#ffffff', opacity: fromWhite }} /> : null}
-      <Camera x={cp.x} y={cp.y} zoom={cp.zoom}>
+      <Camera x={cp.x} y={cp.y} zoom={cp.zoom} moving={moving}>
         {/* 1.0 · the index → the languages → the flow (pushed about FLOW_END), then the titles */}
         <Layer depth={1}>
           <AbsoluteFill style={{ transform: stagePush, transformOrigin: `${G.end.x}px ${G.end.y}px`, zIndex: 0 }}>

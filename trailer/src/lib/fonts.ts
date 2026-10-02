@@ -22,6 +22,7 @@ import '@fontsource-variable/instrument-sans/wght.css';
 import '@fontsource-variable/instrument-sans/wght-italic.css';
 import '@fontsource-variable/noto-sans-jp/wght.css';
 import '@fontsource-variable/geist-mono/wght.css';
+import { useEffect, useState } from 'react';
 import { continueRender, delayRender } from 'remotion';
 
 const SAMPLE =
@@ -53,4 +54,33 @@ export function waitForFonts(): void {
     () => continueRender(handle),
     () => continueRender(handle),
   );
+}
+
+/**
+ * True once `font` (a canvas font shorthand, e.g. `450 76px "Instrument Sans Variable"`) is loaded,
+ * for layouts measured with canvas measureText (lib/type.ts textWidth). Holds the frame (delayRender)
+ * until the face is in and the component has re-rendered with the real metrics — a still rendered
+ * cold never ships a fallback-face measurement.
+ */
+export function useFaceReady(font: string, sample = SAMPLE): boolean {
+  const [ready, setReady] = useState(() => typeof document !== 'undefined' && document.fonts.check(font, sample));
+  const [handle] = useState(() => (ready ? null : delayRender(`face for measureText: ${font}`)));
+  useEffect(() => {
+    if (ready) return;
+    let alive = true;
+    document.fonts
+      .load(font, sample)
+      .then(() => document.fonts.ready)
+      .then(
+        () => alive && setReady(true),
+        () => alive && setReady(true),
+      );
+    return () => {
+      alive = false;
+    };
+  }, [ready, font, sample]);
+  useEffect(() => {
+    if (ready && handle !== null) continueRender(handle);
+  }, [ready, handle]);
+  return ready;
 }

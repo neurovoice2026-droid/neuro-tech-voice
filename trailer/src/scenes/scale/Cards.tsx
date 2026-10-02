@@ -13,6 +13,7 @@
 import React, { useLayoutEffect, useRef } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { C, elevation } from '../../theme';
+import { glideStyle, useGlide } from '../../lib/glide';
 import type { Rect } from './geometry';
 
 export const Card: React.FC<{
@@ -31,21 +32,27 @@ export const Card: React.FC<{
   /** a live transform (sub-pixel compositing while it moves) */
   moving?: boolean;
   children?: React.ReactNode;
-}> = ({ r, transform, opacity = 1, lift = 1, shadow = 1, shade = 0, radius = 26, z, origin, moving = false, children }) =>
-  opacity <= 0.004 ? null : (
+}> = ({ r, transform, opacity = 1, lift = 1, shadow = 1, shade = 0, radius = 26, z, origin, moving = false, children }) => {
+  // while it moves — or a moving camera carries it — the card rides its own small layer with the
+  // compositor's sub-pixel resampling (lib/glide.ts: will-change alone still steps its text 1/16–1 px),
+  // and its position goes into that transform: a fractional left/top is painted INTO the layer (the
+  // glyphs snap again, 0 / 1 / 0 / 1 px as it slides). At rest: plain left/top, pixel-crisp.
+  const glide = useGlide();
+  const on = moving || glide;
+  const tf = on ? `translate(${r.x.toFixed(3)}px, ${r.y.toFixed(3)}px)${transform ? ` ${transform}` : ''}` : transform;
+  return opacity <= 0.004 ? null : (
     <div
       style={{
         position: 'absolute',
-        left: r.x,
-        top: r.y,
+        left: on ? 0 : r.x,
+        top: on ? 0 : r.y,
         width: r.w,
         height: r.h,
         borderRadius: radius,
         background: C.white,
         boxShadow: elevation(lift, shadow),
-        transform,
+        ...glideStyle(tf, on),
         transformOrigin: origin,
-        willChange: moving ? 'transform' : undefined,
         opacity: opacity < 0.999 ? opacity : undefined,
         overflow: 'hidden',
         zIndex: z,
@@ -57,6 +64,7 @@ export const Card: React.FC<{
       ) : null}
     </div>
   );
+};
 
 /**
  * A lucide icon drawn as a monoline: every stroke gets pathLength 1 (set on the DOM before the

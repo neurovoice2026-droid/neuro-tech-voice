@@ -36,6 +36,7 @@ export const HookLine: React.FC<{ start: number; style?: React.CSSProperties; st
         text={H.text}
         start={start}
         stagger={stagger}
+        hold
         style={{ fontSize: H.fontSize }}
         color={C.paper}
         keys={[{ text: H.key.text, color: H.key.color, at: start + H.key.delay }]}
