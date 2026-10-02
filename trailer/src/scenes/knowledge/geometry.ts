@@ -28,8 +28,6 @@ export const LISTEN_GLOW = { body: SUN.listen[2], core: SUN.listen[3] } as const
 export const SUN_MISS = ['#2b3c41', '#57717a', '#86a7ad', '#c1d6d9', '#f3f8f9'] as const;
 /** a quiet, de-lit glow for the miss (SUN_MISS's middle) */
 export const MISS_GLOW = { body: SUN_MISS[2], core: SUN_MISS[3] } as const;
-/** the moment tag (Moment.tsx — no longer on screen: one status, the pill) */
-export const MOMENT = { day: 'Sunday', time: '10:24' } as const;
 
 /** The caller's ink on the paper (in place of theme.ts VOICE_INK.caller.paper's saturated indigo): a
  *  desaturated slate, so the speaker still reads by colour (and by ● CALLER) without a second
@@ -140,10 +138,6 @@ export function geo(L: Layout) {
       /** TYPE.label */
       label: v ? 28 : 30,
       dot: 20,
-      /** (Moment.tsx, unused — one status on screen: the pill) "☀ SUNDAY · 10:24" */
-      tag: v
-        ? { mode: 'below' as const, y: 356, size: 28, icon: 28, gap: 0 }
-        : { mode: 'left' as const, y: 98, size: 30, icon: 30, gap: 30 },
     },
     tiles,
     /** 16:9 cards: the kind (TYPE.label, muted) on the top row, the name (the title family, ≤ 2 lines) on

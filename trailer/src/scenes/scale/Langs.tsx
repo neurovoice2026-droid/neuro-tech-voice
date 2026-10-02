@@ -9,8 +9,8 @@
  *             heading's face; Japanese in Noto Sans JP, its Latin "AI" /
  *             "Ava" in Instrument Sans), every word rising out of its own
  *             mask as she says it. The AI disclosure is the key phrase: it
- *             turns to the scene's accent as she says it, and a fine rule
- *             draws under it.
+ *             turns to the scene's accent as she says it (colour alone, as
+ *             the knowledge heading's two-tone — no rule under it).
  *   cascade   English is heard whole (its card rises in as the index clears). Then
  *             Romanian / Spanish / French / German slide in from the right,
  *             each landing a frame before its voice cuts in (1 – 1.25 s
@@ -90,9 +90,6 @@ function envAt(k: number, t: number): number {
   return e;
 }
 
-/** the AI disclosure's key-phrase progress (0..1): English and Japanese only (the quick four are cut before it) */
-const discloseOf = (k: number, t: number) =>
-  k === 0 ? tween(t, K.discloseEn, [0, 1], EASE.draw) : k === CARRIER ? tween(t, K.discloseJa, [0, 1], EASE.draw) : 0;
 /** the phrase's ink: it turns to the accent as she starts to say it (EASE.house over 12 f) */
 const discloseInk = (k: number, t: number) =>
   k === 0 ? tween(t, [K.discloseEn[0] - 1, K.discloseEn[0] + 11], [0, 1], EASE.house) : k === CARRIER ? tween(t, [K.discloseJa[0] - 1, K.discloseJa[0] + 11], [0, 1], EASE.house) : 0;
@@ -108,8 +105,6 @@ type LineOpts = {
   size: number;
   /** reveal frame of word j (undefined: shown, still) */
   at: (j: number) => number | undefined;
-  /** 0..1 the AI rule */
-  rule: number;
   /** 0..1 the AI phrase's accent */
   key: number;
   thin?: boolean;
@@ -128,7 +123,7 @@ function Unit({ text, t, s0, out, style }: { text: string; t: number; s0: number
   );
 }
 
-/** one line of a greeting: its words (indices), the AI words grouped under one rule */
+/** one line of a greeting: its words (indices), the AI words grouped as the key phrase */
 function GreetingLine({ js, o }: { js: number[]; o: LineOpts }) {
   const l = LANGS[o.k];
   const words = wordsOf(l);
@@ -181,7 +176,6 @@ function GreetingLine({ js, o }: { js: number[]; o: LineOpts }) {
       </React.Fragment>
     );
   };
-  const u = Math.min(1, Math.max(0, o.rule));
   return (
     <div style={{ whiteSpace: 'nowrap' }}>
       {segs.map((seg, si) => {
@@ -199,23 +193,6 @@ function GreetingLine({ js, o }: { js: number[]; o: LineOpts }) {
             {seg.ai ? (
               <span style={{ position: 'relative', display: 'inline-block', whiteSpace: 'pre' }}>
                 {content}
-                {u > 0.001 ? (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      left: '0.02em',
-                      right: '0.02em',
-                      // .1 em under the baseline (Instrument Sans at line-height 1.04: baseline .88 em down the box; the
-                      // Japanese line's baseline — set by its larger Latin "AI" — sits ≈ 1.13 em down)
-                      top: cjk ? '1.25em' : '0.98em',
-                      height: Math.max(o.thin ? 2 : 3, Math.round(o.size * 0.032)),
-                      borderRadius: 4,
-                      background: ACCENT,
-                      transform: `scaleX(${u.toFixed(4)})`,
-                      transformOrigin: '0 50%',
-                    }}
-                  />
-                ) : null}
               </span>
             ) : (
               content
@@ -292,19 +269,8 @@ export const LangFocusFace: React.FC<{ k: number; t: number; w: number; h: numbe
   const D = 10;
   const size = l.size[v ? 1 : 0];
   const quick = isQuick(k);
-  const ul = discloseOf(k, t);
   const keyInk = discloseInk(k, t);
   const mainLines = linesOf(0, quick ? heardLines(k, v) : l.main[v ? 1 : 0]);
-  // a disclosure set over two lines draws on, line by line (each line's share by its words)
-  const aiN = l.ai[1] - l.ai[0] + 1;
-  const aiIn = (js: number[]) => js.filter((j) => j >= l.ai[0] && j <= l.ai[1]).length;
-  const ruleOf = (i: number) => {
-    const n = aiIn(mainLines[i]);
-    const before = mainLines.slice(0, i).reduce((acc, js) => acc + aiIn(js), 0);
-    const draw = n ? Math.min(1, Math.max(0, (ul * aiN - before) / n)) : 0;
-    // (on `out` the rule retracts as its words leave)
-    return out === undefined ? draw : draw * (1 - smooth(out, out + 2.5, t));
-  };
   return (
     <>
       <div style={{ position: 'absolute', left: pad, top: pad }}>
@@ -312,7 +278,7 @@ export const LangFocusFace: React.FC<{ k: number; t: number; w: number; h: numbe
       </div>
       <div style={{ position: 'absolute', left: pad, right: pad, bottom: pad - size * 0.2, ...greetFace(v, size, !!l.cjk) }}>
         {mainLines.map((js, i) => (
-          <GreetingLine key={i} js={js} o={{ k, t, size, rule: ruleOf(i), key: keyInk, at: (j) => riseAt(k, j), out: out === undefined ? undefined : out + 0.6 * i }} />
+          <GreetingLine key={i} js={js} o={{ k, t, size, key: keyInk, at: (j) => riseAt(k, j), out: out === undefined ? undefined : out + 0.6 * i }} />
         ))}
       </div>
     </>
@@ -339,7 +305,7 @@ export const LangGalleryFace: React.FC<{ k: number; t: number; at: number; verti
       </div>
       <div style={{ position: 'absolute', left: pad, right: pad - 6, bottom: pad - size * 0.2, ...greetFace(v, l.cjk ? Math.round(size * TYPE_JP.scale) : size, !!l.cjk), letterSpacing: l.cjk ? TYPE_JP.tracking : '-0.02em' }}>
         {lines.map((js, i) => (
-          <GreetingLine key={i} js={js} o={{ k, t, size, rule: 0, key: 0, at: (j) => at + 0.8 + 0.9 * i + 0.4 * (j - js[0]), thin: true }} />
+          <GreetingLine key={i} js={js} o={{ k, t, size, key: 0, at: (j) => at + 0.8 + 0.9 * i + 0.4 * (j - js[0]), thin: true }} />
         ))}
       </div>
     </>

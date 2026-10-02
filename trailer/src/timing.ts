@@ -759,7 +759,7 @@ export const SCALE_LOCAL = (() => {
     landAt,
     greetIn: landAt.map((l) => l - 4),
     greetSpread: 3,
-    /** the AI disclosure underlined as she says it: English "AI assistant", Japanese "AIアシスタント" */
+    /** the AI disclosure turns to the accent as she says it: English "AI assistant", Japanese "AIアシスタント" */
     discloseEn: [LA[0] + vWord('lang-en', 4), LA[0] + vFrames('lang-en') - 4] as const,
     discloseJa: [LA[5] + vWord('lang-ja', 0), LA[5] + vWord('lang-ja', 2)] as const,
     /** the slow push on the focus card through the languages, released for the flow */
@@ -847,8 +847,6 @@ export const CTA_LOCAL = {
   pullBack: [CTA.converge[0] + 23, CTA.logoImpact] as const,
   /** the impact's sound layer (the corona opening out of the core) */
   ring: [CTA.logoImpact, CTA.logoImpact + 20] as const,
-  /** a light crosses the wordmark's letters once they are all in (190 → 212, inOut) */
-  sweep: [CTA.logoImpact + 10, CTA.logoImpact + 32] as const,
   /** the end card's entrances (see CTA_BUTTON_AT): the button, then the note */
   button: CTA_BUTTON_AT,
   note: CTA_NOTE_AT,
@@ -1459,7 +1457,6 @@ export const HITS: Hit[] = [
   // (soft and far back: it rings into her first word, "This")
   H('scale', SCALE.langTitle, chime(LANGS[0], true), LANGS[0], 0.5, 3, 'LIGHT: rush — English'),
   H('scale', SCALE_LOCAL.enFlip + 6, 'flip', LANGS[0], 0.5, 2, 'the English card settles: its dot lights', { db: -3 }),
-  H('scale', SCALE_LOCAL.discloseEn[0], 'draw', LANGS[0], [0.3, 0.6], 3, '“AI assistant” underlined as she says it'),
   // the quick four + Japanese: each slides in from the right as its voice cuts in, its orb lights in its light
   ...SCALE.langAt.slice(1).flatMap((f, j) => {
     const k = j + 1;
@@ -1472,7 +1469,6 @@ export const HITS: Hit[] = [
     ];
   }),
   // (the card that recedes into the gallery makes no sound of its own: her next word is its sound)
-  H('scale', SCALE_LOCAL.discloseJa[0], 'draw', LANGS[5], [0.3, 0.6], 3, '“AIアシスタント” underlined as she says it', { layer: true }),
   // after the call
   H('scale', SCALE_LOCAL.collapse + 3, 'whoosh-soft', 'none', [0.5, 0.5], 2, 'the gallery drops away', { split: true }),
   H('scale', SCALE_LOCAL.carrierFly + 5, 'whoosh', 'closing', [0.5, 0.21], 2, 'Japanese flies to the first station'),
@@ -1532,7 +1528,7 @@ export const HITS: Hit[] = [
   H('cta', CTA_LOCAL.note, 'tap', 'none', 0.5, 3, '“5 free minutes, no card”', { db: -4 }),
   // (the URL rises ON her words — "neuro" | "tech" | "voice.com" at CTA_LOCAL.urlAt — and makes
   // no sound of its own: her voice is its sound, so nothing sits on the name; likewise the
-  // four-light rim (rimIn) and the light crossing the wordmark (sweep) ride the impact's chord, unvoiced)
+  // four-light rim (rimIn) rides the impact’s chord, unvoiced)
   // THE PRESS — the film's last action, heard: the click (down), a felt knock under it, the
   // release a few frames later
   H('cta', CTA.press, 'click', 'night', 0.5, 1, 'the button is clicked (the plum floods from the arrow)'),

@@ -64,7 +64,7 @@ export type Lang = {
   name: string;
   /** the voice line */
   id: VoiceId;
-  /** the AI disclosure, as word indices [first, last] (underlined; never its full stop) */
+  /** the AI disclosure, as word indices [first, last] (the key phrase, in the accent; never its full stop) */
   ai: readonly [number, number];
   /** line breaks of the whole greeting in the focus card, as word counts [16:9, 9:16] (they must add up to its words) */
   main: readonly [readonly number[], readonly number[]];
@@ -104,7 +104,7 @@ export const LANGS: Lang[] = [
 /** the spoken words of a greeting (verbatim, with their punctuation) */
 export const wordsOf = (l: Lang): string[] => VOICE.lines[l.id].words.map((w) => w.w);
 
-/** the underlined part of a word: the word, not its full stop / comma (nor the Japanese particle) */
+/** the key-phrase part of a word: the word, not its full stop / comma (nor the Japanese particle) */
 export const underlined = (w: string) => w.replace(/[.,。]$/u, '');
 
 /** split a run of text into Latin and CJK pieces (the Latin in Instrument Sans, the CJK in Noto Sans JP) */
