@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
+import { Pause, Play } from "lucide-react";
+import type { Cue, CueTurn } from "@/lib/audio/cue-types";
 import type { Seg, Status, Turn } from "@/lib/pages/custom-ai-agents";
 import { cn } from "@/lib/utils";
 
@@ -58,6 +60,10 @@ export const HELD_INK = "#1f6b3f";
  * `swap` re-keys the live cell on every change so it lands with the
  * house `ind-swap` rise; pass `swap={false}` where a section animates the
  * change itself and a second entrance would double it.
+ *
+ * `render` is told whether it is drawing a sizer, so a live-only state (a
+ * line being said, words not said yet) never reaches the reservation:
+ * the sizers always hold the finished text.
  */
 export function Stack<T>({
   items,
@@ -68,18 +74,18 @@ export function Stack<T>({
 }: {
   items: readonly T[];
   live: number;
-  render: (x: T, i: number) => ReactNode;
+  render: (x: T, i: number, sizer: boolean) => ReactNode;
   swap?: boolean;
   className?: string;
 }) {
   return (
     <div className={cn("grid content-start", className)}>
       <div key={live} className={cn("[grid-area:1/1]", swap && "ind-swap")}>
-        {render(items[live], live)}
+        {render(items[live], live, false)}
       </div>
       {items.map((x, i) => (
         <div key={i} aria-hidden inert className="invisible [grid-area:1/1]">
-          {render(x, i)}
+          {render(x, i, true)}
         </div>
       ))}
     </div>
@@ -212,6 +218,13 @@ export function MadeUp({ children, className }: { children: ReactNode; className
  * on it, so a turn that has just become visible (or every turn, when the
  * key changes with a new draft) mounts fresh and lands with `ind-land`,
  * while turns that were already showing keep their key and stay put.
+ *
+ * `saying` marks the turn whose voice is playing (sound on): a 1.6px
+ * violet tick in the margin, the hero's reading tick, absolutely placed
+ * so it moves nothing. It is still; while motion is allowed its opacity
+ * follows the voice through `--caa-level`, which the section sets on an
+ * ancestor every frame (unset, it is fully on). Without `saying` the
+ * markup is exactly what it was before there was any sound.
  */
 export function Turns({
   turns,
@@ -219,6 +232,7 @@ export function Turns({
   size = "md",
   reached,
   landKey,
+  saying,
   className,
 }: {
   turns: readonly Turn[];
@@ -226,6 +240,8 @@ export function Turns({
   size?: "md" | "sm";
   reached?: number;
   landKey?: string;
+  /** The turn being said, while a voice plays; -1 or undefined for none. */
+  saying?: number;
   className?: string;
 }) {
   const upTo = reached ?? turns.length;
@@ -237,8 +253,13 @@ export function Turns({
         return (
           <div
             key={shown && landKey !== undefined ? `${landKey}:${i}` : `rest:${i}`}
-            className={cn(!shown && "invisible", shown && landKey !== undefined && "ind-land")}
+            className={cn(
+              !shown && "invisible",
+              shown && landKey !== undefined && "ind-land",
+              saying !== undefined && "relative",
+            )}
           >
+            {saying === i && shown && <SayingTick />}
             <p
               className={cn(
                 "text-[11px] leading-4 font-medium tracking-[0.12em] text-pretty uppercase",
@@ -346,6 +367,134 @@ export function StatusDot({ status, label, className }: { status: Status; label:
     >
       <Node state={held ? "green" : "violet"} size="sm" className="bg-transparent" />
       {label}
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Sound on: reading a cue against the lines the page shows.
+ *
+ * Four instruments here can be heard (AI-generated voices, sample calls;
+ * lib/audio/cues/caa-*.json). Nothing below runs with sound off. The
+ * audio clock is the master while a voice plays: a section asks its
+ * track for the cue time and reads the turns with these. Every check is
+ * against the text on screen, so a cue that stopped saying a line as
+ * shown (the producer re-cut it) is simply not used: that line stays
+ * silent and read-paced, never mis-timed.
+ * ------------------------------------------------------------------ */
+
+/** A displayed line's words, as the cue counts them: split on single spaces. */
+export const displayWords = (text: string) => text.split(" ");
+
+/**
+ * The cue's turns `from`, `from + 1`, … that say `lines` as shown: the
+ * same speaker, the line's own index (`i`, which restarts at 0 for a
+ * script that follows another in one file, as a re-ring does), and one
+ * timed word per displayed word. Null when any of them does not.
+ */
+export function voicedLines(cue: Cue | null | undefined, lines: readonly Turn[], from = 0): CueTurn[] | null {
+  if (!cue) return null;
+  const turns = cue.turns.slice(from, from + lines.length);
+  if (turns.length !== lines.length) return null;
+  const ok = turns.every(
+    (turn, k) =>
+      turn.i === k &&
+      turn.sp === lines[k].who &&
+      turn.words.length === displayWords(lines[k].text).length &&
+      turn.words.every((w, j) => w[0] === j),
+  );
+  return ok ? turns : null;
+}
+
+/** How many of `turns` have begun by cue time `t`: the lines on screen. */
+export function begunAt(turns: readonly CueTurn[], t: number): number {
+  let n = 0;
+  while (n < turns.length && turns[n].start <= t) n++;
+  return n;
+}
+
+/**
+ * The turn being said at `t`: the last to have begun, held through the
+ * pause after it, until the next begins; -1 before the first and once the
+ * last has ended.
+ */
+export function sayingAt(turns: readonly CueTurn[], t: number): number {
+  const k = begunAt(turns, t) - 1;
+  if (k < 0) return -1;
+  return k === turns.length - 1 && t >= turns[k].end ? -1 : k;
+}
+
+/** `s` seconds after a turn's last word, never past the track's end: when what follows it lands. */
+export function afterLastWord(cue: Pick<Cue, "dur">, turn: CueTurn, s: number): number {
+  const last = turn.words[turn.words.length - 1];
+  return Math.min(cue.dur, (last ? last[2] : turn.end) + s);
+}
+
+/**
+ * The tick's opacity for an envelope reading (envelopeAt, 0..1): speech
+ * sits around 0.6–0.8, silence near 0, so the tick dims between words and
+ * is full on them, never gone.
+ */
+export const levelOf = (env: number) => 0.35 + 0.65 * Math.min(1, Math.max(0, (env - 0.3) / 0.45));
+
+/** The violet margin tick beside a line being said (see Turns). */
+export function SayingTick({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn("pointer-events-none absolute top-0.5 bottom-0.5 -left-3 w-[1.6px] rounded-full bg-[#551a89]", className)}
+      style={{ opacity: "var(--caa-level, 1)" }}
+    />
+  );
+}
+
+/**
+ * A piece of a spoken line, each word hidden until it is said. `from` is
+ * the line's word index at the piece's first character (the spaces before
+ * it in the whole line), so a piece that carries on a word ("?" after a
+ * name) shows with that word. Words fade in over 150ms; spaces stay plain
+ * text, so the line wraps exactly as the plain string does, and a hidden
+ * word is transparent, never absent, so nothing reflows as words arrive.
+ */
+export function SaidWords({ text, from = 0, said }: { text: string; from?: number; said: number }) {
+  return (
+    <>
+      {text.split(" ").map((chunk, j) => (
+        <Fragment key={j}>
+          {j > 0 && " "}
+          {chunk && (
+            <span className={cn("transition-opacity duration-150 ease-out", from + j >= said && "opacity-0")}>
+              {chunk}
+            </span>
+          )}
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
+/**
+ * The "Listen" transport, for reduced motion: nothing plays by itself
+ * there, so this plays the conversation on screen, and the press turns
+ * sound on as it does. The sound control's own pill (sound.css), so the
+ * two read as a pair; its words are its name.
+ */
+export function ListenButton({
+  playing,
+  labels,
+  onClick,
+}: {
+  playing: boolean;
+  labels: { listen: string; pause: string };
+  onClick: () => void;
+}) {
+  const Icon = playing ? Pause : Play;
+  return (
+    <span className="snd" data-variant="pill" data-tone="light">
+      <button type="button" className="snd-btn" onClick={onClick}>
+        <Icon aria-hidden className="size-3.5 shrink-0 fill-current" />
+        <span>{playing ? labels.pause : labels.listen}</span>
+      </button>
     </span>
   );
 }

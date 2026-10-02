@@ -1,11 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { motion } from "framer-motion";
 import { Pause, Play, RotateCcw } from "lucide-react";
-import { AGENTS_HERO, REEL, type ReelScene } from "@/lib/pages/ai-agents";
+import { AGENTS_HERO, REEL, spokenLines, type ReelScene, type SpokenLine } from "@/lib/pages/ai-agents";
+import { cueIn, lazyCues, type Cue } from "@/lib/audio";
 import { AUTH } from "@/lib/site";
 import { cn } from "@/lib/utils";
+import { envelopeAt, turnAt } from "@/components/site/audio/cue";
+import { isSoundOn, unlockFromGesture } from "@/components/site/audio/engine";
+import { SoundButton } from "@/components/site/audio/sound-button";
+import { useLazyCues } from "@/components/site/audio/use-lazy-cues";
+import { useSounding, useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { IntentLink } from "@/components/site/intent-link";
 import { Orb, PillLink, SectionTitle } from "../primitives";
 import { gradientPoster, NeatBackdrop, paletteByLuma, SCENE_GRADIENTS } from "./neat-backdrop";
@@ -22,7 +28,57 @@ import { holdFor, useInView, usePrefersReducedMotion } from "../timing";
  *
  * The hand is dealt from lg up, shrunk to fit narrower screens down to
  * that; below it the open card stands alone, with the others as chips.
+ *
+ * Sound. Each call has generated audio (AI-generated voices,
+ * lib/audio/cues/agents-hero-reel.json). Nothing plays until the visitor
+ * turns sound on with the control under the hand. From then on a call
+ * that starts is played on its audio's clock: each line comes up as it is
+ * said, its words as they are spoken, and the outcome once the last line
+ * is done; pointing at a card no longer swaps the open one. Sound turned
+ * on mid-call starts the open call again, spoken; turned off, the call
+ * finishes on the same clock in silence and the next one is read-paced.
+ * With reduced motion nothing plays by itself: the transport is "Listen".
  * ------------------------------------------------------------------ */
+
+/** The stage's claim on the site's one sound (components/site/audio/engine.ts). */
+const VOICE_ID = "agents-hero";
+
+type SpokenScene = { cue: Cue; lines: SpokenLine[] };
+
+/**
+ * Each call's audio, where its cue speaks every line of the card as shown.
+ * P0: the cue file (a few KB of timings) is fetched as sound goes on, never
+ * in the page's first load. A call without one stays read-paced.
+ */
+const SPOKEN = lazyCues(
+  "agents-hero-reel",
+  (file): Partial<Record<string, SpokenScene>> =>
+    Object.fromEntries(
+      REEL.scenes.map((s) => {
+        const cue = cueIn(file, `agents-hero-reel/${s.id}`);
+        const lines = spokenLines(cue, s.turns);
+        return [s.id, cue && lines ? { cue, lines } : undefined];
+      }),
+    ),
+);
+
+/**
+ * The card's step at cue time `t` on a spoken run: how many lines have
+ * started (0 before the first), and `lines + 1` once the last line has
+ * been said, which brings the outcome up.
+ */
+export function reelStepAt(sp: SpokenScene, t: number) {
+  const n = sp.lines.length;
+  if (t >= sp.lines[n - 1].end) return n + 1;
+  let s = 0;
+  while (s < n && sp.lines[s].start <= t) s++;
+  return s;
+}
+
+/** Spoken: how far the open card's orb swells at the agent's loudest (its read-paced talk loop peaks at 1.035). */
+const ORB_SWELL = 0.06;
+/** The envelope's speech range (about 0.35 to 0.8) as 0..1. */
+const level = (env: number) => Math.min(1, Math.max(0, (env - 0.35) / 0.45));
 
 /** Card size and the distance between card centres in the fan, in px. */
 const CARD = { w: 440, h: 548 };
@@ -80,6 +136,9 @@ function Hand() {
   const scenes = REEL.scenes;
   const rootRef = useRef<HTMLDivElement>(null);
   const inView = useInView(rootRef);
+  // The voice needs the reel well on screen, not a sliver of it at an edge:
+  // a call it starts must be one the visitor can see.
+  const voiceView = useInView(rootRef, "-15% 0px");
   const reduce = usePrefersReducedMotion();
 
   const [active, setActive] = useState(0);
@@ -88,14 +147,80 @@ function Hand() {
   const [step, setStep] = useState(0);
   const [autoplay, setAutoplay] = useState(true);
   const [paused, setPaused] = useState(false);
+  /** This run plays on its audio's clock (sound was on when it started). */
+  const [spoken, setSpoken] = useState(false);
+  /** Counts spoken runs, so a new one of the same call restarts the clock's frame loop. */
+  const [runId, setRunId] = useState(0);
+  /** Reduced motion: the Listen transport's state, and the lines said so far. */
+  const [listen, setListen] = useState<{ state: "playing" | "paused"; shown: number } | null>(null);
+
+  const track = useVoiceTrack(VOICE_ID, { active: voiceView });
+  const sounding = useSounding();
+  const trackRef = useRef(track);
+  const stepRef = useRef(step);
+  useEffect(() => {
+    trackRef.current = track;
+    stepRef.current = step;
+  });
+  /** The spoken run's clock (cue seconds), for a line to read as it comes up. */
+  const clock = useCallback(() => trackRef.current.time(), []);
 
   const scene = scenes[active];
+  /** The calls' audio, once its timings are here (fetched as sound goes on). */
+  const spokenAll = useLazyCues(SPOKEN, track.on);
+  const sp = spokenAll?.[scene.id];
   const done = step > scene.turns.length;
-  const running = inView && !paused && !reduce;
+  // A spoken run plays while the voice may (well on screen); a read-paced one as it always has.
+  const running = (spoken ? voiceView : inView) && !paused && !reduce;
+  const soundOn = track.on;
+
+  /** The call after `i`, whose file is fetched while this one plays. */
+  const nextSrc = (i: number) => SPOKEN.get()?.[scenes[(i + 1) % scenes.length].id]?.cue.src;
+  /** Bumped by every run asked for: one waiting for the calls' timings starts only if it is still the last. */
+  const cueWait = useRef(0);
+
+  /**
+   * Starts call `i` at its first line: on its audio's clock when sound is
+   * on and it has audio (from its ring, if the track has one), otherwise
+   * read-paced. `press` is the visitor's own choice, which takes the
+   * sound from any other stage.
+   */
+  const startRun = (i: number, press: boolean) => {
+    // Sound on, and the calls' timings not here yet: the run starts once they are (a moment).
+    const ask = ++cueWait.current;
+    if (isSoundOn() && !SPOKEN.settled()) {
+      void SPOKEN.load().then(() => {
+        if (ask === cueWait.current) startLater.current(i, press);
+      });
+      return;
+    }
+    const voice = SPOKEN.get()?.[scenes[i].id];
+    // Nothing starts a voice by itself under reduced motion or the still tier (the hook refuses it too).
+    const speak = !!voice && isSoundOn() && (press || !trackRef.current.listen);
+    setSpoken(speak);
+    if (!speak) {
+      trackRef.current.pause();
+      setStep(1);
+      return;
+    }
+    // From the top of the file: the first line comes up when the audio's clock reaches it, not before the audio has started.
+    const from = 0;
+    setRunId((r) => r + 1);
+    setStep(reelStepAt(voice, from));
+    trackRef.current.play(voice.cue, from, { press, next: nextSrc(i) });
+  };
+  const startLater = useRef(startRun);
+  useLayoutEffect(() => {
+    startLater.current = startRun;
+  });
+  /** The lead-in is over: the run starts, spoken or read-paced. */
+  const beginRun = useEffectEvent((i: number) => startRun(i, false));
 
   useEffect(() => {
     if (!running) return;
     const n = scene.turns.length;
+    // A spoken run's lines follow the audio's clock (below); only the lead-in and the outcome are timed here.
+    if (spoken && step <= n) return;
     let delay: number;
     if (step === 0) delay = 800;
     else if (step <= n) delay = holdFor(scene.turns[step - 1].t);
@@ -104,44 +229,168 @@ function Hand() {
     else return;
 
     const id = window.setTimeout(() => {
-      if (step <= n) setStep(step + 1);
+      // The lead-in is over: startRun puts the first line up (or leaves it to the audio's clock).
+      if (step === 0) beginRun(active);
+      else if (step <= n) setStep(step + 1);
       else {
         setActive((active + 1) % scenes.length);
         setStep(0);
+        setSpoken(false);
       }
     }, delay);
     return () => window.clearTimeout(id);
-  }, [running, step, active, autoplay, hover, scene, scenes.length]);
+  }, [running, step, active, autoplay, hover, scene, scenes.length, spoken]);
+
+  // A spoken run: the lines come up as the audio's clock reaches them, and the outcome once the last is said.
+  useEffect(() => {
+    if (!spoken || !running || !sp) return;
+    const n = sp.lines.length;
+    let raf = 0;
+    const frame = () => {
+      const s = reelStepAt(sp, trackRef.current.time());
+      setStep((prev) => (prev === s || prev > n ? prev : s));
+      if (s <= n) raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [spoken, running, sp, runId]);
+
+  // Back on screen (or unpaused) mid-call: the audio carries on from where it stopped.
+  useEffect(() => {
+    if (!spoken || !running || !sp) return;
+    if (stepRef.current > sp.lines.length || trackRef.current.time() >= sp.cue.dur) return;
+    trackRef.current.play(sp.cue);
+  }, [spoken, running, sp]);
+
+  // Listen (reduced motion): lines swap in whole as they are said; the card reads complete again at the end.
+  const listening = listen?.state === "playing";
+  // Off screen, the hook pauses the voice: the transport says Listen again, and a press carries on.
+  const listenAway = useEffectEvent(() => setListen((l) => (l?.state === "playing" ? { ...l, state: "paused" } : l)));
+  useEffect(() => {
+    if (!voiceView) listenAway();
+  }, [voiceView]);
+  useEffect(() => {
+    if (!listening || !sp) return;
+    const n = sp.lines.length;
+    let raf = 0;
+    const frame = () => {
+      const t = trackRef.current.time();
+      if (t >= sp.cue.dur) {
+        setListen(null);
+        return;
+      }
+      const shown = Math.min(n, reelStepAt(sp, t));
+      setListen((l) => (l && l.shown !== shown ? { ...l, shown } : l));
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [listening, sp]);
+
+  /** A press (Listen, or the sound control) made before the calls' timings had arrived: answered when they do. */
+  const pendingPress = useRef<"listen" | "sound" | null>(null);
+  /** Stops a Listen in progress (another card was chosen). */
+  const stopListen = () => {
+    pendingPress.current = null;
+    if (!listen) return;
+    trackRef.current.pause();
+    setListen(null);
+  };
 
   // Reduced motion: no clock at all, the open card simply reads complete.
-  const shown = reduce ? scene.turns.length + 1 : step;
-  const focus = hover ?? active;
+  const shown = reduce ? (listen ? listen.shown : scene.turns.length + 1) : step;
+  // With sound on, pointing at a card never swaps the open one, so it never lifts in its place either.
+  const focus = soundOn ? active : (hover ?? active);
+  /** A voice is sounding (this stage's or another's): no per-line announcements over it. */
+  const quiet = track.audible || sounding;
 
   const open = (i: number) => {
     setAutoplay(false);
     setPaused(false);
     if (i === active) return;
+    stopListen();
     setActive(i);
     setStep(1);
+    if (!reduce) startRun(i, true);
   };
 
   // Pointing at a card plays its call on it straight away, first line up.
+  // Not with sound on: a hover never starts a voice.
   const preview = (i: number) => {
     setHover(i);
-    if (i === active) return;
+    if (i === active || isSoundOn()) return;
+    stopListen();
     setPaused(false);
     setActive(i);
     setStep(1);
+    if (!reduce) startRun(i, false);
   };
 
   const toggle = () => {
+    if (reduce) {
+      // Listen: plays the open call's audio, and turns sound on (the press unlocks it).
+      if (!sp) {
+        // The calls' timings aren't here yet: sound goes on in this press, and Listen starts when they arrive.
+        if (SPOKEN.settled()) return;
+        unlockFromGesture();
+        pendingPress.current = "listen";
+        return;
+      }
+      if (listen?.state === "playing") {
+        trackRef.current.pause();
+        setListen({ ...listen, state: "paused" });
+        return;
+      }
+      trackRef.current.play(sp.cue, listen ? undefined : 0, { press: true, unlock: true });
+      setListen({ state: "playing", shown: listen?.shown ?? 0 });
+      return;
+    }
     if (done && !autoplay) {
-      setStep(0);
       setPaused(false);
+      if (sp && isSoundOn()) {
+        startRun(active, true);
+      } else {
+        setStep(0);
+        setSpoken(false);
+      }
       return;
     }
     setPaused((p) => !p);
+    if (spoken && sp) {
+      if (!paused) trackRef.current.pause();
+      else if (step <= sp.lines.length) trackRef.current.play(sp.cue, undefined, { press: true });
+    }
   };
+
+  // Sound turned on here: the open call starts again from its first line, spoken (Listen, with reduced motion).
+  const onSound = (on: boolean) => {
+    if (!on) return;
+    if (!sp) {
+      // The calls' timings are on their way (sound went on in this press): answered once they are here.
+      if (!SPOKEN.settled()) pendingPress.current = "sound";
+      return;
+    }
+    if (reduce) {
+      trackRef.current.play(sp.cue, 0, { press: true });
+      setListen({ state: "playing", shown: 0 });
+      return;
+    }
+    setPaused(false);
+    startRun(active, true);
+  };
+
+  // The calls' timings have arrived: a press made while they were on their way is answered now.
+  const answerPending = useEffectEvent(() => {
+    const press = pendingPress.current;
+    pendingPress.current = null;
+    if (!press || !sp || !isSoundOn()) return;
+    if (press === "sound") return onSound(true);
+    trackRef.current.play(sp.cue, 0, { press: true });
+    setListen({ state: "playing", shown: 0 });
+  });
+  useEffect(() => {
+    if (sp) answerPending();
+  }, [sp]);
 
   return (
     <div ref={rootRef} className="mt-10 max-lg:mx-auto max-lg:max-w-[560px] md:mt-12">
@@ -187,6 +436,17 @@ function Hand() {
                     paused={paused || reduce}
                     done={done && !autoplay}
                     progress={autoplay && !reduce ? { index: i, count: scenes.length } : null}
+                    spoken={spoken && !reduce ? sp?.lines : undefined}
+                    voice={spoken && !reduce ? sp?.cue : undefined}
+                    running={running}
+                    clock={clock}
+                    // Before its timings are here (sound off), every call is offered: each has its audio.
+                    listen={
+                      reduce && (sp || !SPOKEN.settled())
+                        ? { playing: listening, current: listen ? listen.shown - 1 : -1 }
+                        : null
+                    }
+                    quiet={quiet}
                   />
                 ) : (
                   <ClosedCard
@@ -221,6 +481,17 @@ function Hand() {
           </button>
         ))}
       </div>
+
+      <div className="mt-4 flex justify-center lg:mt-6">
+        <SoundButton variant="pill" tone="light" onChange={onSound} />
+      </div>
+      {soundOn && (
+        // With this stage's own lines voiced, its outcome is still announced: only when this stage holds the
+        // sound, never because another stage's voice started (that would announce it over that voice).
+        <p className="sr-only" aria-live="polite">
+          {track.audible && shown > scene.turns.length ? scene.outcome : ""}
+        </p>
+      )}
     </div>
   );
 }
@@ -338,6 +609,12 @@ function OpenCard({
   done,
   progress,
   onToggle,
+  spoken,
+  voice,
+  running,
+  clock,
+  listen,
+  quiet,
 }: {
   scene: ReelScene;
   shown: number;
@@ -345,14 +622,64 @@ function OpenCard({
   done: boolean;
   progress: { index: number; count: number } | null;
   onToggle: () => void;
+  /** A spoken run: each line's word times, so the newest line's words land as they are said. */
+  spoken?: SpokenLine[];
+  /** A spoken run: its audio, whose loudness the orb follows while the agent speaks. */
+  voice?: Cue;
+  /** The run's clock can move (on screen, not paused): the frame loops run only then. */
+  running: boolean;
+  /** A spoken run: the audio's clock (cue seconds), read as a line comes up. */
+  clock?: () => number;
+  /** Reduced motion: the transport is Listen; `current` is the line being said (-1 for none). */
+  listen: { playing: boolean; current: number } | null;
+  /** The lines are being voiced: the list stops announcing each one. */
+  quiet: boolean;
 }) {
   const said = Math.min(shown, scene.turns.length);
   const turns = scene.turns.slice(0, said);
   const last = turns[turns.length - 1];
   // The card holds three lines and the outcome; older lines fall away.
   const from = Math.max(0, said - 3);
-  const speaking = !!last && last.sp === "agent" && shown <= scene.turns.length && !paused;
+  // Read-paced, the orb runs its talk loop while the agent's line is the newest. Spoken, it follows
+  // the voice itself instead (below): swelling with the agent's loudness, still through the silences.
+  const speaking = !voice && !!last && last.sp === "agent" && shown <= scene.turns.length && !paused;
   const outcome = shown > scene.turns.length;
+  const orbBox = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const orb = orbBox.current?.querySelector<HTMLElement>(".pp-orb");
+    if (!voice || !clock || !orb) return;
+    const set = (scale: number | null) => {
+      if (scale === null) {
+        orb.style.removeProperty("transition");
+        orb.style.removeProperty("scale");
+        return;
+      }
+      orb.style.transition = "none";
+      orb.style.scale = String(Math.round(scale * 1000) / 1000);
+    };
+    const at = (t: number) => {
+      const turn = turnAt(voice, t);
+      return turn && turn.sp === "agent" && t <= turn.end ? 1 + ORB_SWELL * level(envelopeAt(voice, t)) : 1;
+    };
+    // Paused or off screen, the clock stands still: the orb holds where it is, with no frame loop.
+    set(at(clock()));
+    if (!running) return () => set(null);
+    let raf = 0;
+    const frame = () => {
+      const t = clock();
+      if (t >= voice.dur) {
+        set(null);
+        return;
+      }
+      set(at(t));
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(raf);
+      set(null);
+    };
+  }, [voice, clock, running]);
 
   return (
     <div className="absolute inset-0 flex flex-col animate-in fade-in-0 duration-300 fill-mode-backwards">
@@ -361,22 +688,32 @@ function OpenCard({
           composited layer (a filter animation "in effect") for good. */}
       <CardHeader scene={scene} />
 
-      <div className="pointer-events-none flex justify-center pt-1">
+      <div ref={orbBox} className="pointer-events-none flex justify-center pt-1">
         <Orb mesh={orbMesh(scene)} speaking={speaking} className="size-[96px] sm:size-[120px]" />
       </div>
 
-      <ol aria-live="polite" className="flex min-h-0 flex-1 flex-col justify-end gap-2 px-5 pt-4">
+      <ol aria-live={quiet ? "off" : "polite"} className="flex min-h-0 flex-1 flex-col justify-end gap-2 px-5 pt-4">
         {turns.slice(from).map((turn, j, shown) => (
           <li
             key={from + j}
             className={cn(
-              "w-fit max-w-[88%] rounded-[16px] px-3 py-2 text-[13px] leading-[18px] animate-in fade-in-0 slide-in-from-bottom-2 duration-500",
+              "w-fit max-w-[88%] rounded-[16px] px-3 py-2 text-[13px] leading-[18px] animate-in slide-in-from-bottom-2 duration-500",
+              // Read-paced, the bubble fades in; spoken, its words do, each on the audio's clock (Words).
+              !spoken && "fade-in-0",
               turn.sp === "agent" ? "bg-white text-pp-ink" : "ml-auto bg-white/15 text-white backdrop-blur-md",
               // A phone-width card wraps every line twice over: two lines fit under the orb, not three.
               j === 0 && shown.length === 3 && "max-sm:hidden",
+              // Listen: a still mark on the line being said.
+              listen && from + j === listen.current && "outline-2 outline-offset-2 outline-white/80",
             )}
           >
-            <Words text={turn.t} live={from + j === said - 1} />
+            <Words
+              text={turn.t}
+              live={!listen && from + j === said - 1}
+              at={spoken?.[from + j]?.words}
+              since={spoken && clock ? () => clock() - spoken[from + j].start : undefined}
+              running={running && !paused}
+            />
           </li>
         ))}
         <li
@@ -401,10 +738,22 @@ function OpenCard({
         <button
           type="button"
           onClick={onToggle}
-          aria-label={done ? REEL.replay : paused ? REEL.play : REEL.pause}
-          className="grid size-9 shrink-0 place-items-center rounded-full bg-black/30 text-white backdrop-blur-md transition-colors hover:bg-black/50 focus-visible:outline-2 focus-visible:outline-white"
+          aria-label={
+            listen ? (listen.playing ? REEL.pause : REEL.listen) : done ? REEL.replay : paused ? REEL.play : REEL.pause
+          }
+          className={cn(
+            "grid size-9 shrink-0 place-items-center rounded-full bg-black/30 text-white backdrop-blur-md transition-colors hover:bg-black/50 focus-visible:outline-2 focus-visible:outline-white",
+            // Listen: a 44px tap around the 36px disc.
+            listen && "relative before:absolute before:-inset-1 before:rounded-full",
+          )}
         >
-          {done ? (
+          {listen ? (
+            listen.playing ? (
+              <Pause className="size-4 fill-current" />
+            ) : (
+              <Play className="size-4 fill-current" />
+            )
+          ) : done ? (
             <RotateCcw className="size-4" />
           ) : paused ? (
             <Play className="size-4 fill-current" />
@@ -428,9 +777,31 @@ function OpenCard({
   );
 }
 
-/** The newest line arrives a word at a time; older lines are already settled. */
-function Words({ text, live }: { text: string; live: boolean }) {
+/** A spoken word fades in over this long from the moment it is said. */
+const SAID_FADE_S = 0.12;
+
+/**
+ * The newest line arrives a word at a time; older lines are already
+ * settled. Read-paced, 45ms apart; spoken (`at`, `since`), each word as it
+ * is said: every frame reads the audio's clock and sets each word's
+ * opacity from it, so a slow start, a stall or a dropped frame never puts
+ * a word up before its sound.
+ */
+function Words({
+  text,
+  live,
+  at,
+  since,
+  running,
+}: {
+  text: string;
+  live: boolean;
+  at?: number[];
+  since?: () => number;
+  running: boolean;
+}) {
   if (!live) return <>{text}</>;
+  if (at && since) return <SaidWords text={text} at={at} since={since} running={running} />;
   return (
     <>
       {text.split(" ").map((w, i) => (
@@ -444,5 +815,48 @@ function Words({ text, live }: { text: string; live: boolean }) {
         </span>
       ))}
     </>
+  );
+}
+
+/**
+ * A spoken line's words, each shown from its start on the clock (`since`:
+ * seconds since the line's start). Paused or off screen (`running` false)
+ * the clock stands still: the words are set once, with no frame loop, and
+ * the loop picks up again when it runs.
+ */
+function SaidWords({ text, at, since, running }: { text: string; at: number[]; since: () => number; running: boolean }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const sinceRef = useRef(since);
+  useLayoutEffect(() => {
+    sinceRef.current = since;
+  });
+  // Set before the first paint, then every frame until the last word is fully up.
+  useLayoutEffect(() => {
+    const box = ref.current;
+    if (!box) return;
+    const words = Array.from(box.children) as HTMLElement[];
+    let raf = 0;
+    const paint = () => {
+      const t = sinceRef.current();
+      let all = true;
+      words.forEach((w, i) => {
+        const o = Math.min(1, Math.max(0, (t - (at[i] ?? 0)) / SAID_FADE_S));
+        if (o < 1) all = false;
+        const v = o >= 1 ? "" : String(Math.round(o * 1000) / 1000);
+        if (w.style.opacity !== v) w.style.opacity = v;
+      });
+      if (!all && running) raf = requestAnimationFrame(paint);
+    };
+    paint();
+    return () => cancelAnimationFrame(raf);
+  }, [at, running]);
+  return (
+    <span ref={ref} className="contents">
+      {text.split(" ").map((w, i) => (
+        <span key={i}>
+          {w}{" "}
+        </span>
+      ))}
+    </span>
   );
 }

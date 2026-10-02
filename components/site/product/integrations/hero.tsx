@@ -1,9 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Check, Hash, Loader2, Pause, Play, Tag, Timer, Webhook } from "lucide-react";
-import { INT_HERO, RELAY, TRIGGERS, type ActionKind, type RelayScene } from "@/lib/pages/integrations";
+import { cueIn, loadCueFile, type Cue } from "@/lib/audio";
+import {
+  INT_HERO,
+  keywordAt,
+  RELAY,
+  RELAY_EXCERPT,
+  TRIGGERS,
+  type ActionKind,
+  type RelayScene,
+} from "@/lib/pages/integrations";
 import { cn } from "@/lib/utils";
+import { isSoundOn, unlockFromGesture } from "@/components/site/audio/engine";
+import { SoundButton } from "@/components/site/audio/sound-button";
+import { useTabVisible, useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { PillLink, SectionTitle } from "../primitives";
 import { useInView, usePrefersReducedMotion } from "../timing";
 
@@ -21,7 +33,38 @@ import { useInView, usePrefersReducedMotion } from "../timing";
  *
  * One clock of steps drives it, paused off screen; picking a rule below
  * takes it over. Beams are measured between boxes, from lg up.
+ *
+ * Sound. The keyword rule's line can be heard: a short generated excerpt
+ * (AI-generated voice, never a recording; lib/audio/cues/
+ * post-call-keyword-excerpt.json, fetched only once sound is on). With
+ * sound on, that scene plays its excerpt as the record arrives, and the
+ * rule matches as the caller says the word, on the excerpt's clock.
+ * Turning sound on here plays that scene. With reduced motion nothing
+ * plays by itself; on that scene the transport is "Listen".
  * ------------------------------------------------------------------ */
+
+/** The stage's claim on the site's one sound (components/site/audio/engine.ts). */
+const VOICE_ID = "int-relay";
+
+/**
+ * The excerpt's cue file is P2: fetched on first use, once sound is on.
+ * A failed fetch resolves to null and the scene stays silent, exactly as
+ * with sound off.
+ */
+function loadExcerpt(): Promise<Cue | null> {
+  return Promise.resolve()
+    .then(() => loadCueFile(RELAY_EXCERPT.surface))
+    .then((file) => (file && cueIn(file, RELAY_EXCERPT.id)) ?? null)
+    .catch(() => null);
+}
+
+type Excerpt = { cue: Cue; wordAt: number };
+
+/** A scene's excerpt, where it says the scene's line as shown, and where it says the keyword. */
+function voiceOf(s: RelayScene, cue: Cue | null | undefined): Excerpt | null {
+  const at = s.call.heard && cue ? keywordAt(cue, s.call.heard) : null;
+  return cue && at !== null ? { cue, wordAt: at } : null;
+}
 
 const ICON: Record<ActionKind, typeof Webhook> = { webhook: Webhook, slack: Hash, tag: Tag, wait: Timer };
 const TITLE: Record<ActionKind, string> = {
@@ -75,6 +118,8 @@ function Relay() {
   const actionRefs = useRef<(HTMLLIElement | null)[]>([]);
   const outRefs = useRef<Partial<Record<ActionKind, HTMLDivElement | null>>>({});
   const inView = useInView(rootRef);
+  // The voice needs the stage well on screen, not a sliver of it at an edge.
+  const voiceView = useInView(rootRef, "-15% 0px");
   const reduce = usePrefersReducedMotion();
 
   const [index, setIndex] = useState(0);
@@ -83,24 +128,154 @@ function Relay() {
   const [paused, setPaused] = useState(false);
   const [beams, setBeams] = useState<Beam[]>([]);
 
+  /* ─── Sound ──────────────────────────────────────────────────────── */
+  /** The excerpt has played to its end (or no excerpt is playing). */
+  const done = useRef(true);
+  /** The scene was started by a press here. Cleared when another stage's press takes the sound. */
+  const pressed = useRef(false);
+  const track = useVoiceTrack(VOICE_ID, {
+    active: voiceView,
+    onEnded: () => {
+      done.current = true;
+    },
+    onPreempt: () => {
+      pressed.current = false;
+    },
+  });
+  const trackRef = useRef(track);
+  useEffect(() => {
+    trackRef.current = track;
+  });
+  /** The excerpt: undefined until fetched (sound on), null when it isn't there. */
+  const [excerpt, setExcerpt] = useState<Cue | null | undefined>(undefined);
+  /** This scene's line plays on the excerpt's clock (sound was on when it started). */
+  const [spoken, setSpoken] = useState(false);
+  /** Reduced motion: the Listen transport. */
+  const [listen, setListen] = useState<"playing" | "paused" | null>(null);
+  /** A press that came before the excerpt had arrived: it plays when it does. */
+  const pending = useRef<"sound" | "listen" | null>(null);
+  const keyIndex = scenes.findIndex((s) => s.call.heard);
+
   const scene = scenes[index];
   const n = scene.actions.length;
   const final = 3 + n;
-  const shown = reduce ? final : step;
-  const running = inView && !paused && !reduce;
+  const voice = useMemo(() => voiceOf(scene, excerpt), [scene, excerpt]);
+  const listening = listen === "playing";
+  const shown = reduce && !listen ? final : step;
+  // A spoken scene (or a Listen) runs while the voice may, well on screen; one read as written as it always has.
+  const tabVisible = useTabVisible();
+  // A spoken scene also holds while the tab is hidden: the engine pauses the excerpt then, and the
+  // relay must not step on without it (timers still fire in a hidden tab).
+  const running =
+    (spoken || listen ? voiceView : inView) && !paused && (!reduce || listening) && (!(spoken || listen) || tabVisible);
+
+  /**
+   * Starts scene `i` at its record: with its excerpt when sound is on and
+   * it has one, otherwise as written. `press` is the visitor's own choice
+   * (it takes the sound from any other stage); `unlock` also turns sound
+   * on (Listen: the press is the gesture).
+   */
+  const beginScene = (i: number, press: boolean, unlock = false, cue = excerpt) => {
+    const v = voiceOf(scenes[i], cue);
+    const t = trackRef.current;
+    // Nothing starts a voice by itself under reduced motion or the still tier (the hook refuses it too).
+    const speak = !!v && (unlock || isSoundOn()) && (press || !t.listen);
+    setIndex(i);
+    setStep(1);
+    setSpoken(speak);
+    if (!speak) {
+      t.pause();
+      return;
+    }
+    pressed.current = press;
+    done.current = false;
+    t.play(v.cue, 0, { press, unlock });
+  };
+  /** The idle beat is over: the scene starts, with its excerpt if it can. */
+  const beginNext = useEffectEvent((i: number) => beginScene(i, false));
+  const onExcerpt = useEffectEvent((cue: Cue | null) => {
+    setExcerpt(cue);
+    const press = pending.current;
+    pending.current = null;
+    if (!press || keyIndex < 0 || !voiceOf(scenes[keyIndex], cue)) return;
+    setAutoplay(false);
+    setPaused(false);
+    if (press === "listen") setListen("playing");
+    beginScene(keyIndex, true, false, cue);
+  });
+
+  // The excerpt is fetched once sound is on, never before.
+  useEffect(() => {
+    if (!track.on || excerpt !== undefined) return;
+    let live = true;
+    void loadExcerpt().then((cue) => {
+      if (live) onExcerpt(cue);
+    });
+    return () => {
+      live = false;
+    };
+  }, [track.on, excerpt]);
 
   useEffect(() => {
     if (!running) return;
-    if (step === final && !autoplay) return;
+    if (step === final && (!autoplay || listen)) return;
+    // The record holds until the keyword is said (below).
+    if (spoken && step === 1) return;
     const id = window.setTimeout(() => {
-      if (step < final) setStep(step + 1);
+      if (step === 0) beginNext(index);
+      else if (step < final) setStep(step + 1);
       else {
         setIndex((index + 1) % scenes.length);
         setStep(0);
+        setSpoken(false);
       }
     }, holdAt(step, n));
     return () => window.clearTimeout(id);
-  }, [running, step, final, n, index, autoplay, scenes.length]);
+  }, [running, step, final, n, index, autoplay, scenes.length, spoken, listen]);
+
+  // The record holds on the excerpt's clock until the caller says the keyword: the rule matches as it is heard.
+  const spokenVoice = spoken ? voice : null;
+  useEffect(() => {
+    if (!spokenVoice || !running || step !== 1) return;
+    let raf = 0;
+    const frame = () => {
+      if (done.current || trackRef.current.time() >= spokenVoice.wordAt) {
+        // Listen goes straight to the finished run; the excerpt says its last words over it.
+        setStep(listen ? final : 2);
+        return;
+      }
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [spokenVoice, running, step, listen, final]);
+
+  // Listen ends with the excerpt.
+  const listenOver = !!listen && spoken && step === final && track.ended;
+  useEffect(() => {
+    if (!listenOver) return;
+    const id = window.setTimeout(() => setListen(null), 0);
+    return () => window.clearTimeout(id);
+  }, [listenOver]);
+
+  // Off screen, the voice pauses (the hook): the visitor's press no longer holds the sound for this
+  // scene, and a Listen reads "Listen" again, carried on by a press.
+  const listenAway = useEffectEvent(() => setListen((l) => (l === "playing" ? "paused" : l)));
+  useEffect(() => {
+    if (voiceView) return;
+    pressed.current = false;
+    listenAway();
+  }, [voiceView]);
+
+  // Back on screen (or unpaused) mid-excerpt: it carries on from where it stopped, claiming the sound
+  // only if nobody else is playing (otherwise silently, on the same clock).
+  // Taken by another stage's press where nothing may start by itself (reduced motion, the still tier): the scene reads on.
+  const readOn = useEffectEvent(() => setSpoken(false));
+  useEffect(() => {
+    if (!spokenVoice || !running || done.current) return;
+    if (!pressed.current && trackRef.current.listen) readOn();
+    else trackRef.current.play(spokenVoice.cue);
+  }, [spokenVoice, running]);
 
   const recorded = shown >= 1;
   const matched = shown >= 2;
@@ -151,17 +326,70 @@ function Relay() {
   const pick = (i: number) => {
     setAutoplay(false);
     setPaused(false);
-    setIndex(i);
-    setStep(1);
+    if (reduce) {
+      if (listen) trackRef.current.pause();
+      setListen(null);
+      setSpoken(false);
+      setIndex(i);
+      setStep(1);
+      return;
+    }
+    beginScene(i, true);
   };
 
   const toggle = () => {
     if (step === final && !autoplay) {
-      setStep(1);
+      beginScene(index, true);
       setPaused(false);
       return;
     }
+    if (spoken && voice && !done.current) {
+      if (!paused) trackRef.current.pause();
+      else {
+        // Resuming is a press: it takes the sound back.
+        pressed.current = true;
+        trackRef.current.play(voice.cue, undefined, { press: true });
+      }
+    }
     setPaused((p) => !p);
+  };
+
+  /** Listen (reduced motion): plays the keyword scene's excerpt, turning sound on (the press unlocks it), or pauses it. */
+  const toggleListen = () => {
+    if (listen === "playing") {
+      trackRef.current.pause();
+      setListen("paused");
+      return;
+    }
+    if (listen === "paused" && spoken && voice) {
+      pressed.current = true;
+      setListen("playing");
+      if (!done.current) trackRef.current.play(voice.cue, undefined, { press: true, unlock: true });
+      return;
+    }
+    if (excerpt === undefined) {
+      // The excerpt isn't here yet: sound goes on in this press, and it plays when it arrives.
+      unlockFromGesture();
+      pending.current = "listen";
+      return;
+    }
+    if (!voice) return;
+    setListen("playing");
+    beginScene(index, true, true);
+  };
+
+  // Sound turned on here: the keyword scene plays, with its excerpt (Listen, with reduced motion).
+  const onSound = (on: boolean) => {
+    if (!on || keyIndex < 0) return;
+    if (excerpt === undefined) {
+      pending.current = reduce ? "listen" : "sound";
+      return;
+    }
+    if (!voiceOf(scenes[keyIndex], excerpt)) return;
+    setAutoplay(false);
+    setPaused(false);
+    if (reduce) setListen("playing");
+    beginScene(keyIndex, true);
   };
 
   const beamOn = (key: string) => {
@@ -248,7 +476,13 @@ function Relay() {
               </div>
 
               {scene.call.heard && (
-                <p className="mt-3 rounded-xl bg-pp-card px-3 py-2 text-[13px] leading-[19px] text-pp-muted">
+                <p
+                  className={cn(
+                    "mt-3 rounded-xl bg-pp-card px-3 py-2 text-[13px] leading-[19px] text-pp-muted",
+                    // Listen (reduced motion): a still mark on the line while it is said.
+                    listen && "outline-2 outline-offset-2 outline-[#551a89]/60",
+                  )}
+                >
                   {scene.call.heard.before}
                   <span className="relative text-pp-ink">
                     <span
@@ -262,6 +496,7 @@ function Relay() {
                     <span className="relative">{scene.call.heard.word}</span>
                   </span>
                   {scene.call.heard.after}
+                  {track.on && voice && <span className="mt-1 block text-[11px] leading-4">{RELAY.excerpt}</span>}
                 </p>
               )}
 
@@ -444,6 +679,17 @@ function Relay() {
           </div>
         </div>
 
+        {reduce && scene.call.heard && (excerpt === undefined || voice) && (
+          // Reduced motion: nothing plays by itself; on the keyword scene, Listen plays its excerpt.
+          <button
+            type="button"
+            onClick={toggleListen}
+            aria-label={listening ? RELAY.pause : RELAY.listen}
+            className="pp-shadow-btn absolute top-4 right-4 grid size-9 place-items-center rounded-full bg-white text-pp-ink transition-colors before:absolute before:-inset-1 before:rounded-full hover:bg-pp-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink lg:top-auto lg:bottom-4"
+          >
+            {listening ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}
+          </button>
+        )}
         {!reduce && (
           <button
             type="button"
@@ -488,6 +734,10 @@ function Relay() {
             );
           })}
         </div>
+      </div>
+
+      <div className="mt-3">
+        <SoundButton variant="pill" tone="light" onChange={onSound} />
       </div>
     </div>
   );

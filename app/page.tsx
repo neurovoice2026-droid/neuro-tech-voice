@@ -43,7 +43,9 @@ import '@/components/site/home/home.css'
  * The calls are not deferred: their stage is the first thing under the
  * hero, and its poster (3 a.m., booked) belongs in the first paint.
  * Every other section sits in a `HomeDeferred` box holding its measured
- * height at 375, 768, 1024 and 1440: `.pp` turns scroll anchoring off, so
+ * height at 375, 768, 1024 and 1440 (Trades, Voice, Knowledge and Start
+ * re-measured with their sound controls and the voices' credits, and
+ * grown by what those added): `.pp` turns scroll anchoring off, so
  * a reserve that is far out moves the page under the reader when the box
  * renders, and sends an anchor jump to the wrong place on a phone.
  *
@@ -77,16 +79,16 @@ export default async function Home() {
         <div className={`pp home-body ${homeDisplay.variable} ${homeCinema.variable} relative overflow-x-clip`}>
           <Demo calls={calls} />
           <Gap />
-          <HomeDeferred size={[1565, 1393, 1099, 1061]}>
+          <HomeDeferred size={[1637, 1445, 1137, 1121]}>
             <Trades data={trades} />
           </HomeDeferred>
           <Gap />
           <div id="features" className="scroll-mt-28">
-            <HomeDeferred size={[1069, 1085, 961, 899]}>
+            <HomeDeferred size={[1069, 1085, 979, 899]}>
               <Voice table={greetings} />
             </HomeDeferred>
             <Gap />
-            <HomeDeferred size={[1604, 1259, 1099, 1099]}>
+            <HomeDeferred size={[1660, 1315, 1099, 1099]}>
               <Knowledge />
             </HomeDeferred>
             <Gap />
@@ -107,7 +109,7 @@ export default async function Home() {
             <Doubts />
           </HomeDeferred>
           <Gap />
-          <HomeDeferred size={[1501, 1079, 953, 949]}>
+          <HomeDeferred size={[1591, 1133, 1007, 1021]}>
             <Start />
           </HomeDeferred>
           <Gap className="h-16 md:h-24" />

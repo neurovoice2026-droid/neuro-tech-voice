@@ -1,13 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
+import { cueIn, loadCueFile, type Cue, type CueFile, type CueTurn } from "@/lib/audio";
 import type { CAA_REHEARSAL, SPEAKERS, STATUS_LABEL, TestRow } from "@/lib/pages/custom-ai-agents";
 import { cn } from "@/lib/utils";
+import { envelopeAt } from "@/components/site/audio/cue";
+import { isSoundOn } from "@/components/site/audio/engine";
+import { SoundButton } from "@/components/site/audio/sound-button";
+import { useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { IntentLink } from "@/components/site/intent-link";
 import { Eyebrow, Frame, SectionTitle } from "@/components/site/product/primitives";
 import { useInView, usePrefersReducedMotion } from "@/components/site/product/timing";
 import { ToolName } from "@/components/site/industry/parts";
-import { MadeUp, Segs, Stack, StatusDot, Turns, fill } from "./parts";
+import { MadeUp, Segs, Stack, StatusDot, Turns, fill, levelOf, sayingAt, voicedLines } from "./parts";
 import { markProved } from "./proved";
 
 /* ------------------------------------------------------------------ *
@@ -74,6 +79,25 @@ import { markProved } from "./proved";
  * below `sm` a row is one column in reading order — what was tried, how
  * long it ran, how it went — and from `sm` the result steps up beside
  * the scenario, where a sheet's result column belongs.
+ *
+ * SOUND (off unless the visitor turns it on; nothing is fetched before).
+ * A row's excerpt can be heard: AI-generated voices reading the lines in
+ * the aside (lib/audio/cues/caa-rehearsal-test-sheet.json, one track per
+ * row; a changed row's track goes on to the call rung again). The sheet's
+ * autoplay stays silent: an 800ms slot cannot hold a sentence. With sound
+ * on, a row pick plays that row's excerpt, and the aside follows the
+ * excerpt's clock: the line being said carries the margin tick, "What
+ * changed" lands once the first call has been heard, and "Rung again"
+ * when the voice rings again. The transcript itself is never re-typed
+ * (it stays whole, as above). The sheet's replay is unchanged: it is the
+ * call's length and result, not its words. The sound control here plays
+ * the selected row's excerpt; pressed while the sheet is still filling,
+ * it finishes the sheet where the autoplay would have rested (no pick,
+ * nothing proved) and plays that row. Off screen the excerpt pauses until
+ * it is back; sound turned off finishes it in silence on the same clock.
+ * Reduced motion: nothing plays by itself; a pick or the sound control
+ * plays the excerpt over the finished sheet. With sound off none of this
+ * runs.
  * ------------------------------------------------------------------ */
 
 type Data = typeof CAA_REHEARSAL;
@@ -113,6 +137,38 @@ function clock(secs: number) {
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
 }
 
+/** This section's claim on the site's one sound (components/site/audio/engine.ts). */
+const VOICE_ID = "caa-rehearsal";
+
+/** A row's excerpt as heard: its track, the first call's turns, and the call rung again's (a changed row). */
+export type RowVoice = { cue: Cue; first: CueTurn[]; again: CueTurn[] | null };
+
+/** The row's track, if it says the row's lines as shown (and, for a changed row, the re-ring's after them); else null, and the row stays silent. */
+export function rowVoice(cue: Cue | null | undefined, row: Pick<TestRow, "turns" | "again">): RowVoice | null {
+  if (!cue) return null;
+  const first = voicedLines(cue, row.turns, 0);
+  const again = row.again ? voicedLines(cue, row.again.turns, row.turns.length) : null;
+  const count = row.turns.length + (row.again?.turns.length ?? 0);
+  if (!first || (row.again && !again) || cue.turns.length !== count) return null;
+  return { cue, first, again };
+}
+
+/** Where a heard excerpt is: the line being said (over first and again together, -1 for none), and which of the aside's later blocks have been reached. */
+export type Heard = { saying: number; changed: boolean; rerung: boolean };
+
+export function heardAt(v: RowVoice, t: number): Heard {
+  const all = v.again ? [...v.first, ...v.again] : v.first;
+  return {
+    saying: sayingAt(all, t),
+    // The first call has been heard: what it caused can be said.
+    changed: t >= v.first[v.first.length - 1].end,
+    // The call rings again as its first voice begins.
+    rerung: !!v.again && t >= v.again[0].start,
+  };
+}
+
+const sameHeard = (a: Heard, b: Heard) => a.saying === b.saying && a.changed === b.changed && a.rerung === b.rerung;
+
 /** Every ring on the sheet, in the order it happened: each row, and each re-ring straight after its row. */
 function stepsOf(rows: readonly TestRow[]) {
   const steps: { row: number; again: boolean }[] = [];
@@ -149,11 +205,13 @@ export function Rehearsal({ data }: { data: Data }) {
   // What the live region says after a pick; `n` alternates its trailing
   // no-break space so picking the same row twice is announced twice.
   const [said, setSaid] = useState<{ row: number; n: number } | null>(null);
+  /** Sound on: the sheet was finished by the sound control (not a pick: nothing proved, nothing announced). */
+  const [rested, setRested] = useState(false);
 
   // Reduced motion and a pick both mean "the finished sheet", derived here
   // rather than written into state from an effect: no extra render, and the
   // chain below can keep running to its end without being able to undo a pick.
-  const final = still || picked !== null;
+  const final = still || picked !== null || rested;
   const begun = final ? steps.length : ranBegun;
   const done = final ? steps.length : ranDone;
   const sel = picked ?? (still ? data.settleOn : running);
@@ -170,6 +228,130 @@ export function Rehearsal({ data }: { data: Data }) {
   // the timer and its listeners. A no-op when nothing is pending.
   const follow = useRef<() => void>(() => {});
   useEffect(() => () => follow.current(), []);
+
+  /* ---------- sound (see the header) ---------- */
+  const track = useVoiceTrack(VOICE_ID, { active: inView });
+  const trackRef = useRef(track);
+  useEffect(() => {
+    trackRef.current = track;
+  });
+  /** Each row's excerpt as heard (by row id): undefined until fetched (once sound is on); a row without one fitting is absent. */
+  const [voice, setVoice] = useState<Partial<Record<string, RowVoice>> | undefined>(undefined);
+  /** The excerpt being heard: its row, and where it is. */
+  const [heard, setHeard] = useState<{ row: number; at: Heard } | null>(null);
+  const pending = useRef(false);
+  const away = useRef(false);
+  const heardRow = heard?.row ?? -1;
+
+  /** Row `i`'s excerpt, heard from its first word: true when it plays. */
+  const hear = (i: number, v = voice) => {
+    const rv = v?.[rows[i].id];
+    const t = trackRef.current;
+    if (!rv || !isSoundOn()) return false;
+    if (!t.play(rv.cue, 0, { press: true })) {
+      t.pause();
+      return false;
+    }
+    away.current = false;
+    setHeard({ row: i, at: heardAt(rv, 0) });
+    return true;
+  };
+
+  /**
+   * The sound control here: the selected row's excerpt, heard. While the
+   * sheet is still filling, it is finished first, resting where the
+   * autoplay would have (the row that failed first), and that row plays.
+   */
+  const converse = (v: Partial<Record<string, RowVoice>>) => {
+    let i = sel;
+    if (!final) {
+      timers.current.forEach(window.clearTimeout);
+      timers.current = [];
+      started.current = true;
+      setRested(true);
+      setRunning(data.settleOn);
+      i = data.settleOn;
+    }
+    hear(i, v);
+  };
+
+  // The tracks are fetched once sound is on, never before.
+  const onFile = useEffectEvent((file: CueFile | null) => {
+    if (!file) {
+      pending.current = false;
+      return;
+    }
+    const v: Partial<Record<string, RowVoice>> = {};
+    for (const row of rows) {
+      const rv = rowVoice(cueIn(file, `${data.voice.prefix}${row.id}`), row);
+      if (rv) v[row.id] = rv;
+    }
+    setVoice(v);
+    if (pending.current) converse(v);
+    pending.current = false;
+  });
+  useEffect(() => {
+    if (!track.on || voice !== undefined) return;
+    let live = true;
+    void loadCueFile(data.voice.surface).then((file) => {
+      if (live) onFile(file);
+    });
+    return () => {
+      live = false;
+    };
+  }, [track.on, voice, data.voice.surface]);
+
+  const heardOut = useEffectEvent(() => setHeard(null));
+  // The excerpt, frame by frame on its clock: the tick, and the aside's later blocks.
+  useEffect(() => {
+    if (heardRow < 0 || !voice || !inView) return;
+    const rv = voice[rows[heardRow].id];
+    if (!rv) return;
+    const box = excerptRef.current;
+    let raf = 0;
+    const frame = () => {
+      const t = trackRef.current.time();
+      const at = heardAt(rv, t);
+      setHeard((h) => (h && h.row === heardRow && !sameHeard(h.at, at) ? { row: heardRow, at } : h));
+      if (box && !still) box.style.setProperty("--caa-level", String(levelOf(envelopeAt(rv.cue, t))));
+      if (t >= rv.cue.dur) return heardOut();
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(raf);
+      box?.style.removeProperty("--caa-level");
+    };
+  }, [heardRow, voice, inView, rows, still]);
+
+  /** Back on screen where nothing plays by itself (reduced motion, the still tier): the excerpt is done. */
+  const readOn = useEffectEvent(() => setHeard(null));
+  // Off screen the excerpt pauses (use-voice-track); back on screen it carries on from where it stopped,
+  // as a run rather than a press: it claims the sound only if nobody else is playing (else silently).
+  useEffect(() => {
+    if (heardRow < 0) return;
+    if (!inView) {
+      away.current = true;
+      return;
+    }
+    const rv = voice?.[rows[heardRow].id];
+    if (!away.current || !rv) return;
+    away.current = false;
+    const t = trackRef.current;
+    if (t.time() >= rv.cue.dur) return;
+    if (t.listen) readOn();
+    else t.play(rv.cue);
+  }, [heardRow, inView, voice, rows]);
+
+  const onSound = (on: boolean) => {
+    // Off: the excerpt finishes in silence on the same clock (use-voice-track).
+    if (!on) return;
+    if (voice === undefined) {
+      pending.current = true;
+      return;
+    }
+    converse(voice);
+  };
 
   useEffect(() => {
     if (still || !inView || started.current) return;
@@ -197,6 +379,12 @@ export function Rehearsal({ data }: { data: Data }) {
     markProved("rehearsal");
     if (!still) setRings((r) => ({ ...r, [i]: (r[i] ?? 0) + 1 }));
     setSaid((s) => ({ row: i, n: (s?.n ?? 0) + 1 }));
+    // Sound on: the row's excerpt, heard. Otherwise any excerpt still
+    // finishing in silence (sound was turned off) gives way.
+    if (!hear(i) && heard) {
+      track.pause();
+      setHeard(null);
+    }
     // Below lg the excerpt sits under all six rows — up to two screens
     // away on a landscape phone — so a pick would change a transcript the
     // reader can't see. Bring it up, but only when it is actually below
@@ -245,6 +433,10 @@ export function Rehearsal({ data }: { data: Data }) {
             long line on its bare closing apostrophe. */}
         <SectionTitle className="mt-4 max-w-[680px] text-balance">{data.title}</SectionTitle>
         <p className="mt-5 max-w-[560px] text-base leading-[25px] text-pp-ink/80">{data.body}</p>
+        {/* Sound: off until pressed; a row pick then plays its excerpt. */}
+        <div className="mt-5">
+          <SoundButton variant="pill" tone="light" onChange={onSound} />
+        </div>
       </Frame>
 
       <Frame className="mt-8 px-2 md:px-4">
@@ -349,14 +541,19 @@ export function Rehearsal({ data }: { data: Data }) {
                 className="mt-4"
                 items={rows}
                 live={sel}
-                render={(row, i) => (
-                  <Aside
-                    row={row}
-                    data={data}
-                    changed={done > first[i]}
-                    rerung={again[i] >= 0 && done > again[i]}
-                  />
-                )}
+                render={(row, i, sizer) => {
+                  // The excerpt being heard: the aside follows its clock (the sizers hold the finished row).
+                  const h = !sizer && heard?.row === i ? heard.at : null;
+                  return (
+                    <Aside
+                      row={row}
+                      data={data}
+                      changed={h ? h.changed : done > first[i]}
+                      rerung={h ? h.rerung : again[i] >= 0 && done > again[i]}
+                      saying={h ? h.saying : undefined}
+                    />
+                  );
+                }}
               />
             </div>
           </div>
@@ -511,19 +708,32 @@ function Aside({
   data,
   changed,
   rerung,
+  saying,
 }: {
   row: TestRow;
   data: Data;
   changed: boolean;
   rerung: boolean;
+  /** Sound on: the line being said, counted over the first call and then the call rung again; -1 for none. */
+  saying?: number;
 }) {
+  const n = row.turns.length;
+  // Each transcript's own index for the tick; undefined (no tick, no change to the markup) with sound off.
+  const sayingFirst = saying === undefined ? undefined : saying < n ? saying : -1;
+  const sayingAgain = saying === undefined ? undefined : saying >= n ? saying - n : -1;
   const label = "text-[11px] leading-4 font-medium tracking-[0.12em] uppercase";
   return (
     <div>
       <p className="text-[13px] leading-5 font-medium text-pp-ink">{row.scenario}</p>
 
       {row.change && <p className={cn(label, "mt-4 text-pp-muted")}>{data.firstCall}</p>}
-      <Turns turns={row.turns} labels={WHO} size="sm" className={row.change ? "mt-2" : "mt-4"} />
+      <Turns
+        turns={row.turns}
+        labels={WHO}
+        size="sm"
+        className={row.change ? "mt-2" : "mt-4"}
+        saying={sayingFirst}
+      />
 
       {row.change && (
         <div
@@ -551,7 +761,7 @@ function Aside({
             </p>
             <StatusDot status="held" label={STATUS.held} />
           </div>
-          <Turns turns={row.again.turns} labels={WHO} size="sm" className="mt-2" />
+          <Turns turns={row.again.turns} labels={WHO} size="sm" className="mt-2" saying={sayingAgain} />
         </div>
       )}
 

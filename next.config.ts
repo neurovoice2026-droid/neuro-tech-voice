@@ -66,6 +66,12 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: securityHeaders,
       },
+      {
+        // The site's voices (public/audio/v1): a new take is a new version
+        // folder, never a changed file, so a file is cached for good.
+        source: "/audio/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
     ];
   },
 };

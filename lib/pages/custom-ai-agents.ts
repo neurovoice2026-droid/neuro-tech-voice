@@ -87,6 +87,16 @@ export type CaaClaim = "sheet" | "redline" | "names" | "wiring" | "rehearsal";
 export const STATUS_LABEL = { held: "Held", rewritten: "Rewritten", brief: "Changed the brief", document: "Changed a document" } as const;
 export const SPEAKERS = { caller: "Caller", agent: "Agent" } as const;
 
+/* ---------- sound ---------- */
+
+// Four instruments can be heard: AI-generated voices reading the sample
+// lines on this page, never a recording of a real call. Each section gets
+// the ids of its tracks in lib/audio/cues/<surface>.json; the client fetches
+// that file only once the visitor turns sound on, and reads each track
+// against the text it shows, so a track that no longer says a line as
+// written is left silent. "Listen" is the reduced-motion transport.
+const LISTEN = { listen: "Listen", pause: "Pause" } as const;
+
 /* ---------- meta ---------- */
 
 export const CAA_META = {
@@ -181,6 +191,15 @@ export const CAA_HERO = {
   ] satisfies readonly SheetLine[],
   portraitOrder: ["greet", "plan", "sort", "book", "dan", "night"] as const, // "price" is the rail
   settleOn: 2, // index of line 3
+  // Sound on: line 1 says the greeting, and so does every traced call as
+  // it rings in; the landlord's call is then put through with the transfer
+  // line its outcome quotes.
+  voice: {
+    surface: "caa-hero-greeting-transfer",
+    greeting: "caa-hero-greeting-transfer/greeting/0",
+    transfer: "caa-hero-greeting-transfer/transfer/0",
+    transferLine: TRANSFER_LINE,
+  },
   // H2 copy, verbatim from the addendum §10.1. Flagged for owner sign-off.
   trace: {
     label: "Ring a sample caller through it",
@@ -259,6 +278,12 @@ export const CAA_REDLINE = {
     },
   ] satisfies readonly Draft[],
   foot: `A made-up rule for ${SAMPLE.firm}, a made-up firm. This one took three drafts; plenty take one. What doesn’t change is that each draft is rung, not argued about.`,
+  // One track per draft's test call, each with the same opening caller line.
+  voice: {
+    surface: "caa-redline-test-calls",
+    tracks: ["caa-redline-test-calls/draft-1", "caa-redline-test-calls/draft-2", "caa-redline-test-calls/draft-3"],
+    ...LISTEN,
+  },
 } as const;
 
 /* ---------- names (keyterms) ---------- */
@@ -293,7 +318,9 @@ export const CAA_NAMES = {
   ] satisfies readonly SaidPart[],
   // Order the autoplay switches the five heard terms on:
   walk: ["firm", "combi", "street", "code", "mira"],
-  foot: `Illustrative: the kind of mishearing a list prevents, not a recording. A term on the list is expected, not guaranteed. The list is used for agents speaking ${listJoin(KEYTERM_LANGS)}; in the other ${COUNT_WORD[OTHER_LANGS] ?? OTHER_LANGS} languages the recogniser doesn’t take one, so it reads names back and waits for a yes instead.`,
+  // The caller's sentence, as one track.
+  voice: { surface: "caa-names-caller-sentence", track: "caa-names-caller-sentence/said/0", ...LISTEN },
+  foot: `Illustrative, read by an AI-generated voice: the kind of mishearing a list prevents, not a real caller’s recording. A term on the list is expected, not guaranteed. The list is used for agents speaking ${listJoin(KEYTERM_LANGS)}; in the other ${COUNT_WORD[OTHER_LANGS] ?? OTHER_LANGS} languages the recogniser doesn’t take one, so it reads names back and waits for a yes instead.`,
 } as const;
 
 /* ---------- wiring ---------- */
@@ -474,6 +501,9 @@ export const CAA_REHEARSAL = {
     },
   ] satisfies readonly TestRow[],
   settleOn: 1, // row "fast"
+  // One track per row (`${prefix}${row.id}`): the excerpt, then for a
+  // changed row the call rung again, in the same file.
+  voice: { surface: "caa-rehearsal-test-sheet", prefix: "caa-rehearsal-test-sheet/" },
   foot: `A sample test sheet from a made-up build. On a real one the scenarios come from your calls, and there are as many as they need. Test calls stop at ${testMinutes} minutes, are marked as tests in your call log, and aren’t billed.`,
 } as const;
 

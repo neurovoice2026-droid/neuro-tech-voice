@@ -1,4 +1,5 @@
 import { AGENT_LANGUAGES } from "@/lib/agent-languages";
+import type { Cue, CueTurn } from "@/lib/audio/cue-types";
 import { requiredPlanFor } from "@/lib/billing/entitlements";
 import { PLANS } from "@/types";
 import {
@@ -25,6 +26,61 @@ import {
 
 /** Bookings into Google Calendar start on this plan. Read off the entitlements, as the landing does. */
 const CALENDAR_PLAN = PLANS[requiredPlanFor("googleIntegrations")].name;
+
+/* ─── Spoken lines ───────────────────────────────────────────────── */
+
+/**
+ * A line of the page as its generated audio says it (lib/audio/cues):
+ * where the clip of that line starts and ends on the cue clock, and when
+ * each of its display words is said, from the line's start. The text is
+ * the page's own; only the timing comes from the cue.
+ */
+export type SpokenLine = {
+  start: number;
+  end: number;
+  /** One entry per word of `text.split(" ")`, seconds from `start`. */
+  words: number[];
+};
+
+/** A word the cue does not time follows the one before it by this much. */
+const UNTIMED_WORD_S = 0.12;
+
+/**
+ * Line `k` of a script as `cue` speaks it, or null when the cue has no
+ * turn for it, or gives it to the other speaker (a cue for some other
+ * script). Words past the ones the cue times follow the last by 0.12 s.
+ */
+export function spokenLine(
+  cue: Cue | null | undefined,
+  k: number,
+  line: { sp: "agent" | "client"; t: string },
+): SpokenLine | null {
+  const turn: CueTurn | undefined = cue?.turns.find((x) => x.i === k);
+  if (!turn || (turn.sp === "agent") !== (line.sp === "agent")) return null;
+  const words: number[] = [];
+  const count = line.t.split(" ").length;
+  for (let w = 0; w < count; w++) {
+    const timed = turn.words[w];
+    const prev = w > 0 ? words[w - 1] : 0;
+    words.push(timed ? Math.max(prev, timed[1] - turn.start, 0) : prev + (w > 0 ? UNTIMED_WORD_S : 0));
+  }
+  return { start: turn.start, end: Math.max(turn.end, turn.start), words };
+}
+
+/** Every line of a script as `cue` speaks it, or null unless the cue speaks all of them. */
+export function spokenLines(
+  cue: Cue | null | undefined,
+  lines: readonly { sp: "agent" | "client"; t: string }[],
+): SpokenLine[] | null {
+  if (!cue || !lines.length) return null;
+  const out: SpokenLine[] = [];
+  for (let k = 0; k < lines.length; k++) {
+    const line = spokenLine(cue, k, lines[k]);
+    if (!line) return null;
+    out.push(line);
+  }
+  return out;
+}
 
 /** Every language the agent can be set to speak, from the app's own list. */
 export const LANG_COUNT = String(AGENT_LANGUAGES.length);
@@ -65,6 +121,8 @@ export const REEL = {
   replay: "Replay",
   pause: "Pause",
   play: "Play",
+  /** Reduced motion: the transport plays the open call's audio (components/site/audio). */
+  listen: "Listen",
   scenes: [
     {
       id: "booking",
@@ -167,7 +225,7 @@ export const CALLS = {
   eyebrow: "Hear it work",
   title: "Every call ends with the job done",
   cta: { label: "See pricing", href: "/#pricing" },
-  kicker: "Sample call",
+  kicker: "Sample call · AI-generated voices",
   build: { label: "Build this agent", href: AUTH.signup },
   labels: {
     agent: "Agent",
@@ -178,6 +236,7 @@ export const CALLS = {
     play: "Play",
     pause: "Pause",
     replay: "Replay",
+    listen: "Listen",
   },
   items: [
     {
@@ -246,6 +305,13 @@ export const PLATFORM = {
     pitch: "Pitch",
     pace: "Pace",
     wpm: (n: number) => `${n} wpm`,
+    /**
+     * What each voice's sample says (the app's own preview sentence,
+     * lib/audio/cues/agents-platform-voiceprint.json). With sound on it is
+     * shown while a sample plays: the clip's caption.
+     */
+    sample: "Hi, thanks for calling. I can help you book an appointment or answer any questions you have.",
+    sampleLabel: "Sample",
   },
   knowledge: {
     title: "Answers pulled from your own paperwork",
@@ -253,20 +319,27 @@ export const PLATFORM = {
     asks: "Caller asks",
     answers: "Agent answers",
     from: "From",
+    /** Reduced motion: the card stays still, and this says each document's question and answer (AI-generated voices). */
+    listen: "Listen",
+    pause: "Pause",
     docs: [
       {
+        // The id names the doc's two clips (lib/audio/cues/agents-platform-paperwork.json).
+        id: "cancellation-policy",
         name: "Cancellation policy",
         clause: "§2 · Cancelled inside 24h: charged at 50%",
         question: "If I cancel the day before, do I still pay?",
         answer: "Inside 24 hours it's half the fee — but I can move you to Thursday for free.",
       },
       {
+        id: "price-list",
         name: "Price list",
         clause: "Deep clean, 3-bed home · from $240",
         question: "Roughly what does a deep clean cost for three bedrooms?",
         answer: "A three-bedroom deep clean starts at $240. Shall I find you a slot?",
       },
       {
+        id: "parking-access",
         name: "Parking & access",
         clause: "Free parking behind the building, bay 4–9",
         question: "Is there anywhere to park when I come in?",
@@ -320,23 +393,19 @@ export const AGENT_INTEGRATIONS = {
 
 /* ─── Use cases ──────────────────────────────────────────────────── */
 
+/**
+ * One conversation of the console. The generated audio of this sample
+ * conversation is the track `agents-use-cases-console/<tab id>/<agent id>`
+ * (lib/audio/cues/agents-use-cases-console.json, AI-generated voices),
+ * fetched only once the visitor turns sound on. With sound on, the
+ * transcript follows that track's clock and its word times; with sound
+ * off, the turns are paced from their word counts.
+ */
 export type UseCaseAgent = {
   id: string;
   name: string;
   job: string;
   turns: DemoTurn[];
-  /**
-   * A recording of this conversation, served from /public (e.g.
-   * "/audio/use-cases/quotes.mp3"). With it, the transcript follows the
-   * audio's clock and the stage's sound button comes alive.
-   */
-  audio?: string;
-  /**
-   * Second at which each turn starts in `audio`, one per turn. Without it
-   * the turns are paced from their word counts, which will not line up
-   * with a real recording.
-   */
-  timings?: number[];
 };
 
 export type UseCaseTab = {
@@ -346,12 +415,24 @@ export type UseCaseTab = {
   agents: UseCaseAgent[];
 };
 
+/** The platform card's greetings, by language and tone (platformGreetingKey), written on the server (ai-agents.server.ts). */
+export type PlatformGreetings = Record<string, string>;
+export const platformGreetingKey = (code: string, tone: string) => `${code.toLowerCase()}:${tone}`;
+
 export const USE_CASES = {
   eyebrow: "Use cases",
   title: "One agent for every kind of call your business takes",
   cta: { label: "Start with this agent", href: AUTH.signup },
-  sound: { unmute: "Unmute", mute: "Mute", unavailable: "Recording coming soon" },
-  player: { play: "Play", pause: "Pause", transcript: "Live transcript", agent: "Agent", client: "Caller" },
+  /** The sound control names itself "Sound", its state in aria-pressed (components/site/audio/sound-button.tsx). */
+  sound: { note: "AI-generated voices · sample call" },
+  player: {
+    play: "Play",
+    pause: "Pause",
+    listen: "Listen",
+    transcript: "Live transcript",
+    agent: "Agent",
+    client: "Caller",
+  },
   tabs: [
     {
       id: "front-desk",

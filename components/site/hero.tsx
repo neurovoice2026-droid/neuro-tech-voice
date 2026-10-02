@@ -104,7 +104,11 @@ function SplitLines({
   );
 }
 
-/** Four bars keeping time — a voice product's answer to a sound toggle. */
+/**
+ * Four bars keeping time: decoration (aria-hidden), not a control. Sound
+ * is off until the visitor turns it on at one of the stages below, each
+ * beside the sample it plays; the cover itself stays silent.
+ */
 function Equalizer({ cover }: { cover: RefObject<HTMLElement | null> }) {
   const barsRef = useRef<HTMLDivElement>(null);
 

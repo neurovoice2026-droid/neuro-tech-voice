@@ -1,0 +1,223 @@
+/* ------------------------------------------------------------------ *
+ * The sound control (sound-button.tsx).
+ *
+ * The round shape is the home RoundButton's (home/controls.tsx): a 40px
+ * disc in the same three tones. The pill is the product pages' sound
+ * pill (ai-agents/use-cases.tsx): 36px tall, 13px type, a hairline ring.
+ * Both take a 44px tap through ::before, and show a 2px focus ring in ink
+ * on white and in white on the dark band and the deep panel.
+ *
+ * With sound on, the accent carries the state (violet on white, lilac on
+ * the dark grounds); while a voice is sounding, the pill shows three
+ * small bars, still under reduced motion and the `still` tier.
+ *
+ * The rules are in the components layer, so a utility on the control
+ * (a margin, a grid placement) still wins.
+ * ------------------------------------------------------------------ */
+
+@layer components {
+  .snd {
+    --snd-ink: var(--pp-ink, #000000);
+    --snd-muted: var(--pp-muted, #6b6878);
+    --snd-accent: var(--pp-accent, #551a89);
+    --snd-hover: var(--pp-card, #f4f3f7);
+    --snd-focus: var(--snd-ink);
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 10px;
+    row-gap: 4px;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .snd[data-tone="dark"] {
+    --snd-ink: var(--home-paper, #edecf1);
+    --snd-muted: var(--home-paper-dim, #a8a4b4);
+    --snd-accent: #c9b8ff;
+    --snd-focus: #ffffff;
+  }
+
+  .snd[data-tone="deep"] {
+    --snd-ink: var(--home-on-deep, #f1ecff);
+    --snd-muted: var(--home-on-deep-dim, #d8cdf7);
+    --snd-accent: #ffffff;
+    --snd-focus: #ffffff;
+  }
+
+  .snd-btn {
+    position: relative;
+    /* Above the positioned siblings that follow it (the next section's
+       frame), so they do not paint over the bottom of its tap band. */
+    z-index: 1;
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    color: var(--snd-ink);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      background-color 200ms,
+      color 200ms,
+      box-shadow 200ms,
+      scale 200ms;
+  }
+
+  /* The drawn shape may be smaller; the tap is 44px. */
+  .snd-btn::before {
+    content: "";
+    position: absolute;
+    border-radius: 9999px;
+  }
+
+  .snd-btn:active {
+    scale: 0.96;
+  }
+
+  .snd-btn:focus-visible {
+    outline: 2px solid var(--snd-focus);
+    outline-offset: 2px;
+  }
+
+  /* Round: a 40px disc beside the transport. */
+  .snd[data-variant="round"] .snd-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .snd[data-variant="round"] .snd-btn::before {
+    inset: -2px;
+  }
+
+  /* Pill: icon and word. */
+  .snd[data-variant="pill"] .snd-btn {
+    height: 36px;
+    gap: 8px;
+    padding: 0 12px;
+    font-size: 13px;
+    line-height: 18px;
+    white-space: nowrap;
+  }
+
+  .snd[data-variant="pill"] .snd-btn::before {
+    inset: -4px 0;
+  }
+
+  /* Tones, as RoundButton's. */
+  .snd[data-tone="light"] .snd-btn {
+    background: #ffffff;
+    box-shadow:
+      0 0 1px rgb(0 0 0 / 0.4),
+      0 1px 1px rgb(0 0 0 / 0.04),
+      0 2px 4px rgb(0 0 0 / 0.04);
+  }
+
+  .snd[data-tone="light"][data-variant="pill"] .snd-btn {
+    box-shadow: 0 0 0 1px rgb(24 16 40 / 0.1);
+  }
+
+  .snd[data-tone="light"] .snd-btn:hover {
+    background: var(--snd-hover);
+  }
+
+  .snd[data-tone="dark"] .snd-btn {
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.15);
+  }
+
+  .snd[data-tone="dark"] .snd-btn:hover {
+    background: rgb(255 255 255 / 0.08);
+  }
+
+  .snd[data-tone="deep"] .snd-btn {
+    background: rgb(255 255 255 / 0.08);
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14);
+  }
+
+  .snd[data-tone="deep"] .snd-btn:hover {
+    background: rgb(255 255 255 / 0.14);
+  }
+
+  /* On: the accent carries it, in the icon, the word and the ring. */
+  .snd-btn[data-on] {
+    color: var(--snd-accent);
+  }
+
+  .snd[data-tone="light"] .snd-btn[data-on] {
+    box-shadow:
+      0 0 0 1.5px rgb(85 26 137 / 0.45),
+      0 1px 1px rgb(0 0 0 / 0.04);
+  }
+
+  .snd[data-tone="dark"] .snd-btn[data-on],
+  .snd[data-tone="deep"] .snd-btn[data-on] {
+    box-shadow: 0 0 0 1.5px rgb(255 255 255 / 0.5);
+  }
+
+  .snd-bars {
+    display: none;
+    align-items: flex-end;
+    gap: 2px;
+    height: 10px;
+  }
+
+  .snd-btn[data-sounding] .snd-bars {
+    display: inline-flex;
+  }
+
+  .snd-bars i {
+    width: 2px;
+    height: 10px;
+    border-radius: 1px;
+    background: currentColor;
+    transform-origin: 50% 100%;
+    animation: snd-bar 760ms ease-in-out infinite alternate;
+  }
+
+  .snd-bars i:nth-child(2) {
+    animation-delay: -260ms;
+  }
+
+  .snd-bars i:nth-child(3) {
+    animation-delay: -520ms;
+  }
+
+  /* The micro-caption. Under the control when the column is too narrow for both. */
+  .snd-note {
+    min-width: 0;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--snd-muted);
+    text-wrap: pretty;
+  }
+}
+
+@keyframes snd-bar {
+  from {
+    transform: scaleY(0.3);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .snd-btn {
+    transition: none;
+  }
+
+  .snd-btn:active {
+    scale: 1;
+  }
+
+  .snd-bars i {
+    animation: none;
+    transform: scaleY(0.6);
+  }
+}
+
+html[data-tier="still"] .snd-bars i {
+  animation: none;
+  transform: scaleY(0.6);
+}

@@ -12,6 +12,7 @@ import {
   AgentsTrust,
 } from "@/components/site/product/ai-agents/sections";
 import { AGENTS_META } from "@/lib/pages/ai-agents";
+import { buildPlatformGreetings } from "@/lib/pages/ai-agents.server";
 
 export const metadata: Metadata = {
   title: AGENTS_META.title,
@@ -42,7 +43,7 @@ export default function AiAgentsPage() {
         <Gap />
       </Deferred>
       <Deferred size={1400}>
-        <AgentsPlatform />
+        <AgentsPlatform greetings={buildPlatformGreetings()} />
         <Rule />
       </Deferred>
       <Deferred size={1500}>

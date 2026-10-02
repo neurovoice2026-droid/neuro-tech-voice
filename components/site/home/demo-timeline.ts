@@ -19,6 +19,16 @@ import { BEAT, IDLE, frameAt, type Frame, type LinePlan, type Script } from "./d
  * `onFrame` is called on every update with what the run's time implies
  * (frameAt), so the section derives its state from the timeline instead
  * of from callbacks dropped into it.
+ *
+ * A spoken run (sound on, demo-script.ts) is the same timeline at its
+ * cue's times: the rings and the pickup where the cue has them, each
+ * line where its turn starts. It is never played: the section sets its
+ * time from the run's clock every frame, and while a line is spoken the
+ * orb's voice follows the cue's envelope (the section writes it), so the
+ * timeline only lifts it as the line starts and lets it fall where the
+ * line's recording ends. `onCall(k)` fires as call k (from the second)
+ * starts, so the section can rebuild the rest of the run when sound was
+ * turned on or off since it was built.
  * ------------------------------------------------------------------ */
 
 type G = typeof Gsap;
@@ -43,6 +53,7 @@ export function buildRun({
   voice,
   digitPos,
   onFrame,
+  onCall,
 }: {
   gsap: G;
   root: HTMLElement;
@@ -55,6 +66,8 @@ export function buildRun({
   /** Where each clock figure stands (0–10, fractional mid-spin); written as the strips move. */
   digitPos: number[];
   onFrame: (f: Frame) => void;
+  /** Call k of the run (k ≥ 1) is starting. */
+  onCall?: (k: number) => void;
 }): Tl | null {
   const all = <T extends Element = HTMLElement>(sel: string) => [...root.querySelectorAll<T & HTMLElement>(sel)];
   const one = (sel: string) => root.querySelector<HTMLElement>(sel);
@@ -145,10 +158,11 @@ export function buildRun({
     say(0.1, at + 0.06, 0.3, "sine.inOut");
   };
 
-  script.segs.forEach((seg) => {
-    const { T, id } = seg;
+  script.segs.forEach((seg, k) => {
+    const { T, id, beats } = seg;
     const call = byId.get(id);
     if (!call) return;
+    if (k > 0 && onCall) tl.call(onCall, [k], T);
     const key = one(`[data-key="${id}"]`);
     const disc = one(`[data-key="${id}"] [data-key-disc]`);
 
@@ -247,8 +261,8 @@ export function buildRun({
     bringIn(owner(id, "before"), T + 0.7, { yPercent: 30 });
 
     /* It rings, twice. */
-    const ringA = T + BEAT.ringA;
-    const ringB = T + BEAT.ringB;
+    const ringA = T + beats.ringA;
+    const ringB = T + beats.ringB;
     bringIn(phase("ringing"), ringA, {}, 0.2);
     tl.fromTo(
       dot,
@@ -321,27 +335,35 @@ export function buildRun({
     shiver(ringB);
 
     /* It draws in, and picks up. */
-    tl.set(orb, { willChange: "transform" }, T + BEAT.inhale)
-      .to(orb, { scale: 0.965, duration: 0.16, ease: "power2.in" }, T + BEAT.inhale)
-      .to(orb, { scale: 1, duration: 0.9, ease: "expo.out" }, T + BEAT.pickup)
-      .set(orb, { willChange: "auto" }, T + BEAT.pickup + 0.95);
-    takeOut(phase("ringing"), T + BEAT.pickup, {}, 0.2);
-    bringIn(phase("picked"), T + BEAT.pickup, {}, 0.2);
-    say(0.62, T + BEAT.pickup, 0.12, "sine.out");
-    say(0.14, T + BEAT.pickup + 0.12, 0.4, "sine.inOut");
+    const pickup = T + beats.pickup;
+    tl.set(orb, { willChange: "transform" }, T + beats.inhale)
+      .to(orb, { scale: 0.965, duration: 0.16, ease: "power2.in" }, T + beats.inhale)
+      .to(orb, { scale: 1, duration: 0.9, ease: "expo.out" }, pickup)
+      .set(orb, { willChange: "auto" }, pickup + 0.95);
+    takeOut(phase("ringing"), pickup, {}, 0.2);
+    bringIn(phase("picked"), pickup, {}, 0.2);
+    say(0.62, pickup, 0.12, "sine.out");
+    say(0.14, pickup + 0.12, 0.4, "sine.inOut");
 
     /* The call, a line at a time: the line before steps up into the smaller row above. */
     seg.lines.forEach((line, k) => {
       const at = line.at;
+      // Read, a line follows the step-up by 100ms. Spoken, the step-up moves that much earlier, so
+      // the line lands with its first word, as the first line does.
+      const lead = line.said !== undefined ? 0.1 : 0;
       if (k === 0) bringIn(cur(id, 0), at, { yPercent: 40 });
       else {
-        takeOut(cur(id, k - 1), at - 0.05, { yPercent: -30 });
-        if (k >= 2) takeOut(prev(id, k - 2), at - 0.05, { yPercent: -30 });
-        bringIn(prev(id, k - 1), at + 0.05, { yPercent: 35 }, 0.4);
-        bringIn(cur(id, k), at + 0.1, { yPercent: 40 });
+        takeOut(cur(id, k - 1), at - 0.05 - lead, { yPercent: -30 });
+        if (k >= 2) takeOut(prev(id, k - 2), at - 0.05 - lead, { yPercent: -30 });
+        bringIn(prev(id, k - 1), at + 0.05 - lead, { yPercent: 35 }, 0.4);
+        bringIn(cur(id, k), at + 0.1 - lead, { yPercent: 40 });
       }
-      if (line.sp === "agent") speak(line, at);
-      else say(0.18, at, 0.4, "sine.inOut");
+      if (line.sp !== "agent") say(0.18, at, 0.4, "sine.inOut");
+      else if (line.said !== undefined) {
+        // Spoken: the section drives the voice off the cue's envelope until the recording ends.
+        say(0.44, at, 0.12, "sine.out");
+        say(IDLE, line.said, 0.5, "sine.inOut");
+      } else speak(line, at);
     });
 
     /* The end: the outcome lands in the owner's log, and the owner is still where they were. */

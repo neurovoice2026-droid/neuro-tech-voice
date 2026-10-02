@@ -1,8 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { cueIn, lazyCues } from "@/lib/audio";
+import type { CueFile } from "@/lib/audio/cue-types";
 import type { HOME } from "@/lib/pages/home";
 import { cn } from "@/lib/utils";
+import { envelopeAt } from "@/components/site/audio/cue";
+import { isAudible, isSoundOn, unlockFromGesture } from "@/components/site/audio/engine";
+import { SoundButton } from "@/components/site/audio/sound-button";
+import { useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { FluidOrb } from "@/components/site/product/fluid-orb";
 import { DocBadge } from "@/components/site/product/knowledge-base/parts";
 import { DOTS, LINE, useSvgId } from "@/components/site/product/line-figure";
@@ -10,6 +16,7 @@ import { useKitContext, type Kit } from "@/components/site/product/motion-kit";
 import { useInView } from "@/components/site/product/timing";
 import { ChipRail, RoundButton, centreInRail, useRovingRadio } from "./controls";
 import { useDocumentVisible, useStageMotion } from "./motion";
+import { SpokenClock, type RunClip, type RunVoice } from "./demo-script";
 import { KB_MESH, MUTED_MESH } from "./palettes";
 import { TYPE } from "./type";
 import {
@@ -40,6 +47,7 @@ import {
   type Model,
   type Room,
   type Track,
+  type Voiced,
 } from "./knowledge-timeline";
 
 /* ------------------------------------------------------------------ *
@@ -59,6 +67,18 @@ import {
  * moves are remounted (keyed by mode) so no style React drew for the
  * still frame ever fights a tween, and GSAP sets the same frame before
  * the first paint. The orb is outside those keys and is never remounted.
+ *
+ * Sound. Each question is recorded as two clips, the caller asking and
+ * the agent answering (AI-generated voices; the cue file and the audio
+ * are fetched only once sound is on). With sound on, a run is built on
+ * them (knowledge-timeline.ts `voiced`) and played on the run's clock
+ * (demo-script.ts SpokenClock), so the words rise as they are said, the
+ * reading beat is silent, and the orb follows the agent's voice (the
+ * miss at 40% of it, grey). Sound turned on mid-run restarts the question
+ * under way on its recordings; turned off, the question finishes on the
+ * same clock and the next one is read-paced. With reduced motion the
+ * transport is Listen: the question on screen, asked and then answered,
+ * each line coming up as it is said.
  * ------------------------------------------------------------------ */
 
 type Kb = (typeof HOME)["kb"];
@@ -72,6 +92,48 @@ const BEAM_SPREAD = 15;
 
 const BEAM_INK = "rgb(24 16 40 / 0.34)";
 const RING = "shadow-[0_0_0_1px_rgb(24_16_40/0.07)]";
+
+/** The stage's claim on the site's one sound (components/site/audio/engine.ts). */
+const VOICE_ID = "knowledge";
+/** Listen: the beat between the question and its answer. */
+const LISTEN_GAP = 0.6;
+
+/**
+ * The questions' recordings. P0: their cue file (a few KB of timings) is
+ * fetched as sound goes on, never in the page's first load. A run asked
+ * for with sound on waits for it (a moment); without it (a failed fetch)
+ * the run is read-paced.
+ */
+const KB_FILE = lazyCues("home-knowledge-call", (file: CueFile) => file);
+
+/** A question's two recordings, when both exist (and their file is here). */
+function voicedFor(id: string | undefined): Voiced | undefined {
+  const file = KB_FILE.get();
+  const ask = file && id ? cueIn(file, `home-kb/${id}/0`) : undefined;
+  const answer = file && id ? cueIn(file, `home-kb/${id}/1`) : undefined;
+  return ask && answer ? { ask, answer } : undefined;
+}
+
+/** Listen plays only a pair that speaks the two lines as written: one turn each, the same display words. */
+function listenable(q: { id: string; ask: string; answer: string } | undefined): Voiced | undefined {
+  const v = voicedFor(q?.id);
+  const fits = (cue: Voiced["ask"], text: string) =>
+    cue.dur > 0 && cue.turns.length === 1 && cue.turns[0].words.length === text.split(" ").length;
+  return v && q && fits(v.ask, q.ask) && fits(v.answer, q.answer) ? v : undefined;
+}
+
+/** The orb's volume under a clip, off its loudness: it hears the caller, speaks the answer, and only murmurs the miss. */
+function volOf(tag: string | undefined, level: number) {
+  if (tag === "ask") return VOL.listen + 0.08 * level;
+  if (tag === "miss") return Math.max(VOL.miss, 0.4 * level);
+  return Math.min(0.85, 0.15 + 0.8 * level);
+}
+
+/** A run under way: its questions, and where each starts and finishes on its timeline. */
+type Run = { ids: number[]; starts: number[]; ends: number[]; press: boolean; announce: boolean };
+
+/** A Listen run (reduced motion): the question, and which of its two lines is being said. */
+type Listen = { qi: number; part: "ask" | "answer"; running: boolean };
 
 export function KnowledgeStage({
   room,
@@ -90,7 +152,7 @@ export function KnowledgeStage({
   const stageRef = useRef<HTMLDivElement>(null);
   const uid = useSvgId("kb");
 
-  const { kit, reduce, playing, paused, setPaused, interacted, markInteracted } = useStageMotion(stageRef, {
+  const { kit, reduce, playing, paused, setPaused, interacted, markInteracted, pinFocus } = useStageMotion(stageRef, {
     id: "knowledge",
   });
   const onScreen = useInView(stageRef);
@@ -115,9 +177,67 @@ export function KnowledgeStage({
   const railMoved = useRef(false);
   const started = useRef(false);
   const runRef = useRef(false);
+  /** The run under way, as built; its clock while it runs on recordings (null: its timeline plays itself). */
+  const runInfo = useRef<Run | null>(null);
+  const spokenRef = useRef(false);
+  const clockRef = useRef<SpokenClock | null>(null);
+  const frames = useRef(0);
+  /** The next resume was the reader's Play: it may take the sound back from another stage. */
+  const pressResume = useRef(false);
+  const [listen, setListen] = useState<Listen | null>(null);
+  const listenClock = useRef<SpokenClock | null>(null);
+  const listenLoop = useRef(0);
+  /** Bumped by every Listen press (and its end): one waiting for the recordings' timings goes ahead only if it is still the last. */
+  const listenWait = useRef(0);
 
   // An explicit pick plays even while another stage holds the focus.
   const run = playing || (interacted && onScreen && visible && !paused && !reduce);
+
+  // The stage's voice: it may sound while the stage runs; a Listen run (reduced motion) while it is on screen.
+  const track = useVoiceTrack(VOICE_ID, { active: reduce ? onScreen && visible : run });
+  const trackRef = useRef(track);
+  useLayoutEffect(() => {
+    trackRef.current = track;
+  });
+  // The recordings' timings are fetched as sound goes on (here or on any other stage).
+  const soundOn = track.on;
+  useEffect(() => {
+    if (soundOn) void KB_FILE.load();
+  }, [soundOn]);
+  /** Bumped by every run asked for: a run waiting for the recordings' timings goes ahead only if it is still the last. */
+  const cueWait = useRef(0);
+  const voiceApi = useMemo<RunVoice>(
+    () => ({
+      play: (cue, at, o) => trackRef.current.play(cue, at, o),
+      pause: () => trackRef.current.pause(),
+      time: () => trackRef.current.time(),
+      audible: () => isAudible(VOICE_ID),
+      waiting: () => trackRef.current.waiting(),
+    }),
+    [],
+  );
+
+  // A run on recordings: every frame the clock's time (the audio's while a clip is heard) is the
+  // timeline's, and under a clip the orb's volume follows the recording's loudness.
+  const stopFrames = useCallback(() => {
+    cancelAnimationFrame(frames.current);
+    frames.current = 0;
+  }, []);
+  const runFrames = useCallback(() => {
+    if (frames.current) return;
+    const frame = (now: number) => {
+      frames.current = 0;
+      const clock = clockRef.current;
+      const tl = tlRef.current;
+      if (!clock || !tl) return;
+      const t = clock.tick(now);
+      tl.time(Math.max(0, t));
+      const at = clock.clipAt(t);
+      if (at) vol.current = volOf(at.clip.tag, envelopeAt(at.clip.cue, at.at));
+      if (clock.playing) frames.current = requestAnimationFrame(frame);
+    };
+    frames.current = requestAnimationFrame(frame);
+  }, []);
 
   useEffect(() => {
     stillRef.current = still;
@@ -125,8 +245,20 @@ export function KnowledgeStage({
 
   useEffect(() => {
     runRef.current = run;
-    tlRef.current?.paused(!run);
-  }, [run]);
+    const clock = clockRef.current;
+    if (!clock) {
+      tlRef.current?.paused(!run);
+      return;
+    }
+    if (run) {
+      clock.start(performance.now(), pressResume.current || undefined);
+      runFrames();
+    } else {
+      clock.stop();
+      stopFrames();
+    }
+    pressResume.current = false;
+  }, [run, runFrames, stopFrames]);
 
   // Outside GSAP the orb's volume follows the still frame.
   useEffect(() => {
@@ -154,6 +286,10 @@ export function KnowledgeStage({
       return () => {
         tlRef.current?.kill();
         tlRef.current = null;
+        clockRef.current?.stop();
+        clockRef.current = null;
+        runInfo.current = null;
+        stopFrames();
         roomRef.current = null;
         kitRef.current = null;
       };
@@ -163,44 +299,109 @@ export function KnowledgeStage({
 
   const hooks = useMemo<Hooks>(() => ({ vol, setMuted: setOrbMuted, setSelected, beams: beamRef }), []);
 
-  /** Replaces whatever is playing with a fresh timeline built by `build`. */
+  /**
+   * Replaces whatever is playing with a fresh timeline built by `build`.
+   * With sound on it is built on the recordings and runs on their clock
+   * (the clock waits out `delay` itself); `press`: the reader asked.
+   */
   const start = useCallback(
-    (build: (tl: ReturnType<Kit["gsap"]["timeline"]>, r: Room, track: Track, lg: boolean) => void, delay = 0) => {
+    (
+      build: (tl: ReturnType<Kit["gsap"]["timeline"]>, r: Room, track: Track, lg: boolean, spoken: boolean) => RunClip[],
+      delay = 0,
+      press = false,
+    ) => {
       const k = kitRef.current;
       const r = roomRef.current;
       if (!k || !r) return;
       tlRef.current?.kill();
+      clockRef.current?.stop();
+      clockRef.current = null;
+      stopFrames();
+      const spoken = isSoundOn() && KB_FILE.get() !== null;
       const tl = k.gsap.timeline({ paused: true, delay, onComplete: () => setDone(true) });
-      build(tl, r, { status: statusNow(k.gsap, r) }, window.matchMedia(LG).matches);
+      const clips = build(tl, r, { status: statusNow(k.gsap, r) }, window.matchMedia(LG).matches, spoken);
       tlRef.current = tl;
-      tl.paused(!runRef.current);
+      spokenRef.current = spoken;
+      if (!clips.length) {
+        tl.paused(!runRef.current);
+        return;
+      }
+      const clock = new SpokenClock(clips, tl.duration(), voiceApi, { press, from: -delay });
+      clockRef.current = clock;
+      if (runRef.current) {
+        clock.start(performance.now());
+        runFrames();
+      }
     },
-    [],
+    [voiceApi, runFrames, stopFrames],
   );
+
+  // As each question after the first starts: a run built with sound on while it is now off (or
+  // the other way round) is rebuilt from that question for the sound as it is.
+  const onBoundary = useRef<(n: number) => void>(() => {});
+
+  /** Plays questions `ids` in turn, holding between them; the first view's sequence and a pick alike. */
+  const playFrom = useCallback(
+    (ids: number[], { delay = 0, press = false, announce = true }: { delay?: number; press?: boolean; announce?: boolean } = {}) => {
+      // Sound on, and the recordings' timings not here yet: the run waits for them (a moment), the
+      // one under way carrying on meanwhile. A newer run asked for drops it.
+      const ask = ++cueWait.current;
+      if (isSoundOn() && !KB_FILE.settled()) {
+        void KB_FILE.load().then(() => {
+          if (ask === cueWait.current) playLater.current(ids, { delay, press, announce });
+        });
+        return;
+      }
+      const info: Run = { ids, starts: [], ends: [], press, announce };
+      runInfo.current = info;
+      start(
+        (tl, r, track, lg, spoken) => {
+          const clips: RunClip[] = [];
+          ids.forEach((qi, n) => {
+            if (n > 0) {
+              tl.to({}, { duration: HOLD });
+              tl.call(() => onBoundary.current(n), [], tl.duration());
+            }
+            info.starts.push(tl.duration());
+            addClear(tl, r, track, hooks);
+            const voiced = spoken ? voicedFor(questions[qi]?.id) : undefined;
+            clips.push(...addQuestion(tl, r, model, qi, track, hooks, { lg, announce, voiced }));
+            info.ends.push(tl.duration());
+          });
+          return clips;
+        },
+        delay,
+        press,
+      );
+    },
+    [start, questions, hooks, model],
+  );
+  const playLater = useRef(playFrom);
+  useLayoutEffect(() => {
+    playLater.current = playFrom;
+  });
+
+  useLayoutEffect(() => {
+    onBoundary.current = (n) => {
+      const info = runInfo.current;
+      if (!info || spokenRef.current === (isSoundOn() && KB_FILE.get() !== null)) return;
+      // Once the timeline has finished the update it is in: the rebuild kills it.
+      queueMicrotask(() => {
+        if (runInfo.current === info) playFrom(info.ids.slice(n), { press: info.press, announce: info.announce });
+      });
+    };
+  });
 
   const playSequence = useCallback(
-    (delay = 0) => {
+    (delay = 0, press = false) => {
       const ids = sequence.map((id) => questions.findIndex((q) => q.id === id)).filter((i) => i >= 0);
-      start((tl, r, track, lg) => {
-        ids.forEach((qi, n) => {
-          if (n > 0) tl.to({}, { duration: HOLD });
-          addClear(tl, r, track, hooks);
-          addQuestion(tl, r, model, qi, track, hooks, { lg, announce: true });
-        });
-      }, delay);
+      playFrom(ids, { delay, press, announce: true });
     },
-    [start, sequence, questions, hooks, model],
+    [playFrom, sequence, questions],
   );
 
-  const playOne = useCallback(
-    (qi: number) => {
-      start((tl, r, track, lg) => {
-        addClear(tl, r, track, hooks);
-        addQuestion(tl, r, model, qi, track, hooks, { lg, announce: false });
-      });
-    },
-    [start, hooks, model],
-  );
+  /** One question, picked: a press, so it may take the sound from another stage. */
+  const playOne = useCallback((qi: number) => playFrom([qi], { press: true, announce: false }), [playFrom]);
 
   // First view: once the stage has the reader's attention, a beat, then the sequence.
   useEffect(() => {
@@ -279,6 +480,126 @@ export function KnowledgeStage({
     };
   }, []);
 
+  /* ─── Listen (reduced motion and the still tier) ─────────────────── *
+   * Nothing plays by itself. Listen plays the question on screen: the
+   * caller asks (the answer is not up yet), then the agent answers (the
+   * answer comes up, the question steps back), with no motion. */
+  const stopListenFrames = useCallback(() => {
+    cancelAnimationFrame(listenLoop.current);
+    listenLoop.current = 0;
+  }, []);
+  const endListen = useCallback(() => {
+    listenWait.current++;
+    listenClock.current?.stop();
+    listenClock.current = null;
+    stopListenFrames();
+    setListen(null);
+  }, [stopListenFrames]);
+  const pauseListen = useCallback(() => {
+    listenWait.current++;
+    listenClock.current?.stop();
+    stopListenFrames();
+    setListen((l) => (l && l.running ? { ...l, running: false } : l));
+  }, [stopListenFrames]);
+  const runListenFrames = () => {
+    if (listenLoop.current) return;
+    const frame = (now: number) => {
+      listenLoop.current = 0;
+      const clock = listenClock.current;
+      if (!clock) return;
+      const t = clock.tick(now);
+      if (clock.done) return endListen();
+      const part = t >= clock.clips[1].at ? "answer" : "ask";
+      setListen((l) => (l && l.part !== part ? { ...l, part } : l));
+      if (clock.playing) listenLoop.current = requestAnimationFrame(frame);
+    };
+    listenLoop.current = requestAnimationFrame(frame);
+  };
+  /** Plays question `qi`, or carries on with the one paused; called inside the press. */
+  const listenTo = (qi: number) => {
+    const held = listenClock.current;
+    if (held && listen?.qi === qi) {
+      held.start(performance.now(), true);
+      setListen({ ...listen, running: true });
+      runListenFrames();
+      return;
+    }
+    if (!KB_FILE.get()) {
+      // The recordings' timings are on their way (sound went on in this press): it plays once they are here.
+      const ask = ++listenWait.current;
+      void KB_FILE.load().then((f) => {
+        if (f && ask === listenWait.current) listenLater.current(qi);
+      });
+      return;
+    }
+    const v = listenable(questions[qi]);
+    if (!v) return;
+    endListen();
+    const answerAt = v.ask.dur + LISTEN_GAP;
+    const clock = new SpokenClock(
+      [
+        { at: 0, cue: v.ask, tag: "ask" },
+        { at: answerAt, cue: v.answer, tag: "answer" },
+      ],
+      answerAt + v.answer.dur,
+      voiceApi,
+      { press: true },
+    );
+    listenClock.current = clock;
+    setListen({ qi, part: "ask", running: true });
+    clock.start(performance.now());
+    runListenFrames();
+  };
+  const listenLater = useRef(listenTo);
+  useLayoutEffect(() => {
+    listenLater.current = listenTo;
+  });
+  const onListen = () => {
+    if (listen?.running) return pauseListen();
+    // The press is the gesture that lets audio play, and turns sound on for the visit.
+    unlockFromGesture();
+    listenTo(still);
+  };
+  useEffect(() => {
+    if (!onScreen) pauseListen();
+  }, [onScreen, pauseListen]);
+  useEffect(() => {
+    if (!reduce) endListen();
+  }, [reduce, endListen]);
+  useEffect(() => () => endListen(), [endListen]);
+
+  /**
+   * The sound control. On: the question under way starts again on its
+   * recordings (the next one, once it has landed); at rest, what the
+   * transport would replay. Off: the engine has already silenced the
+   * stage, and the question finishes on its clock.
+   */
+  const onSound = (on: boolean) => {
+    // This stage's own press: it takes the landing's focus, so it is the one that plays and is
+    // heard, not the stage that happens to cover more of the screen (off: it lets it go).
+    pinFocus(on);
+    if (!on) return;
+    if (reduce) return listenTo(still);
+    // GSAP is not here yet: the first run will be built on the recordings.
+    if (!animated || !kitRef.current) return;
+    started.current = true;
+    setPaused(false);
+    setDone(false);
+    runRef.current = true;
+    const info = runInfo.current;
+    const tl = tlRef.current;
+    if (info && tl && !done && info.ids.length) {
+      const t = clockRef.current ? clockRef.current.t : tl.time();
+      let n = 0;
+      info.starts.forEach((at, j) => {
+        if (t >= at) n = j;
+      });
+      if (t >= info.ends[n] && n + 1 < info.ids.length) n++;
+      playFrom(info.ids.slice(n), { press: true, announce: info.announce });
+    } else if (interacted) playOne(selected);
+    else playSequence(0, true);
+  };
+
   const pick = (i: number) => {
     setSelected(i);
     // A pick is the reader taking over, whether or not GSAP has arrived yet:
@@ -286,6 +607,7 @@ export function KnowledgeStage({
     started.current = true;
     markInteracted();
     if (!animated) {
+      endListen();
       setStill(i);
       return;
     }
@@ -303,7 +625,10 @@ export function KnowledgeStage({
   });
 
   const transport = () => {
+    if (reduce) return onListen();
     if (!done) {
+      // Play after Pause is the reader's own press: the question may take the sound back.
+      if (paused) pressResume.current = true;
       setPaused(!paused);
       return;
     }
@@ -311,7 +636,7 @@ export function KnowledgeStage({
     setPaused(false);
     runRef.current = true;
     if (interacted) playOne(selected);
-    else playSequence();
+    else playSequence(0, true);
   };
 
   // ── The still frame (everything below is drawn by React only while GSAP is not in charge) ──
@@ -320,12 +645,16 @@ export function KnowledgeStage({
   const sq = questions[still];
   const sBest = winner(model, still);
   const sHit = sBest >= 0;
-  const sStatus = finishedStatus(model, still);
+  /** A Listen run on the question on screen: which line is being said. */
+  const lq = listen && listen.qi === still ? listen : null;
+  const sStatus = lq ? (lq.part === "ask" ? "listening" : sHit ? "answering" : "missing") : finishedStatus(model, still);
   const orbColors = animated ? (orbMuted ? MUTED_MESH : KB_MESH) : sHit ? KB_MESH : MUTED_MESH;
   const hits = questions.map((q, qi) => ({ q, qi, doc: winner(model, qi) })).filter((x) => x.doc >= 0);
 
   const button = reduce
-    ? { icon: "replay" as const, label: room.replay }
+    ? lq?.running
+      ? { icon: "pause" as const, label: room.pause }
+      : { icon: "listen" as const, label: room.listen }
     : done
       ? { icon: "replay" as const, label: room.replay }
       : paused
@@ -391,11 +720,12 @@ export function KnowledgeStage({
         )}
       </svg>
 
-      {/* Top: what this is, and where it is up to. */}
-      <div className="flex flex-col gap-4 [grid-area:top] lg:flex-row lg:items-center lg:justify-between">
-        <p aria-hidden className={cn(TYPE.label, "text-balance text-pp-muted")}>
+      {/* Top: what this is, the sound, and where it is up to. */}
+      <div className="flex flex-col gap-4 [grid-area:top] lg:flex-row lg:items-center lg:gap-3">
+        <p aria-hidden className={cn(TYPE.label, "text-balance text-pp-muted lg:mr-auto lg:pr-1")}>
           {room.sample}
         </p>
+        <SoundButton variant="round" onChange={onSound} />
         <div className="flex items-center justify-between gap-3 lg:justify-end">
           <p
             key={`status-${mode}`}
@@ -423,7 +753,12 @@ export function KnowledgeStage({
               ))}
             </span>
           </p>
-          <RoundButton icon={button.icon} label={button.label} onClick={transport} disabled={reduce} />
+          <RoundButton
+            icon={button.icon}
+            label={button.label}
+            onClick={transport}
+            disabled={reduce && KB_FILE.get() !== null && !listenable(sq)}
+          />
         </div>
       </div>
 
@@ -484,7 +819,13 @@ export function KnowledgeStage({
             <p
               key={q.id}
               data-kb-ask
-              className={cn(TYPE.cinemaSm, "text-balance italic [grid-area:1/1]", !(stat && i === still) && "invisible")}
+              className={cn(
+                TYPE.cinemaSm,
+                "text-balance italic [grid-area:1/1]",
+                !(stat && i === still) && "invisible",
+                // Listen: the question steps back while it is answered.
+                lq?.part === "answer" && "text-pp-muted",
+              )}
             >
               {q.ask}
             </p>
@@ -595,7 +936,8 @@ export function KnowledgeStage({
         <div className="grid">
           {questions.map((q, i) => {
             const doc = winner(model, i);
-            const hidden = !(stat && i === still) && "invisible";
+            // Listen: the answer comes up when it is said.
+            const hidden = (!(stat && i === still) || lq?.part === "ask") && "invisible";
             return (
               <div key={q.id} className="[grid-area:1/1]">
                 <p data-kb-answer className={cn(TYPE.cinemaSm, "text-balance", hidden)}>

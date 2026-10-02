@@ -8,7 +8,7 @@ import { tradeFor } from "@/lib/pages/industries";
 export const metadata: Metadata = {
   title: "Industries",
   description:
-    "The same agent, your trade's vocabulary. A page for each of the sixteen trades whose phones we answer, with the calls they really get.",
+    "The same agent, your trade's vocabulary. A page for each of the sixteen trades whose phones we answer, with the kind of calls they get.",
   alternates: { canonical: "/industries" },
 };
 

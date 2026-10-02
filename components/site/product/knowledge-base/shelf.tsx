@@ -1,10 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { SHELF, type KbDocKind } from "@/lib/pages/knowledge-base";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { Pause, Play, Volume2 } from "lucide-react";
+import { cueIn, type Cue, type CueFile } from "@/lib/audio";
+import { KB_SOUND, SHELF, type KbDocKind } from "@/lib/pages/knowledge-base";
+import { pastEnd, sayingOf, SHELF_TRACK, shelfDwell } from "@/lib/pages/knowledge-base-voice";
 import { cn } from "@/lib/utils";
+import { SoundButton } from "@/components/site/audio/sound-button";
+import { useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { Frame, SectionHeading } from "../primitives";
 import { useInView, usePrefersReducedMotion } from "../timing";
+import { SCROLLED_MS, showSaid } from "@/components/site/audio/show-said";
+import { loadLate, useListen } from "./meaning";
 import { DocBadge } from "./parts";
 
 /* ------------------------------------------------------------------ *
@@ -14,7 +21,33 @@ import { DocBadge } from "./parts";
  * "asked" — under the pointer, or next in the shelf's own slow round — has
  * a caller's question rise over its sheet and one of its lines marked, the
  * way the reading room marks the line it answered from.
+ *
+ * Sound. Each card's question can be heard, from a different caller
+ * (AI-generated voices, lib/audio/cues/kb-shelf-asks.json, fetched only
+ * once sound is on). With sound on, the first time round the shelf on
+ * each entry into view is spoken: each question is said as it rises, and
+ * the round waits until it has been. Later rounds are silent, and a card
+ * under the pointer never speaks; each card then carries its own control
+ * to hear its question. With reduced motion nothing is asked by itself,
+ * and Listen says the six questions, each card showing its own as it is
+ * said.
  * ------------------------------------------------------------------ */
+
+/** The stage's claim on the site's one sound (components/site/audio/engine.ts). */
+const VOICE_ID = "kb-shelf";
+/** A read round, ms. */
+const ROUND_MS = 2600;
+
+const loadShelf = () => loadLate("kb-shelf-asks");
+
+/** Each card's clip, where it says the card's question as shown. */
+function clipsFor(file: CueFile | null | undefined): (Cue | null)[] | null {
+  if (!file) return null;
+  return SHELF.kinds.map((k, i) => {
+    const cue = cueIn(file, SHELF_TRACK(i));
+    return sayingOf(cue, k.ask, "caller") && cue ? cue : null;
+  });
+}
 
 /** A sheet's file type, its ruled lines, and which line answers the card's question. */
 const SHEETS: Record<string, { kind: KbDocKind; widths: number[]; hit: number }> = {
@@ -33,13 +66,174 @@ export function KbShelf() {
   const [round, setRound] = useState(0);
   const [held, setHeld] = useState<number | null>(null);
 
+  /* ─── Sound ──────────────────────────────────────────────────────── */
+  /** When the clip being said reached its end (performance.now()); null while it plays. */
+  const endedAt = useRef<number | null>(null);
+  /** The pass was started by a press here. Cleared when another stage's press takes the sound. */
+  const pressed = useRef(false);
+  const track = useVoiceTrack(VOICE_ID, {
+    active: inView,
+    onEnded: () => {
+      endedAt.current = performance.now();
+    },
+    onPreempt: () => {
+      pressed.current = false;
+    },
+  });
+  const trackRef = useRef(track);
   useEffect(() => {
-    if (!inView || reduce || held !== null) return;
-    const id = window.setInterval(() => setRound((r) => (r + 1) % SHELF.kinds.length), 2600);
-    return () => window.clearInterval(id);
-  }, [inView, reduce, held]);
+    trackRef.current = track;
+  });
+  /** The questions' clips: undefined until fetched (sound on), null if the file isn't there. */
+  const [file, setFile] = useState<CueFile | null | undefined>(undefined);
+  useEffect(() => {
+    if (!track.on || file !== undefined) return;
+    let live = true;
+    void loadShelf().then((f) => {
+      if (live) setFile(f);
+    });
+    return () => {
+      live = false;
+    };
+  }, [track.on, file]);
+  const clips = useMemo(() => clipsFor(file), [file]);
+  /** A spoken time round the shelf: how many cards it has left to ask. */
+  const [pass, setPass] = useState<number | null>(null);
+  /** A card whose question was asked for with its own control: it stays asked while it is said. */
+  const [picked, setPicked] = useState<number | null>(null);
+  /** The card whose clip the track holds, so a round that is held and let go carries on rather than starting again. */
+  const playing = useRef(-1);
+  /** Bumped by the sound control: the round's card is said again even when the pass count has not changed. */
+  const [restart, setRestart] = useState(0);
 
-  const asked = held ?? (reduce ? -1 : round);
+  // Into view with sound on: one spoken time round the shelf (never under reduced motion or the still tier). Out of view, it ends.
+  const onEntry = useEffectEvent((into: boolean) => {
+    if (!into) {
+      setPass(null);
+      setPicked(null);
+      return;
+    }
+    if (clips && track.on && !track.listen && !reduce) {
+      pressed.current = false;
+      setPass(SHELF.kinds.length);
+    }
+  });
+  useEffect(() => {
+    onEntry(inView);
+  }, [inView]);
+
+  // The read round. A spoken round takes over once its clips are here (until then, and without them, the shelf reads on).
+  const voicing = pass !== null && !!clips;
+  useEffect(() => {
+    if (!inView || reduce || held !== null || voicing || picked !== null) return;
+    const id = window.setInterval(() => setRound((r) => (r + 1) % SHELF.kinds.length), ROUND_MS);
+    return () => window.clearInterval(id);
+  }, [inView, reduce, held, voicing, picked]);
+
+  /** The time round can't carry on spoken (another stage's press took the sound where nothing may start by itself): the shelf reads on. */
+  const endPass = useEffectEvent(() => setPass(null));
+  // A spoken round: the card's question is said as it rises, and the round waits until it has been.
+  useEffect(() => {
+    if (pass === null || !inView || held !== null || picked !== null || !clips) return;
+    if (!pressed.current && trackRef.current.listen) {
+      endPass();
+      return;
+    }
+    const advance = () => {
+      setRound((r) => (r + 1) % SHELF.kinds.length);
+      setPass((p) => (p !== null && p > 1 ? p - 1 : null));
+    };
+    const cue = clips[round];
+    if (!cue) {
+      // A card without its clip keeps the read round.
+      const id = window.setTimeout(advance, ROUND_MS);
+      return () => window.clearTimeout(id);
+    }
+    const t = trackRef.current;
+    if (playing.current === round && endedAt.current === null) {
+      // Let go (pointer, view) mid-question: it carries on, claiming the sound only if nobody else is playing.
+      t.play(cue);
+    } else {
+      playing.current = round;
+      endedAt.current = null;
+      t.play(cue, 0, { press: pressed.current, next: clips[(round + 1) % clips.length]?.src });
+    }
+    const until = shelfDwell(ROUND_MS / 1000, cue.turns[0]);
+    let raf = 0;
+    const frame = () => {
+      if (pastEnd(trackRef.current.time(), cue, endedAt.current, performance.now()) >= until) {
+        playing.current = -1;
+        advance();
+        return;
+      }
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(raf);
+      // Held under the pointer, or out of view: it waits where it is (unless the track has moved on to another clip).
+      if (playing.current === round) trackRef.current.pause();
+    };
+  }, [pass, inView, held, picked, clips, round, restart]);
+
+  // A card asked for with its own control is let go a moment after its question has been said.
+  const pickedDone = picked !== null && track.ended;
+  useEffect(() => {
+    if (!pickedDone) return;
+    const id = window.setTimeout(() => setPicked(null), 600);
+    return () => window.clearTimeout(id);
+  }, [pickedDone]);
+
+  /** A card's own control (sound on): it is asked, and its question said. */
+  const hear = (i: number) => {
+    const cue = clips?.[i];
+    if (!cue) return;
+    setPass(null);
+    setPicked(i);
+    playing.current = -1;
+    endedAt.current = null;
+    trackRef.current.play(cue, 0, { press: true });
+  };
+
+  // Reduced motion: Listen says the six questions, each card showing its own as it is said.
+  const listenCues = useMemo(() => (clips ? clips.filter((c): c is Cue => !!c) : file === undefined ? undefined : []), [clips, file]);
+  const listen = useListen(track, listenCues, inView);
+  const listening = listen.at >= 0 && clips ? clips.indexOf(listenCues?.[listen.at] ?? null) : -1;
+
+  // Sound turned on here: a spoken time round the shelf, from the card that is up (Listen, with reduced motion).
+  const onSound = (on: boolean) => {
+    if (!on) return;
+    if (reduce) {
+      listen.soundOn();
+      return;
+    }
+    setPicked(null);
+    pressed.current = true;
+    playing.current = -1;
+    setPass(SHELF.kinds.length);
+    // A round already on its first card (the same pass count) says that card again too.
+    setRestart((n) => n + 1);
+  };
+
+  const asked = held ?? picked ?? (reduce ? listening : round);
+
+  /** Each card's question bubble: the caption of what is said. */
+  const bubbles = useRef<(HTMLParagraphElement | null)[]>([]);
+  /** When the page was last scrolled to a card (below): a card that comes under a resting mouse then is not held. */
+  const scrolledAt = useRef(-Infinity);
+  // Below lg the cards stand one under another, the sound control under the last: a round this
+  // shelf's own press started (or Listen) brings the card being asked on screen, so its question
+  // can be read as it is said. A round that started by itself never moves the page.
+  const follow = reduce ? listening : voicing ? round : -1;
+  useEffect(() => {
+    if (follow < 0 || (!reduce && !pressed.current)) return;
+    if (showSaid(bubbles.current[follow], reduce, "(max-width: 1023px)")) scrolledAt.current = performance.now();
+  }, [follow, reduce]);
+  /** The pointer came over card `i` (at `at`, the event's time): it holds the shelf there, unless the page just moved the card under it. */
+  const hold = (i: number, at: number) => {
+    if (at - scrolledAt.current < SCROLLED_MS) return;
+    setHeld(i);
+  };
 
   return (
     <>
@@ -57,10 +251,21 @@ export function KbShelf() {
             return (
               <div
                 key={k.id}
-                onPointerEnter={() => setHeld(i)}
+                onPointerEnter={(e) => hold(i, e.timeStamp)}
                 onPointerLeave={() => setHeld(null)}
                 className="relative flex flex-col overflow-hidden rounded-[24px] bg-pp-card p-6 md:p-7"
               >
+                {track.on && clips?.[i] && (
+                  // With sound on: this card's question, said on request (never on hover).
+                  <button
+                    type="button"
+                    onClick={() => hear(i)}
+                    aria-label={KB_SOUND.hear(k.ask)}
+                    className="absolute top-3 right-3 z-10 grid size-9 place-items-center rounded-full bg-white text-pp-ink shadow-[0_0_0_1px_rgb(24_16_40/0.1)] transition-colors before:absolute before:-inset-1 before:rounded-full hover:bg-pp-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
+                  >
+                    <Volume2 className="size-4" />
+                  </button>
+                )}
                 <div className="relative h-[168px]">
                   {/* The sheet */}
                   <div
@@ -93,6 +298,9 @@ export function KbShelf() {
 
                   {/* The question it answers */}
                   <p
+                    ref={(el) => {
+                      bubbles.current[i] = el;
+                    }}
                     aria-hidden
                     className={cn(
                       "absolute right-2 bottom-5 max-w-[80%] rounded-[14px] bg-pp-ink px-3 py-2 text-[13px] leading-[18px] text-white shadow-[0_12px_24px_-12px_rgb(0_0_0/0.45)] transition-[opacity,translate] duration-500",
@@ -110,6 +318,21 @@ export function KbShelf() {
               </div>
             );
           })}
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2 px-2">
+          {reduce && listenCues?.length !== 0 && (
+            // Reduced motion: nothing is asked by itself; Listen says the six questions.
+            <button
+              type="button"
+              onClick={listen.toggle}
+              className="pp-shadow-btn relative inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-sm text-pp-ink transition-colors before:absolute before:inset-x-0 before:-inset-y-1 hover:bg-pp-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
+            >
+              {listen.playing ? <Pause className="size-3.5 fill-current" /> : <Play className="size-3.5 fill-current" />}
+              {listen.playing ? KB_SOUND.pause : KB_SOUND.listen}
+            </button>
+          )}
+          <SoundButton variant="pill" tone="light" onChange={onSound} />
         </div>
 
         <div className="mt-4 flex flex-col gap-4 rounded-[24px] border border-pp-hair px-6 py-5 md:flex-row md:items-center md:justify-between md:px-7">

@@ -1,13 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { gsap as GsapCore } from "gsap";
 import { Check, Tag } from "lucide-react";
 import type { ActionKind, TriggerId } from "@/lib/pages/integrations";
+import { isAudible, isSoundOn, unlockFromGesture } from "@/components/site/audio/engine";
+import { useSoundOn, useSounding, useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { useKitContext } from "@/components/site/product/motion-kit";
+import { useInView } from "@/components/site/product/timing";
+import { loadCue, type Cue, type Surface } from "@/lib/audio";
+import { HOME_AFTER } from "@/lib/pages/home/after";
 import { cn } from "@/lib/utils";
 import { ChipRail, RoundButton, Sizer, useRovingRadio } from "./controls";
-import { useStageMotion } from "./motion";
+import { SpokenClock, type RunVoice } from "./demo-script";
+import { useDocumentVisible, useStageMotion } from "./motion";
 import { TYPE } from "./type";
 
 /* ------------------------------------------------------------------ *
@@ -25,6 +31,16 @@ import { TYPE } from "./type";
  * The server's markup is the finished run, and so is reduced motion.
  * Every block holds the height of its tallest sample, so switching
  * samples never moves the page.
+ *
+ * The "Keyword heard" sample's transcript line is recorded (an
+ * AI-generated voice). With sound on, picking that sample or replaying
+ * it plays the excerpt, and the run follows it: the record rises, then
+ * waits while the caller speaks, and the keyword is marked as it is said
+ * ("emergency", by the cue's word timestamps); from there the run plays
+ * on as written. Never on the page's own first run, and never before the
+ * visitor has turned sound on. With reduced motion the run stays finished
+ * and nothing plays by itself: on the keyword sample, Listen (in place of
+ * the transport) plays the excerpt over the finished run.
  * ------------------------------------------------------------------ */
 
 type Sentiment = "positive" | "neutral" | "negative";
@@ -66,6 +82,8 @@ export type AfterRelayData = {
     pause: string;
     play: string;
     replay: string;
+    /** Reduced motion: the keyword scene's excerpt, played on a press. */
+    listen: string;
     noSummary: string;
     sentiment: Readonly<Record<Sentiment, string>>;
   };
@@ -88,6 +106,45 @@ const hooks = (live: boolean) => (name: string): Hook => (live ? { "data-a": nam
 
 type Phase = "rest" | "armed" | "running" | "done";
 
+/** The stage's claim on the site's one sound (components/site/audio/engine.ts). */
+const VOICE_ID = "after";
+
+/**
+ * The excerpt's cue (P2), shared with /product/integrations: loaded on
+ * first use, once sound is on. A failed load resolves to null, and the
+ * scene stays silent.
+ */
+const KEYWORD = {
+  surface: "post-call-keyword-excerpt" as const satisfies Surface,
+  id: "post-call-keyword-excerpt/keyword/0",
+};
+
+/** When the run marks the keyword (buildRun step 2), and when the record has risen. */
+const HL_AT = 0.55;
+const RISEN = 0.45;
+
+/**
+ * The run on the excerpt's clock. `s` is the spoken run's time and
+ * `wordAt` where the keyword is said, both from the excerpt's start: the
+ * record rises as written, the run then waits while the caller speaks,
+ * the keyword is marked as it is said, and from there the run plays on
+ * as written. Returns the run's own (authored) time. (An excerpt whose
+ * keyword comes sooner than the mark starts that much later instead:
+ * `excerptAt`, and the run keeps its own time.)
+ */
+export function relayTime(s: number, wordAt: number): number {
+  if (wordAt <= HL_AT || s <= RISEN) return s;
+  if (s <= wordAt) return RISEN + ((HL_AT - RISEN) * (s - RISEN)) / (wordAt - RISEN);
+  return HL_AT + (s - wordAt);
+}
+
+/** Where the excerpt starts on the spoken run's clock. */
+export const excerptAt = (wordAt: number) => Math.max(0, HL_AT - wordAt);
+
+/** How long the spoken run lasts: the written run, held while the caller speaks, and at least the excerpt. */
+export const spokenLength = (written: number, wordAt: number, excerpt: number) =>
+  Math.max(written + Math.max(0, wordAt - HL_AT), excerptAt(wordAt) + excerpt);
+
 export function AfterRelay({ data }: { data: AfterRelayData }) {
   const { triggers, scenes, stepTitle, labels: L } = data;
   const stageRef = useRef<HTMLDivElement>(null);
@@ -100,6 +157,100 @@ export function AfterRelay({ data }: { data: AfterRelayData }) {
 
   const index = run.scene;
   const scene = scenes[index];
+
+  /* ─── The excerpt ────────────────────────────────────────────────── */
+  const onScreen = useInView(stageRef);
+  const visible = useDocumentVisible();
+  // Reduced motion: a Listen press may sound while the stage is on screen.
+  const track = useVoiceTrack(VOICE_ID, { active: m.reduce ? onScreen && visible : m.playing });
+  const trackRef = useRef(track);
+  useLayoutEffect(() => {
+    trackRef.current = track;
+  });
+  const voiceApi = useMemo<RunVoice>(
+    () => ({
+      play: (cue, at, o) => trackRef.current.play(cue, at, o),
+      pause: () => trackRef.current.pause(),
+      time: () => trackRef.current.time(),
+      audible: () => isAudible(VOICE_ID),
+      waiting: () => trackRef.current.waiting(),
+    }),
+    [],
+  );
+  const soundOn = useSoundOn();
+  /** The excerpt's recording, once sound is on (never fetched before). */
+  const [excerpt, setExcerpt] = useState<Cue | null>(null);
+  useEffect(() => {
+    if (!soundOn || excerpt) return;
+    let live = true;
+    loadCue(KEYWORD.surface, KEYWORD.id)
+      .catch(() => null)
+      .then((cue) => {
+        if (live && cue) setExcerpt(cue);
+      });
+    return () => {
+      live = false;
+    };
+  }, [soundOn, excerpt]);
+  const excerptRef = useRef(excerpt);
+  useLayoutEffect(() => {
+    excerptRef.current = excerpt;
+  });
+  /** The run's clock while it follows the excerpt; null while the run plays itself. */
+  const clockRef = useRef<SpokenClock | null>(null);
+  const frames = useRef(0);
+  /** Where the keyword is said in the excerpt, for this scene's line: when the excerpt speaks it as written. */
+  const keywordAt = (s: AfterScene, cue: Cue | null) => {
+    const h = s.call.heard;
+    if (!cue || !h || cue.turns.length !== 1) return null;
+    const words = cue.turns[0].words;
+    if (words.length !== `${h.before}${h.word}${h.after}`.split(" ").length) return null;
+    return words[h.before.split(" ").length - 1]?.[1] ?? null;
+  };
+  /** Where the keyword is said in the run being followed. */
+  const wordAtRef = useRef(0);
+  const stopFrames = () => {
+    cancelAnimationFrame(frames.current);
+    frames.current = 0;
+  };
+  const runFrames = () => {
+    if (frames.current) return;
+    const frame = (now: number) => {
+      frames.current = 0;
+      const clock = clockRef.current;
+      const tl = tlRef.current;
+      if (!clock || !tl) return;
+      const t = clock.tick(now);
+      tl.time(Math.min(tl.duration(), relayTime(t, wordAtRef.current)));
+      if (clock.playing) frames.current = requestAnimationFrame(frame);
+    };
+    frames.current = requestAnimationFrame(frame);
+  };
+  /** Reduced motion: Listen plays the excerpt (a press; it turns sound on), or stops it. */
+  const listening = useSounding() && track.audible;
+  const onListen = () => {
+    const t = trackRef.current;
+    if (listening) {
+      t.pause();
+      return;
+    }
+    const cue = excerptRef.current;
+    if (cue) {
+      t.play(cue, 0, { press: true, unlock: true });
+      return;
+    }
+    // Not fetched yet: sound goes on inside the press; the excerpt plays once it is here.
+    unlockFromGesture();
+    void loadCue(KEYWORD.surface, KEYWORD.id)
+      .catch(() => null)
+      .then((c) => {
+        if (!c) return;
+        setExcerpt(c);
+        trackRef.current.play(c, 0, { press: true });
+      });
+  };
+  /** The scene's transcript line can be heard: sound is on and the excerpt speaks it. */
+  const voiced = (s: AfterScene) => soundOn && keywordAt(s, excerpt) !== null;
 
   useKitContext(
     m.kit,
@@ -122,13 +273,31 @@ export function AfterRelay({ data }: { data: AfterRelayData }) {
       });
       tlRef.current = tl;
       setPhase("armed");
+      // The reader's own run of the keyword sample, with sound on: it follows the excerpt.
+      const cue = excerptRef.current;
+      const wordAt = run.nonce > 0 && isSoundOn() ? keywordAt(scene, cue) : null;
+      if (cue && wordAt !== null) {
+        wordAtRef.current = wordAt;
+        clockRef.current = new SpokenClock(
+          [{ at: excerptAt(wordAt), cue }],
+          spokenLength(tl.duration(), wordAt, cue.dur),
+          voiceApi,
+          { press: true },
+        );
+      }
       if (m.playing) {
         autoplayed.current = true;
-        tl.play();
+        if (clockRef.current) {
+          clockRef.current.start(performance.now());
+          runFrames();
+        } else tl.play();
       }
       return () => {
         tl.kill();
         tlRef.current = null;
+        clockRef.current?.stop();
+        clockRef.current = null;
+        stopFrames();
         setPhase("rest");
       };
     },
@@ -140,9 +309,16 @@ export function AfterRelay({ data }: { data: AfterRelayData }) {
   useEffect(() => {
     const tl = tlRef.current;
     if (!tl || tl.progress() === 1) return;
+    const clock = clockRef.current;
     if (m.playing) {
       autoplayed.current = true;
-      tl.play();
+      if (clock) {
+        clock.start(performance.now());
+        runFrames();
+      } else tl.play();
+    } else if (clock) {
+      clock.stop();
+      stopFrames();
     } else tl.pause();
   }, [m.playing]);
 
@@ -165,8 +341,13 @@ export function AfterRelay({ data }: { data: AfterRelayData }) {
       >
         <div className="flex h-10 items-center justify-between gap-4">
           <p className={cn(TYPE.label, "text-pp-muted")}>{L.sample}</p>
-          {/* Nothing plays with reduced motion, so there is nothing to control. */}
-          <div className={cn("flex gap-2", m.reduce && "invisible")}>
+          {/* Nothing plays by itself with reduced motion: the keyword sample offers Listen instead. */}
+          {m.reduce && scene.call.heard && (
+            <div className="flex gap-2">
+              <RoundButton icon={listening ? "pause" : "play"} label={listening ? L.pause : L.listen} onClick={onListen} />
+            </div>
+          )}
+          <div className={cn("flex gap-2", m.reduce && "invisible", m.reduce && scene.call.heard && "hidden")}>
             <RoundButton
               icon={m.paused ? "play" : "pause"}
               label={m.paused ? L.play : L.pause}
@@ -187,7 +368,7 @@ export function AfterRelay({ data }: { data: AfterRelayData }) {
               {/* The empty slot the record rises into. */}
               <span className="absolute inset-0 rounded-[20px] border border-dashed border-pp-ink/10" />
               <Stack scenes={scenes} index={index}>
-                {(s, isLive) => <CallCard s={s} L={L} live={isLive} />}
+                {(s, isLive) => <CallCard s={s} L={L} live={isLive} voiced={voiced(s)} />}
               </Stack>
             </div>
           </Station>
@@ -220,7 +401,7 @@ export function AfterRelay({ data }: { data: AfterRelayData }) {
           </div>
         </div>
 
-        <Summary s={scene} trigger={triggers[index]?.label ?? ""} L={L} stepTitle={stepTitle} />
+        <Summary s={scene} trigger={triggers[index]?.label ?? ""} L={L} stepTitle={stepTitle} voiced={voiced(scene)} />
       </div>
     </>
   );
@@ -579,7 +760,7 @@ function TagChip({ tag, hook, className }: { tag: string; hook: Hook; className?
   );
 }
 
-function CallCard({ s, L, live }: { s: AfterScene; L: Labels; live: boolean }) {
+function CallCard({ s, L, live, voiced }: { s: AfterScene; L: Labels; live: boolean; voiced: boolean }) {
   const a = hooks(live);
   const c = s.call;
   return (
@@ -600,6 +781,8 @@ function CallCard({ s, L, live }: { s: AfterScene; L: Labels; live: boolean }) {
             <span className="relative">{c.heard.word}</span>
           </span>
           {c.heard.after}
+          {/* With sound on, the line can be heard: say what the voice is. */}
+          {voiced && <span className="mt-1 block text-[12px] leading-4">{HOME_AFTER.excerpt}</span>}
         </p>
       )}
       {/* The record's footer, pinned: how long, how it went, and the tags a rule writes. */}
@@ -774,11 +957,13 @@ function Summary({
   trigger,
   L,
   stepTitle,
+  voiced,
 }: {
   s: AfterScene;
   trigger: string;
   L: Labels;
   stepTitle: AfterRelayData["stepTitle"];
+  voiced: boolean;
 }) {
   const c = s.call;
   const hook = s.actions.find((x) => x.kind === "webhook");
@@ -793,6 +978,7 @@ function Summary({
         {L.callTitle}: {c.number}, {c.status}, {c.duration}
         {c.sentiment ? `, ${L.sentiment[c.sentiment]}` : ""}. {c.summary || L.noSummary}
         {c.heard ? ` “${c.heard.before}${c.heard.word}${c.heard.after}”` : ""}
+        {c.heard && voiced ? ` (${HOME_AFTER.excerpt})` : ""}
       </p>
       <p>
         {L.ruleTitle}: {L.when} {trigger}. {L.then}:

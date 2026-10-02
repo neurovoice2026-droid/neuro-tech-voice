@@ -16,10 +16,16 @@ export const HOME_CREDITS: readonly { term: string; detail: string }[] = [
     term: `${PLATFORM.design.company} and ${PLATFORM.design.agent}`,
     detail: "A made-up business and agent name. They are used in the sample calls, the greeting and the knowledge base.",
   },
-  { term: "The calls and the knowledge base", detail: "Written for this page, days and times included. There is no audio." },
+  {
+    term: "The calls and the knowledge base",
+    // The calls and the knowledge base's questions can be played: AI-generated voices, never a recording.
+    detail:
+      "Written for this page, days and times included. The voices are AI-generated with Cartesia text-to-speech; nobody was recorded.",
+  },
   {
     term: "The trade callers",
-    detail: "Sample lines written for the industry pages. The callers, and the people they mention, are made up.",
+    detail:
+      "Sample lines written for the industry pages and read by AI-generated voices. The callers, and the people they mention, are made up.",
   },
   {
     term: "The follow-up runs",
@@ -29,7 +35,13 @@ export const HOME_CREDITS: readonly { term: string; detail: string }[] = [
     term: "Phone numbers and web addresses",
     detail: "From the 555-01xx range kept for fiction, and example.com.", // src: integrations.ts:25
   },
-  { term: "The greetings", detail: "Written by the app's own greeting code for these sample names." },
+  {
+    term: "The greetings",
+    // English is read by the site's own Ava voice, picked by audition; every other language by the
+    // voice the app uses by default for it (prod cast.json): no sentence here claims more than that.
+    detail:
+      "Written by the app's own greeting code for these sample names, and spoken by AI-generated Cartesia voices: in every language but English, the one the app uses by default.",
+  },
   {
     term: "The trade instructions",
     detail: "Quoted from the template a new agent starts with. Owners can edit them.",
@@ -48,6 +60,7 @@ export const HOME_CREDITS: readonly { term: string; detail: string }[] = [
   },
   {
     term: "Twilio, ElevenLabs and Cartesia",
-    detail: "Named in the FAQ, on where a call is kept. They are trademarks of their respective owners; Neuro Tech Voice runs calls on their services, and none of them endorses this page.",
+    detail:
+      "Named in the FAQ, on where a call is kept. They are trademarks of their respective owners; Neuro Tech Voice runs calls on their services, and none of them endorses this page. Cartesia also generates every voice you can play on this page.",
   },
 ];
