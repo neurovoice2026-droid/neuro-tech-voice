@@ -7,10 +7,10 @@
  *   Noto Sans JP (variable)              the Japanese greeting (a sans, to match)
  *   Geist Mono (variable)                technical tokens only (3:00 PM, #front-desk)
  *
- * Legacy faces still loaded so scenes that have not moved to TYPE yet do not
- * fall back to a system face; remove each once no scene sets it by name:
- *   Cormorant Garamond 500 (+ italic), Noto Serif JP 500 — scale/Langs.tsx sets them literally.
- *   (Inter / Inter Tight: no longer loaded — FONT.display / FONT.body are Instrument Sans now.)
+ * No legacy faces: Cormorant Garamond and Noto Serif JP were dropped once no
+ * scene set them (v7); Inter is not loaded (FONT.display / FONT.body are
+ * Instrument Sans). The CTA wordmark loads its own Inter Tight
+ * (scenes/cta/font) — the site header's wordmark face, not text type.
  *
  * The CSS only declares the faces; the browser downloads a face the first
  * time something uses it. Remotion would screenshot before that happens, so
@@ -22,9 +22,6 @@ import '@fontsource-variable/instrument-sans/wght.css';
 import '@fontsource-variable/instrument-sans/wght-italic.css';
 import '@fontsource-variable/noto-sans-jp/wght.css';
 import '@fontsource-variable/geist-mono/wght.css';
-import '@fontsource/cormorant-garamond/500.css';
-import '@fontsource/cormorant-garamond/500-italic.css';
-import '@fontsource/noto-serif-jp/500.css';
 import { continueRender, delayRender } from 'remotion';
 
 const SAMPLE =
@@ -40,10 +37,6 @@ const FACES: Array<[string, string]> = [
   ['italic 460 40px "Instrument Sans Variable"', SAMPLE],
   ['440 40px "Noto Sans JP Variable"', JP_GLYPHS],
   ['500 40px "Geist Mono Variable"', SAMPLE],
-  // legacy (see above)
-  ['500 40px "Cormorant Garamond"', SAMPLE],
-  ['italic 500 40px "Cormorant Garamond"', SAMPLE],
-  ['500 40px "Noto Serif JP"', JP_GLYPHS],
 ];
 
 let pending: Promise<void> | null = null;
