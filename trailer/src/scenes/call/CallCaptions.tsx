@@ -64,8 +64,11 @@ export type CallCaptionsProps = {
   id: string;
   /** the accent ink for word j of caption c (null: the speaker's ink) */
   keys?: (caption: number, word: number) => string | null | undefined;
-  /** a per-word colour mix (e.g. the payoff's ember) */
+  /** a per-word colour mix */
   tint?: (caption: number, word: number) => { color: string; k: number } | null | undefined;
+  /** keep each word on its sub-pixel layer from entrance to exit (Type.tsx revealStyle `hold`): a
+   *  landed word never re-rasterises (no late "tick"). Only where no camera zoom acts on the captions. */
+  hold?: boolean;
   /** a hairline drawn under words [from, to] of one caption as they are said (it leaves with them) */
   underline?: {
     caption: number;
@@ -128,7 +131,7 @@ function plan(p: CallCaptionsProps): Plan[] {
 }
 
 export const CallCaptions: React.FC<CallCaptionsProps> = (props) => {
-  const { t, x, y, maxWidth, font, color, keys, tint, underline } = props;
+  const { t, x, y, maxWidth, font, color, keys, tint, underline, hold = false } = props;
   const plans = plan(props);
   const rowH = font.size * font.lineHeight;
   const tracking = typeof font.tracking === 'number' ? `${font.tracking}em` : font.tracking;
@@ -146,7 +149,7 @@ export const CallCaptions: React.FC<CallCaptionsProps> = (props) => {
       let col = key ?? color;
       const tn = tint?.(c, j);
       if (tn && tn.k > 0.001) col = mixHex(col, tn.color, tn.k);
-      return { w, st: { ...revealStyle(r), color: col } as React.CSSProperties, op: r.opacity };
+      return { w, st: { ...revealStyle(r, undefined, hold), color: col } as React.CSSProperties, op: r.opacity };
     });
     if (words.every((wd) => wd.op <= 0.002)) return null;
     const word = (k: number) => (

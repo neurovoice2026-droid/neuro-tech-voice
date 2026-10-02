@@ -2,8 +2,8 @@
  * THE LANGUAGES — Ava greets in six languages, one card in focus at a time.
  *
  *   focus     the ACTIVE language: a large white card under the band title.
- *             Top-left, her small orb (the call's emerald light — one light,
- *             one Ava) breathing with her REAL envelope (VOICE.lines[id].env)
+ *             Top-left, a small flat emerald dot (the scene's accent: she is
+ *             speaking) breathing with her REAL envelope (VOICE.lines[id].env)
  *             beside the language's name as a tracked label; below, the
  *             greeting in Instrument Sans 460, −0.03em (the knowledge
  *             heading's face; Japanese in Noto Sans JP, its Latin "AI" /
@@ -11,7 +11,7 @@
  *             mask as she says it. The AI disclosure is the key phrase: it
  *             turns to the scene's accent as she says it, and a fine rule
  *             draws under it.
- *   cascade   English is heard whole (the wall's keeper turns into it). Then
+ *   cascade   English is heard whole (its card rises in as the index clears). Then
  *             Romanian / Spanish / French / German slide in from the right,
  *             each landing a frame before its voice cuts in (1 – 1.25 s
  *             each): she is cut right after her name, so the card shows only
@@ -36,15 +36,14 @@ import { C, FONT, TYPE_JP } from '../../theme';
 import { aos, EASE, mixHex, smooth, SPRING, springUnit, tween } from '../../lib/motion';
 import { maskBox, typeStyle } from '../../lib/type';
 import { reveal, revealStyle } from '../../components/Type';
-import { MeshOrb } from '../../components/MeshOrb';
 import { SCALE, SCALE_LOCAL, vWord } from '../../timing';
 import { VOICE } from '../../voice.generated';
-import { Card, IND, IndustryFace } from './Cards';
+import { Card } from './Cards';
 import { slide } from './curves';
-import { INDUSTRIES, LANGS, scriptRuns, underlined, wordsOf } from './data';
+import { LANGS, scriptRuns, underlined, wordsOf } from './data';
 import { StationFace, type FlowTiming } from './Flow';
 import { centre, mixRect, type Geo, type Rect } from './geometry';
-import { ACCENT, cardLight, META, ORB_PALETTE, rgba } from './lights';
+import { ACCENT, META } from './lights';
 
 const K = SCALE_LOCAL;
 const LA = SCALE.langAt;
@@ -243,31 +242,30 @@ const greetFace = (v: boolean, size: number, cjk: boolean): React.CSSProperties 
 });
 
 /* ── the faces ───────────────────────────────────────────────────── */
-/** her orb + the language's name (a tracked label): the card's speaker line */
+/** a flat dot + the language's name (a tracked label): the card's speaker line */
 const SpeakerRow: React.FC<{ k: number; t: number; v: boolean; D: number; lit: number; out?: number }> = ({ k, t, v, D, lit, out }) => {
   const e = envAt(k, t) * lit;
   const a = arriveAt(k);
-  // the orb lights as the card lands (a soft pop), then breathes with her voice; on `out` it shrinks away
+  // the dot comes up as the card lands (a soft pop), takes the accent while her line is live, and
+  // breathes a touch with her voice (flat: no sphere, no highlight); on `out` it shrinks away
   const pop = aos(t, a - 2, { anticip: 0, depth: 0, config: { stiffness: 260, damping: 18, mass: 0.7 } });
   const gone = out === undefined ? 0 : smooth(out, out + 3.5, t);
-  const os = (0.7 + 0.3 * Math.min(1.05, pop)) * (1 + 0.1 * e) * (1 - gone);
+  const ds = (0.6 + 0.4 * Math.min(1.05, Math.max(0, pop))) * (1 + 0.28 * e) * (1 - gone);
   const lr = out === undefined ? null : reveal(t, -1e6, { ...WORD, exit: { at: out, dur: 3.2 } });
+  const label = typeStyle('label', v, { tone: 'paper' });
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: Math.round(D * 0.38) }}>
-      <div style={{ position: 'relative', width: D, height: D }}>
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            borderRadius: '50%',
-            transform: `scale(${os.toFixed(4)})`,
-            boxShadow: `0 ${(D * 0.14).toFixed(1)}px ${(D * 0.32).toFixed(1)}px -${(D * 0.12).toFixed(1)}px ${rgba(ORB_PALETTE[0], 0.45)}`,
-          }}
-        >
-          <MeshOrb size={D} palette={ORB_PALETTE} time={t / 30 + k * 2.3} />
-        </div>
-      </div>
-      <div style={{ ...typeStyle('label', v, { tone: 'paper' }), color: META, whiteSpace: 'nowrap' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: Math.round(D * 1.3) }}>
+      <div
+        style={{
+          width: D,
+          height: D,
+          borderRadius: '50%',
+          background: mixHex(META, ACCENT, lit),
+          transform: Math.abs(ds - 1) > 1e-4 ? `scale(${ds.toFixed(4)})` : undefined,
+          flex: 'none',
+        }}
+      />
+      <div style={{ ...label, color: META, whiteSpace: 'nowrap' }}>
         {lr ? (
           <span style={maskBox(0)}>
             <span style={revealStyle(lr)}>{LANGS[k].name}</span>
@@ -290,7 +288,8 @@ export const LangFocusFace: React.FC<{ k: number; t: number; w: number; h: numbe
 }) => {
   const l = LANGS[k];
   const pad = v ? 48 : 60;
-  const D = v ? 56 : 64;
+  /** the speaker dot (px) */
+  const D = 10;
   const size = l.size[v ? 1 : 0];
   const quick = isQuick(k);
   const ul = discloseOf(k, t);
@@ -308,7 +307,7 @@ export const LangFocusFace: React.FC<{ k: number; t: number; w: number; h: numbe
   };
   return (
     <>
-      <div style={{ position: 'absolute', left: pad - 4, top: pad - 4 }}>
+      <div style={{ position: 'absolute', left: pad, top: pad }}>
         <SpeakerRow k={k} t={t} v={v} D={D} lit={lit} out={out} />
       </div>
       <div style={{ position: 'absolute', left: pad, right: pad, bottom: pad - size * 0.2, ...greetFace(v, size, !!l.cjk) }}>
@@ -328,7 +327,7 @@ export const LangFocusFace: React.FC<{ k: number; t: number; w: number; h: numbe
 export const LangGalleryFace: React.FC<{ k: number; t: number; at: number; vertical: boolean }> = ({ k, t, at, vertical: v }) => {
   const l = LANGS[k];
   const pad = v ? 20 : 24;
-  const size = v ? 38 : 44;
+  const size = v ? 38 : 40;
   const lines = linesOf(0, l.gallery[v ? 1 : 0]);
   const lr = reveal(t, at, WORD);
   return (
@@ -348,14 +347,10 @@ export const LangGalleryFace: React.FC<{ k: number; t: number; at: number; verti
 };
 
 /* ── the choreography ────────────────────────────────────────────── */
-/** the language turn: a 2 f −8° anticipation, then −8 → 180 (≈ 7 f, a 3 % overshoot) */
-const FLIP = { stiffness: 234, damping: 19.2, mass: 0.7 };
-function halfTurn(L0: number, tt: number) {
-  if (tt < L0 - 2) return 0;
-  if (tt < L0) return -8 * Math.sin(((tt - (L0 - 2)) / 2) * (Math.PI / 2));
-  // (closed-form spring from rest at −8°: continuous in angle and velocity at L0, at any fractional frame)
-  return -8 + 188 * springUnit(tt - L0, FLIP);
-}
+/** English rises into the focus under the lifting title: ζ ≈ .85, settled in ≈ 10 f, no visible overshoot */
+const RISE_IN = { stiffness: 200, damping: 24, mass: 1 };
+/** how far below its place it starts (px) */
+const RISE_PX = 84;
 const SLIDE_IN = { w: 0.5, z: 0.7, over: 10 };
 const TO_GALLERY = { w: 0.5, z: 0.72, over: 6, anticip: 2, back: 10 };
 const CARRY = { w: 0.55, z: 0.7, over: 8, anticip: 3, back: 14 };
@@ -363,18 +358,20 @@ const CARRY = { w: 0.55, z: 0.7, over: 8, anticip: 3, back: 14 };
 const focusOf = (G: Geo, k: number) => (k === 0 ? G.langEn : G.lang);
 const dist = (a: Rect, b: Rect) => Math.hypot(centre(b).x - centre(a).x, centre(b).y - centre(a).y);
 
-type Pose = { r: Rect; rot: number; leave: number; drop: number; carry: number; moving: boolean };
+type Pose = { r: Rect; rot: number; leave: number; drop: number; carry: number; moving: boolean; enter: number };
 
 /** where card k is at tt (null: not on stage) */
 export function poseOf(G: Geo, k: number, tt: number): Pose | null {
   const F = focusOf(G, k);
   let r: Rect;
   let moving = false;
+  let enter = 1;
   if (k === 0) {
-    if (tt < K.glide - 4) return null;
-    const g = aos(tt, K.glide, { anticip: 4, depth: 0.04, config: SPRING.site });
-    r = mixRect(G.cards[G.keeper], F, g);
-    moving = Math.abs(1 - g) > 1e-4;
+    // English rises into the focus from a little below as the index clears and the title lifts
+    if (tt < K.glide) return null;
+    enter = springUnit(tt - K.glide, RISE_IN);
+    r = { ...F, y: F.y + (1 - enter) * RISE_PX };
+    moving = Math.abs(1 - enter) > 1e-4;
   } else {
     if (tt < K.switchIn[k]) return null;
     const from: Rect = { ...F, x: G.W + 40, y: F.y };
@@ -407,24 +404,22 @@ export function poseOf(G: Geo, k: number, tt: number): Pose | null {
     rot = (k % 2 === 0 ? 1 : -1) * 2 * drop;
     if (pre > 0 || drop > 0) moving = true;
   }
-  return { r, rot, leave, drop, carry, moving };
+  return { r, rot, leave, drop, carry, moving, enter };
 }
 
 export const LangCards: React.FC<{
   t: number;
   G: Geo;
   vertical: boolean;
-  /** the hero's veil on the wall (0..1): the keeper wears it until it glides out */
-  veil: number;
   flowT: FlowTiming;
-}> = ({ t, G, vertical: v, veil, flowT }) => {
+}> = ({ t, G, vertical: v, flowT }) => {
   const order = Array.from({ length: N }, (_, k) => k);
   const cards = order.map((k) => {
     const P = poseOf(G, k, t);
     if (!P) return null;
     const F = focusOf(G, k);
     const { r } = P;
-    // the card's light (her orb): up as it lands, out as it recedes
+    // the card's light (her speaker dot): up as it lands, out as it recedes
     const a = arriveAt(k);
     const lit =
       tween(t, [a - 3, a + 2], [0, 1], EASE.out3) *
@@ -432,45 +427,15 @@ export const LangCards: React.FC<{
     let transform: string | undefined = Math.abs(P.rot) > 0.01 ? `rotate(${P.rot.toFixed(3)}deg)` : undefined;
     let face: React.ReactNode = null;
     let opacity = 1 - tween(P.drop, [0.3, 1], [0, 1], EASE.inOut);
-    let shade = 0;
     let z = P.leave > 0.02 ? 2 : 3;
-    // English: the keeper's industry face, until it turns
-    if (k === 0) {
-      const ang = halfTurn(K.enFlip, t);
-      const axis = v ? 'X' : 'Y';
-      // the hero's veil lifts as it glides out of the wall
-      const g = tween(t, [K.glide - 2, K.glide + 8], [0, 1], EASE.inOut);
-      opacity *= 1 - veil * (1 - g);
-      // the face turns from the light: it dims a touch edge-on (never a flat grey)
-      shade = Math.abs(Math.sin((ang * Math.PI) / 180)) * 0.55;
-      if (ang < 90) {
-        const i = G.keeper;
-        // the industry face grows with the card (it comes forward), until it turns
-        const c0 = G.cards[i];
-        const grow = Math.min(r.w / c0.w, r.h / c0.h);
-        face = (
-          <div
-            style={{
-              position: 'absolute',
-              left: 0,
-              top: 0,
-              width: c0.w,
-              height: c0.h,
-              transform: Math.abs(grow - 1) > 1e-4 ? `scale(${grow.toFixed(5)})` : undefined,
-              transformOrigin: '0 0',
-            }}
-          >
-            <IndustryFace d={INDUSTRIES[i]} t={t} at={K.pops[i]} tick={K.pops[i]} light={cardLight(i)} vertical={v} still />
-          </div>
-        );
-        transform = ang !== 0 ? `perspective(2400px) rotate${axis}(${ang.toFixed(3)}deg)` : transform;
-      } else {
-        const ra = ang - 180;
-        transform = Math.abs(ra) > 0.01 ? `perspective(2400px) rotate${axis}(${ra.toFixed(3)}deg)` : transform;
-      }
-      if (t < K.glide + 6) z = 4;
+    // English: it comes up with its rise (the card, then its words out of their masks)
+    if (k === 0 && P.enter < 0.9999) {
+      opacity *= smooth(0, 0.6, P.enter);
+      const sc = 0.97 + 0.03 * Math.min(1, P.enter);
+      transform = `scale(${sc.toFixed(5)})`;
+      z = 4;
     }
-    if (!face) {
+    {
       // the focus face, scaled with the card as it recedes, goes in the first third of the move; then the
       // gallery face rises in (its own masks) — a hand-over, never a cross-dissolve of the same words
       const sc = Math.min(r.w / F.w, r.h / F.h);
@@ -506,10 +471,9 @@ export const LangCards: React.FC<{
     if (k === CARRIER && t >= K.stations[0] - 3) z = 4;
     // the shadow: a card in flight floats higher; a gallery card rests closer to the wall
     const lift = P.moving ? 1.6 : P.leave > 0.5 ? 0.7 : 1;
-    const ind = IND(v);
-    const radius = P.leave > 0.5 ? 22 : k === 0 && t < K.enFlip + 2 ? ind.radius : v ? 28 : 32;
+    const radius = P.leave > 0.5 ? 22 : v ? 28 : 32;
     return (
-      <Card key={`lang-${k}`} r={r} transform={transform} opacity={opacity} lift={lift} shade={shade} radius={radius} z={z} moving={P.moving}>
+      <Card key={`lang-${k}`} r={r} transform={transform} opacity={opacity} lift={lift} radius={radius} z={z} moving={P.moving}>
         {face}
       </Card>
     );

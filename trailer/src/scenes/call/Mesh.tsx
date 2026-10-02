@@ -73,21 +73,22 @@ const DEEP = '#021a11';
 const BODY = '#066a4e'; // the closing light's #065f46, a touch more lit
 const MID = '#0c8060';
 
-/** The ambient pools (bottom first). Two layouts, one design: the bodies of colour sit in the
- *  corners and edges, the frame's middle is left to the orb's own light. */
+/** The ambient pools (bottom first). Two layouts, one design: quiet bodies of colour in the corners
+ *  and edges — always DIMMER than the light round the orb (the room is lit by its source, not from
+ *  off-frame) — the frame's middle is left to the orb's own light. */
 const AMBIENT: Record<'h' | 'v', readonly Pool[]> = {
   h: [
-    { c: BODY, a: 0.62, x: 0.1, y: 0.9, rx: 0.6, ry: 0.82, dx: 0.08, dy: 0.1, px: 430, py: 350, ph: [0.4, 1.9] },
-    { c: MID, a: 0.34, x: 0.92, y: 0.06, rx: 0.48, ry: 0.72, dx: 0.09, dy: 0.12, px: 390, py: 470, ph: [2.2, 0.6] },
-    { c: BODY, a: 0.5, x: 0.96, y: 0.96, rx: 0.42, ry: 0.6, dx: 0.1, dy: 0.08, px: 510, py: 330, ph: [4.1, 3.0] },
+    { c: BODY, a: 0.36, x: 0.1, y: 0.9, rx: 0.6, ry: 0.82, dx: 0.08, dy: 0.1, px: 430, py: 350, ph: [0.4, 1.9] },
+    { c: MID, a: 0.26, x: 0.92, y: 0.06, rx: 0.48, ry: 0.72, dx: 0.09, dy: 0.12, px: 390, py: 470, ph: [2.2, 0.6] },
+    { c: BODY, a: 0.3, x: 0.96, y: 0.96, rx: 0.42, ry: 0.6, dx: 0.1, dy: 0.08, px: 510, py: 330, ph: [4.1, 3.0] },
     { c: DEEP, a: 0.6, x: 0.0, y: 0.06, rx: 0.42, ry: 0.6, dx: 0.06, dy: 0.1, px: 560, py: 410, ph: [1.1, 5.2] },
     { c: MID, a: 0.2, x: 0.28, y: 0.34, rx: 0.32, ry: 0.5, dx: 0.12, dy: 0.12, px: 300, py: 420, ph: [5.6, 2.4] },
     { c: MID, a: 0.16, x: 0.74, y: 0.62, rx: 0.3, ry: 0.46, dx: 0.12, dy: 0.12, px: 360, py: 290, ph: [3.3, 4.4] },
   ],
   v: [
-    { c: BODY, a: 0.62, x: 0.08, y: 0.92, rx: 0.9, ry: 0.42, dx: 0.08, dy: 0.1, px: 430, py: 350, ph: [0.4, 1.9] },
-    { c: MID, a: 0.36, x: 0.94, y: 0.06, rx: 0.8, ry: 0.36, dx: 0.09, dy: 0.12, px: 390, py: 470, ph: [2.2, 0.6] },
-    { c: BODY, a: 0.46, x: 1.0, y: 0.64, rx: 0.62, ry: 0.3, dx: 0.1, dy: 0.08, px: 510, py: 330, ph: [4.1, 3.0] },
+    { c: BODY, a: 0.36, x: 0.08, y: 0.92, rx: 0.9, ry: 0.42, dx: 0.08, dy: 0.1, px: 430, py: 350, ph: [0.4, 1.9] },
+    { c: MID, a: 0.28, x: 0.94, y: 0.06, rx: 0.8, ry: 0.36, dx: 0.09, dy: 0.12, px: 390, py: 470, ph: [2.2, 0.6] },
+    { c: BODY, a: 0.3, x: 1.0, y: 0.64, rx: 0.62, ry: 0.3, dx: 0.1, dy: 0.08, px: 510, py: 330, ph: [4.1, 3.0] },
     { c: DEEP, a: 0.55, x: 0.0, y: 0.32, rx: 0.62, ry: 0.3, dx: 0.06, dy: 0.1, px: 560, py: 410, ph: [1.1, 5.2] },
     { c: MID, a: 0.2, x: 0.3, y: 0.2, rx: 0.55, ry: 0.24, dx: 0.12, dy: 0.12, px: 300, py: 420, ph: [5.6, 2.4] },
     { c: MID, a: 0.16, x: 0.72, y: 0.8, rx: 0.55, ry: 0.24, dx: 0.12, dy: 0.12, px: 360, py: 290, ph: [3.3, 4.4] },
@@ -163,12 +164,16 @@ export const EmeraldMesh: React.FC<MeshProps> = ({ t, L, orb, level, listen, rev
   const H = L.height;
   const pools = AMBIENT[L.vertical ? 'v' : 'h'];
   const lv = Math.max(0, Math.min(1.2, level));
-  // the orb's two pools: its light on the room (wide), and a restrained mint heart around it
+  // the orb's three pools — the room's KEY: a wide body of the closing light's deep green round it (the
+  // room's brightest ambient, so the light has its source), its light on the room, and a restrained
+  // mint heart around it
   const keyCol = mixColor(EMERALD_GLOW.body, LISTEN_GLOW.body, 0.65 * listen);
   const heartCol = mixColor(EMERALD_GLOW.core, LISTEN_GLOW.core, 0.65 * listen);
-  const keyA = (0.3 + 0.05 * lv + 0.12 * flash) * (1 - 0.22 * listen) * source;
-  const heartA = (0.075 + 0.035 * lv + 0.08 * flash) * (1 - 0.3 * listen) * source;
-  const key = { rx: L.pick(0.3 * W, 0.62 * W), ry: L.pick(0.52 * H, 0.3 * H) };
+  const bodyA = 0.5 * (1 - 0.15 * listen) * source;
+  const keyA = (0.4 + 0.05 * lv + 0.12 * flash) * (1 - 0.22 * listen) * source;
+  const heartA = (0.085 + 0.035 * lv + 0.08 * flash) * (1 - 0.3 * listen) * source;
+  const body = { rx: L.pick(0.5 * W, 0.95 * W), ry: L.pick(0.8 * H, 0.42 * H) };
+  const key = { rx: L.pick(0.34 * W, 0.68 * W), ry: L.pick(0.58 * H, 0.33 * H) };
   const heart = { rx: Math.max(orb.d * 0.95, L.pick(0.16 * W, 0.4 * W)), ry: Math.max(orb.d * 0.95, L.pick(0.28 * H, 0.2 * H)) };
   const R = Math.hypot(Math.max(orb.x, W - orb.x), Math.max(orb.y, H - orb.y));
   const mask = reveal < 0.999 ? revealMask(orb.x, orb.y, Math.max(1, (R / 0.42) * Math.pow(reveal, 0.9) * 1.04)) : undefined;
@@ -181,6 +186,7 @@ export const EmeraldMesh: React.FC<MeshProps> = ({ t, L, orb, level, listen, rev
         const y = p.y * H + p.dy * ry * Math.sin((2 * Math.PI * t) / p.py + p.ph[1]);
         return <PoolDiv key={i} x={x} y={y} rx={rx} ry={ry} c={p.c} a={p.a} />;
       })}
+      <PoolDiv x={orb.x} y={orb.y + 0.1 * orb.d} rx={body.rx} ry={body.ry} c={BODY} a={bodyA} />
       <PoolDiv x={orb.x} y={orb.y + 0.04 * orb.d} rx={key.rx} ry={key.ry} c={keyCol} a={keyA} />
       <PoolDiv x={orb.x} y={orb.y} rx={heart.rx} ry={heart.ry} c={heartCol} a={heartA} />
       {/* the room falls off to a deep green-black at the edges (never grey) */}

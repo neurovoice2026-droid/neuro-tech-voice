@@ -20,15 +20,16 @@
  *            (call/shots.ts); on the caller's turns it calms in place, eases to
  *            the listen palette, and the caller's real envelope draws out under
  *            it as a fine line (call/Waveform). Live captions in TYPE.caption,
- *            word-synced, key words in the accent ink; the AI disclosure is
- *            underlined as she says it; the slot chips rise ON the spoken times
- *            ("3:00 PM" flanks the orb's left, "4:30 PM" its right; 9:16:
- *            above it), 3:00 PM is picked on "three o'clock" and taken into
- *            the orb as Ava answers
- *   line 5   "You're all booked for / Wednesday at 3 PM." — the ember (the
- *            film's colour for Booked) sweeps the mark ON the spoken "three";
- *            the payoff press; row A leaves; the orb inhales and dives INTO the
- *            mark, which the result picks up at markHide.
+ *            word-synced, key words in the ONE accent ink (mint) — colour alone
+ *            carries the emphasis (no underline, no slot chips: the two-tone
+ *            caption carries the names, the disclosure, the day and the times)
+ *   line 5   "You're all booked for / Wednesday at 3 PM." — the mark rises in
+ *            the mint on the voice; the payoff press ON the spoken "three"; row A
+ *            leaves; the orb inhales and dives INTO the mark, and on the contact
+ *            the ember (the film's colour for Booked — the result's accent)
+ *            ignites out of the point it went in, its glow with it: the only
+ *            ember in the scene, in its last ~4 frames, which the result picks
+ *            up at markHide.
  *
  * Nothing in the scene is blurred, smeared or ghosted; there is no bokeh, no
  * dust, no camera shake. Smoothness is the 120 fps render and the curves.
@@ -37,22 +38,21 @@ import React, { useMemo } from 'react';
 import { AbsoluteFill } from 'remotion';
 import { flowTime } from '../components/Orb';
 import { MarkGlow } from '../components/Shared';
-import { MARK, MARK_GLOW_HANDOFF, TRANSCRIPT } from '../lib/handoff';
+import { MARK, MARK_GLOW_HANDOFF, MARK_TYPE, TRANSCRIPT } from '../lib/handoff';
 import { useLayout } from '../lib/layout';
 import { EASE, SPRING, springUnit, tween } from '../lib/motion';
 import { pickupGlow, pickupScale } from '../lib/pickup';
 import { useSceneFrame } from '../lib/scene';
 import { captionFont, typeSize } from '../lib/type';
-import { C } from '../theme';
 import { CALL, CALL_LOCAL, FPS, SCENES, TWIST_LOCAL, vWord, type Caption } from '../timing';
 import { VOICE } from '../voice.generated';
 import { CallCaptions, exitLength, type CallCaption } from './call/CallCaptions';
 import { callGlow, KeyLight, MidnightVignette, RoomBox } from './call/Light';
-import { Digits, OrbStage, type OrbState } from './call/Lockup';
-import { ACCENT, AVA_INK, CALLER_INK, EmeraldMesh } from './call/Mesh';
+import { Digits, OrbStage, relightGlow, type OrbState } from './call/Lockup';
+import { ACCENT, AVA_INK, CALLER_INK, EMERALD_GLOW, EmeraldMesh } from './call/Mesh';
 import { framingAt, framings, orbBase, swayAt } from './call/shots';
 import { ClosedSign, flightAt, PickupLine } from './call/Status';
-import { Chips, MarkRow, TurnLabel, type Turn } from './call/Transcript';
+import { MarkRow, TurnLabel, type Turn } from './call/Transcript';
 import { lightAt, listenAt, onsets, ORB_FRAME0, orbVolumeByIndex, volumeAt } from './call/voice';
 import { Waveform } from './call/Waveform';
 
@@ -96,14 +96,15 @@ const CAPTIONS: readonly (readonly CallCaption[])[] = LINES.map((l, i) => {
 
 /**
  * KEY WORDS — the knowledge heading's two-tone: per line, per caption, the words set in the accent
- * ink (one accent in the scene). The names, the AI disclosure, the day and the times.
+ * ink (one accent in the scene). The names, the AI disclosure, the day and the times. The last line's
+ * key phrase is the mark itself ("Wednesday at 3 PM", <MarkRow>), so its row A stays paper.
  */
 const KEYS: readonly (readonly (readonly number[])[])[] = [
   [[4, 5], [4, 5], []], // Northside Studio. · AI assistant.
   [[], [5]], // Wednesday
   [[], [2, 3, 5], []], // 3 PM · 4:30.
   [C4_HAS_OH ? [1, 2] : [0, 1]], // three o'clock
-  [[], [2]], // booked
+  [[], []], // (row A paper: the key phrase is the mark)
 ];
 
 /** Ava's talk swell on the orb — her level plus her syllables (eases in after the pickup, so t 0 is exact) */
@@ -124,17 +125,9 @@ const gulpLevel = (tt: number) => {
   if (u < 0) return 0;
   return 0.16 * (1 - Math.exp(-u / 1.2)) * Math.exp(-u / 6);
 };
-/** the orb takes the picked slot in: a small gulp */
-const absorbKick = (tt: number) => {
-  const u = tt - CALL_LOCAL.chipAbsorb;
-  if (u < 0) return 0;
-  return Math.exp(-u / 4) * Math.sin((Math.PI * u) / 4.5);
-};
 /** the hits' light: the pickup's flash and the gulp's (the orb flares, its light floods the room) */
 const pickupFlash = (tt: number) => (tt < 0 ? 0 : 0.5 * Math.exp(-tt / 5));
-const gulpFlash = (tt: number) =>
-  (tt < CALL_LOCAL.swallow ? 0 : 0.42 * Math.exp(-(tt - CALL_LOCAL.swallow) / 4)) +
-  (tt < CALL_LOCAL.chipAbsorb ? 0 : 0.3 * Math.exp(-(tt - CALL_LOCAL.chipAbsorb) / 4));
+const gulpFlash = (tt: number) => (tt < CALL_LOCAL.swallow ? 0 : 0.42 * Math.exp(-(tt - CALL_LOCAL.swallow) / 4));
 
 /* the twist's phone screen at the end of its dive (twist/geometry.ts:
  * phone 260×540, bezel 9 → screen 242×522, scaled S about the avatar) */
@@ -146,8 +139,9 @@ const CALLER_LINES = LINES.flatMap((l, i) => (l.who === 'caller' ? [i] : []));
 const LINE_OPEN = { stiffness: 150, damping: 20, mass: 1 };
 const LINE_CLOSE = 8;
 
-/** the orb turns emerald just after the pickup (the room follows it) */
-const EMERALD: readonly [number, number] = [0, 11];
+/** the orb turns emerald just after the pickup, under its flash (the room follows it); the hue turns
+ *  in the dark — call/Lockup.tsx relight: never through a third light */
+const EMERALD: readonly [number, number] = [0, 8];
 /** the room lights up out of the orb */
 const MESH_OPEN: readonly [number, number] = [4, 50];
 
@@ -172,7 +166,7 @@ export const Call: React.FC = () => {
   const take = { x: M.x, y: M.y - 0.06 * M.fontSize, d: 0.45 * M.fontSize };
   const orbAt = (tt: number): OrbState => {
     const f = framingAt(tt, L);
-    const s = { x: f.x, y: f.y, d: f.d * pickupScale(tt + g0) * (1 + 0.05 * gulpKick(tt) + 0.025 * absorbKick(tt)) * talkSwell(tt) };
+    const s = { x: f.x, y: f.y, d: f.d * pickupScale(tt + g0) * (1 + 0.05 * gulpKick(tt)) * talkSwell(tt) };
     if (tt < i0) return s;
     // the inhale: the orb swells 5 % and draws back 8 px (away from the mark) — the dive's anticipation
     const inh = EASE.inOut(clamp01((tt - i0) / (i1 - i0)));
@@ -207,6 +201,9 @@ export const Call: React.FC = () => {
   const listen = listenAt(t);
   const orb = orbAt(Math.min(t, END - 0.001));
   const orbFade = t >= END ? 0 : fadeAt(t);
+  // the room's light goes with its source — but over the ignition (≈ 4 f), as it passes into the mark's
+  // glow, not in the 1.5 f the orb takes to vanish
+  const roomSource = t >= END ? 0 : 1 - EASE.inOut(clamp01((t - (v1 - 1.5)) / 4));
   const hitFlash = pickupFlash(t) + gulpFlash(t);
 
   const mesh = (reveal: number) => (
@@ -218,7 +215,7 @@ export const Call: React.FC = () => {
       listen={listen}
       reveal={reveal}
       flash={0.5 * hitFlash}
-      source={orbFade}
+      source={roomSource}
     />
   );
   if (t >= END) {
@@ -251,9 +248,6 @@ export const Call: React.FC = () => {
 
   /* ── captions ─────────────────────────────────────────────────────── */
   const holdOf = (i: number) => (i + 1 < LINES.length ? LINES[i + 1].at + 1 : CALL_LOCAL.rowOut + exitLength(ROW_A.text.split(' ').length));
-  // the AI disclosure: a hairline drawn under "AI assistant." as she says it
-  const [d0, d1] = CALL_LOCAL.disclose;
-  const dP = EASE.draw(tween(t, [d0, d1], [0, 1], (x) => x));
 
   /* ── the caller's line (their real voice, under the calm orb) ──── */
   const wave = (() => {
@@ -272,19 +266,6 @@ export const Call: React.FC = () => {
   })();
   const W = L.pick({ cy: 628, half: 300, maxH: 22 }, { cy: 1012, half: 270, maxH: 26 });
 
-  /* ── the slot chips ────────────────────────────────────────────── */
-  const chip = L.pick({ w: 340, h: 112, fs: 64 }, { w: 300, h: 100, fs: 56 });
-  const chipSlots = L.pick(
-    [
-      { x: L.cx - (Fr.A.d / 2 + 74 + chip.w / 2), y: Fr.A.y },
-      { x: L.cx + (Fr.A.d / 2 + 74 + chip.w / 2), y: Fr.A.y },
-    ] as const,
-    [
-      { x: L.cx - (chip.w / 2 + 14), y: 362 },
-      { x: L.cx + (chip.w / 2 + 14), y: 362 },
-    ] as const,
-  );
-
   /* ── the payoff: row B, the booked mark ───────────────────────────── */
   const last = LINES[4];
   const bm = CALL.bookedMark;
@@ -294,18 +275,18 @@ export const Call: React.FC = () => {
     bm - 2,
     last.at + vWord(last.voice, 7) - 2,
   ] as const;
-  // the ember sweeps the mark left → right ON the spoken "three"
-  const ember = tween(t, [bm, bm + 10], [0, 1], EASE.inOut);
-  // the glow comes up ON the mark, then HOLDS exactly the hand-over strength (no fade)
-  const took = t >= CALL_LOCAL.markTake ? Math.exp(-(t - CALL_LOCAL.markTake) / 1.1) : 0;
-  const glowK =
-    t < bm
-      ? 0
-      : t < bm + 6
-        ? EASE.out3((t - bm) / 6) * 0.85
-        : t < bm + 12
-          ? 0.85 - (0.85 - MARK_GLOW_HANDOFF) * EASE.inOut((t - bm - 6) / 6)
-          : MARK_GLOW_HANDOFF + 0.4 * took;
+  // the mark holds the call's mint until the orb goes into it: on the contact the ember ignites out
+  // of the point it went in (a quick front, all ember by markHide − .5) and its glow comes up with it
+  // to exactly the hand-over strength (+ the take's flare) — the scene's only ember, its last ~4 frames
+  const IGNITE: readonly [number, number] = [v1 - 1, END - 0.5];
+  const ignite = tween(t, IGNITE, [0, 1], EASE.out3);
+  // the take's flare (the mark kicks 1.5 %, its ember and glow run hot): a smooth bump from markTake that
+  // is exactly 0 again by markHide − 1 — no jump on the take, none at the hand-over
+  const took = (() => {
+    const u = (t - CALL_LOCAL.markTake) / (END - 1 - CALL_LOCAL.markTake);
+    return u <= 0 || u >= 1 ? 0 : Math.sin(Math.PI * u) ** 2;
+  })();
+  const glowK = ignite * (MARK_GLOW_HANDOFF + 0.4 * took);
   // the payoff beat: a soft press 1 → .98 (3 f), released on a spring — exactly 1 before the hand-over
   const P = CALL_LOCAL.payoff;
   const pulse =
@@ -316,7 +297,6 @@ export const Call: React.FC = () => {
   const periodOut = CALL_LOCAL.rowOut + 1.8;
 
   const orbNow = orb;
-  const leaveTo = orbAt(CALL_LOCAL.chipAbsorb - 1);
 
   return (
     <AbsoluteFill style={{ overflow: 'hidden' }}>
@@ -324,13 +304,15 @@ export const Call: React.FC = () => {
       {meshOpen < 1 ? (
         <AbsoluteFill style={{ opacity: roomOp < 1 ? roomOp : undefined }}>
           <RoomBox x={L.cx} y={L.cy} w={room.w} h={room.h} grade={grade} />
-          {t >= 0 ? <KeyLight x={orbNow.x} y={orbNow.y} d={orbNow.d} glow={callGlow(0)} strength={keyK} spread={L.pick(3.2, 2.6)} /> : null}
+          {t >= 0 ? (
+            <KeyLight x={orbNow.x} y={orbNow.y} d={orbNow.d} glow={relightGlow(callGlow(0), EMERALD_GLOW, emerald)} strength={keyK} spread={L.pick(3.2, 2.6)} />
+          ) : null}
           <MidnightVignette k={vignetteK} />
         </AbsoluteFill>
       ) : null}
       {mesh(meshOpen)}
 
-      {/* ── behind the orb: the big line diving in, the figures, the chips, the caller's line ── */}
+      {/* ── behind the orb: the big line diving in, the figures, the caller's line ── */}
       {t <= CALL_LOCAL.swallow ? (
         <PickupLine t={t} text="Picked up on the first ring." vertical={L.vertical} boxW={L.pick(1500, 940)} flight={flight} keyAt={CALL_LOCAL.lineGlint} />
       ) : null}
@@ -347,19 +329,6 @@ export const Call: React.FC = () => {
           tween(t, [CALL_LOCAL.unfold + 6, CALL_LOCAL.unfold + 22], [0, 1], EASE.inOut),
           tween(t, [CALL_LOCAL.unfold + 10, CALL_LOCAL.unfold + 26], [0, 1], EASE.inOut),
         ]}
-      />
-      <Chips
-        t={t}
-        slots={chipSlots}
-        w={chip.w}
-        h={chip.h}
-        fontSize={chip.fs}
-        pops={CALL_LOCAL.chipPops}
-        pick={CALL_LOCAL.pick}
-        drop={CALL_LOCAL.chipDrop}
-        leave={CALL_LOCAL.chipsOut}
-        leaveTo={leaveTo}
-        recentre={L.vertical ? L.cx : undefined}
       />
       {wave ? (
         <Waveform
@@ -423,23 +392,19 @@ export const Call: React.FC = () => {
             color={agent ? AVA_INK : CALLER_INK}
             holdUntil={holdOf(i)}
             keys={(c, j) => (keys[c]?.includes(j) ? ACCENT : null)}
-            tint={i === 4 ? (c, j) => (c === 1 && j === 2 ? { color: C.emberLit, k: ember } : null) : undefined}
-            underline={
-              i === 0
-                ? { caption: 1, words: [4, 5], p: dP, color: ACCENT, thickness: Math.max(2, Math.round(capFont.size * 0.04)) }
-                : undefined
-            }
+            hold
           />
         );
       })}
 
-      {/* ── the booked mark + its glow (handed to the result at markHide) ── */}
+      {/* ── the booked mark + its glow (the glow only from the take; handed to the result at markHide) ── */}
       <MarkGlow x={M.x} y={M.y} fontSize={M.fontSize} k={glowK} />
       <MarkRow
         t={t}
         appear={markAppear}
-        ink={AVA_INK}
-        ember={ember}
+        ink={ACCENT}
+        ignite={ignite}
+        igniteAt={[50, 50 - (100 * 0.06) / MARK_TYPE.lineHeight]}
         pulse={pulse}
         periodOut={periodOut}
         flare={took}

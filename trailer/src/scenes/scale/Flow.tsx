@@ -14,7 +14,8 @@
  *             empty card): a monoline icon that draws on in the accent and
  *             settles to ink, the line in the title role (64 / 56 px); 16:9
  *             names (title role) above the nodes, 9:16 names in the card's
- *             top-left. The call's "Booked" pill is the film's ember; the
+ *             top-left. The call's "Booked" pill is in the scene's one accent
+ *             (emerald on a pale emerald tint — no second accent here); the
  *             CRM's "Contact saved" turns to the accent as its check lands.
  */
 import React from 'react';
@@ -26,7 +27,7 @@ import { reveal, revealStyle } from '../../components/Type';
 import { Card, DrawIcon } from './Cards';
 import { STATION_ICONS, STATION_NAMES } from './data';
 import type { Geo, Pt } from './geometry';
-import { ACCENT, ACCENT_LIT, META, rgba, tintInk } from './lights';
+import { ACCENT, ACCENT_LIT, ACCENT_TINT, META, rgba, tintInk } from './lights';
 
 export type FlowTiming = {
   trackIn: number;
@@ -270,7 +271,7 @@ const StationIcon: React.FC<{ i: number; t: number; at: number; st: number; size
   return <DrawIcon Icon={STATION_ICONS[i]} size={size} color={tintInk(ACCENT, k)} draw={draw} stroke={1.5} />;
 };
 
-/** the ember "Booked" pill (the film's one ember: the booking) */
+/** the "Booked" pill, in the scene's one accent (emerald on its pale tint) */
 const Pill: React.FC<{ t: number; at: number; size: number }> = ({ t, at, size }) => {
   if (t < at - 1) return null;
   const p = springUnit(t - (at - 1), { stiffness: 320, damping: 20, mass: 0.7 });
@@ -283,8 +284,8 @@ const Pill: React.FC<{ t: number; at: number; size: number }> = ({ t, at, size }
         height: size * 1.7,
         padding: `0 ${size * 0.66}px 0 ${size * 0.56}px`,
         borderRadius: R.pill,
-        background: C.emberSoft,
-        color: C.emberInk,
+        background: ACCENT_TINT,
+        color: ACCENT,
         ...typeStyle('label', false, { tone: 'paper', size, weight: 520 }),
         letterSpacing: '0.01em',
         textTransform: 'none',
@@ -293,7 +294,7 @@ const Pill: React.FC<{ t: number; at: number; size: number }> = ({ t, at, size }
         transformOrigin: '0% 50%',
       }}
     >
-      <div style={{ width: size * 0.3, height: size * 0.3, borderRadius: '50%', background: C.ember }} />
+      <div style={{ width: size * 0.3, height: size * 0.3, borderRadius: '50%', background: ACCENT }} />
       Booked
     </div>
   );

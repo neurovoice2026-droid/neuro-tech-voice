@@ -1,15 +1,16 @@
 /**
  * The SCALE camera, as a 2D affine on the depth-1 layer: screen = A + s·p.
  *
- *   wall     a CONTINUOUS pull-back that always FRAMES THE CLUSTER: the cards
- *            popped so far, plus the next slot a few frames before its card
- *            pops (lead room), inside the framing box (geometry.ts: ≥ 64 px
- *            from the 16:9 edges, ≥ 60 px from the 9:16 sides, inside the
- *            9:16 safe zone) — card 01 fills the box out of the whip → each
- *            new column / row opens the frame → the whole wall, composed with
- *            air around it → a last breath out (0.975) into the slam. Zoom
- *            (in log) and focus are monotone cubics through those framings,
- *            and the focus is clamped so no popped card ever leaves the box.
+ *   index    a CONTINUOUS pull-back that always FRAMES THE CLUSTER: the names
+ *            landed so far, plus the next one a few frames before it lands
+ *            (lead room), inside the framing box (geometry.ts: the whole
+ *            index ≥ 176 px from the 16:9 sides, inside the 9:16 safe zone) —
+ *            "Home services" fills the frame out of the whip (16:9 at ≤ 4.2×)
+ *            → each new column / row opens the frame → the whole index,
+ *            composed with air around it → a last breath out (0.975) into the
+ *            slam. Zoom (in log) and focus are monotone cubics through those
+ *            framings, and the focus is clamped so no landed name ever leaves
+ *            the box.
  *            Locked off otherwise: no per-pop pumps, no jolts, no roll, no
  *            hand-held noise (at 120 fps any step reads as a jitter).
  *   hero     a soft +1.6 % push on the slam (a 3 f C1 attack), letting go
@@ -27,7 +28,7 @@ import { centre, type Geo, type Pt, type Rect } from './geometry';
 
 const K = SCALE_LOCAL;
 const HERO = SCALE.industriesTitle;
-/** the frame has opened for a card this many frames before it pops (its slot's inhale starts at −2) */
+/** the frame has opened for a name this many frames before it lands (its reveal starts at −2) */
 const LEAD = 3;
 /** the wall's last breath out before the slam (the push of the hold brings it back to 1) */
 const REST = 0.975;
@@ -60,10 +61,12 @@ function pchip(xs: readonly number[], ys: readonly number[], x: number): number 
   return h00 * ys[k] + h10 * h[k] * m[k] + h01 * ys[k + 1] + h11 * h[k] * m[k + 1];
 }
 
-/** the zoom at which rect r fills the framing box (its tighter side) */
-const fitZ = (G: Geo, r: Rect) => Math.min(G.frame.w / r.w, G.frame.h / r.h);
+/** the zoom at which rect r fills the framing box (its tighter side); a single name never fills it past
+ *  ZMAX (16:9 "Home services" would be 5× — 4.2× keeps air around it) */
+const ZMAX = 4.2;
+const fitZ = (G: Geo, r: Rect) => Math.min(ZMAX, G.frame.w / r.w, G.frame.h / r.h);
 
-/** the wall's framing keys: one per new column / row of the cluster (LEAD f before its card pops) */
+/** the index's framing keys: one per new column / row of the cluster (LEAD f before its name lands) */
 type Keys = { ts: number[]; lz: number[]; fx: number[]; fy: number[] };
 const KEYS = new Map<string, Keys>();
 function wallKeys(G: Geo): Keys {
@@ -91,7 +94,7 @@ function wallKeys(G: Geo): Keys {
   return keys;
 }
 
-/** the cluster on screen at t: the bounds of every card whose slot has started to inhale */
+/** the cluster on screen at t: the bounds of every name whose reveal has started */
 function clusterAt(t: number, G: Geo): Rect {
   let n = 0;
   for (let i = 0; i < 16; i++) if (t >= (i === 0 ? -K.preroll : K.pops[i] - 2)) n = i;
@@ -104,14 +107,14 @@ export function baseCam(t: number, G: Geo): { F: Pt; Z: number } {
   let Z = Math.exp(pchip(k.ts, k.lz, t));
   let F: Pt = { x: pchip(k.ts, k.fx, t), y: pchip(k.ts, k.fy, t) };
   if (t < HERO) {
-    // no popped card ever leaves the framing box (the focus is clamped into what keeps the cluster in it)
+    // no landed name ever leaves the framing box (the focus is clamped into what keeps the cluster in it)
     const B = clusterAt(t, G);
     const hw = G.frame.w / 2 / Z;
     const hh = G.frame.h / 2 / Z;
     const clamp = (v: number, lo: number, hi: number) => (lo > hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));
     F = { x: clamp(F.x, B.x + B.w - hw, B.x + hw), y: clamp(F.y, B.y + B.h - hh, B.y + hh) };
   } else {
-    // the hold: a slow push from the breath-out back to 1 as the cards leave and the keeper glides
+    // the hold: a slow push from the breath-out back to 1 as the index clears and the English card rises
     Z = REST + (1 - REST) * tween(t, [HERO, K.switchIn[0] + 10], [0, 1], EASE.inOut);
     F = centre(G.wall);
   }
@@ -148,7 +151,7 @@ export function camAt(t: number, G: Geo, L: Layout): Affine {
   // the screen anchor: the framing box's centre (9:16: the safe zone's), = the wall's centre at rest
   const C = G.anchor;
   const { F, Z } = baseCam(t, G);
-  // the hero's hold breathes (a slow 0.2 %, a bar long) and lets go as the cards peel off — a locked-off
+  // the hero's hold breathes (a slow 0.2 %, a bar long) and lets go as the index clears — a locked-off
   // camera otherwise: no hand-held drift, no noise
   const breath =
     0.002 * Math.sin(((t - SCALE.industriesTitle) / 60) * Math.PI) *

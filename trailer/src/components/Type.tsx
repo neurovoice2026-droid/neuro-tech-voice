@@ -91,11 +91,16 @@ export function subpixel(transform: string | undefined, moving: boolean): React.
   return moving ? { transform: `${transform} rotate(0.02deg)`, willChange: 'transform' } : { transform };
 }
 
-/** The inner (moving) span's style for a reveal state (sub-pixel while it moves, crisp at rest). */
-export function revealStyle(r: ReturnType<typeof reveal>, origin = '50% 85%'): React.CSSProperties {
+/**
+ * The inner (moving) span's style for a reveal state (sub-pixel while it moves, crisp at rest).
+ * `hold`: keep the word on its sub-pixel layer from its entrance to its exit, never dropping back
+ * to plain text while it is on screen — the layer → plain switch re-rasterises the glyphs, a
+ * visible one-frame "tick" on a word that has long landed. Only where no camera zoom acts on it.
+ */
+export function revealStyle(r: ReturnType<typeof reveal>, origin = '50% 85%', hold = false): React.CSSProperties {
   const sc = Math.abs(r.scale - 1) > 1e-5;
   // |y| ≤ .03 % (≤ .04 px at 128 px) reads as rest: the text drops back to pixel-crisp
-  const moving = Math.abs(r.y) > 0.03 || sc;
+  const moving = hold || Math.abs(r.y) > 0.03 || sc;
   const tf = moving ? `translateY(${r.y.toFixed(3)}%)${sc ? ` scale(${r.scale.toFixed(5)})` : ''}` : undefined;
   return {
     display: 'inline-block',

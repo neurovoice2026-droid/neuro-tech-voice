@@ -4,30 +4,31 @@
  * (zoom 1, no offset — the flow) world = screen, so the rail's last node is
  * exactly FLOW_END.
  *
- *   wall        a 4 × 4 wall of white cards, a composed grid with air around
- *               and between them (20 / 16 px gutters; 16:9 1760 × 960 · 9:16
- *               960 × 1200 inside the safe box
- *               y 250…1500), centred on the framing anchor. The cards pop in
- *               the block order (POP_CELL): card 01 alone → 2 × 2 → 3 × 3 →
- *               the wall, while the camera pulls back continuously, always
- *               framing the cards popped so far (plus the next slot: lead
- *               room) with ≥ 64 px / 60 px margins (scale/camera.ts).
+ *   index       the sixteen industries as a TYPESET INDEX (scale/Index.tsx):
+ *               16:9 four columns × four rows at 54 px, 9:16 two columns ×
+ *               eight rows at 52 px, on a fixed row pitch, ≥ 150 px from every
+ *               side. The rows are set in two halves with a SPINE between them
+ *               — the band where "16 industries." will land — so no name ever
+ *               sits behind the hero. The names land in INDEX_CELL order (the
+ *               top half on the 8th notes, the bottom half on the 16ths) while
+ *               the camera pulls back, always framing the names landed so far
+ *               (scale/camera.ts) inside `frame`.
  *   languages   ONE card in focus (the active language, large, under the
  *               title band; English, the first, larger still) and a gallery
- *               of the ones already said (16:9 a row of five under it · 9:16
- *               3 + 2 under it), so by Japanese all six are visible together.
+ *               of the ones already said (16:9 a row of five under it, ≥ 160 px
+ *               from the sides · 9:16 3 + 2 under it), so by Japanese all six
+ *               are visible together.
  *   flow        call → Slack → CRM: three big stations on a closing-light
- *               rail; the CRM node is FLOW_END. Sized so that with the slow
- *               push about FLOW_END nothing comes nearer than ~110 px (16:9)
- *               / 70 px (9:16) to a frame edge at the iris.
- *   titles      one slot, centred: "16 industries." (152 / 124 px) lands
- *               centred on the wall, then lifts to the band, where "14
- *               languages." and "After the call." (the headline role, 100 /
- *               92 px) follow it (9:16 cap tops ≥ 290, under the Reels/TikTok
- *               top UI).
+ *               rail; the CRM node is FLOW_END. 9:16: the rail + cards block is
+ *               centred on the frame (its title's axis).
+ *   titles      one slot, centred: "16 industries." (152 / 124 px) lands in
+ *               the index's spine, then lifts to the band, where "14
+ *               languages." and "After the call." (100 / 92 px) follow it
+ *               (9:16 cap tops ≥ 290, under the Reels/TikTok top UI).
  */
 import { FLOW_END } from '../../lib/handoff';
 import type { Layout } from '../../lib/layout';
+import { INDUSTRIES, LINE_EM } from './data';
 
 export type Pt = { x: number; y: number };
 export type Rect = { x: number; y: number; w: number; h: number };
@@ -47,39 +48,51 @@ const bounds = (rs: Rect[]): Rect => {
   return { x, y, w: x2 - x, h: y2 - y };
 };
 
-/** [row, col] of industry i: the camera's blocks, filled in order (2 × 2 | 3 × 3 | 4 × 4). */
-export const POP_CELL: readonly (readonly [number, number])[] = [
-  [0, 0], [0, 1], [1, 0], [1, 1],
-  [0, 2], [1, 2], [2, 0], [2, 1], [2, 2],
-  [0, 3], [1, 3], [2, 3], [3, 0], [3, 1], [3, 2], [3, 3],
+/**
+ * [row, col] of industry i in the index, per orientation. 16:9: the top half fills in column pairs
+ * (the frame opens one column per two names), the bottom half row by row (a running light on the
+ * 16ths). 9:16: reading order, two columns.
+ */
+export const INDEX_CELL: readonly [readonly (readonly [number, number])[], readonly (readonly [number, number])[]] = [
+  [
+    [0, 0], [0, 1], [1, 0], [1, 1], [0, 2], [1, 2], [0, 3], [1, 3],
+    [2, 0], [2, 1], [2, 2], [2, 3], [3, 0], [3, 1], [3, 2], [3, 3],
+  ],
+  Array.from({ length: 16 }, (_, i) => [i >> 1, i & 1] as const),
 ];
 
-/** a cols × rows grid inside `box`, `gap` between cells */
-function cellsOf(box: Rect, cols: number, rows: number, gap: number): Rect[][] {
-  const w = (box.w - (cols - 1) * gap) / cols;
-  const h = (box.h - (rows - 1) * gap) / rows;
-  return Array.from({ length: rows }, (_, r) =>
-    Array.from({ length: cols }, (_, c) => ({ x: box.x + c * (w + gap), y: box.y + r * (h + gap), w, h })),
-  );
-}
+/** the index's setting per orientation: size (px), line height, column x's, row tops (fixed pitch, two halves) */
+export const INDEX_SET = {
+  h: { size: 54, lh: 1.06, cols: [180, 590, 1000, 1410], rows: [158, 294, 668, 804] },
+  v: { size: 52, lh: 1.06, cols: [150, 570], rows: [286, 422, 558, 694, 989, 1125, 1261, 1397] },
+} as const;
 
 export function geo(L: Layout) {
   const v = L.vertical;
   const W = L.width;
   const H = L.height;
 
-  /* ── the industry wall (4 × 4) ──────────────────────────────────── */
-  /** the framing box (screen): every framing of the wall keeps its cards inside it — ≥ 64 px from the
-   *  16:9 frame edges, ≥ 60 px from the 9:16 sides and inside its safe zone (y 250…1500) */
-  const frame: Rect = L.pick({ x: 64, y: 64, w: 1792, h: 952 }, { x: 60, y: 262, w: 960, h: 1226 });
-  /** the camera's screen anchor: the framing box's centre (the wall's centre at rest, zoom 1) */
+  /* ── the industry index ───────────────────────────────────────── */
+  /** the framing box (screen): every framing of the index keeps the names landed so far inside it — the
+   *  whole index at ≈ 1 sits ≥ 176 px from the 16:9 sides (≥ 80 px in 9:16, inside its safe zone) */
+  const frame: Rect = L.pick({ x: 176, y: 150, w: 1568, h: 780 }, { x: 80, y: 280, w: 920, h: 1190 });
+  /** the camera's screen anchor: the framing box's centre (= the index's centre at rest, zoom 1) */
   const anchor: Pt = centre(frame);
-  const wall: Rect = L.pick({ x: 80, y: 60, w: 1760, h: 960 }, { x: 60, y: 275, w: 960, h: 1200 });
-  // generous gutters: a composed grid with air between the cards, not a dashboard
-  const wallCells = cellsOf(wall, 4, 4, v ? 16 : 20); // 425 × 225 · 228 × 288
-  /** card rect of industry i */
-  const cards: Rect[] = POP_CELL.map(([r, c]) => wallCells[r][c]);
-  /** the cluster on screen once card i has popped: the bounds of cards 0 … i */
+  const S = v ? INDEX_SET.v : INDEX_SET.h;
+  const lineH = S.size * S.lh;
+  /** industry i: where it is set and its lines; `box` = its ink extents (the camera frames those) */
+  const entries = INDUSTRIES.map((d, i) => {
+    const [r, c] = INDEX_CELL[v ? 1 : 0][i];
+    const lines = d.lines[v ? 1 : 0];
+    const w = Math.max(...lines.map((ln) => (LINE_EM[ln] ?? 0.55 * ln.length) * S.size));
+    const box: Rect = { x: S.cols[c], y: S.rows[r], w, h: lines.length * lineH };
+    return { r, c, lines, box };
+  });
+  /** the index's bounds, centred EXACTLY on the anchor (so the camera at rest is world = screen) */
+  const wall: Rect = L.pick({ x: 180, y: 158, w: 1560, h: 764 }, { x: 150, y: 286, w: 780, h: 1178 });
+  /** entry rect of industry i (the camera's "cards") */
+  const cards: Rect[] = entries.map((e) => e.box);
+  /** the cluster on screen once name i has landed: the bounds of names 0 … i */
   const cluster: Rect[] = cards.map((_, i) => bounds(cards.slice(0, i + 1)));
 
   /* ── the languages ──────────────────────────────────────────────── */
@@ -93,29 +106,12 @@ export function geo(L: Layout) {
         ...[0, 1, 2].map((i) => ({ x: 60 + i * (304 + 24), y: 1010, w: 304, h: 204 })),
         ...[0, 1].map((i) => ({ x: 224 + i * (304 + 24), y: 1238, w: 304, h: 204 })),
       ]
-    : [0, 1, 2, 3, 4].map((i) => ({ x: 62 + i * (340 + 24), y: 822, w: 340, h: 184 }));
-
-  /**
-   * The keeper: the wall card that becomes English — the one nearest the
-   * English card's centre (a centre card, so its glide is short).
-   */
-  let keeper = 0;
-  {
-    const c = centre(langEn);
-    let bd = Infinity;
-    cards.forEach((r, i) => {
-      const p = centre(r);
-      const d = Math.hypot(p.x - c.x, p.y - c.y);
-      if (d < bd - 0.5) {
-        bd = d;
-        keeper = i;
-      }
-    });
-  }
+    : // (≥ 160 px from the sides, its bottom ≤ 978 — ≤ 990 under the 2.5 % language push)
+      [0, 1, 2, 3, 4].map((i) => ({ x: 162 + i * (300 + 24), y: 810, w: 300, h: 168 }));
 
   /* ── titles: one centred slot ───────────────────────────────────── */
   const title = {
-    /** "16 industries." — centred on the wall (cap centre), size in px */
+    /** "16 industries." — in the index's spine (cap centre), size in px */
     hero: L.pick({ x: L.cx, y: L.cy, size: 152 }, { x: L.cx, y: centre(wall).y, size: 124 }),
     /** the band: "14 languages." / "After the call." (cap centre; 9:16 cap top ≈ 293) */
     band: L.pick({ x: L.cx, y: 120, size: 100 }, { x: L.cx, y: 334, size: 92 }),
@@ -128,19 +124,20 @@ export function geo(L: Layout) {
    * nodes on a horizontal rail 550 apart, the names (64 px) above, 520 × 350
    * cards hanging under them (x 160 … 1780, y 604 … 954): after the push
    * about FLOW_END the block sits ≥ 110 px inside every edge. 9:16: a
-   * vertical rail at x 150, nodes 345 apart, 770 × 316 cards to its right
-   * (x 210 … 980, y 452 … 1458, inside the safe box, clear of the band title
-   * and of the right-hand action rail). */
+   * vertical rail at x 150, nodes 345 apart, 720 × 316 cards to its right
+   * (x 210 … 930, y 452 … 1458): the rail + cards block (x 135 … 930, and
+   * 135 … 952 under the slow push about FLOW_END) is centred on x ≈ 540, the
+   * axis of the centred band title. */
   const end = FLOW_END(L);
   const nodes: Pt[] = [0, 1, 2].map((i) =>
     v ? { x: end.x, y: end.y - (2 - i) * 345 } : { x: end.x - (2 - i) * 550, y: end.y },
   );
   const stations: Rect[] = nodes.map((n) =>
-    v ? { x: 210, y: n.y - 158, w: 770, h: 316 } : { x: n.x - 260, y: 604, w: 520, h: 350 },
+    v ? { x: 210, y: n.y - 158, w: 720, h: 316 } : { x: n.x - 260, y: 604, w: 520, h: 350 },
   );
   /** 16:9: station name centres, above the nodes */
   const names: Pt[] = nodes.map((n) => ({ x: n.x, y: 474 }));
 
-  return { W, H, frame, anchor, wall, cards, cluster, lang, langEn, gallery, keeper, title, nodes, stations, names, end };
+  return { W, H, frame, anchor, wall, entries, size: S.size, lineH, cards, cluster, lang, langEn, gallery, title, nodes, stations, names, end };
 }
 export type Geo = ReturnType<typeof geo>;

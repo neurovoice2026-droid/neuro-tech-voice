@@ -1,59 +1,54 @@
 /**
  * SCALE copy, verbatim from the product.
- *  · industries: lib/pages/industries/index.ts order and labels, with the
- *    lucide icons assigned in lib/site.ts.
+ *  · industries: lib/pages/industries/index.ts order and labels — set as a
+ *    typographic index (scale/Index.tsx), no icons.
  *  · greetings: the Professional greeting each language's generator writes
  *    (lib/voice/greetings.ts, `intro` with {agent} = Ava), as the lang-*
  *    voices say it — the AI disclosure is part of every one of them.
  *    Line breaks are set per orientation: never inside a word; German
  *    keeps "KI-Assistenten" whole.
  */
-import {
-  Car,
-  Database,
-  Dumbbell,
-  GraduationCap,
-  Hash,
-  Home,
-  Hotel,
-  KeyRound,
-  Landmark,
-  PawPrint,
-  Phone,
-  Scale,
-  Scissors,
-  ShieldCheck,
-  ShoppingBag,
-  Stethoscope,
-  Truck,
-  Utensils,
-  Wrench,
-  type LucideIcon,
-} from 'lucide-react';
+import { Database, Hash, Phone, type LucideIcon } from 'lucide-react';
 import { VOICE, type VoiceId } from '../../voice.generated';
 
-/** an industry: its label, its lucide icon, and the label's line breaks on the card [16:9, 9:16] (never inside a word) */
-export type Industry = { label: string; Icon: LucideIcon; lines: readonly [readonly string[], readonly string[]] };
+/**
+ * An industry of the index: its label and its line breaks [16:9, 9:16] (never inside a word).
+ * 16:9 sets it in four 410 px columns at 54 px (a name wraps when it would come within ~50 px of the
+ * next column); 9:16 in two 420 px columns at 52 px.
+ */
+export type Industry = { label: string; lines: readonly [readonly string[], readonly string[]] };
 
-/** in pop order: industry i sits on POP_CELL[i] (labels set at 52 px in a 425 px card · 30 px in a 228 px card) */
+/** in pop order (the index's cell of industry i: geometry.ts INDEX_CELL) */
 export const INDUSTRIES: Industry[] = [
-  { label: 'Home services', Icon: Wrench, lines: [['Home services'], ['Home', 'services']] },
-  { label: 'Real estate', Icon: Home, lines: [['Real estate'], ['Real estate']] },
-  { label: 'Restaurants', Icon: Utensils, lines: [['Restaurants'], ['Restaurants']] },
-  { label: 'Law firms', Icon: Scale, lines: [['Law firms'], ['Law firms']] },
-  { label: 'Auto sales & service', Icon: Car, lines: [['Auto sales &', 'service'], ['Auto sales &', 'service']] },
-  { label: 'Logistics & dispatch', Icon: Truck, lines: [['Logistics &', 'dispatch'], ['Logistics &', 'dispatch']] },
-  { label: 'Salons & spas', Icon: Scissors, lines: [['Salons & spas'], ['Salons &', 'spas']] },
-  { label: 'Veterinary', Icon: PawPrint, lines: [['Veterinary'], ['Veterinary']] },
-  { label: 'Insurance', Icon: ShieldCheck, lines: [['Insurance'], ['Insurance']] },
-  { label: 'Property management', Icon: KeyRound, lines: [['Property', 'management'], ['Property', 'management']] },
-  { label: 'Hotels & hospitality', Icon: Hotel, lines: [['Hotels &', 'hospitality'], ['Hotels &', 'hospitality']] },
-  { label: 'Financial services', Icon: Landmark, lines: [['Financial', 'services'], ['Financial', 'services']] },
-  { label: 'Retail & e-commerce', Icon: ShoppingBag, lines: [['Retail &', 'e-commerce'], ['Retail &', 'e-commerce']] },
-  { label: 'Schools & tutoring', Icon: GraduationCap, lines: [['Schools &', 'tutoring'], ['Schools &', 'tutoring']] },
-  { label: 'Gyms & studios', Icon: Dumbbell, lines: [['Gyms &', 'studios'], ['Gyms &', 'studios']] },
-  { label: 'Clinics & dental', Icon: Stethoscope, lines: [['Clinics &', 'dental'], ['Clinics &', 'dental']] },
+  { label: 'Home services', lines: [['Home services'], ['Home services']] },
+  { label: 'Real estate', lines: [['Real estate'], ['Real estate']] },
+  { label: 'Restaurants', lines: [['Restaurants'], ['Restaurants']] },
+  { label: 'Law firms', lines: [['Law firms'], ['Law firms']] },
+  { label: 'Auto sales & service', lines: [['Auto sales &', 'service'], ['Auto sales &', 'service']] },
+  { label: 'Logistics & dispatch', lines: [['Logistics &', 'dispatch'], ['Logistics &', 'dispatch']] },
+  { label: 'Salons & spas', lines: [['Salons & spas'], ['Salons & spas']] },
+  { label: 'Veterinary', lines: [['Veterinary'], ['Veterinary']] },
+  { label: 'Insurance', lines: [['Insurance'], ['Insurance']] },
+  { label: 'Property management', lines: [['Property', 'management'], ['Property', 'management']] },
+  { label: 'Hotels & hospitality', lines: [['Hotels &', 'hospitality'], ['Hotels &', 'hospitality']] },
+  { label: 'Financial services', lines: [['Financial', 'services'], ['Financial', 'services']] },
+  { label: 'Retail & e-commerce', lines: [['Retail &', 'e-commerce'], ['Retail &', 'e-commerce']] },
+  { label: 'Schools & tutoring', lines: [['Schools &', 'tutoring'], ['Schools &', 'tutoring']] },
+  { label: 'Gyms & studios', lines: [['Gyms &', 'studios'], ['Gyms & studios']] },
+  { label: 'Clinics & dental', lines: [['Clinics &', 'dental'], ['Clinics & dental']] },
 ];
+
+/**
+ * Advance widths of the index lines (em; Instrument Sans 460, −0.02em, measured in Chrome) — the
+ * camera frames the names by their real extents, not by a cell.
+ */
+export const LINE_EM: Record<string, number> = {
+  'Home services': 6.57, 'Real estate': 4.88, Restaurants: 5.32, 'Law firms': 4.28, 'Auto sales &': 5.51, service: 3.19,
+  'Logistics &': 4.87, dispatch: 3.83, 'Salons & spas': 6.09, Veterinary: 4.63, Insurance: 4.36, Property: 3.97,
+  management: 6.04, 'Hotels &': 3.79, hospitality: 4.67, Financial: 3.94, services: 3.65, 'Retail &': 3.42,
+  'e-commerce': 5.86, 'Schools &': 4.45, tutoring: 3.61, 'Gyms &': 3.54, studios: 3.24, 'Clinics &': 3.89, dental: 2.82,
+  'Gyms & studios': 6.96, 'Clinics & dental': 6.89,
+};
 
 /**
  * A greeting: the product's Professional greeting (lib/voice/greetings.ts,

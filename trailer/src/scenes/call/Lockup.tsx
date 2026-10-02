@@ -7,7 +7,8 @@
  * while the orb sways, a hairline Fresnel rim), its rim light, a near-field
  * halo, and the one ring it gives off: the pickup. Its palette is the
  * twist's night violet at the pickup and becomes the closing light's
- * emerald as the room opens (`emerald` 0 → 1); the caller's turns ease it
+ * emerald under the pickup's flash (`emerald` 0 → 1, `relight`: the hue
+ * turns in the dark, never through a third light); the caller's turns ease it
  * to that light's listen blue. No smear, no ghosts, no trails, no blur:
  * the film's 120 fps carries the motion.
  *
@@ -18,7 +19,7 @@
 import React from 'react';
 import { Orb } from '../../components/Orb';
 import { subpixel } from '../../components/Type';
-import { bloom, mixColor, mixPalette, rgba, rimGlow, type Glow } from '../../lib/lights';
+import { bloom, fromOklab, mixColor, mixPalette, rgba, rimGlow, toOklab, type Glow } from '../../lib/lights';
 import { EASE, smooth, springUnit, tween } from '../../lib/motion';
 import { ORB_RIM } from '../../lib/pickup';
 import { FONT, LIGHTS, TYPE, type Palette } from '../../theme';
@@ -38,9 +39,31 @@ const LIMB = [0, 0.5, 0.7, 0.8, 0.9, 0.95, 0.985, 1].map((r) => [r, 0.28 * (1 - 
 const limbBg = (k: number, rgb: string) =>
   `radial-gradient(closest-side, ${LIMB.map(([r, a]) => `rgba(${rgb},${(a * k).toFixed(4)}) ${(r * 100).toFixed(1)}%`).join(', ')})`;
 
-/** The light the orb gives off now: night → emerald (the room opening), Ava → caller (listen). */
+/**
+ * THE PICKUP'S RELIGHT — night violet → closing emerald (k 0 → 1). mixColor / mixPalette take far-apart
+ * hues round the cool side of the wheel (violet → azure → cyan → emerald), which for these two reads,
+ * for a few frames, as a saturated electric-blue orb: a third light. Here the hue turns IN THE DARK
+ * instead: a straight line through OKLab (no chroma kept, no walk round the wheel) whose chroma falls to
+ * 40 % and lightness to 85 % at the middle — a quiet slate with no hue of its own — so the light dims,
+ * turns, and comes back emerald (under the pickup's flash). Exact at both ends.
+ */
+export function relight(a: string, b: string, k: number): string {
+  if (k <= 0) return a;
+  if (k >= 1) return b;
+  const A = toOklab(a);
+  const B = toOklab(b);
+  const s = Math.sin(Math.PI * k);
+  const ch = 1 - 0.6 * s;
+  const lt = 1 - 0.15 * s;
+  return fromOklab([(A[0] + (B[0] - A[0]) * k) * lt, (A[1] + (B[1] - A[1]) * k) * ch, (A[2] + (B[2] - A[2]) * k) * ch]);
+}
+const relightPalette = (a: readonly string[], b: readonly string[], k: number): string[] => a.map((c, i) => relight(c, b[i], k));
+/** A glow (body, core) relit from one light to the other (see `relight`). */
+export const relightGlow = (a: Glow, b: Glow, k: number): Glow => ({ body: relight(a.body, b.body, k), core: relight(a.core, b.core, k) });
+
+/** The light the orb gives off now: night → emerald (the pickup's relight), Ava → caller (listen). */
 export function orbGlow(emerald: number, listen: number): Glow {
-  const ava = { body: mixColor(NIGHT_GLOW.body, EMERALD_GLOW.body, emerald), core: mixColor(NIGHT_GLOW.core, EMERALD_GLOW.core, emerald) };
+  const ava = relightGlow(NIGHT_GLOW, EMERALD_GLOW, emerald);
   if (listen <= 0.001) return ava;
   const cal = { body: mixColor(LIGHTS.night.listen[2], LISTEN_GLOW.body, emerald), core: mixColor(LIGHTS.night.listen[3], LISTEN_GLOW.core, emerald) };
   return { body: mixColor(ava.body, cal.body, listen), core: mixColor(ava.core, cal.core, listen) };
@@ -134,11 +157,12 @@ export const OrbStage: React.FC<{
         }}
       />
     );
-  const palA = mixPalette(mixPalette(LIGHTS.night.orb, NIGHT_LIT, grade), EMERALD_LIT, emerald);
+  const palA = relightPalette(mixPalette(LIGHTS.night.orb, NIGHT_LIT, grade), EMERALD_LIT, emerald);
   const palB = mixPalette(mixPalette(LIGHTS.night.listen, NIGHT_LISTEN_LIT, grade), EMERALD_LISTEN_LIT, emerald);
   // the sphere's own dressing, in its light's colours
-  const limbRgb = emerald > 0.5 ? '2,22,14' : '12,5,32';
-  const fresnel = mixColor('#b9a3ff', listen > 0.5 ? '#a9dcf0' : '#a7f3d0', emerald);
+  // (the limb's dark turns with the light, continuously)
+  const limbRgb = [12 - 10 * emerald, 5 + 17 * emerald, 32 - 18 * emerald].map((v) => Math.round(v)).join(',');
+  const fresnel = relight('#b9a3ff', listen > 0.5 ? '#a9dcf0' : '#a7f3d0', emerald);
   const [fr, fg, fb] = [1, 3, 5].map((i) => parseInt(fresnel.slice(i, i + 2), 16));
   // the specular sits where the room's light comes from (upper left) and stays put as the sphere sways
   const specX = 33 - 3.2 * tilt;

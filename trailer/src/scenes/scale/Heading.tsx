@@ -4,8 +4,10 @@
  * accent ink), in one centred slot that travels — never two titles in it at
  * once:
  *
- *   hero     "16 industries." lands centred on the veiled wall on the
- *            downbeat: each word rises out of its own mask on a firm spring
+ *   hero     "16 industries." lands in the index's spine (the band between
+ *            its two halves, no name behind it; the index has stepped back to
+ *            ≤ 5.5 % before its first word shows) on the downbeat: each word
+ *            rises out of its own mask on a firm spring
  *            (one soft overshoot), "16" first. A beat later "16" turns from
  *            ink to the accent as a band of light runs through it (the
  *            knowledge heading's key-phrase idiom); a second, slower glint
