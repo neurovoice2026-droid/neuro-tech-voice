@@ -9,7 +9,7 @@
  * window's short feather and the motion itself is the transition (120 fps).
  */
 import React from 'react';
-import { CornerDot, glideStyle, subpixel, useGlide } from '../../components/Type';
+import { CornerDot, subpixel } from '../../components/Type';
 import { useLayout } from '../../lib/layout';
 import { typeStyle } from '../../lib/type';
 import { TRACK } from '../../theme';
@@ -36,8 +36,6 @@ export const DayDrum: React.FC<{
   const rowH = Math.round(fontSize * 1.6);
   const mask = 'linear-gradient(180deg, transparent 0%, #000 20%, #000 80%, transparent 100%)';
   const moving = Math.abs(speed) > 4e-4;
-  // under the hook's push the name rides its own small layer (no 1 px ticks; Camera.tsx useGlide)
-  const glide = useGlide();
   const label = typeStyle('label', L.vertical, { tone: 'night', size: fontSize });
   return (
     <div
@@ -71,7 +69,7 @@ export const DayDrum: React.FC<{
             }}
           >
             <CornerDot size={dotSize} color={r.dot} style={{ marginTop: -1 }} />
-            <span style={{ ...label, whiteSpace: 'nowrap', color: r.color, marginRight: `-${TRACK.label}`, ...glideStyle(undefined, glide) }}>{r.text}</span>
+            <span style={{ ...label, whiteSpace: 'nowrap', color: r.color, marginRight: `-${TRACK.label}` }}>{r.text}</span>
           </div>
         );
       })}

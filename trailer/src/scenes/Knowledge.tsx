@@ -326,8 +326,8 @@ export const Knowledge: React.FC = () => {
 
   return (
     <AbsoluteFill style={{ background: C.white, overflow: 'hidden' }}>
-      {/* the slow push glides: while it runs, the planes and the type on them ride sub-pixel layers (Camera.tsx) */}
-      <Camera x={cam.x} y={cam.y} zoom={cam.zoom} moving={false && camMoving((tt) => camera(tt, G, L.cx, L.cy), t)}>
+      {/* the slow push glides: while it runs, the type on its planes rides small sub-pixel layers (Camera.tsx useGlide) */}
+      <Camera x={cam.x} y={cam.y} zoom={cam.zoom} moving={camMoving((tt) => camera(tt, G, L.cx, L.cy), t)}>
         {/* the room stays put under the whip (it goes to clean white): only what stands in it whips away */}
         <Layer depth={0.3}>
           <Room t={t} G={G} />

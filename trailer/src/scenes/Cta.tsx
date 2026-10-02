@@ -492,7 +492,7 @@ export const Cta: React.FC = () => {
               />
             ))
           : null}
-        {/* while it moves, its plane (and the headline / end-card rows on it) glide at their exact sub-pixel position */}
+        {/* while it moves, the headline words and the end-card rows on its plane glide at their exact sub-pixel position */}
         <Camera x={cam.x} y={cam.y} zoom={cam.zoom} moving={camMoving(cameraAt, t)}>
           <Layer depth={1}>
             {scrimO > 0.005 ? (

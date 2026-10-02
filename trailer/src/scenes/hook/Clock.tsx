@@ -24,7 +24,7 @@
  */
 import React from 'react';
 import { MeshOrb } from '../../components/MeshOrb';
-import { glideStyle, useGlide } from '../../components/Type';
+import { subpixel } from '../../components/Type';
 import { mixColor } from '../../lib/lights';
 import { C, FONT } from '../../theme';
 import { rgba } from './color';
@@ -100,8 +100,6 @@ const Window: React.FC<{
   const cellH = 1.1 * fontSize;
   const base = Math.floor(pos);
   const moving = Math.abs(speed) > 4e-4;
-  // under the hook's push each figure also rides its own small layer (no 1 px ticks; Camera.tsx useGlide)
-  const glide = useGlide();
   const shown = [base - 1, base, base + 1, base + 2].filter((k) => k >= 0 && k < cells.length && cells[k].digit !== null);
   return (
     <div
@@ -135,7 +133,7 @@ const Window: React.FC<{
               letterSpacing: 0,
               textAlign: 'center',
               color: ink,
-              ...glideStyle(Math.abs(y) > 0.004 ? `translateY(${y.toFixed(3)}px)` : undefined, moving || glide),
+              ...subpixel(Math.abs(y) > 0.004 ? `translateY(${y.toFixed(3)}px)` : undefined, moving),
             }}
           >
             {cell.digit}

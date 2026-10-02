@@ -289,8 +289,10 @@ export const Hook: React.FC = () => {
         vignette={0.5}
       />
 
-      {/* the push + drift never rest: the planes glide on sub-pixel layers (Camera.tsx) — no 1 px ticks on the figures */}
-      <Camera x={camX} y={camY} zoom={zoom} moving>
+      {/* (no Camera `moving` here: the figures and the day sit in mask-image strips, where small sub-pixel layers
+          were re-rastered differently by different render tabs under the accelerating push — measured ±.45 px
+          frame to frame at 4K, worse than the plain path. The screen-space line holds its own layers instead.) */}
+      <Camera x={camX} y={camY} zoom={zoom}>
         {/* the ring (behind the figures, as on the site) */}
         <Layer depth={1} style={{ maskImage: ringMask, WebkitMaskImage: ringMask }}>
           <RingPulse

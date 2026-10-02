@@ -19,13 +19,19 @@
  *     fractional translation and the text still steps (1/16 – 1 px).
  *   · translateZ(0) / perspective layers re-raster at every scale change and
  *     step again — never use them for text.
- *   · a layer keeps the raster scale it was created at: do not keep a layer
- *     through a large zoom (≥ 10 %), it softens; small pushes (≤ 4 %) are fine.
- *   · small layers (a card, a line, a word) are exact in every render tab; a
- *     FULL-FRAME layer whose scale changes can be re-rastered differently by
- *     different tabs (±.1–.5 px between frames at concurrency > 1). So under a
- *     zooming camera, the text itself should also ride its own small layer
- *     (`useGlide()`): Type.tsx's reveals, captions and labels do it on their own.
+ *   · a layer keeps the raster scale it was created at (a 6 % push measured
+ *     as crisp as a fresh still); Chrome may still re-raster it now and then,
+ *     and a re-raster at a new scale can move its glyphs ≤ 1 px once.
+ *   · keep text layers SMALL (a word, a line, a card — content-sized): a
+ *     frame-wide layer whose scale changes is re-rastered differently by
+ *     different render tabs (±.2–.9 px alternating frame to frame at
+ *     concurrency 2), and so is type inside mask-image strips. A frame-wide
+ *     element that only PANS is fine.
+ *   · position a moving card by its transform, not left/top: a fractional
+ *     left/top is painted INTO the layer and its glyphs snap again.
+ *   So under a moving camera (Camera.tsx `moving`) the planes stay plain while
+ *   they zoom and the type rides its own small layers (`useGlide()`: Type.tsx's
+ *   reveals / captions / words, and the scenes' title blocks, cards and rows).
  *
  *   <span style={{ ...subpixel(`translateY(${y}px)`, moving) }}>
  */
