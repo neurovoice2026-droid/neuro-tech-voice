@@ -445,3 +445,58 @@ The lines are in `trailer/out/kb-plan/voice-lines-kb.json`, in the format of `sc
 | 20 | No statistics | whole film | The repetition is one staged day shown as paper height and clock times, with no counts or percentages. The site refuses circulating figures (`salons-spas.ts:245`, `insurance.ts:234`, `veterinary.ts:237`). |
 
 **Never claimed:** learning, training or fine-tuning on calls or documents; website sync or self-updating; reading scans, photos or spreadsheets; unlimited documents or sizes; 100% accuracy or "never guesses"; instant updates in every case; replacing staff; the agent deciding its own fallback line; medical or other advice (the client's injury is handled by the person, and Ava says nothing about it); caller-record lookups; testimonials or a named customer.
+
+
+---
+
+## CLIENT DIRECTION v2 (2026-10-03) — overrides the rooms and UI notes above
+
+The client, after reading the plan: *"For the colour palette use the gradient meshes for the background, the way they are on the
+site; it has to be a monster trailer; you can also add the site's tabs, but with the animation done properly and the way the click
+is pressed, etc."*
+
+### 1. Grounds = the site's gradient meshes (not plain paper)
+- Every act's background is the site's gradient mesh, built exactly like `app/globals.css` `.pp-mesh-flow` (five radial pools over the
+  palette's floor colour `--m2`, pools at 26/24, 80/26, 76/80, 20/78, 50/52 with the palette's m4, m2, m0, m3, m1; softened and
+  saturated ×1.35), plus the second looser counter-turning field `.pp-mesh-flow-b`, the lit shade `.pp-mesh-shade` and fine grain.
+  The pools move independently like `components/site/home/mesh-flow.ts` (each pool its own element / layer), as a PURE FUNCTION OF
+  TIME (no CSS animation), slow (the site drifts over 14 s / turns over 21 s). Reuse/generalise film 1's call mesh
+  (`src/scenes/call/Mesh.tsx`) if it fits; it must be DPR-sized for 4K and cheap enough to render.
+- Palettes come only from `components/site/home/palettes.ts`:
+  `MUTED_MESH` (the site's "no answer" grey — the grind of Part I, with the rose line light as the only colour),
+  `KB_MESH` = `HOME_KB_MESH` (the site's knowledge-base indigo → violet → lilac — Ava and the knowledge base, Parts II–III),
+  `MOMENT_LIGHTS` (rush rose / closing emerald / sunday teal / night violet — moments, accents, the payoff),
+  `INK_MESH`, `PLAN_LIGHTS`, `STUDIO_PANEL`. Mesh transitions between acts are designed (a palette crossfade or a pool hand-off on
+  the beat), never a dissolve to grey.
+- The white UI cards (panel, doc page, record row, settings card) sit ON the mesh like the site's product shots: real elevation,
+  the mesh's colour in their shadows, legible type. Accent inks are re-checked against the new grounds (the art director chooses
+  whether Ava's accent stays sunday teal or takes the KB mesh's lilac/violet; one accent per part still holds).
+- The "no AI slop" rule still applies: the mesh is the site's material, crisp-edged UI on top, no bokeh, no glow soup, no
+  random blobs.
+
+### 2. Real app tabs, faithfully
+- Use the agent page's real tab bar (`components/agent/AgentPageClient.tsx` + `components/ui/tabs.tsx`, line variant): labels
+  **General · Conversation · Voice · Knowledge · Skills** with their lucide icons (Settings2, MessagesSquare, Volume2, BookOpen,
+  Sparkles), h-11, inactive text at 60 %, active = font-medium + full ink + the 2 px underline (after: bottom −5 px) — rebuilt in
+  the house type system at trailer scale, pixel-faithful in proportions.
+- Use the app's real details as storytelling:
+  - b08: the cursor clicks **Knowledge**; the Knowledge tab's count badge (`size-4 rounded-full bg-primary/15 text-primary`)
+    appears and counts **1 → 2 → 3 → 4** as the rows land.
+  - b12: the cursor clicks **Conversation**; while the owner types the fallback line the tab shows the app's amber
+    **unsaved-changes dot**; **Save** is clicked and the dot goes away (the save tick).
+  - b13: back to **Knowledge**; the row's `…` menu opens and **Replace with new file** is clicked.
+
+### 3. The cursor and the click, done properly
+- A crisp vector pointer (and the I-beam over text fields), rendered DPR-sharp, with a soft contact shadow; hidden when nobody is
+  interacting; it enters from off-frame or from its last position — never teleports.
+- Movement: eased arcs (slight curve, ease-out deceleration, no linear moves, no overshoot), speed of a calm, expert user; it
+  arrives a few frames before the click so the eye can read the target.
+- Hover: the target reacts as the app does (tab text 60 % → 100 %, button hover colour) when the pointer enters.
+- Press (on the beat or 16th the score gives it): pointer scales to ~0.9 and the target to 0.97 + a pressed shade for ~3
+  timeline frames; release springs back; THEN the state changes (the tab underline slides to the new tab with a spring, the panel
+  content swaps with a short masked transition, the menu opens from its trigger). A two-part click sound (down + up) lands exactly on
+  press/release; keystrokes are per word on 16ths with a caret.
+- At 120 fps all of it must be smooth by frame rate (sub-pixel glide layers for moving UI), never by blur.
+
+### 4. Bar
+"Monster trailer": every shot designed, every move motivated, every sound placed; the bar is a top-agency product film.
