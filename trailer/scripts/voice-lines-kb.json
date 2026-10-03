@@ -119,7 +119,7 @@
       "name": "am_michael",
       "speed": 1,
       "phone": true,
-      "note": "Caller 4: a younger, casual man (b09, the live call: \"around this weekend\"). cartesia.id is left EMPTY on purpose so the generator auto-picks a masculine English voice not already taken (Tessa, Leo, Kyle, Dana and Marian are resolved first, so they are excluded); pin the pick afterwards. Suggested pin: Daniel 47c38ca4-5f35-497b-b1a3-415245fb35e1 (masculine per lib/voice/voice-map.ts, verified live 2026-09-17). Kokoro fallback copies the caller's am_michael (placeholder only).",
+      "note": "Caller 4: a younger, casual man (b09, the live call: \"around this weekend\"). Pinned to Daniel 47c38ca4-5f35-497b-b1a3-415245fb35e1 (masculine per lib/voice/voice-map.ts, verified live 2026-09-17), the voice all three Cartesia candidate takes were generated with (voice-candidates/kb/STATUS.md); clear cartesia.id to let the generator auto-pick a masculine English voice not already taken instead. Kokoro fallback copies the caller's am_michael (placeholder only).",
       "fish": {
         "env": "FISH_KB2_CALLER4_VOICE",
         "gender": "male",
@@ -128,8 +128,8 @@
       },
       "cartesia": {
         "env": "CARTESIA_KB2_CALLER4_VOICE",
-        "id": "",
-        "name": "",
+        "id": "47c38ca4-5f35-497b-b1a3-415245fb35e1",
+        "name": "Daniel",
         "gender": "masculine"
       }
     }
@@ -288,5 +288,5 @@
       "emotion": "proud"
     }
   ],
-  "_notes": "Film 2 (\"Two Kinds of Work\", the knowledge-base film); script: trailer/out/kb-plan/SCRIPT.md. Same schema as scripts/voice-lines.json: say = the canonical words the captions and src/kb/timing.ts index (word k); speak / parts = what the TTS actually performs (Sonic SSML allowed, fillers welcome); the generator aligns the real word timestamps back onto `say`. emotion: one of Cartesia's Sonic emotions. 19 generated lines in film order; REUSED takes are not separate lines: kb2-desk-1 plays three times (b02-b04) and kb2-c2 twice (b03, b14), identical files by design. Env names are KB2-prefixed so a film-1 override (e.g. CARTESIA_AVA_VOICE) set in the voice session cannot leak into film 2. caller4 has no cartesia.id on purpose (auto-pick, then pin). Kokoro sid/name are copies of film 1's fallbacks, for placeholder timing only."
+  "_notes": "Film 2 (\"Two Kinds of Work\", the knowledge-base film); script: trailer/out/kb-plan/SCRIPT.md. Same schema as scripts/voice-lines.json: say = the canonical words the captions and src/kb/timing.ts index (word k); speak / parts = what the TTS actually performs (Sonic SSML allowed, fillers welcome); the generator aligns the real word timestamps back onto `say`. emotion: one of Cartesia's Sonic emotions. 19 generated lines in film order; REUSED takes are not separate lines: kb2-desk-1 plays three times (b02-b04) and kb2-c2 twice (b03, b14), identical files by design. Env names are KB2-prefixed so a film-1 override (e.g. CARTESIA_AVA_VOICE) set in the voice session cannot leak into film 2. caller4 is pinned to Daniel (the candidate takes' voice). Kokoro sid/name are copies of film 1's fallbacks, for placeholder timing only."
 }

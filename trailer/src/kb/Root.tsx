@@ -8,6 +8,7 @@
 import React from 'react';
 import { Composition, Folder } from 'remotion';
 import { KbFilm } from './Film';
+import { MeshProbe } from './kit/MeshProbe';
 import { DURATION, FPS, KB_ORDER, LANDSCAPE, RENDER_FPS, SUB, VERTICAL, type KbSceneKey } from './timing';
 
 const title = (k: KbSceneKey) => k[0].toUpperCase() + k.slice(1);
@@ -25,6 +26,9 @@ export const KbRoot: React.FC = () => (
           <Composition id={`KB-${title(k)}-9x16`} component={KbFilm} defaultProps={{ only: k, audio: false }} durationInFrames={DURATION} fps={FPS} {...VERTICAL} />
         </React.Fragment>
       ))}
+      {/* the shared kit (src/kb/kit): a ground on its own (input props: palette, lift, recipe, key, grain, quality) */}
+      <Composition id="KB-KitMesh-16x9" component={MeshProbe} durationInFrames={900} fps={FPS} {...LANDSCAPE} />
+      <Composition id="KB-KitMesh-9x16" component={MeshProbe} durationInFrames={900} fps={FPS} {...VERTICAL} />
     </Folder>
   </>
 );

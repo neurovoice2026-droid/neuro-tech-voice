@@ -508,8 +508,17 @@ export const VOICES: Voiced<VoiceId>[] = (
   ] as Voiced<VoiceId>[]
 ).sort((x, y) => x.at - y.at);
 
-/** The voice post (a fader on part of a line): none yet. */
-export const VOICE_RIDES: Partial<Record<VoiceId, readonly VoiceRide[]>> = {};
+/**
+ * The voice post (a fader on part of a line; frames from the line's own start). kb2-desk-1 is Leo's take-1, the only
+ * take that keeps Part I on the script's grid (voice-candidates/kb/PICKS.md); it peaks on "Saturdays," (−1.5 dBFS at
+ * −23 LUFS), so the dialogue bus limiter (MIX.dialogueCeil) clamps that word ~9 dB and master()'s trim passes leave
+ * the line 0.6 LU under the dialogue target (check-mix: −20.6). Riding the word 2 dB down, ramped inside the commas
+ * around it, evens the line (its direction: "even, unhurried rhythm") and lands every placement at −20.3 LUFS.
+ */
+export const VOICE_RIDES: Partial<Record<VoiceId, readonly VoiceRide[]>> = (() => {
+  const sat = VOICE.lines['kb2-desk-1'].phrases[1]; // "Saturdays,"
+  return { 'kb2-desk-1': [{ from: Math.floor(sat.start * FPS), to: Math.ceil(sat.end * FPS), db: -2, ramp: 3 }] };
+})();
 
 /** Speech windows (the bed ducks under these), spoken phrases, and "is someone speaking at f?" */
 export const { SPEECH, PHRASES, speaking } = makeSpeech(VOICE, VOICES);
