@@ -16,6 +16,8 @@ export type MeshProbeProps = {
   recipe?: PlanId;
   keyOn?: boolean;
   grain?: number;
+  dither?: number;
+  blend?: string;
   quality?: number;
   shade?: number;
 };
@@ -30,7 +32,7 @@ const PAL = {
   night: MOMENT_LIGHTS.night.orb,
 } as const;
 
-export const MeshProbe: React.FC<MeshProbeProps> = ({ palette = 'kb', lift = 1, recipe, keyOn = false, grain = 1, quality = 0.5, shade = 1 }) => {
+export const MeshProbe: React.FC<MeshProbeProps> = ({ palette = 'kb', lift = 1, recipe, keyOn = false, grain = 0, dither = 1, quality = 0.5, shade = 1 }) => {
   useState(() => waitForFonts());
   const L = useLayout();
   const t = useCurrentFrame() / useSub();
@@ -41,6 +43,7 @@ export const MeshProbe: React.FC<MeshProbeProps> = ({ palette = 'kb', lift = 1, 
         palette={PAL[palette]}
         lift={lift}
         grain={grain}
+        dither={dither}
         quality={quality}
         shade={shade}
         recipe={recipe ? PLAN_LIGHTS[recipe].ground : undefined}

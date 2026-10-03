@@ -96,6 +96,10 @@ type PoolSpec = {
   dy: number;
   /** turns about the centre with the b-field */
   turn?: boolean;
+  /** the falloff's steepness (default MESH_K) */
+  k?: number;
+  /** × radius */
+  grow?: number;
 };
 
 /** .pp-mesh-flow — bottom first (CSS lists the top pool first: m4 is painted last) */
@@ -108,14 +112,16 @@ const FLOW: readonly PoolSpec[] = [
 ];
 /** .pp-mesh-flow-b — the looser field turning the other way (opacity .75) */
 const FLOW_B: readonly PoolSpec[] = [
-  { x: 0.34, y: 0.56, r: 0.24, slot: 1, a: 0.75, px: 1.0, py: 1.0, ph: [0, 0], dx: 0, dy: 0, turn: true },
-  { x: 0.62, y: 0.4, r: 0.22, slot: 4, a: 0.75, px: 1.0, py: 1.0, ph: [0, 0], dx: 0, dy: 0, turn: true },
+  // the site blurs this field harder (4cqw on smaller pools): at frame scale that is a broader, softer
+  // falloff and a wider pool — light passing through the field, never a disc sitting on it
+  { x: 0.34, y: 0.56, r: 0.24, slot: 1, a: 0.75, px: 1.0, py: 1.0, ph: [0, 0], dx: 0, dy: 0, turn: true, k: 1.6, grow: 1.3 },
+  { x: 0.62, y: 0.4, r: 0.22, slot: 4, a: 0.75, px: 1.0, py: 1.0, ph: [0, 0], dx: 0, dy: 0, turn: true, k: 1.6, grow: 1.3 },
 ];
 /** the slot index of the recipe's brightest pool (the one a key light pulls by default) */
 export const LIGHT_POOL = FLOW.length - 1;
 
 /** One painted pool in frame px: an ellipse with a gaussian falloff, in its colour and peak alpha. */
-export type MeshPool = { x: number; y: number; rx: number; ry: number; color: string; a: number };
+export type MeshPool = { x: number; y: number; rx: number; ry: number; color: string; a: number; k?: number };
 
 export type KeyLight = {
   /** the source, frame px */
@@ -162,6 +168,7 @@ export function meshAt(s: MeshState): { floor: string; pools: MeshPool[]; shadeI
   const sx = Math.sqrt(W / G);
   const sy = Math.sqrt(H / G);
   const inks = gradePalette(blendMesh(s.palette, s.paletteB, s.mix ?? 0), s.grade);
+  const lift = Math.min(1, Math.max(0, s.grade.lift));
   const speed = s.speed ?? 1;
   const drift = s.drift ?? 1;
   const tt = (s.t + (s.seed ?? 0)) * speed;
@@ -180,7 +187,9 @@ export function meshAt(s: MeshState): { floor: string; pools: MeshPool[]; shadeI
       x += (s.key.x - x) * k;
       y += (s.key.y - y) * k;
     }
-    pools.push({ x, y, rx: R * sx, ry: R * sy, color: inks[p.slot], a: p.a });
+    // the light pool (m4) is the ground's sun: on the deep ground a touch held back (.88), so the upper
+    // left reads as light on the material, not a blown-out corner
+    pools.push({ x, y, rx: R * sx, ry: R * sy, color: inks[p.slot], a: p.slot === 4 ? p.a * (0.88 + 0.12 * lift) : p.a });
   });
   const th = (-2 * Math.PI * tt * (s.turn ?? 1)) / TURN;
   const ct = Math.cos(th);
@@ -191,8 +200,10 @@ export function meshAt(s: MeshState): { floor: string; pools: MeshPool[]; shadeI
     const oy = (at(p.y) - 0.5) * H;
     const x = W / 2 + ox * ct - oy * st;
     const y = H / 2 + ox * st + oy * ct;
-    const R = p.r * 1.4 * G;
-    pools.push({ x, y, rx: R * sx, ry: R * sy, color: inks[p.slot], a: p.a });
+    const R = p.r * 1.4 * G * (p.grow ?? 1);
+    // on the deep ground the passing white is held to a lilac sheen (at full white it reads as a spot)
+    const a = p.slot === 4 ? p.a * (0.55 + 0.45 * lift) : p.a * (0.7 + 0.3 * lift);
+    pools.push({ x, y, rx: R * sx, ry: R * sy, color: inks[p.slot], a, k: p.k });
   }
   if (s.key?.color && s.key.strength > 0) {
     const R = s.key.radius ?? 0.42 * G;
@@ -205,9 +216,11 @@ export function meshAt(s: MeshState): { floor: string; pools: MeshPool[]; shadeI
 
 /** gaussian of the same mass as the site's blurred linear pool: e^(−K r²), tapered to 0 at r = 1 */
 export const MESH_K = 3;
-const E_RIM = Math.exp(-MESH_K);
-/** the falloff at r (0..1) */
-export const falloff = (u: number) => Math.max(0, (Math.exp(-MESH_K * u * u) - E_RIM) / (1 - E_RIM));
+/** the falloff at r (0..1), steepness k */
+export const falloff = (u: number, k: number = MESH_K) => {
+  const rim = Math.exp(-k);
+  return Math.max(0, (Math.exp(-k * u * u) - rim) / (1 - rim));
+};
 /** stop positions (denser where the curve bends) */
 export const FALLOFF_STOPS: readonly number[] = Array.from({ length: 27 }, (_, i) => {
   const v = i / 26;

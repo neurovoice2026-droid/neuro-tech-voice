@@ -19,8 +19,8 @@
  *   <MeshGround t={t} palette={MUTED_MESH} paletteB={KB_MESH} mix={u} lift={1 - u} />   // a hand-off
  */
 import React, { useLayoutEffect, useRef } from 'react';
-import { AbsoluteFill, useVideoConfig } from 'remotion';
-import { Dither, Grain } from '../../components/Grain';
+import { AbsoluteFill, random, useCurrentFrame, useVideoConfig } from 'remotion';
+import { Grain } from '../../components/Grain';
 import { hexToRgb } from '../../lib/lights';
 import type { Palette } from '../palettes';
 import { FALLOFF_STOPS, falloff, meshAt, type KeyLight, type MeshPool } from './mesh';
@@ -56,8 +56,11 @@ export type MeshGroundProps = {
   seed?: number;
   /** the lit shade (.pp-mesh-shade): 1 = the site's; 0 = none */
   shade?: number;
-  /** grain + dither strength (1 = default; 0 if the film's finishing grain already covers the shot) */
+  /** an extra CSS film grain over the ground (components/Grain overlay). Default 0: the film's finishing
+   *  grain (Film.tsx FilmGrain) already lies over every shot; use it where that is off. */
   grain?: number;
+  /** the in-canvas dither (≈ ±1 LSB, moved every render frame): keeps the long ramps from banding. 1 = on. */
+  dither?: number;
   /** canvas backing resolution × device pixels (default .5: exact for a mesh, 4× cheaper) */
   quality?: number;
   /** a pearl recipe instead of a palette (palettes.ts PLAN_LIGHTS[id].ground, PRICING_PANEL): its pools drift like mesh-flow.ts */
@@ -72,6 +75,44 @@ const rgbStr = (hex: string) =>
     .map((v) => Math.round(v * 255))
     .join(',');
 
+/**
+ * The in-canvas DITHER: a 256² tile of mid-grey noise (seeded, made once), soft-lit over the mesh at
+ * ±~1 LSB and moved every render frame. The canvas's gradients are 8-bit; without it their long, slow
+ * ramps keep 1-level plateaus tens of px wide, which an encoder turns into bands. Soft-light is
+ * neutral on mid-grey, so the mean colour does not move. Costs a pattern fill — no full-frame CSS
+ * blend layer (a CSS overlay grain at 4K measured ≈ .24 s/frame; this is a few ms).
+ */
+const TILE = 256;
+let noiseTile: HTMLCanvasElement | null = null;
+function getNoiseTile(): HTMLCanvasElement | null {
+  if (noiseTile || typeof document === 'undefined') return noiseTile;
+  const c = document.createElement('canvas');
+  c.width = TILE;
+  c.height = TILE;
+  const ctx = c.getContext('2d');
+  if (!ctx) return null;
+  const img = ctx.createImageData(TILE, TILE);
+  let s = 0x9e3779b9;
+  const rnd = () => {
+    // mulberry32: deterministic, the same tile in every render tab
+    s = (s + 0x6d2b79f5) | 0;
+    let x = Math.imul(s ^ (s >>> 15), 1 | s);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+  for (let i = 0; i < TILE * TILE; i++) {
+    // triangular noise (the sum of two uniforms): the dither that leaves no pattern of its own
+    const v = Math.round(127.5 + 127.5 * (rnd() + rnd() - 1));
+    img.data[i * 4] = v;
+    img.data[i * 4 + 1] = v;
+    img.data[i * 4 + 2] = v;
+    img.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  noiseTile = c;
+  return c;
+}
+
 /** one pool, painted (ctx in CSS px units) */
 function paintPool(ctx: CanvasRenderingContext2D, p: MeshPool, stops?: readonly (readonly [number, string, number])[]) {
   if (p.a <= 0.001 || p.rx < 1 || p.ry < 1) return;
@@ -83,7 +124,7 @@ function paintPool(ctx: CanvasRenderingContext2D, p: MeshPool, stops?: readonly 
     for (const [u, rgb, a] of stops) g.addColorStop(u, `rgba(${rgb},${(a * p.a).toFixed(4)})`);
   } else {
     const rgb = rgbStr(p.color);
-    for (const u of FALLOFF_STOPS) g.addColorStop(u, `rgba(${rgb},${(p.a * falloff(u)).toFixed(4)})`);
+    for (const u of FALLOFF_STOPS) g.addColorStop(u, `rgba(${rgb},${(p.a * falloff(u, p.k)).toFixed(4)})`);
   }
   ctx.fillStyle = g;
   ctx.fillRect(-1, -1, 2, 2);
@@ -140,13 +181,15 @@ export const MeshGround: React.FC<MeshGroundProps> = ({
   turn = 1,
   seed = 0,
   shade = 1,
-  grain = 1,
+  grain = 0,
+  dither = 1,
   quality = 0.5,
   recipe,
   style,
   children,
 }) => {
   const { width: W, height: H } = useVideoConfig();
+  const frame = useCurrentFrame();
   const ref = useRef<HTMLCanvasElement>(null);
   const k = lift ?? (variant === 'light' ? 1 : 0);
   const q = Math.max(0.1, quality) * dpr();
@@ -188,15 +231,31 @@ export const MeshGround: React.FC<MeshGroundProps> = ({
     } else if (rec) {
       for (const p of rec.pools) paintPool(ctx, p, p.stops);
     }
+    const tile = dither > 0 ? getNoiseTile() : null;
+    if (tile) {
+      // in backing pixels (one noise sample per canvas pixel), offset per render frame
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      const pat = ctx.createPattern(tile, 'repeat');
+      if (pat) {
+        pat.setTransform(new DOMMatrix().translate(Math.floor(random(`mx${frame}`) * TILE), Math.floor(random(`my${frame}`) * TILE)));
+        ctx.globalCompositeOperation = 'soft-light';
+        // soft-light moves a pixel in proportion to d·(1 − d): ≈ 1 LSB rms on the mid-tones, less towards
+        // white (where a 1-level step cannot be seen anyway) — stronger would read as grain on the pearls
+        ctx.globalAlpha = Math.min(1, 0.055 * dither);
+        ctx.fillStyle = pat;
+        ctx.fillRect(0, 0, cw, ch);
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    }
   });
 
   const g = Math.max(0, grain);
   return (
     <AbsoluteFill style={{ background: floor, overflow: 'hidden', ...style }}>
       <canvas ref={ref} width={cw} height={ch} style={{ position: 'absolute', left: 0, top: 0, width: W, height: H }} />
-      {/* the site's .pp-noise, refined for a 120 fps master: fine overlay grain; the sparse dither where it is deep */}
-      <Grain opacity={g * (0.075 - 0.03 * k)} blend="overlay" seed="mesh" />
-      <Dither opacity={g * 0.045 * (1 - k)} />
+      {/* the site's .pp-noise, when the film's finishing grain is not over this shot */}
+      {g > 0 ? <Grain opacity={g * (0.075 - 0.03 * k)} blend="overlay" seed="mesh" /> : null}
       {children}
     </AbsoluteFill>
   );
