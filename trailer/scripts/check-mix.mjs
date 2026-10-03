@@ -20,22 +20,38 @@
  *     of the brand line, said into the impact's ring, must be ≥ MIX.name.sii
  *   · writes out/audio/cue-timeline.txt: every cue onset/peak and every word onset, in order
  *
- *   node --experimental-strip-types --no-warnings scripts/check-mix.mjs [--quiet] [--words=<line id>]
+ *   node --experimental-strip-types --no-warnings scripts/check-mix.mjs [--film=<id>] [--quiet] [--words=<line id>]
+ *
+ * --film=<id> (scripts/films.mjs; default main) picks the film: its timeline and voice data, voice-lines
+ * JSON, voice WAV folder, mix stamp, build-hash function and QA folder (stems + cue timeline; film 1's
+ * paths are the ones named above). The arc's music windows come from MIX.arc.windows ([from, to] frames);
+ * without them, film 1's scale-act windows (SCENES.scale + SCALE.langTitle / flow / irisToDark).
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readWav, lufs, truePeak, peak, db, Biquad, SR } from './audio/dsp.mjs';
-import { buildHash } from './audio/hash.mjs';
 import { blockPowers, integrated, momentary, rmsDb } from './audio/loudness.mjs';
+import { abs, filmOf } from './films.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
 const PUBLIC = path.join(ROOT, 'public');
-const QA = path.join(ROOT, 'out', 'audio');
+const film = filmOf(process.argv.slice(2));
+const QA = abs(film, 'qa');
 const quiet = process.argv.includes('--quiet');
-const T = await import(path.join(ROOT, 'src', 'timing.ts'));
-const { VOICE } = await import(path.join(ROOT, 'src', 'voice.generated.ts'));
+const T = await import(abs(film, 'timing'));
+const { VOICE } = await import(abs(film, 'voiceTs'));
+const [hashModule, hashName] = film.hash;
+if (!existsSync(path.join(ROOT, hashModule))) {
+  console.error(`film "${film.id}": its build hash ${hashModule} does not exist yet`);
+  process.exit(1);
+}
+const buildHash = (await import(path.join(ROOT, hashModule)))[hashName];
+if (typeof buildHash !== 'function') {
+  console.error(`film "${film.id}": ${hashModule} does not export ${hashName}()`);
+  process.exit(1);
+}
 
 const fails = [];
 const notes = [];
@@ -46,17 +62,17 @@ const st = (f) => {
 const fmt = (x, d = 1) => (x >= 0 ? '+' : '') + x.toFixed(d);
 
 /* ── is the master current? ── */
-const stampF = path.join(PUBLIC, 'sfx', 'mix.json');
+const stampF = abs(film, 'stamp');
 if (!existsSync(stampF)) {
-  console.error('no public/sfx/mix.json — run `npm run sfx` first');
+  console.error(`no ${film.stamp} — run \`${film.cmd.sfx}\` first`);
   process.exit(1);
 }
 const stamp = JSON.parse(readFileSync(stampF, 'utf8'));
 const mix = st(path.join(PUBLIC, T.MIX.file));
 const wantN = Math.round((T.DURATION / T.FPS) * SR);
-if (mix[0].length !== wantN) fails.push(`mix.wav is ${mix[0].length} samples, the film needs ${wantN} — stale: run \`npm run sfx\``);
+if (mix[0].length !== wantN) fails.push(`mix.wav is ${mix[0].length} samples, the film needs ${wantN} — stale: run \`${film.cmd.sfx}\``);
 if (stamp.frames !== T.DURATION) fails.push(`mix.wav was built for ${stamp.frames} frames, the film is ${T.DURATION}`);
-if (stamp.hash !== buildHash(T, ROOT)) fails.push('mix.wav is stale (the timeline, the voices or the sound code changed since it was built) — run `npm run sfx`');
+if (stamp.hash !== buildHash(T, ROOT)) fails.push(`mix.wav is stale (the timeline, the voices or the sound code changed since it was built) — run \`${film.cmd.sfx}\``);
 
 /* ── loudness / peaks ── */
 const L = lufs(mix);
@@ -78,7 +94,7 @@ const louderCue = T.CUES.filter((c) => c.vol > 1.0001);
 if (louderCue.length) fails.push(`${louderCue.length} cue(s) play above unity (would exceed the -12 dBFS SFX peak)`);
 
 /* ── dialogue: one loudness for every line ── */
-const vcfg = JSON.parse(readFileSync(path.join(HERE, 'voice-lines.json'), 'utf8'));
+const vcfg = JSON.parse(readFileSync(abs(film, 'voiceLines'), 'utf8'));
 const LV = { lufs: -23, ...(vcfg.level ?? {}) };
 const fileL = {};
 const bandShare = (m, sr, lo, hi) => {
@@ -101,9 +117,9 @@ const bandShare = (m, sr, lo, hi) => {
 };
 const presence = {};
 for (const v of T.VOICES) {
-  const w = readWav(path.join(PUBLIC, 'voice', `${v.id}.wav`));
+  const w = readWav(path.join(abs(film, 'voiceDir'), `${v.id}.wav`));
   fileL[v.id] = integrated([w.ch[0]], w.sr);
-  if (Math.abs(fileL[v.id] - LV.lufs) > 0.5) fails.push(`dialogue: ${v.id}.wav is ${fileL[v.id].toFixed(1)} LUFS (target ${LV.lufs} ± 0.5) — run \`npm run voice:remaster\``);
+  if (Math.abs(fileL[v.id] - LV.lufs) > 0.5) fails.push(`dialogue: ${v.id}.wav is ${fileL[v.id].toFixed(1)} LUFS (target ${LV.lufs} ± 0.5) — run \`${film.cmd.remaster}\``);
   if (vcfg.voices?.[VOICE.lines[v.id].voice]?.phone) {
     presence[v.id] = bandShare(w.ch[0], w.sr, 1400, 2800);
     if (presence[v.id] < -16) fails.push(`dialogue: ${v.id} (phone line) is dull — 1.4–2.8 kHz at ${presence[v.id].toFixed(1)} dB of the line (≥ -16)`);
@@ -180,15 +196,23 @@ if (ring < ARC.ringDb) fails.push(`the end: the chord has died before the pictur
 const S1 = blockPowers(mix, SR, { win: 1, hop: 1 / T.FPS });
 const s1At = (f) => -0.691 + 10 * Math.log10(Math.max(1e-20, S1.p[Math.max(0, Math.min(S1.p.length - 1, Math.round(f)))]));
 const converge1 = s1At(IMP.at - T.FPS);
-const SCs = T.SCENES.scale.from;
+// the music-forward passages the converge must top: the film's MIX.arc.windows, else film 1's scale act
+const ARC_WINDOWS =
+  ARC.windows ??
+  (() => {
+    if (!T.SCENES.scale || !T.SCALE) throw new Error(`film "${film.id}": MIX.arc.windows is missing (and there is no SCENES.scale / SCALE to fall back on)`);
+    const SCs = T.SCENES.scale.from;
+    return [[SCs, SCs + T.SCALE.langTitle], [SCs + T.SCALE.flow, SCs + T.SCALE.irisToDark[0]]];
+  })();
+const arcWhat = ARC.windows ? 'the music windows' : "the scale act's music";
 let scaleMax = { v: -Infinity, f: 0 };
-for (const [a, e] of [[SCs, SCs + T.SCALE.langTitle], [SCs + T.SCALE.flow, SCs + T.SCALE.irisToDark[0]]])
+for (const [a, e] of ARC_WINDOWS)
   for (let f = a; f + T.FPS <= e; f++) {
     const v = s1At(f);
     if (v > scaleMax.v) scaleMax = { v, f };
   }
 if (converge1 < scaleMax.v + ARC.lead)
-  fails.push(`arc: the converge into the logo is ${converge1.toFixed(1)} LUFS (1 s), the scale act's music ${scaleMax.v.toFixed(1)} (@${scaleMax.f}) — the build must top it by ${ARC.lead} LU`);
+  fails.push(`arc: the converge into the logo is ${converge1.toFixed(1)} LUFS (1 s), ${arcWhat} ${scaleMax.v.toFixed(1)} (@${scaleMax.f}) — the build must top it by ${ARC.lead} LU`);
 
 /* ── intelligibility at every word: an SII-style index (ANSI S3.5 octave-band importances) ── */
 const OCT = [[180, 355, 0.0617], [355, 710, 0.1671], [710, 1400, 0.2373], [1400, 2800, 0.2648], [2800, 5600, 0.2142], [5600, 11000, 0.0549]];
@@ -285,7 +309,7 @@ if (['sfx', 'bed'].every((k) => existsSync(path.join(QA, `stem-${k}.wav`))) && O
     if (keys.length && r.sii >= SII_KEY) notes.push(`key hit on a word (allowed): ${msg}`);
     else fails.push(`masking: ${msg}`);
   }
-} else notes.push('no stems in out/audio — run `npm run sfx` for the masking check');
+} else notes.push(`no stems in ${film.qa} — run \`${film.cmd.sfx}\` for the masking check`);
 
 /* ── the timeline ── */
 mkdirSync(QA, { recursive: true });
@@ -335,7 +359,7 @@ console.log(`dialogue      files ${LV.lufs} LUFS ± ${(spread(fileL) / 2).toFixe
 if (Object.keys(presence).length) console.log(`presence      phone lines 1.4–2.8 kHz: ${Object.entries(presence).map(([k, v]) => `${k} ${v.toFixed(1)} dB`).join(' · ')}`);
 console.log(`climax        logo impact ${impM.toFixed(1)} LUFS-M · loudest dialogue ${dMax.lufs.toFixed(1)} (${dMax.id} @${dMax.f.toFixed(0)}) · lead ${fmt(impM - dMax.lufs)} LU · build before it ${suckM.toFixed(1)}`);
 console.log(`end           last 100 ms ${end100.toFixed(1)} dBFS RMS · last frame ${endFrame.toFixed(1)} dBFS · the chord 10–5 f from the end ${ring.toFixed(1)} dBFS RMS (≥ ${ARC.ringDb})`);
-console.log(`arc           converge (1 s into the logo) ${converge1.toFixed(1)} LUFS · scale act's music max ${scaleMax.v.toFixed(1)} (@${scaleMax.f}) · lead ${fmt(converge1 - scaleMax.v)} LU (≥ ${ARC.lead})`);
+console.log(`arc           converge (1 s into the logo) ${converge1.toFixed(1)} LUFS · ${arcWhat.replace(/^the /, '')} max ${scaleMax.v.toFixed(1)} (@${scaleMax.f}) · lead ${fmt(converge1 - scaleMax.v)} LU (≥ ${ARC.lead})`);
 console.log(`cues          ${T.CUES.length}: ${Object.entries(count).map(([k, v]) => `${k} ${v}`).join(' · ')}`);
 if (cascade.length) {
   const sii = (id, re) => scored.filter((r) => r.id === id && re.test(r.w)).map((r) => r.sii.toFixed(2)).join('/') || '—';
@@ -350,7 +374,7 @@ if (maskRows.length) {
   console.log(`words         ${scored.length} scored — intelligibility (SII-style, 1 = clear) mean ${mean.toFixed(2)}, lowest: ${worst.map((r) => `“${r.w}” ${r.sii.toFixed(2)}`).join(', ')}`);
   console.log(`the name      ${T.MIX.name.voice}: ${maskRows.filter((r) => r.id === T.MIX.name.voice).map((r) => `“${r.w}” ${r.sii.toFixed(2)}`).join(' · ')} (≥ ${T.MIX.name.sii})`);
 }
-console.log(`timeline      out/audio/cue-timeline.txt`);
+console.log(`timeline      ${film.qa}/cue-timeline.txt`);
 // --words=<line id>: every word of that line with its intelligibility, all maskers and effects alone
 const wq = process.argv.find((a) => a.startsWith('--words='))?.slice(8);
 if (wq) for (const r of maskRows.filter((x) => x.id === wq)) console.log(`word          ${wq} @${r.f.toFixed(1)} “${r.w}” ${r.cutTail ? '(cut tail) ' : ''}SII ${r.sii.toFixed(2)} · effects alone ${r.siiFx.toFixed(2)} · near: ${r.near.map((c) => path.basename(c.file, '.wav')).join(', ') || '—'}`);

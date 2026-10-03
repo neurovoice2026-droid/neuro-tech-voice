@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Master render (npm run render:master -- [16x9|9x16 …] [--scale=2] [--chunk=960] [--crf=16] [--concurrency=1]).
+ * Master render (npm run render:master -- [16x9|9x16 …] [--scale=2] [--chunk=960] [--crf=16] [--concurrency=1]
+ *                [--film=<id>] [--dry-run]).
  *
  * The delivery masters: 3840×2160 / 2160×3840 at RENDER_FPS (120), HEVC Main
  * (hvc1, so QuickTime / iOS / Android / Windows play it), BT.709 limited range,
@@ -21,16 +22,32 @@
  *
  * Why HEVC: H.264 at 3840×2160 × 120 fps needs level 6.x, which most hardware
  * decoders refuse; HEVC Main level 5.2 covers 4K120 (it is what phones record).
+ *
+ * --film=<id> (scripts/films.mjs; default main): the film's timeline, composition prefix, sound driver,
+ * entry point, bundle folder and output name. Film 1 (main): Trailer-*, scripts/generate-sfx.mjs,
+ * src/index.ts → out/master/bundle → out/neurotechvoice-trailer-<fmt>-4k120.mp4. Film 2 (kb):
+ * KB-Trailer-*, scripts/kb/generate-sfx.mjs, src/kb/index.ts → out/master/bundle-kb →
+ * out/kb/neurotechvoice-knowledge-<fmt>-4k120.mp4. Each film has its own bundle folder, so two films
+ * can render at the same time.
+ *
+ * --dry-run: prints the comps, chunk ranges (and which are done), the sound step, the bundle and the
+ * output paths, then exits. Nothing is built, deleted, rendered or written.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { abs, filmOf } from './films.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const T = await import(path.join(ROOT, 'src', 'timing.ts'));
-
 const args = process.argv.slice(2);
+const film = filmOf(args);
+// refuse a mistyped flag or format BEFORE anything runs (step 1 deletes the film's bundle folder)
+const FLAGS = ['scale', 'chunk', 'crf', 'concurrency', 'film'];
+const unknown = args.filter((a) => a.startsWith('--') && a !== '--dry-run' && !FLAGS.some((k) => a.startsWith(`--${k}=`)));
+if (unknown.length) throw new Error(`render-master: unknown option(s) ${unknown.join(' ')} (known: ${FLAGS.map((k) => `--${k}=`).join(' ')} --dry-run)`);
+const T = await import(abs(film, 'timing'));
+
 const opt = (k, d) => {
   const a = args.find((x) => x.startsWith(`--${k}=`));
   return a ? a.slice(k.length + 3) : d;
@@ -39,32 +56,64 @@ const scale = Number(opt('scale', '2'));
 const chunk = Number(opt('chunk', '960'));
 const crf = Number(opt('crf', '16'));
 const concurrency = opt('concurrency', '1');
+const dryRun = args.includes('--dry-run');
 const formats = args.filter((a) => !a.startsWith('--'));
-const comps = (formats.length ? formats : ['16x9', '9x16']).map((f) => `Trailer-${f}`);
+const badFormat = formats.filter((f) => !film.formats.includes(f));
+if (badFormat.length) throw new Error(`render-master: unknown format(s) ${badFormat.join(' ')} for film "${film.id}" (${film.formats.join(', ')})`);
+const fmts = formats.length ? formats : film.formats;
+const comps = fmts.map((f) => `${film.comp}${f}`);
 
 const total = T.DURATION * T.SUB;
 const env = { ...process.env, NTV_SKIP_SFX: '1', NTV_HEVC: '1' };
 const npx = (a, opts = {}) => execFileSync('npx', ['remotion', ...a], { cwd: ROOT, env, stdio: 'inherit', ...opts });
 const log = (m) => console.log(`[master ${new Date().toISOString().slice(11, 19)}] ${m}`);
+const bundle = abs(film, 'bundle');
+const rangesOf = () => {
+  const ranges = [];
+  for (let a = 0; a < total; a += chunk) ranges.push([a, Math.min(total, a + chunk) - 1]);
+  return ranges;
+};
+const chunkName = ([a, b]) => `${String(a).padStart(5, '0')}-${String(b).padStart(5, '0')}`;
+const outOf = (comp) =>
+  path.join(ROOT, film.outDir, `${film.outName}-${comp.slice(film.comp.length)}-${scale === 2 ? '4k' : `x${scale}`}${T.RENDER_FPS}.mp4`);
+
+if (dryRun) {
+  // print the plan; nothing is built, deleted, rendered or written
+  const rel = (p) => path.relative(ROOT, p);
+  const ranges = rangesOf();
+  console.log(`render-master --dry-run · film ${film.id} (${film.timing}) · ${total} frames at ${T.RENDER_FPS} fps (${T.DURATION} × ${T.SUB}) · scale ${scale} · chunk ${chunk} · crf ${crf} · concurrency ${concurrency}`);
+  console.log(`sound         node --experimental-strip-types --no-warnings ${film.sfxDriver}   (not run)`);
+  console.log(`bundle        npx remotion bundle ${film.entry} --out-dir ${rel(bundle)}   (not run; a real run deletes ${rel(bundle)} first)`);
+  console.log(`comps         ${comps.join(' ')}`);
+  for (const comp of comps) {
+    const dir = path.join(ROOT, 'out', 'master', `${comp}-x${scale}`);
+    console.log(`\n${comp} ×${scale} → ${rel(dir)}/`);
+    for (const r of ranges) {
+      const file = path.join(dir, `${chunkName(r)}.mp4`);
+      const done = existsSync(`${file}.done`) && existsSync(file);
+      console.log(`  chunk ${chunkName(r)}   frames ${r[0]}–${r[1]} (${r[1] - r[0] + 1} f)   ${done ? 'done' : 'to render'}`);
+    }
+    console.log(`  mux   ${rel(path.join(ROOT, 'public', T.MIX.file))} → ${rel(outOf(comp))}   (HEVC hvc1 copy + AAC 320k, ${T.DURATION / T.FPS} s)`);
+  }
+  process.exit(0);
+}
 
 // 1. the soundtrack, then ONE bundle every chunk renders from
-execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', path.join(ROOT, 'scripts', 'generate-sfx.mjs')], {
+execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', abs(film, 'sfxDriver')], {
   cwd: ROOT,
   stdio: 'inherit',
 });
-const bundle = path.join(ROOT, 'out', 'master', 'bundle');
 rmSync(bundle, { recursive: true, force: true });
-npx(['bundle', 'src/index.ts', '--out-dir', bundle]);
+npx(['bundle', film.entry, '--out-dir', bundle]);
 
 for (const comp of comps) {
   const dir = path.join(ROOT, 'out', 'master', `${comp}-x${scale}`);
   mkdirSync(dir, { recursive: true });
-  const ranges = [];
-  for (let a = 0; a < total; a += chunk) ranges.push([a, Math.min(total, a + chunk) - 1]);
+  const ranges = rangesOf();
 
   // 2. picture, chunk by chunk; `.done` marks a chunk that finished encoding
   for (const [a, b] of ranges) {
-    const name = `${String(a).padStart(5, '0')}-${String(b).padStart(5, '0')}`;
+    const name = chunkName([a, b]);
     const file = path.join(dir, `${name}.mp4`);
     if (existsSync(`${file}.done`) && existsSync(file)) continue;
     const t0 = Date.now();
@@ -86,7 +135,8 @@ for (const comp of comps) {
   const parts = readdirSync(dir).filter((f) => /^\d{5}-\d{5}\.mp4$/.test(f)).sort();
   if (parts.length !== ranges.length) throw new Error(`${comp}: ${parts.length}/${ranges.length} chunks`);
   writeFileSync(list, parts.map((f) => `file '${path.join(dir, f)}'`).join('\n') + '\n');
-  const out = path.join(ROOT, 'out', `neurotechvoice-trailer-${comp.slice(8)}-${scale === 2 ? '4k' : `x${scale}`}${T.RENDER_FPS}.mp4`);
+  const out = outOf(comp);
+  mkdirSync(path.dirname(out), { recursive: true });
   const r = spawnSync('npx', [
     'remotion', 'ffmpeg', '-hide_banner', '-v', 'error', '-y',
     '-f', 'concat', '-safe', '0', '-i', list,

@@ -15,21 +15,27 @@
  * --from=<frame>: the file is a frame-range render starting at that frame, counted at the
  * file's own rate (`npx remotion render … --frames=<from>-<to>`).
  *
+ * --film=<id> (scripts/films.mjs; default main): the film whose timeline (FPS, RENDER_FPS, DURATION,
+ * MIX.file) the files are checked against.
+ *
  *   node --experimental-strip-types --no-warnings scripts/check-render.mjs out/neurotechvoice-trailer-16x9.mp4
+ *   node --experimental-strip-types --no-warnings scripts/check-render.mjs --film=kb out/kb/neurotechvoice-knowledge-16x9.mp4
  */
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readWav, SR } from './audio/dsp.mjs';
+import { abs, filmOf } from './films.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const T = await import(path.join(ROOT, 'src', 'timing.ts'));
 const args = process.argv.slice(2);
+const film = filmOf(args);
+const T = await import(abs(film, 'timing'));
 const range = args.find((a) => a.startsWith('--from='));
 const from = range ? Number(range.slice(7)) : 0;
 const files = args.filter((a) => !a.startsWith('--'));
 if (!files.length) {
-  console.error('usage: check-render.mjs <file.mp4> [more.mp4 …] [--from=<frame>]');
+  console.error('usage: check-render.mjs [--film=<id>] <file.mp4> [more.mp4 …] [--from=<frame>]');
   process.exit(2);
 }
 
