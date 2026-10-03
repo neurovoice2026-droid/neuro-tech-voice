@@ -85,7 +85,8 @@ export function PillLink({
   const external = /^(tel:|mailto:|https?:)/.test(href);
   const classes = cn(
     "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full whitespace-nowrap transition-[background-color,color,scale] duration-200 active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
-    size === "md" ? "h-11 px-5 text-base" : "h-9 px-3.5 text-sm",
+    // sm is drawn at 36px; on touch it takes a 44px tap (tap-44).
+    size === "md" ? "h-11 px-5 text-base" : "tap-44 relative h-9 px-3.5 text-sm",
     variant === "primary"
       ? "bg-pp-ink text-white hover:bg-[#2b2a28]"
       : "pp-shadow-btn bg-white text-pp-ink hover:bg-pp-card",

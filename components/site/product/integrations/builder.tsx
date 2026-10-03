@@ -119,7 +119,8 @@ export function IntBuilder() {
             );
           })}
         </ol>
-        <PillLink href={b.cta.href} variant="secondary" size="sm" className="mt-8">
+        {/* z-[1]: at lg its 44px tap reaches under the next section's box. */}
+        <PillLink href={b.cta.href} variant="secondary" size="sm" className="relative z-[1] mt-8">
           {b.cta.label}
         </PillLink>
       </div>
@@ -200,7 +201,8 @@ export function IntBuilder() {
                       >
                         {selected && <Check className="size-2.5" strokeWidth={3} />}
                       </span>
-                      <span className="truncate">{a}</span>
+                      {/* On a phone a name may take two lines; from sm it fits on one. */}
+                      <span className="min-w-0 sm:truncate">{a}</span>
                     </div>
                   );
                 })}
@@ -248,7 +250,7 @@ export function IntBuilder() {
               </p>
               <div className="mt-4 rounded-xl p-4 shadow-[0_0_0_1px_rgb(24_16_40/0.08),0_12px_28px_-20px_rgb(24_16_40/0.4)]">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="truncate text-[14px] leading-5">{m.nameValue}</p>
+                  <p className="min-w-0 text-[14px] leading-5 sm:truncate">{m.nameValue}</p>
                   <span className="flex shrink-0 items-center gap-2 text-[12px] leading-4 text-[#1f6b3f]">
                     {m.live}
                     <span className="relative h-5 w-9 rounded-full bg-[#551a89]">

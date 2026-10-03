@@ -198,9 +198,11 @@ function Relay() {
     const press = pending.current;
     pending.current = null;
     if (!press || keyIndex < 0 || !voiceOf(scenes[keyIndex], cue)) return;
-    setAutoplay(false);
     setPaused(false);
-    if (press === "listen") setListen("playing");
+    if (press === "listen") {
+      setAutoplay(false);
+      setListen("playing");
+    }
     beginScene(keyIndex, true, false, cue);
   });
 
@@ -379,6 +381,8 @@ function Relay() {
   };
 
   // Sound turned on here: the keyword scene plays, with its excerpt (Listen, with reduced motion).
+  // It is not a pick: the tour carries on from there afterwards, as the landing's demo does after its
+  // sound press, and says the keyword scene again each time it comes round with sound on.
   const onSound = (on: boolean) => {
     if (!on || keyIndex < 0) return;
     if (excerpt === undefined) {
@@ -386,9 +390,11 @@ function Relay() {
       return;
     }
     if (!voiceOf(scenes[keyIndex], excerpt)) return;
-    setAutoplay(false);
     setPaused(false);
-    if (reduce) setListen("playing");
+    if (reduce) {
+      setAutoplay(false);
+      setListen("playing");
+    }
     beginScene(keyIndex, true);
   };
 
@@ -400,7 +406,17 @@ function Relay() {
 
   return (
     <div ref={rootRef} className="mt-10 md:mt-12">
-      <div ref={stageRef} className="relative overflow-hidden rounded-[28px] bg-pp-card">
+      {/* Below lg the columns stack, and the scenes run 640–1150px tall, so a tour moved everything
+          under the stage by up to ~470px. The stage holds its tallest scene's height (the keyword
+          scene, with the excerpt's caption line that sound adds) at every width, measured on the
+          dev build 2026-10: under sm the tallest falls with the width (1149px at 320, 1075 at 390,
+          999 at 639; two lines over those, +24px); sm to lg it is 1007px at most (+24px). From lg
+          the stage is 540px and the columns sit side by side, as before. Re-measure if a scene's
+          copy changes (each scene's finished frame, reduced motion, 320–1023px). */}
+      <div
+        ref={stageRef}
+        className="relative overflow-hidden rounded-[28px] bg-pp-card max-sm:min-h-[max(calc(1173px_-_(100vw_-_320px)_*_1.057),calc(1099px_-_(100vw_-_390px)_*_0.305))] sm:max-lg:min-h-[1031px]"
+      >
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0"
@@ -695,7 +711,7 @@ function Relay() {
             type="button"
             onClick={toggle}
             aria-label={step === final && !autoplay ? RELAY.play : paused ? RELAY.play : RELAY.pause}
-            className="pp-shadow-btn absolute top-4 right-4 grid size-9 lg:top-auto lg:bottom-4 place-items-center rounded-full bg-white text-pp-ink transition-colors hover:bg-pp-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
+            className="pp-shadow-btn tap-44 absolute top-4 right-4 grid size-9 lg:top-auto lg:bottom-4 place-items-center rounded-full bg-white text-pp-ink transition-colors hover:bg-pp-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
           >
             {paused || (step === final && !autoplay) ? <Play className="size-4 fill-current" /> : <Pause className="size-4 fill-current" />}
           </button>
@@ -707,7 +723,9 @@ function Relay() {
         <div
           role="group"
           aria-label={RELAY.pick}
-          className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] md:flex-wrap md:overflow-visible"
+          // The chips' 44px taps (tap-44) run 4px past them: the scroller
+          // carries 4px above as padding and gives it back as margin.
+          className="-mx-1 -mt-1 flex gap-2 overflow-x-auto px-1 pt-1 pb-1 [scrollbar-width:none] md:flex-wrap md:overflow-visible"
         >
           {scenes.map((x, i) => {
             const on = i === index;
@@ -718,7 +736,7 @@ function Relay() {
                 onClick={() => pick(i)}
                 aria-pressed={on}
                 className={cn(
-                  "relative h-9 shrink-0 overflow-hidden rounded-full px-3.5 text-[13px] whitespace-nowrap transition-colors duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
+                  "tap-44 relative h-9 shrink-0 rounded-full px-3.5 text-[13px] whitespace-nowrap transition-colors duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
                   on ? "bg-pp-ink text-white" : "bg-pp-card text-pp-ink hover:bg-[#ebe9f1]",
                 )}
               >

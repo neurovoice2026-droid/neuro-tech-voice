@@ -42,7 +42,7 @@ import { ListenPill, StageSound, useStageCues } from "./first-question";
  *
  * LISTEN. The call can also be heard, at its own pace: "Listen to the
  * call" plays it once at 1x with AI-generated voices (one track per
- * trade, lib/audio/cues/industry-run-it-call.json, fetched only once
+ * trade, lib/audio/cues/industry/run-it-call/<slug>.json, fetched only once
  * sound is on or on that press). While it plays the audio's clock is
  * the rail's: each line swaps in as it is said, and the tools and the
  * fields land between the same two lines as written, re-timed to the
@@ -98,7 +98,7 @@ export function RunIt({
   useEffect(() => {
     trackRef.current = track;
   });
-  const { fileRef, load } = useStageCues("industry-run-it-call", track.on && near && canListen);
+  const { fileRef, load } = useStageCues("industry-run-it-call", trade.slug, track.on && near && canListen);
   /** The call's track and the trade re-timed to it, once a press has asked for it. */
   const [spoken, setSpoken] = useState<{ cue: Cue; trade: Trade } | null>(null);
   const [listening, setListening] = useState<Listening>("off");
@@ -342,7 +342,8 @@ export function RunIt({
               </>
             )}
           </p>
-          <PillLink href="/register" size="sm" className="ml-auto">
+          {/* z-[1]: its 44px tap reaches past the section's foot, under the next section's box. */}
+          <PillLink href="/register" size="sm" className="relative z-[1] ml-auto">
             Build this agent
           </PillLink>
         </div>

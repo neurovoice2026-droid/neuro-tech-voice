@@ -3,6 +3,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { CueFile } from "@/lib/audio/cue-types";
 import { isSoundOn, unlockFromGesture } from "@/components/site/audio/engine";
+import { armFollow, showSaid } from "@/components/site/audio/show-said";
 import { useSounding, useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import type { Trade } from "@/lib/pages/industries/schema";
 import {
@@ -42,7 +43,7 @@ import { markProved } from "./proved";
  * answer that: show it starting to be wrong, and stopping.
  *
  * SOUND. The exchange can be heard, dramatised with AI-generated voices
- * (one track per trade, lib/audio/cues/industry-wall-retraction.json,
+ * (one track per trade, lib/audio/cues/industry/wall-retraction/<slug>.json,
  * fetched only once sound is on and the wall is a screen away), and the
  * label under it says so. With sound on the audio's clock runs the
  * wall: the walk plays detents one to three as they are said, each
@@ -115,7 +116,7 @@ export function Wall({ trade }: { trade: Trade }) {
   useEffect(() => {
     trackRef.current = track;
   });
-  const { fileRef, load } = useStageCues("industry-wall-retraction", track.on && near);
+  const { fileRef, load } = useStageCues("industry-wall-retraction", trade.slug, track.on && near);
   const playing = useSounding() && track.audible;
   /** A stretch of the exchange is being said: its frame loop runs while the wall is on screen. */
   const [speaking, setSpeaking] = useState(false);
@@ -237,9 +238,19 @@ export function Wall({ trade }: { trade: Trade }) {
     };
   }, [speaking, inView]);
 
+  /** The exchange (the caller's line and the answer): what a press here says. */
+  const exchangeRef = useRef<HTMLDivElement>(null);
+  /**
+   * Below lg the stage is taller than a phone's screen, and the exchange can sit under the header
+   * while the sound control is on screen: a press here brings it on screen when it is not, by the
+   * least scroll and keeping the control on screen too (show-said.ts), so what is said can be read.
+   */
+  const showExchange = () => showSaid(exchangeRef.current, still || track.listen, "(max-width: 1023px)");
+
   /** The sound pill, inside its click: on, the walk is said on from the detent on screen, or that detent alone. */
   function onSound(on: boolean) {
     if (!on) return;
+    showExchange();
     const r = run.current;
     if (r) {
       // Said silently since sound went off: heard again, from the start of the detent on screen.
@@ -263,6 +274,8 @@ export function Wall({ trade }: { trade: Trade }) {
       setSpeaking(false);
       return;
     }
+    armFollow();
+    showExchange();
     unlockFromGesture();
     sayPressed(at, at);
   }
@@ -354,7 +367,7 @@ export function Wall({ trade }: { trade: Trade }) {
                   the next, which plays by itself, never moves a line: not the
                   Agent label under a caller line that wraps differently, and
                   not anything below the card. */}
-              <div className="mt-7 min-h-[230px]">
+              <div ref={exchangeRef} className="mt-7 min-h-[230px]">
                 <p className="text-[11px] leading-4 font-medium tracking-[0.12em] text-pp-muted uppercase">
                   Caller
                 </p>

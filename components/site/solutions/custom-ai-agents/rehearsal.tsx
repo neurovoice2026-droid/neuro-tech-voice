@@ -6,6 +6,7 @@ import type { CAA_REHEARSAL, SPEAKERS, STATUS_LABEL, TestRow } from "@/lib/pages
 import { cn } from "@/lib/utils";
 import { envelopeAt } from "@/components/site/audio/cue";
 import { isSoundOn } from "@/components/site/audio/engine";
+import { showSaid } from "@/components/site/audio/show-said";
 import { SoundButton } from "@/components/site/audio/sound-button";
 import { useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { IntentLink } from "@/components/site/intent-link";
@@ -182,6 +183,11 @@ function stepsOf(rows: readonly TestRow[]) {
 export function Rehearsal({ data }: { data: Data }) {
   const ref = useRef<HTMLElement>(null);
   const inView = useInView(ref, "-15% 0px");
+  // The sheet starts ringing once its rows are a third of the way up the screen, not when the
+  // section's heading arrives: on a short phone they are a screen below it, and a run started
+  // from there would be over before the reader reached them.
+  const listRef = useRef<HTMLOListElement>(null);
+  const listIn = useInView(listRef, "0px 0px -35% 0px");
   const still = usePrefersReducedMotion();
 
   const rows: readonly TestRow[] = data.rows;
@@ -230,7 +236,14 @@ export function Rehearsal({ data }: { data: Data }) {
   useEffect(() => () => follow.current(), []);
 
   /* ---------- sound (see the header) ---------- */
-  const track = useVoiceTrack(VOICE_ID, { active: inView });
+  /** The excerpt playing was asked for with the sound control: its lines are followed on screen (below). */
+  const followSaid = useRef(false);
+  const track = useVoiceTrack(VOICE_ID, {
+    active: inView,
+    onPreempt: () => {
+      followSaid.current = false;
+    },
+  });
   const trackRef = useRef(track);
   useEffect(() => {
     trackRef.current = track;
@@ -346,6 +359,7 @@ export function Rehearsal({ data }: { data: Data }) {
   const onSound = (on: boolean) => {
     // Off: the excerpt finishes in silence on the same clock (use-voice-track).
     if (!on) return;
+    followSaid.current = true;
     if (voice === undefined) {
       pending.current = true;
       return;
@@ -353,8 +367,17 @@ export function Rehearsal({ data }: { data: Data }) {
     converse(voice);
   };
 
+  // Below lg the excerpt sits under all six rows, far from the sound control on a phone: an excerpt
+  // the control asked for brings the line being said on screen when it is not, so it can be read as
+  // it is heard (show-said.ts). A pick brings the excerpt up its own way, once its row has rung (pick).
+  const sayingNow = heard ? heard.at.saying : -1;
   useEffect(() => {
-    if (still || !inView || started.current) return;
+    if (sayingNow < 0 || !followSaid.current) return;
+    showSaid(excerptRef.current?.querySelector("[data-saying]")?.parentElement, still, "(max-width: 1023px)");
+  }, [sayingNow, heardRow, still]);
+
+  useEffect(() => {
+    if (still || !listIn || started.current) return;
     started.current = true;
     const at = (ms: number, fn: () => void) => timers.current.push(window.setTimeout(fn, ms));
     steps.forEach((s, k) => {
@@ -367,9 +390,10 @@ export function Rehearsal({ data }: { data: Data }) {
     });
     // All rings rung: rest on the first row that failed.
     at(LEAD_MS + total * ROW_MS, () => setRunning(data.settleOn));
-  }, [inView, still, steps, total, data.settleOn]);
+  }, [listIn, still, steps, total, data.settleOn]);
 
   function pick(i: number) {
+    followSaid.current = false;
     // A pick finishes the sheet at once: the reader asked for a row, not
     // for the rest of the demonstration.
     timers.current.forEach(window.clearTimeout);
@@ -448,7 +472,7 @@ export function Rehearsal({ data }: { data: Data }) {
               {fill(data.summary, { calls: word(calls), changes: word(changes) })}
             </p>
 
-            <ol aria-label={data.listAria} className="divide-y divide-pp-rule border-y border-pp-rule">
+            <ol ref={listRef} aria-label={data.listAria} className="divide-y divide-pp-rule border-y border-pp-rule">
               {rows.map((row, i) => {
                 const k = first[i];
                 const j = again[i];
@@ -780,7 +804,7 @@ function Aside({
         <p className="mt-4">
           <IntentLink
             href={row.link.href}
-            className="inline-flex min-h-6 items-center text-[14px] leading-5 underline-offset-4 transition-colors hover:text-[#551a89] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
+            className="tap-44 relative inline-flex min-h-6 items-center text-[14px] leading-5 underline-offset-4 transition-colors hover:text-[#551a89] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
           >
             {row.link.label} →
           </IntentLink>

@@ -76,7 +76,7 @@ export function SiteHeader({
           >
             <IntentLink
               href="/#top"
-              className="hdr-wordmark text-[1.15em] font-medium leading-none tracking-[-0.07em]"
+              className="hdr-wordmark tap-44 relative text-[1.15em] font-medium leading-none tracking-[-0.07em]"
             >
               {COMPANY.wordmark}
               {/* The name read aloud starts with the one on screen. */}
@@ -97,7 +97,7 @@ export function SiteHeader({
           >
             <IntentLink
               href={SITE_HEADER.signin.href}
-              className="hidden h-[2.5em] items-center rounded-[0.5em] px-[1em] text-[0.875em] font-medium text-[var(--cover-paper)]/85 transition-colors hover:bg-[var(--cover-paper)]/[0.08] hover:text-[var(--cover-paper)] md:inline-flex"
+              className="tap-44 relative hidden h-[2.5em] items-center rounded-[0.5em] px-[1em] text-[0.875em] font-medium text-[var(--cover-paper)]/85 transition-colors hover:bg-[var(--cover-paper)]/[0.08] hover:text-[var(--cover-paper)] md:inline-flex"
             >
               {SITE_HEADER.signin.label}
             </IntentLink>
@@ -107,7 +107,7 @@ export function SiteHeader({
               // The same inversion the cover's own button and the cursor
               // chip use, so the primary action reads as one thing in
               // three places.
-              className="hdr-startfree group inline-flex h-[2.25em] items-center gap-[0.4em] rounded-[0.5em] bg-[var(--cover-paper)] px-[1.125em] text-[0.875em] font-medium text-[var(--cover-ink)] transition-colors duration-300 hover:bg-[var(--cover-brand)] hover:text-[var(--cover-paper)] active:scale-[0.97] lg:h-[2.5em]"
+              className="hdr-startfree tap-44 group relative inline-flex h-[2.25em] items-center gap-[0.4em] rounded-[0.5em] bg-[var(--cover-paper)] px-[1.125em] text-[0.875em] font-medium text-[var(--cover-ink)] transition-colors duration-300 hover:bg-[var(--cover-brand)] hover:text-[var(--cover-paper)] active:scale-[0.97] lg:h-[2.5em]"
             >
               {SITE_HEADER.signup.label}
               <span

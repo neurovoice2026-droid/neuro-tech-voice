@@ -287,7 +287,8 @@ export function PrototypeDemo({ data }: { data: PrototypeData }) {
           "shadow-[0_0_0_1px_var(--pp-rule),0_1px_2px_rgb(20_10_36/0.06),0_24px_48px_-28px_rgb(20_10_36/0.3)]",
         )}
       >
-        <div className="flex h-10 shrink-0 items-center justify-between gap-3 border-b border-pp-rule px-4">
+        {/* Under 360px the bar's gutters give the product's name the few pixels it needs. */}
+        <div className="flex h-10 shrink-0 items-center justify-between gap-3 border-b border-pp-rule px-4 max-[359px]:gap-2 max-[359px]:px-3">
           <p className="pp-display flex min-w-0 items-center gap-2 text-[13px] leading-4 text-pp-ink" style={{ fontWeight: 500 }}>
             <span aria-hidden className="size-3 shrink-0 rounded-[4px] bg-(--home-lilac)" />
             <span className="truncate">{data.product}</span>

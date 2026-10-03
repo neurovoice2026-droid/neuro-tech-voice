@@ -4,6 +4,7 @@ import { Fragment, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, 
 import type { gsap as GsapCore } from "gsap";
 import { cn } from "@/lib/utils";
 import { isAudible, isSoundOn, unlockFromGesture } from "@/components/site/audio/engine";
+import { showSaid } from "@/components/site/audio/show-said";
 import { SoundButton } from "@/components/site/audio/sound-button";
 import { useSoundOn, useSounding, useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { Frame, Rule } from "@/components/site/product/primitives";
@@ -11,7 +12,8 @@ import { useKitContext } from "@/components/site/product/motion-kit";
 import { holdFor, useInView } from "@/components/site/product/timing";
 import { cueIn, loadCueFile, type Cue, type CueFile } from "@/lib/audio";
 import { PLATFORM } from "@/lib/pages/ai-agents";
-import { HOME, type HomeRegister } from "@/lib/pages/home";
+import { HOME_CALL } from "@/lib/pages/home/call";
+import { HOME_VOICE, type HomeRegister } from "@/lib/pages/home/voice";
 import type { GreetingRow, GreetingTable } from "@/lib/pages/home.server";
 import { ChipRail, RoundButton, Segmented, Sizer, centreInRail, useRovingRadio } from "./controls";
 import { SpokenClock, saidAtChar, type RunVoice } from "./demo-script";
@@ -346,8 +348,8 @@ function leave(m: Motor, p: Parts, ring: Element | null, onDone: () => void) {
 /* ─── The section ─────────────────────────────────────────────────── */
 
 export function Voice({ table }: { table: GreetingTable }) {
-  const v = HOME.voice;
-  const { play, pause, listen } = HOME.call.controls;
+  const v = HOME_VOICE;
+  const { play, pause, listen } = HOME_CALL.controls;
 
   const rows = useMemo(() => new Map(table.rows.map((r) => [keyOf(r), r])), [table.rows]);
   /** One chip per language, in the app's own order. */
@@ -523,6 +525,9 @@ export function Voice({ table }: { table: GreetingTable }) {
 
   // A spoken greeting's clock: it runs while the greeting may sound, sets the entrance's time
   // (the audio's, while the clip is heard), counts the walk's ring down, and moves the walk on.
+  // The line coming back on screen starts it again where it is, so the clip it is in is heard
+  // again from there: scrolled back up from below, the stage takes the focus before its line is
+  // on screen, and the clip it asked for then was refused.
   useEffect(() => {
     const m = motor.current;
     const clock = m.clock;
@@ -549,7 +554,7 @@ export function Voice({ table }: { table: GreetingTable }) {
       cancelAnimationFrame(raf);
       clock.stop();
     };
-  }, [speaking, spokenKey]);
+  }, [speaking, spokenKey, lineOnScreen]);
 
   /** Puts `next` on the line: at once without motion, otherwise after the current one has left. */
   function show(next: Choice) {
@@ -629,7 +634,10 @@ export function Voice({ table }: { table: GreetingTable }) {
    * The sound control: on, the greeting on screen is said (again); off,
    * the engine has silenced it. With the line scrolled off the screen
    * (the control sits below it, under the chips), the line is brought
-   * back first and said once it is there.
+   * back first, by the least scroll that shows it (keeping the control on
+   * screen where both fit), and said once it is there. A line the reader
+   * never lets come back (a key or a hand cut the scroll short) gives the
+   * press up after PRESS_WAIT_MS, and with it the focus the press took.
    */
   const onSound = (on: boolean) => {
     pendingSay.current = 0;
@@ -640,10 +648,19 @@ export function Voice({ table }: { table: GreetingTable }) {
     const line = lineRef.current;
     const box = line?.getBoundingClientRect();
     if (line && box && (box.bottom <= 0 || box.top >= window.innerHeight)) {
-      pendingSay.current = performance.now();
-      line.scrollIntoView({ block: "center", behavior: "smooth" });
+      const at = performance.now();
+      pendingSay.current = at;
+      showSaid(line, false);
+      window.setTimeout(() => {
+        if (pendingSay.current !== at) return;
+        pendingSay.current = 0;
+        const r = lineRef.current?.getBoundingClientRect();
+        if (!r || r.bottom <= 0 || r.top >= window.innerHeight) unpinFocus();
+      }, PRESS_WAIT_MS);
       return;
     }
+    // Part of it under the header or the fold: the rest comes on screen as it is said.
+    showSaid(line, false);
     sayAgain();
   };
   const sayPending = useEffectEvent(() => {
@@ -661,7 +678,8 @@ export function Voice({ table }: { table: GreetingTable }) {
   useEffect(() => {
     const was = lineWasOnScreen.current;
     lineWasOnScreen.current = lineOnScreen;
-    if (was && !lineOnScreen && !pendingSay.current) unpinFocus();
+    const waiting = pendingSay.current > 0 && performance.now() - pendingSay.current < PRESS_WAIT_MS;
+    if (was && !lineOnScreen && !waiting) unpinFocus();
   }, [lineOnScreen, unpinFocus]);
 
   /** Listen (reduced motion): plays the line on screen, or pauses it. */
@@ -790,7 +808,9 @@ export function Voice({ table }: { table: GreetingTable }) {
               lang={row.lang}
               dir={row.dir}
               data-landed={landed ? "" : undefined}
-              className={cn(TYPE.cinema, "home-voice-script text-balance [grid-area:1/1]")}
+              // It fills the cell the sizers hold and centres its lines inside it (align-content), so a
+              // greeting of fewer lines never moves the line itself up or down the page.
+              className={cn(TYPE.cinema, "home-voice-script self-stretch content-center text-balance [grid-area:1/1]")}
             >
               <Pieces key={`${shown}-b`} text={row.before} split={row.split} spoken={pieced} />
               <span key={`${shown}-d`} className="home-disclose home-voice-d">

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Cue } from "@/lib/audio/cue-types";
-import { getTier, onTierChange } from "@/components/site/product/device-tier";
 import { usePrefersReducedMotion } from "@/components/site/product/timing";
 import * as engine from "./engine";
 
@@ -94,6 +93,13 @@ export type VoiceTrackOptions = {
 };
 
 const useIsoLayoutEffect = typeof document !== "undefined" ? useLayoutEffect : useEffect;
+
+type TierModule = typeof import("@/components/site/product/device-tier");
+/** device-tier, once fetched: imported only when sound goes on, so a page that has no other use for it never loads it. */
+let tierModule: TierModule | null = null;
+let tierLoad: Promise<TierModule> | null = null;
+const loadTier = () =>
+  (tierLoad ??= import("@/components/site/product/device-tier").then((m) => (tierModule = m)));
 const off = () => false;
 
 /** sound.on, for rendering: false on the server and while hydrating. */
@@ -149,11 +155,22 @@ export function useVoiceTrack(id: string, { active = true, onEnded, onPreempt }:
   const reducedMotion = usePrefersReducedMotion();
   // The tier is read only once sound is on: reading it boots device-tier
   // (a WebGL2 context, a frame probe, html[data-tier]), which a page with
-  // no other use for it must not pay for while silent. With sound off,
-  // `listen` is reduced motion alone (the `still` tier is reduced motion,
-  // or a QA override).
-  const subscribeTier = useCallback((cb: () => void) => (on ? onTierChange(cb) : () => {}), [on]);
-  const still = useSyncExternalStore(subscribeTier, () => on && getTier() === "still", off);
+  // no other use for it must not pay for while silent, in bytes either: the
+  // module itself is fetched then. With sound off, `listen` is reduced
+  // motion alone (the `still` tier is reduced motion, or a QA override).
+  const [tier, setTier] = useState<TierModule | null>(tierModule);
+  useEffect(() => {
+    if (!on || tier) return;
+    let live = true;
+    void loadTier().then((m) => {
+      if (live) setTier(m);
+    });
+    return () => {
+      live = false;
+    };
+  }, [on, tier]);
+  const subscribeTier = useCallback((cb: () => void) => (on && tier ? tier.onTierChange(cb) : () => {}), [on, tier]);
+  const still = useSyncExternalStore(subscribeTier, () => !!tier && on && tier.getTier() === "still", off);
   const listen = reducedMotion || still;
   const [ended, setEnded] = useState(false);
   const [preempted, setPreempted] = useState(false);

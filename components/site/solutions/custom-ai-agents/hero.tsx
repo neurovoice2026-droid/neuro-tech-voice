@@ -17,6 +17,7 @@ import type { CAA_HERO, SheetLine, TraceCaller } from "@/lib/pages/custom-ai-age
 import { cn } from "@/lib/utils";
 import { envelopeAt, wordsShownAt } from "@/components/site/audio/cue";
 import { isSoundOn } from "@/components/site/audio/engine";
+import { armFollow, showSaid } from "@/components/site/audio/show-said";
 import { SoundButton } from "@/components/site/audio/sound-button";
 import { useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { Eyebrow, PillLink, SectionTitle } from "@/components/site/product/primitives";
@@ -578,8 +579,9 @@ export function Hero({ data }: { data: Data }) {
   /**
    * Line 1, said: the greeting, its quote's words showing as they are
    * spoken (with motion). True when it plays; nothing for any other line.
+   * `after` runs once the greeting has been said (or given up).
    */
-  function sayQuote(i: number, v = voice) {
+  function sayQuote(i: number, v = voice, after?: () => void) {
     if (lines[i].id !== "greet" || !v || !isSoundOn()) return false;
     const t = trackRef.current;
     const { cue, turn } = v.greeting;
@@ -588,14 +590,21 @@ export function Hero({ data }: { data: Data }) {
     const words = !still;
     setQuoteSaid(words ? 0 : null);
     setVoicing("quote");
-    clip.current = { cue, abandon: hush };
+    clip.current = {
+      cue,
+      abandon: () => {
+        hush();
+        after?.();
+      },
+    };
     const frame = () => {
       const now = t.time();
       if (words) setQuoteSaid(wordsShownAt(turn, now));
       level(cue, now);
       if (now >= turn.end || now >= cue.dur) {
         clip.current = null;
-        return hush();
+        hush();
+        return after?.();
       }
       nextFrame(frame);
     };
@@ -621,11 +630,16 @@ export function Hero({ data }: { data: Data }) {
     setRun(null);
     setSel(i);
     // Announced on a pick only — never during the autoplay, which would
-    // talk over the heading a screen reader is still reading.
-    setSaid(`${fill(data.became, { n: lines[i].n })}: ${lines[i].became}`);
+    // talk over the heading a screen reader is still reading — and not
+    // over the greeting either: picked with sound on, line 1 is said, and
+    // its announcement waits until the greeting has been (as a ring's
+    // outcome does).
+    const announce = () => setSaid(`${fill(data.became, { n: lines[i].n })}: ${lines[i].became}`);
     markProved("sheet");
     // Sound on: line 1 says the greeting (halt() above stopped any other voice).
-    sayQuote(i);
+    if (!sayQuote(i, voice, announce)) announce();
+    // A pick is a press of its own: its caption may come on screen.
+    armFollow();
     showCaption();
   }
 
@@ -640,11 +654,8 @@ export function Hero({ data }: { data: Data }) {
    * this reads the same box before and after the press.
    */
   function showCaption() {
-    const box = captionRef.current;
-    if (!box || window.matchMedia("(min-width: 1024px)").matches) return;
-    const r = box.getBoundingClientRect();
-    if (r.top >= 0 && r.bottom <= window.innerHeight) return;
-    box.scrollIntoView({ block: "nearest", behavior: still ? "auto" : "smooth" });
+    // The least scroll that shows it, keeping the control pressed on screen where both fit (show-said.ts).
+    showSaid(captionRef.current, still, "(max-width: 1023px)");
   }
 
   /**

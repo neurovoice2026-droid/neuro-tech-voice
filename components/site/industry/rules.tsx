@@ -51,7 +51,7 @@ export function Rules({ trade }: { trade: Trade }) {
                     role="switch"
                     aria-checked={on[i]}
                     onClick={() => flip(i)}
-                    className="mt-0.5 shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
+                    className="tap-44 relative mt-0.5 shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
                   >
                     <span
                       className={cn(

@@ -442,6 +442,8 @@ export function SayingTick({ className }: { className?: string }) {
   return (
     <span
       aria-hidden
+      // Marks the line being said, for a stage that brings it on screen (show-said.ts).
+      data-saying=""
       className={cn("pointer-events-none absolute top-0.5 bottom-0.5 -left-3 w-[1.6px] rounded-full bg-[#551a89]", className)}
       style={{ opacity: "var(--caa-level, 1)" }}
     />

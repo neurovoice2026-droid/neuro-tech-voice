@@ -151,8 +151,11 @@ export function AgentsCalls() {
   const palette = paletteFor(call.id);
   /** The calls' audio, once its timings are here (fetched as sound goes on). */
   const spokenAll = useLazyCues(SPOKEN, track.on);
-  /** This call has audio; before its timings are here (sound off), every call is taken to have it, as each does. */
-  const voiced = spokenAll ? !!spokenAll[call.id] : !SPOKEN.settled();
+  /**
+   * This call has audio; before its timings are here (sound off, or a fetch that failed, which a
+   * press asks for again), every call is taken to have it, as each does.
+   */
+  const voiced = spokenAll ? !!spokenAll[call.id] : true;
 
   useKitContext(
     kit,
@@ -344,12 +347,13 @@ export function AgentsCalls() {
    * Starts call `i` from the top: spoken when sound is on and it has
    * audio, read-paced otherwise. `press` is the visitor's own choice.
    */
-  const startRun = (i: number, press: boolean) => {
-    // Sound on, and the calls' timings not here yet: the run starts once they are (a moment).
+  const startRun = (i: number, press: boolean, waited = false) => {
+    // Sound on, and the calls' timings not here yet: the run starts once they are (a moment). A
+    // press asks again for timings that could not be fetched before (once: then it reads on).
     const ask = ++cueWait.current;
-    if (isSoundOn() && !SPOKEN.settled()) {
+    if (isSoundOn() && !waited && (!SPOKEN.settled() || (press && !SPOKEN.get()))) {
       void SPOKEN.load().then(() => {
-        if (ask === cueWait.current) startLater.current(i, press);
+        if (ask === cueWait.current) startLater.current(i, press, true);
       });
       return;
     }
@@ -503,10 +507,13 @@ export function AgentsCalls() {
   const toggleListen = (unlock: boolean) => {
     const sp = SPOKEN.get()?.[call.id];
     if (!sp) {
-      // The calls' timings aren't here yet: sound goes on in this press, and Listen starts when they arrive.
-      if (SPOKEN.settled()) return;
+      // Here, but without this call: nothing to say.
+      if (SPOKEN.get()) return;
+      // The calls' timings aren't here yet (or could not be fetched, and are asked for again): sound
+      // goes on in this press, and Listen starts when they arrive.
       if (unlock) unlockFromGesture();
       pendingPress.current = "listen";
+      void SPOKEN.load();
       return;
     }
     if (listen === "playing") {
@@ -550,8 +557,12 @@ export function AgentsCalls() {
     if (!on) return;
     const sp = SPOKEN.get()?.[call.id];
     if (!sp) {
-      // The calls' timings are on their way (sound went on in this press): answered once they are here.
-      if (!SPOKEN.settled()) pendingPress.current = "sound";
+      // The calls' timings are on their way (sound went on in this press, or a fetch that failed is
+      // asked for again): answered once they are here.
+      if (!SPOKEN.get()) {
+        pendingPress.current = "sound";
+        void SPOKEN.load();
+      }
       return;
     }
     if (reduce) {
@@ -619,7 +630,8 @@ export function AgentsCalls() {
               </p>
               <p className="mt-1 text-[15px] leading-[22px]">{call.headline}</p>
             </div>
-            <div className="flex shrink-0 gap-1.5">
+            {/* 8px apart on touch, so the two 44px taps meet without overlapping. */}
+            <div className="flex shrink-0 gap-1.5 any-pointer-coarse:gap-2">
               <RoundButton label={CALLS.labels.prev} onClick={() => go((index - 1 + calls.length) % calls.length)}>
                 <ChevronLeft className="size-4" />
               </RoundButton>
@@ -784,7 +796,8 @@ function RoundButton({
       aria-label={label}
       onClick={onClick}
       className={cn(
-        "pp-shadow-btn grid size-9 shrink-0 place-items-center rounded-full bg-white text-pp-ink transition-colors hover:bg-pp-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
+        // On touch every one of these takes a 44px tap (tap-44) around its 36px disc.
+        "pp-shadow-btn tap-44 relative grid size-9 shrink-0 place-items-center rounded-full bg-white text-pp-ink transition-colors hover:bg-pp-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
         tap && "relative before:absolute before:-inset-1 before:rounded-full",
       )}
     >

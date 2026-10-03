@@ -22,7 +22,6 @@ import { useKitContext, type Kit } from "@/components/site/product/motion-kit";
 import { useInView } from "@/components/site/product/timing";
 import { cueIn, loadCueFile, type Cue, type CueFile } from "@/lib/audio";
 import type { HomeTrade, HomeTrades } from "@/lib/pages/home.server";
-import { HOME_TRADES } from "@/lib/pages/home/trades";
 import { ChipRail, centreInRail, useRovingRadio } from "./controls";
 import { useDocumentVisible, useStageMotion } from "./motion";
 import { loadHomePosters, loadHomeScene } from "./trade-loaders";
@@ -59,6 +58,7 @@ export type TradesCopy = {
   group: string;
   cells: { caller: string; does: string; boundary: string };
   sample: string;
+  hear: { play: string; stop: string };
 };
 
 type Origin = { x: number; y: number };
@@ -275,14 +275,16 @@ function Hear({
   missing,
   onPress,
   noteId,
+  words,
 }: {
   trade: HomeTrade;
   playing: boolean;
   missing: boolean;
   onPress: (t: HomeTrade) => void;
   noteId: string;
+  words: TradesCopy["hear"];
 }) {
-  const label = playing ? HOME_TRADES.hear.stop : HOME_TRADES.hear.play;
+  const label = playing ? words.stop : words.play;
   const Icon = playing ? Square : Volume2;
   return (
     <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -699,6 +701,7 @@ export function TradesWindow({ data, copy }: { data: HomeTrades; copy: TradesCop
                   missing={file !== null && !lineOf(file, t)}
                   onPress={onHear}
                   noteId={`${groupId}-hear-${t.key}`}
+                  words={copy.hear}
                 />
               )}
             </Cell>

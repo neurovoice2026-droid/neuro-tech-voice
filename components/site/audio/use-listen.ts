@@ -3,6 +3,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { Cue } from "@/lib/audio/cue-types";
 import { unlockFromGesture } from "./engine";
+import { armFollow } from "./show-said";
 import type { VoiceTrack } from "./use-voice-track";
 
 /**
@@ -69,6 +70,8 @@ export function useListen(track: VoiceTrack, cues: readonly Cue[] | undefined, a
       setState({ ...state, playing: false });
       return;
     }
+    // A press to hear: a stage that follows its words (show-said.ts) may bring them on screen.
+    armFollow();
     if (state && cues) {
       // Resuming is a press: it takes the sound back.
       yielded.current = false;

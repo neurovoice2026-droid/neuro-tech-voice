@@ -83,8 +83,9 @@ export function ProductStart({ data }: { data: StartData }) {
           <IntentLink
             href={data.more.href}
             // 24px tall rather than its 20px line: a standalone link, so it
-            // gets the WCAG 2.5.8 minimum target, not the inline-text exemption.
-            className="mt-1.5 inline-flex min-h-6 items-center text-[14px] leading-5 underline-offset-4 transition-colors hover:text-[#551a89] hover:underline"
+            // gets the WCAG 2.5.8 minimum target, not the inline-text
+            // exemption; on touch, a 44px tap (tap-44).
+            className="tap-44 relative mt-1.5 inline-flex min-h-6 items-center text-[14px] leading-5 underline-offset-4 transition-colors hover:text-[#551a89] hover:underline"
           >
             {data.more.label} →
           </IntentLink>

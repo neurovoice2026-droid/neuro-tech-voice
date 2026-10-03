@@ -317,18 +317,23 @@ export function KbMeaning() {
 
   /* ─── Sound ──────────────────────────────────────────────────────── */
   const { track, voice } = usePassVoice(VOICE_ID, inView);
-  /** The phrasings' clips: undefined until fetched (sound on), null if the file isn't there. */
+  /**
+   * The phrasings' clips: undefined until fetched (sound on), and after a fetch that failed, until
+   * the next Listen (or sound turned on again) asks again.
+   */
   const [file, setFile] = useState<CueFile | null | undefined>(undefined);
+  /** Bumped by a Listen pressed before the clips are here: a fetch that failed is asked for again. */
+  const [refetch, setRefetch] = useState(0);
   useEffect(() => {
     if (!track.on || file !== undefined) return;
     let live = true;
     void loadMeaning().then((f) => {
-      if (live) setFile(f);
+      if (live && f) setFile(f);
     });
     return () => {
       live = false;
     };
-  }, [track.on, file]);
+  }, [track.on, file, refetch]);
   const beats = useMemo(() => beatsFor(file, set), [file, set]);
   const [request, setRequest] = useState<PassRequest>(NO_REQUEST);
   const listen = useListen(
@@ -357,7 +362,8 @@ export function KbMeaning() {
       <Frame className="px-4 md:px-6">
         <div className="grid overflow-hidden rounded-[24px] bg-pp-card lg:grid-cols-[380px_minmax(0,1fr)]">
           <div className="flex flex-col gap-6 p-6 md:p-8 lg:border-r lg:border-pp-rule">
-            <div role="group" aria-label={MEANING.eyebrow} className="flex flex-wrap gap-1.5">
+            {/* 32px chips with 44px taps on touch (tap-44); wrapped, 12px between lines keeps the taps apart. */}
+            <div role="group" aria-label={MEANING.eyebrow} className="flex flex-wrap gap-1.5 any-pointer-coarse:gap-y-3">
               {sets.map((s, i) => {
                 const t = MEANING.topics.find((x) => x.id === s.topic)!;
                 return (
@@ -373,7 +379,7 @@ export function KbMeaning() {
                       setRequest((r) => ({ n: r.n + 1, key: s.id, press: track.on && !reduce }));
                     }}
                     className={cn(
-                      "h-8 rounded-full px-3 text-[13px] transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
+                      "tap-44 relative h-8 rounded-full px-3 text-[13px] transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
                       i === setIndex ? "bg-pp-ink text-white" : "bg-white text-pp-ink hover:bg-pp-bg",
                     )}
                   >
@@ -408,7 +414,10 @@ export function KbMeaning() {
                 // Reduced motion: the map stays still; Listen says the three phrasings.
                 <button
                   type="button"
-                  onClick={listen.toggle}
+                  onClick={() => {
+                    if (file === undefined) setRefetch((n) => n + 1);
+                    listen.toggle();
+                  }}
                   className="pp-shadow-btn relative inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-sm text-pp-ink transition-colors before:absolute before:inset-x-0 before:-inset-y-1 hover:bg-pp-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
                 >
                   {listen.playing ? <Pause className="size-3.5 fill-current" /> : <Play className="size-3.5 fill-current" />}

@@ -9,7 +9,6 @@ import { useSoundOn, useSounding, useVoiceTrack } from "@/components/site/audio/
 import { useKitContext } from "@/components/site/product/motion-kit";
 import { useInView } from "@/components/site/product/timing";
 import { loadCue, type Cue, type Surface } from "@/lib/audio";
-import { HOME_AFTER } from "@/lib/pages/home/after";
 import { cn } from "@/lib/utils";
 import { ChipRail, RoundButton, Sizer, useRovingRadio } from "./controls";
 import { SpokenClock, type RunVoice } from "./demo-script";
@@ -84,6 +83,8 @@ export type AfterRelayData = {
     replay: string;
     /** Reduced motion: the keyword scene's excerpt, played on a press. */
     listen: string;
+    /** Beside the keyword line while it can be heard: what the voice is. */
+    excerpt: string;
     noSummary: string;
     sentiment: Readonly<Record<Sentiment, string>>;
   };
@@ -782,7 +783,7 @@ function CallCard({ s, L, live, voiced }: { s: AfterScene; L: Labels; live: bool
           </span>
           {c.heard.after}
           {/* With sound on, the line can be heard: say what the voice is. */}
-          {voiced && <span className="mt-1 block text-[12px] leading-4">{HOME_AFTER.excerpt}</span>}
+          {voiced && <span className="mt-1 block text-[12px] leading-4">{L.excerpt}</span>}
         </p>
       )}
       {/* The record's footer, pinned: how long, how it went, and the tags a rule writes. */}
@@ -844,7 +845,8 @@ function RuleBlock({
             </span>
             <span className="min-w-0 [grid-area:m]">
               <span className={cn("block", TYPE.body)}>{stepTitle[act.kind]}</span>
-              <span className={cn("block truncate text-pp-muted", TYPE.mono)}>{act.detail}</span>
+              {/* One line from sm; on a phone an address breaks onto a second line rather than lose its end. */}
+              <span className={cn("block text-pp-muted [overflow-wrap:anywhere] sm:truncate", TYPE.mono)}>{act.detail}</span>
             </span>
             <span className="grid justify-items-start text-[13px] leading-[18px] [grid-area:t] sm:justify-items-end">
               <span data-s="wait" className="invisible text-pp-muted opacity-0 [grid-area:1/1]">
@@ -978,7 +980,7 @@ function Summary({
         {L.callTitle}: {c.number}, {c.status}, {c.duration}
         {c.sentiment ? `, ${L.sentiment[c.sentiment]}` : ""}. {c.summary || L.noSummary}
         {c.heard ? ` “${c.heard.before}${c.heard.word}${c.heard.after}”` : ""}
-        {c.heard && voiced ? ` (${HOME_AFTER.excerpt})` : ""}
+        {c.heard && voiced ? ` (${L.excerpt})` : ""}
       </p>
       <p>
         {L.ruleTitle}: {L.when} {trigger}. {L.then}:

@@ -8,7 +8,7 @@ import { TWO_CALLS_TRACK, twoCallsAt, twoCallsVoice, type TwoCallsVoice } from "
 import { cn } from "@/lib/utils";
 import { envelopeAt } from "@/components/site/audio/cue";
 import { isSoundOn, unlockFromGesture } from "@/components/site/audio/engine";
-import { showSaid } from "@/components/site/audio/show-said";
+import { armFollow, showSaid } from "@/components/site/audio/show-said";
 import { SoundButton } from "@/components/site/audio/sound-button";
 import { useSounding, useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { Frame, Orb, SectionHeading } from "../primitives";
@@ -67,6 +67,29 @@ export function KbTwoCalls() {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, "-20% 0px");
   const reduce = usePrefersReducedMotion();
+
+  // The section waits in a content-visibility box, laid out only as it nears the screen, and its cards
+  // hold an invisible copy of each call (their final height): laid out then, mid-scroll, that text costs
+  // a long frame on a phone. Once the fonts are in and the page is idle, a size read lays it out ahead.
+  useEffect(() => {
+    let live = true;
+    let cancel = () => {};
+    void document.fonts.ready.then(() => {
+      if (!live) return;
+      const layOut = () => void ref.current?.getBoundingClientRect();
+      if (typeof window.requestIdleCallback === "function") {
+        const id = window.requestIdleCallback(layOut, { timeout: 4000 });
+        cancel = () => window.cancelIdleCallback(id);
+      } else {
+        const id = window.setTimeout(layOut, 1500);
+        cancel = () => window.clearTimeout(id);
+      }
+    });
+    return () => {
+      live = false;
+      cancel();
+    };
+  }, []);
   const [step, setStep] = useState(0);
   const [started, setStarted] = useState(false);
 
@@ -129,6 +152,8 @@ export function KbTwoCalls() {
     beginSpoken(v, true);
   });
 
+  /** Bumped by a press made while the track isn't here (a fetch that failed): it is asked for again. */
+  const [refetch, setRefetch] = useState(0);
   // The track is fetched once sound is on, never before.
   useEffect(() => {
     if (!track.on || voice !== undefined) return;
@@ -136,13 +161,13 @@ export function KbTwoCalls() {
     void loadCueFile("kb-two-calls").then((file) => {
       if (!live) return;
       if (file) onTrack(file);
-      // Not fetched (a flaky connection): a press made meanwhile is dropped, and sound turned on again retries.
+      // Not fetched (a flaky connection): a press made meanwhile is dropped; the next press (or sound turned on again) retries.
       else pending.current = null;
     });
     return () => {
       live = false;
     };
-  }, [track.on, voice]);
+  }, [track.on, voice, refetch]);
 
   const shown = reduce && !spoken ? DONE : step;
   /** The spoken run's position; null while read-paced. */
@@ -241,12 +266,13 @@ export function KbTwoCalls() {
   const speakingLine = speaking ? speaking.line : -1;
   // Below md the two calls are stacked, the controls under the second: on a run this section's
   // own press started (or Listen), the call that is speaking is brought on screen when its line is
-  // not, so the words can be read as they are said. A run that started by itself never moves the page.
+  // not, so the words can be read as they are said. The question both callers ask is in both calls:
+  // whichever copy is nearer. A run that started by itself never moves the page.
   useEffect(() => {
-    if (speakingPanel === null || speakingLine < 0 || !pressed.current) return;
-    const line = panelRefs.current[speakingPanel]?.querySelectorAll("ol > li")[speakingLine];
-    showSaid(line, reduce, "(max-width: 767px)");
-  }, [speakingPanel, speakingLine, reduce]);
+    if (speakingLine < 0 || !pressed.current) return;
+    const lineIn = (p: number) => panelRefs.current[p]?.querySelectorAll("ol[data-call-lines] > li")[speakingLine];
+    showSaid(speakingPanel === null ? calls.map((_, p) => lineIn(p)) : lineIn(speakingPanel), reduce, "(max-width: 767px)");
+  }, [speakingPanel, speakingLine, reduce, calls]);
 
   const replay = () => {
     if (beginSpoken(voice, true)) return;
@@ -265,6 +291,7 @@ export function KbTwoCalls() {
       setListen("paused");
       return;
     }
+    armFollow();
     if (listen === "paused" && spoken && voice) {
       pressed.current = true;
       setListen("playing");
@@ -275,6 +302,7 @@ export function KbTwoCalls() {
       // The track isn't here yet: sound goes on in this press, and the run starts when it arrives.
       unlockFromGesture();
       pending.current = "listen";
+      setRefetch((n) => n + 1);
       return;
     }
     if (beginSpoken(voice, true, true)) setListen("playing");
@@ -285,6 +313,7 @@ export function KbTwoCalls() {
     if (!on) return;
     if (voice === undefined) {
       pending.current = reduce ? "listen" : "sound";
+      setRefetch((n) => n + 1);
       return;
     }
     if (beginSpoken(voice, true) && reduce) setListen("playing");
@@ -340,20 +369,30 @@ export function KbTwoCalls() {
                   </div>
                 </div>
 
-                <ol aria-live={quiet ? "off" : "polite"} className="mt-7 flex flex-col gap-3">
-                  {c.turns.map((turn, i) =>
-                    lines > i ? (
-                      <Line
-                        key={i}
-                        turn={turn}
-                        spoken={!!sp}
-                        live={!reduce && !sp && shown === i + 1}
-                        said={sp && !reduce && saying === i ? sp.said : undefined}
-                        mark={!!listen && saying === i}
-                      />
-                    ) : null,
-                  )}
-                </ol>
+                {/* An invisible copy of the whole call holds the card at its final height from the start, so
+                    the lines come up without moving what is below it (the two calls stack on a phone). It
+                    never animates: its lines' entrance would run, unseen, as the section comes into view. */}
+                <div className="mt-7 grid">
+                  <ol aria-hidden className="invisible flex flex-col gap-3 [grid-area:1/1] [&>li]:animate-none">
+                    {c.turns.map((turn, i) => (
+                      <Line key={i} turn={turn} spoken live={false} />
+                    ))}
+                  </ol>
+                  <ol data-call-lines aria-live={quiet ? "off" : "polite"} className="flex flex-col gap-3 [grid-area:1/1]">
+                    {c.turns.map((turn, i) =>
+                      lines > i ? (
+                        <Line
+                          key={i}
+                          turn={turn}
+                          spoken={!!sp}
+                          live={!reduce && !sp && shown === i + 1}
+                          said={sp && !reduce && saying === i ? sp.said : undefined}
+                          mark={!!listen && saying === i}
+                        />
+                      ) : null,
+                    )}
+                  </ol>
+                </div>
 
                 <div
                   className={cn(
@@ -390,7 +429,7 @@ export function KbTwoCalls() {
             <button
               type="button"
               onClick={replay}
-              className="pp-shadow-btn inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-sm text-pp-ink transition-colors hover:bg-pp-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
+              className="pp-shadow-btn tap-44 relative inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-sm text-pp-ink transition-colors hover:bg-pp-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
             >
               <RotateCcw className="size-3.5" />
               {TWO_CALLS.replay}

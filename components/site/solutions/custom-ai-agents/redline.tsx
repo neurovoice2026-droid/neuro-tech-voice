@@ -13,6 +13,7 @@ import type { CAA_REDLINE, Draft, Status } from "@/lib/pages/custom-ai-agents";
 import { cn } from "@/lib/utils";
 import { envelopeAt } from "@/components/site/audio/cue";
 import { isSoundOn, unlockFromGesture } from "@/components/site/audio/engine";
+import { armFollow, showSaid } from "@/components/site/audio/show-said";
 import { SoundButton } from "@/components/site/audio/sound-button";
 import { useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { Eyebrow, Frame, SectionTitle } from "@/components/site/product/primitives";
@@ -218,6 +219,11 @@ const useHydrated = () =>
 export function Redline({ data }: { data: Data }) {
   const ref = useRef<HTMLElement>(null);
   const inView = useInView(ref, "-15% 0px");
+  // The redraft starts once the card it plays in is a third of the way up the screen, not when the
+  // section's heading arrives: on a short phone the card is a screen or more below the heading, and
+  // a run started from there would be over before the reader reached it.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const cardIn = useInView(cardRef, "0px 0px -35% 0px");
   const still = usePrefersReducedMotion();
   const hydrated = useHydrated();
   const { drafts } = data;
@@ -362,14 +368,14 @@ export function Redline({ data }: { data: Data }) {
   const speakFromStart = useEffectEvent(() => !!voice && !listenMode && trackRef.current.on && speak(0, true, false));
 
   useEffect(() => {
-    if (still || !inView || started.current) return;
+    if (still || !cardIn || started.current) return;
     started.current = true;
     if (speakFromStart()) return;
     pacing.current = "script";
     timers.current = SCRIPT.map(([at, patch]) =>
       window.setTimeout(() => setBeat((b) => ({ ...b, ...patch })), at),
     );
-  }, [inView, still]);
+  }, [cardIn, still]);
 
   /** A heard draft's verdict has been read: the next draft, heard if it can be, else read-paced from there. */
   const nextDraft = useEffectEvent((k: number) => {
@@ -456,6 +462,14 @@ export function Redline({ data }: { data: Data }) {
     converse(voice, listenMode);
   };
 
+  // Below lg the call sits under the draft, on a phone often below the fold (or under the header):
+  // on a run a press here started, the turn being said is brought on screen when it is not, so the
+  // call can be read as it is heard (show-said.ts). A run that started by itself never moves the page.
+  useEffect(() => {
+    if (!speaking || saying < 0 || !pressed.current) return;
+    showSaid(asideRef.current?.querySelector("[data-saying]")?.parentElement, still, "(max-width: 1023px)");
+  }, [speaking, saying, still]);
+
   /** Listen (reduced motion): the draft on screen, heard, turning sound on (the press is the gesture); or pause it. */
   const toggleListen = () => {
     const t = trackRef.current;
@@ -464,6 +478,7 @@ export function Redline({ data }: { data: Data }) {
       setListen("paused");
       return;
     }
+    armFollow();
     if (listen === "paused" && speaking) {
       setListen("playing");
       const dv = voice?.[run.current.draft];
@@ -488,6 +503,8 @@ export function Redline({ data }: { data: Data }) {
     started.current = true;
     setTouched(true);
     markProved("redline");
+    // A press of its own: the call it plays may bring its turns on screen.
+    armFollow();
     // Sound on: the picked draft's call, heard, its turns landing as they're said.
     if (speak(i, false, true)) {
       if (listenMode) setListen("playing");
@@ -564,6 +581,7 @@ export function Redline({ data }: { data: Data }) {
             off the focused radio, the very thing this prevents. A mouse
             click focuses before it clicks, so pick() still wins. */}
         <div
+          ref={cardRef}
           onFocus={settle}
           className="rounded-[24px] bg-white p-4 shadow-[0_0_0_1px_rgb(24_16_40/0.06)] md:p-7"
         >

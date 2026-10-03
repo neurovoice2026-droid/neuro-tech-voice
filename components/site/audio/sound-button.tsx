@@ -1,9 +1,10 @@
 "use client";
 
-import { useId, useSyncExternalStore } from "react";
+import { useId, useSyncExternalStore, type MouseEvent } from "react";
 import { Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isSoundOn, isSounding, soundOff, subscribe, unlockFromGesture } from "./engine";
+import { armFollow, endFollow } from "./show-said";
 import "./sound.css";
 
 /* ------------------------------------------------------------------ *
@@ -61,12 +62,15 @@ export function SoundButton({
   const noteId = useId();
   const Icon = on ? Volume2 : VolumeX;
 
-  const toggle = () => {
+  const toggle = (e: MouseEvent<HTMLButtonElement>) => {
     if (isSoundOn()) {
       soundOff();
+      endFollow();
       onChange?.(false);
     } else {
       unlockFromGesture();
+      // What this press starts may bring its words on screen, keeping this control there too (show-said.ts).
+      armFollow(e.currentTarget);
       onChange?.(true);
     }
   };
@@ -78,22 +82,28 @@ export function SoundButton({
         className="snd-btn"
         aria-pressed={on}
         // The round control shows only an icon; the pill shows the same word, its
-        // state in the icon, the accent and the bars.
+        // state in the icon (the bars, while sounding), the accent and the ring.
         aria-label={variant === "round" ? SOUND_LABEL : undefined}
         aria-describedby={caption === "none" ? describedBy : noteId}
         data-on={on || undefined}
         data-sounding={sounding || undefined}
         onClick={toggle}
       >
-        <Icon aria-hidden className="size-4 shrink-0" />
-        {variant === "pill" && <span>{SOUND_LABEL}</span>}
-        {variant === "pill" && (
-          <span className="snd-bars" aria-hidden>
-            <i />
-            <i />
-            <i />
+        {variant === "pill" ? (
+          // The bars take the icon's place while a voice is sounding, in the same box: the pill
+          // never changes width (a wider pill re-wrapped its caption and moved the page).
+          <span className="snd-glyph">
+            <Icon aria-hidden className="size-4 shrink-0" />
+            <span className="snd-bars" aria-hidden>
+              <i />
+              <i />
+              <i />
+            </span>
           </span>
+        ) : (
+          <Icon aria-hidden className="size-4 shrink-0" />
         )}
+        {variant === "pill" && <span>{SOUND_LABEL}</span>}
       </button>
       {caption !== "none" && (
         <span id={noteId} className={cn("snd-note", caption === "sr" && "sr-only")}>

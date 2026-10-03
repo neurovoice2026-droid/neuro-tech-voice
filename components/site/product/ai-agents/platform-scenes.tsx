@@ -191,7 +191,10 @@ export function Voiceprint() {
   const pitchWord = voice.pitch < 0.35 ? "Low" : voice.pitch < 0.65 ? "Mid" : "High";
 
   return (
-    <div ref={rootRef} className={cn(panel, "mx-7 mt-6 mb-7 flex flex-1 flex-col p-4", soundOn && "relative")}>
+    // A phone gives the card the width of its side margins (mx-4 below sm); the
+    // card is a container, so the picker can lay out by its own width (narrow
+    // on a phone and in the three-up row at lg).
+    <div ref={rootRef} className={cn(panel, "@container mx-4 mt-6 mb-7 flex flex-1 flex-col p-4 sm:mx-7", soundOn && "relative")}>
       <div key={voice.id} className="animate-in fade-in-0 slide-in-from-bottom-1 duration-500">
         <p className="pp-display text-[22px] leading-7" style={{ fontWeight: 480 }}>
           {voice.name}
@@ -239,9 +242,9 @@ export function Voiceprint() {
           { label: v.pace, value: v.wpm(voice.wpm), ref: paceRef },
         ].map((m) => (
           <div key={m.label}>
-            <div className="flex items-baseline justify-between text-[11px] leading-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-[11px] leading-4">
               <span className="text-pp-muted">{m.label}</span>
-              <span className="tabular-nums">{m.value}</span>
+              <span className="whitespace-nowrap tabular-nums">{m.value}</span>
             </div>
             <span className="mt-1.5 block h-1 overflow-hidden rounded-full bg-pp-card">
               <span
@@ -254,7 +257,12 @@ export function Voiceprint() {
         ))}
       </div>
 
-      <div className="mt-4 flex items-center gap-2" role="group" aria-label={v.title}>
+      {/* Narrow (a phone, or the three-up row at lg), the note takes its own line under the voices rather than squeeze them. */}
+      <div
+        className="mt-4 flex items-center gap-2 max-sm:flex-wrap @max-[15.5rem]:flex-wrap"
+        role="group"
+        aria-label={v.title}
+      >
         {v.voices.map((x, i) => (
           <button
             key={x.id}
@@ -263,14 +271,16 @@ export function Voiceprint() {
             aria-label={`${x.name}, ${x.accent}`}
             onClick={() => choose(i)}
             className={cn(
-              "grid size-9 place-items-center rounded-full text-[13px] transition-colors duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
+              "tap-44 relative grid size-9 shrink-0 place-items-center rounded-full text-[13px] transition-colors duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
               i === pick ? "bg-pp-ink text-white" : "bg-pp-card text-pp-ink hover:bg-[#ebe9f1]",
             )}
           >
             {x.name[0]}
           </button>
         ))}
-        <span className="ml-auto truncate text-[12px] text-pp-muted">{voice.note}</span>
+        <span className="ml-auto min-w-0 truncate text-[12px] text-pp-muted max-sm:ml-0 max-sm:basis-full max-sm:whitespace-normal @max-[15.5rem]:ml-0 @max-[15.5rem]:basis-full @max-[15.5rem]:whitespace-normal">
+          {voice.note}
+        </span>
       </div>
 
       {soundOn && saying && (
@@ -331,8 +341,14 @@ export function Paperwork() {
   const trackRef = useRef(track);
   const docsRef = useRef<CueFile | null>(null);
   const soundOn = track.on;
-  /** Listen's clips, every document's question and answer in turn: undefined until fetched (sound on), empty without ones that fit. */
+  /**
+   * Listen's clips, every document's question and answer in turn: undefined until fetched (sound
+   * on), and while a fetch that failed waits for the next Listen to ask again; empty without ones
+   * that fit.
+   */
   const [said, setSaid] = useState<Said[] | undefined>(undefined);
+  /** Bumped by a Listen pressed before the clips are here: a fetch that failed is asked for again. */
+  const [refetch, setRefetch] = useState(0);
   useEffect(() => {
     trackRef.current = track;
   });
@@ -341,7 +357,7 @@ export function Paperwork() {
     let live = true;
     void loadLate("agents-platform-paperwork").then((f) => {
       docsRef.current ??= f;
-      if (!live) return;
+      if (!live || !docsRef.current) return;
       setSaid(
         k.docs.flatMap((d, i): Said[] => {
           const v = docVoice(docsRef.current, d);
@@ -352,7 +368,7 @@ export function Paperwork() {
     return () => {
       live = false;
     };
-  }, [soundOn, k.docs]);
+  }, [soundOn, k.docs, refetch]);
   const listenCues = useMemo(() => said?.map((c) => c.cue), [said]);
   const listen = useListen(track, listenCues, inView);
   /** Listen: the clip being said, whose document the card shows (at once, finished). */
@@ -534,7 +550,7 @@ export function Paperwork() {
   }, [inView, index, reduce, kit, voiced]);
 
   return (
-    <div ref={rootRef} className="relative mx-7 mt-6 mb-7 flex flex-1 flex-col gap-3">
+    <div ref={rootRef} className="@container relative mx-4 mt-6 mb-7 flex flex-1 flex-col gap-3 sm:mx-7">
       {/* The question */}
       <div
         className={cn(
@@ -550,7 +566,9 @@ export function Paperwork() {
       </div>
 
       {/* The document, with the other two behind it */}
-      <div className="pw-docs relative flex-1">
+      {/* The document keeps its whole height (title, five lines and the clause) wherever the card would
+          squeeze it under the reply; narrow, the clause takes two lines. From xl, as it always was. */}
+      <div className="pw-docs relative min-h-[136px] flex-1 @max-[18.75rem]:min-h-[154px] xl:min-h-[88px]">
         <span aria-hidden className="absolute top-2 left-3 h-[calc(100%-8px)] w-[64%] -rotate-3 rounded-lg bg-white/60 shadow-[0_0_0_1px_rgb(24_16_40/0.05)]" />
         <span aria-hidden className="absolute top-1 left-1.5 h-[calc(100%-4px)] w-[64%] rotate-2 rounded-lg bg-white/80 shadow-[0_0_0_1px_rgb(24_16_40/0.05)]" />
         <div className="pw-fade pw-sheet absolute top-0 left-0 flex h-full w-[64%] flex-col rounded-lg bg-white p-3 shadow-[0_0_0_1px_rgb(24_16_40/0.07),0_10px_24px_-14px_rgb(24_16_40/0.3)]">
@@ -561,10 +579,10 @@ export function Paperwork() {
           <div className="pw-sheet-body relative mt-2 flex flex-1 flex-col gap-2 overflow-hidden">
             {[82, 64, -1, 74, 58, 70].map((width, i) =>
               width < 0 ? (
-                <div key={i} className="pw-clause relative h-[18px]">
+                <div key={i} className="pw-clause relative h-[18px] @max-[18.75rem]:h-9">
                   <span className="pw-mark absolute inset-0 origin-left rounded bg-[#551a89]/12" style={{ transform: "scaleX(0)" }} />
                   <span className="absolute top-1/2 left-0 h-1.5 w-[88%] -translate-y-1/2 rounded-full bg-pp-card" />
-                  <span className="pw-clause-text pw-reveal invisible absolute inset-0 truncate px-1 text-[10px] leading-[18px] text-[#551a89]">
+                  <span className="pw-clause-text pw-reveal invisible absolute inset-0 truncate px-1 text-[10px] leading-[18px] text-[#551a89] @max-[18.75rem]:line-clamp-2 @max-[18.75rem]:whitespace-normal">
                     {doc.clause}
                   </span>
                 </div>
@@ -612,7 +630,11 @@ export function Paperwork() {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <button
             type="button"
-            onClick={listen.toggle}
+            onClick={() => {
+              // The clips aren't here (a fetch that failed): this press asks for them again, and Listen starts when they arrive.
+              if (said === undefined) setRefetch((n) => n + 1);
+              listen.toggle();
+            }}
             className="pp-shadow-btn relative inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-sm text-pp-ink transition-colors before:absolute before:inset-x-0 before:-inset-y-1 hover:bg-pp-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
           >
             {listen.playing ? <Pause className="size-3.5 fill-current" /> : <Play className="size-3.5 fill-current" />}
@@ -701,16 +723,18 @@ export function CallLog() {
     return { key: n, ...entry };
   });
   const labelOf = (id: string) => m.outcomes.find((o) => o.id === id)?.label ?? id;
+  const shortOf = (id: string) => m.outcomes.find((o) => o.id === id)?.short ?? labelOf(id);
 
   return (
-    <div ref={rootRef} className={cn(panel, "mx-7 mt-6 mb-7 flex flex-1 flex-col p-4")}>
+    <div ref={rootRef} className={cn(panel, "@container mx-4 mt-6 mb-7 flex flex-1 flex-col p-4 sm:mx-7")}>
       <div className="flex items-center justify-between">
         <p className="text-[11px] leading-4 font-medium tracking-[0.12em] text-pp-muted uppercase">{m.period}</p>
         <span className="rounded-full bg-pp-card px-2 py-0.5 text-[10px] text-pp-muted">{m.sample}</span>
       </div>
 
-      <div className="mt-3 flex items-center gap-4">
-        <div className="relative size-[92px] shrink-0">
+      {/* Narrow (a phone, the three-up row at lg): a smaller ring, and labels that wrap rather than cut. */}
+      <div className="mt-3 flex items-center gap-4 @max-[15.5rem]:gap-3">
+        <div className="relative size-[92px] shrink-0 @max-[15.5rem]:size-[72px]">
           <svg viewBox="0 0 100 100" className="size-full -rotate-90" aria-hidden>
             <circle cx="50" cy="50" r="40" fill="none" stroke="rgb(24 16 40 / 0.06)" strokeWidth="11" />
             {m.outcomes.map((o) => (
@@ -742,7 +766,7 @@ export function CallLog() {
           {m.outcomes.map((o, i) => (
             <li key={o.id} className="flex items-center gap-2 text-[12px] leading-4">
               <span className="size-2 shrink-0 rounded-full" style={{ background: OUTCOME_COLOR[o.id] }} />
-              <span className="min-w-0 flex-1 truncate text-pp-muted">{o.label}</span>
+              <span className="min-w-0 flex-1 truncate text-pp-muted @max-[15.5rem]:whitespace-normal">{o.label}</span>
               <span
                 ref={(el) => {
                   countRefs.current[i] = el;
@@ -770,7 +794,7 @@ export function CallLog() {
                 className="flex items-center gap-2.5 rounded-lg px-1 py-1 text-[12px] leading-4"
               >
                 <span className="w-9 shrink-0 text-pp-muted tabular-nums">{r.time}</span>
-                <span className="min-w-0 flex-1 truncate">{r.intent}</span>
+                <span className="min-w-0 flex-1 truncate @max-[15.5rem]:whitespace-normal">{r.intent}</span>
                 <span
                   className="shrink-0 rounded-full px-2 py-0.5 text-[10px] leading-4"
                   style={{
@@ -778,7 +802,8 @@ export function CallLog() {
                     background: `color-mix(in oklab, ${OUTCOME_COLOR[r.outcome]} 14%, transparent)`,
                   }}
                 >
-                  {labelOf(r.outcome)}
+                  <span className="@max-[15.5rem]:hidden">{labelOf(r.outcome)}</span>
+                  <span className="hidden @max-[15.5rem]:inline">{shortOf(r.outcome)}</span>
                 </span>
               </motion.li>
             ))}

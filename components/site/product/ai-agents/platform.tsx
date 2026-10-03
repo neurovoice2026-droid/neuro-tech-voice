@@ -6,6 +6,7 @@ import { cueIn, loadCueFile, type Cue, type CueFile } from "@/lib/audio";
 import { COMPANY } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { isSoundOn } from "@/components/site/audio/engine";
+import { showSaid } from "@/components/site/audio/show-said";
 import { SoundButton } from "@/components/site/audio/sound-button";
 import { useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { Frame, Orb, ORB_MESHES, SectionHeading } from "../primitives";
@@ -79,7 +80,9 @@ function Card({
     <div
       className={cn(
         "relative flex min-h-[480px] flex-col overflow-hidden rounded-[24px] bg-pp-card",
-        wide ? "lg:grid lg:h-[480px] lg:grid-cols-[340px_minmax(0,1fr)]" : "lg:h-[520px]",
+        // The three-up cards are 520px from xl, as they always were; at lg the columns are narrow enough
+        // that the copy and the scenes need more, so there the cards grow rather than clip.
+        wide ? "lg:grid lg:h-[480px] lg:grid-cols-[340px_minmax(0,1fr)]" : "lg:min-h-[520px] xl:h-[520px]",
         className,
       )}
     >
@@ -126,6 +129,8 @@ function DesignCard({
 }) {
   const d = PLATFORM.design;
   const ref = useRef<HTMLDivElement>(null);
+  /** The greeting as it is said: what the sound control brings on screen. */
+  const sayRef = useRef<HTMLDivElement>(null);
   const inView = useInView(ref);
   // The voice needs the card well on screen, not a sliver of it at an edge.
   const voiceView = useInView(ref, "-15% 0px");
@@ -235,20 +240,16 @@ function DesignCard({
   };
   /**
    * Sound turned on with the section's control: the greeting on screen is
-   * said. On a phone the control sits above the card, which may still be
-   * below the band the voice needs; it is brought on screen first, so the
-   * visitor sees the words as they are said, and the press waits for it.
+   * said. On a phone the control sits above the card, whose greeting may
+   * still be below the fold; it is brought on screen first, by the least
+   * scroll that shows it and with the control kept on screen where both
+   * fit, so the visitor sees the words as they are said (with the greeting
+   * on screen, the card is in the band the voice needs), and the press
+   * waits for it.
    */
   const speak = () => {
     if (!isSoundOn()) return;
-    const box = ref.current;
-    if (box) {
-      const r = box.getBoundingClientRect();
-      const h = window.innerHeight;
-      if (r.top > h * 0.85 || r.bottom < h * 0.15) {
-        box.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
-      }
-    }
+    showSaid(sayRef.current, reduce);
     ask();
   };
   useEffect(() => {
@@ -261,7 +262,9 @@ function DesignCard({
         ref={ref}
         className="relative mt-8 ml-7 flex min-h-[440px] flex-1 sm:min-h-[400px] md:min-h-[360px] lg:mt-10 lg:ml-0 lg:min-h-0"
       >
-        <div className="absolute inset-0 flex overflow-hidden rounded-tl-2xl bg-white shadow-[0_0_0_1px_rgb(0_0_0/0.06),0_12px_32px_-12px_rgb(0_0_0/0.12)]">
+        {/* Below lg the window sits in the flow, so the card grows to hold all of it (a phone wraps the
+            greeting and the chips onto more lines than the reserve allows); from lg it fills the fixed card. */}
+        <div className="absolute inset-0 flex overflow-hidden rounded-tl-2xl bg-white shadow-[0_0_0_1px_rgb(0_0_0/0.06),0_12px_32px_-12px_rgb(0_0_0/0.12)] max-lg:relative max-lg:flex-1">
           <aside className="hidden w-[164px] shrink-0 flex-col gap-0.5 border-r border-pp-rule p-3 sm:flex">
             <p className="mb-3 px-2 pt-1 text-[12px] font-medium tracking-[-0.03em]">{COMPANY.wordmark}</p>
             <p className="mb-1 rounded-lg border border-pp-hair px-2 py-1.5 text-[12px]">{d.crumb[0]} ▾</p>
@@ -286,7 +289,7 @@ function DesignCard({
             </p>
 
             <p className="mt-5 text-[11px] text-pp-muted">{d.greeting}</p>
-            <div className="mt-2 flex items-start gap-3 rounded-2xl border border-pp-hair p-3">
+            <div ref={sayRef} className="mt-2 flex items-start gap-3 rounded-2xl border border-pp-hair p-3">
               <Orb
                 mesh={ORB_MESHES.violet}
                 // With sound on it speaks while the voice does; read, while the walk runs.
@@ -303,7 +306,8 @@ function DesignCard({
             </div>
 
             <p className="mt-5 text-[11px] text-pp-muted">{d.tone}</p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            {/* On touch the chips take 44px taps (tap-44); the wider gaps keep one chip's tap off the next. */}
+            <div className="mt-2 flex flex-wrap gap-1.5 any-pointer-coarse:gap-x-3 any-pointer-coarse:gap-y-4">
               {d.tones.map((x, i) => (
                 <Chip
                   key={x.id}
@@ -321,7 +325,7 @@ function DesignCard({
             </div>
 
             <p className="mt-5 text-[11px] text-pp-muted">{d.language}</p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <div className="mt-2 flex flex-wrap gap-1.5 any-pointer-coarse:gap-x-3 any-pointer-coarse:gap-y-4">
               {d.langs.map((x, i) => (
                 <Chip
                   key={x.code}
@@ -362,7 +366,7 @@ function Chip({
       title={title}
       aria-pressed={on}
       className={cn(
-        "h-7 rounded-full px-2.5 text-[12px] transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-pp-ink",
+        "tap-44 relative h-7 rounded-full px-2.5 text-[12px] transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-pp-ink",
         on ? "bg-pp-ink text-white" : "bg-pp-card text-pp-ink hover:bg-[#ebe8e4]",
       )}
     >

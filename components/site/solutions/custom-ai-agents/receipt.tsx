@@ -71,7 +71,8 @@ import { useProved, type CaaClaim } from "./proved";
  * ------------------------------------------------------------------ */
 
 const LINK =
-  "inline-flex min-h-6 items-center text-[14px] leading-5 underline-offset-4 transition-colors hover:text-[#551a89] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink";
+  // z-[1]: a 44px tap (tap-44) that reaches past the column's foot stays on top there.
+  "tap-44 relative z-[1] inline-flex min-h-6 items-center text-[14px] leading-5 underline-offset-4 transition-colors hover:text-[#551a89] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink";
 
 /** Gap between one node inking and the next, in list order. */
 const STAGGER_MS = 110;

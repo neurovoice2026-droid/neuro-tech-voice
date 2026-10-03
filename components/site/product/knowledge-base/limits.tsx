@@ -94,18 +94,23 @@ export function KbLimits() {
 
   /* ─── Sound ──────────────────────────────────────────────────────── */
   const { track, voice } = usePassVoice(VOICE_ID, inView);
-  /** The two lines' clips: undefined until fetched (sound on), null without ones that fit. */
+  /**
+   * The two lines' clips: undefined until fetched (sound on), and after a fetch that failed (or
+   * found none that fit), until the next Listen (or sound turned on again) asks again.
+   */
   const [lines, setLines] = useState<[Cue, Cue] | null | undefined>(undefined);
+  /** Bumped by a Listen pressed before the clips are here: a fetch that failed is asked for again. */
+  const [refetch, setRefetch] = useState(0);
   useEffect(() => {
     if (!track.on || lines !== undefined) return;
     let live = true;
     void loadLines().then((l) => {
-      if (live) setLines(l);
+      if (live && l) setLines(l);
     });
     return () => {
       live = false;
     };
-  }, [track.on, lines]);
+  }, [track.on, lines, refetch]);
   const beats = useMemo<PassBeat[]>(
     () =>
       lines
@@ -159,7 +164,10 @@ export function KbLimits() {
               // Reduced motion: the figure stays still; Listen says the question and the fallback line.
               <button
                 type="button"
-                onClick={listen.toggle}
+                onClick={() => {
+                  if (lines === undefined) setRefetch((n) => n + 1);
+                  listen.toggle();
+                }}
                 className="pp-shadow-btn relative inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-sm text-pp-ink transition-colors before:absolute before:inset-x-0 before:-inset-y-1 hover:bg-pp-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
               >
                 {listen.playing ? <Pause className="size-3.5 fill-current" /> : <Play className="size-3.5 fill-current" />}

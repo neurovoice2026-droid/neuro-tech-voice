@@ -49,7 +49,7 @@ export function SolutionsPanel() {
         <div className="mt-auto pt-[16px]">
           <MenuLink
             href={SOLUTIONS_MENU.footer.link.href}
-            className="block rounded-[8px] px-[10px] py-[2.5px] text-[14px] font-medium leading-[21px] tracking-[0.01em] text-[var(--cover-paper)] transition-colors hover:text-[var(--cover-muted)]"
+            className="block rounded-[8px] px-[10px] py-[2.5px] text-[14px] font-medium leading-[21px] tracking-[0.01em] text-[var(--cover-paper)] transition-colors hover:text-[var(--cover-muted)] any-pointer-coarse:py-[11.5px]"
           >
             <span className="font-normal text-[var(--cover-muted)]">
               {SOLUTIONS_MENU.footer.text}
@@ -101,7 +101,7 @@ export function SolutionsPanel() {
             <div className="mt-auto pt-[16px]">
               <MenuLink
                 href={SOLUTIONS_MENU.cta.href(active.id)}
-                className="flex h-[36px] items-center justify-center rounded-full bg-[var(--cover-paper)] px-[16px] text-[14px] font-medium text-[var(--cover-ink)] transition-colors duration-300 hover:bg-[var(--cover-brand)]"
+                className="flex h-[36px] items-center justify-center rounded-full bg-[var(--cover-paper)] px-[16px] text-[14px] font-medium text-[var(--cover-ink)] transition-colors duration-300 hover:bg-[var(--cover-brand)] any-pointer-coarse:h-11"
               >
                 {SOLUTIONS_MENU.cta.label}
                 {/* The label already ends "about a build", so the offer is joined

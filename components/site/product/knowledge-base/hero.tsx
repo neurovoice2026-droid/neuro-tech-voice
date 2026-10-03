@@ -181,8 +181,11 @@ function ReadingRoom() {
   /** Every question's clips, once their timings are here (fetched as sound goes on). */
   const voices = useLazyCues(VOICES, track.on);
   const voice = spoken ? voices?.[q.id] : undefined;
-  /** This question has clips; before their timings are here (sound off), every question is taken to have them, as each does. */
-  const voiced = voices ? !!voices[q.id] : !VOICES.settled();
+  /**
+   * This question has clips; before their timings are here (sound off, or a fetch that failed, which
+   * a press asks for again), every question is taken to have them, as each does.
+   */
+  const voiced = voices ? !!voices[q.id] : true;
   const listening = listen === "playing";
   // Reduced motion: no clock at all, the question simply reads complete, unless Listen steps it through.
   const shown = reduce && !listen ? DONE : step;
@@ -197,13 +200,20 @@ function ReadingRoom() {
    * own choice, which takes the sound from any other stage; `unlock` also
    * turns sound on (Listen: the press is the gesture).
    */
-  const beginQuestion = (i: number, press: boolean, unlock = false) => {
+  const beginQuestion = (i: number, press: boolean, unlock = false, waited = false) => {
     // Sound on, and the clips' timings not here yet: the question starts once they are (a moment).
+    // A press asks again for timings that could not be fetched before (once: then it reads on).
     const ask = ++cueWait.current;
-    if ((unlock || isSoundOn()) && !VOICES.settled()) {
+    if ((unlock || isSoundOn()) && !waited && (!VOICES.settled() || (press && !VOICES.get()))) {
       if (unlock) unlockFromGesture();
-      void VOICES.load().then(() => {
-        if (ask === cueWait.current) beginLater.current(i, press);
+      void VOICES.load().then((v) => {
+        if (ask !== cueWait.current) return;
+        // A Listen whose clips could not be fetched says Listen again: its next press asks again.
+        if (!v && reduce) {
+          setListen(null);
+          return;
+        }
+        beginLater.current(i, press, false, true);
       });
       return;
     }
@@ -552,7 +562,20 @@ function ReadingRoom() {
           {/* The call */}
           <div className="flex min-h-[248px] flex-col rounded-[20px] bg-white/70 p-5 max-lg:order-first lg:rounded-none lg:border-l lg:border-pp-rule lg:bg-white/55 lg:p-6">
             <p className="text-[11px] leading-4 font-medium tracking-[0.14em] text-pp-muted uppercase">Sample call</p>
-            <ol aria-live={quiet ? "off" : "polite"} className="mt-4 flex flex-col gap-2.5">
+            {/* Invisible copies of every question's call, stacked in one cell, hold the card at the tallest
+                one, so a longer answer never moves what is below it (the documents, on a phone). They never
+                animate: their bubbles' entrance would run, unseen, as the page loads. */}
+            <div className="mt-4 grid">
+            {questions.map((x) => {
+              const absent = !x.doc || docs.every((d) => d.id !== x.doc);
+              return (
+                <ol key={x.id} aria-hidden className="invisible flex flex-col gap-2.5 [grid-area:1/1] [&>li]:animate-none">
+                  <Bubble who="client" label={ROOM.caller} text={x.ask} live={false} />
+                  <Bubble who="agent" label={absent ? `${ROOM.agent} · ${ROOM.fallback}` : ROOM.agent} text={x.answer} live={false} />
+                </ol>
+              );
+            })}
+            <ol aria-live={quiet ? "off" : "polite"} className="flex flex-col gap-2.5 [grid-area:1/1]">
               {shown >= 1 && (
                 <Bubble
                   key={`${q.id}-ask`}
@@ -576,6 +599,7 @@ function ReadingRoom() {
                 />
               )}
             </ol>
+            </div>
             {track.on && (
               // With this stage's own lines voiced, its outcome is still announced: only while this stage
               // holds the sound, never because another stage's voice started (it would speak over it).
@@ -615,7 +639,7 @@ function ReadingRoom() {
                   type="button"
                   onClick={toggle}
                   aria-label={step === DONE && !autoplay ? ROOM.replay : paused ? ROOM.play : ROOM.pause}
-                  className="pp-shadow-btn grid size-9 shrink-0 place-items-center rounded-full bg-white text-pp-ink transition-colors hover:bg-pp-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
+                  className="pp-shadow-btn tap-44 relative grid size-9 shrink-0 place-items-center rounded-full bg-white text-pp-ink transition-colors hover:bg-pp-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
                 >
                   {step === DONE && !autoplay ? (
                     <RotateCcw className="size-4" />
@@ -637,7 +661,9 @@ function ReadingRoom() {
         <div
           role="group"
           aria-label={ROOM.pick}
-          className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] md:flex-wrap md:overflow-visible"
+          // The chips' 44px taps (tap-44) run 4px past them: the scroller
+          // carries 4px above as padding and gives it back as margin.
+          className="-mx-1 -mt-1 flex gap-2 overflow-x-auto px-1 pt-1 pb-1 [scrollbar-width:none] md:flex-wrap md:overflow-visible"
         >
           {questions.map((x, i) => {
             const on = i === index;
@@ -648,7 +674,7 @@ function ReadingRoom() {
                 onClick={() => pick(i)}
                 aria-pressed={on}
                 className={cn(
-                  "relative h-9 shrink-0 overflow-hidden rounded-full px-3.5 text-[13px] whitespace-nowrap transition-colors duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
+                  "tap-44 relative h-9 shrink-0 rounded-full px-3.5 text-[13px] whitespace-nowrap transition-colors duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
                   on ? "bg-pp-ink text-white" : "bg-pp-card text-pp-ink hover:bg-[#ebe9f1]",
                 )}
               >

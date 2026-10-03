@@ -185,12 +185,13 @@ function Hand() {
    * read-paced. `press` is the visitor's own choice, which takes the
    * sound from any other stage.
    */
-  const startRun = (i: number, press: boolean) => {
-    // Sound on, and the calls' timings not here yet: the run starts once they are (a moment).
+  const startRun = (i: number, press: boolean, waited = false) => {
+    // Sound on, and the calls' timings not here yet: the run starts once they are (a moment). A
+    // press asks again for timings that could not be fetched before (once: then it reads on).
     const ask = ++cueWait.current;
-    if (isSoundOn() && !SPOKEN.settled()) {
+    if (isSoundOn() && !waited && (!SPOKEN.settled() || (press && !SPOKEN.get()))) {
       void SPOKEN.load().then(() => {
-        if (ask === cueWait.current) startLater.current(i, press);
+        if (ask === cueWait.current) startLater.current(i, press, true);
       });
       return;
     }
@@ -330,10 +331,13 @@ function Hand() {
     if (reduce) {
       // Listen: plays the open call's audio, and turns sound on (the press unlocks it).
       if (!sp) {
-        // The calls' timings aren't here yet: sound goes on in this press, and Listen starts when they arrive.
-        if (SPOKEN.settled()) return;
+        // Here, but without this call: nothing to say.
+        if (SPOKEN.get()) return;
+        // The calls' timings aren't here yet (or could not be fetched, and are asked for again): sound
+        // goes on in this press, and Listen starts when they arrive.
         unlockFromGesture();
         pendingPress.current = "listen";
+        void SPOKEN.load();
         return;
       }
       if (listen?.state === "playing") {
@@ -366,8 +370,12 @@ function Hand() {
   const onSound = (on: boolean) => {
     if (!on) return;
     if (!sp) {
-      // The calls' timings are on their way (sound went on in this press): answered once they are here.
-      if (!SPOKEN.settled()) pendingPress.current = "sound";
+      // The calls' timings are on their way (sound went on in this press, or a fetch that failed is
+      // asked for again): answered once they are here.
+      if (!SPOKEN.get()) {
+        pendingPress.current = "sound";
+        void SPOKEN.load();
+      }
       return;
     }
     if (reduce) {
@@ -440,9 +448,10 @@ function Hand() {
                     voice={spoken && !reduce ? sp?.cue : undefined}
                     running={running}
                     clock={clock}
-                    // Before its timings are here (sound off), every call is offered: each has its audio.
+                    // Before its timings are here (sound off, or a fetch that failed), every call is
+                    // offered: each has its audio, and a press asks for the timings again.
                     listen={
-                      reduce && (sp || !SPOKEN.settled())
+                      reduce && (sp || !spokenAll)
                         ? { playing: listening, current: listen ? listen.shown - 1 : -1 }
                         : null
                     }
@@ -473,7 +482,7 @@ function Hand() {
             onClick={() => open(i)}
             aria-pressed={i === active}
             className={cn(
-              "h-10 rounded-full px-3 text-[13px] transition-colors",
+              "tap-44 relative h-10 rounded-full px-3 text-[13px] transition-colors",
               i === active ? "bg-pp-ink text-white" : "bg-pp-card text-pp-ink",
             )}
           >
@@ -731,7 +740,8 @@ function OpenCard({
       <div className="flex items-center justify-between gap-3 p-5">
         <IntentLink
           href={AUTH.signup}
-          className="text-[13px] leading-[18px] text-white/80 underline-offset-4 transition-colors hover:text-white hover:underline"
+          // lg: the held card is drawn at 0.83 at 1024px, so the tap is set 54px to come out at 44.
+          className="tap-44 relative text-[13px] leading-[18px] text-white/80 underline-offset-4 transition-colors hover:text-white hover:underline lg:[--tap-half:27px]"
         >
           {scene.link} →
         </IntentLink>
@@ -742,7 +752,7 @@ function OpenCard({
             listen ? (listen.playing ? REEL.pause : REEL.listen) : done ? REEL.replay : paused ? REEL.play : REEL.pause
           }
           className={cn(
-            "grid size-9 shrink-0 place-items-center rounded-full bg-black/30 text-white backdrop-blur-md transition-colors hover:bg-black/50 focus-visible:outline-2 focus-visible:outline-white",
+            "tap-44 relative grid size-9 shrink-0 place-items-center rounded-full bg-black/30 text-white backdrop-blur-md transition-colors hover:bg-black/50 focus-visible:outline-2 focus-visible:outline-white lg:[--tap-half:27px]",
             // Listen: a 44px tap around the 36px disc.
             listen && "relative before:absolute before:-inset-1 before:rounded-full",
           )}

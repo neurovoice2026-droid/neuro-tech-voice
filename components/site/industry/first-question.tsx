@@ -51,7 +51,7 @@ import { markProved, resetProved } from "./proved";
  *
  * SOUND. Off until the visitor turns it on; before that this island
  * fetches nothing and adds no work. The voices are AI-generated from the
- * page's own lines (lib/audio/cues/industry-first-question.json, loaded
+ * page's own lines (lib/audio/cues/industry/first-question/<slug>.json, loaded
  * through import() only once sound is on), and the pill under the quote
  * says so. With sound on:
  *   - the opening rings on the ring track's own clock: ringing from its
@@ -135,7 +135,7 @@ export function FirstQuestion({ trade }: { trade: Trade }) {
   /** Called when the track this section plays reaches its end: the ring's, during the opening. */
   const onTrackEnd = useRef<(() => void) | null>(null);
   const track = useVoiceTrack(VOICE_ID, { active: inView, onEnded: () => onTrackEnd.current?.() });
-  const { fileRef: cueFile, load: loadCues } = useStageCues("industry-first-question", track.on);
+  const { fileRef: cueFile, load: loadCues } = useStageCues("industry-first-question", trade.slug, track.on);
   const playing = useSounding() && track.audible;
   /** The opening is ringing on the ring track: its frame loop. */
   const ringRun = useRef<{ raf: number } | null>(null);
@@ -394,18 +394,18 @@ export function FirstQuestion({ trade }: { trade: Trade }) {
  * a click can play at once instead of after a promise; a failed load is
  * forgotten and tried again on the next call.
  */
-export function useStageCues(surface: IndustrySurface, on: boolean) {
+export function useStageCues(surface: IndustrySurface, slug: string, on: boolean) {
   const fileRef = useRef<CueFile | null>(null);
   const pending = useRef<Promise<CueFile | null> | null>(null);
   const load = useCallback(() => {
     if (fileRef.current) return Promise.resolve(fileRef.current);
-    pending.current ??= loadIndustryCues(surface).then((file) => {
+    pending.current ??= loadIndustryCues(surface, slug).then((file) => {
       pending.current = null;
       fileRef.current = file;
       return file;
     });
     return pending.current;
-  }, [surface]);
+  }, [surface, slug]);
   useEffect(() => {
     if (on) void load();
   }, [on, load]);

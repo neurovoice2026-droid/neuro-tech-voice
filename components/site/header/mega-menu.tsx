@@ -152,7 +152,7 @@ export function MegaMenu({
         {HEADER_NAV.map((entry) =>
           entry.kind === "menu" ? (
             <NavigationMenu.Item key={entry.id} value={entry.id}>
-              <NavigationMenu.Trigger className="hdr-trigger">
+              <NavigationMenu.Trigger className="hdr-trigger tap-44">
                 {entry.label}
                 <NavigationMenu.Icon className="hdr-chev">
                   <ChevronDown
@@ -184,7 +184,7 @@ export function MegaMenu({
           ) : (
             <NavigationMenu.Item key={entry.id}>
               <NavigationMenu.Link
-                className="hdr-navlink"
+                className="hdr-navlink tap-44"
                 render={<Link href={entry.href} prefetch={false} />}
                 onClick={() => {
                   if (entry.href.includes("#")) focusHashTarget(entry.href);

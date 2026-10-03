@@ -29,7 +29,7 @@ import { markProved } from "./proved";
  * different machine.
  *
  * SOUND. Each chip can be heard as a caller says it (AI-generated
- * voices, lib/audio/cues/industry-bench-intents.json, fetched only once
+ * voices, lib/audio/cues/industry/bench-intents/<slug>.json, fetched only once
  * sound is on and the bench is a screen away). With sound on the
  * autoplay says its four chips, and each holds for max(2.6 s, its line
  * + 0.7 s) on the clip's own clock before the next; a chip without a
@@ -89,7 +89,7 @@ export function Bench({ trade }: { trade: Trade }) {
   useEffect(() => {
     trackRef.current = track;
   });
-  const { fileRef, load } = useStageCues("industry-bench-intents", track.on && near);
+  const { fileRef, load } = useStageCues("industry-bench-intents", trade.slug, track.on && near);
   const playing = useSounding() && track.audible;
   /** The autoplay, said. Null while it reads silently, and once it is over. */
   const spoken = useRef<SpokenRun | null>(null);

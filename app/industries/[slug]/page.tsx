@@ -18,10 +18,7 @@ import { asCueFile } from "@/lib/audio";
 // Read here, on the server, for one number per trade (how long the call is
 // heard at its own pace); the file itself is never sent with the page. The
 // section fetches it with import() only once the visitor opts in to sound.
-import runItCues from "@/lib/audio/cues/industry-run-it-call.json";
-
-/** The run-it calls' cues: the spoken length of each trade's call, for its Listen control. */
-const RUN_IT_CUES = asCueFile(runItCues);
+import { loadIndustryCueModule } from "@/lib/audio/industry-cues";
 
 /**
  * Sixteen trades are in the menu; only the ones with written data have a
@@ -57,7 +54,11 @@ export default async function IndustryPage({ params }: { params: Promise<{ slug:
   if (!trade) notFound();
 
   // Whole seconds of the call as heard, or null when no track says it as written: then no Listen control.
-  const heard = spokenCall(trade, RUN_IT_CUES);
+  const runItCues = await loadIndustryCueModule("industry-run-it-call", slug).then(
+    (m) => asCueFile(m.default),
+    () => null,
+  );
+  const heard = spokenCall(trade, runItCues);
   const listenSeconds = heard ? Math.floor(heard.trade.duration) : null;
 
   /*

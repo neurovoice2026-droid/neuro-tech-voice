@@ -26,7 +26,8 @@ import type { Cue } from "@/lib/audio/cue-types";
  *
  * The tab going hidden pauses it; coming back resumes it only if the
  * owner still wants it playing. Past the middle of a file, the owner's
- * next file is fetched at low priority, so it starts at once.
+ * next file is fetched at low priority, so it starts at once; at most one
+ * file fetched ahead is ever waiting to be played (warm).
  *
  * React reads the store through useSyncExternalStore (use-voice-track.ts).
  * ------------------------------------------------------------------ */
@@ -95,6 +96,15 @@ let pendingSeek: number | null = null;
 /** The owner's next file, fetched once the current one passes its middle. */
 let next: string | null = null;
 const warmed = new Set<string>();
+/**
+ * The file fetched ahead that has not played yet, and its fetch while it is
+ * still arriving. There is at most one: a stage that leaves view before its
+ * warmed file plays holds the one slot until that file plays, so a reader
+ * scrolling through with sound on is never sent more than one file the page
+ * does not play. An owner that lets go stops a fetch still under way.
+ */
+let warmSrc: string | null = null;
+let warmFetch: AbortController | null = null;
 /** The stall watchdog: runs while the owner wants the file playing. */
 let watchdog = 0;
 /** When the current wait began (the element was asked to play or seek, or last moved), and the reading it last moved at. */
@@ -103,11 +113,17 @@ let progressRaw = -1;
 /** When bytes of a file last arrived. */
 let dataAt = 0;
 /**
- * The last file given up had not had a byte: the network looks dead, not
- * slow, so the next file's first byte gets only STALL_MS (until a byte of
- * any file arrives).
+ * When the last file given up had not had a byte (0: it had, or none was
+ * given up): the network looks dead, not slow, so the next file's first
+ * byte gets only STALL_MS, if it is asked for within DEAD_FOR_MS (and
+ * until a byte of any file arrives). Only the next: a file given up under
+ * that shorter wait gives the one after it FIRST_BYTE_MS again, or a link
+ * that came back slow (its first bytes after STALL_MS) would never be
+ * heard again.
  */
-let deadNet = false;
+let deadAt = 0;
+/** How long a dead network is taken to stay dead. */
+const DEAD_FOR_MS = 10000;
 
 /* The smoothed clock: media seconds = wall seconds × rate + skew, while the element runs. */
 let skew = 0;
@@ -168,7 +184,7 @@ function element(): HTMLAudioElement {
   // Bytes are arriving (however slowly): a slow file, not a hung one.
   const fed = () => {
     dataAt = performance.now();
-    deadNet = false;
+    deadAt = 0;
   };
   a.addEventListener("progress", fed);
   a.addEventListener("loadedmetadata", fed);
@@ -237,6 +253,7 @@ function lose(by: string | null) {
   wants = false;
   hiddenHold = false;
   next = null;
+  warmFetch?.abort();
   emit();
   if (was) h.onPreempt?.(at, by);
 }
@@ -274,6 +291,11 @@ export function play(id: string, track: Track, at?: number, { next: after }: { n
   const a = element();
   const fresh = loaded?.src !== track.src;
   loaded = { src: track.src, offset: track.offset, dur: track.dur ?? NaN };
+  if (track.src === warmSrc) {
+    // The file fetched ahead is playing: the slot is free again.
+    warmSrc = null;
+    warmFetch = null;
+  }
   if (fresh) {
     pendingSeek = at !== undefined && at > 0 ? at + track.offset : null;
     a.src = track.src;
@@ -318,16 +340,31 @@ export function release(id: string) {
   wants = false;
   hiddenHold = false;
   next = null;
+  warmFetch?.abort();
   emit();
 }
 
-/** Fetches a file into the HTTP cache at low priority, once, and only with sound on. */
+/**
+ * Fetches a file into the HTTP cache at low priority, once, and only with
+ * sound on; not while another file fetched ahead has yet to play (warmSrc).
+ */
 export function warm(src: string) {
-  if (!on || warmed.has(src) || loaded?.src === src) return;
+  if (!on || warmed.has(src) || loaded?.src === src || warmSrc !== null) return;
   warmed.add(src);
-  fetch(src, { priority: "low" })
+  warmSrc = src;
+  const ac = new AbortController();
+  warmFetch = ac;
+  const done = () => {
+    if (warmFetch === ac) warmFetch = null;
+  };
+  fetch(src, { priority: "low", signal: ac.signal })
     .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
-    .catch(() => warmed.delete(src));
+    .then(done, () => {
+      // Failed or stopped: nothing was kept, so it holds no slot and may be fetched again.
+      done();
+      warmed.delete(src);
+      if (warmSrc === src) warmSrc = null;
+    });
 }
 
 /**
@@ -446,13 +483,15 @@ function checkStall() {
   }
   // Bytes have come since the wait began: it may run on while they keep coming.
   const fed = dataAt > waitAt;
+  const dead = deadAt > 0 && waitAt - deadAt < DEAD_FOR_MS;
   const limit = fed
     ? Math.min(dataAt + STALL_MS, waitAt + START_MAX_MS)
-    : waitAt + (deadNet ? STALL_MS : FIRST_BYTE_MS);
+    : waitAt + (dead ? STALL_MS : FIRST_BYTE_MS);
   if (now < limit) return;
   // Given up: the owner carries on silently from where its clock is, and the
   // element lets go of the request, so a later play loads the file afresh.
-  deadNet = !fed;
+  // The wait is shortened once at most (see deadAt).
+  deadAt = !fed && !dead ? now : 0;
   window.clearInterval(watchdog);
   watchdog = 0;
   lose(null);

@@ -40,7 +40,8 @@ export function AgentsIntegrations() {
   return (
     <Split eyebrow={AGENT_INTEGRATIONS.eyebrow} title={AGENT_INTEGRATIONS.title} cta={AGENT_INTEGRATIONS.cta}>
       <div className="flex flex-col gap-6">
-        <ul className="grid grid-cols-1 gap-x-12 gap-y-4 sm:grid-cols-2 md:max-w-[520px]">
+        {/* md puts the list in a ~200px column beside the heading: one column there, two again from lg. */}
+        <ul className="grid grid-cols-1 gap-x-12 gap-y-4 sm:grid-cols-2 md:max-w-[520px] md:grid-cols-1 lg:grid-cols-2">
           {AGENT_INTEGRATIONS.items.map((i) => (
             <li key={i.label} className="flex h-7 items-center gap-3 text-lg leading-7">
               <Image src={i.logo} alt="" width={20} height={20} className="size-5" />
@@ -57,7 +58,7 @@ export function AgentsIntegrations() {
 export function AgentsTrust() {
   return (
     <Split eyebrow={TRUST.eyebrow} title={TRUST.title} cta={TRUST.cta}>
-      <ul className="grid grid-cols-1 gap-x-12 gap-y-4 sm:grid-cols-2 md:max-w-[560px]">
+      <ul className="grid grid-cols-1 gap-x-12 gap-y-4 sm:grid-cols-2 md:max-w-[560px] md:grid-cols-1 lg:grid-cols-2">
         {TRUST.items.map((i) => (
           <li key={i.id} className="flex min-h-7 items-center gap-3 text-[15px] leading-[22px] md:text-base">
             <span className="grid size-5 shrink-0 place-items-center rounded-full border border-pp-hair">

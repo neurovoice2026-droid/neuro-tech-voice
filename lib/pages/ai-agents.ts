@@ -353,9 +353,10 @@ export const PLATFORM = {
     period: "This week",
     calls: "calls",
     outcomes: [
-      { id: "booked", label: "Booked", share: 0.47 },
-      { id: "answered", label: "Answered", share: 0.41 },
-      { id: "handover", label: "Flagged for you", share: 0.12 },
+      // `short`: the outcome tag on a log row where the card is too narrow for the label (a phone).
+      { id: "booked", label: "Booked", short: "Booked", share: 0.47 },
+      { id: "answered", label: "Answered", short: "Answered", share: 0.41 },
+      { id: "handover", label: "Flagged for you", short: "Flagged", share: 0.12 },
     ],
     log: [
       { time: "09:12", intent: "New booking", outcome: "booked" },

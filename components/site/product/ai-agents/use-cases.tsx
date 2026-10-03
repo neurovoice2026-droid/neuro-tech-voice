@@ -523,10 +523,15 @@ export function AgentsUseCases() {
         <SectionHeading eyebrow={USE_CASES.eyebrow} className="max-w-[600px]">
           {USE_CASES.title}
         </SectionHeading>
+        {/* The ring is drawn by the wrapper; the tab list inside scrolls on a
+            phone. The tabs are 32px and take 44px taps on touch (tap-44), so
+            the list's box runs 6px past the ring above and below — padding,
+            with the margin taking it back — and its clip doesn't cut them. */}
+        <div className="mt-8 flex w-fit max-w-full rounded-full shadow-[0_0_0_1px_rgb(0_0_0/0.06)]">
         <div
           role="tablist"
           aria-label={USE_CASES.title}
-          className="mt-8 flex w-fit max-w-full gap-1 overflow-x-auto rounded-full p-1 shadow-[0_0_0_1px_rgb(0_0_0/0.06)] [scrollbar-width:none]"
+          className="-my-1.5 flex min-w-0 gap-1 overflow-x-auto rounded-full px-1 py-2.5 [scrollbar-width:none]"
         >
           {tabs.map((x, i) => (
             <button
@@ -538,13 +543,14 @@ export function AgentsUseCases() {
               aria-controls="uc-stage"
               onClick={() => pickTab(i)}
               className={cn(
-                "h-8 shrink-0 rounded-full px-3.5 text-sm transition-colors duration-200",
+                "tap-44 relative h-8 shrink-0 rounded-full px-3.5 text-sm transition-colors duration-200",
                 i === tab ? "pp-shadow-btn bg-white text-pp-ink" : "text-pp-muted hover:text-pp-ink",
               )}
             >
               {x.label}
             </button>
           ))}
+        </div>
         </div>
       </Frame>
 
@@ -605,7 +611,8 @@ export function AgentsUseCases() {
 
           {/* The call: a running transcript over the transport. */}
           <div className="flex min-h-[460px] flex-col bg-white/55 lg:min-h-0">
-            <div className="flex items-center justify-between gap-4 border-b border-pp-rule px-5 py-4 md:px-6">
+            {/* Too narrow for both (a phone), the pill goes under the name rather than cut it short. */}
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-pp-rule px-5 py-4 md:px-6">
               <div className="min-w-0">
                 <p className="text-[11px] leading-4 font-medium tracking-[0.14em] text-pp-muted uppercase">
                   {player.transcript}
@@ -636,7 +643,7 @@ export function AgentsUseCases() {
                   listenMode ? (listening ? player.pause : player.listen) : paused ? player.play : player.pause
                 }
                 className={cn(
-                  "grid size-9 shrink-0 place-items-center rounded-full bg-pp-ink text-white transition-transform duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
+                  "tap-44 relative grid size-9 shrink-0 place-items-center rounded-full bg-pp-ink text-white transition-transform duration-200 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
                   // Listen: a 44px tap around the 36px disc.
                   listenMode && "relative before:absolute before:-inset-1 before:rounded-full",
                 )}

@@ -1,5 +1,5 @@
 import type { Cue, CueFile, CueTurn } from "@/lib/audio/cue-types";
-import { cueIn, loadCueFile, type Surface } from "@/lib/audio";
+import { cueIn, loadIndustryCueFile, type IndustrySurface } from "@/lib/audio";
 import { remapAuthoredAxis, turnAt, wordsShownAt } from "@/components/site/audio/cue";
 import type { Prong, Trade, Wall } from "./schema";
 
@@ -10,7 +10,7 @@ import type { Prong, Trade, Wall } from "./schema";
  * sound on: the opening line of each prong (§1), the trade's words on
  * the bench (§2), the call on the rail (§3) and the pressure exchange at
  * the wall (§4). Their audio is AI-generated from the page's own text
- * (lib/audio/cues/industry-*.json); this module joins the two.
+ * (lib/audio/cues/industry/<section>/<slug>.json); this module joins the two.
  *
  * Everything here is pure, so it can be checked against the real cue
  * files without a browser, and everything fails closed: a track that is
@@ -22,18 +22,15 @@ import type { Prong, Trade, Wall } from "./schema";
  * through import() on first use, never with the page.
  * ------------------------------------------------------------------ */
 
-export type IndustrySurface = Extract<
-  Surface,
-  "industry-first-question" | "industry-run-it-call" | "industry-wall-retraction" | "industry-bench-intents"
->;
+export type { IndustrySurface };
 
 /**
- * A section's cue file, fetched once and shared (lib/audio's loader).
- * Null when it cannot be had (a failed fetch).
+ * A section's cue file for one trade, fetched once and shared (lib/audio's
+ * loader): the page's own trade only. Null when it cannot be had (a failed fetch).
  */
-export async function loadIndustryCues(surface: IndustrySurface): Promise<CueFile | null> {
+export async function loadIndustryCues(surface: IndustrySurface, slug: string): Promise<CueFile | null> {
   try {
-    return await loadCueFile(surface);
+    return await loadIndustryCueFile(surface, slug);
   } catch {
     return null;
   }

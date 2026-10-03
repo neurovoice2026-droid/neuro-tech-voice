@@ -10,7 +10,7 @@ import { SoundButton } from "@/components/site/audio/sound-button";
 import { useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { Frame, SectionHeading } from "../primitives";
 import { useInView, usePrefersReducedMotion } from "../timing";
-import { SCROLLED_MS, showSaid } from "@/components/site/audio/show-said";
+import { SCROLLED_MS, followHalted, followMovedAt, showSaid } from "@/components/site/audio/show-said";
 import { loadLate, useListen } from "./meaning";
 import { DocBadge } from "./parts";
 
@@ -84,18 +84,23 @@ export function KbShelf() {
   useEffect(() => {
     trackRef.current = track;
   });
-  /** The questions' clips: undefined until fetched (sound on), null if the file isn't there. */
+  /**
+   * The questions' clips: undefined until fetched (sound on), and after a fetch that failed, until
+   * the next Listen (or sound turned on again) asks again.
+   */
   const [file, setFile] = useState<CueFile | null | undefined>(undefined);
+  /** Bumped by a Listen pressed before the clips are here: a fetch that failed is asked for again. */
+  const [refetch, setRefetch] = useState(0);
   useEffect(() => {
     if (!track.on || file !== undefined) return;
     let live = true;
     void loadShelf().then((f) => {
-      if (live) setFile(f);
+      if (live && f) setFile(f);
     });
     return () => {
       live = false;
     };
-  }, [track.on, file]);
+  }, [track.on, file, refetch]);
   const clips = useMemo(() => clipsFor(file), [file]);
   /** A spoken time round the shelf: how many cards it has left to ask. */
   const [pass, setPass] = useState<number | null>(null);
@@ -108,11 +113,17 @@ export function KbShelf() {
 
   // Into view with sound on: one spoken time round the shelf (never under reduced motion or the still tier). Out of view, it ends.
   const onEntry = useEffectEvent((into: boolean) => {
+    // A round this shelf's own press started, carried through the edge of the view by its own
+    // follow scroll (the page above can grow under it): it is not over, and carries on.
+    const following =
+      pressed.current && pass !== null && !followHalted() && performance.now() - followMovedAt() < SCROLLED_MS;
     if (!into) {
+      if (following) return;
       setPass(null);
       setPicked(null);
       return;
     }
+    if (pressed.current && pass !== null) return;
     if (clips && track.on && !track.listen && !reduce) {
       pressed.current = false;
       setPass(SHELF.kinds.length);
@@ -219,19 +230,18 @@ export function KbShelf() {
 
   /** Each card's question bubble: the caption of what is said. */
   const bubbles = useRef<(HTMLParagraphElement | null)[]>([]);
-  /** When the page was last scrolled to a card (below): a card that comes under a resting mouse then is not held. */
-  const scrolledAt = useRef(-Infinity);
   // Below lg the cards stand one under another, the sound control under the last: a round this
   // shelf's own press started (or Listen) brings the card being asked on screen, so its question
-  // can be read as it is said. A round that started by itself never moves the page.
+  // can be read as it is said. A round that started by itself never moves the page. A press that
+  // says the card on screen again (`restart`) brings it on screen too.
   const follow = reduce ? listening : voicing ? round : -1;
   useEffect(() => {
     if (follow < 0 || (!reduce && !pressed.current)) return;
-    if (showSaid(bubbles.current[follow], reduce, "(max-width: 1023px)")) scrolledAt.current = performance.now();
-  }, [follow, reduce]);
+    showSaid(bubbles.current[follow], reduce, "(max-width: 1023px)");
+  }, [follow, reduce, restart]);
   /** The pointer came over card `i` (at `at`, the event's time): it holds the shelf there, unless the page just moved the card under it. */
   const hold = (i: number, at: number) => {
-    if (at - scrolledAt.current < SCROLLED_MS) return;
+    if (at - followMovedAt() < SCROLLED_MS) return;
     setHeld(i);
   };
 
@@ -325,7 +335,10 @@ export function KbShelf() {
             // Reduced motion: nothing is asked by itself; Listen says the six questions.
             <button
               type="button"
-              onClick={listen.toggle}
+              onClick={() => {
+                if (file === undefined) setRefetch((n) => n + 1);
+                listen.toggle();
+              }}
               className="pp-shadow-btn relative inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-sm text-pp-ink transition-colors before:absolute before:inset-x-0 before:-inset-y-1 hover:bg-pp-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
             >
               {listen.playing ? <Pause className="size-3.5 fill-current" /> : <Play className="size-3.5 fill-current" />}

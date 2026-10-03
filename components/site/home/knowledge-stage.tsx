@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cueIn, lazyCues } from "@/lib/audio";
 import type { CueFile } from "@/lib/audio/cue-types";
 import type { HOME } from "@/lib/pages/home";
@@ -156,6 +156,10 @@ export function KnowledgeStage({
     id: "knowledge",
   });
   const onScreen = useInView(stageRef);
+  // Some of the stage is in the top third of the screen. Below lg the stage is taller than a phone's
+  // screen, with the documents and the page they open under its fold when it takes the focus: its
+  // first view waits for this, so the run is not over before the reader has scrolled down to it.
+  const upScreen = useInView(stageRef, "0px 0px -65% 0px");
   const visible = useDocumentVisible();
   const animated = kit != null && !reduce;
 
@@ -165,6 +169,8 @@ export function KnowledgeStage({
   const [selected, setSelected] = useState(readyIndex);
   const [orbMuted, setOrbMuted] = useState(winner(model, readyIndex) < 0);
   const [done, setDone] = useState(false);
+  /** A run has been built: until then nothing plays, and the transport offers Play. */
+  const [begun, setBegun] = useState(false);
   const [beams, setBeamPaths] = useState<string[]>([]);
 
   const vol = useRef<number>(VOL.miss);
@@ -313,6 +319,7 @@ export function KnowledgeStage({
       const k = kitRef.current;
       const r = roomRef.current;
       if (!k || !r) return;
+      setBegun(true);
       tlRef.current?.kill();
       clockRef.current?.stop();
       clockRef.current = null;
@@ -403,12 +410,14 @@ export function KnowledgeStage({
   /** One question, picked: a press, so it may take the sound from another stage. */
   const playOne = useCallback((qi: number) => playFrom([qi], { press: true, announce: false }), [playFrom]);
 
-  // First view: once the stage has the reader's attention, a beat, then the sequence.
+  // First view: once the stage has the reader's attention, a beat, then the sequence. Below lg it also
+  // waits for the stage to come up the screen; the transport's Play starts it wherever it is.
   useEffect(() => {
     if (!animated || !run || started.current) return;
+    if (!upScreen && !window.matchMedia(LG).matches) return;
     started.current = true;
     playSequence(0.4);
-  }, [animated, run, playSequence]);
+  }, [animated, run, playSequence, upScreen]);
 
   // The question on the stage stays in sight on a rail that scrolls (the rail moves, never
   // the page): it opens on the checked chip, and follows the selection from then on.
@@ -563,6 +572,20 @@ export function KnowledgeStage({
   useEffect(() => {
     if (!onScreen) pauseListen();
   }, [onScreen, pauseListen]);
+  // The tab hidden mid-Listen: the hook lets the sound go, so the clock holds where it is. Back, the
+  // line under way is said again from that second, as the stage's own run does.
+  const onTab = useEffectEvent((shown: boolean) => {
+    const clock = listenClock.current;
+    if (!clock || !listen?.running) return;
+    if (!shown) {
+      clock.stop();
+      stopListenFrames();
+      return;
+    }
+    clock.start(performance.now(), true);
+    runListenFrames();
+  });
+  useEffect(() => onTab(visible), [visible]);
   useEffect(() => {
     if (!reduce) endListen();
   }, [reduce, endListen]);
@@ -626,6 +649,15 @@ export function KnowledgeStage({
 
   const transport = () => {
     if (reduce) return onListen();
+    if (!started.current && !interacted && kitRef.current) {
+      // The first view has not started yet (below lg it waits for the stage to come up the screen):
+      // the button offers Play, and the press starts it here and now.
+      started.current = true;
+      setPaused(false);
+      runRef.current = true;
+      playSequence(0, true);
+      return;
+    }
     if (!done) {
       // Play after Pause is the reader's own press: the question may take the sound back.
       if (paused) pressResume.current = true;
@@ -657,7 +689,7 @@ export function KnowledgeStage({
       : { icon: "listen" as const, label: room.listen }
     : done
       ? { icon: "replay" as const, label: room.replay }
-      : paused
+      : paused || (animated && !begun && !interacted)
         ? { icon: "play" as const, label: room.play }
         : { icon: "pause" as const, label: room.pause };
 
