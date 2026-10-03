@@ -1,10 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { gsap } from "gsap";
 import { AnimatePresence, motion } from "framer-motion";
-import { PLATFORM } from "@/lib/pages/ai-agents";
+import { Pause, Play } from "lucide-react";
+import { PLATFORM, spokenLine, type SpokenLine } from "@/lib/pages/ai-agents";
+import { cueIn, loadCueFile, type Cue, type CueFile, type Surface } from "@/lib/audio";
 import { cn } from "@/lib/utils";
+import { envelopeAt } from "@/components/site/audio/cue";
+import { isSoundOn } from "@/components/site/audio/engine";
+import { SOUND_NOTE } from "@/components/site/audio/sound-button";
+import { useListen } from "@/components/site/audio/use-listen";
+import { useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { useKitContext, useMotionKit } from "../motion-kit";
 import { useInView, usePrefersReducedMotion } from "../timing";
 
@@ -20,7 +27,31 @@ import { useInView, usePrefersReducedMotion } from "../timing";
  *
  * Unlike the monochrome line figures further up, these are drawn as
  * product surfaces: white panels, violet and ember accents, real type.
+ *
+ * Sound (only once the visitor has turned it on; AI-generated voices):
+ * picking a voice plays its sample, the app's own preview sentence, and
+ * its signature swells and falls with it; each document's question and
+ * answer are said the first time they come round while the card is on
+ * screen, their words landing as they are spoken, the hold stretched to
+ * the end of the answer. Later rounds are silent and read-paced. With
+ * reduced motion the card stays still, and its Listen says each
+ * document's question and answer in turn: the card shows that document,
+ * finished, and marks the line being said.
  * ------------------------------------------------------------------ */
+
+/**
+ * The two cue files here are P2: fetched on first use, once sound is on.
+ * A failed fetch resolves to null and the cards stay silent, exactly as
+ * with sound off.
+ */
+function loadLate(surface: Extract<Surface, "agents-platform-voiceprint" | "agents-platform-paperwork">) {
+  return Promise.resolve()
+    .then(() => loadCueFile(surface))
+    .catch(() => null);
+}
+
+/** Voice to wave: the envelope's speech range (about 0.35 to 0.8) onto 0 to 1. */
+const level = (env: number) => Math.min(1, Math.max(0, (env - 0.35) / 0.45));
 
 const VIOLET = "#551a89";
 const EMBER = "#e0663a";
@@ -31,11 +62,16 @@ const panel = "rounded-2xl bg-white shadow-[0_0_0_1px_rgb(24_16_40/0.06),0_14px_
 
 type Voice = (typeof PLATFORM.voice.voices)[number];
 
+/** The signature's shape: pitch as given, pace from the measured wpm (lib/site.ts SETUP_VOICES) over 160 to 240 wpm. */
 function shapeOf(v: Voice) {
-  return { pitch: v.pitch, pace: Math.max(0, Math.min(1, (v.wpm - 125) / 60)) };
+  return { pitch: v.pitch, pace: Math.max(0, Math.min(1, (v.wpm - 160) / 80)) };
 }
 
 const PRINT = { w: 320, h: 132, layers: 4 };
+
+/** A voice's sample (lib/audio/cues/agents-platform-voiceprint.json), by its cast key. */
+const sampleOf = (file: CueFile | null, id: string) =>
+  file ? cueIn(file, `agents-platform-voiceprint/sample/${id}/0`) : undefined;
 
 export function Voiceprint() {
   const v = PLATFORM.voice;
@@ -52,6 +88,46 @@ export function Voiceprint() {
   const [touched, setTouched] = useState(false);
   const voice = v.voices[pick];
   const shape = useRef(shapeOf(v.voices[0]));
+
+  // Sound: a voice that is picked is heard. Never on the walk, never before sound is on.
+  /** A sample is being said: its sentence shows on the card, as its caption. */
+  const [saying, setSaying] = useState(false);
+  // The sample's caption goes when its clip has played out (heard or, after a press elsewhere, silently).
+  const track = useVoiceTrack("agents-voiceprint", { active: inView, onEnded: () => setSaying(false) });
+  const trackRef = useRef(track);
+  useEffect(() => {
+    trackRef.current = track;
+  });
+  const soundOn = track.on;
+  const samplesRef = useRef<CueFile | null>(null);
+  useEffect(() => {
+    if (!soundOn || samplesRef.current) return;
+    void loadLate("agents-platform-voiceprint").then((f) => {
+      samplesRef.current ??= f;
+    });
+  }, [soundOn]);
+  /** The sample being said, if any: the waves follow its loudness. */
+  const sayingRef = useRef<Cue | null>(null);
+
+  const choose = (i: number) => {
+    setTouched(true);
+    setPick(i);
+    if (!isSoundOn()) return;
+    const say = (file: CueFile | null) => {
+      const cue = sampleOf(file, v.voices[i].id);
+      if (!cue) return;
+      // Refused (the card left the screen while the samples were loading): nothing is said, nothing shown.
+      if (!trackRef.current.play(cue, 0, { press: true })) return;
+      sayingRef.current = cue;
+      setSaying(true);
+    };
+    if (samplesRef.current) say(samplesRef.current);
+    else
+      void loadLate("agents-platform-voiceprint").then((f) => {
+        samplesRef.current ??= f;
+        say(f);
+      });
+  };
 
   // Cycles through the voices on its own until one is chosen.
   useEffect(() => {
@@ -80,11 +156,19 @@ export function Voiceprint() {
     const draw = (dt: number) => {
       const { pitch, pace } = shape.current;
       t += dt * (0.7 + pace * 1.1);
+      // While a sample is said, the waves swell and fall with its loudness.
+      let voiced = 1;
+      const saying = sayingRef.current;
+      if (saying) {
+        const at = trackRef.current.time();
+        if (at >= saying.dur) sayingRef.current = null;
+        else voiced = 0.2 + level(envelopeAt(saying, at));
+      }
       for (let k = 0; k < layers; k++) {
         const el = pathRefs.current[k];
         if (!el) continue;
         const freq = 1.6 + pitch * 3.4 + k * 0.28;
-        const lift = (1 - k * 0.2) * (0.78 + 0.22 * Math.sin(t * 1.3 + k * 1.7));
+        const lift = voiced * (1 - k * 0.2) * (0.78 + 0.22 * Math.sin(t * 1.3 + k * 1.7));
         let d = "";
         for (let x = 0; x <= w; x += 4) {
           const u = x / w;
@@ -107,7 +191,10 @@ export function Voiceprint() {
   const pitchWord = voice.pitch < 0.35 ? "Low" : voice.pitch < 0.65 ? "Mid" : "High";
 
   return (
-    <div ref={rootRef} className={cn(panel, "mx-7 mt-6 mb-7 flex flex-1 flex-col p-4")}>
+    // A phone gives the card the width of its side margins (mx-4 below sm); the
+    // card is a container, so the picker can lay out by its own width (narrow
+    // on a phone and in the three-up row at lg).
+    <div ref={rootRef} className={cn(panel, "@container mx-4 mt-6 mb-7 flex flex-1 flex-col p-4 sm:mx-7", soundOn && "relative")}>
       <div key={voice.id} className="animate-in fade-in-0 slide-in-from-bottom-1 duration-500">
         <p className="pp-display text-[22px] leading-7" style={{ fontWeight: 480 }}>
           {voice.name}
@@ -155,9 +242,9 @@ export function Voiceprint() {
           { label: v.pace, value: v.wpm(voice.wpm), ref: paceRef },
         ].map((m) => (
           <div key={m.label}>
-            <div className="flex items-baseline justify-between text-[11px] leading-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-2 text-[11px] leading-4">
               <span className="text-pp-muted">{m.label}</span>
-              <span className="tabular-nums">{m.value}</span>
+              <span className="whitespace-nowrap tabular-nums">{m.value}</span>
             </div>
             <span className="mt-1.5 block h-1 overflow-hidden rounded-full bg-pp-card">
               <span
@@ -170,32 +257,72 @@ export function Voiceprint() {
         ))}
       </div>
 
-      <div className="mt-4 flex items-center gap-2" role="group" aria-label={v.title}>
+      {/* Narrow (a phone, or the three-up row at lg), the note takes its own line under the voices rather than squeeze them. */}
+      <div
+        className="mt-4 flex items-center gap-2 max-sm:flex-wrap @max-[15.5rem]:flex-wrap"
+        role="group"
+        aria-label={v.title}
+      >
         {v.voices.map((x, i) => (
           <button
             key={x.id}
             type="button"
             aria-pressed={i === pick}
             aria-label={`${x.name}, ${x.accent}`}
-            onClick={() => {
-              setTouched(true);
-              setPick(i);
-            }}
+            onClick={() => choose(i)}
             className={cn(
-              "grid size-9 place-items-center rounded-full text-[13px] transition-colors duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
+              "tap-44 relative grid size-9 shrink-0 place-items-center rounded-full text-[13px] transition-colors duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
               i === pick ? "bg-pp-ink text-white" : "bg-pp-card text-pp-ink hover:bg-[#ebe9f1]",
             )}
           >
             {x.name[0]}
           </button>
         ))}
-        <span className="ml-auto truncate text-[12px] text-pp-muted">{voice.note}</span>
+        <span className="ml-auto min-w-0 truncate text-[12px] text-pp-muted max-sm:ml-0 max-sm:basis-full max-sm:whitespace-normal @max-[15.5rem]:ml-0 @max-[15.5rem]:basis-full @max-[15.5rem]:whitespace-normal">
+          {voice.note}
+        </span>
       </div>
+
+      {soundOn && saying && (
+        // The sample's caption, over the top of the wave while it is said.
+        <p
+          lang="en"
+          className="absolute inset-x-4 top-[72px] rounded-xl bg-white/90 px-3 py-2 text-[12px] leading-4 text-pp-ink shadow-[0_0_0_1px_rgb(24_16_40/0.06)] backdrop-blur-sm animate-in fade-in-0 duration-200"
+        >
+          <span className="text-pp-muted">{v.sampleLabel}: </span>“{v.sample}”
+        </p>
+      )}
     </div>
   );
 }
 
 /* ─── Paperwork ──────────────────────────────────────────────────── */
+
+type Doc = (typeof PLATFORM.knowledge.docs)[number];
+
+/** A document's two clips (the caller's question, the agent's answer), where they say its lines as shown. */
+export type DocVoice = { q: Cue; a: Cue; ask: SpokenLine; answer: SpokenLine };
+
+export function docVoice(file: CueFile | null, doc: Doc): DocVoice | null {
+  if (!file) return null;
+  const q = cueIn(file, `agents-platform-paperwork/${doc.id}/0`);
+  const a = cueIn(file, `agents-platform-paperwork/${doc.id}/1`);
+  const ask = spokenLine(q, 0, { sp: "client", t: doc.question });
+  const answer = spokenLine(a, 1, { sp: "agent", t: doc.answer });
+  return q && a && ask && answer ? { q, a, ask, answer } : null;
+}
+
+/** Where the question's words start on a document's timeline, as read and as said. */
+const ASK_AT = 0.3;
+/** How long the answer stays up once it is all there: read, and at least this long after the voice. */
+const HOLD = 2.4;
+const AFTER_ANSWER = 0.4;
+
+/** A clip on a voiced pass: where its start sits on the timeline, and how far it has got. */
+type Clip = { at: number; cue: Cue; state: "waiting" | "playing" | "done" };
+
+/** Listen (reduced motion): one clip, the document it belongs to, and its line (0 the question, 1 the answer). */
+type Said = { cue: Cue; doc: number; line: 0 | 1 };
 
 export function Paperwork() {
   const k = PLATFORM.knowledge;
@@ -207,6 +334,70 @@ export function Paperwork() {
   const [index, setIndex] = useState(0);
   const doc = k.docs[index];
   const tlRef = useRef<gsap.core.Timeline | null>(null);
+
+  // Sound: a pass is voiced when it starts with sound on, its clips here,
+  // and its document not yet heard since the card came on screen.
+  const track = useVoiceTrack("agents-paperwork", { active: inView });
+  const trackRef = useRef(track);
+  const docsRef = useRef<CueFile | null>(null);
+  const soundOn = track.on;
+  /**
+   * Listen's clips, every document's question and answer in turn: undefined until fetched (sound
+   * on), and while a fetch that failed waits for the next Listen to ask again; empty without ones
+   * that fit.
+   */
+  const [said, setSaid] = useState<Said[] | undefined>(undefined);
+  /** Bumped by a Listen pressed before the clips are here: a fetch that failed is asked for again. */
+  const [refetch, setRefetch] = useState(0);
+  useEffect(() => {
+    trackRef.current = track;
+  });
+  useEffect(() => {
+    if (!soundOn || docsRef.current) return;
+    let live = true;
+    void loadLate("agents-platform-paperwork").then((f) => {
+      docsRef.current ??= f;
+      if (!live || !docsRef.current) return;
+      setSaid(
+        k.docs.flatMap((d, i): Said[] => {
+          const v = docVoice(docsRef.current, d);
+          return v ? [{ cue: v.q, doc: i, line: 0 }, { cue: v.a, doc: i, line: 1 }] : [];
+        }),
+      );
+    });
+    return () => {
+      live = false;
+    };
+  }, [soundOn, k.docs, refetch]);
+  const listenCues = useMemo(() => said?.map((c) => c.cue), [said]);
+  const listen = useListen(track, listenCues, inView);
+  /** Listen: the clip being said, whose document the card shows (at once, finished). */
+  const saying = reduce && listen.at >= 0 ? said?.[listen.at] : undefined;
+  const [shownFor, setShownFor] = useState<number | undefined>(undefined);
+  if (saying?.doc !== shownFor) {
+    setShownFor(saying?.doc);
+    if (saying && saying.doc !== index) setIndex(saying.doc);
+  }
+  /** This pass is voiced: its timeline is built on its clips, and the clips play. */
+  const [voiced, setVoiced] = useState(false);
+  /** The voiced pass's two clips, as the timeline places them. */
+  const clipsRef = useRef<Clip[] | null>(null);
+  /** Documents heard since the card came on screen: each is said once per visit. */
+  const heardRef = useRef(new Set<number>());
+  useEffect(() => {
+    if (!inView) heardRef.current.clear();
+  }, [inView]);
+  const shouldVoice = (i: number) =>
+    !reduce && isSoundOn() && !trackRef.current.listen && !heardRef.current.has(i) && !!docVoice(docsRef.current, k.docs[i]);
+  /** The pass is over: the next document, voiced or read. */
+  const nextRef = useRef(() => {});
+  useEffect(() => {
+    nextRef.current = () => {
+      const next = (index + 1) % k.docs.length;
+      setVoiced(shouldVoice(next));
+      setIndex(next);
+    };
+  });
 
   useKitContext(
     kit,
@@ -234,10 +425,18 @@ export function Paperwork() {
       // Split for motion only: the words stay plain text to a screen reader.
       const question = SplitText.create(q(".pw-question")[0], { type: "words", aria: "none" });
       const answer = SplitText.create(q(".pw-answer")[0], { type: "words", aria: "none" });
+      const voice = voiced ? docVoice(docsRef.current, doc) : null;
+      /** Voiced: each word lands as it is said. Read: evenly, as before. */
+      const said = (line: SpokenLine | undefined, even: number) => {
+        if (!line) return even;
+        const last = line.words[line.words.length - 1] ?? 0;
+        return (i: number) => line.words[i] ?? last;
+      };
 
       const tl = gsap.timeline({
         paused: true,
-        onComplete: () => setIndex((i) => (i + 1) % k.docs.length),
+        // A voiced pass decides whether the next one is voiced too; a read pass hands over as it always has.
+        onComplete: voiced ? () => nextRef.current() : () => setIndex((i) => (i + 1) % k.docs.length),
       });
 
       tl.set(q(".pw-reveal"), { autoAlpha: 0 })
@@ -251,8 +450,8 @@ export function Paperwork() {
         .fromTo(
           question.words,
           { autoAlpha: 0, y: 6 },
-          { autoAlpha: 1, y: 0, duration: 0.45, ease: "power2.out", stagger: 0.07 },
-          0.3,
+          { autoAlpha: 1, y: 0, duration: 0.45, ease: "power2.out", stagger: said(voice?.ask, 0.07) },
+          ASK_AT,
         );
 
       // The scan runs down the page and settles on the answering line.
@@ -269,35 +468,97 @@ export function Paperwork() {
         .to(q(".pw-link-h"), { scaleX: 1, duration: 0.35, ease: "power2.inOut" }, ">-0.05")
         .to(q(".pw-link-v"), { scaleY: 1, duration: 0.4, ease: "power2.inOut" }, ">-0.05")
         .to(q(".pw-reply"), { autoAlpha: 1, duration: 0.3 }, ">-0.1")
+        .addLabel("answer", "<0.1")
         .fromTo(
           answer.words,
           { autoAlpha: 0, y: 6 },
-          { autoAlpha: 1, y: 0, duration: 0.45, ease: "power2.out", stagger: 0.06 },
-          "<0.1",
+          { autoAlpha: 1, y: 0, duration: 0.45, ease: "power2.out", stagger: said(voice?.answer, 0.06) },
+          "answer",
         )
-        .to(q(".pw-source"), { autoAlpha: 1, duration: 0.4 }, ">-0.2")
-        .to({}, { duration: 2.4 })
-        .to(q(".pw-fade"), { autoAlpha: 0, duration: 0.45, ease: "power1.in" });
+        .to(q(".pw-source"), { autoAlpha: 1, duration: 0.4 }, ">-0.2");
+      // Voiced, the answer stays up until its voice has finished, and a moment more.
+      const answerAt = voice ? tl.labels.answer - voice.answer.start : 0;
+      const hold = voice ? Math.max(HOLD, answerAt + voice.a.dur + AFTER_ANSWER - tl.duration()) : HOLD;
+      tl.to({}, { duration: hold }).to(q(".pw-fade"), { autoAlpha: 0, duration: 0.45, ease: "power1.in" });
 
       tlRef.current = tl;
+      clipsRef.current = voice
+        ? [
+            { at: ASK_AT - voice.ask.start, cue: voice.q, state: "waiting" },
+            { at: answerAt, cue: voice.a, state: "waiting" },
+          ]
+        : null;
       return () => {
         tlRef.current = null;
+        clipsRef.current = null;
       };
     },
-    { scope: rootRef, dependencies: [index, reduce], revertOnUpdate: true },
+    { scope: rootRef, dependencies: [index, reduce, voiced], revertOnUpdate: true },
   );
 
   useEffect(() => {
     const tl = tlRef.current;
     if (!tl) return;
-    if (inView) tl.play();
-    else tl.pause();
-  }, [inView, index, reduce, kit]);
+    const clips = clipsRef.current;
+    if (!clips) {
+      // A pass that has not begun, come on screen with sound on: it is voiced instead.
+      if (inView && tl.time() === 0 && shouldVoice(index)) {
+        const id = requestAnimationFrame(() => setVoiced(true));
+        return () => cancelAnimationFrame(id);
+      }
+      if (inView) tl.play();
+      else tl.pause();
+      return;
+    }
+    // Voiced: the timeline runs on its own between the clips, and on each clip's clock while it plays.
+    if (!inView) {
+      tl.pause();
+      trackRef.current.pause();
+      return;
+    }
+    let raf = 0;
+    let current: Clip | null = null;
+    const begin = (clip: Clip, from?: number) => {
+      tl.pause();
+      current = clip;
+      clip.state = "playing";
+      const after = clip === clips[0] ? clips[1].cue : undefined;
+      if (trackRef.current.play(clip.cue, from, { next: after })) heardRef.current.add(index);
+    };
+    const playing = clips.find((c) => c.state === "playing");
+    if (playing) begin(playing);
+    else tl.play();
+    const frame = () => {
+      if (current) {
+        const t = trackRef.current.time();
+        tl.time(current.at + t);
+        if (t >= current.cue.dur) {
+          current.state = "done";
+          current = null;
+          tl.play();
+        }
+      } else {
+        const due = clips.find((c) => c.state === "waiting" && tl.time() >= c.at);
+        if (due) begin(due, 0);
+      }
+      if (tl.progress() < 1) raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+    // shouldVoice reads refs and the reduced-motion flag, which rebuilds the timeline anyway.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inView, index, reduce, kit, voiced]);
 
   return (
-    <div ref={rootRef} className="relative mx-7 mt-6 mb-7 flex flex-1 flex-col gap-3">
+    <div ref={rootRef} className="@container relative mx-4 mt-6 mb-7 flex flex-1 flex-col gap-3 sm:mx-7">
       {/* The question */}
-      <div className={cn(panel, "pw-fade pw-ask pw-reveal px-3.5 py-2.5")}>
+      <div
+        className={cn(
+          panel,
+          "pw-fade pw-ask pw-reveal px-3.5 py-2.5",
+          saying?.line === 0 && "shadow-[0_0_0_2px_rgb(85_26_137/0.45)]",
+        )}
+      >
         <p className="text-[10px] leading-4 font-medium tracking-[0.12em] text-pp-muted uppercase">{k.asks}</p>
         <p key={`q-${index}`} className="pw-question text-[13px] leading-[18px]">
           {doc.question}
@@ -305,7 +566,9 @@ export function Paperwork() {
       </div>
 
       {/* The document, with the other two behind it */}
-      <div className="pw-docs relative flex-1">
+      {/* The document keeps its whole height (title, five lines and the clause) wherever the card would
+          squeeze it under the reply; narrow, the clause takes two lines. From xl, as it always was. */}
+      <div className="pw-docs relative min-h-[136px] flex-1 @max-[18.75rem]:min-h-[154px] xl:min-h-[88px]">
         <span aria-hidden className="absolute top-2 left-3 h-[calc(100%-8px)] w-[64%] -rotate-3 rounded-lg bg-white/60 shadow-[0_0_0_1px_rgb(24_16_40/0.05)]" />
         <span aria-hidden className="absolute top-1 left-1.5 h-[calc(100%-4px)] w-[64%] rotate-2 rounded-lg bg-white/80 shadow-[0_0_0_1px_rgb(24_16_40/0.05)]" />
         <div className="pw-fade pw-sheet absolute top-0 left-0 flex h-full w-[64%] flex-col rounded-lg bg-white p-3 shadow-[0_0_0_1px_rgb(24_16_40/0.07),0_10px_24px_-14px_rgb(24_16_40/0.3)]">
@@ -316,10 +579,10 @@ export function Paperwork() {
           <div className="pw-sheet-body relative mt-2 flex flex-1 flex-col gap-2 overflow-hidden">
             {[82, 64, -1, 74, 58, 70].map((width, i) =>
               width < 0 ? (
-                <div key={i} className="pw-clause relative h-[18px]">
+                <div key={i} className="pw-clause relative h-[18px] @max-[18.75rem]:h-9">
                   <span className="pw-mark absolute inset-0 origin-left rounded bg-[#551a89]/12" style={{ transform: "scaleX(0)" }} />
                   <span className="absolute top-1/2 left-0 h-1.5 w-[88%] -translate-y-1/2 rounded-full bg-pp-card" />
-                  <span className="pw-clause-text pw-reveal invisible absolute inset-0 truncate px-1 text-[10px] leading-[18px] text-[#551a89]">
+                  <span className="pw-clause-text pw-reveal invisible absolute inset-0 truncate px-1 text-[10px] leading-[18px] text-[#551a89] @max-[18.75rem]:line-clamp-2 @max-[18.75rem]:whitespace-normal">
                     {doc.clause}
                   </span>
                 </div>
@@ -346,7 +609,12 @@ export function Paperwork() {
       </div>
 
       {/* The reply */}
-      <div className="pw-fade pw-reply pw-reveal invisible rounded-2xl bg-pp-ink px-3.5 py-2.5 text-white">
+      <div
+        className={cn(
+          "pw-fade pw-reply pw-reveal invisible rounded-2xl bg-pp-ink px-3.5 py-2.5 text-white",
+          saying?.line === 1 && "shadow-[0_0_0_2px_#b8a2dc]",
+        )}
+      >
         <p className="text-[10px] leading-4 font-medium tracking-[0.12em] text-white/60 uppercase">{k.answers}</p>
         <p key={`a-${index}`} className="pw-answer text-[13px] leading-[18px]">
           {doc.answer}
@@ -356,6 +624,25 @@ export function Paperwork() {
           {k.from} · {doc.name}
         </p>
       </div>
+
+      {reduce && said?.length !== 0 && (
+        // Reduced motion: the card stays still; Listen says each document's question and answer.
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <button
+            type="button"
+            onClick={() => {
+              // The clips aren't here (a fetch that failed): this press asks for them again, and Listen starts when they arrive.
+              if (said === undefined) setRefetch((n) => n + 1);
+              listen.toggle();
+            }}
+            className="pp-shadow-btn relative inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-sm text-pp-ink transition-colors before:absolute before:inset-x-0 before:-inset-y-1 hover:bg-pp-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
+          >
+            {listen.playing ? <Pause className="size-3.5 fill-current" /> : <Play className="size-3.5 fill-current" />}
+            {listen.playing ? k.pause : k.listen}
+          </button>
+          <span className="text-[11px] leading-4 text-pp-muted">{SOUND_NOTE}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -436,16 +723,18 @@ export function CallLog() {
     return { key: n, ...entry };
   });
   const labelOf = (id: string) => m.outcomes.find((o) => o.id === id)?.label ?? id;
+  const shortOf = (id: string) => m.outcomes.find((o) => o.id === id)?.short ?? labelOf(id);
 
   return (
-    <div ref={rootRef} className={cn(panel, "mx-7 mt-6 mb-7 flex flex-1 flex-col p-4")}>
+    <div ref={rootRef} className={cn(panel, "@container mx-4 mt-6 mb-7 flex flex-1 flex-col p-4 sm:mx-7")}>
       <div className="flex items-center justify-between">
         <p className="text-[11px] leading-4 font-medium tracking-[0.12em] text-pp-muted uppercase">{m.period}</p>
         <span className="rounded-full bg-pp-card px-2 py-0.5 text-[10px] text-pp-muted">{m.sample}</span>
       </div>
 
-      <div className="mt-3 flex items-center gap-4">
-        <div className="relative size-[92px] shrink-0">
+      {/* Narrow (a phone, the three-up row at lg): a smaller ring, and labels that wrap rather than cut. */}
+      <div className="mt-3 flex items-center gap-4 @max-[15.5rem]:gap-3">
+        <div className="relative size-[92px] shrink-0 @max-[15.5rem]:size-[72px]">
           <svg viewBox="0 0 100 100" className="size-full -rotate-90" aria-hidden>
             <circle cx="50" cy="50" r="40" fill="none" stroke="rgb(24 16 40 / 0.06)" strokeWidth="11" />
             {m.outcomes.map((o) => (
@@ -477,7 +766,7 @@ export function CallLog() {
           {m.outcomes.map((o, i) => (
             <li key={o.id} className="flex items-center gap-2 text-[12px] leading-4">
               <span className="size-2 shrink-0 rounded-full" style={{ background: OUTCOME_COLOR[o.id] }} />
-              <span className="min-w-0 flex-1 truncate text-pp-muted">{o.label}</span>
+              <span className="min-w-0 flex-1 truncate text-pp-muted @max-[15.5rem]:whitespace-normal">{o.label}</span>
               <span
                 ref={(el) => {
                   countRefs.current[i] = el;
@@ -505,7 +794,7 @@ export function CallLog() {
                 className="flex items-center gap-2.5 rounded-lg px-1 py-1 text-[12px] leading-4"
               >
                 <span className="w-9 shrink-0 text-pp-muted tabular-nums">{r.time}</span>
-                <span className="min-w-0 flex-1 truncate">{r.intent}</span>
+                <span className="min-w-0 flex-1 truncate @max-[15.5rem]:whitespace-normal">{r.intent}</span>
                 <span
                   className="shrink-0 rounded-full px-2 py-0.5 text-[10px] leading-4"
                   style={{
@@ -513,7 +802,8 @@ export function CallLog() {
                     background: `color-mix(in oklab, ${OUTCOME_COLOR[r.outcome]} 14%, transparent)`,
                   }}
                 >
-                  {labelOf(r.outcome)}
+                  <span className="@max-[15.5rem]:hidden">{labelOf(r.outcome)}</span>
+                  <span className="hidden @max-[15.5rem]:inline">{shortOf(r.outcome)}</span>
                 </span>
               </motion.li>
             ))}

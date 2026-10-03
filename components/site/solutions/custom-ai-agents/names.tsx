@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { cueIn, loadCueFile, type Cue, type CueFile, type CueTurn } from "@/lib/audio";
 import type { CAA_NAMES, SaidPart, Term } from "@/lib/pages/custom-ai-agents";
+import { envelopeAt, wordsShownAt } from "@/components/site/audio/cue";
+import { isSoundOn, unlockFromGesture } from "@/components/site/audio/engine";
+import { SoundButton } from "@/components/site/audio/sound-button";
+import { useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { Eyebrow, Frame, SectionTitle } from "@/components/site/product/primitives";
 import { useInView, usePrefersReducedMotion } from "@/components/site/product/timing";
 import { cn } from "@/lib/utils";
-import { Stack, fill } from "./parts";
+import { ListenButton, SaidWords, SayingTick, Stack, fill, levelOf, voicedLines } from "./parts";
 import { markProved } from "./proved";
 
 /* ------------------------------------------------------------------ *
@@ -100,6 +105,23 @@ import { markProved } from "./proved";
  * this way" rather than as a clipped card. The rail's trailing padding
  * is wider than that fade, so at the end of the scroll the last chip —
  * and its focus ring — sits wholly clear of it.
+ *
+ * SOUND (off unless the visitor turns it on; nothing is fetched before).
+ * The caller's sentence can be heard: an AI-generated voice reading the
+ * line in row 1, not a real caller (lib/audio/cues/caa-names-caller-
+ * sentence.json). With sound on the card plays on the sentence's clock:
+ * row 1 lands as the caller starts and each of its words shows as it is
+ * said (the same words, hidden until then, so nothing reflows), with the
+ * margin tick beside it; the recogniser's two versions follow once she
+ * has finished, at their read-paced 400ms rhythm, and then the walk, as
+ * before. It starts heard only if it can be: an autoplay never takes the
+ * sound from another stage, and one that can't runs read-paced. The sound
+ * control here is a press: untouched, the card plays again from the top,
+ * heard; once a reader has the list, only the sentence is said again. Off
+ * screen the sentence pauses until it is back. Sound turned off mid-
+ * sentence finishes it in silence on the same clock. Reduced motion:
+ * nothing plays by itself; "Listen" says the sentence over the finished
+ * card, the tick beside row 1. With sound off none of this runs.
  * ------------------------------------------------------------------ */
 
 /** When the rows land, from the moment the card is on screen. */
@@ -113,6 +135,15 @@ const REST_AT = 3900;
 const LABEL = "text-[11px] leading-4 font-medium tracking-[0.12em] text-pp-muted uppercase";
 
 const FOCUS = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink";
+
+/** This section's claim on the site's one sound (components/site/audio/engine.ts). */
+const VOICE_ID = "caa-names";
+
+/** The caller's sentence as heard, if its track says it word for word. */
+export function namesVoice(cue: Cue | null | undefined, sentence: string): { cue: Cue; turn: CueTurn } | null {
+  const turns = voicedLines(cue, [{ who: "caller", text: sentence }]);
+  return cue && turns && cue.turns.length === 1 ? { cue, turn: turns[0] } : null;
+}
 
 const noop = () => () => {};
 /** False on the server and through hydration, true after: the redline's hook. */
@@ -162,6 +193,184 @@ export function Names({ data }: { data: typeof CAA_NAMES }) {
   // on an inView change would strand the chain half-played.
   useEffect(() => () => timers.current.forEach(window.clearTimeout), []);
 
+  /* ---------- sound (see the header) ---------- */
+  const said: readonly SaidPart[] = data.said;
+  const termText = (id: string) => terms.find((t) => t.id === id)?.term ?? "";
+  const sentence = sentenceOf(said, termText);
+  const track = useVoiceTrack(VOICE_ID, { active: inView });
+  const trackRef = useRef(track);
+  useEffect(() => {
+    trackRef.current = track;
+  });
+  /** The sentence's track: undefined until fetched (once sound is on), null if it doesn't say the sentence as written. */
+  const [voice, setVoice] = useState<{ cue: Cue; turn: CueTurn } | null | undefined>(undefined);
+  /** The sentence is being said; `rest`: the rows and the walk follow it (the card's own run). */
+  const [speaking, setSpeaking] = useState<{ rest: boolean } | null>(null);
+  /** With motion, how many of row 1's words have been said; null shows them all. */
+  const [heard, setHeard] = useState<number | null>(null);
+  /** Reduced motion: the Listen transport. */
+  const [listen, setListen] = useState<"playing" | "paused" | null>(null);
+  const pending = useRef<"sound" | "listen" | null>(null);
+  const away = useRef(false);
+  /** Nothing plays by itself: reduced motion, or the still tier. */
+  const listenMode = still || track.listen;
+
+  /**
+   * The sentence, said from its first word: true when it plays. `rest`
+   * runs the card on from it (row 1 lands now, the rest once it is said);
+   * `reset` first takes the card back to its start. False, and nothing
+   * changes, without the track or sound, or when an autoplay can't take
+   * the sound.
+   */
+  const say = (
+    v: { cue: Cue; turn: CueTurn } | null | undefined,
+    o: { rest: boolean; press: boolean; reset?: boolean; unlock?: boolean },
+  ) => {
+    const t = trackRef.current;
+    if (!v || !(o.unlock || isSoundOn())) return false;
+    if (!t.play(v.cue, 0, { press: o.press, unlock: o.unlock })) {
+      t.pause();
+      return false;
+    }
+    away.current = false;
+    if (o.reset) {
+      timers.current.forEach(window.clearTimeout);
+      timers.current = [];
+      setOn(new Set());
+    }
+    if (o.rest) setLanded(1);
+    // Word by word with motion; under reduced motion the line is simply there, ticked.
+    setHeard(listenMode ? null : 0);
+    setSpeaking({ rest: o.rest });
+    return true;
+  };
+
+  /** The sound control here, or Listen: this card's conversation, heard. */
+  const converse = (v: { cue: Cue; turn: CueTurn } | null, asListen: boolean) => {
+    if (asListen) {
+      if (say(v, { rest: false, press: true })) setListen("playing");
+      return;
+    }
+    // Not played yet: it will be heard when it starts.
+    if (!started.current) return;
+    // A reader who has the list keeps it: only the sentence is said again.
+    if (taken.current) say(v, { rest: false, press: true });
+    else say(v, { rest: true, press: true, reset: true });
+  };
+
+  // The track is fetched once sound is on, never before.
+  const onFile = useEffectEvent((file: CueFile | null) => {
+    if (!file) {
+      pending.current = null;
+      return;
+    }
+    const v = namesVoice(cueIn(file, data.voice.track), sentence);
+    setVoice(v);
+    const p = pending.current;
+    pending.current = null;
+    if (p) converse(v, p === "listen");
+  });
+  useEffect(() => {
+    if (!track.on || voice !== undefined) return;
+    let live = true;
+    void loadCueFile(data.voice.surface).then((file) => {
+      if (live) onFile(file);
+    });
+    return () => {
+      live = false;
+    };
+  }, [track.on, voice, data.voice.surface]);
+
+  /** The card's own run, heard, if sound is on and it can be: false leaves it read-paced. */
+  const sayFromStart = useEffectEvent(() => !!voice && !listenMode && trackRef.current.on && say(voice, { rest: true, press: false }));
+
+  /** The sentence has been said: row 1 whole, and (the card's own run, untouched) the rows and the walk after it. */
+  const sentenceSaid = useEffectEvent(() => {
+    const rest = !!speaking?.rest && !taken.current;
+    setSpeaking(null);
+    setHeard(null);
+    setListen(null);
+    if (!rest) return;
+    timers.current = [
+      ...AFTER_SAID.rows.map((t, i) => window.setTimeout(() => setLanded(i + 2), t)),
+      ...AFTER_SAID.walk.map((t, i) => window.setTimeout(() => setOn((s) => new Set([...s, walk[i]])), t)),
+      window.setTimeout(() => setOn(new Set(all)), AFTER_SAID.rest),
+    ];
+  });
+
+  // The sentence, frame by frame on its clock: row 1's words and the tick.
+  useEffect(() => {
+    if (!speaking || !voice || !inView || listen === "paused") return;
+    const card = ref.current;
+    let raf = 0;
+    const frame = () => {
+      const t = trackRef.current.time();
+      if (!listenMode) setHeard(wordsShownAt(voice.turn, t));
+      if (card && !still) card.style.setProperty("--caa-level", String(levelOf(envelopeAt(voice.cue, t))));
+      if (t >= voice.turn.end || t >= voice.cue.dur) return sentenceSaid();
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(raf);
+      card?.style.removeProperty("--caa-level");
+    };
+  }, [speaking, voice, inView, listen, listenMode, still]);
+
+  /** Back on screen, but it may not take the sound back (another stage's press took it, and nothing plays by itself here): the sentence is done. */
+  const readOn = useEffectEvent(() => sentenceSaid());
+  // Off screen the sentence pauses (use-voice-track), and a Listen with it: its transport says Listen
+  // again. Back on screen it carries on from where it stopped, as a run rather than a press: it claims
+  // the sound only if nobody else is playing (else silently, on the same clock). Where nothing plays by
+  // itself (reduced motion, the still tier), only a press carries it on: a Listen waits for one, and
+  // anything else is done.
+  useEffect(() => {
+    if (!speaking) return;
+    if (!inView) {
+      away.current = true;
+      setListen((l) => (l === "playing" ? "paused" : l));
+      return;
+    }
+    if (!away.current || !voice) return;
+    away.current = false;
+    const t = trackRef.current;
+    if (t.time() >= voice.cue.dur) return;
+    if (t.listen) {
+      if (!listen) readOn();
+    } else t.play(voice.cue);
+  }, [speaking, inView, voice, listen]);
+
+  const onSound = (on: boolean) => {
+    // Off: the sentence finishes in silence on the same clock (use-voice-track).
+    if (!on) return;
+    if (voice === undefined) {
+      pending.current = listenMode ? "listen" : "sound";
+      return;
+    }
+    converse(voice, listenMode);
+  };
+
+  /** Listen (reduced motion): the sentence, said, turning sound on (the press is the gesture); or pause it. */
+  const toggleListen = () => {
+    const t = trackRef.current;
+    if (listen === "playing") {
+      t.pause();
+      setListen("paused");
+      return;
+    }
+    if (listen === "paused" && speaking && voice) {
+      setListen("playing");
+      t.play(voice.cue, undefined, { press: true, unlock: true });
+      return;
+    }
+    if (voice === undefined) {
+      unlockFromGesture();
+      pending.current = "listen";
+      return;
+    }
+    if (say(voice, { rest: false, press: true, unlock: true })) setListen("playing");
+  };
+
   useEffect(() => {
     if (still) {
       // Final state, no clock: every row shown, the whole list on. Also
@@ -176,6 +385,7 @@ export function Names({ data }: { data: typeof CAA_NAMES }) {
     }
     if (!inView || started.current) return;
     started.current = true;
+    if (sayFromStart()) return;
     timers.current = [
       ...ROW_AT.map((t, i) => window.setTimeout(() => setLanded(i + 1), t)),
       ...WALK_AT.map((t, i) =>
@@ -229,7 +439,6 @@ export function Names({ data }: { data: typeof CAA_NAMES }) {
     });
 
   const byId = new Map(terms.map((t) => [t.id, t]));
-  const said: readonly SaidPart[] = data.said;
 
   // Which step of the walk is written down: how many walk terms are on,
   // in order. Untouched, `on` only ever grows along the walk, so this is
@@ -260,6 +469,13 @@ export function Names({ data }: { data: typeof CAA_NAMES }) {
         <Eyebrow>{data.eyebrow}</Eyebrow>
         <SectionTitle className="mt-4 max-w-[820px]">{data.title}</SectionTitle>
         <p className="mt-5 max-w-[560px] text-base leading-[25px] text-pp-ink/80">{data.body}</p>
+        {/* Sound: off until pressed. */}
+        <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-3">
+          {listenMode && voice !== null && (
+            <ListenButton playing={listen === "playing"} labels={data.voice} onClick={toggleListen} />
+          )}
+          <SoundButton variant="pill" tone="light" onChange={onSound} />
+        </div>
       </Frame>
 
       <Frame className="mt-8 px-2 md:px-4">
@@ -271,11 +487,27 @@ export function Names({ data }: { data: typeof CAA_NAMES }) {
               from the first frame; `invisible` until it lands. */}
           <div className="min-w-0 divide-y divide-pp-hair">
             <Row label={data.labels.said} shown={rows >= 1} enter="ind-land">
-              <p className="font-[family-name:var(--font-pp-cinema)] text-[21px] leading-8 text-pp-ink italic md:text-[24px] md:leading-9">
+              <p
+                className={cn(
+                  "font-[family-name:var(--font-pp-cinema)] text-[21px] leading-8 text-pp-ink italic md:text-[24px] md:leading-9",
+                  speaking && "relative",
+                )}
+              >
+                {/* The tick beside the line while it is said (sound on). */}
+                {speaking && <SayingTick />}
                 &ldquo;
-                {glueRuns(said, (id) => (
-                  <span className={lit(id)}>{byId.get(id)?.term}</span>
-                ))}
+                {heard === null
+                  ? glueRuns(said, (id) => <span className={lit(id)}>{byId.get(id)?.term}</span>)
+                  : glueRuns(
+                      said,
+                      (id, at) => (
+                        <span className={lit(id)}>
+                          <SaidWords text={termText(id)} from={wordAtChar(sentence, at)} said={heard} />
+                        </span>
+                      ),
+                      (text, at) => <SaidWords text={text} from={wordAtChar(sentence, at)} said={heard} />,
+                      termText,
+                    )}
                 &rdquo;
               </p>
             </Row>
@@ -455,32 +687,69 @@ const GUESS =
  * from it ("QM" + "-20417.", "Quillmoor" + "?") in one nowrap span, so
  * no line ever breaks between a code and its number. All three rows and
  * the sizer are built with it, so they break alike.
+ *
+ * Both renderers are told where their piece starts in the whole sentence
+ * (a character offset), so row 1 can show each word as it is said. Without
+ * `renderText` the text is set as plain strings, as it always was.
  */
-function glueRuns(said: readonly SaidPart[], renderTerm: (id: string) => ReactNode): ReactNode[] {
+export function glueRuns(
+  said: readonly SaidPart[],
+  renderTerm: (id: string, at: number) => ReactNode,
+  renderText?: (text: string, at: number) => ReactNode,
+  termText?: (id: string) => string,
+): ReactNode[] {
   const out: ReactNode[] = [];
+  const text = (t: string, at: number) => (renderText ? renderText(t, at) : t);
+  // Where each piece starts in the sentence; only counted when it is used.
+  let at = 0;
+  const length = (p: SaidPart) => ("text" in p ? p.text.length : (termText?.(p.term).length ?? 0));
   for (let i = 0; i < said.length; i++) {
     const p = said[i];
     if ("text" in p) {
-      out.push(<span key={i}>{p.text}</span>);
+      out.push(<span key={i}>{text(p.text, at)}</span>);
+      at += length(p);
       continue;
     }
     const next = said[i + 1];
     const glue = next !== undefined && "text" in next ? (/^\S*/.exec(next.text)?.[0] ?? "") : "";
     if (next === undefined || !("text" in next) || glue === "") {
-      out.push(<span key={i}>{renderTerm(p.term)}</span>);
+      out.push(<span key={i}>{renderTerm(p.term, at)}</span>);
+      at += length(p);
       continue;
     }
+    const after = at + length(p);
     out.push(
       <span key={i} className="whitespace-nowrap">
-        {renderTerm(p.term)}
-        {glue}
+        {renderTerm(p.term, at)}
+        {text(glue, after)}
       </span>,
-      <span key={`${i}+`}>{next.text.slice(glue.length)}</span>,
+      <span key={`${i}+`}>{text(next.text.slice(glue.length), after + glue.length)}</span>,
     );
+    at = after + next.text.length;
     i++;
   }
   return out;
 }
+
+/** The sentence as one string: the text the caller's track must say, word for word. */
+export function sentenceOf(said: readonly SaidPart[], termText: (id: string) => string): string {
+  return said.map((p) => ("text" in p ? p.text : termText(p.term))).join("");
+}
+
+/** The word of `sentence` a character offset falls in (the spaces before it). */
+export const wordAtChar = (sentence: string, at: number) => sentence.slice(0, at).split(" ").length - 1;
+
+/**
+ * Heard: the rows after the caller's sentence keep their read-paced
+ * rhythm, measured from row 1's beat, which moves to the moment the caller
+ * has finished (when the recogniser has the whole sentence): row 2, row 3,
+ * the hold, the walk and the rest, in ms after the sentence.
+ */
+export const AFTER_SAID = {
+  rows: ROW_AT.slice(1).map((t) => t - ROW_AT[0]),
+  walk: WALK_AT.map((t) => t - ROW_AT[0]),
+  rest: REST_AT - ROW_AT[0],
+} as const;
 
 function Row({
   label,

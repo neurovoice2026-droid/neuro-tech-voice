@@ -1,15 +1,33 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { KeyRound, Moon, Phone, Sun, UserRound } from "lucide-react";
+import { envelopeAt, turnAt } from "@/components/site/audio/cue";
+import { isAudible, isSoundOn, unlockFromGesture } from "@/components/site/audio/engine";
+import { SoundButton } from "@/components/site/audio/sound-button";
+import { useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { FluidOrb } from "@/components/site/product/fluid-orb";
 import { Frame, PillLink } from "@/components/site/product/primitives";
 import { useInView } from "@/components/site/product/timing";
+import { cueIn, lazyCues } from "@/lib/audio";
+import type { Cue } from "@/lib/audio/cue-types";
 import { HOME_CALL, type HomeMomentId } from "@/lib/pages/home/call";
 import type { HomeCall, HomeLine } from "@/lib/pages/home.server";
 import { cn } from "@/lib/utils";
 import { CHIP, RING_LIGHT, RoundButton, useRovingRadio } from "./controls";
-import { IDLE, POSTER, TOUR, scriptFor, type Frame as StageFrame, type RunRequest } from "./demo-script";
+import {
+  IDLE,
+  POSTER,
+  SpokenClock,
+  TOUR,
+  scriptFor,
+  speaks,
+  type Frame as StageFrame,
+  type RunRequest,
+  type RunVoice,
+  type Script,
+  type SpokenCalls,
+} from "./demo-script";
 import { buildRun } from "./demo-timeline";
 import { HomeHeading } from "./heading";
 import { useStageMotion } from "./motion";
@@ -45,6 +63,21 @@ import "./demo.css";
  *
  * The run itself is demo-timeline.ts, on demo-script.ts's schedule; this
  * file holds the markup and derives its state from the run's frames.
+ *
+ * Sound. The four calls are recorded (AI-generated voices, a ring and a
+ * pickup; lib/audio/cues/home-demo-call.json). Nothing is fetched and
+ * nothing plays until the reader presses the sound control by the
+ * transport. With sound on, every run is built on the recordings
+ * (demo-script.ts `spoken`) and the audio is its clock: the timeline is
+ * never played but set to the clock's time every frame, and the orb
+ * follows the recording's loudness while a line is spoken. Turning sound
+ * on mid-run restarts the call under way on its recording; turning it
+ * off lets that call finish on the same clock, silently, and the calls
+ * after it go back to read pacing. A call only plays out loud while the
+ * stage is the landing's focused stage; off-screen it pauses with the run.
+ * With reduced motion (or the still tier) nothing plays by itself: the
+ * transport becomes Listen, which plays the call on screen and swaps its
+ * lines in as they are said, with no motion.
  * ------------------------------------------------------------------ */
 
 const ORDER = TOUR;
@@ -69,15 +102,47 @@ const PILL =
  * The small print on the stage and under it, in the body face as written:
  * sentence case, no tracking. Tabular figures only where a time is set:
  * Inter's tnum widens the hyphen too, and "made-up" would gape. Inside the
- * stage's padding a phone gives the transport captions 255px at 375 (one
- * line each) and 200px at 320, where they wrap rather than run off the
- * stage; they stand side by side only from md, where the column has room
- * for both.
+ * stage's padding the transport captions wrap rather than run off the
+ * stage; they stand side by side only from lg, where the column has room
+ * for both, and even there may wrap rather than be cut by the stage.
  */
 const SMALL = "text-[12px] leading-[18px]";
-const CAPTION = cn("home-demo-tone text-(--d-dim) md:whitespace-nowrap", SMALL);
+const CAPTION = cn("home-demo-tone text-(--d-dim)", SMALL);
 
 const OWNER_ICON = { rush: UserRound, closing: KeyRound, sunday: Sun, night: Moon } as const;
+
+/** The stage's claim on the site's one sound (components/site/audio/engine.ts). */
+const VOICE_ID = "demo";
+
+/**
+ * The four calls' recordings. P0: their cue file (a few KB of timings) is
+ * fetched as sound goes on, never in the page's first load, and the audio
+ * itself only as each call plays. A run asked for with sound on waits for
+ * the file (a moment); without it (a failed fetch) it is read-paced. A
+ * moment with no track, or one that no longer speaks its lines
+ * (demo-script.ts `speaks`), stays read-paced and silent.
+ */
+const CUES = lazyCues(
+  "home-demo-call",
+  (file) => Object.fromEntries(TOUR.map((id) => [id, cueIn(file, `home-demo/${id}`)])) as SpokenCalls,
+);
+
+/** The orb's voice while a line is said, off the recording's loudness: Ava's lines move it, the caller's only stir it. */
+function voiceOf(sp: "agent" | "caller", level: number) {
+  return sp === "agent" ? Math.min(0.86, 0.3 + 0.62 * level) : 0.15 + 0.08 * level;
+}
+
+/** Where a recording picks up: its pickup sound, else its first line. */
+const pickupOf = (cue: Cue) => cue.sfx.find((s) => s.kind === "pickup")?.start ?? cue.turns[0]?.start ?? 0;
+
+/** A Listen run (reduced motion): the call, the line being said, and where the call is up to. */
+type Listen = {
+  id: HomeMomentId;
+  /** The line on the stage, -1 before the greeting. */
+  line: number;
+  phase: "ringing" | "picked";
+  running: boolean;
+};
 
 const REST: StageFrame = {
   target: POSTER,
@@ -110,6 +175,24 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
   /** The reader's last pick: what Replay plays again. */
   const pickedRef = useRef<HomeMomentId | null>(null);
   const debounce = useRef(0);
+  /** The run under way, as built. */
+  const scriptRef = useRef<Script | null>(null);
+  /** It was built with sound on (on the recordings, where there are any). */
+  const spokenRef = useRef(false);
+  /** Its clock while it runs on recordings; null for a read-paced run, which its timeline plays itself. */
+  const clockRef = useRef<SpokenClock | null>(null);
+  const frameLoop = useRef(0);
+  /** The next run was asked for by the reader's sound press: its first call may take the sound from another stage. */
+  const pressFirst = useRef(false);
+  /** The next resume was the reader's Play: it may take the sound from another stage. */
+  const pressResume = useRef(false);
+  const listenClock = useRef<SpokenClock | null>(null);
+  const listenLoop = useRef(0);
+  /** Bumped by every Listen press (and its end): one waiting for the recordings' timings goes ahead only if it is still the last. */
+  const listenWait = useRef(0);
+  /** The sound press's rebuild, waiting for the frame after the press to be painted (see onSound). */
+  const soundFrame = useRef(0);
+  const soundTimer = useRef(0);
 
   const m = useStageMotion(sectionRef, { id: "demo" });
   const { kit, reduce, playing, paused, setPaused, interacted, markInteracted, tier } = m;
@@ -120,6 +203,33 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
   // so it starts for a reader parked on the heading or landing on /#demo, on laptops and phones.
   const stageSeen = useInView(stageRef, "0px 0px -15% 0px");
 
+  // The stage's voice. A run sounds only while the stage plays (the landing's focused stage, the
+  // tab visible, not paused by hand); a Listen run (reduced motion) while the stage is on screen.
+  const track = useVoiceTrack(VOICE_ID, { active: reduce ? stageSeen : playing });
+  const trackRef = useRef(track);
+  useLayoutEffect(() => {
+    trackRef.current = track;
+  });
+  // The recordings' timings are fetched as sound goes on (here or on any other stage).
+  const soundOn = track.on;
+  useEffect(() => {
+    if (soundOn) void CUES.load();
+  }, [soundOn]);
+  /** Bumped by every run asked for: a run waiting for the recordings' timings goes ahead only if it is still the last. */
+  const cueWait = useRef(0);
+  const voiceApi = useMemo<RunVoice>(
+    () => ({
+      play: (cue, at, o) => trackRef.current.play(cue, at, o),
+      pause: () => trackRef.current.pause(),
+      time: () => trackRef.current.time(),
+      audible: () => isAudible(VOICE_ID),
+      waiting: () => trackRef.current.waiting(),
+    }),
+    [],
+  );
+
+  /** A Listen run (reduced motion only): the call being played and the line it is on. */
+  const [listen, setListen] = useState<Listen | null>(null);
   /** The moment being dialled: the checked key (drawn filled) and the lit phrase of the sub. */
   const [target, setTarget] = useState<HomeMomentId>(POSTER);
   /** The room's light, the clock, the owner and every copy at rest. */
@@ -161,6 +271,45 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
     };
   });
 
+  // A run on recordings: every frame, the clock's time (the audio's while a call is heard) is
+  // the timeline's, and while a line is said the orb follows the recording's loudness.
+  const stopFrames = useCallback(() => {
+    cancelAnimationFrame(frameLoop.current);
+    frameLoop.current = 0;
+  }, []);
+  const runFrames = useCallback(() => {
+    if (frameLoop.current) return;
+    const frame = (now: number) => {
+      frameLoop.current = 0;
+      const clock = clockRef.current;
+      const tl = tlRef.current;
+      if (!clock || !tl) return;
+      const t = clock.tick(now);
+      tl.time(t);
+      const at = clock.clipAt(t);
+      const turn = at && turnAt(at.clip.cue, at.at);
+      if (at && turn && at.at <= turn.end) voice.current = voiceOf(turn.sp, envelopeAt(at.clip.cue, at.at));
+      if (clock.playing) frameLoop.current = requestAnimationFrame(frame);
+    };
+    frameLoop.current = requestAnimationFrame(frame);
+  }, []);
+
+  // As each call after the first starts: a run built with sound on while it is now off (or the
+  // other way round) is rebuilt from this call, so the calls still to come follow the sound as
+  // it is. The call under way when it changed finished on the schedule it was built on.
+  const onCall = useRef<(k: number) => void>(() => {});
+  useLayoutEffect(() => {
+    onCall.current = (k) => {
+      const script = scriptRef.current;
+      if (!script || spokenRef.current === (isSoundOn() && CUES.get() !== null)) return;
+      const ids = script.segs.slice(k).map((seg) => seg.id);
+      // Once the timeline has finished the update it is in: the rebuild kills it.
+      queueMicrotask(() => {
+        if (scriptRef.current === script) request({ kind: script.kind, ids, from: momentRef.current }, readerRun.current);
+      });
+    };
+  });
+
   // The call's words, not the array's identity: a refreshed server payload
   // hands down an equal but new array, which must not rebuild the stage.
   const sig = calls.map((call) => `${call.id}@${call.time}:${call.lines.map((l) => l.t).join("|")}`).join("/");
@@ -172,9 +321,24 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
     const root = sectionRef.current;
     if (!kit || reduce || !root) return;
     const { gsap } = kit;
-    runner.current = (req) => {
+    const run = (req: RunRequest) => {
+      // Sound on, and the recordings' timings not here yet: the run waits for them (a moment), the
+      // one under way carrying on meanwhile. A newer request, or the runner torn down, drops it.
+      const ask = ++cueWait.current;
+      if (isSoundOn() && !CUES.settled()) {
+        void CUES.load().then(() => {
+          if (ask === cueWait.current && runner.current === run) run(req);
+        });
+        return;
+      }
       tlRef.current?.kill();
-      const script = scriptFor(calls, { ...req, from: momentRef.current });
+      clockRef.current?.stop();
+      clockRef.current = null;
+      stopFrames();
+      // Sound on: the run is built on the recordings, whether or not this stage gets to be heard.
+      const cues = isSoundOn() ? CUES.get() : null;
+      const spoken = cues !== null;
+      const script = scriptFor(calls, { ...req, from: momentRef.current }, cues ?? undefined);
       frameRef.current = { ...frameRef.current, done: false };
       // Cleared at the start, so the same call ending again is a change the reader hears.
       setAnnounce("");
@@ -187,11 +351,24 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
         voice,
         digitPos: digitPos.current,
         onFrame: (f) => onFrame.current(f),
+        onCall: (k) => onCall.current(k),
       });
+      scriptRef.current = script;
+      spokenRef.current = spoken;
+      const clips = script.segs.flatMap((seg) => (seg.cue ? [{ at: seg.T, cue: seg.cue }] : []));
+      clockRef.current =
+        tlRef.current && clips.length
+          ? new SpokenClock(clips, script.total, voiceApi, {
+              press: readerRun.current,
+              pressFirst: pressFirst.current || readerRun.current,
+            })
+          : null;
+      pressFirst.current = false;
       setDone(false);
       setLive(true);
       setRunKey((k) => k + 1);
     };
+    runner.current = run;
     const waiting = pending.current;
     pending.current = null;
     if (waiting) runner.current(waiting);
@@ -200,6 +377,10 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
       runner.current = null;
       tlRef.current?.kill();
       tlRef.current = null;
+      clockRef.current?.stop();
+      clockRef.current = null;
+      scriptRef.current = null;
+      stopFrames();
       gsap.set(gsap.utils.toArray<HTMLElement>(".home-demo-anim, .home-demo-fx", root), {
         clearProps: "transform,opacity,visibility,willChange",
       });
@@ -258,18 +439,174 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
     return () => window.clearTimeout(id);
   }, [started, done, interacted, kit, showing, reduce]);
 
-  // Plays while it has the stage and is not paused by hand.
+  // Plays while it has the stage and is not paused by hand. A run on recordings is never
+  // played: its clock runs (and its call sounds) instead, and sets the timeline's time.
   useEffect(() => {
     const tl = tlRef.current;
     if (!tl || done) return;
-    if (playing && started) tl.play();
-    else tl.pause();
-  }, [playing, started, done, runKey]);
+    const clock = clockRef.current;
+    const go = playing && started;
+    if (!clock) {
+      if (go) tl.play();
+      else tl.pause();
+      return;
+    }
+    tl.pause();
+    if (go) {
+      clock.start(performance.now(), pressResume.current || undefined);
+      runFrames();
+    } else {
+      clock.stop();
+      stopFrames();
+    }
+    pressResume.current = false;
+  }, [playing, started, done, runKey, runFrames, stopFrames]);
 
-  useEffect(() => () => window.clearTimeout(debounce.current), []);
+  useEffect(
+    () => () => {
+      window.clearTimeout(debounce.current);
+      cancelAnimationFrame(soundFrame.current);
+      window.clearTimeout(soundTimer.current);
+    },
+    [],
+  );
+
+  /* ─── Listen (reduced motion and the still tier) ─────────────────── *
+   * Nothing plays by itself. Listen plays the call on screen from its
+   * first ring: the stage swaps each line in as it is said (no words
+   * walking in, no tweens), the line being said is the large one, and
+   * the finished frame and its outcome come back as the call ends. */
+  const stopListenFrames = useCallback(() => {
+    cancelAnimationFrame(listenLoop.current);
+    listenLoop.current = 0;
+  }, []);
+  const endListen = useCallback(() => {
+    listenWait.current++;
+    listenClock.current?.stop();
+    listenClock.current = null;
+    stopListenFrames();
+    setListen(null);
+  }, [stopListenFrames]);
+  const runListenFrames = (id: HomeMomentId) => {
+    if (listenLoop.current) return;
+    const frame = (now: number) => {
+      listenLoop.current = 0;
+      const clock = listenClock.current;
+      if (!clock) return;
+      const t = clock.tick(now);
+      if (clock.done) {
+        endListen();
+        setAnnounce(announceFor(id));
+        return;
+      }
+      const cue = clock.clips[0].cue;
+      const line = turnAt(cue, t)?.i ?? -1;
+      const phase = t >= pickupOf(cue) ? "picked" : "ringing";
+      setListen((l) => (l && (l.line !== line || l.phase !== phase) ? { ...l, line, phase } : l));
+      if (clock.playing) listenLoop.current = requestAnimationFrame(frame);
+    };
+    listenLoop.current = requestAnimationFrame(frame);
+  };
+  /** Plays the call on screen, or carries on with the one paused; called inside the press. */
+  const listenTo = (id: HomeMomentId) => {
+    const held = listenClock.current;
+    if (held && listen?.id === id) {
+      held.start(performance.now(), true);
+      setListen({ ...listen, running: true });
+      runListenFrames(id);
+      return;
+    }
+    const cues = CUES.get();
+    if (!cues) {
+      // The recordings' timings are on their way (sound went on in this press): the call plays once they are here.
+      const ask = ++listenWait.current;
+      void CUES.load().then((c) => {
+        if (c && ask === listenWait.current) listenLater.current(id);
+      });
+      return;
+    }
+    const cue = cues[id];
+    if (!speaks(byId[id], cue)) return;
+    endListen();
+    const clock = new SpokenClock([{ at: 0, cue }], cue.dur, voiceApi, { press: true });
+    listenClock.current = clock;
+    setAnnounce("");
+    setListen({ id, line: -1, phase: "ringing", running: true });
+    clock.start(performance.now());
+    runListenFrames(id);
+  };
+  const listenLater = useRef(listenTo);
+  useLayoutEffect(() => {
+    listenLater.current = listenTo;
+  });
+  const pauseListen = useCallback(() => {
+    listenWait.current++;
+    listenClock.current?.stop();
+    stopListenFrames();
+    setListen((l) => (l && l.running ? { ...l, running: false } : l));
+  }, [stopListenFrames]);
+  const onListen = () => {
+    if (listen?.running) return pauseListen();
+    // The press is the gesture that lets audio play, and turns sound on for the visit.
+    unlockFromGesture();
+    listenTo(target);
+  };
+  // Off screen, a Listen run pauses (Listen carries it on); without reduced motion there is none.
+  useEffect(() => {
+    if (!stageSeen) pauseListen();
+  }, [stageSeen, pauseListen]);
+  useEffect(() => {
+    if (!reduce) endListen();
+  }, [reduce, endListen]);
+  useEffect(() => () => endListen(), [endListen]);
+
+  /**
+   * The sound control. On: the call under way starts again from its
+   * first ring on its recording (or the next call, once this one has
+   * ended); at rest, the call on screen plays. Off: the engine has
+   * already silenced the stage, and the run finishes on its clock.
+   */
+  const onSound = (on: boolean) => {
+    cancelAnimationFrame(soundFrame.current);
+    window.clearTimeout(soundTimer.current);
+    soundFrame.current = 0;
+    // This stage's own press: it takes the landing's focus (it plays, and no other stage speaks).
+    m.pinFocus(on);
+    if (!on) return;
+    if (reduce) return listenTo(target);
+    setPaused(false);
+    pressFirst.current = true;
+    // The click itself only turns sound on (SoundButton unlocks the element inside it). Rebuilding
+    // the run on the recordings (a new script and timeline) is the heavy part: it runs once the
+    // frame after the press has been painted, so the press answers at once and is not one long
+    // task. The run plays on the audio's clock from its start, so nothing is lost by the wait.
+    soundFrame.current = requestAnimationFrame(() => {
+      soundFrame.current = 0;
+      soundTimer.current = window.setTimeout(restartSpoken, 0);
+    });
+  };
+  /** Sound just turned on: the call under way starts again on its recording (or the call on screen plays). */
+  const restartSpoken = () => {
+    if (!isSoundOn()) return;
+    const script = scriptRef.current;
+    const tl = tlRef.current;
+    if (live && script && tl && script.segs.length) {
+      const t = clockRef.current ? clockRef.current.t : tl.time();
+      let k = 0;
+      script.segs.forEach((seg, i) => {
+        if (t >= seg.T) k = i;
+      });
+      if (t >= script.segs[k].end && k + 1 < script.segs.length) k++;
+      request({ kind: script.kind, ids: script.segs.slice(k).map((seg) => seg.id), from: momentRef.current }, readerRun.current);
+      return;
+    }
+    setStarted(true);
+    request({ kind: "single", ids: [target], from: momentRef.current }, true);
+  };
 
   /** Reduced motion: the moment's finished frame, at once, and its outcome spoken. */
   const jump = (id: HomeMomentId) => {
+    endListen();
     frameRef.current = { ...REST, target: id, moment: id };
     momentRef.current = id;
     digitPos.current = [...byId[id].digits];
@@ -302,6 +639,8 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
       // under way holds still meanwhile, so it cannot light a key of its own.
       if (via === "key" && !reduce) {
         tlRef.current?.pause();
+        clockRef.current?.stop();
+        stopFrames();
         debounce.current = window.setTimeout(() => dial(id), 450);
       } else dial(id);
     },
@@ -326,14 +665,35 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
     // was pressing into Pause: the press asked for the tour, so it plays on,
     // theirs now (no loop after it).
     if (!paused && performance.now() - autoAt.current < TURNED_MS) return;
+    // Play after Pause is the reader's own press: the call may take the sound back.
+    if (paused) pressResume.current = true;
     setPaused(!paused);
   };
 
   const control: "play" | "pause" | "replay" =
     reduce || (started && done) ? "replay" : !started || paused ? "play" : "pause";
+  // Reduced motion: the transport is Listen, for the call on screen, when it has a recording.
+  const loadedCues = CUES.get();
+  const transport = reduce
+    ? {
+        icon: listen?.running ? ("pause" as const) : ("listen" as const),
+        label: listen?.running ? c.controls.pause : c.controls.listen,
+        onClick: onListen,
+        // Until the timings are here (sound off) every call is offered: each has its recording.
+        disabled: loadedCues !== null && !speaks(byId[target], loadedCues[target]),
+      }
+    : { icon: control, label: c.controls[control], onClick: onTransport, disabled: false };
   const L = MOMENT_LIGHTS[moment];
   const now = byId[moment];
-  const booked = moment === "night" && ended;
+  /** The call a Listen run is playing, if it is the one on screen; at rest, null. */
+  const heard = listen && listen.id === moment ? listen : null;
+  const booked = moment === "night" && ended && !heard;
+  /** The rows on screen at rest are the call's last two lines; during a Listen run, the line being said and the one before. */
+  const lineOn = (call: HomeCall, i: number, row: "cur" | "prev") => {
+    if (call.id !== moment) return false;
+    const last = heard ? heard.line : call.lines.length - 1;
+    return i === (row === "cur" ? last : last - 1);
+  };
   // The caller's lean toward blue is for the shader only: the CSS stand-in would cut to it.
   const shaderColors = listening ? L.listen : L.orb;
   // The orb moves only while a call does.
@@ -479,7 +839,7 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
                 <span
                   key={p}
                   data-phase={p}
-                  data-on={p === "ended" || undefined}
+                  data-on={p === (heard ? heard.phase : "ended") || undefined}
                   className={cn(
                     "home-demo-anim home-demo-tone inline-flex items-center gap-2 text-(--d-dim) [grid-area:1/1]",
                     TYPE.label,
@@ -528,7 +888,7 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
                       data-row="prev"
                       data-call={call.id}
                       data-i={i}
-                      data-on={(call.id === moment && i === call.lines.length - 2) || undefined}
+                      data-on={lineOn(call, i, "prev") || undefined}
                       className="home-demo-anim text-[13px] leading-[18px] text-balance [grid-area:1/1]"
                     >
                       <Line line={line} speaker={c.speakers[line.sp]} small />
@@ -544,7 +904,7 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
                       data-row="cur"
                       data-call={call.id}
                       data-i={i}
-                      data-on={(call.id === moment && i === call.lines.length - 1) || undefined}
+                      data-on={lineOn(call, i, "cur") || undefined}
                       className="home-demo-anim text-[15px] leading-[22px] font-medium text-balance [grid-area:1/1] md:text-[19px] md:leading-[28px]"
                     >
                       <Line line={line} speaker={c.speakers[line.sp]} />
@@ -571,7 +931,7 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
                             key={`${id}-${when}`}
                             data-owner={id}
                             data-when={when}
-                            data-on={(id === moment && when === "after") || undefined}
+                            data-on={(id === moment && when === (heard ? "before" : "after")) || undefined}
                             className="home-demo-anim [grid-area:1/1]"
                           >
                             <p
@@ -597,7 +957,7 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
                     <span
                       key={call.id}
                       data-pill={call.id}
-                      data-on={call.id === moment || undefined}
+                      data-on={(call.id === moment && !heard) || undefined}
                       className={cn("home-demo-anim [grid-area:1/1]", PILL, PILL_TONE[call.outcome])}
                     >
                       <span aria-hidden className={cn("relative size-1.5 shrink-0 rounded-full", DOT[call.outcome])}>
@@ -616,18 +976,29 @@ export function Demo({ calls }: { calls: HomeCall[] }) {
             </div>
           </div>
 
-          {/* The transport, and what the stage is: a made-up business, with no audio. */}
-          <div className="mt-5 grid grid-cols-[40px_minmax(0,1fr)] items-center gap-x-4 md:mt-6">
+          {/* The transport, the sound, and what the stage is: a made-up business, voiced by generated voices. */}
+          <div className="mt-5 grid grid-cols-[40px_40px_minmax(0,1fr)] items-center gap-x-4 md:mt-6">
             <RoundButton
-              icon={control}
-              label={c.controls[control]}
-              onClick={onTransport}
-              disabled={reduce}
+              icon={transport.icon}
+              label={transport.label}
+              onClick={transport.onClick}
+              disabled={transport.disabled}
               tone={L.tone === "night" ? "dark" : "light"}
             />
-            <div className="flex min-w-0 flex-col gap-1 md:flex-row md:justify-between md:gap-4">
-              <p className={CAPTION}>{c.stageLabel}</p>
-              <p className={CAPTION}>{c.caption}</p>
+            {/* Its note is the caption beside it, which says the voices are generated. */}
+            <SoundButton
+              variant="round"
+              tone={L.tone === "night" ? "dark" : "light"}
+              caption="none"
+              describedBy="demo-voices"
+              onChange={onSound}
+            />
+            {/* The sound control's caption first, beside it; then what the stage is. */}
+            <div className="flex min-w-0 flex-col gap-1 lg:flex-row lg:justify-between lg:gap-4">
+              <p id="demo-voices" className={CAPTION}>
+                {c.caption}
+              </p>
+              <p className={cn(CAPTION, "lg:shrink-0 lg:text-right")}>{c.stageLabel}</p>
             </div>
           </div>
         </div>

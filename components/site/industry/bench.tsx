@@ -1,10 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
+import type { Cue, CueFile } from "@/lib/audio/cue-types";
+import { isSoundOn, unlockFromGesture } from "@/components/site/audio/engine";
+import { useSounding, useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import type { Trade } from "@/lib/pages/industries/schema";
+import { TRACK, benchDwell, lineCue, saidBy, within } from "@/lib/pages/industries/spoken-timing";
 import { cn } from "@/lib/utils";
 import { Eyebrow, Frame, SectionTitle } from "../product/primitives";
 import { useInView, usePrefersReducedMotion } from "../product/timing";
+import { StageSound, useStageCues } from "./first-question";
 import { Gate, ToolName } from "./parts";
 import { markProved } from "./proved";
 
@@ -22,9 +27,50 @@ import { markProved } from "./proved";
  * these pages. What changes per trade is which one a sentence lands on,
  * and that is a more convincing claim than pretending each trade gets a
  * different machine.
+ *
+ * SOUND. Each chip can be heard as a caller says it (AI-generated
+ * voices, lib/audio/cues/industry/bench-intents/<slug>.json, fetched only once
+ * sound is on and the bench is a screen away). With sound on the
+ * autoplay says its four chips, and each holds for max(2.6 s, its line
+ * + 0.7 s) on the clip's own clock before the next; a chip without a
+ * track holds for the read pace, silently. A pick says the picked chip;
+ * the sound pill, turned on, says the chip on screen (mid-autoplay, the
+ * rest of the autoplay is then said too). Reduced motion and the still
+ * tier never autoplay sound: a Listen pill says the chip on screen.
+ * Off screen the autoplay waits, and carries on when it is back; sound
+ * turned off or taken by another section's press lets it finish on the
+ * same clock, silently. Nothing here is announced chip by chip, so there
+ * is no live region to quiet while a chip is said.
  * ------------------------------------------------------------------ */
 
 const CYCLE_MS = 2600;
+
+/** The section's claim on the site's one sound (components/site/audio/engine.ts). */
+const VOICE_ID = "industry-bench-intents";
+/** With sound on as the autoplay starts, how long it waits for its cue file before it reads instead. */
+const CUE_WAIT_MS = 1200;
+/** A frame gap longer than this (a hidden tab) does not count towards a chip's rest. */
+const MAX_FRAME_S = 0.1;
+
+/** The autoplay, said: the chip on screen and how far through its hold it is. */
+type SpokenRun = {
+  chip: number;
+  /** Autoplay steps still to come after this chip. */
+  left: number;
+  cue: Cue | undefined;
+  /** The clip runs on the track's clock (heard, or silently after a refusal); else on `wall`. */
+  played: boolean;
+  /** Seconds since the chip came up, on a plain clock that stops off screen. */
+  wall: number;
+  /** Where its line has been said; from there the hold runs on the plain clock. */
+  end: number;
+  /** How long the chip holds, from the start of its track. */
+  dwell: number;
+  /** Seconds rested since the line was said; null while it is being said. */
+  rested: number | null;
+  /** It left the screen mid-line: the line carries on when it is back. */
+  away: boolean;
+};
 
 export function Bench({ trade }: { trade: Trade }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -33,6 +79,29 @@ export function Bench({ trade }: { trade: Trade }) {
 
   const [active, setActive] = useState(0);
   const [touched, setTouched] = useState(false);
+
+  /* ── The voice ───────────────────────────────────────────────────── */
+
+  /** A screen away: with sound on, the chips' cues are fetched now, so the first one is said on time. */
+  const near = useInView(ref, "100% 0px");
+  const track = useVoiceTrack(VOICE_ID, { active: inView });
+  const trackRef = useRef(track);
+  useEffect(() => {
+    trackRef.current = track;
+  });
+  const { fileRef, load } = useStageCues("industry-bench-intents", trade.slug, track.on && near);
+  const playing = useSounding() && track.audible;
+  /** The autoplay, said. Null while it reads silently, and once it is over. */
+  const spoken = useRef<SpokenRun | null>(null);
+  /** The said autoplay is under way: its frame loop runs while the bench is on screen. */
+  const [speaking, setSpeaking] = useState(false);
+  /** The silent autoplay is under way, and how many of its three steps it has taken. */
+  const reading = useRef(false);
+  const steps = useRef(0);
+  /** The latest press that asked for a chip's line: a slower load for an older one must not play over it. */
+  const asked = useRef(0);
+  /** The reader has picked a chip: an autoplay still waiting for its cues must not start after that. */
+  const picked = useRef(false);
 
   // Plays three, then stops on the third. A rail that cycles forever
   // reads as a screensaver and stops being something you operate.
@@ -44,17 +113,168 @@ export function Bench({ trade }: { trade: Trade }) {
   // Unmount only — see the note in first-question.tsx.
   useEffect(() => () => window.clearInterval(cycle.current), []);
 
-  useEffect(() => {
-    if (!inView || touched || still || started.current) return;
-    started.current = true;
-    let step = 0;
+  /** The autoplay at read pace, as it always ran: the steps still to come, one a beat. */
+  function readOn(from: number) {
+    let step = from;
+    steps.current = step;
+    reading.current = true;
     cycle.current = window.setInterval(() => {
       step += 1;
-      if (step >= 3) window.clearInterval(cycle.current);
+      steps.current = step;
+      if (step >= 3) {
+        window.clearInterval(cycle.current);
+        reading.current = false;
+      }
       stepped.current = true;
       setActive((a) => (a + 1) % Math.min(trade.intents.length, 16));
     }, CYCLE_MS);
+  }
+
+  /** Chip `k`'s line, if its track says it as written. */
+  const chipCue = (file: CueFile | null, k: number) =>
+    lineCue(file, TRACK.intent(trade.slug, k), trade.intents[k]?.chip ?? "");
+
+  /** The autoplay, said, from chip `chip` with `left` steps to come; the first chip as a press when one started it. */
+  function speakOn(file: CueFile | null, chip: number, left: number, press: boolean) {
+    const cue = chipCue(file, chip);
+    const played = !!cue && trackRef.current.play(cue, 0, { press });
+    spoken.current = {
+      chip,
+      left,
+      cue,
+      played,
+      wall: 0,
+      end: cue ? saidBy(cue) : 0,
+      dwell: benchDwell(cue),
+      rested: null,
+      away: false,
+    };
+    setSpeaking(true);
+  }
+
+  /** The autoplay starts, said if sound is on and the cues are here in time, else read as it always was. */
+  const startAutoplay = useEffectEvent(() => {
+    if (!isSoundOn() || track.listen) return readOn(0);
+    void within(load(), CUE_WAIT_MS).then((file) => {
+      // The reader picked a chip meanwhile: the autoplay is over before it began.
+      if (picked.current || spoken.current || reading.current) return;
+      if (file && isSoundOn()) speakOn(file, 0, 3, false);
+      else readOn(0);
+    });
+  });
+
+  useEffect(() => {
+    if (!inView || touched || still || started.current) return;
+    started.current = true;
+    startAutoplay();
   }, [inView, touched, still, trade.intents.length]);
+
+  /** The said autoplay moves on to its next chip, or ends on the one it is on. */
+  const nextChip = useEffectEvent(() => {
+    const run = spoken.current;
+    if (!run) return;
+    if (run.left <= 0) {
+      spoken.current = null;
+      setSpeaking(false);
+      return;
+    }
+    const next = (run.chip + 1) % Math.min(trade.intents.length, 16);
+    stepped.current = true;
+    setActive(next);
+    speakOn(fileRef.current, next, run.left - 1, false);
+  });
+
+  // The said autoplay, frame by frame: the line on its clip's clock, then the rest of the hold.
+  useEffect(() => {
+    if (!speaking || !inView) return;
+    const run = spoken.current;
+    if (run?.away) {
+      run.away = false;
+      // Back on screen mid-line: it carries on from where it was.
+      if (run.cue && run.played && run.rested === null && trackRef.current.time() < run.end) {
+        trackRef.current.play(run.cue);
+      }
+    }
+    let frame = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const r = spoken.current;
+      if (!r) return;
+      const dt = Math.min(MAX_FRAME_S, Math.max(0, (now - last) / 1000));
+      last = now;
+      r.wall += dt;
+      if (r.rested === null) {
+        const at = r.played ? trackRef.current.time() : r.wall;
+        if (!r.cue || at >= r.end) r.rested = Math.max(0, at - r.end);
+      } else {
+        r.rested += dt;
+      }
+      if (r.rested !== null && r.end + r.rested >= r.dwell) {
+        nextChip();
+        if (!spoken.current) return;
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(frame);
+      if (spoken.current) spoken.current.away = true;
+    };
+  }, [speaking, inView]);
+
+  /** Says chip `k`, as a press (it wins the sound, and plays under reduced motion). */
+  function sayChip(k: number) {
+    const ask = ++asked.current;
+    const say = (file: CueFile | null) => {
+      if (ask !== asked.current) return;
+      const cue = chipCue(file, k);
+      // A chip with no track is silence: whatever this section was saying stops with the pick.
+      if (cue) trackRef.current.play(cue, 0, { press: true });
+      else trackRef.current.pause();
+    };
+    const file = fileRef.current;
+    if (file) say(file);
+    else void load().then(say);
+  }
+
+  /** The sound pill, inside its click: on, the chip on screen is said, and an autoplay under way carries on said. */
+  function onSound(on: boolean) {
+    if (!on) return;
+    const run = spoken.current;
+    if (run) {
+      // Said silently since sound went off: the chip on screen starts again, heard, and the hold with it.
+      const cue = chipCue(fileRef.current, run.chip);
+      run.played = !!cue && trackRef.current.play(cue, 0, { press: true });
+      run.cue = cue;
+      run.wall = 0;
+      run.rested = null;
+      return;
+    }
+    if (reading.current && !track.listen) {
+      // Mid-autoplay: the rest of it is said, from the chip on screen.
+      window.clearInterval(cycle.current);
+      reading.current = false;
+      const left = 3 - steps.current;
+      const chip = active;
+      const file = fileRef.current;
+      if (file) speakOn(file, chip, left, true);
+      else
+        void load().then((f) => {
+          if (picked.current || spoken.current || reading.current) return;
+          if (f) speakOn(f, chip, left, true);
+          else readOn(3 - left);
+        });
+      return;
+    }
+    sayChip(active);
+  }
+
+  /** Listen (reduced motion, the still tier): says the chip on screen, turning sound on; pressed again, stops. */
+  function onListen() {
+    if (playing) return track.pause();
+    unlockFromGesture();
+    sayChip(active);
+  }
 
   // On a phone the rail scrolls sideways, and the autoplay can land on a
   // chip past its edge. Bring that chip in, by scrolling the rail alone:
@@ -80,6 +300,14 @@ export function Bench({ trade }: { trade: Trade }) {
     setTouched(true);
     setActive(i);
     markProved("bench");
+    // Said or read, the autoplay is over; with sound on, the picked chip is said.
+    picked.current = true;
+    reading.current = false;
+    if (spoken.current) {
+      spoken.current = null;
+      setSpeaking(false);
+    }
+    if (isSoundOn()) sayChip(i);
   }
 
   const intents = trade.intents.slice(0, 16);
@@ -146,6 +374,7 @@ export function Bench({ trade }: { trade: Trade }) {
                   </p>
                 )}
               />
+              <StageSound className="mt-4" listen={track.listen} playing={playing} onSound={onSound} onListen={onListen} />
             </div>
 
             <div>

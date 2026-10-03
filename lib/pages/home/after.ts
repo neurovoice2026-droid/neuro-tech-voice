@@ -22,6 +22,8 @@ export const HOME_AFTER = {
     wait: "Wait",
   } satisfies Record<ActionKind, string>,
   link: { label: "How workflows work", href: "/product/integrations" }, // NEW label
+  // NEW (PLAN §7). Shown under the keyword scene's transcript line while sound is on: it can be heard.
+  excerpt: "Sample excerpt · AI-generated voice",
   google: {
     title: INT_GOOGLE.title,
     // The source's two sentences, then the plan the steps need (NEW),

@@ -47,7 +47,7 @@ export function Trades({ data }: { data: HomeTrades }) {
             </IntentLink>
           }
         />
-        <TradesWindow data={data} copy={{ group: t.group, cells: t.cells, sample: t.sample }} />
+        <TradesWindow data={data} copy={{ group: t.group, cells: t.cells, sample: t.sample, hear: t.hear }} />
       </Frame>
     </section>
   );

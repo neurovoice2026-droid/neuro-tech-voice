@@ -3,6 +3,7 @@
 import {
   Fragment,
   useEffect,
+  useEffectEvent,
   useRef,
   useState,
   type CSSProperties,
@@ -11,12 +12,18 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
+import { cueIn, loadCueFile, type Cue, type CueFile, type CueTurn } from "@/lib/audio";
 import type { CAA_HERO, SheetLine, TraceCaller } from "@/lib/pages/custom-ai-agents";
 import { cn } from "@/lib/utils";
+import { envelopeAt, wordsShownAt } from "@/components/site/audio/cue";
+import { isSoundOn } from "@/components/site/audio/engine";
+import { armFollow, showSaid } from "@/components/site/audio/show-said";
+import { SoundButton } from "@/components/site/audio/sound-button";
+import { useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { Eyebrow, PillLink, SectionTitle } from "@/components/site/product/primitives";
 import { useInView, usePrefersReducedMotion } from "@/components/site/product/timing";
 import { Gate, ToolName } from "@/components/site/industry/parts";
-import { MadeUp, Node, Stack, fill } from "./parts";
+import { MadeUp, Node, SaidWords, SayingTick, Stack, fill, levelOf, voicedLines } from "./parts";
 import { markProved } from "./proved";
 
 /* ------------------------------------------------------------------ *
@@ -131,6 +138,32 @@ import { markProved } from "./proved";
  * order instead. The pick itself is instant and honest — `sel` moves to
  * the line the call ends on at once, the claim is proved, the outcome is
  * announced — and the motion only shows the way there.
+ *
+ * SOUND (off unless the visitor turns it on with the control by the
+ * sample callers; nothing is fetched before). The greeting can be heard,
+ * and the transfer line: an AI-generated voice reading line 1's quote and
+ * the landlord's outcome (lib/audio/cues/caa-hero-greeting-transfer.json),
+ * never a recorded call. Nothing here plays by itself; every sound is a
+ * press, so reduced motion plays it too.
+ *   · Picking line 1 says the greeting, and the caption's quote shows each
+ *     word as it is said (with motion; the words are only hidden, so the
+ *     reserved caption moves nothing), the margin tick beside it.
+ *   · Ringing a sample caller says the greeting as the call rings in. The
+ *     greeting's clock is the master: the greeting node rings on its first
+ *     word, and the bead waits on it, swelling with the voice, until it
+ *     has been said; then the call goes on through the flow as drawn. The
+ *     landlord's call is put through: the transfer line is said as Dan's
+ *     node is reached, and the outcome that quotes it lands on its first
+ *     word. Below lg the rows ring the same way, without a bead.
+ *   · Under reduced motion a ring shows its outcome at once, as before,
+ *     and the greeting (then, for the landlord, the transfer) is heard.
+ *   · The control itself is a press: it rings the checked caller again,
+ *     heard, or else says line 1's greeting (selecting it, as a pick
+ *     would, but proving nothing).
+ *   · Another pick stops the voice. Off screen it pauses until the cover
+ *     is back. Sound turned off carries the call on in silence on the
+ *     same clock.
+ * With sound off none of this runs and the cover is exactly as above.
  * ------------------------------------------------------------------ */
 
 type Phase = "idle" | "reading" | "drawn" | "settled";
@@ -211,6 +244,48 @@ const P_RING_STAGGER = 260;
 const P_TINT_MS = 400;
 /** Below lg, when the list has to be brought up first: the rings wait for the scroll. */
 const SCROLL_LEAD = 420;
+
+/** This section's claim on the site's one sound (components/site/audio/engine.ts). */
+const VOICE_ID = "caa-hero";
+/** Heard, the waiting bead swells with the voice by up to this much. */
+const BEAD_SWELL = 0.45;
+
+/** A line said: its track and its one turn. */
+type Said = { cue: Cue; turn: CueTurn };
+/** The cover's voice: the greeting (line 1's quote), and the transfer line (the landlord's outcome), when it fits. */
+export type HeroVoice = { greeting: Said; transfer: Said | null };
+
+/** One agent line, if `cue` says it as written. */
+function agentLine(cue: Cue | null | undefined, text: string): Said | null {
+  const turns = voicedLines(cue, [{ who: "agent", text }]);
+  return cue && turns && cue.turns.length === 1 ? { cue, turn: turns[0] } : null;
+}
+
+/** The cover's voice from its tracks; null without a greeting that says line 1's quote. */
+export function heroVoice(
+  greeting: Cue | null | undefined,
+  transfer: Cue | null | undefined,
+  text: { greeting: string; transfer: string },
+): HeroVoice | null {
+  const g = agentLine(greeting, text.greeting);
+  return g ? { greeting: g, transfer: agentLine(transfer, text.transfer) } : null;
+}
+
+/**
+ * A heard trace, once the greeting has been said: when each stop after
+ * it is reached and when the call is over, in ms from that moment. At lg
+ * it is the bead's own route from the greeting node (its fade-in lead
+ * taken off: the bead is already there); below lg the rows ring in turn,
+ * the first straight away. Entry 0 (the greeting, rung already) is unused.
+ */
+export function spokenTraceTimes(c: TraceCaller, wide: boolean): { arrive: number[]; total: number } {
+  if (wide) {
+    const { arrive, total } = beadRoute(c);
+    return { arrive: arrive.map((a) => a - TRACE_IN), total: total - TRACE_IN };
+  }
+  const arrive = c.rings.map((_, k) => (k - 1) * P_RING_STAGGER);
+  return { arrive, total: arrive[arrive.length - 1] };
+}
 
 /** cubic-bezier(x1, y1, x2, y2) as a function, to pace the bead in JS
  *  (WAAPI can ease a whole animation, not each leg of one). */
@@ -391,6 +466,36 @@ export function Hero({ data }: { data: Data }) {
   // refused (onKey focuses the chip it asked to check).
   const liftUntil = useRef(0);
 
+  /* ---------- sound (see the header) ---------- */
+  /** The voice playing is a press here: it takes the sound. Cleared when another stage's press takes it. */
+  const pressed = useRef(false);
+  const track = useVoiceTrack(VOICE_ID, {
+    active: inView,
+    onPreempt: () => {
+      pressed.current = false;
+    },
+  });
+  const trackRef = useRef(track);
+  const inViewRef = useRef(inView);
+  useEffect(() => {
+    trackRef.current = track;
+    inViewRef.current = inView;
+  });
+  /** The cover's voice: undefined until fetched (once sound is on); null without a greeting that fits. */
+  const [voice, setVoice] = useState<HeroVoice | null | undefined>(undefined);
+  /** With motion, how many words of line 1's quote the greeting has said; null shows them all. */
+  const [quoteSaid, setQuoteSaid] = useState<number | null>(null);
+  /** The line on screen the voice is saying, for the margin tick: line 1's quote, or the landlord's outcome. */
+  const [voicing, setVoicing] = useState<"quote" | "outcome" | null>(null);
+  /** A press made before the voice had arrived: ring caller n, or (null) say the greeting. */
+  const pending = useRef<number | null | undefined>(undefined);
+  /** The clip being followed, and how to give it up; for carrying on when the cover is back on screen. */
+  const clip = useRef<{ cue: Cue; abandon: () => void } | null>(null);
+  const voiceRaf = useRef(0);
+  /** A voice's frame loop, held while the cover is off screen (its clock stands still), to run again when it is back. */
+  const heldFrame = useRef<(() => void) | null>(null);
+  const away = useRef(false);
+
   // Cancel only on unmount. A cleanup on every `inView` change would kill
   // the chain for a reader who scrolled away inside three seconds, and
   // `started` would then refuse to restart it — the figure would stop
@@ -400,6 +505,7 @@ export function Hero({ data }: { data: Data }) {
       timers.current.forEach(window.clearTimeout);
       beats.current.forEach(window.clearTimeout);
       anims.current.forEach((a) => a.cancel());
+      cancelAnimationFrame(voiceRaf.current);
     },
     [],
   );
@@ -433,6 +539,77 @@ export function Hero({ data }: { data: Data }) {
     beats.current = [];
     anims.current.forEach((a) => a.cancel());
     anims.current = [];
+    hush();
+  }
+
+  /**
+   * The voice's frame loop, one frame on. Off screen the voice is paused
+   * and its clock stands still, so the loop waits (no frames) and runs
+   * again when the cover is back (the effect on inView below).
+   */
+  function nextFrame(frame: () => void) {
+    if (!inViewRef.current) {
+      voiceRaf.current = 0;
+      heldFrame.current = frame;
+      return;
+    }
+    voiceRaf.current = requestAnimationFrame(frame);
+  }
+
+  /** Stop any voice and what follows it: the clip, the frame loop, the bead's swell, the tick. */
+  function hush() {
+    cancelAnimationFrame(voiceRaf.current);
+    voiceRaf.current = 0;
+    heldFrame.current = null;
+    if (clip.current) trackRef.current.pause();
+    clip.current = null;
+    const root = ref.current;
+    const dot = root?.querySelector("[data-caa-bead]")?.firstElementChild;
+    if (dot instanceof HTMLElement) dot.style.removeProperty("scale");
+    root?.style.removeProperty("--caa-level");
+    setQuoteSaid(null);
+    setVoicing(null);
+  }
+
+  /** The voice's level, for the margin tick (with motion only; under reduced motion the tick is still). */
+  function level(cue: Cue, t: number) {
+    if (!still) ref.current?.style.setProperty("--caa-level", String(levelOf(envelopeAt(cue, t))));
+  }
+
+  /**
+   * Line 1, said: the greeting, its quote's words showing as they are
+   * spoken (with motion). True when it plays; nothing for any other line.
+   * `after` runs once the greeting has been said (or given up).
+   */
+  function sayQuote(i: number, v = voice, after?: () => void) {
+    if (lines[i].id !== "greet" || !v || !isSoundOn()) return false;
+    const t = trackRef.current;
+    const { cue, turn } = v.greeting;
+    if (!t.play(cue, 0, { press: true })) return false;
+    pressed.current = true;
+    const words = !still;
+    setQuoteSaid(words ? 0 : null);
+    setVoicing("quote");
+    clip.current = {
+      cue,
+      abandon: () => {
+        hush();
+        after?.();
+      },
+    };
+    const frame = () => {
+      const now = t.time();
+      if (words) setQuoteSaid(wordsShownAt(turn, now));
+      level(cue, now);
+      if (now >= turn.end || now >= cue.dur) {
+        clip.current = null;
+        hush();
+        return after?.();
+      }
+      nextFrame(frame);
+    };
+    nextFrame(frame);
+    return true;
   }
 
   function pick(i: number) {
@@ -453,21 +630,32 @@ export function Hero({ data }: { data: Data }) {
     setRun(null);
     setSel(i);
     // Announced on a pick only — never during the autoplay, which would
-    // talk over the heading a screen reader is still reading.
-    setSaid(`${fill(data.became, { n: lines[i].n })}: ${lines[i].became}`);
+    // talk over the heading a screen reader is still reading — and not
+    // over the greeting either: picked with sound on, line 1 is said, and
+    // its announcement waits until the greeting has been (as a ring's
+    // outcome does).
+    const announce = () => setSaid(`${fill(data.became, { n: lines[i].n })}: ${lines[i].became}`);
     markProved("sheet");
-    // Below lg the caption sits under all eight rows — most of a screen
-    // down on a phone, always out of view on a landscape one — so a pick
-    // would change words the reader can't see. Bring it up, but only when
-    // it is cut off by the fold and only on a pick: the autoplay never
-    // scrolls anyone. Not an inline caption in the tapped row: that would
-    // collapse the row above and jump the tapped one under the finger.
-    // Its height never changes (both Stacks reserve), so this reads the
-    // same box before and after the pick.
-    const box = captionRef.current;
-    if (!box || window.matchMedia("(min-width: 1024px)").matches) return;
-    if (box.getBoundingClientRect().bottom <= window.innerHeight) return;
-    box.scrollIntoView({ block: "nearest", behavior: still ? "auto" : "smooth" });
+    // Sound on: line 1 says the greeting (halt() above stopped any other voice).
+    if (!sayQuote(i, voice, announce)) announce();
+    // A pick is a press of its own: its caption may come on screen.
+    armFollow();
+    showCaption();
+  }
+
+  /**
+   * Below lg the caption sits under all eight rows — most of a screen
+   * down on a phone, always out of view on a landscape one — so a pick
+   * (or the sound control's greeting) would change words the reader can't
+   * see. Bring it up, but only when the fold cuts it off and only on a
+   * press: the autoplay never scrolls anyone. Not an inline caption in the
+   * tapped row: that would collapse the row above and jump the tapped one
+   * under the finger. Its height never changes (both Stacks reserve), so
+   * this reads the same box before and after the press.
+   */
+  function showCaption() {
+    // The least scroll that shows it, keeping the control pressed on screen where both fit (show-said.ts).
+    showSaid(captionRef.current, still, "(max-width: 1023px)");
   }
 
   /**
@@ -478,23 +666,33 @@ export function Hero({ data }: { data: Data }) {
    * there, drawn — and under reduced motion there is none: the outcome
    * is simply shown.
    */
-  function ring(c: number) {
+  function ring(c: number, v = voice) {
     const who = callers[c];
     take();
     halt();
     setCaller(c);
-    setSel(indexOf(lines, who.ends));
     markProved("sheet");
     // The same words twice would not be re-read, so a repeat pick of the
     // same caller alternates a trailing no-break space (as Wiring's replay).
     const line = `${who.label}: ${who.outcome}`;
-    setSaid((s) => (s === line ? `${line} ` : line));
+    /** The line the call ends on, selected (caption and pressed row), and its outcome announced. */
+    const land = () => {
+      setSel(indexOf(lines, who.ends));
+      setSaid((s) => (s === line ? `${line} ` : line));
+    };
     const root = ref.current;
+    // Sound on: the call is heard as it rings in. Line 1 is what is heard first, so it is the line
+    // selected and captioned (its quote word by word, with motion) while the greeting is said; the
+    // line the call ends on, and the outcome's announcement, come once the greeting is over.
+    const heard = v && isSoundOn() ? v : null;
     if (still || !root) {
       setShown(c);
       setRun(null);
+      if (!heard || !sayCall(c, heard, land)) land();
       return;
     }
+    if (heard && spokenTrace(c, heard, root, land)) return;
+    land();
 
     const wide = window.matchMedia("(min-width: 1024px)").matches;
     const side = wide ? "L" : "P";
@@ -523,26 +721,7 @@ export function Hero({ data }: { data: Data }) {
         );
       }
     } else {
-      // On a phone the chips sit above the list, and the reader who taps
-      // one is usually looking at the chips with the list under the fold.
-      // The test is the row the call ENDS on, not the first to ring: with
-      // the chips in view the greeting row often sits just above the fold
-      // while Dan, the night message and the booking ring below it, so a
-      // first-row test let whole traces play off-screen. When the end row
-      // is cut off, scroll by the least that shows it (16px clear of the
-      // fold) — which also keeps the greeting on screen whenever the whole
-      // run fits — and let the scroll land before the first ring. Only on
-      // a pick: the autoplay never scrolls anyone.
-      let lead = 0;
-      const last = root
-        .querySelector(`[data-caa-ring="P:${who.rings[who.rings.length - 1]}"]`)
-        ?.closest("button");
-      const need = last ? last.getBoundingClientRect().bottom - (window.innerHeight - 16) : 0;
-      if (need > 0) {
-        window.scrollBy({ top: need, behavior: "smooth" });
-        lead = SCROLL_LEAD;
-        liftUntil.current = performance.now() + SCROLL_LEAD + 150;
-      }
+      const lead = lift(root, who);
       arrive = stops.map((_, k) => lead + k * P_RING_STAGGER);
       total = arrive[arrive.length - 1];
     }
@@ -572,6 +751,327 @@ export function Hero({ data }: { data: Data }) {
     at(total, () => setShown(c));
     at(total + (wide ? RESOLVE : P_TINT_MS), () => setRun(null));
   }
+
+  /**
+   * On a phone the chips sit above the list, and the reader who taps
+   * one is usually looking at the chips with the list under the fold.
+   * The test is the row the call ENDS on, not the first to ring: with
+   * the chips in view the greeting row often sits just above the fold
+   * while Dan, the night message and the booking ring below it, so a
+   * first-row test let whole traces play off-screen. When the end row
+   * is cut off, scroll by the least that shows it (16px clear of the
+   * fold) — which also keeps the greeting on screen whenever the whole
+   * run fits — and let the scroll land before the first ring. Only on
+   * a pick: the autoplay never scrolls anyone. Returns the rings' lead.
+   */
+  function lift(root: HTMLElement, who: TraceCaller) {
+    let lead = 0;
+    const last = root
+      .querySelector(`[data-caa-ring="P:${who.rings[who.rings.length - 1]}"]`)
+      ?.closest("button");
+    const need = last ? last.getBoundingClientRect().bottom - (window.innerHeight - 16) : 0;
+    if (need > 0) {
+      window.scrollBy({ top: need, behavior: "smooth" });
+      lead = SCROLL_LEAD;
+      liftUntil.current = performance.now() + SCROLL_LEAD + 150;
+    }
+    return lead;
+  }
+
+  /**
+   * A traced call, heard (see the header). The greeting plays from the
+   * pick; its clock rings the greeting node on the first word and holds
+   * the bead there, swelling with the voice, until the greeting has been
+   * said. Then the trace runs on as drawn (spokenTraceTimes), and a call
+   * that ends at Dan is put through: the transfer line is said as the
+   * bead reaches him, and the outcome quoting it lands on its first word.
+   * False, and nothing started, when the greeting can't play.
+   */
+  function spokenTrace(c: number, v: HeroVoice, root: HTMLElement, land: () => void) {
+    const who = callers[c];
+    const t = trackRef.current;
+    const transfer = who.ends === "dan" ? v.transfer : null;
+    if (!t.play(v.greeting.cue, 0, { press: true, next: transfer?.cue.src })) return false;
+    pressed.current = true;
+    // The greeting is line 1's quote: that line is selected, its words showing as they are said.
+    setSel(indexOf(lines, "greet"));
+    setQuoteSaid(0);
+    setVoicing("quote");
+    let landed = false;
+    const landOnce = () => {
+      if (landed) return;
+      landed = true;
+      setQuoteSaid(null);
+      land();
+    };
+
+    const wide = window.matchMedia("(min-width: 1024px)").matches;
+    const side = wide ? "L" : "P";
+    const stops = wide ? wideStops(who) : [...who.rings];
+    const lead = wide ? 0 : lift(root, who);
+    const t0 = performance.now();
+    const carrier = wide ? root.querySelector<HTMLElement>("[data-caa-bead]") : null;
+    const dot = carrier?.firstElementChild instanceof HTMLElement ? carrier.firstElementChild : null;
+    const at = (ms: number, f: () => void) => beats.current.push(window.setTimeout(f, ms));
+    const ringStop = (k: number, delay: number) => {
+      const el = root.querySelector<HTMLElement>(`[data-caa-ring="${side}:${stops[k]}"]`);
+      const a = el?.animate(
+        [
+          { transform: "scale(1)", opacity: 0.7 },
+          { transform: "scale(2.6)", opacity: 0 },
+        ],
+        { duration: RING_MS, delay, easing: "ease-out" },
+      );
+      if (a) anims.current.push(a);
+    };
+    /** The waiting bead swells with the voice; the margin tick follows it too. */
+    const swell = (cue: Cue, now: number) => {
+      const e = envelopeAt(cue, now);
+      if (dot) dot.style.scale = String(1 + BEAD_SWELL * Math.min(1, Math.max(0, (e - 0.35) / 0.45)));
+      level(cue, now);
+    };
+    const fadeOut = (delay: number) => {
+      if (dot) {
+        anims.current.push(dot.animate([{ opacity: 1 }, { opacity: 0 }], { duration: BEAD_OUT, delay, fill: "forwards" }));
+      }
+    };
+    /** The voice is done: the frame loop, the swell and the tick go; the beats and the bead carry on. */
+    const quiet = () => {
+      cancelAnimationFrame(voiceRaf.current);
+      voiceRaf.current = 0;
+      heldFrame.current = null;
+      clip.current = null;
+      dot?.style.removeProperty("scale");
+      root.style.removeProperty("--caa-level");
+      setVoicing(null);
+    };
+    /** Given up (back on screen, but the sound was taken and may not be taken back): the outcome, at once. */
+    const abandon = () => {
+      halt();
+      landOnce();
+      setShown(c);
+      setRun(null);
+    };
+
+    // The bead fades in on the greeting node and waits there.
+    if (dot) {
+      anims.current.push(dot.animate([{ opacity: 0 }, { opacity: 1 }], { duration: TRACE_IN * 0.8, fill: "forwards" }));
+    }
+    setShown(null);
+    setRun({ c, wide, rung: 1, fade: 0 });
+
+    // A call that ends at Dan, put through: the transfer line, and the outcome that quotes it.
+    const putThrough = (wait: number) => {
+      // Scrolled away meanwhile: nothing to hear; the outcome lands as it would.
+      if (!transfer || !inViewRef.current) {
+        setShown(c);
+        at(wait, () => setRun(null));
+        fadeOut(BEAD_OUT);
+        return;
+      }
+      t.play(transfer.cue, 0, { press: pressed.current });
+      clip.current = { cue: transfer.cue, abandon };
+      let landed = false;
+      const frame = () => {
+        const now = t.time();
+        if (!landed && now >= transfer.turn.words[0][1]) {
+          landed = true;
+          setShown(c);
+          setVoicing("outcome");
+        }
+        swell(transfer.cue, now);
+        if (now >= transfer.turn.end || now >= transfer.cue.dur) {
+          quiet();
+          if (!landed) setShown(c);
+          at(wait, () => setRun(null));
+          fadeOut(0);
+          return;
+        }
+        nextFrame(frame);
+      };
+      nextFrame(frame);
+    };
+
+    // The greeting has been said: the call goes on through the flow, as drawn, to the line it ends on.
+    const depart = () => {
+      quiet();
+      landOnce();
+      const { arrive, total } = spokenTraceTimes(who, wide);
+      if (carrier) {
+        const route = beadRoute(who);
+        const a = carrier.animate(route.frames, { duration: route.total, easing: "linear", fill: "forwards" });
+        // The route's first TRACE_IN is the fade-in on the greeting node, already done.
+        a.currentTime = TRACE_IN;
+        anims.current.push(a);
+      }
+      for (let k = 1; k < stops.length; k++) {
+        ringStop(k, arrive[k]);
+        at(arrive[k], () => setRun((r) => r && { ...r, rung: k + 1 }));
+      }
+      if (!wide) {
+        for (let k = 0; k < stops.length; k++) {
+          at(Math.max(0, arrive[k]) + P_TINT_MS, () => setRun((r) => r && { ...r, fade: k + 1 }));
+        }
+      }
+      const wait = wide ? RESOLVE : P_TINT_MS;
+      if (transfer) {
+        at(total, () => putThrough(wait));
+        return;
+      }
+      at(total, () => setShown(c));
+      at(total + wait, () => setRun(null));
+      fadeOut(total + BEAD_OUT);
+    };
+
+    // The greeting, on its own clock: the master until it has been said.
+    clip.current = { cue: v.greeting.cue, abandon };
+    let rang = false;
+    const frame = () => {
+      const now = t.time();
+      const { cue, turn } = v.greeting;
+      if (!rang && now >= turn.words[0][1] && performance.now() - t0 >= lead) {
+        rang = true;
+        ringStop(0, 0);
+      }
+      setQuoteSaid(wordsShownAt(turn, now));
+      swell(cue, now);
+      if (now >= turn.end || now >= cue.dur) {
+        if (!rang) ringStop(0, 0);
+        return depart();
+      }
+      nextFrame(frame);
+    };
+    nextFrame(frame);
+    return true;
+  }
+
+  /**
+   * Reduced motion: the outcome is already shown; the call is heard over
+   * it, the greeting and then, for a call that ends at Dan, the transfer
+   * line, with the tick beside the outcome that quotes it.
+   */
+  function sayCall(c: number, v: HeroVoice, land: () => void) {
+    const t = trackRef.current;
+    const transfer = callers[c].ends === "dan" ? v.transfer : null;
+    if (!t.play(v.greeting.cue, 0, { press: true, next: transfer?.cue.src })) return false;
+    pressed.current = true;
+    // While the greeting is said, line 1 (its quote) is the line selected; then, at once, the line the call ends on.
+    setSel(indexOf(lines, "greet"));
+    setVoicing("quote");
+    let landed = false;
+    const landOnce = () => {
+      if (landed) return;
+      landed = true;
+      setVoicing(null);
+      land();
+    };
+    let line: Said = v.greeting;
+    clip.current = {
+      cue: line.cue,
+      abandon: () => {
+        hush();
+        landOnce();
+      },
+    };
+    const frame = () => {
+      const now = t.time();
+      if (now >= line.turn.end || now >= line.cue.dur) {
+        if (line === v.greeting) landOnce();
+        if (line !== v.greeting || !transfer || !inViewRef.current) {
+          clip.current = null;
+          return hush();
+        }
+        line = transfer;
+        t.play(transfer.cue, 0, { press: pressed.current });
+        clip.current = { cue: transfer.cue, abandon: hush };
+        setVoicing("outcome");
+      }
+      nextFrame(frame);
+    };
+    nextFrame(frame);
+    return true;
+  }
+
+  /**
+   * The sound control: the cover's conversation, heard. The checked
+   * caller rung again, or else line 1's greeting (selected, as a pick of
+   * line 1 would, but not a pick: nothing proved, nothing announced).
+   */
+  function converse(v: HeroVoice | null) {
+    if (!v) return;
+    if (caller !== null) {
+      ring(caller, v);
+      return;
+    }
+    const g = indexOf(lines, "greet");
+    take();
+    halt();
+    setSel(g);
+    // The greeting is said: its caption, below lg far under the control, comes up to be read.
+    if (sayQuote(g, v)) showCaption();
+  }
+
+  // The voice is fetched once sound is on, never before.
+  const onFile = useEffectEvent((file: CueFile | null) => {
+    if (!file) {
+      pending.current = undefined;
+      return;
+    }
+    const v = heroVoice(cueIn(file, data.voice.greeting), cueIn(file, data.voice.transfer), {
+      greeting: lines[indexOf(lines, "greet")].quote ?? "",
+      transfer: data.voice.transferLine,
+    });
+    setVoice(v);
+    const p = pending.current;
+    pending.current = undefined;
+    if (p === undefined) return;
+    if (p === null) converse(v);
+    else if (v) ring(p, v);
+  });
+  useEffect(() => {
+    if (!track.on || voice !== undefined) return;
+    let live = true;
+    void loadCueFile(data.voice.surface).then((file) => {
+      if (live) onFile(file);
+    });
+    return () => {
+      live = false;
+    };
+  }, [track.on, voice, data.voice.surface]);
+
+  // Off screen the voice pauses (use-voice-track), and the visitor's press no longer holds the sound
+  // (for the transfer line queued after it either). Back on screen it carries on where it stopped, as
+  // a run rather than a press: it claims the sound only if nobody else is playing (else silently, on
+  // the same clock). Where nothing plays by itself (reduced motion, the still tier) it is given up.
+  useEffect(() => {
+    if (!inView) {
+      if (clip.current) away.current = true;
+      pressed.current = false;
+      return;
+    }
+    if (!away.current) return;
+    away.current = false;
+    const k = clip.current;
+    const t = trackRef.current;
+    if (k && t.time() < k.cue.dur) {
+      if (t.listen) k.abandon();
+      else t.play(k.cue);
+    }
+    // The voice's frame loop, held while away, runs on (unless the clip was given up just now).
+    const held = heldFrame.current;
+    heldFrame.current = null;
+    if (held && !voiceRaf.current) voiceRaf.current = requestAnimationFrame(held);
+  }, [inView]);
+
+  const onSound = (on: boolean) => {
+    // Off: the call carries on in silence on the same clock (use-voice-track).
+    if (!on) return;
+    if (voice === undefined) {
+      pending.current = caller;
+      return;
+    }
+    converse(voice);
+  };
 
   function onPeek(i: number, on: boolean) {
     setPeek((p) => (on ? i : p === i ? null : p));
@@ -604,8 +1104,16 @@ export function Hero({ data }: { data: Data }) {
     held,
     runProng: run ? (callers[run.c].prong ?? null) : null,
   };
-  const caption = { data, lines, sel, lands, swap: touched || lands > 0 };
-  const sample = { data, callers, value: caller, shown, onPick: ring };
+  const caption = { data, lines, sel, lands, swap: touched || lands > 0, quoteSaid, saying: voicing === "quote" };
+  const sample = {
+    data,
+    callers,
+    value: caller,
+    shown,
+    onPick: (c: number) => ring(c),
+    onSound,
+    saying: voicing === "outcome",
+  };
   const hint = <p className="mt-4 text-[13px] leading-5 text-pp-muted">{data.pickHint}</p>;
 
   return (
@@ -1348,6 +1856,8 @@ function Callers({
   value,
   shown,
   onPick,
+  onSound,
+  saying,
   className,
 }: {
   data: Data;
@@ -1355,6 +1865,10 @@ function Callers({
   value: number | null;
   shown: number | null;
   onPick: (c: number) => void;
+  /** The sound control's press, inside the click (SoundButton's onChange). */
+  onSound: (on: boolean) => void;
+  /** The voice is saying the outcome on show (the transfer line): its margin tick. */
+  saying: boolean;
   className?: string;
 }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -1385,6 +1899,10 @@ function Callers({
           a hole between the chips and a stranded line. */}
       <p className="text-[11px] leading-4 font-medium tracking-[0.12em] text-pp-muted uppercase">{data.trace.label}</p>
       <p className="mt-1 text-[13px] leading-5 text-pp-muted">{data.trace.note}</p>
+      {/* Sound: off until pressed. Then a ring is heard as it rings in. */}
+      <div className="mt-3">
+        <SoundButton variant="pill" tone="light" onChange={onSound} />
+      </div>
       <div role="radiogroup" aria-label={data.trace.groupAria} className="mt-3 flex flex-wrap gap-2">
         {callers.map((c, i) => (
           <button
@@ -1408,7 +1926,12 @@ function Callers({
         items={outcomes}
         live={shown === null ? 0 : shown + 1}
         className="mt-4"
-        render={(o) => <p className="text-[15px] leading-[23px] text-pretty text-pp-ink">{o}</p>}
+        render={(o, _i, sizer) => (
+          <p className={cn("text-[15px] leading-[23px] text-pretty text-pp-ink", saying && !sizer && "relative")}>
+            {saying && !sizer && <SayingTick />}
+            {o}
+          </p>
+        )}
       />
     </div>
   );
@@ -1434,6 +1957,8 @@ function Caption({
   sel,
   lands,
   swap,
+  quoteSaid,
+  saying,
   className,
   ref,
 }: {
@@ -1442,6 +1967,10 @@ function Caption({
   sel: number;
   lands: number;
   swap: boolean;
+  /** Sound on, with motion: how many of line 1's quoted words the greeting has said; null shows them all. */
+  quoteSaid: number | null;
+  /** The greeting is being said: the quote's margin tick. */
+  saying: boolean;
   className?: string;
   ref?: Ref<HTMLDivElement>;
 }) {
@@ -1472,22 +2001,32 @@ function Caption({
         live={sel}
         swap={swap}
         className="mt-3"
-        render={(l) => (
-          <div>
-            {l.quote ? (
-              <p className="mb-3 font-[family-name:var(--font-pp-cinema)] text-[19px] leading-7 text-pp-ink italic md:text-[21px] md:leading-8">
-                &ldquo;{l.quote}&rdquo;
-              </p>
-            ) : null}
-            <p className="text-[15px] leading-[23px] text-pp-ink">{l.became}</p>
-            {l.under ? (
-              <div className="mt-3 rounded-xl bg-pp-card p-4">
-                <p className="text-[11px] leading-4 tracking-[0.1em] text-pp-accent uppercase">{l.under.label}</p>
-                <p className="mt-1.5 text-[13px] leading-5 text-pp-muted">{l.under.body}</p>
-              </div>
-            ) : null}
-          </div>
-        )}
+        render={(l, _i, sizer) => {
+          // Only the live caption follows the voice; the sizers hold the whole quote.
+          const voiced = !sizer && l.id === "greet";
+          return (
+            <div>
+              {l.quote ? (
+                <p
+                  className={cn(
+                    "mb-3 font-[family-name:var(--font-pp-cinema)] text-[19px] leading-7 text-pp-ink italic md:text-[21px] md:leading-8",
+                    voiced && saying && "relative",
+                  )}
+                >
+                  {voiced && saying && <SayingTick />}
+                  &ldquo;{voiced && quoteSaid !== null ? <SaidWords text={l.quote} said={quoteSaid} /> : l.quote}&rdquo;
+                </p>
+              ) : null}
+              <p className="text-[15px] leading-[23px] text-pp-ink">{l.became}</p>
+              {l.under ? (
+                <div className="mt-3 rounded-xl bg-pp-card p-4">
+                  <p className="text-[11px] leading-4 tracking-[0.1em] text-pp-accent uppercase">{l.under.label}</p>
+                  <p className="mt-1.5 text-[13px] leading-5 text-pp-muted">{l.under.body}</p>
+                </div>
+              ) : null}
+            </div>
+          );
+        }}
       />
     </div>
   );

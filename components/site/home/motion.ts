@@ -31,20 +31,65 @@ const THRESHOLDS = [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1];
 const scores = new Map<string, number>();
 const listeners = new Set<() => void>();
 let focused: string | null = null;
+/**
+ * The stage whose own sound control the reader pressed: it keeps the
+ * focus (and so the sound) while any of it is on screen, whatever else
+ * covers more of it, as a pressed stage keeps the sound on the other
+ * pages. Another stage's press, or the stage leaving the screen, hands
+ * the focus back to the shares. (The shares are read at the observer's
+ * thresholds, so a stage's may lag behind its scroll: on screen at all is
+ * the one test that cannot.) Sound turned off with its control lets it
+ * go too.
+ */
+let pinned: string | null = null;
 
 function settle() {
   let best: string | null = null;
   let top = FOCUS_MIN;
+  if (pinned !== null && !((scores.get(pinned) ?? 0) > 0)) pinned = null;
+  if (pinned !== null) best = pinned;
   // Map order is registration order, so a tie goes to the stage higher up the page.
-  for (const [id, score] of scores) {
-    if (score >= top && (best === null || score > top)) {
-      best = id;
-      top = score;
+  else
+    for (const [id, score] of scores) {
+      if (score >= top && (best === null || score > top)) {
+        best = id;
+        top = score;
+      }
     }
-  }
   if (best === focused) return;
   focused = best;
   listeners.forEach((l) => l());
+}
+
+/**
+ * The reader pressed stage `id`'s own sound control: turned on (`on`), it
+ * takes the focus now, so it plays (and is heard) rather than the stage
+ * that covers more of the screen, which would speak with what it shows
+ * perhaps scrolled away; turned off, the focus goes back to the shares.
+ * Call it inside the press.
+ */
+export function pinStageFocus(id: string, on = true) {
+  if (!on) {
+    if (pinned !== null) {
+      pinned = null;
+      settle();
+    }
+    return;
+  }
+  if (!((scores.get(id) ?? 0) > 0)) return;
+  pinned = id;
+  settle();
+}
+
+/**
+ * Stage `id` can no longer be heard where it is (the landing's greeting,
+ * with its line scrolled away): if it holds the pin, it lets it go, and
+ * the focus goes back to the shares. Any other stage's pin stays.
+ */
+export function unpinStageFocus(id: string) {
+  if (pinned !== id) return;
+  pinned = null;
+  settle();
 }
 
 function subscribeFocus(onChange: () => void) {
@@ -80,6 +125,7 @@ export function useStageFocus(ref: RefObject<Element | null>, id: string) {
     return () => {
       io.disconnect();
       scores.delete(id);
+      if (pinned === id) pinned = null;
       settle();
     };
   }, [ref, id]);
@@ -143,6 +189,10 @@ export type StageMotion<K extends Kit = Kit> = {
   /** The reader has touched a control: autoplay hands over for good. */
   interacted: boolean;
   markInteracted: () => void;
+  /** The reader pressed this stage's own sound control: on, it takes the landing's focus; off, lets it go (pinStageFocus). */
+  pinFocus: (on: boolean) => void;
+  /** This stage cannot be heard where it is: its pin, if it holds it, goes (unpinStageFocus). */
+  unpinFocus: () => void;
   /** "full" on the server and while hydrating; see device-tier.ts. */
   tier: DeviceTier;
 };
@@ -174,6 +224,8 @@ export function useStageMotion(
   const kit = flip ? withFlip : base;
   const focus = useStageFocus(ref, id);
   const visible = useDocumentVisible();
+  const pinFocus = useCallback((on: boolean) => pinStageFocus(id, on), [id]);
+  const unpinFocus = useCallback(() => unpinStageFocus(id), [id]);
 
   return {
     kit,
@@ -184,6 +236,8 @@ export function useStageMotion(
     setPaused,
     interacted,
     markInteracted,
+    pinFocus,
+    unpinFocus,
     tier,
   };
 }

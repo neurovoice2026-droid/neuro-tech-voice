@@ -34,7 +34,9 @@ for (const phrase of Object.values(PHRASES)) {
 }
 
 export const HOME_CALL = {
-  eyebrow: `${CALLS.kicker}s`, // "Sample calls"
+  // "Sample calls". The product page's kicker now reads "Sample call · AI-generated voices";
+  // the landing takes its head only, since the stage's own caption already says the voices are generated.
+  eyebrow: `${CALLS.kicker.split(" · ")[0]}s`,
   // NEW. The stage's door sign says Closed on three of the four calls; the phone answers all four.
   // A no-break space holds "the door" together, so no phone ends a line on "the".
   title: "Closed is for the door, not the phone.",
@@ -43,13 +45,17 @@ export const HOME_CALL = {
   phrases: PHRASES,
   cta: { label: CALLS.cta.label, href: "#pricing" },
   stageLabel: `${PLATFORM.design.company} · a made-up business`, // NEW
-  caption: "Written for this page · no audio", // NEW
+  // NEW. The calls are voiced (AI-generated voices, lib/audio/cues/home-demo-call.json): never a recording.
+  // It is the sound control's caption too (demo.tsx), so it says what every sound control's says: a sample call.
+  caption: "Sample call written for this page · AI-generated voices, not a recording",
   speakers: { agent: PLATFORM.design.agent, caller: CALLS.labels.client },
   // after-call.tsx and voice.tsx read these too.
   controls: {
     play: CALLS.labels.play,
     pause: CALLS.labels.pause,
     replay: CALLS.labels.replay,
+    // NEW. With reduced motion nothing plays by itself; this plays the call on screen, with sound.
+    listen: "Listen",
   },
   outcome: "Booked · Wednesday 15:00", // NEW, composed from ai-agents.ts:78
   // NEW, composed from the reel's "Answered from your documents · rescheduled" (ai-agents.ts:108).

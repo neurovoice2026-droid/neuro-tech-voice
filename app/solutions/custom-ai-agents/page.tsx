@@ -41,9 +41,12 @@ import { Receipt } from "@/components/site/solutions/custom-ai-agents/receipt";
  *
  * The sizes are measured, not guessed: each is the block's height at a
  * 390px-wide phone — the tallest reserved variant plus its trailing Gap,
- * with autoplay finished — rounded UP to the next 50. Measured 568, 1690,
- * 1332, 3194, 2258, 1700 and 3020px; every instrument reserves its
+ * with autoplay finished — rounded UP to the next 50. Measured 568, 1784,
+ * 1476, 3194, 2354, 1700 and 3020px; every instrument reserves its
  * tallest state, so the heights held constant through autoplay too.
+ * Redline, Names and Rehearsal carry a sound row (the sound control and
+ * its caption); Redline and Names are tallest under reduced motion, where
+ * a Listen control joins it (re-measured there, at 390px).
  * Wiring's tallest variant is the one with motion: under reduced motion
  * its Replay button is display:none (72px shorter, 3122), so measuring
  * there alone would under-reserve for most readers. Its scrub rail's
@@ -78,11 +81,11 @@ export default function CustomAiAgentsPage() {
         <Band data={CAA_BAND} />
         <Gap />
       </Deferred>
-      <Deferred size={1700}>
+      <Deferred size={1800}>
         <Redline data={CAA_REDLINE} />
         <Gap />
       </Deferred>
-      <Deferred size={1350}>
+      <Deferred size={1500}>
         <Names data={CAA_NAMES} />
         <Gap />
       </Deferred>
@@ -90,7 +93,7 @@ export default function CustomAiAgentsPage() {
         <Wiring data={CAA_WIRING} />
         <Gap />
       </Deferred>
-      <Deferred size={2300}>
+      <Deferred size={2400}>
         <Rehearsal data={CAA_REHEARSAL} />
         <Gap />
       </Deferred>

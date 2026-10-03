@@ -511,3 +511,23 @@ export const KB_START = {
   note: "5 free minutes for 14 days · No card needed",
   more: { label: "See everything the agent does", href: "/product/ai-agents" },
 } as const;
+
+/* ─── Sound on ───────────────────────────────────────────────────── *
+ * The page's sample calls and questions can be heard: AI-generated
+ * voices (lib/audio/cues/kb-*.json), never a recording, and only once the
+ * visitor turns sound on. While a stage speaks, the audio's clock is its
+ * clock. These read a cue against the words the page shows; a track that
+ * is missing, or was cut for other words, comes back null, and that stage
+ * (or that one line) stays silent and read-paced, as with sound off.
+ * The helpers that read the cues are in knowledge-base-voice.ts, so the
+ * pages that only show this data (the landing among them) do not carry
+ * them.
+ * ------------------------------------------------------------------ */
+
+export const KB_SOUND = {
+  /** The transport under reduced motion: plays the stage's lines, swapping each in whole as it is said. */
+  listen: "Listen",
+  pause: "Pause",
+  /** A shelf card's own control, with sound on. */
+  hear: (ask: string) => `Hear “${ask}”`,
+} as const;

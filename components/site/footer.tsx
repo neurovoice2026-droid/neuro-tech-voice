@@ -108,9 +108,19 @@ const LIVE = new Set([
 const exists = (href: string) =>
   LIVE.has(href) || href.startsWith("/industries/") || href.startsWith("/#");
 
+/**
+ * A finger gets a 44px row per link: the line box grows to 44px and the
+ * list's own gap goes, so the links sit 44px apart rather than overlapping
+ * one another's taps. A mouse keeps the set spacing.
+ */
+const coarseTap =
+  "any-pointer-coarse:inline-flex any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11 any-pointer-coarse:items-center any-pointer-coarse:align-top";
+
 /** One tone for the whole bottom rule, so policies and ANPC match. */
-const legalLink =
-  "text-[length:max(0.72em,12px)] text-[var(--cover-paper)]/65 transition-colors duration-500 hover:text-[var(--cover-brand-lit)] lg:text-[0.72em]";
+const legalLink = cn(
+  "text-[length:max(0.72em,12px)] text-[var(--cover-paper)]/65 transition-colors duration-500 hover:text-[var(--cover-brand-lit)] lg:text-[0.72em]",
+  coarseTap,
+);
 
 function LinkColumn({ column }: { column: FooterColumn }) {
   const links = column.links.filter((l) => exists(l.href));
@@ -133,15 +143,18 @@ function LinkColumn({ column }: { column: FooterColumn }) {
       <ul
         className={cn(
           dense
-            ? "columns-2 gap-x-[1.4em] [&>li]:mb-[0.7em] [&>li]:break-inside-avoid"
-            : "flex flex-col gap-[0.7em]",
+            ? "columns-2 gap-x-[1.4em] [&>li]:mb-[0.7em] [&>li]:break-inside-avoid any-pointer-coarse:[&>li]:mb-0"
+            : "flex flex-col gap-[0.7em] any-pointer-coarse:gap-0",
         )}
       >
         {links.map((l) => (
           <li key={l.href}>
             <IntentLink
               href={l.href}
-              className="text-[length:max(0.85em,14px)] text-[var(--cover-paper)]/75 transition-colors duration-500 hover:text-[var(--cover-brand-lit)] lg:text-[0.85em]"
+              className={cn(
+                "text-[length:max(0.85em,14px)] text-[var(--cover-paper)]/75 transition-colors duration-500 hover:text-[var(--cover-brand-lit)] lg:text-[0.85em]",
+                coarseTap,
+              )}
             >
               {l.label}
             </IntentLink>
@@ -170,7 +183,8 @@ export function Footer() {
           <div className="flex flex-col gap-[1.3em] sm:col-span-2 lg:col-span-1">
             <IntentLink
               href="/#top"
-              className="flex w-fit items-center"
+              // The mark is 2.2em tall: a finger's 44px reaches past it (tap-44), into the gap.
+              className="tap-44 relative flex w-fit items-center"
               aria-label={COMPANY.name}
             >
               <Image
@@ -204,7 +218,7 @@ export function Footer() {
             {COMPANY.email ? (
               <a
                 href={`mailto:${COMPANY.email}`}
-                className="inline-flex w-fit items-center gap-[0.55em] text-[length:max(0.85em,14px)] text-[var(--cover-paper)]/75 transition-colors duration-500 hover:text-[var(--cover-brand-lit)] lg:text-[0.85em]"
+                className="inline-flex w-fit items-center gap-[0.55em] text-[length:max(0.85em,14px)] text-[var(--cover-paper)]/75 transition-colors duration-500 hover:text-[var(--cover-brand-lit)] any-pointer-coarse:min-h-11 lg:text-[0.85em]"
               >
                 <Mail className="size-[1.05em]" strokeWidth={1.9} />
                 {COMPANY.email}
@@ -228,7 +242,7 @@ export function Footer() {
               sells internationally, where they point a reader at a body
               with no jurisdiction over them. lib/site.ts records why. */}
           <nav aria-label="Legal">
-            <ul className="flex flex-wrap items-center gap-x-[1.4em] gap-y-[0.6em]">
+            <ul className="flex flex-wrap items-center gap-x-[1.4em] gap-y-[0.6em] any-pointer-coarse:gap-y-0">
               {FOOTER.legal.map((l) => (
                 <li key={l.href}>
                   <IntentLink href={l.href} className={legalLink}>

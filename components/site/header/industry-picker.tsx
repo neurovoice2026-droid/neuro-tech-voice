@@ -70,7 +70,8 @@ export function IndustryPicker({
       className={cn(
         "flex items-center border border-[var(--cover-paper)]/15 bg-[var(--cover-paper)]/[0.03]",
         variant === "grid"
-          ? "mt-[12px] h-[40px] gap-[8px] rounded-[8px] pl-[10px] pr-[4px]"
+          ? // For a finger the field is 46px, so the input inside its border is a 44px tap.
+            "mt-[12px] h-[40px] gap-[8px] rounded-[8px] pl-[10px] pr-[4px] any-pointer-coarse:h-[46px]"
           : "mt-[0.75em] h-[2.5em] gap-[0.5em] rounded-[0.5em] pl-[0.75em] pr-[0.35em]",
       )}
     >
@@ -108,8 +109,13 @@ export function IndustryPicker({
         className={cn(
           "min-w-0 flex-1 bg-transparent text-[var(--cover-paper)] outline-none",
           variant === "grid"
-            ? "placeholder:text-[var(--cover-muted)]"
-            : "placeholder:text-[var(--cover-paper)]/60",
+            ? "placeholder:text-[var(--cover-muted)] any-pointer-coarse:self-stretch"
+            : // On a phone the field is 2.5em, under 44px: the input fills
+              // it and its box runs on 18px below, over the pane (which
+              // takes no pointer), with the margin taking the 18px back,
+              // so the tap is 44px and nothing moves. The chips above own
+              // the gap between them.
+              "-mb-[18px] self-stretch pb-[18px] placeholder:text-[var(--cover-paper)]/60",
         )}
       />
       <button
@@ -125,8 +131,10 @@ export function IndustryPicker({
         className={cn(
           "grid shrink-0 place-items-center text-[var(--cover-paper)]/70 transition-colors hover:bg-[var(--cover-paper)]/10 hover:text-[var(--cover-paper)] disabled:pointer-events-none disabled:opacity-35",
           variant === "grid"
-            ? "h-[30px] rounded-[6px] px-[10px] text-[13px] font-medium"
-            : "size-[1.85em] rounded-[0.35em]",
+            ? "tap-44 relative h-[30px] rounded-[6px] px-[10px] text-[13px] font-medium"
+            : // The same 44px tap as the input beside it, taken downward, and
+              // leftward over the field: the panel clips 4px past the field's edge.
+              "relative size-[1.85em] rounded-[0.35em] after:absolute after:-top-[2px] after:-right-[4px] after:-bottom-[22px] after:-left-[19px]",
         )}
       >
         {/* The desktop menu carries no icons, so there the key is a word. */}
@@ -142,7 +150,10 @@ export function IndustryPicker({
   if (variant === "strip") {
     return (
       <div className={className}>
-        <div className="hdr-strip -mx-[1.5em] flex gap-[0.5em] overflow-x-auto px-[1.5em] pb-[0.15em]">
+        {/* The chips are 2.1875em, under 44px on a phone. Each takes a 44px
+            tap (tap-44); the strip clips what scrolls, so it carries the
+            room for those taps as padding and gives it back as margin. */}
+        <div className="hdr-strip -mx-[1.5em] -my-[var(--tap-room)] flex gap-[0.5em] overflow-x-auto px-[1.5em] pt-[var(--tap-room)] pb-[calc(var(--tap-room)_+_0.15em)] [--tap-room:max(0px,calc(22px_-_1.09375em))]">
           {NAV_INDUSTRIES.map((industry) => {
             const Icon = industry.icon;
             const active = industry.slug === selected && draft.trim().length === 0;
@@ -156,7 +167,7 @@ export function IndustryPicker({
                   onSelect(industry.slug);
                 }}
                 className={cn(
-                  "flex h-[2.5em] shrink-0 scroll-ml-[1.5em] snap-start items-center gap-[0.45em] rounded-full border px-[0.875em] text-[0.875em] transition-colors",
+                  "tap-44 relative flex h-[2.5em] shrink-0 scroll-ml-[1.5em] snap-start items-center gap-[0.45em] rounded-full border px-[0.875em] text-[0.875em] transition-colors",
                   active
                     ? "border-transparent bg-[var(--cover-paper)] text-[var(--cover-ink)]"
                     : "border-[var(--cover-paper)]/15 text-[var(--cover-paper)]/85",
@@ -173,7 +184,7 @@ export function IndustryPicker({
           <button
             type="button"
             onClick={() => inputRef.current?.focus()}
-            className="flex h-[2.5em] shrink-0 items-center gap-[0.45em] rounded-full border border-dashed border-[var(--cover-paper)]/25 px-[0.875em] text-[0.875em] text-[var(--cover-paper)]/70"
+            className="tap-44 relative flex h-[2.5em] shrink-0 items-center gap-[0.45em] rounded-full border border-dashed border-[var(--cover-paper)]/25 px-[0.875em] text-[0.875em] text-[var(--cover-paper)]/70"
           >
             <Plus className="size-[1em]" strokeWidth={1.75} aria-hidden />
             Any industry
@@ -189,7 +200,8 @@ export function IndustryPicker({
       {/* DOM order runs down column one then column two, so what Tab and
           the arrow keys walk is what the eye reads. */}
       {/* Three columns of six: 14/21 links, 2.5px of padding around the
-          line box. */}
+          line box; 11.5px for a finger, so each row is a 44px tap (a touch
+          tablet at 1024px gets this menu, not the sheet). */}
       <div className="grid grid-flow-col grid-cols-3 grid-rows-6">
         {NAV_INDUSTRIES.map((industry) => (
           <MenuLink
@@ -201,7 +213,7 @@ export function IndustryPicker({
               cancelIntent();
               onSelect(industry.slug);
             }}
-            className="block min-w-0 truncate rounded-[8px] px-[10px] py-[2.5px] text-[14px] font-medium leading-[21px] tracking-[0.01em] text-[var(--cover-paper)] transition-colors hover:text-[var(--cover-muted)]"
+            className="block min-w-0 truncate rounded-[8px] px-[10px] py-[2.5px] text-[14px] font-medium leading-[21px] tracking-[0.01em] text-[var(--cover-paper)] transition-colors hover:text-[var(--cover-muted)] any-pointer-coarse:py-[11.5px]"
           >
             {industry.label}
           </MenuLink>

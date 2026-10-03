@@ -80,12 +80,15 @@ export function Handover({ data }: { data: typeof CAA_HANDOVER }) {
         </div>
 
         <p className="mt-10 max-w-[620px] text-[15px] leading-[23px] text-pp-ink">{data.after}</p>
-        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
+        {/* On touch the links take 44px taps; wrapped, they need 20px
+            between lines so one link's tap doesn't cover the next. */}
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 any-pointer-coarse:gap-y-5">
           {data.links.map((l) => (
             <IntentLink
               key={l.href}
               href={l.href}
-              className="inline-flex min-h-6 items-center text-[14px] leading-5 underline-offset-4 transition-colors hover:text-[#551a89] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
+              // z-[1]: the last line's 44px tap reaches under the next section's box.
+              className="tap-44 relative z-[1] inline-flex min-h-6 items-center text-[14px] leading-5 underline-offset-4 transition-colors hover:text-[#551a89] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
             >
               {l.label} →
             </IntentLink>

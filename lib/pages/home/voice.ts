@@ -26,5 +26,6 @@ export const HOME_VOICE = {
   toneLabel: PLATFORM.design.tone,
   languageLabel: PLATFORM.design.language,
   registers: REGISTERS.map((id) => ({ id, label: must(TONES, id).label })),
-  meta: (lang: string, reg: string) => `${lang} · ${reg} · written by the app's own greeting code`, // NEW
+  // NEW. The greetings can be played (AI-generated voices, lib/audio/cues/home-voice-greetings.json).
+  meta: (lang: string, reg: string) => `${lang} · ${reg} · written by the app's own greeting code · generated voice`,
 } as const;

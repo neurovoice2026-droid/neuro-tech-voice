@@ -109,7 +109,7 @@ export function StackView({
                     type="button"
                     tabIndex={-1}
                     aria-hidden
-                    className="saas-chip relative flex h-10 min-w-0 cursor-pointer flex-col items-start justify-center rounded-full px-3.5 text-left max-[359px]:px-2.5"
+                    className="saas-chip relative flex h-10 min-w-0 cursor-pointer flex-col items-start justify-center rounded-full px-3.5 text-left max-[374px]:px-2.5"
                     data-part={id}
                     data-state={stateOf(frame, id)}
                     data-fault={fault ? "" : undefined}
@@ -127,7 +127,7 @@ export function StackView({
                       <span
                         className={cn(
                           MONO,
-                          "truncate text-[11px] leading-[14px] text-(--home-muted) [grid-area:1/1] max-[359px]:text-[10px]",
+                          "truncate text-[11px] leading-[14px] text-(--home-muted) [grid-area:1/1] max-[374px]:text-[10px]",
                           (fault || speaking) && "invisible",
                         )}
                       >

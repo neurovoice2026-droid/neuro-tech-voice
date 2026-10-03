@@ -21,5 +21,7 @@ export const HOME_TRADES = {
     boundary: "From the instructions it starts with",
   },
   sample: "Sample", // NEW
+  // NEW. Plays the caller's line (AI-generated voice, the industry page's own clip); with sound on a pick plays it too.
+  hear: { play: "Hear the caller", stop: "Stop" },
   pageLink: (label: string) => `Read the ${label} page`, // NEW
 } as const;

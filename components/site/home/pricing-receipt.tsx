@@ -161,7 +161,7 @@ export function Receipt({
         <a
           href={`#plan-${e.plan.id}`}
           className={cn(
-            "home-pricing-tint rounded-sm text-[13px] leading-[18px] whitespace-nowrap text-(--plan-ink) underline decoration-current/35 underline-offset-[0.22em] hover:decoration-current max-sm:basis-full sm:ml-auto",
+            "home-pricing-tint tap-44 relative rounded-sm text-[13px] leading-[18px] whitespace-nowrap text-(--plan-ink) underline decoration-current/35 underline-offset-[0.22em] hover:decoration-current max-sm:basis-full sm:ml-auto",
             RING_LIGHT,
           )}
         >

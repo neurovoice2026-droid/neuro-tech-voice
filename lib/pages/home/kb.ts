@@ -27,6 +27,8 @@ export const HOME_KB = {
     replay: ROOM.replay,
     pause: ROOM.pause,
     play: ROOM.play,
+    // NEW. With reduced motion nothing plays by itself; this plays the question on screen, with sound.
+    listen: "Listen",
     docs: ROOM.docs,
   },
   // "cancel" is left out: the policy on screen does not support its answer.

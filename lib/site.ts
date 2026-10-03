@@ -553,14 +553,22 @@ export const SETUP_LANGS: SetupLang[] = [
 ];
 
 /**
- * Voices, as the app really lists them.
+ * The voices the site's own samples are spoken in: four Cartesia voices
+ * from the library the app offers (2 female, 2 male; American and
+ * British), the same four that voice the agents across the site.
  *
- * `pitch` and `wpm` are not decoration — they draw the signature beside
- * each name and they set the pace at which the greeting is read across it.
- * Which is also the honest limit of what a landing page can do here: there
- * is no audio on this page, so the control says *read*, not *preview*, and
- * shows the two measurements that actually differ between these voices
- * rather than miming a play button that produces silence.
+ * `pitch` and `wpm` are not decoration and not guesses: both are measured
+ * from each voice's generated sample, the app's own preview sentence ("Hi,
+ * thanks for calling. I can help you book an appointment or answer any
+ * questions you have.", lib/audio/cues/agents-platform-voiceprint.json).
+ * `wpm` is its 17 words over the time from the first word's start to the
+ * last word's end, from the cue's word timestamps. `pitch` is the sample's
+ * median F0 placed on a log scale from 100 Hz (0) to 250 Hz (1): Dana
+ * 200.5 Hz, Leo 162.9, Gemma 180.2, Archie 133.1. They draw the signature
+ * beside each name, and with sound on the card plays the sample itself
+ * (AI-generated: no person recorded it). `id` is the voice's cast key,
+ * the name its samples carry in lib/audio/cues. `note` paraphrases
+ * Cartesia's own description of the voice.
  */
 export type SetupVoice = {
   id: string;
@@ -568,66 +576,48 @@ export type SetupVoice = {
   accent: string;
   register: string;
   note: string;
-  /** Relative pitch, 0–1 — drives the signature's amplitude and frequency. */
+  /** Relative pitch, 0–1 (median F0, 100–250 Hz on a log scale) — drives the signature's amplitude and frequency. */
   pitch: number;
-  /** Words per minute — drives how fast the greeting reads across it. */
+  /** Words per minute, measured from the voice's sample — drives the signature's pace. */
   wpm: number;
 };
 
 export const SETUP_VOICES: SetupVoice[] = [
   {
-    id: "sarah",
-    name: "Sarah",
+    id: "ava",
+    name: "Dana",
     accent: "English · American",
-    register: "Female · young",
-    note: "Confident and warm, with a mature undertone.",
-    pitch: 0.66,
-    wpm: 158,
+    register: "Female · calm",
+    note: "Clear and calm, for any kind of call.",
+    pitch: 0.76,
+    wpm: 206,
   },
   {
-    id: "roger",
-    name: "Roger",
+    id: "agent-us-m",
+    name: "Leo",
     accent: "English · American",
-    register: "Male · middle aged",
-    note: "Easy going, and perfect for casual conversations.",
-    pitch: 0.28,
-    wpm: 142,
+    register: "Male · friendly",
+    note: "Friendly and approachable, at ease on every call.",
+    pitch: 0.53,
+    wpm: 205,
   },
   {
-    id: "laura",
-    name: "Laura",
-    accent: "English · American",
-    register: "Female · young",
-    note: "Sunny enthusiasm, quick to put a caller at ease.",
-    pitch: 0.78,
-    wpm: 176,
-  },
-  {
-    id: "george",
-    name: "George",
+    id: "agent-gb-f",
+    name: "Gemma",
     accent: "English · British",
-    register: "Male · middle aged",
-    note: "Warm resonance that instantly captivates.",
-    pitch: 0.22,
-    wpm: 134,
+    register: "Female · confident",
+    note: "Confident and expressive, made for professional help.",
+    pitch: 0.64,
+    wpm: 202,
   },
   {
-    id: "charlie",
-    name: "Charlie",
-    accent: "English · Australian",
-    register: "Male · young",
-    note: "Confident and energetic, never rushed.",
-    pitch: 0.41,
-    wpm: 168,
-  },
-  {
-    id: "river",
-    name: "River",
-    accent: "English · American",
-    register: "Neutral · middle aged",
-    note: "Relaxed and even, ready for anything.",
-    pitch: 0.5,
-    wpm: 150,
+    id: "agent-gb-m",
+    name: "Archie",
+    accent: "English · British",
+    register: "Male · warm",
+    note: "Warm and conversational, easy to talk to.",
+    pitch: 0.31,
+    wpm: 216,
   },
 ];
 
@@ -2165,7 +2155,7 @@ export const PRODUCT_GROUPS: NavGroup[] = [
         lens: "call",
         moment: {
           context: "Text to speech",
-          voiceId: "sarah",
+          voiceId: "ava",
           turns: [
             { sp: "agent", t: "Your table for six is confirmed for Friday at 8:45." },
           ],
@@ -2335,7 +2325,7 @@ export const PRODUCT_MENU = {
   // in the nav would undercut the one section that was careful about it.
   liveKicker: (label: string) => `Sample call · ${label}`,
   seeItFor: (label: string) => `See it for ${label}`,
-  demo: { label: "Hear the agent take a real call", href: "/#demo" },
+  demo: { label: "Hear the agent take a sample call", href: "/#demo" },
   // Read off the price list, so the menu can never quote a plan that moved.
   price: { label: (monthly: number) => `Plans from $${monthly} a month`, href: "/#pricing" },
 } as const;
