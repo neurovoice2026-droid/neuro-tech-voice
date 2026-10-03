@@ -104,7 +104,11 @@ function SplitLines({
   );
 }
 
-/** Four bars keeping time — a voice product's answer to a sound toggle. */
+/**
+ * Four bars keeping time: decoration (aria-hidden), not a control. Sound
+ * is off until the visitor turns it on at one of the stages below, each
+ * beside the sample it plays; the cover itself stays silent.
+ */
 function Equalizer({ cover }: { cover: RefObject<HTMLElement | null> }) {
   const barsRef = useRef<HTMLDivElement>(null);
 
@@ -160,7 +164,7 @@ function CoverCta() {
   return (
     <Link
       href={C.cta.href}
-      className="group inline-grid select-none text-[1.25em] leading-[1.2] tracking-[-0.04em]"
+      className="tap-44 group relative inline-grid select-none text-[1.25em] leading-[1.2] tracking-[-0.04em]"
     >
       <span className="col-start-1 row-start-1 grid grid-cols-2 grid-rows-2 rounded-[0.2em] bg-[var(--cover-paper)] p-[0.33em] text-[var(--cover-ink)] transition-colors duration-500 group-hover:bg-[var(--cover-brand)] group-hover:text-[var(--cover-paper)]">
         <CornerDot className="size-[0.3em] justify-self-start transition-transform duration-500 group-hover:-translate-x-[0.12em] group-hover:-translate-y-[0.12em]" />

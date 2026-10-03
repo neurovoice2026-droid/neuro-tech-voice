@@ -1,3 +1,4 @@
+import type { Cue } from "@/lib/audio/cue-types";
 import { AUTH } from "@/lib/site";
 
 /* ------------------------------------------------------------------ *
@@ -92,6 +93,10 @@ export const RELAY = {
   pick: "Play a rule",
   pause: "Pause",
   play: "Play",
+  /** Reduced motion: the transport for the keyword scene, which plays its excerpt. */
+  listen: "Listen",
+  /** Beside the keyword line once it can be heard: never a recording. */
+  excerpt: "Sample excerpt · AI-generated voice",
   sentiment: { positive: "Positive", neutral: "Neutral", negative: "Negative" },
   noSummary: "No conversation — the call didn't connect.",
   scenes: [
@@ -172,6 +177,29 @@ export const RELAY = {
     },
   ] satisfies RelayScene[],
 } as const;
+
+/**
+ * The keyword scene's line can be heard: one generated excerpt, shared
+ * with the home page's relay (lib/audio/cues/post-call-keyword-excerpt.json,
+ * P2, fetched only once sound is on).
+ */
+export const RELAY_EXCERPT = {
+  surface: "post-call-keyword-excerpt",
+  id: "post-call-keyword-excerpt/keyword/0",
+} as const;
+
+/**
+ * Where the keyword is said in the excerpt (seconds on its cue clock),
+ * when the excerpt says the scene's line as shown, one cue word per
+ * display word; null otherwise (the scene then stays silent).
+ */
+export function keywordAt(cue: Cue | null | undefined, heard: { before: string; word: string; after: string }) {
+  const turn = cue && cue.turns.length === 1 ? cue.turns[0] : null;
+  const words = `${heard.before}${heard.word}${heard.after}`.split(" ");
+  const k = heard.before.split(" ").length - 1;
+  if (!turn || turn.sp !== "caller" || turn.words.length !== words.length || !words[k]?.includes(heard.word)) return null;
+  return turn.words[k][1];
+}
 
 /* ─── Setting one up ─────────────────────────────────────────────── */
 

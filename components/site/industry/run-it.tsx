@@ -1,13 +1,19 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { Headphones, Pause, Play } from "lucide-react";
+import type { Cue, CueFile } from "@/lib/audio/cue-types";
+import { unlockFromGesture } from "@/components/site/audio/engine";
+import { useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import type { RigField, Trade } from "@/lib/pages/industries/schema";
+import { articleFor, spokenCall } from "@/lib/pages/industries/spoken-timing";
 import { cn } from "@/lib/utils";
 import { Eyebrow, Frame, PillLink, SectionTitle } from "../product/primitives";
 import { useInView, usePrefersReducedMotion } from "../product/timing";
 import { EMBER_INK, Gate, SETTLED, ToolName } from "./parts";
 import { markProved } from "./proved";
 import { ArtefactMark } from "./artefacts";
+import { ListenPill, StageSound, useStageCues } from "./first-question";
 
 /* ------------------------------------------------------------------ *
  * §3 — Run it. The signature.
@@ -33,24 +39,73 @@ import { ArtefactMark } from "./artefacts";
  * instrument. `touch-action: pan-y` on it so a vertical flick scrolls
  * the page straight through the rail — on a phone that single line
  * decides whether this reads as beautiful or as broken.
+ *
+ * LISTEN. The call can also be heard, at its own pace: "Listen to the
+ * call" plays it once at 1x with AI-generated voices (one track per
+ * trade, lib/audio/cues/industry/run-it-call/<slug>.json, fetched only once
+ * sound is on or on that press). While it plays the audio's clock is
+ * the rail's: each line swaps in as it is said, and the tools and the
+ * fields land between the same two lines as written, re-timed to the
+ * recording (spokenCall in lib/pages/industries/spoken-timing.ts).
+ * Dragging the puck seeks the audio. The silent 14-second pass is the
+ * one it always was, on the authored clock, and it never makes a sound.
+ * Off screen the call pauses, and plays on when it is back; another
+ * section's press takes the sound and the call runs on silently; sound
+ * turned off lets it finish silently. Under reduced motion lines swap
+ * in whole. A trade without a track that says its call as written has
+ * no Listen control at all (`listenSeconds` null, from the page).
+ * Nothing here is announced line by line, so there is no live region to
+ * quiet while the call is heard.
  * ------------------------------------------------------------------ */
 
 /** The call is 64 seconds. Nobody watches a page for 64 seconds. */
 const PLAYBACK_SECONDS = 14;
 const STEPS = 1000;
 
+/** The section's claim on the site's one sound (components/site/audio/engine.ts). */
+const VOICE_ID = "industry-run-it-call";
+
+/** The 1x listen mode: not started, under way, paused by the reader, or heard to the end. */
+type Listening = "off" | "playing" | "paused" | "ended";
+
 function clock(seconds: number) {
   const s = Math.max(0, Math.floor(seconds));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-export function RunIt({ trade }: { trade: Trade }) {
+export function RunIt({
+  trade,
+  listenSeconds = null,
+}: {
+  trade: Trade;
+  /** The spoken call's length in whole seconds, from its track (the page reads it); null: no track, no Listen. */
+  listenSeconds?: number | null;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, "-15% 0px");
+  /** A screen away: with sound on, the call's cues are fetched now, so a press plays at once. */
+  const near = useInView(ref, "100% 0px");
   const still = usePrefersReducedMotion();
 
   const [progress, setProgress] = useState(0);
   const [touched, setTouched] = useState(false);
+
+  /* ── The voice ───────────────────────────────────────────────────── */
+
+  const canListen = listenSeconds !== null;
+  const track = useVoiceTrack(VOICE_ID, { active: inView });
+  const trackRef = useRef(track);
+  useEffect(() => {
+    trackRef.current = track;
+  });
+  const { fileRef, load } = useStageCues("industry-run-it-call", trade.slug, track.on && near && canListen);
+  /** The call's track and the trade re-timed to it, once a press has asked for it. */
+  const [spoken, setSpoken] = useState<{ cue: Cue; trade: Trade } | null>(null);
+  const [listening, setListening] = useState<Listening>("off");
+  /** What the section draws from: the call as spoken while listening, else as written. */
+  const shownTrade = listening !== "off" && spoken ? spoken.trade : trade;
+  /** Reduced motion or the still tier, listening: lines and fields swap in whole. */
+  const instant = listening !== "off" && track.listen;
 
   // Autoplay: one pass, then it stops dead. It never loops — a looping
   // demonstration reads as a screensaver and stops being evidence.
@@ -65,6 +120,8 @@ export function RunIt({ trade }: { trade: Trade }) {
   const finished = useRef(false);
 
   useEffect(() => {
+    // Listening, the audio's clock drives the rail (below); the silent pass gives way for good.
+    if (listening !== "off") return;
     if (still) {
       setProgress(1);
       return;
@@ -80,29 +137,123 @@ export function RunIt({ trade }: { trade: Trade }) {
     };
     raf.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf.current);
-  }, [inView, still, touched]);
+  }, [inView, still, touched, listening]);
+
+  // Listening: the rail is the audio's clock, frame by frame, until the call ends.
+  useEffect(() => {
+    if (listening !== "playing" || !spoken || !inView) return;
+    let frame = 0;
+    const tick = () => {
+      const at = trackRef.current.time();
+      setProgress(Math.min(1, at / spoken.cue.dur));
+      if (at >= spoken.cue.dur) {
+        setListening("ended");
+        return;
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [listening, spoken, inView]);
+
+  // Back on screen mid-call: it plays on from where it paused (the track let go when it left), as a
+  // run, not a press: it claims the sound only if nobody else is playing, else carries on silently.
+  const away = useRef(false);
+  const playOn = useEffectEvent(() => {
+    if (listening !== "playing" || !spoken) return;
+    const voice = trackRef.current;
+    if (voice.time() >= spoken.cue.dur) return;
+    // Under reduced motion only a press may play: the run waits for one.
+    if (!voice.play(spoken.cue) && voice.listen) setListening("paused");
+  });
+  // Off screen under reduced motion (or the still tier): the call pauses with the track, and the transport says so.
+  const pauseAway = useEffectEvent(() => {
+    if (listening === "playing" && trackRef.current.listen) setListening("paused");
+  });
+  useEffect(() => {
+    if (!inView) {
+      away.current = true;
+      pauseAway();
+      return;
+    }
+    if (!away.current) return;
+    away.current = false;
+    playOn();
+  }, [inView]);
+
+  /** Plays the call from cue time `at`, on its spoken clock. Nothing happens without a track that says it as written. */
+  function listenFrom(file: CueFile | null, at: number) {
+    const call = spokenCall(trade, file);
+    if (!call) return;
+    setSpoken(call);
+    setListening("playing");
+    setProgress(Math.min(1, at / call.cue.dur));
+    trackRef.current.play(call.cue, at, { press: true });
+  }
+
+  /** Inside a press: sound goes on with it, and the call plays from the top once its cues are here. */
+  function listenFromTop() {
+    unlockFromGesture();
+    const file = fileRef.current;
+    if (file) listenFrom(file, 0);
+    else void load().then((f) => listenFrom(f, 0));
+  }
+
+  /** Inside a press: the paused (or silently running) call plays on, heard, from where it is. */
+  function listenOn() {
+    if (!spoken) return;
+    unlockFromGesture();
+    setListening("playing");
+    trackRef.current.play(spoken.cue, undefined, { press: true });
+  }
+
+  /** "Listen to the call" / Pause / Play. */
+  function onTransport() {
+    if (listening === "playing") {
+      trackRef.current.pause();
+      setListening("paused");
+    } else if (listening === "paused") {
+      listenOn();
+    } else {
+      listenFromTop();
+    }
+  }
+
+  /** This section's sound pill, inside its click: on, the call is heard, from where it is or from the top. */
+  function onSound(on: boolean) {
+    if (!on || !canListen) return;
+    if (listening === "playing" || listening === "paused") listenOn();
+    else listenFromTop();
+  }
 
   function take(next: number) {
     cancelAnimationFrame(raf.current);
     setTouched(true);
     setProgress(next);
     markProved("run");
+    // Listening, the puck seeks the audio; past the end, the call waits there for Play.
+    if (listening !== "off" && spoken) {
+      trackRef.current.seek(next * spoken.cue.dur);
+      if (listening === "ended" && next < 1) setListening("paused");
+    }
   }
 
-  const t = progress * trade.duration;
+  const t = progress * shownTrade.duration;
   const turn = useMemo(() => {
-    let current = trade.turns[0];
-    for (const x of trade.turns) if (x.at <= t) current = x;
+    let current = shownTrade.turns[0];
+    for (const x of shownTrade.turns) if (x.at <= t) current = x;
     return current;
-  }, [t, trade.turns]);
+  }, [t, shownTrade.turns]);
 
   // The playback re-renders this section on every frame, but only the rail
   // actually moves every frame. Everything else is handed the last moment
   // it has passed, not the clock, so it renders when that moment changes —
   // a handful of times a call instead of sixty times a second.
-  const ranTo = lastAt(trade.toolRuns, t);
-  const filledTo = lastAt(trade.rig.fields, t);
+  const ranTo = lastAt(shownTrade.toolRuns, t);
+  const filledTo = lastAt(shownTrade.rig.fields, t);
   const shown = Math.round(Math.min(1, Math.max(0, (progress - 0.88) / 0.1)) * receiptWords(trade).length);
+  /** The length the caption gives: the call's as written, or as heard once it is being listened to. */
+  const seconds = listening !== "off" && spoken ? Math.floor(spoken.trade.duration) : trade.duration;
 
   return (
     <section id="run" ref={ref} className="scroll-mt-28">
@@ -123,21 +274,51 @@ export function RunIt({ trade }: { trade: Trade }) {
             {/* The call. On a phone this comes second: the paperwork is
                 the point and the rail is the thing your thumb reaches. */}
             <div className="order-2 lg:order-1">
-              <Transcript turns={trade.turns} side={turn.side} text={turn.text} ember={trade.ink.ember} />
-
-              <Rail
-                trade={trade}
-                progress={progress}
-                onScrub={take}
-                label={`${clock(t)} of ${clock(trade.duration)} — ${turn.text}`}
+              <Transcript
+                turns={shownTrade.turns}
+                side={turn.side}
+                text={turn.text}
+                ember={trade.ink.ember}
+                instant={instant}
               />
 
-              <ToolLog toolRuns={trade.toolRuns} ranTo={ranTo} />
+              <Rail
+                trade={shownTrade}
+                progress={progress}
+                onScrub={take}
+                label={`${clock(t)} of ${clock(shownTrade.duration)} — ${turn.text}`}
+              />
+
+              {canListen && (
+                <StageSound
+                  className="mt-3"
+                  listen={track.listen}
+                  playing={listening === "playing"}
+                  onSound={onSound}
+                  transport={(describedBy) => (
+                    <ListenPill
+                      label={
+                        listening === "playing"
+                          ? "Pause"
+                          : listening === "paused"
+                            ? "Play"
+                            : `Listen to the call · ${clock(listenSeconds)}`
+                      }
+                      icon={listening === "playing" ? Pause : listening === "paused" ? Play : Headphones}
+                      small={listening === "playing" || listening === "paused"}
+                      onPress={onTransport}
+                      describedBy={describedBy}
+                    />
+                  )}
+                />
+              )}
+
+              <ToolLog toolRuns={shownTrade.toolRuns} ranTo={ranTo} instant={instant} />
             </div>
 
             {/* The rig: this trade's own paperwork, drawn empty. */}
             <div className="order-1 lg:order-2">
-              <JobCard trade={trade} clockText={clock(t)} filledTo={filledTo} shown={shown} />
+              <JobCard trade={shownTrade} clockText={clock(t)} filledTo={filledTo} shown={shown} instant={instant} />
             </div>
           </div>
         </div>
@@ -146,10 +327,23 @@ export function RunIt({ trade }: { trade: Trade }) {
       <Frame className="mt-5 px-6 md:px-12">
         <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
           <p className="text-[13px] leading-5 text-pp-muted">
-            A {trade.duration}-second call, played back in {PLAYBACK_SECONDS}. The clock on the rail is
-            the call&rsquo;s own.
+            {canListen && listenSeconds !== null && listening === "off" ? (
+              // The silent pass keeps the written call's clock, which is not the recording's length: the
+              // sentence gives only the recording's (the same as the Listen control's), and says which
+              // clock the rail keeps.
+              <>
+                Played back in {PLAYBACK_SECONDS} seconds, or listen to the whole call ({clock(listenSeconds)}) at its own
+                pace. The clock on the rail keeps the written call&rsquo;s time.
+              </>
+            ) : (
+              <>
+                {articleFor(seconds)} {seconds}-second call, played back in {PLAYBACK_SECONDS}
+                {canListen && ", or listen to it at its own pace"}. The clock on the rail is the call&rsquo;s own.
+              </>
+            )}
           </p>
-          <PillLink href="/register" size="sm" className="ml-auto">
+          {/* z-[1]: its 44px tap reaches past the section's foot, under the next section's box. */}
+          <PillLink href="/register" size="sm" className="relative z-[1] ml-auto">
             Build this agent
           </PillLink>
         </div>
@@ -184,16 +378,19 @@ const Transcript = memo(function Transcript({
   side,
   text,
   ember,
+  instant = false,
 }: {
   turns: Trade["turns"];
   side: "caller" | "agent";
   text: string;
   ember: boolean;
+  /** Listening under reduced motion: the line swaps in whole, with no fade. */
+  instant?: boolean;
 }) {
   return (
     <div className="grid min-h-[92px] md:min-h-[84px]">
       <div className="[grid-area:1/1]">
-        <Line side={side} text={text} ember={ember} live />
+        <Line side={side} text={text} ember={ember} live instant={instant} />
       </div>
       {turns.map((x) => (
         <div key={`${x.side}-${x.at}`} aria-hidden className="invisible [grid-area:1/1]">
@@ -204,7 +401,19 @@ const Transcript = memo(function Transcript({
   );
 });
 
-function Line({ side, text, ember, live }: { side: "caller" | "agent"; text: string; ember: boolean; live?: boolean }) {
+function Line({
+  side,
+  text,
+  ember,
+  live,
+  instant,
+}: {
+  side: "caller" | "agent";
+  text: string;
+  ember: boolean;
+  live?: boolean;
+  instant?: boolean;
+}) {
   return (
     <>
       <p className="text-[11px] leading-4 font-medium tracking-[0.12em] uppercase" style={{ color: side === "caller" ? "#6b6878" : ember ? EMBER_INK : "#551a89" }}>
@@ -214,7 +423,7 @@ function Line({ side, text, ember, live }: { side: "caller" | "agent"; text: str
         key={live ? text : undefined}
         className={cn(
           "mt-2 text-[17px] leading-7 md:text-[19px] md:leading-8",
-          live && "ind-swap",
+          live && !instant && "ind-swap",
           side === "caller"
             ? "font-[family-name:var(--font-pp-cinema)] text-pp-ink italic"
             : "text-pp-ink",
@@ -231,7 +440,16 @@ function Line({ side, text, ember, live }: { side: "caller" | "agent"; text: str
  * as an invisible list under the live one, so the log filling up does not
  * push the page down on a phone, where it is the last thing in the card.
  */
-const ToolLog = memo(function ToolLog({ toolRuns, ranTo }: { toolRuns: Trade["toolRuns"]; ranTo: number }) {
+const ToolLog = memo(function ToolLog({
+  toolRuns,
+  ranTo,
+  instant = false,
+}: {
+  toolRuns: Trade["toolRuns"];
+  ranTo: number;
+  /** Listening under reduced motion: rows arrive without a fade. */
+  instant?: boolean;
+}) {
   const runs = toolRuns.filter((r) => r.at <= ranTo).slice(-3);
   const row = "flex items-baseline gap-3 border-b border-pp-rule pb-1.5";
   return (
@@ -242,7 +460,7 @@ const ToolLog = memo(function ToolLog({ toolRuns, ranTo }: { toolRuns: Trade["to
       <div className="mt-2 grid">
         <ul className="space-y-1.5 [grid-area:1/1]">
           {runs.map((r) => (
-            <li key={`${r.tool}-${r.at}`} className={`ind-row ${row}`}>
+            <li key={`${r.tool}-${r.at}`} className={instant ? row : `ind-row ${row}`}>
               <ToolName tool={r.tool} className="text-pp-ink" />
               <span className="ml-auto text-[11px] text-pp-muted tabular-nums">{r.ms} ms</span>
             </li>
@@ -365,11 +583,14 @@ const JobCard = memo(function JobCard({
   clockText,
   filledTo,
   shown,
+  instant = false,
 }: {
   trade: Trade;
   clockText: string;
   filledTo: number;
   shown: number;
+  /** Listening under reduced motion: fields land without a fade. */
+  instant?: boolean;
 }) {
   const words = receiptWords(trade);
   return (
@@ -384,7 +605,7 @@ const JobCard = memo(function JobCard({
 
       <dl className="mt-1">
         {trade.rig.fields.map((f) => (
-          <Field key={f.id} field={f} on={f.at <= filledTo} />
+          <Field key={f.id} field={f} on={f.at <= filledTo} instant={instant} />
         ))}
       </dl>
 
@@ -401,7 +622,7 @@ const JobCard = memo(function JobCard({
   );
 });
 
-function Field({ field, on }: { field: RigField; on: boolean }) {
+function Field({ field, on, instant }: { field: RigField; on: boolean; instant?: boolean }) {
   return (
     <div
       className={cn(
@@ -426,7 +647,7 @@ function Field({ field, on }: { field: RigField; on: boolean }) {
         <span
           key={on ? "on" : "off"}
           aria-hidden={on ? undefined : true}
-          className={cn("block text-[15px] leading-[22px] text-pp-ink", on ? "ind-land" : "invisible")}
+          className={cn("block text-[15px] leading-[22px] text-pp-ink", on ? !instant && "ind-land" : "invisible")}
         >
           {field.value}
         </span>

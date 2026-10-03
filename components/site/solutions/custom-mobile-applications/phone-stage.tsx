@@ -321,7 +321,8 @@ type Tour = "idle" | "running" | "done";
 const PHONE_BOX = "mx-auto w-[min(280px,100%)] md:w-full";
 
 /** A step on the rail: its number and its name over the dwell track, a 44px target. */
-const STEP = "group flex min-h-11 min-w-0 cursor-pointer flex-col justify-end gap-2 rounded-md pt-1 text-left";
+// tap-44: a step narrower than 44px (a short name on a 320px phone) still takes a 44px tap.
+const STEP = "tap-44 group relative flex min-h-11 min-w-0 cursor-pointer flex-col justify-end gap-2 rounded-md pt-1 text-left";
 
 export function PhoneStage({ data }: { data: StageData }) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -860,10 +861,12 @@ export function PhoneStage({ data }: { data: StageData }) {
                       {pad2(i + 1)}
                     </span>
                     {/* 12px below 360, so five names and their 8px gaps fit a 256px rail
-                        with more than a word space between each two. */}
+                        with more than a word space between each two. One line each below
+                        md (a two-word name wrapped to "Sign / in" at 320); the columns are
+                        sized by their names, so the short ones give way. */}
                     <span
                       className={cn(
-                        "text-[13px] leading-4 max-[359px]:text-[12px]",
+                        "text-[13px] leading-4 max-[359px]:text-[12px] max-md:whitespace-nowrap",
                         current ? "text-pp-ink" : "text-pp-ink/80 group-hover:text-pp-ink",
                       )}
                     >

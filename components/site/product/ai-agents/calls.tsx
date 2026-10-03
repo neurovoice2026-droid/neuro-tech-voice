@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import type { gsap } from "gsap";
 import { ChevronLeft, ChevronRight, Pause, Play, RotateCcw } from "lucide-react";
-import { CALLS } from "@/lib/pages/ai-agents";
+import { CALLS, spokenLines, type SpokenLine } from "@/lib/pages/ai-agents";
+import { cueIn, lazyCues, type Cue } from "@/lib/audio";
 import { cn } from "@/lib/utils";
+import { envelopeAt, turnAt } from "@/components/site/audio/cue";
+import { isAudible, isSounding, isSoundOn, unlockFromGesture } from "@/components/site/audio/engine";
+import { SOUND_NOTE, SoundButton } from "@/components/site/audio/sound-button";
+import { useLazyCues } from "@/components/site/audio/use-lazy-cues";
+import { useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { useKitContext, useMotionKit } from "../motion-kit";
 import { Frame, Orb, PillLink, SectionHeading } from "../primitives";
 import { paletteByLuma, SCENE_GRADIENTS } from "./neat-backdrop";
@@ -19,12 +25,75 @@ import { useInView, usePrefersReducedMotion } from "../timing";
  * words, the speaker card, the orb's breathing, the scrubber and the
  * chapter line under the call's title — so pause, resume and the end of
  * the call are one state and nothing can drift out of step with it.
+ *
+ * Sound. Each call has generated audio (AI-generated voices,
+ * lib/audio/cues/agents-sample-calls.json), played only once the visitor
+ * turns sound on beside the transport. A call that starts with sound on
+ * is built on its audio's schedule: each line comes in as its clip
+ * starts, each word as it is said, and the orb swells with the agent's
+ * voice; the timeline stays paused and the audio's clock sets its time
+ * every frame, so pause, the end and the scrubber follow the voice. The
+ * outcome then plays on GSAP's own clock. Sound turned on mid-call starts
+ * the call again, spoken; turned off, the call finishes on the same clock
+ * in silence and the next is read-paced. While the voice is heard, the
+ * live region stops reading each line out (the outcome is still read).
+ * With reduced motion nothing plays by itself: the transport is "Listen".
  * ------------------------------------------------------------------ */
 
 /** Seconds per spoken word, and the rest after a line lands. */
 const WORD = 0.23;
 const REST = 1.05;
 const OUTCOME_HOLD = 2.8;
+/** Where the first line lands on a read-paced timeline; a spoken one puts its first line there too. */
+const FIRST_LINE = 0.45;
+/** A line starts to leave this long before the next one comes in, as on a read-paced timeline. */
+const LINE_OUT = 0.55;
+/** How far the orb swells at full voice (the read-paced breathing peaks at 1.06). */
+const ORB_SWELL = 0.07;
+
+/** The stage's claim on the site's one sound (components/site/audio/engine.ts). */
+const VOICE_ID = "agents-calls";
+
+type SpokenCall = { cue: Cue; lines: SpokenLine[] };
+
+/**
+ * Each call's audio, where its cue speaks every line as shown. P0: the cue
+ * file (a few KB of timings) is fetched as sound goes on, never in the
+ * page's first load. A call without one stays read-paced.
+ */
+const SPOKEN = lazyCues(
+  "agents-sample-calls",
+  (file): Partial<Record<string, SpokenCall>> =>
+    Object.fromEntries(
+      CALLS.items.map((c) => {
+        const cue = cueIn(file, `agents-sample-calls/${c.id}`);
+        const lines = spokenLines(cue, c.turns);
+        return [c.id, cue && lines ? { cue, lines } : undefined];
+      }),
+    ),
+);
+
+/**
+ * A spoken call's timeline: the audio starts at `T0` (so the first line
+ * lands at FIRST_LINE, as it does read-paced), each line comes in at its
+ * clip's start and leaves before the next comes in (no sooner than 0.3 s
+ * before its own clip ends), and the outcome comes up when the audio ends.
+ */
+export function spokenCallPlan(sp: SpokenCall) {
+  const T0 = Math.max(0, FIRST_LINE - sp.lines[0].start);
+  const outcome = T0 + Math.max(sp.cue.dur, sp.lines[sp.lines.length - 1].end);
+  const lines = sp.lines.map((l, i) => {
+    const at = T0 + l.start;
+    const next = sp.lines[i + 1];
+    const nextAt = next ? T0 + next.start : outcome;
+    const out = Math.max(at + 0.2, Math.min(nextAt - 0.15, Math.max(nextAt - LINE_OUT, T0 + l.end - 0.3)));
+    return { at, out, words: l.words };
+  });
+  return { T0, lines, outcome };
+}
+
+/** Voice to orb: the envelope's speech range (about 0.35 to 0.8) onto 0 to 1. */
+const level = (env: number) => Math.min(1, Math.max(0, (env - 0.35) / 0.45));
 
 /** Each call borrows one of the hero reel's palettes, so its orb matches a panel above. */
 const CALL_PALETTE: Record<string, string> = {
@@ -55,9 +124,38 @@ export function AgentsCalls() {
   const [paused, setPaused] = useState(false);
   const [finished, setFinished] = useState(false);
   const [announce, setAnnounce] = useState("");
+  /** This run is built on its audio's schedule (sound was on when it started). */
+  const [spoken, setSpoken] = useState(false);
+  /** A new spoken run of the same call: rebuilds its timeline. Only ever moves with sound involved. */
+  const [runId, setRunId] = useState(0);
+  /** Reduced motion: the Listen transport. */
+  const [listen, setListen] = useState<"playing" | "paused" | null>(null);
+
+  const track = useVoiceTrack(VOICE_ID, { active: inView });
+  const trackRef = useRef(track);
+  useEffect(() => {
+    trackRef.current = track;
+  });
+  /** The next run was the visitor's own choice: it may take the sound from another stage. */
+  const pressRef = useRef(false);
+  /** A spoken timeline's drive: its call's audio, its plan, the orb's setter; null when read-paced. */
+  const driveRef = useRef<{
+    sp: SpokenCall;
+    plan: ReturnType<typeof spokenCallPlan>;
+    setOrb: (scale: number) => void;
+    fresh: boolean;
+  } | null>(null);
+  const noteId = useId();
 
   const call = calls[index];
   const palette = paletteFor(call.id);
+  /** The calls' audio, once its timings are here (fetched as sound goes on). */
+  const spokenAll = useLazyCues(SPOKEN, track.on);
+  /**
+   * This call has audio; before its timings are here (sound off, or a fetch that failed, which a
+   * press asks for again), every call is taken to have it, as each does.
+   */
+  const voiced = spokenAll ? !!spokenAll[call.id] : true;
 
   useKitContext(
     kit,
@@ -89,6 +187,7 @@ export function AgentsCalls() {
 
       const setBar = gsap.quickSetter(barRef.current, "scaleX");
       const setChapter = gsap.quickSetter(chapterRef.current, "scaleX");
+      const sp = spoken ? SPOKEN.get()?.[call.id] : undefined;
 
       const tl = gsap.timeline({
         paused: true,
@@ -108,13 +207,83 @@ export function AgentsCalls() {
         );
       };
 
+      if (sp) {
+        // Spoken: every line where its clip is, its words as they are said; the orb follows the voice (below).
+        const plan = spokenCallPlan(sp);
+        call.turns.forEach((turn, i) => {
+          const line = plan.lines[i];
+          const words = splits[i].words;
+          const last = line.words[line.words.length - 1] ?? 0;
+          // While a voice is heard (this call's or another stage's), the live region would only talk over it.
+          tl.call(() => {
+            if (!isAudible(VOICE_ID) && !isSounding()) setAnnounce(`${CALLS.labels[turn.sp]}: ${turn.t}`);
+          }, [], line.at);
+          showSpeaker(turn.sp === "agent" ? ".cine-speaker-agent" : ".cine-speaker-client", line.at - 0.15);
+          tl.set(lines[i], { autoAlpha: 1, yPercent: 0, filter: "blur(0px)" }, line.at).fromTo(
+            words,
+            { autoAlpha: 0, yPercent: 16, filter: "blur(3px)" },
+            {
+              autoAlpha: 1,
+              yPercent: 0,
+              filter: "blur(0px)",
+              duration: 0.9,
+              ease: "power2.out",
+              stagger: (k: number) => line.words[k] ?? last,
+            },
+            line.at,
+          );
+          tl.to(
+            lines[i],
+            { autoAlpha: 0, yPercent: -10, filter: "blur(3px)", duration: 0.6, ease: "power2.inOut" },
+            line.out,
+          );
+        });
+        const t = plan.outcome;
+        tl.call(() => setAnnounce(`${CALLS.labels.outcome}: ${call.outcome}`), [], t);
+        showSpeaker(".cine-speaker-outcome", t - 0.15);
+        tl.set(outcome, { autoAlpha: 1 }, t)
+          .fromTo(
+            outcomeSplit.words,
+            { autoAlpha: 0, yPercent: 16, filter: "blur(3px)" },
+            { autoAlpha: 1, yPercent: 0, filter: "blur(0px)", duration: 1, ease: "power2.out", stagger: 0.06 },
+            t,
+          )
+          .fromTo(
+            q(".cine-check"),
+            { scale: 0, autoAlpha: 0 },
+            { scale: 1, autoAlpha: 1, duration: 0.6, ease: "back.out(2.2)" },
+            t + 0.1,
+          )
+          .to({}, { duration: OUTCOME_HOLD });
+
+        // "scale" is a CSSPlugin alias (scaleX + scaleY) that quickSetter cannot take: it would try
+        // setAttribute("scaleX,scaleY") and throw, aborting the spoken run. Set both axes instead.
+        const setScaleX = gsap.quickSetter(orb, "scaleX") as (v: number) => void;
+        const setScaleY = gsap.quickSetter(orb, "scaleY") as (v: number) => void;
+        const setOrb = (scale: number) => {
+          setScaleX(scale);
+          setScaleY(scale);
+        };
+        setOrb(1);
+        tlRef.current = tl;
+        driveRef.current = { sp, plan, setOrb, fresh: true };
+        return () => {
+          setOrb(1);
+          tlRef.current = null;
+          driveRef.current = null;
+        };
+      }
+
       let t = 0.45;
       call.turns.forEach((turn, i) => {
         const words = splits[i].words;
         const speak = words.length * WORD;
         const end = t + speak + REST;
 
-        tl.call(() => setAnnounce(`${CALLS.labels[turn.sp]}: ${turn.t}`), [], t);
+        // Not while another stage's voice is heard: the live region would talk over it.
+        tl.call(() => {
+          if (!isSounding()) setAnnounce(`${CALLS.labels[turn.sp]}: ${turn.t}`);
+        }, [], t);
         showSpeaker(turn.sp === "agent" ? ".cine-speaker-agent" : ".cine-speaker-client", t - 0.15);
 
         tl.set(lines[i], { autoAlpha: 1, yPercent: 0, filter: "blur(0px)" }, t).fromTo(
@@ -171,15 +340,50 @@ export function AgentsCalls() {
         tlRef.current = null;
       };
     },
-    { scope: stageRef, dependencies: [call.id, reduce], revertOnUpdate: true },
+    { scope: stageRef, dependencies: [call.id, reduce, spoken, runId], revertOnUpdate: true },
   );
+
+  /**
+   * Starts call `i` from the top: spoken when sound is on and it has
+   * audio, read-paced otherwise. `press` is the visitor's own choice.
+   */
+  const startRun = (i: number, press: boolean, waited = false) => {
+    // Sound on, and the calls' timings not here yet: the run starts once they are (a moment). A
+    // press asks again for timings that could not be fetched before (once: then it reads on).
+    const ask = ++cueWait.current;
+    if (isSoundOn() && !waited && (!SPOKEN.settled() || (press && !SPOKEN.get()))) {
+      void SPOKEN.load().then(() => {
+        if (ask === cueWait.current) startLater.current(i, press, true);
+      });
+      return;
+    }
+    const speak = !reduce && !!SPOKEN.get()?.[calls[i].id] && isSoundOn() && (press || !trackRef.current.listen);
+    pressRef.current = press;
+    if (speak || spoken) {
+      // A new timeline, on the schedule this run needs.
+      setSpoken(speak);
+      setRunId((r) => r + 1);
+      if (!speak) trackRef.current.pause();
+    } else if (i === index) {
+      // The same call keeps its timeline, so picking it again starts it over.
+      tlRef.current?.restart();
+    }
+    setIndex(i);
+  };
+  /** Bumped by every run asked for: one waiting for the calls' timings starts only if it is still the last. */
+  const cueWait = useRef(0);
+  const startLater = useRef(startRun);
+  useLayoutEffect(() => {
+    startLater.current = startRun;
+  });
+  const nextCall = useEffectEvent(() => startRun((index + 1) % calls.length, false));
 
   // A call that has finished hands over to the next until somebody takes control.
   useEffect(() => {
     if (!finished || !autoplay || !inView) return;
     const id = window.setTimeout(() => {
       setFinished(false);
-      setIndex((i) => (i + 1) % calls.length);
+      nextCall();
     }, 500);
     return () => window.clearTimeout(id);
   }, [finished, autoplay, inView, calls.length]);
@@ -188,30 +392,201 @@ export function AgentsCalls() {
   useEffect(() => {
     const tl = tlRef.current;
     if (!tl) return;
-    if (inView && !paused && !finished) tl.play();
-    else tl.pause();
-  }, [inView, paused, finished, call.id, reduce, kit]);
+    const drive = driveRef.current;
+    const go = inView && !paused && !finished;
+    if (!drive) {
+      if (go) tl.play();
+      else tl.pause();
+      return;
+    }
+    // Spoken: the audio's clock sets the timeline's time until the voice ends; the outcome runs on its own.
+    const voice = trackRef.current;
+    if (!go) {
+      voice.pause();
+      tl.pause();
+      return;
+    }
+    if (tl.time() >= drive.plan.outcome) {
+      tl.play();
+      return;
+    }
+    tl.pause();
+    const press = pressRef.current;
+    pressRef.current = false;
+    const after = SPOKEN.get()?.[calls[(index + 1) % calls.length].id];
+    voice.play(drive.sp.cue, drive.fresh ? 0 : undefined, { press, next: after?.cue });
+    drive.fresh = false;
+    const { cue } = drive.sp;
+    let raf = 0;
+    const frame = () => {
+      const t = trackRef.current.time();
+      tl.time(drive.plan.T0 + t);
+      const turn = turnAt(cue, t);
+      drive.setOrb(turn && turn.sp === "agent" && t <= turn.end ? 1 + ORB_SWELL * level(envelopeAt(cue, t)) : 1);
+      if (t >= cue.dur) {
+        drive.setOrb(1);
+        tl.play();
+        return;
+      }
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(raf);
+      drive.setOrb(1);
+    };
+  }, [inView, paused, finished, call.id, reduce, kit, spoken, runId, index, calls]);
+
+  // Off screen, the hook pauses the voice: the transport says Listen again, and a press carries on.
+  useEffect(() => {
+    if (!inView) setListen((l) => (l === "playing" ? "paused" : l));
+  }, [inView]);
+
+  // Listen (reduced motion): the call's lines swap in whole as they are said, then it reads finished again.
+  const listenSp = spokenAll?.[call.id];
+  useEffect(() => {
+    const sp = listenSp;
+    const root = stageRef.current;
+    if (listen !== "playing" || !sp || !root) return;
+    const lines = Array.from(root.querySelectorAll<HTMLElement>(".cine-line"));
+    const outcome = root.querySelector<HTMLElement>(".cine-outcome");
+    const speaker = (sel: string) => root.querySelector<HTMLElement>(`.cine-speaker-${sel}`);
+    const show = (el: HTMLElement | null, on: boolean) => {
+      if (!el) return;
+      el.style.visibility = on ? "visible" : "hidden";
+      el.style.opacity = on ? "1" : "0";
+    };
+    let current = -2;
+    let raf = 0;
+    const frame = () => {
+      const t = trackRef.current.time();
+      const over = t >= sp.cue.dur;
+      let k = -1;
+      if (!over) while (k + 1 < sp.lines.length && sp.lines[k + 1].start <= t) k++;
+      if (k !== current || over) {
+        current = k;
+        lines.forEach((el, i) => show(el, i === k));
+        show(outcome, over);
+        const who = over ? "outcome" : k >= 0 ? (call.turns[k].sp === "agent" ? "agent" : "client") : "";
+        (["client", "agent", "outcome"] as const).forEach((x) => show(speaker(x), x === who));
+      }
+      if (barRef.current) barRef.current.style.transform = `scaleX(${over ? 1 : Math.min(1, t / sp.cue.dur)})`;
+      if (over) {
+        setListen(null);
+        setAnnounce(`${CALLS.labels.outcome}: ${call.outcome}`);
+        return;
+      }
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [listen, call, listenSp]);
+
+  /** A press (Listen, or the sound control) made before the calls' timings had arrived: answered when they do. */
+  const pendingPress = useRef<"listen" | "sound" | null>(null);
+  /** Ends a Listen early (another call was picked): the stage reads finished again. */
+  const stopListen = () => {
+    pendingPress.current = null;
+    if (!listen) return;
+    trackRef.current.pause();
+    setListen(null);
+    const root = stageRef.current;
+    if (!root) return;
+    root.querySelectorAll<HTMLElement>(".cine-line, .cine-speaker").forEach((el) => {
+      el.style.visibility = "hidden";
+      el.style.opacity = "0";
+    });
+    root.querySelectorAll<HTMLElement>(".cine-outcome, .cine-speaker-outcome").forEach((el) => {
+      el.style.visibility = "visible";
+      el.style.opacity = "1";
+    });
+    if (barRef.current) barRef.current.style.transform = "scaleX(1)";
+  };
+
+  /** Listen: plays the open call's audio, turning sound on (the press unlocks it), or pauses it. */
+  const toggleListen = (unlock: boolean) => {
+    const sp = SPOKEN.get()?.[call.id];
+    if (!sp) {
+      // Here, but without this call: nothing to say.
+      if (SPOKEN.get()) return;
+      // The calls' timings aren't here yet (or could not be fetched, and are asked for again): sound
+      // goes on in this press, and Listen starts when they arrive.
+      if (unlock) unlockFromGesture();
+      pendingPress.current = "listen";
+      void SPOKEN.load();
+      return;
+    }
+    if (listen === "playing") {
+      trackRef.current.pause();
+      setListen("paused");
+      return;
+    }
+    trackRef.current.play(sp.cue, listen ? undefined : 0, { press: true, unlock });
+    setListen("playing");
+  };
 
   const go = (i: number) => {
     setAutoplay(false);
     setPaused(false);
     setFinished(false);
-    // The same call keeps its timeline, so picking it again starts it over.
-    if (i === index) tlRef.current?.restart();
-    setIndex(i);
+    stopListen();
+    startRun(i, true);
   };
 
   const toggle = () => {
+    if (reduce && voiced) {
+      toggleListen(true);
+      return;
+    }
     const tl = tlRef.current;
     if (finished) {
       setFinished(false);
       setPaused(false);
-      tl?.restart();
+      if (spoken || (isSoundOn() && SPOKEN.get()?.[call.id])) startRun(index, true);
+      else tl?.restart();
       return;
     }
     setAutoplay(false);
+    // Resuming a spoken call is a press: it takes the sound back.
+    if (paused) pressRef.current = true;
     setPaused((p) => !p);
   };
+
+  // Sound turned on here: the call on screen starts again from the top, spoken (Listen, with reduced motion).
+  const onSound = (on: boolean) => {
+    if (!on) return;
+    const sp = SPOKEN.get()?.[call.id];
+    if (!sp) {
+      // The calls' timings are on their way (sound went on in this press, or a fetch that failed is
+      // asked for again): answered once they are here.
+      if (!SPOKEN.get()) {
+        pendingPress.current = "sound";
+        void SPOKEN.load();
+      }
+      return;
+    }
+    if (reduce) {
+      // A Listen under way since sound went off carries on heard, from where its clock is.
+      if (listen === "playing") trackRef.current.play(sp.cue, undefined, { press: true });
+      else toggleListen(false);
+      return;
+    }
+    setFinished(false);
+    setPaused(false);
+    startRun(index, true);
+  };
+
+  // The calls' timings have arrived: a press made while they were on their way is answered now.
+  const answerPending = useEffectEvent(() => {
+    const press = pendingPress.current;
+    pendingPress.current = null;
+    if (!press || !isSoundOn()) return;
+    if (press === "sound") onSound(true);
+    else toggleListen(false);
+  });
+  useEffect(() => {
+    if (listenSp) answerPending();
+  }, [listenSp]);
 
   const orbGlow = {
     "--glow-hi": palette[4],
@@ -255,7 +630,8 @@ export function AgentsCalls() {
               </p>
               <p className="mt-1 text-[15px] leading-[22px]">{call.headline}</p>
             </div>
-            <div className="flex shrink-0 gap-1.5">
+            {/* 8px apart on touch, so the two 44px taps meet without overlapping. */}
+            <div className="flex shrink-0 gap-1.5 any-pointer-coarse:gap-2">
               <RoundButton label={CALLS.labels.prev} onClick={() => go((index - 1 + calls.length) % calls.length)}>
                 <ChevronLeft className="size-4" />
               </RoundButton>
@@ -304,12 +680,29 @@ export function AgentsCalls() {
             </p>
           </div>
 
-          <div className="relative flex items-center gap-4 p-5 md:p-7">
+          <div className="relative flex flex-wrap items-center gap-x-4 gap-y-2 p-5 md:flex-nowrap md:p-7">
             <RoundButton
-              label={finished ? CALLS.labels.replay : paused ? CALLS.labels.play : CALLS.labels.pause}
+              label={
+                reduce && voiced
+                  ? listen === "playing"
+                    ? CALLS.labels.pause
+                    : CALLS.labels.listen
+                  : finished
+                    ? CALLS.labels.replay
+                    : paused
+                      ? CALLS.labels.play
+                      : CALLS.labels.pause
+              }
               onClick={toggle}
+              tap={reduce && voiced}
             >
-              {finished ? (
+              {reduce && voiced ? (
+                listen === "playing" ? (
+                  <Pause className="size-4 fill-current" />
+                ) : (
+                  <Play className="size-4 fill-current" />
+                )
+              ) : finished ? (
                 <RotateCcw className="size-4" />
               ) : paused ? (
                 <Play className="size-4 fill-current" />
@@ -317,7 +710,21 @@ export function AgentsCalls() {
                 <Pause className="size-4 fill-current" />
               )}
             </RoundButton>
-            <div className="relative mx-auto h-[2px] w-full max-w-[520px] overflow-hidden rounded-full bg-pp-ink/10">
+            <SoundButton
+              variant="round"
+              tone="light"
+              caption="none"
+              describedBy={noteId}
+              onChange={onSound}
+            />
+            {/* The sound control's caption: beside it from md, on its own line under the transport on a phone. */}
+            <span
+              id={noteId}
+              className="order-last basis-full text-[12px] leading-4 text-pp-muted md:order-none md:basis-auto md:shrink-0"
+            >
+              {SOUND_NOTE}
+            </span>
+            <div className="relative mx-auto h-[2px] max-w-[520px] min-w-0 flex-1 overflow-hidden rounded-full bg-pp-ink/10">
               {/* Transform set inline, not with a scale utility: GSAP writes
                   `transform`, and Tailwind's scale classes use the separate
                   `scale` property, which would multiply it back to zero. */}
@@ -374,10 +781,13 @@ export function AgentsCalls() {
 function RoundButton({
   label,
   onClick,
+  tap = false,
   children,
 }: {
   label: string;
   onClick: () => void;
+  /** A 44px tap around the 36px disc (the Listen transport). */
+  tap?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -385,7 +795,11 @@ function RoundButton({
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="pp-shadow-btn grid size-9 shrink-0 place-items-center rounded-full bg-white text-pp-ink transition-colors hover:bg-pp-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
+      className={cn(
+        // On touch every one of these takes a 44px tap (tap-44) around its 36px disc.
+        "pp-shadow-btn tap-44 relative grid size-9 shrink-0 place-items-center rounded-full bg-white text-pp-ink transition-colors hover:bg-pp-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink",
+        tap && "relative before:absolute before:-inset-1 before:rounded-full",
+      )}
     >
       {children}
     </button>

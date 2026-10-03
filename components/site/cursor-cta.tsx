@@ -182,9 +182,22 @@ export function CursorCta({ targetRef, href, label, onArmedChange }: Props) {
       setArmed(false);
     };
 
+    // The press that dismisses a menu closes it on pointerdown, so the hold
+    // is already gone by the time its click arrives: what counts is the
+    // state when the press began. Captured at the window, ahead of the
+    // menu's own outside-press handling. A press made while the chip was
+    // not showing (a menu was up, or was just closing as the pointer left
+    // it) did not ask for the CTA either.
+    let refusedAtPress = false;
+    const onPress = () => {
+      refusedAtPress = !live.current || document.documentElement.hasAttribute("data-nav-hold");
+    };
+
     const onClick = (e: MouseEvent) => {
+      const refused = refusedAtPress;
+      refusedAtPress = false;
       // Only the bare cover navigates; a real link inside it keeps its own.
-      if (!evaluate()) return;
+      if (refused || !evaluate()) return;
       e.preventDefault();
       router.push(href);
     };
@@ -198,6 +211,7 @@ export function CursorCta({ targetRef, href, label, onArmedChange }: Props) {
 
     el.addEventListener("pointerenter", onEnter);
     el.addEventListener("click", onClick);
+    window.addEventListener("pointerdown", onPress, { capture: true });
     window.addEventListener("pointermove", onMove);
     document.documentElement.addEventListener("pointerleave", onLeave);
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -206,6 +220,7 @@ export function CursorCta({ targetRef, href, label, onArmedChange }: Props) {
     return () => {
       el.removeEventListener("pointerenter", onEnter);
       el.removeEventListener("click", onClick);
+      window.removeEventListener("pointerdown", onPress, { capture: true });
       window.removeEventListener("pointermove", onMove);
       document.documentElement.removeEventListener("pointerleave", onLeave);
       window.removeEventListener("scroll", onScroll);

@@ -441,6 +441,26 @@
   }
 }
 
+/*
+  A tap of at least 44 × 44 px around a control the site draws smaller
+  (a chip, a 36px disc, a text link), centred on it, wherever a finger can
+  be the pointer. Only the hit area grows: an invisible ::after, so the
+  drawn size, the layout and the look are what they were, and a mouse
+  (hover, the menus' hover intent) meets exactly the box it always did.
+  The control has to be positioned (`relative`, or already absolute), and
+  nothing around it may clip the extension. Inside a scaled-down box set
+  --tap-half to half the unscaled size that scales to 44px.
+*/
+@utility tap-44 {
+  @media (any-pointer: coarse) {
+    &::after {
+      content: "";
+      position: absolute;
+      inset: min(0px, calc(50% - var(--tap-half, 22px)));
+    }
+  }
+}
+
 /* ==================================================================== *
  * EDITORIAL COVER — the dark full-bleed hero.
  *
@@ -1195,6 +1215,8 @@ html[data-nav-motion][data-nav-land] .hdr-seam {
 
 .hdr-trigger,
 .hdr-navlink {
+  /* Positioned for the 44px tap (tap-44) around a 2.25em label. */
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 0.3em;

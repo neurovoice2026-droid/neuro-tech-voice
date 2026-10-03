@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 /**
  * Moves focus to a hash target after the menu closes.
  *
- * Without it, a keyboard user who picks "Hear the agent take a real call"
+ * Without it, a keyboard user who picks "Hear the agent take a sample call"
  * is handed back to the Product trigger while the page has scrolled three
  * thousand pixels away from it. Base UI's own focus return runs inside its
  * unmount, so this has to land after a frame.
@@ -109,7 +109,7 @@ export function ItemCard({
 }
 
 /* ------------------------------------------------------------------ *
- * "On the line" — the pane that plays a real moment from a real call.
+ * "On the line" — the pane that shows a moment from a sample call.
  * ------------------------------------------------------------------ */
 
 export type PaneTurn = { who: "agent" | "client"; text: string };
@@ -174,7 +174,7 @@ function Turn({ turn, reveal, delay }: { turn: PaneTurn; reveal?: boolean; delay
   );
 }
 
-/** Six voices, each with the signature its own pitch and pace draw. */
+/** The voice library (SETUP_VOICES), each with the signature its own pitch draws. Silent: the header never plays sound. */
 function VoiceRows() {
   return (
     <div className="mt-[0.75em] flex flex-col gap-[0.35em]">

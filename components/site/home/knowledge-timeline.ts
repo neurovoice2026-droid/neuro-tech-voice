@@ -1,5 +1,7 @@
 import type { Kit } from "@/components/site/product/motion-kit";
+import type { Cue } from "@/lib/audio/cue-types";
 import type { KbDoc, KbQuestion } from "@/lib/pages/knowledge-base";
+import type { RunClip } from "./demo-script";
 
 /* ------------------------------------------------------------------ *
  * #knowledge, the clock: what the reading room looks like at rest, and
@@ -14,6 +16,13 @@ import type { KbDoc, KbQuestion } from "@/lib/pages/knowledge-base";
  *
  * Colours are written as rgba(): GSAP interpolates that form, not the
  * space-separated one.
+ *
+ * With sound on, a question is built on its two recordings (`voiced`):
+ * the caller's clip starts as the question does and each word rises as
+ * it is said (the stagger is the clip's word starts); the reading beat
+ * stays silent; the agent's clip starts with the answer, word by word
+ * the same way, and the answer lands when the recording ends. addQuestion
+ * returns where it put the clips; the stage plays them on its clock.
  * ------------------------------------------------------------------ */
 
 type Gsap = Kit["gsap"];
@@ -50,6 +59,8 @@ export const HOLD = 2.8;
 
 const WORD_ASK = 0.12;
 const WORD_SAY = 0.23;
+/** Spoken: from the question's last word to the reading beat. */
+const ASKED = 0.35;
 const LIFT = -6;
 const CLOSED = "inset(0% 0% 100% 0%)";
 const OPEN = "inset(0% 0% 0% 0%)";
@@ -265,7 +276,23 @@ export function addClear(tl: Timeline, room: Room, track: Track, hooks: Hooks) {
   tl.to({}, { duration: 0.1 }, at + 0.45);
 }
 
-/** One question, from the caller's first word to the answer landing. */
+/** A question's two recordings: the caller asking, the agent answering. */
+export type Voiced = { ask: Cue; answer: Cue };
+
+/** A clip speaks a line the stage split into `words` when it is one turn with those display words. */
+const speaksLine = (cue: Cue, words: number) => cue.dur > 0 && cue.turns.length === 1 && cue.turns[0].words.length === words;
+
+/** Each word's delay from the clip's start: when it is said. */
+const saidAt = (cue: Cue) => {
+  const words = cue.turns[0].words;
+  return (i: number) => words[Math.min(i, words.length - 1)][1];
+};
+
+/**
+ * One question, from the caller's first word to the answer landing. With
+ * `voiced`, on its recordings, and the clips it placed are returned; a
+ * pair that does not speak the lines as split is left out (read pacing).
+ */
 export function addQuestion(
   tl: Timeline,
   room: Room,
@@ -273,13 +300,20 @@ export function addQuestion(
   qi: number,
   track: Track,
   hooks: Hooks,
-  { lg, announce }: { lg: boolean; announce: boolean },
-) {
+  { lg, announce, voiced }: { lg: boolean; announce: boolean; voiced?: Voiced },
+): RunClip[] {
   const q = m.questions[qi];
   const best = winner(m, qi);
   const hit = best >= 0;
   const b = beamsOf(room.stage);
   let t = tl.duration();
+  const v =
+    voiced &&
+    speaksLine(voiced.ask, room.askWords[qi].length) &&
+    speaksLine(voiced.answer, room.answerWords[qi].length)
+      ? voiced
+      : undefined;
+  const clips: RunClip[] = [];
 
   if (announce) tl.call(hooks.setSelected, [qi], t);
 
@@ -288,12 +322,15 @@ export function addQuestion(
   tl.to(hooks.vol, { current: VOL.listen, duration: 0.45, ease: "sine.inOut" }, t);
   t += 0.45;
 
-  // 2 · The question, a word at a time out of a light blur.
+  // 2 · The question, a word at a time out of a light blur (spoken: as each word is said).
   const asked = room.askWords[qi];
   tl.set(room.asks[qi], { autoAlpha: 1, yPercent: 0, filter: "blur(0px)" }, t)
     .set(asked, WORD_FROM, t)
-    .to(asked, { ...WORD_TO, stagger: WORD_ASK }, t);
-  t += Math.max(1.3, asked.length * WORD_ASK + 0.7);
+    .to(asked, { ...WORD_TO, stagger: v ? saidAt(v.ask) : WORD_ASK }, t);
+  if (v) {
+    clips.push({ at: t, cue: v.ask, tag: "ask" });
+    t += v.ask.turns[0].end + ASKED;
+  } else t += Math.max(1.3, asked.length * WORD_ASK + 0.7);
 
   // 3 · Reading: every document is weighed against the question.
   status(tl, room, track, "reading", t);
@@ -355,10 +392,12 @@ export function addQuestion(
   }
 
   const said = room.answerWords[qi];
-  const speak = said.length * WORD_SAY;
+  // Spoken: the answer lasts as long as its recording, each word rising as it is said.
+  const speak = v ? v.answer.turns[0].end : said.length * WORD_SAY;
   tl.set(room.answers[qi], { autoAlpha: 1, yPercent: 0, filter: "blur(0px)" }, t)
     .set(said, WORD_FROM, t)
-    .to(said, { ...WORD_TO, stagger: WORD_SAY }, t);
+    .to(said, { ...WORD_TO, stagger: v ? saidAt(v.answer) : WORD_SAY }, t);
+  if (v) clips.push({ at: t, cue: v.answer, tag: hit ? "hit" : "miss" });
   if (hit) {
     tl.to(hooks.vol, { current: VOL.speak, duration: 0.35, ease: "sine.inOut" }, t).to(
       hooks.vol,
@@ -375,4 +414,5 @@ export function addQuestion(
   );
   if (hit) status(tl, room, track, "found", landed);
   tl.to({}, { duration: 0.5 }, landed);
+  return clips;
 }

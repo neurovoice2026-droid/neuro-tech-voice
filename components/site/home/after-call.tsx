@@ -50,6 +50,8 @@ export function AfterCall() {
       pause: r.pause,
       play: r.play,
       replay: HOME.call.controls.replay,
+      listen: HOME.call.controls.listen,
+      excerpt: a.excerpt,
       noSummary: r.noSummary,
       sentiment: r.sentiment,
     },

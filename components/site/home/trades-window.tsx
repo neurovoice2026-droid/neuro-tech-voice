@@ -12,12 +12,18 @@ import {
 } from "react";
 import type { gsap } from "gsap";
 import type { SplitText } from "gsap/SplitText";
+import { Square, Volume2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isSoundOn, unlockFromGesture } from "@/components/site/audio/engine";
+import { SOUND_NOTE } from "@/components/site/audio/sound-button";
+import { useSoundOn, useSounding, useVoiceTrack } from "@/components/site/audio/use-voice-track";
 import { IntentLink } from "@/components/site/intent-link";
 import { useKitContext, type Kit } from "@/components/site/product/motion-kit";
+import { useInView } from "@/components/site/product/timing";
+import { cueIn, loadCueFile, type Cue, type CueFile } from "@/lib/audio";
 import type { HomeTrade, HomeTrades } from "@/lib/pages/home.server";
 import { ChipRail, centreInRail, useRovingRadio } from "./controls";
-import { useStageMotion } from "./motion";
+import { useDocumentVisible, useStageMotion } from "./motion";
 import { loadHomePosters, loadHomeScene } from "./trade-loaders";
 import { TradeStage, type TradeStageHandle } from "./trade-stage";
 import { TYPE, WEIGHT } from "./type";
@@ -39,12 +45,20 @@ import { TYPE, WEIGHT } from "./type";
  * change is a hand-over inside those slots: the old kicker's lines lift
  * out of their masks as the new ones rise in, the cells fade across. The
  * iris opens from the row or chip that was pressed.
+ *
+ * The caller's line can be heard: "Hear the caller" under it plays the
+ * industry page's own recording of that line (AI-generated voice; the cue
+ * file loads on the first press, or once sound is on), and turns sound
+ * on for the visit. With sound on, picking a trade plays its line too
+ * (not with reduced motion, where only the button plays). Nothing sounds
+ * on hover, and leaving the screen stops it.
  * ------------------------------------------------------------------ */
 
 export type TradesCopy = {
   group: string;
   cells: { caller: string; does: string; boundary: string };
   sample: string;
+  hear: { play: string; stop: string };
 };
 
 type Origin = { x: number; y: number };
@@ -59,6 +73,16 @@ const DWELL_MS = 120;
 const CUSTOM = "custom-ai-agents";
 
 const RING = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink";
+
+/** The stage's claim on the site's one sound (components/site/audio/engine.ts). */
+const VOICE_ID = "trades";
+
+/** A trade's caller line, recorded (the industry page's first prong): one turn speaking the line as written. */
+function lineOf(file: CueFile | null, t: HomeTrade): Cue | undefined {
+  const cue = file ? cueIn(file, `home-trades-caller/${t.key}/0`) : undefined;
+  const fits = cue && cue.dur > 0 && cue.turns.length === 1 && cue.turns[0].words.length === t.caller.split(" ").length;
+  return fits ? cue : undefined;
+}
 
 /* ─── the hand-over ─────────────────────────────────────────────────── */
 
@@ -240,6 +264,53 @@ function Cell({ col, label, children }: { col: number; label: ReactNode; childre
   );
 }
 
+/**
+ * Plays the caller's line, or stops it; the note beside it says what the
+ * voice is. One per sample trade, in its stacked variant, so only the
+ * trade on show can be reached.
+ */
+function Hear({
+  trade,
+  playing,
+  missing,
+  onPress,
+  noteId,
+  words,
+}: {
+  trade: HomeTrade;
+  playing: boolean;
+  missing: boolean;
+  onPress: (t: HomeTrade) => void;
+  noteId: string;
+  words: TradesCopy["hear"];
+}) {
+  const label = playing ? words.stop : words.play;
+  const Icon = playing ? Square : Volume2;
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1">
+      <button
+        type="button"
+        aria-describedby={noteId}
+        aria-disabled={missing || undefined}
+        onClick={missing ? undefined : () => onPress(trade)}
+        className={cn(
+          "relative inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-[13px] leading-[18px] text-pp-ink ring-1 ring-pp-hair transition-[background-color,color,scale] duration-200",
+          // A 44px target.
+          "before:absolute before:inset-x-0 before:-inset-y-1",
+          "hover:bg-pp-card active:scale-[0.96] aria-disabled:cursor-default aria-disabled:opacity-40 aria-disabled:hover:bg-white aria-disabled:active:scale-100",
+          RING,
+        )}
+      >
+        <Icon aria-hidden className={cn("size-4 shrink-0", playing && "size-3 fill-current")} />
+        {label}
+      </button>
+      <span id={noteId} className="min-w-0 text-[12px] leading-4 text-pretty text-pp-muted">
+        {SOUND_NOTE}
+      </span>
+    </div>
+  );
+}
+
 /** The trade's own page. Styled once in trades.css: it is in the page thirty-four times. */
 function PageLink({ trade, className }: { trade: HomeTrade; className?: string }) {
   return (
@@ -290,6 +361,61 @@ export function TradesWindow({ data, copy }: { data: HomeTrades; copy: TradesCop
 
   const { kit, reduce } = useStageMotion(cardRef, { id: "trades" });
 
+  /* ─── The caller's voice ─────────────────────────────────────────── */
+  const onScreen = useInView(rootRef);
+  const visible = useDocumentVisible();
+  const track = useVoiceTrack(VOICE_ID, { active: onScreen && visible });
+  const sounding = useSounding();
+  const soundOn = useSoundOn();
+  /** The trade whose line was last played; it shows Stop while that line is sounding. */
+  const [hearing, setHearing] = useState<string | null>(null);
+  const heard = sounding && track.audible ? hearing : null;
+  /** The callers' cue file (P1): fetched on the first press, or once sound is on; never before. */
+  const [file, setFile] = useState<CueFile | null>(null);
+  const fileRef = useRef<CueFile | null>(null);
+  const loadLines = () =>
+    fileRef.current
+      ? Promise.resolve(fileRef.current)
+      : loadCueFile("home-trades-caller").then((f) => {
+          if (f) {
+            fileRef.current = f;
+            setFile(f);
+          }
+          return f;
+        });
+  useEffect(() => {
+    if (!soundOn || fileRef.current) return;
+    let live = true;
+    void loadCueFile("home-trades-caller").then((f) => {
+      if (!live || !f) return;
+      fileRef.current = f;
+      setFile(f);
+    });
+    return () => {
+      live = false;
+    };
+  }, [soundOn]);
+
+  /** Plays trade `t`'s caller line (a press: it takes the sound from any other stage); the custom build has none. */
+  const sayLine = (t: HomeTrade) => {
+    if (!t.callerIsSample) {
+      if (heard) track.pause();
+      return;
+    }
+    setHearing(t.key);
+    void loadLines().then((f) => {
+      const cue = lineOf(f, t);
+      if (cue) track.play(cue, 0, { press: true });
+    });
+  };
+
+  /** "Hear the caller": inside the press, sound goes on for the visit; pressed again while it plays, it stops. */
+  const onHear = (t: HomeTrade) => {
+    if (heard === t.key) return track.pause();
+    unlockFromGesture();
+    sayLine(t);
+  };
+
   const choose = (i: number, via: "key" | "pointer", from: "index" | "rail") => {
     const t = trades[i];
     if (!t) return;
@@ -298,6 +424,8 @@ export function TradesWindow({ data, copy }: { data: HomeTrades; copy: TradesCop
     const commit = () => {
       setScene(t.key);
       setSaid(`${t.label}: ${t.kicker}`);
+      // With sound on, a pick plays the caller's line; with reduced motion only the button does.
+      if (isSoundOn() && !track.listen) sayLine(t);
     };
     window.clearTimeout(keyTimer.current);
     if (via === "key") keyTimer.current = window.setTimeout(commit, KEY_REST_MS);
@@ -566,6 +694,16 @@ export function TradesWindow({ data, copy }: { data: HomeTrades; copy: TradesCop
               }
             >
               <p className={cn(TYPE.cinemaSm, "text-pretty text-pp-ink italic")}>{t.caller}</p>
+              {t.callerIsSample && (
+                <Hear
+                  trade={t}
+                  playing={heard === t.key}
+                  missing={file !== null && !lineOf(file, t)}
+                  onPress={onHear}
+                  noteId={`${groupId}-hear-${t.key}`}
+                  words={copy.hear}
+                />
+              )}
             </Cell>
             <Cell col={1} label={copy.cells.does}>
               <p className={cn(TYPE.body, "text-pretty text-pp-ink/80")}>{t.does}</p>

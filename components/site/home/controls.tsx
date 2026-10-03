@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, type KeyboardEvent, type ReactNode, type Ref } from "react";
-import { Minus, Pause, Play, Plus, RotateCcw } from "lucide-react";
+import { Headphones, Minus, Pause, Play, Plus, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ *
@@ -17,7 +17,8 @@ import { cn } from "@/lib/utils";
  * but its press.
  * ------------------------------------------------------------------ */
 
-const ICONS = { play: Play, pause: Pause, replay: RotateCcw, minus: Minus, plus: Plus } as const;
+/** `listen`: the transport with reduced motion, which plays a stage's recording without its motion. */
+const ICONS = { play: Play, pause: Pause, replay: RotateCcw, minus: Minus, plus: Plus, listen: Headphones } as const;
 
 /** A focus ring that reads on white stock. */
 export const RING_LIGHT = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink";

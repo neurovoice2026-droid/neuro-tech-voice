@@ -248,13 +248,13 @@ export function ProductPanel({
         <div className="mt-[10px] flex items-center justify-between gap-[16px]">
           <MenuLink
             href={PRODUCT_MENU.demo.href}
-            className="rounded-[8px] px-[10px] py-[2.5px] text-[14px] font-medium leading-[21px] tracking-[0.01em] text-[var(--cover-paper)] transition-colors hover:text-[var(--cover-muted)]"
+            className="rounded-[8px] px-[10px] py-[2.5px] text-[14px] font-medium leading-[21px] tracking-[0.01em] text-[var(--cover-paper)] transition-colors hover:text-[var(--cover-muted)] any-pointer-coarse:py-[11.5px]"
           >
             {PRODUCT_MENU.demo.label}
           </MenuLink>
           <MenuLink
             href={PRODUCT_MENU.price.href}
-            className="rounded-[8px] px-[10px] py-[2.5px] text-[14px] font-medium leading-[21px] tracking-[0.01em] text-[var(--cover-paper)] transition-colors hover:text-[var(--cover-muted)]"
+            className="rounded-[8px] px-[10px] py-[2.5px] text-[14px] font-medium leading-[21px] tracking-[0.01em] text-[var(--cover-paper)] transition-colors hover:text-[var(--cover-muted)] any-pointer-coarse:py-[11.5px]"
           >
             {PRODUCT_MENU.price.label(TIERS[0].monthly)}
           </MenuLink>

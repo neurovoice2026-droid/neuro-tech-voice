@@ -1,11 +1,25 @@
 "use client";
 
-import { useRef } from "react";
-import { LIMITS } from "@/lib/pages/knowledge-base";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { gsap } from "gsap";
+import { Pause, Play } from "lucide-react";
+import { cueIn, loadCueFile, type Cue } from "@/lib/audio";
+import { KB_SOUND, LIMITS } from "@/lib/pages/knowledge-base";
+import { LIMITS_FALLBACK, LIMITS_TRACKS, sayingOf, type PassBeat } from "@/lib/pages/knowledge-base-voice";
+import { SoundButton } from "@/components/site/audio/sound-button";
 import { INK, LINE, MUTED, Node, Ping, ping, svgProps, useLoop, useSvgId, VIOLET, type Motion } from "../line-figure";
 import { useMotionKit } from "../motion-kit";
 import { Frame, Rule, SectionHeading } from "../primitives";
 import { useInView, usePrefersReducedMotion } from "../timing";
+import {
+  loadLate,
+  NO_REQUEST,
+  useListen,
+  usePassVoice,
+  useSpokenPass,
+  type PassRequest,
+  type PassVoice,
+} from "./meaning";
 
 /* ------------------------------------------------------------------ *
  * Where the documents stop.
@@ -15,7 +29,38 @@ import { useInView, usePrefersReducedMotion } from "../timing";
  * dotted line marked "close enough to answer". The route up to "Answer"
  * starts, falters and breaks off; a second route bends down instead and
  * lands on "Message for the team", which rings.
+ *
+ * Sound. The question and the fallback line can be heard (AI-generated
+ * voices; the reading room's clips for the same question, fetched only
+ * once sound is on). With sound on, the first round each time the figure
+ * comes into view is spoken: the caller asks as the question arrives, and
+ * the fallback line is said as the route lands, the figure holding its
+ * ending until it has been. Later rounds are silent. With reduced motion
+ * the figure stays still and Listen plays both lines, each label marked
+ * while it is said.
  * ------------------------------------------------------------------ */
+
+/** The stage's claim on the site's one sound (components/site/audio/engine.ts). */
+const VOICE_ID = "kb-limits";
+/** On the figure's timeline: the question arrives, the route lands on the fallback, the round starts to fade. */
+const ASK_AT = 0.1;
+const LAND_AT = 4.4;
+const FADE_AT = 6.4;
+
+const NONE: readonly Cue[] = [];
+
+/** The question and the fallback line, each said as shown: from this figure's own cue file, or else the reading room's (the same clips). */
+async function loadLines(): Promise<[Cue, Cue] | null> {
+  for (const t of LIMITS_TRACKS) {
+    const file = t.surface === "kb-hero-reading-room" ? await loadCueFile(t.surface) : await loadLate(t.surface);
+    const ask = file ? cueIn(file, t.ask) : undefined;
+    const answer = file ? cueIn(file, t.answer) : undefined;
+    if (ask && answer && sayingOf(ask, LIMITS_FALLBACK.ask, "caller") && sayingOf(answer, LIMITS_FALLBACK.answer, "agent")) {
+      return [ask, answer];
+    }
+  }
+  return null;
+}
 
 /**
  * Label sizes, in the drawing's own units. On a phone the drawing is shown
@@ -47,6 +92,45 @@ export function KbLimits() {
   const reduce = usePrefersReducedMotion();
   const kit = useMotionKit(near && !reduce);
 
+  /* ─── Sound ──────────────────────────────────────────────────────── */
+  const { track, voice } = usePassVoice(VOICE_ID, inView);
+  /**
+   * The two lines' clips: undefined until fetched (sound on), and after a fetch that failed (or
+   * found none that fit), until the next Listen (or sound turned on again) asks again.
+   */
+  const [lines, setLines] = useState<[Cue, Cue] | null | undefined>(undefined);
+  /** Bumped by a Listen pressed before the clips are here: a fetch that failed is asked for again. */
+  const [refetch, setRefetch] = useState(0);
+  useEffect(() => {
+    if (!track.on || lines !== undefined) return;
+    let live = true;
+    void loadLines().then((l) => {
+      if (live && l) setLines(l);
+    });
+    return () => {
+      live = false;
+    };
+  }, [track.on, lines, refetch]);
+  const beats = useMemo<PassBeat[]>(
+    () =>
+      lines
+        ? [
+            { at: ASK_AT, cue: lines[0] },
+            { at: LAND_AT, cue: lines[1], hold: FADE_AT },
+          ]
+        : [],
+    [lines],
+  );
+  const [request, setRequest] = useState<PassRequest>(NO_REQUEST);
+  const listen = useListen(track, lines === undefined ? undefined : (lines ?? NONE), inView);
+
+  // Sound turned on here: the round starts again, spoken (Listen, with reduced motion).
+  const onSound = (on: boolean) => {
+    if (!on) return;
+    if (reduce) listen.soundOn();
+    else setRequest((r) => ({ n: r.n + 1, key: "limits", press: true }));
+  };
+
   return (
     <>
       <Frame className="px-6 pb-10 md:px-12 md:pb-14">
@@ -58,7 +142,39 @@ export function KbLimits() {
       <Frame className="grid lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:divide-x lg:divide-pp-rule">
         <div ref={ref} className="w-full self-center px-4 py-8 md:px-8 lg:py-12">
           <div className="aspect-[600/270] w-full">
-            <Figure kit={kit} play={inView && !reduce} still={reduce} />
+            <Figure
+              kit={kit}
+              play={inView && !reduce}
+              still={reduce}
+              beats={beats}
+              voice={voice}
+              request={request}
+              saying={listen.at}
+            />
+          </div>
+          {track.on && (
+            // With sound on the fallback line is said: here is its transcript, the caption of the node it lands on.
+            <p className="mt-3 text-[13px] leading-5 text-pp-muted">
+              <span className={listen.at === 1 ? "text-[#551a89]" : "text-pp-ink"}>{LIMITS.figure.message}:</span>{" "}
+              “{LIMITS_FALLBACK.answer}”
+            </p>
+          )}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {reduce && lines !== null && (
+              // Reduced motion: the figure stays still; Listen says the question and the fallback line.
+              <button
+                type="button"
+                onClick={() => {
+                  if (lines === undefined) setRefetch((n) => n + 1);
+                  listen.toggle();
+                }}
+                className="pp-shadow-btn relative inline-flex h-9 shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-sm text-pp-ink transition-colors before:absolute before:inset-x-0 before:-inset-y-1 hover:bg-pp-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pp-ink"
+              >
+                {listen.playing ? <Pause className="size-3.5 fill-current" /> : <Play className="size-3.5 fill-current" />}
+                {listen.playing ? KB_SOUND.pause : KB_SOUND.listen}
+              </button>
+            )}
+            <SoundButton variant="pill" tone="light" onChange={onSound} />
           </div>
         </div>
         <div className="flex flex-col border-t border-pp-rule lg:border-t-0">
@@ -85,14 +201,31 @@ export function KbLimits() {
   );
 }
 
-function Figure({ kit, play, still }: Motion) {
+function Figure({
+  kit,
+  play,
+  still,
+  beats,
+  voice,
+  request,
+  saying,
+}: Motion & {
+  /** Sound on: the two clips, where they are said on the timeline. */
+  beats: readonly PassBeat[];
+  voice: PassVoice;
+  request: PassRequest;
+  /** Listen (reduced motion): the line being said, 0 the question, 1 the fallback; -1 for none. */
+  saying: number;
+}) {
   const svg = useRef<SVGSVGElement>(null);
+  const tlRef = useRef<gsap.core.Timeline | null>(null);
   const clip = useSvgId("limits-clip");
   const f = LIMITS.figure;
 
   useLoop(
     svg,
     (tl, q) => {
+      tlRef.current = tl;
       const bars = q(".lim-bar");
       const sweep = q(".lim-sweep");
       const answerRoute = q(".lim-to-answer")[0];
@@ -107,7 +240,7 @@ function Figure({ kit, play, still }: Motion) {
         .set(breakMark, { opacity: 0, scale: 0.5, transformOrigin: "50% 50%" }, 0)
         .set(q(".lim-message-core"), { attr: { fill: "var(--pp-bg)" } }, 0);
 
-      ping(tl, q(".lim-q-ping"), 0.1, 26);
+      ping(tl, q(".lim-q-ping"), ASK_AT, 26);
       // The sweep reads across; each document rises as it is passed.
       tl.to(sweep, { opacity: 1, duration: 0.2 }, 0.5).to(
         sweep,
@@ -130,15 +263,17 @@ function Figure({ kit, play, still }: Motion) {
         .to(messageRoute, { drawSVG: "0% 100%", duration: 1, ease: "power2.inOut" }, 3.4)
         .to(traveller, { opacity: 1, duration: 0.2 }, 3.4)
         .to(traveller, { duration: 1, ease: "power2.inOut", motionPath: { path: messageRoute as SVGPathElement } }, 3.4)
-        .set(q(".lim-message-core"), { attr: { fill: VIOLET } }, 4.4)
-        .to(traveller, { opacity: 0, duration: 0.25 }, 4.4);
-      ping(tl, q(".lim-message-ping"), 4.4, 30);
-      tl.to([answerRoute, messageRoute, breakMark], { opacity: 0, duration: 0.6 }, 6.4)
-        .to(bars, { attr: { y: BASE, height: 0 }, duration: 0.6, ease: "power2.in" }, 6.4)
+        .set(q(".lim-message-core"), { attr: { fill: VIOLET } }, LAND_AT)
+        .to(traveller, { opacity: 0, duration: 0.25 }, LAND_AT);
+      ping(tl, q(".lim-message-ping"), LAND_AT, 30);
+      tl.to([answerRoute, messageRoute, breakMark], { opacity: 0, duration: 0.6 }, FADE_AT)
+        .to(bars, { attr: { y: BASE, height: 0 }, duration: 0.6, ease: "power2.in" }, FADE_AT)
         .to({}, { duration: 0.4 });
     },
     { kit, play, still },
   );
+  // Sound on: the first round of each entry into view is said, the figure following each clip.
+  useSpokenPass(tlRef, { figure: "limits", play, kit, beats, voice, request });
 
   return (
     <svg ref={svg} {...svgProps(W, 250)} viewBox={VIEW}>
@@ -149,7 +284,7 @@ function Figure({ kit, play, still }: Motion) {
       </defs>
 
       {/* The question */}
-      <text x={Q.x - 20} y={Q.y - 62} fill={INK} className={LABEL}>
+      <text x={Q.x - 20} y={Q.y - 62} fill={saying === 0 ? VIOLET : INK} className={LABEL}>
         {f.question}
       </text>
       <line x1={Q.x} x2={SWEEP.from} y1={Q.y} y2={Q.y} stroke={INK} strokeOpacity="0.3" strokeWidth={LINE} strokeDasharray="0.01 4.6" strokeLinecap="round" />
@@ -207,7 +342,7 @@ function Figure({ kit, play, still }: Motion) {
       <path className="lim-to-message" d={TO_MESSAGE} stroke={VIOLET} strokeWidth={LINE} strokeLinecap="round" />
       <Ping className="lim-message-ping" x={MESSAGE.x} y={MESSAGE.y} color={VIOLET} />
       <Node x={MESSAGE.x} y={MESSAGE.y} color={VIOLET} coreClassName="lim-message-core" />
-      <text x={MESSAGE.x} y={MESSAGE.y + 34} textAnchor="end" fill={INK} className={LABEL}>
+      <text x={MESSAGE.x} y={MESSAGE.y + 34} textAnchor="end" fill={saying === 1 ? VIOLET : INK} className={LABEL}>
         {f.message}
       </text>
       <Node className="lim-traveller" hidden r={3.4} color={VIOLET} />

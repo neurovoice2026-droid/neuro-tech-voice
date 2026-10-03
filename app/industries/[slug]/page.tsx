@@ -13,6 +13,12 @@ import { GoLive } from "@/components/site/industry/go-live";
 import { Ledger } from "@/components/site/industry/ledger";
 import { IndustryFaq, IndustryStart } from "@/components/site/industry/closing";
 import { INDUSTRY_SLUGS, tradeFor } from "@/lib/pages/industries";
+import { spokenCall } from "@/lib/pages/industries/spoken-timing";
+import { asCueFile } from "@/lib/audio";
+// Read here, on the server, for one number per trade (how long the call is
+// heard at its own pace); the file itself is never sent with the page. The
+// section fetches it with import() only once the visitor opts in to sound.
+import { loadIndustryCueModule } from "@/lib/audio/industry-cues";
 
 /**
  * Sixteen trades are in the menu; only the ones with written data have a
@@ -47,9 +53,20 @@ export default async function IndustryPage({ params }: { params: Promise<{ slug:
   const trade = tradeFor(slug);
   if (!trade) notFound();
 
+  // Whole seconds of the call as heard, or null when no track says it as written: then no Listen control.
+  const runItCues = await loadIndustryCueModule("industry-run-it-call", slug).then(
+    (m) => asCueFile(m.default),
+    () => null,
+  );
+  const heard = spokenCall(trade, runItCues);
+  const listenSeconds = heard ? Math.floor(heard.trade.duration) : null;
+
   /*
     Deferred sizes are measured, not guessed: each one is the tallest trade's
-    real height for that block on a phone. An estimate well under the truth
+    real height for that block on a phone. Bench, RunIt and Wall were
+    re-measured at 390px once each gained its sound row (tallest trade
+    1024, 1750 and 2002px, the same under reduced motion), rounded up to
+    the next 50. An estimate well under the truth
     makes the page collapse by thousands of pixels the moment a block scrolls
     out of view, and rects taken during that reflow put one section's button
     on top of the next section's rows.
@@ -72,15 +89,15 @@ export default async function IndustryPage({ params }: { params: Promise<{ slug:
         <Signature trade={trade} />
         <Gap />
       </Deferred>
-      <Deferred size={880}>
+      <Deferred size={1050}>
         <Bench trade={trade} />
         <Gap />
       </Deferred>
-      <Deferred size={1320}>
-        <RunIt trade={trade} />
+      <Deferred size={1800}>
+        <RunIt trade={trade} listenSeconds={listenSeconds} />
         <Gap />
       </Deferred>
-      <Deferred size={1320}>
+      <Deferred size={2050}>
         <Wall trade={trade} />
         <Gap />
       </Deferred>
