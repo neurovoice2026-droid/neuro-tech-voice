@@ -153,6 +153,7 @@ const takeLock = () => {
         continue;
       }
       if (Date.now() >= deadline) {
+        rmSync(mine, { force: true }); // (process.exit skips the finally below)
         console.error(`verify-film1: another run holds ${rel(LOCK)} (pid ${holder.pid}, since ${holder.at}: ${holder.argv || '(full)'})${has('--no-wait') ? '' : ' — waited 60 min'}; not run`);
         process.exit(2);
       }
