@@ -25,12 +25,12 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readWav, SR } from './audio/dsp.mjs';
-import { abs, filmOf } from './films.mjs';
+import { filmOf, need } from './films.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const film = filmOf(args);
-const T = await import(abs(film, 'timing'));
+const T = await import(need(film, 'timing'));
 const range = args.find((a) => a.startsWith('--from='));
 const from = range ? Number(range.slice(7)) : 0;
 const files = args.filter((a) => !a.startsWith('--'));

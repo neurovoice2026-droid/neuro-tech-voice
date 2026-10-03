@@ -11,6 +11,7 @@
  *         --unfreeze (and never installs into it); sfx.mjs refuses --force for it without --unfreeze.
  *   kb    trailer #2, the knowledge-base film: entry point src/kb/index.ts, composition ids KB-*.
  */
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -81,6 +82,13 @@ export const filmOf = (argv = process.argv.slice(2), { required = false } = {}) 
 
 /** Absolute path of one of a film's registry paths (`abs(film, 'timing')`). */
 export const abs = (film, key) => path.join(ROOT, film[key]);
+
+/** `abs()`, but a path that does not exist yet throws a clear error (e.g. film 2's files before they are written). */
+export const need = (film, key) => {
+  const p = abs(film, key);
+  if (!existsSync(p)) throw new Error(`[films] film "${film.id}": ${film[key]} (${key}) does not exist yet`);
+  return p;
+};
 
 /** A line's `file` entry in the film's voice.generated.ts: relative to public/ (voice/<id>.wav, kb/voice/<id>.wav). */
 export const voiceFile = (film, id) => `${path.posix.relative('public', film.voiceDir)}/${id}.wav`;

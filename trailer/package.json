@@ -16,8 +16,19 @@
     "typecheck": "tsc --noEmit",
     "sfx:force": "node --experimental-strip-types --no-warnings scripts/generate-sfx.mjs --force",
     "check:audio": "node --experimental-strip-types --no-warnings scripts/check-mix.mjs",
-    "voice": "node scripts/generate-voice.mjs",
-    "voice:remaster": "node scripts/generate-voice.mjs --remaster"
+    "voice": "node scripts/generate-voice.mjs --film=main",
+    "voice:remaster": "node scripts/generate-voice.mjs --film=main --remaster",
+    "studio:kb": "remotion studio src/kb/index.ts",
+    "voice:kb": "node scripts/generate-voice.mjs --film=kb",
+    "sfx:kb": "node --experimental-strip-types --no-warnings scripts/sfx.mjs --film=kb",
+    "sfx:kb:force": "node --experimental-strip-types --no-warnings scripts/sfx.mjs --film=kb --force",
+    "check:audio:kb": "node --experimental-strip-types --no-warnings scripts/check-mix.mjs --film=kb",
+    "render:kb:landscape": "remotion render src/kb/index.ts KB-Trailer-16x9 out/kb/neurotechvoice-knowledge-16x9.mp4",
+    "render:kb:vertical": "remotion render src/kb/index.ts KB-Trailer-9x16 out/kb/neurotechvoice-knowledge-9x16.mp4",
+    "render:kb:master": "node --experimental-strip-types --no-warnings scripts/render-master.mjs --film=kb",
+    "check:render:kb": "node --experimental-strip-types --no-warnings scripts/check-render.mjs --film=kb out/kb/neurotechvoice-knowledge-16x9.mp4 out/kb/neurotechvoice-knowledge-9x16.mp4",
+    "check:port": "node --experimental-strip-types --no-warnings scripts/kb/check-port.mjs",
+    "verify:film1": "node scripts/kb/verify-film1.mjs"
   },
   "dependencies": {
     "@fontsource-variable/geist-mono": "^5.3.0",

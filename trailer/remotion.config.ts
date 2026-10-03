@@ -9,6 +9,10 @@
  *    Skipped in ~0.2 s when nothing it reads has changed; ~10–25 s otherwise.
  *    So a bare `npx remotion render …` is always in sync. (Voices are
  *    pre-generated and committed: public/voice, via `npm run voice`.)
+ *    FILMS (scripts/films.mjs): the pre-step runs the driver of the film the
+ *    command is for — NTV_FILM=<id> if set, else film 2 ("kb") when the entry
+ *    point argument is src/kb/index.ts, else film 1 ("main", the call above,
+ *    unchanged). A film 1 command never runs film 2's code.
  * 2. Output defaults: H.264 High, BT.709 limited range (tagged bt709
  *    primaries / transfer / matrix, tv range) — what every platform and player
  *    assumes, so the 9–21-level midnight room and the four lights' hues survive
@@ -24,8 +28,12 @@ import { closeSync, existsSync, openSync, readSync } from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
+// which film's soundtrack: NTV_FILM, else the entry point on the command line (src/kb/index.ts → kb)
+const film = process.env.NTV_FILM ?? (process.argv.some((a) => /(^|[\\/])src[\\/]kb[\\/]index\.tsx?$/.test(a)) ? 'kb' : 'main');
+const SFX_DRIVER: Record<string, string> = { main: 'generate-sfx.mjs', kb: path.join('kb', 'generate-sfx.mjs') };
+if (!Object.hasOwn(SFX_DRIVER, film)) throw new Error(`[remotion.config] unknown NTV_FILM=${film} (known: ${Object.keys(SFX_DRIVER).join(', ')})`);
 if (!process.env.NTV_SKIP_SFX) {
-  execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', path.join(root, 'scripts', 'generate-sfx.mjs')], {
+  execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', path.join(root, 'scripts', SFX_DRIVER[film])], {
     stdio: 'inherit',
     cwd: root,
   });

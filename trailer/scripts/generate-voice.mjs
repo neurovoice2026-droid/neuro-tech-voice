@@ -2,8 +2,11 @@
 /**
  * Neuro Tech Voice trailer — the voices.
  *
- * Produces every spoken line in scripts/voice-lines.json with one of four
- * engines:
+ * Produces every spoken line of ONE FILM (--film=<id>, required; paths from
+ * scripts/films.mjs — film 1 "main": scripts/voice-lines.json → public/voice +
+ * src/voice.generated.ts; film 2 "kb": scripts/voice-lines-kb.json →
+ * public/kb/voice + src/kb/voice.generated.ts, sources in voice-src/kb) with one
+ * of four engines:
  *
  *   · FILES (preferred for the final cut) — your own recordings or lines
  *     generated on fish.audio / ElevenLabs, dropped into trailer/voice-src/
@@ -45,25 +48,44 @@
  * model) into .cache/, or pass KOKORO_DIR=/path/to/kokoro-int8-en-v0_19.
  * The generated WAVs + TS ARE committed, so rendering never needs the model.
  *
- *   npm run voice                       (files if voice-src/ is complete, else
- *                                        Cartesia / Fish if their key is set, else Kokoro)
- *   npm run voice -- --engine=cartesia  (force Cartesia)
- *   npm run voice -- --engine=files     (force files; a missing one is an error)
- *   npm run voice -- --engine=kokoro    (force the offline engine)
- *   npm run voice -- --list             (list fish.audio voice candidates)
- *   npm run voice -- --only=a,b         (just these lines, merged into the live set;
- *                                        the others are left byte-identical)
- *   npm run voice -- --remaster         (no new takes: re-level the current public/voice
- *                                        lines to level.lufs and apply any role EQ they
- *                                        don't carry yet; timings are kept)
+ *   node scripts/generate-voice.mjs --film=<id> [options]   (npm run voice = --film=main, voice:kb = --film=kb)
+ *
+ *   (no option)            files if the film's voice-src is complete, else Cartesia / Fish if
+ *                          their key is set, else Kokoro
+ *   --engine=cartesia      force Cartesia (files | fish | kokoro likewise; a missing file is an error)
+ *   --list                 list fish.audio voice candidates
+ *   --only=a,b             just these lines, merged into the live set (the others are left
+ *                          byte-identical)
+ *   --remaster             no new takes: re-level the film's current live lines to level.lufs and
+ *                          apply any role EQ they don't carry yet; timings are kept
+ *   --out=DIR              a complete candidate set (DIR/voice/*.wav + DIR/voice.generated.ts +
+ *                          DIR/preview.wav) instead of the live one
+ *   --install=DIR [--only=a,b]
+ *                          no new takes: copy chosen takes from a candidate set (DIR/voice/<id>.wav
+ *                          + their entries, `file` rewritten to the film's prefix) into the film's
+ *                          live set. Existing entries keep their exact JSON and order (installed ids
+ *                          replace theirs in place, new ids are appended); the top-level `voices` takes
+ *                          the candidate's record for the installed lines' roles, `engine` becomes
+ *                          "mixed" when the engines differ. One call per source take.
+ *   --preview              also write the film's preview.wav (out/preview.wav, out/kb/preview.wav)
+ *   --<role>=<voice id>    pin a role's Cartesia voice for this run (--ava=…, --caller2=…)
+ *
+ * FROZEN films (main: delivered) refuse every write to their live set — the default run, --only,
+ * --remaster — unless --unfreeze is passed; --install never writes into a frozen film. --out
+ * candidate sets are always allowed.
+ *
+ * BORROWED lines ({"id": "cta-1", "borrow": "main"} in the film's voice-lines JSON) are never
+ * synthesised: the other film's WAV is byte-copied (same id) and its entry copied with `file`
+ * rewritten. The engines skip them and --remaster leaves them as copied.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { integrated } from './audio/loudness.mjs';
+import { FILMS, abs, filmOf, voiceFile } from './films.mjs';
 
 const require = createRequire(import.meta.url);
 const peakOf = (arr) => {
@@ -73,9 +95,29 @@ const peakOf = (arr) => {
 };
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
-const OUT = path.join(ROOT, 'public', 'voice');
-const TS_OUT = path.join(ROOT, 'src', 'voice.generated.ts');
+/* ── the film (scripts/films.mjs): every path below is that film's ── */
+let FILM;
+try {
+  FILM = filmOf(process.argv.slice(2), { required: true });
+} catch (e) {
+  console.error(`[voice] ${e.message.replace(/^\[films\] /, '')} — e.g. node scripts/generate-voice.mjs --film=kb`);
+  process.exit(2);
+}
+const OUT = abs(FILM, 'voiceDir');
+const TS_OUT = abs(FILM, 'voiceTs');
+const LINES_JSON = abs(FILM, 'voiceLines');
 const FPS = 30;
+const rel = (p) => path.relative(ROOT, p).split(path.sep).join('/');
+const TS_HEAD = `/* GENERATED by scripts/generate-voice.mjs — do not edit. Re-run \`${FILM.cmd.voice}\`. */\n`;
+/** The VOICE object of a generated voice.generated.ts (live set or candidate set). */
+const readVoiceTs = (file) => {
+  const src = readFileSync(file, 'utf8');
+  return JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(' as const')));
+};
+const writeVoiceTs = (file, voice) => {
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, TS_HEAD + `export const VOICE = ${JSON.stringify(voice)} as const;\n` + 'export type VoiceId = keyof typeof VOICE.lines;\n');
+};
 
 /* ── model ─────────────────────────────────────────────────────── */
 function modelDir() {
@@ -433,7 +475,7 @@ function alignWords(say, spoken, language = 'en') {
 }
 
 /* ── your own files (voice-src/) ───────────────────────────────── */
-const SRC = path.join(ROOT, 'voice-src');
+const SRC = abs(FILM, 'voiceSrc');
 const EXTS = ['wav', 'mp3', 'm4a', 'aac', 'ogg', 'opus', 'flac', 'webm'];
 const srcFile = (id) => EXTS.map((e) => path.join(SRC, `${id}.${e}`)).find((f) => existsSync(f));
 
@@ -651,25 +693,57 @@ function timings(say, dur, ps, language = 'en') {
 /* ── run ───────────────────────────────────────────────────────── */
 const t0 = Date.now();
 const argv = process.argv.slice(2);
-const cfg = JSON.parse(readFileSync(path.join(HERE, 'voice-lines.json'), 'utf8'));
+const cfg = JSON.parse(readFileSync(LINES_JSON, 'utf8'));
+const LINES_NAME = path.basename(LINES_JSON);
+/* borrowed lines: copied from another film, never synthesised */
+const isBorrow = (l) => typeof l.borrow === 'string';
+for (const l of cfg.lines.filter(isBorrow)) {
+  if (!Object.hasOwn(FILMS, l.borrow)) throw new Error(`[voice] ${l.id} borrows from an unknown film "${l.borrow}" (known: ${Object.keys(FILMS).join(', ')})`);
+  if (l.borrow === FILM.id) throw new Error(`[voice] ${l.id} borrows from its own film "${l.borrow}"`);
+}
+/** A borrowed line: the source film's WAV (byte-copied by the caller) and its entry, `file` rewritten to this film. */
+const borrowed = (line) => {
+  const from = { id: line.borrow, ...FILMS[line.borrow] };
+  const wav = path.join(abs(from, 'voiceDir'), `${line.id}.wav`);
+  const entry = existsSync(abs(from, 'voiceTs')) ? readVoiceTs(abs(from, 'voiceTs')).lines[line.id] : undefined;
+  if (!existsSync(wav) || !entry) throw new Error(`[voice] borrow: ${line.id} is not in film "${from.id}" (${from.voiceDir}/${line.id}.wav + ${from.voiceTs})`);
+  return { wav, from, entry: { ...entry, file: voiceFile(FILM, line.id) } };
+};
 const cfg_override_ids = {};
 const forced = argv.find((a) => a.startsWith('--engine='))?.split('=')[1];
 const opt = (k) => argv.find((a) => a.startsWith(`--${k}=`))?.split('=').slice(1).join('=');
 /** --out=DIR writes a complete candidate set (DIR/voice/*.wav + DIR/voice.generated.ts + DIR/preview.wav) instead of the live one. */
 const OUT_DIR = opt('out') ? path.resolve(opt('out')) : null;
+/** --install=DIR copies takes from a candidate set into the live set (no synthesis). */
+const INSTALL = opt('install') ? path.resolve(opt('install')) : null;
 /** --only=a,b generates just those lines and merges them into the live set (the other WAVs and their entries stay untouched). */
 const ONLY = opt('only') ? opt('only').split(',').map((x) => x.trim()).filter(Boolean) : null;
 if (ONLY) {
   const unknown = ONLY.filter((id) => !cfg.lines.some((l) => l.id === id));
-  if (unknown.length) throw new Error(`[voice] --only: no such line(s) in voice-lines.json: ${unknown.join(', ')}`);
+  if (unknown.length) throw new Error(`[voice] --only: no such line(s) in ${LINES_NAME}: ${unknown.join(', ')}`);
   if (OUT_DIR) throw new Error('[voice] --only merges into the live set; it does not combine with --out');
 }
+const REMASTER = argv.includes('--remaster');
+if (REMASTER && OUT_DIR) throw new Error('[voice] --remaster re-levels the live set; it does not combine with --out');
+if (INSTALL && (OUT_DIR || REMASTER)) throw new Error('[voice] --install writes the live set; it does not combine with --out or --remaster');
+/* the frozen guard: a delivered film's live set (its voice WAVs + voice.generated.ts) is not rewritten by accident */
+if (FILM.frozen && !argv.includes('--list')) {
+  if (INSTALL) throw new Error(`[voice] film "${FILM.id}" is frozen: --install never writes into it (candidate sets: --out=DIR)`);
+  if (!OUT_DIR && !argv.includes('--unfreeze'))
+    throw new Error(
+      `[voice] film "${FILM.id}" is frozen (delivered): this run would rewrite ${FILM.voiceDir}/ and ${FILM.voiceTs}. ` +
+        'Write a candidate set with --out=DIR, or add --unfreeze if you really mean to replace the live set.',
+    );
+}
 const LINES = ONLY ? cfg.lines.filter((l) => ONLY.includes(l.id)) : cfg.lines;
-for (const [role, flag] of [['ava', 'ava'], ['caller', 'caller'], ['caller2', 'caller2']]) {
-  const id = opt(flag);
+const SYNTH = LINES.filter((l) => !isBorrow(l));
+const RESERVED = new Set(['engine', 'out', 'only', 'install', 'film']);
+for (const role of Object.keys(cfg.voices)) {
+  if (RESERVED.has(role)) continue;
+  const id = opt(role);
   if (id) cfg_override_ids[role] = id;
 }
-const haveAllFiles = LINES.every((l) => srcFile(l.id));
+const haveAllFiles = SYNTH.every((l) => srcFile(l.id));
 const ENGINE =
   forced ?? (haveAllFiles ? 'files' : process.env.CARTESIA_API_KEY ? 'cartesia' : process.env.FISH_API_KEY ? 'fish' : 'kokoro');
 
@@ -689,15 +763,74 @@ const postOf = (v, L) => ({ lufs: LEVEL.lufs, gainDb: r2(L.gainDb), eq: eqSignat
 const levelLog = (id, L) =>
   `${r2(L.before).toFixed(2).padStart(7)} → ${LEVEL.lufs} LUFS (${L.gainDb >= 0 ? '+' : ''}${L.gainDb.toFixed(2)} dB)${L.caught ? `  · soft knee caught ${L.caught} samples` : ''}`;
 
-if (argv.includes('--remaster')) {
+if (INSTALL) {
+  // no new takes: chosen takes of a candidate set (--out=DIR, e.g. the Cartesia session's
+  // voice-candidates/kb/take-N) become the film's live lines, byte for byte
+  const candTs = path.join(INSTALL, 'voice.generated.ts');
+  if (!existsSync(candTs)) throw new Error(`[voice] --install: ${rel(INSTALL)} is not a candidate set (no voice.generated.ts)`);
+  const cand = readVoiceTs(candTs);
+  if (cand.fps !== FPS) throw new Error(`[voice] --install: ${rel(candTs)} is at ${cand.fps} fps, the films use ${FPS}`);
+  const want = ONLY ?? Object.keys(cand.lines);
+  const strangers = want.filter((id) => !cfg.lines.some((l) => l.id === id));
+  if (strangers.length) throw new Error(`[voice] --install: not lines of film "${FILM.id}" (${LINES_NAME}): ${strangers.join(', ')}`);
+  const ids = cfg.lines.map((l) => l.id).filter((id) => want.includes(id)); // film order
+  const absent = ids.filter((id) => !isBorrow(cfg.lines.find((l) => l.id === id)) && !cand.lines[id]);
+  if (absent.length) throw new Error(`[voice] --install: not in the candidate set ${rel(INSTALL)}: ${absent.join(', ')}`);
+  const prev = existsSync(TS_OUT) ? readVoiceTs(TS_OUT) : null;
+  if (prev && prev.fps !== FPS) throw new Error(`[voice] --install: ${FILM.voiceTs} is at ${prev.fps} fps`);
+  // check every take before anything is copied: the WAV is there and is the take its entry describes
+  const plan = ids.map((id) => {
+    const line = cfg.lines.find((l) => l.id === id);
+    if (isBorrow(line)) return { id, line, borrow: borrowed(line) };
+    const e = cand.lines[id];
+    const wav = path.join(INSTALL, 'voice', `${id}.wav`);
+    if (!existsSync(wav)) throw new Error(`[voice] --install: ${rel(wav)} is missing`);
+    const w = decodeWav(readFileSync(wav));
+    const dur = w.samples.length / w.sampleRate;
+    if (Math.abs(dur - e.duration) > 0.002) throw new Error(`[voice] --install: ${rel(wav)} is ${dur.toFixed(3)} s, its entry says ${e.duration} s — not the take its timings describe`);
+    const warn = [];
+    if (e.say !== line.say) warn.push(`its say "${e.say}" ≠ ${LINES_NAME} "${line.say}"`);
+    if (e.voice !== line.voice) warn.push(`its role ${e.voice} ≠ ${LINES_NAME} ${line.voice}`);
+    return { id, line, e, wav, dur, warn };
+  });
+  mkdirSync(OUT, { recursive: true });
+  const installed = {};
+  for (const p of plan) {
+    if (p.borrow) {
+      copyFileSync(p.borrow.wav, path.join(OUT, `${p.id}.wav`));
+      installed[p.id] = p.borrow.entry;
+      console.log(`[voice] borrow  ${p.id.padEnd(10)} from film "${p.borrow.from.id}" (${p.borrow.from.voiceDir}/${p.id}.wav, byte copy)`);
+      continue;
+    }
+    copyFileSync(p.wav, path.join(OUT, `${p.id}.wav`));
+    installed[p.id] = { ...p.e, file: voiceFile(FILM, p.id) };
+    console.log(`[voice] install ${p.id.padEnd(10)} ${p.e.voice.padEnd(8)} ${p.dur.toFixed(2)} s  ${rel(p.wav)} → ${FILM.voiceDir}/${p.id}.wav`);
+    for (const w of p.warn) console.log(`[voice] WARN    ${p.id}: ${w} (re-generate it, or update the script)`);
+  }
+  const roles = new Set(plan.filter((p) => !p.borrow).map((p) => p.e.voice));
+  const candVoices = Object.fromEntries(Object.entries(cand.voices ?? {}).filter(([r]) => roles.has(r)));
+  const written = prev
+    ? { ...prev, engine: prev.engine === cand.engine ? prev.engine : 'mixed', voices: { ...prev.voices, ...candVoices }, lines: { ...prev.lines, ...installed } }
+    : { fps: cand.fps, engine: cand.engine, voices: candVoices, lines: installed };
+  writeVoiceTs(TS_OUT, written);
+  console.log(`[voice] installed ${plan.length} line(s) from ${rel(INSTALL)} → ${FILM.voiceDir} + ${FILM.voiceTs} (${Object.keys(written.lines).length} lines live) in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+  process.exit(0);
+}
+
+if (REMASTER) {
   // no new takes: the current lines (already phone-lined / cleaned, trimmed and faded) get the
   // role EQ they don't carry yet and the dialogue loudness target; timings stay as they are
-  const src = readFileSync(TS_OUT, 'utf8');
-  const prev = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(' as const')));
+  const prev = readVoiceTs(TS_OUT);
+  let n = 0;
   for (const line of cfg.lines) {
+    if (isBorrow(line)) {
+      console.log(`[voice] remaster ${line.id.padEnd(7)} borrowed from film "${line.borrow}" — left as copied`);
+      continue;
+    }
+    n++;
     const v = cfg.voices[line.voice];
     const old = prev.lines[line.id];
-    if (!old) throw new Error(`[voice] --remaster: ${line.id} is not in src/voice.generated.ts — generate it first`);
+    if (!old) throw new Error(`[voice] --remaster: ${line.id} is not in ${FILM.voiceTs} — generate it first`);
     const file = path.join(OUT, `${line.id}.wav`);
     const { samples, sampleRate: sr } = decodeWav(readFileSync(file));
     const want = eqSignature(v.eq);
@@ -709,22 +842,19 @@ if (argv.includes('--remaster')) {
     prev.lines[line.id] = { ...old, env: envelope(L.s, sr), post: { ...postOf(v, L), gainDb: r2((old.post?.gainDb ?? 0) + L.gainDb) } };
     console.log(`[voice] remaster ${line.id.padEnd(7)} ${line.voice.padEnd(8)}${has !== want ? ` EQ ${want}` : ''} ${levelLog(line.id, L)}`);
   }
-  writeFileSync(
-    TS_OUT,
-    '/* GENERATED by scripts/generate-voice.mjs — do not edit. Re-run `npm run voice`. */\n' +
-      `export const VOICE = ${JSON.stringify(prev)} as const;\n` +
-      'export type VoiceId = keyof typeof VOICE.lines;\n',
-  );
-  console.log(`[voice] remastered ${cfg.lines.length} lines (timings kept) in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+  writeVoiceTs(TS_OUT, prev);
+  console.log(`[voice] remastered ${n} lines (timings kept) in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
   process.exit(0);
 }
 
 let synth;
 const chosen = {};
-if (ENGINE === 'files') {
-  const missing = LINES.filter((l) => !srcFile(l.id)).map((l) => l.id);
-  if (missing.length) throw new Error(`[voice] voice-src/ is missing: ${missing.join(', ')}`);
-  for (const role of Object.keys(cfg.voices)) chosen[role] = { engine: 'files', dir: 'voice-src' };
+if (!SYNTH.length) {
+  /* only borrowed lines: no engine needed */
+} else if (ENGINE === 'files') {
+  const missing = SYNTH.filter((l) => !srcFile(l.id)).map((l) => l.id);
+  if (missing.length) throw new Error(`[voice] ${FILM.voiceSrc}/ is missing: ${missing.join(', ')}`);
+  for (const role of Object.keys(cfg.voices)) chosen[role] = { engine: 'files', dir: FILM.voiceSrc };
   synth = (line) => decodeFile(srcFile(line.id));
 } else if (ENGINE === 'cartesia') {
   if (!process.env.CARTESIA_API_KEY) throw new Error('--engine=cartesia needs CARTESIA_API_KEY');
@@ -766,6 +896,15 @@ mkdirSync(VOICE_DIR, { recursive: true });
 const result = { fps: FPS, engine: ENGINE, voices: chosen, lines: {} };
 const previewParts = [];
 for (const line of LINES) {
+  if (isBorrow(line)) {
+    const b = borrowed(line);
+    copyFileSync(b.wav, path.join(VOICE_DIR, `${line.id}.wav`));
+    result.lines[line.id] = b.entry;
+    const w = decodeWav(readFileSync(b.wav));
+    previewParts.push({ s: w.samples, sr: w.sampleRate });
+    console.log(`[voice] borrow ${line.id.padEnd(7)} from film "${b.from.id}" (${b.from.voiceDir}/${line.id}.wav, byte copy)`);
+    continue;
+  }
   const v = cfg.voices[line.voice];
   const audio = synth(line, v, line.voice);
   const sr = audio.sampleRate;
@@ -779,7 +918,7 @@ for (const line of LINES) {
     ? timingsFromWords(line.say, alignWords(line.say, audio.words, line.language), -tr.offset, line.language)
     : timings(line.say, dur, pauses(s, sr), line.language);
   result.lines[line.id] = {
-    file: `voice/${line.id}.wav`,
+    file: voiceFile(FILM, line.id),
     voice: line.voice,
     say: line.say,
     ...(line.language ? { language: line.language } : {}),
@@ -791,28 +930,28 @@ for (const line of LINES) {
   };
   console.log(`[voice] ${ENGINE} ${line.id.padEnd(7)} ${line.voice.padEnd(8)} ${dur.toFixed(2)} s  "${line.say}"${audio.words?.length ? `  (${audio.words.length} timed words)` : ''}  ${levelLog(line.id, L)}`);
 }
-if (OUT_DIR || argv.includes('--preview')) {
-  // one listenable file: every line in order with short gaps
+if ((OUT_DIR || argv.includes('--preview')) && previewParts.length) {
+  // one listenable file: every line in order with short gaps (a line at another sample rate,
+  // e.g. a borrowed one, is left out rather than played at the wrong speed)
   const sr = previewParts[0].sr;
   const gap = new Float32Array(Math.round(0.45 * sr));
-  const all = previewParts.flatMap((p) => [p.sr === sr ? p.s : p.s, gap]);
+  const odd = previewParts.filter((p) => p.sr !== sr).length;
+  if (odd) console.log(`[voice] preview: ${odd} line(s) at another sample rate left out`);
+  const all = previewParts.filter((p) => p.sr === sr).flatMap((p) => [p.s, gap]);
   const n = all.reduce((a, x) => a + x.length, 0);
   const buf = new Float32Array(n);
   let o = 0;
   for (const x of all) { buf.set(x, o); o += x.length; }
-  writeWav(path.join(OUT_DIR ?? path.join(ROOT, 'out'), 'preview.wav'), buf, sr);
+  const previewFile = OUT_DIR ? path.join(OUT_DIR, 'preview.wav') : abs(FILM, 'preview');
+  mkdirSync(path.dirname(previewFile), { recursive: true });
+  writeWav(previewFile, buf, sr);
 }
 let written = result;
-if (ONLY) {
+if (ONLY && existsSync(TS_OUT)) {
   // merge: the existing entries keep their exact JSON (and position); new ids are appended
-  const src = readFileSync(TS_OUT, 'utf8');
-  const prev = JSON.parse(src.slice(src.indexOf('{'), src.lastIndexOf(' as const')));
+  const prev = readVoiceTs(TS_OUT);
   written = { ...prev, lines: { ...prev.lines, ...result.lines } };
 }
-writeFileSync(
-  OUT_DIR ? path.join(OUT_DIR, 'voice.generated.ts') : TS_OUT,
-  '/* GENERATED by scripts/generate-voice.mjs — do not edit. Re-run `npm run voice`. */\n' +
-    `export const VOICE = ${JSON.stringify(written)} as const;\n` +
-    'export type VoiceId = keyof typeof VOICE.lines;\n',
-);
-console.log(`[voice] ${LINES.length} lines${ONLY ? ' (merged)' : ''} → public/voice + src/voice.generated.ts in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+const TS_FILE = OUT_DIR ? path.join(OUT_DIR, 'voice.generated.ts') : TS_OUT;
+writeVoiceTs(TS_FILE, written);
+console.log(`[voice] ${LINES.length} lines${ONLY ? ' (merged)' : ''} → ${rel(VOICE_DIR)} + ${rel(TS_FILE)} in ${((Date.now() - t0) / 1000).toFixed(1)} s`);

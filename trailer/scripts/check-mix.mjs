@@ -32,7 +32,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readWav, lufs, truePeak, peak, db, Biquad, SR } from './audio/dsp.mjs';
 import { blockPowers, integrated, momentary, rmsDb } from './audio/loudness.mjs';
-import { abs, filmOf } from './films.mjs';
+import { abs, filmOf, need } from './films.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -40,8 +40,8 @@ const PUBLIC = path.join(ROOT, 'public');
 const film = filmOf(process.argv.slice(2));
 const QA = abs(film, 'qa');
 const quiet = process.argv.includes('--quiet');
-const T = await import(abs(film, 'timing'));
-const { VOICE } = await import(abs(film, 'voiceTs'));
+const T = await import(need(film, 'timing'));
+const { VOICE } = await import(need(film, 'voiceTs'));
 const [hashModule, hashName] = film.hash;
 if (!existsSync(path.join(ROOT, hashModule))) {
   console.error(`film "${film.id}": its build hash ${hashModule} does not exist yet`);

@@ -37,7 +37,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { abs, filmOf } from './films.mjs';
+import { abs, filmOf, need } from './films.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -46,7 +46,7 @@ const film = filmOf(args);
 const FLAGS = ['scale', 'chunk', 'crf', 'concurrency', 'film'];
 const unknown = args.filter((a) => a.startsWith('--') && a !== '--dry-run' && !FLAGS.some((k) => a.startsWith(`--${k}=`)));
 if (unknown.length) throw new Error(`render-master: unknown option(s) ${unknown.join(' ')} (known: ${FLAGS.map((k) => `--${k}=`).join(' ')} --dry-run)`);
-const T = await import(abs(film, 'timing'));
+const T = await import(need(film, 'timing'));
 
 const opt = (k, d) => {
   const a = args.find((x) => x.startsWith(`--${k}=`));
