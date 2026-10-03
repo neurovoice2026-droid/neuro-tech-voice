@@ -1,0 +1,292 @@
+{
+  "level": {
+    "lufs": -23,
+    "peakMax": -1,
+    "note": "ONE dialogue target for every line: BS.1770 integrated loudness over its phrases (mono file; -20 LUFS dual-mono in the stereo dialogue bus), after the phone line / clean and the role EQ. Not a peak: peak-normalising left a 5 LU spread."
+  },
+  "voices": {
+    "ava": {
+      "sid": 1,
+      "name": "af_bella",
+      "speed": 1.04,
+      "note": "Ava, the AI agent (Tessa). The ONLY explaining voice, as the client asked: narrator to the owner (vo-*, brand) and in-call agent (call-*). Full-band, no phone line.",
+      "fish": {
+        "env": "FISH_KB2_AVA_VOICE",
+        "gender": "female",
+        "id": "",
+        "speed": 1
+      },
+      "cartesia": {
+        "env": "CARTESIA_KB2_AVA_VOICE",
+        "id": "6ccbfb76-1fc6-48f7-b71d-91ac6298247b",
+        "name": "Tessa (Emotive)",
+        "gender": "feminine",
+        "speed": 1.05
+      }
+    },
+    "desk": {
+      "sid": 6,
+      "name": "am_michael",
+      "speed": 1,
+      "note": "The front-desk person, heard in the room (not on a phone): full-band, close, never phone EQ. Any room colour comes from the mix (white room send / fx-roomtone), not from a new reverb. Kokoro fallback copies the caller's am_michael (placeholder only).",
+      "fish": {
+        "env": "FISH_KB2_DESK_VOICE",
+        "gender": "male",
+        "id": "",
+        "speed": 1
+      },
+      "cartesia": {
+        "env": "CARTESIA_KB2_DESK_VOICE",
+        "id": "0834f3df-e650-4766-a20c-5a93a43aa6e3",
+        "name": "Leo",
+        "gender": "masculine"
+      }
+    },
+    "caller": {
+      "sid": 6,
+      "name": "am_michael",
+      "speed": 1,
+      "phone": true,
+      "note": "Caller 1 (Kyle), heard down a phone line: the first Saturday question.",
+      "fish": {
+        "env": "FISH_KB2_CALLER_VOICE",
+        "gender": "male",
+        "id": "",
+        "speed": 1
+      },
+      "cartesia": {
+        "env": "CARTESIA_KB2_CALLER_VOICE",
+        "id": "c961b81c-a935-4c17-bfb3-ba2239de8c2f",
+        "name": "Kyle (Emotive)",
+        "gender": "masculine"
+      }
+    },
+    "caller2": {
+      "sid": 7,
+      "name": "bf_emma",
+      "speed": 1,
+      "phone": true,
+      "eq": [
+        {
+          "type": "peak",
+          "f": 2200,
+          "q": 0.9,
+          "db": 6
+        },
+        {
+          "type": "peak",
+          "f": 500,
+          "q": 1,
+          "db": -3
+        }
+      ],
+      "eqNote": "Dana down the phone line was dull and boxy (1.4-2.8 kHz ~7.5 dB under the other caller, 355-710 Hz dominant): a presence lift at 2.2 kHz and a little out of the box at 500 Hz.",
+      "note": "Caller 2 (Dana): asks at the desk in b03; the SAME file is replayed in b14 (the A/B after the document changes). Film 1's presence EQ.",
+      "fish": {
+        "env": "FISH_KB2_CALLER2_VOICE",
+        "gender": "female",
+        "id": "",
+        "speed": 1
+      },
+      "cartesia": {
+        "env": "CARTESIA_KB2_CALLER2_VOICE",
+        "id": "cc00e582-ed66-4004-8336-0175b85c85f6",
+        "name": "Dana (Emotive)",
+        "gender": "feminine"
+      }
+    },
+    "caller3": {
+      "sid": 7,
+      "name": "bf_emma",
+      "speed": 1,
+      "phone": true,
+      "note": "Caller 3: a mature, polite woman (b04, the autopilot gag). Pinned to Marian, verified feminine with GET /voices in voice-candidates/README.md; clear cartesia.id to let the generator auto-pick a feminine voice instead. Kokoro fallback copies caller2's bf_emma (placeholder only).",
+      "fish": {
+        "env": "FISH_KB2_CALLER3_VOICE",
+        "gender": "female",
+        "id": "",
+        "speed": 1
+      },
+      "cartesia": {
+        "env": "CARTESIA_KB2_CALLER3_VOICE",
+        "id": "26403c37-80c1-4a1a-8692-540551ca2ae5",
+        "name": "Marian",
+        "gender": "feminine"
+      }
+    },
+    "caller4": {
+      "sid": 6,
+      "name": "am_michael",
+      "speed": 1,
+      "phone": true,
+      "note": "Caller 4: a younger, casual man (b09, the live call: \"around this weekend\"). cartesia.id is left EMPTY on purpose so the generator auto-picks a masculine English voice not already taken (Tessa, Leo, Kyle, Dana and Marian are resolved first, so they are excluded); pin the pick afterwards. Suggested pin: Daniel 47c38ca4-5f35-497b-b1a3-415245fb35e1 (masculine per lib/voice/voice-map.ts, verified live 2026-09-17). Kokoro fallback copies the caller's am_michael (placeholder only).",
+      "fish": {
+        "env": "FISH_KB2_CALLER4_VOICE",
+        "gender": "male",
+        "id": "",
+        "speed": 1
+      },
+      "cartesia": {
+        "env": "CARTESIA_KB2_CALLER4_VOICE",
+        "id": "",
+        "name": "",
+        "gender": "masculine"
+      }
+    }
+  },
+  "lines": [
+    {
+      "id": "kb2-c1",
+      "voice": "caller",
+      "say": "Hi! Are you open on Saturdays?",
+      "direction": "Caller 1 on the phone, mid-morning: friendly, quick, ordinary. A light lift on \"Saturdays?\". Nothing special about the question; that is the point.",
+      "speak": "Hi! Are you open on Saturdays?",
+      "emotion": "curious"
+    },
+    {
+      "id": "kb2-desk-1",
+      "voice": "desk",
+      "say": "Yes, Saturdays, nine till two.",
+      "direction": "The front-desk person, in the room: friendly, efficient, a touch rote, the answer he has given a hundred times. Even, unhurried rhythm with small commas. Generated ONCE and played three times as the identical file (b02, b03, b04), so it must sound fine after any of the three questions, including \"What are your weekend hours?\" (the \"Yes\" misfit there is the intended gag).",
+      "speak": "Yes, Saturdays, nine till two.",
+      "emotion": "content"
+    },
+    {
+      "id": "kb2-c2",
+      "voice": "caller2",
+      "say": "Quick one. Can I pop in on Saturday?",
+      "direction": "Caller 2 on the phone: bright and breezy, a small smile, in a hurry. Replayed verbatim in b14 as the \"same question\" after the document changes.",
+      "speak": "Quick one. Can I pop in on Saturday?",
+      "emotion": "happy"
+    },
+    {
+      "id": "kb2-c3",
+      "voice": "caller3",
+      "say": "What are your weekend hours?",
+      "direction": "Caller 3 on the phone: mature, polite, measured, a plain question. No \"Saturday\" in it, on purpose.",
+      "speak": "What are your weekend hours?",
+      "emotion": "calm"
+    },
+    {
+      "id": "kb2-vo-1",
+      "voice": "ava",
+      "say": "You hired someone brilliant. The phone turned them into a recording.",
+      "direction": "Ava as narrator, speaking to the owner (not on a call), in the silence after the hard stop: intimate, dry, a little wry. Warm respect on \"brilliant\"; a quiet, knowing landing on \"a recording.\"",
+      "speak": "You hired someone brilliant. The phone turned them into a recording.",
+      "emotion": "calm"
+    },
+    {
+      "id": "kb2-vo-2",
+      "voice": "ava",
+      "say": "And the customer in front of them? Waiting.",
+      "direction": "Ava as narrator: a real question, then a held breath, then \"Waiting.\" soft and final, almost under the breath. The word \"Waiting\" is placed on a bar line, so the pause before it should be natural, not long.",
+      "speak": "And the customer in front of them? <break time=\"400ms\"/> Waiting.",
+      "emotion": "calm"
+    },
+    {
+      "id": "kb2-vo-3",
+      "voice": "ava",
+      "say": "Some work repeats. Some work matters. I'm Ava, an AI that answers your phone, and I'll take the first kind.",
+      "direction": "Ava as narrator: two short balanced statements, a small beat between them. Then she introduces herself, warm and plain (she is an AI, said without fuss), and a quiet confident promise on \"I'll take the first kind.\"",
+      "speak": "Some work repeats. Some work matters. I'm Ava, an AI that answers your phone, and I'll take the first kind.",
+      "emotion": "confident"
+    },
+    {
+      "id": "kb2-vo-4",
+      "voice": "ava",
+      "say": "Give me your answers once. Your prices, your hours, your policies, pages from your website. That's your knowledge base.",
+      "direction": "Ava as narrator: an easy, generous invitation. The list is relaxed, one item per beat (documents land on the nouns). A small lift and a smile on \"That's your knowledge base.\" This is where the feature is named aloud.",
+      "speak": "Give me your answers once. Your prices, your hours, your policies, pages from your website. That's your knowledge base.",
+      "emotion": "content"
+    },
+    {
+      "id": "kb2-c4",
+      "voice": "caller4",
+      "say": "Are you guys around this weekend?",
+      "direction": "Caller 4 on the phone: young, casual, relaxed. \"around this weekend\" is the phrase the film links to the Saturday/Sunday lines by meaning, so keep it clear.",
+      "speak": "Hey, are you guys around this weekend?",
+      "emotion": "content"
+    },
+    {
+      "id": "kb2-call-1",
+      "voice": "ava",
+      "say": "One moment, let me check.",
+      "direction": "Ava on the call (the product's real filler): light, friendly, natural, quick; not a pause-for-effect.",
+      "speak": "One moment, let me check.",
+      "emotion": "calm"
+    },
+    {
+      "id": "kb2-vo-5",
+      "voice": "ava",
+      "say": "When someone calls, I find the part that answers them, even when they put it differently.",
+      "direction": "Ava as narrator, during the stop-time: clear and assured, explaining something simple. A gentle emphasis on \"the part that answers them\" and a warm turn on \"even when they put it differently.\"",
+      "speak": "When someone calls, I find the part that answers them, even when they put it differently.",
+      "emotion": "confident"
+    },
+    {
+      "id": "kb2-call-2",
+      "voice": "ava",
+      "say": "We are! Saturday from nine till two. Sundays, we're closed.",
+      "direction": "Ava on the call: bright and helpful, a smile on \"We are!\", then the hours crisp and easy. Short and natural; she never mentions documents.",
+      "speak": "We are! Saturday from nine till two. Sundays, we're closed.",
+      "emotion": "happy"
+    },
+    {
+      "id": "kb2-vo-6",
+      "voice": "ava",
+      "say": "If it isn't written down, I say so, in the words you chose.",
+      "direction": "Ava as narrator, over the field the owner just typed: honest, calm, reassuring. Slight weight on \"in the words you chose.\" (it is the owner's line, not hers).",
+      "speak": "If it isn't written down, I say so, in the words you chose.",
+      "emotion": "calm"
+    },
+    {
+      "id": "kb2-vo-7",
+      "voice": "ava",
+      "say": "Hours change? Change the document. The next call gets the new answer.",
+      "direction": "Ava as narrator: brisk and light. A playful little question, a matter-of-fact instruction, then a confident close on \"the new answer.\"",
+      "speak": "Hours change? Change the document. The next call gets the new answer.",
+      "emotion": "confident"
+    },
+    {
+      "id": "kb2-call-3",
+      "voice": "ava",
+      "say": "You can! We're open Saturday from nine till four.",
+      "direction": "Ava on the call: warm and enthusiastic, the payoff answer. A clear, happy \"four\".",
+      "speak": "You can! We're open Saturday from nine till four.",
+      "emotion": "enthusiastic"
+    },
+    {
+      "id": "kb2-desk-2",
+      "voice": "desk",
+      "say": "That's completely normal. We'll take it slow.",
+      "direction": "The front-desk person, in the room, to the client in front of him: warm, kind, unhurried, close; all of the rote tone of desk-1 gone. If Sonic refuses \"sympathetic\", use \"calm\".",
+      "speak": "That's completely normal. We'll take it slow.",
+      "emotion": "sympathetic"
+    },
+    {
+      "id": "kb2-vo-8",
+      "voice": "ava",
+      "say": "That's the work only people can do.",
+      "direction": "Ava as narrator, after a full bar of room tone: quiet, warm, sincere; a statement, not a slogan. Let \"only people can do\" settle.",
+      "speak": "That's the work only people can do.",
+      "emotion": "content"
+    },
+    {
+      "id": "kb2-vo-9",
+      "voice": "ava",
+      "say": "Your answers. Written once, there for every call.",
+      "direction": "Ava as the trailer voice-over in the dark (the end-card headline): intimate, confident, a little slower; a small pause after \"Your answers.\" and a calm landing on \"there for every call.\"",
+      "speak": "Your answers. Written once, there for every call.",
+      "emotion": "confident"
+    },
+    {
+      "id": "kb2-brand",
+      "voice": "ava",
+      "say": "Neuro Tech Voice.",
+      "direction": "Ava voice-over: calm, proud brand sign-off, as in film 1. (The orchestrator may instead byte-copy film 1's cta-2 take, same words and emotion, via the pipeline's borrow mechanism.)",
+      "speak": "Neuro Tech Voice.",
+      "emotion": "proud"
+    }
+  ],
+  "_notes": "Film 2 (\"Two Kinds of Work\", the knowledge-base film); script: trailer/out/kb-plan/SCRIPT.md. Same schema as scripts/voice-lines.json: say = the canonical words the captions and src/kb/timing.ts index (word k); speak / parts = what the TTS actually performs (Sonic SSML allowed, fillers welcome); the generator aligns the real word timestamps back onto `say`. emotion: one of Cartesia's Sonic emotions. 19 generated lines in film order; REUSED takes are not separate lines: kb2-desk-1 plays three times (b02-b04) and kb2-c2 twice (b03, b14), identical files by design. Env names are KB2-prefixed so a film-1 override (e.g. CARTESIA_AVA_VOICE) set in the voice session cannot leak into film 2. caller4 has no cartesia.id on purpose (auto-pick, then pin). Kokoro sid/name are copies of film 1's fallbacks, for placeholder timing only."
+}
