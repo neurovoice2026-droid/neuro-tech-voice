@@ -10,9 +10,12 @@
  *    So a bare `npx remotion render …` is always in sync. (Voices are
  *    pre-generated and committed: public/voice, via `npm run voice`.)
  *    FILMS (scripts/films.mjs): the pre-step runs the driver of the film the
- *    command is for — NTV_FILM=<id> if set, else film 2 ("kb") when the entry
- *    point argument is src/kb/index.ts, else film 1 ("main", the call above,
- *    unchanged). A film 1 command never runs film 2's code.
+ *    command is for — film 2 ("kb") when the entry point argument is
+ *    src/kb/index.ts; film 1 ("main", the call above, unchanged) when it is
+ *    src/index.ts or when there is none (Remotion then uses setEntryPoint
+ *    below); NTV_FILM=<id> only decides for a prebuilt bundle / serve URL.
+ *    A film 1 command never runs film 2's code, and NTV_FILM is not read at
+ *    all once NTV_SKIP_SFX is set (child renders, render-master's chunks).
  * 2. Output defaults: H.264 High, BT.709 limited range (tagged bt709
  *    primaries / transfer / matrix, tv range) — what every platform and player
  *    assumes, so the 9–21-level midnight room and the four lights' hues survive
@@ -28,11 +31,25 @@ import { closeSync, existsSync, openSync, readSync } from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
-// which film's soundtrack: NTV_FILM, else the entry point on the command line (src/kb/index.ts → kb)
-const film = process.env.NTV_FILM ?? (process.argv.some((a) => /(^|[\\/])src[\\/]kb[\\/]index\.tsx?$/.test(a)) ? 'kb' : 'main');
 const SFX_DRIVER: Record<string, string> = { main: 'generate-sfx.mjs', kb: path.join('kb', 'generate-sfx.mjs') };
-if (!Object.hasOwn(SFX_DRIVER, film)) throw new Error(`[remotion.config] unknown NTV_FILM=${film} (known: ${Object.keys(SFX_DRIVER).join(', ')})`);
 if (!process.env.NTV_SKIP_SFX) {
+  // which film's soundtrack (resolved only here: with NTV_SKIP_SFX set — every child render, every
+  // render-master chunk — NTV_FILM is never read, so a stray value cannot break a film 1 command).
+  // The entry point on the command line decides; NTV_FILM only where it cannot: a prebuilt bundle / serve URL.
+  // With no entry point Remotion uses Config.setEntryPoint below (src/index.ts): film 1, whatever NTV_FILM says.
+  const pos = process.argv.slice(2).filter((a) => !a.startsWith('-'));
+  const entryArg = pos[1]; // `remotion <command> [entry-or-bundle] …` (entry-point.js: the first argument, if it exists)
+  const isFile = (a?: string) => !!a && existsSync(path.resolve(root, a));
+  const argFilm = process.argv.some((a) => /(^|[\\/])src[\\/]kb[\\/]index\.tsx?$/.test(a))
+    ? 'kb'
+    : process.argv.some((a) => /(^|[\\/])src[\\/]index\.tsx?$/.test(a)) || !(isFile(entryArg) || /^https?:\/\//.test(entryArg ?? ''))
+      ? 'main'
+      : undefined;
+  const envFilm = process.env.NTV_FILM?.trim() || undefined;
+  if (envFilm && argFilm && envFilm !== argFilm)
+    console.warn(`[remotion.config] NTV_FILM=${envFilm} ignored: this command is film "${argFilm}" (its entry point)`);
+  const film = argFilm ?? envFilm ?? 'main';
+  if (!Object.hasOwn(SFX_DRIVER, film)) throw new Error(`[remotion.config] unknown NTV_FILM=${film} (known: ${Object.keys(SFX_DRIVER).join(', ')})`);
   execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', path.join(root, 'scripts', SFX_DRIVER[film])], {
     stdio: 'inherit',
     cwd: root,

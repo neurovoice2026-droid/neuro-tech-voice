@@ -59,7 +59,9 @@
  *   --remaster             no new takes: re-level the film's current live lines to level.lufs and
  *                          apply any role EQ they don't carry yet; timings are kept
  *   --out=DIR              a complete candidate set (DIR/voice/*.wav + DIR/voice.generated.ts +
- *                          DIR/preview.wav) instead of the live one
+ *                          DIR/preview.wav) instead of the live one. DIR must be a folder of its own
+ *                          under voice-candidates/ or out/ (or outside trailer/): never public/, src/,
+ *                          or any film's live voice folder / voice.generated.ts / preview (refused, exit 2)
  *   --install=DIR [--only=a,b]
  *                          no new takes: copy chosen takes from a candidate set (DIR/voice/<id>.wav
  *                          + their entries, `file` rewritten to the film's prefix) into the film's
@@ -72,14 +74,14 @@
  *
  * FROZEN films (main: delivered) refuse every write to their live set — the default run, --only,
  * --remaster — unless --unfreeze is passed; --install never writes into a frozen film. --out
- * candidate sets are always allowed.
+ * candidate sets are always allowed (for every film, once DIR passes the --out check above).
  *
  * BORROWED lines ({"id": "cta-1", "borrow": "main"} in the film's voice-lines JSON) are never
  * synthesised: the other film's WAV is byte-copied (same id) and its entry copied with `file`
  * rewritten. The engines skip them and --remaster leaves them as copied.
  */
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -714,6 +716,48 @@ const forced = argv.find((a) => a.startsWith('--engine='))?.split('=')[1];
 const opt = (k) => argv.find((a) => a.startsWith(`--${k}=`))?.split('=').slice(1).join('=');
 /** --out=DIR writes a complete candidate set (DIR/voice/*.wav + DIR/voice.generated.ts + DIR/preview.wav) instead of the live one. */
 const OUT_DIR = opt('out') ? path.resolve(opt('out')) : null;
+if (OUT_DIR) {
+  /* a candidate set is never a live set: inside trailer/ it goes under voice-candidates/<set>/ or out/<set>/
+   * (outside trailer/, e.g. a scratch folder, anything that is not an ancestor of it). --out=public would
+   * overwrite film 1's delivered voices under its old timings (H2); --out=src would rewrite film 1's
+   * src/voice.generated.ts; --out=public/kb would swap film 2's WAVs and leave their timings behind. The
+   * frozen guard below lets every --out through, so this is the check that keeps them out. Symlinks are
+   * resolved (the deepest existing ancestor), so a link cannot smuggle a live folder in. */
+  const real = (p) => {
+    const rest = [];
+    let q = p;
+    while (!existsSync(q) && path.dirname(q) !== q) {
+      rest.unshift(path.basename(q));
+      q = path.dirname(q);
+    }
+    return path.join(realpathSync(q), ...rest);
+  };
+  const inside = (p, dir) => {
+    const r = path.relative(dir, p);
+    return r === '' || (!r.startsWith('..') && !path.isAbsolute(r));
+  };
+  const out = real(OUT_DIR);
+  const root = real(ROOT);
+  const why = [];
+  const sets = ['voice-candidates', 'out'].map((d) => path.join(root, d));
+  if (inside(root, out)) why.push(`${OUT_DIR} contains the whole trailer project`);
+  else if (inside(out, root) && !sets.some((d) => inside(out, d) && out !== d))
+    why.push(`inside trailer/ a candidate set lives in a folder of its own under voice-candidates/ or out/ (got ${path.relative(root, out) || '.'}/)`);
+  // belt and braces: whatever the rule above says, never a film's live voice folder, timing file, preview or public/src root
+  for (const [id, f] of Object.entries(FILMS)) {
+    const live = (k) => real(path.join(ROOT, f[k]));
+    if (inside(path.join(out, 'voice'), live('voiceDir')) || inside(live('voiceDir'), path.join(out, 'voice')))
+      why.push(`DIR/voice/ would be film "${id}"'s live ${f.voiceDir}/`);
+    if (path.join(out, 'voice.generated.ts') === live('voiceTs')) why.push(`DIR/voice.generated.ts would be film "${id}"'s ${f.voiceTs}`);
+    if (path.join(out, 'preview.wav') === live('preview')) why.push(`DIR/preview.wav would be film "${id}"'s ${f.preview}`);
+  }
+  for (const d of ['public', 'src']) if (inside(out, path.join(root, d))) why.push(`${d}/ is what the films render and mix from`);
+  if (why.length) {
+    console.error(`[voice] --out=${opt('out')} refused: a candidate set must not land where a film reads its voices —\n  ${[...new Set(why)].join('\n  ')}\n` +
+      `  write it to e.g. --out=voice-candidates/${FILM.id === 'main' ? '' : `${FILM.id}/`}take-N, then install chosen takes with --install (film 2) / --unfreeze (film 1).`);
+    process.exit(2);
+  }
+}
 /** --install=DIR copies takes from a candidate set into the live set (no synthesis). */
 const INSTALL = opt('install') ? path.resolve(opt('install')) : null;
 /** --only=a,b generates just those lines and merges them into the live set (the other WAVs and their entries stay untouched). */

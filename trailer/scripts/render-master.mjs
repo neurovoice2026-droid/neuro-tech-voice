@@ -27,16 +27,29 @@
  * entry point, bundle folder and output name. Film 1 (main): Trailer-*, scripts/generate-sfx.mjs,
  * src/index.ts → out/master/bundle → out/neurotechvoice-trailer-<fmt>-4k120.mp4. Film 2 (kb):
  * KB-Trailer-*, scripts/kb/generate-sfx.mjs, src/kb/index.ts → out/master/bundle-kb →
- * out/kb/neurotechvoice-knowledge-<fmt>-4k120.mp4. Each film has its own bundle folder, so two films
- * can render at the same time.
+ * out/kb/neurotechvoice-knowledge-<fmt>-4k120.mp4. Each film has its own bundle and chunk folders, so
+ * two films can render chunks at the same time — but public/ is SHARED: `remotion bundle` lists (stats)
+ * every public/ file, so do not run film 2's sound build (`npm run sfx:kb`, an --install, or a kb master's
+ * step 1) while a film 1 master is in its bundle step (step 1): a file renamed into public/kb/sfx/ mid-scan
+ * can fail that bundle after out/master/bundle was deleted. (Film 2's driver now stages its temp files in
+ * out/audio/kb/, outside public/, which removes the vanishing `.tmp-` entries; the list still changes.)
  *
- * --dry-run: prints the comps, chunk ranges (and which are done), the sound step, the bundle and the
- * output paths, then exits. Nothing is built, deleted, rendered or written.
+ * CHUNK PLAN (films that are not frozen, i.e. film 2): a finished chunk is reused only if it was rendered
+ * from the same picture. <chunk dir>/plan.json records { bundleSha (sha256 over the bundle's emitted
+ * files outside public/, index.html without its sound entries: scripts/bundle-digest.mjs), total, chunk,
+ * scale, crf, concurrency }; when the new plan differs, the folder's chunks (*.mp4, *.done) are deleted
+ * before rendering, so a scene fix or new takes of the same length can never be muxed as the OLD picture
+ * under the NEW mix. A frozen film (film 1) keeps its chunks and its exact command sequence.
+ *
+ * --dry-run: prints the comps, chunk ranges (and which are done or stale), the sound step, the bundle and
+ * the output paths, then exits. Nothing is built, deleted, rendered or written. NTV_EXPECT_DRY_RUN=1
+ * (verify-film1 gate 11) makes any run that is NOT a dry run abort before it does anything.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { bundleDigest, isSoundStatic } from './bundle-digest.mjs';
 import { abs, filmOf, need } from './films.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -46,6 +59,11 @@ const film = filmOf(args);
 const FLAGS = ['scale', 'chunk', 'crf', 'concurrency', 'film'];
 const unknown = args.filter((a) => a.startsWith('--') && a !== '--dry-run' && !FLAGS.some((k) => a.startsWith(`--${k}=`)));
 if (unknown.length) throw new Error(`render-master: unknown option(s) ${unknown.join(' ')} (known: ${FLAGS.map((k) => `--${k}=`).join(' ')} --dry-run)`);
+const dryRun = args.includes('--dry-run');
+if (process.env.NTV_EXPECT_DRY_RUN === '1' && !dryRun) {
+  console.error('render-master: NTV_EXPECT_DRY_RUN=1 but this is not a --dry-run — aborted before anything was built, deleted or rendered');
+  process.exit(3);
+}
 const T = await import(need(film, 'timing'));
 
 const opt = (k, d) => {
@@ -56,7 +74,6 @@ const scale = Number(opt('scale', '2'));
 const chunk = Number(opt('chunk', '960'));
 const crf = Number(opt('crf', '16'));
 const concurrency = opt('concurrency', '1');
-const dryRun = args.includes('--dry-run');
 const formats = args.filter((a) => !a.startsWith('--'));
 const badFormat = formats.filter((f) => !film.formats.includes(f));
 if (badFormat.length) throw new Error(`render-master: unknown format(s) ${badFormat.join(' ')} for film "${film.id}" (${film.formats.join(', ')})`);
@@ -76,6 +93,25 @@ const rangesOf = () => {
 const chunkName = ([a, b]) => `${String(a).padStart(5, '0')}-${String(b).padStart(5, '0')}`;
 const outOf = (comp) =>
   path.join(ROOT, film.outDir, `${film.outName}-${comp.slice(film.comp.length)}-${scale === 2 ? '4k' : `x${scale}`}${T.RENDER_FPS}.mp4`);
+/* the chunk plan (not for a frozen film): what a chunk folder's finished chunks were rendered from */
+const PLAN_KEYS = ['total', 'chunk', 'scale', 'crf', 'concurrency'];
+const params = { total, chunk, scale, crf, concurrency };
+const CHUNK_FILE = /^\d{5}-\d{5}\.mp4(\.done)?$|\.part\.mp4$/;
+const readPlan = (dir) => {
+  try {
+    return JSON.parse(readFileSync(path.join(dir, 'plan.json'), 'utf8'));
+  } catch {
+    return null;
+  }
+};
+/** why the folder's chunks belong to another plan ('' = same plan); bundleSha only when the bundle is built */
+const planDiff = (old, now) => {
+  if (!old) return 'no plan.json';
+  return [...PLAN_KEYS, ...('bundleSha' in now ? ['bundleSha'] : [])]
+    .filter((k) => old[k] !== now[k])
+    .map((k) => (k === 'bundleSha' ? 'the picture changed (bundle sha)' : `${k} ${old[k]} → ${now[k]}`))
+    .join(', ');
+};
 
 if (dryRun) {
   // print the plan; nothing is built, deleted, rendered or written
@@ -85,13 +121,15 @@ if (dryRun) {
   console.log(`sound         node --experimental-strip-types --no-warnings ${film.sfxDriver}   (not run)`);
   console.log(`bundle        npx remotion bundle ${film.entry} --out-dir ${rel(bundle)}   (not run; a real run deletes ${rel(bundle)} first)`);
   console.log(`comps         ${comps.join(' ')}`);
+  if (!film.frozen) console.log('chunk plan    <chunk dir>/plan.json: a "done" chunk is kept only if the new bundle\'s sha matches it (checked after bundling)');
   for (const comp of comps) {
     const dir = path.join(ROOT, 'out', 'master', `${comp}-x${scale}`);
     console.log(`\n${comp} ×${scale} → ${rel(dir)}/`);
+    const stale = film.frozen || !existsSync(dir) ? '' : planDiff(readPlan(dir), params);
     for (const r of ranges) {
       const file = path.join(dir, `${chunkName(r)}.mp4`);
       const done = existsSync(`${file}.done`) && existsSync(file);
-      console.log(`  chunk ${chunkName(r)}   frames ${r[0]}–${r[1]} (${r[1] - r[0] + 1} f)   ${done ? 'done' : 'to render'}`);
+      console.log(`  chunk ${chunkName(r)}   frames ${r[0]}–${r[1]} (${r[1] - r[0] + 1} f)   ${done ? (stale ? `stale (${stale}): re-rendered` : 'done') : 'to render'}`);
     }
     console.log(`  mux   ${rel(path.join(ROOT, 'public', T.MIX.file))} → ${rel(outOf(comp))}   (HEVC hvc1 copy + AAC 320k, ${T.DURATION / T.FPS} s)`);
   }
@@ -105,11 +143,23 @@ execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', a
 });
 rmSync(bundle, { recursive: true, force: true });
 npx(['bundle', film.entry, '--out-dir', bundle]);
+// what the picture is (a muted render reads no sound file, so index.html's sound entries are left out)
+const plan = film.frozen ? null : { bundleSha: bundleDigest(bundle, { drop: isSoundStatic }), ...params };
 
 for (const comp of comps) {
   const dir = path.join(ROOT, 'out', 'master', `${comp}-x${scale}`);
   mkdirSync(dir, { recursive: true });
   const ranges = rangesOf();
+  if (plan) {
+    // chunks from another picture or other settings are never reused: same names, different content
+    const why = planDiff(readPlan(dir), plan);
+    if (why) {
+      const old = readdirSync(dir).filter((f) => CHUNK_FILE.test(f));
+      for (const f of old) rmSync(path.join(dir, f));
+      if (old.length) log(`${comp}: ${old.length} chunk file(s) from another plan deleted (${why})`);
+      writeFileSync(path.join(dir, 'plan.json'), JSON.stringify(plan, null, 2) + '\n');
+    }
+  }
 
   // 2. picture, chunk by chunk; `.done` marks a chunk that finished encoding
   for (const [a, b] of ranges) {

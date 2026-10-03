@@ -23,25 +23,41 @@
  *
  * Instrument code copied from scripts/audio/bed.mjs (pad, felt kick, shaker, snare, crash, bass,
  * pluck, felt piano, e-piano, hall, glue, bus limiter): that file exports only bed(T), and editing it
- * would change film 1's bedKey and mix hash. Exports bed(T) → { st, points }.
+ * would change film 1's bedKey and mix hash. Exports bed(T) → { st, points } and inputs(T) (its cache key).
  */
 import {
   SR, TAU, stereo, mono, addMono, addStereo, osc, ad, mode, filt, noise, spread, fdn, compress, limit, mtof, smooth, rng,
   Saw, Biquad, lerp, gain,
 } from '../audio/dsp.mjs';
 
+/**
+ * EVERYTHING the bed reads from the timeline — and the bed cache key (scripts/kb/generate-sfx.mjs keys
+ * bed.wav on this object + the bytes of this file and dsp.mjs). bed() reads ONLY this object, so a new
+ * input has to be added here, and then it is in the key too: a cached bed can never miss a change.
+ */
+export const inputs = (T) => ({
+  BPM: T.BPM,
+  BEAT: T.BEAT,
+  DURATION: T.DURATION,
+  MUSIC: T.MUSIC,
+  SCENES: T.SCENES,
+  rings: T.REPEAT_LOCAL.rings,
+  vo9: T.CTA_LOCAL.vo9,
+});
+
 export function bed(T) {
-  const BEAT = 60 / T.BPM; // seconds per beat
-  const fb = (frame) => frame / T.BEAT; // frames → beats
+  const I = inputs(T);
+  const BEAT = 60 / I.BPM; // seconds per beat
+  const fb = (frame) => frame / I.BEAT; // frames → beats
   const sec = (beat) => beat * BEAT;
   const half = (x) => Math.round(x * 2) / 2;
-  const M = T.MUSIC;
-  const S = T.SCENES;
-  const END = T.DURATION / T.BEAT;
+  const M = I.MUSIC;
+  const S = I.SCENES;
+  const END = I.DURATION / I.BEAT;
   const P = {
     ring: fb(M.ringOne),
     rolls: fb(M.rolls),
-    ring3: fb(T.REPEAT_LOCAL.rings[2]),
+    ring3: fb(I.rings[2]),
     stop: fb(M.hardStop),
     brilliant: half(fb(M.brilliant)),
     waiting: fb(M.waiting),
@@ -57,7 +73,7 @@ export function bed(T) {
     desk: fb(M.desk),
     vo8: half(fb(M.vo8)),
     cta: fb(M.cta),
-    vo9: fb(S.cta.from + T.CTA_LOCAL.vo9),
+    vo9: fb(S.cta.from + I.vo9),
     converge: fb(M.converge),
     impact: fb(M.impact),
     brand: fb(M.brand),

@@ -6,8 +6,21 @@
  *   node scripts/kb/verify-film1.mjs --capture [--force]   §11.A: write the baseline to out/kb-plan/baseline/
  *   node scripts/kb/verify-film1.mjs                        §11.B: every gate (1–11), PASS/FAIL each, exit 1 on any FAIL
  *   node scripts/kb/verify-film1.mjs --fast                 gates 1–5 and 10 only (no MP4s, compositions, bundle or stills)
- *   options: --only=1,4,9 (run just these gates) · --keep (keep the run's bundle and stills in out/kb-plan/verify/)
- *            --baseline=DIR (another baseline folder; default out/kb-plan/baseline)
+ *   options: --only=1,4,9 (run just these gates; 9 renders from 8's bundle, so --only=9 runs 8 too)
+ *            --keep (keep the run's bundle and stills in out/kb-plan/verify/)
+ *            --baseline=DIR (another baseline folder; default out/kb-plan/baseline; docs/kb/baseline is the
+ *            committed text copy: every gate but 9, which needs the stills)
+ *            --no-wait (exit 2 at once if another verify-film1 is running, instead of waiting for it)
+ *
+ * ONE RUN AT A TIME: a run holds out/kb-plan/verify-film1.lock (its pid). A second run waits for it (up
+ * to 60 min, or exits 2 with --no-wait): two runs share out/kb-plan/verify/ (a finishing run deletes the
+ * bundle the other is rendering stills from) and out/audio/cue-timeline.txt. A lock left by a killed run
+ * (its pid is gone) is taken over.
+ *
+ * --capture writes into <baseline>.new/ and swaps it in only when every step passed, so an aborted capture
+ * never costs the old reference. --force (replace an existing baseline) is refused unless the frozen set
+ * is unchanged between the old baseline's HEAD and HEAD (`git diff --quiet`). The small text files of the
+ * default baseline are also copied to docs/kb/baseline/ (committed: out/ is not).
  *
  * Gates (§11.B):
  *    1  the frozen set (§10 "Untouched") is unchanged against the baseline HEAD (git diff + status, untracked
@@ -21,27 +34,40 @@
  *    5  timeline.json (src/timing.ts evaluated) byte-identical; check-mix stdout + cue-timeline.txt identical, exit 0
  *    6  check-render stdout on the delivered film 1 MP4s identical, exit 0; the MP4s' bytes unchanged
  *    7  `remotion compositions src/index.ts` table identical
- *    8  a fresh `remotion bundle src/index.ts`: same sha256 for every emitted file outside public/
+ *    8  a fresh `remotion bundle src/index.ts`: same sha256 for every emitted file outside public/. index.html
+ *       is compared with the public/kb/ entries (film 2's files) taken out of its static-file list: Remotion
+ *       lists every public/ file there (name, size, mtime), public/ is shared, and film 1 never reads that
+ *       list. Every other byte of index.html — film 1's own sfx/, voice/, img/ entries included — must match.
  *    9  the 35 stills (§11.A) from that bundle match the baseline: byte-identical, or max channel delta ≤ 1/255
  *       when the baseline found the renderer not byte-deterministic (meta.json stillsMode)
  *   10  `npm run typecheck` passes; `npm run check:port` passes (skipped while the script does not exist)
  *   11  `render-master --dry-run` (main) names the same comps, chunk ranges, bundle and output paths as the
- *       baseline formula (skipped while render-master has no --dry-run: never run it without, it renders)
+ *       baseline formula. Run with NTV_EXPECT_DRY_RUN=1 (render-master aborts before step 1 if it is not in
+ *       its dry-run branch) and a stub `npx` first on PATH (exit 97), so a regressed dry-run can never
+ *       bundle, render or re-mux over the delivered masters. Not run if render-master lacks either.
  *
- * Writes only under out/kb-plan/ (baseline/ on --capture, verify/ otherwise) plus film 1's own QA file
- * out/audio/cue-timeline.txt (check-mix rewrites it with identical bytes). Remotion commands run with
- * NTV_SKIP_SFX=1. Plain `node` is enough: every .ts import runs in a child with --experimental-strip-types.
+ * Writes only under out/kb-plan/ (baseline/ on --capture, verify/ otherwise), docs/kb/baseline/ (on a
+ * --capture of the default baseline) and film 1's own QA file out/audio/cue-timeline.txt (check-mix
+ * rewrites it with identical bytes). Remotion commands run with NTV_SKIP_SFX=1. Plain `node` is enough:
+ * every .ts import runs in a child with --experimental-strip-types.
  */
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  closeSync, copyFileSync, existsSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inflateSync } from 'node:zlib';
+import { bundleFiles, isFilm2Static, staticFilesOf } from '../bundle-digest.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const KB_PLAN = path.join(ROOT, 'out', 'kb-plan');
 const V = path.join(KB_PLAN, 'verify');
+const LOCK = path.join(KB_PLAN, 'verify-film1.lock');
+const DEFAULT_B = path.join(KB_PLAN, 'baseline');
+/** the committed copy of the baseline's small text files (out/ is gitignored) */
+const DOCS_B = path.join(ROOT, 'docs', 'kb', 'baseline');
 const rel = (p) => path.relative(ROOT, p);
 
 /* ── what film 1 is (PIPELINE.md §1, §10, §11.A) ── */
@@ -77,7 +103,72 @@ const capture = has('--capture');
 const fast = has('--fast');
 const keep = has('--keep');
 const only = opt('only')?.split(',').map(Number);
-const B = opt('baseline') ? path.resolve(opt('baseline')) : path.join(KB_PLAN, 'baseline');
+const B = opt('baseline') ? path.resolve(opt('baseline')) : DEFAULT_B;
+
+/* ── one run at a time (out/kb-plan/verify/ and out/audio/cue-timeline.txt are shared) ── */
+const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+const alive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === 'EPERM';
+  }
+};
+const readLock = (f) => {
+  try {
+    return JSON.parse(readFileSync(f, 'utf8'));
+  } catch {
+    return null;
+  }
+};
+const takeLock = () => {
+  mkdirSync(KB_PLAN, { recursive: true });
+  const me = { pid: process.pid, at: new Date().toISOString(), argv: argv.join(' ') };
+  // the lock appears with its content in one step (link of a finished file), so a reader never sees it half-written
+  const mine = `${LOCK}.${process.pid}`;
+  writeFileSync(mine, JSON.stringify(me) + '\n');
+  const deadline = Date.now() + (has('--no-wait') ? 0 : 60 * 60e3);
+  let told = false;
+  try {
+    for (;;) {
+      try {
+        linkSync(mine, LOCK);
+        break;
+      } catch (e) {
+        if (e.code !== 'EEXIST') throw e;
+      }
+      const holder = readLock(LOCK);
+      if (!holder || !alive(holder.pid)) {
+        // left by a killed run: take it over (rename first, so two runs cannot both delete a fresh lock)
+        const grave = `${LOCK}.stale-${process.pid}`;
+        try {
+          renameSync(LOCK, grave);
+          const h = readLock(grave);
+          if (h && alive(h.pid)) linkSync(grave, LOCK); // raced with a live run's fresh lock: put it back
+        } catch {
+          /* someone else moved it: retry */
+        }
+        rmSync(grave, { force: true });
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        console.error(`verify-film1: another run holds ${rel(LOCK)} (pid ${holder.pid}, since ${holder.at}: ${holder.argv || '(full)'})${has('--no-wait') ? '' : ' — waited 60 min'}; not run`);
+        process.exit(2);
+      }
+      if (!told) console.log(`verify-film1: waiting for the run already going (pid ${holder.pid}, since ${holder.at}: ${holder.argv || '(full)'}) …`);
+      told = true;
+      sleep(3000);
+    }
+  } finally {
+    rmSync(mine, { force: true });
+  }
+  process.on('exit', () => {
+    if (readLock(LOCK)?.pid === process.pid) rmSync(LOCK, { force: true });
+  });
+  for (const [sig, code] of [['SIGINT', 130], ['SIGTERM', 143], ['SIGHUP', 129]]) process.on(sig, () => process.exit(code));
+};
+takeLock();
 
 /* ── child processes ── */
 const BASE_ENV = { ...process.env };
@@ -145,18 +236,33 @@ const mixStat = () => {
   const s = statSync(path.join(ROOT, 'public/sfx/mix.wav'));
   return `${s.size} ${s.mtimeMs}`;
 };
-const bundleListing = (dir) => {
-  const out = [];
-  const walk = (d) => {
-    for (const e of readdirSync(path.join(dir, d), { withFileTypes: true })) {
-      const r = d ? `${d}/${e.name}` : e.name;
-      if (r === 'public') continue;
-      if (e.isDirectory()) walk(r);
-      else out.push(r);
-    }
-  };
-  walk('');
-  return out.sort().map((r) => `${sha(path.join(dir, r))}  ./${r}\n`).join('');
+/**
+ * sha256 of every file a bundle emitted outside public/ (`<sha>  ./<path>` lines). index.html is hashed with
+ * the public/kb/ entries (film 2's files) taken out of its static-file list — the rest of it byte for byte,
+ * film 1's own entries included (scripts/bundle-digest.mjs). `kb` = how many entries were taken out.
+ */
+const bundleListingOf = (dir) => {
+  const { files, dropped } = bundleFiles(dir, { drop: isFilm2Static });
+  return { listing: files.map((f) => `${f.sha}  ./${f.rel}\n`).join(''), kb: dropped.length };
+};
+const bundleListing = (dir) => bundleListingOf(dir).listing;
+/** why two index.html differ: the static-file entries (other than public/kb/) that changed, or the rest of the page */
+const indexHtmlDiff = (fa, fb) => {
+  try {
+    const ha = readText(fa);
+    const hb = readText(fb);
+    const key = (e) => `${e.name} ${e.sizeInBytes} ${e.lastModified}`;
+    const a = new Map(staticFilesOf(ha).filter((e) => !isFilm2Static(e)).map((e) => [e.name, key(e)]));
+    const b = new Map(staticFilesOf(hb).filter((e) => !isFilm2Static(e)).map((e) => [e.name, key(e)]));
+    const d = [];
+    for (const [n, k] of a) if (!b.has(n)) d.push(`static entry gone: ${n}`); else if (b.get(n) !== k) d.push(`static entry changed: ${k} → ${b.get(n)}`);
+    for (const n of b.keys()) if (!a.has(n)) d.push(`static entry new: ${n}`);
+    const strip = (h) => h.replace(/window\.remotion_staticFiles = \[.*?\](?=[.<])/s, '');
+    if (strip(ha) !== strip(hb)) d.push(`the page outside the static-file list differs: ${firstDiff(strip(ha), strip(hb))}`);
+    return d.length ? d : ['(no difference found outside the public/kb/ entries)'];
+  } catch (e) {
+    return [`(index.html not compared: ${e.message})`];
+  }
 };
 const read = (f) => readFileSync(f);
 const readText = (f) => readFileSync(f, 'utf8');
@@ -293,17 +399,39 @@ const stillsListing = (dir) => STILLS.map((s) => `${sha(path.join(dir, s.name))}
 const typecheck = () => run('npm', ['run', '--silent', 'typecheck'], { log: 'typecheck' });
 const pkgScripts = () => JSON.parse(readText(path.join(ROOT, 'package.json'))).scripts ?? {};
 const fmtS = (s) => (s >= 60 ? `${Math.floor(s / 60)} min ${Math.round(s % 60)} s` : `${s.toFixed(1)} s`);
+/** a baseline's small text files (HEAD, *.sha256, *.txt, *.json, *.stat — not the bundle, stills or logs) */
+const TEXT_BASELINE = /^HEAD$|\.(txt|json|sha256|stat)$/;
+/** copy them to dst/ (its other files, e.g. a README, are kept); returns how many */
+const copyTextBaseline = (src, dst) => {
+  mkdirSync(dst, { recursive: true });
+  for (const f of readdirSync(dst)) if (TEXT_BASELINE.test(f)) rmSync(path.join(dst, f));
+  const files = readdirSync(src, { withFileTypes: true }).filter((e) => e.isFile() && TEXT_BASELINE.test(e.name)).map((e) => e.name);
+  for (const f of files) copyFileSync(path.join(src, f), path.join(dst, f));
+  return files.length;
+};
 
 /* ════════════════════════════════ --capture (§11.A) ════════════════════════════════ */
 if (capture) {
-  if (existsSync(path.join(B, 'HEAD')) && !has('--force')) {
-    console.error(`${rel(B)} already holds a baseline (HEAD ${readText(path.join(B, 'HEAD')).trim().slice(0, 7)}). It must be captured once, before any edit;\n` +
+  const OLD_HEAD = existsSync(path.join(B, 'HEAD')) ? readText(path.join(B, 'HEAD')).trim() : null;
+  if (OLD_HEAD && !has('--force')) {
+    console.error(`${rel(B)} already holds a baseline (HEAD ${OLD_HEAD.slice(0, 7)}). It must be captured once, before any edit;\n` +
       'pass --force only if you are sure the frozen set is still the delivered film 1.');
     process.exit(2);
   }
-  rmSync(B, { recursive: true, force: true });
-  mkdirSync(B, { recursive: true });
-  LOGS = path.join(B, 'logs');
+  if (OLD_HEAD) {
+    // a forced recapture must not move the reference: the frozen set must be the same at the old baseline's HEAD and now
+    const d = run('git', ['diff', '--quiet', OLD_HEAD, 'HEAD', '--', ...FROZEN]);
+    if (d.code !== 0) {
+      console.error(`--force refused: the frozen set differs between the old baseline's HEAD ${OLD_HEAD.slice(0, 7)} and HEAD` +
+        `${d.code === 1 ? '' : ` (git diff exit ${d.code}: ${d.err.toString().trim()})`} — a recapture would hide that change instead of proving film 1 unchanged.`);
+      process.exit(2);
+    }
+  }
+  // capture into <baseline>.new/ and swap it in only when every step passed: an abort never costs the old reference
+  const BN = `${B}.new`;
+  rmSync(BN, { recursive: true, force: true });
+  mkdirSync(BN, { recursive: true });
+  LOGS = path.join(BN, 'logs');
   const T0 = Date.now();
   const timings = {};
   const step = (name, fn) => {
@@ -319,7 +447,7 @@ if (capture) {
     console.error(`[capture] ABORT: ${m}`);
     process.exit(1);
   };
-  const W = (f, data) => writeFileSync(path.join(B, f), data);
+  const W = (f, data) => writeFileSync(path.join(BN, f), data);
 
   const head = run('git', ['rev-parse', 'HEAD']).out.toString().trim();
   step('frozen set clean', () => {
@@ -392,8 +520,8 @@ if (capture) {
     return `${r.table.trim().split('\n').length - 2} compositions`;
   });
   step('bundle ×2', () => {
-    const a = path.join(B, 'bundle-a');
-    const b = path.join(B, 'bundle-b');
+    const a = path.join(BN, 'bundle-a');
+    const b = path.join(BN, 'bundle-b');
     for (const d of [a, b]) {
       const r = bundle(d);
       if (r.code !== 0) abort(`remotion bundle failed:\n${tail(r.err, 10)}`);
@@ -407,10 +535,10 @@ if (capture) {
     return `${la.trim().split('\n').length} files outside public/, deterministic (bundle-b removed)`;
   });
   const stills = step('stills a/ and b/', () => {
-    const a = path.join(B, 'stills', 'a');
-    const b = path.join(B, 'stills', 'b');
-    const sa = renderStills(path.join(B, 'bundle-a'), a);
-    const sb = renderStills(path.join(B, 'bundle-a'), b);
+    const a = path.join(BN, 'stills', 'a');
+    const b = path.join(BN, 'stills', 'b');
+    const sa = renderStills(path.join(BN, 'bundle-a'), a);
+    const sb = renderStills(path.join(BN, 'bundle-a'), b);
     const la = stillsListing(a);
     const lb = stillsListing(b);
     W('stills.sha256', la);
@@ -446,7 +574,7 @@ if (capture) {
     remotion: remotionVersion,
     mixHash: pr.hash,
     mixSha256: EXPECT_MIX_SHA,
-    film1Files: readText(path.join(B, 'film1.sha256')).trim().split('\n').length,
+    film1Files: readText(path.join(BN, 'film1.sha256')).trim().split('\n').length,
     delivered,
     bundleDeterministic: true,
     stills: STILLS.length,
@@ -456,7 +584,14 @@ if (capture) {
   };
   W('meta.json', JSON.stringify(meta, null, 2) + '\n');
   W('timings.json', JSON.stringify(timings, null, 2) + '\n');
-  console.log(`[capture] baseline written to ${rel(B)}/ in ${fmtS(timings.total)} — stills gate: ${meta.stillsMode}`);
+  // every step passed: swap the new baseline in (the old one is removed only after the new one is in place)
+  const OLD = `${B}.old-${process.pid}`;
+  if (existsSync(B)) renameSync(B, OLD);
+  renameSync(BN, B);
+  rmSync(OLD, { recursive: true, force: true });
+  let docs = '';
+  if (B === DEFAULT_B) docs = ` (text files also in ${rel(DOCS_B)}/: ${copyTextBaseline(B, DOCS_B)} files — commit them)`;
+  console.log(`[capture] baseline written to ${rel(B)}/ in ${fmtS(timings.total)} — stills gate: ${meta.stillsMode}${docs}`);
   process.exit(0);
 }
 
@@ -471,7 +606,9 @@ rmSync(LOGS, { recursive: true, force: true });
 const META = JSON.parse(readText(path.join(B, 'meta.json')));
 const BASE_HEAD = readText(path.join(B, 'HEAD')).trim();
 const bt = (f) => readText(path.join(B, f));
-const want = only ?? (fast ? [1, 2, 3, 4, 5, 10] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+const want = only ? [...only] : fast ? [1, 2, 3, 4, 5, 10] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+// gate 9 renders its stills from gate 8's bundle: --only=9 runs (and reports) 8 first
+if (want.includes(9) && !want.includes(8)) want.splice(want.indexOf(9), 0, 8);
 const results = [];
 const state = { sfxHashOk: null, bundleDir: null };
 const T0 = Date.now();
@@ -561,16 +698,20 @@ const GATES = {
     const r = bundle(dir);
     if (r.code !== 0) return { fail: [`remotion bundle failed (exit ${r.code}):\n${tail(r.err, 8)}`] };
     state.bundleDir = dir;
-    const now = bundleListing(dir);
+    const { listing: now, kb } = bundleListingOf(dir);
     writeFileSync(path.join(V, 'bundle.sha256'), now);
     const d = listingDiff(bt('bundle.sha256'), now);
-    return d.length ? { fail: d.slice(0, 20) } : { ok: `${now.trim().split('\n').length} emitted files outside public/ identical` };
+    // index.html differs: say what (film 1's own static entries, or the page itself) when the baseline bundle is at hand
+    const baseIndex = path.join(B, 'bundle-a', 'index.html');
+    if (d.includes('changed  ./index.html') && existsSync(baseIndex)) d.push(...indexHtmlDiff(baseIndex, path.join(dir, 'index.html')).slice(0, 10).map((l) => `  index.html: ${l}`));
+    const kbNote = kb ? ` (index.html compared without its ${kb} public/kb/ static entries: film 2's files, listed by every bundle of the shared public/)` : '';
+    return d.length ? { fail: d.slice(0, 30) } : { ok: `${now.trim().split('\n').length} emitted files outside public/ identical${kbNote}` };
   }],
   9: ['stills', () => {
-    if (!state.bundleDir) {
-      const g = GATES[8][1]();
-      if (g.fail) return { fail: ['no bundle to render from:', ...g.fail] };
-    }
+    // the bundle gate 8 built (it runs first whenever 9 is asked for), whether or not its listing matched:
+    // the stills are their own proof
+    if (!state.bundleDir) return { fail: ['no bundle to render from (gate 8 could not bundle)'] };
+    if (!existsSync(path.join(B, 'stills', 'a'))) return { fail: [`${rel(B)}/ has no stills/a/ (a text-only baseline such as docs/kb/baseline): run gate 9 against out/kb-plan/baseline`] };
     const dir = path.join(V, 'stills');
     const s = renderStills(state.bundleDir, dir);
     const exact = META.stillsMode === 'exact';
@@ -602,6 +743,7 @@ const GATES = {
   11: ['render-master --dry-run', () => {
     const src = readText(path.join(ROOT, 'scripts/render-master.mjs'));
     if (!src.includes('dry-run')) return { skip: 'render-master.mjs has no --dry-run yet (not run: without it the script renders)' };
+    if (!src.includes('NTV_EXPECT_DRY_RUN')) return { fail: ['render-master.mjs does not honour NTV_EXPECT_DRY_RUN (its abort if a dry run is not one) — not run'] };
     if (state.sfxHashOk === false) return { fail: ["film 1's mix hash changed (gate 4): render-master's sound step could rebuild public/sfx/ — not run"] };
     if (state.sfxHashOk === null) {
       const p = probe();
@@ -612,7 +754,14 @@ const GATES = {
     const w0 = watch();
     const args = [path.join(ROOT, 'scripts/render-master.mjs'), '--dry-run'];
     if (/--film|filmOf/.test(src)) args.push('--film=main');
-    const r = node(args, { log: 'render-master-dry-run' });
+    // belt and braces: render-master aborts before step 1 unless it is in its dry-run branch (NTV_EXPECT_DRY_RUN),
+    // and a stub `npx` first on PATH means that even a regressed script could not bundle, render or mux
+    const stub = path.join(V, 'stub-bin');
+    rmSync(stub, { recursive: true, force: true });
+    mkdirSync(stub, { recursive: true });
+    writeFileSync(path.join(stub, 'npx'), '#!/bin/sh\necho "verify-film1 gate 11: npx is stubbed (render-master --dry-run must never call it): npx $*" >&2\nexit 97\n', { mode: 0o755 });
+    const r = node(args, { log: 'render-master-dry-run', env: { NTV_EXPECT_DRY_RUN: '1', PATH: `${stub}${path.delimiter}${process.env.PATH ?? ''}` } });
+    rmSync(stub, { recursive: true, force: true });
     writeFileSync(path.join(V, 'render-master-dry-run.txt'), r.out);
     const out = r.out.toString();
     const d = [];
