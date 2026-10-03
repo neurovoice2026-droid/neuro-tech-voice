@@ -1,0 +1,4 @@
+out/neurotechvoice-trailer-16x9.mp4
+out/neurotechvoice-trailer-9x16.mp4
+out/neurotechvoice-trailer-16x9-4k120.mp4
+out/neurotechvoice-trailer-9x16-4k120.mp4

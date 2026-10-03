@@ -4,7 +4,7 @@
  *
  *   node --experimental-strip-types --no-warnings scripts/kb/generate-sfx.mjs [--force]
  *   (npm run sfx:kb[:force], scripts/sfx.mjs --film=kb, or remotion.config.ts's pre-step for a
- *   command whose entry point is src/kb/index.ts / NTV_FILM=kb)
+ *   command whose entry point is src/kb/index.ts — or, for a prebuilt bundle, NTV_FILM=kb)
  *
  *   1. imports film 2's timeline (src/kb/timing.ts) and checks its contract (§4): every export present,
  *      VOICES sorted and not overlapping, MIX.name.voice among them, every cue room night / white, every

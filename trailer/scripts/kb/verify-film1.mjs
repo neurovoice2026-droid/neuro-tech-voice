@@ -478,8 +478,10 @@ if (capture) {
     W('timeline.json', r.out);
     return `${r.out.length} B, sha256 ${shaText(r.out).slice(0, 16)}`;
   });
-  const pr = step('mix hash probe', () => {
+  const pr = {};
+  step('mix hash probe', () => {
     const p = probe();
+    pr.hash = p.hash; // (step() hands back the fn's string for the log: keep the hash for meta.json here)
     if (p.hash !== EXPECT_MIX_HASH || p.stamp !== EXPECT_MIX_HASH) abort(`film 1's mix hash is ${p.hash}, stamp ${p.stamp}; expected ${EXPECT_MIX_HASH}. Not running generate-sfx (it would rebuild public/sfx/).`);
     W('render-master.expected.json', JSON.stringify(p.master, null, 2) + '\n');
     return `buildHash = stamp = ${p.hash}`;
@@ -748,7 +750,9 @@ const GATES = {
     if (state.sfxHashOk === false) return { fail: ["film 1's mix hash changed (gate 4): render-master's sound step could rebuild public/sfx/ — not run"] };
     if (state.sfxHashOk === null) {
       const p = probe();
-      if (p.hash !== META.mixHash || p.stamp !== META.mixHash) return { fail: [`film 1's mix hash is ${p.hash} (stamp ${p.stamp}), baseline ${META.mixHash} — not run`] };
+      // (a baseline captured before meta.json carried mixHash: the hash its sfx.txt printed, as gate 4 reads it)
+      const baseHash = META.mixHash ?? bt('sfx.txt').match(/\(([0-9a-f]+)\)/)?.[1];
+      if (!baseHash || p.hash !== baseHash || p.stamp !== baseHash) return { fail: [`film 1's mix hash is ${p.hash} (stamp ${p.stamp}), baseline ${baseHash} — not run`] };
     }
     const exp = JSON.parse(bt('render-master.expected.json'));
     const watch = () => [path.join(ROOT, exp.bundle), ...exp.outputs.map((o) => path.join(ROOT, o))].map((p) => (existsSync(p) ? `${p} ${statSync(p).mtimeMs}` : `${p} -`)).join('\n');

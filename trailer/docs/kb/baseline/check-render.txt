@@ -1,0 +1,4 @@
+✓ out/neurotechvoice-trailer-16x9.mp4: h264 yuv420p bt709/bt709/bt709/tv, 1920×1080, 2310 f @ 30; sync lag 0 in 56/56 windows
+✓ out/neurotechvoice-trailer-9x16.mp4: h264 yuv420p bt709/bt709/bt709/tv, 1080×1920, 2310 f @ 30; sync lag 0 in 56/56 windows
+✓ out/neurotechvoice-trailer-16x9-4k120.mp4: hevc yuv420p bt709/bt709/bt709/tv, 3840×2160, 9240 f @ 120; sync lag 0 in 56/56 windows
+✓ out/neurotechvoice-trailer-9x16-4k120.mp4: hevc yuv420p bt709/bt709/bt709/tv, 2160×3840, 9240 f @ 120; sync lag 0 in 56/56 windows

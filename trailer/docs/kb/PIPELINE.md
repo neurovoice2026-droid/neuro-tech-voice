@@ -64,6 +64,7 @@ Film 2's working id is **`kb`**. It is a knowledge-base film: Ava (Tessa) explai
 | H12 | Some shared modules read film 1's constants: `lib/motion.ts`, `components/Orb.tsx` and `lib/scene.useSub` read `FPS`; `lib/lights.ts` uses film 1's `BEAT` as a default easing. | Film 2 **must keep the 30 fps timeline unit** with a 120 fps render (re-export both from film 1). **120 BPM is strongly recommended**: the borrowed CTA is cut on the 120 BPM grid, the four light notes are E major, and the mixer's ping-pong delay follows `T.BPM`. |
 | H13 | `check-mix`'s ARC check is written for film 1: it compares against `SCENES.scale` and `SCALE.langTitle/flow/irisToDark`. | Add `MIX.arc.windows`, and keep film 1's current expression as the fallback. |
 | H14 | `public/` is copied into every bundle. Global CSS or font-face changes in a bundle affect every composition in it. | With a separate entry point, film 2's code never enters film 1's bundle. Do **not** add npm dependencies, and do not change `package-lock.json` or `node_modules`, because a dependency bump could change film 1's frames. |
+| H15 | `remotion bundle` writes the list of **every** `public/` file (name, size, `Math.floor(mtimeMs)`) into `index.html` (`@remotion/bundler/dist/read-recursively.js`). `public/` is shared, so film 1's bundle lists film 2's `public/kb/` files, and the list changes on every `sfx:kb` rebuild or `--install`. A file renamed into `public/` while a bundle scans it can fail that bundle. | Film 1's frames never read the list (gate 9: 35/35 identical). Gate 8 compares `index.html` with its `kb/` entries taken out; everything else in it must match byte for byte. **Do not run `sfx:kb`, an `--install` or a kb master's sound step while a film 1 bundle is being made.** Film 2's driver stages its temp files outside `public/`. Structural fix (needs sign-off): a separate public root for film 2 (section 13). |
 
 ---
 
@@ -481,3 +482,47 @@ sha256sum $B/stills/a/*.png > $B/stills.sha256   # repeat into stills/b and comp
 3. **Voices (#162):** the child session generates candidates (section 6), the parent cherry-picks with `--install`, then `check:audio:kb` must pass its dialogue checks. Run verify-film1 again.
 4. **Build (#164):** scenes, `HITS`, bed, extras, then rounds of critics. After each round run tsc, `sfx:kb`, `check:audio:kb`, stills, and the fast verify-film1 items (1–5, 10).
 5. **Masters (#165):** `render:kb:master` (4K HEVC at 120 fps, resumable chunks), then `check:render:kb`. Before delivery, run the **full** verify-film1 again.
+
+---
+
+## 13. Amendments (fix round 1, after the infrastructure gate)
+
+These change the plan above where they say so. Everything else stands.
+
+**Film 1's bundle and `public/` (H15).**
+- verify-film1 gate 8 hashes `index.html` with the `public/kb/` entries taken out of `window.remotion_staticFiles` (`scripts/bundle-digest.mjs`). The rest of the page, including film 1's own `sfx/`, `voice/` and `img/` entries, must match byte for byte. When it differs, the gate names the entries that changed.
+- `--only=9` runs gate 8 first, because gate 9 renders from that bundle.
+- Proposed, **not done**, needs sign-off: give film 2 its own Remotion public root (`public-kb/`, with a film-conditional `Config.setPublicDir` for kb only, existing `Config` lines unchanged). The driver would still read film 1's library from `public/sfx` and pass `publicDir = public-kb` to `master()`. Film 1's bundle would then be byte-identical again, and the H15 race would go away. It moves 19 tracked WAVs and changes `MIX.file`, `films.mjs`, `generate-voice`'s `file` prefix and `.gitignore`.
+
+**verify-film1.**
+- Only one run at a time: `out/kb-plan/verify-film1.lock` holds the pid. A second run waits for it (up to 60 min), or exits 2 with `--no-wait`. A lock left by a killed run is taken over.
+- `--capture` writes into `<baseline>.new/` and swaps it in only when every step has passed.
+- `--force` is refused unless `git diff --quiet <old baseline HEAD> HEAD -- <frozen set>`.
+- The baseline's text files are committed in `docs/kb/baseline/`. `--baseline=docs/kb/baseline` runs every gate except 9.
+- Gate 11 runs `render-master --dry-run` with `NTV_EXPECT_DRY_RUN=1` (render-master aborts before step 1 if it is not in its dry-run branch) and with a stub `npx` first on `PATH`.
+
+**render-master.**
+- For a film that is not frozen, `<chunk dir>/plan.json` = `{bundleSha, total, chunk, scale, crf, concurrency}`. `bundleSha` covers the bundle's emitted files outside `public/`, with `index.html`'s sound entries left out, because a `--muted` picture never reads them.
+- When the plan changes, the folder's chunks are deleted before rendering. `--dry-run` marks them `stale`. Film 1 (frozen) keeps its chunks and its exact command sequence.
+
+**`remotion.config.ts` (replaces the snippet in section 9).**
+- The film is resolved only when `NTV_SKIP_SFX` is unset.
+- `src/kb/index.ts` on the command line means film 2.
+- `src/index.ts`, or no entry point at all (Remotion then uses `setEntryPoint`), means film 1, whatever `NTV_FILM` says. The config warns if `NTV_FILM` disagrees.
+- `NTV_FILM` (`||`, so an empty value counts as unset) decides only for a prebuilt bundle or serve URL.
+
+**generate-voice `--out` (amends section 6 "candidate sets are always allowed").**
+- Inside `trailer/`, `DIR` must be a folder of its own under `voice-candidates/` or `out/`. Outside `trailer/`, any path that is not an ancestor of it is allowed.
+- `DIR/voice`, `DIR/voice.generated.ts` and `DIR/preview.wav` may never be any film's live voice folder, timing file or preview. Nothing under `public/` or `src/` is allowed. Symlinks are resolved.
+
+**Film 2's sound driver.**
+- The contract now also requires:
+  - `MIX.file` and `BED.file` sit directly in `kb/sfx/`. The keep list and the skip use their real names.
+  - Every number `master()` reads from `MIX`, `DUCK` and `BED` is finite.
+  - A repeated line id is never combined with an `until` line. The odd-stem rebuild slices spans, which is exact only without overlaps.
+- The bed is keyed on `bed.mjs`'s own `inputs(T)`, and `bed()` reads nothing else. The mix always gets the bed as read back from `bed.wav`, so a forced rebuild and a cached one give the same bytes.
+- The skip also requires the QA stems.
+- The stamp is written only for a finite LUFS and true peak.
+- Files bound for `public/kb/sfx/` are staged in `out/audio/kb/.tmp/`.
+
+**Duration (open decision).** The real takes run longer than the script's estimates. Takes 1 and 2 give 2940 frames (98.0 s), and take 3 gives 3000 frames (100.0 s). The anchors move by whole bars, as section 4 and the script's rule say. The decision on 98 s against tightening the timeline or the script is still open.

@@ -1,0 +1,477 @@
+Neuro Tech Voice — cue timeline (313 cues, 141 words). ◆ key hit · ▶ spoken word (intelligibility: SII-style, 1 = clear, ≥ 0.7 required)
+
+── HOOK (0–120) ────────────────────────────────────────
+    4.0 f    0.133 s   · shimmer-0              -9.0 dB  pan +0.00               N  colon orb born in the rush light
+    8.0 f    0.267 s   · chime-rush-0           -7.0 dB  pan +0.00               N  LIGHT: rush
+    8.0 f    0.267 s   · pop-0                  -4.0 dB  pan +0.00        ×0.667 N  17:05 springs out of the orb
+   10.0 f    0.333 s   · tick-0                -10.0 dB  pan +0.00        ×0.667 N  MID-RUSH drum row rolls up
+   16.0 f    0.533 s   · flick-0               -11.0 dB  pan +0.00               N  strips flick
+   19.0 f    0.633 s   · chime-closing-0        -7.0 dB  pan +0.00               N  LIGHT: closing
+   19.0 f    0.633 s   · tick-1                 -5.0 dB  pan +0.00        ×0.844 N  20:10 AFTER CLOSING lands
+   27.0 f    0.900 s   · flick-1               -11.0 dB  pan +0.00        ×1.004 N  strips flick
+   30.0 f    1.000 s   · chime-sunday-0         -7.0 dB  pan +0.00               N  LIGHT: sunday
+   30.0 f    1.000 s   · tick-2                 -5.0 dB  pan +0.00        ×0.997 N  10:12 SUNDAY lands
+   38.0 f    1.267 s   · flick-0               -11.0 dB  pan +0.00        ×0.997 N  strips spin into the night
+   41.0 f    1.367 s   · chime-night-0          -7.0 dB  pan +0.00               N  LIGHT: night
+   41.0 f    1.367 s   ◆ thump-0                +0.0 dB  pan +0.00               N  the land’s body (camera kick)
+   41.0 f    1.367 s   ◆ click-0                +0.0 dB  pan +0.00               N  03:12 TUESDAY NIGHT lands
+   42.0 f    1.400 s   · sheen-0               -16.0 dB  pan -0.24→+0.24         N  the figures’ flat ink lifts left → right
+   45.0 f    1.500 s   · swish-0               -17.0 dB  pan -0.10→-0.55         N peak@49.0  dotted wave draws out both ways
+   45.0 f    1.501 s   · swish-1               -17.0 dB  pan +0.10→+0.55  ×1.004 N peak@49.0  dotted wave draws out both ways
+   55.0 f    1.833 s   ◆ ring-hook              -2.0 dB  pan +0.00               N peak@56.0  FIRST RING (both pulses)
+   56.0 f    1.867 s   · buzz                  -13.0 dB  pan +0.00               N  handset buzz
+   68.0 f    2.267 s   · whoosh-soft-0          -9.0 dB  pan +0.00               N peak@75.0  “Your business is closed.” rises
+   70.0 f    2.333 s   · freeze                 -6.0 dB  pan +0.00               N  time freezes mid-ring
+   90.0 f    3.000 s   · breath                 -9.0 dB  pan +0.00               N  the frozen world breathes
+  105.0 f    3.500 s   · breath                 -9.0 dB  pan +0.00               N  second breath
+  109.0 f    3.633 s   · riser-short            -7.0 dB  pan +0.00               N peak@119.0  inhale → peaks and chokes 1 f before the shatter
+
+── TWIST (120–240) ────────────────────────────────────────
+  120.0 f    4.000 s   · sub                    -4.0 dB  pan +0.00               N  a sub drops under the shatter
+  120.0 f    4.000 s   ◆ thump-1                +0.0 dB  pan +0.00        ×1.004 N  the shatter’s body (kick)
+  120.0 f    4.000 s   ◆ shatter                +0.0 dB  pan +0.00               N  SHATTER (downbeat)
+  122.0 f    4.066 s   · swish-2                -9.0 dB  pan +0.12→-0.08  ×0.997 N peak@126.0  “closed” slides left
+  122.0 f    4.067 s   · glint-0               -14.0 dB  pan -0.39               N  doorway light floods on
+  127.0 f    4.233 s   · whoosh-rev             -7.0 dB  pan +0.00               N peak@143.0  shards fly back into the tagline
+  127.0 f    4.233 s   · creak                 -13.0 dB  pan -0.39               N  the door creaks wider
+  132.8 f    4.427 s   · tap-0                  -4.0 dB  pan -0.08               N  “Closed” seats
+  136.5 f    4.550 s   · tick-3                 -5.0 dB  pan +0.06        ×0.751 N  “is” locks
+  139.5 f    4.650 s   · tick-0                 -5.0 dB  pan +0.16        ×0.837 N  “for” locks
+  141.0 f    4.701 s   · whoosh-soft-1          -9.0 dB  pan -0.39        ×1.004 N peak@148.0  door swings shut, accelerating
+  142.5 f    4.750 s   · tick-1                 -5.0 dB  pan -0.10        ×1.003 N  “the” locks
+  150.0 f    5.000 s   ◆ door                   +0.0 dB  pan -0.39               N  DOOR SLAM
+  158.0 f    5.267 s   · click-1                -4.0 dB  pan -0.39        ×1.004 N  CLOSED sign swings in
+  161.0 f    5.366 s   · whoosh-soft-0          -9.0 dB  pan +0.00        ×0.997 N peak@168.0  “not the phone.” rises
+  161.0 f    5.367 s   · glint-1               -14.0 dB  pan -0.39        ×1.004 N  glint crosses the CLOSED pill
+  171.0 f    5.700 s   · sheen-1               -16.0 dB  pan -0.12→+0.12  ×1.004 N  paper → lilac
+  173.0 f    5.767 s   · chime-night-1          -7.0 dB  pan +0.40        ×1.004 N  LIGHT: night (the screen)
+  173.0 f    5.767 s   ◆ power-on               -2.0 dB  pan +0.40               N  PHONE POWERS ON
+  176.0 f    5.867 s   · pop-1                  -4.0 dB  pan +0.40        ×1.340 N  Ava’s orb pops onto the screen
+  179.0 f    5.967 s   · key-0                 -11.0 dB  pan +0.32               N  INCOMING CALL · +1 555 0129 type in [1/16]
+  179.8 f    5.992 s   · key-1                 -11.3 dB  pan +0.40        ×1.004 N  INCOMING CALL · +1 555 0129 type in [2/16]
+  180.5 f    6.017 s   · key-2                 -11.5 dB  pan +0.48        ×0.997 N  INCOMING CALL · +1 555 0129 type in [3/16]
+  181.3 f    6.042 s   · key-3                 -11.8 dB  pan +0.32        ×1.002 N  INCOMING CALL · +1 555 0129 type in [4/16]
+  182.0 f    6.067 s   · key-0                 -12.0 dB  pan +0.40        ×0.995 N  INCOMING CALL · +1 555 0129 type in [5/16]
+  182.8 f    6.092 s   · key-1                 -12.3 dB  pan +0.48        ×1.003 N  INCOMING CALL · +1 555 0129 type in [6/16]
+  183.5 f    6.117 s   · key-2                 -12.5 dB  pan +0.32        ×0.998 N  INCOMING CALL · +1 555 0129 type in [7/16]
+  184.3 f    6.142 s   · key-3                 -12.8 dB  pan +0.40        ×1.005 N  INCOMING CALL · +1 555 0129 type in [8/16]
+  185.0 f    6.167 s   · key-0                 -13.0 dB  pan +0.48               N  INCOMING CALL · +1 555 0129 type in [9/16]
+  185.8 f    6.192 s   · key-1                 -13.3 dB  pan +0.32        ×1.004 N  INCOMING CALL · +1 555 0129 type in [10/16]
+  186.5 f    6.217 s   · key-2                 -13.5 dB  pan +0.40        ×0.997 N  INCOMING CALL · +1 555 0129 type in [11/16]
+  187.3 f    6.242 s   · key-3                 -13.8 dB  pan +0.48        ×1.002 N  INCOMING CALL · +1 555 0129 type in [12/16]
+  188.0 f    6.267 s   · key-0                 -14.0 dB  pan +0.32        ×0.995 N  INCOMING CALL · +1 555 0129 type in [13/16]
+  188.8 f    6.292 s   · key-1                 -14.3 dB  pan +0.40        ×1.003 N  INCOMING CALL · +1 555 0129 type in [14/16]
+  189.5 f    6.317 s   · key-2                 -14.5 dB  pan +0.48        ×0.998 N  INCOMING CALL · +1 555 0129 type in [15/16]
+  190.3 f    6.342 s   · key-3                 -14.8 dB  pan +0.32        ×1.005 N  INCOMING CALL · +1 555 0129 type in [16/16]
+  195.0 f    6.500 s   · sheen-0               -11.0 dB  pan -0.18→+0.18  ×0.997 N  “not the phone.” takes the light (its ink lifts)
+  195.0 f    6.500 s   · tick-2                 -5.0 dB  pan +0.00        ×1.333 N  FOCUS BEAT
+  207.0 f    6.900 s   · swell-0                -9.0 dB  pan +0.40               N peak@213.0  pull-back before the dive
+  214.0 f    7.133 s   ◆ whoosh-0               -3.0 dB  pan +0.30→+0.00         N peak@224.0  DIVE into the phone
+  217.0 f    7.233 s   ◆ ring-twist             -3.1 dB  pan +0.36               N peak@218.0  THE FROZEN RING RESUMES (one pulse)
+  218.0 f    7.267 s   · buzz                   -8.0 dB  pan +0.36               N  the phone vibrates
+  224.0 f    7.467 s   · swell-1               -14.0 dB  pan +0.00        ×1.004 N peak@230.0  the orb breathes
+
+── CALL (240–885) ────────────────────────────────────────
+  230.0 f    7.667 s   ◆ riser-short            -3.0 dB  pan +0.00               N peak@240.0  pickup anticipation → peak ON the pickup
+  240.0 f    8.000 s   ◆ thump-2                +0.0 dB  pan +0.00        ×0.997 N  pickup body (kick)
+  240.0 f    8.000 s   ◆ pickup                 -1.0 dB  pan +0.00               N  PICKUP on the downbeat
+  242.0 f    8.067 s   · air                   -14.0 dB  pan +0.00               N  camera pulls back into the room
+  246.0 f    8.200 s   · flip-0                 -5.0 dB  pan +0.00               N peak@248.0  CLOSED sign seats
+  255.0 f    8.500 s   · sheen-1               -16.0 dB  pan -0.24→+0.24  ×1.002 N  glow sweeps the line
+  269.0 f    8.967 s   · swish-3                -9.0 dB  pan +0.00        ×1.002 N peak@273.0  the line dives into the orb
+  274.0 f    9.133 s   ◆ gulp-0                 +0.0 dB  pan +0.00               N  the orb GULPS the line
+  278.0 f    9.267 s   ▶ “Thank”  (call-1)   intelligibility 0.89
+  280.0 f    9.333 s   · tick-0                -13.0 dB  pan +0.10→+0.55  ×1.335 N  03 | 12 cross their rest
+  280.0 f    9.333 s   · tick-3                -13.0 dB  pan -0.10→-0.55  ×1.341 N  03 | 12 cross their rest
+  281.0 f    9.367 s   · glint-2               -22.0 dB  pan -0.14→+0.14  ×0.997 N  light sweeps the figure pairs
+  287.5 f    9.585 s   ▶ “you”  (call-1)   intelligibility 1.00
+  289.9 f    9.665 s   ▶ “for”  (call-1)   intelligibility 1.00
+  289.9 f    9.665 s   ▶ “calling”  (call-1)   intelligibility 1.00
+  304.3 f   10.145 s   ▶ “Northside”  (call-1)   intelligibility 1.00
+  316.3 f   10.545 s   ▶ “Studio.”  (call-1)   intelligibility 1.00
+  327.0 f   10.901 s   · whoosh-soft-1         -14.0 dB  pan +0.06→+0.30  ×1.002 N peak@334.0  CLOSED peels right; push into Ava
+  342.3 f   11.410 s   ▶ “This”  (call-1)   intelligibility 1.00
+  347.5 f   11.585 s   ▶ “is”  (call-1)   intelligibility 1.00
+  349.9 f   11.665 s   ▶ “Ava,”  (call-1)   intelligibility 1.00
+  366.7 f   12.225 s   ▶ “an”  (call-1)   intelligibility 1.00
+  373.9 f   12.465 s   ▶ “AI”  (call-1)   intelligibility 1.00
+  381.1 f   12.705 s   ▶ “assistant.”  (call-1)   intelligibility 1.00
+  409.9 f   13.663 s   ▶ “How”  (call-1)   intelligibility 1.00
+  412.3 f   13.745 s   ▶ “can”  (call-1)   intelligibility 1.00
+  417.1 f   13.905 s   ▶ “I”  (call-1)   intelligibility 1.00
+  417.1 f   13.905 s   ▶ “help”  (call-1)   intelligibility 1.00
+  424.3 f   14.145 s   ▶ “you”  (call-1)   intelligibility 1.00
+  424.3 f   14.145 s   ▶ “today?”  (call-1)   intelligibility 1.00
+  447.0 f   14.900 s   ▶ “(unaligned +1 f)”  (call-2)   intelligibility 0.97
+  449.0 f   14.967 s   · line                  -11.0 dB  pan +0.17               N  caller line draws out of the orb
+  458.4 f   15.282 s   ▶ “Hi!”  (call-2)   intelligibility 0.99
+  478.0 f   15.933 s   ▶ “(unaligned +32 f)”  (call-2)   intelligibility 0.99
+  495.0 f   16.501 s   ▶ “Could”  (call-2)   intelligibility 0.99
+  502.2 f   16.740 s   ▶ “I”  (call-2)   intelligibility 0.98
+  504.6 f   16.820 s   ▶ “come”  (call-2)   intelligibility 0.98
+  509.4 f   16.980 s   ▶ “in”  (call-2)   intelligibility 0.98
+  511.8 f   17.060 s   ▶ “on”  (call-2)   intelligibility 0.98
+  514.2 f   17.140 s   ▶ “Wednesday”  (call-2)   intelligibility 0.99
+  526.2 f   17.540 s   ▶ “afternoon?”  (call-2)   intelligibility 1.00
+  551.0 f   18.367 s   · tick-1                -15.0 dB  pan +0.00        ×1.340 N  AVA tag pops (swing back)
+  551.8 f   18.393 s   ▶ “Of”  (call-3)   intelligibility 1.00
+  554.2 f   18.474 s   ▶ “course!”  (call-3)   intelligibility 0.99
+  571.6 f   19.054 s   ▶ “I”  (call-3)   intelligibility 1.00
+  578.2 f   19.274 s   ▶ “have”  (call-3)   intelligibility 1.00
+  585.4 f   19.514 s   ▶ “3”  (call-3)   intelligibility 1.00
+  590.2 f   19.674 s   ▶ “PM,”  (call-3)   intelligibility 1.00
+  613.3 f   20.444 s   ▶ “or”  (call-3)   intelligibility 0.98
+  628.6 f   20.954 s   ▶ “4:30.”  (call-3)   intelligibility 1.00
+  657.8 f   21.928 s   ▶ “Which”  (call-3)   intelligibility 1.00
+  664.6 f   22.154 s   ▶ “one”  (call-3)   intelligibility 1.00
+  671.8 f   22.394 s   ▶ “suits”  (call-3)   intelligibility 1.00
+  676.6 f   22.554 s   ▶ “you”  (call-3)   intelligibility 1.00
+  681.4 f   22.714 s   ▶ “better?”  (call-3)   intelligibility 0.98
+  698.0 f   23.267 s   ▶ “(unaligned +0 f)”  (call-4)   intelligibility 0.98
+  701.0 f   23.367 s   · line                  -11.0 dB  pan +0.17               N  caller line draws out of the orb
+  715.6 f   23.855 s   ▶ “Three”  (call-4)   intelligibility 0.99
+  723.0 f   24.102 s   ▶ “o'clock”  (call-4)   intelligibility 0.98
+  735.0 f   24.502 s   ▶ “is”  (call-4)   intelligibility 0.99
+  735.0 f   24.502 s   ▶ “perfect.”  (call-4)   intelligibility 0.99
+  756.0 f   25.200 s   ▶ “(unaligned +58 f)”  (call-4)   intelligibility 1.00
+  783.2 f   26.106 s   ▶ “Lovely!”  (call-5)   intelligibility 1.00
+  806.9 f   26.897 s   ▶ “You're”  (call-5)   intelligibility 0.99
+  824.0 f   27.466 s   ▶ “booked”  (call-5)   intelligibility 1.00
+  828.8 f   27.626 s   ▶ “for”  (call-5)   intelligibility 1.00
+  833.6 f   27.786 s   ▶ “Wednesday”  (call-5)   intelligibility 1.00
+  850.0 f   28.333 s   ◆ ember                  -7.0 dB  pan +0.17               N  BOOKED: “3 PM” lands in the mint ON the spoken “three” (the payoff)
+  850.4 f   28.346 s   ▶ “at”  (call-5)   intelligibility 0.90
+  850.4 f   28.346 s   ▶ “3”  (call-5)   intelligibility 0.90
+  851.0 f   28.367 s   · thump-0                -9.0 dB  pan +0.00        ×1.002 N  the mark presses
+  860.0 f   28.666 s   ▶ “PM.”  (call-5)   intelligibility 1.00
+  866.0 f   28.866 s   · swish-0               -19.0 dB  pan +0.00        ×0.995 N peak@870.0  “You’re all booked for” drops away (on the beat)
+  870.0 f   28.999 s   · swell-0               -19.0 dB  pan +0.00        ×0.997 N peak@876.0  the orb inhales
+  871.0 f   29.035 s   · whoosh-1              -15.0 dB  pan +0.00        ×1.004 N peak@881.0  the orb dives into the mark (fastest frame)
+  877.0 f   29.233 s   ▶ “(unaligned +97 f)”  (call-5)   intelligibility 0.99
+  882.0 f   29.400 s   · gulp-1                 -9.0 dB  pan +0.00        ×0.844 N  the mark takes the orb: the ember ignites from the contact
+
+── RESULT (885–1005) ────────────────────────────────────────
+  886.0 f   29.534 s   · swish-1               -14.0 dB  pan +0.00        ×1.003 N peak@890.0  the mark lifts into the card
+  889.0 f   29.632 s   · whoosh-soft-0         -14.0 dB  pan +0.42→+0.18  ×0.995 N peak@896.0  the calendar slides in
+  891.0 f   29.700 s   · tick-2                -15.0 dB  pan -0.10        ×0.997 N  BOOKED row rises
+  895.0 f   29.833 s   · tick-3                -15.0 dB  pan +0.43        ×1.338 N  WED 3 PM slot pops
+  896.0 f   29.866 s   ◆ whoosh-2               -3.0 dB  pan +0.30→+0.08  ×0.997 N peak@906.0  the card is thrown
+  915.0 f   30.500 s   ◆ land-0                 +0.0 dB  pan +0.08               N  squash + one soft 5 px dip
+  915.0 f   30.500 s   ◆ ding                   -2.0 dB  pan +0.08               N  LANDS in the slot
+  918.0 f   30.600 s   · ping-0                -13.0 dB  pan +0.08        ×0.667 N  event dot ping
+  920.0 f   30.667 s   · whoosh-soft-1          -9.0 dB  pan +0.26        ×1.003 N peak@927.0  close-up crops into the card
+  930.0 f   31.000 s   ◆ land-1                 -4.4 dB  pan -0.30        ×1.004 N  “Asleep.” locks
+  934.0 f   31.133 s   · chime-night-0          -7.0 dB  pan -0.30        ×0.997 N  the moon locks (LIGHT: night)
+  938.0 f   31.267 s   · tick-0                -10.0 dB  pan -0.49        ×1.991 N  star 1
+  941.0 f   31.367 s   · tick-1                -10.0 dB  pan -0.13        ×2.677 N  star 2
+  945.0 f   31.500 s   ◆ land-0                 +0.0 dB  pan +0.30        ×0.997 N  “Booked.”: the payoff’s weight
+  945.0 f   31.500 s   ◆ pop-2                  +0.0 dB  pan +0.30        ×0.997 N  “Booked.” locks
+  946.0 f   31.533 s   · sheen-0               -16.0 dB  pan +0.12→+0.48  ×0.995 N  sheen across “Booked.”
+  949.0 f   31.633 s   · ding-s-0               -7.0 dB  pan +0.41        ×0.841 N  the event’s dot draws itself into a check
+  953.0 f   31.767 s   · tick-2                -10.0 dB  pan -0.07        ×2.241 N  star 3
+  956.0 f   31.867 s   · tick-3                -10.0 dB  pan -0.43        ×3.010 N  star 4
+  960.0 f   32.000 s   · sheen-1               -11.0 dB  pan +0.18→+0.48  ×1.003 N  light sweep across 3:00 PM
+  979.0 f   32.634 s   · swell-1               -14.0 dB  pan +0.30        ×1.002 N peak@985.0  the event swells (anticipation)
+  993.0 f   33.101 s   · whoosh-0              -10.0 dB  pan +0.12        ×1.002 N peak@1003.0  the dive into the event
+
+── KNOWLEDGE (1005–1395) ────────────────────────────────────────
+  995.0 f   33.167 s   ◆ riser-short            -3.0 dB  pan +0.00               W peak@1005.0  the event opens past the frame → peak ON the white
+
+── RESULT (885–1005) ────────────────────────────────────────
+  996.0 f   33.200 s   · shimmer-1             -14.0 dB  pan +0.00        ×1.004 N  the event heats from its centre (it is white on the cut)
+
+── KNOWLEDGE (1005–1395) ────────────────────────────────────────
+ 1003.0 f   33.433 s   · swish-2                -9.0 dB  pan +0.00        ×0.998 W peak@1007.0  “Answers from your own documents.” rises on the hit
+ 1005.0 f   33.500 s   ◆ hit-white              +0.0 dB  pan +0.00               W  WHITE: the stage materialises (clean paper — the light comes with the orb)
+ 1008.0 f   33.600 s   · tick-0                -10.0 dB  pan -0.53               W  eyebrow dot spins in
+ 1016.0 f   33.867 s   · pop-3                  -4.0 dB  pan -0.43        ×0.669 W  doc 1 pops
+ 1020.0 f   34.000 s   · pop-0                  -4.0 dB  pan -0.22        ×0.746 W  doc 2 pops
+ 1020.0 f   34.001 s   · swish-3               -14.0 dB  pan +0.00        ×1.005 W peak@1024.0  the heading steps down
+ 1024.0 f   34.133 s   · pop-1                  -4.0 dB  pan +0.00        ×0.843 W  doc 3 pops
+ 1027.0 f   34.233 s   · pop-2                  -4.0 dB  pan +0.22        ×0.998 W  doc 4 pops
+ 1031.0 f   34.367 s   · tick-1                -15.0 dB  pan -0.20        ×1.004 W  CALLER label + “Quick question,” (the caller’s first sound)
+ 1031.0 f   34.367 s   · pop-3                  -9.0 dB  pan +0.43        ×1.128 W  doc 5 pops
+ 1032.0 f   34.400 s   ▶ “(unaligned +4 f)”  (kb-1)   intelligibility 0.94
+ 1035.0 f   34.500 s   · chime-sunday-soft     -15.0 dB  pan +0.00               W  LIGHT: sunday arrives with its source (the orb and its pool on the wall)
+ 1035.0 f   34.500 s   · glint-0               -22.0 dB  pan +0.00        ×1.002 W  bloom flash off the rim
+ 1035.0 f   34.500 s   · land-1                -14.0 dB  pan +0.00        ×1.002 W  the orb springs out (beat 2)
+ 1039.0 f   34.633 s   · pop-0                 -17.0 dB  pan +0.47        ×1.335 W  “Listening” pill (under “question,”)
+ 1043.0 f   34.767 s   · swish-0               -19.0 dB  pan +0.00               W peak@1047.0  the heading flicks out
+ 1066.6 f   35.554 s   ▶ “Do”  (kb-1)   intelligibility 0.95
+ 1071.5 f   35.717 s   ▶ “you”  (kb-1)   intelligibility 1.00
+ 1073.9 f   35.797 s   ▶ “do”  (kb-1)   intelligibility 1.00
+ 1076.3 f   35.877 s   ▶ “home”  (kb-1)   intelligibility 1.00
+ 1085.9 f   36.197 s   ▶ “visits?”  (kb-1)   intelligibility 1.00
+ 1093.0 f   36.434 s   · flip-1                -10.0 dB  pan +0.42        ×1.004 W peak@1095.0  pill: “Looking through 5 documents”
+ 1095.0 f   36.500 s   · tap-1                 -14.0 dB  pan +0.41        ×1.004 W  status dot reads [1/3]
+ 1095.0 f   36.500 s   · shimmer-0             -17.0 dB  pan -0.36→+0.00  ×0.997 W  five beams draw to the orb
+ 1098.0 f   36.600 s   · tick-2                -15.0 dB  pan -0.43        ×0.665 W  the documents are read [1/5]
+ 1100.0 f   36.667 s   · tick-3                -15.0 dB  pan -0.22        ×0.751 W  the documents are read [2/5]
+ 1103.0 f   36.767 s   · tick-0                -15.0 dB  pan +0.00        ×0.837 W  the documents are read [3/5]
+ 1103.0 f   36.767 s   · tap-2                 -14.8 dB  pan +0.41        ×0.997 W  status dot reads [2/3]
+ 1105.0 f   36.833 s   · tick-1                -15.0 dB  pan +0.22        ×1.003 W  the documents are read [4/5]
+ 1108.0 f   36.933 s   · glint-1               -14.0 dB  pan -0.10        ×0.995 W  beam heads land on the orb [1/5]
+ 1108.0 f   36.933 s   · tick-2                -10.0 dB  pan +0.43        ×1.121 W  the documents are read [5/5]
+ 1110.0 f   37.000 s   · glint-2               -14.3 dB  pan -0.02        ×1.126 W  beam heads land on the orb [2/5]
+ 1111.0 f   37.033 s   · tap-3                 -10.6 dB  pan +0.41        ×1.002 W  status dot reads [3/3]
+ 1112.0 f   37.067 s   · glint-0               -14.5 dB  pan +0.06        ×1.258 W  beam heads land on the orb [3/5]
+ 1114.0 f   37.133 s   · glint-1               -14.8 dB  pan -0.10        ×1.421 W  beam heads land on the orb [4/5]
+ 1116.0 f   37.200 s   · flip-2                 -5.0 dB  pan +0.42        ×0.997 W peak@1118.0  pill: “Not in the documents”
+ 1116.0 f   37.200 s   · glint-2               -15.0 dB  pan -0.02        ×1.587 W  beam heads land on the orb [5/5]
+ 1116.0 f   37.201 s   · swish-1               -14.0 dB  pan +0.43→+0.31  ×1.004 W peak@1120.0  the “0 matches” card steps forward (born on the miss)
+ 1118.0 f   37.267 s   ◆ thump-1                +0.0 dB  pan +0.00        ×0.995 W  the miss: kick
+ 1118.0 f   37.267 s   ◆ drain                  -2.0 dB  pan +0.00               W  THE MISS: the light drains to grey
+ 1121.0 f   37.367 s   · tap-0                  -9.0 dB  pan +0.42        ×0.995 W  the pill shakes “no” [1/2]
+ 1122.0 f   37.400 s   · pop-1                  -4.0 dB  pan +0.36        ×0.670 W  “0 matches” pops into the slot
+ 1125.0 f   37.500 s   · tap-1                 -14.8 dB  pan +0.42        ×1.003 W  the pill shakes “no” [2/2]
+ 1126.0 f   37.533 s   · tap-2                 -17.0 dB  pan +0.36        ×0.998 W  the slot shakes “no” [1/2]
+ 1128.0 f   37.600 s   ▶ “(unaligned +3 f)”  (kb-2)   intelligibility 0.87
+ 1130.0 f   37.667 s   · tap-3                 -17.8 dB  pan +0.36        ×1.005 W  the slot shakes “no” [2/2]
+ 1156.0 f   38.533 s   · chime-sunday-soft     -15.0 dB  pan +0.00               W  LIGHT: sunday floods back (Ava’s first word)
+ 1158.0 f   38.599 s   ▶ “I”  (kb-2)   intelligibility 0.95
+ 1158.0 f   38.600 s   · thump-2               -14.0 dB  pan +0.00        ×1.003 W  relight kick
+ 1162.8 f   38.760 s   ▶ “don't”  (kb-2)   intelligibility 1.00
+ 1170.0 f   39.000 s   ▶ “have”  (kb-2)   intelligibility 1.00
+ 1174.8 f   39.160 s   ▶ “an”  (kb-2)   intelligibility 1.00
+ 1174.8 f   39.160 s   ▶ “answer”  (kb-2)   intelligibility 1.00
+ 1175.0 f   39.167 s   · ping-1                -25.0 dB  pan +0.36        ×0.752 W  “answer”: a grey ring leaves “0 matches”
+ 1186.8 f   39.560 s   ▶ “for”  (kb-2)   intelligibility 1.00
+ 1191.6 f   39.720 s   ▶ “that,”  (kb-2)   intelligibility 1.00
+ 1207.8 f   40.261 s   ▶ “and”  (kb-2)   intelligibility 1.00
+ 1213.2 f   40.440 s   ▶ “I”  (kb-2)   intelligibility 1.00
+ 1215.6 f   40.520 s   ▶ “don't”  (kb-2)   intelligibility 1.00
+ 1220.4 f   40.680 s   ▶ “want”  (kb-2)   intelligibility 1.00
+ 1225.0 f   40.833 s   · glint-0               -22.0 dB  pan +0.14        ×1.004 W  “guess.” turns sunday ink
+ 1225.2 f   40.840 s   ▶ “to”  (kb-2)   intelligibility 1.00
+ 1225.2 f   40.840 s   ▶ “guess.”  (kb-2)   intelligibility 1.00
+ 1244.0 f   41.466 s   · swell-0               -19.0 dB  pan +0.36        ×0.995 W peak@1250.0  the slot inhales
+ 1251.8 f   41.725 s   ▶ “I'll”  (kb-2)   intelligibility 0.99
+ 1252.0 f   41.733 s   · pop-2                  -9.0 dB  pan +0.36        ×1.330 W  TEAM CARD pops on “I’ll” (kick)
+ 1253.0 f   41.767 s   · sheen-0               -21.0 dB  pan +0.24→+0.48  ×0.998 W  glint sweeps the card
+ 1256.6 f   41.886 s   ▶ “ask”  (kb-2)   intelligibility 1.00
+ 1257.0 f   41.900 s   · key-0                 -20.0 dB  pan +0.26               W  “Home visits?” writes in [1/12]
+ 1257.7 f   41.923 s   · key-1                 -20.3 dB  pan +0.34        ×1.004 W  “Home visits?” writes in [2/12]
+ 1258.4 f   41.947 s   · key-2                 -20.5 dB  pan +0.42        ×0.997 W  “Home visits?” writes in [3/12]
+ 1259.1 f   41.970 s   · key-3                 -20.8 dB  pan +0.26        ×1.002 W  “Home visits?” writes in [4/12]
+ 1259.8 f   41.993 s   · key-0                 -21.0 dB  pan +0.34        ×0.995 W  “Home visits?” writes in [5/12]
+ 1260.5 f   42.017 s   · key-1                 -21.3 dB  pan +0.42        ×1.003 W  “Home visits?” writes in [6/12]
+ 1261.2 f   42.040 s   · key-2                 -21.5 dB  pan +0.26        ×0.998 W  “Home visits?” writes in [7/12]
+ 1261.9 f   42.063 s   · key-3                 -21.8 dB  pan +0.34        ×1.005 W  “Home visits?” writes in [8/12]
+ 1262.6 f   42.087 s   · key-0                 -22.0 dB  pan +0.42               W  “Home visits?” writes in [9/12]
+ 1263.3 f   42.110 s   · key-1                 -22.3 dB  pan +0.26        ×1.004 W  “Home visits?” writes in [10/12]
+ 1264.0 f   42.133 s   · key-2                 -22.5 dB  pan +0.34        ×0.997 W  “Home visits?” writes in [11/12]
+ 1264.7 f   42.157 s   · key-3                 -22.8 dB  pan +0.42        ×1.002 W  “Home visits?” writes in [12/12]
+ 1268.6 f   42.286 s   ▶ “the”  (kb-2)   intelligibility 1.00
+ 1268.6 f   42.286 s   ▶ “team”  (kb-2)   intelligibility 1.00
+ 1269.0 f   42.300 s   · key-0                 -22.0 dB  pan +0.26        ×0.995 W  the caller’s number writes in [1/10]
+ 1269.6 f   42.320 s   · key-1                 -22.3 dB  pan +0.34        ×1.003 W  the caller’s number writes in [2/10]
+ 1270.2 f   42.340 s   · key-2                 -22.5 dB  pan +0.42        ×0.998 W  the caller’s number writes in [3/10]
+ 1270.8 f   42.360 s   · key-3                 -22.8 dB  pan +0.26        ×1.005 W  the caller’s number writes in [4/10]
+ 1271.4 f   42.380 s   · key-0                 -23.0 dB  pan +0.34               W  the caller’s number writes in [5/10]
+ 1272.0 f   42.400 s   · key-1                 -23.3 dB  pan +0.42        ×1.004 W  the caller’s number writes in [6/10]
+ 1272.6 f   42.420 s   · key-2                 -23.5 dB  pan +0.26        ×0.997 W  the caller’s number writes in [7/10]
+ 1273.2 f   42.440 s   · key-3                 -23.8 dB  pan +0.34        ×1.002 W  the caller’s number writes in [8/10]
+ 1273.8 f   42.460 s   · key-0                 -24.0 dB  pan +0.42        ×0.995 W  the caller’s number writes in [9/10]
+ 1274.4 f   42.480 s   · key-1                 -24.3 dB  pan +0.26        ×1.003 W  the caller’s number writes in [10/10]
+ 1278.2 f   42.606 s   ▶ “to”  (kb-2)   intelligibility 0.98
+ 1283.0 f   42.766 s   ▶ “call”  (kb-2)   intelligibility 1.00
+ 1283.0 f   42.767 s   · pop-3                  -9.0 dB  pan +0.29        ×1.002 W  callback chip pops on “call”
+ 1285.4 f   42.846 s   ▶ “you”  (kb-2)   intelligibility 1.00
+ 1290.2 f   43.006 s   ▶ “back”  (kb-2)   intelligibility 1.00
+ 1297.0 f   43.233 s   · ding-s-1              -15.0 dB  pan +0.22        ×1.004 W  the check draws on “today.” (sunday ink: the scene’s one accent)
+ 1297.4 f   43.246 s   ▶ “today.”  (kb-2)   intelligibility 0.98
+ 1310.0 f   43.667 s   · swell-1                -9.0 dB  pan +0.00        ×1.003 W peak@1316.0  the stage recedes into the title
+ 1319.0 f   43.966 s   · swish-2                -9.0 dB  pan +0.00        ×0.997 W peak@1323.0  “Where your documents stop, it says so.”
+ 1343.0 f   44.767 s   ◆ chime-sunday-1         -3.0 dB  pan +0.00        ×1.004 W  “it says so.” turns Sunday teal
+ 1344.0 f   44.800 s   · glint-1               -14.0 dB  pan -0.12→+0.24  ×0.997 W  a glint runs through it
+ 1374.0 f   45.800 s   · swell-0               -14.0 dB  pan +0.00        ×0.998 W peak@1380.0  suck-in before the whip
+ 1382.0 f   46.065 s   ◆ whoosh-1               -3.0 dB  pan +0.24→-0.48  ×0.995 W peak@1392.0  THE WHIP (pans right → left)
+
+── SCALE (1395–1980) ────────────────────────────────────────
+ 1393.0 f   46.434 s   · swish-3               -14.0 dB  pan +0.00→-0.24  ×1.002 W peak@1397.0  the frame opens: the camera pulls back off “Home services”
+ 1395.0 f   46.500 s   · chime-rush-1           -7.0 dB  pan -0.20        ×1.004 W  LIGHT: rush leads four names
+ 1395.0 f   46.500 s   ◆ pop-0                  +0.0 dB  pan -0.20        ×0.664 W  industry 1 lands in the index (rush chime)
+ 1403.0 f   46.767 s   · pop-1                  -2.0 dB  pan +0.30        ×0.843 W  industry 2 lands in the index (rush chime)
+ 1410.0 f   47.000 s   · pop-2                  -2.0 dB  pan -0.29        ×0.998 W  industry 3 lands in the index (rush chime)
+ 1418.0 f   47.267 s   · pop-3                  -2.0 dB  pan +0.01        ×1.341 W  industry 4 lands in the index (rush chime)
+ 1425.0 f   47.500 s   · chime-closing-1        -7.0 dB  pan +0.36        ×1.004 W  LIGHT: closing leads four names
+ 1425.0 f   47.500 s   · pop-0                  -2.0 dB  pan +0.36        ×0.841 W  industry 5 lands in the index (closing chime)
+ 1433.0 f   47.767 s   · pop-1                  -2.0 dB  pan +0.24        ×1.004 W  industry 6 lands in the index (closing chime)
+ 1440.0 f   48.000 s   · pop-2                  -2.0 dB  pan +0.37        ×1.256 W  industry 7 lands in the index (closing chime)
+ 1448.0 f   48.267 s   · pop-3                  -2.0 dB  pan +0.36        ×1.686 W  industry 8 lands in the index (closing chime)
+ 1455.0 f   48.500 s   · chime-sunday-0         -7.0 dB  pan -0.42        ×0.997 W  LIGHT: sunday leads four names
+ 1455.0 f   48.500 s   · tick-3                 -3.0 dB  pan -0.42        ×0.502 W  industry 9 lands in the index (sunday chime)
+ 1459.0 f   48.633 s   · tick-0                 -3.0 dB  pan -0.13        ×0.630 W  industry 10 lands in the index (sunday chime)
+ 1463.0 f   48.767 s   · tick-1                 -3.0 dB  pan +0.11        ×0.752 W  industry 11 lands in the index (sunday chime)
+ 1466.0 f   48.867 s   · tick-2                 -3.0 dB  pan +0.35        ×0.997 W  industry 12 lands in the index (sunday chime)
+ 1470.0 f   49.000 s   · chime-night-1          -7.0 dB  pan -0.40        ×1.002 W  LIGHT: night leads four names
+ 1470.0 f   49.000 s   · tick-3                 -3.0 dB  pan -0.40        ×0.669 W  industry 13 lands in the index (night chime)
+ 1474.0 f   49.133 s   · tick-0                 -3.0 dB  pan -0.16        ×0.837 W  industry 14 lands in the index (night chime)
+ 1475.0 f   49.167 s   · riser-short            -7.0 dB  pan +0.00               W peak@1485.0  the 16ths build → peak ON the slam
+ 1478.0 f   49.267 s   · tick-1                 -3.0 dB  pan +0.08        ×1.003 W  industry 15 lands in the index (night chime)
+ 1481.0 f   49.367 s   · tick-2                 -3.0 dB  pan +0.34        ×1.333 W  industry 16 lands in the index (night chime)
+ 1485.0 f   49.500 s   · key-2                 -11.0 dB  pan -0.08        ×0.998 W  13 letters stamp in [1/13]
+ 1485.0 f   49.500 s   · strum                  -7.0 dB  pan +0.00               W  the index has stepped back to a whisper as the title lands
+ 1485.0 f   49.500 s   ◆ slam                   +0.0 dB  pan +0.00               W  “16 industries.” SLAMS
+ 1485.6 f   49.520 s   · key-3                 -11.3 dB  pan +0.00        ×1.005 W  13 letters stamp in [2/13]
+ 1486.2 f   49.540 s   · key-0                 -11.5 dB  pan +0.08               W  13 letters stamp in [3/13]
+ 1486.8 f   49.560 s   · key-1                 -11.8 dB  pan -0.08        ×1.004 W  13 letters stamp in [4/13]
+ 1487.4 f   49.580 s   · key-2                 -12.0 dB  pan +0.00        ×0.997 W  13 letters stamp in [5/13]
+ 1488.0 f   49.600 s   · key-3                 -12.3 dB  pan +0.08        ×1.002 W  13 letters stamp in [6/13]
+ 1488.6 f   49.620 s   · key-0                 -12.5 dB  pan -0.08        ×0.995 W  13 letters stamp in [7/13]
+ 1489.2 f   49.640 s   · key-1                 -12.8 dB  pan +0.00        ×1.003 W  13 letters stamp in [8/13]
+ 1489.8 f   49.660 s   · key-2                 -13.0 dB  pan +0.08        ×0.998 W  13 letters stamp in [9/13]
+ 1490.4 f   49.680 s   · key-3                 -13.3 dB  pan -0.08        ×1.005 W  13 letters stamp in [10/13]
+ 1491.0 f   49.700 s   · key-0                 -13.5 dB  pan +0.00               W  13 letters stamp in [11/13]
+ 1491.6 f   49.720 s   · key-1                 -13.8 dB  pan +0.08        ×1.004 W  13 letters stamp in [12/13]
+ 1492.2 f   49.740 s   · key-2                 -14.0 dB  pan -0.08        ×0.997 W  13 letters stamp in [13/13]
+ 1519.0 f   50.633 s   · sheen-1               -20.0 dB  pan -0.17→-0.05  ×1.005 W  a glint crosses “16” mid-hold
+ 1536.0 f   51.199 s   · swish-0               -14.0 dB  pan +0.00        ×0.995 W peak@1540.0  “16 industries.” leaves up as the English card rises in under it
+ 1545.0 f   51.500 s   · chime-rush-soft       -12.0 dB  pan +0.00               W  LIGHT: rush — English
+ 1545.0 f   51.500 s   · tick-3                -10.0 dB  pan +0.00        ×0.671 W  “14 languages.” lands
+ 1545.0 f   51.500 s   · flip-0                -13.0 dB  pan +0.00        ×1.002 W peak@1547.0  the English card settles: its dot lights
+ 1549.0 f   51.633 s   ▶ “This”  (lang-en)   intelligibility 0.91
+ 1556.1 f   51.869 s   ▶ “is”  (lang-en)   intelligibility 1.00
+ 1558.5 f   51.949 s   ▶ “Ava,”  (lang-en)   intelligibility 0.99
+ 1580.2 f   52.674 s   ▶ “an”  (lang-en)   intelligibility 0.99
+ 1582.5 f   52.749 s   ▶ “AI”  (lang-en)   intelligibility 0.99
+ 1594.5 f   53.149 s   ▶ “assistant.”  (lang-en)   intelligibility 1.00
+ 1609.0 f   53.633 s   · whoosh-soft-0         -14.0 dB  pan +0.54→+0.00  ×0.998 W peak@1616.0  Romanian slides in
+ 1619.0 f   53.967 s   · chime-closing-soft    -20.0 dB  pan -0.30               W  LIGHT: closing — Romanian
+ 1619.0 f   53.967 s   · tick-0                -10.0 dB  pan -0.30        ×0.841 W  Romanian lands: its dot lights
+ 1620.2 f   54.008 s   ▶ “Sunt”  (lang-ro)   intelligibility 0.95
+ 1632.2 f   54.408 s   ▶ “Ava,”  (lang-ro)   intelligibility 1.00
+ 1639.0 f   54.634 s   · whoosh-soft-1         -14.0 dB  pan +0.54→+0.00  ×1.005 W peak@1646.0  Spanish slides in
+ 1649.0 f   54.967 s   · chime-sunday-soft     -20.0 dB  pan -0.30               W  LIGHT: sunday — Spanish
+ 1649.0 f   54.967 s   · tick-1                -10.0 dB  pan -0.30        ×1.004 W  Spanish lands: its dot lights
+ 1651.5 f   55.051 s   ▶ “Soy”  (lang-es)   intelligibility 1.00
+ 1653.6 f   55.120 s   ▷ “asistentul”  (lang-ro)   cut tail — the next voice has cut in (not scored)
+ 1661.2 f   55.372 s   ▶ “Ava,”  (lang-es)   intelligibility 1.00
+ 1669.0 f   55.633 s   · whoosh-soft-0         -14.0 dB  pan +0.54→+0.00         W peak@1676.0  French slides in
+ 1675.4 f   55.848 s   ▷ “virtual”  (lang-ro)   cut tail — the next voice has cut in (not scored)
+ 1679.0 f   55.967 s   · chime-night-soft      -20.0 dB  pan -0.30               W  LIGHT: night — French
+ 1679.0 f   55.967 s   · tick-2                -10.0 dB  pan -0.30        ×1.330 W  French lands: its dot lights
+ 1683.6 f   56.120 s   ▶ “Ici”  (lang-fr)   intelligibility 0.88
+ 1684.8 f   56.158 s   ▷ “el”  (lang-es)   cut tail — the next voice has cut in (not scored)
+ 1687.6 f   56.252 s   ▷ “asistente”  (lang-es)   cut tail — the next voice has cut in (not scored)
+ 1692.2 f   56.408 s   ▷ “cu”  (lang-ro)   cut tail — the next voice has cut in (not scored)
+ 1697.0 f   56.568 s   ▷ “inteligență”  (lang-ro)   cut tail — the next voice has cut in (not scored)
+ 1698.1 f   56.602 s   ▶ “Ava,”  (lang-fr)   intelligibility 0.99
+ 1699.0 f   56.634 s   · whoosh-soft-1         -14.0 dB  pan +0.54→+0.00  ×1.004 W peak@1706.0  German slides in
+ 1704.4 f   56.812 s   ▷ “virtual”  (lang-es)   cut tail — the next voice has cut in (not scored)
+ 1709.0 f   56.967 s   · chime-rush-soft       -20.0 dB  pan -0.30               W  LIGHT: rush — German
+ 1709.0 f   56.967 s   · tick-3                -10.0 dB  pan -0.30        ×0.669 W  German lands: its dot lights
+ 1711.6 f   57.054 s   ▶ “Sie”  (lang-de)   intelligibility 0.89
+ 1716.2 f   57.208 s   ▷ “artificială.”  (lang-ro)   cut tail — the next voice has cut in (not scored)
+ 1716.4 f   57.214 s   ▶ “sprechen”  (lang-de)   intelligibility 1.00
+ 1719.6 f   57.320 s   ▷ “l'assistant”  (lang-fr)   cut tail — the next voice has cut in (not scored)
+ 1723.6 f   57.452 s   ▷ “con”  (lang-es)   cut tail — the next voice has cut in (not scored)
+ 1726.0 f   57.532 s   ▷ “inteligencia”  (lang-es)   cut tail — the next voice has cut in (not scored)
+ 1730.8 f   57.694 s   ▶ “mit”  (lang-de)   intelligibility 1.00
+ 1733.2 f   57.775 s   ▶ “Ava,”  (lang-de)   intelligibility 1.00
+ 1736.0 f   57.866 s   · whoosh-soft-0         -14.0 dB  pan +0.54→+0.00  ×0.997 W peak@1743.0  Japanese slides in
+ 1736.4 f   57.880 s   ▷ “virtuel”  (lang-fr)   cut tail — the next voice has cut in (not scored)
+ 1746.0 f   58.200 s   · chime-closing-soft    -15.0 dB  pan -0.30               W  LIGHT: closing — Japanese
+ 1746.0 f   58.200 s   · tick-0                -10.0 dB  pan -0.30        ×0.837 W  Japanese lands: its dot lights
+ 1747.6 f   58.252 s   ▷ “artificial.”  (lang-es)   cut tail — the next voice has cut in (not scored)
+ 1748.5 f   58.285 s   ▶ “AI”  (lang-ja)   intelligibility 1.00
+ 1757.2 f   58.575 s   ▷ “dem”  (lang-de)   cut tail — the next voice has cut in (not scored)
+ 1758.0 f   58.600 s   ▷ “basé”  (lang-fr)   cut tail — the next voice has cut in (not scored)
+ 1760.6 f   58.686 s   ▶ “アシスタント”  (lang-ja)   intelligibility 1.00
+ 1766.8 f   58.894 s   ▷ “KI-Assistenten.”  (lang-de)   cut tail — the next voice has cut in (not scored)
+ 1770.0 f   59.000 s   ▷ “sur”  (lang-fr)   cut tail — the next voice has cut in (not scored)
+ 1774.8 f   59.160 s   ▷ “l'intelligence”  (lang-fr)   cut tail — the next voice has cut in (not scored)
+ 1782.2 f   59.406 s   ▶ “の”  (lang-ja)   intelligibility 1.00
+ 1791.6 f   59.720 s   ▷ “artificielle.”  (lang-fr)   cut tail — the next voice has cut in (not scored)
+ 1793.2 f   59.772 s   ▶ “Ava”  (lang-ja)   intelligibility 1.00
+ 1806.2 f   60.206 s   ▶ “と”  (lang-ja)   intelligibility 1.00
+ 1806.2 f   60.206 s   ▶ “申”  (lang-ja)   intelligibility 1.00
+ 1811.0 f   60.366 s   ▶ “し”  (lang-ja)   intelligibility 1.00
+ 1815.8 f   60.526 s   ▶ “ます。”  (lang-ja)   intelligibility 1.00
+ 1835.0 f   61.166 s   · whoosh-soft-0         -12.0 dB  pan +0.10→+0.55  ×0.995 W peak@1842.0  the gallery drops away
+ 1835.0 f   61.167 s   · whoosh-soft-1         -12.0 dB  pan -0.10→-0.55  ×1.002 W peak@1842.0  the gallery drops away
+ 1835.0 f   61.168 s   · whoosh-2               -7.0 dB  pan +0.00→-0.35  ×1.003 W peak@1845.0  Japanese flies to the first station
+ 1841.0 f   61.367 s   · key-3                 -11.0 dB  pan -0.08        ×1.002 W  “After the call.” rises [1/13]
+ 1841.7 f   61.390 s   · key-0                 -11.3 dB  pan +0.00        ×0.995 W  “After the call.” rises [2/13]
+ 1842.4 f   61.413 s   · key-1                 -11.5 dB  pan +0.08        ×1.003 W  “After the call.” rises [3/13]
+ 1843.1 f   61.437 s   · key-2                 -11.8 dB  pan -0.08        ×0.998 W  “After the call.” rises [4/13]
+ 1843.8 f   61.460 s   · key-3                 -12.0 dB  pan +0.00        ×1.005 W  “After the call.” rises [5/13]
+ 1844.5 f   61.483 s   · key-0                 -12.3 dB  pan +0.08               W  “After the call.” rises [6/13]
+ 1845.2 f   61.507 s   · key-1                 -12.5 dB  pan -0.08        ×1.004 W  “After the call.” rises [7/13]
+ 1845.9 f   61.530 s   · key-2                 -12.8 dB  pan +0.00        ×0.997 W  “After the call.” rises [8/13]
+ 1846.6 f   61.553 s   · key-3                 -13.0 dB  pan +0.08        ×1.002 W  “After the call.” rises [9/13]
+ 1847.3 f   61.577 s   · key-0                 -13.3 dB  pan -0.08        ×0.995 W  “After the call.” rises [10/13]
+ 1848.0 f   61.600 s   · key-1                 -13.5 dB  pan +0.00        ×1.003 W  “After the call.” rises [11/13]
+ 1848.7 f   61.623 s   · key-2                 -13.8 dB  pan +0.08        ×0.998 W  “After the call.” rises [12/13]
+ 1849.0 f   61.633 s   · tick-1                -10.0 dB  pan +0.00        ×0.843 W  rail track + three nodes [1/3]
+ 1849.4 f   61.647 s   · key-3                 -14.0 dB  pan -0.08        ×1.005 W  “After the call.” rises [13/13]
+ 1851.0 f   61.700 s   · tick-2                -10.8 dB  pan +0.00        ×0.942 W  rail track + three nodes [2/3]
+ 1853.0 f   61.767 s   · tick-3                -11.6 dB  pan +0.00        ×1.064 W  rail track + three nodes [3/3]
+ 1860.0 f   62.000 s   · click-2                -4.0 dB  pan -0.34        ×0.997 W  node 1 fills
+ 1860.0 f   62.000 s   ◆ land-0                 +0.0 dB  pan -0.34        ×0.995 W  THE CALL lands
+ 1861.0 f   62.033 s   · sheen-0               -16.0 dB  pan -0.34→+0.00         W  the accent line draws call → Slack
+ 1863.0 f   62.100 s   · pop-0                  -4.0 dB  pan -0.28        ×0.664 W  emerald “Booked” pill
+ 1887.0 f   62.900 s   · land-1                 -4.0 dB  pan +0.00        ×1.003 W  Slack card slams in
+ 1890.0 f   63.000 s   ◆ click-3                +0.0 dB  pan +0.00        ×1.002 W  Slack node
+ 1891.0 f   63.033 s   · sheen-1               -16.0 dB  pan +0.00→+0.35  ×1.004 W  the accent line draws Slack → CRM
+ 1917.0 f   63.900 s   · land-0                 -4.0 dB  pan +0.35        ×0.998 W  CRM card slams in
+ 1920.0 f   64.000 s   ◆ confirm                -2.0 dB  pan +0.35               W  CRM node settles in the closing light
+ 1924.0 f   64.133 s   · ping-0                -13.0 dB  pan +0.35        ×0.838 W  wider ping ring
+ 1938.5 f   64.617 s   · sheen-0               -16.0 dB  pan -0.34→+0.35  ×0.997 W  light pulses run along the rail to the CRM
+
+── CTA (1980–2310) ────────────────────────────────────────
+ 1965.0 f   65.500 s   · whoosh-rev             -7.0 dB  pan +0.35→+0.00         N peak@1981.0  the dark iris opens
+
+── SCALE (1395–1980) ────────────────────────────────────────
+ 1975.0 f   65.833 s   · ding-s-0               -7.0 dB  pan +0.35        ×1.119 W  the handoff spark
+
+── CTA (1980–2310) ────────────────────────────────────────
+ 1980.0 f   66.000 s   · sub                    -4.0 dB  pan +0.00               N  her eyes out of the black
+ 1983.0 f   66.100 s   · shimmer-1             -14.0 dB  pan +0.00        ×1.002 N  radial reveal
+ 1990.0 f   66.333 s   · glint-2               -14.0 dB  pan -0.06→+0.06  ×1.002 N  first catch-light as the iris completes
+ 1992.0 f   66.400 s   · tap-0                 -18.0 dB  pan -0.23               N  headline word 1 rises
+ 1995.0 f   66.500 s   · glint-0               -22.0 dB  pan -0.12→+0.12  ×0.995 N  catch-light on her first word
+ 1995.5 f   66.517 s   ▶ “AI”  (cta-1)   intelligibility 1.00
+ 2004.0 f   66.800 s   · tap-1                 -18.0 dB  pan -0.16        ×1.004 N  headline word 2 rises
+ 2007.5 f   66.918 s   ▶ “voice”  (cta-1)   intelligibility 1.00
+ 2010.0 f   67.000 s   · chime-rush-soft       -17.0 dB  pan -0.22               N  rush: the hook’s chime, recalled
+ 2010.0 f   67.000 s   · pop-1                 -14.0 dB  pan -0.22        ×0.669 N  RUSH orb arrives (LIGHT), keys her from its side
+ 2013.0 f   67.100 s   · tap-2                 -18.0 dB  pan -0.06        ×0.997 N  headline word 3 rises
+ 2017.1 f   67.238 s   ▶ “agents”  (cta-1)   intelligibility 1.00
+ 2028.0 f   67.600 s   · tap-3                 -18.0 dB  pan +0.06        ×1.002 N  headline word 4 rises
+ 2031.5 f   67.718 s   ▶ “that”  (cta-1)   intelligibility 1.00
+ 2040.0 f   68.000 s   · chime-closing-soft    -17.0 dB  pan +0.22               N  closing: the hook’s chime, recalled
+ 2040.0 f   68.000 s   · pop-2                 -14.0 dB  pan +0.22        ×0.839 N  CLOSING orb arrives (LIGHT), keys her from its side
+ 2040.0 f   68.000 s   · tap-0                 -18.0 dB  pan +0.19        ×0.995 N  headline word 5 rises
+ 2043.5 f   68.118 s   ▶ “book”  (cta-1)   intelligibility 0.97
+ 2047.0 f   68.233 s   · tap-1                 -18.0 dB  pan -0.12        ×1.003 N  headline word 6 rises
+ 2050.7 f   68.358 s   ▶ “your”  (cta-1)   intelligibility 0.99
+ 2050.7 f   68.358 s   ▶ “customers.”  (cta-1)   intelligibility 0.99
+ 2070.0 f   69.000 s   · chime-sunday-soft     -17.0 dB  pan -0.22               N  sunday: the hook’s chime, recalled
+ 2070.0 f   69.000 s   · pop-3                 -14.0 dB  pan -0.22        ×1.005 N  SUNDAY orb arrives (LIGHT), keys her from its side
+ 2083.0 f   69.433 s   · tap-2                 -12.0 dB  pan +0.16        ×0.998 N  “24/7.” rises ON “Twenty”
+ 2086.7 f   69.557 s   ▶ “Twenty”  (cta-1)   intelligibility 1.00
+ 2087.0 f   69.567 s   · thump-0               -10.0 dB  pan +0.00        ×0.998 N  the light answers “Twenty”
+ 2093.9 f   69.798 s   ▶ “four”  (cta-1)   intelligibility 1.00
+ 2094.0 f   69.800 s   · thump-1               -10.0 dB  pan +0.00        ×1.005 N  the light answers “four”
+ 2098.7 f   69.958 s   ▶ “seven.”  (cta-1)   intelligibility 0.96
+ 2099.0 f   69.967 s   · thump-2               -10.0 dB  pan +0.00               N  the light answers “seven”
+ 2100.0 f   70.000 s   · chime-night-soft      -17.0 dB  pan +0.22               N  night: the hook’s chime, recalled
+ 2100.0 f   70.000 s   · pop-0                 -14.0 dB  pan +0.22        ×1.335 N  NIGHT orb arrives (LIGHT), keys her from its side
+ 2126.0 f   70.867 s   · swish-1                -3.0 dB  pan +0.00        ×1.003 N peak@2130.0  the converge: the headline leaves through its masks, the light closes on her
+ 2130.0 f   71.000 s   ◆ riser                  -2.0 dB  pan +0.00               N peak@2160.0  CONVERGE → peak ON the impact
+ 2135.0 f   71.166 s   · whoosh-0               -4.0 dB  pan -0.24→+0.24  ×0.998 N peak@2145.0  the four orbs whirl at top speed
+ 2143.0 f   71.433 s   · glint-1               -14.0 dB  pan +0.00        ×1.003 N  the eyes’ last light slides into the core
+ 2154.0 f   71.800 s   · chord-rev              -7.0 dB  pan +0.00               N peak@2160.0  the four lights fuse
+ 2154.0 f   71.800 s   · gulp-0                 -4.0 dB  pan +0.00        ×0.997 N  the four lights are one: the survivor holds alone
+ 2157.0 f   71.900 s   · shock                  -7.0 dB  pan +0.00               N peak@2160.0  the merged light opens out of the core as a corona round the wordmark
+ 2160.0 f   72.000 s   ◆ chord                  -4.0 dB  pan +0.00               N  THE FOUR LIGHTS ring together
+ 2160.0 f   72.000 s   ◆ impact                 +0.0 dB  pan +0.00               N  LOGO IMPACT
+ 2175.7 f   72.524 s   ▶ “Neuro”  (cta-2)   intelligibility 0.93
+ 2190.2 f   73.008 s   ▶ “Tech”  (cta-2)   intelligibility 0.97
+ 2197.4 f   73.248 s   ▶ “Voice.”  (cta-2)   intelligibility 0.94
+ 2205.0 f   73.500 s   · pop-1                 -16.0 dB  pan +0.00        ×1.340 N  “Start free →” rises, once the URL is in
+ 2220.0 f   74.000 s   · tap-3                 -18.0 dB  pan +0.00        ×1.005 N  “5 free minutes, no card”
+ 2243.0 f   74.767 s   · thump-0                -3.0 dB  pan +0.00        ×1.004 N  the click’s felt knock
+ 2243.0 f   74.767 s   ◆ click-0                +0.0 dB  pan +0.00        ×0.995 N  the button is clicked (the plum floods from the arrow)
+ 2246.0 f   74.867 s   · tap-0                 -14.0 dB  pan +0.00               N  the plate springs back (release)

@@ -1,0 +1,33 @@
+{
+  "head": "8b9cd21b31f9dc35ea7319f0c56629e6dfe6dbe3",
+  "capturedAt": "2026-10-03T19:08:18.871Z",
+  "node": "v22.22.2",
+  "remotion": "4.0.530",
+  "mixSha256": "ec03728237edab6417e6ab418ee7c2b1ce04215acc6431cd5e240d8aad31f35e",
+  "film1Files": 116,
+  "delivered": [
+    "out/neurotechvoice-trailer-16x9.mp4",
+    "out/neurotechvoice-trailer-9x16.mp4",
+    "out/neurotechvoice-trailer-16x9-4k120.mp4",
+    "out/neurotechvoice-trailer-9x16-4k120.mp4"
+  ],
+  "bundleDeterministic": true,
+  "stills": 35,
+  "stillsMode": "exact",
+  "stillsMaxDelta": 0,
+  "timings": {
+    "frozen set clean": 0,
+    "sha256 of film 1 files": 0.1,
+    "voice stat": 0,
+    "timeline.json": 0.2,
+    "mix hash probe": 0.2,
+    "generate-sfx": 0.1,
+    "check-mix": 37,
+    "check-render": 18.8,
+    "compositions": 7.4,
+    "bundle ×2": 10.6,
+    "stills a/ and b/": 209.6,
+    "typecheck": 1,
+    "total": 285.1
+  }
+}

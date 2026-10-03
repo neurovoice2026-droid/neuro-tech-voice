@@ -1,0 +1,14 @@
+master        -15.5 LUFS integrated · -1.65 dBTP true peak · -1.65 dBFS sample peak
+levels        effects ≤ -12.0 dBFS · bed -20.0 dBFS · master gain +5.1 dB · limiter ≤ 4.2 dB
+dialogue      files -23 LUFS ± 0.00 · stem call-1 -20.1 · call-2 -20.1 · call-3 -20.0 · call-4 -20.1 · call-5 -19.8 · kb-1 -20.0 · kb-2 -19.9 · lang-en -20.2 · lang-ro -20.0 · lang-es -20.0 · lang-fr -20.0 · lang-de -19.8 · lang-ja -20.0 · cta-1 -20.1 · cta-2 -20.1 (spread 0.4 LU)
+presence      phone lines 1.4–2.8 kHz: call-2 -13.1 dB · call-4 -13.2 dB · kb-1 -15.1 dB
+climax        logo impact -9.3 LUFS-M · loudest dialogue -11.1 (lang-en @1550) · lead +1.8 LU · build before it -13.3
+end           last 100 ms -57.2 dBFS RMS · last frame -66.9 dBFS · the chord 10–5 f from the end -42.0 dBFS RMS (≥ -55)
+arc           converge (1 s into the logo) -13.6 LUFS · scale act's music max -14.6 (@1470) · lead +1.1 LU (≥ 0.5)
+cues          313: hook 24 · twist 43 · call 21 · result 23 · knowledge 77 · scale 88 · cta 37
+cascade       lang-ro cut 30 f, lets go over 2.0 f, “Ava” 1.00 · lang-es cut 29 f, lets go over 2.0 f, “Ava” 1.00 · lang-fr cut 30 f, lets go over 5.0 f, “Ava” 0.99 · lang-de cut 36 f, lets go over 2.0 f, “Ava” 1.00
+              lang-en whole (min 0.91) · lang-ja whole (min 1.00) · 19 cut-tail words not scored
+words         122 scored — intelligibility (SII-style, 1 = clear) mean 0.99, lowest: “(unaligned +3 f)” 0.87, “Ici” 0.88, “Sie” 0.89, “Thank” 0.89, “at” 0.90
+the name      cta-2: “Neuro” 0.93 · “Tech” 0.97 · “Voice.” 0.94 (≥ 0.9)
+timeline      out/audio/cue-timeline.txt
+OK

@@ -1,0 +1,56 @@
+{
+  "comps": [
+    "Trailer-16x9",
+    "Trailer-9x16"
+  ],
+  "total": 9240,
+  "chunk": 960,
+  "scale": 2,
+  "ranges": [
+    [
+      0,
+      959
+    ],
+    [
+      960,
+      1919
+    ],
+    [
+      1920,
+      2879
+    ],
+    [
+      2880,
+      3839
+    ],
+    [
+      3840,
+      4799
+    ],
+    [
+      4800,
+      5759
+    ],
+    [
+      5760,
+      6719
+    ],
+    [
+      6720,
+      7679
+    ],
+    [
+      7680,
+      8639
+    ],
+    [
+      8640,
+      9239
+    ]
+  ],
+  "bundle": "out/master/bundle",
+  "outputs": [
+    "out/neurotechvoice-trailer-16x9-4k120.mp4",
+    "out/neurotechvoice-trailer-9x16-4k120.mp4"
+  ]
+}
