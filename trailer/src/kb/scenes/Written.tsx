@@ -10,7 +10,7 @@
  *              presses (.9 / .97 + shade, a 16th) and releases: the underline springs across, the content swaps
  *              to the Knowledge tab — "Add knowledge", the drop zone, the web page field, Add page (disabled:
  *              the field is empty), "Your documents" with its empty state
- *   "once"     the slips stack up into one (16:9 b07's column, 9:16 dealt in from the left), one per 16th
+ *   "once"     the slips stack up into one (16:9 b07's column, 9:16 dropped in from above), one per 16th
  *   born       the pile draws its edges into a document row: TXT · Opening hours, Reading…
  *   "prices"   PDF · Price list lands in the list (newest on top); the empty state leaves; the Knowledge
  *              badge opens at 1 — the tabs after it slide over; a beat later its pill rolls to Ready
@@ -55,11 +55,15 @@ const PILLS: readonly (readonly PillState[])[] = [
   [{ at: W.rows[3], kind: 'readingPage' }, { at: W.ready[3], kind: 'ready', n: ROWS[3].n }],
 ];
 
-/** the pointer's whole performance (frame px; the panel is at rest from WRITTEN_LOCAL.panel[1]) */
+/** the pointer's whole performance (frame px; the panel is at rest from WRITTEN_LOCAL.panel[1]). Every click
+ *  has a dwell longer than CURSOR.pressLead: kit/cursor.ts cursorPos() falls back to the PREVIOUS key between a
+ *  move's end and its key's `at`, so a press without a dwell key would jump back for those 6 frames. */
 function cursorKeys(S: WrittenStage, bar: TabBarGeometry): CursorKey[] {
   const tk = bar.rect('knowledge', W.tab.down);
   const tab = { x: tk.cx + 6, y: tk.cy + 5 };
-  const rest1 = S.vertical ? { x: tab.x - 30, y: tab.y + 150 } : { x: tab.x - 70, y: tab.y + 180 };
+  // after the tab: a small drift down onto the panel's quiet heading row (16:9 just right of "Your documents", clear of
+  // the list where the Opening hours row will fly in; 9:16 right of "Add knowledge"), then hidden until the row has landed
+  const rest1 = S.vertical ? { x: tab.x + 40, y: tab.y + 84 } : { x: S.docs.x + 280, y: S.docs.y - 6 };
   const field = { x: S.field.x + S.field.w * (S.vertical ? 0.62 : 0.58), y: S.field.y + S.field.h * 0.52 };
   const btn = { x: S.button.x + S.button.w * 0.5, y: S.button.y + S.button.h * 0.56 };
   const rest2 = S.vertical ? { x: btn.x - 40, y: btn.y + 150 } : { x: btn.x + 190, y: btn.y + 96 };
@@ -70,11 +74,11 @@ function cursorKeys(S: WrittenStage, bar: TabBarGeometry): CursorKey[] {
     ...click(W.tab.down, tab.x, tab.y, { dwell: 8, hold }),
     { at: W.tab.up + 14, x: rest1.x, y: rest1.y },
     { at: W.tab.up + 18, x: rest1.x, y: rest1.y, action: 'hide' },
-    { at: W.field.down - 36, x: rest1.x, y: rest1.y, action: 'show' },
-    ...click(W.field.down, field.x, field.y, { dwell: 5, hold: W.field.up - W.field.down, kind: 'text' }),
-    { at: W.keys[0] - 1, x: field.x, y: field.y, action: 'type' },
+    { at: W.fly[1] + 1, x: rest1.x, y: rest1.y, action: 'show' },
+    ...click(W.field.down, field.x, field.y, { dwell: 8, hold: W.field.up - W.field.down, kind: 'text' }),
+    { at: W.field.up + 1.5, x: field.x, y: field.y, action: 'type' },
     { at: lastKey + S32, x: field.x, y: field.y },
-    ...click(W.add.down, btn.x, btn.y, { hold: W.add.up - W.add.down, kind: 'arrow' }),
+    ...click(W.add.down, btn.x, btn.y, { dwell: 7, hold: W.add.up - W.add.down, kind: 'arrow' }),
     { at: W.add.up + 16, x: rest2.x, y: rest2.y },
     { at: W.add.up + 19, x: rest2.x, y: rest2.y, action: 'hide' },
   ];
@@ -141,7 +145,7 @@ const HoursRow: React.FC<{ t: number; S: WrittenStage }> = ({ t, S }) => {
   const x0 = H.x;
   const y0 = H.y + (H.h - h) / 2;
   const top = rowTop(1, t, S);
-  const bow = S.vertical ? 70 : 90;
+  const bow = S.vertical ? 40 : 44;
   const x = mix(x0, S.list.x, f);
   const y = mix(y0, top.y, f) - bow * Math.sin(Math.PI * f);
   const w = mix(H.w, S.list.w, f);
@@ -181,9 +185,9 @@ const HoursRow: React.FC<{ t: number; S: WrittenStage }> = ({ t, S }) => {
         name={ROWS[1].name}
         pill={PILLS[1]}
         morph={u}
-        slip={{ k: H.k, text: SLIP_TEXT, color: SLIP_INK, out: W.born + 1 }}
+        slip={{ k: H.k, text: SLIP_TEXT, color: SLIP_INK, out: W.born }}
         slipRadius={H.radius}
-        contentAt={W.born + 5}
+        contentAt={W.born + 3}
         moving={moving}
       />
     </>
@@ -199,7 +203,7 @@ const Eyebrow: React.FC<{ t: number; S: WrittenStage }> = ({ t, S }) => {
   const dot = Math.round(size * 0.34);
   const r = reveal(t, W.knowledge, { rise: 100, fade: 0.5 });
   return (
-    <div style={{ position: 'absolute', left: S.eyebrow.x, top: S.eyebrow.y }}>
+    <div style={{ position: 'absolute', left: S.eyebrow.x, top: S.eyebrow.y, transform: S.eyebrow.align === 'center' ? 'translateX(-50%)' : undefined }}>
       <span style={{ ...maskBox(0), display: 'block' }}>
         <span style={{ ...revealStyle(r, undefined, t - W.knowledge < 20), display: 'flex', alignItems: 'center', gap: '0.55em', ...label, color: HOME.ink, whiteSpace: 'nowrap' }}>
           <span style={{ display: 'inline-block', width: dot, height: dot, borderRadius: '50%', background: SUNDAY_INK, transform: 'translateY(-0.04em)' }} />

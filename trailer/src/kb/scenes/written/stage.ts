@@ -10,7 +10,8 @@
  *          RIGHT the app: the agent page as a white panel — the real tab bar (General · Conversation · Voice ·
  *                Knowledge · Skills, icons, line variant) over two columns: "Add knowledge" (drop zone, the web
  *                page field, Add page) and "Your documents" (the empty state, then the rows, newest on top)
- *   9:16   TOP   the orb top-left; beside it the slips are dealt in from the left edge on "once", each under
+ *   9:16   TOP   the orb top-left (centred over the panel once the row has flown); beside it the slips drop in
+ *                from above the frame on "once", each under
  *                the one before, into one slip (no column in b07's 9:16) — then the same row is born there
  *          BELOW the eyebrow, then the panel at full width: the tab bar (labels only, as the app on a phone),
  *                "Add knowledge" (a compact drop zone, the field and Add page in a row), "Your documents"
@@ -33,6 +34,8 @@ export const ease = (t: number, a: number, b: number, f: (u: number) => number =
 
 /** a decisive glide that settles without a bounce (ζ ≈ .92) */
 export const GLIDE = { stiffness: 170, damping: 24, mass: 1 } as const;
+/** a calm drift (critically damped, ≈ 1.3 s) */
+export const DRIFT = { stiffness: 60, damping: 15.5, mass: 1 } as const;
 /** critically damped: a slip sliding up under the one above never peeks past it */
 export const TUCK = { stiffness: 300, damping: 34.6, mass: 1 } as const;
 
@@ -40,8 +43,9 @@ export type WrittenStage = {
   W: number;
   H: number;
   vertical: boolean;
-  /** Ava's orb: b07's last place → b08's (centre, diameter) */
-  orb: { from: { x: number; y: number; d: number }; to: { x: number; y: number; d: number } };
+  /** Ava's orb: b07's last place → the corner over the slips → (once the Opening hours row has flown) where
+   *  it settles for the rest of the act (centre, diameter) */
+  orb: { from: { x: number; y: number; d: number }; to: { x: number; y: number; d: number }; settle: { x: number; y: number; d: number } };
   /** the app panel (frame px) and how it comes in (offset at its start) */
   panel: Box & { radius: number; from: XY };
   /** the tab bar: label size, icons, the strip's side padding (× r) */
@@ -64,8 +68,8 @@ export type WrittenStage = {
   type: { title: number; body: number; small: number; label: number };
   /** the slips: 16:9 the column's corner (strip left / top of the top strip / width), 9:16 the pile */
   slips: { x: number; y: number; w: number };
-  /** the eyebrow ● KNOWLEDGE BASE: its left edge and the label's top */
-  eyebrow: XY;
+  /** the eyebrow ● KNOWLEDGE BASE: its anchor x (left edge, or centre) and the label's top */
+  eyebrow: XY & { align: 'left' | 'center' };
   /** the narrator's caption: centre x, row A's centre, max width */
   caption: { x: number; y: number; maxWidth: number };
   /** where the cursor comes in from (off frame) */
@@ -86,7 +90,7 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
       const pad = 46;
       const y0 = panel.y + barH + 40;
       const type = { title: 36, body: 28, small: 23, label: 26 };
-      const addW = 470;
+      const addW = 510;
       const add = { x: panel.x + pad, y: y0, w: addW, h: 0 };
       const drop = { x: add.x, y: y0 + 66, w: addW, h: 200, compact: false };
       const dividerY = drop.y + drop.h + 30;
@@ -101,7 +105,7 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
         W: 1920,
         H: 1080,
         vertical,
-        orb: { from: { x: E.orb.x, y: E.orb.y, d: E.orb.d }, to: { x: 326, y: 292, d: 220 } },
+        orb: { from: { x: E.orb.x, y: E.orb.y, d: E.orb.d }, to: { x: 326, y: 292, d: 220 }, settle: { x: 326, y: 522, d: 236 } },
         panel,
         tabs,
         pad,
@@ -116,7 +120,7 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
         row: { size: rowSize, h: rowHeight('stack', rowSize), gap: 14, layout: 'stack' },
         type,
         slips: { x: 96, y: 446, w: 460 },
-        eyebrow: { x: panel.x + 4, y: 92 },
+        eyebrow: { x: panel.x + 4, y: 92, align: 'left' },
         caption: { x: 960, y: 962, maxWidth: 1560 },
         enter: { x: 2010, y: 520 },
       };
@@ -140,7 +144,7 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
       W: 1080,
       H: 1920,
       vertical,
-      orb: { from: { x: E.orb.x, y: E.orb.y, d: E.orb.d }, to: { x: 168, y: 262, d: 164 } },
+      orb: { from: { x: E.orb.x, y: E.orb.y, d: E.orb.d }, to: { x: 150, y: 262, d: 164 }, settle: { x: 540, y: 222, d: 196 } },
       panel,
       tabs,
       pad,
@@ -155,7 +159,7 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
       row: { size: rowSize, h: rowHeight('inline', rowSize), gap: 10, layout: 'inline' },
       type,
       slips: { x: 300, y: 214, w: 716 },
-      eyebrow: { x: panel.x + 4, y: 362 },
+      eyebrow: { x: 540, y: 358, align: 'center' },
       caption: { x: 540, y: 1336, maxWidth: 940 },
       enter: { x: 1130, y: 760 },
     };
@@ -173,17 +177,23 @@ export const seamLeft = (t: number) => 1 - ease(t, W.seam[0], W.seam[1], EASE.dr
 /** her ground floods the other half: the wipe's front (0 = on the seam … 1 = past the far edge) and its feather */
 export const wipeAt = (t: number) => ease(t, W.ground[0], W.ground[1], EASE.inOut);
 
-/** Ava's orb: b07's place → b08's, on the glide (no bounce) */
+/** the orb's settle starts once the Opening hours row has left the corner */
+export const ORB_SETTLE = W.fly[0] + 6;
+
+/** Ava's orb: b07's place → the corner (the glide, no bounce) → its settle (a calm drift) */
 export function orbPose(t: number, S: WrittenStage) {
   const p = springUnit(t - W.glide[0], GLIDE);
+  const q = springUnit(t - ORB_SETTLE, DRIFT);
   const a = S.orb.from;
   const b = S.orb.to;
-  return { x: lerp(a.x, b.x, p), y: lerp(a.y, b.y, p), d: lerp(a.d, b.d, p), moving: Math.abs(1 - p) > 1e-4 };
+  const c = S.orb.settle;
+  const at = (k: 'x' | 'y' | 'd') => lerp(lerp(a[k], b[k], p), c[k], q);
+  return { x: at('x'), y: at('y'), d: at('d'), moving: Math.abs(1 - p) > 1e-4 || (q > 0 && Math.abs(1 - q) > 1e-4) };
 }
 
 /** the panel's offset from its place (it comes in eased, landing exactly at panel[1] so the cursor aims true) */
 export function panelPose(t: number, S: WrittenStage) {
-  const u = ease(t, W.panel[0], W.panel[1], EASE.house);
+  const u = ease(t, W.panel[0], W.panel[1], EASE.out3);
   return { dx: S.panel.from.x * (1 - u), dy: S.panel.from.y * (1 - u), lift: 2 + 2.5 * (1 - u), on: t >= W.panel[0] - 0.01, moving: u > 0 && u < 1 };
 }
 
@@ -199,7 +209,7 @@ export const ROWS = [
 export type RowKind = (typeof ROWS)[number]['kind'];
 
 /** frames before a newcomer lands that the rows below start making room (the flight's slot opens earlier) */
-const ROOM = { land: 2, fly: 6 } as const;
+const ROOM = { land: 6, fly: 8 } as const;
 
 /** row i's top in the list at t (it slides down a pitch for every row that lands after it) */
 export function rowTop(i: number, t: number, S: WrittenStage) {
@@ -209,7 +219,7 @@ export function rowTop(i: number, t: number, S: WrittenStage) {
     const lead = j === 1 ? ROOM.fly : ROOM.land;
     slots += springUnit(t - (W.rows[j] - lead), GLIDE);
   }
-  return { y: S.list.y + slots * pitch, moving: W.rows.some((a, j) => j > i && t > a - 8 && t < a + 24) };
+  return { y: S.list.y + slots * pitch, moving: W.rows.some((a, j) => j > i && t > a - 10 && t < a + 26) };
 }
 
 /** the badge's count over time (the app counts every document, Reading ones too) */
@@ -230,6 +240,6 @@ export function writtenEnd(vertical: boolean) {
   const S = writtenStage(vertical);
   const t = W.end;
   const rows = ROWS.map((r, i) => ({ name: r.name, kind: r.kind, x: S.list.x, y: rowTop(i, t, S).y, w: S.list.w, h: S.row.h }));
-  return { orb: S.orb.to, panel: { x: S.panel.x, y: S.panel.y, w: S.panel.w, h: S.panel.h, radius: S.panel.radius }, tabs: S.tabs, rows, eyebrow: S.eyebrow, at: t };
+  return { orb: S.orb.settle, panel: { x: S.panel.x, y: S.panel.y, w: S.panel.w, h: S.panel.h, radius: S.panel.radius }, tabs: S.tabs, rows, eyebrow: S.eyebrow, at: t };
 }
 export const WRITTEN_END = writtenEnd;

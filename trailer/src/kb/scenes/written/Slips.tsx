@@ -9,14 +9,14 @@
  *          up through the fade. On "once" the seven strips below it slide up under it, one per 16th — the ones
  *          below the window rising through the bottom fade — critically damped, so none ever peeks past it;
  *          each arrival thickens the pile's edge a hair and deepens its contact shadow.
- *   9:16   (b07's 9:16 had no column) the slips are dealt in from the left edge, one per 16th, each sliding in
+ *   9:16   (b07's 9:16 had no column) the slips drop in from above the frame, one per 16th, each sliding in
  *          under the one before, into one pile beside the orb.
  *
  * At WRITTEN_LOCAL.born the pile is handed to written/Row.tsx (`slipHandoff` gives it the top slip's exact box),
  * which draws its edges into the TXT · Opening hours row.
  */
 import React from 'react';
-import { springUnit } from '../../../lib/motion';
+import { EASE, springUnit } from '../../../lib/motion';
 import { subpixel } from '../../../lib/glide';
 import { typeStyle } from '../../../lib/type';
 import { useLayout } from '../../../lib/layout';
@@ -114,8 +114,12 @@ const Strip: React.FC<{ y: number; z: number; ink: string; lift: number; k?: num
   );
 };
 
+/** the slips under the pile stay a few frames into the hand-off (the row covers them as it grows), so its thick
+ *  edge and deep shadow do not vanish on the cut to written/Row.tsx */
+const UNDER_OUT = 5;
+
 export const Slips: React.FC<{ t: number; S: WrittenStage }> = ({ t, S }) => {
-  if (t >= W.born) return null;
+  if (t >= W.born + UNDER_OUT) return null;
   return S.vertical ? <Deal t={t} S={S} /> : <Column t={t} S={S} />;
 };
 
@@ -148,6 +152,8 @@ const Column: React.FC<{ t: number; S: WrittenStage }> = ({ t, S }) => {
     // cull outside the window (window px = strip px × k0)
     if ((y + STRIP.h) * P.k0 < -4 || y * P.k0 > P.wh + 4) continue;
     const top = r === P.j0;
+    if (t >= W.born && (top || r < P.j0)) continue;
+    if (t >= W.born) o *= 1 - ease(t, W.born, W.born + UNDER_OUT);
     strips.push(<Strip key={r} y={y} z={40 - r} ink={INK_B} lift={top ? pile.lift : 0.6} k={top ? pile.k : 0.95} opacity={o} moving={moving} />);
   }
   const mask = fadeMask(0, FADE.top, P.wh - FADE.bottom, P.wh);
@@ -168,21 +174,25 @@ const Column: React.FC<{ t: number; S: WrittenStage }> = ({ t, S }) => {
   );
 };
 
-/* ── 9:16: dealt in from the left edge into one pile ── */
+/* ── 9:16: dropped in from above the frame into one pile ── */
+const DEAL = 9;
 const Deal: React.FC<{ t: number; S: WrittenStage }> = ({ t, S }) => {
   const H = slipHandoff(S);
   const k = H.k;
-  if (t < W.once - 0.5) return null;
+  if (t < W.once - 4.5) return null;
   const pile = pileLift(t);
   const strips: React.ReactNode[] = [];
-  const from = -(S.slips.x + S.slips.w + 40) / k; // strip px: fully off the left edge
+  const from = -(S.slips.y + H.h + 24) / k; // strip px: just above the top edge
   for (let m = 0; m <= COUNT; m++) {
-    const at = W.once + (m === 0 ? -3.75 : W.collapse[m - 1] - W.once);
+    // the first slip lands ON "once"; each of the others slides in under it on its 16th
+    const at = m === 0 ? W.once - 4 : W.collapse[m - 1];
     if (t < at - 0.25) continue;
-    const p = springUnit(t - at, TUCK);
-    const x = from * (1 - p);
-    const y = m * EDGE * p;
-    strips.push(<Strip key={m} x={x} y={y} z={40 - m} ink={INK_B} lift={m === 0 ? pile.lift : 0.6} k={m === 0 ? pile.k : 0.95} moving={p < 0.9999} />);
+    if (t >= W.born && m === 0) continue;
+    // a quick deal (eased in a third of a second), not the column's spring: they fall from off the frame
+    const p = ease(t, at, at + DEAL, EASE.out3);
+    const y = from * (1 - p) + m * EDGE * p;
+    const o = t >= W.born ? 1 - ease(t, W.born, W.born + UNDER_OUT) : 1;
+    strips.push(<Strip key={m} y={y} z={40 - m} ink={INK_B} lift={m === 0 ? pile.lift : 0.6} k={m === 0 ? pile.k : 0.95} opacity={o} moving={p < 0.9999} />);
   }
   return (
     <div style={{ position: 'absolute', left: 0, top: 0, transformOrigin: '0 0', transform: `translate(${H.x}px, ${H.y}px) scale(${k.toFixed(6)})` }}>

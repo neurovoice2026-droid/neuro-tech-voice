@@ -480,7 +480,7 @@ export const WRITTEN_LOCAL = (() => {
     seam: [0, BEAT] as const,
     ground: [0, 2 * BEAT] as const,
     /** the app panel comes in (16:9 from the right, where the matters side left; 9:16 up from under the seam) */
-    panel: [1, 23] as const,
+    panel: [0, 22] as const,
     /** the orb glides from b07's place to b08's; 16:9: the day's column glides into the corner under it */
     glide: [0, 28] as const,
     tab: { down: tabDown, up: tabDown + S16 } as const,
@@ -515,25 +515,89 @@ export const WRITTEN_LOCAL = (() => {
   };
 })();
 
-/** b09–b11 (call-local; 0 = the live ring on its bar). */
-export const CALL_LOCAL = {
-  ring: 0,
-  pickup: BEAT / 2,
-  c4: L('call', C4_AT),
-  call1: L('call', CALL1_AT),
-  /** 44.5 on the plan: the call freezes; BETWEEN QUESTION AND ANSWER */
-  freeze: L('call', FREEZE),
-  vo5: L('call', VO5_AT),
-  /** "the part that answers them": the ink sweep */
-  sweep: L('call', VO5_AT + vWord('kb2-vo-5', 5)),
-  /** "even when they put it differently": the hero link, then the three earlier phrasings on 8ths */
-  links: [0, 1, 2, 3].map((i) => L('call', up8(VO5_AT + vWord('kb2-vo-5', 10)) + i * (BEAT / 2))) as readonly number[],
-  /** 50.0 on the plan (bar): time resumes */
-  resume: L('call', RESUME),
-  call2: L('call', CALL2_AT),
-  /** the record row folds in after her answer and holds a second */
-  record: L('call', RECORD),
-};
+/** b09–b11 (call-local; 0 = the live ring on its bar). The picture: src/kb/scenes/Call.tsx (+ scenes/call/*:
+ *  stage.ts has the layout and every pose as a pure function of these moments). */
+export const CALL_LOCAL = (() => {
+  const S16 = BEAT / 4;
+  const S8 = BEAT / 2;
+  const end = SCENES.call.to - SCENES.call.from;
+  const pickup = BEAT / 2;
+  const c4 = L('call', C4_AT);
+  const call1 = L('call', CALL1_AT);
+  const freeze = L('call', FREEZE);
+  const vo5 = L('call', VO5_AT);
+  const resume = L('call', RESUME);
+  const call2 = L('call', CALL2_AT);
+  const record = L('call', RECORD);
+  /** a line's spoken word onsets, act-local */
+  const words = (id: VoiceId, at: number) => VOICE.lines[id].words.map((_, k) => at + vWord(id, k));
+  const call2Words = words('kb2-call-2', call2);
+  /** "even when they put it differently": the hero link's pen goes down a 16th before the 8th of "even" and lands
+   *  ON the next 8th; each earlier phrasing rises as the link before it lands and its own hairline lands an 8th later
+   *  — the four plucks (E G# B F#) on four 8ths */
+  const even = L('call', up8(VO5_AT + vWord('kb2-vo-5', 10)));
+  const links = [0, 1, 2, 3].map((i) => even + S8 + i * S8);
+  const linkStart = [even - S16, links[0] + 2, links[1] + 2, links[2] + 2];
+  return {
+    end,
+    /** 40.0 on the plan (bar): the ring — one slate hairline leaves the orb; the panel steps back and slides away
+     *  right (16:9) / down (9:16); the eyebrow leaves; the orb comes forward to her call place */
+    ring: 0,
+    recede: [0, 34] as const,
+    glide: [0, 30] as const,
+    /** 40.25: picked up on the first ring — the orb wakes to listen; ● CALLER and the timer rise */
+    pickup,
+    /** the call timer (mono): it reads `base` s at the pickup (the greeting has been said) and runs on call time
+     *  (frozen through the stop-time): seconds = base + floor((callTime − zero) / 30) */
+    timer: { base: 4, zero: 10 } as const,
+    c4,
+    c4Words: words('kb2-c4', c4) as readonly number[],
+    /** Ava's filler: her turn (● AVA) rises under the caller's; the transcript scrolls up to make room */
+    call1,
+    call1Words: words('kb2-call-1', call1) as readonly number[],
+    scroll: [call1 - 8, call1 + 10] as const,
+    /** 44.5 on the plan: the call freezes (timer, waveform, the mesh's own clock); BETWEEN QUESTION AND ANSWER
+     *  rises; the filler leaves; the orb shrinks into the label's dot */
+    freeze,
+    dock: [freeze, freeze + 24] as const,
+    /** the camera glides to the knowledge (≈ 1.2 s, EASE.inOut): the frozen question to the left column */
+    pan: [freeze, freeze + 30] as const,
+    /** "…let me CHECK.": she fetches it — the Opening hours row comes back (16:9 in from the right, where the panel
+     *  went; 9:16 lifted out of the receded panel, which then sinks away) and waits; after the freeze it unfolds into
+     *  the full page (its lines rise on 16ths) */
+    rowIn: [call1 + vWord('kb2-call-1', 4) - 1, call1 + vWord('kb2-call-1', 4) + 23] as const,
+    unfold: [freeze + 10, freeze + 32] as const,
+    vo5,
+    vo5Words: words('kb2-vo-5', vo5) as readonly number[],
+    /** "the part that answers them": the sweep under Saturday (Sunday a 16th behind); the weekday line settles to 40 % */
+    sweep: L('call', VO5_AT + vWord('kb2-vo-5', 5)),
+    /** "around this weekend": the slate underline, as the hero link's pen goes down */
+    underline: even - S16,
+    links: links as readonly number[],
+    linkStart: linkStart as readonly number[],
+    /** the day's three earlier phrasings rise as the link before them lands (9:16: one at a time in one slot,
+     *  each leaving up on the next 8th; the last stays) */
+    questions: links.slice(0, 3) as readonly number[],
+    /** 50.0 on the plan (bar): time resumes — the label, the phrasings and their links leave; the orb comes out of
+     *  the dot; the page dims to 25 % behind and the two swept lines lift out as their own small layer */
+    resume,
+    undock: [resume + 6, resume + 30] as const,
+    lift: [resume + 2, resume + 16] as const,
+    /** the caller's question leaves up as she answers; her turn (● AVA) holds the answer */
+    call2,
+    call2Words: call2Words as readonly number[],
+    /** the word re-set: kept words glide on her onsets (Saturday · Sunday+s · closed+.), the tokens she doesn't say
+     *  leave just before "Saturday" moves; "nine till two" keys sunday on "nine" */
+    reset: call2Words.map((at, k) => ({ at, from: k === 2 ? ([0, 0] as const) : k === 7 ? ([1, 0] as const) : k === 9 ? ([1, 2] as const) : undefined })),
+    resetLeave: call2Words[2] - 6,
+    key: call2Words[4],
+    /** one very quiet tick per landing word, on its 16th */
+    resetTicks: call2Words.map((f) => up16(f + SCENES.call.from) - SCENES.call.from) as readonly number[],
+    /** the call strip folds into the white record row on the 8th after her answer; the check is drawn an 8th on */
+    record,
+    check: record + S8,
+  };
+})();
 
 /** b12 (line-local). */
 export const LINE_LOCAL = {
@@ -809,7 +873,7 @@ const WRITTEN_HITS: Hit<Snd>[] = (() => {
   const at = (f: number) => SCENES.written.from + f;
   const S16 = BEAT / 4;
   const S32 = BEAT / 8;
-  const NAMES = ['PDF · Price list', 'TXT · Opening hours slots in', 'DOCX · Cancellation policy', 'URL · FAQ page'];
+  const NAMES = ['PDF · Price list lands', 'TXT · Opening hours slots in (from its flight)', 'DOCX · Cancellation policy lands', 'URL · FAQ page lands'];
   const TOCK = [0, 4, 7, 9]; // chord tones under each landing (E · G# · B · C#), from E
   const MALLET = ['E4', 'F#4', 'G#4', 'B4'];
   const MALLET_SEMI = [-7, -5, -3, 0]; // ding-s is a B5 bell: E5 F#5 G#5 B5 until fx-mallet exists
@@ -828,7 +892,7 @@ const WRITTEN_HITS: Hit<Snd>[] = (() => {
     H(at(R.born), 'draw', 'none', 0.18, 3, 'b08 the last slip draws its edges into a document row: TXT · Opening hours, Reading…', { db: -12 }),
     H(at(R.fly[0] + 3), 'swish', 'none', [0.2, 0.74], 3, 'b08 the Opening hours row flies from the corner into the list', { db: -12 }),
     ...R.rows.map((r, i) =>
-      H(at(r), 'tick', 'none', i === 1 ? 0.74 : 0.78, 3, `b08 ${NAMES[i]} lands in the list; the Knowledge badge ${i ? 'ticks to' : 'opens at'} ${i + 1} [→ fx-tock, tuned to the chord]`, {
+      H(at(r), 'tick', 'none', i === 1 ? 0.74 : 0.78, 3, `b08 ${NAMES[i]} on top of the list; the Knowledge badge ${i ? 'ticks to' : 'opens at'} ${i + 1} [→ fx-tock, tuned to the chord]`, {
         semi: TOCK[i],
         db: -4,
       }),
@@ -840,11 +904,60 @@ const WRITTEN_HITS: Hit<Snd>[] = (() => {
     H(at(R.field.up), 'tap', 'none', 0.47, 3, 'b08 … released: the field takes its focus ring [→ fx-click-up]', { db: -10 }),
     H(at(R.keys[0]), 'key', 'none', 0.47, 3, 'b08 https://your-site/faq types, one character per 32nd [→ fx-keys]', { db: -8, layer: true, run: { n: R.keys.length, step: S32 } }),
     H(at(R.add.down), 'click', 'none', 0.47, 2, 'b08 Add page: pressed [→ fx-click-down]', { db: -3 }),
-    H(at(R.add.up), 'tap', 'none', 0.47, 3, 'b08 … released: "Adding…" (the FAQ page lands a 16th later) [→ fx-click-up]', { db: -8 }),
+    H(at(R.add.up), 'tap', 'none', 0.47, 3, 'b08 … released (the FAQ page lands a 16th later and the field clears) [→ fx-click-up]', { db: -8 }),
     H(at(R.knowledge), 'chime-sunday-soft', 'sunday', 0.36, 3, 'b08 "knowledge": the eyebrow ● KNOWLEDGE BASE rises above the panel [→ fx-felt-e, one soft felt-piano E4]', { db: -8 }),
   ];
 })();
 /* ── /written ── */
+
+/* ── call ── (b09–b11: picture src/kb/scenes/Call.tsx + scenes/call/*; pans from the 16:9 layout: the orb .23 in
+ * b09, the call strip .55 (b10's frozen question .25), the panel .6 → off right, the Opening hours page .72, the
+ * hairlines .45 → .55, her answer .3, the record row .3)
+ * The bed's part (MUSIC.call / .freeze / .resume): it ducks under the call; on the freeze its beat drops out and a
+ * sustained E add9 holds (time has stopped); it returns on the beat at the resume (50.0 on the plan).
+ * NO CURSOR in this act (Ava takes the call alone): no click sounds here.
+ * FILM-2 EXTRAS this act asks the sound pass for (film 1 stand-ins below until they exist; labels say [→ …]):
+ *   fx-trill        (b02's) the same desk trill sample, CUT after its first chirp by the pickup click an 8th later
+ *   fx-slip-slide   (b02's) the panel stepping back and sliding away; the Opening hours row coming back on "check"
+ *   fx-linehiss     (b04's) a very low, continuous open-line hiss under the stop-time, freeze → resume, ≈ 6 dB under
+ *                   b04's dead line; it lets go on the resume
+ *   fx-paper-unfold the row opening out into a full page: a soft, dry sheet flexing open (≈ .45 s, no tone)
+ *   fx-felttip      (SCRIPT extras) the sweep: a soft felt-tip swipe (≈ .5 s); the underline: a shorter, lighter one
+ *   fx-scratch      a fine pen scratch under each hairline as it draws (≈ .25–.35 s, very quiet, high-passed)
+ *   fx-pluck        the hairline landing: one soft pitched pluck (nylon / kalimba, short decay) — E4 · G#4 · B4 ·
+ *                   F#4 on four 8ths, building the chord (film 1's ping, tuned, stands in: semis from its B)
+ *   fx-paper-lift   the two swept lines peeled off the page as their own layer: a light dry paper lift (≈ .2 s)
+ *   fx-tick-soft    one very quiet tick per word the re-set lands, on its 16th (−28 dB — under the voice)
+ *   fx-record       the strip folding into the record row: a paper click with a little body, then the check's tick */
+const CALL_HITS: Hit<Snd>[] = (() => {
+  const R = CALL_LOCAL;
+  const at = (f: number) => SCENES.call.from + f;
+  const PLUCK = [-7, -3, 0, -5]; // E · G# · B · F# from ping's B
+  const LINK = ['the hero hairline from "weekend" lands on the swept lines; MATCHED ON MEANING', '"Are you open on Saturdays?" sends its hairline', '"Can I pop in on Saturday?" sends its hairline', '"What are your weekend hours?" sends its hairline'];
+  return [
+    H(at(R.ring), 'ring-hook', 'none', 0.23, 2, 'b09 THE LIVE CALL rings on the bar; one slate hairline leaves the orb [→ fx-trill, cut after one chirp by the pickup]', { db: -2 }),
+    H(at(R.recede[0] + 2), 'swish', 'none', [0.62, 0.95], 3, 'b09 the app panel steps back a depth and slides away (16:9 right, 9:16 down) [→ fx-slip-slide]', { db: -11 }),
+    H(at(R.pickup), 'pickup', 'none', 0.23, 2, 'b09 picked up on the first ring: the orb wakes to listen; ● CALLER and the timer rise'),
+    H(at(R.c4 - 2), 'line', 'none', 0.55, 3, 'b09 the caller’s line draws out under his words', { db: -5 }),
+    H(at(R.rowIn[0] + 2), 'swish', 'none', [0.98, 0.8], 3, 'b09 "…let me check.": the Opening hours row comes back (16:9 in from the right; 9:16 lifted out of the panel) [→ fx-slip-slide]', { db: -12 }),
+    H(at(R.freeze), 'freeze', 'none', 0.5, 2, 'b10 THE FREEZE: the call stops, BETWEEN QUESTION AND ANSWER [+ fx-linehiss, very low, to the resume]', { db: -3 }),
+    H(at(R.unfold[0] + 2), 'draw', 'none', 0.72, 3, 'b10 the row unfolds into the full Opening hours page [→ fx-paper-unfold]', { db: -10 }),
+    H(at(R.sweep), 'draw', 'none', 0.7, 3, 'b10 "the part that answers them": the sunday sweep under Saturday [→ fx-felttip]', { db: -6 }),
+    H(at(R.sweep + BEAT / 4), 'draw', 'none', 0.7, 3, 'b10 … and under Sunday, a 16th behind [→ fx-felttip]', { db: -9, layer: true }),
+    H(at(R.underline), 'draw', 'none', 0.22, 3, 'b10 "around this weekend" takes a slate underline [→ fx-felttip, short and light]', { db: -12 }),
+    ...R.links.flatMap((f, i) => [
+      H(at(R.linkStart[i]), 'sheen', 'none', i ? 0.4 : 0.36, 3, `b10 hairline ${i + 1}: the pen draws [→ fx-scratch]`, { db: i ? -16 : -13, layer: true }),
+      H(at(f), 'ping', 'sunday', 0.62, 3, `b10 ${LINK[i]} [→ fx-pluck ${['E4', 'G#4', 'B4', 'F#4'][i]}]`, { semi: PLUCK[i], db: i ? -3 : 0 }),
+    ]),
+    H(at(R.resume), 'whoosh-soft', 'none', 0.5, 3, 'b11 TIME RESUMES on the bar: the label and the phrasings leave, the orb comes out of the dot (the line hiss lets go)', { db: -8 }),
+    H(at(R.lift[0]), 'swish', 'none', [0.68, 0.6], 3, 'b11 the two swept lines lift out of the page as their own layer [→ fx-paper-lift]', { db: -13, layer: true }),
+    ...R.resetTicks.map((f, k) => H(at(f), 'tick', 'none', R.reset[k].from ? 0.45 : 0.3, 3, `b11 the re-set: "${VOICE.lines['kb2-call-2'].words[k].w}" lands${R.reset[k].from ? ' (kept from the page)' : ''} [→ fx-tick-soft, −28 dB]`, { db: -17 })),
+    H(at(R.record), 'click', 'none', 0.3, 3, 'b11 the strip folds into the white record row [→ fx-record, the paper click]', { db: -4 }),
+    H(at(R.record + 1), 'tap', 'none', 0.3, 3, 'b11 … the card’s body settling', { db: -9, layer: true }),
+    H(at(R.check), 'tick', 'sunday', 0.48, 3, 'b11 the white check draws in the sunday disc: Answered from your documents [→ fx-record, the check tick]', { db: -3 }),
+  ];
+})();
+/* ── /call ── */
 
 export const HITS: Hit<Snd>[] = [
   /* ── repeat ── */
@@ -857,14 +970,9 @@ export const HITS: Hit<Snd>[] = [
   /* ── written ── */
   ...WRITTEN_HITS,
   /* ── /written ── */
-  /* ── b09–b11 ── */
-  H(CALL_FROM, 'ring-hook', 'none', 0.62, 2, 'THE LIVE CALL rings', { db: -2 }),
-  H(CALL_PICKUP, 'pickup', 'none', 0.62, 2, 'the orb wakes to listen (picked up)'),
-  H(FREEZE, 'freeze', 'none', 0.5, 3, 'the call freezes: between question and answer'),
-  ...CALL_LOCAL.links.map((f, i) => H(CALL_FROM + f, 'ping', 'sunday', 0.7, 3, `meaning link ${i + 1}`, { semi: [-7, -3, 0, -5][i] })),
-  H(RESUME, 'whoosh-soft', 'none', 0.5, 3, 'time resumes'),
-  H(RECORD, 'click', 'none', 0.5, 3, 'the record row lands'),
-  H(RECORD + 2, 'confirm', 'none', 0.55, 3, 'the check is drawn', { db: -3 }),
+  /* ── call ── */
+  ...CALL_HITS,
+  /* ── /call ── */
   /* ── b12 ── */
   H(CARET, 'click', 'none', 0.5, 3, 'the caret clicks in', { db: -4 }),
   H(SAVE, 'tick', 'sunday', 0.62, 3, 'the save tick'),

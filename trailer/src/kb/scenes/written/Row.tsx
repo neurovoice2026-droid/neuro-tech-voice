@@ -17,7 +17,7 @@ import React from 'react';
 import { reveal, revealStyle } from '../../../components/Type';
 import { subpixel } from '../../../lib/glide';
 import { useLayout } from '../../../lib/layout';
-import { EASE, tween } from '../../../lib/motion';
+import { EASE, smooth, SPRING, springUnit, tween } from '../../../lib/motion';
 import { maskBox, typeStyle } from '../../../lib/type';
 import { TYPE } from '../../../theme';
 import { APP, Icon, measureText, Pill, type PillState } from '../../kit';
@@ -90,21 +90,36 @@ export const Row: React.FC<{
   const pillSize = rowPill(size);
   const border = 1.25;
   const borderA = morph;
-  // the content's rise (tile, name, pill a 16th apart), or shown
-  const rv = (k: number) => (contentAt === undefined ? null : reveal(t, contentAt + k * 2, { rise: 90, fade: 0.5 }));
+  // the content's entrance (a 16th apart): the tile and the pill settle in (a box: scale + fade, never cropped by a
+  // mask), the name rises through its mask (type) — or everything shown
   const shown = (k: number) => contentAt === undefined || t >= contentAt + k * 2 - 0.5;
-  const piece = (k: number, node: React.ReactNode, style: React.CSSProperties) => {
+  const piece = (k: number, node: React.ReactNode, style: React.CSSProperties, mode: 'box' | 'type') => {
     if (!shown(k)) return null;
-    const r = rv(k);
-    return (
-      <div style={{ position: 'absolute', ...style }}>
-        {r ? (
+    if (contentAt === undefined) return <div style={{ position: 'absolute', ...style }}>{node}</div>;
+    const at = contentAt + k * 2;
+    if (mode === 'type') {
+      const r = reveal(t, at, { rise: 90, fade: 0.5 });
+      return (
+        <div style={{ position: 'absolute', ...style }}>
           <span style={{ ...maskBox(0), display: 'block' }}>
-            <span style={{ ...revealStyle(r, undefined, t - (contentAt as number) < 16), display: 'block' }}>{node}</span>
+            <span style={{ ...revealStyle(r, undefined, t - at < 16), display: 'block' }}>{node}</span>
           </span>
-        ) : (
-          node
-        )}
+        </div>
+      );
+    }
+    const p = springUnit(t - at, SPRING.text);
+    const moving = Math.abs(1 - p) > 1e-3;
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          ...style,
+          opacity: p >= 0.999 ? undefined : smooth(0, 0.6, p),
+          transformOrigin: '0% 50%',
+          ...subpixel(moving ? `translateY(${((1 - p) * 10).toFixed(3)}px) scale(${(0.94 + 0.06 * Math.min(1, p)).toFixed(5)})` : undefined, moving),
+        }}
+      >
+        {node}
       </div>
     );
   };
@@ -135,7 +150,7 @@ export const Row: React.FC<{
   let slipFace: React.ReactNode = null;
   if (slip) {
     const k = slip.k;
-    const q = tween(t, [slip.out, slip.out + 6], [0, 1], EASE.in3);
+    const q = tween(t, [slip.out, slip.out + 5], [0, 1], EASE.in2);
     if (q < 1) {
       const sz = 64 * k;
       const rowH = sz * 1.18;
@@ -193,16 +208,16 @@ export const Row: React.FC<{
         ) : null}
       </svg>
       {slipFace}
-      {piece(0, tileNode, { left: pad, top: (h - tile) / 2 })}
+      {piece(0, tileNode, { left: pad, top: (h - tile) / 2 }, 'box')}
       {layout === 'stack' ? (
         <>
-          {piece(1, nameNode, { left: pad * 2 + tileW, top: h / 2 - (size * 1.05 + size * 0.22 + pillSize * 1.72) / 2 })}
-          {pillNode ? piece(2, pillNode, { left: pad * 2 + tileW, top: h / 2 - (size * 1.05 + size * 0.22 + pillSize * 1.72) / 2 + size * 1.05 + size * 0.22, display: 'flex' }) : null}
+          {piece(1, nameNode, { left: pad * 2 + tileW, top: h / 2 - (size * 1.05 + size * 0.22 + pillSize * 1.72) / 2 }, 'type')}
+          {pillNode ? piece(2, pillNode, { left: pad * 2 + tileW, top: h / 2 - (size * 1.05 + size * 0.22 + pillSize * 1.72) / 2 + size * 1.05 + size * 0.22, display: 'flex' }, 'box') : null}
         </>
       ) : (
         <>
-          {piece(1, nameNode, { left: pad * 2 + tileW, top: (h - size * 1.05) / 2 })}
-          {pillNode ? piece(2, pillNode, { right: Math.ceil(w) - mx + pad * 0.6, top: (h - pillSize * 1.72) / 2, display: 'flex' }) : null}
+          {piece(1, nameNode, { left: pad * 2 + tileW, top: (h - size * 1.05) / 2 }, 'type')}
+          {pillNode ? piece(2, pillNode, { right: Math.ceil(w) - mx + pad * 0.6, top: (h - pillSize * 1.72) / 2, display: 'flex' }, 'box') : null}
         </>
       )}
       {shown(2) ? (

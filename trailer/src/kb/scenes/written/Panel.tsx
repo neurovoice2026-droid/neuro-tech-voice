@@ -4,14 +4,14 @@
  * content, which SWAPS on the Knowledge click's release (the kit's Swap: the old content leaves up through the
  * box's mask, the new rises in):
  *
- *   General     (what the page opens on) components/agent/tabs/TabGeneral.tsx: "Name and language", the agent
- *               name and the language
+ *   General     (what the page opens on) components/agent/tabs/TabGeneral.tsx: "Name and language" (the agent's
+ *               name, its language) and "Tone" (four of lib/voice/tone.ts's profiles, Professional chosen)
  *   Knowledge   components/agent/tabs/TabKnowledge.tsx, verbatim strings:
  *                 AddKnowledgeCard   "Add knowledge"; the FileDropZone ("Drop files here or choose them", the
  *                                    hint "PDF, Word, TXT or Markdown · up to 10 MB each"); "or add a web page";
  *                                    "Web page address" + the field (placeholder https://yourbusiness.com/faq) +
- *                                    "Add page" (Link2) — disabled (50 %) while the field is empty, "Adding…" with
- *                                    the spinner while it adds, the field cleared when the page is in
+ *                                    "Add page" (Link2) — disabled (50 %) while the field is empty, the field
+ *                                    cleared (and the button disabled again) when the page is in
  *                 Your documents     the EmptyState "Teach your agent about your business" while the list is
  *                                    empty (it leaves up as the first row lands); the rows are Written.tsx's
  *
@@ -23,7 +23,7 @@ import React from 'react';
 import { reveal, revealStyle } from '../../../components/Type';
 import { subpixel } from '../../../lib/glide';
 import { mixColor } from '../../../lib/lights';
-import { EASE, smooth, SPRING, springUnit, tween } from '../../../lib/motion';
+import { EASE, smooth, tween } from '../../../lib/motion';
 import { maskBox } from '../../../lib/type';
 import { APP, CURSOR, hoverAt, Icon, measureText, Panel, pressAt, Swap, TabBar, ui, W as WT, type CursorKey, type TabBarGeometry } from '../../kit';
 import { WRITTEN_LOCAL as W } from '../../timing';
@@ -43,32 +43,52 @@ const UploadIcon: React.FC<{ size: number; color: string }> = ({ size, color }) 
 
 const inBox = (b: Box) => ({ position: 'absolute' as const, left: b.x, top: b.y, width: b.w, height: b.h });
 
-/* ── General (the tab the page opens on) ── */
+/* ── General (the tab the page opens on): TabGeneral.tsx's first two cards — "Name and language" (the agent's name
+ *    and language) and "Tone" (TONE_PROFILES, lib/voice/tone.ts: four of the six, Professional chosen) ── */
+const TONES = [
+  { label: 'Formal', blurb: 'Structured, precise, authoritative' },
+  { label: 'Professional', blurb: 'Businesslike and unhurried, never stiff', on: true },
+  { label: 'Empathetic', blurb: 'Patient and reassuring, takes its time' },
+  { label: 'Friendly', blurb: 'Warm and conversational, quick to reassure' },
+] as const;
+
 const General: React.FC<{ S: WrittenStage }> = ({ S }) => {
   const T = S.type;
   const x = S.add.x;
-  const w = S.vertical ? S.add.w : S.add.w + 52 + S.docs.w;
+  const w = S.add.w;
   const fieldH = S.field.h;
   const f = [
     { label: 'Agent name', value: 'Ava' },
     { label: 'Language', value: 'English' },
   ];
+  // the cards' descriptions wrap to two lines in 16:9's columns, one in 9:16's full width
+  const desc = T.small * 1.3 * (S.vertical ? 1 : 2) + (S.vertical ? 24 : 26);
+  const fieldsTop = S.add.y + T.title * 1.35 + desc;
+  const fieldsBottom = fieldsTop + 2 * (fieldH + T.label * 2.6);
+  // Tone: 16:9 in the right column, 9:16 under the fields
+  const tone = S.vertical ? { x, y: fieldsBottom + 18, w } : { x: S.docs.x, y: S.add.y, w: S.docs.w };
+  const gap = 16;
+  const cardW = (tone.w - gap) / 2;
+  const cardH = S.vertical ? 112 : 138;
+  const gridTop = tone.y + T.title * 1.35 + desc;
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div style={{ position: 'absolute', left: x, top: S.add.y, ...ui(T.title, WT.medium), color: APP.foreground }}>Name and language</div>
-      <div style={{ position: 'absolute', left: x, top: S.add.y + T.title * 1.35, ...ui(T.small, WT.regular), color: APP.mutedFg }}>How your agent introduces itself, and the language it speaks with callers.</div>
+      <div style={{ position: 'absolute', left: x, top: S.add.y + T.title * 1.35, width: w, ...ui(T.small, WT.regular), whiteSpace: 'normal', lineHeight: 1.3, color: APP.mutedFg }}>
+        How your agent introduces itself, and the language it speaks with callers.
+      </div>
       {f.map((it, i) => (
-        <div key={it.label} style={{ position: 'absolute', left: x, top: S.add.y + T.title * 1.35 + T.small * 2.6 + i * (fieldH + T.label * 2.6), width: w }}>
+        <div key={it.label} style={{ position: 'absolute', left: x, top: fieldsTop + i * (fieldH + T.label * 2.6), width: w }}>
           <div style={{ ...ui(T.label, WT.medium), color: APP.foreground }}>{it.label}</div>
           <div
             style={{
               marginTop: T.label * 0.5,
               height: fieldH,
-              borderRadius: fieldH * 0.24,
+              borderRadius: fieldH * 0.22,
               boxShadow: `inset 0 0 0 1.25px ${APP.border}`,
               display: 'flex',
               alignItems: 'center',
-              padding: `0 ${fieldH * 0.32}px`,
+              padding: `0 ${fieldH * 0.3}px`,
               ...ui(T.body, WT.regular),
               color: APP.foreground,
             }}
@@ -77,6 +97,35 @@ const General: React.FC<{ S: WrittenStage }> = ({ S }) => {
           </div>
         </div>
       ))}
+      <div style={{ position: 'absolute', left: tone.x, top: tone.y, ...ui(T.title, WT.medium), color: APP.foreground }}>Tone</div>
+      <div style={{ position: 'absolute', left: tone.x, top: tone.y + T.title * 1.35, width: tone.w, ...ui(T.small, WT.regular), whiteSpace: 'normal', lineHeight: 1.3, color: APP.mutedFg }}>
+        Sets how your agent speaks: its wording, pace and warmth.
+      </div>
+      {(S.vertical ? TONES.slice(0, 2) : TONES).map((tn, i) => {
+        const cx = tone.x + (i % 2) * (cardW + gap);
+        const cy = gridTop + Math.floor(i / 2) * (cardH + gap);
+        const on = 'on' in tn && tn.on;
+        return (
+          <div
+            key={tn.label}
+            style={{
+              position: 'absolute',
+              left: cx,
+              top: cy,
+              width: cardW,
+              height: cardH,
+              borderRadius: 18,
+              boxShadow: `inset 0 0 0 2.5px ${on ? APP.primary : APP.border}`,
+              background: on ? 'rgba(124, 58, 237, 0.05)' : APP.card,
+              padding: S.vertical ? '18px 22px' : '18px 20px',
+              boxSizing: 'border-box',
+            }}
+          >
+            <div style={{ ...ui(T.label, WT.medium), color: APP.foreground }}>{tn.label}</div>
+            <div style={{ marginTop: 6, ...ui(T.small - 2, WT.regular), whiteSpace: 'normal', lineHeight: 1.28, color: APP.mutedFg }}>{tn.blurb}</div>
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -96,7 +145,7 @@ const DropZone: React.FC<{ S: WrittenStage; hover: number }> = ({ S, hover }) =>
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: d.compact ? 10 : 14 }}>
         <UploadIcon size={icon} color={APP.mutedFg} />
         <div style={{ ...ui(T.body, WT.medium), color: APP.foreground }}>Drop files here or choose them</div>
-        {!d.compact ? <div style={{ ...ui(T.small, WT.regular), color: APP.mutedFg, marginTop: -4 }}>PDF, Word, TXT or Markdown · up to 10 MB each</div> : null}
+        {!d.compact ? <div style={{ ...ui(T.small - 1, WT.regular), color: APP.mutedFg, marginTop: -4 }}>PDF, Word, TXT or Markdown · up to 10 MB each</div> : null}
       </div>
     </div>
   );
@@ -160,27 +209,18 @@ const UrlField: React.FC<{ t: number; S: WrittenStage }> = ({ t, S }) => {
   );
 };
 
-/* ── Add page: disabled while the field is empty, hover / press from the pointer, "Adding…" while it adds ── */
+/* ── Add page: disabled (50 %) while the field is empty, hover / press from the pointer; once the page is in, the
+ *    field clears and it is disabled again (the app's "Adding…" lasts a 16th here: not shown, it would only flash) ── */
 const AddPage: React.FC<{ t: number; S: WrittenStage; keys: readonly CursorKey[] }> = ({ t, S, keys }) => {
   const b = S.button;
   const size = S.type.body;
-  const enabled = t >= W.keys[0] && t < W.add.up;
-  const en = t < W.keys[0] ? 0 : t < W.add.up ? smooth(W.keys[0], W.keys[0] + 3, t) : 1 - smooth(W.add.up, W.add.up + 3, t);
+  const done = W.rows[3];
+  const enabled = t >= W.keys[0] && t < done;
+  const en = t < W.keys[0] ? 0 : t < done ? smooth(W.keys[0], W.keys[0] + 3, t) : 1 - smooth(done, done + 4, t);
   const hov = enabled ? hoverAt(keys, t, b) : 0;
   const prs = pressAt(keys, t, b);
   const sc = 1 - (1 - CURSOR.targetScale) * prs;
   const bg = mixColor(mixColor(APP.primary, APP.primaryStrong, hov), '#000000', 0.08 * prs);
-  const adding = t >= W.add.up && t < W.rows[3];
-  // the label rolls: Add page → Adding… on the release, back as the page lands
-  const at = t >= W.rows[3] ? W.rows[3] : t >= W.add.up ? W.add.up : null;
-  const roll = at === null ? 1 : springUnit(t - at, SPRING.caption);
-  const content = (busy: boolean, y: number, o: number) => (
-    <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: o >= 0.999 ? undefined : o, ...subpixel(Math.abs(y) > 0.01 ? `translateY(${y.toFixed(2)}%)` : undefined, Math.abs(y) > 0.01) }}>
-      <Icon name={busy ? 'loader' : 'link2'} size={size * 1.05} stroke={2.2} rotate={busy ? ((t / 30) * 360) % 360 : undefined} />
-      <span>{busy ? 'Adding…' : 'Add page'}</span>
-    </span>
-  );
-  const prevBusy = at === W.rows[3];
   return (
     <div
       style={{
@@ -189,14 +229,17 @@ const AddPage: React.FC<{ t: number; S: WrittenStage; keys: readonly CursorKey[]
         background: bg,
         color: APP.primaryFg,
         ...ui(size, WT.medium),
-        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
         opacity: 0.5 + 0.5 * en,
         transformOrigin: '50% 50%',
         ...subpixel(Math.abs(sc - 1) > 1e-4 ? `scale(${sc.toFixed(5)})` : undefined, Math.abs(sc - 1) > 1e-4),
       }}
     >
-      {at !== null && roll < 0.999 ? content(prevBusy, -110 * roll, 1 - smooth(0.1, 0.6, roll)) : null}
-      {content(adding, at !== null ? 110 * (1 - roll) : 0, at !== null ? smooth(0.1, 0.6, roll) : 1)}
+      <Icon name="link2" size={size * 1.05} stroke={2.2} />
+      <span>Add page</span>
     </div>
   );
 };
