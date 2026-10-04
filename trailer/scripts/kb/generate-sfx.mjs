@@ -264,7 +264,9 @@ for (const [k, st] of Object.entries(m.stems)) writeWav(path.join(QA, `stem-${k}
 // stale files from earlier designs (and temp files of an interrupted run) — ONLY inside public/kb/sfx/
 for (const f of readdirSync(OUT)) if ((f.endsWith('.wav') || f.includes('.tmp-')) && !written.has(f)) rmSync(path.join(OUT, f));
 
-publish(stamp, Buffer.from(JSON.stringify({ hash, frames: T.DURATION, samples: m.mix[0].length, sr: SR, ...r }, null, 2)));
+// the stamp carries the hash of what this build LEFT (kbHash reads lib.json and every cue file: the extras just written
+// change both, so the hash taken at step 3 — before them — would read as stale to check-mix and to the next run's skip)
+publish(stamp, Buffer.from(JSON.stringify({ hash: kbHash(T, ROOT), frames: T.DURATION, samples: m.mix[0].length, sr: SR, ...r }, null, 2)));
 rmSync(STAGE, { recursive: true, force: true });
 console.log(
   `[sfx:kb] ${libFiles.length} library sounds (film 1, read-only) + extras (${extraNote}) + bed (${bedNote}, ${db(peak(bedSt)).toFixed(1)} dBFS peak) + master: ` +
