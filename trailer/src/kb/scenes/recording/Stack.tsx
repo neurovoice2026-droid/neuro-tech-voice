@@ -43,13 +43,18 @@ const DEAL = { stiffness: 230, damping: 23, mass: 1 } as const;
 const ROW_FRAMES = 36;
 const RAMP = 24;
 
-/** the column's rows: [answers 3, 2, 1] on top (the newest first), the six rolls, then the pad's two blank sheets */
-type Sheet = { row: number; kind: 'slip'; k: number } | { row: number; kind: 'pad'; i: number };
+/** more of the same under the bottom fade (the recording runs on): enough written rows that the scroll never
+ *  reaches the end of the column, in either frame — sixteen rows deep */
+const MORE = 7;
+/** the column's rows: [answers 3, 2, 1] on top (the newest first), the six rolls, MORE strips of the same line
+ *  (they exist only in the column, under the fade, once it stands), then the pad's two blank sheets, last */
+type Sheet = { row: number; kind: 'slip'; k: number } | { row: number; kind: 'more' } | { row: number; kind: 'pad'; i: number };
 const SHEETS: readonly Sheet[] = [
   ...[2, 1, 0].map((k, row) => ({ row, kind: 'slip' as const, k })),
   ...Array.from({ length: SLIP_COUNT - 3 }, (_, j) => ({ row: 3 + j, kind: 'slip' as const, k: 3 + j })),
-  { row: SLIP_COUNT, kind: 'pad', i: 0 },
-  { row: SLIP_COUNT + 1, kind: 'pad', i: 1 },
+  ...Array.from({ length: MORE }, (_, j) => ({ row: SLIP_COUNT + j, kind: 'more' as const })),
+  { row: SLIP_COUNT + MORE, kind: 'pad', i: 0 },
+  { row: SLIP_COUNT + MORE + 1, kind: 'pad', i: 1 },
 ];
 
 /** the deal: row r ≥ 1 drops on RL.fan[r] (the pad's blank sheets with the last written strip) */
@@ -78,6 +83,7 @@ function faceOf(g: DeskLayout, vertical: boolean) {
 
 /** a sheet's rest pose at the stop (offsets from the pad's first sheet), its stacking and its shadow */
 function restOf(sh: Sheet, vertical: boolean) {
+  if (sh.kind === 'more') return { dx: 0, dy: 0, rot: 0, lift: 0.6, squash: 1, origin: 'bottom' as const };
   if (sh.kind === 'slip') {
     const p = repeatSlipPose(sh.k, REPEAT_LOCAL.hardStop, vertical);
     return { dx: p.dx, dy: p.dy, rot: p.rot, lift: p.lift, squash: p.squash, origin: 'bottom' as const };
@@ -98,7 +104,8 @@ const SheetView: React.FC<{ sh: Sheet; t: number; G: Stage; g: DeskLayout; ink: 
   const v = L.vertical;
   const { s, labelSize, rowH, rowsTop } = faceOf(g, v);
   const rest = restOf(sh, v);
-  const written = sh.kind === 'slip';
+  const written = sh.kind !== 'pad';
+  const more = sh.kind === 'more';
   const C = G.column;
   const [s0, s1] = RL.slide;
   // squared and lifted, then carried to the column's row 0
@@ -107,9 +114,9 @@ const SheetView: React.FC<{ sh: Sheet; t: number; G: Stage; g: DeskLayout; ink: 
   const fold = springUnit(t - RL.morph, FOLD);
   const f = Math.min(1, fold);
   const top0 = rowsTop - C.pad; // the strip's top edge inside the sheet once folded
-  const ox = mix(s.x, C.x, carry);
-  const oy = mix(s.y, C.top - top0, carry);
-  const deal = sh.row === 0 ? 0 : springUnit(t - dealAt(sh.row), DEAL);
+  const ox = more ? C.x : mix(s.x, C.x, carry);
+  const oy = more ? C.top - top0 : mix(s.y, C.top - top0, carry);
+  const deal = more ? 1 : sh.row === 0 ? 0 : springUnit(t - dealAt(sh.row), DEAL);
   const x = ox + rest.dx * (1 - sq);
   const y = oy + rest.dy * (1 - sq) + sh.row * C.pitch * deal - scrollAt(t, G);
   const rot = rest.rot * (1 - sq);
@@ -126,7 +133,7 @@ const SheetView: React.FC<{ sh: Sheet; t: number; G: Stage; g: DeskLayout; ink: 
   const boxW = Math.max(mix(s.w, C.w, fold), written ? s.padX * 2 + line1 * phrase.gx + line2 : 0);
   // the shadow: the front sheet lifted while carried; the sheets behind it lie flat until they are dealt
   const lifted = Math.sin(Math.PI * Math.min(1, Math.max(0, (t - s0) / (s1 - s0 + 6))));
-  const lift = sh.row === 0 ? mix(rest.lift, 0.6, sq) + 1.5 * lifted : mix(mix(rest.lift, 0.12, sq), 0.6, Math.min(1, deal)) + 0.9 * Math.sin(Math.PI * Math.min(1, deal));
+  const lift = more ? 0.6 : sh.row === 0 ? mix(rest.lift, 0.6, sq) + 1.5 * lifted : mix(mix(rest.lift, 0.12, sq), 0.6, Math.min(1, deal)) + 0.9 * Math.sin(Math.PI * Math.min(1, deal));
   const radius = v ? 11 : 12;
   const origin = rest.origin === 'bottom' ? `${s.w / 2}px ${s.h}px` : `${s.w / 2}px ${s.h / 2}px`;
   const tint = sh.kind === 'pad' ? (sh.i === 1 ? '#f4f3f7' : '#fafafc') : '#ffffff';
@@ -278,11 +285,11 @@ export const Stack: React.FC<{ t: number; G: Stage; ink: string }> = ({ t, G, in
       <div style={{ position: 'absolute', inset: 0, transformOrigin: '50% 50%', transform: `translate(${fr.tx.toFixed(4)}px, ${fr.ty.toFixed(4)}px) scale(${fr.s.toFixed(6)})` }}>
         {SHEETS.map((sh) => {
           // cull the rows under the fades' transparent ends once the column stands
+          // the rows beyond the pile exist only once the column stands (under its bottom fade)
+          if (sh.kind === 'more' && k < 0.999) return null;
           if (k > 0.999) {
-            const { rowsTop } = faceOf(g, L.vertical);
-            const deal = sh.row === 0 ? 1 : springUnit(t - dealAt(sh.row), DEAL);
+            const deal = sh.kind === 'more' || sh.row === 0 ? 1 : springUnit(t - dealAt(sh.row), DEAL);
             const yTop = yS(G.column.top + sh.row * G.column.pitch * deal - scrollAt(t, G));
-            void rowsTop;
             if (yTop > yS(F.d) + 4 || yTop + G.column.h * fr.s < yS(F.a) - 4) return null;
           }
           return <SheetView key={sh.row} sh={sh} t={t} G={G} g={g} ink={ink} z={n - sh.row} />;

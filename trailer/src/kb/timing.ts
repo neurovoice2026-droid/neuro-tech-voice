@@ -384,41 +384,134 @@ export const RECORDING_LOCAL = (() => {
   };
 })();
 
-/** b07 (turn-local). */
-export const TURN_LOCAL = {
-  /** the seam draws over one beat from the act's first frame */
-  seam: [0, b(1)] as const,
-  vo3: L('turn', VO3_AT),
-  repeats: L('turn', VO3_AT + vWord('kb2-vo-3', 2)),
-  matters: L('turn', VO3_AT + vWord('kb2-vo-3', 3)),
-  /** the orb is born from the line light on "Ava", snapped to the 16th */
-  ava: L('turn', up16(VO3_AT + vWord('kb2-vo-3', 7))),
-  /** "the first kind": the flip window stops for good */
-  firstKind: L('turn', VO3_AT + vWord('kb2-vo-3', 17)),
-};
-/** the flip window turns over on every beat (only ever to the same word) until "the first kind" */
+/** b07 (turn-local; 0 = the act's first frame, on beat 3 of its bar). The picture: src/kb/scenes/Turn.tsx
+ *  (+ scenes/turn/*: stage.ts has the layout and every pose as a pure function of these moments). */
+export const TURN_LOCAL = (() => {
+  const S16 = BEAT / 4;
+  /** vo-3's spoken word k, act-local */
+  const w = (k: number) => L('turn', VO3_AT + vWord('kb2-vo-3', k));
+  const ava = L('turn', up16(VO3_AT + vWord('kb2-vo-3', 7)));
+  const firstKind = w(17);
+  const kind = w(19);
+  const end = SCENES.turn.to - SCENES.turn.from;
+  return {
+    /** the seam draws over one beat from the act's first frame (EASE.draw; 25.0 on the plan) */
+    seam: [0, b(1)] as const,
+    /** … and the desk sorts itself on it: b06's narration leaves up through its masks, the in-person card
+     *  glides into its half (9:16: out, under the seam), the clock rides to the top of the left half (9:16:
+     *  its figures roll away and leave the line light alone) */
+    sort: 0,
+    vo3: L('turn', VO3_AT),
+    /** "Some work repeats." — each word on its onset, "repeats." rising in its flip window */
+    left: [w(0), w(1), w(2)] as const,
+    repeats: w(2),
+    /** "Some work matters." — each word on its onset; on its first the Part I loop stops (MUSIC.matters) */
+    right: [w(3), w(4), w(5)] as const,
+    matters: w(3),
+    /** 16:9: the day's column flows up into the left half under its title, on the beat after "repeats." */
+    column: upBeat(VO3_AT + vWord('kb2-vo-3', 2) + S16) - SCENES.turn.from,
+    /** the line light lifts off the clock three 16ths before "Ava" … */
+    lift: ava - 3 * S16,
+    /** … and springs open into Ava's orb ON "Ava" (snapped to the 16th): SPRING.pop 0 → 1.06 → 1 */
+    ava,
+    /** as it opens its palette crossfades rush → sunday (6 frames): the same light, now hers */
+    relight: [ava, ava + 6] as const,
+    /** her side's ground hands off MUTED → KB_MESH, spreading from the orb over two beats */
+    ground: [ava, ava + b(2)] as const,
+    /** the narrator's captions (no tag): from "I'm" and from "and"; the key phrase on "the first kind" */
+    captions: [
+      { text: "I'm Ava, an AI that answers your phone,", word: 6 },
+      { text: "and I'll take the first kind.", word: 14 },
+    ] as readonly Caption[],
+    /** "the first kind": the flip window has stopped for good; the repeat side eases toward her light (the
+     *  left title leaves up through its masks, 16:9: the column glides up into its place and comes to rest) */
+    firstKind,
+    /** "kind.": the matters side yields (its title leaves, the card glides out to the right) */
+    kind,
+    yieldAt: up16(VO3_AT + vWord('kb2-vo-3', 19)) - SCENES.turn.from,
+    /** 16:9: the emptied clock rides up and out (it returns in b15 with her teal colon) */
+    clockOut: up16(VO3_AT + vWord('kb2-vo-3', 19)) - SCENES.turn.from + 2 * S16,
+    /** the captions hold to here (a beat after "kind." at least), then leave before the cut */
+    holdUntil: Math.min(end - 6, Math.max(kind + b(1), L('turn', VO3_AT + vFrames('kb2-vo-3')))),
+    end,
+  };
+})();
+/** the flip window turns over on every beat (only ever to the same word): the flap LANDS on each beat, from
+ *  the first beat a beat after "repeats." has risen, until "the first kind" (the flap tick on each) */
 export const TURN_FLIPS: readonly number[] = (() => {
   const out: number[] = [];
-  for (let f = BEAT; f < TURN_LOCAL.firstKind; f += BEAT) out.push(f);
+  for (let f = Math.ceil((TURN_LOCAL.repeats + BEAT) / BEAT) * BEAT; f < TURN_LOCAL.firstKind - 1e-9; f += BEAT) out.push(f);
   return out;
 })();
 
-/** b08 (written-local). Rows land on the 16th after their nouns; each pill rolls to Ready a beat later. */
+/** b08 (written-local; 0 = the act's first frame, beat 2 of its bar — every multiple of a 16th is on the grid).
+ *  The picture: src/kb/scenes/Written.tsx (+ scenes/written/*: stage.ts has the layout and every pose as a pure
+ *  function of these moments). CLIENT DIRECTION v2: the app's real tab bar, clicked by a real cursor. */
 export const WRITTEN_LOCAL = (() => {
+  const S16 = BEAT / 4;
+  const S32 = BEAT / 8;
+  /** vo-4's spoken word k (absolute) */
   const at = (k: number) => VO4_AT + vWord('kb2-vo-4', k);
-  const row = (k: number) => L('written', up16(at(k)) + BEAT / 4);
-  const rows = [row(6), row(8), row(10), row(14)] as const; // prices · hours · policies · (pages from your) website
+  const near16 = (f: number) => Math.round(f / S16) * S16;
+  /** a row lands on the 16th after its noun */
+  const row = (k: number) => L('written', up16(at(k)) + S16);
+  const end = SCENES.written.to - SCENES.written.from;
+  const once = L('written', up16(at(4)));
+  /** the Knowledge tab: down on the 8th after "answers", up a 16th later (a two-part click); the underline
+   *  slides and the panel's content swaps on the release */
+  const tabDown = Math.max(8 * S16, L('written', up8(at(3) + S16)));
+  const price = row(6);
+  const hours = row(8);
+  const policies = row(10);
+  /** the URL field: clicked a 16th pair before the policies row, typed one character per 32nd */
+  const URL_TEXT = 'https://your-site/faq';
+  const field = { down: policies - 2 * S16, up: policies - S16 };
+  const keys = Array.from({ length: URL_TEXT.length }, (_, i) => field.up + 3 * S32 + i * S32);
+  const lastKey = keys[keys.length - 1];
+  /** Add page: the pointer comes back off the keys (a short hop, ≥ 8 f, arriving 6 f before the press) */
+  const addDown = up16(lastKey + S32 + 8 + 6);
+  const add = { down: addDown, up: addDown + S16 };
+  const faq = add.up + S16;
+  const rows = [price, hours, policies, faq] as const; // prices · hours · policies · (pages from your) website
   return {
     vo4: L('written', VO4_AT),
-    /** "once": the slip column stacks up into one, on 16ths */
-    once: L('written', up16(at(4))),
+    end,
+    /** the cut from b07: the seam draws back up (EASE.draw, a beat); her ground floods the other half (two beats) */
+    seam: [0, BEAT] as const,
+    ground: [0, 2 * BEAT] as const,
+    /** the app panel comes in (16:9 from the right, where the matters side left; 9:16 up from under the seam) */
+    panel: [1, 23] as const,
+    /** the orb glides from b07's place to b08's; 16:9: the day's column glides into the corner under it */
+    glide: [0, 28] as const,
+    tab: { down: tabDown, up: tabDown + S16 } as const,
+    /** "once": the slips stack up into one — strip m (1 … 7) slides up under the one above on its 16th */
+    once,
+    collapse: Array.from({ length: 7 }, (_, m) => once + m * S16) as readonly number[],
+    /** the pile has settled: the last slip draws its edges into a document row (TXT · Opening hours, Reading…) */
+    born: once + 10 * S16,
+    /** the rows, in the order they land (the list is newest-first, as useKnowledge's upsert: each new row lands
+     *  on top and the others slide down): Price list on "prices", Opening hours slots in on "hours" (its flight
+     *  from the corner starts five 16ths before), Cancellation policy on "policies", the FAQ page a 16th after
+     *  Add page — the Knowledge tab's badge counts 1 → 4 on them */
     rows,
-    /** "pages from your website": the URL field types from "pages" */
-    url: L('written', up16(at(11))),
-    /** each Ready mallet (E4 F#4 G#4 B4), a beat after its row */
+    fly: [hours - 5 * S16, hours] as const,
+    /** each pill rolls Reading… → Ready a beat after its row lands (the Ready mallets E4 F#4 G#4 B4) */
     ready: rows.map((r) => r + BEAT) as readonly number[],
-    /** "knowledge": the eyebrow ● KNOWLEDGE BASE */
-    knowledge: L('written', at(17)),
+    url: URL_TEXT,
+    field,
+    keys: keys as readonly number[],
+    add,
+    /** "knowledge" (the nearest 16th): the eyebrow ● KNOWLEDGE BASE rises above the panel */
+    knowledge: L('written', near16(at(17))),
+    /** the narrator's captions (no tag); the key phrase "knowledge base." from "knowledge" */
+    captions: [
+      { text: 'Give me your answers once.', word: 0 },
+      { text: 'Your prices, your hours, your policies,', word: 5 },
+      { text: 'pages from your website.', word: 11 },
+      { text: "That's your knowledge base.", word: 15 },
+    ] as readonly Caption[],
+    /** the last caption holds a beat past her line, then leaves before the cut */
+    holdUntil: Math.min(end - 7, L('written', VO4_AT + vFrames('kb2-vo-4')) + BEAT),
   };
 })();
 
@@ -633,15 +726,137 @@ const REPEAT_HITS: Hit<Snd>[] = (() => {
 })();
 /* ── /repeat ── */
 
+/* ── recording ── (b06: picture src/kb/scenes/Recording.tsx + scenes/recording/*; pans from the 16:9 layout:
+ * the pile .72 → the column .3, the titles .3, the card .7)
+ * The act is ROOM TONE ONLY (SCRIPT.md b06): the bus cut at the hard stop holds; the bed's one low felt-piano
+ * E2 under "brilliant" is MUSIC.brilliant (scripts/kb/bed.mjs). Everything below is quiet paper and one note.
+ * FILM-2 EXTRAS this act asks the sound pass for (film 1 stand-ins below until they exist; labels say [→ …]):
+ *   fx-paper-square  the pile picked up: a small stack squared against the desk and lifted — two soft dry
+ *                    paper taps and a breath of air, no thud (≈ .25 s)
+ *   fx-paper-fold    a pad sheet folding to a strip: a soft paper crease and slide, no tone (≈ .3 s)
+ *   fx-riffle        the deal: ONE dry paper tick per strip landing on the one below (8 on 16ths), each a
+ *                    touch darker than the last; faint (the script's "faint paper riffle")
+ *   fx-scroll        the teleprompter: a faint continuous paper drag under the column's scroll (≈ 4 s,
+ *                    fading in over a beat, cut when the camera leaves the column)
+ *   (the B5)         "Waiting.": a single high B5 that does not resolve — film 1's ding-s IS a B5 bell
+ *                    (scripts/audio/sounds.mjs: bellVoice(1.6, B5)); light 'none' keeps it on B */
+const RECORDING_HITS: Hit<Snd>[] = (() => {
+  const R = RECORDING_LOCAL;
+  const at = (f: number) => SCENES.recording.from + f;
+  const deal = R.fan.slice(1);
+  return [
+    H(at(R.slide[0] + 1), 'tap', 'none', 0.72, 3, 'b06 the pile is squared and picked up off the pad [→ fx-paper-square]', { db: -10 }),
+    H(at(R.morph), 'draw', 'none', 0.62, 3, 'b06 the pad sheets fold to one line each [→ fx-paper-fold]', { db: -10 }),
+    H(at(R.title1), 'sheen', 'none', 0.3, 3, 'b06 "You hired someone brilliant." rises (on "You")', { db: -8 }),
+    ...(deal.length
+      ? [H(at(deal[0]), 'tap', 'none', 0.3, 3, 'b06 the strips deal down into one column, one per 16th [→ fx-riffle]', { db: -12, run: { n: deal.length, step: BEAT / 4, semi: -0.4 } })]
+      : []),
+    H(at(R.fan[R.fan.length - 1] + 12), 'draw', 'none', 0.3, 3, 'b06 the column starts to scroll: a teleprompter of the same line [→ fx-scroll]', { db: -14 }),
+    H(at(R.title2), 'sheen', 'none', 0.3, 3, 'b06 "The phone turned them / into a recording." rises (on "The")', { db: -8 }),
+    H(WAITING, 'ding-s', 'none', 0.25, 2, 'b06 "WAITING." locks on the bar: a single high B5 that does not resolve'),
+  ];
+})();
+/* ── /recording ── */
+
+/* ── turn ── (b07: picture src/kb/scenes/Turn.tsx + scenes/turn/*; pans from the 16:9 layout: the seam .5,
+ * the repeat half .22–.38 (the clock .12, the orb .28, "repeats." .38), the matters half .6–.8)
+ * The Part I loop's one deadpan bar under "Some work repeats." and the harmony opening on "Some work matters."
+ * are the bed's (MUSIC.turn, MUSIC.matters). Everything below is small: a line, flaps, a light, paper.
+ * FILM-2 EXTRAS this act asks the sound pass for (film 1 stand-ins below until they exist; labels say [→ …]):
+ *   fx-flap        the flip window: ONE split-flap tick — a light paper-card flap snapping down onto its stop
+ *                  (a dry click with a hint of hollow body, ≈ 40 ms, no ring), the SAME sample on every beat
+ *                  (deadpan, never varied), quiet under the voice; it lands ON the beat
+ *   fx-seed        the rose line light lifting off the clock: a soft rising sine seed (B4 → E5, ≈ .35 s, a
+ *                  breath of air on it) swelling into the open on "Ava"; it ends where the "ting" begins
+ *   (the ting)     on "Ava", with the hairline ring: one sine "ting" — film 1's ping on the sunday light
+ *   (fx-slip-slide) the quiet paper slide (b02's extra) on "the first kind": the repeat side easing toward her
+ * The desk sorting itself on the seam (the card's glide) rides under the seam's draw: no second air sound there
+ * (two air hits ≤ 2 f apart merge in buildCues anyway). */
+const TURN_HITS: Hit<Snd>[] = (() => {
+  const R = TURN_LOCAL;
+  const at = (f: number) => SCENES.turn.from + f;
+  return [
+    H(at(R.seam[0]), 'draw', 'none', 0.5, 3, 'b07 THE SEAM draws on the beat, over one beat (16:9 top → bottom, 9:16 left → right)'),
+    ...(TURN_FLIPS.length
+      ? [H(at(TURN_FLIPS[0]), 'flick', 'none', 0.38, 3, 'b07 "repeats." flips over — to the same word — on every beat [→ fx-flap, one sample]', { db: -6, run: { n: TURN_FLIPS.length, step: BEAT } })]
+      : []),
+    H(at(R.lift), 'sheen', 'rush', 0.18, 3, 'b07 the rose line light lifts off the clock (on "I’m") [→ fx-seed]', { db: -8 }),
+    H(at(R.ava), 'pop', 'sunday', 0.28, 2, 'b07 AVA: the line light springs open into her orb (on "Ava"), rush → sunday', { db: -3 }),
+    H(at(R.ava + 3), 'ping', 'sunday', 0.28, 2, 'b07 the hairline ring leaves her rim: one sine "ting"', { layer: true }),
+    H(at(R.firstKind), 'swish', 'none', [0.32, 0.28], 3, 'b07 "the first kind": the flips have stopped; the repeat side eases toward her light [→ fx-slip-slide]', { db: -10 }),
+  ];
+})();
+/* ── /turn ── */
+
+/* ── written ── (b08: picture src/kb/scenes/Written.tsx + scenes/written/*; pans from the 16:9 layout: the corner
+ * (the orb, the slips) .17, the panel .32–.95 — its Knowledge tab .75, the web page field / Add page .47, the list .78)
+ * The Part III bed (felt-piano eighths, a soft kick on beats 1 and 3, E – C#m7 – Amaj7 – B) is the bed's
+ * (MUSIC.written). The CURSOR's clicks are TWO-PART (CLIENT DIRECTION v2 §3): one sound on the press, one on the
+ * release (the press and release frames come from WRITTEN_LOCAL; the picture's pointer uses the same frames).
+ * FILM-2 EXTRAS this act asks the sound pass for (film 1 stand-ins below until they exist; labels say [→ …]):
+ *   fx-click-down  a mouse / trackpad button going down: a tight dry plastic tick (≈ 8 ms) with a little low body
+ *   fx-click-up    its release: lighter and a touch higher, ≈ 5 dB under the down, no body
+ *   fx-tuck        a slip sliding up under the pile: a short dry paper click-slide; the run steps down in pitch
+ *   fx-settle      the pile settling: a soft low paper thud, no ring
+ *   fx-tock        a row landing in the list: a pitched paper "tock" tuned to the bar's chord (semis from E given)
+ *   fx-tick-roll   a pill rolling Reading… → Ready: a tiny tick, under the mallet
+ *   fx-mallet      each Ready: one soft mallet note rising up the E major pentatonic, E4 · F#4 · G#4 · B4 (the
+ *                  phrase is left open: its fifth note, E5, lands in b13 — CHANGE_LOCAL.ready5)
+ *   fx-keys        soft low-profile keystrokes: one per character, on 32nds (a quick, light run, not a typewriter)
+ *   fx-felt-e      the eyebrow: one soft felt-piano E4 */
+const WRITTEN_HITS: Hit<Snd>[] = (() => {
+  const R = WRITTEN_LOCAL;
+  const at = (f: number) => SCENES.written.from + f;
+  const S16 = BEAT / 4;
+  const S32 = BEAT / 8;
+  const NAMES = ['PDF · Price list', 'TXT · Opening hours slots in', 'DOCX · Cancellation policy', 'URL · FAQ page'];
+  const TOCK = [0, 4, 7, 9]; // chord tones under each landing (E · G# · B · C#), from E
+  const MALLET = ['E4', 'F#4', 'G#4', 'B4'];
+  const MALLET_SEMI = [-7, -5, -3, 0]; // ding-s is a B5 bell: E5 F#5 G#5 B5 until fx-mallet exists
+  return [
+    H(at(R.seam[0]), 'draw', 'none', 0.5, 3, 'b08 the seam draws back the way it came; her ground floods the other half', { db: -12 }),
+    H(at(R.panel[0] + 4), 'whoosh-soft', 'none', [0.86, 0.66], 3, 'b08 the app comes in (16:9 from the right, 9:16 up from under the seam)', { db: -10 }),
+    H(at(R.tab.down), 'click', 'none', 0.75, 2, 'b08 the cursor presses the Knowledge tab [→ fx-click-down]', { db: -3 }),
+    H(at(R.tab.up), 'tap', 'none', 0.75, 3, 'b08 … and releases it [→ fx-click-up]', { db: -8 }),
+    H(at(R.tab.up + 1), 'draw', 'none', 0.72, 3, 'b08 the underline springs across to Knowledge; the tab content swaps through its mask', { db: -14 }),
+    H(at(R.collapse[0]), 'tap', 'none', 0.17, 3, 'b08 "once": the slips stack up into one, one per 16th, each a touch lower [→ fx-tuck]', {
+      db: -9,
+      layer: true,
+      run: { n: R.collapse.length, step: S16, semi: -0.6 },
+    }),
+    H(at(R.collapse[R.collapse.length - 1] + 2 * S16), 'land', 'none', 0.17, 3, 'b08 the pile settles, its shadow deep [→ fx-settle]', { db: -8 }),
+    H(at(R.born), 'draw', 'none', 0.18, 3, 'b08 the last slip draws its edges into a document row: TXT · Opening hours, Reading…', { db: -12 }),
+    H(at(R.fly[0] + 3), 'swish', 'none', [0.2, 0.74], 3, 'b08 the Opening hours row flies from the corner into the list', { db: -12 }),
+    ...R.rows.map((r, i) =>
+      H(at(r), 'tick', 'none', i === 1 ? 0.74 : 0.78, 3, `b08 ${NAMES[i]} lands in the list; the Knowledge badge ${i ? 'ticks to' : 'opens at'} ${i + 1} [→ fx-tock, tuned to the chord]`, {
+        semi: TOCK[i],
+        db: -4,
+      }),
+    ),
+    ...R.ready.map((r, i) =>
+      H(at(r), 'ding-s', 'sunday', 0.8, 3, `b08 Ready ${i + 1}: the pill rolls Reading… → Ready [→ fx-mallet ${MALLET[i]} + fx-tick-roll]`, { semi: MALLET_SEMI[i], db: -4 }),
+    ),
+    H(at(R.field.down), 'click', 'none', 0.47, 3, 'b08 the cursor (an I-beam) presses into the web page field [→ fx-click-down]', { db: -6 }),
+    H(at(R.field.up), 'tap', 'none', 0.47, 3, 'b08 … released: the field takes its focus ring [→ fx-click-up]', { db: -10 }),
+    H(at(R.keys[0]), 'key', 'none', 0.47, 3, 'b08 https://your-site/faq types, one character per 32nd [→ fx-keys]', { db: -8, layer: true, run: { n: R.keys.length, step: S32 } }),
+    H(at(R.add.down), 'click', 'none', 0.47, 2, 'b08 Add page: pressed [→ fx-click-down]', { db: -3 }),
+    H(at(R.add.up), 'tap', 'none', 0.47, 3, 'b08 … released: "Adding…" (the FAQ page lands a 16th later) [→ fx-click-up]', { db: -8 }),
+    H(at(R.knowledge), 'chime-sunday-soft', 'sunday', 0.36, 3, 'b08 "knowledge": the eyebrow ● KNOWLEDGE BASE rises above the panel [→ fx-felt-e, one soft felt-piano E4]', { db: -8 }),
+  ];
+})();
+/* ── /written ── */
+
 export const HITS: Hit<Snd>[] = [
   /* ── repeat ── */
   ...REPEAT_HITS,
-  /* ── b07 ── */
-  H(SCENES.turn.from, 'draw', 'none', 0.5, 3, 'the seam draws'),
-  H(SCENES.turn.from + TURN_LOCAL.ava, 'pop', 'sunday', 0.25, 2, 'Ava’s orb is born from the line light'),
-  /* ── b08 ── */
-  ...WRITTEN_LOCAL.rows.map((r, i) => H(SCENES.written.from + r, 'tap', 'none', 0.62, 3, `row ${i + 1} lands`)),
-  ...WRITTEN_LOCAL.ready.map((r, i) => H(SCENES.written.from + r, 'ding-s', 'sunday', 0.7, 3, `Ready ${i + 1}`, { semi: [-7, -5, -3, 0][i] })),
+  /* ── recording ── */
+  ...RECORDING_HITS,
+  /* ── turn ── */
+  ...TURN_HITS,
+  /* ── /turn ── */
+  /* ── written ── */
+  ...WRITTEN_HITS,
+  /* ── /written ── */
   /* ── b09–b11 ── */
   H(CALL_FROM, 'ring-hook', 'none', 0.62, 2, 'THE LIVE CALL rings', { db: -2 }),
   H(CALL_PICKUP, 'pickup', 'none', 0.62, 2, 'the orb wakes to listen (picked up)'),

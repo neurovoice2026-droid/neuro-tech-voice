@@ -96,7 +96,11 @@ export const Recording: React.FC = () => {
   const G = stageFor(v);
   const g = deskLayout(v);
   const pose = camPose(t, G);
-  const motion = camMotion((u) => camPose(u, G), t);
+  // the planes never become frame-wide layers mid-move (a plane switching from plain to a layer as the
+  // pull-back's zoom settles would re-raster everything on it at once); every part on them rides its own small
+  // layer instead (Repeat's parts do) — so: zooming whenever moving.
+  const cm = camMotion((u) => camPose(u, G), t);
+  const motion = { moving: cm.moving, zooming: cm.moving };
   const card = cardDepth(t);
   const lines = titleLines(v);
   // the ground: Repeat's own (MUTED_MESH, its clock = the timeline), held where Part I's slow push left its
