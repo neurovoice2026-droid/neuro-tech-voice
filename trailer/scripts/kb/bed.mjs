@@ -632,7 +632,8 @@ export function bed(T) {
     for (let x = Math.ceil(P.ring14), i = 0; x < P.desk - 1e-6; x += 1, i++) {
       const n = chordAt(x).notes;
       const m = n[LINE[i % LINE.length] % n.length] + 24;
-      putPiano(keys, x, m, 0.42, i % 2 ? 0.3 : -0.3, { dur: 1.4, seed: 6, g: 0.26 });
+      // (under her answer: the line sits in the voice's presence band, so it speaks softly — the duck does the rest)
+      putPiano(keys, x, m, 0.42, i % 2 ? 0.3 : -0.3, { dur: 1.4, seed: 6, g: 0.19 });
     }
   }
   // b16: fuller — piano 8ths over the strings, rising into the dark

@@ -512,7 +512,8 @@ function paperUnfold(seed) {
   const len = 0.85;
   const m = mono(len);
   const flex = (t) => smooth(t / 0.3) * Math.exp(-Math.max(0, t - 0.35) / 0.08);
-  mixIn(m, grains(len, seed, (t) => 60 + 1800 * flex(t), { lo: 1600, hi: 8000, amp: (t) => 0.5 + 0.5 * flex(t) }), 0, 0.6);
+  // (the sheet's own crackle settles with it: the idle grain thins out after the settle tap, never running into the file's end)
+  mixIn(m, grains(len, seed, (t) => 60 * (1 - smooth((t - 0.55) / 0.2)) + 1800 * flex(t), { lo: 1600, hi: 8000, amp: (t) => 0.5 + 0.5 * flex(t) }), 0, 0.6);
   mixIn(m, friction(len, seed + 1, { f: (t) => 1600 + 1400 * flex(t), q: 0.5, a: flex, grain: 0.6, color: 'pink' }), 0, 0.35);
   mixIn(m, noise(len, seed + 2, (t) => Math.pow(Math.sin(Math.PI * Math.min(1, Math.max(0, (t - 0.18) / 0.36))), 2), 'lp', 420, 0.8), 0, 0.3);
   mixIn(m, noise(0.03, seed + 3, ad(0.0006, 0.004), 'bpn', 1500, 0.7), 0.52, 0.25);
@@ -522,7 +523,7 @@ function paperUnfold(seed) {
 
 /** A light dry paper lift (≈ .2 s): a rising peel of grain and air, a tiny release tick. */
 function paperLift(seed, k) {
-  const len = 0.24;
+  const len = 0.32;
   const m = mono(len);
   const a = (t) => smooth(t / 0.13) * Math.exp(-Math.max(0, t - 0.13) / 0.03);
   mixIn(m, grains(len, seed, (t) => 100 + 1500 * a(t), { lo: 2200, hi: 9000 }), 0, 0.55);

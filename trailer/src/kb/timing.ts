@@ -998,18 +998,18 @@ export const VOICE_RIDES: Partial<Record<VoiceId, readonly VoiceRide[]>> = (() =
   /** word k of a line, line-local frames */
   const w = (id: VoiceId, k: number) => vWord(id, k);
   /* THE CLIMAX'S HEADROOM (check-mix: the logo impact tops the loudest dialogue moment by ≥ 1 LU). The loudest 400 ms of
-   * dialogue are three hot openings, all voice (bed and effects 20 dB under): vo-5's "When someone calls," over the held
-   * stop-time chord, its "even when they", and vo-3's "Some work". Each is ridden 1.5 dB down, ramped in the gaps around
-   * it (master() then re-trims the line to the dialogue target, so the rest of it comes up a little): the openings sit
-   * with the line instead of over it, and the impact keeps its lead. */
+   * dialogue are the narrator's confident openings, all voice (bed and effects 15–20 dB under): vo-5's "When someone
+   * calls," over the held stop-time chord and its "even when they", vo-4's "Give me your answers", vo-3's "Some work".
+   * Each is ridden down, ramped in the gaps around it. The leveller after the ride gives back about half of it, and
+   * master() re-trims the line to the dialogue target (the rest of it comes up a little), so a nominal −3.5 dB is ≈ −1.5 dB
+   * heard: the openings sit with their lines instead of over them, and the impact keeps a clear lead. */
   return {
     'kb2-desk-1': [{ from: Math.floor(sat.start * FPS), to: Math.ceil(sat.end * FPS), db: -2, ramp: 3 }],
-    'kb2-vo-3': [{ from: 0, to: w('kb2-vo-3', 2) - 3, db: -1.5, ramp: 2 }],
-    // (vo-5's two openings were still the film's loudest 400 ms at −1.5 dB — "When someone calls," 0.65 LU and "even
-    // when they" 0.4 LU over vo-4's and vo-3's openings: ridden a little further they sit with the narrator's other lines)
+    'kb2-vo-3': [{ from: 0, to: w('kb2-vo-3', 2) - 3, db: -2.5, ramp: 2 }],
+    'kb2-vo-4': [{ from: 0, to: w('kb2-vo-4', 4) - 3, db: -2, ramp: 2 }],
     'kb2-vo-5': [
-      { from: 0, to: w('kb2-vo-5', 3) - 8, db: -2.75, ramp: 3 },
-      { from: w('kb2-vo-5', 10) - 1, to: w('kb2-vo-5', 13) - 1, db: -2.5, ramp: 2 },
+      { from: 0, to: w('kb2-vo-5', 3) - 8, db: -3.5, ramp: 3 },
+      { from: w('kb2-vo-5', 10) - 1, to: w('kb2-vo-5', 13) - 1, db: -3.25, ramp: 2 },
     ],
   };
 })();
@@ -1134,7 +1134,8 @@ const REPEAT_HITS: Hit<Snd>[] = (() => {
   const CUTS = ['after its two chirps', 'inside its second chirp', 'after one chirp'];
   const CALLER_X = [0.7, 0.64, 0.56];
   return [
-    H(0, 'fx-roomtone', 'none', 0.5, 3, 'b01 the front desk’s room tone (soft HVAC, the far street), from frame 0 — on through the hard stop and b06', { db: -26 }),
+    // (−24: ≈ −53 dBFS RMS in the master — SCRIPT.md's "−52 dBFS" room — and the same room as b15's, level for level)
+    H(0, 'fx-roomtone', 'none', 0.5, 3, 'b01 the front desk’s room tone (soft HVAC, the far street), from frame 0 — on through the hard stop and b06', { db: -24 }),
     H(R.cup, 'fx-cup', 'none', 0.3, 3, 'b01 a cup set down on wood (her sentence starts rising)', { db: -1 }),
     H(R.dash, 'fx-pen', 'none', 0.36, 3, 'b01 the em dash hangs: a pen click', { db: -2 }),
     ...R.rings.flatMap((ring, k) => [
@@ -1147,7 +1148,7 @@ const REPEAT_HITS: Hit<Snd>[] = (() => {
     ]),
     H(R.dead[0], 'fx-linehiss', 'none', CALLER_X[2], 3, 'b04 the dead line: the waveform lies flat — half a beat of open line hiss, nothing else (the loop runs on)', { db: -4 }),
     ...(R.rolls.length
-      ? [H(R.rolls[0], 'fx-rolls', 'none', 0.8, 2, `b05 THE REST OF THE DAY: ${R.rolls.length} rolls on 8ths (the figures roll, a chirp cut by the pickup, a slip lands) — one file, cut ON THE SAMPLE at the hard stop`, { db: -1 })]
+      ? [H(R.rolls[0], 'fx-rolls', 'none', 0.8, 1, `b05 THE REST OF THE DAY: ${R.rolls.length} rolls on 8ths (the figures roll, a chirp cut by the pickup, a slip lands) — one file, cut ON THE SAMPLE at the hard stop (a key: the same phone as the rings, never the speech drop)`, { db: -6 })]
       : []),
   ];
 })();
@@ -1405,7 +1406,9 @@ const MATTERS_HITS: Hit<Snd>[] = (() => {
   const R = MATTERS_LOCAL;
   const at = (f: number) => SCENES.matters.from + f;
   return [
-    H(ROOM_DESK[0], 'fx-roomtone-desk', 'none', 0.5, 3, 'b15 the front desk’s room tone again (under the desk, the breath bar and b16, into the dark)', { db: -26 }),
+    // (it fades in under call-3's last word, so the cue builder takes its 5 dB speech drop; its file runs 1.2 dB hotter than
+    // b01's: −20 puts the breath bar's room at b01's ≈ −53 dBFS RMS)
+    H(ROOM_DESK[0], 'fx-roomtone-desk', 'none', 0.5, 3, 'b15 the front desk’s room tone again (under the desk, the breath bar and b16, into the dark)', { db: -20 }),
     H(at(R.nervous), 'fx-pen-lift', 'none', 0.35, 3, 'b15 "nervous." — the sentence that hung since b01 completes; the em dash lifted off', { db: -6 }),
     H(at(R.ring), 'fx-trill-1', 'none', 0.84, 1, 'b15 THE LINE RINGS ONCE (beat 2), far under the staff line: one hairline teal ring leaves the colon; the card does not move (ducked −14 dB re the desk rings)', { db: RING_DB - 14 }),
     H(at(R.pickup), 'fx-ting', 'none', 0.84, 3, 'b15 … cut a 16th later by her soft pickup tone: Ava takes the call', { db: -6 }),
@@ -1468,7 +1471,7 @@ const CTA_HITS: Hit<Snd>[] = (() => {
     H(at(R.impact), 'chord-rev', 'none', 0.5, 2, 'b18 the four lights fuse', { layer: true }),
     H(at(R.impact), 'thump', 'none', 0.5, 1, 'b18 the impact’s weight', { layer: true, db: -8 }),
     H(at(R.impact), 'slam', 'none', 0.5, 2, 'b18 the impact’s crack', { layer: true }),
-    H(at(R.impact + 1), 'shimmer', 'none', 0.5, 2, 'b18 NEUROVOICE surfaces letter by letter from the centre out (the letter shimmer is a sound, not a glow)', { layer: true, db: -4 }),
+    H(at(R.impact + 1), 'shimmer', 'none', 0.5, 2, 'b18 NEUROVOICE surfaces letter by letter from the centre out (the letter shimmer is a sound, not a glow)', { layer: true, db: 0 }),
     H(at(R.impact + 2), 'shock', 'none', 0.5, 2, 'b18 the backlight opens out round the wordmark', { layer: true }),
     ...R.url.map((f, k) => H(at(f - 1), 'fx-keys', 'none', 0.46 + 0.04 * k, 3, `b18 the URL rises on her words: "${['neuro', 'tech', 'voice.com'][k]}" — one soft key`, { db: -7 })),
     H(at(R.url[0] + 2), 'draw', 'none', [0.4, 0.6], 3, 'b18 the colophon’s hairline draws out to the margins', { db: -16 }),
@@ -1512,8 +1515,10 @@ export const HITS: Hit<Snd>[] = [
 export const CUES: Cue[] = buildCues(HITS, { sfx: SFX, speaking, roomAt });
 
 /**
- * The moments the music bed reads (scripts/kb/bed.mjs; absolute frames, part of its cache key):
- * a placeholder score on the 120 BPM grid in E major that follows the acts.
+ * The moments the music bed reads (scripts/kb/bed.mjs; absolute frames, part of its cache key): the 120 BPM E-major score
+ * composed against the acts (SCRIPT.md's per-beat "Sound" notes) — Part I's deadpan bar from ring one to the hard stop,
+ * b06's two notes, the harmony from "matters", the stop-time, the thinned b12, the lift at the next call, b15's pad and its
+ * bar of room tone, the close.
  */
 export const MUSIC = {
   ringOne: RING_ONE,
