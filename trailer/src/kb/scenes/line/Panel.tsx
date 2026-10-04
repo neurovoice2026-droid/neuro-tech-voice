@@ -15,8 +15,9 @@
  *
  * THE POINTER rides on the page (it is part of the screen that rises in) and works it with two-part clicks: the I-beam
  * into the field, the arrow back off the keys to Save changes (kit/cursor.ts; the hover / press curves drive the button).
- * With room for v2's full order (LINE_LOCAL.full) the page comes back on Knowledge (b08's list at rest) and the pointer
- * clicks Conversation first: the underline springs across, the content swaps through its mask (the kit's Swap).
+ * In v2's full order (LINE_LOCAL.full — on since b12's extra bar) the page comes back on Knowledge (b08's list at rest) and
+ * the pointer settles onto Conversation and clicks it first: the underline springs across, the content swaps through its
+ * mask (the kit's Swap).
  */
 import React, { useMemo } from 'react';
 import { subpixel } from '../../../lib/glide';
@@ -135,7 +136,13 @@ export function cursorKeys(G: PageGeo): CursorKey[] {
   if (N.tab) {
     const tc = G.bar.rect('conversation', N.tab.down);
     const tab = { x: tc.cx + 6, y: tc.cy + 5 };
-    keys.push({ at: 0, x: tab.x, y: tab.y });
+    // the hand rides in on the page just below the tab bar (over b08's list) and settles up onto Conversation as the page
+    // lands (the end of the move shows as the page fades in: the tab is entered, not found hovered), then rests five
+    // frames on it before the press (the brief's ≥ 4; the act's grid keeps the press on beat 2)
+    const from = { x: tab.x + 0.34 * tc.h, y: tab.y + 1.2 * tc.h };
+    const settle = N.tab.down - 5;
+    keys.push({ at: 0, x: from.x, y: from.y });
+    keys.push({ at: settle, x: tab.x, y: tab.y, dur: settle - 1.5, bend: 0.1 });
     keys.push({ at: N.tab.down, x: tab.x, y: tab.y, action: 'press' });
     keys.push({ at: N.tab.up, x: tab.x, y: tab.y, action: 'release' });
     keys.push({ at: field.down - 6.5, x: f.x, y: f.y });

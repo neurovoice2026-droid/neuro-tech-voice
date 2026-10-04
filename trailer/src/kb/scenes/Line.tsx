@@ -18,10 +18,15 @@
  *              so," / "in the words you chose." — and on "words" a sunday ring settles round the field (the key phrase
  *              keys sunday with it)
  *
- * With room for v2's full order (LINE_LOCAL.full — not this take set: see timing.ts) the page comes back on Knowledge
- * and the pointer clicks Conversation first. Every time is LINE_LOCAL (src/kb/timing.ts, from kb2-vo-6's real word
- * onsets); the layout and the poses are scenes/line/stage.ts; the cut from b11 takes callEnd(), the cut into b13 hands
- * over lineEnd().
+ * THE FULL ORDER (LINE_LOCAL.full — on: b12 has one bar more than the script's plan, timing.ts LINE_BAR): the page comes
+ * back on Knowledge (b08's list at rest) and the pointer settles onto Conversation as it lands (the hover), presses it on
+ * beat 2 and releases (the underline springs across, the content swaps through its mask), crosses to the field and clicks
+ * it. THE PUSH (stage.ts PUSH): from the caret to the last word the camera pushes slowly in (16:9 ×1.30, the page filling
+ * the frame, Ava carried out past the left edge; 9:16 ×1.08 about the field), holds while the pointer hops to Save changes
+ * and clicks it, and pulls back on the release — bringing Ava back in to relight on her first word. At rest long before
+ * the act ends.
+ * Every time is LINE_LOCAL (src/kb/timing.ts, from kb2-vo-6's real word onsets); the layout and the poses are
+ * scenes/line/stage.ts; the cut from b11 takes callEnd(), the cut into b13 hands over lineEnd().
  */
 import React from 'react';
 import { AbsoluteFill } from 'remotion';
@@ -36,7 +41,7 @@ import { LineGround } from './line/Ground';
 import { Handoff } from './line/Handoff';
 import { LineOrb } from './line/Orb';
 import { LinePanel, usePageGeometry } from './line/Panel';
-import { lineStage, orbPose } from './line/stage';
+import { camToScreen, groundCam, lineCam, lineStage, orbPose, planeStyle } from './line/stage';
 
 const SUNDAY = MOMENT_LIGHTS.sunday.ink;
 const INK = meshShadowInk(KB_MESH);
@@ -49,12 +54,23 @@ export const Line: React.FC = () => {
   const G = usePageGeometry(S);
   const orb = orbPose(t, S);
   const keyK = tween(t, [N.key, N.key + 10], [0, 1], EASE.inOut);
+  // the push-in while the owner types (stage.ts PUSH; the full order only): the page, its pointer and the orb on the focal
+  // plane, the ground a quarter of the way behind; her key light stays on her (her screen place, in the ground's own px)
+  const cam = lineCam(t, S, G.panel, G.field);
+  const gc = groundCam(cam, S);
+  const orbOnScreen = camToScreen(cam, S, orb);
+  const orbOnGround = { ...gc.fromScreen(orbOnScreen), d: (orb.d * cam.zoom) / gc.zoom };
+  const plane = planeStyle(cam);
   return (
     <AbsoluteFill>
-      <LineGround t={t} S={S} orb={orb} />
+      <AbsoluteFill style={gc.css ? { transform: gc.css, transformOrigin: '50% 50%' } : undefined}>
+        <LineGround t={t} S={S} orb={orbOnGround} />
+      </AbsoluteFill>
       <Handoff t={t} S={S} ink={INK} />
-      <LinePanel t={t} S={S} G={G} ink={INK} accent={SUNDAY} />
-      <LineOrb t={t} S={S} pose={orb} />
+      <AbsoluteFill style={plane}>
+        <LinePanel t={t} S={S} G={G} ink={INK} accent={SUNDAY} />
+        <LineOrb t={t} S={S} pose={orb} />
+      </AbsoluteFill>
       <Captions
         t={t}
         lineAt={N.vo6}

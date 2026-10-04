@@ -19,6 +19,7 @@
  * THE NEIGHBOURS: b11 → here, frame 0 is callEnd()'s picture (scenes/line/Handoff.tsx draws the record row and the page
  * as b11 left them, then they leave). Here → b13: lineEnd() (bottom).
  */
+import type React from 'react';
 import { EASE, springUnit } from '../../../lib/motion';
 import { LINE_LOCAL as N, SCENES } from '../../timing';
 import { callEnd, callKey, callStage, type Box, type OrbAt } from '../call/stage';
@@ -152,6 +153,95 @@ export function orbLit(t: number) {
 
 /** the stage the call act used (for its hand-over parts) */
 export const callStageOf = (S: LineStage) => callStage(S.vertical);
+
+/* ── the push (the full order only) ─────────────────────────────── */
+
+/**
+ * THE PUSH-IN WHILE THE OWNER TYPES (orchestrator, kb-notes.md: "use the spare time for the slow push-in while typing
+ * — typed line at ad size"). Only in v2's full order (LINE_LOCAL.full: b12's extra bar); the no-room order has no frame
+ * to spare for it.
+ *
+ *   in    from the field's release (the caret) to just after the last word lands: one slow, continuous push (power2
+ *         in-out, ≈ 2.8 s). 16:9: the page comes forward until it fills the frame, centred (×1.30: the field's type
+ *         48 → 62 px, the tab bar with its amber dot still in at the top, Save changes in at the bottom right); Ava's
+ *         orb, on the same plane, is carried out past the left edge — the owner's moment, not hers. 9:16: a gentle
+ *         push about the field (×1.08: 56 → 60 px), which already sits in the middle of the usable height; the typed
+ *         line stays inside the platform-safe width (≥ 95 px from each edge).
+ *   hold  the finished line holds at ad size while the pointer hops to Save changes and clicks it (the dot closes).
+ *   out   on Save's release the camera pulls back to the page's rest place (EASE.inOut) — 16:9 brings Ava back into
+ *         the frame in time to relight on her first word; at rest well before the act ends, so lineEnd() is unchanged.
+ *
+ * The ground rides a far plane (PUSH.ground: a quarter of the move, a gentle parallax); the panel, its pointer and the
+ * orb ride the focal plane (planeStyle below: plain while zooming — the type re-rasters at the exact scale every frame, no
+ * upscaled layer, no blur).
+ */
+export const PUSH = (() => {
+  const last = N.keys[N.keys.length - 1];
+  return {
+    on: N.full,
+    in: [N.field.up, last + 8] as const,
+    out: [N.saveClick.up, N.saveClick.up + 30] as const,
+    zoom: { land: 1.3, vert: 1.08 },
+    ground: 0.25,
+  };
+})();
+
+/** the push's amount 0 (rest) … 1 (pushed in) at act-local t */
+export function pushAmount(t: number): number {
+  if (!PUSH.on) return 0;
+  if (t < PUSH.out[0]) return ease(t, PUSH.in[0], PUSH.in[1], EASE.draw);
+  return 1 - ease(t, PUSH.out[0], PUSH.out[1], EASE.inOut);
+}
+
+export type LineCam = { x: number; y: number; zoom: number };
+
+/**
+ * The camera (components/Camera semantics: a depth-d plane is drawn translate(−x·d, −y·d) scale(1 + (zoom − 1)·d)
+ * about the frame centre). Focus F goes to target T in a straight line as the push runs: 16:9 F = the page's centre,
+ * T = the frame's centre; 9:16 F = T = the field's centre (a pure zoom about it).
+ */
+export function lineCam(t: number, S: LineStage, page: Box, field: Box): LineCam {
+  const e = pushAmount(t);
+  if (e <= 0) return { x: 0, y: 0, zoom: 1 };
+  const Z = S.vertical ? PUSH.zoom.vert : PUSH.zoom.land;
+  const cx = S.W / 2;
+  const cy = S.H / 2;
+  const F = S.vertical ? { x: field.x + field.w / 2, y: field.y + field.h / 2 } : { x: page.x + page.w / 2, y: page.y + page.h / 2 };
+  const T = S.vertical ? F : { x: cx, y: cy };
+  return { x: e * (cx + Z * (F.x - cx) - T.x), y: e * (cy + Z * (F.y - cy) - T.y), zoom: 1 + (Z - 1) * e };
+}
+
+/** a focal-plane point (stage px) → the screen, under the camera */
+export function camToScreen(c: LineCam, S: LineStage, p: { x: number; y: number }) {
+  return { x: S.W / 2 - c.x + c.zoom * (p.x - S.W / 2), y: S.H / 2 - c.y + c.zoom * (p.y - S.H / 2) };
+}
+
+/**
+ * The focal plane's style under the camera: a PLAIN transform (no will-change, no tilt). Measured at 4K / 120 fps over the
+ * whole push (out/kb/plusbar, render sequences at concurrency 2):
+ *   · a compositor layer keeps the raster scale it was made at: by the end of a ×1.3 push its type was ≈ 35 % softer than a
+ *     fresh still (gradient energy 96–100 vs 126–160) — upscaled raster, i.e. blur. Never for a push this deep.
+ *   · the house tilt on a plain transform (lib/glide SUBPIXEL_TILT, no layer) softened the glyphs ≈ 25 % and still stepped.
+ *   · plain: re-rastered at the exact scale every frame (as sharp as a still); horizontal glide sub-pixel smooth; vertically
+ *     the baselines move in whole 4K device pixels (½ px at 1080) — a step every 1–3 frames mid-push, sparser near the
+ *     push's still line and in its ease tails. The sharp choice; no blur at any frame.
+ * At rest (zoom 1, home) no transform at all, so the act's first and last pictures are untouched.
+ */
+export function planeStyle(c: LineCam): React.CSSProperties | undefined {
+  if (c.zoom === 1 && c.x === 0 && c.y === 0) return undefined;
+  return { transform: `translate(${(-c.x).toFixed(4)}px, ${(-c.y).toFixed(4)}px) scale(${c.zoom.toFixed(6)})`, transformOrigin: '50% 50%' };
+}
+
+/** the ground plane's transform under the camera (depth PUSH.ground) and a screen point → that plane's own px */
+export function groundCam(c: LineCam, S: LineStage) {
+  const d = PUSH.ground;
+  const z = 1 + (c.zoom - 1) * d;
+  return {
+    css: c.zoom === 1 && c.x === 0 && c.y === 0 ? undefined : `translate(${(-c.x * d).toFixed(4)}px, ${(-c.y * d).toFixed(4)}px) scale(${z.toFixed(6)})`,
+    zoom: z,
+    fromScreen: (p: { x: number; y: number }) => ({ x: S.W / 2 + (p.x - S.W / 2 + c.x * d) / z, y: S.H / 2 + (p.y - S.H / 2 + c.y * d) / z }),
+  };
+}
 
 /* ── the act's last picture, for b13 ─────────────────────────────── */
 

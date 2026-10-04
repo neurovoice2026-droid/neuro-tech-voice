@@ -210,13 +210,17 @@ const CALL_TO = RECORD + b(2);
 
 /* ── b12 · YOUR LINE ────────────────────────────────────────────────
  * The caret a beat in; the owner's line types one word per 16th (22 words, nothing narrated); the save
- * tick after the last word; vo-6 three and a half beats in (58.0 on the plan). */
+ * tick after the last word; vo-6 seven beats in on the script's plan (58.0) — PLUS ONE BAR (LINE_BAR): CLIENT DIRECTION
+ * v2's full order (the Conversation tab clicked, the field clicked, the 22 words, Save, then vo-6) needs vo-6 ≥ 157.5 f
+ * into the act (LINE_LOCAL.full); the orchestrator's decision (2026-10-04) gives b12 exactly one more bar, so vo-6 sits
+ * 165 f in and every later anchor moves by that bar (anchorAt keeps each in its place in the bar). */
 const OWNER_LINE = "I don't have an answer for that, and I don't want to guess. I'll ask the team to call you back today.";
 const OWNER_WORDS = OWNER_LINE.split(' ').length; // 22
 const LINE_FROM = CALL_TO;
+const LINE_BAR = BAR;
 const CARET = LINE_FROM + b(1);
 const SAVE = CARET + OWNER_WORDS * (BEAT / 4);
-const VO6_AT = Math.max(LINE_FROM + b(7), upHalf(SAVE + 2));
+const VO6_AT = Math.max(LINE_FROM + b(7) + LINE_BAR, upHalf(SAVE + 2));
 const LINE_TO = upBeat(VO6_AT + vFrames('kb2-vo-6') + b(0.5));
 
 /* ── b13–b14 · CHANGE IT / THE NEXT CALL ────────────────────────────
@@ -609,10 +613,12 @@ export const CALL_LOCAL = (() => {
  *
  *  THE TWO ORDERS. v2's full order — click Conversation, cross to the field and click it, type the 22 words on 16ths,
  *  click Save, a breath, THEN vo-6 — needs vo-6 at least `full` frames in (157.5: a calm hand takes ≈ 16 f to cross from
- *  the tab to the field plus the 6 f read before a press, and ≈ 12 f + 6 back off the keys to Save). The voiced timeline
- *  (CARET, SAVE, VO6_AT above) gives b12 the script's own plan — the caret a beat in, vo-6 105 f in — so:
- *    · room (vo6 ≥ 157.5)   the page comes back on Knowledge; tab on beat 2 → field → the words → Save → vo-6
- *    · no room (this take set)   the page comes back already on Conversation (the tab click does not fit: it would have
+ *  the tab to the field plus the 6 f read before a press, and ≈ 12 f + 6 back off the keys to Save). The script's own plan
+ *  (the caret a beat in, vo-6 105 f in) leaves no room; the voiced timeline gives b12 ONE MORE BAR (LINE_BAR above, the
+ *  orchestrator's decision of 2026-10-04): vo-6 165 f in, so —
+ *    · room (vo6 ≥ 157.5: THIS cut)   the page comes back on Knowledge; tab on beat 2 → field → the words → Save → vo-6
+ *      (the spare frames carry the slow push-in while it types: scenes/line/stage.ts PUSH)
+ *    · no room (LINE_BAR = 0)   the page comes back already on Conversation (the tab click does not fit: it would have
  *      to land before the act starts); the I-beam rides in on the page and clicks on the script's caret, the words land on
  *      the script's 16ths, the pointer comes back off the keys as the last words land and Save is released on vo-6's
  *      first frame (her first word is ≥ 3 f later): the dot goes, then she speaks. */
@@ -641,7 +647,7 @@ export const LINE_LOCAL = (() => {
   return {
     ownerLine: OWNER_LINE,
     end,
-    /** room for v2's full order (see above) — false for this take set */
+    /** room for v2's full order (see above) — true with b12's extra bar */
     full,
     needs,
     /** the cut from b11: the call's record row and its page leave up (0 → 6); the agent page rises in from 2 (settled
@@ -1260,7 +1266,9 @@ const LINE_HITS: Hit<Snd>[] = (() => {
     });
   });
   const FIELD = 0.6;
-  const SAVE = 0.73;
+  // Save changes is clicked with the page pushed in (scenes/line/stage.ts PUSH: it sits further right, ≈ .88 of the frame,
+  // than at rest) — on the pans' ¾ scale, .79; at rest (no full order) .73
+  const SAVE = R.tab ? 0.79 : 0.73;
   return [
     H(at(R.leave[0] + 2), 'whoosh-soft', 'none', [0.42, 0.52], 3, 'b12 the call’s record row leaves up; the agent page rises in', { db: -12 }),
     ...(R.tab

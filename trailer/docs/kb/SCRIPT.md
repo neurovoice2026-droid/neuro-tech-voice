@@ -3,6 +3,7 @@
 **Film:** Neuro Tech Voice, trailer #2, the knowledge-base film
 **Formats:** 16:9 and 9:16, 4K (3840×2160 / 2160×3840) at 120 fps (`RENDER_FPS=120`, `SUB=4`). The timeline is in 30 fps units.
 **Duration:** 90.0 s = 2700 frames = 45 bars at 120 BPM. The impact lands on bar 44 (86.0 s, frame 2580).
+**As built:** 100.0 s = 3000 frames = 50 bars. The real takes push the anchors by whole bars (98.0 s), and b12 takes one bar more than this plan so CLIENT DIRECTION v2's full order fits (Conversation tab click → field click → the 22 words → Save → vo-6; orchestrator decision, 2026-10-04). Placed anchors (`src/kb/timing.ts` `ANCHORS`): "Waiting." 26.0, live ring 44.0, resume 54.0, desk ring 82.5, impact 96.0 (bar 49, frame 2880), end 100.0 (frame 3000). The times below are the plan's.
 **Language:** English. **Explaining voice:** Ava = Cartesia "Tessa (Emotive)", sonic-3.6, speed 1.05, as the client asked.
 **Built from:** the winning draft "contrast" (both judges), plus grafts from "empathy" and "demo". Every must-fix from both judges is resolved (ledger at the end).
 
@@ -248,6 +249,8 @@ Bars fall on even seconds. "Strong beat" means beat 1 (bar line) or beat 3 (bar 
 **Voice:** kb2-vo-6 at 58.0
 **Sound:** the bed thins to piano and pad. Soft real keystrokes, one per word on 16ths (no typewriter bell). A save tick at 57.75. A glassy tick on the focus ring ("words"). HITS: 55.0 caret, 22 key events, 57.75 save, focus ring.
 
+*As built (CLIENT DIRECTION v2, b12 one bar longer: 60.0–69.5 s on the 100 s cut):* the page comes back on its **Knowledge** tab (b08's list at rest); the pointer settles onto **Conversation** as the page lands, presses it on beat 2 and releases (underline slide, content swap), crosses to the field and clicks it (the caret), the 22 words type on 16ths, the pointer hops back off the keys to **Save changes** after the last word and clicks it (the amber dot goes), a beat, then vo-6 (5.5 s into the act). While the line types the camera pushes slowly in (16:9 ×1.30: the page fills the frame, the field's type 48 → 62 px, the orb carried out past the left edge; 9:16 ×1.08 about the field, inside the platform-safe width), holds through the Save click, and pulls back on its release so the orb returns to relight on her first word. HITS add the tab's down / up and the underline's slide.
+
 ### b13 · Change it · 62.0–67.0
 **Picture.**
 - The Opening hours page comes back to fill the frame, shown as **the owner's own file**: plain paper, with the file name `opening-hours.txt` in Geist Mono at the top and **no dashboard chrome**. There is no in-app editor, so the edit happens outside the app.
@@ -483,7 +486,8 @@ is pressed, etc."*
   - b08: the cursor clicks **Knowledge**; the Knowledge tab's count badge (`size-4 rounded-full bg-primary/15 text-primary`)
     appears and counts **1 → 2 → 3 → 4** as the rows land.
   - b12: the cursor clicks **Conversation**; while the owner types the fallback line the tab shows the app's amber
-    **unsaved-changes dot**; **Save** is clicked and the dot goes away (the save tick).
+    **unsaved-changes dot**; **Save** is clicked and the dot goes away (the save tick). (b12 is one bar longer than the plan for this:
+    the film runs 100 s.)
   - b13: back to **Knowledge**; the row's `…` menu opens and **Replace with new file** is clicked.
 
 ### 3. The cursor and the click, done properly
