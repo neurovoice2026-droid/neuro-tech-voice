@@ -6,8 +6,8 @@
  * sha256 over
  *   · the bytes of src/kb/timing.ts, src/kb/voice.generated.ts, src/lib/cuesheet.ts, and film 1's
  *     src/timing.ts + src/voice.generated.ts (film 2's timeline imports both)
- *   · the sound code: scripts/kb/*.mjs (but the QA-only check-port.mjs and verify-film1.mjs, which shape
- *     no sound), scripts/films.mjs, scripts/audio/{dsp,mix,loudness}.mjs
+ *   · the sound code: scripts/kb/*.mjs (but check-port.mjs, verify-film1.mjs, render-par.mjs and
+ *     finish-master.mjs, which shape no sound), scripts/films.mjs, scripts/audio/{dsp,mix,loudness}.mjs
  *   · the evaluated timeline: {CUES, VOICES, SCENES, DURATION, BED, MIX, DUCK, MUSIC}
  *   · the CONTENT (sha256) of every voice file public/kb/voice/<id>.wav — not its mtime, so a fresh
  *     checkout does not force a rebuild
@@ -20,8 +20,8 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
-/** scripts/kb/ files that shape no sound (QA only): editing them must not invalidate the mix */
-const QA_ONLY = new Set(['check-port.mjs', 'verify-film1.mjs']);
+/** scripts/kb/ files that shape no sound (QA and picture delivery): editing them must not invalidate the mix */
+const QA_ONLY = new Set(['check-port.mjs', 'verify-film1.mjs', 'render-par.mjs', 'finish-master.mjs']);
 
 const fileSha = (f) => createHash('sha256').update(readFileSync(f)).digest('hex');
 

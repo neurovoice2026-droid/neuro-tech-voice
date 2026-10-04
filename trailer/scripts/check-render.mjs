@@ -6,8 +6,8 @@
  *   · picture: H.264 (or HEVC tagged hvc1: the 4K 120 masters), yuv420p, BT.709 LIMITED range
  *     with all four colour properties tagged (matrix, primaries, transfer, range) — what
  *     platforms and players assume
- *   · length: the whole film at the file's rate — DURATION frames at FPS (previews) or
- *     DURATION × SUB at RENDER_FPS (masters); skipped with --from
+ *   · length: the whole film at the file's rate — DURATION frames at FPS (previews),
+ *     DURATION × 2 at 2 × FPS (60 fps share copies) or DURATION × SUB at RENDER_FPS (masters); skipped with --from
  *   · picture/sound lock: the AAC track, decoded the way players decode it (edit list honoured),
  *     lines up with public/sfx/mix.wav TO THE SAMPLE (lag 0) in every loud window through the
  *     file. Untrimmed AAC priming reads as +2048 (libfdk) or +1024 (native) samples late.
@@ -133,8 +133,9 @@ for (const file of files) {
     for (const [k, x] of Object.entries(want)) if (v[k] !== x) fails.push(`video ${k} = ${v[k]}, want ${x}`);
     if (v.codec_name !== 'h264' && v.codec_name !== 'hevc') fails.push(`video codec ${v.codec_name}, want h264 or hevc`);
     if (v.codec_name === 'hevc' && v.codec_tag_string !== 'hvc1') fails.push(`HEVC tagged ${v.codec_tag_string}, want hvc1 (QuickTime / iOS)`);
-    if (v.r_frame_rate !== `${T.FPS}/1` && v.r_frame_rate !== `${T.RENDER_FPS}/1`)
-      fails.push(`video ${v.r_frame_rate} fps, want ${T.FPS} or ${T.RENDER_FPS}`);
+    // the timeline rate (previews), the master rate, or twice the timeline rate (the 60 fps share copies cut from a master)
+    const rates = [T.FPS, 2 * T.FPS, T.RENDER_FPS];
+    if (!rates.some((r) => v.r_frame_rate === `${r}/1`)) fails.push(`video ${v.r_frame_rate} fps, want ${rates.join(', ')}`);
   }
   const fps = v ? Number(v.r_frame_rate.split('/')[0]) / Number(v.r_frame_rate.split('/')[1] ?? 1) : T.FPS;
   const filmFrames = Math.round(T.DURATION * (fps / T.FPS));
