@@ -48,7 +48,8 @@ function target(f: number): number {
   if (f >= C.resume) return 0.12 + (f >= C.call2 - 2 ? 0.32 * Math.min(1, (f - C.call2 + 2) / 4) : 0) + 0.38 * envOf('kb2-call-2', f - C.call2);
   if (f >= C.freeze) return 0.12 + 0.6 * envOf('kb2-vo-5', f - C.vo5);
   if (f >= C.call1 - 2) return 0.12 + 0.32 * Math.min(1, (f - C.call1 + 2) / 4) * (1 - tween(f, [C.call1 + 52, C.call1 + 60], [0, 1])) + 0.38 * envOf('kb2-call-1', f - C.call1);
-  return 0.12 + 0.03 * l + 0.06 * l * envOf('kb2-c4', f - C.c4);
+  // (the take's ridden-out opening syllable — timing.ts VOICE_RIDES — does not move her either)
+  return 0.12 + 0.03 * l + 0.06 * l * (f < C.c4Words[0] - 2 ? 0 : envOf('kb2-c4', f - C.c4));
 }
 
 let TABLE: { vol: Float32Array; flow: Float64Array } | null = null;

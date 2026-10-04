@@ -4,24 +4,28 @@
  *   <StopLabel>   BETWEEN QUESTION AND ANSWER (label role, ink), rising on the freeze, leaving on the resume. Ava's orb
  *                 shrinks into its DOT (Call.tsx: the orb's dock pose is this lockup's dot) — the house ● tag idiom,
  *                 with her living light as the dot: the stop-time is hers
- *   <Phrasings>   the day's three earlier questions return as smaller slate lines (title role, slate at 70 %): 16:9
- *                 stacked over the frozen question, 9:16 one at a time in one slot (each rises, sends its hairline,
- *                 and leaves up on the next 8th; the last stays)
+ *   <Phrasings>   the day's three earlier questions return as slate lines (the title role 64 / 56, slate at 70 %), one
+ *                 at a time through ONE hard-masked slot under the page: each rolls up into it as the link before it
+ *                 lands, sends its hairline, and rolls up out of it as the next one rolls in — the two move in lockstep
+ *                 a full mask's height apart, so they never share a pixel; the last stays until the resume
  *   <Links>       one hairline per phrasing to the SAME two swept lines (the kit's MeaningLink: a gentle arc drawn on
  *                 EASE.draw, a dot at each end): the hero link from "weekend" carries the midpoint tag MATCHED ON
- *                 MEANING; the three echoes are finer and quieter. Four phrasings, one written answer.
+ *                 MEANING; the three echoes are finer and quieter. Four phrasings, one written answer. An echo retracts
+ *                 into the page (its end) as its phrasing rolls away; on the resume every link has retracted BEFORE
+ *                 any text leaves (CALL_LOCAL.retract) — no hairline ever points at nothing
  */
 import React from 'react';
 import { reveal, revealStyle } from '../../../components/Type';
+import { subpixel } from '../../../lib/glide';
 import { useLayout } from '../../../lib/layout';
-import { SPRING } from '../../../lib/motion';
+import { EASE, SPRING } from '../../../lib/motion';
 import { maskBox, typeStyle } from '../../../lib/type';
 import { TYPE } from '../../../theme';
 import { labelWidth, measureText, MeaningLink, useKitFaces } from '../../kit';
 import { HOME, MOMENT_LIGHTS } from '../../palettes';
 import { KB_INK } from '../../theme';
 import { CALL_LOCAL as C } from '../../timing';
-import type { CallStage, XY } from './stage';
+import { ease, type CallStage, type XY } from './stage';
 
 const SUNDAY = MOMENT_LIGHTS.sunday.ink;
 const SLATE = KB_INK.caller.paper.text;
@@ -58,52 +62,87 @@ export const StopLabel: React.FC<{ t: number; S: CallStage }> = ({ t, S }) => {
 /** a phrasing's text spec (title role, smaller) */
 const qSpec = (size: number) => ({ size, weight: TYPE.title.weight, tracking: -0.02 });
 
-/** each phrasing's box (frame px) — 16:9 stacked, 9:16 all in the one slot */
+/** each phrasing's box (frame px) — all in the one slot */
 export function phrasingBoxes(S: CallStage) {
   const Q = S.questions;
-  return PHRASINGS.map((q, i) => {
+  return PHRASINGS.map((q) => {
     const w = measureText(q, qSpec(Q.size));
-    const top = Q.tops[Math.min(i, Q.tops.length - 1)];
     const x = Q.align === 'center' ? Q.x - w / 2 : Q.x;
-    return { x, y: top, w, h: Q.size * 1.18, cy: top + Q.size * 0.62 };
+    return { x, y: Q.y, w, h: Q.size * 1.18, cy: Q.y + Q.size * 0.62 };
   });
 }
 
-/** when phrasing i leaves (9:16: on the next one's rise; the last, and every 16:9 one, at the resume) */
-const phrasingOut = (S: CallStage, i: number) => (S.questions.tops.length === 1 && i < PHRASINGS.length - 1 ? C.questions[i + 1] : C.resume + i * 0.8);
+/** frames a swap through the slot takes (the outgoing phrasing up out, the incoming up in, in lockstep) */
+const ROLL = 6;
+/** when phrasing i rolls out of the slot: as the next one rolls in; the last at the resume (after the links retract) */
+export const phrasingOut = (i: number) => (i < PHRASINGS.length - 1 ? C.questions[i + 1] : C.resume);
 
 export const Phrasings: React.FC<{ t: number; S: CallStage }> = ({ t, S }) => {
   const L = useLayout();
   useKitFaces();
-  if (t < C.questions[0] - 1 || t > C.resume + 16) return null;
+  if (t < C.questions[0] || t > C.resume + ROLL + 1) return null;
   const Q = S.questions;
   const boxes = phrasingBoxes(S);
   const st = typeStyle('title', L.vertical, { tone: 'paper', size: Q.size });
+  // the slot's hard mask: one line box with room for ascenders / descenders; the travel is the whole mask
+  const pad = Q.size * 0.22;
+  const maskH = Q.size * 1.18 + 2 * pad;
+  const maxW = Math.max(...boxes.map((b) => b.w));
+  const left = (Q.align === 'center' ? Q.x - maxW / 2 : Q.x) - 24;
   return (
-    <>
+    <div style={{ position: 'absolute', left, top: Q.y - pad, width: maxW + 48, height: maskH, overflow: 'hidden' }}>
       {PHRASINGS.map((q, i) => {
-        const at = C.questions[i];
-        if (t < at - 1) return null;
-        const out = phrasingOut(S, i);
-        if (t > out + 12) return null;
-        const r = reveal(t, at, { config: SPRING.caption, rise: 90, fade: 0.5, exit: { at: out, dur: 8 } });
-        const b = boxes[i];
+        const inU = ease(t, C.questions[i], C.questions[i] + ROLL, EASE.inOut);
+        const outU = ease(t, phrasingOut(i), phrasingOut(i) + ROLL, EASE.inOut);
+        if (inU <= 0 || outU >= 1) return null;
+        const y = (1 - inU) * maskH - outU * maskH;
+        const moving = (inU > 0 && inU < 1) || (outU > 0 && outU < 1);
         return (
-          <div key={i} style={{ position: 'absolute', left: b.x, top: b.y, ...st, letterSpacing: '-0.02em', lineHeight: 1.18, color: SLATE, opacity: 0.72, whiteSpace: 'nowrap' }}>
-            <span style={maskBox(0)}>
-              <span style={revealStyle(r, undefined, t - at < 16 || t > out - 1)}>{q}</span>
-            </span>
+          <div
+            key={i}
+            style={{
+              position: 'absolute',
+              left: boxes[i].x - left,
+              top: pad,
+              ...st,
+              letterSpacing: '-0.02em',
+              lineHeight: 1.18,
+              color: SLATE,
+              opacity: 0.72,
+              whiteSpace: 'nowrap',
+              ...subpixel(`translateY(${y.toFixed(3)}px)`, moving),
+            }}
+          >
+            {q}
           </div>
         );
       })}
-    </>
+    </div>
   );
 };
 
-export const Links: React.FC<{ t: number; S: CallStage; hero: XY; target: XY }> = ({ t, S, hero, target }) => {
-  if (t < C.linkStart[0] || t > C.resume + 14) return null;
+/** the MATCHED ON MEANING chip's width (the kit's MeaningLink tag: label role, .7em padding each side) */
+const chipW = (vertical: boolean) => {
+  const size = typeStyle('label', vertical).fontSize as number;
+  return labelWidth('MATCHED ON MEANING', size) + 1.4 * size;
+};
+
+/**
+ * The hairlines all land on ONE point: the swept lines' LEFT edge (the page's left padding, where no text is). The hero
+ * link (16:9) runs from the end of "weekend" down-right into it, its tag between the frozen question and the page;
+ * (9:16) from the start of "this weekend" down the left margin into it (the page fills the width: a link from the right
+ * would cross the weekday line), its tag in the gap between the question's waveform and the page's top. Each echo runs
+ * from its phrasing in the slot (16:9 its top, 9:16 its left end) to the same point.
+ */
+export const Links: React.FC<{ t: number; S: CallStage; hero: XY; target: XY; page: { x: number; y: number } }> = ({ t, S, hero, target, page }) => {
+  if (t < C.linkStart[0] || t > C.retract[1] + 1) return null;
   const boxes = phrasingBoxes(S);
   const vertical = S.vertical;
+  const rd = C.retract[1] - C.retract[0];
+  const cw = chipW(vertical);
+  // 16:9: the chip's right edge ~58 px short of the page, a phrasing's height under the question's end (it covers the
+  // line's middle); 9:16: its left edge at the frame's margin + 24, centred in the gap over the page's top
+  const tagAt = vertical ? { x: 88 + cw / 2, y: page.y - 49 } : { x: page.x - 58 - cw / 2, y: hero.y + 95 };
   const echo = 'rgba(14, 116, 144, 0.55)';
   return (
     <>
@@ -113,20 +152,22 @@ export const Links: React.FC<{ t: number; S: CallStage; hero: XY; target: XY }> 
         to={target}
         at={C.linkStart[0]}
         dur={C.links[0] - C.linkStart[0]}
-        bend={vertical ? 0.5 : 0.14}
-        tagPos={vertical ? 0.22 : 0.42}
-        tagOffset={vertical ? 0 : 24}
-        side="below"
+        bend={vertical ? 0.38 : 0.14}
+        tagPos={vertical ? 0.2 : 0.42}
+        tagAt={tagAt}
+        side={vertical ? 'above' : 'below'}
         color={SUNDAY}
         width={2.2}
         tag="MATCHED ON MEANING"
         tagColor={SUNDAY}
-        exitAt={C.resume}
+        exitAt={C.retract[0]}
+        exitDur={rd}
       />
       {boxes.map((b, i) => {
         const k = i + 1;
-        const single = S.questions.tops.length === 1;
-        const from = single ? { x: b.x + b.w / 2, y: b.y - 10 } : { x: b.x + b.w + 18, y: b.cy };
+        // from its phrasing in the slot (16:9 its top, 9:16 its left end, up the left margin); it retracts into the
+        // page as its phrasing rolls away
+        const from = vertical ? { x: b.x - 12, y: b.cy } : { x: b.x + b.w / 2, y: b.y - 10 };
         return (
           <MeaningLink
             key={i}
@@ -135,11 +176,12 @@ export const Links: React.FC<{ t: number; S: CallStage; hero: XY; target: XY }> 
             to={target}
             at={C.linkStart[k]}
             dur={C.links[k] - C.linkStart[k]}
-            bend={single ? 0.15 : 0.1}
-            side="below"
+            bend={vertical ? 0.1 : 0.15}
+            side={vertical ? 'above' : 'below'}
             color={echo}
             width={1.5}
-            exitAt={single && i < 2 ? C.questions[i + 1] : C.resume + 2 + i}
+            exitAt={i < PHRASINGS.length - 1 ? phrasingOut(i) : C.retract[0]}
+            exitDur={rd}
           />
         );
       })}

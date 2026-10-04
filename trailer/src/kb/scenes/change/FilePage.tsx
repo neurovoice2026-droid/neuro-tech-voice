@@ -7,9 +7,10 @@
  *   caret    the I-beam presses on "14:00": the caret clicks in at the press point (the script's "caret clicks in")
  *   drag     the selection follows the pointer across the digits, a character at a time (an editor's selection snaps
  *            to characters), as a flat sunday wash at 12 % — released over the end of "00"
- *   keys     "16:00" typed over it, one key per 16th: the selected "14:00" and its wash leave up through the line's mask
- *            on the first key as "1" rises in; each character rises into its own mask; the caret rides after the last,
- *            solid while typing, blinking on the beat once idle
+ *   keys     "16:00" typed over it, one key per 16th, IN PLACE as an editor shows keystrokes (kit/typed.ts: no travel,
+ *            a one-frame appearance centred on the key): the selected "14:00" and its wash go as "1" comes, in the same
+ *            frame; the caret is the pen after the last half-visible character (never ahead of the text), solid while
+ *            typing, blinking on the beat once idle
  *   park     the file steps up into the corner over the app (a transform about its top-left: one layer, sub-pixel)
  *   flight   on "Replace with new file" the parked file DROPS INTO THE LIST: its paper becomes the new row's (box, corner,
  *            the row's hairline border coming in, its lift settling to 0) while its words fade out early — at the
@@ -17,13 +18,12 @@
  */
 import React from 'react';
 import { Easing } from 'remotion';
-import { reveal, revealStyle } from '../../../components/Type';
 import { subpixel } from '../../../lib/glide';
 import { useLayout } from '../../../lib/layout';
 import { EASE, smooth, SPRING, springUnit, tween } from '../../../lib/motion';
-import { maskBox, typeStyle } from '../../../lib/type';
+import { typeStyle } from '../../../lib/type';
 import { TYPE } from '../../../theme';
-import { APP, cursorPos, measureText, meshElevation, ui, type CursorKey, type DocPageGeometry } from '../../kit';
+import { APP, cursorPos, measureText, meshElevation, typedOpacity, ui, type CursorKey, type DocPageGeometry } from '../../kit';
 import { CHANGE_LOCAL as K } from '../../timing';
 import { filePose, lerp, type ChangeStage } from './stage';
 
@@ -79,8 +79,8 @@ const Content: React.FC<{ g: DocPageGeometry; t: number; keys: readonly CursorKe
       for (let i = 1; i < e.bounds.length; i++) if (px >= (e.bounds[i - 1] + e.bounds[i]) / 2) selN = i;
     }
   }
-  // the selected word and its wash leave up through the line's mask on the first key
-  const outQ = typedN > 0 ? tween(t, [K.keys[0], K.keys[0] + 3], [0, 1], EASE.in2) : 0;
+  // the selected word and its wash go as the first key's character comes (in place, the same one-frame ramp)
+  const outQ = typedOpacity(t, K.keys[0]);
   const lineH = size * 1.18;
   const sweepH = size * 1.22;
   const typedW = tabW(EDIT.replace.slice(0, typedN), size);
@@ -159,23 +159,20 @@ const Content: React.FC<{ g: DocPageGeometry; t: number; keys: readonly CursorKe
               />
             ) : null}
             <div style={{ position: 'absolute', left: r.x - ox, top: r.y - oy, ...title, letterSpacing: '-0.02em', color: APP.foreground, whiteSpace: 'nowrap' }}>{e.pre}</div>
-            {/* the old "14:00": in place, then up and out through the line's mask on the first key */}
-            {outQ < 1 ? (
-              <div style={{ position: 'absolute', left: e.x0, top: e.y - size * 0.16, height: lineH + size * 0.38, overflow: 'hidden' }}>
-                <div style={{ paddingTop: size * 0.16, ...title, letterSpacing: '-0.02em', color: APP.foreground, whiteSpace: 'nowrap', opacity: 1 - smooth(0.2, 1, outQ), transform: outQ > 0 ? `translateY(${(-outQ * 100).toFixed(2)}%)` : undefined }}>
-                  {EDIT.find}
-                </div>
+            {/* the old "14:00": in place until the first key replaces it (no travel) */}
+            {outQ < 0.999 ? (
+              <div style={{ position: 'absolute', left: e.x0, top: e.y, ...title, letterSpacing: '-0.02em', color: APP.foreground, whiteSpace: 'nowrap', opacity: outQ > 0.001 ? 1 - outQ : undefined }}>
+                {EDIT.find}
               </div>
             ) : null}
-            {/* the typed characters, each rising into its own mask on its key */}
+            {/* the typed characters, IN PLACE at their pen positions: a one-frame appearance on each key */}
             {EDIT.replace.split('').map((ch, j) => {
-              const at = K.keys[j];
-              if (t < at - 0.5) return null;
-              const rv = reveal(t, at, { config: SPRING.caption, rise: 60, fade: 0.4 });
+              const o = typedOpacity(t, K.keys[j]);
+              if (o <= 0.001) return null;
               const x = e.x0 + tabW(EDIT.replace.slice(0, j), size);
               return (
-                <span key={j} style={{ position: 'absolute', left: x, top: r.y - oy, ...maskBox(0), ...title, letterSpacing: '-0.02em', color: APP.foreground }}>
-                  <span style={revealStyle(rv, undefined, t - at < 10)}>{ch}</span>
+                <span key={j} style={{ position: 'absolute', left: x, top: r.y - oy, ...title, letterSpacing: '-0.02em', color: APP.foreground, whiteSpace: 'nowrap', opacity: o >= 0.999 ? undefined : o }}>
+                  {ch}
                 </span>
               );
             })}

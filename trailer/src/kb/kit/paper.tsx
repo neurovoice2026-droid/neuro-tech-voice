@@ -78,10 +78,12 @@ export type DocPageSpec = {
   fileName?: string;
   /** line size px (default the house title role 64 / 56) */
   size?: number;
+  /** the paper's padding px (default .95 × size) — a page cropped to its content sets a tighter one */
+  pad?: number;
 };
 
 export type DocPageGeometry = {
-  spec: Required<Omit<DocPageSpec, 'fileName' | 'kind'>> & { fileName?: string; kind?: string };
+  spec: Required<Omit<DocPageSpec, 'fileName' | 'kind' | 'pad'>> & { fileName?: string; kind?: string };
   card: Rect;
   /** each line's text box (frame px) */
   lineRects: (Rect & { cx: number; cy: number })[];
@@ -95,7 +97,7 @@ export function useDocPage(spec: DocPageSpec): DocPageGeometry {
   const L = useLayout();
   useKitFaces();
   const size = spec.size ?? (typeStyle('title', L.vertical).fontSize as number);
-  const pad = size * 0.95;
+  const pad = spec.pad ?? size * 0.95;
   const lineH = size * 1.62;
   const labelSize = typeStyle('label', L.vertical).fontSize as number;
   const headTop = spec.y + pad;
@@ -437,18 +439,22 @@ export const MeaningLink: React.FC<{
   width?: number;
   tag?: string;
   tagColor?: string;
-  /** leave (the line un-draws from its start) */
+  /** leave (the line un-draws from its start, into its end) over `exitDur` frames (default 10) */
   exitAt?: number;
+  exitDur?: number;
   /** which side of the chord the arc bows to (screen 'above' / 'below') */
   side?: 'above' | 'below';
   /** where along the arc the tag sits (0..1, default .5) and how far off the line, px (perpendicular, towards the bow) */
   tagPos?: number;
   tagOffset?: number;
-}> = ({ t, from, to, at, dur = 15, bend = 0.18, color = APP.foreground, width = 2, tag, tagColor, exitAt, side = 'above', tagPos = 0.5, tagOffset = 0 }) => {
+  /** the tag's centre, frame px, where the layout needs it (it must still cover the line); it rises as the pen passes
+   *  `tagPos` */
+  tagAt?: { x: number; y: number };
+}> = ({ t, from, to, at, dur = 15, bend = 0.18, color = APP.foreground, width = 2, tag, tagColor, exitAt, exitDur = 10, side = 'above', tagPos = 0.5, tagOffset = 0, tagAt }) => {
   const L = useLayout();
   if (t < at) return null;
   const p = tween(t, [at, at + dur], [0, 1], EASE.draw);
-  const q = exitAt !== undefined ? tween(t, [exitAt, exitAt + 10], [0, 1], EASE.in3) : 0;
+  const q = exitAt !== undefined ? tween(t, [exitAt, exitAt + exitDur], [0, 1], EASE.in3) : 0;
   if (q >= 0.999) return null;
   const dx = to.x - from.x;
   const dy = to.y - from.y;
@@ -463,8 +469,8 @@ export const MeaningLink: React.FC<{
   const cx = (from.x + to.x) / 2 + nx * bend * d;
   const cy = (from.y + to.y) / 2 + ny * bend * d;
   const u = tagPos;
-  const mx = (1 - u) * (1 - u) * from.x + 2 * (1 - u) * u * cx + u * u * to.x + nx * tagOffset;
-  const my = (1 - u) * (1 - u) * from.y + 2 * (1 - u) * u * cy + u * u * to.y + ny * tagOffset;
+  const mx = tagAt?.x ?? (1 - u) * (1 - u) * from.x + 2 * (1 - u) * u * cx + u * u * to.x + nx * tagOffset;
+  const my = tagAt?.y ?? (1 - u) * (1 - u) * from.y + 2 * (1 - u) * u * cy + u * u * to.y + ny * tagOffset;
   const W0 = L.width;
   const H0 = L.height;
   const tagP = tag ? springUnit(t - (at + dur * Math.max(0, tagPos - 0.05)), SPRING.caption) : 0;

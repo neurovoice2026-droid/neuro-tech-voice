@@ -60,16 +60,18 @@ export const Line: React.FC = () => {
   const gc = groundCam(cam, S);
   const orbOnScreen = camToScreen(cam, S, orb);
   const orbOnGround = { ...gc.fromScreen(orbOnScreen), d: (orb.d * cam.zoom) / gc.zoom };
-  const plane = planeStyle(cam);
+  const plane = planeStyle(cam, S);
   return (
     <AbsoluteFill>
       <AbsoluteFill style={gc.css ? { transform: gc.css, transformOrigin: '50% 50%' } : undefined}>
         <LineGround t={t} S={S} orb={orbOnGround} />
       </AbsoluteFill>
       <Handoff t={t} S={S} ink={INK} />
-      <AbsoluteFill style={plane}>
-        <LinePanel t={t} S={S} G={G} ink={INK} accent={SUNDAY} />
-        <LineOrb t={t} S={S} pose={orb} />
+      <AbsoluteFill style={plane.outer}>
+        <AbsoluteFill style={plane.inner}>
+          <LinePanel t={t} S={S} G={G} ink={INK} accent={SUNDAY} />
+          <LineOrb t={t} S={S} pose={orb} />
+        </AbsoluteFill>
       </AbsoluteFill>
       <Captions
         t={t}

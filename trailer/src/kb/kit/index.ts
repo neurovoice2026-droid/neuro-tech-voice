@@ -37,6 +37,8 @@
  *                              <FlipWord>, <MeaningLink>, <WordReset>, labelWidth
  *   icons.tsx                  <Icon name size stroke? rotate?> — lucide's own node data (ICONS)
  *   type.ts                    ui(size, weight), measureText, spaceWidth, layoutWords, wrapWords, useKitFaces, W
+ *   typed.ts                   typedOpacity, typedCount — typed text in place (a one-frame appearance, no travel) and
+ *                              the caret after the last half-visible glyph group (product fields; never a masked rise)
  *
  * SPECIMEN: compositions KB-Kit-16x9 / KB-Kit-9x16 (30 fps), KB-Kit120-16x9 (120 fps) and the ground
  * probe KB-KitMesh-16x9 / -9x16 (input props: palette, lift, recipe, keyOn, grain, dither, quality),
@@ -52,3 +54,4 @@ export * from './ui';
 export * from './paper';
 export * from './icons';
 export * from './type';
+export * from './typed';

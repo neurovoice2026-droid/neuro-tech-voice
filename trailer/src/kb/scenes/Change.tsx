@@ -34,7 +34,7 @@ import { AbsoluteFill } from 'remotion';
 import { useLayout } from '../../lib/layout';
 import { EASE, smooth, tween } from '../../lib/motion';
 import { Captions } from '../components/Captions';
-import { CURSOR, hoverAt, meshShadowInk, useDocPage, useKitFaces, useMenu, useTabBar, type CursorKey } from '../kit';
+import { CURSOR, EASE_HOVER, hoverAt, meshShadowInk, useDocPage, useKitFaces, useMenu, useTabBar, type CursorKey } from '../kit';
 import { KB_MESH, MOMENT_LIGHTS } from '../palettes';
 import { useKbSceneFrame } from '../scene';
 import { CHANGE_LOCAL as K } from '../timing';
@@ -97,10 +97,16 @@ function cursorKeys(start: XY, drag: { start: XY; end: XY }, dots: XY, rep: XY):
     },
     { at: K.replace.down, x: rep.x, y: rep.y, action: 'press' },
     { at: K.replace.up, x: rep.x, y: rep.y, action: 'release' },
-    // its work done, it fades where it stands
-    { at: K.pointerOut, x: rep.x, y: rep.y, action: 'hide' },
+    // its work done, it flicks off to the right (past the panel's edge), clear of the rows that shift down under it as
+    // the new one flies in; it fades on the way (pointerFade below) and is gone before it can rest on any of them
+    { at: K.replace.up + 12, x: rep.x + 240, y: rep.y - 24, dur: 12 },
+    { at: K.replace.up + 13, x: rep.x + 240, y: rep.y - 24, action: 'hide' },
   ];
 }
+
+/** the pointer's exit after Replace with new file: faded WHILE it flicks away (from 4 frames after the release, gone 6
+ *  frames later), never at rest over the list that moves under it */
+const pointerFade = (t: number) => 1 - EASE_HOVER(Math.min(1, Math.max(0, (t - (K.replace.up + 4)) / 6)));
 
 export const Change: React.FC = () => {
   const L = useLayout();
@@ -184,7 +190,9 @@ export const Change: React.FC = () => {
           echoY={null}
           tint={(c, j) => (c === 2 && j >= 4 ? { color: SUNDAY, k: keyK } : null)}
         />
-        <Pointer keys={keys} t={t} text={text} />
+        <div style={{ position: 'absolute', inset: 0, opacity: pointerFade(t) < 0.999 ? pointerFade(t) : undefined }}>
+          <Pointer keys={keys} t={t} text={text} />
+        </div>
       </PushOut>
       <Cross t={t} S={S} />
     </AbsoluteFill>

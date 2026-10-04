@@ -84,7 +84,8 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
   const make = (vertical: boolean): WrittenStage => {
     const E = turnEnd(vertical);
     if (!vertical) {
-      const panel = { x: 612, y: 150, w: 1212, h: 744, radius: 30, from: { x: 1320, y: 0 } };
+      // the panel's bottom edge sits ≥ 70 px above the caption's cap height (caption row centre 962, caps from ≈ 932)
+      const panel = { x: 612, y: 116, w: 1212, h: 744, radius: 30, from: { x: 1320, y: 0 } };
       const tabs = { size: 28, icons: true, padR: 14 };
       const barH = (44 * tabs.size) / 14;
       const pad = 46;
@@ -105,7 +106,7 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
         W: 1920,
         H: 1080,
         vertical,
-        orb: { from: { x: E.orb.x, y: E.orb.y, d: E.orb.d }, to: { x: 326, y: 292, d: 220 }, settle: { x: 326, y: 522, d: 236 } },
+        orb: { from: { x: E.orb.x, y: E.orb.y, d: E.orb.d }, to: { x: 326, y: 292, d: 220 }, settle: { x: 326, y: panel.y + panel.h / 2, d: 236 } },
         panel,
         tabs,
         pad,
@@ -120,7 +121,7 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
         row: { size: rowSize, h: rowHeight('stack', rowSize), gap: 14, layout: 'stack' },
         type,
         slips: { x: 96, y: 446, w: 460 },
-        eyebrow: { x: panel.x + 4, y: 92, align: 'left' },
+        eyebrow: { x: panel.x + 4, y: panel.y - 58, align: 'left' },
         caption: { x: 960, y: 962, maxWidth: 1560 },
         enter: { x: 2010, y: 520 },
       };
@@ -144,7 +145,7 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
       W: 1080,
       H: 1920,
       vertical,
-      orb: { from: { x: E.orb.x, y: E.orb.y, d: E.orb.d }, to: { x: 150, y: 262, d: 164 }, settle: { x: 540, y: 222, d: 196 } },
+      orb: { from: { x: E.orb.x, y: E.orb.y, d: E.orb.d }, to: { x: 150, y: 318, d: 150 }, settle: { x: 540, y: 222, d: 196 } },
       panel,
       tabs,
       pad,
@@ -158,7 +159,8 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
       list: { x: add.x, y: docsY + 54, w: cw, bottom: panel.y + panel.h - 30 },
       row: { size: rowSize, h: rowHeight('inline', rowSize), gap: 10, layout: 'inline' },
       type,
-      slips: { x: 300, y: 214, w: 716 },
+      // the pile rests in the band between the top platform zone (the top 250 px, the Reels/TikTok UI) and the panel
+      slips: { x: 286, y: 284, w: 680 },
       eyebrow: { x: 540, y: 358, align: 'center' },
       caption: { x: 540, y: 1336, maxWidth: 940 },
       enter: { x: 1130, y: 760 },

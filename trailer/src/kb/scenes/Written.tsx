@@ -11,13 +11,16 @@
  *              to the Knowledge tab — "Add knowledge", the drop zone, the web page field, Add page (disabled:
  *              the field is empty), "Your documents" with its empty state
  *   "once"     the slips stack up into one (16:9 b07's column, 9:16 dropped in from above), one per 16th
- *   born       the pile draws its edges into a document row: TXT · Opening hours, Reading…
- *   "prices"   PDF · Price list lands in the list (newest on top); the empty state leaves; the Knowledge
- *              badge opens at 1 — the tabs after it slide over; a beat later its pill rolls to Ready
+ *   born       the pile draws its edges into a document row: Opening hours, Reading… · Text (the app's row:
+ *              the FileText tile — Globe for a web page —, the name, the pill and its TYPE_LABELS word)
+ *   "prices"   Price list (PDF) lands in the list (newest on top) — the empty state has left just before, so it
+ *              lands into an empty list; the Knowledge badge opens at 1 — the tabs after it slide over; a beat
+ *              later its pill rolls to Ready
  *   "hours"    the Opening hours row flies from the corner and slots in on top (badge 2)
- *   "policies" DOCX · Cancellation policy (badge 3); the cursor has clicked into the web page field (I-beam)
- *              and types https://your-site/faq, one character per 32nd (Add page wakes on the first)
- *   "website"  Add page: pressed, released → "Adding…", then URL · FAQ page lands (badge 4), the field clears
+ *   "policies" Cancellation policy (Word, badge 3); the cursor has clicked into the web page field (I-beam) and
+ *              types your-site/faq bare (the app adds https://), one key per 16th (Add page wakes on the first)
+ *   "website"  Add page: pressed, released (the pointer flicks off and fades), then FAQ page (Web page) lands
+ *              (badge 4), the field clears
  *   "knowledge" the eyebrow ● KNOWLEDGE BASE rises above the panel; the caption keys "knowledge base." in sunday
  *
  * Every time is WRITTEN_LOCAL (src/kb/timing.ts, from kb2-vo-4's real word onsets); the layout and the poses are
@@ -30,10 +33,10 @@ import { useLayout } from '../../lib/layout';
 import { EASE, mix, smooth, SPRING, springUnit, tween } from '../../lib/motion';
 import { maskBox, typeStyle } from '../../lib/type';
 import { Captions } from '../components/Captions';
-import { click, Cursor, meshElevation, meshShadowInk, useTabBar, type CursorKey, type PillState, type TabBarGeometry } from '../kit';
+import { click, Cursor, EASE_HOVER, meshElevation, meshShadowInk, useTabBar, type CursorKey, type PillState, type TabBarGeometry } from '../kit';
 import { HOME, KB_MESH, MOMENT_LIGHTS } from '../palettes';
 import { useKbSceneFrame } from '../scene';
-import { BEAT, WRITTEN_LOCAL as W } from '../timing';
+import { WRITTEN_LOCAL as W } from '../timing';
 import { SEAM_ALPHA } from './turn/Seam';
 import { turnStage } from './turn/stage';
 import { WrittenGround } from './written/Ground';
@@ -45,7 +48,6 @@ import { BADGE, ease, orbPose, ROWS, rowTop, seamLeft, writtenStage, type Writte
 
 const SUNDAY_INK = MOMENT_LIGHTS.sunday.ink;
 const INK = meshShadowInk(KB_MESH);
-const S32 = BEAT / 8;
 
 /** each row's pill over time (the counts are illustrative, SCRIPT.md b08) */
 const PILLS: readonly (readonly PillState[])[] = [
@@ -57,32 +59,48 @@ const PILLS: readonly (readonly PillState[])[] = [
 
 /** the pointer's whole performance (frame px; the panel is at rest from WRITTEN_LOCAL.panel[1]). Every click
  *  has a dwell longer than CURSOR.pressLead: kit/cursor.ts cursorPos() falls back to the PREVIOUS key between a
- *  move's end and its key's `at`, so a press without a dwell key would jump back for those 6 frames. */
+ *  move's end and its key's `at`, so a press without a dwell key would jump back for those 6 frames.
+ *
+ *  Its rests are chosen in SCREEN space, clear of every row, caption and label it could sit on:
+ *    rest1  after the tab click the hand drifts down to the web page address (16:9 the white space right of "Web
+ *           page address", 9:16 right of "Add knowledge", above the drop zone) and lifts off (hidden while the slips
+ *           and the rows have the stage); it comes back THERE once the flying row is past it, holds still, then
+ *           moves into the field at a calm, expert speed
+ *    exit   after Add page it glides out to the right along the button (16:9 toward the gutter between the
+ *           columns, 9:16 off the panel onto the mesh) and is gone (PointerExit) before it reaches any text and
+ *           before the FAQ page lands under the field (9:16) */
+const SHOW = 99;
 function cursorKeys(S: WrittenStage, bar: TabBarGeometry): CursorKey[] {
   const tk = bar.rect('knowledge', W.tab.down);
   const tab = { x: tk.cx + 6, y: tk.cy + 5 };
-  // after the tab: a small drift down onto the panel's quiet heading row (16:9 just right of "Your documents", clear of
-  // the list where the Opening hours row will fly in; 9:16 right of "Add knowledge"), then hidden until the row has landed
-  const rest1 = S.vertical ? { x: tab.x + 40, y: tab.y + 84 } : { x: S.docs.x + 280, y: S.docs.y - 6 };
-  const field = { x: S.field.x + S.field.w * (S.vertical ? 0.62 : 0.58), y: S.field.y + S.field.h * 0.52 };
-  const btn = { x: S.button.x + S.button.w * 0.5, y: S.button.y + S.button.h * 0.56 };
-  const rest2 = S.vertical ? { x: btn.x - 40, y: btn.y + 150 } : { x: btn.x + 190, y: btn.y + 96 };
+  const rest1 = S.vertical ? { x: S.field.x + S.field.w + 60, y: S.add.y + 6 } : { x: S.field.x + S.field.w - 50, y: S.fieldLabel!.y - 22 };
+  const field = { x: S.field.x + S.field.w * (S.vertical ? 0.93 : 0.58), y: S.field.y + S.field.h * 0.52 };
+  const btn = { x: S.button.x + S.button.w * (S.vertical ? 0.42 : 0.5), y: S.button.y + S.button.h * 0.56 };
+  const rest2 = S.vertical ? { x: S.panel.x + S.panel.w + 30, y: S.button.y + 10 } : { x: S.button.x + S.button.w + 24, y: S.button.y + 10 };
   const hold = W.tab.up - W.tab.down;
   const lastKey = W.keys[W.keys.length - 1];
   return [
     { at: 0, x: S.enter.x, y: S.enter.y },
     ...click(W.tab.down, tab.x, tab.y, { dwell: 8, hold }),
-    { at: W.tab.up + 14, x: rest1.x, y: rest1.y },
-    { at: W.tab.up + 18, x: rest1.x, y: rest1.y, action: 'hide' },
-    { at: W.fly[1] + 1, x: rest1.x, y: rest1.y, action: 'show' },
-    ...click(W.field.down, field.x, field.y, { dwell: 8, hold: W.field.up - W.field.down, kind: 'text' }),
+    { at: W.tab.up + 22, x: rest1.x, y: rest1.y },
+    { at: W.tab.up + 25, x: rest1.x, y: rest1.y, action: 'hide' },
+    { at: SHOW, x: rest1.x, y: rest1.y, action: 'show' },
+    // still for a beat after it has faded in (≥ 5 f at rest), then into the field
+    { at: SHOW + 6, x: rest1.x, y: rest1.y },
+    ...click(W.field.down, field.x, field.y, { dwell: 7, hold: W.field.up - W.field.down, kind: 'text' }),
     { at: W.field.up + 1.5, x: field.x, y: field.y, action: 'type' },
-    { at: lastKey + S32, x: field.x, y: field.y },
+    { at: lastKey + 0.5, x: field.x, y: field.y },
     ...click(W.add.down, btn.x, btn.y, { dwell: 7, hold: W.add.up - W.add.down, kind: 'arrow' }),
-    { at: W.add.up + 16, x: rest2.x, y: rest2.y },
-    { at: W.add.up + 19, x: rest2.x, y: rest2.y, action: 'hide' },
+    // off the button the moment it comes up: a quick flick away (the hand leaves; 12 frames), faded on the way
+    { at: W.add.up + 12, x: rest2.x, y: rest2.y, dur: 12 },
+    { at: W.add.up + 13, x: rest2.x, y: rest2.y, action: 'hide' },
   ];
 }
+
+/** the pointer's exit after Add page: it fades WHILE it flicks away (kit/cursor.ts hides only at a key, i.e. at rest),
+ *  from 5 frames after the release — once it is past the button's label — and is gone 11 frames after it, before
+ *  any row, caption or label (9:16: before the FAQ page lands under the field, 3.75 f after the release) */
+const exitFade = (t: number) => 1 - EASE_HOVER(Math.min(1, Math.max(0, (t - (W.add.up + 5)) / 6)));
 
 /** b07's seam drawing back the way it came (turn/Seam.tsx's line: the feathers fixed to the full line) */
 const SeamBack: React.FC<{ t: number; vertical: boolean; W: number; H: number }> = ({ t, vertical, W: FW, H: FH }) => {
@@ -251,7 +269,9 @@ export const Written: React.FC = () => {
         echoY={null}
         tint={(c, j) => (c === 3 && j >= 2 ? { color: SUNDAY_INK, k: keyK } : null)}
       />
-      <Cursor keys={keys} t={t} />
+      <div style={{ position: 'absolute', inset: 0, opacity: exitFade(t) < 0.999 ? exitFade(t) : undefined }}>
+        <Cursor keys={keys} t={t} />
+      </div>
     </AbsoluteFill>
   );
 };

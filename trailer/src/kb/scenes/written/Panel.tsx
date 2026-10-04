@@ -44,13 +44,62 @@ const UploadIcon: React.FC<{ size: number; color: string }> = ({ size, color }) 
 const inBox = (b: Box) => ({ position: 'absolute' as const, left: b.x, top: b.y, width: b.w, height: b.h });
 
 /* ── General (the tab the page opens on): TabGeneral.tsx's first two cards — "Name and language" (the agent's name
- *    and language) and "Tone" (TONE_PROFILES, lib/voice/tone.ts: four of the six, Professional chosen) ── */
-const TONES = [
-  { label: 'Formal', blurb: 'Structured, precise, authoritative' },
-  { label: 'Professional', blurb: 'Businesslike and unhurried, never stiff', on: true },
-  { label: 'Empathetic', blurb: 'Patient and reassuring, takes its time' },
-  { label: 'Friendly', blurb: 'Warm and conversational, quick to reassure' },
-] as const;
+ *    and language) and "Tone" (TabGeneral.tsx:224–258: CardDescription verbatim; the radio grid in AGENT_TONES order
+ *    with each profile's TONE_ICONS icon, label and blurb from lib/voice/tone.ts, Professional chosen). The panel shows
+ *    the grid's first rows — 16:9 Formal · Professional / Empathetic · Casual, 9:16 Formal · Professional — as the
+ *    app's own window would before you scroll; nothing is re-ordered or re-worded ── */
+type ToneIcon = 'landmark' | 'briefcase' | 'heartHandshake' | 'coffee';
+/** lucide 1.49 node data (landmark, briefcase, heart-handshake, coffee .mjs) */
+const TONE_ICON: Record<ToneIcon, React.ReactNode> = {
+  landmark: (
+    <>
+      <path d="M10 18v-7" />
+      <path d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z" />
+      <path d="M14 18v-7" />
+      <path d="M18 18v-7" />
+      <path d="M3 22h18" />
+      <path d="M6 18v-7" />
+    </>
+  ),
+  briefcase: (
+    <>
+      <path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+      <rect width="20" height="14" x="2" y="6" rx="2" />
+    </>
+  ),
+  heartHandshake: (
+    <path d="M19.414 14.414C21 12.828 22 11.5 22 9.5a5.5 5.5 0 0 0-9.591-3.676.6.6 0 0 1-.818.001A5.5 5.5 0 0 0 2 9.5c0 2.3 1.5 4 3 5.5l5.535 5.362a2 2 0 0 0 2.879.052 2.12 2.12 0 0 0-.004-3 2.124 2.124 0 1 0 3-3 2.124 2.124 0 0 0 3.004 0 2 2 0 0 0 0-2.828l-1.881-1.882a2.41 2.41 0 0 0-3.409 0l-1.71 1.71a2 2 0 0 1-2.828 0 2 2 0 0 1 0-2.828l2.823-2.762" />
+  ),
+  coffee: (
+    <>
+      <path d="M10 2v2" />
+      <path d="M14 2v2" />
+      <path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1" />
+      <path d="M6 2v2" />
+    </>
+  ),
+};
+const TONES: readonly { label: string; blurb: string; icon: ToneIcon; on?: true }[] = [
+  { label: 'Formal', blurb: 'Structured, precise, authoritative', icon: 'landmark' },
+  { label: 'Professional', blurb: 'Businesslike and unhurried, never stiff', icon: 'briefcase', on: true },
+  { label: 'Empathetic', blurb: 'Patient and reassuring, takes its time', icon: 'heartHandshake' },
+  { label: 'Casual', blurb: 'Relaxed and natural, like a good receptionist', icon: 'coffee' },
+];
+const TONE_DESC = 'Sets how your agent speaks: its wording, pace and warmth. The greeting on the Conversation tab follows it.';
+
+/** lines a string wraps to at `size` in `width` (word wrap, the ui face) */
+function wrapCount(text: string, size: number, weight: number, width: number) {
+  let lines = 1;
+  let line = '';
+  for (const w of text.split(' ')) {
+    const next = line ? `${line} ${w}` : w;
+    if (line && measureText(next, { size, weight }) > width) {
+      lines++;
+      line = w;
+    } else line = next;
+  }
+  return lines;
+}
 
 const General: React.FC<{ S: WrittenStage }> = ({ S }) => {
   const T = S.type;
@@ -67,10 +116,19 @@ const General: React.FC<{ S: WrittenStage }> = ({ S }) => {
   const fieldsBottom = fieldsTop + 2 * (fieldH + T.label * 2.6);
   // Tone: 16:9 in the right column, 9:16 under the fields
   const tone = S.vertical ? { x, y: fieldsBottom + 18, w } : { x: S.docs.x, y: S.add.y, w: S.docs.w };
+  // (16:9: a measure a touch narrower than the column, so the description's last line is never one word)
+  const descW = S.vertical ? tone.w : tone.w - 44;
+  const toneDesc = T.small * 1.3 * wrapCount(TONE_DESC, T.small, WT.regular, descW) + (S.vertical ? 24 : 26);
   const gap = 16;
   const cardW = (tone.w - gap) / 2;
-  const cardH = S.vertical ? 112 : 138;
-  const gridTop = tone.y + T.title * 1.35 + desc;
+  const padX = S.vertical ? 22 : 20;
+  const blurbSize = T.small - 2;
+  const icon = Math.round(T.label * 1.3);
+  const blurbLines = Math.max(...TONES.map((tn) => wrapCount(tn.blurb, blurbSize, WT.regular, cardW - 2 * padX)));
+  // p-4 · the icon (size-5, mb-2) · the label · the blurb (mt-0.5)
+  const cardH = Math.ceil(18 + icon + 10 + T.label * 1.2 + 4 + blurbSize * 1.28 * blurbLines + 18);
+  const gridTop = tone.y + T.title * 1.35 + toneDesc;
+  const shown = S.vertical ? TONES.slice(0, 2) : TONES;
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div style={{ position: 'absolute', left: x, top: S.add.y, ...ui(T.title, WT.medium), color: APP.foreground }}>Name and language</div>
@@ -98,13 +156,13 @@ const General: React.FC<{ S: WrittenStage }> = ({ S }) => {
         </div>
       ))}
       <div style={{ position: 'absolute', left: tone.x, top: tone.y, ...ui(T.title, WT.medium), color: APP.foreground }}>Tone</div>
-      <div style={{ position: 'absolute', left: tone.x, top: tone.y + T.title * 1.35, width: tone.w, ...ui(T.small, WT.regular), whiteSpace: 'normal', lineHeight: 1.3, color: APP.mutedFg }}>
-        Sets how your agent speaks: its wording, pace and warmth.
+      <div style={{ position: 'absolute', left: tone.x, top: tone.y + T.title * 1.35, width: descW, ...ui(T.small, WT.regular), whiteSpace: 'normal', lineHeight: 1.3, color: APP.mutedFg }}>
+        {TONE_DESC}
       </div>
-      {(S.vertical ? TONES.slice(0, 2) : TONES).map((tn, i) => {
+      {shown.map((tn, i) => {
         const cx = tone.x + (i % 2) * (cardW + gap);
         const cy = gridTop + Math.floor(i / 2) * (cardH + gap);
-        const on = 'on' in tn && tn.on;
+        const on = !!tn.on;
         return (
           <div
             key={tn.label}
@@ -117,12 +175,15 @@ const General: React.FC<{ S: WrittenStage }> = ({ S }) => {
               borderRadius: 18,
               boxShadow: `inset 0 0 0 2.5px ${on ? APP.primary : APP.border}`,
               background: on ? 'rgba(124, 58, 237, 0.05)' : APP.card,
-              padding: S.vertical ? '18px 22px' : '18px 20px',
+              padding: `18px ${padX}px`,
               boxSizing: 'border-box',
             }}
           >
+            <svg width={icon} height={icon} viewBox="0 0 24 24" fill="none" stroke={on ? APP.primary : APP.mutedFg} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block', marginBottom: 10 }} aria-hidden>
+              {TONE_ICON[tn.icon]}
+            </svg>
             <div style={{ ...ui(T.label, WT.medium), color: APP.foreground }}>{tn.label}</div>
-            <div style={{ marginTop: 6, ...ui(T.small - 2, WT.regular), whiteSpace: 'normal', lineHeight: 1.28, color: APP.mutedFg }}>{tn.blurb}</div>
+            <div style={{ marginTop: 4, ...ui(blurbSize, WT.regular), whiteSpace: 'normal', lineHeight: 1.28, color: APP.mutedFg }}>{tn.blurb}</div>
           </div>
         );
       })}
@@ -151,7 +212,7 @@ const DropZone: React.FC<{ S: WrittenStage; hover: number }> = ({ S, hover }) =>
   );
 };
 
-/* ── the web page field: placeholder, focus ring, one character per 32nd, the caret; cleared once the page is in ── */
+/* ── the web page field: placeholder, focus ring, one character per 16th, the caret; cleared once the page is in ── */
 const UrlField: React.FC<{ t: number; S: WrittenStage }> = ({ t, S }) => {
   const f = S.field;
   const size = S.vertical ? 27 : 26;
@@ -248,8 +309,9 @@ const AddPage: React.FC<{ t: number; S: WrittenStage; keys: readonly CursorKey[]
 const Knowledge: React.FC<{ t: number; S: WrittenStage; keys: readonly CursorKey[] }> = ({ t, S, keys }) => {
   const T = S.type;
   const dropHover = hoverAt(keys, t, S.drop);
-  // the empty state: only while the list is empty — it leaves up through its mask as the first row lands
-  const emptyOut = W.rows[0] - 1;
+  // the empty state: only while the list is empty — it leaves up through its mask and is gone (9 f) BEFORE the first
+  // row lands, so that row lands into an empty list (truth table #6: the title never shows beside a document)
+  const emptyOut = W.rows[0] - 10;
   const er = reveal(t, -100, { rise: 60, exit: { at: emptyOut, dur: 9 } });
   const listMid = (S.list.y + S.list.bottom) / 2;
   const emptyIcon = S.vertical ? 52 : 60;

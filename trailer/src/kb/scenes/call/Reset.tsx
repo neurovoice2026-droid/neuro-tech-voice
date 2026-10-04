@@ -1,53 +1,50 @@
 /**
- * THE WORD RE-SET — a fork of the kit's <WordReset> (kit/paper.tsx) for b11, same layout and the same reveals, with
- * one change: a kept word's flight is a TIMED glide on the house ease (cubic-bezier(.16, 1, .3, 1) over GLIDE frames)
- * instead of a spring, so it lands exactly on its pen position GLIDE frames after its onset. Her last kept word
- * ("closed.", on the last word of the line) has under 20 frames before the strip folds into the record; a spring
- * still has a few px to travel then, which reads as a tight word space ("we'reclosed"). Everything else is the kit's:
+ * THE WORD RE-SET (SCRIPT.md b11, the graft from "demo") — ONE choreographed move, rebuilt after build B's critics
+ * ("orphan words floating, an empty highlighted box, 'we're        closed' with a wide gap, the sentence held 6 frames"):
  *
- *   source tokens sit where the page set them (lines `lineH` apart, title role with tabular figures); every token
- *   no target word takes leaves up through its mask at `leaveAt`, a frame apart
- *   KEPT words glide (sub-pixel) to their pen positions in the target sentence, from the source size to the
- *   target size by transform (the glyphs are set once, at the target size); extra letters they gain ("Sunday" →
- *   "Sundays,") rise in once they land
- *   NEW words rise into their masks on their onsets; a key phrase eases into its ink
+ *   page     the swept lines stay on the page (call/Page.tsx): from CALL_LOCAL.drop the tokens she doesn't say
+ *            (· 9:00–14:00 ·) leave up through their own masks and the sweep bands up out of theirs — no strip, no box
+ *            outlives its words
+ *   fly      on "We" (CALL_LOCAL.fly) every KEPT word (Saturday · Sunday · closed) takes off from its place on the page
+ *            TOGETHER and glides — one eased path each, soft start, long settle, never two words on the same pixels
+ *            (stage.ts `flights`) — straight into its pen position in her sentence, growing from the page's size to
+ *            the caption's by transform (the glyphs are set once, at the caption size; the weight eases 480 → 460 on
+ *            the variable face). Nothing parks, nothing is ever alone in transit; all three have landed long before
+ *            "Saturday" is said, and wait there at 40 % ink
+ *   onsets   on each word's moment (CALL_LOCAL.reset: its onset − 2, captions' lead) her own words rise into their
+ *            slots, a kept word takes full ink ("Sunday" its "s," and "closed" its "." rising in) — the sentence never
+ *            shows a hole where she has already spoken, and every word lands before it is heard; "nine till two." takes
+ *            the sunday key with "nine"
+ *
+ * The result IS her caption: "We are! Saturday from nine till two. Sundays, we're closed." (caption role, ink).
  */
 import React from 'react';
+import { Easing } from 'remotion';
 import { reveal, revealStyle } from '../../../components/Type';
 import { subpixel } from '../../../lib/glide';
 import { EASE, mix, mixHex, SPRING, tween } from '../../../lib/motion';
 import { maskBox, typeStyle } from '../../../lib/type';
 import { TYPE } from '../../../theme';
-import { APP, layoutWords, measureText, spaceWidth, useKitFaces, type ResetWord } from '../../kit';
+import { APP, measureText, spaceWidth, useKitFaces, type ResetWord } from '../../kit';
 
-/** frames a kept word takes from its onset to its pen position */
-export const GLIDE = 16;
+/** a flight: soft start (it is lifted off the page, not kicked), decisive, a long settle with no overshoot */
+const FLY = Easing.bezier(0.36, 0, 0.12, 1);
+/** a kept word's ink while it waits for its onset in her sentence */
+const WAIT = 0.4;
 
-export const Reset: React.FC<{
-  t: number;
-  source: { x: number; y: number; lines: readonly string[]; size: number; lineH?: number; color?: string };
-  target: { text: string; x: number; y: number; size: number; maxWidth: number; align?: 'center' | 'left'; color?: string; keys?: readonly { text: string; color: string; at: number }[] };
-  words: readonly ResetWord[];
-  leaveAt?: number;
-  /** each kept word's flight (by target word index), so it never crosses a word already set or still on the strip:
-   *  'yx'  to its line's height first, then along the line (it arrives from the open side of its slot)
-   *  'xy'  across first, then into its line
-   *  'hop' up out of the strip first (a line's height), across above it, then into its slot */
-  path?: (i: number) => 'yx' | 'xy' | 'hop';
-}> = ({ t, source, target, words, leaveAt, path = () => 'yx' }) => {
-  useKitFaces();
-  const sSpec = { size: source.size, weight: TYPE.title.weight, tracking: -0.02 };
+export type Flight = 'g' | 'yx' | 'xy';
+export type PageToken = { text: string; x: number; y: number };
+
+/** her sentence laid out (greedy wrap at maxWidth, each line left / centred): every word's pen position (frame px) */
+export function resetLayout(target: { text: string; x: number; y: number; size: number; maxWidth: number; align?: 'center' | 'left' }) {
   const tSpec = { size: target.size, weight: TYPE.caption.weight, tracking: -0.02 };
-  const sLineH = source.lineH ?? source.size * 1.62;
-  const srcTokens = source.lines.map((ln, li) => layoutWords(ln, sSpec, source.x).words.map((w) => ({ ...w, y: source.y + li * sLineH })));
-  // the target layout: greedy wrap at maxWidth, each line centred (or left)
-  const tWords = target.text.split(' ');
+  const words = target.text.split(' ');
   const space = spaceWidth(tSpec);
-  const widths = tWords.map((w) => measureText(w, tSpec));
+  const widths = words.map((w) => measureText(w, tSpec));
   const lines: number[][] = [];
   let cur: number[] = [];
   let lw = 0;
-  tWords.forEach((_, i) => {
+  words.forEach((_, i) => {
     if (cur.length && lw + space + widths[i] > target.maxWidth) {
       lines.push(cur);
       cur = [];
@@ -57,82 +54,81 @@ export const Reset: React.FC<{
     cur.push(i);
   });
   if (cur.length) lines.push(cur);
-  const tLineH = target.size * TYPE.caption.lineHeight;
-  const top = target.y - (lines.length * tLineH) / 2;
-  const pos: { x: number; y: number }[] = [];
+  const lineH = target.size * TYPE.caption.lineHeight;
+  const top = target.y - (lines.length * lineH) / 2;
+  const pos: { x: number; y: number; w: number }[] = [];
   lines.forEach((ln, li) => {
-    const wSum = ln.reduce((s, i) => s + widths[i], 0) + space * (ln.length - 1);
+    const wSum = ln.reduce((a, i) => a + widths[i], 0) + space * (ln.length - 1);
     let x = target.align === 'left' ? target.x : target.x - wSum / 2;
     for (const i of ln) {
-      pos[i] = { x, y: top + li * tLineH };
+      pos[i] = { x, y: top + li * lineH, w: widths[i] };
       x += widths[i] + space;
     }
   });
-  const used = new Set(words.filter((w) => w.from).map((w) => `${w.from![0]}:${w.from![1]}`));
-  const leave = leaveAt ?? Math.min(...words.map((w) => w.at));
-  const tColor = target.color ?? APP.foreground;
-  const sColor = source.color ?? APP.foreground;
+  return { words, pos, lineH, top, lines: lines.length };
+}
+
+export const Reset: React.FC<{
+  t: number;
+  /** the swept lines' tokens where the page sets them (call/Page.tsx sweptTokens), and the page's line size */
+  tokens: readonly (readonly PageToken[])[];
+  sourceSize: number;
+  target: { text: string; x: number; y: number; size: number; maxWidth: number; align?: 'center' | 'left'; color: string; keys?: readonly { text: string; color: string; at: number }[] };
+  /** per target word: its moment (onset − lead) and, for a kept word, the page token it comes from [line, token] */
+  words: readonly ResetWord[];
+  /** the one move: [take-off, landing] */
+  fly: readonly [number, number];
+  /** each kept word's path, in sentence order */
+  flights: readonly Flight[];
+}> = ({ t, tokens, sourceSize, target, words, fly, flights }) => {
+  useKitFaces();
+  const L = resetLayout(target);
+  const tColor = target.color;
   const keyOf = (i: number) => {
     for (const k of target.keys ?? []) {
       const kw = k.text.split(' ');
-      for (let s = 0; s + kw.length <= tWords.length; s++) {
-        if (kw.every((w, j) => tWords[s + j].replace(/[.,!?]$/, '') === w.replace(/[.,!?]$/, '')) && i >= s && i < s + kw.length) return k;
+      for (let s = 0; s + kw.length <= L.words.length; s++) {
+        if (kw.every((w, j) => L.words[s + j].replace(/[.,!?]$/, '') === w.replace(/[.,!?]$/, '')) && i >= s && i < s + kw.length) return k;
       }
     }
     return null;
   };
-  const scaleK = source.size / target.size;
+  const scaleK = sourceSize / target.size;
+  // the flyer is set with the TITLE role's line height (the page's) so its baseline is the page's at take-off; it lands
+  // that much lower in the caption's taller line box (the caption words' baseline)
+  const lhTitle = TYPE.title.lineHeight;
+  const dyLand = (target.size * (TYPE.caption.lineHeight - lhTitle)) / 2;
+  const D = fly[1] - fly[0];
+  let keptIndex = 0;
   return (
     <>
-      {srcTokens.flatMap((line, li) =>
-        line.map((tok, ti) => {
-          if (used.has(`${li}:${ti}`)) return null;
-          const rv = reveal(t, -1e6, { exit: { at: leave + (li * line.length + ti) * 1, dur: 9 } });
-          if (rv.opacity <= 0.001) return null;
-          return (
-            <span key={`s${li}-${ti}`} style={{ position: 'absolute', left: tok.x, top: tok.y, ...maskBox(0), ...typeStyle('title', false, { size: source.size, tabular: true }), letterSpacing: '-0.02em', color: sColor }}>
-              <span style={revealStyle(rv, undefined, true)}>{tok.text}</span>
-            </span>
-          );
-        }),
-      )}
-      {tWords.map((word, i) => {
+      {L.words.map((word, i) => {
         const spec = words[i] ?? { at: Infinity };
         const k = keyOf(i);
         const ink = k ? mixHex(tColor, k.color, tween(t, [k.at, k.at + 18], [0, 1], EASE.house)) : tColor;
-        const P = pos[i];
+        const P = L.pos[i];
         if (spec.from) {
-          const tok = srcTokens[spec.from[0]][spec.from[1]];
-          const g = tween(t, [spec.at, spec.at + GLIDE], [0, 1], EASE.house);
-          // the leading axis gets there early (out3 over 60 %), the trailing one follows (inOut from 20 %): a curved path
-          const lead = tween(t, [spec.at, spec.at + GLIDE * 0.6], [0, 1], EASE.out3);
-          const trail = tween(t, [spec.at + GLIDE * 0.2, spec.at + GLIDE], [0, 1], EASE.inOut);
-          const kind = path(i);
-          let gx: number;
-          let gy: number;
-          // it grows to the sentence's size as it travels along / across (not as it leaves the strip: a word growing
-          // in place would spread over its neighbours on the strip)
-          let sc: number;
-          if (kind === 'hop') {
-            // up out of the strip (a line), across, then into the slot — three overlapping eased legs
-            const up = tween(t, [spec.at, spec.at + GLIDE * 0.35], [0, 1], EASE.out3);
-            const across = tween(t, [spec.at + GLIDE * 0.12, spec.at + GLIDE * 0.82], [0, 1], EASE.inOut);
-            const settle = tween(t, [spec.at + GLIDE * 0.5, spec.at + GLIDE], [0, 1], EASE.inOut);
-            const band = tok.y - source.size * 1.3;
-            gx = mix(tok.x, P.x, across);
-            gy = mix(mix(tok.y, band, up), P.y, settle);
-            sc = mix(scaleK, 1, across);
-          } else {
-            gx = mix(tok.x, P.x, kind === 'xy' ? lead : trail);
-            gy = mix(tok.y, P.y, kind === 'xy' ? trail : lead);
-            sc = mix(scaleK, 1, kind === 'xy' ? lead : trail);
-          }
+          const kind = flights[keptIndex++] ?? 'g';
+          const tok = tokens[spec.from[0]][spec.from[1]];
+          if (t < fly[0]) return null;
+          const g = FLY(Math.min(1, Math.max(0, (t - fly[0]) / D)));
+          const lead = FLY(Math.min(1, Math.max(0, (t - fly[0]) / (0.65 * D))));
+          const trail = FLY(Math.min(1, Math.max(0, (t - fly[0] - 0.2 * D) / (0.8 * D))));
+          const ux = kind === 'g' ? g : kind === 'xy' ? lead : trail;
+          const uy = kind === 'g' ? g : kind === 'yx' ? lead : trail;
+          const gx = mix(tok.x, P.x, ux);
+          const gy = mix(tok.y, P.y + dyLand, uy);
+          const sc = mix(scaleK, 1, g);
+          const weight = mix(TYPE.title.weight, TYPE.caption.weight, g);
           const keep = tok.text;
           const prefix = word.startsWith(keep) ? keep : word;
           const suffix = word.startsWith(keep) ? word.slice(keep.length) : '';
-          // the letters it gains rise in once it has landed in its slot
-          const suf = suffix ? reveal(t, spec.at + GLIDE - 6, { config: SPRING.caption, rise: 90 }) : null;
-          const flying = g > 0 && t < spec.at + GLIDE + 0.5;
+          // the letters it gains rise in on its own moment (it has long landed by then)
+          const suf = suffix ? reveal(t, spec.at, { config: SPRING.caption, rise: 90 }) : null;
+          // ink: the page's foreground → her ink as it flies; it waits at 40 % and takes full ink on its moment
+          const onAt = tween(t, [spec.at, spec.at + 4], [0, 1], EASE.out3);
+          const opacity = mix(mix(1, WAIT, g), 1, onAt);
+          const flying = t < fly[1] + 0.5;
           return (
             <span
               key={`t${i}`}
@@ -141,18 +137,20 @@ export const Reset: React.FC<{
                 left: 0,
                 top: 0,
                 transformOrigin: '0 0',
-                ...typeStyle('caption', false, { size: target.size }),
+                ...typeStyle('caption', false, { size: target.size, weight }),
+                lineHeight: lhTitle,
                 letterSpacing: '-0.02em',
                 whiteSpace: 'nowrap',
-                color: t < spec.at ? sColor : mixHex(sColor, ink, g),
-                // on its own layer from the onset until it has landed; at rest it drops back to pixel-crisp
-                ...subpixel(`translate(${gx.toFixed(3)}px, ${gy.toFixed(3)}px) scale(${sc.toFixed(5)})`, flying || t < spec.at),
+                color: mixHex(APP.foreground, ink, g),
+                opacity: opacity < 0.999 ? opacity : undefined,
+                // on its own layer while it flies; at rest it drops back to pixel-crisp
+                ...subpixel(`translate(${gx.toFixed(3)}px, ${gy.toFixed(3)}px) scale(${sc.toFixed(5)})`, flying),
               }}
             >
               {prefix}
               {suffix ? (
                 <span style={maskBox(0)}>
-                  <span style={revealStyle(suf!, undefined, true)}>{suffix}</span>
+                  <span style={revealStyle(suf!, undefined, t - spec.at < 20)}>{suffix}</span>
                 </span>
               ) : null}
             </span>

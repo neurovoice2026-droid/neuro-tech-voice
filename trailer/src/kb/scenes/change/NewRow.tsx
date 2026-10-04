@@ -19,7 +19,7 @@ import { maskBox, typeStyle } from '../../../lib/type';
 import { TYPE } from '../../../theme';
 import { APP, Icon, measureText, meshElevation, Pill, type DocPageGeometry, type PillState } from '../../kit';
 import { CHANGE_LOCAL as K } from '../../timing';
-import { Row } from '../written/Row';
+import { KindTile, Row, rowFace, typeLabelWidth, TypeLabel } from '../written/Row';
 import { ease, lerp, listGeo, type ChangeStage } from './stage';
 
 /** the new version's lines (the page b14 answers from) */
@@ -43,12 +43,15 @@ function rowGeo(size: number, w: number, h: number) {
   const pad = size * 0.42;
   const tokenSize = Math.max(24, Math.round(size * 0.5));
   const tile = size * 1.4;
-  const tileW = Math.max(tile, measureText('DOCX', { size: tokenSize, weight: TYPE.label.weight, tracking: 0.08 }) + size * 0.6);
+  // written/Row.tsx's face: the app's square icon tile (FileText), the type word "Text" after the pill
+  const F = rowFace(size, 'inline', h);
+  const tileW = tile;
+  const metaW = F.metaGap + typeLabelWidth('txt', F.metaSize);
   const btn = size * 1.05;
   const pillSize = Math.max(26, Math.round(size * 0.6));
   const mx = w - pad - btn;
   const pillW = measureText('Ready · 1 passage', { size: pillSize, weight: 520 }) + 2.67 * pillSize;
-  return { pad, tokenSize, tile, tileW, btn, pillSize, mx, pillW, nameX: pad * 2 + tileW, nameY: (h - size * 1.05) / 2, pillX: mx - pad * 0.6 - pillW, pillY: (h - pillSize * 1.72) / 2 };
+  return { pad, tokenSize, tile, tileW, btn, pillSize, mx, pillW, F, nameX: pad * 2 + tileW, nameY: (h - size * 1.05) / 2, pillX: mx - pad * 0.6 - pillW - metaW, pillY: (h - pillSize * 1.72) / 2 };
 }
 
 export const NewRow: React.FC<{ t: number; S: ChangeStage; g: DocPageGeometry; ink: string; accent: string }> = ({ t, S, g, ink, accent }) => {
@@ -94,13 +97,9 @@ export const NewRow: React.FC<{ t: number; S: ChangeStage; g: DocPageGeometry; i
   const ny = lerp(R.nameY, headY, hyp);
   const nsc = lerp(size, headSize, hm) / headSize;
   const nWeight = lerp(TYPE.title.weight, 560, hm);
-  // the token: the tile's centre → the page's kind line (first, quick: out of the name's way)
-  const hk = ease(t, K.unfold[0] + 3, K.unfold[0] + 15, EASE.inOut);
-  const tokS = lerp(R.tokenSize, labelSize, hk);
-  const tokW0 = measureText('TXT', { size: R.tokenSize, weight: TYPE.label.weight, tracking: 0.08 });
-  const tx = lerp(R.pad + (R.tileW - tokW0) / 2, pad, hk);
-  const ty = lerp((B.h - R.tokenSize * 1.2) / 2, headTop, hk);
-  const tokTrack = lerp(0.08, 0.14, hk);
+  // the page's kind line: the row's tile holds the app's FileText icon (written/Row.tsx), not a token, so the line
+  // rises into its place on the page through its own mask once the name has gone down past it (they never cross)
+  const kindAt = K.unfold[0] + 12;
   // the page's own content: the rule draws, the lines rise on 16ths
   const ruleP = tween(t, [K.unfold[1] - 8, K.unfold[1] + 4], [0, 1], EASE.draw);
   const linesAt = (i: number) => K.unfold[1] - 6 + i * 3.75;
@@ -118,8 +117,12 @@ export const NewRow: React.FC<{ t: number; S: ChangeStage; g: DocPageGeometry; i
         {borderA > 0.001 ? <rect x={0.625} y={0.625} width={Math.max(0, w - 1.25)} height={Math.max(0, h - 1.25)} rx={Math.max(0, radius - 0.6)} fill="none" stroke={APP.border} strokeWidth={1.25} strokeOpacity={borderA} /> : null}
       </svg>
       <div style={{ position: 'absolute', left: 0, top: 0, width: w, height: h, overflow: 'hidden', borderRadius: radius }}>
-        {tileA > 0.001 ? <div style={{ position: 'absolute', left: R.pad, top: (B.h - R.tile) / 2, width: R.tileW, height: R.tile, borderRadius: size * 0.24, background: APP.muted, opacity: tileA }} /> : null}
-        <div style={{ position: 'absolute', left: tx, top: ty, ...typeStyle('label', v, { size: tokS }), letterSpacing: `${tokTrack}em`, color: APP.mutedFg, lineHeight: 1.2, whiteSpace: 'nowrap' }}>TXT</div>
+        {tileA > 0.001 ? <KindTile kind="txt" side={R.tile} icon={R.F.icon} radius={R.F.radius} style={{ position: 'absolute', left: R.pad, top: (B.h - R.tile) / 2, opacity: tileA }} /> : null}
+        {t >= kindAt - 0.5 ? (
+          <div style={{ position: 'absolute', left: pad, top: headTop, ...maskBox(0) }}>
+            <span style={{ ...revealStyle(reveal(t, kindAt, { rise: 90, fade: 0.5 }), undefined, t - kindAt < 16), display: 'block', ...typeStyle('label', v, { size: labelSize }), letterSpacing: '0.14em', color: APP.mutedFg, lineHeight: 1.2, whiteSpace: 'nowrap' }}>TXT</span>
+          </div>
+        ) : null}
         <div
           style={{
             position: 'absolute',
@@ -138,8 +141,10 @@ export const NewRow: React.FC<{ t: number; S: ChangeStage; g: DocPageGeometry; i
         {rowOut < 1 ? (
           <>
             <div style={{ position: 'absolute', left: R.pillX, top: R.pillY, overflow: 'hidden', paddingBottom: 1 }}>
-              <div style={{ transform: `translateY(${(-rowOut * 120).toFixed(2)}%)`, opacity: 1 - smooth(0.3, 1, rowOut), display: 'flex' }}>
+              <div style={{ transform: `translateY(${(-rowOut * 120).toFixed(2)}%)`, opacity: 1 - smooth(0.3, 1, rowOut), display: 'flex', alignItems: 'center', height: R.pillSize * 1.72 }}>
                 <Pill t={t} states={PILL} size={R.pillSize} />
+                <span style={{ display: 'inline-block', width: R.F.metaGap }} />
+                <TypeLabel kind="txt" size={R.F.metaSize} />
               </div>
             </div>
             <div style={{ position: 'absolute', left: R.mx, top: (B.h - R.btn) / 2, width: R.btn, height: R.btn, display: 'flex', alignItems: 'center', justifyContent: 'center', color: APP.foreground, opacity: 1 - rowOut }}>

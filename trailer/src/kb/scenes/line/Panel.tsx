@@ -22,7 +22,7 @@
 import React, { useMemo } from 'react';
 import { subpixel } from '../../../lib/glide';
 import { smooth } from '../../../lib/motion';
-import { APP, Button, buttonSize, CURSOR, hoverAt, Panel, pressAt, Swap, TabBar, ui, useKitFaces, useTabBar, W as WT, wrapWords, type CursorKey, type PillState, type Rect, type TabBarGeometry, type TabChange } from '../../kit';
+import { APP, Button, buttonSize, hoverAt, Panel, pressAt, Swap, TabBar, ui, useKitFaces, useTabBar, W as WT, wrapWords, type CursorKey, type PillState, type Rect, type TabBarGeometry, type TabChange } from '../../kit';
 import { LINE_LOCAL as N } from '../../timing';
 import { Row } from '../written/Row';
 import { ROWS, rowHeight, writtenStage } from '../written/stage';
@@ -125,8 +125,15 @@ export function usePageGeometry(S: LineStage): PageGeo {
 }
 
 /** the pointer's whole performance (frame px at the page's rest place; it rides the page's transform). Each move INTO a
- *  press ends on a dwell key (> CURSOR.pressLead before the press): kit/cursor.ts cursorPos() falls back to the previous
- *  key between a move's end and its key's `at`, so a press key alone would jump back for those frames. */
+ *  press ends on a dwell key (the read before the press): kit/cursor.ts cursorPos() falls back to the previous key between
+ *  a move's end and its key's `at`, so a press key alone would jump back for those frames.
+ *   enter    on the page: it comes up through the frame's bottom edge with it (the act's one scroll) and settles onto
+ *            Conversation as the page lands, 4.5 f before the press (the brief's ≥ 4)
+ *   tab      a crisp click (LINE_LOCAL.tab: 2.25 f down → up); the hand LEAVES a frame before the release, as a real hand
+ *            does (the press names its own `up`, so the move may start under it)
+ *   field    the crossing at its natural pace (≈ 22 f for ≈ 710 px: naturalMove ≈ 24), the field read 4.5 f, pressed and
+ *            released (the caret, the first word); the I-beam exactly while the hotspot is inside the field's box
+ *   Save     after the last word: a frame later it leaves the keys, reads Save changes 4.5 f, presses, releases, fades */
 export function cursorKeys(G: PageGeo): CursorKey[] {
   const f = G.click;
   const s = { x: G.save.x + G.save.w * 0.5, y: G.save.y + G.save.h * 0.56 };
@@ -136,16 +143,17 @@ export function cursorKeys(G: PageGeo): CursorKey[] {
   if (N.tab) {
     const tc = G.bar.rect('conversation', N.tab.down);
     const tab = { x: tc.cx + 6, y: tc.cy + 5 };
-    // the hand rides in on the page just below the tab bar (over b08's list) and settles up onto Conversation as the page
-    // lands (the end of the move shows as the page fades in: the tab is entered, not found hovered), then rests five
-    // frames on it before the press (the brief's ≥ 4; the act's grid keeps the press on beat 2)
-    const from = { x: tab.x + 0.34 * tc.h, y: tab.y + 1.2 * tc.h };
-    const settle = N.tab.down - 5;
+    // the hand comes up with the page just below the tab bar (over b08's list: it enters through the frame's bottom edge
+    // on the screen) and settles up onto Conversation through the page's landing (the tab is entered, not found hovered),
+    // then rests 4.5 frames on it before the press (the brief's ≥ 4; the act's grid keeps the press on beat 2)
+    const from = { x: tab.x + 0.3 * tc.h, y: tab.y + 1.1 * tc.h };
+    const settle = N.tab.down - 4.5;
     keys.push({ at: 0, x: from.x, y: from.y });
-    keys.push({ at: settle, x: tab.x, y: tab.y, dur: settle - 1.5, bend: 0.1 });
-    keys.push({ at: N.tab.down, x: tab.x, y: tab.y, action: 'press' });
-    keys.push({ at: N.tab.up, x: tab.x, y: tab.y, action: 'release' });
-    keys.push({ at: field.down - 6.5, x: f.x, y: f.y });
+    keys.push({ at: settle, x: tab.x, y: tab.y, dur: 5, bend: 0.1 });
+    keys.push({ at: N.tab.down, x: tab.x, y: tab.y, action: 'press', up: N.tab.up });
+    // the crossing leaves a frame before the tab's release and arrives 4.5 f before the field's press
+    const arrive = field.down - 4.5;
+    keys.push({ at: arrive, x: f.x, y: f.y, dur: arrive - (N.tab.up - 1) });
   } else {
     keys.push({ at: 0, x: f.x, y: f.y });
   }
@@ -256,8 +264,9 @@ export const LinePanel: React.FC<{ t: number; S: LineStage; G: PageGeo; ink: str
       </div>
       {/* the field outside the content clip in the plain order (its accent ring draws past its edge) */}
       {N.tab ? null : <Field g={G.field} t={t} keys={N.keys} focusAt={N.field.down} blurAt={N.saveClick.down} accent={{ at: N.focus, color: accent }} vertical={S.vertical} />}
-      {/* the I-beam exactly while the hotspot is over the textarea (a browser's cursor: text), the arrow elsewhere */}
-      <Pointer keys={keys} t={t} text={hoverAt(keys, t, G.field, CURSOR.kindDur)} />
+      {/* the I-beam exactly while the hotspot is over the textarea (a browser's cursor: text), the arrow elsewhere — the
+          swap as the hotspot crosses the box's edge, in one frame (a browser swaps it at once) */}
+      <Pointer keys={keys} t={t} text={hoverAt(keys, t, G.field, 1)} />
     </div>
   );
 };

@@ -7,10 +7,12 @@
  * desk SORTS ITSELF on the seam (SCRIPT.md b07, CLIENT DIRECTION v2):
  *
  *   16:9   a vertical hairline at x 960 divides the frame. LEFT — the work that repeats: the clock rides in to
- *          the top of the half, "Some work repeats." (its last word in a flip window), the day's column of
- *          the same answer flowing under it; Ava's orb is born above it from the clock's rose colon and her
- *          ground (KB_MESH) spreads from her over the half. RIGHT — the work that matters: "Some work
- *          matters." over the in-person card, still and in full ink, on the neutral muted mesh.
+ *          the top of the half (Part I's lockup at its own size — figures 112, labels 30 — over "Some work"),
+ *          "Some work repeats." (its last word in a flip window), the day's column of the same answer flowing
+ *          under it; Ava's orb is born over "repeats." from the clock's rose colon and her ground (KB_MESH)
+ *          spreads from her over the half. RIGHT — the work that matters: "Some work matters." over the
+ *          in-person card, still and in full ink, on the neutral muted mesh. As the matters side yields
+ *          (its title leaves, the card glides out right) her ground floods across the seam (`floodAt`).
  *   9:16   five elements (the judges' fix): the orb (born where the colon was), "Some work repeats.", the
  *          seam (horizontal, y 900), "Some work matters.", the caption. The card leaves under the seam; the
  *          clock's figures roll away and leave the line light alone, breathing, until it becomes her.
@@ -19,8 +21,8 @@
  * diptych is symmetric about its hairline.
  *
  * THE NEIGHBOURS: b06 → here is the same picture at frame 0 (`recEnd`, the desk plane / near plane offsets
- * below). Here → b08: TURN_END (bottom) is this act's last picture — the orb, the seam, the split ground and
- * (16:9) the column at rest under the orb; everything else has left by the cut.
+ * below). Here → b08: TURN_END (bottom) is this act's last picture — the orb, the seam, her ground over the
+ * whole frame and (16:9) the column at rest under the orb; everything else has left by the cut.
  */
 import { EASE, springUnit } from '../../../lib/motion';
 import { TURN_LOCAL as T } from '../../timing';
@@ -106,10 +108,14 @@ const STAGES: Record<'land' | 'vert', TurnStage> = (() => {
           // the box's top-left at (960 + M, top), scaled about its centre (InPersonCard's origin)
           to: { dx: 960 + M + (cardW - g.card.w) / 2 - g.card.x, dy: top + (g.card.h * k - g.card.h) / 2 - g.card.y, scale: k },
         },
-        clock: { from: null, to: clockGeo(M, 92, 64, g.clock) },
+        // Part I's lockup at its own size (the desk's figures 112 and labels 30: the same proportions as b01–b05 and
+        // b15 — a scaled-down copy with the fixed-size labels read as another face), TUE on the act's top line
+        clock: { from: null, to: clockGeo(M, 92 + (g.clock.y - g.clock.dayY), g.clock.size, g.clock) },
         titleL: { x: M, baseline: 512, align: 'left', size: 84 },
         titleR: { x: 960 + M, baseline: 512, align: 'left', size: 84 },
-        orb: { x: 540, y: 268, d: 300 },
+        // over "repeats." (the clock's lockup holds the half's left, over "Some work"; the orb's edge keeps the
+        // half's margin, 130 px from the seam)
+        orb: { x: 680, y: 268, d: 300 },
         column: { x: M, top: top + 10, k, window: [top - 8, top + 264], rise: 96 },
         caption: { x: 960, y: 962, maxWidth: 1560 },
         question: R.question,
@@ -191,8 +197,9 @@ export function lightPath(t: number, S: TurnStage): { x: number; y: number; lift
   const o = S.orb;
   const u = ease(t, T.lift, T.ava, EASE.inOut);
   // a quadratic arc bowed up: off the colon upwards first, then down and across onto the orb's place
-  const mx = lerp(c.x, o.x, 0.35);
-  const my = Math.min(c.y, o.y) - (S.vertical ? 46 : 110);
+  // (16:9: it rises out of the gap between the hours and the minutes and clears the minutes' caps)
+  const mx = lerp(c.x, o.x, S.vertical ? 0.35 : 0.15);
+  const my = Math.min(c.y, o.y) - (S.vertical ? 46 : 180);
   const x = (1 - u) * (1 - u) * c.x + 2 * (1 - u) * u * mx + u * u * o.x;
   const y = (1 - u) * (1 - u) * c.y + 2 * (1 - u) * u * my + u * u * o.y;
   const lift = Math.sin(Math.PI * u);
@@ -206,6 +213,9 @@ export const openAt = (t: number) => (t < T.ava ? 0 : springUnit(t - T.ava, POP)
 
 /** 0..1: how far her ground (KB_MESH, keyed on the orb) has spread over her half */
 export const groundAt = (t: number) => ease(t, T.ground[0], T.ground[1], EASE.out3);
+
+/** 0..1: her ground flooding across the seam as the matters side yields (T.flood: from "kind." to the cut) */
+export const floodAt = (t: number) => ease(t, T.flood[0], T.flood[1], EASE.inOut);
 
 /* ── the column (16:9) ──────────────────────────────────────────── */
 
@@ -243,8 +253,9 @@ export function columnAt(t: number, S: TurnStage, pitch: number) {
  * TURN_END(vertical): what the cut into b08 hands over (screen px). Everything not listed has left by then.
  *   orb      Ava's orb at rest (sunday), centre + diameter; her volume back at rest (VOL.rest .12)
  *   seam     the hairline, still drawn (b08 retracts it): from `a` to `b`, 1.5 px, ink at 13 %
- *   ground   her half on KB_MESH (lift .86, keyed on the orb, sunday tint .3), the other half on Part I's
- *            muted mesh (Repeat's REPEAT_GROUND, held where b06 left it) — scenes/turn/Ground.tsx
+ *   ground   KB_MESH over the WHOLE frame (HER_GROUND, keyed on the orb, sunday tint .3): her half since "Ava",
+ *            the matters half flooded across the seam from "kind." to the cut (floodAt) — Part I's muted mesh
+ *            (Repeat's REPEAT_GROUND) is still drawn under it but fully covered — scenes/turn/Ground.tsx
  *   column   16:9 only: the day's strips at rest under the orb (their top-left, scale, pitch, scroll px)
  */
 export function turnEnd(vertical: boolean) {

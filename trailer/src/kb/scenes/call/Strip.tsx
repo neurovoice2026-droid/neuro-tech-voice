@@ -275,8 +275,11 @@ export const CallWave: React.FC<{
   /** the line's own clock stops here (the bars keep their shape) */
   freezeAt?: number;
   resumeAt?: number;
+  /** frames from the take's start during which the line shows no voice (a part of the take ridden out of the mix —
+   *  timing.ts VOICE_RIDES) */
+  quiet?: number;
   seed?: string;
-}> = ({ t, at, voice, cx, cy, half, barW, pitch, maxH, color, open, close, freezeAt, resumeAt, seed = 'kb-call-line' }) => {
+}> = ({ t, at, voice, cx, cy, half, barW, pitch, maxH, color, open, close, freezeAt, resumeAt, quiet = 0, seed = 'kb-call-line' }) => {
   const reach = Math.max(0, Math.min(1.02, open)) * (1 - Math.max(0, Math.min(1, close)));
   if (reach <= 0.002) return null;
   // the line's clock: held from the freeze to the resume
@@ -289,7 +292,8 @@ export const CallWave: React.FC<{
       const u = (i * pitch) / half;
       const gate = Math.min(1, Math.max(0, (reach * 1.06 - u) / 0.06));
       if (gate <= 0) continue;
-      const e = env(voice, tl - at - u * 5);
+      const ts = tl - at - u * 5;
+      const e = ts < quiet ? 0 : env(voice, ts);
       const tex = 0.55 + 0.45 * (0.5 + 0.5 * noise2D(seed, i * 0.31 * side, tl * 0.06));
       const shape = 1 - 0.45 * u * u;
       const h = Math.max(barW, 2 * maxH * Math.pow(Math.max(0, e), 0.8) * tex * shape * gate);

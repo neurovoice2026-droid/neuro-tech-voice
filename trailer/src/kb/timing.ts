@@ -444,6 +444,9 @@ export const TURN_LOCAL = (() => {
     yieldAt: up16(VO3_AT + vWord('kb2-vo-3', 19)) - SCENES.turn.from,
     /** 16:9: the emptied clock rides up and out (it returns in b15 with her teal colon) */
     clockOut: up16(VO3_AT + vWord('kb2-vo-3', 19)) - SCENES.turn.from + 2 * S16,
+    /** … and as the matters side yields her light follows it out: KB_MESH floods across the seam (a feathered front,
+     *  EASE.inOut) and covers the frame on the cut, so b08's panel comes in over her ground, never an empty grey half */
+    flood: [up16(VO3_AT + vWord('kb2-vo-3', 19)) - SCENES.turn.from, end] as const,
     /** the captions hold to here (a beat after "kind." at least), then leave before the cut */
     holdUntil: Math.min(end - 6, Math.max(kind + b(1), L('turn', VO3_AT + vFrames('kb2-vo-3')))),
     end,
@@ -476,10 +479,12 @@ export const WRITTEN_LOCAL = (() => {
   const price = row(6);
   const hours = row(8);
   const policies = row(10);
-  /** the URL field: clicked a 16th pair before the policies row, typed one character per 32nd */
-  const URL_TEXT = 'https://your-site/faq';
-  const field = { down: policies - 2 * S16, up: policies - S16 };
-  const keys = Array.from({ length: URL_TEXT.length }, (_, i) => field.up + 3 * S32 + i * S32);
+  /** the URL field: clicked three 16ths before the policies row, released a 16th later; the owner types the address
+   *  bare, as people do (the app adds https:// itself: lib/knowledge/shared.ts normalizeKnowledgeUrl), one key per
+   *  16th from the 16th after the release (8 keys/s: a fluent typist, not a rattle) */
+  const URL_TEXT = 'your-site/faq';
+  const field = { down: policies - 3 * S16, up: policies - 2 * S16 };
+  const keys = Array.from({ length: URL_TEXT.length }, (_, i) => field.up + S16 + i * S16);
   const lastKey = keys[keys.length - 1];
   /** Add page: the pointer comes back off the keys (a short hop, ≥ 8 f, arriving 6 f before the press) */
   const addDown = up16(lastKey + S32 + 8 + 6);
@@ -594,24 +599,36 @@ export const CALL_LOCAL = (() => {
     /** the day's three earlier phrasings rise as the link before them lands (9:16: one at a time in one slot,
      *  each leaving up on the next 8th; the last stays) */
     questions: links.slice(0, 3) as readonly number[],
-    /** 50.0 on the plan (bar): time resumes — the label, the phrasings and their links leave; the orb comes out of
-     *  the dot; the page dims to 25 % behind and the two swept lines lift out as their own small layer */
+    /** 50.0 on the plan (bar): time resumes — the label, the phrasing, the frozen question leave; the orb comes out
+     *  of the dot. The meaning hairlines RETRACT into the page (their end) in the 4 frames BEFORE it: nothing ever
+     *  points at a word that has gone */
     resume,
+    retract: [resume - 4, resume] as const,
     undock: [resume + 6, resume + 30] as const,
-    lift: [resume + 2, resume + 16] as const,
-    /** the caller's question leaves up as she answers; her turn (● AVA) holds the answer */
+    /** her turn (● AVA) holds the answer */
     call2,
     call2Words: call2Words as readonly number[],
-    /** the word re-set: kept words glide on her onsets (Saturday · Sunday+s · closed+.), the tokens she doesn't say
-     *  leave just before "Saturday" moves; "nine till two" keys sunday on "nine" */
-    reset: call2Words.map((at, k) => ({ at, from: k === 2 ? ([0, 0] as const) : k === 7 ? ([1, 0] as const) : k === 9 ? ([1, 2] as const) : undefined })),
-    resetLeave: call2Words[2] - 6,
-    key: call2Words[4],
-    /** one very quiet tick per landing word, on its 16th */
-    resetTicks: call2Words.map((f) => up16(f + SCENES.call.from) - SCENES.call.from) as readonly number[],
-    /** the call strip folds into the white record row on the 8th after her answer; the check is drawn an 8th on */
+    /** THE WORD RE-SET, ONE MOVE (critics, build B: no strip, no parking, no lone word in transit, no empty box):
+     *  · drop   the tokens she doesn't say (· 9:00–14:00 ·) and both sweep bands leave up through their masks
+     *           INSIDE the page, a frame apart
+     *  · fly    on "We", every kept word (Saturday · Sunday · closed) takes off from the page TOGETHER and glides to
+     *           its pen position in her sentence (landing ≥ 15 f before "Saturday" is said), where it waits at 40 % ink
+     *  · reset  each word's moment = its onset − LEAD (captions' lead): her own words rise into their slots; a kept
+     *           word takes full ink ("Sunday" its "s,", "closed" its ".") — the sentence never has a hole she has said
+     *  "nine till two" keys sunday with "nine" */
+    drop: resume + 2,
+    fly: [call2, call2 + 14] as const,
+    reset: call2Words.map((at, k) => ({ at: at - 2, from: k === 2 ? ([0, 0] as const) : k === 7 ? ([1, 0] as const) : k === 9 ? ([1, 2] as const) : undefined })),
+    key: call2Words[4] - 2,
+    /** the page dims to 25 % once the words have left it */
+    dim: [call2 + 2, call2 + 22] as const,
+    /** the call strip folds into the white record row on the 8th after her answer; the check is drawn an 8th on.
+     *  Her finished sentence holds ≥ a beat (her last word lands at reset[9].at) and leaves up AS the record unfolds
+     *  over it (≥ 2 f of overlap: never an empty frame); the dim page recedes (× .9, to 0) as the record lands */
     record,
     check: record + S8,
+    sentenceOut: [record - 2, record + 6] as const,
+    pageOut: [record, record + 10] as const,
   };
 })();
 
@@ -621,8 +638,8 @@ export const CALL_LOCAL = (() => {
  *  with two-part clicks; then she narrates (SCRIPT.md b12, J2: one text moves at a time, nothing narrated while it types).
  *
  *  THE TWO ORDERS. v2's full order — click Conversation, cross to the field and click it, type the 22 words on 16ths,
- *  click Save, a breath, THEN vo-6 — needs vo-6 at least `full` frames in (157.5: a calm hand takes ≈ 16 f to cross from
- *  the tab to the field plus the 6 f read before a press, and ≈ 12 f + 6 back off the keys to Save). The script's own plan
+ *  click Save, a breath, THEN vo-6 — needs vo-6 at least `full` frames in (157.5: a calm hand takes ≈ 22 f to cross from
+ *  the tab to the field plus a 4.5 f read before a press, and ≈ 17 f + 4.5 back off the keys to Save). The script's own plan
  *  (the caret a beat in, vo-6 105 f in) leaves no room; the voiced timeline gives b12 ONE MORE BAR (LINE_BAR above, the
  *  orchestrator's decision of 2026-10-04): vo-6 165 f in, so —
  *    · room (vo6 ≥ 157.5: THIS cut)   the page comes back on Knowledge; tab on beat 2 → field → the words → Save → vo-6
@@ -638,9 +655,13 @@ export const LINE_LOCAL = (() => {
   const w6 = (k: number) => vo6 + vWord('kb2-vo-6', k);
   const N = OWNER_WORDS;
   const run = (N - 1) * S16;
-  // the full order, on the grid: tab on beat 2; the field six 16ths after its release; Save six 16ths after the last word
-  const tabF = { down: b(1), up: b(1) + S16 };
-  const fieldF = { down: tabF.up + 6 * S16, up: tabF.up + 7 * S16 };
+  // the full order, on the grid: tab pressed on beat 2; the field RELEASED (the caret, the first word) eight 16ths after
+  // that press; Save six 16ths after the last word. The tab and the field are quick, crisp clicks (CLICK: press → release
+  // in 2.25 f, an expert's tap) so the hand gets its natural time to cross between them (motion critic: ≥ 22 f for the
+  // ≈ 700 px move; it leaves during the tab's release, reads the field 4.5 f, presses at 42.75, releases on 45)
+  const CLICK = 0.6 * S16;
+  const tabF = { down: b(1), up: b(1) + CLICK };
+  const fieldF = { down: b(1) + 8 * S16 - CLICK, up: b(1) + 8 * S16 };
   const saveF = { down: fieldF.up + run + 6 * S16, up: fieldF.up + run + 7 * S16 };
   const needs = saveF.up + 2 * S16;
   const full = vo6 >= needs;
@@ -650,20 +671,22 @@ export const LINE_LOCAL = (() => {
   const last = keys[N - 1];
   // no room: Save as late as her line allows — released on vo-6's first frame
   const save = full ? saveF : { down: vo6 - S16, up: vo6 };
-  // the pointer back off the keys to Save: arriving CURSOR.pressLead (6) before the press — a calm crossing when there is
-  // room; with none, a decisive 9-frame hop that starts as "back" types and lands as "today." does
-  const hop = full ? ([last + 2, save.down - 6] as const) : ([save.down - 6 - 9, save.down - 6] as const);
+  // the pointer back off the keys to Save: leaving a frame after the last word is in and reading Save 4.5 f before the
+  // press (as it reads the field) — a calm crossing when there is room; with none, a decisive 9-frame hop that starts as
+  // "back" types and lands as "today." does
+  const hop = full ? ([last + 1, save.down - 4.5] as const) : ([save.down - 6 - 9, save.down - 6] as const);
   return {
     ownerLine: OWNER_LINE,
     end,
     /** room for v2's full order (see above) — true with b12's extra bar */
     full,
     needs,
-    /** the cut from b11: the call's record row and its page leave up (0 → 6); the agent page rises in from 2 (settled
-     *  by the caret's press), the pointer riding on it; Ava's orb glides to her corner and dims to rest (the owner's
-     *  moment, not hers) */
-    leave: [0, 6] as const,
-    enter: [2, 12] as const,
+    /** the cut from b11 — ONE SCROLL (SCRIPT.md b12 "the record row slides away and a white settings Card comes in"):
+     *  the call's record row slides up and out of the frame (gone by ≈ 9) as the agent page comes up from below the
+     *  frame's bottom edge and lands (11), one sheet on power2.inOut — nothing dissolves, something is always in frame;
+     *  the pointer enters with the page (it is on the screen) and settles onto Conversation as it lands. Ava's orb
+     *  glides to her corner and dims to rest (the owner's moment, not hers) */
+    scroll: [0, 11] as const,
     orb: [0, 26] as const,
     /** the Conversation tab: down / up (the underline slides and the content swaps on the release) — null: no room */
     tab: full ? tabF : null,
@@ -1010,7 +1033,13 @@ export const VOICE_RIDES: Partial<Record<VoiceId, readonly VoiceRide[]>> = (() =
    * Each is ridden down, ramped in the gaps around it. The leveller after the ride gives back about half of it, and
    * master() re-trims the line to the dialogue target (the rest of it comes up a little), so a nominal −3.5 dB is ≈ −1.5 dB
    * heard: the openings sit with their lines instead of over them, and the impact keeps a clear lead. */
+  /* kb2-c4 (b09): every take of the line opens with an unscripted voiced syllable (≈ 0.03–0.38 s: F0 ≈ 215–227 Hz
+   * rising, then creak, as loud as "guys"), then ≈ 0.15 s of silence before "Are" (word 0). It is not in the script nor
+   * in the caption, so it is ridden out: −60 dB from the file's start to 5 frames before "Are", ramped back up inside
+   * that silence (the caller's line then starts on his first word, under his caption). */
+  const c4Are = Math.floor(VOICE.lines['kb2-c4'].words[0].t * FPS);
   return {
+    'kb2-c4': [{ from: 0, to: c4Are - 5, db: -60, ramp: 3 }],
     'kb2-desk-1': [{ from: Math.floor(sat.start * FPS), to: Math.ceil(sat.end * FPS), db: -2, ramp: 3 }],
     'kb2-vo-3': [{ from: 0, to: w('kb2-vo-3', 2) - 3, db: -2.5, ramp: 2 }],
     'kb2-vo-4': [{ from: 0, to: w('kb2-vo-4', 4) - 3, db: -2, ramp: 2 }],
@@ -1080,12 +1109,12 @@ const KB_SFX = {
   'fx-mallet-b4': X(1, 'bell', -3, -12, { delay: -20 }),
   'fx-mallet-e5': X(1, 'bell', -3, -12, { delay: -18 }),
   'fx-felt-e': X(1, 'bell', -3, -14),
-  // b10's links: a nylon pluck per hairline, E4 G#4 B4 F#4 (the stop-time chord); b14's bright E5 on "four"
-  'fx-pluck-e4': X(1, 'bell', -3, -12, { delay: -20 }),
-  'fx-pluck-fs4': X(1, 'bell', -3, -12, { delay: -20 }),
-  'fx-pluck-gs4': X(1, 'bell', -3, -12, { delay: -20 }),
-  'fx-pluck-b4': X(1, 'bell', -3, -12, { delay: -20 }),
+  // b10's links: a bright nylon pluck per hairline, E5 G#5 B5 F#5 (the stop-time chord, an octave over its pad — at E4–B4
+  // the held E add9 and her voice masked them); b14's bright E5 on "four" is the same instrument, the same note
   'fx-pluck-e5': X(1, 'bell', -3, -12, { delay: -20 }),
+  'fx-pluck-fs5': X(1, 'bell', -3, -12, { delay: -20 }),
+  'fx-pluck-gs5': X(1, 'bell', -3, -12, { delay: -20 }),
+  'fx-pluck-b5': X(1, 'bell', -3, -12, { delay: -20 }),
   // glass: b12's focus-ring tick; the close's arpeggio (the trill's G# B resolving to E, two octaves up)
   'fx-glass-tick': X(1, 'spark', -5, -14),
   'fx-glass-e6': X(1, 'bell', -4, -10, { delay: -18 }),
@@ -1182,7 +1211,7 @@ const RECORDING_HITS: Hit<Snd>[] = (() => {
 /* ── /recording ── */
 
 /* ── turn ── (b07: picture src/kb/scenes/Turn.tsx + scenes/turn/*; pans from the 16:9 layout: the seam .5,
- * the repeat half .22–.38 (the clock .12, the orb .28, "repeats." .38), the matters half .6–.8)
+ * the repeat half .15–.43 (the clock .15, the orb .35, "repeats." .38), the matters half .6–.8)
  * The Part I loop's one deadpan bar under "Some work repeats." and the harmony opening on "Some work matters." are the
  * bed's (MUSIC.turn, MUSIC.matters). Here: the seam's line; ONE split-flap tick per flip, the same sample, the same level,
  * the same place every beat (deadpan — `xs` holds the run's pan and level still); her seed rising out of the line light
@@ -1195,9 +1224,9 @@ const TURN_HITS: Hit<Snd>[] = (() => {
     ...(TURN_FLIPS.length
       ? [H(at(TURN_FLIPS[0]), 'fx-flap', 'none', 0.38, 3, 'b07 "repeats." flips over — to the same word — on every beat: one split-flap tick, never varied', { db: -4, run: { n: TURN_FLIPS.length, step: BEAT, xs: TURN_FLIPS.map(() => 0.38) } })]
       : []),
-    H(at(R.lift), 'fx-seed', 'none', 0.18, 3, 'b07 the rose line light lifts off the clock: a soft seed tone rising B4 → E5 into "Ava"', { db: -4 }),
-    H(at(R.ava), 'pop', 'sunday', 0.28, 2, 'b07 AVA: the line light springs open into her orb (on "Ava"), rush → sunday', { db: -7 }),
-    H(at(R.ava + 3), 'fx-ting', 'none', 0.28, 2, 'b07 the hairline ring leaves her rim: one sine "ting" (B5, her light)', { layer: true, db: 0 }),
+    H(at(R.lift), 'fx-seed', 'none', 0.2, 3, 'b07 the rose line light lifts off the clock: a soft seed tone rising B4 → E5 into "Ava"', { db: -4 }),
+    H(at(R.ava), 'pop', 'sunday', 0.35, 2, 'b07 AVA: the line light springs open into her orb (on "Ava"), rush → sunday', { db: -7 }),
+    H(at(R.ava + 3), 'fx-ting', 'none', 0.35, 2, 'b07 the hairline ring leaves her rim: one sine "ting" (B5, her light)', { layer: true, db: 0 }),
     H(at(R.firstKind), 'fx-slip-slide', 'none', [0.32, 0.28], 3, 'b07 "the first kind": the flips have stopped; the repeat side eases toward her light — a quiet paper slide', { db: -8 }),
   ];
 })();
@@ -1216,8 +1245,7 @@ const WRITTEN_HITS: Hit<Snd>[] = (() => {
   const R = WRITTEN_LOCAL;
   const at = (f: number) => SCENES.written.from + f;
   const S16 = BEAT / 4;
-  const S32 = BEAT / 8;
-  const NAMES = ['PDF · Price list lands', 'TXT · Opening hours slots in (from its flight)', 'DOCX · Cancellation policy lands', 'URL · FAQ page lands'];
+  const NAMES = ['Price list (PDF) lands', 'Opening hours (Text) slots in (from its flight)', 'Cancellation policy (Word) lands', 'FAQ page (Web page) lands'];
   const TOCK = [0, 4, 7, 9]; // chord tones under each landing (E · G# · B · C#), from fx-tock's E
   const MALLET = ['fx-mallet-e4', 'fx-mallet-fs4', 'fx-mallet-gs4', 'fx-mallet-b4'] as const;
   return [
@@ -1248,10 +1276,10 @@ const WRITTEN_HITS: Hit<Snd>[] = (() => {
     ]),
     H(at(R.field.down), 'fx-click-down', 'none', 0.47, 2, 'b08 the cursor (an I-beam) presses into the web page field (down)', { db: -3 }),
     H(at(R.field.up), 'fx-click-up', 'none', 0.47, 2, 'b08 … released: the field takes its focus ring (up)', { db: -6 }),
-    H(at(R.keys[0]), 'fx-keys', 'none', 0.47, 3, 'b08 https://your-site/faq types, one soft low-profile key per character on 32nds', {
+    H(at(R.keys[0]), 'fx-keys', 'none', 0.47, 3, `b08 ${R.url} types, one soft low-profile key per character on 16ths`, {
       db: -5,
       layer: true,
-      run: { n: R.keys.length, step: S32, xs: R.keys.map((_, i) => 0.44 + (0.06 * i) / Math.max(1, R.keys.length - 1)) },
+      run: { n: R.keys.length, step: S16, xs: R.keys.map((_, i) => 0.44 + (0.06 * i) / Math.max(1, R.keys.length - 1)) },
     }),
     H(at(R.add.down), 'fx-click-down', 'none', 0.47, 2, 'b08 Add page: pressed (down)', { db: -1 }),
     H(at(R.add.up), 'fx-click-up', 'none', 0.47, 2, 'b08 … released (up; the FAQ page lands a 16th later and the field clears)', { db: -4 }),
@@ -1267,19 +1295,20 @@ const WRITTEN_HITS: Hit<Snd>[] = (() => {
  * sustained E add9 holds (time has stopped); it returns on the beat at the resume. NO CURSOR in this act (Ava takes the
  * call alone): no clicks. The ring is the desk trill, one chirp, answered in the gap; the frozen line's hiss sits very low
  * under the stop-time (fx-linehold, sized freeze → resume); the sweep is a felt-tip swipe; each hairline a fine pen scratch
- * landing on a nylon pluck — E4 G#4 B4 F#4 on four 8ths, building the stop-time's chord; the re-set ticks very quietly per
- * word; the record row lands with a paper click and the check's tick. */
+ * landing on a nylon pluck — E5 G#5 B5 F#5 (key hits, an octave over the held pad) on four 8ths, building the stop-time's
+ * chord; the re-set is one paper lift as the kept words take off; the record row lands with a paper click and the check's
+ * tick. */
 const CALL_HITS: Hit<Snd>[] = (() => {
   const R = CALL_LOCAL;
   const at = (f: number) => SCENES.call.from + f;
-  const PLUCK = ['fx-pluck-e4', 'fx-pluck-gs4', 'fx-pluck-b4', 'fx-pluck-fs4'] as const;
+  const PLUCK = ['fx-pluck-e5', 'fx-pluck-gs5', 'fx-pluck-b5', 'fx-pluck-fs5'] as const;
   const LINK = ['the hero hairline from "weekend" lands on the swept lines; MATCHED ON MEANING', '"Are you open on Saturdays?" sends its hairline', '"Can I pop in on Saturday?" sends its hairline', '"What are your weekend hours?" sends its hairline'];
   return [
     H(at(R.ring), 'fx-trill-1', 'none', 0.23, 1, 'b09 THE LIVE CALL rings on the bar: the same desk trill, one chirp; one slate hairline leaves the orb', { db: RING_DB }),
     H(at(R.recede[0] + 2), 'fx-slip-slide', 'none', [0.62, 0.95], 3, 'b09 the app panel steps back a depth and slides away (16:9 right, 9:16 down)', { db: -7 }),
     H(at(R.pickup), 'fx-pickup', 'none', 0.23, 1, 'b09 picked up on the first ring: the orb wakes to listen; ● CALLER and the timer rise', { db: PICKUP_DB }),
     H(at(R.c4 - 2), 'fx-line', 'none', 0.55, 3, 'b09 the caller’s line opens under his words', { db: -8 }),
-    H(at(R.rowIn[0] + 2), 'fx-slip-slide', 'none', [0.98, 0.8], 3, 'b09 "…let me check.": the Opening hours row comes back (16:9 in from the right; 9:16 lifted out of the panel)', { db: -8 }),
+    H(at(R.rowIn[0] + 2), 'fx-slip-slide', 'none', [0.98, 0.8], 3, 'b09 "…let me check.": the Opening hours row comes back (16:9 in from the right edge, 9:16 up from the bottom edge — where the panel went)', { db: -8 }),
     H(at(R.freeze), 'freeze', 'none', 0.5, 2, 'b10 THE FREEZE: the call stops — BETWEEN QUESTION AND ANSWER', { db: -7 }),
     H(at(R.freeze), 'fx-linehold', 'none', 0.55, 3, 'b10 the frozen call’s open line, very low, through the stop-time (it lets go on the resume)', { db: -8, layer: true }),
     H(at(R.unfold[0] + 2), 'fx-paper-unfold', 'none', 0.72, 3, 'b10 the row unfolds into the full Opening hours page', { db: -4 }),
@@ -1288,13 +1317,15 @@ const CALL_HITS: Hit<Snd>[] = (() => {
     H(at(R.underline), 'fx-felttip-short', 'none', 0.22, 3, 'b10 "around this weekend" takes a slate underline (short, light)', { db: -6 }),
     ...R.links.flatMap((f, i) => [
       H(at(R.linkStart[i]), 'fx-scratch', 'none', i ? 0.4 : 0.36, 3, `b10 hairline ${i + 1}: the pen draws (a fine scratch)`, { db: i ? -8 : -5, layer: true }),
-      H(at(f), PLUCK[i], 'none', 0.62, 3, `b10 ${LINK[i]} — a pluck, ${['E4', 'G#4', 'B4', 'F#4'][i]} (the four build the held chord on 8ths)`, { db: i ? -1 : 1 }),
+      // KEY hits an octave over the held E add9's pad (E3–G#4) and her F0: as weight-3 hits at E4–B4 they took the speech
+      // drop and the bells' 10 dB duck and sat 7–26 dB under the masker (sound critic, build B); measured against the
+      // current stems, the octave up + key status puts each ≈ +5…+20 dB over it in its f0 band (key tonal duck −5 dB)
+      H(at(f), PLUCK[i], 'none', 0.62, 1, `b10 ${LINK[i]} — a pluck, ${['E5', 'G#5', 'B5', 'F#5'][i]} (the four build the held chord on 8ths, an octave over the pad)`, { db: i ? -2 : -1 }),
     ]),
     H(at(R.resume), 'whoosh-soft', 'none', 0.5, 3, 'b11 TIME RESUMES on the bar: the label and the phrasings leave, the orb comes out of the dot (the line hiss lets go)', { db: -8 }),
-    H(at(R.lift[0]), 'fx-paper-lift', 'none', [0.68, 0.6], 3, 'b11 the two swept lines lift out of the page as their own layer', { db: -4, layer: true }),
-    ...R.resetTicks.map((f, k) =>
-      H(at(f), 'fx-tick', 'none', R.reset[k].from ? 0.45 : 0.3, 3, `b11 the re-set: "${VOICE.lines['kb2-call-2'].words[k].w}" lands${R.reset[k].from ? ' (kept from the page)' : ''} — one very quiet tick (−28 dB)`, { db: -12 }),
-    ),
+    // the re-set is ONE move now (CALL_LOCAL.fly): one paper lift as the page's kept words take off together; the old
+    // per-word ticks (−27…−65 dB SMR under her line, inaudible) are gone with the per-word flights
+    H(at(R.fly[0]), 'fx-paper-lift', 'none', [0.68, 0.3], 3, 'b11 on "We": the page’s kept words (Saturday · Sunday · closed) take off together into her sentence', { db: -4, layer: true }),
     H(at(R.record), 'fx-record', 'none', 0.3, 3, 'b11 the strip folds into the white record row: a paper click with a little body', { db: -1 }),
     H(at(R.check), 'tick', 'sunday', 0.48, 3, 'b11 the white check draws in the sunday disc: Answered from your documents (the check’s tick)', { db: -4 }),
   ];
@@ -1327,12 +1358,16 @@ const LINE_HITS: Hit<Snd>[] = (() => {
       return 0.38 + 0.24 * (mid / width);
     });
   });
-  const FIELD = 0.6;
+  // the field's click (scenes/line/stage.ts click: .8 across the field, ≈ .72 of the frame at rest) on the pans' ¾ scale;
+  // the focus ring round the whole field (centred on the page, ≈ .52)
+  const FIELD = 0.66;
+  const RING = 0.52;
   // Save changes is clicked with the page pushed in (scenes/line/stage.ts PUSH: it sits further right, ≈ .88 of the frame,
   // than at rest) — on the pans' ¾ scale, .79; at rest (no full order) .73
   const SAVE = R.tab ? 0.79 : 0.73;
   return [
-    H(at(R.leave[0] + 2), 'whoosh-soft', 'none', [0.42, 0.52], 3, 'b12 the call’s record row leaves up; the agent page rises in', { db: -12 }),
+    // the whoosh peaks 6 f in — on the scroll's fastest frames (power2.inOut over R.scroll: peak ≈ 5.5)
+    H(at(R.scroll[0]), 'whoosh-soft', 'none', [0.42, 0.52], 3, 'b12 one scroll: the call’s record row slides up and out, the agent page comes up from below the frame', { db: -12 }),
     ...(R.tab
       ? [
           H(at(R.tab.down), 'fx-click-down', 'none', 0.32, 2, 'b12 the cursor presses the Conversation tab (down, on beat 2)', { db: -1 }),
@@ -1350,7 +1385,7 @@ const LINE_HITS: Hit<Snd>[] = (() => {
     H(at(R.saveClick.down), 'fx-click-down', 'none', SAVE, 2, 'b12 Save changes: pressed (down)', { db: -1 }),
     H(at(R.saveClick.down), 'tick', 'sunday', SAVE, 3, 'b12 the save tick', { layer: true, db: -8 }),
     H(at(R.saveClick.up), 'fx-click-up', 'none', SAVE, 2, 'b12 … released (up): the amber dot closes', { db: -4 }),
-    H(at(R.focus), 'fx-glass-tick', 'none', FIELD, 3, 'b12 "words": the sunday focus ring settles round the field — one small glassy tick', { db: -4 }),
+    H(at(R.focus), 'fx-glass-tick', 'none', RING, 3, 'b12 "words": the sunday focus ring settles round the field — one small glassy tick', { db: -4 }),
   ];
 })();
 /* ── /line ── */

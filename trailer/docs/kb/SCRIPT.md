@@ -167,6 +167,7 @@ Bars fall on even seconds. "Strong beat" means beat 1 (bar line) or beat 3 (bar 
 - *9:16:* orb Ø 180 at y 300; eyebrow y 430; panel x 64–1016, y 470–1220, rows stacked. The slip collapse happens above the panel (y 470–640) and drops in. Caption y 1300–1440.
 
 **On screen:** `Add knowledge` · `Drop files here or choose them` · `Teach your agent about your business` (leaves) · `TXT · Opening hours` · `PDF · Price list` · `DOCX · Cancellation policy` · `https://your-site/faq` · `Add page` · `URL · FAQ page` · `Reading…` / `Reading page…` → `Ready · N passages` · `● KNOWLEDGE BASE` · caption `Give me your answers once. Your prices, your hours, your policies, pages from your website. That's your knowledge base.` [key **knowledge base** in sunday ink]
+**Fix round (written act), overrides the row and URL notes above:** the rows are drawn as the app draws them (TabKnowledge.tsx DocumentRow): the icon tile with lucide FileText (Globe for the page) and the TYPE_LABELS word after the pill (`PDF` · `Word` · `Text` · `Web page`), never the reading-room kind tokens (DOCX / TXT / URL); in b10 and b14 the page's own `TXT` kind line rises in on the page. The address is typed bare, `your-site/faq`, one key per 16th (8 keys/s), as owners type it; the app adds https:// itself (lib/knowledge/shared.ts normalizeKnowledgeUrl). Note for the truth table: that function also rejects a host without a dot, so `your-site` would not pass the real app's check — kept as the script's no-TLD placeholder by design.
 **Voice:** kb2-vo-4 at ≈32.25. **The feature is named aloud** (judges' must-fix).
 **Sound:**
 - **Bed, Part III:** felt-piano eighths, a soft kick on beats 1 and 3, and the chords E – C#m7 – Amaj7 – B.
@@ -209,12 +210,12 @@ Bars fall on even seconds. "Strong beat" means beat 1 (bar line) or beat 3 (bar 
 
 **On screen:** `BETWEEN QUESTION AND ANSWER` · `00:07` · `TXT` `Opening hours` · `Monday to Friday · 8:00–20:00` · `Saturday · 9:00–14:00` · `Sunday · closed` · `MATCHED ON MEANING` · `Are you open on Saturdays?` · `Can I pop in on Saturday?` · `What are your weekend hours?` · caption `When someone calls, I find the part that answers them, even when they put it differently.` [key **the part that answers them** in sunday ink]
 **Voice:** kb2-vo-5 at ≈44.75
-**Sound:** the bed's beat drops out and a sustained E add9 holds: time has stopped. The frozen call's line hiss sits very low. The ink sweep is a soft felt-tip swipe. Each hairline is a fine pen scratch landing on a pitched pluck. The four plucks (E, G#, B, F#) build the chord on 8ths. HITS: 44.5 freeze, the sweep, four links.
+**Sound:** the bed's beat drops out and a sustained E add9 holds: time has stopped. The frozen call's line hiss sits very low. The ink sweep is a soft felt-tip swipe. Each hairline is a fine pen scratch landing on a pitched pluck. The four plucks (E5, G#5, B5, F#5: key hits an octave over the held pad, so they are heard under her line) build the chord on 8ths. HITS: 44.5 freeze, the sweep, four links.
 
 ### b11 · The answer · 50.0–54.5
 **Picture.**
 - **50.0, bar:** time resumes. The label leaves up, the strip unfreezes, and the timer runs 00:07 → 00:11. The `TurnLabel` holds `● AVA` (sunday) and the orb speaks.
-- **The word re-set (the graft from "demo").** The two swept lines lift out of the page as their own small layer (`elevation` 0 → 6, glide). On her word onsets they **re-set into what she actually says**, using `layoutText` pen positions:
+- **The word re-set (the graft from "demo").** *(Build B fix: ONE move, no lifted strip.)* The tokens she doesn't say leave the page up through their masks with the sweep bands; on "We" the kept words fly from the page together straight into their pen positions in her sentence and wait at 40 %; on her onsets (− 2 f) her own words rise in and each kept word takes full ink. The sentence is complete ≥ a beat before the record. The plan's version, for reference: the two swept lines **re-set into what she actually says**, using `layoutText` pen positions:
   - The words that stay (`Saturday`, `Sunday`, `closed`) glide sub-pixel to their new places. `Sunday` gains its "s" as one letter rising in.
   - The tokens she doesn't say (`·`, `9:00–14:00`) leave up through their masks.
   - Her own words (`We are!`, `from nine till two.`, `we're`) rise in.
@@ -222,7 +223,7 @@ Bars fall on even seconds. "Strong beat" means beat 1 (bar line) or beat 3 (bar 
 - Behind it the page stays tall and dim (25%): a page against a sentence, showing "a sentence or two" without reading the page out.
 - **53.5:** the call strip folds into a compact white record row (Card):
   - meta `TRANSCRIPT`
-  - a dim first row `00:00  Ava: This is Ava, an AI assistant.` (the real greeting, carrying the disclosure)
+  - a dim first row `00:00  Ava: … This is Ava, an AI assistant.` (an excerpt of the real greeting — every English greeting opens "Thank you for calling…" before the intro, `lib/voice/greetings.ts:237–252` — carrying the disclosure)
   - the section title `Answered from your documents` with a chip `Opening hours`
   - a white check drawn in a teal disc (the Flow check idiom)
 
@@ -230,9 +231,9 @@ Bars fall on even seconds. "Strong beat" means beat 1 (bar line) or beat 3 (bar 
 - *16:9:* re-set line centred at y 540 (max width 1500); page behind at x 980–1760; record row x 560–1360, y 760–960.
 - *9:16:* re-set line y 640–860 (3 lines); page behind at .85 scale; record row y 1100–1340.
 
-**On screen:** `● AVA` `We are! Saturday from nine till two. Sundays, we're closed.` [key **nine till two** in sunday] · `00:11` · `TRANSCRIPT` · `Ava: This is Ava, an AI assistant.` · `Answered from your documents` · `Opening hours`
+**On screen:** `● AVA` `We are! Saturday from nine till two. Sundays, we're closed.` [key **nine till two** in sunday] · `00:11` · `TRANSCRIPT` · `Ava: … This is Ava, an AI assistant.` · `Answered from your documents` · `Opening hours`
 **Voice:** kb2-call-2 (Ava, in-call) at ≈50.25
-**Sound:** the bed returns on the beat at 50.0. One very quiet tick per landing word, on 16ths (−28 dB). The record row lands with a paper click and a check tick at 53.5. HITS: 50.0 resume, the re-set ticks, 53.5 record.
+**Sound:** the bed returns on the beat at 50.0. One paper lift as the kept words take off (the per-word ticks were inaudible and went with the per-word flights). The record row lands with a paper click and a check tick at 53.5. HITS: 50.0 resume, the re-set lift, 53.5 record.
 
 ### b12 · Your line · 54.5–62.0
 **Picture.**
@@ -415,7 +416,7 @@ The lines are in `trailer/out/kb-plan/voice-lines-kb.json`, in the format of `sc
 | J2 | Edits must look like the owner's own file | `opening-hours.txt` on plain paper, no app chrome |
 | graft (empathy) | Collapse into one line | b08: the slips stack into one, which becomes the `TXT · Opening hours` row |
 | graft (empathy) | One light, two meanings | the rose colon dot becomes Ava's orb and relights teal; in b15 the colon is her teal dot |
-| graft (empathy) | AI disclosure in the record | the record row's first line is "Ava: This is Ava, an AI assistant." |
+| graft (empathy) | AI disclosure in the record | the record row's first line is "Ava: … This is Ava, an AI assistant." (an excerpt of the greeting) |
 | graft (demo) | Word re-set | b11: the swept lines re-set into her spoken caption |
 | graft (demo) | Real filler before stop-time | "One moment, let me check." |
 | graft (demo) | `MATCHED ON MEANING` and `SAME QUESTION` tags | b10 and b14 |
@@ -426,7 +427,7 @@ The lines are in `trailer/out/kb-plan/voice-lines-kb.json`, in the format of `sc
 
 | # | Claim in the film | Where | Source |
 |---|---|---|---|
-| 1 | Ava is an AI that answers the business's phone | vo-3; record row "This is Ava, an AI assistant." | `lib/voice/prompt.ts:265` (AI, never claims to be human); `lib/voice/greetings.ts:245` (intro "This is {agent}, an AI assistant."); product summary (picks up the business's calls) |
+| 1 | Ava is an AI that answers the business's phone | vo-3; record row "Ava: … This is Ava, an AI assistant." (excerpt; the greeting opens "Thank you for calling…", `greetings.ts:237–252`) | `lib/voice/prompt.ts:265` (AI, never claims to be human); `lib/voice/greetings.ts:245` (intro "This is {agent}, an AI assistant."); product summary (picks up the business's calls) |
 | 2 | Some work repeats, some matters; the agent takes the first kind; "That's the work only people can do." | vo-3, vo-8 | `lib/pages/ai-agents.ts:149-150` ("Give your team its day back… the same five questions are handled end to end, so the people on payroll do the work only people can do"); `lib/pages/industries/veterinary.ts:259`. The staff member stays and is shown doing the in-person work; nothing says the product replaces staff. |
 | 3 | "You hired someone brilliant. The phone turned them into a recording." | vo-1 | An argument, not a statistic. Consistent with `lib/pages/knowledge-base.ts:274` ("The questions your team answers ten times a day are already written down somewhere"). |
 | 4 | "Give me your answers once. Your prices, your hours, your policies, pages from your website." | vo-4 | `lib/pages/knowledge-base.ts:28` ("Add your price lists, policies, FAQs and web pages once"); `:302-311` (Hours, location and access; Pages from your website); `components/agent/tabs/TabKnowledge.tsx:158` (empty state lists price list, opening hours, policies, FAQs as files or web pages) |

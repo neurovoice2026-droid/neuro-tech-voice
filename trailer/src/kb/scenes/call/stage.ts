@@ -6,18 +6,22 @@
  *
  * THREE FRAMINGS, one continuous set of moves (each element glides from pose to pose — nothing cuts):
  *
- *   A  the live call (b09)   the panel steps back a depth and slides away (16:9 right, 9:16 down: it stays, receded,
- *                            under the call); the orb comes forward to her call place; the call strip beside it
+ *   A  the live call (b09)   the panel steps back a depth and slides away (16:9 off the right edge, 9:16 off the bottom
+ *                            edge — clear of the platform UI zone before the caller speaks); the orb comes forward to
+ *                            her call place; the call strip beside it
  *                            (16:9) / under it (9:16): ● CALLER + the mono timer, the caller's line (slate) over the
  *                            line's waveform; Ava's filler as her own turn (● AVA) under it, the transcript scrolling
  *   B  the stop-time (b10)   the camera glides to the knowledge: the frozen question takes the left column (9:16 the
- *                            top), the orb shrinks into the dot of BETWEEN QUESTION AND ANSWER, the Opening hours row
- *                            comes back and unfolds into the full page; the day's three earlier phrasings stack over the
- *                            question (9:16 one at a time in one slot) and every phrasing sends a hairline to the same
- *                            two swept lines
- *   C  the answer (b11)      in the question's place: her turn (● AVA) and the word re-set — the swept lines lifted out
- *                            of the page re-set into what she says; the page stays, dim, beside it (9:16 behind it);
- *                            then the strip folds into the white record row
+ *                            top), stepping back a touch (16:9 × .86 — the page needs the width), the orb shrinks into
+ *                            the dot of BETWEEN QUESTION AND ANSWER, the Opening hours row comes back and unfolds into
+ *                            the full page (cropped to its content, its lines at the title role 64 / 56); the day's three
+ *                            earlier phrasings roll through ONE masked slot under it, one at a time, each sending a
+ *                            hairline to the same two swept lines
+ *   C  the answer (b11)      in the question's place: her turn (● AVA) and the word re-set — ONE move: the tokens she
+ *                            doesn't say leave the page up through their masks, the kept words fly from the page into
+ *                            their slots in her sentence together, her own words rise in on her onsets; the page dims
+ *                            beside it (9:16 below it); then the strip folds into the white record row and the page
+ *                            recedes out
  *
  * THE NEIGHBOURS: b08 → here is the same picture at frame 0 (writtenEnd). Here → b12: callEnd() (bottom).
  */
@@ -67,21 +71,26 @@ export type CallStage = {
     b: TurnAt;
     /** her answer turn (b11): the tag; the re-set sentence's centre y and max width */
     c: TurnAt & { y: number; maxWidth: number };
+    /** the frozen turn's step-back scale in B (about its tag's top-left; 16:9 makes room for the page) */
+    bScale: number;
   };
   /** BETWEEN QUESTION AND ANSWER: its text's left edge (16:9) / the lockup's centre (9:16), its centre line */
   label: { x: number; y: number; align: 'left' | 'center'; gap: number };
-  /** the day's three earlier phrasings: 16:9 stacked (one top each), 9:16 one slot */
-  questions: { x: number; tops: readonly number[]; size: number; align: 'left' | 'center' };
-  /** the page (the Opening hours document): its box, its line size, the paper's minimum height */
-  page: { x: number; y: number; w: number; size: number; minH: number };
-  /** where the row comes back from (16:9: off the right edge, where the panel went; null: its place in the receded
-   *  panel) and where it waits for the freeze — top-left corners */
+  /** the day's three earlier phrasings: ONE masked slot (both orientations), one phrasing at a time — x is the slot's
+   *  left edge (align left) or centre (align center), y its top */
+  questions: { x: number; y: number; size: number; align: 'left' | 'center' };
+  /** the page (the Opening hours document), CROPPED TO ITS CONTENT (kind, heading, three lines, `pad` all round): its
+   *  anchor (16:9 its right edge, 9:16 its centre), its top, its line size (the title role) and padding */
+  page: { anchor: 'right' | 'center'; x: number; y: number; size: number; pad: number };
+  /** where the row comes back from (16:9 off the right edge, 9:16 up from the bottom edge — where the panel went) and
+   *  where it waits for the freeze — top-left corners */
   rowFrom: XY | null;
   rowHold: XY;
   /** the page in b11: dims to `fade`, recedes by scale / offset */
   pageC: { scale: number; dx: number; dy: number; fade: number };
-  /** the two swept lines lifted out as their own layer: the lift's offset */
-  lift: { dx: number; dy: number };
+  /** each kept word's flight (Saturday · Sunday · closed) into her sentence: 'g' straight (both axes on one ease),
+   *  'yx' its line's height first, 'xy' across first — chosen so that no two flying words ever share pixels */
+  flights: readonly ['g' | 'yx' | 'xy', 'g' | 'yx' | 'xy', 'g' | 'yx' | 'xy'];
   /** the narrator's caption (vo-5, no tag) */
   caption: { x: number; y: number; maxWidth: number };
   /** the record row (CallDetailSheet's record) */
@@ -117,14 +126,21 @@ const STAGES: Record<'land' | 'vert', CallStage> = (() => {
           filler: { x: 700, tag: 632, lines: [674] },
           b: { x: 160, tag: 206, lines: [248, 248 + lh], wave: 474 },
           c: { x: 160, tag: 440, lines: [], y: 482 + (3 * lh) / 2, maxWidth: 760 },
+          // "Are you guys around" (689 px at 76) × .86 ends at x ≈ 753: a clear 56 px before the page's paper (x 809)
+          bScale: 0.86,
         },
         label: { x: 214, y: 112, align: 'left', gap: 0 },
-        questions: { x: 160, tops: [582, 652, 722], size: 46, align: 'left' },
-        page: { x: 1000, y: 150, w: 760, size: 48, minH: 640 },
+        // the slot under the question and the page (whose paper ends at y 708), over the narrator's caption (top ≈ 921)
+        questions: { x: 160, y: 760, size: 64, align: 'left' },
+        // lines at the title role (64), 48 px padding: "Monday to Friday · 8:00–20:00" sets the width (≈ 951 px)
+        page: { anchor: 'right', x: 1760, y: 150, size: 64, pad: 48 },
         rowFrom: { x: 1960, y: 150 },
         rowHold: { x: 1240, y: 150 },
-        pageC: { scale: 0.95, dx: 24, dy: 0, fade: 0.25 },
-        lift: { dx: -100, dy: 8 },
+        // the dim page steps back to the right, clear of her sentence's measure (x 160–911)
+        pageC: { scale: 0.86, dx: 110, dy: 30, fade: 0.25 },
+        // closed (from the right end of the Sunday line, bound for line 3) drops to its line first and passes UNDER
+        // Sunday (bound for line 2); Saturday rides its own line's height
+        flights: ['g', 'g', 'yx'],
         caption: { x: 960, y: 966, maxWidth: 1600 },
         record: { x: 160, y: 440, w: 800, size: 40 },
       };
@@ -137,7 +153,9 @@ const STAGES: Record<'land' | 'vert', CallStage> = (() => {
       vertical,
       from,
       orb: { a: { x: 540, y: 330, d: 206 }, dot: { x: 0, y: 260, d: 38 }, c: { x: 540, y: 330, d: 206 } },
-      recede: { scale: 0.9, shade: 0.06, dx: 0, dy: 760 },
+      // 9:16: the panel steps back and slides DOWN OFF the frame (panelPose) — clear of the platform zone (bottom 20 %)
+      // before the caller's first word; the Opening hours row comes back up from the bottom edge where it went
+      recede: { scale: 0.9, shade: 0.06, dx: 0, dy: 1500 },
       strip: {
         align: 'center',
         caption,
@@ -151,19 +169,28 @@ const STAGES: Record<'land' | 'vert', CallStage> = (() => {
         filler: { x: 540, tag: 812, lines: [852] },
         // the stop-time's frozen turn sits under the label (whole-film pass: label + turn 24 px lower, inside the 9:16 safe zone)
         b: { x: 540, tag: 320, lines: [360, 360 + lh], wave: 556 },
-        c: { x: 540, tag: 500, lines: [], y: 540 + (3 * lh) / 2, maxWidth: 900 },
+        // her answer UNDER the page (paper 680–1183; the kept words fly DOWN out of it, crossing only its bottom
+        // padding — never its heading), inside the safe zone (bottom ≈ 1487 < 1536)
+        c: { x: 540, tag: 1206, lines: [], y: 1246 + (3 * lh) / 2, maxWidth: 900 },
+        bScale: 1,
       },
       label: { x: 540, y: 260, align: 'center', gap: 16 },
-      // the earlier phrasings, one at a time in the slot: the title role's 9:16 size (whole-film pass: 44 was under the
-      // phone's read-text floor, theme.ts TYPE)
-      questions: { x: 540, tops: [1206], size: 56, align: 'center' },
-      page: { x: 64, y: 668, w: 816, size: 42, minH: 500 },
-      rowFrom: null,
+      // the earlier phrasings, one at a time in the masked slot under the page (the title role's 9:16 size)
+      questions: { x: 540, y: 1212, size: 56, align: 'center' },
+      // lines at the title role (56), 48 px padding (≈ 844 × 503); its top leaves room under the frozen turn's waveform
+      // for the MATCHED ON MEANING tag (y ≈ 604–658)
+      page: { anchor: 'center', x: 540, y: 680, size: 56, pad: 48 },
+      rowFrom: { x: 64, y: 1960 },
       rowHold: { x: 64, y: 1010 },
-      pageC: { scale: 0.86, dx: 0, dy: 300, fade: 0.25 },
-      lift: { dx: 0, dy: -64 },
-      caption: { x: 540, y: 1382, maxWidth: 940 },
-      record: { x: 104, y: 492, w: 872, size: 38 },
+      // the page stays over her sentence, dimming, a touch back and up (air over ● AVA)
+      pageC: { scale: 0.97, dx: 0, dy: -24, fade: 0.25 },
+      // the sentence lies BELOW the page: Saturday and Sunday slide across to their slots first, then drop (Saturday
+      // a line over Sunday all the way); closed drops to its line first and slides along under Sunday
+      flights: ['xy', 'xy', 'yx'],
+      caption: { x: 540, y: 1408, maxWidth: 940 },
+      // the record lands where the page was (the page recedes out under it): the document gives way to the record
+      // that cites it, centred in the frame under the orb
+      record: { x: 104, y: 786, w: 872, size: 38 },
     };
   };
   return { land: make(false), vert: make(true) };
@@ -173,17 +200,13 @@ export const callStage = (vertical: boolean): CallStage => (vertical ? STAGES.ve
 
 /* ── the moves ──────────────────────────────────────────────────── */
 
-/** the panel: steps back a depth (scale, shade) and slides away (house ease, ≈ 1.1 s from the ring; 9:16 it settles
- *  receded under the call, then sinks away once the Opening hours row has been lifted out of it) */
+/** the panel: steps back a depth (scale, shade) and slides away off the frame (16:9 off the right edge, ≈ 1 s from the
+ *  ring; 9:16 off the bottom edge, 6 frames sooner — out of the platform UI zone before the caller's first word) */
 export function panelPose(t: number, S: CallStage) {
   // a soft start (it is pushed, not kicked), then decisive, with a long settle: clear of the strip before ● CALLER rises
-  const u = ease(t, C.recede[0], C.recede[1], RECEDE);
+  const u = ease(t, C.recede[0], C.recede[1] - (S.vertical ? 6 : 0), RECEDE);
   const R = S.recede;
-  // 9:16: once the Opening hours row has lifted out of it, the receded panel sinks away under the frame
-  const sink = S.vertical ? ease(t, C.rowIn[0] + 6, C.rowIn[0] + 28, EASE.in2) : 0;
-  const dy = R.dy * u + 760 * sink;
-  const on = S.vertical ? sink < 1 : u < 1;
-  return { scale: lerp(1, R.scale, u), shade: R.shade * u + 0.04 * sink, dx: R.dx * u, dy, u, on, moving: (u > 0 && u < 1) || (sink > 0 && sink < 1) };
+  return { scale: lerp(1, R.scale, u), shade: R.shade * u, dx: R.dx * u, dy: R.dy * u, u, on: u < 1, moving: u > 0 && u < 1 };
 }
 
 /** the camera glide to the knowledge (b10): 0 = the call's framing … 1 = the stop-time's */
@@ -211,8 +234,9 @@ export function orbPose(t: number, S: CallStage, dot: OrbAt) {
   return { x, y, d, moving: !(settled(g) && settled(k) && settled(u)) };
 }
 
-/** the caller's turn (turn 1): A1 → A2 (the scroll as Ava's turn arrives) → B (the camera glide) */
-export function callerTurnPose(t: number, S: CallStage): TurnAt & { moving: boolean } {
+/** the caller's turn (turn 1): A1 → A2 (the scroll as Ava's turn arrives) → B (the camera glide, stepping back to
+ *  `bScale` about its tag's top-left as it goes) */
+export function callerTurnPose(t: number, S: CallStage): TurnAt & { moving: boolean; scale: number } {
   const s = ease(t, C.scroll[0], C.scroll[1], EASE.inOut);
   const p = panAt(t);
   const A1 = S.strip.a1;
@@ -225,11 +249,16 @@ export function callerTurnPose(t: number, S: CallStage): TurnAt & { moving: bool
     wave: lerp(a.wave ?? 0, b.wave ?? 0, u),
   });
   const r = mixT(mixT(A1, A2, s), B, p);
-  return { ...r, moving: (s > 0 && s < 1) || (p > 0 && p < 1) };
+  return { ...r, scale: lerp(1, S.strip.bScale, p), moving: (s > 0 && s < 1) || (p > 0 && p < 1) };
 }
+/** a point of the caller's turn (laid out at full size from its pose) → where it is drawn (its step-back scale about
+ *  the tag's top-left) */
+export const turnPoint = (turn: { x: number; tag: number; scale: number }, p: XY): XY => ({ x: turn.x + (p.x - turn.x) * turn.scale, y: turn.tag + (p.y - turn.tag) * turn.scale });
 
-/** the page's dim and recede in b11 */
-export const pageDimAt = (t: number) => ease(t, C.resume, C.resume + 20, EASE.inOut);
+/** the page's dim in b11 — once the kept words have flown out of it */
+export const pageDimAt = (t: number) => ease(t, C.dim[0], C.dim[1], EASE.inOut);
+/** the page's exit as the record lands: it recedes (× .9) and fades out — the transcript owns the frame */
+export const pageOutAt = (t: number) => ease(t, C.pageOut[0], C.pageOut[1], EASE.inOut);
 
 /* ── the ground's clock and key (call/Ground.tsx draws with these) ── */
 
@@ -263,9 +292,10 @@ export function callKey(S: CallStage, d: number) {
 
 /**
  * callEnd(vertical): what the cut into b12 hands over (frame px). The record row (TRANSCRIPT, the greeting,
- * "Answered from your documents" + the Opening hours chip, the sunday check) holds where the strip was; the orb at
- * rest in her answer place; the page (dim, 25 %) beside it (9:16 behind/below); the app panel is off frame (16:9
- * right, 9:16 receded at the bottom); the ground is KB_MESH keyed on the orb (call/Ground.tsx), its clock running —
+ * "Answered from your documents" + the Opening hours chip, the sunday check) holds where the strip was (16:9) / where
+ * the page was (9:16); the orb at rest in her answer place; the page has receded out (opacity 0 from
+ * CALL_LOCAL.pageOut[1]: call/Page.tsx draws nothing at C.end); the app panel is off frame (16:9 right, 9:16 below
+ * the bottom edge); the ground is KB_MESH keyed on the orb (call/Ground.tsx), its clock running —
  * but TRAILING the timeline by the stop-time it was held for (ground.meshLag frames): the next act continues the mesh
  * from ground.meshClock, or its pools jump at the cut.
  */

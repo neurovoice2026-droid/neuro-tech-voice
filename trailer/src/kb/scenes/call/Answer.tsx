@@ -2,15 +2,15 @@
  * b11 · THE ANSWER (SCRIPT.md b11) — her turn on the call, in the question's place:
  *
  *   ● AVA + the timer (running again) rise as time resumes
- *   THE WORD RE-SET (call/Reset.tsx, the kit's WordReset with timed glides): the two swept lines, lifted out of the
- *   page (call/Page.tsx LiftedLines),
- *   re-set into what she actually says ON HER WORD ONSETS — Saturday / Sunday(+s) / closed(+.) glide sub-pixel to
- *   their pen positions, the tokens she doesn't say (·, 9:00–14:00) leave up through their masks as "Saturday" moves,
- *   her own words rise in. The result IS her caption: "We are! Saturday from nine till two. Sundays, we're closed."
- *   with "nine till two" keyed in sunday on "nine".
+ *   THE WORD RE-SET (call/Reset.tsx), ONE move: the tokens she doesn't say (· 9:00–14:00 ·) have left the page up
+ *   through their masks; on "We" the kept words (Saturday · Sunday · closed) fly from the page TOGETHER straight into
+ *   their slots in her sentence and wait there at 40 %; on her onsets (− 2 f) her own words rise in and each kept word
+ *   takes full ink (Sunday its "s,", closed its "."). The result IS her caption: "We are! Saturday from nine till two.
+ *   Sundays, we're closed." with "nine till two" keyed in sunday on "nine" — complete ≥ a beat before the record.
  *   THE RECORD: on the 8th after her answer the strip folds into the white record row (the kit's RecordRow:
  *   TRANSCRIPT, the greeting with its disclosure, "Answered from your documents" + the Opening hours chip, a white
- *   check drawn in the sunday disc), unfolding down from its top edge over the sentence as it leaves up.
+ *   check drawn in the sunday disc), unfolding down from its top edge over the sentence as it leaves up (they overlap:
+ *   the frame is never empty).
  */
 import React from 'react';
 import { EASE, tween } from '../../../lib/motion';
@@ -20,7 +20,7 @@ import { TYPE } from '../../../theme';
 import { HOME, MOMENT_LIGHTS } from '../../palettes';
 import { CALL_LOCAL as C } from '../../timing';
 import { VOICE } from '../../voice.generated';
-import { liftedSource, PAGE_LINES, SWEPT, type PageGeo } from './Page';
+import { sweptTokens, type PageGeo } from './Page';
 import { Tag } from './Strip';
 import type { CallStage } from './stage';
 
@@ -31,13 +31,10 @@ export const AnswerTurn: React.FC<{ t: number; S: CallStage; g: PageGeo; ink: st
   useKitFaces();
   if (t < C.resume) return null;
   const T = S.strip.c;
-  const src = liftedSource(t, S, g);
-  // the sentence leaves up through its block's mask as the record lands (a block exit: the words are at rest by then)
-  // (its last line is leaving as the record starts to unfold down from the strip's top edge)
-  const out = tween(t, [C.record - 6, C.record], [0, 1], EASE.in3);
-  // each kept word's flight (call/Reset.tsx): 9:16 the strip lies under the sentence — every word hops up out of it;
-  // 16:9 it lies beside it — "Saturday" hops over the strip's second line, the others drop to their line and slide in
-  const flight = (i: number) => (S.vertical || i === 2 ? ('hop' as const) : ('yx' as const));
+  const tokens = sweptTokens(g);
+  // the sentence leaves up through its block's mask AS the record unfolds down over it (a block exit: the words are at
+  // rest by then; ≥ 2 f of overlap — never a frame with neither)
+  const out = tween(t, [C.sentenceOut[0], C.sentenceOut[1]], [0, 1], EASE.in3);
   const lh = S.strip.caption * 1.18;
   // the fold: a clip opening from the record's top edge down past its foot (frame-relative inset)
   const foldU = tween(t, [C.record, C.record + 10], [0, 1], EASE.out3);
@@ -54,16 +51,17 @@ export const AnswerTurn: React.FC<{ t: number; S: CallStage; g: PageGeo; ink: st
   const target = { text: ANSWER, x: T.x, y: T.y, size: S.strip.caption, maxWidth: measure, align: S.strip.align, color: HOME.ink, keys: [{ text: 'nine till two.', color: SUNDAY, at: C.key }] };
   return (
     <>
-      <Tag t={t} x={T.x} y={T.tag} align={S.strip.align} name="AVA" ink={SUNDAY} at={C.call2 - 1} exitAt={C.record - 9} timer />
-      {out < 1 && t >= C.lift[0] ? (
+      {/* (9:16: the kept words drop out of the page through the tag's row — it rises once they have landed) */}
+      <Tag t={t} x={T.x} y={T.tag} align={S.strip.align} name="AVA" ink={SUNDAY} at={S.vertical ? C.fly[1] : C.call2 - 1} exitAt={C.record - 9} timer />
+      {out < 1 && t >= C.fly[0] - 2 ? (
         out > 0 ? (
           <div style={{ position: 'absolute', left: clip.left, top: clip.top, width: clip.w, height: clip.h, overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', left: -clip.left, top: -clip.top, width: S.W, height: S.H, opacity: 1 - EASE.in2(out) * 0.6, transform: `translateY(${(-out * clip.h).toFixed(3)}px)` }}>
-              <Reset t={t} source={{ x: src.x, y: src.y, lines: SWEPT.map((i) => PAGE_LINES[i]), size: src.size, lineH: src.lineH, color: HOME.ink }} target={target} words={C.reset} leaveAt={C.resetLeave} path={flight} />
+            <div style={{ position: 'absolute', left: -clip.left, top: -clip.top, width: S.W, height: S.H, opacity: 1 - EASE.in2(out), transform: `translateY(${(-out * clip.h).toFixed(3)}px)` }}>
+              <Reset t={t} tokens={tokens} sourceSize={g.spec.size} target={target} words={C.reset} fly={C.fly} flights={S.flights} />
             </div>
           </div>
         ) : (
-          <Reset t={t} source={{ x: src.x, y: src.y, lines: SWEPT.map((i) => PAGE_LINES[i]), size: src.size, lineH: src.lineH, color: HOME.ink }} target={target} words={C.reset} leaveAt={C.resetLeave} path={flight} />
+          <Reset t={t} tokens={tokens} sourceSize={g.spec.size} target={target} words={C.reset} fly={C.fly} flights={S.flights} />
         )
       ) : null}
       {/* the record unfolds from its top edge as it lands (a fold, not a fade) */}

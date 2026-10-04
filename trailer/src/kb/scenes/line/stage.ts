@@ -17,9 +17,11 @@
  *          line in four rows, the SaveBar's two buttons side by side (the app's flex-1 on a phone)
  *
  * THE NEIGHBOURS: b11 → here, frame 0 is callEnd()'s picture (scenes/line/Handoff.tsx draws the record row and the page
- * as b11 left them, then they leave). Here → b13: lineEnd() (bottom).
+ * as b11 left them); then ONE SCROLL (LINE_LOCAL.scroll, scrollAmount below): the record slides up and out of the frame as
+ * the agent page comes up from below the bottom edge, one sheet. Here → b13: lineEnd() (bottom).
  */
 import type React from 'react';
+import { subpixel } from '../../../lib/glide';
 import { EASE, springUnit } from '../../../lib/motion';
 import { LINE_LOCAL as N, SCENES } from '../../timing';
 import { callEnd, callKey, callStage, type Box, type OrbAt } from '../call/stage';
@@ -32,8 +34,6 @@ export const ease = (t: number, a: number, b: number, f: (u: number) => number =
 
 /** a decisive glide that settles without a bounce (ζ ≈ .92 — the acts' GLIDE) */
 export const GLIDE = { stiffness: 170, damping: 24, mass: 1 } as const;
-/** the page rising in: a short landing, no bounce (ζ ≈ 1) */
-export const RISE = { stiffness: 300, damping: 34.6, mass: 1 } as const;
 
 export type LineStage = {
   W: number;
@@ -43,8 +43,8 @@ export type LineStage = {
   from: ReturnType<typeof callEnd>;
   /** the orb's b11 place → its b12 corner */
   orb: { from: OrbAt; to: OrbAt };
-  /** the agent page (frame px at rest), its corner radius, how far below its place it starts rising */
-  panel: Box & { radius: number; rise: number };
+  /** the agent page (frame px at rest) and its corner radius */
+  panel: Box & { radius: number };
   /** the tab bar: label size, icons, the strip's side padding (× r) */
   tabs: { size: number; icons: boolean; padR: number };
   /** the content's inner padding */
@@ -58,12 +58,12 @@ export type LineStage = {
   sentenceRows: boolean;
   /** the SaveBar: buttons right-aligned at their own widths (16:9) or side by side, each half (9:16) */
   saveBar: 'right' | 'split';
-  /** where the I-beam clicks in the field (fractions of the field's box) */
+  /** where the I-beam clicks in the field (fractions of the field's box): on the placeholder's first row, to the right —
+   *  the hand's crossing from the tab is ≈ 710 px (16:9) / 580 px (9:16), it enters the field's box late in its
+   *  deceleration (the I-beam swaps there), and the hop back off the keys to Save changes stays short */
   click: { fx: number; fy: number };
   /** the narrator's caption: centre x, row A's centre, max width */
   caption: { x: number; y: number; maxWidth: number };
-  /** the call's record row and page leave up by this much */
-  leave: number;
 };
 
 const STAGES: Record<'land' | 'vert', LineStage> = (() => {
@@ -76,7 +76,7 @@ const STAGES: Record<'land' | 'vert', LineStage> = (() => {
         vertical,
         from,
         orb: { from: from.orb, to: { x: 178, y: 262, d: 140 } },
-        panel: { x: 316, y: 214, w: 1360, h: 0, radius: 30, rise: 96 },
+        panel: { x: 316, y: 214, w: 1360, h: 0, radius: 30 },
         tabs: { size: 28, icons: true, padR: 14 },
         pad: 48,
         type: { title: 36, small: 24, label: 28, field: 48, button: 27 },
@@ -84,9 +84,8 @@ const STAGES: Record<'land' | 'vert', LineStage> = (() => {
         lineH: 1.24,
         sentenceRows: true,
         saveBar: 'right',
-        click: { fx: 0.86, fy: 0.72 },
+        click: { fx: 0.8, fy: 0.33 },
         caption: { x: 960, y: 962, maxWidth: 1560 },
-        leave: 120,
       };
     }
     return {
@@ -95,7 +94,7 @@ const STAGES: Record<'land' | 'vert', LineStage> = (() => {
       vertical,
       from,
       orb: { from: from.orb, to: { x: 540, y: 322, d: 150 } },
-      panel: { x: 64, y: 476, w: 952, h: 0, radius: 30, rise: 120 },
+      panel: { x: 64, y: 476, w: 952, h: 0, radius: 30 },
       tabs: { size: 30, icons: false, padR: 8 },
       pad: 38,
       type: { title: 34, small: 24, label: 28, field: 56, button: 28 },
@@ -103,9 +102,8 @@ const STAGES: Record<'land' | 'vert', LineStage> = (() => {
       lineH: 1.24,
       sentenceRows: false,
       saveBar: 'split',
-      click: { fx: 0.8, fy: 0.78 },
+      click: { fx: 0.8, fy: 0.33 },
       caption: { x: 540, y: 1336, maxWidth: 940 },
-      leave: 160,
     };
   };
   return { land: make(false), vert: make(true) };
@@ -115,22 +113,34 @@ export const lineStage = (vertical: boolean): LineStage => (vertical ? STAGES.ve
 
 /* ── the moves ──────────────────────────────────────────────────── */
 
-/** the call's record row and page leaving up (power3.in, gone by leave[1]): offset and opacity */
-export function leavePose(t: number, S: LineStage) {
-  const q = ease(t, N.leave[0], N.leave[1], EASE.in3);
-  // gone (faded) a frame before it has finished travelling: the page rising in never sits on top of it
-  return { dy: -S.leave * q, opacity: 1 - ease(t, N.leave[0] + 0.5, N.leave[1] - 1, EASE.in2), on: q < 1, moving: q > 0 && q < 1 };
+/**
+ * THE CUT FROM b11 — ONE SCROLL (SCRIPT.md b12: "the record row slides away and a white settings Card comes in"; motion
+ * critic: no cross-dissolve, never a frame with nothing new in it). One sheet moves up on power2.inOut over
+ * LINE_LOCAL.scroll: the call's record row (and its page, where b11 left one) slides up and OUT through the top edge (gone
+ * by ≈ 9), the agent page comes up from just below the BOTTOM edge and lands (11) — both fully opaque, never overlapping
+ * (the page's top edge trails the record's bottom), a soft start on b11's held last picture and a long soft landing. The
+ * pointer is on the page: it enters through the bottom edge with it and settles onto Conversation as it lands.
+ *   travel   the record: its bottom edge + its shadow past the top (record.y + ≈ 9 lines of its type + 60);
+ *            the page: from 40 px below the frame (its shadow clear) to its place — 16:9 ≈ 840 / 906 px, 9:16 ≈ 1190 / 1484
+ *   speed    peak ≈ 3.5 % of the frame height per 120 fps frame (16:9 37 px, 9:16 61 px): a real app's page push
+ */
+export function scrollAmount(t: number) {
+  return ease(t, N.scroll[0], N.scroll[1], EASE.draw);
 }
 
-/** the agent page rising into place (a landing spring from enter[0]; opacity over its first frames) */
+/** the call's record row and page sliding up and out of the frame (frame px offset) */
+export function leavePose(t: number, S: LineStage) {
+  const q = scrollAmount(t);
+  const r = S.from.record;
+  const travel = r.y + 9 * r.size + 60;
+  return { dy: -travel * q, on: q < 1, moving: q > 0 && q < 1 };
+}
+
+/** the agent page coming up from below the frame and landing in place */
 export function panelPose(t: number, S: LineStage) {
-  const s = t < N.enter[0] ? 0 : springUnit(t - N.enter[0], RISE);
-  const dy = S.panel.rise * (1 - s);
-  // it rises from enter[0] but only shows as the record goes (its last quarter-frame under 12 %): the two never sit on
-  // top of each other, and the stage is never left empty — a fast ease-out (whole-film pass: the old inOut over
-  // [5, 9.5] left ~1.8 frames with nothing but the ground between the two)
-  const opacity = ease(t, Math.max(N.enter[0], N.leave[1] - 1.25), N.leave[1] + 2, EASE.out3);
-  return { dy, opacity, lift: 2.4 + 1.6 * (1 - s), on: t >= N.enter[0] - 0.01, moving: s > 0 && Math.abs(1 - s) > 1e-4 };
+  const s = scrollAmount(t);
+  const dy = (S.H + 40 - S.panel.y) * (1 - s);
+  return { dy, opacity: 1, lift: 2.4 + 1.6 * (1 - s), on: s > 0 || t >= N.scroll[1], moving: s > 0 && s < 1 };
 }
 
 /** Ava's orb: b11's place → her corner (the glide, no bounce) */
@@ -172,8 +182,8 @@ export const callStageOf = (S: LineStage) => callStage(S.vertical);
  *         the frame in time to relight on her first word; at rest well before the act ends, so lineEnd() is unchanged.
  *
  * The ground rides a far plane (PUSH.ground: a quarter of the move, a gentle parallax); the panel, its pointer and the
- * orb ride the focal plane (planeStyle below: plain while zooming — the type re-rasters at the exact scale every frame, no
- * upscaled layer, no blur).
+ * orb ride the focal plane (planeStyle below: laid out at the push's FULL zoom inside one compositor layer and scaled
+ * DOWN to the camera's zoom — a downsampled raster, sharp and sub-pixel smooth on both axes; never an upscaled one).
  */
 export const PUSH = (() => {
   const last = N.keys[N.keys.length - 1];
@@ -217,19 +227,25 @@ export function camToScreen(c: LineCam, S: LineStage, p: { x: number; y: number 
 }
 
 /**
- * The focal plane's style under the camera: a PLAIN transform (no will-change, no tilt). Measured at 4K / 120 fps over the
- * whole push (out/kb/plusbar, render sequences at concurrency 2):
- *   · a compositor layer keeps the raster scale it was made at: by the end of a ×1.3 push its type was ≈ 35 % softer than a
- *     fresh still (gradient energy 96–100 vs 126–160) — upscaled raster, i.e. blur. Never for a push this deep.
- *   · the house tilt on a plain transform (lib/glide SUBPIXEL_TILT, no layer) softened the glyphs ≈ 25 % and still stepped.
- *   · plain: re-rastered at the exact scale every frame (as sharp as a still); horizontal glide sub-pixel smooth; vertically
- *     the baselines move in whole 4K device pixels (½ px at 1080) — a step every 1–3 frames mid-push, sparser near the
- *     push's still line and in its ease tails. The sharp choice; no blur at any frame.
- * At rest (zoom 1, home) no transform at all, so the act's first and last pictures are untouched.
+ * The focal plane under the camera — TWO nested boxes (motion critic, 4K: a plain transform re-rasters the type every
+ * frame and Chrome snaps its baselines to whole device pixels, so the panel title stepped ≈ 0.9 device px every 6–8 frames
+ * inside a box gliding ½ px a frame — type swimming ≤ 1 px in its box):
+ *   inner   the plane laid out at the push's FULL zoom (Z: 16:9 ×1.30, 9:16 ×1.08) — a constant, plain scale(Z), painted
+ *           once into the outer layer at that size
+ *   outer   ONE compositor layer (will-change + the house tilt, lib/glide) carrying translate + scale(zoom / Z) ≤ 1: the
+ *           compositor resamples that raster at the exact sub-pixel offset and scale every frame — no re-raster, no pixel
+ *           snapping, a monotonic glide on both axes — and because zoom ≤ Z it only ever DOWNsamples (an upscaled raster is
+ *           blur; the old single-layer attempt kept its creation scale and went ≈ 35 % soft by the end of the push)
+ * Only while the push is running (pushAmount > 0, LINE_LOCAL field.up → Save's release + 30): at rest (zoom 1, home) no
+ * transform and no layer, so the act's first and last pictures (and b13's handover, change/Handoff.tsx) are untouched.
  */
-export function planeStyle(c: LineCam): React.CSSProperties | undefined {
-  if (c.zoom === 1 && c.x === 0 && c.y === 0) return undefined;
-  return { transform: `translate(${(-c.x).toFixed(4)}px, ${(-c.y).toFixed(4)}px) scale(${c.zoom.toFixed(6)})`, transformOrigin: '50% 50%' };
+export function planeStyle(c: LineCam, S: LineStage): { outer?: React.CSSProperties; inner?: React.CSSProperties } {
+  if (c.zoom === 1 && c.x === 0 && c.y === 0) return {};
+  const Z = S.vertical ? PUSH.zoom.vert : PUSH.zoom.land;
+  return {
+    outer: { ...subpixel(`translate(${(-c.x).toFixed(4)}px, ${(-c.y).toFixed(4)}px) scale(${(c.zoom / Z).toFixed(6)})`, true), transformOrigin: '50% 50%' },
+    inner: { transform: `scale(${Z})`, transformOrigin: '50% 50%' },
+  };
 }
 
 /** the ground plane's transform under the camera (depth PUSH.ground) and a screen point → that plane's own px */

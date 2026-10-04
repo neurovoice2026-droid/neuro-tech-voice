@@ -1,12 +1,14 @@
 /**
  * A DOCUMENT ROW of the Knowledge tab (components/agent/tabs/TabKnowledge.tsx DocumentRow: rounded-lg border p-3,
- * the kind tile, the name in font-medium, the status pill, the … trigger) — the kit's DocRow (kit/ui.tsx) rebuilt
+ * the icon tile — size-9 rounded-md bg-muted with lucide FileText, Globe for a web page —, the name in font-medium,
+ * the status pill then the muted TYPE_LABELS word (PDF · Word · Text · Web page), the … trigger) — the kit's DocRow
+ * (kit/ui.tsx) rebuilt
  * so its BOX can change size while it moves: the paper and its hairline border are one SVG rect (anti-aliased at
  * its exact fractional edges every render frame; a CSS box's width paints pixel-snapped), the content is placed
  * from the left edge and the … trigger from the right, so a row can be born from a slip and widen into the list.
  *
- *   layout 'stack'   16:9: the name over the pill (the app's two-line row)
- *   layout 'inline'  9:16: one line — tile, name, the pill pushed right, …
+ *   layout 'stack'   16:9: the name over the pill and its type word (the app's two-line row)
+ *   layout 'inline'  9:16: one line — tile, name, the pill and its type word pushed right, …
  *
  * `morph` (0 → 1) is the slip → row change: corner radius, the border coming in, the paper's lift. With `slip` the
  * row draws b06/b07's strip of "Yes, Saturdays, nine till two." on top, leaving up through its mask at `slip.out`
@@ -19,14 +21,44 @@ import { subpixel } from '../../../lib/glide';
 import { useLayout } from '../../../lib/layout';
 import { EASE, smooth, SPRING, springUnit, tween } from '../../../lib/motion';
 import { maskBox, typeStyle } from '../../../lib/type';
-import { TYPE } from '../../../theme';
-import { APP, Icon, measureText, Pill, type PillState } from '../../kit';
+import { APP, Icon, measureText, Pill, ui, W as WT, type PillState } from '../../kit';
 import type { RowKind } from './stage';
 
-const KIND_TOKEN: Record<RowKind, string> = { pdf: 'PDF', docx: 'DOCX', txt: 'TXT', url: 'URL' };
+/** the app's TYPE_LABELS (TabKnowledge.tsx:44–50): the muted word after the pill */
+export const TYPE_LABEL: Record<RowKind, string> = { pdf: 'PDF', docx: 'Word', txt: 'Text', url: 'Web page' };
 const RULE = 'rgba(20, 10, 36, 0.075)';
 
 export const rowPill = (size: number) => Math.max(26, Math.round(size * 0.6));
+
+/**
+ * A row's face geometry (row px) for its name size / layout / height — call/Page.tsx and change/NewRow.tsx draw the
+ * Opening hours row's face themselves when it unfolds into its page, from THIS, so the hand-over is the same picture.
+ *   tile     the icon tile's side (a square: size-9 against the name's text-sm), its icon (size-4 in it)
+ *   nameX/Y  the name's top-left; meta: the type word's size and the gap after the pill (gap-x-2)
+ */
+export function rowFace(size: number, layout: 'stack' | 'inline', h: number) {
+  const pad = size * 0.42;
+  const tile = layout === 'stack' ? size * 1.5 : size * 1.4;
+  const pillSize = rowPill(size);
+  const btn = size * 1.05;
+  const nameY = layout === 'stack' ? h / 2 - (size * 1.05 + size * 0.22 + pillSize * 1.72) / 2 : (h - size * 1.05) / 2;
+  return { pad, tile, icon: tile * 0.46, radius: tile * 0.17, pillSize, btn, nameX: pad * 2 + tile, nameY, metaSize: pillSize, metaGap: pillSize * 0.62 };
+}
+
+/** the type word's width (row px) */
+export const typeLabelWidth = (kind: RowKind, size: number) => measureText(TYPE_LABEL[kind], { size, weight: WT.regular });
+
+/** the icon tile: the app's muted square with FileText (Globe for a web page) */
+export const KindTile: React.FC<{ kind: RowKind; side: number; icon: number; radius: number; style?: React.CSSProperties }> = ({ kind, side, icon, radius, style }) => (
+  <div style={{ width: side, height: side, borderRadius: radius, background: APP.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', color: APP.mutedFg, ...style }}>
+    <Icon name={kind === 'url' ? 'globe' : 'fileText'} size={icon} stroke={2} />
+  </div>
+);
+
+/** the type word (text-xs, muted) */
+export const TypeLabel: React.FC<{ kind: RowKind; size: number }> = ({ kind, size }) => (
+  <span style={{ ...ui(size, WT.regular), color: APP.mutedFg, whiteSpace: 'nowrap', lineHeight: 1 }}>{TYPE_LABEL[kind]}</span>
+);
 
 /** a soft lifted shadow for a row off the list (no crisp ring: the SVG border is the edge) */
 const flightShadow = (lift: number, ink: string) => {
@@ -82,12 +114,8 @@ export const Row: React.FC<{
   const rRow = size * 0.32;
   const rSlip = slipRadius ?? rRow;
   const radius = rSlip + (rRow - rSlip) * morph;
-  const pad = size * 0.42;
-  const tokenSize = Math.max(24, Math.round(size * 0.5));
-  const tile = layout === 'stack' ? size * 1.5 : size * 1.4;
-  const tileW = Math.max(tile, measureText('DOCX', { size: tokenSize, weight: TYPE.label.weight, tracking: 0.08 }) + size * 0.6);
-  const btn = size * 1.05;
-  const pillSize = rowPill(size);
+  const F = rowFace(size, layout, h);
+  const { pad, tile, btn, pillSize } = F;
   const border = 1.25;
   const borderA = morph;
   // the content's entrance (a 16th apart): the tile and the pill settle in (a box: scale + fade, never cropped by a
@@ -124,25 +152,15 @@ export const Row: React.FC<{
     );
   };
   const nameNode = <div style={{ ...typeStyle('title', v, { size }), color: APP.foreground, whiteSpace: 'nowrap', lineHeight: 1.05 }}>{name}</div>;
-  const pillNode = pill ? <Pill t={t} states={pill} size={pillSize} /> : null;
-  const tileNode = (
-    <div
-      style={{
-        width: tileW,
-        height: tile,
-        borderRadius: size * 0.24,
-        background: APP.muted,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        ...typeStyle('label', v, { size: tokenSize }),
-        letterSpacing: '0.08em',
-        color: APP.mutedFg,
-      }}
-    >
-      {KIND_TOKEN[kind]}
-    </div>
-  );
+  // the pill, then the type word (gap-x-2): a flex row, so the word follows the pill's width as it rolls
+  const pillNode = pill ? (
+    <>
+      <Pill t={t} states={pill} size={pillSize} />
+      <span style={{ display: 'inline-block', width: F.metaGap }} />
+      <TypeLabel kind={kind} size={F.metaSize} />
+    </>
+  ) : null;
+  const tileNode = <KindTile kind={kind} side={tile} icon={F.icon} radius={F.radius} />;
   const mx = w - pad - btn;
   const my = (h - btn) / 2;
   const msc = 1 - 0.03 * menuPress;
@@ -211,13 +229,13 @@ export const Row: React.FC<{
       {piece(0, tileNode, { left: pad, top: (h - tile) / 2 }, 'box')}
       {layout === 'stack' ? (
         <>
-          {piece(1, nameNode, { left: pad * 2 + tileW, top: h / 2 - (size * 1.05 + size * 0.22 + pillSize * 1.72) / 2 }, 'type')}
-          {pillNode ? piece(2, pillNode, { left: pad * 2 + tileW, top: h / 2 - (size * 1.05 + size * 0.22 + pillSize * 1.72) / 2 + size * 1.05 + size * 0.22, display: 'flex' }, 'box') : null}
+          {piece(1, nameNode, { left: F.nameX, top: F.nameY }, 'type')}
+          {pillNode ? piece(2, pillNode, { left: F.nameX, top: F.nameY + size * 1.05 + size * 0.22, height: pillSize * 1.72, display: 'flex', alignItems: 'center' }, 'box') : null}
         </>
       ) : (
         <>
-          {piece(1, nameNode, { left: pad * 2 + tileW, top: (h - size * 1.05) / 2 }, 'type')}
-          {pillNode ? piece(2, pillNode, { right: Math.ceil(w) - mx + pad * 0.6, top: (h - pillSize * 1.72) / 2, display: 'flex' }, 'box') : null}
+          {piece(1, nameNode, { left: F.nameX, top: F.nameY }, 'type')}
+          {pillNode ? piece(2, pillNode, { right: Math.ceil(w) - mx + pad * 0.6, top: (h - pillSize * 1.72) / 2, height: pillSize * 1.72, display: 'flex', alignItems: 'center' }, 'box') : null}
         </>
       )}
       {shown(2) ? (

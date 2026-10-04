@@ -8,6 +8,10 @@
  *   hers     from "Ava": KB_MESH (the site's knowledge-base indigo → violet → lilac), keyed on her orb (its
  *            light pool pulled onto her, a sunday wash at its source), spreading out FROM the orb over two
  *            beats — a gradient mask, no blur — and held to her half by the seam (a clip on its line).
+ *   flood    from "kind." (T.flood): as the matters side yields, her ground follows it out across the seam — the
+ *            clip becomes a many-stop smoothstep front (hard on the seam at its first frame, so nothing jumps)
+ *            travelling to past the far edge, its feather widening as it goes — and covers the frame on the cut:
+ *            b08 opens on her ground everywhere (its own flood, written/Ground.tsx, then lays KB over KB).
  *
  * The two canvases share the field's clock, seed and plane transform, so their pools sit in the same places:
  * the seam is the only edge between them.
@@ -20,7 +24,7 @@ import { REPEAT_LOCAL, SCENES, TURN_LOCAL as T } from '../../timing';
 import { REPEAT_GROUND } from '../Repeat';
 import { stageFor } from '../recording/stage';
 import { deskLayout, PLANE, roomTint } from '../repeat/desk';
-import { groundAt, type TurnStage } from './stage';
+import { floodAt, groundAt, type TurnStage } from './stage';
 
 /** her ground: the KB mesh raised for white paper on it (a touch more colour than Part I's .88) */
 export const HER_GROUND = { palette: KB_MESH, lift: 0.84, seed: 0 } as const;
@@ -38,6 +42,20 @@ function spreadMask(x: number, y: number, r0: number, r1: number) {
     stops.push(`rgba(0,0,0,${a.toFixed(4)}) ${(r0 + (r1 - r0) * u).toFixed(1)}px`);
   }
   return `radial-gradient(circle at ${x.toFixed(1)}px ${y.toFixed(1)}px, ${stops.join(', ')})`;
+}
+
+/** a many-stop smoothstep along one axis: opaque until `a`, clear from `a + f` (frame px; f 0 = a hard edge) */
+function floodMask(vertical: boolean, a: number, f: number) {
+  const N = 14;
+  const dir = vertical ? 'to bottom' : 'to right';
+  if (f < 0.5) return `linear-gradient(${dir}, #000 ${a.toFixed(2)}px, transparent ${a.toFixed(2)}px)`;
+  const stops: string[] = [`#000 ${a.toFixed(2)}px`];
+  for (let i = 1; i <= N; i++) {
+    const u = i / N;
+    const al = 1 - u * u * (3 - 2 * u);
+    stops.push(`rgba(0,0,0,${al.toFixed(4)}) ${(a + f * u).toFixed(2)}px`);
+  }
+  return `linear-gradient(${dir}, ${stops.join(', ')})`;
 }
 
 export const TurnGround: React.FC<{ t: number; S: TurnStage }> = ({ t, S }) => {
@@ -67,6 +85,13 @@ export const TurnGround: React.FC<{ t: number; S: TurnStage }> = ({ t, S }) => {
   const r1 = (far + F) * u;
   const r0 = r1 - F;
   const clip = `inset(${h.top}px ${h.right}px ${h.bottom}px ${h.left}px)`;
+  // the flood: the clip's seam edge becomes a front travelling to past the far edge (16:9 → right, 9:16 → down)
+  const fl = floodAt(t);
+  const seam = v ? S.H - h.bottom : S.W - h.right;
+  const farEdge = v ? S.H : S.W;
+  const front = seam + (farEdge + 40 - seam) * fl;
+  const feather = (v ? 520 : 620) * Math.min(1, fl * 2.2);
+  const hold = fl > 0 ? { WebkitMaskImage: floodMask(v, front, feather), maskImage: floodMask(v, front, feather) } : { clipPath: clip };
   return (
     <AbsoluteFill>
       <AbsoluteFill style={{ transform: plane, transformOrigin: '50% 50%' }}>
@@ -79,7 +104,7 @@ export const TurnGround: React.FC<{ t: number; S: TurnStage }> = ({ t, S }) => {
         />
       </AbsoluteFill>
       {t >= T.ground[0] - 0.01 ? (
-        <AbsoluteFill style={{ clipPath: clip }}>
+        <AbsoluteFill style={hold}>
           <AbsoluteFill
             style={{
               ...(u < 0.999 ? { WebkitMaskImage: spreadMask(o.x, o.y, r0, r1), maskImage: spreadMask(o.x, o.y, r0, r1) } : null),

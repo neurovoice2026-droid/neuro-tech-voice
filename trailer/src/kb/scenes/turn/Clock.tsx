@@ -6,8 +6,9 @@
  *
  *   9:16   the figures roll up out of their windows (the hour tens first, a frame apart: the clock's
  *          last flick) and the labels leave up through their masks — the line light stays, alone
- *   16:9   the lockup rides in from above to the top of the left half (smaller: figures 64), and after
- *          the light has gone rides up and out with an empty colon
+ *   16:9   the lockup rides in from above to the top of the left half AT ITS OWN SIZE (figures 112, labels
+ *          30: the proportions of b01–b05 and b15's lockup — a scaled-down copy beside the fixed-size labels
+ *          read as another face), and after the light has gone rides up and out with an empty colon
  */
 import React from 'react';
 import { reveal, revealStyle } from '../../../components/Type';

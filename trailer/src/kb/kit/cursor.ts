@@ -14,6 +14,9 @@
  *                                     CURSOR.pressLead (6) frames early, so the pointer has arrived and
  *                                     the eye has read the target before it clicks (≥ 4 frames, the brief).
  *   { at, x, y, action: 'release' }   the button comes up (default: CURSOR.pressHold = 3 frames after the press).
+ *   { …, action: 'press', up }         a press that names its own release time instead of a release key — so the
+ *                                     hand can LEAVE while the button comes up (the next move may start before `up`,
+ *                                     as a real hand starts its move during the release).
  *   { at, x, y, action: 'type' }      the owner starts typing: the pointer hides (as macOS hides it on a
  *                                     keypress) and comes back by itself on its next move.
  *   { at, x, y, action: 'hide' | 'show' }   fade out / in where it stands.
@@ -38,7 +41,7 @@ import { springUnit } from '../../lib/motion.ts';
 
 export type CursorAction = 'press' | 'release' | 'type' | 'hide' | 'show';
 export type CursorKind = 'arrow' | 'text';
-export type CursorKey = { at: number; x: number; y: number; action?: CursorAction; kind?: CursorKind; bend?: number; dur?: number };
+export type CursorKey = { at: number; x: number; y: number; action?: CursorAction; kind?: CursorKind; bend?: number; dur?: number; up?: number };
 export type Rect = { x: number; y: number; w: number; h: number };
 
 export const CURSOR = {
@@ -142,7 +145,7 @@ export function compileCursor(keys: readonly CursorKey[]): Compiled {
     if (k.kind) kinds.push({ at: moveT1 > moveT0 ? moveT1 - (moveT1 - moveT0) / 3 : k.at, kind: k.kind });
     if (k.action === 'press') {
       const rel = keys.slice(i + 1).find((q) => q.action === 'release' || q.action === 'press');
-      const up = rel && rel.action === 'release' ? rel.at : k.at + CURSOR.pressHold;
+      const up = k.up ?? (rel && rel.action === 'release' ? rel.at : k.at + CURSOR.pressHold);
       presses.push({ down: k.at, up: Math.max(up, k.at + CURSOR.down), x: k.x, y: k.y });
     }
     if (k.action === 'show') vis.push({ at: k.at, to: 1, dur: CURSOR.showDur });

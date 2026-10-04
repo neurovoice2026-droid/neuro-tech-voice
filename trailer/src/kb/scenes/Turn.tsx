@@ -3,8 +3,9 @@
  *
  *   0 (beat 3)  a hairline seam draws over one beat (16:9 top → bottom at x 960; 9:16 left → right at y 900)
  *               and the desk sorts itself on it: b06's narration leaves up through its masks; the in-person
- *               card glides into the right half (9:16: out, under the seam); 16:9: the clock rides in to the
- *               top of the left half; 9:16: its figures roll away and leave the rose line light alone
+ *               card glides into the right half (9:16: out, under the seam); 16:9: the clock (Part I's lockup,
+ *               its own size) rides in to the top of the left half; 9:16: its figures roll away and leave the
+ *               rose line light alone
  *   left        "Some work repeats." on its words, "repeats." in a split-flap window that turns over on every
  *               beat and only ever to the same word (slate, a flap tick each); 16:9: under it the day's column
  *               of the same answer flows up and keeps scrolling — the work that repeats, still repeating
@@ -16,9 +17,10 @@
  *   caption     the narrator's line under the seam, no tag; the key "the first kind" in sunday ink
  *   firstKind   the flips have stopped for good; the left title leaves and (16:9) the column glides up into
  *               its place, toward her light, and comes to rest
- *   kind.       the matters side yields to the next act: its title leaves, the card glides out; 16:9 the
- *               emptied clock rides up and out. The cut hands b08 the orb, the seam, the split ground and (16:9)
- *               the column at rest (scenes/turn/stage.ts TURN_END).
+ *   kind.       the matters side yields to the next act: its title leaves, the card glides out, and her ground
+ *               follows it across the seam (a feathered front, to the cut: the half is never left empty grey);
+ *               16:9 the emptied clock rides up and out. The cut hands b08 the orb, the seam, her ground over the
+ *               whole frame and (16:9) the column at rest (scenes/turn/stage.ts TURN_END).
  *
  * Every time is TURN_LOCAL (src/kb/timing.ts, from kb2-vo-3's real word onsets); the layout and every pose
  * are scenes/turn/stage.ts.

@@ -14,23 +14,23 @@
  *   <Menu> / useMenu() the row's DropdownMenu: opens from its trigger (scale / opacity spring), items
  *                      with hover / press
  *   <FieldCard> / useFieldCard()   the conversation tab's field (TabConversation.tsx): label,
- *                      placeholder, caret, the owner's words typed one per 16th, focus ring, Save
+ *                      placeholder, caret, the owner's words typed one per 16th (in place), focus ring, Save
  *   <RecordRow>        the call detail's record (CallDetailSheet.tsx): TRANSCRIPT, the greeting,
  *                      "Answered from your documents" + the document chip, a check drawn in a disc
  *   <Swap>             a panel's content swapping: the old leaves up through the mask, the new rises
  */
 import React from 'react';
-import { reveal, revealStyle } from '../../components/Type';
 import { hexToRgb, mixColor } from '../../lib/lights';
 import { EASE, mix, smooth, SPRING, springUnit, tween } from '../../lib/motion';
 import { subpixel } from '../../lib/glide';
-import { maskBox, typeStyle } from '../../lib/type';
+import { typeStyle } from '../../lib/type';
 import { useLayout } from '../../lib/layout';
 import { C, TYPE } from '../../theme';
 import { HOME } from '../palettes';
 import { CURSOR, fold, hoverAt, pressAt, type CursorKey, type Rect } from './cursor';
 import { Icon, type IconName } from './icons';
 import { layoutWords, measureText, ui, useKitFaces, W, wrapWords } from './type';
+import { typedCount, typedOpacity } from './typed';
 
 /* ── tokens ─────────────────────────────────────────────────────── */
 
@@ -380,7 +380,8 @@ function mixRgba(a: string, b: string, u: number): string {
 /* ── DocRow ─────────────────────────────────────────────────────── */
 
 export type DocKind = 'pdf' | 'docx' | 'txt' | 'url';
-const KIND_TOKEN: Record<DocKind, string> = { pdf: 'PDF', docx: 'DOCX', txt: 'TXT', url: 'URL' };
+/** the app's TYPE_LABELS (components/agent/tabs/TabKnowledge.tsx:44–50): the muted word after the pill */
+const TYPE_WORD: Record<DocKind, string> = { pdf: 'PDF', docx: 'Word', txt: 'Text', url: 'Web page' };
 
 export type DocRowProps = {
   t: number;
@@ -424,10 +425,9 @@ export const DocRow: React.FC<DocRowProps> = ({ t, x, y, w, kind, name, pill, si
   const size = sizeProp ?? Math.round(typeStyle('title', L.vertical).fontSize as number * 0.8);
   const h = docRowHeight(size);
   const pad = size * 0.42;
-  const tokenSize = Math.max(24, Math.round(size * 0.5));
+  // the icon tile: size-9 rounded-md bg-muted, FileText (Globe for a web page) at size-4
   const tile = size * 1.5;
-  // one tile width for every kind (the widest token, DOCX), so the names line up down the list
-  const tileW = Math.max(tile, measureText('DOCX', { size: tokenSize, weight: TYPE.label.weight, tracking: 0.08 }) + size * 0.6);
+  const tileW = tile;
   // the landing: down into place on the house landing spring, fading in over its first 30 %
   let dy = 0;
   let o = 1;
@@ -465,7 +465,7 @@ export const DocRow: React.FC<DocRowProps> = ({ t, x, y, w, kind, name, pill, si
         ...style,
       }}
     >
-      {/* the kind tile: the app's muted square, carrying the kind token (label role) */}
+      {/* the icon tile: the app's muted square with FileText (Globe for a web page) */}
       <div
         style={{
           position: 'absolute',
@@ -473,23 +473,22 @@ export const DocRow: React.FC<DocRowProps> = ({ t, x, y, w, kind, name, pill, si
           top: (h - tile) / 2,
           width: tileW,
           height: tile,
-          borderRadius: size * 0.24,
+          borderRadius: tile * 0.17,
           background: APP.muted,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          ...typeStyle('label', L.vertical, { size: tokenSize }),
-          letterSpacing: '0.08em',
           color: APP.mutedFg,
         }}
       >
-        {KIND_TOKEN[kind]}
+        <Icon name={kind === 'url' ? 'globe' : 'fileText'} size={tile * 0.46} stroke={2} />
       </div>
       <div style={{ position: 'absolute', left: pad * 2 + tileW, top: 0, height: h, right: pad * 2 + mb.w, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: size * 0.22 }}>
         <div style={{ ...typeStyle('title', L.vertical, { size }), color: APP.foreground, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.05 }}>{name}</div>
         {pill ? (
-          <div style={{ display: 'flex' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: rowPillSize(size) * 0.62 }}>
             <Pill t={t} states={pill} size={rowPillSize(size)} />
+            <span style={{ ...ui(rowPillSize(size), W.regular), color: APP.mutedFg, whiteSpace: 'nowrap', lineHeight: 1 }}>{TYPE_WORD[kind]}</span>
           </div>
         ) : null}
       </div>
@@ -723,8 +722,10 @@ export function useFieldCard(spec: FieldCardSpec): FieldCardGeometry {
 
 /**
  * The field card. The owner's words type ONE PER 16th from `typeAt` (`step` frames apart, 3.75 = a
- * 16th at 120 BPM), each rising into its own mask; the caret glides to the end of each new word, solid
- * while typing and blinking on the beat (15 frames) when idle. The placeholder clears on the first word.
+ * 16th at 120 BPM), each appearing IN PLACE as a real field shows a keystroke (kit/typed.ts: at its pen
+ * position, no travel, a one-frame opacity ramp centred on the key); the caret is the pen after the last
+ * half-visible word (it jumps with the text, never leads it), solid while typing and blinking on the beat
+ * (15 frames) when idle. The placeholder clears with the first word.
  * The field takes the app's focus ring on `focusAt` (border → ring, a 3 px ring at 50 %), and an accent
  * ring can settle round it (`accentRing`: it closes in from 10 px out on a soft spring).
  */
@@ -750,8 +751,10 @@ export const FieldCard: React.FC<{
   const r = spec.labelSize / 14;
   const tSpec = { size: spec.size, weight: TYPE.title.weight, tracking: -0.02 };
   const words = g.lines.flat();
-  const typed = Math.max(0, Math.min(words.length, Math.floor((t - typeAt) / step) + 1));
-  const lastAt = typeAt + (words.length - 1) * step;
+  const keyAt = (i: number) => typeAt + i * step;
+  const keys = words.map((_, i) => keyAt(i));
+  const typed = Math.min(words.length, typedCount(t, keys));
+  const lastAt = keyAt(words.length - 1);
   // focus: the app's ring (border → ring colour, ring-3 ring-ring/50)
   const focus = focusAt !== undefined ? fold([{ at: focusAt, to: 1, dur: CURSOR.hoverDur }, ...(blurAt !== undefined ? [{ at: blurAt, to: 0, dur: 6 }] : [])], 0, t) : 0;
   const accent = accentRing && t >= accentRing.at ? springUnit(t - accentRing.at, { stiffness: 140, damping: 18, mass: 1 }) : 0;
@@ -764,15 +767,9 @@ export const FieldCard: React.FC<{
     return lay.words.map((w) => ({ ...w, line: li, i: wi++ }));
   });
   const flat = placed.flat();
-  // the caret: after the last typed word (glides there as the word rises), or at the start
-  const caretPos = (n: number) => (n <= 0 ? { x: 0, line: 0 } : { x: flat[n - 1].x + flat[n - 1].w + 0.06 * spec.size, line: flat[n - 1].line });
-  let caret = caretPos(typed);
-  if (typed > 0 && t < lastAt + step) {
-    const since = t - (typeAt + (typed - 1) * step);
-    const pPrev = caretPos(typed - 1);
-    const g2 = EASE.out3(Math.min(1, since / 2.2));
-    if (pPrev.line === caret.line) caret = { x: pPrev.x + (caret.x - pPrev.x) * g2, line: caret.line };
-  }
+  // the caret: the pen after the last half-visible word (it jumps with the keystroke), or at the start
+  const caretPos = (n: number) => (n <= 0 ? { x: 0, line: 0 } : { x: flat[n - 1].x + flat[n - 1].w + 0.05 * spec.size, line: flat[n - 1].line });
+  const caret = caretPos(typed);
   const typing = t >= typeAt - 0.5 && t < lastAt + 8;
   const caretOn = focusAt !== undefined && t >= focusAt && (blurAt === undefined || t < blurAt);
   const idleFrom = typing ? Infinity : t < typeAt ? focusAt ?? 0 : lastAt + 8;
@@ -781,7 +778,7 @@ export const FieldCard: React.FC<{
     // on for a beat, off for a beat, with 1.5-frame edges (a blink, not a flicker)
     return ph < 15 ? smooth(0, 1.5, ph) : 1 - smooth(15, 16.5, ph);
   })();
-  const placeholderO = 1 - smooth(typeAt - 1, typeAt + 1, t);
+  const placeholderO = 1 - typedOpacity(t, typeAt);
   const hov = save && cursor.length ? hoverAt(cursor, t, save) : 0;
   const prs = save && cursor.length ? pressAt(cursor, t, save) : 0;
   return (
@@ -816,14 +813,13 @@ export const FieldCard: React.FC<{
             ))}
           </div>
         ) : null}
-        {/* the owner's words, one per 16th, each rising into its mask */}
+        {/* the owner's words, one per 16th, IN PLACE (a one-frame appearance on each key, no travel) */}
         {flat.map((w) => {
-          const at = typeAt + w.i * step;
-          if (t < at - 0.5) return null;
-          const rv = reveal(t, at, { config: SPRING.caption, rise: 70, fade: 0.5 });
+          const o = typedOpacity(t, keyAt(w.i));
+          if (o <= 0.001) return null;
           return (
-            <span key={w.i} style={{ position: 'absolute', left: g.padX + w.x, top: g.padY + w.line * g.lineH + (g.lineH - spec.size * 1.12) / 2, ...maskBox(0), ...typeStyle('title', L.vertical, { size: spec.size }), letterSpacing: '-0.02em', color: APP.foreground }}>
-              <span style={revealStyle(rv, undefined, t - at < 12)}>{w.text}</span>
+            <span key={w.i} style={{ position: 'absolute', left: g.padX + w.x, top: g.padY + w.line * g.lineH + (g.lineH - spec.size * 1.12) / 2, ...typeStyle('title', L.vertical, { size: spec.size }), letterSpacing: '-0.02em', color: APP.foreground, whiteSpace: 'nowrap', opacity: o >= 0.999 ? undefined : o }}>
+              {w.text}
             </span>
           );
         })}
@@ -837,7 +833,7 @@ export const FieldCard: React.FC<{
               height: spec.size * 1.08,
               background: APP.foreground,
               opacity: blink,
-              ...subpixel(`translate(${(g.padX + caret.x).toFixed(3)}px, ${(g.padY + caret.line * g.lineH + (g.lineH - spec.size * 1.08) / 2).toFixed(3)}px)`, typing),
+              transform: `translate(${(g.padX + caret.x).toFixed(3)}px, ${(g.padY + caret.line * g.lineH + (g.lineH - spec.size * 1.08) / 2).toFixed(3)}px)`,
             }}
           />
         ) : null}
@@ -863,8 +859,9 @@ const rgbaOf = (hex: string, a: number) => `rgb(${rgb(hex)} / ${Math.max(0, Math
 
 /**
  * The call's record, as the call detail shows it (CallDetailSheet.tsx:185–202): a white card with the
- * meta TRANSCRIPT, the greeting's first row dim (the AI disclosure: "Ava: This is Ava, an AI
- * assistant."), the section title "Answered from your documents" and the document chip (BookOpen in
+ * meta TRANSCRIPT, the greeting's first row dim (the AI disclosure: "Ava: … This is Ava, an AI
+ * assistant." — an excerpt: every English greeting opens "Thank you for calling…" before the intro,
+ * lib/voice/greetings.ts:237–252; the full opener does not fit the row at the read size), the section title "Answered from your documents" and the document chip (BookOpen in
  * purple-600, the name), and a white check drawn in the accent disc (the Flow check idiom). Lands on
  * the house landing spring at `at`; the check pops and draws at `checkAt`.
  */
@@ -885,7 +882,7 @@ export const RecordRow: React.FC<{
   chip?: string;
   ink?: string;
   exitAt?: number;
-}> = ({ t, x, y, w, at, checkAt, accent, size: sizeProp, meta = 'TRANSCRIPT', first = { time: '00:00', text: 'Ava: This is Ava, an AI assistant.' }, section = 'Answered from your documents', chip = 'Opening hours', ink, exitAt }) => {
+}> = ({ t, x, y, w, at, checkAt, accent, size: sizeProp, meta = 'TRANSCRIPT', first = { time: '00:00', text: 'Ava: … This is Ava, an AI assistant.' }, section = 'Answered from your documents', chip = 'Opening hours', ink, exitAt }) => {
   const L = useLayout();
   if (t < at - 0.5) return null;
   const size = sizeProp ?? L.pick(44, 40);
@@ -958,16 +955,17 @@ export const RecordRow: React.FC<{
 /* ── Swap ───────────────────────────────────────────────────────── */
 
 /**
- * A panel's content swapping at `at`: the old content leaves UP through the box's mask (power3.in,
- * fading in its second half), the new one rises into it on the text spring — a short masked
- * transition, never a dissolve. `children` = [old, new].
+ * A panel's content swapping at `at`: the old content leaves UP (power2.in over 4 frames, fading), the new one
+ * rises in on the text spring from at + 1.5 — a short overlap, so the panel is never blank: the two states' combined
+ * opacity stays ≥ .5 through the change (it dipped to 0 for ≈ 8 render frames when the new one waited for the old to
+ * be gone; the app's own tab change is instant). `children` = [old, new].
  */
-export const Swap: React.FC<{ t: number; at: number; rise?: number; children: [React.ReactNode, React.ReactNode]; style?: React.CSSProperties }> = ({ t, at, rise = 36, children, style }) => {
-  // the old content is out of the way (up, faded) before the new one arrives — the two never sit on top of each other
-  const outQ = tween(t, [at, at + 5], [0, 1], EASE.in2);
-  const inS = springUnit(t - (at + 4), SPRING.text);
+export const Swap: React.FC<{ t: number; at: number; rise?: number; children: [React.ReactNode, React.ReactNode]; style?: React.CSSProperties }> = ({ t, at, rise = 24, children, style }) => {
+  const IN = 1.5;
+  const outQ = tween(t, [at, at + 4], [0, 1], EASE.in2);
+  const inS = springUnit(t - (at + IN), SPRING.text);
   const showOld = outQ < 0.999;
-  const showNew = t >= at + 3.5;
+  const showNew = t >= at + IN;
   const moving = (showOld && outQ > 0) || (showNew && Math.abs(1 - inS) > 1e-3);
   return (
     <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', ...style }}>
@@ -975,7 +973,7 @@ export const Swap: React.FC<{ t: number; at: number; rise?: number; children: [R
         <div style={{ position: 'absolute', inset: 0, opacity: 1 - smooth(0.05, 0.75, outQ), ...subpixel(outQ > 0 ? `translateY(${(-outQ * rise * 0.6).toFixed(3)}px)` : undefined, moving) }}>{children[0]}</div>
       ) : null}
       {showNew ? (
-        <div style={{ position: 'absolute', inset: 0, opacity: smooth(0, 0.5, inS), ...subpixel(`translateY(${((1 - inS) * rise).toFixed(3)}px)`, moving) }}>{children[1]}</div>
+        <div style={{ position: 'absolute', inset: 0, opacity: smooth(0, 0.35, inS), ...subpixel(`translateY(${((1 - inS) * rise).toFixed(3)}px)`, moving) }}>{children[1]}</div>
       ) : null}
     </div>
   );

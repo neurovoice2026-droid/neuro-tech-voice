@@ -4,9 +4,10 @@
  * The kit's FieldCard field (kit/ui.tsx), set into the agent page instead of a card of its own:
  *
  *   focus     on the press (mousedown): border → ring colour, the app's ring-3 ring-ring/50; the caret appears
- *   typing    ONE WORD PER 16th (LINE_LOCAL.keys), each rising into its own mask on the caption spring (no blur); the
- *             placeholder clears on the first word, as a real field does; the caret glides to the end of each new word,
- *             solid while typing, blinking on the beat when idle
+ *   typing    ONE WORD PER 16th (LINE_LOCAL.keys), each appearing IN PLACE as a real field shows a keystroke (kit/typed.ts:
+ *             at its final pen position, no travel, no mask — a one-frame opacity ramp centred on the key); the placeholder
+ *             clears with the first word, as a real field does; the caret is always the pen after the last half-visible
+ *             word (it jumps with the text, never leads it), solid while typing, blinking on the beat when idle
  *   blur      on the press of Save changes (focus moves to the button): the ring and the caret go
  *   accent    "in the words you chose": a sunday ring closes in round the field from 10 px out on a soft spring and
  *             settles (SCRIPT.md b12's focus ring) — Ava's mark, drawn as a box-shadow ring, crisp
@@ -14,13 +15,11 @@
  * Every word sits at its measured pen position (kit/type.ts layoutWords): nothing reflows as the line grows.
  */
 import React from 'react';
-import { reveal, revealStyle } from '../../../components/Type';
-import { subpixel } from '../../../lib/glide';
 import { mixColor } from '../../../lib/lights';
-import { EASE, smooth, SPRING, springUnit } from '../../../lib/motion';
-import { maskBox, typeStyle } from '../../../lib/type';
+import { smooth, springUnit } from '../../../lib/motion';
+import { typeStyle } from '../../../lib/type';
 import { TYPE } from '../../../theme';
-import { APP, CURSOR, fold, layoutWords } from '../../kit';
+import { APP, CURSOR, fold, layoutWords, typedCount, typedOpacity } from '../../kit';
 
 export const PLACEHOLDER_INK = '#a29bb4';
 
@@ -59,23 +58,15 @@ export const Field: React.FC<{
   const words = g.lines.flat();
   const typeAt = keys[0];
   const lastAt = keys[keys.length - 1];
-  const step = keys.length > 1 ? keys[1] - keys[0] : 3.75;
-  let typed = 0;
-  for (const k of keys) if (k <= t + 1e-6) typed++;
-  typed = Math.min(typed, words.length);
+  // the words at least half visible (kit/typed.ts): the caret sits right after the last of them — never ahead of the text
+  const typed = Math.min(typedCount(t, keys), words.length);
   const spec = fieldSpec(g.size);
   // word boxes (relative to the text origin)
   let wi = 0;
   const flat = g.lines.flatMap((line, li) => layoutWords(line.join(' '), spec).words.map((w) => ({ ...w, line: li, i: wi++ })));
-  // the caret: after the last typed word (gliding there as the word rises), or at the start
-  const caretPos = (n: number) => (n <= 0 ? { x: 0, line: 0 } : { x: flat[n - 1].x + flat[n - 1].w + 0.07 * g.size, line: flat[n - 1].line });
-  let caret = caretPos(typed);
-  if (typed > 0 && t < lastAt + step) {
-    const since = t - keys[typed - 1];
-    const prev = caretPos(typed - 1);
-    const u = EASE.out3(Math.min(1, since / 2.2));
-    if (prev.line === caret.line) caret = { x: prev.x + (caret.x - prev.x) * u, line: caret.line };
-  }
+  // the caret: the pen after the last typed word (a real caret jumps with the keystroke), or at the start
+  const caretPos = (n: number) => (n <= 0 ? { x: 0, line: 0 } : { x: flat[n - 1].x + flat[n - 1].w + 0.05 * g.size, line: flat[n - 1].line });
+  const caret = caretPos(typed);
   const focus = fold(
     [
       { at: focusAt, to: 1, dur: CURSOR.hoverDur },
@@ -94,7 +85,8 @@ export const Field: React.FC<{
         return ph < 15 ? smooth(0, 1.5, ph) : 1 - smooth(15, 16.5, ph);
       })();
   const caretFade = caretOn ? 1 : 0;
-  const placeholderO = 1 - smooth(typeAt - 0.5, typeAt + 1.5, t);
+  // the placeholder goes as the first word comes (the same frame: a real field swaps them on the keystroke)
+  const placeholderO = 1 - typedOpacity(t, typeAt);
   const a = t >= accent.at ? springUnit(t - accent.at, { stiffness: 140, damping: 18, mass: 1 }) : 0;
   const ringW = 3.4;
   const textTop = (li: number) => g.padY + li * g.lineH + (g.lineH - g.size * 1.12) / 2;
@@ -127,13 +119,15 @@ export const Field: React.FC<{
           ))}
         </div>
       ) : null}
+      {/* the owner's words, IN PLACE at their pen positions: a one-frame appearance on each key, no travel */}
       {flat.map((w) => {
         const at = keys[w.i];
-        if (at === undefined || t < at - 0.5) return null;
-        const rv = reveal(t, at, { config: SPRING.caption, rise: 70, fade: 0.5 });
+        if (at === undefined) return null;
+        const o = typedOpacity(t, at);
+        if (o <= 0.001) return null;
         return (
-          <span key={w.i} style={{ position: 'absolute', left: g.padX + w.x, top: textTop(w.line), ...maskBox(0), ...base, letterSpacing: '-0.02em', lineHeight: 1.12, color: APP.foreground }}>
-            <span style={revealStyle(rv, undefined, t - at < 14)}>{w.text}</span>
+          <span key={w.i} style={{ position: 'absolute', left: g.padX + w.x, top: textTop(w.line), ...base, letterSpacing: '-0.02em', lineHeight: 1.12, color: APP.foreground, whiteSpace: 'nowrap', opacity: o >= 0.999 ? undefined : o }}>
+            {w.text}
           </span>
         );
       })}
@@ -148,7 +142,7 @@ export const Field: React.FC<{
             borderRadius: 1,
             background: APP.foreground,
             opacity: blink,
-            ...subpixel(`translate(${(g.padX + caret.x).toFixed(3)}px, ${(g.padY + caret.line * g.lineH + (g.lineH - g.size * 1.1) / 2).toFixed(3)}px)`, typing),
+            transform: `translate(${(g.padX + caret.x).toFixed(3)}px, ${(g.padY + caret.line * g.lineH + (g.lineH - g.size * 1.1) / 2).toFixed(3)}px)`,
           }}
         />
       ) : null}

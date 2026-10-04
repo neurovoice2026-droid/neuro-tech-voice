@@ -9,14 +9,15 @@
  *          up through the fade. On "once" the seven strips below it slide up under it, one per 16th — the ones
  *          below the window rising through the bottom fade — critically damped, so none ever peeks past it;
  *          each arrival thickens the pile's edge a hair and deepens its contact shadow.
- *   9:16   (b07's 9:16 had no column) the slips drop in from above the frame, one per 16th, each sliding in
- *          under the one before, into one pile beside the orb.
+ *   9:16   (b07's 9:16 had no column) the slips drop in, one per 16th, each sliding in under the one before, into
+ *          one pile beside the orb — a short drop (fading in from just under the top platform zone, the top 250 px
+ *          the Reels/TikTok UI covers), so the pile and every slip on its way to it stay in the band above the panel.
  *
  * At WRITTEN_LOCAL.born the pile is handed to written/Row.tsx (`slipHandoff` gives it the top slip's exact box),
  * which draws its edges into the TXT · Opening hours row.
  */
 import React from 'react';
-import { EASE, springUnit } from '../../../lib/motion';
+import { EASE, smooth, springUnit } from '../../../lib/motion';
 import { subpixel } from '../../../lib/glide';
 import { typeStyle } from '../../../lib/type';
 import { useLayout } from '../../../lib/layout';
@@ -174,24 +175,27 @@ const Column: React.FC<{ t: number; S: WrittenStage }> = ({ t, S }) => {
   );
 };
 
-/* ── 9:16: dropped in from above the frame into one pile ── */
+/* ── 9:16: dropped into one pile, from just above it ── */
 const DEAL = 9;
+/** the top edge a slip's drop starts from (frame px): just under the top platform zone */
+const DROP_TOP = 236;
 const Deal: React.FC<{ t: number; S: WrittenStage }> = ({ t, S }) => {
   const H = slipHandoff(S);
   const k = H.k;
   if (t < W.once - 4.5) return null;
   const pile = pileLift(t);
   const strips: React.ReactNode[] = [];
-  const from = -(S.slips.y + H.h + 24) / k; // strip px: just above the top edge
+  const from = -(S.slips.y - DROP_TOP) / k; // strip px: the drop's start, above the pile
   for (let m = 0; m <= COUNT; m++) {
     // the first slip lands ON "once"; each of the others slides in under it on its 16th
     const at = m === 0 ? W.once - 4 : W.collapse[m - 1];
     if (t < at - 0.25) continue;
     if (t >= W.born && m === 0) continue;
-    // a quick deal (eased in a third of a second), not the column's spring: they fall from off the frame
+    // a quick deal (eased in a third of a second), not the column's spring: each fades in as it drops the last
+    // stretch onto the pile (opaque by the time its top edge is clear of the platform zone)
     const p = ease(t, at, at + DEAL, EASE.out3);
     const y = from * (1 - p) + m * EDGE * p;
-    const o = t >= W.born ? 1 - ease(t, W.born, W.born + UNDER_OUT) : 1;
+    const o = (t >= W.born ? 1 - ease(t, W.born, W.born + UNDER_OUT) : 1) * smooth(0, 0.4, p);
     strips.push(<Strip key={m} y={y} z={40 - m} ink={INK_B} lift={m === 0 ? pile.lift : 0.6} k={m === 0 ? pile.k : 0.95} opacity={o} moving={p < 0.9999} />);
   }
   return (
