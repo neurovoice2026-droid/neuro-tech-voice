@@ -4,8 +4,8 @@
  *
  *   0          b07's last picture: the seam draws back the way it came and her ground (KB_MESH) floods the
  *              other half; the orb glides to the corner; 16:9 the day's column glides in under it; the app
- *              comes in (16:9 from the right, where the matters side left; 9:16 up from under the seam): the
- *              agent page on General, its real tab bar
+ *              comes in from the right (16:9 where the matters side left; 9:16 along its own band, clear of the
+ *              caption's): the agent page on General, its real tab bar
  *   tab        the cursor comes in from the edge, crosses to Knowledge (the tab lifts 60 → 100 % on hover),
  *              presses (.9 / .97 + shade, a 16th) and releases: the underline springs across, the content swaps
  *              to the Knowledge tab — "Add knowledge", the drop zone, the web page field, Add page (disabled:
@@ -18,7 +18,7 @@
  *              later its pill rolls to Ready
  *   "hours"    the Opening hours row flies from the corner and slots in on top (badge 2)
  *   "policies" Cancellation policy (Word, badge 3); the cursor has clicked into the web page field (I-beam) and
- *              types your-site/faq bare (the app adds https://), one key per 16th (Add page wakes on the first)
+ *              types yoursite.com/faq bare (the app adds https://), one key per 16th (Add page wakes on the first)
  *   "website"  Add page: pressed, released (the pointer flicks off and fades), then FAQ page (Web page) lands
  *              (badge 4), the field clears
  *   "knowledge" the eyebrow ● KNOWLEDGE BASE rises above the panel; the caption keys "knowledge base." in sunday
@@ -90,7 +90,8 @@ function cursorKeys(S: WrittenStage, bar: TabBarGeometry): CursorKey[] {
     ...click(W.field.down, field.x, field.y, { dwell: 7, hold: W.field.up - W.field.down, kind: 'text' }),
     { at: W.field.up + 1.5, x: field.x, y: field.y, action: 'type' },
     { at: lastKey + 0.5, x: field.x, y: field.y },
-    ...click(W.add.down, btn.x, btn.y, { dwell: 7, hold: W.add.up - W.add.down, kind: 'arrow' }),
+    // (a 6.5-frame dwell: the hop off the keys is ≥ 8 f — WRITTEN_LOCAL.add)
+    ...click(W.add.down, btn.x, btn.y, { dwell: 6.5, hold: W.add.up - W.add.down, kind: 'arrow' }),
     // off the button the moment it comes up: a quick flick away (the hand leaves; 12 frames), faded on the way
     { at: W.add.up + 12, x: rest2.x, y: rest2.y, dur: 12 },
     { at: W.add.up + 13, x: rest2.x, y: rest2.y, action: 'hide' },

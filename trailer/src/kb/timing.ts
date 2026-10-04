@@ -467,7 +467,6 @@ export const TURN_FLIPS: readonly number[] = (() => {
  *  function of these moments). CLIENT DIRECTION v2: the app's real tab bar, clicked by a real cursor. */
 export const WRITTEN_LOCAL = (() => {
   const S16 = BEAT / 4;
-  const S32 = BEAT / 8;
   /** vo-4's spoken word k (absolute) */
   const at = (k: number) => VO4_AT + vWord('kb2-vo-4', k);
   const near16 = (f: number) => Math.round(f / S16) * S16;
@@ -481,15 +480,18 @@ export const WRITTEN_LOCAL = (() => {
   const price = row(6);
   const hours = row(8);
   const policies = row(10);
-  /** the URL field: clicked three 16ths before the policies row, released a 16th later; the owner types the address
-   *  bare, as people do (the app adds https:// itself: lib/knowledge/shared.ts normalizeKnowledgeUrl), one key per
-   *  16th from the 16th after the release (8 keys/s: a fluent typist, not a rattle) */
-  const URL_TEXT = 'your-site/faq';
-  const field = { down: policies - 3 * S16, up: policies - 2 * S16 };
+  /** the URL field: clicked four 16ths before the policies row, released a 16th later; the owner types the address
+   *  bare, as people do (the app adds https:// itself: lib/knowledge/shared.ts normalizeKnowledgeUrl — a host with a
+   *  dot, so the real check passes), one key per 16th from the 16th after the release (8 keys/s: a fluent typist, not
+   *  a rattle). Its 16 keys run 131.25 → 187.5: the click a 16th earlier and Add page a 16th later than the 13 keys of
+   *  the old no-TLD token, so the FAQ page's Ready still rolls before "knowledge" (and 9:16's scroll) */
+  const URL_TEXT = 'yoursite.com/faq';
+  const field = { down: policies - 4 * S16, up: policies - 3 * S16 };
   const keys = Array.from({ length: URL_TEXT.length }, (_, i) => field.up + S16 + i * S16);
   const lastKey = keys[keys.length - 1];
-  /** Add page: the pointer comes back off the keys (a short hop, ≥ 8 f, arriving 6 f before the press) */
-  const addDown = up16(lastKey + S32 + 8 + 6);
+  /** Add page: the pointer comes back off the keys (from half a frame after the last, a short hop, ≥ 8 f, arriving
+   *  6.5 f before the press: Written.tsx's dwell) */
+  const addDown = up16(lastKey + 0.5 + 8 + 6.5);
   const add = { down: addDown, up: addDown + S16 };
   const faq = add.up + S16;
   const rows = [price, hours, policies, faq] as const; // prices · hours · policies · (pages from your) website
@@ -499,7 +501,8 @@ export const WRITTEN_LOCAL = (() => {
     /** the cut from b07: the seam draws back up (EASE.draw, a beat); her ground floods the other half (two beats) */
     seam: [0, BEAT] as const,
     ground: [0, 2 * BEAT] as const,
-    /** the app panel comes in (16:9 from the right, where the matters side left; 9:16 up from under the seam) */
+    /** the app panel comes in from the right (16:9 where the matters side left; 9:16 along its own band, never through
+     *  the caption's) */
     panel: [0, 22] as const,
     /** the orb glides from b07's place to b08's; 16:9: the day's column glides into the corner under it */
     glide: [0, 28] as const,
@@ -762,11 +765,13 @@ export const CHANGE_LOCAL = (() => {
   const call3Words = words('kb2-call-3', CALL3_AT);
   const four = L('change', FOUR);
   const lcut = L('change', LCUT);
-  /* b13 · the handoff: b12's panel leaves (recedes a depth, shades, eases out left — gone before the file shows); the
-     owner's file eases in (opacity over 4 frames) as it rises, its words rising INSIDE it while it settles (never an
-     empty paper) */
+  /* b13 · the handoff, ONE continuous move (polish pass): b12's panel leaves (recedes a depth, shades, eases out left,
+     sliding on out at its exit speed) and the owner's file eases in OVER it (opacity over 2.5 frames) as it rises, its
+     words rising INSIDE it while it settles (never an empty paper); the page fades out beneath the arriving file, so
+     one card or the other is always on screen (a card stack, as b13's 9:16 sheet over the file). The file starts a
+     frame earlier than before (3, was 4: its words are up by the time its paper is opaque); the whoosh follows it */
   const handoff = [0, 6] as const;
-  const page = [4, 16] as const;
+  const page = [3, 15] as const;
   /* b13 · the owner's file: the I-beam presses on "14:00" a 16th before "change?", drags across it over two 16ths
      (selected, the sunday wash, a character at a time) and releases; "16:00" is typed over it, one key per 16th */
   const drag = { down: on16(vo7Words[1]) - S16, up: on16(vo7Words[1]) + S16 };
@@ -785,8 +790,9 @@ export const CHANGE_LOCAL = (() => {
     end,
     vo7,
     vo7Words: vo7Words as readonly number[],
-    /** the cut from b12: its agent page leaves (0 → 6, its opacity gone by 4.5); the owner's file eases in from 4 and
-     *  settles by 16 */
+    /** the cut from b12: its agent page leaves (0 → 6 on its curve, then on at its exit speed; it recedes and fades out
+     *  4 → 7.5, under the file: change/stage.ts PAGE_OUT); the owner's file rises from 3, its paper eases in over the
+     *  page 3.5 → 6 (FILE_IN), and settles by 15 */
     handoff,
     page,
     /** the pointer comes back where it will press (an I-beam over the settled page, 14:00 in view), fading in */
@@ -1324,7 +1330,7 @@ const WRITTEN_HITS: Hit<Snd>[] = (() => {
   const MALLET = ['fx-mallet-e4', 'fx-mallet-fs4', 'fx-mallet-gs4', 'fx-mallet-b4'] as const;
   return [
     H(at(R.seam[0]), 'draw', 'none', 0.5, 3, 'b08 the seam draws back the way it came; her ground floods the other half', { db: -12 }),
-    H(at(R.panel[0] + 4), 'whoosh-soft', 'none', [0.86, 0.66], 3, 'b08 the app comes in (16:9 from the right, 9:16 up from under the seam)', { db: -10 }),
+    H(at(R.panel[0] + 4), 'whoosh-soft', 'none', [0.86, 0.66], 3, 'b08 the app comes in from the right (both framings)', { db: -10 }),
     H(at(R.tab.down), 'fx-click-down', 'none', 0.75, 2, 'b08 the cursor presses the Knowledge tab (down)', { db: -1 }),
     H(at(R.tab.up), 'fx-click-up', 'none', 0.75, 2, 'b08 … and releases it (up): the underline springs across, the content swaps', { db: -4 }),
     H(at(R.tab.up + 1), 'draw', 'none', [0.45, 0.75], 3, 'b08 the underline slides from General to Knowledge (a breath of air under the click)', { db: -10 }),

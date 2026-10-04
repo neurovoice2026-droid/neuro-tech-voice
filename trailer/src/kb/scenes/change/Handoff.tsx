@@ -1,9 +1,10 @@
 /**
  * b12's LAST PICTURE, handed over and cleared: frame 0 draws b12's agent page exactly as b12 leaves it — line/Panel.tsx's
  * LinePanel at LINE_LOCAL.end (the owner's line saved, the sunday ring settled, the pointer hidden since Save's release)
- * — so the cut is the same picture. Then the page LEAVES (critic fix, build B): it recedes a depth (scale .9 about its
- * centre), takes a shade and eases out to the left, gone before the owner's own file starts to show
- * (change/FilePage.tsx): two white cards never overlap, and no page is ever seen empty.
+ * — so the cut is the same picture. Then the page LEAVES (critic fix, build B; polish pass): it recedes a depth (scale .9
+ * about its centre), takes a shade and eases out to the left while the owner's own file (change/FilePage.tsx) comes in
+ * OVER it and the page fades out beneath that paper (stage.ts handoffPose): one card is always there, no page is ever
+ * seen empty.
  */
 import React from 'react';
 import { subpixel } from '../../../lib/glide';

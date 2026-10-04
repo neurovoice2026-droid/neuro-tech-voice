@@ -139,7 +139,10 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
     // screen (Add knowledge · the drop zone · the field + Add page · Your documents · the newest row) holds them all; on
     // "knowledge" the page scrolls to the four rows, Ready (the act's last picture, b09's first).
     //   band   the card 426 → 1264: under the eyebrow (358–384), ≥ 40 px over the caption's caps (row A centre 1336)
-    const panel = { x: 28, y: 426, w: 1024, h: 838, radius: 34, from: { x: 0, y: 1560 } };
+    //   entry  from the right, as in 16:9 (b07's 9:16 card left that way too), riding its own band: a climb from under
+    //          the frame would cross the caption's band while "Give me your answers once." rises (polish pass). 1300 px
+    //          puts its left edge and its entry shadow (≈ 210 px at lift 4.5) past the frame's edge on frame 0
+    const panel = { x: 28, y: 426, w: 1024, h: 838, radius: 34, from: { x: 1300, y: 0 } };
     const tabs = { size: 32, icons: false, padR: 8 };
     const barH = (44 * tabs.size) / 14;
     const pad = 40;

@@ -2,9 +2,9 @@
  * PART III · b13–b14 · CHANGE IT / THE NEXT CALL (SCRIPT.md b13–b14; CLIENT DIRECTION v2) — "Hours change? Change the
  * document. The next call gets the new answer." — and the next call does.
  *
- *   0          b12's last picture (its agent page, saved); the page recedes and eases out left, then the OWNER'S OWN FILE
- *              eases in: Opening hours.txt on plain paper, no app chrome (the edit happens outside the app), its words
- *              rising inside it. The pointer (hidden since Save) comes back as an I-beam once the page has settled
+ *   0          b12's last picture (its agent page, saved); the page recedes and eases out left as the OWNER'S OWN FILE
+ *              eases in over it (one continuous hand-off): Opening hours.txt on plain paper, no app chrome (the edit
+ *              happens outside the app), its words rising inside it. The pointer (hidden since Save) comes back as an I-beam once the page has settled
  *   "change?"  the caret clicks into "14:00": the I-beam presses, drags across the digits (the sunday wash, a character at
  *              a time) and lets go; "16:00" is typed over it in place, one key per 16th — the last on "Change"; the agent
  *              page rises on its KNOWLEDGE tab behind the file while the keys go in (the badge at 4)
@@ -165,7 +165,7 @@ export const Change: React.FC = () => {
       <PushOut t={t} S={S}>
         <ChangeGround t={t} S={S} orb={orb} />
         <Handoff t={t} S={S} ink={INK} accent={SUNDAY} />
-        {/* 9:16: the file steps back UNDER the app's sheet as it comes up (stage.ts appPose / filePose) */}
+        {/* 9:16: the file steps back UNDER the app's sheet as it comes in (stage.ts appPose / filePose) */}
         {S.file.park ? null : <FilePage t={t} S={S} g={file} keys={keys} ink={INK} accent={SUNDAY} />}
         <AppPanel t={t} S={S} bar={bar} menu={menu} keys={keys} ink={INK} />
         <NewRow t={t} S={S} g={page} ink={INK} accent={SUNDAY} />

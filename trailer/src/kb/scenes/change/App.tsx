@@ -61,7 +61,8 @@ export const AppPanel: React.FC<{ t: number; S: ChangeStage; bar: TabBarGeometry
   const P = S.panel;
   const cx = P.x + P.w / 2;
   const cy = P.y + Lg.panelH / 2;
-  const tf = Math.abs(ap.dy) > 0.01 || ap.scale !== 1 ? `translate(0px, ${ap.dy.toFixed(3)}px)${ap.scale !== 1 ? ` scale(${ap.scale.toFixed(5)})` : ''}` : undefined;
+  // (9:16's sheet comes in from the right: dx; 16:9's dx is always 0)
+  const tf = Math.abs(ap.dx) + Math.abs(ap.dy) > 0.01 || ap.scale !== 1 ? `translate(${ap.dx ? `${ap.dx.toFixed(3)}px` : '0px'}, ${ap.dy.toFixed(3)}px)${ap.scale !== 1 ? ` scale(${ap.scale.toFixed(5)})` : ''}` : undefined;
   const size = S.row.size;
   const dots = oldRowBox(S);
   const dotsRect = rowMenuRect(dots.x, dots.y, dots.w, dots.h, size);
