@@ -323,23 +323,66 @@ export const REPEAT_LOCAL = {
   rolls: ROLLS as readonly number[],
   /** 18.0 (bar): everything stops on the sample */
   hardStop: HARD_STOP,
+  /* ── the picture's own moments (scenes/repeat/desk.ts, Clock.tsx) ── */
+  /** the clock's figures start rolling this long before the ring / roll they land on (the hour strips first) */
+  flickLead: { ring: 6.5, roll: 4.2 } as const,
+  /** answers 2 and 3: a fresh slip is slid up from the desk's front edge over `placeDur`, arriving a frame
+   *  before the desk's first word (`placeLead` before it); the first answer is the pad's own top sheet */
+  placeDur: 13,
+  placeLead: 14,
+  /** each call ends (its ● CALLER and its line draw back in): calls 1–2 as their slip lands; the third line
+   *  stays open, flat, through the dead air, to the first roll */
+  hangups: [R_SLIP[0], R_SLIP[1], ROLL0] as readonly number[],
+  /** b05: each roll's slip is slipped in behind the pile and rises one strip, reaching it a 16th after its roll */
+  rollSlips: ROLLS.map((f) => f + BEAT / 4) as readonly number[],
 };
 
-/** b06 (recording-local). */
-export const RECORDING_LOCAL = {
-  vo1: L('recording', VO1_AT),
-  /** "You hired someone brilliant." rises on "You"; leaves on "The" as "The phone turned them / into a recording." rises */
-  title1: L('recording', VO1_AT + vWord('kb2-vo-1', 0)),
-  brilliant: L('recording', VO1_AT + vWord('kb2-vo-1', 3)),
-  title2: L('recording', VO1_AT + vWord('kb2-vo-1', 4)),
-  /** "a recording." eases into rush ink (on "a") */
-  recordingKey: L('recording', VO1_AT + vWord('kb2-vo-1', 9)),
-  vo2: L('recording', VO2_AT),
-  /** "And the customer…": the camera pulls back to the in-person card */
-  pullBack: L('recording', VO2_AT + vWord('kb2-vo-2', 0)),
-  /** "Waiting." locks in ON the bar */
-  waiting: L('recording', WAITING),
-};
+/** b06 (recording-local). The picture: src/kb/scenes/Recording.tsx (+ scenes/recording/*). */
+export const RECORDING_LOCAL = (() => {
+  const S16 = BEAT / 4;
+  const w1 = (k: number) => L('recording', VO1_AT + vWord('kb2-vo-1', k));
+  const w2 = (k: number) => L('recording', VO2_AT + vWord('kb2-vo-2', k));
+  /** the day's slips on the pile at the stop: the three answers + one per roll of b05 */
+  const slips = R_SLIP.length + ROLLS.length;
+  const deal0 = 8 * S16; // the first row drops on the second beat
+  const pullBack = w2(0);
+  return {
+    vo1: L('recording', VO1_AT),
+    /** the stop holds a 16th; then the camera glides up and right onto the slip stack, 3½ beats (EASE.inOut) */
+    glide: [S16, S16 + 3.5 * BEAT] as const,
+    /** the pile is picked up — squared, lifted off the desk — and carried with the camera, 2½ beats */
+    slide: [S16, S16 + 2.5 * BEAT] as const,
+    /** on its way the written pad sheets fold to one line each: strips of the same line (the label lifts out,
+     *  "nine till two." glides up beside "Yes, Saturdays,", the paper closes round it) */
+    morph: 3 * S16,
+    /** … and the strips deal down into one column: row r (0 = the top strip, which stays) drops on its 16th —
+     *  the paper riffle; the pad's own blank sheets go to the bottom with the last */
+    slips,
+    fan: Array.from({ length: slips }, (_, r) => (r === 0 ? S16 : deal0 + (r - 1) * S16)) as readonly number[],
+    /** the column's paper fades come in once the desk has left the frame */
+    fades: [11 * S16, 15 * S16] as const,
+    /** "You hired someone brilliant." rises on "You"; leaves on "The" as "The phone turned them / into a recording." rises */
+    title1: w1(0),
+    brilliant: w1(3),
+    title2: w1(4),
+    /** its second line ("into a recording.") rises on "into" */
+    title2b: w1(8),
+    /** "a recording." eases into rush ink (on "a"), the glint running word by word */
+    recordingKey: w1(9),
+    /** the title leaves up through its masks a beat before the camera leaves the column */
+    title2Out: pullBack - b(1),
+    vo2: L('recording', VO2_AT),
+    /** "And the customer…": the camera pulls back and left to the in-person card (2 beats), the column sliding off */
+    pullBack,
+    pullBackTo: pullBack + b(2),
+    /** the card comes forward .90 → 1 (SPRING.site) as the camera finds it */
+    cardForward: pullBack + b(1),
+    /** "And the customer / in front of them?" rises beside it, a line per phrase: on "customer" (the card has passed) and on "in" */
+    question: [w2(2), w2(3)] as const,
+    /** "Waiting." locks in ON the bar */
+    waiting: L('recording', WAITING),
+  };
+})();
 
 /** b07 (turn-local). */
 export const TURN_LOCAL = {
@@ -543,23 +586,56 @@ const chime = (l: Exclude<Light, 'none'>) => `chime-${l}` as Snd;
  * stop, the call's freeze and resume, the record, the lights, the converge and the impact). Part I is
  * in the rush light (the rose line light), everything from Ava on in sunday.
  */
+/* ── repeat ── (b01–b05: picture src/kb/scenes/Repeat.tsx + scenes/repeat/*; pans from the 16:9 layout:
+ * the card .3, the clock .84, the pad .78, the callers .55–.7)
+ * FILM-2 EXTRAS this act asks the sound pass for (film 1 stand-ins below until they exist; each label
+ * names its extra in [→ …]):
+ *   fx-trill        the desk phone: ONE two-chirp trill tuned G#4/B4 (score in E), the same sample for every
+ *                   ring of the film; each ring is CUT by its pickup click — ring 1 after 2 chirps (15 f),
+ *                   ring 2 after 1½ (7.5 f), ring 3 after 1 (3.75 f); b05's rolls: one short chirp each
+ *   fx-slip         a slip landing on the pile: dry paper slap + a soft low desk thud (no ring-out)
+ *   fx-slip-slide   a fresh slip slid up over the pile: a short, soft paper slide (−6 dB under the slap)
+ *   fx-cup          a ceramic cup set down on a wooden desk: a soft clack with a little body
+ *   fx-linehiss     b04's dead line: half a beat (7.5 f) of open phone-line hiss, nothing else
+ *   (fx-roomtone)   front-desk room tone (soft HVAC, far street) at −52 dBFS from frame 0, running on
+ *                   through the hard stop — a bed element, not a hit
+ * THE HARD STOP (REPEAT_LOCAL.hardStop) has NO hit: music and every effect are cut on the sample there,
+ * with no tail (the last roll's chirp and slap ring into it); room tone only. */
+const REPEAT_HITS: Hit<Snd>[] = (() => {
+  const R = REPEAT_LOCAL;
+  const RING = ['ONE', 'TWO', 'THREE'];
+  const CUT = ['2 chirps', '1½ chirps', '1 chirp'];
+  const CALLER_X = [0.7, 0.64, 0.56];
+  const n = R.rolls.length;
+  const run = { n, step: BEAT / 2 };
+  return [
+    H(R.cup, 'tap', 'none', 0.3, 3, 'b01 a cup set down on wood [→ fx-cup]', { db: -3 }),
+    H(R.dash, 'click', 'none', 0.36, 3, 'b01 the em dash is drawn: the pen click as it lands', { db: -4 }),
+    ...R.rings.flatMap((ring, k) => [
+      H(ring - R.flickLead.ring, 'flick', 'none', 0.84, 3, `ring ${k + 1}: the clock's figures roll, landing on the ring`),
+      H(ring, 'ring-hook', 'none', 0.84, k === 0 ? 1 : 2, `RING ${RING[k]}: the desk trill, the rose line light pulses [→ fx-trill, cut by the pickup after ${CUT[k]}]`),
+      H(R.pickups[k], 'pickup', 'none', 0.84, 2, `ring ${k + 1}: picked up (the handset click cuts the trill)`),
+      H(R.callers[k] - 2, 'line', 'none', CALLER_X[k], 3, `caller ${k + 1}: the line draws out under the caption`, { db: -4 }),
+      ...(k ? [H(R.desk[k] - R.placeLead, 'swish', 'none', 0.78, 3, `answer ${k + 1}: a fresh slip slid up over the pile [→ fx-slip-slide]`, { db: -8 })] : []),
+      H(R.slips[k], 'land', 'none', 0.78, 2, `answer ${k + 1}: the slip drops onto the pile on "two."${k === 2 ? ' (crooked)' : ''} [→ fx-slip]`),
+      H(R.slips[k], 'tap', 'none', 0.78, 3, `answer ${k + 1}: the paper slap`, { layer: true, db: -2 }),
+    ]),
+    H(R.dead[0], 'line', 'none', CALLER_X[2], 3, 'b04 the dead line: the waveform lies flat, line hiss only [→ fx-linehiss]', { db: -8 }),
+    ...(n
+      ? [
+          H(R.rolls[0] - R.flickLead.roll, 'flick', 'none', 0.84, 3, 'b05 the clock rolls on 8ths', { run }),
+          H(R.rolls[0], 'ping', 'rush', 0.84, 3, 'b05 a chirp per roll, the rose pulse [→ fx-trill, one short chirp]', { run }),
+          H(R.rolls[0] + BEAT / 8, 'pickup', 'none', 0.84, 3, 'b05 picked up, each time', { run, db: -5 }),
+          H(R.rollSlips[0], 'land', 'none', 0.78, 3, 'b05 a slip per roll: slipped in behind the pile, up one strip [→ fx-slip]', { run }),
+        ]
+      : []),
+  ];
+})();
+/* ── /repeat ── */
+
 export const HITS: Hit<Snd>[] = [
-  /* ── PART I ── */
-  H(REPEAT_LOCAL.cup, 'tap', 'none', 0.3, 3, 'a cup set down on wood', { db: -3 }),
-  H(REPEAT_LOCAL.dash, 'click', 'none', 0.4, 3, 'the em dash hangs: a pen click', { db: -4 }),
-  ...R_RING.flatMap((ring, k) => [
-    H(ring, 'ring-hook', 'none', 0.78, k === 0 ? 1 : 2, `RING ${['ONE', 'TWO', 'THREE'][k]}: the desk line (the rose colon pulses)`),
-    H(R_PICKUP[k], 'pickup', 'none', 0.78, 2, `ring ${k + 1}: picked up`),
-    H(R_SLIP[k], 'land', 'none', 0.72, 2, `slip ${k + 1} tears off and lands on "two."`),
-  ]),
-  ...(ROLLS.length
-    ? [
-        H(ROLLS[0], 'ping', 'rush', 0.8, 3, 'the rest of the day: a chirp per roll', { run: { n: ROLLS.length, step: BEAT / 2 } }),
-        H(ROLLS[0], 'flick', 'none', 0.8, 3, 'the clock rolls on 8ths', { run: { n: ROLLS.length, step: BEAT / 2 } }),
-        H(ROLLS[0] + BEAT / 4, 'land', 'none', 0.72, 3, 'a slip per roll', { run: { n: ROLLS.length, step: BEAT / 2 } }),
-      ]
-    : []),
-  H(HARD_STOP, 'thump', 'none', 0.5, 2, 'THE HARD STOP: everything cut on the sample'),
+  /* ── repeat ── */
+  ...REPEAT_HITS,
   /* ── b07 ── */
   H(SCENES.turn.from, 'draw', 'none', 0.5, 3, 'the seam draws'),
   H(SCENES.turn.from + TURN_LOCAL.ava, 'pop', 'sunday', 0.25, 2, 'Ava’s orb is born from the line light'),
