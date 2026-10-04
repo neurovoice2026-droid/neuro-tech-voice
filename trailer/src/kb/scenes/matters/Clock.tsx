@@ -30,14 +30,16 @@ export const MattersClock: React.FC<{ t: number; g: MattersLayout }> = ({ t, g }
   const label = typeStyle('label', L.vertical, { tone: 'paper' });
   const fade = typeFade(t);
   if (fade <= 0.001) return null;
-  // 9:16, b16: each element leaves up through its mask (the figures first, then the labels), a 1-frame stagger
-  const out = (k: number) => (g.vertical ? { exit: { at: M.clockOut[0] + k, dur: 8 } } : {});
-  const still = (k: number) => reveal(t, -1e6, { rise: 100, fade: 0, ...out(k) });
-  const figure = still(0);
-  const day = still(1);
-  const line = still(2);
+  // 9:16, b16: each element leaves up through its mask — the figures and the day first (gone by her first word, which
+  // rises where they stood), then the labels on it (gone before her second line rises over their place)
+  const figDur = M.clockOut[1] - M.clockOut[0];
+  const out = (at: number, dur: number) => (g.vertical ? { exit: { at, dur } } : {});
+  const still = (at: number, dur: number) => reveal(t, -1e6, { rise: 100, fade: 0, ...out(at, dur) });
+  const figure = still(M.clockOut[0], figDur);
+  const day = still(M.clockOut[0], figDur);
+  const line = still(M.labelsOut, 7);
   // AVA · ON A CALL: rolls up into its window an 8th after the ring (the house caption spring)
-  const ava = reveal(t, M.label, { config: SPRING.caption, rise: 100, fade: 0.4, ...(g.vertical ? { exit: { at: M.clockOut[0] + 3, dur: 8 } } : {}) });
+  const ava = reveal(t, M.label, { config: SPRING.caption, rise: 100, fade: 0.4, ...out(M.labelsOut + 1, 7) });
   const word = (r: ReturnType<typeof reveal>, text: React.ReactNode, style: React.CSSProperties, center: boolean) => (
     <div style={{ position: 'absolute', ...style, whiteSpace: 'nowrap', transform: center ? 'translateX(-50%)' : undefined }}>
       <span style={maskBox(0)}>

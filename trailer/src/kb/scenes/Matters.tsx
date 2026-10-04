@@ -38,7 +38,7 @@ import { ACCENT } from '../theme';
 import { MATTERS_LOCAL as M, SCENES } from '../timing';
 import { MattersCard } from './matters/Card';
 import { MattersClock } from './matters/Clock';
-import { TealDot } from './matters/Dot';
+import { TealDot, TealRing } from './matters/Dot';
 import { OldStack, Pad } from './matters/Paper';
 import { DeskReply } from './matters/Reply';
 import { darkness, dotAt, groundGrade, mattersCam, mattersLayout, paperFade, paperShade, PLANE } from './matters/stage';
@@ -95,10 +95,12 @@ export const MattersDesk: React.FC<{ t: number }> = ({ t }) => {
         mix={gg.mix}
         lift={REPEAT_GROUND.lift * gg.lift}
         brightness={gg.brightness}
+        saturation={gg.saturation}
         shade={gg.shade}
         seed={REPEAT_GROUND.seed}
         keyLight={{ x: dot.x, y: dot.y, strength: key, color: keyColor, radius: L.pick(620, 600) * (1 - 0.12 * dark) }}
       />
+      <TealRing t={t} g={g} />
       <Camera x={cam.x} y={cam.y} zoom={cam.zoom} moving={cm.moving} zooming={cm.zooming}>
         <Layer depth={PLANE.desk}>
           {/* the paper sinks into the night, then is gone into it before the cut */}

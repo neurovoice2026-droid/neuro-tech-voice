@@ -21,11 +21,11 @@
  *      call place; ● CALLER — Dana's identical recording — with SAME QUESTION beside it; ● AVA "You can! / We're open
  *      Saturday / from nine till four." — 16:9 her "We're open Saturday" row level with the page's Saturday line; on
  *      "four." the sweep. Then the L-CUT: the frame crosses to b15's desk (scenes/Matters.tsx MattersDesk at its first
- *      picture) in a wipe in the reading direction.
+ *      picture) in one push against the reading direction (a camera crossing back).
  *
  * THE NEIGHBOURS: b12 → here is the same picture at frame 0 (change/Handoff.tsx draws line/Panel.tsx's LinePanel at
- * LINE_LOCAL.end). Here → b15: the wipe ends on MattersDesk's own first picture (its ground, desk and teal dot), so the
- * cut at the act's end is invisible by construction; changeEnd() documents it.
+ * LINE_LOCAL.end). Here → b15: the push lands on MattersDesk's own first picture (its ground, desk and teal dot), so the
+ * cut at the act's end is invisible by construction (the push lands at rest on it); changeEnd() documents it.
  */
 import { Easing } from 'remotion';
 import { EASE, springUnit } from '../../../lib/motion';
@@ -90,7 +90,7 @@ export type ChangeStage = {
   };
   /** b14's page (the new row unfolded): box, line size */
   page: { x: number; y: number; w: number; size: number };
-  /** the L-cut's wipe: its axis and feather (px) */
+  /** the L-cut's push: its axis, and the soft leading edge of the incoming desk (px) */
   cross: { axis: 'x' | 'y'; feather: number };
 };
 
@@ -105,8 +105,8 @@ const STAGES: Record<'land' | 'vert', ChangeStage> = (() => {
         H: 1080,
         vertical,
         orb: { a: E.orb, b: E.orb, c: { x: 210, y: 158, d: 130 } },
-        file: { x: 676, y: 180, w: 1040, size: 64, rise: 90, park: { right: E.panel.x + E.panel.w, y: 30, k: 0.41 } },
-        panel: { x: E.panel.x, y: 300, w: E.panel.w, radius: E.panel.radius, rise: 240 },
+        file: { x: 676, y: 180, w: 1040, size: 64, rise: 90, park: { right: E.panel.x + E.panel.w, y: 26, k: 0.4 } },
+        panel: { x: E.panel.x, y: 284, w: E.panel.w, radius: E.panel.radius, rise: 240 },
         tabs: E.tabs,
         pad: 48,
         heading: 36,
@@ -126,8 +126,8 @@ const STAGES: Record<'land' | 'vert', ChangeStage> = (() => {
           chip: { mode: 'beside', y: 262 },
         },
         // the Saturday line level with her "We're open Saturday" row (centre 602 + 1.5 lh = 737)
-        page: { x: 1110, y: 450, w: 680, size: 46 },
-        cross: { axis: 'x', feather: 640 },
+        page: { x: 1090, y: 450, w: 720, size: 46 },
+        cross: { axis: 'x', feather: 180 },
       };
     }
     const size = 68;
@@ -136,9 +136,9 @@ const STAGES: Record<'land' | 'vert', ChangeStage> = (() => {
       W: 1080,
       H: 1920,
       vertical,
-      orb: { a: E.orb, b: { x: 282, y: 298, d: 140 }, c: { x: 540, y: 178, d: 140 } },
-      file: { x: 64, y: 480, w: 952, size: 56, rise: 110, park: { right: E.panel.x + E.panel.w, y: 166, k: 0.5 } },
-      panel: { x: E.panel.x, y: 486, w: E.panel.w, radius: E.panel.radius, rise: 300 },
+      orb: { a: E.orb, b: { x: 282, y: 352, d: 140 }, c: { x: 540, y: 300, d: 140 } },
+      file: { x: 64, y: 480, w: 952, size: 56, rise: 110, park: { right: E.panel.x + E.panel.w, y: 220, k: 0.5 } },
+      panel: { x: E.panel.x, y: 524, w: E.panel.w, radius: E.panel.radius, rise: 300 },
       tabs: E.tabs,
       pad: 38,
       heading: 34,
@@ -152,13 +152,13 @@ const STAGES: Record<'land' | 'vert', ChangeStage> = (() => {
         size,
         callerLines: ['Quick one.', 'Can I pop in on Saturday?'],
         avaLines: ['You can! We’re open Saturday', 'from nine till four.'],
-        caller: { tag: 350, lines: [390, 390 + lh], wave: 590 },
-        ava: { tag: 640, lines: [680, 680 + lh] },
+        caller: { tag: 470, lines: [510, 510 + lh], wave: 710 },
+        ava: { tag: 760, lines: [800, 800 + lh] },
         wave: { half: 210, pitch: 10, bar: 4, maxH: 20 },
-        chip: { mode: 'above', y: 282 },
+        chip: { mode: 'above', y: 402 },
       },
-      page: { x: 120, y: 900, w: 840, size: 46 },
-      cross: { axis: 'y', feather: 560 },
+      page: { x: 120, y: 1020, w: 840, size: 46 },
+      cross: { axis: 'y', feather: 180 },
     };
   };
   return { land: make(false), vert: make(true) };
@@ -218,7 +218,8 @@ export function filePose(t: number, S: ChangeStage, h: number) {
   const px = F.park.right - F.w * F.park.k;
   const x = lerp(F.x, px, p);
   const y = lerp(F.y + F.rise * (1 - r), F.park.y, p);
-  const opacity = ease(t, K.page[0], K.page[0] + 6, EASE.inOut);
+  // the paper is opaque almost at once (its words rise in after it: FilePage.tsx) — never a page fading over the app
+  const opacity = ease(t, K.page[0], K.page[0] + 2.5, EASE.inOut);
   return { x, y, k, w: F.w * k, h: h * k, lift: lerp(3 + 1.5 * (1 - r), 2.2, p), opacity, on: t >= K.page[0] - 0.01, moving: (r > 0 && Math.abs(1 - r) > 1e-4) || (p > 0 && Math.abs(1 - p) > 1e-4), p };
 }
 
@@ -227,7 +228,7 @@ export function appPose(t: number, S: ChangeStage) {
   const r = t < K.app[0] ? 0 : springUnit(t - K.app[0], RISE);
   const u = ease(t, K.recede[0], K.recede[1], RECEDE);
   const dy = S.panel.rise * (1 - r) + (S.vertical ? 1100 : 760) * u;
-  const opacity = ease(t, K.app[0], K.app[0] + 5, EASE.inOut) * (1 - ease(t, K.recede[1] - 8, K.recede[1], EASE.inOut));
+  const opacity = ease(t, K.app[0], K.app[0] + 3, EASE.inOut) * (1 - ease(t, K.recede[0] + 4, K.recede[0] + 18, EASE.inOut));
   return { dy, scale: lerp(1, 0.9, u), shade: 0.06 * u, lift: 2.4 + 1.6 * (1 - r), opacity, u, on: t >= K.app[0] - 0.01 && u < 0.999, moving: (r > 0 && Math.abs(1 - r) > 1e-4) || (u > 0 && u < 1) };
 }
 
@@ -241,16 +242,15 @@ export function orbPose(t: number, S: ChangeStage) {
   return { x: at('x'), y: at('y'), d: at('d'), moving: !(settled(b) && settled(c)) };
 }
 
-/** the L-cut's wipe front (frame px along its axis): opaque (b15's desk) before it, this act after it + feather */
-export function crossFront(t: number, S: ChangeStage) {
+/**
+ * The L-cut's push (0 → 1 over CHANGE_LOCAL.cross, EASE.inOut: a slow start — the sweep on "four." reads — then decisive,
+ * landing at rest on the act's last frame): this act's whole picture slides out against the reading direction (16:9
+ * left, 9:16 up) as b15's desk slides in behind its leading edge — a camera crossing back to the desk, one pan.
+ */
+export function crossPush(t: number, S: ChangeStage) {
   const far = S.cross.axis === 'x' ? S.W : S.H;
-  const u = ease(t, K.cross[0], K.cross[1], EASE.inOut);
-  return { a: -S.cross.feather + (far + 40 + S.cross.feather) * u, u, on: t >= K.cross[0] };
-}
-/** when the front's feathered edge reaches a point along the axis (an act-local frame): for the type leaving ahead of it */
-export function crossReaches(p: number, S: ChangeStage, k = 0.75) {
-  for (let t = K.cross[0]; t <= K.cross[1]; t += 0.25) if (crossFront(t, S).a + S.cross.feather * k >= p) return t;
-  return K.cross[1];
+  const p = ease(t, K.cross[0], K.cross[1], EASE.inOut);
+  return { p, out: -far * p, in: far * (1 - p), on: t >= K.cross[0] - 1e-6, moving: p > 0 && p < 1 };
 }
 
 /** b12's mesh clock at this act's frame t (absolute frames): line/Ground.tsx's clock run on past its act */
@@ -259,10 +259,10 @@ export const lineClockT = (t: number) => LINE_LOCAL.end + t;
 /* ── the act's last picture, for b15 ─────────────────────────────── */
 
 /**
- * changeEnd(vertical): what the cut into b15 hands over — nothing of this act: by the last frame the wipe has crossed
- * the whole frame and the picture IS scenes/Matters.tsx's MattersDesk at its first picture (t = 0, the camera at rest:
+ * changeEnd(vertical): what the cut into b15 hands over — nothing of this act: by the last frame the push has landed and
+ * the picture IS scenes/Matters.tsx's MattersDesk at its first picture (t = 0, the camera at rest:
  * its MUTED_MESH ground on the timeline's clock keyed teal at the colon, the desk, the clock with Ava's teal dot). The
- * orb's last pose is given for reference (it is wiped off with the call; the teal dot carries her light on).
+ * orb's last pose is given for reference (it leaves with the call; the desk's teal dot carries her light on).
  */
 export function changeEnd(vertical: boolean) {
   const S = changeStage(vertical);

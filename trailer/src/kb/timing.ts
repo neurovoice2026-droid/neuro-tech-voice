@@ -727,8 +727,9 @@ export const CHANGE_LOCAL = (() => {
   const replace = { down: menu.up + 4 * S16, up: menu.up + 5 * S16 };
   /** the edited file drops into the list as the new version (newest on top), landing on the 16th */
   const land = replace.up + 3 * S16;
-  /** b14 · the app steps back a beat before the ring; the new row lifts out of it and unfolds into its page */
-  const recede = [ring - BEAT, ring + 13] as const;
+  /** b14 · the app steps back seven 16ths before the ring; the new row lifts out of it and unfolds into its page — its lines
+   *  are in before Dana's turn rises (one thing moves at a time) */
+  const recede = [ring - 7 * S16, ring + 3] as const;
   return {
     end,
     vo7,
@@ -753,7 +754,7 @@ export const CHANGE_LOCAL = (() => {
     /** the new row (TXT · Opening hours, Reading…) has landed on top; the badge ticks 4 → 5 (the old one still counts) */
     land,
     /** the pointer, its work done, fades where it stands */
-    pointerOut: replace.up + 8,
+    pointerOut: replace.up + 4,
     /** the fifth Ready mallet (E5) completes b08's phrase ON the beat with "the new answer": the new row rolls to Ready;
      *  the old row leaves up through its mask; the badge back to 4 */
     ready5,
@@ -767,11 +768,11 @@ export const CHANGE_LOCAL = (() => {
     ] as readonly Caption[],
     key: vo7Words[10],
     holdUntil: Math.min(recede[0] - 3, vo7 + vFrames('kb2-vo-7') + BEAT),
-    /** b14: the app steps back a depth and slides away down (a beat before the ring — the rows step back); the new row
+    /** b14: the app steps back a depth and slides away down (seven 16ths before the ring — the rows step back); the new row
      *  lifts out of it and unfolds into its page (Saturday · 9:00–16:00), its lines rising on 16ths */
     recede,
     lift: [recede[0], recede[0] + 8] as const,
-    unfold: [recede[0] + 4, recede[1]] as const,
+    unfold: [recede[0] + 4, recede[0] + 24] as const,
     /** 67.0 on the plan (beat 3): the ring — one slate hairline leaves the orb; she glides to her call place */
     ring,
     orbCall: [ring, ring + 30] as const,
@@ -793,10 +794,10 @@ export const CHANGE_LOCAL = (() => {
     four,
     sweep: [four, four + 10] as const,
     /** 72.75 on the plan: the L-CUT under her last word — the frame crosses to b15's desk (scenes/Matters.tsx
-     *  MattersDesk at its first picture), wiping on in the reading direction (16:9 left → right, 9:16 top → bottom);
-     *  the call's type leaves up through its masks just ahead of the front */
+     *  MattersDesk at its first picture) in one camera push against the reading direction (16:9 the call slides out
+     *  left, 9:16 up); it lands at rest a frame before the act ends (at 120 fps too), so the cut is the same picture */
     lcut,
-    cross: [lcut + 2, end] as const,
+    cross: [lcut + 2, end - 1] as const,
   };
 })();
 
@@ -831,13 +832,15 @@ export const MATTERS_LOCAL = (() => {
     /** at least one full bar of room tone, nothing moving but the colon's breath */
     breath: [L('matters', DESK2_END), L('matters', VO8_AT)] as const,
     /** b16 (half a beat before vo-8): the slow push toward the card starts (eased in: nothing visible moves in
-     *  the breath); 9:16: the clock's figures and labels leave up and the teal dot rises above the title */
+     *  the breath); 9:16: the clock's figures leave up (gone by her first word, which rises where they stood), its
+     *  labels on her first word (gone before her second line), and the teal dot rises above the title */
     b16,
     push: [b16, end] as const,
-    clockOut: [b16, b16 + 10] as const,
-    dotRise: [b16, b16 + 36] as const,
+    clockOut: [b16 + 1, L('matters', VO8_AT)] as const,
+    labelsOut: L('matters', VO8_AT),
+    dotRise: [b16 + 1, b16 + 37] as const,
     /** 9:16: the desk reframes down under the title (done before "only" rises) */
-    reframe: [b16, b16 + 44] as const,
+    reframe: [b16 + 1, b16 + 45] as const,
     vo8: L('matters', VO8_AT),
     /** "That's the work / only people can do." — each word rises on its spoken onset */
     vo8Words: vo8Words as readonly number[],
@@ -846,7 +849,7 @@ export const MATTERS_LOCAL = (() => {
     key: doAt,
     /** … and the old slip stack lifts from the desk's edge (on the 16th) and glides off toward the teal dot, the
      *  slips a cascade (each `stagger` behind the one above), EASE.inOut */
-    stack: { lift, glide: [lift + 1, lift + 1 + 38] as const, stagger: 2.5, n: 5 },
+    stack: { lift, glide: [lift + 1, lift + 1 + 30] as const, stagger: 2.25, n: 5 },
     /** the title leaves up through its masks as the room goes dark */
     titleOut: dark[0] + 6,
     /** the paper darkens into night over three beats (80.5–82.0 on the plan), landing on the close's bar; the
@@ -856,26 +859,85 @@ export const MATTERS_LOCAL = (() => {
   };
 })();
 
-/** b17–b18 (cta-local). The §7 FALLBACK route: a film-2 Cta from the timing-free end-card parts. */
-export const CTA_LOCAL = {
-  vo9: L('cta', VO9_AT),
-  headline: ['Your answers.', 'Written once, there for every call.'] as const,
-  /** headline word i rises on spoken word i (8 words, 8 spoken words) */
-  words: Array.from({ length: VOICE.lines['kb2-vo-9'].words.length }, (_, k) => L('cta', VO9_AT + vWord('kb2-vo-9', k))) as readonly number[],
-  /** the four lights, sunday first, on 8ths as the heading completes */
-  lights: LIGHTS4.map((f) => L('cta', f)) as readonly number[],
-  lightOrder: ['sunday', 'rush', 'closing', 'night'] as const,
-  converge: L('cta', CONVERGE),
-  impact: L('cta', IMPACT),
-  brand: L('cta', BRAND_AT),
-  /** the URL rises ON her words: "neuro" | "tech" | "voice.com" */
-  url: [0, 1, 2].map((k) => L('cta', BRAND_AT + vWord(BRAND, k))) as readonly number[],
-  button: L('cta', BUTTON),
-  note: L('cta', NOTE),
-  press: L('cta', PRESS),
-  /** from here to the end nothing moves but grain */
-  finalHold: L('cta', FINAL_HOLD),
-};
+/**
+ * b17–b18 (cta-local). The §7 FALLBACK route: a film-2 Cta from film 1's timing-free end-card parts
+ * (src/kb/scenes/Cta.tsx + scenes/cta/*). Every visible moment of the close, from the real word onsets.
+ */
+export const CTA_LOCAL = (() => {
+  const at = (f: number) => L('cta', f);
+  const vo9Words = VOICE.lines['kb2-vo-9'].words.map((_, k) => at(VO9_AT + vWord('kb2-vo-9', k)));
+  const impact = at(IMPACT);
+  const converge = at(CONVERGE);
+  const press = at(PRESS);
+  const finalHold = at(FINAL_HOLD);
+  const lights = LIGHTS4.map(at);
+  return {
+    vo9: at(VO9_AT),
+    headline: ['Your answers.', 'Written once, there for every call.'] as const,
+    /** the spoken word onsets of vo-9 (8 words: the heading's 8 words, one to one) */
+    words: vo9Words as readonly number[],
+    /** her three phrases (word indices): "Your answers." · "Written once," · "there for every call." — a heading ROW
+     *  rises as a unit on its phrase's first word (16:9 sets the last two phrases on one row, which rises on
+     *  "Written"; 9:16 gives each phrase its own row) */
+    phrases: [[0, 1], [2, 3], [4, 5, 6, 7]] as const,
+    /** a row starts its mask rise this many frames ahead of its first spoken word (≈ 85 % up ON the word) */
+    riseLead: 3,
+    /** the key phrase "there for every call." takes the sunday ink WORD BY WORD on its spoken onsets (a glint
+     *  of her lightest teal runs through each word as it is said, then settles to the key ink) */
+    key: [4, 5, 6, 7] as const,
+    /** the night comes up out of the darkening's black: the deep mesh opens to its night level (the drop into
+     *  the dark lands on the bar, frame 0; her teal dot keeps keying the room) */
+    night: [0, 45] as const,
+    /** THE FOUR LIGHTS, sunday first (hers: it springs out of her teal dot), then rush, closing, night, one at a
+     *  time on 8ths from the corners as the heading completes */
+    lights: lights as readonly number[],
+    lightOrder: ['sunday', 'rush', 'closing', 'night'] as const,
+    /** 9:16: her light glides from the dot (top centre) to its corner as it opens */
+    sundayGlide: [lights[0], lights[0] + 20] as const,
+    /** the ring of four drifts toward the centre (and turns a little) until the converge */
+    drift: [lights[0], converge] as const,
+    /** THE CONVERGE (on the beat after her line, two beats before the impact): the heading leaves up through its
+     *  masks word by word (`exit`); the ring swells (anticipation), whirls up and spirals into the core */
+    converge,
+    exit: { from: converge, step: 0.8, dur: 8 },
+    swell: [converge, converge + 4] as const,
+    orbIn: [converge + 4, impact - 9] as const,
+    /** the whirl's top speed (a pass of air) */
+    whirl: converge + 15,
+    /** the four overlap and become one: the three pour into HER light (sunday), which takes all four hues … */
+    merge: [impact - 12, impact - 6] as const,
+    /** … holds alone, is squeezed (anticipation) … */
+    survivor: [impact - 6, impact] as const,
+    squeeze: [impact - 4, impact] as const,
+    /** IMPACT on the bar: the merged light gives itself to the backlight (burst), NEUROVOICE surfaces from the
+     *  centre out as the light reaches each letter; the four lights come up on the backlight's rim */
+    impact,
+    burst: [impact, impact + 6] as const,
+    rimIn: [impact + 6, impact + 26] as const,
+    brand: at(BRAND_AT),
+    /** the URL rises ON her words: "neuro" | "tech" | "voice.com" (chunk start characters, and frames) */
+    urlText: 'neurotechvoice.com',
+    urlChunks: [0, 5, 9] as const,
+    url: [0, 1, 2].map((k) => at(BRAND_AT + vWord(BRAND, k))) as readonly number[],
+    /** "Start free →" rises on "…Voice." once the URL is in; the note a beat later, a word every 2.5 frames */
+    button: at(BUTTON),
+    note: at(NOTE),
+    noteStep: 2.5,
+    /** THE CLICK (CLIENT DIRECTION v2 §3): the pointer comes in from off-frame (lower right) on a calm arc,
+     *  the button takes the site's hover (plum) as it enters, the pointer rests `dwell` frames, presses (.97),
+     *  releases `hold` frames later — a two-part click on the cue sheet (down, up) */
+    press,
+    release: press + 3,
+    dwell: 9,
+    /** the backlight breathes under the end card, its amplitude easing to 0 into the hold */
+    breath: at(BUTTON) + 10,
+    breathOut: [finalHold - 10, finalHold] as const,
+    /** every residual (springs, breath, glows) pinned to its exact rest over these frames */
+    settle: [Math.max(press + 3, finalHold - 8), finalHold] as const,
+    /** from here to the end nothing moves but grain; the picture fades with the master (MIX.fadeOut) */
+    finalHold,
+  };
+})();
 
 /** The mix room of a hit (and the grain): the paper acts in the short bright room, the close in the dark
  *  one — the dark takes over a second before the close (81.0 on the plan, the darkening's middle). */
@@ -1317,6 +1379,58 @@ const MATTERS_HITS: Hit<Snd>[] = (() => {
 })();
 /* ── /matters ── */
 
+/* ── cta ── (b17–b18: picture src/kb/scenes/Cta.tsx + scenes/cta/*; pans from the 16:9 layout: the heading .5, the
+ * four lights on their corners — sunday (her dot) .87 top, rush .13 top, closing .13 low, night .87 low — the core,
+ * the wordmark and the end card .5, the pointer coming in from the lower right .75 → the button .53)
+ * The bed's part (MUSIC.cta / .lights / .converge / .impact): the drop into the dark lands on the close's bar; under the
+ * heading THE RINGS COME BACK AS MUSIC — the Part I trill pitches (G#, B) plus E two octaves up (E6 · G#6 · B6), a
+ * soft resolving glass arpeggio on 8ths (the heading's rows rise on CTA_LOCAL.words[0] / [2], the key phrase inks
+ * from words[4]); the converge swell and the inhale; E on the logo; the held E major chord rings out into the master
+ * fade. The impact must top the dialogue maximum by ≥ 1 LU (check-mix; MIX.impact).
+ * FILM-2 EXTRAS this act asks the sound pass for (film 1 stand-ins below until they exist; labels say [→ …]):
+ *   fx-click-down / fx-click-up   (b08's) the Start free click, a sound on the press and one on the release
+ *   fx-keys                       (b08's) the URL's three chunks rising on her words: one soft low-profile key each
+ *   (the chimes)                  film 1's end-card chime family, re-cued, sunday first — no new sound */
+const CTA_HITS: Hit<Snd>[] = (() => {
+  const R = CTA_LOCAL;
+  const at = (f: number) => SCENES.cta.from + f;
+  const PAN = { sunday: 0.87, rush: 0.13, closing: 0.13, night: 0.87 } as const;
+  const WHERE = { sunday: 'out of her teal dot (top right; 9:16 top centre)', rush: 'top left', closing: 'lower left', night: 'lower right' } as const;
+  return [
+    H(at(R.words[0] - R.riseLead), 'sheen', 'none', 0.5, 3, 'b17 "Your answers." rises (on "Your")', { db: -14 }),
+    H(at(R.words[2] - R.riseLead), 'sheen', 'none', 0.5, 3, 'b17 "Written once, …" rises (on "Written")', { db: -15 }),
+    H(at(R.words[R.key[0]] - 1), 'glint', 'sunday', 0.55, 3, 'b17 "there for every call." takes her teal word by word, a glint running through it (9:16: its row rises here)', { db: -16 }),
+    ...R.lights.flatMap((f, i) => {
+      const id = R.lightOrder[i];
+      return [
+        H(at(f), 'pop', id, PAN[id], 3, `b17 the ${id.toUpperCase()} light arrives, ${WHERE[id]} — ${i ? 'its orb springs out of a point of light' : 'the dot springs open into her orb'}`, { db: -3 }),
+        H(at(f), `${chime(id)}-soft` as Snd, id, PAN[id], 2, `b17 ${id}: the end card’s chime, recalled${i ? '' : ' — hers first'}`, { db: -2, layer: true }),
+      ];
+    }),
+    H(at(R.converge), 'swish', 'none', 0.5, 2, 'b17 THE CONVERGE: the heading leaves up through its masks; the ring of four swells', { db: 4 }),
+    H(at(R.whirl), 'whoosh', 'none', [0.3, 0.7], 2, 'b17 the four whirl at top speed, spiralling into the core', { db: 2 }),
+    H(at(R.survivor[0]), 'gulp', 'sunday', 0.5, 2, 'b17 the four are one: the three pour into her light, which holds alone'),
+    H(at(R.impact), 'riser', 'none', 0.5, 1, 'b17 the converge swell, peaking ON the impact', { db: -2 }),
+    H(at(R.impact), 'impact', 'night', 0.5, 1, 'b18 LOGO IMPACT (bar line): the merged light opens into the backlight'),
+    H(at(R.impact), 'chord', 'night', 0.5, 1, 'b18 the four lights ring together'),
+    H(at(R.impact), 'chord-rev', 'none', 0.5, 2, 'b18 the four lights fuse', { layer: true }),
+    H(at(R.impact), 'thump', 'none', 0.5, 1, 'b18 the impact’s weight', { layer: true }),
+    H(at(R.impact), 'slam', 'none', 0.5, 2, 'b18 the impact’s crack', { layer: true }),
+    H(at(R.impact + 1), 'shimmer', 'none', 0.5, 2, 'b18 NEUROVOICE surfaces letter by letter from the centre out (the letter shimmer is a sound, not a glow)', { layer: true, db: -4 }),
+    H(at(R.impact + 2), 'shock', 'none', 0.5, 2, 'b18 the backlight opens out round the wordmark', { layer: true }),
+    ...R.url.map((f, k) =>
+      H(at(f - 1), 'key', 'none', 0.5, 3, `b18 the URL rises on her words: "${['neuro', 'tech', 'voice.com'][k]}" [→ fx-keys]`, { db: -10 }),
+    ),
+    H(at(R.url[0] + 2), 'draw', 'none', [0.4, 0.6], 3, 'b18 the colophon’s hairline draws out to the margins', { db: -16 }),
+    H(at(R.button), 'pop', 'night', 0.5, 3, 'b18 "Start free →" rises on "…Voice."', { db: -2 }),
+    H(at(R.note), 'tap', 'none', 0.5, 3, 'b18 "5 free minutes, no card"', { db: -4 }),
+    H(at(R.press), 'click', 'night', 0.53, 1, 'b18 THE CLICK: the pointer presses Start free (plum, .97) [→ fx-click-down]'),
+    H(at(R.press), 'thump', 'none', 0.53, 2, 'b18 … the click’s felt knock', { layer: true, db: -4 }),
+    H(at(R.release), 'tap', 'night', 0.53, 3, 'b18 … released: the plate springs back under the pointer [→ fx-click-up]', { db: -6 }),
+  ];
+})();
+/* ── /cta ── */
+
 export const HITS: Hit<Snd>[] = [
   /* ── repeat ── */
   ...REPEAT_HITS,
@@ -1340,20 +1454,9 @@ export const HITS: Hit<Snd>[] = [
   /* ── matters ── */
   ...MATTERS_HITS,
   /* ── /matters ── */
-  /* ── CLOSE ── */
-  ...LIGHTS4.map((f, i) => H(f, chime(CTA_LOCAL.lightOrder[i]), CTA_LOCAL.lightOrder[i], [0.2, 0.8, 0.3, 0.7][i], 2, `${CTA_LOCAL.lightOrder[i].toUpperCase()} light arrives`)),
-  H(IMPACT, 'riser', 'none', 0.5, 1, 'CONVERGE → peak ON the impact', { db: -2 }),
-  H(CONVERGE, 'swish', 'none', 0.5, 2, 'the converge: the heading leaves through its masks'),
-  H(IMPACT, 'chord-rev', 'none', 0.5, 2, 'the four lights fuse', { layer: true }),
-  H(IMPACT, 'impact', 'night', 0.5, 1, 'LOGO IMPACT'),
-  H(IMPACT, 'chord', 'night', 0.5, 1, 'THE FOUR LIGHTS ring together'),
-  H(IMPACT, 'thump', 'none', 0.5, 1, 'the impact\u2019s weight', { layer: true }),
-  H(IMPACT, 'slam', 'none', 0.5, 2, 'the impact\u2019s crack', { layer: true }),
-  H(IMPACT + 2, 'shock', 'none', 0.5, 2, 'the merged light opens out round the wordmark', { layer: true }),
-  H(BUTTON, 'pop', 'night', 0.5, 3, '“Start free” rises', { db: -2 }),
-  H(NOTE, 'tap', 'none', 0.5, 3, '“5 free minutes, no card”', { db: -4 }),
-  H(PRESS, 'click', 'night', 0.5, 1, 'the button is pressed'),
-  H(PRESS + 3, 'tap', 'night', 0.5, 3, 'the plate springs back', { db: -5 }),
+  /* ── cta ── */
+  ...CTA_HITS,
+  /* ── /cta ── */
 ];
 
 export const CUES: Cue[] = buildCues(HITS, { sfx: SFX, speaking, roomAt });

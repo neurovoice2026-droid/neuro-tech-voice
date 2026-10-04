@@ -1,163 +1,282 @@
 /**
- * CLOSE · b17–b18 — the film-2 Cta, docs/kb/PIPELINE.md §7 FALLBACK route (SCRIPT.md b18 "Build route"):
- * the headline differs from film 1's, so this is NOT film 1's Cta mounted as is; it is built from the
- * timing-free end-card parts (scenes/cta/EndCard: Wordmark · StartFree · Note · Url, and Headline),
- * timed by CTA_LOCAL. PLACEHOLDER stage: the four lights and the backlight are plain CSS light (the
- * HeroGL / heroShader / orbPass pass comes in the build); the end-card geometry is film 1's.
+ * CLOSE · b17–b18 · YOUR ANSWERS → THE END CARD (SCRIPT.md b17–b18; CLIENT DIRECTION v2). Every time is CTA_LOCAL
+ * (src/kb/timing.ts, from the real word onsets); every pose and light is scenes/cta/stage.ts.
  *
- *   Ava's heading "Your answers. / Written once, there for every call." rises on her words (key phrase in
- *   sunday on dark) · the four lights arrive on 8ths, sunday first, and drift in · the converge: the
- *   heading leaves through its masks, the lights close on the core · IMPACT on the bar: the backlight
- *   opens, NEUROVOICE surfaces from the centre out · the URL on her sign-off · Start free on "…Voice." ·
- *   the note · the press · the still hold, fading with the master (MIX.fadeOut).
+ * Built by docs/kb/PIPELINE.md §7's FALLBACK route (the headline differs from film 1's, so film 1's Cta is not
+ * mounted as is): film 1's timing-free parts — scenes/cta/EndCard (Wordmark · StartFree · Note · Url) and orbPass
+ * (the site's FluidOrb in one WebGL context), the backlight forked from heroShader (cta/lightShader.ts), HeroGL
+ * forked without the portrait (cta/LightGL.tsx) — on the site's gradient mesh, timed by CTA_LOCAL.
+ *
+ *   0        the cut lands on b16's last picture exactly: the deep INK_MESH all but black, her teal dot (where b16
+ *            left it) keying the room. The night comes up over a bar and a half — the mesh's violet material
+ *            opening out of the dark, her dot still the room's light
+ *   words    Ava: "Your answers. / Written once, there for every call." — the house two-tone heading, centred, each
+ *            row rising on its phrase's first word; "there for every call." takes her teal word by word as it is said
+ *   lights   THE FOUR LIGHTS, one at a time on 8ths from the corners as the heading completes: SUNDAY first — her
+ *            dot springs open into her orb (16:9 at its corner; 9:16 it glides from the top centre to its corner) —
+ *            then rush (top left), closing (lower left), night (lower right). The room's key moves onto her orb.
+ *            The ring of four drifts toward the centre, turning on the way they came (counter-clockwise)
+ *   converge on the beat: the heading leaves up through its masks word by word; the ring swells, whirls and spirals
+ *            into the core P; the three pour into HER light, which takes all four hues, holds alone, is squeezed
+ *   IMPACT   on the bar: her light gives itself away in a short white burst and the merged light opens OUT of the
+ *            core as the wide, filled, luminous BACKLIGHT (film 1's); NEUROVOICE (Inter Tight 500, −0.07em, the
+ *            wordmark ink) surfaces letter by letter from the centre out as the light reaches it; the four lights
+ *            come up as the colours of its rim, each on the side it arrived from; the backlight lights the mesh
+ *   brand    "Neuro Tech Voice.": neurotechvoice.com rises on her words; "Start free →" on "…Voice."; the note a beat
+ *            later; THE CLICK — a real pointer comes in from the right on a calm arc, the button takes the site's
+ *            hover (plum) as the pointer enters it, rests, presses (.97, the pointer .9), releases
+ *   hold     dead still (every residual pinned), the picture fading with the master (MIX.fadeOut) into the night
+ *
+ * The mesh is screen-fixed (a mesh has nothing to parallax) and there is no camera: the type sits still and crisp;
+ * the lights, the light and the pointer are what move. One WebGL context (the lights + the backlight); the mesh is a
+ * 2D canvas; everything else is crisp vector DOM.
  */
 import React from 'react';
 import { AbsoluteFill } from 'remotion';
 import '../../scenes/cta/font/wordmark.css';
-import { NightRoom } from '../../components/Atmosphere';
+import { flowTime, seedTime } from '../../components/Orb';
+import type { OrbDraw } from '../../components/orbGL';
 import { useFaceReady } from '../../lib/fonts';
 import { useLayout } from '../../lib/layout';
-import { GLOW, inkFor } from '../../lib/lights';
-import { EASE, mix, SPRING, springUnit, tween } from '../../lib/motion';
-import { Note, StartFree, Url, Wordmark, WORDMARK_FONT, WORDMARK_INK, WORDMARK_TEXT, type Rest } from '../../scenes/cta/EndCard';
-import { Headline } from '../../scenes/cta/Headline';
-import { LIGHTS, ROOM } from '../../theme';
+import { ALL_GLOW, GLOW, hexToRgb, inkFor, mixColor } from '../../lib/lights';
+import { EASE, mix, tween, windowed } from '../../lib/motion';
+import { Note, StartFree, Url, Wordmark, WORDMARK_FONT, WORDMARK_INK, WORDMARK_TEXT } from '../../scenes/cta/EndCard';
+import { C, TRACK } from '../../theme';
+import { click, Cursor, cursorPos, measureText, MeshGround, useKitFaces, type CursorKey, type Rect } from '../kit';
+import { HOME, INK_MESH, MOMENT_LIGHTS } from '../palettes';
 import { useKbSceneFrame } from '../scene';
-import { CTA_LOCAL as K, MIX, SCENES } from '../timing';
+import { CTA_LOCAL as K, MATTERS_LOCAL, SCENES } from '../timing';
+import { Heading, type HeadingRow } from './cta/Heading';
+import { LightGL, type Glow, type LightUniforms } from './cta/LightGL';
+import {
+  arriveAt,
+  bloomAt,
+  brandEnv,
+  breathAt,
+  ctaLayout,
+  endLight,
+  groundAt,
+  lightsAt,
+  orbVolume,
+  rest,
+  smoothUnit,
+  SURVIVOR,
+  type CtaLayout,
+} from './cta/stage';
+import { mattersLayout } from './matters/stage';
+import { TealDot } from './matters/Dot';
+import { REPEAT_GROUND } from './Repeat';
 
-const ACCENT = inkFor('sunday', 'dark');
-/** every residual pinned to its exact rest value by the final hold */
-const rest: Rest = (t, v, target) => (t >= K.finalHold ? target : v);
-const rgba = (hex: string, a: number) => {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${Math.max(0, Math.min(1, a)).toFixed(4)})`;
-};
-/** the picture fades with the master: MIX.fadeOut's exponential curve (fadeK nepers, landing on zero) */
-const endLight = (t: number) => {
-  const [a, e] = MIX.fadeOut.map((f) => f - SCENES.cta.from);
-  if (t <= a) return 1;
-  const u = Math.min(1, (t - a) / (e - a));
-  const z = Math.exp(-MIX.fadeK);
-  return (Math.exp(-MIX.fadeK * u) - z) / (1 - z);
-};
+const SUNDAY = MOMENT_LIGHTS.sunday;
+/** the key phrase on the night: her teal's light end (lights.ts inkFor('sunday', 'dark') — #a5eaf5) */
+const KEY_INK = inkFor('sunday', 'dark');
+/** the glint that runs into each key word as it is said: her lightest teal */
+const GLINT = SUNDAY.orb[4];
+const rgb01 = (hex: string) => hexToRgb(hex) as [number, number, number];
+
+/** the heading's rows: 16:9 two (the last two phrases share a row), 9:16 a row per phrase */
+function headingRows(vertical: boolean): HeadingRow[] {
+  const words = 'Your answers. Written once, there for every call.'.split(' ');
+  const groups: number[][] = vertical ? K.phrases.map((p) => [...p]) : [[...K.phrases[0]], [...K.phrases[1], ...K.phrases[2]]];
+  return groups.map((idx) => ({ words: idx.map((i) => words[i]), idx, at: K.words[idx[0]] - K.riseLead }));
+}
+const KEY_ONSETS: ReadonlyMap<number, number> = new Map(K.key.map((i) => [i, K.words[i]]));
+
+/* ── the click ─────────────────────────────────────────────────────── */
+
+/** the site button's box (EndCard StartFree: title role 500, height 2.25em, padding 1.125em, gap .4em) */
+function buttonRect(G: CtaLayout): Rect {
+  const F = G.button.size;
+  const spec = { size: F, weight: 500, tracking: parseFloat(TRACK.title) };
+  const w = 2 * 1.125 * F + measureText('Start free', spec) + 0.4 * F + measureText('→', spec);
+  const h = 2.25 * F;
+  return { x: G.W / 2 - w / 2, y: G.button.y - h / 2, w, h };
+}
+
+/** the pointer: in from the right edge at the button's height (clear of every row of type), a calm arc onto the
+ *  button — its tip in the gap between "free" and the arrow, so it never sits on a letter through the hold —
+ *  `dwell` frames to read it, the press, the release */
+function cursorKeys(G: CtaLayout, r: Rect): CursorKey[] {
+  const F = G.button.size;
+  const spec = { size: F, weight: 500, tracking: parseFloat(TRACK.title) };
+  const gapX = r.x + 1.125 * F + measureText('Start free', spec) + 0.2 * F;
+  const target = { x: gapX, y: r.y + r.h * 0.56 };
+  const entry = G.vertical ? { x: G.W + 60, y: target.y + 40 } : { x: G.W + 70, y: target.y + 60 };
+  return [{ at: K.press - K.dwell - 40, x: entry.x, y: entry.y }, ...click(K.press, target.x, target.y, { dwell: K.dwell, hold: K.release - K.press })];
+}
+
+/** the frame the pointer's hotspot first enters the button (its hover starts there) */
+function hoverStart(keys: readonly CursorKey[], r: Rect) {
+  for (let tt = K.press - 45; tt <= K.press; tt += 0.25) {
+    const p = cursorPos(keys, tt);
+    if (p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h) return tt;
+  }
+  return K.press - 6;
+}
 
 const Row: React.FC<{ y: number; children: React.ReactNode }> = ({ y, children }) => (
   <div style={{ position: 'absolute', left: 0, right: 0, top: y, display: 'flex', justifyContent: 'center', transform: 'translateY(-50%)' }}>{children}</div>
 );
 
+/* ── the scene ──────────────────────────────────────────────────────── */
+
 export const Cta: React.FC = () => {
   const L = useLayout();
   const t = useKbSceneFrame('cta');
-  const ready = useFaceReady(`500 100px ${WORDMARK_FONT}`, WORDMARK_TEXT);
-  /* film 1's end-card geometry (scenes/Cta.tsx geo) */
-  const P = { x: L.cx, y: L.pick(L.cy - 170, 650) };
-  const G = {
-    wordmark: L.pick(160, 116),
-    halo: L.pick(580, 400),
-    button: { y: L.pick(700, 1030), fontSize: L.pick(64, 56) },
-    note: { y: L.pick(850, 1180), size: L.pick(64, 56) },
-    url: { y: L.pick(968, 1318), size: L.pick(64, 56), dot: L.pick(20, 18), rule: L.pick(1400, L.width - 2 * L.safe.x) },
-    headline: { size: L.pick(100, 84), cy: L.pick(L.cy + 40, 760) },
-  };
-  const lines = L.vertical ? ['Your answers.', 'Written once,', 'there for every call.'] : [...K.headline];
+  const v = L.vertical;
+  const wordmarkReady = useFaceReady(`500 100px ${WORDMARK_FONT}`, WORDMARK_TEXT);
+  useKitFaces();
+  const G = ctaLayout(v);
+  const I = K.impact;
 
-  /* the four lights: from the corners on their 8ths, drifting to a ring about the core, closing on it in the converge */
-  const corners = [
-    [-0.1, -0.1],
-    [1.1, -0.1],
-    [-0.1, 1.1],
-    [1.1, 1.1],
-  ] as const;
-  const ringR = L.pick(420, 330);
-  const close = tween(t, [K.converge, K.impact], [0, 1], EASE.in3);
-  const lights = K.lightOrder.map((id, i) => {
-    const a = springUnit(t - K.lights[i], SPRING.site);
-    const ang = Math.PI * (1.25 + 0.5 * i) + 0.35 * tween(t, [K.lights[i], K.impact], [0, 1]);
-    const rx = P.x + Math.cos(ang) * ringR * (1 - close);
-    // (the ring sits a little above the core, clear of the heading under it)
-    const ry = P.y - L.pick(60, 80) * (1 - close) + Math.sin(ang) * ringR * 0.32 * (1 - close);
-    const x = mix(corners[i][0] * L.width, rx, Math.min(1, a));
-    const y = mix(corners[i][1] * L.height, ry, Math.min(1, a));
-    return { id, x, y, on: t >= K.lights[i] - 1 && t < K.impact + 1 };
+  const lights = lightsAt(t, G);
+  const ground = groundAt(t, G, lights);
+
+  /* ── the four lights in the GL context: orbs + their blooms (film 1's light model) ── */
+  const vol = orbVolume(t);
+  const flow = flowTime(Math.max(0, t), orbVolume);
+  const inP = tween(t, K.orbIn, [0, 1], EASE.inOut);
+  const burst = tween(t, K.burst, [0, 1], EASE.out3);
+  const survivorW = windowed(t, K.merge[0], K.survivor[0], I - 1, I + 4, EASE.out3, EASE.in2);
+  const toAll = tween(t, K.merge, [0, 1], EASE.inOut);
+  const sv = lights[SURVIVOR];
+  const sw = (t - K.merge[0]) * 0.32;
+  const orbs: OrbDraw[] = [];
+  const glows: Glow[] = lights.map((o) => {
+    const shown = o.pop > 0 && o.d >= 1 && o.opacity > 0.002;
+    const body = GLOW[o.id];
+    const glowBody = mixColor(mixColor(body.body, body.core, 0.4), ALL_GLOW.body, o.i === SURVIVOR ? toAll : 0);
+    // a point of light: its bloom (≈ its own size) does the work of the light, a brighter flash on its arrival
+    let gs = 0.7 * o.gather;
+    let gr = o.gather > 0 ? G.orb * (0.25 + 0.25 * o.gather) : 0;
+    if (shown) {
+      gs += (0.42 * o.light + 0.32 * o.flash) * (1 + 0.3 * inP) * o.opacity;
+      gr = Math.max(gr, 0.8 * o.d * (1 + 0.3 * o.flash));
+    }
+    gs = Math.min(1.3, gs);
+    const own = {
+      x: o.x,
+      y: o.y,
+      r: gr,
+      s: gs,
+      color: rgb01(mixColor(glowBody, MOMENT_LIGHTS[o.id].orb[3], smoothUnit(o.gather * (1 - Math.min(1, o.light / 0.4))))),
+    };
+    // in the merge every slot travels onto the survivor as one of its four colour glows (slot k = light k, always)
+    const a = sw + (o.i * Math.PI) / 2;
+    const mine = { x: sv.x + Math.cos(a) * sv.d * 0.55, y: sv.y + Math.sin(a) * sv.d * 0.55, r: sv.d * 0.72, s: 0.6 * survivorW, color: rgb01(MOMENT_LIGHTS[o.id].orb[2]) };
+    let g: Glow = {
+      x: mix(own.x, mine.x, survivorW),
+      y: mix(own.y, mine.y, survivorW),
+      r: mix(own.r, mine.r, survivorW),
+      s: mix(own.s, mine.s, survivorW),
+      color: [0, 1, 2].map((c) => mix(own.color[c], mine.color[c], survivorW)) as [number, number, number],
+    };
+    if (t >= I) {
+      // the impact: the survivor's slot is the burst — a white-lilac light from the core, hot for 2–3 frames,
+      // handing over to the backlight; the others are gone
+      g =
+        o.i === SURVIVOR
+          ? { x: sv.x, y: sv.y, r: mix(sv.d * 1.1, G.halo[0] * 0.5, burst), s: 0.85 * Math.exp(-(t - I) / 2.2), color: rgb01(mixColor('#f7f3ff', MOMENT_LIGHTS.night.orb[3], 0.35)) }
+          : { ...g, s: 0 };
+    }
+    if (shown) orbs.push({ x: o.x, y: o.y, d: o.d, palette: o.palette, volume: vol, time: flow + seedTime(o.i), opacity: o.opacity });
+    return g;
   });
+  // the survivor on top in the merge
+  orbs.sort((p, q) => (p.palette === sv.palette ? 1 : q.palette === sv.palette ? -1 : 0));
 
-  /* the impact: the backlight opens out of the core */
-  const bloom = t < K.impact ? 0 : springUnit(t - K.impact, SPRING.site);
-  const flash = t < K.impact ? 0 : Math.exp(-(t - K.impact) / 3);
-  const arrive = (xEm: number) => 1 + xEm * 2.4;
-  const end = endLight(t);
+  /* ── the backlight ── */
+  const bloomS = bloomAt(t);
+  const haloScale = mix(G.bloomFrom, 1, bloomS);
+  const flare = t < I ? 0 : rest(t, Math.exp(-(t - I) / 6), 0);
+  const u: LightUniforms = {
+    haloC: [G.P.x, G.P.y],
+    haloR: [G.halo[0] * haloScale, G.halo[1] * haloScale, G.halo[2] * haloScale],
+    haloGain: t < I ? 0 : rest(t, smoothUnit(bloomS / 0.5) * (1 + 0.22 * flare) * (1 + 0.012 * breathAt(t)) * (1 + 0.04 * brandEnv(t)), 1),
+    merge: [1, 0.72, 0.42, 0.05],
+    floor: [G.P.y + G.floor.dy, G.floor.len, G.floor.k * tween(t, [I + 4, K.button + 10], [0, 1], EASE.inOut), G.floor.rise],
+    glows,
+    // the four lights on its rim, each on the corner it arrived from: rush top-left, sunday top-right, night
+    // bottom-right, closing bottom-left
+    rim: [0.85 * tween(t, K.rimIn, [0, 1], EASE.inOut), 0, 0, 0.45],
+    rimColors: (['rush', 'sunday', 'night', 'closing'] as const).map((id) => rgb01(mixColor(MOMENT_LIGHTS[id].orb[2], MOMENT_LIGHTS[id].orb[3], 0.25))),
+    glowOver: 0.4,
+    wide: [4.5, 0.07],
+    seed: t,
+  };
+  const glOn = t >= K.lights[0] - 3;
+
+  /* ── her dot (b16's, continuing exactly), until her light springs out of it ── */
+  const dotO = 1 - tween(t, [K.lights[0] - 0.5, K.lights[0] + 3], [0, 1], EASE.inOut);
+
+  /* ── the click ── */
+  const rect = buttonRect(G);
+  const keys = cursorKeys(G, rect);
+  const hover = hoverStart(keys, rect);
+
+  /* the impact's light: a white burst from the core (a light, not a veil), rising over 1.5 f, gone in ≈5 */
+  const flash = t < I - 1.5 ? 0 : t < I ? Math.sin(((t - (I - 1.5)) / 1.5) * (Math.PI / 2)) : Math.exp(-(t - I) / 1.5);
+  const endO = 1 - endLight(t);
 
   return (
-    <AbsoluteFill style={{ background: ROOM.night }}>
-      <NightRoom light={{ x: P.x, y: P.y, color: LIGHTS.sunday.orb[2], strength: 0.18 + 0.12 * bloom, radius: L.pick(520, 640) }} vignette={0.6} />
-      {lights.map((l) =>
-        l.on ? (
-          <div
-            key={l.id}
-            style={{
-              position: 'absolute',
-              left: l.x - 70,
-              top: l.y - 70,
-              width: 140,
-              height: 140,
-              borderRadius: '50%',
-              mixBlendMode: 'screen',
-              background: `radial-gradient(circle, ${rgba(GLOW[l.id].core, 0.95)} 0%, ${rgba(GLOW[l.id].body, 0.55)} 30%, ${rgba(GLOW[l.id].body, 0)} 70%)`,
-            }}
-          />
-        ) : null,
-      )}
-      <Headline
-        t={t}
-        spec={{
-          lines,
-          cy: G.headline.cy,
-          size: G.headline.size,
-          wordAt: K.words.map((f) => f - 2),
-          exit: { from: K.converge, step: 1.5, dur: 8 },
-          keys: ['there', 'for', 'every', 'call.'],
-          accent: ACCENT,
-          vertical: L.vertical,
-        }}
+    <AbsoluteFill style={{ background: HOME.night }}>
+      <MeshGround
+        t={SCENES.cta.from + t}
+        palette={INK_MESH}
+        lift={0}
+        brightness={ground.brightness}
+        saturation={ground.saturation}
+        shade={ground.shade}
+        seed={REPEAT_GROUND.seed}
+        keyLight={ground.key}
       />
-      {bloom > 0.001 ? (
-        <div
-          style={{
-            position: 'absolute',
-            left: P.x - G.halo * bloom,
-            top: P.y - G.halo * 0.42 * bloom,
-            width: 2 * G.halo * bloom,
-            height: 2 * G.halo * 0.42 * bloom,
-            borderRadius: '50%',
-            background: `radial-gradient(closest-side, ${rgba('#f7f3ff', 0.96)} 0%, ${rgba('#d9ccff', 0.85)} 45%, ${rgba('#b9a3ff', 0.35)} 78%, ${rgba('#b9a3ff', 0)} 100%)`,
-          }}
-        />
+      {dotO > 0.001 ? (
+        <AbsoluteFill style={{ opacity: dotO < 0.999 ? dotO : undefined }}>
+          <TealDot t={MATTERS_LOCAL.end + t} g={mattersLayout(v)} />
+        </AbsoluteFill>
       ) : null}
-      <Wordmark t={t} at={K.impact} ready={ready} rest={rest} spec={{ x: P.x, y: P.y, size: G.wordmark, arrive, color: WORDMARK_INK }} />
+      {glOn ? <LightGL width={L.width} height={L.height} u={u} orbs={orbs} /> : null}
+      {/* the type is the near plane: the lights pass behind it */}
+      <Heading
+        t={t}
+        rows={headingRows(v)}
+        cy={G.heading.cy}
+        size={G.heading.size}
+        vertical={v}
+        color={C.paper}
+        keyOn={KEY_ONSETS}
+        keyColor={KEY_INK}
+        glint={GLINT}
+        exit={K.exit}
+      />
+      <Wordmark t={t} at={I} ready={wordmarkReady} rest={rest} spec={{ x: G.P.x, y: G.P.y, size: G.wordmark, arrive: arriveAt(G), color: WORDMARK_INK }} />
       <Row y={G.button.y}>
-        <StartFree t={t} at={K.button} press={K.press} fontSize={G.button.fontSize} vertical={L.vertical} spec={{ hover: K.press - 9, down: 3 }} rest={rest} />
+        <StartFree t={t} at={K.button} press={K.press} fontSize={G.button.size} vertical={v} spec={{ hover, down: K.release - K.press }} rest={rest} />
       </Row>
       <Row y={G.note.y}>
-        <Note t={t} at={K.note} step={1.5} size={G.note.size} vertical={L.vertical} />
+        <Note t={t} at={K.note} step={K.noteStep} size={G.note.size} vertical={v} />
       </Row>
       <Row y={G.url.y}>
         <Url
           t={t}
-          text="neurotechvoice.com"
-          chunks={[0, 5, 9].map((from, k) => ({ from, at: K.url[k] }))}
+          text={K.urlText}
+          chunks={K.urlChunks.map((from, k) => ({ from, at: K.url[k] }))}
           size={G.url.size}
           dot={G.url.dot}
           ruleW={G.url.rule}
-          vertical={L.vertical}
+          vertical={v}
           rest={rest}
         />
       </Row>
+      <Cursor keys={keys} t={t} />
       {flash > 0.002 ? (
         <AbsoluteFill
-          style={{ background: `radial-gradient(circle at ${P.x}px ${P.y}px, ${rgba('#ffffff', 0.7 * flash)} 0%, ${rgba('#d6c8ff', 0.12 * flash)} 22%, ${rgba('#c4a8ff', 0)} 50%)` }}
+          style={{
+            background: `radial-gradient(circle at ${G.P.x.toFixed(1)}px ${G.P.y.toFixed(1)}px, rgba(255,255,255,${(0.75 * flash).toFixed(3)}) 0%, rgba(247,243,255,${(0.42 * flash).toFixed(3)}) ${L.pick(6, 5)}%, rgba(214,200,255,${(0.12 * flash).toFixed(3)}) ${L.pick(18, 15)}%, rgba(196,168,255,${(0.03 * flash).toFixed(3)}) 34%, rgba(196,168,255,0) 52%)`,
+          }}
         />
       ) : null}
-      {end < 0.999 ? <AbsoluteFill style={{ background: ROOM.night, opacity: 1 - end }} /> : null}
+      {endO > 0.001 ? <AbsoluteFill style={{ background: HOME.night, opacity: endO }} /> : null}
     </AbsoluteFill>
   );
 };

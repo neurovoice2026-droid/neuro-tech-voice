@@ -37,17 +37,11 @@ const thump = (t: number, at: number) => {
   return k * Math.exp(1 - k);
 };
 
-export const TealDot: React.FC<{ t: number; g: MattersLayout }> = ({ t, g }) => {
+/** The ring: one hairline leaving the dot on the line's ring — drawn BEHIND the clock's figures (b01's rings). */
+export const TealRing: React.FC<{ t: number; g: MattersLayout }> = ({ t, g }) => {
   const L = useLayout();
   const p = dotAt(t, g.vertical);
   const d = g.clock.dot * p.z;
-  const dark = darkness(t);
-  const breath = 0.5 + 0.5 * Math.sin((t / 90) * Math.PI * 2 - 1.2);
-  const hit = thump(t, M.ring) + 0.45 * thump(t, M.pickup);
-  const dotScale = 1 + 0.05 * breath + 0.5 * Math.max(-0.1, hit) + 0.12 * dark;
-  const bloom = 0.17 + 0.05 * breath + 0.22 * Math.max(0, Math.min(1, hit)) + 0.12 * dark;
-  const halo = d * (4.2 + 1.4 * dark);
-  // the ring: one hairline, leaving the dot on the ring
   const age = t - M.ring;
   const ring = age >= 0 && age < LIFE;
   let ringEl: React.ReactNode = null;
@@ -65,9 +59,20 @@ export const TealDot: React.FC<{ t: number; g: MattersLayout }> = ({ t, g }) => 
       </svg>
     );
   }
+  return <>{ringEl}</>;
+};
+
+export const TealDot: React.FC<{ t: number; g: MattersLayout }> = ({ t, g }) => {
+  const p = dotAt(t, g.vertical);
+  const d = g.clock.dot * p.z;
+  const dark = darkness(t);
+  const breath = 0.5 + 0.5 * Math.sin((t / 90) * Math.PI * 2 - 1.2);
+  const hit = thump(t, M.ring) + 0.45 * thump(t, M.pickup);
+  const dotScale = 1 + 0.05 * breath + 0.42 * Math.max(-0.1, hit) + 0.12 * dark;
+  const bloom = 0.17 + 0.05 * breath + 0.22 * Math.max(0, Math.min(1, hit)) + 0.12 * dark;
+  const halo = d * (4.2 + 1.4 * dark);
   return (
     <>
-      {ringEl}
       {/* positioned by transform on its own small layer: it glides sub-pixel under the push and the rise */}
       <div
         style={{
