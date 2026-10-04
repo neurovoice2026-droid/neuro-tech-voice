@@ -219,7 +219,8 @@ export function filePose(t: number, S: ChangeStage, h: number) {
   const x = lerp(F.x, px, p);
   const y = lerp(F.y + F.rise * (1 - r), F.park.y, p);
   // the paper is opaque almost at once (its words rise in after it: FilePage.tsx) — never a page fading over the app
-  const opacity = ease(t, K.page[0], K.page[0] + 2.5, EASE.inOut);
+  // (whole-film pass: an ease-out over 1.5 frames; the inOut over 2.5 showed b12's text through the paper for 2 frames)
+  const opacity = ease(t, K.page[0], K.page[0] + 1.5, EASE.out3);
   return { x, y, k, w: F.w * k, h: h * k, lift: lerp(3 + 1.5 * (1 - r), 2.2, p), opacity, on: t >= K.page[0] - 0.01, moving: (r > 0 && Math.abs(1 - r) > 1e-4) || (p > 0 && Math.abs(1 - p) > 1e-4), p };
 }
 

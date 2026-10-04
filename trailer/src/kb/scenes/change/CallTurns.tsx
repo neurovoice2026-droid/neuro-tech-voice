@@ -5,8 +5,10 @@
  *   ● CALLER   Dana's IDENTICAL recording from the desk (b03's kb2-c2): "Quick one. / Can I pop in on Saturday?" (slate),
  *              her line's waveform under it — and on her last word the tag SAME QUESTION pops beside the label (16:9) /
  *              over it (9:16): label role on a white chip, sunday ink, the pair of b10's MATCHED ON MEANING
- *   ● AVA      her answer, rising as a unit on her first word: "You can! / We're open Saturday / from nine till four."
- *              (9:16: two lines) — "nine till four." easing into sunday on "nine"
+ *   ● AVA      her answer: "You can! / We're open Saturday / from nine till four." (9:16: two lines) — "nine till four."
+ *              easing into sunday on "nine"
+ *   Both turns rise LINE BY LINE, each line as a unit on its own first spoken word (Lines `wordAt`; whole-film pass:
+ *   a multi-sentence turn never shows words before the voice reaches them — "four." no longer reads 2.5 s early)
  *
  * The L-cut: nothing leaves on its own — the whole picture is carried out by the crossing's push (change/stage.ts
  * crossPush), the transcript with it.
@@ -79,7 +81,7 @@ export const CallTurns: React.FC<{ t: number; S: ChangeStage }> = ({ t, S }) => 
     <>
       <Tag t={t} x={C.x} y={C.caller.tag} align={C.align} name="CALLER" ink={CALLER.tag} at={K.callerTag} />
       <Chip t={t} x={chipX} y={chipY} align={C.align} at={K.chip} />
-      <Lines t={t} lines={C.callerLines} size={size} x={C.x} tops={C.caller.lines} align={C.align} color={CALLER.text} at={K.c2Words[0] - 1} />
+      <Lines t={t} lines={C.callerLines} size={size} x={C.x} tops={C.caller.lines} align={C.align} color={CALLER.text} at={K.c2Words[0] - 1} wordAt={K.c2Words} />
       <CallWave
         t={t}
         at={K.c2}
@@ -105,6 +107,7 @@ export const CallTurns: React.FC<{ t: number; S: ChangeStage }> = ({ t, S }) => 
         align={C.align}
         color={HOME.ink}
         at={K.call3Words[0] - 1}
+        wordAt={K.call3Words}
         ink={(i) => (KEY_WORDS.includes(i) && keyK > 0 ? mixHex(HOME.ink, SUNDAY, keyK) : null)}
       />
     </>

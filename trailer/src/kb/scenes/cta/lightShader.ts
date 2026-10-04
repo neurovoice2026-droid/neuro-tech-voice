@@ -93,9 +93,11 @@ void main() {
     vec2 R = vec2(uHaloR.x, mix(uHaloR.y, uHaloR.z, smoothstep(-0.6, 0.6, hd.y / max(uHaloR.y, 1.0))));
     vec2 q = hd / R;
     float hr = length(q);
+    // (past 1.75 every term below is under 1e-3 of a level: skip the work — the 4K master is software-rasterised)
+    if (hr < 1.75) {
     vec3 edgeC = L_EDGE;
     vec3 rimSum = vec3(0.0);
-    if (uRim.x > 0.0) {
+    if (uRim.x > 0.0 && hr > 0.5) {
       float a = atan(q.x, -q.y);                       // 0 at the top, clockwise
       const float ARC_A[4] = float[4](-0.785398, 0.785398, 2.356194, -2.356194);
       for (int i = 0; i < 4; i++) {
@@ -111,6 +113,7 @@ void main() {
     float fy = uFloor.x - uFloor.w * (hd.x / uHaloR.x) * (hd.x / uHaloR.x);
     halo *= 1.0 - uFloor.z * smoothstep(0.0, 1.0, (px.y - fy) / uFloor.y);
     light = halo * uHaloGain;
+    }
   }
 
   /* ---- the four lights' blooms ------------------------------------ */
@@ -120,10 +123,12 @@ void main() {
     vec4 g = uGlowP[i];
     if (g.w <= 0.0) continue;
     vec2 dd = (px - g.xy) / g.z;
-    glow += uGlowC[i] * (exp(-dot(dd, dd)) * g.w);
+    float d2 = dot(dd, dd);
     // its light falling on the ground round it: a wide, faint pool of the same light (a lamp in a room, not a halo)
-    vec2 dw = dd / uWide.x;
-    wide += uGlowC[i] * (exp(-dot(dw, dw)) * g.w * uWide.y);
+    float w2 = d2 / (uWide.x * uWide.x);
+    if (w2 > 9.0) continue;                          // (beyond 3σ of the wide pool: nothing of this light reaches here)
+    wide += uGlowC[i] * (exp(-w2) * g.w * uWide.y);
+    if (d2 < 9.0) glow += uGlowC[i] * (exp(-d2) * g.w);
   }
   vec3 col = screen(screen(light, wide), glow);
   float a = maxc(col);

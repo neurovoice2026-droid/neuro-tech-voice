@@ -125,8 +125,10 @@ export function leavePose(t: number, S: LineStage) {
 export function panelPose(t: number, S: LineStage) {
   const s = t < N.enter[0] ? 0 : springUnit(t - N.enter[0], RISE);
   const dy = S.panel.rise * (1 - s);
-  // it rises from enter[0] but only shows once the record has gone (leave[1] − 1): the two never sit on top of each other
-  const opacity = ease(t, Math.max(N.enter[0], N.leave[1] - 1), N.leave[1] + 3.5, EASE.inOut);
+  // it rises from enter[0] but only shows as the record goes (its last quarter-frame under 12 %): the two never sit on
+  // top of each other, and the stage is never left empty — a fast ease-out (whole-film pass: the old inOut over
+  // [5, 9.5] left ~1.8 frames with nothing but the ground between the two)
+  const opacity = ease(t, Math.max(N.enter[0], N.leave[1] - 1.25), N.leave[1] + 2, EASE.out3);
   return { dy, opacity, lift: 2.4 + 1.6 * (1 - s), on: t >= N.enter[0] - 0.01, moving: s > 0 && Math.abs(1 - s) > 1e-4 };
 }
 

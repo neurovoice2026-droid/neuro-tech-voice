@@ -1,6 +1,6 @@
 /**
  * b02–b04 · THE CALLER'S TURN (near plane): `● CALLER` (label role, slate) rises on the pickup, the
- * caller's line rises word by word on the real voice (the Captions fork, caption role, slate), and under it
+ * caller's line rises phrase by phrase on the real voice (the Captions fork, caption role, slate), and under it
  * the line's WAVEFORM (slate, the take's real envelope) draws out from the centre as the caller starts.
  * On the desk voice's first word the caption leaves up; the label and the line stay open (flat dots: the
  * caller listening) until the call is over — the slip lands — and draw back in. On the third call the line
@@ -20,6 +20,18 @@ import type { CallerSlot } from './desk';
 import { LineWave } from './LineWave';
 
 export const CALLER_INK = KB_INK.caller.paper;
+
+/** the caller's line as one caption per spoken phrase ("Hi!" · "Are you open on Saturdays?"): each rises on its own
+ *  first word and the first gives way to the next — a two-sentence line never shows the second before it is said
+ *  (whole-film pass; the house unit, as film 1's "Hi!" · "Could I come in on Wednesday afternoon?") */
+function phraseCaptions(voice: VoiceId) {
+  let word = 0;
+  return VOICE.lines[voice].phrases.map((p) => {
+    const c = { text: p.text, word };
+    word += p.text.split(' ').length;
+    return c;
+  });
+}
 
 export const CallerTurn: React.FC<{
   t: number;
@@ -66,7 +78,7 @@ export const CallerTurn: React.FC<{
         t={t}
         lineAt={at}
         voice={voice}
-        captions={[{ text: VOICE.lines[voice].say, word: 0 }]}
+        captions={phraseCaptions(voice)}
         x={slot.x}
         y={slot.rowY}
         maxWidth={slot.maxWidth}

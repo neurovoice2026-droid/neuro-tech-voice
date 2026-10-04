@@ -130,10 +130,6 @@ export function ctaLayout(vertical: boolean): CtaLayout {
 /* ── curves ─────────────────────────────────────────────────────── */
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
-/** a hit with an attack (film 1's orbit.ts): up over ≈ 1 frame, down over `decay`, normalised to peak 1 */
-const att = (u: number) => (u <= 0 ? 0 : 1 - Math.exp(-u / 0.5));
-const hitPeak = (D: number) => ((2 * D) / (1 + 2 * D)) * Math.pow(1 + 2 * D, -1 / (2 * D));
-export const hit = (u: number, decay = 3) => (u <= 0 || !Number.isFinite(u) ? 0 : (att(u) * Math.exp(-u / decay)) / hitPeak(decay));
 /** a light's arrival flash: up over ≈ 1.5 frames (6 render frames — a bloom, never a one-frame strobe), down over ≈ 4,
  *  normalised to peak 1 */
 const arrivalFlash = (u: number) => (u <= 0 ? 0 : ((1 - Math.exp(-u)) * Math.exp(-u / 4)) / 0.535);
@@ -171,7 +167,7 @@ export const brandEnv = (t: number) => envAt('kb2-brand', K.brand, t);
 /* ── the ground ─────────────────────────────────────────────────── */
 
 /** the night's level: the deep INK_MESH opened from b16's black to a night you can see the material in */
-const NIGHT = { brightness: 0.24, saturation: 1, shade: 0.2, key: 0.62 } as const;
+const NIGHT = { brightness: 0.24, saturation: 1, shade: 0.2, key: 0.8 } as const;
 const SUNDAY = MOMENT_LIGHTS.sunday;
 /** the backlight's light on the ground (its mid stop, the night's light #b298f6) */
 export const BACKLIGHT_MID = '#b298f6';
@@ -192,7 +188,10 @@ export function groundAt(t: number, G: CtaLayout, lights: LightState[]): GroundS
   const g0 = groundGrade(MATTERS_LOCAL.end);
   const up = EASE.inOut(clamp01((t - K.night[0]) / (K.night[1] - K.night[0])));
   const impact = t < K.impact ? 0 : springUnit(t - K.impact, BLOOM);
-  let brightness = mix(g0.brightness, NIGHT.brightness, up) + 0.035 * Math.min(1.2, impact);
+  // THE INHALE: as the four become one the room draws its breath — its light sinks toward the core's own, so the
+  // impact opens out of a darker room — and lets it go as the backlight opens
+  const inhale = t < K.impact ? tween(t, [K.merge[0], K.impact], [0, 1], EASE.in2) : Math.max(0, 1 - Math.min(1, impact));
+  let brightness = mix(g0.brightness, NIGHT.brightness, up) + 0.035 * Math.min(1.2, impact) - 0.07 * inhale;
   const saturation = mix(g0.saturation, NIGHT.saturation, up);
   const shade = mix(g0.shade, NIGHT.shade, up);
   // the key: on her dot, then on her orb as it opens (the light glides with it), then on the converging core,
@@ -206,7 +205,7 @@ export function groundAt(t: number, G: CtaLayout, lights: LightState[]): GroundS
   ky = mix(ky, G.P.y, toCore);
   const glow = clamp01(impact);
   const color = mixColor(mixColor(SUNDAY.orb[1], ALL_GLOW.body, 0.3 * toCore), BACKLIGHT_MID, glow);
-  const strength = mix(0.5, NIGHT.key, up) + 0.08 * glow;
+  const strength = (mix(0.5, NIGHT.key, up) + 0.08 * glow) * (1 - 0.4 * inhale);
   const radius = mix(G.keyR0, Math.sqrt(G.W * G.H) * 0.5, Math.max(0.4 * toCore, glow));
   brightness = rest(t, brightness, NIGHT.brightness + 0.035);
   return { brightness, saturation, shade, key: { x: kx, y: ky, strength, color, radius } };

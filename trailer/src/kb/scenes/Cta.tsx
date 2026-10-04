@@ -99,8 +99,9 @@ function buttonRect(G: CtaLayout): Rect {
 function cursorKeys(G: CtaLayout, r: Rect): CursorKey[] {
   const F = G.button.size;
   const spec = { size: F, weight: 500, tracking: parseFloat(TRACK.title) };
-  const gapX = r.x + 1.125 * F + measureText('Start free', spec) + 0.2 * F;
-  const target = { x: gapX, y: r.y + r.h * 0.56 };
+  // (the gap is .4em, and the hover moves the arrow .2em further on: the tip sits in the middle of it)
+  const gapX = r.x + 1.125 * F + measureText('Start free', spec) + 0.3 * F;
+  const target = { x: gapX, y: r.y + r.h * 0.6 };
   const entry = G.vertical ? { x: G.W + 60, y: target.y + 40 } : { x: G.W + 70, y: target.y + 60 };
   return [{ at: K.press - K.dwell - 40, x: entry.x, y: entry.y }, ...click(K.press, target.x, target.y, { dwell: K.dwell, hold: K.release - K.press })];
 }
@@ -205,6 +206,10 @@ export const Cta: React.FC = () => {
     seed: t,
   };
   const glOn = t >= K.lights[0] - 3;
+  // once the burst is over only the backlight is left in the context — a smooth light with no detail finer than
+  // ~100 px — so its canvas drops to half the device resolution (the compositor's bilinear upscale is exact for it:
+  // measured identical at 4K; ≈ .55 s/frame saved at --scale 2). The orbs always draw at full device resolution.
+  const glQuality = t < K.burst[1] + 1 ? 1 : 0.5;
 
   /* ── her dot (b16's, continuing exactly), until her light springs out of it ── */
   const dotO = 1 - tween(t, [K.lights[0] - 0.5, K.lights[0] + 3], [0, 1], EASE.inOut);
@@ -235,7 +240,7 @@ export const Cta: React.FC = () => {
           <TealDot t={MATTERS_LOCAL.end + t} g={mattersLayout(v)} />
         </AbsoluteFill>
       ) : null}
-      {glOn ? <LightGL width={L.width} height={L.height} u={u} orbs={orbs} /> : null}
+      {glOn ? <LightGL width={L.width} height={L.height} u={u} orbs={orbs} quality={glQuality} /> : null}
       {/* the type is the near plane: the lights pass behind it */}
       <Heading
         t={t}

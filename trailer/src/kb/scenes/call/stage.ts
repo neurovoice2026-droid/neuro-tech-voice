@@ -136,7 +136,7 @@ const STAGES: Record<'land' | 'vert', CallStage> = (() => {
       H: 1920,
       vertical,
       from,
-      orb: { a: { x: 540, y: 330, d: 206 }, dot: { x: 0, y: 236, d: 38 }, c: { x: 540, y: 330, d: 206 } },
+      orb: { a: { x: 540, y: 330, d: 206 }, dot: { x: 0, y: 260, d: 38 }, c: { x: 540, y: 330, d: 206 } },
       recede: { scale: 0.9, shade: 0.06, dx: 0, dy: 760 },
       strip: {
         align: 'center',
@@ -149,10 +149,11 @@ const STAGES: Record<'land' | 'vert', CallStage> = (() => {
         a1: { x: 540, tag: 500, lines: [540, 540 + lh], wave: 742 },
         a2: { x: 540, tag: 500, lines: [540, 540 + lh], wave: 742 },
         filler: { x: 540, tag: 812, lines: [852] },
-        b: { x: 540, tag: 296, lines: [336, 336 + lh], wave: 532 },
+        // the stop-time's frozen turn sits under the label (whole-film pass: label + turn 24 px lower, inside the 9:16 safe zone)
+        b: { x: 540, tag: 320, lines: [360, 360 + lh], wave: 556 },
         c: { x: 540, tag: 500, lines: [], y: 540 + (3 * lh) / 2, maxWidth: 900 },
       },
-      label: { x: 540, y: 236, align: 'center', gap: 16 },
+      label: { x: 540, y: 260, align: 'center', gap: 16 },
       questions: { x: 540, tops: [1206], size: 44, align: 'center' },
       page: { x: 64, y: 668, w: 816, size: 42, minH: 500 },
       rowFrom: null,

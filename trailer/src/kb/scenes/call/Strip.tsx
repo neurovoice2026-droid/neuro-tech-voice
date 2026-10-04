@@ -147,6 +147,10 @@ export const Lines: React.FC<{
   color: string;
   /** the turn rises at (its first spoken word) */
   at: number;
+  /** optional: each word's spoken onset (global index, same frame space as `t`). Given, the turn rises LINE BY LINE —
+   *  each line as a unit a frame before its own first word (a multi-sentence turn never shows words the voice has not
+   *  reached; whole-film pass) — instead of all at once at `at` */
+  wordAt?: readonly number[];
   exitAt?: number;
   /** per word (index across all lines) ink: a key colour easing in */
   ink?: (i: number) => string | null;
@@ -156,7 +160,7 @@ export const Lines: React.FC<{
   /** an underline under words (global indices, inclusive), drawn left → right over [at, at + dur], with a part of a
    *  word excluded at its end (e.g. the "?" of "weekend?") */
   underline?: { from: number; to: number; at: number; dur: number; color: string; trimEnd?: string };
-}> = ({ t, lines, size, x, tops, align, color, at, exitAt, ink, veil = 0, veilInk = '#8a8798', moving = false, underline }) => {
+}> = ({ t, lines, size, x, tops, align, color, at, wordAt, exitAt, ink, veil = 0, veilInk = '#8a8798', moving = false, underline }) => {
   const L = useLayout();
   useKitFaces();
   if (t < at - 1) return null;
@@ -169,9 +173,11 @@ export const Lines: React.FC<{
   const nodes = laid.map((lay, li) => {
     const left = align === 'center' ? x - lay.width / 2 : x;
     const top = tops[li];
+    // line by line (wordAt): the line rises a frame before its own first spoken word; else the turn at `at`
+    const lineAt = wordAt ? wordAt[gi] - 1 : at;
     const words = lay.words.map((w, k) => {
       const i = gi++;
-      const r = reveal(t, at + i * 0.5, { config: SPRING.caption, rise: 80, exit: exitAt !== undefined ? { at: exitAt + Math.min(1.4, i * 0.2), dur: 5 } : undefined });
+      const r = reveal(t, wordAt ? lineAt + k * 0.5 : at + i * 0.5, { config: SPRING.caption, rise: 80, exit: exitAt !== undefined ? { at: exitAt + Math.min(1.4, i * 0.2), dur: 5 } : undefined });
       let c = ink?.(i) ?? color;
       if (veil > 0.001) c = mixHex(c, veilInk, veil);
       // the underline: one span per line, from its first underlined word to its last (a trailing "?" left out)
@@ -183,7 +189,7 @@ export const Lines: React.FC<{
         if (sp) sp.x1 = x1;
         else spans[li] = { x0, x1, top, r };
       }
-      const hold = moving || t - at < 16 || (exitAt !== undefined && t > exitAt - 1);
+      const hold = moving || t - lineAt < 16 || (exitAt !== undefined && t > exitAt - 1);
       return (
         <span key={k} style={{ ...maskBox(k === lay.words.length - 1 ? 0 : 0), position: 'absolute', left: w.x, top: 0 }}>
           <span style={{ ...revealStyle(r, undefined, hold), color: c }}>{w.text}</span>
