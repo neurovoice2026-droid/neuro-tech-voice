@@ -402,6 +402,40 @@ function slipSlide(seed, k, pk) {
   return spread(filt(m, ['hp', 450, 0.7], ['lp', 10000, 0.7]), 0.4, seed + 3);
 }
 
+/**
+ * b16's old slips gliding off as ONE long glide (≈ .9 s): `sh` = T.MUSIC.fx.slipGlide (frames from the stack's lift: the
+ * first glide's start, a glide's length, the stagger, the slips). Each slip is a soft paper friction plus a breath of air
+ * whose level follows its OWN in-out speed (0 → peak at mid-glide → 0) and whose band rises with it (the paper leaving the
+ * pad, then cutting the air), and a tiny lift tick as it comes off the pile. Summed, the sound swells with the ease and
+ * peaks where the cascade moves fastest (T.SFX pk, the speeds' centre); it ends as the last slip leaves the frame.
+ */
+function slipGlide(seed, sh, FPS) {
+  const g = sh.glide / FPS;
+  const st = sh.stagger / FPS;
+  const lead = sh.lead / FPS;
+  const len = lead + (sh.n - 1) * st + g + 0.22;
+  const m = mono(len);
+  const r = rng(seed);
+  for (let i = 0; i < sh.n; i++) {
+    const t0 = lead + i * st;
+    // the in-out cubic's speed, normalised to 1 at mid-glide (EASE.inOut ≈ 4u³ / 1 − (−2u + 2)³ / 2)
+    const v = (t) => {
+      const u = (t - t0) / g;
+      if (u <= 0 || u >= 1) return 0;
+      return u < 0.5 ? 4 * u * u : 4 * (1 - u) * (1 - u);
+    };
+    const gain = 0.82 + 0.3 * r();
+    const tilt = (r() - 0.5) * 300;
+    // the paper on the pile, then leaving it: friction whose band climbs with the speed
+    mixIn(m, friction(len, seed + 11 * i, { f: (t) => 1500 + tilt + 2300 * v(t), q: 0.75, a: (t) => gain * Math.pow(v(t), 1.25), grain: 0.5 }), 0, 0.85);
+    // the air it cuts: a brighter breath that only comes in at speed
+    mixIn(m, friction(len, seed + 11 * i + 5, { f: (t) => 4200 + 2600 * v(t), q: 0.6, a: (t) => gain * Math.pow(v(t), 2.2), grain: 0.3, color: 'pink' }), 0, 0.42);
+    // the slip coming off the pile (its 4-frame lift, half a stagger apart): a dry tick
+    mixIn(m, noise(0.02, seed + 11 * i + 7, ad(0.0003, 0.0018), 'bpn', 3000 + 250 * i, 1), 0.5 * i * st, 0.08);
+  }
+  return spread(filt(m, ['hp', 420, 0.7], ['lp', 11000, 0.7]), 0.45, seed + 97);
+}
+
 /** A ceramic cup set down on a wooden desk: the contact, the cup's brief ring, the desk's knock and thud, a rock onto its rim. */
 function cup(seed) {
   const len = 0.5;
@@ -764,6 +798,7 @@ const MAKE = {
   'fx-rolls': (k, c) => rollsMontage(c.fx, c.FPS),
   'fx-slip': (k) => slip(5401 + k * 11, k),
   'fx-slip-slide': (k, c) => slipSlide(5501 + k * 11, k, c.pk),
+  'fx-slip-glide': (k, c) => slipGlide(5551, c.fx.slipGlide, c.FPS),
   'fx-cup': () => cup(5601),
   'fx-pen': () => pen(5701),
   'fx-roomtone': (k, c) => roomTone(5801, (c.fx.room[1] - c.fx.room[0]) / c.FPS, 0.4, 2.5),
@@ -800,6 +835,8 @@ const MAKE = {
   'fx-pluck-fs5': () => pluckNote(78, 7806, { bright: 0.8, tau: 0.5 }),
   'fx-pluck-gs5': () => pluckNote(80, 7807, { bright: 0.8, tau: 0.5 }),
   'fx-pluck-b5': () => pluckNote(83, 7808, { bright: 0.8, tau: 0.5 }),
+  // b14's accent on "four.": the same nylon pluck an octave over b10's E5 (clear of the vowel's formants)
+  'fx-pluck-e6': () => pluckNote(88, 7809, { bright: 0.8, tau: 0.5 }),
   'fx-paper-lift': (k) => paperLift(7901 + k * 7, k),
   'fx-record': () => record(8001),
   'fx-tag': () => tag(8501),

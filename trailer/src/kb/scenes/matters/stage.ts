@@ -11,10 +11,15 @@
  *                             card (zoom 1 → 1.05 on the near plane), anchored on the card's text axis (16:9: the
  *                             card grows, the clock and the paper slide out right); 9:16 also reframes the desk
  *                             down under the title
+ *   deskStep(t, vertical)     b16 "That's": the desk steps back (SPRING.site, Part I's step back) about the layout's
+ *                             recede anchor — the thesis takes the frame, the person's card and its reply under it
+ *   deskToScreen(...)         a desk-local point → the screen (the step back, then the camera)
  *   toScreen(...)             a plane point → the screen (Camera/Layer maths)
  *   dotAt(t, vertical)        the teal dot on screen (the clock's colon; 9:16: it rises above the title in b16)
  *   stackSlip(i, t, vertical) slip i of the old stack (0 = the top one): its rest in the pile, then the cascade
- *   darkness(t)               0 → 1 across the last three beats (EASE.inOut), and the ground's grade from it
+ *   darkness(t)               0 → 1 across the last three beats (a sine in-out), and the ground's grade from it
+ *   closingAt(t, vertical)    the dark as a CLOSING KEY: the room's light pulled in from the frame's far edges onto
+ *                             the teal dot (a soft radial edge: lit inside `ri`, night beyond `ro`, `mid` its half)
  *
  * PLANES (b01's): ground (the mesh — here screen-fixed: it has no detail to parallax), desk 0.6 (the card, its
  * reply, the pad, the old stack), near 1.0 (the clock lockup). The title is a screen graphic (it never zooms).
@@ -37,8 +42,14 @@ export type MattersLayout = {
   stack: Box & { rot: number; padX: number; padTop: number; size: number };
   /** the pad's top sheet (desk plane): under the old slips, empty once they have gone */
   pad: Box;
-  /** b16's title: its left edge (on the card's text axis) and the first line box's top */
-  title: { x: number; y: number };
+  /** b16's thesis: its left edge (the stepped-back card's edge), the first line box's top, its size (the display role,
+   *  set a step up for the film's one thesis: ×1.125 16:9 / ×1.07 9:16) and the words of each line (vo-8's 7 words) */
+  title: { x: number; y: number; size: number; lines: readonly (readonly number[])[] };
+  /** b16's step back (desk plane): the scale the desk steps back to, the point it steps back about, its shade, and how
+   *  far the paper (the pad and the old slips) rises on the desk as it does (desk px: it keeps a bottom margin) */
+  recede: { s: number; ax: number; ay: number; shade: number; padDy: number };
+  /** the old slips' way out (screen px): the arc's control point and the exit beyond the frame edge */
+  slipOut: { cx: number; cy: number; ex: number; ey: number; shrink: number };
   /** 9:16: where the teal dot rises to in b16 (screen px) */
   dotTop: { x: number; y: number } | null;
 };
@@ -85,7 +96,12 @@ const LAND: MattersLayout = (() => {
     reply: { x: card.x + card.padX, labelY, rowY: labelY + 30 * 1.2 + 10, rowH },
     stack: { x: pad.x + 18, y: pad.y - 16, w: 540, h: 288, padX: 50, padTop: 40, size: 64, rot: -2.2 },
     pad,
-    title: { x: card.x + card.padX, y: 92 },
+    // the thesis: a clean left block on the stepped-back card's edge, its caps 120 px under the frame's top
+    title: { x: 160, y: 104, size: 144, lines: [[0, 1, 2], [3, 4, 5, 6]] },
+    // the card's edge lands on x 160 under the title's caps, its top 80 px under the title's descenders
+    recede: { s: 0.84, ax: 288, ay: 1091, shade: 0.06, padDy: -50 },
+    // up and to the right, past her dot (clear of the thesis' last word) and out over the top edge
+    slipOut: { cx: 1760, cy: 700, ex: 1800, ey: -260, shrink: 0.8 },
     dotTop: null,
   };
 })();
@@ -106,7 +122,11 @@ const VERT: MattersLayout = (() => {
     reply: { x: card.x + card.padX, labelY, rowY: labelY + 28 * 1.2 + 10, rowH },
     stack: { x: pad.x + 14, y: pad.y - 14, w: 480, h: 262, padX: 44, padTop: 36, size: 56, rot: -2 },
     pad,
-    title: { x: card.x + card.padX, y: 300 },
+    // three lines (the 9:16 measure), on the stepped-back card's edge, under the risen dot
+    title: { x: 140, y: 256, size: 120, lines: [[0, 1, 2], [3, 4], [5, 6]] },
+    recede: { s: 0.84, ax: 540, ay: 1172, shade: 0.06, padDy: -30 },
+    // out through the right edge, rising (the script's 9:16: "slips leave to the right") — under the reply's last word
+    slipOut: { cx: 1010, cy: 1400, ex: 1400, ey: 1090, shrink: 0.82 },
     dotTop: { x: 540, y: 214 },
   };
 })();
@@ -165,6 +185,47 @@ export const toScreen = (cam: Pose, vertical: boolean, depth: number, x: number,
   return { x: W / 2 + z * (x - W / 2) - cam.x * depth, y: H / 2 + z * (y - H / 2) - cam.y * depth, z };
 };
 
+/* ── b16's step back ──────────────────────────────────────────────── */
+
+/** SPRING.site in closed form (k 300, c 22, m 1: one 7.5 % overshoot — Part I's step back), at 30 fps */
+const site = (dt: number) => {
+  if (dt <= 0) return 0;
+  const tt = dt / 30;
+  const w0 = Math.sqrt(300);
+  const z = 22 / (2 * Math.sqrt(300));
+  const wd = w0 * Math.sqrt(1 - z * z);
+  return 1 - Math.exp(-z * w0 * tt) * (Math.cos(wd * tt) + ((z * w0) / wd) * Math.sin(wd * tt));
+};
+
+export type DeskStep = { s: number; ax: number; ay: number; shade: number; k: number; padDy: number };
+
+/** The desk's step back at t (desk plane: scale `s` about (ax, ay)), its shade, the paper's rise (desk px) and the
+ *  spring's progress `k`. */
+export const deskStep = (t: number, vertical: boolean): DeskStep => {
+  const r = mattersLayout(vertical).recede;
+  const k = site(t - M.recede);
+  return { s: 1 - (1 - r.s) * k, ax: r.ax, ay: r.ay, shade: r.shade * Math.min(1, Math.max(0, k)), k, padDy: r.padDy * k };
+};
+
+/** A desk-local point → the screen: the step back (desk plane), then the camera (the desk Layer). */
+export const deskToScreen = (t: number, vertical: boolean, x: number, y: number) => {
+  const st = deskStep(t, vertical);
+  const p = toScreen(mattersCam(t, vertical), vertical, PLANE.desk, st.ax + st.s * (x - st.ax), st.ay + st.s * (y - st.ay));
+  return { x: p.x, y: p.y, z: p.z * st.s };
+};
+
+/** The screen → a desk-local point (the inverse of deskToScreen). */
+export const screenToDesk = (t: number, vertical: boolean, x: number, y: number) => {
+  const st = deskStep(t, vertical);
+  const cam = mattersCam(t, vertical);
+  const W = vertical ? 1080 : 1920;
+  const H = vertical ? 1920 : 1080;
+  const z = 1 + (cam.zoom - 1) * PLANE.desk;
+  const px = W / 2 + (x + cam.x * PLANE.desk - W / 2) / z;
+  const py = H / 2 + (y + cam.y * PLANE.desk - H / 2) / z;
+  return { x: st.ax + (px - st.ax) / st.s, y: st.ay + (py - st.ay) / st.s };
+};
+
 /* ── the teal dot ─────────────────────────────────────────────────── */
 
 /** 9:16: how far the dot has risen off the clock (0 … 1) */
@@ -194,11 +255,17 @@ const PILE = [
 
 export type StackPose = { dx: number; dy: number; rot: number; lift: number; scale: number };
 
+/** a quadratic Bézier, one coordinate */
+const bez = (a: number, b: number, c: number, u: number) => (1 - u) * (1 - u) * a + 2 * u * (1 - u) * b + u * u * c;
+
 /**
- * Slip i of the old stack at t (offsets from the layout's stack place, desk-plane px). At rest a squared pile,
- * its edges showing. On "do." it lifts (a 3-frame rise off the desk: scale 1.015, the shadow opening) and the
- * slips glide off one after another (`stagger`), EASE.inOut — off the right edge, rising toward the teal dot's side
- * of the frame (16:9 under the clock, never through its type), uncovering the empty pad.
+ * Slip i of the old stack at t (offsets from the layout's stack place, desk-plane px, before the step back's scale is
+ * undone — they are desk-local). At rest a squared pile, its edges showing. A beat's fifth after "do." it lifts (a 4-frame
+ * rise off the pad: scale 1.015, the shadow opening) and the slips glide off one after another (`stagger`), each gone in
+ * 8 frames, EASE.inOut, on an ARC up toward the teal dot (16:9: up and right, past the dot, out over the top edge, clear
+ * of the thesis; 9:16: out through the right edge, rising), shrinking a little as they go — the path is laid in SCREEN
+ * px (where the dot and the frame edge are) and brought back into the desk plane, so it holds under the step back and
+ * the push.
  */
 export function stackSlip(i: number, t: number, vertical: boolean): StackPose {
   const g = mattersLayout(vertical);
@@ -207,15 +274,19 @@ export function stackSlip(i: number, t: number, vertical: boolean): StackPose {
   const lift = out3((t - s.lift - i * s.stagger * 0.5) / 4);
   const a = s.glide[0] + i * s.stagger;
   const u = inOut((t - a) / (s.glide[1] - s.glide[0]));
-  // the travel: off the right edge with a margin, rising toward the clock's side of the frame (in desk-plane px;
-  // the push only grows it on screen) — under the clock, never through its type
-  const travel = vertical ? { x: g.W - g.stack.x + 140, y: -170 } : { x: g.W - g.stack.x + 160, y: -120 };
+  const rest = { dx: p.dx, dy: p.dy + deskStep(t, vertical).padDy, rot: g.stack.rot + p.rot, lift: 0.4 + 1.4 * lift, scale: 1 + 0.015 * lift };
+  if (u <= 0) return rest;
+  // the slip's centre at rest, on screen (this frame's step back and camera), then along the arc
+  const c0 = { x: g.stack.x + rest.dx + g.stack.w / 2, y: g.stack.y + rest.dy + g.stack.h / 2 };
+  const S = deskToScreen(t, vertical, c0.x, c0.y);
+  const o = g.slipOut;
+  const q = screenToDesk(t, vertical, bez(S.x, o.cx, o.ex, u), bez(S.y, o.cy, o.ey, u));
   return {
-    dx: p.dx * (1 - 0.6 * u) + travel.x * u,
-    dy: p.dy * (1 - 0.6 * u) + travel.y * u,
-    rot: g.stack.rot + p.rot - 2.2 * u,
-    lift: 0.4 + 1.4 * lift,
-    scale: 1 + 0.015 * lift,
+    dx: q.x - g.stack.w / 2 - g.stack.x,
+    dy: q.y - g.stack.h / 2 - g.stack.y,
+    rot: rest.rot - 5 * u,
+    lift: rest.lift,
+    scale: rest.scale * (1 - (1 - o.shrink) * u),
   };
 }
 
@@ -223,7 +294,7 @@ export function stackSlip(i: number, t: number, vertical: boolean): StackPose {
 
 /** 0 → 1 across the darkening (the last three beats): a sine in-out — the light dims evenly across all three beats */
 export const darkness = (t: number) => 0.5 - 0.5 * Math.cos(Math.PI * clamp01((t - M.dark[0]) / (M.dark[1] - M.dark[0])));
-/** the desk's type and the clock fade with the light (they are gone a few frames before the cut) */
+/** the clock's last guard (it has left up through its masks long before the dark) */
 export const typeFade = (t: number) => 1 - smoothstep(M.fade[0], M.fade[1], t);
 /** the ground's hand-off into the night: the light dims as one (brightness ∝ the darkness), the lit shade goes out
  *  first, the lift with the light; the night's violet comes in late and only into the dark — never a lavender wash over
@@ -234,10 +305,46 @@ export const groundGrade = (t: number) => {
   // (the night's violet at half chroma: an indigo bias in the dark, not a purple glow)
   return { lift: 1 - d, brightness: 1 - 0.93 * Math.pow(d, 0.85), mix, shade: 1 - smoothstep(0, 0.6, d), saturation: 1 - 0.55 * mix };
 };
-/** the paper sinks into the night WITH the room (its shade tracks the ground's light), then is gone into it before the
- *  cut (its opacity) — a silhouette going out, never a half-transparent card */
-export const paperShade = (t: number) => 0.97 * Math.min(1, 1.25 * darkness(t));
-export const paperFade = (t: number) => 1 - smoothstep(0.5, 0.95, darkness(t));
+
+/**
+ * THE CLOSING KEY (the dark's shape): the room's light is pulled in from the frame's far edges onto her dot — lit inside
+ * `ri`, night beyond `ro` (a smoothstep between: a deep soft falloff, a vignette, never an iris's edge), `mid` its half. It starts with `ri` past the farthest corner (nothing has changed) and lands with `ro` at 0 (only the night
+ * and the dot's own key pool are left: b17's first picture). Progress is darkness(t) — even across the three beats.
+ * null before the dark.
+ */
+export type Closing = {
+  x: number;
+  y: number;
+  ri: number;
+  ro: number;
+  mid: number;
+  c: number;
+  /** how much of the lit room is left at the core (1 → 0 over the dark's last third: the core gives way to the night's
+   *  own teal key pool on the dot, never a lit disc) */
+  a: number;
+  /** the radius where the room's light falls to half — where type turns from ink to the night's (-1: nowhere, all night) */
+  edge: number;
+};
+/** the inverse of smoothstep on [0, 1] */
+const invSmooth = (y: number) => 0.5 - Math.sin(Math.asin(1 - 2 * Math.min(1, Math.max(0, y))) / 3);
+export const closingAt = (t: number, vertical: boolean): Closing | null => {
+  if (t <= M.dark[0]) return null;
+  const c = darkness(t);
+  const d = dotAt(t, vertical);
+  const W = vertical ? 1080 : 1920;
+  const H = vertical ? 1920 : 1080;
+  const far = Math.max(Math.hypot(d.x, d.y), Math.hypot(W - d.x, d.y), Math.hypot(d.x, H - d.y), Math.hypot(W - d.x, H - d.y));
+  // a vignette, not an iris: the dark rises out of the corners over a falloff ~2.4× as deep as the lit core, and the
+  // whole of it contracts onto the dot (faster at first: the frame's far reaches go while the thesis still reads)
+  const k = Math.pow(1 - c, 1.4);
+  const ri = far * k;
+  const ro = (2.4 * far + 40) * k;
+  const a = 1 - smoothstep(0.6, 0.9, c);
+  const edge = a <= 0.5 ? -1 : ri + (ro - ri) * invSmooth(1 - 0.5 / a);
+  return { x: d.x, y: d.y, ri, ro, mid: (ri + ro) / 2, c, a, edge };
+};
+/** how lit a screen point is under the closing key (1 = the room's light, 0 = night) */
+export const litAt = (cl: Closing | null, x: number, y: number) => (cl ? cl.a * (1 - smoothstep(cl.ri, cl.ro, Math.hypot(x - cl.x, y - cl.y))) : 1);
 
 /* ── the neighbours ─────────────────────────────────────────────── */
 

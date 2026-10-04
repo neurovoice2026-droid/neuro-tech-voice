@@ -2,13 +2,16 @@
  * PART III · b12 · YOUR LINE (SCRIPT.md b12; CLIENT DIRECTION v2) — "If it isn't written down, I say so, in the words you
  * chose."
  *
- *   0 (bar)    b11's last picture: the call's record row and its page leave up; the agent page rises in under them (the
- *              app of b08, its real tab bar, Knowledge's badge at 4) on its Conversation tab — "When your agent can't
- *              help", the field "When the answer isn't in your documents" with the product's default line as grey
- *              placeholder, the SaveBar (Discard · Save changes, disabled). The pointer rides in on the page, an I-beam
- *              over the field. Ava's orb glides to her corner, small, and dims to rest: these are not her words
+ *   0 (bar)    b11's last picture: the agent page comes up from below the frame's bottom edge, opaque, OVER the call's
+ *              record row, which steps back (× .92) and goes — a card stack, no dissolve (stage.ts scrollAmount). The
+ *              page is the app of b08 (its real tab bar, Knowledge's badge at 4) on its Conversation tab — "When your
+ *              agent can't help", the field "When the answer isn't in your documents" with the product's default line as
+ *              grey placeholder, the SaveBar (Discard · Save changes, disabled). The pointer is on the page: it enters
+ *              through the bottom edge with it. Ava's orb glides to her corner, small, and dims to rest: these are not
+ *              her words
  *   caret      the I-beam presses (.9; focus ring, caret) and releases — the caret clicks in
- *   the words  the owner's line, ONE WORD PER 16th (22), each rising into its mask; the placeholder clears on the first;
+ *   the words  the owner's line, ONE WORD PER 16th (22), each appearing IN PLACE as a real field shows a keystroke (no
+ *              rise; the caret jumps after the last half-visible word — kit/typed.ts); the placeholder clears on the first;
  *              the amber unsaved-changes dot opens on the Conversation tab (the tabs after it slide over) and Discard /
  *              Save changes wake. Nothing else moves, nothing is narrated (one text moves at a time)
  *   Save       the pointer comes back off the keys as the last words land, hovers Save changes (it darkens), presses
@@ -60,18 +63,16 @@ export const Line: React.FC = () => {
   const gc = groundCam(cam, S);
   const orbOnScreen = camToScreen(cam, S, orb);
   const orbOnGround = { ...gc.fromScreen(orbOnScreen), d: (orb.d * cam.zoom) / gc.zoom };
-  const plane = planeStyle(cam, S);
+  const plane = planeStyle(cam);
   return (
     <AbsoluteFill>
       <AbsoluteFill style={gc.css ? { transform: gc.css, transformOrigin: '50% 50%' } : undefined}>
         <LineGround t={t} S={S} orb={orbOnGround} />
       </AbsoluteFill>
       <Handoff t={t} S={S} ink={INK} />
-      <AbsoluteFill style={plane.outer}>
-        <AbsoluteFill style={plane.inner}>
-          <LinePanel t={t} S={S} G={G} ink={INK} accent={SUNDAY} />
-          <LineOrb t={t} S={S} pose={orb} />
-        </AbsoluteFill>
+      <AbsoluteFill style={plane}>
+        <LinePanel t={t} S={S} G={G} ink={INK} accent={SUNDAY} />
+        <LineOrb t={t} S={S} pose={orb} />
       </AbsoluteFill>
       <Captions
         t={t}

@@ -105,8 +105,9 @@ const STAGES: Record<'land' | 'vert', ChangeStage> = (() => {
         H: 1080,
         vertical,
         orb: { a: E.orb, b: E.orb, c: { x: 210, y: 158, d: 130 } },
-        file: { x: 676, y: 180, w: 1040, size: 64, rise: 90, park: { right: E.panel.x + E.panel.w, y: 26, k: 0.4 } },
-        panel: { x: E.panel.x, y: 284, w: E.panel.w, radius: E.panel.radius, rise: 240 },
+        // parked: ≥ 80 px under the frame's top, ≈ 23 px clear of the panel's top edge (284)
+        file: { x: 676, y: 180, w: 1040, size: 64, rise: 48, park: { right: E.panel.x + E.panel.w, y: 80, k: 0.3 } },
+        panel: { x: E.panel.x, y: 284, w: E.panel.w, radius: E.panel.radius, rise: 90 },
         tabs: E.tabs,
         pad: 48,
         heading: 36,
@@ -127,7 +128,7 @@ const STAGES: Record<'land' | 'vert', ChangeStage> = (() => {
         },
         // the Saturday line level with her "We're open Saturday" row (centre 602 + 1.5 lh = 737)
         page: { x: 1090, y: 450, w: 720, size: 46 },
-        cross: { axis: 'x', feather: 180 },
+        cross: { axis: 'x', feather: 110 },
       };
     }
     const size = 68;
@@ -137,8 +138,9 @@ const STAGES: Record<'land' | 'vert', ChangeStage> = (() => {
       H: 1920,
       vertical,
       orb: { a: E.orb, b: { x: 282, y: 352, d: 140 }, c: { x: 540, y: 300, d: 140 } },
-      file: { x: 64, y: 480, w: 952, size: 56, rise: 110, park: { right: E.panel.x + E.panel.w, y: 220, k: 0.5 } },
-      panel: { x: E.panel.x, y: 524, w: E.panel.w, radius: E.panel.radius, rise: 300 },
+      // parked: 220 px under the frame's top, ≈ 40 px clear of the panel's top edge (524)
+      file: { x: 64, y: 480, w: 952, size: 56, rise: 56, park: { right: E.panel.x + E.panel.w, y: 220, k: 0.5 } },
+      panel: { x: E.panel.x, y: 524, w: E.panel.w, radius: E.panel.radius, rise: 110 },
       tabs: E.tabs,
       pad: 38,
       heading: 34,
@@ -158,7 +160,7 @@ const STAGES: Record<'land' | 'vert', ChangeStage> = (() => {
         chip: { mode: 'above', y: 402 },
       },
       page: { x: 120, y: 1020, w: 840, size: 46 },
-      cross: { axis: 'y', feather: 180 },
+      cross: { axis: 'y', feather: 110 },
     };
   };
   return { land: make(false), vert: make(true) };
@@ -203,33 +205,66 @@ export function rowSlot(k: number, t: number) {
 
 /* ── the moves ──────────────────────────────────────────────────── */
 
-/** b12's agent page sinking back (0 → 1): scale .94 about its centre, down a little, gone by handoff[1] */
-export function handoffPose(t: number) {
-  const q = ease(t, K.handoff[0], K.handoff[1], EASE.in2);
-  return { q, scale: lerp(1, 0.94, q), dy: 36 * q, opacity: 1 - ease(t, K.handoff[0] + 1, K.handoff[1] - 1, EASE.inOut), on: q < 1, moving: q > 0 && q < 1 };
+/**
+ * b12's agent page LEAVING (critic fix, build B): it recedes a depth (scale .9 about its centre, a soft start from b12's
+ * rest), takes a shade and eases out to the left (accelerating away), its opacity gone by the time the owner's file starts to show — two white cards
+ * never overlap (it is at ≈ 7 % and going when the file starts to ease in at K.page[0], gone a frame later).
+ */
+/** an exit from rest: no velocity on its first frame, accelerating away */
+const LEAVE = Easing.bezier(0.5, 0, 0.75, 0);
+
+export function handoffPose(t: number, S: ChangeStage) {
+  const u = ease(t, K.handoff[0], K.handoff[1], LEAVE);
+  const d = ease(t, K.handoff[0], K.handoff[1], EASE.inOut);
+  const far = S.vertical ? 320 : 560;
+  return {
+    q: u,
+    dx: -far * u,
+    scale: lerp(1, 0.9, d),
+    shade: 0.06 * d,
+    opacity: 1 - ease(t, K.handoff[0] + 0.5, K.page[0] + 1, EASE.inOut),
+    on: t < K.page[0] + 1,
+    moving: t > K.handoff[0] && t < K.handoff[1],
+  };
 }
 
-/** the owner's file: rising in (A), then stepping up into its parked corner (B) — a transform about its top-left */
+/** the park's scale + rise (they lead: the file is small and above the panel's top edge before it has finished
+ *  travelling right) and its sideways glide */
+const PARK_LEAD = Easing.bezier(0.215, 0.61, 0.355, 1);
+
+/**
+ * The owner's file: easing in (A) — opacity over 4 frames as it rises a little on a landing spring, its words rising
+ * inside it (FilePage.tsx) — then stepping up into its parked corner (B): the scale and the rise on a quick ease-out
+ * (8.5 f), the sideways travel after them (an in-out from 2.5 f in), so the paper shrinks up off the panel first and
+ * then runs in to its corner above the panel's top edge — never sliding across the tab bar.
+ * A transform about its top-left.
+ */
 export function filePose(t: number, S: ChangeStage, h: number) {
   const r = t < K.page[0] ? 0 : springUnit(t - K.page[0], RISE);
-  const p = t < K.park[0] ? 0 : springUnit(t - K.park[0], GLIDE);
+  const ps = t < K.park[0] ? 0 : PARK_LEAD(Math.min(1, (t - K.park[0]) / 8.5));
+  // 16:9: up first (the rise with the scale), across after — clear of the panel's tab bar for its whole run-in.
+  // 9:16: across first (the glide), up after — the file passes right of Ava's orb as she moves into the corner it
+  // leaves, never over her
+  const px = S.vertical ? (t < K.park[0] ? 0 : springUnit(t - K.park[0], GLIDE)) : ease(t, K.park[0] + 2.5, K.park[0] + 13, EASE.inOut);
+  const py = S.vertical ? ease(t, K.park[0] + 3, K.park[0] + 14, EASE.inOut) : ps;
   const F = S.file;
-  const k = lerp(1, F.park.k, p);
-  const px = F.park.right - F.w * F.park.k;
-  const x = lerp(F.x, px, p);
-  const y = lerp(F.y + F.rise * (1 - r), F.park.y, p);
-  // the paper is opaque almost at once (its words rise in after it: FilePage.tsx) — never a page fading over the app
-  // (whole-film pass: an ease-out over 1.5 frames; the inOut over 2.5 showed b12's text through the paper for 2 frames)
-  const opacity = ease(t, K.page[0], K.page[0] + 1.5, EASE.out3);
-  return { x, y, k, w: F.w * k, h: h * k, lift: lerp(3 + 1.5 * (1 - r), 2.2, p), opacity, on: t >= K.page[0] - 0.01, moving: (r > 0 && Math.abs(1 - r) > 1e-4) || (p > 0 && Math.abs(1 - p) > 1e-4), p };
+  const k = lerp(1, F.park.k, ps);
+  const parkX = F.park.right - F.w * F.park.k;
+  const x = lerp(F.x, parkX, px);
+  const y = lerp(F.y + F.rise * (1 - r), F.park.y, py);
+  const opacity = ease(t, K.page[0], K.page[0] + 4, EASE.draw);
+  const p = Math.min(ps, px);
+  const moving = (r > 0 && Math.abs(1 - r) > 1e-4) || (t >= K.park[0] && (ps < 1 - 1e-4 || Math.abs(1 - px) > 1e-4 || py < 1 - 1e-4));
+  return { x, y, k, w: F.w * k, h: h * k, lift: lerp(3 + 1.5 * (1 - r), 2.2, ps), opacity, on: t >= K.page[0] - 0.01, moving, p };
 }
 
-/** the agent page: rising on Knowledge (B), then stepping back a depth and sliding away down (C) */
+/** the agent page: rising on Knowledge BEHIND the file while the owner types (B, at rest before the pointer leaves for
+ *  its …), then stepping back a depth and sliding away down (C) */
 export function appPose(t: number, S: ChangeStage) {
   const r = t < K.app[0] ? 0 : springUnit(t - K.app[0], RISE);
   const u = ease(t, K.recede[0], K.recede[1], RECEDE);
   const dy = S.panel.rise * (1 - r) + (S.vertical ? 1100 : 760) * u;
-  const opacity = ease(t, K.app[0], K.app[0] + 3, EASE.inOut) * (1 - ease(t, K.recede[0] + 4, K.recede[0] + 18, EASE.inOut));
+  const opacity = ease(t, K.app[0], K.app[0] + 4, EASE.inOut) * (1 - ease(t, K.recede[0] + 4, K.recede[0] + 18, EASE.inOut));
   return { dy, scale: lerp(1, 0.9, u), shade: 0.06 * u, lift: 2.4 + 1.6 * (1 - r), opacity, u, on: t >= K.app[0] - 0.01 && u < 0.999, moving: (r > 0 && Math.abs(1 - r) > 1e-4) || (u > 0 && u < 1) };
 }
 
@@ -243,15 +278,25 @@ export function orbPose(t: number, S: ChangeStage) {
   return { x: at('x'), y: at('y'), d: at('d'), moving: !(settled(b) && settled(c)) };
 }
 
+/** the L-cut's travel: both pictures move this share of the frame (the soft edge does the rest of the hand-over) */
+export const CROSS_TRAVEL = 0.4;
+
 /**
- * The L-cut's push (0 → 1 over CHANGE_LOCAL.cross, EASE.inOut: a slow start — the sweep on "four." reads — then decisive,
- * landing at rest on the act's last frame): this act's whole picture slides out against the reading direction (16:9
- * left, 9:16 up) as b15's desk slides in behind its leading edge — a camera crossing back to the desk, one pan.
+ * The L-cut's push (critic fix, build B): ONE curve p (0 → 1 over CHANGE_LOCAL.cross, 24 frames, a sine in-out — the
+ * gentlest peak for the distance) drives everything: this act's picture slides out against the reading direction (16:9
+ * left, 9:16 up) by 40 % of the frame while b15's desk slides in by the same 40 % behind a soft edge of CONSTANT width
+ * (`feather`) that crosses the frame on the same p — the two grounds hand over under it. `edge` is where (screen px along
+ * the axis) the desk is fully opaque from; the ramp runs over [edge − feather, edge]. At p = 0 the ramp is past the far
+ * side (nothing of the desk shows); at p = 1 it is past the near side and the desk sits at rest: the cut is the same
+ * picture. Peak: 16:9 content ≈ 12.6 px, the edge ≈ 34 px per 120 fps frame.
  */
 export function crossPush(t: number, S: ChangeStage) {
   const far = S.cross.axis === 'x' ? S.W : S.H;
-  const p = ease(t, K.cross[0], K.cross[1], EASE.inOut);
-  return { p, out: -far * p, in: far * (1 - p), on: t >= K.cross[0] - 1e-6, moving: p > 0 && p < 1 };
+  const u = Math.min(1, Math.max(0, (t - K.cross[0]) / (K.cross[1] - K.cross[0])));
+  const p = (1 - Math.cos(Math.PI * u)) / 2;
+  const travel = far * CROSS_TRAVEL;
+  const f = S.cross.feather;
+  return { p, out: -travel * p, in: travel * (1 - p), edge: (far + f) * (1 - p), feather: f, far, on: t >= K.cross[0] - 1e-6, moving: p > 0 && p < 1 };
 }
 
 /** b12's mesh clock at this act's frame t (absolute frames): line/Ground.tsx's clock run on past its act */

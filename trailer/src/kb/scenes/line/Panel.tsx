@@ -146,10 +146,10 @@ export function cursorKeys(G: PageGeo): CursorKey[] {
     // the hand comes up with the page just below the tab bar (over b08's list: it enters through the frame's bottom edge
     // on the screen) and settles up onto Conversation through the page's landing (the tab is entered, not found hovered),
     // then rests 4.5 frames on it before the press (the brief's ≥ 4; the act's grid keeps the press on beat 2)
-    const from = { x: tab.x + 0.3 * tc.h, y: tab.y + 1.1 * tc.h };
+    const from = { x: tab.x + 0.25 * tc.h, y: tab.y + 0.8 * tc.h };
     const settle = N.tab.down - 4.5;
     keys.push({ at: 0, x: from.x, y: from.y });
-    keys.push({ at: settle, x: tab.x, y: tab.y, dur: 5, bend: 0.1 });
+    keys.push({ at: settle, x: tab.x, y: tab.y, dur: 7, bend: 0.1 });
     keys.push({ at: N.tab.down, x: tab.x, y: tab.y, action: 'press', up: N.tab.up });
     // the crossing leaves a frame before the tab's release and arrives 4.5 f before the field's press
     const arrive = field.down - 4.5;

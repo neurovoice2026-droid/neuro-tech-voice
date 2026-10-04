@@ -17,11 +17,10 @@
  *          line in four rows, the SaveBar's two buttons side by side (the app's flex-1 on a phone)
  *
  * THE NEIGHBOURS: b11 → here, frame 0 is callEnd()'s picture (scenes/line/Handoff.tsx draws the record row and the page
- * as b11 left them); then ONE SCROLL (LINE_LOCAL.scroll, scrollAmount below): the record slides up and out of the frame as
- * the agent page comes up from below the bottom edge, one sheet. Here → b13: lineEnd() (bottom).
+ * as b11 left them); then ONE MOVE (LINE_LOCAL.scroll, scrollAmount below): the record steps back under the agent page as
+ * it comes up from below the bottom edge, a card stack. Here → b13: lineEnd() (bottom).
  */
 import type React from 'react';
-import { subpixel } from '../../../lib/glide';
 import { EASE, springUnit } from '../../../lib/motion';
 import { LINE_LOCAL as N, SCENES } from '../../timing';
 import { callEnd, callKey, callStage, type Box, type OrbAt } from '../call/stage';
@@ -114,26 +113,34 @@ export const lineStage = (vertical: boolean): LineStage => (vertical ? STAGES.ve
 /* ── the moves ──────────────────────────────────────────────────── */
 
 /**
- * THE CUT FROM b11 — ONE SCROLL (SCRIPT.md b12: "the record row slides away and a white settings Card comes in"; motion
- * critic: no cross-dissolve, never a frame with nothing new in it). One sheet moves up on power2.inOut over
- * LINE_LOCAL.scroll: the call's record row (and its page, where b11 left one) slides up and OUT through the top edge (gone
- * by ≈ 9), the agent page comes up from just below the BOTTOM edge and lands (11) — both fully opaque, never overlapping
- * (the page's top edge trails the record's bottom), a soft start on b11's held last picture and a long soft landing. The
- * pointer is on the page: it enters through the bottom edge with it and settles onto Conversation as it lands.
- *   travel   the record: its bottom edge + its shadow past the top (record.y + ≈ 9 lines of its type + 60);
- *            the page: from 40 px below the frame (its shadow clear) to its place — 16:9 ≈ 840 / 906 px, 9:16 ≈ 1190 / 1484
- *   speed    peak ≈ 3.5 % of the frame height per 120 fps frame (16:9 37 px, 9:16 61 px): a real app's page push
+ * THE CUT FROM b11 (SCRIPT.md b12: "the record row slides away and a white settings Card comes in"; motion critic: no
+ * cross-dissolve, never a frame with nothing new in it) — a CARD STACK, as an app presents its next sheet: over
+ * LINE_LOCAL.scroll the agent page comes up from just below the frame's BOTTOM edge (opaque from its first frame, power2
+ * inOut, landing at 11 with a long soft tail) and slides OVER the call's record row, which steps back under it — it
+ * recedes (× .92 about its centre, drifting up 36 px) and goes (gone by 9.5, the page covering most of it by then). The
+ * record never crosses Ava's orb (a slide-out through the top edge would pass behind her), the page is in frame from
+ * ≈ 1.75, and the pointer is on the page: it enters through the bottom edge with it and settles onto Conversation as it
+ * lands.
+ *   travel   the page: from 40 px below the frame (its shadow clear) to its place — 16:9 906 px, 9:16 1484 px
+ *   speed    peak ≈ 3.5 % of the frame height per 120 fps frame (16:9 37 px, 9:16 61 px): a real app's sheet
  */
 export function scrollAmount(t: number) {
   return ease(t, N.scroll[0], N.scroll[1], EASE.draw);
 }
 
-/** the call's record row and page sliding up and out of the frame (frame px offset) */
+/** the call's record row (and its page, where b11 left one) stepping back under the incoming page */
 export function leavePose(t: number, S: LineStage) {
-  const q = scrollAmount(t);
+  const q = ease(t, N.scroll[0], N.scroll[1] - 1, EASE.draw);
   const r = S.from.record;
-  const travel = r.y + 9 * r.size + 60;
-  return { dy: -travel * q, on: q < 1, moving: q > 0 && q < 1 };
+  const opacity = 1 - ease(t, N.scroll[0] + 1.5, N.scroll[1] - 1.5, EASE.inOut);
+  return {
+    scale: 1 - 0.08 * q,
+    dy: -36 * q,
+    origin: { x: r.x + r.w / 2, y: r.y + 4 * r.size },
+    opacity,
+    on: opacity > 0.001,
+    moving: q > 0 && q < 1,
+  };
 }
 
 /** the agent page coming up from below the frame and landing in place */
@@ -182,8 +189,8 @@ export const callStageOf = (S: LineStage) => callStage(S.vertical);
  *         the frame in time to relight on her first word; at rest well before the act ends, so lineEnd() is unchanged.
  *
  * The ground rides a far plane (PUSH.ground: a quarter of the move, a gentle parallax); the panel, its pointer and the
- * orb ride the focal plane (planeStyle below: laid out at the push's FULL zoom inside one compositor layer and scaled
- * DOWN to the camera's zoom — a downsampled raster, sharp and sub-pixel smooth on both axes; never an upscaled one).
+ * orb ride the focal plane (planeStyle below: plain while zooming — the type re-rasters at the exact scale every frame, no
+ * upscaled layer, no blur).
  */
 export const PUSH = (() => {
   const last = N.keys[N.keys.length - 1];
@@ -227,25 +234,27 @@ export function camToScreen(c: LineCam, S: LineStage, p: { x: number; y: number 
 }
 
 /**
- * The focal plane under the camera — TWO nested boxes (motion critic, 4K: a plain transform re-rasters the type every
- * frame and Chrome snaps its baselines to whole device pixels, so the panel title stepped ≈ 0.9 device px every 6–8 frames
- * inside a box gliding ½ px a frame — type swimming ≤ 1 px in its box):
- *   inner   the plane laid out at the push's FULL zoom (Z: 16:9 ×1.30, 9:16 ×1.08) — a constant, plain scale(Z), painted
- *           once into the outer layer at that size
- *   outer   ONE compositor layer (will-change + the house tilt, lib/glide) carrying translate + scale(zoom / Z) ≤ 1: the
- *           compositor resamples that raster at the exact sub-pixel offset and scale every frame — no re-raster, no pixel
- *           snapping, a monotonic glide on both axes — and because zoom ≤ Z it only ever DOWNsamples (an upscaled raster is
- *           blur; the old single-layer attempt kept its creation scale and went ≈ 35 % soft by the end of the push)
- * Only while the push is running (pushAmount > 0, LINE_LOCAL field.up → Save's release + 30): at rest (zoom 1, home) no
- * transform and no layer, so the act's first and last pictures (and b13's handover, change/Handoff.tsx) are untouched.
+ * The focal plane's style under the camera: a PLAIN transform (no will-change, no tilt). Measured at 4K / 120 fps over the
+ * whole push (out/kb/plusbar, render sequences at concurrency 2):
+ *   · a compositor layer keeps the raster scale it was made at: by the end of a ×1.3 push its type was ≈ 35 % softer than a
+ *     fresh still (gradient energy 96–100 vs 126–160) — upscaled raster, i.e. blur. Never for a push this deep.
+ *   · the house tilt on a plain transform (lib/glide SUBPIXEL_TILT, no layer) softened the glyphs ≈ 25 % and still stepped.
+ *   · plain: re-rastered at the exact scale every frame (as sharp as a still); horizontal glide sub-pixel smooth; vertically
+ *     the baselines move in whole 4K device pixels (½ px at 1080) — a step every 1–3 frames mid-push, sparser near the
+ *     push's still line and in its ease tails. The sharp choice; no blur at any frame.
+ *   · line fix pass (motion critic: "lay the plane out at ×1.30 in a will-change layer and scale it DOWN, zoom / 1.3"),
+ *     built and measured (out/kb/fix-line, 4K, 7480–7520, concurrency 1, the panel title's ink centroid against the panel's
+ *     edges): this renderer re-rasters the layer at its on-screen scale every frame while the push-in grows it, so the
+ *     downsampled raster never exists — the title stepped exactly as before (−0.1 / −1.4 px alternating; title-vs-box dy
+ *     std 0.38 vs 0.43 plain, worst 0.78 vs 1.11) while the layer's resampling cost 15 % of the type's gradient energy at
+ *     4K (rms 37.1 vs 43.7, p99.5 182 vs 228) and 30 % at 1080 (23.4 vs 33.6) — blur, against the film's hard rule. The
+ *     same with no tilt (37.4) and with a paused CSS animation carrying the scale (cc's max-scale raster hint: 37.1, same
+ *     steps). Rejected; the plain transform stays.
+ * At rest (zoom 1, home) no transform at all, so the act's first and last pictures are untouched.
  */
-export function planeStyle(c: LineCam, S: LineStage): { outer?: React.CSSProperties; inner?: React.CSSProperties } {
-  if (c.zoom === 1 && c.x === 0 && c.y === 0) return {};
-  const Z = S.vertical ? PUSH.zoom.vert : PUSH.zoom.land;
-  return {
-    outer: { ...subpixel(`translate(${(-c.x).toFixed(4)}px, ${(-c.y).toFixed(4)}px) scale(${(c.zoom / Z).toFixed(6)})`, true), transformOrigin: '50% 50%' },
-    inner: { transform: `scale(${Z})`, transformOrigin: '50% 50%' },
-  };
+export function planeStyle(c: LineCam): React.CSSProperties | undefined {
+  if (c.zoom === 1 && c.x === 0 && c.y === 0) return undefined;
+  return { transform: `translate(${(-c.x).toFixed(4)}px, ${(-c.y).toFixed(4)}px) scale(${c.zoom.toFixed(6)})`, transformOrigin: '50% 50%' };
 }
 
 /** the ground plane's transform under the camera (depth PUSH.ground) and a screen point → that plane's own px */

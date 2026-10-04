@@ -4,9 +4,9 @@
  * `AVA · ON A CALL` rolling in under it in her ink. The colon itself is NOT drawn here: it is Ava's teal dot
  * (matters/Dot.tsx), drawn over everything, because it outlives the clock (it becomes the key light).
  *
- * Near plane. 9:16, b16: the figures and the labels leave up through their masks (staggered) as the dot rises
- * above the title. Both: everything fades with the light in the last beats. Static text rides its own small
- * layer while the camera pushes (lib/glide).
+ * Near plane. b16, both orientations: the figures and the day leave up through their masks before her first word,
+ * the labels on it (staggered) — the thesis gets the frame, and her dot stays behind as the room's light (9:16: it
+ * rises above the title). Static text rides its own small layer while the camera pushes (lib/glide).
  */
 import React from 'react';
 import { reveal, revealStyle } from '../../../components/Type';
@@ -29,11 +29,11 @@ export const MattersClock: React.FC<{ t: number; g: MattersLayout }> = ({ t, g }
   const c = g.clock;
   const label = typeStyle('label', L.vertical, { tone: 'paper' });
   const fade = typeFade(t);
-  if (fade <= 0.001) return null;
-  // 9:16, b16: each element leaves up through its mask — the figures and the day first (gone by her first word, which
-  // rises where they stood), then the labels on it (gone before her second line rises over their place)
+  // b16: each element leaves up through its mask — the figures and the day first (gone by her first word), then the
+  // labels on it; then there is nothing left to draw
+  if (fade <= 0.001 || t > M.labelsOut + 1 + 7 + 1) return null;
   const figDur = M.clockOut[1] - M.clockOut[0];
-  const out = (at: number, dur: number) => (g.vertical ? { exit: { at, dur } } : {});
+  const out = (at: number, dur: number) => ({ exit: { at, dur } });
   const still = (at: number, dur: number) => reveal(t, -1e6, { rise: 100, fade: 0, ...out(at, dur) });
   const figure = still(M.clockOut[0], figDur);
   const day = still(M.clockOut[0], figDur);

@@ -4,7 +4,8 @@
  * line variant, Knowledge's count badge) over "Your documents" — b08's four rows newest first (the app's upsert puts a new
  * document on top), single-line rows (written/Row.tsx), each Ready.
  *
- *   rise      on "Change the document" it rises into the lower frame (a landing with no bounce)
+ *   rise      while the owner types it rises BEHIND the file (a landing with no bounce, at rest before the pointer leaves
+ *             for its …); the file stepping up into its corner on "Change the document" reveals it
  *   menu      the cursor presses the Opening hours row's … (hover → the trigger's muted wash, press .97); on the release
  *             the menu opens from its trigger (the kit's Menu: Read again · Replace with new file · Remove,
  *             TabKnowledge.tsx:600–618); "Replace with new file" takes its hover, is pressed and released: the menu closes

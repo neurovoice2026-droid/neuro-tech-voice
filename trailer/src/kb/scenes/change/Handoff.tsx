@@ -1,9 +1,9 @@
 /**
  * b12's LAST PICTURE, handed over and cleared: frame 0 draws b12's agent page exactly as b12 leaves it — line/Panel.tsx's
- * LinePanel at LINE_LOCAL.end (the owner's line saved, the sunday ring settled, the pointer hidden on Save changes) — so
- * the cut is the same picture. Then the app SINKS BACK (a step of depth: scale .94 about its centre, a little down,
- * fading in its second half) as the owner's own file comes forward over it (change/FilePage.tsx): the edit happens
- * outside the app.
+ * LinePanel at LINE_LOCAL.end (the owner's line saved, the sunday ring settled, the pointer hidden since Save's release)
+ * — so the cut is the same picture. Then the page LEAVES (critic fix, build B): it recedes a depth (scale .9 about its
+ * centre), takes a shade and eases out to the left, gone before the owner's own file starts to show
+ * (change/FilePage.tsx): two white cards never overlap, and no page is ever seen empty.
  */
 import React from 'react';
 import { subpixel } from '../../../lib/glide';
@@ -15,12 +15,12 @@ import { handoffPose, type ChangeStage } from './stage';
 export const Handoff: React.FC<{ t: number; S: ChangeStage; ink: string; accent: string }> = ({ t, S, ink, accent }) => {
   const LS = lineStage(S.vertical);
   const G = usePageGeometry(LS);
-  const hp = handoffPose(t);
+  const hp = handoffPose(t, S);
   if (!hp.on) return null;
   const P = G.panel;
   const cx = P.x + P.w / 2;
   const cy = P.y + P.h / 2;
-  const tf = hp.q > 0 ? `translate(0px, ${hp.dy.toFixed(3)}px) scale(${hp.scale.toFixed(5)})` : undefined;
+  const tf = hp.q > 0 || hp.scale !== 1 ? `translate(${hp.dx.toFixed(3)}px, 0px) scale(${hp.scale.toFixed(5)})` : undefined;
   return (
     <div
       style={{
@@ -35,6 +35,8 @@ export const Handoff: React.FC<{ t: number; S: ChangeStage; ink: string; accent:
       }}
     >
       <LinePanel t={LINE_LOCAL.end} S={LS} G={G} ink={ink} accent={accent} />
+      {/* the shade of a page stepping back (the kit Panel's own idiom), over its rounded box only */}
+      {hp.shade > 0.001 ? <div style={{ position: 'absolute', left: P.x, top: P.y, width: P.w, height: P.h, borderRadius: P.radius, background: `rgba(20, 10, 36, ${hp.shade.toFixed(4)})` }} /> : null}
     </div>
   );
 };

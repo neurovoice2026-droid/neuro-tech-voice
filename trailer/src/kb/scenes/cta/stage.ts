@@ -16,9 +16,8 @@
  *                        end card, pinned to rest for the hold; arriveAt: when the light reaches a letter
  *   endLight(t)          the picture fading with the master (MIX.fadeOut's curve, as light)
  */
-import { ALL_GLOW, ALL_LIGHTS, mixColor, mixPalette } from '../../../lib/lights';
+import { ALL_GLOW, mixColor } from '../../../lib/lights';
 import { EASE, mix, springAt, springUnit, tween, windowed } from '../../../lib/motion';
-import type { Palette } from '../../../theme';
 import { MOMENT_LIGHTS, type MomentId } from '../../palettes';
 import { CTA_LOCAL as K, MATTERS_LOCAL, MIX, SCENES } from '../../timing';
 import { VOICE, type VoiceId } from '../../voice.generated';
@@ -41,8 +40,9 @@ export type CtaLayout = {
   P: Pt;
   /** the ring's ellipse: y radius / x radius */
   aspect: number;
-  /** a light's diameter (a point of light, not a marble: the bloom does the rest) */
-  orb: number;
+  /** a light at rest (an emitter, never a body): its white-hot core's diameter and its bloom's σ (px) */
+  core: number;
+  bloom: number;
   heading: { cy: number; size: number };
   /** the backlight (film 1's): radii rx / ry above / ry below; the scale it opens from; its floor */
   halo: readonly [number, number, number];
@@ -82,7 +82,8 @@ export function ctaLayout(vertical: boolean): CtaLayout {
       C0,
       P: { x: 960, y: 370 },
       aspect: Math.abs(dy / dx),
-      orb: 60,
+      core: 8,
+      bloom: 12,
       heading: { cy: 540, size: 100 },
       halo: [580, 236, 214],
       bloomFrom: 0.16,
@@ -114,7 +115,8 @@ export function ctaLayout(vertical: boolean): CtaLayout {
     C0,
     P: { x: 540, y: 650 },
     aspect: sy / sx,
-    orb: 56,
+    core: 8,
+    bloom: 12,
     heading: { cy: 730, size: 92 },
     halo: [400, 192, 180],
     bloomFrom: 0.2,
@@ -133,9 +135,9 @@ const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 /** a light's arrival flash: up over ≈ 1.5 frames (6 render frames — a bloom, never a one-frame strobe), down over ≈ 4,
  *  normalised to peak 1 */
 const arrivalFlash = (u: number) => (u <= 0 ? 0 : ((1 - Math.exp(-u)) * Math.exp(-u / 4)) / 0.535);
-/** a point of its light gathers over the 3 f before the beat and hands over to the orb (film 1's) */
+/** a point of its light gathers over the 3 f before the beat and hands over to the light's own core (film 1's) */
 const gatherAt = (u: number) => (u < -3 ? 0 : u < 0 ? Math.sin(((u + 3) / 3) * (Math.PI / 2)) : Math.max(0, 1 - u / 2.5));
-/** an orb pop: ≈15 % overshoot, settled in ~12 f; it starts POP_LEAD before its 8th (film 1's ORB_POP) */
+/** a light's pop: ≈15 % overshoot, settled in ~12 f; it starts POP_LEAD before its 8th (film 1's ORB_POP) */
 const ORB_POP = { stiffness: 340, damping: 18, mass: 0.9 };
 const POP_LEAD = 1.5;
 /** the backlight opening behind the word: ≈4 % over, settled in ≈16 f (film 1's BLOOM) */
@@ -218,12 +220,11 @@ export type LightState = {
   i: number;
   x: number;
   y: number;
-  /** drawn diameter (px) */
+  /** its white-hot core's drawn diameter (px) */
   d: number;
   /** its size factor (the pop spring) */
   pop: number;
   opacity: number;
-  palette: Palette;
   /** how lit (0 … 1), the arrival flash (peak 1), the gathering point */
   light: number;
   flash: number;
@@ -292,27 +293,21 @@ export function lightsAt(t: number, G: CtaLayout): LightState[] {
       y = mix(G.dot.y, y, glide);
     }
     const pop = t < pAt - POP_LEAD ? 0 : springAt(t, pAt - POP_LEAD, ORB_POP);
-    // hers grows from the dot's own size
-    const size = i === 0 ? mix(G.dot.d / G.orb, 1, pop) : pop;
+    const size = pop;
     const flash = arrivalFlash(t - pAt);
     const gather = i === 0 ? 0 : gatherAt(t - pAt);
     const light = Math.min(1.15, pop);
     const survivor = i === SURVIVOR;
     const grow = survivor ? 1 + 1.2 * tween(t, K.merge, [0, 1], EASE.out3) : 1 - 0.55 * pour;
-    let d = G.orb * size * (1 + 0.04 * vol) * mix(1, 0.72, inP) * grow * (survivor ? squeeze : 1);
+    let d = G.core * size * (1 + 0.04 * vol) * mix(1, 0.72, inP) * grow * (survivor ? squeeze : 1);
     let opacity = survivor ? 1 : 1 - toAll;
     if (t >= K.impact) {
       d *= survivor ? mix(1, 1.25, burst) : 0;
       opacity = survivor ? Math.pow(1 - burst, 2.2) : 0;
     }
-    const palette = survivor ? mixPalette(MOMENT_LIGHTS[id].orb, ALL_LIGHTS, toAll) : [...MOMENT_LIGHTS[id].orb];
-    return { id, i, x, y, d, pop, opacity, palette, light, flash, gather };
+    return { id, i, x, y, d, pop, opacity, light, flash, gather };
   });
 }
-
-/** the orbs' flow volume (their swirl follows her voice, quickens in the whirl, and the survivor's swirls hard) */
-export const orbVolume = (s: number) =>
-  0.12 + 0.75 * lineEnv(s) + 0.6 * tween(s, K.orbIn, [0, 1], EASE.in2) + 1.4 * windowed(s, K.merge[0], K.survivor[0], K.impact - 1, K.impact + 4, EASE.out3, EASE.in2);
 
 /* ── the backlight ──────────────────────────────────────────────── */
 
