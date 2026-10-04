@@ -5,10 +5,13 @@
  * bars lagging a little, slow smooth texture (never per-frame random); silent bars sit as round dots, so
  * an open line nobody speaks on reads as a fine dotted rule (b04's dead line). It draws OUT from the
  * centre (`open`) and back IN (`close`); its ends fade. One SVG: heights are continuous in t (120 fps).
+ * It sits in its own clipping box (its mask), so it can also LEAVE UP with the caption it belongs to (`lift`:
+ * the caption words' reveal exit — the same offset and fade, through the same kind of mask).
  * Fold back after delivery (one Waveform taking its envelope as a prop).
  */
 import React from 'react';
 import { noise2D } from '@remotion/noise';
+import { subpixel } from '../../../components/Type';
 import { VOICE, type VoiceId } from '../../voice.generated';
 
 /** A line's loudness `f` frames after it starts (fractional ok; 0 outside the line). */
@@ -37,7 +40,10 @@ export const LineWave: React.FC<{
   close: number;
   /** a seed for the texture, so two callers' lines never move alike */
   seed?: string;
-}> = ({ t, at, voice, cx, cy, half, barW, pitch, maxH, color, open, close, seed = 'kb-line' }) => {
+  /** leaving up out of its mask: a reveal() state's `y` (% of its height, < 0 = up) and `opacity` */
+  lift?: { y: number; opacity: number };
+}> = ({ t, at, voice, cx, cy, half, barW, pitch, maxH, color, open, close, seed = 'kb-line', lift }) => {
+  if (lift && lift.opacity <= 0.001) return null;
   const reach = Math.max(0, Math.min(1.02, open)) * (1 - Math.max(0, Math.min(1, close)));
   if (reach <= 0.002) return null;
   const n = Math.floor(half / pitch);
@@ -69,9 +75,25 @@ export const LineWave: React.FC<{
       );
     }
   }
+  // the mask: the line's own box (every bar fits in H; a bar's width of room at either end)
+  const pad = pitch + barW;
+  const lifting = !!lift && (Math.abs(lift.y) > 0.01 || lift.opacity < 0.999);
   return (
-    <svg width={2 * half} height={H} style={{ position: 'absolute', left: cx - half, top: cy - H / 2, overflow: 'visible' }}>
-      {rects}
-    </svg>
+    <div style={{ position: 'absolute', left: cx - half - pad, top: cy - H / 2, width: 2 * half + 2 * pad, height: H, overflow: 'hidden' }}>
+      <svg
+        width={2 * half}
+        height={H}
+        style={{
+          position: 'absolute',
+          left: pad,
+          top: 0,
+          overflow: 'visible',
+          ...(lifting ? subpixel(`translateY(${lift!.y.toFixed(3)}%)`, true) : null),
+          opacity: lifting ? Math.max(0, lift!.opacity) : undefined,
+        }}
+      >
+        {rects}
+      </svg>
+    </div>
   );
 };

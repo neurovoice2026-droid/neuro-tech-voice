@@ -144,7 +144,10 @@ type Plan = {
 /** <Captions>' own props: `font` may be left out (TYPE.caption for the orientation and tone). */
 export type CaptionsInput = Omit<CaptionsProps, 'font'> & { font?: CaptionFont };
 
-function plan(p: CaptionsInput): Plan[] {
+/** what the timing plan reads (a line's captions on its voice) */
+type PlanInput = Pick<CaptionsInput, 'lineAt' | 'voice' | 'captions' | 'holdUntil' | 'echoY' | 'echoBlock' | 'lead'>;
+
+function plan(p: PlanInput): Plan[] {
   const { lineAt, voice, captions, holdUntil, echoY, echoBlock } = p;
   const lead = p.lead ?? 2;
   const idx = (c: Caption, j: number) => c.map?.[j] ?? c.word + j;
@@ -193,6 +196,18 @@ function plan(p: CaptionsInput): Plan[] {
     prevEcho = pl;
   }
   return plans;
+}
+
+/**
+ * When the line's LAST caption leaves: its words rise out of their masks from `at` over `dur` frames (the
+ * reveal exit). For what belongs to the line and must leave with it through the same exit (a speaker tag or a
+ * waveform drawn outside <Captions>): pass the same props the <Captions> gets.
+ */
+export function captionsOut(p: PlanInput): { at: number; dur: number } {
+  const plans = plan(p);
+  const last = plans[plans.length - 1];
+  if (!last) return { at: p.holdUntil, dur: OUT };
+  return last.mode === 'echo' ? { at: last.echoOut, dur: ECHO_OUT } : { at: last.out, dur: OUT };
 }
 
 /** Word j of n leaves in a window of `dur` frames from `at`: a small left-to-right stagger inside it. */

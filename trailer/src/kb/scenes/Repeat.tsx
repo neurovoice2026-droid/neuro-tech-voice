@@ -67,7 +67,7 @@ export const RepeatDesk: React.FC<{ t: number; cam?: { x: number; y: number; zoo
         <Layer depth={PLANE.near}>
           <DeskClock t={t} g={g} />
           {[0, 1, 2].map((k) => (
-            <CallerTurn key={k} t={t} k={k} slot={g.callers[k]} hangup={R.hangups[k]} />
+            <CallerTurn key={k} t={t} k={k} slot={g.callers[k]} dead={k === 2 ? R.dead : undefined} />
           ))}
         </Layer>
       </Camera>

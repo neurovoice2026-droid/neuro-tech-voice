@@ -323,7 +323,9 @@ export const REPEAT_LOCAL = {
   desk: R_DESK as readonly number[],
   /** each slip tears off and lands on the 16th of "two." */
   slips: R_SLIP as readonly number[],
-  /** b04's dead line: the waveform lies flat (the caller's silence after the wrong answer) */
+  /** b04's dead line: the third caller's waveform re-opens alone, flat (her silence after the wrong answer), and
+   *  draws back in on the first roll. Each caller's ● CALLER and line otherwise leave WITH the caption, on the desk's
+   *  first word (scenes/repeat/CallerTurn.tsx) */
   dead: [DEAD_FROM, ROLL0] as const,
   /** b05: the clock rolls on 8ths (each a rose pulse and a new slip) */
   rolls: ROLLS as readonly number[],
@@ -336,9 +338,6 @@ export const REPEAT_LOCAL = {
    *  before the desk's first word (`placeLead` before it); the first answer is the pad's own top sheet */
   placeDur: 13,
   placeLead: 14,
-  /** each call ends (its ● CALLER and its line draw back in): calls 1–2 as their slip lands; the third line
-   *  stays open, flat, through the dead air, to the first roll */
-  hangups: [R_SLIP[0], R_SLIP[1], ROLL0] as readonly number[],
   /** b05: each roll's slip is slipped in behind the pile and rises one strip, reaching it a 16th after its roll */
   rollSlips: ROLLS.map((f) => f + BEAT / 4) as readonly number[],
 };
@@ -367,6 +366,11 @@ export const RECORDING_LOCAL = (() => {
     fan: Array.from({ length: slips }, (_, r) => (r === 0 ? S16 : deal0 + (r - 1) * S16)) as readonly number[],
     /** the column's paper fades come in once the desk has left the frame */
     fades: [11 * S16, 15 * S16] as const,
+    /** the desk leaves AHEAD of the glide, never cropped by the frame edge: the clock lifts and dims out (gone
+     *  before the dip carries it to the top edge / the travel to the side), the in-person card steps back into
+     *  the room and dims (gone before it reaches the edge); both are back, as they were, when the camera returns */
+    clockOut: [5, 13] as const,
+    cardOut: [8, 18] as const,
     /** "You hired someone brilliant." rises on "You"; leaves on "The" as "The phone turned them / into a recording." rises */
     title1: w1(0),
     brilliant: w1(3),
@@ -385,8 +389,11 @@ export const RECORDING_LOCAL = (() => {
     cardForward: pullBack + b(1),
     /** "And the customer / in front of them?" rises beside it, a line per phrase: on "customer" (the card has passed) and on "in" */
     question: [w2(2), w2(3)] as const,
-    /** "Waiting." locks in ON the bar */
+    /** "Waiting." is spoken ON the bar (the B5 is the bed's, MUSIC.waiting) */
     waiting: L('recording', WAITING),
+    /** … and the display word rises ON it, like every word of the act (SPRING.display: the first sliver shows on
+     *  the bar, it reads with the vowel, locks ≈ .25 s on) — locking on the bar would read it before it is heard */
+    waitingRise: L('recording', WAITING) - 1,
   };
 })();
 

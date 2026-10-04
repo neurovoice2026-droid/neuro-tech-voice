@@ -7,16 +7,21 @@
  *              light's pulse cut; the camera holds a 16th
  *   glide      in the silence the camera glides on, the desk leaving the frame (recording/stage.ts); the
  *              pile is picked up, squared, carried, folded to strips of one line, and dealt down into one
- *              column that scrolls like a teleprompter (recording/Stack.tsx)
+ *              column that scrolls like a teleprompter (recording/Stack.tsx). The desk goes AHEAD of the
+ *              camera, so the frame edge never crops it: the clock lifts and dims out (RL.clockOut), the
+ *              in-person card steps back into the room and dims (RL.cardOut, Part I's own step back)
  *   title1     "You hired someone brilliant." (headline, left on the column's axis), each word on its spoken
  *              onset — "brilliant." lands on its own word
  *   title2     it leaves up on "The" as "The phone turned them / into a recording." rises a line per
  *              phrase; the key "a recording." eases into rush ink as the glint runs word by word
- *   pullBack   on "And the customer" the camera pulls back to the in-person card, the column left behind
- *              still scrolling; the card comes forward .90 → 1 (SPRING.site), its shade lifting
+ *   pullBack   on "And the customer" the camera pulls back to the in-person card (back as Part I left
+ *              it, out of frame until the camera finds it), the column left behind still scrolling; the
+ *              card comes forward .90 → 1 (SPRING.site), its shade lifting; in 9:16 the clock is back
+ *              over it (b07's orb is born from its colon)
  *   question   "And the customer / in front of them?" (caption role, no tag: narration) — in 16:9 beside the
  *              card on its own baselines, in 9:16 under it
- *   waiting    "Waiting." locks in the display role ON the bar, and holds to the act's end
+ *   waiting    "Waiting." rises in the display role ON the bar, where it is spoken (RL.waitingRise), locks
+ *              ≈ .25 s on and holds to the act's end
  *
  * Every time is RECORDING_LOCAL (src/kb/timing.ts, from the real word onsets). No orb yet: Ava is only a
  * voice, so her arrival in b07 is an event.
@@ -24,9 +29,9 @@
 import React from 'react';
 import { AbsoluteFill } from 'remotion';
 import { Camera, Layer } from '../../components/Camera';
-import { camMotion } from '../../lib/glide';
+import { camMotion, subpixel } from '../../lib/glide';
 import { useLayout } from '../../lib/layout';
-import { SPRING, springUnit } from '../../lib/motion';
+import { EASE, SPRING, springUnit } from '../../lib/motion';
 import { meshShadowInk, MeshGround } from '../kit';
 import { HOME, MOMENT_LIGHTS, MUTED_MESH } from '../palettes';
 import { useKbSceneFrame } from '../scene';
@@ -45,14 +50,28 @@ const STOP = REPEAT_LOCAL.hardStop;
 /** the clock past its last ring's life (Clock.tsx LIFE 28.5): the ring and the pulse cut, the breath going on */
 const CLOCK_T0 = STOP + 30;
 
+/** the desk's exits ahead of the glide (0 → 1 over its window, RL.clockOut / RL.cardOut). None from the pull-back
+ *  on: both parts are out of frame at PULL[0] in both orientations, and come back as they were. */
+const outOf = (t: number, w: readonly [number, number]) => (t >= PULL[0] ? 0 : EASE.inOut(Math.min(1, Math.max(0, (t - w[0]) / (w[1] - w[0])))));
+/** how far the clock lifts as it dims (near-plane px): it leaves upward, the way the dip is carrying it (and
+ *  the way b07's 16:9 clock comes back in) */
+const CLOCK_LIFT = 44;
+
 /** vo-1's word k, act-local */
 const w1 = (k: number) => RL.vo1 + vWord('kb2-vo-1', k);
 
-/** the card's depth and shade: as Part I left it (.90 far back) until it comes forward on the site spring */
+/** the card's depth, shade and opacity: as Part I left it (.90 far back); as the glide starts it takes one more
+ *  step back into the room (scale −5 %, a deeper shade) and dims out; found again by the pull-back, it comes
+ *  forward on the site spring */
 export function cardDepth(t: number) {
   const d0 = repeatCardDepth(STOP);
   const p = springUnit(t - RL.cardForward, SPRING.site);
-  return { scale: d0.scale + (1 - d0.scale) * p, shade: d0.shade * Math.max(0, 1 - Math.min(1, p)) };
+  const out = outOf(t, RL.cardOut);
+  return {
+    scale: (d0.scale + (1 - d0.scale) * p) * (1 - 0.05 * out),
+    shade: d0.shade * Math.max(0, 1 - Math.min(1, p)) + 0.08 * out,
+    opacity: 1 - out,
+  };
 }
 
 /** the titles: each word on its spoken onset (left-set, so a line fills from its axis); 9:16 wraps into the frame */
@@ -108,9 +127,13 @@ export const Recording: React.FC = () => {
   const P0 = G.P0;
   const zg = 1 + (P0.zoom - 1) * PLANE.ground;
   const ground = `translate(${(-P0.x * PLANE.ground).toFixed(4)}px, ${(-P0.y * PLANE.ground).toFixed(4)}px) scale(${zg.toFixed(6)})`;
-  // 16:9: once the camera pulls back the clock is left off the right of the frame (the turn brings it back);
-  // 9:16: it stands over the card again (where b07's orb is born from its colon)
-  const clockOn = v ? true : t < PULL[0];
+  // the clock lifts and dims out ahead of the glide; 16:9: it stays gone (the turn brings it back in from above);
+  // 9:16: it is back over the card when the camera returns (where b07's orb is born from its colon)
+  const clockOut = outOf(t, RL.clockOut);
+  const clockOn = (v ? true : t < PULL[0]) && clockOut < 0.999;
+  const clock = <DeskClock t={CLOCK_T0 + t} g={g} />;
+  const cardOn = card.opacity > 0.001 && cardInFrame(t, G, card.scale);
+  const cardEl = <InPersonCard t={STOP} g={g} scale={card.scale} shade={card.shade} ink={SHADOW_INK} />;
   return (
     <AbsoluteFill>
       <AbsoluteFill style={{ transform: ground, transformOrigin: '50% 50%' }}>
@@ -124,8 +147,18 @@ export const Recording: React.FC = () => {
       </AbsoluteFill>
 
       <Camera x={pose.x} y={pose.y} zoom={pose.zoom} {...motion}>
-        <Layer depth={PLANE.desk}>{cardInFrame(t, G, card.scale) ? <InPersonCard t={STOP} g={g} scale={card.scale} shade={card.shade} ink={SHADOW_INK} /> : null}</Layer>
-        <Layer depth={PLANE.near}>{clockOn ? <DeskClock t={CLOCK_T0 + t} g={g} /> : null}</Layer>
+        <Layer depth={PLANE.desk}>
+          {cardOn ? card.opacity < 0.999 ? <div style={{ position: 'absolute', left: 0, top: 0, opacity: card.opacity }}>{cardEl}</div> : cardEl : null}
+        </Layer>
+        <Layer depth={PLANE.near}>
+          {clockOn ? (
+            clockOut > 0.001 ? (
+              <div style={{ position: 'absolute', left: 0, top: 0, opacity: 1 - clockOut, ...subpixel(`translateY(${(-CLOCK_LIFT * clockOut).toFixed(3)}px)`, true) }}>{clock}</div>
+            ) : (
+              clock
+            )
+          ) : null}
+        </Layer>
       </Camera>
 
       {/* the day's paper → one column, a teleprompter of the same answer */}
@@ -154,7 +187,7 @@ export const Recording: React.FC = () => {
         vertical={v}
         color={HOME.ink}
       />
-      <Waiting t={t} land={RL.waiting} x={G.waiting.x} baseline={G.waiting.baseline} vertical={v} color={HOME.ink} />
+      <Waiting t={t} at={RL.waitingRise} x={G.waiting.x} baseline={G.waiting.baseline} vertical={v} color={HOME.ink} />
     </AbsoluteFill>
   );
 };

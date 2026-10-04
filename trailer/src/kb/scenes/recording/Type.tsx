@@ -8,17 +8,21 @@
  *                 it leaves up through the same masks
  *   <SaidLines>   the narrator's question in the caption role (no tag: narration), line by line
  *   <Waiting>     "Waiting." in the display role, the whole word rising out of its mask on
- *                 SPRING.display and LOCKING (first reaching its line) ON the bar — film 1's DisplayWord
- *                 timing (scenes/result/Split.tsx wordReveal), set on paper, anchored at its left edge
+ *                 SPRING.display (film 1's DisplayWord motion, scenes/result/Split.tsx wordReveal) from
+ *                 the frame it is spoken — like every word of the act, so it is never read before it is
+ *                 heard — set on paper, anchored at its left edge
  */
 import React from 'react';
 import { reveal, revealStyle } from '../../../components/Type';
 import { mixColor } from '../../../lib/lights';
 import { EASE, mixHex, SPRING, tween } from '../../../lib/motion';
 import { maskBox, typeStyle } from '../../../lib/type';
-import { wordReveal } from '../../../scenes/result/Split';
+import { lockFrames, wordReveal } from '../../../scenes/result/Split';
 import { subpixel } from '../../../lib/glide';
 import type { TypeRole } from '../../../theme';
+
+/** the display word's rise → lock (wordReveal releases its spring this many frames before `land`) */
+const WORD_LOCK = lockFrames(SPRING.display);
 
 /** a line of words and when it rises: one time (the line ripples from it) or one per word */
 export type TitleLine = { words: readonly string[]; at: number | readonly number[] };
@@ -107,10 +111,11 @@ export const SaidLines: React.FC<{ t: number; lines: readonly TitleLine[]; x: nu
   );
 };
 
-/** "Waiting." — the display role on paper, locking ON `land`; (x, baseline) = its left edge on the baseline. */
-export const Waiting: React.FC<{ t: number; land: number; x: number; baseline: number; vertical: boolean; color: string; text?: string }> = ({
+/** "Waiting." — the display role on paper, rising from `at` (it locks lockFrames(SPRING.display) ≈ 8.6 frames
+ *  later); (x, baseline) = its left edge on the baseline. */
+export const Waiting: React.FC<{ t: number; at: number; x: number; baseline: number; vertical: boolean; color: string; text?: string }> = ({
   t,
-  land,
+  at,
   x,
   baseline,
   vertical,
@@ -121,6 +126,7 @@ export const Waiting: React.FC<{ t: number; land: number; x: number; baseline: n
   const size = st.fontSize as number;
   const lh = 1.04;
   const base = ((lh - 1.22) / 2 + 0.97) * size;
+  const land = at + WORD_LOCK;
   const r = wordReveal(t, land);
   if (r.opacity <= 0.001 && t < land) return null;
   const moving = Math.abs(r.y) > 0.03;
