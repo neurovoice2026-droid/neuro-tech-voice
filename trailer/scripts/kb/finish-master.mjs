@@ -4,8 +4,8 @@
  * the 4K 120 fps delivery masters → (with --previews) the 1080p60 share copies.
  *
  * 1. CHUNKS. The picture is the regular grid (out/master/KB-Trailer-<fmt>-x2/, scripts/kb/render-par.mjs) with
- *    any act-aligned replacements from out/master/KB-Trailer-<fmt>-x2-act/ (render-par --ranges … --dir=act):
- *    a grid chunk that overlaps an act chunk is dropped. A grid chunk that starts mid-act opens a fresh tab, which
+ *    any act-aligned replacements from out/master/KB-Trailer-<fmt>-x2-act/ (render-par --ranges … --dir=act) and,
+ *    over those, re-renders after a picture fix from …-x2-act2/: a lower-layer chunk that overlaps a higher one is dropped. A grid chunk that starts mid-act opens a fresh tab, which
  *    re-rasters the glide layers that a continuous render would still be drawing from their mount — a 0.1–0.7 px
  *    jump of static text at the seam; act chunks start where every layer mounts, so their seams are clean. The
  *    script refuses gaps, overlaps, unfinished chunks, wrong packet counts or parameter sets that differ.
@@ -32,6 +32,8 @@ const args = process.argv.slice(2);
 const fmts = args.filter((a) => !a.startsWith('--'));
 const FORMATS = fmts.length ? fmts : ['16x9', '9x16'];
 const previews = args.includes('--previews');
+/** re-render layers over the grid, highest priority first (out/master/<comp>-x2-<layer>/) */
+const LAYERS = ['act2', 'act'];
 
 const T = await import(path.join(ROOT, 'src/kb/timing.ts'));
 const total = T.DURATION * T.SUB;
@@ -54,10 +56,13 @@ const chunksIn = (dir) =>
 
 for (const fmt of FORMATS) {
   const comp = `KB-Trailer-${fmt}`;
-  const grid = chunksIn(path.join(ROOT, 'out/master', `${comp}-x2`));
-  const act = chunksIn(path.join(ROOT, 'out/master', `${comp}-x2-act`));
-  const overlaps = (c) => act.some((x) => c.a <= x.b && x.a <= c.b);
-  const parts = [...act, ...grid.filter((c) => !overlaps(c))].sort((x, y) => x.a - y.a);
+  // layers, highest priority first: later re-renders (act2: after a picture fix) over act-aligned seams over the grid;
+  // a chunk overlapping anything already chosen is dropped whole, so a partial overlap shows up as a gap (refused below)
+  const layers = [...LAYERS.map((l) => chunksIn(path.join(ROOT, 'out/master', `${comp}-x2-${l}`))), chunksIn(path.join(ROOT, 'out/master', `${comp}-x2`))];
+  const chosen = [];
+  for (const layer of layers) for (const c of layer) if (!chosen.some((x) => c.a <= x.b && x.a <= c.b)) chosen.push(c);
+  const parts = chosen.sort((x, y) => x.a - y.a);
+  const act = parts.filter((c) => !c.file.includes(`${comp}-x2/`));
   let next = 0;
   for (const c of parts) {
     if (c.a !== next) throw new Error(`${fmt}: chunks leave a gap or overlap at frame ${next} (next chunk starts at ${c.a})`);
@@ -75,7 +80,7 @@ for (const fmt of FORMATS) {
     if (hvcc === null) hvcc = key;
     else if (key !== hvcc) throw new Error(`${fmt}: ${path.basename(c.file)} has different stream parameters than the first chunk`);
   }
-  log(`${fmt}: ${parts.length} chunks (${act.length} act-aligned, ${parts.length - act.length} grid), frames 0–${total - 1}, one parameter set`);
+  log(`${fmt}: ${parts.length} chunks (${act.length} from re-render layers ${LAYERS.join('/')}, ${parts.length - act.length} grid), frames 0–${total - 1}, one parameter set`);
 
   const list = path.join(ROOT, 'out/master', `${comp}-x2`, 'concat-final.txt');
   writeFileSync(list, parts.map((c) => `file '${c.file}'`).join('\n') + '\n');
