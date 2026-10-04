@@ -186,15 +186,19 @@ const Knowledge: React.FC<{ G: PageGeo; S: LineStage }> = ({ G, S }) => {
   const WS = writtenStage(S.vertical);
   const T = S.type;
   const top = G.title.y;
+  // 9:16: b08's ad-size rows (the app's two-line row, written/stage.ts) — the page's content box cuts the list where it
+  // ends, as a phone's would; 16:9: single-line rows
   const size = S.vertical ? WS.row.size : 30;
-  const h = rowHeight('inline', size);
+  const layout = S.vertical ? WS.row.layout : 'inline';
+  const pill = S.vertical ? WS.row.pill : undefined;
+  const h = rowHeight(layout, size, pill);
   const gap = S.vertical ? WS.row.gap : 12;
   const listY = top + T.title * 1.5;
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div style={{ position: 'absolute', left: G.title.x, top, ...ui(T.title, WT.medium), color: APP.foreground }}>Your documents</div>
       {NEWEST_FIRST.map((i, k) => (
-        <Row key={ROWS[i].name} t={0} x={G.title.x} y={listY + k * (h + gap)} w={G.desc.w} h={h} layout="inline" size={size} kind={ROWS[i].kind} name={ROWS[i].name} pill={READY[i]} />
+        <Row key={ROWS[i].name} t={0} x={G.title.x} y={listY + k * (h + gap)} w={G.desc.w} h={h} layout={layout} size={size} pillSize={pill} kind={ROWS[i].kind} name={ROWS[i].name} pill={READY[i]} />
       ))}
     </div>
   );

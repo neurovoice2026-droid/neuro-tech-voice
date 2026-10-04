@@ -180,8 +180,9 @@ const STAGES: Record<'land' | 'vert', CallStage> = (() => {
       // lines at the title role (56), 48 px padding (≈ 844 × 503); its top leaves room under the frozen turn's waveform
       // for the MATCHED ON MEANING tag (y ≈ 604–658)
       page: { anchor: 'center', x: 540, y: 680, size: 56, pad: 48 },
-      rowFrom: { x: 64, y: 1960 },
-      rowHold: { x: 64, y: 1010 },
+      // (x: the written list's left edge — b08's ad-size rows, written/stage.ts)
+      rowFrom: { x: writtenStage(vertical).list.x, y: 1960 },
+      rowHold: { x: writtenStage(vertical).list.x, y: 1010 },
       // the page stays over her sentence, dimming, a touch back and up (air over ● AVA)
       pageC: { scale: 0.97, dx: 0, dy: -24, fade: 0.25 },
       // the sentence lies BELOW the page: Saturday and Sunday slide across to their slots first, then drop (Saturday

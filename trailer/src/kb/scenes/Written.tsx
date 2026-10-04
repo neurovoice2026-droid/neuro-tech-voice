@@ -146,6 +146,7 @@ const ListRow: React.FC<{ t: number; S: WrittenStage; i: number }> = ({ t, S, i 
       kind={ROWS[i].kind}
       name={ROWS[i].name}
       pill={PILLS[i]}
+      pillSize={S.row.pill}
       opacity={smooth(0, 0.3, s)}
       scale={mix(0.985, 1, Math.min(1, s))}
       moving={moving}
@@ -153,9 +154,13 @@ const ListRow: React.FC<{ t: number; S: WrittenStage; i: number }> = ({ t, S, i 
   );
 };
 
-/** TXT · Opening hours: born from the pile, then flown into the list on "hours" */
-const HoursRow: React.FC<{ t: number; S: WrittenStage }> = ({ t, S }) => {
+/** TXT · Opening hours: born from the pile, then flown into the list on "hours". `part`: 'free' while it is its own
+ *  paper (born, in flight; and always in 16:9), 'list' once it has landed in 9:16's scrolling list (drawn inside the
+ *  panel's content box: it scrolls with the page and is cut by its edges as the rows below it are) */
+const HoursRow: React.FC<{ t: number; S: WrittenStage; part: 'free' | 'list' }> = ({ t, S, part }) => {
   if (t < W.born) return null;
+  const inList = !!S.scroll && t >= W.fly[1];
+  if ((part === 'list') !== inList) return null;
   const H = slipHandoff(S);
   const u = ease(t, W.born, W.born + 9, EASE.inOut);
   const f = ease(t, W.fly[0], W.fly[1], EASE.inOut);
@@ -202,10 +207,12 @@ const HoursRow: React.FC<{ t: number; S: WrittenStage }> = ({ t, S }) => {
         kind="txt"
         name={ROWS[1].name}
         pill={PILLS[1]}
+        pillSize={S.row.pill}
         morph={u}
-        slip={{ k: H.k, text: SLIP_TEXT, color: SLIP_INK, out: W.born }}
+        // the slip's words leave as the row's own face arrives (a 16th's overlap): the paper is never blank
+        slip={{ k: H.k, text: SLIP_TEXT, color: SLIP_INK, out: W.born + 1.5 }}
         slipRadius={H.radius}
-        contentAt={W.born + 3}
+        contentAt={W.born + 1}
         moving={moving}
       />
     </>
@@ -252,8 +259,9 @@ export const Written: React.FC = () => {
         {[0, 2, 3].map((i) => (
           <ListRow key={i} t={t} S={S} i={i} />
         ))}
+        <HoursRow t={t} S={S} part="list" />
       </AppPanel>
-      <HoursRow t={t} S={S} />
+      <HoursRow t={t} S={S} part="free" />
       <WrittenOrb t={t} S={S} />
       <Eyebrow t={t} S={S} />
       <Captions

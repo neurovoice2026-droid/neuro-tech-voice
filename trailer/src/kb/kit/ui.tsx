@@ -535,6 +535,9 @@ export type MenuSpec = {
   size?: number;
   /** width px (default the app's w-48 at scale) */
   width?: number;
+  /** 'bottom' (default: under the trigger, `y` = its bottom) or 'top' (the dropdown flipped above it for want of room
+   *  below, as Radix's collision handling does on a phone: `y` = the trigger's TOP, the menu's bottom 6r above it) */
+  side?: 'bottom' | 'top';
 };
 
 export type MenuGeometry = { box: Rect; items: (Rect & { cx: number; cy: number })[]; spec: Required<MenuSpec> };
@@ -549,7 +552,11 @@ export function useMenu(spec: MenuSpec): MenuGeometry {
   const itemH = 30 * r;
   const sepH = 9 * r;
   const padY = 4 * r;
-  let y = spec.y + 6 * r + padY;
+  const side = spec.side ?? 'bottom';
+  // the menu's height (its padding, the items, the separators)
+  const h = 2 * padY + items.length * itemH + items.filter((it) => it.separatorBefore).length * sepH;
+  const top = side === 'top' ? spec.y - 6 * r - h : spec.y + 6 * r;
+  let y = top + padY;
   const left = spec.x - width;
   const rects = items.map((it) => {
     if (it.separatorBefore) y += sepH;
@@ -557,8 +564,7 @@ export function useMenu(spec: MenuSpec): MenuGeometry {
     y += itemH;
     return rr;
   });
-  const h = y + padY - (spec.y + 6 * r);
-  return { box: { x: left, y: spec.y + 6 * r, w: width, h }, items: rects, spec: { x: spec.x, y: spec.y, items, size, width } };
+  return { box: { x: left, y: top, w: width, h }, items: rects, spec: { x: spec.x, y: spec.y, items, size, width, side } };
 }
 
 /** the menu opening (zoom-in-95 + fade-in + slide-in-from-top-2, as a spring) */
@@ -577,14 +583,16 @@ export const Menu: React.FC<{
   const { box, items, spec } = menu;
   const r = spec.size / 14;
   const s = springUnit(t - openAt, MENU_OPEN);
+  // (flipped above its trigger: it grows from its bottom-right corner and slides in from below)
+  const up = spec.side === 'top' ? -1 : 1;
   let o = smooth(0, 0.45, s);
   let sc = mix(0.95, 1, Math.min(1.02, s));
-  let dy = (1 - Math.min(1, s)) * -8 * r;
+  let dy = (1 - Math.min(1, s)) * -8 * r * up;
   if (closeAt !== undefined && t > closeAt) {
     const q = tween(t, [closeAt, closeAt + 5], [0, 1], EASE.out3);
     o *= 1 - q;
     sc *= 1 - 0.05 * q;
-    dy += -4 * r * q;
+    dy += -4 * r * q * up;
     if (o <= 0.001) return null;
   }
   const moving = Math.abs(sc - 1) > 1e-4 || Math.abs(dy) > 0.02;
@@ -600,7 +608,7 @@ export const Menu: React.FC<{
         background: APP.card,
         boxShadow: `${meshElevation(3.2, ink, 1.05)}, 0 0 0 1px ${APP.ring}`,
         opacity: o >= 0.999 ? undefined : o,
-        transformOrigin: '100% 0%',
+        transformOrigin: up < 0 ? '100% 100%' : '100% 0%',
         ...subpixel(`translate(${box.x.toFixed(3)}px, ${(box.y + dy).toFixed(3)}px) scale(${sc.toFixed(5)})`, moving),
       }}
     >

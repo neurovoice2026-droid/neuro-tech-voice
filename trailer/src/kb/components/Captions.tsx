@@ -50,6 +50,7 @@ import { BEAT, FPS, vWord, type Caption } from '../timing';
 import type { Tone } from '../../theme';
 import { KB_INK, type KbSpeaker as Speaker } from '../theme';
 import { VOICE, type VoiceId } from '../voice.generated';
+import { typo } from '../kit/type';
 import { reveal, revealStyle, SpeakerLabel, useGlide } from '../../components/Type';
 
 export type { CaptionFont } from '../../lib/type';
@@ -152,7 +153,8 @@ function plan(p: PlanInput): Plan[] {
   const lead = p.lead ?? 2;
   const idx = (c: Caption, j: number) => c.map?.[j] ?? c.word + j;
   const plans: Plan[] = captions.map((c) => {
-    const words = c.text.split(' ');
+    // the film's one apostrophe (kit/type.ts typo: 1:1, so the word indices hold)
+    const words = typo(c.text).split(' ');
     const spoken = words.map((_, j) => lineAt + vWord(voice, idx(c, j)));
     const speakEnd = words.map((_, j) => lineAt + wordEnd(voice, idx(c, j)));
     const appear = spoken.map((s) => s - lead);

@@ -14,7 +14,7 @@
  */
 import React from 'react';
 import { EASE, tween } from '../../../lib/motion';
-import { measureText, RecordRow, useKitFaces } from '../../kit';
+import { measureText, RecordRow, typo, useKitFaces } from '../../kit';
 import { Reset } from './Reset';
 import { TYPE } from '../../../theme';
 import { HOME, MOMENT_LIGHTS } from '../../palettes';
@@ -25,7 +25,7 @@ import { Tag } from './Strip';
 import type { CallStage } from './stage';
 
 const SUNDAY = MOMENT_LIGHTS.sunday.ink;
-export const ANSWER = VOICE.lines['kb2-call-2'].say;
+export const ANSWER = typo(VOICE.lines['kb2-call-2'].say);
 
 export const AnswerTurn: React.FC<{ t: number; S: CallStage; g: PageGeo; ink: string }> = ({ t, S, g, ink }) => {
   useKitFaces();

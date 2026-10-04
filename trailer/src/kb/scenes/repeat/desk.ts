@@ -58,7 +58,7 @@ export type DeskLayout = {
 /** The sentence on the in-person card, in its two lines (balanced at the caption role; the dash hangs at the end). */
 export const CARD_LINES = [
   ['First', 'session', 'since', 'my'],
-  ['injury,', 'and', "I'm", 'a', 'bit'],
+  ['injury,', 'and', 'I’m', 'a', 'bit'],
 ] as const;
 /** The desk's answer, on the slip, in two lines (the comma breaks it). Spoken words 0..4 of kb2-desk-1. */
 export const ANSWER_LINES = [

@@ -257,7 +257,9 @@ const DARK = [CTA_FROM - b(3), CTA_FROM] as const;
  * vo-9 an 8th in; the four lights on 8ths as her heading completes; the converge on the beat after her
  * line, the impact two beats later ON a bar (a beat of breath before the converge if the grid needs one,
  * as in film 1); Ava names it a beat after the impact; the button on "…Voice." once the URL is in;
- * the note a beat later; the press; the still hold; the end two bars after the impact. */
+ * the note an 8th later (landed before the pointer comes in); the press a 16th after the next-but-one beat
+ * (button → note → hover → press: the pointer enters once the note is in); the still hold; the end two bars
+ * after the impact. */
 const VO9_AT = CTA_FROM + b(0.5);
 const IMPACT = anchorAt('impact', upBeat(VO9_AT + vFrames('kb2-vo-9')) + b(2));
 const CONVERGE = IMPACT - b(2);
@@ -267,10 +269,10 @@ const LIGHTS4 = [0, 1, 2, 3].map((i) => LIGHT0 + i * (BEAT / 2));
 const BRAND: VoiceId = 'kb2-brand';
 const BRAND_AT = IMPACT + b(1);
 const BUTTON = IMPACT + Math.max(b(2.5), upHalf(b(1) + vWord(BRAND, lastWord(BRAND))));
-const NOTE = BUTTON + b(1);
-const PRESS = Math.max(NOTE + b(1), BRAND_AT + vFrames(BRAND) + b(0.5));
-const END = anchorAt('end', Math.max(IMPACT + b(8), upBar(PRESS + b(3))));
-const FINAL_HOLD = Math.max(PRESS + b(1), END - b(2));
+const NOTE = BUTTON + b(0.5);
+const PRESS = Math.max(NOTE + b(1.75), BRAND_AT + vFrames(BRAND) + b(0.5));
+const END = anchorAt('end', Math.max(IMPACT + b(8), upBar(PRESS + b(2.5))));
+const FINAL_HOLD = Math.max(PRESS + b(0.75), END - b(2));
 
 /**
  * Scene windows on the absolute timeline (the acts of the task list: repeat b01–b05, recording b06,
@@ -940,6 +942,8 @@ export const CTA_LOCAL = (() => {
   const press = at(PRESS);
   const finalHold = at(FINAL_HOLD);
   const lights = LIGHTS4.map(at);
+  const note = at(NOTE);
+  const noteStep = 2;
   return {
     vo9: at(VO9_AT),
     headline: ['Your answers.', 'Written once, there for every call.'] as const,
@@ -954,15 +958,20 @@ export const CTA_LOCAL = (() => {
     /** the key phrase "there for every call." takes the sunday ink WORD BY WORD on its spoken onsets (a glint
      *  of her lightest teal runs through each word as it is said, then settles to the key ink) */
     key: [4, 5, 6, 7] as const,
-    /** the night comes up out of the darkening's black: the deep mesh opens to its night level (the drop into
-     *  the dark lands on the bar, frame 0; her teal dot keeps keying the room) */
-    night: [0, 45] as const,
+    /** the violet room comes up out of the darkening: the deep mesh opens to its night level at once and settles
+     *  (cta/stage.ts riseCurve: no slope on the cut, steepest 10 frames in — the drop into the dark lands on the
+     *  bar, frame 0, and the room is a third of the way up by frame 8; her teal dot keeps keying it) */
+    night: [0, 40] as const,
     /** THE FOUR LIGHTS, sunday first (hers: it springs out of her teal dot), then rush, closing, night, one at a
      *  time on 8ths from the corners as the heading completes */
     lights: lights as readonly number[],
     lightOrder: ['sunday', 'rush', 'closing', 'night'] as const,
     /** 9:16: her light glides from the dot (top centre) to its corner as it opens */
     sundayGlide: [lights[0], lights[0] + 20] as const,
+    /** as the room comes up, b16's teal dot (a small mesh orb) settles into her POINT OF LIGHT — the dot drawing in
+     *  as her white-hot core and teal bloom come up in its place — so all four lights are one kind of thing (emitters)
+     *  before the first of them springs open on its 8th */
+    dotMorph: [12, 36] as const,
     /** the ring of four drifts toward the centre (and turns a little) until the converge */
     drift: [lights[0], converge] as const,
     /** THE CONVERGE (on the beat after her line, two beats before the impact): the heading leaves up through its
@@ -988,16 +997,20 @@ export const CTA_LOCAL = (() => {
     urlText: 'neurotechvoice.com',
     urlChunks: [0, 5, 9] as const,
     url: [0, 1, 2].map((k) => at(BRAND_AT + vWord(BRAND, k))) as readonly number[],
-    /** "Start free →" rises on "…Voice." once the URL is in; the note a beat later, a word every 2.5 frames */
+    /** "Start free →" rises on "…Voice." once the URL is in; the note an 8th later, a word every 2 frames (in by
+     *  ≈ +11: before the pointer comes in) */
     button: at(BUTTON),
-    note: at(NOTE),
-    noteStep: 2.5,
-    /** THE CLICK (CLIENT DIRECTION v2 §3): the pointer comes in from off-frame (lower right) on a calm arc,
-     *  the button takes the site's hover (plum) as it enters, the pointer rests `dwell` frames, presses (.97),
-     *  releases `hold` frames later — a two-part click on the cue sheet (down, up) */
+    note,
+    noteStep,
+    /** THE CLICK (CLIENT DIRECTION v2 §3), in the order button → note → hover → press: the pointer comes in from
+     *  off-frame right, on the button's row, as the note's last word lands (it crosses the frame edge at `enter`), on
+     *  a calm arc that decelerates into the button — the site's hover (plum) runs from the frame its hotspot crosses
+     *  the button's edge, ≈ 6 f later — comes to rest `arrive` frames before the press (the eye reads the target),
+     *  presses (.97) a 16th after the beat, releases 3 frames later: a two-part click on the cue sheet (down, up) */
     press,
     release: press + 3,
-    dwell: 9,
+    enter: note + 4 * noteStep + 1.5,
+    arrive: 4,
     /** the backlight breathes under the end card, its amplitude easing to 0 into the hold */
     breath: at(BUTTON) + 10,
     breathOut: [finalHold - 10, finalHold] as const,
@@ -1539,6 +1552,13 @@ const CTA_HITS: Hit<Snd>[] = (() => {
   const R = CTA_LOCAL;
   const at = (f: number) => SCENES.cta.from + f;
   const PAN = { sunday: 0.87, rush: 0.13, closing: 0.13, night: 0.87 } as const;
+  /** the four arrivals' trims (dB on the pop and on the chime; night's pop un-tuned) — see the lights below */
+  const LIGHT_LEVEL: Record<(typeof R.lightOrder)[number], { pop: number; chime: number; semi?: number }> = {
+    sunday: { pop: 2, chime: -0.5 },
+    rush: { pop: 1, chime: -1.5 },
+    closing: { pop: -5.5, chime: -9.5 },
+    night: { pop: -7, chime: -12.5, semi: -5 },
+  };
   const WHERE = { sunday: 'out of her teal dot (top right; 9:16 top centre)', rush: 'top left', closing: 'lower left', night: 'lower right' } as const;
   const GLASS = ['fx-glass-gs6', 'fx-glass-b6', 'fx-glass-e6'] as const;
   const GLASS_NOTE = ['G#6', 'B6', 'E6'];
@@ -1558,15 +1578,21 @@ const CTA_HITS: Hit<Snd>[] = (() => {
     H(at(R.words[2] - R.riseLead), 'sheen', 'none', 0.5, 3, 'b17 "Written once, …" rises (on "Written")', { db: -15 }),
     H(at(R.words[R.key[0]] - 1), 'glint', 'sunday', 0.55, 3, 'b17 "there for every call." takes her teal word by word, a glint running through it (9:16: its row rises here)', { db: -16 }),
     // THE FOUR LIGHTS as one even sequence: hers (on "call.") and rush (on its tail) land under her voice, closing and night
-    // after it. As weight-2/3 hits the first two took the speech drop and the bells' 10 dB duck and arrived ~18 dB under the
-    // last two — hers, the first, all but silent. The chimes are KEY hits (the key tonal bus steps back only 5 dB under the
-    // word), levelled so the four sit within a few dB, hers a touch under her own word; the pops likewise.
+    // after it. The chimes are KEY hits (the key tonal bus steps back 5 dB under the word); the pops are not. LEVELLED BY
+    // MEASUREMENT (the effects stem's 200 ms RMS from each arrival): with one level per side of her line they measured
+    // sunday −37.5, rush −35.4, closing −32.7, night −28.0 dB — hers ducked under "call.", every later one riding the
+    // earlier chimes' tails, and night's pop tuned +5 st (×1.33, brighter). Per-light trims (dB on the hit), re-measured as
+    // each arrival's OWN energy over what is already ringing: sunday −33.4, rush −34.1, closing −34.0, night −32.7 (±0.7),
+    // hers first not the quietest; night's pop is played at its own pitch (semi −5 undoes its light's tuning). The plain
+    // 200 ms window still climbs to night (−33.3 → −27.6): the earlier chimes ring on (2.2 s) and come back up as the duck
+    // under her line releases (≈ 2826) — the four building their chord, not the night hit; cutting night to flatten that
+    // would bury its own attack.
     ...R.lights.flatMap((f, i) => {
       const id = R.lightOrder[i];
-      const talk = speaking(at(f));
+      const lv = LIGHT_LEVEL[id];
       return [
-        H(at(f), 'pop', id, PAN[id], 3, `b17 the ${id.toUpperCase()} light arrives, ${WHERE[id]} — ${i ? 'its orb springs out of a point of light' : 'the dot springs open into her orb'}`, { db: talk ? -2 : -4 }),
-        H(at(f), `${chime(id)}-soft` as Snd, id, PAN[id], 1, `b17 ${id}: the end card’s chime, recalled${i ? '' : ' — hers first'}`, { db: talk ? -5 : -8, layer: true }),
+        H(at(f), 'pop', id, PAN[id], 3, `b17 the ${id.toUpperCase()} light arrives, ${WHERE[id]} — ${i ? 'its point of light springs open' : 'the dot springs open into her light'}`, { db: lv.pop, semi: lv.semi }),
+        H(at(f), `${chime(id)}-soft` as Snd, id, PAN[id], 1, `b17 ${id}: the end card’s chime, recalled${i ? '' : ' — hers first'}`, { db: lv.chime, layer: true }),
       ];
     }),
     H(at(R.converge), 'swish', 'none', 0.5, 2, 'b17 THE CONVERGE: the heading leaves up through its masks; the ring of four swells', { db: 3 }),

@@ -27,7 +27,7 @@ import { EASE, smooth, tween } from '../../../lib/motion';
 import { maskBox } from '../../../lib/type';
 import { APP, CURSOR, hoverAt, Icon, measureText, Panel, pressAt, Swap, TabBar, ui, W as WT, type CursorKey, type TabBarGeometry } from '../../kit';
 import { WRITTEN_LOCAL as W } from '../../timing';
-import { panelPose, type Box, type WrittenStage } from './stage';
+import { panelPose, scrollAt, scrolling, type Box, type WrittenStage } from './stage';
 
 const PLACEHOLDER = 'https://yourbusiness.com/faq';
 const PLACEHOLDER_INK = '#a29bb4';
@@ -85,6 +85,7 @@ const TONES: readonly { label: string; blurb: string; icon: ToneIcon; on?: true 
   { label: 'Empathetic', blurb: 'Patient and reassuring, takes its time', icon: 'heartHandshake' },
   { label: 'Casual', blurb: 'Relaxed and natural, like a good receptionist', icon: 'coffee' },
 ];
+const NAME_DESC = 'How your agent introduces itself, and the language it speaks with callers.';
 const TONE_DESC = 'Sets how your agent speaks: its wording, pace and warmth. The greeting on the Conversation tab follows it.';
 
 /** lines a string wraps to at `size` in `width` (word wrap, the ui face) */
@@ -110,8 +111,8 @@ const General: React.FC<{ S: WrittenStage }> = ({ S }) => {
     { label: 'Agent name', value: 'Ava' },
     { label: 'Language', value: 'English' },
   ];
-  // the cards' descriptions wrap to two lines in 16:9's columns, one in 9:16's full width
-  const desc = T.small * 1.3 * (S.vertical ? 1 : 2) + (S.vertical ? 24 : 26);
+  // the cards' descriptions wrap to two lines in 16:9's columns; 9:16 (ad-size type) measures its own
+  const desc = T.small * 1.3 * (S.vertical ? wrapCount(NAME_DESC, T.small, WT.regular, w) : 2) + (S.vertical ? 24 : 26);
   const fieldsTop = S.add.y + T.title * 1.35 + desc;
   const fieldsBottom = fieldsTop + 2 * (fieldH + T.label * 2.6);
   // Tone: 16:9 in the right column, 9:16 under the fields
@@ -133,7 +134,7 @@ const General: React.FC<{ S: WrittenStage }> = ({ S }) => {
     <div style={{ position: 'absolute', inset: 0 }}>
       <div style={{ position: 'absolute', left: x, top: S.add.y, ...ui(T.title, WT.medium), color: APP.foreground }}>Name and language</div>
       <div style={{ position: 'absolute', left: x, top: S.add.y + T.title * 1.35, width: w, ...ui(T.small, WT.regular), whiteSpace: 'normal', lineHeight: 1.3, color: APP.mutedFg }}>
-        How your agent introduces itself, and the language it speaks with callers.
+        {NAME_DESC}
       </div>
       {f.map((it, i) => (
         <div key={it.label} style={{ position: 'absolute', left: x, top: fieldsTop + i * (fieldH + T.label * 2.6), width: w }}>
@@ -197,7 +198,7 @@ const DropZone: React.FC<{ S: WrittenStage; hover: number }> = ({ S, hover }) =>
   const T = S.type;
   const r = Math.min(26, d.h * 0.16);
   const stroke = mixColor(APP.border, '#b9b2c8', hover);
-  const icon = d.compact ? 38 : 46;
+  const icon = d.compact ? Math.round(T.body * 1.15) : 46;
   return (
     <div style={{ ...inBox(d) }}>
       <svg width={d.w + 2} height={d.h + 2} style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible' }} aria-hidden>
@@ -215,7 +216,7 @@ const DropZone: React.FC<{ S: WrittenStage; hover: number }> = ({ S, hover }) =>
 /* ── the web page field: placeholder, focus ring, one character per 16th, the caret; cleared once the page is in ── */
 const UrlField: React.FC<{ t: number; S: WrittenStage }> = ({ t, S }) => {
   const f = S.field;
-  const size = S.vertical ? 27 : 26;
+  const size = S.type.url;
   const mono = { size, weight: 460, mono: true } as const;
   const padX = f.h * 0.3;
   let n = 0;
@@ -314,7 +315,7 @@ const Knowledge: React.FC<{ t: number; S: WrittenStage; keys: readonly CursorKey
   const emptyOut = W.rows[0] - 10;
   const er = reveal(t, -100, { rise: 60, exit: { at: emptyOut, dur: 9 } });
   const listMid = (S.list.y + S.list.bottom) / 2;
-  const emptyIcon = S.vertical ? 52 : 60;
+  const emptyIcon = 60;
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div style={{ position: 'absolute', left: S.add.x, top: S.add.y, ...ui(T.title, WT.medium), color: APP.foreground }}>Add knowledge</div>
@@ -340,7 +341,7 @@ const Knowledge: React.FC<{ t: number; S: WrittenStage; keys: readonly CursorKey
             </span>
           </span>
           <span style={{ ...maskBox(0), display: 'block' }}>
-            <span style={{ ...revealStyle(reveal(t, -100, { rise: 90, exit: { at: emptyOut + 1, dur: 9 } }), undefined, t > emptyOut - 1), display: 'block', ...ui(S.vertical ? 30 : 32, WT.medium), color: APP.foreground, opacity: 0.4 }}>
+            <span style={{ ...revealStyle(reveal(t, -100, { rise: 90, exit: { at: emptyOut + 1, dur: 9 } }), undefined, t > emptyOut - 1), display: 'block', ...ui(S.vertical ? 40 : 32, WT.medium), color: APP.foreground, opacity: 0.4 }}>
               Teach your agent about your business
             </span>
           </span>
@@ -350,6 +351,12 @@ const Knowledge: React.FC<{ t: number; S: WrittenStage; keys: readonly CursorKey
   );
 };
 
+/**
+ * The panel. `children` are the list's rows (frame px, at scroll 0). 16:9 draws them over the panel as before; 9:16 draws
+ * them INSIDE the content box under the tab bar, so they scroll with the page and are cut by its edges like a phone's
+ * list (written/stage.ts scrollAt: one scroll, on "knowledge"). `cursor` keys are frame px at their own times: the
+ * pointer only ever acts before the scroll.
+ */
 export const AppPanel: React.FC<{ t: number; S: WrittenStage; bar: TabBarGeometry; keys: readonly CursorKey[]; ink: string; children?: React.ReactNode }> = ({ t, S, bar, keys, ink, children }) => {
   const pp = panelPose(t, S);
   if (!pp.on) return null;
@@ -357,6 +364,10 @@ export const AppPanel: React.FC<{ t: number; S: WrittenStage; bar: TabBarGeometr
   const barH = bar.height;
   const cx = P.x;
   const cy = P.y + barH;
+  const sc = scrollAt(t, S);
+  const inside = !!S.scroll;
+  // the scrolled content rides one transform (a sub-pixel glide layer while it moves; none at rest)
+  const scrollTf = sc > 0.001 ? `translateY(${(-sc).toFixed(3)}px)` : undefined;
   return (
     <div style={{ position: 'absolute', left: 0, top: 0, width: S.W, height: S.H, ...subpixel(Math.abs(pp.dx) + Math.abs(pp.dy) > 0.01 ? `translate(${pp.dx.toFixed(3)}px, ${pp.dy.toFixed(3)}px)` : undefined, pp.moving) }}>
       <Panel x={P.x} y={P.y} w={P.w} h={P.h} radius={P.radius} lift={pp.lift} ink={ink}>
@@ -364,14 +375,15 @@ export const AppPanel: React.FC<{ t: number; S: WrittenStage; bar: TabBarGeometr
       </Panel>
       <TabBar bar={bar} t={t} active={[{ at: -Infinity, tab: 'general' }, { at: W.tab.up, tab: 'knowledge' }]} cursor={keys} radius={P.radius} />
       <div style={{ position: 'absolute', left: cx, top: cy, width: P.w, height: P.h - barH, overflow: 'hidden', borderRadius: `0 0 ${P.radius}px ${P.radius}px` }}>
-        <div style={{ position: 'absolute', left: -cx, top: -cy, width: S.W, height: S.H }}>
+        <div style={{ position: 'absolute', left: -cx, top: -cy, width: S.W, height: S.H, ...subpixel(scrollTf, scrolling(t, S)) }}>
           <Swap t={t} at={W.tab.up}>
             <General S={S} />
             <Knowledge t={t} S={S} keys={keys} />
           </Swap>
+          {inside ? children : null}
         </div>
       </div>
-      {children}
+      {inside ? null : children}
     </div>
   );
 };

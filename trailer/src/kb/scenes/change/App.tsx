@@ -42,6 +42,18 @@ export function oldRowBox(S: ChangeStage) {
   return { x: Lg.x, y: Lg.listY + OLD * Lg.pitch, w: Lg.w, h: Lg.h };
 }
 
+/** 9:16 (a card of fixed height): the list lives in the content box under the tab bar and is cut by the card's bottom
+ *  edge like a phone's list; 16:9's panel is as tall as its rows (no box) */
+const ListBox: React.FC<{ S: ChangeStage; top: number; h: number; children: React.ReactNode }> = ({ S, top, h, children }) => {
+  if (!S.panel.h) return <>{children}</>;
+  const P = S.panel;
+  return (
+    <div style={{ position: 'absolute', left: P.x, top, width: P.w, height: h, overflow: 'hidden', borderRadius: `0 0 ${P.radius}px ${P.radius}px` }}>
+      <div style={{ position: 'absolute', left: -P.x, top: -top, width: S.W, height: S.H }}>{children}</div>
+    </div>
+  );
+};
+
 export const AppPanel: React.FC<{ t: number; S: ChangeStage; bar: TabBarGeometry; menu: MenuGeometry; keys: readonly CursorKey[]; ink: string }> = ({ t, S, bar, menu, keys, ink }) => {
   const ap = appPose(t, S);
   if (!ap.on) return null;
@@ -70,6 +82,7 @@ export const AppPanel: React.FC<{ t: number; S: ChangeStage; bar: TabBarGeometry
         {null}
       </Panel>
       <TabBar bar={bar} t={t} active="knowledge" cursor={keys} radius={P.radius} />
+      <ListBox S={S} top={P.y + bar.height} h={Lg.panelH - bar.height}>
       <div style={{ position: 'absolute', left: Lg.x, top: Lg.headY, ...ui(S.heading, WT.medium), color: APP.foreground, whiteSpace: 'nowrap' }}>Your documents</div>
       {NEWEST_FIRST.map((ri, k) => {
         const R = ROWS[ri];
@@ -86,8 +99,9 @@ export const AppPanel: React.FC<{ t: number; S: ChangeStage; bar: TabBarGeometry
             y={isOld ? -q * Lg.h * 0.9 : y}
             w={Lg.w}
             h={Lg.h}
-            layout="inline"
+            layout={S.row.layout}
             size={size}
+            pillSize={S.row.pill}
             kind={R.kind}
             name={R.name}
             pill={[{ at: -1e6, kind: 'ready', n: R.n }]}
@@ -105,6 +119,7 @@ export const AppPanel: React.FC<{ t: number; S: ChangeStage; bar: TabBarGeometry
           </div>
         );
       })}
+      </ListBox>
       <Menu menu={menu} t={t} openAt={K.menu.up} closeAt={K.replace.up} cursor={keys} ink={ink} />
     </div>
   );

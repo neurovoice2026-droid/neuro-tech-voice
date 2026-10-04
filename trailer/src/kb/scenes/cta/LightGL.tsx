@@ -2,21 +2,21 @@
  * <LightGL> — the close's ONE WebGL2 context (SCRIPT.md b17: "the scene's single WebGL context"): the four lights
  * and the backlight. A FORK of film 1's src/scenes/cta/HeroGL.tsx with the portrait pass removed (film 2 shows no
  * faces: no art textures to load) and a transparent, premultiplied canvas, so it lies over the mesh ground
- * (lightShader.ts says how it composites). The orbs are film 1's OrbPass (the site's FluidOrb shader), imported
- * as is and drawn into one offscreen layer of this context.
+ * (lightShader.ts says how it composites). The four lights are EMITTERS drawn in the one pass (a white-hot core in a
+ * tight bloom of its own colour): no orb bodies, no surface, no offscreen layer.
  *
  * The backing store is CSS size × quality × devicePixelRatio, so the 4K master (--scale 2) draws every pixel.
- * Every uniform and every orb is a pure function of the (fractional) frame, passed in by the scene. The context
+ * Every uniform is a pure function of the (fractional) frame, passed in by the scene. The context
  * is created in a layout effect and drawn in the next one of the same commit — nothing loads, so no frame is
  * held — and it is handed back on unmount (scrubbing must not pile up contexts).
  */
 import React, { useLayoutEffect, useRef } from 'react';
 import { cancelRender } from 'remotion';
-import type { OrbDraw } from '../../../components/orbGL';
-import { OrbPass } from '../../../scenes/cta/orbPass';
 import { LIGHT_FRAG, LIGHT_VERT } from './lightShader';
 
 export type Glow = { x: number; y: number; r: number; s: number; color: [number, number, number] };
+/** a light's core: centre (frame px), radius (px), intensity (0..1), and the hue its white is tinted by */
+export type Core = { x: number; y: number; r: number; s: number; color: [number, number, number] };
 
 export type LightUniforms = {
   /** the backlight: centre (frame px), radii rx / ry above / ry below (px), gain */
@@ -29,19 +29,20 @@ export type LightUniforms = {
   floor: [number, number, number, number];
   /** the four bloom slots (slot k = light k, always) */
   glows: Glow[];
+  /** the four cores (slot k = light k) */
+  cores: Core[];
   /** rim strength (0..1), -, -, angular half-width (rad) */
   rim: [number, number, number, number];
   /** rim colours: top-left, top-right, bottom-right, bottom-left (0..1 rgb) */
   rimColors: [number, number, number][];
-  glowOver: number;
   /** each light's pool on the ground: radius (× its bloom radius), strength (× its bloom's) */
   wide: [number, number];
   seed: number;
 };
 
-type GL = { gl: WebGL2RenderingContext; prog: WebGLProgram; vao: WebGLVertexArrayObject; orbs: OrbPass; u: Record<string, WebGLUniformLocation | null> };
+type GL = { gl: WebGL2RenderingContext; prog: WebGLProgram; vao: WebGLVertexArrayObject; u: Record<string, WebGLUniformLocation | null> };
 
-const NAMES = ['uRes', 'uHaloC', 'uHaloR', 'uHaloGain', 'uMerge', 'uFloor', 'uSeed', 'uOrbs', 'uOrbOn', 'uGlowP', 'uGlowC', 'uRim', 'uRimC', 'uGlowOver', 'uWide'];
+const NAMES = ['uRes', 'uHaloC', 'uHaloR', 'uHaloGain', 'uMerge', 'uFloor', 'uSeed', 'uGlowP', 'uGlowC', 'uCoreP', 'uCoreC', 'uRim', 'uRimC', 'uWide'];
 
 const dpr = () => (typeof window !== 'undefined' && window.devicePixelRatio > 0 ? window.devicePixelRatio : 1);
 
@@ -59,8 +60,7 @@ export const LightGL: React.FC<{
   /** canvas px per frame CSS px, before the device-pixel ratio */
   quality?: number;
   u: LightUniforms;
-  orbs: OrbDraw[];
-}> = ({ width, height, quality = 1, u, orbs }) => {
+}> = ({ width, height, quality = 1, u }) => {
   const ref = useRef<HTMLDivElement>(null);
   const state = useRef<GL | null>(null);
   const q = quality * dpr();
@@ -88,7 +88,7 @@ export const LightGL: React.FC<{
       if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(`[kb cta lights] ${gl.getProgramInfoLog(prog)}`);
       const uniforms: GL['u'] = {};
       for (const n of NAMES) uniforms[n] = gl.getUniformLocation(prog, n);
-      state.current = { gl, prog, vao: gl.createVertexArray()!, orbs: new OrbPass(gl), u: uniforms };
+      state.current = { gl, prog, vao: gl.createVertexArray()!, u: uniforms };
     } catch (e) {
       cancelRender(e as Error);
     }
@@ -109,16 +109,11 @@ export const LightGL: React.FC<{
       gl.canvas.width = cw;
       gl.canvas.height = ch;
     }
-    // the orbs into their layer (the pass leaves the default framebuffer bound); only the front layer is used
-    s.orbs.render([[], orbs], cw, ch, q, q);
-    const [, layer] = s.orbs.layers(cw, ch);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.useProgram(s.prog);
     gl.bindVertexArray(s.vao);
     gl.disable(gl.BLEND);
     gl.disable(gl.SCISSOR_TEST);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, layer);
-    gl.uniform1i(L.uOrbs, 0);
     gl.viewport(0, 0, cw, ch);
     gl.uniform2f(L.uRes, cw, ch);
     gl.uniform2f(L.uHaloC, u.haloC[0] * q, u.haloC[1] * q);
@@ -127,7 +122,6 @@ export const LightGL: React.FC<{
     gl.uniform4f(L.uMerge, u.merge[0], u.merge[1], u.merge[2], u.merge[3]);
     gl.uniform4f(L.uFloor, u.floor[0] * q, u.floor[1] * q, u.floor[2], u.floor[3] * q);
     gl.uniform1f(L.uSeed, u.seed);
-    gl.uniform1f(L.uOrbOn, s.orbs.on ? 1 : 0);
     const gp = new Float32Array(16);
     const gc = new Float32Array(12);
     u.glows.slice(0, 4).forEach((g, i) => {
@@ -136,11 +130,18 @@ export const LightGL: React.FC<{
     });
     gl.uniform4fv(L.uGlowP, gp);
     gl.uniform3fv(L.uGlowC, gc);
+    const cp = new Float32Array(16);
+    const cc = new Float32Array(12);
+    u.cores.slice(0, 4).forEach((c, i) => {
+      cp.set([c.x * q, c.y * q, Math.max(0.25, c.r * q), c.s], i * 4);
+      cc.set(c.color, i * 3);
+    });
+    gl.uniform4fv(L.uCoreP, cp);
+    gl.uniform3fv(L.uCoreC, cc);
     gl.uniform4f(L.uRim, u.rim[0], u.rim[1], u.rim[2], u.rim[3]);
     const rc = new Float32Array(12);
     u.rimColors.slice(0, 4).forEach((c, i) => rc.set(c, i * 3));
     gl.uniform3fv(L.uRimC, rc);
-    gl.uniform1f(L.uGlowOver, u.glowOver);
     gl.uniform2f(L.uWide, u.wide[0], u.wide[1]);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);

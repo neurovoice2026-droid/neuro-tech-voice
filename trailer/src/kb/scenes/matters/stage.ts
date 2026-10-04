@@ -57,13 +57,13 @@ export type MattersLayout = {
 /** The sentence on the in-person card, completed: "nervous." lands where b01's em dash hung. */
 export const CARD_LINES = [
   ['First', 'session', 'since', 'my'],
-  ['injury,', 'and', "I'm", 'a', 'bit'],
+  ['injury,', 'and', 'I’m', 'a', 'bit'],
 ] as const;
 export const NERVOUS = 'nervous.';
 /** The staff reply (kb2-desk-2), a sentence per line: spoken words 0–2 and 3–6. */
 export const REPLY_LINES = [
-  ["That's", 'completely', 'normal.'],
-  ["We'll", 'take', 'it', 'slow.'],
+  ['That’s', 'completely', 'normal.'],
+  ['We’ll', 'take', 'it', 'slow.'],
 ] as const;
 /** The old slips still say the old hours. */
 export const OLD_ANSWER = [

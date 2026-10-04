@@ -86,7 +86,7 @@ const pulse = (t: number) => {
 const tealKey = (t: number, c: number) => 0.23 + 0.12 * pulse(t) + 0.09 * smoothstep(M.b16, M.dark[0], t) + 0.6 * c;
 
 /** b16's thesis, vo-8's seven words, each on its spoken onset (a frame ahead, as captions lead) */
-const VO8_WORDS = ["That's", 'the', 'work', 'only', 'people', 'can', 'do.'] as const;
+const VO8_WORDS = ['That’s', 'the', 'work', 'only', 'people', 'can', 'do.'] as const;
 
 /** The whole picture at act-local `t` (negative = the act's first picture held; exported for the neighbours). */
 export const MattersDesk: React.FC<{ t: number }> = ({ t }) => {

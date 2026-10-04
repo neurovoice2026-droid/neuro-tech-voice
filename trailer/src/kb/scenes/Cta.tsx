@@ -3,18 +3,22 @@
  * (src/kb/timing.ts, from the real word onsets); every pose and light is scenes/cta/stage.ts.
  *
  * Built by docs/kb/PIPELINE.md §7's FALLBACK route (the headline differs from film 1's, so film 1's Cta is not
- * mounted as is): film 1's timing-free parts — scenes/cta/EndCard (Wordmark · StartFree · Note · Url) and orbPass
- * (the site's FluidOrb in one WebGL context), the backlight forked from heroShader (cta/lightShader.ts), HeroGL
- * forked without the portrait (cta/LightGL.tsx) — on the site's gradient mesh, timed by CTA_LOCAL.
+ * mounted as is): film 1's timing-free parts — scenes/cta/EndCard (Wordmark · Note · Url; StartFree forked as
+ * cta/StartFree.tsx so its hover never washes the label out), the backlight forked from heroShader
+ * (cta/lightShader.ts), HeroGL forked without the portrait (cta/LightGL.tsx) — on the site's gradient mesh, timed by
+ * CTA_LOCAL. The four lights are EMITTERS drawn in that one pass (a white-hot core in a tight bloom of its own colour):
+ * no orb bodies, no surface texture, no specular.
  *
  *   0        the cut lands on b16's last picture exactly: the deep INK_MESH all but black, her teal dot (where b16
- *            left it) keying the room. The night comes up over a bar and a half — the mesh's violet material
- *            opening out of the dark, her dot still the room's light
+ *            left it) keying the room. THE VIOLET ROOM comes up at once and settles (C¹ on the cut, a third of the
+ *            way by frame 8): the floor ≈ #20004b, the pools violet, her teal pool the key; as it comes up her dot
+ *            settles into her point of light
  *   words    Ava: "Your answers. / Written once, there for every call." — the house two-tone heading, centred, each
  *            row rising on its phrase's first word; "there for every call." takes her teal word by word as it is said
  *   lights   THE FOUR LIGHTS, one at a time on 8ths from the corners as the heading completes: SUNDAY first — her
- *            dot springs open into her orb (16:9 at its corner; 9:16 it glides from the top centre to its corner) —
- *            then rush (top left), closing (lower left), night (lower right). The room's key moves onto her orb.
+ *            point springs open (16:9 at its corner; 9:16 it glides from the top centre to its corner) — then rush
+ *            (top left), closing (lower left), night (lower right), each out of a gathering pin of light. The
+ *            room's key moves onto her light.
  *            The ring of four drifts toward the centre, turning on the way they came (counter-clockwise)
  *   converge on the beat: the heading leaves up through its masks word by word; the ring swells, whirls and spirals
  *            into the core P; the three pour into HER light, which takes all four hues, holds alone, is squeezed
@@ -22,9 +26,11 @@
  *            core as the wide, filled, luminous BACKLIGHT (film 1's); NEUROVOICE (Inter Tight 500, −0.07em, the
  *            wordmark ink) surfaces letter by letter from the centre out as the light reaches it; the four lights
  *            come up as the colours of its rim, each on the side it arrived from; the backlight lights the mesh
- *   brand    "Neuro Tech Voice.": neurotechvoice.com rises on her words; "Start free →" on "…Voice."; the note a beat
- *            later; THE CLICK — a real pointer comes in from the right on a calm arc, the button takes the site's
- *            hover (plum) as the pointer enters it, rests, presses (.97, the pointer .9), releases
+ *   brand    "Neuro Tech Voice.": neurotechvoice.com rises on her words; "Start free →" on "…Voice."; the note an 8th
+ *            later; THE CLICK, in order button → note → hover → press — a real pointer comes in from off-frame right
+ *            as the note's last word lands, decelerates onto the button (the site's plum hover from the frame its
+ *            hotspot crosses the plate, the label switching ink → paper where the paper reads better), rests,
+ *            presses (.97, the pointer .9) a 16th after the beat, releases
  *   hold     dead still (every residual pinned), the picture fading with the master (MIX.fadeOut) into the night
  *
  * The mesh is screen-fixed (a mesh has nothing to parallax) and there is no camera: the type sits still and crisp;
@@ -34,20 +40,19 @@
 import React from 'react';
 import { AbsoluteFill } from 'remotion';
 import '../../scenes/cta/font/wordmark.css';
-import { flowTime, seedTime } from '../../components/Orb';
-import type { OrbDraw } from '../../components/orbGL';
 import { useFaceReady } from '../../lib/fonts';
 import { useLayout } from '../../lib/layout';
-import { ALL_GLOW, GLOW, hexToRgb, inkFor, mixColor } from '../../lib/lights';
+import { ALL_GLOW, hexToRgb, inkFor, mixColor } from '../../lib/lights';
 import { EASE, mix, tween, windowed } from '../../lib/motion';
-import { Note, StartFree, Url, Wordmark, WORDMARK_FONT, WORDMARK_INK, WORDMARK_TEXT } from '../../scenes/cta/EndCard';
+import { Note, Url, Wordmark, WORDMARK_FONT, WORDMARK_INK, WORDMARK_TEXT } from '../../scenes/cta/EndCard';
 import { C, TRACK } from '../../theme';
-import { click, Cursor, cursorPos, measureText, MeshGround, useKitFaces, type CursorKey, type Rect } from '../kit';
+import { Cursor, cursorPos, measureText, MeshGround, useKitFaces, type CursorKey, type Rect } from '../kit';
 import { HOME, INK_MESH, MOMENT_LIGHTS } from '../palettes';
 import { useKbSceneFrame } from '../scene';
-import { CTA_LOCAL as K, MATTERS_LOCAL, SCENES } from '../timing';
+import { CTA_LOCAL as K, MATTERS_LOCAL } from '../timing';
 import { Heading, type HeadingRow } from './cta/Heading';
-import { LightGL, type Glow, type LightUniforms } from './cta/LightGL';
+import { StartFree } from './cta/StartFree';
+import { LightGL, type Core, type Glow, type LightUniforms } from './cta/LightGL';
 import {
   arriveAt,
   bloomAt,
@@ -56,14 +61,14 @@ import {
   ctaLayout,
   endLight,
   groundAt,
+  dotMorphAt,
   lightsAt,
-  orbVolume,
   rest,
   smoothUnit,
   SURVIVOR,
   type CtaLayout,
 } from './cta/stage';
-import { mattersLayout } from './matters/stage';
+import { groundGrade, mattersLayout } from './matters/stage';
 import { TealDot } from './matters/Dot';
 import { REPEAT_GROUND } from './Repeat';
 
@@ -73,6 +78,12 @@ const KEY_INK = inkFor('sunday', 'dark');
 /** the glint that runs into each key word as it is said: her lightest teal */
 const GLINT = SUNDAY.orb[4];
 const rgb01 = (hex: string) => hexToRgb(hex) as [number, number, number];
+/** each light's colour — its bloom (the moment's orb body, a quarter of the way to its light, so the night's violet
+ *  still reads on the violet room) */
+const HUE = Object.fromEntries((['sunday', 'rush', 'closing', 'night'] as const).map((id) => [id, mixColor(MOMENT_LIGHTS[id].orb[2], MOMENT_LIGHTS[id].orb[3], 0.25)])) as Record<
+  keyof typeof MOMENT_LIGHTS,
+  string
+>;
 
 /** the heading's rows: 16:9 two (the last two phrases share a row), 9:16 a row per phrase */
 function headingRows(vertical: boolean): HeadingRow[] {
@@ -93,17 +104,37 @@ function buttonRect(G: CtaLayout): Rect {
   return { x: G.W / 2 - w / 2, y: G.button.y - h / 2, w, h };
 }
 
-/** the pointer: in from the right edge at the button's height (clear of every row of type), a calm arc onto the
- *  button — its tip in the gap between "free" and the arrow, so it never sits on a letter through the hold —
- *  `dwell` frames to read it, the press, the release */
+/**
+ * The pointer, in the order button → note → hover → press: it waits off-frame right (its tip 24 px past the edge: the
+ * arrow and its contact shadow lie to the right of the tip, so none of it shows), on the button's row, clear of every row
+ * of type; it crosses the frame edge at K.enter, as the note's last word lands, and runs one calm arc onto the button —
+ * soft start off-frame, the long deceleration in frame (the kit's move ease) — its tip coming to rest in the gap between
+ * "free" and the arrow (it never sits on a letter through the hold) K.arrive frames before the press; the press; the
+ * release. The off-frame start is solved so the crossing lands exactly on K.enter.
+ */
 function cursorKeys(G: CtaLayout, r: Rect): CursorKey[] {
   const F = G.button.size;
   const spec = { size: F, weight: 500, tracking: parseFloat(TRACK.title) };
   // (the gap is .4em, and the hover moves the arrow .2em further on: the tip sits in the middle of it)
   const gapX = r.x + 1.125 * F + measureText('Start free', spec) + 0.3 * F;
   const target = { x: gapX, y: r.y + r.h * 0.6 };
-  const entry = G.vertical ? { x: G.W + 60, y: target.y + 40 } : { x: G.W + 70, y: target.y + 60 };
-  return [{ at: K.press - K.dwell - 40, x: entry.x, y: entry.y }, ...click(K.press, target.x, target.y, { dwell: K.dwell, hold: K.release - K.press })];
+  const entry = { x: G.W + 24, y: target.y + (G.vertical ? 40 : 60) };
+  const rest = K.press - K.arrive;
+  const keysFrom = (t0: number): CursorKey[] => [
+    { at: t0, x: entry.x, y: entry.y },
+    { at: rest, x: target.x, y: target.y, dur: rest - t0 },
+    { at: K.press, x: target.x, y: target.y, action: 'press' },
+    { at: K.release, x: target.x, y: target.y, action: 'release' },
+  ];
+  // the start that puts the tip on the frame edge at K.enter (the move is monotone in x: bisect)
+  let lo = K.enter - 12;
+  let hi = K.enter - 0.25;
+  for (let k = 0; k < 24; k++) {
+    const mid = (lo + hi) / 2;
+    if (cursorPos(keysFrom(mid), K.enter).x > G.W) hi = mid;
+    else lo = mid;
+  }
+  return keysFrom(lo);
 }
 
 /** the frame the pointer's hotspot first enters the button (its hover starts there) */
@@ -131,40 +162,40 @@ export const Cta: React.FC = () => {
   const I = K.impact;
 
   const lights = lightsAt(t, G);
-  const ground = groundAt(t, G, lights);
+  const ground = groundAt(t, G, lights, REPEAT_GROUND.lift * groundGrade(MATTERS_LOCAL.end).lift);
 
-  /* ── the four lights in the GL context: orbs + their blooms (film 1's light model) ── */
-  const vol = orbVolume(t);
-  const flow = flowTime(Math.max(0, t), orbVolume);
-  const inP = tween(t, K.orbIn, [0, 1], EASE.inOut);
+  /* ── the four lights: EMITTERS — a white-hot core in a tight bloom of its own colour (no body, no surface) ── */
   const burst = tween(t, K.burst, [0, 1], EASE.out3);
   const survivorW = windowed(t, K.merge[0], K.survivor[0], I - 1, I + 4, EASE.out3, EASE.in2);
   const toAll = tween(t, K.merge, [0, 1], EASE.inOut);
   const sv = lights[SURVIVOR];
   const sw = (t - K.merge[0]) * 0.32;
-  const orbs: OrbDraw[] = [];
+  // a bloom's gaussian radius (exp(−d²/r²)) from its σ
+  const R = (sigma: number) => sigma * Math.SQRT2;
+  const cores: Core[] = [];
   const glows: Glow[] = lights.map((o) => {
-    const shown = o.pop > 0 && o.d >= 1 && o.opacity > 0.002;
-    const body = GLOW[o.id];
-    const glowBody = mixColor(mixColor(body.body, body.core, 0.4), ALL_GLOW.body, o.i === SURVIVOR ? toAll : 0);
-    // a point of light: its bloom (≈ its own size) does the work of the light, a brighter flash on its arrival
-    let gs = 0.7 * o.gather;
-    let gr = o.gather > 0 ? G.orb * (0.25 + 0.25 * o.gather) : 0;
-    if (shown) {
-      gs += (0.42 * o.light + 0.32 * o.flash) * (1 + 0.3 * inP) * o.opacity;
-      gr = Math.max(gr, 0.8 * o.d * (1 + 0.3 * o.flash));
+    const shown = o.pop > 0 && o.opacity > 0.002;
+    // its bloom: σ ≈ G.bloom at rest (it opens with the core's pop and a touch wider on the arrival flash), peak ≤ .6;
+    // the survivor's takes all four hues as the others pour into it
+    const k = Math.max(0, o.d / G.core);
+    let r = 0;
+    let s = 0;
+    if (o.gather > 0) {
+      // a point of its light gathers before the beat (rush, closing, night)
+      r = R(G.bloom * (0.45 + 0.25 * o.gather));
+      s = 0.32 * o.gather;
     }
-    gs = Math.min(1.3, gs);
-    const own = {
-      x: o.x,
-      y: o.y,
-      r: gr,
-      s: gs,
-      color: rgb01(mixColor(glowBody, MOMENT_LIGHTS[o.id].orb[3], smoothUnit(o.gather * (1 - Math.min(1, o.light / 0.4))))),
-    };
-    // in the merge every slot travels onto the survivor as one of its four colour glows (slot k = light k, always)
+    if (shown) {
+      r = Math.max(r, R(G.bloom * Math.sqrt(Math.max(0.15, k)) * (1 + 0.35 * o.flash)));
+      s = Math.max(s, (0.5 * Math.min(1, o.light) + 0.12 * o.flash) * o.opacity);
+    }
+    s = Math.min(0.6, s);
+    const hue = o.i === SURVIVOR ? mixColor(HUE[o.id], ALL_GLOW.body, toAll) : HUE[o.id];
+    const own = { x: o.x, y: o.y, r, s, color: rgb01(hue) };
+    // in the merge every slot travels onto the survivor as one of the four colours of its rim (slot k = light k)
     const a = sw + (o.i * Math.PI) / 2;
-    const mine = { x: sv.x + Math.cos(a) * sv.d * 0.55, y: sv.y + Math.sin(a) * sv.d * 0.55, r: sv.d * 0.72, s: 0.6 * survivorW, color: rgb01(MOMENT_LIGHTS[o.id].orb[2]) };
+    const off = 0.75 * sv.d;
+    const mine = { x: sv.x + Math.cos(a) * off, y: sv.y + Math.sin(a) * off, r: R(G.bloom * 0.95), s: 0.5 * survivorW, color: rgb01(HUE[o.id]) };
     let g: Glow = {
       x: mix(own.x, mine.x, survivorW),
       y: mix(own.y, mine.y, survivorW),
@@ -177,14 +208,15 @@ export const Cta: React.FC = () => {
       // handing over to the backlight; the others are gone
       g =
         o.i === SURVIVOR
-          ? { x: sv.x, y: sv.y, r: mix(sv.d * 1.1, G.halo[0] * 0.5, burst), s: 0.85 * Math.exp(-(t - I) / 2.2), color: rgb01(mixColor('#f7f3ff', MOMENT_LIGHTS.night.orb[3], 0.35)) }
+          ? { x: sv.x, y: sv.y, r: mix(R(G.bloom * 1.6), G.halo[0] * 0.5, burst), s: 0.85 * Math.exp(-(t - I) / 2.2), color: rgb01(mixColor('#f7f3ff', MOMENT_LIGHTS.night.orb[3], 0.35)) }
           : { ...g, s: 0 };
     }
-    if (shown) orbs.push({ x: o.x, y: o.y, d: o.d, palette: o.palette, volume: vol, time: flow + seedTime(o.i), opacity: o.opacity });
+    // its core: the gathering point (a pin of light), then the core itself on its pop
+    const coreR = shown ? o.d / 2 : o.gather > 0 ? 1.2 * o.gather : 0;
+    const coreS = shown ? o.opacity : o.gather > 0 ? 0.8 * o.gather : 0;
+    cores.push({ x: o.x, y: o.y, r: coreR, s: coreS, color: rgb01(hue) });
     return g;
   });
-  // the survivor on top in the merge
-  orbs.sort((p, q) => (p.palette === sv.palette ? 1 : q.palette === sv.palette ? -1 : 0));
 
   /* ── the backlight ── */
   const bloomS = bloomAt(t);
@@ -197,22 +229,24 @@ export const Cta: React.FC = () => {
     merge: [1, 0.72, 0.42, 0.05],
     floor: [G.P.y + G.floor.dy, G.floor.len, G.floor.k * tween(t, [I + 4, K.button + 10], [0, 1], EASE.inOut), G.floor.rise],
     glows,
+    cores,
     // the four lights on its rim, each on the corner it arrived from: rush top-left, sunday top-right, night
     // bottom-right, closing bottom-left
     rim: [0.85 * tween(t, K.rimIn, [0, 1], EASE.inOut), 0, 0, 0.45],
     rimColors: (['rush', 'sunday', 'night', 'closing'] as const).map((id) => rgb01(mixColor(MOMENT_LIGHTS[id].orb[2], MOMENT_LIGHTS[id].orb[3], 0.25))),
-    glowOver: 0.4,
-    wide: [4.5, 0.07],
+    wide: [5.5, 0.07],
     seed: t,
   };
-  const glOn = t >= K.lights[0] - 3;
+  const glOn = t >= K.dotMorph[0] - 1;
   // once the burst is over only the backlight is left in the context — a smooth light with no detail finer than
   // ~100 px — so its canvas drops to half the device resolution (the compositor's bilinear upscale is exact for it:
-  // measured identical at 4K; ≈ .55 s/frame saved at --scale 2). The orbs always draw at full device resolution.
+  // measured identical at 4K; ≈ .55 s/frame saved at --scale 2). The lights' cores always draw at full device resolution.
   const glQuality = t < K.burst[1] + 1 ? 1 : 0.5;
 
-  /* ── her dot (b16's, continuing exactly), until her light springs out of it ── */
-  const dotO = 1 - tween(t, [K.lights[0] - 0.5, K.lights[0] + 3], [0, 1], EASE.inOut);
+  /* ── her dot (b16's, continuing exactly) until it settles into her point of light (K.dotMorph): it draws in about its
+     centre and goes as her core and bloom come up in its place, so no disc is ever left behind the point of light ── */
+  const dotK = dotMorphAt(t);
+  const dotO = 1 - dotK;
 
   /* ── the click ── */
   const rect = buttonRect(G);
@@ -226,9 +260,10 @@ export const Cta: React.FC = () => {
   return (
     <AbsoluteFill style={{ background: HOME.night }}>
       <MeshGround
-        t={SCENES.cta.from + t}
+        t={ground.clock}
         palette={INK_MESH}
-        lift={0}
+        lift={ground.lift}
+        drift={ground.drift}
         brightness={ground.brightness}
         saturation={ground.saturation}
         shade={ground.shade}
@@ -236,11 +271,17 @@ export const Cta: React.FC = () => {
         keyLight={ground.key}
       />
       {dotO > 0.001 ? (
-        <AbsoluteFill style={{ opacity: dotO < 0.999 ? dotO : undefined }}>
+        <AbsoluteFill
+          style={
+            dotK > 0
+              ? { opacity: dotO, transform: `scale(${(1 - 0.6 * dotK).toFixed(4)})`, transformOrigin: `${G.dot.x.toFixed(2)}px ${G.dot.y.toFixed(2)}px` }
+              : undefined
+          }
+        >
           <TealDot t={MATTERS_LOCAL.end + t} g={mattersLayout(v)} />
         </AbsoluteFill>
       ) : null}
-      {glOn ? <LightGL width={L.width} height={L.height} u={u} orbs={orbs} quality={glQuality} /> : null}
+      {glOn ? <LightGL width={L.width} height={L.height} u={u} quality={glQuality} /> : null}
       {/* the type is the near plane: the lights pass behind it */}
       <Heading
         t={t}

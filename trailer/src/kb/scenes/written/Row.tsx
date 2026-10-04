@@ -36,10 +36,12 @@ export const rowPill = (size: number) => Math.max(26, Math.round(size * 0.6));
  *   tile     the icon tile's side (a square: size-9 against the name's text-sm), its icon (size-4 in it)
  *   nameX/Y  the name's top-left; meta: the type word's size and the gap after the pill (gap-x-2)
  */
-export function rowFace(size: number, layout: 'stack' | 'inline', h: number) {
+export function rowFace(size: number, layout: 'stack' | 'inline', h: number, pill?: number) {
   const pad = size * 0.42;
   const tile = layout === 'stack' ? size * 1.5 : size * 1.4;
-  const pillSize = rowPill(size);
+  // the pill (and its type word): rowPill(size), or the layout's own size — 9:16's ad-size rows set the app's own
+  // text-xs : text-sm ratio (12 : 14) so the status reads on a phone
+  const pillSize = pill ?? rowPill(size);
   const btn = size * 1.05;
   const nameY = layout === 'stack' ? h / 2 - (size * 1.05 + size * 0.22 + pillSize * 1.72) / 2 : (h - size * 1.05) / 2;
   return { pad, tile, icon: tile * 0.46, radius: tile * 0.17, pillSize, btn, nameX: pad * 2 + tile, nameY, metaSize: pillSize, metaGap: pillSize * 0.62 };
@@ -108,13 +110,15 @@ export const Row: React.FC<{
   menuPress?: number;
   /** the slip's corner radius (b06's strip: 12 × k) */
   slipRadius?: number;
-}> = ({ t, x, y, w, h, layout, size, kind, name, pill, morph = 1, lift = 0, ink = '#1e1442', slip, contentAt, opacity = 1, scale = 1, moving = false, menuHover = 0, menuPress = 0, slipRadius }) => {
+  /** the pill's size (default rowPill(size)) */
+  pillSize?: number;
+}> = ({ t, x, y, w, h, layout, size, kind, name, pill, morph = 1, lift = 0, ink = '#1e1442', slip, contentAt, opacity = 1, scale = 1, moving = false, menuHover = 0, menuPress = 0, slipRadius, pillSize: pillAt }) => {
   const L = useLayout();
   const v = L.vertical;
   const rRow = size * 0.32;
   const rSlip = slipRadius ?? rRow;
   const radius = rSlip + (rRow - rSlip) * morph;
-  const F = rowFace(size, layout, h);
+  const F = rowFace(size, layout, h, pillAt);
   const { pad, tile, btn, pillSize } = F;
   const border = 1.25;
   const borderA = morph;

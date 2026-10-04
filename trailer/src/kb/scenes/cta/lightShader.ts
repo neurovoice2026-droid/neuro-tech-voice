@@ -3,18 +3,20 @@
  * "HeroGL with art = 0"), cut down to what film 2 draws and made TRANSPARENT so it lies over the site's
  * gradient mesh (kit/MeshGround, a 2D canvas under it) instead of film 1's flat night:
  *
- *   · the four lights: the site's FluidOrb (orbPass.ts, film 1's, imported) in ONE premultiplied layer — there is
- *     no figure to hide a back layer — each throwing a tight bloom of its own light (an emitter, not a marble) and
- *     a faint wide pool of it onto the ground round it (uWide: a lamp in a room)
+ *   · the four lights: EMITTERS, never bodies — each a white-hot core (a flat-topped disc, Ø ≈ 8 px at 1080, its
+ *     white barely tinted by its hue) in a thin hot halation and a tight gaussian bloom of its own colour (σ ≈ 12
+ *     px, peak alpha ≤ .6), plus a faint wide pool of it on the ground round it (uWide: a lamp in a room). No
+ *     surface, no specular, no shadow: the colour lives only in the bloom (and, at the merge, in the rim of four
+ *     blooms round her core)
  *   · after the impact, THE BACKLIGHT behind the wordmark: film 1's merged light verbatim — a wide, filled
  *     ellipse of lilac-white light, brightest at the core and falling the whole way (one C¹ curve through its
  *     stops, so no stop shows as a ring), its rim taking the four lights' colours at the diagonals and spilling
  *     a little of them past its edge; its underside settles under the word (uFloor) so the button sits on the
  *     night. Film 1 mixed to its INK past the edge; here the far edge is NO light (alpha → 0): the mesh shows.
  *
- * OUTPUT: premultiplied RGBA, with alpha = the light's own brightest channel (and the orbs' coverage), so the
- * browser's ordinary source-over composite gives  light + mesh · (1 − max(light))  — light ADDED on the dark
- * ground (≈ screen), the orbs' bodies occluding it — with no CSS blend mode and no invalid (rgb > a) pixels.
+ * OUTPUT: premultiplied RGBA, with alpha = the light's own brightest channel, so the browser's ordinary source-over
+ * composite gives  light + mesh · (1 − max(light))  — light ADDED on the dark ground (≈ screen) — with no CSS blend
+ * mode and no invalid (rgb > a) pixels.
  *
  * Every term is smooth in its uniforms (no noise, no smear), so the 120 fps master samples it continuously.
  * Absolute-frequency terms are in canvas px (uPxScale = canvas px per CSS px): the 4K master is the same picture.
@@ -40,13 +42,12 @@ uniform float uHaloGain;
 uniform vec4  uMerge;     // the backlight: body gain, rim peak (≤ .75), rim spill past the edge, core lift
 uniform vec4  uFloor;     // y where the floor starts (at the axis), its length (canvas px), strength, rise at ±rx (px)
 uniform float uSeed;      // render frame, for the dither
-uniform sampler2D uOrbs;  // the premultiplied orb layer
-uniform float uOrbOn;     // 1 while any orb is drawn
-uniform vec4  uGlowP[4];  // orb bloom: centre (canvas px, y down), radius px, strength
-uniform vec3  uGlowC[4];  // orb bloom colour
+uniform vec4  uGlowP[4];  // a light's bloom: centre (canvas px, y down), radius px (exp(−d²/r²): σ = r/√2), strength
+uniform vec3  uGlowC[4];  // its colour
+uniform vec4  uCoreP[4];  // a light's core: centre (canvas px, y down), radius px, intensity
+uniform vec3  uCoreC[4];  // the hue its white-hot core and halation are tinted by
 uniform vec4  uRim;       // the four lights on the rim: strength (0..1), -, -, angular half-width (rad)
 uniform vec3  uRimC[4];   // the rim's colours: top-left, top-right, bottom-right, bottom-left
-uniform float uGlowOver;  // how much of each orb's bloom also lies over its own body (halation)
 uniform vec2  uWide;      // each light's light on the ground round it: radius (× its bloom), strength (× its bloom's)
 
 // THE BACKLIGHT (film 1's merged light): a lilac-white core (#f4efff), #dccfff, the night's light (#b298f6),
@@ -116,31 +117,38 @@ void main() {
     }
   }
 
-  /* ---- the four lights' blooms ------------------------------------ */
+  /* ---- the four lights: bloom (their colour), halation, white-hot core ---- */
   vec3 glow = vec3(0.0);
   vec3 wide = vec3(0.0);
+  vec3 hot = vec3(0.0);
   for (int i = 0; i < 4; i++) {
     vec4 g = uGlowP[i];
-    if (g.w <= 0.0) continue;
-    vec2 dd = (px - g.xy) / g.z;
-    float d2 = dot(dd, dd);
-    // its light falling on the ground round it: a wide, faint pool of the same light (a lamp in a room, not a halo)
-    float w2 = d2 / (uWide.x * uWide.x);
-    if (w2 > 9.0) continue;                          // (beyond 3σ of the wide pool: nothing of this light reaches here)
-    wide += uGlowC[i] * (exp(-w2) * g.w * uWide.y);
-    if (d2 < 9.0) glow += uGlowC[i] * (exp(-d2) * g.w);
+    if (g.w > 0.0) {
+      vec2 dd = (px - g.xy) / g.z;
+      float d2 = dot(dd, dd);
+      // its light falling on the ground round it: a wide, faint pool of the same light (a lamp in a room, not a halo)
+      float w2 = d2 / (uWide.x * uWide.x);
+      if (w2 < 9.0) {                               // (beyond 3σ of the wide pool: nothing of this light reaches here)
+        wide += uGlowC[i] * (exp(-w2) * g.w * uWide.y);
+        if (d2 < 9.0) glow += uGlowC[i] * (exp(-d2) * g.w);
+      }
+    }
+    vec4 c = uCoreP[i];
+    if (c.w > 0.0) {
+      float d = length(px - c.xy);
+      float u = d / c.z;
+      if (u < 6.0) {
+        // the core: a flat-topped disc (super-gaussian, n = 6: its edge ≈ .4 of its radius wide — soft by 1–2 px, never
+        // a hard sprite, never a shaded ball), its white barely tinted; round it a thin hot halation (σ 1.6 r) that
+        // carries the white into the bloom's colour
+        float u2 = u * u;
+        hot += mix(vec3(1.0), uCoreC[i], 0.1) * (c.w * exp(-u2 * u2 * u2));
+        hot += mix(vec3(1.0), uCoreC[i], 0.55) * (0.42 * c.w * exp(-u2 / 5.12));
+      }
+    }
   }
-  vec3 col = screen(screen(light, wide), glow);
+  vec3 col = screen(screen(screen(light, wide), glow), hot);
   float a = maxc(col);
-
-  /* ---- the orbs (premultiplied), then their halation --------------- */
-  if (uOrbOn > 0.5) {
-    vec4 o = texture(uOrbs, vUv);
-    col = o.rgb + col * (1.0 - o.a);
-    a = o.a + a * (1.0 - o.a);
-    col = screen(col, glow * uGlowOver);
-    a = max(a, maxc(col));
-  }
 
   // ±0.5/255 dither where there is light (the film grain is the global overlay)
   float n = hash12(gl_FragCoord.xy + fract(uSeed * 0.618) * 311.0) - 0.5;

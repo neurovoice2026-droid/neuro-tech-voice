@@ -54,7 +54,7 @@ export const HandoffPanel: React.FC<{ t: number; S: CallStage; ink: string; hide
       <AppPanel t={W.end} S={WS} bar={bar} keys={[]} ink={ink}>
         {ROWS.map((r, i) =>
           hideHours && i === HOURS ? null : (
-            <Row key={r.name} t={W.end} x={WS.list.x} y={rowTop(i, W.end, WS).y} w={WS.list.w} h={WS.row.h} layout={WS.row.layout} size={WS.row.size} kind={r.kind} name={r.name} pill={READY[i]} />
+            <Row key={r.name} t={W.end} x={WS.list.x} y={rowTop(i, W.end, WS).y} w={WS.list.w} h={WS.row.h} layout={WS.row.layout} size={WS.row.size} pillSize={WS.row.pill} kind={r.kind} name={r.name} pill={READY[i]} />
           ),
         )}
       </AppPanel>

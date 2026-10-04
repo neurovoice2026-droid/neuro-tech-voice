@@ -6,9 +6,11 @@
  *                        centre, the core P (the wordmark's cap line — film 1's end-card geometry), the heading,
  *                        the backlight and the end card's rows
  *   groundAt(t, G, L)    the mesh: b16's last ground exactly on frame 0 (INK_MESH, deep, near black, keyed teal on
- *                        her dot), then the night comes up; the room's key follows the source — her dot → her orb →
- *                        the converging core → the backlight
- *   lightsAt(t, G)       THE FOUR LIGHTS: one at a time on 8ths from the corners, sunday first out of her dot; a slow
+ *                        her dot), then THE VIOLET ROOM comes up; the room's key follows the source — her dot → her
+ *                        light → the converging core → the backlight
+ *   lightsAt(t, G)       THE FOUR LIGHTS (emitters: a core's diameter, its pop, light and flash — Cta.tsx draws the
+ *                        core and its bloom): one at a time on 8ths from the corners, sunday first (b16's dot settled
+ *                        into her point of light over K.dotMorph, springing open on her 8th); a slow
  *                        drift toward the centre (the ring turning on, counter-clockwise, the way they arrived);
  *                        the converge (a swell, a whirl, a spiral into the core); the merge into HER light; the
  *                        burst on the impact
@@ -82,8 +84,8 @@ export function ctaLayout(vertical: boolean): CtaLayout {
       C0,
       P: { x: 960, y: 370 },
       aspect: Math.abs(dy / dx),
-      core: 8,
-      bloom: 12,
+      core: 9,
+      bloom: 13,
       heading: { cy: 540, size: 100 },
       halo: [580, 236, 214],
       bloomFrom: 0.16,
@@ -115,8 +117,8 @@ export function ctaLayout(vertical: boolean): CtaLayout {
     C0,
     P: { x: 540, y: 650 },
     aspect: sy / sx,
-    core: 8,
-    bloom: 12,
+    core: 9,
+    bloom: 13,
     heading: { cy: 730, size: 92 },
     halo: [400, 192, 180],
     bloomFrom: 0.2,
@@ -140,6 +142,10 @@ const gatherAt = (u: number) => (u < -3 ? 0 : u < 0 ? Math.sin(((u + 3) / 3) * (
 /** a light's pop: ≈15 % overshoot, settled in ~12 f; it starts POP_LEAD before its 8th (film 1's ORB_POP) */
 const ORB_POP = { stiffness: 340, damping: 18, mass: 0.9 };
 const POP_LEAD = 1.5;
+/** her point of light at rest before her 8th (× the full size and light): b16's dot, settled into an emitter */
+const HER_REST = 0.72;
+/** 0 → 1: b16's teal dot settling into her point of light (K.dotMorph, an in-out) */
+export const dotMorphAt = (t: number) => EASE.inOut(clamp01((t - K.dotMorph[0]) / (K.dotMorph[1] - K.dotMorph[0])));
 /** the backlight opening behind the word: ≈4 % over, settled in ≈16 f (film 1's BLOOM) */
 export const BLOOM = { stiffness: 130, damping: 16.5, mass: 1 };
 export const smoothUnit = (x: number) => {
@@ -168,35 +174,67 @@ export const brandEnv = (t: number) => envAt('kb2-brand', K.brand, t);
 
 /* ── the ground ─────────────────────────────────────────────────── */
 
-/** the night's level: the deep INK_MESH opened from b16's black to a night you can see the material in */
-const NIGHT = { brightness: 0.24, saturation: 1, shade: 0.2, key: 0.8 } as const;
+/**
+ * THE VIOLET ROOM (the night's level): the deep INK_MESH opened from b16's dark into a room you can see the material
+ * in — the floor (m2) ≈ #1a0a40–#20004b (OKLCH L .22), the electric and indigo pools violet at about a third of the
+ * site's lightness, her teal pool the key. A third of the mesh's own lift keeps the deepest pool (m0, lower right) a
+ * deep violet (L .12) instead of crushing it to black; the lit shade is held low so the corners fall off without going
+ * out. White type on it stays above 10:1. The key pulls the top-right m2 pool (the floor's own colour), not the white
+ * m4 one: the m4 sheen stays at home, top left, so the teal key never greys and the converge never fogs the centre
+ * (on b16's last frame, at its 7 % brightness, the two pulls differ by under 2 levels: the swap is invisible). The pools drift a little wider and faster than b16's (the room breathes: × `drift`, the clock × `speed`,
+ * both eased in with the light so the field never jumps on the cut).
+ */
+const NIGHT = { brightness: 0.33, saturation: 1.2, shade: 0.15, key: 0.68, lift: 0.3, drift: 1.3, speed: 1.25 } as const;
 const SUNDAY = MOMENT_LIGHTS.sunday;
+/** the mesh pool the key pulls (kit/mesh.ts FLOW index 3: the m2 pool at 80/26) */
+const KEY_POOL = 3;
 /** the backlight's light on the ground (its mid stop, the night's light #b298f6) */
 export const BACKLIGHT_MID = '#b298f6';
 
+/** the night's rise: C¹ (no slope on the cut — the darkening landed with none), front-loaded (its steepest a quarter of
+ *  the way in: the room comes up out of the dark at once and settles slowly), and its integral (for the mesh's clock) */
+const riseCurve = (u: number) => {
+  const x = clamp01(u);
+  return 1 - Math.pow(1 - x, 4) * (1 + 4 * x);
+};
+const riseIntegral = (u: number) => {
+  const x = clamp01(u);
+  return x - 1 / 3 + Math.pow(1 - x, 5) - (2 / 3) * Math.pow(1 - x, 6) + Math.max(0, u - 1);
+};
+
 export type GroundState = {
+  /** the mesh's clock (timeline frames: b16's on the cut, then running × NIGHT.speed) */
+  clock: number;
+  drift: number;
+  lift: number;
   brightness: number;
   saturation: number;
   shade: number;
-  key: { x: number; y: number; strength: number; color: string; radius: number };
+  key: { x: number; y: number; strength: number; color: string; radius: number; pool: number };
 };
 
 /**
- * The mesh at t. Frame 0 is b16's last ground exactly (matters/stage.ts groundGrade at its end + Matters.tsx's key:
- * strength .5, the sunday orb's deep teal, radius × .88). The night comes up over K.night (an in-out: the darkening
- * landed with no slope, so the light rises without a kink). The key follows the source.
+ * The mesh at t. Frame 0 is b16's last ground exactly (matters/stage.ts groundGrade at its end — `lift0` is the lift
+ * Matters.tsx draws it with — and Matters.tsx's key: strength .5, the sunday orb's deep teal, radius × .88). The violet
+ * room comes up over K.night (riseCurve). The key follows the source.
  */
-export function groundAt(t: number, G: CtaLayout, lights: LightState[]): GroundState {
+export function groundAt(t: number, G: CtaLayout, lights: LightState[], lift0: number): GroundState {
   const g0 = groundGrade(MATTERS_LOCAL.end);
-  const up = EASE.inOut(clamp01((t - K.night[0]) / (K.night[1] - K.night[0])));
+  const D = K.night[1] - K.night[0];
+  const up = riseCurve((t - K.night[0]) / D);
   const impact = t < K.impact ? 0 : springUnit(t - K.impact, BLOOM);
   // THE INHALE: as the four become one the room draws its breath — its light sinks toward the core's own, so the
   // impact opens out of a darker room — and lets it go as the backlight opens
   const inhale = t < K.impact ? tween(t, [K.merge[0], K.impact], [0, 1], EASE.in2) : Math.max(0, 1 - Math.min(1, impact));
-  let brightness = mix(g0.brightness, NIGHT.brightness, up) + 0.035 * Math.min(1.2, impact) - 0.07 * inhale;
+  let brightness = mix(g0.brightness, NIGHT.brightness, up) + 0.04 * Math.min(1.2, impact) - 0.11 * inhale;
   const saturation = mix(g0.saturation, NIGHT.saturation, up);
   const shade = mix(g0.shade, NIGHT.shade, up);
-  // the key: on her dot, then on her orb as it opens (the light glides with it), then on the converging core,
+  const lift = mix(lift0, NIGHT.lift, up);
+  // the field: b16's clock on the cut, then a little quicker and wider as the room comes up (the clock is the integral
+  // of its speed, so it never jumps)
+  const clock = SCENES.cta.from + t + (NIGHT.speed - 1) * D * riseIntegral(Math.max(0, t - K.night[0]) / D);
+  const drift = mix(1, NIGHT.drift, up);
+  // the key: on her dot, then on her light as it opens (the pool glides with it), then on the converging core,
   // then the backlight's own light on the ground
   const sun = lights[0];
   const onOrb = EASE.inOut(clamp01((t - K.lights[0]) / 6));
@@ -206,11 +244,15 @@ export function groundAt(t: number, G: CtaLayout, lights: LightState[]): GroundS
   kx = mix(kx, G.P.x, toCore);
   ky = mix(ky, G.P.y, toCore);
   const glow = clamp01(impact);
-  const color = mixColor(mixColor(SUNDAY.orb[1], ALL_GLOW.body, 0.3 * toCore), BACKLIGHT_MID, glow);
+  // (her teal on the violet room: the deep teal of b16's key opened a third of the way to her body colour as the room
+  // comes up, so the pool reads teal, not the blue a deep teal makes screened over violet; on the converge it becomes
+  // the merged light's own colour, then the backlight's)
+  const teal = mixColor(SUNDAY.orb[1], SUNDAY.orb[2], 0.35 * up);
+  const color = mixColor(mixColor(teal, ALL_GLOW.body, toCore), BACKLIGHT_MID, glow);
   const strength = (mix(0.5, NIGHT.key, up) + 0.08 * glow) * (1 - 0.4 * inhale);
   const radius = mix(G.keyR0, Math.sqrt(G.W * G.H) * 0.5, Math.max(0.4 * toCore, glow));
-  brightness = rest(t, brightness, NIGHT.brightness + 0.035);
-  return { brightness, saturation, shade, key: { x: kx, y: ky, strength, color, radius } };
+  brightness = rest(t, brightness, NIGHT.brightness + 0.04);
+  return { clock, drift, lift, brightness, saturation, shade, key: { x: kx, y: ky, strength, color, radius, pool: KEY_POOL } };
 }
 
 /* ── the four lights ────────────────────────────────────────────── */
@@ -292,7 +334,10 @@ export function lightsAt(t: number, G: CtaLayout): LightState[] {
       x = mix(G.dot.x, x, glide);
       y = mix(G.dot.y, y, glide);
     }
-    const pop = t < pAt - POP_LEAD ? 0 : springAt(t, pAt - POP_LEAD, ORB_POP);
+    // hers is already a point of light, at rest a size down (b16's dot settled into it over K.dotMorph); on her 8th it
+    // springs open to full like the others. The others pop out of nothing (a gathering point first).
+    const spring = t < pAt - POP_LEAD ? 0 : springAt(t, pAt - POP_LEAD, ORB_POP);
+    const pop = i === 0 ? HER_REST * dotMorphAt(t) + (1 - HER_REST) * spring : spring;
     const size = pop;
     const flash = arrivalFlash(t - pAt);
     const gather = i === 0 ? 0 : gatherAt(t - pAt);

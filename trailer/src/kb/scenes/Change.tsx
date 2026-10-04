@@ -137,8 +137,9 @@ export const Change: React.FC = () => {
   const dots = rowMenuRect(old.x, old.y, old.w, old.h, S.row.size);
   const menu = useMenu({
     x: dots.x + dots.w,
-    y: dots.y + dots.h,
+    y: S.menu.side === 'top' ? dots.y : dots.y + dots.h,
     size: S.menu.size,
+    side: S.menu.side,
   });
   const start = useLinePointer(v);
   const drag = dragPoints(file, v);
@@ -167,7 +168,7 @@ export const Change: React.FC = () => {
         <AppPanel t={t} S={S} bar={bar} menu={menu} keys={keys} ink={INK} />
         <NewRow t={t} S={S} g={page} ink={INK} accent={SUNDAY} />
         <FilePage t={t} S={S} g={file} keys={keys} ink={INK} accent={SUNDAY} />
-        <Flight t={t} S={S} g={file} keys={keys} row={newRowBox(S)} size={S.row.size} ink={INK} accent={SUNDAY} />
+        {S.file.park ? <Flight t={t} S={S} g={file} keys={keys} row={newRowBox(S)} size={S.row.size} ink={INK} accent={SUNDAY} /> : null}
         <CallTurns t={t} S={S} />
         <ChangeOrb t={t} S={S} pose={orb} />
         <Captions

@@ -31,6 +31,7 @@ import { Easing } from 'remotion';
 import { EASE, springUnit } from '../../../lib/motion';
 import { CHANGE_LOCAL as K, LINE_LOCAL } from '../../timing';
 import { lineEnd } from '../line/stage';
+import { rowHeight, writtenStage } from '../written/stage';
 
 export type XY = { x: number; y: number };
 export type Box = { x: number; y: number; w: number; h: number };
@@ -59,20 +60,24 @@ export type ChangeStage = {
   /** Ava's orb: b12's corner (A), the corner she gives up for the parked file in 9:16 (B), her call place (C) */
   orb: { a: OrbAt; b: OrbAt; c: OrbAt };
   /** the owner's file: its box (h measured), its line size, how far below it starts rising; parked: its right edge,
-   *  top and scale */
-  file: { x: number; y: number; w: number; size: number; rise: number; park: { right: number; y: number; k: number } };
-  /** the agent page on Knowledge (b12's panel geometry, set lower): box (its height fits five rows), corner radius,
-   *  how far below it starts rising */
-  panel: { x: number; y: number; w: number; radius: number; rise: number };
+   *  top and scale (16:9). 9:16 has no parked thumbnail (null): the file steps back and leaves left as the app takes the
+   *  frame, and the new version lands in the list by itself (the global 9:16 pass: a 17 px thumbnail read as clutter) */
+  file: { x: number; y: number; w: number; size: number; rise: number; park: { right: number; y: number; k: number } | null };
+  /** the agent page on Knowledge: box (16:9: b12's panel geometry set lower, its height fitting five rows; 9:16: the app at
+   *  ad size, b08's card — `h` fixed, the list cut by its bottom edge like a phone's), corner radius, how far below it
+   *  starts rising */
+  panel: { x: number; y: number; w: number; radius: number; rise: number; h?: number };
   /** the tab bar: label size, icons, the strip's side padding (× r) — b12's */
   tabs: { size: number; icons: boolean; padR: number };
   /** the content's inner padding, the heading's size ("Your documents"), the gap from the tab bar to it */
   pad: number;
   heading: number;
   headTop: number;
-  /** the rows (written/Row.tsx, single-line): name size, gap; and the … menu's item size */
-  row: { size: number; gap: number };
-  menu: { size: number };
+  /** the rows (written/Row.tsx): name size, gap, layout (16:9 single-line; 9:16 b08's ad-size two-line row and its pill
+   *  size); the … menu's item size and the side it opens on (9:16: above its trigger — no room under it in the card, as
+   *  the app's dropdown flips on a phone) */
+  row: { size: number; gap: number; layout: 'stack' | 'inline'; pill?: number };
+  menu: { size: number; side: 'bottom' | 'top' };
   /** the narrator's caption (vo-7, no tag): centre x, row A's centre, max width */
   caption: { x: number; y: number; maxWidth: number };
   /** b14's call transcript: alignment and anchor x, caption size, the two turns' fixed lines and rows */
@@ -112,8 +117,8 @@ const STAGES: Record<'land' | 'vert', ChangeStage> = (() => {
         pad: 48,
         heading: 36,
         headTop: 42,
-        row: { size: 28, gap: 10 },
-        menu: { size: 27 },
+        row: { size: 28, gap: 10, layout: 'inline' },
+        menu: { size: 27, side: 'bottom' },
         caption: { x: 960, y: 962, maxWidth: 1560 },
         call: {
           align: 'left',
@@ -133,20 +138,23 @@ const STAGES: Record<'land' | 'vert', ChangeStage> = (() => {
     }
     const size = 68;
     const lh = Math.round(size * 1.18);
+    // THE APP AT AD SIZE (the global 9:16 pass; b08's card, written/stage.ts): the panel full width under her orb, its
+    // type at the app's proportions ≈ 1.56× (row names 50, pills 42), the app's two-line row; the list cut by the card's
+    // bottom edge like a phone's (the row and its menu are the shot)
+    const W8 = writtenStage(true);
     return {
       W: 1080,
       H: 1920,
       vertical,
-      orb: { a: E.orb, b: { x: 282, y: 352, d: 140 }, c: { x: 540, y: 300, d: 140 } },
-      // parked: 220 px under the frame's top, ≈ 40 px clear of the panel's top edge (524)
-      file: { x: 64, y: 480, w: 952, size: 56, rise: 56, park: { right: E.panel.x + E.panel.w, y: 220, k: 0.5 } },
-      panel: { x: E.panel.x, y: 524, w: E.panel.w, radius: E.panel.radius, rise: 110 },
-      tabs: E.tabs,
-      pad: 38,
-      heading: 34,
-      headTop: 40,
-      row: { size: 32, gap: 10 },
-      menu: { size: 28 },
+      orb: { a: E.orb, b: E.orb, c: { x: 540, y: 300, d: 140 } },
+      file: { x: 64, y: 480, w: 952, size: 56, rise: 56, park: null },
+      panel: { x: W8.panel.x, y: W8.panel.y, w: W8.panel.w, radius: W8.panel.radius, rise: 110, h: W8.panel.h },
+      tabs: W8.tabs,
+      pad: W8.pad,
+      heading: W8.type.title,
+      headTop: 28,
+      row: { size: W8.row.size, gap: W8.row.gap, layout: W8.row.layout, pill: W8.row.pill },
+      menu: { size: 46, side: 'top' },
       caption: { x: 540, y: 1336, maxWidth: 940 },
       call: {
         align: 'center',
@@ -159,7 +167,8 @@ const STAGES: Record<'land' | 'vert', ChangeStage> = (() => {
         wave: { half: 210, pitch: 10, bar: 4, maxH: 20 },
         chip: { mode: 'above', y: 402 },
       },
-      page: { x: 120, y: 1020, w: 840, size: 46 },
+      // the page at the 9:16 title floor (call/stage.ts's page: 56) — legible on a phone
+      page: { x: 56, y: 1000, w: 968, size: 56 },
       cross: { axis: 'y', feather: 110 },
     };
   };
@@ -170,20 +179,20 @@ export const changeStage = (vertical: boolean): ChangeStage => (vertical ? STAGE
 
 /* ── the panel's list (pure numbers: written/Row.tsx's single-line row) ── */
 
-/** a single-line row's height for its name size (written/stage.ts rowHeight('inline')) */
-export const rowH = (size: number) => Math.round(size * 2.35);
+/** a row's height for its name size and layout (written/stage.ts rowHeight) */
+export const rowH = (S: ChangeStage) => rowHeight(S.row.layout, S.row.size, S.row.pill);
 /** the tab bar's height (kit/TabBar: 44r, r = size / 14) */
 export const barH = (S: ChangeStage) => (44 * S.tabs.size) / 14;
 /** the list's top (frame px, the panel at rest) and the row pitch */
 export function listGeo(S: ChangeStage) {
   const top = S.panel.y + barH(S) + S.headTop;
   const listY = top + S.heading * 1.5;
-  const h = rowH(S.row.size);
+  const h = rowH(S);
   const pitch = h + S.row.gap;
   const x = S.panel.x + S.pad;
   const w = S.panel.w - 2 * S.pad;
   // the panel holds five rows (the two versions side by side, for a moment) and its padding
-  const panelH = listY + 5 * h + 4 * S.row.gap + (S.vertical ? 30 : 28) - S.panel.y;
+  const panelH = S.panel.h ?? listY + 5 * h + 4 * S.row.gap + (S.vertical ? 30 : 28) - S.panel.y;
   return { headY: top, listY, h, pitch, x, w, panelH };
 }
 
@@ -241,6 +250,20 @@ const PARK_LEAD = Easing.bezier(0.215, 0.61, 0.355, 1);
  */
 export function filePose(t: number, S: ChangeStage, h: number) {
   const r = t < K.page[0] ? 0 : springUnit(t - K.page[0], RISE);
+  if (!S.file.park) {
+    // 9:16 (no parked thumbnail): on "Change the document" the file is put away the way b12's page went — it steps
+    // back a depth (× .92 about its centre, a shade of lift lost) and eases out to the left, accelerating, gone before
+    // the pointer reaches the row's …; the app it covered is the shot
+    const F = S.file;
+    const u = ease(t, K.park[0], K.park[0] + 12, LEAVE);
+    const d = ease(t, K.park[0], K.park[0] + 12, EASE.inOut);
+    const k = lerp(1, 0.92, d);
+    const x = F.x + (F.w * (1 - k)) / 2 - 420 * u;
+    const y = F.y + F.rise * (1 - r) + (h * (1 - k)) / 2;
+    const opacity = ease(t, K.page[0], K.page[0] + 4, EASE.draw) * (1 - ease(t, K.park[0] + 3, K.park[0] + 11, EASE.inOut));
+    const moving = (r > 0 && Math.abs(1 - r) > 1e-4) || (u > 0 && u < 1);
+    return { x, y, k, w: F.w * k, h: h * k, lift: lerp(3 + 1.5 * (1 - r), 2.4, d), opacity, on: t >= K.page[0] - 0.01 && t < K.park[0] + 11, moving, p: u };
+  }
   const ps = t < K.park[0] ? 0 : PARK_LEAD(Math.min(1, (t - K.park[0]) / 8.5));
   // 16:9: up first (the rise with the scale), across after — clear of the panel's tab bar for its whole run-in.
   // 9:16: across first (the glide), up after — the file passes right of Ava's orb as she moves into the corner it
@@ -248,10 +271,11 @@ export function filePose(t: number, S: ChangeStage, h: number) {
   const px = S.vertical ? (t < K.park[0] ? 0 : springUnit(t - K.park[0], GLIDE)) : ease(t, K.park[0] + 2.5, K.park[0] + 13, EASE.inOut);
   const py = S.vertical ? ease(t, K.park[0] + 3, K.park[0] + 14, EASE.inOut) : ps;
   const F = S.file;
-  const k = lerp(1, F.park.k, ps);
-  const parkX = F.park.right - F.w * F.park.k;
+  const park = S.file.park;
+  const k = lerp(1, park.k, ps);
+  const parkX = park.right - F.w * park.k;
   const x = lerp(F.x, parkX, px);
-  const y = lerp(F.y + F.rise * (1 - r), F.park.y, py);
+  const y = lerp(F.y + F.rise * (1 - r), park.y, py);
   const opacity = ease(t, K.page[0], K.page[0] + 4, EASE.draw);
   const p = Math.min(ps, px);
   const moving = (r > 0 && Math.abs(1 - r) > 1e-4) || (t >= K.park[0] && (ps < 1 - 1e-4 || Math.abs(1 - px) > 1e-4 || py < 1 - 1e-4));

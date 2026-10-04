@@ -99,6 +99,13 @@ export function layoutWords(text: string, s: TextSpec, x0 = 0): { words: { text:
   return { words, width: Math.max(0, x - space - x0), space };
 }
 
+/**
+ * ONE APOSTROPHE FOR THE WHOLE FILM: the typographic ’ (U+2019) for every straight ' in copy that is rendered
+ * (captions, word arrays, the call's answer). One character for one, so word counts, word indices and the timings
+ * built on them never change.
+ */
+export const typo = (s: string): string => s.replace(/'/g, '’');
+
 /** Greedy wrap into lines no wider than maxW (word indices per line). */
 export function wrapWords(text: string, s: TextSpec, maxW: number): string[][] {
   const words = text.split(' ').filter(Boolean);

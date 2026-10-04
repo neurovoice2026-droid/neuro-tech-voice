@@ -72,14 +72,15 @@ function rowGeo(S: CallStage) {
   const pad = size * 0.42;
   const tokenSize = Math.max(24, Math.round(size * 0.5));
   const tile = layout === 'stack' ? size * 1.5 : size * 1.4;
-  // written/Row.tsx's face: the app's square icon tile (FileText), the type word "Text" after the pill
-  const F = rowFace(size, layout, h);
+  // written/Row.tsx's face: the app's square icon tile (FileText), the type word "Text" after the pill (its size: the
+  // written stage's — 9:16's ad-size rows set their own)
+  const F = rowFace(size, layout, h, WS.row.pill);
   const tileW = tile;
   const metaW = F.metaGap + typeLabelWidth('txt', F.metaSize);
-  const pillSize = Math.max(26, Math.round(size * 0.6));
+  const pillSize = F.pillSize;
   const btn = size * 1.05;
   const nameX = pad * 2 + tileW;
-  const nameY = layout === 'stack' ? h / 2 - (size * 1.05 + size * 0.22 + pillSize * 1.72) / 2 : (h - size * 1.05) / 2;
+  const nameY = F.nameY;
   return { WS, size, layout, h, w, pad, tokenSize, tile, tileW, pillSize, btn, nameX, nameY, radius: size * 0.32, F, metaW };
 }
 
@@ -160,9 +161,10 @@ export const OpeningHoursPage: React.FC<{ t: number; S: CallStage; g: PageGeo; i
   // the page's kind line: the row's tile holds the app's FileText icon (written/Row.tsx), not a token, so the line
   // rises into its place on the page through its own mask once the name has gone down past it (they never cross)
   const kindAt = C.unfold[0] + 10;
-  // the page's own content: rule + lines on 16ths
-  const ruleP = tween(t, [C.unfold[1] - 8, C.unfold[1] + 4], [0, 1], EASE.draw);
-  const linesAt = (i: number) => C.unfold[1] - 6 + i * 3.75;
+  // the page's own content: rule + lines on 16ths — overlapping the paper's growth (the first line rises at ≈ 60 % of
+  // the unfold, once the paper is tall enough to hold it), so the opening page is never a heading over blank paper
+  const ruleP = tween(t, [C.unfold[0] + 9, C.unfold[0] + 21], [0, 1], EASE.draw);
+  const linesAt = (i: number) => C.unfold[0] + 12 + i * 3.75;
   const dimW = tween(t, [C.sweep, C.sweep + 15], [1, 0.4], EASE.inOut);
   // THE RE-SET's page side (b11): the swept lines are set token by token (exactly where the line sets them); from
   // `drop` the tokens she doesn't say (· 9:00–14:00 ·) leave up through their own masks, a frame apart, and the sweep

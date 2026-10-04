@@ -21,6 +21,7 @@
  * last picture — the orb, the panel (its tab bar on Knowledge with the badge at 4), the four rows (Ready), the
  * eyebrow, the ground (KB_MESH keyed on the orb). The cursor and the caption have left by the cut.
  */
+import { Easing } from 'remotion';
 import { EASE, springUnit } from '../../../lib/motion';
 import { WRITTEN_LOCAL as W } from '../../timing';
 import { turnEnd } from '../turn/stage';
@@ -63,9 +64,11 @@ export type WrittenStage = {
   /** "Your documents": the heading's top and the list (frame px), the rows' layout */
   docs: { x: number; y: number; w: number };
   list: { x: number; y: number; w: number; bottom: number };
-  row: { size: number; h: number; gap: number; layout: 'stack' | 'inline' };
-  /** UI type sizes */
-  type: { title: number; body: number; small: number; label: number };
+  row: { size: number; h: number; gap: number; layout: 'stack' | 'inline'; pill?: number };
+  /** UI type sizes (url: the web page field's mono text) */
+  type: { title: number; body: number; small: number; label: number; url: number };
+  /** 9:16: the panel's content SCROLLS (the app on a phone, its tab bar fixed): by `by` px over `at` (null: no scroll) */
+  scroll: { at: readonly [number, number]; by: number } | null;
   /** the slips: 16:9 the column's corner (strip left / top of the top strip / width), 9:16 the pile */
   slips: { x: number; y: number; w: number };
   /** the eyebrow ● KNOWLEDGE BASE: its anchor x (left edge, or centre) and the label's top */
@@ -76,9 +79,9 @@ export type WrittenStage = {
   enter: XY;
 };
 
-/** the row height for a layout / name size (kept in step with written/Row.tsx) */
-export const rowHeight = (layout: 'stack' | 'inline', size: number) =>
-  layout === 'stack' ? Math.round(size * 0.36 * 2 + size * 1.05 + size * 0.22 + Math.max(26, Math.round(size * 0.6)) * 1.72) : Math.round(size * 2.35);
+/** the row height for a layout / name size / pill size (kept in step with written/Row.tsx rowFace) */
+export const rowHeight = (layout: 'stack' | 'inline', size: number, pill?: number) =>
+  layout === 'stack' ? Math.round(size * 0.36 * 2 + size * 1.05 + size * 0.22 + (pill ?? Math.max(26, Math.round(size * 0.6))) * 1.72) : Math.round(size * 2.35);
 
 const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
   const make = (vertical: boolean): WrittenStage => {
@@ -90,7 +93,7 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
       const barH = (44 * tabs.size) / 14;
       const pad = 46;
       const y0 = panel.y + barH + 40;
-      const type = { title: 36, body: 28, small: 23, label: 26 };
+      const type = { title: 36, body: 28, small: 23, label: 26, url: 26 };
       const addW = 510;
       const add = { x: panel.x + pad, y: y0, w: addW, h: 0 };
       const drop = { x: add.x, y: y0 + 66, w: addW, h: 200, compact: false };
@@ -120,27 +123,42 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
         list: { x: docsX, y: y0 + 66, w: docsW, bottom: panel.y + panel.h - 34 },
         row: { size: rowSize, h: rowHeight('stack', rowSize), gap: 14, layout: 'stack' },
         type,
+        scroll: null,
         slips: { x: 96, y: 446, w: 460 },
         eyebrow: { x: panel.x + 4, y: panel.y - 58, align: 'left' },
         caption: { x: 960, y: 962, maxWidth: 1560 },
         enter: { x: 2010, y: 520 },
       };
     }
-    const panel = { x: 64, y: 418, w: 952, h: 842, radius: 30, from: { x: 0, y: 1560 } };
-    const tabs = { size: 30, icons: false, padR: 8 };
+    // THE APP AT AD SIZE (global 9:16 fix: the desktop panel shrunk to fit read at 20–27 px on a phone). The panel is the
+    // app as a phone shows it — full width, its type at the app's own proportions scaled up ≈ 1.56× (row names 50, the
+    // status pills 42, text-xs : text-sm = 12 : 14), the app's real two-line document row (TabKnowledge.tsx DocumentRow:
+    // the name over the pill and its type word) — and its content SCROLLS under the fixed tab bar like the page on a
+    // phone: every truth beat happens in the top slot of the list, right under "Add page" (newest first), so the first
+    // screen (Add knowledge · the drop zone · the field + Add page · Your documents · the newest row) holds them all; on
+    // "knowledge" the page scrolls to the four rows, Ready (the act's last picture, b09's first).
+    //   band   the card 426 → 1264: under the eyebrow (358–384), ≥ 40 px over the caption's caps (row A centre 1336)
+    const panel = { x: 28, y: 426, w: 1024, h: 838, radius: 34, from: { x: 0, y: 1560 } };
+    const tabs = { size: 32, icons: false, padR: 8 };
     const barH = (44 * tabs.size) / 14;
-    const pad = 36;
-    const y0 = panel.y + barH + 34;
-    const type = { title: 34, body: 28, small: 22, label: 26 };
+    const pad = 40;
+    const y0 = panel.y + barH + 28;
+    const type = { title: 46, body: 42, small: 34, label: 38, url: 34 };
     const cw = panel.w - 2 * pad;
     const add = { x: panel.x + pad, y: y0, w: cw, h: 0 };
-    const drop = { x: add.x, y: y0 + 58, w: cw, h: 116, compact: true };
-    const bw = 196;
-    const field = { x: add.x, y: drop.y + drop.h + 22, w: cw - bw - 14, h: 68 };
-    const button = { x: field.x + field.w + 14, y: field.y, w: bw, h: 68 };
+    const drop = { x: add.x, y: y0 + 72, w: cw, h: 150, compact: true };
+    const bw = 280;
+    const field = { x: add.x, y: drop.y + drop.h + 20, w: cw - bw - 14, h: 96 };
+    const button = { x: field.x + field.w + 14, y: field.y, w: bw, h: 96 };
     add.h = field.y + field.h - y0;
-    const docsY = field.y + field.h + 34;
-    const rowSize = 32;
+    const docsY = field.y + field.h + 36;
+    const rowSize = 50;
+    const pill = 42;
+    const row = { size: rowSize, pill, h: rowHeight('stack', rowSize, pill), gap: 10, layout: 'stack' as const };
+    const listY = docsY + 72;
+    // the end scroll: the four rows fill the view (the newest 12 px under the tab bar, the oldest clear of the bottom)
+    const viewTop = panel.y + barH;
+    const by = Math.round(listY - (viewTop + 12));
     return {
       W: 1080,
       H: 1920,
@@ -156,11 +174,12 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
       field,
       button,
       docs: { x: add.x, y: docsY, w: cw },
-      list: { x: add.x, y: docsY + 54, w: cw, bottom: panel.y + panel.h - 30 },
-      row: { size: rowSize, h: rowHeight('inline', rowSize), gap: 10, layout: 'inline' },
+      list: { x: add.x, y: listY, w: cw, bottom: panel.y + panel.h - 24 },
+      row,
       type,
+      scroll: { at: [W.knowledge - 4, W.knowledge + 22] as const, by },
       // the pile rests in the band between the top platform zone (the top 250 px, the Reels/TikTok UI) and the panel
-      slips: { x: 286, y: 284, w: 680 },
+      slips: { x: 286, y: 286, w: 680 },
       eyebrow: { x: 540, y: 358, align: 'center' },
       caption: { x: 540, y: 1336, maxWidth: 940 },
       enter: { x: 1130, y: 760 },
@@ -224,6 +243,21 @@ export function rowTop(i: number, t: number, S: WrittenStage) {
   return { y: S.list.y + slots * pitch, moving: W.rows.some((a, j) => j > i && t > a - 10 && t < a + 26) };
 }
 
+/**
+ * 9:16: how far the panel's content has scrolled at t (px; 0 in 16:9). One scroll, on "knowledge": the page glides up
+ * under the fixed tab bar until the four rows fill the view — a phone's scroll (a soft start, a long decelerating
+ * settle, no bounce), the newest row coming to rest just under the bar. The content and the rows inside it ride it.
+ */
+const SCROLL_EASE = Easing.bezier(0.32, 0, 0.12, 1);
+export function scrollAt(t: number, S: WrittenStage) {
+  if (!S.scroll) return 0;
+  const [a, b] = S.scroll.at;
+  const u = Math.min(1, Math.max(0, (t - a) / (b - a)));
+  return S.scroll.by * SCROLL_EASE(u);
+}
+/** the scroll is moving at t */
+export const scrolling = (t: number, S: WrittenStage) => !!S.scroll && t > S.scroll.at[0] && t < S.scroll.at[1];
+
 /** the badge's count over time (the app counts every document, Reading ones too) */
 export const BADGE = W.rows.map((at, i) => ({ at, n: i + 1 }));
 
@@ -241,7 +275,9 @@ export const BADGE = W.rows.map((at, i) => ({ at, n: i + 1 }));
 export function writtenEnd(vertical: boolean) {
   const S = writtenStage(vertical);
   const t = W.end;
-  const rows = ROWS.map((r, i) => ({ name: r.name, kind: r.kind, x: S.list.x, y: rowTop(i, t, S).y, w: S.list.w, h: S.row.h }));
-  return { orb: S.orb.settle, panel: { x: S.panel.x, y: S.panel.y, w: S.panel.w, h: S.panel.h, radius: S.panel.radius }, tabs: S.tabs, rows, eyebrow: S.eyebrow, at: t };
+  // (9:16: the rows where the end scroll left them)
+  const sc = scrollAt(t, S);
+  const rows = ROWS.map((r, i) => ({ name: r.name, kind: r.kind, x: S.list.x, y: rowTop(i, t, S).y - sc, w: S.list.w, h: S.row.h }));
+  return { orb: S.orb.settle, panel: { x: S.panel.x, y: S.panel.y, w: S.panel.w, h: S.panel.h, radius: S.panel.radius }, tabs: S.tabs, rows, eyebrow: S.eyebrow, scroll: sc, at: t };
 }
 export const WRITTEN_END = writtenEnd;
