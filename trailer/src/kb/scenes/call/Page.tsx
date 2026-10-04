@@ -17,7 +17,7 @@ import React from 'react';
 import { reveal, revealStyle } from '../../../components/Type';
 import { subpixel } from '../../../lib/glide';
 import { useLayout } from '../../../lib/layout';
-import { EASE, mix, smooth, SPRING, springUnit, tween } from '../../../lib/motion';
+import { EASE, smooth, SPRING, springUnit, tween } from '../../../lib/motion';
 import { maskBox, typeStyle } from '../../../lib/type';
 import { TYPE } from '../../../theme';
 import { APP, Icon, meshElevation, measureText, Pill, useDocPage, useKitFaces, type DocPageGeometry } from '../../kit';
@@ -61,7 +61,7 @@ function rowGeo(S: CallStage) {
 }
 
 /** where the row is at the start of its return: 16:9 off the right edge; 9:16 its place in the receded panel */
-function rowStart(S: CallStage, R: ReturnType<typeof rowGeo>) {
+function rowStart(S: CallStage) {
   if (S.rowFrom) return { x: S.rowFrom.x, y: S.rowFrom.y, k: 1 };
   const row = S.from.rows.find((r) => r.name === ROWS[HOURS].name)!;
   const tr = panelTransform(C.rowIn[0], S);
@@ -82,7 +82,7 @@ export const OpeningHoursPage: React.FC<{ t: number; S: CallStage; g: PageGeo; i
   const v = L.vertical;
   if (t < C.rowIn[0]) return null;
   const R = rowGeo(S);
-  const st = rowStart(S, R);
+  const st = rowStart(S);
   const size = g.spec.size;
   const pad = g.pad;
   const labelSize = typeStyle('label', v).fontSize as number;
@@ -283,7 +283,3 @@ export const LiftedLines: React.FC<{ t: number; S: CallStage; g: PageGeo; ink: s
     </div>
   );
 };
-
-/** a convenience: the page's lines' left (for links) */
-export const lineLeft = (g: PageGeo, i: number) => g.lineRects[i].x;
-export { mix };

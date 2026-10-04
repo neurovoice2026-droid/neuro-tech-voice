@@ -543,13 +543,16 @@ export const CALL_LOCAL = (() => {
     /** 40.0 on the plan (bar): the ring — one slate hairline leaves the orb; the panel steps back and slides away
      *  right (16:9) / down (9:16); the eyebrow leaves; the orb comes forward to her call place */
     ring: 0,
-    recede: [0, 34] as const,
+    recede: [0, 30] as const,
     glide: [0, 30] as const,
-    /** 40.25: picked up on the first ring — the orb wakes to listen; ● CALLER and the timer rise */
+    /** 40.25: picked up on the first ring — the orb wakes to listen; ● CALLER and the timer rise a beat's 16th later,
+     *  once the panel has cleared the strip's place */
     pickup,
-    /** the call timer (mono): it reads `base` s at the pickup (the greeting has been said) and runs on call time
-     *  (frozen through the stop-time): seconds = base + floor((callTime − zero) / 30) */
-    timer: { base: 4, zero: 10 } as const,
+    strip: pickup + 2,
+    /** the call timer (mono), on CALL time (frozen through the stop-time): seconds = base + floor((callTime − zero) / 30)
+     *  — it ticks to 00:04 as the caller speaks (the greeting has been said), reads 00:07 at the freeze (its roll done
+     *  just before it) and 00:11 as the strip folds into the record */
+    timer: { base: 4, zero: 31.5 } as const,
     c4,
     c4Words: words('kb2-c4', c4) as readonly number[],
     /** Ava's filler: her turn (● AVA) rises under the caller's; the transcript scrolls up to make room */
@@ -599,54 +602,259 @@ export const CALL_LOCAL = (() => {
   };
 })();
 
-/** b12 (line-local). */
-export const LINE_LOCAL = {
-  ownerLine: OWNER_LINE,
-  caret: L('line', CARET),
-  /** one word per 16th */
-  keys: Array.from({ length: OWNER_WORDS }, (_, k) => L('line', CARET + k * (BEAT / 4))) as readonly number[],
-  save: L('line', SAVE),
-  vo6: L('line', VO6_AT),
-  /** "in the words you chose": the focus ring settles on "words" */
-  focus: L('line', VO6_AT + vWord('kb2-vo-6', 10)),
-};
+/** b12 (line-local; 0 = the act's first frame, on a bar line). The picture: src/kb/scenes/Line.tsx (+ scenes/line/*:
+ *  stage.ts has the layout and every pose as a pure function of these moments). CLIENT DIRECTION v2: the agent page's
+ *  real tab bar and its Conversation tab — the field, the amber unsaved dot, Save changes — worked by a real cursor
+ *  with two-part clicks; then she narrates (SCRIPT.md b12, J2: one text moves at a time, nothing narrated while it types).
+ *
+ *  THE TWO ORDERS. v2's full order — click Conversation, cross to the field and click it, type the 22 words on 16ths,
+ *  click Save, a breath, THEN vo-6 — needs vo-6 at least `full` frames in (157.5: a calm hand takes ≈ 16 f to cross from
+ *  the tab to the field plus the 6 f read before a press, and ≈ 12 f + 6 back off the keys to Save). The voiced timeline
+ *  (CARET, SAVE, VO6_AT above) gives b12 the script's own plan — the caret a beat in, vo-6 105 f in — so:
+ *    · room (vo6 ≥ 157.5)   the page comes back on Knowledge; tab on beat 2 → field → the words → Save → vo-6
+ *    · no room (this take set)   the page comes back already on Conversation (the tab click does not fit: it would have
+ *      to land before the act starts); the I-beam rides in on the page and clicks on the script's caret, the words land on
+ *      the script's 16ths, the pointer comes back off the keys as the last words land and Save is released on vo-6's
+ *      first frame (her first word is ≥ 3 f later): the dot goes, then she speaks. */
+export const LINE_LOCAL = (() => {
+  const S16 = BEAT / 4;
+  const end = SCENES.line.to - SCENES.line.from;
+  const vo6 = L('line', VO6_AT);
+  const w6 = (k: number) => vo6 + vWord('kb2-vo-6', k);
+  const N = OWNER_WORDS;
+  const run = (N - 1) * S16;
+  // the full order, on the grid: tab on beat 2; the field six 16ths after its release; Save six 16ths after the last word
+  const tabF = { down: b(1), up: b(1) + S16 };
+  const fieldF = { down: tabF.up + 6 * S16, up: tabF.up + 7 * S16 };
+  const saveF = { down: fieldF.up + run + 6 * S16, up: fieldF.up + run + 7 * S16 };
+  const needs = saveF.up + 2 * S16;
+  const full = vo6 >= needs;
+  const caret = full ? fieldF.up : L('line', CARET);
+  const field = full ? fieldF : { down: caret - S16, up: caret };
+  const keys = Array.from({ length: N }, (_, k) => field.up + k * S16);
+  const last = keys[N - 1];
+  // no room: Save as late as her line allows — released on vo-6's first frame
+  const save = full ? saveF : { down: vo6 - S16, up: vo6 };
+  // the pointer back off the keys to Save: arriving CURSOR.pressLead (6) before the press — a calm crossing when there is
+  // room; with none, a decisive 9-frame hop that starts as "back" types and lands as "today." does
+  const hop = full ? ([last + 2, save.down - 6] as const) : ([save.down - 6 - 9, save.down - 6] as const);
+  return {
+    ownerLine: OWNER_LINE,
+    end,
+    /** room for v2's full order (see above) — false for this take set */
+    full,
+    needs,
+    /** the cut from b11: the call's record row and its page leave up (0 → 6); the agent page rises in from 2 (settled
+     *  by the caret's press), the pointer riding on it; Ava's orb glides to her corner and dims to rest (the owner's
+     *  moment, not hers) */
+    leave: [0, 6] as const,
+    enter: [2, 12] as const,
+    orb: [0, 26] as const,
+    /** the Conversation tab: down / up (the underline slides and the content swaps on the release) — null: no room */
+    tab: full ? tabF : null,
+    /** the I-beam presses into "When the answer isn't in your documents" (focus + the caret on the down, the script's
+     *  "caret clicks in" on the up) */
+    field,
+    caret,
+    /** one word per 16th from the field's release (22): each rises into its mask; the amber unsaved dot opens on the
+     *  first, and Discard / Save changes wake (disabled → enabled) */
+    keys: keys as readonly number[],
+    /** the pointer leaves the keys for Save changes [start, arrive] */
+    hop,
+    /** Save changes: down (the save tick) / up — the dot closes, the buttons go back to disabled, the field blurs */
+    saveClick: save,
+    save: save.down,
+    /** the pointer, its work done, fades where it stands */
+    pointerOut: save.up + 6,
+    vo6,
+    /** her first word: the orb relights */
+    relight: w6(0),
+    /** the narrator's captions (no tag); the key phrase "in the words you chose." keys sunday from "in". 9:16 sets her
+     *  first sentence as its two phrases (one line each on the phone's measure) */
+    captions: [
+      { text: 'If it isn\u2019t written down, I say so,', word: 0 },
+      { text: 'in the words you chose.', word: 8 },
+    ] as readonly Caption[],
+    captionsV: [
+      { text: 'If it isn\u2019t written down,', word: 0 },
+      { text: 'I say so,', word: 5 },
+      { text: 'in the words you chose.', word: 8 },
+    ] as readonly Caption[],
+    key: w6(8),
+    /** "in the words you chose": the sunday focus ring settles round the field on "words" (the glassy tick) */
+    focus: w6(10),
+    /** the last caption holds a beat past her line (never into the cut's last 7 frames) */
+    holdUntil: Math.min(end - 7, vo6 + vFrames('kb2-vo-6') + BEAT),
+  };
+})();
 
-/** b13–b14 (change-local). */
-export const CHANGE_LOCAL = {
-  vo7: L('change', VO7_AT),
-  /** "Hours change?": the caret clicks into 14:00 */
-  caret: L('change', VO7_AT + vWord('kb2-vo-7', 0)),
-  /** "Change the document": the menu opens */
-  menu: L('change', up16(VO7_AT + vWord('kb2-vo-7', 2))),
-  /** the fifth Ready mallet (E5) completes the phrase, on the beat with "the new answer" */
-  ready5: L('change', READY5),
-  ring: L('change', RING_B14),
-  pickup: L('change', PICKUP_B14),
-  c2: L('change', C2B_AT),
-  call3: L('change', CALL3_AT),
-  /** "four.": the new line takes the sweep */
-  four: L('change', FOUR),
-  /** the frame starts crossing back to the desk under her last word */
-  lcut: L('change', LCUT),
-};
+/** b13–b14 (change-local; 0 = the act's first frame, on a beat — every multiple of a 16th is on the grid). The picture:
+ *  src/kb/scenes/Change.tsx (+ scenes/change/*: stage.ts has the layout and every pose as a pure function of these
+ *  moments). CLIENT DIRECTION v2: the owner's own file edited by a real cursor (an I-beam drag over "14:00", "16:00"
+ *  typed a key per 16th), then back in the app on Knowledge — the row's … menu clicked open, "Replace with new file"
+ *  clicked — every click two-part (down / up, a sound on each).
+ *
+ *  THE CURSOR'S CLOCK. The pointer comes back from where b12 left it (on Save changes) and must be on "14:00" for the
+ *  drag on "change?"; its last key lands on "Change"; the … press is six 16ths later (a calm crossing to the row) and
+ *  "Replace with new file" four 16ths after the menu opens, so the new version lands in the list a beat and a quarter
+ *  before the fifth Ready — its Reading… pill reads under "The next call gets…". */
+export const CHANGE_LOCAL = (() => {
+  const S16 = BEAT / 4;
+  const from = SCENES.change.from;
+  const end = SCENES.change.to - from;
+  /** an act-local frame snapped up to the film's 16th grid */
+  const on16 = (f: number) => up16(from + f) - from;
+  /** a line's spoken word onsets, act-local */
+  const words = (id: VoiceId, at: number) => VOICE.lines[id].words.map((_, k) => L('change', at + vWord(id, k)));
+  const vo7 = L('change', VO7_AT);
+  const vo7Words = words('kb2-vo-7', VO7_AT); // Hours change? · Change the document. · The next call gets the new answer.
+  const ready5 = L('change', READY5);
+  const ring = L('change', RING_B14);
+  const pickup = L('change', PICKUP_B14);
+  const c2 = L('change', C2B_AT);
+  const c2Words = words('kb2-c2', C2B_AT);
+  const call3 = L('change', CALL3_AT);
+  const call3Words = words('kb2-call-3', CALL3_AT);
+  const four = L('change', FOUR);
+  const lcut = L('change', LCUT);
+  /* b13 · the owner's file: the I-beam presses on "14:00" on "change?", drags across it (selected, the sunday wash) and
+     releases a 16th later; "16:00" is typed over it, one key per 16th — the last key on "Change" */
+  const drag = { down: on16(vo7Words[1]), up: on16(vo7Words[1]) + S16 };
+  const keys = Array.from({ length: 5 }, (_, i) => drag.up + (i + 1) * S16);
+  const lastKey = keys[keys.length - 1];
+  /* b13 · back in the app: the cursor presses the old row's …, the menu opens on the release; "Replace with new file" */
+  const menu = { down: lastKey + 6 * S16, up: lastKey + 7 * S16 };
+  const replace = { down: menu.up + 4 * S16, up: menu.up + 5 * S16 };
+  /** the edited file drops into the list as the new version (newest on top), landing on the 16th */
+  const land = replace.up + 3 * S16;
+  /** b14 · the app steps back a beat before the ring; the new row lifts out of it and unfolds into its page */
+  const recede = [ring - BEAT, ring + 13] as const;
+  return {
+    end,
+    vo7,
+    vo7Words: vo7Words as readonly number[],
+    /** the cut from b12: its agent page sinks back (0 → 12); the owner's file comes forward over it (2 → 16) */
+    handoff: [0, 12] as const,
+    page: [2, 16] as const,
+    /** "Hours change?": the caret clicks into 14:00 — the I-beam presses there and drags across it (two-part click) */
+    caret: drag.down,
+    drag,
+    /** "16:00", one keystroke per 16th (the selection is replaced on the first) */
+    keys: keys as readonly number[],
+    /** "Change the document": the agent page rises on its Knowledge tab (its badge at 4); the file steps up into the
+     *  corner once its last key is in */
+    app: [vo7Words[2], vo7Words[2] + 14] as const,
+    park: [lastKey + 2, lastKey + 18] as const,
+    /** the old row's … pressed / released (the menu opens from its trigger on the release) */
+    menu,
+    /** "Replace with new file" pressed (.97) / released: the menu closes, the file flies into the list's top slot */
+    replace,
+    fly: [replace.up, land] as const,
+    /** the new row (TXT · Opening hours, Reading…) has landed on top; the badge ticks 4 → 5 (the old one still counts) */
+    land,
+    /** the pointer, its work done, fades where it stands */
+    pointerOut: replace.up + 8,
+    /** the fifth Ready mallet (E5) completes b08's phrase ON the beat with "the new answer": the new row rolls to Ready;
+     *  the old row leaves up through its mask; the badge back to 4 */
+    ready5,
+    oldOut: ready5,
+    badgeBack: ready5 + 6,
+    /** the narrator's captions (no tag); the key phrase "the new answer." keys sunday from "new" */
+    captions: [
+      { text: 'Hours change?', word: 0 },
+      { text: 'Change the document.', word: 2 },
+      { text: 'The next call gets the new answer.', word: 5 },
+    ] as readonly Caption[],
+    key: vo7Words[10],
+    holdUntil: Math.min(recede[0] - 3, vo7 + vFrames('kb2-vo-7') + BEAT),
+    /** b14: the app steps back a depth and slides away down (a beat before the ring — the rows step back); the new row
+     *  lifts out of it and unfolds into its page (Saturday · 9:00–16:00), its lines rising on 16ths */
+    recede,
+    lift: [recede[0], recede[0] + 8] as const,
+    unfold: [recede[0] + 4, recede[1]] as const,
+    /** 67.0 on the plan (beat 3): the ring — one slate hairline leaves the orb; she glides to her call place */
+    ring,
+    orbCall: [ring, ring + 30] as const,
+    /** picked up (an 8th): she listens; ● CALLER rises */
+    pickup,
+    callerTag: pickup + 2,
+    /** Dana's IDENTICAL recording (b03's kb2-c2): her turn rises as a unit on "Quick", her line's waveform under it */
+    c2,
+    c2Words: c2Words as readonly number[],
+    /** SAME QUESTION: the tag pops beside ● CALLER on her last word, "Saturday?" (the 16th) */
+    chip: on16(c2Words[c2Words.length - 1]),
+    waveClose: c2 + vFrames('kb2-c2') + 2,
+    /** her answer (● AVA): "You can! / We're open Saturday / from nine till four." — "nine till four." keys sunday on "nine" */
+    call3,
+    call3Words: call3Words as readonly number[],
+    avaTag: call3 - 2,
+    nine: call3Words[6],
+    /** "four.": the new line takes the ink sweep (and the bright pluck); the other two lines settle to 45 % */
+    four,
+    sweep: [four, four + 10] as const,
+    /** 72.75 on the plan: the L-CUT under her last word — the frame crosses to b15's desk (scenes/Matters.tsx
+     *  MattersDesk at its first picture), wiping on in the reading direction (16:9 left → right, 9:16 top → bottom);
+     *  the call's type leaves up through its masks just ahead of the front */
+    lcut,
+    cross: [lcut + 2, end] as const,
+  };
+})();
 
 /** b15–b16 (matters-local). */
-export const MATTERS_LOCAL = {
-  /** "nervous." rises on the act's first frame */
-  nervous: 0,
-  desk2: L('matters', DESK2_AT),
-  /** the line rings once (ducked, cut after one chirp); the label rolls in an 8th later */
-  ring: L('matters', DESK_RING),
-  label: L('matters', DESK_RING + BEAT / 2),
-  /** at least one full bar of room tone, nothing moving but the colon's breath */
-  breath: [L('matters', DESK2_END), L('matters', VO8_AT)] as const,
-  /** b16: the title over the desk; vo-8; "do." sends the old slip stack away */
-  b16: L('matters', B16),
-  vo8: L('matters', VO8_AT),
-  do: L('matters', VO8_AT + vWord('kb2-vo-8', lastWord('kb2-vo-8'))),
-  /** the paper darkens into night over three beats */
-  dark: [L('matters', DARK[0]), L('matters', DARK[1])] as const,
-};
+export const MATTERS_LOCAL = (() => {
+  const S16 = BEAT / 4;
+  const S8 = BEAT / 2;
+  const end = SCENES.matters.to - SCENES.matters.from;
+  /** a line's spoken words, act-local */
+  const words = (id: VoiceId, at: number) => VOICE.lines[id].words.map((_, k) => L('matters', at + vWord(id, k)));
+  const ring = L('matters', DESK_RING);
+  const b16 = L('matters', B16);
+  const vo8Words = words('kb2-vo-8', VO8_AT);
+  const doAt = vo8Words[vo8Words.length - 1];
+  /** the stack lifts on the 16th of "do." (the paper slide's frame) */
+  const lift = L('matters', up16(VO8_AT + vWord('kb2-vo-8', lastWord('kb2-vo-8'))));
+  const dark = [L('matters', DARK[0]), L('matters', DARK[1])] as const;
+  return {
+    end,
+    /** "nervous." rises on the act's first frame (73.0 on the plan); the hanging em dash is lifted off as it does */
+    nervous: 0,
+    dash: [0, 3] as const,
+    desk2: L('matters', DESK2_AT),
+    /** the staff reply's words (● FRONT DESK rises a beat's 16th before the first) */
+    deskWords: words(DESK2, DESK2_AT) as readonly number[],
+    /** the line rings once (74.5: beat 2 of its bar, ducked): the teal colon sends one hairline ring; her soft
+     *  pickup tone cuts the trill after one chirp (a 16th); AVA · ON A CALL rolls in under the clock an 8th after
+     *  the ring — where a second chirp would have been. The in-person card does not move. */
+    ring,
+    pickup: ring + S16,
+    label: ring + S8,
+    /** at least one full bar of room tone, nothing moving but the colon's breath */
+    breath: [L('matters', DESK2_END), L('matters', VO8_AT)] as const,
+    /** b16 (half a beat before vo-8): the slow push toward the card starts (eased in: nothing visible moves in
+     *  the breath); 9:16: the clock's figures and labels leave up and the teal dot rises above the title */
+    b16,
+    push: [b16, end] as const,
+    clockOut: [b16, b16 + 10] as const,
+    dotRise: [b16, b16 + 36] as const,
+    /** 9:16: the desk reframes down under the title (done before "only" rises) */
+    reframe: [b16, b16 + 44] as const,
+    vo8: L('matters', VO8_AT),
+    /** "That's the work / only people can do." — each word rises on its spoken onset */
+    vo8Words: vo8Words as readonly number[],
+    /** "do.": the key phrase eases into sunday ink as the glint runs through it … */
+    do: doAt,
+    key: doAt,
+    /** … and the old slip stack lifts from the desk's edge (on the 16th) and glides off toward the teal dot, the
+     *  slips a cascade (each `stagger` behind the one above), EASE.inOut */
+    stack: { lift, glide: [lift + 1, lift + 1 + 38] as const, stagger: 2.5, n: 5 },
+    /** the title leaves up through its masks as the room goes dark */
+    titleOut: dark[0] + 6,
+    /** the paper darkens into night over three beats (80.5–82.0 on the plan), landing on the close's bar; the
+     *  teal dot becomes the key light; the desk's type and the clock fade with the light */
+    dark,
+    fade: [dark[0] + 6, end - 3] as const,
+  };
+})();
 
 /** b17–b18 (cta-local). The §7 FALLBACK route: a film-2 Cta from the timing-free end-card parts. */
 export const CTA_LOCAL = {
@@ -959,6 +1167,127 @@ const CALL_HITS: Hit<Snd>[] = (() => {
 })();
 /* ── /call ── */
 
+/* ── line ── (b12: picture src/kb/scenes/Line.tsx + scenes/line/*; pans from the 16:9 layout: the Conversation tab .32,
+ * the field — each keystroke panned (narrowly, .38–.62) to where its word lands (16:9 sets the line a sentence per row) —
+ * Save changes .73)
+ * The bed thinning to piano and pad is the bed's (MUSIC.line). The CURSOR's clicks are TWO-PART (CLIENT DIRECTION v2 §3):
+ * one sound on the press, one on the release (LINE_LOCAL's frames — the picture's pointer uses the same frames).
+ * FILM-2 EXTRAS this act asks the sound pass for (film 1 stand-ins below until they exist; labels say [→ …]):
+ *   fx-click-down / fx-click-up   (b08's) the mouse button going down / coming up
+ *   fx-keys        (b08's soft low-profile keystrokes) — here ONE per WORD on 16ths: a word's last key, a touch rounder
+ *                  than b08's character run, no typewriter bell, no ring; even in level across the line
+ *   fx-glass-tick  "words": the sunday focus ring settling round the field — one small glassy tick (a high sine / glass
+ *                  transient near E6, ≈ 60 ms, a breath of air on it), quiet under her voice
+ * (the save tick) the press on Save changes carries a tiny pitched tick (film 1's tick, sunday-tuned) layered on the click.
+ * The amber dot and the buttons waking ride the first keystroke; nothing sounds for the pointer's moves. */
+const LINE_HITS: Hit<Snd>[] = (() => {
+  const R = LINE_LOCAL;
+  const at = (f: number) => SCENES.line.from + f;
+  const S16 = BEAT / 4;
+  // each word's pan: its centre's place along its row (16:9: "…want to guess." / "I'll ask … today."; the field spans .21–.79)
+  const words = R.ownerLine.split(' ');
+  const rows = [words.slice(0, words.findIndex((w) => w.endsWith('.')) + 1)];
+  rows.push(words.slice(rows[0].length));
+  const width = Math.max(...rows.map((r) => r.join(' ').length));
+  const xs = rows.flatMap((r) => {
+    let c = 0;
+    return r.map((w) => {
+      const mid = c + w.length / 2;
+      c += w.length + 1;
+      return 0.38 + 0.24 * (mid / width);
+    });
+  });
+  const FIELD = 0.6;
+  const SAVE = 0.73;
+  return [
+    H(at(R.leave[0] + 2), 'whoosh-soft', 'none', [0.42, 0.52], 3, 'b12 the call’s record row leaves up; the agent page rises in', { db: -12 }),
+    ...(R.tab
+      ? [
+          H(at(R.tab.down), 'click', 'none', 0.32, 2, 'b12 the cursor presses the Conversation tab [→ fx-click-down]', { db: -3 }),
+          H(at(R.tab.up), 'tap', 'none', 0.32, 3, 'b12 … and releases it [→ fx-click-up]', { db: -8 }),
+          H(at(R.tab.up + 1), 'draw', 'none', [0.62, 0.34], 3, 'b12 the underline springs back to Conversation; the tab content swaps through its mask', { db: -14 }),
+        ]
+      : []),
+    H(at(R.field.down), 'click', 'none', FIELD, 3, 'b12 the I-beam presses into the field: focus, the caret [→ fx-click-down]', { db: -5 }),
+    H(at(R.field.up), 'tap', 'none', FIELD, 3, 'b12 … released [→ fx-click-up]', { db: -10 }),
+    H(at(R.keys[0]), 'key', 'none', xs[0], 3, `b12 the owner’s line types, one soft keystroke per word on 16ths (${R.keys.length}); the amber unsaved dot opens on the first [→ fx-keys]`, {
+      db: -7,
+      layer: true,
+      run: { n: R.keys.length, step: S16, xs },
+    }),
+    H(at(R.saveClick.down), 'click', 'none', SAVE, 2, 'b12 Save changes: pressed [→ fx-click-down]', { db: -3 }),
+    H(at(R.saveClick.down), 'tick', 'sunday', SAVE, 3, 'b12 the save tick', { layer: true, db: -8 }),
+    H(at(R.saveClick.up), 'tap', 'none', SAVE, 3, 'b12 … released: the amber dot closes [→ fx-click-up]', { db: -8 }),
+    H(at(R.focus), 'glint', 'sunday', FIELD, 3, 'b12 "words": the sunday focus ring settles round the field [→ fx-glass-tick]', { db: -9 }),
+  ];
+})();
+/* ── /line ── */
+
+/* ── change ── (b13–b14: picture src/kb/scenes/Change.tsx + scenes/change/*; pans from the 16:9 layout: the owner's
+ * file .62 ("14:00" .65), the agent page .5 (the old row's … .83, "Replace with new file" .8, the list's top slot .52),
+ * the parked file .76; b14: the orb .11, the call transcript .3, SAME QUESTION .32, the page .75)
+ * The bed's part (MUSIC.change / .ready5 / .ring14): the fifth Ready mallet's chord, the lift into the next call with a
+ * high piano line. The CURSOR's clicks are TWO-PART (CLIENT DIRECTION v2 §3): one sound on the press, one on the release
+ * (CHANGE_LOCAL's frames — the picture's pointer uses the same frames).
+ * FILM-2 EXTRAS this act asks the sound pass for (film 1 stand-ins below until they exist; labels say [→ …]):
+ *   fx-click-down / fx-click-up   (b08's) the mouse button going down / coming up
+ *   fx-select      NEW: the drag-selection snapping across "14:00" — a very short, soft high tick (≈ 15 ms, no tone,
+ *                  quieter than the click-up), layered on the release
+ *   fx-keys        (b08's soft low-profile keystrokes) — here one per CHARACTER of "16:00", on 16ths (five), a touch
+ *                  brighter than b12's word-keys; no typewriter bell
+ *   fx-menu-open   NEW: the dropdown opening from its trigger — a soft, low, dry "pop" of a light panel (≈ 30 ms, a breath
+ *                  of air, no pitch), under the click-up
+ *   fx-slip-slide  (b02's) the app panel rising / stepping back; the edited file dropping into the list
+ *   fx-tock        (b08's) the new row landing on top of the list — a pitched paper "tock" on E (the badge ticks to 5)
+ *   fx-tick-roll   (b08's) a soft rolling tick under the Reading… spinner, Reading → Ready
+ *   fx-mallet      (b08's) the FIFTH Ready note, E5 (the octave of b08's E4): it completes the phrase E4 F#4 G#4 B4 · E5
+ *   fx-paper-lift  (b11's) the old row leaving up through its mask
+ *   fx-paper-unfold (b10's) the new row opening out into its page
+ *   fx-trill       (b02's) the same desk trill sample, cut after one chirp by the pickup click an 8th later
+ *   fx-tag         NEW: SAME QUESTION popping beside ● CALLER — a small dry card tick with a hint of body (≈ 25 ms), the
+ *                  same family as the card ticks; b10's MATCHED ON MEANING tag rose without one: quiet, under Dana's last word
+ *   fx-felttip     (b10's) the sunday sweep under the new Saturday line on "four"
+ *   fx-pluck       (b10's family) a BRIGHT pluck on "four" with the sweep — E5 here (the key's tonic, high), short decay
+ * The L-cut's crossing into b15 rides on the bed's own move (MUSIC.desk): one soft air under the wipe, nothing more. */
+const CHANGE_HITS: Hit<Snd>[] = (() => {
+  const R = CHANGE_LOCAL;
+  const at = (f: number) => SCENES.change.from + f;
+  const S16 = BEAT / 4;
+  return [
+    H(at(R.page[0]), 'whoosh-soft', 'none', [0.5, 0.62], 3, 'b13 the app sinks back; the owner’s own file (opening-hours.txt) comes forward', { db: -13 }),
+    H(at(R.drag.down), 'click', 'none', 0.62, 3, 'b13 "Hours change?": the I-beam presses on 14:00 — the caret clicks in [→ fx-click-down]', { db: -5 }),
+    H(at(R.drag.up), 'tap', 'none', 0.66, 3, 'b13 … dragged across 14:00 and released: selected, the sunday wash [→ fx-click-up]', { db: -9 }),
+    H(at(R.drag.up), 'tick', 'sunday', 0.66, 3, 'b13 the selection snaps across the digits [→ fx-select]', { db: -16, layer: true }),
+    H(at(R.keys[0]), 'key', 'none', 0.66, 3, 'b13 16:00 typed over it, one keystroke per 16th (five) — the last on "Change" [→ fx-keys]', {
+      db: -7,
+      layer: true,
+      run: { n: R.keys.length, step: S16 },
+    }),
+    H(at(R.app[0] + 2), 'swish', 'none', [0.5, 0.5], 3, 'b13 "Change the document": the agent page rises on Knowledge; the file steps up into the corner [→ fx-slip-slide]', { db: -12 }),
+    H(at(R.menu.down), 'click', 'none', 0.83, 3, 'b13 the cursor presses the Opening hours row’s … [→ fx-click-down]', { db: -4 }),
+    H(at(R.menu.up), 'tap', 'none', 0.83, 3, 'b13 … released: the menu opens — Read again · Replace with new file · Remove [→ fx-click-up]', { db: -8 }),
+    H(at(R.menu.up + 0.5), 'pop', 'none', 0.81, 3, 'b13 the menu opens from its trigger [→ fx-menu-open]', { db: -15, layer: true }),
+    H(at(R.replace.down), 'click', 'none', 0.8, 2, 'b13 "Replace with new file" pressed (.97, the pressed shade) [→ fx-click-down]', { db: -3 }),
+    H(at(R.replace.up), 'tap', 'none', 0.8, 3, 'b13 … released: the menu closes [→ fx-click-up]', { db: -8 }),
+    H(at(R.fly[0] + 1), 'swish', 'none', [0.76, 0.52], 3, 'b13 the edited file drops into the list as the new version [→ fx-slip-slide]', { db: -12 }),
+    H(at(R.land), 'tick', 'none', 0.52, 3, 'b13 the new row lands on top: TXT · Opening hours · Reading…; the badge ticks to 5 [→ fx-tock, on E]', { db: -4 }),
+    H(at(R.land + 2 * S16), 'tick', 'none', 0.6, 3, 'b13 Reading… — the old row still Ready [→ fx-tick-roll, under the spinner]', { db: -20, run: { n: 4, step: S16 } }),
+    H(at(R.ready5), 'ding-s', 'sunday', 0.6, 3, 'b13 "the new answer": Ready · 1 passage — the FIFTH mallet completes b08’s phrase [→ fx-mallet E5, the octave] (ding-s an octave up, as b08’s)', { semi: 5 }),
+    H(at(R.oldOut + 1), 'swish', 'none', 0.5, 3, 'b13 the old row leaves up through its mask; the badge back to 4 [→ fx-paper-lift]', { db: -16, layer: true }),
+    H(at(R.recede[0] + 1), 'swish', 'none', [0.5, 0.5], 3, 'b14 the app steps back and slides away; the new row lifts out of it [→ fx-slip-slide]', { db: -12 }),
+    H(at(R.unfold[0] + 2), 'draw', 'none', 0.75, 3, 'b14 the new row unfolds into its page: Saturday · 9:00–16:00 [→ fx-paper-unfold]', { db: -11 }),
+    // (film 1's ring burst cannot be cut by the pickup like the script's trill: it steps back under Dana's "Quick")
+    H(at(R.ring), 'ring-hook', 'none', 0.15, 2, 'b14 THE NEXT CALL rings (beat 3): one slate hairline leaves the orb [→ fx-trill, cut after one chirp by the pickup]', { db: -4 }),
+    H(at(R.pickup), 'pickup', 'none', 0.15, 2, 'b14 picked up on the first ring: she listens; ● CALLER rises'),
+    H(at(R.c2 - 2), 'line', 'none', 0.3, 3, 'b14 Dana’s line draws out under her words — b03’s identical recording', { db: -5 }),
+    H(at(R.chip), 'tap', 'none', 0.32, 3, 'b14 SAME QUESTION pops beside ● CALLER, on "Saturday?" [→ fx-tag]', { db: -10 }),
+    H(at(R.sweep[0]), 'draw', 'none', 0.75, 3, 'b14 "four.": the sunday sweep under Saturday · 9:00–16:00 [→ fx-felttip]', { db: -6 }),
+    H(at(R.sweep[0]), 'ping', 'sunday', 0.75, 2, 'b14 … and the bright pluck on "four" [→ fx-pluck, bright E5]', { semi: 5, db: -3, layer: true }),
+    H(at(R.cross[0]), 'whoosh-soft', 'none', [0.3, 0.7], 3, 'b14 THE L-CUT under her last word: the frame crosses to the desk (the wipe, reading direction)', { db: -16 }),
+  ];
+})();
+/* ── /change ── */
+
 export const HITS: Hit<Snd>[] = [
   /* ── repeat ── */
   ...REPEAT_HITS,
@@ -973,15 +1302,12 @@ export const HITS: Hit<Snd>[] = [
   /* ── call ── */
   ...CALL_HITS,
   /* ── /call ── */
-  /* ── b12 ── */
-  H(CARET, 'click', 'none', 0.5, 3, 'the caret clicks in', { db: -4 }),
-  H(SAVE, 'tick', 'sunday', 0.62, 3, 'the save tick'),
-  /* ── b13–b14 ── */
-  H(SCENES.change.from + CHANGE_LOCAL.menu, 'click', 'none', 0.66, 3, 'the menu opens'),
-  H(READY5, 'ding-s', 'sunday', 0.6, 3, 'Ready: the fifth mallet completes the phrase', { semi: 5 }),
-  // (film 1's ring burst cannot be cut by the pickup like the script's trill: it steps back under Dana's "Quick")
-  H(RING_B14, 'ring-hook', 'none', 0.62, 2, 'the next call rings', { db: -4 }),
-  H(PICKUP_B14, 'pickup', 'none', 0.62, 2, 'picked up'),
+  /* ── line ── */
+  ...LINE_HITS,
+  /* ── /line ── */
+  /* ── change ── */
+  ...CHANGE_HITS,
+  /* ── /change ── */
   /* ── b15–b16 ── */
   H(DESK_RING, 'ring-hook', 'none', 0.7, 3, 'the desk line rings once, far under the staff line (Ava takes it)', { db: -6 }),
   H(DESK_RING + BEAT / 2, 'glint', 'sunday', 0.7, 3, 'AVA · ON A CALL', { db: -4 }),

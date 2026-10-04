@@ -21,8 +21,9 @@
  *
  * THE NEIGHBOURS: b08 → here is the same picture at frame 0 (writtenEnd). Here → b12: callEnd() (bottom).
  */
+import { Easing } from 'remotion';
 import { EASE, springUnit } from '../../../lib/motion';
-import { CALL_LOCAL as C, WRITTEN_LOCAL } from '../../timing';
+import { CALL_LOCAL as C, SCENES, WRITTEN_LOCAL } from '../../timing';
 import { orbPose as writtenOrbPose, writtenEnd, writtenStage } from '../written/stage';
 
 export type XY = { x: number; y: number };
@@ -35,8 +36,8 @@ export const ease = (t: number, a: number, b: number, f: (u: number) => number =
 
 /** a decisive glide that settles without a bounce (ζ ≈ .92 — written/stage.ts GLIDE) */
 export const GLIDE = { stiffness: 170, damping: 24, mass: 1 } as const;
-/** the camera's glide (no overshoot) */
-export const PAN = { stiffness: 120, damping: 22, mass: 1 } as const;
+/** the panel's exit: a soft start, decisive, a long settle */
+const RECEDE = Easing.bezier(0.42, 0, 0.12, 1);
 
 /** a turn of the call strip: its tag row's top, its caption lines' tops, its waveform's centre (frame px) */
 export type TurnAt = { x: number; tag: number; lines: readonly number[]; wave?: number };
@@ -169,9 +170,11 @@ export const callStage = (vertical: boolean): CallStage => (vertical ? STAGES.ve
 
 /* ── the moves ──────────────────────────────────────────────────── */
 
-/** the panel: steps back a depth (scale, shade) and slides away (house ease, ≈ 1.1 s from the ring) */
+/** the panel: steps back a depth (scale, shade) and slides away (house ease, ≈ 1.1 s from the ring; 9:16 it settles
+ *  receded under the call, then sinks away once the Opening hours row has been lifted out of it) */
 export function panelPose(t: number, S: CallStage) {
-  const u = ease(t, C.recede[0], C.recede[1], EASE.inOut);
+  // a soft start (it is pushed, not kicked), then decisive, with a long settle: clear of the strip before ● CALLER rises
+  const u = ease(t, C.recede[0], C.recede[1], RECEDE);
   const R = S.recede;
   // 9:16: once the Opening hours row has lifted out of it, the receded panel sinks away under the frame
   const sink = S.vertical ? ease(t, C.rowIn[0] + 6, C.rowIn[0] + 28, EASE.in2) : 0;
@@ -225,16 +228,57 @@ export function callerTurnPose(t: number, S: CallStage): TurnAt & { moving: bool
 /** the page's dim and recede in b11 */
 export const pageDimAt = (t: number) => ease(t, C.resume, C.resume + 20, EASE.inOut);
 
+/* ── the ground's clock and key (call/Ground.tsx draws with these) ── */
+
+/** frames the mesh's clock takes to stop / to get going again */
+const RAMP = 10;
+/** ∫₀ᵘ (1 − smoothstep) — the distance covered while slowing down over a unit ramp */
+const slowArea = (u: number) => u - (u * u * u - (u * u * u * u) / 2);
+/** the mesh's act-local clock: real time until the freeze, held through the stop-time, real time again after (a speed
+ *  easing 1 → 0 → 1 on smoothstep ramps, integrated in closed form: no jump in position, ever) */
+export function groundClock(t: number): number {
+  const a = C.freeze;
+  const b = C.resume;
+  if (t <= a) return t;
+  const stopped = a + RAMP * slowArea(1);
+  if (t < a + RAMP) return a + RAMP * slowArea((t - a) / RAMP);
+  if (t <= b) return stopped;
+  if (t < b + RAMP) {
+    const u = (t - b) / RAMP;
+    return stopped + RAMP * (u * u * u - (u * u * u * u) / 2);
+  }
+  return stopped + RAMP * 0.5 + (t - b - RAMP);
+}
+
+/** her key light on the ground for an orb of diameter d (written/Ground.tsx KEY .3 at b08's size; smaller in the dot) */
+export function callKey(S: CallStage, d: number) {
+  const k = Math.min(1, Math.max(0.35, d / S.from.orb.d));
+  return { strength: 0.3 * k, radius: (S.vertical ? 620 : 680) * (0.7 + 0.3 * k) };
+}
+
 /* ── the act's last picture, for b12 ─────────────────────────────── */
 
 /**
  * callEnd(vertical): what the cut into b12 hands over (frame px). The record row (TRANSCRIPT, the greeting,
  * "Answered from your documents" + the Opening hours chip, the sunday check) holds where the strip was; the orb at
  * rest in her answer place; the page (dim, 25 %) beside it (9:16 behind/below); the app panel is off frame (16:9
- * right, 9:16 receded at the bottom); the ground is KB_MESH keyed on the orb (call/Ground.tsx), its clock running.
+ * right, 9:16 receded at the bottom); the ground is KB_MESH keyed on the orb (call/Ground.tsx), its clock running —
+ * but TRAILING the timeline by the stop-time it was held for (ground.meshLag frames): the next act continues the mesh
+ * from ground.meshClock, or its pools jump at the cut.
  */
 export function callEnd(vertical: boolean) {
   const S = callStage(vertical);
-  return { orb: S.orb.c, record: S.record, page: S.page, pageC: S.pageC, panel: { ...S.from.panel, recede: S.recede }, at: C.end };
+  // the mesh's clock trails the timeline by the stop-time it was held for: continue it from here (absolute frames:
+  // meshClock + the next act's own t), never from the next act's SCENES start
+  const meshClock = SCENES.call.from + groundClock(C.end);
+  return {
+    orb: S.orb.c,
+    record: S.record,
+    page: S.page,
+    pageC: S.pageC,
+    panel: { ...S.from.panel, recede: S.recede },
+    ground: { meshClock, meshLag: SCENES.call.to - meshClock, key: { x: S.orb.c.x, y: S.orb.c.y, ...callKey(S, S.orb.c.d) } },
+    at: C.end,
+  };
 }
 export const CALL_END = callEnd;

@@ -86,12 +86,13 @@ export const Call: React.FC = () => {
     <AbsoluteFill>
       <CallGround t={t} S={S} orb={orb} />
       <HandoffPanel t={t} S={S} ink={INK} hideHours={t >= C.rowIn[0]} />
+      <HandoffEyebrow t={t} S={S} />
       <OpeningHoursPage t={t} S={S} g={g} ink={INK} />
       <LiftedLines t={t} S={S} g={g} ink={INK} lastKept={lastKept} />
       <Links t={t} S={S} hero={hero} target={target} />
       <Phrasings t={t} S={S} />
       {/* the caller's turn: ● CALLER + the timer, his line, the line's waveform (frozen in the stop-time) */}
-      <Tag t={t} x={turn.x} y={turn.tag} align={S.strip.align} name="CALLER" ink={CALLER.tag} at={C.pickup - 1} exitAt={C.resume} timer timerHold={C.resume - 1} veil={0.5 * held} veilInk={veilInk} moving={turn.moving} />
+      <Tag t={t} x={turn.x} y={turn.tag} align={S.strip.align} name="CALLER" ink={CALLER.tag} at={C.strip} exitAt={C.resume} timer timerHold={C.resume - 1} veil={0.5 * held} veilInk={veilInk} moving={turn.moving} />
       <Lines
         t={t}
         lines={S.strip.callerLines}
@@ -129,7 +130,6 @@ export const Call: React.FC = () => {
       <AnswerTurn t={t} S={S} g={g} ink={INK} />
       <CallOrb t={t} S={S} pose={orb} />
       <StopLabel t={t} S={S} />
-      <HandoffEyebrow t={t} S={S} />
       <Captions
         t={t}
         lineAt={C.vo5}

@@ -2,14 +2,15 @@
  * b11 · THE ANSWER (SCRIPT.md b11) — her turn on the call, in the question's place:
  *
  *   ● AVA + the timer (running again) rise as time resumes
- *   THE WORD RE-SET (the kit's WordReset): the two swept lines, lifted out of the page (call/Page.tsx LiftedLines),
+ *   THE WORD RE-SET (call/Reset.tsx, the kit's WordReset with timed glides): the two swept lines, lifted out of the
+ *   page (call/Page.tsx LiftedLines),
  *   re-set into what she actually says ON HER WORD ONSETS — Saturday / Sunday(+s) / closed(+.) glide sub-pixel to
  *   their pen positions, the tokens she doesn't say (·, 9:00–14:00) leave up through their masks as "Saturday" moves,
  *   her own words rise in. The result IS her caption: "We are! Saturday from nine till two. Sundays, we're closed."
  *   with "nine till two" keyed in sunday on "nine".
  *   THE RECORD: on the 8th after her answer the strip folds into the white record row (the kit's RecordRow:
  *   TRANSCRIPT, the greeting with its disclosure, "Answered from your documents" + the Opening hours chip, a white
- *   check drawn in the sunday disc); the sentence and her tag leave up into it.
+ *   check drawn in the sunday disc), unfolding down from its top edge over the sentence as it leaves up.
  */
 import React from 'react';
 import { EASE, tween } from '../../../lib/motion';
@@ -32,6 +33,7 @@ export const AnswerTurn: React.FC<{ t: number; S: CallStage; g: PageGeo; ink: st
   const T = S.strip.c;
   const src = liftedSource(t, S, g);
   // the sentence leaves up through its block's mask as the record lands (a block exit: the words are at rest by then)
+  // (its last line is leaving as the record starts to unfold down from the strip's top edge)
   const out = tween(t, [C.record - 6, C.record], [0, 1], EASE.in3);
   // each kept word's flight (call/Reset.tsx): 9:16 the strip lies under the sentence — every word hops up out of it;
   // 16:9 it lies beside it — "Saturday" hops over the strip's second line, the others drop to their line and slide in
@@ -46,7 +48,7 @@ export const AnswerTurn: React.FC<{ t: number; S: CallStage; g: PageGeo; ink: st
   const blockTop = T.y - 1.5 * lh - 0.16 * S.strip.caption;
   const clip = { top: blockTop, h: 3 * lh + 0.4 * S.strip.caption, left: S.strip.align === 'center' ? T.x - T.maxWidth / 2 - 60 : T.x - 30, w: T.maxWidth + 120 };
   // the measure that sets her sentence in three lines with the key phrase whole: "We are! Saturday from" /
-  // "nine till two. Sundays," / "we're closed." (WordReset wraps greedily at maxWidth)
+  // "nine till two. Sundays," / "we're closed." (the re-set wraps greedily at maxWidth)
   const spec = { size: S.strip.caption, weight: TYPE.caption.weight, tracking: -0.02 };
   const measure = Math.max(measureText('We are! Saturday from', spec), measureText('nine till two. Sundays,', spec)) + 2;
   const target = { text: ANSWER, x: T.x, y: T.y, size: S.strip.caption, maxWidth: measure, align: S.strip.align, color: HOME.ink, keys: [{ text: 'nine till two.', color: SUNDAY, at: C.key }] };

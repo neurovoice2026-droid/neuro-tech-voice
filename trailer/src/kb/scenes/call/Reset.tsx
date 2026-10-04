@@ -130,7 +130,8 @@ export const Reset: React.FC<{
           const keep = tok.text;
           const prefix = word.startsWith(keep) ? keep : word;
           const suffix = word.startsWith(keep) ? word.slice(keep.length) : '';
-          const suf = suffix ? reveal(t, spec.at + GLIDE * 0.55, { config: SPRING.caption, rise: 90 }) : null;
+          // the letters it gains rise in once it has landed in its slot
+          const suf = suffix ? reveal(t, spec.at + GLIDE - 6, { config: SPRING.caption, rise: 90 }) : null;
           const flying = g > 0 && t < spec.at + GLIDE + 0.5;
           return (
             <span

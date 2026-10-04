@@ -73,7 +73,7 @@ export const HandoffEyebrow: React.FC<{ t: number; S: CallStage }> = ({ t, S }) 
   const label = typeStyle('label', L.vertical, { tone: 'paper' });
   const size = label.fontSize as number;
   const dot = Math.round(size * 0.34);
-  const r = reveal(t, -1e6, { rise: 100, fade: 0.5, exit: { at: C.ring + 1, dur: 9 } });
+  const r = reveal(t, -1e6, { rise: 100, fade: 0.5, exit: { at: C.ring, dur: 6 } });
   const e = WS.eyebrow as { x: number; y: number; align?: 'center' | 'left' };
   return (
     <div style={{ position: 'absolute', left: e.x, top: e.y, transform: e.align === 'center' ? 'translateX(-50%)' : undefined }}>
