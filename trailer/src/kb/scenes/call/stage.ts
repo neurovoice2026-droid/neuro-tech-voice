@@ -154,7 +154,9 @@ const STAGES: Record<'land' | 'vert', CallStage> = (() => {
         c: { x: 540, tag: 500, lines: [], y: 540 + (3 * lh) / 2, maxWidth: 900 },
       },
       label: { x: 540, y: 260, align: 'center', gap: 16 },
-      questions: { x: 540, tops: [1206], size: 44, align: 'center' },
+      // the earlier phrasings, one at a time in the slot: the title role's 9:16 size (whole-film pass: 44 was under the
+      // phone's read-text floor, theme.ts TYPE)
+      questions: { x: 540, tops: [1206], size: 56, align: 'center' },
       page: { x: 64, y: 668, w: 816, size: 42, minH: 500 },
       rowFrom: null,
       rowHold: { x: 64, y: 1010 },
