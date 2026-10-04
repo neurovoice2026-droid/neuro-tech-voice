@@ -106,7 +106,7 @@ const General: React.FC<{ S: WrittenStage }> = ({ S }) => {
   const T = S.type;
   const x = S.add.x;
   const w = S.add.w;
-  const fieldH = S.field.h;
+  const fieldH = S.inputH;
   const f = [
     { label: 'Agent name', value: 'Ava' },
     { label: 'Language', value: 'English' },
@@ -192,19 +192,19 @@ const General: React.FC<{ S: WrittenStage }> = ({ S }) => {
   );
 };
 
-/* ── the drop zone ── */
+/* ── the drop zone (9:16 compact: one line high, the icon beside the words — the first screen holds two whole rows) ── */
 const DropZone: React.FC<{ S: WrittenStage; hover: number }> = ({ S, hover }) => {
   const d = S.drop;
   const T = S.type;
   const r = Math.min(26, d.h * 0.16);
   const stroke = mixColor(APP.border, '#b9b2c8', hover);
-  const icon = d.compact ? Math.round(T.body * 1.15) : 46;
+  const icon = d.compact ? Math.round(T.body * 1.1) : 46;
   return (
     <div style={{ ...inBox(d) }}>
       <svg width={d.w + 2} height={d.h + 2} style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible' }} aria-hidden>
         <rect x={1.25} y={1.25} width={d.w - 2.5} height={d.h - 2.5} rx={r} ry={r} fill={hover > 0.001 ? `rgba(244, 242, 247, ${(0.3 * hover).toFixed(3)})` : 'none'} stroke={stroke} strokeWidth={2.5} strokeDasharray="9 7" />
       </svg>
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: d.compact ? 10 : 14 }}>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: d.compact ? 'row' : 'column', alignItems: 'center', justifyContent: 'center', gap: d.compact ? 18 : 14 }}>
         <UploadIcon size={icon} color={APP.mutedFg} />
         <div style={{ ...ui(T.body, WT.medium), color: APP.foreground }}>Drop files here or choose them</div>
         {!d.compact ? <div style={{ ...ui(T.small - 1, WT.regular), color: APP.mutedFg, marginTop: -4 }}>PDF, Word, TXT or Markdown · up to 10 MB each</div> : null}

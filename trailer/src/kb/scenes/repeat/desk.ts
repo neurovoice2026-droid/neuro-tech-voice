@@ -251,10 +251,10 @@ export const slipZ = (k: number) => (k < 3 ? 20 + k : 10 - (k - 2));
 
 /**
  * Slip k at time t. THE ANSWERS: the first is the pad's own top sheet (it peels up as the line ends); the
- * next two are fresh slips, brought up from the desk's front edge over the pile just before the desk speaks
- * and held a hand's breadth up while the words arrive. Each drops on "two." (a 3-frame fall) and lands on
- * the pile, its shadow tightening. THE ROLLS: a written slip is slipped in BEHIND the pile on each 8th and
- * rises to sit a strip higher than the last (the land spring: up on the 16th, a touch past, settling) —
+ * next two are fresh slips, already printed (Slips.tsx), brought up from the desk's front edge over the pile
+ * just before the desk speaks and held a hand's breadth up while it does. Each drops on "two." (a 3-frame
+ * fall) and lands on the pile, its shadow tightening. THE ROLLS: a written slip is slipped in BEHIND the
+ * pile on each 8th and rises to sit a strip higher than the last (the land spring: up on the 16th, a touch past, settling) —
  * the column of paper edges grows; its height is the count. Nothing fades in: every slip enters from out of
  * frame or from behind paper, so no text ever shows through another.
  */

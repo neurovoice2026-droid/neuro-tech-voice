@@ -49,11 +49,11 @@ export const StopLabel: React.FC<{ t: number; S: CallStage }> = ({ t, S }) => {
   if (t < C.freeze - 1 || t > C.resume + 14) return null;
   const lk = stopLockup(S, L.vertical);
   const st = typeStyle('label', L.vertical, { tone: 'paper' });
-  const r = reveal(t, C.freeze + 4, { config: SPRING.caption, rise: 100, fade: 0.5, exit: { at: C.resume, dur: 8 } });
+  const r = reveal(t, S.label.at, { config: SPRING.caption, rise: 100, fade: 0.5, exit: { at: C.resume, dur: 8 } });
   return (
     <div style={{ position: 'absolute', left: lk.textX, top: S.label.y - lk.size * 0.6, ...st, lineHeight: 1.2, color: HOME.ink, whiteSpace: 'nowrap' }}>
       <span style={maskBox(0)}>
-        <span style={revealStyle(r, undefined, t - C.freeze < 24 || t > C.resume - 1)}>{STOP_LABEL}</span>
+        <span style={revealStyle(r, undefined, t - S.label.at < 20 || t > C.resume - 1)}>{STOP_LABEL}</span>
       </span>
     </div>
   );

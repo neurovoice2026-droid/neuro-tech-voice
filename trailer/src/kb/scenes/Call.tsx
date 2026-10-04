@@ -22,8 +22,9 @@
  *   RESUME     (bar) the hairlines retract into the page just before it; then time runs again: the label, the
  *              phrasing and the frozen question leave; the orb comes out of the dot; ● AVA + the timer. THE RE-SET, one
  *              move: the tokens she doesn't say leave the page up through their masks; on "We" the kept words fly from
- *              the page together into their slots in her sentence; on her onsets her own words rise in ("nine till
- *              two" keyed sunday); the page dims to 25 %
+ *              the page together to their slots in her sentence and dive into the slots' masks (nothing waits on
+ *              screen); on her onsets every word rises into its slot ("nine till two" keyed sunday); the page dims to
+ *              25 % and collapses to what is left on it
  *   record     the strip folds into the white record row over her finished sentence (held ≥ a beat): TRANSCRIPT · the
  *              greeting (its AI disclosure) · Answered from your documents + Opening hours · the check in the sunday
  *              disc; the dim page recedes out

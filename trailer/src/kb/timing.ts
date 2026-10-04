@@ -616,10 +616,11 @@ export const CALL_LOCAL = (() => {
     /** THE WORD RE-SET, ONE MOVE (critics, build B: no strip, no parking, no lone word in transit, no empty box):
      *  · drop   the tokens she doesn't say (· 9:00–14:00 ·) and both sweep bands leave up through their masks
      *           INSIDE the page, a frame apart
-     *  · fly    on "We", every kept word (Saturday · Sunday · closed) takes off from the page TOGETHER and glides to
-     *           its pen position in her sentence (landing ≥ 15 f before "Saturday" is said), where it waits at 40 % ink
-     *  · reset  each word's moment = its onset − LEAD (captions' lead): her own words rise into their slots; a kept
-     *           word takes full ink ("Sunday" its "s,", "closed" its ".") — the sentence never has a hole she has said
+     *  · fly    on "We", every kept word (Saturday · Sunday · closed) takes off from the page TOGETHER, glides to its
+     *           slot in her sentence and dives into the slot's mask (call/Reset.tsx) — nothing waits on screen: a
+     *           placeholder in its slot read as a wrong sentence (4K review)
+     *  · reset  each word's moment = its onset − LEAD (captions' lead): every word rises into its slot, a kept word
+     *           whole ("Sundays," / "closed.") — the line only ever shows what she has said, never a hole in it
      *  "nine till two" keys sunday with "nine" */
     drop: resume + 2,
     fly: [call2, call2 + 14] as const,

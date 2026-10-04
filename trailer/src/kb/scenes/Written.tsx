@@ -44,7 +44,7 @@ import { WrittenOrb } from './written/Orb';
 import { AppPanel } from './written/Panel';
 import { Row } from './written/Row';
 import { pileLift, SLIP_INK, SLIP_TEXT, slipHandoff, Slips } from './written/Slips';
-import { BADGE, ease, orbPose, ROWS, rowTop, seamLeft, writtenStage, type WrittenStage } from './written/stage';
+import { BADGE, ease, edgeFade, orbPose, ROWS, rowTop, scrollAt, seamLeft, writtenStage, type WrittenStage } from './written/stage';
 
 const SUNDAY_INK = MOMENT_LIGHTS.sunday.ink;
 const INK = meshShadowInk(KB_MESH);
@@ -136,6 +136,8 @@ const ListRow: React.FC<{ t: number; S: WrittenStage; i: number }> = ({ t, S, i 
   // (9:16's tall ad-size rows drop in from just under the heading: never over it)
   const dy = -(1 - s) * (S.vertical ? 0.1 : 0.32) * S.row.h;
   const moving = top.moving || Math.abs(1 - s) > 1e-3;
+  // (9:16: drawn inside the scrolling content box — its top on screen is y − the scroll)
+  const edge = S.scroll ? edgeFade(top.y + dy - scrollAt(t, S), S.panel.y + S.panel.h) : 1;
   return (
     <Row
       t={t}
@@ -149,7 +151,7 @@ const ListRow: React.FC<{ t: number; S: WrittenStage; i: number }> = ({ t, S, i 
       name={ROWS[i].name}
       pill={PILLS[i]}
       pillSize={S.row.pill}
-      opacity={smooth(0, 0.3, s)}
+      opacity={smooth(0, 0.3, s) * edge}
       scale={mix(0.985, 1, Math.min(1, s))}
       moving={moving}
     />
@@ -182,6 +184,9 @@ const HoursRow: React.FC<{ t: number; S: WrittenStage; part: 'free' | 'list' }> 
   const landed = t >= W.fly[1];
   const settle = landed ? springUnit(t - W.fly[1], SPRING.land) : 1;
   const moving = (f > 0 && f < 1) || top.moving || u < 1 || Math.abs(1 - settle) > 1e-3;
+  const rowY = y + (landed ? (1 - settle) * -4 : 0);
+  // (9:16, in the list: inside the scrolling content box — see ListRow)
+  const edge = part === 'list' ? edgeFade(rowY - scrollAt(t, S), S.panel.y + S.panel.h) : 1;
   return (
     <>
       {shadowK > 0.001 ? (
@@ -201,7 +206,7 @@ const HoursRow: React.FC<{ t: number; S: WrittenStage; part: 'free' | 'list' }> 
       <Row
         t={t}
         x={x}
-        y={y + (landed ? (1 - settle) * -4 : 0)}
+        y={rowY}
         w={w}
         h={h}
         layout={S.row.layout}
@@ -215,6 +220,7 @@ const HoursRow: React.FC<{ t: number; S: WrittenStage; part: 'free' | 'list' }> 
         slip={{ k: H.k, text: SLIP_TEXT, color: SLIP_INK, out: W.born + 1.5 }}
         slipRadius={H.radius}
         contentAt={W.born + 1}
+        opacity={edge}
         moving={moving}
       />
     </>

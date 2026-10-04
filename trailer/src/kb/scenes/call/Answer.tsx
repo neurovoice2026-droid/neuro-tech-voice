@@ -3,10 +3,11 @@
  *
  *   ● AVA + the timer (running again) rise as time resumes
  *   THE WORD RE-SET (call/Reset.tsx), ONE move: the tokens she doesn't say (· 9:00–14:00 ·) have left the page up
- *   through their masks; on "We" the kept words (Saturday · Sunday · closed) fly from the page TOGETHER straight into
- *   their slots in her sentence and wait there at 40 %; on her onsets (− 2 f) her own words rise in and each kept word
- *   takes full ink (Sunday its "s,", closed its "."). The result IS her caption: "We are! Saturday from nine till two.
- *   Sundays, we're closed." with "nine till two" keyed in sunday on "nine" — complete ≥ a beat before the record.
+ *   through their masks; on "We" the kept words (Saturday · Sunday · closed) fly from the page TOGETHER to their slots
+ *   in her sentence and dive into the slots' masks (nothing waits on screen); on her onsets (− 2 f) every word rises
+ *   into its slot, a kept word whole ("Sundays," / "closed."). The result IS her caption: "We are! Saturday from nine
+ *   till two. Sundays, we're closed." with "nine till two" keyed in sunday on "nine" — complete ≥ a beat before the
+ *   record.
  *   THE RECORD: on the 8th after her answer the strip folds into the white record row (the kit's RecordRow:
  *   TRANSCRIPT, the greeting with its disclosure, "Answered from your documents" + the Opening hours chip, a white
  *   check drawn in the sunday disc), unfolding down from its top edge over the sentence as it leaves up (they overlap:

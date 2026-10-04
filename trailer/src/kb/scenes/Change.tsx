@@ -41,7 +41,7 @@ import { useKbSceneFrame } from '../scene';
 import { CHANGE_LOCAL as K } from '../timing';
 import { AppPanel, oldRowBox, rowMenuRect } from './change/App';
 import { CallTurns } from './change/CallTurns';
-import { Cross, PushOut } from './change/Cross';
+import { Cross, PushOut, PushTop, PushWipe } from './change/Cross';
 import { dragPoints, FILE_LINES, FILE_NAME, FilePage, Flight } from './change/FilePage';
 import { ChangeGround } from './change/Ground';
 import { Handoff, useLinePointer } from './change/Handoff';
@@ -164,31 +164,36 @@ export const Change: React.FC = () => {
     <AbsoluteFill>
       <PushOut t={t} S={S}>
         <ChangeGround t={t} S={S} orb={orb} />
-        <Handoff t={t} S={S} ink={INK} accent={SUNDAY} />
-        {/* 9:16: the file steps back UNDER the app's sheet as it comes in (stage.ts appPose / filePose) */}
-        {S.file.park ? null : <FilePage t={t} S={S} g={file} keys={keys} ink={INK} accent={SUNDAY} />}
-        <AppPanel t={t} S={S} bar={bar} menu={menu} keys={keys} ink={INK} />
-        <NewRow t={t} S={S} g={page} ink={INK} accent={SUNDAY} />
-        {S.file.park ? <FilePage t={t} S={S} g={file} keys={keys} ink={INK} accent={SUNDAY} /> : null}
-        {S.file.park ? <Flight t={t} S={S} g={file} keys={keys} row={newRowBox(S)} size={S.row.size} ink={INK} accent={SUNDAY} /> : null}
-        <CallTurns t={t} S={S} />
-        <ChangeOrb t={t} S={S} pose={orb} />
-        <Captions
-          t={t}
-          lineAt={K.vo7}
-          voice="kb2-vo-7"
-          captions={K.captions}
-          x={S.caption.x}
-          y={S.caption.y}
-          maxWidth={S.caption.maxWidth}
-          tone="paper"
-          holdUntil={K.holdUntil}
-          echoY={null}
-          tint={(c, j) => (c === 2 && j >= 4 ? { color: SUNDAY, k: keyK } : null)}
-        />
-        <div style={{ position: 'absolute', inset: 0, opacity: pointerFade(t) * pointerBack(t) < 0.999 ? pointerFade(t) * pointerBack(t) : undefined }}>
-          <Pointer keys={keys} t={t} text={text} />
-        </div>
+        {/* the L-cut (change/Cross.tsx): only the grounds meet under its soft edge — all the rest is wiped off ahead of it */}
+        <PushWipe t={t} S={S}>
+          <Handoff t={t} S={S} ink={INK} accent={SUNDAY} />
+          {/* 9:16: the file steps back UNDER the app's sheet as it comes in (stage.ts appPose / filePose) */}
+          {S.file.park ? null : <FilePage t={t} S={S} g={file} keys={keys} ink={INK} accent={SUNDAY} />}
+          <AppPanel t={t} S={S} bar={bar} menu={menu} keys={keys} ink={INK} />
+          <NewRow t={t} S={S} g={page} ink={INK} accent={SUNDAY} />
+          {S.file.park ? <FilePage t={t} S={S} g={file} keys={keys} ink={INK} accent={SUNDAY} /> : null}
+          {S.file.park ? <Flight t={t} S={S} g={file} keys={keys} row={newRowBox(S)} size={S.row.size} ink={INK} accent={SUNDAY} /> : null}
+          <PushTop t={t} S={S}>
+            <CallTurns t={t} S={S} />
+          </PushTop>
+          <ChangeOrb t={t} S={S} pose={orb} />
+          <Captions
+            t={t}
+            lineAt={K.vo7}
+            voice="kb2-vo-7"
+            captions={K.captions}
+            x={S.caption.x}
+            y={S.caption.y}
+            maxWidth={S.caption.maxWidth}
+            tone="paper"
+            holdUntil={K.holdUntil}
+            echoY={null}
+            tint={(c, j) => (c === 2 && j >= 4 ? { color: SUNDAY, k: keyK } : null)}
+          />
+          <div style={{ position: 'absolute', inset: 0, opacity: pointerFade(t) * pointerBack(t) < 0.999 ? pointerFade(t) * pointerBack(t) : undefined }}>
+            <Pointer keys={keys} t={t} text={text} />
+          </div>
+        </PushWipe>
       </PushOut>
       <Cross t={t} S={S} />
     </AbsoluteFill>

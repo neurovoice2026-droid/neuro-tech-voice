@@ -74,14 +74,19 @@ export type CallStage = {
     /** the frozen turn's step-back scale in B (about its tag's top-left; 16:9 makes room for the page) */
     bScale: number;
   };
-  /** BETWEEN QUESTION AND ANSWER: its text's left edge (16:9) / the lockup's centre (9:16), its centre line */
-  label: { x: number; y: number; align: 'left' | 'center'; gap: number };
+  /** BETWEEN QUESTION AND ANSWER: its text's left edge (16:9) / the lockup's centre (9:16), its centre line, and the
+   *  frame it rises on (act-local) */
+  label: { x: number; y: number; align: 'left' | 'center'; gap: number; at: number };
   /** the day's three earlier phrasings: ONE masked slot (both orientations), one phrasing at a time — x is the slot's
    *  left edge (align left) or centre (align center), y its top */
   questions: { x: number; y: number; size: number; align: 'left' | 'center' };
   /** the page (the Opening hours document), CROPPED TO ITS CONTENT (kind, heading, three lines, `pad` all round): its
    *  anchor (16:9 its right edge, 9:16 its centre), its top, its line size (the title role) and padding */
   page: { anchor: 'right' | 'center'; x: number; y: number; size: number; pad: number };
+  /** how the row unfolds into the page (call/Page.tsx): 'header' — to the page's place and width first as a header
+   *  strip, then down to its height (16:9: the page is far wider than the row, its lines must never be laid wider
+   *  than the opening paper); 'box' — box to box in one move (9:16: the row is wider than the page) */
+  unfold: 'header' | 'box';
   /** where the row comes back from (16:9 off the right edge, 9:16 up from the bottom edge — where the panel went) and
    *  where it waits for the freeze — top-left corners */
   rowFrom: XY | null;
@@ -129,11 +134,12 @@ const STAGES: Record<'land' | 'vert', CallStage> = (() => {
           // "Are you guys around" (689 px at 76) × .86 ends at x ≈ 753: a clear 56 px before the page's paper (x 809)
           bScale: 0.86,
         },
-        label: { x: 214, y: 112, align: 'left', gap: 0 },
+        label: { x: 214, y: 112, align: 'left', gap: 0, at: C.freeze + 4 },
         // the slot under the question and the page (whose paper ends at y 708), over the narrator's caption (top ≈ 921)
         questions: { x: 160, y: 760, size: 64, align: 'left' },
         // lines at the title role (64), 48 px padding: "Monday to Friday · 8:00–20:00" sets the width (≈ 951 px)
         page: { anchor: 'right', x: 1760, y: 150, size: 64, pad: 48 },
+        unfold: 'header',
         rowFrom: { x: 1960, y: 150 },
         rowHold: { x: 1240, y: 150 },
         // the dim page steps back to the right, clear of her sentence's measure (x 160–911)
@@ -174,12 +180,15 @@ const STAGES: Record<'land' | 'vert', CallStage> = (() => {
         c: { x: 540, tag: 1206, lines: [], y: 1246 + (3 * lh) / 2, maxWidth: 900 },
         bScale: 1,
       },
-      label: { x: 540, y: 260, align: 'center', gap: 16 },
+      // (4K review: its caps sat on the 250 px platform line — now 264–284 — and it rose under the shrinking orb, which
+      // crossed its first letters ("RFTWEEN…"): it rises once the orb has cleared them, ≈ 97 % into its dot)
+      label: { x: 540, y: 274, align: 'center', gap: 16, at: C.freeze + 11 },
       // the earlier phrasings, one at a time in the masked slot under the page (the title role's 9:16 size)
       questions: { x: 540, y: 1212, size: 56, align: 'center' },
       // lines at the title role (56), 48 px padding (≈ 844 × 503); its top leaves room under the frozen turn's waveform
       // for the MATCHED ON MEANING tag (y ≈ 604–658)
       page: { anchor: 'center', x: 540, y: 680, size: 56, pad: 48 },
+      unfold: 'box',
       // (x: the written list's left edge — b08's ad-size rows, written/stage.ts)
       rowFrom: { x: writtenStage(vertical).list.x, y: 1960 },
       rowHold: { x: writtenStage(vertical).list.x, y: 1010 },
@@ -258,6 +267,9 @@ export const turnPoint = (turn: { x: number; tag: number; scale: number }, p: XY
 
 /** the page's dim in b11 — once the kept words have flown out of it */
 export const pageDimAt = (t: number) => ease(t, C.dim[0], C.dim[1], EASE.inOut);
+/** the page's collapse in b11 (0 → 1): once the swept lines have left it (the dropped tokens gone, the kept words
+ *  away), its bottom edge rises to what is left on it — never a half-empty card behind her sentence */
+export const pageCollapseAt = (t: number) => ease(t, C.fly[0] + 4, C.fly[0] + 22, EASE.inOut);
 /** the page's exit as the record lands: it recedes (× .9) and fades out — the transcript owns the frame */
 export const pageOutAt = (t: number) => ease(t, C.pageOut[0], C.pageOut[1], EASE.inOut);
 

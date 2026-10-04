@@ -21,7 +21,7 @@ import { EASE, smooth, tween } from '../../../lib/motion';
 import { APP, hoverAt, Menu, Panel, pressAt, TabBar, ui, W as WT, type CursorKey, type MenuGeometry, type Rect, type TabBarGeometry } from '../../kit';
 import { CHANGE_LOCAL as K } from '../../timing';
 import { Row } from '../written/Row';
-import { ROWS } from '../written/stage';
+import { edgeFade, ROWS } from '../written/stage';
 import { appPose, listGeo, OLD, rowSlot, type ChangeStage } from './stage';
 
 /** b08's rows newest first (written/stage.ts ROWS: Price list, Opening hours, Cancellation policy, FAQ page) */
@@ -42,8 +42,9 @@ export function oldRowBox(S: ChangeStage) {
   return { x: Lg.x, y: Lg.listY + OLD * Lg.pitch, w: Lg.w, h: Lg.h };
 }
 
-/** 9:16 (a card of fixed height): the list lives in the content box under the tab bar and is cut by the card's bottom
- *  edge like a phone's list; 16:9's panel is as tall as its rows (no box) */
+/** 9:16 (a card of fixed height): the list lives in the content box under the tab bar, b08's end scroll (stage.ts
+ *  listOnly): the four rows whole, the card's bottom edge in the gap under them — a row pushed down (the fifth, while
+ *  both versions count) goes wholly under it; 16:9's panel is as tall as its rows (no box) */
 const ListBox: React.FC<{ S: ChangeStage; top: number; h: number; children: React.ReactNode }> = ({ S, top, h, children }) => {
   if (!S.panel.h) return <>{children}</>;
   const P = S.panel;
@@ -84,7 +85,7 @@ export const AppPanel: React.FC<{ t: number; S: ChangeStage; bar: TabBarGeometry
       </Panel>
       <TabBar bar={bar} t={t} active="knowledge" cursor={keys} radius={P.radius} />
       <ListBox S={S} top={P.y + bar.height} h={Lg.panelH - bar.height}>
-      <div style={{ position: 'absolute', left: Lg.x, top: Lg.headY, ...ui(S.heading, WT.medium), color: APP.foreground, whiteSpace: 'nowrap' }}>Your documents</div>
+      {S.listOnly ? null : <div style={{ position: 'absolute', left: Lg.x, top: Lg.headY, ...ui(S.heading, WT.medium), color: APP.foreground, whiteSpace: 'nowrap' }}>Your documents</div>}
       {NEWEST_FIRST.map((ri, k) => {
         const R = ROWS[ri];
         const y = Lg.listY + rowSlot(k, t) * Lg.pitch;
@@ -93,6 +94,8 @@ export const AppPanel: React.FC<{ t: number; S: ChangeStage; bar: TabBarGeometry
         // the old version leaves up through its own slot's mask on "the new answer"
         const q = isOld ? tween(t, [K.oldOut, K.oldOut + 9], [0, 1], EASE.in3) : 0;
         if (q >= 0.999) return null;
+        // (9:16: a row sliding under the card's bottom edge, or back up from under it, fades with its last sliver)
+        const edge = S.listOnly ? edgeFade(y, P.y + Lg.panelH) : 1;
         const row = (
           <Row
             t={t}
@@ -107,7 +110,7 @@ export const AppPanel: React.FC<{ t: number; S: ChangeStage; bar: TabBarGeometry
             name={R.name}
             pill={[{ at: -1e6, kind: 'ready', n: R.n }]}
             moving={moving || q > 0}
-            opacity={isOld ? 1 - smooth(0.25, 1, q) : 1}
+            opacity={(isOld ? 1 - smooth(0.25, 1, q) : 1) * edge}
             menuHover={isOld ? hoverAt(keys, t, { x: dotsRect.x, y: dotsRect.y + (y - dots.y), w: dotsRect.w, h: dotsRect.h }) : 0}
             menuPress={isOld ? pressAt(keys, t, dotsRect) : 0}
           />

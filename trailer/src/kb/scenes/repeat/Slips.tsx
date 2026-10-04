@@ -3,8 +3,9 @@
  * role, a ruled line under each row) on a small pad of blank sheets. The desk's answer rises on it word by
  * word on Leo's real word onsets; on "two." it drops onto the pile (desk.ts slipPose: held a hand's breadth
  * up while written, a 3-frame fall, the landing squash, its shadow tightening; the paper beneath takes the
- * weight). The second and third answers come on fresh slips placed over the pile — the SAME words on the
- * SAME timings; the third alone lands crooked. Through the rest of the day a slip drops on every 8th,
+ * weight). The second and third answers come on fresh slips placed over the pile, already printed — the SAME
+ * words, arriving whole (never a blank card over the last answer); each drops on its "two.", the third alone
+ * lands crooked. Through the rest of the day a slip drops on every 8th,
  * already written, and the pile grows into a neat column: its height is the count (no number is shown).
  *
  * Every slip is positioned by its transform on its own small layer (sub-pixel glide, no blur).
@@ -79,9 +80,10 @@ export const Slips: React.FC<{ t: number; g: DeskLayout; ink: string }> = ({ t, 
     const p = slipPose(k, t, v);
     if (!p.on) return null;
     const jolt = pileJolt(t, k);
-    // the answers are written on the desk's real word onsets (a frame ahead of the voice, as captions lead);
-    // the rolls' slips arrive already written
-    const answer = k < 3;
+    // the first answer is written on the pad's own top sheet, on the desk's real word onsets (a frame ahead of
+    // the voice, as captions lead). Answers 2 and 3 are the same answer again: their fresh slips arrive already
+    // printed (tag and words), so no blank card ever hangs over the last "nine till two." — like the rolls' slips
+    const answer = k === 0;
     const desk = answer ? R.desk[k] : -1e6;
     const tf = `translate(${(s.x + p.dx).toFixed(3)}px, ${(s.y + p.dy + jolt).toFixed(3)}px) rotate(${p.rot.toFixed(4)}deg) scaleY(${p.squash.toFixed(5)})`;
     return (

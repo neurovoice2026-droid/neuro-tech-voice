@@ -6,13 +6,20 @@
  *   unfold   the row's paper opens into the full page (one SVG rect: its box, its corner, exact at every
  *            fractional edge) and it is ONE object becoming another: the row's name glides and grows into the page's
  *            heading (its weight easing 480 → 560 on the variable face), the kind token leaves its tile for the page's
- *            kind line, the pill and the … leave up through their masks; the rule draws, the three lines rise on 16ths
+ *            kind line, the pill and the … leave up through their masks; the rule draws, the three lines rise on 16ths.
+ *            16:9 (stage `unfold: 'header'` — the page is far wider than the row): the paper first takes the page's
+ *            place and WIDTH as a header strip (kind + heading set at their final places), then unrolls down to the
+ *            page's height, so its lines are only ever revealed at their final width (4K review, 49.0 s: the lines
+ *            were laid wider than the opening paper — "Monday to Friday · 8:00–20" clipped, TXT half-masked, the
+ *            heading indented); 9:16 (`'box'`, the row is wider than the page) opens box to box in one move
  *   sweep    "the part that answers them": a flat sunday band (12 %, EASE.draw, .5 s, no glow) under Saturday, then
  *            Sunday a 16th behind; the weekday line settles to 40 %
  *   b11      THE RE-SET's page side: the tokens she doesn't say (· 9:00–14:00 ·) leave up through their own masks
  *            and the sweep bands up out of theirs (CALL_LOCAL.drop); the kept words fly from their places here into her
  *            sentence (call/Reset.tsx, CALL_LOCAL.fly); then the page dims to 25 % (16:9 in place beside the answer,
- *            9:16 receding below it) and, as the record lands, recedes out (× .9, opacity → 0)
+ *            9:16 receding below it) and COLLAPSES to what is left on it (kind, heading, the weekday line: its bottom
+ *            edge rises behind the words leaving — never a half-empty card behind her sentence) and, as the record
+ *            lands, recedes out (× .9, opacity → 0)
  *
  * The page is CROPPED TO ITS CONTENT (usePage): kind, heading, three lines at the title role (64 / 56), 48 px padding.
  */
@@ -29,12 +36,18 @@ import { CALL_LOCAL as C } from '../../timing';
 import { KindTile, rowFace, typeLabelWidth, TypeLabel } from '../written/Row';
 import { ROWS, writtenStage } from '../written/stage';
 import { HOURS, panelTransform } from './Panel';
-import { ease, lerp, pageDimAt, pageOutAt, type CallStage } from './stage';
+import { ease, lerp, pageCollapseAt, pageDimAt, pageOutAt, type CallStage } from './stage';
 
 const SUNDAY = MOMENT_LIGHTS.sunday.ink;
 export const PAGE_LINES = ['Monday to Friday · 8:00–20:00', 'Saturday · 9:00–14:00', 'Sunday · closed'] as const;
 /** the swept lines (Saturday, Sunday) */
 export const SWEPT = [1, 2] as const;
+/** the 'header' unfold (16:9), frames from CALL_LOCAL.unfold[0]: the paper reaches the page's place and width by
+ *  `wide` — its left edge tracking ≥ 50 px clear of the frozen question as the camera's pan steps it back (stage.ts
+ *  panAt: the pan ends 2 f later) — and its height the header strip's by `strip`; the name is in the heading's place
+ *  and size by `name` (down past the kind line by `down`, which then rises at `kind`); the paper unrolls from the strip
+ *  to the page's height over `open` (its first line shows ≈ 18.5 f in, the paper at its full width) */
+const HDR = { wide: 18, strip: 12, name: 12, down: 8, kind: 8, open: [15, 27] } as const;
 
 export type PageGeo = DocPageGeometry & { h: number };
 
@@ -126,12 +139,23 @@ export const OpeningHoursPage: React.FC<{ t: number; S: CallStage; g: PageGeo; i
   const hx = lerp(st.x, S.rowHold.x, fl);
   const hy = lerp(st.y, S.rowHold.y, fl) - (S.rowFrom ? 0 : 30 * Math.sin(Math.PI * Math.min(1, fl)));
   const rk = lerp(k0, 1, Math.min(1, fl));
-  /* the unfold: the paper opens from the row's box to the page's, travelling to the page's place */
+  /* the unfold: the paper opens from the row's box to the page's, travelling to the page's place — 16:9 ('header')
+     in two overlapping moves: to the page's place and width as a header strip (its height growing only to the rule),
+     then down to the page's height */
+  const u0 = C.unfold[0];
   const un = ease(t, C.unfold[0], C.unfold[1], EASE.inOut);
-  const rx = lerp(hx, g.card.x, un);
-  const ry = lerp(hy, g.card.y, un);
-  const w = lerp(R.w * rk, g.card.w, un);
-  const h = lerp(R.h * rk, g.h, un);
+  const hdr = S.unfold === 'header';
+  const uW = hdr ? ease(t, u0, u0 + HDR.wide, EASE.inOut) : un;
+  const uH = hdr ? ease(t, u0 + HDR.open[0], u0 + HDR.open[1], EASE.inOut) : un;
+  const rx = lerp(hx, g.card.x, uW);
+  const ry = lerp(hy, g.card.y, uW);
+  const w = lerp(R.w * rk, g.card.w, uW);
+  // the header strip: down to just above the rule (the heading's descenders clear)
+  const stripH = g.lineRects[0].y - g.card.y - size * 0.55 - size * 0.12;
+  const hOpen = hdr ? lerp(lerp(R.h * rk, stripH, ease(t, u0, u0 + HDR.strip, EASE.inOut)), g.h, uH) : lerp(R.h * rk, g.h, un);
+  // b11: once the swept lines have left, the page collapses to what is left on it (kind, heading, the weekday line)
+  const hLeft = g.lineRects[0].y - g.card.y + size * 1.18 + pad;
+  const h = lerp(hOpen, hLeft, pageCollapseAt(t));
   const radius = lerp(R.radius * rk, size * 0.22, un);
   // the paper rises off the ground as it is fetched (it is held a touch higher while it waits)
   const lift = lerp(3.4, 3, un) * smooth(0, 0.4, fl);
@@ -150,17 +174,19 @@ export const OpeningHoursPage: React.FC<{ t: number; S: CallStage; g: PageGeo; i
   const tileA = 1 - ease(t, C.unfold[0], C.unfold[0] + 10, EASE.inOut);
   // name → heading: position and size (by transform), weight on the variable face
   const nameS = R.size * rk;
-  // the name travels second, down first and then left (the token has gone up to its line by then: they never cross)
-  const hm = ease(t, C.unfold[0] + 3, C.unfold[1] - 1, EASE.inOut);
-  const hyp = ease(t, C.unfold[0] + 2, C.unfold[0] + 15, EASE.inOut);
-  const hxp = ease(t, C.unfold[0] + 9, C.unfold[1] - 1, EASE.inOut);
+  // the name travels second, down first and then left (the token has gone up to its line by then: they never cross);
+  // 16:9 ('header') it is in the heading's place and size with the strip, long before the paper unrolls
+  const hm = hdr ? ease(t, u0, u0 + HDR.name, EASE.inOut) : ease(t, C.unfold[0] + 3, C.unfold[1] - 1, EASE.inOut);
+  const hyp = hdr ? ease(t, u0, u0 + HDR.down, EASE.inOut) : ease(t, C.unfold[0] + 2, C.unfold[0] + 15, EASE.inOut);
+  const hxp = hdr ? ease(t, u0 + 2, u0 + HDR.name, EASE.inOut) : ease(t, C.unfold[0] + 9, C.unfold[1] - 1, EASE.inOut);
   const nx = lerp(R.nameX * rk, pad, hxp);
   const ny = lerp(R.nameY * rk, headTop, hyp);
   const nsc = lerp(nameS, headSize, hm) / headSize;
   const nWeight = lerp(TYPE.title.weight, 560, hm);
   // the page's kind line: the row's tile holds the app's FileText icon (written/Row.tsx), not a token, so the line
-  // rises into its place on the page through its own mask once the name has gone down past it (they never cross)
-  const kindAt = C.unfold[0] + 10;
+  // rises into its place on the page through its own mask once the name has gone down past it (they never cross);
+  // 16:9 ('header') on the quicker caption spring: it is up long before the paper unrolls to the first line
+  const kindAt = hdr ? u0 + HDR.kind : C.unfold[0] + 10;
   // the page's own content: rule + lines on 16ths, set at their final places INSIDE the opening paper from the start of
   // the unfold (the paper's moving edge reveals what is below it), so the row becomes the page and the opening paper is
   // never a heading over blank paper (global pass: 16:9 1462–1478 / 9:16 1460–1470 held 3–8 empty frames)
@@ -193,7 +219,7 @@ export const OpeningHoursPage: React.FC<{ t: number; S: CallStage; g: PageGeo; i
           {/* the page's kind line TXT, rising into place */}
           {t >= kindAt - 0.5 ? (
             <div style={{ position: 'absolute', left: pad, top: pad, ...maskBox(0) }}>
-              <span style={{ ...revealStyle(reveal(t, kindAt, { rise: 90, fade: 0.5 }), undefined, t - kindAt < 16), display: 'block', ...typeStyle('label', v, { size: labelSize }), letterSpacing: '0.14em', color: APP.mutedFg, lineHeight: 1.2, whiteSpace: 'nowrap' }}>TXT</span>
+              <span style={{ ...revealStyle(reveal(t, kindAt, { rise: 90, fade: 0.5, ...(hdr ? { config: SPRING.caption } : null) }), undefined, t - kindAt < 16), display: 'block', ...typeStyle('label', v, { size: labelSize }), letterSpacing: '0.14em', color: APP.mutedFg, lineHeight: 1.2, whiteSpace: 'nowrap' }}>TXT</span>
             </div>
           ) : null}
           {/* the name → the heading */}

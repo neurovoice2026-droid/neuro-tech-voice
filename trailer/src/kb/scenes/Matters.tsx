@@ -88,8 +88,14 @@ const tealKey = (t: number, c: number) => 0.23 + 0.12 * pulse(t) + 0.09 * smooth
 /** b16's thesis, vo-8's seven words, each on its spoken onset (a frame ahead, as captions lead) */
 const VO8_WORDS = ['That’s', 'the', 'work', 'only', 'people', 'can', 'do.'] as const;
 
-/** The whole picture at act-local `t` (negative = the act's first picture held; exported for the neighbours). */
-export const MattersDesk: React.FC<{ t: number }> = ({ t }) => {
+/**
+ * The whole picture at act-local `t` (negative = the act's first picture held; exported for the neighbours). `part`
+ * (only b14's L-cut, change/Cross.tsx, which hands the grounds over under a soft edge and the desk behind it): just the
+ * ground, or just what stands on it. Omitted — this act, and the push's landing — it is the whole picture, unchanged.
+ */
+export const MattersDesk: React.FC<{ t: number; part?: 'ground' | 'desk' }> = ({ t, part }) => {
+  const ground = part !== 'desk';
+  const desk = part !== 'ground';
   const L = useLayout();
   const v = L.vertical;
   const g = mattersLayout(v);
@@ -117,7 +123,7 @@ export const MattersDesk: React.FC<{ t: number }> = ({ t }) => {
   const litMask = cl ? rampCss(cl.x, cl.y, cl.ri, cl.ro, cl.a, 0, '0,0,0') : null;
   return (
     <AbsoluteFill>
-      {cl ? (
+      {ground && cl ? (
         // the night it closes onto: b17's first picture exactly (INK_MESH, deep, her key pool on the dot)
         <MeshGround
           t={SCENES.matters.from + t}
@@ -132,42 +138,46 @@ export const MattersDesk: React.FC<{ t: number }> = ({ t }) => {
           keyLight={{ x: dot.x, y: dot.y, strength: 0.5, color: SUNDAY.orb[1], radius: L.pick(620, 600) * 0.88 }}
         />
       ) : null}
-      {litMask === null ? lit : cl && cl.ro > 0 && cl.a > 0.001 ? <AbsoluteFill style={{ maskImage: litMask, WebkitMaskImage: litMask }}>{lit}</AbsoluteFill> : null}
-      <TealRing t={t} g={g} />
-      <Camera x={cam.x} y={cam.y} zoom={cam.zoom} moving={cm.moving} zooming={cm.zooming}>
-        <Layer depth={PLANE.desk}>
-          {/* b16's step back: the whole desk about the layout's anchor (each part keeps its own sub-pixel layer) */}
-          <AbsoluteFill
-            style={
-              step.k > 0
-                ? { transform: `scale(${step.s.toFixed(5)})`, transformOrigin: `${step.ax}px ${step.ay}px` }
-                : undefined
-            }
-          >
-            <Pad t={t} g={g} ink={SHADOW_INK} flat={step.shade} cl={cl} />
-            <OldStack t={t} g={g} ink={SHADOW_INK} flat={step.shade} cl={cl} />
-            <MattersCard t={t} g={g} ink={SHADOW_INK} flat={step.shade} cl={cl} />
-            <DeskReply t={t} g={g} cl={cl} />
-          </AbsoluteFill>
-        </Layer>
-        <Layer depth={PLANE.near}>
-          <MattersClock t={t} g={g} />
-        </Layer>
-      </Camera>
-      <Thesis
-        t={t}
-        words={VO8_WORDS}
-        at={M.vo8Words.map((f) => f - 1)}
-        lines={g.title.lines}
-        x={g.title.x}
-        y={g.title.y}
-        size={g.title.size}
-        vertical={v}
-        keyPhrase={{ from: 3, at: M.key }}
-        exit={{ at: M.titleOut, stagger: 0.5, dur: 7 }}
-        cl={cl}
-      />
-      <TealDot t={t} g={g} />
+      {!ground ? null : litMask === null ? lit : cl && cl.ro > 0 && cl.a > 0.001 ? <AbsoluteFill style={{ maskImage: litMask, WebkitMaskImage: litMask }}>{lit}</AbsoluteFill> : null}
+      {desk ? (
+        <>
+          <TealRing t={t} g={g} />
+          <Camera x={cam.x} y={cam.y} zoom={cam.zoom} moving={cm.moving} zooming={cm.zooming}>
+            <Layer depth={PLANE.desk}>
+              {/* b16's step back: the whole desk about the layout's anchor (each part keeps its own sub-pixel layer) */}
+              <AbsoluteFill
+                style={
+                  step.k > 0
+                    ? { transform: `scale(${step.s.toFixed(5)})`, transformOrigin: `${step.ax}px ${step.ay}px` }
+                    : undefined
+                }
+              >
+                <Pad t={t} g={g} ink={SHADOW_INK} flat={step.shade} cl={cl} />
+                <OldStack t={t} g={g} ink={SHADOW_INK} flat={step.shade} cl={cl} />
+                <MattersCard t={t} g={g} ink={SHADOW_INK} flat={step.shade} cl={cl} />
+                <DeskReply t={t} g={g} cl={cl} />
+              </AbsoluteFill>
+            </Layer>
+            <Layer depth={PLANE.near}>
+              <MattersClock t={t} g={g} />
+            </Layer>
+          </Camera>
+          <Thesis
+            t={t}
+            words={VO8_WORDS}
+            at={M.vo8Words.map((f) => f - 1)}
+            lines={g.title.lines}
+            x={g.title.x}
+            y={g.title.y}
+            size={g.title.size}
+            vertical={v}
+            keyPhrase={{ from: 3, at: M.key }}
+            exit={{ at: M.titleOut, stagger: 0.5, dur: 7 }}
+            cl={cl}
+          />
+          <TealDot t={t} g={g} />
+        </>
+      ) : null}
     </AbsoluteFill>
   );
 };

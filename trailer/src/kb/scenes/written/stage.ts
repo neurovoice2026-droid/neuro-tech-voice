@@ -23,7 +23,7 @@
  * eyebrow, the ground (KB_MESH keyed on the orb). The cursor and the caption have left by the cut.
  */
 import { Easing } from 'remotion';
-import { EASE, springUnit } from '../../../lib/motion';
+import { EASE, smooth, springUnit } from '../../../lib/motion';
 import { WRITTEN_LOCAL as W } from '../../timing';
 import { turnEnd } from '../turn/stage';
 
@@ -61,6 +61,9 @@ export type WrittenStage = {
   divider: { y: number } | null;
   fieldLabel: { y: number } | null;
   field: Box;
+  /** General's text inputs (TabGeneral.tsx: Agent name, Language): their height — the web page field's in 16:9; 9:16
+   *  keeps the 96 px its General tab always had while the Knowledge tab's field is compact (fix:knowledge-9x16) */
+  inputH: number;
   button: Box;
   /** "Your documents": the heading's top and the list (frame px), the rows' layout */
   docs: { x: number; y: number; w: number };
@@ -119,6 +122,7 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
         divider: { y: dividerY },
         fieldLabel: { y: fieldLabelY },
         field,
+        inputH: field.h,
         button,
         docs: { x: docsX, y: y0, w: docsW },
         list: { x: docsX, y: y0 + 66, w: docsW, bottom: panel.y + panel.h - 34 },
@@ -142,6 +146,12 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
     //   entry  from the right, as in 16:9 (b07's 9:16 card left that way too), riding its own band: a climb from under
     //          the frame would cross the caption's band while "Give me your answers once." rises (polish pass). 1300 px
     //          puts its left edge and its entry shadow (≈ 210 px at lift 4.5) past the frame's edge on frame 0
+    //   list   (fix:knowledge-9x16) the first screen holds TWO WHOLE ROWS and the card's bottom edge falls in the gap
+    //          under them: "Add knowledge" is compact (the drop zone one line high — its icon beside the words —, the
+    //          field and Add page 84 px, tighter gaps), so the list starts 98 px higher (1000.6 → 902.6) — exactly where
+    //          the end scroll's third slot is. Slot 1 then ends at 1256.6 (the card's edge 1264) and slot 2 starts at
+    //          1266.6, wholly under the edge: a row that slides down out of slot 1 as a newer one lands is never parked
+    //          cut by it. The end scroll (by 364, was 462) leaves the four rows exactly where they were (b09's frame 0)
     const panel = { x: 28, y: 426, w: 1024, h: 838, radius: 34, from: { x: 1300, y: 0 } };
     const tabs = { size: 32, icons: false, padR: 8 };
     const barH = (44 * tabs.size) / 14;
@@ -150,12 +160,12 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
     const type = { title: 46, body: 42, small: 34, label: 38, url: 34 };
     const cw = panel.w - 2 * pad;
     const add = { x: panel.x + pad, y: y0, w: cw, h: 0 };
-    const drop = { x: add.x, y: y0 + 72, w: cw, h: 150, compact: true };
+    const drop = { x: add.x, y: y0 + 66, w: cw, h: 88, compact: true };
     const bw = 280;
-    const field = { x: add.x, y: drop.y + drop.h + 20, w: cw - bw - 14, h: 96 };
-    const button = { x: field.x + field.w + 14, y: field.y, w: bw, h: 96 };
+    const field = { x: add.x, y: drop.y + drop.h + 16, w: cw - bw - 14, h: 84 };
+    const button = { x: field.x + field.w + 14, y: field.y, w: bw, h: 84 };
     add.h = field.y + field.h - y0;
-    const docsY = field.y + field.h + 36;
+    const docsY = field.y + field.h + 22;
     const rowSize = 50;
     const pill = 42;
     const row = { size: rowSize, pill, h: rowHeight('stack', rowSize, pill), gap: 10, layout: 'stack' as const };
@@ -176,12 +186,15 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
       divider: null,
       fieldLabel: null,
       field,
+      inputH: 96,
       button,
       docs: { x: add.x, y: docsY, w: cw },
       list: { x: add.x, y: listY, w: cw, bottom: panel.y + panel.h - 24 },
       row,
       type,
-      scroll: { at: [W.knowledge - 4, W.knowledge + 22] as const, by },
+      // (19 frames, was 26 for 462 px: the same top speed; the oldest row is whole again — the bottom of the move —
+      // by "knowledge" + 11, so the decelerating tail never crawls with a row cut at the card's edge)
+      scroll: { at: [W.knowledge - 4, W.knowledge + 15] as const, by },
       // the pile rests in the band between the top platform zone (the top 250 px, the Reels/TikTok UI) and the panel
       slips: { x: 286, y: 286, w: 680 },
       eyebrow: { x: 540, y: 358, align: 'center' },
@@ -261,6 +274,14 @@ export function scrollAt(t: number, S: WrittenStage) {
 }
 /** the scroll is moving at t */
 export const scrolling = (t: number, S: WrittenStage) => !!S.scroll && t > S.scroll.at[0] && t < S.scroll.at[1];
+
+/**
+ * 9:16 (fix:knowledge-9x16): a row whose top (screen px) is in a card's last few px — the tail of its slide out under the
+ * bottom edge (a newer row has landed above it), or the start of its rise from under it (the end scroll) — fades with that
+ * sliver, where only its hairline border shows: the spring's slow tail never leaves a 1–3 px line along the edge. 1 for
+ * any row whose top is 8 px or more above the edge (every row at rest), so the resting pictures are untouched.
+ */
+export const edgeFade = (y: number, edge: number) => 1 - smooth(edge - 8, edge - 2, y);
 
 /** the badge's count over time (the app counts every document, Reading ones too) */
 export const BADGE = W.rows.map((at, i) => ({ at, n: i + 1 }));

@@ -24,7 +24,7 @@ import { subpixel } from '../../../lib/glide';
 import { smooth } from '../../../lib/motion';
 import { APP, Button, buttonSize, hoverAt, Panel, pressAt, Swap, TabBar, ui, useKitFaces, useTabBar, W as WT, wrapWords, type CursorKey, type PillState, type Rect, type TabBarGeometry, type TabChange } from '../../kit';
 import { LINE_LOCAL as N } from '../../timing';
-import { Row } from '../written/Row';
+import { Row, rowPill } from '../written/Row';
 import { ROWS, rowHeight, writtenStage } from '../written/stage';
 import { Field, fieldSpec, type FieldGeo } from './Field';
 import { Pointer } from './Pointer';
@@ -180,19 +180,43 @@ const Conversation: React.FC<{ G: PageGeo; S: LineStage }> = ({ G, S }) => {
   );
 };
 
-/** FULL order only: the Knowledge tab as b08 left it — "Your documents", the four rows Ready, newest first (single-line
- *  rows, the app's phone layout, so the list fits the page's height in both orientations) */
+/** 9:16: the largest two-line row (b08's name : pill proportions, 50 : 42) whose four rows fit `avail` px whole */
+function fitRows(avail: number, gap: number, size0: number, pill0: number) {
+  for (let size = size0; size > 20; size--) {
+    const pill = Math.round((size * pill0) / size0);
+    const h = rowHeight('stack', size, pill);
+    if (4 * h + 3 * gap <= avail) return { size, pill, h };
+  }
+  return { size: 20, pill: Math.round((20 * pill0) / size0), h: rowHeight('stack', 20, Math.round((20 * pill0) / size0)) };
+}
+
+/** FULL order only: the Knowledge tab as b08 left it — the four rows Ready, newest first (16:9: under "Your documents",
+ *  single-line rows; 9:16: b08's scrolled list, every row whole) */
 const Knowledge: React.FC<{ G: PageGeo; S: LineStage }> = ({ G, S }) => {
   const WS = writtenStage(S.vertical);
   const T = S.type;
   const top = G.title.y;
-  // 9:16: b08's ad-size rows (the app's two-line row, written/stage.ts) — the page's content box cuts the list where it
-  // ends, as a phone's would; 16:9: single-line rows
-  const size = S.vertical ? WS.row.size : 30;
-  const layout = S.vertical ? WS.row.layout : 'inline';
-  const pill = S.vertical ? WS.row.pill : undefined;
+  if (S.vertical) {
+    // 9:16 (fix:knowledge-9x16): b08's list as b08 left it — scrolled, the newest row 12 px under the tab bar, no heading
+    // (written/stage.ts's end scroll) — its two-line rows sized so ALL FOUR fit this page's height whole (≥ 8 px over its
+    // bottom edge; the page is the Conversation tab's height, shorter than b08's card): never a row cut by the edge
+    const gap = WS.row.gap;
+    const listY = G.panel.y + G.bar.height + 12;
+    const R = fitRows(G.panel.y + G.panel.h - 8 - listY, gap, WS.row.size, WS.row.pill ?? rowPill(WS.row.size));
+    return (
+      <div style={{ position: 'absolute', inset: 0 }}>
+        {NEWEST_FIRST.map((i, k) => (
+          <Row key={ROWS[i].name} t={0} x={G.title.x} y={listY + k * (R.h + gap)} w={G.desc.w} h={R.h} layout="stack" size={R.size} pillSize={R.pill} kind={ROWS[i].kind} name={ROWS[i].name} pill={READY[i]} />
+        ))}
+      </div>
+    );
+  }
+  // 16:9: single-line rows under "Your documents"
+  const size = 30;
+  const layout = 'inline';
+  const pill = undefined;
   const h = rowHeight(layout, size, pill);
-  const gap = S.vertical ? WS.row.gap : 12;
+  const gap = 12;
   const listY = top + T.title * 1.5;
   return (
     <div style={{ position: 'absolute', inset: 0 }}>

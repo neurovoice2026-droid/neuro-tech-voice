@@ -77,6 +77,10 @@ export type ChangeStage = {
   pad: number;
   heading: number;
   headTop: number;
+  /** 9:16 (fix:knowledge-9x16): no "Your documents" heading — the list as b08's end scroll left it (written/stage.ts:
+   *  the newest row `headTop` px under the tab bar), so the card holds all four rows whole and its bottom edge falls in
+   *  the gap under the fourth (a fifth — the two versions side by side — sits wholly under it) */
+  listOnly?: boolean;
   /** the rows (written/Row.tsx): name size, gap, layout (16:9 single-line; 9:16 b08's ad-size two-line row and its pill
    *  size); the … menu's item size and the side it opens on (9:16: above its trigger — no room under it in the card, as
    *  the app's dropdown flips on a phone) */
@@ -156,7 +160,8 @@ const STAGES: Record<'land' | 'vert', ChangeStage> = (() => {
       tabs: W8.tabs,
       pad: W8.pad,
       heading: W8.type.title,
-      headTop: 28,
+      headTop: 12,
+      listOnly: true,
       row: { size: W8.row.size, gap: W8.row.gap, layout: W8.row.layout, pill: W8.row.pill },
       menu: { size: 46, side: 'top' },
       caption: { x: 540, y: 1336, maxWidth: 940 },
@@ -190,7 +195,7 @@ export const barH = (S: ChangeStage) => (44 * S.tabs.size) / 14;
 /** the list's top (frame px, the panel at rest) and the row pitch */
 export function listGeo(S: ChangeStage) {
   const top = S.panel.y + barH(S) + S.headTop;
-  const listY = top + S.heading * 1.5;
+  const listY = S.listOnly ? top : top + S.heading * 1.5;
   const h = rowH(S);
   const pitch = h + S.row.gap;
   const x = S.panel.x + S.pad;
