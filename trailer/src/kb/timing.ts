@@ -818,7 +818,7 @@ export const MATTERS_LOCAL = (() => {
     end,
     /** "nervous." rises on the act's first frame (73.0 on the plan); the hanging em dash is lifted off as it does */
     nervous: 0,
-    dash: [0, 3] as const,
+    dash: [0, 2] as const,
     desk2: L('matters', DESK2_AT),
     /** the staff reply's words (● FRONT DESK rises a beat's 16th before the first) */
     deskWords: words(DESK2, DESK2_AT) as readonly number[],
@@ -1288,6 +1288,35 @@ const CHANGE_HITS: Hit<Snd>[] = (() => {
 })();
 /* ── /change ── */
 
+/* ── matters ── (b15–b16: picture src/kb/scenes/Matters.tsx + scenes/matters/*; pans from the 16:9 layout: the card .35,
+ * the teal colon (the clock) .84, the old slip stack on the pad .81 → off the right edge)
+ * The bed's part (MUSIC.desk / .breath / .vo8): it drops to room tone and one warm sustained pad under the desk; the bar
+ * of room tone after the staff line (nothing else sounds in it); it returns fuller (strings and piano, a gentle lift)
+ * under vo-8; the drop into the dark lands on the close's bar (MUSIC.cta). NO cursor and no clicks: nobody works the app.
+ * FILM-2 EXTRAS this act asks the sound pass for (film 1 stand-ins below until they exist; labels say [→ …]):
+ *   fx-pen-lift    NEW: the em dash lifted off the card as "nervous." rises — a breath of a felt-tip leaving paper
+ *                  (≈ 60 ms, dry, no tone), very quiet: the sentence completing, not an effect
+ *   fx-trill       (b02's) the same desk trill sample, DUCKED −14 dB under Leo, CUT after one chirp (a 16th) by her pickup
+ *   fx-ava-pickup  NEW: her soft pickup tone — b07's arrival "ting" (one sine, the sunday light's), very quiet and short,
+ *                  ending the trill: she has the call (film 1's ping on sunday stands in)
+ *   fx-roll        NEW: AVA · ON A CALL rolling up into its window under the clock — a tiny soft drum-roll tick (≈ 30 ms,
+ *                  the clock's own flick family, dry), under the voice
+ *   fx-slip-slide  (b02's) the old slips gliding off the pad on "do." — one soft paper slide that thins out as the cascade
+ *                  leaves (the five slips 2.5 f apart: one gesture, not five hits) */
+const MATTERS_HITS: Hit<Snd>[] = (() => {
+  const R = MATTERS_LOCAL;
+  const at = (f: number) => SCENES.matters.from + f;
+  return [
+    H(at(R.nervous), 'sheen', 'none', 0.35, 3, 'b15 "nervous." — the sentence that hung since b01 completes; the em dash lifted off [→ fx-pen-lift]', { db: -14 }),
+    H(at(R.ring), 'ring-hook', 'none', 0.84, 3, 'b15 THE LINE RINGS ONCE (74.5, beat 2), far under the staff line: one hairline teal ring leaves the colon; the card does not move [→ fx-trill, ducked −14 dB, cut after one chirp]', { db: -14 }),
+    H(at(R.pickup), 'ping', 'sunday', 0.84, 3, 'b15 … cut a 16th later by her soft pickup tone: Ava takes the call [→ fx-ava-pickup]', { db: -15 }),
+    H(at(R.label), 'flick', 'none', 0.84, 3, 'b15 AVA · ON A CALL rolls in under the clock, where a second chirp would have been [→ fx-roll]', { db: -12 }),
+    H(at(R.vo8Words[0] - 1), 'sheen', 'none', 0.3, 3, 'b16 "That\u2019s the work / only people can do." rises over the desk; the slow push toward the card', { db: -12 }),
+    H(at(R.stack.lift), 'swish', 'none', [0.8, 1], 3, 'b16 "do.": the old slips lift off the pad and glide off toward the teal dot, still reading "nine till two" [→ fx-slip-slide]', { db: -9 }),
+  ];
+})();
+/* ── /matters ── */
+
 export const HITS: Hit<Snd>[] = [
   /* ── repeat ── */
   ...REPEAT_HITS,
@@ -1308,9 +1337,9 @@ export const HITS: Hit<Snd>[] = [
   /* ── change ── */
   ...CHANGE_HITS,
   /* ── /change ── */
-  /* ── b15–b16 ── */
-  H(DESK_RING, 'ring-hook', 'none', 0.7, 3, 'the desk line rings once, far under the staff line (Ava takes it)', { db: -6 }),
-  H(DESK_RING + BEAT / 2, 'glint', 'sunday', 0.7, 3, 'AVA · ON A CALL', { db: -4 }),
+  /* ── matters ── */
+  ...MATTERS_HITS,
+  /* ── /matters ── */
   /* ── CLOSE ── */
   ...LIGHTS4.map((f, i) => H(f, chime(CTA_LOCAL.lightOrder[i]), CTA_LOCAL.lightOrder[i], [0.2, 0.8, 0.3, 0.7][i], 2, `${CTA_LOCAL.lightOrder[i].toUpperCase()} light arrives`)),
   H(IMPACT, 'riser', 'none', 0.5, 1, 'CONVERGE → peak ON the impact', { db: -2 }),

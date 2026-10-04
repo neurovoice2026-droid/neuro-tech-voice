@@ -227,7 +227,13 @@ export const darkness = (t: number) => inOut((t - M.dark[0]) / (M.dark[1] - M.da
 export const typeFade = (t: number) => 1 - smoothstep(M.fade[0], M.fade[1], t);
 /** the paper sinks into the night (its shade), then is gone into it before the cut (its opacity) */
 export const paperShade = (t: number) => 0.86 * darkness(t);
-export const paperFade = (t: number) => 1 - smoothstep(M.dark[0] + 0.45 * (M.dark[1] - M.dark[0]), M.dark[1] - 2, t);
+export const paperFade = (t: number) => 1 - smoothstep(M.dark[0] + 0.3 * (M.dark[1] - M.dark[0]), M.dark[0] + 0.86 * (M.dark[1] - M.dark[0]), t);
+/** the ground's hand-off into the night: its light and its lift go first, the night's violet comes in late (only
+ *  into the dark, never as a lavender wash over the light room) */
+export const groundGrade = (t: number) => {
+  const d = darkness(t);
+  return { lift: 1 - d, brightness: 1 - 0.9 * Math.pow(d, 0.75), mix: smoothstep(0.35, 1, d), shade: 1 - d };
+};
 
 /* ── the neighbours ─────────────────────────────────────────────── */
 

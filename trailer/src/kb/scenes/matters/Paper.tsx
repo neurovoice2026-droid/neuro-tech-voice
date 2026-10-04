@@ -57,10 +57,10 @@ const Face: React.FC<{ g: MattersLayout; written: boolean }> = ({ g, written }) 
   );
 };
 
-const Shade: React.FC<{ dark: number }> = ({ dark }) =>
-  dark > 0.001 ? <div style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', background: `rgba(${NIGHT_RGB}, ${(0.93 * dark).toFixed(4)})` }} /> : null;
+const Shade: React.FC<{ shade: number }> = ({ shade }) =>
+  shade > 0.001 ? <div style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', background: `rgba(${NIGHT_RGB}, ${shade.toFixed(4)})` }} /> : null;
 
-export const Pad: React.FC<{ g: MattersLayout; ink: string; dark: number }> = ({ g, ink, dark }) => {
+export const Pad: React.FC<{ g: MattersLayout; ink: string; shade: number }> = ({ g, ink, shade }) => {
   const L = useLayout();
   const p = g.pad;
   const radius = L.pick(12, 11);
@@ -75,12 +75,12 @@ export const Pad: React.FC<{ g: MattersLayout; ink: string; dark: number }> = ({
         height: p.h,
         borderRadius: radius,
         background: i === 0 ? '#ffffff' : i === 1 ? '#fafafc' : '#f4f3f7',
-        boxShadow: meshElevation(i === 0 ? 0.35 : i === 1 ? 0.12 : 0.3, ink, 0.95 * (1 - 0.85 * dark)),
+        boxShadow: meshElevation(i === 0 ? 0.35 : i === 1 ? 0.12 : 0.3, ink, 0.95 * (1 - shade)),
         ...subpixel(`translate(${(p.x + [0, 1, -1.5][i]).toFixed(3)}px, ${(p.y + [0, 5, 10][i]).toFixed(3)}px) rotate(${[-0.3, -0.2, 0.35][i]}deg)`, true),
       }}
     >
       {i === 0 ? <Face g={{ ...g, stack: { ...g.stack, w: p.w, h: p.h } }} written={false} /> : null}
-      <Shade dark={dark} />
+      <Shade shade={shade} />
     </div>
   );
   return (
@@ -92,7 +92,7 @@ export const Pad: React.FC<{ g: MattersLayout; ink: string; dark: number }> = ({
   );
 };
 
-export const OldStack: React.FC<{ t: number; g: MattersLayout; ink: string; dark: number }> = ({ t, g, ink, dark }) => {
+export const OldStack: React.FC<{ t: number; g: MattersLayout; ink: string; shade: number }> = ({ t, g, ink, shade }) => {
   const L = useLayout();
   const s = g.stack;
   const radius = L.pick(12, 11);
@@ -116,13 +116,13 @@ export const OldStack: React.FC<{ t: number; g: MattersLayout; ink: string; dark
               height: s.h,
               borderRadius: radius,
               background: i === 0 ? '#ffffff' : '#fcfcfd',
-              boxShadow: meshElevation(p.lift, ink, 0.95 * (1 - 0.85 * dark)),
+              boxShadow: meshElevation(p.lift, ink, 0.95 * (1 - shade)),
               transformOrigin: '50% 50%',
               ...subpixel(tf, true),
             }}
           >
             <Face g={g} written />
-            <Shade dark={dark} />
+            <Shade shade={shade} />
           </div>
         );
       })}

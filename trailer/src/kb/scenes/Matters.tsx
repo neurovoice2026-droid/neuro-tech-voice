@@ -29,6 +29,7 @@ import React from 'react';
 import { AbsoluteFill } from 'remotion';
 import { Camera, Layer } from '../../components/Camera';
 import { camMotion } from '../../lib/glide';
+import { mixHex } from '../../lib/motion';
 import { useLayout } from '../../lib/layout';
 import { MeshGround, meshShadowInk } from '../kit';
 import { HOME, INK_MESH, MOMENT_LIGHTS, MUTED_MESH } from '../palettes';
@@ -40,7 +41,7 @@ import { MattersClock } from './matters/Clock';
 import { TealDot } from './matters/Dot';
 import { OldStack, Pad } from './matters/Paper';
 import { DeskReply } from './matters/Reply';
-import { darkness, dotAt, mattersCam, mattersLayout, PLANE } from './matters/stage';
+import { darkness, dotAt, groundGrade, mattersCam, mattersLayout, paperFade, paperShade, PLANE } from './matters/stage';
 import { LeftTitle, type TitleLine } from './recording/Type';
 import { REPEAT_GROUND } from './Repeat';
 
@@ -77,26 +78,40 @@ export const MattersDesk: React.FC<{ t: number }> = ({ t }) => {
   const cm = camMotion((u) => mattersCam(u, v), t);
   const dark = darkness(t);
   const dot = dotAt(t, v);
-  // the ground: Part I's mesh on the timeline's clock, keyed by her dot; in the dark it hands off to the night
-  const key = roomTint(t) * 4 * (1 - dark) + 0.42 * dark;
+  const shade = paperShade(t);
+  const fade = paperFade(t);
+  // the ground: Part I's mesh on the timeline's clock, keyed by her dot; in the dark it hands off to the night —
+  // the lit shade goes out with the light, the mesh's light pool is pulled onto her dot, and its tint deepens to her
+  // ink (on the deep ground the tint is light ADDED: kept to her darker teal so the dot stays the brightest thing)
+  const key = roomTint(t) * 4 * (1 - dark) + 0.5 * dark;
+  const keyColor = mixHex(TEAL, SUNDAY.orb[1], dark);
+  const gg = groundGrade(t);
   return (
     <AbsoluteFill>
       <MeshGround
         t={SCENES.matters.from + t}
         palette={REPEAT_GROUND.palette}
         paletteB={INK_MESH}
-        mix={dark}
-        lift={REPEAT_GROUND.lift * (1 - dark)}
-        brightness={1 - 0.8 * dark}
+        mix={gg.mix}
+        lift={REPEAT_GROUND.lift * gg.lift}
+        brightness={gg.brightness}
+        shade={gg.shade}
         seed={REPEAT_GROUND.seed}
-        keyLight={{ x: dot.x, y: dot.y, strength: key, color: TEAL, radius: L.pick(620, 600) * (1 + 0.25 * dark) }}
+        keyLight={{ x: dot.x, y: dot.y, strength: key, color: keyColor, radius: L.pick(620, 600) * (1 - 0.12 * dark) }}
       />
       <Camera x={cam.x} y={cam.y} zoom={cam.zoom} moving={cm.moving} zooming={cm.zooming}>
         <Layer depth={PLANE.desk}>
-          <Pad g={g} ink={SHADOW_INK} dark={dark} />
-          <OldStack t={t} g={g} ink={SHADOW_INK} dark={dark} />
-          <MattersCard t={t} g={g} ink={SHADOW_INK} dark={dark} />
-          <DeskReply t={t} g={g} />
+          {/* the paper sinks into the night, then is gone into it before the cut */}
+          <AbsoluteFill style={{ opacity: fade < 0.999 ? fade : undefined }}>
+            {fade > 0.001 ? (
+              <>
+                <Pad g={g} ink={SHADOW_INK} shade={shade} />
+                <OldStack t={t} g={g} ink={SHADOW_INK} shade={shade} />
+                <MattersCard t={t} g={g} ink={SHADOW_INK} shade={shade} />
+                <DeskReply t={t} g={g} />
+              </>
+            ) : null}
+          </AbsoluteFill>
         </Layer>
         <Layer depth={PLANE.near}>
           <MattersClock t={t} g={g} />
