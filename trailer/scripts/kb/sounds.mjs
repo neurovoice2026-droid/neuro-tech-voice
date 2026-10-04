@@ -176,6 +176,18 @@ const pad = (st, sec) => {
   });
 };
 
+/**
+ * A tone's natural end: a raised-cosine damp over the file's last `sec` s (a hand settling on the bar, a finger on
+ * the glass), so a long decay never reaches the end of its file still sounding — the driver's 12 ms edge fade would
+ * chop it there, audibly, in a quiet passage.
+ */
+function ringOut(st, sec) {
+  const n = st[0].length;
+  const a = Math.max(0, n - S(sec));
+  for (const c of st) for (let i = a; i < n; i++) c[i] *= 0.5 + 0.5 * Math.cos((Math.PI * (i - a)) / Math.max(1, n - a));
+  return st;
+}
+
 /* ═════════════════════════ instruments (the tones) ═════════════════════════ */
 
 /**
@@ -212,7 +224,7 @@ function feltPiano(m, { vel = 0.6, dur = 2.4, seed = 0, len } = {}) {
 }
 
 /** A soft vibraphone bar under a yarn mallet (no motor): partials 1 · 4 · 10, slow L/R beating, a soft contact. */
-function vibe(m, seed, { len = 2.6, vel = 0.7 } = {}) {
+function vibe(m, seed, { len = 4.4, vel = 0.7 } = {}) {
   const f = mtof(m);
   const st = stereo(len);
   const r = rng(seed);
@@ -233,11 +245,12 @@ function vibe(m, seed, { len = 2.6, vel = 0.7 } = {}) {
   partial(st[1], f, 0.1, 0, 0.9, 1, 0.9, 0, 0.02);
   // the yarn mallet's soft contact
   addMono(st, noise(0.03, seed + 5, ad(0.0012, 0.004), 'lp', 1500, 0.7), 0, 0.1, 0);
-  return st;
+  // (no motor, no pedal: the bar rings ~4 s, then the player's hand settles on it)
+  return ringOut(st, 1.2);
 }
 
 /** A nylon / kalimba-ish pluck: plucked-string partials (position comb), short decay, a nail tick, a wooden body. */
-function pluckNote(m, seed, { bright = 0.55, tau = 0.42, len = 1.5 } = {}) {
+function pluckNote(m, seed, { bright = 0.55, tau = 0.42, len = 2.4 } = {}) {
   const f = mtof(m);
   const out = mono(len);
   const r = rng(seed);
@@ -251,11 +264,11 @@ function pluckNote(m, seed, { bright = 0.55, tau = 0.42, len = 1.5 } = {}) {
   }
   mixIn(out, noise(0.015, seed + 1, ad(0.0002, 0.001), 'bpn', 3600, 0.9), 0, 0.12 + 0.12 * bright);
   mixIn(out, modes(0.4, [[198, 0.1, 0.06], [395, 0.05, 0.035]], 0.001, seed + 2), 0, 1);
-  return spread(filt(out, ['hp', 70, 0.7]), 0.2, seed + 3);
+  return ringOut(spread(filt(out, ['hp', 70, 0.7]), 0.2, seed + 3), 0.6);
 }
 
 /** A struck glass (rubber mallet on the rim): inharmonic glass modes as slowly beating pairs, a long clear decay. */
-function glass(m, seed, { len = 2.8, strike = 1, decay = 1 } = {}) {
+function glass(m, seed, { len = 4.6, strike = 1, decay = 1 } = {}) {
   const f = mtof(m);
   const st = stereo(len);
   const r = rng(seed);
@@ -271,18 +284,18 @@ function glass(m, seed, { len = 2.8, strike = 1, decay = 1 } = {}) {
     pairPartial(st, fk, a * 0.75, 0.7 + r() * 0.8, 0.35, tau * decay, 0.0018, r() * TAU);
   }
   addMono(st, noise(0.02, seed + 3, ad(0.0002, 0.0011), 'hp', 3200, 0.7), 0, 0.1 * strike, 0);
-  return st;
+  return ringOut(st, Math.min(1.4, len * 0.3));
 }
 
 /** A sine "ting" (her light): a pure tone with a slow shimmer pair and a tiny strike. */
-function ting(m, seed, { len = 1.2, tau = 0.42 } = {}) {
+function ting(m, seed, { len = 2.0, tau = 0.42 } = {}) {
   const f = mtof(m);
   const st = stereo(len);
   pairPartial(st, f, 0.65, 1.1, 0.3, tau, 0.002);
   partial(st[0], f * 2.756, 0.05, 0.3, 0.06, 1, 0.06, 0, 0.001);
   partial(st[1], f * 2.756, 0.05, 1.3, 0.06, 1, 0.06, 0, 0.001);
   addMono(st, edge(seed, { f: 6500, tau: 0.0003 }), 0, 0.06, 0);
-  return st;
+  return ringOut(st, 0.5);
 }
 
 /* ═════════════════════════ the phone ═════════════════════════ */
@@ -714,7 +727,8 @@ function rollsMontage(fx, FPS) {
   const t0 = fx.rolls[0] - fx.lead;
   const sec = (f) => (f - t0) / FPS;
   const end = sec(fx.hardStop);
-  const st = stereo(end + 0.002);
+  // (20 ms of silence after the stop: the driver's 12 ms edge fade then lands on zeros, not on the last 10 ms before it)
+  const st = stereo(end + 0.02);
   fx.rolls.forEach((f, k) => {
     const g = gain(0.35 * k);
     addStereo(st, flick(8100 + k, k % 2), sec(f - fx.flickLead), 0.42 * g);
@@ -771,7 +785,7 @@ const MAKE = {
   'fx-mallet-fs4': () => vibe(66, 7302),
   'fx-mallet-gs4': () => vibe(68, 7303),
   'fx-mallet-b4': () => vibe(71, 7304),
-  'fx-mallet-e5': () => vibe(76, 7305, { len: 3.2 }),
+  'fx-mallet-e5': () => vibe(76, 7305, { len: 5.0 }),
   'fx-felt-e': () => {
     const m = feltPiano(64, { vel: 0.45, dur: 2.6, seed: 7401 });
     return spread(m, 0.25, 7402);

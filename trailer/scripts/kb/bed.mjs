@@ -395,7 +395,10 @@ export function bed(T) {
     addMono(dst, s, sec(x), g, pan);
   };
 
-  /* ── PART I: THE BAR, rendered once and pasted (bit-identical every time), cut on the sample at the hard stop ── */
+  /* ── PART I: THE BAR, rendered once and pasted (bit-identical every time), cut on the sample at the hard stop ──
+   * (LOOP_DB: the deadpan bar sits this much over the rest of the bed's balance — muted felt is dark and soft, and the
+   * gag needs the bar heard: b07 brings it back for one bar and the ear must know it) */
+  const LOOP_G = gain(3);
   /** one bar of the deadpan figure: B3 on the beats, E4 on the offbeats, muted felt; the shaker on the 8ths */
   const renderBar = (sixteenths, open) => {
     const st = stereo(sec(4) + 1.2);
@@ -455,7 +458,7 @@ export function bed(T) {
     for (let c = 0; c < 2; c++) {
       for (let i = 0; i < partI[c].length; i++) {
         const g = i < cut - ramp ? 1 : i >= cut ? 0 : (cut - i) / ramp;
-        partI[c][i] = (partI[c][i] + hall[c][i] * 0.22) * g;
+        partI[c][i] = (partI[c][i] + hall[c][i] * 0.22) * g * LOOP_G;
       }
     }
   }
@@ -470,7 +473,7 @@ export function bed(T) {
     const fade = Math.round(0.03 * SR);
     const part = [BAR8[0].slice(0, n + fade), BAR8[1].slice(0, n + fade)];
     for (const c of part) for (let i = Math.max(0, n - fade); i < c.length; i++) c[i] *= Math.max(0, (n + fade - i) / (2 * fade));
-    addStereo(keys, part, sec(P.turn), 1);
+    addStereo(keys, part, sec(P.turn), LOOP_G);
   }
 
   /* ── STRINGS + PAD + SUB through the harmony (b07 → the end) ── */
@@ -533,7 +536,8 @@ export function bed(T) {
     const padLevel = (x) => {
       if (inR(x, P.freeze, P.resume)) return 0.5;
       if (inR(x, P.line, P.change)) return 0.42;
-      if (inR(x, P.desk, P.vo8)) return 0.5 * (1 - smooth((x - P.breath) / 2)); // breathes out into the bar of room tone
+      // breathes out over the staff line's last two beats: the bar after it is room tone only (SCRIPT.md b15)
+      if (inR(x, P.desk, P.vo8)) return 0.5 * (1 - smooth((x - (P.breath - 2)) / 2));
       if (x >= P.impact) return 0.3 + 0.35 * Math.exp(-(x - P.impact) / 3);
       return 0;
     };

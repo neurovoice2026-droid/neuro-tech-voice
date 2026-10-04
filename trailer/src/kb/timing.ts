@@ -1005,9 +1005,11 @@ export const VOICE_RIDES: Partial<Record<VoiceId, readonly VoiceRide[]>> = (() =
   return {
     'kb2-desk-1': [{ from: Math.floor(sat.start * FPS), to: Math.ceil(sat.end * FPS), db: -2, ramp: 3 }],
     'kb2-vo-3': [{ from: 0, to: w('kb2-vo-3', 2) - 3, db: -1.5, ramp: 2 }],
+    // (vo-5's two openings were still the film's loudest 400 ms at −1.5 dB — "When someone calls," 0.65 LU and "even
+    // when they" 0.4 LU over vo-4's and vo-3's openings: ridden a little further they sit with the narrator's other lines)
     'kb2-vo-5': [
-      { from: 0, to: w('kb2-vo-5', 3) - 8, db: -1.5, ramp: 3 },
-      { from: w('kb2-vo-5', 10) - 1, to: w('kb2-vo-5', 13) - 1, db: -1.5, ramp: 2 },
+      { from: 0, to: w('kb2-vo-5', 3) - 8, db: -2.75, ramp: 3 },
+      { from: w('kb2-vo-5', 10) - 1, to: w('kb2-vo-5', 13) - 1, db: -2.5, ramp: 2 },
     ],
   };
 })();
@@ -1100,6 +1102,11 @@ const H = (at: number, snd: Snd, light: Light, x: Pan, w: Weight, label: string,
   ...o,
 });
 const chime = (l: Exclude<Light, 'none'>) => `chime-${l}` as Snd;
+/** THE PHONE: one desk phone, one sample, one level. Every ring is a KEY hit at RING_DB (a weight-2 ring that lands on an
+ *  answer's last word would take the cue builder's −5 dB speech drop and the same phone would ring 8 dB quieter), every
+ *  pickup at PICKUP_DB; b15's one ring sits 14 dB under them (SCRIPT.md b15: "ducked −14 dB" under Leo). */
+const RING_DB = -2; // fx-trill* (trim −2): −4 dB on the cue sheet
+const PICKUP_DB = -5; // fx-pickup (trim −1): −6 dB
 
 /**
  * THE VISUAL HITS — every visible event that is heard, on its frame (the act's *_LOCAL moments; the cursor's two-part
@@ -1132,8 +1139,8 @@ const REPEAT_HITS: Hit<Snd>[] = (() => {
     H(R.dash, 'fx-pen', 'none', 0.36, 3, 'b01 the em dash hangs: a pen click', { db: -2 }),
     ...R.rings.flatMap((ring, k) => [
       H(ring - R.flickLead.ring, 'flick', 'none', 0.84, 3, `ring ${k + 1}: the clock's figures roll, landing on the ring`, { db: k ? -3 : -1 }),
-      H(ring, TRILL[k], 'none', 0.84, k === 0 ? 1 : 2, `RING ${RING[k]}: the desk trill (G#4/B4), the rose line light pulses — cut by the pickup ${CUTS[k]}`, { db: k ? 0 : -1 }),
-      H(R.pickups[k], 'fx-pickup', 'none', 0.84, 2, `ring ${k + 1}: the handset is lifted (the hook switch cuts the trill)`, { db: -1 }),
+      H(ring, TRILL[k], 'none', 0.84, 1, `RING ${RING[k]}: the desk trill (G#4/B4), the rose line light pulses — cut by the pickup ${CUTS[k]}`, { db: RING_DB }),
+      H(R.pickups[k], 'fx-pickup', 'none', 0.84, 1, `ring ${k + 1}: the handset is lifted (the hook switch cuts the trill)`, { db: PICKUP_DB }),
       H(R.callers[k] - 2, 'fx-line', 'none', CALLER_X[k], 3, `caller ${k + 1}: the line opens as the caption and its waveform draw out`, { db: -8 }),
       ...(k ? [H(R.desk[k] - R.placeLead, 'fx-slip-slide', 'none', 0.78, 3, `answer ${k + 1}: a fresh slip slid up over the pile`, { db: -5 })] : []),
       H(R.slips[k], 'fx-slip', 'none', 0.78, 2, `answer ${k + 1}: the slip tears off and lands on the pile on the 16th of "two."${k === 2 ? ' (crooked)' : ''} — paper slap + soft desk thud`, { db: 1 }),
@@ -1210,6 +1217,7 @@ const WRITTEN_HITS: Hit<Snd>[] = (() => {
     H(at(R.panel[0] + 4), 'whoosh-soft', 'none', [0.86, 0.66], 3, 'b08 the app comes in (16:9 from the right, 9:16 up from under the seam)', { db: -10 }),
     H(at(R.tab.down), 'fx-click-down', 'none', 0.75, 2, 'b08 the cursor presses the Knowledge tab (down)', { db: -1 }),
     H(at(R.tab.up), 'fx-click-up', 'none', 0.75, 2, 'b08 … and releases it (up): the underline springs across, the content swaps', { db: -4 }),
+    H(at(R.tab.up + 1), 'draw', 'none', [0.45, 0.75], 3, 'b08 the underline slides from General to Knowledge (a breath of air under the click)', { db: -10 }),
     H(at(R.collapse[0]), 'fx-tuck', 'none', 0.17, 3, 'b08 "once": the slips tuck up into one, one per 16th, each a touch lower', {
       db: -4,
       layer: true,
@@ -1224,8 +1232,10 @@ const WRITTEN_HITS: Hit<Snd>[] = (() => {
         db: -2,
       }),
     ),
+    // (the Ready phrase is a KEY: its four notes play under her line and must be heard as a phrase for b13's fifth to
+    // complete it — on the key tonal bus they step back 5 dB under her voice, not the bells' 10)
     ...R.ready.flatMap((r, i) => [
-      H(at(r), MALLET[i], 'none', 0.8, 3, `b08 Ready ${i + 1}: the pill rolls Reading… → Ready — one soft mallet note, ${['E4', 'F#4', 'G#4', 'B4'][i]} (the phrase is left open)`, { db: 0 }),
+      H(at(r), MALLET[i], 'none', 0.8, 1, `b08 Ready ${i + 1}: the pill rolls Reading… → Ready — one soft mallet note, ${['E4', 'F#4', 'G#4', 'B4'][i]} (the phrase is left open)`, { db: -10 }),
       H(at(r), 'fx-tick', 'none', 0.8, 3, `b08 Ready ${i + 1}: the pill's roll`, { db: -12, layer: true }),
     ]),
     H(at(R.field.down), 'fx-click-down', 'none', 0.47, 2, 'b08 the cursor (an I-beam) presses into the web page field (down)', { db: -3 }),
@@ -1257,9 +1267,9 @@ const CALL_HITS: Hit<Snd>[] = (() => {
   const PLUCK = ['fx-pluck-e4', 'fx-pluck-gs4', 'fx-pluck-b4', 'fx-pluck-fs4'] as const;
   const LINK = ['the hero hairline from "weekend" lands on the swept lines; MATCHED ON MEANING', '"Are you open on Saturdays?" sends its hairline', '"Can I pop in on Saturday?" sends its hairline', '"What are your weekend hours?" sends its hairline'];
   return [
-    H(at(R.ring), 'fx-trill-1', 'none', 0.23, 2, 'b09 THE LIVE CALL rings on the bar: the same desk trill, one chirp; one slate hairline leaves the orb', { db: -1 }),
+    H(at(R.ring), 'fx-trill-1', 'none', 0.23, 1, 'b09 THE LIVE CALL rings on the bar: the same desk trill, one chirp; one slate hairline leaves the orb', { db: RING_DB }),
     H(at(R.recede[0] + 2), 'fx-slip-slide', 'none', [0.62, 0.95], 3, 'b09 the app panel steps back a depth and slides away (16:9 right, 9:16 down)', { db: -7 }),
-    H(at(R.pickup), 'fx-pickup', 'none', 0.23, 2, 'b09 picked up on the first ring: the orb wakes to listen; ● CALLER and the timer rise', { db: -1 }),
+    H(at(R.pickup), 'fx-pickup', 'none', 0.23, 1, 'b09 picked up on the first ring: the orb wakes to listen; ● CALLER and the timer rise', { db: PICKUP_DB }),
     H(at(R.c4 - 2), 'fx-line', 'none', 0.55, 3, 'b09 the caller’s line opens under his words', { db: -8 }),
     H(at(R.rowIn[0] + 2), 'fx-slip-slide', 'none', [0.98, 0.8], 3, 'b09 "…let me check.": the Opening hours row comes back (16:9 in from the right; 9:16 lifted out of the panel)', { db: -8 }),
     H(at(R.freeze), 'freeze', 'none', 0.5, 2, 'b10 THE FREEZE: the call stops — BETWEEN QUESTION AND ANSWER', { db: -7 }),
@@ -1319,6 +1329,7 @@ const LINE_HITS: Hit<Snd>[] = (() => {
       ? [
           H(at(R.tab.down), 'fx-click-down', 'none', 0.32, 2, 'b12 the cursor presses the Conversation tab (down, on beat 2)', { db: -1 }),
           H(at(R.tab.up), 'fx-click-up', 'none', 0.32, 2, 'b12 … and releases it (up): the underline springs back to Conversation, the content swaps', { db: -4 }),
+          H(at(R.tab.up + 1), 'draw', 'none', [0.62, 0.34], 3, 'b12 the underline slides back from Knowledge to Conversation; the tab content swaps through its mask', { db: -12 }),
         ]
       : []),
     H(at(R.field.down), 'fx-click-down', 'none', FIELD, 2, 'b12 the I-beam presses into the field (down): focus', { db: -2 }),
@@ -1368,12 +1379,12 @@ const CHANGE_HITS: Hit<Snd>[] = (() => {
     H(at(R.fly[0] + 1), 'fx-slip-slide', 'none', [0.76, 0.52], 3, 'b13 the edited file drops into the list as the new version', { db: -8 }),
     H(at(R.land), 'fx-tock', 'none', 0.52, 3, 'b13 the new row lands on top: TXT · Opening hours · Reading…; the badge ticks to 5 (a tock on E)', { db: -2 }),
     H(at(R.land + 2 * S16), 'fx-tick', 'none', 0.6, 3, 'b13 Reading… — the old row still Ready (a soft tick-roll under the spinner)', { db: -14, run: { n: 4, step: S16 } }),
-    H(at(R.ready5), 'fx-mallet-e5', 'none', 0.6, 3, 'b13 "the new answer": Ready · 1 passage — the FIFTH mallet, E5, completes b08’s phrase (E4 F#4 G#4 B4 · E5)', { db: 2 }),
+    H(at(R.ready5), 'fx-mallet-e5', 'none', 0.6, 1, 'b13 "the new answer": Ready · 1 passage — the FIFTH mallet, E5, completes b08’s phrase (E4 F#4 G#4 B4 · E5)', { db: -8 }),
     H(at(R.oldOut + 1), 'fx-paper-lift', 'none', 0.5, 3, 'b13 the old row leaves up through its mask; the badge back to 4', { db: -8, layer: true }),
     H(at(R.recede[0] + 1), 'fx-slip-slide', 'none', [0.5, 0.5], 3, 'b14 the app steps back and slides away; the new row lifts out of it', { db: -9 }),
     H(at(R.unfold[0] + 2), 'fx-paper-unfold', 'none', 0.75, 3, 'b14 the new row unfolds into its page: Saturday · 9:00–16:00', { db: -5 }),
-    H(at(R.ring), 'fx-trill-1', 'none', 0.15, 2, 'b14 THE NEXT CALL rings (beat 3): the same desk trill, one chirp; one slate hairline leaves the orb', { db: -1 }),
-    H(at(R.pickup), 'fx-pickup', 'none', 0.15, 2, 'b14 picked up on the first ring: she listens; ● CALLER rises', { db: -1 }),
+    H(at(R.ring), 'fx-trill-1', 'none', 0.15, 1, 'b14 THE NEXT CALL rings (beat 3): the same desk trill, one chirp; one slate hairline leaves the orb', { db: RING_DB }),
+    H(at(R.pickup), 'fx-pickup', 'none', 0.15, 1, 'b14 picked up on the first ring: she listens; ● CALLER rises', { db: PICKUP_DB }),
     H(at(R.c2 - 2), 'fx-line', 'none', 0.3, 3, 'b14 Dana’s line opens under her words — b03’s identical recording', { db: -8 }),
     H(at(R.chip), 'fx-tag', 'none', 0.32, 3, 'b14 SAME QUESTION pops beside ● CALLER, on "Saturday?"', { db: -4 }),
     H(at(R.sweep[0]), 'fx-felttip', 'none', 0.75, 3, 'b14 "four.": the sunday sweep under Saturday · 9:00–16:00', { db: -3 }),
@@ -1396,7 +1407,7 @@ const MATTERS_HITS: Hit<Snd>[] = (() => {
   return [
     H(ROOM_DESK[0], 'fx-roomtone-desk', 'none', 0.5, 3, 'b15 the front desk’s room tone again (under the desk, the breath bar and b16, into the dark)', { db: -26 }),
     H(at(R.nervous), 'fx-pen-lift', 'none', 0.35, 3, 'b15 "nervous." — the sentence that hung since b01 completes; the em dash lifted off', { db: -6 }),
-    H(at(R.ring), 'fx-trill-1', 'none', 0.84, 3, 'b15 THE LINE RINGS ONCE (beat 2), far under the staff line: one hairline teal ring leaves the colon; the card does not move (ducked −14 dB re the desk rings)', { db: -3 }),
+    H(at(R.ring), 'fx-trill-1', 'none', 0.84, 1, 'b15 THE LINE RINGS ONCE (beat 2), far under the staff line: one hairline teal ring leaves the colon; the card does not move (ducked −14 dB re the desk rings)', { db: RING_DB - 14 }),
     H(at(R.pickup), 'fx-ting', 'none', 0.84, 3, 'b15 … cut a 16th later by her soft pickup tone: Ava takes the call', { db: -6 }),
     H(at(R.label), 'flick', 'none', 0.84, 3, 'b15 AVA · ON A CALL rolls in under the clock, where a second chirp would have been', { db: -10 }),
     H(at(R.vo8Words[0] - 1), 'sheen', 'none', 0.3, 3, 'b16 "That’s the work / only people can do." rises over the desk; the slow push toward the card', { db: -14 }),
@@ -1423,20 +1434,29 @@ const CTA_HITS: Hit<Snd>[] = (() => {
   const GLASS_NOTE = ['G#6', 'B6', 'E6'];
   // the figure on 8ths from the close's bar, as long as it clears the first light by a beat (four turns on this cut)
   const glass = Array.from({ length: 12 }, (_, j) => j * (BEAT / 2)).filter((f) => f <= R.lights[0] - BEAT);
+  // (the figure is a KEY under her line — the rings coming back must read as music through it: on the key tonal bus its
+  // notes step back 5 dB while she speaks, not the bells' 10; the first, on the drop into the dark before her first word,
+  // is the downbeat's accent, a few dB over the figure, and every E — the resolution — a touch over the G# and B)
+  const glassDb = (j: number) => (j === 0 ? -15 : j % 3 === 2 ? -15 : -17);
   return [
     ...glass.map((f, j) =>
-      H(at(f), GLASS[j % 3], 'none', [0.42, 0.58, 0.5][j % 3], 3, `b17 the rings come back as music: glass ${GLASS_NOTE[j % 3]} (8th ${j + 1}; the trill's G# B resolving to E, two octaves up)`, {
-        db: j === 0 ? -1 : j % 3 === 2 ? -2 : -4,
+      H(at(f), GLASS[j % 3], 'none', [0.42, 0.58, 0.5][j % 3], 1, `b17 the rings come back as music: glass ${GLASS_NOTE[j % 3]} (8th ${j + 1}; the trill's G# B resolving to E, two octaves up)`, {
+        db: glassDb(j),
       }),
     ),
     H(at(R.words[0] - R.riseLead), 'sheen', 'none', 0.5, 3, 'b17 "Your answers." rises (on "Your")', { db: -14 }),
     H(at(R.words[2] - R.riseLead), 'sheen', 'none', 0.5, 3, 'b17 "Written once, …" rises (on "Written")', { db: -15 }),
     H(at(R.words[R.key[0]] - 1), 'glint', 'sunday', 0.55, 3, 'b17 "there for every call." takes her teal word by word, a glint running through it (9:16: its row rises here)', { db: -16 }),
+    // THE FOUR LIGHTS as one even sequence: hers (on "call.") and rush (on its tail) land under her voice, closing and night
+    // after it. As weight-2/3 hits the first two took the speech drop and the bells' 10 dB duck and arrived ~18 dB under the
+    // last two — hers, the first, all but silent. The chimes are KEY hits (the key tonal bus steps back only 5 dB under the
+    // word), levelled so the four sit within a few dB, hers a touch under her own word; the pops likewise.
     ...R.lights.flatMap((f, i) => {
       const id = R.lightOrder[i];
+      const talk = speaking(at(f));
       return [
-        H(at(f), 'pop', id, PAN[id], 3, `b17 the ${id.toUpperCase()} light arrives, ${WHERE[id]} — ${i ? 'its orb springs out of a point of light' : 'the dot springs open into her orb'}`, { db: -4 }),
-        H(at(f), `${chime(id)}-soft` as Snd, id, PAN[id], 2, `b17 ${id}: the end card’s chime, recalled${i ? '' : ' — hers first'}`, { db: -2, layer: true }),
+        H(at(f), 'pop', id, PAN[id], 3, `b17 the ${id.toUpperCase()} light arrives, ${WHERE[id]} — ${i ? 'its orb springs out of a point of light' : 'the dot springs open into her orb'}`, { db: talk ? -2 : -4 }),
+        H(at(f), `${chime(id)}-soft` as Snd, id, PAN[id], 1, `b17 ${id}: the end card’s chime, recalled${i ? '' : ' — hers first'}`, { db: talk ? -5 : -8, layer: true }),
       ];
     }),
     H(at(R.converge), 'swish', 'none', 0.5, 2, 'b17 THE CONVERGE: the heading leaves up through its masks; the ring of four swells', { db: 3 }),
