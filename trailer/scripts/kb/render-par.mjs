@@ -13,6 +13,13 @@
  * It renders from the existing out/master/bundle-kb (built by render-master) and refuses to start unless
  * that bundle's digest is the one recorded in plan.json, or no plan exists yet (then it records it).
  * Resumable: a chunk with `.done` is never rendered again; a `.part.mp4` is overwritten.
+ *
+ * --ranges=a-b,c-d,… --dir=<suffix>: render exactly these frame ranges (render frames, inclusive) into
+ * out/master/<comp>-x2-<suffix>/ instead of the regular grid. Every chunk is a fresh tab, and a glide layer
+ * keeps the raster it was given when it mounted, so a chunk that starts mid-act re-rasters text that a
+ * continuous render would still be drawing from its mount: a sub-pixel jump at the seam. Ranges that start
+ * on an act's first frame (every act mounts at its start and unmounts at its end, nothing carries across)
+ * reproduce the continuous render exactly; use them to replace grid chunks whose seams jump.
  */
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -28,7 +35,10 @@ const chunk = Number(opt('chunk', '240'));
 const scale = 2;
 const crf = 16;
 const concurrency = '1';
-const COMPS = ['KB-Trailer-16x9', 'KB-Trailer-9x16'];
+const COMPS = (opt('comps', 'KB-Trailer-16x9,KB-Trailer-9x16')).split(',');
+const explicit = opt('ranges', '') ? opt('ranges', '').split(',').map((r) => r.split('-').map(Number)) : null;
+const suffix = opt('dir', '');
+if (explicit && !suffix) throw new Error('--ranges needs --dir=<suffix> (explicit ranges never go into the grid folders)');
 
 const T = await import(path.join(ROOT, 'src/kb/timing.ts'));
 const total = T.DURATION * T.SUB;
@@ -39,12 +49,12 @@ const CHUNK_FILE = /^\d{5}-\d{5}\.mp4(\.done)?$|\.part\.mp4$/;
 const name = ([a, b]) => `${String(a).padStart(5, '0')}-${String(b).padStart(5, '0')}`;
 
 if (!existsSync(path.join(bundle, 'index.html'))) throw new Error('no out/master/bundle-kb — run render-master --film=kb once to build it');
-const plan = { bundleSha: bundleDigest(bundle, { drop: isSoundStatic }), total, chunk, scale, crf, concurrency };
+const plan = { bundleSha: bundleDigest(bundle, { drop: isSoundStatic }), total, chunk: explicit ? `ranges:${opt('ranges', '')}` : chunk, scale, crf, concurrency };
 log(`bundle sha ${plan.bundleSha.slice(0, 16)} · ${total} frames · chunk ${chunk} · ${workers} workers`);
 
 const queue = [];
 for (const comp of COMPS) {
-  const dir = path.join(ROOT, 'out', 'master', `${comp}-x${scale}`);
+  const dir = path.join(ROOT, 'out', 'master', `${comp}-x${scale}${suffix ? `-${suffix}` : ''}`);
   mkdirSync(dir, { recursive: true });
   let old = null;
   try {
@@ -57,12 +67,13 @@ for (const comp of COMPS) {
     if (stale.length) log(`${comp}: ${stale.length} chunk file(s) from another plan deleted`);
     writeFileSync(path.join(dir, 'plan.json'), JSON.stringify(plan, null, 2) + '\n');
   }
-  for (let a = 0; a < total; a += chunk) {
-    const r = [a, Math.min(total, a + chunk) - 1];
+  const ranges = explicit ?? Array.from({ length: Math.ceil(total / chunk) }, (_, i) => [i * chunk, Math.min(total, (i + 1) * chunk) - 1]);
+  for (const r of ranges) {
     const file = path.join(dir, `${name(r)}.mp4`);
     if (!(existsSync(`${file}.done`) && existsSync(file))) queue.push({ comp, dir, r, file });
   }
 }
+queue.sort((x, y) => y.r[1] - y.r[0] - (x.r[1] - x.r[0])); // longest first (stable: the grid keeps its order)
 log(`${queue.length} chunk(s) to render`);
 
 let failed = 0;
