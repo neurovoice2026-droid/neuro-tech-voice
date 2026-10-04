@@ -161,10 +161,11 @@ export const OpeningHoursPage: React.FC<{ t: number; S: CallStage; g: PageGeo; i
   // the page's kind line: the row's tile holds the app's FileText icon (written/Row.tsx), not a token, so the line
   // rises into its place on the page through its own mask once the name has gone down past it (they never cross)
   const kindAt = C.unfold[0] + 10;
-  // the page's own content: rule + lines on 16ths — overlapping the paper's growth (the first line rises at ≈ 60 % of
-  // the unfold, once the paper is tall enough to hold it), so the opening page is never a heading over blank paper
-  const ruleP = tween(t, [C.unfold[0] + 9, C.unfold[0] + 21], [0, 1], EASE.draw);
-  const linesAt = (i: number) => C.unfold[0] + 12 + i * 3.75;
+  // the page's own content: rule + lines on 16ths, set at their final places INSIDE the opening paper from the start of
+  // the unfold (the paper's moving edge reveals what is below it), so the row becomes the page and the opening paper is
+  // never a heading over blank paper (global pass: 16:9 1462–1478 / 9:16 1460–1470 held 3–8 empty frames)
+  const ruleP = tween(t, [C.unfold[0] + 3, C.unfold[0] + 15], [0, 1], EASE.draw);
+  const linesAt = (i: number) => C.unfold[0] + 5 + i * 3.75;
   const dimW = tween(t, [C.sweep, C.sweep + 15], [1, 0.4], EASE.inOut);
   // THE RE-SET's page side (b11): the swept lines are set token by token (exactly where the line sets them); from
   // `drop` the tokens she doesn't say (· 9:00–14:00 ·) leave up through their own masks, a frame apart, and the sweep

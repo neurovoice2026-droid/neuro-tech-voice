@@ -2,7 +2,8 @@
  * b15–b16 · THE PAPER ON THE DESK.
  *
  *   <Pad>        the message pad, EMPTY: b01's pad (a blank, ruled top sheet on two blank sheets) — no slip is
- *                written this morning
+ *                written this morning; it fades out behind the last slip (from its mid-flight, 8 f), so no empty
+ *                white card is left on the desk before the dark
  *   <OldStack>   the old slip stack at the desk's edge: yesterday's slips, squared into a pile, every one still
  *                reading "Yes, Saturdays, / nine till two." (now out of date). Just after "do." it lifts and the
  *                slips glide off one after another on an arc toward the teal dot and out of the frame, each in
@@ -72,7 +73,11 @@ export const Pad: React.FC<{ t: number; g: MattersLayout; ink: string; flat: num
   const lc = cl ? localClosing(cl, o, o.z) : null;
   const c = deskToScreen(t, g.vertical, p.x + p.w / 2, py + p.h / 2);
   const shadowK = 0.95 * litAt(cl, c.x, c.y);
-  const gone = cl ? Math.min(1, nearestLit(cl, o, o.z, p.w, p.h + 10) / 0.12) : 1;
+  // the empty pad goes with the old slips (orchestrator's final-pass note: no empty white card left on the desk after
+  // the cascade): it fades from the last slip's mid-flight, gone before the dark reaches the desk
+  const lastOff = M.stack.glide[0] + (M.stack.n - 1) * M.stack.stagger;
+  const k = Math.min(1, Math.max(0, (t - (lastOff + 5)) / 8));
+  const gone = (cl ? Math.min(1, nearestLit(cl, o, o.z, p.w, p.h + 10) / 0.12) : 1) * (1 - k * k * (3 - 2 * k));
   if (gone <= 0.001) return null;
   const sheet = (i: number) => {
     const dx = [0, 1, -1.5][i];

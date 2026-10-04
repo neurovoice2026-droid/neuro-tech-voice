@@ -13,9 +13,10 @@
  *   9:16   TOP   the orb top-left (centred over the panel once the row has flown); beside it the slips drop in
  *                from above the frame on "once", each under
  *                the one before, into one slip (no column in b07's 9:16) — then the same row is born there
- *          BELOW the eyebrow, then the panel at full width: the tab bar (labels only, as the app on a phone),
- *                "Add knowledge" (a compact drop zone, the field and Add page in a row), "Your documents"
- *                (single-line rows)
+ *          BELOW the eyebrow, then the app AT AD SIZE (the global 9:16 pass): full width, its type ≈ 1.56× the app's
+ *                proportions, the tab bar labels only (as on a phone), "Add knowledge" (a compact drop zone, the field and
+ *                Add page in a row), "Your documents" in the app's two-line rows — its content scrolling under the
+ *                fixed tab bar like a phone's page (one scroll, on "knowledge": scrollAt)
  *
  * THE NEIGHBOURS: b07 → here is the same picture at frame 0. Here → b09: writtenEnd() (bottom) is this act's
  * last picture — the orb, the panel (its tab bar on Knowledge with the badge at 4), the four rows (Ready), the

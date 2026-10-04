@@ -255,7 +255,10 @@ const words = T.VOICES.flatMap((v) => {
     const f = v.at + s0;
     const inPhrase = l.phrases.some((p) => s0 >= p.start * T.FPS - 2 && s0 <= p.end * T.FPS);
     const nearWord = aligned.some((w) => Math.abs(w.f - f) <= 4);
-    if (!inPhrase && !nearWord) extra.push({ f, w: `(unaligned +${s0} f)`, id: v.id, k: 1000 + s0, cutTail: cut ? f + 6 > cut[1] : false, name: false });
+    // a run the voice post rides OUT (≤ −30 dB over its onset — film 2's kb2-c4 unscripted head syllable) is unheard by
+    // design, not masked (film 1's rides are a few dB: its output is unchanged)
+    const riddenOut = (T.VOICE_RIDES?.[v.id] ?? []).some((r) => r.db <= -30 && s0 >= r.from && s0 + 2 <= r.to);
+    if (!inPhrase && !nearWord && !riddenOut) extra.push({ f, w: `(unaligned +${s0} f)`, id: v.id, k: 1000 + s0, cutTail: cut ? f + 6 > cut[1] : false, name: false });
   };
   l.env.forEach((x, i) => {
     if (x < 0.08) return;

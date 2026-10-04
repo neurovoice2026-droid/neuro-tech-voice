@@ -7,8 +7,9 @@
  * its exact fractional edges every render frame; a CSS box's width paints pixel-snapped), the content is placed
  * from the left edge and the … trigger from the right, so a row can be born from a slip and widen into the list.
  *
- *   layout 'stack'   16:9: the name over the pill and its type word (the app's two-line row)
- *   layout 'inline'  9:16: one line — tile, name, the pill and its type word pushed right, …
+ *   layout 'stack'   the name over the pill and its type word (the app's two-line row): 16:9, and 9:16's ad-size rows
+ *                    (b08, b12's Knowledge view, b13–b14 — with their own pill size)
+ *   layout 'inline'  one line — tile, name, the pill and its type word pushed right, … (16:9's b12 / b13 lists)
  *
  * `morph` (0 → 1) is the slip → row change: corner radius, the border coming in, the paper's lift. With `slip` the
  * row draws b06/b07's strip of "Yes, Saturdays, nine till two." on top, leaving up through its mask at `slip.out`

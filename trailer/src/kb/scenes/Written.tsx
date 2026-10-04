@@ -132,7 +132,8 @@ const ListRow: React.FC<{ t: number; S: WrittenStage; i: number }> = ({ t, S, i 
   if (t < at - 0.5) return null;
   const s = springUnit(t - at, SPRING.land);
   const top = rowTop(i, t, S);
-  const dy = -(1 - s) * 0.32 * S.row.h;
+  // (9:16's tall ad-size rows drop in from just under the heading: never over it)
+  const dy = -(1 - s) * (S.vertical ? 0.1 : 0.32) * S.row.h;
   const moving = top.moving || Math.abs(1 - s) > 1e-3;
   return (
     <Row

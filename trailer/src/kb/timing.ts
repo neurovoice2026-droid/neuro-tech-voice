@@ -1645,7 +1645,22 @@ export const HITS: Hit<Snd>[] = [
   /* ── /cta ── */
 ];
 
-export const CUES: Cue[] = buildCues(HITS, { sfx: SFX, speaking, roomAt });
+/**
+ * ONE MIX FOR BOTH CUTS (global sound pass). The hits' x are read off the 16:9 layout, but the 9:16 cut centres the same
+ * pictures (16:9's top-right clock and rings, its right-hand panel, Save, the menu all sit mid-frame in 9:16): at ±.4 on
+ * earbuds the vertical cut's sounds came from the wrong side of centred picture. So every picture-anchored pan is
+ * narrowed to half its 16:9 width and capped at ±0.15 (the run spread and pan moves included): still placed in 16:9,
+ * never contradicting 9:16. A `split` (a symmetric stereo widening, not a place) keeps its spread.
+ */
+const PAN_CAP = 0.15;
+const narrowX = (x: number) => 0.5 + Math.max(-PAN_CAP / 1.2, Math.min(PAN_CAP / 1.2, (x - 0.5) * 0.5));
+const narrowPan = (x: Pan): Pan => (typeof x === 'number' ? narrowX(x) : [narrowX(x[0]), narrowX(x[1])]);
+const capPan = (p: Pan): Pan => (typeof p === 'number' ? Math.max(-PAN_CAP, Math.min(PAN_CAP, p)) : [Math.max(-PAN_CAP, Math.min(PAN_CAP, p[0])), Math.max(-PAN_CAP, Math.min(PAN_CAP, p[1]))]);
+const SPLIT_LABELS = new Set(HITS.filter((h) => h.split).map((h) => h.label));
+const MIX_HITS: Hit<Snd>[] = HITS.map((h) => (h.split ? h : { ...h, x: narrowPan(h.x), run: h.run?.xs ? { ...h.run, xs: h.run.xs.map(narrowX) } : h.run }));
+export const CUES: Cue[] = buildCues(MIX_HITS, { sfx: SFX, speaking, roomAt }).map((c) =>
+  SPLIT_LABELS.has(c.label.replace(/ \[\d+\/\d+\]$/, '')) ? c : { ...c, pan: capPan(c.pan) },
+);
 
 /**
  * The moments the music bed reads (scripts/kb/bed.mjs; absolute frames, part of its cache key): the 120 BPM E-major score

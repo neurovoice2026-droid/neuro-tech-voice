@@ -19,7 +19,7 @@ import { Easing } from 'remotion';
 import { reveal, revealStyle } from '../../../components/Type';
 import { subpixel } from '../../../lib/glide';
 import { useLayout } from '../../../lib/layout';
-import { EASE, smooth, springUnit, tween } from '../../../lib/motion';
+import { EASE, smooth, SPRING, springUnit, tween } from '../../../lib/motion';
 import { maskBox, typeStyle } from '../../../lib/type';
 import { TYPE } from '../../../theme';
 import { APP, Icon, meshElevation, Pill, type DocPageGeometry, type PillState } from '../../kit';
@@ -81,15 +81,39 @@ const OPEN = Easing.bezier(0.33, 0, 0.2, 1);
 export const NewRow: React.FC<{ t: number; S: ChangeStage; g: DocPageGeometry; ink: string; accent: string }> = ({ t, S, g, ink, accent }) => {
   const L = useLayout();
   const v = L.vertical;
-  if (t < K.land) return null;
+  // 9:16 has no flight (no parked thumbnail): the new version lands in the slot the list opened for it by itself — a
+  // b08 landing (from a touch above, a fade, a hair of scale), its last frames on K.land
+  const flies = !!S.file.park;
+  const landAt = flies ? K.land : K.land - 6;
+  if (t < landAt) return null;
   const B = newRowBox(S);
   const size = S.row.size;
+  const layout = S.row.layout;
   // in the list (landed → the lift): the row itself — its face already whole (the flight brought it in)
   if (t < K.lift[0]) {
-    return <Row t={t} x={B.x} y={B.y} w={B.w} h={B.h} layout="inline" size={size} kind="txt" name="Opening hours" pill={PILL} moving={t < K.land + 12} />;
+    const s = flies ? 1 : springUnit(t - landAt, SPRING.land);
+    const dy = -(1 - s) * 0.18 * B.h;
+    return (
+      <Row
+        t={t}
+        x={B.x}
+        y={B.y + dy}
+        w={B.w}
+        h={B.h}
+        layout={layout}
+        size={size}
+        pillSize={S.row.pill}
+        kind="txt"
+        name="Opening hours"
+        pill={PILL}
+        opacity={flies ? 1 : smooth(0, 0.3, s)}
+        scale={flies ? 1 : 0.985 + 0.015 * Math.min(1, s)}
+        moving={t < K.land + 12}
+      />
+    );
   }
   /* ── lifted out, unfolding into the page ── */
-  const F = rowFace(size, 'inline', B.h);
+  const F = rowFace(size, layout, B.h, S.row.pill);
   const ps = g.spec.size;
   const pad = g.pad;
   const labelSize = typeStyle('label', v).fontSize as number;
@@ -117,6 +141,8 @@ export const NewRow: React.FC<{ t: number; S: ChangeStage; g: DocPageGeometry; i
   // the row's face leaving AS the paper changes (never a blank strip): pill + type word + … ride the narrowing right
   // edge and go up out through their masks, the tile after them
   const rowOut = ease(t, u0 + 2, u0 + 7, EASE.in3);
+  // (the two-line row's pill sits under the name: it goes first, as the row lifts, before the name travels down past it)
+  const pillOut = layout === 'stack' ? ease(t, u0 - 3, u0 + 2, EASE.in3) : rowOut;
   const tileA = 1 - ease(t, u0 + 4, u0 + 9, EASE.inOut);
   // name → heading, driven by the opening edge: it is down at the heading's place (and at its size) once the paper is
   // tall enough to hold it (hv ≈ .35), always inside the paper
@@ -164,16 +190,28 @@ export const NewRow: React.FC<{ t: number; S: ChangeStage; g: DocPageGeometry; i
         >
           Opening hours
         </div>
+        {layout === 'stack' && pillOut < 1 ? (
+          // the two-line row's status line (under the name), leaving up through its mask
+          <div style={{ position: 'absolute', left: F.nameX, top: F.nameY + size * 1.27, overflow: 'hidden', paddingBottom: 1 }}>
+            <div style={{ transform: `translateY(${(-pillOut * 120).toFixed(2)}%)`, opacity: 1 - smooth(0.3, 1, pillOut), display: 'flex', alignItems: 'center', height: F.pillSize * 1.72 }}>
+              <Pill t={t} states={PILL} size={F.pillSize} />
+              <span style={{ display: 'inline-block', width: F.metaGap }} />
+              <TypeLabel kind="txt" size={F.metaSize} />
+            </div>
+          </div>
+        ) : null}
         {rowOut < 1 ? (
           // the right-hand group rides the paper's right edge (laid out for the row's own width)
           <div style={{ position: 'absolute', left: 0, top: 0, width: Math.ceil(B.w), height: B.h, ...subpixel(Math.abs(w - B.w) > 0.01 ? `translateX(${(w - B.w).toFixed(3)}px)` : undefined, moving) }}>
-            <div style={{ position: 'absolute', right: Math.ceil(B.w) - (B.w - F.pad - F.btn) + F.pad * 0.6, top: (B.h - F.pillSize * 1.72) / 2, overflow: 'hidden', paddingBottom: 1 }}>
-              <div style={{ transform: `translateY(${(-rowOut * 120).toFixed(2)}%)`, opacity: 1 - smooth(0.3, 1, rowOut), display: 'flex', alignItems: 'center', height: F.pillSize * 1.72 }}>
-                <Pill t={t} states={PILL} size={F.pillSize} />
-                <span style={{ display: 'inline-block', width: F.metaGap }} />
-                <TypeLabel kind="txt" size={F.metaSize} />
+            {layout === 'inline' ? (
+              <div style={{ position: 'absolute', right: Math.ceil(B.w) - (B.w - F.pad - F.btn) + F.pad * 0.6, top: (B.h - F.pillSize * 1.72) / 2, overflow: 'hidden', paddingBottom: 1 }}>
+                <div style={{ transform: `translateY(${(-rowOut * 120).toFixed(2)}%)`, opacity: 1 - smooth(0.3, 1, rowOut), display: 'flex', alignItems: 'center', height: F.pillSize * 1.72 }}>
+                  <Pill t={t} states={PILL} size={F.pillSize} />
+                  <span style={{ display: 'inline-block', width: F.metaGap }} />
+                  <TypeLabel kind="txt" size={F.metaSize} />
+                </div>
               </div>
-            </div>
+            ) : null}
             <div style={{ position: 'absolute', left: B.w - F.pad - F.btn, top: (B.h - F.btn) / 2, width: F.btn, height: F.btn, display: 'flex', alignItems: 'center', justifyContent: 'center', color: APP.foreground, opacity: 1 - rowOut }}>
               <Icon name="ellipsis" size={size * 0.56} stroke={2.4} />
             </div>

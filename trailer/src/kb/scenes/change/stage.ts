@@ -10,8 +10,9 @@
  *   A  the owner's file (b13, "Hours change?")   the app sinks back; opening-hours.txt comes forward on plain paper (no
  *      app chrome: the edit happens outside the app) — 16:9 right of her orb, 9:16 under it. The I-beam drags over
  *      "14:00" (the sunday wash) and "16:00" is typed over it, a key per 16th.
- *   B  back in the app (b13, "Change the document. The next call gets the new answer.")   the file steps up into the
- *      corner over the agent page, which rises on its KNOWLEDGE tab (the badge at 4; "Your documents", newest first:
+ *   B  back in the app (b13, "Change the document. The next call gets the new answer.")   16:9: the file steps up into
+ *      the corner over the agent page (9:16: the app at ad size comes up over the file as a card stack, the file steps
+ *      back under it — no parked thumbnail — and the menu flips above its trigger), which rises on its KNOWLEDGE tab (the badge at 4; "Your documents", newest first:
  *      FAQ page · Cancellation policy · Opening hours · Price list). The cursor opens the Opening hours row's … menu
  *      (Read again · Replace with new file · Remove) and clicks "Replace with new file": the edited file drops into the
  *      list's top slot as the NEW version — Reading… while the old row stays Ready (the badge counts both: 5); on "the
@@ -47,6 +48,9 @@ export const GLIDE = { stiffness: 170, damping: 24, mass: 1 } as const;
 export const RISE = { stiffness: 300, damping: 34.6, mass: 1 } as const;
 /** critically damped: a slot opening / closing in a list (rows never overlap) */
 export const SLOT = { stiffness: 300, damping: 34.6, mass: 1 } as const;
+/** 9:16: the app's sheet coming up over the file (frames: from three before the file starts to step away, landing a
+ *  beat before the pointer reaches the …) */
+export const APP_UP = [K.park[0] - 3, K.park[0] + 9] as const;
 /** the app's exit: a soft start (it is pushed, not kicked), decisive, a long settle (call/stage.ts RECEDE) */
 const RECEDE = Easing.bezier(0.42, 0, 0.12, 1);
 
@@ -242,6 +246,9 @@ export function handoffPose(t: number, S: ChangeStage) {
 const PARK_LEAD = Easing.bezier(0.215, 0.61, 0.355, 1);
 
 /**
+ * 9:16 (no park): the file steps back UNDER the app's sheet as it comes up (× .92 about its centre, drifting up 36 px,
+ * gone by the time the sheet lands) — drawn below the app (Change.tsx).
+ *
  * The owner's file: easing in (A) — opacity over 4 frames as it rises a little on a landing spring, its words rising
  * inside it (FilePage.tsx) — then stepping up into its parked corner (B): the scale and the rise on a quick ease-out
  * (8.5 f), the sideways travel after them (an in-out from 2.5 f in), so the paper shrinks up off the panel first and
@@ -255,14 +262,13 @@ export function filePose(t: number, S: ChangeStage, h: number) {
     // back a depth (× .92 about its centre, a shade of lift lost) and eases out to the left, accelerating, gone before
     // the pointer reaches the row's …; the app it covered is the shot
     const F = S.file;
-    const u = ease(t, K.park[0], K.park[0] + 12, LEAVE);
-    const d = ease(t, K.park[0], K.park[0] + 12, EASE.inOut);
+    const d = ease(t, APP_UP[0], APP_UP[1] - 1, EASE.draw);
     const k = lerp(1, 0.92, d);
-    const x = F.x + (F.w * (1 - k)) / 2 - 420 * u;
-    const y = F.y + F.rise * (1 - r) + (h * (1 - k)) / 2;
-    const opacity = ease(t, K.page[0], K.page[0] + 4, EASE.draw) * (1 - ease(t, K.park[0] + 3, K.park[0] + 11, EASE.inOut));
-    const moving = (r > 0 && Math.abs(1 - r) > 1e-4) || (u > 0 && u < 1);
-    return { x, y, k, w: F.w * k, h: h * k, lift: lerp(3 + 1.5 * (1 - r), 2.4, d), opacity, on: t >= K.page[0] - 0.01 && t < K.park[0] + 11, moving, p: u };
+    const x = F.x + (F.w * (1 - k)) / 2;
+    const y = F.y + F.rise * (1 - r) + (h * (1 - k)) / 2 - 36 * d;
+    const opacity = ease(t, K.page[0], K.page[0] + 4, EASE.draw) * (1 - ease(t, APP_UP[0] + 1.5, APP_UP[1] - 1.5, EASE.inOut));
+    const moving = (r > 0 && Math.abs(1 - r) > 1e-4) || (d > 0 && d < 1);
+    return { x, y, k, w: F.w * k, h: h * k, lift: lerp(3 + 1.5 * (1 - r), 2.4, d), opacity, on: t >= K.page[0] - 0.01 && t < APP_UP[1], moving, p: d };
   }
   const ps = t < K.park[0] ? 0 : PARK_LEAD(Math.min(1, (t - K.park[0]) / 8.5));
   // 16:9: up first (the rise with the scale), across after — clear of the panel's tab bar for its whole run-in.
@@ -285,8 +291,16 @@ export function filePose(t: number, S: ChangeStage, h: number) {
 /** the agent page: rising on Knowledge BEHIND the file while the owner types (B, at rest before the pointer leaves for
  *  its …), then stepping back a depth and sliding away down (C) */
 export function appPose(t: number, S: ChangeStage) {
-  const r = t < K.app[0] ? 0 : springUnit(t - K.app[0], RISE);
   const u = ease(t, K.recede[0], K.recede[1], RECEDE);
+  if (!S.file.park) {
+    // 9:16: the app comes up from below the frame OVER the owner's file on "Change the document" (b12's card stack: an
+    // app's next sheet, opaque from its first frame), at rest before the pointer reaches the row's …
+    const a = ease(t, APP_UP[0], APP_UP[1], EASE.draw);
+    const dy = (S.H + 40 - S.panel.y) * (1 - a) + 1100 * u;
+    const opacity = 1 - ease(t, K.recede[0] + 4, K.recede[0] + 18, EASE.inOut);
+    return { dy, scale: lerp(1, 0.9, u), shade: 0.06 * u, lift: 2.4 + 1.6 * (1 - a), opacity, u, on: t >= APP_UP[0] - 0.01 && u < 0.999, moving: (a > 0 && a < 1) || (u > 0 && u < 1) };
+  }
+  const r = t < K.app[0] ? 0 : springUnit(t - K.app[0], RISE);
   const dy = S.panel.rise * (1 - r) + (S.vertical ? 1100 : 760) * u;
   const opacity = ease(t, K.app[0], K.app[0] + 4, EASE.inOut) * (1 - ease(t, K.recede[0] + 4, K.recede[0] + 18, EASE.inOut));
   return { dy, scale: lerp(1, 0.9, u), shade: 0.06 * u, lift: 2.4 + 1.6 * (1 - r), opacity, u, on: t >= K.app[0] - 0.01 && u < 0.999, moving: (r > 0 && Math.abs(1 - r) > 1e-4) || (u > 0 && u < 1) };
