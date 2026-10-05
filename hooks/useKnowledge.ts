@@ -347,6 +347,10 @@ export function useKnowledge() {
   const retryDoc = useCallback(
     async (docId: string): Promise<boolean> => {
       setRetrying((prev) => (prev.includes(docId) ? prev : [...prev, docId]))
+      // Optimistic: the row shows as processing (and polling starts) while the server works.
+      setDocs((prev) =>
+        prev.map((d) => (d.id === docId ? { ...d, status: 'processing', error_message: null, can_retry: false } : d)),
+      )
       try {
         const doc = await retryKnowledgeDocument(docId)
         if (!doc) {
@@ -365,6 +369,7 @@ export function useKnowledge() {
           console.warn('[knowledge] retry failed', err)
           toast.error('Network error. Check your connection and try again.')
         }
+        void loadDocs({ quiet: true }) // undo the optimistic state with the server's view
         return false
       } finally {
         if (mounted.current) setRetrying((prev) => prev.filter((id) => id !== docId))

@@ -24,13 +24,33 @@ const MAX_FILES = 3
 /** Whole request must stay under the hosting body limit (~4.5 MB). */
 const MAX_TOTAL_BYTES = 4 * 1024 * 1024
 const MAX_NAME_LENGTH = 100
-const AUDIO_EXTENSIONS = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.oga', '.webm', '.flac']
-const ACCEPT = ['audio/*', ...AUDIO_EXTENSIONS].join(',')
+/** Formats the server accepts (it verifies the file signature as well). */
+const MIME_BY_EXTENSION: Record<string, string> = {
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.m4a': 'audio/mp4',
+  '.ogg': 'audio/ogg',
+  '.oga': 'audio/ogg',
+  '.opus': 'audio/ogg',
+  '.webm': 'audio/webm',
+}
+const AUDIO_EXTENSIONS = Object.keys(MIME_BY_EXTENSION)
+const ACCEPT = AUDIO_EXTENSIONS.join(',')
+
+function extensionOf(file: File): string {
+  const lower = file.name.toLowerCase()
+  return AUDIO_EXTENSIONS.find((ext) => lower.endsWith(ext)) ?? ''
+}
 
 function isAudioFile(file: File): boolean {
-  if (file.type.startsWith('audio/')) return true
-  const lower = file.name.toLowerCase()
-  return AUDIO_EXTENSIONS.some((ext) => lower.endsWith(ext))
+  return !!extensionOf(file)
+}
+
+/** Some browsers report no MIME type (e.g. .m4a/.wav on Windows): derive it from the extension. */
+function withAudioType(file: File): File {
+  if (file.type.startsWith('audio/')) return file
+  const type = MIME_BY_EXTENSION[extensionOf(file)]
+  return type ? new File([file], file.name, { type, lastModified: file.lastModified }) : file
 }
 
 const fileKey = (f: File) => `${f.name}:${f.size}:${f.lastModified}`
@@ -126,7 +146,7 @@ export function VoiceCloneDialog({ open, onOpenChange, onCloned }: VoiceCloneDia
       form.append('speaker_name', speakerName.trim())
       form.append('consent', 'true')
       form.append('rights_attestation', 'true')
-      for (const file of files) form.append('files', file, file.name)
+      for (const file of files) form.append('files', withAudioType(file), file.name)
 
       const res = await fetch('/api/voices/clone', { method: 'POST', body: form })
       if (!res.ok) throw await parseApiError(res, 'Could not create the voice. Please try again.')
@@ -224,7 +244,7 @@ export function VoiceCloneDialog({ open, onOpenChange, onCloned }: VoiceCloneDia
             >
               <Upload className="size-5 text-muted-foreground" aria-hidden="true" />
               <span className="text-sm font-medium">Add audio files</span>
-              <span className="text-xs font-normal text-muted-foreground">MP3, WAV, M4A, OGG or FLAC</span>
+              <span className="text-xs font-normal text-muted-foreground">MP3, WAV, M4A, OGG or WebM</span>
             </Button>
             <p id={ids.filesHint} className="text-xs text-muted-foreground">
               1–3 recordings, 4 MB in total. About 1–2 minutes of clear speech from one person, with no music or

@@ -20,6 +20,7 @@ import { syncAgent } from './agent-sync'
 import { reprocessPendingWebhooks } from './webhook-ingest'
 import { reconcileCartesiaCalls } from './cartesia-poll'
 import { finalizeStaleElevenLabsCalls } from './stale-calls'
+import { processDocument, STALE_PROCESSING_MS } from './knowledge'
 import { VOICE_PROVIDERS, isHealthSignalCode, type ProviderErrorCode } from './errors'
 import type { ProviderHealth } from './types'
 
@@ -59,6 +60,37 @@ export async function retryAgentSyncs(limit: number, log: Logger) {
   return done
 }
 
+/**
+ * Knowledge documents stuck in 'processing' (abandoned run, or reset by
+ * migration 010 because the old code never attached them) are resumed here;
+ * processDocument verifies an existing ElevenLabs doc before re-uploading.
+ * Failed documents are left for the owner to retry (bad file, too large…).
+ */
+export async function retryStaleKnowledgeDocs(limit: number, log: Logger) {
+  const db = createAdminClient()
+  const cutoff = new Date(Date.now() - STALE_PROCESSING_MS).toISOString()
+  const { data, error } = await db
+    .from('knowledge_documents')
+    .select('id, org_id')
+    .eq('status', 'processing')
+    .lt('updated_at', cutoff)
+    .lt('attempt_count', 5)
+    .order('updated_at', { ascending: true })
+    .limit(limit)
+  if (error) throw new Error(`knowledge_documents scan failed: ${error.message}`)
+  const out: Record<string, number> = {}
+  for (const d of data ?? []) {
+    try {
+      const doc = await processDocument(d.org_id as string, d.id as string, log, { mode: 'retry' })
+      out[doc.status] = (out[doc.status] ?? 0) + 1
+    } catch (err) {
+      log.error('maintenance.knowledge_retry_failed', err, { docId: d.id, orgId: d.org_id })
+      out.error = (out.error ?? 0) + 1
+    }
+  }
+  return out
+}
+
 const DAY_MS = 86_400_000
 
 function retentionDays(name: string, fallback: number): number {
@@ -96,6 +128,7 @@ export async function runVoiceMaintenance(log: Logger = createLogger({ component
     ['webhook_retries', () => reprocessPendingWebhooks(50, log)],
     ['cartesia_poll', () => reconcileCartesiaCalls(25, log)],
     ['stale_elevenlabs_calls', () => finalizeStaleElevenLabsCalls(50, log)],
+    ['knowledge_retries', () => retryStaleKnowledgeDocs(2, log)],
     // Hourly is plenty for retention (the cron fires every 5 minutes).
     ...(new Date().getUTCMinutes() < 5 ? ([['retention', () => pruneOperationalData(log)]] as Array<[string, () => Promise<unknown>]>) : []),
   ]

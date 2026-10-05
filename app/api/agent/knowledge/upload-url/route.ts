@@ -23,7 +23,7 @@ import {
   KNOWLEDGE_MAX_NAME_CHARS,
   KNOWLEDGE_TYPES_LABEL,
   assertDocumentCapacity,
-  cleanDisplayName,
+  cleanFileDisplayName,
   newDocumentId,
   resolveFileType,
   safeFileName,
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     if (body.size > KNOWLEDGE_MAX_FILE_BYTES) {
       throw new RequestError('payload_too_large', 'Files can be up to 20 MB.', 413)
     }
-    const name = cleanDisplayName(body.name)
+    const name = cleanFileDisplayName(body.name)
     const type = resolveFileType(body.name, body.mime)
     if (!name || !type) {
       throw new RequestError('unsupported_media_type', `Unsupported file type. Use ${KNOWLEDGE_TYPES_LABEL}.`, 415)

@@ -4,7 +4,7 @@ import { createLogger, requestIdFrom } from '@/lib/observability/logger'
 import { conversations as elConversations } from '@/lib/elevenlabs/client'
 import { calls as cartesiaCalls } from '@/lib/cartesia/client'
 import { isProviderError } from '@/lib/voice-providers/errors'
-import { rateLimit } from '@/lib/security/rate-limit'
+import { rateLimit, RATE_LIMITS } from '@/lib/security/rate-limit'
 import { findOrgCall, parseCallId, servingProvider, type CallRow } from '@/lib/calls/serialize'
 
 const AUDIO_COLUMNS: string =
@@ -15,7 +15,7 @@ type AudioRow = Pick<
   'id' | 'provider' | 'provider_call_id' | 'elevenlabs_conversation_id' | 'cartesia_call_id' | 'has_recording' | 'recording_status'
 >
 
-const AUDIO_LIMIT = { name: 'call_audio', limit: 120, windowSeconds: 600 }
+const AUDIO_LIMIT = RATE_LIMITS.callAudio
 const DEFAULT_TYPE = { elevenlabs: 'audio/mpeg', cartesia: 'audio/wav' } as const
 const EXTENSION: Record<string, string> = { 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/wave': 'wav', 'audio/ogg': 'ogg' }
 

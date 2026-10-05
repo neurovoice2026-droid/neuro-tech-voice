@@ -20,6 +20,7 @@ export type ApiErrorCode =
   | 'precondition_failed'
   | 'provider_error'
   | 'not_configured'
+  | 'voice_not_provisioned'
   | 'internal'
 
 export function apiError(

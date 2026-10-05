@@ -94,7 +94,7 @@ function AgentStatusDetails({ agent }: { agent: Agent }) {
             <dl className="space-y-1.5 text-xs">
               <div className="flex items-center justify-between gap-2">
                 <dt className="text-muted-foreground">Primary · {PROVIDER_LABEL[primary?.provider ?? 'elevenlabs']}</dt>
-                <dd>{primary ? <StatusPill copy={providerStatusCopy(primary.status)} /> : '—'}</dd>
+                <dd>{primary ? <StatusPill copy={providerStatusCopy(primary.status, primary.last_synced_at)} /> : '—'}</dd>
               </div>
               <div className="flex items-center justify-between gap-2">
                 <dt className="text-muted-foreground">Backup · {PROVIDER_LABEL[backup?.provider ?? 'cartesia']}</dt>

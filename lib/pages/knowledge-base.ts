@@ -4,18 +4,19 @@ import { AUTH } from "@/lib/site";
  * /product/knowledge-base — every word on the page.
  *
  * What the product does is read off the app, not imagined: the dashboard's
- * Knowledge tab takes PDF, DOCX, TXT and MD files up to 10 MB each and web
- * pages by URL (components/agent/tabs/TabKnowledge.tsx), a page is read as
+ * Knowledge tab takes PDF, DOCX, TXT, MD, HTML and EPUB files up to 20 MB
+ * each, pasted text and web pages by URL (components/agent/tabs/TabKnowledge.tsx,
+ * lib/voice-providers/knowledge.ts), a page is read as
  * it stands when it is added (no re-sync), nothing from calls is written
  * back, and when the agent can't help it says the fallback message the
- * customer sets in the dashboard (lib/elevenlabs/prompt.ts) — so the page
+ * customer sets in the dashboard (lib/voice-providers/prompt.ts) — so the page
  * presents that line as the customer's to write, not as something the
  * agent decides. The business in every example is a sample, and is
  * labelled as one.
  * ------------------------------------------------------------------ */
 
 /** What the Knowledge tab accepts. Keep in step with TabKnowledge.tsx. */
-export const KB_FILES = { types: ["PDF", "DOCX", "TXT", "MD"], maxMb: 10 } as const;
+export const KB_FILES = { types: ["PDF", "DOCX", "TXT", "MD", "HTML", "EPUB"], maxMb: 20 } as const;
 
 export const KB_META = {
   title: "Knowledge Base",
@@ -454,7 +455,7 @@ export const KB_FAQ = {
     {
       id: "files",
       q: "Which files can I add?",
-      a: `PDF, Word (.docx), plain text and Markdown files up to ${KB_FILES.maxMb} MB each, and web pages by their address. Files with real text in them work best — a scanned image has no words to read.`,
+      a: `PDF, Word (.docx), plain text, Markdown, HTML and EPUB files up to ${KB_FILES.maxMb} MB each, pasted text, and web pages by their address. Files with real text in them work best — a scanned image has no words to read.`,
     },
     {
       id: "sync",

@@ -145,11 +145,16 @@ function baseName(name: string): string {
 
 /** User-visible name: no control characters, single spaces, bounded. */
 export function cleanDisplayName(raw: string): string {
-  return baseName(raw)
+  return raw
     .replace(/\p{Cc}/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, KNOWLEDGE_MAX_NAME_CHARS)
+}
+
+/** Display name for an uploaded file: its base name only (browsers may send a path). */
+export function cleanFileDisplayName(raw: string): string {
+  return cleanDisplayName(baseName(raw))
 }
 
 /** ASCII-only object/file name: letters, digits, dot, dash, underscore. */
@@ -552,7 +557,11 @@ async function attachToAgent(db: SupabaseClient, orgId: string, agentId: string,
 
 // ─── Post-ready (non-fatal) ──────────────────────────────────────────────────
 
-const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
+const ENTITIES: Record<string, string> = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+  ndash: '–', mdash: '—', hellip: '…', lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”',
+  euro: '€', pound: '£', copy: '©', reg: '®', trade: '™', middot: '·', bull: '•', deg: '°',
+}
 
 /** Extracted document content (HTML or Markdown) → bounded plain text. */
 export function toPlainText(content: string): string {

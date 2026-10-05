@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import { PLANS } from '@/types'
 import type { Plan, Organization } from '@/types'
 
@@ -401,16 +402,32 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
             system_prompt: agent.system_prompt,
             first_message: agent.first_message,
           },
-          voice: { voice_id: voice.voice_id, voice_name: voice.voice_name },
         }),
       })
-      const data = await res.json()
+      const data = (await res.json().catch((err: unknown) => {
+        console.error('Onboarding: unreadable response', err)
+        return null
+      })) as { checkout_url?: string; error?: string; sync?: Array<{ provider: string; status: string; error: string | null }> } | null
+
+      if (!res.ok || !data) {
+        // Nothing was launched: keep the user here with the server's message.
+        toast.error(data?.error ?? 'We could not launch your agent. Please try again.')
+        setIsLaunching(false)
+        return
+      }
+
+      // The account is set up; a provider problem is retried automatically.
+      const primary = data.sync?.find((s) => s.provider === 'elevenlabs')
+      if (primary && (primary.status === 'failed' || primary.status === 'degraded')) {
+        toast.warning(`Your agent was saved, but the voice provider is not ready yet: ${primary.error ?? 'it will be retried automatically.'}`)
+      }
 
       setShowConfetti(true)
 
       if (data.checkout_url) {
         // Paid plan → Stripe checkout (confetti visible briefly before redirect)
-        setTimeout(() => { window.location.href = data.checkout_url }, 1500)
+        const checkoutUrl = data.checkout_url
+        setTimeout(() => { window.location.href = checkoutUrl }, 1500)
       } else {
         // Free plan or Stripe not configured → show success screen
         setTimeout(() => {
@@ -418,13 +435,11 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
           setLaunched(true)
         }, 1800)
       }
-    } catch {
-      // Fallback: still show success even if API fails
-      setShowConfetti(true)
-      setTimeout(() => {
-        setIsLaunching(false)
-        setLaunched(true)
-      }, 1800)
+    } catch (err) {
+      // Network failure: the launch did not happen, so do not pretend it did.
+      console.error('Onboarding launch failed', err)
+      toast.error('Network error. Check your connection and try again.')
+      setIsLaunching(false)
     }
   }
 

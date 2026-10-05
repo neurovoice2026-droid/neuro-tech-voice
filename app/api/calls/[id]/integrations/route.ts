@@ -11,7 +11,7 @@ import {
   requestErrorResponse,
 } from '@/lib/api/http'
 import { createLogger, requestIdFrom } from '@/lib/observability/logger'
-import { rateLimit } from '@/lib/security/rate-limit'
+import { rateLimit, RATE_LIMITS } from '@/lib/security/rate-limit'
 import { getGoogleClientWithToken } from '@/lib/google/client'
 import { sendEmail, isConfigured as emailConfigured } from '@/lib/email/client'
 import {
@@ -39,7 +39,7 @@ type ReportRow = Pick<
   | 'started_at' | 'created_at'
 >
 
-const INTEGRATION_LIMIT = { name: 'call_integration', limit: 20, windowSeconds: 600 }
+const INTEGRATION_LIMIT = RATE_LIMITS.callIntegration
 
 function handledByText(call: ReportRow): string {
   return handledBy({

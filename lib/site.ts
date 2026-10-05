@@ -1925,7 +1925,7 @@ export const FAQ: { q: string; a: string; where?: { label: string; href: string 
     //     data is hosted/stored in the U.S." (elevenlabs.io/docs/overview/
     //     administration/data-residency). It keeps the conversation of
     //     every call its agent answers. Audio follows record_voice as of
-    //     the last sync (lib/elevenlabs/create-agent.ts), and the webhook
+    //     the last sync (lib/elevenlabs/agent-config.ts), and the webhook
     //     sees audio on calls we do not treat as recorded (app/api/
     //     elevenlabs/webhook/handlers.ts), hence "can". It may process
     //     data in other countries, so the answer says where it keeps it

@@ -6,7 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { conversations as elConversations } from '@/lib/elevenlabs/client'
 import { calls as cartesiaCalls } from '@/lib/cartesia/client'
 import { isProviderError } from '@/lib/voice-providers/errors'
-import { rateLimit } from '@/lib/security/rate-limit'
+import { rateLimit, RATE_LIMITS } from '@/lib/security/rate-limit'
 import {
   CALL_DETAIL_COLUMNS,
   dbError,
@@ -47,7 +47,7 @@ type DeleteRow = Pick<
   'id' | 'status' | 'started_at' | 'created_at' | 'provider' | 'provider_call_id' | 'elevenlabs_conversation_id' | 'cartesia_call_id'
 >
 
-const CALL_DELETE_LIMIT = { name: 'call_delete', limit: 60, windowSeconds: 600 }
+const CALL_DELETE_LIMIT = RATE_LIMITS.callDelete
 /** A live call cannot be deleted at the providers; older "live" rows are stale. */
 const LIVE_GRACE_MS = 6 * 60 * 60 * 1000
 
@@ -130,7 +130,9 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       action: 'call.deleted',
       target_type: 'call',
       target_id: row.id,
-      details: { provider: row.provider, status: row.status, provider_deletes: results },
+      // provider_call_ids is the tombstone applyCallEvent checks, so a late
+      // webhook or poll for this call cannot recreate the deleted row.
+      details: { provider: row.provider, status: row.status, provider_deletes: results, provider_call_ids: providerTargets(row).map((t) => t.externalId) },
     })
     // The call is already gone; a missing audit row must not turn that into an error for the user.
     if (auditError) log.error('calls.delete.audit_failed', dbError('audit_log insert', auditError))

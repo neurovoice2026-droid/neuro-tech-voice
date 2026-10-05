@@ -29,6 +29,10 @@ export const RATE_LIMITS = {
   knowledgeUpload: { name: 'knowledge_upload', limit: 30, windowSeconds: 3_600 },
   agentSync: { name: 'agent_sync', limit: 30, windowSeconds: 600 },
   voiceCatalog: { name: 'voice_catalog', limit: 120, windowSeconds: 60 },
+  callDelete: { name: 'call_delete', limit: 60, windowSeconds: 600 },
+  callAudio: { name: 'call_audio', limit: 120, windowSeconds: 600 },
+  callIntegration: { name: 'call_integration', limit: 20, windowSeconds: 600 },
+  callsExport: { name: 'calls_export', limit: 20, windowSeconds: 600 },
 } as const satisfies Record<string, RateLimitRule>
 
 export interface RateLimitResult {

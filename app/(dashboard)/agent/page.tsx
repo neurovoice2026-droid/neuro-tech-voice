@@ -35,6 +35,7 @@ export default async function AgentPage() {
     <AgentPageClient
       initialAgent={agent}
       phoneNumbers={(phoneNumbersRes.data ?? []) as PhoneNumber[]}
+      orgTimezone={ctx.org.timezone}
     />
   )
 }

@@ -17,7 +17,7 @@ import {
   KNOWLEDGE_LEGACY_MAX_FILE_BYTES,
   KNOWLEDGE_TYPES_LABEL,
   assertDocumentCapacity,
-  cleanDisplayName,
+  cleanFileDisplayName,
   newDocumentId,
   processDocument,
   resolveFileType,
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
     if (file.size > KNOWLEDGE_LEGACY_MAX_FILE_BYTES) {
       throw new RequestError('payload_too_large', 'Files over 4 MB must be added with the uploader in the Knowledge tab.', 413)
     }
-    const name = cleanDisplayName(file.name)
+    const name = cleanFileDisplayName(file.name)
     const type = resolveFileType(file.name, file.type)
     if (!name || !type) {
       throw new RequestError('unsupported_media_type', `Unsupported file type. Use ${KNOWLEDGE_TYPES_LABEL}.`, 415)

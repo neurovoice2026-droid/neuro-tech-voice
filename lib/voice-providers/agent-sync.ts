@@ -24,6 +24,7 @@ import { lifecycleFor, type SyncedAgent } from './adapters'
 import { isProviderError, toProviderError, type VoiceProvider } from './errors'
 import { platformFallbackEnabled } from './config'
 import type { ResourceStatus } from './types'
+import { applyNumberRouting } from '@/lib/telephony/binding'
 
 const LEASE_MS = 90_000
 const MAX_CATCH_UP_LOOPS = 3
@@ -52,6 +53,8 @@ export interface ProviderSyncResult {
   appliedVoiceId: string | null
   errorCode: string | null
   error: string | null
+  /** A new external agent was created (or adopted) in this sync. */
+  created?: boolean
 }
 
 /** Exponential backoff with full jitter for the maintenance job: 1 min … 1 h. */
@@ -114,6 +117,7 @@ async function syncOne(db: SupabaseClient, agentId: string, orgId: string, provi
   }
 
   let row = lease.row
+  const previousExternalId = row.external_id
   let result: ProviderSyncResult = { provider, status: row.status, externalId: row.external_id, appliedVoiceId: null, errorCode: null, error: null }
   try {
     for (let loop = 0; loop < MAX_CATCH_UP_LOOPS; loop++) {
@@ -170,7 +174,7 @@ async function syncOne(db: SupabaseClient, agentId: string, orgId: string, provi
         if (error) log.error('agent_sync.compat_column_failed', error)
       }
       emitProviderEvent({ system: provider, kind: 'sync_success', ok: true, orgId, agentId, details: { revision: spec.revision } })
-      result = { provider, status: 'ready', externalId: synced.externalId, appliedVoiceId: synced.appliedVoiceId, errorCode: null, error: null }
+      result = { provider, status: 'ready', externalId: synced.externalId, appliedVoiceId: synced.appliedVoiceId, errorCode: null, error: null, created: synced.externalId !== previousExternalId }
 
       if ((await currentRevision(db, agentId)) <= spec.revision) break
       log.info('agent_sync.catch_up', { pushed: spec.revision })
@@ -235,7 +239,65 @@ export async function syncAgent(agentId: string, opts: SyncOptions = {}): Promis
   for (const provider of providers) {
     results.push(await syncOne(db, agentId, agent.org_id as string, provider, { force: !!opts.force, log }))
   }
+  const el = results.find((r) => r.provider === 'elevenlabs')
+  if (el) await reconcileVoiceStatus(db, agentId, el, log)
+  const created = results.filter((r) => r.created).map((r) => r.provider)
+  if (created.length) await rebindNumbers(db, agent.org_id as string, created, log)
   return results
+}
+
+/**
+ * Keeps agents.voice_sync_status honest after any ElevenLabs sync that read
+ * the agent back: "synced" only when the provider really uses the selected
+ * voice. A save in progress (PUT /api/agent/voice, status 'saving') decides
+ * its own outcome and is left alone.
+ */
+async function reconcileVoiceStatus(db: SupabaseClient, agentId: string, result: ProviderSyncResult, log: Logger) {
+  if (result.status !== 'ready' || !result.appliedVoiceId) return
+  const { data, error } = await db.from('agents').select('voice_id, voice_sync_status').eq('id', agentId).single()
+  if (error) {
+    log.error('agent_sync.voice_status_read_failed', error)
+    return
+  }
+  if (!data?.voice_id || data.voice_sync_status === 'saving') return
+  const applied = result.appliedVoiceId === data.voice_id
+  const next = applied ? 'synced' : 'failed'
+  if (data.voice_sync_status === next) return
+  const { error: updErr } = await db
+    .from('agents')
+    .update({
+      voice_sync_status: next,
+      voice_sync_error: applied ? null : 'The selected voice could not be applied to your agent. Choose another voice or retry.',
+    })
+    .eq('id', agentId)
+  if (updErr) log.error('agent_sync.voice_status_write_failed', updErr)
+  else log.info('agent_sync.voice_status', { status: next })
+}
+
+/**
+ * A newly created external agent must be wired to the org's numbers: the
+ * Cartesia SIP import is assigned to the fallback agent (app-routed numbers)
+ * and native numbers are assigned to the ElevenLabs agent. Runs for every
+ * caller (routes, maintenance retries, provisioning). Failures are recorded on
+ * the number (routing_status) by applyNumberRouting and logged here.
+ */
+async function rebindNumbers(db: SupabaseClient, orgId: string, created: VoiceProvider[], log: Logger) {
+  const { data, error } = await db.from('phone_numbers').select('id, twilio_sid, routing_mode').eq('org_id', orgId)
+  if (error) {
+    log.error('agent_sync.numbers_read_failed', error)
+    return
+  }
+  for (const n of data ?? []) {
+    if (!n.twilio_sid || String(n.twilio_sid).startsWith('mock')) continue
+    const native = n.routing_mode === 'native_elevenlabs'
+    if (!(native ? created.includes('elevenlabs') : created.includes('cartesia'))) continue
+    try {
+      const res = await applyNumberRouting(n.id as string, log)
+      log.info('agent_sync.number_rebound', { phoneNumberId: n.id, status: res.status })
+    } catch (err) {
+      log.error('agent_sync.number_rebind_failed', err, { phoneNumberId: n.id })
+    }
+  }
 }
 
 /** Increments agents.config_revision (provider-managed column) and returns the new value. */

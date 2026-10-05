@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { requireOrg } from '@/lib/api/auth'
 import { apiError, errorResponse, RequestError, requestErrorResponse } from '@/lib/api/http'
 import { createLogger, requestIdFrom } from '@/lib/observability/logger'
-import { rateLimit } from '@/lib/security/rate-limit'
+import { rateLimit, RATE_LIMITS } from '@/lib/security/rate-limit'
 import {
   applyCallFilters,
   CALL_DETAIL_COLUMNS,
@@ -98,7 +98,7 @@ const ExportQuerySchema = CallFilterSchema.extend({
     }),
 })
 
-const EXPORT_LIMIT = { name: 'calls_export', limit: 20, windowSeconds: 600 }
+const EXPORT_LIMIT = RATE_LIMITS.callsExport
 const PAGE = 1000
 const MAX_ROWS = 10_000
 

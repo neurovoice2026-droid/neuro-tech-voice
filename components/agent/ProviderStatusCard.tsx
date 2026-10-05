@@ -15,7 +15,7 @@ import { PROVIDER_LABEL } from '@/hooks/useAgentStatus'
 import { cn, formatPhoneNumber } from '@/lib/utils'
 import type { AgentStatusView, ProviderResourceStatus, ProviderResourceView } from '@/types'
 
-type Tone = 'ok' | 'busy' | 'warn' | 'error' | 'muted'
+type Tone = 'ok' | 'busy' | 'waiting' | 'warn' | 'error' | 'muted'
 
 export interface StatusCopy {
   label: string
@@ -47,6 +47,7 @@ export const ROUTING_MODE_SHORT: Record<'app_routed' | 'native_elevenlabs', stri
 const TONE_CLASS: Record<Tone, string> = {
   ok: 'border-green-500/30 bg-green-500/15 text-green-700 dark:text-green-400',
   busy: '',
+  waiting: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
   warn: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
   error: '',
   muted: 'text-muted-foreground',
@@ -55,6 +56,7 @@ const TONE_CLASS: Record<Tone, string> = {
 function ToneIcon({ tone }: { tone: Tone }) {
   if (tone === 'ok') return <CheckCircle2 aria-hidden="true" />
   if (tone === 'busy') return <Loader2 className="animate-spin" aria-hidden="true" />
+  if (tone === 'waiting') return <Clock aria-hidden="true" />
   if (tone === 'warn') return <AlertTriangle aria-hidden="true" />
   if (tone === 'error') return <AlertCircle aria-hidden="true" />
   return <CircleSlash aria-hidden="true" />
@@ -70,8 +72,16 @@ export function StatusPill({ copy, className }: { copy: StatusCopy; className?: 
   )
 }
 
+const NOT_CREATED: StatusCopy = {
+  label: 'Pending',
+  tone: 'waiting',
+  description: 'The voice agent is created when you activate your agent or save a change.',
+}
+
 /** Copy for a provider's sync status (primary agent, or the backup's own sync state). */
-export function providerStatusCopy(status: ProviderResourceView['status']): StatusCopy {
+export function providerStatusCopy(status: ProviderResourceView['status'], lastSyncedAt?: string | null): StatusCopy {
+  // Pending and never synced: nothing is running yet, so no spinner.
+  if (status === 'pending' && lastSyncedAt === null) return NOT_CREATED
   return PRIMARY_COPY[status] ?? PRIMARY_COPY.pending
 }
 
@@ -133,10 +143,10 @@ export function ProviderStatusCard({ status, isLoading, error, isRetrying, onRet
 
   const primary = status.providers.find((p) => p.role === 'primary')
   const fallback = status.providers.find((p) => p.role === 'fallback')
-  const primaryCopy = primary ? providerStatusCopy(primary.status) : PRIMARY_COPY.not_configured
+  const primaryCopy = primary ? providerStatusCopy(primary.status, primary.last_synced_at) : PRIMARY_COPY.not_configured
   const fbCopy = backupStatusCopy(status)
   const fallbackActive = fbCopy.label === 'Enabled'
-  const fallbackSync = fallback && fallbackActive ? providerStatusCopy(fallback.status) : null
+  const fallbackSync = fallback && fallbackActive ? providerStatusCopy(fallback.status, fallback.last_synced_at) : null
   const canRetry =
     status.providers.some((p) => p.configured && p.enabled && p.status !== 'ready') ||
     status.voice.status === 'failed' ||

@@ -6,7 +6,6 @@
 
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { requireOrg } from '@/lib/api/auth'
 import {
   RequestError,
@@ -41,8 +40,9 @@ import {
   VoiceTuningSchema,
   WorkingHoursSchema,
 } from '@/lib/voice-providers/settings'
-import { isProviderError, type VoiceProvider } from '@/lib/voice-providers/errors'
+import type { VoiceProvider } from '@/lib/voice-providers/errors'
 import * as cartesia from '@/lib/cartesia/client'
+import { getAllowedFallbackVoice } from '@/lib/voice-providers/voice-catalog'
 import { isValidTimeZone } from '@/lib/scheduling/time'
 import type { Agent } from '@/types'
 
@@ -119,39 +119,26 @@ function primaryProviderOf(agent: Agent): VoiceProvider {
 }
 
 /**
- * A fallback voice must exist at Cartesia, be active, and be either a public
- * library voice or a private platform voice registered for this org (or
- * platform-wide) in provider_voices. Without Cartesia configured the id is
- * format-checked only; the sync engine validates it again before use.
+ * A fallback voice must be one the voice catalog offers this tenant (active
+ * public Cartesia voice or a platform-mapped one; never another account's
+ * private voice) — same rule as GET /api/voices/fallback. Without Cartesia
+ * configured the id is format-checked only; the sync engine validates it
+ * again before use.
  */
-async function assertFallbackVoiceEligible(supabase: SupabaseClient, voiceId: string, log: Logger): Promise<void> {
+async function assertFallbackVoiceEligible(voiceId: string, log: Logger): Promise<void> {
   if (!cartesia.isConfigured()) {
     log.info('agent.fallback_voice_unverified', { reason: 'cartesia_not_configured' })
     return
   }
-  const invalid = () =>
-    new RequestError('invalid_request', 'This fallback voice is not available.', 400, [
-      { path: 'fallback_voice_id', message: 'Voice not available' },
-    ])
-  let voice: cartesia.CartesiaVoice
   try {
-    voice = await cartesia.voices.get(voiceId)
+    await getAllowedFallbackVoice(voiceId)
   } catch (err) {
-    if (isProviderError(err) && err.code === 'not_found') throw invalid()
+    if (err instanceof RequestError && (err.status === 404 || err.status === 400)) {
+      throw new RequestError('invalid_request', 'This fallback voice is not available.', 400, [
+        { path: 'fallback_voice_id', message: 'Voice not available' },
+      ])
+    }
     throw err
-  }
-  if (!voice?.id || (voice.status !== undefined && voice.status !== 'active')) throw invalid()
-  if (voice.is_owner) {
-    // A private voice in the platform account may belong to another org.
-    const { data, error } = await supabase
-      .from('provider_voices')
-      .select('id')
-      .eq('provider', 'cartesia')
-      .eq('voice_id', voice.id)
-      .neq('status', 'deleted')
-      .maybeSingle()
-    if (error) throw new Error(`provider_voices read failed: ${error.message}`)
-    if (!data) throw invalid()
   }
 }
 
@@ -195,7 +182,7 @@ export async function PATCH(request: Request) {
     const providerFieldsChanged = PROVIDER_FIELDS.filter((k) => changed(k))
 
     if (changed('fallback_voice_id') && typeof agentPatch.fallback_voice_id === 'string') {
-      await assertFallbackVoiceEligible(supabase, agentPatch.fallback_voice_id, log)
+      await assertFallbackVoiceEligible(agentPatch.fallback_voice_id, log)
     }
 
     // ── Organization columns (tenant-writable: timezone, voice_fallback_enabled) ──

@@ -22,7 +22,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     .from('agents')
     .select('*')
     .eq('org_id', org.id)
-    .order('created_at', { ascending: false })
+    .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle()
 

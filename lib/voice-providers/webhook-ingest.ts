@@ -74,7 +74,7 @@ async function handle(provider: WebhookSource, payload: unknown, log: Logger): P
   const event = provider === 'elevenlabs' ? normalizeElevenLabsEvent(readEnvelope(payload)) : normalizeCartesiaEnvelope(readCartesiaEnvelope(payload))
   if (!event) return { callId: null, ignored: true }
   const res = await applyCallEvent(event, log)
-  return { callId: res.callId, ignored: res.outcome === 'unowned' }
+  return { callId: res.callId, ignored: res.outcome === 'unowned' || res.outcome === 'deleted' }
 }
 
 /** Claims and processes one stored event. Never throws (records the failure). */

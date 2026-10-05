@@ -62,6 +62,7 @@ export async function buildAgentSpec(db: SupabaseClient, agent: AgentRow): Promi
       .from('knowledge_documents')
       .select('id, name, type, elevenlabs_doc_id, cartesia_doc_id, status, content_excerpt')
       .eq('agent_id', agent.id)
+      .eq('org_id', agent.org_id)
       .in('status', ['ready', 'processing'])
       .order('created_at', { ascending: true }),
     db.from('phone_numbers').select('routing_mode').eq('org_id', agent.org_id),

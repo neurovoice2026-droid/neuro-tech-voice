@@ -4,9 +4,11 @@
 -- "Bucket not found". (Buckets can't be created by normal table migrations.)
 -- ══════════════════════════════════════════════════════════════════════════════
 
-insert into storage.buckets (id, name, public)
-values ('knowledge-documents', 'knowledge-documents', false)
-on conflict (id) do nothing;
+-- 20 MB cap (ElevenLabs knowledge-base limit): signed upload URLs do not
+-- enforce a size themselves. File contents are validated server-side.
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('knowledge-documents', 'knowledge-documents', false, 20971520)
+on conflict (id) do update set file_size_limit = excluded.file_size_limit;
 
 -- Authenticated users can only read/write objects under their own org folder
 -- (`<org_id>/<agent_id>/<file>`); the app uploads through signed upload URLs

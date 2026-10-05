@@ -407,6 +407,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at    timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS audit_log_org_created ON audit_log (org_id, created_at DESC);
+-- Tombstones checked before a late provider event could recreate a deleted call.
+CREATE INDEX IF NOT EXISTS audit_log_call_deleted ON audit_log USING gin (details jsonb_path_ops) WHERE action = 'call.deleted';
 ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "audit_log_owner_read" ON audit_log;
 CREATE POLICY "audit_log_owner_read" ON audit_log
@@ -481,6 +483,39 @@ BEGIN
     ) THEN
       RAISE EXCEPTION 'provider-managed phone fields are read-only' USING ERRCODE = '42501';
     END IF;
+  ELSIF TG_TABLE_NAME = 'knowledge_documents' THEN
+    -- Tenants may create a document row (their own agent, their own Storage
+    -- folder, nothing processed yet) and rename it; everything the provider
+    -- pipeline writes is platform-managed. Otherwise a tenant could point
+    -- elevenlabs_doc_id at another org's document in the shared workspace,
+    -- or attach a document to another org's agent.
+    IF TG_OP = 'INSERT' THEN
+      IF NEW.elevenlabs_doc_id IS NOT NULL OR NEW.cartesia_doc_id IS NOT NULL
+         OR NEW.attached_at IS NOT NULL OR NEW.last_synced_at IS NOT NULL
+         OR NEW.content_excerpt IS NOT NULL OR NEW.status IS DISTINCT FROM 'processing' THEN
+        RAISE EXCEPTION 'knowledge processing fields are managed by the platform' USING ERRCODE = '42501';
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM public.agents a WHERE a.id = NEW.agent_id AND a.org_id = NEW.org_id) THEN
+        RAISE EXCEPTION 'agent does not belong to this organization' USING ERRCODE = '42501';
+      END IF;
+      IF NEW.storage_path IS NOT NULL AND split_part(NEW.storage_path, '/', 1) <> NEW.org_id::text THEN
+        RAISE EXCEPTION 'storage path outside the organization folder' USING ERRCODE = '42501';
+      END IF;
+    END IF;
+    IF TG_OP = 'UPDATE' AND (
+         NEW.org_id IS DISTINCT FROM OLD.org_id
+      OR NEW.agent_id IS DISTINCT FROM OLD.agent_id
+      OR NEW.elevenlabs_doc_id IS DISTINCT FROM OLD.elevenlabs_doc_id
+      OR NEW.cartesia_doc_id IS DISTINCT FROM OLD.cartesia_doc_id
+      OR NEW.status IS DISTINCT FROM OLD.status
+      OR NEW.storage_path IS DISTINCT FROM OLD.storage_path
+      OR NEW.url IS DISTINCT FROM OLD.url
+      OR NEW.attached_at IS DISTINCT FROM OLD.attached_at
+      OR NEW.last_synced_at IS DISTINCT FROM OLD.last_synced_at
+      OR NEW.content_excerpt IS DISTINCT FROM OLD.content_excerpt
+    ) THEN
+      RAISE EXCEPTION 'provider-managed knowledge fields are read-only' USING ERRCODE = '42501';
+    END IF;
   ELSIF TG_TABLE_NAME = 'calls' THEN
     IF TG_OP = 'INSERT' THEN
       RAISE EXCEPTION 'call records are written by the platform' USING ERRCODE = '42501';
@@ -501,6 +536,9 @@ CREATE TRIGGER agents_guard BEFORE INSERT OR UPDATE ON agents
   FOR EACH ROW EXECUTE FUNCTION public.guard_platform_columns();
 DROP TRIGGER IF EXISTS phone_numbers_guard ON phone_numbers;
 CREATE TRIGGER phone_numbers_guard BEFORE INSERT OR UPDATE ON phone_numbers
+  FOR EACH ROW EXECUTE FUNCTION public.guard_platform_columns();
+DROP TRIGGER IF EXISTS knowledge_documents_guard ON knowledge_documents;
+CREATE TRIGGER knowledge_documents_guard BEFORE INSERT OR UPDATE ON knowledge_documents
   FOR EACH ROW EXECUTE FUNCTION public.guard_platform_columns();
 DROP TRIGGER IF EXISTS calls_guard ON calls;
 CREATE TRIGGER calls_guard BEFORE INSERT OR UPDATE ON calls
@@ -523,6 +561,9 @@ GRANT EXECUTE ON FUNCTION public.bump_agent_revision(uuid) TO service_role;
 -- authenticated user read/write every org's documents.
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'storage') THEN
+    -- Signed upload URLs do not enforce a size: cap the bucket itself at the
+    -- ElevenLabs knowledge-base limit (content is validated server-side).
+    EXECUTE 'UPDATE storage.buckets SET file_size_limit = 20971520 WHERE id = ''knowledge-documents''';
     EXECUTE 'DROP POLICY IF EXISTS "knowledge_docs_rw" ON storage.objects';
     EXECUTE 'DROP POLICY IF EXISTS "knowledge_docs_owner" ON storage.objects';
     EXECUTE $p$

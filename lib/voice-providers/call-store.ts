@@ -72,7 +72,19 @@ async function ownerOf(db: SupabaseClient, provider: VoiceProvider, externalAgen
 
 export interface ApplyResult {
   callId: string | null
-  outcome: 'created' | 'updated' | 'unchanged' | 'unowned'
+  outcome: 'created' | 'updated' | 'unchanged' | 'unowned' | 'deleted'
+}
+
+/** True when the owner deleted this call (tombstone written by DELETE /api/calls/[id]). */
+async function wasDeleted(db: SupabaseClient, orgId: string, event: NormalizedCallEvent): Promise<boolean> {
+  const base = () => db.from('audit_log').select('id').eq('org_id', orgId).eq('action', 'call.deleted')
+  const checks = [base().contains('details', { provider_call_ids: [event.providerCallId] }).limit(1)]
+  if (event.localCallId && UUID.test(event.localCallId)) checks.push(base().eq('target_id', event.localCallId).limit(1))
+  for (const { data, error } of await Promise.all(checks)) {
+    if (error) throw new Error(`audit_log lookup failed: ${error.message}`)
+    if ((data?.length ?? 0) > 0) return true
+  }
+  return false
 }
 
 export async function applyCallEvent(event: NormalizedCallEvent, log: Logger = createLogger()): Promise<ApplyResult> {
@@ -88,6 +100,10 @@ export async function applyCallEvent(event: NormalizedCallEvent, log: Logger = c
       if (!owner) {
         l.warn('call_event.unowned', { externalAgentId: event.externalAgentId })
         return { callId: null, outcome: 'unowned' }
+      }
+      if (await wasDeleted(db, owner.org_id, event)) {
+        l.info('call_event.deleted_call_ignored')
+        return { callId: null, outcome: 'deleted' }
       }
       const direction = event.direction ?? 'inbound'
       const insert = {
