@@ -16,7 +16,7 @@
  * 3. SHARE COPIES (--previews). 1920×1080 / 1080×1920 H.264 High at 60 fps, < 30 MB: every second master frame
  *    (tinterlace=drop_even keeps frames 0, 2, 4 …; this ffmpeg build has no fps/select filters and a bare -r 60
  *    on the 120 fps master keeps 0, 1, 2, 3, 5, 7 …), lanczos 2:1, two-pass at the size budget, aq-mode 3 for the
- *    dark gradients, AAC 160k from the mix at the same delivery gain, BT.709 limited tags, avc1, +faststart.
+ *    dark gradients, Level 4.2 with ref=4 (preset slow's ref=5 forces Level 5.0 at 1080p, which 4.2-only devices refuse), AAC 160k from the mix at the same delivery gain, BT.709 limited tags, avc1, +faststart.
  *
  * Uses Remotion's bundled ffmpeg/ffprobe directly (the npx wrapper mangles commas inside filter strings).
  */
@@ -99,7 +99,7 @@ for (const fmt of FORMATS) {
   const passlog = path.join(ROOT, 'out/kb', `.x264-${fmt}`);
   const vf = `tinterlace=drop_even,scale=${w}:${h}:flags=lanczos+accurate_rnd+full_chroma_int`;
   const venc = ['-c:v', 'libx264', '-preset', 'slow', '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-b:v', `${PREVIEW.videoKbps}k`,
-    '-x264-params', 'aq-mode=3', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv',
+    '-level:v', '4.2', '-x264-params', 'aq-mode=3:ref=4', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv',
     '-passlogfile', passlog];
   run('ffmpeg', ['-hide_banner', '-v', 'error', '-y', '-i', out, '-map', '0:v:0', '-vf', vf, ...venc, '-pass', '1', '-an', '-f', 'mp4', '/dev/null'], { stdio: 'inherit' });
   const stmp = share.replace(/\.mp4$/, '.tmp.mp4');
