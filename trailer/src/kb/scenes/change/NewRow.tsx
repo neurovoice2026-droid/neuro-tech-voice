@@ -92,9 +92,9 @@ export const NewRow: React.FC<{ t: number; S: ChangeStage; g: DocPageGeometry; i
   // in the list (landed → the lift): the row itself — its face already whole (the flight brought it in)
   if (t < K.lift[0]) {
     const s = flies ? 1 : springUnit(t - landAt, SPRING.land);
-    // (9:16: the two-line row is twice as tall — it drops in from the same ≈ 12 px above its slot as 16:9's, under the
-    // "Your documents" heading, never over it)
-    const dy = -(1 - s) * (S.vertical ? 0.09 : 0.18) * B.h;
+    // (9:16: its row is 85 tall — it drops in from the same ≈ 12 px above its slot as 16:9's, under the "Your documents"
+    // heading, never over it)
+    const dy = -(1 - s) * (S.vertical ? 0.14 : 0.18) * B.h;
     return (
       <Row
         t={t}

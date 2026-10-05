@@ -23,7 +23,8 @@
  * full-tab panel (line/stage.ts 9:16 PORTRAIT PAGE; written/stage.ts 9:16 FULL-TAB SPEC) and shows the WHOLE current tab
  * at every moment: it comes back on b08's whole Knowledge tab exactly as the written act left it (KnowledgePortrait — Add
  * knowledge, the drop zone, the web page field, Add page, Your documents, the four rows Ready at b08's slots: no list
- * scrolled under the tab bar, no row cut), and the Conversation tab fills the same fixed panel — title, description,
+ * scrolled under the tab bar, no row cut — the one-line rows the change act lists too), and the Conversation tab fills the
+ * same fixed panel — title, description,
  * label, the field (a phrase per row) and the SaveBar pinned to the panel's foot. Nothing scrolls, nothing is cropped,
  * no camera pushes in.
  */
@@ -255,8 +256,9 @@ const Conversation: React.FC<{ G: PageGeo; S: LineStage }> = ({ G, S }) => {
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div style={{ position: 'absolute', left: G.title.x, top: G.title.y, ...ui(T.title, WT.medium), color: APP.foreground }}>{TITLE}</div>
-      {/* (9:16: balanced — two even lines, no one-word last line; the line count stays usePageGeometry's wrap) */}
-      <div style={{ position: 'absolute', left: G.desc.x, top: G.desc.y, width: G.desc.w, ...ui(T.small, WT.regular), whiteSpace: 'normal', textWrap: S.vertical ? 'balance' : undefined, lineHeight: 1.32, color: APP.mutedFg }}>{DESCRIPTION}</div>
+      {/* (9:16: pretty — the column's full measure, no one-word last line; the line count stays usePageGeometry's wrap.
+          refix-1: balance set it in two half-width lines beside the full-width field) */}
+      <div style={{ position: 'absolute', left: G.desc.x, top: G.desc.y, width: G.desc.w, ...ui(T.small, WT.regular), whiteSpace: 'normal', textWrap: S.vertical ? 'pretty' : undefined, lineHeight: 1.32, color: APP.mutedFg }}>{DESCRIPTION}</div>
       <div style={{ position: 'absolute', left: G.label.x, top: G.label.y, ...ui(T.label, WT.medium), color: APP.foreground }}>{LABEL}</div>
     </div>
   );
@@ -275,8 +277,8 @@ const UploadIcon: React.FC<{ size: number; color: string }> = ({ size, color }) 
  * 9:16 (fix:line): b08's WHOLE Knowledge tab, at rest exactly as the written act leaves it (written/Panel.tsx Knowledge
  * at WRITTEN_LOCAL.end — the empty state gone, the web page field cleared back to its placeholder, Add page disabled, no
  * hover — and its four rows Ready at written/stage.ts rowTop(…, end): the call act's hand-over picture, call/Panel.tsx).
- * Every box is writtenStage(true)'s (the 9:16 FULL-TAB SPEC); the styles are written/Panel.tsx's at rest, so the page
- * that comes back is the page b08 showed.
+ * Every box is writtenStage(true)'s (the 9:16 FULL-TAB SPEC: "Web page address" over the field since refix-1); the
+ * styles are written/Panel.tsx's at rest, so the page that comes back is the page b08 showed.
  */
 const KnowledgePortrait: React.FC = () => {
   const WS = writtenStage(true);
@@ -310,6 +312,7 @@ const KnowledgePortrait: React.FC = () => {
           <span style={{ flex: 1, height: 1.25, background: APP.border }} />
         </div>
       ) : null}
+      {WS.fieldLabel ? <div style={{ position: 'absolute', left: WS.add.x, top: WS.fieldLabel.y, ...ui(T.label, WT.medium), color: APP.foreground }}>Web page address</div> : null}
       {/* the web page field, cleared (its placeholder back) */}
       <div style={{ position: 'absolute', left: f.x, top: f.y, width: f.w, height: f.h, borderRadius: f.h * 0.22, background: APP.background, boxShadow: `inset 0 0 0 1.25px ${mixColor(APP.border, APP.primary, 0)}`, overflow: 'hidden' }}>
         <div style={{ position: 'absolute', left: f.h * 0.3, top: 0, height: f.h, display: 'flex', alignItems: 'center', ...ui(T.url, 440, { mono: true }), color: PLACEHOLDER_INK }}>{URL_PLACEHOLDER}</div>

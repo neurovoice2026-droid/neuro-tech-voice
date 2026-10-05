@@ -7,10 +7,11 @@
  * its exact fractional edges every render frame; a CSS box's width paints pixel-snapped), the content is placed
  * from the left edge and the … trigger from the right, so a row can be born from a slip and widen into the list.
  *
- *   layout 'stack'   the name over the pill and its type word (the app's two-line row): 16:9's b08, and 9:16's own
- *                    sizes where an act sets them (b10's fetched row, b12, b13–b14 — with their own pill size)
+ *   layout 'stack'   the name over the pill and its type word (the app's two-line row): 16:9's b08, and 9:16's b10
+ *                    fetched row (call/Page.tsx FETCH_9x16, its own pill size)
  *   layout 'inline'  one line — tile, name, the pill and its type word pushed right, … (16:9's b12 / b13 lists; 9:16's
- *                    b08 list since fix:written — written/stage.ts 9:16 FULL-TAB SPEC: name 36, pill 28, h 85)
+ *                    b08 / b12 lists since fix:written and b13's since refix-1 — written/stage.ts 9:16 FULL-TAB SPEC: name
+ *                    36, pill 28, h 85: one row form for the document list in every act)
  *
  * `morph` (0 → 1) is the slip → row change: corner radius, the border coming in, the paper's lift. With `slip` the
  * row draws b06/b07's strip of "Yes, Saturdays, nine till two." on top, leaving up through its mask at `slip.out`
@@ -24,7 +25,7 @@ import { useLayout } from '../../../lib/layout';
 import { EASE, smooth, SPRING, springUnit, tween } from '../../../lib/motion';
 import { maskBox, typeStyle } from '../../../lib/type';
 import { APP, Icon, measureText, Pill, ui, W as WT, type PillState } from '../../kit';
-import { SOFT_EDGE, type RowKind } from './stage';
+import type { RowKind } from './stage';
 
 /** the app's TYPE_LABELS (TabKnowledge.tsx:44–50): the muted word after the pill */
 export const TYPE_LABEL: Record<RowKind, string> = { pdf: 'PDF', docx: 'Word', txt: 'Text', url: 'Web page' };
@@ -63,17 +64,6 @@ export const KindTile: React.FC<{ kind: RowKind; side: number; icon: number; rad
 export const TypeLabel: React.FC<{ kind: RowKind; size: number }> = ({ kind, size }) => (
   <span style={{ ...ui(size, WT.regular), color: APP.mutedFg, whiteSpace: 'nowrap', lineHeight: 1 }}>{TYPE_LABEL[kind]}</span>
 );
-
-/**
- * A list row drawn through the card's SOFT BOTTOM EDGE (written/stage.ts softK; 9:16 only): a frame-sized wrapper (w × h,
- * the list's own coordinates) masked to fade out over the last SOFT_EDGE px above `edge`, by `k` (0 → no wrapper at all,
- * the row drawn exactly as before; 1 → transparent at the edge).
- */
-export const SoftBottom: React.FC<{ k: number; edge: number; w: number; h: number; children: React.ReactNode }> = ({ k, edge, w, h, children }) => {
-  if (k <= 0.0005) return <>{children}</>;
-  const m = `linear-gradient(to bottom, #000 0px, #000 ${(edge - SOFT_EDGE).toFixed(2)}px, rgba(0, 0, 0, ${(1 - Math.min(1, k)).toFixed(4)}) ${edge.toFixed(2)}px)`;
-  return <div style={{ position: 'absolute', left: 0, top: 0, width: w, height: h, WebkitMaskImage: m, maskImage: m }}>{children}</div>;
-};
 
 /** a soft lifted shadow for a row off the list (no crisp ring: the SVG border is the edge) */
 const flightShadow = (lift: number, ink: string) => {

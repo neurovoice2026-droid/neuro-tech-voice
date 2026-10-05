@@ -50,8 +50,10 @@ export const RISE = { stiffness: 300, damping: 34.6, mass: 1 } as const;
 /** critically damped: a slot opening / closing in a list (rows never overlap) */
 export const SLOT = { stiffness: 300, damping: 34.6, mass: 1 } as const;
 /** 9:16: the app's sheet coming in over the file, from the right (frames: from three before the file starts to step
- *  away, landing a beat before the pointer reaches the …) */
-export const APP_UP = [K.park[0] - 3, K.park[0] + 9] as const;
+ *  away — the owner's last key is in — landing 8 frames later, 6 before the pointer reaches the …; refix-1: it took 12
+ *  and landed on the pointer's arrival, so the arrow crossed rows still sliding in. The pointer shows only as it lands:
+ *  Change.tsx pointerBack) */
+export const APP_UP = [K.park[0] - 3, K.park[0] + 5] as const;
 /** the app's exit: a soft start (it is pushed, not kicked), decisive, a long settle (call/stage.ts RECEDE) */
 const RECEDE = Easing.bezier(0.42, 0, 0.12, 1);
 
@@ -68,9 +70,8 @@ export type ChangeStage = {
    *  top and scale (16:9). 9:16 has no parked thumbnail (null): the file steps back and leaves left as the app takes the
    *  frame, and the new version lands in the list by itself (the global 9:16 pass: a 17 px thumbnail read as clutter) */
   file: { x: number; y: number; w: number; size: number; rise: number; park: { right: number; y: number; k: number } | null };
-  /** the agent page on Knowledge: box (16:9: b12's panel geometry set lower, its height fitting five rows; 9:16: the
-   *  PORTRAIT_SPEC panel band, `h` fixed — it holds the tab bar, "Your documents" and five rows whole), corner radius, how
-   *  far below it starts rising */
+  /** the agent page on Knowledge: box (16:9: b12's panel geometry set lower; both: its height fitting the tab bar, "Your
+   *  documents" and five rows whole — `h` fixed overrides it), corner radius, how far below it starts rising */
   panel: { x: number; y: number; w: number; radius: number; rise: number; h?: number };
   /** the tab bar: label size, icons, the strip's side padding (× r) — b12's */
   tabs: { size: number; icons: boolean; padR: number };
@@ -78,9 +79,8 @@ export type ChangeStage = {
   pad: number;
   heading: number;
   headTop: number;
-  /** the rows (written/Row.tsx): name size, gap, layout (16:9 single-line; 9:16 the app's two-line row and its pill
-   *  size); the … menu's item size and the side it opens on (below, as the app's dropdown: under its trigger in 16:9, under
-   *  its row in 9:16 — Change.tsx MENU_GAP) */
+  /** the rows (written/Row.tsx): name size, gap, layout (single-line in both: 9:16 b08 / b12's row, PORTRAIT_SPEC.row);
+   *  the … menu's item size and the side it opens on (below, under its trigger, as the app's dropdown) */
   row: { size: number; gap: number; layout: 'stack' | 'inline'; pill?: number };
   menu: { size: number; side: 'bottom' | 'top' };
   /** the narrator's caption (vo-7, no tag): centre x, row A's centre, max width */
@@ -104,33 +104,35 @@ export type ChangeStage = {
   cross: { axis: 'x' | 'y'; feather: number };
 };
 
-/* ── 9:16 FULL-TAB (fix:change) ─────────────────────────────────────────────────────────────────────────────────────
+/* ── 9:16 FULL-TAB (fix:change; refix-1) ────────────────────────────────────────────────────────────────────────────
  *
  * The client's note ("In 9:16 the tab is not shown complete like in 16:9 while navigating"): b13's agent page in 9:16 was
- * "the app at ad size" — b08's card with the list cut by its bottom edge like a phone's (no "Your documents", the fifth
- * row parked under the edge through a soft fade, the … menu flipped ABOVE its trigger over the rows above it and Ava's
- * orb), and before the shared geometry a panel wider than the frame. Now it is the SAME tab 16:9 shows at that moment
- * (b12's panel on Knowledge: the tab bar, "Your documents", the rows — no "Add knowledge", as 16:9's) laid out for the
- * portrait frame inside written/stage.ts's PORTRAIT_SPEC bands, WHOLE at every moment the app is on screen: four rows,
- * five while both versions are listed, four again; the menu under its row. Layout px (× 2 in the 2160 × 3840 master):
+ * "the app at ad size" — b08's card with the list cut by its bottom edge like a phone's (the fifth row parked under the
+ * edge through a soft fade, the … menu flipped ABOVE its trigger over the rows above it and Ava's orb), and before the
+ * shared geometry a panel wider than the frame. Now it is the SAME tab 16:9 shows at that moment (the panel on Knowledge:
+ * the tab bar, "Your documents", the rows — no "Add knowledge", as 16:9's b13) laid out for the portrait frame inside
+ * written/stage.ts's PORTRAIT_SPEC, WHOLE at every moment the app is on screen: four rows, five while both versions are
+ * listed, four again; the menu under its trigger. refix-1: the rows are b08 / b12's ONE-LINE rows (the two-line row
+ * fix:change used made the same list read as two different designs ten seconds apart, and left ≈ 188 px of white under
+ * the fourth row) and the panel fits them, as 16:9's does. Layout px (× 2 in the 2160 × 3840 master):
  *
- *   ORB       where b12 leaves her (lineEnd: the header row, (540, 317), d 124 since fix:line) until the call — the
- *             panel's top edge clears her by 17 px; she glides to her call place (540, 300, 140) on the ring, as before
- *   PANEL     x 28, y 396, w 1024, h 951 (bottom 1347), radius 34 — the PORTRAIT_SPEC box, b12's 9:16 page's; it comes
- *             in from the right (APP_UP) and recedes down (appPose), as before
+ *   ORB       where b12 leaves her (lineEnd: the header row, (540, 317), d 124) until the call — the panel's top edge
+ *             clears her by 17 px; she glides to her call place (540, 300, 140) on the ring, as before
+ *   PANEL     x 28, y 396, w 1024, radius 34 (b12's box) — h 676 (bottom 1072): the tab bar, "Your documents" and five
+ *             slots (16:9's panel keeps the same fifth slot free at rest). It comes in from the right (APP_UP: 8 frames,
+ *             at rest 6 frames before the pointer reaches the …) and recedes down (appPose), as before
  *   TAB BAR   the spec's: labels only, size 32 (r = 32/14), side pad 8r, 100.57 tall
- *   HEADING   "Your documents" at 524.6 (bar + 28), title 42
- *   ROWS      the app's TWO-LINE row (written/Row.tsx 'stack': the name over the pill and its type word — the width that
- *             the one-line row needs for the pill beside the name is height here): name 40, pill 30, h 131, gap 16 →
- *             pitch 147; x 68, w 944. Slots 587.6 · 734.6 · 881.6 · 1028.6 · 1175.6 (the fifth ends 1306.6, 40 px inside
- *             the panel's bottom edge); four rows at rest end 1159.6 (16:9's panel keeps the same fifth slot free)
- *   MENU      the kit's Menu at size 36 (r = 36/14: items 77 tall, ≈ 494 wide), right edge on the … trigger's, opening
- *             UNDER the Opening hours row as 16:9's does: its top 8 px under the row's bottom edge (1020.6 → 1295.7) —
- *             over the right half of Price list (its … only; its name, pill and type word stay clear), never over its
- *             own row (Change.tsx MENU_GAP); the hop takes 16:9's bow
- *   CAPTION   the spec's band: centre x 540, row A's centre 1412, max width 940 (it was 1336, over the panel's bottom)
- *   NEW ROW   lands in the top slot from 9 % of its height above (≈ 12 px, as 16:9's), lifts out on the recede and
- *             unfolds into b14's page (x 56, y 1000, w 968, as before — the two-line row's own unfold path)
+ *   HEADING   "Your documents" at 520.6 (bar + 24: the line every 9:16 tab's first title sits on), title 42
+ *   ROWS      PORTRAIT_SPEC.row — written/Row.tsx 'inline', name 36, pill 28, h 85, gap 10 → pitch 95; x 68, w 944.
+ *             Slots on whole px (written/stage.ts LIST SLOTS): 577 · 672 · 767 · 862 · 957 (the fifth ends 1042, 30 px
+ *             inside the panel's bottom edge); "Your documents" → the list 56, as b08's
+ *   MENU      the kit's Menu at size 36 (items 77 tall, ≈ 494 wide), right edge on the … trigger's, opening under the
+ *             trigger as 16:9's (its top 6r under the trigger: over the Opening hours row's bottom padding, clear of its
+ *             pill), ≈ 844 → 1119 — over Price list's right half and, as 16:9's, past the panel's bottom edge (a dropdown
+ *             floats over the page)
+ *   CAPTION   the spec's band: centre x 540, row A's centre 1412, max width 940
+ *   NEW ROW   lands in the top slot from 14 % of its height above (≈ 12 px, as 16:9's), lifts out on the recede and
+ *             unfolds into b14's page (x 56, y 1000, w 968, as before — the one-line row's unfold, 16:9's path)
  *   GROUND    her key light by call/stage.ts callKey (change/Ground.tsx), the function b12's ground uses: continuous at
  *             the cut, and b14 lit as delivered
  */
@@ -173,9 +175,9 @@ const STAGES: Record<'land' | 'vert', ChangeStage> = (() => {
     }
     const size = 68;
     const lh = Math.round(size * 1.18);
-    // THE WHOLE TAB (fix:change — the 9:16 FULL-TAB block below): the PORTRAIT_SPEC panel band, the tab bar, "Your
-    // documents" and five slots of the app's two-line row; her orb stays where b12 left it, in the header row over the
-    // panel, until the call; the caption in its band
+    // THE WHOLE TAB (fix:change, refix-1 — the 9:16 FULL-TAB block above): the PORTRAIT_SPEC panel box, the tab bar,
+    // "Your documents" and five slots of b08 / b12's one-line row (the panel fits them); her orb stays where b12 left
+    // it, in the header row over the panel, until the call; the caption in its band
     const P = PORTRAIT_SPEC;
     return {
       W: 1080,
@@ -183,12 +185,12 @@ const STAGES: Record<'land' | 'vert', ChangeStage> = (() => {
       vertical,
       orb: { a: E.orb, b: E.orb, c: { x: 540, y: 300, d: 140 } },
       file: { x: 64, y: 480, w: 952, size: 56, rise: 56, park: null },
-      panel: { x: P.panel.x, y: P.panelTop, w: P.panel.w, radius: P.panel.radius, rise: 110, h: P.panelBottom - P.panelTop },
+      panel: { x: P.panel.x, y: P.panelTop, w: P.panel.w, radius: P.panel.radius, rise: 110 },
       tabs: { ...P.tabs },
       pad: P.pad,
       heading: P.type.title,
-      headTop: 28,
-      row: { size: 40, gap: 16, layout: 'stack', pill: 30 },
+      headTop: 24,
+      row: { ...P.row },
       menu: { size: 36, side: 'bottom' },
       caption: { ...P.caption },
       call: {
@@ -221,7 +223,8 @@ export const barH = (S: ChangeStage) => (44 * S.tabs.size) / 14;
 /** the list's top (frame px, the panel at rest) and the row pitch */
 export function listGeo(S: ChangeStage) {
   const top = S.panel.y + barH(S) + S.headTop;
-  const listY = top + S.heading * 1.5;
+  // (9:16: b08's "Your documents" → list gap, the list on a whole px — written/stage.ts LIST SLOTS)
+  const listY = S.vertical ? Math.round(top + 56) : top + S.heading * 1.5;
   const h = rowH(S);
   const pitch = h + S.row.gap;
   const x = S.panel.x + S.pad;

@@ -45,7 +45,7 @@ import { WrittenOrb } from './written/Orb';
 import { AppPanel } from './written/Panel';
 import { Row } from './written/Row';
 import { pileLift, SLIP_INK, SLIP_TEXT, slipHandoff, Slips } from './written/Slips';
-import { BADGE, ease, orbPose, ROWS, rowTop, seamLeft, writtenStage, type WrittenStage } from './written/stage';
+import { BADGE, ease, EYEBROW_EXIT_9x16, orbPose, ROWS, rowTop, seamLeft, writtenStage, type WrittenStage } from './written/stage';
 
 const SUNDAY_INK = MOMENT_LIGHTS.sunday.ink;
 const INK = meshShadowInk(KB_MESH);
@@ -104,6 +104,19 @@ function cursorKeys(S: WrittenStage, bar: TabBarGeometry): CursorKey[] {
  *  any row, caption or label (9:16: before the FAQ page lands under the field, 3.75 f after the release) */
 const exitFade = (t: number) => 1 - EASE_HOVER(Math.min(1, Math.max(0, (t - (W.add.up + 5)) / 6)));
 
+/**
+ * 9:16 (refix-1): frames after a landing spring (SPRING.land) starts until it stays within 1e-3 of rest FOR GOOD. A row
+ * that has landed keeps its sub-pixel layer (lib/glide.ts) until then and drops back to plain text once: the spring's
+ * overshoot crossed the old |1 − s| > 1e-3 test three times (layer → plain → layer → plain), and each switch moved the
+ * FAQ page row's glyphs 0.4 px (42.3 s). With the list's slots on whole px (written/stage.ts LIST SLOTS) the one switch
+ * is invisible. (16:9 keeps its test: its slots are whole px already and its frames must not change.)
+ */
+const LAND_SETTLED = (() => {
+  let last = 0;
+  for (let f = 0; f <= 150; f += 0.25) if (Math.abs(1 - springUnit(f, SPRING.land)) > 1e-3) last = f;
+  return last + 0.25;
+})();
+
 /** b07's seam drawing back the way it came (turn/Seam.tsx's line: the feathers fixed to the full line) */
 const SeamBack: React.FC<{ t: number; vertical: boolean; W: number; H: number }> = ({ t, vertical, W: FW, H: FH }) => {
   const q = seamLeft(t);
@@ -136,7 +149,7 @@ const ListRow: React.FC<{ t: number; S: WrittenStage; i: number }> = ({ t, S, i 
   const top = rowTop(i, t, S);
   // (9:16: a short drop — "Your documents" sits close over the top slot in the full-tab layout: never over it)
   const dy = -(1 - s) * (S.vertical ? 0.1 : 0.32) * S.row.h;
-  const moving = top.moving || Math.abs(1 - s) > 1e-3;
+  const moving = top.moving || (S.vertical ? t - at < LAND_SETTLED : Math.abs(1 - s) > 1e-3);
   return (
     <Row
       t={t}
@@ -180,7 +193,7 @@ const HoursRow: React.FC<{ t: number; S: WrittenStage }> = ({ t, S }) => {
   const shadowK = f < 1 ? 1 : 1 - smooth(W.fly[1], W.fly[1] + 6, t);
   const landed = t >= W.fly[1];
   const settle = landed ? springUnit(t - W.fly[1], SPRING.land) : 1;
-  const moving = (f > 0 && f < 1) || top.moving || u < 1 || Math.abs(1 - settle) > 1e-3;
+  const moving = (f > 0 && f < 1) || top.moving || u < 1 || (S.vertical ? landed && t - W.fly[1] < LAND_SETTLED : Math.abs(1 - settle) > 1e-3);
   const rowY = y + (landed ? (1 - settle) * -4 : 0);
   return (
     <>
@@ -222,18 +235,21 @@ const HoursRow: React.FC<{ t: number; S: WrittenStage }> = ({ t, S }) => {
   );
 };
 
-/** ● KNOWLEDGE BASE — label role, a sunday dot, rising above the panel on "knowledge" */
+/** ● KNOWLEDGE BASE — label role, a sunday dot, rising above the panel on "knowledge" (9:16: beside the orb, and gone by
+ *  the cut — written/stage.ts EYEBROW_EXIT_9x16: b09's orb glides through its place on the ring) */
 const Eyebrow: React.FC<{ t: number; S: WrittenStage }> = ({ t, S }) => {
   const L = useLayout();
   if (t < W.knowledge - 0.5) return null;
   const label = typeStyle('label', L.vertical, { tone: 'paper' });
   const size = label.fontSize as number;
   const dot = Math.round(size * 0.34);
-  const r = reveal(t, W.knowledge, { rise: 100, fade: 0.5 });
+  const exit = S.vertical ? EYEBROW_EXIT_9x16 : undefined;
+  if (exit && t >= exit.at + exit.dur) return null;
+  const r = reveal(t, W.knowledge, exit ? { rise: 100, fade: 0.5, exit } : { rise: 100, fade: 0.5 });
   return (
     <div style={{ position: 'absolute', left: S.eyebrow.x, top: S.eyebrow.y, transform: S.eyebrow.align === 'center' ? 'translateX(-50%)' : undefined }}>
       <span style={{ ...maskBox(0), display: 'block' }}>
-        <span style={{ ...revealStyle(r, undefined, t - W.knowledge < 20), display: 'flex', alignItems: 'center', gap: '0.55em', ...label, color: HOME.ink, whiteSpace: 'nowrap' }}>
+        <span style={{ ...revealStyle(r, undefined, t - W.knowledge < 20 || (!!exit && t > exit.at)), display: 'flex', alignItems: 'center', gap: '0.55em', ...label, color: HOME.ink, whiteSpace: 'nowrap' }}>
           <span style={{ display: 'inline-block', width: dot, height: dot, borderRadius: '50%', background: SUNDAY_INK, transform: 'translateY(-0.04em)' }} />
           KNOWLEDGE BASE
         </span>

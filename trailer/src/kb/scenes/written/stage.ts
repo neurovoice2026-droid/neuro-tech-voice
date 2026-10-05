@@ -21,9 +21,10 @@
  *
  * THE NEIGHBOURS: b07 → here is the same picture at frame 0. Here → b09: writtenEnd() (bottom) is this act's
  * last picture — the orb, the panel (its tab bar on Knowledge with the badge at 4), the whole Knowledge tab with the
- * four rows (Ready), the eyebrow, the ground (KB_MESH keyed on the orb). The cursor and the caption have left by the cut.
+ * four rows (Ready), the eyebrow (16:9; 9:16's has left over the last frames — EYEBROW_EXIT_9x16), the ground (KB_MESH
+ * keyed on the orb). The cursor and the caption have left by the cut.
  */
-import { EASE, smooth, springUnit } from '../../../lib/motion';
+import { EASE, springUnit } from '../../../lib/motion';
 import { WRITTEN_LOCAL as W } from '../../timing';
 import { turnEnd } from '../turn/stage';
 
@@ -106,26 +107,34 @@ export const rowHeight = (layout: 'stack' | 'inline', size: number, pill?: numbe
  *                with icons), size 32 → r = 32/14, side pad 8r, bar 44r = 100.57 tall
  *   TYPE         title 42 (card titles) · body 32 (input values, the drop line, Add page) · small 28 (descriptions, the
  *                divider) · label 30 (field labels, tone names) · url 30 (mono) · tone blurbs 26 · drop hint 27 — every
- *                UI text ≥ 26 (16:9: 36 / 28 / 23 / 26 / 26)
+ *                UI text ≥ 26 (16:9: 36 / 28 / 23 / 26 / 26). Descriptions wrap to the column with text-wrap: pretty
+ *                (refix-1: full-width lines, no one-word last line; "balance" set them in two half-width lines)
  *   GENERAL      (written/Panel.tsx GeneralPortrait) content top 520.6: "Name and language" + its description (one
- *                line) · Agent name | Language SIDE BY SIDE at 641.7 (two columns 460 wide, gap 24, fields 76 tall) ·
- *                "Tone" at 812.7 + its description (two lines) · the four tone cards in a 2 × 2 grid from 970.2 (464 ×
- *                154, gap 16; the icon beside the tone's name, the blurb under them; Professional chosen) — it ends at
- *                1294.2, 53 px inside the written panel's bottom edge (the blocks are laid out from measured wraps)
- *   KNOWLEDGE    content top 520.6 (= panel top + 124.6): "Add knowledge" · the drop zone 944 × 118 at +60 (the upload
+ *                line) · Agent name | Language SIDE BY SIDE at 641.7 (two columns 460 wide, gap 24, fields 72 tall — the web
+ *                page field's) · "Tone" at 808.7 + its description (two lines) · the four tone cards in a 2 × 2 grid from
+ *                966.2 (464 × 154, gap 16; the icon beside the tone's name, the blurb under them; Professional chosen) —
+ *                it ends at 1290.2, 57 px inside the written panel's bottom edge (the blocks are laid out from measured
+ *                wraps)
+ *   KNOWLEDGE    content top 520.6 (= panel top + 124.6): "Add knowledge" · the drop zone 944 × 106 at +56 (the upload
  *                icon beside "Drop files here or choose them", the hint "PDF, Word, TXT or Markdown · up to 10 MB each"
- *                under it) · "or add a web page" (the divider) at +198 · the web page field 650 × 76 + Add page 280 × 76
- *                (gap 14) in one row at +248 · "Your documents" at +356 · the list at +416
+ *                under it) · "or add a web page" (the divider) at +178 · "Web page address" (the field's label, as 16:9's;
+ *                refix-1) at +224 · the web page field 650 × 72 + Add page 280 × 72 (gap 14) in one row at +268 · "Your
+ *                documents" at +370 · the list at +426, rounded to a WHOLE px (see LIST SLOTS)
  *   ROWS         the app's ONE-LINE document row (written/Row.tsx layout 'inline', as 16:9's b12 / b13 lists): name 36,
- *                pill 28 (its type word 28), h 85 = rowHeight('inline', 36), gap 12 → pitch 97; x 68, w 944
- *   LIST SLOTS   4 rows (written, line): tops 936.6 · 1033.6 · 1130.6 · 1227.6 (the 4th ends 1312.6, 34 px over the
- *                panel's bottom edge). 5 rows (the change act's replace, both versions listed): portraitPanel(299, 5) —
- *                the same panel one pitch taller (h 1048), its top 97 higher and its bottom still 1347 (the caption's
- *                band untouched), slots 839.6 · 936.6 · 1033.6 · 1130.6 · 1227.6 — the header row is then the panel's:
- *                the orb must sit elsewhere (it is free in that act). Newest on top, as the app lists them
+ *                pill 28 (its type word 28), h 85 = rowHeight('inline', 36), gap 10 → pitch 95; x 68, w 944. The SAME row
+ *                in the written, call (hand-over), line and change acts (refix-1: the change act had a two-line row)
+ *   LIST SLOTS   4 rows (written, line): tops 947 · 1042 · 1137 · 1232 (the 4th ends 1317, 30 px over the panel's bottom
+ *                edge). The list's top is rounded to a whole px (refix-1), so every slot is: a row that has slid into its
+ *                slot on its sub-pixel layer (lib/glide.ts) drops back to plain text at EXACTLY the place it glided to —
+ *                at a fractional slot (936.6 before) Chrome's plain text snapped 0.4 px away from the layer's, a visible
+ *                shimmer of the list as rows settled (FAQ page's landing, 42.3 s). portraitPanel(top, 5) is one pitch taller
+ *                (5 slots, the bottom 95 px lower) — not used by any act now: the change act lists "Your documents" alone
+ *                (change/stage.ts 9:16 FULL-TAB). Newest on top, as the app lists them
  *   HEADER       (written) the orb at (130, 317), d 124 (68 … 192 — its left edge on the panel's content edge; it may
  *                reach into the top zone, it is not text); the slips pile at x 236, top 266, w 740 (h 102: its text from
- *                ≈ 287); the eyebrow ● KNOWLEDGE BASE left-aligned at x 236, top 300 (centred on the orb)
+ *                ≈ 287); the eyebrow ● KNOWLEDGE BASE left-aligned at x 236, top 300 (centred on the orb). It LEAVES
+ *                BEFORE THE CUT (EYEBROW_EXIT_9x16, refix-1): on b09's ring the orb glides from here to the centre straight
+ *                through the eyebrow's place, so the label is gone by then — it rose on "knowledge" and holds ≈ 1.6 s
  *   CAPTION      centre x 540, row A centre 1412, max width 940 (the call act's 1408 band)
  *   CURSOR       enters from (1130, 700); its rests are written/Written.tsx cursorKeys' (right of "Add knowledge";
  *                off the panel's right edge after Add page)
@@ -138,7 +147,7 @@ export const PORTRAIT_SPEC = {
   tabs: { size: 32, icons: false, padR: 8 },
   pad: 40,
   type: { title: 42, body: 32, small: 28, label: 30, url: 30 },
-  row: { size: 36, pill: 28, gap: 12, layout: 'inline' as const },
+  row: { size: 36, pill: 28, gap: 10, layout: 'inline' as const },
   header: {
     orb: { x: 130, y: 317, d: 124 },
     slips: { x: 236, y: 266, w: 740 },
@@ -160,17 +169,20 @@ export function portraitPanel(top: number, slots: number) {
   const cw = P.panel.w - 2 * pad;
   const y0 = top + barH + 24;
   const add = { x, y: y0, w: cw, h: 0 };
-  const drop = { x, y: y0 + 60, w: cw, h: 118, compact: true };
-  const divider = { y: drop.y + drop.h + 20 };
+  const drop = { x, y: y0 + 56, w: cw, h: 106, compact: true };
+  const divider = { y: drop.y + drop.h + 16 };
+  // "Web page address" over the field (16:9's label; refix-1)
+  const fieldLabel = { y: divider.y + 46 };
   const bw = 280;
-  const field = { x, y: divider.y + 50, w: cw - bw - 14, h: 76 };
+  const field = { x, y: fieldLabel.y + 44, w: cw - bw - 14, h: 72 };
   const button = { x: field.x + field.w + 14, y: field.y, w: bw, h: field.h };
   add.h = field.y + field.h - y0;
-  const docsY = field.y + field.h + 32;
-  const listY = docsY + 60;
+  const docsY = field.y + field.h + 30;
+  // (a WHOLE px: every slot is one — LIST SLOTS above)
+  const listY = Math.round(docsY + 56);
   const row = { ...P.row, h: rowHeight('inline', P.row.size) };
   const listEnd = listY + slots * row.h + (slots - 1) * row.gap;
-  const h = Math.round(listEnd + 34 - top);
+  const h = Math.round(listEnd + 30 - top);
   const panel = { x: P.panel.x, y: top, w: P.panel.w, h, radius: P.panel.radius, from: { ...P.panel.from } };
   return {
     panel,
@@ -179,7 +191,7 @@ export function portraitPanel(top: number, slots: number) {
     add,
     drop,
     divider,
-    fieldLabel: null,
+    fieldLabel,
     field,
     inputH: field.h,
     button,
@@ -261,6 +273,14 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
 
 export const writtenStage = (vertical: boolean): WrittenStage => (vertical ? STAGES.vert : STAGES.land);
 
+/**
+ * 9:16 (refix-1): the eyebrow ● KNOWLEDGE BASE leaves up through its mask over the act's last frames (written-local
+ * [at, at + dur]: EASE.in3, components/Type reveal's exit), gone on the act's last frame — b09's orb glides from the
+ * header's left to the centre on the ring, through the place the eyebrow held beside it (16:9's eyebrow sits over the
+ * panel, nowhere near her path: it leaves on the ring, in b09). call/Panel.tsx HandoffEyebrow continues the same exit.
+ */
+export const EYEBROW_EXIT_9x16 = { at: W.end - 7, dur: 6 } as const;
+
 /* ── the hand-off from b07 ──────────────────────────────────────── */
 
 /** the seam draws back the way it came (its far end returns to its start): 1 → 0 */
@@ -323,31 +343,6 @@ export function rowTop(i: number, t: number, S: WrittenStage) {
   return { y: S.list.y + slots * pitch, moving: W.rows.some((a, j) => j > i && t > a - 10 && t < a + 26) };
 }
 
-/* (fix:written: the written act no longer uses edgeFade / softK — in the full-tab layout nothing scrolls and no row ever
- *  goes under the panel's edge. They stay for change/App.tsx until the change act takes the 9:16 FULL-TAB SPEC.) */
-
-/**
- * 9:16 (fix:knowledge-9x16): a row whose top (screen px) is in a card's last few px — the tail of its slide out under the
- * bottom edge (a newer row has landed above it), or the start of its rise from under it (the end scroll) — fades with that
- * sliver, where only its hairline border shows: the spring's slow tail never leaves a 1–3 px line along the edge. 1 for
- * any row whose top is 8 px or more above the edge (every row at rest), so the resting pictures are untouched.
- */
-export const edgeFade = (y: number, edge: number) => 1 - smooth(edge - 8, edge - 2, y);
-
-/**
- * 9:16 (polish round 2): THE SOFT BOTTOM EDGE. A row pushed out under the card's fixed bottom edge (a newer row has landed
- * above it), or rising back from under it, was sliced mid-glyph by that edge for several frames. While a row is below
- * the list's last resting slot it is drawn through a soft edge instead (written/Row.tsx SoftBottom): its content fades
- * out over the last SOFT_EDGE px above the card's edge. The edge's strength `softK` follows the row's displacement below
- * its resting slot — 0 at rest (no mask at all: every resting picture is untouched, each row whole as before), 1 once it
- * has moved SOFT_RAMP px down (before its pill's bottom, 29 px above the edge at rest, can reach the edge). The rows
- * above, settling INTO that slot, never take it; nor does a row wholly under the edge (edgeFade has it at 0 opacity
- * there: no mask layer for a row nothing of which is drawn).
- */
-export const SOFT_EDGE = 56;
-export const SOFT_RAMP = 24;
-export const softK = (y: number, rest: number, edge: number) => (y >= edge - 2 ? 0 : smooth(rest, rest + SOFT_RAMP, y));
-
 /** the badge's count over time (the app counts every document, Reading ones too) */
 export const BADGE = W.rows.map((at, i) => ({ at, n: i + 1 }));
 
@@ -356,7 +351,7 @@ export const BADGE = W.rows.map((at, i) => ({ at, n: i + 1 }));
 /**
  * writtenEnd(vertical): what the cut into b09 hands over (frame px). The tab bar is on Knowledge, its badge at
  * 4; the rows are newest-first (FAQ page, Cancellation policy, Opening hours, Price list), all Ready; the eyebrow
- * holds; the cursor and the caption have left.
+ * holds (16:9; 9:16's has just left: EYEBROW_EXIT_9x16); the cursor and the caption have left.
  *   orb      centre + diameter (the FluidOrb drawn at 300 px, scaled), her volume back near rest
  *   panel    its box + corner radius; tabs: label size / icons / strip padding (r = size / 14, bar 44r tall)
  *   rows     each row's box at the end, by name (the Opening hours row is the one b10 lifts into the page)

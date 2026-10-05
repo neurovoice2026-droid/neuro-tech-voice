@@ -17,8 +17,8 @@
  *
  * 16:9 puts the two cards side by side (the panel is a wide desktop window); 9:16 stacks them in ONE column and shows
  * the WHOLE tab at every moment (fix:written — written/stage.ts's 9:16 FULL-TAB SPEC: General's fields side by side and
- * its four tone cards 2 × 2; Knowledge's drop zone compact, the field and Add page in one row, the rows one-line; nothing
- * scrolls, nothing is cut by the panel's edge). Everything is laid out in FRAME px at the panel's resting place; the
+ * its four tone cards 2 × 2; Knowledge's drop zone compact, "Web page address" over the field and Add page in one row,
+ * the rows one-line; nothing scrolls, nothing is cut by the panel's edge). Everything is laid out in FRAME px at the panel's resting place; the
  * whole panel rides one transform while it comes in (written/stage.ts panelPose).
  */
 import React from 'react';
@@ -212,7 +212,7 @@ const GeneralPortrait: React.FC<{ S: WrittenStage }> = ({ S }) => {
   const fieldH = S.inputH;
   const descLH = T.small * 1.3;
   // (the gaps: the panel's spare height — ≈ 75 px with the description on one line — shared between the blocks; a
-  // two-line description still ends the grid ≈ 17 px inside the written panel's bottom edge)
+  // two-line description still ends the grid ≈ 20 px inside the written panel's bottom edge)
   const fieldsTop = S.add.y + T.title * 1.35 + descLH * wrapCount(NAME_DESC, T.small, WT.regular, w) + 28;
   const colGap = 24;
   const colW = (w - colGap) / 2;
@@ -256,7 +256,8 @@ const GeneralPortrait: React.FC<{ S: WrittenStage }> = ({ S }) => {
         </div>
       ))}
       <div style={{ position: 'absolute', left: x, top: toneY, ...ui(T.title, WT.medium), color: APP.foreground }}>Tone</div>
-      <div style={{ position: 'absolute', left: x, top: toneY + T.title * 1.35, width: w, ...ui(T.small, WT.regular), whiteSpace: 'normal', textWrap: 'balance', lineHeight: 1.3, color: APP.mutedFg }}>
+      {/* (pretty: the column's full measure, never a one-word last line — balance halved it; refix-1) */}
+      <div style={{ position: 'absolute', left: x, top: toneY + T.title * 1.35, width: w, ...ui(T.small, WT.regular), whiteSpace: 'normal', textWrap: 'pretty', lineHeight: 1.3, color: APP.mutedFg }}>
         {TONE_DESC}
       </div>
       {TONES.map((tn, i) => {

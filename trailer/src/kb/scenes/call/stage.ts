@@ -2,7 +2,8 @@
  * b09–b11 · THE CALL — the act's LAYOUT and every POSE as a pure function of act-local time (no React).
  *
  * FRAME 0 IS b08's LAST PICTURE (scenes/written/stage.ts writtenEnd): Ava's orb at rest, the app panel on Knowledge
- * (its badge at 4, the four rows Ready), the eyebrow ● KNOWLEDGE BASE, her KB_MESH ground keyed on the orb.
+ * (its badge at 4, the four rows Ready), the eyebrow ● KNOWLEDGE BASE (16:9 — 9:16's has left over b08's last frames,
+ * clear of the orb's glide from the header's left: written/stage.ts EYEBROW_EXIT_9x16), her KB_MESH ground keyed on the orb.
  *
  * THREE FRAMINGS, one continuous set of moves (each element glides from pose to pose — nothing cuts):
  *

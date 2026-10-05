@@ -47,7 +47,7 @@ import { ChangeGround } from './change/Ground';
 import { Handoff, useLinePointer } from './change/Handoff';
 import { NEW_LINES, NewRow, newRowBox } from './change/NewRow';
 import { ChangeOrb } from './change/Orb';
-import { changeStage, filePose, orbPose } from './change/stage';
+import { APP_UP, changeStage, filePose, orbPose } from './change/stage';
 import { Pointer } from './line/Pointer';
 
 const SUNDAY = MOMENT_LIGHTS.sunday.ink;
@@ -94,8 +94,12 @@ function cursorKeys(start: XY, drag: { start: XY; end: XY }, dots: XY, rep: XY, 
  *  frames later), never at rest over the list that moves under it */
 const pointerFade = (t: number) => 1 - EASE_HOVER(Math.min(1, Math.max(0, (t - (K.replace.up + 4)) / 6)));
 /** after typing it comes back only as the file starts to step away (an arrow, over the app) — not as an I-beam over a
- *  page that is leaving */
-const pointerBack = (t: number) => (t < K.toMenu[0] || t >= K.park[0] + 2 ? 1 : smooth(K.park[0], K.park[0] + 2, t));
+ *  page that is leaving. 9:16 (refix-1): only as the app's sheet lands (stage.ts APP_UP: from a frame before it is at
+ *  rest, ≈ 45 px out, to a frame after) — never over rows still sliding in from the right */
+const pointerBack = (t: number, vertical: boolean) => {
+  if (vertical) return t < K.toMenu[0] || t >= APP_UP[1] + 1 ? 1 : smooth(APP_UP[1] - 1, APP_UP[1] + 1, t);
+  return t < K.toMenu[0] || t >= K.park[0] + 2 ? 1 : smooth(K.park[0], K.park[0] + 2, t);
+};
 
 /**
  * The hop's bow (kit/cursor.ts: a vertical move bows to the right). fix:change: 9:16's … menu no longer flips above its
@@ -104,14 +108,6 @@ const pointerBack = (t: number) => (t < K.toMenu[0] || t >= K.park[0] + 2 ? 1 : 
  * both framings, so both take 16:9's hop.
  */
 const HOP_BEND = 0.06;
-/**
- * 9:16 (fix:change): the app's TWO-LINE row centres its … trigger on the row, so a menu hung 6r under the trigger (16:9's
- * rule) would lie over the row's own status line ("Ready · 1 passage · Text"); it hangs MENU_GAP px under the row's bottom
- * edge instead — where 16:9's one-line row puts it too (its trigger's bottom + 6r is that row's bottom edge, within a few
- * px). Its open spring slides it in from 8r above: never as far up as the status line.
- */
-const MENU_GAP = 8;
-
 export const Change: React.FC = () => {
   const L = useLayout();
   const v = L.vertical;
@@ -153,8 +149,8 @@ export const Change: React.FC = () => {
   const dots = rowMenuRect(old.x, old.y, old.w, old.h, S.row.size);
   const menu = useMenu({
     x: dots.x + dots.w,
-    // (`y` is where the menu's top hangs 6r under)
-    y: S.row.layout === 'stack' ? old.y + old.h + MENU_GAP - (6 * S.menu.size) / 14 : dots.y + dots.h,
+    // (`y` is where the menu's top hangs 6r under: the trigger's bottom — both framings list one-line rows since refix-1)
+    y: dots.y + dots.h,
     size: S.menu.size,
     side: S.menu.side,
   });
@@ -207,7 +203,7 @@ export const Change: React.FC = () => {
             echoY={null}
             tint={(c, j) => (c === 2 && j >= 4 ? { color: SUNDAY, k: keyK } : null)}
           />
-          <div style={{ position: 'absolute', inset: 0, opacity: pointerFade(t) * pointerBack(t) < 0.999 ? pointerFade(t) * pointerBack(t) : undefined }}>
+          <div style={{ position: 'absolute', inset: 0, opacity: pointerFade(t) * pointerBack(t, v) < 0.999 ? pointerFade(t) * pointerBack(t, v) : undefined }}>
             <Pointer keys={keys} t={t} text={text} />
           </div>
         </PushWipe>

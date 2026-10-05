@@ -7,7 +7,9 @@
  * call takes the stage); 9:16 it settles, receded, under the call, and the Opening hours row is lifted out of it in
  * the stop-time (call/Page.tsx) before it sinks away under the frame.
  *
- * Also b08's eyebrow ● KNOWLEDGE BASE (Written.tsx's Eyebrow at rest), leaving up through its mask on the ring.
+ * Also b08's eyebrow ● KNOWLEDGE BASE (Written.tsx's Eyebrow at rest), leaving up through its mask on the ring (16:9).
+ * 9:16 (refix-1): it has already left over b08's last frames (written/stage.ts EYEBROW_EXIT_9x16) — the orb glides from
+ * the header's left through its place on the ring — so here it is that same exit, run on in this act's time: nothing.
  */
 import React from 'react';
 import { reveal, revealStyle } from '../../../components/Type';
@@ -19,7 +21,7 @@ import { HOME, MOMENT_LIGHTS } from '../../palettes';
 import { CALL_LOCAL as C, WRITTEN_LOCAL as W } from '../../timing';
 import { AppPanel } from '../written/Panel';
 import { Row } from '../written/Row';
-import { BADGE, ROWS, rowTop, writtenStage, type WrittenStage } from '../written/stage';
+import { BADGE, EYEBROW_EXIT_9x16, ROWS, rowTop, writtenStage, type WrittenStage } from '../written/stage';
 import { panelPose, type CallStage } from './stage';
 
 const SUNDAY_INK = MOMENT_LIGHTS.sunday.ink;
@@ -65,10 +67,12 @@ export const HandoffPanel: React.FC<{ t: number; S: CallStage; ink: string; hide
   );
 };
 
-/** b08's eyebrow at rest, leaving up through its mask on the ring */
+/** b08's eyebrow at rest, leaving up through its mask on the ring (9:16: b08's own exit, finished before the cut) */
 export const HandoffEyebrow: React.FC<{ t: number; S: CallStage }> = ({ t, S }) => {
   const L = useLayout();
   if (t > C.ring + 14) return null;
+  // (9:16: written-local → this act's frames; the exit ends on b08's last frame, so t ≥ 0 is past it)
+  if (S.vertical && t >= EYEBROW_EXIT_9x16.at + EYEBROW_EXIT_9x16.dur - W.end) return null;
   const WS = writtenStage(S.vertical);
   const label = typeStyle('label', L.vertical, { tone: 'paper' });
   const size = label.fontSize as number;

@@ -25,9 +25,11 @@
  *   PANEL   portraitPanel(396, 4): x 28, y 396, w 1024, h 951, radius 34 (b08's at writtenEnd, b09's hand-over); the
  *           tab bar labels only, 32 (100.57 tall), Knowledge's badge at 4; content x 68, w 944
  *   KNOWLEDGE (the page comes back on it) b08's whole tab at rest: Add knowledge · the drop zone · or add a web page ·
- *           the field (placeholder) + Add page (disabled) · Your documents · the four rows Ready at b08's slots
- *           (936.6 · 1033.6 · 1130.6 · 1227.6, one-line rows, name 36, pill 28) — line/Panel.tsx KnowledgePortrait
- *   CONVERSATION  title 42 at 520.6 (Add knowledge's line) · the description 28 (two lines) · the label 30 · the
+ *           Web page address · the field (placeholder) + Add page (disabled) · Your documents · the four rows Ready at
+ *           b08's slots (947 · 1042 · 1137 · 1232 since refix-1, one-line rows, name 36, pill 28 — the change act's rows
+ *           too) — line/Panel.tsx KnowledgePortrait
+ *   CONVERSATION  title 42 at 520.6 (Add knowledge's line) · the description 28 (two lines, text-wrap: pretty — the
+ *           column's measure, refix-1) · the label 30 · the
  *           field from ≈ 731: the owner's line at 64 (the old push's peak was 60), a phrase per row ("I don't have an
  *           answer for that," / "and I don't want to guess." / "I'll ask the team to" / "call you back today."), the
  *           placeholder the same way in three, the box filling down to 40 px over the SaveBar's hairline (a phone's
