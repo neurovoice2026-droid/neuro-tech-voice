@@ -33,7 +33,7 @@ import { Easing } from 'remotion';
 import { EASE, springUnit } from '../../../lib/motion';
 import { CHANGE_LOCAL as K, LINE_LOCAL } from '../../timing';
 import { lineEnd } from '../line/stage';
-import { PORTRAIT_SPEC, rowHeight } from '../written/stage';
+import { PORTRAIT_SPEC, portraitPanel, rowHeight } from '../written/stage';
 
 export type XY = { x: number; y: number };
 export type Box = { x: number; y: number; w: number; h: number };
@@ -70,8 +70,9 @@ export type ChangeStage = {
    *  top and scale (16:9). 9:16 has no parked thumbnail (null): the file steps back and leaves left as the app takes the
    *  frame, and the new version lands in the list by itself (the global 9:16 pass: a 17 px thumbnail read as clutter) */
   file: { x: number; y: number; w: number; size: number; rise: number; park: { right: number; y: number; k: number } | null };
-  /** the agent page on Knowledge: box (16:9: b12's panel geometry set lower; both: its height fitting the tab bar, "Your
-   *  documents" and five rows whole — `h` fixed overrides it), corner radius, how far below it starts rising */
+  /** the agent page on Knowledge: box (16:9: b12's panel geometry set lower, its height fitting the tab bar, "Your
+   *  documents" and five rows whole; 9:16: `h` fixed — b12's panel box, which holds them with room to spare), corner
+   *  radius, how far below it starts rising */
   panel: { x: number; y: number; w: number; radius: number; rise: number; h?: number };
   /** the tab bar: label size, icons, the strip's side padding (× r) — b12's */
   tabs: { size: number; icons: boolean; padR: number };
@@ -114,28 +115,39 @@ export type ChangeStage = {
  * written/stage.ts's PORTRAIT_SPEC, WHOLE at every moment the app is on screen: four rows, five while both versions are
  * listed, four again; the menu under its trigger. refix-1: the rows are b08 / b12's ONE-LINE rows (the two-line row
  * fix:change used made the same list read as two different designs ten seconds apart, and left ≈ 188 px of white under
- * the fourth row) and the panel fits them, as 16:9's does. Layout px (× 2 in the 2160 × 3840 master):
+ * the fourth row) and the panel fits them, as 16:9's does. fix:change-comp: the sheet takes the line act's panel BOX
+ * (below: PANEL) — the 676-tall sheet left ≈ 316 px of ground between its bottom edge and the caption's ink (written / line
+ * ≈ 40, 16:9's b13 ≈ 69), so the sheet and the caption read as two objects. Layout px (× 2 in the 2160 × 3840 master):
  *
  *   ORB       where b12 leaves her (lineEnd: the header row, (540, 317), d 124) until the call — the panel's top edge
  *             clears her by 17 px; she glides to her call place (540, 300, 140) on the ring, as before
- *   PANEL     x 28, y 396, w 1024, radius 34 (b12's box) — h 676 (bottom 1072): the tab bar, "Your documents" and five
- *             slots (16:9's panel keeps the same fifth slot free at rest). It comes in from the right (APP_UP: 8 frames,
- *             at rest 6 frames before the pointer reaches the …) and recedes down (appPose), as before
+ *   PANEL     x 28, y 396, w 1024, h 951, radius 34 — b08 / b12's panel box exactly (portraitPanel(396, 4): bottom
+ *             1347, 40 px over the caption's caps at ≈ 1387, as in the written and line acts; fix:change-comp, was h 676,
+ *             bottom 1072). The same sheet in every 9:16 visit of the agent page; its content stays 16:9's b13 tab: the
+ *             tab bar, "Your documents" and the rows — the page's own white under them (≈ 400 px at four rows, 305 at
+ *             five: a short list on a phone's page). WHY NOT b12's whole tab here (Add knowledge over Your documents):
+ *             under that block the list starts at 947 and five one-line rows end at 947 + 5 × 85 + 4 × 10 = 1412 — 65 px
+ *             past the panel's bottom edge and 25 px into the caption's ink — so the replace beat's fifth row could not be
+ *             whole; and the … menu, hanging under the Opening hours row (1137), would run ≈ 1214 → 1489, across the
+ *             caption "Change the document." (ink ≈ 1387 → 1450). It comes in from the right (APP_UP: 8 frames, at rest
+ *             6 frames before the pointer reaches the …) and recedes down (appPose), as before
  *   TAB BAR   the spec's: labels only, size 32 (r = 32/14), side pad 8r, 100.57 tall
  *   HEADING   "Your documents" at 520.6 (bar + 24: the line every 9:16 tab's first title sits on), title 42
  *   ROWS      PORTRAIT_SPEC.row — written/Row.tsx 'inline', name 36, pill 28, h 85, gap 10 → pitch 95; x 68, w 944.
- *             Slots on whole px (written/stage.ts LIST SLOTS): 577 · 672 · 767 · 862 · 957 (the fifth ends 1042, 30 px
+ *             Slots on whole px (written/stage.ts LIST SLOTS): 577 · 672 · 767 · 862 · 957 (the fifth ends 1042, 305 px
  *             inside the panel's bottom edge); "Your documents" → the list 56, as b08's
  *   MENU      the kit's Menu at size 36 (items 77 tall, ≈ 494 wide), right edge on the … trigger's, opening under the
  *             trigger as 16:9's (its top 6r under the trigger: over the Opening hours row's bottom padding, clear of its
- *             pill), ≈ 844 → 1119 — over Price list's right half and, as 16:9's, past the panel's bottom edge (a dropdown
- *             floats over the page)
+ *             pill), ≈ 844 → 1119 — over Price list's right half, inside the sheet (228 px over its bottom edge)
  *   CAPTION   the spec's band: centre x 540, row A's centre 1412, max width 940
  *   NEW ROW   lands in the top slot from 14 % of its height above (≈ 12 px, as 16:9's), lifts out on the recede and
  *             unfolds into b14's page (x 56, y 1000, w 968, as before — the one-line row's unfold, 16:9's path)
  *   GROUND    her key light by call/stage.ts callKey (change/Ground.tsx), the function b12's ground uses: continuous at
  *             the cut, and b14 lit as delivered
  */
+/** 9:16: the sheet's height — the line act's panel box (portraitPanel(396, 4): 951, bottom 1347; fix:change-comp) */
+export const SHEET_H_9x16 = portraitPanel(PORTRAIT_SPEC.panelTop, 4).panel.h;
+
 const STAGES: Record<'land' | 'vert', ChangeStage> = (() => {
   const make = (vertical: boolean): ChangeStage => {
     const E = lineEnd(vertical);
@@ -185,7 +197,7 @@ const STAGES: Record<'land' | 'vert', ChangeStage> = (() => {
       vertical,
       orb: { a: E.orb, b: E.orb, c: { x: 540, y: 300, d: 140 } },
       file: { x: 64, y: 480, w: 952, size: 56, rise: 56, park: null },
-      panel: { x: P.panel.x, y: P.panelTop, w: P.panel.w, radius: P.panel.radius, rise: 110 },
+      panel: { x: P.panel.x, y: P.panelTop, w: P.panel.w, radius: P.panel.radius, rise: 110, h: SHEET_H_9x16 },
       tabs: { ...P.tabs },
       pad: P.pad,
       heading: P.type.title,

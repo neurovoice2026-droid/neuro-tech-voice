@@ -17,7 +17,8 @@
  *
  * Both framings draw the same tree: the panel, the tab bar, "Your documents" and the rows over it, the menu over them.
  * 9:16 (fix:change) shows the WHOLE tab as 16:9 does — the panel holds five rows whole (change/stage.ts 9:16 FULL-TAB), so
- * no row ever goes under its edge: no clip box, no soft edge.
+ * no row ever goes under its edge: no clip box, no soft edge. fix:change-comp: the panel is b08 / b12's box (h 951, bottom
+ * 1347, 40 px over the caption), the same sheet as the line act's.
  */
 import React from 'react';
 import { subpixel } from '../../../lib/glide';
