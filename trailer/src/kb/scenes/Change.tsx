@@ -64,7 +64,7 @@ type XY = { x: number; y: number };
  * natural pace into the right-hand padding of "Replace with new file" (the label stays readable through the press).
  * One cursor shape at a time: the I-beam only while the file is the thing being edited.
  */
-function cursorKeys(start: XY, drag: { start: XY; end: XY }, dots: XY, rep: XY): CursorKey[] {
+function cursorKeys(start: XY, drag: { start: XY; end: XY }, dots: XY, rep: XY, hopBend: number): CursorKey[] {
   return [
     // hidden, where b12 left it (on Save changes)
     { at: 0, x: start.x, y: start.y, action: 'hide' },
@@ -78,8 +78,10 @@ function cursorKeys(start: XY, drag: { start: XY; end: XY }, dots: XY, rep: XY):
     { at: K.toMenu[1], x: dots.x, y: dots.y, dur: K.toMenu[1] - K.toMenu[0], bend: 0.1 },
     { at: K.menu.down, x: dots.x, y: dots.y, action: 'press' },
     { at: K.menu.up, x: dots.x, y: dots.y, action: 'release' },
-    // the hop into the open menu, once it is fully drawn: "Replace with new file"
-    { at: K.hop[1], x: rep.x, y: rep.y, dur: K.hop[1] - K.hop[0], bend: 0.06 },
+    // the hop into the open menu, once it is fully drawn: "Replace with new file" (9:16: the menu opens ABOVE its trigger,
+    // so Remove lies between them — the hop bows out past the menu's right edge and comes into Replace from the right,
+    // never over Remove: HOP_BEND)
+    { at: K.hop[1], x: rep.x, y: rep.y, dur: K.hop[1] - K.hop[0], bend: hopBend },
     { at: K.replace.down, x: rep.x, y: rep.y, action: 'press' },
     { at: K.replace.up, x: rep.x, y: rep.y, action: 'release' },
     // its work done, it flicks off to the right (past the panel's edge), clear of the rows that shift down under it as
@@ -95,6 +97,19 @@ const pointerFade = (t: number) => 1 - EASE_HOVER(Math.min(1, Math.max(0, (t - (
 /** after typing it comes back only as the file starts to step away (an arrow, over the app) — not as an I-beam over a
  *  page that is leaving */
 const pointerBack = (t: number) => (t < K.toMenu[0] || t >= K.park[0] + 2 ? 1 : smooth(K.park[0], K.park[0] + 2, t));
+
+/**
+ * 9:16's flipped … menu (polish round 2). It opens above its trigger, so its order (Read again · Replace with new file ·
+ * Remove — TabKnowledge.tsx, kept) puts Remove nearest the pointer: a straight hop lit Remove red under the cursor on its
+ * way up, which read as the owner about to delete the file. Two changes, 9:16 only (16:9's menu opens below: unchanged):
+ *   MENU_CLEAR  the menu's bottom edge sits this far above the row's top edge (not 6r above the … — that edge cut the
+ *               top of the row's own title "Opening hours")
+ *   HOP_BEND    the hop's bow (kit/cursor.ts: a vertical move bows to the right): the hotspot rises outside the menu's
+ *               right edge (≥ 15 px past Remove's box at its nearest) and comes into Replace's right-hand padding from
+ *               the right, entering it only in the last tenth of the move
+ */
+const MENU_CLEAR = 8;
+const HOP_BEND = { land: 0.06, vert: 0.34 } as const;
 
 export const Change: React.FC = () => {
   const L = useLayout();
@@ -137,7 +152,8 @@ export const Change: React.FC = () => {
   const dots = rowMenuRect(old.x, old.y, old.w, old.h, S.row.size);
   const menu = useMenu({
     x: dots.x + dots.w,
-    y: S.menu.side === 'top' ? dots.y : dots.y + dots.h,
+    // (side 'top': `y` is where the menu's bottom hangs 6r above — the … trigger's top, or higher so it clears the row)
+    y: S.menu.side === 'top' ? Math.min(dots.y, old.y - MENU_CLEAR + (6 * S.menu.size) / 14) : dots.y + dots.h,
     size: S.menu.size,
     side: S.menu.side,
   });
@@ -148,9 +164,11 @@ export const Change: React.FC = () => {
   // icon 16r, gap 6r, then the label) — the arrow's body falls on empty padding, never on a letter
   const mr = S.menu.size / 14;
   const labelEnd = item.x + 28 * mr + measureText('Replace with new file', { size: S.menu.size, weight: WT.regular + 20 });
-  const repX = Math.min(item.x + item.w - 4 * mr, labelEnd + 10 * mr);
+  // (9:16: a little further right — 15r past the label, 8r inside the item's edge — so the bowed hop's last stretch comes
+  // in from the right over the separator, never over Remove: HOP_BEND)
+  const repX = v ? Math.min(item.x + item.w - 8 * mr, labelEnd + 15 * mr) : Math.min(item.x + item.w - 4 * mr, labelEnd + 10 * mr);
   const keys = useMemo(
-    () => cursorKeys(start, drag, { x: dots.cx + 3, y: dots.cy + 4 }, { x: repX, y: item.cy + 2 }),
+    () => cursorKeys(start, drag, { x: dots.cx + 3, y: dots.cy + 4 }, { x: repX, y: item.cy + 2 }, v ? HOP_BEND.vert : HOP_BEND.land),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [v, start.x, start.y, drag.start.x, drag.start.y, drag.end.x, dots.cx, dots.cy, repX, item.cy],
   );

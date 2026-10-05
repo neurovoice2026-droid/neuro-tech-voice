@@ -294,8 +294,13 @@ const PILL_ROLL = { stiffness: 340, damping: 30, mass: 1 };
  * The status pill. `states` over time (sorted). Each change ROLLS: the old label and icon leave up
  * through the pill's mask as the new ones rise into it, the pill's width springs to the new label, the
  * tint / keyline / ink cross over. The spinner turns at the app's animate-spin (1 turn / s).
+ *
+ * `lead` (opt-in, kb polish round 2): on a roll to a LONGER label the width leads the text — it is at the new label's
+ * width by half the roll (an ease-out on the same spring), before the rising label's tail can reach the pill's edge
+ * (on the plain spring the width trailed the text: for ~2 frames "Ready · 2 passages" showed with its last letter
+ * clipped). A roll to a shorter label, and every pill without `lead`, is unchanged; at rest the width is identical.
  */
-export const Pill: React.FC<{ t: number; states: readonly PillState[]; size?: number; style?: React.CSSProperties }> = ({ t, states, size: sizeProp, style }) => {
+export const Pill: React.FC<{ t: number; states: readonly PillState[]; size?: number; lead?: boolean; style?: React.CSSProperties }> = ({ t, states, size: sizeProp, lead = false, style }) => {
   const L = useLayout();
   useKitFaces();
   const size = sizeProp ?? L.pick(28, 28);
@@ -307,7 +312,8 @@ export const Pill: React.FC<{ t: number; states: readonly PillState[]; size?: nu
   const em = size;
   const textW = (s: PillState) => measureText(pillText(s), { size, weight: W.medium });
   const inner = (s: PillState) => em * 1.0 + 0.33 * em + textW(s);
-  const wNow = prev ? inner(prev) + (inner(cur) - inner(prev)) * Math.min(1, roll) : inner(cur);
+  const wu = prev && lead && inner(cur) > inner(prev) ? 1 - Math.pow(1 - Math.min(1, roll / 0.5), 3) : Math.min(1, roll);
+  const wNow = prev ? inner(prev) + (inner(cur) - inner(prev)) * wu : inner(cur);
   const A = pillLook(cur);
   const B = prev ? pillLook(prev) : A;
   const u = Math.min(1, roll);

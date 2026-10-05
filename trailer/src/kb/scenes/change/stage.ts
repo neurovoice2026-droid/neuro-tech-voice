@@ -214,11 +214,16 @@ export const slotOpen = (t: number) => (t < K.fly[0] + 2 ? 0 : springUnit(t - (K
 /** the old row's slot closing after it leaves (0 → 1): Price list slides up into it */
 export const slotClose = (t: number) => (t < K.oldOut + 4 ? 0 : springUnit(t - (K.oldOut + 4), SLOT));
 
+/** the new row's slot closing as it LIFTS out of the list (0 → 1, from the lift, polish round 2): the rows under it slide
+ *  up into the place it leaves — under the lifted paper — as the app recedes, so the list never shows an empty white
+ *  slot where the row was (the app's own idiom: the list closed the same way when the old row left) */
+export const liftClose = (t: number) => (t < K.lift[0] ? 0 : springUnit(t - K.lift[0], SLOT));
+
 /** row k (0..3 of the original newest-first list) at t: its y (panel-local offset from the list top, in pitches) */
 export function rowSlot(k: number, t: number) {
   const open = slotOpen(t);
   const close = k > OLD ? slotClose(t) : 0;
-  return k + open - close;
+  return k + open - close - liftClose(t);
 }
 
 /* ── the moves ──────────────────────────────────────────────────── */

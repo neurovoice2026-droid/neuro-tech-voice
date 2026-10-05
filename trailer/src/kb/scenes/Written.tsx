@@ -42,9 +42,9 @@ import { turnStage } from './turn/stage';
 import { WrittenGround } from './written/Ground';
 import { WrittenOrb } from './written/Orb';
 import { AppPanel } from './written/Panel';
-import { Row } from './written/Row';
+import { Row, SoftBottom } from './written/Row';
 import { pileLift, SLIP_INK, SLIP_TEXT, slipHandoff, Slips } from './written/Slips';
-import { BADGE, ease, edgeFade, orbPose, ROWS, rowTop, scrollAt, seamLeft, writtenStage, type WrittenStage } from './written/stage';
+import { BADGE, ease, edgeFade, orbPose, ROWS, rowTop, scrollAt, seamLeft, softK, writtenStage, type WrittenStage } from './written/stage';
 
 const SUNDAY_INK = MOMENT_LIGHTS.sunday.ink;
 const INK = meshShadowInk(KB_MESH);
@@ -103,6 +103,12 @@ function cursorKeys(S: WrittenStage, bar: TabBarGeometry): CursorKey[] {
  *  any row, caption or label (9:16: before the FAQ page lands under the field, 3.75 f after the release) */
 const exitFade = (t: number) => 1 - EASE_HOVER(Math.min(1, Math.max(0, (t - (W.add.up + 5)) / 6)));
 
+/** 9:16, before the end scroll: the soft bottom edge's strength for a list row whose top is at `y` (list px = screen px
+ *  until the scroll) — written/stage.ts softK against the second slot, the lowest one a resting row has (polish round 2:
+ *  a row pushed down under the card's edge as a newer one lands fades through it instead of being sliced). From the
+ *  scroll on it is 0: the end scroll is as before */
+const pushSoft = (t: number, S: WrittenStage, y: number) => (S.scroll && t < S.scroll.at[0] ? softK(y, S.list.y + S.row.h + S.row.gap, S.panel.y + S.panel.h) : 0);
+
 /** b07's seam drawing back the way it came (turn/Seam.tsx's line: the feathers fixed to the full line) */
 const SeamBack: React.FC<{ t: number; vertical: boolean; W: number; H: number }> = ({ t, vertical, W: FW, H: FH }) => {
   const q = seamLeft(t);
@@ -139,6 +145,7 @@ const ListRow: React.FC<{ t: number; S: WrittenStage; i: number }> = ({ t, S, i 
   // (9:16: drawn inside the scrolling content box — its top on screen is y − the scroll)
   const edge = S.scroll ? edgeFade(top.y + dy - scrollAt(t, S), S.panel.y + S.panel.h) : 1;
   return (
+    <SoftBottom k={pushSoft(t, S, top.y + dy)} edge={S.panel.y + S.panel.h} w={S.W} h={S.H}>
     <Row
       t={t}
       x={S.list.x}
@@ -151,10 +158,12 @@ const ListRow: React.FC<{ t: number; S: WrittenStage; i: number }> = ({ t, S, i 
       name={ROWS[i].name}
       pill={PILLS[i]}
       pillSize={S.row.pill}
+      pillLead
       opacity={smooth(0, 0.3, s) * edge}
       scale={mix(0.985, 1, Math.min(1, s))}
       moving={moving}
     />
+    </SoftBottom>
   );
 };
 
@@ -188,7 +197,7 @@ const HoursRow: React.FC<{ t: number; S: WrittenStage; part: 'free' | 'list' }> 
   // (9:16, in the list: inside the scrolling content box — see ListRow)
   const edge = part === 'list' ? edgeFade(rowY - scrollAt(t, S), S.panel.y + S.panel.h) : 1;
   return (
-    <>
+    <SoftBottom k={part === 'list' ? pushSoft(t, S, rowY) : 0} edge={S.panel.y + S.panel.h} w={S.W} h={S.H}>
       {shadowK > 0.001 ? (
         <div
           style={{
@@ -215,6 +224,7 @@ const HoursRow: React.FC<{ t: number; S: WrittenStage; part: 'free' | 'list' }> 
         name={ROWS[1].name}
         pill={PILLS[1]}
         pillSize={S.row.pill}
+        pillLead
         morph={u}
         // the slip's words leave as the row's own face arrives (a 16th's overlap): the paper is never blank
         slip={{ k: H.k, text: SLIP_TEXT, color: SLIP_INK, out: W.born + 1.5 }}
@@ -223,7 +233,7 @@ const HoursRow: React.FC<{ t: number; S: WrittenStage; part: 'free' | 'list' }> 
         opacity={edge}
         moving={moving}
       />
-    </>
+    </SoftBottom>
   );
 };
 

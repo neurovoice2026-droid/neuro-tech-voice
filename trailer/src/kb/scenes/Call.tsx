@@ -5,8 +5,9 @@
  *   0 (bar)    the line rings: one slate hairline leaves Ava's orb; b08's app panel steps back a depth (.9, shade .06)
  *              and slides away (16:9 right; 9:16 down, receded under the call); the eyebrow leaves; the orb comes
  *              forward to her call place
- *   pickup     picked up on the first ring (an 8th): she wakes to listen; ● CALLER and the mono call timer (00:04 —
- *              the greeting has been said) rise; the caller's line rises on his first word over the line's waveform
+ *   pickup     picked up on the first ring (an 8th): she wakes to listen; ● CALLER and the mono call timer rise, the
+ *              timer already at 00:04 (the greeting has been said — SCRIPT.md b09) and running; the caller's line rises
+ *              on his first word over the line's waveform
  *   filler     her own turn (● AVA, sunday) rises under his, the transcript scrolling up: "One moment, let me check."
  *              — the product's real filler — and the orb speaks
  *   FREEZE     the call stops: the timer holds at 00:07, the waveform keeps its shape, the mesh's own clock comes to
@@ -20,14 +21,15 @@
  *              "weekend" to the swept lines with MATCHED ON MEANING; the day's three earlier questions roll through one
  *              masked slot on 8ths, each sending its own hairline to the same lines
  *   RESUME     (bar) the hairlines retract into the page just before it; then time runs again: the label, the
- *              phrasing and the frozen question leave; the orb comes out of the dot; ● AVA + the timer. THE RE-SET, one
- *              move: the tokens she doesn't say leave the page up through their masks; on "We" the kept words fly from
- *              the page together to their slots in her sentence and dive into the slots' masks (nothing waits on
- *              screen); on her onsets every word rises into its slot ("nine till two" keyed sunday); the page dims to
- *              25 % and collapses to what is left on it
+ *              phrasing and the frozen question leave; the orb comes out of the dot; ● AVA + the timer. THE RE-SET: the
+ *              tokens she doesn't say leave the page up through their masks (gone before "We"); on "We" THE LIFT — the
+ *              page's paper recedes and fades out from under the kept words (Saturday / Sunday closed), which stay,
+ *              then drift together toward her line and dissolve on the way (polish round 2: no word straddles the
+ *              card's edge, no "We … Saturday / Sunday / closed" staircase, no dim page left beside her answer); on
+ *              her onsets every word rises into its slot ("nine till two" keyed sunday)
  *   record     the strip folds into the white record row over her finished sentence (held ≥ a beat): TRANSCRIPT · the
  *              greeting (its AI disclosure) · Answered from your documents + Opening hours · the check in the sunday
- *              disc; the dim page recedes out
+ *              disc
  *
  * No cursor: nobody is at the dashboard — the call is answered by Ava alone (the cursor returns in b12).
  * Every time is CALL_LOCAL (src/kb/timing.ts, from the real voices' word onsets); the layout and the poses are
@@ -77,12 +79,15 @@ export const Call: React.FC = () => {
   const held = ease(t, C.freeze, C.freeze + 12) * (1 - ease(t, C.resume, C.resume + 8));
   // the hairlines: the hero from the end of the underline under "weekend" (the frozen turn at B, stepped back); all
   // land on the swept lines' edge
-  // (16:9 from the end of "weekend"; 9:16 from the start of "this weekend", whose link runs down the left margin)
+  // (16:9 from the end of "weekend"; 9:16 from the start of "this weekend", whose link runs down the frame's left
+  // gutter, outside the page)
   const B = S.strip.b;
   const wk = wordBox(S.strip.callerLines, size, B.x, B.lines, S.strip.align, v ? 4 : 5, '?');
   const hero = turnPoint({ x: B.x, tag: B.tag, scale: S.strip.bScale }, v ? { x: wk.x - 2, y: wk.y + size * 1.1 } : { x: wk.x + wk.w + 2, y: wk.y + size * 1.1 });
   const sb = sweptBlock(g);
-  const target = { x: sb.left - 14, y: sb.cy };
+  // 16:9: in the page's left padding, beside the swept lines; 9:16 (polish round 2): just OUTSIDE the card's left edge
+  // at their height — the hairlines run down the frame's left gutter and never cross the white page
+  const target = v ? { x: g.card.x - 12, y: sb.cy } : { x: sb.left - 14, y: sb.cy };
   const keyK = tween(t, [C.sweep, C.sweep + 12], [0, 1], EASE.inOut);
   const waveOpen = springUnit(t - (C.c4 - 2), SPRING.site);
   const waveClose = tween(t, [C.resume, C.resume + 9], [0, 1], EASE.in3);

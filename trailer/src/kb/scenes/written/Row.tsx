@@ -23,7 +23,7 @@ import { useLayout } from '../../../lib/layout';
 import { EASE, smooth, SPRING, springUnit, tween } from '../../../lib/motion';
 import { maskBox, typeStyle } from '../../../lib/type';
 import { APP, Icon, measureText, Pill, ui, W as WT, type PillState } from '../../kit';
-import type { RowKind } from './stage';
+import { SOFT_EDGE, type RowKind } from './stage';
 
 /** the app's TYPE_LABELS (TabKnowledge.tsx:44–50): the muted word after the pill */
 export const TYPE_LABEL: Record<RowKind, string> = { pdf: 'PDF', docx: 'Word', txt: 'Text', url: 'Web page' };
@@ -62,6 +62,17 @@ export const KindTile: React.FC<{ kind: RowKind; side: number; icon: number; rad
 export const TypeLabel: React.FC<{ kind: RowKind; size: number }> = ({ kind, size }) => (
   <span style={{ ...ui(size, WT.regular), color: APP.mutedFg, whiteSpace: 'nowrap', lineHeight: 1 }}>{TYPE_LABEL[kind]}</span>
 );
+
+/**
+ * A list row drawn through the card's SOFT BOTTOM EDGE (written/stage.ts softK; 9:16 only): a frame-sized wrapper (w × h,
+ * the list's own coordinates) masked to fade out over the last SOFT_EDGE px above `edge`, by `k` (0 → no wrapper at all,
+ * the row drawn exactly as before; 1 → transparent at the edge).
+ */
+export const SoftBottom: React.FC<{ k: number; edge: number; w: number; h: number; children: React.ReactNode }> = ({ k, edge, w, h, children }) => {
+  if (k <= 0.0005) return <>{children}</>;
+  const m = `linear-gradient(to bottom, #000 0px, #000 ${(edge - SOFT_EDGE).toFixed(2)}px, rgba(0, 0, 0, ${(1 - Math.min(1, k)).toFixed(4)}) ${edge.toFixed(2)}px)`;
+  return <div style={{ position: 'absolute', left: 0, top: 0, width: w, height: h, WebkitMaskImage: m, maskImage: m }}>{children}</div>;
+};
 
 /** a soft lifted shadow for a row off the list (no crisp ring: the SVG border is the edge) */
 const flightShadow = (lift: number, ink: string) => {
@@ -113,7 +124,9 @@ export const Row: React.FC<{
   slipRadius?: number;
   /** the pill's size (default rowPill(size)) */
   pillSize?: number;
-}> = ({ t, x, y, w, h, layout, size, kind, name, pill, morph = 1, lift = 0, ink = '#1e1442', slip, contentAt, opacity = 1, scale = 1, moving = false, menuHover = 0, menuPress = 0, slipRadius, pillSize: pillAt }) => {
+  /** the pill's width leads its roll to a longer label (kit Pill `lead`; off by default: the other acts' rows unchanged) */
+  pillLead?: boolean;
+}> = ({ t, x, y, w, h, layout, size, kind, name, pill, morph = 1, lift = 0, ink = '#1e1442', slip, contentAt, opacity = 1, scale = 1, moving = false, menuHover = 0, menuPress = 0, slipRadius, pillSize: pillAt, pillLead = false }) => {
   const L = useLayout();
   const v = L.vertical;
   const rRow = size * 0.32;
@@ -160,7 +173,7 @@ export const Row: React.FC<{
   // the pill, then the type word (gap-x-2): a flex row, so the word follows the pill's width as it rolls
   const pillNode = pill ? (
     <>
-      <Pill t={t} states={pill} size={pillSize} />
+      <Pill t={t} states={pill} size={pillSize} lead={pillLead} />
       <span style={{ display: 'inline-block', width: F.metaGap }} />
       <TypeLabel kind={kind} size={F.metaSize} />
     </>

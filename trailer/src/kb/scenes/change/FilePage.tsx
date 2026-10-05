@@ -108,12 +108,15 @@ export function editGeo(g: DocPageGeometry, vertical: boolean) {
   return { pre, preW, lx, x0, bounds, y: r.y - g.card.y, h: r.h, cy: r.cy - g.card.y, content: domMeasure(pre, size, vertical).h };
 }
 
-/** frame px of the drag's ends (the page at rest): where the I-beam presses and where it lets go */
+/** frame px of the drag's ends (the page at rest): where the I-beam presses and where it lets go. It presses JUST LEFT
+ *  of "14" (a real drag starts before the first character: the stem .18 em before the pen, on the dash, so the I-beam
+ *  never sits on the digits being edited — polish round 2); the selection still snaps from the "1" (Content: a
+ *  character joins it once the hotspot passes its middle) */
 export function dragPoints(g: DocPageGeometry, vertical: boolean) {
   const e = editGeo(g, vertical);
   const ox = g.card.x;
   const oy = g.card.y;
-  return { start: { x: ox + e.bounds[0] + 2, y: oy + e.cy }, end: { x: ox + e.bounds[e.bounds.length - 1] - 1, y: oy + e.cy + 1 } };
+  return { start: { x: ox + e.bounds[0] - 0.18 * g.spec.size, y: oy + e.cy }, end: { x: ox + e.bounds[e.bounds.length - 1] - 1, y: oy + e.cy + 1 } };
 }
 
 /** the page's words (card-local, scale 1) at t: the file name, the heading, the rule, the lines with the live edit */

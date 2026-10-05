@@ -14,12 +14,12 @@
  *            heading indented); 9:16 (`'box'`, the row is wider than the page) opens box to box in one move
  *   sweep    "the part that answers them": a flat sunday band (12 %, EASE.draw, .5 s, no glow) under Saturday, then
  *            Sunday a 16th behind; the weekday line settles to 40 %
- *   b11      THE RE-SET's page side: the tokens she doesn't say (· 9:00–14:00 ·) leave up through their own masks
- *            and the sweep bands up out of theirs (CALL_LOCAL.drop); the kept words fly from their places here into her
- *            sentence (call/Reset.tsx, CALL_LOCAL.fly); then the page dims to 25 % (16:9 in place beside the answer,
- *            9:16 receding below it) and COLLAPSES to what is left on it (kind, heading, the weekday line: its bottom
- *            edge rises behind the words leaving — never a half-empty card behind her sentence) and, as the record
- *            lands, recedes out (× .9, opacity → 0)
+ *   b11      THE RE-SET's page side: the tokens she doesn't say (· 9:00–14:00 ·) leave up through their own masks,
+ *            their ink gone while each glyph is still whole inside its mask (no stray dash of a leaving mid-dot), and
+ *            the sweep bands up out of theirs (CALL_LOCAL.drop) — all of it before "We"; on "We" (THE LIFT, stage.ts)
+ *            the PAPER recedes and fades out from under the kept words, which stay where it set them (call/Reset.tsx
+ *            draws them from CALL_LOCAL.fly[0] and flies them into her sentence once the paper has gone): the page is
+ *            retired as her sentence starts — no word straddles its edge, no dim page is left beside her answer
  *
  * The page is CROPPED TO ITS CONTENT (usePage): kind, heading, three lines at the title role (64 / 56), 48 px padding.
  */
@@ -36,7 +36,7 @@ import { CALL_LOCAL as C } from '../../timing';
 import { KindTile, rowFace, typeLabelWidth, TypeLabel } from '../written/Row';
 import { ROWS, writtenStage } from '../written/stage';
 import { HOURS, panelTransform } from './Panel';
-import { ease, lerp, pageCollapseAt, pageDimAt, pageOutAt, type CallStage } from './stage';
+import { ease, lerp, LIFT, pageLiftAt, type CallStage } from './stage';
 
 const SUNDAY = MOMENT_LIGHTS.sunday.ink;
 export const PAGE_LINES = ['Monday to Friday · 8:00–20:00', 'Saturday · 9:00–14:00', 'Sunday · closed'] as const;
@@ -107,14 +107,13 @@ function rowStart(S: CallStage) {
   return { x: p.x, y: p.y, k: tr.scale };
 }
 
-/** the page's pose in b11: it dims (and 9:16 recedes) once the kept words have flown out of it; it recedes out
- *  (× .9, opacity → 0) as the record lands */
+/** the page's pose in b11 — THE LIFT: on "We" its paper recedes (stage `pageLift`: scale about its centre, a drift away
+ *  from her sentence) and fades out from under the kept words; it is gone ≈ .3 s later (nothing of it is left beside her
+ *  sentence or under the record) */
 export function pagePoseC(t: number, S: CallStage, g: PageGeo) {
-  const u = pageDimAt(t);
-  const o = pageOutAt(t);
-  const P = S.pageC;
-  const sc = lerp(1, P.scale, u) * (1 - 0.1 * o);
-  return { u, o, scale: sc, dx: P.dx * u, dy: P.dy * u, fade: lerp(1, P.fade, u), shade: 0.05 * u, opacity: 1 - o, cx: g.card.x + g.card.w / 2, cy: g.card.y + g.h / 2 };
+  const u = pageLiftAt(t);
+  const P = S.pageLift;
+  return { u, o: 0, scale: lerp(1, P.scale, u), dx: P.dx * u, dy: P.dy * u, fade: 1, shade: 0, opacity: 1 - u, cx: g.card.x + g.card.w / 2, cy: g.card.y + g.h / 2 };
 }
 
 /** the page tokens the re-set keeps ("line:token" of the swept lines: Saturday · Sunday · closed) */
@@ -153,15 +152,13 @@ export const OpeningHoursPage: React.FC<{ t: number; S: CallStage; g: PageGeo; i
   // the header strip: down to just above the rule (the heading's descenders clear)
   const stripH = g.lineRects[0].y - g.card.y - size * 0.55 - size * 0.12;
   const hOpen = hdr ? lerp(lerp(R.h * rk, stripH, ease(t, u0, u0 + HDR.strip, EASE.inOut)), g.h, uH) : lerp(R.h * rk, g.h, un);
-  // b11: once the swept lines have left, the page collapses to what is left on it (kind, heading, the weekday line)
-  const hLeft = g.lineRects[0].y - g.card.y + size * 1.18 + pad;
-  const h = lerp(hOpen, hLeft, pageCollapseAt(t));
+  const h = hOpen;
   const radius = lerp(R.radius * rk, size * 0.22, un);
   // the paper rises off the ground as it is fetched (it is held a touch higher while it waits)
   const lift = lerp(3.4, 3, un) * smooth(0, 0.4, fl);
   const moving = fl < 0.9995 || (un > 0 && un < 1);
 
-  /* b11: the page dims and (9:16) recedes; then it recedes out under the record */
+  /* b11: THE LIFT — the paper recedes and fades out from under the kept words on "We" */
   const pc = pagePoseC(t, S, g);
   if (pc.opacity <= 0.001) return null;
   const cardTf = `translate(${rx.toFixed(3)}px, ${ry.toFixed(3)}px)`;
@@ -264,8 +261,8 @@ export const OpeningHoursPage: React.FC<{ t: number; S: CallStage; g: PageGeo; i
             const swept = si >= 0;
             const sAt = C.sweep + (i - 1) * 3.75;
             const sp = swept && t >= sAt ? tween(t, [sAt, sAt + 15], [0, 1], EASE.draw) : 0;
-            // the band leaves up out of its own mask (no box ever outlives its words)
-            const bq = swept ? tween(t, [C.drop + si, C.drop + si + 6], [0, 1], EASE.in3) : 0;
+            // the band leaves up out of its own mask (no box ever outlives its words), gone before "We"
+            const bq = swept ? tween(t, [C.drop + si, C.drop + si + LIFT.drop], [0, 1], EASE.in3) : 0;
             const bandR = sweepH * 0.16;
             return (
               <React.Fragment key={i}>
@@ -291,11 +288,17 @@ export const OpeningHoursPage: React.FC<{ t: number; S: CallStage; g: PageGeo; i
                     if (kept && t >= C.fly[0]) return null;
                     const di = dropped.indexOf(key);
                     const at = C.drop + Math.max(0, di);
-                    const rt = kept ? rv : reveal(t, linesAt(i), { config: SPRING.text, rise: 90, fade: 0.5, exit: { at, dur: 6 } });
-                    if (!kept && t > at + 6) return null;
+                    // a dropped token rises out on EASE.in3 but its ink is gone at 70 % of the move, while the glyph is
+                    // still whole inside its mask (polish round 2: a 6 f exit fading only at its end left the leaving
+                    // mid-dot as a stray dash at the mask's top edge as "We" landed); the last is gone before "We"
+                    const dq = kept ? 0 : tween(t, [at, at + LIFT.drop], [0, 1], (u) => u);
+                    const rt = kept ? rv : { ...rv, y: rv.y - EASE.in3(dq) * 90, opacity: rv.opacity * (1 - smooth(0.12, 0.7, dq)) };
+                    if (!kept && t > at + LIFT.drop) return null;
                     return (
                       <div key={k} style={{ position: 'absolute', left: tok.x - g.card.x, top: r.y - g.card.y, ...maskBox(0) }}>
-                        <span style={{ ...revealStyle(rt, undefined, t - linesAt(i) < 18 || (!kept && t > at - 1)), ...title, letterSpacing: '-0.02em', color: APP.foreground, whiteSpace: 'nowrap' }}>{tok.text}</span>
+                        {/* (on its sub-pixel layer from its rise to its exit / hand-over — never re-rasterised as plain text in
+                            between: the kept words are handed to call/Reset.tsx on the same layer, without a one-frame tick) */}
+                        <span style={{ ...revealStyle(rt, undefined, true), ...title, letterSpacing: '-0.02em', color: APP.foreground, whiteSpace: 'nowrap' }}>{tok.text}</span>
                       </div>
                     );
                   })

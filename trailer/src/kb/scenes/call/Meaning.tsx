@@ -152,7 +152,7 @@ export const Links: React.FC<{ t: number; S: CallStage; hero: XY; target: XY; pa
         to={target}
         at={C.linkStart[0]}
         dur={C.links[0] - C.linkStart[0]}
-        bend={vertical ? 0.38 : 0.14}
+        bend={vertical ? 0.55 : 0.14}
         tagPos={vertical ? 0.2 : 0.42}
         tagAt={tagAt}
         side={vertical ? 'above' : 'below'}
@@ -176,8 +176,8 @@ export const Links: React.FC<{ t: number; S: CallStage; hero: XY; target: XY; pa
             to={target}
             at={C.linkStart[k]}
             dur={C.links[k] - C.linkStart[k]}
-            bend={vertical ? 0.1 : 0.15}
-            side={vertical ? 'above' : 'below'}
+            bend={vertical ? 0.5 : 0.15}
+            side="below"
             color={echo}
             width={1.5}
             exitAt={i < PHRASINGS.length - 1 ? phrasingOut(i) : C.retract[0]}

@@ -20,8 +20,8 @@ import { subpixel } from '../../../lib/glide';
 import { EASE, smooth, tween } from '../../../lib/motion';
 import { APP, hoverAt, Menu, Panel, pressAt, TabBar, ui, W as WT, type CursorKey, type MenuGeometry, type Rect, type TabBarGeometry } from '../../kit';
 import { CHANGE_LOCAL as K } from '../../timing';
-import { Row } from '../written/Row';
-import { edgeFade, ROWS } from '../written/stage';
+import { Row, SoftBottom } from '../written/Row';
+import { edgeFade, ROWS, softK } from '../written/stage';
 import { appPose, listGeo, OLD, rowSlot, type ChangeStage } from './stage';
 
 /** b08's rows newest first (written/stage.ts ROWS: Price list, Opening hours, Cancellation policy, FAQ page) */
@@ -89,7 +89,7 @@ export const AppPanel: React.FC<{ t: number; S: ChangeStage; bar: TabBarGeometry
       {NEWEST_FIRST.map((ri, k) => {
         const R = ROWS[ri];
         const y = Lg.listY + rowSlot(k, t) * Lg.pitch;
-        const moving = (t > K.fly[0] && t < K.land + 14) || (k > OLD && t > K.oldOut + 2 && t < K.oldOut + 22);
+        const moving = (t > K.fly[0] && t < K.land + 14) || (k > OLD && t > K.oldOut + 2 && t < K.oldOut + 22) || (t > K.lift[0] && t < K.lift[0] + 20);
         const isOld = k === OLD;
         // the old version leaves up through its own slot's mask on "the new answer"
         const q = isOld ? tween(t, [K.oldOut, K.oldOut + 9], [0, 1], EASE.in3) : 0;
@@ -115,7 +115,14 @@ export const AppPanel: React.FC<{ t: number; S: ChangeStage; bar: TabBarGeometry
             menuPress={isOld ? pressAt(keys, t, dotsRect) : 0}
           />
         );
-        if (!isOld) return <React.Fragment key={R.name}>{row}</React.Fragment>;
+        // (9:16: Price list pushed down under the card's edge as the new version lands, and rising back as the old row's
+        // slot closes, goes through its soft bottom edge — written/stage.ts softK against the lowest resting slot)
+        if (!isOld)
+          return (
+            <SoftBottom key={R.name} k={S.listOnly ? softK(y, Lg.listY + 3 * Lg.pitch, P.y + Lg.panelH) : 0} edge={P.y + Lg.panelH} w={S.W} h={S.H}>
+              {row}
+            </SoftBottom>
+          );
         // the old row inside its own slot (a mask box a hair larger than the row: its border is never cut at rest)
         return (
           <div key={R.name} style={{ position: 'absolute', left: Lg.x - 2, top: y - 2, width: Lg.w + 4, height: Lg.h + 4, overflow: q > 0 ? 'hidden' : undefined }}>

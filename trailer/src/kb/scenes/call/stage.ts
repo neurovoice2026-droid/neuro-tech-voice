@@ -17,11 +17,10 @@
  *                            the full page (cropped to its content, its lines at the title role 64 / 56); the day's three
  *                            earlier phrasings roll through ONE masked slot under it, one at a time, each sending a
  *                            hairline to the same two swept lines
- *   C  the answer (b11)      in the question's place: her turn (● AVA) and the word re-set — ONE move: the tokens she
- *                            doesn't say leave the page up through their masks, the kept words fly from the page into
- *                            their slots in her sentence together, her own words rise in on her onsets; the page dims
- *                            beside it (9:16 below it); then the strip folds into the white record row and the page
- *                            recedes out
+ *   C  the answer (b11)      in the question's place: her turn (● AVA) and the word re-set: the tokens she doesn't
+ *                            say leave the page up through their masks; on "We" the page's paper recedes and fades out
+ *                            from under the kept words (LIFT), which drift together toward her line and dissolve; her
+ *                            words rise in on her onsets; then the strip folds into the white record row
  *
  * THE NEIGHBOURS: b08 → here is the same picture at frame 0 (writtenEnd). Here → b12: callEnd() (bottom).
  */
@@ -91,11 +90,14 @@ export type CallStage = {
    *  where it waits for the freeze — top-left corners */
   rowFrom: XY | null;
   rowHold: XY;
-  /** the page in b11: dims to `fade`, recedes by scale / offset */
+  /** the page's b11 pose before polish round 2 (dim to `fade` beside her sentence); no longer drawn (b11 retires the
+   *  page: `pageLift`) — kept only in callEnd()'s shape */
   pageC: { scale: number; dx: number; dy: number; fade: number };
-  /** each kept word's flight (Saturday · Sunday · closed) into her sentence: 'g' straight (both axes on one ease),
-   *  'yx' its line's height first, 'xy' across first — chosen so that no two flying words ever share pixels */
-  flights: readonly ['g' | 'yx' | 'xy', 'g' | 'yx' | 'xy', 'g' | 'yx' | 'xy'];
+  /** THE LIFT (b11): the paper's recede as it fades out from under the kept words (scale about its centre, drift away
+   *  from her sentence) */
+  pageLift: { scale: number; dx: number; dy: number };
+  /** THE LIFT (b11): how far the kept words' cluster drifts toward her line as it dissolves (call/Reset.tsx `reach`) */
+  drift: { x: number; y: number };
   /** the narrator's caption (vo-5, no tag) */
   caption: { x: number; y: number; maxWidth: number };
   /** the record row (CallDetailSheet's record) */
@@ -142,11 +144,12 @@ const STAGES: Record<'land' | 'vert', CallStage> = (() => {
         unfold: 'header',
         rowFrom: { x: 1960, y: 150 },
         rowHold: { x: 1240, y: 150 },
-        // the dim page steps back to the right, clear of her sentence's measure (x 160–911)
+        // (pre-round-2 b11 dim pose — callEnd shape only)
         pageC: { scale: 0.86, dx: 110, dy: 30, fade: 0.25 },
-        // closed (from the right end of the Sunday line, bound for line 3) drops to its line first and passes UNDER
-        // Sunday (bound for line 2); Saturday rides its own line's height
-        flights: ['g', 'g', 'yx'],
+        // (her sentence is to the left: the paper falls back and away to the right)
+        pageLift: { scale: 0.94, dx: 28, dy: 0 },
+        // (left toward her first line: it stays ≈ 290 px clear of "We are!")
+        drift: { x: 0.36, y: 0.36 },
         caption: { x: 960, y: 966, maxWidth: 1600 },
         record: { x: 160, y: 440, w: 800, size: 40 },
       };
@@ -194,9 +197,10 @@ const STAGES: Record<'land' | 'vert', CallStage> = (() => {
       rowHold: { x: writtenStage(vertical).list.x, y: 1010 },
       // the page stays over her sentence, dimming, a touch back and up (air over ● AVA)
       pageC: { scale: 0.97, dx: 0, dy: -24, fade: 0.25 },
-      // the sentence lies BELOW the page: Saturday and Sunday slide across to their slots first, then drop (Saturday
-      // a line over Sunday all the way); closed drops to its line first and slides along under Sunday
-      flights: ['xy', 'xy', 'yx'],
+      // (her sentence is below: the paper falls back and away up)
+      pageLift: { scale: 0.95, dx: 0, dy: -22 },
+      // (her line is right under the page: the cluster centres over it and only leans down, never sitting on it)
+      drift: { x: 0.36, y: 0.12 },
       caption: { x: 540, y: 1408, maxWidth: 940 },
       // the record lands where the page was (the page recedes out under it): the document gives way to the record
       // that cites it, centred in the frame under the orb
@@ -265,13 +269,13 @@ export function callerTurnPose(t: number, S: CallStage): TurnAt & { moving: bool
  *  the tag's top-left) */
 export const turnPoint = (turn: { x: number; tag: number; scale: number }, p: XY): XY => ({ x: turn.x + (p.x - turn.x) * turn.scale, y: turn.tag + (p.y - turn.tag) * turn.scale });
 
-/** the page's dim in b11 — once the kept words have flown out of it */
-export const pageDimAt = (t: number) => ease(t, C.dim[0], C.dim[1], EASE.inOut);
-/** the page's collapse in b11 (0 → 1): once the swept lines have left it (the dropped tokens gone, the kept words
- *  away), its bottom edge rises to what is left on it — never a half-empty card behind her sentence */
-export const pageCollapseAt = (t: number) => ease(t, C.fly[0] + 4, C.fly[0] + 22, EASE.inOut);
-/** the page's exit as the record lands: it recedes (× .9) and fades out — the transcript owns the frame */
-export const pageOutAt = (t: number) => ease(t, C.pageOut[0], C.pageOut[1], EASE.inOut);
+/** THE LIFT (b11, polish round 2 — the viewer's "staircase across the card edge" and "ghost page"): on "We"
+ *  (CALL_LOCAL.fly[0], the paper-lift hit) the page's PAPER recedes (stage `pageLift`) and fades out from under the
+ *  words it is giving up — the kept words (Saturday · Sunday · closed) stay where it set them, lifting a hair — and only
+ *  once it has gone do they travel (call/Reset.tsx, over `travel`): no word ever straddles the card's edge, and no dim
+ *  page is left beside her sentence. The tokens she doesn't say have left up through their masks by then (`drop`). */
+export const LIFT = { recede: [C.fly[0], C.fly[0] + 9] as const, travel: [C.fly[0] + 5, C.fly[0] + 21] as const, drop: 5 } as const;
+export const pageLiftAt = (t: number) => ease(t, LIFT.recede[0], LIFT.recede[1], EASE.inOut);
 
 /* ── the ground's clock and key (call/Ground.tsx draws with these) ── */
 

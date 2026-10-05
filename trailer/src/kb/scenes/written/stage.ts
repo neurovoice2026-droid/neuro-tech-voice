@@ -186,7 +186,9 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
       divider: null,
       fieldLabel: null,
       field,
-      inputH: 96,
+      // (polish round 2: 84, was 96 — with General's tighter field rhythm (written/Panel.tsx) the Tone card's description
+      // ends whole above the card's edge and its first tone card starts wholly under it)
+      inputH: 84,
       button,
       docs: { x: add.x, y: docsY, w: cw },
       list: { x: add.x, y: listY, w: cw, bottom: panel.y + panel.h - 24 },
@@ -282,6 +284,20 @@ export const scrolling = (t: number, S: WrittenStage) => !!S.scroll && t > S.scr
  * any row whose top is 8 px or more above the edge (every row at rest), so the resting pictures are untouched.
  */
 export const edgeFade = (y: number, edge: number) => 1 - smooth(edge - 8, edge - 2, y);
+
+/**
+ * 9:16 (polish round 2): THE SOFT BOTTOM EDGE. A row pushed out under the card's fixed bottom edge (a newer row has landed
+ * above it), or rising back from under it, was sliced mid-glyph by that edge for several frames. While a row is below
+ * the list's last resting slot it is drawn through a soft edge instead (written/Row.tsx SoftBottom): its content fades
+ * out over the last SOFT_EDGE px above the card's edge. The edge's strength `softK` follows the row's displacement below
+ * its resting slot — 0 at rest (no mask at all: every resting picture is untouched, each row whole as before), 1 once it
+ * has moved SOFT_RAMP px down (before its pill's bottom, 29 px above the edge at rest, can reach the edge). The rows
+ * above, settling INTO that slot, never take it; nor does a row wholly under the edge (edgeFade has it at 0 opacity
+ * there: no mask layer for a row nothing of which is drawn).
+ */
+export const SOFT_EDGE = 56;
+export const SOFT_RAMP = 24;
+export const softK = (y: number, rest: number, edge: number) => (y >= edge - 2 ? 0 : smooth(rest, rest + SOFT_RAMP, y));
 
 /** the badge's count over time (the app counts every document, Reading ones too) */
 export const BADGE = W.rows.map((at, i) => ({ at, n: i + 1 }));

@@ -107,6 +107,7 @@ export const NewRow: React.FC<{ t: number; S: ChangeStage; g: DocPageGeometry; i
         kind="txt"
         name="Opening hours"
         pill={PILL}
+        pillLead
         opacity={flies ? 1 : smooth(0, 0.3, s)}
         scale={flies ? 1 : 0.985 + 0.015 * Math.min(1, s)}
         moving={t < K.land + 12}
@@ -140,10 +141,13 @@ export const NewRow: React.FC<{ t: number; S: ChangeStage; g: DocPageGeometry; i
   const lift = lerp(3.4 * Math.min(1, lf), 3, hx);
   const moving = t < u1 + 0.5 || lf < 0.999;
   // the row's face leaving AS the paper changes (never a blank strip): pill + type word + … ride the narrowing right
-  // edge and go up out through their masks, the tile after them
+  // edge and go, the tile after them
   const rowOut = ease(t, u0 + 2, u0 + 7, EASE.in3);
-  // (the two-line row's pill sits under the name: it goes first, as the row lifts, before the name travels down past it)
-  const pillOut = layout === 'stack' ? ease(t, u0 - 3, u0 + 2, EASE.in3) : rowOut;
+  // the status line (pill + type word) FADES where it sits, drifting up a hair (PILL_DRIFT px, less than the gap over
+  // it) — no mask: rising through one sliced it flat along an invisible edge just under the title / the paper's top
+  // (polish round 2). The two-line row's goes first, as the row lifts, before the name travels down past it
+  const pillOut = layout === 'stack' ? ease(t, u0 - 3, u0 + 1.5, EASE.inOut) : ease(t, u0 + 1, u0 + 5.5, EASE.inOut);
+  const PILL_DRIFT = 6;
   const tileA = 1 - ease(t, u0 + 4, u0 + 9, EASE.inOut);
   // name → heading, driven by the opening edge: it is down at the heading's place (and at its size) once the paper is
   // tall enough to hold it (hv ≈ .35), always inside the paper
@@ -193,8 +197,8 @@ export const NewRow: React.FC<{ t: number; S: ChangeStage; g: DocPageGeometry; i
         </div>
         {layout === 'stack' && pillOut < 1 ? (
           // the two-line row's status line (under the name), leaving up through its mask
-          <div style={{ position: 'absolute', left: F.nameX, top: F.nameY + size * 1.27, overflow: 'hidden', paddingBottom: 1 }}>
-            <div style={{ transform: `translateY(${(-pillOut * 120).toFixed(2)}%)`, opacity: 1 - smooth(0.3, 1, pillOut), display: 'flex', alignItems: 'center', height: F.pillSize * 1.72 }}>
+          <div style={{ position: 'absolute', left: F.nameX, top: F.nameY + size * 1.27 }}>
+            <div style={{ transform: `translateY(${(-pillOut * PILL_DRIFT).toFixed(3)}px)`, opacity: 1 - pillOut, display: 'flex', alignItems: 'center', height: F.pillSize * 1.72 }}>
               <Pill t={t} states={PILL} size={F.pillSize} />
               <span style={{ display: 'inline-block', width: F.metaGap }} />
               <TypeLabel kind="txt" size={F.metaSize} />
@@ -205,8 +209,8 @@ export const NewRow: React.FC<{ t: number; S: ChangeStage; g: DocPageGeometry; i
           // the right-hand group rides the paper's right edge (laid out for the row's own width)
           <div style={{ position: 'absolute', left: 0, top: 0, width: Math.ceil(B.w), height: B.h, ...subpixel(Math.abs(w - B.w) > 0.01 ? `translateX(${(w - B.w).toFixed(3)}px)` : undefined, moving) }}>
             {layout === 'inline' ? (
-              <div style={{ position: 'absolute', right: Math.ceil(B.w) - (B.w - F.pad - F.btn) + F.pad * 0.6, top: (B.h - F.pillSize * 1.72) / 2, overflow: 'hidden', paddingBottom: 1 }}>
-                <div style={{ transform: `translateY(${(-rowOut * 120).toFixed(2)}%)`, opacity: 1 - smooth(0.3, 1, rowOut), display: 'flex', alignItems: 'center', height: F.pillSize * 1.72 }}>
+              <div style={{ position: 'absolute', right: Math.ceil(B.w) - (B.w - F.pad - F.btn) + F.pad * 0.6, top: (B.h - F.pillSize * 1.72) / 2 }}>
+                <div style={{ transform: `translateY(${(-pillOut * PILL_DRIFT).toFixed(3)}px)`, opacity: 1 - pillOut, display: 'flex', alignItems: 'center', height: F.pillSize * 1.72 }}>
                   <Pill t={t} states={PILL} size={F.pillSize} />
                   <span style={{ display: 'inline-block', width: F.metaGap }} />
                   <TypeLabel kind="txt" size={F.metaSize} />

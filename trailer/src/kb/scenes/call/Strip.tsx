@@ -30,12 +30,22 @@ import type { VoiceId } from '../../voice.generated';
 
 /** call time at act frame t: real until the freeze, held through the stop-time, real again after the resume */
 export const callTime = (t: number) => (t < C.freeze ? t : t < C.resume ? C.freeze : t - (C.resume - C.freeze));
-const secondsAt = (t: number) => C.timer.base + Math.floor((callTime(t) - C.timer.zero) / 30);
+/**
+ * The timer's clock (polish round 2 — SCRIPT.md b09: "a mono call timer 00:04 ticking (the greeting has already been
+ * said)"): it rises with ● CALLER ALREADY at 00:04 — its second begins half a frame before the strip rises, so it never
+ * reads 00:03 (CALL_LOCAL.timer.zero, 31.5, had it tick 3 → 4 under his first word) — and runs one tick per 30 frames
+ * of call time: 00:05 · 00:06 · 00:07 (≈ 1 s before the freeze, held through the stop-time, b10), then on the resume
+ * ● AVA reads 00:08 → 00:12 as the strip folds into the record (the real five seconds of her answer; the script's 00:11
+ * was its 3.5 s plan). Set here rather than in src/kb/timing.ts, whose bytes key film 2's sound build (scripts/kb/hash.mjs):
+ * the soundtrack does not change, so it is not invalidated.
+ */
+const TIMER = { base: C.timer.base, zero: C.strip - 0.5 } as const;
+const secondsAt = (t: number) => TIMER.base + Math.floor((callTime(t) - TIMER.zero) / 30);
 /** the act frame of the last tick at or before t (to roll the figures) */
 function lastTick(t: number): number {
   const ct = callTime(t);
-  const k = Math.floor((ct - C.timer.zero) / 30);
-  const tickCt = C.timer.zero + k * 30;
+  const k = Math.floor((ct - TIMER.zero) / 30);
+  const tickCt = TIMER.zero + k * 30;
   // back to act time
   return tickCt < C.freeze ? tickCt : tickCt + (C.resume - C.freeze);
 }

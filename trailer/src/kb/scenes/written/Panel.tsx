@@ -114,7 +114,11 @@ const General: React.FC<{ S: WrittenStage }> = ({ S }) => {
   // the cards' descriptions wrap to two lines in 16:9's columns; 9:16 (ad-size type) measures its own
   const desc = T.small * 1.3 * (S.vertical ? wrapCount(NAME_DESC, T.small, WT.regular, w) : 2) + (S.vertical ? 24 : 26);
   const fieldsTop = S.add.y + T.title * 1.35 + desc;
-  const fieldsBottom = fieldsTop + 2 * (fieldH + T.label * 2.6);
+  // a field's pitch: the field + its label block. 9:16 sets them a touch tighter (2.35, was 2.6 — polish round 2) so the
+  // Tone card's two-line description ends whole above the card's bottom edge (it was cut through its second line) and
+  // the edge falls in the gap before the tone grid, which starts wholly under it
+  const pitch = fieldH + T.label * (S.vertical ? 2.35 : 2.6);
+  const fieldsBottom = fieldsTop + 2 * pitch;
   // Tone: 16:9 in the right column, 9:16 under the fields
   const tone = S.vertical ? { x, y: fieldsBottom + 18, w } : { x: S.docs.x, y: S.add.y, w: S.docs.w };
   // (16:9: a measure a touch narrower than the column, so the description's last line is never one word)
@@ -137,7 +141,7 @@ const General: React.FC<{ S: WrittenStage }> = ({ S }) => {
         {NAME_DESC}
       </div>
       {f.map((it, i) => (
-        <div key={it.label} style={{ position: 'absolute', left: x, top: fieldsTop + i * (fieldH + T.label * 2.6), width: w }}>
+        <div key={it.label} style={{ position: 'absolute', left: x, top: fieldsTop + i * pitch, width: w }}>
           <div style={{ ...ui(T.label, WT.medium), color: APP.foreground }}>{it.label}</div>
           <div
             style={{
