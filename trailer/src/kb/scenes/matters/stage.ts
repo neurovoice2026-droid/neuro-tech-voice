@@ -16,7 +16,7 @@
  *   deskToScreen(...)         a desk-local point → the screen (the step back, then the camera)
  *   toScreen(...)             a plane point → the screen (Camera/Layer maths)
  *   dotAt(t, vertical)        the teal dot on screen (the clock's colon; 9:16: it rises above the title in b16)
- *   stackSlip(i, t, vertical) slip i of the old stack (0 = the top one): its rest in the pile, then the cascade
+ *   stackSlip(i, t, vertical) slip i of the old stack (0 = the top one): its rest in the pile, then the glide off (as one)
  *   darkness(t)               0 → 1 across the last three beats (a sine in-out), and the ground's grade from it
  *   closingAt(t, vertical)    the dark as a CLOSING KEY: the room's light pulled in from the frame's far edges onto
  *                             the teal dot (a soft radial edge: lit inside `ri`, night beyond `ro`, `mid` its half)
@@ -100,8 +100,9 @@ const LAND: MattersLayout = (() => {
     title: { x: 160, y: 104, size: 144, lines: [[0, 1, 2], [3, 4, 5, 6]] },
     // the card's edge lands on x 160 under the title's caps, its top 80 px under the title's descenders
     recede: { s: 0.84, ax: 288, ay: 1091, shade: 0.06, padDy: -50 },
-    // up and to the right, past her dot (clear of the thesis' last word) and out over the top edge
-    slipOut: { cx: 1760, cy: 700, ex: 1800, ey: -260, shrink: 0.8 },
+    // up and to the right, past her dot (clear of the thesis' last word) and out over the top edge — the exit point far
+    // past it, so the stack crosses the edge at speed, mid-glide (never easing out across it, its words cut by the edge)
+    slipOut: { cx: 1760, cy: 700, ex: 1840, ey: -900, shrink: 0.8 },
     dotTop: null,
   };
 })();
@@ -125,8 +126,9 @@ const VERT: MattersLayout = (() => {
     // three lines (the 9:16 measure), on the stepped-back card's edge, under the risen dot
     title: { x: 140, y: 256, size: 120, lines: [[0, 1, 2], [3, 4], [5, 6]] },
     recede: { s: 0.84, ax: 540, ay: 1172, shade: 0.06, padDy: -30 },
-    // out through the right edge, rising (the script's 9:16: "slips leave to the right") — under the reply's last word
-    slipOut: { cx: 1010, cy: 1400, ex: 1400, ey: 1090, shrink: 0.82 },
+    // out through the right edge, rising (the script's 9:16: "slips leave to the right") — under the reply's last word;
+    // the exit point far past the edge, so the stack crosses it at speed, mid-glide
+    slipOut: { cx: 1010, cy: 1400, ex: 2000, ey: 1000, shrink: 0.82 },
     dotTop: { x: 540, y: 214 },
   };
 })();
@@ -261,19 +263,20 @@ const bez = (a: number, b: number, c: number, u: number) => (1 - u) * (1 - u) * 
 /**
  * Slip i of the old stack at t (offsets from the layout's stack place, desk-plane px, before the step back's scale is
  * undone — they are desk-local). At rest a squared pile, its edges showing. A beat's fifth after "do." it lifts (a 4-frame
- * rise off the pad: scale 1.015, the shadow opening) and the slips glide off one after another (`stagger`), each gone in
- * 8 frames, EASE.inOut, on an ARC up toward the teal dot (16:9: up and right, past the dot, out over the top edge, clear
- * of the thesis; 9:16: out through the right edge, rising), shrinking a little as they go — the path is laid in SCREEN
- * px (where the dot and the frame edge are) and brought back into the desk plane, so it holds under the step back and
- * the push.
+ * rise off the pad: scale 1.015, the shadow opening) and the stack glides off AS ONE — over the cascade's whole window
+ * (MATTERS_LOCAL.stack: the first glide's start to the last one's end, so the one glide sound still covers it and peaks at
+ * its fastest frame), EASE.inOut — on an ARC up toward the teal dot (16:9: up and right, past the dot, out over the top
+ * edge, clear of the thesis; 9:16: out through the right edge, rising), shrinking a little as it goes. Every slip rides
+ * the same progress from its own place in the pile (the pile closing up as it goes), so no slip ever slides across
+ * another's words. The path is laid in SCREEN px (where the dot and the frame edge are) and brought back into the desk
+ * plane, so it holds under the step back and the push.
  */
 export function stackSlip(i: number, t: number, vertical: boolean): StackPose {
   const g = mattersLayout(vertical);
   const p = PILE[i] ?? PILE[PILE.length - 1];
   const s = M.stack;
-  const lift = out3((t - s.lift - i * s.stagger * 0.5) / 4);
-  const a = s.glide[0] + i * s.stagger;
-  const u = inOut((t - a) / (s.glide[1] - s.glide[0]));
+  const lift = out3((t - s.lift) / 4);
+  const u = inOut((t - s.glide[0]) / (s.glide[1] - s.glide[0] + (s.n - 1) * s.stagger));
   const rest = { dx: p.dx, dy: p.dy + deskStep(t, vertical).padDy, rot: g.stack.rot + p.rot, lift: 0.4 + 1.4 * lift, scale: 1 + 0.015 * lift };
   if (u <= 0) return rest;
   // the slip's centre at rest, on screen (this frame's step back and camera), then along the arc

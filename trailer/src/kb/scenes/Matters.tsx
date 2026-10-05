@@ -19,8 +19,8 @@
  *            anchor, a .06 shade, the reply dimmed) and THE THESIS takes the frame: "That's the work / only people can
  *            do." in the display role a step up (16:9 144 px, a clean left block on the card's edge, caps 120 px under
  *            the top; 9:16 three lines at 120 px), word by word on vo-8; on "do." the key phrase eases into sunday ink
- *            as the glint runs through it. A beat's fifth later the old slips lift and glide off on an arc toward the
- *            teal dot and out of the frame, each in 8 frames, still reading "nine till two"
+ *            as the glint runs through it. A beat's fifth later the old slip stack lifts and glides off as one on an arc
+ *            toward the teal dot and out of the frame, still reading "nine till two"
  *   dark     the last three beats: THE CLOSING KEY (stage.ts closingAt) — the room's light is pulled in from the frame's
  *            far edges onto her dot: the lit room (MUTED keyed teal) gives way to the night (INK_MESH, deep, her key
  *            pool — b17's first picture) behind a soft radial edge; the desk falls into silhouette pixel by pixel with

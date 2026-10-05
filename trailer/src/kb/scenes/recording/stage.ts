@@ -85,9 +85,11 @@ const pullEase = (u: number) => {
   return a * (1 - x) + b * x;
 };
 
-/** the pull-back: 36 frames centred on "And" (timing.ts RECORDING_LOCAL.pull) — off the column as the title leaves, onto
- *  the card on "customer" */
-export const PULL = RL.pull;
+/** the pull-back: 36 frames CENTRED on "And" (RL.pullBack, vo-2's first word) — it leaves the column in the silence after
+ *  "recording." (as the title leaves), so the column is gone from the question's place before "And the customer" rises
+ *  (16:9: the card it carries in across that place is found there once clear, scenes/Recording.tsx FOUND16), and it lands
+ *  on "customer" */
+export const PULL = [RL.pullBack - 18, RL.pullBack + 18] as const;
 
 /** The camera at act-local t (Camera props; x/y in near-plane px). */
 export function camPose(t: number, G: Stage): Pose {

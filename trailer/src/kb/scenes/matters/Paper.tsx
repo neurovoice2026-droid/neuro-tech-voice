@@ -6,8 +6,8 @@
  *                white card is left on the desk before the dark
  *   <OldStack>   the old slip stack at the desk's edge: yesterday's slips, squared into a pile, every one still
  *                reading "Yes, Saturdays, / nine till two." (now out of date). Just after "do." it lifts and the
- *                slips glide off one after another on an arc toward the teal dot and out of the frame, each in
- *                8 frames (16:9: up and right past the dot, out over the top edge; 9:16: out through the right
+ *                stack glides off as one on an arc toward the teal dot and out of the frame, over the cascade's
+ *                window (16:9: up and right past the dot, out over the top edge; 9:16: out through the right
  *                edge, rising) — EASE.inOut, a sub-pixel layer each (stage.ts stackSlip)
  *
  * Desk plane. The slips are b01's slips (white, the pad's ruling, ● FRONT DESK, the answer in the title role). Both
@@ -74,7 +74,7 @@ export const Pad: React.FC<{ t: number; g: MattersLayout; ink: string; flat: num
   const c = deskToScreen(t, g.vertical, p.x + p.w / 2, py + p.h / 2);
   const shadowK = 0.95 * litAt(cl, c.x, c.y);
   // the empty pad goes with the old slips (orchestrator's final-pass note: no empty white card left on the desk after
-  // the cascade): it fades from the last slip's mid-flight, gone before the dark reaches the desk
+  // the cascade): it fades once the stack has left the frame, gone before the dark reaches the desk
   const lastOff = M.stack.glide[0] + (M.stack.n - 1) * M.stack.stagger;
   const k = Math.min(1, Math.max(0, (t - (lastOff + 5)) / 8));
   const gone = (cl ? Math.min(1, nearestLit(cl, o, o.z, p.w, p.h + 10) / 0.12) : 1) * (1 - k * k * (3 - 2 * k));

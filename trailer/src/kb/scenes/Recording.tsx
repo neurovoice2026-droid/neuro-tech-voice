@@ -14,12 +14,16 @@
  *              onset — "brilliant." lands on its own word
  *   title2     it leaves up on "The" as "The phone turned them / into a recording." rises a line per
  *              phrase; the key "a recording." eases into rush ink as the glint runs word by word
- *   pullBack   on "And the customer" the camera pulls back to the in-person card (back as Part I left
- *              it, out of frame until the camera finds it), the column left behind still scrolling; the
- *              card comes forward .90 → 1 (SPRING.site), its shade lifting; in 9:16 the clock is back
- *              over it (b07's orb is born from its colon)
- *   question   "And the customer / in front of them?" (caption role, no tag: narration) — in 16:9 beside the
- *              card on its own baselines, in 9:16 under it
+ *   pullBack   around "And the customer" (stage.ts PULL: centred on "And", from the silence after "recording." to
+ *              "customer") the camera pulls back to the in-person card (back as Part I left it, out of frame
+ *              until the camera finds it), the column left behind still scrolling — gone from the question's
+ *              place before its first word rises; the card comes forward .90 → 1 (SPRING.site), its shade
+ *              lifting (16:9: it is carried in straight through the question's place, so it is found — comes up
+ *              out of the room — once it is clear, FOUND16); in 9:16 the clock is back over it (b07's orb is
+ *              born from its colon)
+ *   question   "And the customer / in front of them?" (caption role, no tag: narration) — the first line as a
+ *              unit on "And" (−2 f, the captions' lead), the second on "in"; in 16:9 beside the card on its own
+ *              baselines, in 9:16 under it
  *   waiting    "Waiting." rises in the display role ON the bar, where it is spoken (RL.waitingRise), locks
  *              ≈ .25 s on and holds to the act's end
  *
@@ -68,6 +72,10 @@ const w1 = (k: number) => RL.vo1 + vWord('kb2-vo-1', k);
  * card: there the card comes in with the camera, as before.
  */
 const FOUND16 = [PULL[1] - 8, PULL[1] + 4] as const;
+
+/** the question's first line rises AS A UNIT on its first spoken word — "And", its onset − 2 (the captions' lead,
+ *  kb/components/Captions.tsx) — not on "customer" (RL.question[0]); its second line keeps RL.question[1] ("in") */
+const QUESTION_AT = [RL.vo2 + vWord('kb2-vo-2', 0) - 2, RL.question[1]] as const;
 
 /** the card's depth, shade and opacity: as Part I left it (.90 far back); as the glide starts it takes one more
  *  step back into the room (scale −5 %, a deeper shade) and dims out; found again by the pull-back, it comes
@@ -194,8 +202,8 @@ export const Recording: React.FC = () => {
       <SaidLines
         t={t}
         lines={[
-          { words: ['And', 'the', 'customer'], at: RL.question[0] },
-          { words: ['in', 'front', 'of', 'them?'], at: RL.question[1] },
+          { words: ['And', 'the', 'customer'], at: QUESTION_AT[0] },
+          { words: ['in', 'front', 'of', 'them?'], at: QUESTION_AT[1] },
         ]}
         x={G.question.x}
         y={G.question.y}

@@ -24,7 +24,7 @@ import { reveal, revealStyle } from '../../../components/Type';
 import { subpixel } from '../../../lib/glide';
 import { useLayout } from '../../../lib/layout';
 import { EASE, mix, mixHex, smooth, SPRING, springUnit } from '../../../lib/motion';
-import { maskBox, typeStyle } from '../../../lib/type';
+import { MASK_PAD, maskBox, typeStyle } from '../../../lib/type';
 import { TYPE } from '../../../theme';
 import { APP, measureText, meshElevation, useKitFaces } from '../../kit';
 import { GRAPHITE, KB_INK } from '../../theme';
@@ -73,7 +73,7 @@ export function scrollAt(t: number, G: Stage) {
  * row one's tail after "Saturdays," on the text spring (two frames a word, the first as the second-row word is half
  * gone) — the paper's right edge already ahead of each word as it rises, its bottom edge following the leaving row up.
  */
-const ROLL_OUT = { at: RL.morph + 1, step: 1, dur: 6 } as const;
+const ROLL_OUT = { at: RL.morph + 1, step: 1, dur: 5 } as const;
 const ROLL_IN = { at: RL.morph + 5, step: 2 } as const;
 /** 0 → 1: how far row two has rolled out (its last word's exit), which the paper's bottom edge follows up */
 const rollOut = (t: number) => EASE.inOut(Math.min(1, Math.max(0, (t - ROLL_OUT.at) / (2 * ROLL_OUT.step + ROLL_OUT.dur))));
@@ -104,10 +104,20 @@ const WordAt: React.FC<{ x: number; y: number; word: string; style: React.CSSPro
   <span style={{ position: 'absolute', left: 0, top: 0, ...style, whiteSpace: 'nowrap', ...subpixel(`translate(${x.toFixed(3)}px, ${y.toFixed(3)}px)`, true) }}>{word}</span>
 );
 
-/** a word at (x, y) in its own mask (lib/type maskBox), revealed / leaving by `r` (held on its sub-pixel layer) */
-const MaskedWordAt: React.FC<{ x: number; y: number; word: string; style: React.CSSProperties; r: ReturnType<typeof reveal> }> = ({ x, y, word, style, r }) => (
+const FLUSH_TOP_MASK: React.CSSProperties = {
+  display: 'inline-block',
+  overflow: 'hidden',
+  verticalAlign: 'top',
+  padding: `0 ${MASK_PAD.right}em ${MASK_PAD.bottom}em ${MASK_PAD.left}em`,
+  margin: `0 -${MASK_PAD.right}em -${MASK_PAD.bottom}em -${MASK_PAD.left}em`,
+  whiteSpace: 'nowrap',
+};
+/** a word at (x, y) in its own mask (lib/type maskBox), revealed / leaving by `r` (held on its sub-pixel layer);
+ *  `flushTop`: the mask's top edge ON the line box (no pad above it) — row two leaving upward is cut at its own row,
+ *  never reaching into the first row's descenders */
+const MaskedWordAt: React.FC<{ x: number; y: number; word: string; style: React.CSSProperties; r: ReturnType<typeof reveal>; flushTop?: boolean }> = ({ x, y, word, style, r, flushTop }) => (
   <span style={{ position: 'absolute', left: 0, top: 0, ...style, whiteSpace: 'nowrap', ...subpixel(`translate(${x.toFixed(3)}px, ${y.toFixed(3)}px)`, true) }}>
-    <span style={maskBox(0)}>
+    <span style={flushTop ? FLUSH_TOP_MASK : maskBox(0)}>
       <span style={revealStyle(r, undefined, true)}>{word}</span>
     </span>
   </span>
@@ -215,17 +225,23 @@ const SheetView: React.FC<{ sh: Sheet; t: number; G: Stage; g: DeskLayout; ink: 
           })()}
           {ANSWER_LINES[1].map((w, j) => {
             // row two: "nine till two." leaves up through its masks, a frame a word …
-            const out = reveal(t, -1e6, { exit: { at: ROLL_OUT.at + j * ROLL_OUT.step, dur: ROLL_OUT.dur } });
-            return out.opacity > 0.001 ? (
-              <MaskedWordAt key={`b${j}`} x={s.padX + x2[j]} y={rowsTop + rowH - boxTop} word={w} style={{ ...title, lineHeight: `${rowH}px`, color: col }} r={out} />
-            ) : null;
+            // (until its exit starts it is the plain word the fold has always drawn — the frames before the roll unchanged)
+            const outAt = ROLL_OUT.at + j * ROLL_OUT.step;
+            const st = { ...title, lineHeight: `${rowH}px`, color: col };
+            if (t <= outAt) return <WordAt key={`b${j}`} x={s.padX + x2[j]} y={rowsTop + rowH - boxTop} word={w} style={st} />;
+            const out = reveal(t, -1e6, { exit: { at: outAt, dur: ROLL_OUT.dur } });
+            return out.opacity > 0.001 ? <MaskedWordAt key={`b${j}`} x={s.padX + x2[j]} y={rowsTop + rowH - boxTop} word={w} style={st} r={out} flushTop /> : null;
           })}
           {ANSWER_LINES[1].map((w, j) => {
             // … and rises into row one's tail after "Saturdays," on the text spring, two frames a word
             const at = ROLL_IN.at + j * ROLL_IN.step;
             if (t < at - 1) return null;
             const r = reveal(t, at, { config: SPRING.text, rise: 100, fade: 0.55 });
-            return <MaskedWordAt key={`c${j}`} x={s.padX + lineEnd + x2[j]} y={rowsTop - boxTop} word={w} style={{ ...title, lineHeight: `${rowH}px`, color: col }} r={r} />;
+            const st = { ...title, lineHeight: `${rowH}px`, color: col };
+            // landed (the house rest rule, components/Type revealStyle: |y| ≤ .03 %): the plain word on the line, as the
+            // column has always set it
+            if (Math.abs(r.y) <= 0.03 && r.opacity >= 0.999) return <WordAt key={`c${j}`} x={s.padX + lineEnd + x2[j]} y={rowsTop - boxTop} word={w} style={st} />;
+            return <MaskedWordAt key={`c${j}`} x={s.padX + lineEnd + x2[j]} y={rowsTop - boxTop} word={w} style={st} r={r} />;
           })}
         </>
       );
