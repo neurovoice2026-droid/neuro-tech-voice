@@ -31,7 +31,7 @@ import { appPose, listGeo, OLD, rowSlot, type ChangeStage } from './stage';
 /** b08's rows newest first (written/stage.ts ROWS: Price list, Opening hours, Cancellation policy, FAQ page) */
 export const NEWEST_FIRST = [3, 2, 1, 0] as const;
 
-/** a single-line row's … trigger (written/Row.tsx: pad .42 × size, button 1.05 × size, vertically centred) */
+/** a row's … trigger, either layout (written/Row.tsx: pad .42 × size, button 1.05 × size, vertically centred) */
 export function rowMenuRect(x: number, y: number, w: number, h: number, size: number): Rect & { cx: number; cy: number } {
   const pad = size * 0.42;
   const b = size * 1.05;
