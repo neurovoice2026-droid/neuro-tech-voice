@@ -1,34 +1,27 @@
+// POST /api/onboarding/voice — step 3 only advances the onboarding step.
+// The voice itself is saved (and confirmed with the provider) by
+// PUT /api/agent/voice; any voice fields sent here are ignored on purpose, so
+// an unverified voice id can never be written through this route.
+
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { requireOrg } from '@/lib/api/auth'
+import { RequestError, assertSameOrigin, errorResponse, requestErrorResponse } from '@/lib/api/http'
+import { createLogger, requestIdFrom } from '@/lib/observability/logger'
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
+  const requestId = requestIdFrom(request)
+  let log = createLogger({ requestId, route: 'onboarding.voice' })
+  try {
+    assertSameOrigin(request)
+    const { supabase, org } = await requireOrg()
+    log = log.child({ orgId: org.id })
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { error } = await supabase.from('organizations').update({ onboarding_step: 4 }).eq('id', org.id)
+    if (error) throw new Error(`organizations update failed: ${error.message}`)
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
-
-  if (!org) return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
-
-  const { voice_id, voice_name } = await request.json()
-
-  // Update agent with voice
-  const { error } = await supabase
-    .from('agents')
-    .update({ voice_id, voice_name })
-    .eq('org_id', org.id)
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  await supabase
-    .from('organizations')
-    .update({ onboarding_step: 4 })
-    .eq('user_id', user.id)
-
-  return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    if (err instanceof RequestError) return requestErrorResponse(err, requestId)
+    return errorResponse(err, log, 'onboarding.voice_failed', requestId)
+  }
 }

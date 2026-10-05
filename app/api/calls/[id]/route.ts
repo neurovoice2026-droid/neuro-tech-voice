@@ -1,133 +1,144 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { conversations, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { requireOrg } from '@/lib/api/auth'
+import { apiError, assertSameOrigin, errorResponse, RequestError, requestErrorResponse } from '@/lib/api/http'
+import { createLogger, requestIdFrom, type Logger } from '@/lib/observability/logger'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { conversations as elConversations } from '@/lib/elevenlabs/client'
+import { calls as cartesiaCalls } from '@/lib/cartesia/client'
+import { isProviderError } from '@/lib/voice-providers/errors'
+import { rateLimit } from '@/lib/security/rate-limit'
+import {
+  CALL_DETAIL_COLUMNS,
+  dbError,
+  findOrgCall,
+  parseCallId,
+  providerTargets,
+  serializeCallDetail,
+  type CallRow,
+} from '@/lib/calls/serialize'
+import type { VoiceProviderId } from '@/types'
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const supabase = await createClient()
+type RouteParams = { params: Promise<{ id: string }> }
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { id } = await params
-
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
-
-  if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  // Try ElevenLabs first — the id could be an elevenlabs_conversation_id
-  if (elConfigured()) {
-    try {
-      const conv = await conversations.get(id)
-
-      // Verify this conversation belongs to the user's org
-      const { data: agent } = await supabase
-        .from('agents')
-        .select('id, name, voice_name')
-        .eq('elevenlabs_agent_id', conv.agent_id)
-        .eq('org_id', org.id)
-        .single()
-
-      if (agent) {
-        const metadata = conv.metadata ?? {}
-        const analysis = conv.analysis ?? {}
-
-        const startedAt = metadata.start_time_unix_secs
-          ? new Date(metadata.start_time_unix_secs * 1000).toISOString()
-          : null
-        const endedAt = metadata.start_time_unix_secs && metadata.call_duration_secs
-          ? new Date((metadata.start_time_unix_secs + metadata.call_duration_secs) * 1000).toISOString()
-          : null
-
-        let sentiment: string | null = 'neutral'
-        if (analysis.call_successful === 'true') sentiment = 'positive'
-        else if (analysis.call_successful === 'false') sentiment = 'negative'
-
-        const source = String(conv.conversation_initiation_client_data?.source ?? metadata.direction ?? '')
-        const direction = source === 'outbound' ? 'outbound' : 'inbound'
-
-        return NextResponse.json({
-          id: conv.conversation_id,
-          elevenlabs_conversation_id: conv.conversation_id,
-          org_id: org.id,
-          agent_id: agent.id,
-          caller_number: metadata.from_number ?? null,
-          direction,
-          duration_seconds: Math.round(metadata.call_duration_secs ?? 0),
-          status: conv.status === 'done' ? 'completed' : conv.status ?? 'completed',
-          transcript: (conv.transcript ?? []).map((t) => ({
-            role: t.role === 'agent' ? 'agent' : 'user',
-            message: t.message,
-            time_in_call_secs: t.time_in_call_secs ?? 0,
-          })),
-          sentiment,
-          summary: analysis.transcript_summary ?? null,
-          // Streamed through our proxy (enforces ownership, hides the API key).
-          recording_url: `/api/calls/${conv.conversation_id}/audio`,
-          started_at: startedAt,
-          ended_at: endedAt,
-          created_at: startedAt,
-          agents: { name: agent.name, voice_name: agent.voice_name },
-        })
-      }
-    } catch {
-      // Not found in ElevenLabs or not authorized — fall through to DB
-    }
+// GET /api/calls/[id] — one call of the signed-in org, by calls.id or by a
+// provider call id (ElevenLabs conversation / Cartesia call). Ownership is the
+// org_id filter on every lookup (plus RLS on the user-scoped client).
+export async function GET(request: Request, { params }: RouteParams) {
+  const requestId = requestIdFrom(request)
+  let log = createLogger({ requestId, route: 'calls.get' })
+  try {
+    const { supabase, org } = await requireOrg()
+    log = log.child({ orgId: org.id })
+    const id = parseCallId((await params).id)
+    const row = await findOrgCall<CallRow>(supabase, org.id, id, CALL_DETAIL_COLUMNS)
+    if (!row) return apiError('not_found', 'Call not found', 404, { requestId })
+    return NextResponse.json(serializeCallDetail(row))
+  } catch (err) {
+    if (err instanceof RequestError) return requestErrorResponse(err, requestId)
+    return errorResponse(err, log, 'calls.get.failed', requestId)
   }
-
-  // Fallback: read from Supabase
-  const { data: call, error } = await supabase
-    .from('calls')
-    .select('*, agents(name, voice_name)')
-    .eq('id', id)
-    .eq('org_id', org.id)
-    .single()
-
-  if (error || !call) return NextResponse.json({ error: 'Call not found' }, { status: 404 })
-
-  return NextResponse.json(call)
 }
 
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const supabase = await createClient()
+const DELETE_COLUMNS: string =
+  'id, status, started_at, created_at, provider, provider_call_id, elevenlabs_conversation_id, cartesia_call_id'
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+type DeleteRow = Pick<
+  CallRow,
+  'id' | 'status' | 'started_at' | 'created_at' | 'provider' | 'provider_call_id' | 'elevenlabs_conversation_id' | 'cartesia_call_id'
+>
 
-  const { id } = await params
+const CALL_DELETE_LIMIT = { name: 'call_delete', limit: 60, windowSeconds: 600 }
+/** A live call cannot be deleted at the providers; older "live" rows are stale. */
+const LIVE_GRACE_MS = 6 * 60 * 60 * 1000
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
+type ProviderDeleteResult = { provider: VoiceProviderId; result: 'deleted' | 'already_gone' | 'skipped_not_configured' }
 
-  if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  // Delete from ElevenLabs
-  if (elConfigured()) {
-    try {
-      await conversations.delete(id)
-    } catch {
-      // May not exist in EL — continue to delete from DB
+async function deleteAtProvider(
+  provider: VoiceProviderId,
+  externalId: string,
+  ctx: { orgId: string; callId: string },
+  log: Logger,
+): Promise<ProviderDeleteResult> {
+  try {
+    if (provider === 'elevenlabs') await elConversations.delete(externalId, ctx)
+    else await cartesiaCalls.delete(externalId, ctx)
+    return { provider, result: 'deleted' }
+  } catch (err) {
+    if (isProviderError(err) && err.code === 'not_found') return { provider, result: 'already_gone' }
+    if (isProviderError(err) && err.code === 'not_configured') {
+      // This deployment has no key for that provider: nothing we can delete there.
+      log.warn('calls.delete.provider_not_configured', { provider })
+      return { provider, result: 'skipped_not_configured' }
     }
+    throw err
   }
+}
 
-  // Also delete from local DB cache (by conversation_id or by uuid)
-  await supabase
-    .from('calls')
-    .delete()
-    .eq('org_id', org.id)
-    .or(`id.eq.${id},elevenlabs_conversation_id.eq.${id}`)
+// DELETE /api/calls/[id] — deletes the call at the voice provider(s) first
+// (transcript + audio), then our row. If a provider delete fails the row is
+// kept so the user can retry, and nothing is reported as deleted.
+export async function DELETE(request: Request, { params }: RouteParams) {
+  const requestId = requestIdFrom(request)
+  let log = createLogger({ requestId, route: 'calls.delete' })
+  try {
+    assertSameOrigin(request)
+    const { supabase, user, org } = await requireOrg()
+    log = log.child({ orgId: org.id })
+    const id = parseCallId((await params).id)
 
-  return NextResponse.json({ success: true })
+    const limit = await rateLimit(CALL_DELETE_LIMIT, org.id)
+    if (!limit.allowed) {
+      return apiError('rate_limited', 'Too many deletions in a short time. Please wait a moment.', 429, {
+        requestId,
+        headers: { 'Retry-After': String(Math.max(1, Math.ceil((limit.resetAt - Date.now()) / 1000))) },
+      })
+    }
+
+    const row = await findOrgCall<DeleteRow>(supabase, org.id, id, DELETE_COLUMNS)
+    if (!row) return apiError('not_found', 'Call not found', 404, { requestId })
+    log = log.child({ callId: row.id })
+
+    const startedMs = Date.parse(row.started_at ?? row.created_at)
+    const live = (row.status === 'in-progress' || row.status === 'ringing') && Date.now() - startedMs < LIVE_GRACE_MS
+    if (live) {
+      return apiError('conflict', 'This call is still in progress. You can delete it once it has ended.', 409, { requestId })
+    }
+
+    const results: ProviderDeleteResult[] = []
+    for (const target of providerTargets(row)) {
+      try {
+        results.push(await deleteAtProvider(target.provider, target.externalId, { orgId: org.id, callId: row.id }, log))
+      } catch (err) {
+        log.error('calls.delete.provider_failed', err, { provider: target.provider })
+        return apiError(
+          'provider_error',
+          'We could not delete this call at the voice provider, so the record was kept. Please try again in a moment.',
+          502,
+          { requestId, details: { provider: target.provider, ...(isProviderError(err) ? { code: err.code } : {}) } },
+        )
+      }
+    }
+
+    // RLS allows the owner to delete their call rows (the guard trigger only blocks INSERT/UPDATE).
+    const { error: deleteError } = await supabase.from('calls').delete().eq('id', row.id).eq('org_id', org.id)
+    if (deleteError) throw dbError('calls delete', deleteError)
+
+    const { error: auditError } = await createAdminClient().from('audit_log').insert({
+      org_id: org.id,
+      actor_user_id: user.id,
+      actor_kind: 'user',
+      action: 'call.deleted',
+      target_type: 'call',
+      target_id: row.id,
+      details: { provider: row.provider, status: row.status, provider_deletes: results },
+    })
+    // The call is already gone; a missing audit row must not turn that into an error for the user.
+    if (auditError) log.error('calls.delete.audit_failed', dbError('audit_log insert', auditError))
+
+    log.info('calls.deleted', { providers: results })
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    if (err instanceof RequestError) return requestErrorResponse(err, requestId)
+    return errorResponse(err, log, 'calls.delete.failed', requestId)
+  }
 }

@@ -10,37 +10,48 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import type { CallFilters } from '@/types'
+import { callFilterParams, readApiError } from '@/hooks/useCalls'
+import type { CallListFilters } from '@/lib/calls/labels'
 
 interface ExportDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  filters: CallFilters
+  filters: CallListFilters
   total: number
   selectedIds: string[]
 }
 
-const COLUMNS = [
+// Column ids must match the server whitelist (app/api/calls/export/route.ts).
+const COLUMNS: Array<{ id: string; label: string; required: boolean; warning?: string }> = [
   { id: 'caller_number',    label: 'Phone number',   required: true },
   { id: 'direction',        label: 'Direction',      required: true },
   { id: 'duration_seconds', label: 'Duration',       required: true },
   { id: 'status',           label: 'Status',         required: true },
-  { id: 'sentiment',        label: 'Sentiment',      required: false },
   { id: 'created_at',       label: 'Date & time',    required: false },
+  { id: 'sentiment',        label: 'Sentiment',      required: false },
+  { id: 'provider',         label: 'Voice provider', required: false },
+  { id: 'routing_reason',   label: 'Routing (answered by AI, backup agent, after hours…)', required: false },
+  { id: 'failover_reason',  label: 'Failover reason', required: false },
+  { id: 'outcome',          label: 'Outcome',        required: false },
+  { id: 'summary_title',    label: 'Summary title',  required: false },
+  { id: 'summary',          label: 'AI summary',     required: false },
   { id: 'transcript',       label: 'Transcript',     required: false, warning: 'Makes file larger' },
-  { id: 'summary',          label: 'AI Summary',     required: false },
   { id: 'agent_name',       label: 'Agent name',     required: false },
 ]
+
+const DEFAULT_COLUMNS = ['sentiment', 'created_at', 'provider', 'routing_reason', 'outcome']
 
 export function ExportDialog({ open, onOpenChange, filters, total, selectedIds }: ExportDialogProps) {
   const [format, setFormat] = useState<'csv' | 'json'>('csv')
   const [scope, setScope] = useState<'filtered' | 'all' | 'selected'>('filtered')
   const [checkedCols, setCheckedCols] = useState<Set<string>>(
-    new Set(COLUMNS.filter((c) => c.required || ['sentiment', 'created_at'].includes(c.id)).map((c) => c.id))
+    new Set(COLUMNS.filter((c) => c.required || DEFAULT_COLUMNS.includes(c.id)).map((c) => c.id))
   )
   const [isPending, startTransition] = useTransition()
 
-  const scopeCount = scope === 'selected' ? selectedIds.length : total
+  // "Selected" disappears when the selection is cleared: fall back to the filters.
+  const effectiveScope = scope === 'selected' && selectedIds.length === 0 ? 'filtered' : scope
+  const scopeCount = effectiveScope === 'selected' ? selectedIds.length : effectiveScope === 'filtered' ? total : null
 
   function toggleCol(id: string) {
     setCheckedCols((prev) => {
@@ -53,26 +64,17 @@ export function ExportDialog({ open, onOpenChange, filters, total, selectedIds }
 
   function handleExport() {
     startTransition(async () => {
-      const params = new URLSearchParams({
-        format,
-        scope,
-        columns: Array.from(checkedCols).join(','),
-        ...(scope === 'selected' ? { selectedIds: selectedIds.join(',') } : {}),
-        ...(scope === 'filtered' ? {
-          search:    filters.search,
-          status:    filters.status,
-          direction: filters.direction,
-          sentiment: filters.sentiment,
-          dateFrom:  filters.dateFrom,
-          dateTo:    filters.dateTo,
-        } : {}),
-      })
+      const params = effectiveScope === 'filtered' ? callFilterParams(filters) : new URLSearchParams()
+      params.set('format', format)
+      params.set('scope', effectiveScope)
+      params.set('columns', COLUMNS.filter((c) => checkedCols.has(c.id)).map((c) => c.id).join(','))
+      if (effectiveScope === 'selected') params.set('selectedIds', selectedIds.join(','))
 
-      toast.loading(`Exporting ${scopeCount} calls…`, { id: 'export' })
+      toast.loading(scopeCount === null ? 'Exporting calls…' : `Exporting ${scopeCount} calls…`, { id: 'export' })
 
       try {
         const res = await fetch(`/api/calls/export?${params}`)
-        if (!res.ok) throw new Error('Export failed')
+        if (!res.ok) throw new Error(await readApiError(res, 'Export failed'))
 
         const blob = await res.blob()
         const url  = URL.createObjectURL(blob)
@@ -84,15 +86,15 @@ export function ExportDialog({ open, onOpenChange, filters, total, selectedIds }
 
         toast.success('Download ready!', { id: 'export' })
         onOpenChange(false)
-      } catch {
-        toast.error('Export failed', { id: 'export' })
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Export failed', { id: 'export' })
       }
     })
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className="rounded-full bg-purple-100 p-1.5">
@@ -107,15 +109,17 @@ export function ExportDialog({ open, onOpenChange, filters, total, selectedIds }
 
         <div className="space-y-5 py-1">
           {/* Format */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Format</p>
+          <fieldset>
+            <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Format</legend>
             <div className="grid grid-cols-2 gap-2">
               {(['csv', 'json'] as const).map((f) => (
                 <button
                   key={f}
+                  type="button"
+                  aria-pressed={format === f}
                   onClick={() => setFormat(f)}
                   className={cn(
-                    'rounded-lg border p-3 text-left transition-colors',
+                    'rounded-lg border p-3 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
                     format === f
                       ? 'border-primary bg-purple-50'
                       : 'border-border hover:border-purple-200'
@@ -128,11 +132,11 @@ export function ExportDialog({ open, onOpenChange, filters, total, selectedIds }
                 </button>
               ))}
             </div>
-          </div>
+          </fieldset>
 
           {/* Scope */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Export scope</p>
+          <fieldset>
+            <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Export scope</legend>
             <div className="space-y-1.5">
               {[
                 { id: 'filtered', label: `Current filters (${total} calls)` },
@@ -146,7 +150,7 @@ export function ExportDialog({ open, onOpenChange, filters, total, selectedIds }
                     type="radio"
                     name="scope"
                     value={s.id}
-                    checked={scope === s.id}
+                    checked={effectiveScope === s.id}
                     onChange={() => setScope(s.id as typeof scope)}
                     className="accent-primary"
                   />
@@ -154,11 +158,11 @@ export function ExportDialog({ open, onOpenChange, filters, total, selectedIds }
                 </label>
               ))}
             </div>
-          </div>
+          </fieldset>
 
           {/* Columns */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Columns</p>
+          <fieldset>
+            <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Columns</legend>
             <div className="space-y-1.5">
               {COLUMNS.map((col) => (
                 <div key={col.id} className="flex items-center gap-2.5">
@@ -177,7 +181,7 @@ export function ExportDialog({ open, onOpenChange, filters, total, selectedIds }
                 </div>
               ))}
             </div>
-          </div>
+          </fieldset>
         </div>
 
         <div className="flex gap-3 pt-1">
@@ -194,7 +198,7 @@ export function ExportDialog({ open, onOpenChange, filters, total, selectedIds }
             ) : (
               <>
                 <Download className="mr-2 h-4 w-4" />
-                Export {scopeCount} calls
+                {scopeCount === null ? 'Export all calls' : `Export ${scopeCount} calls`}
               </>
             )}
           </Button>

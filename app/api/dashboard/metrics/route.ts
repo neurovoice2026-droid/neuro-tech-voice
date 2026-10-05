@@ -1,129 +1,91 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { conversations, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { requireOrg } from '@/lib/api/auth'
+import { errorResponse, RequestError, requestErrorResponse } from '@/lib/api/http'
+import { createLogger, requestIdFrom } from '@/lib/observability/logger'
+import {
+  dbError,
+  factTime,
+  loadCallFacts,
+  localDateOf,
+  safeTimeZone,
+  shiftMonths,
+  wallTime,
+  zonedDayStart,
+} from '@/lib/calls/serialize'
+import type { DashboardMetrics } from '@/types'
 
-export async function GET() {
-  const supabase = await createClient()
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+const LIVE = new Set(['ringing', 'in-progress'])
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+// GET /api/dashboard/metrics — dashboard KPIs from the `calls` table (both
+// providers). "Today" and "this month" use the org's time zone; the success
+// rate is the share of finished calls that completed; sentiment comes from
+// calls.sentiment (derived from the provider's call analysis).
+export async function GET(request: Request) {
+  const requestId = requestIdFrom(request)
+  let log = createLogger({ requestId, route: 'dashboard.metrics' })
+  try {
+    const { supabase, org } = await requireOrg()
+    log = log.child({ orgId: org.id })
+    const tz = safeTimeZone(org.timezone)
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id, minutes_used, minutes_limit')
-    .eq('user_id', user.id)
-    .single()
+    const [factsResult, usage] = await Promise.all([
+      loadCallFacts(supabase, org.id),
+      supabase.from('organizations').select('minutes_used, minutes_limit').eq('id', org.id).single(),
+    ])
+    if (usage.error) throw dbError('organization usage', usage.error)
+    const { facts, total, truncated } = factsResult
+    if (truncated) log.warn('dashboard.metrics.truncated', { total, loaded: facts.length })
 
-  if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    const now = new Date()
+    const today = localDateOf(now, tz)
+    const todayStart = zonedDayStart(today, tz).getTime()
+    const monthStart = zonedDayStart(shiftMonths(today, 0), tz).getTime()
+    const weekStart = now.getTime() - WEEK_MS
 
-  const { data: agent } = await supabase
-    .from('agents')
-    .select('elevenlabs_agent_id')
-    .eq('org_id', org.id)
-    .single()
+    let totalDuration = 0
+    let completed = 0
+    let completedDuration = 0
+    let finished = 0
+    let callsToday = 0
+    let callsThisWeek = 0
+    let callsThisMonth = 0
+    const sentiment = { positive: 0, neutral: 0, negative: 0 }
+    const hourCounts = new Array<number>(24).fill(0)
 
-  const now = new Date()
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-
-  // Try ElevenLabs
-  if (elConfigured() && agent?.elevenlabs_agent_id) {
-    try {
-      const data = await conversations.list({
-        agent_id: agent.elevenlabs_agent_id,
-        page_size: 100,
-      })
-
-      const all = data.conversations ?? []
-
-      const totalCalls = all.length
-      const durations = all.map((c) => c.call_duration_secs ?? 0)
-      const totalDuration = durations.reduce((s, d) => s + d, 0)
-      const completed = all.filter((c) => c.call_duration_secs && c.call_duration_secs > 0)
-      const avgDuration = completed.length > 0
-        ? Math.round(totalDuration / completed.length) : 0
-
-      const todayUnix = Math.floor(todayStart.getTime() / 1000)
-      const weekUnix = Math.floor(weekStart.getTime() / 1000)
-      const monthUnix = Math.floor(monthStart.getTime() / 1000)
-
-      const callsToday = all.filter((c) => (c.start_time_unix_secs ?? 0) >= todayUnix).length
-      const callsThisWeek = all.filter((c) => (c.start_time_unix_secs ?? 0) >= weekUnix).length
-      const callsThisMonth = all.filter((c) => (c.start_time_unix_secs ?? 0) >= monthUnix).length
-
-      const sentimentBreakdown = {
-        positive: all.filter((c) => c.call_successful === 'true').length,
-        negative: all.filter((c) => c.call_successful === 'false').length,
-        neutral: all.filter((c) => c.call_successful !== 'true' && c.call_successful !== 'false').length,
+    for (const f of facts) {
+      const duration = Math.max(0, f.duration_seconds ?? 0)
+      const t = factTime(f)
+      totalDuration += duration
+      if (!LIVE.has(f.status ?? '')) finished++
+      if (f.status === 'completed') {
+        completed++
+        completedDuration += duration
+        if (Number.isFinite(t)) hourCounts[wallTime(new Date(t), tz).hour]++
       }
-
-      // Peak hour
-      const hourCounts = new Array(24).fill(0)
-      completed.forEach((c) => {
-        if (c.start_time_unix_secs) {
-          const h = new Date(c.start_time_unix_secs * 1000).getHours()
-          hourCounts[h]++
-        }
-      })
-      const peakHour = hourCounts.indexOf(Math.max(...hourCounts))
-
-      const successRate = totalCalls > 0
-        ? Math.round((completed.length / totalCalls) * 100) : 0
-
-      return NextResponse.json({
-        total_calls: totalCalls,
-        total_duration_seconds: Math.round(totalDuration),
-        avg_duration_seconds: avgDuration,
-        calls_today: callsToday,
-        calls_this_week: callsThisWeek,
-        calls_this_month: callsThisMonth,
-        sentiment_breakdown: sentimentBreakdown,
-        peak_hour: peakHour,
-        success_rate: successRate,
-        minutes_used: org.minutes_used,
-        minutes_limit: org.minutes_limit,
-      })
-    } catch (err) {
-      console.error('ElevenLabs metrics failed, falling back to DB:', err)
+      if (t >= todayStart) callsToday++
+      if (t >= weekStart) callsThisWeek++
+      if (t >= monthStart) callsThisMonth++
+      if (f.sentiment === 'positive' || f.sentiment === 'neutral' || f.sentiment === 'negative') sentiment[f.sentiment]++
     }
+
+    const peak = Math.max(...hourCounts)
+    const metrics: DashboardMetrics = {
+      total_calls: total,
+      total_duration_seconds: Math.round(totalDuration),
+      avg_duration_seconds: completed > 0 ? Math.round(completedDuration / completed) : 0,
+      calls_today: callsToday,
+      calls_this_week: callsThisWeek,
+      calls_this_month: callsThisMonth,
+      sentiment_breakdown: sentiment,
+      peak_hour: peak > 0 ? hourCounts.indexOf(peak) : 0,
+      success_rate: finished > 0 ? Math.round((completed / finished) * 100) : 0,
+      minutes_used: Number(usage.data?.minutes_used ?? 0),
+      minutes_limit: Number(usage.data?.minutes_limit ?? 0),
+    }
+    return NextResponse.json(metrics)
+  } catch (err) {
+    if (err instanceof RequestError) return requestErrorResponse(err, requestId)
+    return errorResponse(err, log, 'dashboard.metrics.failed', requestId)
   }
-
-  // Fallback: Supabase
-  const todayISO = todayStart.toISOString()
-  const weekISO = weekStart.toISOString()
-  const monthISO = monthStart.toISOString()
-
-  const { data: calls } = await supabase
-    .from('calls')
-    .select('duration_seconds, status, sentiment, started_at')
-    .eq('org_id', org.id)
-
-  const allCalls = calls ?? []
-  const completedCalls = allCalls.filter((c) => c.status === 'completed')
-  const totalDuration = allCalls.reduce((s, c) => s + (c.duration_seconds ?? 0), 0)
-
-  const hourCounts = new Array(24).fill(0)
-  completedCalls.forEach((c) => {
-    const h = new Date(c.started_at).getHours()
-    hourCounts[h]++
-  })
-
-  return NextResponse.json({
-    total_calls: allCalls.length,
-    total_duration_seconds: totalDuration,
-    avg_duration_seconds: completedCalls.length > 0 ? Math.round(totalDuration / completedCalls.length) : 0,
-    calls_today: allCalls.filter((c) => c.started_at >= todayISO).length,
-    calls_this_week: allCalls.filter((c) => c.started_at >= weekISO).length,
-    calls_this_month: allCalls.filter((c) => c.started_at >= monthISO).length,
-    sentiment_breakdown: {
-      positive: allCalls.filter((c) => c.sentiment === 'positive').length,
-      neutral: allCalls.filter((c) => c.sentiment === 'neutral').length,
-      negative: allCalls.filter((c) => c.sentiment === 'negative').length,
-    },
-    peak_hour: hourCounts.indexOf(Math.max(...hourCounts)),
-    success_rate: allCalls.length > 0 ? Math.round((completedCalls.length / allCalls.length) * 100) : 0,
-    minutes_used: org.minutes_used,
-    minutes_limit: org.minutes_limit,
-  })
 }

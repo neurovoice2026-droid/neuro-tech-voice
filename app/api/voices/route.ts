@@ -1,43 +1,53 @@
+// GET /api/voices — the voices this organization may pick for its agent.
+//   ?source=workspace (default): the org's own clones + platform-provisioned
+//     library voices + ElevenLabs default voices.
+//   ?source=library: the public ElevenLabs Voice Library (filtered).
+// Never lists the shared ElevenLabs workspace directly: it holds every
+// customer's cloned voices (see lib/voice-providers/voice-catalog.ts).
+
 import { NextResponse } from 'next/server'
-import { voices, isConfigured } from '@/lib/elevenlabs/client'
-import type { ElevenLabsVoice } from '@/types'
+import { z } from 'zod'
+import { requireOrg } from '@/lib/api/auth'
+import { createLogger, requestIdFrom } from '@/lib/observability/logger'
+import { RATE_LIMITS, enforceRateLimit } from '@/lib/security/rate-limit'
+import {
+  languageSchema,
+  listVoices,
+  optionalParam,
+  parseQuery,
+  voiceErrorResponse,
+} from '@/lib/voice-providers/voice-catalog'
+
+const QuerySchema = z.object({
+  source: optionalParam(z.enum(['workspace', 'library'])),
+  search: optionalParam(z.string().trim().max(100)),
+  language: optionalParam(languageSchema),
+  gender: optionalParam(z.enum(['female', 'male'])),
+  page_token: optionalParam(z.string().max(512)),
+  page_size: optionalParam(z.coerce.number().int().min(1).max(100)),
+})
 
 export async function GET(request: Request) {
-  if (!isConfigured()) {
-    return NextResponse.json([], {
-      headers: { 'Cache-Control': 'public, max-age=60' },
-    })
-  }
-
-  const { searchParams } = new URL(request.url)
-  const search = searchParams.get('search') ?? undefined
-  const category = searchParams.get('category') ?? undefined
-  const pageSize = Number(searchParams.get('page_size') ?? 50)
-
+  const requestId = requestIdFrom(request)
+  let log = createLogger({ requestId, route: 'voices.list' })
   try {
-    const data = await voices.search({
-      page_size: Math.min(pageSize, 100),
-      search,
-      category,
-      sort: 'name',
-      sort_direction: 'asc',
-    })
+    const { org } = await requireOrg()
+    log = log.child({ orgId: org.id })
+    const q = parseQuery(request, QuerySchema)
+    await enforceRateLimit([RATE_LIMITS.voiceCatalog], org.id)
 
-    const formatted: ElevenLabsVoice[] = (data.voices ?? []).map((v) => ({
-      voice_id: v.voice_id,
-      name: v.name,
-      category: v.category ?? 'premade',
-      description: v.description ?? null,
-      preview_url: v.preview_url ?? null,
-      labels: v.labels ?? {},
-    }))
-
-    return NextResponse.json(formatted, {
-      headers: { 'Cache-Control': 'public, max-age=3600' },
+    const page = await listVoices(org.id, {
+      source: q.source ?? 'workspace',
+      search: q.search,
+      language: q.language,
+      gender: q.gender,
+      pageToken: q.page_token,
+      pageSize: q.page_size,
     })
-  } catch {
-    return NextResponse.json([], {
-      headers: { 'Cache-Control': 'public, max-age=60' },
+    return NextResponse.json(page, {
+      headers: { 'Cache-Control': 'private, max-age=30', Vary: 'Cookie' },
     })
+  } catch (err) {
+    return voiceErrorResponse(err, log, 'voices.list.failed', requestId)
   }
 }

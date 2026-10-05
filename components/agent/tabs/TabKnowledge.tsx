@@ -3,67 +3,65 @@
 import { useState, useRef, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  FileText, Globe, Trash2, Upload, Link2, CheckCircle2,
-  AlertCircle, Loader2, Info, RefreshCw,
+  FileText, Globe, Trash2, Upload, Link2, CheckCircle2, AlertCircle, Loader2, Info,
+  RefreshCw, RotateCw, Type, Bot, Clock,
 } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
-import type { KnowledgeDocument } from '@/types'
-import type { useKnowledge, UploadingFile } from '@/hooks/useKnowledge'
-import { formatFileSize } from '@/lib/utils'
+import {
+  KNOWLEDGE_LIMITS, isProcessing, validateKnowledgeFile,
+  type useKnowledge, type KnowledgeDoc, type UploadingFile,
+} from '@/hooks/useKnowledge'
+import { cn, formatDate, formatFileSize } from '@/lib/utils'
+import { toast } from 'sonner'
 
 type KnowledgeHook = ReturnType<typeof useKnowledge>
-
-const ACCEPTED = '.pdf,.txt,.docx,.md'
-const MAX_SIZE_MB = 10
-const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024
 
 interface TabKnowledgeProps {
   hook: KnowledgeHook
 }
 
+const STAGE_LABEL: Record<UploadingFile['stage'], string> = {
+  preparing: 'Preparing…',
+  uploading: 'Uploading…',
+  processing: 'Adding to your agent…',
+  done: 'Done',
+  error: 'Failed',
+}
+
 export function TabKnowledge({ hook }: TabKnowledgeProps) {
-  const { docs, isLoading, uploading, uploadFiles, addUrl, deleteDoc, refetch } = hook
+  const { docs, isLoading, uploading, retrying, uploadFiles, addUrl, addText, retryDoc, deleteDoc, refetch, clearErrorUploads } = hook
   const [urlInput, setUrlInput] = useState('')
   const [isAddingUrl, setIsAddingUrl] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<KnowledgeDocument | null>(null)
+  const [textName, setTextName] = useState('')
+  const [textBody, setTextBody] = useState('')
+  const [isAddingText, setIsAddingText] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<KnowledgeDoc | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const validateFiles = (files: File[]): File[] => {
-    const valid: File[] = []
-    for (const f of files) {
-      const ext = f.name.split('.').pop()?.toLowerCase() ?? ''
-      if (!['pdf', 'txt', 'docx', 'md'].includes(ext)) {
-        continue
-      }
-      if (f.size > MAX_SIZE_BYTES) {
-        continue
-      }
-      valid.push(f)
-    }
-    return valid
-  }
-
   const handleFiles = useCallback(async (files: FileList | File[]) => {
-    const arr = Array.from(files)
-    const valid = validateFiles(arr)
-    if (valid.length === 0) return
-    await uploadFiles(valid)
+    const valid: File[] = []
+    for (const f of Array.from(files)) {
+      const problem = validateKnowledgeFile(f)
+      if (problem) toast.error(`"${f.name}": ${problem}`)
+      else valid.push(f)
+    }
+    if (valid.length > 0) await uploadFiles(valid)
   }, [uploadFiles])
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
-    if (e.dataTransfer.files.length > 0) {
-      handleFiles(e.dataTransfer.files)
-    }
+    if (e.dataTransfer.files.length > 0) void handleFiles(e.dataTransfer.files)
   }, [handleFiles])
 
   const onDragOver = (e: React.DragEvent) => {
@@ -74,21 +72,44 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
   const onDragLeave = () => setIsDragging(false)
 
   const handleAddUrl = async () => {
-    if (!urlInput.trim()) return
+    const url = urlInput.trim()
+    if (!url || isAddingUrl) return
+    if (!/^https?:\/\//i.test(url)) {
+      toast.error('Enter a full web address, starting with https://')
+      return
+    }
     setIsAddingUrl(true)
-    const ok = await addUrl(urlInput.trim())
+    const ok = await addUrl(url)
     if (ok) setUrlInput('')
     setIsAddingUrl(false)
   }
 
+  const textTooLong = textBody.length > KNOWLEDGE_LIMITS.maxTextChars
+  const canAddText = !!textName.trim() && !!textBody.trim() && !textTooLong && !isAddingText
+
+  const handleAddText = async () => {
+    if (!canAddText) return
+    setIsAddingText(true)
+    const ok = await addText(textName.trim(), textBody)
+    if (ok) {
+      setTextName('')
+      setTextBody('')
+    }
+    setIsAddingText(false)
+  }
+
   const handleDelete = async () => {
     if (!deleteTarget) return
+    setIsDeleting(true)
     await deleteDoc(deleteTarget.id)
+    setIsDeleting(false)
     setDeleteTarget(null)
   }
 
   const totalDocs = docs.length
-  const totalSize = docs.reduce((acc, d) => acc + d.size_bytes, 0)
+  const totalSize = docs.reduce((acc, d) => acc + (d.size_bytes ?? 0), 0)
+  const attachedCount = docs.filter((d) => d.status === 'ready' && !!d.attached_at).length
+  const hasUploadErrors = uploading.some((u) => u.status === 'error')
 
   return (
     <div className="space-y-6">
@@ -108,8 +129,8 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
         </Card>
         <Card className="flex-1">
           <CardContent className="py-4">
-            <p className="text-2xl font-bold">{docs.filter(d => d.status === 'ready').length}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Ready</p>
+            <p className="text-2xl font-bold">{attachedCount}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">On your agent</p>
           </CardContent>
         </Card>
       </div>
@@ -119,43 +140,59 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
         <CardHeader>
           <CardTitle className="text-base">Upload Files</CardTitle>
           <CardDescription>
-            Supported: PDF, TXT, DOCX, MD — max {MAX_SIZE_MB}MB per file
+            Supported: {KNOWLEDGE_LIMITS.typesLabel} — max {KNOWLEDGE_LIMITS.maxFileMb} MB per file
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div
+            role="button"
+            tabIndex={0}
             onDrop={onDrop}
             onDragOver={onDragOver}
             onDragLeave={onDragLeave}
             onClick={() => fileInputRef.current?.click()}
-            className={[
-              'flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 cursor-pointer transition-colors',
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                fileInputRef.current?.click()
+              }
+            }}
+            className={cn(
+              'flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 cursor-pointer transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
               isDragging ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/50 hover:bg-muted/30',
-            ].join(' ')}
+            )}
           >
-            <Upload className={['size-8 mb-3', isDragging ? 'text-primary' : 'text-muted-foreground'].join(' ')} />
+            <Upload className={cn('size-8 mb-3', isDragging ? 'text-primary' : 'text-muted-foreground')} />
             <p className="text-sm font-medium">
               {isDragging ? 'Drop files here' : 'Click or drag & drop files'}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              PDF, TXT, DOCX, MD up to {MAX_SIZE_MB}MB
+              {KNOWLEDGE_LIMITS.typesLabel} up to {KNOWLEDGE_LIMITS.maxFileMb} MB
             </p>
             <input
               ref={fileInputRef}
               type="file"
-              accept={ACCEPTED}
+              accept={KNOWLEDGE_LIMITS.accept}
               multiple
               className="hidden"
-              onChange={e => e.target.files && handleFiles(e.target.files)}
+              onChange={(e) => {
+                if (e.target.files) void handleFiles(e.target.files)
+                e.target.value = ''
+              }}
             />
           </div>
 
           {/* Upload progress */}
           {uploading.length > 0 && (
             <div className="space-y-2">
-              {uploading.map(u => (
+              {uploading.map((u) => (
                 <UploadProgress key={u.id} item={u} />
               ))}
+              {hasUploadErrors && (
+                <Button variant="ghost" size="sm" onClick={clearErrorUploads} className="text-xs">
+                  Clear failed uploads
+                </Button>
+              )}
             </div>
           )}
         </CardContent>
@@ -165,19 +202,22 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Add URL</CardTitle>
-          <CardDescription>Scrape a webpage and add it to your knowledge base.</CardDescription>
+          <CardDescription>Import a public web page into your knowledge base.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex gap-2">
             <Input
               value={urlInput}
-              onChange={e => setUrlInput(e.target.value)}
+              onChange={(e) => setUrlInput(e.target.value)}
               placeholder="https://example.com/faq"
               className="flex-1"
-              onKeyDown={e => e.key === 'Enter' && handleAddUrl()}
+              inputMode="url"
+              maxLength={2048}
+              disabled={isAddingUrl}
+              onKeyDown={(e) => e.key === 'Enter' && void handleAddUrl()}
             />
             <Button
-              onClick={handleAddUrl}
+              onClick={() => void handleAddUrl()}
               disabled={!urlInput.trim() || isAddingUrl}
               className="shrink-0"
             >
@@ -188,19 +228,53 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
         </CardContent>
       </Card>
 
+      {/* Add text */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Add Text</CardTitle>
+          <CardDescription>Paste opening hours, prices, policies or FAQs directly.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Input
+            value={textName}
+            onChange={(e) => setTextName(e.target.value)}
+            placeholder="Name, e.g. Opening hours & prices"
+            maxLength={KNOWLEDGE_LIMITS.maxNameChars}
+            disabled={isAddingText}
+          />
+          <Textarea
+            value={textBody}
+            onChange={(e) => setTextBody(e.target.value)}
+            placeholder="Paste or type the information your agent should know…"
+            className="min-h-32 max-h-80 overflow-y-auto"
+            disabled={isAddingText}
+            aria-invalid={textTooLong || undefined}
+          />
+          <div className="flex items-center justify-between gap-2">
+            <p className={cn('text-xs', textTooLong ? 'text-destructive' : 'text-muted-foreground')}>
+              {textBody.length.toLocaleString()} / {KNOWLEDGE_LIMITS.maxTextChars.toLocaleString()} characters
+            </p>
+            <Button onClick={() => void handleAddText()} disabled={!canAddText} className="shrink-0">
+              {isAddingText ? <Loader2 className="size-4 animate-spin" /> : <Type className="size-4" />}
+              <span className="ml-1.5">{isAddingText ? 'Adding…' : 'Add text'}</span>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Document List */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="text-base">Knowledge Base</CardTitle>
-            <CardDescription>Files and URLs your agent can reference.</CardDescription>
+            <CardDescription>Files, pages and text your agent can reference.</CardDescription>
           </div>
-          <Button variant="ghost" size="sm" onClick={refetch}>
-            <RefreshCw className="size-3.5" />
+          <Button variant="ghost" size="sm" onClick={() => void refetch()} title="Refresh">
+            <RefreshCw className={cn('size-3.5', isLoading && 'animate-spin')} />
           </Button>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
+          {isLoading && docs.length === 0 ? (
             <div className="space-y-3">
               {Array.from({ length: 3 }).map((_, i) => (
                 <Skeleton key={i} className="h-14 rounded-lg" />
@@ -211,13 +285,19 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
               <FileText className="size-8 text-muted-foreground mx-auto mb-3" />
               <p className="text-sm font-medium">No documents yet</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Upload files or add URLs to help your agent answer questions.
+                Upload files, add pages or paste text to help your agent answer questions.
               </p>
             </div>
           ) : (
             <div className="space-y-2">
-              {docs.map(doc => (
-                <DocRow key={doc.id} doc={doc} onDelete={() => setDeleteTarget(doc)} />
+              {docs.map((doc) => (
+                <DocRow
+                  key={doc.id}
+                  doc={doc}
+                  isRetrying={retrying.includes(doc.id)}
+                  onRetry={() => void retryDoc(doc.id)}
+                  onDelete={() => setDeleteTarget(doc)}
+                />
               ))}
             </div>
           )}
@@ -230,13 +310,17 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
           <Info className="size-4 text-muted-foreground mt-0.5 shrink-0" />
           <div className="text-xs text-muted-foreground space-y-1">
             <p>Your agent uses these documents to answer caller questions accurately.</p>
-            <p>For best results: use clear, well-structured documents. Avoid scanned images.</p>
+            <p>
+              Accepted: {KNOWLEDGE_LIMITS.typesLabel} up to {KNOWLEDGE_LIMITS.maxFileMb} MB each, public web pages, and pasted
+              text up to {KNOWLEDGE_LIMITS.maxTextChars.toLocaleString()} characters.
+            </p>
+            <p>For best results: use clear, well-structured, text-based documents. Scanned images can&apos;t be read.</p>
           </div>
         </CardContent>
       </Card>
 
       {/* Delete confirmation dialog */}
-      <Dialog open={!!deleteTarget} onOpenChange={open => !open && setDeleteTarget(null)}>
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && !isDeleting && setDeleteTarget(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete document?</DialogTitle>
@@ -245,8 +329,11 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>Cancel</Button>
+            <Button variant="destructive" onClick={() => void handleDelete()} disabled={isDeleting}>
+              {isDeleting && <Loader2 className="size-4 animate-spin mr-1.5" />}
+              Delete
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -266,9 +353,7 @@ function UploadProgress({ item }: { item: UploadingFile }) {
           <Loader2 className="size-4 animate-spin shrink-0" />
         )}
         <span className="truncate flex-1 font-medium">{item.name}</span>
-        <span className="text-xs text-muted-foreground shrink-0">
-          {item.status === 'error' ? 'Failed' : item.status === 'done' ? 'Done' : `${item.progress}%`}
-        </span>
+        <span className="text-xs text-muted-foreground shrink-0">{STAGE_LABEL[item.stage]}</span>
       </div>
       {item.status === 'uploading' && (
         <Progress value={item.progress} className="h-1" />
@@ -280,39 +365,110 @@ function UploadProgress({ item }: { item: UploadingFile }) {
   )
 }
 
-function DocRow({ doc, onDelete }: { doc: KnowledgeDocument; onDelete: () => void }) {
-  const Icon = doc.type === 'url' ? Globe : FileText
-  const statusIcon = {
-    ready: <CheckCircle2 className="size-3.5 text-green-500" />,
-    processing: <Loader2 className="size-3.5 animate-spin text-muted-foreground" />,
-    failed: <AlertCircle className="size-3.5 text-destructive" />,
-  }[doc.status]
+const STATUS_STYLE = {
+  processing: 'border-blue-200 bg-blue-50 text-blue-700',
+  stalled: 'border-amber-300 bg-amber-50 text-amber-800',
+  ready: 'border-green-200 bg-green-50 text-green-700',
+  failed: 'border-red-200 bg-red-50 text-red-700',
+} as const
+
+function StatusBadge({ doc }: { doc: KnowledgeDoc }) {
+  if (doc.status === 'processing') {
+    const stalled = !isProcessing(doc)
+    return (
+      <Badge
+        variant="outline"
+        className={cn('gap-1 text-xs', stalled ? STATUS_STYLE.stalled : STATUS_STYLE.processing)}
+        title={stalled ? 'Processing stopped before it finished. Retry to continue.' : 'Uploading to your agent'}
+      >
+        {stalled ? <Clock aria-hidden="true" /> : <Loader2 aria-hidden="true" className="animate-spin" />}
+        {stalled ? 'Stalled' : 'Processing'}
+      </Badge>
+    )
+  }
+  if (doc.status === 'failed') {
+    return (
+      <Badge variant="outline" className={cn('gap-1 text-xs', STATUS_STYLE.failed)}>
+        <AlertCircle aria-hidden="true" />
+        Failed
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="outline" className={cn('gap-1 text-xs', STATUS_STYLE.ready)}>
+      <CheckCircle2 aria-hidden="true" />
+      Ready
+    </Badge>
+  )
+}
+
+function AttachedIndicator({ doc }: { doc: KnowledgeDoc }) {
+  if (doc.attached_at && doc.status === 'ready') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-green-700" title={`Added to your agent on ${formatDate(doc.attached_at)}`}>
+        <Bot className="size-3.5" aria-hidden="true" />
+        On your agent
+      </span>
+    )
+  }
+  if (doc.status === 'ready') {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-amber-700" title="This document is not part of your agent yet. Retry to add it.">
+        <Bot className="size-3.5" aria-hidden="true" />
+        Not on your agent yet
+      </span>
+    )
+  }
+  return null
+}
+
+function DocRow({
+  doc, isRetrying, onRetry, onDelete,
+}: { doc: KnowledgeDoc; isRetrying: boolean; onRetry: () => void; onDelete: () => void }) {
+  const Icon = doc.type === 'url' ? Globe : doc.type === 'text' ? Type : FileText
+  const showRetry = !!doc.can_retry || isRetrying
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors">
-      <Icon className="size-5 text-muted-foreground shrink-0" />
+    <div className="flex items-start gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors">
+      <Icon className="size-5 text-muted-foreground shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{doc.name}</p>
-        <div className="flex items-center gap-2 mt-0.5">
-          {statusIcon}
-          <span className="text-xs text-muted-foreground capitalize">{doc.status}</span>
+        <p className="text-sm font-medium truncate" title={doc.url ?? doc.name}>{doc.name}</p>
+        <div className="flex flex-wrap items-center gap-2 mt-1">
+          <StatusBadge doc={doc} />
           {doc.size_bytes > 0 && (
-            <>
-              <span className="text-xs text-muted-foreground">·</span>
-              <span className="text-xs text-muted-foreground">{formatFileSize(doc.size_bytes)}</span>
-            </>
+            <span className="text-xs text-muted-foreground">{formatFileSize(doc.size_bytes)}</span>
           )}
           <Badge variant="outline" className="text-xs">{doc.type.toUpperCase()}</Badge>
+          <AttachedIndicator doc={doc} />
         </div>
+        {doc.status === 'failed' && doc.error_message && (
+          <p className="text-xs text-destructive mt-1.5">{doc.error_message}</p>
+        )}
       </div>
-      <button
-        type="button"
-        onClick={onDelete}
-        className="p-1.5 rounded-md hover:bg-destructive/10 hover:text-destructive transition-colors"
-        title="Delete document"
-      >
-        <Trash2 className="size-4" />
-      </button>
+      <div className="flex items-center gap-1 shrink-0">
+        {showRetry && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRetry}
+            disabled={isRetrying}
+            title={doc.status === 'ready' ? 'Add this document to your agent' : 'Try processing this document again'}
+          >
+            {isRetrying ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCw className="size-3.5" />}
+            <span className="ml-1">{isRetrying ? 'Retrying…' : 'Retry'}</span>
+          </Button>
+        )}
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={isRetrying}
+          className="p-1.5 rounded-md hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-50"
+          title="Delete document"
+          aria-label={`Delete ${doc.name}`}
+        >
+          <Trash2 className="size-4" />
+        </button>
+      </div>
     </div>
   )
 }

@@ -1,161 +1,181 @@
-import { createClient } from '@/lib/supabase/server'
-import { conversations, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
-import type { TranscriptEntry } from '@/types'
+import { z } from 'zod'
+import { requireOrg } from '@/lib/api/auth'
+import { apiError, errorResponse, RequestError, requestErrorResponse } from '@/lib/api/http'
+import { createLogger, requestIdFrom } from '@/lib/observability/logger'
+import { rateLimit } from '@/lib/security/rate-limit'
+import {
+  applyCallFilters,
+  CALL_DETAIL_COLUMNS,
+  CALL_LIST_COLUMNS,
+  CallFilterSchema,
+  csvCell,
+  dbError,
+  parseQuery,
+  safeTimeZone,
+  serializeCallDetail,
+  UUID_RE,
+  type CallDetail,
+  type CallRow,
+} from '@/lib/calls/serialize'
+import {
+  callResultLabel,
+  failoverReasonLabel,
+  outcomeLabel,
+  providerLabel,
+  routingReasonLabel,
+} from '@/lib/calls/labels'
 
-interface ExportCall {
-  id: string
-  caller_number: string | null
-  direction: string
-  duration_seconds: number
-  status: string
-  sentiment: string | null
-  summary: string | null
-  transcript: TranscriptEntry[]
-  created_at: string | null
-  agent_name?: string
+// GET /api/calls/export?format=csv|json&scope=filtered|all|selected&columns=a,b&selectedIds=...
+// Exports the org's calls from the `calls` table. Columns are whitelisted; CSV
+// cells are protected against spreadsheet formula injection.
+
+type ExportColumn = {
+  label: string
+  /** CSV value (human labels for routing fields; never raw internal codes alone). */
+  csv: (c: CallDetail) => unknown
+  /** JSON value (raw, for developers). */
+  json: (c: CallDetail) => unknown
 }
 
+const transcriptText = (c: CallDetail) =>
+  c.transcript.map((t) => `${t.role === 'agent' ? 'Agent' : 'Caller'}: ${t.message}`).join('\n')
+
+const EXPORT_COLUMNS = {
+  caller_number: { label: 'Phone Number', csv: (c) => c.caller_number, json: (c) => c.caller_number },
+  from_number: { label: 'From', csv: (c) => c.from_number, json: (c) => c.from_number },
+  to_number: { label: 'To', csv: (c) => c.to_number, json: (c) => c.to_number },
+  direction: { label: 'Direction', csv: (c) => c.direction, json: (c) => c.direction },
+  duration_seconds: { label: 'Duration (s)', csv: (c) => c.duration_seconds, json: (c) => c.duration_seconds },
+  status: { label: 'Status', csv: (c) => c.status, json: (c) => c.status },
+  sentiment: { label: 'Sentiment', csv: (c) => c.sentiment, json: (c) => c.sentiment },
+  created_at: { label: 'Date & Time', csv: (c) => c.started_at ?? c.created_at, json: (c) => c.started_at ?? c.created_at },
+  ended_at: { label: 'Ended At', csv: (c) => c.ended_at, json: (c) => c.ended_at },
+  provider: { label: 'Voice Provider', csv: (c) => providerLabel(c.provider), json: (c) => c.provider ?? null },
+  routing_reason: { label: 'Routing', csv: (c) => routingReasonLabel(c.routing_reason), json: (c) => c.routing_reason ?? null },
+  failover_reason: {
+    label: 'Failover Reason',
+    csv: (c) => failoverReasonLabel(c.failover_reason, c.primary_provider),
+    json: (c) => c.failover_reason ?? null,
+  },
+  outcome: { label: 'Outcome', csv: (c) => outcomeLabel(c.outcome), json: (c) => c.outcome ?? null },
+  call_successful: { label: 'Call Result', csv: (c) => callResultLabel(c.call_successful), json: (c) => c.call_successful ?? null },
+  summary_title: { label: 'Summary Title', csv: (c) => c.summary_title, json: (c) => c.summary_title ?? null },
+  summary: { label: 'AI Summary', csv: (c) => c.summary, json: (c) => c.summary },
+  transcript: { label: 'Transcript', csv: transcriptText, json: (c) => c.transcript },
+  agent_name: { label: 'Agent', csv: (c) => c.agent_name ?? '', json: (c) => c.agent_name ?? null },
+} satisfies Record<string, ExportColumn>
+
+type ExportColumnId = keyof typeof EXPORT_COLUMNS
+const COLUMN_IDS = Object.keys(EXPORT_COLUMNS) as ExportColumnId[]
+const DEFAULT_COLUMNS: ExportColumnId[] = ['caller_number', 'direction', 'duration_seconds', 'status', 'sentiment', 'created_at']
+
+const ExportQuerySchema = CallFilterSchema.extend({
+  format: z.enum(['csv', 'json']).default('csv'),
+  scope: z.enum(['filtered', 'all', 'selected']).default('filtered'),
+  columns: z
+    .string()
+    .max(1000)
+    .optional()
+    .transform((v) => {
+      const picked = (v ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s): s is ExportColumnId => (COLUMN_IDS as string[]).includes(s))
+      const unique = Array.from(new Set(picked))
+      return unique.length ? unique : DEFAULT_COLUMNS
+    }),
+  selectedIds: z
+    .string()
+    .max(500 * 37)
+    .optional()
+    .transform((v, ctx) => {
+      const ids = (v ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+      if (ids.length > 500 || ids.some((id) => !UUID_RE.test(id))) {
+        ctx.addIssue({ code: 'custom', message: 'selectedIds must be up to 500 call ids.' })
+        return z.NEVER
+      }
+      return ids.map((id) => id.toLowerCase())
+    }),
+})
+
+const EXPORT_LIMIT = { name: 'calls_export', limit: 20, windowSeconds: 600 }
+const PAGE = 1000
+const MAX_ROWS = 10_000
+
 export async function GET(request: Request) {
-  const supabase = await createClient()
-
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return new Response('Unauthorized', { status: 401 })
-
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
-
-  if (!org) return new Response('Not found', { status: 404 })
-
-  const { searchParams } = new URL(request.url)
-  const format = searchParams.get('format') ?? 'csv'
-  const columns = (searchParams.get('columns') ?? 'caller_number,direction,duration_seconds,status,sentiment,created_at').split(',')
-
-  const { data: agent } = await supabase
-    .from('agents')
-    .select('name, elevenlabs_agent_id')
-    .eq('org_id', org.id)
-    .single()
-
-  let rows: ExportCall[] = []
-
-  // Try ElevenLabs
-  if (elConfigured() && agent?.elevenlabs_agent_id) {
-    try {
-      // Fetch all conversations (paginate up to 200 for export)
-      const data = await conversations.list({
-        agent_id: agent.elevenlabs_agent_id,
-        page_size: 100,
-      })
-
-      rows = (data.conversations ?? []).map((c) => {
-        const startedAt = c.start_time_unix_secs
-          ? new Date(c.start_time_unix_secs * 1000).toISOString()
-          : null
-
-        let sentiment: string | null = 'neutral'
-        if (c.call_successful === 'true') sentiment = 'positive'
-        else if (c.call_successful === 'false') sentiment = 'negative'
-
-        const source = c.conversation_initiation_source ?? ''
-        const direction = source === 'outbound' || source === 'phone_outbound'
-          ? 'outbound' : 'inbound'
-
-        return {
-          id: c.conversation_id,
-          caller_number: c.from_phone_number ?? c.to_phone_number ?? null,
-          direction,
-          duration_seconds: Math.round(c.call_duration_secs ?? 0),
-          status: 'completed',
-          sentiment,
-          summary: null,
-          transcript: [],
-          created_at: startedAt,
-          agent_name: agent.name ?? '',
-        }
-      })
-    } catch {
-      // Fall through to DB
+  const requestId = requestIdFrom(request)
+  let log = createLogger({ requestId, route: 'calls.export' })
+  try {
+    const { supabase, org } = await requireOrg()
+    log = log.child({ orgId: org.id })
+    const q = parseQuery(request, ExportQuerySchema)
+    if (q.scope === 'selected' && q.selectedIds.length === 0) {
+      return apiError('invalid_request', 'Select at least one call to export.', 400, { requestId })
     }
-  }
 
-  // Fallback or supplement from DB
-  if (rows.length === 0) {
-    const { data: calls } = await supabase
-      .from('calls')
-      .select('*, agents(name)')
-      .eq('org_id', org.id)
-      .order('created_at', { ascending: false })
+    const limit = await rateLimit(EXPORT_LIMIT, org.id)
+    if (!limit.allowed) {
+      return apiError('rate_limited', 'Too many exports in a short time. Please wait a moment.', 429, {
+        requestId,
+        headers: { 'Retry-After': String(Math.max(1, Math.ceil((limit.resetAt - Date.now()) / 1000))) },
+      })
+    }
 
-    rows = (calls ?? []).map((c) => ({
-      id: c.id,
-      caller_number: c.caller_number,
-      direction: c.direction,
-      duration_seconds: c.duration_seconds,
-      status: c.status,
-      sentiment: c.sentiment,
-      summary: c.summary,
-      transcript: c.transcript ?? [],
-      created_at: c.created_at,
-      agent_name: (c.agents as { name?: string } | null)?.name ?? '',
-    }))
-  }
+    const tz = safeTimeZone(org.timezone)
+    const columns = q.columns
+    // Transcripts are large: only read them when the export includes them.
+    const select = columns.includes('transcript') ? CALL_DETAIL_COLUMNS : CALL_LIST_COLUMNS
+    const rows: CallRow[] = []
+    for (let offset = 0; offset < MAX_ROWS; ) {
+      let query = supabase.from('calls').select(select).eq('org_id', org.id)
+      if (q.scope === 'filtered') query = applyCallFilters(query, q, tz)
+      if (q.scope === 'selected') query = query.in('id', q.selectedIds)
+      const { data, error } = await query
+        .order('started_at', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(offset, Math.min(offset + PAGE, MAX_ROWS) - 1)
+      if (error) throw dbError('calls export', error)
+      const page = (data ?? []) as unknown as CallRow[]
+      rows.push(...page)
+      offset += page.length
+      if (page.length === 0) break
+    }
+    if (rows.length >= MAX_ROWS) log.warn('calls.export.truncated', { maxRows: MAX_ROWS })
 
-  const date = new Date().toISOString().slice(0, 10)
+    const calls = rows.map(serializeCallDetail)
+    const date = new Date().toISOString().slice(0, 10)
+    const baseHeaders = { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' }
 
-  if (format === 'json') {
-    return new Response(JSON.stringify(rows, null, 2), {
+    if (q.format === 'json') {
+      const body = calls.map((c) => {
+        const out: Record<string, unknown> = { id: c.id }
+        for (const col of columns) out[col] = EXPORT_COLUMNS[col].json(c)
+        return out
+      })
+      return new Response(JSON.stringify(body, null, 2), {
+        headers: {
+          ...baseHeaders,
+          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Disposition': `attachment; filename="calls-${date}.json"`,
+        },
+      })
+    }
+
+    const lines = [
+      columns.map((col) => csvCell(EXPORT_COLUMNS[col].label)).join(','),
+      ...calls.map((c) => columns.map((col) => csvCell(EXPORT_COLUMNS[col].csv(c))).join(',')),
+    ]
+    // BOM so spreadsheet apps read UTF-8 (Romanian diacritics in transcripts).
+    return new Response(`﻿${lines.join('\r\n')}\r\n`, {
       headers: {
-        'Content-Type': 'application/json',
-        'Content-Disposition': `attachment; filename="calls-${date}.json"`,
+        ...baseHeaders,
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="calls-${date}.csv"`,
       },
     })
+  } catch (err) {
+    if (err instanceof RequestError) return requestErrorResponse(err, requestId)
+    return errorResponse(err, log, 'calls.export.failed', requestId)
   }
-
-  // CSV
-  const COLUMN_LABELS: Record<string, string> = {
-    caller_number: 'Phone Number',
-    direction: 'Direction',
-    duration_seconds: 'Duration (s)',
-    status: 'Status',
-    sentiment: 'Sentiment',
-    created_at: 'Date & Time',
-    summary: 'AI Summary',
-    transcript: 'Transcript',
-    agent_name: 'Agent',
-  }
-
-  const header = columns.map((c) => COLUMN_LABELS[c] ?? c).join(',')
-
-  function escapeCSV(val: unknown): string {
-    const s = val === null || val === undefined ? '' : String(val)
-    if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-      return `"${s.replace(/"/g, '""')}"`
-    }
-    return s
-  }
-
-  function flattenTranscript(transcript: TranscriptEntry[]): string {
-    return transcript.map((t) => `${t.role === 'agent' ? 'Agent' : 'Caller'}: ${t.message}`).join('\n')
-  }
-
-  const dataRows = rows.map((call) => {
-    return columns.map((col) => {
-      if (col === 'transcript') return escapeCSV(flattenTranscript(call.transcript ?? []))
-      if (col === 'agent_name') return escapeCSV(call.agent_name ?? '')
-      if (col === 'duration_seconds') return escapeCSV(call.duration_seconds)
-      return escapeCSV((call as unknown as Record<string, unknown>)[col])
-    }).join(',')
-  })
-
-  const csv = [header, ...dataRows].join('\n')
-
-  return new Response(csv, {
-    headers: {
-      'Content-Type': 'text/csv',
-      'Content-Disposition': `attachment; filename="calls-${date}.csv"`,
-    },
-  })
 }

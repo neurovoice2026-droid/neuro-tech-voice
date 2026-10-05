@@ -1,35 +1,46 @@
+// POST /api/elevenlabs/voices/add — legacy: { public_owner_id, voice_id, name? }
+// → { voice_id } (the workspace id to give the agent). Compatibility wrapper:
+// the library voice is re-validated server-side and provisioned once for the
+// whole platform (deduplicated, rate-limited, audited). `name` is ignored: the
+// library's own name is used. New code: PUT /api/agent/voice with library_ref.
+
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { sharedVoices, isConfigured } from '@/lib/elevenlabs/client'
+import { z } from 'zod'
+import { requireOrg } from '@/lib/api/auth'
+import { assertSameOrigin, parseJsonBody } from '@/lib/api/http'
+import { createLogger, requestIdFrom } from '@/lib/observability/logger'
+import {
+  assertVoiceEligible,
+  libraryRefSchema,
+  provisionLibraryVoice,
+  voiceErrorResponse,
+} from '@/lib/voice-providers/voice-catalog'
 
-// Add a shared/library voice to the workspace so it can be used by an agent.
-// Returns the workspace voice_id (which may differ from the library one).
+const BodySchema = libraryRefSchema.extend({
+  name: z.string().max(200).optional(),
+})
+
 export async function POST(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  if (!isConfigured()) {
-    return NextResponse.json({ error: 'ElevenLabs not configured' }, { status: 503 })
-  }
-
-  const { public_owner_id, voice_id, name } = (await request.json()) as {
-    public_owner_id?: string
-    voice_id?: string
-    name?: string
-  }
-
-  if (!public_owner_id || !voice_id) {
-    return NextResponse.json({ error: 'public_owner_id and voice_id are required' }, { status: 400 })
-  }
-
+  const requestId = requestIdFrom(request)
+  let log = createLogger({ requestId, route: 'elevenlabs.voices.add' })
   try {
-    const added = await sharedVoices.add(public_owner_id, voice_id, name ?? 'Library voice')
-    return NextResponse.json({ voice_id: added.voice_id })
+    assertSameOrigin(request)
+    const { user, org } = await requireOrg()
+    log = log.child({ orgId: org.id })
+    const body = await parseJsonBody(request, BodySchema, 4 * 1024)
+    const libraryRef = { publicOwnerId: body.public_owner_id, voiceId: body.voice_id }
+
+    const eligible = await assertVoiceEligible(org.id, { voiceId: body.voice_id, libraryRef })
+    if (!eligible.requiresProvisioning) return NextResponse.json({ voice_id: eligible.voiceId })
+    const provisioned = await provisionLibraryVoice({
+      orgId: org.id,
+      userId: user.id,
+      libraryRef,
+      libraryVoice: eligible.libraryVoice,
+      log,
+    })
+    return NextResponse.json({ voice_id: provisioned.voiceId })
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to add voice' },
-      { status: 502 }
-    )
+    return voiceErrorResponse(err, log, 'elevenlabs.voices.add.failed', requestId)
   }
 }

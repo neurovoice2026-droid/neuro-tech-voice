@@ -1,49 +1,91 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { conversations, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { requireOrg } from '@/lib/api/auth'
+import { apiError, errorResponse, RequestError, requestErrorResponse } from '@/lib/api/http'
+import { createLogger, requestIdFrom } from '@/lib/observability/logger'
+import { conversations as elConversations } from '@/lib/elevenlabs/client'
+import { calls as cartesiaCalls } from '@/lib/cartesia/client'
+import { isProviderError } from '@/lib/voice-providers/errors'
+import { rateLimit } from '@/lib/security/rate-limit'
+import { findOrgCall, parseCallId, servingProvider, type CallRow } from '@/lib/calls/serialize'
 
-// Streams a call recording from ElevenLabs through our server so the audio key
-// is never exposed and we can enforce org ownership. `id` is the conversation id.
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const supabase = await createClient()
+const AUDIO_COLUMNS: string =
+  'id, provider, provider_call_id, elevenlabs_conversation_id, cartesia_call_id, has_recording, recording_status'
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+type AudioRow = Pick<
+  CallRow,
+  'id' | 'provider' | 'provider_call_id' | 'elevenlabs_conversation_id' | 'cartesia_call_id' | 'has_recording' | 'recording_status'
+>
 
-  const { id } = await params
+const AUDIO_LIMIT = { name: 'call_audio', limit: 120, windowSeconds: 600 }
+const DEFAULT_TYPE = { elevenlabs: 'audio/mpeg', cartesia: 'audio/wav' } as const
+const EXTENSION: Record<string, string> = { 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/wave': 'wav', 'audio/ogg': 'ogg' }
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
+function notAvailable(requestId: string) {
+  return apiError('not_found', 'No recording is available for this call.', 404, { requestId })
+}
 
-  if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (!elConfigured()) return NextResponse.json({ error: 'Audio unavailable' }, { status: 503 })
-
+// GET /api/calls/[id]/audio — streams the recording from the provider that
+// served the call. Ownership comes from our DB row (org-scoped lookup); the
+// provider URL and key never reach the browser.
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const requestId = requestIdFrom(request)
+  let log = createLogger({ requestId, route: 'calls.audio' })
   try {
-    // Ownership check: the conversation's agent must belong to this org.
-    const conv = await conversations.get(id)
-    const { data: agent } = await supabase
-      .from('agents')
-      .select('id')
-      .eq('elevenlabs_agent_id', conv.agent_id)
-      .eq('org_id', org.id)
-      .maybeSingle()
+    const { supabase, org } = await requireOrg()
+    log = log.child({ orgId: org.id })
+    const id = parseCallId((await params).id)
 
-    if (!agent) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    const row = await findOrgCall<AudioRow>(supabase, org.id, id, AUDIO_COLUMNS)
+    if (!row) return apiError('not_found', 'Call not found', 404, { requestId })
+    log = log.child({ callId: row.id })
+    if (row.recording_status === 'unavailable' || row.recording_status === 'deleted') return notAvailable(requestId)
 
-    const audio = await conversations.getAudio(id)
-    return new Response(audio.body, {
-      headers: {
-        'Content-Type': audio.headers.get('content-type') ?? 'audio/mpeg',
-        'Cache-Control': 'private, max-age=3600',
-      },
+    // Provider-specific id first: provider_call_id holds whichever provider
+    // reported first, which differs from the serving one after a failover.
+    const provider = servingProvider(row)
+    const externalId =
+      provider === 'elevenlabs'
+        ? (row.elevenlabs_conversation_id ?? row.provider_call_id)
+        : provider === 'cartesia'
+          ? (row.cartesia_call_id ?? row.provider_call_id)
+          : null
+    if (!provider || !externalId) return notAvailable(requestId)
+
+    const limit = await rateLimit(AUDIO_LIMIT, org.id)
+    if (!limit.allowed) {
+      return apiError('rate_limited', 'Too many recording requests. Please wait a moment.', 429, {
+        requestId,
+        headers: { 'Retry-After': String(Math.max(1, Math.ceil((limit.resetAt - Date.now()) / 1000))) },
+      })
+    }
+
+    const ctx = { orgId: org.id, callId: row.id }
+    let upstream: Response
+    try {
+      upstream = provider === 'elevenlabs'
+        ? await elConversations.audio(externalId, ctx)
+        : await cartesiaCalls.audio(externalId, ctx)
+    } catch (err) {
+      if (isProviderError(err) && err.code === 'not_found') {
+        log.info('calls.audio.not_found', { provider })
+        return notAvailable(requestId)
+      }
+      throw err
+    }
+    if (!upstream.body) return notAvailable(requestId)
+
+    const upstreamType = (upstream.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
+    const contentType = upstreamType.startsWith('audio/') ? upstreamType : DEFAULT_TYPE[provider]
+    const headers = new Headers({
+      'Content-Type': contentType,
+      'Cache-Control': 'private, no-store',
+      'Content-Disposition': `inline; filename="call-${row.id}.${EXTENSION[contentType] ?? 'audio'}"`,
+      'X-Content-Type-Options': 'nosniff',
     })
-  } catch {
-    return NextResponse.json({ error: 'Recording not found' }, { status: 404 })
+    const length = upstream.headers.get('content-length')
+    if (length && /^\d+$/.test(length)) headers.set('Content-Length', length)
+    return new Response(upstream.body, { status: 200, headers })
+  } catch (err) {
+    if (err instanceof RequestError) return requestErrorResponse(err, requestId)
+    return errorResponse(err, log, 'calls.audio.failed', requestId)
   }
 }

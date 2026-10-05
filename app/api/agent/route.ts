@@ -1,169 +1,275 @@
+// GET   /api/agent → Agent (find-or-create the org's single agent)
+// PATCH /api/agent → { agent, sync } — saves the change, then pushes it to the
+// primary provider (awaited) and the fallback provider (after the response).
+// A provider sync failure is reported in `sync`, not as an HTTP error: the
+// change is saved and the sync engine/maintenance job retries it.
+
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { agents as elAgents, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
-import { createAgentWithFallback, TTS_MODEL, LLM_MODEL } from '@/lib/elevenlabs/create-agent'
-import { composeSystemPrompt } from '@/lib/elevenlabs/prompt'
-import { linkNumbersToAgent } from '@/lib/phone/link'
+import { z } from 'zod'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { requireOrg } from '@/lib/api/auth'
+import {
+  RequestError,
+  assertSameOrigin,
+  errorResponse,
+  parseJsonBody,
+  requestErrorResponse,
+} from '@/lib/api/http'
+import { createLogger, requestIdFrom, type Logger } from '@/lib/observability/logger'
+import {
+  AGENT_NAME_MAX,
+  AgentLanguageSchema,
+  FALLBACK_MESSAGE_MAX,
+  FIRST_MESSAGE_MAX,
+  PersonalitySchema,
+  SYSTEM_PROMPT_MAX,
+  blankToNull,
+  defaultAgentName,
+  ensureAgent,
+  hasExternalAgent,
+  mergeMetadata,
+  syncAgentProviders,
+  type AgentSyncReport,
+} from '@/lib/agents/ensure-agent'
+import {
+  AfterHoursSchema,
+  AnalysisSettingsSchema,
+  ConversationSettingsSchema,
+  DynamicVariablesSchema,
+  PrivacySettingsSchema,
+  TransferSettingsSchema,
+  VoiceTuningSchema,
+  WorkingHoursSchema,
+} from '@/lib/voice-providers/settings'
+import { isProviderError, type VoiceProvider } from '@/lib/voice-providers/errors'
+import * as cartesia from '@/lib/cartesia/client'
+import { isValidTimeZone } from '@/lib/scheduling/time'
+import type { Agent } from '@/types'
 
-export async function GET() {
-  const supabase = await createClient()
+// The awaited primary sync can take several provider round-trips.
+export const maxDuration = 60
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+const PatchAgentSchema = z.strictObject({
+  name: z.string().trim().min(1).max(AGENT_NAME_MAX).optional(),
+  language: AgentLanguageSchema.optional(),
+  system_prompt: z.string().max(SYSTEM_PROMPT_MAX).nullable().optional(),
+  first_message: z.string().max(FIRST_MESSAGE_MAX).nullable().optional(),
+  fallback_message: z.string().max(FALLBACK_MESSAGE_MAX).nullable().optional(),
+  is_active: z.boolean().optional(),
+  working_hours: WorkingHoursSchema.optional(),
+  metadata: z.strictObject({ personality: PersonalitySchema }).optional(),
+  conversation_settings: ConversationSettingsSchema.optional(),
+  after_hours: AfterHoursSchema.optional(),
+  transfer_settings: TransferSettingsSchema.optional(),
+  analysis_settings: AnalysisSettingsSchema.optional(),
+  privacy_settings: PrivacySettingsSchema.optional(),
+  voice_settings: VoiceTuningSchema.optional(),
+  dynamic_variables: DynamicVariablesSchema.optional(),
+  // Cartesia voice for the fallback agent; null = automatic per language.
+  fallback_voice_id: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9_-]{8,100}$/, 'Invalid voice id')
+    .nullable()
+    .optional(),
+  organization: z
+    .strictObject({
+      timezone: z.string().trim().min(1).max(64).refine((tz) => isValidTimeZone(tz), 'Unknown time zone').optional(),
+      voice_fallback_enabled: z.boolean().optional(),
+    })
+    .optional(),
+})
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id, name')
-    .eq('user_id', user.id)
-    .single()
+type PatchAgentBody = z.infer<typeof PatchAgentSchema>
 
-  if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+/** Fields that end up in the provider-side agent (AgentSpec). */
+const PROVIDER_FIELDS = [
+  'name',
+  'language',
+  'system_prompt',
+  'first_message',
+  'fallback_message',
+  'conversation_settings',
+  'transfer_settings',
+  'analysis_settings',
+  'privacy_settings',
+  'voice_settings',
+  'dynamic_variables',
+  'fallback_voice_id',
+] as const satisfies ReadonlyArray<keyof PatchAgentBody & keyof Agent>
 
-  const { data: agent } = await supabase
-    .from('agents')
-    .select('*')
-    .eq('org_id', org.id)
-    .limit(1)
-    .maybeSingle()
+/** Fields only our own router/UI read (no provider push needed). */
+const LOCAL_FIELDS = ['is_active', 'working_hours', 'after_hours'] as const satisfies ReadonlyArray<
+  keyof PatchAgentBody & keyof Agent
+>
 
-  // Safety net: accounts created before the onboarding-persistence fix may not
-  // have an agent row yet. Auto-create a default one so the page always works.
-  if (!agent) {
-    const { data: created } = await supabase
-      .from('agents')
-      .insert({ org_id: org.id, name: org.name ? `${org.name} Agent` : 'My Agent' })
-      .select('*')
-      .single()
-    return NextResponse.json(created ?? null)
+const TEXT_FIELDS = new Set<string>(['system_prompt', 'first_message', 'fallback_message'])
+
+/** JSON with sorted object keys, so JSONB key order never counts as a change. */
+function stableJson(value: unknown): string {
+  return JSON.stringify(value ?? null, (_key, v: unknown) =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : v,
+  )
+}
+
+function primaryProviderOf(agent: Agent): VoiceProvider {
+  return agent.primary_provider === 'cartesia' ? 'cartesia' : 'elevenlabs'
+}
+
+/**
+ * A fallback voice must exist at Cartesia, be active, and be either a public
+ * library voice or a private platform voice registered for this org (or
+ * platform-wide) in provider_voices. Without Cartesia configured the id is
+ * format-checked only; the sync engine validates it again before use.
+ */
+async function assertFallbackVoiceEligible(supabase: SupabaseClient, voiceId: string, log: Logger): Promise<void> {
+  if (!cartesia.isConfigured()) {
+    log.info('agent.fallback_voice_unverified', { reason: 'cartesia_not_configured' })
+    return
   }
+  const invalid = () =>
+    new RequestError('invalid_request', 'This fallback voice is not available.', 400, [
+      { path: 'fallback_voice_id', message: 'Voice not available' },
+    ])
+  let voice: cartesia.CartesiaVoice
+  try {
+    voice = await cartesia.voices.get(voiceId)
+  } catch (err) {
+    if (isProviderError(err) && err.code === 'not_found') throw invalid()
+    throw err
+  }
+  if (!voice?.id || (voice.status !== undefined && voice.status !== 'active')) throw invalid()
+  if (voice.is_owner) {
+    // A private voice in the platform account may belong to another org.
+    const { data, error } = await supabase
+      .from('provider_voices')
+      .select('id')
+      .eq('provider', 'cartesia')
+      .eq('voice_id', voice.id)
+      .neq('status', 'deleted')
+      .maybeSingle()
+    if (error) throw new Error(`provider_voices read failed: ${error.message}`)
+    if (!data) throw invalid()
+  }
+}
 
-  return NextResponse.json(agent)
+export async function GET(request: Request) {
+  const requestId = requestIdFrom(request)
+  let log = createLogger({ requestId, route: 'agent.get' })
+  try {
+    const { org } = await requireOrg()
+    log = log.child({ orgId: org.id })
+    const agent = await ensureAgent(org.id, defaultAgentName(org.name))
+    return NextResponse.json(agent)
+  } catch (err) {
+    if (err instanceof RequestError) return requestErrorResponse(err, requestId)
+    return errorResponse(err, log, 'agent.get_failed', requestId)
+  }
 }
 
 export async function PATCH(request: Request) {
-  const supabase = await createClient()
+  const requestId = requestIdFrom(request)
+  let log = createLogger({ requestId, route: 'agent.patch' })
+  try {
+    assertSameOrigin(request)
+    const { supabase, org } = await requireOrg()
+    log = log.child({ orgId: org.id })
+    const body = await parseJsonBody(request, PatchAgentSchema)
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const agent = await ensureAgent(org.id, defaultAgentName(org.name))
+    log = log.child({ agentId: agent.id })
+    const current = agent as unknown as Record<string, unknown>
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
-
-  if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const body = await request.json() as Record<string, unknown>
-
-  // Only allow patching known agent columns
-  const allowed = [
-    'name', 'language', 'system_prompt', 'first_message', 'fallback_message',
-    'is_active', 'working_hours', 'voice_id', 'voice_name', 'metadata',
-  ]
-  const updates: Record<string, unknown> = {}
-  for (const key of allowed) {
-    if (key in body) updates[key] = body[key]
-  }
-
-  // Find-or-create: update the org's agent, or create one if none exists yet.
-  const { data: existing } = await supabase
-    .from('agents')
-    .select('id')
-    .eq('org_id', org.id)
-    .limit(1)
-    .maybeSingle()
-
-  let agent
-  if (existing) {
-    const { data, error } = await supabase
-      .from('agents')
-      .update(updates)
-      .eq('id', existing.id)
-      .select()
-      .single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    agent = data
-  } else {
-    const { data, error } = await supabase
-      .from('agents')
-      .insert({ org_id: org.id, name: (updates.name as string) || 'My Agent', ...updates })
-      .select()
-      .single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    agent = data
-  }
-
-  // Self-heal: if this agent has no ElevenLabs agent yet, create one now so
-  // calls/test-calls work (covers accounts from the pre-fix onboarding).
-  if (elConfigured() && !agent.elevenlabs_agent_id && agent.name) {
-    const { agent_id } = await createAgentWithFallback({
-      name: agent.name,
-      system_prompt: agent.system_prompt,
-      first_message: agent.first_message,
-      language: agent.language,
-      voice_id: agent.voice_id,
-      fallback_message: agent.fallback_message,
-    })
-    if (agent_id) {
-      await supabase
-        .from('agents')
-        .update({ elevenlabs_agent_id: agent_id, is_active: true })
-        .eq('id', agent.id)
-      agent.elevenlabs_agent_id = agent_id
+    // ── Agent columns ──────────────────────────────────────────────────────
+    const agentPatch: Record<string, unknown> = {}
+    for (const key of [...PROVIDER_FIELDS, ...LOCAL_FIELDS]) {
+      const value = body[key]
+      if (value === undefined) continue
+      agentPatch[key] = TEXT_FIELDS.has(key) ? blankToNull(value as string | null) : value
     }
-  }
+    if (body.metadata) agentPatch.metadata = mergeMetadata(agent.metadata, { personality: body.metadata.personality })
 
-  // Ensure the org's phone number(s) route to this agent in ElevenLabs
-  // (idempotent — fixes numbers bought during onboarding before the agent existed).
-  if (elConfigured() && agent.elevenlabs_agent_id) {
-    await linkNumbersToAgent(supabase, org.id, agent.id, agent.elevenlabs_agent_id)
-  }
+    const changed = (key: string) => key in agentPatch && stableJson(agentPatch[key]) !== stableJson(current[key])
+    const providerFieldsChanged = PROVIDER_FIELDS.filter((k) => changed(k))
 
-  // Sync to ElevenLabs if agent has elevenlabs_agent_id and relevant fields changed.
-  // system_prompt/language/fallback_message all feed into the SAME composed
-  // prompt (see lib/elevenlabs/prompt.ts), so any of the three requires
-  // recomposing from the agent's full current state, not just the changed field,
-  // otherwise a fallback_message-only edit would never reach ElevenLabs at all.
-  const elId = agent.elevenlabs_agent_id
-  const promptFieldsChanged =
-    'system_prompt' in updates || 'language' in updates || 'fallback_message' in updates
-  const needsSync = elConfigured() && elId && (
-    promptFieldsChanged || 'first_message' in updates || 'voice_id' in updates || 'name' in updates
-  )
+    if (changed('fallback_voice_id') && typeof agentPatch.fallback_voice_id === 'string') {
+      await assertFallbackVoiceEligible(supabase, agentPatch.fallback_voice_id, log)
+    }
 
-  if (needsSync) {
-    try {
-      await elAgents.update(elId, {
-        ...('name' in updates && { name: updates.name as string }),
-        conversation_config: {
-          agent: {
-            ...(promptFieldsChanged && {
-              prompt: {
-                prompt: composeSystemPrompt({
-                  system_prompt: agent.system_prompt,
-                  language: agent.language,
-                  fallback_message: agent.fallback_message,
-                }),
-                llm: LLM_MODEL,
-              },
-            }),
-            ...(updates.first_message !== undefined && {
-              first_message: updates.first_message as string,
-            }),
-            ...(updates.language !== undefined && {
-              language: updates.language as string,
-            }),
-          },
-          ...(updates.voice_id !== undefined && {
-            tts: { voice_id: updates.voice_id as string, model_id: TTS_MODEL, expressive_mode: true },
-          }),
-        },
+    // ── Organization columns (tenant-writable: timezone, voice_fallback_enabled) ──
+    const orgPatch: Record<string, unknown> = {}
+    let fallbackTurnedOn = false
+    let timezoneChanged = false
+    if (body.organization) {
+      const { data: orgRow, error: orgErr } = await supabase
+        .from('organizations')
+        .select('timezone, voice_fallback_enabled')
+        .eq('id', org.id)
+        .single()
+      if (orgErr) throw new Error(`organizations read failed: ${orgErr.message}`)
+      const { timezone, voice_fallback_enabled } = body.organization
+      if (timezone !== undefined && timezone !== orgRow.timezone) {
+        orgPatch.timezone = timezone
+        timezoneChanged = true
+      }
+      if (voice_fallback_enabled !== undefined && voice_fallback_enabled !== orgRow.voice_fallback_enabled) {
+        orgPatch.voice_fallback_enabled = voice_fallback_enabled
+        fallbackTurnedOn = voice_fallback_enabled
+      }
+    }
+
+    // ── Writes (user-scoped client: RLS + column guard apply) ──────────────
+    if (Object.keys(agentPatch).length) {
+      const { error } = await supabase.from('agents').update(agentPatch).eq('id', agent.id).eq('org_id', org.id)
+      if (error) throw new Error(`agents update failed: ${error.message}`)
+    }
+    if (Object.keys(orgPatch).length) {
+      const { error } = await supabase.from('organizations').update(orgPatch).eq('id', org.id)
+      if (error) throw new Error(`organizations update failed: ${error.message}`)
+    }
+
+    // ── Provider propagation ───────────────────────────────────────────────
+    const configChanged = providerFieldsChanged.length > 0 || timezoneChanged
+    const primaryProvider = primaryProviderOf(agent)
+    const activated =
+      agentPatch.is_active === true &&
+      !agent.is_active &&
+      !(await hasExternalAgent(supabase, org.id, agent.id, primaryProvider))
+
+    let sync: AgentSyncReport[] = []
+    if (configChanged || activated || fallbackTurnedOn) {
+      sync = await syncAgentProviders({
+        supabase,
+        orgId: org.id,
+        agentId: agent.id,
+        primaryProvider,
+        bump: configChanged,
+        primary: configChanged || activated,
+        fallback: configChanged || activated || fallbackTurnedOn,
+        log,
       })
-    } catch {
-      // Non-fatal — agent is updated in DB, ElevenLabs sync failed
     }
-  }
 
-  return NextResponse.json({ success: true, agent })
+    log.info('agent.patch', {
+      fields: Object.keys(agentPatch),
+      organization: Object.keys(orgPatch),
+      providerFieldsChanged,
+      sync: sync.map((s) => `${s.provider}:${s.status}`),
+    })
+
+    const { data: saved, error: readErr } = await supabase
+      .from('agents')
+      .select('*')
+      .eq('id', agent.id)
+      .eq('org_id', org.id)
+      .single()
+    if (readErr) throw new Error(`agents read failed: ${readErr.message}`)
+
+    return NextResponse.json({ agent: saved as Agent, sync })
+  } catch (err) {
+    if (err instanceof RequestError) return requestErrorResponse(err, requestId)
+    return errorResponse(err, log, 'agent.patch_failed', requestId)
+  }
 }

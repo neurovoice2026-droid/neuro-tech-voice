@@ -1,50 +1,40 @@
-import { createClient } from '@/lib/supabase/server'
+import { requireOrg } from '@/lib/api/auth'
+import { RequestError } from '@/lib/api/http'
+import { createLogger } from '@/lib/observability/logger'
+import { defaultAgentName, ensureAgent } from '@/lib/agents/ensure-agent'
 import { AgentPageClient } from '@/components/agent/AgentPageClient'
-import type { Agent, PhoneNumber } from '@/types'
+import type { PhoneNumber } from '@/types'
 
 export default async function AgentPage() {
-  const supabase = await createClient()
+  let ctx: Awaited<ReturnType<typeof requireOrg>>
+  try {
+    ctx = await requireOrg()
+  } catch (err) {
+    // Signed out / no organization: the dashboard layout redirects; render nothing.
+    if (err instanceof RequestError) return null
+    throw err
+  }
+  const { supabase, org } = ctx
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id, name')
-    .eq('user_id', user.id)
-    .single()
-
-  if (!org) return null
-
-  const [{ data: existingAgent }, { data: phoneNumbers }] = await Promise.all([
-    supabase
-      .from('agents')
-      .select('*')
-      .eq('org_id', org.id)
-      .limit(1)
-      .maybeSingle(),
+  // ensureAgent: the org always has exactly one agent to edit (older accounts
+  // may lack one), created without duplicates even under concurrent requests.
+  const [agent, phoneNumbersRes] = await Promise.all([
+    ensureAgent(org.id, defaultAgentName(org.name)),
     supabase
       .from('phone_numbers')
       .select('*')
       .eq('org_id', org.id)
       .order('created_at', { ascending: false }),
   ])
-
-  // Ensure the org always has an agent to edit (older accounts may lack one).
-  let agent = existingAgent
-  if (!agent) {
-    const { data: created } = await supabase
-      .from('agents')
-      .insert({ org_id: org.id, name: org.name ? `${org.name} Agent` : 'My Agent' })
-      .select('*')
-      .single()
-    agent = created
+  if (phoneNumbersRes.error) {
+    createLogger({ orgId: org.id, route: 'page.agent' }).error('agent_page.phone_numbers_failed', phoneNumbersRes.error)
+    throw new Error('Could not load your phone numbers.')
   }
 
   return (
     <AgentPageClient
-      initialAgent={agent as Agent | null}
-      phoneNumbers={(phoneNumbers ?? []) as PhoneNumber[]}
+      initialAgent={agent}
+      phoneNumbers={(phoneNumbersRes.data ?? []) as PhoneNumber[]}
     />
   )
 }

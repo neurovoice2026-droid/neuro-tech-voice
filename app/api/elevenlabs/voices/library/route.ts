@@ -1,42 +1,60 @@
+// GET /api/elevenlabs/voices/library?search=&language=&gender=&page= — legacy
+// shape { voices: (ElevenLabsVoice & { public_owner_id })[], has_more }.
+// Compatibility wrapper over the voice catalog's filtered Voice Library
+// listing (no live-moderated or custom-rate voices, minimum notice period).
+// `voice_id` is always the LIBRARY id here; POST /api/elevenlabs/voices/add
+// turns it into a usable workspace id. New code: GET /api/voices?source=library.
+
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { sharedVoices, isConfigured } from '@/lib/elevenlabs/client'
-import type { ElevenLabsVoice } from '@/types'
+import { z } from 'zod'
+import { requireOrg } from '@/lib/api/auth'
+import { createLogger, requestIdFrom } from '@/lib/observability/logger'
+import { RATE_LIMITS, enforceRateLimit } from '@/lib/security/rate-limit'
+import {
+  languageSchema,
+  libraryPageToken,
+  listVoices,
+  optionalParam,
+  parseQuery,
+  toLegacyVoice,
+  voiceErrorResponse,
+} from '@/lib/voice-providers/voice-catalog'
 
-// Browse the ElevenLabs shared voice library (thousands of community voices).
-// Returns voices carrying `public_owner_id` so the client can add them on select.
+const QuerySchema = z.object({
+  search: optionalParam(z.string().trim().max(100)),
+  language: optionalParam(languageSchema),
+  gender: optionalParam(z.enum(['female', 'male', 'neutral'])),
+  page: optionalParam(z.coerce.number().int().min(0).max(1_000)),
+})
+
 export async function GET(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  if (!isConfigured()) return NextResponse.json({ voices: [] })
-
-  const { searchParams } = new URL(request.url)
-  const search = searchParams.get('search') ?? undefined
-  const language = searchParams.get('language') ?? undefined
-  const gender = searchParams.get('gender') ?? undefined
-  const page = Number(searchParams.get('page') ?? 0)
-
+  const requestId = requestIdFrom(request)
+  let log = createLogger({ requestId, route: 'elevenlabs.voices.library' })
   try {
-    const data = await sharedVoices.list({ page_size: 100, search, language, gender, page })
-    const voices: (ElevenLabsVoice & { public_owner_id: string })[] = (data.voices ?? []).map((v) => ({
-      voice_id: v.voice_id,
-      public_owner_id: v.public_owner_id,
-      name: v.name,
+    const { org } = await requireOrg()
+    log = log.child({ orgId: org.id })
+    const q = parseQuery(request, QuerySchema)
+    await enforceRateLimit([RATE_LIMITS.voiceCatalog], org.id)
+
+    const page = await listVoices(org.id, {
+      source: 'library',
+      search: q.search,
+      language: q.language,
+      gender: q.gender,
+      pageSize: 100,
+      pageToken: libraryPageToken(q.page ?? 0),
+    })
+    const voices = page.voices.map((v) => ({
+      ...toLegacyVoice(v),
+      voice_id: v.libraryRef?.voiceId ?? v.voiceId,
+      public_owner_id: v.libraryRef?.publicOwnerId ?? '',
       category: v.category ?? 'library',
-      description: v.description ?? null,
-      preview_url: v.preview_url ?? null,
-      labels: {
-        language: v.language ?? '',
-        accent: v.accent ?? '',
-        gender: v.gender ?? '',
-        age: v.age ?? '',
-        use_case: v.use_case ?? '',
-      },
     }))
-    return NextResponse.json({ voices, has_more: data.has_more ?? false })
-  } catch {
-    return NextResponse.json({ voices: [], has_more: false })
+    return NextResponse.json(
+      { voices, has_more: page.next_page_token !== null },
+      { headers: { 'Cache-Control': 'private, max-age=60', Vary: 'Cookie' } },
+    )
+  } catch (err) {
+    return voiceErrorResponse(err, log, 'elevenlabs.voices.library.failed', requestId)
   }
 }

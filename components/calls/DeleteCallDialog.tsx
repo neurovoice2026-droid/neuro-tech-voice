@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
+import { readApiError } from '@/hooks/useCalls'
 
 interface DeleteCallDialogProps {
   open: boolean
@@ -20,19 +21,23 @@ export function DeleteCallDialog({ open, onOpenChange, callId, onDeleted }: Dele
 
   function handleDelete() {
     startTransition(async () => {
-      const res = await fetch(`/api/calls/${callId}`, { method: 'DELETE' })
-      if (res.ok) {
+      try {
+        const res = await fetch(`/api/calls/${encodeURIComponent(callId)}`, { method: 'DELETE' })
+        if (!res.ok) {
+          toast.error(await readApiError(res, 'Failed to delete the call record'))
+          return
+        }
         toast.success('Call record deleted')
         onDeleted(callId)
         onOpenChange(false)
-      } else {
-        toast.error('Failed to delete call record')
+      } catch (e) {
+        toast.error(e instanceof Error && e.message ? `Failed to delete the call record: ${e.message}` : 'Failed to delete the call record')
       }
     })
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => !isPending && onOpenChange(next)}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -42,8 +47,8 @@ export function DeleteCallDialog({ open, onOpenChange, callId, onDeleted }: Dele
             Delete call record?
           </DialogTitle>
           <DialogDescription>
-            This will permanently delete the call record, transcript, and any associated data.
-            This action cannot be undone.
+            This permanently deletes the call, its transcript and its recording, here and at the
+            voice provider that handled it. This action cannot be undone.
           </DialogDescription>
         </DialogHeader>
         <div className="flex gap-3 pt-2">

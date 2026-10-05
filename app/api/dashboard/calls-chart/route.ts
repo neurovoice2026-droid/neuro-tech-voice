@@ -1,109 +1,68 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { conversations, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { requireOrg } from '@/lib/api/auth'
+import { errorResponse, RequestError, requestErrorResponse } from '@/lib/api/http'
+import { createLogger, requestIdFrom } from '@/lib/observability/logger'
+import {
+  factTime,
+  loadCallFacts,
+  localDateOf,
+  safeTimeZone,
+  shiftDays,
+  zonedDayStart,
+} from '@/lib/calls/serialize'
 
 export interface ChartDataPoint {
+  /** Short weekday of the org-local day ("Mon"). */
   date: string
   calls: number
+  /** Average duration of completed calls that day, in minutes (1 decimal). */
   duration: number
 }
 
-export async function GET() {
-  const supabase = await createClient()
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const DAYS = 7
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+// GET /api/dashboard/calls-chart — calls per day for the last 7 days (today
+// included), in the org's time zone, from the `calls` table (both providers).
+export async function GET(request: Request) {
+  const requestId = requestIdFrom(request)
+  let log = createLogger({ requestId, route: 'dashboard.calls_chart' })
+  try {
+    const { supabase, org } = await requireOrg()
+    log = log.child({ orgId: org.id })
+    const tz = safeTimeZone(org.timezone)
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
-
-  if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const { data: agent } = await supabase
-    .from('agents')
-    .select('elevenlabs_agent_id')
-    .eq('org_id', org.id)
-    .single()
-
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  const sevenDaysAgo = new Date()
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
-  sevenDaysAgo.setHours(0, 0, 0, 0)
-
-  // Try ElevenLabs
-  if (elConfigured() && agent?.elevenlabs_agent_id) {
-    try {
-      const data = await conversations.list({
-        agent_id: agent.elevenlabs_agent_id,
-        page_size: 100,
-        call_start_after_unix: Math.floor(sevenDaysAgo.getTime() / 1000),
-      })
-
-      const convs = data.conversations ?? []
-      const result: ChartDataPoint[] = []
-
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date()
-        d.setDate(d.getDate() - i)
-        d.setHours(0, 0, 0, 0)
-        const dayStartUnix = Math.floor(d.getTime() / 1000)
-        const dayEndUnix = dayStartUnix + 86400
-
-        const dayCalls = convs.filter((c) => {
-          const t = c.start_time_unix_secs ?? 0
-          return t >= dayStartUnix && t < dayEndUnix
-        })
-
-        const completed = dayCalls.filter((c) => c.call_duration_secs && c.call_duration_secs > 0)
-        const totalSecs = completed.reduce((s, c) => s + (c.call_duration_secs ?? 0), 0)
-        const avgMins = completed.length > 0
-          ? Math.round((totalSecs / completed.length) / 60 * 10) / 10 : 0
-
-        result.push({
-          date: days[d.getDay()],
-          calls: dayCalls.length,
-          duration: avgMins,
-        })
+    const today = localDateOf(new Date(), tz)
+    const days = Array.from({ length: DAYS }, (_, i) => {
+      const local = shiftDays(today, i - (DAYS - 1))
+      return {
+        local,
+        start: zonedDayStart(local, tz).getTime(),
+        end: zonedDayStart(shiftDays(local, 1), tz).getTime(),
       }
-
-      return NextResponse.json(result)
-    } catch (err) {
-      console.error('ElevenLabs calls-chart failed, falling back to DB:', err)
-    }
-  }
-
-  // Fallback: Supabase
-  const result: ChartDataPoint[] = []
-
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date()
-    d.setDate(d.getDate() - i)
-    d.setHours(0, 0, 0, 0)
-    const dayStart = d.toISOString()
-    const dayEnd = new Date(d.getTime() + 86400000).toISOString()
-
-    const { data: calls } = await supabase
-      .from('calls')
-      .select('duration_seconds, status')
-      .eq('org_id', org.id)
-      .gte('started_at', dayStart)
-      .lt('started_at', dayEnd)
-
-    const dayCalls = calls ?? []
-    const completed = dayCalls.filter((c) => c.status === 'completed')
-    const totalSecs = completed.reduce((s, c) => s + (c.duration_seconds ?? 0), 0)
-    const avgMins = completed.length > 0
-      ? Math.round((totalSecs / completed.length) / 60 * 10) / 10 : 0
-
-    result.push({
-      date: days[d.getDay()],
-      calls: dayCalls.length,
-      duration: avgMins,
     })
-  }
 
-  return NextResponse.json(result)
+    const { facts, truncated } = await loadCallFacts(supabase, org.id, { since: new Date(days[0].start) })
+    if (truncated) log.warn('dashboard.calls_chart.truncated', { loaded: facts.length })
+
+    const result: ChartDataPoint[] = days.map(({ local, start, end }) => {
+      const dayFacts = facts.filter((f) => {
+        const t = factTime(f)
+        return t >= start && t < end
+      })
+      const completed = dayFacts.filter((f) => f.status === 'completed')
+      const totalSecs = completed.reduce((s, f) => s + Math.max(0, f.duration_seconds ?? 0), 0)
+      const weekday = new Date(Date.UTC(local.year, local.month - 1, local.day)).getUTCDay()
+      return {
+        date: DAY_NAMES[weekday],
+        calls: dayFacts.length,
+        duration: completed.length > 0 ? Math.round((totalSecs / completed.length / 60) * 10) / 10 : 0,
+      }
+    })
+
+    return NextResponse.json(result)
+  } catch (err) {
+    if (err instanceof RequestError) return requestErrorResponse(err, requestId)
+    return errorResponse(err, log, 'dashboard.calls_chart.failed', requestId)
+  }
 }

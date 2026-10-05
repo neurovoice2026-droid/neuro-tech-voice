@@ -4,13 +4,12 @@ import { useState } from 'react'
 import {
   ArrowDownLeft, ArrowUpRight, MoreHorizontal, Phone, Eye,
   FileText, Copy, Trash2, ChevronLeft, ChevronRight, Search,
-  CheckCheck,
+  CheckCheck, RotateCw,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import {
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
 } from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -23,32 +22,25 @@ import { cn, formatDuration, formatPhoneNumber, formatDate } from '@/lib/utils'
 import { toast } from 'sonner'
 import { CallDetailSheet } from './CallDetailSheet'
 import { DeleteCallDialog } from './DeleteCallDialog'
-import type { Call, CallFilters } from '@/types'
+import { CallStatusBadge, HandledByBadge, SentimentIcon } from './CallBadges'
+import type { CallListItem } from '@/lib/calls/labels'
 
-const STATUS_BADGE: Record<string, string> = {
-  completed:     'border-green-200 bg-green-100 text-green-700',
-  failed:        'border-red-200 bg-red-100 text-red-700',
-  busy:          'border-amber-200 bg-amber-100 text-amber-700',
-  'no-answer':   'border-gray-200 bg-gray-100 text-gray-600',
-  'in-progress': 'border-blue-200 bg-blue-100 text-blue-700',
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  completed: 'Completed', failed: 'Failed', busy: 'Busy',
-  'no-answer': 'No answer', 'in-progress': 'In progress',
-}
+const COLUMN_COUNT = 10
 
 interface CallsTableProps {
-  calls: Call[]
+  calls: CallListItem[]
   isLoading: boolean
+  error?: string | null
   total: number
   totalPages: number
   page: number
   pageSize: number
-  filters: CallFilters
+  selectedIds: string[]
+  onSelectedIdsChange: (ids: string[]) => void
   onPageChange: (p: number) => void
   onPageSizeChange: (ps: number) => void
   onDeleteCall: (id: string) => void
+  onRetry?: () => void
 }
 
 function SkeletonRow() {
@@ -56,11 +48,12 @@ function SkeletonRow() {
     <TableRow>
       <TableCell><Skeleton className="h-4 w-4 rounded" /></TableCell>
       <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-      <TableCell><Skeleton className="h-4 w-6" /></TableCell>
-      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+      <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-6" /></TableCell>
+      <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-16" /></TableCell>
       <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
-      <TableCell><Skeleton className="h-4 w-6" /></TableCell>
-      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+      <TableCell className="hidden md:table-cell"><Skeleton className="h-5 w-28 rounded-full" /></TableCell>
+      <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-6" /></TableCell>
+      <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-20" /></TableCell>
       <TableCell><Skeleton className="h-4 w-24" /></TableCell>
       <TableCell><Skeleton className="h-4 w-6" /></TableCell>
     </TableRow>
@@ -72,7 +65,7 @@ function PaginationBar({
   onPageChange, onPageSizeChange,
 }: {
   page: number; totalPages: number; pageSize: number; total: number
-  calls: Call[]; onPageChange: (p: number) => void; onPageSizeChange: (ps: number) => void
+  onPageChange: (p: number) => void; onPageSizeChange: (ps: number) => void
 }) {
   const from = Math.min((page - 1) * pageSize + 1, total)
   const to   = Math.min(page * pageSize, total)
@@ -90,8 +83,8 @@ function PaginationBar({
   }
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-1 mt-4">
-      <p className="text-sm text-muted-foreground">
+    <nav aria-label="Calls pagination" className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-1 mt-4">
+      <p className="text-sm text-muted-foreground" aria-live="polite">
         Showing {from}–{to} of {total.toLocaleString()} calls
       </p>
       <div className="flex items-center gap-2 justify-center">
@@ -99,19 +92,23 @@ function PaginationBar({
           variant="outline"
           size="icon-sm"
           onClick={() => onPageChange(page - 1)}
-          disabled={page === 1}
+          disabled={page <= 1}
+          aria-label="Previous page"
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
         {pages.map((p, i) =>
           p === '…' ? (
-            <span key={`ellipsis-${i}`} className="px-1 text-muted-foreground text-sm">…</span>
+            <span key={`ellipsis-${i}`} className="px-1 text-muted-foreground text-sm" aria-hidden="true">…</span>
           ) : (
             <button
               key={p}
+              type="button"
               onClick={() => onPageChange(p)}
+              aria-label={`Page ${p}`}
+              aria-current={p === page ? 'page' : undefined}
               className={cn(
-                'h-7 min-w-7 rounded-md px-2.5 text-sm transition-colors',
+                'h-7 min-w-7 rounded-md px-2.5 text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
                 p === page
                   ? 'bg-primary text-primary-foreground'
                   : 'hover:bg-purple-50 text-foreground'
@@ -125,15 +122,16 @@ function PaginationBar({
           variant="outline"
           size="icon-sm"
           onClick={() => onPageChange(page + 1)}
-          disabled={page === totalPages}
+          disabled={page >= totalPages}
+          aria-label="Next page"
         >
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
       <div className="flex items-center gap-2 justify-center sm:justify-end">
-        <span className="text-sm text-muted-foreground">Rows per page:</span>
+        <span className="text-sm text-muted-foreground" id="calls-page-size-label">Rows per page:</span>
         <Select value={String(pageSize)} onValueChange={(v) => v && onPageSizeChange(Number(v))}>
-          <SelectTrigger className="h-7 w-16">
+          <SelectTrigger className="h-7 w-16" aria-labelledby="calls-page-size-label">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -143,34 +141,36 @@ function PaginationBar({
           </SelectContent>
         </Select>
       </div>
-    </div>
+    </nav>
   )
 }
 
+function callerText(call: CallListItem): string {
+  return call.caller_number ? formatPhoneNumber(call.caller_number) : 'Unknown caller'
+}
+
 export function CallsTable({
-  calls, isLoading, total, totalPages, page, pageSize,
-  onPageChange, onPageSizeChange, onDeleteCall,
+  calls, isLoading, error, total, totalPages, page, pageSize,
+  selectedIds, onSelectedIdsChange,
+  onPageChange, onPageSizeChange, onDeleteCall, onRetry,
 }: CallsTableProps) {
-  const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set())
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null)
   const [sheetTab, setSheetTab]         = useState('overview')
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [copiedId, setCopiedId]         = useState<string | null>(null)
 
-  const allSelected = calls.length > 0 && calls.every((c) => selectedIds.has(c.id))
+  const selected = new Set(selectedIds)
+  const allSelected = calls.length > 0 && calls.every((c) => selected.has(c.id))
+  const someSelected = !allSelected && calls.some((c) => selected.has(c.id))
 
   function toggleAll() {
-    if (allSelected) setSelectedIds(new Set())
-    else setSelectedIds(new Set(calls.map((c) => c.id)))
+    const pageIds = calls.map((c) => c.id)
+    if (allSelected) onSelectedIdsChange(selectedIds.filter((id) => !pageIds.includes(id)))
+    else onSelectedIdsChange(Array.from(new Set([...selectedIds, ...pageIds])))
   }
 
   function toggleRow(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+    onSelectedIdsChange(selected.has(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id])
   }
 
   function openDetail(id: string, tab = 'overview') {
@@ -178,19 +178,33 @@ export function CallsTable({
     setSheetTab(tab)
   }
 
-  function copyNumber(call: Call, e: React.MouseEvent) {
-    e.stopPropagation()
-    if (!call.caller_number) return
-    navigator.clipboard.writeText(call.caller_number)
-    setCopiedId(call.id)
-    toast.success('Phone number copied')
-    setTimeout(() => setCopiedId(null), 2000)
+  function copyNumber(call: CallListItem) {
+    if (!call.caller_number) {
+      toast.error('This call has no phone number')
+      return
+    }
+    navigator.clipboard.writeText(call.caller_number).then(
+      () => {
+        setCopiedId(call.id)
+        toast.success('Phone number copied')
+        setTimeout(() => setCopiedId(null), 2000)
+      },
+      () => toast.error('Could not copy to the clipboard'),
+    )
   }
 
   function handleDeleted(id: string) {
     onDeleteCall(id)
     if (selectedCallId === id) setSelectedCallId(null)
-    setSelectedIds((prev) => { const next = new Set(prev); next.delete(id); return next })
+    if (selected.has(id)) onSelectedIdsChange(selectedIds.filter((x) => x !== id))
+  }
+
+  function onRowKeyDown(e: React.KeyboardEvent<HTMLTableRowElement>, id: string) {
+    if (e.target !== e.currentTarget) return
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      openDetail(id)
+    }
   }
 
   return (
@@ -202,26 +216,42 @@ export function CallsTable({
               <TableHead className="w-10">
                 <Checkbox
                   checked={allSelected}
+                  indeterminate={someSelected}
                   onCheckedChange={toggleAll}
-                  aria-label="Select all"
+                  aria-label="Select all calls on this page"
                 />
               </TableHead>
               <TableHead>Caller</TableHead>
               <TableHead className="w-16 text-center hidden sm:table-cell">Dir.</TableHead>
               <TableHead className="text-right hidden md:table-cell">Duration</TableHead>
               <TableHead className="text-center">Status</TableHead>
+              <TableHead className="hidden md:table-cell">Handled by</TableHead>
               <TableHead className="text-center hidden lg:table-cell">Sentiment</TableHead>
               <TableHead className="hidden xl:table-cell">Agent</TableHead>
               <TableHead className="text-right">Date</TableHead>
-              <TableHead className="w-10" />
+              <TableHead className="w-10"><span className="sr-only">Actions</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading ? (
+            {isLoading && calls.length === 0 ? (
               [...Array(8)].map((_, i) => <SkeletonRow key={i} />)
+            ) : error && calls.length === 0 ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={COLUMN_COUNT} className="py-16">
+                  <div className="flex flex-col items-center gap-3 text-center" role="alert">
+                    <p className="font-semibold text-sm">Calls could not be loaded</p>
+                    <p className="text-sm text-muted-foreground">{error}</p>
+                    {onRetry && (
+                      <Button variant="outline" size="sm" className="gap-1.5" onClick={onRetry}>
+                        <RotateCw className="h-3.5 w-3.5" /> Try again
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
             ) : calls.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="py-16">
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={COLUMN_COUNT} className="py-16">
                   <div className="flex flex-col items-center gap-3 text-center">
                     <div className="rounded-full bg-muted p-4">
                       <Search className="h-7 w-7 text-muted-foreground" />
@@ -233,51 +263,63 @@ export function CallsTable({
                       </p>
                     </div>
                   </div>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : (
               calls.map((call) => {
-                const isSelected = selectedIds.has(call.id)
+                const isSelected = selected.has(call.id)
                 const isActive   = selectedCallId === call.id
+                const caller = callerText(call)
 
                 return (
                   <TableRow
                     key={call.id}
+                    tabIndex={0}
+                    aria-label={`Open call from ${caller}`}
+                    aria-selected={isSelected}
                     onClick={() => openDetail(call.id)}
+                    onKeyDown={(e) => onRowKeyDown(e, call.id)}
                     className={cn(
-                      'cursor-pointer transition-colors',
+                      'cursor-pointer transition-colors outline-none focus-visible:bg-purple-50/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50',
                       isActive  && 'border-l-4 border-l-primary bg-purple-50',
                       isSelected && !isActive && 'bg-purple-50/30',
-                      !isActive  && 'hover:bg-purple-50/20'
+                      !isActive  && 'hover:bg-purple-50/20',
+                      isLoading && 'opacity-60'
                     )}
                   >
                     {/* Checkbox */}
-                    <TableCell onClick={(e) => e.stopPropagation()}>
+                    <TableCell onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                       <Checkbox
                         checked={isSelected}
                         onCheckedChange={() => toggleRow(call.id)}
-                        aria-label="Select row"
+                        aria-label={`Select call from ${caller}`}
                       />
                     </TableCell>
 
-                    {/* Caller */}
-                    <TableCell>
+                    {/* Caller (+ title, and the handled-by badge on small screens) */}
+                    <TableCell className="max-w-[16rem]">
                       <div className="flex items-center gap-1.5">
-                        <Phone className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                        <span className="font-mono text-sm font-medium">
-                          {call.caller_number ? formatPhoneNumber(call.caller_number) : (
-                            <span className="text-muted-foreground">Unknown caller</span>
-                          )}
+                        <Phone className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" aria-hidden="true" />
+                        <span className={cn('font-mono text-sm font-medium', !call.caller_number && 'font-sans text-muted-foreground')}>
+                          {caller}
                         </span>
+                      </div>
+                      {call.summary_title && (
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground" title={call.summary_title}>
+                          {call.summary_title}
+                        </p>
+                      )}
+                      <div className="mt-1 md:hidden">
+                        <HandledByBadge call={call} />
                       </div>
                     </TableCell>
 
                     {/* Direction */}
                     <TableCell className="text-center hidden sm:table-cell">
                       {call.direction === 'inbound' ? (
-                        <span title="Inbound"><ArrowDownLeft className="h-4 w-4 text-blue-500 mx-auto" /></span>
+                        <span title="Inbound"><ArrowDownLeft className="h-4 w-4 text-blue-500 mx-auto" aria-label="Inbound" /></span>
                       ) : (
-                        <span title="Outbound"><ArrowUpRight className="h-4 w-4 text-purple-500 mx-auto" /></span>
+                        <span title="Outbound"><ArrowUpRight className="h-4 w-4 text-purple-500 mx-auto" aria-label="Outbound" /></span>
                       )}
                     </TableCell>
 
@@ -290,23 +332,17 @@ export function CallsTable({
 
                     {/* Status */}
                     <TableCell className="text-center">
-                      <Badge
-                        variant="outline"
-                        className={cn('text-xs capitalize', STATUS_BADGE[call.status])}
-                      >
-                        {call.status === 'in-progress' && (
-                          <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />
-                        )}
-                        {STATUS_LABEL[call.status] ?? call.status}
-                      </Badge>
+                      <CallStatusBadge status={call.status} />
+                    </TableCell>
+
+                    {/* Handled by */}
+                    <TableCell className="hidden md:table-cell">
+                      <HandledByBadge call={call} />
                     </TableCell>
 
                     {/* Sentiment */}
                     <TableCell className="text-center hidden lg:table-cell">
-                      {call.sentiment === 'positive' && <span title="Positive" className="text-base">😊</span>}
-                      {call.sentiment === 'neutral'  && <span title="Neutral"  className="text-base">😐</span>}
-                      {call.sentiment === 'negative' && <span title="Negative" className="text-base">😞</span>}
-                      {!call.sentiment               && <span className="text-muted-foreground text-xs">—</span>}
+                      <SentimentIcon sentiment={call.sentiment} />
                     </TableCell>
 
                     {/* Agent */}
@@ -331,10 +367,11 @@ export function CallsTable({
                     </TableCell>
 
                     {/* Actions dropdown */}
-                    <TableCell onClick={(e) => e.stopPropagation()}>
+                    <TableCell onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger
-                          className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted transition-colors outline-none"
+                          aria-label={`Actions for call from ${caller}`}
+                          className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                         >
                           <MoreHorizontal className="h-4 w-4" />
                         </DropdownMenuTrigger>
@@ -345,7 +382,7 @@ export function CallsTable({
                           <DropdownMenuItem onClick={() => openDetail(call.id, 'transcript')}>
                             <FileText className="mr-2 h-4 w-4" /> View transcript
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={(e) => copyNumber(call, e)}>
+                          <DropdownMenuItem onClick={() => copyNumber(call)} disabled={!call.caller_number}>
                             {copiedId === call.id
                               ? <><CheckCheck className="mr-2 h-4 w-4 text-green-500" /> Copied!</>
                               : <><Copy className="mr-2 h-4 w-4" /> Copy number</>}
@@ -368,15 +405,17 @@ export function CallsTable({
         </Table>
 
         {/* Bulk actions */}
-        {selectedIds.size > 0 && (
+        {selectedIds.length > 0 && (
           <div className="mx-4 mb-4 mt-2 flex items-center justify-between rounded-xl bg-purple-900 px-4 py-3 text-white">
-            <span className="text-sm font-medium">{selectedIds.size} call{selectedIds.size > 1 ? 's' : ''} selected</span>
+            <span className="text-sm font-medium" aria-live="polite">
+              {selectedIds.length} call{selectedIds.length > 1 ? 's' : ''} selected
+            </span>
             <div className="flex gap-2">
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 text-xs border-white/30 text-white hover:bg-white/10"
-                onClick={() => setSelectedIds(new Set())}
+                className="h-7 text-xs border-white/30 bg-transparent text-white hover:bg-white/10"
+                onClick={() => onSelectedIdsChange([])}
               >
                 Clear
               </Button>
@@ -392,7 +431,6 @@ export function CallsTable({
           totalPages={totalPages}
           pageSize={pageSize}
           total={total}
-          calls={calls}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
         />

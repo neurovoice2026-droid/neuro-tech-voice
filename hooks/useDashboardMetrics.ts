@@ -1,24 +1,46 @@
+'use client'
+
 import { useState, useEffect, useCallback } from 'react'
 import type { DashboardMetrics } from '@/types'
+import { readApiError } from '@/hooks/useCalls'
+
+const REFRESH_MS = 60_000
+
+interface MetricsState {
+  metrics: DashboardMetrics | null
+  loaded: boolean
+  error: string | null
+}
 
 export function useDashboardMetrics() {
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-
-  const fetch_ = useCallback(async () => {
-    try {
-      const res = await fetch('/api/dashboard/metrics')
-      if (res.ok) setMetrics(await res.json())
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
+  const [state, setState] = useState<MetricsState>({ metrics: null, loaded: false, error: null })
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
-    fetch_()
-    const id = setInterval(fetch_, 60_000)
-    return () => clearInterval(id)
-  }, [fetch_])
+    const ctrl = new AbortController()
+    fetch('/api/dashboard/metrics', { signal: ctrl.signal })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(await readApiError(res, 'Could not load metrics.'))
+        return (await res.json()) as DashboardMetrics
+      })
+      .then((metrics) => {
+        if (!ctrl.signal.aborted) setState({ metrics, loaded: true, error: null })
+      })
+      .catch((e: unknown) => {
+        // Aborted: unmounted or replaced by a newer refresh.
+        if (ctrl.signal.aborted) return
+        // Keep the last good numbers on a failed background refresh.
+        setState((prev) => ({ ...prev, loaded: true, error: e instanceof Error ? e.message : 'Could not load metrics.' }))
+      })
+    return () => ctrl.abort()
+  }, [reloadKey])
 
-  return { metrics, isLoading, refetch: fetch_ }
+  useEffect(() => {
+    const id = setInterval(() => setReloadKey((k) => k + 1), REFRESH_MS)
+    return () => clearInterval(id)
+  }, [])
+
+  const refetch = useCallback(() => setReloadKey((k) => k + 1), [])
+
+  return { metrics: state.metrics, isLoading: !state.loaded, error: state.error, refetch }
 }

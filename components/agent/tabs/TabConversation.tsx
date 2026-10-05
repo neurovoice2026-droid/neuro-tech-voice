@@ -1,19 +1,107 @@
 'use client'
 
-import { useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useMemo, useState } from 'react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardAction } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
-import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
-import { Play, Square, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
-import { toast } from 'sonner'
-import type { Agent, BehaviorSettings } from '@/types'
-import type { useAgent } from '@/hooks/useAgent'
-import { defaultFallbackMessage } from '@/lib/elevenlabs/prompt'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import { ChevronDown, ChevronUp, Info, Loader2, Play, Sparkles, Square } from 'lucide-react'
+import { useAudioPreview } from '@/hooks/useAudioPreview'
+import { readAgentSettings, type AgentHook } from '@/hooks/useAgent'
+import { ConversationSettingsSchema } from '@/lib/voice-providers/settings'
+import { defaultFallbackMessage } from '@/lib/voice-providers/prompt'
+import type { ConversationSettings } from '@/lib/voice-providers/types'
+import { cn } from '@/lib/utils'
+import type { Agent } from '@/types'
+
+// ─── Shared form primitives (also used by the Availability and Call handling tabs) ──
+
+export function FieldError({ id, children }: { id: string; children: React.ReactNode }) {
+  return (
+    <p id={id} role="alert" className="text-xs text-destructive">
+      {children}
+    </p>
+  )
+}
+
+interface SettingSwitchProps {
+  id: string
+  label: string
+  description: React.ReactNode
+  checked: boolean
+  onCheckedChange: (checked: boolean) => void
+  disabled?: boolean
+  children?: React.ReactNode
+}
+
+/** A labelled switch with its description; `children` render below (e.g. the value it enables). */
+export function SettingSwitch({ id, label, description, checked, onCheckedChange, disabled, children }: SettingSwitchProps) {
+  const descriptionId = `${id}-description`
+  return (
+    <div className="space-y-2">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 space-y-0.5">
+          <Label htmlFor={id} className="text-sm font-medium">{label}</Label>
+          <p id={descriptionId} className="text-xs text-muted-foreground">{description}</p>
+        </div>
+        <Switch
+          id={id}
+          checked={checked}
+          onCheckedChange={(value) => onCheckedChange(value)}
+          disabled={disabled}
+          aria-describedby={descriptionId}
+          className="mt-0.5"
+        />
+      </div>
+      {children}
+    </div>
+  )
+}
+
+interface SaveBarProps {
+  dirty: boolean
+  saving: boolean
+  onSave: () => void
+  onDiscard: () => void
+  label?: string
+  /** Disables saving (e.g. invalid fields) without hiding the bar. */
+  blocked?: boolean
+}
+
+export function SaveBar({ dirty, saving, onSave, onDiscard, label = 'Save changes', blocked = false }: SaveBarProps) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <Button onClick={onSave} disabled={!dirty || saving || blocked} className="purple-glow">
+        {saving && <Loader2 className="animate-spin" aria-hidden="true" />}
+        {saving ? 'Saving…' : label}
+      </Button>
+      {dirty && !saving && (
+        <Button variant="ghost" onClick={onDiscard}>
+          Discard
+        </Button>
+      )}
+      {dirty && (
+        <Badge variant="secondary" className="text-xs">Unsaved changes</Badge>
+      )}
+    </div>
+  )
+}
+
+/** Parses an integer typed into a text/number input; null when it is not one. */
+export function parseInteger(raw: string): number | null {
+  const trimmed = raw.trim()
+  if (!/^-?\d+$/.test(trimmed)) return null
+  const value = Number(trimmed)
+  return Number.isSafeInteger(value) ? value : null
+}
+
+// ─── Prompt templates ────────────────────────────────────────────────────────
 
 const PROMPT_TEMPLATES = [
   {
@@ -38,17 +126,118 @@ const PROMPT_TEMPLATES = [
   },
 ]
 
-const DEFAULT_BEHAVIOR: BehaviorSettings = {
-  allow_interruptions: true,
-  auto_end_call: true,
-  auto_end_silence_seconds: 10,
-  max_call_duration_enabled: false,
-  max_call_duration_minutes: 30,
-  record_calls: true,
-  voicemail_detection: true,
+// Same limits as PATCH /api/agent.
+const FIRST_MESSAGE_MAX = 1_000
+const SYSTEM_PROMPT_MAX = 20_000
+const FALLBACK_MESSAGE_MAX = 500
+const VOICEMAIL_MESSAGE_MAX = 500
+
+const EAGERNESS_OPTIONS: Array<{ value: ConversationSettings['turn_eagerness']; label: string; description: string }> = [
+  { value: 'patient', label: 'Patient', description: 'Waits a little longer before replying. Good for callers who pause while thinking.' },
+  { value: 'normal', label: 'Normal', description: 'Balanced for most conversations.' },
+  { value: 'eager', label: 'Eager', description: 'Replies as soon as the caller stops. Snappier, but may cut in.' },
+]
+
+// ─── Draft ───────────────────────────────────────────────────────────────────
+
+interface Draft {
+  first_message: string
+  system_prompt: string
+  fallback_message: string
+  allow_interruptions: boolean
+  turn_timeout: string
+  turn_eagerness: ConversationSettings['turn_eagerness']
+  silence_enabled: boolean
+  silence_seconds: string
+  max_duration: string
+  allow_end_call: boolean
+  voicemail_detection: boolean
+  voicemail_message: string
+  temperature_enabled: boolean
+  temperature: string
 }
 
-type AgentHook = ReturnType<typeof useAgent>
+type FieldKey = 'first_message' | 'system_prompt' | 'fallback_message' | 'turn_timeout' | 'silence_seconds' | 'max_duration' | 'voicemail_message' | 'temperature'
+type FieldErrors = Partial<Record<FieldKey, string>>
+
+function draftFrom(agent: Agent): Draft {
+  const c = readAgentSettings(agent).conversation
+  return {
+    first_message: agent.first_message ?? '',
+    system_prompt: agent.system_prompt ?? '',
+    fallback_message: agent.fallback_message ?? '',
+    allow_interruptions: c.allow_interruptions,
+    turn_timeout: String(c.turn_timeout_seconds),
+    turn_eagerness: c.turn_eagerness,
+    silence_enabled: c.silence_end_call_seconds !== null,
+    silence_seconds: String(c.silence_end_call_seconds ?? 30),
+    max_duration: String(c.max_call_duration_minutes),
+    allow_end_call: c.allow_end_call,
+    voicemail_detection: c.voicemail_detection,
+    voicemail_message: c.voicemail_message ?? '',
+    temperature_enabled: c.temperature !== null,
+    temperature: String(c.temperature ?? 0.5),
+  }
+}
+
+const SCHEMA_FIELD: Partial<Record<keyof ConversationSettings, FieldKey>> = {
+  turn_timeout_seconds: 'turn_timeout',
+  silence_end_call_seconds: 'silence_seconds',
+  max_call_duration_minutes: 'max_duration',
+  voicemail_message: 'voicemail_message',
+  temperature: 'temperature',
+}
+
+/** Builds the full conversation_settings object (keeping fields other tabs own) and validates it. */
+function buildSettings(draft: Draft, base: ConversationSettings): { value: ConversationSettings | null; errors: FieldErrors } {
+  const errors: FieldErrors = {}
+  const range = (raw: string, min: number, max: number, unit: string, key: FieldKey): number => {
+    const n = parseInteger(raw)
+    if (n === null || n < min || n > max) errors[key] = `Enter a whole number of ${unit} between ${min} and ${max}.`
+    return n ?? min
+  }
+
+  const turnTimeout = range(draft.turn_timeout, 1, 30, 'seconds', 'turn_timeout')
+  const silence = draft.silence_enabled ? range(draft.silence_seconds, 10, 600, 'seconds', 'silence_seconds') : null
+  const maxDuration = range(draft.max_duration, 1, 120, 'minutes', 'max_duration')
+  let temperature: number | null = null
+  if (draft.temperature_enabled) {
+    const t = Number(draft.temperature.trim())
+    if (!draft.temperature.trim() || !Number.isFinite(t) || t < 0 || t > 1) errors.temperature = 'Enter a value between 0 and 1.'
+    else temperature = Math.round(t * 100) / 100
+  }
+  const voicemailMessage = draft.voicemail_message.trim()
+  if (voicemailMessage.length > VOICEMAIL_MESSAGE_MAX) errors.voicemail_message = `Keep it under ${VOICEMAIL_MESSAGE_MAX} characters.`
+
+  if (draft.first_message.length > FIRST_MESSAGE_MAX) errors.first_message = `Keep it under ${FIRST_MESSAGE_MAX.toLocaleString()} characters.`
+  if (draft.system_prompt.length > SYSTEM_PROMPT_MAX) errors.system_prompt = `Keep it under ${SYSTEM_PROMPT_MAX.toLocaleString()} characters.`
+  if (draft.fallback_message.trim().length > FALLBACK_MESSAGE_MAX) errors.fallback_message = `Keep it under ${FALLBACK_MESSAGE_MAX} characters.`
+
+  const candidate: ConversationSettings = {
+    ...base,
+    allow_interruptions: draft.allow_interruptions,
+    turn_timeout_seconds: turnTimeout,
+    turn_eagerness: draft.turn_eagerness,
+    silence_end_call_seconds: silence,
+    max_call_duration_minutes: maxDuration,
+    allow_end_call: draft.allow_end_call,
+    voicemail_detection: draft.voicemail_detection,
+    voicemail_message: voicemailMessage || null,
+    temperature,
+    ai_disclosure: true,
+  }
+  const parsed = ConversationSettingsSchema.safeParse(candidate)
+  if (!parsed.success) {
+    for (const issue of parsed.error.issues) {
+      const key = SCHEMA_FIELD[issue.path[0] as keyof ConversationSettings]
+      if (key && !errors[key]) errors[key] = issue.message
+    }
+    if (Object.keys(errors).length === 0) errors.max_duration = 'Some settings are invalid.'
+  }
+  return { value: Object.keys(errors).length === 0 && parsed.success ? (parsed.data as ConversationSettings) : null, errors }
+}
+
+// ─── Tab ─────────────────────────────────────────────────────────────────────
 
 interface TabConversationProps {
   agent: Agent
@@ -56,113 +245,106 @@ interface TabConversationProps {
   isSaving: boolean
 }
 
-export function TabConversation({ agent, onUpdate, isSaving }: TabConversationProps) {
-  const [firstMessage, setFirstMessage] = useState(agent.first_message ?? '')
-  const [systemPrompt, setSystemPrompt] = useState(agent.system_prompt ?? '')
-  const [fallbackMessage, setFallbackMessage] = useState(agent.fallback_message ?? '')
-  const [behavior, setBehavior] = useState<BehaviorSettings>({
-    ...DEFAULT_BEHAVIOR,
-    ...((agent.metadata?.behavior_settings as Partial<BehaviorSettings>) ?? {}),
-  })
-  const [showTemplates, setShowTemplates] = useState(false)
-  const [isPreviewingTTS, setIsPreviewingTTS] = useState(false)
-  const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null)
+const PREVIEW_ID = 'first-message'
 
-  const isDirty =
-    firstMessage !== (agent.first_message ?? '') ||
-    systemPrompt !== (agent.system_prompt ?? '') ||
-    fallbackMessage !== (agent.fallback_message ?? '')
+export function TabConversation({ agent, onUpdate, isSaving }: TabConversationProps) {
+  const saved = useMemo(() => draftFrom(agent), [agent])
+  const [draft, setDraft] = useState<Draft>(saved)
+  const [showTemplates, setShowTemplates] = useState(false)
+  const [showErrors, setShowErrors] = useState(false)
+  const preview = useAudioPreview()
+
+  const isDirty = JSON.stringify(draft) !== JSON.stringify(saved)
+  const { value, errors } = buildSettings(draft, readAgentSettings(agent).conversation)
+  const visibleErrors: FieldErrors = showErrors ? errors : {}
+
+  const set = <K extends keyof Draft>(key: K, v: Draft[K]) => setDraft((d) => ({ ...d, [key]: v }))
 
   const handleSave = async () => {
-    await onUpdate(
-      {
-        first_message: firstMessage,
-        system_prompt: systemPrompt,
-        fallback_message: fallbackMessage,
-        metadata: {
-          ...agent.metadata,
-          behavior_settings: behavior,
-        },
-      },
-      'Conversation settings saved'
-    )
-  }
-
-  const previewFirstMessage = async () => {
-    if (!agent.voice_id || !firstMessage) return
-
-    if (audioRef) {
-      audioRef.pause()
-      setAudioRef(null)
-      setIsPreviewingTTS(false)
+    if (!value) {
+      setShowErrors(true)
       return
     }
-
-    setIsPreviewingTTS(true)
-    try {
-      const res = await fetch('/api/agent/preview-voice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: firstMessage, voice_id: agent.voice_id }),
-      })
-      if (!res.ok) {
-        const detail = await res.text().catch(() => '')
-        toast.error('Could not generate voice preview', detail ? { description: detail.slice(0, 200) } : undefined)
-        setIsPreviewingTTS(false)
-        return
-      }
-
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const audio = new Audio(url)
-      audio.addEventListener('ended', () => {
-        setIsPreviewingTTS(false)
-        setAudioRef(null)
-        URL.revokeObjectURL(url)
-      })
-      setAudioRef(audio)
-      await audio.play()
-    } catch {
-      toast.error('Could not generate voice preview')
-      setIsPreviewingTTS(false)
-      setAudioRef(null)
+    preview.stop()
+    const next = await onUpdate(
+      {
+        first_message: draft.first_message,
+        system_prompt: draft.system_prompt,
+        fallback_message: draft.fallback_message.trim() || null,
+        conversation_settings: value,
+      },
+      'Conversation settings saved',
+    )
+    if (next) {
+      setDraft(draftFrom(next))
+      setShowErrors(false)
     }
   }
 
-  const setBehaviorField = <K extends keyof BehaviorSettings>(key: K, val: BehaviorSettings[K]) => {
-    setBehavior(prev => ({ ...prev, [key]: val }))
+  const discard = () => {
+    setDraft(saved)
+    setShowErrors(false)
   }
+
+  const previewStatus = preview.statusFor(PREVIEW_ID)
+  const togglePreview = () => {
+    if (!agent.voice_id || !draft.first_message.trim()) return
+    preview.toggle(PREVIEW_ID, {
+      kind: 'request',
+      url: '/api/agent/preview-voice',
+      method: 'POST',
+      body: { text: draft.first_message, voice_id: agent.voice_id, language: agent.language },
+    })
+  }
+
+  const errorProps = (key: FieldKey) =>
+    visibleErrors[key] ? { 'aria-invalid': true as const, 'aria-describedby': `conv-${key}-error` } : {}
 
   return (
     <div className="space-y-6">
       {/* First Message */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">First Message</CardTitle>
+          <CardTitle className="text-base">First message</CardTitle>
           <CardDescription>
             What your agent says when a call connects. Keep it under 30 words.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <Label htmlFor="conv-first-message" className="sr-only">First message</Label>
           <Textarea
-            value={firstMessage}
-            onChange={e => setFirstMessage(e.target.value)}
-            placeholder="Hello! Thank you for calling. How can I assist you today?"
+            id="conv-first-message"
+            value={draft.first_message}
+            onChange={(e) => set('first_message', e.target.value)}
+            placeholder="Hello! Thank you for calling. How can I help you today?"
             rows={3}
+            maxLength={FIRST_MESSAGE_MAX}
             className="resize-none"
+            {...errorProps('first_message')}
           />
+          {visibleErrors.first_message && <FieldError id="conv-first_message-error">{visibleErrors.first_message}</FieldError>}
+          <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+            <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+            <span>
+              The platform always adds a short AI disclosure to this greeting, plus a recording notice when it is
+              enabled under Call handling → Privacy.
+            </span>
+          </p>
           {agent.voice_id && (
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={previewFirstMessage}
-              disabled={!firstMessage || isPreviewingTTS}
+              onClick={togglePreview}
+              disabled={!draft.first_message.trim()}
+              aria-label={previewStatus === 'idle' ? 'Preview the first message with your voice' : 'Stop the preview'}
             >
-              {isPreviewingTTS ? (
-                <><Square className="size-3 mr-1.5" /> Stop preview</>
+              {previewStatus === 'loading' ? (
+                <><Loader2 className="size-3 mr-1.5 animate-spin" aria-hidden="true" /> Loading…</>
+              ) : previewStatus === 'playing' ? (
+                <><Square className="size-3 mr-1.5" aria-hidden="true" /> Stop preview</>
               ) : (
-                <><Play className="size-3 mr-1.5" /> Preview with voice</>
+                <><Play className="size-3 mr-1.5" aria-hidden="true" /> Preview with voice</>
               )}
             </Button>
           )}
@@ -171,182 +353,288 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
 
       {/* System Prompt */}
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
-          <div>
-            <CardTitle className="text-base">System Prompt</CardTitle>
-            <CardDescription className="mt-1">
-              Instructions that define your agent&apos;s role, goals, and constraints.
-            </CardDescription>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setShowTemplates(v => !v)}
-          >
-            <Sparkles className="size-3.5 mr-1.5" />
-            Templates
-            {showTemplates ? <ChevronUp className="size-3.5 ml-1" /> : <ChevronDown className="size-3.5 ml-1" />}
-          </Button>
+        <CardHeader>
+          <CardTitle className="text-base">System prompt</CardTitle>
+          <CardDescription>
+            Instructions that define your agent&apos;s role, goals, and constraints.
+          </CardDescription>
+          <CardAction>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowTemplates((v) => !v)}
+              aria-expanded={showTemplates}
+              aria-controls="conv-templates"
+            >
+              <Sparkles className="size-3.5 mr-1.5" aria-hidden="true" />
+              Templates
+              {showTemplates ? <ChevronUp className="size-3.5 ml-1" aria-hidden="true" /> : <ChevronDown className="size-3.5 ml-1" aria-hidden="true" />}
+            </Button>
+          </CardAction>
         </CardHeader>
         <CardContent className="space-y-4">
           {showTemplates && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 rounded-lg bg-muted/50 border">
-              {PROMPT_TEMPLATES.map(t => (
+            <div id="conv-templates" className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 rounded-lg bg-muted/50 border">
+              {PROMPT_TEMPLATES.map((t) => (
                 <button
                   key={t.id}
                   type="button"
                   onClick={() => {
-                    setSystemPrompt(t.prompt)
+                    set('system_prompt', t.prompt)
                     setShowTemplates(false)
                   }}
-                  className="text-left px-3 py-2 rounded-md hover:bg-accent text-sm border border-transparent hover:border-border transition-colors"
+                  className="text-left px-3 py-2 rounded-md hover:bg-accent text-sm border border-transparent hover:border-border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <span className="font-medium">{t.label}</span>
                 </button>
               ))}
             </div>
           )}
+          <Label htmlFor="conv-system-prompt" className="sr-only">System prompt</Label>
           <Textarea
-            value={systemPrompt}
-            onChange={e => setSystemPrompt(e.target.value)}
+            id="conv-system-prompt"
+            value={draft.system_prompt}
+            onChange={(e) => set('system_prompt', e.target.value)}
             placeholder="You are a helpful AI assistant for Acme Corp. Your role is to..."
             rows={10}
-            className="font-mono text-sm resize-none"
+            className="font-mono text-sm resize-y"
+            {...errorProps('system_prompt')}
           />
-          <p className="text-xs text-muted-foreground text-right">
-            {systemPrompt.length.toLocaleString()} characters
+          {visibleErrors.system_prompt && <FieldError id="conv-system_prompt-error">{visibleErrors.system_prompt}</FieldError>}
+          <p className={cn('text-xs text-right', draft.system_prompt.length > SYSTEM_PROMPT_MAX ? 'text-destructive' : 'text-muted-foreground')}>
+            {draft.system_prompt.length.toLocaleString()} / {SYSTEM_PROMPT_MAX.toLocaleString()} characters
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Safety, privacy and AI-disclosure rules are always added after your prompt and take precedence over it.
           </p>
         </CardContent>
       </Card>
 
-      {/* Behavior Settings */}
+      {/* Conversational fallback phrase */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Behavior Settings</CardTitle>
-          <CardDescription>Fine-tune how your agent handles conversations.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <BehaviorRow
-            label="Allow Interruptions"
-            description="Caller can interrupt the agent mid-sentence"
-            checked={behavior.allow_interruptions}
-            onCheckedChange={v => setBehaviorField('allow_interruptions', v)}
-          />
-          <BehaviorRow
-            label="Auto-end Call on Silence"
-            description={`End call after ${behavior.auto_end_silence_seconds}s of silence`}
-            checked={behavior.auto_end_call}
-            onCheckedChange={v => setBehaviorField('auto_end_call', v)}
-          >
-            {behavior.auto_end_call && (
-              <div className="flex items-center gap-2 mt-2">
-                <Label className="text-xs text-muted-foreground">Seconds:</Label>
-                <Input
-                  type="number"
-                  min={3}
-                  max={60}
-                  value={behavior.auto_end_silence_seconds}
-                  onChange={e => setBehaviorField('auto_end_silence_seconds', Number(e.target.value))}
-                  className="w-20 h-7 text-sm"
-                />
-              </div>
-            )}
-          </BehaviorRow>
-          <BehaviorRow
-            label="Maximum Call Duration"
-            description="Automatically end calls after a set time"
-            checked={behavior.max_call_duration_enabled}
-            onCheckedChange={v => setBehaviorField('max_call_duration_enabled', v)}
-          >
-            {behavior.max_call_duration_enabled && (
-              <div className="flex items-center gap-2 mt-2">
-                <Label className="text-xs text-muted-foreground">Minutes:</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={120}
-                  value={behavior.max_call_duration_minutes}
-                  onChange={e => setBehaviorField('max_call_duration_minutes', Number(e.target.value))}
-                  className="w-20 h-7 text-sm"
-                />
-              </div>
-            )}
-          </BehaviorRow>
-          <BehaviorRow
-            label="Record Calls"
-            description="Store call recordings (subject to your plan)"
-            checked={behavior.record_calls}
-            onCheckedChange={v => setBehaviorField('record_calls', v)}
-          />
-          <BehaviorRow
-            label="Voicemail Detection"
-            description="Detect and handle voicemail greetings automatically"
-            checked={behavior.voicemail_detection}
-            onCheckedChange={v => setBehaviorField('voicemail_detection', v)}
-          />
-        </CardContent>
-      </Card>
-
-      {/* Fallback */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Fallback Message</CardTitle>
+          <CardTitle className="text-base">Fallback phrase</CardTitle>
           <CardDescription>
-            Spoken when the agent doesn&apos;t understand or can&apos;t handle the request.
+            Said when the agent doesn&apos;t understand or can&apos;t help. This is not the provider fallback (backup voice agent).
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-2">
+          <Label htmlFor="conv-fallback" className="sr-only">Fallback phrase</Label>
           <Textarea
-            value={fallbackMessage}
-            onChange={e => setFallbackMessage(e.target.value)}
+            id="conv-fallback"
+            value={draft.fallback_message}
+            onChange={(e) => set('fallback_message', e.target.value)}
             placeholder={defaultFallbackMessage(agent.language)}
-            rows={3}
+            rows={2}
+            maxLength={FALLBACK_MESSAGE_MAX}
             className="resize-none"
+            {...errorProps('fallback_message')}
           />
+          {visibleErrors.fallback_message && <FieldError id="conv-fallback_message-error">{visibleErrors.fallback_message}</FieldError>}
           <p className="text-xs text-muted-foreground">
-            Leave blank to use the default fallback phrase in your agent&apos;s language.
+            Leave blank to use the default phrase in your agent&apos;s language (shown above).
           </p>
         </CardContent>
       </Card>
 
-      <Separator />
+      {/* Conversation settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Conversation settings</CardTitle>
+          <CardDescription>How your agent takes turns, handles silence and ends calls.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <SettingSwitch
+            id="conv-interruptions"
+            label="Allow interruptions"
+            description="Callers can interrupt the agent mid-sentence."
+            checked={draft.allow_interruptions}
+            onCheckedChange={(v) => set('allow_interruptions', v)}
+          />
 
-      <div className="flex items-center gap-3">
-        <Button onClick={handleSave} disabled={!isDirty || isSaving} className="purple-glow">
-          {isSaving ? 'Saving…' : 'Save Changes'}
-        </Button>
-        {isDirty && (
-          <Badge variant="secondary" className="text-xs">Unsaved changes</Badge>
-        )}
-      </div>
-    </div>
-  )
-}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="conv-eagerness">Turn eagerness</Label>
+              <Select
+                value={draft.turn_eagerness}
+                onValueChange={(v) => v && set('turn_eagerness', v as ConversationSettings['turn_eagerness'])}
+              >
+                <SelectTrigger id="conv-eagerness" className="w-full">
+                  <SelectValue>
+                    {(v: string) => EAGERNESS_OPTIONS.find((o) => o.value === v)?.label ?? v}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {EAGERNESS_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {EAGERNESS_OPTIONS.find((o) => o.value === draft.turn_eagerness)?.description}
+              </p>
+            </div>
 
-function BehaviorRow({
-  label,
-  description,
-  checked,
-  onCheckedChange,
-  children,
-}: {
-  label: string
-  description: string
-  checked: boolean
-  onCheckedChange: (v: boolean) => void
-  children?: React.ReactNode
-}) {
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium">{label}</p>
-          <p className="text-xs text-muted-foreground">{description}</p>
-        </div>
-        <Switch checked={checked} onCheckedChange={onCheckedChange} />
-      </div>
-      {children}
+            <div className="space-y-1.5">
+              <Label htmlFor="conv-turn-timeout">Re-prompt after silence (seconds)</Label>
+              <Input
+                id="conv-turn-timeout"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={30}
+                step={1}
+                value={draft.turn_timeout}
+                onChange={(e) => set('turn_timeout', e.target.value)}
+                className="w-28"
+                {...errorProps('turn_timeout')}
+              />
+              {visibleErrors.turn_timeout ? (
+                <FieldError id="conv-turn_timeout-error">{visibleErrors.turn_timeout}</FieldError>
+              ) : (
+                <p className="text-xs text-muted-foreground">1–30 s. How long the agent waits before checking in.</p>
+              )}
+            </div>
+          </div>
+
+          <SettingSwitch
+            id="conv-silence"
+            label="End call after silence"
+            description="Hang up when the caller has said nothing for a while."
+            checked={draft.silence_enabled}
+            onCheckedChange={(v) => set('silence_enabled', v)}
+          >
+            {draft.silence_enabled && (
+              <div className="flex flex-wrap items-center gap-2 pl-0.5">
+                <Label htmlFor="conv-silence-seconds" className="text-xs text-muted-foreground">After</Label>
+                <Input
+                  id="conv-silence-seconds"
+                  type="number"
+                  inputMode="numeric"
+                  min={10}
+                  max={600}
+                  step={5}
+                  value={draft.silence_seconds}
+                  onChange={(e) => set('silence_seconds', e.target.value)}
+                  className="h-8 w-24"
+                  {...errorProps('silence_seconds')}
+                />
+                <span className="text-xs text-muted-foreground">seconds (10–600)</span>
+                {visibleErrors.silence_seconds && <FieldError id="conv-silence_seconds-error">{visibleErrors.silence_seconds}</FieldError>}
+              </div>
+            )}
+          </SettingSwitch>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="conv-max-duration">Maximum call duration (minutes)</Label>
+            <Input
+              id="conv-max-duration"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={120}
+              step={1}
+              value={draft.max_duration}
+              onChange={(e) => set('max_duration', e.target.value)}
+              className="w-28"
+              {...errorProps('max_duration')}
+            />
+            {visibleErrors.max_duration ? (
+              <FieldError id="conv-max_duration-error">{visibleErrors.max_duration}</FieldError>
+            ) : (
+              <p className="text-xs text-muted-foreground">1–120 minutes. Calls are ended politely when the limit is reached.</p>
+            )}
+          </div>
+
+          <SettingSwitch
+            id="conv-end-call"
+            label="Let the agent end calls"
+            description="The agent can hang up once the caller has said goodbye or has nothing else to ask."
+            checked={draft.allow_end_call}
+            onCheckedChange={(v) => set('allow_end_call', v)}
+          />
+
+          <SettingSwitch
+            id="conv-voicemail"
+            label="Voicemail detection"
+            description="On outbound calls, detect an answering machine and leave a message (or hang up)."
+            checked={draft.voicemail_detection}
+            onCheckedChange={(v) => set('voicemail_detection', v)}
+          >
+            {draft.voicemail_detection && (
+              <div className="space-y-1.5">
+                <Label htmlFor="conv-voicemail-message" className="text-xs text-muted-foreground">
+                  Voicemail message (optional)
+                </Label>
+                <Textarea
+                  id="conv-voicemail-message"
+                  value={draft.voicemail_message}
+                  onChange={(e) => set('voicemail_message', e.target.value)}
+                  placeholder="Hi, this is the assistant from Acme. Please call us back at your convenience."
+                  rows={2}
+                  maxLength={VOICEMAIL_MESSAGE_MAX}
+                  className="resize-none"
+                  {...errorProps('voicemail_message')}
+                />
+                {visibleErrors.voicemail_message ? (
+                  <FieldError id="conv-voicemail_message-error">{visibleErrors.voicemail_message}</FieldError>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Leave blank to hang up without leaving a message.</p>
+                )}
+              </div>
+            )}
+          </SettingSwitch>
+
+          <SettingSwitch
+            id="conv-temperature"
+            label="Custom response creativity"
+            description="Lower values give more consistent answers, higher values more varied ones. Off uses the provider default."
+            checked={draft.temperature_enabled}
+            onCheckedChange={(v) => set('temperature_enabled', v)}
+          >
+            {draft.temperature_enabled && (
+              <div className="flex flex-wrap items-center gap-3">
+                <Label htmlFor="conv-temperature-value" className="text-xs text-muted-foreground">Temperature</Label>
+                <input
+                  aria-label="Temperature slider"
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={Number.isFinite(Number(draft.temperature)) ? Number(draft.temperature) : 0.5}
+                  onChange={(e) => set('temperature', e.target.value)}
+                  className="w-40 accent-primary"
+                />
+                <Input
+                  id="conv-temperature-value"
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={draft.temperature}
+                  onChange={(e) => set('temperature', e.target.value)}
+                  className="h-8 w-20"
+                  {...errorProps('temperature')}
+                />
+                {visibleErrors.temperature && <FieldError id="conv-temperature-error">{visibleErrors.temperature}</FieldError>}
+              </div>
+            )}
+          </SettingSwitch>
+        </CardContent>
+      </Card>
+
+      <SaveBar
+        dirty={isDirty}
+        saving={isSaving}
+        onSave={() => void handleSave()}
+        onDiscard={discard}
+        blocked={showErrors && !value}
+      />
+      {showErrors && !value && (
+        <p role="status" className="text-xs text-destructive">Fix the highlighted fields to save.</p>
+      )}
     </div>
   )
 }
