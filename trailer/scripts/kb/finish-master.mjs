@@ -5,7 +5,7 @@
  *
  * 1. CHUNKS. The picture is the regular grid (out/master/KB-Trailer-<fmt>-x2/, scripts/kb/render-par.mjs) with
  *    any act-aligned replacements from out/master/KB-Trailer-<fmt>-x2-act/ (render-par --ranges … --dir=act) and,
- *    over those, re-renders after a picture fix from …-x2-act2/ (then act3, act4 — the newest wins): a lower-layer chunk that overlaps a higher one is dropped. A grid chunk that starts mid-act opens a fresh tab, which
+ *    over those, re-renders after a picture fix from …-x2-act2/ (then act3, act4, act5 — the newest wins): a lower-layer chunk that overlaps a higher one is dropped. A grid chunk that starts mid-act opens a fresh tab, which
  *    re-rasters the glide layers that a continuous render would still be drawing from their mount — a 0.1–0.7 px
  *    jump of static text at the seam; act chunks start where every layer mounts, so their seams are clean. The
  *    script refuses gaps, overlaps, unfinished chunks, wrong packet counts or parameter sets that differ.
@@ -33,7 +33,7 @@ const fmts = args.filter((a) => !a.startsWith('--'));
 const FORMATS = fmts.length ? fmts : ['16x9', '9x16'];
 const previews = args.includes('--previews');
 /** re-render layers over the grid, highest priority first (out/master/<comp>-x2-<layer>/) */
-const LAYERS = ['act4', 'act3', 'act2', 'act'];
+const LAYERS = ['act5', 'act4', 'act3', 'act2', 'act'];
 
 const T = await import(path.join(ROOT, 'src/kb/timing.ts'));
 const total = T.DURATION * T.SUB;

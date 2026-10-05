@@ -42,7 +42,8 @@ if (explicit && !suffix) throw new Error('--ranges needs --dir=<suffix> (explici
 
 const T = await import(path.join(ROOT, 'src/kb/timing.ts'));
 const total = T.DURATION * T.SUB;
-const bundle = path.join(ROOT, 'out/master/bundle-kb');
+// --bundle=<folder in out/master> (default bundle-kb): render from another bundle, e.g. while bundle-kb is busy
+const bundle = path.join(ROOT, 'out/master', opt('bundle', 'bundle-kb'));
 const env = { ...process.env, NTV_SKIP_SFX: '1', NTV_HEVC: '1' };
 const log = (m) => console.log(`[par ${new Date().toISOString().slice(11, 19)}] ${m}`);
 const CHUNK_FILE = /^\d{5}-\d{5}\.mp4(\.done)?$|\.part\.mp4$/;
