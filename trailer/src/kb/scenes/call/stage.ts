@@ -27,7 +27,7 @@
 import { Easing } from 'remotion';
 import { EASE, springUnit } from '../../../lib/motion';
 import { CALL_LOCAL as C, SCENES, WRITTEN_LOCAL } from '../../timing';
-import { orbPose as writtenOrbPose, writtenEnd, writtenStage } from '../written/stage';
+import { KEY_FULL_D_9x16, keyScale, orbPose as writtenOrbPose, writtenEnd, writtenStage } from '../written/stage';
 
 export type XY = { x: number; y: number };
 export type Box = { x: number; y: number; w: number; h: number };
@@ -192,7 +192,7 @@ const STAGES: Record<'land' | 'vert', CallStage> = (() => {
       // for the MATCHED ON MEANING tag (y ≈ 604–658)
       page: { anchor: 'center', x: 540, y: 680, size: 56, pad: 48 },
       unfold: 'box',
-      // (x: the written list's left edge — b08's ad-size rows, written/stage.ts)
+      // (x: the written list's left edge, written/stage.ts — the row itself at call/Page.tsx FETCH_9x16's size)
       rowFrom: { x: writtenStage(vertical).list.x, y: 1960 },
       rowHold: { x: writtenStage(vertical).list.x, y: 1010 },
       // the page stays over her sentence, dimming, a touch back and up (air over ● AVA)
@@ -302,7 +302,8 @@ export function groundClock(t: number): number {
 
 /** her key light on the ground for an orb of diameter d (written/Ground.tsx KEY .3 at b08's size; smaller in the dot) */
 export function callKey(S: CallStage, d: number) {
-  const k = Math.min(1, Math.max(0.35, d / S.from.orb.d));
+  // (9:16: full at b08's former orb size — written/stage.ts KEY_FULL_D_9x16 — not at the header orb fix:written made smaller)
+  const k = keyScale(d, S.vertical ? KEY_FULL_D_9x16 : S.from.orb.d);
   return { strength: 0.3 * k, radius: (S.vertical ? 620 : 680) * (0.7 + 0.3 * k) };
 }
 

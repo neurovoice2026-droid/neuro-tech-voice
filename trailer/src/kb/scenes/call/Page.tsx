@@ -34,7 +34,7 @@ import { APP, Icon, layoutWords, meshElevation, measureText, Pill, useDocPage, u
 import { MOMENT_LIGHTS } from '../../palettes';
 import { CALL_LOCAL as C } from '../../timing';
 import { KindTile, rowFace, typeLabelWidth, TypeLabel } from '../written/Row';
-import { ROWS, writtenStage } from '../written/stage';
+import { ROWS, rowHeight, writtenStage } from '../written/stage';
 import { HOURS, panelTransform } from './Panel';
 import { ease, lerp, LIFT, pageLiftAt, type CallStage } from './stage';
 
@@ -75,19 +75,26 @@ export function sweptTokens(g: PageGeo) {
   });
 }
 
+/** 9:16: the fetched row's own size — the app's two-line row, name 50, pill 42 (the call act's picture as signed off).
+ *  It comes back ALONE from under the frame (stage rowFrom), the stop-time's one document, not out of the panel: since
+ *  fix:written b08's list is the full-tab panel's one-line rows (written/stage.ts 9:16 FULL-TAB SPEC, name 36), and
+ *  the row is fetched here at the larger two-line size the stop-time reads at */
+const FETCH_9x16 = { size: 50, pill: 42, layout: 'stack' as const };
+
 /** the row's geometry at its own size (written/Row.tsx: kept in step with it) */
 function rowGeo(S: CallStage) {
   const WS = writtenStage(S.vertical);
-  const size = WS.row.size;
-  const layout = WS.row.layout;
-  const h = WS.row.h;
+  const spec = S.vertical ? { ...FETCH_9x16, h: rowHeight('stack', FETCH_9x16.size, FETCH_9x16.pill) } : WS.row;
+  const size = spec.size;
+  const layout = spec.layout;
+  const h = spec.h;
   const w = WS.list.w;
   const pad = size * 0.42;
   const tokenSize = Math.max(24, Math.round(size * 0.5));
   const tile = layout === 'stack' ? size * 1.5 : size * 1.4;
   // written/Row.tsx's face: the app's square icon tile (FileText), the type word "Text" after the pill (its size: the
   // written stage's — 9:16's ad-size rows set their own)
-  const F = rowFace(size, layout, h, WS.row.pill);
+  const F = rowFace(size, layout, h, spec.pill);
   const tileW = tile;
   const metaW = F.metaGap + typeLabelWidth('txt', F.metaSize);
   const pillSize = F.pillSize;

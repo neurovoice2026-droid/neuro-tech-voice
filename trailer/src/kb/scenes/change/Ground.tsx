@@ -9,9 +9,9 @@ import { AbsoluteFill } from 'remotion';
 import { MeshGround } from '../../kit';
 import { MOMENT_LIGHTS } from '../../palettes';
 import { CALL_LOCAL, SCENES } from '../../timing';
-import { callStage, groundClock } from '../call/stage';
+import { callKey, callStage, groundClock } from '../call/stage';
 import { HER_GROUND } from '../turn/Ground';
-import { groundPlane, KEY } from '../written/Ground';
+import { groundPlane } from '../written/Ground';
 import { lineClockT, type ChangeStage } from './stage';
 
 const SUNDAY_BODY = MOMENT_LIGHTS.sunday.orb[2];
@@ -23,8 +23,10 @@ export const ChangeGround: React.FC<{ t: number; S: ChangeStage; orb: { x: numbe
   const v = S.vertical;
   const plane = groundPlane(v, S.W, S.H);
   const key = plane.toPlane(orb.x, orb.y);
-  // as line/Ground.tsx: full at b08's size and above, smaller with her (from = b08's settled orb)
-  const k = Math.min(1, Math.max(0.35, orb.d / callStage(v).from.orb.d));
+  // as line/Ground.tsx: b11's key for an orb of this size (call/stage.ts callKey: full at b08's size and above, smaller
+  // with her). fix:change: the SAME function as b12's — 9:16's full-key size is KEY_FULL_D_9x16 since fix:written, not
+  // b08's new header orb, so a formula of its own here lit her ground 1.58× brighter than b12's from the cut on
+  const ck = callKey(callStage(v), orb.d);
   return (
     <AbsoluteFill>
       <AbsoluteFill style={{ transform: plane.css, transformOrigin: '50% 50%' }}>
@@ -33,7 +35,7 @@ export const ChangeGround: React.FC<{ t: number; S: ChangeStage; orb: { x: numbe
           palette={HER_GROUND.palette}
           lift={HER_GROUND.lift}
           seed={HER_GROUND.seed}
-          keyLight={{ x: key.x, y: key.y, strength: KEY * k, color: SUNDAY_BODY, radius: (v ? 620 : 680) * (0.7 + 0.3 * k) }}
+          keyLight={{ x: key.x, y: key.y, strength: ck.strength, color: SUNDAY_BODY, radius: ck.radius }}
         />
       </AbsoluteFill>
     </AbsoluteFill>

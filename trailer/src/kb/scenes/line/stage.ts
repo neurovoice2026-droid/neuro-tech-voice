@@ -13,8 +13,27 @@
  * her corner, small, and dims to rest: these are not her words.
  *
  *   16:9   the orb top-left; the page centred, its field a sentence per row (the owner's line in two rows)
- *   9:16   the orb centred over the page; the page full width (labels only in the tab bar, as the app on a phone), the
- *          line in four rows, the SaveBar's two buttons side by side (the app's flex-1 on a phone)
+ *   9:16   the orb centred over the page; the page is b08's FULL-TAB panel (fix:line — written/stage.ts's 9:16 FULL-TAB
+ *          SPEC: the same box, tab bar and type as the written act's), the WHOLE current tab inside it at every moment —
+ *          Knowledge exactly as b08 left it, then Conversation laid out for the portrait panel: the line in four rows,
+ *          a phrase per row, the SaveBar pinned to the panel's foot with its two buttons side by side (the app's flex-1
+ *          on a phone). No push-in (PUSH below): the panel is 1024 of the frame's 1080, any push would crop it
+ *
+ * 9:16 PORTRAIT PAGE (fix:line; layout px of the 1080 × 1920 frame, × 2 in the master):
+ *   FRAME   250–384 the header row: Ava's orb centred, (540, 317) Ø 124 (b08's header orb size and line) · 396–1347
+ *           the panel · the caption's row A centred on 1412 (PORTRAIT_SPEC.caption) · nothing under 1536
+ *   PANEL   portraitPanel(396, 4): x 28, y 396, w 1024, h 951, radius 34 (b08's at writtenEnd, b09's hand-over); the
+ *           tab bar labels only, 32 (100.57 tall), Knowledge's badge at 4; content x 68, w 944
+ *   KNOWLEDGE (the page comes back on it) b08's whole tab at rest: Add knowledge · the drop zone · or add a web page ·
+ *           the field (placeholder) + Add page (disabled) · Your documents · the four rows Ready at b08's slots
+ *           (936.6 · 1033.6 · 1130.6 · 1227.6, one-line rows, name 36, pill 28) — line/Panel.tsx KnowledgePortrait
+ *   CONVERSATION  title 42 at 520.6 (Add knowledge's line) · the description 28 (two lines) · the label 30 · the
+ *           field from ≈ 731: the owner's line at 64 (the old push's peak was 60), a phrase per row ("I don't have an
+ *           answer for that," / "and I don't want to guess." / "I'll ask the team to" / "call you back today."), the
+ *           placeholder the same way in three, the box filling down to 40 px over the SaveBar's hairline (a phone's
+ *           flex-1 textarea) · the SaveBar pinned to the panel's foot: Discard | Save changes at 32 (73 tall), 34 px
+ *           over the panel's bottom edge (the Knowledge list's last row ends at the same line)
+ *   POINTER the I-beam clicks on the placeholder's first row (.8 across); the hop back off the keys to Save changes
  *
  * THE NEIGHBOURS: b11 → here, frame 0 is callEnd()'s picture (scenes/line/Handoff.tsx draws the record row and the page
  * as b11 left them); then ONE MOVE (LINE_LOCAL.scroll, scrollAmount below): the record steps back under the agent page as
@@ -24,6 +43,7 @@ import type React from 'react';
 import { EASE, springUnit } from '../../../lib/motion';
 import { LINE_LOCAL as N, SCENES } from '../../timing';
 import { callEnd, callKey, callStage, type Box, type OrbAt } from '../call/stage';
+import { PORTRAIT_SPEC, portraitPanel } from '../written/stage';
 
 export type { Box, OrbAt };
 
@@ -42,7 +62,9 @@ export type LineStage = {
   from: ReturnType<typeof callEnd>;
   /** the orb's b11 place → its b12 corner */
   orb: { from: OrbAt; to: OrbAt };
-  /** the agent page (frame px at rest) and its corner radius */
+  /** the agent page (frame px at rest) and its corner radius. h 0: the page's height is its content's (16:9, measured
+   *  by line/Panel.tsx usePageGeometry); h > 0: a fixed panel (9:16, b08's full-tab panel) — the SaveBar pinned to its
+   *  foot, the field filling down to it */
   panel: Box & { radius: number };
   /** the tab bar: label size, icons, the strip's side padding (× r) */
   tabs: { size: number; icons: boolean; padR: number };
@@ -55,12 +77,15 @@ export type LineStage = {
   lineH: number;
   /** 16:9: a sentence per row (the owner's line breaks after "guess.") */
   sentenceRows: boolean;
+  /** 9:16: a phrase per row (line/Panel.tsx phraseRows: clauses packed into rows, a clause too long for one row split
+   *  into the fewest, most even rows) — the owner's line and the placeholder */
+  phraseRows: boolean;
   /** the SaveBar: buttons right-aligned at their own widths (16:9) or side by side, each half (9:16) */
   saveBar: 'right' | 'split';
   /** where the I-beam clicks in the field (fractions of the field's box): on the placeholder's first row, to the right —
    *  the hand's crossing from the tab is ≈ 710 px (16:9) / 580 px (9:16), it enters the field's box late in its
    *  deceleration (the I-beam swaps there), and the hop back off the keys to Save changes stays short */
-  click: { fx: number; fy: number };
+  click: { fx: number; fy: number; row?: number };
   /** the narrator's caption: centre x, row A's centre, max width */
   caption: { x: number; y: number; maxWidth: number };
 };
@@ -82,27 +107,35 @@ const STAGES: Record<'land' | 'vert', LineStage> = (() => {
         fieldPad: { x: 26, y: 20 },
         lineH: 1.24,
         sentenceRows: true,
+        phraseRows: false,
         saveBar: 'right',
         click: { fx: 0.8, fy: 0.33 },
         caption: { x: 960, y: 962, maxWidth: 1560 },
       };
     }
+    // 9:16 (fix:line): b08's full-tab panel (written/stage.ts PORTRAIT_SPEC / portraitPanel — the box, tab bar, padding
+    // and UI type of the written act's last picture and the call act's hand-over), the orb centred in the header row
+    // over it at b08's header size, the caption in the spec's band under it
+    const PP = portraitPanel(PORTRAIT_SPEC.panelTop, 4);
+    const H = PORTRAIT_SPEC.header.orb;
     return {
       W: 1080,
       H: 1920,
       vertical,
       from,
-      orb: { from: from.orb, to: { x: 540, y: 322, d: 150 } },
-      panel: { x: 64, y: 476, w: 952, h: 0, radius: 30 },
-      tabs: { size: 30, icons: false, padR: 8 },
-      pad: 38,
-      type: { title: 34, small: 24, label: 28, field: 56, button: 28 },
-      fieldPad: { x: 26, y: 20 },
+      orb: { from: from.orb, to: { x: 540, y: H.y, d: H.d } },
+      panel: { x: PP.panel.x, y: PP.panel.y, w: PP.panel.w, h: PP.panel.h, radius: PP.panel.radius },
+      tabs: { ...PP.tabs },
+      pad: PP.pad,
+      type: { title: PP.type.title, small: PP.type.small, label: PP.type.label, field: 64, button: PP.type.body },
+      fieldPad: { x: 26, y: 22 },
       lineH: 1.24,
       sentenceRows: false,
+      phraseRows: true,
       saveBar: 'split',
-      click: { fx: 0.8, fy: 0.33 },
-      caption: { x: 540, y: 1336, maxWidth: 940 },
+      // (on the placeholder's first row, to the right: the field box is tall — it fills down to the SaveBar)
+      click: { fx: 0.8, fy: 0, row: 0 },
+      caption: { ...PORTRAIT_SPEC.caption },
     };
   };
   return { land: make(false), vert: make(true) };
@@ -183,7 +216,10 @@ export const callStageOf = (S: LineStage) => callStage(S.vertical);
  *         48 → 62 px, the tab bar with its amber dot still in at the top, Save changes in at the bottom right); Ava's
  *         orb, on the same plane, is carried out past the left edge — the owner's moment, not hers. 9:16: a gentle
  *         push about the field (×1.08: 56 → 60 px), which already sits in the middle of the usable height; the typed
- *         line stays inside the platform-safe width (≥ 95 px from each edge).
+ *         line stays inside the platform-safe width (≥ 95 px from each edge). fix:line: NO PUSH IN 9:16 (zoom.vert 1,
+ *         lineCam the identity) — the page is now b08's full-tab panel, 1024 px of the frame's 1080: any push about the
+ *         field would carry the panel's edges (and the whole tab with them) out of the frame. The typed line is set at
+ *         its ad size at rest instead (64 px, the old push's peak was 60.5).
  *   hold  the finished line holds at ad size while the pointer hops to Save changes and clicks it (the dot closes).
  *   out   on Save's release the camera pulls back to the page's rest place (EASE.inOut) — 16:9 brings Ava back into
  *         the frame in time to relight on her first word; at rest well before the act ends, so lineEnd() is unchanged.
@@ -198,7 +234,7 @@ export const PUSH = (() => {
     on: N.full,
     in: [N.field.up, last + 8] as const,
     out: [N.saveClick.up, N.saveClick.up + 30] as const,
-    zoom: { land: 1.3, vert: 1.08 },
+    zoom: { land: 1.3, vert: 1 },
     ground: 0.25,
   };
 })();
@@ -219,8 +255,8 @@ export type LineCam = { x: number; y: number; zoom: number };
  */
 export function lineCam(t: number, S: LineStage, page: Box, field: Box): LineCam {
   const e = pushAmount(t);
-  if (e <= 0) return { x: 0, y: 0, zoom: 1 };
   const Z = S.vertical ? PUSH.zoom.vert : PUSH.zoom.land;
+  if (e <= 0 || Z === 1) return { x: 0, y: 0, zoom: 1 };
   const cx = S.W / 2;
   const cy = S.H / 2;
   const F = S.vertical ? { x: field.x + field.w / 2, y: field.y + field.h / 2 } : { x: page.x + page.w / 2, y: page.y + page.h / 2 };

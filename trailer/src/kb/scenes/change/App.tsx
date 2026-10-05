@@ -14,14 +14,18 @@
  *   Ready     on "the new answer" the old row leaves up through its own mask (the old version is removed once the new
  *             one is ready — hooks/useKnowledge.ts), the slot below closes, the badge goes back to 4
  *   recede    a beat before the next call rings the panel steps back a depth (.9, shade .06) and slides away down
+ *
+ * Both framings draw the same tree: the panel, the tab bar, "Your documents" and the rows over it, the menu over them.
+ * 9:16 (fix:change) shows the WHOLE tab as 16:9 does — the panel holds five rows whole (change/stage.ts 9:16 FULL-TAB), so
+ * no row ever goes under its edge: no clip box, no soft edge.
  */
 import React from 'react';
 import { subpixel } from '../../../lib/glide';
 import { EASE, smooth, tween } from '../../../lib/motion';
 import { APP, hoverAt, Menu, Panel, pressAt, TabBar, ui, W as WT, type CursorKey, type MenuGeometry, type Rect, type TabBarGeometry } from '../../kit';
 import { CHANGE_LOCAL as K } from '../../timing';
-import { Row, SoftBottom } from '../written/Row';
-import { edgeFade, ROWS, softK } from '../written/stage';
+import { Row } from '../written/Row';
+import { ROWS } from '../written/stage';
 import { appPose, listGeo, OLD, rowSlot, type ChangeStage } from './stage';
 
 /** b08's rows newest first (written/stage.ts ROWS: Price list, Opening hours, Cancellation policy, FAQ page) */
@@ -41,19 +45,6 @@ export function oldRowBox(S: ChangeStage) {
   const Lg = listGeo(S);
   return { x: Lg.x, y: Lg.listY + OLD * Lg.pitch, w: Lg.w, h: Lg.h };
 }
-
-/** 9:16 (a card of fixed height): the list lives in the content box under the tab bar, b08's end scroll (stage.ts
- *  listOnly): the four rows whole, the card's bottom edge in the gap under them — a row pushed down (the fifth, while
- *  both versions count) goes wholly under it; 16:9's panel is as tall as its rows (no box) */
-const ListBox: React.FC<{ S: ChangeStage; top: number; h: number; children: React.ReactNode }> = ({ S, top, h, children }) => {
-  if (!S.panel.h) return <>{children}</>;
-  const P = S.panel;
-  return (
-    <div style={{ position: 'absolute', left: P.x, top, width: P.w, height: h, overflow: 'hidden', borderRadius: `0 0 ${P.radius}px ${P.radius}px` }}>
-      <div style={{ position: 'absolute', left: -P.x, top: -top, width: S.W, height: S.H }}>{children}</div>
-    </div>
-  );
-};
 
 export const AppPanel: React.FC<{ t: number; S: ChangeStage; bar: TabBarGeometry; menu: MenuGeometry; keys: readonly CursorKey[]; ink: string }> = ({ t, S, bar, menu, keys, ink }) => {
   const ap = appPose(t, S);
@@ -84,8 +75,7 @@ export const AppPanel: React.FC<{ t: number; S: ChangeStage; bar: TabBarGeometry
         {null}
       </Panel>
       <TabBar bar={bar} t={t} active="knowledge" cursor={keys} radius={P.radius} />
-      <ListBox S={S} top={P.y + bar.height} h={Lg.panelH - bar.height}>
-      {S.listOnly ? null : <div style={{ position: 'absolute', left: Lg.x, top: Lg.headY, ...ui(S.heading, WT.medium), color: APP.foreground, whiteSpace: 'nowrap' }}>Your documents</div>}
+      <div style={{ position: 'absolute', left: Lg.x, top: Lg.headY, ...ui(S.heading, WT.medium), color: APP.foreground, whiteSpace: 'nowrap' }}>Your documents</div>
       {NEWEST_FIRST.map((ri, k) => {
         const R = ROWS[ri];
         const y = Lg.listY + rowSlot(k, t) * Lg.pitch;
@@ -94,8 +84,6 @@ export const AppPanel: React.FC<{ t: number; S: ChangeStage; bar: TabBarGeometry
         // the old version leaves up through its own slot's mask on "the new answer"
         const q = isOld ? tween(t, [K.oldOut, K.oldOut + 9], [0, 1], EASE.in3) : 0;
         if (q >= 0.999) return null;
-        // (9:16: a row sliding under the card's bottom edge, or back up from under it, fades with its last sliver)
-        const edge = S.listOnly ? edgeFade(y, P.y + Lg.panelH) : 1;
         const row = (
           <Row
             t={t}
@@ -110,19 +98,12 @@ export const AppPanel: React.FC<{ t: number; S: ChangeStage; bar: TabBarGeometry
             name={R.name}
             pill={[{ at: -1e6, kind: 'ready', n: R.n }]}
             moving={moving || q > 0}
-            opacity={(isOld ? 1 - smooth(0.25, 1, q) : 1) * edge}
+            opacity={isOld ? 1 - smooth(0.25, 1, q) : 1}
             menuHover={isOld ? hoverAt(keys, t, { x: dotsRect.x, y: dotsRect.y + (y - dots.y), w: dotsRect.w, h: dotsRect.h }) : 0}
             menuPress={isOld ? pressAt(keys, t, dotsRect) : 0}
           />
         );
-        // (9:16: Price list pushed down under the card's edge as the new version lands, and rising back as the old row's
-        // slot closes, goes through its soft bottom edge — written/stage.ts softK against the lowest resting slot)
-        if (!isOld)
-          return (
-            <SoftBottom key={R.name} k={S.listOnly ? softK(y, Lg.listY + 3 * Lg.pitch, P.y + Lg.panelH) : 0} edge={P.y + Lg.panelH} w={S.W} h={S.H}>
-              {row}
-            </SoftBottom>
-          );
+        if (!isOld) return <React.Fragment key={R.name}>{row}</React.Fragment>;
         // the old row inside its own slot (a mask box a hair larger than the row: its border is never cut at rest)
         return (
           <div key={R.name} style={{ position: 'absolute', left: Lg.x - 2, top: y - 2, width: Lg.w + 4, height: Lg.h + 4, overflow: q > 0 ? 'hidden' : undefined }}>
@@ -130,7 +111,6 @@ export const AppPanel: React.FC<{ t: number; S: ChangeStage; bar: TabBarGeometry
           </div>
         );
       })}
-      </ListBox>
       <Menu menu={menu} t={t} openAt={K.menu.up} closeAt={K.replace.up} cursor={keys} ink={ink} />
     </div>
   );

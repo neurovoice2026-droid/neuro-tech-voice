@@ -3,9 +3,10 @@
  * your hours, your policies, pages from your website. That's your knowledge base."
  *
  *   0          b07's last picture: the seam draws back the way it came and her ground (KB_MESH) floods the
- *              other half; the orb glides to the corner; 16:9 the day's column glides in under it; the app
- *              comes in from the right (16:9 where the matters side left; 9:16 along its own band, clear of the
- *              caption's): the agent page on General, its real tab bar
+ *              other half; the orb glides to the corner (9:16 the header row's left); 16:9 the day's column glides in
+ *              under it; the app comes in from the right (16:9 where the matters side left; 9:16 along its own band,
+ *              clear of the caption's): the agent page on General, its real tab bar — 9:16 the WHOLE tab, its four
+ *              tone cards included (fix:written: written/stage.ts's 9:16 FULL-TAB SPEC; nothing ever scrolls)
  *   tab        the cursor comes in from the edge, crosses to Knowledge (the tab lifts 60 → 100 % on hover),
  *              presses (.9 / .97 + shade, a 16th) and releases: the underline springs across, the content swaps
  *              to the Knowledge tab — "Add knowledge", the drop zone, the web page field, Add page (disabled:
@@ -42,9 +43,9 @@ import { turnStage } from './turn/stage';
 import { WrittenGround } from './written/Ground';
 import { WrittenOrb } from './written/Orb';
 import { AppPanel } from './written/Panel';
-import { Row, SoftBottom } from './written/Row';
+import { Row } from './written/Row';
 import { pileLift, SLIP_INK, SLIP_TEXT, slipHandoff, Slips } from './written/Slips';
-import { BADGE, ease, edgeFade, orbPose, ROWS, rowTop, scrollAt, seamLeft, softK, writtenStage, type WrittenStage } from './written/stage';
+import { BADGE, ease, orbPose, ROWS, rowTop, seamLeft, writtenStage, type WrittenStage } from './written/stage';
 
 const SUNDAY_INK = MOMENT_LIGHTS.sunday.ink;
 const INK = meshShadowInk(KB_MESH);
@@ -103,12 +104,6 @@ function cursorKeys(S: WrittenStage, bar: TabBarGeometry): CursorKey[] {
  *  any row, caption or label (9:16: before the FAQ page lands under the field, 3.75 f after the release) */
 const exitFade = (t: number) => 1 - EASE_HOVER(Math.min(1, Math.max(0, (t - (W.add.up + 5)) / 6)));
 
-/** 9:16, before the end scroll: the soft bottom edge's strength for a list row whose top is at `y` (list px = screen px
- *  until the scroll) — written/stage.ts softK against the second slot, the lowest one a resting row has (polish round 2:
- *  a row pushed down under the card's edge as a newer one lands fades through it instead of being sliced). From the
- *  scroll on it is 0: the end scroll is as before */
-const pushSoft = (t: number, S: WrittenStage, y: number) => (S.scroll && t < S.scroll.at[0] ? softK(y, S.list.y + S.row.h + S.row.gap, S.panel.y + S.panel.h) : 0);
-
 /** b07's seam drawing back the way it came (turn/Seam.tsx's line: the feathers fixed to the full line) */
 const SeamBack: React.FC<{ t: number; vertical: boolean; W: number; H: number }> = ({ t, vertical, W: FW, H: FH }) => {
   const q = seamLeft(t);
@@ -139,13 +134,10 @@ const ListRow: React.FC<{ t: number; S: WrittenStage; i: number }> = ({ t, S, i 
   if (t < at - 0.5) return null;
   const s = springUnit(t - at, SPRING.land);
   const top = rowTop(i, t, S);
-  // (9:16's tall ad-size rows drop in from just under the heading: never over it)
+  // (9:16: a short drop — "Your documents" sits close over the top slot in the full-tab layout: never over it)
   const dy = -(1 - s) * (S.vertical ? 0.1 : 0.32) * S.row.h;
   const moving = top.moving || Math.abs(1 - s) > 1e-3;
-  // (9:16: drawn inside the scrolling content box — its top on screen is y − the scroll)
-  const edge = S.scroll ? edgeFade(top.y + dy - scrollAt(t, S), S.panel.y + S.panel.h) : 1;
   return (
-    <SoftBottom k={pushSoft(t, S, top.y + dy)} edge={S.panel.y + S.panel.h} w={S.W} h={S.H}>
     <Row
       t={t}
       x={S.list.x}
@@ -159,21 +151,17 @@ const ListRow: React.FC<{ t: number; S: WrittenStage; i: number }> = ({ t, S, i 
       pill={PILLS[i]}
       pillSize={S.row.pill}
       pillLead
-      opacity={smooth(0, 0.3, s) * edge}
+      opacity={smooth(0, 0.3, s)}
       scale={mix(0.985, 1, Math.min(1, s))}
       moving={moving}
     />
-    </SoftBottom>
   );
 };
 
-/** TXT · Opening hours: born from the pile, then flown into the list on "hours". `part`: 'free' while it is its own
- *  paper (born, in flight; and always in 16:9), 'list' once it has landed in 9:16's scrolling list (drawn inside the
- *  panel's content box: it scrolls with the page and is cut by its edges as the rows below it are) */
-const HoursRow: React.FC<{ t: number; S: WrittenStage; part: 'free' | 'list' }> = ({ t, S, part }) => {
+/** TXT · Opening hours: born from the pile, then flown into the list on "hours" (drawn over the panel in both framings:
+ *  9:16's list no longer scrolls — fix:written) */
+const HoursRow: React.FC<{ t: number; S: WrittenStage }> = ({ t, S }) => {
   if (t < W.born) return null;
-  const inList = !!S.scroll && t >= W.fly[1];
-  if ((part === 'list') !== inList) return null;
   const H = slipHandoff(S);
   const u = ease(t, W.born, W.born + 9, EASE.inOut);
   const f = ease(t, W.fly[0], W.fly[1], EASE.inOut);
@@ -194,10 +182,8 @@ const HoursRow: React.FC<{ t: number; S: WrittenStage; part: 'free' | 'list' }> 
   const settle = landed ? springUnit(t - W.fly[1], SPRING.land) : 1;
   const moving = (f > 0 && f < 1) || top.moving || u < 1 || Math.abs(1 - settle) > 1e-3;
   const rowY = y + (landed ? (1 - settle) * -4 : 0);
-  // (9:16, in the list: inside the scrolling content box — see ListRow)
-  const edge = part === 'list' ? edgeFade(rowY - scrollAt(t, S), S.panel.y + S.panel.h) : 1;
   return (
-    <SoftBottom k={part === 'list' ? pushSoft(t, S, rowY) : 0} edge={S.panel.y + S.panel.h} w={S.W} h={S.H}>
+    <>
       {shadowK > 0.001 ? (
         <div
           style={{
@@ -230,10 +216,9 @@ const HoursRow: React.FC<{ t: number; S: WrittenStage; part: 'free' | 'list' }> 
         slip={{ k: H.k, text: SLIP_TEXT, color: SLIP_INK, out: W.born + 1.5 }}
         slipRadius={H.radius}
         contentAt={W.born + 1}
-        opacity={edge}
         moving={moving}
       />
-    </SoftBottom>
+    </>
   );
 };
 
@@ -277,9 +262,8 @@ export const Written: React.FC = () => {
         {[0, 2, 3].map((i) => (
           <ListRow key={i} t={t} S={S} i={i} />
         ))}
-        <HoursRow t={t} S={S} part="list" />
       </AppPanel>
-      <HoursRow t={t} S={S} part="free" />
+      <HoursRow t={t} S={S} />
       <WrittenOrb t={t} S={S} />
       <Eyebrow t={t} S={S} />
       <Captions

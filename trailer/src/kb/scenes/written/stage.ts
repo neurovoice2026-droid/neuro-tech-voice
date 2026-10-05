@@ -10,19 +10,19 @@
  *          RIGHT the app: the agent page as a white panel — the real tab bar (General · Conversation · Voice ·
  *                Knowledge · Skills, icons, line variant) over two columns: "Add knowledge" (drop zone, the web
  *                page field, Add page) and "Your documents" (the empty state, then the rows, newest on top)
- *   9:16   TOP   the orb top-left (centred over the panel once the row has flown); beside it the slips drop in
- *                from above the frame on "once", each under
- *                the one before, into one slip (no column in b07's 9:16) — then the same row is born there
- *          BELOW the eyebrow, then the app AT AD SIZE (the global 9:16 pass): full width, its type ≈ 1.56× the app's
- *                proportions, the tab bar labels only (as on a phone), "Add knowledge" (a compact drop zone, the field and
- *                Add page in a row), "Your documents" in the app's two-line rows — its content scrolling under the
- *                fixed tab bar like a phone's page (one scroll, on "knowledge": scrollAt)
+ *   9:16   TOP   the header row: the orb at its left (where it stays); beside it the slips drop in from just under the
+ *                top platform zone on "once", each under the one before, into one slip (no column in b07's 9:16) — then
+ *                the same row is born there; on "knowledge" the eyebrow rises in the same place, beside the orb
+ *          BELOW the app as the WHOLE TAB (fix:written, the 9:16 FULL-TAB SPEC below): full width, ONE column, nothing
+ *                scrolls — General (Name and language, Agent name | Language, Tone and its four cards 2 × 2), then
+ *                Knowledge ("Add knowledge": the drop zone, "or add a web page", the field and Add page in a row; "Your
+ *                documents": the empty state, then the rows in the app's one-line form, every one whole); the caption
+ *                under the panel
  *
  * THE NEIGHBOURS: b07 → here is the same picture at frame 0. Here → b09: writtenEnd() (bottom) is this act's
- * last picture — the orb, the panel (its tab bar on Knowledge with the badge at 4), the four rows (Ready), the
- * eyebrow, the ground (KB_MESH keyed on the orb). The cursor and the caption have left by the cut.
+ * last picture — the orb, the panel (its tab bar on Knowledge with the badge at 4), the whole Knowledge tab with the
+ * four rows (Ready), the eyebrow, the ground (KB_MESH keyed on the orb). The cursor and the caption have left by the cut.
  */
-import { Easing } from 'remotion';
 import { EASE, smooth, springUnit } from '../../../lib/motion';
 import { WRITTEN_LOCAL as W } from '../../timing';
 import { turnEnd } from '../turn/stage';
@@ -71,8 +71,6 @@ export type WrittenStage = {
   row: { size: number; h: number; gap: number; layout: 'stack' | 'inline'; pill?: number };
   /** UI type sizes (url: the web page field's mono text) */
   type: { title: number; body: number; small: number; label: number; url: number };
-  /** 9:16: the panel's content SCROLLS (the app on a phone, its tab bar fixed): by `by` px over `at` (null: no scroll) */
-  scroll: { at: readonly [number, number]; by: number } | null;
   /** the slips: 16:9 the column's corner (strip left / top of the top strip / width), 9:16 the pile */
   slips: { x: number; y: number; w: number };
   /** the eyebrow ● KNOWLEDGE BASE: its anchor x (left edge, or centre) and the label's top */
@@ -86,6 +84,111 @@ export type WrittenStage = {
 /** the row height for a layout / name size / pill size (kept in step with written/Row.tsx rowFace) */
 export const rowHeight = (layout: 'stack' | 'inline', size: number, pill?: number) =>
   layout === 'stack' ? Math.round(size * 0.36 * 2 + size * 1.05 + size * 0.22 + (pill ?? Math.max(26, Math.round(size * 0.6))) * 1.72) : Math.round(size * 2.35);
+
+/* ── 9:16 FULL-TAB SPEC ───────────────────────────────────────────────────────────────────────────────────────────
+ *
+ * fix:written (the client's note: "In 9:16 the tab is not shown complete like in 16:9 while navigating — make it the
+ * same quality as 16:9"). The agent page in 9:16 is the SAME app as 16:9's panel — the same content, states and beats —
+ * re-laid out for the portrait frame in ONE column, so the WHOLE current tab is inside the panel at every moment it is on
+ * screen: the full tab bar, every block of the tab, every document row whole. No scroll, no row parked under an edge, no
+ * soft-fade crop, no panel edge off frame, no UI camera. (It replaces "the app at ad size", whose content scrolled under a
+ * fixed tab bar like a phone's page: the General tab was cut under Tone's description, the Knowledge list under the
+ * card's edge.) Layout px are the 1080 × 1920 frame's (× 2 in the 2160 × 3840 master). portraitPanel(top, slots) below
+ * computes every box from these numbers; the line and change acts take it from here (writtenStage(true) /
+ * portraitPanel), so the app is one design in all four acts.
+ *
+ *   FRAME BANDS  0–250 the top platform zone (no text) · 250–384 the HEADER ROW (Ava's orb; beside it the slips pile,
+ *                later the eyebrow) · 396–1347 the PANEL · 1368–1534 the CAPTION (row A centre 1412, ≤ two lines: row
+ *                A's caps from ≈ 1387, row B's descenders to ≈ 1534) · from 1536 the bottom platform zone (no text)
+ *   PANEL        x 28, w 1024, radius 34; content x 68, w 944 (pad 40). Written: top 396, h 951 (bottom 1347: 40 px
+ *                over the caption's caps). Comes in from the right (from.x 1300) as before
+ *   TAB BAR      the kit's TabBar, labels only (the app's phone bar: the five labels + the badge fit 1024 at 32, not
+ *                with icons), size 32 → r = 32/14, side pad 8r, bar 44r = 100.57 tall
+ *   TYPE         title 42 (card titles) · body 32 (input values, the drop line, Add page) · small 28 (descriptions, the
+ *                divider) · label 30 (field labels, tone names) · url 30 (mono) · tone blurbs 26 · drop hint 27 — every
+ *                UI text ≥ 26 (16:9: 36 / 28 / 23 / 26 / 26)
+ *   GENERAL      (written/Panel.tsx GeneralPortrait) content top 520.6: "Name and language" + its description (one
+ *                line) · Agent name | Language SIDE BY SIDE at 641.7 (two columns 460 wide, gap 24, fields 76 tall) ·
+ *                "Tone" at 812.7 + its description (two lines) · the four tone cards in a 2 × 2 grid from 970.2 (464 ×
+ *                154, gap 16; the icon beside the tone's name, the blurb under them; Professional chosen) — it ends at
+ *                1294.2, 53 px inside the written panel's bottom edge (the blocks are laid out from measured wraps)
+ *   KNOWLEDGE    content top 520.6 (= panel top + 124.6): "Add knowledge" · the drop zone 944 × 118 at +60 (the upload
+ *                icon beside "Drop files here or choose them", the hint "PDF, Word, TXT or Markdown · up to 10 MB each"
+ *                under it) · "or add a web page" (the divider) at +198 · the web page field 650 × 76 + Add page 280 × 76
+ *                (gap 14) in one row at +248 · "Your documents" at +356 · the list at +416
+ *   ROWS         the app's ONE-LINE document row (written/Row.tsx layout 'inline', as 16:9's b12 / b13 lists): name 36,
+ *                pill 28 (its type word 28), h 85 = rowHeight('inline', 36), gap 12 → pitch 97; x 68, w 944
+ *   LIST SLOTS   4 rows (written, line): tops 936.6 · 1033.6 · 1130.6 · 1227.6 (the 4th ends 1312.6, 34 px over the
+ *                panel's bottom edge). 5 rows (the change act's replace, both versions listed): portraitPanel(299, 5) —
+ *                the same panel one pitch taller (h 1048), its top 97 higher and its bottom still 1347 (the caption's
+ *                band untouched), slots 839.6 · 936.6 · 1033.6 · 1130.6 · 1227.6 — the header row is then the panel's:
+ *                the orb must sit elsewhere (it is free in that act). Newest on top, as the app lists them
+ *   HEADER       (written) the orb at (130, 317), d 124 (68 … 192 — its left edge on the panel's content edge; it may
+ *                reach into the top zone, it is not text); the slips pile at x 236, top 266, w 740 (h 102: its text from
+ *                ≈ 287); the eyebrow ● KNOWLEDGE BASE left-aligned at x 236, top 300 (centred on the orb)
+ *   CAPTION      centre x 540, row A centre 1412, max width 940 (the call act's 1408 band)
+ *   CURSOR       enters from (1130, 700); its rests are written/Written.tsx cursorKeys' (right of "Add knowledge";
+ *                off the panel's right edge after Add page)
+ */
+export const PORTRAIT_SPEC = {
+  panelTop: 396,
+  /** the panel's bottom edge (every act keeps it: the caption's band starts 40 px under it) */
+  panelBottom: 1347,
+  panel: { x: 28, w: 1024, radius: 34, from: { x: 1300, y: 0 } },
+  tabs: { size: 32, icons: false, padR: 8 },
+  pad: 40,
+  type: { title: 42, body: 32, small: 28, label: 30, url: 30 },
+  row: { size: 36, pill: 28, gap: 12, layout: 'inline' as const },
+  header: {
+    orb: { x: 130, y: 317, d: 124 },
+    slips: { x: 236, y: 266, w: 740 },
+    eyebrow: { x: 236, y: 300, align: 'left' as const },
+  },
+  caption: { x: 540, y: 1412, maxWidth: 940 },
+} as const;
+
+/**
+ * The 9:16 agent page (PORTRAIT_SPEC) for a panel whose top edge is at `top`, sized to hold `slots` document rows whole
+ * under "Your documents" (4: the written act's panel, h 951; 5: one pitch taller). Every box in frame px.
+ */
+export function portraitPanel(top: number, slots: number) {
+  const P = PORTRAIT_SPEC;
+  const tabs = { ...P.tabs };
+  const barH = (44 * tabs.size) / 14;
+  const pad = P.pad;
+  const x = P.panel.x + pad;
+  const cw = P.panel.w - 2 * pad;
+  const y0 = top + barH + 24;
+  const add = { x, y: y0, w: cw, h: 0 };
+  const drop = { x, y: y0 + 60, w: cw, h: 118, compact: true };
+  const divider = { y: drop.y + drop.h + 20 };
+  const bw = 280;
+  const field = { x, y: divider.y + 50, w: cw - bw - 14, h: 76 };
+  const button = { x: field.x + field.w + 14, y: field.y, w: bw, h: field.h };
+  add.h = field.y + field.h - y0;
+  const docsY = field.y + field.h + 32;
+  const listY = docsY + 60;
+  const row = { ...P.row, h: rowHeight('inline', P.row.size) };
+  const listEnd = listY + slots * row.h + (slots - 1) * row.gap;
+  const h = Math.round(listEnd + 34 - top);
+  const panel = { x: P.panel.x, y: top, w: P.panel.w, h, radius: P.panel.radius, from: { ...P.panel.from } };
+  return {
+    panel,
+    tabs,
+    pad,
+    add,
+    drop,
+    divider,
+    fieldLabel: null,
+    field,
+    inputH: field.h,
+    button,
+    docs: { x, y: docsY, w: cw },
+    list: { x, y: listY, w: cw, bottom: top + h - 24 },
+    row,
+    type: { ...P.type },
+  };
+}
 
 const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
   const make = (vertical: boolean): WrittenStage => {
@@ -128,80 +231,29 @@ const STAGES: Record<'land' | 'vert', WrittenStage> = (() => {
         list: { x: docsX, y: y0 + 66, w: docsW, bottom: panel.y + panel.h - 34 },
         row: { size: rowSize, h: rowHeight('stack', rowSize), gap: 14, layout: 'stack' },
         type,
-        scroll: null,
         slips: { x: 96, y: 446, w: 460 },
         eyebrow: { x: panel.x + 4, y: panel.y - 58, align: 'left' },
         caption: { x: 960, y: 962, maxWidth: 1560 },
         enter: { x: 2010, y: 520 },
       };
     }
-    // THE APP AT AD SIZE (global 9:16 fix: the desktop panel shrunk to fit read at 20–27 px on a phone). The panel is the
-    // app as a phone shows it — full width, its type at the app's own proportions scaled up ≈ 1.56× (row names 50, the
-    // status pills 42, text-xs : text-sm = 12 : 14), the app's real two-line document row (TabKnowledge.tsx DocumentRow:
-    // the name over the pill and its type word) — and its content SCROLLS under the fixed tab bar like the page on a
-    // phone: every truth beat happens in the top slot of the list, right under "Add page" (newest first), so the first
-    // screen (Add knowledge · the drop zone · the field + Add page · Your documents · the newest row) holds them all; on
-    // "knowledge" the page scrolls to the four rows, Ready (the act's last picture, b09's first).
-    //   band   the card 426 → 1264: under the eyebrow (358–384), ≥ 40 px over the caption's caps (row A centre 1336)
-    //   entry  from the right, as in 16:9 (b07's 9:16 card left that way too), riding its own band: a climb from under
-    //          the frame would cross the caption's band while "Give me your answers once." rises (polish pass). 1300 px
-    //          puts its left edge and its entry shadow (≈ 210 px at lift 4.5) past the frame's edge on frame 0
-    //   list   (fix:knowledge-9x16) the first screen holds TWO WHOLE ROWS and the card's bottom edge falls in the gap
-    //          under them: "Add knowledge" is compact (the drop zone one line high — its icon beside the words —, the
-    //          field and Add page 84 px, tighter gaps), so the list starts 98 px higher (1000.6 → 902.6) — exactly where
-    //          the end scroll's third slot is. Slot 1 then ends at 1256.6 (the card's edge 1264) and slot 2 starts at
-    //          1266.6, wholly under the edge: a row that slides down out of slot 1 as a newer one lands is never parked
-    //          cut by it. The end scroll (by 364, was 462) leaves the four rows exactly where they were (b09's frame 0)
-    const panel = { x: 28, y: 426, w: 1024, h: 838, radius: 34, from: { x: 1300, y: 0 } };
-    const tabs = { size: 32, icons: false, padR: 8 };
-    const barH = (44 * tabs.size) / 14;
-    const pad = 40;
-    const y0 = panel.y + barH + 28;
-    const type = { title: 46, body: 42, small: 34, label: 38, url: 34 };
-    const cw = panel.w - 2 * pad;
-    const add = { x: panel.x + pad, y: y0, w: cw, h: 0 };
-    const drop = { x: add.x, y: y0 + 66, w: cw, h: 88, compact: true };
-    const bw = 280;
-    const field = { x: add.x, y: drop.y + drop.h + 16, w: cw - bw - 14, h: 84 };
-    const button = { x: field.x + field.w + 14, y: field.y, w: bw, h: 84 };
-    add.h = field.y + field.h - y0;
-    const docsY = field.y + field.h + 22;
-    const rowSize = 50;
-    const pill = 42;
-    const row = { size: rowSize, pill, h: rowHeight('stack', rowSize, pill), gap: 10, layout: 'stack' as const };
-    const listY = docsY + 72;
-    // the end scroll: the four rows fill the view (the newest 12 px under the tab bar, the oldest clear of the bottom)
-    const viewTop = panel.y + barH;
-    const by = Math.round(listY - (viewTop + 12));
+    // 9:16: THE FULL TAB (fix:written — see PORTRAIT_SPEC / portraitPanel above): the panel holds the WHOLE current tab
+    // at every moment, nothing scrolls; the header row above it holds the orb (left) and, in turn, the slips pile and the
+    // eyebrow beside it; the caption sits under it
+    const G = portraitPanel(PORTRAIT_SPEC.panelTop, 4);
+    const H = PORTRAIT_SPEC.header;
     return {
       W: 1080,
       H: 1920,
       vertical,
-      orb: { from: { x: E.orb.x, y: E.orb.y, d: E.orb.d }, to: { x: 150, y: 318, d: 150 }, settle: { x: 540, y: 222, d: 196 } },
-      panel,
-      tabs,
-      pad,
-      add,
-      drop,
-      divider: null,
-      fieldLabel: null,
-      field,
-      // (polish round 2: 84, was 96 — with General's tighter field rhythm (written/Panel.tsx) the Tone card's description
-      // ends whole above the card's edge and its first tone card starts wholly under it)
-      inputH: 84,
-      button,
-      docs: { x: add.x, y: docsY, w: cw },
-      list: { x: add.x, y: listY, w: cw, bottom: panel.y + panel.h - 24 },
-      row,
-      type,
-      // (19 frames, was 26 for 462 px: the same top speed; the oldest row is whole again — the bottom of the move —
-      // by "knowledge" + 11, so the decelerating tail never crawls with a row cut at the card's edge)
-      scroll: { at: [W.knowledge - 4, W.knowledge + 15] as const, by },
-      // the pile rests in the band between the top platform zone (the top 250 px, the Reels/TikTok UI) and the panel
-      slips: { x: 286, y: 286, w: 680 },
-      eyebrow: { x: 540, y: 358, align: 'center' },
-      caption: { x: 540, y: 1336, maxWidth: 940 },
-      enter: { x: 1130, y: 760 },
+      // the orb glides to the header (left), and stays there (settle = to: the pile, then the eyebrow, beside it)
+      orb: { from: { x: E.orb.x, y: E.orb.y, d: E.orb.d }, to: H.orb, settle: H.orb },
+      ...G,
+      // the pile beside the orb, in the band between the top platform zone and the panel (its drop starts at 236)
+      slips: H.slips,
+      eyebrow: H.eyebrow,
+      caption: PORTRAIT_SPEC.caption,
+      enter: { x: 1130, y: 700 },
     };
   };
   return { land: make(false), vert: make(true) };
@@ -230,6 +282,15 @@ export function orbPose(t: number, S: WrittenStage) {
   const at = (k: 'x' | 'y' | 'd') => lerp(lerp(a[k], b[k], p), c[k], q);
   return { x: at('x'), y: at('y'), d: at('d'), moving: Math.abs(1 - p) > 1e-4 || (q > 0 && Math.abs(1 - q) > 1e-4) };
 }
+
+/**
+ * Her key light on the ground scales with the orb's size (call/stage.ts callKey: full at b08's orb, down to .35 with a
+ * smaller one). 9:16 (fix:written): the full-key size stays b08's former orb, 196 — the header orb (124) lights the
+ * ground a touch less, in written/Ground.tsx as in the call act, so the cut between them is continuous and the line and
+ * change acts (callKey) light exactly as before. 16:9 keys on b08's own end orb (236), as before.
+ */
+export const KEY_FULL_D_9x16 = 196;
+export const keyScale = (d: number, full: number) => Math.min(1, Math.max(0.35, d / full));
 
 /** the panel's offset from its place (it comes in eased, landing exactly at panel[1] so the cursor aims true) */
 export function panelPose(t: number, S: WrittenStage) {
@@ -262,20 +323,8 @@ export function rowTop(i: number, t: number, S: WrittenStage) {
   return { y: S.list.y + slots * pitch, moving: W.rows.some((a, j) => j > i && t > a - 10 && t < a + 26) };
 }
 
-/**
- * 9:16: how far the panel's content has scrolled at t (px; 0 in 16:9). One scroll, on "knowledge": the page glides up
- * under the fixed tab bar until the four rows fill the view — a phone's scroll (a soft start, a long decelerating
- * settle, no bounce), the newest row coming to rest just under the bar. The content and the rows inside it ride it.
- */
-const SCROLL_EASE = Easing.bezier(0.32, 0, 0.12, 1);
-export function scrollAt(t: number, S: WrittenStage) {
-  if (!S.scroll) return 0;
-  const [a, b] = S.scroll.at;
-  const u = Math.min(1, Math.max(0, (t - a) / (b - a)));
-  return S.scroll.by * SCROLL_EASE(u);
-}
-/** the scroll is moving at t */
-export const scrolling = (t: number, S: WrittenStage) => !!S.scroll && t > S.scroll.at[0] && t < S.scroll.at[1];
+/* (fix:written: the written act no longer uses edgeFade / softK — in the full-tab layout nothing scrolls and no row ever
+ *  goes under the panel's edge. They stay for change/App.tsx until the change act takes the 9:16 FULL-TAB SPEC.) */
 
 /**
  * 9:16 (fix:knowledge-9x16): a row whose top (screen px) is in a card's last few px — the tail of its slide out under the
@@ -316,9 +365,7 @@ export const BADGE = W.rows.map((at, i) => ({ at, n: i + 1 }));
 export function writtenEnd(vertical: boolean) {
   const S = writtenStage(vertical);
   const t = W.end;
-  // (9:16: the rows where the end scroll left them)
-  const sc = scrollAt(t, S);
-  const rows = ROWS.map((r, i) => ({ name: r.name, kind: r.kind, x: S.list.x, y: rowTop(i, t, S).y - sc, w: S.list.w, h: S.row.h }));
-  return { orb: S.orb.settle, panel: { x: S.panel.x, y: S.panel.y, w: S.panel.w, h: S.panel.h, radius: S.panel.radius }, tabs: S.tabs, rows, eyebrow: S.eyebrow, scroll: sc, at: t };
+  const rows = ROWS.map((r, i) => ({ name: r.name, kind: r.kind, x: S.list.x, y: rowTop(i, t, S).y, w: S.list.w, h: S.row.h }));
+  return { orb: S.orb.settle, panel: { x: S.panel.x, y: S.panel.y, w: S.panel.w, h: S.panel.h, radius: S.panel.radius }, tabs: S.tabs, rows, eyebrow: S.eyebrow, at: t };
 }
 export const WRITTEN_END = writtenEnd;

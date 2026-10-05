@@ -19,7 +19,7 @@ import { HER_GROUND, TurnGround } from '../turn/Ground';
 import { turnStage } from '../turn/stage';
 import { stageFor } from '../recording/stage';
 import { PLANE } from '../repeat/desk';
-import { wipeAt, type WrittenStage } from './stage';
+import { KEY_FULL_D_9x16, keyScale, wipeAt, type WrittenStage } from './stage';
 
 const SUNDAY_BODY = MOMENT_LIGHTS.sunday.orb[2];
 /** her key light's strength on her ground (turn/Ground.tsx KEY) */
@@ -53,7 +53,7 @@ export function groundPlane(vertical: boolean, W: number, H: number) {
   };
 }
 
-export const WrittenGround: React.FC<{ t: number; S: WrittenStage; orb: { x: number; y: number } }> = ({ t, S, orb }) => {
+export const WrittenGround: React.FC<{ t: number; S: WrittenStage; orb: { x: number; y: number; d: number } }> = ({ t, S, orb }) => {
   const v = S.vertical;
   const plane = groundPlane(v, S.W, S.H);
   const clock = SCENES.written.from + t;
@@ -64,6 +64,9 @@ export const WrittenGround: React.FC<{ t: number; S: WrittenStage; orb: { x: num
   const F = (v ? 520 : 620) * Math.min(1, u * 2.2);
   const a = seam + (far + 40 - seam) * u;
   const covering = u < 0.999;
+  // 9:16: her key follows the orb's size (written/stage.ts keyScale, as the call act's): full until it shrinks under b08's
+  // former 196, ≈ .63 at the header's 124. 16:9: KEY at 680 as before
+  const kk = v ? keyScale(orb.d, KEY_FULL_D_9x16) : 1;
   return (
     <AbsoluteFill>
       {covering ? <TurnGround t={TURN_LOCAL.end + t} S={turnStage(v)} /> : null}
@@ -74,7 +77,7 @@ export const WrittenGround: React.FC<{ t: number; S: WrittenStage; orb: { x: num
             palette={HER_GROUND.palette}
             lift={HER_GROUND.lift}
             seed={HER_GROUND.seed}
-            keyLight={{ x: key.x, y: key.y, strength: KEY, color: SUNDAY_BODY, radius: v ? 620 : 680 }}
+            keyLight={{ x: key.x, y: key.y, strength: v ? KEY * kk : KEY, color: SUNDAY_BODY, radius: v ? 620 * (0.7 + 0.3 * kk) : 680 }}
           />
         </AbsoluteFill>
       </AbsoluteFill>

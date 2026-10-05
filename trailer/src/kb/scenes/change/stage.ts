@@ -11,12 +11,13 @@
  *      app chrome: the edit happens outside the app) — 16:9 right of her orb, 9:16 under it. The I-beam drags over
  *      "14:00" (the sunday wash) and "16:00" is typed over it, a key per 16th.
  *   B  back in the app (b13, "Change the document. The next call gets the new answer.")   16:9: the file steps up into
- *      the corner over the agent page (9:16: the app at ad size comes in over the file from the right as a card stack, the file steps
- *      back under it — no parked thumbnail — and the menu flips above its trigger), which rises on its KNOWLEDGE tab (the badge at 4; "Your documents", newest first:
- *      FAQ page · Cancellation policy · Opening hours · Price list). The cursor opens the Opening hours row's … menu
+ *      the corner over the agent page (9:16: the app comes in over the file from the right as a card stack, the file steps
+ *      back under it — no parked thumbnail), which rises on its KNOWLEDGE tab (the badge at 4; "Your documents", newest
+ *      first: FAQ page · Cancellation policy · Opening hours · Price list). The cursor opens the Opening hours row's … menu
  *      (Read again · Replace with new file · Remove) and clicks "Replace with new file": the edited file drops into the
  *      list's top slot as the NEW version — Reading… while the old row stays Ready (the badge counts both: 5); on "the
- *      new answer" it rolls to Ready and the old row leaves up through its mask (the badge back to 4).
+ *      new answer" it rolls to Ready and the old row leaves up through its mask (the badge back to 4). 9:16 shows the
+ *      WHOLE tab as 16:9 does (fix:change — the 9:16 FULL-TAB block below).
  *   C  the next call (b14)   a beat before the ring the app steps back and slides away; the new row lifts out of it and
  *      unfolds into its page (TXT · Opening hours, "Saturday · 9:00–16:00"); the ring leaves her orb as she glides to her
  *      call place; ● CALLER — Dana's identical recording — with SAME QUESTION beside it; ● AVA "You can! / We're open
@@ -32,7 +33,7 @@ import { Easing } from 'remotion';
 import { EASE, springUnit } from '../../../lib/motion';
 import { CHANGE_LOCAL as K, LINE_LOCAL } from '../../timing';
 import { lineEnd } from '../line/stage';
-import { rowHeight, writtenStage } from '../written/stage';
+import { PORTRAIT_SPEC, rowHeight } from '../written/stage';
 
 export type XY = { x: number; y: number };
 export type Box = { x: number; y: number; w: number; h: number };
@@ -67,9 +68,9 @@ export type ChangeStage = {
    *  top and scale (16:9). 9:16 has no parked thumbnail (null): the file steps back and leaves left as the app takes the
    *  frame, and the new version lands in the list by itself (the global 9:16 pass: a 17 px thumbnail read as clutter) */
   file: { x: number; y: number; w: number; size: number; rise: number; park: { right: number; y: number; k: number } | null };
-  /** the agent page on Knowledge: box (16:9: b12's panel geometry set lower, its height fitting five rows; 9:16: the app at
-   *  ad size, b08's card — `h` fixed, the list cut by its bottom edge like a phone's), corner radius, how far below it
-   *  starts rising */
+  /** the agent page on Knowledge: box (16:9: b12's panel geometry set lower, its height fitting five rows; 9:16: the
+   *  PORTRAIT_SPEC panel band, `h` fixed — it holds the tab bar, "Your documents" and five rows whole), corner radius, how
+   *  far below it starts rising */
   panel: { x: number; y: number; w: number; radius: number; rise: number; h?: number };
   /** the tab bar: label size, icons, the strip's side padding (× r) — b12's */
   tabs: { size: number; icons: boolean; padR: number };
@@ -77,13 +78,9 @@ export type ChangeStage = {
   pad: number;
   heading: number;
   headTop: number;
-  /** 9:16 (fix:knowledge-9x16): no "Your documents" heading — the list as b08's end scroll left it (written/stage.ts:
-   *  the newest row `headTop` px under the tab bar), so the card holds all four rows whole and its bottom edge falls in
-   *  the gap under the fourth (a fifth — the two versions side by side — sits wholly under it) */
-  listOnly?: boolean;
-  /** the rows (written/Row.tsx): name size, gap, layout (16:9 single-line; 9:16 b08's ad-size two-line row and its pill
-   *  size); the … menu's item size and the side it opens on (9:16: above its trigger — no room under it in the card, as
-   *  the app's dropdown flips on a phone) */
+  /** the rows (written/Row.tsx): name size, gap, layout (16:9 single-line; 9:16 the app's two-line row and its pill
+   *  size); the … menu's item size and the side it opens on (below, as the app's dropdown: under its trigger in 16:9, under
+   *  its row in 9:16 — Change.tsx MENU_GAP) */
   row: { size: number; gap: number; layout: 'stack' | 'inline'; pill?: number };
   menu: { size: number; side: 'bottom' | 'top' };
   /** the narrator's caption (vo-7, no tag): centre x, row A's centre, max width */
@@ -107,6 +104,36 @@ export type ChangeStage = {
   cross: { axis: 'x' | 'y'; feather: number };
 };
 
+/* ── 9:16 FULL-TAB (fix:change) ─────────────────────────────────────────────────────────────────────────────────────
+ *
+ * The client's note ("In 9:16 the tab is not shown complete like in 16:9 while navigating"): b13's agent page in 9:16 was
+ * "the app at ad size" — b08's card with the list cut by its bottom edge like a phone's (no "Your documents", the fifth
+ * row parked under the edge through a soft fade, the … menu flipped ABOVE its trigger over the rows above it and Ava's
+ * orb), and before the shared geometry a panel wider than the frame. Now it is the SAME tab 16:9 shows at that moment
+ * (b12's panel on Knowledge: the tab bar, "Your documents", the rows — no "Add knowledge", as 16:9's) laid out for the
+ * portrait frame inside written/stage.ts's PORTRAIT_SPEC bands, WHOLE at every moment the app is on screen: four rows,
+ * five while both versions are listed, four again; the menu under its row. Layout px (× 2 in the 2160 × 3840 master):
+ *
+ *   ORB       where b12 leaves her (lineEnd: the header row, (540, 317), d 124 since fix:line) until the call — the
+ *             panel's top edge clears her by 17 px; she glides to her call place (540, 300, 140) on the ring, as before
+ *   PANEL     x 28, y 396, w 1024, h 951 (bottom 1347), radius 34 — the PORTRAIT_SPEC box, b12's 9:16 page's; it comes
+ *             in from the right (APP_UP) and recedes down (appPose), as before
+ *   TAB BAR   the spec's: labels only, size 32 (r = 32/14), side pad 8r, 100.57 tall
+ *   HEADING   "Your documents" at 524.6 (bar + 28), title 42
+ *   ROWS      the app's TWO-LINE row (written/Row.tsx 'stack': the name over the pill and its type word — the width that
+ *             the one-line row needs for the pill beside the name is height here): name 40, pill 30, h 131, gap 16 →
+ *             pitch 147; x 68, w 944. Slots 587.6 · 734.6 · 881.6 · 1028.6 · 1175.6 (the fifth ends 1306.6, 40 px inside
+ *             the panel's bottom edge); four rows at rest end 1159.6 (16:9's panel keeps the same fifth slot free)
+ *   MENU      the kit's Menu at size 36 (r = 36/14: items 77 tall, ≈ 494 wide), right edge on the … trigger's, opening
+ *             UNDER the Opening hours row as 16:9's does: its top 8 px under the row's bottom edge (1020.6 → 1295.7) —
+ *             over the right half of Price list (its … only; its name, pill and type word stay clear), never over its
+ *             own row (Change.tsx MENU_GAP); the hop takes 16:9's bow
+ *   CAPTION   the spec's band: centre x 540, row A's centre 1412, max width 940 (it was 1336, over the panel's bottom)
+ *   NEW ROW   lands in the top slot from 9 % of its height above (≈ 12 px, as 16:9's), lifts out on the recede and
+ *             unfolds into b14's page (x 56, y 1000, w 968, as before — the two-line row's own unfold path)
+ *   GROUND    her key light by call/stage.ts callKey (change/Ground.tsx), the function b12's ground uses: continuous at
+ *             the cut, and b14 lit as delivered
+ */
 const STAGES: Record<'land' | 'vert', ChangeStage> = (() => {
   const make = (vertical: boolean): ChangeStage => {
     const E = lineEnd(vertical);
@@ -146,25 +173,24 @@ const STAGES: Record<'land' | 'vert', ChangeStage> = (() => {
     }
     const size = 68;
     const lh = Math.round(size * 1.18);
-    // THE APP AT AD SIZE (the global 9:16 pass; b08's card, written/stage.ts): the panel full width under her orb, its
-    // type at the app's proportions ≈ 1.56× (row names 50, pills 42), the app's two-line row; the list cut by the card's
-    // bottom edge like a phone's (the row and its menu are the shot)
-    const W8 = writtenStage(true);
+    // THE WHOLE TAB (fix:change — the 9:16 FULL-TAB block below): the PORTRAIT_SPEC panel band, the tab bar, "Your
+    // documents" and five slots of the app's two-line row; her orb stays where b12 left it, in the header row over the
+    // panel, until the call; the caption in its band
+    const P = PORTRAIT_SPEC;
     return {
       W: 1080,
       H: 1920,
       vertical,
       orb: { a: E.orb, b: E.orb, c: { x: 540, y: 300, d: 140 } },
       file: { x: 64, y: 480, w: 952, size: 56, rise: 56, park: null },
-      panel: { x: W8.panel.x, y: W8.panel.y, w: W8.panel.w, radius: W8.panel.radius, rise: 110, h: W8.panel.h },
-      tabs: W8.tabs,
-      pad: W8.pad,
-      heading: W8.type.title,
-      headTop: 12,
-      listOnly: true,
-      row: { size: W8.row.size, gap: W8.row.gap, layout: W8.row.layout, pill: W8.row.pill },
-      menu: { size: 46, side: 'top' },
-      caption: { x: 540, y: 1336, maxWidth: 940 },
+      panel: { x: P.panel.x, y: P.panelTop, w: P.panel.w, radius: P.panel.radius, rise: 110, h: P.panelBottom - P.panelTop },
+      tabs: { ...P.tabs },
+      pad: P.pad,
+      heading: P.type.title,
+      headTop: 28,
+      row: { size: 40, gap: 16, layout: 'stack', pill: 30 },
+      menu: { size: 36, side: 'bottom' },
+      caption: { ...P.caption },
       call: {
         align: 'center',
         x: 540,
@@ -195,7 +221,7 @@ export const barH = (S: ChangeStage) => (44 * S.tabs.size) / 14;
 /** the list's top (frame px, the panel at rest) and the row pitch */
 export function listGeo(S: ChangeStage) {
   const top = S.panel.y + barH(S) + S.headTop;
-  const listY = S.listOnly ? top : top + S.heading * 1.5;
+  const listY = top + S.heading * 1.5;
   const h = rowH(S);
   const pitch = h + S.row.gap;
   const x = S.panel.x + S.pad;
@@ -317,7 +343,7 @@ export function appPose(t: number, S: ChangeStage) {
   if (!S.file.park) {
     // 9:16: the app comes in from the right OVER the owner's file on "Change the document" (b12's card stack: an app's
     // next sheet, opaque from its first frame; b12's page left to the left), at rest before the pointer reaches the
-    // row's … — along its own band (426 → 1264): a climb from under the frame crossed the caption "Change the
+    // row's … — along its own band (396 → 1347): a climb from under the frame crossed the caption "Change the
     // document." (polish pass). S.W + 200 puts its left edge and its entry shadow (≈ 190 px at lift 4) past the edge
     const a = ease(t, APP_UP[0], APP_UP[1], EASE.draw);
     const dx = (S.W + 200 - S.panel.x) * (1 - a);

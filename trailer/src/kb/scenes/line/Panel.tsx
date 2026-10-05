@@ -18,15 +18,24 @@
  * In v2's full order (LINE_LOCAL.full — on since b12's extra bar) the page comes back on Knowledge (b08's list at rest) and
  * the pointer settles onto Conversation and clicks it first: the underline springs across, the content swaps through its
  * mask (the kit's Swap).
+ *
+ * 9:16 (fix:line — the client: "in 9:16 the tab is not shown complete like in 16:9 while navigating"): the page is b08's
+ * full-tab panel (line/stage.ts 9:16 PORTRAIT PAGE; written/stage.ts 9:16 FULL-TAB SPEC) and shows the WHOLE current tab
+ * at every moment: it comes back on b08's whole Knowledge tab exactly as the written act left it (KnowledgePortrait — Add
+ * knowledge, the drop zone, the web page field, Add page, Your documents, the four rows Ready at b08's slots: no list
+ * scrolled under the tab bar, no row cut), and the Conversation tab fills the same fixed panel — title, description,
+ * label, the field (a phrase per row) and the SaveBar pinned to the panel's foot. Nothing scrolls, nothing is cropped,
+ * no camera pushes in.
  */
 import React, { useMemo } from 'react';
 import { subpixel } from '../../../lib/glide';
 import { smooth } from '../../../lib/motion';
-import { APP, Button, buttonSize, hoverAt, Panel, pressAt, Swap, TabBar, ui, useKitFaces, useTabBar, W as WT, wrapWords, type CursorKey, type PillState, type Rect, type TabBarGeometry, type TabChange } from '../../kit';
-import { LINE_LOCAL as N } from '../../timing';
-import { Row, rowPill } from '../written/Row';
-import { ROWS, rowHeight, writtenStage } from '../written/stage';
-import { Field, fieldSpec, type FieldGeo } from './Field';
+import { mixColor } from '../../../lib/lights';
+import { APP, Button, buttonSize, hoverAt, Icon, measureText, Panel, pressAt, Swap, TabBar, ui, useKitFaces, useTabBar, W as WT, wrapWords, type CursorKey, type PillState, type Rect, type TabBarGeometry, type TabChange, type TextSpec } from '../../kit';
+import { LINE_LOCAL as N, WRITTEN_LOCAL } from '../../timing';
+import { Row } from '../written/Row';
+import { ROWS, rowHeight, rowTop, writtenStage } from '../written/stage';
+import { Field, fieldSpec, PLACEHOLDER_INK, type FieldGeo } from './Field';
 import { Pointer } from './Pointer';
 import { panelPose, type LineStage } from './stage';
 
@@ -36,10 +45,66 @@ export const PLACEHOLDER_TEXT = 'I don’t have that information, but I can take
 const TITLE = 'When your agent can’t help';
 const DESCRIPTION = 'The exact words your agent uses. Leave a line empty to use the default in English.';
 const LABEL = 'When the answer isn’t in your documents';
+/** b08's web page field (written/Panel.tsx) */
+const URL_PLACEHOLDER = 'https://yourbusiness.com/faq';
 
 /** b08's rows at rest (FULL order only: the Knowledge tab the page comes back on) */
 const READY: readonly (readonly PillState[])[] = ROWS.map((r) => [{ at: -1e6, kind: 'ready', n: r.n }]);
 const NEWEST_FIRST = [3, 2, 1, 0] as const;
+
+/**
+ * 9:16: a PHRASE PER ROW — the text's clauses (each ending on , or .) packed into rows while they fit; a clause too wide
+ * for a row alone is split into the fewest rows, at the break with the most even widths (no one-word last row). The
+ * owner's line: "I don't have an answer for that," / "and I don't want to guess." / "I'll ask the team to" / "call you
+ * back today." — each word still at its measured pen position (Field.tsx), so nothing reflows as the line is typed.
+ */
+export function phraseRows(text: string, spec: TextSpec, maxW: number): string[][] {
+  const words = text.split(' ').filter(Boolean);
+  const space = measureText('n n', spec) - measureText('nn', spec);
+  const width = (ws: readonly string[]) => ws.reduce((a, w, i) => a + measureText(w, spec) + (i ? space : 0), 0);
+  const fits = (ws: readonly string[]) => width(ws) <= maxW + 0.01;
+  const clauses: string[][] = [];
+  let cur: string[] = [];
+  for (const w of words) {
+    cur.push(w);
+    if (/[,.;:!?]$/.test(w)) {
+      clauses.push(cur);
+      cur = [];
+    }
+  }
+  if (cur.length) clauses.push(cur);
+  // the fewest rows for a clause (greedy), then the split into that many with the smallest widest row
+  const split = (ws: string[]): string[][] => {
+    const k = wrapWords(ws.join(' '), spec, maxW).length;
+    let best: { rows: string[][]; widest: number } | null = null;
+    const walk = (from: number, left: number, acc: string[][]) => {
+      if (left === 1) {
+        const last = ws.slice(from);
+        if (!last.length || !fits(last)) return;
+        const rows = [...acc, last];
+        const widest = Math.max(...rows.map(width));
+        if (!best || widest < best.widest - 0.01) best = { rows, widest };
+        return;
+      }
+      for (let end = from + 1; end < ws.length; end++) {
+        const row = ws.slice(from, end);
+        if (!fits(row)) break;
+        walk(end, left - 1, [...acc, row]);
+      }
+    };
+    walk(0, k, []);
+    const found = best as { rows: string[][] } | null;
+    return found ? found.rows : wrapWords(ws.join(' '), spec, maxW);
+  };
+  const rows: string[][] = [];
+  for (const c of clauses) {
+    const last = rows[rows.length - 1];
+    if (last && fits([...last, ...c])) last.push(...c);
+    else if (fits(c)) rows.push([...c]);
+    else rows.push(...split(c));
+  }
+  return rows;
+}
 
 export type PageGeo = {
   bar: TabBarGeometry;
@@ -75,7 +140,9 @@ export function usePageGeometry(S: LineStage): PageGeo {
   });
   const x = P.x + S.pad;
   const cw = P.w - 2 * S.pad;
-  const titleY = P.y + bar.height + (S.vertical ? 40 : 42);
+  // a fixed panel (9:16): its content starts where b08's Knowledge tab's does (written/stage.ts portraitPanel: bar + 24)
+  const fixed = P.h > 0;
+  const titleY = P.y + bar.height + (fixed ? 24 : S.vertical ? 40 : 42);
   const descY = titleY + T.title * 1.34;
   const descH = T.small * 1.32 * wrapWords(DESCRIPTION, { size: T.small, weight: WT.regular }, cw).length;
   const labelY = descY + descH + (S.vertical ? 30 : 32);
@@ -84,18 +151,32 @@ export function usePageGeometry(S: LineStage): PageGeo {
   const padY = S.fieldPad.y;
   const spec = fieldSpec(T.field);
   const inner = cw - 2 * padX;
-  // 16:9 sets the line a sentence per row when both fit; otherwise (and in 9:16) a greedy wrap
+  // 16:9 sets the line a sentence per row when both fit, otherwise a greedy wrap; 9:16 a phrase per row (phraseRows)
   const sentences = OWNER_TEXT.split(/(?<=\.)\s+/);
   const perSentence = sentences.map((s) => wrapWords(s, spec, inner));
-  const lines = S.sentenceRows && perSentence.every((l) => l.length === 1) ? perSentence.map((l) => l[0]) : wrapWords(OWNER_TEXT, spec, inner);
-  const placeholderLines = wrapWords(PLACEHOLDER_TEXT, spec, inner);
+  const lines = S.phraseRows
+    ? phraseRows(OWNER_TEXT, spec, inner)
+    : S.sentenceRows && perSentence.every((l) => l.length === 1)
+      ? perSentence.map((l) => l[0])
+      : wrapWords(OWNER_TEXT, spec, inner);
+  const placeholderLines = S.phraseRows ? phraseRows(PLACEHOLDER_TEXT, spec, inner) : wrapWords(PLACEHOLDER_TEXT, spec, inner);
   const rows = Math.max(lines.length, placeholderLines.length);
   const lineH = T.field * S.lineH;
-  const fieldH = rows * lineH + 2 * padY;
-  const field: FieldGeo = { x, y: fieldY, w: cw, h: fieldH, size: T.field, lineH, padX, padY, radius: S.vertical ? 18 : 16, lines, placeholderLines };
-  const ruleY = fieldY + fieldH + (S.vertical ? 34 : 36);
   const bh = buttonSize('Save changes', 'primary', T.button).h;
-  const btnY = ruleY + (S.vertical ? 22 : 20);
+  let fieldH = rows * lineH + 2 * padY;
+  let ruleY: number;
+  let btnY: number;
+  if (fixed) {
+    // 9:16: the SaveBar pinned to the panel's foot (its buttons end 34 px over the bottom edge, where b08's last row
+    // does), the field filling down to 40 px over its hairline — never shorter than its rows
+    btnY = P.y + P.h - 34 - bh;
+    ruleY = btnY - 22;
+    fieldH = Math.max(fieldH, ruleY - 40 - fieldY);
+  } else {
+    ruleY = fieldY + fieldH + (S.vertical ? 34 : 36);
+    btnY = ruleY + (S.vertical ? 22 : 20);
+  }
+  const field: FieldGeo = { x, y: fieldY, w: cw, h: fieldH, size: T.field, lineH, padX, padY, radius: S.vertical ? 18 : 16, lines, placeholderLines };
   let discard: Rect;
   let save: Rect;
   const gap = (8 * T.button) / 14;
@@ -109,7 +190,7 @@ export function usePageGeometry(S: LineStage): PageGeo {
     save = { x: x + cw - sw, y: btnY, w: sw, h: bh };
     discard = { x: save.x - gap - dw, y: btnY, w: dw, h: bh };
   }
-  const h = btnY + bh + (S.vertical ? 26 : 24) - P.y;
+  const h = fixed ? P.h : btnY + bh + (S.vertical ? 26 : 24) - P.y;
   return {
     bar,
     panel: { x: P.x, y: P.y, w: P.w, h, radius: P.radius },
@@ -120,7 +201,7 @@ export function usePageGeometry(S: LineStage): PageGeo {
     rule: { y: ruleY },
     discard,
     save,
-    click: { x: field.x + field.w * S.click.fx, y: field.y + field.h * S.click.fy },
+    click: { x: field.x + field.w * S.click.fx, y: S.click.row === undefined ? field.y + field.h * S.click.fy : field.y + padY + (S.click.row + 0.55) * lineH },
   };
 }
 
@@ -174,43 +255,101 @@ const Conversation: React.FC<{ G: PageGeo; S: LineStage }> = ({ G, S }) => {
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div style={{ position: 'absolute', left: G.title.x, top: G.title.y, ...ui(T.title, WT.medium), color: APP.foreground }}>{TITLE}</div>
-      <div style={{ position: 'absolute', left: G.desc.x, top: G.desc.y, width: G.desc.w, ...ui(T.small, WT.regular), whiteSpace: 'normal', lineHeight: 1.32, color: APP.mutedFg }}>{DESCRIPTION}</div>
+      {/* (9:16: balanced — two even lines, no one-word last line; the line count stays usePageGeometry's wrap) */}
+      <div style={{ position: 'absolute', left: G.desc.x, top: G.desc.y, width: G.desc.w, ...ui(T.small, WT.regular), whiteSpace: 'normal', textWrap: S.vertical ? 'balance' : undefined, lineHeight: 1.32, color: APP.mutedFg }}>{DESCRIPTION}</div>
       <div style={{ position: 'absolute', left: G.label.x, top: G.label.y, ...ui(T.label, WT.medium), color: APP.foreground }}>{LABEL}</div>
     </div>
   );
 };
 
-/** 9:16: the largest two-line row (b08's name : pill proportions, 50 : 42) whose four rows fit `avail` px whole */
-function fitRows(avail: number, gap: number, size0: number, pill0: number) {
-  for (let size = size0; size > 20; size--) {
-    const pill = Math.round((size * pill0) / size0);
-    const h = rowHeight('stack', size, pill);
-    if (4 * h + 3 * gap <= avail) return { size, pill, h };
-  }
-  return { size: 20, pill: Math.round((20 * pill0) / size0), h: rowHeight('stack', 20, Math.round((20 * pill0) / size0)) };
-}
+/** lucide Upload (24-unit box) — written/Panel.tsx's */
+const UploadIcon: React.FC<{ size: number; color: string }> = ({ size, color }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }} aria-hidden>
+    <path d="M12 3v12" />
+    <path d="m17 8-5-5-5 5" />
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+  </svg>
+);
+
+/**
+ * 9:16 (fix:line): b08's WHOLE Knowledge tab, at rest exactly as the written act leaves it (written/Panel.tsx Knowledge
+ * at WRITTEN_LOCAL.end — the empty state gone, the web page field cleared back to its placeholder, Add page disabled, no
+ * hover — and its four rows Ready at written/stage.ts rowTop(…, end): the call act's hand-over picture, call/Panel.tsx).
+ * Every box is writtenStage(true)'s (the 9:16 FULL-TAB SPEC); the styles are written/Panel.tsx's at rest, so the page
+ * that comes back is the page b08 showed.
+ */
+const KnowledgePortrait: React.FC = () => {
+  const WS = writtenStage(true);
+  const T = WS.type;
+  const d = WS.drop;
+  const f = WS.field;
+  const b = WS.button;
+  const end = WRITTEN_LOCAL.end;
+  const r = Math.min(26, d.h * 0.16);
+  const icon = Math.round(T.body * 1.05);
+  return (
+    <div style={{ position: 'absolute', inset: 0 }}>
+      <div style={{ position: 'absolute', left: WS.add.x, top: WS.add.y, ...ui(T.title, WT.medium), color: APP.foreground }}>Add knowledge</div>
+      {/* the drop zone (compact: the icon beside the words, the hint under them) */}
+      <div style={{ position: 'absolute', left: d.x, top: d.y, width: d.w, height: d.h }}>
+        <svg width={d.w + 2} height={d.h + 2} style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible' }} aria-hidden>
+          <rect x={1.25} y={1.25} width={d.w - 2.5} height={d.h - 2.5} rx={r} ry={r} fill="none" stroke={mixColor(APP.border, '#b9b2c8', 0)} strokeWidth={2.5} strokeDasharray="9 7" />
+        </svg>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <UploadIcon size={icon} color={APP.mutedFg} />
+            <div style={{ ...ui(T.body, WT.medium), color: APP.foreground }}>Drop files here or choose them</div>
+          </div>
+          <div style={{ ...ui(T.small - 1, WT.regular), color: APP.mutedFg }}>PDF, Word, TXT or Markdown · up to 10 MB each</div>
+        </div>
+      </div>
+      {WS.divider ? (
+        <div style={{ position: 'absolute', left: WS.add.x, top: WS.divider.y, width: WS.add.w, display: 'flex', alignItems: 'center', gap: 16, ...ui(T.small, WT.regular), color: APP.mutedFg }}>
+          <span style={{ flex: 1, height: 1.25, background: APP.border }} />
+          or add a web page
+          <span style={{ flex: 1, height: 1.25, background: APP.border }} />
+        </div>
+      ) : null}
+      {/* the web page field, cleared (its placeholder back) */}
+      <div style={{ position: 'absolute', left: f.x, top: f.y, width: f.w, height: f.h, borderRadius: f.h * 0.22, background: APP.background, boxShadow: `inset 0 0 0 1.25px ${mixColor(APP.border, APP.primary, 0)}`, overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', left: f.h * 0.3, top: 0, height: f.h, display: 'flex', alignItems: 'center', ...ui(T.url, 440, { mono: true }), color: PLACEHOLDER_INK }}>{URL_PLACEHOLDER}</div>
+      </div>
+      {/* Add page, disabled again (50 %) */}
+      <div
+        style={{
+          position: 'absolute',
+          left: b.x,
+          top: b.y,
+          width: b.w,
+          height: b.h,
+          borderRadius: b.h * 0.22,
+          background: mixColor(mixColor(APP.primary, APP.primaryStrong, 0), '#000000', 0),
+          color: APP.primaryFg,
+          ...ui(T.body, WT.medium),
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 10,
+          opacity: 0.5,
+        }}
+      >
+        <Icon name="link2" size={T.body * 1.05} stroke={2.2} />
+        <span>Add page</span>
+      </div>
+      <div style={{ position: 'absolute', left: WS.docs.x, top: WS.docs.y, ...ui(T.title, WT.medium), color: APP.foreground }}>Your documents</div>
+      {ROWS.map((row, i) => (
+        <Row key={row.name} t={end} x={WS.list.x} y={rowTop(i, end, WS).y} w={WS.list.w} h={WS.row.h} layout={WS.row.layout} size={WS.row.size} pillSize={WS.row.pill} kind={row.kind} name={row.name} pill={READY[i]} />
+      ))}
+    </div>
+  );
+};
 
 /** FULL order only: the Knowledge tab as b08 left it — the four rows Ready, newest first (16:9: under "Your documents",
- *  single-line rows; 9:16: b08's scrolled list, every row whole) */
+ *  single-line rows; 9:16: b08's WHOLE tab, KnowledgePortrait) */
 const Knowledge: React.FC<{ G: PageGeo; S: LineStage }> = ({ G, S }) => {
-  const WS = writtenStage(S.vertical);
   const T = S.type;
   const top = G.title.y;
-  if (S.vertical) {
-    // 9:16 (fix:knowledge-9x16): b08's list as b08 left it — scrolled, the newest row 12 px under the tab bar, no heading
-    // (written/stage.ts's end scroll) — its two-line rows sized so ALL FOUR fit this page's height whole (≥ 8 px over its
-    // bottom edge; the page is the Conversation tab's height, shorter than b08's card): never a row cut by the edge
-    const gap = WS.row.gap;
-    const listY = G.panel.y + G.bar.height + 12;
-    const R = fitRows(G.panel.y + G.panel.h - 8 - listY, gap, WS.row.size, WS.row.pill ?? rowPill(WS.row.size));
-    return (
-      <div style={{ position: 'absolute', inset: 0 }}>
-        {NEWEST_FIRST.map((i, k) => (
-          <Row key={ROWS[i].name} t={0} x={G.title.x} y={listY + k * (R.h + gap)} w={G.desc.w} h={R.h} layout="stack" size={R.size} pillSize={R.pill} kind={ROWS[i].kind} name={ROWS[i].name} pill={READY[i]} />
-        ))}
-      </div>
-    );
-  }
+  if (S.vertical) return <KnowledgePortrait />;
   // 16:9: single-line rows under "Your documents"
   const size = 30;
   const layout = 'inline';

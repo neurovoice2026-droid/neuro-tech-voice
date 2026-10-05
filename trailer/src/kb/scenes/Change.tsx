@@ -78,9 +78,8 @@ function cursorKeys(start: XY, drag: { start: XY; end: XY }, dots: XY, rep: XY, 
     { at: K.toMenu[1], x: dots.x, y: dots.y, dur: K.toMenu[1] - K.toMenu[0], bend: 0.1 },
     { at: K.menu.down, x: dots.x, y: dots.y, action: 'press' },
     { at: K.menu.up, x: dots.x, y: dots.y, action: 'release' },
-    // the hop into the open menu, once it is fully drawn: "Replace with new file" (9:16: the menu opens ABOVE its trigger,
-    // so Remove lies between them — the hop bows out past the menu's right edge and comes into Replace from the right,
-    // never over Remove: HOP_BEND)
+    // the hop into the open menu, once it is fully drawn: "Replace with new file" (the menu opens under its trigger in
+    // both framings: the hop passes over "Read again", never over Remove)
     { at: K.hop[1], x: rep.x, y: rep.y, dur: K.hop[1] - K.hop[0], bend: hopBend },
     { at: K.replace.down, x: rep.x, y: rep.y, action: 'press' },
     { at: K.replace.up, x: rep.x, y: rep.y, action: 'release' },
@@ -99,17 +98,19 @@ const pointerFade = (t: number) => 1 - EASE_HOVER(Math.min(1, Math.max(0, (t - (
 const pointerBack = (t: number) => (t < K.toMenu[0] || t >= K.park[0] + 2 ? 1 : smooth(K.park[0], K.park[0] + 2, t));
 
 /**
- * 9:16's flipped … menu (polish round 2). It opens above its trigger, so its order (Read again · Replace with new file ·
- * Remove — TabKnowledge.tsx, kept) puts Remove nearest the pointer: a straight hop lit Remove red under the cursor on its
- * way up, which read as the owner about to delete the file. Two changes, 9:16 only (16:9's menu opens below: unchanged):
- *   MENU_CLEAR  the menu's bottom edge sits this far above the row's top edge (not 6r above the … — that edge cut the
- *               top of the row's own title "Opening hours")
- *   HOP_BEND    the hop's bow (kit/cursor.ts: a vertical move bows to the right): the hotspot rises outside the menu's
- *               right edge (≥ 15 px past Remove's box at its nearest) and comes into Replace's right-hand padding from
- *               the right, entering it only in the last tenth of the move
+ * The hop's bow (kit/cursor.ts: a vertical move bows to the right). fix:change: 9:16's … menu no longer flips above its
+ * trigger (polish round 2 flipped it because its card had no room under the row; that cover hid the rows above and put
+ * Remove between the pointer and Replace) — the panel now holds the whole tab and the menu opens under its trigger in
+ * both framings, so both take 16:9's hop.
  */
-const MENU_CLEAR = 8;
-const HOP_BEND = { land: 0.06, vert: 0.34 } as const;
+const HOP_BEND = 0.06;
+/**
+ * 9:16 (fix:change): the app's TWO-LINE row centres its … trigger on the row, so a menu hung 6r under the trigger (16:9's
+ * rule) would lie over the row's own status line ("Ready · 1 passage · Text"); it hangs MENU_GAP px under the row's bottom
+ * edge instead — where 16:9's one-line row puts it too (its trigger's bottom + 6r is that row's bottom edge, within a few
+ * px). Its open spring slides it in from 8r above: never as far up as the status line.
+ */
+const MENU_GAP = 8;
 
 export const Change: React.FC = () => {
   const L = useLayout();
@@ -152,8 +153,8 @@ export const Change: React.FC = () => {
   const dots = rowMenuRect(old.x, old.y, old.w, old.h, S.row.size);
   const menu = useMenu({
     x: dots.x + dots.w,
-    // (side 'top': `y` is where the menu's bottom hangs 6r above — the … trigger's top, or higher so it clears the row)
-    y: S.menu.side === 'top' ? Math.min(dots.y, old.y - MENU_CLEAR + (6 * S.menu.size) / 14) : dots.y + dots.h,
+    // (`y` is where the menu's top hangs 6r under)
+    y: S.row.layout === 'stack' ? old.y + old.h + MENU_GAP - (6 * S.menu.size) / 14 : dots.y + dots.h,
     size: S.menu.size,
     side: S.menu.side,
   });
@@ -164,11 +165,9 @@ export const Change: React.FC = () => {
   // icon 16r, gap 6r, then the label) — the arrow's body falls on empty padding, never on a letter
   const mr = S.menu.size / 14;
   const labelEnd = item.x + 28 * mr + measureText('Replace with new file', { size: S.menu.size, weight: WT.regular + 20 });
-  // (9:16: a little further right — 15r past the label, 8r inside the item's edge — so the bowed hop's last stretch comes
-  // in from the right over the separator, never over Remove: HOP_BEND)
-  const repX = v ? Math.min(item.x + item.w - 8 * mr, labelEnd + 15 * mr) : Math.min(item.x + item.w - 4 * mr, labelEnd + 10 * mr);
+  const repX = Math.min(item.x + item.w - 4 * mr, labelEnd + 10 * mr);
   const keys = useMemo(
-    () => cursorKeys(start, drag, { x: dots.cx + 3, y: dots.cy + 4 }, { x: repX, y: item.cy + 2 }, v ? HOP_BEND.vert : HOP_BEND.land),
+    () => cursorKeys(start, drag, { x: dots.cx + 3, y: dots.cy + 4 }, { x: repX, y: item.cy + 2 }, HOP_BEND),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [v, start.x, start.y, drag.start.x, drag.start.y, drag.end.x, dots.cx, dots.cy, repX, item.cy],
   );

@@ -15,9 +15,11 @@
  *                 Your documents     the EmptyState "Teach your agent about your business" while the list is
  *                                    empty (it leaves up as the first row lands); the rows are Written.tsx's
  *
- * 16:9 puts the two cards side by side (the panel is a wide desktop window); 9:16 stacks them as the app does on a
- * phone (the field and Add page in one row, the drop zone compact). Everything is laid out in FRAME px at the
- * panel's resting place; the whole panel rides one transform while it comes in (written/stage.ts panelPose).
+ * 16:9 puts the two cards side by side (the panel is a wide desktop window); 9:16 stacks them in ONE column and shows
+ * the WHOLE tab at every moment (fix:written — written/stage.ts's 9:16 FULL-TAB SPEC: General's fields side by side and
+ * its four tone cards 2 × 2; Knowledge's drop zone compact, the field and Add page in one row, the rows one-line; nothing
+ * scrolls, nothing is cut by the panel's edge). Everything is laid out in FRAME px at the panel's resting place; the
+ * whole panel rides one transform while it comes in (written/stage.ts panelPose).
  */
 import React from 'react';
 import { reveal, revealStyle } from '../../../components/Type';
@@ -27,7 +29,7 @@ import { EASE, smooth, tween } from '../../../lib/motion';
 import { maskBox } from '../../../lib/type';
 import { APP, CURSOR, hoverAt, Icon, measureText, Panel, pressAt, Swap, TabBar, ui, W as WT, type CursorKey, type TabBarGeometry } from '../../kit';
 import { WRITTEN_LOCAL as W } from '../../timing';
-import { panelPose, scrollAt, scrolling, type Box, type WrittenStage } from './stage';
+import { panelPose, type Box, type WrittenStage } from './stage';
 
 const PLACEHOLDER = 'https://yourbusiness.com/faq';
 const PLACEHOLDER_INK = '#a29bb4';
@@ -45,9 +47,9 @@ const inBox = (b: Box) => ({ position: 'absolute' as const, left: b.x, top: b.y,
 
 /* ── General (the tab the page opens on): TabGeneral.tsx's first two cards — "Name and language" (the agent's name
  *    and language) and "Tone" (TabGeneral.tsx:224–258: CardDescription verbatim; the radio grid in AGENT_TONES order
- *    with each profile's TONE_ICONS icon, label and blurb from lib/voice/tone.ts, Professional chosen). The panel shows
- *    the grid's first rows — 16:9 Formal · Professional / Empathetic · Casual, 9:16 Formal · Professional — as the
- *    app's own window would before you scroll; nothing is re-ordered or re-worded ── */
+ *    with each profile's TONE_ICONS icon, label and blurb from lib/voice/tone.ts, Professional chosen). Both framings
+ *    show all four — Formal · Professional / Empathetic · Casual (9:16 too since fix:written: GeneralPortrait); nothing
+ *    is re-ordered or re-worded ── */
 type ToneIcon = 'landmark' | 'briefcase' | 'heartHandshake' | 'coffee';
 /** lucide 1.49 node data (landmark, briefcase, heart-handshake, coffee .mjs) */
 const TONE_ICON: Record<ToneIcon, React.ReactNode> = {
@@ -102,38 +104,38 @@ function wrapCount(text: string, size: number, weight: number, width: number) {
   return lines;
 }
 
+const FIELDS = [
+  { label: 'Agent name', value: 'Ava' },
+  { label: 'Language', value: 'English' },
+] as const;
+
+/** 16:9 General: two columns — Name and language (the fields stacked) left, Tone and its 2 × 2 grid right */
 const General: React.FC<{ S: WrittenStage }> = ({ S }) => {
   const T = S.type;
   const x = S.add.x;
   const w = S.add.w;
   const fieldH = S.inputH;
-  const f = [
-    { label: 'Agent name', value: 'Ava' },
-    { label: 'Language', value: 'English' },
-  ];
-  // the cards' descriptions wrap to two lines in 16:9's columns; 9:16 (ad-size type) measures its own
-  const desc = T.small * 1.3 * (S.vertical ? wrapCount(NAME_DESC, T.small, WT.regular, w) : 2) + (S.vertical ? 24 : 26);
+  const f = FIELDS;
+  // the cards' descriptions wrap to two lines in 16:9's columns
+  const desc = T.small * 1.3 * 2 + 26;
   const fieldsTop = S.add.y + T.title * 1.35 + desc;
-  // a field's pitch: the field + its label block. 9:16 sets them a touch tighter (2.35, was 2.6 — polish round 2) so the
-  // Tone card's two-line description ends whole above the card's bottom edge (it was cut through its second line) and
-  // the edge falls in the gap before the tone grid, which starts wholly under it
-  const pitch = fieldH + T.label * (S.vertical ? 2.35 : 2.6);
-  const fieldsBottom = fieldsTop + 2 * pitch;
-  // Tone: 16:9 in the right column, 9:16 under the fields
-  const tone = S.vertical ? { x, y: fieldsBottom + 18, w } : { x: S.docs.x, y: S.add.y, w: S.docs.w };
-  // (16:9: a measure a touch narrower than the column, so the description's last line is never one word)
-  const descW = S.vertical ? tone.w : tone.w - 44;
-  const toneDesc = T.small * 1.3 * wrapCount(TONE_DESC, T.small, WT.regular, descW) + (S.vertical ? 24 : 26);
+  // a field's pitch: the field + its label block
+  const pitch = fieldH + T.label * 2.6;
+  // Tone: in the right column
+  const tone = { x: S.docs.x, y: S.add.y, w: S.docs.w };
+  // (a measure a touch narrower than the column, so the description's last line is never one word)
+  const descW = tone.w - 44;
+  const toneDesc = T.small * 1.3 * wrapCount(TONE_DESC, T.small, WT.regular, descW) + 26;
   const gap = 16;
   const cardW = (tone.w - gap) / 2;
-  const padX = S.vertical ? 22 : 20;
+  const padX = 20;
   const blurbSize = T.small - 2;
   const icon = Math.round(T.label * 1.3);
   const blurbLines = Math.max(...TONES.map((tn) => wrapCount(tn.blurb, blurbSize, WT.regular, cardW - 2 * padX)));
   // p-4 · the icon (size-5, mb-2) · the label · the blurb (mt-0.5)
   const cardH = Math.ceil(18 + icon + 10 + T.label * 1.2 + 4 + blurbSize * 1.28 * blurbLines + 18);
   const gridTop = tone.y + T.title * 1.35 + toneDesc;
-  const shown = S.vertical ? TONES.slice(0, 2) : TONES;
+  const shown = TONES;
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div style={{ position: 'absolute', left: x, top: S.add.y, ...ui(T.title, WT.medium), color: APP.foreground }}>Name and language</div>
@@ -196,23 +198,129 @@ const General: React.FC<{ S: WrittenStage }> = ({ S }) => {
   );
 };
 
-/* ── the drop zone (9:16 compact: one line high, the icon beside the words — the first screen holds two whole rows) ── */
+/**
+ * 9:16 General — THE WHOLE TAB in one column (written/stage.ts 9:16 FULL-TAB SPEC): "Name and language" and its
+ * description; Agent name | Language side by side (two columns: the phone frame's width, not its height); "Tone" and its
+ * description; the four tone cards in a 2 × 2 grid — each card's icon beside its name, the blurb under them (the app's
+ * card, its icon moved up beside the name so all four fit). Every block is laid out from the measured wraps, so nothing
+ * is ever cut by the panel's edge.
+ */
+const GeneralPortrait: React.FC<{ S: WrittenStage }> = ({ S }) => {
+  const T = S.type;
+  const x = S.add.x;
+  const w = S.add.w;
+  const fieldH = S.inputH;
+  const descLH = T.small * 1.3;
+  // (the gaps: the panel's spare height — ≈ 75 px with the description on one line — shared between the blocks; a
+  // two-line description still ends the grid ≈ 17 px inside the written panel's bottom edge)
+  const fieldsTop = S.add.y + T.title * 1.35 + descLH * wrapCount(NAME_DESC, T.small, WT.regular, w) + 28;
+  const colGap = 24;
+  const colW = (w - colGap) / 2;
+  // a field block: its label (the ui line, 1.2) + the label's half gap (16:9's marginTop) + the field
+  const fieldBlock = T.label * 1.2 + T.label * 0.5 + fieldH;
+  const toneY = fieldsTop + fieldBlock + 44;
+  const gridTop = toneY + T.title * 1.35 + descLH * wrapCount(TONE_DESC, T.small, WT.regular, w) + 28;
+  const gap = 16;
+  const cardW = (w - gap) / 2;
+  const padX = 22;
+  const padY = 20;
+  const blurbSize = T.small - 2;
+  const icon = Math.round(T.label * 1.3);
+  const blurbLines = Math.max(...TONES.map((tn) => wrapCount(tn.blurb, blurbSize, WT.regular, cardW - 2 * padX)));
+  const headH = Math.max(icon, T.label * 1.2);
+  const cardH = Math.ceil(padY + headH + 8 + blurbSize * 1.28 * blurbLines + padY);
+  return (
+    <div style={{ position: 'absolute', inset: 0 }}>
+      <div style={{ position: 'absolute', left: x, top: S.add.y, ...ui(T.title, WT.medium), color: APP.foreground }}>Name and language</div>
+      <div style={{ position: 'absolute', left: x, top: S.add.y + T.title * 1.35, width: w, ...ui(T.small, WT.regular), whiteSpace: 'normal', lineHeight: 1.3, color: APP.mutedFg }}>
+        {NAME_DESC}
+      </div>
+      {FIELDS.map((it, i) => (
+        <div key={it.label} style={{ position: 'absolute', left: x + i * (colW + colGap), top: fieldsTop, width: colW }}>
+          <div style={{ ...ui(T.label, WT.medium), color: APP.foreground }}>{it.label}</div>
+          <div
+            style={{
+              marginTop: T.label * 0.5,
+              height: fieldH,
+              borderRadius: fieldH * 0.22,
+              boxShadow: `inset 0 0 0 1.25px ${APP.border}`,
+              display: 'flex',
+              alignItems: 'center',
+              padding: `0 ${fieldH * 0.3}px`,
+              ...ui(T.body, WT.regular),
+              color: APP.foreground,
+            }}
+          >
+            {it.value}
+          </div>
+        </div>
+      ))}
+      <div style={{ position: 'absolute', left: x, top: toneY, ...ui(T.title, WT.medium), color: APP.foreground }}>Tone</div>
+      <div style={{ position: 'absolute', left: x, top: toneY + T.title * 1.35, width: w, ...ui(T.small, WT.regular), whiteSpace: 'normal', textWrap: 'balance', lineHeight: 1.3, color: APP.mutedFg }}>
+        {TONE_DESC}
+      </div>
+      {TONES.map((tn, i) => {
+        const cx = x + (i % 2) * (cardW + gap);
+        const cy = gridTop + Math.floor(i / 2) * (cardH + gap);
+        const on = !!tn.on;
+        return (
+          <div
+            key={tn.label}
+            style={{
+              position: 'absolute',
+              left: cx,
+              top: cy,
+              width: cardW,
+              height: cardH,
+              borderRadius: 20,
+              boxShadow: `inset 0 0 0 2.5px ${on ? APP.primary : APP.border}`,
+              background: on ? 'rgba(124, 58, 237, 0.05)' : APP.card,
+              padding: `${padY}px ${padX}px`,
+              boxSizing: 'border-box',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, height: headH }}>
+              <svg width={icon} height={icon} viewBox="0 0 24 24" fill="none" stroke={on ? APP.primary : APP.mutedFg} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block', flex: 'none' }} aria-hidden>
+                {TONE_ICON[tn.icon]}
+              </svg>
+              <div style={{ ...ui(T.label, WT.medium), color: APP.foreground }}>{tn.label}</div>
+            </div>
+            {/* (balanced: two even lines, never a one-word last line — the line count stays wrapCount's) */}
+            <div style={{ marginTop: 8, ...ui(blurbSize, WT.regular), whiteSpace: 'normal', textWrap: 'balance', lineHeight: 1.28, color: APP.mutedFg }}>{tn.blurb}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+/* ── the drop zone (9:16 compact: the icon beside the words, the hint under them — the whole Knowledge tab fits) ── */
 const DropZone: React.FC<{ S: WrittenStage; hover: number }> = ({ S, hover }) => {
   const d = S.drop;
   const T = S.type;
   const r = Math.min(26, d.h * 0.16);
   const stroke = mixColor(APP.border, '#b9b2c8', hover);
-  const icon = d.compact ? Math.round(T.body * 1.1) : 46;
+  const icon = d.compact ? Math.round(T.body * 1.05) : 46;
   return (
     <div style={{ ...inBox(d) }}>
       <svg width={d.w + 2} height={d.h + 2} style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible' }} aria-hidden>
         <rect x={1.25} y={1.25} width={d.w - 2.5} height={d.h - 2.5} rx={r} ry={r} fill={hover > 0.001 ? `rgba(244, 242, 247, ${(0.3 * hover).toFixed(3)})` : 'none'} stroke={stroke} strokeWidth={2.5} strokeDasharray="9 7" />
       </svg>
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: d.compact ? 'row' : 'column', alignItems: 'center', justifyContent: 'center', gap: d.compact ? 18 : 14 }}>
-        <UploadIcon size={icon} color={APP.mutedFg} />
-        <div style={{ ...ui(T.body, WT.medium), color: APP.foreground }}>Drop files here or choose them</div>
-        {!d.compact ? <div style={{ ...ui(T.small - 1, WT.regular), color: APP.mutedFg, marginTop: -4 }}>PDF, Word, TXT or Markdown · up to 10 MB each</div> : null}
-      </div>
+      {d.compact ? (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <UploadIcon size={icon} color={APP.mutedFg} />
+            <div style={{ ...ui(T.body, WT.medium), color: APP.foreground }}>Drop files here or choose them</div>
+          </div>
+          <div style={{ ...ui(T.small - 1, WT.regular), color: APP.mutedFg }}>PDF, Word, TXT or Markdown · up to 10 MB each</div>
+        </div>
+      ) : (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+          <UploadIcon size={icon} color={APP.mutedFg} />
+          <div style={{ ...ui(T.body, WT.medium), color: APP.foreground }}>Drop files here or choose them</div>
+          <div style={{ ...ui(T.small - 1, WT.regular), color: APP.mutedFg, marginTop: -4 }}>PDF, Word, TXT or Markdown · up to 10 MB each</div>
+        </div>
+      )}
     </div>
   );
 };
@@ -356,10 +464,9 @@ const Knowledge: React.FC<{ t: number; S: WrittenStage; keys: readonly CursorKey
 };
 
 /**
- * The panel. `children` are the list's rows (frame px, at scroll 0). 16:9 draws them over the panel as before; 9:16 draws
- * them INSIDE the content box under the tab bar, so they scroll with the page and are cut by its edges like a phone's
- * list (written/stage.ts scrollAt: one scroll, on "knowledge"). `cursor` keys are frame px at their own times: the
- * pointer only ever acts before the scroll.
+ * The panel. `children` are the list's rows (frame px), drawn over the panel in both framings (fix:written: 9:16's
+ * content no longer scrolls under the tab bar — the whole tab fits the panel). `cursor` keys are frame px at their own
+ * times.
  */
 export const AppPanel: React.FC<{ t: number; S: WrittenStage; bar: TabBarGeometry; keys: readonly CursorKey[]; ink: string; children?: React.ReactNode }> = ({ t, S, bar, keys, ink, children }) => {
   const pp = panelPose(t, S);
@@ -368,10 +475,6 @@ export const AppPanel: React.FC<{ t: number; S: WrittenStage; bar: TabBarGeometr
   const barH = bar.height;
   const cx = P.x;
   const cy = P.y + barH;
-  const sc = scrollAt(t, S);
-  const inside = !!S.scroll;
-  // the scrolled content rides one transform (a sub-pixel glide layer while it moves; none at rest)
-  const scrollTf = sc > 0.001 ? `translateY(${(-sc).toFixed(3)}px)` : undefined;
   return (
     <div style={{ position: 'absolute', left: 0, top: 0, width: S.W, height: S.H, ...subpixel(Math.abs(pp.dx) + Math.abs(pp.dy) > 0.01 ? `translate(${pp.dx.toFixed(3)}px, ${pp.dy.toFixed(3)}px)` : undefined, pp.moving) }}>
       <Panel x={P.x} y={P.y} w={P.w} h={P.h} radius={P.radius} lift={pp.lift} ink={ink}>
@@ -379,15 +482,14 @@ export const AppPanel: React.FC<{ t: number; S: WrittenStage; bar: TabBarGeometr
       </Panel>
       <TabBar bar={bar} t={t} active={[{ at: -Infinity, tab: 'general' }, { at: W.tab.up, tab: 'knowledge' }]} cursor={keys} radius={P.radius} />
       <div style={{ position: 'absolute', left: cx, top: cy, width: P.w, height: P.h - barH, overflow: 'hidden', borderRadius: `0 0 ${P.radius}px ${P.radius}px` }}>
-        <div style={{ position: 'absolute', left: -cx, top: -cy, width: S.W, height: S.H, ...subpixel(scrollTf, scrolling(t, S)) }}>
+        <div style={{ position: 'absolute', left: -cx, top: -cy, width: S.W, height: S.H }}>
           <Swap t={t} at={W.tab.up}>
-            <General S={S} />
+            {S.vertical ? <GeneralPortrait S={S} /> : <General S={S} />}
             <Knowledge t={t} S={S} keys={keys} />
           </Swap>
-          {inside ? children : null}
         </div>
       </div>
-      {inside ? null : children}
+      {children}
     </div>
   );
 };

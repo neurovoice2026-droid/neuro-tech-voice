@@ -25,9 +25,10 @@
  * back on Knowledge (b08's list at rest) and the pointer settles onto Conversation as it lands (the hover), presses it on
  * beat 2 and releases (the underline springs across, the content swaps through its mask), crosses to the field and clicks
  * it. THE PUSH (stage.ts PUSH): from the caret to the last word the camera pushes slowly in (16:9 ×1.30, the page filling
- * the frame, Ava carried out past the left edge; 9:16 ×1.08 about the field), holds while the pointer hops to Save changes
- * and clicks it, and pulls back on the release — bringing Ava back in to relight on her first word. At rest long before
- * the act ends.
+ * the frame, Ava carried out past the left edge), holds while the pointer hops to Save changes and clicks it, and pulls
+ * back on the release — bringing Ava back in to relight on her first word. At rest long before the act ends. 9:16 has no
+ * push (fix:line): its page is b08's full-tab panel, the WHOLE current tab in frame at every moment (Knowledge as b08 left
+ * it, then Conversation with the line at its ad size at rest) — line/stage.ts 9:16 PORTRAIT PAGE.
  * Every time is LINE_LOCAL (src/kb/timing.ts, from kb2-vo-6's real word onsets); the layout and the poses are
  * scenes/line/stage.ts; the cut from b11 takes callEnd(), the cut into b13 hands over lineEnd().
  */
