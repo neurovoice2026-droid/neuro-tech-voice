@@ -33,7 +33,7 @@ const fmts = args.filter((a) => !a.startsWith('--'));
 const FORMATS = fmts.length ? fmts : ['16x9', '9x16'];
 const previews = args.includes('--previews');
 /** re-render layers over the grid, highest priority first (out/master/<comp>-x2-<layer>/) */
-const LAYERS = ['act2', 'act'];
+const LAYERS = ['act3', 'act2', 'act'];
 
 const T = await import(path.join(ROOT, 'src/kb/timing.ts'));
 const total = T.DURATION * T.SUB;
