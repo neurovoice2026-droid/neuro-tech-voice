@@ -384,13 +384,17 @@ export const RECORDING_LOCAL = (() => {
     /** the title leaves up through its masks a beat before the camera leaves the column */
     title2Out: pullBack - b(1),
     vo2: L('recording', VO2_AT),
-    /** "And the customer…": the camera pulls back and left to the in-person card (2 beats), the column sliding off */
+    /** "And the customer…": the camera pulls back and left to the in-person card, the column sliding off — 36 frames
+     *  CENTRED on "And": it leaves the column in the silence after "recording.", so the column has left the question's
+     *  place as "And the customer" rises (16:9: the card it carries in across that place is found there once it is
+     *  clear, scenes/Recording.tsx), and it lands on "customer" */
     pullBack,
-    pullBackTo: pullBack + b(2),
+    pull: [pullBack - 18, pullBack + 18] as const,
     /** the card comes forward .90 → 1 (SPRING.site) as the camera finds it */
     cardForward: pullBack + b(1),
-    /** "And the customer / in front of them?" rises beside it, a line per phrase: on "customer" (the card has passed) and on "in" */
-    question: [w2(2), w2(3)] as const,
+    /** "And the customer / in front of them?" rises beside it, a line per phrase: the first as a unit on its first
+     *  spoken word ("And", its onset − 2: the captions' lead), the second on "in" */
+    question: [w2(0) - 2, w2(3)] as const,
     /** "Waiting." is spoken ON the bar (the B5 is the bed's, MUSIC.waiting) */
     waiting: L('recording', WAITING),
     /** … and the display word rises ON it, like every word of the act (SPRING.display: the first sliver shows on

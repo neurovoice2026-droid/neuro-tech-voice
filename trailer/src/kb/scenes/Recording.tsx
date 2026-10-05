@@ -60,19 +60,34 @@ const CLOCK_LIFT = 44;
 /** vo-1's word k, act-local */
 const w1 = (k: number) => RL.vo1 + vWord('kb2-vo-1', k);
 
+/**
+ * 16:9 only: the pull-back carries the card in from the left straight through the question's place, where "And the
+ * customer" is already rising — so the card stays as the glide left it (stepped back, dimmed out) until the camera has
+ * carried it clear of the question's words, and is FOUND there: it steps forward out of the room (SPRING.site) as it
+ * comes up, on the camera's settle (every frame from FOUND[1] on is the old picture). 9:16 sets the question under the
+ * card: there the card comes in with the camera, as before.
+ */
+const FOUND16 = [PULL[1] - 8, PULL[1] + 4] as const;
+
 /** the card's depth, shade and opacity: as Part I left it (.90 far back); as the glide starts it takes one more
  *  step back into the room (scale −5 %, a deeper shade) and dims out; found again by the pull-back, it comes
- *  forward on the site spring */
-export function cardDepth(t: number) {
+ *  forward on the site spring (16:9: FOUND16) */
+export function cardDepth(t: number, vertical: boolean) {
   const d0 = repeatCardDepth(STOP);
-  const p = springUnit(t - RL.cardForward, SPRING.site);
-  const out = outOf(t, RL.cardOut);
+  // 16:9 from the pull-back on: still out until found (the glide's exit, run back)
+  const out = !vertical && t >= PULL[0] ? 1 - smoothstep(FOUND16[0], FOUND16[1], t) : outOf(t, RL.cardOut);
+  const p = springUnit(t - (vertical ? RL.cardForward : FOUND16[0]), SPRING.site);
   return {
     scale: (d0.scale + (1 - d0.scale) * p) * (1 - 0.05 * out),
     shade: d0.shade * Math.max(0, 1 - Math.min(1, p)) + 0.08 * out,
     opacity: 1 - out,
   };
 }
+
+const smoothstep = (a: number, b: number, x: number) => {
+  const u = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return u * u * (3 - 2 * u);
+};
 
 /** the titles: each word on its spoken onset (left-set, so a line fills from its axis); 9:16 wraps into the frame */
 function titleLines(vertical: boolean): { one: TitleLine[]; two: TitleLine[] } {
@@ -120,7 +135,7 @@ export const Recording: React.FC = () => {
   // layer instead (Repeat's parts do) — so: zooming whenever moving.
   const cm = camMotion((u) => camPose(u, G), t);
   const motion = { moving: cm.moving, zooming: cm.moving };
-  const card = cardDepth(t);
+  const card = cardDepth(t, v);
   const lines = titleLines(v);
   // the ground: Repeat's own (MUTED_MESH, its clock = the timeline), held where Part I's slow push left its
   // plane; the line light's pull stays, its rose tint is drained on the stop

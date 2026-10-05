@@ -7,17 +7,16 @@
  *   page     the swept lines stay on the page (call/Page.tsx): from CALL_LOCAL.drop the tokens she doesn't say
  *            (· 9:00–14:00 ·) leave up through their own masks and the sweep bands up out of theirs — no strip, no box
  *            outlives its words
- *   lift     on "We" (CALL_LOCAL.fly[0]) the page's PAPER recedes and fades out from under the kept words (stage.ts
- *            LIFT, call/Page.tsx): they stay where it set them, lifting a hair, drawn here from that frame on — polish
- *            round 2: flown straight off the page they crossed the white card's edge half on paper, half on the mesh,
- *            a staircase "We … Saturday / Sunday / closed"
- *   fly      once the paper has gone (LIFT.travel) every KEPT word (Saturday · Sunday · closed) glides TOGETHER over
- *            the bare ground — one eased path each, soft start, never two words on the same pixels (stage.ts
- *            `flights`) — to its slot in her sentence, growing from the page's size to the caption's by transform (the
- *            glyphs are set once, at the caption size; the weight eases 480 → 460 on the variable face), and DIVES into
- *            the slot: without stopping it sinks through the slot's own mask edge (the very mask the slot's word will
- *            rise out of) and is gone — the words are filed into her sentence, nothing waits on screen. Nothing parks,
- *            nothing is ever alone in transit, no word sits in her line before she says it
+ *   lift     on "We" (CALL_LOCAL.fly[0], the paper-lift hit) the page's PAPER recedes and fades out from under the kept
+ *            words (stage.ts LIFT, call/Page.tsx): they stay exactly where it set them (drawn here from that frame on, the
+ *            same type on the same sub-pixel layer — not a pixel moves at the hand-over)
+ *   drift    once the paper has gone (LIFT.travel) the kept words (Saturday / Sunday closed) drift TOGETHER — one rigid
+ *            cluster, soft start, growing a touch toward her size, ink easing to hers — toward her line (stage.ts
+ *            `drift`: a fraction of the way to "Saturday"'s slot), and DISSOLVE on the way: they are gone before they
+ *            could sit beside her words. Polish round 2 (the viewer): flown straight into their slots they crossed the
+ *            white card's edge half on paper, half on the mesh, and for ~.3 s the screen read a staircase
+ *            "We … Saturday / Sunday / closed" (9:16: "We closed"); nothing parks, nothing waits on screen, no word sits
+ *            in her line before she says it
  *   onsets   on each word's moment (CALL_LOCAL.reset: its onset − 2, captions' lead) its word rises into its slot out of
  *            that mask — her own words and the kept ones alike, a kept word whole ("Sundays," / "closed.") — so every
  *            state of the line reads as what she has said so far; "nine till two." takes the sunday key with "nine". The

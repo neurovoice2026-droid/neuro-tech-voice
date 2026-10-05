@@ -68,7 +68,9 @@ export function stageFor(vertical: boolean): Stage {
     P0,
     P1: { x: -1950, y: P0.y, zoom: P0.zoom },
     P2: { x: 0, y: -50, zoom: 1 },
-    column: { x: 42, top: 770, w: 996, h: 113, pitch: 100, pad: 23.5, fade: { a: 660, b: 770, c: 1450, d: 1630 } },
+    // the strip: b06's 16:9 strip at the 9:16 title size (940 × 56/64 — the strip written/Slips.tsx scales), so the
+    // folded row stays ≥ 40 px inside the frame's right edge while it is still being carried
+    column: { x: 42, top: 770, w: 822, h: 113, pitch: 100, pad: 23.5, fade: { a: 660, b: 770, c: 1450, d: 1630 } },
     title: { x: 86, y: 290 },
     question: { x: 130, y: 1030 },
     waiting: { x: 130, baseline: 1330 },
@@ -83,8 +85,9 @@ const pullEase = (u: number) => {
   return a * (1 - x) + b * x;
 };
 
-/** the pull-back: from a beat before "And" (the title has gone) to two beats after it */
-export const PULL = [RL.pullBack - 6, RL.pullBackTo] as const;
+/** the pull-back: 36 frames centred on "And" (timing.ts RECORDING_LOCAL.pull) — off the column as the title leaves, onto
+ *  the card on "customer" */
+export const PULL = RL.pull;
 
 /** The camera at act-local t (Camera props; x/y in near-plane px). */
 export function camPose(t: number, G: Stage): Pose {

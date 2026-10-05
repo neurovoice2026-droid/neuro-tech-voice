@@ -5,7 +5,8 @@
  *           crooked — the rolls' sheets behind, a strip higher each, the pad's two blank sheets under them)
  *   pick up the pile is squared and lifted off the desk (its shadow opening) and carried with the camera
  *   fold    on the way every written sheet folds to ONE line: ● FRONT DESK lifts out of its mask, "nine till
- *           two." glides up beside "Yes, Saturdays," on the same ruled line, and the paper closes round it —
+ *           two." rolls up out of its row and into the first row after "Yes, Saturdays," (word masks, never a
+ *           half-reflowed layout), and the paper closes round it —
  *           top edge down, bottom edge up, the right edge out to the column's width (the title role stays the
  *           title role); the ink settles from ink to slate, the answer said by rote
  *   deal    the strips deal down into one column, one per 16th, the top strip staying (the paper riffle):
@@ -22,7 +23,7 @@ import React from 'react';
 import { reveal, revealStyle } from '../../../components/Type';
 import { subpixel } from '../../../lib/glide';
 import { useLayout } from '../../../lib/layout';
-import { EASE, mix, mixHex, smooth, springUnit } from '../../../lib/motion';
+import { EASE, mix, mixHex, smooth, SPRING, springUnit } from '../../../lib/motion';
 import { maskBox, typeStyle } from '../../../lib/type';
 import { TYPE } from '../../../theme';
 import { APP, measureText, meshElevation, useKitFaces } from '../../kit';
@@ -66,11 +67,16 @@ export function scrollAt(t: number, G: Stage) {
   return (G.column.pitch / ROW_FRAMES) * (x < RAMP ? (x * x) / (2 * RAMP) : x - RAMP / 2);
 }
 
-/** the fold's second line: along its own line first (gx), then up beside the first (gy) once it has passed it */
-export function foldPhrase(t: number) {
-  const u = EASE.inOut(Math.min(1, Math.max(0, (t - RL.morph - 1) / 14)));
-  return { gx: smooth(0, 0.7, u), gy: smooth(0.55, 1, u) };
-}
+/**
+ * The fold's second line ROLLS up onto the first through the house masks (never a sliding, half-reflowed layout):
+ * "nine till two." leaves row two up through its word masks (EASE.in3, a frame a word), and the same words rise into
+ * row one's tail after "Saturdays," on the text spring (two frames a word, the first as the second-row word is half
+ * gone) — the paper's right edge already ahead of each word as it rises, its bottom edge following the leaving row up.
+ */
+const ROLL_OUT = { at: RL.morph + 1, step: 1, dur: 6 } as const;
+const ROLL_IN = { at: RL.morph + 5, step: 2 } as const;
+/** 0 → 1: how far row two has rolled out (its last word's exit), which the paper's bottom edge follows up */
+const rollOut = (t: number) => EASE.inOut(Math.min(1, Math.max(0, (t - ROLL_OUT.at) / (2 * ROLL_OUT.step + ROLL_OUT.dur))));
 
 /** a sheet's face geometry (scenes/repeat/Slips.tsx SlipFace, verbatim) */
 function faceOf(g: DeskLayout, vertical: boolean) {
@@ -98,6 +104,15 @@ const WordAt: React.FC<{ x: number; y: number; word: string; style: React.CSSPro
   <span style={{ position: 'absolute', left: 0, top: 0, ...style, whiteSpace: 'nowrap', ...subpixel(`translate(${x.toFixed(3)}px, ${y.toFixed(3)}px)`, true) }}>{word}</span>
 );
 
+/** a word at (x, y) in its own mask (lib/type maskBox), revealed / leaving by `r` (held on its sub-pixel layer) */
+const MaskedWordAt: React.FC<{ x: number; y: number; word: string; style: React.CSSProperties; r: ReturnType<typeof reveal> }> = ({ x, y, word, style, r }) => (
+  <span style={{ position: 'absolute', left: 0, top: 0, ...style, whiteSpace: 'nowrap', ...subpixel(`translate(${x.toFixed(3)}px, ${y.toFixed(3)}px)`, true) }}>
+    <span style={maskBox(0)}>
+      <span style={revealStyle(r, undefined, true)}>{word}</span>
+    </span>
+  </span>
+);
+
 /** One sheet of the pile: Part I's pad sheet at the stop, folding to a strip of the column. */
 const SheetView: React.FC<{ sh: Sheet; t: number; G: Stage; g: DeskLayout; ink: string; z: number }> = ({ sh, t, G, g, ink, z }) => {
   const L = useLayout();
@@ -122,15 +137,21 @@ const SheetView: React.FC<{ sh: Sheet; t: number; G: Stage; g: DeskLayout; ink: 
   const rot = rest.rot * (1 - sq);
   const squash = 1 + (rest.squash - 1) * (1 - sq);
   // the paper: the box closes round the first ruled line
-  // (the paper never closes over the travelling second line: its bottom waits for the line to rise, its
-  // right edge stays ahead of it)
-  const phrase = foldPhrase(t);
+  // (its bottom edge follows the second row up as it rolls out; its right edge is ahead of every word rolling
+  // into the first row's tail — the guard below never binds on the fold spring, it only keeps that true)
   const word0 = { size: s.size, weight: TYPE.title.weight, tracking: -0.02 };
-  const line1 = ANSWER_LINES[0].reduce((a, w) => a + measureText(w, word0) + 0.24 * s.size, 0);
-  const line2 = ANSWER_LINES[1].reduce((a, w, j) => a + measureText(w, word0) + (j ? 0.24 * s.size : 0), 0);
+  const gap0 = 0.24 * s.size;
+  const w1 = ANSWER_LINES[0].map((w) => measureText(w, word0));
+  const w2 = ANSWER_LINES[1].map((w) => measureText(w, word0));
+  const lineEnd = w1.reduce((a, b) => a + b + gap0, 0);
+  const x2 = w2.map((_, j) => w2.slice(0, j).reduce((a, b) => a + b + gap0, 0));
+  let rollNeed = 0;
+  ANSWER_LINES[1].forEach((_, j) => {
+    if (t > ROLL_IN.at + j * ROLL_IN.step) rollNeed = s.padX * 1.5 + lineEnd + x2[j] + w2[j];
+  });
   const boxTop = mix(0, top0, fold);
-  const boxBot = Math.max(mix(s.h, rowsTop + rowH + C.pad, fold), written ? rowsTop + rowH * (2 - phrase.gy) + C.pad : 0);
-  const boxW = Math.max(mix(s.w, C.w, fold), written ? s.padX * 2 + line1 * phrase.gx + line2 : 0);
+  const boxBot = Math.max(mix(s.h, rowsTop + rowH + C.pad, fold), written ? rowsTop + rowH * (2 - rollOut(t)) + C.pad : 0);
+  const boxW = Math.max(mix(s.w, C.w, fold), written ? rollNeed : 0);
   // the shadow: the front sheet lifted while carried; the sheets behind it lie flat until they are dealt
   const lifted = Math.sin(Math.PI * Math.min(1, Math.max(0, (t - s0) / (s1 - s0 + 6))));
   const lift = more ? 0.6 : sh.row === 0 ? mix(rest.lift, 0.6, sq) + 1.5 * lifted : mix(mix(rest.lift, 0.12, sq), 0.6, Math.min(1, deal)) + 0.9 * Math.sin(Math.PI * Math.min(1, deal));
@@ -141,8 +162,6 @@ const SheetView: React.FC<{ sh: Sheet; t: number; G: Stage; g: DeskLayout; ink: 
   const label = typeStyle('label', v, { tone: 'paper' });
   const title = typeStyle('title', v, { tone: 'paper', size: s.size });
   const dot = Math.round(labelSize * 0.3);
-  const word = { size: s.size, weight: TYPE.title.weight, tracking: -0.02 };
-  const gap = 0.24 * s.size;
   const col = mixHex(APP.foreground, STRIP_INK, f);
   let face: React.ReactNode = null;
   if (written) {
@@ -172,10 +191,8 @@ const SheetView: React.FC<{ sh: Sheet; t: number; G: Stage; g: DeskLayout; ink: 
         </>
       );
     } else {
-      // folding: the label lifts out; the second line glides up beside the first (2 frames a word)
+      // folding: the label lifts out; the second line rolls up onto the first through its masks (ROLL_OUT / ROLL_IN)
       const lab = reveal(t, -1e6, { exit: { at: RL.morph - 5, dur: 6 } });
-      const w1 = ANSWER_LINES[0].map((w) => measureText(w, word));
-      const lineEnd = w1.reduce((a, b) => a + b + gap, 0);
       face = (
         <>
           {lab.opacity > 0.001 ? (
@@ -192,23 +209,24 @@ const SheetView: React.FC<{ sh: Sheet; t: number; G: Stage; g: DeskLayout; ink: 
             let xx = 0;
             return ANSWER_LINES[0].map((w, j) => {
               const el = <WordAt key={`a${j}`} x={s.padX + xx} y={rowsTop - boxTop} word={w} style={{ ...title, lineHeight: `${rowH}px`, color: col }} />;
-              xx += w1[j] + gap;
+              xx += w1[j] + gap0;
               return el;
             });
           })()}
-          {(() => {
-            // the second line travels as ONE phrase: along its own line first, then up into place beside the
-            // first once it has passed "Saturdays," — an L of a path, so no word ever crosses another
-            const { gx, gy } = foldPhrase(t);
-            let x2 = 0;
-            return ANSWER_LINES[1].map((w, j) => {
-              const ww = measureText(w, word);
-              const xs = s.padX + x2;
-              const xt = s.padX + lineEnd + x2;
-              x2 += ww + gap;
-              return <WordAt key={`b${j}`} x={mix(xs, xt, gx)} y={mix(rowsTop + rowH, rowsTop, gy) - boxTop} word={w} style={{ ...title, lineHeight: `${rowH}px`, color: col }} />;
-            });
-          })()}
+          {ANSWER_LINES[1].map((w, j) => {
+            // row two: "nine till two." leaves up through its masks, a frame a word …
+            const out = reveal(t, -1e6, { exit: { at: ROLL_OUT.at + j * ROLL_OUT.step, dur: ROLL_OUT.dur } });
+            return out.opacity > 0.001 ? (
+              <MaskedWordAt key={`b${j}`} x={s.padX + x2[j]} y={rowsTop + rowH - boxTop} word={w} style={{ ...title, lineHeight: `${rowH}px`, color: col }} r={out} />
+            ) : null;
+          })}
+          {ANSWER_LINES[1].map((w, j) => {
+            // … and rises into row one's tail after "Saturdays," on the text spring, two frames a word
+            const at = ROLL_IN.at + j * ROLL_IN.step;
+            if (t < at - 1) return null;
+            const r = reveal(t, at, { config: SPRING.text, rise: 100, fade: 0.55 });
+            return <MaskedWordAt key={`c${j}`} x={s.padX + lineEnd + x2[j]} y={rowsTop - boxTop} word={w} style={{ ...title, lineHeight: `${rowH}px`, color: col }} r={r} />;
+          })}
         </>
       );
     }

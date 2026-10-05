@@ -271,9 +271,10 @@ export const turnPoint = (turn: { x: number; tag: number; scale: number }, p: XY
 
 /** THE LIFT (b11, polish round 2 — the viewer's "staircase across the card edge" and "ghost page"): on "We"
  *  (CALL_LOCAL.fly[0], the paper-lift hit) the page's PAPER recedes (stage `pageLift`) and fades out from under the
- *  words it is giving up — the kept words (Saturday · Sunday · closed) stay where it set them, lifting a hair — and only
- *  once it has gone do they travel (call/Reset.tsx, over `travel`): no word ever straddles the card's edge, and no dim
- *  page is left beside her sentence. The tokens she doesn't say have left up through their masks by then (`drop`). */
+ *  words it is giving up — the kept words (Saturday · Sunday · closed) stay where it set them — and only once it has gone
+ *  do they move: one cluster drifting toward her line and dissolving on the way (call/Reset.tsx, over `travel`; stage
+ *  `drift`). No word ever straddles the card's edge or sits beside hers, and no dim page is left beside her sentence.
+ *  The tokens she doesn't say leave up through their masks over `drop` frames each (call/Page.tsx), all gone before "We". */
 export const LIFT = { recede: [C.fly[0], C.fly[0] + 9] as const, travel: [C.fly[0] + 5, C.fly[0] + 21] as const, drop: 5 } as const;
 export const pageLiftAt = (t: number) => ease(t, LIFT.recede[0], LIFT.recede[1], EASE.inOut);
 
