@@ -19,9 +19,11 @@ export async function GET(request: Request) {
     const admin = await requireAdmin(request)
     const db = createAdminClient()
     const since = new Date(Date.now() - 24 * 3600_000).toISOString()
-    const [elCircuit, ctCircuit, resources, syncRows, webhookRows, failovers, recentCalls] = await Promise.all([
+    const [elCircuit, ctCircuit, elMedia, ctMedia, resources, syncRows, webhookRows, failovers, recentCalls] = await Promise.all([
       peek('elevenlabs'),
       peek('cartesia'),
+      peek('elevenlabs_media'),
+      peek('cartesia_media'),
       listPlatformResources(),
       db.from('agent_provider_resources').select('provider, status'),
       db.from('webhook_events').select('provider, status').in('status', ['received', 'processing', 'failed']),
@@ -63,7 +65,7 @@ export async function GET(request: Request) {
       {
         config: summarizeVoiceConfig(),
         problems: validateVoiceConfig(),
-        circuits: { elevenlabs: elCircuit.raw, cartesia: ctCircuit.raw },
+        circuits: { elevenlabs: elCircuit.raw, elevenlabs_media: elMedia.raw, cartesia: ctCircuit.raw, cartesia_media: ctMedia.raw },
         platform_resources: Object.fromEntries(Object.entries(resources).map(([k, v]) => [k, !!v])),
         agent_sync: tally(syncRows.data ?? [], 'provider', 'status'),
         webhook_backlog: tally(webhookRows.data ?? [], 'provider', 'status'),

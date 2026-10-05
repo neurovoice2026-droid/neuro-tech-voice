@@ -63,7 +63,7 @@ export async function POST(request: Request) {
 
     const id = newDocumentId()
     const storagePath = storagePathFor(org.id, agent.id, id, safeFileName(name, type.ext))
-    const { data: row, error: insertErr } = await supabase
+    const { data: row, error: insertErr } = await createAdminClient()
       .from('knowledge_documents')
       .insert({
         id,
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
       .createSignedUploadUrl(storagePath)
     if (signErr || !signed) {
       log.error('agent.knowledge.signed_url_failed', signErr, { docId: id })
-      const { error: cleanupErr } = await supabase.from('knowledge_documents').delete().eq('id', id).eq('org_id', org.id)
+      const { error: cleanupErr } = await createAdminClient().from('knowledge_documents').delete().eq('id', id).eq('org_id', org.id)
       if (cleanupErr) log.error('agent.knowledge.row_cleanup_failed', cleanupErr, { docId: id })
       throw new RequestError('internal', 'Could not prepare the upload. Please try again.', 500)
     }

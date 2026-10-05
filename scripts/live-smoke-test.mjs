@@ -46,7 +46,7 @@ const errors = d.problems.filter((p) => p.severity === 'error')
 console.log(`  config problems: ${errors.length} error(s), ${d.problems.length - errors.length} warning(s)`)
 for (const p of d.problems) console.log(`   - [${p.severity}] ${p.key}: ${p.message}`)
 for (const h of d.health ?? []) console.log(`  ${h.provider}: configured=${h.configured} ok=${h.ok} latency=${h.latencyMs ?? '-'}ms ${h.errorCode ?? ''}`)
-console.log(`  circuits: elevenlabs=${d.circuits.elevenlabs.state} cartesia=${d.circuits.cartesia.state}`)
+console.log(`  circuits: elevenlabs=${d.circuits.elevenlabs.state}/${d.circuits.elevenlabs_media.state} (api/media) cartesia=${d.circuits.cartesia.state}/${d.circuits.cartesia_media.state}`)
 console.log(`  webhook backlog: ${JSON.stringify(d.webhook_backlog)}; failovers 24h: ${d.failovers_24h.total} (final ${d.failovers_24h.final_failures})`)
 
 if (!flag('confirm-live')) {

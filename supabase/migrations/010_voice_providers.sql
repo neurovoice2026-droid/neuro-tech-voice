@@ -1,10 +1,15 @@
 -- ══════════════════════════════════════════════════════════════════════════════
 -- 010 · Voice providers: ElevenLabs primary, Cartesia fallback
 --
--- Zero-downtime: every new column is nullable or has a safe default, backfills
--- only touch rows that need them, and constraints are added only where the
--- existing data already satisfies them (otherwise a NOTICE explains why it was
--- skipped). Safe to re-run.
+-- Additive and idempotent (safe to re-run): every new column is nullable or
+-- has a constant default, backfills only touch rows that need them, and
+-- constraints are added only where the existing data already satisfies them
+-- (otherwise a NOTICE explains why it was skipped). The file runs as ONE
+-- transaction: organizations, agents, phone_numbers, calls and
+-- knowledge_documents are locked for its duration (seconds on a typical
+-- table; longer with a very large calls table). Apply it at low traffic.
+-- lock_timeout makes it fail fast (and leave nothing applied) instead of
+-- queueing behind a long-running transaction while blocking live calls.
 --
 -- Adds:
 --   • provider resource tracking (agent_provider_resources) with sync status
@@ -38,6 +43,9 @@ ALTER TABLE agents ADD COLUMN IF NOT EXISTS dynamic_variables jsonb NOT NULL DEF
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS fallback_voice_id text;
 -- 'synced' only after the provider confirmed the voice; never shown as active otherwise.
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS voice_sync_status text NOT NULL DEFAULT 'synced';
+-- When the current 'saving' started: a save interrupted by a timeout is
+-- settled by the next sync instead of showing "saving" forever.
+ALTER TABLE agents ADD COLUMN IF NOT EXISTS voice_sync_started_at timestamptz;
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS voice_sync_error text;
 -- Bumped by every change that must reach the providers; resources record the revision they hold.
 ALTER TABLE agents ADD COLUMN IF NOT EXISTS config_revision integer NOT NULL DEFAULT 1;
@@ -51,6 +59,8 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE agents ADD CONSTRAINT agents_voice_sync_status_check CHECK (voice_sync_status IN ('pending', 'saving', 'synced', 'failed'));
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+SET lock_timeout = '5s';
 
 -- Behaviour switches used to live in metadata.behavior_settings and never reached
 -- the provider. Copy them into the column the sync now reads (only once).
@@ -69,7 +79,7 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT org_id FROM agents GROUP BY org_id HAVING count(*) > 1) THEN
     CREATE UNIQUE INDEX IF NOT EXISTS agents_one_per_org ON agents (org_id);
   ELSE
-    RAISE NOTICE 'agents_one_per_org skipped: some organizations have duplicate agents. Run scripts/reconcile-voice-providers.ts --report and merge them, then re-run this migration.';
+    RAISE NOTICE 'agents_one_per_org skipped: some organizations have duplicate agents. Merge them with the "Duplicate agents" procedure in docs/voice-providers.md (section 10), then re-run this migration.';
   END IF;
 END $$;
 
@@ -187,7 +197,6 @@ ALTER TABLE calls ADD COLUMN IF NOT EXISTS usage_recorded_at timestamptz;
 ALTER TABLE calls ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
 
 ALTER TABLE calls DROP CONSTRAINT IF EXISTS calls_status_check;
--- NOT VALID + VALIDATE: the scan runs without blocking reads/writes.
 ALTER TABLE calls ADD CONSTRAINT calls_status_check CHECK (status IN (
   'completed', 'failed', 'busy', 'no-answer', 'in-progress',
   'ringing', 'canceled', 'after-hours', 'transferred'
@@ -456,13 +465,19 @@ BEGIN
       RAISE EXCEPTION 'billing fields are managed by the platform' USING ERRCODE = '42501';
     END IF;
   ELSIF TG_TABLE_NAME = 'agents' THEN
-    IF TG_OP = 'INSERT' AND NEW.elevenlabs_agent_id IS NOT NULL THEN
-      RAISE EXCEPTION 'elevenlabs_agent_id is managed by the platform' USING ERRCODE = '42501';
+    -- Voices are eligibility-checked server-side (the ElevenLabs workspace is
+    -- shared by every tenant), so they are written by the platform only.
+    IF TG_OP = 'INSERT' AND (NEW.elevenlabs_agent_id IS NOT NULL OR NEW.voice_id IS NOT NULL OR NEW.fallback_voice_id IS NOT NULL) THEN
+      RAISE EXCEPTION 'provider-managed agent fields are set by the platform' USING ERRCODE = '42501';
     END IF;
     IF TG_OP = 'UPDATE' AND (
          NEW.elevenlabs_agent_id IS DISTINCT FROM OLD.elevenlabs_agent_id
       OR NEW.org_id IS DISTINCT FROM OLD.org_id
+      OR NEW.voice_id IS DISTINCT FROM OLD.voice_id
+      OR NEW.voice_name IS DISTINCT FROM OLD.voice_name
+      OR NEW.fallback_voice_id IS DISTINCT FROM OLD.fallback_voice_id
       OR NEW.voice_sync_status IS DISTINCT FROM OLD.voice_sync_status
+      OR NEW.voice_sync_started_at IS DISTINCT FROM OLD.voice_sync_started_at
       OR NEW.config_revision IS DISTINCT FROM OLD.config_revision
     ) THEN
       RAISE EXCEPTION 'provider-managed agent fields are read-only' USING ERRCODE = '42501';
@@ -544,6 +559,37 @@ DROP TRIGGER IF EXISTS calls_guard ON calls;
 CREATE TRIGGER calls_guard BEFORE INSERT OR UPDATE ON calls
   FOR EACH ROW EXECUTE FUNCTION public.guard_platform_columns();
 
+-- ─── Tenant row policies: no direct INSERT/DELETE of platform-managed rows ────
+-- The original FOR ALL policies let a signed-in tenant delete and re-insert
+-- its organization (self-assigned plan/minutes/Stripe ids), delete its agent
+-- (orphaning the external agents in the shared provider workspaces) or
+-- delete/insert knowledge documents behind the server's back (rate limits,
+-- per-agent caps, provider cleanup). Those writes now happen only through
+-- the API routes (service role, scoped by the authorized org).
+DROP POLICY IF EXISTS "organizations_owner" ON organizations;
+DROP POLICY IF EXISTS "organizations_owner_select" ON organizations;
+DROP POLICY IF EXISTS "organizations_owner_update" ON organizations;
+CREATE POLICY "organizations_owner_select" ON organizations FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY "organizations_owner_update" ON organizations FOR UPDATE USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "agents_owner" ON agents;
+DROP POLICY IF EXISTS "agents_owner_select" ON agents;
+DROP POLICY IF EXISTS "agents_owner_update" ON agents;
+CREATE POLICY "agents_owner_select" ON agents FOR SELECT
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = auth.uid()));
+CREATE POLICY "agents_owner_update" ON agents FOR UPDATE
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = auth.uid()))
+  WITH CHECK (org_id IN (SELECT id FROM organizations WHERE user_id = auth.uid()));
+
+DROP POLICY IF EXISTS "knowledge_documents_owner" ON knowledge_documents;
+DROP POLICY IF EXISTS "knowledge_documents_owner_select" ON knowledge_documents;
+DROP POLICY IF EXISTS "knowledge_documents_owner_update" ON knowledge_documents;
+CREATE POLICY "knowledge_documents_owner_select" ON knowledge_documents FOR SELECT
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = auth.uid()));
+CREATE POLICY "knowledge_documents_owner_update" ON knowledge_documents FOR UPDATE
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = auth.uid()))
+  WITH CHECK (org_id IN (SELECT id FROM organizations WHERE user_id = auth.uid()));
+
 -- ─── RPC privileges ───────────────────────────────────────────────────────────
 -- SECURITY DEFINER functions are executable by PUBLIC by default; with the
 -- anon key any visitor could have called increment_minutes_used.
@@ -561,6 +607,9 @@ GRANT EXECUTE ON FUNCTION public.bump_agent_revision(uuid) TO service_role;
 -- authenticated user read/write every org's documents.
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'storage') THEN
+    -- Tenants only READ their own folder: uploads go through server-created
+    -- signed upload URLs and deletes through the server (rate limits, caps,
+    -- validation and cleanup all live there).
     -- Signed upload URLs do not enforce a size: cap the bucket itself at the
     -- ElevenLabs knowledge-base limit (content is validated server-side).
     EXECUTE 'UPDATE storage.buckets SET file_size_limit = 20971520 WHERE id = ''knowledge-documents''';
@@ -568,12 +617,8 @@ DO $$ BEGIN
     EXECUTE 'DROP POLICY IF EXISTS "knowledge_docs_owner" ON storage.objects';
     EXECUTE $p$
       CREATE POLICY "knowledge_docs_owner" ON storage.objects
-        FOR ALL TO authenticated
+        FOR SELECT TO authenticated
         USING (
-          bucket_id = 'knowledge-documents'
-          AND (storage.foldername(name))[1] IN (SELECT id::text FROM public.organizations WHERE user_id = auth.uid())
-        )
-        WITH CHECK (
           bucket_id = 'knowledge-documents'
           AND (storage.foldername(name))[1] IN (SELECT id::text FROM public.organizations WHERE user_id = auth.uid())
         )

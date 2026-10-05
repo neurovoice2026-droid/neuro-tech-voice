@@ -144,13 +144,20 @@ describe('cartesiaLifecycle.health', () => {
 })
 
 describe('resolveFallbackVoice', () => {
-  it('1) uses the agent’s explicit choice when the voice exists at Cartesia', async () => {
+  it('1) uses the agent’s explicit choice when the voice exists at Cartesia and is a public voice', async () => {
     vi.stubEnv('CARTESIA_FALLBACK_VOICES', JSON.stringify({ en: 'mapped-voice-en-01' }))
-    vi.mocked(ct.voices.get).mockResolvedValue(voice('cartesia-voice-456', 'Chosen'))
+    vi.mocked(ct.voices.get).mockResolvedValue({ ...voice('cartesia-voice-456', 'Chosen'), is_owner: false })
     const res = await resolveFallbackVoice(makeAgentSpec({ fallbackVoiceId: 'cartesia-voice-456' }))
     expect(res).toEqual({ voiceId: 'cartesia-voice-456', source: 'agent' })
     expect(ct.voices.get).toHaveBeenCalledWith('cartesia-voice-456')
     expect(ct.voices.list).not.toHaveBeenCalled()
+  })
+
+  it('1b) ignores a stored choice that is a private (non-public, unmapped) voice and uses the platform map', async () => {
+    vi.stubEnv('CARTESIA_FALLBACK_VOICES', JSON.stringify({ en: 'mapped-voice-en-01' }))
+    vi.mocked(ct.voices.get).mockResolvedValue({ ...voice('private-voice-789', 'Private'), is_owner: true })
+    const res = await resolveFallbackVoice(makeAgentSpec({ fallbackVoiceId: 'private-voice-789' }))
+    expect(res).toEqual({ voiceId: 'mapped-voice-en-01', source: 'platform_map' })
   })
 
   it('2) falls through to the CARTESIA_FALLBACK_VOICES map for the agent language', async () => {

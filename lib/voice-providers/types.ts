@@ -213,8 +213,16 @@ export interface NormalizedCallEvent {
   /** Provider conversation/call id. */
   providerCallId: string
   externalAgentId: string | null
-  /** Our calls.id when the provider echoes the dynamic variable we passed. */
+  /**
+   * Our calls.id when the provider echoes it. Only trusted when
+   * localCallIdTrusted is set (our own poll, or a SIP header only our trunk
+   * can set) or when localCallToken verifies to the same id: ElevenLabs
+   * dynamic variables can also be supplied by a client-started session.
+   */
   localCallId: string | null
+  /** Signed call token echoed with localCallId (ElevenLabs ntv_call_token). */
+  localCallToken?: string | null
+  localCallIdTrusted?: boolean
   twilioCallSid: string | null
   direction: 'inbound' | 'outbound' | null
   fromNumber: string | null

@@ -24,7 +24,8 @@ npm run dev                    # http://localhost:3000
 Database: apply the SQL files in `supabase/migrations/` in order (001 → 010) with
 the Supabase CLI or the SQL editor, and create the private Storage bucket from
 `supabase/STORAGE_BUCKET.sql`. Migration `010_voice_providers.sql` is idempotent
-and additive (safe to re-run, no downtime).
+and additive (safe to re-run); it briefly locks the main tables, so apply it at
+low traffic (see docs/voice-providers.md §6).
 
 ## Scripts
 

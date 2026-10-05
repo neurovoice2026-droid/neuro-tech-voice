@@ -12,7 +12,7 @@ import { createLogger, type Logger } from '@/lib/observability/logger'
 import { getTwilioClient, isTwilioConfigured } from '@/lib/twilio/client'
 import * as el from '@/lib/elevenlabs/client'
 import { publicBaseUrl } from '@/lib/voice-providers/config'
-import { planRouting } from '@/lib/voice-providers/routing'
+import { outboundRoutingInput, planRouting } from '@/lib/voice-providers/routing'
 import { RequestError } from '@/lib/api/http'
 import { maskPhone, normalizeE164 } from '@/lib/phone/e164'
 import { loadRoutingContext, type NumberRow } from './context'
@@ -102,7 +102,7 @@ export async function startOutboundCall(req: OutboundRequest, log: Logger = crea
 
   // app_routed: refuse early if no provider could take the call when answered.
   if (!ctx.routingInput) throw new RequestError('precondition_failed', 'Your agent is not ready to take calls.', 409)
-  const plan = planRouting({ ...ctx.routingInput, afterHours: { ...ctx.routingInput.afterHours, enabled: false } })
+  const plan = planRouting(outboundRoutingInput(ctx.routingInput))
   if (plan.kind !== 'connect') {
     throw new RequestError('precondition_failed', 'No voice provider is available right now. Please try again in a few minutes.', 409)
   }

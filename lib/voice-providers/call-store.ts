@@ -11,13 +11,16 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createLogger, type Logger } from '@/lib/observability/logger'
 import { emitProviderEvent } from '@/lib/observability/telemetry'
-import { mergeCallEvent, type StoredCall } from './call-merge'
+import { isFromOtherProvider, mergeCallEvent, type StoredCall } from './call-merge'
 import type { NormalizedCallEvent } from './types'
 import type { VoiceProvider } from './errors'
 import { executeWorkflows, type CallContext } from '@/lib/workflows/executor'
 import { sendEmail } from '@/lib/email/client'
 import { usageAlertEmail } from '@/lib/email/templates'
 import { PLANS, type Plan } from '@/types'
+import { verifyCallToken } from '@/lib/telephony/tokens'
+import { reportOutcome } from './circuit-registry'
+import { earlyFailureWindowSeconds } from './config'
 
 const STORED_COLUMNS =
   'id, org_id, agent_id, status, lifecycle_rank, provider, provider_call_id, elevenlabs_conversation_id, cartesia_call_id, transcript, summary, duration_seconds, started_at, ended_at, routing_reason, outcome, direction, caller_number, from_number, to_number, sentiment, updated_at, workflows_triggered_at'
@@ -36,11 +39,26 @@ interface CallRow extends StoredCall {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+/**
+ * Our calls.id carried by the event, if it can be trusted: set by our own
+ * code (poll, SIP header from our trunk) or accompanied by the signed call
+ * token we injected. An ElevenLabs client-started session can send any
+ * dynamic variables, so a bare ntv_call_id is never trusted (it could
+ * attach a fake conversation to someone's call and consume its billing key).
+ */
+export function trustedLocalCallId(event: NormalizedCallEvent): string | null {
+  const id = event.localCallId
+  if (!id || !UUID.test(id)) return null
+  if (event.localCallIdTrusted) return id
+  return verifyCallToken(event.localCallToken, 'transfer', Date.now(), { ignoreExpiry: true }) === id ? id : null
+}
+
 async function findCall(db: SupabaseClient, event: NormalizedCallEvent): Promise<CallRow | null> {
   const tries: Array<[string, string]> = []
-  if (event.localCallId && UUID.test(event.localCallId)) tries.push(['id', event.localCallId])
+  const localId = trustedLocalCallId(event)
+  if (localId) tries.push(['id', localId])
+  // provider_call_id is always written together with these indexed columns.
   tries.push([event.provider === 'elevenlabs' ? 'elevenlabs_conversation_id' : 'cartesia_call_id', event.providerCallId])
-  tries.push(['provider_call_id', event.providerCallId])
   if (event.twilioCallSid) tries.push(['twilio_call_sid', event.twilioCallSid])
   for (const [col, val] of tries) {
     const { data, error } = await db.from('calls').select(STORED_COLUMNS).eq(col, val).limit(1).maybeSingle()
@@ -70,6 +88,33 @@ async function ownerOf(db: SupabaseClient, provider: VoiceProvider, externalAgen
   return null
 }
 
+/**
+ * A Cartesia event for a SIP fallback call arrives without our call id when
+ * Cartesia does not echo the SIP header, and before any poll stored the
+ * Cartesia call id on our row. Match the routed row instead of creating a
+ * second ("native") one: same org, served by Cartesia, no Cartesia id yet,
+ * same two numbers (our line + the other party, in either direction),
+ * created within a few minutes of the event.
+ */
+async function findRoutedCartesiaCall(db: SupabaseClient, orgId: string, event: NormalizedCallEvent): Promise<CallRow | null> {
+  if (event.provider !== 'cartesia' || !event.fromNumber || !event.toNumber) return null
+  const at = event.startedAt ? Date.parse(event.startedAt) : Date.now()
+  const { data, error } = await db
+    .from('calls')
+    .select(STORED_COLUMNS)
+    .eq('org_id', orgId)
+    .eq('provider', 'cartesia')
+    .is('cartesia_call_id', null)
+    .gte('created_at', new Date(at - 10 * 60_000).toISOString())
+    .lte('created_at', new Date(at + 5 * 60_000).toISOString())
+    .order('created_at', { ascending: false })
+    .limit(10)
+  if (error) throw new Error(`calls routed-row lookup failed: ${error.message}`)
+  const pair = new Set([event.fromNumber, event.toNumber])
+  const match = (data ?? []).find((c) => pair.has(c.from_number as string) && pair.has(c.to_number as string))
+  return (match as CallRow | undefined) ?? null
+}
+
 export interface ApplyResult {
   callId: string | null
   outcome: 'created' | 'updated' | 'unchanged' | 'unowned' | 'deleted'
@@ -79,7 +124,8 @@ export interface ApplyResult {
 async function wasDeleted(db: SupabaseClient, orgId: string, event: NormalizedCallEvent): Promise<boolean> {
   const base = () => db.from('audit_log').select('id').eq('org_id', orgId).eq('action', 'call.deleted')
   const checks = [base().contains('details', { provider_call_ids: [event.providerCallId] }).limit(1)]
-  if (event.localCallId && UUID.test(event.localCallId)) checks.push(base().eq('target_id', event.localCallId).limit(1))
+  const localId = trustedLocalCallId(event)
+  if (localId) checks.push(base().eq('target_id', localId).limit(1))
   for (const { data, error } of await Promise.all(checks)) {
     if (error) throw new Error(`audit_log lookup failed: ${error.message}`)
     if ((data?.length ?? 0) > 0) return true
@@ -92,7 +138,11 @@ export async function applyCallEvent(event: NormalizedCallEvent, log: Logger = c
   const l = log.child({ provider: event.provider, providerCallId: event.providerCallId })
 
   for (let attempt = 0; attempt < 3; attempt++) {
-    const current = await findCall(db, event)
+    let current = await findCall(db, event)
+    if (!current && event.provider === 'cartesia') {
+      const owner = await ownerOf(db, event.provider, event.externalAgentId)
+      if (owner) current = await findRoutedCartesiaCall(db, owner.org_id, event)
+    }
     const patch = mergeCallEvent(current, event)
 
     if (!current) {
@@ -127,6 +177,16 @@ export async function applyCallEvent(event: NormalizedCallEvent, log: Logger = c
       return { callId: data.id as string, outcome: 'created' }
     }
 
+    if (isFromOtherProvider(current, event)) {
+      // Abandoned conversation of the provider that did not serve the call:
+      // record its id only; no usage, no workflows (call-merge.ts).
+      l.info('call_event.other_provider_ignored', { callId: current.id, servedBy: current.provider })
+      if (patch && Object.keys(patch).length) {
+        const { error } = await db.from('calls').update(patch).eq('id', current.id)
+        if (error) throw new Error(`calls update failed: ${error.message}`)
+      }
+      return { callId: current.id, outcome: 'unchanged' }
+    }
     if (!patch || Object.keys(patch).length === 0) {
       await afterWrite(db, current.id, current.org_id, event, l)
       return { callId: current.id, outcome: 'unchanged' }
@@ -147,6 +207,11 @@ export async function applyCallEvent(event: NormalizedCallEvent, log: Logger = c
 }
 
 async function afterWrite(db: SupabaseClient, callId: string, orgId: string, event: NormalizedCallEvent, log: Logger) {
+  // A conversation that outlived the early-failure window proves the
+  // provider's media path works (closes/keeps closed its media circuit).
+  if (event.kind === 'call.completed' && typeof event.durationSeconds === 'number' && event.durationSeconds > earlyFailureWindowSeconds()) {
+    await reportOutcome(`${event.provider}_media`, { ok: true })
+  }
   if (event.kind === 'call.completed' && typeof event.durationSeconds === 'number' && event.durationSeconds > 0) {
     await recordUsage(db, { orgId, callId, seconds: event.durationSeconds, provider: event.provider, source: `${event.provider}_webhook` }, log)
   }

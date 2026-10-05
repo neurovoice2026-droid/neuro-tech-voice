@@ -80,9 +80,21 @@ function AudioPlayer({ url, fallbackDuration }: { url: string; fallbackDuration:
     setBuffering(true)
     audio.play().then(
       () => setBuffering(false),
-      () => {
+      (err: unknown) => {
         setBuffering(false)
-        setFailed(true)
+        const name = err instanceof DOMException ? err.name : null
+        // Pausing while it buffers rejects the pending play() with AbortError:
+        // the recording is fine, the user just stopped it.
+        if (name === 'AbortError') return
+        if (name === 'NotSupportedError') {
+          setFailed(true)
+          return
+        }
+        // e.g. NotAllowedError (browser playback policy): keep the player so
+        // the user can try again; a broken source is reported via onError.
+        setPlaying(false)
+        console.warn('Recording playback did not start', err)
+        toast.error('Playback did not start', { description: 'Press play to try again.' })
       },
     )
   }

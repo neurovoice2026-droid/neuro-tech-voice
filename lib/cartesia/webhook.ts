@@ -67,15 +67,16 @@ export function normalizeCartesiaCall(call: Partial<CartesiaCall> & Obj, extras:
   const duration = start && end ? Math.max(0, Math.round((Date.parse(end) - Date.parse(start)) / 1000)) : null
   const endReason = str(call.end_reason)
   const status = str(call.status)
-  const dynamic = obj(call.dynamic_variables)
   const headers = obj(tp.headers)
-  const localCallId = str(dynamic.ntv_call_id) ?? str(headers['X-NTV-Call-Id']) ?? str(headers['x-ntv-call-id'])
+  // Only our SIP leg (platform trunk credentials) can set this header.
+  const localCallId = str(headers['X-NTV-Call-Id']) ?? str(headers['x-ntv-call-id'])
   const direction: 'inbound' | 'outbound' | null = tp.direction === 'outbound' ? 'outbound' : tp.direction === 'inbound' ? 'inbound' : null
   const base = {
     provider: 'cartesia' as const,
     providerCallId: id,
     externalAgentId: str(call.agent_id),
     localCallId,
+    localCallIdTrusted: !!localCallId,
     twilioCallSid: null,
     direction,
     fromNumber: str(tp.from),

@@ -16,7 +16,7 @@ import { toProviderError } from '@/lib/voice-providers/errors'
 import { publicBaseUrl } from '@/lib/voice-providers/config'
 import { ingressUrls, applyNumberRouting } from '@/lib/telephony/binding'
 import { syncAgent } from '@/lib/voice-providers/agent-sync'
-import { peek } from '@/lib/voice-providers/circuit-registry'
+import { peekProvider } from '@/lib/voice-providers/circuit-registry'
 import { maskPhone } from '@/lib/phone/e164'
 
 interface NumberRow {
@@ -117,14 +117,14 @@ export async function GET(request: Request) {
       }),
     )
 
-    const [elCircuit, ctCircuit] = await Promise.all([peek('elevenlabs'), peek('cartesia')])
+    const [elCircuit, ctCircuit] = await Promise.all([peekProvider('elevenlabs'), peekProvider('cartesia')])
     return NextResponse.json(
       {
         agent: agent
           ? { name: agent.name, is_active: agent.is_active, voice_sync_status: agent.voice_sync_status, voice_sync_error: agent.voice_sync_error }
           : null,
         providers: resources.map((r) => ({ provider: r.provider, status: r.status, has_external_agent: !!r.external_id, last_error: r.last_error, last_synced_at: r.last_synced_at })),
-        provider_health: { elevenlabs: elCircuit.state, cartesia: ctCircuit.state },
+        provider_health: { elevenlabs: elCircuit, cartesia: ctCircuit },
         numbers: report,
       },
       { headers: { 'Cache-Control': 'no-store' } },

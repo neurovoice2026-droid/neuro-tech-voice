@@ -1,4 +1,7 @@
 // PATCH  /api/phone/[id] { is_active?, routing_mode? } → number (+ binding result)
+//        The binding runs when the mode changes, and also when the same mode is
+//        sent again while the number is not 'ready' (a retry after a failed
+//        attempt re-applies it instead of reporting success without a binding).
 // DELETE /api/phone/[id] → releases the number everywhere (provider imports,
 //        Twilio, Stripe) before dropping the row.
 import { NextResponse } from 'next/server'
@@ -16,6 +19,9 @@ import { isProviderError } from '@/lib/voice-providers/errors'
 import { applyNumberRouting } from '@/lib/telephony/binding'
 import { bumpRevision, syncAgent } from '@/lib/voice-providers/agent-sync'
 import { maskPhone } from '@/lib/phone/e164'
+
+// Agent re-sync + number binding (provider round-trips) on a routing change.
+export const maxDuration = 60
 
 const IdParam = z.uuid()
 const PatchBody = z
@@ -46,7 +52,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
     const { data: current, error: readErr } = await supabase
       .from('phone_numbers')
-      .select('id, agent_id, routing_mode')
+      .select('id, agent_id, routing_mode, routing_status')
       .eq('id', id)
       .eq('org_id', org.id)
       .maybeSingle()
@@ -59,7 +65,8 @@ export async function PATCH(request: Request, { params }: Params) {
     }
 
     let binding: Awaited<ReturnType<typeof applyNumberRouting>> | null = null
-    if (body.routing_mode && body.routing_mode !== current.routing_mode) {
+    // Same mode re-sent while not 'ready' (e.g. after a failed attempt): re-apply.
+    if (body.routing_mode && (body.routing_mode !== current.routing_mode || current.routing_status !== 'ready')) {
       await enforceRateLimit(RATE_LIMITS.agentSync, org.id)
       if (body.routing_mode === 'native_elevenlabs' && !el.isConfigured()) {
         throw new RequestError('not_configured', 'Direct ElevenLabs routing is not available on this platform.', 503)
@@ -80,7 +87,12 @@ export async function PATCH(request: Request, { params }: Params) {
         if (res && res.status !== 'ready') log.warn('phone.routing_agent_sync_not_ready', { status: res.status })
       }
       binding = await applyNumberRouting(id, log)
-      log.info('phone.routing_mode_changed', { mode: body.routing_mode, status: binding.status })
+      log.info('phone.routing_mode_changed', {
+        mode: body.routing_mode,
+        previousMode: current.routing_mode,
+        previousStatus: current.routing_status,
+        status: binding.status,
+      })
     }
 
     const { data, error } = await supabase.from('phone_numbers').select('*, agents(name)').eq('id', id).eq('org_id', org.id).single()

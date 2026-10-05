@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { csvCell, searchExpression, timeRangeExpression, combineOrGroups, zonedDayStart, rangeStart, rangeEnd, parseCallId, CallListQuerySchema, serializeListItem, providerTargets, wallTime, shiftMonths } from '@/lib/calls/serialize'
+import { applyCallFilters, csvCell, searchExpression, timeRangeExpression, combineOrGroups, zonedDayStart, rangeStart, rangeEnd, parseCallId, CallListQuerySchema, serializeListItem, providerTargets, wallTime, shiftMonths } from '@/lib/calls/serialize'
 import { describeFailoverReason, handledBy, failoverReasonLabel, terminationReasonLabel, humanizeKey } from '@/lib/calls/labels'
 
 describe('csv', () => {
@@ -101,5 +101,36 @@ describe('blank params', () => {
     expect(r.dateFrom).toBeUndefined()
     expect(CallListQuerySchema.safeParse({ status: 'bogus' }).success).toBe(false)
     expect(CallListQuerySchema.safeParse({ page: 'abc' }).success).toBe(false)
+  })
+})
+describe('filters', () => {
+  interface Recorder {
+    eq(column: string, value: string): Recorder
+    gte(column: string, value: number): Recorder
+    or(filters: string): Recorder
+  }
+  function recorder() {
+    const ops: Array<[string, ...unknown[]]> = []
+    const q: Recorder = {
+      eq: (column, value) => (ops.push(['eq', column, value]), q),
+      gte: (column, value) => (ops.push(['gte', column, value]), q),
+      or: (filters) => (ops.push(['or', filters]), q),
+    }
+    return { q, ops }
+  }
+
+  it('transferred matches the outcome (or legacy status) in the single or= param', () => {
+    const { q, ops } = recorder()
+    applyCallFilters(q, CallListQuerySchema.parse({ status: 'transferred', search: 'programare' }), 'UTC')
+    expect(ops.some((o) => o[0] === 'eq' && o[1] === 'status')).toBe(false)
+    const ors = ops.filter((o) => o[0] === 'or')
+    expect(ors).toHaveLength(1)
+    expect(ors[0][1]).toBe('and(or(outcome.eq.transferred,status.eq.transferred),or(summary_title.ilike."*programare*",summary.ilike."*programare*"))')
+  })
+
+  it('other statuses filter the status column', () => {
+    const { q, ops } = recorder()
+    applyCallFilters(q, CallListQuerySchema.parse({ status: 'completed' }), 'UTC')
+    expect(ops).toEqual([['eq', 'status', 'completed']])
   })
 })

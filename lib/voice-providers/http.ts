@@ -43,7 +43,12 @@ export interface ProviderRequest {
   retry?: RetryPolicy
   /** POST/PATCH are retried only when the caller says the operation is idempotent. */
   idempotent?: boolean
-  /** Whether this call participates in the breaker (default true for providers). */
+  /**
+   * Whether this call feeds/consults the routing circuit breaker. Off by
+   * default: only live-call requests (register-call, outbound call) opt in,
+   * so tenant-triggered work (previews, catalog, uploads, syncs) can never
+   * open the circuit that routes every organization's calls.
+   */
   breaker?: boolean
   responseKind?: ResponseKind
   signal?: AbortSignal
@@ -167,7 +172,7 @@ export async function providerRequest<T = unknown>(req: ProviderRequest): Promis
   const method = req.method ?? 'GET'
   const policy = req.retry ?? (IDEMPOTENT_METHODS.has(method) || req.idempotent ? DEFAULT_RETRY : NO_RETRY)
   const mayRetry = IDEMPOTENT_METHODS.has(method) || req.idempotent === true
-  const useBreaker = (req.breaker ?? true) && isVoiceProvider(req.system)
+  const useBreaker = req.breaker === true && isVoiceProvider(req.system)
   const ctx = req.context ?? {}
 
   if (useBreaker) {

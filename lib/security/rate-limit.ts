@@ -27,6 +27,7 @@ export const RATE_LIMITS = {
   testCall: { name: 'test_call', limit: 5, windowSeconds: 600 },
   outboundCall: { name: 'outbound_call', limit: 30, windowSeconds: 3_600 },
   knowledgeUpload: { name: 'knowledge_upload', limit: 30, windowSeconds: 3_600 },
+  knowledgeProcess: { name: 'knowledge_process', limit: 60, windowSeconds: 3_600 },
   agentSync: { name: 'agent_sync', limit: 30, windowSeconds: 600 },
   voiceCatalog: { name: 'voice_catalog', limit: 120, windowSeconds: 60 },
   callDelete: { name: 'call_delete', limit: 60, windowSeconds: 600 },

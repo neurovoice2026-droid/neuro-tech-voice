@@ -47,10 +47,24 @@ export function outcomeFrom(event: NormalizedCallEvent): CallOutcome | null {
   return null
 }
 
+/** True when the stored call is served by a different provider than the event's. */
+export function isFromOtherProvider(current: Pick<StoredCall, 'provider'> | null, event: Pick<NormalizedCallEvent, 'provider'>): boolean {
+  return !!current?.provider && current.provider !== event.provider
+}
+
 /** Returns the column patch to apply, or null when the event changes nothing. */
 export function mergeCallEvent(current: StoredCall | null, event: NormalizedCallEvent): Record<string, unknown> | null {
   const rank = current?.lifecycle_rank ?? 0
   const patch: Record<string, unknown> = {}
+
+  // The call is served by another provider (e.g. ElevenLabs failed in the
+  // first seconds and Cartesia took over): the abandoned conversation must
+  // not overwrite status, transcript, duration or billing. Keep only its id.
+  if (isFromOtherProvider(current, event)) {
+    if (event.provider === 'elevenlabs' && !current?.elevenlabs_conversation_id) patch.elevenlabs_conversation_id = event.providerCallId
+    if (event.provider === 'cartesia' && !current?.cartesia_call_id) patch.cartesia_call_id = event.providerCallId
+    return Object.keys(patch).length ? patch : null
+  }
 
   // Provider identity: always safe to fill.
   if (!current?.provider) patch.provider = event.provider

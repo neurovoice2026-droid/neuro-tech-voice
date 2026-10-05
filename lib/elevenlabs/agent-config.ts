@@ -163,6 +163,12 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
       // Outbound calls get their own opening line; nothing else is overridable.
       conversation_config_override: { agent: { first_message: true } },
     },
+    // Every legitimate session starts server-side (register-call, outbound
+    // call, native telephony): nobody may open an anonymous web session on a
+    // tenant's agent (it could inject dynamic variables and burn minutes).
+    // Opt out with ELEVENLABS_AGENT_AUTH=false only if a live test shows a
+    // telephony path that needs it.
+    auth: { enable_auth: process.env.ELEVENLABS_AGENT_AUTH !== 'false' },
   }
   if (platform.postCallWebhookId) {
     platform_settings.workspace_overrides = {

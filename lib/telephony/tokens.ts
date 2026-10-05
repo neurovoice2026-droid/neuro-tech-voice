@@ -33,7 +33,12 @@ export function signCallToken(callId: string, purpose: CallTokenPurpose, ttlSeco
 }
 
 /** Returns the call id when the token is authentic, unexpired and for `purpose`. */
-export function verifyCallToken(token: string | null | undefined, purpose: CallTokenPurpose, now = Date.now()): string | null {
+export function verifyCallToken(
+  token: string | null | undefined,
+  purpose: CallTokenPurpose,
+  now = Date.now(),
+  opts: { ignoreExpiry?: boolean } = {},
+): string | null {
   if (!token || token.length > 512) return null
   const [body, sig] = token.split('.')
   if (!body || !sig) return null
@@ -47,6 +52,8 @@ export function verifyCallToken(token: string | null | undefined, purpose: CallT
   if (!parsed.ok || !parsed.value || typeof parsed.value !== 'object') return null
   const payload = parsed.value as Payload
   if (payload.p !== purpose || typeof payload.c !== 'string' || typeof payload.e !== 'number') return null
-  if (payload.e < Math.floor(now / 1000)) return null
+  // ignoreExpiry: correlation only (post-call webhooks can be retried hours
+  // later); the signature still binds the token to this call and purpose.
+  if (!opts.ignoreExpiry && payload.e < Math.floor(now / 1000)) return null
   return /^[0-9a-f-]{36}$/i.test(payload.c) ? payload.c : null
 }

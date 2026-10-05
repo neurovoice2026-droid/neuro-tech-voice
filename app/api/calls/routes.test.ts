@@ -79,6 +79,14 @@ describe('list', () => {
     expect(String(or?.[1])).toContain('started_at.gte."2026-09-30T21:00:00.000Z"')
     expect(ops).toContainEqual(['range', 0, 24])
   })
+  it('transferred status filters on the outcome', async () => {
+    handler = () => ({ data: [], error: null, count: 0 })
+    const res = await listGET(req('/api/calls?status=transferred'))
+    expect(res.status).toBe(200)
+    const ops = calls[0].ops
+    expect(ops).not.toContainEqual(['eq', 'status', 'transferred'])
+    expect(ops).toContainEqual(['or', 'outcome.eq.transferred,status.eq.transferred'])
+  })
   it('400 on bad params', async () => {
     const res = await listGET(req('/api/calls?limit=1000'))
     expect(res.status).toBe(400)
@@ -159,6 +167,40 @@ describe('audio', () => {
     expect(res.headers.get('cache-control')).toBe('private, no-store')
     expect(res.headers.get('content-disposition')).toMatch(/^inline;/)
     expect(await res.text()).toBe('RIFF')
+    expect(res.headers.get('accept-ranges')).toBe('bytes')
+    expect(res.headers.get('content-length')).toBe('4')
+  })
+  it('serves byte ranges so the player can seek', async () => {
+    handler = () => ({ data: ROW, error: null })
+    const audio = () => new Response('0123456789', { headers: { 'content-type': 'audio/mpeg' } })
+    vi.mocked(conversations.audio).mockImplementation(async () => audio())
+
+    let res = await audioGET(req('/a', { headers: { range: 'bytes=2-5' } }), params(ROW.id))
+    expect(res.status).toBe(206)
+    expect(res.headers.get('content-range')).toBe('bytes 2-5/10')
+    expect(res.headers.get('content-length')).toBe('4')
+    expect(res.headers.get('accept-ranges')).toBe('bytes')
+    expect(res.headers.get('cache-control')).toBe('private, no-store')
+    expect(await res.text()).toBe('2345')
+
+    res = await audioGET(req('/a', { headers: { range: 'bytes=7-' } }), params(ROW.id))
+    expect(res.status).toBe(206)
+    expect(res.headers.get('content-range')).toBe('bytes 7-9/10')
+    expect(await res.text()).toBe('789')
+
+    res = await audioGET(req('/a', { headers: { range: 'bytes=-3' } }), params(ROW.id))
+    expect(res.status).toBe(206)
+    expect(await res.text()).toBe('789')
+
+    res = await audioGET(req('/a', { headers: { range: 'bytes=0-999' } }), params(ROW.id))
+    expect(res.status).toBe(206)
+    expect(res.headers.get('content-range')).toBe('bytes 0-9/10')
+
+    for (const bad of ['bytes=10-', 'bytes=5-2', 'bytes=-0', 'bytes=0-1,4-5', 'items=0-1']) {
+      res = await audioGET(req('/a', { headers: { range: bad } }), params(ROW.id))
+      expect(res.status, bad).toBe(416)
+      expect(res.headers.get('content-range')).toBe('bytes */10')
+    }
   })
   it('404 when deleted / upstream missing', async () => {
     handler = () => ({ data: { ...ROW, recording_status: 'deleted' }, error: null })

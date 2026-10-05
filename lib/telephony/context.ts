@@ -5,7 +5,7 @@ import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { peek } from '@/lib/voice-providers/circuit-registry'
+import { peekProvider } from '@/lib/voice-providers/circuit-registry'
 import { forcedProvider, platformFallbackEnabled, cartesiaSip } from '@/lib/voice-providers/config'
 import { isConfigured as elConfigured } from '@/lib/elevenlabs/client'
 import { isConfigured as ctConfigured } from '@/lib/cartesia/client'
@@ -93,7 +93,7 @@ export async function loadRoutingContext(number: NumberRow, now = new Date()): P
   const transfer = readTransferSettings(agentRow.transfer_settings)
   const afterHours = readAfterHours(agentRow.after_hours)
   const hours = evaluateWorkingHours(readWorkingHours(agentRow.working_hours), orgCtx.timezone, afterHours, now)
-  const [elCircuit, ctCircuit] = await Promise.all([peek('elevenlabs'), peek('cartesia')])
+  const [elCircuit, ctCircuit] = await Promise.all([peekProvider('elevenlabs'), peekProvider('cartesia')])
   const sip = cartesiaSip()
 
   const agent = {
@@ -116,12 +116,12 @@ export async function loadRoutingContext(number: NumberRow, now = new Date()): P
     fallbackEnabled: platformFallbackEnabled() && orgCtx.voice_fallback_enabled,
     force: forcedProvider(),
     providers: {
-      elevenlabs: { configured: elConfigured(), hasResource: !!externalIds.elevenlabs, circuit: elCircuit.state },
+      elevenlabs: { configured: elConfigured(), hasResource: !!externalIds.elevenlabs, circuit: elCircuit },
       cartesia: {
         configured: ctConfigured() && !!sip.username && !!sip.password,
         // The SIP route needs both the fallback agent and the number imported for it.
         hasResource: !!externalIds.cartesia && !!number.cartesia_phone_number_id,
-        circuit: ctCircuit.state,
+        circuit: ctCircuit,
       },
     },
     hours,

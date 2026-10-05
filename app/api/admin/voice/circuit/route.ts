@@ -13,7 +13,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { forceCircuit, peek } from '@/lib/voice-providers/circuit-registry'
 
 const Body = z.object({
-  provider: z.enum(['elevenlabs', 'cartesia']),
+  // API circuit (live-call requests + health probe) or media circuit (call outcomes).
+  provider: z.enum(['elevenlabs', 'cartesia', 'elevenlabs_media', 'cartesia_media']),
   action: z.enum(['open', 'close', 'auto']),
   reason: z.string().trim().max(300).optional(),
 })
@@ -23,8 +24,9 @@ export async function GET(request: Request) {
   const log = createLogger({ requestId, route: 'admin.voice.circuit' })
   try {
     await requireAdmin(request)
-    const [elevenlabs, cartesia] = await Promise.all([peek('elevenlabs'), peek('cartesia')])
-    return NextResponse.json({ elevenlabs, cartesia }, { headers: { 'Cache-Control': 'no-store' } })
+    const keys = ['elevenlabs', 'elevenlabs_media', 'cartesia', 'cartesia_media'] as const
+    const states = await Promise.all(keys.map((k) => peek(k)))
+    return NextResponse.json(Object.fromEntries(keys.map((k, i) => [k, states[i]])), { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {
     if (err instanceof RequestError) return requestErrorResponse(err, requestId)
     return errorResponse(err, log, 'admin.circuit_read_failed', requestId)

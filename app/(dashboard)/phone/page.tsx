@@ -258,11 +258,13 @@ function AddNumberDialog({
 
 // ─── Routing dialog ──────────────────────────────────────────────────────────
 function RoutingDialog({
-  number, onClose, onChanged,
+  number, onClose, onChanged, onRefresh,
 }: {
   number: PhoneNumber | null
   onClose: () => void
   onChanged: (updated: PhoneNumber) => void
+  /** Reloads the list (and so this dialog's `number`) from the server. */
+  onRefresh: () => void
 }) {
   const current = number ? modeOf(number) : 'app_routed'
   const [choice, setChoice] = useState<RoutingMode>(current)
@@ -298,6 +300,9 @@ function RoutingDialog({
       onClose()
     } catch (err) {
       toast.error('Could not change the routing', { description: errorMessage(err, 'Please try again.') })
+      // The server may have saved the new mode (status 'pending') before the
+      // binding failed: show what is actually persisted, not the old row.
+      onRefresh()
     } finally {
       setSaving(false)
     }
@@ -426,9 +431,11 @@ export default function PhonePage() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [search, setSearch]   = useState('')
-  const [routingTarget, setRoutingTarget] = useState<PhoneNumber | null>(null)
+  // By id, so a reload refreshes the open routing dialog's row as well.
+  const [routingTargetId, setRoutingTargetId] = useState<string | null>(null)
   const [releaseTarget, setReleaseTarget] = useState<PhoneNumber | null>(null)
   const [busy, setBusy] = useState<Record<string, 'toggle' | 'reapply' | undefined>>({})
+  const routingTarget = routingTargetId ? (numbers.find((n) => n.id === routingTargetId) ?? null) : null
 
   const load = useCallback(async () => {
     try {
@@ -637,7 +644,7 @@ export default function PhonePage() {
                     )}
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setRoutingTarget(n)} disabled={!!rowBusy}>
+                    <Button variant="outline" size="sm" onClick={() => setRoutingTargetId(n.id)} disabled={!!rowBusy}>
                       Change routing
                     </Button>
                     <Button
@@ -668,11 +675,12 @@ export default function PhonePage() {
       <AddNumberDialog open={addOpen} onClose={() => setAddOpen(false)} />
       <RoutingDialog
         number={routingTarget}
-        onClose={() => setRoutingTarget(null)}
+        onClose={() => setRoutingTargetId(null)}
         onChanged={(updated) => {
           setNumbers((p) => p.map((x) => (x.id === updated.id ? { ...x, ...updated } : x)))
           void load()
         }}
+        onRefresh={() => void load()}
       />
       <ReleaseDialog
         number={releaseTarget}

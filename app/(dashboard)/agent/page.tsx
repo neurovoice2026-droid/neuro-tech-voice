@@ -1,3 +1,4 @@
+import { unstable_rethrow } from 'next/navigation'
 import { requireOrg } from '@/lib/api/auth'
 import { RequestError } from '@/lib/api/http'
 import { createLogger } from '@/lib/observability/logger'
@@ -10,8 +11,13 @@ export default async function AgentPage() {
   try {
     ctx = await requireOrg()
   } catch (err) {
+    // Next.js control-flow signals (dynamic rendering, redirects) are not errors.
+    unstable_rethrow(err)
     // Signed out / no organization: the dashboard layout redirects; render nothing.
-    if (err instanceof RequestError) return null
+    if (err instanceof RequestError && (err.status === 401 || err.status === 404)) return null
+    // Anything else (e.g. the organization read failed) is a real error: log it
+    // and let app/(dashboard)/error.tsx render it with a retry.
+    createLogger({ route: 'page.agent' }).error('agent_page.require_org_failed', err)
     throw err
   }
   const { supabase, org } = ctx

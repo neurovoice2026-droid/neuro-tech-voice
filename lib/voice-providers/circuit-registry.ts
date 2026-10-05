@@ -13,6 +13,7 @@ import {
   type CircuitState,
   type CircuitStateName,
   type CircuitStore,
+  type CircuitKey,
 } from './circuit-breaker'
 import { isHealthSignalCode, type ProviderErrorCode, type VoiceProvider } from './errors'
 import { emitProviderEvent } from '@/lib/observability/telemetry'
@@ -62,6 +63,18 @@ async function getStore(): Promise<CircuitStore> {
   return store
 }
 
+function systemOf(key: CircuitKey): VoiceProvider {
+  return key.endsWith('_media') ? (key.slice(0, -'_media'.length) as VoiceProvider) : (key as VoiceProvider)
+}
+
+/** Worst of a provider's API and media circuits, as seen by routing. */
+export async function peekProvider(provider: VoiceProvider, now = Date.now()): Promise<CircuitStateName> {
+  const [api, media] = await Promise.all([peek(provider, now), peek(`${provider}_media`, now)])
+  if (api.state === 'open' || media.state === 'open') return 'open'
+  if (api.state === 'half_open' || media.state === 'half_open') return 'half_open'
+  return 'closed'
+}
+
 export interface AcquireResult {
   allowed: boolean
   probe: boolean
@@ -73,7 +86,7 @@ export interface AcquireResult {
  * when a half-open probe must be claimed: that write is optimistic, so exactly
  * one instance gets the probe and the others are told to wait.
  */
-export async function acquire(provider: VoiceProvider, now = Date.now()): Promise<AcquireResult> {
+export async function acquire(provider: CircuitKey, now = Date.now()): Promise<AcquireResult> {
   const cfg = circuitConfig()
   try {
     const s = await getStore()
@@ -96,7 +109,7 @@ export async function acquire(provider: VoiceProvider, now = Date.now()): Promis
 }
 
 /** Read-only view for routing and diagnostics (does not claim a probe). */
-export async function peek(provider: VoiceProvider, now = Date.now()): Promise<{ state: CircuitStateName; raw: CircuitState }> {
+export async function peek(provider: CircuitKey, now = Date.now()): Promise<{ state: CircuitStateName; raw: CircuitState }> {
   try {
     const s = await getStore()
     const row = await s.read(provider)
@@ -116,7 +129,7 @@ export async function peek(provider: VoiceProvider, now = Date.now()): Promise<{
  * the first failure in the current window.
  */
 export async function reportOutcome(
-  provider: VoiceProvider,
+  provider: CircuitKey,
   outcome: { ok: true } | { ok: false; code: ProviderErrorCode },
   now = Date.now(),
 ): Promise<void> {
@@ -136,11 +149,11 @@ export async function reportOutcome(
     )
     if (transition) {
       emitProviderEvent({
-        system: provider,
+        system: systemOf(provider),
         kind: 'circuit_transition',
         ok: transition.to === 'closed',
         errorCode: transition.errorCode,
-        details: { from: transition.from, to: transition.to },
+        details: { circuit: provider, from: transition.from, to: transition.to },
       })
     }
   } catch (err) {
@@ -149,13 +162,13 @@ export async function reportOutcome(
 }
 
 /** Admin override: force a circuit open (maintenance), closed, or clear the override. */
-export async function forceCircuit(provider: VoiceProvider, forced: 'open' | 'closed' | null, now = Date.now()): Promise<CircuitState> {
+export async function forceCircuit(provider: CircuitKey, forced: 'open' | 'closed' | null, now = Date.now()): Promise<CircuitState> {
   const s = await getStore()
   const { state } = await updateCircuit(s, provider, now, (st) => ({
     ...st,
     forced,
     ...(forced === null ? { state: 'closed' as const, openUntil: null, openedAt: null, consecutiveFailures: 0, reopenCount: 0, probeStartedAt: null } : {}),
   }))
-  emitProviderEvent({ system: provider, kind: 'circuit_transition', ok: forced !== 'open', details: { forced } })
+  emitProviderEvent({ system: systemOf(provider), kind: 'circuit_transition', ok: forced !== 'open', details: { circuit: provider, forced } })
   return state
 }

@@ -10,7 +10,8 @@ import * as ct from '@/lib/cartesia/client'
 import { buildElevenLabsAgentBody, agentTags, configHash } from '@/lib/elevenlabs/agent-config'
 import { buildCartesiaAgentConfig } from '@/lib/cartesia/agent-config'
 import { cartesiaFallbackVoices } from './config'
-import { tryPlatformResource } from './platform-resources'
+import { isAllowedFallbackVoice } from '@/lib/cartesia/voice-policy'
+import { forgetPlatformResource, tryPlatformResource } from './platform-resources'
 
 export interface SyncedAgent extends ExternalAgentRef {
   configHash: string
@@ -125,7 +126,10 @@ export async function resolveFallbackVoice(spec: AgentSpec, preferredGender: 'fe
   if (spec.fallbackVoiceId) {
     try {
       const v = await ct.voices.get(spec.fallbackVoiceId)
-      if (v?.id) return { voiceId: v.id, source: 'agent' }
+      // Re-validated at sync time: the stored id must still be a voice the
+      // catalog would offer (never another account's private voice).
+      if (v?.id && isAllowedFallbackVoice(v)) return { voiceId: v.id, source: 'agent' }
+      if (v?.id) createLogger({ component: 'fallback_voice' }).warn('fallback_voice.agent_choice_not_allowed', { localAgentId: spec.localAgentId })
     } catch (err) {
       // The chosen voice was removed at Cartesia: fall back to the platform
       // choice so the fallback agent keeps working (logged for follow-up).
@@ -152,10 +156,26 @@ async function cartesiaConfig(spec: AgentSpec) {
   return { config: buildCartesiaAgentConfig(spec, voice.voiceId, { contextToolId }), voice }
 }
 
+/**
+ * Best effort: call-event webhooks are an optimisation (results are also
+ * polled), so a failed attach must never fail the agent sync — and above all
+ * must never look like "agent missing" to the sync engine. A webhook that no
+ * longer exists is forgotten so it is recreated on the next sync.
+ */
 async function attachCartesiaWebhook(agentId: string): Promise<string | null> {
   const webhookId = await tryPlatformResource('cartesia.call_webhook')
-  if (webhookId) await ct.agents.attachWebhook(agentId, webhookId)
-  return webhookId
+  if (!webhookId) return null
+  try {
+    await ct.agents.attachWebhook(agentId, webhookId)
+    return webhookId
+  } catch (err) {
+    createLogger({ component: 'cartesia_lifecycle' }).warn('cartesia.webhook_attach_failed', {
+      externalAgentId: agentId,
+      code: isProviderError(err) ? err.code : 'unknown',
+    })
+    if (isProviderError(err) && err.code === 'not_found') await forgetPlatformResource('cartesia.call_webhook')
+    return null
+  }
 }
 
 function cartesiaName(spec: AgentSpec): string {

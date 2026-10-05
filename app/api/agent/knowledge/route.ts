@@ -127,7 +127,7 @@ export async function POST(request: Request) {
       throw new RequestError('internal', 'The file could not be stored. Please try again.', 500)
     }
 
-    const { error: insertErr } = await supabase.from('knowledge_documents').insert({
+    const { error: insertErr } = await createAdminClient().from('knowledge_documents').insert({
       id,
       agent_id: agent.id,
       org_id: org.id,

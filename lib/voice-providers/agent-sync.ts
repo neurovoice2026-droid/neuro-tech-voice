@@ -144,7 +144,9 @@ async function syncOne(db: SupabaseClient, agentId: string, orgId: string, provi
         try {
           synced = await lifecycle.update(row.external_id, spec)
         } catch (err) {
-          if (isProviderError(err) && err.code === 'not_found') {
+          // Recreate only when the agent itself is gone, not when a secondary
+          // call made during the update (webhook attach, tools) returned 404.
+          if (isProviderError(err) && err.code === 'not_found' && err.operation === 'agents.update') {
             // Deleted out of band at the provider: recreate once.
             log.warn('agent_sync.remote_missing_recreating', { externalId: row.external_id })
             synced = await lifecycle.create(spec)
@@ -246,6 +248,9 @@ export async function syncAgent(agentId: string, opts: SyncOptions = {}): Promis
   return results
 }
 
+/** About twice the voice route's maxDuration. */
+const SAVING_LEASE_MS = 2 * 60_000
+
 /**
  * Keeps agents.voice_sync_status honest after any ElevenLabs sync that read
  * the agent back: "synced" only when the provider really uses the selected
@@ -254,18 +259,23 @@ export async function syncAgent(agentId: string, opts: SyncOptions = {}): Promis
  */
 async function reconcileVoiceStatus(db: SupabaseClient, agentId: string, result: ProviderSyncResult, log: Logger) {
   if (result.status !== 'ready' || !result.appliedVoiceId) return
-  const { data, error } = await db.from('agents').select('voice_id, voice_sync_status').eq('id', agentId).single()
+  const { data, error } = await db.from('agents').select('voice_id, voice_sync_status, voice_sync_started_at').eq('id', agentId).single()
   if (error) {
     log.error('agent_sync.voice_status_read_failed', error)
     return
   }
-  if (!data?.voice_id || data.voice_sync_status === 'saving') return
+  if (!data?.voice_id) return
+  // A save in progress decides its own outcome; one that started long ago
+  // was interrupted (function timeout) and is settled here.
+  const startedMs = data.voice_sync_started_at ? Date.parse(data.voice_sync_started_at as string) : NaN
+  if (data.voice_sync_status === 'saving' && Number.isFinite(startedMs) && Date.now() - startedMs < SAVING_LEASE_MS) return
   const applied = result.appliedVoiceId === data.voice_id
   const next = applied ? 'synced' : 'failed'
   if (data.voice_sync_status === next) return
   const { error: updErr } = await db
     .from('agents')
     .update({
+      voice_sync_started_at: null,
       voice_sync_status: next,
       voice_sync_error: applied ? null : 'The selected voice could not be applied to your agent. Choose another voice or retry.',
     })

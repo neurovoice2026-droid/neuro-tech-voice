@@ -61,7 +61,7 @@ export async function pollCartesiaCall(callId: string, log: Logger = createLogge
 
   const event = normalizeCartesiaCall(remote as ct.CartesiaCall & Record<string, unknown>)
   if (!event) return 'pending'
-  await applyCallEvent({ ...event, localCallId: callId }, log)
+  await applyCallEvent({ ...event, localCallId: callId, localCallIdTrusted: true }, log)
   return 'applied'
 }
 
@@ -90,9 +90,17 @@ export async function reconcileCartesiaCalls(limit = 25, log: Logger = createLog
   if (error) throw new Error(`calls scan failed: ${error.message}`)
   const counts: Record<string, number> = {}
   for (const c of calls ?? []) {
+    let r: 'applied' | 'not_found' | 'pending' | 'error'
     try {
-      const r = await pollCartesiaCall(c.id as string, log)
-      counts[r] = (counts[r] ?? 0) + 1
+      r = await pollCartesiaCall(c.id as string, log)
+    } catch (err) {
+      // Keep going: after 30 minutes the call is billed from Twilio's leg
+      // duration even if Cartesia cannot be queried (outage, missing call).
+      r = 'error'
+      log.error('cartesia_poll.call_failed', err, { callId: c.id })
+    }
+    counts[r] = (counts[r] ?? 0) + 1
+    try {
       const ageMs = Date.now() - Date.parse(c.created_at as string)
       const routing = (c.routing ?? {}) as { cartesia_dial?: { duration?: number }; twilio_duration?: number; twilio_status?: string }
       const legEnded = !!routing.cartesia_dial || TWILIO_TERMINAL.has(routing.twilio_status ?? '')
@@ -115,7 +123,7 @@ export async function reconcileCartesiaCalls(limit = 25, log: Logger = createLog
       counts.finalized = (counts.finalized ?? 0) + 1
     } catch (err) {
       counts.error = (counts.error ?? 0) + 1
-      log.error('cartesia_poll.call_failed', err, { callId: c.id })
+      log.error('cartesia_poll.finalize_step_failed', err, { callId: c.id })
     }
   }
   return counts

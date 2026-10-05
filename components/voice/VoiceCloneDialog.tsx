@@ -58,7 +58,11 @@ const fileKey = (f: File) => `${f.name}:${f.size}:${f.lastModified}`
 export interface VoiceCloneDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Called with the new workspace voice; the workspace catalog is refreshed already. */
+  /**
+   * Called with the new workspace voice once it is usable; the workspace
+   * catalog is refreshed already. Not called while the provider still has to
+   * verify the clone (it cannot be selected until then).
+   */
   onCloned?: (voice: VoiceOption) => void
 }
 
@@ -150,14 +154,23 @@ export function VoiceCloneDialog({ open, onOpenChange, onCloned }: VoiceCloneDia
 
       const res = await fetch('/api/voices/clone', { method: 'POST', body: form })
       if (!res.ok) throw await parseApiError(res, 'Could not create the voice. Please try again.')
-      const json = (await res.json()) as { voice?: VoiceOption }
+      const json = (await res.json()) as { voice?: VoiceOption; requires_verification?: boolean }
       if (!json.voice) throw new ApiError('Unexpected response while creating the voice.', res.status)
 
       invalidateVoiceCatalog('workspace')
-      toast.success(`"${voiceDisplayName(json.voice)}" is ready`, {
-        description: 'You can now choose it as your agent’s voice.',
-      })
-      onCloned?.(json.voice)
+      if (json.requires_verification === true) {
+        // Stored as pending: it is not in the catalog and the agent cannot use
+        // it yet, so do not offer it for selection.
+        toast.info(`"${voiceDisplayName(json.voice)}" was created`, {
+          description: 'The provider must verify it before it can be used.',
+          duration: 10_000,
+        })
+      } else {
+        toast.success(`"${voiceDisplayName(json.voice)}" is ready`, {
+          description: 'You can now choose it as your agent’s voice.',
+        })
+        onCloned?.(json.voice)
+      }
       reset()
       onOpenChange(false)
     } catch (err) {

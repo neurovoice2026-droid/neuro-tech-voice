@@ -385,10 +385,17 @@ interface FilterBuilder<Self> {
   or(filters: string): Self
 }
 
+/**
+ * The "Transferred" status filter. A human transfer keeps status
+ * completed/in-progress and records outcome='transferred'; legacy rows may
+ * carry status='transferred' instead.
+ */
+export const TRANSFERRED_EXPRESSION = 'outcome.eq.transferred,status.eq.transferred'
+
 /** Applies the validated list filters (status, direction, provider, dates, search...). */
 export function applyCallFilters<Q extends FilterBuilder<Q>>(query: Q, f: CallFilterParams, timeZone: string): Q {
   let q = query
-  if (f.status !== 'all') q = q.eq('status', f.status)
+  if (f.status !== 'all' && f.status !== 'transferred') q = q.eq('status', f.status)
   if (f.direction !== 'all') q = q.eq('direction', f.direction)
   if (f.sentiment !== 'all') q = q.eq('sentiment', f.sentiment)
   if (f.provider !== 'all') q = q.eq('provider', f.provider)
@@ -396,7 +403,8 @@ export function applyCallFilters<Q extends FilterBuilder<Q>>(query: Q, f: CallFi
   if (f.minDuration > 0) q = q.gte('duration_seconds', f.minDuration)
   const from = f.dateFrom ? rangeStart(f.dateFrom, timeZone) : null
   const to = f.dateTo ? rangeEnd(f.dateTo, timeZone) : null
-  const or = combineOrGroups([searchExpression(f.search), timeRangeExpression(from, to)])
+  const statusGroup = f.status === 'transferred' ? TRANSFERRED_EXPRESSION : null
+  const or = combineOrGroups([statusGroup, searchExpression(f.search), timeRangeExpression(from, to)])
   if (or) q = q.or(or)
   return q
 }

@@ -149,6 +149,7 @@ export interface CartesiaPhoneNumber {
   number: string
   label?: string | null
   agent?: { id: string; name?: string } | null
+  provider?: { id: string; type?: string } | null
 }
 
 export const telephony = {
@@ -166,6 +167,12 @@ export const telephony = {
   },
   getNumber(id: string) {
     return req<CartesiaPhoneNumber>('numbers.get', `/agents/phone-numbers/${encodeURIComponent(id)}`)
+  },
+  /** `q` searches by phone number, label or agent name (exact match is up to the caller). */
+  listNumbers(params: { q?: string; provider_id?: string; limit?: number; starting_after?: string | null }) {
+    return req<{ data: CartesiaPhoneNumber[]; has_more: boolean }>('numbers.list', '/agents/phone-numbers', {
+      query: { q: params.q, provider_id: params.provider_id, limit: params.limit ?? 20, starting_after: params.starting_after ?? undefined },
+    })
   },
   deleteNumber(id: string) {
     return req<void>('numbers.delete', `/agents/phone-numbers/${encodeURIComponent(id)}`, { method: 'DELETE', responseKind: 'none' })

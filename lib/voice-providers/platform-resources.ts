@@ -127,3 +127,19 @@ export async function listPlatformResources(): Promise<Record<PlatformResourceKe
   }
   return out
 }
+
+/**
+ * Drops a stored resource id that the provider says no longer exists, so the
+ * next ensurePlatformResource() recreates it. Env-pinned ids are left alone
+ * (the operator owns them); failures are logged, never thrown.
+ */
+export async function forgetPlatformResource(key: PlatformResourceKey): Promise<void> {
+  memo.delete(key)
+  if ((process.env[ENV_OVERRIDE[key]] ?? '').trim()) {
+    log.warn('platform_resource.pinned_missing', { key })
+    return
+  }
+  const { error } = await createAdminClient().from('platform_resources').delete().eq('key', key)
+  if (error) log.error('platform_resource.forget_failed', error, { key })
+  else log.warn('platform_resource.forgotten', { key })
+}

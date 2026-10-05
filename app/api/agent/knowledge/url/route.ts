@@ -8,6 +8,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireOrg } from '@/lib/api/auth'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { RequestError, assertSameOrigin, errorResponse, parseJsonBody, requestErrorResponse } from '@/lib/api/http'
 import { createLogger, requestIdFrom } from '@/lib/observability/logger'
 import { RATE_LIMITS, enforceRateLimit } from '@/lib/security/rate-limit'
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
 
     const id = newDocumentId()
     const name = cleanDisplayName(`${check.url.hostname}${check.url.pathname === '/' ? '' : check.url.pathname}`).slice(0, KNOWLEDGE_MAX_NAME_CHARS) || check.url.hostname
-    const { error: insertErr } = await supabase.from('knowledge_documents').insert({
+    const { error: insertErr } = await createAdminClient().from('knowledge_documents').insert({
       id,
       agent_id: agent.id,
       org_id: org.id,

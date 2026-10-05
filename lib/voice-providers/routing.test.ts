@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { planRouting, type RoutingInput } from './routing'
+import { outboundRoutingInput, planRouting, type RoutingInput } from './routing'
 import { DEFAULT_AFTER_HOURS } from './working-hours'
 
 const OPEN_HOURS = { open: true, reason: 'in_window', timeZone: 'UTC', localWeekday: 'monday', localTime: '10:00' } as const
@@ -110,5 +110,22 @@ describe('planRouting', () => {
     if (plan.kind !== 'connect') throw new Error('expected connect')
     expect(plan.candidates.map((c) => c.provider)).toEqual(['cartesia'])
     expect(plan.candidates[0].role).toBe('primary')
+  })
+})
+
+describe('outboundRoutingInput', () => {
+  it('lets a business-initiated call through outside working hours (message/forward modes)', () => {
+    const closed = { ...OPEN_HOURS, open: false }
+    for (const mode of ['message', 'forward'] as const) {
+      const afterHours = { enabled: true, mode, message: null, forward_number: '+40712345678' }
+      expect(planRouting(input({ hours: closed, afterHours })).kind).toBe('after_hours')
+      const plan = planRouting(outboundRoutingInput(input({ hours: closed, afterHours })))
+      expect(plan.kind).toBe('connect')
+    }
+  })
+
+  it('still honours provider availability and the kill switch', () => {
+    const plan = planRouting(outboundRoutingInput(input({ force: 'cartesia' })))
+    expect(plan.kind === 'connect' && plan.candidates.map((c) => c.provider)).toEqual(['cartesia'])
   })
 })

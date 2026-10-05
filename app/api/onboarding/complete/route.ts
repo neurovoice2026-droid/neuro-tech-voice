@@ -4,7 +4,13 @@
 //
 // Re-running it (e.g. after a cancelled checkout) is safe: ensureAgent never
 // creates a second local agent, and the sync engine's lease + provider-side
-// tags never create a second external agent.
+// tags never create a second external agent. Each provider push counts against
+// the org's agentSync budget, and an already-onboarded org that changed nothing
+// provider-relevant is not re-pushed at all.
+//
+// The response says whether the agent is live (`activated`): the agent is only
+// switched on when the primary provider sync is ready, so the client must not
+// claim "you're live" otherwise.
 
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -18,6 +24,7 @@ import {
 } from '@/lib/api/http'
 import { createLogger, requestIdFrom } from '@/lib/observability/logger'
 import { deferBackground } from '@/lib/observability/telemetry'
+import { RATE_LIMITS, enforceRateLimit } from '@/lib/security/rate-limit'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getStripeClient, isStripeConfigured } from '@/lib/stripe/client'
 import { sendEmail } from '@/lib/email/client'
@@ -35,6 +42,7 @@ import {
   ensureAgent,
   mergeMetadata,
   syncAgentProviders,
+  type AgentSyncReport,
 } from '@/lib/agents/ensure-agent'
 import type { VoiceProvider } from '@/lib/voice-providers/errors'
 import { PLANS, stripePriceId } from '@/types'
@@ -44,6 +52,12 @@ import type { BillingInterval, Plan } from '@/types'
 export const maxDuration = 60
 
 const PLAN_VALUES = ['trial', 'starter', 'pro', 'business', 'custom'] as const satisfies readonly Plan[]
+
+/** Agent columns set here that end up in the provider-side agent (AgentSpec). */
+const PROVIDER_AGENT_FIELDS = ['name', 'language', 'system_prompt', 'first_message'] as const
+
+const NOT_PUSHED_MESSAGE =
+  'Your agent was saved, but the latest changes could not be sent to the voice provider yet.'
 
 // Unknown keys (e.g. a legacy `voice` object) are stripped: the voice is saved
 // and confirmed with the provider by PUT /api/agent/voice, never here.
@@ -81,13 +95,38 @@ export async function POST(request: Request) {
 
     const { data: orgRow, error: orgErr } = await supabase
       .from('organizations')
-      .select('id, name, industry, website, description, stripe_customer_id')
+      .select('id, name, industry, website, description, stripe_customer_id, onboarding_completed')
       .eq('id', org.id)
       .single()
     if (orgErr) throw new Error(`organizations read failed: ${orgErr.message}`)
 
-    // ── Persist the company details entered during onboarding ──────────────
     const companyName = (body.company?.name ?? orgRow.name ?? null) as string | null
+    const agent = await ensureAgent(org.id, defaultAgentName(companyName))
+    log = log.child({ agentId: agent.id })
+
+    // ── Work out what changes (voice excluded) ─────────────────────────────
+    const agentPatch: Record<string, unknown> = {}
+    if (body.agent?.name) agentPatch.name = body.agent.name
+    if (body.agent?.language) agentPatch.language = body.agent.language
+    if (body.agent?.system_prompt !== undefined) agentPatch.system_prompt = blankToNull(body.agent.system_prompt)
+    if (body.agent?.first_message !== undefined) agentPatch.first_message = blankToNull(body.agent.first_message)
+    if (body.agent?.personality) agentPatch.metadata = mergeMetadata(agent.metadata, { personality: body.agent.personality })
+
+    // The org name is part of the provider-side agent too (AgentSpec).
+    const current = agent as unknown as Record<string, unknown>
+    const providerConfigChanged =
+      (!!body.company && companyName !== ((orgRow.name as string | null) ?? null)) ||
+      PROVIDER_AGENT_FIELDS.some((k) => k in agentPatch && (agentPatch[k] ?? null) !== (current[k] ?? null))
+    // First launch (or a re-run after a cancelled checkout) always pushes; an
+    // org that already finished onboarding only when something changed.
+    const shouldSync = !orgRow.onboarding_completed || providerConfigChanged
+
+    // Checked before any write, so a 429 leaves nothing half-saved.
+    if (shouldSync) {
+      await enforceRateLimit(RATE_LIMITS.agentSync, org.id, 'Too many launch attempts. Please wait a moment and try again.')
+    }
+
+    // ── Persist the company details entered during onboarding ──────────────
     if (body.company) {
       const { error } = await supabase
         .from('organizations')
@@ -101,15 +140,7 @@ export async function POST(request: Request) {
       if (error) throw new Error(`organizations update failed: ${error.message}`)
     }
 
-    // ── Save the agent config (voice excluded) ─────────────────────────────
-    const agent = await ensureAgent(org.id, defaultAgentName(companyName))
-    log = log.child({ agentId: agent.id })
-    const agentPatch: Record<string, unknown> = {}
-    if (body.agent?.name) agentPatch.name = body.agent.name
-    if (body.agent?.language) agentPatch.language = body.agent.language
-    if (body.agent?.system_prompt !== undefined) agentPatch.system_prompt = blankToNull(body.agent.system_prompt)
-    if (body.agent?.first_message !== undefined) agentPatch.first_message = blankToNull(body.agent.first_message)
-    if (body.agent?.personality) agentPatch.metadata = mergeMetadata(agent.metadata, { personality: body.agent.personality })
+    // ── Save the agent config ──────────────────────────────────────────────
     if (Object.keys(agentPatch).length) {
       const { error } = await supabase.from('agents').update(agentPatch).eq('id', agent.id).eq('org_id', org.id)
       if (error) throw new Error(`agents update failed: ${error.message}`)
@@ -117,22 +148,40 @@ export async function POST(request: Request) {
 
     // ── Push to the providers (primary now, fallback after the response) ───
     const primaryProvider: VoiceProvider = agent.primary_provider === 'cartesia' ? 'cartesia' : 'elevenlabs'
-    const sync = await syncAgentProviders({
-      supabase,
-      orgId: org.id,
-      agentId: agent.id,
-      primaryProvider,
-      bump: true,
-      primary: true,
-      fallback: true,
-      log,
-    })
-    const primaryReady = sync.some((s) => s.provider === primaryProvider && s.status === 'ready')
+    let sync: AgentSyncReport[] = []
+    if (shouldSync) {
+      sync = await syncAgentProviders({
+        supabase,
+        orgId: org.id,
+        agentId: agent.id,
+        primaryProvider,
+        bump: true,
+        primary: true,
+        fallback: true,
+        log,
+      })
+    }
+    const primaryReport = sync.find((s) => s.provider === primaryProvider) ?? null
+    const primaryReady = primaryReport?.status === 'ready'
     if (primaryReady && !agent.is_active) {
       const { error } = await supabase.from('agents').update({ is_active: true }).eq('id', agent.id).eq('org_id', org.id)
       if (error) throw new Error(`agents activate failed: ${error.message}`)
     }
-    log.info('onboarding.agent_synced', { sync: sync.map((s) => `${s.provider}:${s.status}`) })
+    // Live = the router will answer calls with this agent. Nothing re-activates
+    // it later on its own, so the client must send the user to /agent otherwise.
+    const activated = primaryReady || agent.is_active
+    // Sanitized, product-level detail from the agent's actual primary provider.
+    const pushFailed = primaryReport?.status === 'failed' || primaryReport?.status === 'degraded'
+    const warning = !activated
+      ? (primaryReport?.error ?? null)
+      : pushFailed
+        ? (primaryReport?.error ?? NOT_PUSHED_MESSAGE)
+        : null
+    log.info('onboarding.agent_synced', {
+      synced: shouldSync,
+      activated,
+      sync: sync.map((s) => `${s.provider}:${s.status}`),
+    })
 
     // Mark onboarding complete. For a paid plan with Stripe configured we do NOT
     // grant the paid tier yet — the billing webhook upgrades the org only once
@@ -213,7 +262,7 @@ export async function POST(request: Request) {
           },
         })
 
-        return NextResponse.json({ success: true, checkout_url: session.url, sync })
+        return NextResponse.json({ success: true, checkout_url: session.url, activated, primary_provider: primaryProvider, warning, sync })
       } catch (err) {
         // Stripe failed — grant the trial so the user isn't stuck, then continue.
         log.error('onboarding.stripe_failed', err)
@@ -228,6 +277,9 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       redirect: `${appUrl}/dashboard?welcome=true`,
+      activated,
+      primary_provider: primaryProvider,
+      warning,
       sync,
     })
   } catch (err) {

@@ -117,8 +117,12 @@ describe('normalizeCartesiaCall', () => {
     ])
   })
 
-  it('prefers the ntv_call_id dynamic variable over the SIP header', () => {
-    expect(normalizeCartesiaCall(call({ dynamic_variables: { ntv_call_id: 'local-from-var' } }))?.localCallId).toBe('local-from-var')
+  it('ignores an ntv_call_id dynamic variable (not set by our trunk) and trusts only the SIP header', () => {
+    const ev = normalizeCartesiaCall(call({ dynamic_variables: { ntv_call_id: 'local-from-var' }, telephony_params: { direction: 'inbound', headers: {} } }))
+    expect(ev?.localCallId).toBeNull()
+    expect(ev?.localCallIdTrusted).toBe(false)
+    const fromHeader = normalizeCartesiaCall(call({ telephony_params: { direction: 'inbound', headers: { 'X-NTV-Call-Id': 'local-h' } } }))
+    expect(fromHeader).toMatchObject({ localCallId: 'local-h', localCallIdTrusted: true })
   })
 
   it('reads the call id from a lower-case SIP header too', () => {

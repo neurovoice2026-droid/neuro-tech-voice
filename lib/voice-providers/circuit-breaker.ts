@@ -14,6 +14,15 @@
 // request never opens a circuit.
 
 import type { ProviderErrorCode, VoiceProvider } from './errors'
+
+/**
+ * Circuits: one per provider for its API (live-call requests + health probe),
+ * plus a media circuit per provider fed by call outcomes (stream ended in the
+ * first seconds / SIP leg failed vs. conversations that ran). Routing treats a
+ * provider as unavailable when either of its circuits is open.
+ */
+export type CircuitKey = VoiceProvider | `${VoiceProvider}_media`
+
 import { isHealthSignalCode } from './errors'
 
 export type CircuitStateName = 'closed' | 'open' | 'half_open'
@@ -193,20 +202,20 @@ function open(s: CircuitState, now: number, reopenCount: number, cfg: CircuitCon
 
 export interface CircuitStore {
   /** Returns the stored state and an opaque version for optimistic writes. */
-  read(provider: VoiceProvider): Promise<{ state: CircuitState; version: number } | null>
+  read(provider: CircuitKey): Promise<{ state: CircuitState; version: number } | null>
   /** Writes if the version still matches; returns false on a concurrent write. */
-  write(provider: VoiceProvider, state: CircuitState, expectedVersion: number | null): Promise<boolean>
+  write(provider: CircuitKey, state: CircuitState, expectedVersion: number | null): Promise<boolean>
 }
 
 export class MemoryCircuitStore implements CircuitStore {
-  private readonly data = new Map<VoiceProvider, { state: CircuitState; version: number }>()
+  private readonly data = new Map<CircuitKey, { state: CircuitState; version: number }>()
 
-  async read(provider: VoiceProvider) {
+  async read(provider: CircuitKey) {
     const row = this.data.get(provider)
     return row ? { state: { ...row.state }, version: row.version } : null
   }
 
-  async write(provider: VoiceProvider, state: CircuitState, expectedVersion: number | null) {
+  async write(provider: CircuitKey, state: CircuitState, expectedVersion: number | null) {
     const row = this.data.get(provider)
     const current = row?.version ?? null
     if (current !== expectedVersion) return false
@@ -216,7 +225,7 @@ export class MemoryCircuitStore implements CircuitStore {
 }
 
 export interface CircuitTransition {
-  provider: VoiceProvider
+  provider: CircuitKey
   from: CircuitStateName
   to: CircuitStateName
   errorCode: ProviderErrorCode | null
@@ -228,7 +237,7 @@ export interface CircuitTransition {
  */
 export async function updateCircuit(
   store: CircuitStore,
-  provider: VoiceProvider,
+  provider: CircuitKey,
   now: number,
   fn: (s: CircuitState) => CircuitState,
 ): Promise<{ state: CircuitState; transition: CircuitTransition | null }> {

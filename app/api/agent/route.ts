@@ -7,6 +7,8 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireOrg } from '@/lib/api/auth'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { RATE_LIMITS, enforceRateLimit } from '@/lib/security/rate-limit'
 import {
   RequestError,
   assertSameOrigin,
@@ -207,9 +209,21 @@ export async function PATCH(request: Request) {
       }
     }
 
+    // Provider pushes are bounded per org (shared provider accounts). Checked
+    // before any write so a 429 leaves nothing half-saved.
+    const mayPush = providerFieldsChanged.length > 0 || timezoneChanged || fallbackTurnedOn || (agentPatch.is_active === true && !agent.is_active)
+    if (mayPush) await enforceRateLimit(RATE_LIMITS.agentSync, org.id, 'Too many changes in a short time. Please wait a moment and save again.')
+
     // ── Writes (user-scoped client: RLS + column guard apply) ──────────────
-    if (Object.keys(agentPatch).length) {
-      const { error } = await supabase.from('agents').update(agentPatch).eq('id', agent.id).eq('org_id', org.id)
+    // fallback_voice_id is platform-managed (guard trigger): it was checked by
+    // assertFallbackVoiceEligible above and is written with the service role.
+    const { fallback_voice_id: fallbackVoiceId, ...tenantPatch } = agentPatch
+    if ('fallback_voice_id' in agentPatch) {
+      const { error } = await createAdminClient().from('agents').update({ fallback_voice_id: fallbackVoiceId }).eq('id', agent.id).eq('org_id', org.id)
+      if (error) throw new Error(`agents fallback voice update failed: ${error.message}`)
+    }
+    if (Object.keys(tenantPatch).length) {
+      const { error } = await supabase.from('agents').update(tenantPatch).eq('id', agent.id).eq('org_id', org.id)
       if (error) throw new Error(`agents update failed: ${error.message}`)
     }
     if (Object.keys(orgPatch).length) {

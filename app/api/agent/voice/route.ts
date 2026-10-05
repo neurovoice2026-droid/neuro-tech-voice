@@ -55,7 +55,7 @@ function sleep(ms: number): Promise<void> {
 async function setVoiceSyncState(orgId: string, agentId: string, status: ApplyStatus | 'saving', error: string | null): Promise<void> {
   const { error: dbErr } = await createAdminClient()
     .from('agents')
-    .update({ voice_sync_status: status, voice_sync_error: error })
+    .update({ voice_sync_status: status, voice_sync_error: error, voice_sync_started_at: status === 'saving' ? new Date().toISOString() : null })
     .eq('id', agentId)
     .eq('org_id', orgId)
   if (dbErr) throw new Error(`agents voice_sync_status update failed: ${dbErr.message}`)
@@ -149,7 +149,9 @@ async function handle(request: Request): Promise<Response> {
     }
     const voiceName = cleanText(body.voice_name, 100) || eligible.name
 
-    const { error: updErr } = await supabase
+    // Platform-managed column (guard trigger): written only after the
+    // eligibility check above, scoped by the authorized org.
+    const { error: updErr } = await createAdminClient()
       .from('agents')
       .update({ voice_id: voiceId, voice_name: voiceName })
       .eq('id', agentId)

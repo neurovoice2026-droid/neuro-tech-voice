@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import {
   Rocket, Check, Building2, Bot, Mic2, CreditCard,
-  ArrowLeft, Zap, Shield, Star, Layers, Gift,
+  ArrowLeft, Zap, Shield, Star, Layers, Gift, AlertTriangle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -371,13 +371,79 @@ function SuccessScreen({ agentName }: { agentName: string }) {
   )
 }
 
+// ─── Saved, but not live yet ──────────────────────────────────────────────────
+// The server only switches the agent on when the voice provider sync is ready.
+// Nothing re-activates it later on its own, so point the user at /agent.
+function NotLiveScreen({ agentName, detail, checkoutUrl }: {
+  agentName: string; detail: string | null; checkoutUrl: string | null
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-6 py-10 text-center">
+      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-xl shadow-amber-500/30">
+        <AlertTriangle className="h-10 w-10 text-white" />
+      </div>
+      <div className="max-w-md">
+        <h2 className="text-3xl font-extrabold text-foreground">Saved — not live yet</h2>
+        <p className="mt-2 text-muted-foreground">
+          Your setup is saved, but the voice provider setup did not complete, so{' '}
+          {agentName ? `${agentName} is` : 'your AI agent is'} not taking calls yet.
+          {checkoutUrl
+            ? ' Once checkout is complete, open the Agent page to retry the setup and activate your agent.'
+            : ' Open the Agent page to retry the setup and activate your agent.'}
+        </p>
+        {detail && <p className="mt-2 text-sm text-amber-700">{detail}</p>}
+      </div>
+      <div className="flex flex-col gap-3 w-full max-w-xs">
+        {checkoutUrl ? (
+          <a
+            href={checkoutUrl}
+            className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-purple-500/25 transition-all hover:shadow-purple-500/40 hover:scale-[1.02]"
+          >
+            <CreditCard className="h-4 w-4" />
+            Continue to checkout
+          </a>
+        ) : (
+          <>
+            <a
+              href="/agent"
+              className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-purple-500/25 transition-all hover:shadow-purple-500/40 hover:scale-[1.02]"
+            >
+              <Bot className="h-4 w-4" />
+              Activate my agent
+            </a>
+            <a
+              href="/dashboard"
+              className="flex items-center justify-center gap-2 rounded-xl border border-border px-6 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              Go to Dashboard
+            </a>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+interface CompleteResponse {
+  checkout_url?: string | null
+  error?: string
+  /** True only when the agent is switched on and will answer calls. */
+  activated?: boolean
+  /** Sanitized message about the primary voice provider sync. */
+  warning?: string | null
+}
+
+type LaunchOutcome =
+  | { kind: 'live' }
+  | { kind: 'not_live'; detail: string | null; checkoutUrl: string | null }
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export function Step6Launch({ organization }: Step6LaunchProps) {
   const { plan, setPlan, setStep, agent, voice, company } = useOnboardingStore()
   const [annual, setAnnual]             = useState(false)
   const [isLaunching, setIsLaunching]   = useState(false)
   const [showConfetti, setShowConfetti] = useState(false)
-  const [launched, setLaunched]         = useState(false)
+  const [outcome, setOutcome]           = useState<LaunchOutcome | null>(null)
 
   const displayCompanyName = company.name || organization.name || '—'
 
@@ -407,7 +473,7 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
       const data = (await res.json().catch((err: unknown) => {
         console.error('Onboarding: unreadable response', err)
         return null
-      })) as { checkout_url?: string; error?: string; sync?: Array<{ provider: string; status: string; error: string | null }> } | null
+      })) as CompleteResponse | null
 
       if (!res.ok || !data) {
         // Nothing was launched: keep the user here with the server's message.
@@ -416,10 +482,19 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
         return
       }
 
-      // The account is set up; a provider problem is retried automatically.
-      const primary = data.sync?.find((s) => s.provider === 'elevenlabs')
-      if (primary && (primary.status === 'failed' || primary.status === 'degraded')) {
-        toast.warning(`Your agent was saved, but the voice provider is not ready yet: ${primary.error ?? 'it will be retried automatically.'}`)
+      // The account is set up, but the agent only takes calls once the server
+      // activated it (primary voice provider ready). Never claim "live" otherwise.
+      if (data.activated !== true) {
+        setIsLaunching(false)
+        setOutcome({ kind: 'not_live', detail: data.warning ?? null, checkoutUrl: data.checkout_url ?? null })
+        return
+      }
+
+      // Live, but the latest changes did not reach the voice provider.
+      if (data.warning) {
+        toast.warning('Your agent is live, but the latest changes did not reach the voice provider.', {
+          description: `${data.warning} You can retry from the Agent page.`,
+        })
       }
 
       setShowConfetti(true)
@@ -432,7 +507,7 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
         // Free plan or Stripe not configured → show success screen
         setTimeout(() => {
           setIsLaunching(false)
-          setLaunched(true)
+          setOutcome({ kind: 'live' })
         }, 1800)
       }
     } catch (err) {
@@ -443,13 +518,17 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
     }
   }
 
-  if (launched) {
+  if (outcome?.kind === 'live') {
     return (
       <>
         <Confetti active={showConfetti} />
         <SuccessScreen agentName={agent.name} />
       </>
     )
+  }
+
+  if (outcome?.kind === 'not_live') {
+    return <NotLiveScreen agentName={agent.name} detail={outcome.detail} checkoutUrl={outcome.checkoutUrl} />
   }
 
   return (

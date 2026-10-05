@@ -98,6 +98,7 @@ export function normalizeElevenLabsEvent(env: ElevenLabsEnvelope): NormalizedCal
     providerCallId: env.conversationId,
     externalAgentId: env.agentId,
     localCallId: localCallId && localCallId !== 'unknown' ? localCallId : null,
+    localCallToken: str(vars[PLATFORM_VARIABLES.callToken]),
     twilioCallSid: str(phone.call_sid),
     eventTimestamp: env.eventTimestamp,
   }

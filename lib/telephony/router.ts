@@ -21,7 +21,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createLogger, type Logger } from '@/lib/observability/logger'
 import { emitProviderEvent, deferBackground } from '@/lib/observability/telemetry'
-import { planRouting, type Candidate, type RoutingInput } from '@/lib/voice-providers/routing'
+import { outboundRoutingInput, planRouting, type Candidate } from '@/lib/voice-providers/routing'
 import { reportOutcome } from '@/lib/voice-providers/circuit-registry'
 import { isProviderError, toProviderError, type VoiceProvider } from '@/lib/voice-providers/errors'
 import { cartesiaSip, earlyFailureWindowSeconds, publicBaseUrl } from '@/lib/voice-providers/config'
@@ -58,9 +58,11 @@ interface CallRow {
   routing: Record<string, unknown>
   routing_reason: string | null
   failover_reason: string | null
+  outcome: string | null
+  duration_seconds: number | null
 }
 
-const CALL_COLUMNS = 'id, org_id, agent_id, phone_number_id, direction, status, provider, from_number, to_number, caller_number, routing, routing_reason, failover_reason'
+const CALL_COLUMNS = 'id, org_id, agent_id, phone_number_id, direction, status, provider, from_number, to_number, caller_number, routing, routing_reason, failover_reason, outcome, duration_seconds'
 
 function base(): string {
   const b = publicBaseUrl()
@@ -324,8 +326,7 @@ export async function routeOutboundConnect(callId: string, p: Record<string, str
   if (p.CallSid) await updateCall(db, callId, { twilio_call_sid: p.CallSid }, cl)
   if (!ctx.agent || !ctx.routingInput) return hangup()
   // Outbound calls are business-initiated: the after-hours gate does not apply.
-  const input: RoutingInput = { ...ctx.routingInput, hours: { ...ctx.routingInput.hours, open: true }, afterHours: { ...ctx.routingInput.afterHours, enabled: false } }
-  const plan = planRouting(input)
+  const plan = planRouting(outboundRoutingInput(ctx.routingInput))
   if (plan.kind !== 'connect') {
     await updateCall(db, callId, { status: 'failed', routing_reason: plan.kind === 'reject' ? plan.reason : 'no_provider', lifecycle_rank: 30 }, cl)
     return hangup()
@@ -349,20 +350,32 @@ export async function handleStreamEnded(callId: string, p: Record<string, string
   const attempts = attemptsOf(call)
   const cl = log.child({ orgId: call.org_id, callId, callSid: p.CallSid })
 
-  const early = call.provider === 'elevenlabs' && call.direction === 'inbound' && elapsed <= earlyFailureWindowSeconds()
+  const window = earlyFailureWindowSeconds()
+  const early = call.provider === 'elevenlabs' && elapsed <= window
+  // Media-plane health: a stream that outlived the early window proves the
+  // conversation path works; one that died within it is a failure. This
+  // feeds the ElevenLabs media circuit, which REST successes cannot close.
+  if (call.provider === 'elevenlabs' && Number.isFinite(elapsed)) {
+    await reportOutcome('elevenlabs_media', early ? { ok: false, code: 'upstream' } : { ok: true })
+  }
   const alreadyFellBack = attempts.some((a) => a.provider === 'cartesia')
-  if (!early || alreadyFellBack || !call.phone_number_id) {
+  if (!early || call.direction !== 'inbound' || alreadyFellBack || !call.phone_number_id) {
     cl.info('router.stream_ended', { elapsed: Math.round(elapsed), early })
     return hangup()
   }
 
-  await reportOutcome('elevenlabs', { ok: false, code: 'upstream' })
   const number = await numberById(db, call.phone_number_id)
   if (!number) return hangup()
   const ctx = await loadRoutingContext(number)
   if (!ctx.routingInput) return hangup()
-  const plan = planRouting({ ...ctx.routingInput, primary: 'cartesia', fallback: null, force: 'auto' })
   cl.warn('router.early_stream_failure', { elapsed: Math.round(elapsed) })
+  // Same switches as the ingress decision: the kill switch, the platform and
+  // org fallback flags and the agent's configured fallback all apply here.
+  const fallbackAllowed =
+    ctx.routingInput.fallbackEnabled && ctx.routingInput.force !== 'elevenlabs' && ctx.agent?.fallback === 'cartesia'
+  const plan = fallbackAllowed
+    ? planRouting({ ...ctx.routingInput, primary: 'cartesia', fallback: null, force: 'auto' })
+    : ({ kind: 'reject', reason: 'no_provider', skipped: [] } as const)
   if (plan.kind !== 'connect') {
     await updateCall(db, callId, { status: 'failed', routing_reason: 'no_provider', failover_reason: 'elevenlabs:stream_failed_early', lifecycle_rank: 30 }, cl)
     return finalFailureTwiml(ctx, call)
@@ -388,14 +401,14 @@ export async function handleDialComplete(callId: string, leg: string, p: Record<
 
   if (leg === 'cartesia') {
     if (connected && duration > 0) {
-      await reportOutcome('cartesia', { ok: true })
+      await reportOutcome('cartesia_media', { ok: true })
       await updateCall(db, callId, { routing: { ...call.routing, cartesia_dial: { status, duration } } }, cl)
       // Pull transcript/recording from Cartesia now (webhooks for managed agents
       // are not guaranteed); the maintenance job retries if it is not ready yet.
       deferBackground(import('@/lib/voice-providers/cartesia-poll').then((m) => m.pollCartesiaCall(callId, cl)).catch((err: unknown) => cl.error('router.cartesia_poll_failed', err)))
       return hangup()
     }
-    await reportOutcome('cartesia', { ok: false, code: 'upstream' })
+    await reportOutcome('cartesia_media', { ok: false, code: 'upstream' })
     emitProviderEvent({ system: 'cartesia', kind: 'failover', ok: false, orgId: call.org_id, callId, details: { reason: `cartesia:dial_${status}`, final: true } })
     await updateCall(db, callId, {
       status: 'failed',
@@ -411,11 +424,15 @@ export async function handleDialComplete(callId: string, leg: string, p: Record<
   }
 
   // after_hours forward, final-failure handoff, transfer: record and end.
-  await updateCall(db, callId, {
-    outcome: connected ? 'transferred' : call.status === 'after-hours' ? 'missed' : null,
-    duration_seconds: duration || undefined,
-    routing: { ...call.routing, [`${leg}_dial`]: { status, duration } },
-  }, cl)
+  // A transfer leg is the human part of an AI call: its duration stays in
+  // routing (duration_seconds is the AI conversation, which billing and the
+  // transcript match). Forward/handoff legs are the whole call.
+  const patch: Record<string, unknown> = { routing: { ...call.routing, [`${leg}_dial`]: { status, duration } } }
+  if (connected) patch.outcome = 'transferred'
+  else if (leg === 'after_hours') patch.outcome = 'missed'
+  else if (leg === 'transfer' && call.outcome === 'transferred') patch.outcome = null // the transfer did not happen
+  if (leg !== 'transfer' && duration > 0 && !call.duration_seconds) patch.duration_seconds = duration
+  await updateCall(db, callId, patch, cl)
   return hangup()
 }
 
@@ -458,7 +475,7 @@ export async function handleRefer(callId: string, p: Record<string, string>, log
  */
 export async function transferLiveCall(callId: string, reason: string, log: Logger = createLogger()): Promise<{ ok: boolean; message: string }> {
   const db = createAdminClient()
-  const { data: call, error } = await db.from('calls').select(`${CALL_COLUMNS}, twilio_call_sid, outcome`).eq('id', callId).maybeSingle()
+  const { data: call, error } = await db.from('calls').select(`${CALL_COLUMNS}, twilio_call_sid`).eq('id', callId).maybeSingle()
   if (error) throw new Error(`calls read failed: ${error.message}`)
   if (!call?.twilio_call_sid || !call.phone_number_id) return { ok: false, message: 'This call cannot be transferred.' }
   // The model may call the tool twice; redirecting the live call twice would drop it.
@@ -489,11 +506,30 @@ const TERMINAL = new Set(['completed', 'busy', 'failed', 'no-answer', 'canceled'
 export async function handleStatusCallback(p: Record<string, string>, log: Logger = createLogger()): Promise<void> {
   const db = createAdminClient()
   if (!p.CallSid || !p.CallStatus) return
-  const { data: call, error } = await db.from('calls').select(`${CALL_COLUMNS}, lifecycle_rank, duration_seconds`).eq('twilio_call_sid', p.CallSid).maybeSingle()
+  const { data: call, error } = await db.from('calls').select(`${CALL_COLUMNS}, lifecycle_rank`).eq('twilio_call_sid', p.CallSid).maybeSingle()
   if (error) throw new Error(`calls read failed: ${error.message}`)
   if (!call) return
   const cl = log.child({ orgId: call.org_id, callId: call.id, twilioStatus: p.CallStatus })
-  const patch: Record<string, unknown> = { routing: { ...(call.routing as object), twilio_status: p.CallStatus, twilio_duration: Number(p.CallDuration ?? '0') || 0 } }
+  // Twilio does not guarantee delivery order: never let a late non-terminal
+  // event (or an older sequence number) overwrite a terminal status.
+  const prev = call.routing as { twilio_status?: string; twilio_seq?: number }
+  const seq = Number(p.SequenceNumber)
+  if (Number.isFinite(seq) && typeof prev.twilio_seq === 'number' && seq < prev.twilio_seq) {
+    cl.info('router.status_out_of_order', { seq, last: prev.twilio_seq })
+    return
+  }
+  if (prev.twilio_status && TERMINAL.has(prev.twilio_status) && !TERMINAL.has(p.CallStatus)) {
+    cl.info('router.status_after_terminal_ignored')
+    return
+  }
+  const patch: Record<string, unknown> = {
+    routing: {
+      ...(call.routing as object),
+      twilio_status: p.CallStatus,
+      twilio_duration: Number(p.CallDuration ?? '0') || 0,
+      ...(Number.isFinite(seq) ? { twilio_seq: seq } : {}),
+    },
+  }
   if (p.CallStatus === 'in-progress' && (call.lifecycle_rank as number) < 20) {
     patch.status = 'in-progress'
     patch.lifecycle_rank = 20

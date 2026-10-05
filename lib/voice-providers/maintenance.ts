@@ -31,12 +31,11 @@ export async function probeProviders(log: Logger): Promise<ProviderHealth[]> {
     out.push(h)
     emitProviderEvent({ system: p, kind: 'health_check', ok: h.ok, latencyMs: h.latencyMs, errorCode: h.errorCode })
     if (h.configured) {
-      // providerRequest already reported the outcome of the probe request;
-      // only non-HTTP failures need an explicit report here.
-      if (!h.ok && h.errorCode && !isHealthSignalCode(h.errorCode as ProviderErrorCode) && h.errorCode !== 'auth') {
-        log.warn('maintenance.health_non_signal', { provider: p, code: h.errorCode })
-      }
+      // The API probe feeds the provider's API circuit only; the media
+      // circuit is driven by real call outcomes (router / call-store).
       if (h.ok) await reportOutcome(p, { ok: true })
+      else if (h.errorCode && isHealthSignalCode(h.errorCode as ProviderErrorCode)) await reportOutcome(p, { ok: false, code: h.errorCode as ProviderErrorCode })
+      else log.warn('maintenance.health_non_signal', { provider: p, code: h.errorCode })
     }
   }
   return out
@@ -91,6 +90,31 @@ export async function retryStaleKnowledgeDocs(limit: number, log: Logger) {
   return out
 }
 
+/**
+ * A voice save interrupted mid-flight (function timeout) leaves
+ * voice_sync_status 'saving'. Re-sync those agents: the sync reads the agent
+ * back from ElevenLabs and settles the status to synced/failed.
+ */
+export async function settleInterruptedVoiceSaves(limit: number, log: Logger) {
+  const db = createAdminClient()
+  const cutoff = new Date(Date.now() - 5 * 60_000).toISOString()
+  const { data, error } = await db
+    .from('agents')
+    .select('id')
+    .eq('voice_sync_status', 'saving')
+    .or(`voice_sync_started_at.is.null,voice_sync_started_at.lt."${cutoff}"`)
+    .limit(limit)
+  if (error) throw new Error(`agents scan failed: ${error.message}`)
+  for (const a of data ?? []) {
+    try {
+      await syncAgent(a.id as string, { providers: ['elevenlabs'], force: true, log })
+    } catch (err) {
+      log.error('maintenance.voice_settle_failed', err, { agentId: a.id })
+    }
+  }
+  return { settled: data?.length ?? 0 }
+}
+
 const DAY_MS = 86_400_000
 
 function retentionDays(name: string, fallback: number): number {
@@ -129,6 +153,7 @@ export async function runVoiceMaintenance(log: Logger = createLogger({ component
     ['cartesia_poll', () => reconcileCartesiaCalls(25, log)],
     ['stale_elevenlabs_calls', () => finalizeStaleElevenLabsCalls(50, log)],
     ['knowledge_retries', () => retryStaleKnowledgeDocs(2, log)],
+    ['voice_saves', () => settleInterruptedVoiceSaves(5, log)],
     // Hourly is plenty for retention (the cron fires every 5 minutes).
     ...(new Date().getUTCMinutes() < 5 ? ([['retention', () => pruneOperationalData(log)]] as Array<[string, () => Promise<unknown>]>) : []),
   ]

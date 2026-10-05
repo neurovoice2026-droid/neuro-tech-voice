@@ -217,7 +217,9 @@ describe('PATCH /api/agent', () => {
     voicesGet.mockResolvedValueOnce({ id: '34acfaee-c556-41ee-a5f6-c687fb20357c', name: 'x', is_owner: false, status: 'active' })
     res = await patchAgent(req('/api/agent', 'PATCH', { fallback_voice_id: '34acfaee-c556-41ee-a5f6-c687fb20357c' }))
     expect(res.status).toBe(200)
-    expect(updates(state.user!, 'agents')[0].payload).toEqual({ fallback_voice_id: '34acfaee-c556-41ee-a5f6-c687fb20357c' })
+    // Platform-managed column: written with the service role after the eligibility check, never with the tenant client.
+    expect(updates(state.admin!, 'agents')[0].payload).toEqual({ fallback_voice_id: '34acfaee-c556-41ee-a5f6-c687fb20357c' })
+    expect(updates(state.user!, 'agents')).toHaveLength(0)
   })
 
   it('provider errors other than not_found are safe 5xx without upstream body', async () => {

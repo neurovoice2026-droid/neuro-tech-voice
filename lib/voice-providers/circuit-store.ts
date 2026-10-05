@@ -1,14 +1,13 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
-import type { CircuitState, CircuitStore } from './circuit-breaker'
-import type { VoiceProvider } from './errors'
+import type { CircuitState, CircuitStore, CircuitKey } from './circuit-breaker'
 
 /**
  * Breaker state shared by every serverless instance, in `provider_circuit_state`
  * (service-role only). Writes are optimistic on the `version` column.
  */
 export class SupabaseCircuitStore implements CircuitStore {
-  async read(provider: VoiceProvider): Promise<{ state: CircuitState; version: number } | null> {
+  async read(provider: CircuitKey): Promise<{ state: CircuitState; version: number } | null> {
     const { data, error } = await createAdminClient()
       .from('provider_circuit_state')
       .select('state, version')
@@ -19,7 +18,7 @@ export class SupabaseCircuitStore implements CircuitStore {
     return { state: data.state as CircuitState, version: data.version as number }
   }
 
-  async write(provider: VoiceProvider, state: CircuitState, expectedVersion: number | null): Promise<boolean> {
+  async write(provider: CircuitKey, state: CircuitState, expectedVersion: number | null): Promise<boolean> {
     const admin = createAdminClient()
     if (expectedVersion === null) {
       const { error } = await admin

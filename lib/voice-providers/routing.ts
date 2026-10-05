@@ -127,3 +127,11 @@ export function planRouting(input: RoutingInput): RoutingPlan {
   // At most one fallback attempt per call: no loops between providers.
   return { kind: 'connect', candidates: candidates.slice(0, 2), afterHoursContext, skipped }
 }
+
+/**
+ * Outbound calls are business-initiated: the after-hours gate never applies
+ * (same input for the pre-check before dialing and for the decision at answer).
+ */
+export function outboundRoutingInput(input: RoutingInput): RoutingInput {
+  return { ...input, hours: { ...input.hours, open: true }, afterHours: { ...input.afterHours, enabled: false } }
+}

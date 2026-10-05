@@ -140,10 +140,27 @@ During the call:
 * Twilio `voiceFallbackUrl` → `/api/telephony/twilio/fallback` re-runs routing
   (idempotent on CallSid; a connected call is never routed twice).
 
-Circuit defaults: open after 3 consecutive failures or ≥50% failures over ≥5
-events in 60 s; open 30 s doubling to 300 s; 4xx errors (except 408/429) do not
-count. Only 5xx/timeouts/network/429 are retried, only for idempotent requests,
-with full-jitter backoff and `Retry-After` honoured (capped).
+Circuits (shared by all instances, stored in `provider_circuit_state`):
+
+| Circuit | Fed by | Never fed by |
+|---|---|---|
+| `elevenlabs` (API) | register-call / outbound-call outcomes, maintenance health probe | previews, catalog, knowledge uploads, agent syncs (tenant-triggered) |
+| `elevenlabs_media` | stream ended within the early window (failure); stream that outlived it or a completed conversation longer than the window (success) | REST successes |
+| `cartesia` (API) | maintenance health probe | tenant-triggered requests |
+| `cartesia_media` | SIP leg result (`DialCallStatus`) | REST successes |
+
+Routing treats a provider as unavailable when **either** of its circuits is
+open (half-open when either is half-open), so a healthy REST API cannot mask a
+broken media plane and one tenant's heavy usage cannot fail every org over.
+Defaults: open after 3 consecutive failures or ≥50% failures over ≥5 events in
+60 s; open 30 s doubling to 300 s; 4xx errors (except 408/429) do not count.
+Only 5xx/timeouts/network/429 are retried, only for idempotent requests, with
+full-jitter backoff and `Retry-After` honoured (capped).
+
+The early-failure retry on Cartesia obeys the same switches as the ingress
+decision (kill switch, platform/org fallback flags, agent fallback provider).
+The abandoned ElevenLabs conversation of such a call is linked to the call row
+(its id only): it never overwrites the Cartesia result, usage or workflows.
 
 **Cartesia SIP routing is unverified live**: Cartesia documents routing inbound SIP
 by the dialed number for numbers imported under a SIP-trunk provider. The number
@@ -212,8 +229,12 @@ startup (`instrumentation.ts`) and shown by `GET /api/admin/voice/diagnostics`
   directly to Supabase Storage with a signed URL; voice-clone uploads are capped at 4 MB.
 
 ### Supabase
-* Apply `supabase/migrations/010_voice_providers.sql` (idempotent, additive,
-  zero-downtime: new columns have defaults, constraints are added after backfill).
+* Apply `supabase/migrations/010_voice_providers.sql` (idempotent and additive:
+  new columns have defaults, constraints are added only when existing data
+  satisfies them). It runs as one transaction and briefly locks the main tables
+  while columns are added and legacy rows backfilled: apply it at low traffic.
+  `lock_timeout = 5s` makes it fail fast (nothing applied, safe to re-run)
+  instead of queueing behind a long transaction while blocking live calls.
 * Storage bucket `knowledge-documents` (private); the migration scopes object
   access to the owning org's folder.
 
@@ -261,12 +282,27 @@ per call through `record_call_usage` (ledger key `call:<uuid>`).
   `provider_events`, `platform_resources`, `rate_limit_buckets`; tenant-readable:
   `provider_voices` (own org + platform voices), `audit_log` (own org).
 * `guard_platform_columns` trigger: a tenant JWT cannot change billing, provider
-  ids, routing mode/status or sync state, nor insert numbers/calls.
+  ids, voices (`voice_id`, `fallback_voice_id` — eligibility-checked server-side),
+  routing mode/status, sync state or knowledge-processing fields, nor insert
+  numbers/calls.
+* Row policies: tenants can read and update their organization, agent and
+  knowledge documents, but not insert or delete them directly (organizations are
+  created by the signup trigger; agents, documents and deletions go through the
+  API, which enforces rate limits, caps and provider cleanup). Storage: tenants
+  may only read objects in their own org folder (uploads use signed URLs created
+  by the server).
 * RPCs `increment_minutes_used`, `record_call_usage`, `rate_limit_hit`,
   `bump_agent_revision` are executable by `service_role` only.
 
 ## 9. Security, consent and retention
 
+* Webhook correlation: our call id travels to ElevenLabs as a dynamic variable
+  together with a signed call token; a post-call event is matched to a call by
+  that id only when the token verifies (otherwise by conversation id or Twilio
+  CallSid), so a client-started session cannot attach to another call or
+  consume its billing key. Agents are created with `enable_auth` (no anonymous
+  web sessions; opt out with `ELEVENLABS_AGENT_AUTH=false` only if a live test
+  shows a telephony path needs it — **unverified live**).
 * Secrets are server-only; logs are JSON with keys/tokens/JWTs redacted and phone
   numbers masked; transcripts and prompts are never logged; HTTP errors carry a
   product message + request id, never upstream bodies.
@@ -319,6 +355,17 @@ ADMIN_API_TOKEN=… node scripts/reconcile-voice-providers.mjs --base-url https:
 ```
 Cartesia orphans are reported only (no environment marker).
 
+**Duplicate agents** (the migration's `agents_one_per_org` NOTICE): list them with
+```sql
+SELECT org_id, array_agg(id ORDER BY created_at) AS agents
+FROM agents GROUP BY org_id HAVING count(*) > 1;
+```
+For each org keep the oldest agent (the one every code path uses), re-point
+`phone_numbers.agent_id`, `knowledge_documents.agent_id` and `calls.agent_id`
+to it, delete the other agents' external agents (`deleteExternalAgents`, or the
+reconcile script with `--apply --delete-orphans` after the rows are gone), delete
+the extra rows, then re-run the migration to create the unique index.
+
 **Webhook backlog**: failed events are retried by the cron; inspect
 `webhook_events.status='failed'` (`last_error`) for persistent errors.
 
@@ -335,6 +382,12 @@ the agent and re-applies every binding.
 * Cartesia managed agents have no knowledge base yet: the fallback agent gets
   inlined document excerpts (≤24k chars).
 * Native ElevenLabs numbers have no failover and no after-hours gate.
+* Removing a post-call data-collection field may not remove it from an existing
+  ElevenLabs agent (PATCH merges nested objects; deletion semantics are not
+  documented) — **unverified live**; re-creating the agent clears it.
+* If an ElevenLabs post-call webhook arrives before the router processed an
+  early stream failure (a race of a few hundred milliseconds), that call is
+  billed from the abandoned conversation.
 * Voice design, professional voice clones and BYOK are deferred.
 * ElevenLabs premade voices are scheduled for removal on 2026-12-31; library
   voices are filtered by a minimum removal notice period.

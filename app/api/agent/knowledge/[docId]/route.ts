@@ -79,7 +79,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ d
     }
 
     // 3. Row.
-    const { error: deleteErr } = await supabase.from('knowledge_documents').delete().eq('id', docId).eq('org_id', org.id)
+    const { error: deleteErr } = await createAdminClient().from('knowledge_documents').delete().eq('id', docId).eq('org_id', org.id)
     if (deleteErr) throw new Error(`knowledge_documents delete failed: ${deleteErr.message}`)
 
     // 4. Agent config: the document is gone from the spec (and the fallback excerpt).

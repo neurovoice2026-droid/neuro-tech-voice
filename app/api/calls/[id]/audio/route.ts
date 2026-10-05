@@ -1,6 +1,6 @@
 import { requireOrg } from '@/lib/api/auth'
 import { apiError, errorResponse, RequestError, requestErrorResponse } from '@/lib/api/http'
-import { createLogger, requestIdFrom } from '@/lib/observability/logger'
+import { createLogger, requestIdFrom, type Logger } from '@/lib/observability/logger'
 import { conversations as elConversations } from '@/lib/elevenlabs/client'
 import { calls as cartesiaCalls } from '@/lib/cartesia/client'
 import { isProviderError } from '@/lib/voice-providers/errors'
@@ -19,13 +19,70 @@ const AUDIO_LIMIT = RATE_LIMITS.callAudio
 const DEFAULT_TYPE = { elevenlabs: 'audio/mpeg', cartesia: 'audio/wav' } as const
 const EXTENSION: Record<string, string> = { 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/wave': 'wav', 'audio/ogg': 'ogg' }
 
+/**
+ * Recordings are buffered so byte ranges can be served (a phone call is a few
+ * MB at most); anything larger than this is refused rather than held in memory.
+ */
+const MAX_RECORDING_BYTES = 50 * 1024 * 1024
+
 function notAvailable(requestId: string) {
   return apiError('not_found', 'No recording is available for this call.', 404, { requestId })
 }
 
-// GET /api/calls/[id]/audio — streams the recording from the provider that
-// served the call. Ownership comes from our DB row (org-scoped lookup); the
-// provider URL and key never reach the browser.
+function tooLarge(requestId: string) {
+  return apiError('provider_error', 'This recording is too large to play here.', 502, { requestId })
+}
+
+/** Reads the whole upstream body; null when it exceeds `max` bytes. */
+async function readCapped(body: ReadableStream<Uint8Array>, max: number, log: Logger): Promise<Uint8Array<ArrayBuffer> | null> {
+  const reader = body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.byteLength
+    if (total > max) {
+      await reader.cancel().catch((err: unknown) => log.warn('calls.audio.cancel_failed', { error: String(err) }))
+      return null
+    }
+    chunks.push(value)
+  }
+  const out = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    out.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return out
+}
+
+type ByteRange = { start: number; end: number }
+
+/**
+ * Parses a single `Range: bytes=a-b | a- | -n` header against `size`.
+ * Returns the inclusive range, or null when it is malformed, multi-range or
+ * unsatisfiable (→ 416).
+ */
+function parseByteRange(header: string, size: number): ByteRange | null {
+  const m = /^bytes=(\d*)-(\d*)$/i.exec(header.trim())
+  if (!m || (m[1] === '' && m[2] === '') || size <= 0) return null
+  const first = m[1] === '' ? null : Number(m[1])
+  const last = m[2] === '' ? null : Number(m[2])
+  if ((first !== null && !Number.isSafeInteger(first)) || (last !== null && !Number.isSafeInteger(last))) return null
+  if (first === null) {
+    // Suffix range: the last `last` bytes.
+    if (!last) return null
+    return { start: Math.max(0, size - last), end: size - 1 }
+  }
+  if (first >= size || (last !== null && last < first)) return null
+  return { start: first, end: last === null ? size - 1 : Math.min(last, size - 1) }
+}
+
+// GET /api/calls/[id]/audio — serves the recording from the provider that
+// served the call, with byte-range support (206) so the player can seek.
+// Ownership comes from our DB row (org-scoped lookup); the provider URL and
+// key never reach the browser.
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const requestId = requestIdFrom(request)
   let log = createLogger({ requestId, route: 'calls.audio' })
@@ -73,6 +130,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
     if (!upstream.body) return notAvailable(requestId)
 
+    const declared = upstream.headers.get('content-length')
+    if (declared && /^\d+$/.test(declared) && Number(declared) > MAX_RECORDING_BYTES) {
+      log.warn('calls.audio.too_large', { provider, bytes: Number(declared) })
+      await upstream.body.cancel().catch((err: unknown) => log.warn('calls.audio.cancel_failed', { error: String(err) }))
+      return tooLarge(requestId)
+    }
+    let bytes: Uint8Array<ArrayBuffer> | null
+    try {
+      bytes = await readCapped(upstream.body, MAX_RECORDING_BYTES, log)
+    } catch (err) {
+      log.error('calls.audio.read_failed', err, { provider })
+      return apiError('provider_error', 'The recording could not be loaded right now. Please try again.', 502, { requestId })
+    }
+    if (!bytes) {
+      log.warn('calls.audio.too_large', { provider })
+      return tooLarge(requestId)
+    }
+    const size = bytes.byteLength
+
     const upstreamType = (upstream.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
     const contentType = upstreamType.startsWith('audio/') ? upstreamType : DEFAULT_TYPE[provider]
     const headers = new Headers({
@@ -80,10 +156,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       'Cache-Control': 'private, no-store',
       'Content-Disposition': `inline; filename="call-${row.id}.${EXTENSION[contentType] ?? 'audio'}"`,
       'X-Content-Type-Options': 'nosniff',
+      // Without range support Chromium treats the media as a stream and cannot seek.
+      'Accept-Ranges': 'bytes',
     })
-    const length = upstream.headers.get('content-length')
-    if (length && /^\d+$/.test(length)) headers.set('Content-Length', length)
-    return new Response(upstream.body, { status: 200, headers })
+
+    const rangeHeader = request.headers.get('range')
+    if (rangeHeader === null) {
+      headers.set('Content-Length', String(size))
+      return new Response(bytes, { status: 200, headers })
+    }
+    const range = parseByteRange(rangeHeader, size)
+    if (!range) {
+      return apiError('invalid_request', 'The requested range is not satisfiable.', 416, {
+        requestId,
+        headers: { 'Content-Range': `bytes */${size}`, 'Accept-Ranges': 'bytes', 'Cache-Control': 'private, no-store' },
+      })
+    }
+    headers.set('Content-Range', `bytes ${range.start}-${range.end}/${size}`)
+    headers.set('Content-Length', String(range.end - range.start + 1))
+    return new Response(bytes.subarray(range.start, range.end + 1), { status: 206, headers })
   } catch (err) {
     if (err instanceof RequestError) return requestErrorResponse(err, requestId)
     return errorResponse(err, log, 'calls.audio.failed', requestId)

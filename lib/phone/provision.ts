@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getTwilioClient } from '@/lib/twilio/client'
 import { publicBaseUrl } from '@/lib/voice-providers/config'
@@ -22,6 +23,12 @@ export interface ProvisionPhoneNumberParams {
  * Idempotent: Stripe retries webhooks, so a number already recorded for this
  * org is returned as-is instead of being bought (and billed) twice.
  */
+/** ≤64 chars (Twilio friendlyName limit); identifies one paid checkout. */
+function purchaseMarker(orgId: string, stripeSubscriptionId: string | null): string | null {
+  if (!stripeSubscriptionId) return null
+  return `ntv:${crypto.createHash('sha256').update(`${orgId}:${stripeSubscriptionId}`).digest('hex').slice(0, 32)}`
+}
+
 export async function provisionPhoneNumber(
   supabase: SupabaseClient,
   { orgId, number, country, agentId, stripeSubscriptionId }: ProvisionPhoneNumberParams
@@ -61,17 +68,24 @@ export async function provisionPhoneNumber(
     localAgentId = agent?.id ?? null
   }
 
-  // Step 1: buy the number with our ingress already configured on it. A
-  // previous attempt may have bought it and then failed before the DB insert:
-  // reuse a number the account already owns instead of buying it again.
+  // Step 1: buy the number with our ingress already configured on it. The
+  // friendly name carries a marker of THIS purchase, so a retry after a
+  // failure between the purchase and the DB insert can adopt the number it
+  // bought — and nothing else the Twilio account owns (another deployment's
+  // number, an operator line) can ever be taken over by a paying tenant.
   const base = publicBaseUrl()
   const webhooks = base ? { ...ingressUrls(base), voiceMethod: 'POST', voiceFallbackMethod: 'POST', statusCallbackMethod: 'POST' } : {}
+  const marker = purchaseMarker(orgId, stripeSubscriptionId ?? null)
   const twilio = getTwilioClient()
   const [alreadyOwned] = await twilio.incomingPhoneNumbers.list({ phoneNumber: e164, limit: 1 })
+  if (alreadyOwned && (!marker || alreadyOwned.friendlyName !== marker)) {
+    log.error('provision.number_owned_elsewhere', null, { number: maskPhone(e164) })
+    throw new Error('number is already owned by the platform account and not linked to this purchase')
+  }
   const purchased = alreadyOwned
     ? await twilio.incomingPhoneNumbers(alreadyOwned.sid).update(webhooks)
-    : await twilio.incomingPhoneNumbers.create({ phoneNumber: e164, ...webhooks })
-  if (alreadyOwned) log.warn('provision.reused_owned_number', { number: maskPhone(e164) })
+    : await twilio.incomingPhoneNumbers.create({ phoneNumber: e164, ...(marker ? { friendlyName: marker } : {}), ...webhooks })
+  if (alreadyOwned) log.warn('provision.adopted_own_purchase', { number: maskPhone(e164) })
 
   // Step 2: record it.
   const { data: phoneRecord, error: dbError } = await supabase

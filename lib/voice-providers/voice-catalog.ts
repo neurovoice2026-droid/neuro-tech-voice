@@ -27,6 +27,8 @@ import { z } from 'zod'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import * as el from '@/lib/elevenlabs/client'
 import * as ct from '@/lib/cartesia/client'
+import { CARTESIA_VOICE_ID_RE, isAllowedFallbackVoice, platformFallbackIds } from '@/lib/cartesia/voice-policy'
+export { CARTESIA_VOICE_ID_RE } from '@/lib/cartesia/voice-policy'
 import { previewTtsModel } from '@/lib/elevenlabs/models'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
@@ -43,7 +45,7 @@ import { parseJson } from '@/lib/util/json'
 import { AGENT_LANGUAGES, type AgentLanguageCode } from '@/lib/agent-languages'
 import { normalizeAgentLanguage } from '@/lib/voice/languages'
 import type { ElevenLabsVoice, VoiceOption } from '@/types'
-import { cartesiaFallbackVoices, libraryMinNoticeDays } from './config'
+import { libraryMinNoticeDays } from './config'
 import { ProviderError, isProviderError } from './errors'
 
 // ─── Identifiers and shared input schemas ────────────────────────────────────
@@ -53,7 +55,6 @@ export const EL_VOICE_ID_RE = /^[A-Za-z0-9]{8,64}$/
 /** Voice Library public owner ids (64 hex chars today). */
 export const EL_OWNER_ID_RE = /^[A-Za-z0-9]{8,128}$/
 /** Cartesia voice ids are UUIDs. */
-export const CARTESIA_VOICE_ID_RE = /^[A-Za-z0-9-]{8,64}$/
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const PREVIEW_TEXT_MAX_CHARS = 200
@@ -916,8 +917,17 @@ export async function synthesizePreview(params: {
   libraryRef: LibraryRef | null
   text: string | null | undefined
   language: string
+  /** The org's agent's current voice (platform-written after its own check). */
+  currentAgentVoiceId?: string | null
 }): Promise<ArrayBuffer> {
   if (!el.isConfigured()) throw new ProviderError({ system: 'elevenlabs', operation: 'tts.preview', code: 'not_configured' })
+  // The voice the org's agent already uses may predate the voice registry
+  // (legacy agents): previewing it reveals nothing the org does not have.
+  if (!params.libraryRef && params.currentAgentVoiceId && params.voiceId === params.currentAgentVoiceId) {
+    const language = normalizeAgentLanguage(params.language)
+    const text = cleanText(params.text ?? '', PREVIEW_TEXT_MAX_CHARS) || defaultPreviewText(language)
+    return el.textToSpeech(params.voiceId, text, previewTtsModel(language), language)
+  }
   if (params.libraryRef) {
     // Cheap check first: no library lookup needed to know it cannot be spoken yet.
     const row = await registryByLibraryVoice(createAdminClient(), params.libraryRef.voiceId)
@@ -954,13 +964,22 @@ export async function handleVoicePreview(request: Request, route: string): Promi
     log = log.child({ orgId: org.id })
     const body = await parseJsonBody(request, PreviewBodySchema, 16 * 1024)
     await enforceRateLimit([RATE_LIMITS.ttsPreview, RATE_LIMITS.ttsPreviewDaily], org.id)
-    const language = body.language ?? (await orgAgentLanguage(supabase, org.id))
+    const { data: agentRow, error: agentErr } = await supabase
+      .from('agents')
+      .select('language, voice_id')
+      .eq('org_id', org.id)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    if (agentErr) throw new Error(`agents read failed: ${agentErr.message}`)
+    const language = body.language ?? normalizeAgentLanguage((agentRow?.language as string | null | undefined) ?? null)
     const audio = await synthesizePreview({
       orgId: org.id,
       voiceId: body.voice_id,
       libraryRef: toLibraryRef(body.library_ref),
       text: body.text,
       language,
+      currentAgentVoiceId: (agentRow?.voice_id as string | null | undefined) ?? null,
     })
     return new Response(audio, { status: 200, headers: PREVIEW_AUDIO_HEADERS })
   } catch (err) {
@@ -1222,23 +1241,7 @@ export interface FallbackVoiceOption {
   hasPreview: boolean
 }
 
-function isPublicCartesiaVoice(v: ct.CartesiaVoice): boolean {
-  const access = typeof v.access === 'string' ? v.access : v.access?.type
-  return access === 'public' || v.is_owner === false
-}
 
-function platformFallbackIds(): Set<string> {
-  return new Set(Object.values(cartesiaFallbackVoices()))
-}
-
-/**
- * Voices a tenant may see or pick for the fallback agent: public Cartesia
- * voices plus the platform's explicitly mapped ones. Private voices of the
- * platform account (if any) are never offered otherwise.
- */
-function isAllowedFallbackVoice(v: ct.CartesiaVoice, mapped: Set<string>): boolean {
-  return CARTESIA_VOICE_ID_RE.test(v.id) && (v.status ?? 'active') === 'active' && (isPublicCartesiaVoice(v) || mapped.has(v.id))
-}
 
 function speaksNatively(v: ct.CartesiaVoice, language: string): boolean {
   if (normalizeLanguage(v.language) === language) return true

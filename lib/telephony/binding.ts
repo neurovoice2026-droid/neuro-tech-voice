@@ -39,6 +39,50 @@ export function ingressUrls(base: string) {
   }
 }
 
+/**
+ * Imports the number into Cartesia under the platform SIP provider and assigns
+ * it to the fallback agent, idempotently: an import that already exists (409,
+ * e.g. a lost response or a stale import) is found and adopted; a stored id
+ * that no longer exists (404) is re-imported. Returns the Cartesia number id.
+ */
+async function bindCartesiaNumber(
+  n: { number: string; orgId: string; storedId: string | null },
+  providerId: string,
+  agentId: string,
+  log: Logger,
+): Promise<string> {
+  if (n.storedId) {
+    try {
+      await ct.telephony.updateNumber(n.storedId, { agent_id: agentId })
+      return n.storedId
+    } catch (err) {
+      if (!(isProviderError(err) && err.code === 'not_found')) throw err
+      log.warn('binding.cartesia_import_missing_reimporting')
+    }
+  }
+  try {
+    const imported = await ct.telephony.importNumber({ label: `ntv ${n.orgId.slice(0, 8)}`, number: n.number, provider: { id: providerId }, agent_id: agentId })
+    return imported.id
+  } catch (err) {
+    if (!(isProviderError(err) && err.code === 'conflict')) throw err
+  }
+  // Already imported: adopt it when it is under our SIP provider, otherwise
+  // replace it (a number can be imported only once per account).
+  const { data } = await ct.telephony.listNumbers({ q: n.number, limit: 20 })
+  const existing = (data ?? []).find((x) => x.number === n.number)
+  if (!existing) throw new Error('Cartesia reports the number as imported but it was not found')
+  const providerOf = existing.provider?.id
+  if (providerOf && providerOf !== providerId) {
+    log.warn('binding.cartesia_import_wrong_provider_replacing')
+    await ct.telephony.deleteNumber(existing.id)
+    const imported = await ct.telephony.importNumber({ label: `ntv ${n.orgId.slice(0, 8)}`, number: n.number, provider: { id: providerId }, agent_id: agentId })
+    return imported.id
+  }
+  await ct.telephony.updateNumber(existing.id, { agent_id: agentId })
+  log.info('binding.cartesia_import_adopted')
+  return existing.id
+}
+
 export async function applyNumberRouting(phoneNumberId: string, log: Logger = createLogger()): Promise<BindingResult> {
   const db = createAdminClient()
   const { data: n, error } = await db
@@ -109,12 +153,12 @@ export async function applyNumberRouting(phoneNumberId: string, log: Logger = cr
       await step('cartesia.sip_import', async () => {
         const providerId = await tryPlatformResource('cartesia.sip_provider')
         if (!providerId) throw new Error('Cartesia SIP provider unavailable (check CARTESIA_SIP_USERNAME/PASSWORD)')
-        if (n.cartesia_phone_number_id) {
-          await ct.telephony.updateNumber(n.cartesia_phone_number_id as string, { agent_id: ext.cartesia })
-        } else {
-          const imported = await ct.telephony.importNumber({ label: `ntv ${String(n.org_id).slice(0, 8)}`, number: n.number as string, provider: { id: providerId }, agent_id: ext.cartesia })
-          patch.cartesia_phone_number_id = imported.id
-        }
+        patch.cartesia_phone_number_id = await bindCartesiaNumber(
+          { number: n.number as string, orgId: n.org_id as string, storedId: (n.cartesia_phone_number_id as string | null) ?? null },
+          providerId,
+          ext.cartesia,
+          l,
+        )
       })
     }
   } else {

@@ -10,6 +10,7 @@ import { NextResponse } from 'next/server'
 import { requireOrg } from '@/lib/api/auth'
 import { RequestError, assertSameOrigin, errorResponse, requestErrorResponse } from '@/lib/api/http'
 import { createLogger, requestIdFrom } from '@/lib/observability/logger'
+import { RATE_LIMITS, enforceRateLimit } from '@/lib/security/rate-limit'
 import { parseDocId, processDocument, toDocumentView } from '@/lib/voice-providers/knowledge'
 
 export const maxDuration = 120
@@ -22,6 +23,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ doc
     const { supabase, org } = await requireOrg()
     log = log.child({ orgId: org.id })
     const docId = parseDocId((await params).docId)
+    // Rows are only created by the rate-limited, capacity-checked upload
+    // routes; this bounds repeated processing calls as well.
+    await enforceRateLimit(RATE_LIMITS.knowledgeProcess, org.id)
 
     // Ownership check under RLS before any service-role work.
     const { data: doc, error } = await supabase

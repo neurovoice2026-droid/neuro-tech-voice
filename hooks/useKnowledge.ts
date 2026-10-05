@@ -192,6 +192,8 @@ export function useKnowledge() {
 
   const mounted = useRef(true)
   const listRequest = useRef<AbortController | null>(null)
+  /** Ids whose DELETE is in flight: hidden from list snapshots until it settles. */
+  const deleting = useRef<Set<string>>(new Set())
   const timers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
 
   useEffect(() => {
@@ -223,7 +225,10 @@ export function useKnowledge() {
         return
       }
       const data = (await res.json()) as KnowledgeDoc[]
-      if (mounted.current && !ctrl.signal.aborted) setDocs(sortDocs(data))
+      // A snapshot taken while a DELETE runs still contains that document (the
+      // row is dropped last): keep it hidden instead of resurrecting it.
+      const visible = deleting.current.size ? data.filter((d) => !deleting.current.has(d.id)) : data
+      if (mounted.current && !ctrl.signal.aborted) setDocs(sortDocs(visible))
     } catch (err) {
       if (ctrl.signal.aborted) return // superseded by a newer request or unmounted
       if (opts.quiet) console.warn('[knowledge] refresh failed', err)
@@ -381,6 +386,9 @@ export function useKnowledge() {
   const deleteDoc = useCallback(
     async (docId: string): Promise<boolean> => {
       const snapshot = docs.find((d) => d.id === docId)
+      deleting.current.add(docId)
+      // A list request already in flight predates the delete: drop its answer.
+      listRequest.current?.abort()
       setDocs((prev) => prev.filter((d) => d.id !== docId))
       const restore = () => {
         if (snapshot && mounted.current) setDocs((prev) => upsertInto(prev, snapshot))
@@ -392,7 +400,10 @@ export function useKnowledge() {
           toast.error(await readError(res, 'Failed to delete the document.'))
           return false
         }
-        const data = (await res.json().catch(() => null)) as { warnings?: string[] } | null
+        const data = (await res.json().catch((err: unknown) => {
+          console.warn('[knowledge] unreadable delete response', err)
+          return null
+        })) as { warnings?: string[] } | null
         const warning = data?.warnings?.[0]
         if (warning) toast.warning(`Document removed. ${warning}`)
         else toast.success('Document removed')
@@ -402,9 +413,14 @@ export function useKnowledge() {
         restore()
         toast.error('Network error. Check your connection and try again.')
         return false
+      } finally {
+        deleting.current.delete(docId)
+        // One fresh server view now that the delete settled (this also replaces
+        // any list request aborted above).
+        if (mounted.current) void loadDocs({ quiet: true })
       }
     },
-    [docs],
+    [docs, loadDocs],
   )
 
   const clearErrorUploads = useCallback(() => {

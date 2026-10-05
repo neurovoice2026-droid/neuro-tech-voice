@@ -59,6 +59,8 @@ async function req<T>(
     ctx?: Ctx
     accept?: string
     retry?: typeof NO_RETRY
+    /** Feed the routing circuit breaker (live-call requests only). */
+    breaker?: boolean
   } = {},
 ) {
   const qs = new URLSearchParams()
@@ -80,6 +82,7 @@ async function req<T>(
     responseKind: opts.responseKind,
     context: opts.ctx,
     retry: opts.retry,
+    breaker: opts.breaker ?? false,
   }).then((r) => r.data)
 }
 
@@ -304,6 +307,7 @@ export const twilio = {
       responseKind: 'text',
       timeoutMs: T.registerCall,
       retry: NO_RETRY,
+      breaker: true,
       ctx,
     })
   },
@@ -312,7 +316,7 @@ export const twilio = {
     return req<{ success: boolean; message: string; conversation_id: string | null; callSid: string | null }>(
       'twilio.outbound_call',
       '/v1/convai/twilio/outbound-call',
-      { method: 'POST', body: params, timeoutMs: T.outbound, retry: NO_RETRY, ctx },
+      { method: 'POST', body: params, timeoutMs: T.outbound, retry: NO_RETRY, breaker: true, ctx },
     )
   },
 }

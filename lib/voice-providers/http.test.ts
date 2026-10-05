@@ -85,13 +85,21 @@ describe('providerRequest', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response('x', { status: 500 }))
     vi.stubGlobal('fetch', fetchMock)
     for (let i = 0; i < 3; i++) {
-      await providerRequest({ system: 'elevenlabs', operation: 'health', url: 'https://x.test', timeoutMs: 100, retry: { attempts: 1, baseDelayMs: 0, maxDelayMs: 0 } }).catch(() => undefined)
+      await providerRequest({ system: 'elevenlabs', operation: 'twilio.register_call', url: 'https://x.test', timeoutMs: 100, breaker: true, retry: { attempts: 1, baseDelayMs: 0, maxDelayMs: 0 } }).catch(() => undefined)
     }
     expect((await peek('elevenlabs')).state).toBe('open')
     fetchMock.mockClear()
-    await expect(providerRequest({ system: 'elevenlabs', operation: 'health', url: 'https://x.test', timeoutMs: 100 }))
+    await expect(providerRequest({ system: 'elevenlabs', operation: 'twilio.register_call', url: 'https://x.test', timeoutMs: 100, breaker: true }))
       .rejects.toMatchObject({ code: 'circuit_open' })
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('leaves the routing circuit alone for requests that did not opt in (previews, uploads, syncs)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('x', { status: 429 })))
+    for (let i = 0; i < 5; i++) {
+      await providerRequest({ system: 'elevenlabs', operation: 'tts.convert', url: 'https://x.test', method: 'POST', timeoutMs: 100, retry: { attempts: 1, baseDelayMs: 0, maxDelayMs: 0 } }).catch(() => undefined)
+    }
+    expect((await peek('elevenlabs')).state).toBe('closed')
   })
 
   it('does not apply the voice-provider breaker to Twilio', async () => {
