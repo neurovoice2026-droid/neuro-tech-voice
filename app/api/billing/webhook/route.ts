@@ -7,6 +7,8 @@ import { emitInvoiceForStripePayment } from '@/lib/smartbill/emit'
 import { sendEmail } from '@/lib/email/client'
 import { paymentSuccessEmail, paymentFailedEmail } from '@/lib/email/templates'
 import { provisionPhoneNumber } from '@/lib/phone/provision'
+import { createLogger } from '@/lib/observability/logger'
+import { maskPhone } from '@/lib/phone/e164'
 import { PLANS } from '@/types'
 import type { Plan } from '@/types'
 
@@ -121,11 +123,13 @@ async function provisionPurchasedNumber(supabase: SupabaseClient, session: Strip
   try {
     await provisionPhoneNumber(supabase, { orgId, number, country, agentId, stripeSubscriptionId })
   } catch (err) {
-    console.error(
-      `PAID BUT NOT PROVISIONED: phone number ${number} for org ${orgId} (checkout session ${session.id}). ` +
-      `Customer has been charged. Needs manual follow-up.`,
-      err
-    )
+    // provisionPhoneNumber is idempotent per number, so the error is rethrown:
+    // the webhook answers 500 and Stripe retries the delivery (up to 3 days).
+    createLogger({ component: 'billing_webhook', orgId }).error('billing.paid_but_not_provisioned', err, {
+      number: maskPhone(number),
+      checkoutSessionId: session.id,
+    })
+    throw err
   }
 }
 

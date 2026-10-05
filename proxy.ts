@@ -11,8 +11,15 @@ const PROTECTED_PATHS = [
   '/billing',
 ]
 
+// Machine-to-machine endpoints: each authenticates itself (provider
+// signatures, signed call tokens, bearer secrets) and must not depend on the
+// Supabase session cookie. /api/elevenlabs/voices* still require a user
+// session inside the route handlers.
 const PUBLIC_API_PREFIXES = [
   '/api/elevenlabs/',
+  '/api/cartesia/',
+  '/api/telephony/',
+  '/api/cron/',
   '/api/billing/webhook',
 ]
 

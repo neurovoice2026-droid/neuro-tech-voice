@@ -1,113 +1,85 @@
-// ─── ElevenLabs Conversational AI Client ─────────────────────────────────────
-// Comprehensive wrapper for all ElevenLabs API endpoints used by the platform.
+import 'server-only'
+// ─── ElevenLabs API client ────────────────────────────────────────────────────
+// Thin, typed wrapper over the endpoints the platform uses, verified against
+// the official OpenAPI spec (api.elevenlabs.io/openapi.json, 2026-10). Every
+// call goes through providerRequest(): explicit timeout, retry only when safe,
+// circuit breaker, telemetry, and errors that never carry upstream bodies.
+//
+// Removed vs the previous client:
+// - POST /v1/convai/agents/{id}/add-to-knowledge-base: no longer in the API.
+//   Documents are attached by sending the full prompt.knowledge_base array.
+// - TTS model eleven_turbo_v2_5: deprecated, replaced by eleven_flash_v2_5.
 
-import crypto from 'crypto'
+import { providerRequest, NO_RETRY } from '@/lib/voice-providers/http'
+import { ProviderError } from '@/lib/voice-providers/errors'
 
-const BASE = 'https://api.elevenlabs.io'
-
-function headers(extra?: Record<string, string>): Record<string, string> {
-  return {
-    'xi-api-key': process.env.ELEVENLABS_API_KEY!,
-    'Content-Type': 'application/json',
-    ...extra,
-  }
-}
-
-async function request<T>(
-  method: string,
-  path: string,
-  body?: unknown,
-  opts?: { rawResponse?: boolean; headers?: Record<string, string> }
-): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: headers(opts?.headers),
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  })
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new ElevenLabsError(res.status, text, path)
-  }
-
-  if (opts?.rawResponse) return res as unknown as T
-
-  const contentType = res.headers.get('content-type') ?? ''
-  if (contentType.includes('application/json')) {
-    return res.json() as Promise<T>
-  }
-  return res.text() as unknown as T
-}
-
-async function requestFormData<T>(path: string, formData: FormData): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'POST',
-    headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY! },
-    body: formData,
-  })
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new ElevenLabsError(res.status, text, path)
-  }
-
-  return res.json() as Promise<T>
-}
-
-export class ElevenLabsError extends Error {
-  constructor(
-    public status: number,
-    public body: string,
-    public path: string
-  ) {
-    super(`ElevenLabs API error ${status} on ${path}: ${body}`)
-    this.name = 'ElevenLabsError'
-  }
-}
+const PLACEHOLDER_KEYS = new Set(['', 'your-elevenlabs-api-key'])
 
 export function isConfigured(): boolean {
-  const key = process.env.ELEVENLABS_API_KEY
-  return !!key && key !== 'your-elevenlabs-api-key'
+  return !PLACEHOLDER_KEYS.has((process.env.ELEVENLABS_API_KEY ?? '').trim())
 }
 
-/** True when an ElevenLabs webhook signing secret is configured. */
-export function isWebhookConfigured(): boolean {
-  const secret = process.env.ELEVENLABS_WEBHOOK_SECRET
-  return !!secret && secret !== 'your-elevenlabs-webhook-secret'
+function baseUrl(): string {
+  const raw = (process.env.ELEVENLABS_API_BASE_URL ?? 'https://api.elevenlabs.io').trim().replace(/\/+$/, '')
+  return raw || 'https://api.elevenlabs.io'
 }
 
-/**
- * Verify an ElevenLabs webhook HMAC signature.
- *
- * Header format: `ElevenLabs-Signature: t=<unix>,v0=<hex>` where the hex value
- * is HMAC-SHA256 of `${t}.${rawBody}` keyed with ELEVENLABS_WEBHOOK_SECRET.
- * Stale timestamps are rejected to mitigate replay attacks.
- */
-export function verifyWebhookSignature(
-  rawBody: string,
-  signatureHeader: string | null,
-  toleranceSeconds = 1800
-): boolean {
-  const secret = process.env.ELEVENLABS_WEBHOOK_SECRET
-  if (!secret || !signatureHeader) return false
+function key(operation: string): string {
+  const k = (process.env.ELEVENLABS_API_KEY ?? '').trim()
+  if (PLACEHOLDER_KEYS.has(k)) {
+    throw new ProviderError({ system: 'elevenlabs', operation, code: 'not_configured' })
+  }
+  return k
+}
 
-  const parts = signatureHeader.split(',')
-  const t = parts.find((p) => p.startsWith('t='))?.slice(2)
-  const v0 = parts.find((p) => p.startsWith('v0='))?.slice(3)
-  if (!t || !v0) return false
+type Ctx = { orgId?: string | null; agentId?: string | null; callId?: string | null }
 
-  const timestamp = Number(t)
-  if (!Number.isFinite(timestamp)) return false
-  if (Math.abs(Date.now() / 1000 - timestamp) > toleranceSeconds) return false
+// Timeouts per class of call. Register-call is on the live call path: Twilio
+// waits at most 15 s for our TwiML and we still need time for a fallback.
+const T = {
+  read: 8_000,
+  write: 15_000,
+  upload: 60_000,
+  tts: 20_000,
+  registerCall: 4_500,
+  outbound: 10_000,
+} as const
 
-  const expected = crypto
-    .createHmac('sha256', secret)
-    .update(`${t}.${rawBody}`)
-    .digest('hex')
-
-  const a = Buffer.from(expected)
-  const b = Buffer.from(v0)
-  return a.length === b.length && crypto.timingSafeEqual(a, b)
+function req<T>(
+  operation: string,
+  path: string,
+  opts: {
+    method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+    body?: unknown
+    timeoutMs?: number
+    idempotent?: boolean
+    responseKind?: 'json' | 'text' | 'arrayBuffer' | 'response' | 'none'
+    query?: Record<string, string | number | boolean | string[] | null | undefined>
+    ctx?: Ctx
+    accept?: string
+    retry?: typeof NO_RETRY
+  } = {},
+) {
+  const qs = new URLSearchParams()
+  for (const [k, v] of Object.entries(opts.query ?? {})) {
+    if (v === undefined || v === null || v === '') continue
+    if (Array.isArray(v)) v.forEach((x) => qs.append(k, x))
+    else qs.set(k, String(v))
+  }
+  const q = qs.toString()
+  return providerRequest<T>({
+    system: 'elevenlabs',
+    operation,
+    url: `${baseUrl()}${path}${q ? `?${q}` : ''}`,
+    method: opts.method ?? 'GET',
+    headers: { 'xi-api-key': key(operation), ...(opts.accept ? { Accept: opts.accept } : {}) },
+    body: opts.body,
+    timeoutMs: opts.timeoutMs ?? (opts.method && opts.method !== 'GET' ? T.write : T.read),
+    idempotent: opts.idempotent,
+    responseKind: opts.responseKind,
+    context: opts.ctx,
+    retry: opts.retry,
+  }).then((r) => r.data)
 }
 
 // ─── Agents ──────────────────────────────────────────────────────────────────
@@ -115,344 +87,274 @@ export function verifyWebhookSignature(
 export interface ELAgent {
   agent_id: string
   name: string
-  conversation_config: {
+  tags?: string[] | null
+  version_id?: string | null
+  branch_id?: string | null
+  conversation_config: Record<string, unknown> & {
     agent?: {
-      prompt?: { prompt?: string; llm?: string }
       first_message?: string
       language?: string
+      prompt?: { prompt?: string; llm?: string; knowledge_base?: Array<{ type: string; name: string; id: string; usage_mode?: string }>; tool_ids?: string[] }
     }
-    tts?: { voice_id?: string; expressive_mode?: boolean }
+    tts?: { voice_id?: string; model_id?: string; agent_output_audio_format?: string }
+    asr?: { user_input_audio_format?: string }
   }
   platform_settings?: Record<string, unknown>
-  metadata?: Record<string, unknown>
-  [key: string]: unknown
+  metadata?: { created_at_unix_secs?: number; updated_at_unix_secs?: number }
 }
 
-export interface CreateAgentParams {
+export interface AgentBody {
   name: string
-  conversation_config: {
-    agent: {
-      prompt?: { prompt: string; llm?: string }
-      first_message?: string
-      language?: string
-    }
-    tts?: { voice_id?: string; model_id?: string; expressive_mode?: boolean }
-  }
-  platform_settings?: Record<string, unknown>
+  tags: string[]
+  conversation_config: Record<string, unknown>
+  platform_settings: Record<string, unknown>
+  version_description?: string
 }
 
-export interface UpdateAgentParams {
-  conversation_config?: {
-    agent?: {
-      prompt?: { prompt: string; llm?: string }
-      first_message?: string
-      language?: string
-    }
-    tts?: { voice_id?: string; model_id?: string; expressive_mode?: boolean }
-  }
-  name?: string
-  platform_settings?: Record<string, unknown>
+export interface ELAgentSummary {
+  agent_id: string
+  name: string
+  voice_id?: string | null
+  tags?: string[]
+  created_at_unix_secs?: number
+  archived?: boolean
 }
 
 export const agents = {
-  create(params: CreateAgentParams) {
-    return request<ELAgent>('POST', '/v1/convai/agents/create', params)
+  /** Not idempotent at the provider: never retried automatically. */
+  create(body: Omit<AgentBody, 'version_description'>, ctx?: Ctx) {
+    return req<{ agent_id: string }>('agents.create', '/v1/convai/agents/create', { method: 'POST', body, ctx, retry: NO_RETRY })
   },
-
-  get(agentId: string) {
-    return request<ELAgent>('GET', `/v1/convai/agents/${agentId}`)
+  get(agentId: string, ctx?: Ctx) {
+    return req<ELAgent>('agents.get', `/v1/convai/agents/${encodeURIComponent(agentId)}`, { ctx })
   },
-
-  list(params?: { page_size?: number; search?: string; cursor?: string }) {
-    const qs = new URLSearchParams()
-    if (params?.page_size) qs.set('page_size', String(params.page_size))
-    if (params?.search) qs.set('search', params.search)
-    if (params?.cursor) qs.set('cursor', params.cursor)
-    const q = qs.toString()
-    return request<{ agents: ELAgent[]; next_cursor?: string }>(
-      'GET',
-      `/v1/convai/agents${q ? `?${q}` : ''}`
-    )
+  /** Full-config PATCH: re-sending the same config is idempotent, so it may be retried. */
+  update(agentId: string, body: Partial<AgentBody>, ctx?: Ctx) {
+    return req<ELAgent>('agents.update', `/v1/convai/agents/${encodeURIComponent(agentId)}`, { method: 'PATCH', body, idempotent: true, ctx })
   },
-
-  update(agentId: string, params: UpdateAgentParams) {
-    return request<ELAgent>('PATCH', `/v1/convai/agents/${agentId}`, params)
+  delete(agentId: string, ctx?: Ctx) {
+    return req<void>('agents.delete', `/v1/convai/agents/${encodeURIComponent(agentId)}`, { method: 'DELETE', responseKind: 'none', ctx })
   },
-
-  delete(agentId: string) {
-    return request<void>('DELETE', `/v1/convai/agents/${agentId}`)
+  list(params: { tags?: string[]; search?: string; cursor?: string | null; page_size?: number }) {
+    return req<{ agents: ELAgentSummary[]; next_cursor?: string | null; has_more?: boolean }>('agents.list', '/v1/convai/agents', {
+      query: { tags: params.tags, search: params.search, cursor: params.cursor ?? undefined, page_size: params.page_size ?? 100 },
+    })
   },
 }
 
+// ─── Platform tools (webhook tool used for app-routed human transfer) ────────
+
+export const tools = {
+  create(toolConfig: Record<string, unknown>) {
+    return req<{ id: string }>('tools.create', '/v1/convai/tools', { method: 'POST', body: { tool_config: toolConfig }, retry: NO_RETRY })
+  },
+  get(toolId: string) {
+    return req<{ id: string; tool_config: Record<string, unknown> }>('tools.get', `/v1/convai/tools/${encodeURIComponent(toolId)}`)
+  },
+  update(toolId: string, toolConfig: Record<string, unknown>) {
+    return req<{ id: string }>('tools.update', `/v1/convai/tools/${encodeURIComponent(toolId)}`, {
+      method: 'PATCH',
+      body: { tool_config: toolConfig },
+      idempotent: true,
+    })
+  },
+}
+
+export async function listLlms() {
+  return req<{ llms: Array<{ llm: string; deprecation_info?: { is_deprecated?: boolean; replacement_model?: string | null; is_in_fallback_period?: boolean } | null }> }>(
+    'llm.list',
+    '/v1/convai/llm/list',
+  )
+}
+
 // ─── Conversations ───────────────────────────────────────────────────────────
+
+export interface ELTranscriptTurn {
+  role: string
+  message?: string | null
+  time_in_call_secs?: number | null
+}
+
+export interface ELPhoneCallMeta {
+  type?: string
+  direction?: 'inbound' | 'outbound'
+  phone_number_id?: string
+  agent_number?: string
+  external_number?: string
+  call_sid?: string
+}
 
 export interface ELConversation {
   conversation_id: string
   agent_id: string
   status: string
-  transcript?: Array<{
-    role: string
-    message: string
-    time_in_call_secs?: number
-  }>
+  transcript?: ELTranscriptTurn[]
   metadata?: {
     start_time_unix_secs?: number
     call_duration_secs?: number
-    cost?: number
-    from_number?: string
-    to_number?: string
-    direction?: string
-    [key: string]: unknown
+    cost?: number | null
+    cost_fiat?: number | null
+    termination_reason?: string | null
+    phone_call?: ELPhoneCallMeta | null
+    conversation_initiation_source?: string
   }
   analysis?: {
-    call_successful?: string
+    call_successful?: 'success' | 'failure' | 'unknown'
     transcript_summary?: string
-    evaluation_criteria_results?: Record<string, unknown>
-    data_collection_results?: Record<string, unknown>
-    [key: string]: unknown
-  }
-  conversation_initiation_client_data?: Record<string, unknown>
-  [key: string]: unknown
+    call_summary_title?: string | null
+    evaluation_criteria_results?: Record<string, { criteria_id?: string; result?: string; rationale?: string }>
+    data_collection_results?: Record<string, { data_collection_id?: string; value?: unknown; rationale?: string }>
+  } | null
+  conversation_initiation_client_data?: { dynamic_variables?: Record<string, unknown> } | null
+  has_audio?: boolean
 }
 
-export interface ELConversationListItem {
+export interface ELConversationSummary {
   conversation_id: string
   agent_id: string
   status: string
-  start_time_unix_secs?: number
-  call_duration_secs?: number
-  message_count?: number
-  call_successful?: string
-  from_phone_number?: string
-  to_phone_number?: string
-  conversation_initiation_source?: string
-  [key: string]: unknown
-}
-
-export interface ListConversationsParams {
-  agent_id?: string
-  page_size?: number
-  cursor?: string
-  call_successful?: string
-  call_start_after_unix?: number
-  call_start_before_unix?: number
-  call_duration_min_secs?: number
-  call_duration_max_secs?: number
-  search?: string
-  exclude_statuses?: string[]
-}
-
-export interface ListConversationsResponse {
-  conversations: ELConversationListItem[]
-  next_cursor?: string
-  has_more?: boolean
-  total_count?: number
+  start_time_unix_secs: number
+  call_duration_secs: number
+  call_successful?: 'success' | 'failure' | 'unknown'
+  direction?: 'inbound' | 'outbound' | null
+  transcript_summary?: string | null
+  call_summary_title?: string | null
+  termination_reason?: string | null
 }
 
 export const conversations = {
-  list(params?: ListConversationsParams) {
-    const qs = new URLSearchParams()
-    if (params?.agent_id) qs.set('agent_id', params.agent_id)
-    if (params?.page_size) qs.set('page_size', String(params.page_size))
-    if (params?.cursor) qs.set('cursor', params.cursor)
-    if (params?.call_successful) qs.set('call_successful', params.call_successful)
-    if (params?.call_start_after_unix) qs.set('call_start_after_unix', String(params.call_start_after_unix))
-    if (params?.call_start_before_unix) qs.set('call_start_before_unix', String(params.call_start_before_unix))
-    if (params?.call_duration_min_secs) qs.set('call_duration_min_secs', String(params.call_duration_min_secs))
-    if (params?.call_duration_max_secs) qs.set('call_duration_max_secs', String(params.call_duration_max_secs))
-    if (params?.search) qs.set('search', params.search)
-    if (params?.exclude_statuses) {
-      for (const s of params.exclude_statuses) qs.append('exclude_statuses', s)
-    }
-    const q = qs.toString()
-    return request<ListConversationsResponse>(
-      'GET',
-      `/v1/convai/conversations${q ? `?${q}` : ''}`
+  list(params: { agent_id: string; cursor?: string | null; page_size?: number; call_start_after_unix?: number }) {
+    return req<{ conversations: ELConversationSummary[]; next_cursor?: string | null; has_more?: boolean }>(
+      'conversations.list',
+      '/v1/convai/conversations',
+      { query: { agent_id: params.agent_id, cursor: params.cursor ?? undefined, page_size: params.page_size ?? 100, call_start_after_unix: params.call_start_after_unix } },
     )
   },
-
-  get(conversationId: string) {
-    return request<ELConversation>('GET', `/v1/convai/conversations/${conversationId}`)
+  get(conversationId: string, ctx?: Ctx) {
+    return req<ELConversation>('conversations.get', `/v1/convai/conversations/${encodeURIComponent(conversationId)}`, { ctx })
   },
-
-  delete(conversationId: string) {
-    return request<void>('DELETE', `/v1/convai/conversations/${conversationId}`)
+  /** Streams audio/mpeg; the caller proxies it after an ownership check. */
+  audio(conversationId: string, ctx?: Ctx) {
+    return req<Response>('conversations.audio', `/v1/convai/conversations/${encodeURIComponent(conversationId)}/audio`, {
+      responseKind: 'response',
+      timeoutMs: T.upload,
+      ctx,
+    })
   },
-
-  async getAudioUrl(conversationId: string): Promise<string> {
-    // Returns a URL that streams the audio — we proxy this
-    return `${BASE}/v1/convai/conversations/${conversationId}/audio`
-  },
-
-  async getAudio(conversationId: string): Promise<Response> {
-    const res = await fetch(
-      `${BASE}/v1/convai/conversations/${conversationId}/audio`,
-      { headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY! } }
-    )
-    if (!res.ok) {
-      throw new ElevenLabsError(res.status, await res.text(), 'conversations/audio')
-    }
-    return res
+  delete(conversationId: string, ctx?: Ctx) {
+    return req<void>('conversations.delete', `/v1/convai/conversations/${encodeURIComponent(conversationId)}`, { method: 'DELETE', responseKind: 'none', ctx })
   },
 }
 
-// ─── Phone Numbers ───────────────────────────────────────────────────────────
+// ─── Phone numbers (native Twilio import) ────────────────────────────────────
 
-// The agent assigned to a number is NOT a flat `agent_id` field in
-// responses - confirmed against ElevenLabs' actual API reference, it's
-// nested under `assigned_agent`. (The CREATE/UPDATE *request* body does take
-// a flat top-level `agent_id` - request and response shapes differ here.)
 export interface ELPhoneNumber {
   phone_number_id: string
   phone_number: string
   label?: string
-  assigned_agent?: {
-    agent_id: string
-    agent_name?: string
-    environment?: string | null
-    branch_id?: string | null
-  } | null
   provider?: string
-  [key: string]: unknown
-}
-
-// Flat, sibling fields - confirmed against ElevenLabs' actual API reference
-// (CreateTwilioPhoneNumberRequest schema + a same-shaped Exotel example on the
-// same page). There is NO provider_config wrapper object; sid/token are the
-// Twilio Account SID/Auth Token directly. A previous version of this
-// interface nested them under provider_config.twilio.{account_sid,
-// auth_token, phone_number_sid} - that shape doesn't exist in ElevenLabs'
-// schema at all, meaning every past import silently never sent valid Twilio
-// credentials, however plausible the extra fields being ignored made it look
-// like it worked (2xx response, but agent_id also never actually persisted).
-export interface ImportPhoneNumberParams {
-  phone_number: string
-  label: string
-  provider: 'twilio'
-  agent_id?: string | null
-  sid: string
-  token: string
+  assigned_agent?: { agent_id: string; agent_name?: string } | null
 }
 
 export const phoneNumbers = {
-  // Unlike every other list endpoint in this file (agents, conversations,
-  // voices, knowledge-base, webhooks all wrap their array in an object), this
-  // one returns a bare array at the top level - confirmed against ElevenLabs'
-  // actual API reference. Do not "fix" this to match the others.
   list() {
-    return request<ELPhoneNumber[]>('GET', '/v1/convai/phone-numbers')
+    return req<ELPhoneNumber[]>('phone_numbers.list', '/v1/convai/phone-numbers')
   },
-
-  get(phoneNumberId: string) {
-    return request<ELPhoneNumber>(
-      'GET',
-      `/v1/convai/phone-numbers/${phoneNumberId}`
-    )
+  get(id: string) {
+    return req<ELPhoneNumber>('phone_numbers.get', `/v1/convai/phone-numbers/${encodeURIComponent(id)}`)
   },
-
-  create(params: ImportPhoneNumberParams) {
-    return request<ELPhoneNumber>('POST', '/v1/convai/phone-numbers', params)
+  /**
+   * Imports a Twilio number. ElevenLabs then points the number's voice webhook
+   * at its own endpoint (native mode). enable_sms=false keeps SMS routing ours.
+   */
+  importTwilio(params: { phone_number: string; label: string; agent_id?: string | null; sid: string; token: string }) {
+    return req<{ phone_number_id: string }>('phone_numbers.import', '/v1/convai/phone-numbers', {
+      method: 'POST',
+      body: { provider: 'twilio', enable_sms: false, ...params },
+      retry: NO_RETRY,
+    })
   },
-
-  update(phoneNumberId: string, params: { agent_id?: string; label?: string }) {
-    return request<ELPhoneNumber>(
-      'PATCH',
-      `/v1/convai/phone-numbers/${phoneNumberId}`,
-      params
-    )
+  update(id: string, params: { agent_id?: string | null; label?: string }) {
+    return req<ELPhoneNumber>('phone_numbers.update', `/v1/convai/phone-numbers/${encodeURIComponent(id)}`, { method: 'PATCH', body: params, idempotent: true })
   },
-
-  delete(phoneNumberId: string) {
-    return request<void>('DELETE', `/v1/convai/phone-numbers/${phoneNumberId}`)
+  delete(id: string) {
+    return req<void>('phone_numbers.delete', `/v1/convai/phone-numbers/${encodeURIComponent(id)}`, { method: 'DELETE', responseKind: 'none' })
   },
 }
 
-// ─── Twilio Integration ──────────────────────────────────────────────────────
+// ─── Twilio call control ─────────────────────────────────────────────────────
 
-export interface TwilioOutboundCallParams {
-  agent_id: string
-  agent_phone_number_id: string
-  to_number: string
-  conversation_initiation_client_data?: Record<string, unknown>
+export interface ClientData {
+  dynamic_variables?: Record<string, string | number | boolean>
+  conversation_config_override?: Record<string, unknown>
+  user_id?: string
 }
 
-export const twilioIntegration = {
-  outboundCall(params: TwilioOutboundCallParams) {
-    return request<{ conversation_id: string; call_sid?: string }>(
-      'POST',
+export const twilio = {
+  /**
+   * App-routed calls: returns the TwiML (text) that connects the Twilio call to
+   * the agent. Requires the agent to use ulaw_8000 in and out. Not retried:
+   * the router falls back to the other provider instead, within Twilio's budget.
+   */
+  registerCall(params: { agent_id: string; from_number: string; to_number: string; direction: 'inbound' | 'outbound'; conversation_initiation_client_data?: ClientData }, ctx?: Ctx) {
+    return req<string>('twilio.register_call', '/v1/convai/twilio/register-call', {
+      method: 'POST',
+      body: params,
+      responseKind: 'text',
+      timeoutMs: T.registerCall,
+      retry: NO_RETRY,
+      ctx,
+    })
+  },
+  /** Native numbers only (needs the ElevenLabs phone_number_id). */
+  outboundCall(params: { agent_id: string; agent_phone_number_id: string; to_number: string; conversation_initiation_client_data?: ClientData }, ctx?: Ctx) {
+    return req<{ success: boolean; message: string; conversation_id: string | null; callSid: string | null }>(
+      'twilio.outbound_call',
       '/v1/convai/twilio/outbound-call',
-      params
+      { method: 'POST', body: params, timeoutMs: T.outbound, retry: NO_RETRY, ctx },
     )
   },
 }
 
-// ─── Knowledge Base ──────────────────────────────────────────────────────────
+// ─── Knowledge base ──────────────────────────────────────────────────────────
 
-export interface ELDocument {
+export interface ELDocumentRef {
   id: string
   name: string
-  type?: string
-  source_type?: string
-  url?: string
-  status?: string
-  created_at_unix?: number
-  [key: string]: unknown
 }
 
 export const knowledgeBase = {
-  list(params?: { page_size?: number; search?: string; cursor?: string; types?: string[] }) {
-    const qs = new URLSearchParams()
-    if (params?.page_size) qs.set('page_size', String(params.page_size))
-    if (params?.search) qs.set('search', params.search)
-    if (params?.cursor) qs.set('cursor', params.cursor)
-    if (params?.types) {
-      for (const t of params.types) qs.append('types', t)
-    }
-    const q = qs.toString()
-    return request<{ documents: ELDocument[]; next_cursor?: string }>(
-      'GET',
-      `/v1/convai/knowledge-base${q ? `?${q}` : ''}`
-    )
+  createFromUrl(params: { url: string; name?: string }, ctx?: Ctx) {
+    return req<ELDocumentRef>('kb.create_url', '/v1/convai/knowledge-base/url', { method: 'POST', body: params, retry: NO_RETRY, ctx })
   },
-
-  get(docId: string) {
-    return request<ELDocument>('GET', `/v1/convai/knowledge-base/${docId}`)
+  createFromText(params: { text: string; name?: string }, ctx?: Ctx) {
+    return req<ELDocumentRef>('kb.create_text', '/v1/convai/knowledge-base/text', { method: 'POST', body: params, retry: NO_RETRY, ctx })
   },
-
-  createFromUrl(params: { url: string; name?: string }) {
-    return request<ELDocument>('POST', '/v1/convai/knowledge-base/url', params)
+  createFromFile(file: Blob, filename: string, name: string, ctx?: Ctx) {
+    const form = new FormData()
+    form.append('file', file, filename)
+    form.append('name', name)
+    return req<ELDocumentRef>('kb.create_file', '/v1/convai/knowledge-base/file', { method: 'POST', body: form, timeoutMs: T.upload, retry: NO_RETRY, ctx })
   },
-
-  createFromText(params: { text: string; name?: string }) {
-    return request<ELDocument>('POST', '/v1/convai/knowledge-base/text', params)
+  get(id: string, ctx?: Ctx) {
+    return req<{ id: string; name: string; type: string; metadata?: { size_bytes?: number } }>('kb.get', `/v1/convai/knowledge-base/${encodeURIComponent(id)}`, { ctx })
   },
-
-  createFromFile(file: File, name?: string) {
-    const formData = new FormData()
-    formData.append('file', file, file.name)
-    if (name) formData.append('name', name)
-    return requestFormData<ELDocument>('/v1/convai/knowledge-base/file', formData)
+  /** Plain text the provider extracted (used to give the fallback agent the same knowledge). */
+  content(id: string, ctx?: Ctx) {
+    return req<string>('kb.content', `/v1/convai/knowledge-base/${encodeURIComponent(id)}/content`, { responseKind: 'text', ctx })
   },
-
-  update(docId: string, params: { name?: string; content?: string }) {
-    return request<ELDocument>(
-      'PATCH',
-      `/v1/convai/knowledge-base/${docId}`,
-      params
-    )
+  /** force=true also detaches the document from any agent still referencing it. */
+  delete(id: string, force: boolean, ctx?: Ctx) {
+    return req<void>('kb.delete', `/v1/convai/knowledge-base/${encodeURIComponent(id)}`, { method: 'DELETE', query: { force }, responseKind: 'none', ctx })
   },
-
-  delete(docId: string) {
-    return request<void>('DELETE', `/v1/convai/knowledge-base/${docId}`)
-  },
-
-  // Add a document to an agent's knowledge base (legacy endpoint, still works)
-  addToAgent(agentId: string, docId: string) {
-    return request<void>(
-      'POST',
-      `/v1/convai/agents/${agentId}/add-to-knowledge-base`,
-      { documentation_id: docId }
-    )
+  /** Idempotent: starts indexing if missing, otherwise returns the current status. */
+  ragIndex(id: string, model: 'e5_mistral_7b_instruct' | 'multilingual_e5_large_instruct', ctx?: Ctx) {
+    return req<{ id: string; status: string; progress_percentage?: number }>('kb.rag_index', `/v1/convai/knowledge-base/${encodeURIComponent(id)}/rag-index`, {
+      method: 'POST',
+      body: { model },
+      idempotent: true,
+      ctx,
+    })
   },
 }
 
@@ -465,152 +367,111 @@ export interface ELVoice {
   description?: string | null
   preview_url?: string | null
   labels?: Record<string, string>
-  [key: string]: unknown
+  verified_languages?: Array<{ language: string; accent?: string | null; locale?: string | null; preview_url?: string | null }>
+  sharing?: { public_owner_id?: string | null; original_voice_id?: string | null } | null
 }
-
-export const voices = {
-  getAll(showLegacy?: boolean) {
-    const qs = showLegacy ? '?show_legacy=true' : ''
-    return request<{ voices: ELVoice[] }>('GET', `/v1/voices${qs}`)
-  },
-
-  search(params?: {
-    page_size?: number
-    search?: string
-    category?: string
-    voice_type?: string
-    sort?: string
-    sort_direction?: string
-    next_page_token?: string
-  }) {
-    const qs = new URLSearchParams()
-    if (params?.page_size) qs.set('page_size', String(params.page_size))
-    if (params?.search) qs.set('search', params.search)
-    if (params?.category) qs.set('category', params.category)
-    if (params?.voice_type) qs.set('voice_type', params.voice_type)
-    if (params?.sort) qs.set('sort', params.sort)
-    if (params?.sort_direction) qs.set('sort_direction', params.sort_direction)
-    if (params?.next_page_token) qs.set('next_page_token', params.next_page_token)
-    const q = qs.toString()
-    return request<{ voices: ELVoice[]; has_more?: boolean; next_page_token?: string }>(
-      'GET',
-      `/v2/voices${q ? `?${q}` : ''}`
-    )
-  },
-
-  get(voiceId: string) {
-    return request<ELVoice>('GET', `/v1/voices/${voiceId}`)
-  },
-}
-
-// ─── Shared voice library (community voices — thousands) ──────────────────────
 
 export interface ELSharedVoice {
-  voice_id: string
   public_owner_id: string
+  voice_id: string
   name: string
-  category?: string
-  description?: string | null
-  preview_url?: string | null
-  language?: string
   accent?: string
   gender?: string
   age?: string
+  descriptive?: string
   use_case?: string
-  [key: string]: unknown
+  category?: string
+  language?: string | null
+  locale?: string | null
+  description?: string | null
+  preview_url?: string | null
+  rate?: number | null
+  fiat_rate?: number | null
+  free_users_allowed?: boolean
+  live_moderation_enabled?: boolean
+  notice_period?: number | null
+  verified_languages?: Array<{ language: string; accent?: string | null; locale?: string | null; preview_url?: string | null }>
+}
+
+export const voices = {
+  search(params: { search?: string; voice_type?: string; category?: string; page_size?: number; next_page_token?: string | null; voice_ids?: string[] }) {
+    return req<{ voices: ELVoice[]; has_more: boolean; next_page_token?: string | null }>('voices.search', '/v2/voices', {
+      query: {
+        search: params.search,
+        voice_type: params.voice_type,
+        category: params.category,
+        page_size: Math.min(params.page_size ?? 50, 100),
+        next_page_token: params.next_page_token ?? undefined,
+        include_total_count: false,
+        voice_ids: params.voice_ids,
+      },
+    })
+  },
+  get(voiceId: string, ctx?: Ctx) {
+    return req<ELVoice>('voices.get', `/v1/voices/${encodeURIComponent(voiceId)}`, { ctx })
+  },
+  delete(voiceId: string, ctx?: Ctx) {
+    return req<{ status: string }>('voices.delete', `/v1/voices/${encodeURIComponent(voiceId)}`, { method: 'DELETE', ctx })
+  },
+  /** Instant voice clone (multipart). Consent is collected and audited by the caller. */
+  addInstantClone(params: { name: string; files: Array<{ blob: Blob; filename: string }>; description?: string; labels?: Record<string, string> }, ctx?: Ctx) {
+    const form = new FormData()
+    form.append('name', params.name)
+    for (const f of params.files) form.append('files', f.blob, f.filename)
+    if (params.description) form.append('description', params.description)
+    if (params.labels) form.append('labels', JSON.stringify(params.labels))
+    form.append('remove_background_noise', 'false')
+    return req<{ voice_id: string; requires_verification?: boolean }>('voices.ivc', '/v1/voices/add', { method: 'POST', body: form, timeoutMs: T.upload, retry: NO_RETRY, ctx })
+  },
 }
 
 export const sharedVoices = {
-  list(params?: {
-    page_size?: number
-    search?: string
-    language?: string
-    gender?: string
-    category?: string
-    page?: number
-  }) {
-    const qs = new URLSearchParams()
-    qs.set('page_size', String(Math.min(params?.page_size ?? 100, 100)))
-    if (params?.search) qs.set('search', params.search)
-    if (params?.language) qs.set('language', params.language)
-    if (params?.gender) qs.set('gender', params.gender)
-    if (params?.category) qs.set('category', params.category)
-    if (params?.page) qs.set('page', String(params.page))
-    return request<{ voices: ELSharedVoice[]; has_more?: boolean }>(
-      'GET',
-      `/v1/shared-voices?${qs.toString()}`
-    )
+  list(params: { search?: string; language?: string; gender?: string; page?: number; page_size?: number; owner_id?: string; min_notice_period_days?: number }) {
+    return req<{ voices: ELSharedVoice[]; has_more: boolean }>('shared_voices.list', '/v1/shared-voices', {
+      query: {
+        page_size: Math.min(params.page_size ?? 30, 100),
+        page: params.page ?? 0,
+        search: params.search,
+        language: params.language,
+        gender: params.gender,
+        owner_id: params.owner_id,
+        min_notice_period_days: params.min_notice_period_days,
+        include_live_moderated: false,
+        include_custom_rates: false,
+        sort: 'cloned_by_count',
+      },
+    })
   },
-
-  /** Add a shared/library voice to the workspace; returns the usable voice_id. */
+  /** Adds a library voice to the platform workspace; returns the usable voice_id. */
   add(publicOwnerId: string, voiceId: string, newName: string) {
-    return request<{ voice_id: string }>(
-      'POST',
-      `/v1/voices/add/${publicOwnerId}/${voiceId}`,
-      { new_name: newName }
-    )
+    return req<{ voice_id: string }>('shared_voices.add', `/v1/voices/add/${encodeURIComponent(publicOwnerId)}/${encodeURIComponent(voiceId)}`, {
+      method: 'POST',
+      body: { new_name: newName.slice(0, 100), bookmarked: true },
+      retry: NO_RETRY,
+    })
   },
 }
 
-// ─── Text-to-Speech ──────────────────────────────────────────────────────────
+// ─── Text-to-speech (previews) ───────────────────────────────────────────────
 
-// Multilingual TTS model. ElevenLabs requires turbo/flash v2_5 for non-English
-// agents, and it works for English too — so we always use it. This is the one
-// place it's declared; lib/elevenlabs/create-agent.ts re-exports it so every
-// TTS call (live agent creation/update and this preview endpoint) stays on
-// the exact same model.
-export const TTS_MODEL = 'eleven_turbo_v2_5'
-
-export async function textToSpeech(
-  voiceId: string,
-  text: string,
-  modelId = TTS_MODEL
-): Promise<ArrayBuffer> {
-  const res = await fetch(`${BASE}/v1/text-to-speech/${voiceId}`, {
+export async function textToSpeech(voiceId: string, text: string, modelId: string, languageCode?: string): Promise<ArrayBuffer> {
+  return req<ArrayBuffer>('tts.convert', `/v1/text-to-speech/${encodeURIComponent(voiceId)}`, {
     method: 'POST',
-    headers: {
-      'xi-api-key': process.env.ELEVENLABS_API_KEY!,
-      'Content-Type': 'application/json',
-      Accept: 'audio/mpeg',
-    },
-    body: JSON.stringify({
-      text,
-      model_id: modelId,
-      voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-    }),
+    query: { output_format: 'mp3_22050_32' },
+    body: { text, model_id: modelId, ...(languageCode ? { language_code: languageCode } : {}) },
+    responseKind: 'arrayBuffer',
+    accept: 'audio/mpeg',
+    timeoutMs: T.tts,
+    retry: NO_RETRY,
   })
-
-  if (!res.ok) {
-    throw new ElevenLabsError(res.status, await res.text(), 'text-to-speech')
-  }
-
-  return res.arrayBuffer()
 }
 
-// ─── Webhooks ────────────────────────────────────────────────────────────────
+// ─── Health ──────────────────────────────────────────────────────────────────
 
-export interface ELWebhook {
-  webhook_id: string
-  name?: string
-  url?: string
-  is_disabled?: boolean
-  [key: string]: unknown
-}
-
-export const webhooks = {
-  list() {
-    return request<{ webhooks: ELWebhook[] }>('GET', '/v1/webhooks')
-  },
-
-  create(params: { settings: { url: string; secret?: string } }) {
-    return request<ELWebhook>('POST', '/v1/webhooks', params)
-  },
-
-  update(webhookId: string, params: { is_disabled: boolean; name: string }) {
-    return request<ELWebhook>('PATCH', `/v1/webhooks/${webhookId}`, params)
-  },
-
-  delete(webhookId: string) {
-    return request<void>('DELETE', `/v1/webhooks/${webhookId}`)
-  },
+export function subscription() {
+  return req<{ tier?: string; status?: string; character_count?: number; character_limit?: number; voice_slots_used?: number; voice_limit?: number }>(
+    'user.subscription',
+    '/v1/user/subscription',
+    { timeoutMs: 5_000 },
+  )
 }

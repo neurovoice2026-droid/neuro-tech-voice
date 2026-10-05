@@ -56,8 +56,10 @@ export function isValidTimeZone(timeZone: string | null | undefined): boolean {
   try {
     partsFormatter(timeZone)
     return true
-  } catch {
-    return false
+  } catch (err) {
+    // Intl throws RangeError for an unknown zone: that is the "invalid" answer.
+    if (err instanceof RangeError) return false
+    throw err
   }
 }
 

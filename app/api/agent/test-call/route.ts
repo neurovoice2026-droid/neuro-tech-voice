@@ -1,72 +1,35 @@
+// "Call me now": the agent calls the owner's phone so they can hear it end to
+// end (same routing as a real call). Strictly rate limited.
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { twilioIntegration, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
+import { z } from 'zod'
+import { requireOrg } from '@/lib/api/auth'
+import { RequestError, assertSameOrigin, errorResponse, parseJsonBody, requestErrorResponse } from '@/lib/api/http'
+import { createLogger, requestIdFrom } from '@/lib/observability/logger'
+import { RATE_LIMITS, enforceRateLimit } from '@/lib/security/rate-limit'
+import { e164 } from '@/lib/voice-providers/settings'
+import { startOutboundCall } from '@/lib/telephony/outbound'
+
+const Body = z.object({
+  to_number: e164,
+  phone_number_id: z.uuid().optional(),
+})
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
-
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
-
-  if (!org) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const { to_number } = (await request.json()) as { to_number: string }
-
-  if (!to_number) {
-    return NextResponse.json({ error: 'Phone number is required' }, { status: 400 })
-  }
-
-  if (!elConfigured()) {
-    return NextResponse.json({ error: 'ElevenLabs not configured' }, { status: 503 })
-  }
-
-  // Get agent + phone number
-  const [{ data: agent }, { data: phoneNumber }] = await Promise.all([
-    supabase
-      .from('agents')
-      .select('elevenlabs_agent_id, name')
-      .eq('org_id', org.id)
-      .single(),
-    supabase
-      .from('phone_numbers')
-      .select('elevenlabs_phone_number_id')
-      .eq('org_id', org.id)
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle(),
-  ])
-
-  if (!agent?.elevenlabs_agent_id) {
-    return NextResponse.json({ error: 'Agent not configured with ElevenLabs' }, { status: 400 })
-  }
-
-  if (!phoneNumber?.elevenlabs_phone_number_id) {
-    return NextResponse.json({ error: 'No phone number linked to ElevenLabs' }, { status: 400 })
-  }
-
+  const requestId = requestIdFrom(request)
+  let log = createLogger({ requestId, route: 'agent.test_call' })
   try {
-    const result = await twilioIntegration.outboundCall({
-      agent_id: agent.elevenlabs_agent_id,
-      agent_phone_number_id: phoneNumber.elevenlabs_phone_number_id,
-      to_number,
-    })
-
-    return NextResponse.json({
-      success: true,
-      conversation_id: result.conversation_id,
-      message: `Test call initiated to ${to_number} from agent "${agent.name}"`,
-    })
-  } catch (err) {
-    console.error('Test call error:', err)
+    assertSameOrigin(request)
+    const { org } = await requireOrg()
+    log = log.child({ orgId: org.id })
+    const body = await parseJsonBody(request, Body, 4 * 1024)
+    await enforceRateLimit(RATE_LIMITS.testCall, org.id, 'You have reached the test call limit. Please wait a few minutes.')
+    const res = await startOutboundCall({ orgId: org.id, toNumber: body.to_number, phoneNumberId: body.phone_number_id ?? null, purpose: 'test' }, log)
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to initiate test call' },
-      { status: 500 }
+      { call_id: res.callId, routing_mode: res.routingMode, status: res.status, message: 'Calling you now. Answer to talk to your agent.' },
+      { status: 202 },
     )
+  } catch (err) {
+    if (err instanceof RequestError) return requestErrorResponse(err, requestId)
+    return errorResponse(err, log, 'agent.test_call_failed', requestId)
   }
 }

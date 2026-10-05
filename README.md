@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Neuro Tech Voice
 
-## Getting Started
+Multi-tenant SaaS for AI phone agents: businesses create an agent (prompt,
+language, voice, knowledge base, working hours, human transfer), connect a phone
+number and get call history with transcripts, recordings and analysis.
 
-First, run the development server:
+Stack: Next.js 16 (App Router, `proxy.ts`), TypeScript, Supabase (Postgres + RLS +
+Storage), Twilio (numbers, call ingress), ElevenLabs Agents (primary voice
+provider), Cartesia Managed Agents (fallback voice provider), Stripe, Resend,
+SmartBill.
+
+> This repo uses Next.js 16 — APIs and conventions differ from older versions.
+> Read the guides in `node_modules/next/dist/docs/` before changing framework code
+> (see `AGENTS.md`).
+
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local     # fill in the values (never commit them)
+npm run dev                    # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Database: apply the SQL files in `supabase/migrations/` in order (001 → 010) with
+the Supabase CLI or the SQL editor, and create the private Storage bucket from
+`supabase/STORAGE_BUCKET.sql`. Migration `010_voice_providers.sql` is idempotent
+and additive (safe to re-run, no downtime).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command | What it does |
+|---|---|
+| `npm run dev` / `build` / `start` | Next.js |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Vitest unit + integration tests (mocked providers, no network, no calls) |
+| `node scripts/reconcile-voice-providers.mjs --base-url <url>` | Dry-run reconciliation of agents with ElevenLabs/Cartesia (`--apply` to fix) |
+| `node scripts/live-smoke-test.mjs --base-url <url>` | Read-only live diagnostics; places a real call only with `--confirm-live` + typed confirmation |
 
-## Learn More
+Both scripts call the deployment's admin API and need `ADMIN_API_TOKEN` in the environment.
 
-To learn more about Next.js, take a look at the following resources:
+## Voice providers
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+ElevenLabs answers calls by default; when it is unavailable, new calls on
+smart-routed numbers are answered by a Cartesia agent built from the same
+configuration. Working hours are enforced before any provider is used.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+* Architecture, capability matrix, configuration (ElevenLabs, Cartesia, Twilio,
+  Vercel), webhooks, schema, security/retention and the incident runbook:
+  [`docs/voice-providers.md`](docs/voice-providers.md)
+* Automated, manual and live test procedure:
+  [`docs/voice-provider-test-plan.md`](docs/voice-provider-test-plan.md)
 
-## Deploy on Vercel
+## Deployment (Vercel)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+* Set every variable from `.env.example` (Production and Preview separately).
+* `VOICE_PUBLIC_BASE_URL` must be the stable public origin: Twilio request
+  signatures are validated against it.
+* `vercel.json` schedules `/api/cron/voice-maintenance` every 5 minutes
+  (protected by `CRON_SECRET`).
+* After deploying, check `GET /api/admin/voice/diagnostics?probe=1` with the admin
+  token: it lists missing configuration by name (values are never returned).

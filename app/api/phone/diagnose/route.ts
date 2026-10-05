@@ -1,197 +1,162 @@
+// Phone routing diagnostics for the signed-in organization.
+//   GET  — read-only: what the DB, Twilio and the providers say about each
+//          number and the agent (no side effects, safe to open any time);
+//   POST — repair: re-sync the agent on every provider, then re-apply each
+//          number's routing binding. Same-origin + rate limited.
+// Responses never include provider secrets or upstream error bodies.
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { phoneNumbers as elPhone, isConfigured as elConfigured } from '@/lib/elevenlabs/client'
-import { createAgentWithFallback } from '@/lib/elevenlabs/create-agent'
-import { getTwilioClient } from '@/lib/twilio/client'
+import { requireOrg } from '@/lib/api/auth'
+import { RequestError, assertSameOrigin, errorResponse, requestErrorResponse } from '@/lib/api/http'
+import { createLogger, requestIdFrom, type Logger } from '@/lib/observability/logger'
+import { RATE_LIMITS, enforceRateLimit } from '@/lib/security/rate-limit'
+import { getTwilioClient, isTwilioConfigured } from '@/lib/twilio/client'
+import * as el from '@/lib/elevenlabs/client'
+import * as ct from '@/lib/cartesia/client'
+import { toProviderError } from '@/lib/voice-providers/errors'
+import { publicBaseUrl } from '@/lib/voice-providers/config'
+import { ingressUrls, applyNumberRouting } from '@/lib/telephony/binding'
+import { syncAgent } from '@/lib/voice-providers/agent-sync'
+import { peek } from '@/lib/voice-providers/circuit-registry'
+import { maskPhone } from '@/lib/phone/e164'
 
-// Diagnostic + repair endpoint for phone routing. Open in the browser while
-// logged in: it reports the DB + ElevenLabs state and tries to (re)link each
-// number to the agent, surfacing the real ElevenLabs error if any.
-//
-// Root cause chain found debugging a real broken number (2026-07-06):
-// 1. First suspect: ElevenLabs' auto-configured Twilio webhook wasn't set.
-//    Fixed by force-setting a hand-written static URL - Twilio's own error
-//    log then showed a real HTTP 404 on that exact URL, proving it was
-//    simply wrong, not a config/region issue. Reverted.
-// 2. Second suspect: a plain PATCH that only changes agent_id doesn't
-//    retrigger ElevenLabs' import-time auto-configuration. Switched every
-//    repair here to delete + re-import fresh instead of patching in place.
-//    Confirmed-agent-id verification (added below) still showed null after
-//    a "successful" import.
-// 3. Real fix, found by checking ElevenLabs' exact schema instead of
-//    assuming: the import request body nested Twilio credentials under
-//    provider_config.twilio.{account_sid, auth_token, phone_number_sid} -
-//    that shape doesn't exist in ElevenLabs' API at all (confirmed against
-//    their reference: flat top-level `sid`/`token`, no provider_config
-//    wrapper). Fixed in lib/elevenlabs/client.ts's ImportPhoneNumberParams.
-//    Confirmed working: after this fix, ElevenLabs' auto-configured voiceUrl
-//    changed on its own to a different (and presumably correct) value than
-//    the hand-written one from step 1 - real proof it now has working
-//    Twilio access it didn't have before.
-// 4. But confirmed_agent_id still showed null even after step 3's fix. Turned
-//    out to be a second, independent bug: the phone-number GET/list response
-//    puts the assigned agent under `assigned_agent.agent_id`, not a flat
-//    `agent_id` like the *request* body uses - request and response shapes
-//    differ. This verification code was reading the wrong path the whole
-//    time, so agent assignment may have been working correctly already and
-//    this was a false alarm from my own reporting, not a real failure.
-export async function GET() {
-  const supabase = await createClient()
+interface NumberRow {
+  id: string
+  number: string
+  twilio_sid: string | null
+  is_active: boolean
+  routing_mode: string
+  routing_status: string | null
+  routing_error: string | null
+  routing_synced_at: string | null
+  elevenlabs_phone_number_id: string | null
+  cartesia_phone_number_id: string | null
+}
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+function safe(err: unknown, system: 'twilio' | 'elevenlabs' | 'cartesia', op: string): string {
+  const pe = toProviderError(err, system, op)
+  return pe.code === 'unknown' ? 'check failed' : pe.safeMessage
+}
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
-  if (!org) return NextResponse.json({ error: 'No organization' }, { status: 404 })
+async function loadState(supabase: Awaited<ReturnType<typeof requireOrg>>['supabase'], orgId: string) {
+  const [{ data: agent, error: agentErr }, { data: numbers, error: numErr }] = await Promise.all([
+    supabase.from('agents').select('id, name, is_active, voice_sync_status, voice_sync_error').eq('org_id', orgId).order('created_at', { ascending: true }).limit(1).maybeSingle(),
+    supabase
+      .from('phone_numbers')
+      .select('id, number, twilio_sid, is_active, routing_mode, routing_status, routing_error, routing_synced_at, elevenlabs_phone_number_id, cartesia_phone_number_id')
+      .eq('org_id', orgId),
+  ])
+  if (agentErr) throw new Error(`agents read failed: ${agentErr.message}`)
+  if (numErr) throw new Error(`phone_numbers read failed: ${numErr.message}`)
+  const { data: resources, error: resErr } = agent
+    ? await supabase.from('agent_provider_resources').select('provider, external_id, status, last_error, last_synced_at').eq('agent_id', agent.id)
+    : { data: [], error: null }
+  if (resErr) throw new Error(`agent_provider_resources read failed: ${resErr.message}`)
+  return { agent, numbers: (numbers ?? []) as NumberRow[], resources: resources ?? [] }
+}
 
-  const { data: agent } = await supabase
-    .from('agents')
-    .select('id, name, elevenlabs_agent_id, voice_id, voice_name, is_active, system_prompt, first_message, language')
-    .eq('org_id', org.id)
-    .limit(1)
-    .maybeSingle()
+export async function GET(request: Request) {
+  const requestId = requestIdFrom(request)
+  let log: Logger = createLogger({ requestId, route: 'phone.diagnose' })
+  try {
+    const { supabase, org } = await requireOrg()
+    log = log.child({ orgId: org.id })
+    await enforceRateLimit(RATE_LIMITS.agentSync, org.id)
+    const { agent, numbers, resources } = await loadState(supabase, org.id)
+    const elAgentId = resources.find((r) => r.provider === 'elevenlabs')?.external_id as string | undefined
+    const base = publicBaseUrl()
+    const expected = base ? ingressUrls(base) : null
 
-  const { data: numbers } = await supabase
-    .from('phone_numbers')
-    .select('id, number, twilio_sid, elevenlabs_phone_number_id, agent_id, is_active')
-    .eq('org_id', org.id)
-
-  const report: Record<string, unknown> = {
-    elevenlabs_configured: elConfigured(),
-    twilio_env: {
-      account_sid_set: !!process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_ACCOUNT_SID !== 'your-twilio-account-sid',
-      auth_token_set: !!process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_AUTH_TOKEN !== 'your-twilio-auth-token',
-    },
-    agent: agent ?? null,
-    db_numbers: numbers ?? [],
-  }
-
-  const repair: unknown[] = []
-  let elAgentId: string | null = (agent?.elevenlabs_agent_id as string) ?? null
-
-  // ── Step 1: create the ElevenLabs agent if it's missing ──────────────────
-  if (elConfigured() && agent && !elAgentId) {
-    const result = await createAgentWithFallback({
-      name: agent.name,
-      system_prompt: agent.system_prompt,
-      first_message: agent.first_message,
-      language: agent.language,
-      voice_id: agent.voice_id,
-    })
-    elAgentId = result.agent_id
-    repair.push({ step: 'create_agent', ok: !!elAgentId, voice_error: result.voiceError, error: result.error })
-    if (elAgentId) {
-      await supabase.from('agents').update({ elevenlabs_agent_id: elAgentId, is_active: true }).eq('id', agent.id)
-    }
-  }
-
-  // ── Step 2: delete + re-import each number so ElevenLabs reconfigures the
-  // Twilio voice webhook fresh, then assign the agent at creation time ──────
-  if (elConfigured() && agent && elAgentId) {
-    for (const n of numbers ?? []) {
-      if (n.elevenlabs_phone_number_id) {
-        try {
-          await elPhone.delete(n.elevenlabs_phone_number_id as string)
-        } catch (e) {
-          repair.push({ number: n.number, action: 'delete_failed', ok: false, error: e instanceof Error ? e.message : String(e) })
+    const report = await Promise.all(
+      numbers.map(async (n) => {
+        const out: Record<string, unknown> = {
+          id: n.id,
+          number: maskPhone(n.number),
+          is_active: n.is_active,
+          routing_mode: n.routing_mode,
+          routing_status: n.routing_status,
+          routing_error: n.routing_error,
+          routing_synced_at: n.routing_synced_at,
         }
-        await supabase.from('phone_numbers').update({ elevenlabs_phone_number_id: null }).eq('id', n.id)
-      }
-
-      if (!n.twilio_sid || String(n.twilio_sid).startsWith('mock')) continue
-
-      try {
-        const imported = await elPhone.create({
-          phone_number: n.number as string,
-          label: `${org.id}-${n.number}`,
-          provider: 'twilio',
-          agent_id: elAgentId,
-          sid: process.env.TWILIO_ACCOUNT_SID!,
-          token: process.env.TWILIO_AUTH_TOKEN!,
-        })
-        await supabase
-          .from('phone_numbers')
-          .update({ elevenlabs_phone_number_id: imported.phone_number_id, agent_id: agent.id })
-          .eq('id', n.id)
-
-        // Don't just trust that create() succeeding means agent_id actually
-        // stuck - read the record back from ElevenLabs directly and report
-        // exactly what it says, so this is a real confirmation, not an
-        // assumption based on a 2xx response.
-        let confirmedAgentId: string | null | undefined = undefined
-        try {
-          const fetched = await elPhone.get(imported.phone_number_id)
-          confirmedAgentId = fetched.assigned_agent?.agent_id ?? null
-        } catch (e) {
-          confirmedAgentId = undefined
-          repair.push({ number: n.number, action: 'verify_fetch_failed', ok: false, error: e instanceof Error ? e.message : String(e) })
+        const twilioSid = n.twilio_sid && !n.twilio_sid.startsWith('mock') ? n.twilio_sid : null
+        if (twilioSid && isTwilioConfigured()) {
+          try {
+            const tw = await getTwilioClient().incomingPhoneNumbers(twilioSid).fetch()
+            const voiceUrl = tw.voiceUrl || ''
+            out.twilio = {
+              voice_webhook:
+                !voiceUrl ? 'none'
+                : expected && voiceUrl === expected.voiceUrl ? 'platform'
+                : /elevenlabs\.io/i.test(voiceUrl) ? 'elevenlabs'
+                : 'other',
+              fallback_webhook_set: expected ? tw.voiceFallbackUrl === expected.voiceFallbackUrl : false,
+              status_callback_set: expected ? tw.statusCallback === expected.statusCallback : false,
+              voice_capable: tw.capabilities?.voice !== false,
+            }
+          } catch (err) {
+            log.warn('diagnose.twilio_failed', { phoneNumberId: n.id, error: safe(err, 'twilio', 'diagnose') })
+            out.twilio = { error: safe(err, 'twilio', 'diagnose') }
+          }
         }
+        if (n.elevenlabs_phone_number_id && el.isConfigured()) {
+          try {
+            const p = await el.phoneNumbers.get(n.elevenlabs_phone_number_id)
+            out.elevenlabs_import = { present: true, assigned_to_agent: !!elAgentId && p.assigned_agent?.agent_id === elAgentId }
+          } catch (err) {
+            out.elevenlabs_import = { present: false, error: safe(err, 'elevenlabs', 'diagnose') }
+          }
+        }
+        if (n.cartesia_phone_number_id && ct.isConfigured()) {
+          try {
+            await ct.telephony.getNumber(n.cartesia_phone_number_id)
+            out.cartesia_import = { present: true }
+          } catch (err) {
+            out.cartesia_import = { present: false, error: safe(err, 'cartesia', 'diagnose') }
+          }
+        }
+        return out
+      }),
+    )
 
-        repair.push({
-          number: n.number,
-          action: 'imported_and_assigned',
-          ok: confirmedAgentId === elAgentId,
-          phone_number_id: imported.phone_number_id,
-          requested_agent_id: elAgentId,
-          confirmed_agent_id: confirmedAgentId,
-        })
-      } catch (e) {
-        repair.push({ number: n.number, action: 'import_error', ok: false, error: e instanceof Error ? e.message : String(e) })
-      }
-    }
-  } else if (!elAgentId) {
-    report.repair_note = 'Could not create/find an ElevenLabs agent — see repair_results for the error.'
+    const [elCircuit, ctCircuit] = await Promise.all([peek('elevenlabs'), peek('cartesia')])
+    return NextResponse.json(
+      {
+        agent: agent
+          ? { name: agent.name, is_active: agent.is_active, voice_sync_status: agent.voice_sync_status, voice_sync_error: agent.voice_sync_error }
+          : null,
+        providers: resources.map((r) => ({ provider: r.provider, status: r.status, has_external_agent: !!r.external_id, last_error: r.last_error, last_synced_at: r.last_synced_at })),
+        provider_health: { elevenlabs: elCircuit.state, cartesia: ctCircuit.state },
+        numbers: report,
+      },
+      { headers: { 'Cache-Control': 'no-store' } },
+    )
+  } catch (err) {
+    if (err instanceof RequestError) return requestErrorResponse(err, requestId)
+    return errorResponse(err, log, 'phone.diagnose_failed', requestId)
   }
+}
 
-  report.repair_results = repair
-
-  // ── Step 2c: confirm what ElevenLabs actually has AFTER repair (not a
-  // stale pre-repair snapshot - a previous version of this report queried
-  // the list before running repairs, so it always showed last run's state) ─
-  if (elConfigured()) {
-    try {
-      const list = await elPhone.list()
-      report.elevenlabs_phone_numbers = list.map((p) => ({
-        phone_number_id: p.phone_number_id,
-        phone_number: p.phone_number,
-        agent_id: p.assigned_agent?.agent_id ?? null,
-      }))
-    } catch (e) {
-      report.elevenlabs_list_error = e instanceof Error ? e.message : String(e)
+export async function POST(request: Request) {
+  const requestId = requestIdFrom(request)
+  let log: Logger = createLogger({ requestId, route: 'phone.diagnose.repair' })
+  try {
+    assertSameOrigin(request)
+    const { supabase, org } = await requireOrg()
+    log = log.child({ orgId: org.id })
+    await enforceRateLimit(RATE_LIMITS.agentSync, org.id)
+    const { agent, numbers } = await loadState(supabase, org.id)
+    const sync = agent ? await syncAgent(agent.id as string, { force: true, log }) : []
+    const bindings = []
+    for (const n of numbers) {
+      const result = await applyNumberRouting(n.id, log)
+      bindings.push({ id: n.id, number: maskPhone(n.number), ...result })
     }
+    log.info('diagnose.repair', { numbers: bindings.length })
+    return NextResponse.json(
+      { sync: sync.map((s) => ({ provider: s.provider, status: s.status, error: s.error ?? null })), numbers: bindings },
+      { headers: { 'Cache-Control': 'no-store' } },
+    )
+  } catch (err) {
+    if (err instanceof RequestError) return requestErrorResponse(err, requestId)
+    return errorResponse(err, log, 'phone.diagnose_repair_failed', requestId)
   }
-
-  // ── Step 3: inspect the Twilio number's actual voice routing ─────────────
-  // If voiceUrl is empty, Twilio has no instructions for inbound calls, so the
-  // call just fails silently even though ElevenLabs has the agent assigned.
-  // If it's set but the call still errors, the value itself is worth seeing.
-  const twSidSet = (report.twilio_env as { account_sid_set: boolean }).account_sid_set
-  if (twSidSet) {
-    const twInfo: unknown[] = []
-    for (const n of numbers ?? []) {
-      if (!n.twilio_sid || String(n.twilio_sid).startsWith('mock')) continue
-      try {
-        const tw = await getTwilioClient().incomingPhoneNumbers(n.twilio_sid as string).fetch()
-        twInfo.push({
-          number: n.number,
-          status: tw.status,
-          voiceUrl: tw.voiceUrl || null,
-          voiceMethod: tw.voiceMethod || null,
-          voiceApplicationSid: tw.voiceApplicationSid || null,
-          voiceReceiveMode: (tw as unknown as { voiceReceiveMode?: string }).voiceReceiveMode ?? null,
-          capabilities: tw.capabilities,
-          trunkSid: (tw as unknown as { trunkSid?: string }).trunkSid ?? null,
-        })
-      } catch (e) {
-        twInfo.push({ number: n.number, error: e instanceof Error ? e.message : String(e) })
-      }
-    }
-    report.twilio_numbers = twInfo
-  }
-
-  return NextResponse.json(report, { headers: { 'Cache-Control': 'no-store' } })
 }

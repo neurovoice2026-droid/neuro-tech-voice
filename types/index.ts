@@ -6,6 +6,10 @@ export interface Organization {
   id: string
   user_id: string
   name: string | null
+  /** IANA zone used for working hours (default UTC). */
+  timezone?: string
+  /** Org-level opt-out of provider fallback (ElevenLabs → Cartesia). */
+  voice_fallback_enabled?: boolean
   industry: string | null
   website: string | null
   description: string | null
@@ -67,9 +71,14 @@ export const AGENT_TONES: readonly AgentTone[] = [
 ] as const
 
 
+export type VoiceProviderId = 'elevenlabs' | 'cartesia'
+export type ProviderResourceStatus = 'pending' | 'ready' | 'failed' | 'degraded'
+export type VoiceSyncStatus = 'pending' | 'saving' | 'synced' | 'failed'
+
 export interface Agent {
   id: string
   org_id: string
+  /** Legacy mirror of the ElevenLabs external id (source of truth: agent_provider_resources). */
   elevenlabs_agent_id: string | null
   name: string
   voice_id: string | null
@@ -79,10 +88,49 @@ export interface Agent {
   first_message: string | null
   is_active: boolean
   working_hours: WorkingHours
+  /** Conversational fallback phrase (agent doesn't understand) — NOT provider failover. */
   fallback_message: string | null
   metadata: Record<string, unknown>
+  primary_provider?: VoiceProviderId
+  fallback_provider?: VoiceProviderId | null
+  conversation_settings?: Record<string, unknown>
+  after_hours?: Record<string, unknown>
+  transfer_settings?: Record<string, unknown>
+  analysis_settings?: Record<string, unknown>
+  privacy_settings?: Record<string, unknown>
+  voice_settings?: Record<string, unknown>
+  dynamic_variables?: Record<string, string>
+  /** Cartesia voice used by the fallback agent (null = automatic per language). */
+  fallback_voice_id?: string | null
+  voice_sync_status?: VoiceSyncStatus
+  voice_sync_error?: string | null
+  config_revision?: number
   created_at: string
   updated_at: string
+}
+
+/** Client-safe view of one provider resource (no internal ids beyond what the owner may see). */
+export interface ProviderResourceView {
+  provider: VoiceProviderId
+  role: 'primary' | 'fallback'
+  enabled: boolean
+  configured: boolean
+  status: ProviderResourceStatus | 'not_configured' | 'disabled'
+  last_synced_at: string | null
+  last_error: string | null
+}
+
+export interface AgentStatusView {
+  providers: ProviderResourceView[]
+  voice: { status: VoiceSyncStatus; error: string | null }
+  numbers: Array<{
+    id: string
+    number: string
+    routing_mode: 'app_routed' | 'native_elevenlabs'
+    routing_status: ProviderResourceStatus
+    routing_error: string | null
+  }>
+  fallback_enabled: boolean
 }
 
 // ─── Knowledge ────────────────────────────────────────────────────────────────
@@ -92,14 +140,19 @@ export type KnowledgeDocument = {
   agent_id: string
   org_id: string
   elevenlabs_doc_id: string | null
+  cartesia_doc_id?: string | null
   name: string
-  type: 'pdf' | 'txt' | 'docx' | 'md' | 'url'
+  type: 'pdf' | 'txt' | 'docx' | 'md' | 'url' | 'text' | 'html' | 'epub'
   url: string | null
   storage_path: string | null
   size_bytes: number
   character_count: number
   status: 'processing' | 'ready' | 'failed'
   error_message: string | null
+  mime_type?: string | null
+  /** Set once the document is confirmed in the live agent's configuration. */
+  attached_at?: string | null
+  last_synced_at?: string | null
   created_at: string
 }
 
@@ -116,6 +169,11 @@ export interface PhoneNumber {
   is_active: boolean
   is_verified: boolean
   monthly_cost: number
+  routing_mode?: 'app_routed' | 'native_elevenlabs'
+  routing_status?: ProviderResourceStatus
+  routing_error?: string | null
+  supports_inbound?: boolean
+  supports_outbound?: boolean
   created_at: string
 }
 
@@ -128,7 +186,35 @@ export interface TranscriptEntry {
 }
 
 export type CallDirection = 'inbound' | 'outbound'
-export type CallStatus = 'completed' | 'failed' | 'busy' | 'no-answer' | 'in-progress'
+export type CallStatus =
+  | 'completed'
+  | 'failed'
+  | 'busy'
+  | 'no-answer'
+  | 'in-progress'
+  | 'ringing'
+  | 'canceled'
+  | 'after-hours'
+  | 'transferred'
+
+/**
+ * Why a call went where it went. Kept distinct on purpose:
+ * - primary: served by the primary provider (ElevenLabs)
+ * - provider_fallback: primary unavailable, Cartesia served it (see failover_reason)
+ * - after_hours: closed hours handling (message/forward) before any provider
+ * - transferred: handed to a human
+ * - no_provider: final failure, nobody could take the call
+ * - agent_inactive / number_inactive: paused by the owner
+ * The conversational fallback phrase is a prompt behaviour, not a routing reason.
+ */
+export type RoutingReason =
+  | 'primary'
+  | 'provider_fallback'
+  | 'after_hours'
+  | 'transferred'
+  | 'no_provider'
+  | 'agent_inactive'
+  | 'number_inactive'
 export type Sentiment = 'positive' | 'neutral' | 'negative'
 
 /** What came of a call. Booked / Answered / Flagged are the three the site leads with. */
@@ -169,6 +255,20 @@ export interface Call {
   started_at: string | null
   ended_at: string | null
   created_at: string
+  provider?: VoiceProviderId | null
+  primary_provider?: VoiceProviderId | null
+  routing_reason?: RoutingReason | null
+  failover_reason?: string | null
+  provider_call_id?: string | null
+  from_number?: string | null
+  to_number?: string | null
+  outcome?: CallOutcome | null
+  call_successful?: 'success' | 'failure' | 'unknown' | null
+  summary_title?: string | null
+  analysis?: { evaluation?: Record<string, { result: string; rationale: string | null }>; data?: Record<string, string | number | boolean | null> } | null
+  termination_reason?: string | null
+  has_recording?: boolean
+  recording_status?: 'unknown' | 'pending' | 'available' | 'unavailable' | 'deleted'
 }
 
 // ─── Integration ──────────────────────────────────────────────────────────────
@@ -195,7 +295,27 @@ export interface Integration {
 
 export type MessageUrgency = 'normal' | 'urgent'
 
-// ─── ElevenLabs ───────────────────────────────────────────────────────────────
+// ─── Voices ───────────────────────────────────────────────────────────────────
+
+/** A voice as the dashboard sees it (provider-neutral, from GET /api/voices). */
+export interface VoiceOption {
+  provider: VoiceProviderId
+  voiceId: string
+  name: string
+  description: string | null
+  language: string | null
+  accent: string | null
+  gender: 'female' | 'male' | 'neutral' | null
+  age: string | null
+  category: string | null
+  source: 'premade' | 'library' | 'cloned' | 'designed' | 'provider'
+  /** Public preview audio URL when the provider offers one (else use POST /api/voices/preview). */
+  previewUrl: string | null
+  requiresProvisioning: boolean
+  libraryRef: { publicOwnerId: string; voiceId: string } | null
+}
+
+// ─── ElevenLabs (legacy shape, kept for old callers) ──────────────────────────
 
 export interface ElevenLabsVoice {
   voice_id: string
@@ -230,7 +350,7 @@ export interface DashboardMetrics {
 
 export type CallFilters = {
   search: string
-  status: 'all' | 'completed' | 'failed' | 'busy' | 'no-answer'
+  status: 'all' | 'completed' | 'failed' | 'busy' | 'no-answer' | 'after-hours' | 'transferred'
   direction: 'all' | 'inbound' | 'outbound'
   sentiment: 'all' | 'positive' | 'neutral' | 'negative'
   dateFrom: string
