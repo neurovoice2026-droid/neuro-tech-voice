@@ -5,6 +5,7 @@ import 'server-only'
 import type { AgentSpec, ExternalAgentRef, ProviderHealth } from './types'
 import { ProviderError, isProviderError, type VoiceProvider } from './errors'
 import * as el from '@/lib/elevenlabs/client'
+import { createLogger } from '@/lib/observability/logger'
 import * as ct from '@/lib/cartesia/client'
 import { buildElevenLabsAgentBody, agentTags, configHash } from '@/lib/elevenlabs/agent-config'
 import { buildCartesiaAgentConfig } from '@/lib/cartesia/agent-config'
@@ -122,8 +123,16 @@ const AGENT_MARKER = (localAgentId: string) => `ntv-agent:${localAgentId}`
  */
 export async function resolveFallbackVoice(spec: AgentSpec, preferredGender: 'feminine' | 'masculine' | null = null): Promise<{ voiceId: string; source: 'agent' | 'platform_map' | 'auto' }> {
   if (spec.fallbackVoiceId) {
-    const v = await ct.voices.get(spec.fallbackVoiceId)
-    if (v?.id) return { voiceId: v.id, source: 'agent' }
+    try {
+      const v = await ct.voices.get(spec.fallbackVoiceId)
+      if (v?.id) return { voiceId: v.id, source: 'agent' }
+    } catch (err) {
+      // The chosen voice was removed at Cartesia: fall back to the platform
+      // choice so the fallback agent keeps working (logged for follow-up).
+      // Any other error (outage, auth) propagates and fails the sync.
+      if (!(isProviderError(err) && err.code === 'not_found')) throw err
+      createLogger({ component: 'fallback_voice' }).warn('fallback_voice.agent_choice_missing', { localAgentId: spec.localAgentId })
+    }
   }
   const mapped = cartesiaFallbackVoices()[spec.language]
   if (mapped) return { voiceId: mapped, source: 'platform_map' }

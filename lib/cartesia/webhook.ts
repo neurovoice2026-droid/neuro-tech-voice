@@ -130,7 +130,10 @@ export function normalizeCartesiaCall(call: Partial<CartesiaCall> & Obj, extras:
 export function normalizeCartesiaEnvelope(env: CartesiaEnvelope): NormalizedCallEvent | null {
   const ts = env.timestamp ? Math.floor(Date.parse(env.timestamp) / 1000) : null
   if (env.type === 'call_started' || env.type === 'call_completed' || env.type === 'call_failed') {
-    return env.call ? normalizeCartesiaCall(env.call as Partial<CartesiaCall> & Obj, { eventTimestamp: ts }) : null
+    if (!env.call) return null
+    // Some payloads carry the ids at the top level only.
+    const call = { ...env.call, id: str(env.call.id) ?? env.callId, agent_id: str(env.call.agent_id) ?? env.agentId }
+    return normalizeCartesiaCall(call as Partial<CartesiaCall> & Obj, { eventTimestamp: ts })
   }
   if (env.type === 'post_call_analysis' && env.callId) {
     const summary = str(obj(env.analysis).summary)

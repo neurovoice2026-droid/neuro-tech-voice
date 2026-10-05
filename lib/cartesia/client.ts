@@ -32,7 +32,8 @@ function key(operation: string): string {
 
 type Ctx = { orgId?: string | null; agentId?: string | null; callId?: string | null }
 
-function req<T>(
+// async: a missing key must reject the returned promise, never throw synchronously.
+async function req<T>(
   operation: string,
   path: string,
   opts: {
@@ -53,7 +54,7 @@ function req<T>(
     else qs.set(k, String(v))
   }
   const q = qs.toString()
-  return providerRequest<T>({
+  return await providerRequest<T>({
     system: 'cartesia',
     operation,
     url: `${baseUrl()}${path}${q ? `?${q}` : ''}`,
