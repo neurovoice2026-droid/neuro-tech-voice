@@ -204,15 +204,20 @@ export const END_CARD = {
 
 /* ── the cue sheet (SCRIPT.md ig4 §4 "Sound", beat by beat; hierarchy: voice ≫ story sounds ≫ the bed) ── */
 export const roomAt = (_f: number): Room => 'white';
+/** THE FILE'S FIRST SAMPLES: the delivery's AAC (scripts/ig/finish.mjs) starts on the mix's sample 1024 under a 2 ms
+ *  fade, and a limiter-pinned onset there decodes +3.6 dB hot (0.0 dBTP at 30 ms; check-delivery wants ≤ −1). The
+ *  frame-0 attack — the ring and the riff's first call — sits `db` under the later rings, the bed back on its body
+ *  level by frame `to` (the ring is still the replay's first sound) */
+const HEAD = { db: -4, to: 3 } as const;
 /** a ring: one desk-trill chirp (a key hit at one level, film 2's RING_DB rule), cut by the pickup a 16th later */
-const ring = (f: number, what: string): Hit<Snd>[] => [
-  H(f, 'fx-trill-1', 'rush', 0.16, 1, `${what}: one trill chirp — a rose ring leaves her orb`),
-  H(f + S16, 'fx-pickup', 'none', 0.16, 2, `${what}: … picked up a 16th later (the click cuts the chirp)`, { db: -4 }),
+const ring = (f: number, what: string, trim = 0): Hit<Snd>[] => [
+  H(f, 'fx-trill-1', 'rush', 0.16, 1, `${what}: one trill chirp — a rose ring leaves her orb`, trim ? { db: trim } : {}),
+  H(f + S16, 'fx-pickup', 'none', 0.16, 2, `${what}: … picked up a 16th later (the click cuts the chirp)`, { db: -4 + trim }),
 ];
 const LANDING = ['fx-pluck-e5', 'fx-pluck-gs5', 'fx-pluck-b5'] as const;
 export const HITS: Hit<Snd>[] = [
   H(0, 'fx-roomtone', 'none', 0.5, 3, 'b1 the studio’s room tone, from frame 0 (on through the stop-time: its air floor)', { db: -27 }),
-  ...ring(0, 'b1 THE RING AT FRAME 0 (the attack)'),
+  ...ring(0, 'b1 THE RING AT FRAME 0 (the attack; HEAD.db under the later rings)', HEAD.db),
   H(M.glide[0] + 1, 'fx-paper-lift', 'none', [0.5, 0.6], 3, 'b1 the price list glides up and right (the slot needs the room)', { db: -9 }),
   ...ring(R1, 'b2 ring 1'),
   H(M.slot + 2, 'draw', 'none', [0.3, 0.7], 3, 'b2 the slot’s slate hairline frame draws; ASKED AS rises', { db: -12 }),
@@ -284,7 +289,9 @@ export const BED = {
   file: `ig/sfx/${REEL}/bed.wav`,
   vol: 2,
   ride: [
-    [0, BODY.hook],
+    // the riff's first call under the frame-0 ring, HEAD.db down (the delivery's AAC head), back by HEAD.to
+    [0, BODY.hook + HEAD.db],
+    [HEAD.to, BODY.hook],
     // the riff under the phrasings (the hairline chord is the sfx's: the plucks)
     [RINGS[0] - 4, BODY.hook],
     [RINGS[0] + 2, BODY.asked],
