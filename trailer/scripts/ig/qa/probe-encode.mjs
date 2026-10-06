@@ -4,10 +4,11 @@
  *
  *   node --experimental-strip-types --no-warnings scripts/ig/qa/probe-encode.mjs --comp=IG-Probe-Night-9x16 \
  *        [--film=ig2] [--frames=0-239] [--kbps=N] [--props='{"reseed":"render"}'] [--label=name] [--image-format=png]
- *        [--bundle=out/ig/probe/bundle] [--rebundle] [--60] [--audio] [--sample=0,60,120,180,236] [--keep] [--reuse]
+ *        [--jpeg-quality=100] [--bundle=out/ig/probe/bundle] [--rebundle] [--60] [--audio] [--sample=0,60,120,180,236] [--keep] [--reuse]
  *
- *   1. RENDER the strip exactly as render-par.mjs renders a chunk (scale 1, HEVC CRF 12 intermediate, one tab,
- *      NTV_SKIP_SFX / NTV_HEVC) from a probe bundle (out/ig/probe/bundle; built here when missing or with --rebundle).
+ *   1. RENDER the strip exactly as render-par.mjs renders a chunk (scale 1, frames at JPEG q100, HEVC CRF 12
+ *      intermediate, one tab, NTV_SKIP_SFX / NTV_HEVC) from a probe bundle (out/ig/probe/bundle; built here when missing
+ *      or with --rebundle — rebundle after any src/ change).
  *   2. ENCODE it with finish.mjs's own settings (videoArgs, MUX: two-pass x264 at the reel's budget — `--film` picks the
  *      reel, IG-Probe-Night → ig2, IG-Probe-Pearl → ig1 — or `--kbps`), the 120 fps file and, with --60, the upload copy.
  *      The strip gets the reel's AVERAGE rate; in the full reel two-pass gives a hard passage more, an easy one less.
@@ -52,6 +53,7 @@ const frames = b - a + 1;
 const props = opt('props', '{}');
 const label = opt('label', `${comp.replace(/-9x16$/, '')}-${kbps}`);
 const imageFormat = opt('image-format', null);
+const jpegQuality = imageFormat === 'png' ? null : opt('jpeg-quality', '100');
 const bundle = path.join(ROOT, opt('bundle', 'out/ig/probe/bundle'));
 const OUT = path.join(ROOT, 'out', 'ig', 'probe', label);
 const crf = Number(opt('crf', '12'));
@@ -77,10 +79,10 @@ const inter = path.join(OUT, 'intermediate-hevc.mp4');
 const t0 = Date.now();
 let renderS = null;
 if (!(reuse && existsSync(inter))) {
-  log(`render ${comp} ${a}-${b} (${frames} frames, HEVC CRF ${crf}${imageFormat ? `, ${imageFormat} frames` : ''}) props ${props}`);
+  log(`render ${comp} ${a}-${b} (${frames} frames, ${imageFormat === 'png' ? 'png' : `jpeg q${jpegQuality}`} frames, HEVC CRF ${crf}) props ${props}`);
   const r = spawnSync(
     'npx',
-    ['remotion', 'render', bundle, comp, inter, `--frames=${a}-${b}`, '--scale=1', '--muted', '--codec=h265', `--crf=${crf}`, '--concurrency=1', '--log=error', `--props=${props}`, ...(imageFormat ? [`--image-format=${imageFormat}`] : [])],
+    ['remotion', 'render', bundle, comp, inter, `--frames=${a}-${b}`, '--scale=1', '--muted', '--codec=h265', `--crf=${crf}`, '--concurrency=1', '--log=error', `--props=${props}`, ...(imageFormat ? [`--image-format=${imageFormat}`] : []), ...(jpegQuality ? [`--jpeg-quality=${jpegQuality}`] : [])],
     { cwd: ROOT, env, stdio: ['ignore', 'ignore', 'inherit'] },
   );
   if (r.status !== 0) throw new Error('remotion render failed');
@@ -279,7 +281,7 @@ const sideBySide = (l, r, w, h) => {
   return png(W2, h, out);
 };
 
-const report = { comp, film: filmId, label, frames: [a, b], props: JSON.parse(props), kbps, renderS, imageFormat: imageFormat ?? 'jpeg', outputs: {}, samples: [] };
+const report = { comp, film: filmId, label, frames: [a, b], props: JSON.parse(props), kbps, renderS, imageFormat: imageFormat ?? 'jpeg', jpegQuality, outputs: {}, samples: [] };
 for (const [k, o] of Object.entries(outs)) report.outputs[k] = { size: o.size, mbps: Number(o.mbps.toFixed(3)), encodeS: Number(o.encodeS.toFixed(1)), lock: o.lock };
 const agg = { psnr: [], ssim: [], p8: [], p16: [], max: [], p8c: [], max_c: [], p8src: [], block: [], grain: [] };
 for (const n of sample) {

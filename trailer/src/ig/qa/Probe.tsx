@@ -13,7 +13,8 @@
  * Stand-ins, not the scenes: the layout follows SCRIPT.md closely enough for the encoder to see the same amount of
  * ground, edge, small type and motion. 240 render frames each (timeline t = from + frame / 4).
  *
- * Props (the probe's variants, `--props`): reseed ('timeline' | 'render' | 'static') of IgFinish's noise and
+ * Props (the probe's variants, `--props`; default = the settled reels): reseed ('static' | 'timeline' | 'render') of
+ * IgFinish's noise and
  * groundReseed of the ground's in-canvas dither (default: reseed), finish (FinishSpec overrides), dither (the ground's
  * in-canvas dither), quality (the ground canvas' backing resolution).
  */
@@ -72,7 +73,7 @@ const strip = (d: number | null): Strip => ({ cells: [{ digit: d, ink: FIG_INK }
 /** the rings leave the colon at f −4 (already in flight at f0) and f56 (the second trill at f60) */
 const RINGS = [-4, 56];
 
-export const NightProbe: React.FC<ProbeProps> = ({ reseed = 'timeline', groundReseed = reseed, finish, dither, quality }) => {
+export const NightProbe: React.FC<ProbeProps> = ({ reseed = 'static', groundReseed = reseed, finish, dither, quality }) => {
   React.useState(() => waitForFonts());
   const t = useTimelineFrame();
   const flash = Math.max(...RINGS.map((s) => (t < s ? 0 : Math.exp(-(t - s) / 6))));
@@ -160,7 +161,7 @@ const Cell: React.FC<{ c: number; r: number; t: number }> = ({ c, r, t }) => {
 const S5 = [['The', 255], ['other', 259], ['123?', 264]] as const;
 const S6 = [['That’s', 292], ['the', 297], ['agent’s', 300], ['shift.', 308]] as const;
 
-export const PearlProbe: React.FC<ProbeProps> = ({ reseed = 'timeline', groundReseed = reseed, finish, dither, quality }) => {
+export const PearlProbe: React.FC<ProbeProps> = ({ reseed = 'static', groundReseed = reseed, finish, dither, quality }) => {
   React.useState(() => waitForFonts());
   const t = 255 + useTimelineFrame();
   const pool = tween(t, [262, 292], [0, 0.3], EASE.inOut);

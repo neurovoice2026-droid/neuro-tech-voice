@@ -31,7 +31,7 @@
       "voice": "ava",
       "say": "Don't fire your receptionist for an AI. Not even ours.",
       "direction": "Reel 1 hook, narrator, from frame 0 over the desk phone's ring: confident and dry, a statement nobody expects from an AI company. A small stress on \"fire\". A short beat, then \"Not even ours.\" with a dry smile, a touch lower, landing by about 3.1 s.",
-      "speak": "Don't fire your receptionist for an AI. <break time=\"250ms\"/> Not even ours.",
+      "speak": "Don't fire your receptionist for an AI. Not even ours.",
       "emotion": "confident"
     },
     {
@@ -39,7 +39,7 @@
       "voice": "ava",
       "say": "Nine to six, weekdays: forty-five hours. The week has a hundred and sixty-eight.",
       "direction": "Reel 1, narrator, over the week grid filling: measured, counting, easy. \"forty-five hours\" lands as a small fact; a beat; \"a hundred and sixty-eight\" a little slower and wider, the bigger number. Captions show 45 and 168 as numerals over these words.",
-      "speak": "Nine to six, weekdays: <break time=\"150ms\"/> forty-five hours. <break time=\"300ms\"/> The week has a hundred and sixty-eight.",
+      "speak": "Nine to six, weekdays: forty-five hours. The week has a hundred and sixty-eight.",
       "emotion": "calm"
     },
     {
@@ -80,7 +80,7 @@
       "voice": "ava",
       "say": "Five free minutes, no card. Comment AGENT for the link.",
       "direction": "Reel 1 CTA, narrator: warm, plain, unhurried; a small beat after \"no card\". \"AGENT\" is the comment keyword: say it as the ordinary word (speak has it lowercase so Sonic does not spell it), with a little stress.",
-      "speak": "Five free minutes, no card. <break time=\"200ms\"/> Comment agent for the link.",
+      "speak": "Five free minutes, no card. Comment agent for the link.",
       "emotion": "content"
     },
     {
@@ -88,7 +88,7 @@
       "voice": "ava",
       "say": "Five free minutes, no card. The link's in our bio.",
       "direction": "ALTERNATE for ig1-06, used only if the comment-to-DM automation is not live on posting day: same read, same length budget (≤ 3.3 s).",
-      "speak": "Five free minutes, no card. <break time=\"200ms\"/> The link's in our bio.",
+      "speak": "Five free minutes, no card. The link's in our bio.",
       "emotion": "content"
     },
     {
@@ -185,7 +185,7 @@
       "voice": "ava",
       "say": "Pick it up, the colour over-processes. Leave it, she books elsewhere.",
       "direction": "Reel 3, narrator: the dilemma as two balanced halves. A small wry rise on \"over-processes\"; a beat; a soft drop on \"she books elsewhere.\"",
-      "speak": "Pick it up, the colour over-processes. <break time=\"250ms\"/> Leave it, she books elsewhere.",
+      "speak": "Pick it up, the colour over-processes. Leave it, she books elsewhere.",
       "emotion": "content"
     },
     {
@@ -209,7 +209,7 @@
       "voice": "ava",
       "say": "Timer's done. Caller's sorted. You never looked up.",
       "direction": "Reel 3, narrator, on the payoff (timer at 00:00 as the call ends): content, three small beats, a smile on \"You never looked up.\"",
-      "speak": "Timer's done. <break time=\"150ms\"/> Caller's sorted. <break time=\"200ms\"/> You never looked up.",
+      "speak": "Timer's done. Caller's sorted. You never looked up.",
       "emotion": "content"
     },
     {
@@ -217,7 +217,7 @@
       "voice": "ava",
       "say": "Try it free on your price list. Comment AGENT.",
       "direction": "Reel 3 CTA, narrator: confident and specific (the knowledge base is on the free trial). \"AGENT\" as the plain word, a little stress.",
-      "speak": "Try it free on your price list. <break time=\"200ms\"/> Comment agent.",
+      "speak": "Try it free on your price list. Comment agent.",
       "emotion": "confident"
     },
     {
@@ -225,7 +225,7 @@
       "voice": "ava",
       "say": "Try it free on your price list. Link in bio.",
       "direction": "ALTERNATE for ig3-06 (DM automation not live): same read, same slot.",
-      "speak": "Try it free on your price list. <break time=\"200ms\"/> Link in bio.",
+      "speak": "Try it free on your price list. Link in bio.",
       "emotion": "confident"
     },
     {
@@ -273,7 +273,7 @@
       "voice": "ava",
       "say": "Now: do you do home visits?",
       "direction": "Reel 4, narrator: \"Now:\" as a small turn (the twist is coming), then the curveball quoted lightly, like the earlier phrasings. The bed hard-stops right after it.",
-      "speak": "Now. <break time=\"200ms\"/> Do you do home visits?",
+      "speak": "Now. Do you do home visits?",
       "emotion": "curious"
     },
     {
@@ -297,7 +297,7 @@
       "voice": "ava",
       "say": "Test it free. Comment AGENT, then try to trip it up.",
       "direction": "Reel 4 CTA, narrator: confident, then playful on \"try to trip it up\" (it loops back to the hook). \"AGENT\" as the plain word.",
-      "speak": "Test it free. <break time=\"150ms\"/> Comment agent, then try to trip it up.",
+      "speak": "Test it free. Comment agent, then try to trip it up.",
       "emotion": "confident"
     },
     {
@@ -305,9 +305,9 @@
       "voice": "ava",
       "say": "Test it free. Link in bio, then try to trip it up.",
       "direction": "ALTERNATE for ig4-09 (DM automation not live): same read, same slot.",
-      "speak": "Test it free. <break time=\"150ms\"/> Link in bio, then try to trip it up.",
+      "speak": "Test it free. Link in bio, then try to trip it up.",
       "emotion": "confident"
     }
   ],
-  "_notes": "The four Instagram reels (docs/ig/SCRIPT.md; ids by reel in POSTING order: ig1 'Not even ours', ig2 'Booked after hours', ig3 'Twelve minutes', ig4 'Can you trip it up?'). Same schema as voice-lines-kb.json: say = the canonical words the captions and src/ig/<reel>/timing.ts index (word k), written in SPOKEN form (numbers as words); the Captions fork's display map shows numerals over word spans (9:47 pm., 45 hours., 168., 123?, $85.); speak / parts = what Sonic performs (SSML breaks; 'agent' lowercase so the keyword AGENT is never spelled out); the generator aligns the real word timestamps back onto say. ONE role (ava = Tessa (Emotive), id and speed copied from film 2), pinned with the IG-prefixed env name CARTESIA_IG_AVA_VOICE so a film 1 / film 2 override cannot leak in. ONE COMBINED FILE, NOT SPLIT: the four IG film entries (scripts/ig/films.mjs) share this voiceLines file, src/ig/voice.generated.ts and public/ig/voice/, so generate with --film=ig1 (it covers every line) and a reel may place a line of another reel: ig1-07 'Neuro Tech Voice.' is the sign-off of ALL FOUR reels (one take, one sonic signature). The four *-bio lines are alternates for the CTA slot, generated now and swapped in (VOICES id change only) if the comment-to-DM automation is not live on posting day. 33 lines: 29 placed + 4 alternates. Budget 2.5-3.2 words/s at speed 1.05 (film 2's measured Tessa pace); timelines re-anchor to the measured takes on the 120 BPM grid. Option (client's call): to reuse film 2's delivered sign-off byte for byte instead of ig1-07, add {\"id\": \"kb2-brand\", \"borrow\": \"kb\"} and place kb2-brand in the four VOICES (needs the merged registry, PIPELINE.md §3)."
+  "_notes": "The four Instagram reels (docs/ig/SCRIPT.md; ids by reel in POSTING order: ig1 'Not even ours', ig2 'Booked after hours', ig3 'Twelve minutes', ig4 'Can you trip it up?'). Same schema as voice-lines-kb.json: say = the canonical words the captions and src/ig/<reel>/timing.ts index (word k), written in SPOKEN form (numbers as words); the Captions fork's display map shows numerals over word spans (9:47 pm., 45 hours., 168., 123?, $85.); speak / parts = what Sonic performs (SSML breaks; 'agent' lowercase so the keyword AGENT is never spelled out); the generator aligns the real word timestamps back onto say. ONE role (ava = Tessa (Emotive), id and speed copied from film 2), pinned with the IG-prefixed env name CARTESIA_IG_AVA_VOICE so a film 1 / film 2 override cannot leak in. ONE COMBINED FILE, NOT SPLIT: the four IG film entries (scripts/ig/films.mjs) share this voiceLines file, src/ig/voice.generated.ts and public/ig/voice/, so generate with --film=ig1 (it covers every line) and a reel may place a line of another reel: ig1-07 'Neuro Tech Voice.' is the sign-off of ALL FOUR reels (one take, one sonic signature). The four *-bio lines are alternates for the CTA slot, generated now and swapped in (VOICES id change only) if the comment-to-DM automation is not live on posting day. 33 lines: 29 placed + 4 alternates. Budget 2.5-3.2 words/s at speed 1.05 (film 2's measured Tessa pace); timelines re-anchor to the measured takes on the 120 BPM grid. Option (client's call): to reuse film 2's delivered sign-off byte for byte instead of ig1-07, add {\"id\": \"kb2-brand\", \"borrow\": \"kb\"} and place kb2-brand in the four VOICES (needs the merged registry, PIPELINE.md §3). TAKES (voice-candidates/ig/PICKS.md): the installed reads come from five Cartesia sets; take-4 and take-5 were generated with every <break/> left out of speak, because Sonic already pauses about 0.5 s at a sentence end and the breaks doubled it (the hooks ran 4.1-4.2 s against the 3.1 s budget and the reels 30-32 s). The lines installed from take-4/5 carry that break-free speak here, so this file reproduces every installed read: ig1-01, ig1-02, ig1-06, ig1-06-bio, ig3-02, ig3-05, ig3-06, ig3-06-bio, ig4-06, ig4-09, ig4-09-bio."
 }

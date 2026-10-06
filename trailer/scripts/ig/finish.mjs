@@ -132,7 +132,7 @@ async function main() {
   const mix = path.join(ROOT, 'public', T.MIX.file);
   const DELIVER = path.join(ROOT, film.outDir, 'deliver');
   const QA = path.join(ROOT, film.outDir, 'qa', film.id);
-  const TMP = path.join(ROOT, film.outDir, '.tmp');
+  const TMP = path.join(ROOT, film.outDir, `.tmp-finish-${film.id}`);
   const KBPS0 = kbpsFor(seconds);
   const want = (k) => !only || only === k;
 
@@ -156,7 +156,7 @@ async function main() {
         if (want(kind))
           encodeTwoPass({ input: master, aacIn, out: path.join(DELIVER, `${film.outName}${VIDEO[kind].suffix}.mp4`), kind, kbps: KBPS0, seconds, passlog: path.join(TMP, `x264-${film.id}-${kind}`), log });
     } finally {
-      rmSync(aacIn, { force: true });
+      rmSync(TMP, { recursive: true, force: true });
     }
   }
   if (want('cover')) {

@@ -55,8 +55,8 @@ export const IgRoot: React.FC = () => (
       {REELS.map(({ n, T, Reel }) => (
         <Composition key={n} id={`IG${n}-Zones-9x16`} component={Reel} defaultProps={{ zones: true, audio: false }} durationInFrames={T.DURATION} fps={FPS} {...VERTICAL} />
       ))}
-      <Composition id="IG-Probe-Night-9x16" component={NightProbe} defaultProps={{ reseed: 'timeline' } as ProbeProps} durationInFrames={PROBE_FRAMES} fps={RENDER_FPS} {...VERTICAL} />
-      <Composition id="IG-Probe-Pearl-9x16" component={PearlProbe} defaultProps={{ reseed: 'timeline' } as ProbeProps} durationInFrames={PROBE_FRAMES} fps={RENDER_FPS} {...VERTICAL} />
+      <Composition id="IG-Probe-Night-9x16" component={NightProbe} defaultProps={{ reseed: 'static' } as ProbeProps} durationInFrames={PROBE_FRAMES} fps={RENDER_FPS} {...VERTICAL} />
+      <Composition id="IG-Probe-Pearl-9x16" component={PearlProbe} defaultProps={{ reseed: 'static' } as ProbeProps} durationInFrames={PROBE_FRAMES} fps={RENDER_FPS} {...VERTICAL} />
     </Folder>
   </>
 );

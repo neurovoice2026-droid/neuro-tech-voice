@@ -1,6 +1,7 @@
 /**
  * REEL 3 · "Twelve minutes" (salons) — every timing constant of the reel (docs/ig/SCRIPT.md "ig3", PIPELINE.md §6.1).
- * 24.0 s · 12 bars · 720 timeline frames (2880 at 120 fps). Impact f660 (bar 12), END f720.
+ * Plan 24.0 s · 12 bars (impact f660). WITH THE INSTALLED TAKES (voice-candidates/ig/PICKS.md): 26.0 s · 13 bars ·
+ * 780 timeline frames (3120 at 120 fps), impact f720 (bar 13), END f780 — the script's "gains one bar" rule.
  *
  * The colour timer is the clock of the reel: it ticks in real seconds from frame 0, time-lapses from the pickup and
  * reads 00:00 on the very frame of the hang-up (HANGUP = the beat after the agent's answer + 4 f). Each line sits on its
@@ -13,7 +14,7 @@ import { VOICE, type VoiceId } from '../voice.generated.ts';
 import { BEAT, BPM, CUT, DUCK, FPS, LIGHT_NOTES, LIGHT_SEMI, PK, RENDER_FPS, SUB, VERTICAL, b } from '../../timing.ts';
 import { buildCues, makeSpeech, makeVoiceKit, upBeat, type Cue, type Hit, type Room, type Voiced, type VoiceRide } from '../common/cues.ts';
 import {
-  BAR, BRAND, IG_LOUD, IG_NAME, IMPACT_BEFORE_END, IMPACT_GAP, ROLL, SEAM, SFX, H, bedRide, igArc, igImpact, impactHits, place, upBar,
+  BAR, BRAND, IG_LOUD, IG_NAME, IMPACT_BEFORE_END, IMPACT_GAP, ROLL, SEAM, SFX, H, afterRing, bedRide, igArc, igImpact, impactHits, place, ringBefore, upBar,
   type Display, type LineScreens, type Snd,
 } from '../common/series.ts';
 
@@ -31,7 +32,7 @@ const end = (at: number, id: VoiceId) => voiceEnd({ at, id });
 /* ── the plan (SCRIPT.md ig3 §3, frames) ── */
 export const PLAN = {
   acts: { hook: 0, call: 240, payoff: 435, end: 546 },
-  /** rings of the phone across the room (the hook) */
+  /** rings of the phone across the room (the hook; placed in her pauses: RINGS) */
   rings: [0, 60, 120, 180],
   pickup: 240,
   lines: { 'ig3-01': 6, 'ig3-02': 108, 'ig3-03': 246, 'ig3-04': 354, 'ig3-05': 450, 'ig3-06': 546 },
@@ -42,8 +43,16 @@ export const PLAN = {
 } as const;
 
 /* ── the voiced timeline ── */
-const L1 = place(PLAN.lines['ig3-01']);
-const L2 = place(PLAN.lines['ig3-02'], end(L1, 'ig3-01'));
+/** the hook: on its planned frame, once the frame-0 ring has rung out before her first word */
+const L1 = afterRing(PLAN.lines['ig3-01'], 0, KIT.firstSound('ig3-01'));
+/**
+ * THE RINGS of the phone across the room, re-anchored to her pauses (the plan's bar lines 60 / 120 / 180 fell on
+ * "You", "up," and "Leave" in the real reads): frame 0; the last beat that rings out before "You can't touch…"; the
+ * beat after the hook's take (the dilemma waits for it to ring out); the last beat that rings out before "Leave it…".
+ */
+const RING3 = upBeat(end(L1, 'ig3-01'));
+const L2 = afterRing(PLAN.lines['ig3-02'], RING3, KIT.firstSound('ig3-02'));
+export const RINGS = [0, ringBefore(L1 + vWord('ig3-01', 5)), RING3, ringBefore(L2 + vWord('ig3-02', 6))] as const;
 /** the pickup click (bar 5): the dimmed dot springs open into the teal orb */
 export const PICKUP = Math.max(PLAN.pickup, upBeat(end(L2, 'ig3-02')));
 const A3 = place(PLAN.lines['ig3-03'], PICKUP, PLAN.lines['ig3-03'] - PLAN.pickup);
@@ -115,7 +124,7 @@ export const END_CARD = {
 /* ── the cue sheet (placeholder hits until the acts are built: the rings, the pickup, the hang-up, the impact) ── */
 export const roomAt = (_f: number): Room => 'white';
 export const HITS: Hit<Snd>[] = [
-  ...PLAN.rings.map((f, k) => H(f, 'fx-trill', 'rush', 0.3, 1, `b1 the phone across the room rings (${k + 1}/4)`)),
+  ...RINGS.map((f, k) => H(f, 'fx-trill', 'rush', 0.3, 1, `b1 the phone across the room rings (${k + 1}/4)`)),
   H(PICKUP, 'fx-pickup', 'none', 0.5, 1, 'b3 PICKUP: the click; the dot springs open into her light'),
   H(HANGUP, 'fx-mallet-e5', 'sunday', 0.5, 1, 'b6 HANG-UP: the timer reads 00:00'),
   ...impactHits(IMPACT),

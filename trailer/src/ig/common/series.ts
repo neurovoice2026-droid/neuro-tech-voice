@@ -37,6 +37,17 @@ export const LINE_GAP = 6;
  * borrows from the gaps before the CTA, and only the CTA can push the end card by whole bars.)
  */
 export const place = (plan: number, after = -Infinity, gap = LINE_GAP) => (after + gap <= plan + 1e-9 ? plan : Math.max(plan, upQuarter(after + gap)));
+/**
+ * THE RINGS AND HER WORDS (check-mix scores every word over the 200 ms from its onset): the desk trill `fx-trill` rings
+ * 0.32 s (≈ 10 f) before it falls 30 dB, the one-chirp `fx-trill-1` 0.13 s (≈ 4 f). A ring never covers a word's onset:
+ * no onset in (ring − 6, ring + RING_OUT); the frame-0 ring rings out before her first word (`afterRing`).
+ */
+export const RING_OUT = 10;
+export const CHIRP_OUT = 4;
+/** the frame a line may start so its first sound lands `out` frames after a ring at `ring` (never before `plan`) */
+export const afterRing = (plan: number, ring: number, firstSound: number, out = RING_OUT) => Math.max(plan, Math.ceil(ring + out - firstSound));
+/** the last beat on which a ring has rung out (`out`) before a word onset at `onset` */
+export const ringBefore = (onset: number, out = RING_OUT) => Math.floor((onset - out) / BEAT + 1e-9) * BEAT;
 
 /* ── what is shown of each line (the Captions fork, LiveTranscript rows, slots and fields read these) ── */
 /** How a line's words are set on screen: narrator captions, an in-call row (● AVA), ig4's "Asked as" slot, ig4's
@@ -53,11 +64,13 @@ export type Display = { id: string; from: number; to: number; text: string };
  *  files, made once by scripts/ig/generate-sfx.mjs (a later rebuild of a film's library can never change a reel). */
 export const IG_LIB = 'ig/sfx/lib';
 /** Film 2's extras the reels may play — the definitions of src/kb/timing.ts KB_SFX @ 743247a, re-declared (the
- *  reels never import film 2's timeline). Left out: the trills cut to film 2's pickups (fx-trill-15, fx-trill-1) and
- *  the montages cut to its timeline (fx-rolls, fx-slip-glide). */
+ *  reels never import film 2's timeline). Left out: the trill cut to film 2's second pickup (fx-trill-15) and the
+ *  montages cut to its timeline (fx-rolls, fx-slip-glide). `fx-trill-1` is the trill's first chirp alone (0.13 s): ig4's
+ *  rings ("one fx-trill chirp", SCRIPT.md ig4 b1–b6). */
 const X = (n: number, group: Group, trim: number, send: number, o: Partial<SfxDef> = {}): SfxDef => ({ n, pk: 0, group, trim, send, ...o });
 const KB_EXTRAS = {
   'fx-trill': X(1, 'sig', -2, -14),
+  'fx-trill-1': X(1, 'sig', -2, -14),
   'fx-pickup': X(2, 'sig', -1, -16),
   'fx-line': X(1, 'sig', -4, -20),
   'fx-linehiss': X(1, 'sig', -4, -30),

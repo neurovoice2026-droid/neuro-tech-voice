@@ -10,13 +10,18 @@
  * remotion.config.ts adds x265 aq-mode=3), concurrency 1 per chunk (one tab renders every frame of its chunk the same
  * way: no glide-layer re-raster flicker), `--workers` chunks in parallel (default 2: other agents share the 4 CPUs).
  *
+ *   · FRAMES AT JPEG QUALITY 100 (the config's 95 is the films'): the bit-budget probe (scripts/ig/qa/probe-encode.mjs)
+ *     measured q95's 8×8 blocks frozen into the reels' static grain — a lattice on the night ground that the delivery
+ *     encode keeps (blocking 1.13 vs 1.03) and pays for (+6 % bits). q100 is as clean as PNG frames (0.77 s/frame) at
+ *     JPEG speed: ≈ 0.4–0.5 s per render frame per worker with 2 workers on this machine (1080×1920).
+ *
  *   · BUNDLE out/master/bundle-ig. Built here when it is missing or `--rebundle` is passed — after `npm run sfx:ig`
  *     (never while a film 1 / film 2 bundle is being made: H15) — with NTV_SKIP_SFX=1. A bundle older than any file
  *     under src/ is refused (the picture would be stale) unless --rebundle.
  *   · CHUNKS start on every act's mount frame ((from − pre) × SUB): every glide layer mounts at its act's start, so a
  *     chunk boundary never re-rasters text mid-act (RESEARCH-product §2.4.4). out/master/IG<n>-Reel-9x16-x1/ holds
  *     <a>-<b>.mp4 + .done markers (resumable) and plan.json {bundleSha (bundle-digest, sound entries dropped), total,
- *     chunk, scale, crf, concurrency}; chunks of another plan are deleted before rendering.
+ *     chunk, scale, crf, concurrency, jpegQuality}; chunks of another plan are deleted before rendering.
  *   · --ranges=… --dir=<suffix>: re-render exactly these render-frame ranges into …-x1-<suffix>/ (after a picture fix
  *     of one act); the join takes a range from the newest layer that has it.
  *   · JOIN: concat copy (one HEVC parameter set, frame counts checked) → out/ig/master/<outName>-1080p120-hevc.mp4.
@@ -39,6 +44,7 @@ const workers = Math.max(1, Math.min(2, Number(opt('workers', '2'))));
 const scale = 1;
 const crf = 12;
 const concurrency = '1';
+const jpegQuality = 100;
 const dryRun = args.includes('--dry-run');
 const comp = `${film.comp}9x16`;
 const explicit = opt('ranges', '') ? opt('ranges', '').split(',').map((r) => r.split('-').map(Number)) : null;
@@ -68,7 +74,7 @@ const dir = dirOf(suffix);
 const outFile = path.join(ROOT, film.outDir, 'master', `${film.outName}-1080p${T.RENDER_FPS}-hevc.mp4`);
 
 if (dryRun) {
-  console.log(`render:ig --dry-run · ${film.id} · ${comp} · ${total} frames (${T.DURATION} × ${T.SUB}) · scale ${scale} · crf ${crf} · ${workers} workers`);
+  console.log(`render:ig --dry-run · ${film.id} · ${comp} · ${total} frames (${T.DURATION} × ${T.SUB}) · scale ${scale} · crf ${crf} · jpeg q${jpegQuality} · ${workers} workers`);
   for (const r of ranges) console.log(`  ${name(r)}  ${existsSync(path.join(dir, `${name(r)}.mp4.done`)) ? 'done' : 'to render'}`);
   console.log(`  bundle ${path.relative(ROOT, bundle)}${existsSync(path.join(bundle, 'index.html')) ? '' : ' (missing: built first, after npm run sfx:ig)'}`);
   console.log(`  chunks ${path.relative(ROOT, dir)}/ → ${path.relative(ROOT, outFile)}`);
@@ -100,7 +106,7 @@ if (!haveBundle || args.includes('--rebundle')) {
   const b = spawnSync('npx', ['remotion', 'bundle', film.entry, '--out-dir', bundle, '--log=error'], { cwd: ROOT, env, stdio: 'inherit' });
   if (b.status !== 0) throw new Error('remotion bundle failed');
 }
-const plan = { bundleSha: bundleDigest(bundle, { drop: isSoundStatic }), total, chunk: explicit ? `ranges:${opt('ranges', '')}` : `acts:${starts.join(',')}`, scale, crf, concurrency };
+const plan = { bundleSha: bundleDigest(bundle, { drop: isSoundStatic }), total, chunk: explicit ? `ranges:${opt('ranges', '')}` : `acts:${starts.join(',')}`, scale, crf, concurrency, jpegQuality };
 log(`${comp}: bundle sha ${plan.bundleSha.slice(0, 16)} · ${total} frames · ${ranges.length} chunk(s) · ${workers} worker(s)`);
 
 /* ── chunks (resumable) ── */
@@ -124,7 +130,7 @@ const runOne = ({ r, file }) =>
     const tmp = file.replace(/\.mp4$/, '.part.mp4');
     const t0 = Date.now();
     log(`${name(r)} start`);
-    const p = spawn('npx', ['remotion', 'render', bundle, comp, tmp, `--frames=${r[0]}-${r[1]}`, `--scale=${scale}`, '--muted', '--codec=h265', `--crf=${crf}`, `--concurrency=${concurrency}`, '--log=error'], {
+    const p = spawn('npx', ['remotion', 'render', bundle, comp, tmp, `--frames=${r[0]}-${r[1]}`, `--scale=${scale}`, '--muted', '--codec=h265', `--crf=${crf}`, `--jpeg-quality=${jpegQuality}`, `--concurrency=${concurrency}`, '--log=error'], {
       cwd: ROOT,
       env,
       stdio: ['ignore', 'ignore', 'inherit'],

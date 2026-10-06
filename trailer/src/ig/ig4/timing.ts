@@ -1,10 +1,12 @@
 /**
  * REEL 4 · "Can you trip it up?" — every timing constant of the reel (docs/ig/SCRIPT.md "ig4", PIPELINE.md §6.1).
- * 26.0 s · 13 bars · 780 timeline frames (3120 at 120 fps). Impact f720 (bar 13), END f780.
+ * Plan 26.0 s · 13 bars (impact f720). WITH THE INSTALLED TAKES (voice-candidates/ig/PICKS.md): 28.0 s · 14 bars ·
+ * 840 timeline frames (3360 at 120 fps), impact f780 (bar 14), END f840 — the script's "gains one bar" rule.
  *
  * Quick-fire: a ring on the beat, the phrasing a 6-frame breath after it, three times; the answer; the curveball's
- * ring; a stop-time of 0.9 s (the bed cut on the sample); the owner's fallback; the thesis; the CTA. Each ring waits
- * for the take before it to finish (on the next beat); only the CTA can push the end card on by whole bars.
+ * ring; a stop-time of 0.9 s (the bed cut on the sample); the owner's fallback; the thesis; the CTA. Each ring (one
+ * chirp, fx-trill-1) waits for her voice before it to stop (on the next beat); only the CTA can push the end card on by
+ * whole bars.
  *
  * Node-safe (PIPELINE.md H10): explicit `.ts` extensions, type-only imports marked, no React or Remotion.
  */
@@ -12,7 +14,7 @@ import { VOICE, type VoiceId } from '../voice.generated.ts';
 import { BEAT, BPM, CUT, DUCK, FPS, LIGHT_NOTES, LIGHT_SEMI, PK, RENDER_FPS, SUB, VERTICAL, b } from '../../timing.ts';
 import { buildCues, makeSpeech, makeVoiceKit, upBeat, upQuarter, type Cue, type Hit, type Room, type Voiced, type VoiceRide } from '../common/cues.ts';
 import {
-  BAR, BRAND, IG_LOUD, IG_NAME, IMPACT_BEFORE_END, IMPACT_GAP, ROLL, SEAM, SFX, H, bedRide, igArc, igImpact, impactHits, place, upBar,
+  BAR, BRAND, CHIRP_OUT, IG_LOUD, IG_NAME, IMPACT_BEFORE_END, IMPACT_GAP, ROLL, SEAM, SFX, H, afterRing, bedRide, igArc, igImpact, impactHits, place, upBar,
   type Display, type LineScreens, type Snd,
 } from '../common/series.ts';
 
@@ -42,7 +44,8 @@ export const PLAN = {
 } as const;
 
 /* ── the voiced timeline ── */
-const L1 = place(PLAN.lines['ig4-01']);
+/** the hook: on its planned frame, once the frame-0 chirp has rung out before her first word */
+const L1 = afterRing(PLAN.lines['ig4-01'], 0, KIT.firstSound('ig4-01'), CHIRP_OUT);
 /** the frame her voice has stopped in a take placed at `at` (its last frame of loudness ≥ CUT.onset, + 1) — a ring
  *  waits for her voice, not for the file's silent tail */
 const voiced = (at: number, id: VoiceId) => {
@@ -135,8 +138,8 @@ export const END_CARD = {
 /* ── the cue sheet (placeholder hits until the acts are built: the rings, the impact) ── */
 export const roomAt = (_f: number): Room => 'white';
 export const HITS: Hit<Snd>[] = [
-  H(0, 'fx-trill', 'rush', 0.5, 1, 'b1 the ring at frame 0 (the attack)'),
-  ...RINGS.map((f, k) => H(f, 'fx-trill', 'rush', 0.5, 1, `b${k < 3 ? k + 2 : 6} ring ${k + 1}: ${k < 3 ? 'a phrasing' : 'the curveball'}`)),
+  H(0, 'fx-trill-1', 'rush', 0.5, 1, 'b1 the ring at frame 0 (the attack): one chirp'),
+  ...RINGS.map((f, k) => H(f, 'fx-trill-1', 'rush', 0.5, 1, `b${k < 3 ? k + 2 : 6} ring ${k + 1}: one chirp, ${k < 3 ? 'a phrasing' : 'the curveball'} after it`)),
   ...impactHits(IMPACT),
 ];
 export const CUES: Cue[] = buildCues(HITS, { sfx: SFX, speaking, roomAt });

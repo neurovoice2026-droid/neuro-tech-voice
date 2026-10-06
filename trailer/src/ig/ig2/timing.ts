@@ -1,6 +1,8 @@
 /**
  * REEL 2 · "Booked after hours" — every timing constant of the reel (docs/ig/SCRIPT.md "ig2", PIPELINE.md §6.1).
- * 22.0 s · 11 bars · 660 timeline frames (2640 at 120 fps). Impact f600 (bar 11), END f660. The series' only night ground.
+ * Plan 22.0 s · 11 bars (impact f600). WITH THE INSTALLED TAKES (voice-candidates/ig/PICKS.md): 28.0 s · 14 bars ·
+ * 840 timeline frames (3360 at 120 fps), impact f780 (bar 14), END f840: the four call lines run ≈ 1 s over their
+ * slots each (natural phone pace). The series' only night ground.
  *
  * A one-sided call: the agent restates what was asked, the caller's turns are a level meter (no words, no voice).
  * Each line sits on its planned frame unless the take before it (or the caller's turn) is still running
@@ -13,7 +15,7 @@ import { VOICE, type VoiceId } from '../voice.generated.ts';
 import { BEAT, BPM, CUT, DUCK, FPS, LIGHT_NOTES, LIGHT_SEMI, PK, RENDER_FPS, SUB, VERTICAL, b } from '../../timing.ts';
 import { buildCues, makeSpeech, makeVoiceKit, upBeat, type Cue, type Hit, type Room, type Voiced, type VoiceRide } from '../common/cues.ts';
 import {
-  BAR, BRAND, IG_LOUD, IG_NAME, IMPACT_BEFORE_END, IMPACT_GAP, ROLL, SEAM, SFX, H, bedRide, igArc, igImpact, impactHits, place, upBar,
+  BAR, BRAND, IG_LOUD, IG_NAME, IMPACT_BEFORE_END, IMPACT_GAP, ROLL, SEAM, SFX, H, afterRing, bedRide, igArc, igImpact, impactHits, place, ringBefore, upBar,
   type Display, type LineScreens, type Snd,
 } from '../common/series.ts';
 
@@ -41,7 +43,11 @@ export const PLAN = {
 } as const;
 
 /* ── the voiced timeline ── */
-const L1 = place(PLAN.lines['ig2-01']);
+/** the hook: on its planned frame, once the frame-0 ring has rung out before her first word */
+const L1 = afterRing(PLAN.lines['ig2-01'], 0, KIT.firstSound('ig2-01'));
+/** the rings in the dark: at frame 0, and on the last beat (≥ bar 1's beat 3) that rings out before "You're closed." —
+ *  in her pause, never on a word (the plan's f60 was cut against the planned read) */
+export const RINGS = [0, Math.max(2 * BEAT, ringBefore(L1 + vWord('ig2-01', 2)))] as const;
 /** the pickup click: the ring is cut, the colon light springs open into the teal orb */
 export const PICKUP = Math.max(PLAN.pickup, upBeat(end(L1, 'ig2-01')));
 const A2 = place(PLAN.lines['ig2-02'], PICKUP, PLAN.lines['ig2-02'] - PLAN.pickup);
@@ -60,7 +66,9 @@ export const CALLERS = [C1, C2, C3] as const;
 /** the hang-up, on the beat after "…Saturday at ten." (the header swaps to Booked) */
 export const HANGUP = Math.max(PLAN.hangup, upBeat(end(A5, 'ig2-05') + 4));
 const L6 = place(PLAN.lines['ig2-06'], HANGUP, PLAN.lines['ig2-06'] - PLAN.hangup);
-const CTA = place(PLAN.lines['ig2-07'], end(L6, 'ig2-06'));
+/** the CTA keeps the plan's beat after the gate line (543 − (483 + 45) = 15 f): the comment field rises in it, 12 f
+ *  before her first word, after "…with Pro." has ended */
+const CTA = place(PLAN.lines['ig2-07'], end(L6, 'ig2-06'), BEAT);
 export const IMPACT = Math.max(PLAN.impact, upBar(end(CTA, 'ig2-07') + BEAT));
 export const END = IMPACT + IMPACT_BEFORE_END;
 export const BRAND_AT = IMPACT + IMPACT_GAP;
@@ -123,8 +131,8 @@ export const END_CARD = {
 /* ── the cue sheet (placeholder hits until the acts are built: the rings, the pickup, the impact) ── */
 export const roomAt = (_f: number): Room => 'night';
 export const HITS: Hit<Snd>[] = [
-  H(0, 'fx-trill', 'rush', 0.5, 1, 'b1 a ring in the dark at frame 0 (the attack)'),
-  H(60, 'fx-trill', 'rush', 0.5, 1, 'b1 the second ring'),
+  H(RINGS[0], 'fx-trill', 'rush', 0.5, 1, 'b1 a ring in the dark at frame 0 (the attack)'),
+  H(RINGS[1], 'fx-trill', 'rush', 0.5, 1, 'b1 the second ring, in her pause before "You’re closed."'),
   H(PICKUP, 'fx-pickup', 'none', 0.5, 1, 'b2 PICKUP: the click cuts the ring'),
   ...impactHits(IMPACT),
 ];

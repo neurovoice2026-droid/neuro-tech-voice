@@ -92,7 +92,8 @@ for (const id of ids) {
     const a = p.streams.find((s) => s.codec_type === 'audio');
     if (!v) f.push('no video stream');
     else {
-      if (v.codec_name !== 'h264' || v.profile !== 'High') f.push(`video ${v.codec_name} ${v.profile}, want h264 High`);
+      // this ffprobe build prints profiles as numbers: H.264 High = 100, AAC LC = 1 (FF_PROFILE_AAC_LOW)
+      if (v.codec_name !== 'h264' || !['High', '100', 100].includes(v.profile)) f.push(`video ${v.codec_name} ${v.profile}, want h264 High`);
       if (v.pix_fmt !== 'yuv420p') f.push(`pix_fmt ${v.pix_fmt}`);
       if (v.width !== 1080 || v.height !== 1920) f.push(`${v.width}×${v.height}, want 1080×1920`);
       if (v.r_frame_rate !== `${kind.fps}/1`) f.push(`${v.r_frame_rate} fps, want ${kind.fps}/1`);
@@ -105,7 +106,7 @@ for (const id of ids) {
     }
     if (!a) f.push('no audio stream');
     else {
-      if (a.codec_name !== 'aac' || a.profile !== 'LC') f.push(`audio ${a.codec_name} ${a.profile}, want aac LC`);
+      if (a.codec_name !== 'aac' || !['LC', '1', 1].includes(a.profile)) f.push(`audio ${a.codec_name} ${a.profile}, want aac LC`);
       if (Number(a.sample_rate) !== 48000) f.push(`audio ${a.sample_rate} Hz`);
       if (a.channels !== 2) f.push(`audio ${a.channels} channels`);
       if (Math.abs(Number(a.bit_rate) - 192000) > 192000 * 0.06) f.push(`audio ${Math.round(a.bit_rate / 1000)} kb/s, want 192`);
@@ -123,7 +124,7 @@ for (const id of ids) {
     let loud = '';
     if (a) {
       const wav = path.join(QA, `delivery-${kind.tag}.wav`);
-      ff('ffmpeg', ['-hide_banner', '-v', 'error', '-y', '-i', file, '-map', '0:a:0', '-c:a', 'pcm_f32le', '-ar', '48000', wav]);
+      ff('ffmpeg', ['-hide_banner', '-v', 'error', '-y', '-i', file, '-map', '0:a:0', '-c:a', 'pcm_s24le', '-ar', '48000', wav]);
       const w = readWav(wav);
       rmSync(wav, { force: true });
       const st = [w.ch[0], w.ch[1] ?? w.ch[0]];
@@ -133,7 +134,7 @@ for (const id of ids) {
       if (tp > -1.0) f.push(`decoded AAC true peak ${tp.toFixed(2)} dBTP (> −1.0)`);
       loud = `${L.toFixed(2)} LUFS, ${tp.toFixed(2)} dBTP`;
     }
-    const note = `${(size / 1e6).toFixed(2)} MB · ${v ? `${v.codec_name} ${v.profile} L${v.level} ${v.width}×${v.height} ${v.r_frame_rate}` : ''} · ${a ? `aac ${Math.round(a.bit_rate / 1000)}k` : ''} · ${loud} · elst ${bx.elst ? 'PRESENT' : 'none'} · ${lock || 'lock not proven'}`;
+    const note = `${(size / 1e6).toFixed(2)} MB · ${v ? `${v.codec_name} ${String(v.profile) === '100' ? 'High' : v.profile} L${v.level} ${v.width}×${v.height} ${v.r_frame_rate}` : ''} · ${a ? `aac ${String(a.profile) === '1' ? 'LC' : a.profile} ${Math.round(a.bit_rate / 1000)}k` : ''} · ${loud} · elst ${bx.elst ? 'PRESENT' : 'none'} · ${lock || 'lock not proven'}`;
     if (f.length) {
       failed = true;
       console.log(`✗ ${rel}: ${note}\n  ${f.join('\n  ')}`);

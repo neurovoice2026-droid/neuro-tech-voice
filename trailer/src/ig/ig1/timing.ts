@@ -1,6 +1,7 @@
 /**
  * REEL 1 · "Not even ours" — every timing constant of the reel (docs/ig/SCRIPT.md "ig1", PIPELINE.md §6.1).
- * 26.0 s · 13 bars · 780 timeline frames (3120 at 120 fps). Impact f720 (bar 13), END f780.
+ * Plan 26.0 s · 13 bars (impact f720). WITH THE INSTALLED TAKES (voice-candidates/ig/PICKS.md): 28.0 s · 14 bars ·
+ * 840 timeline frames (3360 at 120 fps), impact f780 (bar 14), END f840 — the script's "gains one bar" rule.
  *
  * Cut on the 120 BPM grid (beat 15 f, bar 60 f) and TIMED BY THE REAL VOICES (src/ig/voice.generated.ts): each line
  * sits on its planned frame unless the take before it still sounds (common/series.ts `place`); acts, IMPACT and END
@@ -12,7 +13,7 @@ import { VOICE, type VoiceId } from '../voice.generated.ts';
 import { BEAT, BPM, CUT, DUCK, FPS, LIGHT_NOTES, LIGHT_SEMI, PK, RENDER_FPS, SUB, VERTICAL, b } from '../../timing.ts';
 import { buildCues, makeSpeech, makeVoiceKit, upQuarter, type Cue, type Hit, type Room, type Voiced, type VoiceRide } from '../common/cues.ts';
 import {
-  BAR, BRAND, IG_LOUD, IG_NAME, IMPACT_BEFORE_END, IMPACT_GAP, LINE_GAP, ROLL, SEAM, SFX, H, bedRide, igArc, igImpact, impactHits, place, upBar,
+  BAR, BRAND, IG_LOUD, IG_NAME, IMPACT_BEFORE_END, IMPACT_GAP, LINE_GAP, ROLL, SEAM, SFX, H, afterRing, bedRide, igArc, igImpact, impactHits, place, upBar,
   type Display, type LineScreens, type Snd,
 } from '../common/series.ts';
 
@@ -37,7 +38,8 @@ export const PLAN = {
 } as const;
 
 /* ── the voiced timeline ── */
-const L1 = place(PLAN.lines['ig1-01']);
+/** the hook: on its planned frame, once the frame-0 desk ring has rung out before her first word */
+const L1 = afterRing(PLAN.lines['ig1-01'], 0, KIT.firstSound('ig1-01'));
 /**
  * THE GRID'S ACT (hours) follows the hook's take: it opens once "Not even ours." has held a beat past its last word
  * (the caption rule) and the take has ended; "Nine…" keeps the plan's 3-frame lead into the act (the grid rises first).
