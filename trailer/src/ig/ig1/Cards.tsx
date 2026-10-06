@@ -40,8 +40,9 @@ export const RECORDS: readonly Rec[] = [
   { kind: 'messageTaken', at: M.messages, bars: [176, 150] },
   { kind: 'transferred', at: M.puts, bars: [198, 118] },
 ];
-/** b5: the records leave, top first, one per 16th from the desk act's start */
-export const leaveAt = (i: number) => M.desk + i * T.SIXTEENTH;
+/** b4 → b5: the records leave together, top first a 32nd apart, once "…listed." has been said (the stage is clear before
+ *  "Your receptionist" rises and the people's block lifts) */
+export const leaveAt = (i: number) => M.recordsOut + i * (T.SIXTEENTH / 2);
 
 /** lucide phone-incoming (lucide-react 1.49 phone-incoming.mjs), drawn locally */
 const PhoneIncoming: React.FC<{ size: number; color: string }> = ({ size, color }) => (

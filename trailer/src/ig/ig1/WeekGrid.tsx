@@ -4,7 +4,7 @@
  * timing.ts M moments), drawn in the stage's camera plane (Stage.tsx zooms it about the grid's centre).
  *
  *   UNFOLD   (M.unfold) the desk's hairline opens into the week: its 24 rows spread out of the line (centre rows first,
- *            on a near-critical spring), each row's segment splitting into seven cells as it thickens
+ *            on a near-critical spring, nearly together), each row's segment splitting into seven cells as it thickens
  *   STAFFED  ("Nine") 9 to 6 × Monday–Friday fills graphite, one column per 16th, each column wiping down its hours;
  *            "09" / "18" tick into the hour gutter on "Nine" / "six", MON–FRI over columns 1–5 on "weekdays" (chrome,
  *            each on its spoken word)
@@ -12,20 +12,19 @@
  *   168      ("a hundred and sixty-eight") every empty cell draws its hairline outline in one diagonal wave
  *   123      ("other") the 123 empty cells pop teal in a ripple from Friday 18:00 — a glint at the front settling into
  *            her ink — through the nights and the weekend
- *   PEOPLE   ("receptionist", b5) the graphite block lifts off the week (5 px: inside the row gap), its contact shadow under it
+ *   PEOPLE   ("receptionist", b5) the graphite block lifts off the week (8 px and × 1.012), its drop shadow on the hours round it
  *   END      (End.tsx) `fx.dim` steps the whole week back behind the CTA; `fx.collapse` folds it back into the desk line
  *            in the seam (rows converging on y 760, the teal draining first), so frame 0's hairline can draw again
  */
 import React from 'react';
 import { reveal, revealStyle } from '../../components/Type';
-import { ContactShadow } from '../../components/Atmosphere';
 import { EASE, mix, mixHex, smooth, SPRING, springUnit, tween } from '../../lib/motion';
 import { maskBox } from '../../lib/type';
 import { GRAPHITE } from '../../kb/theme';
-import { MOMENT_LIGHTS } from '../../kb/palettes';
-import { labelWidth, measureText, useKitFaces } from '../../kb/kit';
+import { MOMENT_LIGHTS, MUTED_MESH } from '../../kb/palettes';
+import { labelWidth, measureText, meshElevation, meshShadowInk, useKitFaces } from '../../kb/kit';
 import { ZoneRect } from '../components/ZoneGuard';
-import { BLOCK, CELLS, GRID, TICKS, cascadeAt, cellY, waveAt, type Cell } from './grid';
+import { BLOCK, CELLS, GRID, GRID_C, TICKS, cascadeAt, cellY, waveAt, type Cell } from './grid';
 import { DESK } from './desk';
 import { onScreen } from './stage';
 import * as T from './timing';
@@ -54,10 +53,14 @@ export type GridFx = {
   collapse?: number;
   /** hide the chrome (ticks, MON–FRI): the cover */
   chrome?: boolean;
+  /** the chrome's opacity (0..1): stepped out under the call records, and behind the end card */
+  chromeA?: number;
 };
 
 /* ── the moments, per cell ── */
-const ROW_STAGGER = 4;
+/** the rows leave the line nearly together (a 1.5 f spread from the desk outward): the week opens like a blind, its
+ *  columns straight-sided, never a barrel of rows at different phases */
+const ROW_STAGGER = 1.5;
 const rowDelay = (r: number) => (Math.abs(cellY(r) + GRID.ch / 2 - DESK.y) / 400) * ROW_STAGGER;
 /** a row's unfold 0 → 1 (a hair of overshoot) */
 const unfoldOf = (t: number, r: number) => springUnit(t - M.unfold - rowDelay(r), { stiffness: 380, damping: 32, mass: 1 });
@@ -75,14 +78,16 @@ function cellRect(k: Cell, t: number, collapse: number) {
   const x = mix(DESK.x0 + k.c * segW, k.x, u);
   const w = mix(segW, GRID.cw, u);
   const cy = mix(DESK.y, k.y + GRID.ch / 2, u);
-  const h = mix(1.5, GRID.ch, smooth(0.22, 1, u));
+  // the tile thickens as it travels (from the first few % of its way), so the rows read as cells opening, not as
+  // hairlines streaking through the column
+  const h = mix(1.5, GRID.ch, smooth(0.04, 0.8, u));
   return { x, y: cy - h / 2, w, h, u, p, cq };
 }
 
 export const WeekGrid: React.FC<{ t: number; fx?: GridFx; zoom?: number }> = ({ t, fx = {}, zoom = 1 }) => {
   const ready = useKitFaces();
   if (t < M.unfold - 1) return null;
-  const { dim = 0, collapse = 0, chrome = true } = fx;
+  const { dim = 0, collapse = 0, chrome = true, chromeA = 1 } = fx;
   const opacity = 1 - dim;
   if (opacity <= 0.002) return null;
   const f45 = M.fortyFive;
@@ -90,10 +95,13 @@ export const WeekGrid: React.FC<{ t: number; fx?: GridFx; zoom?: number }> = ({ 
   const bob = -4 * (springUnit(t - f45, SPRING.pop) - springUnit(t - f45 - 7, SPRING.pop));
   const ringPop = springUnit(t - (f45 - 1), SPRING.pop);
   const ringA = 0.5 * smooth(f45 - 1, f45 + 1, t) * (1 - tween(t, [M.week168 - 6, M.week168 + 8], [0, 1], EASE.inOut)) * (1 - collapse);
-  // "receptionist": the people's block lifts off the week
+  // "receptionist": the people's block lifts off the week — up 8 px and a touch nearer (× 1.012 about its centre), its
+  // own drop shadow on the hours round it: one object picked up off the week (its edge covers a few px of the night
+  // row above, as a lifted tile would)
   const lift = springUnit(t - M.receptionist, SPRING.land);
-  // (5 px: under the 6 px row gap, so the lifted block never touches the hours around it; its shadow carries the lift)
-  const liftY = -5 * lift * (1 - smooth(0, 0.5, collapse));
+  const liftK = lift * (1 - smooth(0, 0.5, collapse));
+  const liftY = -LIFT.y * liftK;
+  const liftS = 1 + (LIFT.scale - 1) * liftK;
   const tealDrain = (k: Cell) => (collapse > 0 ? smooth(0, 0.55, collapse * 1.1 - (1 - cascadeAt(k)) * 0.25) : 0);
   const base: React.ReactNode[] = [];
   const lines: React.ReactNode[] = [];
@@ -103,9 +111,9 @@ export const WeekGrid: React.FC<{ t: number; fx?: GridFx; zoom?: number }> = ({ 
     const R = cellRect(k, t, collapse);
     if (R.p <= 0.001 && collapse <= 0) continue;
     const rx = Math.min(GRID.radius, R.h / 2);
-    // the pale hour: a line while it travels, a tile once it is open; gone in the collapse
-    const lineA = 0.14 * smooth(0, 0.1, R.u) * (1 - smooth(0.3, 0.85, R.u));
-    const tileA = INK.emptyA * smooth(0.3, 0.85, R.u);
+    // the pale hour: a line as it leaves the desk, a tile once it is open; gone in the collapse
+    const lineA = 0.12 * smooth(0, 0.06, R.u) * (1 - smooth(0.08, 0.3, R.u));
+    const tileA = INK.emptyA * smooth(0.12, 0.6, R.u);
     // (a filled hour of the front desk covers its pale tile: none under it, so its lift shows the ground, not a ghost)
     const covered = k.open && t >= T.STAFFED_FILLS[k.c] + 8 && R.cq <= 0;
     const a = covered ? 0 : (lineA + tileA) * (1 - smooth(0.2, 0.7, R.cq));
@@ -118,7 +126,7 @@ export const WeekGrid: React.FC<{ t: number; fx?: GridFx; zoom?: number }> = ({ 
       const fa = 1 - smooth(0.1, 0.55, R.cq);
       if (fy > 0.001 && fa > 0.002) {
         const h = R.h * fy;
-        people.push(<rect key={`s${k.c}-${k.r}`} x={R.x} y={R.y + bob + liftY} width={R.w} height={h} rx={Math.min(rx, h / 2)} fill={INK.staffed} fillOpacity={fa < 0.999 ? fa.toFixed(4) : undefined} />);
+        people.push(<rect key={`s${k.c}-${k.r}`} x={R.x} y={R.y} width={R.w} height={h} rx={Math.min(rx, h / 2)} fill={INK.staffed} fillOpacity={fa < 0.999 ? fa.toFixed(4) : undefined} />);
       }
     } else {
       // "a hundred and sixty-eight": its hairline outline draws, in one diagonal wave
@@ -158,16 +166,39 @@ export const WeekGrid: React.FC<{ t: number; fx?: GridFx; zoom?: number }> = ({ 
         <g>{lines}</g>
         <g>{fills}</g>
       </svg>
-      {/* the people's block over the week: its shadow falls on the hours around it */}
-      {lift > 0.001 && collapse < 1 ? <ContactShadow x={BLOCK.x + BLOCK.w / 2} y={BLOCK.y + BLOCK.h + 2} w={BLOCK.w} lift={0.2 + 0.4 * lift} k={1.25 * Math.min(1, lift) * (1 - smooth(0, 0.4, collapse))} /> : null}
+      {/* the people's block over the week: lifted, its drop shadow on the hours around it */}
+      {liftK > 0.001 ? <BlockShadow k={Math.min(1, liftK)} y={bob + liftY} s={liftS} /> : null}
       <svg width={1080} height={1920} style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible' }} aria-hidden>
-        <g>{people}</g>
+        <g transform={liftK > 0.001 ? liftTransform(bob + liftY, liftS) : bob !== 0 ? `translate(0 ${bob.toFixed(3)})` : undefined}>{people}</g>
         {blockRing}
       </svg>
-      {chrome && ready ? <GridChrome t={t} collapse={collapse} zoom={zoom} /> : null}
+      {chrome && ready && chromeA > 0.002 ? <GridChrome t={t} collapse={collapse} zoom={zoom} a={chromeA} /> : null}
     </div>
   );
 };
+
+/* ── the people's block lifted ── */
+const LIFT = { y: 8, scale: 1.012 } as const;
+const BC = { x: BLOCK.x + BLOCK.w / 2, y: BLOCK.y + BLOCK.h / 2 } as const;
+/** the block's lift: up by `dy`, scaled `s` about its centre (SVG transform, frame px) */
+const liftTransform = (dy: number, s: number) => `translate(${BC.x.toFixed(3)} ${(BC.y + dy).toFixed(3)}) scale(${s.toFixed(5)}) translate(${-BC.x} ${-BC.y})`;
+const SHADOW_INK = meshShadowInk(MUTED_MESH);
+/** the lifted block's drop shadow: the house's mesh-tinted elevation (the cards' own), only outside the block's box */
+const BlockShadow: React.FC<{ k: number; y: number; s: number }> = ({ k, y, s }) => (
+  <div
+    style={{
+      position: 'absolute',
+      left: BLOCK.x - 2,
+      top: BLOCK.y - 2,
+      width: BLOCK.w + 4,
+      height: BLOCK.h + 4,
+      borderRadius: GRID.radius + 2,
+      boxShadow: meshElevation(1 + 3.4 * k, SHADOW_INK, 1.1 * k),
+      transformOrigin: '50% 50%',
+      transform: `translate(0px, ${y.toFixed(3)}px) scale(${s.toFixed(5)})`,
+    }}
+  />
+);
 
 /* ── the chrome: the hour gutter's ticks and MON–FRI (each on its spoken word; ≤ 32 px) ── */
 const TICK_FONT = { size: 28, weight: 460, mono: true } as const;
@@ -177,11 +208,11 @@ const MONFRI = 'Mon–Fri';
 /** the label's place: over columns 1–5, a hairline bracket under it */
 const LBL = { x: BLOCK.x, y: GRID.y0 - 62, rule: GRID.y0 - 18 } as const;
 
-const GridChrome: React.FC<{ t: number; collapse: number; zoom: number }> = ({ t, collapse, zoom }) => {
-  const fade = 1 - smooth(0, 0.35, collapse);
+const GridChrome: React.FC<{ t: number; collapse: number; zoom: number; a: number }> = ({ t, collapse, zoom, a }) => {
+  const fade = (1 - smooth(0, 0.35, collapse)) * a;
   if (fade <= 0.002) return null;
   // "09" as the first column fills (once her caption has risen: one moving text at a time), "18" on "six"
-  const at = [T.STAFFED_FILLS[0], M.six];
+  const at = T.TICK_AT;
   const items = TICKS.map((tk, i) => {
     const s = at[i] - 1;
     if (t < s - 0.5) return null;
@@ -241,8 +272,14 @@ const GridChrome: React.FC<{ t: number; collapse: number; zoom: number }> = ({ t
   );
 };
 
-/** a chrome rect in the camera plane, reported where it is on screen (the plane's zoom z) */
+/** a chrome rect in the camera plane, reported where it is on screen (the plane's zoom z); its QA outline is drawn
+ *  through the plane's inverse transform, so it lands on the glyphs (the plane would otherwise transform it twice) */
 const TickZone: React.FC<{ what: string; x: number; y: number; w: number; h: number; z: number }> = ({ what, x, y, w, h, z }) => {
   const a = onScreen({ x, y }, z);
-  return <ZoneRect what={what} rect={{ x: a.x, y: a.y, w: w * z, h: h * z }} />;
+  const inv = Math.abs(z - 1) > 1e-6 ? `scale(${(1 / z).toFixed(6)}) translate(${(-GRID_C.x * (1 - z)).toFixed(4)}px, ${(-GRID_C.y * (1 - z)).toFixed(4)}px)` : undefined;
+  return (
+    <div style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, transformOrigin: '0 0', transform: inv, pointerEvents: 'none' }}>
+      <ZoneRect what={what} rect={{ x: a.x, y: a.y, w: w * z, h: h * z }} />
+    </div>
+  );
 };

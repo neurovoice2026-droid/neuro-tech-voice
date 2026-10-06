@@ -17,11 +17,12 @@ import { ClockLockup, lockColon, type LockAt } from './Clock';
 import { Ground2 } from './Stage';
 
 const SUNDAY = MOMENT_LIGHTS.sunday;
-/** the lockup on the cover (SCRIPT: y 330–560 — set a little lower, so the grid's 3:4 crop holds the cover's weight
- *  nearer its middle), the title below it, the pills under the title */
-const AT: LockAt = { cx: 540, cy: 500, size: 230 };
-const TITLE_Y = 700;
-const PILLS_Y = 1046;
+/** the lockup on the cover (SCRIPT: y 330–560 — set lower and larger, fix round 1: the block — lockup, title, pills —
+ *  is centred in the profile grid's 3:4 crop (y 240–1680) instead of leaving its lower 40 % empty), the title below it,
+ *  the pills under the title */
+const AT: LockAt = { cx: 534, cy: 690, size: 244 };
+const TITLE_Y = 900;
+const PILLS_Y = 1250;
 /** the PRO chip at the pill's size (the EventCard's Badge, × 32/24) */
 const PRO_K = 32 / 24;
 
@@ -49,7 +50,7 @@ const Art: React.FC = () => {
 export const Cover2: React.FC<{ zones?: boolean }> = ({ zones }) => (
   <CoverCard
     zones={zones}
-    ground={<Ground2 t={0} keyLight={{ x: 420, y: AT.cy, strength: 0.46, color: SUNDAY.orb[1], radius: 620 }} />}
+    ground={<Ground2 t={0} keyLight={{ x: lockColon(AT).x, y: AT.cy, strength: 0.56, color: SUNDAY.orb[1], radius: 520, pool: 'deep' }} />}
     art={<Art />}
     spec={{
       reel: 'ig2',

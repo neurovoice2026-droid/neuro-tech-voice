@@ -23,7 +23,7 @@ export type CardPose = { dx: number; dy: number; scale: number; shade: number; o
 export const REST: CardPose = { dx: 0, dy: 0, scale: 1, shade: 0, opacity: 1, moving: false };
 export type Rect = { x: number; y: number; w: number; h: number };
 
-export const EVENT: Rect = { x: 120, y: 664, w: 760, h: 290 };
+export const EVENT: Rect = { x: 120, y: 794, w: 760, h: 290 };
 
 /** the rect a card's pose puts on screen (for the zone guard) */
 export const posed = (r: Rect, p: CardPose, inner: Rect): Rect => {

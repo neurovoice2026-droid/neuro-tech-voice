@@ -340,9 +340,17 @@ export type IgEndProps = {
   ctaPlace?: Partial<CapPlace>;
   /** the backlight's look on the pearl: the reels' teal (default) or the films' lilac */
   pearlLight?: 'teal' | 'lilac';
+  /** optional: the light's last stretch, u 0 → 1 over [the brand's exit, the last frame] → × gain (default: none, the
+   *  mix's exponential curve alone). The default curve meets 0 on the last frame with an infinite slope (≈ 9 % left a
+   *  quarter-frame before it), which a night ground shows as a blink at the loop; a reel may ease the tail to 0. */
+  lightTail?: (u: number) => number;
+  /** optional, the pearl's teal light only (default: none — BACKLIGHT.pearl, a .18 core, the emitter's own burst): a
+   *  reel's fuller light — `stops` its colours (core, high, mid, edge), `core` its heart's whitening (uMerge.w), `burst`
+   *  × the emitter's bloom ON the bar (so the impact's own frame lands as light, not as a speck, on a light ground) */
+  pearlLook?: { stops?: readonly [string, string, string, string]; core?: number; burst?: number };
 };
 
-export const IgEnd: React.FC<IgEndProps> = ({ T, t, tone, ground, backdrop, orb, seam, ctaPlace, pearlLight = 'teal' }) => {
+export const IgEnd: React.FC<IgEndProps> = ({ T, t, tone, ground, backdrop, orb, seam, ctaPlace, pearlLight = 'teal', lightTail, pearlLook }) => {
   const kit = useKitFaces();
   const wmReady = useFaceReady(`500 100px ${WORDMARK_FONT}`, WORDMARK_TEXT);
   const E = T.END_CARD;
@@ -381,7 +389,7 @@ export const IgEnd: React.FC<IgEndProps> = ({ T, t, tone, ground, backdrop, orb,
     if (t <= BRAND_OUT(E)) return 1;
     const u = Math.min(1, (t - BRAND_OUT(E)) / Math.max(1, T.DURATION - 1 - BRAND_OUT(E)));
     const z = Math.exp(-2);
-    return Math.pow(Math.max(0, (Math.exp(-2 * u) - z) / (1 - z)), 1 / 2.2);
+    return Math.pow(Math.max(0, (Math.exp(-2 * u) - z) / (1 - z)), 1 / 2.2) * (lightTail ? lightTail(u) : 1);
   })();
   const teal = SUNDAY.orb[2];
   const hot = mixColor('#f4fdff', SUNDAY.orb[3], 0.35);
@@ -392,15 +400,17 @@ export const IgEnd: React.FC<IgEndProps> = ({ T, t, tone, ground, backdrop, orb,
     cores.push({ x: P.x, y: P.y, r: 1.4 + 3 * g, s: 0.9 * g, color: rgb01(teal) });
   } else if (t >= I) {
     // the burst: her light gives itself away — white-teal, hot for 2–3 frames, handing over to the backlight
-    glows.push({ x: P.x, y: P.y, r: mix(R(13 * 1.6), halo[0] * 0.5, burst), s: (night ? 0.85 : 0.7) * Math.exp(-(t - I) / 2.2), color: rgb01(night ? hot : teal) });
+    const kB = !night && pearlLook?.burst ? pearlLook.burst : 1;
+    glows.push({ x: P.x, y: P.y, r: mix(R(13 * 1.6) * kB, halo[0] * 0.5, burst), s: (night ? 0.85 : 0.7) * Math.exp(-(t - I) / 2.2), color: rgb01(night ? hot : teal) });
     if (g > 0) cores.push({ x: P.x, y: P.y, r: 4.5 + 6 * (1 - g), s: g, color: rgb01(teal) });
   }
-  const stops = (night || pearlLight === 'lilac' ? (night ? BACKLIGHT.lilac : ['#ffffff', '#f7f3ff', '#e9e0ff', '#c4a8ff']) : BACKLIGHT.pearl).map(rgb01) as IgLightUniforms['stops'];
+  const pearlStops = !night && pearlLight !== 'lilac' && pearlLook?.stops ? pearlLook.stops : BACKLIGHT.pearl;
+  const stops = (night || pearlLight === 'lilac' ? (night ? BACKLIGHT.lilac : ['#ffffff', '#f7f3ff', '#e9e0ff', '#c4a8ff']) : pearlStops).map(rgb01) as IgLightUniforms['stops'];
   const u: IgLightUniforms = {
     haloC: [P.x, P.y],
     haloR: [halo[0] * haloScale, halo[1] * haloScale, halo[2] * haloScale],
     haloGain: t < I ? 0 : smoothUnit(s.bloom / 0.5) * (1 + 0.22 * flare) * (1 + 0.04 * brandEnv) * out,
-    merge: night ? [1, 0.72, 0.42, 0.05] : [1, 0, 0, 0.18],
+    merge: night ? [1, 0.72, 0.42, 0.05] : [1, 0, 0, pearlLook?.core ?? 0.18],
     floor: [P.y + wmSize * 1.3, wmSize * 1.4, (night ? 0.4 : 0.32) * tween(t, [I + 4, I + 30], [0, 1], EASE.inOut), wmSize * 0.5],
     glows,
     cores,

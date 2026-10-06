@@ -10,7 +10,9 @@
  *     arriving at frame 0's still exactly.
  *
  * Set in the house sans as a device's clock — Instrument Sans 600, tabular figures in fixed cells (film 1 hook/Clock's
- * windows: a figure never changes width), paper ink at 90 % on the night; "pm." small on the figures' baseline.
+ * windows: a figure never changes width), paper ink (the set screen's 72 % until each word lifts it) on the night;
+ * "pm." small on the figures' baseline. Set at cy 470 (fix round 1): the hook's block sits in the upper middle of the safe
+ * area, not against the header band.
  * A pure function of the timeline frame `t`.
  */
 import React from 'react';
@@ -24,7 +26,7 @@ import { SEAM_RISE, SET_INK } from '../components/Captions';
 import { ZoneRect } from '../components/ZoneGuard';
 
 /** the lockup: centred on (cx, cy) — cy is the figures' optical centre, where the colon light sits */
-export const LOCK = { cx: 540, cy: 392, size: 214, weight: 600, cell: 0.6, colon: 0.5, pmSize: 0.4, pmGap: 0.12, ink: 0.9 } as const;
+export const LOCK = { cx: 540, cy: 470, size: 214, weight: 600, cell: 0.6, colon: 0.5, pmSize: 0.4, pmGap: 0.12, ink: 1 } as const;
 const PM = 'pm.';
 const pmSpec = (size: number = LOCK.size) => ({ size: Math.round(size * LOCK.pmSize), weight: 560, tracking: -0.01 });
 

@@ -14,7 +14,7 @@
  *                             lockup rises into place (frame 0's composition, mid-ring)
  */
 import React from 'react';
-import { EASE, mix, tween } from '../../../lib/motion';
+import { EASE, mix, smooth, tween } from '../../../lib/motion';
 import { mixColor } from '../../../lib/lights';
 import { useKitFaces } from '../../../kb/kit';
 import { CAPTION_BAND, Captions } from '../../components/Captions';
@@ -27,27 +27,37 @@ import { CallPanel, DOT, Ground2, groundKey, Ig2Frame0, orbPose, PANEL, PARK } f
 import * as T from '../timing';
 
 const M = T.M;
+/** the seam's arc: she leaves her place SEAM_LEAD frames before the seam (as the brand leaves), passes SEAM_LIFT px above
+ *  the straight line to the colon (sin², so she lifts off and settles without a kick) and closes from 2 f before the
+ *  seam — clear of the rising "9" (≥ 8 px) and of the header band (≥ 6 px) all the way (fix round 1) */
+const SEAM_LIFT = 150;
+const SEAM_LEAD = 6;
 const track = () => orbTrack(T, { listen: T.CALLERS.map(([a, b]) => [a, b] as const) });
 
 /* ── the gate's camera and the end card's pull-back, per card (every card stays its own small layer) ── */
 /** the stack's top centre: the camera pushes about it, the end card pulls the stack up and back about it */
 const O = { x: PANEL.x + PANEL.w / 2, y: PANEL.y };
-/** the end card: the stack pulls back to a compact receipt above the CTA (top at y ≈ 280, clear of her orb), dimmed */
-const PULL = { scale: 0.68, dx: 24, dy: -190, shade: 0.58 } as const;
+/** the end card: the stack pulls back to a compact receipt above the CTA (top at y ≈ 300, its left edge ≈ 60 px clear of
+ *  her parked orb), dimmed */
+const PULL = { scale: 0.66, dx: 76, dy: -300, shade: 0.58 } as const;
 
 /** the pull-back: it starts as the gate line ends (a few frames before the end card's field rises, so the field never
- *  meets the EventCard), 18 f on the house in-out */
+ *  meets the EventCard), over 18 f. It CURVES round her parked orb: the step back and the drift right lead (power3.out),
+ *  the rise follows (the house in-out) — a straight line would carry the record's corner under her orb */
 const PULL_AT = T.END_CARD.field - 8;
-export const pullStep = (t: number) => tween(t, [PULL_AT, PULL_AT + 18], [0, 1], EASE.inOut);
+const pullU = (t: number) => tween(t, [PULL_AT, PULL_AT + 18], [0, 1], (x) => x);
 
-export function groupPose(t: number, step = pullStep(t)) {
+export function groupPose(t: number) {
+  const u = pullU(t);
+  const across = EASE.out3(u);
+  const up = EASE.inOut(u);
   const push = 1 + 0.03 * tween(t, [M.cards[1], T.END_CARD.impact], [0, 1], EASE.inOut);
-  const z = push * mix(1, PULL.scale, step);
-  const dx = mix(0, PULL.dx, step);
-  const dy = mix(0, PULL.dy, step);
+  const z = push * mix(1, PULL.scale, across);
+  const dx = mix(0, PULL.dx, across);
+  const dy = mix(0, PULL.dy, up);
   const fade = 1 - tween(t, [T.IMPACT - 6, T.IMPACT + 1], [0, 1], EASE.in3);
-  const moving = (t > M.cards[1] && t < T.END_CARD.impact) || (step > 0 && step < 1);
-  return { z, dx, dy, shade: PULL.shade * step, opacity: fade, moving };
+  const moving = (t > M.cards[1] && t < T.END_CARD.impact) || (u > 0 && u < 1);
+  return { z, dx, dy, shade: PULL.shade * up, opacity: fade, moving };
 }
 const cardPose = (r: Rect, g: ReturnType<typeof groupPose>): CardPose => {
   const c = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
@@ -121,7 +131,7 @@ function endGround(tm: number) {
   const orb = groundKey(tm);
   const key = endGroundKey(T, tm, true);
   const k = Math.min(1, key.strength / 0.5);
-  return <Ground2 t={tm} keyLight={k > 0.001 ? { x: mix(orb.x, key.x, k), y: mix(orb.y, key.y, k), strength: mix(orb.strength, key.strength, k), color: mixColor(orb.color, key.color, k), radius: mix(orb.radius, 900, k) } : orb} />;
+  return <Ground2 t={tm} keyLight={k > 0.001 ? { x: mix(orb.x, key.x, k), y: mix(orb.y, key.y, k), strength: mix(orb.strength, key.strength, k), color: mixColor(orb.color, key.color, k), radius: mix(orb.radius, 900, k), pool: orb.pool } : orb} />;
 }
 
 export const End2: React.FC = () => {
@@ -142,12 +152,17 @@ export const End2: React.FC = () => {
       )}
       orb={() => {
         // the seam: the wordmark has left; she glides back to the colon and closes into the phone's rose light, a ring
-        // already in flight — frame 0's dot, exactly
-        const g = tween(f, [E.seam, T.DURATION - 2], [0, 1], EASE.inOut);
-        const pose = { x: mix(PARK.x, c.x, g), y: mix(PARK.y, c.y, g), d: PARK.d, moving: g > 0 && g < 1 };
-        return <AvaOrb t={f} pose={pose} canvas={PARK.d} track={track()} shadow={0} close={{ at: E.seam + 2, dur: T.DURATION - 4 - E.seam, dot: DOT, t0: T.DURATION, rings: M.rings }} />;
+        // already in flight — frame 0's dot, exactly. Her path ARCS over the rising "9" (up, across, down into the colon's
+        // slot as she shrinks), never through it
+        const u = tween(f, [E.seam - SEAM_LEAD, T.DURATION - 2], [0, 1], (x) => x);
+        const g = EASE.inOut(u);
+        const lift = SEAM_LIFT * Math.sin(Math.PI * u) ** 2;
+        const pose = { x: mix(PARK.x, c.x, g), y: mix(PARK.y, c.y, g) - lift, d: PARK.d, moving: u > 0 && u < 1 };
+        const closeAt = E.seam - 2;
+        return <AvaOrb t={f} pose={pose} canvas={PARK.d} track={track()} shadow={0} close={{ at: closeAt, dur: T.DURATION - 2 - closeAt, dot: DOT, t0: T.DURATION, rings: M.ringTrain }} />;
       }}
       seam={(th) => <Ig2Frame0 t={th} dot={false} />}
+      lightTail={(u) => 1 - smooth(0.55, 1, u)}
     />
   );
 };

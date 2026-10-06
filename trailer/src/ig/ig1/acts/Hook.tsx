@@ -6,7 +6,8 @@
  *   · S1 "Don't fire your / receptionist / for an AI." — headline 92, left at x 86, rows at y 420 · 524 · 628, SET at
  *     frame 0 at 72 % ink (each word lifting to full ink on her onset with a 1-frame rose glint); "fire" in rose ink
  *   · the desk (desk.ts): a 1.5 px graphite hairline at y 760 drawing x 86 → 906 (EASE.draw 0.6 s from f −6: moving at
- *     frame 0), the front desk's phone at its right end — the rose line light (Ø 18) — a ring leaving it at f0 and f30
+ *     frame 0), the front desk's phone at its right end — the rose line light (Ø 18) — a pair of rings leaving it on each trill
+ *     (f0, f30; DeskRings), travelling out across the empty frame, its rose light on the ground (stage.ts PHONE_KEY)
  *   · THE TURN: at "Not" − 2 S1 leaves up through its masks and "Not even ours" rises at y 520 (display 112, her teal);
  *     its full stop is HER ORB (Stage.tsx Ig1Orb: Ø 40, popping in as the last word lands, breathing on her voice)
  *   · THE WEEK: as "Not even ours." leaves, the desk line hands over to the week grid unfolding out of it (WeekGrid):
@@ -18,8 +19,8 @@ import { GRAPHITE } from '../../../kb/theme';
 import { MOMENT_LIGHTS } from '../../../kb/palettes';
 import { Captions, captionScreens, layoutScreen, retextScreens, type CapPlace } from '../../components/Captions';
 import { PearlGround } from '../../components/Ground';
-import { LineLight, Rings } from '../../components/Orb';
-import { DESK } from '../desk';
+import { LineLight } from '../../components/Orb';
+import { DESK, RING_LIFE } from '../desk';
 import { groundKeyAt } from '../stage';
 import * as T from '../timing';
 
@@ -52,10 +53,38 @@ export const Ig1Frame0: React.FC<{ t: number; dot?: boolean }> = ({ t, dot = tru
           <line x1={DESK.x0} y1={DESK.y} x2={DESK.x0 + (DESK.x1 - DESK.x0) * draw} y2={DESK.y} stroke={GRAPHITE.tag} strokeOpacity={lineA.toFixed(4)} strokeWidth={1.5} strokeLinecap="round" />
         ) : null}
       </svg>
-      <Rings t={t} at={DESK.rings} x={DESK.x1} y={DESK.y} d0={DESK.dot} d1={190} color={RUSH.orb[2]} out={out} />
+      <DeskRings t={t} out={out} />
       {dot && out < 1 ? <LineLight t={t} x={DESK.x1} y={DESK.y} d={DESK.dot * (1 - 0.6 * smooth(0, 1, out))} rings={DESK.rings} opacity={1 - out} /> : null}
       <Captions T={T} id="ig1-01" t={t} place={(k) => (k === 0 ? S1 : S2)} keys={KEYS} glint={RUSH.orb[2]} retext={RETEXT} skip={t < 0 ? [1] : []} what="hook" />
     </>
+  );
+};
+
+/**
+ * THE PHONE RINGING (film 1 hook/Rings' RingPulse, the desk's own): each ring a rose hairline leaving the phone's light
+ * and travelling out across the desk and the empty frame below it (Ø 1400 over RING_LIFE frames, power2.out — fast off
+ * the light, settling as it widens), thinning and fading as it goes; a pair per trill burst (desk.ts DESK.rings).
+ * Pure function of t (frame 0's ring is already leaving; the seam re-forms it).
+ */
+const RING_D1 = 1400;
+const DeskRings: React.FC<{ t: number; out: number }> = ({ t, out }) => {
+  const live = DESK.rings.filter((s) => t >= s && t < s + RING_LIFE);
+  if (!live.length || out >= 0.999) return null;
+  return (
+    <svg width={1080} height={1920} style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', pointerEvents: 'none' }} aria-hidden>
+      {live.map((s, i) => {
+        const age = t - s;
+        const u = Math.min(1, age / RING_LIFE);
+        const e = 1 - (1 - u) * (1 - u);
+        const born = tween(t, [s, s + 1.5], [0, 1], EASE.out3);
+        const young = Math.max(0, 1 - age / 12);
+        const w = 1.6 + 1.2 * young;
+        // the pair's second ring a touch fainter (the chirp's echo)
+        const a = (0.5 + 0.3 * young) * (i % 2 ? 0.72 : 1) * born * Math.pow(1 - e, 1.05) * (1 - out);
+        const r = Math.max(0, (DESK.dot + (RING_D1 - DESK.dot) * e) / 2 - w / 2);
+        return <circle key={s} cx={DESK.x1} cy={DESK.y} r={r.toFixed(3)} fill="none" stroke={RUSH.orb[2]} strokeOpacity={a.toFixed(4)} strokeWidth={w.toFixed(3)} />;
+      })}
+    </svg>
   );
 };
 

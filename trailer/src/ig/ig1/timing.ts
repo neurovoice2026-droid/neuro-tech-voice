@@ -97,8 +97,11 @@ export const M = {
   fire: word(L1, 'ig1-01', 1),
   not: word(L1, 'ig1-01', 7),
   ours: word(L1, 'ig1-01', 9),
-  /** b2: the desk hairline UNFOLDS into the week (its 24 rows spreading out of the line), as "Not even ours." leaves */
-  unfold: HOURS - 3,
+  /** b2: the desk hairline UNFOLDS into the week (its 24 rows spreading out of the line) the moment "ours" lands — her
+   *  orb pops in as the full stop a frame before — so the proof's canvas is open while the punchline still holds */
+  unfold: word(L1, 'ig1-01', 9) + 3,
+  /** her full stop detaches and parks in the label band as "Not even ours." leaves (the caption's exit) */
+  detach: HOURS - 3,
   /** "Nine": the staffed block fills column by column, one per 16th (five columns) — "09" ticks in */
   nine: word(L2, 'ig1-02', 0),
   /** "six": "18" ticks in */
@@ -119,7 +122,10 @@ export const M = {
   messages: word(L4, 'ig1-04', 3),
   puts: word(L4, 'ig1-04', 5),
   people: word(L4, 'ig1-04', 9),
-  /** b5: the cards leave as the act opens; on "receptionist" the graphite block lifts; on "only" her orb rests */
+  /** b4 → b5: the records leave together (top first, a 32nd apart) once "…listed." has been said, so the stage is clear
+   *  before "Your receptionist" rises; the week comes back to full size under it */
+  recordsOut: word(L4, 'ig1-04', 11) + 10,
+  /** b5: the desk act opens; on "receptionist" the graphite block lifts; on "only" her orb rests */
   desk: L5 - (PLAN.lines['ig1-05'] - PLAN.acts.desk),
   receptionist: word(L5, 'ig1-05', 1),
   only: word(L5, 'ig1-05', 5),
@@ -129,6 +135,9 @@ export const CASCADE_LEN = 36;
 /** the staffed block's five column fills (one per 16th from "Nine") */
 /** (from "Nine" — once the week has opened: the unfold settles ≈ 9 f after it starts) */
 export const STAFFED_FILLS = [0, 1, 2, 3, 4].map((c) => Math.max(M.nine, M.unfold + 9) + c * SIXTEENTH);
+/** the hour ticks: "09" once her caption has risen (one moving text at a time: the caption rises from "Nine" − 2), "18"
+ *  on "six" */
+export const TICK_AT = [Math.max(STAFFED_FILLS[0], M.nine + 3), M.six] as const;
 
 /* ── the acts ── */
 /** Act windows on the absolute timeline; `pre`/`post`: frames an act stays mounted before/after its window. */
@@ -154,10 +163,13 @@ export const DURATION = END;
 /** What each line shows (word spans of its `say`; SCRIPT.md §3 "Screens"). */
 export const SCREENS: Record<string, LineScreens> = {
   'ig1-01': { kind: 'caption', spans: [[0, 6], [7, 9]], set0: true },
-  'ig1-02': { kind: 'caption', spans: [[0, 5], [6, 12]] },
+  // "45 hours." is its own screen, so the numeral appears as she says it (the count along), not 1.9 s before
+  'ig1-02': { kind: 'caption', spans: [[0, 3], [4, 5], [6, 12]] },
   'ig1-03': { kind: 'caption', spans: [[0, 4], [5, 8]] },
-  'ig1-04': { kind: 'caption', spans: [[0, 3], [4, 7], [8, 11]] },
-  'ig1-05': { kind: 'caption', spans: [[0, 4], [5, 8]] },
+  // split where she breathes ("calls" → "through": 12 f), so one screen has left before the next rises
+  'ig1-04': { kind: 'caption', spans: [[0, 3], [4, 6], [7, 11]] },
+  // "Your receptionist" holds through the block's lift (20 f after its last word), then the rest of the line
+  'ig1-05': { kind: 'caption', spans: [[0, 1], [2, 8]] },
   'ig1-06': { kind: 'caption', spans: [[0, 4], [5, 9]] },
   'ig1-07': { kind: 'brand', spans: [] },
 };
@@ -206,34 +218,36 @@ export const HITS: Hit<Snd>[] = [
   H(0, 'fx-trill', 'rush', 0.62, 1, 'b1 the desk phone rings at frame 0 (the attack)'),
   H(30, 'fx-trill', 'rush', 0.62, 2, 'b1 its second burst'),
   H(M.fire, 'thump', 'none', 0.5, 3, 'b1 “fire”: a soft weight under the rose glint', { db: -4 }),
-  H(M.ours + 2, 'ping', 'sunday', 0.62, 2, 'b1 “ours”: her orb lands as the full stop', { db: -2 }),
-  H(M.ours + 2, 'chime-sunday-soft', 'sunday', 0.62, 3, 'b1 … the sunday chime under it', { layer: true }),
+  H(M.ours + 2, 'ping', 'sunday', 0.62, 2, 'b1 “ours”: her orb lands as the full stop', { db: 3 }),
+  H(M.ours + 2, 'chime-sunday-soft', 'sunday', 0.62, 3, 'b1 … the sunday chime under it', { layer: true, db: 5 }),
   // b2 — the desk line opens into the week; the staffed block fills; 45; the whole week
-  H(M.unfold + 1, 'fx-riffle', 'none', 0.5, 3, 'b2 the desk line unfolds into the 24 hours of the week', { db: -4 }),
+  H(M.unfold + 1, 'fx-riffle', 'none', 0.5, 3, 'b2 the desk line unfolds into the 24 hours of the week', { db: 7 }),
   H(T0(STAFFED_FILLS), 'fx-tick', 'none', 0.3, 3, 'b2 “Nine”: the staffed block fills, one column per 16th', {
-    db: -2,
+    db: 9,
     run: { n: 5, offs: STAFFED_FILLS.map((f) => f - STAFFED_FILLS[0]), xs: [0.22, 0.28, 0.34, 0.4, 0.46] },
   }),
-  H(M.weekdays, 'draw', 'none', 0.36, 3, 'b2 “weekdays”: MON–FRI’s bracket draws out', { db: -6 }),
+  H(M.weekdays, 'draw', 'none', 0.36, 3, 'b2 “weekdays”: MON–FRI’s bracket draws out', { db: 6 }),
   H(M.fortyFive, 'fx-tock', 'none', 0.36, 2, 'b2 “forty-five”: the block’s outline lifts once'),
-  H(M.week168, 'swish', 'none', 0.5, 3, 'b2 “a hundred and sixty-eight”: the camera eases back, every empty hour outlined', { db: -3 }),
+  H(M.week168, 'swish', 'none', 0.5, 3, 'b2 “a hundred and sixty-eight”: the camera eases back, every empty hour outlined', { db: 4 }),
   // b3 — the agent's shift
   ...CASCADE_PLUCKS.map(([snd, semi], i) =>
-    H(M.cascade + i * SIXTEENTH, snd, 'none', 0.5 + 0.06 * (i % 4), 3, `b3 the teal cascade, rising pluck ${i + 1}/${CASCADE_PLUCKS.length}`, { semi, db: -1 - 0.6 * i, layer: true }),
+    H(M.cascade + i * SIXTEENTH, snd, 'none', 0.5 + 0.06 * (i % 4), 3, `b3 the teal cascade, rising pluck ${i + 1}/${CASCADE_PLUCKS.length}`, { semi, db: 8.5 - 0.3 * i, layer: true }),
   ),
   H(M.shiftWord, 'glint', 'sunday', 0.74, 2, 'b3 “shift”: her orb, grown into the corner'),
   H(M.shiftWord, 'fx-ting', 'sunday', 0.74, 2, 'b3 … its ting', { layer: true }),
   // b4 — what it does
-  H(M.answers, 'fx-tag', 'none', 0.62, 2, 'b4 “answers”: the Answered record lands'),
-  H(M.messages, 'fx-tag', 'none', 0.62, 2, 'b4 “messages”: Message taken lands'),
-  H(M.puts, 'fx-tag', 'none', 0.62, 2, 'b4 “puts calls through”: Transferred lands'),
-  H(M.people, 'line', 'none', 0.6, 3, 'b4 “people you listed”: the team member slides out (Live transfers)', { db: -4 }),
+  H(M.answers, 'fx-tag', 'none', 0.62, 2, 'b4 “answers”: the Answered record lands', { db: 5 }),
+  H(M.messages, 'fx-tag', 'none', 0.62, 2, 'b4 “messages”: Message taken lands', { db: 5 }),
+  H(M.puts, 'fx-tag', 'none', 0.62, 2, 'b4 “puts calls through”: Transferred lands', { db: 5 }),
+  H(M.people, 'line', 'none', 0.6, 3, 'b4 “people you listed”: the team member slides out (Live transfers)', { db: 8 }),
   // b5 — the desk beat
-  H(M.desk, 'swish', 'none', 0.5, 3, 'b5 the records leave up', { db: -8 }),
+  H(M.recordsOut, 'swish', 'none', 0.5, 3, 'b4 → b5 the records leave up', { db: 4 }),
   H(M.receptionist, 'land', 'none', 0.36, 2, 'b5 “receptionist”: the people’s block lifts off the week'),
   // b6–b8 — the shared end card
-  ...endHits(END_CARD),
-  H(IMPACT - 12, 'riser', 'none', 0.5, 1, 'END the build’s crest, just after her last word (“…link.”): a first swell, cresting before the breath', { layer: true, db: -1 }),
+  // (the comment field's rise heard over the CTA's bed: the shared −6 dB sat 35 LU under her voice)
+  ...endHits(END_CARD).map((h) => (h.snd === 'fx-menu-open' ? { ...h, db: 6 } : h)),
+  H(IMPACT - 12, 'riser', 'none', 0.5, 1, 'END the build’s crest, just after her last word (“…link.”): a first swell, cresting before the breath', { layer: true, db: 2 }),
+  H(IMPACT - 14, 'whoosh-rev', 'none', 0.5, 1, 'END the crest: a reversed swell out of “…link.”, cut into the breath', { layer: true, db: 3 }),
   H(IMPACT - 1, 'whoosh-rev', 'none', 0.5, 1, 'END the breath before the hit: a reversed whoosh through the inhale', { layer: true, db: -1 }),
   // the shared impact stack, its riser a touch hotter: it carries the last 400 ms while the bed draws its breath
   ...impactHits(IMPACT).map((h) => (h.snd === 'riser' ? { ...h, db: 1 } : h)),
@@ -258,10 +272,20 @@ export const MUSIC = {
  * is still letting go after her last word ("…link.") when the build must peak, so the fader rides up against it for the
  * 16th after it — the crest — then down into the inhale, the hit, well back for the name, down into the seam.
  */
+/** the bed under her lines: the films' 10–12 LU voice-over-music balance (film 2's VO acts), not a dry voice-over */
+const BED_UNDER = 4.5;
+/** the cascade's opening (pad and strings an octave up, the plucks): the bed swells this much more over it */
+const BED_CASCADE = 1;
 const BED_RIDE: readonly (readonly [number, number])[] = [
-  [0, 0],
-  [IMPACT - 32, 0],
-  [IMPACT - 27, 1],
+  [0, BED_UNDER],
+  [CASCADE - 6, BED_UNDER],
+  [CASCADE + 2, BED_UNDER + BED_CASCADE],
+  [CASCADE + 34, BED_UNDER + BED_CASCADE],
+  [CASCADE + 70, BED_UNDER],
+  // the CTA: drawn back under "…for the link." (its last word clear), then the build's crest after it
+  [IMPACT - 40, BED_UNDER],
+  [IMPACT - 32, -3],
+  [IMPACT - 26, -2.5],
   [IMPACT - 24, 7],
   [IMPACT - 22, 14],
   [IMPACT - 17, 14],

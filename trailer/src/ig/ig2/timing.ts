@@ -135,27 +135,30 @@ export const DISPLAY: readonly Display[] = [{ id: 'ig2-01', from: 0, to: 1, text
 /* ── the picture's moments (absolute frames; the acts and the cue sheet both read these) ── */
 const S16 = BEAT / 4;
 const on = (at: number, id: VoiceId, k: number) => at + vWord(id, k);
-/** the panel's top edge peeks up from the frame's foot while she says "Watch it book this call." */
-const PEEK = [on(L1, 'ig2-01', 4) + 4, on(L1, 'ig2-01', 8) + 8] as const;
 /** S2 "Watch it book / this call." leaves a beat after its last word, so the stage is clear for the pickup */
 const S2_OUT = on(L1, 'ig2-01', 8) + BEAT;
 const TOOL1 = on(A3, 'ig2-03', 0);
 const NAME = on(A5, 'ig2-05', 1);
+const C1_FROM = CALLERS[0][0];
 const BOOKED = on(A5, 'ig2-05', 3);
 const FOLD = HANGUP + S16;
 const PRO = on(L6, 'ig2-06', 4);
 export const M = {
   /** the rings' hairlines leave the colon light a little ahead of each trill (frame 0 shows one in flight) */
   rings: [-4, ...RINGS.slice(1).map((r) => r - 4)] as readonly number[],
-  peek: PEEK,
+  /** … and a second hairline an 8th behind each (the trill's two chirps): the light keeps ringing while the phone does */
+  ringTrain: [-4, ...RINGS.slice(1).map((r) => r - 4)].flatMap((r) => [r, r + BEAT / 2]) as readonly number[],
   s2Out: S2_OUT,
-  /** the panel: up from its peek on the pickup (a stiff, critically damped spring), landed before her first word */
-  panelUp: PICKUP - 1,
+  /** the panel LANDS a frame after the birth (the house settle, SPRING.site, from 120 px below — there in ≈ 5 f, before
+   *  her first word's row rises): a short move under the orb, so the colon opening into her orb leads the pickup */
+  panelUp: PICKUP + 2,
   /** the colon light springs open into her orb, then glides to the label band */
   birth: PICKUP + 1,
   glide: [PICKUP + 8, PICKUP + 26] as const,
-  /** the peeking panel's header (● SAMPLE CALL) rises on her word "call" */
-  header: on(L1, 'ig2-01', 8),
+  /** the panel's header (● SAMPLE CALL) lands with it (its word "call" said before the pickup) */
+  header: PICKUP + 2,
+  /** the caller's first turn: the panel grows to hold its row (it hugs her greeting until then) */
+  room: C1_FROM - 6,
   /** "Saturday morning?": the panel grows to hold the tool row and the slot strip; the spinner turns until the check */
   grow: TOOL1 - 2,
   tool1: TOOL1,
@@ -166,11 +169,13 @@ export const M = {
   pulse: [on(A3, 'ig2-03', 4), on(A3, 'ig2-03', 6)] as const,
   /** "Ten it is.": the 10:00 chip fills her teal */
   fill: on(A4, 'ig2-04', 0),
-  /** "Maya": her name clips onto the chip; the booking tool row starts */
+  /** "Maya": her name clips onto the chip */
   name: NAME,
-  tool2: NAME + 4,
-  /** "booked,": the chip widens into the event; the tool row ticks */
+  /** "booked,": the chip widens into the event; the booking tool row rises ON the word (chrome on or after its word,
+   *  SCRIPT §0.3 — never ahead of the payoff) and ticks a beat-8th later */
   booked: BOOKED,
+  tool2: BOOKED + 1,
+  tool2Done: BOOKED + 9,
   hangup: HANGUP,
   /** the panel folds to its header and steps back; the two cards land on 16ths */
   fold: FOLD,
@@ -187,7 +192,7 @@ export const END_CARD = {
   field: CTA - 12,
   agent: CTA + vWord('ig2-07', 1),
   send: end(CTA, 'ig2-07'),
-  roll: IMPACT - ROLL,
+  roll: IMPACT - ROLL + BEAT / 2,
   impact: IMPACT,
   brand: BRAND_AT,
   url: [0, 1, 2].map((k) => BRAND_AT + vWord(BRAND, k)),
@@ -208,11 +213,10 @@ const callerHits = CALLERS.map(([a, e], k) =>
 export const HITS: Hit<Snd>[] = [
   H(0, 'fx-roomtone', 'none', 0.5, 3, 'b1 the closed studio’s room tone, from frame 0 (no bed: the ring is the opener)', { db: -22 }),
   ...ringHits,
-  H(M.peek[0] + 3, 'whoosh-soft', 'none', 0.5, 3, 'b1 “Watch it book…”: the call panel’s edge peeks up from the frame’s foot', { db: -10 }),
   H(PICKUP, 'fx-pickup', 'none', 0.5, 1, 'b2 PICKUP: the click cuts the ring'),
   H(M.birth, 'fx-seed', 'sunday', 0.38, 2, 'b2 the colon light springs open into her orb (the seed)'),
   H(M.birth + 2, 'fx-ting', 'sunday', 0.38, 2, 'b2 … her teal: the birth’s ting', { layer: true }),
-  H(M.panelUp + 3, 'fx-paper-lift', 'none', 0.5, 3, 'b2 the call panel rises into place', { db: -6 }),
+  H(M.panelUp, 'fx-paper-lift', 'none', 0.5, 3, 'b2 the call panel lands under her orb (its air clear of “Northside”)', { db: -6 }),
   H(PICKUP + 4, 'fx-linehold', 'none', 0.5, 3, 'b3 the open line under the call (very low)', { db: -16, layer: true }),
   ...callerHits,
   H(M.tool1 + 2, 'fx-tick', 'none', 0.3, 3, 'b5 “Saturday morning?”: a soft tick-roll under the availability spinner', { db: -10, run: { n: 6, step: BEAT / 4 } }),
@@ -240,10 +244,12 @@ export const HITS: Hit<Snd>[] = [
 export const CUES: Cue[] = buildCues(HITS, { sfx: SFX, speaking, roomAt });
 
 /** The moments the bed reads (scripts/ig/bed.mjs inputs(T)): no bed under the hook — it enters a beat after the pickup
- *  (the plan's bar 3, f120, one beat after its pickup at f105). */
+ *  (the plan's bar 3, f120, one beat after its pickup at f105). THE ROLL starts an 8th after the series' half bar
+ *  (fix round 1): her "link." ends on the half bar (its "k" releases ≈ 1 f after it), so the build begins once the word is
+ *  out — never "for the lin—" under a snare. */
 export const MUSIC = {
   bedFrom: PICKUP + BEAT,
-  roll: IMPACT - ROLL,
+  roll: END_CARD.roll,
   impact: IMPACT,
   brand: BRAND_AT,
   end: END,
@@ -253,19 +259,23 @@ export const MUSIC = {
   /** the shared build, louder: the converge into the logo must top the gate line's second (check-mix arc) */
   build: { kick: 1.4, snare: 1.5 },
 } as const;
-/** the bed's fader: the series' shape round the hit (common/series.ts bedRide), with ig2's BUILD — her CTA ends 20 f
- *  before the bar, so the roll is ridden up as her last word lands (the duck still holds it under "link.") and kept up
- *  until the inhale draws it in: the converge into the logo is the loudest second of music (check-mix arc) */
-const CTA_END = CTA + Math.round(phrase('ig2-07', VOICE.lines['ig2-07'].phrases.length - 1).end * FPS);
+/** the bed's fader: the series' shape round the hit (common/series.ts bedRide), with ig2's BUILD — her CTA ends on the
+ *  half bar, so the bed is held where it is until "link." is out (its "k" released), then ridden up into the roll and
+ *  kept up until the inhale draws it in: the converge into the logo is the loudest second of music (check-mix arc) */
+const LINK_OUT = CTA + vWord('ig2-07', 4) + 6;
 export const BED = {
   file: `ig/sfx/${REEL}/bed.wav`,
   vol: 2,
   ride: [
     [0, 0],
-    [CTA_END - 12, 0],
-    [CTA_END, 11],
-    [IMPACT - 10, 11],
-    ...bedRide(IMPACT, BRAND_AT, vFrames(BRAND), END).filter(([f]) => f >= IMPACT - 1),
+    [LINK_OUT, 0],
+    [END_CARD.roll + 3, 13.5],
+    [IMPACT - 11, 13.5],
+    // the series' shape round the hit, its seam point a touch up (−17 for −20): ig2's louder build costs master gain,
+    // and the chord must still ring 10–5 f from the end (check-mix ≥ −55 dBFS; the mix's own fade takes it under −60)
+    ...bedRide(IMPACT, BRAND_AT, vFrames(BRAND), END)
+      .filter(([f]) => f >= IMPACT - 1)
+      .map(([f, db]) => [f, f === END - SEAM ? -17 : db] as const),
   ] as readonly (readonly [number, number])[],
 };
 export const MIX = {

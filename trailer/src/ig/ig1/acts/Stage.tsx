@@ -20,12 +20,16 @@ import { Captions } from '../../components/Captions';
 import { AvaOrb, orbTrack } from '../../components/Orb';
 import { useActFrame } from '../../scene';
 import { OutcomeCards } from '../Cards';
-import { ctaDimAt, ORB_CANVAS, orbPose, planeTransform, recedeAt, zoomAt, zooming } from '../stage';
+import { chromeAt, ctaDimAt, ORB_CANVAS, orbPose, planeTransform, recedeAt, zoomAt, zooming } from '../stage';
 import * as T from '../timing';
+import { DESK } from '../desk';
 import { WeekGrid } from '../WeekGrid';
 import { fullStop, Ig1Frame0, Ig1Ground } from './Hook';
 
 const SUNDAY = MOMENT_LIGHTS.sunday;
+/** how far the week steps back behind the call records (b4): a quiet ground for the white cards, so its rows never
+ *  read as stripes in the gaps between them */
+const RECEDE_DIM = 0.74;
 const TEAL_KEY = { ink: SUNDAY.ink, glint: SUNDAY.orb[2] } as const;
 
 /** the camera plane at absolute frame t: its children are laid out at zoom 1 */
@@ -59,7 +63,7 @@ export const Ig1Orb: React.FC<{ t: number; seam?: { at: number; dur: number; to:
       canvas={ORB_CANVAS}
       track={orbTrack(T)}
       pop={{ at: T.M.ours + 2 }}
-      close={seam ? { at: seam.at + 2, dur: seam.dur - 2, dot: seam.dot, t0: seam.t0 } : undefined}
+      close={seam ? { at: seam.at + 2, dur: seam.dur - 2, dot: seam.dot, t0: seam.t0, rings: DESK.rings } : undefined}
       opacity={p.opacity}
       rim={0.8}
     />
@@ -82,7 +86,7 @@ export const Ig1Stage: React.FC<{ t: number }> = ({ t }) => {
       <Ig1Ground t={t} />
       <Plane t={t}>
         {t < T.HOURS + 8 ? <Ig1Frame0 t={t} /> : null}
-        <WeekGrid t={t} zoom={z} fx={{ dim: Math.max(0.45 * recedeAt(t), ctaDimAt(t)) }} />
+        <WeekGrid t={t} zoom={z} fx={{ dim: Math.max(RECEDE_DIM * recedeAt(t), ctaDimAt(t)), chromeA: chromeAt(t) }} />
       </Plane>
       <OutcomeCards t={t} />
       <Ig1Orb t={t} />

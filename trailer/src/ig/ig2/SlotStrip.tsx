@@ -36,7 +36,7 @@ export type StripMoments = {
 };
 
 /** the strip's box (frame px): the SAT label at y, the chips below it */
-export const STRIP = { x: 134, y: 990, w: 724, chipY: 1032, chipH: 80, gap: 11, r: 20, label: 30 } as const;
+export const STRIP = { x: 134, y: 1120, w: 724, chipY: 1162, chipH: 80, gap: 11, r: 20, label: 30 } as const;
 const chipW = (STRIP.w - 4 * STRIP.gap) / 5;
 const chipX = (i: number) => STRIP.x + i * (chipW + STRIP.gap);
 const TEAL = SUNDAY.ink; // #0e7490: white type on it reads (5.4 : 1)
