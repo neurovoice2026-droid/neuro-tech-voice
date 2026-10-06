@@ -45,23 +45,31 @@ export const PLAN = {
 /* ── the voiced timeline ── */
 /** the hook: on its planned frame, once the frame-0 ring has rung out before her first word */
 const L1 = afterRing(PLAN.lines['ig2-01'], 0, KIT.firstSound('ig2-01'));
-/** the rings in the dark: at frame 0, and on the last beat (≥ bar 1's beat 3) that rings out before "You're closed." —
- *  in her pause, never on a word (the plan's f60 was cut against the planned read) */
-export const RINGS = [0, Math.max(2 * BEAT, ringBefore(L1 + vWord('ig2-01', 2)))] as const;
-/** the pickup click: the ring is cut, the colon light springs open into the teal orb */
-export const PICKUP = Math.max(PLAN.pickup, upBeat(end(L1, 'ig2-01')));
-const A2 = place(PLAN.lines['ig2-02'], PICKUP, PLAN.lines['ig2-02'] - PLAN.pickup);
-const turn = (k: 0 | 1 | 2, after: number) => {
-  const from = place(PLAN.callers[k][0], after, 4);
-  return [from, from + PLAN.callers[k][1]] as const;
-};
-const C1 = turn(0, end(A2, 'ig2-02'));
-const A3 = place(PLAN.lines['ig2-03'], C1[1], 0);
-const C2 = turn(1, end(A3, 'ig2-03'));
-const A4 = place(PLAN.lines['ig2-04'], C2[1], 3);
-const C3 = turn(2, end(A4, 'ig2-04'));
-const A5 = place(PLAN.lines['ig2-05'], C3[1], 3);
-/** the caller's turns [from, to): a ● CALLER row with the level meter, line hiss +3 dB */
+/** the third ring: on the beat after her "…this call." — the phone still ringing as she finishes (fix round 2: from f60 to
+ *  the pickup the phone seemed to have stopped); one chirp (`fx-trill-1`), which the pickup's click cuts a 16th later */
+const RING3 = upBeat(end(L1, 'ig2-01'));
+/** the rings in the dark: at frame 0, on the last beat (≥ bar 1's beat 3) that rings out before "You're closed." — in
+ *  her pause, never on a word (the plan's f60 was cut against the planned read) — and the pickup's ring */
+export const RINGS = [0, Math.max(2 * BEAT, ringBefore(L1 + vWord('ig2-01', 2))), RING3] as const;
+/** the pickup click, a 16th into the third ring: the ring is cut, the colon light springs open into the teal orb */
+export const PICKUP = Math.max(PLAN.pickup, RING3 + 4);
+const A2 = place(PLAN.lines['ig2-02'], PICKUP, 6);
+/**
+ * THE CALLER'S TURNS (fix round 2): a live call's pace. Her next line starts on the 16th after her last + CALL_GAP, so
+ * the line is open 0.67–0.73 s between her lines (SCRIPT §0.3: 0.6–0.8 s; the planned 24 / 18 / 18-frame turns plus the
+ * grid had made each ≈ 1 s — dead air a business owner hears as AI lag). The ● CALLER row lives from 2 f after her
+ * last sound to 2 f before her next.
+ */
+const CALL_GAP = 18;
+const nextLine = (plan: number, after: number) => place(plan, after, CALL_GAP);
+const turnBetween = (prevAt: number, prev: VoiceId, nextAt: number, next: VoiceId) => [end(prevAt, prev) + 2, Math.round(nextAt + KIT.firstSound(next)) - 2] as const;
+const A3 = nextLine(PLAN.lines['ig2-03'], end(A2, 'ig2-02'));
+const A4 = nextLine(PLAN.lines['ig2-04'], end(A3, 'ig2-03'));
+const A5 = nextLine(PLAN.lines['ig2-05'], end(A4, 'ig2-04'));
+const C1 = turnBetween(A2, 'ig2-02', A3, 'ig2-03');
+const C2 = turnBetween(A3, 'ig2-03', A4, 'ig2-04');
+const C3 = turnBetween(A4, 'ig2-04', A5, 'ig2-05');
+/** the caller's turns [from, to): a ● CALLER row with the level meter, the line lifted */
 export const CALLERS = [C1, C2, C3] as const;
 /** the hang-up, on the beat after "…Saturday at ten." (the header swaps to Booked) */
 export const HANGUP = Math.max(PLAN.hangup, upBeat(end(A5, 'ig2-05') + 4));
@@ -137,17 +145,46 @@ const S16 = BEAT / 4;
 const on = (at: number, id: VoiceId, k: number) => at + vWord(id, k);
 /** S2 "Watch it book / this call." leaves a beat after its last word, so the stage is clear for the pickup */
 const S2_OUT = on(L1, 'ig2-01', 8) + BEAT;
-const TOOL1 = on(A3, 'ig2-03', 0);
+/** "Saturday morning?" (fix round 2: everything started on "Saturday" — the scroll, her row, the panel's growth, the tool
+ *  row, SAT and the chips within ½ s): ONE THING AT A TIME — the stack scrolls up as the caller's turn ends; her row
+ *  rises into the room it made; the panel grows under "morning?"; the tool row rises after the word; SAT and the chips
+ *  land while the spinner turns; the check draws and the free chips take her teal before "I have ten," */
+const MORNING = on(A3, 'ig2-03', 1);
+const TOOL1 = MORNING + 4;
 const NAME = on(A5, 'ig2-05', 1);
 const C1_FROM = CALLERS[0][0];
 const BOOKED = on(A5, 'ig2-05', 3);
 const FOLD = HANGUP + S16;
 const PRO = on(L6, 'ig2-06', 4);
+/** the hook's ring hairlines (absolute frames; `k` × their strength, `d1` how far they travel): the light rings on the
+ *  phone's cadence until the pickup (fix round 2: from f60 the light went still while the phone was still ringing) —
+ *    frame 0 IS MID-RING: two hairlines of the first trill already in flight (launched an 8th apart before frame 0, so
+ *    the seam's re-formed frame 0 grows them from its own start) and a third leaving on the trill;
+ *    each trill: two hairlines an 8th apart (its two chirps); under her "Watch it book…" the cadence goes on SILENT
+ *    (no ring may cover a word's onset), a touch quieter; the pickup's ring: one, on its beat */
+type Pulse = { at: number; k: number; d1: number };
+const TRILL_D = 1300;
+const BLINK_D = 1000;
+const PULSES: readonly Pulse[] = [
+  { at: -11.5, k: 1, d1: TRILL_D },
+  { at: -4, k: 1, d1: TRILL_D },
+  { at: 3.5, k: 0.8, d1: TRILL_D },
+  ...[RINGS[1] - 4, RINGS[1] + 3.5].map((at, i) => ({ at, k: i ? 0.8 : 1, d1: TRILL_D })),
+  // the phone's cadence goes on under her voice: a silent trill (two hairlines) every three beats between the rings
+  ...(() => {
+    const out: Pulse[] = [];
+    for (let at = RINGS[1] + 3 * BEAT; at < RING3 - BEAT; at += 3 * BEAT) out.push({ at: at - 4, k: 0.75, d1: BLINK_D }, { at: at + 3.5, k: 0.6, d1: BLINK_D });
+    return out;
+  })(),
+  { at: RING3, k: 1, d1: TRILL_D },
+];
 export const M = {
-  /** the rings' hairlines leave the colon light a little ahead of each trill (frame 0 shows one in flight) */
-  rings: [-4, ...RINGS.slice(1).map((r) => r - 4)] as readonly number[],
-  /** … and a second hairline an 8th behind each (the trill's two chirps): the light keeps ringing while the phone does */
-  ringTrain: [-4, ...RINGS.slice(1).map((r) => r - 4)].flatMap((r) => [r, r + BEAT / 2]) as readonly number[],
+  /** every hairline the colon light sends (the ring train): frame 0's, the trills', the blinks', the pickup's */
+  pulses: PULSES,
+  /** the light's flashes (the dot's bloom; the room's rose swell): every hairline's launch */
+  rings: PULSES.map((p) => p.at) as readonly number[],
+  /** the dot's flash clock for the seam (frame 0's hairlines: a ring already in flight) */
+  ringTrain: PULSES.map((p) => p.at) as readonly number[],
   s2Out: S2_OUT,
   /** the panel LANDS a frame after the birth (the house settle, SPRING.site, from 120 px below — there in ≈ 5 f, before
    *  her first word's row rises): a short move under the orb, so the colon opening into her orb leads the pickup */
@@ -159,12 +196,18 @@ export const M = {
   header: PICKUP + 2,
   /** the caller's first turn: the panel grows to hold its row (it hugs her greeting until then) */
   room: C1_FROM - 6,
-  /** "Saturday morning?": the panel grows to hold the tool row and the slot strip; the spinner turns until the check */
-  grow: TOOL1 - 2,
+  /** the transcript scrolls this many frames before her row rises (the room is made, then she fills it) */
+  scrollLead: 2,
+  /** after "morning?": the panel grows to hold the tool row and the slot strip AS the tool row rises (never an empty
+   *  grown panel); the spinner turns until the check */
+  grow: TOOL1 - 4,
   tool1: TOOL1,
-  tool1Done: TOOL1 + 24,
-  sat: TOOL1 + 5,
+  /** SAT and the five chips land while the spinner turns */
+  sat: TOOL1 + 6,
   chips: TOOL1 + 8,
+  tool1Done: TOOL1 + 18,
+  /** the free chips take her teal as the check lands */
+  chipsLit: TOOL1 + 18,
   /** "ten," / "eleven-thirty.": the free chips pulse */
   pulse: [on(A3, 'ig2-03', 4), on(A3, 'ig2-03', 6)] as const,
   /** "Ten it is.": the 10:00 chip fills her teal */
@@ -180,19 +223,27 @@ export const M = {
   /** the panel folds to its header and steps back; the two cards land on 16ths */
   fold: FOLD,
   cards: [FOLD + 2 * S16, FOLD + 3 * S16] as const,
+  /** the call FILED: the record's line (the transcript's first words) rises as the call's content clears — the folding
+   *  panel is never a blank card (fix round 2) */
+  record: FOLD + 3.5,
   /** "Pro": the PRO chip clips on, BETA a 16th later */
   pro: PRO,
   beta: PRO + S16,
 } as const;
 /** the zone stills (scripts/ig/check-zones.mjs): every chip and card landing + 8 f */
-export const ZONE_FRAMES = [M.header, M.tool1, M.chips, M.name, M.booked, M.hangup, M.cards[1], M.pro].map((f) => f + 8);
+export const ZONE_FRAMES = [M.header, ...CALLERS.map(([a]) => a), M.tool1, M.chips, M.name, M.booked, M.hangup, M.record, M.cards[1], M.pro].map((f) => f + 8);
 
+/** her CTA's last word out (the "k" of "link." released): the build waits for it */
+const LINK_OUT = CTA + vWord('ig2-07', 4) + 6;
+/** THE ROLL: the series' half bar into the impact — an 8th later only if her "link." were still sounding (fix round 1's
+ *  case: it ended on the half bar; with the call's turns at a live pace it ends ≈ ⅔ s before it) */
+const ROLL_AT = LINK_OUT <= IMPACT - ROLL ? IMPACT - ROLL : IMPACT - ROLL + BEAT / 2;
 export const END_CARD = {
   cta: CTA,
   field: CTA - 12,
   agent: CTA + vWord('ig2-07', 1),
   send: end(CTA, 'ig2-07'),
-  roll: IMPACT - ROLL + BEAT / 2,
+  roll: ROLL_AT,
   impact: IMPACT,
   brand: BRAND_AT,
   url: [0, 1, 2].map((k) => BRAND_AT + vWord(BRAND, k)),
@@ -201,14 +252,17 @@ export const END_CARD = {
 
 /* ── the cue sheet (SCRIPT.md ig2 §4 "Sound", beat by beat; hierarchy: voice ≫ story sounds ≫ the bed) ── */
 export const roomAt = (_f: number): Room => 'night';
-/** the hook's rings: one trill each (a key hit at one level, film 2's RING_DB rule) with a low sub pulse under it */
+/** the hook's rings: a trill each (a key hit at one level, film 2's RING_DB rule) with a low sub pulse under it; the
+ *  third is the trill's first chirp alone, which the pickup's click cuts a 16th later */
+const RING_WHERE = [' at frame 0: the reel’s attack', ' (in her pause before “You’re closed.”)', ' (after “…this call.”: one chirp, the pickup cuts it)'];
 const ringHits = RINGS.flatMap((r, k) => [
-  H(r, 'fx-trill', 'rush', 0.42, 1, `b1 ring ${k + 1} in the dark${k ? ' (in her pause before “You’re closed.”)' : ' at frame 0: the reel’s attack'} — the colon light flashes, a RingPulse leaves it`),
+  H(r, k === 2 ? 'fx-trill-1' : 'fx-trill', 'rush', 0.42, 1, `b1 ring ${k + 1} in the dark${RING_WHERE[k]} — the colon light flashes, hairlines leave it`),
   H(r, 'thump', 'none', 0.5, 3, `b1 ring ${k + 1}: the low pulse under the trill`, { db: -6, layer: true }),
 ]);
-/** the caller's turns: the open line lifted (a short run of line hiss under the meter), nothing voiced */
+/** the caller's turns: the open line lifted (a run of line hiss under the meter, at the open line's presence: the
+ *  turn is the caller talking, not a hole — fix round 2), nothing voiced */
 const callerHits = CALLERS.map(([a, e], k) =>
-  H(a + 1, 'fx-linehiss', 'none', 0.62, 3, `b${4 + 2 * k} the caller's turn: the line lifts under the level meter (no words, no voice)`, { db: -6, run: { n: Math.max(2, Math.round((e - a) / 8)), step: 7 } }),
+  H(a + 1, 'fx-linehiss', 'none', 0.62, 2, `b${4 + 2 * k} the caller's turn: the line lifts under the level meter (no words, no voice)`, { db: -2, run: { n: Math.max(2, Math.round((e - a) / 7)), step: 6 } }),
 );
 export const HITS: Hit<Snd>[] = [
   H(0, 'fx-roomtone', 'none', 0.5, 3, 'b1 the closed studio’s room tone, from frame 0 (no bed: the ring is the opener)', { db: -22 }),
@@ -220,7 +274,7 @@ export const HITS: Hit<Snd>[] = [
   H(PICKUP + 4, 'fx-linehold', 'none', 0.5, 3, 'b3 the open line under the call (very low)', { db: -16, layer: true }),
   ...callerHits,
   H(M.tool1 + 2, 'fx-tick', 'none', 0.3, 3, 'b5 “Saturday morning?”: a soft tick-roll under the availability spinner', { db: -10, run: { n: 6, step: BEAT / 4 } }),
-  H(M.chips, 'tap', 'none', 0.5, 3, 'b5 the five slot chips land on 32nds', { db: -10, run: { n: 5, step: BEAT / 8, xs: [0.2, 0.35, 0.5, 0.65, 0.8] } }),
+  H(M.chips, 'tap', 'none', 0.5, 3, 'b5 the five slot chips land on 32nds (while the spinner turns)', { db: -10, run: { n: 5, step: BEAT / 8, xs: [0.2, 0.35, 0.5, 0.65, 0.8] } }),
   H(M.tool1Done, 'fx-ting', 'sunday', 0.3, 2, 'b5 the check draws: the free chips take her teal', { db: -2 }),
   H(M.pulse[0], 'fx-pluck-gs5', 'none', 0.36, 2, 'b5 “ten,”: the 10:00 chip pulses (G#5)'),
   H(M.pulse[1], 'fx-pluck-b5', 'none', 0.64, 2, 'b5 “eleven-thirty.”: the 11:30 chip pulses (B5)'),
@@ -232,7 +286,7 @@ export const HITS: Hit<Snd>[] = [
   H(HANGUP + 2, 'fx-click-up', 'none', 0.5, 3, 'b9 … up', { layer: true }),
   H(M.fold + 1, 'fx-paper-fold', 'none', 0.5, 3, 'b10 the panel folds to its record (the call filed)', { db: -2 }),
   H(M.cards[0] + 2, 'fx-paper-square', 'none', 0.56, 2, 'b10 the EventCard lands (a paper slap, E4)', { semi: 0 }),
-  H(M.cards[1] + 3, 'fx-felttip-short', 'none', 0.36, 3, 'b10 … a 16th later the record’s ink bars draw (G#4 slap’s answer)', { db: -2, semi: 4 }),
+  H(M.record + 2, 'fx-felttip-short', 'none', 0.36, 3, 'b10 the record’s line rises as the panel folds (the call filed)', { db: -2, semi: 4 }),
   H(M.pro, 'fx-tag', 'none', 0.66, 2, 'b10 “Pro”: the PRO chip clips on'),
   H(M.beta, 'fx-tag', 'none', 0.76, 3, 'b10 … BETA a 16th later', { db: -3, semi: 3 }),
   ...endHits(END_CARD),
@@ -243,12 +297,10 @@ export const HITS: Hit<Snd>[] = [
 ];
 export const CUES: Cue[] = buildCues(HITS, { sfx: SFX, speaking, roomAt });
 
-/** The moments the bed reads (scripts/ig/bed.mjs inputs(T)): no bed under the hook — it enters a beat after the pickup
- *  (the plan's bar 3, f120, one beat after its pickup at f105). THE ROLL starts an 8th after the series' half bar
- *  (fix round 1): her "link." ends on the half bar (its "k" releases ≈ 1 f after it), so the build begins once the word is
- *  out — never "for the lin—" under a snare. */
+/** The moments the bed reads (scripts/ig/bed.mjs inputs(T)): no bed under the hook — it enters on the beat after the
+ *  pickup's (the plan's bar 3, f120, one beat after its pickup at f105). THE ROLL: END_CARD.roll (never under "link."). */
 export const MUSIC = {
-  bedFrom: PICKUP + BEAT,
+  bedFrom: upBeat(PICKUP + BEAT / 2),
   roll: END_CARD.roll,
   impact: IMPACT,
   brand: BRAND_AT,
@@ -259,18 +311,31 @@ export const MUSIC = {
   /** the shared build, louder: the converge into the logo must top the gate line's second (check-mix arc) */
   build: { kick: 1.4, snare: 1.5 },
 } as const;
-/** the bed's fader: the series' shape round the hit (common/series.ts bedRide), with ig2's BUILD — her CTA ends on the
- *  half bar, so the bed is held where it is until "link." is out (its "k" released), then ridden up into the roll and
- *  kept up until the inhale draws it in: the converge into the logo is the loudest second of music (check-mix arc) */
-const LINK_OUT = CTA + vWord('ig2-07', 4) + 6;
+/** the bed's fader: the series' shape round the hit (common/series.ts bedRide), with ig2's own two rides —
+ *  THE CALLER'S TURNS (fix round 2): the bed comes up into each turn (the speech duck is still releasing there) and is
+ *  back down before her next word, so the turn reads as the line open and the call moving, never as a hole in the mix;
+ *  THE BUILD: held until "link." is out (its "k" released), then ridden up into the roll and kept up until the inhale
+ *  draws it in: the converge into the logo is the loudest second of music (check-mix arc) */
+const TURN_LIFT = [9, 9, 4] as const; // the third turn has the kit under it (the kick from "Ten"): less lift
+const turnRide = ([a, e]: readonly [number, number], k: number) =>
+  [
+    [a - 2, 0],
+    [a + 5, TURN_LIFT[k]],
+    [e - 5, TURN_LIFT[k]],
+    [e + 1, 0],
+  ] as const;
+/** the build's fader (dB): with the series' half-bar roll back (her "link." is out ⅔ s before it), +10 tops the gate's
+ *  music by the arc's lead with the master limiter at ≈ 4 dB on the roll (fix round 1's +13.5 drove it to 8 dB) */
+const BUILD_DB = 10;
 export const BED = {
   file: `ig/sfx/${REEL}/bed.wav`,
   vol: 2,
   ride: [
     [0, 0],
+    ...CALLERS.flatMap((c, k) => turnRide(c, k)),
     [LINK_OUT, 0],
-    [END_CARD.roll + 3, 13.5],
-    [IMPACT - 11, 13.5],
+    [END_CARD.roll + 3, BUILD_DB],
+    [IMPACT - 11, BUILD_DB],
     // the series' shape round the hit, its seam point a touch up (−17 for −20): ig2's louder build costs master gain,
     // and the chord must still ring 10–5 f from the end (check-mix ≥ −55 dBFS; the mix's own fade takes it under −60)
     ...bedRide(IMPACT, BRAND_AT, vFrames(BRAND), END)

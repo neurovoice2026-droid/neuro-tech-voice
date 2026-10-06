@@ -203,8 +203,13 @@ export type TranscriptSpec = {
   /** px between a tag and its words; between rows */
   tagGap?: number;
   rowGap?: number;
-  /** optional: the caller's level meter (CallerMeter's bars / barW / maxH / gap / gain; default its own 5 × 8 × 28 px) */
-  meter?: { bars?: number; barW?: number; maxH?: number; gap?: number; gain?: number };
+  /** optional: the caller's level meter (CallerMeter's bars / barW / maxH / gap / gain; default its own 5 × 8 × 28 px).
+   *  `rise`: the meter rises out of its mask WITH its ● CALLER tag (default: off — the bars rest in place from the row's
+   *  start) */
+  meter?: { bars?: number; barW?: number; maxH?: number; gap?: number; gain?: number; rise?: boolean };
+  /** optional: frames BEFORE a row's start that the stack's scroll for it begins (default 0: with the row) — the room is
+   *  made, then the row rises into it */
+  scrollLead?: number;
 };
 
 type Row = {
@@ -292,16 +297,17 @@ export const LiveTranscript: React.FC<{
   // spring from the new row's start
   let scroll = 0;
   let prev = 0;
+  const lead = spec.scrollLead ?? 0;
   rows.forEach((r, i) => {
     let k = 0;
     while (k < i && r.y + r.h - rows[k].y > spec.h) k++;
     const need = Math.max(prev, rows[k].y);
-    if (need > prev) scroll += (need - prev) * springUnit(t - r.start, SPRING.site);
+    if (need > prev) scroll += (need - prev) * springUnit(t - r.start + lead, SPRING.site);
     prev = need;
   });
   const scrolling = rows.some((r) => {
-    const k = t - r.start;
-    return k > 0 && k < 24;
+    const k = t - r.start + lead;
+    return k > 0 && k < 24 + lead;
   });
   const titleSt = typeStyle('title', true, { tone: 'paper', size });
   return (
@@ -351,11 +357,23 @@ export const LiveTranscript: React.FC<{
             const mt = spec.meter ?? {};
             bodyW = (mt.bars ?? 5) * (mt.barW ?? 8) + ((mt.bars ?? 5) - 1) * (mt.gap ?? 7);
             const fade = exitAt !== undefined ? 1 - tween(t, [exitAt, exitAt + 5], [0, 1], EASE.in3) : 1;
-            body = (
-              <div style={{ position: 'absolute', left: 0, top: 0, opacity: fade }}>
-                <CallerMeter t={t} from={turn.from} to={turn.to} x={2} cy={lab * 1.2 + tagGap + lh / 2} bars={mt.bars} barW={mt.barW} maxH={mt.maxH} gap={mt.gap} gain={mt.gain} />
-              </div>
-            );
+            const meter = <CallerMeter t={t} from={turn.from} to={turn.to} x={2} cy={lab * 1.2 + tagGap + lh / 2} bars={mt.bars} barW={mt.barW} maxH={mt.maxH} gap={mt.gap} gain={mt.gain} />;
+            if (mt.rise) {
+              // the meter rises out of its own mask with its tag (the same spring, a ½-frame behind), never ahead of it
+              const mh = mt.maxH ?? 28;
+              const top = lab * 1.2 + tagGap + lh / 2 - mh / 2 - 4;
+              const rv = reveal(t, r.start + 0.5, { config: SPRING.caption, rise: 100 });
+              body = (
+                <div style={{ position: 'absolute', left: 0, top, width: bodyW + 8, height: mh + 8, overflow: 'hidden', opacity: fade >= 0.999 ? undefined : fade }}>
+                  <div style={{ position: 'absolute', left: 0, top: -top, opacity: rv.opacity >= 0.999 ? undefined : rv.opacity, ...subpixel(Math.abs(rv.y) > 0.03 ? `translateY(${((rv.y / 100) * (mh + 8)).toFixed(3)}px)` : undefined, Math.abs(rv.y) > 0.03 || moving || scrolling) }}>{meter}</div>
+                </div>
+              );
+            } else
+              body = (
+                <div style={{ position: 'absolute', left: 0, top: 0, opacity: fade }}>
+                  {meter}
+                </div>
+              );
           }
           const screenTop = spec.y + top;
           const visible = screenTop + r.h > spec.y && screenTop < spec.y + spec.h;

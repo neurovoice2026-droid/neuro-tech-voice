@@ -10,7 +10,7 @@
  * stays a small layer). Every string ≤ 32 px app chrome or a word she says.
  */
 import React from 'react';
-import { smooth, SPRING, springUnit } from '../../lib/motion';
+import { smooth, SPRING, springUnit, tween } from '../../lib/motion';
 import { APP, measureText, Panel, ui, useKitFaces, W } from '../../kb/kit';
 import { MOMENT_LIGHTS } from '../../kb/palettes';
 import { IgIcon } from '../components/icons';
@@ -32,17 +32,19 @@ export const posed = (r: Rect, p: CardPose, inner: Rect): Rect => {
   return { x: cx + (inner.x - (r.x + r.w / 2)) * p.scale, y: cy + (inner.y - (r.y + r.h / 2)) * p.scale, w: inner.w * p.scale, h: inner.h * p.scale };
 };
 
-/** a card landing: from below on SPRING.land, opaque over the first 30 % of its travel */
+/** a card landing: from below on SPRING.land, OPAQUE ON ITS FIRST RENDER FRAME (a white card fading in on the night
+ *  passes through a grey, frosted state — fix round 2) */
 function landing(t: number, at: number, size = 56) {
   const s = springUnit(t - at, SPRING.land);
-  return { dy: (1 - s) * size * 1.7, o: smooth(0, 0.3, s), moving: Math.abs(1 - s) > 2e-4, lift: 1.4 + 1.6 * Math.min(1, s) };
+  return { dy: (1 - s) * size * 1.7, o: tween(t, [at - 0.25, at], [0, 1], (x) => x), moving: Math.abs(1 - s) > 2e-4, lift: 1.4 + 1.6 * Math.min(1, s) };
 }
 
 const PAD = 36;
 
 /* ── the PRO and BETA chips ── */
-const PRO_SPEC = { size: 24, weight: 620, tracking: 0.12 };
-export const chipBox = (text: string) => ({ w: measureText(text.toUpperCase(), PRO_SPEC) + 30, h: 42 });
+/** the label role's 28 px (SCRIPT ig2 b10 "label 28"; fix round 2: 24 px caps were ≈ 1.5 mm on a phone) */
+export const PRO_SPEC = { size: 28, weight: 620, tracking: 0.1 };
+export const chipBox = (text: string) => ({ w: measureText(text.toUpperCase(), PRO_SPEC) + 32, h: 46 });
 
 export const Badge: React.FC<{ t: number; at: number; text: string; bg: string; ring: string; ink: string; x: number; y: number }> = ({ t, at, text, bg, ring, ink, x, y }) => {
   if (t < at - 1) return null;
@@ -114,7 +116,7 @@ export const EventCard: React.FC<{ t: number; at: number; pro: number; beta: num
         {/* the day column: the hour gutter and its rules */}
         {rows.map((h, i) => (
           <React.Fragment key={h}>
-            <div style={{ position: 'absolute', left: PAD, top: top0 + i * rowH - 13, ...ui(24, 460, { mono: true }), color: APP.mutedFg }}>{h}</div>
+            <div style={{ position: 'absolute', left: PAD, top: top0 + i * rowH - 14, ...ui(26, 460, { mono: true }), color: APP.mutedFg }}>{h}</div>
             <div style={{ position: 'absolute', left: PAD + gutter - 16, right: PAD, top: top0 + i * rowH, height: 1, background: APP.border, opacity: 0.9 }} />
           </React.Fragment>
         ))}

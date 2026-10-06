@@ -152,10 +152,12 @@ export const CommentField: React.FC<{
 }> = ({ t, at, keys, send, exitAt, night = false }) => {
   const F = END.field;
   if (t < at - 1 || t > exitAt + 5) return null;
-  // the rise: an object, on the site's spring from 72 px below, opaque within the first 35 % of its travel
+  // the rise: an object, on the site's spring from 72 px below, opaque within the first 35 % of its travel — on the
+  // night opaque on its first render frame (a white field fading in on the dark passes through a grey, frosted state;
+  // ig2 fix round 2)
   const e = springUnit(t - at, SPRING.site);
   let dy = (1 - e) * 72;
-  let o = smooth(0, 0.35, e);
+  let o = night ? tween(t, [at - 0.25, at], [0, 1], (x) => x) : smooth(0, 0.35, e);
   // the exit: up through its mask (4 f, power3.in)
   const q = tween(t, [exitAt, exitAt + 4], [0, 1], EASE.in3);
   dy -= q * (F.h + 24);

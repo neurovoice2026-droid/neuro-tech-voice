@@ -12,7 +12,7 @@ import { CoverCard } from '../components/CoverCard';
 import { LineLight } from '../components/Orb';
 import { OutcomePill, outcomePillSize } from '../components/OutcomePill';
 import { ZoneRect } from '../components/ZoneGuard';
-import { Badge, chipBox } from './Cards';
+import { Badge, chipBox, PRO_SPEC } from './Cards';
 import { ClockLockup, lockColon, type LockAt } from './Clock';
 import { Ground2 } from './Stage';
 
@@ -23,8 +23,8 @@ const SUNDAY = MOMENT_LIGHTS.sunday;
 const AT: LockAt = { cx: 534, cy: 690, size: 244 };
 const TITLE_Y = 900;
 const PILLS_Y = 1250;
-/** the PRO chip at the pill's size (the EventCard's Badge, × 32/24) */
-const PRO_K = 32 / 24;
+/** the PRO chip at the pill's size (the EventCard's Badge, × 32 / its label size) */
+const PRO_K = 32 / PRO_SPEC.size;
 
 const Art: React.FC = () => {
   const ready = useKitFaces();

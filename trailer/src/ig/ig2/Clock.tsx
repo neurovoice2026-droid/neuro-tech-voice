@@ -16,7 +16,7 @@
  * A pure function of the timeline frame `t`.
  */
 import React from 'react';
-import { reveal, revealStyle } from '../../components/Type';
+import { reveal, revealStyle, useGlide } from '../../components/Type';
 import { EASE, mixHex, SPRING, tween } from '../../lib/motion';
 import { maskBox, UNIT_STAGGER } from '../../lib/type';
 import { C, FONT } from '../../theme';
@@ -74,6 +74,8 @@ export const ClockLockup: React.FC<{
 }> = ({ t, onsets, exitAt, what = 'clock lockup "9:47 pm."', at }) => {
   // the layout measures "pm." in the real face: hold the frame until the kit's faces are in
   const ready = useKitFaces();
+  // carried by the hook's push (Stage.tsx HookPlane): every part holds its sub-pixel layer while the plane moves
+  const glide = useGlide();
   if (!ready) return null;
   const L = lockLayout(at);
   const parts = [
@@ -92,7 +94,7 @@ export const ClockLockup: React.FC<{
         const lift = SET_INK + (1 - SET_INK) * tween(t, [p.on - 1, p.on + 1], [0, 1], EASE.out3);
         const g = glintAt(t, p.on);
         const col = g > 0.004 ? mixHex(C.paper, RUSH_GLINT, 0.6 * g) : C.paper;
-        const st = revealStyle({ ...r, opacity: r.opacity * lift * LOCK.ink }, undefined, t < 0 || t > ex.at - 0.5);
+        const st = revealStyle({ ...r, opacity: r.opacity * lift * LOCK.ink }, undefined, glide || t < 0 || t > ex.at - 0.5);
         return (
           <span
             key={p.key}

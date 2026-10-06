@@ -17,7 +17,7 @@ import React from 'react';
 import { EASE, mix, smooth, tween } from '../../../lib/motion';
 import { mixColor } from '../../../lib/lights';
 import { useKitFaces } from '../../../kb/kit';
-import { CAPTION_BAND, Captions } from '../../components/Captions';
+import { CAP_OUT, CAPTION_BAND, Captions } from '../../components/Captions';
 import { endGroundKey, IgEnd } from '../../components/End';
 import { AvaOrb, orbTrack } from '../../components/Orb';
 import { useActFrame } from '../../scene';
@@ -27,11 +27,19 @@ import { CallPanel, DOT, Ground2, groundKey, Ig2Frame0, orbPose, PANEL, PARK } f
 import * as T from '../timing';
 
 const M = T.M;
-/** the seam's arc: she leaves her place SEAM_LEAD frames before the seam (as the brand leaves), passes SEAM_LIFT px above
- *  the straight line to the colon (sin², so she lifts off and settles without a kick) and closes from 2 f before the
- *  seam — clear of the rising "9" (≥ 8 px) and of the header band (≥ 6 px) all the way (fix round 1) */
-const SEAM_LIFT = 150;
-const SEAM_LEAD = 6;
+/** THE SEAM (fix round 2): she goes home BEFORE frame 0's figures rise — across to the colon while the brand leaves up
+ *  (the figures are still under their masks; they rise from END − 13), on a shallow arc (SEAM_ARC px above the straight
+ *  line, sin), closing into the rose line light on the way, so she is in the colon's slot (Ø ≤ 52 in its 107 px) as
+ *  the "9" surfaces and the dot from 830: never a small rose dot beside a visible "9" (it read as an apostrophe, "9’47") */
+const SEAM_ARC = 28;
+const HOME = [T.END_CARD.seam - 10, T.END_CARD.seam + 2] as const;
+const CLOSE = { at: T.END_CARD.seam - 6, dur: 10 } as const;
+/** … and the end card's light goes out WITH the brand (over the 6 f after the wordmark starts leaving), so frame 0
+ *  re-forms in the night, never through an empty lilac ellipse (fix round 2: it lingered ≈ ⅓ s) */
+const LIGHT_OUT = 0.36;
+const lightTail = (u: number) => 1 - smooth(0, LIGHT_OUT, u);
+const BRAND_OUT = T.END_CARD.seam - CAP_OUT;
+const lightLeft = (t: number) => (t <= BRAND_OUT ? 1 : lightTail(Math.min(1, (t - BRAND_OUT) / Math.max(1, T.DURATION - 1 - BRAND_OUT))));
 const track = () => orbTrack(T, { listen: T.CALLERS.map(([a, b]) => [a, b] as const) });
 
 /* ── the gate's camera and the end card's pull-back, per card (every card stays its own small layer) ── */
@@ -129,14 +137,14 @@ export const Booked2: React.FC = () => {
 function endGround(tm: number) {
   if (tm < 0) return <Ground2 t={tm} keyLight={groundKey(tm)} />;
   const orb = groundKey(tm);
-  const key = endGroundKey(T, tm, true);
+  const key0 = endGroundKey(T, tm, true);
+  const key = { ...key0, strength: key0.strength * lightLeft(tm) };
   const k = Math.min(1, key.strength / 0.5);
   return <Ground2 t={tm} keyLight={k > 0.001 ? { x: mix(orb.x, key.x, k), y: mix(orb.y, key.y, k), strength: mix(orb.strength, key.strength, k), color: mixColor(orb.color, key.color, k), radius: mix(orb.radius, 900, k), pool: orb.pool } : orb} />;
 }
 
 export const End2: React.FC = () => {
   const f = T.SCENES.end.from + useActFrame(T.SCENES, 'end');
-  const E = T.END_CARD;
   const c = lockColon();
   return (
     <IgEnd
@@ -151,18 +159,15 @@ export const End2: React.FC = () => {
         </>
       )}
       orb={() => {
-        // the seam: the wordmark has left; she glides back to the colon and closes into the phone's rose light, a ring
-        // already in flight — frame 0's dot, exactly. Her path ARCS over the rising "9" (up, across, down into the colon's
-        // slot as she shrinks), never through it
-        const u = tween(f, [E.seam - SEAM_LEAD, T.DURATION - 2], [0, 1], (x) => x);
+        // the seam: as the brand leaves she goes home to the colon and closes into the phone's rose light, a ring already
+        // in flight — frame 0's dot, exactly
+        const u = tween(f, HOME, [0, 1], (x) => x);
         const g = EASE.inOut(u);
-        const lift = SEAM_LIFT * Math.sin(Math.PI * u) ** 2;
-        const pose = { x: mix(PARK.x, c.x, g), y: mix(PARK.y, c.y, g) - lift, d: PARK.d, moving: u > 0 && u < 1 };
-        const closeAt = E.seam - 2;
-        return <AvaOrb t={f} pose={pose} canvas={PARK.d} track={track()} shadow={0} close={{ at: closeAt, dur: T.DURATION - 2 - closeAt, dot: DOT, t0: T.DURATION, rings: M.ringTrain }} />;
+        const pose = { x: mix(PARK.x, c.x, g), y: mix(PARK.y, c.y, g) - SEAM_ARC * Math.sin(Math.PI * u), d: PARK.d, moving: u > 0 && u < 1 };
+        return <AvaOrb t={f} pose={pose} canvas={PARK.d} track={track()} shadow={0} close={{ ...CLOSE, dot: DOT, t0: T.DURATION, rings: M.ringTrain }} />;
       }}
       seam={(th) => <Ig2Frame0 t={th} dot={false} />}
-      lightTail={(u) => 1 - smooth(0.55, 1, u)}
+      lightTail={lightTail}
     />
   );
 };
