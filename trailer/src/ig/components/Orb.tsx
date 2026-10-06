@@ -238,8 +238,10 @@ export type AvaOrbProps = {
   /** she appears out of nothing at `at` (SPRING.pop from 0) */
   pop?: { at: number };
   /** she closes back into the rose line light over [at, at + dur] (the seam), ending as a dot of Ø `dot`; the line
-   *  light breathes on the clock t − t0 (the seam: t0 = END, so it breathes exactly as frame 0's does) */
-  close?: { at: number; dur: number; dot: number; t0?: number };
+   *  light breathes on the clock t − t0 (the seam: t0 = END, so it breathes exactly as frame 0's does). `rings`: the
+   *  line light's ring flashes on that clock (frame 0's, e.g. [−4]: a ring already in flight), so the dot's bloom at
+   *  the loop matches frame 0's exactly (optional; none by default) */
+  close?: { at: number; dur: number; dot: number; t0?: number; rings?: readonly number[] };
   /** palette while she listens: × the track's listen (default .55 of the way to the listen palette) */
   listenMix?: number;
   /** rim strength × (her rim of light; 0 = none) */
@@ -261,7 +263,7 @@ export const AvaOrb: React.FC<AvaOrbProps> = ({ t, pose, track, canvas, born, po
   }
   /* after she has closed back into the line light */
   if (close && t >= close.at + close.dur) {
-    return <LineLight t={t - (close.t0 ?? 0)} x={pose.x} y={pose.y} d={close.dot} />;
+    return <LineLight t={t - (close.t0 ?? 0)} x={pose.x} y={pose.y} d={close.dot} rings={close.rings} />;
   }
   /* she appears out of nothing */
   if (pop && t < pop.at - 0.5) return null;
@@ -343,7 +345,7 @@ export const AvaOrb: React.FC<AvaOrbProps> = ({ t, pose, track, canvas, born, po
           <MeshOrb size={dot0} palette={RUSH.orb} time={11.4 + t / 30} />
         </div>
       ) : null}
-      {closeDot > 0 && close ? <LineLight t={t - (close.t0 ?? 0)} x={pose.x} y={pose.y} d={close.dot} opacity={closeDot} /> : null}
+      {closeDot > 0 && close ? <LineLight t={t - (close.t0 ?? 0)} x={pose.x} y={pose.y} d={close.dot} rings={close.rings} opacity={closeDot} /> : null}
     </div>
   );
 };

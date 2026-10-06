@@ -85,7 +85,23 @@ export const VOICES: Voiced<VoiceId>[] = (
     { at: BRAND_AT, id: BRAND },
   ] as Voiced<VoiceId>[]
 ).sort((x, y) => x.at - y.at);
-export const VOICE_RIDES: Partial<Record<VoiceId, readonly VoiceRide[]>> = {};
+/**
+ * THE VOICE POST — THE CLIMAX'S HEADROOM (film 2's method, src/kb/timing.ts VOICE_RIDES; check-mix: the logo impact tops
+ * the loudest dialogue moment by ≥ 1 LU). The reel's loudest 400 ms are all voice (bed and effects 15–25 dB under): her
+ * bright check-back "Saturday morning?", "Saturday at ten.", "this is Ava," and the hook's "Nine forty-seven.". Each is
+ * ridden down inside the silences around it (line-local frames, from the phrase timings); master() re-trims a ridden line
+ * so its body sits on the dialogue target, so a nominal −2.5 dB is ≈ −1 dB heard — the peaks sit with their lines.
+ */
+const phrase = (id: VoiceId, k: number) => VOICE.lines[id].phrases[k];
+const rideOf = (id: VoiceId, k: number, db: number, ramp: number): VoiceRide => ({ from: Math.floor(phrase(id, k).start * FPS), to: Math.ceil(phrase(id, k).end * FPS), db, ramp });
+export const VOICE_RIDES: Partial<Record<VoiceId, readonly VoiceRide[]>> = {
+  'ig2-01': [rideOf('ig2-01', 0, -2, 3)],
+  'ig2-02': [rideOf('ig2-02', 1, -2, 2)],
+  'ig2-03': [rideOf('ig2-03', 0, -3, 3)],
+  'ig2-05': [rideOf('ig2-05', 3, -2.5, 2)],
+  // the gate line leans on "Pro.": "Calendar booking" a touch under the rest (ramped in the "-ing | comes" join)
+  'ig2-06': [{ from: 0, to: Math.floor(VOICE.lines['ig2-06'].words[2].t * FPS) - 2, db: -2.5, ramp: 2 }],
+};
 export const { SPEECH, PHRASES, speaking } = makeSpeech(VOICE, VOICES);
 
 /* ── the acts ── */
@@ -116,6 +132,56 @@ export const SCREENS: Record<string, LineScreens> = {
 };
 export const DISPLAY: readonly Display[] = [{ id: 'ig2-01', from: 0, to: 1, text: '9:47 pm.' }];
 
+/* ── the picture's moments (absolute frames; the acts and the cue sheet both read these) ── */
+const S16 = BEAT / 4;
+const on = (at: number, id: VoiceId, k: number) => at + vWord(id, k);
+/** the panel's top edge peeks up from the frame's foot while she says "Watch it book this call." */
+const PEEK = [on(L1, 'ig2-01', 4) + 4, on(L1, 'ig2-01', 8) + 8] as const;
+/** S2 "Watch it book / this call." leaves a beat after its last word, so the stage is clear for the pickup */
+const S2_OUT = on(L1, 'ig2-01', 8) + BEAT;
+const TOOL1 = on(A3, 'ig2-03', 0);
+const NAME = on(A5, 'ig2-05', 1);
+const BOOKED = on(A5, 'ig2-05', 3);
+const FOLD = HANGUP + S16;
+const PRO = on(L6, 'ig2-06', 4);
+export const M = {
+  /** the rings' hairlines leave the colon light a little ahead of each trill (frame 0 shows one in flight) */
+  rings: [-4, ...RINGS.slice(1).map((r) => r - 4)] as readonly number[],
+  peek: PEEK,
+  s2Out: S2_OUT,
+  /** the panel: up from its peek on the pickup (a stiff, critically damped spring), landed before her first word */
+  panelUp: PICKUP - 1,
+  /** the colon light springs open into her orb, then glides to the label band */
+  birth: PICKUP + 1,
+  glide: [PICKUP + 8, PICKUP + 26] as const,
+  /** the peeking panel's header (● SAMPLE CALL) rises on her word "call" */
+  header: on(L1, 'ig2-01', 8),
+  /** "Saturday morning?": the panel grows to hold the tool row and the slot strip; the spinner turns until the check */
+  grow: TOOL1 - 2,
+  tool1: TOOL1,
+  tool1Done: TOOL1 + 24,
+  sat: TOOL1 + 5,
+  chips: TOOL1 + 8,
+  /** "ten," / "eleven-thirty.": the free chips pulse */
+  pulse: [on(A3, 'ig2-03', 4), on(A3, 'ig2-03', 6)] as const,
+  /** "Ten it is.": the 10:00 chip fills her teal */
+  fill: on(A4, 'ig2-04', 0),
+  /** "Maya": her name clips onto the chip; the booking tool row starts */
+  name: NAME,
+  tool2: NAME + 4,
+  /** "booked,": the chip widens into the event; the tool row ticks */
+  booked: BOOKED,
+  hangup: HANGUP,
+  /** the panel folds to its header and steps back; the two cards land on 16ths */
+  fold: FOLD,
+  cards: [FOLD + 2 * S16, FOLD + 3 * S16] as const,
+  /** "Pro": the PRO chip clips on, BETA a 16th later */
+  pro: PRO,
+  beta: PRO + S16,
+} as const;
+/** the zone stills (scripts/ig/check-zones.mjs): every chip and card landing + 8 f */
+export const ZONE_FRAMES = [M.header, M.tool1, M.chips, M.name, M.booked, M.hangup, M.cards[1], M.pro].map((f) => f + 8);
+
 export const END_CARD = {
   cta: CTA,
   field: CTA - 12,
@@ -128,21 +194,80 @@ export const END_CARD = {
   seam: END - SEAM,
 } as const;
 
-/* ── the cue sheet (placeholder hits until the acts are built: the rings, the pickup, the impact) ── */
+/* ── the cue sheet (SCRIPT.md ig2 §4 "Sound", beat by beat; hierarchy: voice ≫ story sounds ≫ the bed) ── */
 export const roomAt = (_f: number): Room => 'night';
+/** the hook's rings: one trill each (a key hit at one level, film 2's RING_DB rule) with a low sub pulse under it */
+const ringHits = RINGS.flatMap((r, k) => [
+  H(r, 'fx-trill', 'rush', 0.42, 1, `b1 ring ${k + 1} in the dark${k ? ' (in her pause before “You’re closed.”)' : ' at frame 0: the reel’s attack'} — the colon light flashes, a RingPulse leaves it`),
+  H(r, 'thump', 'none', 0.5, 3, `b1 ring ${k + 1}: the low pulse under the trill`, { db: -6, layer: true }),
+]);
+/** the caller's turns: the open line lifted (a short run of line hiss under the meter), nothing voiced */
+const callerHits = CALLERS.map(([a, e], k) =>
+  H(a + 1, 'fx-linehiss', 'none', 0.62, 3, `b${4 + 2 * k} the caller's turn: the line lifts under the level meter (no words, no voice)`, { db: -6, run: { n: Math.max(2, Math.round((e - a) / 8)), step: 7 } }),
+);
 export const HITS: Hit<Snd>[] = [
-  H(RINGS[0], 'fx-trill', 'rush', 0.5, 1, 'b1 a ring in the dark at frame 0 (the attack)'),
-  H(RINGS[1], 'fx-trill', 'rush', 0.5, 1, 'b1 the second ring, in her pause before "You’re closed."'),
+  H(0, 'fx-roomtone', 'none', 0.5, 3, 'b1 the closed studio’s room tone, from frame 0 (no bed: the ring is the opener)', { db: -22 }),
+  ...ringHits,
+  H(M.peek[0] + 3, 'whoosh-soft', 'none', 0.5, 3, 'b1 “Watch it book…”: the call panel’s edge peeks up from the frame’s foot', { db: -10 }),
   H(PICKUP, 'fx-pickup', 'none', 0.5, 1, 'b2 PICKUP: the click cuts the ring'),
+  H(M.birth, 'fx-seed', 'sunday', 0.38, 2, 'b2 the colon light springs open into her orb (the seed)'),
+  H(M.birth + 2, 'fx-ting', 'sunday', 0.38, 2, 'b2 … her teal: the birth’s ting', { layer: true }),
+  H(M.panelUp + 3, 'fx-paper-lift', 'none', 0.5, 3, 'b2 the call panel rises into place', { db: -6 }),
+  H(PICKUP + 4, 'fx-linehold', 'none', 0.5, 3, 'b3 the open line under the call (very low)', { db: -16, layer: true }),
+  ...callerHits,
+  H(M.tool1 + 2, 'fx-tick', 'none', 0.3, 3, 'b5 “Saturday morning?”: a soft tick-roll under the availability spinner', { db: -10, run: { n: 6, step: BEAT / 4 } }),
+  H(M.chips, 'tap', 'none', 0.5, 3, 'b5 the five slot chips land on 32nds', { db: -10, run: { n: 5, step: BEAT / 8, xs: [0.2, 0.35, 0.5, 0.65, 0.8] } }),
+  H(M.tool1Done, 'fx-ting', 'sunday', 0.3, 2, 'b5 the check draws: the free chips take her teal', { db: -2 }),
+  H(M.pulse[0], 'fx-pluck-gs5', 'none', 0.36, 2, 'b5 “ten,”: the 10:00 chip pulses (G#5)'),
+  H(M.pulse[1], 'fx-pluck-b5', 'none', 0.64, 2, 'b5 “eleven-thirty.”: the 11:30 chip pulses (B5)'),
+  H(M.fill, 'fx-tock', 'none', 0.36, 2, 'b7 “Ten it is.”: the 10:00 chip fills teal'),
+  H(M.name + 1, 'fx-tag', 'none', 0.4, 3, 'b9 “Maya”: the name chip clips onto the 10:00 chip'),
+  H(M.booked, 'fx-mallet-e5', 'sunday', 0.5, 2, 'b9 “booked,”: the chip widens into the event; the tool row ticks (the mallet: true / done)'),
+  H(M.booked, 'pop', 'none', 0.5, 3, 'b9 … a small pop under the mallet', { db: -6, layer: true }),
+  H(HANGUP, 'fx-click-down', 'none', 0.5, 2, 'b9 HANG-UP (on the beat): the header swaps to Booked — down'),
+  H(HANGUP + 2, 'fx-click-up', 'none', 0.5, 3, 'b9 … up', { layer: true }),
+  H(M.fold + 1, 'fx-paper-fold', 'none', 0.5, 3, 'b10 the panel folds to its record (the call filed)', { db: -2 }),
+  H(M.cards[0] + 2, 'fx-paper-square', 'none', 0.56, 2, 'b10 the EventCard lands (a paper slap, E4)', { semi: 0 }),
+  H(M.cards[1] + 3, 'fx-felttip-short', 'none', 0.36, 3, 'b10 … a 16th later the record’s ink bars draw (G#4 slap’s answer)', { db: -2, semi: 4 }),
+  H(M.pro, 'fx-tag', 'none', 0.66, 2, 'b10 “Pro”: the PRO chip clips on'),
+  H(M.beta, 'fx-tag', 'none', 0.76, 3, 'b10 … BETA a 16th later', { db: -3, semi: 3 }),
   ...endHits(END_CARD),
+  // THE BUILD: her last word lands 20 f before the bar, so the swell crests early — a riser peaking as the roll does,
+  // a 16th before the bed's inhale (the converge into the logo, check-mix arc); then the shared stack's own riser into the hit
+  H(IMPACT - 10, 'riser', 'none', 0.5, 1, 'END the build’s crest under the roll (peaks a 16th before the inhale)', { db: 1.5 }),
   ...impactHits(IMPACT),
 ];
 export const CUES: Cue[] = buildCues(HITS, { sfx: SFX, speaking, roomAt });
 
 /** The moments the bed reads (scripts/ig/bed.mjs inputs(T)): no bed under the hook — it enters a beat after the pickup
  *  (the plan's bar 3, f120, one beat after its pickup at f105). */
-export const MUSIC = { bedFrom: PICKUP + BEAT, roll: IMPACT - ROLL, impact: IMPACT, brand: BRAND_AT, end: END } as const;
-export const BED = { file: `ig/sfx/${REEL}/bed.wav`, vol: 2, ride: bedRide(IMPACT, BRAND_AT, vFrames(BRAND), END) };
+export const MUSIC = {
+  bedFrom: PICKUP + BEAT,
+  roll: IMPACT - ROLL,
+  impact: IMPACT,
+  brand: BRAND_AT,
+  end: END,
+  /** ig2's own moments (scripts/ig/bed.mjs ig2Parts): the check (the shaker enters), "Ten" (the open ostinato),
+   *  "booked," (A → B), the hang-up (E: the cascade, the strings), the gate line (it thins), the CTA */
+  ig2: { check: M.tool1Done, ten: M.fill, booked: M.booked, hangup: HANGUP, gate: L6, cta: CTA },
+  /** the shared build, louder: the converge into the logo must top the gate line's second (check-mix arc) */
+  build: { kick: 1.4, snare: 1.5 },
+} as const;
+/** the bed's fader: the series' shape round the hit (common/series.ts bedRide), with ig2's BUILD — her CTA ends 20 f
+ *  before the bar, so the roll is ridden up as her last word lands (the duck still holds it under "link.") and kept up
+ *  until the inhale draws it in: the converge into the logo is the loudest second of music (check-mix arc) */
+const CTA_END = CTA + Math.round(phrase('ig2-07', VOICE.lines['ig2-07'].phrases.length - 1).end * FPS);
+export const BED = {
+  file: `ig/sfx/${REEL}/bed.wav`,
+  vol: 2,
+  ride: [
+    [0, 0],
+    [CTA_END - 12, 0],
+    [CTA_END, 11],
+    [IMPACT - 10, 11],
+    ...bedRide(IMPACT, BRAND_AT, vFrames(BRAND), END).filter(([f]) => f >= IMPACT - 1),
+  ] as readonly (readonly [number, number])[],
+};
 export const MIX = {
   file: `ig/sfx/${REEL}/mix.wav`,
   ...IG_LOUD,

@@ -273,6 +273,198 @@ function kitAt(sec, kickTimes) {
   return { putPiano, feltKick, kick, shaker, snare, crash, pluck, epiano };
 }
 
+/* ═════════════════════════ REEL 1 "Not even ours" — the shift pulse ═════════════════════════ */
+/**
+ * ig1's arrangement (docs/ig/SCRIPT.md ig1 §4 "Sound"; PIPELINE.md §6.3 "Shift pulse"), on the reel's own moments
+ * (MUSIC.ig1: hours, cascade, does, desk, cta — frames, re-timed with the voices):
+ *   HARMONY  E under the hook (the dilemma, a pedal) → C#m7 – Amaj7 – Bsus/B through "Nine to six … a hundred and
+ *            sixty-eight" (the question rising) → E ON the bar of the teal cascade (the answer) → C#m7 – Amaj7 – B – E …
+ *            by bar, B into the impact, E on it
+ *   HOOK     shaker 8ths + a muted felt-piano ostinato on E in a low graphite register, the root pedal under it
+ *   HOURS    + a low string pad and the sub on the roots
+ *   CASCADE  the pad and strings OPEN AN OCTAVE (brighter, fuller), the ostinato lifts an octave and unmutes
+ *   DOES     a light felt kick on 1 and 3 under the records
+ *   DESK     thins to piano: warm open chords on 1 and 3 (the people beat) — no shaker, no kick, no strings
+ *   CTA      the ostinato and shaker back, the strings swelling through the last two bars into the shared build
+ */
+function ig1Harmony(put, P, fb, M) {
+  const cb = Math.floor(fb(M.ig1.cascade) / 4 + 1e-9) * 4; // the cascade's bar
+  put(P.from, cb - 12, 'E');
+  put(cb - 12, cb - 8, 'Csm7');
+  put(cb - 8, cb - 4, 'Amaj7');
+  put(cb - 4, cb - 2, 'Bsus');
+  put(cb - 2, cb, 'B');
+  const PROG = ['E', 'Csm7', 'Amaj7', 'B'];
+  for (let x = cb, k = 0; x < P.impact - 1e-6; x += 4, k++) put(x, Math.min(P.impact, x + 4), x + 4 >= P.impact - 1e-6 ? 'B' : PROG[k % 4]);
+  put(P.impact, fb(M.end) / 1 + 4, 'Efin');
+}
+
+function ig1Parts({ P, fb, M, seg, CH, chordAt, sec, LEN, out, keys, drums, bass, putPiano, feltKick, shaker }) {
+  const S = { hours: fb(M.ig1.hours), cascade: fb(M.ig1.cascade), does: fb(M.ig1.does), desk: fb(M.ig1.desk), cta: fb(M.ig1.cta) };
+  const cb = Math.floor(S.cascade / 4 + 1e-9) * 4;
+  /* the ostinato: 8ths over the chord, low and muted (graphite) until the cascade, an octave up and open after it */
+  const FIG = [0, 2, 1, 3, 0, 2, 1, 2];
+  for (let x = Math.ceil(P.from * 2 - 1e-9) / 2; x < P.impact - 1e-6; x += 0.5) {
+    if (x >= S.desk - 1e-6 && x < S.cta - 1e-6) continue; // the desk: piano chords instead
+    const n = chordAt(x).notes;
+    const pos = Math.round(x * 2) % 8;
+    const open = x >= cb - 1e-6;
+    const reg = open ? 0 : -12;
+    const v = (open ? 0.44 : 0.38) * (pos % 2 === 0 ? 1 : 0.78) * (pos === 0 ? 1.12 : 1);
+    putPiano(keys, x, n[FIG[pos] % n.length] + reg, v, pos % 2 ? 0.2 : -0.2, { dur: open ? 0.8 : 0.55, mute: open ? 0.22 : 0.62, seed: pos % 3, g: open ? 0.3 : 0.36 });
+    // the root pedal, on each bar's one (low, muted)
+    if (pos === 0 && !open) putPiano(keys, x, CH[segAt(seg, x).c].root, 0.42, 0, { dur: 1.6, mute: 0.5, seed: 5, g: 0.34 });
+    if (x < S.desk - 1e-6 || x >= S.cta - 1e-6) shaker(drums, x, (pos % 2 ? 0.068 : 0.05) * (open ? 1.1 : 1), pos);
+  }
+  /* the strings: a low pad from the week's act; OPEN AN OCTAVE on the cascade; gone for the desk; swelling into the build */
+  {
+    const spans = [];
+    for (const s of seg) {
+      if (s.a >= P.impact - 1e-6) continue;
+      const a = Math.max(s.a, S.hours);
+      const e = Math.min(s.e, P.impact);
+      if (e <= a + 1e-6) continue;
+      for (const [x0, x1, oct, g] of [
+        [a, Math.min(e, cb), 0, 0.16],
+        [Math.max(a, cb), Math.min(e, S.desk), 12, 0.27],
+        [Math.max(a, S.cta), e, 0, 0.2],
+      ]) {
+        if (x1 <= x0 + 1e-6) continue;
+        for (const m of CH[s.c].str) spans.push([sec(x0) - 0.03, sec(x1), m + oct, g]);
+      }
+    }
+    addStereo(out, stringSection(LEN, spans, { att: 0.55, rel: 0.8, cut: 2600 }), 0, 1);
+    // the build's swell: the last two bars before the impact, low strings crescendo (a bowed rise into the hit)
+    const sw = [];
+    const a0 = Math.max(S.cta, P.impact - 8);
+    for (let x = a0; x < P.impact - 1e-6; x += 1) for (const m of chordAt(x).str) sw.push([sec(x) - 0.02, sec(x + 1), m - 12 + (m < 50 ? 12 : 0), 0.1 + 0.5 * ((x - a0) / (P.impact - a0)) ** 1.6]);
+    addStereo(out, stringSection(LEN, sw, { att: 0.3, rel: 0.25, cut: 2400, seed: 3 }), 0, 1);
+    // the crest: a rising noise swell (a reversed cymbal's breath) from the roll into the inhale, its band opening upward
+    const a = P.roll;
+    const c = P.impact - (M.build?.breathEnd ?? M.build?.inhale ?? 1);
+    const D = sec(c - a);
+    const u = (t) => Math.min(1, Math.max(0, t / D));
+    const breath = noise(D + 0.03, 9401, (t) => Math.pow(u(t), M.build?.breathCurve ?? 0.9) * (t > D ? Math.max(0, 1 - (t - D) / 0.03) : 1), 'bpn', (t) => 1400 + 7000 * Math.pow(u(t), 1.6), 0.55);
+    addStereo(drums, spread(breath, 0.55, 9402), sec(a), M.build?.breath ?? 0.3);
+  }
+  /* the sub on the roots from the week's act (not under the desk's piano) */
+  for (const s of seg) {
+    if (s.a >= P.impact - 1e-6 || s.e <= S.hours) continue;
+    const a = Math.max(s.a, S.hours);
+    if (a >= S.desk - 1e-6 && a < S.cta - 1e-6) continue;
+    subNote(bass, sec(a), sec(s.e - a) - 0.02, CH[s.c].root - 12 + (CH[s.c].root < 43 ? 12 : 0), a >= cb ? 0.14 : 0.1, { att: 0.05, rel: 0.25 });
+  }
+  /* does: a light felt kick on 1 and 3 */
+  for (let x = Math.ceil(S.does / 2 - 1e-9) * 2; x < S.desk - 1e-6; x += 2) feltKick(drums, x, 0.42);
+  /* the desk: warm open piano chords on 1 and 3 (the people beat) */
+  for (let x = Math.ceil(S.desk / 2 - 1e-9) * 2; x < S.cta - 1e-6; x += 2) {
+    const c = chordAt(x);
+    putPiano(keys, x, c.root + 12, 0.42, -0.1, { dur: 1.9, seed: 2, g: 0.36 });
+    c.notes.forEach((m, i) => putPiano(keys, x + 0.03 * i, m, 0.4, (i - 1.5) * 0.14, { dur: 1.8, seed: 3 + i, g: 0.26 }));
+  }
+}
+const segAt = (seg, x) => seg.find((s) => x >= s.a - 1e-9 && x < s.e - 1e-9) ?? seg[seg.length - 1];
+
+/* ═════════════════════════ REEL 2 "Booked after hours" — the night call ═════════════════════════ */
+/**
+ * ig2's arrangement (docs/ig/SCRIPT.md ig2 §4 "Sound"; PIPELINE.md §6.3), on the reel's own moments (MUSIC.ig2: check,
+ * ten, booked, hangup, gate, cta — frames, re-timed with the voices). No bed under the hook: the ring is the opener.
+ *   HARMONY  E under the greeting (a B–E ostinato) → C#m7 on the availability check → Amaj7 → E on "Ten it is." → Amaj7
+ *            → B ON "booked," (the lift A → B) → E ON THE HANG-UP (the call resolved: the cards' cascade) → C#m7 under the
+ *            gate line → Amaj7 under the CTA → B for the roll → E on the logo
+ *   CALL     a muted felt-piano ostinato, B–E 8ths, with the sub on each bar's one (ducked under her); a brushed 16th
+ *            shaker from the check; a light felt kick on 1 and 3 from "Ten" (the booking coming together)
+ *   BOOKED   the ostinato opens (unmuted, an octave up); a bright B chord on "booked,"
+ *   CASCADE  the strings swell in under the cards; the kit stops
+ *   GATE     thins: soft open piano chords on 1 and 3, a low string pad
+ *   CTA      the ostinato and an 8th shaker back, the strings crescendo through the last bars into the shared build
+ */
+function ig2Harmony(put, P, fb, M) {
+  const m = M.ig2;
+  const b6 = Math.floor(fb(m.check) / 4 + 1e-9) * 4; // the check's bar
+  const booked = fb(m.booked);
+  const hang = fb(m.hangup);
+  const gateBar = Math.ceil(fb(m.gate) / 4 - 1e-9) * 4;
+  put(P.from, b6, 'E');
+  put(b6, b6 + 4, 'Csm7');
+  put(b6 + 4, b6 + 8, 'Amaj7');
+  put(b6 + 8, b6 + 12, 'E');
+  put(b6 + 12, booked, 'Amaj7');
+  put(booked, hang, 'B');
+  put(hang, gateBar, 'E');
+  put(gateBar, gateBar + 4, 'Csm7');
+  put(gateBar + 4, P.roll, 'Amaj7');
+  put(P.roll, P.impact, 'B');
+  put(P.impact, fb(M.end) + 4, 'Efin');
+}
+
+function ig2Parts({ P, fb, M, seg, CH, chordAt, sec, LEN, out, keys, drums, bass, putPiano, feltKick, shaker }) {
+  const m = M.ig2;
+  const S = { check: fb(m.check), ten: fb(m.ten), booked: fb(m.booked), hang: fb(m.hangup), gate: fb(m.gate), cta: fb(m.cta) };
+  const gateBar = Math.ceil(S.gate / 4 - 1e-9) * 4;
+  /* the ostinato: B–E 8ths (the chord's 2nd and 3rd tones, a 4th on the off-beats), muted and low through the call,
+   * open an octave up after "booked,"; out under the cards' cascade and the gate (piano chords there) */
+  const FIG = [1, 2, 1, 2, 1, 3, 1, 2];
+  for (let x = Math.ceil(P.from * 2 - 1e-9) / 2; x < P.impact - 1e-6; x += 0.5) {
+    if (x >= S.hang - 1e-6 && x < S.cta - 1e-6) continue;
+    const n = chordAt(x).notes;
+    const pos = Math.round(x * 2) % 8;
+    const open = x >= S.booked - 1e-6;
+    const v = (open ? 0.42 : 0.34) * (pos % 2 === 0 ? 1 : 0.8) * (pos === 0 ? 1.1 : 1);
+    putPiano(keys, x, n[FIG[pos] % n.length] + (open ? 12 : 0), v, pos % 2 ? 0.22 : -0.22, { dur: open ? 0.75 : 0.5, mute: open ? 0.2 : 0.6, seed: pos % 3, g: open ? 0.26 : 0.32 });
+  }
+  /* the sub on each bar's one (and on every chord change), short — the call's pulse */
+  for (const s of seg) {
+    if (s.a >= P.impact - 1e-6) continue;
+    for (let x = s.a; x < s.e - 1e-6; x = Math.floor(x / 4 + 1e-9) * 4 + 4) {
+      if (x >= S.hang - 1e-6 && x < S.cta - 1e-6) continue;
+      subNote(bass, sec(x), sec(Math.min(0.9, s.e - x)) - 0.02, CH[s.c].root - 12 + (CH[s.c].root < 43 ? 12 : 0), 0.13, { att: 0.02, rel: 0.2 });
+    }
+  }
+  /* the brushed shaker: 16ths from the availability check to the hang-up; 8ths again from the CTA */
+  for (let x = Math.ceil(S.check * 4 - 1e-9) / 4; x < S.hang - 1e-6; x += 0.25) {
+    const pos = Math.round(x * 4) % 4;
+    shaker(drums, x, pos === 0 ? 0.05 : pos === 2 ? 0.042 : 0.03, pos + 4, 0.2);
+  }
+  for (let x = Math.ceil(S.cta * 2 - 1e-9) / 2; x < P.roll - 1e-6; x += 0.5) shaker(drums, x, (Math.round(x * 2) % 2 ? 0.06 : 0.045), Math.round(x * 2) % 8);
+  /* a light felt kick on 1 and 3 from "Ten it is." to the hang-up (the booking coming together) */
+  for (let x = Math.ceil(S.ten / 2 - 1e-9) * 2; x < S.hang - 1e-6; x += 2) feltKick(drums, x, 0.36);
+  /* "booked,": a bright, open B chord under the mallet */
+  {
+    const c = CH.B;
+    c.notes.forEach((n, i) => putPiano(keys, S.booked + 0.02 * i, n + 12, 0.5, (i - 1.5) * 0.16, { dur: 1.6, seed: 6 + i, g: 0.2 }));
+  }
+  /* the gate: soft open piano chords on 1 and 3 (it thins under the line) */
+  for (let x = Math.ceil(S.gate / 2 - 1e-9) * 2; x < S.cta - 1e-6; x += 2) {
+    const c = chordAt(x);
+    c.notes.forEach((n, i) => putPiano(keys, x + 0.025 * i, n, 0.36, (i - 1.5) * 0.14, { dur: 1.7, seed: 3 + i, g: 0.2 }));
+  }
+  /* the strings: a low pad from "Ten"; the SWELL under the cards' cascade (from the hang-up), thinning under the gate
+   * line; the build's crescendo from the CTA into the impact */
+  {
+    const spans = [];
+    for (const s of seg) {
+      if (s.a >= P.impact - 1e-6) continue;
+      for (const [x0, x1, oct, g] of [
+        [Math.max(s.a, S.ten), Math.min(s.e, S.hang), 0, 0.1],
+        [Math.max(s.a, S.hang), Math.min(s.e, gateBar), 12, 0.34],
+        [Math.max(s.a, gateBar), Math.min(s.e, S.cta), 0, 0.12],
+      ]) {
+        if (x1 <= x0 + 1e-6) continue;
+        for (const n of CH[s.c].str) spans.push([sec(x0) - 0.03, sec(x1), n + oct, g]);
+      }
+    }
+    addStereo(out, stringSection(LEN, spans, { att: 0.35, rel: 0.7, cut: 2600, seed: 2 }), 0, 1);
+    const sw = [];
+    const a0 = Math.min(S.cta, P.impact - 6);
+    for (let x = a0; x < P.impact - 1e-6; x += 1) for (const n of chordAt(x).str) sw.push([sec(x) - 0.02, sec(Math.min(P.impact, x + 1)), n, 0.12 + 0.5 * ((x - a0) / (P.impact - a0)) ** 1.5]);
+    addStereo(out, stringSection(LEN, sw, { att: 0.25, rel: 0.2, cut: 3000, seed: 4 }), 0, 1);
+  }
+}
+
+/** the reels' own arrangements (harmony + parts), by REEL; a reel without one plays the stub */
+const ARRANGEMENTS = { ig1: { harmony: ig1Harmony, parts: ig1Parts }, ig2: { harmony: ig2Harmony, parts: ig2Parts } };
+
 /* ═════════════════════════ the bed ═════════════════════════ */
 
 export function bed(T) {
@@ -309,7 +501,9 @@ export function bed(T) {
   const put = (a, e, c) => {
     if (e > a + 1e-6) seg.push({ a, e, c });
   };
-  {
+  const ARR = ARRANGEMENTS[I.REEL];
+  if (ARR) ARR.harmony(put, P, fb, M);
+  else {
     const PROG = ['E', 'Csm7', 'Amaj7', 'B'];
     let x = P.from;
     for (let k = 0; x < P.impact - 1 - 1e-6; k++) {
@@ -327,9 +521,11 @@ export function bed(T) {
   const drums = stereo(LEN);
   const bass = stereo(LEN);
   const kickTimes = [];
-  const { putPiano, kick, shaker, snare, crash, pluck, epiano } = kitAt(sec, kickTimes);
+  const { putPiano, feltKick, kick, shaker, snare, crash, pluck, epiano } = kitAt(sec, kickTimes);
 
-  /* ── ARRANGEMENT (stub, every reel): felt-piano 8ths + a shaker, low strings, the sub on the roots ── */
+  /* ── ARRANGEMENT: the reel's own (ARRANGEMENTS), else the stub: felt-piano 8ths + a shaker, low strings, the sub ── */
+  if (ARR) ARR.parts({ P, fb, M, seg, CH, chordAt, sec, LEN, out, keys, drums, bass, putPiano, feltKick, shaker });
+  else {
   const FIG = [0, 1, 2, 3, 2, 1, 2, 3];
   for (let x = Math.ceil(P.from * 2 - 1e-9) / 2; x < P.impact - 1e-6; x += 0.5) {
     const n = chordAt(x).notes;
@@ -343,12 +539,16 @@ export function bed(T) {
     addStereo(out, stringSection(LEN, spans, { att: 0.6, rel: 0.8, cut: 2200 }), 0, 1);
   }
   for (const s of seg) if (s.a < P.impact - 1e-6) subNote(bass, sec(s.a), sec(s.e - s.a) - 0.02, CH[s.c].root - 12 + (CH[s.c].root < 43 ? 12 : 0), 0.12, { att: 0.05, rel: 0.25 });
+  }
 
-  /* ── the build: a half-bar snare roll (16ths → 32nds) and 8th kicks into the impact, 16th plucks ── */
-  for (let x = P.roll; x < P.impact - 0.4; x += 0.5) kick(drums, x, 0.5 + 0.2 * ((x - P.roll) / (P.impact - P.roll)));
-  for (let x = P.roll; x < P.impact - 0.3; ) {
+  /* ── the build: a half-bar snare roll (16ths → 32nds) and 8th kicks into the impact, 16th plucks ──
+   * MUSIC.build (optional, a reel's own; every default is the stub's): kick / snare gain ×, where the kicks and the roll
+   * stop (beats before the impact), the inhale's length (beats) and depth (dB) */
+  const BLD = { kick: 1, snare: 1, kickEnd: 0.4, snareEnd: 0.3, inhale: 1, inhaleDb: -9, ...(M.build ?? {}) };
+  for (let x = P.roll; x < P.impact - BLD.kickEnd; x += 0.5) kick(drums, x, (0.5 + 0.2 * ((x - P.roll) / (P.impact - P.roll))) * BLD.kick);
+  for (let x = P.roll; x < P.impact - BLD.snareEnd; ) {
     const u = (x - P.roll) / (P.impact - P.roll);
-    snare(drums, x, 0.16 + 0.38 * u * u, Math.round(x * 8));
+    snare(drums, x, (0.16 + 0.38 * u * u) * BLD.snare, Math.round(x * 8));
     x += u < 0.5 ? 0.25 : 0.125;
   }
   for (let x = P.roll, i = 0; x < P.impact - 0.01; x += 0.25, i++) {
@@ -382,10 +582,10 @@ export function bed(T) {
   const glued = compress(out, { thr: -20, ratio: 2, knee: 8, att: 0.01, rel: 0.2, rms: 0.01 });
   {
     // THE INHALE: the beat before the logo the bed is drawn in 9 dB, back at unity ON the hit
-    const i0 = Math.round(sec(P.impact - 1) * SR);
+    const i0 = Math.round(sec(P.impact - BLD.inhale) * SR);
     const i1 = Math.round(sec(P.impact) * SR);
     const back = Math.round(0.002 * SR);
-    const dip = 1 - gain(-9);
+    const dip = 1 - gain(BLD.inhaleDb);
     const down = Math.max(1, i1 - back - i0);
     for (let c = 0; c < 2; c++) {
       for (let i = i0; i < i1 && i < glued[c].length; i++) glued[c][i] *= i < i1 - back ? 1 - dip * smooth((i - i0) / down) : 1 - dip * ((i1 - i) / back);

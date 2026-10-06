@@ -13,7 +13,7 @@ import { VOICE, type VoiceId } from '../voice.generated.ts';
 import { BEAT, BPM, CUT, DUCK, FPS, LIGHT_NOTES, LIGHT_SEMI, PK, RENDER_FPS, SUB, VERTICAL, b } from '../../timing.ts';
 import { buildCues, makeSpeech, makeVoiceKit, upQuarter, type Cue, type Hit, type Room, type Voiced, type VoiceRide } from '../common/cues.ts';
 import {
-  BAR, BRAND, IG_LOUD, IG_NAME, IMPACT_BEFORE_END, IMPACT_GAP, LINE_GAP, ROLL, SEAM, SFX, H, afterRing, endHits, bedRide, igArc, igImpact, impactHits, place, upBar,
+  BAR, BRAND, IG_LOUD, IG_NAME, IMPACT_BEFORE_END, IMPACT_GAP, LINE_GAP, ROLL, SEAM, SFX, H, afterRing, endHits, igArc, igImpact, impactHits, place, upBar,
   type Display, type LineScreens, type Snd,
 } from '../common/series.ts';
 
@@ -72,8 +72,63 @@ export const VOICES: Voiced<VoiceId>[] = (
     { at: BRAND_AT, id: BRAND },
   ] as Voiced<VoiceId>[]
 ).sort((x, y) => x.at - y.at);
-export const VOICE_RIDES: Partial<Record<VoiceId, readonly VoiceRide[]>> = {};
+/**
+ * THE VOICE POST (scripts/audio/mix.mjs VOICE_RIDES; the ridden line's body is put back on the dialogue target): her
+ * hottest syllable runs eased down a touch — the punchline "Not even…", "Nine…", "…hundred and twenty…", "Your…",
+ * "Comment AGENT" — so no 400 ms of her voice stands as loud as the logo impact (check-mix: the impact tops the
+ * loudest dialogue by 1 LU; the reels' −14 LUFS master leaves 1.5 dB less room above her peaks than the films' −15.5).
+ * Frames are the line's own; each fader ramps over `ramp` frames outside its span.
+ */
+export const VOICE_RIDES: Partial<Record<VoiceId, readonly VoiceRide[]>> = {
+  'ig1-01': [{ from: 85, to: 108, db: -2.4, ramp: 4 }],
+  'ig1-02': [{ from: 0, to: 20, db: -2, ramp: 3 }],
+  'ig1-03': [{ from: 14, to: 40, db: -1.4, ramp: 4 }],
+  'ig1-05': [{ from: 0, to: 16, db: -1.2, ramp: 3 }],
+  'ig1-06': [{ from: 63, to: 86, db: -1.4, ramp: 4 }],
+};
 export const { SPEECH, PHRASES, speaking } = makeSpeech(VOICE, VOICES);
+
+/* ── the picture's moments (absolute frames, from her real word onsets): the acts draw them, the cue sheet hits them ── */
+const word = (L: number, id: VoiceId, k: number) => L + vWord(id, k);
+/** a 16th (3.75 f) */
+export const SIXTEENTH = BEAT / 4;
+export const M = {
+  /** b1: "fire" (the rose glint), "Not" (S2 turns), "ours" (her orb lands as its full stop) */
+  fire: word(L1, 'ig1-01', 1),
+  not: word(L1, 'ig1-01', 7),
+  ours: word(L1, 'ig1-01', 9),
+  /** b2: the desk hairline UNFOLDS into the week (its 24 rows spreading out of the line), as "Not even ours." leaves */
+  unfold: HOURS - 3,
+  /** "Nine": the staffed block fills column by column, one per 16th (five columns) — "09" ticks in */
+  nine: word(L2, 'ig1-02', 0),
+  /** "six": "18" ticks in */
+  six: word(L2, 'ig1-02', 2),
+  /** "weekdays": MON–FRI over columns 1–5 */
+  weekdays: word(L2, 'ig1-02', 3),
+  /** "forty-five": the block's outline lifts once */
+  fortyFive: word(L2, 'ig1-02', 4),
+  /** "a hundred and sixty-eight": the camera eases back and every empty cell draws its hairline in one wave */
+  week168: word(L2, 'ig1-02', 10),
+  /** b3: "other" — the 123 cascade teal from Friday 18:00 (CASCADE_LEN frames) */
+  cascade: CASCADE,
+  /** "agent's": her orb glides into the grid's corner and grows */
+  agents: word(L3, 'ig1-03', 7),
+  shiftWord: word(L3, 'ig1-03', 8),
+  /** b4: the three outcome cards land on their verbs; the contact row on "people" */
+  answers: word(L4, 'ig1-04', 1),
+  messages: word(L4, 'ig1-04', 3),
+  puts: word(L4, 'ig1-04', 5),
+  people: word(L4, 'ig1-04', 9),
+  /** b5: the cards leave as the act opens; on "receptionist" the graphite block lifts; on "only" her orb rests */
+  desk: L5 - (PLAN.lines['ig1-05'] - PLAN.acts.desk),
+  receptionist: word(L5, 'ig1-05', 1),
+  only: word(L5, 'ig1-05', 5),
+} as const;
+/** the teal cascade's length: ≈ 1.2 s (SCRIPT ig1 b3) */
+export const CASCADE_LEN = 36;
+/** the staffed block's five column fills (one per 16th from "Nine") */
+/** (from "Nine" — once the week has opened: the unfold settles ≈ 9 f after it starts) */
+export const STAFFED_FILLS = [0, 1, 2, 3, 4].map((c) => Math.max(M.nine, M.unfold + 9) + c * SIXTEENTH);
 
 /* ── the acts ── */
 /** Act windows on the absolute timeline; `pre`/`post`: frames an act stays mounted before/after its window. */
@@ -113,6 +168,8 @@ export const DISPLAY: readonly Display[] = [
   { id: 'ig1-03', from: 2, to: 4, text: '123?' },
 ];
 
+/** extra zone stills (scripts/ig/check-zones.mjs): the chrome and the call records landed (+ 8 f) */
+export const ZONE_FRAMES: readonly number[] = [M.nine + 8, M.six + 8, M.weekdays + 10, M.answers + 8, M.messages + 8, M.puts + 8, M.people + 10];
 /** The shared end card's moments (SCRIPT.md §0.3; components/End.tsx). */
 export const END_CARD = {
   cta: CTA,
@@ -130,24 +187,101 @@ export const END_CARD = {
   seam: END - SEAM,
 } as const;
 
-/* ── the cue sheet (placeholder hits until the acts are built: the ring and the impact) ── */
+/* ── the cue sheet (SCRIPT.md ig1 §4 "Sound" per beat) ── */
 export const roomAt = (_f: number): Room => 'white';
+/** the cascade's plucks: the E-major pentatonic rising on 16ths through the teal (E5 F#5 G#5 B5 E6, then F#6 G#6 B6) */
+const T0 = (a: readonly number[]) => a[0];
+const CASCADE_PLUCKS: readonly [Snd, number][] = [
+  ['fx-pluck-e5', 0],
+  ['fx-pluck-fs5', 0],
+  ['fx-pluck-gs5', 0],
+  ['fx-pluck-b5', 0],
+  ['fx-pluck-e6', 0],
+  ['fx-pluck-fs5', 12],
+  ['fx-pluck-gs5', 12],
+  ['fx-pluck-b5', 12],
+];
 export const HITS: Hit<Snd>[] = [
+  // b1 — the desk phone (the frame-0 attack and its second burst), "fire", her full stop
   H(0, 'fx-trill', 'rush', 0.62, 1, 'b1 the desk phone rings at frame 0 (the attack)'),
   H(30, 'fx-trill', 'rush', 0.62, 2, 'b1 its second burst'),
+  H(M.fire, 'thump', 'none', 0.5, 3, 'b1 “fire”: a soft weight under the rose glint', { db: -4 }),
+  H(M.ours + 2, 'ping', 'sunday', 0.62, 2, 'b1 “ours”: her orb lands as the full stop', { db: -2 }),
+  H(M.ours + 2, 'chime-sunday-soft', 'sunday', 0.62, 3, 'b1 … the sunday chime under it', { layer: true }),
+  // b2 — the desk line opens into the week; the staffed block fills; 45; the whole week
+  H(M.unfold + 1, 'fx-riffle', 'none', 0.5, 3, 'b2 the desk line unfolds into the 24 hours of the week', { db: -4 }),
+  H(T0(STAFFED_FILLS), 'fx-tick', 'none', 0.3, 3, 'b2 “Nine”: the staffed block fills, one column per 16th', {
+    db: -2,
+    run: { n: 5, offs: STAFFED_FILLS.map((f) => f - STAFFED_FILLS[0]), xs: [0.22, 0.28, 0.34, 0.4, 0.46] },
+  }),
+  H(M.weekdays, 'draw', 'none', 0.36, 3, 'b2 “weekdays”: MON–FRI’s bracket draws out', { db: -6 }),
+  H(M.fortyFive, 'fx-tock', 'none', 0.36, 2, 'b2 “forty-five”: the block’s outline lifts once'),
+  H(M.week168, 'swish', 'none', 0.5, 3, 'b2 “a hundred and sixty-eight”: the camera eases back, every empty hour outlined', { db: -3 }),
+  // b3 — the agent's shift
+  ...CASCADE_PLUCKS.map(([snd, semi], i) =>
+    H(M.cascade + i * SIXTEENTH, snd, 'none', 0.5 + 0.06 * (i % 4), 3, `b3 the teal cascade, rising pluck ${i + 1}/${CASCADE_PLUCKS.length}`, { semi, db: -1 - 0.6 * i, layer: true }),
+  ),
+  H(M.shiftWord, 'glint', 'sunday', 0.74, 2, 'b3 “shift”: her orb, grown into the corner'),
+  H(M.shiftWord, 'fx-ting', 'sunday', 0.74, 2, 'b3 … its ting', { layer: true }),
+  // b4 — what it does
+  H(M.answers, 'fx-tag', 'none', 0.62, 2, 'b4 “answers”: the Answered record lands'),
+  H(M.messages, 'fx-tag', 'none', 0.62, 2, 'b4 “messages”: Message taken lands'),
+  H(M.puts, 'fx-tag', 'none', 0.62, 2, 'b4 “puts calls through”: Transferred lands'),
+  H(M.people, 'line', 'none', 0.6, 3, 'b4 “people you listed”: the team member slides out (Live transfers)', { db: -4 }),
+  // b5 — the desk beat
+  H(M.desk, 'swish', 'none', 0.5, 3, 'b5 the records leave up', { db: -8 }),
+  H(M.receptionist, 'land', 'none', 0.36, 2, 'b5 “receptionist”: the people’s block lifts off the week'),
+  // b6–b8 — the shared end card
   ...endHits(END_CARD),
-  ...impactHits(IMPACT),
+  H(IMPACT - 12, 'riser', 'none', 0.5, 1, 'END the build’s crest, just after her last word (“…link.”): a first swell, cresting before the breath', { layer: true, db: -1 }),
+  H(IMPACT - 1, 'whoosh-rev', 'none', 0.5, 1, 'END the breath before the hit: a reversed whoosh through the inhale', { layer: true, db: -1 }),
+  // the shared impact stack, its riser a touch hotter: it carries the last 400 ms while the bed draws its breath
+  ...impactHits(IMPACT).map((h) => (h.snd === 'riser' ? { ...h, db: 1 } : h)),
 ];
 export const CUES: Cue[] = buildCues(HITS, { sfx: SFX, speaking, roomAt });
 
 /** The moments the bed reads (scripts/ig/bed.mjs inputs(T)). */
-export const MUSIC = { bedFrom: 0, roll: IMPACT - ROLL, impact: IMPACT, brand: BRAND_AT, end: END } as const;
-export const BED = { file: `ig/sfx/${REEL}/bed.wav`, vol: 2, ride: bedRide(IMPACT, BRAND_AT, vFrames(BRAND), END) };
+export const MUSIC = {
+  bedFrom: 0,
+  roll: IMPACT - ROLL,
+  impact: IMPACT,
+  brand: BRAND_AT,
+  end: END,
+  /** ig1's arrangement (scripts/ig/bed.mjs arrangeIg1): where the sections turn */
+  ig1: { hours: HOURS, cascade: CASCADE, does: SCENES.does.from, desk: SCENES.desk.from, cta: CTA },
+  /** ig1's build (bed.mjs MUSIC.build): the roll and the kicks harder, both stopping into a short, deep inhale (the last
+   *  0.6 beat, −14 dB) — the crest just after her last word, the breath, then the hit */
+  build: { kick: 0.8, snare: 1.0, kickEnd: 0.8, snareEnd: 0.8, inhale: 0.8, inhaleDb: -9, breath: 1.8, breathEnd: 0.25, breathCurve: 0.25 },
+} as const;
+/**
+ * The bed's fader (frame → dB). Film 2's shape round the hit (series.ts bedRide), with ig1's own crest: the speech duck
+ * is still letting go after her last word ("…link.") when the build must peak, so the fader rides up against it for the
+ * 16th after it — the crest — then down into the inhale, the hit, well back for the name, down into the seam.
+ */
+const BED_RIDE: readonly (readonly [number, number])[] = [
+  [0, 0],
+  [IMPACT - 32, 0],
+  [IMPACT - 27, 1],
+  [IMPACT - 24, 7],
+  [IMPACT - 22, 14],
+  [IMPACT - 17, 14],
+  [IMPACT - 13, 10],
+  [IMPACT - 10, 3],
+  [IMPACT - 6, -1],
+  [IMPACT - 1, -2],
+  [IMPACT + 2, 0],
+  [BRAND_AT - 1, -8],
+  [BRAND_AT + vFrames(BRAND) - 4, -8],
+  [END - SEAM, -16.5],
+  [END, -30],
+];
+export const BED = { file: `ig/sfx/${REEL}/bed.wav`, vol: 2, ride: BED_RIDE };
 export const MIX = {
   file: `ig/sfx/${REEL}/mix.wav`,
   ...IG_LOUD,
   fadeOut: [END - SEAM, END] as const,
-  impact: igImpact(IMPACT, BRAND_AT - IMPACT),
+  /** the impact insert held a frame longer and released over the name's first syllable (its SII stays ≥ .9) */
+  impact: { ...igImpact(IMPACT, BRAND_AT - IMPACT), hold: [0, 4] as const, release: 8 },
   name: IG_NAME,
   /** the music-forward passage the converge into the logo must top (check-mix): the teal cascade (from "other", 36 f) */
   arc: igArc([[CASCADE, CASCADE + 36]]),
