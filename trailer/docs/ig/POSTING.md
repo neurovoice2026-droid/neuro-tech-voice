@@ -202,7 +202,7 @@ Want a hand? Reply here and I'll help you load your price list and make the firs
 |---|---|---|---|
 | 24 h | **Skip rate (3 s)** | < 40 % healthy; > 50 % means the first 2 s are broken | Re-cut the hook as a *new* post later; never repost the same file |
 | 24 h | Views and reach vs the account's baseline (52 views), plus the share of non-followers | the reel is leaving the follower bubble | — |
-| 72 h | **Average watch time and the retention curve** | a drop *before* the mid-reel payoff (01 ≈ 10 s, 02 ≈ 14 s, 03 ≈ 14.5 s, 04 ≈ 14.6 s) means the pacing is slow; a drop at the CTA is expected | Tighten the beats before the payoff in the next variant |
+| 72 h | **Average watch time and the retention curve** | a drop *before* the mid-reel payoff (01 ≈ 10 s, 02 ≈ 17.5 s, 03 ≈ 16.5 s, 04 ≈ 16.5 s, as delivered) means the pacing is slow; a drop at the CTA is expected | Tighten the beats before the payoff in the next variant |
 | 72 h | **Sends per reach**, saves, comments, follows | the signals that drive non-follower reach | The best sends-per-reach format gets the next variant |
 | 72 h | **AGENT comments per 1,000 reach**, DM replies, profile visits, bio-link taps | conversion intent | Re-pin by this number after week 2 |
 | 7 d / 14 d | **UTM funnel on the site:** sign-ups → agent created → test call → number bought → paid plan | **the real KPI**: one paying account outweighs any view count | — |
