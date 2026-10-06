@@ -10,9 +10,9 @@
  */
 import { VOICE, type VoiceId } from '../voice.generated.ts';
 import { BEAT, BPM, CUT, DUCK, FPS, LIGHT_NOTES, LIGHT_SEMI, PK, RENDER_FPS, SUB, VERTICAL, b } from '../../timing.ts';
-import { buildCues, makeSpeech, makeVoiceKit, type Cue, type Hit, type Room, type Voiced, type VoiceRide } from '../common/cues.ts';
+import { buildCues, makeSpeech, makeVoiceKit, upQuarter, type Cue, type Hit, type Room, type Voiced, type VoiceRide } from '../common/cues.ts';
 import {
-  BAR, BRAND, IG_LOUD, IG_NAME, IMPACT_BEFORE_END, IMPACT_GAP, ROLL, SEAM, SFX, H, bedRide, igArc, igImpact, impactHits, place, upBar,
+  BAR, BRAND, IG_LOUD, IG_NAME, IMPACT_BEFORE_END, IMPACT_GAP, LINE_GAP, ROLL, SEAM, SFX, H, bedRide, igArc, igImpact, impactHits, place, upBar,
   type Display, type LineScreens, type Snd,
 } from '../common/series.ts';
 
@@ -38,8 +38,18 @@ export const PLAN = {
 
 /* ── the voiced timeline ── */
 const L1 = place(PLAN.lines['ig1-01']);
-const L2 = place(PLAN.lines['ig1-02'], end(L1, 'ig1-01'));
+/**
+ * THE GRID'S ACT (hours) follows the hook's take: it opens once "Not even ours." has held a beat past its last word
+ * (the caption rule) and the take has ended; "Nine…" keeps the plan's 3-frame lead into the act (the grid rises first).
+ */
+export const HOURS = Math.max(
+  PLAN.acts.hours,
+  upQuarter(Math.max(L1 + vWord('ig1-01', 9) + BEAT, end(L1, 'ig1-01') + LINE_GAP - (PLAN.lines['ig1-02'] - PLAN.acts.hours))),
+);
+const L2 = HOURS + (PLAN.lines['ig1-02'] - PLAN.acts.hours);
 const L3 = place(PLAN.lines['ig1-03'], end(L2, 'ig1-02'));
+/** b3: the 123 empty cells cascade teal from her word "other" (one row-diagonal per 16th, ≈ 1.2 s) */
+export const CASCADE = L3 + vWord('ig1-03', 1);
 const L4 = place(PLAN.lines['ig1-04'], end(L3, 'ig1-03'));
 const L5 = place(PLAN.lines['ig1-05'], end(L4, 'ig1-04'));
 const CTA = place(PLAN.lines['ig1-06'], end(L5, 'ig1-05'));
@@ -68,11 +78,12 @@ export const { SPEECH, PHRASES, speaking } = makeSpeech(VOICE, VOICES);
 export const SCENES = (() => {
   const w = (from: number, to: number, pre = 0, post = 0) => ({ from, to, pre, post });
   const A = PLAN.acts;
-  // an act that opens on its line follows the line (shift, does, end); the others keep their planned frame
+  // every act follows the voices: hours opens after the hook's take (HOURS), shift / does / end open on their line,
+  // desk keeps its plan's 3-frame lead on its line
   const DESK = A.desk + (L5 - PLAN.lines['ig1-05']);
   return {
-    hook: w(A.hook, A.hours),
-    hours: w(A.hours, L3),
+    hook: w(A.hook, HOURS),
+    hours: w(HOURS, L3),
     shift: w(L3, L4),
     does: w(L4, DESK),
     desk: w(DESK, CTA),
@@ -135,8 +146,8 @@ export const MIX = {
   fadeOut: [END - SEAM, END] as const,
   impact: igImpact(IMPACT, BRAND_AT - IMPACT),
   name: IG_NAME,
-  /** the music-forward passage the converge into the logo must top (check-mix): the teal cascade */
-  arc: igArc([[262, 300]]),
+  /** the music-forward passage the converge into the logo must top (check-mix): the teal cascade (from "other", 36 f) */
+  arc: igArc([[CASCADE, CASCADE + 36]]),
 } as const;
 /** The finish (components/Finish.tsx): pearl ground. Grain and dither strengths are settled by the bit-budget probe. */
 export const GRAIN = { ground: 'pearl' as 'pearl' | 'night' };

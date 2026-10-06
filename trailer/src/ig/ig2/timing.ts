@@ -130,8 +130,9 @@ export const HITS: Hit<Snd>[] = [
 ];
 export const CUES: Cue[] = buildCues(HITS, { sfx: SFX, speaking, roomAt });
 
-/** The moments the bed reads (scripts/ig/bed.mjs inputs(T)): no bed under the hook — it enters on bar 3. */
-export const MUSIC = { bedFrom: 120, roll: IMPACT - ROLL, impact: IMPACT, brand: BRAND_AT, end: END } as const;
+/** The moments the bed reads (scripts/ig/bed.mjs inputs(T)): no bed under the hook — it enters a beat after the pickup
+ *  (the plan's bar 3, f120, one beat after its pickup at f105). */
+export const MUSIC = { bedFrom: PICKUP + BEAT, roll: IMPACT - ROLL, impact: IMPACT, brand: BRAND_AT, end: END } as const;
 export const BED = { file: `ig/sfx/${REEL}/bed.wav`, vol: 2, ride: bedRide(IMPACT, BRAND_AT, vFrames(BRAND), END) };
 export const MIX = {
   file: `ig/sfx/${REEL}/mix.wav`,
@@ -139,7 +140,7 @@ export const MIX = {
   fadeOut: [END - SEAM, END] as const,
   impact: igImpact(IMPACT, BRAND_AT - IMPACT),
   name: IG_NAME,
-  /** the card cascade */
-  arc: igArc([[465, 528]]),
+  /** the card cascade: the booked act, from the hang-up to the end card */
+  arc: igArc([[SCENES.booked.from, SCENES.booked.to]]),
 } as const;
 export const GRAIN = { ground: 'night' as 'pearl' | 'night' };

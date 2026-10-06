@@ -130,7 +130,7 @@ export const MIX = {
   fadeOut: [END - SEAM, END] as const,
   impact: igImpact(IMPACT, BRAND_AT - IMPACT),
   name: IG_NAME,
-  /** the payoff hit */
-  arc: igArc([[435, 480]]),
+  /** the payoff hit: from the hang-up (timer 00:00), 45 f */
+  arc: igArc([[HANGUP, HANGUP + 45]]),
 } as const;
 export const GRAIN = { ground: 'pearl' as 'pearl' | 'night' };

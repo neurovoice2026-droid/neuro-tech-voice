@@ -43,15 +43,24 @@ export const PLAN = {
 
 /* ── the voiced timeline ── */
 const L1 = place(PLAN.lines['ig4-01']);
+/** the frame her voice has stopped in a take placed at `at` (its last frame of loudness ≥ CUT.onset, + 1) — a ring
+ *  waits for her voice, not for the file's silent tail */
+const voiced = (at: number, id: VoiceId) => {
+  const env = VOICE.lines[id].env;
+  let i = env.length - 1;
+  while (i > 0 && env[i] < CUT.onset) i--;
+  return at + i + 1;
+};
+/** a ring: on its planned beat, or on the first beat ≥ 3 frames after the voice before it has stopped */
 const ringAfter = (plan: number, after: number) => Math.max(plan, upBeat(after + 3));
-const R1 = ringAfter(PLAN.rings[0], end(L1, 'ig4-01'));
+const R1 = ringAfter(PLAN.rings[0], voiced(L1, 'ig4-01'));
 const L2 = R1 + PLAN.afterRing;
-const R2 = ringAfter(PLAN.rings[1], end(L2, 'ig4-02'));
+const R2 = ringAfter(PLAN.rings[1], voiced(L2, 'ig4-02'));
 const L3 = R2 + PLAN.afterRing;
-const R3 = ringAfter(PLAN.rings[2], end(L3, 'ig4-03'));
+const R3 = ringAfter(PLAN.rings[2], voiced(L3, 'ig4-03'));
 const L4 = R3 + PLAN.afterRing;
 const L5 = place(PLAN.lines['ig4-05'], end(L4, 'ig4-04'));
-const R4 = ringAfter(PLAN.rings[3], end(L5, 'ig4-05'));
+const R4 = ringAfter(PLAN.rings[3], voiced(L5, 'ig4-05'));
 const L6 = R4 + PLAN.afterRing;
 /** the rings (each a trill chirp cut by the pickup a 16th later) */
 export const RINGS = [R1, R2, R3, R4] as const;
@@ -140,7 +149,7 @@ export const MIX = {
   fadeOut: [END - SEAM, END] as const,
   impact: igImpact(IMPACT, BRAND_AT - IMPACT),
   name: IG_NAME,
-  /** the hairline chord */
-  arc: igArc([[90, 255]]),
+  /** the hairline chord: the three phrasings, from the first ring to the answer */
+  arc: igArc([[RINGS[0], L5]]),
 } as const;
 export const GRAIN = { ground: 'pearl' as 'pearl' | 'night' };
