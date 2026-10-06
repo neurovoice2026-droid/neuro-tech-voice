@@ -9,13 +9,13 @@ Filled in from the brand's own material (the site, the bio, the two launch films
 
 - **Name:** Neuro Tech Voice (NeuroTechVoice)
 - **Handle:** @neurotechvoice · https://www.instagram.com/neurotechvoice
-- **What I do, in one sentence:** AI voice agents that answer a business's phone calls, day or night, in the
-  caller's language, from the answers the business wrote down once.
+- **What I do, in one sentence:** AI voice agents that answer a business's phone calls, day or night, in 14
+  languages, from the answers the business wrote down once.
 - **Who I am talking to:** owners and managers of small and mid-size service businesses that live on the
   phone and lose customers to missed or repetitive calls: salons & spas, clinics & dental, restaurants,
   real estate & property management, home services, fitness, law firms, veterinary, automotive.
 - **What I sell:** the NeuroTechVoice subscription. Starts with a 14-day free trial (5 minutes included,
-  no credit card), then Starter $49/mo, Pro $249/mo, Business $499/mo, or Custom.
+  no credit card), then a paid plan (no prices on Instagram: the site's two price lists differ).
 
 ## What I sound like
 
@@ -53,7 +53,8 @@ Filled in from the brand's own material (the site, the bio, the two launch films
 ## Proof I can use
 
 - 14-day free trial, 5 minutes included, no credit card required (site pricing).
-- Setup in minutes: "AI agents deployed in 5 minutes" (bio).
+- Setup in minutes: "ready in under ten minutes" (site FAQ). Not "5 minutes" and not "every language" (14 languages).
+- Calendar booking needs Pro (beta) and SMS needs Starter; never imply the free trial books or texts.
 - {{a real customer result, once there is one}}
 
 ## The ask

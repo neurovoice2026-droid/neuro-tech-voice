@@ -41,7 +41,15 @@ session link it to this folder first: `mkdir -p ~/.claude && ln -sfn "$PWD/.clau
 
 - **Trial:** 14-day free trial, 5 minutes included, no credit card required (`types/index.ts` PLANS.trial,
   `app/` pricing FAQ).
-- **Plans:** Starter $49/mo (150 min) · Pro $249/mo (850 min) · Business $499/mo (1,750 min) · Custom (`types/index.ts`).
+- **Prices:** the homepage and the backend (`types/index.ts`) list different plans and prices, so content shows **no prices,
+  minute allowances or plan names** (except "Pro" where a feature needs it).
+- **Phone number:** a separate $1.15/month purchase that needs a card; the free trial alone answers test calls. Numbers are
+  sold in 21 countries, not in DE, ES, FR, IT, NL, PL or RO (`lib/twilio/countries.ts`); no porting, the agent's number sits
+  next to the business's line.
+- **Gated features:** calendar booking is Pro and up (beta), SMS is Starter and up; the trial has neither
+  (`lib/billing/entitlements.ts`).
+- **Languages / setup:** 14 languages; "ready in under ten minutes" (site FAQ). The bio's "every language" and "deployed in
+  5 minutes" overclaim (see `trailer/docs/ig/POSTING.md` §7 for a corrected bio).
 - **Industries on the site:** automotive, clinics & dental, education, financial services, fitness, home services,
   hospitality, insurance, law firms, logistics, property management, real estate, restaurants, retail, salons & spas,
   veterinary (`app/industries/[slug]`).

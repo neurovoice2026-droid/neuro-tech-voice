@@ -1,0 +1,313 @@
+{
+  "level": {
+    "lufs": -23,
+    "peakMax": -1,
+    "note": "ONE dialogue target for every line: BS.1770 integrated loudness over its phrases (mono file; the IG mix places dialogue at MIX.dialogueLufs -18.5, 4.5 LU under the -14 LUFS Instagram master, the films' voice-to-master balance), after the role EQ. Not a peak: peak-normalising left a 5 LU spread in film 2."
+  },
+  "voices": {
+    "ava": {
+      "sid": 1,
+      "name": "af_bella",
+      "speed": 1.04,
+      "note": "Tessa, the ONLY voice of the four Instagram reels (the client: the woman's voice speaks whenever there is text on screen). She is the narrator (untagged captions) and the sample agent Ava on the calls (captions tagged ● AVA). Callers are never voiced: ig2 and ig3 are one-sided calls (the agent restates what was asked; the caller's turn is a slate level meter with no words), ig4's phrasings are read by the narrator under the site's own 'Asked as' label. Full-band, no phone line. Same voice id and speed as film 2's ava role.",
+      "fish": {
+        "env": "FISH_IG_AVA_VOICE",
+        "gender": "female",
+        "id": "",
+        "speed": 1
+      },
+      "cartesia": {
+        "env": "CARTESIA_IG_AVA_VOICE",
+        "id": "6ccbfb76-1fc6-48f7-b71d-91ac6298247b",
+        "name": "Tessa (Emotive)",
+        "gender": "feminine",
+        "speed": 1.05
+      }
+    }
+  },
+  "lines": [
+    {
+      "id": "ig1-01",
+      "voice": "ava",
+      "say": "Don't fire your receptionist for an AI. Not even ours.",
+      "direction": "Reel 1 hook, narrator, from frame 0 over the desk phone's ring: confident and dry, a statement nobody expects from an AI company. A small stress on \"fire\". A short beat, then \"Not even ours.\" with a dry smile, a touch lower, landing by about 3.1 s.",
+      "speak": "Don't fire your receptionist for an AI. <break time=\"250ms\"/> Not even ours.",
+      "emotion": "confident"
+    },
+    {
+      "id": "ig1-02",
+      "voice": "ava",
+      "say": "Nine to six, weekdays: forty-five hours. The week has a hundred and sixty-eight.",
+      "direction": "Reel 1, narrator, over the week grid filling: measured, counting, easy. \"forty-five hours\" lands as a small fact; a beat; \"a hundred and sixty-eight\" a little slower and wider, the bigger number. Captions show 45 and 168 as numerals over these words.",
+      "speak": "Nine to six, weekdays: <break time=\"150ms\"/> forty-five hours. <break time=\"300ms\"/> The week has a hundred and sixty-eight.",
+      "emotion": "calm"
+    },
+    {
+      "id": "ig1-03",
+      "voice": "ava",
+      "say": "The other hundred and twenty-three? That's the agent's shift.",
+      "direction": "Reel 1, narrator, as 123 cells cascade teal: a real, curious question with a lift, then a confident, warm answer. \"agent's shift\" is the payoff phrase.",
+      "emotion": "confident",
+      "parts": [
+        {
+          "speak": "The other hundred and twenty-three?",
+          "emotion": "curious"
+        },
+        {
+          "speak": "<break time=\"250ms\"/> That's the agent's shift.",
+          "emotion": "confident"
+        }
+      ]
+    },
+    {
+      "id": "ig1-04",
+      "voice": "ava",
+      "say": "It answers, takes messages, and puts calls through to people you listed.",
+      "direction": "Reel 1, narrator: a calm list, one verb per beat (three outcome cards land on the three verbs). Plain weight on \"people you listed\", which is the honest condition, not a throwaway.",
+      "speak": "It answers, takes messages, and puts calls through to people you listed.",
+      "emotion": "calm"
+    },
+    {
+      "id": "ig1-05",
+      "voice": "ava",
+      "say": "Your receptionist keeps the work only people can do.",
+      "direction": "Reel 1, narrator: warm and sincere, a statement, not a slogan (film 2's kb2-vo-8 idea). Let \"only people can do\" settle.",
+      "speak": "Your receptionist keeps the work only people can do.",
+      "emotion": "content"
+    },
+    {
+      "id": "ig1-06",
+      "voice": "ava",
+      "say": "Five free minutes, no card. Comment AGENT for the link.",
+      "direction": "Reel 1 CTA, narrator: warm, plain, unhurried; a small beat after \"no card\". \"AGENT\" is the comment keyword: say it as the ordinary word (speak has it lowercase so Sonic does not spell it), with a little stress.",
+      "speak": "Five free minutes, no card. <break time=\"200ms\"/> Comment agent for the link.",
+      "emotion": "content"
+    },
+    {
+      "id": "ig1-06-bio",
+      "voice": "ava",
+      "say": "Five free minutes, no card. The link's in our bio.",
+      "direction": "ALTERNATE for ig1-06, used only if the comment-to-DM automation is not live on posting day: same read, same length budget (≤ 3.3 s).",
+      "speak": "Five free minutes, no card. <break time=\"200ms\"/> The link's in our bio.",
+      "emotion": "content"
+    },
+    {
+      "id": "ig1-07",
+      "voice": "ava",
+      "say": "Neuro Tech Voice.",
+      "direction": "THE SERIES SIGN-OFF, said into the logo impact's ring on every end card (reels 1-4 all place this one take; it is check-mix's MIX.name.voice). Calm, proud, a gentle fall, as film 2's kb2-brand. Must be ≤ 1.45 s so it ends before the 0.5 s loop seam.",
+      "speak": "Neuro Tech Voice.",
+      "emotion": "proud"
+    },
+    {
+      "id": "ig2-01",
+      "voice": "ava",
+      "say": "Nine forty-seven. You're closed. Watch it book this call.",
+      "direction": "Reel 2 hook, narrator, over a ringing desk phone in the dark: low and close for \"Nine forty-seven. You're closed.\", then a small, conspiratorial lift into \"Watch it book this call.\" (\"book\" stressed). Captions show the time as 9:47 pm.",
+      "emotion": "calm",
+      "parts": [
+        {
+          "speak": "Nine forty-seven. <break time=\"150ms\"/> You're closed.",
+          "emotion": "calm"
+        },
+        {
+          "speak": "<break time=\"250ms\"/> Watch it book this call.",
+          "emotion": "curious"
+        }
+      ]
+    },
+    {
+      "id": "ig2-02",
+      "voice": "ava",
+      "say": "Northside Studio, this is Ava, an AI assistant.",
+      "direction": "Reel 2, Ava ON THE CALL, the first-ring pickup: warm, bright, professional, natural phone pace. \"an AI assistant\" said plainly, without fuss (the disclosure is a feature, not a confession).",
+      "speak": "Northside Studio, this is Ava, an AI assistant.",
+      "emotion": "happy"
+    },
+    {
+      "id": "ig2-03",
+      "voice": "ava",
+      "say": "Saturday morning? I have ten, or eleven-thirty.",
+      "direction": "Reel 2, Ava on the call, restating what the (unheard) caller asked: a light, friendly check-back on \"Saturday morning?\", a tiny pause as if glancing at the diary, then the two times, easy and clear.",
+      "speak": "Saturday morning? <break time=\"300ms\"/> I have ten, or eleven-thirty.",
+      "emotion": "content"
+    },
+    {
+      "id": "ig2-04",
+      "voice": "ava",
+      "say": "Ten it is. And your name?",
+      "direction": "Reel 2, Ava on the call: \"Ten it is.\" confirms the caller's choice with a smile; \"And your name?\" is a natural, light question (booking needs the caller's name).",
+      "speak": "Ten it is. <break time=\"150ms\"/> And your name?",
+      "emotion": "happy"
+    },
+    {
+      "id": "ig2-05",
+      "voice": "ava",
+      "say": "Thanks, Maya. You're booked, Saturday at ten.",
+      "direction": "Reel 2, Ava on the call, the payoff: warm thanks, then a bright, satisfied \"You're booked,\" and a crisp confirmation of day and time.",
+      "speak": "Thanks, Maya. <break time=\"150ms\"/> You're booked, Saturday at ten.",
+      "emotion": "enthusiastic"
+    },
+    {
+      "id": "ig2-06",
+      "voice": "ava",
+      "say": "Calendar booking comes with Pro.",
+      "direction": "Reel 2, narrator: plain, matter-of-fact, friendly. It is an honest fact and a reason to upgrade, not a legal disclaimer voice.",
+      "speak": "Calendar booking comes with Pro.",
+      "emotion": "calm"
+    },
+    {
+      "id": "ig2-07",
+      "voice": "ava",
+      "say": "Comment AGENT for the link.",
+      "direction": "Reel 2 CTA, narrator: confident, slightly lower and warm. No \"free\" in this reel's CTA (booking is a paid feature); the DM carries the trial.",
+      "speak": "Comment agent for the link.",
+      "emotion": "confident"
+    },
+    {
+      "id": "ig2-07-bio",
+      "voice": "ava",
+      "say": "The link's in our bio.",
+      "direction": "ALTERNATE for ig2-07 (DM automation not live): same read, same slot.",
+      "speak": "The link's in our bio.",
+      "emotion": "confident"
+    },
+    {
+      "id": "ig3-01",
+      "voice": "ava",
+      "say": "Twelve minutes on the colour. You can't touch the phone.",
+      "direction": "Reel 3 hook, narrator, over a running colour timer and a ringing phone across the room: calm, intimate, a stylist's inner voice. \"can't touch\" carries the tension, quietly.",
+      "speak": "Twelve minutes on the colour. <break time=\"200ms\"/> You can't touch the phone.",
+      "emotion": "calm"
+    },
+    {
+      "id": "ig3-02",
+      "voice": "ava",
+      "say": "Pick it up, the colour over-processes. Leave it, she books elsewhere.",
+      "direction": "Reel 3, narrator: the dilemma as two balanced halves. A small wry rise on \"over-processes\"; a beat; a soft drop on \"she books elsewhere.\"",
+      "speak": "Pick it up, the colour over-processes. <break time=\"250ms\"/> Leave it, she books elsewhere.",
+      "emotion": "content"
+    },
+    {
+      "id": "ig3-03",
+      "voice": "ava",
+      "say": "Thanks for calling. This is Ava, an AI assistant.",
+      "direction": "Reel 3, Ava ON THE CALL, the pickup: warm and bright, natural phone pace; the AI disclosure said plainly.",
+      "speak": "Thanks for calling. <break time=\"100ms\"/> This is Ava, an AI assistant.",
+      "emotion": "happy"
+    },
+    {
+      "id": "ig3-04",
+      "voice": "ava",
+      "say": "A walk-in trim? You can, Tuesday to Saturday.",
+      "direction": "Reel 3, Ava on the call, restating the (unheard) caller's question, then a bright yes and the days, crisp and friendly. The call ends right after this line.",
+      "speak": "A walk-in trim? <break time=\"200ms\"/> You can, Tuesday to Saturday.",
+      "emotion": "happy"
+    },
+    {
+      "id": "ig3-05",
+      "voice": "ava",
+      "say": "Timer's done. Caller's sorted. You never looked up.",
+      "direction": "Reel 3, narrator, on the payoff (timer at 00:00 as the call ends): content, three small beats, a smile on \"You never looked up.\"",
+      "speak": "Timer's done. <break time=\"150ms\"/> Caller's sorted. <break time=\"200ms\"/> You never looked up.",
+      "emotion": "content"
+    },
+    {
+      "id": "ig3-06",
+      "voice": "ava",
+      "say": "Try it free on your price list. Comment AGENT.",
+      "direction": "Reel 3 CTA, narrator: confident and specific (the knowledge base is on the free trial). \"AGENT\" as the plain word, a little stress.",
+      "speak": "Try it free on your price list. <break time=\"200ms\"/> Comment agent.",
+      "emotion": "confident"
+    },
+    {
+      "id": "ig3-06-bio",
+      "voice": "ava",
+      "say": "Try it free on your price list. Link in bio.",
+      "direction": "ALTERNATE for ig3-06 (DM automation not live): same read, same slot.",
+      "speak": "Try it free on your price list. <break time=\"200ms\"/> Link in bio.",
+      "emotion": "confident"
+    },
+    {
+      "id": "ig4-01",
+      "voice": "ava",
+      "say": "Can you trip up this AI receptionist?",
+      "direction": "Reel 4 hook, narrator, over a ring and a price list: a playful, direct challenge to the viewer, a real question with a lift at the end. Stress \"trip up\".",
+      "speak": "Can you trip up this AI receptionist?",
+      "emotion": "curious"
+    },
+    {
+      "id": "ig4-02",
+      "voice": "ava",
+      "say": "How much is an hour?",
+      "direction": "Reel 4, narrator QUOTING a caller's phrasing (shown under 'Asked as'): light, natural, everyday; a small smile. Not a character voice. Quick (≈ 1.2 s).",
+      "speak": "How much is an hour?",
+      "emotion": "curious"
+    },
+    {
+      "id": "ig4-03",
+      "voice": "ava",
+      "say": "What would a session set me back?",
+      "direction": "Reel 4, narrator quoting the second phrasing: casual, conversational, a touch more playful than the first. Quick (≈ 1.7 s).",
+      "speak": "What would a session set me back?",
+      "emotion": "happy"
+    },
+    {
+      "id": "ig4-04",
+      "voice": "ava",
+      "say": "Is the long massage pricey?",
+      "direction": "Reel 4, narrator quoting the third, hardest phrasing (shares no word with the price list): a little sly, light stress on \"pricey\". Quick (≈ 1.3 s).",
+      "speak": "Is the long massage pricey?",
+      "emotion": "curious"
+    },
+    {
+      "id": "ig4-05",
+      "voice": "ava",
+      "say": "An hour of sports massage is eighty-five dollars.",
+      "direction": "Reel 4, Ava ON THE CALL answering: bright, helpful, sure. \"eighty-five dollars\" clear (captions show $85). It is the sample studio's price, not ours.",
+      "speak": "An hour of sports massage is eighty-five dollars.",
+      "emotion": "happy"
+    },
+    {
+      "id": "ig4-06",
+      "voice": "ava",
+      "say": "Now: do you do home visits?",
+      "direction": "Reel 4, narrator: \"Now:\" as a small turn (the twist is coming), then the curveball quoted lightly, like the earlier phrasings. The bed hard-stops right after it.",
+      "speak": "Now. <break time=\"200ms\"/> Do you do home visits?",
+      "emotion": "curious"
+    },
+    {
+      "id": "ig4-07",
+      "voice": "ava",
+      "say": "I won't guess. The team will call you back.",
+      "direction": "Reel 4, Ava on the call, in near-silence after the stop-time: calm, kind, honest. This is the business owner's own fallback line, said word for word. No apology in the voice; a reassuring close on \"call you back.\"",
+      "speak": "I won't guess. <break time=\"200ms\"/> The team will call you back.",
+      "emotion": "sympathetic"
+    },
+    {
+      "id": "ig4-08",
+      "voice": "ava",
+      "say": "Where your documents stop, it says so.",
+      "direction": "Reel 4, narrator: clear and assured, the site's own heading. A gentle landing on \"says so\" as the bed returns.",
+      "speak": "Where your documents stop, it says so.",
+      "emotion": "confident"
+    },
+    {
+      "id": "ig4-09",
+      "voice": "ava",
+      "say": "Test it free. Comment AGENT, then try to trip it up.",
+      "direction": "Reel 4 CTA, narrator: confident, then playful on \"try to trip it up\" (it loops back to the hook). \"AGENT\" as the plain word.",
+      "speak": "Test it free. <break time=\"150ms\"/> Comment agent, then try to trip it up.",
+      "emotion": "confident"
+    },
+    {
+      "id": "ig4-09-bio",
+      "voice": "ava",
+      "say": "Test it free. Link in bio, then try to trip it up.",
+      "direction": "ALTERNATE for ig4-09 (DM automation not live): same read, same slot.",
+      "speak": "Test it free. <break time=\"150ms\"/> Link in bio, then try to trip it up.",
+      "emotion": "confident"
+    }
+  ],
+  "_notes": "The four Instagram reels (docs/ig/SCRIPT.md; ids by reel in POSTING order: ig1 'Not even ours', ig2 'Booked after hours', ig3 'Twelve minutes', ig4 'Can you trip it up?'). Same schema as voice-lines-kb.json: say = the canonical words the captions and src/ig/<reel>/timing.ts index (word k), written in SPOKEN form (numbers as words); the Captions fork's display map shows numerals over word spans (9:47 pm., 45 hours., 168., 123?, $85.); speak / parts = what Sonic performs (SSML breaks; 'agent' lowercase so the keyword AGENT is never spelled out); the generator aligns the real word timestamps back onto say. ONE role (ava = Tessa (Emotive), id and speed copied from film 2), pinned with the IG-prefixed env name CARTESIA_IG_AVA_VOICE so a film 1 / film 2 override cannot leak in. ONE COMBINED FILE, NOT SPLIT: the four IG film entries (scripts/ig/films.mjs) share this voiceLines file, src/ig/voice.generated.ts and public/ig/voice/, so generate with --film=ig1 (it covers every line) and a reel may place a line of another reel: ig1-07 'Neuro Tech Voice.' is the sign-off of ALL FOUR reels (one take, one sonic signature). The four *-bio lines are alternates for the CTA slot, generated now and swapped in (VOICES id change only) if the comment-to-DM automation is not live on posting day. 33 lines: 29 placed + 4 alternates. Budget 2.5-3.2 words/s at speed 1.05 (film 2's measured Tessa pace); timelines re-anchor to the measured takes on the 120 BPM grid. Option (client's call): to reuse film 2's delivered sign-off byte for byte instead of ig1-07, add {\"id\": \"kb2-brand\", \"borrow\": \"kb\"} and place kb2-brand in the four VOICES (needs the merged registry, PIPELINE.md §3)."
+}
