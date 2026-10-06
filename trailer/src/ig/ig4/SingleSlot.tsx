@@ -33,14 +33,16 @@ export const SLATE = { text: KB_INK.caller.paper.text, tag: KB_INK.caller.paper.
 const AVA_TEXT = '#140a24';
 const M = T.M;
 
-/** the four slot lines, their quotes (by first word index) and their exits */
-type SlotLine = { id: T.VoiceId; at: number; retext: Readonly<Record<number, string>>; rows?: readonly number[]; out: number; keys?: readonly CapKey[] };
+/** the four slot lines, their quotes (by first word index) and their exits; `stack`: a line of several screens set one
+ *  per row (each screen on its own word, the first holding until the line leaves — the curveball's "Now:" then its
+ *  question) */
+type SlotLine = { id: T.VoiceId; at: number; retext: Readonly<Record<number, string>>; rows?: readonly number[]; out: number; keys?: readonly CapKey[]; stack?: boolean };
 export const SLOT_LINES: readonly SlotLine[] = [
   { id: 'ig4-02', at: T.LINE.asked[0], retext: { 0: '“How', 4: 'hour?”' }, out: M.phrasingOut[0] },
   { id: 'ig4-03', at: T.LINE.asked[1], retext: { 0: '“What', 6: 'back?”' }, rows: [4], out: M.phrasingOut[1] },
   { id: 'ig4-04', at: T.LINE.asked[2], retext: { 0: '“Is', 4: 'pricey?”' }, rows: [4], out: M.phrasingOut[2] },
   // "Now:" is the narrator's own word (graphite); the question in the caller's slate
-  { id: 'ig4-06', at: T.LINE.curve, retext: { 1: '“Do', 5: 'visits?”' }, rows: [1], out: M.edgeOut, keys: [{ words: [0], ink: '#2b2a2e', from: 'set' }] },
+  { id: 'ig4-06', at: T.LINE.curve, retext: { 1: '“Do', 5: 'visits?”' }, rows: [1], out: M.edgeOut, keys: [{ words: [0], ink: '#2b2a2e', from: 'set' }], stack: true },
 ];
 /** where a slot line is set: inside the frame, left at its padding, centred on the frame's middle */
 export const slotPlace = (rows?: readonly number[]): CapPlace => ({
@@ -55,6 +57,13 @@ export const slotPlace = (rows?: readonly number[]): CapPlace => ({
   color: SLATE.text,
   rows,
 });
+
+/** a stacked line's place per screen: the whole line's rows (slotPlace(rows), centred in the frame), screen k on row k */
+function stackPlace(line: SlotLine): (k: number) => CapPlace {
+  const all = retextScreens(captionScreens(T, line.id, { at: line.at }), line.retext).flatMap((s) => s.tokens);
+  const lay = layoutScreen(all, slotPlace(line.rows));
+  return (k) => ({ ...slotPlace(), valign: 'top', y: lay.top + k * lay.rowH });
+}
 
 /** the laid-out tokens of a slot line (needs the faces) — for the hairlines' feet and the underline */
 export function slotLayout(line: SlotLine) {
@@ -82,9 +91,10 @@ const SLOT_OUT = M.edgeOut;
 const dimAt = (t: number) => 1 - 0.45 * tween(t, [M.fieldUp, M.fieldUp + 10], [0, 1], EASE.inOut);
 
 export const SlotFrame: React.FC<{ t: number }> = ({ t }) => {
-  if (t < M.slot - 0.5 || t > SLOT_OUT + 12) return null;
+  if (t < M.slot - 0.5 || t > SLOT_OUT + 6) return null;
   const draw = tween(t, [M.slot, M.slot + FRAME_DRAW], [0, 1], EASE.draw);
-  const q = tween(t, [SLOT_OUT, SLOT_OUT + 9], [0, 1], EASE.in3);
+  // the frame leaves WITH its question (one unit, over the caption's own exit): never an empty frame on the stage
+  const q = tween(t, [SLOT_OUT, SLOT_OUT + 5], [0, 1], EASE.inOut);
   const ink = frameInk(t);
   const fill = 0.42 * smooth(0.3, 1, draw) * (1 - q);
   const a = (0.62 + 0.25 * tween(t, [M.swap, M.swap + 6], [0, 1], EASE.inOut) * (1 - tween(t, [M.answerOut, M.answerOut + 6], [0, 1], EASE.inOut))) * (1 - q) * (t > M.fieldUp ? dimAt(t) : 1);
@@ -116,6 +126,8 @@ const BROWS: readonly Brow[] = [
   { at: M.swap + 1, who: 'ava', out: M.answerOut - 1 },
   { at: M.answerOut + 7, who: 'asked', out: SLOT_OUT },
 ];
+/** an eyebrow's exit (frames): the last one leaves with its frame and question as one unit */
+const browOut = (b: Brow) => (b.out === SLOT_OUT ? 4 : 6);
 const ASKED = 'Asked as';
 export const Eyebrow: React.FC<{ t: number }> = ({ t }) => {
   const glide = useGlide();
@@ -130,7 +142,7 @@ export const Eyebrow: React.FC<{ t: number }> = ({ t }) => {
       {BROWS.map((b, i) => {
         if (t < b.at - 1 || t > b.out + 9) return null;
         if (b.who === 'ava') return <TurnLabel key={i} t={t} who="ava" x={x} y={y} at={b.at} exitAt={b.out} size={size} />;
-        const r = reveal(t, b.at, { config: SPRING.caption, rise: 90, fade: 0.5, exit: { at: b.out, dur: 6 } });
+        const r = reveal(t, b.at, { config: SPRING.caption, rise: 90, fade: 0.5, exit: { at: b.out, dur: browOut(b) } });
         const dim = t > M.fieldUp ? dimAt(t) : 1;
         return (
           <React.Fragment key={i}>
@@ -158,7 +170,16 @@ export const Phrasings: React.FC<{ t: number }> = ({ t }) => {
         const dim = ln.id === 'ig4-06' && t > M.fieldUp ? dimAt(t) : 1;
         return (
           <div key={ln.id} style={{ position: 'absolute', inset: 0, opacity: dim < 0.999 ? dim : undefined }}>
-            <Captions T={T} id={ln.id} t={t} place={slotPlace(ln.rows)} retext={ln.retext} keys={ln.keys ?? []} timing={{ at: ln.at, exitAt: ln.out }} what="slot" />
+            <Captions
+              T={T}
+              id={ln.id}
+              t={t}
+              place={ln.stack ? stackPlace(ln) : slotPlace(ln.rows)}
+              retext={ln.retext}
+              keys={ln.keys ?? []}
+              timing={{ at: ln.at, exitAt: ln.out, exits: ln.stack ? { 0: ln.out } : undefined }}
+              what="slot"
+            />
           </div>
         );
       })}

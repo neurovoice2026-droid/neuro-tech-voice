@@ -8,14 +8,17 @@
  *   · THE RING is the time left on a 15-minute dial: at 12:00 it runs from 2:24 o'clock clockwise round to 12 o'clock
  *     (288°) and its free end retreats clockwise toward 12 o'clock as the time runs down. The gap past 12 o'clock is the
  *     OVER-TIME zone: a pale track that darkens to deep rose on "over-processes" (colour only, no move).
- *   · THE TIME is a pure mapping of the timeline (remainingAt): real seconds from frame 0 (12:00, 11:59 at f30 …), then
+ *   · THE TIME is a pure mapping of the timeline (remainingAt): real seconds from frame 0 (12:00 — already half a second
+ *     in, so 11:59 at f15, 11:58 at f45 …: it is visibly running inside the first second), then
  *     from the pickup a TIME-LAPSE eased out of real time, flying through the minutes, and settling so its last four
  *     seconds tick on the last four 16ths before the hang-up — 00:00 lands exactly on HANGUP.
  *   · A FIGURE THAT CHANGES ROLLS one cell DOWN (a countdown: the smaller figure drops in from above, the old one leaves
  *     through the cell's foot) — a crisp, quick roll (power3.out) as long as the time allows: in the time-lapse's
  *     fast middle the figures swap in place, one per render frame, never smeared.
+ *   · THE TIME-LAPSE is marked as one: from the pickup a small teal fast-forward mark (two chevrons, chrome size) sits
+ *     under the figures, pulsing on the ticks — the colour's twelve minutes pass quickly; the call does not last them.
  *   · THE PAYOFF: on the hang-up the ring CLOSES (a full teal ring drawing round from 12 o'clock), the figures lift and
- *     a teal check draws under them.
+ *     the fast-forward mark hands over to a teal check drawn under them.
  *
  * The card's pose (centre, scale, roll, shade, opacity) comes from the stage (Stage.tsx timerPose): one transform on
  * one small layer, so the type inside it glides at sub-pixel precision while it moves and is pixel-crisp at rest.
@@ -70,8 +73,8 @@ const M0 = -1 / T.FPS;
 const M1 = -1 / TM.tailStep;
 /** the seconds left on the timer at t (continuous, decreasing) */
 export function remainingAt(t: number): number {
-  if (t <= 0) return TM.start;
-  if (t <= A) return TM.start - t / T.FPS;
+  if (t <= -TM.phase) return TM.start;
+  if (t <= A) return TM.start - (t + TM.phase) / T.FPS;
   if (t >= TM.zeroAt) return 0;
   if (t >= B) return (TM.zeroAt - t) / TM.tailStep;
   const h = B - A;
@@ -86,7 +89,7 @@ export const shownAt = (t: number) => Math.max(0, Math.ceil(remainingAt(t) - 1e-
 export function frameOf(n: number): number {
   if (n >= TM.start) return 0;
   if (n <= 0) return TM.zeroAt;
-  if (n >= P0) return (TM.start - n) * T.FPS;
+  if (n >= P0) return (TM.start - n) * T.FPS - TM.phase;
   if (n <= P1) return TM.zeroAt - n * TM.tailStep;
   let lo = A;
   let hi = B;
@@ -141,7 +144,7 @@ export type TimerPose = {
   /** the card's centre on screen */
   cx: number;
   cy: number;
-  /** × the full size (the corner chip ≈ .31) */
+  /** × the full size (stepped aside ≈ .64) */
   s: number;
   /** roll (deg) — the tug */
   rot: number;
@@ -166,6 +169,9 @@ export type TimerLook = {
   time?: number;
   /** a lifted shadow (the tug, the spring back) 0..1 */
   air?: number;
+  /** 0..1 the fast-forward mark under the figures (the time-lapse), and its pulse 0..1 (on the ticks) */
+  ff?: number;
+  ffPulse?: number;
 };
 
 const FIG_INK = GRAPHITE.text;
@@ -260,6 +266,8 @@ export const TimerFace: React.FC<{ t: number; pose: TimerPose; look: TimerLook; 
           );
         })}
         <div style={{ ...figStyle, position: 'absolute', left: x0 + 2 * cw, top: top - 0.04 * F, width: colonW, textAlign: 'center' }}>:</div>
+        {/* the time-lapse's fast-forward mark under the figures (two chevrons, her teal) */}
+        {(look.ff ?? 0) > 0.002 ? <FastForward cx={D / 2} cy={D / 2 + FACE.check.y} a={(look.ff ?? 0) * (0.62 + 0.38 * (look.ffPulse ?? 0))} /> : null}
         {/* the check under the figures (the payoff) */}
         {look.checkAt !== undefined && t >= look.checkAt - 0.5 ? (
           <div style={{ position: 'absolute', left: D / 2 - FACE.check.size / 2, top: D / 2 + FACE.check.y - FACE.check.size / 2 }}>
@@ -275,6 +283,21 @@ export const TimerFace: React.FC<{ t: number; pose: TimerPose; look: TimerLook; 
         />
       ) : null}
     </>
+  );
+};
+
+/** the fast-forward mark: two rounded chevrons (≈ 44 × 26 px at full size), drawn, not set */
+const FastForward: React.FC<{ cx: number; cy: number; a: number }> = ({ cx, cy, a }) => {
+  const w = 22;
+  const h = 26;
+  const tri = (x0: number) => `M ${x0} ${-h / 2} L ${x0 + w} 0 L ${x0} ${h / 2} Z`;
+  return (
+    <svg width={2 * w + 8} height={h + 8} style={{ position: 'absolute', left: cx - w - 4, top: cy - h / 2 - 4, overflow: 'visible' }} aria-hidden>
+      <g transform={`translate(4 ${h / 2 + 4})`} fill={SUNDAY.orb[2]} stroke={SUNDAY.orb[2]} strokeWidth={3} strokeLinejoin="round" opacity={Math.min(1, a).toFixed(4)}>
+        <path d={tri(0)} />
+        <path d={tri(w)} />
+      </g>
+    </svg>
   );
 };
 

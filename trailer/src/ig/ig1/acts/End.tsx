@@ -6,8 +6,8 @@
  *           in the grid's corner (stage.ts P2)
  *   IMPACT  the week gone as the CTA leaves; her light thrown wide on the bar, opening into the card's luminous teal
  *           backlight (PEARL_LOOK); NEUROVOICE, the URL on "Neuro | Tech | Voice"
- *   SEAM    (the last 14 f) the week folds back into the desk line — its teal draining first, its rows converging on
- *           y 760 — she glides down onto the desk and closes into the phone's rose light, and frame 0's composition
+ *   SEAM    (the last 14 f) the card's light goes out, she glides down onto the desk and closes into the phone's rose
+ *           light (the week was put away on the bar, so nothing folds behind the re-forming headline), and frame 0's composition
  *           re-forms (Hook.tsx Ig1Frame0 at t − END: S1 rising back into place, the hairline drawing again from x 86),
  *           the ground crossing to frame 0's: the replay continues the picture
  */
@@ -29,6 +29,9 @@ import { Ig1Orb, Plane } from './Stage';
  * as film 2's card does on its night; and her light's burst on the bar wide enough to read on a light ground.
  */
 export const PEARL_LOOK = { stops: ['#f0fdff', '#5ccde1', '#97e0ed', '#d2f2f7'], core: 0.3, burst: 3.2 } as const;
+/** the light's last stretch (IgEnd lightTail, u 0 → 1 from the brand's exit to the last frame): on the pearl the fuller
+ *  light would otherwise still lie under frame 0's headline a few frames before the loop; it is out as S1 settles */
+const LIGHT_TAIL = (u: number) => Math.pow(Math.max(0, 1 - u), 1.5);
 /** the impact's flash on the ground (its mesh key): her teal pool thrown wide on the bar, settling into the card's light */
 const FLASH = { strength: 0.42, tau: 7, color: '#8fdfec', radius: 760 } as const;
 
@@ -61,21 +64,21 @@ export const Ig1End: React.FC = () => {
         );
       }}
       backdrop={(s) => {
-        // the week: stepped back and dimmed behind the CTA, gone as the CTA leaves (the card's light opens on a clear pearl,
-        // no ghost of the grid or its labels behind the name); back, faint, only to fold into the desk in the seam
+        // the week: stepped back (× .92) and dimmed behind the CTA, gone as the CTA leaves — the card's light opens on a
+        // clear pearl, no ghost of the grid or its labels behind the name; the seam re-forms frame 0 from her orb and the
+        // desk line alone (the week was put away on the bar)
         const dim = ctaDimAt(f) + (1 - CTA_DIM) * tween(f, [E.impact - 6, E.impact - 1], [0, 1], EASE.inOut);
-        const collapse = tween(f, [E.seam - 2, T.DURATION - 6], [0, 1], (u) => u);
+        if (dim >= 0.999) return null;
         const z = 1 - 0.08 * s.step;
-        // in the seam the week comes forward again to fold away (its light back as it collapses)
-        const seamUp = tween(f, [E.seam - 4, E.seam + 2], [0, 1], EASE.inOut);
         return (
-          <Plane t={f} z={mix(z, 1, seamUp)}>
-            <WeekGrid t={f} zoom={mix(z, 1, seamUp)} fx={{ dim: mix(dim, 0.8, seamUp), collapse, chromeA: 1 - ctaDimAt(f) / CTA_DIM }} />
+          <Plane t={f} z={z}>
+            <WeekGrid t={f} zoom={z} fx={{ dim, chromeA: 1 - ctaDimAt(f) / CTA_DIM }} />
           </Plane>
         );
       }}
       orb={() => <Ig1Orb t={f} seam={{ at: E.seam, dur: T.DURATION - 2 - E.seam, to: { x: DESK.x1, y: DESK.y }, dot: DESK.dot, t0: T.DURATION }} />}
       pearlLook={PEARL_LOOK}
+      lightTail={LIGHT_TAIL}
       seam={(th) => (
         <Plane t={th} z={1}>
           <Ig1Frame0 t={th} dot={false} />

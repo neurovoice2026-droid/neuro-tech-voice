@@ -122,9 +122,9 @@ export const M = {
   messages: word(L4, 'ig1-04', 3),
   puts: word(L4, 'ig1-04', 5),
   people: word(L4, 'ig1-04', 9),
-  /** b4 → b5: the records leave together (top first, a 32nd apart) once "…listed." has been said, so the stage is clear
-   *  before "Your receptionist" rises; the week comes back to full size under it */
-  recordsOut: word(L4, 'ig1-04', 11) + 10,
+  /** b4 → b5: the records leave together (top first, a 32nd apart) on "…listed.", gone before its caption leaves (one
+   *  moving text at a time) and the stage clear before "Your receptionist" rises; the week comes back to full size */
+  recordsOut: word(L4, 'ig1-04', 11) + 6,
   /** b5: the desk act opens; on "receptionist" the graphite block lifts; on "only" her orb rests */
   desk: L5 - (PLAN.lines['ig1-05'] - PLAN.acts.desk),
   receptionist: word(L5, 'ig1-05', 1),

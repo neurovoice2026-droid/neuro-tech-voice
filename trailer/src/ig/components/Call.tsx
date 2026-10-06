@@ -103,7 +103,9 @@ export const CallerMeter: React.FC<{
   gap?: number;
   color?: string;
   seed?: string;
-}> = ({ t, from, to, x, cy, bars = 5, barW = 8, maxH = 28, gap = 7, color = TURN_INK.caller.tag, seed = 'ig-caller' }) => {
+  /** optional: × the envelope (default 1), clamped to the bars' full height — a livelier read of the same line */
+  gain?: number;
+}> = ({ t, from, to, x, cy, bars = 5, barW = 8, maxH = 28, gap = 7, color = TURN_INK.caller.tag, seed = 'ig-caller', gain = 1 }) => {
   // the turn's gate: up over 3 f, down over 5 f
   const gate = tween(t, [from, from + 3], [0, 1], EASE.out3) * (1 - tween(t, [to - 2, to + 3], [0, 1], EASE.inOut));
   const W_ = bars * barW + (bars - 1) * gap;
@@ -114,7 +116,7 @@ export const CallerMeter: React.FC<{
         const phrase = 0.55 + 0.45 * noise2D(seed, i * 0.13, t * 0.045);
         const syl = 0.5 + 0.5 * noise2D(`${seed}-s`, i * 0.71, t * 0.21);
         const shape = 1 - 0.32 * Math.abs(i - (bars - 1) / 2) / ((bars - 1) / 2);
-        const e = Math.max(0, Math.min(1, phrase * (0.35 + 0.75 * syl))) * shape;
+        const e = Math.max(0, Math.min(1, gain * phrase * (0.35 + 0.75 * syl))) * shape;
         const h = Math.max(barW, barW + (maxH - barW) * e * gate);
         const op = 0.45 + 0.55 * gate;
         return <rect key={i} x={i * (barW + gap)} y={(maxH - h) / 2} width={barW} height={h} rx={barW / 2} fill={color} opacity={op.toFixed(4)} />;
@@ -182,8 +184,9 @@ export const ToolRow: React.FC<{
 export type Turn =
   /** her line (absolute start = its VOICES entry unless `at` is given); keys: glints on words (e.g. "an AI assistant");
    *  breaks (optional): word indices of `say` that start a new line (the phrase's own breaks, instead of a greedy wrap —
-   *  a line that would still overflow the box wraps as before) */
-  | { who: 'ava'; id: string; at?: number; keys?: readonly CapKey[]; breaks?: readonly number[] }
+   *  a line that would still overflow the box wraps as before); nudge (optional): frames added to a word's onset (by its
+   *  index in `say`) where the aligner's stamp is off the take's energy (two words sharing one stamp) */
+  | { who: 'ava'; id: string; at?: number; keys?: readonly CapKey[]; breaks?: readonly number[]; nudge?: Readonly<Record<number, number>> }
   /** a caller's turn: the meter, no words */
   | { who: 'caller'; from: number; to: number };
 
@@ -200,6 +203,8 @@ export type TranscriptSpec = {
   /** px between a tag and its words; between rows */
   tagGap?: number;
   rowGap?: number;
+  /** optional: the caller's level meter (CallerMeter's bars / barW / maxH / gap / gain; default its own 5 × 8 × 28 px) */
+  meter?: { bars?: number; barW?: number; maxH?: number; gap?: number; gain?: number };
 };
 
 type Row = {
@@ -235,10 +240,11 @@ export function transcriptRows(T: ReelTimeline, turns: readonly Turn[], s: Trans
       const toks: { text: string; first: number; last: number; onset: number }[] = [];
       for (let i = 0; i < raw.length; i++) {
         const d = T.DISPLAY.find((m) => m.id === turn.id && m.from === i);
+        const onsetOf = (k: number) => at + T.vWord(turn.id, k) + (turn.nudge?.[k] ?? 0);
         if (d) {
-          toks.push({ text: d.text, first: i, last: d.to, onset: at + T.vWord(turn.id, i) });
+          toks.push({ text: d.text, first: i, last: d.to, onset: onsetOf(i) });
           i = d.to;
-        } else toks.push({ text: raw[i], first: i, last: i, onset: at + T.vWord(turn.id, i) });
+        } else toks.push({ text: raw[i], first: i, last: i, onset: onsetOf(i) });
       }
       let x = 0;
       let line = 0;
@@ -342,11 +348,12 @@ export const LiveTranscript: React.FC<{
               );
             });
           } else {
-            bodyW = 5 * 8 + 4 * 7;
+            const mt = spec.meter ?? {};
+            bodyW = (mt.bars ?? 5) * (mt.barW ?? 8) + ((mt.bars ?? 5) - 1) * (mt.gap ?? 7);
             const fade = exitAt !== undefined ? 1 - tween(t, [exitAt, exitAt + 5], [0, 1], EASE.in3) : 1;
             body = (
               <div style={{ position: 'absolute', left: 0, top: 0, opacity: fade }}>
-                <CallerMeter t={t} from={turn.from} to={turn.to} x={2} cy={lab * 1.2 + tagGap + lh / 2} />
+                <CallerMeter t={t} from={turn.from} to={turn.to} x={2} cy={lab * 1.2 + tagGap + lh / 2} bars={mt.bars} barW={mt.barW} maxH={mt.maxH} gap={mt.gap} gain={mt.gain} />
               </div>
             );
           }

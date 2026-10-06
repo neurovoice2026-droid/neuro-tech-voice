@@ -46,10 +46,10 @@ export const PLAN = {
   end: 720,
 } as const;
 /**
- * THE GREETING waits a 16th-and-a-half after the click (13 f, the plan's 6 + 7): the timer card shrinks to its corner
- * chip over the 14 f after the pickup, so the call strip's first row rises into a clear frame (one moving text at a
- * time). The 7 frames come out of the caller's turn (21 f) and the 16th the answer was rounding up to: the hang-up and
- * everything after it stay where the plan's re-anchoring put them.
+ * THE GREETING waits a 16th-and-a-half after the click (13 f, the plan's 6 + 7): the click, her orb's birth out of the
+ * phone's light and the dilemma's captions leaving get the frame to themselves before her first row rises (one moving
+ * text at a time). The 7 frames come out of the caller's turn (21 f) and the 16th the answer was rounding up to: the
+ * hang-up and everything after it stay where the plan's re-anchoring put them.
  */
 const GREET = 13;
 
@@ -74,16 +74,20 @@ const CALLER_FROM = place(PLAN.caller[0], end(A3, 'ig3-03'), 4);
 /** the caller's turn [from, to): the meter row */
 export const CALLERS = [[CALLER_FROM, CALLER_FROM + PLAN.caller[1]] as const] as const;
 const A4 = place(PLAN.lines['ig3-04'], CALLERS[0][1], 0);
-/** THE HANG-UP: the corner chip reads 00:00, the tick stops dead — the beat after her answer (+ 4 f) */
+/** THE HANG-UP: the timer (stepped aside) reads 00:00, the tick stops dead — the beat after her answer (+ 4 f) */
 export const HANGUP = Math.max(PLAN.hangup, upBeat(end(A4, 'ig3-04') + 4));
 const L5 = place(PLAN.lines['ig3-05'], HANGUP, PLAN.lines['ig3-05'] - PLAN.hangup);
 const CTA = place(PLAN.lines['ig3-06'], end(L5, 'ig3-05'));
 export const IMPACT = Math.max(PLAN.impact, upBar(end(CTA, 'ig3-06') + BEAT));
 export const END = IMPACT + IMPACT_BEFORE_END;
 export const BRAND_AT = IMPACT + IMPACT_GAP;
+/** the timer is already half a second into its 12:00 at frame 0, so its first figure rolls on beat 2 (f15) and on every
+ *  second after it: the countdown is visibly running from the first second (the ticks land on beats 2 and 4, answering
+ *  the bed's dyads on 1 and 3) */
+const PHASE = BEAT;
 /** the timer: 12:00 at frame 0, real seconds until the pickup, then a time-lapse from 11:52 that ends on HANGUP; its
  *  last four seconds land on the last four 16ths before the hang-up (one second per 16th: TimerCard.tsx remainingAt) */
-export const TIMER = { start: 12 * 60, lapseFrom: PICKUP, lapseStart: 12 * 60 - PICKUP / FPS, zeroAt: HANGUP, tail: 4, tailStep: BEAT / 4 } as const;
+export const TIMER = { start: 12 * 60, phase: PHASE, lapseFrom: PICKUP, lapseStart: 12 * 60 - (PICKUP + PHASE) / FPS, zeroAt: HANGUP, tail: 4, tailStep: BEAT / 4 } as const;
 
 export const VOICES: Voiced<VoiceId>[] = (
   [
@@ -134,8 +138,8 @@ const grid = (from: number, to: number, step: number) => {
   return out;
 };
 export const M = {
-  /* b1–b2 the hook: the real seconds tick (the digits roll on each), the phone rings across the room */
-  seconds: Array.from({ length: Math.floor((PICKUP - 1) / FPS) + 1 }, (_, k) => k * FPS),
+  /* b1–b2 the hook: the real seconds tick (the digits roll on each, from f15), the phone rings across the room */
+  seconds: Array.from({ length: Math.floor((PICKUP - 1 - PHASE) / FPS) + 1 }, (_, k) => PHASE + k * FPS),
   /** "Pick it up,": the card TUGS toward the phone (one move, on "up") */
   tug: on(L2, 'ig3-02', 2),
   /** "over-processes.": the arc's segment past 12 o'clock darkens to deep rose (colour only) */
@@ -147,8 +151,9 @@ export const M = {
   /* b3 the pickup */
   /** the dimmed dot springs open into her orb (2 f after the click) */
   birth: PICKUP + 2,
-  /** the timer card shrinks and glides to its corner chip (EASE.inOut), clear before her first word rises */
-  chip: [PICKUP, PICKUP + GREET + 1] as const,
+  /** the timer STAYS the hero through the greeting (centred, full size, time-lapsing over her rows), and steps up and
+   *  aside to the top right in the caller's turn (no words move then: only the meter), clearing the stage for the page */
+  aside: [CALLERS[0][0] + 2, CALLERS[0][0] + 18] as const,
   /** "an AI assistant." */
   ai: on(A3, 'ig3-03', 6),
   /* b5 the answer */
@@ -157,8 +162,9 @@ export const M = {
   trim: on(A4, 'ig3-04', 2),
   /** the service list slides up under the call strip, once "trim?" has risen (one moving text at a time) */
   page: on(A4, 'ig3-04', 2) + 5,
-  /** the dashboard's "Looked it up in your documents" rises beside the heading (spinner → check before "You can,") */
-  tool: on(A4, 'ig3-04', 2) + 11,
+  /** the dashboard's "Looked it up in your documents" beside the heading: it rides IN WITH the page (set before the page
+   *  shows, so one block moves), its spinner turning until the check, before "You can," */
+  tool: on(A4, 'ig3-04', 2) - 8,
   toolDone: on(A4, 'ig3-04', 3) - 6,
   /** "You can," */
   youCan: on(A4, 'ig3-04', 3),
@@ -167,10 +173,13 @@ export const M = {
   /** the call's content leaves (up through its masks; the page sinks back) as her answer ends */
   callOut: A4 + speechEnd('ig3-04') - 2,
   /* b6 the payoff */
-  /** the Answered record lands under the timer (a 16th and a half after the hang-up) */
-  record: HANGUP + 6,
-  /** the check draws in the disc as it lands */
-  check: HANGUP + 5,
+  /** 00:00 lands in the timer where it stands (the hit); it springs back to centre once the call has left (one moving
+   *  text at a time: the rows and the page are gone a frame before it) */
+  back: HANGUP + 3,
+  /** the Answered record lands under the timer */
+  record: HANGUP + 8,
+  /** the check draws in the disc as it arrives */
+  check: HANGUP + 9,
   /** "Timer's done." / "You never looked up.": she rests */
   done: on(L5, 'ig3-05', 1),
   looked: on(L5, 'ig3-05', 6),
@@ -179,8 +188,8 @@ export const M = {
   sixteenths: grid(on(A4, 'ig3-04', 1), HANGUP, SIXTEENTH),
 } as const;
 
-/** extra zone stills (scripts/ig/check-zones.mjs): the chip, the page and its tool row, the sweep, the record (+ 8 f) */
-export const ZONE_FRAMES: readonly number[] = [M.chip[1], M.page, M.tool, M.tuesday, M.record, M.looked].map((f) => Math.round(f + 8));
+/** extra zone stills (scripts/ig/check-zones.mjs): the timer aside, the page, its tool row's check, the sweep, the record (+ 8 f) */
+export const ZONE_FRAMES: readonly number[] = [M.aside[1], M.page, M.toolDone, M.tuesday, M.record, M.looked].map((f) => Math.round(f + 8));
 
 export const END_CARD = {
   cta: CTA,
@@ -198,13 +207,18 @@ export const END_CARD = {
 export const roomAt = (_f: number): Room => 'white';
 /** screen x of the phone across the room (the rings and the pickup pan there) */
 const PHONE_X = 150 / 1080;
-/** the timer's ticks: a run of dry ticks (film 2's fx-tick) at its own pan, never fading down the run (xs given) */
-const tickRun = (frames: readonly number[], x: number, db: number, label: string) =>
-  frames.length ? [H(frames[0], 'fx-tick', 'none', x, 3, label, { db, layer: true, run: { n: frames.length, offs: frames.map((f) => f - frames[0]), xs: frames.map(() => x) } })] : [];
+/** the timer's ticks: runs of dry ticks (film 2's fx-tick) at its own pan, never fading down the run (xs given) — the
+ *  ticks in her pauses at `gap` dB (the clock you hear between her words), the ones under her words at `talk` dB (the
+ *  cue sheet takes them a further 5 dB under her) */
+const tickRun = (frames: readonly number[], x: number, gap: number, talk: number, label: string): Hit<Snd>[] =>
+  ([[false, gap], [true, talk]] as const).flatMap(([under, db]) => {
+    const fs = frames.filter((f) => speaking(f) === under);
+    return fs.length ? [H(fs[0], 'fx-tick', 'none', x, 3, `${label}${under ? ' (under her words)' : ''}`, { db, layer: true, run: { n: fs.length, offs: fs.map((f) => f - fs[0]), xs: fs.map(() => x) } })] : [];
+  });
 export const HITS: Hit<Snd>[] = [
   // b1 — the phone across the room, and the colour timer's real seconds (the rhythm)
   ...RINGS.map((f, k) => H(f, 'fx-trill', 'rush', PHONE_X, 1, `b1 the phone across the room rings (${k + 1}/4)${k ? ' — in her pause' : ': the frame-0 attack'}; a RingPulse leaves it`, { db: -3 })),
-  ...tickRun(M.seconds, 0.5, -1, 'b1 the colour timer: a dry tick on every real second (the digits roll on it)'),
+  ...tickRun(M.seconds, 0.5, 1, 1, 'b1 the colour timer: a dry tick on every real second (the digits roll on it)'),
   // b2 — the pull
   H(M.tug, 'whoosh-soft', 'none', [0.5, 0.36], 3, 'b2 “Pick it up,”: the card tugs toward the phone (one move)', { db: -6 }),
   H(M.tug, 'thump', 'none', 0.45, 3, 'b2 … a sub thump under the tug', { db: -6, layer: true }),
@@ -212,22 +226,23 @@ export const HITS: Hit<Snd>[] = [
   H(PICKUP, 'fx-pickup', 'none', PHONE_X, 1, 'b3 PICKUP (bar 5): the click — the ring is answered', { db: -2 }),
   H(M.birth, 'fx-seed', 'sunday', 0.2, 2, 'b3 the dot springs open into her orb (the seed)'),
   H(M.birth + 2, 'fx-ting', 'sunday', 0.2, 2, 'b3 … her teal: the birth’s ting', { layer: true, db: -2 }),
-  H(M.chip[0] + 2, 'swish', 'none', [0.5, 0.75], 3, 'b3 the timer card shrinks to its corner chip and starts the time-lapse', { db: -8 }),
+  H(M.aside[0], 'swish', 'none', [0.5, 0.72], 3, 'b4 the timer steps up and aside to the top right (the caller’s turn)', { db: -8 }),
   H(PICKUP + 4, 'fx-linehold', 'none', 0.5, 3, 'b3 the open line under the call (very low)', { db: -16, layer: true }),
-  ...tickRun(M.eighths, 0.75, -6, 'b3–b4 the time-lapse: the ticks double to 8ths (the corner chip)'),
+  ...tickRun(M.eighths, 0.5, -2, -3, 'b3–b4 the time-lapse: the ticks double to 8ths'),
   // b4 — the caller's turn: the line lifts under the level meter (no words, no voice)
   H(CALLERS[0][0] + 1, 'fx-linehiss', 'none', 0.5, 3, 'b4 the caller’s turn: the line lifts (+3 dB) under the level meter', { db: -6, run: { n: 3, step: 7 } }),
   // b5 — the answer from the salon's own list
   H(M.page, 'fx-paper-lift', 'none', 0.5, 3, 'b5 “trim?”: the service list slides up', { db: -4 }),
   H(M.toolDone, 'fx-tag', 'sunday', 0.62, 3, 'b5 “Looked it up in your documents”: the check draws', { db: -2 }),
   H(M.tuesday, 'fx-felttip', 'none', 0.45, 3, 'b5 “Tuesday to Saturday.”: the teal sweep runs under the Trim line', { db: -2 }),
-  ...tickRun(M.sixteenths, 0.75, -7, 'b5 the ticks go to 16ths into the hang-up (the last four are the timer’s last four seconds)'),
+  ...tickRun(M.sixteenths, 0.7, -2, -4, 'b5 the ticks go to 16ths into the hang-up (the last four are the timer’s last four seconds)'),
   H(HANGUP, 'riser-short', 'none', 0.5, 3, 'b5 … a very low riser-short into the hang-up', { db: -8 }),
   // b6 — THE HANG-UP: the click, the timer at 00:00 springs back to centre, its ring closes, the check; the tick stops dead
   H(HANGUP, 'fx-click-down', 'none', 0.62, 2, 'b6 HANG-UP (beat 2 of bar 9): the click — down', { db: -4 }),
   H(HANGUP + 2, 'fx-click-up', 'none', 0.62, 3, 'b6 … up', { layer: true, db: -6 }),
-  H(HANGUP, 'fx-mallet-e5', 'sunday', 0.5, 1, 'b6 00:00: the mallet (true / done) — the strongest hit before the impact', { db: -2 }),
-  H(M.check, 'fx-glass-e6', 'sunday', 0.5, 2, 'b6 … the glass ting as the ring closes and the check draws', { layer: true, db: -4 }),
+  H(HANGUP, 'fx-mallet-e5', 'sunday', 0.62, 1, 'b6 00:00: the mallet (true / done) — the strongest hit before the impact', { db: 3 }),
+  H(HANGUP, 'fx-mallet-b4', 'sunday', 0.62, 1, 'b6 … a fourth under it (the done chord’s body)', { layer: true, db: -4 }),
+  H(M.check, 'fx-glass-e6', 'sunday', 0.5, 2, 'b6 … the glass ting as the ring closes and the check draws', { layer: true, db: -1 }),
   H(M.record, 'fx-tock', 'none', 0.5, 2, 'b6 the Answered record lands under the timer'),
   // b7–b9 — the shared end card
   ...endHits(END_CARD),
@@ -248,19 +263,29 @@ export const MUSIC = {
    *  hang-up (E: the bed opens, a high piano line), the CTA */
   ig3: { pickup: PICKUP, walkIn: M.walkIn, hangup: HANGUP, cta: CTA },
   /** the shared build, louder: the converge into the logo must top the payoff's second (check-mix arc) */
-  build: { kick: 1.4, snare: 1.5 },
+  build: { kick: 1.4, snare: 1.5, inhaleDb: -12 },
 } as const;
 /** the bed's fader: the series' shape round the hit (common/series.ts bedRide), with ig3's BUILD — her CTA ends 22 f
  *  before the bar, so the roll is ridden up as her last word lands and kept up until the inhale draws it in */
 const CTA_END = CTA + speechEnd('ig3-06');
+/** the bed's level under her (dB on the fader): the timer's hook and the call sit RIDE.under over the bed as composed (its
+ *  peak is the logo's E, so the quiet parts were 17 dB under her voice — film 2 sits at 9), the payoff's opened line
+ *  RIDE.payoff, the build RIDE.build */
+const RIDE = { under: 6, payoff: 7, build: 13 } as const;
 export const BED = {
   file: `ig/sfx/${REEL}/bed.wav`,
   vol: 2,
   ride: [
-    [0, 0],
-    [CTA_END - 12, 0],
-    [CTA_END, 11],
-    [IMPACT - 10, 11],
+    [0, RIDE.under],
+    [HANGUP - 3, RIDE.under],
+    // the hang-up's hit sits clear of the bed for a beat, then the payoff's opened line blooms in under her
+    [HANGUP, RIDE.under - 1.5],
+    [HANGUP + 24, RIDE.payoff],
+    [CTA - 8, RIDE.payoff],
+    [CTA, RIDE.under],
+    [CTA_END - 12, RIDE.under],
+    [CTA_END, RIDE.build],
+    [IMPACT - 12, RIDE.build],
     // the series' shape round the hit, the chord held 2.5 dB higher into the seam (it still rings 10–5 f from the end)
     ...bedRide(IMPACT, BRAND_AT, vFrames(BRAND), END)
       .filter(([f]) => f >= IMPACT - 1)

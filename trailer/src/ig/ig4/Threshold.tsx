@@ -27,23 +27,28 @@ const M = T.M;
 const LABEL = 'Close enough to answer';
 const DRAW = 14;
 const RISE = 9;
+const EXIT = 5;
+/** the rule's dots: 3.4 px at an 8 px pitch, near full slate — it must read as a LINE at phone size (the reason the
+ *  hairlines stop short), not as a faint texture on the mesh */
+const DOT = { w: 3.4, pitch: 8, alpha: 0.92 } as const;
 
 export const Threshold: React.FC<{ t: number; dim?: number; exitAt: number }> = ({ t, dim = 1, exitAt }) => {
   const ready = useKitFaces();
-  if (!ready || t < M.threshold - 0.5 || t > exitAt + 10) return null;
+  if (!ready || t < M.threshold - 0.5 || t > exitAt + EXIT + 1) return null;
   const draw = tween(t, [M.threshold, M.threshold + DRAW], [0, 1], EASE.draw);
-  const q = tween(t, [exitAt, exitAt + 8], [0, 1], EASE.in3);
+  // it leaves with the question (the slot's own exit length): one unit
+  const q = tween(t, [exitAt, exitAt + EXIT], [0, 1], EASE.inOut);
   const a = (1 - smooth(0.2, 1, q)) * dim;
   const size = 28;
   const lw = labelWidth(LABEL, size);
   const lx = THRESH.x1 - lw;
   const ly = THRESH.y - size * 1.2 - 12;
-  const r = reveal(t, M.threshold + DRAW * 0.6, { config: SPRING.caption, rise: 90, fade: 0.5, exit: { at: exitAt, dur: 6 } });
+  const r = reveal(t, M.threshold + DRAW * 0.6, { config: SPRING.caption, rise: 90, fade: 0.5, exit: { at: exitAt, dur: EXIT } });
   return (
     <>
       <svg width={1080} height={1920} style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', pointerEvents: 'none', opacity: a < 0.999 ? a : undefined }} aria-hidden>
         {/* the rule: a dotted hairline (the site's dotted "close enough" line), drawn left to right */}
-        <line x1={THRESH.x0} y1={THRESH.y} x2={THRESH.x0 + (THRESH.x1 - THRESH.x0) * draw} y2={THRESH.y} stroke={SLATE.tag} strokeOpacity={0.7} strokeWidth={2} strokeLinecap="round" strokeDasharray="0.01 9" />
+        <line x1={THRESH.x0} y1={THRESH.y} x2={THRESH.x0 + (THRESH.x1 - THRESH.x0) * draw} y2={THRESH.y} stroke={SLATE.tag} strokeOpacity={DOT.alpha} strokeWidth={DOT.w} strokeLinecap="round" strokeDasharray={`0.01 ${DOT.pitch}`} />
         {/* the five hairlines */}
         {M.stubs.map((at, k) => {
           if (t < at - 0.5) return null;

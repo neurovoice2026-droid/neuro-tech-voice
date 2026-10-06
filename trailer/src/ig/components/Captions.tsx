@@ -133,6 +133,9 @@ export type CapTiming = {
   exits?: Readonly<Record<number, number>>;
   /** how many leading screens are set at frame 0 (default 1 for a `set0` line, else 0) */
   setScreens?: number;
+  /** optional: frames added to a word's onset (by its index in `say`) where the aligner's stamp is off the take's own
+   *  energy (two words sharing one stamp, a late first word) — its screen rises, its glint and its lift follow it */
+  nudge?: Readonly<Record<number, number>>;
 };
 
 type Line = { say: string; frames: number; phrases: readonly { end: number }[] };
@@ -152,7 +155,7 @@ export function captionScreens(T: ReelTimeline, id: string, o: CapTiming = {}): 
   const at = o.at ?? v?.at;
   if (at === undefined) throw new Error(`[ig captions] ${id} is not on ${T.REEL}'s timeline`);
   const words = typo(SAY(id)).split(' ').filter(Boolean);
-  const onset = (k: number) => at + T.vWord(id, k);
+  const onset = (k: number) => at + T.vWord(id, k) + (o.nudge?.[k] ?? 0);
   const nSet = o.setScreens ?? (sc.set0 ? 1 : 0);
   const screens: CapScreen[] = sc.spans.map(([a, e], k) => {
     const tokens: CapToken[] = [];

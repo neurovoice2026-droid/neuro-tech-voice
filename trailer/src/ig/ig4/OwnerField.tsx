@@ -32,19 +32,22 @@ const ROW_BREAK = 3;
 const UP = { stiffness: 820, damping: 2 * Math.sqrt(820), mass: 1 };
 const RISE_FROM = 1500;
 const LIT0 = 0.4;
+/** the step back's length (frames): it holds a beat after "back." (timing.ts FIELD_OUT), then hands over to the thesis */
+const OUT = 3;
 
 export const OwnerField: React.FC<{ t: number }> = ({ t }) => {
   const ready = useKitFaces();
   const s = ready ? captionScreens(T, 'ig4-07')[0] : null;
   const text = s ? s.tokens.map((x) => x.text).join(' ') : '';
   const g = useFieldCard({ x: FIELD.x, y: FIELD.y, w: FIELD.w, label: FIELD_LABEL, placeholder: '', text, size: FIELD.size, labelSize: FIELD.labelSize, save: false, rows: 2 });
-  if (!ready || !s || t < M.fieldUp - 1 || t > M.fieldOut + 9) return null;
+  if (!ready || !s || t < M.fieldUp - 1 || t > M.fieldOut + OUT + 1) return null;
   const { card, field } = g;
   const r = g.spec.labelSize / 14;
   // the rise (the site's spring from 120 px below) and the step back
   const e = springUnit(t - M.fieldUp, UP);
-  // the step back: down a little, × .96, gone in 8 f (EASE.in3) — before the documents come forward
-  const out = tween(t, [M.fieldOut, M.fieldOut + 8], [0, 1], EASE.in3);
+  // the step back: down a little, × .96, gone in 3 f (fast out: the card has nearly gone before the documents come
+  // forward in its place — Stage.tsx FWD — so the two never double-expose)
+  const out = tween(t, [M.fieldOut, M.fieldOut + OUT], [0, 1], EASE.out3);
   const dy = (1 - e) * RISE_FROM + out * 30;
   const sc = 1 - 0.04 * out;
   const o = 1 - smooth(0, 0.85, out);
@@ -73,7 +76,8 @@ export const OwnerField: React.FC<{ t: number }> = ({ t }) => {
   const textW = Math.max(...pos.map((p) => p.x + p.w));
   return (
     <>
-      <TurnLabel t={t} who="ava" x={FIELD.x + 6} y={FIELD.tagY} at={M.avaTag} exitAt={M.fieldOut} size={28} />
+      {/* (her tag leaves just ahead of the card — its 6 f exit is over before the documents reach its place) */}
+      <TurnLabel t={t} who="ava" x={FIELD.x + 6} y={FIELD.tagY} at={M.avaTag} exitAt={M.fieldOut - 3} size={28} />
       <div
         style={{
           position: 'absolute',

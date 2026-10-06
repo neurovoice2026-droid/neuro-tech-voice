@@ -1,8 +1,9 @@
 /**
  * REEL 1 · b4 "It answers, takes messages, and puts calls through to people you listed." (docs/ig/SCRIPT.md ig1 b4):
  * three white call records land on their verbs over the receding week — each the dashboard's own row at trailer scale
- * (components/calls CallsTable: the caller cell, the OutcomeChip): a phone disc, two ink bars where the caller's number
- * and intent would be (no unspoken words), and the outcome pill in the app's colours —
+ * (components/calls CallsTable: the caller cell, the OutcomeChip): a phone disc in the outcome's tint, an ink bar where the
+ * caller would be and the call's recording as a small waveform (no unspoken words), and the outcome pill in the app's
+ * colours —
  *
  *   "answers"              Answered (blue)
  *   "messages"             Message taken (indigo)
@@ -22,7 +23,7 @@ import { APP, measureText, meshElevation, meshShadowInk, W } from '../../kb/kit'
 import { MUTED_MESH } from '../../kb/palettes';
 import { GRAPHITE } from '../../kb/theme';
 import { IgIcon } from '../components/icons';
-import { OutcomePill, outcomePillSize, type OutcomeKind } from '../components/OutcomePill';
+import { OUTCOME, OutcomePill, outcomePillSize, type OutcomeKind } from '../components/OutcomePill';
 import { ZoneRect } from '../components/ZoneGuard';
 import * as T from './timing';
 
@@ -71,6 +72,22 @@ function leaving(t: number, at: number) {
 const InkBar: React.FC<{ x: number; y: number; w: number; h: number; a: number }> = ({ x, y, w, h, a }) => (
   <div style={{ position: 'absolute', left: x, top: y, width: w, height: h, borderRadius: h / 2, background: GRAPHITE.text, opacity: a }} />
 );
+/** the call's recording, as the dashboard row's waveform reads at a glance (no words): rounded bars in the outcome's
+ *  colour, a fixed seeded profile per record */
+const Waveform: React.FC<{ x: number; y: number; h: number; seed: number; color: string }> = ({ x, y, h, seed, color }) => {
+  const bars = Array.from({ length: 22 }, (_, i) => {
+    const v = 0.5 + 0.5 * Math.sin(i * 1.7 + seed * 2.3) * Math.cos(i * 0.61 + seed);
+    const env = Math.sin(((i + 0.5) / 22) * Math.PI) ** 0.6;
+    return Math.max(0.18, Math.min(1, 0.22 + 0.85 * v * env));
+  });
+  return (
+    <svg width={22 * 7} height={h} style={{ position: 'absolute', left: x, top: y, overflow: 'visible' }} aria-hidden>
+      {bars.map((b, i) => (
+        <rect key={i} x={i * 7} y={(h * (1 - b)) / 2} width={3.5} height={h * b} rx={1.75} fill={color} fillOpacity={0.55} />
+      ))}
+    </svg>
+  );
+};
 
 export const OutcomeCards: React.FC<{ t: number }> = ({ t }) => {
   if (t < RECORDS[0].at - 1 || t > leaveAt(3) + 7) return null;
@@ -106,12 +123,12 @@ export const OutcomeCards: React.FC<{ t: number }> = ({ t }) => {
                 ...subpixel(tf, moving),
               }}
             >
-              {/* the caller cell: a phone disc, the number's and the intent's ink bars */}
-              <div style={{ position: 'absolute', left: 32, top: (C.h - 64) / 2, width: 64, height: 64, borderRadius: 32, background: APP.muted, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <PhoneIncoming size={28} color={GRAPHITE.tag} />
+              {/* the caller cell: a phone disc in the outcome's tint, the caller's ink bar, the call's recording */}
+              <div style={{ position: 'absolute', left: 32, top: (C.h - 64) / 2, width: 64, height: 64, borderRadius: 32, background: OUTCOME[rec.kind].bg, boxShadow: `inset 0 0 0 1.5px ${OUTCOME[rec.kind].border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <PhoneIncoming size={28} color={OUTCOME[rec.kind].ink} />
               </div>
-              <InkBar x={122} y={42} w={rec.bars[0]} h={17} a={0.24} />
-              <InkBar x={122} y={72} w={rec.bars[1]} h={13} a={0.12} />
+              <InkBar x={122} y={38} w={rec.bars[0]} h={17} a={0.3} />
+              <Waveform x={122} y={66} h={26} seed={i + 1} color={OUTCOME[rec.kind].dot} />
               {/* the outcome, the dashboard's chip */}
               <div style={{ position: 'absolute', right: 32, top: (C.h - pill.h) / 2 }}>
                 <OutcomePill kind={rec.kind} size={C.pill} />

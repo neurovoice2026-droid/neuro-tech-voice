@@ -121,7 +121,8 @@ export const SCREENS: Record<string, LineScreens> = {
   'ig4-03': { kind: 'slot', spans: [[0, 6]] },
   'ig4-04': { kind: 'slot', spans: [[0, 4]] },
   'ig4-05': { kind: 'row', spans: [[0, 7]] },
-  'ig4-06': { kind: 'slot', spans: [[0, 5]] },
+  // "Now:" first; the quoted question rises on "do" (the take breathes 0.9 s after "Now:") — "Now:" holds over it
+  'ig4-06': { kind: 'slot', spans: [[0, 0], [1, 5]] },
   'ig4-07': { kind: 'field', spans: [[0, 8]] },
   'ig4-08': { kind: 'caption', spans: [[0, 6]] },
   'ig4-09': { kind: 'caption', spans: [[0, 2], [3, 4], [5, 10]] },
@@ -143,8 +144,9 @@ const LINKS = [linkStart(L2, 'ig4-02'), linkStart(L3, 'ig4-03'), linkStart(L4, '
 /** the answer: the slot swaps to ● AVA 3 f before her first word; the three hairlines contract into the line as she starts */
 const SWAP = on(L5, 'ig4-05', 0) - 3;
 const FIELD_UP = STOP[1];
-/** the field steps back once her fallback has stopped; the rows come forward to rest under the thesis */
-const FIELD_OUT = voiced(L7, 'ig4-07') + 3;
+/** the field steps back once her fallback has stopped AND its last word ("back.", the focus ring) has held a beat
+ *  (SCRIPT §0.3: a caption holds ≥ 1 beat after its last word); the rows come forward under it, to rest under the thesis */
+const FIELD_OUT = Math.max(voiced(L7, 'ig4-07') + 3, Math.ceil(on(L7, 'ig4-07', lastWord('ig4-07')) + BEAT + 1));
 export const M = {
   /** b1: S1 leaves; the page glides up and right to make room for the slot (sub-pixel, EASE.inOut) */
   s1Out: S1_OUT,
@@ -178,8 +180,9 @@ export const M = {
   avaTag: FIELD_UP + 2,
   back: on(L7, 'ig4-07', 8),
   fieldOut: FIELD_OUT,
-  /** the question, the threshold and its hairlines leave as the field steps back */
-  edgeOut: FIELD_OUT - 4,
+  /** the question (with its frame: one unit), the threshold and its hairlines leave just before the field steps back,
+   *  so the slot is gone before the thesis rises in its band */
+  edgeOut: FIELD_OUT - 3,
   /** b9: "says so" (the bed returns on "so") */
   says: on(L8, 'ig4-08', 5),
   so: on(L8, 'ig4-08', 6),
@@ -221,7 +224,9 @@ export const HITS: Hit<Snd>[] = [
   ]),
   H(M.pricey + 1, 'fx-felttip-short', 'none', 0.4, 3, 'b4 “pricey”: a slate underline under the word the page never says', { db: -5 }),
   H(M.swap, 'fx-tag', 'none', 0.3, 3, 'b5 the slot swaps to ● AVA (its frame turns her teal)', { db: -6 }),
-  H(M.eightyFive + 2, 'fx-mallet-e5', 'sunday', 0.62, 1, 'b5 “eighty-five”: the page’s $85 takes her teal — the mallet resolves the chord (a touch after the onset, under the word)', { db: -4 }),
+  // (its attack a frame AHEAD of the vowel, with the price's glint, and 5 dB under the landings: the price is the line
+  //  that matters, so the mallet colours "eighty-five" without masking it — check-mix SII)
+  H(M.eightyFive - 1, 'fx-mallet-e5', 'sunday', 0.62, 1, 'b5 “eighty-five”: the page’s $85 takes her teal — the mallet resolves the chord (with the glint, under the word)', { db: -9 }),
   ...ring(R4, 'b6 ring 4: THE CURVEBALL'),
   H(M.shrink[0] + 1, 'fx-paper-fold', 'none', 0.55, 3, 'b6 the page folds down into its row: Price list · PDF', { db: -4 }),
   H(M.rows[1], 'tap', 'none', 0.5, 3, 'b6 the four other documents land on 16ths', { db: -9, run: { n: 4, step: S16, xs: [0.45, 0.5, 0.55, 0.6] } }),
@@ -255,36 +260,54 @@ export const MUSIC = {
    *  the fallback's pad (from the stop's end), "so" (the bed returns), the CTA */
   ig4: { rings: [0, R1, R2, R3, R4] as readonly number[], lands: M.lands, answer: L5, eightyFive: M.eightyFive, curve: R4, so: M.so, says: M.says, cta: CTA },
   /** the shared build, louder: the converge into the logo must top the hairline chord (check-mix arc) */
-  build: { kick: 1.4, snare: 1.5 },
+  build: { kick: 1.4, snare: 1.5, inhale: 1, inhaleDb: -11 },
 } as const;
 /** the bed's fader: the series' shape round the hit (common/series.ts bedRide), with the reel's BUILD — her CTA ends
  *  16 f before the bar, so the roll is ridden up as her last word lands and kept up until the inhale draws it in */
 const CTA_END = voiced(CTA, 'ig4-09');
-/** the CTA's bed a touch under (the logo must top her loudest second by 1 LU), the build's ride up as her last word
- *  ends, held until the inhale */
-const RIDE = { asked: -1, cta: -1.5, up: [-3, 2] as const, db: 11, hold: 9 } as const;
-/** the impact insert, tuned for this reel (check-mix climax): see MIX.impact */
+/** THE BODY'S LEVEL: the bed carries the reel between her lines at the films' balance (≈ 10.5 LU under her voice
+ *  over the body, films 1–2: 9.6 / 10.6 LU) — the arrangement's own dynamics are quiet by design (a pluck riff, a
+ *  pad), so the fader lifts them: the riff under the hook and the phrasings; the curveball's strings SWELLING into
+ *  the cut (the hard stop on the sample is only an event if the bed was there to stop); the warm pad under the
+ *  fallback and "Where your documents stop" held forward (it is all that is left after the cut); the bed's RETURN on
+ *  "so" (riff, kick, rim, the rolled E) a step down from the pad on the fader — its own energy carries it over; the
+ *  CTA a touch under the return (the logo must top her loudest second by 1 LU, check-mix climax) */
+const BODY = { hook: 5, asked: 5, answer: 5.5, curve: 6.5, swell: 12.5, pad: 13.5, ret: 5.5, cta: 2.5 } as const;
+/** the build's ride up as her last word ends, held until the inhale */
+const RIDE = { up: [-3, 2] as const, db: 11, hold: 9 } as const;
+/** the impact insert, tuned for this reel (check-mix climax): the stack driven a touch harder into the clipper, so the
+ *  logo tops her loudest second and the inhale before it with room to spare — see MIX.impact */
 const IMPACT_TUNE = { ceil: -3, rideDb: 7 } as const;
+/** the end card's chord a touch forward into the seam (check-mix: it still rings 10–5 f from the end) */
+const RING_LIFT = 1.5;
 export const BED = {
   file: `ig/sfx/${REEL}/bed.wav`,
   vol: 2,
   ride: [
-    [0, 0],
-    // the phrasings and the curveball sit a touch under her (the hairline chord is the sfx's: the plucks)
-    [RINGS[0] - 4, 0],
-    [RINGS[0] + 2, RIDE.asked],
-    [M.swap - 4, RIDE.asked],
-    [M.swap + 6, 0],
-    [RINGS[3] - 2, 0],
-    [RINGS[3] + 6, RIDE.asked],
-    [STOP[0] - 1, RIDE.asked],
-    [STOP[0], 0],
-    [CTA - 6, 0],
-    [CTA, RIDE.cta],
-    [CTA_END + RIDE.up[0], RIDE.cta],
+    [0, BODY.hook],
+    // the riff under the phrasings (the hairline chord is the sfx's: the plucks)
+    [RINGS[0] - 4, BODY.hook],
+    [RINGS[0] + 2, BODY.asked],
+    [M.swap - 4, BODY.asked],
+    [M.swap + 6, BODY.answer],
+    // the curveball: the kick out, the strings swelling into the cut
+    [RINGS[3] - 2, BODY.answer],
+    [RINGS[3] + 6, BODY.curve],
+    [STOP[0] - 10, BODY.swell],
+    [STOP[0], BODY.swell],
+    // (the cut is in the bed itself) — the pad after it, forward
+    [STOP[1], BODY.pad],
+    // "so": the bed returns (its riff and kick louder than the pad; the fader steps down under them)
+    [M.so - 1, BODY.pad],
+    [M.so + 6, BODY.ret],
+    [CTA - 6, BODY.ret],
+    [CTA, BODY.cta],
+    [CTA_END + RIDE.up[0], BODY.cta],
     [CTA_END + RIDE.up[1], RIDE.db],
     [IMPACT - RIDE.hold, RIDE.db],
-    ...bedRide(IMPACT, BRAND_AT, vFrames(BRAND), END).filter(([f]) => f >= IMPACT - 1),
+    ...bedRide(IMPACT, BRAND_AT, vFrames(BRAND), END)
+      .filter(([f]) => f >= IMPACT - 1)
+      .map(([f, d]) => [f, f >= END - SEAM ? d + RING_LIFT : d] as const),
   ] as readonly (readonly [number, number])[],
 };
 export const MIX = {

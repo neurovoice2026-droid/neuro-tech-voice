@@ -13,8 +13,9 @@
  *   123      ("other") the 123 empty cells pop teal in a ripple from Friday 18:00 — a glint at the front settling into
  *            her ink — through the nights and the weekend
  *   PEOPLE   ("receptionist", b5) the graphite block lifts off the week (8 px and × 1.012), its drop shadow on the hours round it
- *   END      (End.tsx) `fx.dim` steps the whole week back behind the CTA; `fx.collapse` folds it back into the desk line
- *            in the seam (rows converging on y 760, the teal draining first), so frame 0's hairline can draw again
+ *   END      (End.tsx) `fx.dim` steps the whole week back behind the CTA and puts it away on the bar; (`fx.collapse`, the
+ *            week folding back into the desk line — rows converging on y 760, the teal draining first — is kept for a
+ *            seam that shows the week; the end act no longer does)
  */
 import React from 'react';
 import { reveal, revealStyle } from '../../components/Type';

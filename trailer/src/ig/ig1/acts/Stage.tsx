@@ -29,7 +29,7 @@ import { fullStop, Ig1Frame0, Ig1Ground } from './Hook';
 const SUNDAY = MOMENT_LIGHTS.sunday;
 /** how far the week steps back behind the call records (b4): a quiet ground for the white cards, so its rows never
  *  read as stripes in the gaps between them */
-const RECEDE_DIM = 0.74;
+const RECEDE_DIM = 0.84;
 const TEAL_KEY = { ink: SUNDAY.ink, glint: SUNDAY.orb[2] } as const;
 
 /** the camera plane at absolute frame t: its children are laid out at zoom 1 */

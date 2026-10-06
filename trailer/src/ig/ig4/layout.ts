@@ -7,7 +7,8 @@
  *            UP AND RIGHT to × .85 (x 260–906), so the left margin holds the three hairlines' arcs (SCRIPT b2–b4: they
  *            land on the line from the slot below, and the right of the frame is Instagram's like / comment rail)
  *   SLOT     the SingleSlot (SingleSlot.tsx): a slate hairline frame at x 86–906, y 1180–1420, its eyebrow above it
- *   ROWS     b6's five documents (KbRows.tsx), x 86–906 from y 352
+ *   ROWS     b6's five documents (KbRows.tsx), x 86–906, y 376–892: a clear 25 px under her orb's foot (y 351) — the
+ *            orb never rests ON the list — and a clear 38 px over the threshold's label
  *   THRESH   the ThresholdRule (Threshold.tsx): a dashed line across at y 976, "Close enough to answer" over its right
  *            end; the five hairlines rise from the slot's top toward it in the site's own figure proportions
  *            (lib/pages/knowledge-base.ts ROOM.questions "home": match .22 .14 .10 .30 .26 against KB_THRESHOLD .6 —
@@ -59,10 +60,10 @@ export const SLOT = { x: 86, y: 1170, w: 820, h: 270, r: 30, pad: 40, eyebrowY: 
 /** b6: the five documents (TabKnowledge.tsx TYPE_LABELS for the type word) */
 export const ROWS = {
   x: 86,
-  y: 352,
+  y: 376,
   w: 820,
-  h: 96,
-  gap: 16,
+  h: 92,
+  gap: 14,
   size: 32,
   docs: [
     { name: 'Price list', kind: 'pdf', type: 'PDF' },
