@@ -7,7 +7,8 @@
  *
  *   · renders IG<n>-Zones-9x16 stills (the zone overlay + the guard: components/ZoneGuard.tsx) at f0, at every screen
  *     onset + 8 f (timing.ts SCREENS: each span's first word), at every frame the reel lists in an optional
- *     ZONE_FRAMES export (card / chip landings + 8 f), and the cover (IG<n>-Cover-9x16 with {"zones": true}, checked
+ *     ZONE_FRAMES export (card / chip landings + 8 f), at the shared end card's four moments (END_CARD: the comment
+ *     field landed, AGENT typed, the wordmark, the URL typed), and the cover (IG<n>-Cover-9x16 with {"zones": true}, checked
  *     against the cover box x 86–930, y 260–1500)
  *   · FAILS on any `[ig-zones] VIOLATION` line the page logs (a text rect on the header / caption bands, the right
  *     rail, the side margins, or a cover word outside its box)
@@ -108,6 +109,8 @@ try {
     const frames = new Set([0]);
     for (const v of T.VOICES) for (const [a] of T.SCREENS[v.id]?.spans ?? []) frames.add(Math.round(v.at + T.vWord(v.id, a)) + 8);
     for (const f of T.ZONE_FRAMES ?? []) frames.add(Math.round(f));
+    // the shared end card (components/End.tsx endZoneFrames): the field landed, AGENT typed, the wordmark, the URL in
+    if (T.END_CARD) for (const f of [T.END_CARD.field + 10, T.END_CARD.agent + 20, T.END_CARD.impact + 16, T.END_CARD.url[2] + 8]) frames.add(Math.round(f));
     const list = [...frames].filter((f) => f >= 0 && f < T.DURATION).sort((a, b) => a - b);
     log(`${id}: ${list.length} zone stills (${list.join(', ')}) + the cover`);
     const t0 = Date.now();

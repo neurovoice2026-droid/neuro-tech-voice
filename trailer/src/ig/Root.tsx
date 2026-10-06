@@ -6,7 +6,8 @@
  *   folder IG-Scenes     IG<n>-<Act>-9x16: one act at a time on the real timeline, no audio
  *   folder IG-QA         IG<n>-Zones-9x16: the zone overlay + violation logger (scripts/ig/check-zones.mjs);
  *                        IG-Probe-Night-9x16 / IG-Probe-Pearl-9x16: the bit-budget probe's 2 s strips at 120 fps
- *                        (qa/Probe.tsx, scripts/ig/qa/probe-encode.mjs)
+ *                        (qa/Probe.tsx, scripts/ig/qa/probe-encode.mjs);
+ *                        IG-Kit-9x16: the shared parts on one page, on ig2's timeline (qa/Kit.tsx)
  */
 import React from 'react';
 import { Composition, Folder } from 'remotion';
@@ -24,6 +25,7 @@ import { Cover2 } from './ig2/Cover';
 import { Cover3 } from './ig3/Cover';
 import { Cover4 } from './ig4/Cover';
 import { NightProbe, PearlProbe, PROBE_FRAMES, type ProbeProps } from './qa/Probe';
+import { KIT_FRAMES, KitSpecimen } from './qa/Kit';
 import type { ReelProps, ReelTimeline } from './types';
 
 type ReelEntry = { n: number; T: ReelTimeline; Reel: React.FC<ReelProps>; Cover: React.FC<{ zones?: boolean }> };
@@ -57,6 +59,7 @@ export const IgRoot: React.FC = () => (
       ))}
       <Composition id="IG-Probe-Night-9x16" component={NightProbe} defaultProps={{ reseed: 'static' } as ProbeProps} durationInFrames={PROBE_FRAMES} fps={RENDER_FPS} {...VERTICAL} />
       <Composition id="IG-Probe-Pearl-9x16" component={PearlProbe} defaultProps={{ reseed: 'static' } as ProbeProps} durationInFrames={PROBE_FRAMES} fps={RENDER_FPS} {...VERTICAL} />
+      <Composition id="IG-Kit-9x16" component={KitSpecimen} durationInFrames={KIT_FRAMES} fps={FPS} {...VERTICAL} />
     </Folder>
   </>
 );

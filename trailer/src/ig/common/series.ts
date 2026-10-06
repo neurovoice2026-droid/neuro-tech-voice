@@ -123,7 +123,12 @@ const KB_EXTRAS = {
 /** Every family read from the reels' library (`dir: ig/sfx/lib`): film 1's whole SFX table + film 2's extras above. */
 const inLib = <O extends Record<string, SfxDef>>(o: O) =>
   Object.fromEntries(Object.entries(o).map(([k, d]) => [k, { ...d, dir: IG_LIB }])) as { readonly [K in keyof O]: SfxDef };
-export const SFX = inLib({ ...SFX1, ...KB_EXTRAS });
+/** The reels' OWN extras (scripts/ig/sounds.mjs, written to ig/sfx/): `fx-impact-end`, film 1's impact choked for a
+ *  reel's one-bar end (its ring must be down before the 14-frame seam). Film 1's def, its file the reels' own. */
+const IG_EXTRAS = {
+  'fx-impact-end': { ...SFX1.impact, dir: 'ig/sfx' },
+} as const satisfies Record<string, SfxDef>;
+export const SFX = { ...inLib({ ...SFX1, ...KB_EXTRAS }), ...IG_EXTRAS };
 export type Snd = keyof typeof SFX;
 
 /** A hit (common/cues.ts `Hit`) in the reels' families. */
@@ -134,9 +139,31 @@ export const H = (at: number, snd: Snd, light: Light, x: Pan, w: Weight, label: 
  *  bell on the effects bus would outlast (check-mix's end tail and the name's intelligibility). */
 export const impactHits = (impact: number): Hit<Snd>[] => [
   H(impact, 'riser', 'none', 0.5, 1, 'END the build’s swell, peaking ON the impact', { db: -2 }),
-  H(impact, 'impact', 'sunday', 0.5, 1, 'END LOGO IMPACT (bar line): the field leaves, the teal light opens into the backlight'),
+  H(impact, 'fx-impact-end', 'sunday', 0.5, 1, 'END LOGO IMPACT (bar line): her teal light bursts and opens into the backlight (film 1’s impact, choked for the seam)'),
   H(impact, 'thump', 'none', 0.5, 1, 'END the impact’s weight', { layer: true, db: -8 }),
   H(impact, 'slam', 'none', 0.5, 2, 'END the impact’s crack', { layer: true }),
+];
+
+/** The end card's moments (a reel's END_CARD; components/End.tsx draws them). */
+export type EndCardFrames = { readonly field: number; readonly agent: number; readonly send: number; readonly url: readonly number[] };
+/** One letter of AGENT per 16th from her word (components/End.tsx agentKeys: the same five frames). */
+export const AGENT_STEP = BEAT / 4;
+/**
+ * THE END CARD's own sounds, the same in all four (SCRIPT.md §0.3 "The shared end card"): the comment field rising (a
+ * soft UI pop), AGENT typed one soft key per 16th from her word (film 2's low-profile keys, panned where the letters
+ * are), the send disc's two-part click on her last word, and — under the name — only the colophon's hairline drawing
+ * out (no keys under "Neuro Tech Voice.": the name must stay clear, SII ≥ .9).
+ */
+export const endHits = (E: EndCardFrames): Hit<Snd>[] => [
+  H(E.field, 'fx-menu-open', 'none', 0.5, 3, 'END the comment field rises (before she says “Comment AGENT”)', { db: -6 }),
+  H(E.agent, 'fx-keys', 'none', 0.32, 3, 'END AGENT types, one soft key per 16th (five), from her word', {
+    db: -4,
+    layer: true,
+    run: { n: 5, step: AGENT_STEP, xs: [0.28, 0.31, 0.34, 0.37, 0.4] },
+  }),
+  H(E.send, 'fx-click-down', 'none', 0.79, 2, 'END the send disc presses (.97) as her last word ends — down', { db: -3 }),
+  H(E.send + 2, 'fx-click-up', 'none', 0.79, 3, 'END … released — up', { db: -6, layer: true }),
+  H(E.url[0] + 2, 'draw', 'none', [0.4, 0.6], 3, 'END the colophon’s hairline draws out from neurotechvoice.com', { db: -16 }),
 ];
 
 /* ── the Instagram master (PIPELINE.md §6.1) ── */

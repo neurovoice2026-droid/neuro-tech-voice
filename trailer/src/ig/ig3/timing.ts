@@ -14,7 +14,7 @@ import { VOICE, type VoiceId } from '../voice.generated.ts';
 import { BEAT, BPM, CUT, DUCK, FPS, LIGHT_NOTES, LIGHT_SEMI, PK, RENDER_FPS, SUB, VERTICAL, b } from '../../timing.ts';
 import { buildCues, makeSpeech, makeVoiceKit, upBeat, type Cue, type Hit, type Room, type Voiced, type VoiceRide } from '../common/cues.ts';
 import {
-  BAR, BRAND, IG_LOUD, IG_NAME, IMPACT_BEFORE_END, IMPACT_GAP, ROLL, SEAM, SFX, H, afterRing, bedRide, igArc, igImpact, impactHits, place, ringBefore, upBar,
+  BAR, BRAND, IG_LOUD, IG_NAME, IMPACT_BEFORE_END, IMPACT_GAP, ROLL, SEAM, SFX, H, afterRing, endHits, bedRide, igArc, igImpact, impactHits, place, ringBefore, upBar,
   type Display, type LineScreens, type Snd,
 } from '../common/series.ts';
 
@@ -127,6 +127,7 @@ export const HITS: Hit<Snd>[] = [
   ...RINGS.map((f, k) => H(f, 'fx-trill', 'rush', 0.3, 1, `b1 the phone across the room rings (${k + 1}/4)`)),
   H(PICKUP, 'fx-pickup', 'none', 0.5, 1, 'b3 PICKUP: the click; the dot springs open into her light'),
   H(HANGUP, 'fx-mallet-e5', 'sunday', 0.5, 1, 'b6 HANG-UP: the timer reads 00:00'),
+  ...endHits(END_CARD),
   ...impactHits(IMPACT),
 ];
 export const CUES: Cue[] = buildCues(HITS, { sfx: SFX, speaking, roomAt });

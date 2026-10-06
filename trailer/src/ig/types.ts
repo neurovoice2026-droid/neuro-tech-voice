@@ -19,7 +19,27 @@ export type ReelTimeline = {
   readonly SCREENS: { readonly [id: string]: LineScreens };
   readonly DISPLAY: readonly Display[];
   readonly GRAIN: { readonly ground: 'pearl' | 'night' };
-  readonly END_CARD: { readonly cta: number; readonly field: number; readonly impact: number; readonly brand: number; readonly seam: number };
+  /** the shared end card's moments (components/End.tsx IgEnd), absolute frames */
+  readonly END_CARD: {
+    /** the CTA line starts */
+    readonly cta: number;
+    /** the comment field rises (before she says "Comment AGENT") */
+    readonly field: number;
+    /** her word "AGENT": the field types it, one letter per 16th */
+    readonly agent: number;
+    /** the send disc presses (the CTA line's last word ends) */
+    readonly send: number;
+    /** the snare roll into the impact (half a bar) */
+    readonly roll: number;
+    /** the logo impact (the bar line one bar before the end) */
+    readonly impact: number;
+    /** the sign-off "Neuro Tech Voice." starts */
+    readonly brand: number;
+    /** the URL's three chunks type on "Neuro" | "Tech" | "Voice" */
+    readonly url: readonly number[];
+    /** the seam: the last SEAM frames re-form frame 0 */
+    readonly seam: number;
+  };
   vWord(id: string, k: number): number;
   vFrames(id: string): number;
 };
