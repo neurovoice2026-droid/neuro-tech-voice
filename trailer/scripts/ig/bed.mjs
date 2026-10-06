@@ -465,6 +465,239 @@ function ig2Parts({ P, fb, M, seg, CH, chordAt, sec, LEN, out, keys, drums, bass
 /** the reels' own arrangements (harmony + parts), by REEL; a reel without one plays the stub */
 const ARRANGEMENTS = { ig1: { harmony: ig1Harmony, parts: ig1Parts }, ig2: { harmony: ig2Harmony, parts: ig2Parts } };
 
+/* ═════════════════════════ REEL 3 "Twelve minutes" — the colour timer ═════════════════════════ */
+/**
+ * ig3's arrangement (docs/ig/SCRIPT.md ig3 §4 "Sound"; PIPELINE.md §6.3), on the reel's own moments (MUSIC.ig3: pickup,
+ * walkIn, hangup, cta — frames, re-timed with the voices). The timer's tick is the rhythm: it is on the cue sheet (a dry
+ * tick on every real second, 8ths under the time-lapse, 16ths into the hang-up, dead on it), so the bed only holds the
+ * harmony round it.
+ *   HARMONY  E under the hook (a low pedal: the held breath) → E – C#m7 – Amaj7 – B by bar from the pickup (the call),
+ *            B held into the hang-up → E ON THE HANG-UP (timer's done) → C#m7 → Amaj7 under the CTA → B for the roll →
+ *            E on the logo
+ *   HOOK     a low E pedal (sub + low strings, very quiet) and muted felt-piano B–E dyads on the ticks (every 2 beats),
+ *            the dyad leaning to A–E then B–F# in the last bar before the pickup (the dilemma)
+ *   CALL     a muted felt-piano ostinato in 8ths over the chords (ducked under her), the sub on each bar's one, a low
+ *            string pad; from "walk-in" the ostinato's off-beats brighten (the answer coming together)
+ *   PAYOFF   the bed OPENS: a high piano line (E-major pentatonic) over open strings an octave up, no ostinato, no sub
+ *   CTA      the ostinato back with an 8th shaker, the strings crescendo into the shared build
+ */
+function ig3Harmony(put, P, fb, M) {
+  const m = M.ig3;
+  const pk = fb(m.pickup);
+  const hang = fb(m.hangup);
+  const ctaBar = Math.floor(fb(m.cta) / 4 + 1e-9) * 4;
+  put(P.from, pk, 'E');
+  put(pk, pk + 4, 'E');
+  put(pk + 4, pk + 8, 'Csm7');
+  put(pk + 8, pk + 12, 'Amaj7');
+  put(pk + 12, hang, 'B');
+  put(hang, Math.max(hang + 3, ctaBar - 4), 'E');
+  put(Math.max(hang + 3, ctaBar - 4), ctaBar, 'Csm7');
+  put(ctaBar, P.roll, 'Amaj7');
+  put(P.roll, P.impact, 'B');
+  put(P.impact, fb(M.end) + 4, 'Efin');
+}
+
+function ig3Parts({ P, fb, M, seg, CH, chordAt, sec, LEN, out, keys, drums, bass, putPiano, shaker }) {
+  const m = M.ig3;
+  const S = { pick: fb(m.pickup), walk: fb(m.walkIn), hang: fb(m.hangup), cta: fb(m.cta) };
+  /* the hook: the low E pedal and B–E dyads on the ticks (beats 1 and 3), leaning to A–E, then B–F# before the pickup */
+  subNote(bass, sec(P.from), sec(S.pick - P.from) - 0.05, 28, 0.07, { att: 0.6, rel: 0.4 });
+  for (let x = Math.ceil(P.from / 2 - 1e-9) * 2; x < S.pick - 1e-6; x += 2) {
+    const last = S.pick - x <= 4 + 1e-6;
+    const dy = last ? (S.pick - x <= 2 + 1e-6 ? [59, 66] : [57, 64]) : [59, 64];
+    const v = 0.3 + (Math.round(x) % 4 === 0 ? 0.05 : 0);
+    dy.forEach((n, i) => putPiano(keys, x + 0.012 * i, n, v, i ? 0.12 : -0.12, { dur: 1.5, mute: 0.5, seed: 4 + i, g: 0.32 }));
+  }
+  /* the call: the muted ostinato in 8ths over the chords (its off-beats a touch brighter from "walk-in"), the sub on
+   * each bar's one; out from the hang-up until the CTA (the payoff's own line there) */
+  const FIG = [0, 2, 1, 3, 0, 2, 1, 2];
+  const osti = (x) => (x >= S.pick - 1e-6 && x < S.hang - 1e-6) || x >= S.cta - 1e-6;
+  for (let x = Math.ceil(S.pick * 2 - 1e-9) / 2; x < P.impact - 1e-6; x += 0.5) {
+    if (!osti(x)) continue;
+    const n = chordAt(x).notes;
+    const pos = Math.round(x * 2) % 8;
+    const lit = x >= S.walk - 1e-6 && pos % 2 === 1 ? 1.12 : 1;
+    const v = 0.34 * (pos % 2 === 0 ? 1 : 0.8) * (pos === 0 ? 1.1 : 1) * lit;
+    putPiano(keys, x, n[FIG[pos] % n.length], v, pos % 2 ? 0.2 : -0.2, { dur: 0.55, mute: 0.58, seed: pos % 3, g: 0.3 });
+    if (x >= S.cta - 1e-6 && x < P.roll - 1e-6) shaker(drums, x, pos % 2 ? 0.06 : 0.045, pos);
+  }
+  for (const sg of seg) {
+    if (sg.a >= P.impact - 1e-6 || sg.e <= S.pick + 1e-6) continue;
+    for (let x = Math.max(sg.a, S.pick); x < sg.e - 1e-6; x = Math.floor(x / 4 + 1e-9) * 4 + 4) {
+      if (!osti(x)) continue;
+      subNote(bass, sec(x), sec(Math.min(1.2, sg.e - x)) - 0.02, CH[sg.c].root - 12 + (CH[sg.c].root < 43 ? 12 : 0), 0.12, { att: 0.02, rel: 0.25 });
+    }
+  }
+  /* the payoff: the bed OPENS — a high piano line, E-major pentatonic, over the E and the C#m7 */
+  {
+    const LINE = [
+      [0, 83, 0.5], [0.5, 80, 0.42], [1, 76, 0.44], [2, 78, 0.4], [2.5, 80, 0.42], [3, 83, 0.46],
+      [4, 85, 0.44], [4.5, 83, 0.4], [5, 80, 0.42], [6, 78, 0.38], [6.5, 76, 0.36],
+    ];
+    for (const [dx, n, v] of LINE) {
+      const x = S.hang + dx;
+      if (x >= S.cta - 1e-6) break;
+      putPiano(keys, x, n, v, 0.18, { dur: 1.4, seed: 6, g: 0.26 });
+    }
+    // the open chord under the hang-up's mallet: E, rolled, warm
+    CH.E.notes.forEach((n, i) => putPiano(keys, S.hang + 0.02 * i, n, 0.36, (i - 1.5) * 0.14, { dur: 2.4, seed: 3 + i, g: 0.2 }));
+  }
+  /* the strings: a low pad under the hook (the pedal) and the call; OPEN AN OCTAVE at the payoff; the build's
+   * crescendo from the CTA into the impact */
+  {
+    const spans = [];
+    for (const sg of seg) {
+      if (sg.a >= P.impact - 1e-6) continue;
+      for (const [x0, x1, oct, g] of [
+        [Math.max(sg.a, P.from), Math.min(sg.e, S.pick), -12, 0.08],
+        [Math.max(sg.a, S.pick), Math.min(sg.e, S.hang), 0, 0.12],
+        [Math.max(sg.a, S.hang), Math.min(sg.e, S.cta), 12, 0.22],
+      ]) {
+        if (x1 <= x0 + 1e-6) continue;
+        for (const n of CH[sg.c].str) spans.push([sec(x0) - 0.03, sec(x1), n + oct + (n + oct < 40 ? 12 : 0), g]);
+      }
+    }
+    addStereo(out, stringSection(LEN, spans, { att: 0.4, rel: 0.7, cut: 2600, seed: 5 }), 0, 1);
+    const sw = [];
+    const a0 = Math.min(S.cta, P.impact - 6);
+    for (let x = a0; x < P.impact - 1e-6; x += 1) for (const n of chordAt(x).str) sw.push([sec(x) - 0.02, sec(Math.min(P.impact, x + 1)), n, 0.12 + 0.5 * ((x - a0) / (P.impact - a0)) ** 1.5]);
+    addStereo(out, stringSection(LEN, sw, { att: 0.25, rel: 0.2, cut: 3000, seed: 6 }), 0, 1);
+  }
+}
+ARRANGEMENTS.ig3 = { harmony: ig3Harmony, parts: ig3Parts };
+
+/* ═════════════════════════ REEL 4 "Can you trip it up?" — the challenge ═════════════════════════ */
+/**
+ * ig4's arrangement (docs/ig/SCRIPT.md ig4 §4 "Sound"; PIPELINE.md §6.3 "pluck call-and-response riff with soft kick and
+ * rim → chord building on the landings → hard stop on the sample at the stop-time → warm pad under the fallback → bed
+ * returns on "says so" → build"), on the reel's own moments (MUSIC.ig4: the rings, the landings, the answer, "eighty-
+ * five", the curveball, "says", "so", the CTA — frames, re-timed with the voices; MUSIC.stop is the stop-time).
+ *   HARMONY  E under the hook → C#m7 – Amaj7 – B by bar through the three phrasings (the question rising) → E for the
+ *            answer (her "eighty-five" lands on it, under the mallet) → C#m7 – F#m11 under the curveball (darker, a
+ *            crescendo) → THE STOP (MUSIC.stop: the bed and its tails cut on the sample, bed.mjs below) → Amaj9, the
+ *            warm pad, under the fallback → Bsus under "Where your documents stop" → E ON "so" → Amaj7 under the CTA → B
+ *            for the roll → E on the logo
+ *   RIFF     a muted pluck call-and-response, one bar long: the CALL climbs the chord in 8ths on beats 1–2, the RESPONSE
+ *            answers an octave down on 3 and 4 (pluck: the kit's additive pluck, copied — ig4Pluck); a soft felt kick on
+ *            1 and 3, a rim on 2 and 4 (ig4Rim, new); the sub on each bar's one from the first ring
+ *   LANDINGS each hairline's landing adds a held string voice — E4, G#4, B4 — the chord BUILDING under the phrasings,
+ *            all three resolving into the answer's E
+ *   CURVE    the kick drops out on the curveball's ring; the riff thins to its calls; low strings swell into the cut
+ *   FALLBACK one warm pad (strings, slow bow): Amaj9, then Bsus under the thesis
+ *   "so"     the bed RETURNS: an open E rolled on the felt piano, the riff, kick and rim back; the CTA adds an 8th shaker
+ *            and the strings' crescendo into the shared build
+ */
+/** the kit's additive pluck (kitAt pluck, verbatim): exact pitch, harmonics decaying faster the higher they are */
+function ig4Pluck(dst, sec, x, m, g, pan, bright = 0.6, tau = 0.5) {
+  const len = Math.min(1.6, tau * 5);
+  const f = mtof(m);
+  const s = mono(len);
+  for (let k = 1; k <= 8; k++) {
+    if (f * k > 16000) break;
+    const p = mode(len, f * k, Math.pow(k, -1.25) * (k === 1 ? 1 : bright), tau / Math.pow(k, 0.75), 0.0008);
+    for (let i = 0; i < s.length; i++) s[i] += p[i];
+  }
+  addMono(dst, s, sec(x), g, pan);
+}
+/** a soft rim click: a woody knock (two short modes) and a breath of band-passed noise, 40 ms */
+function ig4Rim(dst, sec, x, g, seed) {
+  const len = 0.12;
+  const s = mono(len);
+  const body = mode(len, 410 + (seed % 3) * 9, 0.7, 0.018, 0.0004);
+  const ring = mode(len, 1720, 0.35, 0.009, 0.0003);
+  const n = noise(0.04, 8800 + seed, ad(0.0003, 0.008), 'bpn', 2600, 0.9);
+  for (let i = 0; i < s.length; i++) s[i] = body[i] + ring[i] + (i < n.length ? n[i] * 0.5 : 0);
+  addStereo(dst, spread(filt(s, ['hp', 180, 0.7]), 0.2, 8900 + seed), sec(x), g);
+}
+
+function ig4Harmony(put, P, fb, M) {
+  const m = M.ig4;
+  const so = fb(m.so);
+  const ctaBar = Math.ceil(fb(m.cta) / 4 - 1e-9) * 4;
+  put(P.from, 8, 'E');
+  put(8, 12, 'Csm7');
+  put(12, 16, 'Amaj7');
+  put(16, 20, 'B');
+  put(20, 24, 'E');
+  put(24, 28, 'Csm7');
+  put(28, P.stop[0], 'Fsm11');
+  put(P.stop[0], 40, 'Amaj9');
+  put(40, so, 'Bsus');
+  put(so, ctaBar + 4, 'E');
+  put(ctaBar + 4, P.roll, 'Amaj7');
+  put(P.roll, P.impact, 'B');
+  put(P.impact, fb(M.end) + 4, 'Efin');
+}
+
+function ig4Parts({ P, fb, M, seg, CH, chordAt, sec, LEN, out, keys, drums, bass, putPiano, feltKick, shaker }) {
+  const m = M.ig4;
+  const S = { r1: fb(m.rings[1]), answer: fb(m.answer), curve: fb(m.curve), stop: P.stop[0], resume: P.stop[1], says: fb(m.says), so: fb(m.so), cta: fb(m.cta) };
+  const on = (x) => x < S.stop - 1e-6 || x >= S.so - 1e-6;
+  /* the riff: CALL (beats 1–2, 8ths climbing the chord) and RESPONSE (beats 3–4, an octave down, quarters) */
+  for (let x = Math.ceil(P.from * 2 - 1e-9) / 2; x < P.roll - 1e-6; x += 0.5) {
+    if (!on(x)) continue;
+    const c = chordAt(x);
+    const n = [...c.notes].sort((a, b) => a - b);
+    const pos = Math.round(x * 2) % 8;
+    const thin = x >= S.curve - 1e-6 && x < S.stop;
+    if (pos < 4) {
+      const note = n[pos % n.length] + (n[0] < 60 ? 12 : 0);
+      ig4Pluck(keys, sec, x, note, (pos === 0 ? 0.075 : 0.058) * (x < S.r1 ? 0.85 : 1), pos % 2 ? 0.24 : -0.08, 0.55, 0.28);
+    } else if (!thin && (pos === 4 || pos === 6)) {
+      const note = (pos === 4 ? n[2] : n[0]) + (n[0] < 60 ? 0 : -12);
+      ig4Pluck(keys, sec, x, note, 0.06, -0.26, 0.42, 0.34);
+    }
+  }
+  /* the kit: a soft felt kick on 1 and 3, a rim on 2 and 4 — not in the curveball (it holds its breath), back on "so" */
+  for (let x = Math.ceil(P.from - 1e-9); x < P.roll - 1e-6; x += 1) {
+    if (!on(x) || (x >= S.curve - 1e-6 && x < S.stop)) continue;
+    const beat = Math.round(x) % 4;
+    if (beat === 0 || beat === 2) feltKick(drums, x, beat === 0 ? 0.4 : 0.32);
+    else ig4Rim(drums, sec, x, beat === 3 ? 0.07 : 0.06, Math.round(x));
+  }
+  /* the CTA's 8th shaker */
+  for (let x = Math.ceil(S.cta * 2 - 1e-9) / 2; x < P.roll - 1e-6; x += 0.5) shaker(drums, x, Math.round(x * 2) % 2 ? 0.058 : 0.044, Math.round(x * 2) % 8);
+  /* the sub on each bar's one (and every chord change) from the first ring; not through the stop or the pad */
+  for (const sg of seg) {
+    if (sg.a >= P.roll - 1e-6) continue;
+    for (let x = Math.max(sg.a, S.r1); x < sg.e - 1e-6; x = Math.floor(x / 4 + 1e-9) * 4 + 4) {
+      if (!on(x)) continue;
+      subNote(bass, sec(x), sec(Math.min(1.1, sg.e - x, S.stop - x > 0 ? S.stop - x : 9)) - 0.03, CH[sg.c].root - 12 + (CH[sg.c].root < 43 ? 12 : 0), 0.12, { att: 0.02, rel: 0.2 });
+    }
+  }
+  /* the strings: the landings' chord building (E4, G#4, B4 held into the answer's E), a low pad under the answer, the
+   * curveball's swell INTO the cut, the warm pad under the fallback and the thesis, the CTA's crescendo */
+  {
+    const spans = [];
+    m.lands.forEach((f, k) => spans.push([sec(fb(f)) - 0.02, sec(S.answer + 2), [64, 68, 71][k], 0.2]));
+    for (const sg of seg) {
+      for (const [x0, x1, oct, g] of [
+        [Math.max(sg.a, S.answer), Math.min(sg.e, S.curve), 0, 0.1],
+        [Math.max(sg.a, S.resume), Math.min(sg.e, S.so), 0, 0.26],
+        [Math.max(sg.a, S.so), Math.min(sg.e, S.cta), 0, 0.12],
+      ]) {
+        if (x1 <= x0 + 1e-6) continue;
+        for (const n of CH[sg.c].str) spans.push([sec(x0) - 0.03, sec(x1), n, g]);
+      }
+    }
+    addStereo(out, stringSection(LEN, spans, { att: 0.7, rel: 0.6, cut: 2400, seed: 7 }), 0, 1);
+    // the curveball's swell: low strings growing into the cut (they end ON it: the stop takes them)
+    const sw = [];
+    for (let x = S.curve; x < S.stop - 1e-6; x += 1) for (const n of chordAt(x).str) sw.push([sec(x) - 0.02, sec(Math.min(S.stop + 0.5, x + 1)), n - 12 + (n < 52 ? 12 : 0), 0.08 + 0.32 * ((x - S.curve) / (S.stop - S.curve)) ** 1.4]);
+    addStereo(out, stringSection(LEN, sw, { att: 0.3, rel: 0.2, cut: 2200, seed: 8 }), 0, 1);
+    // the CTA's crescendo into the build
+    const cr = [];
+    const a0 = Math.min(S.cta, P.impact - 6);
+    for (let x = a0; x < P.impact - 1e-6; x += 1) for (const n of chordAt(x).str) cr.push([sec(x) - 0.02, sec(Math.min(P.impact, x + 1)), n, 0.12 + 0.5 * ((x - a0) / (P.impact - a0)) ** 1.5]);
+    addStereo(out, stringSection(LEN, cr, { att: 0.25, rel: 0.2, cut: 3000, seed: 9 }), 0, 1);
+  }
+  /* "so": the bed returns — an open E rolled on the felt piano (the lift) */
+  CH.E.notes.forEach((n, i) => putPiano(keys, S.so + 0.02 * i, n + (i > 1 ? 12 : 0), 0.46, (i - 1.5) * 0.15, { dur: 2.2, seed: 3 + i, g: 0.24 }));
+  putPiano(keys, S.so, 40, 0.42, 0, { dur: 2.2, seed: 9, g: 0.26 });
+}
+ARRANGEMENTS.ig4 = { harmony: ig4Harmony, parts: ig4Parts };
+
 /* ═════════════════════════ the bed ═════════════════════════ */
 
 export function bed(T) {

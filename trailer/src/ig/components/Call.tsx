@@ -180,8 +180,10 @@ export const ToolRow: React.FC<{
 /* ── LiveTranscript ─────────────────────────────────────────────── */
 
 export type Turn =
-  /** her line (absolute start = its VOICES entry unless `at` is given); keys: glints on words (e.g. "an AI assistant") */
-  | { who: 'ava'; id: string; at?: number; keys?: readonly CapKey[] }
+  /** her line (absolute start = its VOICES entry unless `at` is given); keys: glints on words (e.g. "an AI assistant");
+   *  breaks (optional): word indices of `say` that start a new line (the phrase's own breaks, instead of a greedy wrap —
+   *  a line that would still overflow the box wraps as before) */
+  | { who: 'ava'; id: string; at?: number; keys?: readonly CapKey[]; breaks?: readonly number[] }
   /** a caller's turn: the meter, no words */
   | { who: 'caller'; from: number; to: number };
 
@@ -242,7 +244,7 @@ export function transcriptRows(T: ReelTimeline, turns: readonly Turn[], s: Trans
       let line = 0;
       words = toks.map((tk) => {
         const w = measureText(tk.text, spec);
-        if (x > 0 && x + w > s.w + 0.01) {
+        if (x > 0 && (x + w > s.w + 0.01 || (turn.breaks?.includes(tk.first) ?? false))) {
           line++;
           x = 0;
         }
