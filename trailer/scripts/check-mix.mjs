@@ -32,7 +32,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readWav, lufs, truePeak, peak, db, Biquad, SR } from './audio/dsp.mjs';
 import { blockPowers, integrated, momentary, rmsDb } from './audio/loudness.mjs';
-import { abs, filmOf, need } from './films.mjs';
+import { abs, filmOf, need } from './registry.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');

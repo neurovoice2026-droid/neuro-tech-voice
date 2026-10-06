@@ -1,0 +1,15 @@
+master        -15.5 LUFS integrated · -1.65 dBTP true peak · -1.65 dBFS sample peak
+levels        effects ≤ -12.0 dBFS · bed -20.0 dBFS · master gain +5.1 dB · limiter ≤ 4.3 dB
+dialogue      files -23 LUFS ± 0.01 · stem kb2-c1 -20.0 · kb2-desk-1 -20.3 · kb2-c2 -20.0 · kb2-c3 -20.0 · kb2-vo-1 -20.0 · kb2-vo-2 -20.0 · kb2-vo-3 -20.0 · kb2-vo-4 -20.0 · kb2-c4 -19.8 · kb2-call-1 -20.0 · kb2-vo-5 -19.9 · kb2-call-2 -20.0 · kb2-vo-6 -20.1 · kb2-vo-7 -20.0 · kb2-call-3 -20.0 · kb2-desk-2 -20.2 · kb2-vo-8 -20.0 · kb2-vo-9 -20.0 · kb2-brand -20.1 (spread 0.5 LU)
+presence      phone lines 1.4–2.8 kHz: kb2-c1 -13.7 dB · kb2-c2 -11.8 dB · kb2-c3 -15.6 dB · kb2-c4 -15.1 dB
+climax        logo impact -9.0 LUFS-M · loudest dialogue -10.3 (kb2-vo-5 @1560) · lead +1.3 LU · build before it -14.5
+end           last 100 ms -58.4 dBFS RMS · last frame -69.7 dBFS · the chord 10–5 f from the end -42.8 dBFS RMS (≥ -55)
+arc           converge (1 s into the logo) -13.6 LUFS · music windows max -17.2 (@510) · lead +3.6 LU (≥ 0.5)
+cues          233: repeat 22 · recording 11 · turn 15 · written 48 · call 23 · line 32 · change 33 · matters 6 · cta 43
+words         196 scored — intelligibility (SII-style, 1 = clear) mean 0.96, lowest: “four.” 0.55, “when” 0.67, “they” 0.69, “Saturday” 0.73, “till” 0.74
+the name      kb2-brand: “Neuro” 0.95 · “Tech” 0.99 · “Voice.” 0.95 (≥ 0.9)
+timeline      out/audio/kb/cue-timeline.txt
+note          key hit on a word (allowed): word “when” (kb2-vo-5 @1568): intelligibility 0.67 (effects alone 0.68) — fx-pluck-e5, fx-scratch-1
+note          key hit on a word (allowed): word “they” (kb2-vo-5 @1572): intelligibility 0.69 (effects alone 0.71) — fx-pluck-e5, fx-scratch-1, fx-pluck-gs5
+note          key hit on a word (allowed): word “four.” (kb2-call-3 @2415): intelligibility 0.55 (effects alone 0.58) — fx-pluck-e6
+OK

@@ -59,11 +59,13 @@ export const filterStaticFiles = (html, drop) => {
 /** the static-file entries of an index.html */
 export const staticFilesOf = (html) => filterStaticFiles(html, () => false).entries;
 
-/** film 2's own public files (public/kb/…): listed by every bundle of the shared public/, never read by film 1 */
-export const isFilm2Static = (e) => typeof e?.name === 'string' && e.name.startsWith('kb/');
+/** film 2's own public files (public/kb/…): listed by every bundle of the shared public/, never read by film 1
+ * kb/ and ig/: other films' public files (the Instagram reels' public/ig/, docs/ig/PIPELINE.md §3.3) */
+export const isFilm2Static = (e) => typeof e?.name === 'string' && (e.name.startsWith('kb/') || e.name.startsWith('ig/'));
 
-/** sound files and their stamps (film 1's sfx/ + voice/, film 2's kb/sfx/ + kb/voice/): a --muted picture never reads them */
-export const isSoundStatic = (e) => typeof e?.name === 'string' && /^(kb\/)?(sfx|voice)\//.test(e.name);
+/** sound files and their stamps (film 1's sfx/ + voice/, film 2's kb/sfx/ + kb/voice/, the reels' ig/sfx/ + ig/voice/):
+ * a --muted picture never reads them */
+export const isSoundStatic = (e) => typeof e?.name === 'string' && /^((kb|ig)\/)?(sfx|voice)\//.test(e.name);
 
 const sha = (file) => {
   const h = createHash('sha256');

@@ -25,7 +25,7 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readWav, SR } from './audio/dsp.mjs';
-import { filmOf, need } from './films.mjs';
+import { filmOf, need } from './registry.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);

@@ -7,3 +7,5 @@ public/sfx/
 public/kb/sfx/
 # the Kokoro TTS model, fetched by scripts/generate-voice.mjs
 .cache/
+# the Instagram reels' soundtracks, synthesised by scripts/ig/generate-sfx.mjs (public/ig/voice/ stays tracked)
+public/ig/sfx/

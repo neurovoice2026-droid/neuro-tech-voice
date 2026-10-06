@@ -1,0 +1,12 @@
+{
+  "capturedAt": "2026-10-06T12:05:49.839Z",
+  "head": "04cf0c378ac87fbda9acf96b5adeb7ccb68ab2f0",
+  "ref": "743247a",
+  "kbHash": "db3a9efa91f928f2",
+  "stampHash": "db3a9efa91f928f2",
+  "cueTimeline": "44ea1be917b521a2fbdfb34401a373c66ec2ff7cf745df86cdd395637710cc53",
+  "bundleSha": "269c7b3c26ad72ffae7979a745aed1fc18c0eba1556f2485aea37393cea255fd",
+  "bundlePlans": [
+    "out/master/KB-Trailer-9x16-x2-act5"
+  ]
+}

@@ -87,7 +87,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { integrated } from './audio/loudness.mjs';
-import { FILMS, abs, filmOf, voiceFile } from './films.mjs';
+import { FILMS, abs, filmOf, voiceFile } from './registry.mjs';
 
 const require = createRequire(import.meta.url);
 const peakOf = (arr) => {

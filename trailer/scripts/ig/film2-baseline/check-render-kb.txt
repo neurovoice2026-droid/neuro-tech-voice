@@ -1,0 +1,4 @@
+✓ out/kb/neurotechvoice-knowledge-16x9-4k120.mp4: hevc yuv420p bt709/bt709/bt709/tv, 3840×2160, 12000 f @ 120; sync lag 0 in 71/71 windows
+✓ out/kb/neurotechvoice-knowledge-9x16-4k120.mp4: hevc yuv420p bt709/bt709/bt709/tv, 2160×3840, 12000 f @ 120; sync lag 0 in 71/71 windows
+✓ out/kb/deliver/neurotechvoice-knowledge-16x9-1080p60-preview.mp4: h264 yuv420p bt709/bt709/bt709/tv, 1920×1080, 6000 f @ 60; sync lag 0 in 71/71 windows
+✓ out/kb/deliver/neurotechvoice-knowledge-9x16-1080p60-preview.mp4: h264 yuv420p bt709/bt709/bt709/tv, 1080×1920, 6000 f @ 60; sync lag 0 in 71/71 windows

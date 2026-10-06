@@ -12,7 +12,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { ROOT, abs, filmOf } from './films.mjs';
+import { ROOT, abs, filmOf } from './registry.mjs';
 
 const argv = process.argv.slice(2);
 let film;
