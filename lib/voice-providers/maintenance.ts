@@ -21,6 +21,7 @@ import { reprocessPendingWebhooks } from './webhook-ingest'
 import { reconcileCartesiaCalls } from './cartesia-poll'
 import { finalizeStaleElevenLabsCalls } from './stale-calls'
 import { processDocument, STALE_PROCESSING_MS } from './knowledge'
+import { purgeRejectedClones } from './voice-catalog'
 import { VOICE_PROVIDERS, isHealthSignalCode, type ProviderErrorCode } from './errors'
 import type { ProviderHealth } from './types'
 
@@ -167,6 +168,7 @@ export async function runVoiceMaintenance(log: Logger = createLogger({ component
     ['stale_elevenlabs_calls', () => finalizeStaleElevenLabsCalls(50, log)],
     ['knowledge_retries', () => retryStaleKnowledgeDocs(2, log)],
     ['voice_saves', () => settleInterruptedVoiceSaves(5, log)],
+    ['rejected_clones', () => purgeRejectedClones(5, log)],
     // Hourly is plenty for retention (the cron fires every 5 minutes).
     ...(new Date().getUTCMinutes() < 5 ? ([['retention', () => pruneOperationalData(log)]] as Array<[string, () => Promise<unknown>]>) : []),
   ]

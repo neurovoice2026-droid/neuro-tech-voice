@@ -117,10 +117,27 @@ function encodeBody(body: unknown, headers: Record<string, string>): BodyInit | 
 async function attemptOnce<T>(req: ProviderRequest, method: string): Promise<ProviderResponse<T>> {
   const headers = { ...(req.headers ?? {}) }
   const body = encodeBody(req.body, headers)
-  const timeout = AbortSignal.timeout(req.timeoutMs)
+  // A streamed response (responseKind 'response') is consumed by the caller at
+  // the client's pace: the timeout must cover only the wait for the response
+  // headers, not the body, or long recordings would be cut off mid-stream.
+  const streaming = req.responseKind === 'response'
+  let headerTimer: ReturnType<typeof setTimeout> | null = null
+  let timeout: AbortSignal
+  if (streaming) {
+    const ctl = new AbortController()
+    headerTimer = setTimeout(() => ctl.abort(new DOMException('The operation timed out.', 'TimeoutError')), req.timeoutMs)
+    timeout = ctl.signal
+  } else {
+    timeout = AbortSignal.timeout(req.timeoutMs)
+  }
   const signal = req.signal ? AbortSignal.any([req.signal, timeout]) : timeout
   const started = Date.now()
-  const res = await fetch(req.url, { method, headers, body, signal, cache: 'no-store' })
+  let res: Response
+  try {
+    res = await fetch(req.url, { method, headers, body, signal, cache: 'no-store' })
+  } finally {
+    if (headerTimer) clearTimeout(headerTimer)
+  }
   const latencyMs = Date.now() - started
 
   if (!res.ok) {

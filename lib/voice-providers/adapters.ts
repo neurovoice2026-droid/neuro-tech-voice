@@ -156,6 +156,19 @@ async function cartesiaConfig(spec: AgentSpec) {
   return { config: buildCartesiaAgentConfig(spec, voice.voiceId, { contextToolId }), voice }
 }
 
+/** Pages through the whole listing; throws (keep the id) if it cannot be read completely. */
+async function cartesiaWebhookExists(webhookId: string): Promise<boolean> {
+  let after: string | null = null
+  for (let page = 0; page < 20; page++) {
+    const res = await ct.webhooks.list({ limit: 100, starting_after: after })
+    const data = res.data ?? []
+    if (data.some((w) => w.id === webhookId)) return true
+    if (!res.has_more || !data.length) return false
+    after = data[data.length - 1].id
+  }
+  throw new Error('webhook listing too long to verify')
+}
+
 /**
  * Best effort: call-event webhooks are an optimisation (results are also
  * polled), so a failed attach must never fail the agent sync — and above all
@@ -178,8 +191,7 @@ async function attachCartesiaWebhook(agentId: string): Promise<string | null> {
     // no longer exists, or every sync would create (and leak) a new one.
     if (isProviderError(err) && err.code === 'not_found') {
       try {
-        const { data } = await ct.webhooks.list()
-        if (!(data ?? []).some((w) => w.id === webhookId)) await forgetPlatformResource('cartesia.call_webhook')
+        if (!(await cartesiaWebhookExists(webhookId))) await forgetPlatformResource('cartesia.call_webhook')
       } catch (listErr) {
         createLogger({ component: 'cartesia_lifecycle' }).warn('cartesia.webhook_list_failed', { code: isProviderError(listErr) ? listErr.code : 'unknown' })
       }

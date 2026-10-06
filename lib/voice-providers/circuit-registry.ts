@@ -4,6 +4,7 @@
 import {
   DEFAULT_CIRCUIT_CONFIG,
   MemoryCircuitStore,
+  advance,
   decide,
   initialCircuitState,
   recordFailure,
@@ -132,6 +133,14 @@ export async function reportOutcome(
   provider: CircuitKey,
   outcome: { ok: true } | { ok: false; code: ProviderErrorCode },
   now = Date.now(),
+  opts: {
+    /**
+     * Media circuits: when the call that proves health started. A call that
+     * started before the latest failure (e.g. dropped by the very outage that
+     * opened the circuit) is not evidence of recovery.
+     */
+    evidenceStartedAt?: number
+  } = {},
 ): Promise<void> {
   const cfg = circuitConfig()
   try {
@@ -141,6 +150,10 @@ export async function reportOutcome(
       const st = row?.state
       const healthy = !st || (st.state === 'closed' && st.consecutiveFailures === 0 && st.windowFailures === 0 && !st.forced)
       if (healthy) return
+      if (st && opts.evidenceStartedAt !== undefined && st.lastFailureAt !== null && opts.evidenceStartedAt < st.lastFailureAt) return
+      // A media circuit is closed only by a success while half-open (after the
+      // open period), never by a call that happened to finish while open.
+      if (st && provider.endsWith('_media') && advance(st, now).state === 'open') return
     } else if (!isHealthSignalCode(outcome.code)) {
       return // our own request was wrong; provider health is unaffected
     }

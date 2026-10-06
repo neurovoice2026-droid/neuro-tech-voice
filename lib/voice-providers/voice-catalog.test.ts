@@ -321,13 +321,20 @@ describe('clones', () => {
     el.voices.addInstantClone.mockResolvedValue({ voice_id: 'Verify00000000000002', requires_verification: true })
     el.voices.delete.mockRejectedValueOnce(new ProviderError({ system: 'elevenlabs', operation: 'voices.delete', code: 'upstream' }))
     await expect(vc.createInstantClone({ orgId: ORG_A, userId: 'u1', name: 'n', speakerName: 's', language: null, samples: [sample], ipHash: null, log })).rejects.toMatchObject({ status: 422 })
-    expect(db.tables.provider_voices[0]).toMatchObject({ status: 'deleted' })
+    // Still at the provider: kept as 'failed' (never listed) so maintenance retries the delete.
+    expect(db.tables.provider_voices[0]).toMatchObject({ status: 'failed', deleted_at: null })
     expect(db.tables.audit_log[0]).toMatchObject({ action: 'voice.clone.rejected_verification', details: { provider_deleted: false } })
 
     el.voices.addInstantClone.mockResolvedValue({ voice_id: 'Verify00000000000003', requires_verification: true })
     el.voices.delete.mockRejectedValueOnce(new ProviderError({ system: 'elevenlabs', operation: 'voices.delete', code: 'not_found' }))
     await expect(vc.createInstantClone({ orgId: ORG_A, userId: 'u1', name: 'n', speakerName: 's', language: null, samples: [sample], ipHash: null, log })).rejects.toMatchObject({ status: 422 })
     expect(db.tables.audit_log[1]).toMatchObject({ details: { provider_deleted: true } })
+    expect(db.tables.provider_voices[1]).toMatchObject({ status: 'deleted' })
+
+    // Maintenance retries the failed provider delete and then marks the row deleted.
+    el.voices.delete.mockResolvedValueOnce(undefined)
+    expect(await vc.purgeRejectedClones(5, log)).toEqual({ purged: 1, failed: 0 })
+    expect(db.tables.provider_voices[0]).toMatchObject({ status: 'deleted' })
   })
 })
 

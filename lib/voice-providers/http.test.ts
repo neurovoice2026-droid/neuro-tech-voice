@@ -102,6 +102,19 @@ describe('providerRequest', () => {
     expect((await peek('elevenlabs')).state).toBe('closed')
   })
 
+  it('times out a streamed response only while waiting for headers, never while the body is read', async () => {
+    const signals: AbortSignal[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      signals.push(init.signal as AbortSignal)
+      return new Response('audio-bytes', { status: 200 })
+    }))
+    await providerRequest({ system: 'elevenlabs', operation: 'conversations.audio', url: 'https://x.test', timeoutMs: 30, responseKind: 'response' })
+    await providerRequest({ system: 'elevenlabs', operation: 'agents.get', url: 'https://x.test', timeoutMs: 30, responseKind: 'text' })
+    await new Promise((r) => setTimeout(r, 80))
+    expect(signals[0].aborted).toBe(false) // body of a streamed response stays readable
+    expect(signals[1].aborted).toBe(true) // buffered requests keep a whole-request timeout
+  })
+
   it('does not apply the voice-provider breaker to Twilio', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('x', { status: 500 })))
     for (let i = 0; i < 4; i++) {

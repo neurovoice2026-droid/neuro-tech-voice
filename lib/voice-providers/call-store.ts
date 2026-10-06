@@ -214,8 +214,11 @@ async function afterWrite(db: SupabaseClient, callId: string, orgId: string, eve
   // retried webhook for a call that ended before an outage must not close
   // the media circuit opened by that outage.
   if (event.kind === 'call.completed' && typeof event.durationSeconds === 'number' && event.durationSeconds > earlyFailureWindowSeconds()) {
-    const endedMs = event.startedAt ? Date.parse(event.startedAt) + event.durationSeconds * 1000 : NaN
-    if (Number.isFinite(endedMs) && Date.now() - endedMs < MEDIA_EVIDENCE_MAX_AGE_MS) await reportOutcome(`${event.provider}_media`, { ok: true })
+    const startedMs = event.startedAt ? Date.parse(event.startedAt) : NaN
+    const endedMs = startedMs + event.durationSeconds * 1000
+    if (Number.isFinite(endedMs) && Date.now() - endedMs < MEDIA_EVIDENCE_MAX_AGE_MS) {
+      await reportOutcome(`${event.provider}_media`, { ok: true }, Date.now(), { evidenceStartedAt: startedMs })
+    }
   }
   if (event.kind === 'call.completed' && typeof event.durationSeconds === 'number' && event.durationSeconds > 0) {
     await recordUsage(db, { orgId, callId, seconds: event.durationSeconds, provider: event.provider, source: `${event.provider}_webhook` }, log)

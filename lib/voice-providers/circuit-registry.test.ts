@@ -42,4 +42,20 @@ describe('circuit registry', () => {
     await reportOutcome('elevenlabs', { ok: true })
     expect(await peekProvider('elevenlabs')).toBe('open')
   })
+
+  it('ignores stale media evidence and never closes an open media circuit, only a half-open one', async () => {
+    const t0 = 1_800_000_000_000
+    for (let i = 0; i < 3; i++) await reportOutcome('elevenlabs_media', { ok: false, code: 'upstream' }, t0 + i)
+    // A call dropped by the outage (started before the failures) proves nothing.
+    await reportOutcome('elevenlabs_media', { ok: true }, t0 + 10, { evidenceStartedAt: t0 - 60_000 })
+    expect((await peek('elevenlabs_media', t0 + 10)).state).toBe('open')
+    // Even fresh evidence does not close it while it is still open...
+    await reportOutcome('elevenlabs_media', { ok: true }, t0 + 20, { evidenceStartedAt: t0 + 15 })
+    expect((await peek('elevenlabs_media', t0 + 20)).state).toBe('open')
+    // ...but after the open period (half-open) a fresh success closes it.
+    const later = t0 + 31_000
+    expect((await peek('elevenlabs_media', later)).state).toBe('half_open')
+    await reportOutcome('elevenlabs_media', { ok: true }, later, { evidenceStartedAt: later - 5_000 })
+    expect((await peek('elevenlabs_media', later)).state).toBe('closed')
+  })
 })

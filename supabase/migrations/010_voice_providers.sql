@@ -225,7 +225,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS calls_cartesia_call_id_unique ON calls (cartes
 CREATE INDEX IF NOT EXISTS calls_org_started ON calls (org_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS calls_org_provider ON calls (org_id, provider);
 -- Router: early stream ends across organizations (shared media circuit).
-CREATE INDEX IF NOT EXISTS calls_early_stream_end ON calls ((routing ->> 'early_stream_end_at')) WHERE routing ? 'early_stream_end_at';
+DROP INDEX IF EXISTS calls_early_stream_end;
+CREATE INDEX IF NOT EXISTS calls_early_stream_end_at ON calls ((routing ->> 'early_stream_end_at')) WHERE (routing ->> 'early_stream_end_at') IS NOT NULL;
 
 DROP TRIGGER IF EXISTS calls_updated_at ON calls;
 CREATE TRIGGER calls_updated_at BEFORE UPDATE ON calls FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();

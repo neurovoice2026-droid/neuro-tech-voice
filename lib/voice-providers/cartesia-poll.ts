@@ -54,22 +54,37 @@ export async function pollCartesiaCall(callId: string, log: Logger = createLogge
     })
     // Closest start time wins when several calls match.
     candidates.sort((a, b) => Math.abs(Date.parse(a.start_time ?? '') - startedMs) - Math.abs(Date.parse(b.start_time ?? '') - startedMs))
-    remote = candidates[0] ?? null
+    // Calls already held by another row are someone else's (e.g. a concurrent
+    // fallback call of the same org) — unless that row is a webhook-created
+    // copy of THIS call (native mode, same org, same two numbers), in which
+    // case that copy carries the data and the billing.
+    const held = candidates.length
+      ? await db.from('calls').select('id, org_id, from_number, to_number, routing, cartesia_call_id').in('cartesia_call_id', candidates.map((c) => c.id)).neq('id', callId)
+      : { data: [], error: null }
+    if (held.error) throw new Error(`calls duplicate lookup failed: ${held.error.message}`)
+    const pair = new Set([call.from_number, call.to_number])
+    for (const c of candidates) {
+      const holder = (held.data ?? []).find((h) => h.cartesia_call_id === c.id)
+      if (!holder) {
+        remote = c
+        break
+      }
+      const sameCall =
+        holder.org_id === call.org_id &&
+        (holder.routing as { mode?: string } | null)?.mode === 'native' &&
+        pair.has(holder.from_number as string) &&
+        pair.has(holder.to_number as string)
+      if (sameCall) {
+        log.warn('cartesia_poll.held_by_webhook_copy', { callId, otherCallId: holder.id })
+        return 'duplicate'
+      }
+    }
   }
   if (!remote) return 'not_found'
   if (remote.status === 'created' || remote.status === 'started') return 'pending'
 
   const event = normalizeCartesiaCall(remote as ct.CartesiaCall & Record<string, unknown>)
   if (!event) return 'pending'
-  // Another row already holds this Cartesia call (created from a webhook
-  // before this row could be matched): that row carries the data and the
-  // billing; this one must not be billed again.
-  const { data: holder, error: holderErr } = await db.from('calls').select('id').eq('cartesia_call_id', remote.id).neq('id', callId).limit(1)
-  if (holderErr) throw new Error(`calls duplicate lookup failed: ${holderErr.message}`)
-  if (holder?.length) {
-    log.warn('cartesia_poll.held_by_other_row', { callId, otherCallId: holder[0].id })
-    return 'duplicate'
-  }
   await applyCallEvent({ ...event, localCallId: callId, localCallIdTrusted: true }, log)
   return 'applied'
 }

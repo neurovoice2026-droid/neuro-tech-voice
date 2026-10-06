@@ -147,7 +147,7 @@ Circuits (shared by all instances, stored in `provider_circuit_state`):
 | Circuit | Fed by | Never fed by |
 |---|---|---|
 | `elevenlabs` (API) | register-call / outbound-call outcomes, maintenance health probe | previews, catalog, knowledge uploads, agent syncs (tenant-triggered) |
-| `elevenlabs_media` | early stream ends seen by **≥2 organizations** within 2 min (failure — one tenant's agent hanging up at once cannot trip it); a stream that outlived the early window, or a completed conversation longer than the window that ended in the last 2 min (success) | REST successes, late/retried webhooks |
+| `elevenlabs_media` | early stream ends of **inbound** calls, counted once per organization per 2 min and only when ≥2 organizations saw one (failure — opening it takes several organizations, so one tenant's agent hanging up at once cannot trip it); a stream that outlived the early window, or a conversation longer than the window that ended in the last 2 min, **started after the latest failure** (success; only a half-open media circuit can be closed by it) | REST successes, late/retried webhooks, calls dropped by the outage itself |
 | `cartesia` (API) | maintenance health probe | tenant-triggered requests |
 | `cartesia_media` | SIP leg result (`DialCallStatus`) | REST successes |
 
@@ -310,9 +310,12 @@ per call through `record_call_usage` (ledger key `call:<uuid>`).
   web sessions; opt out with `ELEVENLABS_AGENT_AUTH=false` only if a live test
   shows a telephony path needs it — **unverified live**).
 * An instant clone that ElevenLabs holds for manual verification cannot be
-  completed in-app: it is deleted at the provider right away, its consent
-  record kept (status deleted) and audited, and the user is asked to try other
-  recordings.
+  completed in-app: it is deleted at the provider right away (if that delete
+  fails, the maintenance job retries it), its consent record is kept and
+  audited, and the user is asked to try other recordings.
+* Recordings are streamed through the ownership-checked proxy (any length,
+  constant memory); the dashboard player downloads a recording once and plays
+  it from memory, so seeking needs no range requests.
 * Secrets are server-only; logs are JSON with keys/tokens/JWTs redacted and phone
   numbers masked; transcripts and prompts are never logged; HTTP errors carry a
   product message + request id, never upstream bodies.

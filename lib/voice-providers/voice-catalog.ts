@@ -1086,8 +1086,10 @@ async function rejectUnverifiedClone(
     name: p.name,
     language: p.language,
     category: 'cloned',
-    status: 'deleted',
-    deleted_at: now,
+    // 'failed' = never listed or usable, but still present at the provider:
+    // the maintenance job retries the delete (purgeRejectedClones).
+    status: providerDeleted ? 'deleted' : 'failed',
+    deleted_at: providerDeleted ? now : null,
     consent: p.consent,
     created_by: userId,
   })
@@ -1356,4 +1358,37 @@ export async function getAllowedFallbackVoice(voiceId: string): Promise<ct.Carte
     throw new RequestError('not_found', 'Voice not found.', 404)
   }
   return voice
+}
+
+/**
+ * Maintenance: clones rejected for verification whose provider delete failed
+ * (status 'failed') are deleted again; a voice already gone counts as done.
+ */
+export async function purgeRejectedClones(limit: number, log: Logger): Promise<{ purged: number; failed: number }> {
+  const db = createAdminClient()
+  const { data, error } = await db
+    .from('provider_voices')
+    .select('id, voice_id, owner_org_id')
+    .eq('provider', 'elevenlabs')
+    .eq('source', 'cloned')
+    .eq('status', 'failed')
+    .limit(limit)
+  if (error) throw new Error(`provider_voices scan failed: ${error.message}`)
+  let purged = 0
+  let failed = 0
+  for (const row of data ?? []) {
+    try {
+      await el.voices.delete(row.voice_id as string, { orgId: (row.owner_org_id as string | null) ?? undefined })
+    } catch (err) {
+      if (!(isProviderError(err) && err.code === 'not_found')) {
+        failed++
+        log.error('voice_clone.purge_failed', err, { voiceId: row.voice_id })
+        continue
+      }
+    }
+    const { error: updErr } = await db.from('provider_voices').update({ status: 'deleted', deleted_at: new Date().toISOString() }).eq('id', row.id)
+    if (updErr) log.error('voice_clone.purge_mark_failed', updErr, { voiceId: row.voice_id })
+    else purged++
+  }
+  return { purged, failed }
 }

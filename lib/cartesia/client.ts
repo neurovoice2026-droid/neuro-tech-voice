@@ -243,8 +243,10 @@ export const webhooks = {
   create(body: { url: string; secret: string; display_name?: string }) {
     return req<{ id: string }>('webhooks.create', '/agents/webhooks', { method: 'POST', body, retry: NO_RETRY })
   },
-  list() {
-    return req<{ data: Array<{ id: string; url: string; display_name?: string | null }>; has_more: boolean }>('webhooks.list', '/agents/webhooks')
+  list(params: { limit?: number; starting_after?: string | null } = {}) {
+    return req<{ data: Array<{ id: string; url: string; display_name?: string | null }>; has_more: boolean }>('webhooks.list', '/agents/webhooks', {
+      query: { limit: params.limit ?? 100, starting_after: params.starting_after ?? undefined },
+    })
   },
 }
 
