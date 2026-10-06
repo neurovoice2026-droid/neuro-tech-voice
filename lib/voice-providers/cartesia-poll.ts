@@ -14,7 +14,7 @@ import { RANK } from './call-merge'
 
 const WINDOW_MS = 3 * 60_000
 
-export async function pollCartesiaCall(callId: string, log: Logger = createLogger()): Promise<'applied' | 'not_found' | 'pending'> {
+export async function pollCartesiaCall(callId: string, log: Logger = createLogger()): Promise<'applied' | 'not_found' | 'pending' | 'duplicate'> {
   const db = createAdminClient()
   const { data: call, error } = await db
     .from('calls')
@@ -61,6 +61,15 @@ export async function pollCartesiaCall(callId: string, log: Logger = createLogge
 
   const event = normalizeCartesiaCall(remote as ct.CartesiaCall & Record<string, unknown>)
   if (!event) return 'pending'
+  // Another row already holds this Cartesia call (created from a webhook
+  // before this row could be matched): that row carries the data and the
+  // billing; this one must not be billed again.
+  const { data: holder, error: holderErr } = await db.from('calls').select('id').eq('cartesia_call_id', remote.id).neq('id', callId).limit(1)
+  if (holderErr) throw new Error(`calls duplicate lookup failed: ${holderErr.message}`)
+  if (holder?.length) {
+    log.warn('cartesia_poll.held_by_other_row', { callId, otherCallId: holder[0].id })
+    return 'duplicate'
+  }
   await applyCallEvent({ ...event, localCallId: callId, localCallIdTrusted: true }, log)
   return 'applied'
 }
@@ -90,7 +99,7 @@ export async function reconcileCartesiaCalls(limit = 25, log: Logger = createLog
   if (error) throw new Error(`calls scan failed: ${error.message}`)
   const counts: Record<string, number> = {}
   for (const c of calls ?? []) {
-    let r: 'applied' | 'not_found' | 'pending' | 'error'
+    let r: 'applied' | 'not_found' | 'pending' | 'duplicate' | 'error'
     try {
       r = await pollCartesiaCall(c.id as string, log)
     } catch (err) {
@@ -104,9 +113,9 @@ export async function reconcileCartesiaCalls(limit = 25, log: Logger = createLog
       const ageMs = Date.now() - Date.parse(c.created_at as string)
       const routing = (c.routing ?? {}) as { cartesia_dial?: { duration?: number }; twilio_duration?: number; twilio_status?: string }
       const legEnded = !!routing.cartesia_dial || TWILIO_TERMINAL.has(routing.twilio_status ?? '')
-      if (r === 'applied' || !legEnded || ageMs <= 30 * 60_000) continue
+      if (r === 'applied' || (r !== 'duplicate' && (!legEnded || ageMs <= 30 * 60_000))) continue
       const seconds = routing.cartesia_dial?.duration ?? routing.twilio_duration ?? 0
-      if (seconds > 0 && !c.usage_recorded_at) {
+      if (r !== 'duplicate' && seconds > 0 && !c.usage_recorded_at) {
         await recordUsage(db, { orgId: c.org_id as string, callId: c.id as string, seconds, provider: 'cartesia', source: 'twilio_dial_duration' }, log)
       }
       const { error: finErr } = await db

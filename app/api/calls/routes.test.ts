@@ -166,41 +166,48 @@ describe('audio', () => {
     expect(res.headers.get('content-type')).toBe('audio/wav')
     expect(res.headers.get('cache-control')).toBe('private, no-store')
     expect(res.headers.get('content-disposition')).toMatch(/^inline;/)
+    expect(res.headers.get('accept-ranges')).toBeNull()
+    expect(res.headers.get('content-length')).toBe('4')
     expect(await res.text()).toBe('RIFF')
-    expect(res.headers.get('accept-ranges')).toBe('bytes')
-    expect(res.headers.get('content-length')).toBe('4')
   })
-  it('serves byte ranges so the player can seek', async () => {
+  it('ignores Range and always answers 200 with the full stream', async () => {
     handler = () => ({ data: ROW, error: null })
-    const audio = () => new Response('0123456789', { headers: { 'content-type': 'audio/mpeg' } })
-    vi.mocked(conversations.audio).mockImplementation(async () => audio())
-
-    let res = await audioGET(req('/a', { headers: { range: 'bytes=2-5' } }), params(ROW.id))
-    expect(res.status).toBe(206)
-    expect(res.headers.get('content-range')).toBe('bytes 2-5/10')
-    expect(res.headers.get('content-length')).toBe('4')
-    expect(res.headers.get('accept-ranges')).toBe('bytes')
-    expect(res.headers.get('cache-control')).toBe('private, no-store')
-    expect(await res.text()).toBe('2345')
-
-    res = await audioGET(req('/a', { headers: { range: 'bytes=7-' } }), params(ROW.id))
-    expect(res.status).toBe(206)
-    expect(res.headers.get('content-range')).toBe('bytes 7-9/10')
-    expect(await res.text()).toBe('789')
-
-    res = await audioGET(req('/a', { headers: { range: 'bytes=-3' } }), params(ROW.id))
-    expect(res.status).toBe(206)
-    expect(await res.text()).toBe('789')
-
-    res = await audioGET(req('/a', { headers: { range: 'bytes=0-999' } }), params(ROW.id))
-    expect(res.status).toBe(206)
-    expect(res.headers.get('content-range')).toBe('bytes 0-9/10')
-
-    for (const bad of ['bytes=10-', 'bytes=5-2', 'bytes=-0', 'bytes=0-1,4-5', 'items=0-1']) {
-      res = await audioGET(req('/a', { headers: { range: bad } }), params(ROW.id))
-      expect(res.status, bad).toBe(416)
-      expect(res.headers.get('content-range')).toBe('bytes */10')
+    vi.mocked(conversations.audio).mockImplementation(async () => new Response('0123456789', { headers: { 'content-type': 'audio/mpeg', 'content-length': '10' } }))
+    for (const range of ['bytes=2-5', 'bytes=0-', 'bytes=-3', 'bytes=10-', 'bytes=0-1,4-5', 'items=0-1']) {
+      const res = await audioGET(req('/a', { headers: { range } }), params(ROW.id))
+      expect(res.status, range).toBe(200)
+      expect(res.headers.get('content-range')).toBeNull()
+      expect(res.headers.get('accept-ranges')).toBeNull()
+      expect(res.headers.get('content-length')).toBe('10')
+      expect(await res.text()).toBe('0123456789')
     }
+    expect(conversations.audio).toHaveBeenCalledTimes(6)
+  })
+  it('streams long recordings without buffering them', async () => {
+    handler = () => ({ data: ROW, error: null })
+    const chunk = new Uint8Array(1024 * 1024)
+    const total = 200 // 200 MiB declared — far past any buffer cap
+    let pulled = 0
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1
+        if (pulled > total) controller.close()
+        else controller.enqueue(chunk)
+      },
+    }, { highWaterMark: 0 })
+    vi.mocked(conversations.audio).mockResolvedValue(new Response(body, { headers: { 'content-type': 'audio/mpeg', 'content-length': String(total * chunk.byteLength) } }))
+    const res = await audioGET(req('/a', { headers: { range: 'bytes=0-' } }), params(ROW.id))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-length')).toBe(String(total * chunk.byteLength))
+    expect(pulled).toBeLessThanOrEqual(1)
+    await res.body?.cancel()
+  })
+  it('drops Content-Length for an encoded upstream body', async () => {
+    handler = () => ({ data: ROW, error: null })
+    vi.mocked(conversations.audio).mockResolvedValue(new Response('abc', { headers: { 'content-type': 'audio/mpeg', 'content-length': '2', 'content-encoding': 'gzip' } }))
+    const res = await audioGET(req('/a'), params(ROW.id))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-length')).toBeNull()
   })
   it('404 when deleted / upstream missing', async () => {
     handler = () => ({ data: { ...ROW, recording_status: 'deleted' }, error: null })

@@ -60,7 +60,7 @@ export async function GET(request: Request) {
   try {
     const { supabase, org } = await requireOrg()
     log = log.child({ orgId: org.id })
-    await enforceRateLimit(RATE_LIMITS.agentSync, org.id)
+    await enforceRateLimit(RATE_LIMITS.diagnostics, org.id)
     const { agent, numbers, resources } = await loadState(supabase, org.id)
     const elAgentId = resources.find((r) => r.provider === 'elevenlabs')?.external_id as string | undefined
     const base = publicBaseUrl()

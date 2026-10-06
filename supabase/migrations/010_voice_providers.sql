@@ -25,6 +25,10 @@
 --   • knowledge-documents storage objects scoped to the owning org's folder
 -- ══════════════════════════════════════════════════════════════════════════════
 
+-- Before the first ALTER: every ACCESS EXCLUSIVE acquisition fails after 5 s
+-- instead of queueing (and blocking all readers) behind a long transaction.
+SET lock_timeout = '5s';
+
 -- ─── Organizations ────────────────────────────────────────────────────────────
 ALTER TABLE organizations ADD COLUMN IF NOT EXISTS timezone text NOT NULL DEFAULT 'UTC';
 ALTER TABLE organizations ADD COLUMN IF NOT EXISTS voice_fallback_enabled boolean NOT NULL DEFAULT true;
@@ -59,8 +63,6 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE agents ADD CONSTRAINT agents_voice_sync_status_check CHECK (voice_sync_status IN ('pending', 'saving', 'synced', 'failed'));
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-
-SET lock_timeout = '5s';
 
 -- Behaviour switches used to live in metadata.behavior_settings and never reached
 -- the provider. Copy them into the column the sync now reads (only once).
@@ -222,6 +224,8 @@ UPDATE calls SET lifecycle_rank = 50 WHERE status = 'completed' AND lifecycle_ra
 CREATE UNIQUE INDEX IF NOT EXISTS calls_cartesia_call_id_unique ON calls (cartesia_call_id) WHERE cartesia_call_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS calls_org_started ON calls (org_id, started_at DESC);
 CREATE INDEX IF NOT EXISTS calls_org_provider ON calls (org_id, provider);
+-- Router: early stream ends across organizations (shared media circuit).
+CREATE INDEX IF NOT EXISTS calls_early_stream_end ON calls ((routing ->> 'early_stream_end_at')) WHERE routing ? 'early_stream_end_at';
 
 DROP TRIGGER IF EXISTS calls_updated_at ON calls;
 CREATE TRIGGER calls_updated_at BEFORE UPDATE ON calls FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();

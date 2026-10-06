@@ -206,11 +206,16 @@ export async function applyCallEvent(event: NormalizedCallEvent, log: Logger = c
   throw new Error('calls update kept conflicting; will be retried')
 }
 
+const MEDIA_EVIDENCE_MAX_AGE_MS = 2 * 60_000
+
 async function afterWrite(db: SupabaseClient, callId: string, orgId: string, event: NormalizedCallEvent, log: Logger) {
   // A conversation that outlived the early-failure window proves the
-  // provider's media path works (closes/keeps closed its media circuit).
+  // provider's media path works — but only as fresh evidence: a late or
+  // retried webhook for a call that ended before an outage must not close
+  // the media circuit opened by that outage.
   if (event.kind === 'call.completed' && typeof event.durationSeconds === 'number' && event.durationSeconds > earlyFailureWindowSeconds()) {
-    await reportOutcome(`${event.provider}_media`, { ok: true })
+    const endedMs = event.startedAt ? Date.parse(event.startedAt) + event.durationSeconds * 1000 : NaN
+    if (Number.isFinite(endedMs) && Date.now() - endedMs < MEDIA_EVIDENCE_MAX_AGE_MS) await reportOutcome(`${event.provider}_media`, { ok: true })
   }
   if (event.kind === 'call.completed' && typeof event.durationSeconds === 'number' && event.durationSeconds > 0) {
     await recordUsage(db, { orgId, callId, seconds: event.durationSeconds, provider: event.provider, source: `${event.provider}_webhook` }, log)

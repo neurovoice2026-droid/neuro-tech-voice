@@ -103,11 +103,22 @@ export async function settleInterruptedVoiceSaves(limit: number, log: Logger) {
     .select('id')
     .eq('voice_sync_status', 'saving')
     .or(`voice_sync_started_at.is.null,voice_sync_started_at.lt."${cutoff}"`)
+    .order('voice_sync_started_at', { ascending: true, nullsFirst: true })
     .limit(limit)
   if (error) throw new Error(`agents scan failed: ${error.message}`)
   for (const a of data ?? []) {
     try {
-      await syncAgent(a.id as string, { providers: ['elevenlabs'], force: true, log })
+      const [res] = await syncAgent(a.id as string, { providers: ['elevenlabs'], force: true, log })
+      // A ready sync settles the status itself (agent-sync reconcileVoiceStatus);
+      // otherwise end the stuck save as failed so the owner can retry.
+      if (!res || res.status !== 'ready' || !res.appliedVoiceId) {
+        const { error: updErr } = await db
+          .from('agents')
+          .update({ voice_sync_status: 'failed', voice_sync_error: 'The voice could not be applied. Retry or choose another voice.', voice_sync_started_at: null })
+          .eq('id', a.id)
+          .eq('voice_sync_status', 'saving')
+        if (updErr) log.error('maintenance.voice_settle_write_failed', updErr, { agentId: a.id })
+      }
     } catch (err) {
       log.error('maintenance.voice_settle_failed', err, { agentId: a.id })
     }
@@ -139,7 +150,9 @@ export async function pruneOperationalData(log: Logger, now = Date.now()) {
     db.from('webhook_events').delete().in('status', ['processed', 'ignored']).lt('received_at', iso(retentionDays('WEBHOOK_EVENTS_RETENTION_DAYS', 90))),
   )
   // Dead-lettered events keep their row (audit) but not the PII payload.
-  await run('webhook_payloads', () => db.from('webhook_events').update({ payload: null }).eq('status', 'failed').lt('received_at', iso(30)))
+  await run('webhook_payloads', () =>
+    db.from('webhook_events').update({ payload: null }).eq('status', 'failed').lt('received_at', iso(retentionDays('WEBHOOK_PAYLOAD_RETENTION_DAYS', 30))),
+  )
   await run('rate_limit_buckets', () => db.from('rate_limit_buckets').delete().lt('window_start', iso(2)))
   return out
 }

@@ -173,7 +173,17 @@ async function attachCartesiaWebhook(agentId: string): Promise<string | null> {
       externalAgentId: agentId,
       code: isProviderError(err) ? err.code : 'unknown',
     })
-    if (isProviderError(err) && err.code === 'not_found') await forgetPlatformResource('cartesia.call_webhook')
+    // A 404 from the attach can mean "agent unknown to the legacy endpoint"
+    // rather than "webhook gone": forget the id only when the webhook really
+    // no longer exists, or every sync would create (and leak) a new one.
+    if (isProviderError(err) && err.code === 'not_found') {
+      try {
+        const { data } = await ct.webhooks.list()
+        if (!(data ?? []).some((w) => w.id === webhookId)) await forgetPlatformResource('cartesia.call_webhook')
+      } catch (listErr) {
+        createLogger({ component: 'cartesia_lifecycle' }).warn('cartesia.webhook_list_failed', { code: isProviderError(listErr) ? listErr.code : 'unknown' })
+      }
+    }
     return null
   }
 }

@@ -334,6 +334,38 @@ export async function routeOutboundConnect(callId: string, p: Record<string, str
   return connect(ctx, call, plan.candidates, { afterHours: false, direction: 'outbound', skipped: skippedSummary(plan) }, cl)
 }
 
+/** Distinct organizations that must see early stream ends before the shared media circuit counts one. */
+const EARLY_END_MIN_ORGS = 2
+const EARLY_END_WINDOW_MS = 2 * 60_000
+
+/**
+ * Marks this call's early stream end and reports a media failure only when
+ * calls of at least EARLY_END_MIN_ORGS organizations ended early within the
+ * window: one tenant (a prompt that ends the call immediately, a broken
+ * voice) can never take ElevenLabs out of routing for everyone.
+ */
+async function recordEarlyStreamEnd(db: SupabaseClient, call: CallRow, log: Logger) {
+  // Kept on the in-memory row too: the failover below rewrites routing from it.
+  call.routing = { ...call.routing, early_stream_end_at: new Date().toISOString() }
+  await updateCall(db, call.id, { routing: call.routing }, log)
+  const since = new Date(Date.now() - EARLY_END_WINDOW_MS).toISOString()
+  const { data, error } = await db
+    .from('calls')
+    .select('org_id')
+    .eq('provider', 'elevenlabs')
+    .gte('created_at', new Date(Date.now() - 4 * 3600_000).toISOString())
+    .filter('routing->>early_stream_end_at', 'gte', since)
+    .limit(50)
+  if (error) {
+    log.error('router.early_end_scan_failed', error)
+    return
+  }
+  const orgs = new Set((data ?? []).map((r) => r.org_id as string))
+  orgs.add(call.org_id)
+  if (orgs.size >= EARLY_END_MIN_ORGS) await reportOutcome('elevenlabs_media', { ok: false, code: 'upstream' })
+  else log.info('router.early_end_single_org', { orgs: orgs.size })
+}
+
 /**
  * POST /api/telephony/twilio/stream-ended?t= — the ElevenLabs media stream
  * closed while the caller is still on the line. Within the early-failure
@@ -353,10 +385,12 @@ export async function handleStreamEnded(callId: string, p: Record<string, string
   const window = earlyFailureWindowSeconds()
   const early = call.provider === 'elevenlabs' && elapsed <= window
   // Media-plane health: a stream that outlived the early window proves the
-  // conversation path works; one that died within it is a failure. This
-  // feeds the ElevenLabs media circuit, which REST successes cannot close.
+  // conversation path works. A stream that ended within it may be a platform
+  // failure — or a tenant's own agent hanging up at once — so it only counts
+  // against the shared circuit when several organizations see it (below).
   if (call.provider === 'elevenlabs' && Number.isFinite(elapsed)) {
-    await reportOutcome('elevenlabs_media', early ? { ok: false, code: 'upstream' } : { ok: true })
+    if (!early) await reportOutcome('elevenlabs_media', { ok: true })
+    else await recordEarlyStreamEnd(db, call, cl)
   }
   const alreadyFellBack = attempts.some((a) => a.provider === 'cartesia')
   if (!early || call.direction !== 'inbound' || alreadyFellBack || !call.phone_number_id) {

@@ -2,8 +2,9 @@
 // multipart/form-data:
 //   name, speaker_name, consent='true', rights_attestation='true',
 //   files (1–3 audio samples; `files[]` also accepted), language? (agent language by default)
-// → 201 { voice: VoiceOption } (+ requires_verification: true when the provider
-//   holds the voice for verification; it is not selectable until then).
+// → 201 { voice: VoiceOption }. When the provider holds the clone for speaker
+//   verification (which a tenant cannot complete in the shared workspace), the
+//   clone is deleted again and the route answers 422 with a product message.
 //
 // Vercel rejects request bodies above 4.5 MB, so the samples are limited to
 // 4 MB in total. Each file is checked by MIME type AND magic bytes. Audio is
@@ -150,10 +151,7 @@ export async function POST(request: Request) {
       ipHash: hashClientIp(request.headers.get('x-forwarded-for')),
       log,
     })
-    return NextResponse.json(
-      { voice: result.voice, ...(result.requiresVerification ? { requires_verification: true } : {}) },
-      { status: 201 },
-    )
+    return NextResponse.json({ voice: result.voice }, { status: 201 })
   } catch (err) {
     return voiceErrorResponse(err, log, 'voices.clone.failed', requestId)
   }

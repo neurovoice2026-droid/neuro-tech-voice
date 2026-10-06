@@ -1053,11 +1053,72 @@ export interface CloneSample {
   mime: string
 }
 
+export const CLONE_NEEDS_VERIFICATION_MESSAGE = 'This voice could not be cloned automatically. Try different recordings.'
+
+/**
+ * ElevenLabs held the clone for speaker verification. The platform workspace
+ * is shared, so the tenant can never complete that verification and nothing
+ * promotes such a clone: it is deleted at the provider, registered only as a
+ * 'deleted' row (consent evidence; never listed or selectable) and audited.
+ */
+async function rejectUnverifiedClone(
+  db: SupabaseClient,
+  p: { orgId: string; userId: string; voiceId: string; name: string; language: string | null; consent: Record<string, unknown>; files: number; log: Logger },
+): Promise<never> {
+  const { orgId, userId, voiceId, log } = p
+  let providerDeleted = true
+  try {
+    await el.voices.delete(voiceId, { orgId })
+  } catch (err) {
+    if (isProviderError(err) && err.code === 'not_found') {
+      log.info('voice_clone.already_gone_upstream', { voiceId })
+    } else {
+      providerDeleted = false
+      log.error('voice_clone.verification_delete_failed', err, { voiceId })
+    }
+  }
+  const now = new Date().toISOString()
+  const { error } = await db.from('provider_voices').insert({
+    provider: 'elevenlabs',
+    voice_id: voiceId,
+    source: 'cloned',
+    owner_org_id: orgId,
+    name: p.name,
+    language: p.language,
+    category: 'cloned',
+    status: 'deleted',
+    deleted_at: now,
+    consent: p.consent,
+    created_by: userId,
+  })
+  if (error) log.error('voice_clone.rejected_register_failed', error, { voiceId })
+  log.warn('voice_clone.rejected_verification', { voiceId, providerDeleted })
+  await writeAudit(
+    db,
+    {
+      orgId,
+      userId,
+      action: 'voice.clone.rejected_verification',
+      targetId: voiceId,
+      details: {
+        name: p.name,
+        language: p.language,
+        files: p.files,
+        statement_version: CONSENT_STATEMENT_VERSION,
+        provider_deleted: providerDeleted,
+      },
+    },
+    log,
+  )
+  throw new RequestError('invalid_request', CLONE_NEEDS_VERIFICATION_MESSAGE, 422, { reason: 'requires_verification' })
+}
+
 /**
  * Instant voice clone for one org. Audio is streamed to ElevenLabs and never
  * stored by us. The registry row (owner_org_id = org) makes the clone visible
  * to that org only; if it cannot be written, the clone is deleted again so no
- * unregistered voice is left in the shared workspace.
+ * unregistered voice is left in the shared workspace. A clone the provider
+ * holds for verification is deleted and rejected with a 422.
  */
 export async function createInstantClone(params: {
   orgId: string
@@ -1068,7 +1129,7 @@ export async function createInstantClone(params: {
   samples: CloneSample[]
   ipHash: string | null
   log: Logger
-}): Promise<{ voice: VoiceOption; requiresVerification: boolean }> {
+}): Promise<{ voice: VoiceOption }> {
   const { orgId, userId, samples } = params
   const log = params.log.child({ component: 'voice_clone' })
   const name = displayName(params.name)
@@ -1089,8 +1150,6 @@ export async function createInstantClone(params: {
   if (!voiceId || !EL_VOICE_ID_RE.test(voiceId)) {
     throw new ProviderError({ system: 'elevenlabs', operation: 'voices.ivc', code: 'bad_response', detail: 'missing voice_id' })
   }
-  const requiresVerification = created.requires_verification === true
-
   const consent = {
     accepted_at: new Date().toISOString(),
     user_id: userId,
@@ -1098,6 +1157,10 @@ export async function createInstantClone(params: {
     statement_version: CONSENT_STATEMENT_VERSION,
     ip_hash: params.ipHash,
   }
+  if (created.requires_verification === true) {
+    await rejectUnverifiedClone(db, { orgId, userId, voiceId, name, language: params.language, consent, files: samples.length, log })
+  }
+
   const { error } = await db.from('provider_voices').insert({
     provider: 'elevenlabs',
     voice_id: voiceId,
@@ -1106,7 +1169,7 @@ export async function createInstantClone(params: {
     name,
     language: params.language,
     category: 'cloned',
-    status: requiresVerification ? 'pending' : 'ready',
+    status: 'ready',
     consent,
     created_by: userId,
   })
@@ -1119,7 +1182,6 @@ export async function createInstantClone(params: {
     }
     throw new Error(`provider_voices insert failed: ${error.message}`)
   }
-  if (requiresVerification) log.warn('voice_clone.requires_verification', { voiceId })
   log.info('voice_clone.created', { voiceId, files: samples.length })
 
   await writeAudit(
@@ -1135,7 +1197,6 @@ export async function createInstantClone(params: {
         files: samples.length,
         total_bytes: samples.reduce((n, s) => n + s.file.size, 0),
         statement_version: CONSENT_STATEMENT_VERSION,
-        requires_verification: requiresVerification,
       },
     },
     log,
@@ -1157,7 +1218,6 @@ export async function createInstantClone(params: {
       requiresProvisioning: false,
       libraryRef: null,
     },
-    requiresVerification,
   }
 }
 

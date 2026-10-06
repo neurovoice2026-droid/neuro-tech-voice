@@ -94,7 +94,8 @@ export async function provisionPhoneNumber(
       org_id: orgId,
       twilio_sid: purchased.sid,
       number: purchased.phoneNumber,
-      friendly_name: purchased.friendlyName,
+      // The purchase marker is internal: never shown as the number's label.
+      friendly_name: marker && purchased.friendlyName === marker ? null : purchased.friendlyName,
       country: country ?? 'US',
       is_active: true,
       is_verified: true,

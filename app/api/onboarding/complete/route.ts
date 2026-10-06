@@ -193,7 +193,11 @@ export async function POST(request: Request) {
     // Fall back to the monthly price if an annual one isn't configured yet.
     const priceId = stripePriceId(body.plan, interval) || planConfig.stripe_price_id
     const willCheckout = !!priceId && isStripeConfigured()
-    const effectivePlan: Plan = willCheckout || planConfig.contact_sales ? 'trial' : body.plan
+    // Billing configured but this paid tier has no price id: never grant a
+    // paid plan for free — fall back to the trial and flag the misconfiguration.
+    const paidWithoutPrice = isStripeConfigured() && !planConfig.contact_sales && planConfig.price_monthly > 0 && !priceId
+    if (paidWithoutPrice) log.error('onboarding.price_not_configured', null, { plan: body.plan, interval })
+    const effectivePlan: Plan = willCheckout || planConfig.contact_sales || paidWithoutPrice ? 'trial' : body.plan
 
     // plan / minutes_limit are platform-managed columns (guard trigger): written
     // with the service role, scoped to the authorized org.

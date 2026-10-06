@@ -295,6 +295,40 @@ describe('clones', () => {
     await expect(vc.createInstantClone({ orgId: ORG_A, userId: 'u1', name: 'n', speakerName: 's', language: null, samples: [{ file: new Blob([new Uint8Array(2048)]), kind: 'mp3', mime: 'audio/mpeg' }], ipHash: null, log })).rejects.toThrow()
     expect(el.voices.delete).toHaveBeenCalledWith('Clash000000000000001', { orgId: ORG_A })
   })
+  it('deletes and rejects a clone the provider holds for verification', async () => {
+    const sample = { file: new Blob([new Uint8Array(2048)]), kind: 'wav' as const, mime: 'audio/wav' }
+    el.voices.addInstantClone.mockResolvedValue({ voice_id: 'Verify00000000000001', requires_verification: true })
+    el.voices.delete.mockResolvedValue({ status: 'ok' })
+    const err = await vc.createInstantClone({ orgId: ORG_A, userId: 'u1', name: 'Front desk', speakerName: 'Ana Pop', language: 'ro', samples: [sample], ipHash: 'abc', log }).catch((e: unknown) => e)
+    expect(err).toMatchObject({ status: 422, message: 'This voice could not be cloned automatically. Try different recordings.' })
+    expect(el.voices.delete).toHaveBeenCalledWith('Verify00000000000001', { orgId: ORG_A })
+    // No usable or pending row: only a 'deleted' one holding the consent evidence.
+    expect(db.tables.provider_voices).toHaveLength(1)
+    expect(db.tables.provider_voices[0]).toMatchObject({ voice_id: 'Verify00000000000001', owner_org_id: ORG_A, status: 'deleted' })
+    expect(db.tables.provider_voices[0].deleted_at).toEqual(expect.any(String))
+    expect(db.tables.provider_voices[0].consent).toMatchObject({ user_id: 'u1', speaker_name: 'Ana Pop' })
+    expect(db.tables.audit_log).toHaveLength(1)
+    expect(db.tables.audit_log[0]).toMatchObject({ action: 'voice.clone.rejected_verification', target_id: 'Verify00000000000001', details: { provider_deleted: true } })
+    // The route maps it to a 422 with the product message.
+    const res = vc.voiceErrorResponse(err, log, 'e', 'rid')
+    expect(res.status).toBe(422)
+    expect(await res.json()).toMatchObject({ error: 'This voice could not be cloned automatically. Try different recordings.' })
+    // Never offered in the catalog.
+    expect(await vc.deleteOrgClone({ orgId: ORG_A, userId: 'u1', voiceId: 'Verify00000000000001', log }).catch((e: unknown) => e)).toMatchObject({ status: 404 })
+  })
+  it('still rejects a verification-held clone when the provider delete fails', async () => {
+    const sample = { file: new Blob([new Uint8Array(2048)]), kind: 'mp3' as const, mime: 'audio/mpeg' }
+    el.voices.addInstantClone.mockResolvedValue({ voice_id: 'Verify00000000000002', requires_verification: true })
+    el.voices.delete.mockRejectedValueOnce(new ProviderError({ system: 'elevenlabs', operation: 'voices.delete', code: 'upstream' }))
+    await expect(vc.createInstantClone({ orgId: ORG_A, userId: 'u1', name: 'n', speakerName: 's', language: null, samples: [sample], ipHash: null, log })).rejects.toMatchObject({ status: 422 })
+    expect(db.tables.provider_voices[0]).toMatchObject({ status: 'deleted' })
+    expect(db.tables.audit_log[0]).toMatchObject({ action: 'voice.clone.rejected_verification', details: { provider_deleted: false } })
+
+    el.voices.addInstantClone.mockResolvedValue({ voice_id: 'Verify00000000000003', requires_verification: true })
+    el.voices.delete.mockRejectedValueOnce(new ProviderError({ system: 'elevenlabs', operation: 'voices.delete', code: 'not_found' }))
+    await expect(vc.createInstantClone({ orgId: ORG_A, userId: 'u1', name: 'n', speakerName: 's', language: null, samples: [sample], ipHash: null, log })).rejects.toMatchObject({ status: 422 })
+    expect(db.tables.audit_log[1]).toMatchObject({ details: { provider_deleted: true } })
+  })
 })
 
 describe('voiceErrorResponse', () => {

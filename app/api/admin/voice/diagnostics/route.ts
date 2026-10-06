@@ -65,7 +65,13 @@ export async function GET(request: Request) {
       {
         config: summarizeVoiceConfig(),
         problems: validateVoiceConfig(),
-        circuits: { elevenlabs: elCircuit.raw, elevenlabs_media: elMedia.raw, cartesia: ctCircuit.raw, cartesia_media: ctMedia.raw },
+        // `effective` is what routing sees (forced overrides, open → half-open after the open period).
+        circuits: {
+          elevenlabs: { effective: elCircuit.state, ...elCircuit.raw },
+          elevenlabs_media: { effective: elMedia.state, ...elMedia.raw },
+          cartesia: { effective: ctCircuit.state, ...ctCircuit.raw },
+          cartesia_media: { effective: ctMedia.state, ...ctMedia.raw },
+        },
         platform_resources: Object.fromEntries(Object.entries(resources).map(([k, v]) => [k, !!v])),
         agent_sync: tally(syncRows.data ?? [], 'provider', 'status'),
         webhook_backlog: tally(webhookRows.data ?? [], 'provider', 'status'),

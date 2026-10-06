@@ -123,8 +123,10 @@ Five situations are kept distinct in the DB (`calls.routing_reason`), the UI and
 2. A provider is skipped when not configured, its agent/number resource is missing,
    or its circuit is open (`failover_reason` e.g. `elevenlabs:circuit_open`).
 3. Fallback only when `VOICE_FALLBACK_ENABLED` and the org's `voice_fallback_enabled`.
-4. An open circuit is half-opened by **one** probe call (lease in DB) or by the
-   maintenance health probe; success closes it, failure re-opens with backoff.
+4. After its open period a circuit becomes half-open. The API circuit hands out
+   **one** probe call at a time (lease in DB; the maintenance health probe also
+   counts); media circuits let calls through while half-open and the first
+   outcome decides. Success closes the circuit, failure re-opens it with backoff.
 
 During the call:
 
@@ -145,7 +147,7 @@ Circuits (shared by all instances, stored in `provider_circuit_state`):
 | Circuit | Fed by | Never fed by |
 |---|---|---|
 | `elevenlabs` (API) | register-call / outbound-call outcomes, maintenance health probe | previews, catalog, knowledge uploads, agent syncs (tenant-triggered) |
-| `elevenlabs_media` | stream ended within the early window (failure); stream that outlived it or a completed conversation longer than the window (success) | REST successes |
+| `elevenlabs_media` | early stream ends seen by **≥2 organizations** within 2 min (failure — one tenant's agent hanging up at once cannot trip it); a stream that outlived the early window, or a completed conversation longer than the window that ended in the last 2 min (success) | REST successes, late/retried webhooks |
 | `cartesia` (API) | maintenance health probe | tenant-triggered requests |
 | `cartesia_media` | SIP leg result (`DialCallStatus`) | REST successes |
 
@@ -208,8 +210,10 @@ startup (`instrumentation.ts`) and shown by `GET /api/admin/voice/diagnostics`
 3. `CARTESIA_WEBHOOK_SECRET` (≥24 chars) — the call-event webhook to
    `/api/cartesia/webhook` is created automatically.
 4. `CARTESIA_TOOL_SECRET` (≥24 chars) — bearer token of `get_call_context`.
-5. Optional per-language voice map `CARTESIA_FALLBACK_VOICES` (e.g. Romanian
-   voices "Andrada"/"Andrei"); otherwise the first active voice for the language.
+5. Optional per-language voice map `CARTESIA_FALLBACK_VOICES` — JSON of language
+   code → Cartesia **voice id** (look up the ids of e.g. the Romanian voices
+   "Andrada"/"Andrei" in the Cartesia voice library; names are ignored);
+   otherwise the first active voice for the language.
 
 ### Twilio
 * `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` (also used to validate
@@ -278,9 +282,11 @@ per call through `record_call_usage` (ledger key `call:<uuid>`).
   `lifecycle_rank`, `workflows_triggered_at`, `usage_recorded_at`.
 * `knowledge_documents`: provider doc ids, `mime_type`, `attached_at`,
   `last_synced_at`, `attempt_count`, `content_excerpt`.
-* Service-only tables: `webhook_events`, `usage_ledger`, `provider_circuit_state`,
-  `provider_events`, `platform_resources`, `rate_limit_buckets`; tenant-readable:
-  `provider_voices` (own org + platform voices), `audit_log` (own org).
+* Service-only tables: `webhook_events`, `provider_circuit_state`,
+  `provider_events`, `platform_resources`, `rate_limit_buckets`. Tenant-readable
+  (own org, no tenant writes): `usage_ledger`, `agent_provider_resources`
+  (read by the agent page and phone diagnose), `provider_voices` (own org +
+  platform voices), `audit_log`.
 * `guard_platform_columns` trigger: a tenant JWT cannot change billing, provider
   ids, voices (`voice_id`, `fallback_voice_id` — eligibility-checked server-side),
   routing mode/status, sync state or knowledge-processing fields, nor insert
@@ -303,6 +309,10 @@ per call through `record_call_usage` (ledger key `call:<uuid>`).
   consume its billing key. Agents are created with `enable_auth` (no anonymous
   web sessions; opt out with `ELEVENLABS_AGENT_AUTH=false` only if a live test
   shows a telephony path needs it — **unverified live**).
+* An instant clone that ElevenLabs holds for manual verification cannot be
+  completed in-app: it is deleted at the provider right away, its consent
+  record kept (status deleted) and audited, and the user is asked to try other
+  recordings.
 * Secrets are server-only; logs are JSON with keys/tokens/JWTs redacted and phone
   numbers masked; transcripts and prompts are never logged; HTTP errors carry a
   product message + request id, never upstream bodies.
@@ -319,7 +329,9 @@ per call through `record_call_usage` (ledger key `call:<uuid>`).
 * AI disclosure is always on; a recording notice can be added to the greeting.
 * Retention: recordings/transcripts at the provider follow the agent's
   `privacy_settings.retention_days`; `provider_events` 30 days, processed
-  `webhook_events` 90 days, dead-letter payloads 30 days (configurable).
+  `webhook_events` 90 days, dead-letter payloads 30 days (configurable with
+  `PROVIDER_EVENTS_RETENTION_DAYS`, `WEBHOOK_EVENTS_RETENTION_DAYS`,
+  `WEBHOOK_PAYLOAD_RETENTION_DAYS`).
 * Deletion: deleting a call deletes it at the provider first, then the row
   (audited). Deleting a knowledge document detaches/deletes it at ElevenLabs and
   removes the Storage object. Releasing a number removes provider imports, the
@@ -338,7 +350,10 @@ per call through `record_call_usage` (ledger key `call:<uuid>`).
    `POST /api/admin/voice/circuit {"provider":"elevenlabs","action":"open"}`
    (or set `VOICE_FORCE_PROVIDER=cartesia` and redeploy for a hard switch).
 3. New calls on app-routed numbers go to Cartesia; native numbers are not covered.
-4. Recovery: `{"action":"auto"}` (half-open probe closes it) or remove the env override.
+4. Recovery: `POST /api/admin/voice/circuit {"provider":"elevenlabs","action":"auto"}`
+   clears the override and puts the circuit in half-open: one probe call decides
+   (success closes it, failure re-opens it). Do the same for `elevenlabs_media`
+   if that circuit is open. With the env kill switch, remove the variable and redeploy.
 
 **Cartesia outage**: calls keep working on ElevenLabs; fallback attempts fail fast
 (circuit open). Nothing to do unless ElevenLabs is also down (final-failure path:
@@ -350,10 +365,15 @@ cron with jittered exponential backoff (1 min → 1 h).
 **Reconciliation** (dry run first):
 ```
 ADMIN_API_TOKEN=… node scripts/reconcile-voice-providers.mjs --base-url https://app.example.com
-… --apply                    # re-sync agents with missing/failed/duplicate resources
-… --apply --delete-orphans   # also delete ElevenLabs agents tagged for this env with no local agent
+… --apply                    # re-sync agents with missing, unrecorded, failed or degraded resources
+… --apply --delete-orphans   # also delete ElevenLabs agents tagged for this env that are orphans
 ```
-Cartesia orphans are reported only (no environment marker).
+Duplicates (several remote agents for one local agent) are decided after the
+re-sync, against the id the sync recorded: only the others are deleted with
+`--delete-orphans`; when no recorded id can be confirmed they are reported as
+`unresolved` and never deleted. Agents whose local agent no longer exists are
+deleted too (ElevenLabs only). Cartesia orphans are reported only (no
+environment marker).
 
 **Duplicate agents** (the migration's `agents_one_per_org` NOTICE): list them with
 ```sql

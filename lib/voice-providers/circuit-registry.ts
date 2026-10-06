@@ -164,11 +164,23 @@ export async function reportOutcome(
 /** Admin override: force a circuit open (maintenance), closed, or clear the override. */
 export async function forceCircuit(provider: CircuitKey, forced: 'open' | 'closed' | null, now = Date.now()): Promise<CircuitState> {
   const s = await getStore()
-  const { state } = await updateCircuit(s, provider, now, (st) => ({
-    ...st,
-    forced,
-    ...(forced === null ? { state: 'closed' as const, openUntil: null, openedAt: null, consecutiveFailures: 0, reopenCount: 0, probeStartedAt: null } : {}),
-  }))
+  const { state } = await updateCircuit(s, provider, now, (st) => {
+    if (forced !== null) return { ...st, forced }
+    // Back to automatic: a circuit that was forced open (or is open/half-open)
+    // resumes half-open, so recovery goes through a probe instead of sending
+    // all traffic back at once; a healthy circuit simply stays closed.
+    const recovering = st.forced === 'open' || st.state !== 'closed'
+    return {
+      ...st,
+      forced: null,
+      state: recovering ? ('half_open' as const) : ('closed' as const),
+      openUntil: null,
+      openedAt: recovering ? st.openedAt : null,
+      consecutiveFailures: 0,
+      reopenCount: 0,
+      probeStartedAt: null,
+    }
+  })
   emitProviderEvent({ system: systemOf(provider), kind: 'circuit_transition', ok: forced !== 'open', details: { circuit: provider, forced } })
   return state
 }

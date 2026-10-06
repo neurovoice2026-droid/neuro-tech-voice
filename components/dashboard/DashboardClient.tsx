@@ -37,7 +37,7 @@ export function DashboardClient({ org, agent, integrations, phoneNumber }: Dashb
 
   return (
     <>
-      <DashboardWelcome />
+      <DashboardWelcome agentActive={agent?.is_active === true} />
 
       <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
         {/* Header */}

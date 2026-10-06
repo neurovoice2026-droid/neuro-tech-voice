@@ -82,7 +82,14 @@ export async function startOutboundCall(req: OutboundRequest, log: Logger = crea
           agent_id: ctx.externalIds.elevenlabs,
           agent_phone_number_id: number.elevenlabs_phone_number_id,
           to_number: to,
-          conversation_initiation_client_data: { user_id: req.orgId, dynamic_variables: { ntv_call_id: call.id as string, ntv_call_token: 'none', after_hours: 'false', business_name: ctx.org.name ?? '' } },
+          conversation_initiation_client_data: { user_id: req.orgId, dynamic_variables: {
+            ntv_call_id: call.id as string,
+            // Signed so the post-call webhook can be matched to this row (a
+            // bare ntv_call_id is never trusted).
+            ntv_call_token: signCallToken(call.id as string, 'transfer', 4 * 3600),
+            after_hours: 'false',
+            business_name: ctx.org.name ?? '',
+          } },
         },
         { orgId: req.orgId, agentId: ctx.agent.id, callId: call.id as string },
       )

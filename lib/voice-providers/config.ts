@@ -109,9 +109,10 @@ export function summarizeVoiceConfig(): VoiceConfigSummary {
     },
     cartesia: {
       apiKey: present('CARTESIA_API_KEY'),
-      webhookSecret: present('CARTESIA_WEBHOOK_SECRET'),
+      // Shorter secrets are rejected by platform-resources (webhook not created).
+      webhookSecret: (process.env.CARTESIA_WEBHOOK_SECRET ?? '').trim().length >= 24,
       sipCredentials: present('CARTESIA_SIP_USERNAME') && present('CARTESIA_SIP_PASSWORD'),
-      toolSecret: present('CARTESIA_TOOL_SECRET'),
+      toolSecret: (process.env.CARTESIA_TOOL_SECRET ?? '').trim().length >= 24,
       fallbackVoices: Object.keys(cartesiaFallbackVoices()).length,
     },
     twilio: { accountSid: present('TWILIO_ACCOUNT_SID'), authToken: present('TWILIO_AUTH_TOKEN') },
@@ -145,8 +146,8 @@ export function validateVoiceConfig(): ConfigProblem[] {
   if (s.routing.fallbackEnabled) {
     if (!s.cartesia.apiKey) warn('CARTESIA_API_KEY', 'Cartesia fallback is enabled but not configured: calls fail over to the apology/human path only.')
     if (s.cartesia.apiKey && !s.cartesia.sipCredentials) err('CARTESIA_SIP_USERNAME/CARTESIA_SIP_PASSWORD', 'Cartesia is configured but the SIP trunk credentials are missing: fallback calls cannot be connected.')
-    if (s.cartesia.apiKey && !s.cartesia.webhookSecret) warn('CARTESIA_WEBHOOK_SECRET', 'Cartesia call events will only be collected by polling.')
-    if (s.cartesia.apiKey && !s.cartesia.toolSecret) warn('CARTESIA_TOOL_SECRET', 'The fallback agent cannot fetch per-call context (after-hours flag).')
+    if (s.cartesia.apiKey && !s.cartesia.webhookSecret) warn('CARTESIA_WEBHOOK_SECRET', 'Missing or shorter than 24 chars: Cartesia call events will only be collected by polling.')
+    if (s.cartesia.apiKey && !s.cartesia.toolSecret) warn('CARTESIA_TOOL_SECRET', 'Missing or shorter than 24 chars: the fallback agent cannot fetch per-call context (after-hours flag).')
   }
   if (!s.security.cronSecret) warn('CRON_SECRET', 'Scheduled maintenance (health checks, webhook retries, Cartesia polling) is not protected/enabled.')
   if (!s.security.adminToken && !s.security.adminUsers) warn('ADMIN_API_TOKEN/PLATFORM_ADMIN_USER_IDS', 'No platform admin configured: diagnostics and reconciliation endpoints are unreachable.')

@@ -105,6 +105,7 @@ export async function reconcileVoiceProviders(opts: ReconcileOptions): Promise<R
     }
   }
 
+  const duplicateCandidates: Array<{ agentId: string; provider: VoiceProvider; remoteIds: string[] }> = []
   for (const agentId of agentIds) {
     report.agentsChecked++
     let wanted: VoiceProvider[]
@@ -127,11 +128,10 @@ export async function reconcileVoiceProviders(opts: ReconcileOptions): Promise<R
       if (!recorded && remoteIds.length === 0) push('not_created')
       else if (!recorded && remoteIds.length > 0) push('unrecorded_remote', remoteIds)
       else if (recorded && !remoteIds.includes(recorded)) push('missing_remote', [recorded])
-      if (remoteIds.length > 1) {
-        const extras = remoteIds.filter((id) => id !== recorded)
-        report.issues.push({ agentId, provider: p, kind: 'duplicates', externalIds: extras })
-        for (const id of extras) report.orphans.push({ provider: p, externalId: id, localAgentId: agentId, deleted: false, note: 'duplicate' })
-      }
+      // Duplicates are decided after the sync below (which may adopt one of
+      // them): deleting against the pre-sync record could remove the agent
+      // that was just adopted.
+      if (remoteIds.length > 1) duplicateCandidates.push({ agentId, provider: p, remoteIds })
       if (row && ['failed', 'degraded', 'pending'].includes(row.status as string)) push(row.status as 'failed' | 'degraded' | 'pending')
     }
     if (opts.apply && needsSync.length) {
@@ -139,6 +139,25 @@ export async function reconcileVoiceProviders(opts: ReconcileOptions): Promise<R
       for (const r of results) {
         for (const issue of report.issues) if (issue.agentId === agentId && issue.provider === r.provider) issue.action = `synced:${r.status}`
       }
+    }
+  }
+
+  if (duplicateCandidates.length) {
+    const { data: fresh, error: freshErr } = await db
+      .from('agent_provider_resources')
+      .select('agent_id, provider, external_id')
+      .in('agent_id', duplicateCandidates.map((d) => d.agentId))
+    if (freshErr) throw new Error(`agent_provider_resources re-read failed: ${freshErr.message}`)
+    for (const d of duplicateCandidates) {
+      const recorded = (fresh ?? []).find((r) => r.agent_id === d.agentId && r.provider === d.provider)?.external_id as string | undefined
+      if (!recorded || !d.remoteIds.includes(recorded)) {
+        // No confirmed live agent to keep: report only, never delete.
+        report.issues.push({ agentId: d.agentId, provider: d.provider, kind: 'duplicates', externalIds: d.remoteIds, action: 'unresolved' })
+        continue
+      }
+      const extras = d.remoteIds.filter((id) => id !== recorded)
+      report.issues.push({ agentId: d.agentId, provider: d.provider, kind: 'duplicates', externalIds: extras })
+      for (const id of extras) report.orphans.push({ provider: d.provider, externalId: id, localAgentId: d.agentId, deleted: false, note: 'duplicate' })
     }
   }
 

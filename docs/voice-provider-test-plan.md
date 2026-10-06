@@ -19,19 +19,27 @@ Coverage (see `*.test.ts`):
 
 | Area | Tests |
 |---|---|
-| Circuit breaker, provider selection, working hours (DST, overnight, 24 h) | `circuit-breaker`, `routing`, `working-hours` |
+| Circuit breaker, API vs media circuits, forced/auto recovery, provider selection, outbound routing, working hours (DST, overnight, 24 h) | `circuit-breaker`, `circuit-registry`, `routing`, `working-hours` |
 | HTTP policy: timeouts, retry only when safe, jitter, Retry-After, no retry on 4xx | `voice-providers/http` |
 | Webhook signature (HMAC, tolerance, tamper), Cartesia secret, normalization, dedupe | `elevenlabs/webhook`, `cartesia/webhook`, webhook route tests |
-| Call merge: out-of-order / duplicate / partial events never downgrade | `call-merge` |
+| Call merge: out-of-order / duplicate / partial events never downgrade; abandoned provider conversation never overwrites; trusted call correlation (signed token) | `call-merge`, `call-store` |
 | Prompt composition (platform rules, injection, diacritics), settings schemas, E.164 | `prompt`, `settings`, `phone/e164` |
 | Agent config builders (μ-law, transfer modes, KB, TTS model, analysis, privacy) | `elevenlabs/agent-config`, `cartesia/agent-config`, `models` |
 | Provider clients with mocked fetch (URLs, headers, pagination, errors) | `elevenlabs/client`, `cartesia/client`, `adapters` |
 | Twilio signature + call tokens + TwiML, transfer tool auth | `route-handler`, `tokens`, `twiml`, `tools/transfer` |
 | API helpers: body limits, same-origin, error mapping, admin auth, rate limits | `api/http`, `api/auth`, `security/rate-limit` |
 | Redaction (keys, tokens, phones) | `security/redact` |
+| Agent API + onboarding (validation, one agent per org, sync reporting, activation, rate limit, fallback voice eligibility) | `app/api/agent/routes`, `app/api/onboarding/complete/route`, `agents/ensure-agent` |
+| Voice catalog (tenant isolation, library provisioning races, preview, clone consent/verification) | `voice-providers/voice-catalog` |
+| Knowledge base (file/URL/text validation, SSRF guard, processing, attach, delete) | `voice-providers/knowledge`, `knowledge-process`, `app/api/agent/knowledge/routes` |
+| Calls history API (DB-first, ownership, audio proxy streaming, CSV injection, filters) | `calls/serialize`, `app/api/calls/routes` |
 
-RLS/authorization: the guard trigger and policies are in migration 010; verify
-them on a staging database with §3.
+RLS/authorization: the guard trigger and policies are in migration 010. They
+were exercised on PostgreSQL 16 with Supabase stand-ins (migrations 001–010
+applied twice; tenant updates of plan/voices/provider fields, inserts of
+organizations/numbers/calls/knowledge rows and storage uploads rejected; the
+service role unaffected; usage billed once). Repeat §3 on the staging
+Supabase project.
 
 ## 2. Staging setup checklist
 
@@ -63,7 +71,7 @@ them on a staging database with §3.
 | 4.6 | Call the number (Romanian agent) | greeting with AI disclosure; correct diacritics in transcript; call appears in Calls with "AI · ElevenLabs", transcript, summary, recording player |
 | 4.7 | Ask for a human (transfer enabled to your second phone) | agent announces the transfer, your second phone rings, call outcome *Transferred* |
 | 4.8 | "Call me now" from the dashboard | your phone rings; outbound greeting; call recorded as outbound |
-| 4.9 | Call 6 times in 10 minutes via "Call me now" | 6th attempt → 429 with a friendly message |
+| 4.9 | Use "Call me now" 6 times quickly (within one clock-aligned 10-minute window, e.g. 10:00–10:09) | 6th attempt → 429 with a friendly message and `Retry-After` (fixed windows reset on the 10-minute boundary) |
 | 4.10 | Minutes | org `minutes_used` increases once per call even if the webhook is re-sent (resend from ElevenLabs webhook history) |
 
 ## 5. Fallback path (Cartesia) — staging only
@@ -71,11 +79,11 @@ them on a staging database with §3.
 | # | Step | Expected |
 |---|---|---|
 | 5.1 | Agent page → Fallback "Cartesia" status *Ready*; Phone diagnose shows the Cartesia import present | |
-| 5.2 | Force the circuit: `POST /api/admin/voice/circuit {"provider":"elevenlabs","action":"open"}` | diagnostics shows elevenlabs `open` |
+| 5.2 | Force the circuit: `POST /api/admin/voice/circuit {"provider":"elevenlabs","action":"open"}` | diagnostics shows `circuits.elevenlabs.effective = "open"` (`forced: "open"`) |
 | 5.3 | Call the number | Cartesia agent answers in the same language with the mapped voice; Calls shows amber "Fallback · Cartesia", reason "Primary provider degraded" |
 | 5.4 | During the fallback call ask for a human | SIP REFER → your transfer phone rings (only the configured number is accepted) |
 | 5.5 | After hangup | within a few minutes (webhook or cron poll) the call has transcript/summary; minutes billed once |
-| 5.6 | `{"action":"auto"}` then call again | ElevenLabs answers again (half-open probe closes the circuit) |
+| 5.6 | `POST /api/admin/voice/circuit {"provider":"elevenlabs","action":"auto"}` then call again | circuit half-open → the call is the probe, ElevenLabs answers, diagnostics shows `effective: "closed"` |
 | 5.7 | Simulate register-call failure: on a staging deployment set `ELEVENLABS_API_BASE_URL` to an unreachable host, call | Cartesia answers; `failover_reason` contains `elevenlabs:connect_network` or `_timeout` |
 | 5.8 | Both providers unavailable (also break Cartesia SIP credentials) | localized apology, then forward to the transfer number if configured; call `no_provider` |
 | 5.9 | Disable fallback (Call handling → Provider fallback off) with the circuit open | apology/human path, no Cartesia attempt |

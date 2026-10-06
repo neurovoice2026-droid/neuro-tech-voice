@@ -154,23 +154,16 @@ export function VoiceCloneDialog({ open, onOpenChange, onCloned }: VoiceCloneDia
 
       const res = await fetch('/api/voices/clone', { method: 'POST', body: form })
       if (!res.ok) throw await parseApiError(res, 'Could not create the voice. Please try again.')
-      const json = (await res.json()) as { voice?: VoiceOption; requires_verification?: boolean }
+      // A clone the provider would hold for verification is rejected by the
+      // server (422 with a product message), shown below via submitError.
+      const json = (await res.json()) as { voice?: VoiceOption }
       if (!json.voice) throw new ApiError('Unexpected response while creating the voice.', res.status)
 
       invalidateVoiceCatalog('workspace')
-      if (json.requires_verification === true) {
-        // Stored as pending: it is not in the catalog and the agent cannot use
-        // it yet, so do not offer it for selection.
-        toast.info(`"${voiceDisplayName(json.voice)}" was created`, {
-          description: 'The provider must verify it before it can be used.',
-          duration: 10_000,
-        })
-      } else {
-        toast.success(`"${voiceDisplayName(json.voice)}" is ready`, {
-          description: 'You can now choose it as your agent’s voice.',
-        })
-        onCloned?.(json.voice)
-      }
+      toast.success(`"${voiceDisplayName(json.voice)}" is ready`, {
+        description: 'You can now choose it as your agent’s voice.',
+      })
+      onCloned?.(json.voice)
       reset()
       onOpenChange(false)
     } catch (err) {

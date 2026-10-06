@@ -59,23 +59,94 @@ function InfoItem({ label, children }: { label: string; children: React.ReactNod
 
 // ─── Recording ────────────────────────────────────────────────────────────────
 
+const LOAD_FAILED = 'The recording could not be loaded. It may still be processing at the voice provider, or it was removed.'
+const TOO_MANY = 'Too many recording requests right now. Please wait a minute and try again.'
+
+type PlayerFailure = { message: string; retry: boolean }
+
+/**
+ * The audio route streams the recording without byte ranges, so the player
+ * downloads it once (on first Play) into a Blob and plays the object URL,
+ * which the browser can seek freely. The download link keeps using the route.
+ */
 function AudioPlayer({ url, fallbackDuration }: { url: string; fallbackDuration: number }) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
+  const objectUrlRef = useRef<string | null>(null)
   const [playing, setPlaying] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const [buffering, setBuffering] = useState(false)
-  const [failed, setFailed] = useState(false)
+  const [failure, setFailure] = useState<PlayerFailure | null>(null)
   const [duration, setDuration] = useState(0)
   const [current, setCurrent] = useState(0)
 
   const total = duration || fallbackDuration
   const progress = total ? Math.min(100, (current / total) * 100) : 0
 
-  function toggle() {
-    const audio = audioRef.current
+  // Abort an in-flight download and free the Blob when the call changes or
+  // the player unmounts.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+      abortRef.current = null
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current)
+        objectUrlRef.current = null
+      }
+    }
+  }, [url])
+
+  /** Downloads the recording once; null when it failed or was cancelled. */
+  async function download(): Promise<string | null> {
+    if (objectUrlRef.current) return objectUrlRef.current
+    const controller = new AbortController()
+    abortRef.current = controller
+    setDownloading(true)
+    try {
+      const res = await fetch(url, { signal: controller.signal, cache: 'no-store' })
+      if (!res.ok) {
+        const message = res.status === 429 ? TOO_MANY : await readApiError(res, LOAD_FAILED)
+        if (!controller.signal.aborted) setFailure({ message, retry: res.status === 429 || res.status >= 500 })
+        return null
+      }
+      const blob = await res.blob()
+      if (controller.signal.aborted) return null
+      objectUrlRef.current = URL.createObjectURL(blob)
+      return objectUrlRef.current
+    } catch (err) {
+      // Cancelled by the user or by unmount: nothing went wrong.
+      if (controller.signal.aborted) return null
+      console.warn('Recording download failed', err)
+      setFailure({ message: 'The recording could not be downloaded. Check your connection and try again.', retry: true })
+      return null
+    } finally {
+      if (abortRef.current === controller) {
+        abortRef.current = null
+        setDownloading(false)
+      }
+    }
+  }
+
+  async function toggle() {
+    let audio = audioRef.current
     if (!audio) return
+    if (abortRef.current) {
+      // Pressed again while downloading: stop.
+      abortRef.current.abort()
+      return
+    }
     if (!audio.paused) {
       audio.pause()
       return
+    }
+    if (!objectUrlRef.current) {
+      // Touch the element inside the click so Safari still allows play()
+      // after the download's await (it has no src yet, so nothing loads).
+      audio.load()
+      const objectUrl = await download()
+      audio = audioRef.current
+      if (!objectUrl || !audio) return
+      audio.src = objectUrl
     }
     setBuffering(true)
     audio.play().then(
@@ -87,7 +158,7 @@ function AudioPlayer({ url, fallbackDuration }: { url: string; fallbackDuration:
         // the recording is fine, the user just stopped it.
         if (name === 'AbortError') return
         if (name === 'NotSupportedError') {
-          setFailed(true)
+          setFailure({ message: LOAD_FAILED, retry: false })
           return
         }
         // e.g. NotAllowedError (browser playback policy): keep the player so
@@ -125,11 +196,16 @@ function AudioPlayer({ url, fallbackDuration }: { url: string; fallbackDuration:
     }
   }
 
-  if (failed) {
+  if (failure) {
     return (
-      <p className="rounded-xl border bg-gray-50 p-4 text-sm text-muted-foreground" role="status">
-        The recording could not be loaded. It may still be processing at the voice provider, or it was removed.
-      </p>
+      <div className="rounded-xl border bg-gray-50 p-4 text-sm text-muted-foreground flex flex-wrap items-center justify-between gap-2" role="status">
+        <p>{failure.message}</p>
+        {failure.retry && (
+          <Button type="button" variant="outline" size="sm" onClick={() => setFailure(null)}>
+            <RotateCw className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" /> Try again
+          </Button>
+        )}
+      </div>
     )
   }
 
@@ -137,7 +213,6 @@ function AudioPlayer({ url, fallbackDuration }: { url: string; fallbackDuration:
     <div className="rounded-xl bg-gray-50 border p-4 flex items-center gap-3">
       <audio
         ref={audioRef}
-        src={url}
         preload="none"
         onLoadedMetadata={(e) => {
           const d = e.currentTarget.duration
@@ -152,16 +227,17 @@ function AudioPlayer({ url, fallbackDuration }: { url: string; fallbackDuration:
         onError={() => {
           setPlaying(false)
           setBuffering(false)
-          setFailed(true)
+          setFailure({ message: LOAD_FAILED, retry: false })
         }}
       />
       <button
         type="button"
-        onClick={toggle}
-        aria-label={playing ? 'Pause recording' : 'Play recording'}
+        onClick={() => void toggle()}
+        aria-label={downloading ? 'Loading recording — press to cancel' : playing ? 'Pause recording' : 'Play recording'}
+        aria-busy={downloading || buffering}
         className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2"
       >
-        {buffering ? <Loader2 className="h-4 w-4 animate-spin" /> : playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
+        {downloading || buffering ? <Loader2 className="h-4 w-4 animate-spin" /> : playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
       </button>
       <div className="flex-1 min-w-0">
         <div
@@ -216,7 +292,7 @@ function RecordingSection({ call }: { call: Call }) {
         Recording
       </h3>
       {available ? (
-        <AudioPlayer url={`/api/calls/${encodeURIComponent(call.id)}/audio`} fallbackDuration={call.duration_seconds} />
+        <AudioPlayer key={call.id} url={`/api/calls/${encodeURIComponent(call.id)}/audio`} fallbackDuration={call.duration_seconds} />
       ) : (
         <p className="text-sm text-muted-foreground">{message}</p>
       )}
