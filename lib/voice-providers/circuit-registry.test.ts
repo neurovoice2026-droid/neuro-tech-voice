@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { MemoryCircuitStore } from './circuit-breaker'
-import { forceCircuit, peek, peekProvider, reportOutcome, setCircuitStore } from './circuit-registry'
+import { forceCircuit, peek, peekProvider, reportOutcome, setCircuitStore, tripCircuit } from './circuit-registry'
 import { setProviderEventSink } from '@/lib/observability/telemetry'
 
 let restoreSink: () => void = () => {}
@@ -57,5 +57,15 @@ describe('circuit registry', () => {
     expect((await peek('elevenlabs_media', later)).state).toBe('half_open')
     await reportOutcome('elevenlabs_media', { ok: true }, later, { evidenceStartedAt: later - 5_000 })
     expect((await peek('elevenlabs_media', later)).state).toBe('closed')
+  })
+
+  it('tripCircuit opens a closed circuit at once and recovery then goes through half-open', async () => {
+    const t0 = 1_900_000_000_000
+    await tripCircuit('elevenlabs_media', 'upstream', t0)
+    expect((await peek('elevenlabs_media', t0)).state).toBe('open')
+    expect((await peek('elevenlabs_media', t0 + 31_000)).state).toBe('half_open')
+    // A failure while half-open re-opens it (with a longer open period).
+    await reportOutcome('elevenlabs_media', { ok: false, code: 'upstream' }, t0 + 31_000)
+    expect((await peek('elevenlabs_media', t0 + 61_000)).state).toBe('open')
   })
 })

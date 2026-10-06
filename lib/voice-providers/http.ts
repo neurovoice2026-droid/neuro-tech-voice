@@ -135,13 +135,19 @@ async function attemptOnce<T>(req: ProviderRequest, method: string): Promise<Pro
   let res: Response
   try {
     res = await fetch(req.url, { method, headers, body, signal, cache: 'no-store' })
-  } finally {
+  } catch (err) {
     if (headerTimer) clearTimeout(headerTimer)
+    throw err
   }
   const latencyMs = Date.now() - started
+  // A successful stream is consumed by the caller without a deadline; an
+  // error body is still read under the same timeout (it can stall too).
+  if (headerTimer && res.ok) clearTimeout(headerTimer)
 
   if (!res.ok) {
-    const text = await readBounded(res)
+    const text = await readBounded(res).finally(() => {
+      if (headerTimer) clearTimeout(headerTimer)
+    })
     throw new ProviderError({
       system: req.system,
       operation: req.operation,

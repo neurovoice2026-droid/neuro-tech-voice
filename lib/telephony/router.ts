@@ -22,7 +22,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createLogger, type Logger } from '@/lib/observability/logger'
 import { emitProviderEvent, deferBackground } from '@/lib/observability/telemetry'
 import { outboundRoutingInput, planRouting, type Candidate } from '@/lib/voice-providers/routing'
-import { reportOutcome } from '@/lib/voice-providers/circuit-registry'
+import { peek, reportOutcome, tripCircuit } from '@/lib/voice-providers/circuit-registry'
 import { isProviderError, toProviderError, type VoiceProvider } from '@/lib/voice-providers/errors'
 import { cartesiaSip, earlyFailureWindowSeconds, publicBaseUrl } from '@/lib/voice-providers/config'
 import { PLATFORM_VARIABLES } from '@/lib/voice-providers/prompt'
@@ -334,39 +334,48 @@ export async function routeOutboundConnect(callId: string, p: Record<string, str
   return connect(ctx, call, plan.candidates, { afterHours: false, direction: 'outbound', skipped: skippedSummary(plan) }, cl)
 }
 
-/** Distinct organizations that must see early stream ends before the shared media circuit counts one. */
-const EARLY_END_MIN_ORGS = 2
+/** Early stream ends are aggregated over this window, across organizations. */
 const EARLY_END_WINDOW_MS = 2 * 60_000
+/** Distinct organizations with early ends that open a closed media circuit. */
+const EARLY_END_TRIP_ORGS = 3
+/** While half-open, an early end re-opens the circuit when this many organizations saw one. */
+const EARLY_END_REOPEN_ORGS = 2
 
 /**
  * Stamps this inbound call's early stream end (synchronously: the failover
  * below rewrites routing from the same in-memory row) and, off the caller's
- * critical path, reports a media failure to the shared circuit only when
- *   • at least EARLY_END_MIN_ORGS organizations had early ends in the window, and
- *   • this is the first early end of this organization in the window,
- * so tripping the circuit (3 consecutive failures) needs several different
- * organizations: one tenant (a prompt that ends calls at once, a broken
- * voice) can never take ElevenLabs out of routing for everyone. The stamp is
- * keyed in routing, not on calls.provider, which the failover rewrites.
+ * critical path, evaluates the shared ElevenLabs media circuit from the
+ * number of DISTINCT organizations with early ends in the window:
+ *   • closed: ≥ EARLY_END_TRIP_ORGS organizations → open it (with backoff);
+ *   • half-open: ≥ EARLY_END_REOPEN_ORGS organizations → re-open it.
+ * One tenant (a prompt that ends calls at once, a broken voice) therefore
+ * can never take ElevenLabs out of routing for everyone, while a real
+ * platform outage — which hits every organization — trips it quickly. The
+ * stamp lives in routing, not calls.provider, which the failover rewrites.
  */
 async function recordEarlyStreamEnd(db: SupabaseClient, call: CallRow, log: Logger) {
   call.routing = { ...call.routing, early_stream_end_at: new Date().toISOString() }
   await updateCall(db, call.id, { routing: call.routing }, log)
   deferBackground(
     (async () => {
+      const circuit = await peek('elevenlabs_media')
+      if (circuit.state === 'open') return
       const since = new Date(Date.now() - EARLY_END_WINDOW_MS).toISOString()
       const { data, error } = await db
         .from('calls')
-        .select('id, org_id')
+        .select('org_id')
         .not('routing->>early_stream_end_at', 'is', null)
         .gte('routing->>early_stream_end_at', since)
-        .limit(200)
+        .limit(500)
       if (error) throw new Error(`early-end scan failed: ${error.message}`)
-      const others = (data ?? []).filter((r) => r.id !== call.id)
-      const orgs = new Set([call.org_id, ...others.map((r) => r.org_id as string)])
-      const firstForOrg = !others.some((r) => r.org_id === call.org_id)
-      if (firstForOrg && orgs.size >= EARLY_END_MIN_ORGS) await reportOutcome('elevenlabs_media', { ok: false, code: 'upstream' })
-      else log.info('router.early_end_not_counted', { orgs: orgs.size, firstForOrg })
+      const orgs = new Set([call.org_id, ...(data ?? []).map((r) => r.org_id as string)]).size
+      if (circuit.state === 'half_open' && orgs >= EARLY_END_REOPEN_ORGS) {
+        await reportOutcome('elevenlabs_media', { ok: false, code: 'upstream' })
+      } else if (circuit.state === 'closed' && orgs >= EARLY_END_TRIP_ORGS) {
+        await tripCircuit('elevenlabs_media', 'upstream')
+      } else {
+        log.info('router.early_end_below_threshold', { orgs, circuit: circuit.state })
+      }
     })().catch((err: unknown) => log.error('router.early_end_report_failed', err)),
   )
 }

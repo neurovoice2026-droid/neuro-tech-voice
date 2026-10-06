@@ -174,6 +174,34 @@ export async function reportOutcome(
   }
 }
 
+/**
+ * Opens a circuit at once (aggregate evidence, e.g. several organizations'
+ * calls failed in the media plane): applies failures until it is open, so
+ * the usual backoff and half-open recovery follow.
+ */
+export async function tripCircuit(provider: CircuitKey, code: ProviderErrorCode, now = Date.now()): Promise<void> {
+  const cfg = circuitConfig()
+  try {
+    const s = await getStore()
+    const { transition } = await updateCircuit(s, provider, now, (state) => {
+      let next = state
+      for (let i = 0; i < cfg.consecutiveFailureThreshold && advance(next, now).state !== 'open'; i++) next = recordFailure(next, now, code, cfg)
+      return next
+    })
+    if (transition) {
+      emitProviderEvent({
+        system: systemOf(provider),
+        kind: 'circuit_transition',
+        ok: false,
+        errorCode: code,
+        details: { circuit: provider, from: transition.from, to: transition.to, aggregate: true },
+      })
+    }
+  } catch (err) {
+    log.error('circuit.trip_failed', err, { provider })
+  }
+}
+
 /** Admin override: force a circuit open (maintenance), closed, or clear the override. */
 export async function forceCircuit(provider: CircuitKey, forced: 'open' | 'closed' | null, now = Date.now()): Promise<CircuitState> {
   const s = await getStore()

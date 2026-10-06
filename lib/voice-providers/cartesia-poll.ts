@@ -72,8 +72,9 @@ export async function pollCartesiaCall(callId: string, log: Logger = createLogge
       const sameCall =
         holder.org_id === call.org_id &&
         (holder.routing as { mode?: string } | null)?.mode === 'native' &&
-        pair.has(holder.from_number as string) &&
-        pair.has(holder.to_number as string)
+        // Same tolerance as the candidate filter: Cartesia may omit a number.
+        (!holder.from_number || pair.has(holder.from_number as string)) &&
+        (!holder.to_number || pair.has(holder.to_number as string))
       if (sameCall) {
         log.warn('cartesia_poll.held_by_webhook_copy', { callId, otherCallId: holder.id })
         return 'duplicate'

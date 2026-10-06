@@ -147,7 +147,7 @@ Circuits (shared by all instances, stored in `provider_circuit_state`):
 | Circuit | Fed by | Never fed by |
 |---|---|---|
 | `elevenlabs` (API) | register-call / outbound-call outcomes, maintenance health probe | previews, catalog, knowledge uploads, agent syncs (tenant-triggered) |
-| `elevenlabs_media` | early stream ends of **inbound** calls, counted once per organization per 2 min and only when ≥2 organizations saw one (failure — opening it takes several organizations, so one tenant's agent hanging up at once cannot trip it); a stream that outlived the early window, or a conversation longer than the window that ended in the last 2 min, **started after the latest failure** (success; only a half-open media circuit can be closed by it) | REST successes, late/retried webhooks, calls dropped by the outage itself |
+| `elevenlabs_media` | early stream ends of **inbound** calls, aggregated across organizations over 2 min: ≥3 distinct organizations open it at once; while half-open, an early end with ≥2 organizations in the window re-opens it (one tenant's agent hanging up at once can never trip it, a real outage hits every organization); success: a stream that outlived the early window, or a conversation longer than the window that ended in the last 2 min, **started after the latest failure** (only a half-open media circuit can be closed by it) | REST successes, late/retried webhooks, calls dropped by the outage itself |
 | `cartesia` (API) | maintenance health probe | tenant-triggered requests |
 | `cartesia_media` | SIP leg result (`DialCallStatus`) | REST successes |
 
@@ -405,6 +405,10 @@ the agent and re-applies every binding.
 * Cartesia managed agents have no knowledge base yet: the fallback agent gets
   inlined document excerpts (≤24k chars).
 * Native ElevenLabs numbers have no failover and no after-hours gate.
+* The ElevenLabs media circuit needs early stream ends from ≥3 organizations
+  within 2 minutes to open: on a platform with fewer active organizations it
+  will not open from media failures alone (each affected call still fails over
+  to Cartesia individually; operators can force the circuit open).
 * Removing a post-call data-collection field may not remove it from an existing
   ElevenLabs agent (PATCH merges nested objects; deletion semantics are not
   documented) — **unverified live**; re-creating the agent clears it.
