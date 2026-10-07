@@ -89,6 +89,8 @@ export async function startOutboundCall(req: OutboundRequest, log: Logger = crea
             ntv_call_token: signCallToken(call.id as string, 'transfer', 4 * 3600),
             after_hours: 'false',
             business_name: ctx.org.name ?? '',
+            // Gates voicemail_detection to outbound calls (prompt rule).
+            ntv_call_direction: 'outbound',
           } },
         },
         { orgId: req.orgId, agentId: ctx.agent.id, callId: call.id as string },

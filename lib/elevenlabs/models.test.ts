@@ -1,11 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  AGENT_TTS_MODELS,
   DEFAULT_LLM,
   TTS_CONVERSATIONAL_MODELS,
   agentLlm,
+  chooseReasoningEffort,
+  isAgentTtsModel,
   isDeprecatedTts,
   previewTtsModel,
   ragEmbeddingModel,
+  supportsExpressiveMode,
+  textNormalisationType,
   ttsModelFor,
 } from './models'
 
@@ -34,9 +39,18 @@ describe('ttsModelFor', () => {
     expect(ttsModelFor('en')).toBe('eleven_flash_v2')
   })
 
-  it('honours a valid English override', () => {
-    vi.stubEnv('ELEVENLABS_TTS_MODEL_EN', '  eleven_multilingual_v2 ')
-    expect(ttsModelFor('en')).toBe('eleven_multilingual_v2')
+  it('honours a valid English override from the agent allow-list', () => {
+    vi.stubEnv('ELEVENLABS_TTS_MODEL_EN', '  eleven_v4_turbo ')
+    expect(ttsModelFor('en')).toBe('eleven_v4_turbo')
+  })
+
+  it('refuses spec models outside the real-time allow-list (high-fidelity models)', () => {
+    for (const model of ['eleven_multilingual_v2', 'eleven_v4']) {
+      vi.stubEnv('ELEVENLABS_TTS_MODEL_EN', model)
+      vi.stubEnv('ELEVENLABS_TTS_MODEL_MULTILINGUAL', model)
+      expect(ttsModelFor('en'), model).toBe('eleven_flash_v2')
+      expect(ttsModelFor('ro'), model).toBe('eleven_flash_v2_5')
+    }
   })
 
   it('honours a valid multilingual override', () => {
@@ -98,13 +112,91 @@ describe('ragEmbeddingModel', () => {
     expect(ragEmbeddingModel('ro')).toBe('multilingual_e5_large_instruct')
     expect(ragEmbeddingModel('ja')).toBe('multilingual_e5_large_instruct')
   })
+
+  it('switches to the multilingual model when any additional language is not English', () => {
+    expect(ragEmbeddingModel('en', ['ro'])).toBe('multilingual_e5_large_instruct')
+    expect(ragEmbeddingModel('en', [])).toBe('e5_mistral_7b_instruct')
+    expect(ragEmbeddingModel('ro', ['en'])).toBe('multilingual_e5_large_instruct')
+  })
 })
 
 describe('previewTtsModel', () => {
-  it('uses flash models (never turbo)', () => {
+  it('uses flash models by default (never turbo)', () => {
+    vi.stubEnv('ELEVENLABS_TTS_MODEL_EN', '')
+    vi.stubEnv('ELEVENLABS_TTS_MODEL_MULTILINGUAL', '')
     expect(previewTtsModel('en')).toBe('eleven_flash_v2')
     expect(previewTtsModel(null)).toBe('eleven_flash_v2')
     expect(previewTtsModel('ro')).toBe('eleven_flash_v2_5')
+  })
+
+  it('follows the live agent model (env), with the plain-TTS sibling of a conversational-only model', () => {
+    vi.stubEnv('ELEVENLABS_TTS_MODEL_MULTILINGUAL', 'eleven_v4_turbo')
+    expect(previewTtsModel('ro')).toBe('eleven_v4_turbo')
+    vi.stubEnv('ELEVENLABS_TTS_MODEL_MULTILINGUAL', 'eleven_v3_conversational')
+    expect(previewTtsModel('ro')).toBe('eleven_v3')
+    vi.stubEnv('ELEVENLABS_TTS_MODEL_EN', 'eleven_turbo_v2')
+    expect(previewTtsModel('en')).toBe('eleven_flash_v2')
+  })
+})
+
+describe('supportsExpressiveMode', () => {
+  it('is true for the v3/v4 families only', () => {
+    expect(supportsExpressiveMode('eleven_v3_conversational')).toBe(true)
+    expect(supportsExpressiveMode('eleven_v4_turbo')).toBe(true)
+    expect(supportsExpressiveMode('eleven_v4')).toBe(true)
+    for (const m of ['eleven_flash_v2', 'eleven_flash_v2_5', 'eleven_multilingual_v2', '', null]) expect(supportsExpressiveMode(m), String(m)).toBe(false)
+  })
+})
+
+describe('AGENT_TTS_MODELS', () => {
+  it('is a subset of the spec enum without deprecated models', () => {
+    for (const m of AGENT_TTS_MODELS) {
+      expect(TTS_CONVERSATIONAL_MODELS).toContain(m)
+      expect(isDeprecatedTts(m)).toBe(false)
+      expect(isAgentTtsModel(m)).toBe(true)
+    }
+    expect(isAgentTtsModel('eleven_multilingual_v2')).toBe(false)
+    expect(isAgentTtsModel(null)).toBe(false)
+  })
+})
+
+describe('textNormalisationType', () => {
+  it("defaults to 'elevenlabs' and accepts only the spec enum", () => {
+    vi.stubEnv('ELEVENLABS_TEXT_NORMALISATION', '')
+    expect(textNormalisationType()).toBe('elevenlabs')
+    vi.stubEnv('ELEVENLABS_TEXT_NORMALISATION', ' system_prompt ')
+    expect(textNormalisationType()).toBe('system_prompt')
+    vi.stubEnv('ELEVENLABS_TEXT_NORMALISATION', 'SYSTEM_PROMPT')
+    expect(textNormalisationType()).toBe('elevenlabs')
+  })
+})
+
+describe('chooseReasoningEffort', () => {
+  it('returns null when the model has no configurable reasoning', () => {
+    expect(chooseReasoningEffort(null, '')).toBeNull()
+    expect(chooseReasoningEffort([], '')).toBeNull()
+    expect(chooseReasoningEffort(undefined, 'low')).toBeNull()
+  })
+
+  it('picks the lowest supported level by default', () => {
+    expect(chooseReasoningEffort(['medium', 'low', 'high'], '')).toBe('low')
+    expect(chooseReasoningEffort(['high', 'none', 'minimal'], undefined)).toBe('none')
+    expect(chooseReasoningEffort(['minimal', 'low'], 'auto')).toBe('minimal')
+  })
+
+  it('honours a supported preference and ignores an unsupported or unknown one', () => {
+    expect(chooseReasoningEffort(['minimal', 'low', 'medium'], 'medium')).toBe('medium')
+    expect(chooseReasoningEffort(['minimal', 'low'], 'none')).toBe('minimal')
+    expect(chooseReasoningEffort(['minimal', 'low'], 'turbo')).toBe('minimal')
+  })
+
+  it('ignores values outside the spec enum even if the catalogue lists them', () => {
+    expect(chooseReasoningEffort(['ultra'], '')).toBeNull()
+  })
+
+  it('reads ELEVENLABS_REASONING_EFFORT when no preference is passed', () => {
+    vi.stubEnv('ELEVENLABS_REASONING_EFFORT', 'low')
+    expect(chooseReasoningEffort(['minimal', 'low'])).toBe('low')
   })
 })
 

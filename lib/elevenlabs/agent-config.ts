@@ -10,7 +10,21 @@
 
 import type { AgentSpec } from '@/lib/voice-providers/types'
 import { PLATFORM_VARIABLES } from '@/lib/voice-providers/prompt'
-import { agentLlm, ragEmbeddingModel, ttsModelFor } from './models'
+import { maxDurationMessage } from '@/lib/voice/conversation-phrases'
+import { agentLlm, ragEmbeddingModel } from './models'
+import {
+  DTMF_INPUT_SETTINGS,
+  VOICEMAIL_TOOL_DESCRIPTION,
+  additionalLanguagesOf,
+  asrConfig,
+  dataCollectionProperty,
+  languageDetectionTool,
+  languagePresets,
+  skipTurnTool,
+  ttsConfig,
+  turnBehaviour,
+  vadConfig,
+} from './conversation-behaviour'
 import type { AgentBody } from './client'
 
 export interface PlatformResources {
@@ -18,6 +32,12 @@ export interface PlatformResources {
   transferToolId: string | null
   /** Workspace webhook that receives post-call events. */
   postCallWebhookId: string | null
+}
+
+/** Values read from provider catalogues at sync time (kept out of AgentSpec, which is provider-neutral). */
+export interface AgentRuntimeOptions {
+  /** prompt.reasoning_effort for the configured LLM; null/undefined = not sent (model without configurable reasoning). */
+  reasoningEffort?: string | null
 }
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
@@ -38,7 +58,7 @@ export function dynamicVariablePlaceholders(spec: AgentSpec): Record<string, str
   }
 }
 
-function builtInTools(spec: AgentSpec) {
+function builtInTools(spec: AgentSpec, hasLanguagePresets: boolean) {
   const c = spec.conversation
   const nativeTransfer = spec.transfer.enabled && !!spec.transfer.number && !spec.appRouted
   return {
@@ -49,7 +69,9 @@ function builtInTools(spec: AgentSpec) {
       ? {
           type: 'system',
           name: 'voicemail_detection',
-          description: '',
+          // Outbound calls only (prompt rule on {{ntv_call_direction}}): an
+          // inbound caller must never be hung up on as a "voicemail".
+          description: VOICEMAIL_TOOL_DESCRIPTION,
           params: { system_tool_type: 'voicemail_detection', voicemail_message: c.voicemail_message?.trim() || null },
         }
       : null,
@@ -73,15 +95,17 @@ function builtInTools(spec: AgentSpec) {
           },
         }
       : null,
-    language_detection: null,
+    language_detection: hasLanguagePresets ? languageDetectionTool() : null,
     transfer_to_agent: null,
-    skip_turn: null,
+    skip_turn: c.skip_turn ? skipTurnTool() : null,
     play_keypad_touch_tone: null,
   }
 }
 
-export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformResources): AgentBody {
+export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformResources, runtime: AgentRuntimeOptions = {}): AgentBody {
   const c = spec.conversation
+  const presets = languagePresets(spec)
+  const hasPresets = Object.keys(presets).length > 0
   const knowledge = spec.knowledge
     .filter((k) => !!k.elevenlabsId)
     .map((k) => ({ type: k.type, name: k.name.slice(0, 200), id: k.elevenlabsId as string, usage_mode: 'auto' }))
@@ -93,47 +117,52 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
     llm: agentLlm(),
     max_tokens: -1,
     knowledge_base: knowledge,
-    rag: { enabled: knowledge.length > 0, embedding_model: ragEmbeddingModel(spec.language) },
+    rag: { enabled: knowledge.length > 0, embedding_model: ragEmbeddingModel(spec.language, additionalLanguagesOf(spec)) },
     timezone: spec.timezone,
-    built_in_tools: builtInTools(spec),
+    built_in_tools: builtInTools(spec, hasPresets),
     tool_ids: appTransfer ? [platform.transferToolId] : [],
+    // Never omitted: a custom value pushed earlier must not survive "Off".
+    // The spec default is 0 (null would drop temperature from the LLM request).
+    temperature: typeof c.temperature === 'number' ? clamp(c.temperature, 0, 1) : 0,
+    // The composed prompt defines the persona; no default personality lines.
+    ignore_default_personality: true,
+    enable_reasoning_summary: false,
   }
-  if (typeof c.temperature === 'number') prompt.temperature = clamp(c.temperature, 0, 1)
+  if (runtime.reasoningEffort) prompt.reasoning_effort = runtime.reasoningEffort
 
-  const tts: Record<string, unknown> = {
-    model_id: ttsModelFor(spec.language),
-    agent_output_audio_format: telephonyFormat,
-    expressive_mode: false, // flash models: expressive tags are not supported
-  }
-  if (spec.voiceId) tts.voice_id = spec.voiceId
-  if (spec.voiceTuning.stability !== null) tts.stability = clamp(spec.voiceTuning.stability, 0, 1)
-  if (spec.voiceTuning.similarity_boost !== null) tts.similarity_boost = clamp(spec.voiceTuning.similarity_boost, 0, 1)
-  if (spec.voiceTuning.speed !== null) tts.speed = clamp(spec.voiceTuning.speed, 0.7, 1.2)
+  const tts = ttsConfig(spec, telephonyFormat)
 
   const conversation_config = {
     agent: {
       first_message: spec.firstMessage,
       language: spec.language,
-      disable_first_message_interruptions: false,
-      dynamic_variables: { dynamic_variable_placeholders: dynamicVariablePlaceholders(spec) },
+      // The first message carries the mandatory AI disclosure (and the
+      // recording notice): a caller's "Alo?" must not cut it off.
+      disable_first_message_interruptions: true,
+      max_conversation_duration_message: maxDurationMessage(spec.language),
+      // ntv_call_direction (A1, voicemail gating): 'inbound' unless the call
+      // was started with client data (router / outbound) saying otherwise.
+      dynamic_variables: { dynamic_variable_placeholders: { [PLATFORM_VARIABLES.callDirection]: 'inbound', ...dynamicVariablePlaceholders(spec) } },
       prompt,
     },
-    asr: {
-      quality: 'high',
-      user_input_audio_format: telephonyFormat,
-      keywords: spec.orgName ? [spec.orgName.slice(0, 50)] : [],
-    },
+    asr: asrConfig(spec, telephonyFormat),
     turn: {
       mode: 'turn',
       turn_timeout: clamp(c.turn_timeout_seconds, 1, 30),
       silence_end_call_timeout: c.silence_end_call_seconds === null ? -1 : clamp(c.silence_end_call_seconds, 5, 600),
       turn_eagerness: c.turn_eagerness,
+      ...turnBehaviour(spec),
     },
     tts,
+    vad: vadConfig(spec),
     conversation: {
       max_duration_seconds: clamp(Math.round(c.max_call_duration_minutes * 60), 60, 7200),
       client_events: c.allow_interruptions ? ['audio', 'interruption'] : ['audio'],
+      dtmf_input_settings: { ...DTMF_INPUT_SETTINGS },
     },
+    // Always sent (possibly empty). Removing a key relies on the PATCH merge
+    // semantics (unverified, see docs/elevenlabs/A1.md).
+    language_presets: presets,
   }
 
   const criteria = spec.analysis.success_criteria.slice(0, 30).map((cr) => ({
@@ -142,9 +171,9 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
     type: 'prompt',
     conversation_goal_prompt: cr.prompt.slice(0, 2000),
   }))
-  const dataCollection: Record<string, { type: string; description: string }> = {}
+  const dataCollection: Record<string, ReturnType<typeof dataCollectionProperty>> = {}
   for (const f of spec.analysis.data_collection.slice(0, 25)) {
-    dataCollection[f.id] = { type: f.type, description: f.description.slice(0, 1000) }
+    dataCollection[f.id] = dataCollectionProperty(f)
   }
 
   const platform_settings: Record<string, unknown> = {

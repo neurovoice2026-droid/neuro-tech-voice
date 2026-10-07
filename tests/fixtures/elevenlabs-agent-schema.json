@@ -1,0 +1,7834 @@
+{
+ "source": "https://api.elevenlabs.io/openapi.json",
+ "info_version": "1.0",
+ "extracted_at": "2026-10-07",
+ "root": "Body_Create_Agent_v1_convai_agents_create_post",
+ "schemas": {
+  "ASRConversationalConfig": {
+   "properties": {
+    "quality": {
+     "$ref": "#/components/schemas/ASRQuality",
+     "default": "high"
+    },
+    "provider": {
+     "$ref": "#/components/schemas/ASRProvider",
+     "default": "scribe_realtime"
+    },
+    "user_input_audio_format": {
+     "$ref": "#/components/schemas/ASRInputFormat",
+     "default": "pcm_16000"
+    },
+    "keywords": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    }
+   },
+   "type": "object"
+  },
+  "ASRConversationalConfigOverride": {
+   "properties": {
+    "keywords": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "ASRConversationalConfigOverrideConfig": {
+   "properties": {
+    "keywords": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "ASRInputFormat": {
+   "type": "string",
+   "enum": [
+    "pcm_8000",
+    "pcm_16000",
+    "pcm_22050",
+    "pcm_24000",
+    "pcm_44100",
+    "pcm_48000",
+    "ulaw_8000"
+   ],
+   "default": "pcm_16000"
+  },
+  "ASRProvider": {
+   "type": "string",
+   "enum": [
+    "elevenlabs",
+    "scribe_realtime",
+    "scribe_v2_turbo"
+   ],
+   "x-fern-enum": {
+    "elevenlabs": {
+     "description": "Deprecated: Use scribe_realtime instead.",
+     "deprecated": true
+    }
+   },
+   "default": "scribe_realtime"
+  },
+  "ASRQuality": {
+   "type": "string",
+   "enum": [
+    "high"
+   ],
+   "default": "high"
+  },
+  "AgentAnalysisItems-Input": {
+   "properties": {
+    "evaluation_criteria": {
+     "items": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/AttachedUserEvaluationRef"
+       },
+       {
+        "$ref": "#/components/schemas/AttachedSystemEvaluationRef"
+       }
+      ],
+      "discriminator": {}
+     },
+     "type": "array"
+    },
+    "data_collection": {
+     "items": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/AttachedUserDataCollectionRef"
+       },
+       {
+        "$ref": "#/components/schemas/AttachedSystemDataCollectionRef"
+       }
+      ],
+      "discriminator": {}
+     },
+     "type": "array"
+    }
+   },
+   "type": "object"
+  },
+  "AgentCallLimits": {
+   "properties": {
+    "agent_concurrency_limit": {
+     "type": "integer",
+     "default": -1
+    },
+    "daily_limit": {
+     "type": "integer",
+     "default": 100000
+    },
+    "bursting_enabled": {
+     "type": "boolean",
+     "default": true
+    }
+   },
+   "type": "object"
+  },
+  "AgentConfigAPIModel-Input": {
+   "properties": {
+    "first_message": {
+     "type": "string",
+     "default": ""
+    },
+    "language": {
+     "type": "string",
+     "default": "en"
+    },
+    "hinglish_mode": {
+     "type": "boolean",
+     "default": false
+    },
+    "dynamic_variables": {
+     "$ref": "#/components/schemas/DynamicVariablesConfig"
+    },
+    "disable_first_message_interruptions": {
+     "type": "boolean",
+     "default": false
+    },
+    "max_conversation_duration_message": {
+     "type": "string",
+     "default": ""
+    },
+    "text_behavior_overrides": {
+     "anyOf": [
+      {
+       "additionalProperties": {
+        "$ref": "#/components/schemas/BehaviorOverride"
+       },
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "prompt": {
+     "$ref": "#/components/schemas/PromptAgentAPIModel-Input"
+    }
+   },
+   "type": "object"
+  },
+  "AgentConfigOverride-Input": {
+   "properties": {
+    "first_message": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "language": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "max_conversation_duration_message": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "prompt": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/PromptAgentAPIModelOverride-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "AgentConfigOverrideConfig": {
+   "properties": {
+    "first_message": {
+     "type": "boolean",
+     "default": false
+    },
+    "language": {
+     "type": "boolean",
+     "default": false
+    },
+    "max_conversation_duration_message": {
+     "type": "boolean",
+     "default": false
+    },
+    "prompt": {
+     "$ref": "#/components/schemas/PromptAgentAPIModelOverrideConfig"
+    }
+   },
+   "type": "object"
+  },
+  "AgentHoldAudioConfig": {
+   "properties": {
+    "audio_path": {
+     "type": "string"
+    },
+    "audio_url": {
+     "type": "string"
+    },
+    "original_filename": {
+     "type": "string"
+    },
+    "duration_secs": {
+     "type": "number"
+    },
+    "size_bytes": {
+     "type": "integer"
+    }
+   },
+   "type": "object",
+   "required": [
+    "audio_path",
+    "audio_url",
+    "original_filename",
+    "duration_secs",
+    "size_bytes"
+   ]
+  },
+  "AgentPlatformSettingsRequestModel": {
+   "properties": {
+    "evaluation": {
+     "$ref": "#/components/schemas/EvaluationSettings-Input"
+    },
+    "widget": {
+     "$ref": "#/components/schemas/WidgetConfig-Input"
+    },
+    "data_collection": {
+     "additionalProperties": {
+      "$ref": "#/components/schemas/AnalysisProperty"
+     },
+     "type": "object"
+    },
+    "data_collection_scopes": {
+     "additionalProperties": {
+      "$ref": "#/components/schemas/AnalysisScope"
+     },
+     "type": "object"
+    },
+    "analysis_items": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/AgentAnalysisItems-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "overrides": {
+     "$ref": "#/components/schemas/ConversationInitiationClientDataConfig-Input"
+    },
+    "workspace_overrides": {
+     "$ref": "#/components/schemas/AgentWorkspaceOverrides-Input"
+    },
+    "testing": {
+     "$ref": "#/components/schemas/AgentTestingSettings"
+    },
+    "archived": {
+     "type": "boolean",
+     "default": false
+    },
+    "guardrails": {
+     "discriminator": {},
+     "$ref": "#/components/schemas/GuardrailsV1-Input"
+    },
+    "summary_language": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "auto_translate_transcript_to_app_language": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "auth": {
+     "$ref": "#/components/schemas/AuthSettings"
+    },
+    "call_limits": {
+     "$ref": "#/components/schemas/AgentCallLimits"
+    },
+    "queueing_config": {
+     "$ref": "#/components/schemas/AgentQueueingConfig"
+    },
+    "privacy": {
+     "$ref": "#/components/schemas/PrivacyConfig-Input"
+    },
+    "trust_context": {
+     "$ref": "#/components/schemas/AgentTrustContext",
+     "default": "unknown"
+    },
+    "analysis_llm": {
+     "$ref": "#/components/schemas/LLM",
+     "default": "gemini-2.5-flash"
+    },
+    "topic_discovery": {
+     "$ref": "#/components/schemas/TopicDiscoverySettings"
+    },
+    "sentiment_analysis": {
+     "$ref": "#/components/schemas/SentimentAnalysisSettings"
+    },
+    "alerting": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/AlertingSettings"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "AgentQueueingConfig": {
+   "properties": {
+    "enabled": {
+     "type": "boolean",
+     "default": false
+    },
+    "wait_timeout_seconds": {
+     "type": "integer",
+     "maximum": 1800,
+     "exclusiveMinimum": 0,
+     "default": 180
+    },
+    "hold_audio": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/AgentHoldAudioConfig"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "AgentTestingSettings": {
+   "properties": {
+    "attached_tests": {
+     "items": {
+      "$ref": "#/components/schemas/AttachedTestModel"
+     },
+     "type": "array",
+     "maxItems": 5000,
+     "minItems": 0
+    }
+   },
+   "type": "object"
+  },
+  "AgentTransfer-Input": {
+   "properties": {
+    "agent_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "branch_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "node_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "condition": {
+     "type": "string"
+    },
+    "delay_ms": {
+     "type": "integer",
+     "default": 0
+    },
+    "transfer_message": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "enable_transferred_agent_first_message": {
+     "type": "boolean",
+     "default": false
+    },
+    "is_workflow_node_transfer": {
+     "type": "boolean",
+     "default": false
+    },
+    "preserve_client_tts_overrides": {
+     "type": "boolean",
+     "default": false
+    },
+    "preserve_voice_settings": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object",
+   "required": [
+    "condition"
+   ]
+  },
+  "AgentTrustContext": {
+   "type": "string",
+   "enum": [
+    "unknown",
+    "low",
+    "high"
+   ],
+   "default": "unknown"
+  },
+  "AgentWorkspaceOverrides-Input": {
+   "properties": {
+    "conversation_initiation_client_data_webhook": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ConversationInitiationClientDataWebhook"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "webhooks": {
+     "$ref": "#/components/schemas/ConvAIWebhooks"
+    }
+   },
+   "type": "object"
+  },
+  "AlertingMonitorConfig": {
+   "properties": {
+    "enabled": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "threshold": {
+     "anyOf": [
+      {
+       "type": "number",
+       "maximum": 1,
+       "minimum": 0
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "relative_increase_threshold": {
+     "anyOf": [
+      {
+       "type": "number",
+       "maximum": 10,
+       "minimum": 0
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "min_failure_count": {
+     "anyOf": [
+      {
+       "type": "integer",
+       "minimum": 1
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "min_history_bucket_count": {
+     "anyOf": [
+      {
+       "type": "integer",
+       "minimum": 1
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "min_sample_count": {
+     "anyOf": [
+      {
+       "type": "integer",
+       "minimum": 1
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "suspect_trigger_threshold": {
+     "anyOf": [
+      {
+       "type": "integer",
+       "maximum": 10,
+       "minimum": 1
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "auto_resolve_after_inactive_minutes": {
+     "anyOf": [
+      {
+       "type": "integer",
+       "minimum": 1
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "AlertingPagerDutyNotifier": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "integration",
+     "default": "integration"
+    },
+    "integration_type": {
+     "type": "string",
+     "const": "pagerduty",
+     "default": "pagerduty"
+    },
+    "connection_id": {
+     "type": "string",
+     "minLength": 1
+    }
+   },
+   "additionalProperties": false,
+   "type": "object",
+   "required": [
+    "connection_id"
+   ]
+  },
+  "AlertingSettings": {
+   "properties": {
+    "monitor_configs": {
+     "additionalProperties": {
+      "$ref": "#/components/schemas/AlertingMonitorConfig"
+     },
+     "type": "object"
+    },
+    "auto_resolve_after_inactive_minutes": {
+     "anyOf": [
+      {
+       "type": "integer",
+       "minimum": 1
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "notifiers": {
+     "items": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/AlertingWebhookNotifier"
+       },
+       {
+        "$ref": "#/components/schemas/AlertingPagerDutyNotifier"
+       },
+       {
+        "$ref": "#/components/schemas/AlertingSlackNotifier"
+       }
+      ]
+     },
+     "type": "array",
+     "maxItems": 10
+    }
+   },
+   "type": "object"
+  },
+  "AlertingSlackNotifier": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "integration",
+     "default": "integration"
+    },
+    "integration_type": {
+     "type": "string",
+     "const": "slack",
+     "default": "slack"
+    },
+    "connection_id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "channel_id": {
+     "type": "string",
+     "maxLength": 64,
+     "minLength": 1
+    }
+   },
+   "additionalProperties": false,
+   "type": "object",
+   "required": [
+    "connection_id",
+    "channel_id"
+   ]
+  },
+  "AlertingWebhookNotifier": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "webhook",
+     "default": "webhook"
+    },
+    "webhook_id": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "webhook_id"
+   ]
+  },
+  "AllowedValues": {
+   "properties": {
+    "dynamic_variable": {
+     "type": "string",
+     "minLength": 1
+    }
+   },
+   "type": "object",
+   "required": [
+    "dynamic_variable"
+   ]
+  },
+  "AllowlistItem": {
+   "properties": {
+    "hostname": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "hostname"
+   ]
+  },
+  "AnalysisProperty": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "enum": [
+      "boolean",
+      "string",
+      "integer",
+      "number"
+     ]
+    },
+    "description": {
+     "type": "string",
+     "default": ""
+    },
+    "enum": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "is_system_provided": {
+     "type": "boolean",
+     "default": false
+    },
+    "dynamic_variable": {
+     "type": "string",
+     "default": ""
+    },
+    "allowed_values": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/AllowedValues"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "allowed_values_dynamic_variable": {
+     "type": "string",
+     "default": "",
+     "deprecated": true
+    },
+    "constant_value": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      },
+      {
+       "type": "number"
+      },
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": ""
+    },
+    "is_omitted": {
+     "type": "boolean",
+     "default": false
+    },
+    "name": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "llm": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/LLM"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "type"
+   ]
+  },
+  "AnalysisScope": {
+   "type": "string",
+   "enum": [
+    "conversation",
+    "agent"
+   ],
+   "default": "conversation"
+  },
+  "ApiIntegrationWebhookOverrides": {
+   "properties": {
+    "schema_overrides": {
+     "anyOf": [
+      {
+       "additionalProperties": {
+        "oneOf": [
+         {
+          "$ref": "#/components/schemas/ConstantSchemaOverride"
+         },
+         {
+          "$ref": "#/components/schemas/DynamicVariableSchemaOverride"
+         },
+         {
+          "$ref": "#/components/schemas/LLMSchemaOverride"
+         },
+         {
+          "$ref": "#/components/schemas/OmitSchemaOverride"
+         }
+        ],
+        "discriminator": {}
+       },
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "response_filter_mode": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ResponseFilterMode"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "response_filters": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "request_headers": {
+     "anyOf": [
+      {
+       "additionalProperties": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "$ref": "#/components/schemas/ConvAIDynamicVariable"
+         }
+        ]
+       },
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "ApiIntegrationWebhookToolConfig-Input": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "api_integration_webhook",
+     "default": "api_integration_webhook"
+    },
+    "name": {
+     "type": "string",
+     "minLength": 0
+    },
+    "description": {
+     "type": "string",
+     "minLength": 0
+    },
+    "response_timeout_secs": {
+     "type": "integer",
+     "maximum": 300,
+     "minimum": 5,
+     "default": 20
+    },
+    "disable_interruptions": {
+     "type": "boolean",
+     "default": false,
+     "deprecated": true
+    },
+    "interruption_mode": {
+     "$ref": "#/components/schemas/ToolInterruptionMode",
+     "default": "allow"
+    },
+    "force_pre_tool_speech": {
+     "type": "boolean",
+     "default": false,
+     "deprecated": true
+    },
+    "pre_tool_speech": {
+     "$ref": "#/components/schemas/PreToolSpeechMode",
+     "default": "auto"
+    },
+    "assignments": {
+     "items": {
+      "$ref": "#/components/schemas/DynamicVariableAssignment"
+     },
+     "type": "array"
+    },
+    "tool_call_sound": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ToolCallSoundType"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "tool_call_sound_behavior": {
+     "$ref": "#/components/schemas/ToolCallSoundBehavior",
+     "default": "auto"
+    },
+    "tool_error_handling_mode": {
+     "$ref": "#/components/schemas/ToolErrorHandlingMode",
+     "default": "auto"
+    },
+    "dynamic_variables": {
+     "$ref": "#/components/schemas/DynamicVariablesConfig"
+    },
+    "execution_mode": {
+     "$ref": "#/components/schemas/ToolExecutionMode",
+     "default": "immediate"
+    },
+    "tool_version": {
+     "type": "string",
+     "default": "1.0.0"
+    },
+    "api_integration_id": {
+     "type": "string"
+    },
+    "api_integration_connection_id": {
+     "type": "string"
+    },
+    "api_schema_overrides": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ApiIntegrationWebhookOverrides"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "name",
+    "description",
+    "api_integration_id",
+    "api_integration_connection_id"
+   ]
+  },
+  "ArrayJsonSchemaProperty-Input": {
+   "properties": {
+    "property_kind": {
+     "type": "string",
+     "enum": [
+      "array",
+      "object"
+     ],
+     "default": "array"
+    },
+    "description": {
+     "type": "string",
+     "default": ""
+    },
+    "dynamic_variable": {
+     "type": "string",
+     "default": ""
+    },
+    "constant_value": {
+     "anyOf": [
+      {
+       "items": {},
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "is_omitted": {
+     "type": "boolean",
+     "default": false
+    },
+    "type": {
+     "type": "string",
+     "const": "array",
+     "default": "array"
+    },
+    "items": {
+     "oneOf": [
+      {
+       "$ref": "#/components/schemas/LiteralJsonSchemaProperty"
+      },
+      {
+       "$ref": "#/components/schemas/ObjectJsonSchemaProperty-Input"
+      },
+      {
+       "$ref": "#/components/schemas/ArrayJsonSchemaProperty-Input"
+      }
+     ],
+     "default": {
+      "type": "string",
+      "description": "Array element",
+      "is_system_provided": false,
+      "dynamic_variable": "",
+      "allowed_values_dynamic_variable": "",
+      "constant_value": "",
+      "is_omitted": false
+     }
+    }
+   },
+   "additionalProperties": false,
+   "type": "object"
+  },
+  "AttachedSystemDataCollectionRef": {
+   "properties": {
+    "source": {
+     "type": "string",
+     "const": "system"
+    },
+    "analysis_item_id": {
+     "$ref": "#/components/schemas/SystemDataCollectionId"
+    },
+    "scope": {
+     "$ref": "#/components/schemas/AnalysisScope",
+     "default": "conversation"
+    }
+   },
+   "type": "object",
+   "required": [
+    "source",
+    "analysis_item_id"
+   ]
+  },
+  "AttachedSystemEvaluationRef": {
+   "properties": {
+    "source": {
+     "type": "string",
+     "const": "system"
+    },
+    "analysis_item_id": {
+     "$ref": "#/components/schemas/SystemEvaluationId"
+    },
+    "scope": {
+     "$ref": "#/components/schemas/AnalysisScope",
+     "default": "conversation"
+    },
+    "weight": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "source",
+    "analysis_item_id"
+   ]
+  },
+  "AttachedTestModel": {
+   "properties": {
+    "test_id": {
+     "type": "string"
+    },
+    "workflow_node_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "test_id"
+   ]
+  },
+  "AttachedUserDataCollectionRef": {
+   "properties": {
+    "source": {
+     "type": "string",
+     "const": "user"
+    },
+    "analysis_item_id": {
+     "type": "string"
+    },
+    "version_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "scope": {
+     "$ref": "#/components/schemas/AnalysisScope",
+     "default": "conversation"
+    }
+   },
+   "type": "object",
+   "required": [
+    "source",
+    "analysis_item_id"
+   ]
+  },
+  "AttachedUserEvaluationRef": {
+   "properties": {
+    "source": {
+     "type": "string",
+     "const": "user"
+    },
+    "analysis_item_id": {
+     "type": "string"
+    },
+    "version_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "additional_version_ids": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "scope": {
+     "$ref": "#/components/schemas/AnalysisScope",
+     "default": "conversation"
+    },
+    "weight": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "source",
+    "analysis_item_id"
+   ]
+  },
+  "AuthConnectionLocator": {
+   "properties": {
+    "auth_connection_id": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "auth_connection_id"
+   ]
+  },
+  "AuthSettings": {
+   "properties": {
+    "enable_auth": {
+     "type": "boolean",
+     "default": false
+    },
+    "allowlist": {
+     "items": {
+      "$ref": "#/components/schemas/AllowlistItem"
+     },
+     "type": "array"
+    },
+    "require_origin_header": {
+     "type": "boolean",
+     "default": false
+    },
+    "shareable_token": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "BackgroundSoundConfig": {
+   "properties": {
+    "source_type": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/BackgroundSoundSourceType"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "source_id": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/BackgroundSoundPresetId"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "volume": {
+     "type": "number",
+     "maximum": 1,
+     "minimum": 0.01,
+     "default": 0.15
+    },
+    "crossfade_loop": {
+     "type": "boolean",
+     "default": true
+    }
+   },
+   "type": "object"
+  },
+  "BackgroundSoundPresetId": {
+   "type": "string",
+   "enum": [
+    "office2",
+    "office1",
+    "restaurant",
+    "city",
+    "typing",
+    "elevator1",
+    "elevator2",
+    "elevator3",
+    "elevator4"
+   ]
+  },
+  "BackgroundSoundSourceType": {
+   "type": "string",
+   "enum": [
+    "preset"
+   ]
+  },
+  "BackupLLMDefault": {
+   "properties": {
+    "preference": {
+     "type": "string",
+     "const": "default",
+     "default": "default"
+    }
+   },
+   "type": "object"
+  },
+  "BackupLLMDisabled": {
+   "properties": {
+    "preference": {
+     "type": "string",
+     "const": "disabled",
+     "default": "disabled"
+    }
+   },
+   "type": "object"
+  },
+  "BackupLLMOverride": {
+   "properties": {
+    "preference": {
+     "type": "string",
+     "const": "override",
+     "default": "override"
+    },
+    "order": {
+     "items": {
+      "$ref": "#/components/schemas/LLM"
+     },
+     "type": "array"
+    }
+   },
+   "type": "object",
+   "required": [
+    "order"
+   ]
+  },
+  "BehaviorOverride": {
+   "properties": {
+    "verbosity": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/Verbosity"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "output_format": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/OutputFormat"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "interaction_budget": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/InteractionBudget"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "Body_Create_Agent_v1_convai_agents_create_post": {
+   "properties": {
+    "conversation_config": {
+     "$ref": "#/components/schemas/ConversationalConfigAPIModel-Input"
+    },
+    "platform_settings": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/AgentPlatformSettingsRequestModel"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "name": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "tags": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "conversation_config"
+   ]
+  },
+  "BuiltInTools-Input": {
+   "properties": {
+    "transfer_to_agent": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/SystemToolConfig-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "end_call": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/SystemToolConfig-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "language_detection": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/SystemToolConfig-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "transfer_to_number": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/SystemToolConfig-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "skip_turn": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/SystemToolConfig-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "play_keypad_touch_tone": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/SystemToolConfig-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "voicemail_detection": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/SystemToolConfig-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "CancelCalendarEventParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "cancel_calendar_event",
+     "default": "cancel_calendar_event"
+    }
+   },
+   "type": "object"
+  },
+  "CancelGroupSessionForAllParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "cancel_group_session_for_all",
+     "default": "cancel_group_session_for_all"
+    }
+   },
+   "type": "object"
+  },
+  "CancelGroupSessionRegistrationParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "cancel_group_session_registration",
+     "default": "cancel_group_session_registration"
+    }
+   },
+   "type": "object"
+  },
+  "CancelOrderParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "cancel_order",
+     "default": "cancel_order"
+    }
+   },
+   "type": "object"
+  },
+  "CheckServiceAvailabilityParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "check_service_availability",
+     "default": "check_service_availability"
+    }
+   },
+   "type": "object"
+  },
+  "ClientEvent": {
+   "type": "string",
+   "enum": [
+    "conversation_initiation_metadata",
+    "asr_initiation_metadata",
+    "ping",
+    "audio",
+    "interruption",
+    "user_transcript",
+    "tentative_user_transcript",
+    "agent_response",
+    "agent_response_correction",
+    "client_tool_call",
+    "mcp_tool_call",
+    "mcp_connection_status",
+    "agent_tool_request",
+    "agent_tool_response",
+    "agent_tool_response_full_payload",
+    "agent_response_metadata",
+    "vad_score",
+    "agent_chat_response_part",
+    "client_error",
+    "guardrail_triggered",
+    "dtmf_request",
+    "agent_response_complete",
+    "context_usage",
+    "internal_turn_probability",
+    "internal_tentative_agent_response"
+   ]
+  },
+  "ClientToolConfig-Input": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "client",
+     "default": "client"
+    },
+    "name": {
+     "type": "string",
+     "minLength": 0
+    },
+    "description": {
+     "type": "string",
+     "minLength": 0
+    },
+    "response_timeout_secs": {
+     "type": "integer",
+     "maximum": 120,
+     "minimum": -1,
+     "default": 20
+    },
+    "disable_interruptions": {
+     "type": "boolean",
+     "default": false,
+     "deprecated": true
+    },
+    "interruption_mode": {
+     "$ref": "#/components/schemas/ToolInterruptionMode",
+     "default": "allow"
+    },
+    "force_pre_tool_speech": {
+     "type": "boolean",
+     "default": false,
+     "deprecated": true
+    },
+    "pre_tool_speech": {
+     "$ref": "#/components/schemas/PreToolSpeechMode",
+     "default": "auto"
+    },
+    "assignments": {
+     "items": {
+      "$ref": "#/components/schemas/DynamicVariableAssignment"
+     },
+     "type": "array"
+    },
+    "tool_call_sound": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ToolCallSoundType"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "tool_call_sound_behavior": {
+     "$ref": "#/components/schemas/ToolCallSoundBehavior",
+     "default": "auto"
+    },
+    "tool_error_handling_mode": {
+     "$ref": "#/components/schemas/ToolErrorHandlingMode",
+     "default": "auto"
+    },
+    "parameters": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ObjectJsonSchemaProperty-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "expects_response": {
+     "type": "boolean",
+     "default": false
+    },
+    "dynamic_variables": {
+     "$ref": "#/components/schemas/DynamicVariablesConfig"
+    },
+    "execution_mode": {
+     "$ref": "#/components/schemas/ToolExecutionMode",
+     "default": "immediate"
+    }
+   },
+   "type": "object",
+   "required": [
+    "name",
+    "description"
+   ]
+  },
+  "ConfigEntityType": {
+   "type": "string",
+   "enum": [
+    "name",
+    "name.name_given",
+    "name.name_family",
+    "name.name_other",
+    "email_address",
+    "contact_number",
+    "dob",
+    "age",
+    "religious_belief",
+    "political_opinion",
+    "sexual_orientation",
+    "ethnicity_race",
+    "marital_status",
+    "occupation",
+    "physical_attribute",
+    "language",
+    "username",
+    "password",
+    "url",
+    "organization",
+    "financial_id",
+    "financial_id.payment_card",
+    "financial_id.payment_card.payment_card_number",
+    "financial_id.payment_card.payment_card_expiration_date",
+    "financial_id.payment_card.payment_card_cvv",
+    "financial_id.bank_account",
+    "financial_id.bank_account.bank_account_number",
+    "financial_id.bank_account.bank_routing_number",
+    "financial_id.bank_account.swift_bic_code",
+    "financial_id.financial_id_other",
+    "location",
+    "location.location_address",
+    "location.location_city",
+    "location.location_postal_code",
+    "location.location_coordinate",
+    "location.location_state",
+    "location.location_country",
+    "location.location_other",
+    "date",
+    "date_interval",
+    "unique_id",
+    "unique_id.government_issued_id",
+    "unique_id.account_number",
+    "unique_id.vehicle_id",
+    "unique_id.healthcare_number",
+    "unique_id.healthcare_number.medical_record_number",
+    "unique_id.healthcare_number.health_plan_beneficiary_number",
+    "unique_id.device_id",
+    "unique_id.unique_id_other",
+    "medical",
+    "medical.medical_condition",
+    "medical.medication",
+    "medical.medical_procedure",
+    "medical.medical_measurement",
+    "medical.medical_other"
+   ]
+  },
+  "ConstantSchemaOverride": {
+   "properties": {
+    "source": {
+     "type": "string",
+     "const": "constant",
+     "default": "constant"
+    },
+    "constant_value": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      },
+      {
+       "type": "number"
+      },
+      {
+       "type": "boolean"
+      },
+      {
+       "items": {},
+       "type": "array"
+      },
+      {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "constant_value"
+   ]
+  },
+  "ContentConfig": {
+   "properties": {
+    "sexual": {
+     "$ref": "#/components/schemas/ContentThresholdGuardrail"
+    },
+    "violence": {
+     "$ref": "#/components/schemas/ContentThresholdGuardrail"
+    },
+    "harassment": {
+     "$ref": "#/components/schemas/ContentThresholdGuardrail"
+    },
+    "self_harm": {
+     "$ref": "#/components/schemas/ContentThresholdGuardrail"
+    },
+    "profanity": {
+     "$ref": "#/components/schemas/ContentThresholdGuardrail"
+    },
+    "religion_or_politics": {
+     "$ref": "#/components/schemas/ContentThresholdGuardrail"
+    },
+    "medical_and_legal_information": {
+     "$ref": "#/components/schemas/ContentThresholdGuardrail"
+    }
+   },
+   "type": "object"
+  },
+  "ContentGuardrail-Input": {
+   "properties": {
+    "execution_mode": {
+     "$ref": "#/components/schemas/GuardrailExecutionMode",
+     "default": "streaming"
+    },
+    "config": {
+     "$ref": "#/components/schemas/ContentConfig"
+    },
+    "trigger_action": {
+     "oneOf": [
+      {
+       "$ref": "#/components/schemas/EndCallTriggerAction"
+      },
+      {
+       "$ref": "#/components/schemas/RetryTriggerAction"
+      }
+     ],
+     "discriminator": {}
+    }
+   },
+   "type": "object"
+  },
+  "ContentThresholdGuardrail": {
+   "properties": {
+    "is_enabled": {
+     "type": "boolean",
+     "default": false
+    },
+    "threshold": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "string",
+       "enum": [
+        "low",
+        "medium",
+        "high"
+       ]
+      }
+     ],
+     "default": 0.3
+    }
+   },
+   "type": "object"
+  },
+  "ConvAIDynamicVariable": {
+   "properties": {
+    "variable_name": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "variable_name"
+   ]
+  },
+  "ConvAIEnvVarLocator": {
+   "properties": {
+    "env_var_label": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "env_var_label"
+   ]
+  },
+  "ConvAISecretLocator": {
+   "properties": {
+    "secret_id": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "secret_id"
+   ]
+  },
+  "ConvAIWebhooks": {
+   "properties": {
+    "post_call_webhook_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "events": {
+     "items": {
+      "$ref": "#/components/schemas/WebhookEventType"
+     },
+     "type": "array"
+    },
+    "transcript_format": {
+     "$ref": "#/components/schemas/WebhookTranscriptFormat",
+     "default": "json"
+    },
+    "exclude_transcript": {
+     "type": "boolean",
+     "default": false
+    },
+    "send_audio": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "deprecated": true
+    }
+   },
+   "type": "object"
+  },
+  "ConversationConfig-Input": {
+   "properties": {
+    "text_only": {
+     "type": "boolean",
+     "default": false
+    },
+    "max_duration_seconds": {
+     "type": "integer",
+     "default": 600
+    },
+    "client_events": {
+     "items": {
+      "$ref": "#/components/schemas/ClientEvent"
+     },
+     "type": "array"
+    },
+    "file_input": {
+     "$ref": "#/components/schemas/FileInputConfig"
+    },
+    "monitoring_enabled": {
+     "type": "boolean",
+     "default": false
+    },
+    "monitoring_events": {
+     "items": {
+      "$ref": "#/components/schemas/ClientEvent"
+     },
+     "type": "array"
+    },
+    "dtmf_input_settings": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/DTMFInputConfig"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "background_sound": {
+     "$ref": "#/components/schemas/BackgroundSoundConfig"
+    },
+    "source_attribution": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "ConversationConfigClientOverride-Input": {
+   "properties": {
+    "asr": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ASRConversationalConfigOverride"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "turn": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/TurnConfigOverride"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "tts": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/TTSConversationalConfigOverride"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "conversation": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ConversationConfigOverride"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "agent": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/AgentConfigOverride-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "ConversationConfigClientOverrideConfig-Input": {
+   "properties": {
+    "asr": {
+     "$ref": "#/components/schemas/ASRConversationalConfigOverrideConfig"
+    },
+    "turn": {
+     "$ref": "#/components/schemas/TurnConfigOverrideConfig"
+    },
+    "tts": {
+     "$ref": "#/components/schemas/TTSConversationalConfigOverrideConfig"
+    },
+    "conversation": {
+     "$ref": "#/components/schemas/ConversationConfigOverrideConfig"
+    },
+    "agent": {
+     "$ref": "#/components/schemas/AgentConfigOverrideConfig"
+    }
+   },
+   "type": "object"
+  },
+  "ConversationConfigOverride": {
+   "properties": {
+    "text_only": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "max_duration_seconds": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "ConversationConfigOverrideConfig": {
+   "properties": {
+    "text_only": {
+     "type": "boolean",
+     "default": false
+    },
+    "max_duration_seconds": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "ConversationHistoryRedactionConfig": {
+   "properties": {
+    "enabled": {
+     "type": "boolean",
+     "default": false
+    },
+    "entities": {
+     "items": {
+      "$ref": "#/components/schemas/ConfigEntityType"
+     },
+     "type": "array"
+    },
+    "excluded_data_collection_ids": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array",
+     "maxItems": 50
+    }
+   },
+   "type": "object"
+  },
+  "ConversationInitiationClientDataConfig-Input": {
+   "properties": {
+    "conversation_config_override": {
+     "$ref": "#/components/schemas/ConversationConfigClientOverrideConfig-Input"
+    },
+    "custom_llm_extra_body": {
+     "type": "boolean",
+     "default": false
+    },
+    "enable_conversation_initiation_client_data_from_webhook": {
+     "type": "boolean",
+     "default": false
+    },
+    "enable_starting_workflow_node_id_from_client": {
+     "type": "boolean",
+     "default": false
+    },
+    "enable_procedure_ids_from_client": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "ConversationInitiationClientDataWebhook": {
+   "properties": {
+    "url": {
+     "type": "string"
+    },
+    "request_headers": {
+     "additionalProperties": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "$ref": "#/components/schemas/ConvAISecretLocator"
+       }
+      ]
+     },
+     "type": "object"
+    }
+   },
+   "type": "object",
+   "required": [
+    "url",
+    "request_headers"
+   ]
+  },
+  "ConversationalConfigAPIModel-Input": {
+   "properties": {
+    "asr": {
+     "$ref": "#/components/schemas/ASRConversationalConfig"
+    },
+    "turn": {
+     "$ref": "#/components/schemas/TurnConfig"
+    },
+    "tts": {
+     "$ref": "#/components/schemas/TTSConversationalConfig-Input"
+    },
+    "conversation": {
+     "$ref": "#/components/schemas/ConversationConfig-Input"
+    },
+    "language_presets": {
+     "additionalProperties": {
+      "$ref": "#/components/schemas/LanguagePreset-Input"
+     },
+     "type": "object"
+    },
+    "vad": {
+     "$ref": "#/components/schemas/VADConfig"
+    },
+    "agent": {
+     "$ref": "#/components/schemas/AgentConfigAPIModel-Input"
+    }
+   },
+   "type": "object"
+  },
+  "CreateAgentProcedureParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "create_agent_procedure",
+     "default": "create_agent_procedure"
+    }
+   },
+   "type": "object"
+  },
+  "CreateAgentRuleParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "create_agent_rule",
+     "default": "create_agent_rule"
+    }
+   },
+   "type": "object"
+  },
+  "CreateAssetParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "create_asset",
+     "default": "create_asset"
+    }
+   },
+   "type": "object"
+  },
+  "CreateClientAppointmentParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "create_client_appointment",
+     "default": "create_client_appointment"
+    }
+   },
+   "type": "object"
+  },
+  "CreateClientInteractionParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "create_client_interaction",
+     "default": "create_client_interaction"
+    }
+   },
+   "type": "object"
+  },
+  "CreateClientParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "create_client",
+     "default": "create_client"
+    }
+   },
+   "type": "object"
+  },
+  "CreateHolidayParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "create_holiday",
+     "default": "create_holiday"
+    }
+   },
+   "type": "object"
+  },
+  "CreateLocationParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "create_location",
+     "default": "create_location"
+    }
+   },
+   "type": "object"
+  },
+  "CreateOrderParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "create_order",
+     "default": "create_order"
+    }
+   },
+   "type": "object"
+  },
+  "CreateProductParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "create_product",
+     "default": "create_product"
+    }
+   },
+   "type": "object"
+  },
+  "CreateProductQuoteRequestParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "create_product_quote_request",
+     "default": "create_product_quote_request"
+    }
+   },
+   "type": "object"
+  },
+  "CreateServiceParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "create_service",
+     "default": "create_service"
+    }
+   },
+   "type": "object"
+  },
+  "CreateServiceQuoteRequestParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "create_service_quote_request",
+     "default": "create_service_quote_request"
+    }
+   },
+   "type": "object"
+  },
+  "CreateStaffParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "create_staff",
+     "default": "create_staff"
+    }
+   },
+   "type": "object"
+  },
+  "CreateTransferRuleParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "create_transfer_rule",
+     "default": "create_transfer_rule"
+    },
+    "post_dial_digits_enabled": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "CriteriaScoringMode": {
+   "type": "string",
+   "enum": [
+    "binary",
+    "numeric_uniform"
+   ],
+   "default": "binary"
+  },
+  "CustomGuardrail-Input": {
+   "properties": {
+    "config": {
+     "$ref": "#/components/schemas/CustomGuardrailsConfig-Input"
+    }
+   },
+   "type": "object"
+  },
+  "CustomGuardrailConfig": {
+   "properties": {
+    "is_enabled": {
+     "type": "boolean",
+     "default": false
+    },
+    "name": {
+     "type": "string",
+     "maxLength": 500,
+     "minLength": 1
+    },
+    "prompt": {
+     "type": "string",
+     "maxLength": 10000,
+     "minLength": 1
+    },
+    "execution_mode": {
+     "$ref": "#/components/schemas/GuardrailExecutionMode",
+     "default": "streaming"
+    },
+    "model": {
+     "type": "string",
+     "enum": [
+      "gemini-2.5-flash-lite",
+      "gemini-2.5-flash",
+      "gemini-3.1-flash-lite",
+      "gemini-3.5-flash",
+      "claude-haiku-4-5",
+      "claude-sonnet-4-6",
+      "gpt-5.4-nano",
+      "gpt-5.4-mini"
+     ],
+     "default": "gemini-3.1-flash-lite"
+    },
+    "history_message_count": {
+     "type": "integer",
+     "maximum": 100,
+     "minimum": 0,
+     "default": 0
+    },
+    "history_include_tool_calls": {
+     "type": "boolean",
+     "default": false
+    },
+    "trigger_action": {
+     "oneOf": [
+      {
+       "$ref": "#/components/schemas/EndCallTriggerAction"
+      },
+      {
+       "$ref": "#/components/schemas/RetryTriggerAction"
+      }
+     ],
+     "discriminator": {}
+    },
+    "evaluate_full_response_only": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object",
+   "required": [
+    "name",
+    "prompt"
+   ]
+  },
+  "CustomGuardrailsConfig-Input": {
+   "properties": {
+    "configs": {
+     "items": {
+      "$ref": "#/components/schemas/CustomGuardrailConfig"
+     },
+     "type": "array"
+    }
+   },
+   "type": "object"
+  },
+  "CustomLLM": {
+   "properties": {
+    "url": {
+     "type": "string"
+    },
+    "model_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "api_key": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ConvAISecretLocator"
+      },
+      {
+       "$ref": "#/components/schemas/ConvAIEnvVarLocator"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "auth_connection": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/AuthConnectionLocator"
+      },
+      {
+       "$ref": "#/components/schemas/EnvironmentAuthConnectionLocator"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "request_headers": {
+     "additionalProperties": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "$ref": "#/components/schemas/ConvAISecretLocator"
+       },
+       {
+        "$ref": "#/components/schemas/ConvAIDynamicVariable"
+       },
+       {
+        "$ref": "#/components/schemas/ConvAIEnvVarLocator"
+       }
+      ]
+     },
+     "type": "object"
+    },
+    "api_version": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "api_type": {
+     "$ref": "#/components/schemas/CustomLLMAPIType",
+     "default": "chat_completions"
+    }
+   },
+   "type": "object",
+   "required": [
+    "url"
+   ]
+  },
+  "CustomLLMAPIType": {
+   "type": "string",
+   "enum": [
+    "chat_completions",
+    "responses",
+    "websocket"
+   ],
+   "default": "chat_completions"
+  },
+  "CustomSIPHeader": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "static",
+     "default": "static"
+    },
+    "key": {
+     "type": "string",
+     "maxLength": 64,
+     "minLength": 1
+    },
+    "value": {
+     "type": "string",
+     "maxLength": 512,
+     "minLength": 1
+    }
+   },
+   "type": "object",
+   "required": [
+    "key",
+    "value"
+   ]
+  },
+  "CustomSIPHeaderWithDynamicVariable": {
+   "properties": {
+    "value": {
+     "type": "string",
+     "minLength": 1
+    },
+    "type": {
+     "type": "string",
+     "const": "dynamic"
+    },
+    "key": {
+     "type": "string",
+     "maxLength": 64,
+     "minLength": 1
+    }
+   },
+   "type": "object",
+   "required": [
+    "value",
+    "type",
+    "key"
+   ]
+  },
+  "DTMFInputConfig": {
+   "properties": {
+    "dtmf_input_timeout": {
+     "type": "number",
+     "maximum": 10,
+     "minimum": 0.5,
+     "default": 2
+    },
+    "hash_terminator": {
+     "type": "boolean",
+     "default": true
+    },
+    "redact_input": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "DeleteAgentProcedureParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "delete_agent_procedure",
+     "default": "delete_agent_procedure"
+    }
+   },
+   "type": "object"
+  },
+  "DeleteAgentRuleParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "delete_agent_rule",
+     "default": "delete_agent_rule"
+    }
+   },
+   "type": "object"
+  },
+  "DeleteAssetParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "delete_asset",
+     "default": "delete_asset"
+    }
+   },
+   "type": "object"
+  },
+  "DeleteCalendarEventParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "delete_calendar_event",
+     "default": "delete_calendar_event"
+    }
+   },
+   "type": "object"
+  },
+  "DeleteClientInteractionParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "delete_client_interaction",
+     "default": "delete_client_interaction"
+    }
+   },
+   "type": "object"
+  },
+  "DeleteClientParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "delete_client",
+     "default": "delete_client"
+    }
+   },
+   "type": "object"
+  },
+  "DeleteGroupSessionParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "delete_group_session",
+     "default": "delete_group_session"
+    }
+   },
+   "type": "object"
+  },
+  "DeleteHolidayParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "delete_holiday",
+     "default": "delete_holiday"
+    }
+   },
+   "type": "object"
+  },
+  "DeleteLocationParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "delete_location",
+     "default": "delete_location"
+    }
+   },
+   "type": "object"
+  },
+  "DeleteProductParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "delete_product",
+     "default": "delete_product"
+    }
+   },
+   "type": "object"
+  },
+  "DeleteServiceParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "delete_service",
+     "default": "delete_service"
+    }
+   },
+   "type": "object"
+  },
+  "DeleteStaffParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "delete_staff",
+     "default": "delete_staff"
+    }
+   },
+   "type": "object"
+  },
+  "DeleteTransferRuleParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "delete_transfer_rule",
+     "default": "delete_transfer_rule"
+    }
+   },
+   "type": "object"
+  },
+  "DocumentUsageModeEnum": {
+   "type": "string",
+   "enum": [
+    "prompt",
+    "auto"
+   ],
+   "default": "auto"
+  },
+  "DynamicVariableAssignment": {
+   "properties": {
+    "source": {
+     "type": "string",
+     "const": "response",
+     "default": "response"
+    },
+    "dynamic_variable": {
+     "type": "string"
+    },
+    "value_path": {
+     "type": "string"
+    },
+    "sanitize": {
+     "type": "boolean",
+     "default": false
+    },
+    "preserve_native_type": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object",
+   "required": [
+    "dynamic_variable",
+    "value_path"
+   ]
+  },
+  "DynamicVariableSchemaOverride": {
+   "properties": {
+    "source": {
+     "type": "string",
+     "const": "dynamic_variable",
+     "default": "dynamic_variable"
+    },
+    "dynamic_variable": {
+     "type": "string",
+     "minLength": 1
+    }
+   },
+   "type": "object",
+   "required": [
+    "dynamic_variable"
+   ]
+  },
+  "DynamicVariablesConfig": {
+   "properties": {
+    "dynamic_variable_placeholders": {
+     "additionalProperties": true,
+     "type": "object"
+    }
+   },
+   "type": "object"
+  },
+  "EffectsSpec-Input": {
+   "properties": {
+    "filter_preset_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "distance": {
+     "type": "number",
+     "maximum": 1,
+     "minimum": 0,
+     "default": 0
+    },
+    "environment_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "background_noise_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "send_level": {
+     "type": "number",
+     "maximum": 1,
+     "minimum": 0,
+     "default": 1
+    },
+    "seed": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "EmbedVariant": {
+   "type": "string",
+   "enum": [
+    "tiny",
+    "compact",
+    "full",
+    "expandable"
+   ],
+   "default": "full"
+  },
+  "EmbeddingModelEnum": {
+   "type": "string",
+   "enum": [
+    "e5_mistral_7b_instruct",
+    "multilingual_e5_large_instruct"
+   ],
+   "default": "e5_mistral_7b_instruct"
+  },
+  "EndCallToolConfig": {
+   "properties": {
+    "system_tool_type": {
+     "type": "string",
+     "const": "end_call",
+     "default": "end_call"
+    }
+   },
+   "type": "object"
+  },
+  "EndCallTriggerAction": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "end_call",
+     "default": "end_call"
+    }
+   },
+   "type": "object"
+  },
+  "EndProcedureToolConfig": {
+   "properties": {
+    "system_tool_type": {
+     "type": "string",
+     "const": "end_procedure",
+     "default": "end_procedure"
+    },
+    "procedures": {
+     "additionalProperties": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ProcedureVersionRef"
+       },
+       {
+        "$ref": "#/components/schemas/ProcedureDraftRef"
+       }
+      ]
+     },
+     "type": "object"
+    }
+   },
+   "type": "object"
+  },
+  "EnvironmentAuthConnectionLocator": {
+   "properties": {
+    "env_var_label": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "env_var_label"
+   ]
+  },
+  "EvaluationSettings-Input": {
+   "properties": {
+    "criteria": {
+     "items": {
+      "$ref": "#/components/schemas/PromptEvaluationCriteria"
+     },
+     "type": "array"
+    }
+   },
+   "type": "object"
+  },
+  "FileInputConfig": {
+   "properties": {
+    "enabled": {
+     "type": "boolean",
+     "default": true
+    },
+    "max_files_in_memory": {
+     "type": "integer",
+     "maximum": 30,
+     "minimum": 1,
+     "default": 10
+    },
+    "max_files_per_conversation": {
+     "type": "integer",
+     "default": 10
+    }
+   },
+   "type": "object"
+  },
+  "FocusGuardrail": {
+   "properties": {
+    "is_enabled": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "GetAnalyticsSummaryParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "get_analytics_summary",
+     "default": "get_analytics_summary"
+    }
+   },
+   "type": "object"
+  },
+  "GetAppointmentByConfirmationNumberParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "get_appointment_by_confirmation_number",
+     "default": "get_appointment_by_confirmation_number"
+    }
+   },
+   "type": "object"
+  },
+  "GetBookingPageSettingsParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "get_booking_page_settings",
+     "default": "get_booking_page_settings"
+    }
+   },
+   "type": "object"
+  },
+  "GetBookingSlugStatusParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "get_booking_slug_status",
+     "default": "get_booking_slug_status"
+    }
+   },
+   "type": "object"
+  },
+  "GetClientAppointmentsParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "get_client_appointments",
+     "default": "get_client_appointments"
+    },
+    "include_cancelled": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "GetClientByPhoneParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "get_client_by_phone",
+     "default": "get_client_by_phone"
+    }
+   },
+   "type": "object"
+  },
+  "GetClientOrdersParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "get_client_orders",
+     "default": "get_client_orders"
+    },
+    "include_cancelled": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "GetOrderByConfirmationNumberParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "get_order_by_confirmation_number",
+     "default": "get_order_by_confirmation_number"
+    }
+   },
+   "type": "object"
+  },
+  "GetScheduleParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "get_schedule",
+     "default": "get_schedule"
+    },
+    "include_location_filter": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "GuardrailExecutionMode": {
+   "type": "string",
+   "enum": [
+    "streaming",
+    "blocking"
+   ],
+   "default": "streaming"
+  },
+  "GuardrailsV1-Input": {
+   "properties": {
+    "version": {
+     "type": "string",
+     "const": "1",
+     "default": "1"
+    },
+    "focus": {
+     "$ref": "#/components/schemas/FocusGuardrail"
+    },
+    "prompt_injection": {
+     "$ref": "#/components/schemas/PromptInjectionGuardrail"
+    },
+    "content": {
+     "$ref": "#/components/schemas/ContentGuardrail-Input"
+    },
+    "moderation": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ModerationGuardrail-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "custom": {
+     "$ref": "#/components/schemas/CustomGuardrail-Input"
+    }
+   },
+   "type": "object"
+  },
+  "ImageAvatar": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "image",
+     "default": "image"
+    },
+    "url": {
+     "type": "string",
+     "default": ""
+    }
+   },
+   "type": "object"
+  },
+  "IntegrationType": {
+   "type": "string",
+   "enum": [
+    "mcp_server",
+    "mcp_integration"
+   ]
+  },
+  "InteractionBudget": {
+   "type": "string",
+   "enum": [
+    "realtime",
+    "5_minutes",
+    "10_minutes",
+    "1_hour"
+   ]
+  },
+  "KnowledgeBaseDocumentType": {
+   "type": "string",
+   "enum": [
+    "file",
+    "url",
+    "text",
+    "folder"
+   ]
+  },
+  "KnowledgeBaseLocator": {
+   "properties": {
+    "type": {
+     "$ref": "#/components/schemas/KnowledgeBaseDocumentType"
+    },
+    "name": {
+     "type": "string"
+    },
+    "id": {
+     "type": "string"
+    },
+    "usage_mode": {
+     "$ref": "#/components/schemas/DocumentUsageModeEnum",
+     "default": "auto"
+    }
+   },
+   "type": "object",
+   "required": [
+    "type",
+    "name",
+    "id"
+   ]
+  },
+  "KnowledgeBaseRagToolConfig": {
+   "properties": {
+    "system_tool_type": {
+     "type": "string",
+     "const": "knowledge_base_rag",
+     "default": "knowledge_base_rag"
+    }
+   },
+   "type": "object"
+  },
+  "KnowledgeBaseToolConfig": {
+   "properties": {
+    "system_tool_type": {
+     "type": "string",
+     "const": "knowledge_base",
+     "default": "knowledge_base"
+    },
+    "enabled_strategies": {
+     "items": {
+      "$ref": "#/components/schemas/SearchStrategy"
+     },
+     "type": "array"
+    }
+   },
+   "type": "object"
+  },
+  "KnowledgeBaseToolInfo": {
+   "properties": {
+    "enabled_strategies": {
+     "items": {
+      "$ref": "#/components/schemas/SearchStrategy"
+     },
+     "type": "array"
+    }
+   },
+   "type": "object"
+  },
+  "LLM": {
+   "type": "string",
+   "enum": [
+    "gpt-4o-mini",
+    "gpt-4o",
+    "gpt-4",
+    "gpt-4-turbo",
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4.1-nano",
+    "gpt-5",
+    "gpt-5.1",
+    "gpt-5.2",
+    "gpt-5.2-chat-latest",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.4-nano",
+    "gpt-5.5",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-6-astra",
+    "gpt-6-sol",
+    "gpt-6-luna",
+    "gpt-6.1-sol",
+    "gpt-5-mini",
+    "gpt-5-nano",
+    "gpt-3.5-turbo",
+    "gemini-1.5-pro",
+    "gemini-1.5-flash",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-3-pro-preview",
+    "gemini-3-flash-preview",
+    "gemini-3.1-pro-preview",
+    "gemini-3.1-flash-lite-preview",
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+    "gemini-3.7-flash",
+    "gemini-3.8-flash",
+    "claude-sonnet-4-5",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-opus-5",
+    "claude-opus-5-5",
+    "claude-sonnet-4-6",
+    "claude-sonnet-5",
+    "claude-sonnet-5-5",
+    "claude-sonnet-4",
+    "claude-haiku-4-5",
+    "claude-3-7-sonnet",
+    "claude-3-5-sonnet",
+    "claude-3-5-sonnet-v1",
+    "claude-3-haiku",
+    "grok-beta",
+    "custom-llm",
+    "qwen3-4b",
+    "qwen3-30b-a3b",
+    "qwen36-35b-a3b",
+    "qwen35-397b-a17b",
+    "gpt-oss-20b",
+    "gpt-oss-120b",
+    "glm-45-air-fp8",
+    "glm-52",
+    "deepseek-v41-flash",
+    "gemini-2.5-flash-preview-09-2025",
+    "gemini-2.5-flash-lite-preview-09-2025",
+    "gemini-2.5-flash-preview-05-20",
+    "gemini-2.5-flash-preview-04-17",
+    "gemini-2.5-flash-lite-preview-06-17",
+    "gemini-2.0-flash-lite-001",
+    "gemini-2.0-flash-001",
+    "gemini-1.5-flash-002",
+    "gemini-1.5-flash-001",
+    "gemini-1.5-pro-002",
+    "gemini-1.5-pro-001",
+    "claude-sonnet-4@20250514",
+    "claude-sonnet-4-5@20250929",
+    "claude-haiku-4-5@20251001",
+    "claude-3-7-sonnet@20250219",
+    "claude-3-5-sonnet@20240620",
+    "claude-3-5-sonnet-v2@20241022",
+    "claude-3-haiku@20240307",
+    "gpt-5-2025-08-07",
+    "gpt-5.1-2025-11-13",
+    "gpt-5.2-2025-12-11",
+    "gpt-5.4-2026-03-05",
+    "gpt-5.4-mini-2026-03-17",
+    "gpt-5.4-nano-2026-03-17",
+    "gpt-5.5-2026-04-23",
+    "gpt-5-mini-2025-08-07",
+    "gpt-5-nano-2025-08-07",
+    "gpt-4.1-2025-04-14",
+    "gpt-4.1-mini-2025-04-14",
+    "gpt-4.1-nano-2025-04-14",
+    "gpt-4o-mini-2024-07-18",
+    "gpt-4o-2024-11-20",
+    "gpt-4o-2024-08-06",
+    "gpt-4o-2024-05-13",
+    "gpt-4-0613",
+    "gpt-4-0314",
+    "gpt-4-turbo-2024-04-09",
+    "gpt-3.5-turbo-0125",
+    "gpt-3.5-turbo-1106",
+    "watt-tool-8b",
+    "watt-tool-70b"
+   ]
+  },
+  "LLMReasoningEffort": {
+   "type": "string",
+   "enum": [
+    "none",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max"
+   ]
+  },
+  "LLMSchemaOverride": {
+   "properties": {
+    "source": {
+     "type": "string",
+     "const": "llm",
+     "default": "llm"
+    },
+    "prompt": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "LanguageDetectionToolConfig": {
+   "properties": {
+    "system_tool_type": {
+     "type": "string",
+     "const": "language_detection",
+     "default": "language_detection"
+    },
+    "only_at_conversation_start": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "LanguagePreset-Input": {
+   "properties": {
+    "overrides": {
+     "$ref": "#/components/schemas/ConversationConfigClientOverride-Input"
+    },
+    "first_message_translation": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/LanguagePresetTranslation"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "soft_timeout_translation": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/LanguagePresetTranslation"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "overrides"
+   ]
+  },
+  "LanguagePresetTranslation": {
+   "properties": {
+    "source_hash": {
+     "type": "string"
+    },
+    "text": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "source_hash",
+    "text"
+   ]
+  },
+  "LeaveMessageParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "leave_message",
+     "default": "leave_message"
+    }
+   },
+   "type": "object"
+  },
+  "ListAgentProceduresParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "list_agent_procedures",
+     "default": "list_agent_procedures"
+    }
+   },
+   "type": "object"
+  },
+  "ListAgentReferencesParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "list_agent_references",
+     "default": "list_agent_references"
+    }
+   },
+   "type": "object"
+  },
+  "ListAgentRulesParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "list_agent_rules",
+     "default": "list_agent_rules"
+    }
+   },
+   "type": "object"
+  },
+  "ListAssetsParams": {
+   "properties": {
+    "list_kwargs": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "smb_tool_type": {
+     "type": "string",
+     "const": "list_assets",
+     "default": "list_assets"
+    }
+   },
+   "type": "object"
+  },
+  "ListCalendarEventsParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "list_calendar_events",
+     "default": "list_calendar_events"
+    },
+    "include_cancelled": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "ListClientInteractionsParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "list_client_interactions",
+     "default": "list_client_interactions"
+    }
+   },
+   "type": "object"
+  },
+  "ListClientsParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "list_clients",
+     "default": "list_clients"
+    }
+   },
+   "type": "object"
+  },
+  "ListCustomerFacingAgentsParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "list_customer_facing_agents",
+     "default": "list_customer_facing_agents"
+    }
+   },
+   "type": "object"
+  },
+  "ListGroupSessionsParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "list_group_sessions",
+     "default": "list_group_sessions"
+    }
+   },
+   "type": "object"
+  },
+  "ListHolidaysParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "list_holidays",
+     "default": "list_holidays"
+    }
+   },
+   "type": "object"
+  },
+  "ListLocationsParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "list_locations",
+     "default": "list_locations"
+    }
+   },
+   "type": "object"
+  },
+  "ListProductsParams": {
+   "properties": {
+    "list_kwargs": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "smb_tool_type": {
+     "type": "string",
+     "const": "list_products",
+     "default": "list_products"
+    }
+   },
+   "type": "object"
+  },
+  "ListServicesParams": {
+   "properties": {
+    "list_kwargs": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "smb_tool_type": {
+     "type": "string",
+     "const": "list_services",
+     "default": "list_services"
+    }
+   },
+   "type": "object"
+  },
+  "ListStaffParams": {
+   "properties": {
+    "list_kwargs": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "smb_tool_type": {
+     "type": "string",
+     "const": "list_staff",
+     "default": "list_staff"
+    }
+   },
+   "type": "object"
+  },
+  "ListTransferRulesParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "list_transfer_rules",
+     "default": "list_transfer_rules"
+    }
+   },
+   "type": "object"
+  },
+  "LiteralJsonSchemaProperty": {
+   "properties": {
+    "type": {
+     "anyOf": [
+      {
+       "type": "string",
+       "enum": [
+        "boolean",
+        "string",
+        "integer",
+        "number"
+       ]
+      },
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array",
+       "maxItems": 2,
+       "minItems": 2
+      }
+     ]
+    },
+    "description": {
+     "type": "string",
+     "default": ""
+    },
+    "enum": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "is_system_provided": {
+     "type": "boolean",
+     "default": false
+    },
+    "dynamic_variable": {
+     "type": "string",
+     "default": ""
+    },
+    "allowed_values": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/AllowedValues"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "allowed_values_dynamic_variable": {
+     "type": "string",
+     "default": "",
+     "deprecated": true
+    },
+    "constant_value": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "integer"
+      },
+      {
+       "type": "number"
+      },
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": ""
+    },
+    "is_omitted": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object",
+   "required": [
+    "type"
+   ]
+  },
+  "MCPApprovalPolicy": {
+   "type": "string",
+   "enum": [
+    "auto_approve_all",
+    "require_approval_all",
+    "require_approval_per_tool"
+   ],
+   "default": "require_approval_all"
+  },
+  "MCPToolConfig-Input": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "mcp",
+     "default": "mcp"
+    },
+    "name": {
+     "type": "string",
+     "minLength": 0
+    },
+    "description": {
+     "type": "string",
+     "minLength": 0
+    },
+    "response_timeout_secs": {
+     "type": "integer",
+     "maximum": 300,
+     "minimum": 5,
+     "default": 30
+    },
+    "disable_interruptions": {
+     "type": "boolean",
+     "default": false,
+     "deprecated": true
+    },
+    "interruption_mode": {
+     "$ref": "#/components/schemas/ToolInterruptionMode",
+     "default": "allow"
+    },
+    "force_pre_tool_speech": {
+     "type": "boolean",
+     "default": false,
+     "deprecated": true
+    },
+    "pre_tool_speech": {
+     "$ref": "#/components/schemas/PreToolSpeechMode",
+     "default": "auto"
+    },
+    "assignments": {
+     "items": {
+      "$ref": "#/components/schemas/DynamicVariableAssignment"
+     },
+     "type": "array"
+    },
+    "tool_call_sound": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ToolCallSoundType"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "tool_call_sound_behavior": {
+     "$ref": "#/components/schemas/ToolCallSoundBehavior",
+     "default": "auto"
+    },
+    "tool_error_handling_mode": {
+     "$ref": "#/components/schemas/ToolErrorHandlingMode",
+     "default": "auto"
+    },
+    "integration_type": {
+     "$ref": "#/components/schemas/IntegrationType"
+    },
+    "parameters": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ObjectJsonSchemaProperty-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "approval_policy": {
+     "$ref": "#/components/schemas/MCPApprovalPolicy",
+     "default": "require_approval_all"
+    },
+    "mcp_tool_name": {
+     "type": "string"
+    },
+    "mcp_tool_description": {
+     "type": "string"
+    },
+    "mcp_server_id": {
+     "type": "string"
+    },
+    "mcp_server_name": {
+     "type": "string"
+    },
+    "mcp_input_schema": {
+     "anyOf": [
+      {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "execution_mode": {
+     "$ref": "#/components/schemas/ToolExecutionMode",
+     "default": "immediate"
+    },
+    "input_overrides": {
+     "anyOf": [
+      {
+       "additionalProperties": {
+        "oneOf": [
+         {
+          "$ref": "#/components/schemas/ConstantSchemaOverride"
+         },
+         {
+          "$ref": "#/components/schemas/DynamicVariableSchemaOverride"
+         },
+         {
+          "$ref": "#/components/schemas/LLMSchemaOverride"
+         },
+         {
+          "$ref": "#/components/schemas/OmitSchemaOverride"
+         }
+        ],
+        "discriminator": {}
+       },
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "name",
+    "description",
+    "integration_type",
+    "mcp_tool_name",
+    "mcp_tool_description",
+    "mcp_server_id",
+    "mcp_server_name"
+   ]
+  },
+  "ModerationConfig": {
+   "properties": {
+    "sexual": {
+     "$ref": "#/components/schemas/ThresholdGuardrail"
+    },
+    "violence": {
+     "$ref": "#/components/schemas/ThresholdGuardrail"
+    },
+    "violence_graphic": {
+     "$ref": "#/components/schemas/ThresholdGuardrail"
+    },
+    "harassment": {
+     "$ref": "#/components/schemas/ThresholdGuardrail"
+    },
+    "harassment_threatening": {
+     "$ref": "#/components/schemas/ThresholdGuardrail"
+    },
+    "hate": {
+     "$ref": "#/components/schemas/ThresholdGuardrail"
+    },
+    "hate_threatening": {
+     "$ref": "#/components/schemas/ThresholdGuardrail"
+    },
+    "self_harm_instructions": {
+     "$ref": "#/components/schemas/ThresholdGuardrail"
+    },
+    "self_harm": {
+     "$ref": "#/components/schemas/ThresholdGuardrail"
+    },
+    "self_harm_intent": {
+     "$ref": "#/components/schemas/ThresholdGuardrail"
+    },
+    "sexual_minors": {
+     "$ref": "#/components/schemas/ThresholdGuardrail"
+    }
+   },
+   "type": "object"
+  },
+  "ModerationGuardrail-Input": {
+   "properties": {
+    "execution_mode": {
+     "$ref": "#/components/schemas/GuardrailExecutionMode",
+     "default": "streaming"
+    },
+    "config": {
+     "$ref": "#/components/schemas/ModerationConfig"
+    }
+   },
+   "type": "object"
+  },
+  "ObjectJsonSchemaProperty-Input": {
+   "properties": {
+    "property_kind": {
+     "type": "string",
+     "enum": [
+      "array",
+      "object"
+     ],
+     "default": "object"
+    },
+    "description": {
+     "type": "string",
+     "default": ""
+    },
+    "dynamic_variable": {
+     "type": "string",
+     "default": ""
+    },
+    "constant_value": {
+     "anyOf": [
+      {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "is_omitted": {
+     "type": "boolean",
+     "default": false
+    },
+    "type": {
+     "type": "string",
+     "const": "object",
+     "default": "object"
+    },
+    "required": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "properties": {
+     "additionalProperties": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/LiteralJsonSchemaProperty"
+       },
+       {
+        "$ref": "#/components/schemas/ObjectJsonSchemaProperty-Input"
+       },
+       {
+        "$ref": "#/components/schemas/ArrayJsonSchemaProperty-Input"
+       }
+      ]
+     },
+     "type": "object"
+    },
+    "required_constraints": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/RequiredConstraints"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "additionalProperties": false,
+   "type": "object"
+  },
+  "OmitSchemaOverride": {
+   "properties": {
+    "source": {
+     "type": "string",
+     "const": "omit",
+     "default": "omit"
+    }
+   },
+   "type": "object"
+  },
+  "OptInSmsReminderParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "opt_in_sms_reminder",
+     "default": "opt_in_sms_reminder"
+    }
+   },
+   "type": "object"
+  },
+  "OptOutSmsReminderParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "opt_out_sms_reminder",
+     "default": "opt_out_sms_reminder"
+    }
+   },
+   "type": "object"
+  },
+  "OrbAvatar": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "orb",
+     "default": "orb"
+    },
+    "color_1": {
+     "type": "string",
+     "default": "#2792dc"
+    },
+    "color_2": {
+     "type": "string",
+     "default": "#9ce6e6"
+    }
+   },
+   "type": "object"
+  },
+  "OutputFormat": {
+   "type": "string",
+   "enum": [
+    "plain_text",
+    "markdown"
+   ]
+  },
+  "PhoneNumberDynamicVariableTransferDestination": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "phone_dynamic_variable",
+     "default": "phone_dynamic_variable"
+    },
+    "phone_number": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "phone_number"
+   ]
+  },
+  "PhoneNumberTransfer": {
+   "properties": {
+    "custom_sip_headers": {
+     "items": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/CustomSIPHeader"
+       },
+       {
+        "$ref": "#/components/schemas/CustomSIPHeaderWithDynamicVariable"
+       }
+      ],
+      "discriminator": {}
+     },
+     "type": "array",
+     "maxItems": 20
+    },
+    "transfer_destination": {
+     "oneOf": [
+      {
+       "$ref": "#/components/schemas/PhoneNumberTransferDestination"
+      },
+      {
+       "$ref": "#/components/schemas/SIPUriTransferDestination"
+      },
+      {
+       "$ref": "#/components/schemas/PhoneNumberDynamicVariableTransferDestination"
+      },
+      {
+       "$ref": "#/components/schemas/SIPUriDynamicVariableTransferDestination"
+      }
+     ],
+     "discriminator": {}
+    },
+    "transfer_type": {
+     "$ref": "#/components/schemas/TransferTypeEnum",
+     "default": "conference"
+    },
+    "sip_refer_play_dialtone": {
+     "type": "boolean",
+     "default": true
+    },
+    "uui": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/UUITransferConfig"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "post_dial_digits": {
+     "anyOf": [
+      {
+       "oneOf": [
+        {
+         "$ref": "#/components/schemas/PostDialDigitsStatic"
+        },
+        {
+         "$ref": "#/components/schemas/PostDialDigitsDynamicVariable"
+        }
+       ],
+       "discriminator": {}
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "phone_number": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "deprecated": true
+    },
+    "condition": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "transfer_destination",
+    "condition"
+   ]
+  },
+  "PhoneNumberTransferDestination": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "phone",
+     "default": "phone"
+    },
+    "phone_number": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "phone_number"
+   ]
+  },
+  "PlayDTMFToolConfig": {
+   "properties": {
+    "system_tool_type": {
+     "type": "string",
+     "const": "play_keypad_touch_tone",
+     "default": "play_keypad_touch_tone"
+    },
+    "use_out_of_band_dtmf": {
+     "type": "boolean",
+     "default": true
+    },
+    "suppress_turn_after_dtmf": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "PostDialDigitsDynamicVariable": {
+   "properties": {
+    "value": {
+     "type": "string",
+     "minLength": 1
+    },
+    "type": {
+     "type": "string",
+     "const": "dynamic",
+     "default": "dynamic"
+    }
+   },
+   "type": "object",
+   "required": [
+    "value"
+   ]
+  },
+  "PostDialDigitsStatic": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "static",
+     "default": "static"
+    },
+    "value": {
+     "type": "string",
+     "minLength": 1
+    }
+   },
+   "type": "object",
+   "required": [
+    "value"
+   ]
+  },
+  "PreToolSpeechMode": {
+   "type": "string",
+   "enum": [
+    "auto",
+    "force",
+    "off"
+   ],
+   "default": "auto"
+  },
+  "PrivacyConfig-Input": {
+   "properties": {
+    "record_voice": {
+     "type": "boolean",
+     "default": true
+    },
+    "retention_days": {
+     "type": "integer",
+     "default": -1
+    },
+    "delete_transcript_and_pii": {
+     "type": "boolean",
+     "default": false
+    },
+    "delete_audio": {
+     "type": "boolean",
+     "default": false
+    },
+    "apply_to_existing_conversations": {
+     "type": "boolean",
+     "default": false
+    },
+    "zero_retention_mode": {
+     "type": "boolean",
+     "default": false
+    },
+    "conversation_history_redaction": {
+     "$ref": "#/components/schemas/ConversationHistoryRedactionConfig"
+    }
+   },
+   "type": "object"
+  },
+  "ProcedureDraftRef": {
+   "properties": {
+    "procedure_id": {
+     "type": "string"
+    },
+    "version_id": {
+     "type": "null"
+    }
+   },
+   "type": "object",
+   "required": [
+    "procedure_id"
+   ]
+  },
+  "ProcedureVersionRef": {
+   "properties": {
+    "procedure_id": {
+     "type": "string"
+    },
+    "version_id": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "procedure_id",
+    "version_id"
+   ]
+  },
+  "PromptAgentAPIModel-Input": {
+   "properties": {
+    "prompt": {
+     "type": "string",
+     "default": ""
+    },
+    "llm": {
+     "$ref": "#/components/schemas/LLM",
+     "default": "gemini-2.5-flash"
+    },
+    "reasoning_effort": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/LLMReasoningEffort"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "thinking_budget": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "enable_reasoning_summary": {
+     "type": "boolean",
+     "default": false
+    },
+    "temperature": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": 0
+    },
+    "max_tokens": {
+     "type": "integer",
+     "default": -1
+    },
+    "tool_ids": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "built_in_tools": {
+     "$ref": "#/components/schemas/BuiltInTools-Input"
+    },
+    "enable_parallel_tool_calls": {
+     "type": "boolean",
+     "default": true
+    },
+    "mcp_server_ids": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array",
+     "maxItems": 10
+    },
+    "native_mcp_server_ids": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array",
+     "maxItems": 10
+    },
+    "knowledge_base": {
+     "items": {
+      "$ref": "#/components/schemas/KnowledgeBaseLocator"
+     },
+     "type": "array"
+    },
+    "custom_llm": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/CustomLLM"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "ignore_default_personality": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": true
+    },
+    "rag": {
+     "$ref": "#/components/schemas/RagConfig-Input"
+    },
+    "timezone": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "backup_llm_config": {
+     "oneOf": [
+      {
+       "$ref": "#/components/schemas/BackupLLMDefault"
+      },
+      {
+       "$ref": "#/components/schemas/BackupLLMDisabled"
+      },
+      {
+       "$ref": "#/components/schemas/BackupLLMOverride"
+      }
+     ],
+     "discriminator": {}
+    },
+    "cascade_timeout_seconds": {
+     "type": "number",
+     "maximum": 15,
+     "minimum": 2,
+     "default": 4
+    },
+    "tools": {
+     "items": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/WebhookToolConfig-Input"
+       },
+       {
+        "$ref": "#/components/schemas/ClientToolConfig-Input"
+       },
+       {
+        "$ref": "#/components/schemas/SystemToolConfig-Input"
+       },
+       {
+        "$ref": "#/components/schemas/MCPToolConfig-Input"
+       },
+       {
+        "$ref": "#/components/schemas/ApiIntegrationWebhookToolConfig-Input"
+       },
+       {
+        "$ref": "#/components/schemas/SMBToolConfig"
+       }
+      ],
+      "discriminator": {}
+     },
+     "type": "array",
+     "deprecated": true
+    }
+   },
+   "type": "object"
+  },
+  "PromptAgentAPIModelOverride-Input": {
+   "properties": {
+    "prompt": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "llm": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/LLM"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "tool_ids": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "native_mcp_server_ids": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "knowledge_base": {
+     "anyOf": [
+      {
+       "items": {
+        "$ref": "#/components/schemas/KnowledgeBaseLocator"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "PromptAgentAPIModelOverrideConfig": {
+   "properties": {
+    "prompt": {
+     "type": "boolean",
+     "default": false
+    },
+    "llm": {
+     "type": "boolean",
+     "default": false
+    },
+    "tool_ids": {
+     "type": "boolean",
+     "default": false
+    },
+    "native_mcp_server_ids": {
+     "type": "boolean",
+     "default": false
+    },
+    "knowledge_base": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "PromptEvaluationCriteria": {
+   "properties": {
+    "id": {
+     "type": "string"
+    },
+    "name": {
+     "type": "string"
+    },
+    "type": {
+     "type": "string",
+     "const": "prompt",
+     "default": "prompt"
+    },
+    "conversation_goal_prompt": {
+     "type": "string",
+     "maxLength": 2000
+    },
+    "use_knowledge_base": {
+     "type": "boolean",
+     "default": false
+    },
+    "scope": {
+     "$ref": "#/components/schemas/AnalysisScope",
+     "default": "conversation"
+    },
+    "llm": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/LLM"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "scoring_mode": {
+     "$ref": "#/components/schemas/CriteriaScoringMode",
+     "default": "binary"
+    },
+    "max_score": {
+     "type": "integer",
+     "default": 100
+    },
+    "score_instructions": {
+     "anyOf": [
+      {
+       "type": "string",
+       "maxLength": 2000
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "id",
+    "name",
+    "conversation_goal_prompt"
+   ]
+  },
+  "PromptInjectionGuardrail": {
+   "properties": {
+    "is_enabled": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "PydanticPronunciationDictionaryVersionLocator": {
+   "properties": {
+    "pronunciation_dictionary_id": {
+     "type": "string"
+    },
+    "version_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "pronunciation_dictionary_id",
+    "version_id"
+   ]
+  },
+  "QueryParamsJsonSchema-Input": {
+   "properties": {
+    "properties": {
+     "additionalProperties": {
+      "$ref": "#/components/schemas/LiteralJsonSchemaProperty"
+     },
+     "type": "object"
+    },
+    "required": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    }
+   },
+   "additionalProperties": false,
+   "type": "object",
+   "required": [
+    "properties"
+   ]
+  },
+  "RagConfig-Input": {
+   "properties": {
+    "enabled": {
+     "type": "boolean",
+     "default": false
+    },
+    "embedding_model": {
+     "$ref": "#/components/schemas/EmbeddingModelEnum",
+     "default": "e5_mistral_7b_instruct"
+    },
+    "max_vector_distance": {
+     "type": "number",
+     "exclusiveMaximum": 1,
+     "exclusiveMinimum": 0,
+     "default": 0.6
+    },
+    "max_documents_length": {
+     "type": "integer",
+     "exclusiveMaximum": 10000000,
+     "exclusiveMinimum": 0,
+     "default": 50000
+    },
+    "max_retrieved_rag_chunks_count": {
+     "type": "integer",
+     "maximum": 20,
+     "exclusiveMinimum": 0,
+     "default": 20
+    },
+    "num_candidates": {
+     "anyOf": [
+      {
+       "type": "integer",
+       "maximum": 10000,
+       "exclusiveMinimum": 0
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "query_rewrite_prompt_override": {
+     "anyOf": [
+      {
+       "type": "string",
+       "maxLength": 1000,
+       "minLength": 1
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "knowledge_base_tool_info": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/KnowledgeBaseToolInfo"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "RegisterForGroupSessionParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "register_for_group_session",
+     "default": "register_for_group_session"
+    }
+   },
+   "type": "object"
+  },
+  "ReportKnowledgeGapParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "report_knowledge_gap",
+     "default": "report_knowledge_gap"
+    }
+   },
+   "type": "object"
+  },
+  "RequiredConstraint": {
+   "properties": {
+    "required": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    }
+   },
+   "type": "object",
+   "required": [
+    "required"
+   ]
+  },
+  "RequiredConstraints": {
+   "properties": {
+    "any_of": {
+     "items": {
+      "$ref": "#/components/schemas/RequiredConstraint"
+     },
+     "type": "array"
+    },
+    "all_of": {
+     "items": {
+      "$ref": "#/components/schemas/RequiredConstraint"
+     },
+     "type": "array"
+    }
+   },
+   "type": "object"
+  },
+  "ResponseFilter": {
+   "properties": {
+    "mode": {
+     "$ref": "#/components/schemas/ResponseFilterMode",
+     "default": "all"
+    },
+    "filters": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "content_type": {
+     "type": "string",
+     "const": "application/json",
+     "default": "application/json"
+    }
+   },
+   "type": "object"
+  },
+  "ResponseFilterMode": {
+   "type": "string",
+   "enum": [
+    "all",
+    "allow",
+    "hide_all"
+   ],
+   "default": "all"
+  },
+  "RestoreCalendarEventParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "restore_calendar_event",
+     "default": "restore_calendar_event"
+    }
+   },
+   "type": "object"
+  },
+  "RetryTriggerAction": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "retry",
+     "default": "retry"
+    },
+    "feedback": {
+     "type": "string",
+     "default": "Your response was blocked by a guardrail that blocks content that matches this condition/category: '{{trigger_reason}}' During your next turn you must tell the user \"I'm sorry but I can't answer that question, would you like to know something else?\"."
+    }
+   },
+   "type": "object"
+  },
+  "SIPUriDynamicVariableTransferDestination": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "sip_uri_dynamic_variable",
+     "default": "sip_uri_dynamic_variable"
+    },
+    "sip_uri": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "sip_uri"
+   ]
+  },
+  "SIPUriTransferDestination": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "sip_uri",
+     "default": "sip_uri"
+    },
+    "sip_uri": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "sip_uri"
+   ]
+  },
+  "SMBToolConfig": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "smb",
+     "default": "smb"
+    },
+    "name": {
+     "type": "string",
+     "minLength": 0
+    },
+    "description": {
+     "type": "string",
+     "minLength": 0,
+     "default": ""
+    },
+    "response_timeout_secs": {
+     "type": "integer",
+     "default": 20
+    },
+    "disable_interruptions": {
+     "type": "boolean",
+     "default": false,
+     "deprecated": true
+    },
+    "interruption_mode": {
+     "$ref": "#/components/schemas/ToolInterruptionMode",
+     "default": "allow"
+    },
+    "force_pre_tool_speech": {
+     "type": "boolean",
+     "default": false,
+     "deprecated": true
+    },
+    "pre_tool_speech": {
+     "$ref": "#/components/schemas/PreToolSpeechMode",
+     "default": "auto"
+    },
+    "assignments": {
+     "items": {
+      "$ref": "#/components/schemas/DynamicVariableAssignment"
+     },
+     "type": "array"
+    },
+    "tool_call_sound": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ToolCallSoundType"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "tool_call_sound_behavior": {
+     "$ref": "#/components/schemas/ToolCallSoundBehavior",
+     "default": "auto"
+    },
+    "tool_error_handling_mode": {
+     "$ref": "#/components/schemas/ToolErrorHandlingMode",
+     "default": "auto"
+    },
+    "human_description": {
+     "type": "string",
+     "minLength": 0,
+     "default": ""
+    },
+    "enabled": {
+     "type": "boolean",
+     "default": true
+    },
+    "params": {
+     "oneOf": [
+      {
+       "$ref": "#/components/schemas/SearchClientsParams"
+      },
+      {
+       "$ref": "#/components/schemas/SendCustomEmailParams"
+      },
+      {
+       "$ref": "#/components/schemas/ListClientsParams"
+      },
+      {
+       "$ref": "#/components/schemas/GetClientByPhoneParams"
+      },
+      {
+       "$ref": "#/components/schemas/CreateClientParams"
+      },
+      {
+       "$ref": "#/components/schemas/UpdateClientParams"
+      },
+      {
+       "$ref": "#/components/schemas/DeleteClientParams"
+      },
+      {
+       "$ref": "#/components/schemas/ListStaffParams"
+      },
+      {
+       "$ref": "#/components/schemas/CreateStaffParams"
+      },
+      {
+       "$ref": "#/components/schemas/UpdateStaffParams"
+      },
+      {
+       "$ref": "#/components/schemas/DeleteStaffParams"
+      },
+      {
+       "$ref": "#/components/schemas/ListAssetsParams"
+      },
+      {
+       "$ref": "#/components/schemas/CreateAssetParams"
+      },
+      {
+       "$ref": "#/components/schemas/UpdateAssetParams"
+      },
+      {
+       "$ref": "#/components/schemas/DeleteAssetParams"
+      },
+      {
+       "$ref": "#/components/schemas/ListServicesParams"
+      },
+      {
+       "$ref": "#/components/schemas/CreateServiceParams"
+      },
+      {
+       "$ref": "#/components/schemas/UpdateServiceParams"
+      },
+      {
+       "$ref": "#/components/schemas/DeleteServiceParams"
+      },
+      {
+       "$ref": "#/components/schemas/ListProductsParams"
+      },
+      {
+       "$ref": "#/components/schemas/CreateProductParams"
+      },
+      {
+       "$ref": "#/components/schemas/UpdateProductParams"
+      },
+      {
+       "$ref": "#/components/schemas/DeleteProductParams"
+      },
+      {
+       "$ref": "#/components/schemas/CheckServiceAvailabilityParams"
+      },
+      {
+       "$ref": "#/components/schemas/CreateClientAppointmentParams"
+      },
+      {
+       "$ref": "#/components/schemas/GetClientAppointmentsParams"
+      },
+      {
+       "$ref": "#/components/schemas/GetAppointmentByConfirmationNumberParams"
+      },
+      {
+       "$ref": "#/components/schemas/CreateOrderParams"
+      },
+      {
+       "$ref": "#/components/schemas/GetOrderByConfirmationNumberParams"
+      },
+      {
+       "$ref": "#/components/schemas/GetClientOrdersParams"
+      },
+      {
+       "$ref": "#/components/schemas/UpdateOrderParams"
+      },
+      {
+       "$ref": "#/components/schemas/CancelOrderParams"
+      },
+      {
+       "$ref": "#/components/schemas/ListGroupSessionsParams"
+      },
+      {
+       "$ref": "#/components/schemas/ScheduleGroupSessionParams"
+      },
+      {
+       "$ref": "#/components/schemas/RegisterForGroupSessionParams"
+      },
+      {
+       "$ref": "#/components/schemas/CancelGroupSessionRegistrationParams"
+      },
+      {
+       "$ref": "#/components/schemas/UpdateGroupSessionSeatsParams"
+      },
+      {
+       "$ref": "#/components/schemas/CancelGroupSessionForAllParams"
+      },
+      {
+       "$ref": "#/components/schemas/DeleteGroupSessionParams"
+      },
+      {
+       "$ref": "#/components/schemas/ListCalendarEventsParams"
+      },
+      {
+       "$ref": "#/components/schemas/UpdateCalendarEventParams"
+      },
+      {
+       "$ref": "#/components/schemas/CancelCalendarEventParams"
+      },
+      {
+       "$ref": "#/components/schemas/RestoreCalendarEventParams"
+      },
+      {
+       "$ref": "#/components/schemas/DeleteCalendarEventParams"
+      },
+      {
+       "$ref": "#/components/schemas/ListCustomerFacingAgentsParams"
+      },
+      {
+       "$ref": "#/components/schemas/ListAgentRulesParams"
+      },
+      {
+       "$ref": "#/components/schemas/CreateAgentRuleParams"
+      },
+      {
+       "$ref": "#/components/schemas/UpdateAgentRuleParams"
+      },
+      {
+       "$ref": "#/components/schemas/DeleteAgentRuleParams"
+      },
+      {
+       "$ref": "#/components/schemas/ListTransferRulesParams"
+      },
+      {
+       "$ref": "#/components/schemas/CreateTransferRuleParams"
+      },
+      {
+       "$ref": "#/components/schemas/UpdateTransferRuleParams"
+      },
+      {
+       "$ref": "#/components/schemas/DeleteTransferRuleParams"
+      },
+      {
+       "$ref": "#/components/schemas/ListAgentProceduresParams"
+      },
+      {
+       "$ref": "#/components/schemas/ListAgentReferencesParams"
+      },
+      {
+       "$ref": "#/components/schemas/CreateAgentProcedureParams"
+      },
+      {
+       "$ref": "#/components/schemas/UpdateAgentProcedureParams"
+      },
+      {
+       "$ref": "#/components/schemas/DeleteAgentProcedureParams"
+      },
+      {
+       "$ref": "#/components/schemas/ListHolidaysParams"
+      },
+      {
+       "$ref": "#/components/schemas/CreateHolidayParams"
+      },
+      {
+       "$ref": "#/components/schemas/UpdateHolidayParams"
+      },
+      {
+       "$ref": "#/components/schemas/DeleteHolidayParams"
+      },
+      {
+       "$ref": "#/components/schemas/GetScheduleParams"
+      },
+      {
+       "$ref": "#/components/schemas/SubmitBusinessInfoParams"
+      },
+      {
+       "$ref": "#/components/schemas/UpdateBusinessInfoParams"
+      },
+      {
+       "$ref": "#/components/schemas/UpdateCustomerFacingConfigParams"
+      },
+      {
+       "$ref": "#/components/schemas/GetAnalyticsSummaryParams"
+      },
+      {
+       "$ref": "#/components/schemas/GetBookingPageSettingsParams"
+      },
+      {
+       "$ref": "#/components/schemas/UpdateBookingPageSettingsParams"
+      },
+      {
+       "$ref": "#/components/schemas/UpdateBookingPageAppearanceParams"
+      },
+      {
+       "$ref": "#/components/schemas/GetBookingSlugStatusParams"
+      },
+      {
+       "$ref": "#/components/schemas/SetBookingSlugParams"
+      },
+      {
+       "$ref": "#/components/schemas/ListClientInteractionsParams"
+      },
+      {
+       "$ref": "#/components/schemas/CreateClientInteractionParams"
+      },
+      {
+       "$ref": "#/components/schemas/DeleteClientInteractionParams"
+      },
+      {
+       "$ref": "#/components/schemas/ListLocationsParams"
+      },
+      {
+       "$ref": "#/components/schemas/CreateLocationParams"
+      },
+      {
+       "$ref": "#/components/schemas/UpdateLocationParams"
+      },
+      {
+       "$ref": "#/components/schemas/DeleteLocationParams"
+      },
+      {
+       "$ref": "#/components/schemas/LeaveMessageParams"
+      },
+      {
+       "$ref": "#/components/schemas/CreateServiceQuoteRequestParams"
+      },
+      {
+       "$ref": "#/components/schemas/CreateProductQuoteRequestParams"
+      },
+      {
+       "$ref": "#/components/schemas/ReportKnowledgeGapParams"
+      },
+      {
+       "$ref": "#/components/schemas/OptInSmsReminderParams"
+      },
+      {
+       "$ref": "#/components/schemas/OptOutSmsReminderParams"
+      },
+      {
+       "$ref": "#/components/schemas/TriggerUserVerificationParams"
+      },
+      {
+       "$ref": "#/components/schemas/ValidateUserVerificationCodeParams"
+      }
+     ],
+     "discriminator": {}
+    }
+   },
+   "type": "object",
+   "required": [
+    "name",
+    "params"
+   ]
+  },
+  "ScheduleGroupSessionParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "schedule_group_session",
+     "default": "schedule_group_session"
+    }
+   },
+   "type": "object"
+  },
+  "SearchClientsParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "search_clients",
+     "default": "search_clients"
+    }
+   },
+   "type": "object"
+  },
+  "SearchStrategy": {
+   "type": "string",
+   "enum": [
+    "cat",
+    "keyword",
+    "semantic",
+    "ls"
+   ]
+  },
+  "SendCustomEmailParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "send_custom_email",
+     "default": "send_custom_email"
+    }
+   },
+   "type": "object"
+  },
+  "SentimentAnalysisSettings": {
+   "properties": {},
+   "type": "object"
+  },
+  "SetBookingSlugParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "set_booking_slug",
+     "default": "set_booking_slug"
+    }
+   },
+   "type": "object"
+  },
+  "SkipTurnToolConfig": {
+   "properties": {
+    "system_tool_type": {
+     "type": "string",
+     "const": "skip_turn",
+     "default": "skip_turn"
+    },
+    "wait_timeout_secs": {
+     "type": "number",
+     "default": -1
+    }
+   },
+   "type": "object"
+  },
+  "SoftTimeoutConfig": {
+   "properties": {
+    "timeout_seconds": {
+     "type": "number",
+     "default": -1
+    },
+    "message": {
+     "type": "string",
+     "maxLength": 200,
+     "minLength": 1,
+     "default": "Hhmmmm...yeah."
+    },
+    "additional_soft_timeout_messages": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array",
+     "maxItems": 7
+    },
+    "use_llm_generated_message": {
+     "type": "boolean",
+     "default": false
+    },
+    "randomize_fillers": {
+     "type": "boolean",
+     "default": false
+    },
+    "max_soft_timeouts_per_generation": {
+     "type": "integer",
+     "maximum": 8,
+     "minimum": 1,
+     "default": 1
+    },
+    "llm_generated_message_prompt_override": {
+     "anyOf": [
+      {
+       "type": "string",
+       "maxLength": 1000,
+       "minLength": 1
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "disable_until_first_user_message": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "SoftTimeoutConfigOverride": {
+   "properties": {
+    "message": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "additional_soft_timeout_messages": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "SoftTimeoutConfigOverrideConfig": {
+   "properties": {
+    "message": {
+     "type": "boolean",
+     "default": false
+    },
+    "additional_soft_timeout_messages": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "SpellingPatience": {
+   "type": "string",
+   "enum": [
+    "auto",
+    "off"
+   ],
+   "default": "auto"
+  },
+  "StartProcedureToolConfig": {
+   "properties": {
+    "system_tool_type": {
+     "type": "string",
+     "const": "start_procedure",
+     "default": "start_procedure"
+    },
+    "procedures": {
+     "additionalProperties": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ProcedureVersionRef"
+       },
+       {
+        "$ref": "#/components/schemas/ProcedureDraftRef"
+       }
+      ]
+     },
+     "type": "object"
+    }
+   },
+   "type": "object"
+  },
+  "SubmitBusinessInfoParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "submit_business_info",
+     "default": "submit_business_info"
+    }
+   },
+   "type": "object"
+  },
+  "SuggestedAudioTag": {
+   "properties": {
+    "tag": {
+     "type": "string",
+     "maxLength": 30,
+     "minLength": 1
+    },
+    "description": {
+     "anyOf": [
+      {
+       "type": "string",
+       "maxLength": 200
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "tag"
+   ]
+  },
+  "SupportedVoice": {
+   "properties": {
+    "label": {
+     "type": "string",
+     "minLength": 1
+    },
+    "voice_id": {
+     "type": "string",
+     "minLength": 1
+    },
+    "description": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "language": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "model_family": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/TTSModelFamily"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "optimize_streaming_latency": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/TTSOptimizeStreamingLatency"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "stability": {
+     "anyOf": [
+      {
+       "type": "number",
+       "maximum": 1,
+       "minimum": 0
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "speed": {
+     "anyOf": [
+      {
+       "type": "number",
+       "maximum": 1.2,
+       "minimum": 0.7
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "similarity_boost": {
+     "anyOf": [
+      {
+       "type": "number",
+       "maximum": 1,
+       "minimum": 0
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "label",
+    "voice_id"
+   ]
+  },
+  "SystemDataCollectionId": {
+   "type": "string",
+   "enum": [
+    "__system_data_collection_topic"
+   ]
+  },
+  "SystemEvaluationId": {
+   "type": "string",
+   "enum": [
+    "__system_eval_criteria_sentiment",
+    "__system_eval_criteria_frustration"
+   ]
+  },
+  "SystemToolConfig-Input": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "system",
+     "default": "system"
+    },
+    "name": {
+     "type": "string",
+     "minLength": 0
+    },
+    "description": {
+     "type": "string",
+     "minLength": 0,
+     "default": ""
+    },
+    "response_timeout_secs": {
+     "type": "integer",
+     "default": 20
+    },
+    "disable_interruptions": {
+     "type": "boolean",
+     "default": false,
+     "deprecated": true
+    },
+    "interruption_mode": {
+     "$ref": "#/components/schemas/ToolInterruptionMode",
+     "default": "allow"
+    },
+    "force_pre_tool_speech": {
+     "type": "boolean",
+     "default": false,
+     "deprecated": true
+    },
+    "pre_tool_speech": {
+     "$ref": "#/components/schemas/PreToolSpeechMode",
+     "default": "auto"
+    },
+    "assignments": {
+     "items": {
+      "$ref": "#/components/schemas/DynamicVariableAssignment"
+     },
+     "type": "array"
+    },
+    "tool_call_sound": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ToolCallSoundType"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "tool_call_sound_behavior": {
+     "$ref": "#/components/schemas/ToolCallSoundBehavior",
+     "default": "auto"
+    },
+    "tool_error_handling_mode": {
+     "$ref": "#/components/schemas/ToolErrorHandlingMode",
+     "default": "auto"
+    },
+    "params": {
+     "oneOf": [
+      {
+       "$ref": "#/components/schemas/EndCallToolConfig"
+      },
+      {
+       "$ref": "#/components/schemas/LanguageDetectionToolConfig"
+      },
+      {
+       "$ref": "#/components/schemas/TransferToAgentToolConfig-Input"
+      },
+      {
+       "$ref": "#/components/schemas/TransferToNumberToolConfig-Input"
+      },
+      {
+       "$ref": "#/components/schemas/SkipTurnToolConfig"
+      },
+      {
+       "$ref": "#/components/schemas/PlayDTMFToolConfig"
+      },
+      {
+       "$ref": "#/components/schemas/VoicemailDetectionToolConfig"
+      },
+      {
+       "$ref": "#/components/schemas/KnowledgeBaseRagToolConfig"
+      },
+      {
+       "$ref": "#/components/schemas/KnowledgeBaseToolConfig"
+      },
+      {
+       "$ref": "#/components/schemas/StartProcedureToolConfig"
+      },
+      {
+       "$ref": "#/components/schemas/EndProcedureToolConfig"
+      }
+     ],
+     "discriminator": {}
+    }
+   },
+   "type": "object",
+   "required": [
+    "name",
+    "params"
+   ]
+  },
+  "TTSConversationalConfig-Input": {
+   "properties": {
+    "model_id": {
+     "$ref": "#/components/schemas/TTSConversationalModel",
+     "default": "eleven_v4_turbo"
+    },
+    "voice_id": {
+     "type": "string",
+     "minLength": 0,
+     "default": "cjVigY5qzO86Huf0OWal"
+    },
+    "supported_voices": {
+     "items": {
+      "$ref": "#/components/schemas/SupportedVoice"
+     },
+     "type": "array"
+    },
+    "expressive_mode": {
+     "type": "boolean",
+     "default": true
+    },
+    "suggested_audio_tags": {
+     "items": {
+      "$ref": "#/components/schemas/SuggestedAudioTag"
+     },
+     "type": "array",
+     "maxItems": 20
+    },
+    "agent_output_audio_format": {
+     "$ref": "#/components/schemas/TTSOutputFormat",
+     "default": "pcm_16000"
+    },
+    "optimize_streaming_latency": {
+     "$ref": "#/components/schemas/TTSOptimizeStreamingLatency",
+     "default": 3,
+     "deprecated": true
+    },
+    "stability": {
+     "type": "number",
+     "maximum": 1,
+     "minimum": 0,
+     "default": 0.5
+    },
+    "speed": {
+     "type": "number",
+     "maximum": 1.2,
+     "minimum": 0.7,
+     "default": 1
+    },
+    "similarity_boost": {
+     "type": "number",
+     "maximum": 1,
+     "minimum": 0,
+     "default": 0.8
+    },
+    "text_normalisation_type": {
+     "$ref": "#/components/schemas/TextNormalisationType",
+     "default": "system_prompt"
+    },
+    "pronunciation_dictionary_locators": {
+     "items": {
+      "$ref": "#/components/schemas/PydanticPronunciationDictionaryVersionLocator"
+     },
+     "type": "array"
+    },
+    "enable_phoneme_tags": {
+     "type": "boolean",
+     "default": true
+    },
+    "audio_effects": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/EffectsSpec-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "TTSConversationalConfigOverride": {
+   "properties": {
+    "model_id": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/TTSConversationalModel"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "voice_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "supported_voices": {
+     "anyOf": [
+      {
+       "items": {
+        "$ref": "#/components/schemas/SupportedVoice"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "stability": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "speed": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "similarity_boost": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "pronunciation_dictionary_locators": {
+     "anyOf": [
+      {
+       "items": {
+        "$ref": "#/components/schemas/PydanticPronunciationDictionaryVersionLocator"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "TTSConversationalConfigOverrideConfig": {
+   "properties": {
+    "model_id": {
+     "type": "boolean",
+     "default": false
+    },
+    "voice_id": {
+     "type": "boolean",
+     "default": false
+    },
+    "supported_voices": {
+     "type": "boolean",
+     "default": false
+    },
+    "stability": {
+     "type": "boolean",
+     "default": false
+    },
+    "speed": {
+     "type": "boolean",
+     "default": false
+    },
+    "similarity_boost": {
+     "type": "boolean",
+     "default": false
+    },
+    "pronunciation_dictionary_locators": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "TTSConversationalModel": {
+   "type": "string",
+   "enum": [
+    "eleven_turbo_v2",
+    "eleven_turbo_v2_5",
+    "eleven_flash_v2",
+    "eleven_flash_v2_5",
+    "eleven_multilingual_v2",
+    "eleven_v3_conversational",
+    "eleven_v4",
+    "eleven_v4_turbo"
+   ],
+   "x-fern-enum": {
+    "eleven_turbo_v2": {
+     "description": "Deprecated: Use eleven_flash_v2 instead.",
+     "deprecated": true
+    },
+    "eleven_turbo_v2_5": {
+     "description": "Deprecated: Use eleven_flash_v2_5 instead.",
+     "deprecated": true
+    }
+   },
+   "default": "eleven_v4_turbo"
+  },
+  "TTSModelFamily": {
+   "type": "string",
+   "enum": [
+    "turbo",
+    "flash",
+    "multilingual",
+    "v3_conversational",
+    "v4",
+    "v4_turbo"
+   ],
+   "x-fern-enum": {
+    "turbo": {
+     "description": "Deprecated: Use flash instead.",
+     "deprecated": true
+    }
+   }
+  },
+  "TTSOptimizeStreamingLatency": {
+   "type": "integer",
+   "enum": [
+    0,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
+  "TTSOutputFormat": {
+   "type": "string",
+   "enum": [
+    "pcm_8000",
+    "pcm_16000",
+    "pcm_22050",
+    "pcm_24000",
+    "pcm_44100",
+    "pcm_48000",
+    "ulaw_8000"
+   ],
+   "default": "pcm_16000"
+  },
+  "TextNormalisationType": {
+   "type": "string",
+   "enum": [
+    "system_prompt",
+    "elevenlabs"
+   ],
+   "default": "system_prompt"
+  },
+  "ThresholdGuardrail": {
+   "properties": {
+    "is_enabled": {
+     "type": "boolean",
+     "default": false
+    },
+    "threshold": {
+     "type": "number",
+     "maximum": 1,
+     "minimum": 0,
+     "default": 0.3
+    }
+   },
+   "type": "object"
+  },
+  "ToolCallSoundBehavior": {
+   "type": "string",
+   "enum": [
+    "auto",
+    "always"
+   ],
+   "default": "auto"
+  },
+  "ToolCallSoundType": {
+   "type": "string",
+   "enum": [
+    "typing",
+    "elevator1",
+    "elevator2",
+    "elevator3",
+    "elevator4"
+   ]
+  },
+  "ToolErrorHandlingMode": {
+   "type": "string",
+   "enum": [
+    "auto",
+    "summarized",
+    "passthrough",
+    "hide"
+   ],
+   "default": "auto"
+  },
+  "ToolExecutionMode": {
+   "type": "string",
+   "enum": [
+    "immediate",
+    "post_tool_speech",
+    "async"
+   ],
+   "default": "immediate"
+  },
+  "ToolInterruptionMode": {
+   "type": "string",
+   "enum": [
+    "allow",
+    "disable_during_tool",
+    "disable_during_tool_and_turn"
+   ],
+   "default": "allow"
+  },
+  "TopicDiscoverySettings": {
+   "properties": {},
+   "type": "object"
+  },
+  "TransferToAgentToolConfig-Input": {
+   "properties": {
+    "system_tool_type": {
+     "type": "string",
+     "const": "transfer_to_agent",
+     "default": "transfer_to_agent"
+    },
+    "transfers": {
+     "items": {
+      "$ref": "#/components/schemas/AgentTransfer-Input"
+     },
+     "type": "array"
+    }
+   },
+   "type": "object",
+   "required": [
+    "transfers"
+   ]
+  },
+  "TransferToNumberToolConfig-Input": {
+   "properties": {
+    "system_tool_type": {
+     "type": "string",
+     "const": "transfer_to_number",
+     "default": "transfer_to_number"
+    },
+    "transfers": {
+     "items": {
+      "$ref": "#/components/schemas/PhoneNumberTransfer"
+     },
+     "type": "array"
+    },
+    "enable_client_message": {
+     "type": "boolean",
+     "default": true
+    }
+   },
+   "type": "object",
+   "required": [
+    "transfers"
+   ]
+  },
+  "TransferTypeEnum": {
+   "type": "string",
+   "enum": [
+    "blind",
+    "conference",
+    "sip_refer"
+   ],
+   "default": "conference"
+  },
+  "TriggerUserVerificationParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "trigger_user_verification",
+     "default": "trigger_user_verification"
+    }
+   },
+   "type": "object"
+  },
+  "TurnConfig": {
+   "properties": {
+    "turn_timeout": {
+     "type": "number",
+     "default": 7
+    },
+    "initial_wait_time": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "silence_end_call_timeout": {
+     "type": "number",
+     "default": -1
+    },
+    "mode": {
+     "$ref": "#/components/schemas/TurnMode",
+     "default": "turn"
+    },
+    "turn_eagerness": {
+     "$ref": "#/components/schemas/TurnEagerness",
+     "default": "normal"
+    },
+    "spelling_patience": {
+     "$ref": "#/components/schemas/SpellingPatience",
+     "default": "auto"
+    },
+    "speculative_turn": {
+     "type": "boolean",
+     "default": false
+    },
+    "retranscribe_on_turn_timeout": {
+     "type": "boolean",
+     "default": false
+    },
+    "turn_model": {
+     "$ref": "#/components/schemas/TurnModel",
+     "default": "turn_v3"
+    },
+    "interruption_ignore_terms": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "interruption_ignore_term_languages": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "merge_with_default_ignore_terms": {
+     "type": "boolean",
+     "default": false
+    },
+    "transcribe_on_disabled_interruptions": {
+     "type": "boolean",
+     "default": false
+    },
+    "soft_timeout_config": {
+     "$ref": "#/components/schemas/SoftTimeoutConfig"
+    }
+   },
+   "type": "object"
+  },
+  "TurnConfigOverride": {
+   "properties": {
+    "soft_timeout_config": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/SoftTimeoutConfigOverride"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "TurnConfigOverrideConfig": {
+   "properties": {
+    "soft_timeout_config": {
+     "$ref": "#/components/schemas/SoftTimeoutConfigOverrideConfig"
+    }
+   },
+   "type": "object"
+  },
+  "TurnEagerness": {
+   "type": "string",
+   "enum": [
+    "patient",
+    "normal",
+    "eager"
+   ],
+   "default": "normal"
+  },
+  "TurnMode": {
+   "type": "string",
+   "enum": [
+    "silence",
+    "turn"
+   ],
+   "default": "turn"
+  },
+  "TurnModel": {
+   "type": "string",
+   "enum": [
+    "turn_v2",
+    "turn_v3"
+   ],
+   "default": "turn_v3"
+  },
+  "URLAvatar": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "url",
+     "default": "url"
+    },
+    "custom_url": {
+     "type": "string",
+     "default": ""
+    }
+   },
+   "type": "object"
+  },
+  "UUITransferConfig": {
+   "properties": {
+    "data": {
+     "type": "string",
+     "maxLength": 8192
+    },
+    "protocol_discriminator": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "protocol_discriminator_mode": {
+     "type": "string",
+     "enum": [
+      "prefix",
+      "pd_parameter"
+     ],
+     "default": "prefix"
+    }
+   },
+   "type": "object",
+   "required": [
+    "data"
+   ]
+  },
+  "UpdateAgentProcedureParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "update_agent_procedure",
+     "default": "update_agent_procedure"
+    }
+   },
+   "type": "object"
+  },
+  "UpdateAgentRuleParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "update_agent_rule",
+     "default": "update_agent_rule"
+    }
+   },
+   "type": "object"
+  },
+  "UpdateAssetParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "update_asset",
+     "default": "update_asset"
+    }
+   },
+   "type": "object"
+  },
+  "UpdateBookingPageAppearanceParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "update_booking_page_appearance",
+     "default": "update_booking_page_appearance"
+    }
+   },
+   "type": "object"
+  },
+  "UpdateBookingPageSettingsParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "update_booking_page_settings",
+     "default": "update_booking_page_settings"
+    }
+   },
+   "type": "object"
+  },
+  "UpdateBusinessInfoParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "update_business_info",
+     "default": "update_business_info"
+    }
+   },
+   "type": "object"
+  },
+  "UpdateCalendarEventParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "update_calendar_event",
+     "default": "update_calendar_event"
+    }
+   },
+   "type": "object"
+  },
+  "UpdateClientParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "update_client",
+     "default": "update_client"
+    }
+   },
+   "type": "object"
+  },
+  "UpdateCustomerFacingConfigParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "update_customer_facing_config",
+     "default": "update_customer_facing_config"
+    }
+   },
+   "type": "object"
+  },
+  "UpdateGroupSessionSeatsParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "update_group_session_seats",
+     "default": "update_group_session_seats"
+    }
+   },
+   "type": "object"
+  },
+  "UpdateHolidayParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "update_holiday",
+     "default": "update_holiday"
+    }
+   },
+   "type": "object"
+  },
+  "UpdateLocationParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "update_location",
+     "default": "update_location"
+    }
+   },
+   "type": "object"
+  },
+  "UpdateOrderParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "update_order",
+     "default": "update_order"
+    }
+   },
+   "type": "object"
+  },
+  "UpdateProductParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "update_product",
+     "default": "update_product"
+    }
+   },
+   "type": "object"
+  },
+  "UpdateServiceParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "update_service",
+     "default": "update_service"
+    }
+   },
+   "type": "object"
+  },
+  "UpdateStaffParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "update_staff",
+     "default": "update_staff"
+    }
+   },
+   "type": "object"
+  },
+  "UpdateTransferRuleParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "update_transfer_rule",
+     "default": "update_transfer_rule"
+    },
+    "post_dial_digits_enabled": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "VADConfig": {
+   "properties": {
+    "background_voice_detection": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "ValidateUserVerificationCodeParams": {
+   "properties": {
+    "smb_tool_type": {
+     "type": "string",
+     "const": "validate_user_verification_code",
+     "default": "validate_user_verification_code"
+    }
+   },
+   "type": "object"
+  },
+  "Verbosity": {
+   "type": "string",
+   "enum": [
+    "auto",
+    "concise",
+    "thorough"
+   ]
+  },
+  "VoicemailDetectionToolConfig": {
+   "properties": {
+    "system_tool_type": {
+     "type": "string",
+     "const": "voicemail_detection",
+     "default": "voicemail_detection"
+    },
+    "voicemail_message": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "WebhookEventType": {
+   "type": "string",
+   "enum": [
+    "transcript",
+    "audio",
+    "call_initiation_failure",
+    "answering_machine_detection",
+    "unredacted_transcript",
+    "unredacted_audio"
+   ]
+  },
+  "WebhookToolApiSchemaConfig-Input": {
+   "properties": {
+    "request_headers": {
+     "additionalProperties": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "$ref": "#/components/schemas/ConvAISecretLocator"
+       },
+       {
+        "$ref": "#/components/schemas/ConvAIDynamicVariable"
+       },
+       {
+        "$ref": "#/components/schemas/ConvAIEnvVarLocator"
+       }
+      ]
+     },
+     "type": "object"
+    },
+    "url": {
+     "type": "string"
+    },
+    "method": {
+     "type": "string",
+     "enum": [
+      "GET",
+      "POST",
+      "PUT",
+      "PATCH",
+      "DELETE"
+     ],
+     "default": "GET"
+    },
+    "path_params_schema": {
+     "additionalProperties": {
+      "$ref": "#/components/schemas/LiteralJsonSchemaProperty"
+     },
+     "type": "object"
+    },
+    "query_params_schema": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/QueryParamsJsonSchema-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "request_body_schema": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ObjectJsonSchemaProperty-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "response_body_schema": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ObjectJsonSchemaProperty-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "response_filter": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ResponseFilter"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "content_type": {
+     "type": "string",
+     "enum": [
+      "application/json",
+      "application/x-www-form-urlencoded"
+     ],
+     "default": "application/json"
+    },
+    "auth_resolved_params": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "auth_connection": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/AuthConnectionLocator"
+      },
+      {
+       "$ref": "#/components/schemas/EnvironmentAuthConnectionLocator"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "url"
+   ]
+  },
+  "WebhookToolConfig-Input": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "webhook",
+     "default": "webhook"
+    },
+    "name": {
+     "type": "string",
+     "minLength": 0
+    },
+    "description": {
+     "type": "string",
+     "minLength": 0
+    },
+    "response_timeout_secs": {
+     "type": "integer",
+     "maximum": 300,
+     "minimum": 5,
+     "default": 20
+    },
+    "disable_interruptions": {
+     "type": "boolean",
+     "default": false,
+     "deprecated": true
+    },
+    "interruption_mode": {
+     "$ref": "#/components/schemas/ToolInterruptionMode",
+     "default": "allow"
+    },
+    "force_pre_tool_speech": {
+     "type": "boolean",
+     "default": false,
+     "deprecated": true
+    },
+    "pre_tool_speech": {
+     "$ref": "#/components/schemas/PreToolSpeechMode",
+     "default": "auto"
+    },
+    "assignments": {
+     "items": {
+      "$ref": "#/components/schemas/DynamicVariableAssignment"
+     },
+     "type": "array"
+    },
+    "tool_call_sound": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ToolCallSoundType"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "tool_call_sound_behavior": {
+     "$ref": "#/components/schemas/ToolCallSoundBehavior",
+     "default": "auto"
+    },
+    "tool_error_handling_mode": {
+     "$ref": "#/components/schemas/ToolErrorHandlingMode",
+     "default": "auto"
+    },
+    "dynamic_variables": {
+     "$ref": "#/components/schemas/DynamicVariablesConfig"
+    },
+    "execution_mode": {
+     "$ref": "#/components/schemas/ToolExecutionMode",
+     "default": "immediate"
+    },
+    "api_schema": {
+     "$ref": "#/components/schemas/WebhookToolApiSchemaConfig-Input"
+    },
+    "follow_redirects": {
+     "type": "boolean",
+     "default": false
+    },
+    "follow_redirects_allowed_domains": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array",
+     "maxItems": 20
+    }
+   },
+   "type": "object",
+   "required": [
+    "name",
+    "description",
+    "api_schema"
+   ]
+  },
+  "WebhookTranscriptFormat": {
+   "type": "string",
+   "enum": [
+    "json",
+    "opentelemetry"
+   ],
+   "default": "json"
+  },
+  "WidgetConfig-Input": {
+   "properties": {
+    "variant": {
+     "$ref": "#/components/schemas/EmbedVariant",
+     "default": "full"
+    },
+    "placement": {
+     "$ref": "#/components/schemas/WidgetPlacement",
+     "default": "bottom-right"
+    },
+    "expandable": {
+     "$ref": "#/components/schemas/WidgetExpandable",
+     "default": "never"
+    },
+    "avatar": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/OrbAvatar"
+      },
+      {
+       "$ref": "#/components/schemas/URLAvatar"
+      },
+      {
+       "$ref": "#/components/schemas/ImageAvatar"
+      }
+     ]
+    },
+    "feedback_mode": {
+     "$ref": "#/components/schemas/WidgetFeedbackMode",
+     "default": "none"
+    },
+    "end_feedback": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/WidgetEndFeedbackConfig"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "bg_color": {
+     "type": "string",
+     "default": "#ffffff"
+    },
+    "text_color": {
+     "type": "string",
+     "default": "#000000"
+    },
+    "btn_color": {
+     "type": "string",
+     "default": "#000000"
+    },
+    "btn_text_color": {
+     "type": "string",
+     "default": "#ffffff"
+    },
+    "border_color": {
+     "type": "string",
+     "default": "#e1e1e1"
+    },
+    "focus_color": {
+     "type": "string",
+     "default": "#000000"
+    },
+    "border_radius": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "btn_radius": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "action_text": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "start_call_text": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "end_call_text": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "expand_text": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "listening_text": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "speaking_text": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "shareable_page_text": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "shareable_page_show_terms": {
+     "type": "boolean",
+     "default": true
+    },
+    "terms_text": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "terms_html": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "terms_key": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "show_avatar_when_collapsed": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": false
+    },
+    "disable_banner": {
+     "type": "boolean",
+     "default": false
+    },
+    "override_link": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "markdown_link_allowed_hosts": {
+     "items": {
+      "$ref": "#/components/schemas/AllowlistItem"
+     },
+     "type": "array"
+    },
+    "markdown_link_include_www": {
+     "type": "boolean",
+     "default": true
+    },
+    "markdown_link_allow_http": {
+     "type": "boolean",
+     "default": true
+    },
+    "mic_muting_enabled": {
+     "type": "boolean",
+     "default": true
+    },
+    "transcript_enabled": {
+     "type": "boolean",
+     "default": true
+    },
+    "text_input_enabled": {
+     "type": "boolean",
+     "default": true
+    },
+    "conversation_mode_toggle_enabled": {
+     "type": "boolean",
+     "default": false
+    },
+    "default_expanded": {
+     "type": "boolean",
+     "default": false
+    },
+    "always_expanded": {
+     "type": "boolean",
+     "default": false
+    },
+    "dismissible": {
+     "type": "boolean",
+     "default": false
+    },
+    "show_agent_status": {
+     "type": "boolean",
+     "default": false
+    },
+    "show_conversation_id": {
+     "type": "boolean",
+     "default": true
+    },
+    "strip_audio_tags": {
+     "type": "boolean",
+     "default": true
+    },
+    "syntax_highlight_theme": {
+     "anyOf": [
+      {
+       "type": "string",
+       "enum": [
+        "light",
+        "dark"
+       ]
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "text_contents": {
+     "$ref": "#/components/schemas/WidgetTextContents"
+    },
+    "styles": {
+     "$ref": "#/components/schemas/WidgetStyles"
+    },
+    "show_resize_button": {
+     "type": "boolean",
+     "default": true
+    },
+    "language_selector": {
+     "type": "boolean",
+     "default": false
+    },
+    "supports_text_only": {
+     "type": "boolean",
+     "default": true
+    },
+    "custom_avatar_path": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "language_presets": {
+     "additionalProperties": {
+      "$ref": "#/components/schemas/WidgetLanguagePreset"
+     },
+     "type": "object"
+    }
+   },
+   "type": "object"
+  },
+  "WidgetEndFeedbackConfig": {
+   "properties": {
+    "type": {
+     "$ref": "#/components/schemas/WidgetEndFeedbackType",
+     "default": "rating"
+    }
+   },
+   "type": "object"
+  },
+  "WidgetEndFeedbackType": {
+   "type": "string",
+   "enum": [
+    "rating"
+   ],
+   "default": "rating"
+  },
+  "WidgetExpandable": {
+   "type": "string",
+   "enum": [
+    "never",
+    "mobile",
+    "desktop",
+    "always"
+   ],
+   "default": "never"
+  },
+  "WidgetFeedbackMode": {
+   "type": "string",
+   "enum": [
+    "none",
+    "during",
+    "end"
+   ],
+   "default": "none"
+  },
+  "WidgetLanguagePreset": {
+   "properties": {
+    "text_contents": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/WidgetTextContents"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "text_contents_translation": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/WidgetTextContentsTranslation"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "terms_text": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "terms_html": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "terms_key": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "terms_translation": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/WidgetTermsTranslation"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "WidgetPlacement": {
+   "type": "string",
+   "enum": [
+    "top-left",
+    "top",
+    "top-right",
+    "bottom-left",
+    "bottom",
+    "bottom-right"
+   ],
+   "default": "bottom-right"
+  },
+  "WidgetStyles": {
+   "properties": {
+    "base": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "base_hover": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "base_active": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "base_border": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "base_subtle": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "base_primary": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "base_error": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "accent": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "accent_hover": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "accent_active": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "accent_border": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "accent_subtle": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "accent_primary": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "overlay_padding": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "button_radius": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "input_radius": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "bubble_radius": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "sheet_radius": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "compact_sheet_radius": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "dropdown_sheet_radius": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "WidgetTermsTranslation": {
+   "properties": {
+    "source_hash": {
+     "type": "string"
+    },
+    "text": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "source_hash",
+    "text"
+   ]
+  },
+  "WidgetTextContents": {
+   "properties": {
+    "main_label": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "start_call": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "start_chat": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "new_call": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "end_call": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "mute_microphone": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "change_language": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "collapse": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "expand": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "copied": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "accept_terms": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "dismiss_terms": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "listening_status": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "speaking_status": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "connecting_status": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "chatting_status": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "queue_waiting_status": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "queue_waiting_status_short": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "input_label": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "input_placeholder": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "input_placeholder_text_only": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "input_placeholder_new_conversation": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "user_ended_conversation": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "agent_ended_conversation": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "conversation_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "error_occurred": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "queue_timed_out": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "copy_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "initiate_feedback": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "request_follow_up_feedback": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "thanks_for_feedback": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "thanks_for_feedback_details": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "follow_up_feedback_placeholder": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "submit": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "go_back": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "send_message": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "text_mode": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "voice_mode": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "switched_to_text_mode": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "switched_to_voice_mode": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "copy": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "download": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "wrap": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "agent_working": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "agent_done": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "agent_error": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "attach_file": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "remove_file": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "file_upload_error": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "file_type_unsupported": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "file_too_large": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "file_limit_reached": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "typing_indicator": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "rich_content_unavailable": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "WidgetTextContentsTranslation": {
+   "properties": {
+    "source": {
+     "additionalProperties": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "text": {
+     "additionalProperties": {
+      "type": "string"
+     },
+     "type": "object"
+    }
+   },
+   "type": "object"
+  }
+ }
+}

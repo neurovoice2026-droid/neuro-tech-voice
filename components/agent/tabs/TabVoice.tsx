@@ -19,6 +19,8 @@ import { VoiceCloneDialog } from '@/components/voice/VoiceCloneDialog'
 import { PreviewButton, voiceDisplayName, voiceLocaleLine } from '@/components/voice/VoiceCard'
 import { VoicePicker } from '@/components/voice/VoicePicker'
 import { VOICE_SYNC_COPY, VoiceSyncBadge } from '@/components/voice/VoiceSyncBadge'
+import { VoiceTuningCard } from '@/components/agent/VoiceTuningCard'
+import type { AgentHook } from '@/hooks/useAgent'
 import { useAudioPreview, voicePreviewSource, type PreviewRequest } from '@/hooks/useAudioPreview'
 import {
   ApiError,
@@ -36,13 +38,16 @@ import type { Agent, VoiceOption, VoiceSyncStatus } from '@/types'
 export interface TabVoiceProps {
   agent: Agent
   onAgentUpdated: (agent: Agent) => void
+  /** PATCH /api/agent (voice tuning); the tuning card is shown only when given. */
+  onUpdate?: AgentHook['updateWithToast']
+  isSaving?: boolean
 }
 
 /** While another request holds the sync ("saving"), re-read the agent until it settles. */
 const SYNC_POLL_MS = 4000
 const SYNC_POLL_MAX = 15
 
-export function TabVoice({ agent, onAgentUpdated }: TabVoiceProps) {
+export function TabVoice({ agent, onAgentUpdated, onUpdate, isSaving = false }: TabVoiceProps) {
   const [pendingVoice, setPendingVoice] = useState<VoiceOption | null>(null)
   const [applying, setApplying] = useState<'apply' | 'retry' | null>(null)
   const [cloneOpen, setCloneOpen] = useState(false)
@@ -343,6 +348,8 @@ export function TabVoice({ agent, onAgentUpdated }: TabVoiceProps) {
           )}
         </CardContent>
       </Card>
+
+      {onUpdate && <VoiceTuningCard agent={agent} onUpdate={onUpdate} isSaving={isSaving} />}
 
       {/* Provider fallback voice (Cartesia) */}
       <FallbackVoiceSelect agent={agent} onAgentUpdated={onAgentUpdated} />

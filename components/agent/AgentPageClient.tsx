@@ -215,7 +215,7 @@ export function AgentPageClient({ initialAgent, phoneNumbers, orgTimezone }: Age
             </TabsContent>
 
             <TabsContent value="voice">
-              <TabVoice agent={agent} onAgentUpdated={replaceAgent} />
+              <TabVoice agent={agent} onAgentUpdated={replaceAgent} onUpdate={updateWithToast} isSaving={isSaving} />
             </TabsContent>
 
             <TabsContent value="knowledge">

@@ -34,6 +34,7 @@ beforeEach(() => {
   vi.stubEnv('ELEVENLABS_TTS_MODEL_MULTILINGUAL', '')
   vi.stubEnv('ELEVENLABS_LLM', '')
   vi.stubEnv('ELEVENLABS_ENABLE_GUARDRAILS', '')
+  vi.stubEnv('ELEVENLABS_TEXT_NORMALISATION', '')
 })
 
 describe('agentTags', () => {
@@ -159,9 +160,29 @@ describe('buildElevenLabsAgentBody', () => {
 
     it('explicitly nulls every built-in tool we do not use (arrays/objects are replaced on update)', () => {
       const tools = at(build(), 'conversation_config.agent.prompt.built_in_tools') as Record<string, unknown>
-      for (const key of ['language_detection', 'transfer_to_agent', 'skip_turn', 'play_keypad_touch_tone']) {
+      for (const key of ['language_detection', 'transfer_to_agent', 'play_keypad_touch_tone']) {
         expect(tools, key).toHaveProperty(key, null)
       }
+      const conv = makeAgentSpec().conversation
+      const off = at(build({ conversation: { ...conv, skip_turn: false } }), 'conversation_config.agent.prompt.built_in_tools') as Record<string, unknown>
+      expect(off).toHaveProperty('skip_turn', null)
+    })
+
+    it('skip_turn is on by default with a positive wait (the end-call-after-silence timer pauses)', () => {
+      expect(at(build(), 'conversation_config.agent.prompt.built_in_tools.skip_turn')).toEqual({
+        type: 'system',
+        name: 'skip_turn',
+        description: '',
+        params: { system_tool_type: 'skip_turn', wait_timeout_secs: 20 },
+      })
+    })
+
+    it('voicemail detection is described as outbound-only', () => {
+      const conv = makeAgentSpec().conversation
+      const on = build({ conversation: { ...conv, voicemail_detection: true } })
+      const description = at(on, 'conversation_config.agent.prompt.built_in_tools.voicemail_detection.description') as string
+      expect(description).toMatch(/call you placed/)
+      expect(description).toMatch(/Never use it on a call where the caller phoned the business/)
     })
   })
 
@@ -217,6 +238,7 @@ describe('buildElevenLabsAgentBody', () => {
         model_id: 'eleven_flash_v2',
         agent_output_audio_format: 'ulaw_8000',
         expressive_mode: false,
+        text_normalisation_type: 'elevenlabs',
         voice_id: 'el-voice-123',
         stability: 1,
         similarity_boost: 0,
@@ -225,9 +247,33 @@ describe('buildElevenLabsAgentBody', () => {
       expect(at(build({ voiceTuning: { stability: null, similarity_boost: null, speed: 0.5 } }), 'conversation_config.tts.speed')).toBe(0.7)
     })
 
-    it('omits unset voice and tuning (provider defaults apply)', () => {
+    it('sends the spec defaults for "default" tuning so an earlier value cannot persist; omits an unset voice', () => {
       const tts = at(build({ voiceId: null, voiceTuning: { stability: null, similarity_boost: null, speed: null } }), 'conversation_config.tts')
-      expect(tts).toEqual({ model_id: 'eleven_flash_v2', agent_output_audio_format: 'ulaw_8000', expressive_mode: false })
+      expect(tts).toEqual({
+        model_id: 'eleven_flash_v2',
+        agent_output_audio_format: 'ulaw_8000',
+        expressive_mode: false,
+        text_normalisation_type: 'elevenlabs',
+        stability: 0.5,
+        similarity_boost: 0.8,
+        speed: 1,
+      })
+    })
+
+    it('enables expressive mode only for v3/v4 models (never forced off for them)', () => {
+      vi.stubEnv('ELEVENLABS_TTS_MODEL_MULTILINGUAL', 'eleven_v3_conversational')
+      expect(at(build({ language: 'ro' }), 'conversation_config.tts.expressive_mode')).toBe(true)
+      vi.stubEnv('ELEVENLABS_TTS_MODEL_MULTILINGUAL', 'eleven_v4_turbo')
+      expect(at(build({ language: 'ro' }), 'conversation_config.tts.expressive_mode')).toBe(true)
+      expect(at(build({ language: 'en' }), 'conversation_config.tts.expressive_mode')).toBe(false)
+    })
+
+    it('uses the ElevenLabs text normaliser by default, env-switchable to system_prompt', () => {
+      expect(at(build(), 'conversation_config.tts.text_normalisation_type')).toBe('elevenlabs')
+      vi.stubEnv('ELEVENLABS_TEXT_NORMALISATION', 'system_prompt')
+      expect(at(build(), 'conversation_config.tts.text_normalisation_type')).toBe('system_prompt')
+      vi.stubEnv('ELEVENLABS_TEXT_NORMALISATION', 'bogus')
+      expect(at(build(), 'conversation_config.tts.text_normalisation_type')).toBe('elevenlabs')
     })
   })
 
@@ -235,7 +281,7 @@ describe('buildElevenLabsAgentBody', () => {
     it('maps and clamps durations and timeouts', () => {
       const conv = makeAgentSpec().conversation
       const body = build({ conversation: { ...conv, turn_timeout_seconds: 99, silence_end_call_seconds: 2, max_call_duration_minutes: 500, turn_eagerness: 'patient' } })
-      expect(at(body, 'conversation_config.turn')).toEqual({ mode: 'turn', turn_timeout: 30, silence_end_call_timeout: 5, turn_eagerness: 'patient' })
+      expect(at(body, 'conversation_config.turn')).toMatchObject({ mode: 'turn', turn_timeout: 30, silence_end_call_timeout: 5, turn_eagerness: 'patient' })
       expect(at(body, 'conversation_config.conversation.max_duration_seconds')).toBe(7200)
       expect(at(build(), 'conversation_config.conversation.max_duration_seconds')).toBe(900)
     })
@@ -251,9 +297,9 @@ describe('buildElevenLabsAgentBody', () => {
       expect(at(build({ conversation: { ...conv, allow_interruptions: false } }), 'conversation_config.conversation.client_events')).toEqual(['audio'])
     })
 
-    it('sends temperature only when set, clamped to 0..1', () => {
+    it('always sends temperature: 0 (spec default, never null) when unset, clamped to 0..1 otherwise', () => {
       const conv = makeAgentSpec().conversation
-      expect(at(build(), 'conversation_config.agent.prompt')).not.toHaveProperty('temperature')
+      expect(at(build(), 'conversation_config.agent.prompt.temperature')).toBe(0)
       expect(at(build({ conversation: { ...conv, temperature: 0.3 } }), 'conversation_config.agent.prompt.temperature')).toBe(0.3)
       expect(at(build({ conversation: { ...conv, temperature: 3 } }), 'conversation_config.agent.prompt.temperature')).toBe(1)
     })
@@ -268,6 +314,7 @@ describe('buildElevenLabsAgentBody', () => {
     it('includes customer variables and the platform placeholders', () => {
       const body = build({ dynamicVariables: { clinic_city: 'Cluj' } })
       expect(at(body, 'conversation_config.agent.dynamic_variables.dynamic_variable_placeholders')).toEqual({
+        ntv_call_direction: 'inbound',
         clinic_city: 'Cluj',
         ntv_call_id: 'unknown',
         ntv_call_token: 'none',

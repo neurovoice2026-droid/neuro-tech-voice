@@ -14,10 +14,14 @@ vi.mock('@/lib/cartesia/client', () => ({
 vi.mock('@/lib/voice-providers/platform-resources', () => ({
   tryPlatformResource: vi.fn(),
 }))
+vi.mock('@/lib/elevenlabs/model-catalog', () => ({
+  agentReasoningEffort: vi.fn(),
+}))
 
 import * as el from '@/lib/elevenlabs/client'
 import * as ct from '@/lib/cartesia/client'
 import { tryPlatformResource } from './platform-resources'
+import { agentReasoningEffort } from '@/lib/elevenlabs/model-catalog'
 import { cartesiaLifecycle, elevenLabsLifecycle, lifecycleFor, resolveFallbackVoice } from './adapters'
 import { ProviderError } from './errors'
 import { makeAgentSpec } from '@/tests/helpers/agent-spec'
@@ -41,6 +45,7 @@ beforeEach(() => {
   vi.setSystemTime(NOW)
   vi.stubEnv('CARTESIA_FALLBACK_VOICES', '')
   vi.mocked(tryPlatformResource).mockResolvedValue(null)
+  vi.mocked(agentReasoningEffort).mockResolvedValue(null)
   vi.mocked(el.isConfigured).mockReturnValue(true)
   vi.mocked(ct.isConfigured).mockReturnValue(true)
 })
@@ -54,6 +59,26 @@ describe('lifecycleFor', () => {
     expect(lifecycleFor('cartesia')).toBe(cartesiaLifecycle)
     expect(elevenLabsLifecycle.provider).toBe('elevenlabs')
     expect(cartesiaLifecycle.provider).toBe('cartesia')
+  })
+})
+
+describe('elevenLabsLifecycle.update: LLM reasoning effort', () => {
+  it('sends the reasoning effort resolved from the LLM catalogue, and nothing when there is none', async () => {
+    vi.mocked(el.agents.update).mockResolvedValue({ agent_id: 'agent_1', name: 'x', conversation_config: {} })
+    vi.mocked(agentReasoningEffort).mockResolvedValueOnce('minimal')
+    await elevenLabsLifecycle.update('agent_1', makeAgentSpec())
+    const sent = vi.mocked(el.agents.update).mock.calls[0][1] as { conversation_config: { agent: { prompt: Record<string, unknown> } } }
+    expect(sent.conversation_config.agent.prompt.reasoning_effort).toBe('minimal')
+
+    await elevenLabsLifecycle.update('agent_1', makeAgentSpec())
+    const second = vi.mocked(el.agents.update).mock.calls[1][1] as { conversation_config: { agent: { prompt: Record<string, unknown> } } }
+    expect(second.conversation_config.agent.prompt).not.toHaveProperty('reasoning_effort')
+  })
+
+  it('the config hash includes it (a newly supported level is pushed)', async () => {
+    const without = await elevenLabsLifecycle.hash(makeAgentSpec())
+    vi.mocked(agentReasoningEffort).mockResolvedValueOnce('low')
+    expect(await elevenLabsLifecycle.hash(makeAgentSpec())).not.toBe(without)
   })
 })
 
