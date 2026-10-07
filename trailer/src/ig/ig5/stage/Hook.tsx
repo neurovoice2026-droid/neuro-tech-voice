@@ -46,7 +46,8 @@ const M = T.M;
 /* ── the desk ── */
 /** the undraw into the light on the pickup (gone under her orb by the time ours rises: crit-r2 SYNC-B) */
 const UNDRAW = 6;
-export const DeskLine: React.FC<{ t: number }> = ({ t }) => {
+/** `stroke`: the hairline's width (1.5; the cover's bolder variant passes its own, crit-r3 LOOK3-P5) */
+export const DeskLine: React.FC<{ t: number; stroke?: number }> = ({ t, stroke = 1.5 }) => {
   const draw = tween(t, M.deskDraw, [0, 1], EASE.draw);
   const und = t > 0 ? tween(t, [M.pickup, M.pickup + UNDRAW], [0, 1], EASE.inOut) : 0;
   // drawn out of the light: x1 − len → x1 (crit-r2 P10); on the pickup both ends close on the light (x 740)
@@ -56,7 +57,7 @@ export const DeskLine: React.FC<{ t: number }> = ({ t }) => {
   if (b - a < 0.5) return null;
   return (
     <svg width={1080} height={1920} style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', pointerEvents: 'none' }} aria-hidden>
-      <line x1={a} y1={DESK.y} x2={b} y2={DESK.y} stroke={GRAPHITE.tag} strokeOpacity={0.62} strokeWidth={1.5} strokeLinecap="round" />
+      <line x1={a} y1={DESK.y} x2={b} y2={DESK.y} stroke={GRAPHITE.tag} strokeOpacity={0.62} strokeWidth={stroke} strokeLinecap="round" />
     </svg>
   );
 };
@@ -66,11 +67,13 @@ export const DeskLine: React.FC<{ t: number }> = ({ t }) => {
 const TRIO_BIRTH = (TRIO.d0 - PHONE.d) / TRIO.grow;
 export const RING_FLASHES = [...M.trio.map((l) => l - TRIO_BIRTH), ...M.rings] as const;
 
-export const Phone: React.FC<{ t: number; opacity?: number }> = ({ t, opacity = 1 }) => <LineLight t={t} x={PHONE.x} y={PHONE.y} d={PHONE.d} rings={RING_FLASHES} opacity={opacity} />;
+export const Phone: React.FC<{ t: number; opacity?: number; d?: number }> = ({ t, opacity = 1, d = PHONE.d }) => <LineLight t={t} x={PHONE.x} y={PHONE.y} d={d} rings={RING_FLASHES} opacity={opacity} />;
 
 /** the seam's fade-in of the rings already in flight (1 from t −2 on: frame 0 and the 839 → 0 step are unchanged) */
 export const TRIO_SEAM_IN = [-10, -2] as const;
-export const TrioRings: React.FC<{ t: number }> = ({ t }) => {
+/** `scale`: the cover's bolder variant only (crit-r3 LOOK3-P5: Ø × `d` about the light, strokes × `stroke`); the reel
+ *  draws it at 1 / 1, so frame 0 is unchanged */
+export const TrioRings: React.FC<{ t: number; scale?: { d: number; stroke: number } }> = ({ t, scale = { d: 1, stroke: 1 } }) => {
   const seamIn = t < 0 ? tween(t, TRIO_SEAM_IN, [0, 1], EASE.inOut) : 1;
   if (seamIn <= 0) return null;
   const live = M.trio
@@ -80,8 +83,8 @@ export const TrioRings: React.FC<{ t: number }> = ({ t }) => {
   return (
     <svg width={1080} height={1920} style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', pointerEvents: 'none' }} aria-hidden>
       {live.map(({ l, age }) => {
-        const d = TRIO.d0 + TRIO.grow * age;
-        const w = Math.min(TRIO.stroke0, TRIO.stroke0 - TRIO.strokeK * age);
+        const d = (TRIO.d0 + TRIO.grow * age) * scale.d;
+        const w = Math.min(TRIO.stroke0, TRIO.stroke0 - TRIO.strokeK * age) * scale.stroke;
         // the linear fade, a short tail to nothing over its last frames, and its birth out of the light
         const ink = TRIO.ink0 * Math.max(0, 1 - age / TRIO.inkLife) * (1 - tween(age, [TRIO.life - TRIO.tail, TRIO.life], [0, 1], (v) => v)) * tween(age, [-TRIO_BIRTH, -TRIO_BIRTH + 3], [0, 1], EASE.out3) * seamIn;
         const r = Math.max(0, d / 2 - w / 2);

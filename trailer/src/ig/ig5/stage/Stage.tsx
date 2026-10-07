@@ -29,7 +29,7 @@
  */
 import React from 'react';
 import { AbsoluteFill } from 'remotion';
-import { EASE, mix, mixHex, SPRING, springUnit, tween } from '../../../lib/motion';
+import { EASE, mix, mixHex, tween } from '../../../lib/motion';
 import { useKitFaces } from '../../../kb/kit';
 import { MOMENT_LIGHTS } from '../../../kb/palettes';
 import { Captions, captionScreens, layoutScreen, type CapKey, type CapPlace } from '../../components/Captions';
@@ -39,7 +39,7 @@ import { ZoneRect } from '../../components/ZoneGuard';
 import * as T from '../timing';
 import { DeskLine, HookCard, Phone, PhoneRings, RING_FLASHES, TrioRings } from './Hook';
 import { CAP, OURS, PHONE, RECORD, TRIO } from './layout';
-import { Chip, fullStopAt, Ours, OURS_UP, oursY, Track } from './Ours';
+import { Chip, fullStopAt, Ours, oursUpAt, oursY, ScaleAxis, Track } from './Ours';
 import { Papers } from './Papers';
 import { dockAt, RecordCard } from './Record';
 
@@ -56,10 +56,13 @@ const PHONE_KEY = { x: PHONE.x, y: PHONE.y - 40, strength: 0.24, color: '#f2b8c9
 const POOL_KEY = { x: 520, y: OURS.y4 + 150, strength: 0.32, color: '#bfeef5', radius: 980 } as const;
 const ringSwell = (t: number) => RING_FLASHES.reduce((m, r) => (t < r ? m : Math.max(m, Math.min(1, (t - r) / 2) * Math.exp(-Math.max(0, t - r - 2) / 12))), 0);
 export const phoneAt = (t: number) => 1 - tween(t, [M.pickup, M.pickup + 12], [0, 1], EASE.inOut);
-export const poolAt = (t: number) => tween(t, [M.ours, M.ours + 30], [0, 1], EASE.inOut);
+/** her pool: .6 of the way in over ours' first second, the rest — a bloom of the light behind ours — on "forty-nine"
+ *  (crit-r3 LOOK3-P3: the pool was full by f457 and the climax's word got only an ink lift) */
+const POOL_FIRST = 0.6;
+export const poolAt = (t: number) => POOL_FIRST * tween(t, [M.ours, M.ours + 30], [0, 1], EASE.inOut) + (1 - POOL_FIRST) * tween(t, [M.fortyNine, M.fortyNine + 8], [0, 1], EASE.out3);
 export function groundKeyAt(t: number) {
   const k = poolAt(t);
-  const up = springUnit(t - OURS_UP, SPRING.site);
+  const up = oursUpAt(t);
   const pool = { ...POOL_KEY, y: mix(POOL_KEY.y, OURS.y5 + 150, up) };
   const base = { x: mix(HOOK_KEY.x, pool.x, k), y: mix(HOOK_KEY.y, pool.y, k), strength: mix(HOOK_KEY.strength, pool.strength, k), color: mixHex(HOOK_KEY.color, pool.color, k), radius: mix(HOOK_KEY.radius, pool.radius, k) };
   const ph = phoneAt(t);
@@ -165,6 +168,7 @@ export const Stage5: React.FC<{ t: number }> = ({ t }) => (
     <Papers t={t} />
     <PhoneRings t={t} />
     <Ours t={t} />
+    <ScaleAxis t={t} />
     <Track t={t} />
     <RecordCard t={t} />
     <Chip t={t} />

@@ -213,7 +213,7 @@ SCRIPT §7's cover line "Don't pay $300 a month." is no longer spoken, so it can
 
 **TikTok's feed autoplays from frame 0, which is the hook picture itself.** So for TikTok the cover matters only on the profile grid and in search:
 - upload the PNG;
-- otherwise use the payoff frame between 17.4 and 17.6 s (f521–528), never later, as POSTING §3 says (critic round 2, TRUTH-R2-4; the frames after the pickup moved 3 f in the same round, SYNC-B);
+- otherwise use the payoff frame between 17.45 and 17.55 s (f524–526), as POSTING §3 says (critic round 3, TRUTH-R3-7: at f521 "fee." is still rising, and from f528 the pile fades out; critic round 2, TRUTH-R2-4 / SYNC-B, had moved the window 3 f);
 - the IG composer's fallback, frame 0, is now a usable cover.
 
 ### 1.9 Truth and voice checks

@@ -11,8 +11,9 @@
  *                as "AI receptionists cost $300"
  *   the graphic  FRAME 0'S PICTURE in the lower half, as TikTok autoplays it (crit-r2 P1: the Ø 132 ring icon tucked
  *                top right left half the 3:4 tile bare pearl): the desk hairline y 1130, the rose line light at
- *                (740, 1130) with the full-size ring trio Ø 72 / 156 / 240 in flight, on frame 0's ground (the warm
- *                key low left, the phone's rose pool) — stage/Hook.tsx's own parts, so it is the reel's frame 0
+ *                (740, 1130) with the ring trio in flight, on frame 0's ground (the warm key low left, the phone's rose
+ *                pool) — stage/Hook.tsx's own parts, drawn bolder for the grid tile (crit-r3 LOOK3-P5: trio Ø 90 / 195
+ *                / 300, strokes 4.5 / 3.4 / 2.25 px, desk 2.25 px, light Ø 24; the reel's frame 0 keeps 72 / 156 / 240)
  *
  * A title and ONE graphic, as ig1–ig4 (crit-r1 P6 / T4): the × .42 payoff thumbnail is gone — its labels rendered at
  * ≈ 11 px (its "$99" without a legible "for 50 minutes" at grid size) and it repeated the attribution's $300 and $49.
@@ -75,12 +76,17 @@ const Attribution: React.FC = () => {
   );
 };
 
-/** frame 0's picture: the desk (fully drawn), the ring trio in flight (frame 0's three rings), the rose line light */
+/** frame 0's picture: the desk (fully drawn), the ring trio in flight (frame 0's three rings), the rose line light —
+ *  drawn BOLDER for the grid tile than in the reel (crit-r3 LOOK3-P5: at profile-grid size its 1.5–3 px hairlines and
+ *  Ø 18 light read as "text plus a pink dot" beside ig1–ig4's solid objects): the trio's Ø × 1.25 about the light
+ *  (90 / 195 / 300: its outer ring still ends at x 890), its strokes × 1.5 (4.5 / 3.4 / 2.25 px), the desk 2.25 px, the
+ *  light Ø 24. The reel's frame 0 is untouched (these are the cover's own props) */
+const COVER_LOOK = { ring: { d: 1.25, stroke: 1.5 }, desk: 2.25, light: 24 } as const;
 const Frame0Picture: React.FC = () => (
   <>
-    <DeskLine t={20} />
-    <TrioRings t={0} />
-    <Phone t={0} />
+    <DeskLine t={20} stroke={COVER_LOOK.desk} />
+    <TrioRings t={0} scale={COVER_LOOK.ring} />
+    <Phone t={0} d={COVER_LOOK.light} />
   </>
 );
 

@@ -118,10 +118,20 @@ export const SLIP2 = {
   tag: { x: 40, y: 34, size: 36 },
   /** "from" (44) then "$99" (140) on one baseline */
   fig: { x: 40, y: 82, size: 140, from: 44 },
+  /** the empty amount slot until "$99" rises into it (slip 1's and the stub's idiom, crit-r3 LOOK3-P2: slip 2 had shown
+   *  1.6 s of blank paper under its tag): the figure's cells ± `pad` (`padL` on the left, where "from" sits 16 px
+   *  away), local y 82–222 */
+  slot: { pad: 14, padL: 8, y: 82, h: 140, r: 18 },
   /** the column right of the figure: "a month," over "for 50 minutes" (44 both), the lower baseline on the figure's */
   col: { size: 44, pitch: 46 },
   bar: { y: 228 },
 } as const;
+
+/** b4 on "forty-nine": the bars' shared $0 axis (crit-r3 LOOK3-P4: three bars in three cards read as underlines, not
+ *  one scale) — a 1.5 px graphite hairline (35 %) just LEFT of x 160 (every quote's and ours' words also start on x 160:
+ *  a rule there would run along their first letters), joined to each bar's $0 end by a short tick on its row: a bracket
+ *  from the $300 bar down to the $49 bar, drawn top to bottom over 8 f; it goes with the pile */
+export const AXIS = { x: 147, stroke: 1.5, ink: 0.35, draw: 8 } as const;
 
 /** the to-scale hairline's local y in a figure's box: its baseline (line-height 1) */
 export const baseline = (top: number, size: number) => top + 0.86 * size;
@@ -196,6 +206,8 @@ export const RECORD = {
   toolSize: 30,
   orbD: 52,
 } as const;
-/** b7: the record pulled back and up over the CTA (dimmed), × .55 about (540, 260): y ≈ 458–618, ≈ 92 px under the
- *  chip and ≈ 97 px over the CTA's cap tops (crit-r2 P4: × .62 about (540, 330) left 25 px) */
-export const RECORD_BACK = { s: 0.55, c: { x: 540, y: 260 }, opacity: 0.5 } as const;
+/** b7: the record pulled back and up over the CTA (dimmed), × .55 about (589, 260): y ≈ 458–618, ≈ 92 px under the
+ *  chip and ≈ 97 px over the CTA's cap tops (crit-r2 P4: × .62 about (540, 330) left 25 px); x 331–749, centred on the
+ *  CTA's and the comment field's axis x 540 (crit-r3 LOOK3-P6: about x 540 the record — its own centre x 500 — sat
+ *  22 px left of the end card's column) */
+export const RECORD_BACK = { s: 0.55, c: { x: 589, y: 260 }, opacity: 0.5 } as const;

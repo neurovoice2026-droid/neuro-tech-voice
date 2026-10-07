@@ -21,6 +21,7 @@ import { EASE, SPRING, tween } from '../../../lib/motion';
 import { maskBox } from '../../../lib/type';
 import { FONT, TYPE } from '../../../theme';
 import { measureText } from '../../../kb/kit';
+import { springMoving } from './settle';
 
 /* ── settings ── */
 /** object words (the slips' lines, ours' words): the title role's weight and tracking */
@@ -127,6 +128,8 @@ export const figWidth = (text: string, size: number) => figCells(text, size).w;
 
 /** a figure's mask padding (em): the "$" stands above the cap line and the comma drops under the baseline */
 const FIG_PAD = { top: 0.08, bottom: 0.16, side: 0.06 } as const;
+/** |1 − p| under which the rise's 80 % offset is ≤ .03 % (≤ .04 px at 140 px): rest */
+const FIG_RISE_EPS = 0.03 / 80;
 export const Figure: React.FC<{
   t: number;
   /** the value it shows (always this value: it never counts) */
@@ -154,7 +157,10 @@ export const Figure: React.FC<{
   const r = { ...r0, y: Math.max(0, r0.y) };
   const o = r.opacity * ink;
   if (o <= 0.002) return null;
-  const live = moving || glide || Math.abs(r.y) > 0.03 || (roll !== undefined && t - roll < 14);
+  // its own layer while the landing spring lives — by the spring's ENVELOPE (crit-r3 LOOK3-B1: |r.y| > .03 % went false
+  // at every overshoot crossing of SPRING.land, ζ ≈ .45 — and the overshoot is clamped to 0 — so a figure at rest flipped
+  // crisp ↔ soft a few times before it settled)
+  const live = moving || glide || (roll !== undefined && springMoving(t - (roll - 1), SPRING.land, FIG_RISE_EPS));
   const pt = FIG_PAD.top * size;
   const pb = FIG_PAD.bottom * size;
   const ps = FIG_PAD.side * size;

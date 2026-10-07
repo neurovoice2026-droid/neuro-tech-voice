@@ -352,3 +352,7 @@ PIPELINE §7.1's allowed `git diff` list now names `src/ig/components/ZoneGuard.
 ## Fix round 2 (label `fix-r2`, 2026-10-07): no shared edit
 
 The round-2 fixer touched no shared file: `src/ig/components/ZoneGuard.tsx` and everything else under `src/ig/components/`, `src/ig/common/`, `scripts/ig/` are unchanged (`git status --porcelain` lists only `src/ig/ig5/**` and `docs/ig/ig5/**`). `guard:ig5 -- --check` **PASS** gates 1–5 (255/257 shas, the 2 allowed QA edits; stamps unchanged; gate P 24/24 byte-identical: `out/ig/qa/ig5/fix-r2/guard.log`); `sfx:ig` 0 built, 4 up to date; the film 1 / film 2 frozen sets are clean. The ig5 timeline moved (BUILD §7), so `sfx:ig5` restamped ig5's own mix.
+
+## Fix round 3 (label `fix-r3`, 2026-10-07): no shared edit
+
+The round-3 fixer touched no shared file: `src/ig/components/ZoneGuard.tsx` and everything else under `src/ig/components/`, `src/ig/common/`, `scripts/ig/` are unchanged (`git status --porcelain` lists only `src/ig/ig5/**` and `docs/ig/ig5/**`; the one new file is `src/ig/ig5/stage/settle.ts`, picture only and outside `ig5Hash`, which hashes the top-level `.ts` of `src/ig/ig5/`). `guard:ig5 -- --check` **PASS** gates 1–5 (255/257 shas, the 2 allowed QA edits; stamps unchanged; gate P 24/24 byte-identical: `out/ig/qa/ig5/fix-r3/guard.log`); `sfx:ig` 0 built, 4 up to date; the film 1 / film 2 frozen sets are clean. `timing.ts` changed (NUDGE `ig5-04`, the whoosh, no seed), so `sfx:ig5` restamped ig5's own mix.

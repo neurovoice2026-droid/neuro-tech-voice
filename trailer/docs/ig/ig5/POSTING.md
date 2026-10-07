@@ -15,9 +15,9 @@ The reel says and shows that the $49 plan **books the appointment**. Today that 
 - [ ] **1. Booking works on Starter in the product.** Test: a fresh Starter account with Google Calendar connected books a real test call end to end, and the call shows **Booked** in the dashboard.
 - [ ] **2. The pricing page says so.** The Starter card lists calendar booking; `lib/pages/home/pricing.ts:91` no longer puts Calendar under Pro only; `lib/pages/ai-agents.ts:40` no longer says "booking into Google Calendar on ${CALENDAR_PLAN} and above" with Pro as the plan.
 - [ ] **3. The live Stripe Starter price is $49.00 USD a month** (`STRIPE_STARTER_PRICE_ID`; the repo can't show it).
-- [ ] **4. The trial still doesn't book** (trial `googleIntegrations: false`, `entitlements.ts:27-29`). Both captions and the DM say so. If the owner turns booking on for the trial too, delete "and doesn't book" / "The trial doesn't book." everywhere.
+- [ ] **4. The trial still doesn't book** (trial `googleIntegrations: false`, `entitlements.ts:27-29`). Both captions and the DM say so (booking master only: the message master's captions and DM drop the line, §5 and §7, critic round 3 TRUTH-R3-1). If the owner turns booking on for the trial too, delete "and doesn't book" / "The trial doesn't book." everywhere.
 - [ ] **5. "(in beta)"** stays in the captions and the DM while the app badges booking as beta. If the badge goes, delete "(in beta)" and the `BETA` chip (built since critic round 1: the app's own badge beside **Booked** on the booking master, `BETA` in `src/ig/ig5/stage/Record.tsx`, one switch, then re-render; the message master has none).
-- [ ] **6. Re-open by eye** the pages behind the three outside figures (the research fetcher summarised them, and prices change): PATLive https://www.patlive.com/pricing/ ($99, 50 minutes), the Trillet agency guide https://trillet.ai/blogs/voice-agent-pricing-strategy-guide and Ciela https://ciela.ai/blogs/how-much-to-charge-for-ai-voice-agent ($300), Agentpro https://agentpro.ai/resources/ai-voice-agent-vs-answering-service-vs-new-hire-a-cost-comparison-for-small-businesses and Constant Concepts https://constantconcepts.ai/pricing/ (setup). **After the re-check (critic round 2, TRUTH-R2-6), set the date in both captions (§3, §4) and both pinned comments to the re-check date. If any figure moved outside RESEARCH-prices §6, stop and re-cut the reel.**
+- [ ] **6. Re-open by eye** the pages behind the three outside figures (the research fetcher summarised them, and prices change): PATLive https://www.patlive.com/pricing/ ($99, 50 minutes), the Trillet agency guide https://trillet.ai/blogs/voice-agent-pricing-strategy-guide and Ciela https://ciela.ai/blogs/how-much-to-charge-for-ai-voice-agent ($300), Agentpro https://agentpro.ai/resources/ai-voice-agent-vs-answering-service-vs-new-hire-a-cost-comparison-for-small-businesses and Constant Concepts https://constantconcepts.ai/pricing/ (setup). For the **$99 floor** (slip 2's "from $99 a month, for 50 minutes" and the IG pinned comment's "$99 or more at every one of them") also re-open the three surveyed live services closest to it (critic round 3, TRUTH-R3-2; RESEARCH-prices §8): MAP https://www.mapcommunications.com/pricing/ ($117.50 when read), SAS https://www.specialtyansweringservice.net/pricing/ ($121) and Posh https://www.posh.com/pricing ($130), each with the test **base fee + 50 × per-minute ≥ $99**. **After the re-check (critic round 2, TRUTH-R2-6), set the date in both captions (§3, §4), both pinned comments and the §6 ready replies ("Link your sources", critic round 3 TRUTH-R3-3) to the re-check date. If any figure moved outside RESEARCH-prices §6, or any service now sells 50 minutes under $99, stop and re-cut the reel.**
 - [ ] **7. Someone answers AGENT comments on TikTok by hand within the hour** (TikTok has no comment-to-DM automation for us). On Instagram the series comment-to-DM automation is live with keyword AGENT and its own ig5 rule (`utm_campaign=reel_ig5`). If neither can be covered, the reel is rendered with `ig5-07-bio`.
 
 **Strongly recommended in the same pricing edit:** settle Starter's minutes and overage (the site says 400 minutes and $0.20, the app bills 150 minutes and $0.25). The reel never shows them, but it sends viewers to that page, and "how many minutes?" will be the first question. After the change ships, update `.claude/instagram/voice.md:57` and `profile.md:67` ("Calendar booking needs Pro").
@@ -63,7 +63,7 @@ Built into `trailer/out/ig/deliver/` (PIPELINE §6.2: two passes, the message ma
 
 ## 3. TikTok (post first)
 
-**Cover:** TikTok's feed autoplays from frame 0, which is the hook picture itself (the ringing light, three rings, "Three rings. / Gloves on. / You can't."), so the cover only shows on the profile grid and in search. Upload `…-cover.png` ("Three rings. / Gloves on. / You can't." over "Agency AI receptionist: / commonly $300 a month. / Ours: from $49 a month.", SCRIPT §7: the $300 keeps its hedge on the cover too) if the app offers "upload from photos"; otherwise pick the payoff frame **between 17.4 and 17.6 s (f521–528), never later** (every hedge and "No setup fee." printed, the pile at rest: three quotes and "$49 a month● / No setup fee.", bars to scale; from 17.6 s the pile fades out. Critic round 2 moved everything after the pickup 3 f later, SYNC-B) and add no TikTok text sticker.
+**Cover:** TikTok's feed autoplays from frame 0, which is the hook picture itself (the ringing light, three rings, "Three rings. / Gloves on. / You can't."), so the cover only shows on the profile grid and in search. Upload `…-cover.png` ("Three rings. / Gloves on. / You can't." over "Agency AI receptionist: / commonly $300 a month. / Ours: from $49 a month.", SCRIPT §7: the $300 keeps its hedge on the cover too) if the app offers "upload from photos"; otherwise pick the payoff frame **between 17.45 and 17.55 s (f524–526)** (every hedge and "No setup fee." settled, the pile at rest: three quotes and "$49 a month● / No setup fee.", bars to scale on their shared $0 axis; at 17.4 s, f521, "fee." is still rising, and from 17.6 s, f528, the pile fades out: critic round 3, TRUTH-R3-7) and add no TikTok text sticker.
 
 **Caption** (1,541 / 2,200 characters; keyword-first line for TikTok search; one ask; 4 hashtags; no link):
 
@@ -102,14 +102,14 @@ Checked 7 Oct 2026: 10 US live answering services, 8 agency pricing sources. Our
 
 **Cover:** Edit cover → Add from camera roll → `…-cover.png`. Fallback: frame 0, now a usable cover on its own (the ringing light with its three rings and "Three rings. / Gloves on. / You can't.").
 
-**Caption** (1,354 / 2,200 characters; `caption.py` READY; the 111-character first line lands whole; one ask; 4 hashtags; no link):
+**Caption** (1,360 / 2,200 characters; `caption.py` READY; the 111-character first line lands whole; one ask; 4 hashtags; no link; "How we checked is in the pinned comment." since critic round 3, TRUTH-R3-4: the pinned comment names no source, it says how the figures were checked):
 
 ```
 AI receptionist pricing, side by side: an agency retainer, a live answering service, and ours from $49 a month.
 
 Comment AGENT and we'll DM you the link. 5 free minutes for 14 days, no card.
 
-The numbers, checked on 7 Oct 2026: $300 a month is a common agency retainer for an AI receptionist, and agency setup fees often run around $1,500. The cheapest 50-minute plan we found among ten US live answering services was $99 a month. Those are staffed by people, so it's a different product. Sources are in the pinned comment.
+The numbers, checked on 7 Oct 2026: $300 a month is a common agency retainer for an AI receptionist, and agency setup fees often run around $1,500. The cheapest 50-minute plan we found among ten US live answering services was $99 a month. Those are staffed by people, so it's a different product. How we checked is in the pinned comment.
 
 An agency builds and runs it for you; ours you set up yourself, in under ten minutes. Keep your front desk for the work only people can do. Ours picks up when you can't: it tells callers it's an AI, answers from the documents you give it, takes messages and books the appointment into your calendar. It answers its own number, and you point your calls at it when nobody can pick up.
 
@@ -172,14 +172,16 @@ Each is ≤ 150 characters (fits TikTok's comment cap) and humanize-clean. Never
 |---|---|
 | An agency builder defends their price | Fair point. An agency builds and runs it for you, and that's worth paying for if you want it. Ours you set up yourself, so there's no setup fee. |
 | "X does it for $29" | True, some self-serve AI receptionist apps cost the same as ours or less. This one compares agencies and live answering services. |
-| "Is $49 all-in?" | No. $49 a month is the Starter plan fee. The agent's number is $1.15 a month, and minutes past the allowance are billed per minute. No setup fee. |
+| "Is $49 all-in?" | No. $49 a month is the Starter plan fee, excl. VAT. The agent's number is $1.15 a month, and minutes past the allowance are billed per minute. |
 | "Does $49 really book?" | Starter is $49 a month plus $1.15 for the number. Booking is included once you connect Google Calendar (in beta). The free trial doesn't book. |
 | "Does the free trial book?" | Not on the trial. It answers your own test calls: 5 free minutes, 14 days, no card. Booking starts on the $49 plan. |
 | "How many minutes?" | Minutes are included, and extra minutes are billed per minute. Send us a DM and we'll give you the current numbers. (Owner answers the DM with the settled figure.) |
 | "Can you build it for me?" | Yes, a custom build is quoted on its own. The $49 plan is the do-it-yourself one: you set it up in under ten minutes. |
 | "Does it say it's AI?" | Yes. It tells every caller it's an AI, and no setting turns that off. |
 | "Answering services are better, they're people" | They're people, and they handle things ours can't. Ours answers from what you wrote down, and when it isn't written, it says so. |
-| "Link your sources" | We don't link providers here. Every figure is from the provider's or agency's own public pricing page or guide, read on 7 Oct 2026. |
+| "Link your sources" | We don't link providers here. Every figure is from a provider's own pricing page or a published pricing guide, checked 7 Oct 2026. |
+
+Since critic round 3: "Is $49 all-in?" carries "excl. VAT" like every other text (TRUTH-R3-5; "No setup fee." dropped to fit 150, the captions carry it), and "Link your sources" no longer calls the agency figures agencies' own pages: six of the eight are published pricing guides (TRUTH-R3-3; its date is carried by §0 item 6).
 
 The "Can you build it for me?" reply matters: RESEARCH-product §6 warns that "agencies charge hundreds" must not make our own custom work sound cheap. Custom builds are quoted separately (`lib/pages/home/pricing.ts:243`).
 
@@ -187,13 +189,17 @@ The "Can you build it for me?" reply matters: RESEARCH-product §6 warns that "a
 
 ## 7. No-booking captions (use these captions whenever the message master is posted)
 
-**TikTok** (1,433 characters; READY; detect 89.6 PASS): the §3 caption with two edits:
+**TikTok** (1,416 characters; READY; detect 89.5 PASS): the §3 caption with three edits:
 - "…answers from the documents you give it, and books the appointment into your calendar." → "…answers from the documents you give it, and takes a message for your team."
 - delete "Booking needs Google Calendar connected (in beta; Google Calendar is a trademark of Google LLC)."
+- "…it answers only your own test calls and doesn't book." → "…it answers only your own test calls."
 
-**Instagram** (1,229 characters; READY; detect 78.0 PASS): the §4 caption with two edits:
+**Instagram** (1,218 characters; READY; detect 78.1 PASS): the §4 caption with three edits:
 - "…answers from the documents you give it, takes messages and books the appointment into your calendar." → "…answers from the documents you give it and takes messages for your team."
 - delete "Booking needs Google Calendar connected (in beta; Google Calendar is a trademark of Google LLC)."
+- "The free trial answers only your own test calls and doesn't book." → "The free trial answers only your own test calls."
+
+The third edit (critic round 3, TRUTH-R3-1): once booking is gone from the copy, singling out that the *trial* doesn't book would imply the $49 plan does, which is false until §0 items 1–2 are ticked (`entitlements.ts:43`, `pricing.ts:91`; SCRIPT §9). The DM's no-booking cut (§5) already drops "The trial doesn't book.".
 
 **Alt text:** "A sample call record turns from Answered to Message taken: It picks up when you can't, and takes a message."
 
@@ -221,10 +227,10 @@ The "Can you build it for me?" reply matters: RESEARCH-product §6 warns that "a
 | Text | `caption.py` | `detect.py` | `humanize.py` |
 |---|---|---|---|
 | TikTok caption | READY (1,541 chars; 105-char first line lands whole; 2/2 search terms in the visible window; 1 ask; 4 tags) | **87.5 PASS** | nothing to strip |
-| Instagram caption | READY (1,354 chars; 111-char first line; 2/2 search terms; 1 ask; 4 tags) | **78.0 PASS** | nothing to strip |
+| Instagram caption | READY (1,360 chars since critic round 3; 111-char first line; 2/2 search terms; 1 ask; 4 tags) | **76.9 PASS** | nothing to strip |
 | Instagram pinned comment | | **74.3 PASS** | nothing to strip |
 | TikTok pinned comment (137 chars since critic round 1: + "live") | | 62.0, "too short to judge" | nothing to strip |
 | DM | | **91.1 PASS** | nothing to strip |
-| Ready replies (10) | all ≤ 150 chars | | nothing to strip |
+| Ready replies (10) | all ≤ 150 chars ("Is $49 all-in?" 142, "Link your sources" 130 since critic round 3) | | nothing to strip |
 | Alt text | | | nothing to strip (re-run on the hook-swap alt text, 617 chars) |
-| No-booking captions | READY / READY | 89.6 / 78.0 PASS | |
+| No-booking captions (three edits since critic round 3) | READY / READY (1,416 / 1,218 chars) | 89.5 / 78.1 PASS | nothing to strip |

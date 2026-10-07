@@ -28,15 +28,15 @@ import { GRAPHITE } from '../../../kb/theme';
 import { CAP_OUT } from '../../components/Captions';
 import { ZoneRect } from '../../components/ZoneGuard';
 import * as T from '../timing';
-import { baseline, CHIP, OURS, SCALE, TRACK, type Box } from './layout';
+import { at as atPose, AXIS, baseline, CHIP, OURS, SCALE, SLIP1, SLIP2, TRACK, type Box } from './layout';
 import { IG5_ZONES } from '../zones';
-import { pileExitAt } from './Papers';
+import { pileExitAt, pileFadeAt, slip1State, slip2State } from './Papers';
+import { springMoving } from './settle';
 import { Figure, figWidth, money, objSpec, Print, ScaleBar } from './type';
 
 const M = T.M;
 const SUNDAY = MOMENT_LIGHTS.sunday;
 const SHADOW = meshShadowInk(MUTED_MESH);
-const EPS = 2e-4;
 
 /* ── ours' clock ── */
 /** b4: ours rises 2 f before "Ours?" (the card lead), 4 f after the pickup (the orb's 3-frame seed and SPRING.pop play
@@ -46,14 +46,22 @@ export const OURS_RISE = M.ours - 2;
 const RISE_FROM = 40;
 /** b5: ours glides up just behind the pile's exit, clear of the caption band before "You" rises there */
 export const OURS_UP = M.you - 5;
+/** its glide up: CRITICALLY damped (ζ ≈ 1: springUnit's critical branch), so the 542 px travel lands with no rebound
+ *  and is near rest as "You set it up yourself." rises (crit-r3 LOOK3-P1: on SPRING.site it peaked at 38 px per 120 fps
+ *  frame, overshot 42 px and drifted back while the caption rose — the reel's one whip). Peak ≈ 23 px per 120 fps
+ *  frame at OURS_UP + 2.1; its bottom edge is still ≈ 95 px over the band (y 1180) as "You" rises (OURS_UP + 3) */
+export const OURS_GLIDE = { stiffness: 200, damping: 28.3, mass: 1 } as const;
+/** ours' b5 glide, 0 → 1 (the ground's pool follows it: Stage.tsx groundKeyAt) */
+export const oursUpAt = (t: number) => springUnit(t - OURS_UP, OURS_GLIDE);
 /** b4 rise, b5 glide; null before its rise. `rise`: how far it still is under its b4 place (px) */
 export function oursY(t: number): { y: number; opacity: number; moving: boolean; rise: number } | null {
   if (t < OURS_RISE - 0.5) return null;
   const e = springUnit(t - OURS_RISE, SPRING.site);
-  const g = springUnit(t - OURS_UP, SPRING.site);
+  const g = oursUpAt(t);
   const rise = (1 - e) * RISE_FROM;
   const y = mix(OURS.y4 + rise, OURS.y5, g);
-  return { y, opacity: smooth(0, 0.35, e), moving: Math.abs(1 - e) > EPS || (g > 0 && Math.abs(1 - g) > EPS), rise };
+  // crit-r3 LOOK3-B1: moving by each spring's envelope (monotone), never |1 − u| (it dips at every overshoot crossing)
+  return { y, opacity: smooth(0, 0.35, e), moving: springMoving(t - OURS_RISE, SPRING.site) || springMoving(t - OURS_UP, OURS_GLIDE), rise };
 }
 /** the fold into the chip (0 → 1 from "It") */
 export const FOLD = [M.it, M.it + 16] as const;
@@ -129,6 +137,9 @@ export const Ours: React.FC<{ t: number }> = ({ t }) => {
   // its hairline: drawn on "forty-nine", undrawn with the pile on "You"
   const bar = tween(t, [M.fortyNine, M.fortyNine + 12], [0, 1], EASE.draw) * (1 - pileExitAt(t));
   const lifted = 4 + 2.5 * Math.max(0, 1 - springUnit(t - OURS_RISE, SPRING.site));
+  // its teal edge 2 → 3 px on "forty-nine" (crit-r3 LOOK3-P3: the climax's word is ours' own picture event — with the
+  // pool's bloom behind it and the $0 axis drawing), back to the chip's 2 px through the fold
+  const edge = mix(2 + tween(t, [M.fortyNine - 1, M.fortyNine + 3], [0, 1], EASE.out3), 2, f);
   return (
     <>
       <div
@@ -140,7 +151,7 @@ export const Ours: React.FC<{ t: number }> = ({ t }) => {
           height: r.h,
           borderRadius: r.rad,
           background: '#ffffff',
-          boxShadow: `inset 0 0 0 2px ${SUNDAY.orb[2]}, ${meshElevation(mix(lifted, 2, f), SHADOW, 1)}`,
+          boxShadow: `inset 0 0 0 ${edge.toFixed(3)}px ${SUNDAY.orb[2]}, ${meshElevation(mix(lifted, 2, f), SHADOW, 1)}`,
           overflow: 'hidden',
           opacity: o.opacity >= 0.999 ? undefined : o.opacity,
           ...subpixel(`translate(${r.x.toFixed(3)}px, ${r.y.toFixed(3)}px)`, moving),
@@ -174,6 +185,41 @@ export const Ours: React.FC<{ t: number }> = ({ t }) => {
         </>
       ) : null}
       {o.opacity > 0.5 && f < 0.5 ? <ZoneRect what="object ours" rect={{ x: r.x, y: r.y, w: r.w, h: r.h }} /> : null}
+    </>
+  );
+};
+
+/* ── the bars' shared $0 axis (crit-r3 LOOK3-P4) ── */
+/** on "forty-nine" a graphite hairline draws top to bottom just left of the bars' $0 end (x 160), from the $300 bar's
+ *  row down to the $49 bar's, each bar joined to it by a tick on its row — the three bars, in three cards, read as ONE
+ *  scale (the rule stays off x 160: every quote's and ours' words start there). It goes with the pile (its 3 f fade). */
+export const ScaleAxis: React.FC<{ t: number }> = ({ t }) => {
+  if (t < M.fortyNine - 0.5) return null;
+  const fade = 1 - pileFadeAt(t);
+  if (fade <= 0.002) return null;
+  const a = slip1State(t);
+  const b = slip2State(t);
+  const o = oursY(t);
+  if (!a || !b || !o) return null;
+  // each bar's $0 end in frame px (the pile is at rest by now; ours too, until "You")
+  const rows = [atPose(a.pose, SCALE.x0, SLIP1.bar.y), atPose(b.pose, SCALE.x0, SLIP2.bar.y), { x: OURS.x + SCALE.x0, y: o.y + OURS.bar.y }];
+  const y0 = rows[0].y;
+  const y1 = rows[2].y;
+  const draw = tween(t, [M.fortyNine, M.fortyNine + AXIS.draw], [0, 1], EASE.draw);
+  const head = y0 + (y1 - y0) * draw;
+  const ink = AXIS.ink * fade;
+  const half = AXIS.stroke / 2;
+  return (
+    <>
+      <svg width={1080} height={1920} style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible', pointerEvents: 'none' }} aria-hidden>
+        {head - y0 > 0.3 ? <line x1={AXIS.x} y1={y0} x2={AXIS.x} y2={head} stroke={GRAPHITE.text} strokeOpacity={ink.toFixed(4)} strokeWidth={AXIS.stroke} strokeLinecap="round" /> : null}
+        {rows.map((r, i) => {
+          // each tick reaches out to its bar as the axis passes its row (2 f)
+          const k = tween(t, [M.fortyNine + AXIS.draw * ((r.y - y0) / (y1 - y0)) - 0.5, M.fortyNine + AXIS.draw * ((r.y - y0) / (y1 - y0)) + 1.5], [0, 1], EASE.out3);
+          return k > 0.01 ? <line key={i} x1={AXIS.x} y1={r.y} x2={AXIS.x + (r.x - AXIS.x - half) * k} y2={r.y} stroke={GRAPHITE.text} strokeOpacity={ink.toFixed(4)} strokeWidth={AXIS.stroke} strokeLinecap="round" /> : null;
+        })}
+      </svg>
+      {fade > 0.5 && draw > 0 ? <ZoneRect what="object $0 axis" rect={{ x: AXIS.x - half, y: y0 - half, w: rows[0].x - AXIS.x + AXIS.stroke, h: head - y0 + AXIS.stroke }} /> : null}
     </>
   );
 };

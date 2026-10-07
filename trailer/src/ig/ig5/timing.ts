@@ -105,7 +105,7 @@ export const HOOK: { readonly hooks: readonly VoiceId[]; readonly agency: VoiceI
   agency: 'ig5-02g',
   agencyT1: 'ig5-02gt',
 };
-const BODY = { answering: 'ig5-03', ours: 'ig5-04', setup: 'ig5-05', does: 'ig5-06', cta: 'ig5-07' } as const;
+const BODY = { answering: 'ig5-03', ours: 'ig5-04', setup: 'ig5-05', does: 'ig5-06-msg', cta: 'ig5-07' } as const;
 /** full → T1 (HOOK.agencyT1) → T1 + T2 (+ ig5-05t): never a hedge cut (SCRIPT §4.3, HOOKS §1.1) */
 const ladder = (hook: VoiceId): readonly Cast[] => {
   const full: Cast = { hook, agency: HOOK.agency, ...BODY };
@@ -286,6 +286,9 @@ export const NUDGE: Partial<Record<VoiceId, Readonly<Record<number, number>>>> =
   /** crit-r2 SYNC-A: "a" and "month." share one stamp on the creaky vowel of "month" (local 100.7); her schwa starts
    *  ≈ 3 f before it, out of the d-release of "hundred" */
   'ig5-02gt': { 6: -3 },
+  /** crit-r3 SYNC3-A: "No" is stamped on its vowel (her /n/ starts 2.3 f before: the take's envelope jumps −62 → −38 dB
+   *  at local 2.565 s), "setup" 2.1 f after its /s/ (the > 3 kHz band rises at 2.735 s); "fee." is on time */
+  'ig5-04': { 6: -2.3, 7: -2.1 },
   'ig5-05t': { 1: -3, 3: -4.5 },
   'ig5-06': { 2: -3 },
   'ig5-06-msg': { 2: -3 },
@@ -348,7 +351,8 @@ export const M = {
   fromOurs: on('ours', 1),
   fortyNine: on('ours', 2),
   monthOurs: on('ours', 4),
-  noSetup: [on('ours', 6), on('ours', 7), on('ours', 8)] as const,
+  /** "No" and "setup" as she says them (crit-r3 SYNC3-A: NUDGE — on the stamps they printed 3–4 f late) */
+  noSetup: [said('ours', 6), said('ours', 7), on('ours', 8)] as const,
   /** b5: on "You" the pile leaves up and ours glides up; the track on "set"; the dots fill from "yourself" one per
    *  16th; the fourth turns into a check (T2 has no "minutes": it lands with the fourth dot) */
   you: on('setup', 0),
@@ -440,9 +444,11 @@ const PIC = {
   /** Stage.tsx orbPose: the glide runs a LINEAR clock under its eases (x out3, y inOut, crit-r2 B1): she is within 1 px
    *  of the full stop 2 f before M.glide[1] — her landing's ping and chime go there */
   glideLand: M.glide[1] - 2,
-  /** Papers.tsx PILE_EXIT: the pile fades out (linear, 3 f) as it starts up through its mask from M.you − 8, gone by
-   *  M.you − 5, as ours starts its glide up (Ours.tsx OURS_UP) — the whoosh goes there (crit-r2 B2) */
-  pileOut: M.you - 5,
+  /** Papers.tsx PILE_EXIT: the pile fades out (linear, 3 f) from M.you − 8, gone by M.you − 5, as ours starts its
+   *  glide up (Ours.tsx OURS_UP = M.you − 5, critically damped since crit-r3 LOOK3-P1: fastest ≈ 2 f in, at M.you − 3)
+   *  — the whoosh's peak goes on ours' travel, not the pile's last frame (crit-r3 S-R3-1: its energy peaked 2–4 f ahead
+   *  of the reel's fastest card move) */
+  oursUp: M.you - 3,
   /** Ours.tsx: the fourth dot's check at M.dots[3] + 2 */
   check: M.dots[3] + 2,
   /** Record.tsx: REC_UP = M.it + 8 (SPRING.site); ANSWERED_AT = M.up (the pill starts up on the click, legible 2 f later:
@@ -482,7 +488,7 @@ export const HITS: Hit<Snd>[] = [
   counter(M.ninetyNine, 0.36, 'b3 “ninety-nine”: $99 rises; its 198 px bar measures out under it', 2),
   H(M.for50[1] - 1, 'fx-tock', 'none', 0.62, 3, 'b3 “fifty”: “50” prints (a frame ahead of the word)', { db: 1 }),
   // b4 — THE STOP-TIME (the bed cut on its 16th, MUSIC.stop): the pickup, her birth and "Ours?" in the room tone alone
-  H(M.pickup - 11, 'fx-seed', 'sunday', PHONE_X, 3, 'b4 the seed rises out of the last ring into the pickup (it peaks on the click)', { db: -2 }),
+  // (crit-r3 S-R3-2: no fx-seed — under ring 3's trill and the bed's swell it was never heard; trill → cut → click → ting)
   H(M.pickup, 'fx-pickup', 'none', PHONE_X, 1, 'b4 PICKUP (the bed’s cut + 1, 6 f before “Ours?”): the click — the phone that rang since frame 0 is answered', { db: 0 }),
   H(M.pickup + 3, 'fx-ting', 'sunday', PHONE_X, 2, 'b4 … the rose light springs open into her teal orb (the birth’s ting)', { db: -4, layer: true }),
   H(PIC.oursLand, 'land', 'none', 0.5, 3, 'b4 ours lands under the pile as the quotes square up (× .88, every $0 on x 160), "Ours?" on it', { db: -4 }),
@@ -492,7 +498,8 @@ export const HITS: Hit<Snd>[] = [
   H(M.fortyNine + 1, 'fx-scratch', 'none', [0.2, 0.3], 3, 'b4 … ours’ 86 px hairline draws under the pile’s 174 and 528', { db: -10 }),
   H(M.noSetup[0], 'fx-tag', 'sunday', 0.78, 3, 'b4 “No setup fee.” prints teal at ours’ upper right, under the setup stub’s column', { db: 6 }),
   // b5 — set it up yourself
-  H(PIC.pileOut, 'whoosh-soft', 'none', [0.5, 0.5], 3, 'b5 the pile leaves up through its mask; ours glides up into the cleared stage', { db: -4 }),
+  // (crit-r3 S-R3-1: on ours' travel and +3 dB — at −4 dB on the pile's last frame only its 4–12 kHz band cleared the bed)
+  H(PIC.oursUp, 'whoosh-soft', 'none', [0.5, 0.5], 3, 'b5 the pile has left up through its mask; ours glides up into the cleared stage (the whoosh on its travel)', { db: -2 }),
   H(M.set + 1, 'fx-scratch', 'none', [0.2, 0.62], 3, 'b5 “set”: the track draws with four empty dots', { db: -8 }),
   ...(['fx-pluck-e5', 'fx-pluck-fs5', 'fx-pluck-gs5', 'fx-pluck-b5'] as const).map((snd, k) =>
     // crit-r2 S-R2-7a: −3 dB (all four and the check fall on "up yourself." since T2)
@@ -520,7 +527,10 @@ export const HITS: Hit<Snd>[] = [
   ...endHits(END_CARD).map((h) => (h.snd === 'fx-menu-open' ? { ...h, db: 6 } : h.snd === 'fx-keys' ? { ...h, db: -1 } : h)),
   // THE BUILD: her last word lands 34 f before the bar — a riser cresting with the roll, then the shared stack
   H(IMPACT - 10, 'riser', 'none', 0.5, 1, 'END the build’s crest under the roll (peaks a 16th before the inhale)', { db: 1.5 }),
-  ...impactHits(IMPACT),
+  // the shared stack with its `slam` crack 6 dB down (mastering, docs/ig/ig5/DELIVERY.md): at full level its first 4 ms,
+  // pinned by the master limiter at −1.65 dBTP, decoded from the delivery AAC at −0.73 dBTP (check-delivery ≤ −1.0); at
+  // −6 the hottest decoded frame is −1.66 (message) / −1.46 (booking) and check-mix is unchanged (climax, arc, words, name)
+  ...impactHits(IMPACT).map((h) => (h.snd === 'slam' ? { ...h, db: (h.db ?? 0) - 6 } : h)),
 ];
 export const CUES: Cue[] = buildCues(HITS, { sfx: SFX, speaking, roomAt });
 

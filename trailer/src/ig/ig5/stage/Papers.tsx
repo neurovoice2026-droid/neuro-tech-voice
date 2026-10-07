@@ -47,6 +47,7 @@ import { SET_INK } from '../../components/Captions';
 import { ZoneRect } from '../../components/ZoneGuard';
 import * as T from '../timing';
 import { B2_DROP, baseline, bbox, mixPose, PILE, poseTransform, SCALE, SLIP1, SLIP1_REST, SLIP2, SLIP2_REST, STUB, STUB_REST, type Box, type Pose } from './layout';
+import { springMoving } from './settle';
 import { Figure, figWidth, labelSpec, money, objSpec, Print, rollEase, ScaleBar } from './type';
 
 const M = T.M;
@@ -61,7 +62,9 @@ export const liftAt = (t: number) => tween(t, M.lift, [0, 1], EASE.inOut);
 /** the square-up from the pickup: slip 2 first (the lowest paper: it slides UNDER the stub, clear of ours rising
  *  beneath it), then slip 1 and its stapled stub together a 32nd later — a paper never passes over another's figure */
 const SQ_ORDER = { slip2: 0, slip1: 1, stub: 1 } as const;
-const squareAt = (t: number, k: keyof typeof SQ_ORDER) => springUnit(t - (M.pickup + SQ_ORDER[k] * (SIX / 2)), SPRING.site);
+/** the square-up's release of paper `k` (squareAt's clock) */
+const squareFrom = (k: keyof typeof SQ_ORDER) => M.pickup + SQ_ORDER[k] * (SIX / 2);
+const squareAt = (t: number, k: keyof typeof SQ_ORDER) => springUnit(t - squareFrom(k), SPRING.site);
 const pileK = (t: number) => tween(t, [M.pickup, M.pickup + 14], [0, 1], EASE.inOut);
 /** the FIGURES' and bars' ink: 1 → .6 as they square up (the comparison steps back) */
 export const pileInk = (t: number) => mix(1, PILE.ink, pileK(t));
@@ -78,7 +81,6 @@ export const pileExitAt = (t: number) => tween(t, [PILE_EXIT.at, PILE_EXIT.at + 
 export const pileFadeAt = (t: number) => tween(t, [PILE_EXIT.at, PILE_EXIT.at + PILE_EXIT.fade], [0, 1], (v) => v);
 
 type PaperState = { pose: Pose; opacity: number; moving: boolean; lift: number };
-const EPS = 2e-4;
 
 function slipState(t: number, key: 'slip1' | 'slip2', rest: Pose, riseAt: number): PaperState | null {
   if (t < riseAt - 0.5) return null;
@@ -90,7 +92,9 @@ function slipState(t: number, key: 'slip1' | 'slip2', rest: Pose, riseAt: number
   const u = squareAt(t, key);
   if (u > 0) pose = mixPose(pose, PILE[key], u);
   pose = { ...pose, y: pose.y - q * PILE_EXIT.travel };
-  const moving = Math.abs(1 - e) > EPS || (l > 0 && l < 1) || (u > 0 && Math.abs(1 - u) > EPS) || q > 0;
+  // crit-r3 LOOK3-B1: each spring's ENVELOPE, not |1 − u| (which dips under ε at every overshoot crossing and dropped
+  // the paper off its glide layer for 1–5 render frames: its prices twinkled crisp ↔ soft on a pile at rest)
+  const moving = springMoving(t - riseAt, SPRING.site) || (l > 0 && l < 1) || springMoving(t - squareFrom(key), SPRING.site) || q > 0;
   return { pose, opacity: smooth(0, 0.35, e) * (1 - pileFadeAt(t)), moving, lift: 2 + 1.4 * Math.max(0, 1 - e) };
 }
 export const slip1State = (t: number) => slipState(t, 'slip1', SLIP1_REST, M.slip1);
@@ -107,7 +111,7 @@ export function stubState(t: number): PaperState | null {
   const u = squareAt(t, 'stub');
   if (u > 0) pose = mixPose(pose, PILE.stub, u);
   pose = { ...pose, y: pose.y - q * PILE_EXIT.travel };
-  const moving = Math.abs(1 - k) > EPS || (l > 0 && l < 1) || (u > 0 && Math.abs(1 - u) > EPS) || q > 0;
+  const moving = springMoving(t - M.setup, SPRING.land) || (l > 0 && l < 1) || springMoving(t - squareFrom('stub'), SPRING.site) || q > 0;
   return { pose, opacity: smooth(0, 0.25, k) * (1 - pileFadeAt(t)), moving, lift: 1.6 + 3 * Math.max(0, 1 - k) };
 }
 
@@ -345,6 +349,8 @@ export const Slip2: React.FC<{ t: number }> = ({ t }) => {
   const fiftyW = measureText('50', spec);
   const minW = measureText('minutes', spec);
   const barLen = SCALE.pxPerDollar * 99 * rollEase(t, M.ninetyNine);
+  // the empty amount slot (crit-r3 LOOK3-P2: slip 1's and the stub's idiom), going as "$99" rises into it
+  const slotA = 1 - tween(t, [M.ninetyNine - 1, M.ninetyNine + 5], [0, 1], EASE.inOut);
   const show = s.opacity > 0.5;
   // the figure's words ("from", "a month,", "for 50 minutes") rise as a unit 2 f before "from", each lifting on its word
   const unit = M.from99 - 2;
@@ -352,6 +358,9 @@ export const Slip2: React.FC<{ t: number }> = ({ t }) => {
     <>
       <Paper s={s} w={S.w} h={S.h} what="slip 2 (answering)" stripe={S.stripe}>
         <Tag t={t} x={S.tag.x} y={S.tag.y} size={S.tag.size} words={TAG2} unit={M.tag2[0] - 2} ink={words} moving={s.moving} />
+        {slotA > 0.002 ? (
+          <div style={{ position: 'absolute', left: figX - S.slot.padL, top: S.slot.y, width: figW + S.slot.padL + S.slot.pad, height: S.slot.h, borderRadius: S.slot.r, boxShadow: `inset 0 0 0 1.5px rgba(43, 42, 46, ${(0.3 * slotA).toFixed(3)})` }} />
+        ) : null}
         <Print t={t} at={unit} text="from" x={S.fig.x} y={lowTop} size={S.fig.from} color={GRAPHITE.text} ink={words * liftOn(t, M.from99)} moving={s.moving} />
         <Figure t={t} value={99} roll={M.ninetyNine} x={figX} y={S.fig.y} size={S.fig.size} color={RUSH.ink} ink={ink} moving={s.moving} />
         <Print t={t} at={unit + UNIT_STAGGER} text="a month," x={colX} y={upTop} size={small} color={GRAPHITE.text} ink={words * liftOn(t, M.month99)} moving={s.moving} />

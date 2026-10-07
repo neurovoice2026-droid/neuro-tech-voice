@@ -11,8 +11,9 @@
  * The launch-gate cut (ig5-06-msg: "…and takes a message.") shows one step "Took a message" and swaps to Message taken
  * (no BETA chip).
  *
- * b7 (the shared end card): the record is pulled back and up over the CTA (× .62, dimmed to 50 %), her orb docked on
- * it; it goes out under the card's light on the bar.
+ * b7 (the shared end card): the record is pulled back and up over the CTA (× .55 about (589, 260), dimmed to 50 %:
+ * centred on the end card's axis x 540, crit-r3 LOOK3-P6), her orb docked on it; it goes out under the card's light on
+ * the bar.
  *
  * Chrome only (≤ 32 px, each on or after the spoken word it belongs to). Every rect is reported in frame px.
  */
@@ -29,6 +30,7 @@ import { ZoneRect } from '../../components/ZoneGuard';
 import * as T from '../timing';
 import { at as atPose, bbox, poseTransform, RECORD, RECORD_BACK, type Pose } from './layout';
 import { reveal } from '../../../components/Type';
+import { springMoving } from './settle';
 import { labelSpec } from './type';
 
 const M = T.M;
@@ -36,7 +38,6 @@ const RUSH = MOMENT_LIGHTS.rush;
 const SUNDAY = MOMENT_LIGHTS.sunday;
 const SHADOW = meshShadowInk(MUTED_MESH);
 const E = T.END_CARD;
-const EPS = 2e-4;
 
 /** the record rises a quarter beat after "It", once ours' fold has lifted clear of its place */
 export const REC_UP = M.it + 8;
@@ -51,13 +52,17 @@ const OUTCOME_AT = M.books - 1;
 /** the BETA chip lands once Booked is up (crit-r2 SYNC-C / S-R2-3: at + 1 it sat beside a still-readable Answered) */
 const BETA_AT = OUTCOME_AT + 3;
 const OUTCOME: OutcomeKind = M.booked ? 'booked' : 'messageTaken';
-/** the tool steps: availability after "can't", the booking on "books" (the cut: "Took a message" on "takes") */
+/** the tool steps: availability after "can't", the booking on "books" (the cut: "Took a message" on "takes"). The
+ *  outcome step resolves AS the pill's outcome reads (OUTCOME_AT + 3 = "books" + 2): in the app the outcome is the
+ *  call's result, written after the tool returns — at + 8 Booked / Message taken sat beside a still-spinning step for
+ *  ≈ 0.2 s (crit-r3 TRUTH-R3-8 / SYNC3-P1). It still rises on her word (never before it) */
+const OUTCOME_STEP_DONE = M.books + 2;
 const TOOLS = M.booked
   ? [
       { label: 'Checked your availability', at: M.cant + 4, done: M.books - 7 },
-      { label: 'Booked an appointment', at: M.books, done: M.books + 8 },
+      { label: 'Booked an appointment', at: M.books, done: OUTCOME_STEP_DONE },
     ]
-  : [{ label: 'Took a message', at: M.books, done: M.books + 8 }];
+  : [{ label: 'Took a message', at: M.books, done: OUTCOME_STEP_DONE }];
 
 /** the end card's pull-back (from just before the comment field rises) and the record's exit on the bar */
 const PULL = [E.field - 8, E.field + 12] as const;
@@ -86,7 +91,7 @@ export function recordState(t: number): { pose: Pose; opacity: number; moving: b
   const x = mix(RECORD.x, RECORD_BACK.c.x + (RECORD.x - RECORD_BACK.c.x) * RECORD_BACK.s, p);
   const y = mix(RECORD.y + (1 - e) * 72, RECORD_BACK.c.y + (RECORD.y - RECORD_BACK.c.y) * RECORD_BACK.s, p) - 30 * q;
   const opacity = smooth(0, 0.35, e) * mix(1, RECORD_BACK.opacity, p) * (1 - q);
-  return { pose: { x, y, r: 0, s }, opacity, moving: Math.abs(1 - e) > EPS || (p > 0 && p < 1) || q > 0 };
+  return { pose: { x, y, r: 0, s }, opacity, moving: springMoving(t - REC_UP, SPRING.site) || (p > 0 && p < 1) || q > 0 };
 }
 /** her dock on the record (the dot's place), frame px, and the record's scale there */
 export function dockAt(t: number): { x: number; y: number; s: number } {
@@ -128,7 +133,9 @@ const ToolStep: React.FC<{ t: number; label: string; x: number; y: number; at: n
 const BetaChip: React.FC<{ t: number; x: number; y: number }> = ({ t, x, y }) => {
   const r = reveal(t, BETA_AT, { config: SPRING.pop, rise: 40, fade: 0.5, scaleFrom: 0.94 });
   const B = BETA_CHIP;
-  const moving = Math.abs(r.y) > 0.03 || Math.abs(r.scale - 1) > 1e-4;
+  // its layer while SPRING.pop lives, by its envelope (crit-r3 LOOK3-B1: |r.y| / the clamped scale dip at the overshoot's
+  // crossing and would drop it off its layer for a render frame)
+  const moving = springMoving(t - BETA_AT, SPRING.pop, 0.03 / 40);
   return (
     <div
       style={{
