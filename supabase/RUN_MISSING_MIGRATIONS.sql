@@ -5,8 +5,8 @@
 -- Covers migrations 002 → 005 (knowledge base, phone column + minutes RPC,
 -- workflows, google_drive integration).
 -- ORDER: run this BEFORE migrations/010_voice_providers.sql. If you run it
--- after 010, re-run 010 afterwards: this file recreates the older, broader
--- knowledge_documents policy that 010 narrows.
+-- after 010, re-run 010 and then 011 afterwards: this file recreates the
+-- older, broader knowledge_documents policy that 010 narrows.
 -- ══════════════════════════════════════════════════════════════════════════════
 
 -- ── 002: knowledge base ───────────────────────────────────────────────────────

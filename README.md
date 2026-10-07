@@ -21,11 +21,13 @@ cp .env.example .env.local     # fill in the values (never commit them)
 npm run dev                    # http://localhost:3000
 ```
 
-Database: apply the SQL files in `supabase/migrations/` in order (001 → 010) with
+Database: apply the SQL files in `supabase/migrations/` in order (001 → 011) with
 the Supabase CLI or the SQL editor, and create the private Storage bucket from
-`supabase/STORAGE_BUCKET.sql`. Migration `010_voice_providers.sql` is idempotent
-and additive (safe to re-run); it briefly locks the main tables, so apply it at
-low traffic (see docs/voice-providers.md §6).
+`supabase/STORAGE_BUCKET.sql`. Migrations `010` and `011` are idempotent and
+additive (safe to re-run); `010` briefly locks the main tables, so apply it at
+low traffic, and apply `011` after deploying the app version that ships it
+(see docs/voice-providers.md §6). On the Vercel Hobby plan, schedule the
+5-minute maintenance from Supabase with `supabase/ops/schedule_voice_maintenance.sql`.
 
 ## Scripts
 

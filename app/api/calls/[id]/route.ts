@@ -119,8 +119,9 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       }
     }
 
-    // RLS allows the owner to delete their call rows (the guard trigger only blocks INSERT/UPDATE).
-    const { error: deleteError } = await supabase.from('calls').delete().eq('id', row.id).eq('org_id', org.id)
+    // Ownership was checked above (findOrgCall); tenants cannot delete call rows
+    // directly (migration 011), so the row is removed server-side.
+    const { error: deleteError } = await createAdminClient().from('calls').delete().eq('id', row.id).eq('org_id', org.id)
     if (deleteError) throw dbError('calls delete', deleteError)
 
     const { error: auditError } = await createAdminClient().from('audit_log').insert({

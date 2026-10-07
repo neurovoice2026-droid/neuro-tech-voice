@@ -231,10 +231,11 @@ startup (`instrumentation.ts`) and shown by `GET /api/admin/voice/diagnostics`
   ±59 min); set `CRON_SECRET`. The Hobby plan rejects deployments whose crons
   run more than once a day. The job is designed for a 5-minute cadence (Cartesia
   polling, webhook and agent-sync retries, settling stuck voice saves): on Pro,
-  change the schedule to `*/5 * * * *`; on Hobby, have an external scheduler
-  send `GET /api/cron/voice-maintenance` with `Authorization: Bearer $CRON_SECRET`
-  every 5 minutes. With the daily schedule those retries wait up to a day (saves,
-  webhooks and calls themselves are unaffected).
+  change the schedule to `*/5 * * * *`; on Hobby, run
+  `supabase/ops/schedule_voice_maintenance.sql` (Supabase pg_cron + pg_net,
+  secret kept in Vault) so the endpoint is called every 5 minutes. Without
+  either, those retries wait up to a day (saves, webhooks and calls themselves
+  are unaffected).
 * Request bodies are limited to 4.5 MB: knowledge files up to 20 MB are uploaded
   directly to Supabase Storage with a signed URL; voice-clone uploads are capped at 4 MB.
 
@@ -245,6 +246,16 @@ startup (`instrumentation.ts`) and shown by `GET /api/admin/voice/diagnostics`
   while columns are added and legacy rows backfilled: apply it at low traffic.
   `lock_timeout = 5s` makes it fail fast (nothing applied, safe to re-run)
   instead of queueing behind a long transaction while blocking live calls.
+* Then apply `supabase/migrations/011_security_performance_hardening.sql`
+  (no DROP, safe to re-run) **after** deploying the application version that
+  deletes calls/numbers with the service role: it denies direct tenant
+  INSERT/DELETE on `calls` and `phone_numbers` (restrictive policies), pins
+  `search_path` on the remaining functions, removes RPC access to
+  `handle_new_user`, rewrites RLS policies to evaluate `auth.uid()` once per
+  statement and adds the foreign-key indexes reported by the Supabase advisors.
+  The remaining advisor notices are intentional: service-only tables have RLS
+  enabled with no policies, and new indexes show as unused until traffic grows.
+* Supabase Auth → enable *Leaked password protection* (dashboard setting).
 * Storage bucket `knowledge-documents` (private); the migration scopes object
   access to the owning org's folder.
 

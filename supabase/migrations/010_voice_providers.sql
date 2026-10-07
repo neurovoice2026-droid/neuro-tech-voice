@@ -118,7 +118,7 @@ CREATE INDEX IF NOT EXISTS agent_provider_resources_retry
 ALTER TABLE agent_provider_resources ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "agent_provider_resources_owner_read" ON agent_provider_resources;
 CREATE POLICY "agent_provider_resources_owner_read" ON agent_provider_resources
-  FOR SELECT USING (org_id IN (SELECT id FROM organizations WHERE user_id = auth.uid()));
+  FOR SELECT USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
 -- No insert/update/delete policies: only the service role writes provider state.
 
 DROP TRIGGER IF EXISTS agent_provider_resources_updated_at ON agent_provider_resources;
@@ -268,7 +268,7 @@ CREATE INDEX IF NOT EXISTS usage_ledger_org_created ON usage_ledger (org_id, cre
 ALTER TABLE usage_ledger ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "usage_ledger_owner_read" ON usage_ledger;
 CREATE POLICY "usage_ledger_owner_read" ON usage_ledger
-  FOR SELECT USING (org_id IN (SELECT id FROM organizations WHERE user_id = auth.uid()));
+  FOR SELECT USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
 
 CREATE OR REPLACE FUNCTION public.record_call_usage(
   p_org_id uuid, p_call_id uuid, p_key text, p_seconds integer, p_provider text, p_source text
@@ -405,7 +405,7 @@ DROP POLICY IF EXISTS "provider_voices_visible" ON provider_voices;
 CREATE POLICY "provider_voices_visible" ON provider_voices
   FOR SELECT USING (
     owner_org_id IS NULL
-    OR owner_org_id IN (SELECT id FROM organizations WHERE user_id = auth.uid())
+    OR owner_org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid()))
   );
 
 -- ─── Audit log ────────────────────────────────────────────────────────────────
@@ -426,7 +426,7 @@ CREATE INDEX IF NOT EXISTS audit_log_call_deleted ON audit_log USING gin (detail
 ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "audit_log_owner_read" ON audit_log;
 CREATE POLICY "audit_log_owner_read" ON audit_log
-  FOR SELECT USING (org_id IN (SELECT id FROM organizations WHERE user_id = auth.uid()));
+  FOR SELECT USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
 
 -- ─── Knowledge documents ──────────────────────────────────────────────────────
 ALTER TABLE knowledge_documents ADD COLUMN IF NOT EXISTS cartesia_doc_id text;
@@ -452,7 +452,7 @@ WHERE status = 'ready' AND elevenlabs_doc_id IS NOT NULL AND attached_at IS NULL
 -- RLS decides WHICH rows a tenant may touch; these triggers decide WHICH
 -- columns. Service-role (webhooks, server-side sync) is unaffected.
 CREATE OR REPLACE FUNCTION public.guard_platform_columns()
-RETURNS trigger LANGUAGE plpgsql AS $$
+RETURNS trigger LANGUAGE plpgsql SET search_path = public AS $$
 BEGIN
   IF current_user NOT IN ('authenticated', 'anon') THEN
     RETURN NEW;
@@ -574,26 +574,26 @@ CREATE TRIGGER calls_guard BEFORE INSERT OR UPDATE ON calls
 DROP POLICY IF EXISTS "organizations_owner" ON organizations;
 DROP POLICY IF EXISTS "organizations_owner_select" ON organizations;
 DROP POLICY IF EXISTS "organizations_owner_update" ON organizations;
-CREATE POLICY "organizations_owner_select" ON organizations FOR SELECT USING (user_id = auth.uid());
-CREATE POLICY "organizations_owner_update" ON organizations FOR UPDATE USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+CREATE POLICY "organizations_owner_select" ON organizations FOR SELECT USING (user_id = (SELECT auth.uid()));
+CREATE POLICY "organizations_owner_update" ON organizations FOR UPDATE USING (user_id = (SELECT auth.uid())) WITH CHECK (user_id = (SELECT auth.uid()));
 
 DROP POLICY IF EXISTS "agents_owner" ON agents;
 DROP POLICY IF EXISTS "agents_owner_select" ON agents;
 DROP POLICY IF EXISTS "agents_owner_update" ON agents;
 CREATE POLICY "agents_owner_select" ON agents FOR SELECT
-  USING (org_id IN (SELECT id FROM organizations WHERE user_id = auth.uid()));
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
 CREATE POLICY "agents_owner_update" ON agents FOR UPDATE
-  USING (org_id IN (SELECT id FROM organizations WHERE user_id = auth.uid()))
-  WITH CHECK (org_id IN (SELECT id FROM organizations WHERE user_id = auth.uid()));
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())))
+  WITH CHECK (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
 
 DROP POLICY IF EXISTS "knowledge_documents_owner" ON knowledge_documents;
 DROP POLICY IF EXISTS "knowledge_documents_owner_select" ON knowledge_documents;
 DROP POLICY IF EXISTS "knowledge_documents_owner_update" ON knowledge_documents;
 CREATE POLICY "knowledge_documents_owner_select" ON knowledge_documents FOR SELECT
-  USING (org_id IN (SELECT id FROM organizations WHERE user_id = auth.uid()));
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
 CREATE POLICY "knowledge_documents_owner_update" ON knowledge_documents FOR UPDATE
-  USING (org_id IN (SELECT id FROM organizations WHERE user_id = auth.uid()))
-  WITH CHECK (org_id IN (SELECT id FROM organizations WHERE user_id = auth.uid()));
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())))
+  WITH CHECK (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
 
 -- ─── RPC privileges ───────────────────────────────────────────────────────────
 -- SECURITY DEFINER functions are executable by PUBLIC by default; with the
@@ -625,7 +625,7 @@ DO $$ BEGIN
         FOR SELECT TO authenticated
         USING (
           bucket_id = 'knowledge-documents'
-          AND (storage.foldername(name))[1] IN (SELECT id::text FROM public.organizations WHERE user_id = auth.uid())
+          AND (storage.foldername(name))[1] IN (SELECT id::text FROM public.organizations WHERE user_id = (SELECT auth.uid()))
         )
     $p$;
   END IF;

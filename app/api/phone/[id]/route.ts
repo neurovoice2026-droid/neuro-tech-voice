@@ -184,7 +184,9 @@ export async function DELETE(request: Request, { params }: Params) {
       }
     }
 
-    const { error } = await supabase.from('phone_numbers').delete().eq('id', id).eq('org_id', org.id)
+    // Ownership was checked above; tenants cannot delete number rows directly
+    // (migration 011: that would skip the Twilio/Stripe/provider cleanup).
+    const { error } = await admin.from('phone_numbers').delete().eq('id', id).eq('org_id', org.id)
     if (error) throw new Error(`phone_numbers delete failed: ${error.message}`)
     const { error: auditErr } = await admin.from('audit_log').insert({
       org_id: org.id,

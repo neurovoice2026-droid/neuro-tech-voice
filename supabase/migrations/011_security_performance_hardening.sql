@@ -1,0 +1,103 @@
+-- ══════════════════════════════════════════════════════════════════════════════
+-- 011 · Security & performance hardening (Supabase advisor findings)
+--
+-- Idempotent and additive: no DROP statements, safe to re-run.
+--   • tenants can no longer DELETE call / phone-number rows directly through
+--     PostgREST (the API routes delete them server-side after the provider,
+--     Twilio and Stripe cleanup) and cannot INSERT them either
+--   • fixed search_path on the remaining functions (lint 0011)
+--   • handle_new_user() (auth trigger) is not callable through /rest/v1/rpc
+--   • RLS policies evaluate auth.uid() once per statement (lint 0003)
+--   • covering indexes for foreign keys (lint 0001)
+-- Requires 010. Deploy the application version that deletes calls/numbers
+-- with the service role BEFORE applying this file.
+-- ══════════════════════════════════════════════════════════════════════════════
+
+SET lock_timeout = '5s';
+
+-- ─── Restrictive policies: no direct tenant INSERT/DELETE ─────────────────────
+-- calls_owner and phone_numbers_owner (001) are FOR ALL; restrictive policies
+-- are AND-ed with them, so SELECT/UPDATE keep working (UPDATE stays limited by
+-- the guard trigger) while INSERT/DELETE are denied for signed-in users.
+DO $$ BEGIN
+  CREATE POLICY "calls_no_tenant_delete" ON calls AS RESTRICTIVE FOR DELETE TO authenticated, anon USING (false);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "calls_no_tenant_insert" ON calls AS RESTRICTIVE FOR INSERT TO authenticated, anon WITH CHECK (false);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "phone_numbers_no_tenant_delete" ON phone_numbers AS RESTRICTIVE FOR DELETE TO authenticated, anon USING (false);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "phone_numbers_no_tenant_insert" ON phone_numbers AS RESTRICTIVE FOR INSERT TO authenticated, anon WITH CHECK (false);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- ─── Functions ────────────────────────────────────────────────────────────────
+ALTER FUNCTION public.set_updated_at() SET search_path = public;
+ALTER FUNCTION public.increment_minutes_used(uuid, integer) SET search_path = public;
+ALTER FUNCTION public.guard_platform_columns() SET search_path = public;
+-- Trigger function on auth.users: it runs as a trigger, never through RPC.
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
+
+-- ─── RLS: evaluate auth.uid() once per statement ──────────────────────────────
+ALTER POLICY "organizations_owner_select" ON organizations USING (user_id = (SELECT auth.uid()));
+ALTER POLICY "organizations_owner_update" ON organizations
+  USING (user_id = (SELECT auth.uid())) WITH CHECK (user_id = (SELECT auth.uid()));
+
+ALTER POLICY "agents_owner_select" ON agents
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
+ALTER POLICY "agents_owner_update" ON agents
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())))
+  WITH CHECK (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
+
+ALTER POLICY "knowledge_documents_owner_select" ON knowledge_documents
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
+ALTER POLICY "knowledge_documents_owner_update" ON knowledge_documents
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())))
+  WITH CHECK (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
+
+ALTER POLICY "phone_numbers_owner" ON phone_numbers
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
+ALTER POLICY "calls_owner" ON calls
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
+ALTER POLICY "integrations_owner" ON integrations
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
+ALTER POLICY "invoices_owner_read" ON invoices
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
+ALTER POLICY "workflows_owner" ON workflows
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
+ALTER POLICY "workflow_runs_owner" ON workflow_runs
+  USING (workflow_id IN (
+    SELECT w.id FROM workflows w
+    WHERE w.org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid()))
+  ));
+
+ALTER POLICY "agent_provider_resources_owner_read" ON agent_provider_resources
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
+ALTER POLICY "usage_ledger_owner_read" ON usage_ledger
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
+ALTER POLICY "provider_voices_visible" ON provider_voices
+  USING (owner_org_id IS NULL OR owner_org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
+ALTER POLICY "audit_log_owner_read" ON audit_log
+  USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
+
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'knowledge_docs_owner') THEN
+    EXECUTE $p$
+      ALTER POLICY "knowledge_docs_owner" ON storage.objects
+        USING (
+          bucket_id = 'knowledge-documents'
+          AND (storage.foldername(name))[1] IN (SELECT id::text FROM public.organizations WHERE user_id = (SELECT auth.uid()))
+        )
+    $p$;
+  END IF;
+END $$;
+
+-- ─── Foreign-key covering indexes ─────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS calls_agent_id ON calls (agent_id);
+CREATE INDEX IF NOT EXISTS calls_phone_number_id ON calls (phone_number_id);
+CREATE INDEX IF NOT EXISTS phone_numbers_agent_id ON phone_numbers (agent_id);
+CREATE INDEX IF NOT EXISTS usage_ledger_call_id ON usage_ledger (call_id);
+CREATE INDEX IF NOT EXISTS webhook_events_call_id ON webhook_events (call_id);
+CREATE INDEX IF NOT EXISTS webhook_events_org_id ON webhook_events (org_id);
+CREATE INDEX IF NOT EXISTS workflow_runs_call_id ON workflow_runs (call_id);
