@@ -133,7 +133,47 @@
       "direction": "SPARE, not placed by default: if the owner wants the phone-number cost spoken instead of the setup line, it replaces ig5-05 (time-neutral). Light and candid, the small print said out loud with a half-smile and no apology; \"a dollar fifteen\" clear (captions show $1.15).",
       "speak": "Plus the number: a dollar fifteen a month.",
       "emotion": "content"
+    },
+    {
+      "id": "ig5-01g",
+      "voice": "ava",
+      "say": "Three rings. Gloves on. You can't.",
+      "direction": "Reel 5 HOOK (docs/ig/ig5/HOOKS.md §1, the TikTok tournament winner), narrator, over the desk phone's third ring in a quiet room (no music yet): an owner naming a moment, not an ad. Calm, close and dry: three short falling sentences, gaps of 0.25 s or less. No drama on \"can't\", but its t must be released: a read that sounds like \"can\" inverts the line and is rejected. Card S1 [0-5] set at frame 0: \"Three rings.\" / \"Gloves on.\" / \"You can't.\" (\"Three\" stays a word). Target about 2.1-2.4 s.",
+      "speak": "Three rings. Gloves on. You can't.",
+      "emotion": "calm"
+    },
+    {
+      "id": "ig5-01g2",
+      "voice": "ava",
+      "say": "Three rings, gloves on. You can't.",
+      "direction": "ALTERNATE READING of ig5-01g (HOOKS §1.1), about 0.3 s quicker: two breaths instead of three, the same calm, dry read; \"can't\" with its t released. The same card: the display map shows \"rings,\" as \"rings.\" and \"gloves\" as \"Gloves\". timing.ts places it only if ig5-01g would put \"Agency AI receptionist:\" on screen after f78 (HOOKS §1.1 cast rule).",
+      "speak": "Three rings, gloves on. You can't.",
+      "emotion": "calm"
+    },
+    {
+      "id": "ig5-02g",
+      "voice": "ava",
+      "say": "Agency AI receptionist: three hundred a month, a common retainer. Setup, often fifteen hundred.",
+      "direction": "Reel 5 beat 2 for the winning hook (HOOKS §1.6, replaces ig5-02): read it like the price list it is, the same shape as ig5-03 (\"Live answering service: ...\"), matter-of-fact, never mocking. A small beat after the label. Light stress on \"three hundred\" and on \"often\" (the hedge: it must be heard); \"common\" audible; \"fifteen hundred\" a touch slower. Cards S2 [0-2] \"Agency AI receptionist:\" / S3 [3-9] \"$300 a month, a common retainer.\" / S4 [10-13] \"Setup, often $1,500.\"",
+      "speak": "Agency AI receptionist: three hundred a month, a common retainer. Setup, often fifteen hundred.",
+      "emotion": "calm"
+    },
+    {
+      "id": "ig5-02gt",
+      "voice": "ava",
+      "say": "Agency AI receptionist: commonly three hundred a month. Setup, often fifteen hundred.",
+      "direction": "TRIM T1 for ig5-02g (HOOKS §1.1, two tokens shorter), placed by timing.ts only if the full cast would push the CTA past f765. Same read as ig5-02g; \"commonly\" keeps the hedge and must be heard. Cards S2 [0-2] / S3 [3-7] \"commonly $300 a month.\" / S4 [8-11] \"Setup, often $1,500.\"",
+      "speak": "Agency AI receptionist: commonly three hundred a month. Setup, often fifteen hundred.",
+      "emotion": "calm"
+    },
+    {
+      "id": "ig5-01c",
+      "voice": "ava",
+      "say": "Closed at nine? Your phone's not.",
+      "direction": "RUNNER-UP HOOK for a later TikTok A/B (HOOKS §2, callout-3; its ig5-01n), over a phone ringing in a closed shop: a small rise on \"nine?\", then a dry, falling \"not.\" Calm, not a gotcha. Same body as the winner (ig5-02g). Card S1 [0-5] set at frame 0: \"Closed at 9?\" / \"Your phone's not.\" (display [2] \"nine?\" shows as \"9?\").",
+      "speak": "Closed at nine? Your phone's not.",
+      "emotion": "calm"
     }
   ],
-  "_notes": "Reel ig5 'Don't pay $300' (docs/ig/ig5/SCRIPT.md). DRAFT for scripts/ig5/voice-lines-ig5.json (PIPELINE.md §3.1): copy it there at build time; never write it into scripts/voice-lines-ig.json, which is an igHash input of the four delivered reels. Same schema as voice-lines-ig.json: say = the canonical words the captions and src/ig/ig5/timing.ts index (word k), in SPOKEN form; the Captions fork's display map shows numerals over word spans (ig5-01 [2-3] -> $300; ig5-02 [7-8] -> $1,500.; ig5-03 [4] -> $99, [8] -> 50; ig5-04 [2-3] -> $49; ig5-05-num [3-5] -> $1.15). speak = what Sonic performs, with NO <break/> tags (ig1-ig4 lesson: Sonic already pauses about 0.5 s at a sentence end and breaks doubled it); 'agent' lowercase so the keyword AGENT is never spelled. ONE role (ava = Tessa (Emotive), the same level and voices block as voice-lines-ig.json, env CARTESIA_IG_AVA_VOICE). Every id matches ^ig5- except the single borrow {id: ig1-07, borrow: ig1}, the series sign-off reused byte for byte (never synthesise it, never drop 'borrow'). PLACED: ig5-01..ig5-07 + ig1-07 (62 tokens before the sign-off; the CTA must end by f765 for a 28.0 s reel). ALTERNATES, generated in the same batch and swapped by VOICES id only: ig5-02t and ig5-05t (the trim ladder T1, then T1+T2, picked on measured takes; they never cut a hedge), ig5-06-msg (the no-booking cut for the launch gate), ig5-01b (A/B hook), ig5-07-bio (no DM path), ig5-05-num (spare: the $1.15 spoken instead of the setup line). 14 entries: 8 placed + 6 alternates. Pick takes by measurement first (duration against SCRIPT §5; hook 3.6 s or less; word SII on 'forty-nine dollars' >= 0.7), then by ear (voice-candidates/ig/PICKS.md method)."
+  "_notes": "Reel ig5 'Don't pay $300' (docs/ig/ig5/SCRIPT.md). DRAFT for scripts/ig5/voice-lines-ig5.json (PIPELINE.md §3.1): copy it there at build time; never write it into scripts/voice-lines-ig.json, which is an igHash input of the four delivered reels. Same schema as voice-lines-ig.json: say = the canonical words the captions and src/ig/ig5/timing.ts index (word k), in SPOKEN form; the Captions fork's display map shows numerals over word spans (ig5-01 [2-3] -> $300; ig5-02 [7-8] -> $1,500.; ig5-03 [4] -> $99, [8] -> 50; ig5-04 [2-3] -> $49; ig5-05-num [3-5] -> $1.15). speak = what Sonic performs, with NO <break/> tags (ig1-ig4 lesson: Sonic already pauses about 0.5 s at a sentence end and breaks doubled it); 'agent' lowercase so the keyword AGENT is never spelled. ONE role (ava = Tessa (Emotive), the same level and voices block as voice-lines-ig.json, env CARTESIA_IG_AVA_VOICE). Every id matches ^ig5- except the single borrow {id: ig1-07, borrow: ig1}, the series sign-off reused byte for byte (never synthesise it, never drop 'borrow'). PLACED: ig5-01..ig5-07 + ig1-07 (62 tokens before the sign-off; the CTA must end by f765 for a 28.0 s reel). ALTERNATES, generated in the same batch and swapped by VOICES id only: ig5-02t and ig5-05t (the trim ladder T1, then T1+T2, picked on measured takes; they never cut a hedge), ig5-06-msg (the no-booking cut for the launch gate), ig5-01b (A/B hook), ig5-07-bio (no DM path), ig5-05-num (spare: the $1.15 spoken instead of the setup line). 14 entries: 8 placed + 6 alternates. Pick takes by measurement first (duration against SCRIPT §5; hook 3.6 s or less; word SII on 'forty-nine dollars' >= 0.7), then by ear (voice-candidates/ig/PICKS.md method). HOOK SWAP (docs/ig/ig5/HOOKS.md, 2026-10-07): the TikTok tournament's winner \"Three rings. Gloves on. You can't.\" is placed: ig5-01g (hook) + ig5-02g (beat 2, \"Agency AI receptionist: ...\"), with ig5-01g2 (its two-breath reading, the cast rule's fallback when ig5-01g puts \"Agency AI receptionist:\" on screen after f78) and ig5-02gt (trim T1 of ig5-02g: \"commonly\"); trim ladder full -> T1 (ig5-02gt) -> T1 + T2 (ig5-02gt + ig5-05t). ig5-01c \"Closed at nine? Your phone's not.\" is the runner-up hook for a later A/B on the same body (display [2] -> 9?). The incumbent ig5-01 / ig5-01b / ig5-02 / ig5-02t stay as the A/B reserve. Display map of the new lines: ig5-02g [3-4] -> $300, [12-13] -> $1,500.; ig5-02gt [4-5] -> $300, [10-11] -> $1,500.; ig5-01g2 [1] -> rings., [2] -> Gloves. 19 entries."
 }

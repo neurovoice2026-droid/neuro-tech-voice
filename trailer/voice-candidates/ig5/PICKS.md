@@ -10,6 +10,8 @@ the series' borrow, never synthesised.
 `docs/ig/ig5/HOOKS.md`, which does not exist yet. If it changes their words, these four need new takes and new picks;
 `timing.ts` re-anchors to whatever is installed. **Every pick from `ig5-03` on is final.**
 
+**Update (hook swap, 2026-10-07):** `HOOKS.md` changed the words. These four are now the installed A/B reserve, not placed; the reel opens on `ig5-01g` + `ig5-02gt` (rung T1 + T2). See "Hook swap" at the end of this file.
+
 ## The outcome
 
 | reel | plan | with the picks | hook: her last word lands / take ends | "Ours?" (the $49 card) · "forty-nine" heard | CTA starts |
@@ -253,3 +255,81 @@ Every case stays 28 s: rung 0 (or the rung that was forced), impact f780.
 | `npm run sfx:ig5` | up to date (`df59239ddc8e41cd`), skipped: the mix is current with the installed takes |
 | `npm run check:audio:ig5` | **FAIL, 1 item: the climax** (+0.4 LU of +1). Everything else passes: −14.1 LUFS, −1.65 dBTP, the lines −20.0 … −20.1, 65 words ≥ 0.76, the name 0.97 / 1.00 / 0.99, the end, the arc |
 | `node scripts/kb/verify-film1.mjs --fast` | **PASS**: 6/6 (gates 1 2 3 4 5 10) |
+
+## Hook swap: the winning hook's takes (2026-10-07, label `hook-swap`)
+
+`docs/ig/ig5/HOOKS.md` picked "Three rings. Gloves on. You can't." (§1). Five lines were added to `scripts/ig5/voice-lines-ig5.json` (Tessa (Emotive), speed 1.05, emotion `calm`, no `<break/>`): `ig5-01g` (the hook), `ig5-01g2` (its two-breath reading), `ig5-02g` (beat 2, "Agency AI receptionist: …"), `ig5-02gt` (its trim T1, "…commonly three hundred a month…") and `ig5-01c` (the runner-up hook "Closed at nine? Your phone's not.", for a later A/B). Every existing entry is kept: the incumbent `ig5-01` / `ig5-01b` / `ig5-02` / `ig5-02t` stay installed as the reserve. `generate-voice --out` cannot take `--only`, so four complete sets were made (`take-e` … `take-h`, 19 lines each, ≈ 20 s per set, same model and API version as `take-a` … `take-d`) and **only the five new ids were installed**. Lines 03-07 are untouched. Method: the same tape (`out/ig/qa/ig5/hook-swap/analyse-hook.mjs`, re-pointed from `../voices/analyse.mjs`) plus a numpy word-level measure (`words.py`: per-word loudness, the last word's 5 ms low-band / high-band profile for the released t), and the real `timing.ts` run on every one of the 256 combinations of the new takes.
+
+| line | take | why |
+|---|---|---|
+| ig5-01g | **take-h** | 2.56 s [e 2.74 / f 2.71 / g 2.74 / h 2.56], the shortest by 0.15 s: it puts "Agency AI receptionist:" on screen on f92, the earliest any take allows (e/f f99, g f103). **Each sentence lands:** "rings." falls cleanly 14 → 9 st (land −2.9, no creak), "on." falls inside the word (13 → 12 st; it ends 1.9 st over the phrase median, in creak), "can't." settles into creak. **"can't" is stressed and its t released:** "can't" is 1.3 dB louder than "You" (the only take where it is; e −4.9 dB, a "YOU can't" read; f −1.3, g −1.2), and after its nasal a ≈ 110 ms closure (high band −41 to −49 dB re the line) then a clear aspirated burst to −7 dB: a "can't", never a "can". Every take of the four sets releases the t the same way. Gaps after "rings." / "on." 0.26 / 0.13 s (direction ≤ 0.25 s; g's 0.27 / 0.29 and f's rising "rings." (+3.3 st uptalk) were the others' faults). In the built mix every hook word scores 1.00 (no bed under it). |
+| ig5-01g2 *(installed, not placed)* | **take-e** | 2.90 s [e 2.90 / f 2.96 / g 3.01 / h 2.84]. Sonic reads the two-breath version **longer, not shorter, in every set** (+0.17 to +0.28 s within a set), so the cast rule never places it (§ the cast rule below). Of the four, e keeps "can't" stressed and calm (+2.2 dB over "You", no pitch drama; f peaks +6.9 st on it, g and h sink it −4.5 / −8.0 dB) with a released t (closure, burst −9 dB re the line) and "can't." falls (land −2.8). h is 0.06 s shorter but buries "can't". |
+| ig5-02g *(full; installed, placed only on rung 0)* | **take-h** | 6.51 s [e 6.55 / f 6.91 / g 6.65 / h 6.51]. "three hundred" stressed (key 5.5: +2.0 dB, +7.3 st), the hedge "common" audible (+2.1 dB, +2.5 st; e sinks it −0.8 dB, −3.4 st), "often" +1.8 dB; "three" SII 0.94, "fifteen" 0.84, "hundred." 0.88 (f's "three" 0.68 fails the 0.7 gate). No shared onsets, no stamp in silence. Both sentence ends lift a little in creak (+0.3 / +1.6 st), as in every take but e. |
+| ig5-02gt *(trim T1; **placed**)* | **take-f** | 6.12 s [e 6.22 / f 6.12 / g 6.30 / h 6.20], the shortest. Both sentences fall cleanly ("month." −5.9 st, "hundred." −7.1 st). "commonly", the hedge, carries the line (+3.6 dB, +4.3 st); "three hundred" has a light pitch accent (+2.9 st) and "often" +2.8 st. Every word's SII ≥ 0.85 against the mix (e's "three hundred" sinks −3.6 st, g's "often" −4.2 st, h's "Setup," scores 0.69). In the built mix: "commonly" 0.95, "three" 0.91, "hundred" 0.99, "Setup," 0.97, "often" 0.98, "fifteen" 0.85, "hundred." 0.86. `a+month.` share an onset. |
+| ig5-01c *(runner-up hook, installed, not placed)* | **take-f** | 2.43 s [e 2.54 / f 2.43 / g 2.64 / h 2.40]. The direction's shape: a small rise on "nine?" (+7.1 st from its dip), then a dry "not." that lands level-to-falling (−0.1 st) with a released t (closure −47 dB, burst 130 ms later); every word SII ≥ 0.87, a 0.20 s beat after "nine?". h is 0.03 s shorter but its "not." rises (+4.3, +7.3 st peak: a question, not a statement); e's "not." rises too and its "Closed" is weak (SII 0.55); g is the longest. `at+nine?` share an onset (Cartesia gives "at" zero length in three of four sets). |
+
+**Installed** with one call per set, `guard:ig5 -- --check` (gates 1-5) PASS after each:
+- `--install=voice-candidates/ig5/take-h --only=ig5-01g,ig5-02g`
+- `--install=voice-candidates/ig5/take-e --only=ig5-01g2`
+- `--install=voice-candidates/ig5/take-f --only=ig5-02gt,ig5-01c`
+
+All five `public/ig/voice/<id>.wav` are byte-identical to their picks (sha256 `9a27f615…` 01g · `88b7f2b0…` 01g2 · `486225a0…` 02g · `1a879b85…` 02gt · `0bc353cc…` 01c) and their entries JSON-identical; the 14 earlier entries and the `voices` block are unchanged; `engine` stays `cartesia`; `ig1-07` is still `c73b8a86…`.
+
+### The cast rule and the trim ladder on these takes
+
+`timing.ts` now places the hook by HOOKS §1.1's cast rule (`HOOK`): `ig5-01g` if "Agency AI receptionist:" rises by f78, else `ig5-01g2`, else the reading that gets it up first; then the trim ladder full → T1 (`ig5-02gt`) → T1 + T2 (+ `ig5-05t`). With the picks:
+
+| rung | CTA ends | result |
+|---|---|---|
+| full (`ig5-01g` + `ig5-02g`) | f795 | impact would move to f840 (a 30 s reel): refused |
+| T1 (`ig5-02gt`) | f783 | refused |
+| **T1 + T2 (`ig5-02gt` + `ig5-05t`)** | **f746, 19 f to spare** | **placed: 28.0 s, impact f780** |
+
+**Cast:** `ig5-01g` @9 · `ig5-02gt` @94 · `ig5-03` @285 · `ig5-04` @424 · `ig5-05t` @533 · `ig5-06` @581 · `ig5-07` @694 · `ig1-07` @784. Over all 256 combinations of the new takes every cast lands on rung 2 at 28.0 s; the picks give the earliest keyword (f92 of f92-103) and the earliest "Ours?" (f424 of f424-435), and the CTA ends f746 (spare 15-19 f over the combinations).
+
+| moment | frame | s | % |
+|---|---|---|---|
+| S2 "Agency AI receptionist:" on screen / "AI receptionist" heard | f92 / f116 | 3.07 / 3.87 | 11.0 / 13.8 |
+| "$300" on screen (S3 "commonly $300 a month.") / "three" heard | f157 / f176 | 5.23 / 5.87 | 18.7 / 21.0 |
+| the bed enters (`MUSIC.bedFrom`) | f105 | 3.50 | 12.5 |
+| the $49 card rises / "Ours?" / "forty-nine" | f422 / f424 / f458 | 14.07 / 14.13 / 15.27 | 50.2 / 50.5 / 54.5 |
+| CTA "Comment AGENT" (field f688, AGENT types f709, send f746) | f694 | 23.13 | 82.6 |
+
+### Flags
+
+- **The cast rule's f78 is out of reach with these reads.** "Agency AI receptionist:" rises on f92 (3.07 s), 14 f past HOOKS §1.1's target. The hook would need ≤ ≈ 2.1 s; Sonic reads it in 2.56-2.74 s (each two-word sentence ≈ 0.75-0.95 s, pauses 0.13-0.29 s), and the two-breath `ig5-01g2` is slower still. The rule therefore keeps `ig5-01g` (it puts the keyword up 7 f earlier than `ig5-01g2`). Reaching f78 would take a faster read than the series' speed 1.05, which is a series rule, so it was not tried.
+- **The first price and $49 come later than the incumbent's.** "three hundred" is heard at 5.87 s (incumbent 1.10 s; HOOKS estimated 4.3-5.0 s) and "forty-nine" at 54.5 % (incumbent 51.0 %), because beat 2 reads 6.1-6.9 s against the 4.05 s line it replaced.
+- **T1 + T2 are placed.** T2 drops "in under ten minutes" from the voice-over (it stays in both captions). T1's slip needs a layout HOOKS did not draw: SCRIPT b2 now prints "a month" over "commonly" in the slip's column.
+- **`check:audio:ig5`: 2 FAIL.** (1) The climax lead is +0.1 LU of the +1 needed (the loudest dialogue is now `ig5-02gt` "Agency" at f100, −9.5 LUFS-M, against the impact −9.4): the sound pass's open item, as before. (2) **New, from rung 2:** "You" of `ig5-05t` (take-c, picked when T2 was not placed) scores 0.69 against the bed at f533 (gate ≥ 0.7; effects alone 1.00). Measured against the same bed, the eight `ig5-05t` takes score 0.68-0.80 on "You" (take-g best, 0.80; take-c 0.73 by this tape). The fix is the sound pass's: a bed ride under f533, or a re-pick of `ig5-05t` (lines 03-07 were declared final, so it was not swapped here). Everything else passes: −14.1 LUFS, −1.65 dBTP, lines −19.6 … −20.1 LUFS (spread 0.5 LU), 60 words mean 0.94 with every hook word 1.00, the name 0.97 / 1.00 / 0.99, the end, the arc (+2.8 LU).
+- **Gates:** `npx tsc --noEmit -p .` clean; `guard:ig5 -- --check` PASS ×4 (after each install and after the `timing.ts` switch + `sfx:ig5` + the cover title; 255/257 shas, stamps ig1 `49b90ae4…` ig2 `757d177d…` ig3 `47ae5cf3…` ig4 `f4500c7a…`, gate P 24/24 stills byte-identical); `npm run sfx:ig` "0 built, 4 up to date"; the film 1 / film 2 frozen paths show no change in `git status`.
+- QA files (ignored): `out/ig/qa/ig5/hook-swap/` (`report-1.txt`, `report-picks.txt`, `metrics*.json`, `words.py`, `probe.mts`, `guard-1…4.log`, `check-audio.log`, the stills of the title-card reel and the cover).
+
+## Hook fold check
+
+Independent check of the hook swap above, 2026-10-07, HEAD `8f62e3d` plus the uncommitted swap. The checker used its own code: sha256, a JSON diff of the voice data, a Python WAV header read, the real `timing.ts` imported as is, a scratch copy of `timing.ts` with `layout`/`ladder` exported, and all 256 take combinations re-run through that copy. Scripts and logs are in `out/ig/qa/ig5/hook-check/` (ignored).
+
+| item | result | evidence |
+|---|---|---|
+| Installed WAVs = picked takes | **PASS** | sha256 of `public/ig/voice/ig5-{01g,01g2,02g,02gt,01c}.wav` matches only `take-h` / `take-e` / `take-h` / `take-f` / `take-f`. The WAV headers (mono, 44.1 kHz, 24-bit) give 2.562 / 2.901 / 6.507 / 6.119 / 2.434 s, equal to each entry's `duration`. Each new `voice.generated.ts` entry is JSON-identical to its pick's, `env` length = `frames`, words n/n. The 14 earlier entries, the `voices` block (Tessa, `sonic-3.6-2026-08-27`) and `engine: cartesia` are unchanged. `voice-lines-ig5.json` only gains the five entries: the 14 old ones and the `voices` block are unchanged, and the speed is still 1.05. |
+| ig1–ig4 voices and `ig1-07` unchanged | **PASS** | `guard:ig5 -- --check` PASS twice (before and after this check's edits): 255/257 shas (the 2 allowed QA edits 9–10), stamps ig1 `49b90ae4…` ig2 `757d177d…` ig3 `47ae5cf3…` ig4 `f4500c7a…`, gate P 24/24 stills byte-identical. `git diff HEAD` is empty on `public/ig/voice` (33 ig1–ig4 files tracked), `src/ig/voice.generated.ts` and `scripts/voice-lines-ig.json`. `ig1-07.wav` = `c73b8a86…dd601035b`. |
+| Cast uses 01g + 02g | **PASS** | `HOOK = { hooks: [01g, 01g2], agency: 02g, agencyT1: 02gt }`. `HOOK_TAKE` is `ig5-01g`, `RUNG` 2, cast `01g` @9 · `02gt` @94 · `03` @285 · `04` @424 · `05t` @533 · `06` @581 · `07` @694 · `ig1-07` @784. That is the 02g family on its T1, as HOOKS §1.1 lays out. **Note:** when neither reading reaches f78, the rule takes the reading that puts S2 up first. HOOKS' literal "otherwise `ig5-01g2`" would place 01g2, 7 f later (S2 f99/f100), against the rule's own aim. SCRIPT §4.4 documents this extension. |
+| No voice overlap | **PASS** | File ends and next starts: 86→94, 278→285, 410→424, 526→533, 575→581, 677→694, 746→784. Gaps 8, 7, 14, 7, 6, 17, 38 f. The stop-time is f420–458. |
+| 28.0 s / impact f780 | **PASS** | `DURATION` 840, `IMPACT` 780, `END` 840, brand f784, CTA ends f746 (19 f spare). Rungs: full CTA ends f795, T1 f783 (both would push the impact to f840), T1 + T2 f746. Over all 256 combinations of the new takes, every cast lands on rung 2 at 28.0 s / f780, with S2 at f92–103, "Ours?" at f424–435 and 15–19 f spare. The picks give the earliest S2 and the earliest "Ours?". `ig5-01g2` is never chosen. No combination reaches f78. |
+| The f78 keyword target | **FAIL (accepted, reported)** | S2 is on screen at f92 (3.07 s), 14 f late. The reads in each set: 01g 2.56–2.74 s, and 01g2 longer by +0.17 to +0.28 s. A faster read would break the series speed, so this is the owner's or orchestrator's call, not a fix. |
+| Timeline moments | **PASS** | "AI" heard f116 (3.87 s), S3 "$300" card f157, "three" f176 (5.87 s), "fifteen" f250, "answering" f296 (9.9 s), the $49 card f422 / "Ours?" f424 (50.5 %) / "forty-nine" f458 (54.5 %), "No setup fee." printed by f515 (so the ≈ f520 payoff cover frame holds), CTA f694 (82.6 %), `MUSIC.bedFrom` f105. R1 = `ringBefore`("Gloves" f43) = f30, and no onset falls in (24, 40). "can't." is at f74, S1 is gone by f88, slip 1 rises at f88 and S2 at f92. The display map and spans index the right words in 01g, 01g2, 02g, 02gt and 01c. |
+| Stills (by eye) | **PASS** | Rendered here: `IG5-Preview-9x16` f74 / 88 / 92 / 157 / 422 / 458 and the cover (`stills/`, `sheet.png`). The title cards show 01g → 02gt → 04 on their frames, "commonly $300 a month." at f157 and "Ours? From $49 a month." at f422–458. The cover's three-row 112 px title fits (ends ≈ y 665). The cover render before this check's edit is byte-identical to the swap's own still. |
+| The released t in "can't" (spot check) | **PASS** | Take-h: voiced energy until ≈ 2.30 s, then a ≈ 100 ms closure (high band −31 to −42 dB re the line), then a burst at 2.41–2.46 s (+3 to +5 dB high band). So it is "can't", not "can". |
+| `check:audio:ig5` | **2 FAIL, as reported** | The checker re-ran it: climax +0.1 LU (needs +1) and "You" (`ig5-05t` @533) 0.69 (gate 0.7). Everything else passes. This is the sound pass's open item, or a re-pick of `ig5-05t` (take-g), which is the orchestrator's call. |
+| SCRIPT / POSTING vs HOOKS and the truth rules | **PASS after 1 fix** | Agency scoping holds: "Agency AI receptionist:" is on screen (f92) before any figure (f157), and the slip tag writes on words 0–2 before the roll. "common" / "commonly" and "often" are spoken and printed. "Live", "from" and "for 50 minutes" are kept. No competitor is named. Booking stays behind the launch gate with `ig5-06-msg` as the fallback. The captions, pinned comments and DM keep "a common agency retainer" and "often run around $1,500". The alt text (617 characters, counted) matches T1 + T2. POSTING §8's A/B order matches HOOKS §6. **Fixed:** the cover attribution "Agency AI receptionist: $300 a month." (HOOKS §1.8, copied into SCRIPT §7, POSTING §3 and the `Cover.tsx` comment) showed $300 without its hedge, outside RESEARCH-prices §6 #6 (a B claim). It is now three rows at 44 px: "Agency AI receptionist:" / "commonly $300 a month." / "Ours: from $49 a month." (y 720–876). One row would measure ≈ 1,000 px in Instrument Sans at 44 px. The thumbnail moves to y 890–1380, and the `Cover.tsx` placeholder rect moves with it. The cover is re-rendered and checked by eye. This edit deviates from HOOKS §1.8 because of the truth rule. |
+| Small doc fixes | done | SCRIPT §4.1 and Companions now point to `scripts/ig5/voice-lines-ig5.json`, because `voice-lines-draft.json` predates the swap and has no 01g / 02g lines. SCRIPT §4.3 notes that HOOKS §2 calls the runner-up `ig5-01n` and that `ig5-01n2` was not synthesised. The 01g2-vs-01g delta above is corrected to +0.17 to +0.28 s. |
+| `npx tsc --noEmit -p .` | **PASS** | Clean, before and after the `Cover.tsx` edit. |
+| `npm run sfx:ig` | **PASS** | "0 built, 4 up to date" (ig1–ig4 skipped), before and after the edits. |
+| Film 1 / 2 frozen paths | **PASS** | `git status` is empty on all 17 paths. |
+| ZoneGuard / INFRA-LOG | n/a | `ZoneGuard.tsx` is not edited, so no INFRA-LOG entry is needed. |
+
+Open for the orchestrator (not fixed here):
+- The f78 keyword miss.
+- The later prices ("forty-nine" at 54.5 % against the 45 % guideline).
+- The two `check:audio:ig5` FAILs.
+- T1's slip column ("a month" over "commonly") is a SCRIPT layout that HOOKS did not draw.
+- HOOKS §1.8 itself still carries the unhedged attribution. It was not edited because it is the hook director's record.

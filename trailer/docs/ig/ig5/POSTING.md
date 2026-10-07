@@ -1,6 +1,8 @@
-# ig5 · "Don't pay $300" (POSTING)
+# ig5 · "Three rings" (POSTING)
 
 Label `synth`. Written 2026-10-07 for TikTok @neuro.tech.voice (posted first) and Instagram @neurotechvoice. The reel is described in `SCRIPT.md`; this file is everything that goes around it.
+
+**Hook swap (label `hook-swap`, 2026-10-07):** the reel now opens on "Three rings. Gloves on. You can't." (`HOOKS.md` §1; the incumbent "Don't pay $300 a month" is the reserve, SCRIPT §4.5). Only the lines that named the hook or its timing changed here: the covers (§3, §4), the search note (§3), the alt text (§4), the payoff time (§8) and the next A/B (§8). The captions, pinned comments, DM and replies carry no hook words and are unchanged. The file names keep the slug `dont-pay-300`.
 
 All copy is in English with no em dashes. Every figure traces to `SCRIPT.md` §6. No provider is named anywhere. "$49" always comes with "a month" and the fine print (Starter plan fee, USD, excl. VAT, $1.15 a month for the number, minutes past the allowance billed). The checks run on every text are in §9.
 
@@ -55,7 +57,7 @@ Built into `trailer/out/ig/deliver/` (PIPELINE §6.2):
 
 ## 3. TikTok (post first)
 
-**Cover:** upload `…-cover.png` if the app offers "upload from photos"; otherwise pick the frame at ≈ 15.2 s (the payoff: three quotes and "$49 a month", bars to scale) and add no TikTok text sticker.
+**Cover:** TikTok's feed autoplays from frame 0, which is the hook picture itself (the ringing light, three rings, "Three rings. / Gloves on. / You can't."), so the cover only shows on the profile grid and in search. Upload `…-cover.png` ("Three rings. / Gloves on. / You can't." over "Agency AI receptionist: / commonly $300 a month. / Ours: from $49 a month.", SCRIPT §7: the $300 keeps its hedge on the cover too) if the app offers "upload from photos"; otherwise pick the payoff frame at ≈ 17.3 s (once "No setup fee." has printed: three quotes and "$49 a month", bars to scale) and add no TikTok text sticker.
 
 **Caption** (1,541 / 2,200 characters; keyword-first line for TikTok search; one ask; 4 hashtags; no link):
 
@@ -73,7 +75,7 @@ Fine print: $49 a month is the Starter plan fee in US dollars, excluding VAT. Th
 #AIReceptionist #AnsweringService #SmallBusinessOwner #SmallBusinessTips
 ```
 
-- **Search:** "AI receptionist cost" opens the caption; "AI receptionist" is also on screen by ≈ 2.4 s and spoken; "answering service" is spoken at ≈ 8 s, in the body and in a hashtag.
+- **Search:** "AI receptionist cost" opens the caption; "AI receptionist" is also on screen at ≈ 3.1 s ("Agency AI receptionist:") and spoken at ≈ 3.9 s, and the cover kicker carries it; "answering service" is spoken at ≈ 9.9 s, in the body and in a hashtag.
 - **"It's also in our bio":** the TikTok bio link is https://linktr.ee/neurotechvoice (profile.md). TikTok links in comments aren't clickable, and TikTok may not let us DM a commenter who doesn't follow us.
 
 **Pinned comment** (132 / 150 characters; TikTok caps comments at 150, so the full sources live in the caption):
@@ -92,7 +94,7 @@ Checked 7 Oct 2026: 10 US answering services, 8 agency pricing sources. Ours: $4
 
 ## 4. Instagram (second)
 
-**Cover:** Edit cover → Add from camera roll → `…-cover.png`. Fallback: frame 0.
+**Cover:** Edit cover → Add from camera roll → `…-cover.png`. Fallback: frame 0, now a usable cover on its own (the ringing light with its three rings and "Three rings. / Gloves on. / You can't.").
 
 **Caption** (1,354 / 2,200 characters; `caption.py` READY; the 111-character first line lands whole; one ask; 4 hashtags; no link):
 
@@ -120,13 +122,13 @@ Fine print: $49 a month is the Starter plan fee in US dollars, excluding VAT. Th
 Sources, read 7 Oct 2026. Agencies: two agencies' own price pages and six published pricing guides. Seven of the eight put the lowest monthly retainer at about $300 or more, and the typical lowest setup fee is $1,500 (some agencies waive it). Agency retainers often add per-minute usage on top, as our plan does past its allowance. Answering services: the pricing pages of ten US providers, all staffed by people. Buying 50 minutes costs $99 or more at every one of them. We didn't compare self-serve AI receptionist apps; some cost the same as ours or less. The quote slips in the video are illustrative, not real businesses'. We don't name providers in our posts. Ours: $49 a month is the Starter plan fee (USD, excl. VAT), plus $1.15 a month for the phone number.
 ```
 
-**Alt text** (Accessibility → Alt text; 640 characters):
+**Alt text** (Accessibility → Alt text; 617 characters):
 
 ```
-Motion-design reel on a pale gradient. A blank quote slip lies on a desk while a rose phone light rings. Text: Don't pay $300 a month for an AI receptionist. The slip fills in: common agency retainer, $300 a month. A stub is stapled on: setup, often $1,500. A second slip: live answering service, from $99 a month, for 50 minutes. The phone light turns into a teal orb as a third slip rises: Ours? From $49 a month. No setup fee. Text: You set it up yourself, in under ten minutes. A sample call record turns from Answered to Booked: It picks up when you can't, and books the appointment. Ends: Comment AGENT for the link. Neuro Tech Voice.
+Motion-design reel on a pale gradient. A rose phone light rings on a desk, three rings spreading from it. Text: Three rings. Gloves on. You can't. A quote slip rises: agency AI receptionist, commonly $300 a month. A stub is stapled on: setup, often $1,500. A second slip: live answering service, from $99 a month, for 50 minutes. The phone light turns into a teal orb as a third slip rises: Ours? From $49 a month. No setup fee. Text: You set it up yourself. A sample call record turns from Answered to Booked: It picks up when you can't, and books the appointment. Ends: Comment AGENT for the link. Neuro Tech Voice.
 ```
 
-If the trims ship (SCRIPT §4.3), edit the alt text to match the words placed ("A common agency retainer"; "You set it up yourself.").
+This alt text matches the cut as placed with the installed takes (trims T1 + T2, SCRIPT §5.4: "commonly $300 a month", "You set it up yourself."). If the full script is ever placed, edit it to "agency AI receptionist, $300 a month, a common retainer" and "You set it up yourself, in under ten minutes."
 
 ---
 
@@ -197,14 +199,14 @@ The "Can you build it for me?" reply matters: RESEARCH-product §6 warns that "a
 
 | When | Where | Metric | Read it as |
 |---|---|---|---|
-| 48 h | TikTok analytics | average watch time; % who watched the full video; the retention graph at 2-3 s and at the payoff (≈ 12-13 s) | a steep early drop means the hook; a drop before ≈ 12 s means the two anchors run long |
+| 48 h | TikTok analytics | average watch time; % who watched the full video; the retention graph at 2-3 s and at the payoff ("Ours?" ≈ 14.1 s, "forty-nine" ≈ 15.3 s) | a steep early drop means the hook; a drop before ≈ 14 s means the two anchors run long |
 | 48 h | TikTok | views against the account's baseline (ig1 563; the rest 174-283), AGENT comments, profile views, bio-link taps (Linktree analytics) | the "receptionist" hook family should hold its lead |
 | 24 h | Instagram Reels Insights | skip rate (3 s) | < 40 % healthy; > 50 % means the first 2 s are broken |
 | 72 h | Instagram | sends per reach, saves, AGENT comments per 1,000 reach | the main bet: price tables get sent |
 | 72 h | both | comments asking "how many minutes?" | the cost of not showing minutes; the push to settle 150 vs 400 |
 | 7 d / 14 d | site, UTM | `tt_ig5` vs `reel_ig5`: sign-ups → agent created → test call → number bought → paid Starter | **the real KPI**: paying users per platform |
 
-**Next step from the numbers:** if TikTok's 2-3 s hold is weak, post the same body with the `ig5-01b` hook ("Before you pay $300 a month for an AI receptionist.", hookscore 87.0) as a **new** TikTok post about a week later; never repost the same file. On Instagram, use Trial Reels for that A/B once the account passes about 200 followers.
+**Next step from the numbers** (HOOKS §6): about a week later, post a **new** TikTok re-cut on the same body (never repost the same file): if this post's average watch time is below ig1's, the curiosity hook (HOOKS §3, "Live answering: 50 minutes costs you…"); otherwise the runner-up scene hook `ig5-01c` ("Closed at 9? Your phone's not.", already installed). The reserve is the incumbent `ig5-01` / `ig5-01b` ("Don't pay $300 a month for an AI receptionist." / "Before you pay $300 a month for an AI receptionist.", hookscore 87.0), the cheapest test if the 3-second hold comes in under ig1's. Measure against ig1 on the same TikTok numbers: 2-second and 3-second hold, average watch time, AGENT comments per 1,000 views. On Instagram, use Trial Reels for that A/B once the account passes about 200 followers.
 
 ---
 
@@ -218,5 +220,5 @@ The "Can you build it for me?" reply matters: RESEARCH-product §6 warns that "a
 | TikTok pinned comment (132 chars) | | 62.0, "too short to judge" | nothing to strip |
 | DM | | **91.1 PASS** | nothing to strip |
 | Ready replies (10) | all ≤ 150 chars | | nothing to strip |
-| Alt text | | | nothing to strip |
+| Alt text | | | nothing to strip (re-run on the hook-swap alt text, 617 chars) |
 | No-booking captions | READY / READY | 89.6 / 78.0 PASS | |

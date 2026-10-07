@@ -183,3 +183,21 @@ The pauses are silent runs in the 30 fps envelope (below `CUT.quiet` 0.05, ≥ 3
 2. **Choose the cast with `timing.ts`.** A mixed cast can keep the full script (rung 0) with up to 22 f to spare.
 3. **Write `PICKS.md`.** Mark the `ig5-01`, `ig5-01b`, `ig5-02` and `ig5-02t` picks PROVISIONAL until `HOOKS.md` lands.
 4. **Install** with one `--install=voice-candidates/ig5/take-x --only=…` call per set, then run `guard --check` after every install.
+
+## Hook swap sets `take-e` … `take-h` (2026-10-07, 14:34–14:36 UTC, HEAD `8f62e3d`)
+
+`HOOKS.md` §1 added five lines to `scripts/ig5/voice-lines-ig5.json` (`ig5-01g`, `ig5-01g2`, `ig5-02g`, `ig5-02gt`, `ig5-01c`; emotion `calm`, no `<break/>`). `generate-voice --out` does not combine with `--only`, so each set holds all 19 lines (the 14 earlier ones re-read too, unused) plus the byte copy of `ig1-07`; the same engine, voice, speed 1.05, model `sonic-3.6-2026-08-27` and API version as `take-a` … `take-d`; every request accepted on the first try, every line aligned n/n.
+
+```
+node scripts/generate-voice.mjs --film=ig5 --engine=cartesia --out=voice-candidates/ig5/take-e   (then f, g, h)
+```
+
+| line | take-e | take-f | take-g | take-h |
+|---|---:|---:|---:|---:|
+| ig5-01g | 2.74 s | 2.71 s | 2.74 s | 2.56 s |
+| ig5-01g2 | 2.90 s | 2.96 s | 3.01 s | 2.84 s |
+| ig5-02g | 6.55 s | 6.91 s | 6.65 s | 6.51 s |
+| ig5-02gt | 6.22 s | 6.12 s | 6.30 s | 6.20 s |
+| ig5-01c | 2.54 s | 2.43 s | 2.64 s | 2.40 s |
+
+Only the five new ids were installed (picks and checks: `PICKS.md` "Hook swap").

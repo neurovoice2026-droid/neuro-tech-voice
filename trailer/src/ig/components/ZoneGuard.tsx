@@ -8,6 +8,12 @@
  * bands (header, caption/username, the right rail), the side margins and the 3:4 grid crop.
  *
  * Mesh, orbs and hairlines are exempt: they are not text.
+ *
+ * PER-REEL ZONES (docs/ig/ig5/SCRIPT.md §1.3): a reel posted somewhere stricter than Instagram registers its own rule
+ * (`registerZones(reel, { faults, coverFaults, overlay })`, from its own module, never from common/): its rects are then
+ * checked by its `faults` (which also gets the rect's label, so a rule can tell a price numeral or an object from
+ * text) and its overlay paints its own bands. A reel that registers nothing keeps the series' Instagram ZONES exactly
+ * (ig1–ig4: the same checks, the same overlay).
  */
 import React, { createContext, useContext } from 'react';
 import { AbsoluteFill } from 'remotion';
@@ -19,6 +25,19 @@ const ZoneCtx = createContext<ZoneState>({ on: false, reel: '', frame: 0, cover:
 /** set once per reel / cover, outside the act sequences (so `frame` is the absolute timeline frame) */
 export const ZoneProvider = ZoneCtx.Provider;
 
+/** A reel's own zone rule (see the header): `faults` for its reel's rects, `coverFaults` for its cover's (default
+ *  `faults`), `overlay` in place of the series' bands. */
+export type ReelZones = {
+  faults: (r: Rect, what: string) => string[];
+  coverFaults?: (r: Rect, what: string) => string[];
+  overlay?: React.FC<{ cover: boolean }>;
+};
+const REEL_ZONES = new Map<string, ReelZones>();
+/** register a reel's own rule (idempotent; call it at module scope of the reel's Reel / Cover module) */
+export function registerZones(reel: string, z: ReelZones): void {
+  REEL_ZONES.set(reel, z);
+}
+
 const RED = '#ff1f3d';
 const OK = 'rgba(0, 150, 110, 0.9)';
 
@@ -26,7 +45,8 @@ const OK = 'rgba(0, 150, 110, 0.9)';
 export const ZoneRect: React.FC<{ what: string; rect: Rect }> = ({ what, rect }) => {
   const z = useContext(ZoneCtx);
   if (!z.on) return null;
-  const faults = z.cover ? coverFaults(rect) : zoneFaults(rect);
+  const own = REEL_ZONES.get(z.reel);
+  const faults = own ? (z.cover ? (own.coverFaults ?? own.faults) : own.faults)(rect, what) : z.cover ? coverFaults(rect) : zoneFaults(rect);
   const r = { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.w), h: Math.round(rect.h) };
   if (faults.length) console.error(`[ig-zones] VIOLATION ${z.reel} f${Number(z.frame.toFixed(2))} ${what} ${JSON.stringify(r)} ${faults.join('; ')}`);
   return (
@@ -59,6 +79,8 @@ const tag: React.CSSProperties = { position: 'absolute', fontFamily: FONT.mono, 
 
 /** The platform's no-text bands, the side margins and the 3:4 crop (zone mode only). */
 export const ZoneOverlay: React.FC<{ cover?: boolean }> = ({ cover = false }) => {
+  const own = REEL_ZONES.get(useContext(ZoneCtx).reel);
+  if (own?.overlay) return <own.overlay cover={cover} />;
   const Z = ZONES;
   return (
     <AbsoluteFill style={{ pointerEvents: 'none' }}>
