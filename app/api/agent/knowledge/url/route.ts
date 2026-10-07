@@ -58,7 +58,8 @@ export async function POST(request: Request) {
     if (existing?.length) {
       throw new RequestError('conflict', 'This page is already in your knowledge base.', 409)
     }
-    await assertDocumentCapacity(supabase, org.id, agent.id)
+    // The page's size is known only once the provider fetched it: require room left.
+    await assertDocumentCapacity(supabase, org.id, agent.id, { incomingBytes: 0, log })
 
     const id = newDocumentId()
     const name = cleanDisplayName(`${check.url.hostname}${check.url.pathname === '/' ? '' : check.url.pathname}`).slice(0, KNOWLEDGE_MAX_NAME_CHARS) || check.url.hostname

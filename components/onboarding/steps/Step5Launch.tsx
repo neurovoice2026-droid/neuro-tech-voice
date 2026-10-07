@@ -3,10 +3,12 @@
 import { useState, useMemo } from 'react'
 import {
   Rocket, Check, Building2, Bot, Mic2, CreditCard,
-  ArrowLeft, Zap, Shield, Star, Layers, Gift, AlertTriangle,
+  ArrowLeft, Zap, Shield, Star, Layers, Gift, AlertTriangle, Globe,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
+import { startWebsiteImportInBackground } from '@/hooks/useKnowledgeWebsite'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -444,6 +446,7 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
   const [isLaunching, setIsLaunching]   = useState(false)
   const [showConfetti, setShowConfetti] = useState(false)
   const [outcome, setOutcome]           = useState<LaunchOutcome | null>(null)
+  const [importSite, setImportSite]     = useState(false)
 
   const displayCompanyName = company.name || organization.name || '—'
 
@@ -481,6 +484,10 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
         setIsLaunching(false)
         return
       }
+
+      // Opt-in website import: started in the background (survives the
+      // redirect to checkout), never blocks or fails the launch.
+      if (importSite && company.website) startWebsiteImportInBackground(company.website)
 
       // The account is set up, but the agent only takes calls once the server
       // activated it (primary voice provider ready). Never claim "live" otherwise.
@@ -582,6 +589,28 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
             <SummaryRow icon={CreditCard} label="Plan" value={PLANS[plan].name} />
           </div>
         </div>
+
+        {/* Optional: teach the agent from the company website (non-blocking) */}
+        {company.website && (
+          <div className="flex items-start gap-3 rounded-xl border border-border p-4">
+            <Checkbox
+              id="onboarding-import-website"
+              checked={importSite}
+              onCheckedChange={(v) => setImportSite(v === true)}
+              disabled={isLaunching}
+              className="mt-0.5"
+            />
+            <label htmlFor="onboarding-import-website" className="space-y-1 text-sm">
+              <span className="flex items-center gap-1.5 font-medium text-foreground">
+                <Globe className="h-4 w-4" aria-hidden="true" /> Import my website
+              </span>
+              <span className="block text-xs leading-relaxed text-muted-foreground">
+                Your agent learns from the pages of {company.website} (same domain only), refreshed weekly. I confirm I own this website or am
+                authorised to import it. You can remove it later in Agent → Knowledge.
+              </span>
+            </label>
+          </div>
+        )}
 
         {/* Launch button */}
         <Button

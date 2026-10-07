@@ -12,6 +12,7 @@ import type { AgentSpec } from '@/lib/voice-providers/types'
 import { PLATFORM_VARIABLES } from '@/lib/voice-providers/prompt'
 import { maxDurationMessage } from '@/lib/voice/conversation-phrases'
 import { agentLlm, ragEmbeddingModel } from './models'
+import { buildKnowledgePromptConfig } from './rag-config'
 import {
   DTMF_INPUT_SETTINGS,
   VOICEMAIL_TOOL_DESCRIPTION,
@@ -106,9 +107,7 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
   const c = spec.conversation
   const presets = languagePresets(spec)
   const hasPresets = Object.keys(presets).length > 0
-  const knowledge = spec.knowledge
-    .filter((k) => !!k.elevenlabsId)
-    .map((k) => ({ type: k.type, name: k.name.slice(0, 200), id: k.elevenlabsId as string, usage_mode: 'auto' }))
+  const knowledge = buildKnowledgePromptConfig(spec.knowledge, ragEmbeddingModel(spec.language, additionalLanguagesOf(spec)))
   const telephonyFormat = spec.appRouted ? 'ulaw_8000' : 'pcm_16000'
   const appTransfer = spec.appRouted && spec.transfer.enabled && !!spec.transfer.number && !!platform.transferToolId
 
@@ -116,8 +115,8 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
     prompt: spec.systemPrompt,
     llm: agentLlm(),
     max_tokens: -1,
-    knowledge_base: knowledge,
-    rag: { enabled: knowledge.length > 0, embedding_model: ragEmbeddingModel(spec.language, additionalLanguagesOf(spec)) },
+    knowledge_base: knowledge.knowledge_base,
+    rag: knowledge.rag,
     timezone: spec.timezone,
     built_in_tools: builtInTools(spec, hasPresets),
     tool_ids: appTransfer ? [platform.transferToolId] : [],

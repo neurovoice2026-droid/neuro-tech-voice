@@ -59,7 +59,8 @@ export async function POST(request: Request) {
 
     const agent = await ensureAgent(org.id, defaultAgentName(org.name))
     log = log.child({ agentId: agent.id })
-    await assertDocumentCapacity(supabase, org.id, agent.id)
+    // The declared size is re-checked against the real file when it is processed.
+    await assertDocumentCapacity(supabase, org.id, agent.id, { incomingBytes: body.size, log })
 
     const id = newDocumentId()
     const storagePath = storagePathFor(org.id, agent.id, id, safeFileName(name, type.ext))

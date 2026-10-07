@@ -460,7 +460,7 @@ export const KB_FAQ = {
     {
       id: "sync",
       q: "Does it notice when my website changes?",
-      a: "Not on its own. A page is read as it stands when you add it; when the page changes, remove it and add it again.",
+      a: "Yes. Pages you add, and websites you import, are re-read automatically at least once a week. When you change something important, press Refresh on the page to update it right away.",
     },
     {
       id: "learn",

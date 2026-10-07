@@ -30,13 +30,18 @@ import { z } from 'zod'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/lib/supabase/admin'
 import * as el from '@/lib/elevenlabs/client'
-import { ragEmbeddingModel } from '@/lib/elevenlabs/models'
+import * as kb from '@/lib/elevenlabs/api/knowledge'
+import type { EmbeddingModel } from '@/lib/elevenlabs/api/knowledge'
+import { AGENT_RAG_COLUMNS, embeddingModelForAgentRow } from './agent-rag-model'
 import { RequestError } from '@/lib/api/http'
 import { describeError, type Logger } from '@/lib/observability/logger'
 import { deferBackground } from '@/lib/observability/telemetry'
-import { normalizeAgentLanguage } from '@/lib/voice/languages'
 import { bumpRevision, providersFor, syncAgent } from './agent-sync'
 import { ProviderError, isProviderError } from './errors'
+import { ensureOrgFolder, forgetOrgFolder } from './knowledge-folders'
+import { assertBytesFit, assertDocumentsFit, orgKnowledgeUsage, syncFrequencyDays } from './knowledge-limits'
+import { assertWorkspaceRagHeadroom, ragPatch } from './knowledge-rag'
+import { healMissingDocuments, summaryPatch } from './knowledge-reconcile'
 import type { KnowledgeDocument } from '@/types'
 
 // ─── Limits ──────────────────────────────────────────────────────────────────
@@ -54,6 +59,8 @@ export const KNOWLEDGE_MAX_URL_CHARS = 2_048
 export const KNOWLEDGE_MAX_DOCS_PER_AGENT = 100
 /** Plain-text excerpt kept per document for the Cartesia fallback agent. */
 export const KNOWLEDGE_EXCERPT_CHARS = 8_000
+/** At most this much of the provider's extracted content is read to build the excerpt. */
+export const EXCERPT_SOURCE_MAX_BYTES = 256 * 1024
 /** A 'processing' row untouched for this long is treated as abandoned (retryable). */
 export const STALE_PROCESSING_MS = 5 * 60_000
 
@@ -61,13 +68,29 @@ const STORAGE_DOWNLOAD_TIMEOUT_MS = 45_000
 const ATTACH_MAX_ROUNDS = 8
 const ATTACH_WAIT_MS = 2_500
 
-/** Columns returned to the browser (content_excerpt stays server-side). */
+/** Columns returned to the browser (content_excerpt and pending_storage_path stay server-side). */
 export const KNOWLEDGE_DOC_COLUMNS =
-  'id, agent_id, org_id, elevenlabs_doc_id, cartesia_doc_id, name, type, url, storage_path, size_bytes, character_count, status, error_message, mime_type, attached_at, last_synced_at, attempt_count, created_at, updated_at'
+  'id, agent_id, org_id, elevenlabs_doc_id, cartesia_doc_id, name, type, url, storage_path, size_bytes, character_count, status, error_message, mime_type, attached_at, last_synced_at, attempt_count, created_at, updated_at, usage_mode, supported_usages, auto_sync, sync_frequency_days, sync_failures, remote_updated_at, rag_status, rag_progress, rag_model, rag_used_bytes, rag_checked_at, elevenlabs_folder_id, deleting_at'
 
 export type KnowledgeDocumentRow = KnowledgeDocument & {
   attempt_count: number
   updated_at: string
+  /** 'prompt' = always in the agent's prompt ("Always include"); platform-managed. */
+  usage_mode?: 'auto' | 'prompt'
+  supported_usages?: string[] | null
+  auto_sync?: boolean
+  sync_frequency_days?: number | null
+  /** Consecutive failed auto-syncs reported by the provider. */
+  sync_failures?: number
+  remote_updated_at?: string | null
+  rag_status?: string | null
+  rag_progress?: number | null
+  rag_model?: string | null
+  rag_used_bytes?: number | null
+  rag_checked_at?: string | null
+  elevenlabs_folder_id?: string | null
+  /** Set while a delete runs (the agent no longer uses the document). */
+  deleting_at?: string | null
 }
 
 /** What the API returns for a document: the row plus whether a retry is possible now. */
@@ -358,8 +381,18 @@ function retryState(doc: KnowledgeDocumentRow, now: number): DocState {
   return isStale(doc, now) ? 'retryable' : 'in_flight'
 }
 
+/** An attached document whose search index failed: a retry re-indexes it. */
+function ragRetryable(doc: KnowledgeDocumentRow): boolean {
+  return doc.status === 'ready' && !!doc.attached_at && !!doc.elevenlabs_doc_id && doc.rag_status === 'failed'
+}
+
 export function toDocumentView(doc: KnowledgeDocumentRow, now = Date.now()): KnowledgeDocumentView {
-  return { ...doc, can_retry: retryState(doc, now) === 'retryable' }
+  const { pending_storage_path: _pending, content_excerpt: _excerpt, ...visible } = doc as KnowledgeDocumentRow & {
+    pending_storage_path?: unknown
+    content_excerpt?: unknown
+  }
+  const can_retry = !doc.deleting_at && (retryState(doc, now) === 'retryable' || ragRetryable(doc))
+  return { ...visible, can_retry }
 }
 
 // ─── Errors ──────────────────────────────────────────────────────────────────
@@ -449,7 +482,7 @@ type Source =
   | { kind: 'text'; text: string; size: number }
   | { kind: 'url'; url: string }
 
-async function readCapped(stream: ReadableStream<Uint8Array>, max: number): Promise<Uint8Array<ArrayBuffer>> {
+export async function readCapped(stream: ReadableStream<Uint8Array>, max: number): Promise<Uint8Array<ArrayBuffer>> {
   const reader = stream.getReader()
   const chunks: Uint8Array[] = []
   let total = 0
@@ -526,8 +559,9 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  * When another request holds the sync lease, that holder re-pushes because
  * the revision moved; we wait until a push at or after our revision landed.
  */
-async function attachToAgent(db: SupabaseClient, orgId: string, agentId: string, log: Logger): Promise<void> {
-  const revision = await bumpRevision(agentId)
+export async function attachToAgent(db: SupabaseClient, orgId: string, agentId: string, log: Logger): Promise<void> {
+  let revision = await bumpRevision(agentId)
+  let healed = false
   for (let round = 0; round < ATTACH_MAX_ROUNDS; round++) {
     const results = await syncAgent(agentId, { providers: ['elevenlabs'], log })
     const r = results.find((x) => x.provider === 'elevenlabs')
@@ -537,6 +571,16 @@ async function attachToAgent(db: SupabaseClient, orgId: string, agentId: string,
       throw new ProviderError({ system: 'elevenlabs', operation: 'agent.sync', code: 'not_configured' })
     }
     if (r.status === 'failed' || r.status === 'degraded') {
+      // A locator for a document the provider no longer has can fail the whole
+      // agent update: drop such documents from the spec once, then retry.
+      if (r.errorCode === 'validation' && !healed) {
+        healed = true
+        const removed = await healMissingDocuments(db, orgId, agentId, log)
+        if (removed > 0) {
+          revision = await bumpRevision(agentId)
+          continue
+        }
+      }
       log.warn('knowledge.attach_sync_unsuccessful', { agentId, status: r.status, errorCode: r.errorCode })
       throw new KnowledgeError(r.error ? `${ATTACH_FAILED} (${r.error})`.slice(0, 300) : ATTACH_FAILED)
     }
@@ -588,24 +632,51 @@ function safeCodePoint(n: number): string | null {
   return String.fromCodePoint(n)
 }
 
-async function startRagIndex(elId: string, language: string, ctx: { orgId: string; agentId: string }, log: Logger, docId: string) {
+/**
+ * Starts (or reads) RAG indexing for the agent's embedding model and stores
+ * the state on the row, so the dashboard shows indexing progress, failures and
+ * the workspace limit instead of a blanket "Ready". Non-fatal: the agent can
+ * still use the document in full-context mode, and ElevenLabs also indexes
+ * documents attached to a RAG-enabled agent.
+ */
+export async function startRagIndex(
+  db: SupabaseClient,
+  doc: KnowledgeDocumentRow,
+  elId: string,
+  model: EmbeddingModel,
+  ctx: { orgId: string; agentId: string },
+  log: Logger,
+): Promise<KnowledgeDocumentRow> {
   try {
-    const res = await el.knowledgeBase.ragIndex(elId, ragEmbeddingModel(language), ctx)
+    const res = await kb.ragIndex(elId, model, ctx)
     const status = String(res?.status ?? 'unknown')
-    // document_too_small: used in full-context mode instead; the others leave RAG unavailable for this doc.
+    // document_too_small: always used in the prompt instead; the others leave RAG unavailable for this doc.
     if (status === 'failed' || status === 'rag_limit_exceeded' || status === 'cannot_index_folder') {
-      log.warn('knowledge.rag_index_unavailable', { docId, status })
+      log.warn('knowledge.rag_index_unavailable', { docId: doc.id, status })
     } else {
-      log.info('knowledge.rag_index', { docId, status })
+      log.info('knowledge.rag_index', { docId: doc.id, status })
     }
+    const patch = ragPatch(res)
+    if (doc.rag_model && doc.rag_model !== model) patch.rag_cleanup_pending = true
+    return (await patchDoc(db, ctx.orgId, doc.id, patch)) ?? doc
   } catch (err) {
-    // Non-fatal: the agent can still use the document in full-context mode,
-    // and ElevenLabs also indexes documents attached to a RAG-enabled agent.
-    log.warn('knowledge.rag_index_failed', { docId, error: describeError(err) })
+    log.warn('knowledge.rag_index_failed', { docId: doc.id, error: describeError(err) })
+    return doc
   }
 }
 
-async function storeExcerpt(
+/** Plain-text excerpt for the fallback agent, from text we already hold or the provider's (bounded) content. */
+export function excerptPatch(raw: string, truncated: boolean): Record<string, unknown> {
+  const text = toPlainText(raw)
+  return {
+    content_excerpt: text.slice(0, KNOWLEDGE_EXCERPT_CHARS) || null,
+    // Content cut at 256 KB: the real length is unknown, so record a value above
+    // every prompt-mode cap (such a document can never be pinned to the prompt).
+    character_count: truncated ? Math.max(text.length, EXCERPT_SOURCE_MAX_BYTES) : text.length,
+  }
+}
+
+export async function storeExcerpt(
   db: SupabaseClient,
   orgId: string,
   doc: KnowledgeDocumentRow,
@@ -615,19 +686,63 @@ async function storeExcerpt(
   log: Logger,
 ): Promise<KnowledgeDocumentRow> {
   try {
-    const raw = localText ?? (await el.knowledgeBase.content(elId, ctx))
-    const text = toPlainText(typeof raw === 'string' ? raw : '')
-    const updated = await patchDoc(db, orgId, doc.id, {
-      content_excerpt: text.slice(0, KNOWLEDGE_EXCERPT_CHARS) || null,
-      character_count: text.length,
-    })
+    // At most 256 KB of the provider's copy is read: only 8,000 characters are kept.
+    const source = localText !== null ? { text: localText, truncated: false } : await kb.contentPrefix(elId, { maxBytes: EXCERPT_SOURCE_MAX_BYTES }, ctx)
+    const updated = await patchDoc(db, orgId, doc.id, excerptPatch(source.text, source.truncated))
     return updated ?? doc
   } catch (err) {
     // Non-fatal: the document is attached to the primary agent; only the
-    // fallback agent's copy is missing until the next retry.
+    // fallback agent's copy is missing until the next retry or sync.
     log.error('knowledge.excerpt_failed', err, { docId: doc.id })
     return doc
   }
+}
+
+/**
+ * Stores the provider's metadata for the document (size for URL documents,
+ * supported usage modes, auto-sync state). Non-fatal.
+ */
+export async function storeRemoteMetadata(
+  db: SupabaseClient,
+  doc: KnowledgeDocumentRow,
+  elId: string,
+  ctx: { orgId: string; agentId: string },
+  log: Logger,
+): Promise<KnowledgeDocumentRow> {
+  try {
+    const res = (await kb.summaries([elId], ctx))[elId]
+    if (!res || res.status !== 'success') {
+      log.warn('knowledge.metadata_unavailable', { docId: doc.id, code: res ? res.error_code : null })
+      return doc
+    }
+    // Files and text keep the size we validated; URL pages only learn theirs here.
+    const patch = summaryPatch(res.data, { includeSize: doc.type === 'url' })
+    return (await patchDoc(db, ctx.orgId, doc.id, patch)) ?? doc
+  } catch (err) {
+    log.warn('knowledge.metadata_failed', { docId: doc.id, error: describeError(err) })
+    return doc
+  }
+}
+
+/**
+ * Re-indexes a document whose RAG index failed: deletes the failed index
+ * (re-requesting would only return it) and starts a new one.
+ */
+async function retryRagIndex(db: SupabaseClient, orgId: string, doc: KnowledgeDocumentRow, log: Logger): Promise<KnowledgeDocumentRow> {
+  const elId = doc.elevenlabs_doc_id as string
+  const ctx = { orgId, agentId: doc.agent_id }
+  const { data: agent, error } = await db.from('agents').select(AGENT_RAG_COLUMNS).eq('id', doc.agent_id).eq('org_id', orgId).maybeSingle()
+  if (error) throw new Error(`agents read failed: ${error.message}`)
+  const model = embeddingModelForAgentRow(agent)
+  try {
+    const { indexes } = await kb.ragIndexes(elId, ctx)
+    for (const idx of indexes ?? []) {
+      if (idx.status === 'failed') await kb.deleteRagIndex(elId, idx.id, ctx)
+    }
+  } catch (err) {
+    log.warn('knowledge.rag_failed_index_cleanup_failed', { docId: doc.id, error: describeError(err) })
+  }
+  return startRagIndex(db, doc, elId, model, ctx, log)
 }
 
 /** Re-syncs every non-ElevenLabs provider (the Cartesia fallback) after the response. */
@@ -675,13 +790,14 @@ export async function processDocument(
   const now = Date.now()
 
   const loaded = await loadDoc(db, orgId, docId)
+  if (loaded.deleting_at) throw new RequestError('conflict', 'This document is being deleted.', 409)
   const state = retryState(loaded, now)
   if (mode === 'initial') {
     if (loaded.status !== 'processing') return loaded
     const fresh = isUnclaimed(loaded) && !loaded.elevenlabs_doc_id
     if (!fresh && !isStale(loaded, now)) throw new RequestError('conflict', 'This document is already being processed.', 409)
   } else {
-    if (state === 'settled') return loaded
+    if (state === 'settled') return ragRetryable(loaded) ? retryRagIndex(db, orgId, loaded, log) : loaded
     if (state === 'in_flight') throw new RequestError('conflict', 'This document is already being processed.', 409)
   }
 
@@ -691,50 +807,52 @@ export async function processDocument(
   let elId: string | null = doc.elevenlabs_doc_id
   let localText: string | null = null
   let agentId = doc.agent_id
-  let language = 'en'
+  let model: EmbeddingModel = embeddingModelForAgentRow(null)
   try {
     const { data: agent, error: agentErr } = await db
       .from('agents')
-      .select('id, language')
+      .select(`id, ${AGENT_RAG_COLUMNS}`)
       .eq('id', doc.agent_id)
       .eq('org_id', orgId)
       .maybeSingle()
     if (agentErr) throw new Error(`agents read failed: ${agentErr.message}`)
     if (!agent) throw new KnowledgeError('Your agent could not be found.')
     agentId = agent.id as string
-    language = normalizeAgentLanguage(agent.language as string | null)
+    model = embeddingModelForAgentRow(agent)
     const ctx = { orgId, agentId }
 
-    // A document uploaded earlier may have been removed upstream: re-upload it then.
+    // A document uploaded earlier may have been removed upstream: re-upload it
+    // then. Checked with the light summaries endpoint (no document content).
     if (elId) {
-      try {
-        await el.knowledgeBase.get(elId, ctx)
-      } catch (err) {
-        if (!(isProviderError(err) && err.code === 'not_found')) throw err
+      const check = (await kb.summaries([elId], ctx))[elId]
+      if (kb.isMissing(check)) {
         log.warn('knowledge.remote_missing_reuploading', { elevenlabsDocId: elId })
         elId = null
-        doc = (await patchDoc(db, orgId, doc.id, { elevenlabs_doc_id: null, attached_at: null })) ?? doc
+        doc = (await patchDoc(db, orgId, doc.id, { elevenlabs_doc_id: null, attached_at: null, elevenlabs_folder_id: null, rag_status: null, rag_index_id: null })) ?? doc
+      } else if (!check || check.status !== 'success') {
+        throw new ProviderError({ system: 'elevenlabs', operation: 'kb.summaries', code: check ? 'upstream' : 'bad_response', status: check?.error_code ?? null })
       }
     }
 
     if (!elId) {
       const source = await loadSource(db, orgId, doc, log)
-      const name = cleanDisplayName(doc.name) || 'Document'
-      const created =
-        source.kind === 'file'
-          ? await el.knowledgeBase.createFromFile(source.blob, source.filename, name, ctx)
-          : source.kind === 'text'
-            ? await el.knowledgeBase.createFromText({ text: source.text, name }, ctx)
-            : await el.knowledgeBase.createFromUrl({ url: source.url, name }, ctx)
-      if (!created || typeof created.id !== 'string' || !created.id) {
-        throw new ProviderError({ system: 'elevenlabs', operation: 'kb.create', code: 'bad_response' })
+      if (source.kind === 'file' && source.size > Number(doc.size_bytes ?? 0)) {
+        // The browser declared a smaller size than it uploaded: re-check the budget with the real one.
+        const usage = await orgKnowledgeUsage(db, orgId, KNOWLEDGE_MAX_DOCS_PER_AGENT)
+        try {
+          assertBytesFit(usage, source.size - Number(doc.size_bytes ?? 0))
+        } catch (err) {
+          throw new KnowledgeError(err instanceof Error ? err.message : 'Your knowledge base is full.')
+        }
       }
+      const created = await createRemote(db, orgId, doc, source, ctx, log)
       elId = created.id
       if (source.kind === 'text') localText = source.text
 
       const stored = await patchDoc(db, orgId, doc.id, {
         elevenlabs_doc_id: elId,
-        ...(source.kind !== 'url' ? { size_bytes: source.size } : {}),
+        elevenlabs_folder_id: created.folderId,
+        ...(source.kind !== 'url' ? { size_bytes: source.size } : { auto_sync: true, sync_frequency_days: syncFrequencyDays() }),
       })
       if (!stored) {
         // Deleted while we uploaded: do not leave an orphan upstream.
@@ -768,10 +886,64 @@ export async function processDocument(
 
   log.info('knowledge.attached', { elevenlabsDocId: elId, durationMs: Date.now() - started })
   const ctx = { orgId, agentId }
-  await startRagIndex(elId, language, ctx, log, doc.id)
+  doc = await startRagIndex(db, doc, elId, model, ctx, log)
+  doc = await storeRemoteMetadata(db, doc, elId, ctx, log)
   doc = await storeExcerpt(db, orgId, doc, elId, localText, ctx, log)
   scheduleFallbackSync(agentId, log)
   return doc
+}
+
+/**
+ * Creates the provider copy inside the organization's folder (at the root when
+ * the folder cannot be obtained; maintenance moves it later). URL documents
+ * are created with weekly auto-sync and never auto-removed.
+ */
+async function createRemote(
+  db: SupabaseClient,
+  orgId: string,
+  doc: KnowledgeDocumentRow,
+  source: Source,
+  ctx: { orgId: string; agentId: string },
+  log: Logger,
+): Promise<{ id: string; folderId: string | null }> {
+  let folderId: string | null = null
+  try {
+    folderId = await ensureOrgFolder(orgId, log, db)
+  } catch (err) {
+    log.error('knowledge.folder_unavailable', err)
+  }
+  const name = cleanDisplayName(doc.name) || 'Document'
+  const create = (parent: string | null) =>
+    source.kind === 'file'
+      ? el.knowledgeBase.createFromFile(source.blob, source.filename, name, ctx, parent)
+      : source.kind === 'text'
+        ? el.knowledgeBase.createFromText({ text: source.text, name, ...(parent ? { parent_folder_id: parent } : {}) }, ctx)
+        : el.knowledgeBase.createFromUrl(
+            {
+              url: source.url,
+              name,
+              ...(parent ? { parent_folder_id: parent } : {}),
+              enable_auto_sync: true,
+              auto_remove: false,
+              minimum_frequency_days: syncFrequencyDays(),
+            },
+            ctx,
+          )
+  let created: el.ELDocumentRef
+  try {
+    created = await create(folderId)
+  } catch (err) {
+    // The folder was deleted out of band: forget it and create at the root (nothing was created).
+    if (!folderId || !(isProviderError(err) && err.code === 'not_found')) throw err
+    log.warn('knowledge.folder_missing_creating_at_root', { folderId })
+    await forgetOrgFolder(orgId, folderId, log, db)
+    folderId = null
+    created = await create(null)
+  }
+  if (!created || typeof created.id !== 'string' || !created.id) {
+    throw new ProviderError({ system: 'elevenlabs', operation: 'kb.create', code: 'bad_response' })
+  }
+  return { id: created.id, folderId }
 }
 
 /** New object id for a document (also used as the row id, so logs line up). */
@@ -779,19 +951,20 @@ export function newDocumentId(): string {
   return crypto.randomUUID()
 }
 
-/** Count of documents on the agent, for the per-agent cap. */
-export async function assertDocumentCapacity(supabase: SupabaseClient, orgId: string, agentId: string): Promise<void> {
-  const { count, error } = await supabase
-    .from('knowledge_documents')
-    .select('id', { count: 'exact', head: true })
-    .eq('org_id', orgId)
-    .eq('agent_id', agentId)
-  if (error) throw new Error(`knowledge_documents count failed: ${error.message}`)
-  if ((count ?? 0) >= KNOWLEDGE_MAX_DOCS_PER_AGENT) {
-    throw new RequestError(
-      'conflict',
-      `Your knowledge base is full (${KNOWLEDGE_MAX_DOCS_PER_AGENT} documents). Remove a document to add another.`,
-      409,
-    )
-  }
+/**
+ * Capacity check before adding knowledge: the document count (website pages
+ * included), the organization's byte budget for `incomingBytes` more, and —
+ * when a logger is given — the shared workspace's RAG quota. Throws a
+ * RequestError (409 full / 503 paused) with a message for the owner.
+ */
+export async function assertDocumentCapacity(
+  supabase: SupabaseClient,
+  orgId: string,
+  _agentId: string,
+  opts: { incomingBytes?: number; incomingDocs?: number; log?: Logger } = {},
+): Promise<void> {
+  const usage = await orgKnowledgeUsage(supabase, orgId, KNOWLEDGE_MAX_DOCS_PER_AGENT)
+  assertDocumentsFit(usage, opts.incomingDocs ?? 1)
+  assertBytesFit(usage, opts.incomingBytes ?? 0)
+  if (opts.log) await assertWorkspaceRagHeadroom(opts.log)
 }

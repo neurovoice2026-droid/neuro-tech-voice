@@ -51,6 +51,27 @@ export const AGENT_COLUMNS =
 const MAX_APPENDIX_CHARS = 24_000
 const MAX_EXCERPT_PER_DOC = 8_000
 
+/** Finished website imports of the agent: one RAG folder each (pages live in the provider's folder). */
+async function loadWebsiteKnowledge(
+  db: SupabaseClient,
+  agent: Pick<AgentRow, 'id' | 'org_id'>,
+): Promise<Array<{ host: string; rootFolderId: string; excerpt: string | null }>> {
+  const { data, error } = await db
+    .from('knowledge_crawls')
+    .select('host, root_folder_id, content_excerpt')
+    .eq('agent_id', agent.id)
+    .eq('org_id', agent.org_id)
+    .eq('status', 'succeeded')
+    .not('root_folder_id', 'is', null)
+    .order('created_at', { ascending: true })
+  if (error) throw new Error(`knowledge_crawls read failed: ${error.message}`)
+  return (data ?? []).map((c) => ({
+    host: String(c.host),
+    rootFolderId: String(c.root_folder_id),
+    excerpt: typeof c.content_excerpt === 'string' ? c.content_excerpt : null,
+  }))
+}
+
 export async function loadAgentRow(db: SupabaseClient, agentId: string): Promise<AgentRow | null> {
   const { data, error } = await db.from('agents').select(AGENT_COLUMNS).eq('id', agentId).maybeSingle()
   if (error) throw new Error(`agents read failed: ${error.message}`)
@@ -62,10 +83,12 @@ export async function buildAgentSpec(db: SupabaseClient, agent: AgentRow): Promi
     db.from('organizations').select('id, name, timezone').eq('id', agent.org_id).single(),
     db
       .from('knowledge_documents')
-      .select('id, name, type, elevenlabs_doc_id, cartesia_doc_id, status, content_excerpt')
+      .select('id, name, type, elevenlabs_doc_id, cartesia_doc_id, status, content_excerpt, usage_mode, size_bytes')
       .eq('agent_id', agent.id)
       .eq('org_id', agent.org_id)
       .in('status', ['ready', 'processing'])
+      // A document being deleted is left out from the moment the delete starts.
+      .is('deleting_at', null)
       .order('created_at', { ascending: true }),
     db.from('phone_numbers').select('routing_mode').eq('org_id', agent.org_id),
   ])
@@ -106,20 +129,37 @@ export async function buildAgentSpec(db: SupabaseClient, agent: AgentRow): Promi
     recordingNotice: conversation.recording_notice,
   })
 
-  const knowledge = (docs ?? [])
-    .filter((d) => d.status === 'ready' || d.elevenlabs_doc_id)
-    .map((d) => ({
-      name: String(d.name),
-      type: (d.type === 'url' ? 'url' : d.type === 'text' ? 'text' : 'file') as 'file' | 'url' | 'text',
-      elevenlabsId: (d.elevenlabs_doc_id as string | null) ?? null,
-      cartesiaId: (d.cartesia_doc_id as string | null) ?? null,
-    }))
+  const websites = await loadWebsiteKnowledge(db, agent)
+  const knowledge: AgentSpec['knowledge'] = [
+    ...(docs ?? [])
+      .filter((d) => d.status === 'ready' || d.elevenlabs_doc_id)
+      .map((d) => ({
+        name: String(d.name),
+        type: (d.type === 'url' ? 'url' : d.type === 'text' ? 'text' : 'file') as 'file' | 'url' | 'text',
+        elevenlabsId: (d.elevenlabs_doc_id as string | null) ?? null,
+        cartesiaId: (d.cartesia_doc_id as string | null) ?? null,
+        usageMode: (d.usage_mode === 'prompt' ? 'prompt' : 'auto') as 'auto' | 'prompt',
+        sizeBytes: typeof d.size_bytes === 'number' && d.size_bytes > 0 ? d.size_bytes : null,
+      })),
+    ...websites.map((w) => ({
+      name: `Website: ${w.host}`.slice(0, 200),
+      type: 'folder' as const,
+      elevenlabsId: w.rootFolderId,
+      cartesiaId: null,
+      usageMode: 'auto' as const,
+      sizeBytes: null,
+    })),
+  ]
 
   let appendix = ''
-  for (const d of docs ?? []) {
-    const excerpt = typeof d.content_excerpt === 'string' ? d.content_excerpt.slice(0, MAX_EXCERPT_PER_DOC) : ''
+  const excerpts = [
+    ...(docs ?? []).map((d) => ({ name: String(d.name), excerpt: d.content_excerpt })),
+    ...websites.map((w) => ({ name: `Website ${w.host}`, excerpt: w.excerpt })),
+  ]
+  for (const d of excerpts) {
+    const excerpt = typeof d.excerpt === 'string' ? d.excerpt.slice(0, MAX_EXCERPT_PER_DOC) : ''
     if (!excerpt) continue
-    const block = `### ${String(d.name).slice(0, 120)}\n${excerpt}\n`
+    const block = `### ${d.name.slice(0, 120)}\n${excerpt}\n`
     if (appendix.length + block.length > MAX_APPENDIX_CHARS) break
     appendix += block
   }

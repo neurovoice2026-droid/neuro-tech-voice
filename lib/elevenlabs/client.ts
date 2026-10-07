@@ -12,6 +12,7 @@ import 'server-only'
 
 import { providerRequest, NO_RETRY } from '@/lib/voice-providers/http'
 import { ProviderError } from '@/lib/voice-providers/errors'
+import { readTextPrefix } from './api/body'
 
 const PLACEHOLDER_KEYS = new Set(['', 'your-elevenlabs-api-key'])
 
@@ -327,27 +328,64 @@ export const twilio = {
 export interface ELDocumentRef {
   id: string
   name: string
+  folder_path?: Array<{ id: string; name?: string | null }>
 }
 
+/** Default cap for content(): callers keep a short excerpt, never the whole document. */
+export const KB_CONTENT_MAX_BYTES = 256 * 1024
+const KB_CONTENT_BODY_TIMEOUT_MS = 20_000
+
 export const knowledgeBase = {
-  createFromUrl(params: { url: string; name?: string }, ctx?: Ctx) {
-    return req<ELDocumentRef>('kb.create_url', '/v1/convai/knowledge-base/url', { method: 'POST', body: params, retry: NO_RETRY, ctx })
+  /**
+   * ElevenLabs scrapes the page before it answers, hence the upload timeout.
+   * Never retried: a retry after a late upstream success would create a
+   * duplicate document. Auto-sync can only be chosen here (PATCH has no
+   * auto-sync field); auto_remove stays false so a temporarily unreachable
+   * site never deletes the document behind our back.
+   */
+  createFromUrl(
+    params: {
+      url: string
+      name?: string
+      parent_folder_id?: string | null
+      enable_auto_sync?: boolean
+      auto_remove?: false
+      minimum_frequency_days?: number | null
+    },
+    ctx?: Ctx,
+  ) {
+    return req<ELDocumentRef>('kb.create_url', '/v1/convai/knowledge-base/url', { method: 'POST', body: params, timeoutMs: T.upload, retry: NO_RETRY, ctx })
   },
-  createFromText(params: { text: string; name?: string }, ctx?: Ctx) {
-    return req<ELDocumentRef>('kb.create_text', '/v1/convai/knowledge-base/text', { method: 'POST', body: params, retry: NO_RETRY, ctx })
+  createFromText(params: { text: string; name?: string; parent_folder_id?: string | null }, ctx?: Ctx) {
+    return req<ELDocumentRef>('kb.create_text', '/v1/convai/knowledge-base/text', { method: 'POST', body: params, timeoutMs: T.upload, retry: NO_RETRY, ctx })
   },
-  createFromFile(file: Blob, filename: string, name: string, ctx?: Ctx) {
+  createFromFile(file: Blob, filename: string, name: string, ctx?: Ctx, parentFolderId?: string | null) {
     const form = new FormData()
     form.append('file', file, filename)
     form.append('name', name)
+    if (parentFolderId) form.append('parent_folder_id', parentFolderId)
     return req<ELDocumentRef>('kb.create_file', '/v1/convai/knowledge-base/file', { method: 'POST', body: form, timeoutMs: T.upload, retry: NO_RETRY, ctx })
   },
   get(id: string, ctx?: Ctx) {
     return req<{ id: string; name: string; type: string; metadata?: { size_bytes?: number } }>('kb.get', `/v1/convai/knowledge-base/${encodeURIComponent(id)}`, { ctx })
   },
-  /** Plain text the provider extracted (used to give the fallback agent the same knowledge). */
-  content(id: string, ctx?: Ctx) {
-    return req<string>('kb.content', `/v1/convai/knowledge-base/${encodeURIComponent(id)}/content`, { responseKind: 'text', ctx })
+  /**
+   * The content the provider extracted (HTML or Markdown), bounded to
+   * maxBytes (default 256 KB): used for the fallback agent's short excerpt.
+   */
+  async content(id: string, ctx?: Ctx, opts: { maxBytes?: number; bodyTimeoutMs?: number } = {}): Promise<string> {
+    const res = await req<Response>('kb.content', `/v1/convai/knowledge-base/${encodeURIComponent(id)}/content`, {
+      responseKind: 'response',
+      timeoutMs: T.upload,
+      ctx,
+    })
+    const prefix = await readTextPrefix(res, {
+      maxBytes: opts.maxBytes ?? KB_CONTENT_MAX_BYTES,
+      timeoutMs: opts.bodyTimeoutMs ?? KB_CONTENT_BODY_TIMEOUT_MS,
+      system: 'elevenlabs',
+      operation: 'kb.content',
+    })
+    return prefix.text
   },
   /** force=true also detaches the document from any agent still referencing it. */
   delete(id: string, force: boolean, ctx?: Ctx) {

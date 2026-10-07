@@ -193,13 +193,66 @@ describe('buildElevenLabsAgentBody', () => {
       { name: 'Not uploaded yet', type: 'text', elevenlabsId: null, cartesiaId: 'c3' },
     ]
 
-    it('lists only uploaded documents as {type,name,id,usage_mode} and enables RAG', () => {
+    it('lists only uploaded documents as {type,name,id,usage_mode} and enables RAG with the pinned retrieval limits', () => {
       const body = build({ knowledge: docs })
       expect(at(body, 'conversation_config.agent.prompt.knowledge_base')).toEqual([
         { type: 'file', name: 'Price list.pdf', id: 'kb_file_1', usage_mode: 'auto' },
         { type: 'url', name: 'https://smile.example/faq', id: 'kb_url_2', usage_mode: 'auto' },
       ])
-      expect(at(body, 'conversation_config.agent.prompt.rag')).toEqual({ enabled: true, embedding_model: 'e5_mistral_7b_instruct' })
+      expect(at(body, 'conversation_config.agent.prompt.rag')).toEqual({
+        enabled: true,
+        embedding_model: 'e5_mistral_7b_instruct',
+        max_documents_length: 12_000,
+        max_retrieved_rag_chunks_count: 6,
+        max_vector_distance: 0.6,
+        num_candidates: null,
+      })
+    })
+
+    it('maps usage_mode per document; folders (website imports) are always auto and always need RAG', () => {
+      const body = build({
+        knowledge: [
+          { name: 'Hours', type: 'text', elevenlabsId: 'kb_t', cartesiaId: null, usageMode: 'prompt', sizeBytes: 900 },
+          { name: 'Website: smile.example', type: 'folder', elevenlabsId: 'fold_1', cartesiaId: null, usageMode: 'prompt', sizeBytes: null },
+        ],
+      })
+      expect(at(body, 'conversation_config.agent.prompt.knowledge_base')).toEqual([
+        { type: 'text', name: 'Hours', id: 'kb_t', usage_mode: 'prompt' },
+        { type: 'folder', name: 'Website: smile.example', id: 'fold_1', usage_mode: 'auto' },
+      ])
+      expect(at(body, 'conversation_config.agent.prompt.rag.enabled')).toBe(true)
+    })
+
+    it('disables RAG when every document is pinned to the prompt or too small to index (< 500 bytes)', () => {
+      const small: AgentSpec['knowledge'] = [
+        { name: 'Hours', type: 'text', elevenlabsId: 'kb_t', cartesiaId: null, usageMode: 'auto', sizeBytes: 120 },
+        { name: 'Prices', type: 'text', elevenlabsId: 'kb_p', cartesiaId: null, usageMode: 'prompt', sizeBytes: 9_000 },
+      ]
+      expect(at(build({ knowledge: small }), 'conversation_config.agent.prompt.rag.enabled')).toBe(false)
+      // Unknown size counts as large.
+      const unknown: AgentSpec['knowledge'] = [{ name: 'Page', type: 'url', elevenlabsId: 'kb_u', cartesiaId: null, usageMode: 'auto', sizeBytes: null }]
+      expect(at(build({ knowledge: unknown }), 'conversation_config.agent.prompt.rag.enabled')).toBe(true)
+    })
+
+    it('takes retrieval limits from env within the spec bounds; invalid values fall back', () => {
+      vi.stubEnv('ELEVENLABS_RAG_MAX_DOCS_LENGTH', '20000')
+      vi.stubEnv('ELEVENLABS_RAG_MAX_CHUNKS', '25')
+      vi.stubEnv('ELEVENLABS_RAG_MAX_VECTOR_DISTANCE', '0.45')
+      vi.stubEnv('ELEVENLABS_RAG_NUM_CANDIDATES', '200')
+      expect(at(build({ knowledge: docs }), 'conversation_config.agent.prompt.rag')).toMatchObject({
+        max_documents_length: 20_000,
+        max_retrieved_rag_chunks_count: 6,
+        max_vector_distance: 0.45,
+        num_candidates: 200,
+      })
+      vi.stubEnv('ELEVENLABS_RAG_MAX_DOCS_LENGTH', '999999')
+      vi.stubEnv('ELEVENLABS_RAG_MAX_VECTOR_DISTANCE', '1')
+      vi.stubEnv('ELEVENLABS_RAG_NUM_CANDIDATES', '50')
+      expect(at(build({ knowledge: docs }), 'conversation_config.agent.prompt.rag')).toMatchObject({
+        max_documents_length: 12_000,
+        max_vector_distance: 0.6,
+        num_candidates: null,
+      })
     })
 
     it('uses the multilingual embedding model for non-English agents', () => {
