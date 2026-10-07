@@ -159,3 +159,97 @@ and the CTA on its plan f694 (CTA ends f746). T1 + T2 gives the same, with `does
 - **`swaps.mjs`** checks the alternates as placed and the forced trim rungs.
 - **`compare.mjs`** compares the old and the re-anchored stop-time over 262,144 casts.
 - **`sync.mjs`** is the end-to-end sync check against the built stems.
+
+## Independent check
+
+This check was done on 2026-10-07 at HEAD `3bdb059`. That is the orchestrator's wip commit, and it already carries this file. The checker re-measured everything with its own code (numpy and Node, not the picker's `analyse.mjs`). The intelligibility (SII) of each key word was scored against the bed and effects stems of the ig5 mix as built. The picker's runs used the placeholder mix for this. Scripts and logs are in `out/ig/qa/ig5/voices/check/` (ignored).
+
+**Verdict: no swap. Every pick stands.** `ig5-01`, `ig5-01b`, `ig5-02` and `ig5-02t` stay PROVISIONAL until `HOOKS.md` lands. No other take is better on the brief's criteria without losing on another one. Nothing was installed, re-generated or committed in this step. `timing.ts` and `voice.generated.ts` are unchanged.
+
+**Install.**
+- All 13 `public/ig/voice/ig5-*.wav` files match their picked takes byte for byte (sha256). Each one matches only its own pick:
+  - `01` a `655fb98d…`
+  - `01b` c `dc8800c9…`
+  - `02` b `2d11d96e…`
+  - `02t` c `4fe5f6b7…`
+  - `03` c `363cc18b…`
+  - `04` d `82bfdbd6…`
+  - `05` c `74d9b220…`
+  - `05t` c `bab7ae38…`
+  - `05-num` a `fb1e107d…`
+  - `06` c `e6e34abe…`
+  - `06-msg` a `7b7e7b98…`
+  - `07` b `835810d2…`
+  - `07-bio` b `99e9103b…`
+- `ig1-07.wav` is unchanged at `c73b8a86…dd601035b`, the same as in all four sets.
+- In `src/ig/ig5/voice.generated.ts`, all 14 entries are JSON-identical to their pick's entry. The `ig1-07` entry equals `src/ig/voice.generated.ts`'s.
+  - `engine` is `cartesia`. The voice is Tessa `6ccbfb76…` on `sonic-3.6-2026-08-27`.
+  - For every WAV, the duration matches its entry's `duration`, the `env` length equals `frames`, and the words are n/n.
+- `voice-lines-ig5.json` is unchanged (`9362ba41…`).
+
+**Timeline.** This is the real `timing.ts`, imported as is.
+- The full script is placed (rung 0), with impact f780, END f840, the brand at f784 and the stop-time at f390–428.
+- The lines start at hook f10 · agency f124 · answering f255 · ours f394 · setup f503 · does f596 · CTA f701. Their files end at f114, 246, 380, 496, 590, 692 and 753.
+  - **No voice overlaps.** The gaps between lines are 10, 9, 14, 7, 6, 9 and 31 f.
+- "Ours?" lands at 46.9 %, "forty-nine" at 51.0 % and the CTA at 83.5 %.
+- The CTA ends at f753, 12 f to spare. The field rises at f695 and AGENT types from f716.
+- The scene windows equal the table above.
+- **Screens and display map:** every span and every `$300` / `$1,500.` / `$99` / `50` / `$49` entry indexes the right word in every placed and alternate line.
+- **Onsets:** each card's first word that follows a pause lands within ±1.7 f of the audio onset (in the installed WAVs), with two exceptions:
+  - "No" in `ig5-04`: Cartesia's stamp is 2.1 f late, as the picker found.
+  - "for" in `ig5-01`: the fricative starts ≈ 4 f before the stamp, and the vowel starts on it.
+
+**Swaps, re-simulated.** The checker ran its own copy of `timing.ts` on:
+- each of the 28 one-line swaps;
+- the four alternates placed in their roles (4 takes each);
+- the forced trim rungs.
+
+Every case stays 28 s: rung 0 (or the rung that was forced), impact f780.
+- The one-line swaps match the picker's table.
+- These results add to the picker's numbers or correct them:
+  - **`ig5-01b` in the hook:** take-c (the pick) moves nothing. Take-b moves only the hook's own start (f7). Take-d costs 4 f ("Ours?" f398). Take-a costs 8 f ("Ours?" f402, CTA f709, 4 f spare).
+  - **Forced T1:** "Ours?" lands on **f387**, not f386, with the re-anchored rule. The CTA is on f694 and ends f746. T1 + T2 gives the same, with `does` on f574.
+  - **`ig5-04` takes b and c** place the line at f393, because their "Ours?" starts 0.07 s into the take. It is still heard at f394.
+
+**The picks challenged.** Columns:
+- *loud* is the word against the median of the line's words (dB);
+- *st* is the word's median pitch against the line's median (semitones);
+- *SII* is the word's score at the mix level / with the masker +6 dB.
+
+| line | pick | challenger | measured | verdict |
+|---|---|---|---|---|
+| `ig5-04` "forty-nine" | d | c, a | d: 0.48 s, +3.5 dB, +1.4 st, SII 0.97 / 0.89, /f/ frication right on the stamp (a $49 that lights with the sound). c: 0.40 s, +3.0 dB, 0.98 / 0.92, its /f/ comes before its stamp, its "a month." rises, and the CTA moves 4 f later. a: 0.56 s but only +2.1 dB, 0.99 / 0.86, the CTA moves 8 f later. b: 0.40 s, +3.5 dB, 0.96 / 0.83, "From" in silence. | **d stands.** "fee." falls (−3.2 st), "Ours?" rises. |
+| `ig5-07` "AGENT" | b | c, d | AGENT: b and c both 0.56 s, 0.0 dB, +0.8 st (a 0.40 s, d −0.3 st). c's AGENT SII is higher (0.94 / 0.84 against b's 0.90 / 0.77), but its "link." sits 13 dB under the line (SII 0.33, b 0.68), which risks the ≥ 0.7 word gate. | **b stands.** No take has a stronger AGENT. |
+| `ig5-03` | c | d | Same timing ("Ours?" f394). c has the louder "fifty" (+0.7 against −1.3 dB) and the stronger "ninety-nine" (+4.6 dB / +4.7 st against +3.7 / +2.4). d's "fifty" is longer (0.40 s) and scores 0.84 / 0.72 against c's 0.80 / 0.68. "minutes." creaks low in both. | **c stands** (no clear win for d). |
+| `ig5-05` | c | b | c is the only take that raises "yourself" (+7.5 st, a/b/d −2.5 … +2.6), and its "minutes." ends 2.9 st under the phrase. b has a clearer "ten" (0.97 against 0.88) but costs 8 f of CTA spare. | **c stands.** |
+| `ig5-06` | c | a | c has the clearest "books" (+1.2 dB, SII 0.93 / 0.79; a, b and d 0.76–0.79). a is 0.16 s shorter (CTA f694), but its "can't," runs on and two of its word pairs share an onset. | **c stands.** |
+| `ig5-06-msg` | a | b | "message." creaks low in both: b's voiced blip sits 2 st lower. a has a real 0.22 s comma, while b's "and" is stamped across 0.4 s. All four takes place the CTA on f694. | **a stands** (the two are equivalent). |
+| `ig5-05-num` | a | c | c falls more and costs 0 f, against a's 4 f. a has the more prominent "fifteen" (+2.0 st peak against +0.0). This is a spare. | **a stands.** |
+| `ig5-01` *(prov.)* | a | c | c has the clearer "three" (SII 0.98 / 0.90 against a's 0.88 / 0.78 in the mix as built), is 0.16 s shorter and costs nothing. But its final rise is louder (below). | **a stands.** Re-check after `HOOKS.md`. |
+| `ig5-02` *(prov.)* | b | c / d | Each costs 4 f. Neither would fix the climax (below). | **b stands.** |
+
+**Two corrections to the record above.**
+- **The hook's landing is not "no lift" in any take.** The final syllable "-ist" of "receptionist." rises to ≈ 296–320 Hz, about +8 st over the line's median, in all four `ig5-01` takes. The harmonic spacing confirms it: take-a at 3.06–3.13 s has 296 / 589 / 886 Hz.
+  - In take-a this rise comes after a fall into creak on "-tion", and it is 2–3 dB quieter than take-c's. So take-a is still the least uptalk of the four, which is why it stands.
+  - "appointment." (`ig5-06`) also ends high on "-ment" in all four takes (+8 … +12 st), and c is no worse than the others.
+  - If `HOOKS.md` keeps the words, measure this on the re-take.
+- **The climax FAIL cannot be fixed by a pick.** The loudest moment of each line in the master: `ig5-02` −9.9 (f183), `ig5-03` −10.3 (f322), `ig5-06` −10.3 (f608), `ig5-05` −10.9, `ig5-04` −11.1, `ig5-07` −11.7, `ig5-01` −12.0. The impact is −9.4.
+  - Without `ig5-02`'s "Setup," peak, `ig5-03` and `ig5-06` are still less than 1 LU under it.
+  - So this is the sound pass's job (the impact level, or rides on 02 / 03 / 06), as the picker said.
+
+**Clicks and fry.** No pick has a click.
+- The only spikes after silence are word onsets: a take's first plosive, or the /s/ of "Setup," in `ig5-02t`.
+- The sample-step counts follow creak pulses on phrase ends ("minutes.", "hundred.", "message.", "link."). They are not glitches.
+- Fry is as the picker reported.
+
+**Gates** (run by the checker in this order; nothing ran beside the guard).
+
+| gate | result |
+|---|---|
+| `guard:ig5 -- --check` (gates 1–5) | **PASS**: 255/257 shas (the 2 allowed edits 9–10), stamps ig1 `49b90ae4…` ig2 `757d177d…` ig3 `47ae5cf3…` ig4 `f4500c7a…`, 38 rows + 11 IG5, gate P 24/24 stills byte-identical |
+| `npx tsc --noEmit -p .` | **PASS** |
+| `npm run sfx:ig` | **PASS**: ig1–ig4 "up to date … skipped" ×4, 0 built |
+| `npm run check:audio:ig` | **PASS ×4**: climax leads +1.7 / +1.3 / +1.1 / +1.1 LU |
+| `npm run sfx:ig5` | up to date (`df59239ddc8e41cd`), skipped: the mix is current with the installed takes |
+| `npm run check:audio:ig5` | **FAIL, 1 item: the climax** (+0.4 LU of +1). Everything else passes: −14.1 LUFS, −1.65 dBTP, the lines −20.0 … −20.1, 65 words ≥ 0.76, the name 0.97 / 1.00 / 0.99, the end, the arc |
+| `node scripts/kb/verify-film1.mjs --fast` | **PASS**: 6/6 (gates 1 2 3 4 5 10) |
