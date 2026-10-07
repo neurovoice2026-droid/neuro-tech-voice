@@ -81,9 +81,26 @@ export interface TransferSettings {
   condition: string | null
   /** Shown/spoken name of the destination ("our front desk"). */
   label: string | null
+  /**
+   * Keys dialed once the destination answers (an extension behind a PBX):
+   * digits, * and #; w = 0.5 s pause, W = 1 s. null = none.
+   */
+  extension?: string | null
+  /** Native numbers: 'conference' (warm message to the human, default) or 'blind' (direct, keeps the caller's number). */
+  transfer_type?: 'conference' | 'blind'
+  /** Smart-routed numbers: announce the caller's reason to the human before connecting. */
+  whisper?: boolean
 }
 
-export const DEFAULT_TRANSFER_SETTINGS: TransferSettings = { enabled: false, number: null, condition: null, label: null }
+export const DEFAULT_TRANSFER_SETTINGS: TransferSettings = {
+  enabled: false,
+  number: null,
+  condition: null,
+  label: null,
+  extension: null,
+  transfer_type: 'conference',
+  whisper: false,
+}
 
 export interface DataCollectionField {
   id: string

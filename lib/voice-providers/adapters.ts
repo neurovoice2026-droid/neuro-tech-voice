@@ -18,6 +18,7 @@ import {
 } from '@/lib/elevenlabs/agent-config'
 import { effectiveAgentLlm } from '@/lib/elevenlabs/llm-selection'
 import { inspectRemoteAgent } from '@/lib/elevenlabs/remote-agent-checks'
+import { clientOverridesDetail } from '@/lib/elevenlabs/client-overrides'
 import type { AgentBody, ELAgent } from '@/lib/elevenlabs/client'
 import { buildCartesiaAgentConfig } from '@/lib/cartesia/agent-config'
 import { cartesiaFallbackVoices } from './config'
@@ -123,7 +124,9 @@ async function elevenLabsBody(spec: AgentSpec, mode: 'write' | 'hash' = 'write')
   // Cached LLM catalogue: the configured LLM when offered and not deprecated,
   // else the platform default; plus the lowest reasoning level it supports.
   const llm = await effectiveAgentLlm()
-  const body = buildElevenLabsAgentBody(effective, { transferToolId, postCallWebhookId }, { llm: llm.llm, reasoningEffort: llm.reasoningEffort })
+  // Native numbers: per-call variables from our conversation initiation webhook (slice C).
+  const initiationWebhook = spec.hasNativeNumbers ? await import('@/lib/telephony/initiation-config').then((m) => m.initiationWebhookFor(mode)) : null
+  const body = buildElevenLabsAgentBody(effective, { transferToolId, postCallWebhookId, initiationWebhook }, { llm: llm.llm, reasoningEffort: llm.reasoningEffort })
   return { body, degraded, appTransfer: !needsTransferTool ? 'not_needed' : transferToolId ? 'attached' : 'unavailable' }
 }
 
@@ -194,6 +197,8 @@ function elevenLabsDetails(spec: AgentSpec, body: AgentBody, remote: ELAgent | n
     tts_model: remote?.conversation_config?.tts?.model_id ?? null,
     llm: prompt?.llm ?? null,
     platform_version: PLATFORM_AGENT_CONFIG_VERSION,
+    // Override fields the agent now accepts at call start (lib/elevenlabs/client-overrides.ts).
+    client_overrides: clientOverridesDetail(body),
     // The privacy now in force at the provider (decides the next one-shot retroactive push).
     privacy_applied: { record_audio: spec.privacy.record_audio, retention_days: spec.privacy.retention_days },
     paused: !spec.active,

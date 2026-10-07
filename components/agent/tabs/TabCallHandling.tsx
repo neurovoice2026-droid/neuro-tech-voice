@@ -84,11 +84,27 @@ interface TransferDraft {
   number: string
   condition: string
   label: string
+  extension: string
+  transfer_type: 'conference' | 'blind'
+  whisper: boolean
 }
 
 function transferDraftFrom(t: TransferSettings): TransferDraft {
-  return { enabled: t.enabled, number: t.number ?? '', condition: t.condition ?? '', label: t.label ?? '' }
+  return {
+    enabled: t.enabled,
+    number: t.number ?? '',
+    condition: t.condition ?? '',
+    label: t.label ?? '',
+    extension: t.extension ?? '',
+    transfer_type: t.transfer_type === 'blind' ? 'blind' : 'conference',
+    whisper: t.whisper === true,
+  }
 }
+
+const TRANSFER_TYPES: Array<{ value: TransferDraft['transfer_type']; label: string; hint: string }> = [
+  { value: 'conference', label: 'Warm (recommended)', hint: 'The agent briefs your team member before leaving the call.' },
+  { value: 'blind', label: 'Direct', hint: 'Connects straight away and shows the caller\'s number to your team member.' },
+]
 
 function TransferCard({ agent, status, onUpdate, isSaving }: TabCallHandlingProps) {
   const saved = useMemo(() => transferDraftFrom(readAgentSettings(agent).transfer), [agent])
@@ -98,23 +114,27 @@ function TransferCard({ agent, status, onUpdate, isSaving }: TabCallHandlingProp
 
   const typed = draft.number.trim()
   const normalized = typed ? normalizeE164(typed) : null
-  const errors: Partial<Record<'number' | 'condition' | 'label', string>> = {}
+  const errors: Partial<Record<'number' | 'condition' | 'label' | 'extension', string>> = {}
   if (typed && !normalized) errors.number = 'Use the international format, e.g. +40712345678.'
   else if (!typed && draft.enabled) errors.number = 'Enter the number to transfer calls to.'
   if (draft.condition.trim().length > 500) errors.condition = 'Keep it under 500 characters.'
   if (draft.label.trim().length > 80) errors.label = 'Keep it under 80 characters.'
+  const extension = draft.extension.replace(/\s+/g, '')
   const candidate: TransferSettings = {
     enabled: draft.enabled,
     number: normalized,
     condition: draft.condition.trim() || null,
     label: draft.label.trim() || null,
+    extension: extension || null,
+    transfer_type: draft.transfer_type,
+    whisper: draft.whisper,
   }
   const parsed = TransferSettingsSchema.safeParse(candidate)
   if (!parsed.success) {
     // Show each schema error under its own field (e.g. a platform variable in the condition).
     const issue = parsed.error.issues[0]
     const field = issue?.path[0]
-    if (field === 'condition' || field === 'label') errors[field] = errors[field] ?? issue.message
+    if (field === 'condition' || field === 'label' || field === 'extension') errors[field] = errors[field] ?? issue.message
     else if (!errors.number) errors.number = issue?.message ?? 'Invalid transfer settings.'
   }
   const valid = Object.keys(errors).length === 0 && parsed.success
@@ -190,6 +210,54 @@ function TransferCard({ agent, status, onUpdate, isSaving }: TabCallHandlingProp
             )}
           </div>
         </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="transfer-extension">Extension (optional)</Label>
+            <Input
+              id="transfer-extension"
+              autoComplete="off"
+              placeholder="ww123"
+              value={draft.extension}
+              maxLength={24}
+              onChange={(e) => setDraft((d) => ({ ...d, extension: e.target.value }))}
+              className="font-mono"
+              aria-invalid={visible.extension ? true : undefined}
+              aria-describedby={visible.extension ? 'transfer-extension-error' : 'transfer-extension-hint'}
+            />
+            {visible.extension ? (
+              <FieldError id="transfer-extension-error">{visible.extension}</FieldError>
+            ) : (
+              <p id="transfer-extension-hint" className="text-xs text-muted-foreground">
+                Dialed after the call connects, for a phone system menu. Digits, * and #; w waits half a second.
+              </p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="transfer-type">Transfer method on direct numbers</Label>
+            <Select value={draft.transfer_type} onValueChange={(v) => v && setDraft((d) => ({ ...d, transfer_type: v as TransferDraft['transfer_type'] }))}>
+              <SelectTrigger id="transfer-type" className="w-full" aria-describedby="transfer-type-hint">
+                <SelectValue>{(v: string) => TRANSFER_TYPES.find((t) => t.value === v)?.label ?? v}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {TRANSFER_TYPES.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p id="transfer-type-hint" className="text-xs text-muted-foreground">
+              {TRANSFER_TYPES.find((t) => t.value === draft.transfer_type)?.hint}
+            </p>
+          </div>
+        </div>
+
+        <SettingSwitch
+          id="transfer-whisper"
+          label="Tell your team member why the caller is transferred"
+          description="On smart-routed numbers, the person who answers first hears a short announcement with the caller's reason, then the caller is connected."
+          checked={draft.whisper}
+          onCheckedChange={(v) => setDraft((d) => ({ ...d, whisper: v }))}
+        />
 
         <div className="space-y-1.5">
           <Label htmlFor="transfer-condition">When to transfer</Label>

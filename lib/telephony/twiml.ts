@@ -38,6 +38,10 @@ export function forwardCall(opts: {
   callerId?: string | null
   actionUrl: string
   timeoutSeconds?: number
+  /** Keys dialed once the destination answers (an extension): Twilio sendDigits (digits, *, #, w). */
+  sendDigits?: string | null
+  /** TwiML played to the destination only, before the caller is bridged (warm-transfer whisper). */
+  whisperUrl?: string | null
 }): string {
   const r = new twilio.twiml.VoiceResponse()
   if (opts.sayText) say(r, opts.sayText, opts.language)
@@ -48,7 +52,22 @@ export function forwardCall(opts: {
     answerOnBridge: true,
     ...(opts.callerId ? { callerId: opts.callerId } : {}),
   })
-  dial.number(opts.to)
+  const sendDigits = opts.sendDigits && /^[0-9*#w]{1,48}$/.test(opts.sendDigits) ? opts.sendDigits : null
+  if (sendDigits || opts.whisperUrl) {
+    dial.number({ ...(sendDigits ? { sendDigits } : {}), ...(opts.whisperUrl ? { url: opts.whisperUrl, method: 'POST' as const } : {}) }, opts.to)
+  } else {
+    dial.number(opts.to)
+  }
+  return r.toString()
+}
+
+/**
+ * The whisper document (<Number url>): spoken to the human who answered, then
+ * Twilio bridges the caller. No <Hangup>: that would drop the human's leg.
+ */
+export function whisperResponse(text: string | null, language: string): string {
+  const r = new twilio.twiml.VoiceResponse()
+  if (text) say(r, text, language)
   return r.toString()
 }
 

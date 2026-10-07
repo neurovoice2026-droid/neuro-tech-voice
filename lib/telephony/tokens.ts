@@ -15,8 +15,9 @@ import { parseJson } from '@/lib/util/json'
  * 'transfer'  historical name of the ntv_call_token correlation value (post-call
  *             webhook matching). It authorizes no tool any more, except the
  *             legacy body token of a transfer tool not yet reconciled.
+ * 'whisper'   the <Number url> TwiML played to the human before a transfer is bridged.
  */
-export type CallTokenPurpose = 'tool' | 'transfer' | 'stream_ended' | 'dial_complete' | 'refer' | 'outbound_connect'
+export type CallTokenPurpose = 'tool' | 'transfer' | 'stream_ended' | 'dial_complete' | 'refer' | 'outbound_connect' | 'whisper'
 
 interface Payload {
   c: string // calls.id

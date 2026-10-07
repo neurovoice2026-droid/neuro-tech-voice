@@ -14,6 +14,8 @@ import { evaluateWorkingHours } from '@/lib/voice-providers/working-hours'
 import type { RoutingInput } from '@/lib/voice-providers/routing'
 import type { VoiceProvider } from '@/lib/voice-providers/errors'
 import { normalizeAgentLanguage } from '@/lib/voice/languages'
+import { overridesInForce } from '@/lib/elevenlabs/client-overrides'
+import type { OrgUsage } from './quota'
 
 export interface NumberRow {
   id: string
@@ -30,7 +32,7 @@ export interface NumberRow {
 export interface RoutingContext {
   db: SupabaseClient
   number: NumberRow
-  org: { id: string; name: string | null; timezone: string; voice_fallback_enabled: boolean }
+  org: { id: string; name: string | null; timezone: string; voice_fallback_enabled: boolean; usage?: OrgUsage }
   agent: {
     id: string
     name: string
@@ -41,8 +43,16 @@ export interface RoutingContext {
     maxDurationSeconds: number
     transferNumber: string | null
     transferEnabled: boolean
+    /** The business enabled the recording notice: every opening line carries it. */
+    recordingNotice?: boolean
+    /** Twilio sendDigits for the transfer destination (extension), or null. */
+    transferDigits?: string | null
+    /** Announce the caller's reason to the human before bridging (app-routed transfers). */
+    transferWhisper?: boolean
   } | null
   externalIds: Partial<Record<VoiceProvider, string>>
+  /** conversation_config_override fields the ElevenLabs agent accepts at call start (lib/elevenlabs/client-overrides.ts). */
+  elevenLabsOverrides?: Set<string>
   routingInput: RoutingInput | null
 }
 
@@ -66,7 +76,7 @@ export async function loadRoutingContext(number: NumberRow, now = new Date()): P
     ? db.from('agents').select('*').eq('id', number.agent_id).eq('org_id', number.org_id).maybeSingle()
     : db.from('agents').select('*').eq('org_id', number.org_id).order('created_at', { ascending: true }).limit(1).maybeSingle()
   const [{ data: org, error: orgErr }, { data: agentRow, error: agentErr }] = await Promise.all([
-    db.from('organizations').select('id, name, timezone, voice_fallback_enabled').eq('id', number.org_id).single(),
+    db.from('organizations').select('id, name, timezone, voice_fallback_enabled, plan, minutes_used, minutes_limit').eq('id', number.org_id).single(),
     agentQuery,
   ])
   if (orgErr) throw new Error(`organizations read failed: ${orgErr.message}`)
@@ -77,16 +87,22 @@ export async function loadRoutingContext(number: NumberRow, now = new Date()): P
     name: (org.name as string | null) ?? null,
     timezone: (org.timezone as string) ?? 'UTC',
     voice_fallback_enabled: org.voice_fallback_enabled !== false,
+    usage: {
+      plan: (org.plan as string | null) ?? null,
+      minutes_used: (org.minutes_used as number | null) ?? null,
+      minutes_limit: (org.minutes_limit as number | null) ?? null,
+    },
   }
   if (!agentRow) return { db, number, org: orgCtx, agent: null, externalIds: {}, routingInput: null }
 
   const { data: resources, error: resErr } = await db
     .from('agent_provider_resources')
-    .select('provider, external_id')
+    .select('provider, external_id, details')
     .eq('agent_id', agentRow.id)
   if (resErr) throw new Error(`agent_provider_resources read failed: ${resErr.message}`)
   const externalIds: Partial<Record<VoiceProvider, string>> = {}
   for (const r of resources ?? []) if (r.external_id) externalIds[r.provider as VoiceProvider] = r.external_id as string
+  const elevenLabsOverrides = overridesInForce((resources ?? []).find((r) => r.provider === 'elevenlabs')?.details)
   if (!externalIds.elevenlabs && agentRow.elevenlabs_agent_id) externalIds.elevenlabs = agentRow.elevenlabs_agent_id as string
 
   const conversation = readConversationSettings(agentRow.conversation_settings ?? (agentRow.metadata as Record<string, unknown> | null)?.behavior_settings)
@@ -106,6 +122,9 @@ export async function loadRoutingContext(number: NumberRow, now = new Date()): P
     maxDurationSeconds: conversation.max_call_duration_minutes * 60,
     transferNumber: transfer.enabled ? transfer.number : null,
     transferEnabled: transfer.enabled && !!transfer.number,
+    recordingNotice: conversation.recording_notice,
+    transferDigits: twilioSendDigits(transfer.extension),
+    transferWhisper: transfer.whisper === true,
   }
 
   const routingInput: RoutingInput = {
@@ -127,5 +146,16 @@ export async function loadRoutingContext(number: NumberRow, now = new Date()): P
     hours,
     afterHours,
   }
-  return { db, number, org: orgCtx, agent, externalIds, routingInput }
+  return { db, number, org: orgCtx, agent, externalIds, elevenLabsOverrides, routingInput }
+}
+
+/**
+ * The stored transfer extension as Twilio <Number sendDigits>: digits, * and
+ * #, with "w" = 0.5 s pause (a "W" one-second pause becomes "ww"). null when
+ * none or invalid (settings validate it on save).
+ */
+export function twilioSendDigits(extension: string | null | undefined): string | null {
+  const raw = (extension ?? '').trim()
+  if (!raw || !/^[0-9*#wW]{1,24}$/.test(raw) || !/[0-9*#]/.test(raw)) return null
+  return raw.replace(/W/g, 'ww')
 }

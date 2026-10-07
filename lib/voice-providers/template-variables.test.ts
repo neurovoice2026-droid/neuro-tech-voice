@@ -48,6 +48,9 @@ describe('tenant text schemas reject platform variables with a clear message', (
       number: '+40712345678',
       condition: null,
       label: 'Desk',
+      extension: null,
+      transfer_type: 'conference',
+      whisper: false,
     })
   })
 })
