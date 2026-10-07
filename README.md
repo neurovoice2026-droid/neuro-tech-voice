@@ -57,7 +57,9 @@ configuration. Working hours are enforced before any provider is used.
 * Set every variable from `.env.example` (Production and Preview separately).
 * `VOICE_PUBLIC_BASE_URL` must be the stable public origin: Twilio request
   signatures are validated against it.
-* `vercel.json` schedules `/api/cron/voice-maintenance` every 5 minutes
-  (protected by `CRON_SECRET`).
+* `vercel.json` schedules `/api/cron/voice-maintenance` once a day (protected by
+  `CRON_SECRET`): the Hobby plan rejects deployments with more frequent crons.
+  On Pro, change the schedule to `*/5 * * * *`; on Hobby, an external scheduler
+  can call it every 5 minutes instead (docs/voice-providers.md §Vercel).
 * After deploying, check `GET /api/admin/voice/diagnostics?probe=1` with the admin
   token: it lists missing configuration by name (values are never returned).

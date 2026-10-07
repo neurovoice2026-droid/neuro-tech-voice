@@ -29,7 +29,7 @@ webhooks, incidents, reconciliation). The manual and live test procedure is in
                        │                                                                       │
  ElevenLabs ──post-call webhook──► /api/elevenlabs/webhook ─┐                                 │
  Cartesia  ──call webhook──────► /api/cartesia/webhook ─────┼─► webhook_events (dedupe)       │
- cron (5 min) ─► /api/cron/voice-maintenance (poll Cartesia,│   → after(): applyCallEvent     │
+ cron (daily) ─► /api/cron/voice-maintenance (poll Cartesia,│   → after(): applyCallEvent     │
                  retries, health probes, retention)         └─► calls (single source of truth)│
                                                                 → usage_ledger (billed once)   │
                        └──────────────────────────────────────────────────────────────────────┘
@@ -227,8 +227,14 @@ startup (`instrumentation.ts`) and shown by `GET /api/admin/voice/diagnostics`
 * Set all variables for Production (and Preview with separate keys/secrets).
 * `VOICE_PUBLIC_BASE_URL` must be the stable production origin (Twilio signatures
   are computed over the exact URL).
-* `vercel.json` schedules `/api/cron/voice-maintenance` every 5 minutes; set
-  `CRON_SECRET`.
+* `vercel.json` schedules `/api/cron/voice-maintenance` once a day (03:17 UTC,
+  ±59 min); set `CRON_SECRET`. The Hobby plan rejects deployments whose crons
+  run more than once a day. The job is designed for a 5-minute cadence (Cartesia
+  polling, webhook and agent-sync retries, settling stuck voice saves): on Pro,
+  change the schedule to `*/5 * * * *`; on Hobby, have an external scheduler
+  send `GET /api/cron/voice-maintenance` with `Authorization: Bearer $CRON_SECRET`
+  every 5 minutes. With the daily schedule those retries wait up to a day (saves,
+  webhooks and calls themselves are unaffected).
 * Request bodies are limited to 4.5 MB: knowledge files up to 20 MB are uploaded
   directly to Supabase Storage with a signed URL; voice-clone uploads are capped at 4 MB.
 
