@@ -45,7 +45,7 @@ import { GRAPHITE } from '../../kb/theme';
 import { INK_MESH, MOMENT_LIGHTS, MUTED_MESH } from '../../kb/palettes';
 import { AGENT_STEP, BRAND as BRAND_ID } from '../common/series';
 import type { ReelTimeline } from '../types';
-import { VOICE } from '../voice.generated';
+import { VOICE } from '../voices';
 import { useActFrame } from '../scene';
 import { CAP_OUT, Captions, type CapPlace } from './Captions';
 

@@ -26,7 +26,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { db, readWav, truePeak } from '../audio/dsp.mjs';
 import { integrated } from '../audio/loudness.mjs';
-import { IG_FILMS, IG_IDS } from './films.mjs';
+import { FILMS } from '../registry.mjs';
+
+/** the reels: every film of the merged registry named ig<n> (ig1–ig4 of ./films.mjs, ig5 of ../ig5/films.mjs) */
+const IG_FILMS = Object.fromEntries(Object.entries(FILMS).filter(([id]) => /^ig\d+$/.test(id)));
+const IG_IDS = Object.keys(IG_FILMS);
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const args = process.argv.slice(2);

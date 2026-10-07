@@ -34,7 +34,7 @@ import { FPS } from '../../timing';
 import { MOMENT_LIGHTS } from '../../kb/palettes';
 import { KB_INK } from '../../kb/theme';
 import type { ReelTimeline } from '../types';
-import { VOICE } from '../voice.generated';
+import { VOICE } from '../voices';
 
 const RUSH = MOMENT_LIGHTS.rush;
 const SUNDAY = MOMENT_LIGHTS.sunday;

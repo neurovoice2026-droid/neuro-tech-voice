@@ -30,7 +30,7 @@ import { APP, CheckMark, labelWidth, measureText, spaceWidth, typo, ui, useKitFa
 import { MOMENT_LIGHTS } from '../../kb/palettes';
 import { KB_INK } from '../../kb/theme';
 import type { ReelTimeline } from '../types';
-import { VOICE } from '../voice.generated';
+import { VOICE } from '../voices';
 import { CAP_LEAD, type CapKey } from './Captions';
 import { IgIcon } from './icons';
 import { ZoneRect } from './ZoneGuard';

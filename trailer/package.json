@@ -38,7 +38,13 @@
     "finish:ig": "node --experimental-strip-types --no-warnings scripts/ig/finish.mjs",
     "check:zones:ig": "node --experimental-strip-types --no-warnings scripts/ig/check-zones.mjs",
     "check:delivery:ig": "node --experimental-strip-types --no-warnings scripts/ig/check-delivery.mjs",
-    "verify:film2": "node --experimental-strip-types --no-warnings scripts/ig/verify-film2.mjs"
+    "verify:film2": "node --experimental-strip-types --no-warnings scripts/ig/verify-film2.mjs",
+    "voice:ig5": "node scripts/generate-voice.mjs --film=ig5",
+    "sfx:ig5": "node --experimental-strip-types --no-warnings scripts/ig5/generate-sfx.mjs",
+    "sfx:ig5:force": "node --experimental-strip-types --no-warnings scripts/ig5/generate-sfx.mjs --force",
+    "check:audio:ig5": "node --experimental-strip-types --no-warnings scripts/check-mix.mjs --film=ig5",
+    "studio:ig5": "npm run sfx:ig && npm run sfx:ig5 && NTV_SKIP_SFX=1 remotion studio src/ig/index.ts",
+    "guard:ig5": "node --experimental-strip-types --no-warnings scripts/ig5/guard.mjs"
   },
   "dependencies": {
     "@fontsource-variable/geist-mono": "^5.3.0",

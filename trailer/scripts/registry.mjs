@@ -1,18 +1,40 @@
 /**
  * The merged film registry (docs/ig/PIPELINE.md §3.2): scripts/films.mjs (film 1 "main", film 2 "kb") plus the
- * Instagram reels of scripts/ig/films.mjs (ig1…ig4), with the same API. The shared tools (generate-voice,
- * check-mix, check-render, render-master, sfx) import from here, so `--film=ig<n>` resolves while
- * scripts/films.mjs — an input to film 2's mix hash — stays byte-identical. `main` and `kb` resolve to
- * exactly the objects they always did.
+ * Instagram reels of scripts/ig/films.mjs (ig1…ig4) and the fifth reel of scripts/ig5/films.mjs (ig5,
+ * docs/ig/ig5/PIPELINE.md §0, §3.2 edit 1), with the same API. The shared tools (generate-voice, check-mix,
+ * check-render, render-master, sfx, scripts/ig/{render-par,finish,check-zones,check-delivery}) import from here,
+ * so `--film=ig<n>` resolves while scripts/films.mjs — an input to film 2's mix hash — and scripts/ig/films.mjs —
+ * an input to ig1–ig4's igHash — stay byte-identical. `main`, `kb` and ig1–ig4 resolve to exactly the objects
+ * they always did.
  *
  * This file is in no mix hash and in no frozen set.
  */
 import { FILMS as BASE, ROOT, abs, need, voiceFile } from './films.mjs';
 import { IG_FILMS } from './ig/films.mjs';
+import { IG5_FILMS } from './ig5/films.mjs';
 
-for (const id of Object.keys(IG_FILMS)) if (Object.hasOwn(BASE, id)) throw new Error(`[registry] film id "${id}" is in both scripts/films.mjs and scripts/ig/films.mjs`);
+/* every film id in exactly one registry (a duplicate would silently shadow a delivered film's entry) */
+{
+  const REGS = [['scripts/films.mjs', BASE], ['scripts/ig/films.mjs', IG_FILMS], ['scripts/ig5/films.mjs', IG5_FILMS]];
+  const seen = new Map();
+  for (const [file, reg] of REGS)
+    for (const id of Object.keys(reg)) {
+      if (seen.has(id)) throw new Error(`[registry] film id "${id}" is in both ${seen.get(id)} and ${file}`);
+      seen.set(id, file);
+    }
+}
 
-export const FILMS = { ...BASE, ...IG_FILMS };
+export const FILMS = { ...BASE, ...IG_FILMS, ...IG5_FILMS };
+
+/* every outName unique: finish writes <outDir>/deliver/<outName>-*, so a shared name would overwrite a delivered file */
+{
+  const by = new Map();
+  for (const [id, f] of Object.entries(FILMS)) {
+    if (f.outName === undefined) continue;
+    if (by.has(f.outName)) throw new Error(`[registry] films "${by.get(f.outName)}" and "${id}" share the outName ${f.outName}`);
+    by.set(f.outName, id);
+  }
+}
 export const FILM_IDS = Object.keys(FILMS);
 export { ROOT, abs, need, voiceFile };
 

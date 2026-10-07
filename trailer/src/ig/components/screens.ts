@@ -9,7 +9,7 @@
  */
 import { BEAT } from '../../timing';
 import { typo } from '../../kb/kit/type';
-import { VOICE } from '../voice.generated';
+import { VOICE } from '../voices';
 import type { ScreenKind } from '../common/series';
 import type { ReelTimeline } from '../types';
 

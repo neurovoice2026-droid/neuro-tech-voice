@@ -42,7 +42,7 @@ import { GRAPHITE } from '../../kb/theme';
 import { measureText, spaceWidth, typo, useKitFaces } from '../../kb/kit';
 import type { LineScreens } from '../common/series';
 import type { ReelTimeline } from '../types';
-import { VOICE } from '../voice.generated';
+import { VOICE } from '../voices';
 import { ZoneRect } from './ZoneGuard';
 
 /* ── the rules (SCRIPT.md §0.3) ── */
