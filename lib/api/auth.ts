@@ -7,25 +7,37 @@ import { RequestError } from '@/lib/api/http'
 export interface OrgContext {
   supabase: SupabaseClient
   user: User
-  org: { id: string; name: string | null; timezone: string | null; plan: string | null }
+  org: { id: string; name: string | null; timezone: string | null; plan: string | null; deletion_requested_at?: string | null }
 }
+
+/** 403 for every tenant API call of an organization whose deletion was requested (lib/account). */
+export const ACCOUNT_DELETING_MESSAGE = 'This account is being deleted.'
 
 /**
  * Resolves the signed-in user and their organization with the user-scoped
  * client, so every subsequent query is still bounded by RLS. Throws a
- * RequestError (401/404) that route handlers turn into a JSON response.
+ * RequestError (401/404) that route handlers turn into a JSON response, and
+ * 403 once the account's deletion was requested (nothing may re-create
+ * provider resources while it runs) unless `allowDeleting` is set.
  */
-export async function requireOrg(): Promise<OrgContext> {
+export async function requireOrg(opts: { allowDeleting?: boolean } = {}): Promise<OrgContext> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new RequestError('unauthorized', 'Unauthorized', 401)
-  const { data: org, error } = await supabase
+  let { data: org, error } = await supabase
     .from('organizations')
-    .select('id, name, timezone, plan')
+    .select('id, name, timezone, plan, deletion_requested_at')
     .eq('user_id', user.id)
     .maybeSingle()
+  if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+    // Migration 021 not applied yet: nothing can be in deletion.
+    ;({ data: org, error } = await supabase.from('organizations').select('id, name, timezone, plan').eq('user_id', user.id).maybeSingle())
+  }
   if (error) throw new RequestError('internal', 'Could not load your organization.', 500)
   if (!org) throw new RequestError('not_found', 'Organization not found', 404)
+  if ((org as OrgContext['org']).deletion_requested_at && !opts.allowDeleting) {
+    throw new RequestError('forbidden', ACCOUNT_DELETING_MESSAGE, 403, { reason: 'account_deleting' })
+  }
   return { supabase, user, org: org as OrgContext['org'] }
 }
 

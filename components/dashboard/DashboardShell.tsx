@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, PhoneCall, Bot, Phone, Plug, CreditCard,
-  LogOut, Menu, X, ChevronRight, GitBranch, TriangleAlert,
+  LogOut, Menu, X, ChevronRight, GitBranch, TriangleAlert, Settings,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -28,6 +28,7 @@ const NAV_ITEMS = [
   { href: '/integrations', label: 'Integrations', icon: Plug },
   { href: '/workflows', label: 'Workflows', icon: GitBranch },
   { href: '/billing', label: 'Billing', icon: CreditCard },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
 interface DashboardShellProps {

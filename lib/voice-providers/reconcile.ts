@@ -16,6 +16,7 @@ import { agentTags } from '@/lib/elevenlabs/agent-config'
 import { LIFECYCLES } from './adapters'
 import { providersFor, syncAgent } from './agent-sync'
 import { isProviderError, toProviderError, VOICE_PROVIDERS, type VoiceProvider } from './errors'
+import { deleteOrphanAgentKnowledge, type OrphanKnowledgeReport } from '@/lib/account/orphan-knowledge'
 
 export interface ReconcileOptions {
   apply: boolean
@@ -50,7 +51,7 @@ export interface ReconcileReport {
   dryRun: boolean
   agentsChecked: number
   issues: ReconcileIssue[]
-  orphans: Array<{ provider: VoiceProvider; externalId: string; localAgentId: string | null; deleted: boolean; note?: string }>
+  orphans: Array<{ provider: VoiceProvider; externalId: string; localAgentId: string | null; deleted: boolean; note?: string; knowledge?: OrphanKnowledgeReport }>
   errors: Array<{ provider: VoiceProvider; step: string; error: string }>
 }
 
@@ -253,6 +254,8 @@ export async function reconcileVoiceProviders(opts: ReconcileOptions): Promise<R
     for (const o of report.orphans) {
       if (o.provider !== 'elevenlabs') continue
       try {
+        // A true orphan's documents went unreferenced with its rows (slice H); a duplicate shares the live agent's.
+        if (o.note !== 'duplicate') o.knowledge = await deleteOrphanAgentKnowledge(o.externalId, log)
         await LIFECYCLES.elevenlabs.delete(o.externalId)
         o.deleted = true
         log.warn('reconcile.orphan_deleted', { provider: o.provider, externalAgentId: o.externalId })
