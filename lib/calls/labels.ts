@@ -53,9 +53,13 @@ export const LIVE_CALL_STATUSES: readonly CallStatus[] = ['ringing', 'in-progres
 
 export type CallProviderFilter = 'all' | VoiceProviderId
 
-/** The calls page filters: the shared CallFilters plus the provider filter. */
+/** The calls page filters: the shared CallFilters plus the provider, outcome and AI-outcome filters. */
 export interface CallListFilters extends CallFilters {
   provider: CallProviderFilter
+  /** calls.outcome (booked, message_taken, …). */
+  outcome: 'all' | CallOutcome
+  /** calls.call_successful ("AI outcome"). */
+  aiOutcome: 'all' | 'success' | 'failure' | 'unknown'
 }
 
 /** A call as list endpoints return it (transcript and analysis are detail-only). */
@@ -221,6 +225,7 @@ export const OUTCOME_LABEL: Record<CallOutcome, string> = {
   transferred: 'Transferred',
   flagged: 'Flagged for follow-up',
   missed: 'Missed',
+  voicemail: 'Reached voicemail',
   spam: 'Spam',
   other: 'Other',
 }
@@ -235,8 +240,54 @@ const CALL_RESULT_LABEL: Record<'success' | 'failure' | 'unknown', string> = {
   unknown: 'Unclear',
 }
 
+/**
+ * "AI outcome": the provider's verdict on whether the call met its goal
+ * (call_successful). Not the caller's sentiment.
+ */
 export function callResultLabel(value: string | null | undefined): string | null {
   return hasKey(CALL_RESULT_LABEL, value) ? CALL_RESULT_LABEL[value] : null
+}
+
+export const AI_OUTCOME_VALUES = ['success', 'failure', 'unknown'] as const
+export type AiOutcome = (typeof AI_OUTCOME_VALUES)[number]
+
+export const AI_OUTCOME_DESCRIPTION: Record<AiOutcome, string> = {
+  success: 'The AI judged that the call reached its goal.',
+  failure: 'The AI judged that the call did not reach its goal.',
+  unknown: 'The AI could not tell whether the call reached its goal.',
+}
+
+/** What the transcript timeline shows for a tool the agent used. */
+export function toolEventLabel(e: { tool: string; kind: string; ok: boolean; result_type: string | null }): string {
+  switch (e.kind) {
+    case 'transfer':
+      return e.ok ? 'Transferred to a person' : 'Transfer to a person failed'
+    case 'voicemail':
+      return e.ok ? 'Voicemail detected' : 'Voicemail check failed'
+    case 'end_call':
+      return 'The agent ended the call'
+    case 'language':
+      return 'Switched language'
+    case 'skip_turn':
+      return 'Waited for the caller'
+    case 'knowledge':
+      return 'Looked up the knowledge base'
+    default:
+      return e.ok ? `Used “${humanizeKey(e.tool)}”` : `“${humanizeKey(e.tool)}” failed`
+  }
+}
+
+/** Language code → English name ("ro" → "Romanian"); the code itself when unknown. */
+export function languageLabel(code: string | null | undefined): string | null {
+  const value = typeof code === 'string' ? code.trim() : ''
+  if (!value) return null
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'language' }).of(value.replace('_', '-')) ?? value
+  } catch (err) {
+    // RangeError: not a well-formed language tag.
+    if (err instanceof RangeError) return value
+    throw err
+  }
 }
 
 const EVALUATION_RESULT_LABEL: Record<'success' | 'failure' | 'unknown', string> = {
@@ -275,12 +326,23 @@ const TERMINATION_TEXT: Record<string, string> = {
   error: 'Ended because of an error',
 }
 
+/** ElevenLabs end reasons are free English text: the common ones by pattern. */
+const TERMINATION_PATTERNS: Array<[RegExp, string]> = [
+  [/end_call|ended by (the )?agent/i, 'The agent ended the call'],
+  [/voicemail/i, 'Voicemail detected'],
+  [/max(imum)?[ _]?(call[ _])?duration/i, 'Maximum call length reached'],
+  [/silence|inactiv/i, 'Ended after a long silence'],
+  [/remote party|client disconnected|user (hung up|disconnected)|caller hung up/i, 'The caller hung up'],
+  [/transfer/i, 'Transferred'],
+]
+
 /** Provider end reasons: known codes get a sentence, free text is tidied up. */
 export function terminationReasonLabel(raw: string | null | undefined): string | null {
   const value = typeof raw === 'string' ? raw.trim() : ''
   if (!value) return null
   const key = value.toLowerCase()
   if (hasKey(TERMINATION_TEXT, key)) return TERMINATION_TEXT[key]
+  for (const [pattern, text] of TERMINATION_PATTERNS) if (pattern.test(value)) return text
   const text = /\s/.test(value) ? value : value.replace(/[_-]+/g, ' ')
   const clean = text.replace(/\.$/, '')
   return clean.charAt(0).toUpperCase() + clean.slice(1)

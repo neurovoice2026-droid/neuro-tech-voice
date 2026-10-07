@@ -139,14 +139,12 @@ describe('mergeCallEvent — completed', () => {
       summary: 'Booked a cleaning.',
       summary_title: 'Booking',
       call_successful: 'success',
-      sentiment: 'positive',
       analysis: { evaluation: { booked: { result: 'success', rationale: null } }, data: { outcome: 'booked' } },
       termination_reason: 'remote hangup',
       duration_seconds: 95,
       started_at: STARTED_AT,
       ended_at: '2026-10-05T11:51:35.000Z',
-      cost_credits: 812,
-      cost_usd: 0.42,
+      // Provider cost never goes on the tenant-readable calls row (call_provider_costs).
       has_recording: true,
       recording_status: 'available',
       direction: 'inbound',
@@ -244,19 +242,58 @@ describe('mergeCallEvent — completed', () => {
   })
 })
 
-describe('mergeCallEvent — sentiment', () => {
-  it.each([
-    ['success', 'positive'],
-    ['failure', 'negative'],
-    ['unknown', 'neutral'],
-  ] as const)('derives %s → %s', (callSuccessful, sentiment) => {
-    expect(mergeCallEvent(row(), completed({ callSuccessful }))).toMatchObject({ call_successful: callSuccessful, sentiment })
+describe('mergeCallEvent — AI outcome is not sentiment', () => {
+  it.each(['success', 'failure', 'unknown'] as const)('stores call_successful %s without deriving calls.sentiment from it', (callSuccessful) => {
+    const patch = mergeCallEvent(row(), completed({ callSuccessful }))
+    expect(patch).toMatchObject({ call_successful: callSuccessful })
+    expect(patch).not.toHaveProperty('sentiment')
   })
 
-  it('leaves sentiment alone when the provider gives no verdict', () => {
+  it('leaves the verdict alone when the provider gives none', () => {
     const patch = mergeCallEvent(row(), completed({ callSuccessful: null }))
     expect(patch).not.toHaveProperty('call_successful')
     expect(patch).not.toHaveProperty('sentiment')
+  })
+
+  it('never writes provider cost to the calls row', () => {
+    const patch = mergeCallEvent(row(), completed({ costCredits: 812, costUsd: 0.42, charging: { isBurst: true, tier: 'pro', devDiscount: false, llmPrice: 0.01, platformPrice: 0.08 } }))
+    expect(patch).not.toHaveProperty('cost_credits')
+    expect(patch).not.toHaveProperty('cost_usd')
+    expect(JSON.stringify(patch)).not.toMatch(/burst|charging|0\.42/)
+  })
+})
+
+describe('mergeCallEvent — evidence outcomes, metadata, retention', () => {
+  it('a successful native transfer or voicemail detection sets the outcome over the AI data collection', () => {
+    expect(mergeCallEvent(row(), completed({ evidenceOutcome: 'transferred' }))).toMatchObject({ outcome: 'transferred' })
+    expect(mergeCallEvent(row(), completed({ evidenceOutcome: 'voicemail' }))).toMatchObject({ outcome: 'voicemail' })
+    // An outcome already set (router transfer) is never replaced.
+    expect(mergeCallEvent(row({ outcome: 'transferred' }), completed({ evidenceOutcome: 'voicemail' }))).not.toHaveProperty('outcome')
+  })
+
+  it('merges provider metadata over what is stored, only when something changed', () => {
+    const stored = { main_language: 'ro', channel: 'phone' }
+    const patch = mergeCallEvent(row({ call_metadata: stored }), completed({ metadata: { main_language: 'ro', queue_wait_secs: 4, channel: 'phone' } }))
+    expect(patch?.call_metadata).toEqual({ main_language: 'ro', channel: 'phone', queue_wait_secs: 4 })
+    const same = mergeCallEvent(row({ call_metadata: { main_language: 'ro', channel: 'phone', queue_wait_secs: 4 } }), completed({ metadata: { main_language: 'ro', queue_wait_secs: 4, channel: 'phone' } }))
+    expect(same).not.toHaveProperty('call_metadata')
+  })
+
+  it('a call purged by the privacy retention never gets its transcript, summary, analysis, error text or recording back', () => {
+    const purged = row({ retention_applied_at: '2026-10-01T00:00:00Z', recording_status: 'deleted', lifecycle_rank: RANK.completed, status: 'completed' })
+    const patch = mergeCallEvent(purged, completed({ metadata: { main_language: 'ro', provider_error: { code: 1, reason: 'caller said x' }, warnings: ['w'] } }))
+    for (const k of ['transcript', 'summary', 'summary_title', 'analysis', 'has_recording', 'recording_status']) expect(patch).not.toHaveProperty(k)
+    expect(patch?.call_metadata).toEqual({ main_language: 'ro' })
+    expect(mergeCallEvent(purged, completed({ kind: 'call.recording_available' }))).toBeNull()
+  })
+
+  it('a recording the provider reported gone is not offered again by a re-fetched conversation', () => {
+    const gone = row({ recording_status: 'unavailable', lifecycle_rank: RANK.completed, status: 'completed' })
+    const patch = mergeCallEvent(gone, completed({ hasRecording: true }))
+    expect(patch).not.toHaveProperty('recording_status')
+    expect(patch).not.toHaveProperty('has_recording')
+    // A first result (rank below completed) still sets it normally.
+    expect(mergeCallEvent(row({ recording_status: 'unavailable' }), completed({ hasRecording: true }))).toMatchObject({ recording_status: 'available' })
   })
 })
 

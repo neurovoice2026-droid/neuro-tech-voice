@@ -18,7 +18,7 @@ import "server-only";
  * entitlementsFor, requiredPlanFor and PLANS (where texts and the Google
  * steps start); TRIGGER_TYPES, ACTION_TYPES, GOOGLE_ACTION_INTEGRATION and
  * MAX_WORKFLOW_ACTIONS (the workflow engine); TRIGGER_META and ACTION_META
- * (the dashboard's own names: "Unhappy caller", never "negative
+ * (the dashboard's own names: "Call not resolved", never "negative
  * sentiment"); WEBHOOK_HEADERS, SHEET_HEADER and CALL_OUTCOMES.
  *
  * Retyped in FACTS_AUTO, each held by lib/pages/custom-automations.test.ts
@@ -97,7 +97,7 @@ if (TRIGGER_TYPES.length !== 4 || ACTION_TYPES.length !== 10 || MAX_WORKFLOW_ACT
 const GOOGLE_STEPS = Object.keys(GOOGLE_ACTION_INTEGRATION) as GoogleActionType[];
 if (GOOGLE_STEPS.length !== 5) throw new Error("custom-automations: the Google steps changed");
 if (SHEET_HEADER.length !== 12) throw new Error("custom-automations: the sheet row changed");
-if (CALL_OUTCOMES.length !== 10) throw new Error("custom-automations: the call outcomes changed");
+if (CALL_OUTCOMES.length !== 11) throw new Error("custom-automations: the call outcomes changed");
 // "In three steps, with no build": the self-serve builder's own steps.
 if (INT_BUILDER.steps.length !== 3) throw new Error("custom-automations: the builder's steps changed");
 // Every Google step on the page says "in beta". When the product drops the
@@ -135,7 +135,7 @@ export const FACTS_AUTO = {
 
 /* ---------- the dashboard's words ---------- */
 
-// "Unhappy caller", "Send webhook": the dashboard's own names, read, so the
+// "Call not resolved", "Send webhook": the dashboard's own names, read, so the
 // page and the screen a customer sees can't call one thing two names.
 const T = (id: TriggerType) => TRIGGER_META[id].label;
 const A = (id: ActionType) => ACTION_META[id].label;
@@ -144,7 +144,7 @@ const A = (id: ActionType) => ACTION_META[id].label;
 export const TRIGGER_WORDS: Record<TriggerType, string> = {
   call_ended: "a call ending",
   call_missed: "a missed call",
-  sentiment_negative: "an unhappy caller",
+  sentiment_negative: "a call the AI marks as not resolved",
   keyword_detected: "a word you listen for",
 };
 /** Each step kind in a sentence. A new kind fails tsc here. The Google ones name their product. */
@@ -425,7 +425,7 @@ export const AUTO_HERO: HeroData = keyed({
         datum: `${SHEET_HEADER.length} columns a call` }, // "12 columns a call"
       { layer: ITEM.stack[2], name: "Conversations written up by AI",
         runs: "What the caller wanted, how they felt, what came of it and the details they gave, saved for a workflow to pass on",
-        datum: `${CALL_OUTCOMES.length} outcomes` }, // "10 outcomes"
+        datum: `${CALL_OUTCOMES.length} outcomes` }, // "11 outcomes"
       { layer: ITEM.stack[3], name: "Signed, and tried again",
         runs: "Signed so the receiver knows it’s ours, tried again when the other end is busy, and never sent into a private network",
         datum: `signed · ${FACTS.webhookAttempts} tries` }, // "signed · 3 tries"
@@ -835,7 +835,7 @@ const CALL_LENS = lens({
     // keywords.ts: "Whole words or phrases only", "Case never matters"; router.ts runs call_missed.
     { id: "fire", kind: "rule", label: "Which rules fire?", at: { c: 4, r: 1 },
       fresh: "By hand, who needed to know was a judgement, call by call.",
-      detail: `‘${T("call_ended")}’ always; ‘${T("sentiment_negative")}’ when the caller was unhappy; ‘${T("keyword_detected")}’ when a word you listen for was said, as a whole word, whatever the capitals. ‘${T("call_missed")}’ runs its own workflows the moment the phone line reports a missed call.`,
+      detail: `‘${T("call_ended")}’ always; ‘${T("sentiment_negative")}’ when the AI marks the call as not resolved; ‘${T("keyword_detected")}’ when a word you listen for was said, as a whole word, whatever the capitals. ‘${T("call_missed")}’ runs its own workflows the moment the phone line reports a missed call.`,
       files: ["lib/voice/post-call.ts", "lib/workflows/keywords.ts", "lib/voice/router.ts"] },
     { id: "once", kind: "once", label: "Once per call", at: { c: 5, r: 1 },
       fresh: "By hand, a repeat was a second message nobody meant to send.",
@@ -872,7 +872,7 @@ const CALL_LENS = lens({
     { id: "fresh", title: "Not written up yet", hops: ["ended-fresh"], caption: "Nobody has written it up yet, so the write-up starts, and holds a lock while it runs." },
     { id: "ai", title: "OpenAI writes it up", hops: ["fresh-ai"], caption: "OpenAI’s write-up is in, and the caller’s mood with it." },
     { id: "test", title: "A real call", hops: ["ai-test"], caption: "It’s a real call, not a test from the dashboard, so it carries on." },
-    { id: "fire", title: "Two rules fire", hops: ["test-fire"], caption: `The caller was unhappy, so two rules fire: ‘${T("call_ended")}’ and ‘${T("sentiment_negative")}’.` },
+    { id: "fire", title: "Two rules fire", hops: ["test-fire"], caption: `The AI marked the call as not resolved, so two rules fire: ‘${T("call_ended")}’ and ‘${T("sentiment_negative")}’.` },
     { id: "once", title: "Marked once", hops: ["fire-once"], caption: "Each workflow marks the call as handled; none has run for it before." },
     { id: "steps", title: "The workflows run", hops: ["once-steps"], caption: "Their steps run in order: a tag on the call, then a signed webhook to the CRM, tried again if the CRM is busy." },
     { id: "team", title: "The managers hear", hops: ["steps-team"], caption: "The managers hear about it in Slack." },
@@ -1313,7 +1313,7 @@ export const AUTO_BREAKS: BreaksData = keyed({
     tag: "Sample workflow",
     name: "Unhappy callers to the CRM",
     whenLabel: "When",
-    trigger: T("sentiment_negative"), // "Unhappy caller"
+    trigger: T("sentiment_negative"), // "Call not resolved"
     steps: [
       { lane: "tag", kind: "write", label: `${A("add_tag")}: “follow-up”` }, // "Tag the call: “follow-up”"
       { lane: "crm", kind: "send", label: `${A("send_webhook")} to the CRM` }, // "Send webhook to the CRM"

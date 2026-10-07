@@ -67,7 +67,8 @@ async function timed<T>(fn: () => Promise<T>): Promise<{ value: T | null; ms: nu
 async function elevenLabsBody(spec: AgentSpec) {
   const needsTransferTool = spec.appRouted && spec.transfer.enabled && !!spec.transfer.number
   const transferToolId = needsTransferTool ? await tryPlatformResource('elevenlabs.transfer_tool') : null
-  const postCallWebhookId = (process.env.ELEVENLABS_POST_CALL_WEBHOOK_ID ?? '').trim() || null
+  // ELEVENLABS_POST_CALL_WEBHOOK_ID, else the workspace webhook pointing at our receiver (discovered once).
+  const postCallWebhookId = await import('./webhook-health').then((m) => m.resolvePostCallWebhookId())
   // Cached LLM catalogue: the configured LLM when offered and not deprecated,
   // else the platform default; plus the lowest reasoning level it supports.
   const llm = await effectiveAgentLlm()

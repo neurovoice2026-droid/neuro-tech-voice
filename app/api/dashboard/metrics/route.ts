@@ -12,15 +12,18 @@ import {
   wallTime,
   zonedDayStart,
 } from '@/lib/calls/serialize'
-import type { DashboardMetrics } from '@/types'
+import { CALL_OUTCOMES, type DashboardMetrics } from '@/types'
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 const LIVE = new Set(['ringing', 'in-progress'])
 
 // GET /api/dashboard/metrics — dashboard KPIs from the `calls` table (both
-// providers). "Today" and "this month" use the org's time zone; the success
-// rate is the share of finished calls that completed; sentiment comes from
-// calls.sentiment (derived from the provider's call analysis).
+// providers, test sessions excluded). "Today" and "this month" use the org's
+// time zone; success_rate is the ANSWERED rate (share of finished calls that
+// completed); ai_success_rate is the AI resolution rate from call_successful
+// (success / (success + failure)); outcome_breakdown counts calls.outcome.
+// sentiment_breakdown counts calls.sentiment, which is no longer derived from
+// the AI verdict (older rows only).
 export async function GET(request: Request) {
   const requestId = requestIdFrom(request)
   let log = createLogger({ requestId, route: 'dashboard.metrics' })
@@ -51,6 +54,8 @@ export async function GET(request: Request) {
     let callsThisWeek = 0
     let callsThisMonth = 0
     const sentiment = { positive: 0, neutral: 0, negative: 0 }
+    const aiOutcome = { success: 0, failure: 0, unknown: 0 }
+    const outcomes: Record<string, number> = {}
     const hourCounts = new Array<number>(24).fill(0)
 
     for (const f of facts) {
@@ -67,7 +72,10 @@ export async function GET(request: Request) {
       if (t >= weekStart) callsThisWeek++
       if (t >= monthStart) callsThisMonth++
       if (f.sentiment === 'positive' || f.sentiment === 'neutral' || f.sentiment === 'negative') sentiment[f.sentiment]++
+      if (f.call_successful === 'success' || f.call_successful === 'failure' || f.call_successful === 'unknown') aiOutcome[f.call_successful]++
+      if (f.outcome && (CALL_OUTCOMES as readonly string[]).includes(f.outcome)) outcomes[f.outcome] = (outcomes[f.outcome] ?? 0) + 1
     }
+    const judged = aiOutcome.success + aiOutcome.failure
 
     const peak = Math.max(...hourCounts)
     const metrics: DashboardMetrics = {
@@ -82,6 +90,10 @@ export async function GET(request: Request) {
       success_rate: finished > 0 ? Math.round((completed / finished) * 100) : 0,
       minutes_used: Number(usage.data?.minutes_used ?? 0),
       minutes_limit: Number(usage.data?.minutes_limit ?? 0),
+      // AI resolution rate: the AI's verdict on each call's goal (not sentiment).
+      ai_success_rate: judged > 0 ? Math.round((aiOutcome.success / judged) * 100) : null,
+      ai_outcome_breakdown: aiOutcome,
+      outcome_breakdown: outcomes,
     }
     return NextResponse.json(metrics)
   } catch (err) {

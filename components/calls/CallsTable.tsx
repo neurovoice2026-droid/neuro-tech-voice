@@ -22,7 +22,7 @@ import { cn, formatDuration, formatPhoneNumber, formatDate } from '@/lib/utils'
 import { toast } from 'sonner'
 import { CallDetailSheet } from './CallDetailSheet'
 import { DeleteCallDialog } from './DeleteCallDialog'
-import { CallStatusBadge, HandledByBadge, SentimentIcon } from './CallBadges'
+import { AiOutcomeIcon, CallStatusBadge, HandledByBadge, TestCallBadge } from './CallBadges'
 import type { CallListItem } from '@/lib/calls/labels'
 
 const COLUMN_COUNT = 10
@@ -226,7 +226,7 @@ export function CallsTable({
               <TableHead className="text-right hidden md:table-cell">Duration</TableHead>
               <TableHead className="text-center">Status</TableHead>
               <TableHead className="hidden md:table-cell">Handled by</TableHead>
-              <TableHead className="text-center hidden lg:table-cell">Sentiment</TableHead>
+              <TableHead className="text-center hidden lg:table-cell">AI outcome</TableHead>
               <TableHead className="hidden xl:table-cell">Agent</TableHead>
               <TableHead className="text-right">Date</TableHead>
               <TableHead className="w-10"><span className="sr-only">Actions</span></TableHead>
@@ -303,6 +303,7 @@ export function CallsTable({
                         <span className={cn('font-mono text-sm font-medium', !call.caller_number && 'font-sans text-muted-foreground')}>
                           {caller}
                         </span>
+                        {call.is_test && <TestCallBadge />}
                       </div>
                       {call.summary_title && (
                         <p className="mt-0.5 truncate text-xs text-muted-foreground" title={call.summary_title}>
@@ -340,9 +341,9 @@ export function CallsTable({
                       <HandledByBadge call={call} />
                     </TableCell>
 
-                    {/* Sentiment */}
+                    {/* AI outcome (call_successful; not sentiment) */}
                     <TableCell className="text-center hidden lg:table-cell">
-                      <SentimentIcon sentiment={call.sentiment} />
+                      <AiOutcomeIcon value={call.call_successful} />
                     </TableCell>
 
                     {/* Agent */}

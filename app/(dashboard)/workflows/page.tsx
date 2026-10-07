@@ -73,7 +73,7 @@ interface Workflow {
 const TRIGGER_META: Record<TriggerType, { label: string; icon: React.FC<{ className?: string }>; color: string; description: string }> = {
   call_ended:         { label: 'Call Ended',          icon: Phone,          color: 'text-blue-600 bg-blue-50',    description: 'Triggers when any call finishes' },
   call_missed:        { label: 'Missed Call',         icon: PhoneIncoming,  color: 'text-red-600 bg-red-50',      description: 'Triggers when a call goes unanswered' },
-  sentiment_negative: { label: 'Negative Sentiment',  icon: AlertCircle,    color: 'text-red-600 bg-red-50',      description: 'Triggers when AI detects a frustrated caller' },
+  sentiment_negative: { label: 'Call not resolved',   icon: AlertCircle,    color: 'text-red-600 bg-red-50',      description: 'Triggers when the AI marks the call as not successful' },
   keyword_detected:   { label: 'Keyword Detected',    icon: Star,           color: 'text-purple-600 bg-purple-50',description: 'Triggers when a specific word is spoken' },
 }
 

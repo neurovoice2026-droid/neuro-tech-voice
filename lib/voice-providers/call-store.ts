@@ -6,6 +6,12 @@ import 'server-only'
 //     and increments minutes_used only if that insert happened (retries and
 //     a second source for the same call are no-ops);
 //   • workflows: claimed with workflows_triggered_at IS NULL → now().
+// Conversations that are not phone calls (dashboard tests, widget/SDK
+// sessions, ElevenLabs simulations) are stored as test calls (calls.channel,
+// calls.is_test): never billed, never trigger workflows. Provider cost goes to
+// the service-only call_provider_costs table, never to the calls row.
+// The same path applies webhooks (source 'webhook') and conversations fetched
+// by the reconciliation (source 'poll', conversation-reconcile.ts).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -21,9 +27,12 @@ import { PLANS, type Plan } from '@/types'
 import { verifyCallToken } from '@/lib/telephony/tokens'
 import { reportOutcome } from './circuit-registry'
 import { earlyFailureWindowSeconds } from './config'
+import { conversations as elConversations } from '@/lib/elevenlabs/client'
+import { isProviderError } from './errors'
+import { collectedValues } from './call-context'
 
 const STORED_COLUMNS =
-  'id, org_id, agent_id, status, lifecycle_rank, provider, provider_call_id, elevenlabs_conversation_id, cartesia_call_id, transcript, summary, duration_seconds, started_at, ended_at, routing_reason, outcome, direction, caller_number, from_number, to_number, sentiment, updated_at, workflows_triggered_at'
+  'id, org_id, agent_id, status, lifecycle_rank, provider, provider_call_id, elevenlabs_conversation_id, cartesia_call_id, transcript, summary, duration_seconds, started_at, ended_at, routing_reason, outcome, direction, caller_number, from_number, to_number, sentiment, updated_at, workflows_triggered_at, channel, is_test, call_metadata, recording_status, retention_applied_at'
 
 interface CallRow extends StoredCall {
   id: string
@@ -35,6 +44,15 @@ interface CallRow extends StoredCall {
   to_number: string | null
   sentiment: string | null
   updated_at: string
+  channel?: string | null
+  is_test?: boolean | null
+}
+
+/** Where an event came from: the provider's webhook or our own reconciliation poll. */
+export type EventSource = 'webhook' | 'poll'
+
+export interface ApplyOptions {
+  source?: EventSource
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -118,6 +136,45 @@ async function findRoutedCartesiaCall(db: SupabaseClient, orgId: string, event: 
 export interface ApplyResult {
   callId: string | null
   outcome: 'created' | 'updated' | 'unchanged' | 'unowned' | 'deleted'
+  /** The stored row is a test session (no billing, no workflows). */
+  test?: boolean
+}
+
+/** Our phone_numbers row for the provider's phone number id, within the owner org only. */
+async function phoneNumberIdFor(db: SupabaseClient, orgId: string, event: NormalizedCallEvent): Promise<string | null> {
+  const externalId = event.metadata?.phone_number_external_id
+  if (event.provider !== 'elevenlabs' || !externalId) return null
+  const { data, error } = await db
+    .from('phone_numbers')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('elevenlabs_phone_number_id', externalId)
+    .limit(1)
+    .maybeSingle()
+  if (error) throw new Error(`phone_numbers lookup failed: ${error.message}`)
+  return (data?.id as string | undefined) ?? null
+}
+
+/**
+ * The owner deleted this call: make sure the provider copy (transcript,
+ * audio, analysis) is gone too. The owner org was resolved from the
+ * conversation's agent (ownerOf), so this never touches another tenant's
+ * conversation. A 404 means already gone; any other failure throws so the
+ * stored webhook event is retried by maintenance.
+ */
+async function deleteTombstonedConversation(event: NormalizedCallEvent, orgId: string, log: Logger): Promise<void> {
+  if (event.provider !== 'elevenlabs') return
+  try {
+    await elConversations.delete(event.providerCallId, { orgId })
+    log.info('call_event.deleted_call_purged_at_provider')
+  } catch (err) {
+    if (isProviderError(err) && err.code === 'not_found') return
+    if (isProviderError(err) && err.code === 'not_configured') {
+      log.warn('call_event.deleted_call_provider_not_configured')
+      return
+    }
+    throw err
+  }
 }
 
 /** True when the owner deleted this call (tombstone written by DELETE /api/calls/[id]). */
@@ -133,9 +190,12 @@ async function wasDeleted(db: SupabaseClient, orgId: string, event: NormalizedCa
   return false
 }
 
-export async function applyCallEvent(event: NormalizedCallEvent, log: Logger = createLogger()): Promise<ApplyResult> {
+export async function applyCallEvent(event: NormalizedCallEvent, log: Logger = createLogger(), opts: ApplyOptions = {}): Promise<ApplyResult> {
   const db = createAdminClient()
-  const l = log.child({ provider: event.provider, providerCallId: event.providerCallId })
+  const source: EventSource = opts.source ?? 'webhook'
+  const l = log.child({ provider: event.provider, providerCallId: event.providerCallId, source })
+  // Why a conversation failed at the provider: the code only (the reason text may quote the caller).
+  if (event.metadata?.provider_error) l.warn('call_event.provider_error', { code: event.metadata.provider_error.code })
 
   for (let attempt = 0; attempt < 3; attempt++) {
     let current = await findCall(db, event)
@@ -152,20 +212,31 @@ export async function applyCallEvent(event: NormalizedCallEvent, log: Logger = c
         return { callId: null, outcome: 'unowned' }
       }
       if (await wasDeleted(db, owner.org_id, event)) {
+        await deleteTombstonedConversation(event, owner.org_id, l)
         l.info('call_event.deleted_call_ignored')
         return { callId: null, outcome: 'deleted' }
       }
       const direction = event.direction ?? 'inbound'
+      // Only a post-call result can tell a phone call from a web/SDK/test
+      // session; failures and audio events keep today's behaviour (phone).
+      const channel = event.kind === 'call.completed' && event.channel ? event.channel : 'phone'
+      const isTest = channel !== 'phone'
+      if (isTest) l.info('call_event.non_telephony', { channel, initiationSource: event.metadata?.initiation_source ?? null })
       const insert = {
         org_id: owner.org_id,
         agent_id: owner.agent_id,
         twilio_call_sid: event.twilioCallSid,
+        phone_number_id: isTest ? null : await phoneNumberIdFor(db, owner.org_id, event),
         direction,
         caller_number: direction === 'outbound' ? event.toNumber : event.fromNumber,
         primary_provider: event.provider,
         routing_reason: 'primary',
-        routing: { mode: 'native', note: 'call reached the provider directly (native number)' },
+        routing: isTest
+          ? { mode: 'test', note: 'conversation did not come from a phone call (web, SDK or dashboard test)' }
+          : { mode: 'native', note: 'call reached the provider directly (native number)' },
         started_at: event.startedAt,
+        channel,
+        is_test: isTest,
         ...patch,
       }
       const { data, error } = await db.from('calls').insert(insert).select('id').single()
@@ -173,8 +244,8 @@ export async function applyCallEvent(event: NormalizedCallEvent, log: Logger = c
         if (error.code === '23505') continue // a concurrent event created it: merge into that row
         throw new Error(`calls insert failed: ${error.message}`)
       }
-      await afterWrite(db, data.id as string, owner.org_id, event, l)
-      return { callId: data.id as string, outcome: 'created' }
+      await afterWrite(db, data.id as string, owner.org_id, event, l, { source, isTest })
+      return { callId: data.id as string, outcome: 'created', test: isTest }
     }
 
     if (isFromOtherProvider(current, event)) {
@@ -185,11 +256,14 @@ export async function applyCallEvent(event: NormalizedCallEvent, log: Logger = c
         const { error } = await db.from('calls').update(patch).eq('id', current.id)
         if (error) throw new Error(`calls update failed: ${error.message}`)
       }
+      // The abandoned conversation still cost the platform money.
+      if (event.kind === 'call.completed') await recordProviderCost(db, current.id, current.org_id, event, l)
       return { callId: current.id, outcome: 'unchanged' }
     }
+    const isTest = current.is_test === true
     if (!patch || Object.keys(patch).length === 0) {
-      await afterWrite(db, current.id, current.org_id, event, l)
-      return { callId: current.id, outcome: 'unchanged' }
+      await afterWrite(db, current.id, current.org_id, event, l, { source, isTest })
+      return { callId: current.id, outcome: 'unchanged', test: isTest }
     }
     if (!current.caller_number) {
       const other = (patch.direction ?? current.direction) === 'outbound' ? event.toNumber : event.fromNumber
@@ -200,15 +274,53 @@ export async function applyCallEvent(event: NormalizedCallEvent, log: Logger = c
     const { data, error } = await db.from('calls').update(patch).eq('id', current.id).eq('updated_at', current.updated_at).select('id')
     if (error) throw new Error(`calls update failed: ${error.message}`)
     if ((data?.length ?? 0) === 0) continue
-    await afterWrite(db, current.id, current.org_id, event, l)
-    return { callId: current.id, outcome: 'updated' }
+    await afterWrite(db, current.id, current.org_id, event, l, { source, isTest })
+    return { callId: current.id, outcome: 'updated', test: isTest }
   }
   throw new Error('calls update kept conflicting; will be retried')
 }
 
 const MEDIA_EVIDENCE_MAX_AGE_MS = 2 * 60_000
 
-async function afterWrite(db: SupabaseClient, callId: string, orgId: string, event: NormalizedCallEvent, log: Logger) {
+/**
+ * Provider cost of one call (service-only table: tenants can read calls rows,
+ * so cost of goods never goes there). Best effort: a failure is logged and
+ * never fails the event (the call data and the billing matter more).
+ */
+async function recordProviderCost(db: SupabaseClient, callId: string, orgId: string, event: NormalizedCallEvent, log: Logger): Promise<void> {
+  if (event.costCredits === null && event.costUsd === null && !event.charging) return
+  const { error } = await db.from('call_provider_costs').upsert(
+    {
+      call_id: callId,
+      org_id: orgId,
+      provider: event.provider,
+      provider_call_id: event.providerCallId,
+      cost_credits: event.costCredits,
+      cost_usd: event.costUsd,
+      is_burst: event.charging?.isBurst ?? null,
+      tier: event.charging?.tier ?? null,
+      dev_discount: event.charging?.devDiscount ?? null,
+      llm_price: event.charging?.llmPrice ?? null,
+      platform_price: event.charging?.platformPrice ?? null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'call_id,provider' },
+  )
+  if (error) log.error('call_event.cost_write_failed', new Error(error.message), { callId })
+}
+
+async function afterWrite(
+  db: SupabaseClient,
+  callId: string,
+  orgId: string,
+  event: NormalizedCallEvent,
+  log: Logger,
+  opts: { source: EventSource; isTest: boolean },
+) {
+  if (event.kind === 'call.completed') await recordProviderCost(db, callId, orgId, event, log)
+  // Test sessions (web, SDK, dashboard): no billing, no workflows, and no
+  // evidence about the telephony media path.
+  if (opts.isTest) return
   // A conversation that outlived the early-failure window proves the
   // provider's media path works — but only as fresh evidence: a late or
   // retried webhook for a call that ended before an outage must not close
@@ -221,7 +333,7 @@ async function afterWrite(db: SupabaseClient, callId: string, orgId: string, eve
     }
   }
   if (event.kind === 'call.completed' && typeof event.durationSeconds === 'number' && event.durationSeconds > 0) {
-    await recordUsage(db, { orgId, callId, seconds: event.durationSeconds, provider: event.provider, source: `${event.provider}_webhook` }, log)
+    await recordUsage(db, { orgId, callId, seconds: event.durationSeconds, provider: event.provider, source: `${event.provider}_${opts.source}` }, log)
   }
   if (event.kind === 'call.completed' || event.kind === 'call.initiation_failed') {
     await triggerWorkflowsOnce(db, callId, event.kind === 'call.completed' ? 'ended' : 'missed', log)
@@ -281,12 +393,19 @@ async function triggerWorkflowsOnce(db: SupabaseClient, callId: string, kind: 'e
     .update({ workflows_triggered_at: new Date().toISOString() })
     .eq('id', callId)
     .is('workflows_triggered_at', null)
-    .select('id, org_id, provider_call_id, caller_number, direction, duration_seconds, status, sentiment, summary, transcript, started_at, agents(name)')
+    // Test sessions never trigger the owner's automations.
+    .eq('is_test', false)
+    .select(
+      'id, org_id, provider_call_id, caller_number, from_number, to_number, direction, duration_seconds, status, sentiment, call_successful, outcome, summary, summary_title, analysis, transcript, started_at, ended_at, agents(name), organizations(name, timezone)',
+    )
   if (error) throw new Error(`workflow claim failed: ${error.message}`)
   const call = claimed?.[0] as Record<string, unknown> | undefined
-  if (!call) return // already triggered by an earlier delivery
+  if (!call) return // already triggered by an earlier delivery (or a test session)
 
   const agentRel = call.agents as { name?: string } | Array<{ name?: string }> | null
+  type OrgJoin = { name?: string | null; timezone?: string | null }
+  const orgRel = call.organizations as OrgJoin | OrgJoin[] | null
+  const org = Array.isArray(orgRel) ? orgRel[0] : orgRel
   const transcript = Array.isArray(call.transcript) ? (call.transcript as Array<{ role: string; message: string }>) : []
   const ctx: CallContext = {
     call_id: callId,
@@ -301,6 +420,15 @@ async function triggerWorkflowsOnce(db: SupabaseClient, callId: string, kind: 'e
     transcript,
     agent_name: (Array.isArray(agentRel) ? agentRel[0]?.name : agentRel?.name) ?? undefined,
     started_at: (call.started_at as string) ?? new Date().toISOString(),
+    ended_at: (call.ended_at as string | null) ?? null,
+    from_number: (call.from_number as string | null) ?? null,
+    to_number: (call.to_number as string | null) ?? null,
+    call_successful: (call.call_successful as string | null) ?? null,
+    outcome: (call.outcome as string | null) ?? null,
+    summary_title: (call.summary_title as string | null) ?? null,
+    collected: collectedValues(call.analysis),
+    business_name: org?.name ?? null,
+    timezone: org?.timezone ?? null,
   }
   try {
     if (kind === 'missed') {
@@ -308,7 +436,10 @@ async function triggerWorkflowsOnce(db: SupabaseClient, callId: string, kind: 'e
       return
     }
     await executeWorkflows('call_ended', ctx)
-    if (ctx.sentiment === 'negative') await executeWorkflows('sentiment_negative', ctx)
+    // 'sentiment_negative' now means "the AI marked the call unsuccessful":
+    // calls.sentiment is no longer derived from call_successful; older rows
+    // keep their derived value.
+    if (ctx.call_successful === 'failure' || ctx.sentiment === 'negative') await executeWorkflows('sentiment_negative', ctx)
     if (transcript.length > 0) await executeWorkflows('keyword_detected', ctx)
   } catch (err) {
     // Workflow runs record their own per-action failures; a crash here must

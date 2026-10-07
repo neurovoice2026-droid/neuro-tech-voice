@@ -82,7 +82,11 @@ describe('labels', () => {
   })
   it('misc', () => {
     expect(terminationReasonLabel('client_hangup')).toBe('The caller hung up')
-    expect(terminationReasonLabel('Call ended by remote party.')).toBe('Call ended by remote party')
+    // ElevenLabs free-text reasons: common ones by pattern, the rest tidied.
+    expect(terminationReasonLabel('Call ended by remote party.')).toBe('The caller hung up')
+    expect(terminationReasonLabel('end_call tool was called.')).toBe('The agent ended the call')
+    expect(terminationReasonLabel('Maximum duration exceeded')).toBe('Maximum call length reached')
+    expect(terminationReasonLabel('Some new provider reason.')).toBe('Some new provider reason')
     expect(humanizeKey('customer_name')).toBe('Customer name')
   })
 })

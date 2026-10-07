@@ -83,6 +83,7 @@ export const OUTCOME_LABELS: Record<CallOutcome, string> = {
   transferred: 'Transferred',
   flagged: 'Flagged',
   missed: 'Missed',
+  voicemail: 'Voicemail',
   spam: 'Spam',
   other: 'Other',
 }

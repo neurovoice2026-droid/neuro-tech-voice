@@ -3,6 +3,7 @@
 // Pure type module (safe to import from client components with `import type`).
 
 import type { VoiceProvider } from './errors'
+import type { CallChannel, CallMetadata } from './call-metadata'
 
 export type { VoiceProvider } from './errors'
 
@@ -310,6 +311,14 @@ export interface NormalizedCallEvent {
   hasRecording: boolean | null
   failureReason: string | null
   eventTimestamp: number | null
+  /** Telephony vs a web/SDK/test session (ElevenLabs post-call data); undefined = not classified. */
+  channel?: CallChannel | null
+  /** Provider conversation metadata for support (calls.call_metadata, call-metadata.ts). */
+  metadata?: CallMetadata | null
+  /** Outcome proven by a provider tool result (native transfer, voicemail detection). */
+  evidenceOutcome?: 'transferred' | 'voicemail' | null
+  /** Provider charging details: service-only (call_provider_costs), never on the calls row. */
+  charging?: { isBurst: boolean | null; tier: string | null; devDiscount: boolean | null; llmPrice: number | null; platformPrice: number | null } | null
 }
 
 export interface ProviderHealth {

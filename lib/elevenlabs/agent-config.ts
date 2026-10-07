@@ -43,7 +43,7 @@ import { pausedAgentBody } from './paused-agent'
  * `config_rollout` then re-syncs them in batches (lib/voice-providers/config-rollout.ts).
  * Bump it whenever this builder changes what existing agents should receive.
  */
-export const PLATFORM_AGENT_CONFIG_VERSION = 1
+export const PLATFORM_AGENT_CONFIG_VERSION = 2
 
 export interface PlatformResources {
   /** Workspace webhook tool used for human transfer on app-routed calls. */

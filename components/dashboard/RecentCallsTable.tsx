@@ -6,7 +6,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/shared/EmptyState'
-import { CallStatusBadge, HandledByBadge, SentimentIcon } from '@/components/calls/CallBadges'
+import { AiOutcomeIcon, CallStatusBadge, HandledByBadge } from '@/components/calls/CallBadges'
 import { formatDate, formatDuration, formatPhoneNumber } from '@/lib/utils'
 import type { CallListItem } from '@/lib/calls/labels'
 
@@ -48,7 +48,7 @@ export function RecentCallsTable({ calls, isLoading }: RecentCallsTableProps) {
                   <th scope="col" className="px-4 py-2.5 text-left font-medium text-muted-foreground">Status</th>
                   <th scope="col" className="px-4 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell">Handled by</th>
                   <th scope="col" className="px-4 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell">Duration</th>
-                  <th scope="col" className="px-4 py-2.5 text-left font-medium text-muted-foreground hidden lg:table-cell">Sentiment</th>
+                  <th scope="col" className="px-4 py-2.5 text-left font-medium text-muted-foreground hidden lg:table-cell">AI outcome</th>
                   <th scope="col" className="px-4 py-2.5 text-left font-medium text-muted-foreground hidden lg:table-cell">Time</th>
                 </tr>
               </thead>
@@ -85,7 +85,7 @@ export function RecentCallsTable({ calls, isLoading }: RecentCallsTableProps) {
                       </span>
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell">
-                      <SentimentIcon sentiment={call.sentiment} />
+                      <AiOutcomeIcon value={call.call_successful} />
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell">
                       {call.started_at ? (

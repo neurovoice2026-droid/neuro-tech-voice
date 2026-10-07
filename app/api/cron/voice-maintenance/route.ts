@@ -1,4 +1,5 @@
-// Scheduled voice maintenance (vercel.json cron, every 5 minutes):
+// Scheduled voice maintenance (vercel.json cron, daily on the Hobby plan; every
+// 5 minutes with supabase/ops/schedule_voice_maintenance.sql):
 // provider health probes (feed the circuit breaker), agent sync retries,
 // webhook reprocessing and Cartesia call polling. Vercel Cron authenticates
 // with `Authorization: Bearer $CRON_SECRET`.

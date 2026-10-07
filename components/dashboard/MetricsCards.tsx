@@ -61,12 +61,12 @@ export function MetricsCards({ metrics }: MetricsCardsProps) {
       badge: <span className="text-xs text-muted-foreground">completed calls</span>,
     },
     {
-      label: 'Success Rate',
+      label: 'Answered rate',
       value: `${successRate}%`,
       icon: TrendingUp,
       iconColor: 'text-green-600',
       iconBg: 'bg-green-100',
-      badge: <span className="text-xs text-muted-foreground" title="Share of finished calls that completed">of finished calls</span>,
+      badge: <span className="text-xs text-muted-foreground" title="Share of finished calls that were answered and completed (not the AI's verdict)">of finished calls</span>,
     },
     {
       label: 'Minutes Used',

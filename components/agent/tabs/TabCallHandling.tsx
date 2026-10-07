@@ -643,8 +643,8 @@ function stricterPrivacyMessage(saved: PrivacyDraft, draft: PrivacyDraft): strin
   if (shorter) {
     parts.push(
       draft.retention_days === 0
-        ? 'Transcripts and recordings already stored at the voice provider will be deleted.'
-        : `Transcripts and recordings older than ${retentionLabel(draft.retention_days)} will be deleted at the voice provider, including calls already stored.`,
+        ? 'Transcripts and recordings already stored at the voice provider will be deleted, and transcripts and summaries in your call history here are removed too.'
+        : `Transcripts and recordings older than ${retentionLabel(draft.retention_days)} will be deleted at the voice provider and from your call history here, including calls already stored.`,
     )
   }
   return `${parts.join(' ')} This cannot be undone.`
@@ -733,6 +733,11 @@ function PrivacyCard({ agent, onUpdate, isSaving }: Omit<TabCallHandlingProps, '
             Applies to calls stored at the voice provider. “Unlimited” keeps them until you delete them. Choosing a shorter
             period, or turning recording off, also applies to calls already stored there: older transcripts and recordings
             are deleted and cannot be recovered.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Your call history here follows the same period: transcripts, summaries and collected details of older calls
+            are removed (call counts and durations stay). Copies your automations already sent elsewhere (Google Sheets,
+            Docs, email, webhooks) are not deleted.
           </p>
         </div>
 

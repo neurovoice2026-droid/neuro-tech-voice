@@ -5,6 +5,7 @@ import {
   PhoneIncoming, PhoneOutgoing, Bot, User, Copy, CheckCheck,
   Play, Pause, Download, Loader2, Mail, FileText, Table2,
   Trash2, Search, ChevronDown, Route, ClipboardList, ListChecks, RotateCw,
+  ThumbsUp, ThumbsDown, Sparkles, Wrench, CircleCheck, CircleX, CircleHelp,
 } from 'lucide-react'
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
@@ -20,9 +21,12 @@ import { toast } from 'sonner'
 import { useCallDetail } from '@/hooks/useCallDetail'
 import { readApiError } from '@/hooks/useCalls'
 import { DeleteCallDialog } from './DeleteCallDialog'
-import { CallStatusBadge, HandledByBadge } from './CallBadges'
+import { CallStatusBadge, HandledByBadge, TestCallBadge } from './CallBadges'
 import {
+  AI_OUTCOME_DESCRIPTION,
   callResultLabel,
+  languageLabel,
+  toolEventLabel,
   describeFailoverReason,
   evaluationResultLabel,
   evaluationResultTone,
@@ -35,7 +39,7 @@ import {
   routingReasonLabel,
   terminationReasonLabel,
 } from '@/lib/calls/labels'
-import type { Call, TranscriptEntry } from '@/types'
+import type { Call, CallDetails, TranscriptEntry } from '@/types'
 
 const fmtClock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
@@ -331,7 +335,7 @@ function CallHandlingSection({ call }: { call: Call }) {
             </ul>
           </div>
         )}
-        {(call.routing_reason || call.failover_reason || call.provider_call_id) && (
+        {(call.routing_reason || call.failover_reason || call.provider_call_id || call.details?.provider_error || call.termination_reason) && (
           <details className="text-xs text-muted-foreground">
             <summary className="cursor-pointer select-none rounded outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
               Technical details for support
@@ -340,6 +344,19 @@ function CallHandlingSection({ call }: { call: Call }) {
               {call.routing_reason && <div><dt className="inline">routing: </dt><dd className="inline">{call.routing_reason}</dd></div>}
               {call.failover_reason && <div><dt className="inline">failover: </dt><dd className="inline">{call.failover_reason}</dd></div>}
               {call.provider_call_id && <div><dt className="inline">provider call id: </dt><dd className="inline">{call.provider_call_id}</dd></div>}
+              {call.termination_reason && <div><dt className="inline">ended: </dt><dd className="inline">{call.termination_reason}</dd></div>}
+              {call.details?.provider_error && (
+                <div>
+                  <dt className="inline">provider error: </dt>
+                  <dd className="inline">{call.details.provider_error.code}{call.details.provider_error.reason ? ` · ${call.details.provider_error.reason}` : ''}</dd>
+                </div>
+              )}
+              {(call.details?.warnings ?? []).map((w, i) => (
+                <div key={i}><dt className="inline">warning: </dt><dd className="inline">{w}</dd></div>
+              ))}
+              {typeof call.details?.queue_wait_secs === 'number' && call.details.queue_wait_secs > 0 && (
+                <div><dt className="inline">queue wait: </dt><dd className="inline">{call.details.queue_wait_secs}s</dd></div>
+              )}
             </dl>
           </details>
         )}
@@ -411,9 +428,143 @@ function AnalysisSections({ call }: { call: Call }) {
   )
 }
 
+// ─── AI outcome + owner feedback ──────────────────────────────────────────────
+
+const AI_OUTCOME_STYLE = {
+  success: { icon: CircleCheck, className: 'text-green-600' },
+  failure: { icon: CircleX, className: 'text-red-600' },
+  unknown: { icon: CircleHelp, className: 'text-gray-500' },
+} as const
+
+function FeedbackControl({ call }: { call: Call }) {
+  const [value, setValue] = useState<'like' | 'dislike' | null>(call.owner_feedback ?? null)
+  const [isPending, start] = useTransition()
+
+  function send(next: 'like' | 'dislike') {
+    const feedback = value === next ? null : next
+    start(async () => {
+      try {
+        const res = await fetch(`/api/calls/${encodeURIComponent(call.id)}/feedback`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ feedback }),
+        })
+        if (!res.ok) {
+          toast.error(await readApiError(res, 'Could not save your feedback.'))
+          return
+        }
+        setValue(feedback)
+        toast.success(feedback ? 'Thanks, your feedback was saved.' : 'Feedback removed.')
+      } catch (e) {
+        toast.error(e instanceof Error && e.message ? e.message : 'Could not save your feedback.')
+      }
+    })
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <p id={`feedback-${call.id}`} className="text-sm text-muted-foreground">Was this call handled well?</p>
+      <div role="group" aria-labelledby={`feedback-${call.id}`} className="flex gap-1">
+        <Button
+          type="button" variant="outline" size="sm" className={cn('h-8 w-8 p-0', value === 'like' && 'border-green-300 bg-green-50 text-green-700')}
+          aria-pressed={value === 'like'} aria-label="Handled well" disabled={isPending} onClick={() => send('like')}
+        >
+          <ThumbsUp className="h-4 w-4" aria-hidden="true" />
+        </Button>
+        <Button
+          type="button" variant="outline" size="sm" className={cn('h-8 w-8 p-0', value === 'dislike' && 'border-red-300 bg-red-50 text-red-700')}
+          aria-pressed={value === 'dislike'} aria-label="Not handled well" disabled={isPending} onClick={() => send('dislike')}
+        >
+          <ThumbsDown className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/** call_successful, shown as the AI's verdict on the call's goal (never as caller sentiment). */
+function AiOutcomeSection({ call }: { call: Call }) {
+  const verdict = call.call_successful ?? null
+  const look = verdict ? AI_OUTCOME_STYLE[verdict] : null
+  return (
+    <section>
+      <SectionTitle icon={Sparkles}>AI outcome</SectionTitle>
+      <div className="rounded-xl border bg-gray-50 p-4 space-y-3">
+        {verdict && look ? (
+          <div className="flex items-start gap-2">
+            <look.icon className={cn('mt-0.5 h-5 w-5 flex-shrink-0', look.className)} aria-hidden="true" />
+            <div>
+              <p className="text-sm font-semibold">{callResultLabel(verdict)}</p>
+              <p className="text-sm text-muted-foreground">{AI_OUTCOME_DESCRIPTION[verdict]}</p>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {isLiveStatus(call.status) ? 'Analysis pending…' : 'No AI verdict for this call.'}
+          </p>
+        )}
+        {!call.is_test && !isLiveStatus(call.status) && <FeedbackControl key={call.id} call={call} />}
+      </div>
+    </section>
+  )
+}
+
+/** Re-runs the provider's analysis with the agent's current success criteria and fields. */
+function ReanalyzeAction({ call, onDone }: { call: Call; onDone: () => void }) {
+  const [isPending, start] = useTransition()
+  if (!call.details?.can_reanalyze) return null
+
+  function run() {
+    start(async () => {
+      try {
+        const res = await fetch(`/api/calls/${encodeURIComponent(call.id)}/reanalyze`, { method: 'POST' })
+        if (!res.ok) {
+          toast.error(await readApiError(res, 'Could not analyse this call again.'))
+          return
+        }
+        toast.success('The call was analysed again.')
+        onDone()
+      } catch (e) {
+        toast.error(e instanceof Error && e.message ? e.message : 'Could not analyse this call again.')
+      }
+    })
+  }
+
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-xl border p-4">
+      <div>
+        <p className="text-sm font-medium flex items-center gap-1.5">
+          <Sparkles className="h-4 w-4 text-purple-600" aria-hidden="true" /> Analyse again
+        </p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Re-runs the AI analysis with your current success criteria and the details you ask the agent to collect.
+        </p>
+      </div>
+      <Button variant="outline" size="sm" onClick={run} disabled={isPending}>
+        {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-label="Analysing" /> : 'Analyse'}
+      </Button>
+    </div>
+  )
+}
+
 // ─── Transcript ───────────────────────────────────────────────────────────────
 
-function TranscriptView({ transcript, callId }: { transcript: TranscriptEntry[]; callId: string }) {
+type TimelineItem =
+  | { type: 'message'; at: number; entry: TranscriptEntry }
+  | { type: 'tool'; at: number; event: CallDetails['tool_events'][number] }
+
+/** Spoken turns plus the agent's tool use (transfer, voicemail, end call…), in call order. */
+function timelineOf(transcript: TranscriptEntry[], toolEvents: CallDetails['tool_events']): TimelineItem[] {
+  const items: TimelineItem[] = transcript.map((entry) => ({ type: 'message', at: entry.time_in_call_secs, entry }))
+  for (const event of toolEvents) items.push({ type: 'tool', at: event.at_secs, event })
+  // Stable: a tool event lands after the turn it belongs to.
+  return items
+    .map((item, i) => ({ item, i }))
+    .sort((a, b) => a.item.at - b.item.at || (a.item.type === b.item.type ? a.i - b.i : a.item.type === 'message' ? -1 : 1))
+    .map(({ item }) => item)
+}
+
+function TranscriptView({ transcript, callId, toolEvents = [] }: { transcript: TranscriptEntry[]; callId: string; toolEvents?: CallDetails['tool_events'] }) {
   const [search, setSearch] = useState('')
   const [atBottom, setAtBottom] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -504,7 +655,18 @@ function TranscriptView({ transcript, callId }: { transcript: TranscriptEntry[];
         role="log"
         aria-label="Call transcript"
       >
-        {transcript.map((msg, i) => {
+        {timelineOf(transcript, toolEvents).map((item, i) => {
+          if (item.type === 'tool') {
+            return (
+              <div key={`tool-${i}`} className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground" role="note">
+                <Wrench className={cn('h-3.5 w-3.5', item.event.ok ? 'text-gray-400' : 'text-red-500')} aria-hidden="true" />
+                <span>{toolEventLabel(item.event)}</span>
+                <span aria-hidden="true">·</span>
+                <span>at {formatDuration(item.event.at_secs)}</span>
+              </div>
+            )
+          }
+          const msg = item.entry
           const isAgent = msg.role === 'agent'
           return (
             <div key={i} className={cn('flex items-end gap-2', isAgent ? '' : 'flex-row-reverse')}>
@@ -625,12 +787,6 @@ interface CallDetailSheetProps {
   defaultTab?: string
 }
 
-const SENTIMENT_DATA = {
-  positive: { emoji: '😊', label: 'Positive', color: 'text-green-600', desc: 'Customer seemed happy and satisfied' },
-  neutral:  { emoji: '😐', label: 'Neutral',  color: 'text-gray-700', desc: 'Conversation was balanced' },
-  negative: { emoji: '😞', label: 'Negative', color: 'text-red-600',  desc: 'Customer seemed frustrated' },
-} as const
-
 export function CallDetailSheet({ callId, onClose, onDeleted, defaultTab = 'overview' }: CallDetailSheetProps) {
   const { call, isLoading, error, refetch } = useCallDetail(callId)
   const [tab, setTab] = useState(defaultTab)
@@ -680,6 +836,7 @@ export function CallDetailSheet({ callId, onClose, onDeleted, defaultTab = 'over
 
   const outcome = outcomeLabel(call?.outcome)
   const result = callResultLabel(call?.call_successful)
+  const language = languageLabel(call?.details?.main_language)
 
   return (
     <>
@@ -696,6 +853,7 @@ export function CallDetailSheet({ callId, onClose, onDeleted, defaultTab = 'over
               </div>
               {call && (
                 <div className="flex flex-wrap justify-end gap-1.5">
+                  {call.is_test && <TestCallBadge />}
                   <CallStatusBadge status={call.status} />
                   <HandledByBadge call={call} />
                 </div>
@@ -752,29 +910,13 @@ export function CallDetailSheet({ callId, onClose, onDeleted, defaultTab = 'over
                   {call.from_number && <InfoItem label="From"><span className="font-mono text-xs">{formatPhoneNumber(call.from_number)}</span></InfoItem>}
                   {call.to_number && <InfoItem label="To"><span className="font-mono text-xs">{formatPhoneNumber(call.to_number)}</span></InfoItem>}
                   <InfoItem label="Outcome">{outcome ?? '—'}</InfoItem>
-                  <InfoItem label="Call result">{result ?? '—'}</InfoItem>
+                  <InfoItem label="AI outcome">{result ?? '—'}</InfoItem>
+                  {language && <InfoItem label="Language">{language}</InfoItem>}
                 </dl>
 
                 <CallHandlingSection call={call} />
 
-                {/* Sentiment */}
-                <section>
-                  <SectionTitle>Sentiment analysis</SectionTitle>
-                  {call.sentiment ? (() => {
-                    const s = SENTIMENT_DATA[call.sentiment]
-                    return (
-                      <div className="flex flex-col items-center py-4 rounded-xl bg-gray-50 border gap-2">
-                        <span className="text-4xl" role="img" aria-label={`${s.label} sentiment`}>{s.emoji}</span>
-                        <p className={cn('text-xl font-bold', s.color)}>{s.label}</p>
-                        <p className="text-sm text-muted-foreground">{s.desc}</p>
-                      </div>
-                    )
-                  })() : (
-                    <p className="text-sm text-muted-foreground">
-                      {isLiveStatus(call.status) ? 'Analysis pending…' : 'No sentiment for this call'}
-                    </p>
-                  )}
-                </section>
+                <AiOutcomeSection call={call} />
 
                 {/* Summary */}
                 <section>
@@ -798,7 +940,12 @@ export function CallDetailSheet({ callId, onClose, onDeleted, defaultTab = 'over
 
               {/* --- TRANSCRIPT --- */}
               <TabsContent value="transcript" className="flex-1 overflow-y-auto p-5">
-                <TranscriptView transcript={call.transcript ?? []} callId={call.id} />
+                {call.details?.content_purged && (
+                  <p className="mb-3 rounded-lg border bg-gray-50 px-3 py-2 text-xs text-muted-foreground" role="note">
+                    The transcript, summary and recording were removed by your retention setting (Agent › Call handling › Privacy).
+                  </p>
+                )}
+                <TranscriptView transcript={call.transcript ?? []} callId={call.id} toolEvents={call.details?.tool_events ?? []} />
               </TabsContent>
 
               {/* --- ACTIONS --- */}
@@ -834,6 +981,7 @@ export function CallDetailSheet({ callId, onClose, onDeleted, defaultTab = 'over
                 <section className="border-t pt-4">
                   <SectionTitle>Call management</SectionTitle>
                   <div className="space-y-2">
+                    <ReanalyzeAction call={call} onDone={refetch} />
                     <Button
                       variant="outline"
                       size="sm"
