@@ -32,11 +32,11 @@ function key(operation: string): string {
   return k
 }
 
-type Ctx = { orgId?: string | null; agentId?: string | null; callId?: string | null }
+export type Ctx = { orgId?: string | null; agentId?: string | null; callId?: string | null }
 
 // Timeouts per class of call. Register-call is on the live call path: Twilio
 // waits at most 15 s for our TwiML and we still need time for a fallback.
-const T = {
+export const T = {
   read: 8_000,
   write: 15_000,
   upload: 60_000,
@@ -46,11 +46,12 @@ const T = {
 } as const
 
 // async: a missing key must reject the returned promise, never throw synchronously.
-async function req<T>(
+// Exported (as `req`) for the per-area modules in lib/elevenlabs/api/*.
+export async function req<T>(
   operation: string,
   path: string,
   opts: {
-    method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+    method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
     body?: unknown
     timeoutMs?: number
     idempotent?: boolean
