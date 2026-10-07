@@ -9,6 +9,8 @@
 // unrelated to provider failover (ElevenLabs → Cartesia), which happens in the
 // call router before the conversation starts.
 
+import { AGENT_LANGUAGES } from '@/lib/agent-languages'
+
 const DEFAULT_FALLBACK_MESSAGES: Record<string, string> = {
   en: "I'm sorry, I didn't quite catch that. Could you please repeat?",
   ro: 'Îmi pare rău, nu am înțeles exact. Puteți repeta, vă rog?',
@@ -37,6 +39,8 @@ export const PLATFORM_VARIABLES = {
   callToken: 'ntv_call_token',
   afterHours: 'after_hours',
   businessName: 'business_name',
+  /** 'inbound' (the caller phoned the business) or 'outbound' (the agent placed the call). */
+  callDirection: 'ntv_call_direction',
 } as const
 
 export interface ComposePromptInput {
@@ -57,6 +61,24 @@ export interface ComposePromptInput {
    * get_call_context tool instead ('tool'), or has no per-call context ('none').
    */
   callContext?: 'variables' | 'tool' | 'none'
+  // The options below only apply with callContext 'variables' (the ElevenLabs
+  // agent): they describe ElevenLabs system tools and speech settings.
+  /** voicemail_detection is attached: restrict it to outbound calls. */
+  voicemailDetection?: boolean
+  /** skip_turn is attached: wait quietly when the caller asks for a moment. */
+  skipTurn?: boolean
+  /** Extra languages reachable through language_detection (agent language codes). */
+  additionalLanguages?: readonly string[]
+  /** The speech engine normalises numbers (tts.text_normalisation_type 'elevenlabs'): keep digits. */
+  numbersAsDigits?: boolean
+  /** Keypad (DTMF) input is collected. */
+  keypadInput?: boolean
+}
+
+const LANGUAGE_NAMES: Record<string, string> = Object.fromEntries(AGENT_LANGUAGES.map((l) => [l.value, l.label]))
+
+function languageName(code: string): string {
+  return LANGUAGE_NAMES[code] ?? code
 }
 
 const MAX_CUSTOMER_PROMPT_CHARS = 20_000
@@ -69,9 +91,15 @@ export function composeSystemPrompt(input: ComposePromptInput): string {
 
   const rules: string[] = []
 
+  // Languages the ElevenLabs agent may switch to (language presets); the
+  // Cartesia fallback ('tool' / 'none') stays on the primary language.
+  const extraLanguages = (input.callContext ?? 'variables') === 'variables' ? (input.additionalLanguages ?? []).filter((l) => l !== lang) : []
+
   if (lang === 'ro') {
     rules.push(
-      'You must always write and speak in Romanian using correct diacritics (ă, â, î, ș, ț) - for example "vă mulțumesc" not "va multumesc". Never drop the diacritics, even if information you receive from tools, documents, or the caller omits them.'
+      extraLanguages.length > 0
+        ? 'Whenever you write or speak Romanian, use correct diacritics (ă, â, î, ș, ț) - for example "vă mulțumesc" not "va multumesc". Never drop the diacritics, even if information you receive from tools, documents, or the caller omits them.'
+        : 'You must always write and speak in Romanian using correct diacritics (ă, â, î, ș, ț) - for example "vă mulțumesc" not "va multumesc". Never drop the diacritics, even if information you receive from tools, documents, or the caller omits them.'
     )
   }
 
@@ -118,6 +146,32 @@ export function composeSystemPrompt(input: ComposePromptInput): string {
     rules.push(
       `At the very start of the call, call the get_call_context tool once. If it reports after_hours = true, ${closedBehaviour} If it reports direction = outbound, you placed this call on behalf of the business: introduce yourself and the reason for calling.`
     )
+  }
+
+  if (context === 'variables') {
+    if (input.voicemailDetection) {
+      rules.push(
+        `Voicemail: the variable {{${PLATFORM_VARIABLES.callDirection}}} is "outbound" only on calls you placed for the business. Use the voicemail_detection tool only when it is "outbound" and an answering machine or voicemail greeting clearly answered. When it is "inbound", the caller phoned the business: never use voicemail_detection, even if you hear a recorded message, music or an automated menu.`
+      )
+    }
+    if (input.skipTurn) {
+      rules.push(
+        'If the caller asks you to wait a moment (for example to check a calendar or find a document), answer with a very short acknowledgement, use the skip_turn tool and stay silent until they speak again.'
+      )
+    }
+    if (extraLanguages.length > 0) {
+      rules.push(
+        `Languages: you start in ${languageName(lang)}. If the caller speaks or asks for ${extraLanguages.map(languageName).join(', ')}, switch with the language_detection tool and continue in that language. Do not switch because of a single foreign word or name.`
+      )
+    }
+    if (input.numbersAsDigits) {
+      rules.push(
+        'Write phone numbers, prices, dates and times with digits and the usual symbols or currency names (for example 0721 234 567, 150, 14:30): the speech engine reads them aloud naturally. When you confirm a phone number, repeat it back in short groups of digits and ask the caller to confirm it.'
+      )
+    }
+    if (input.keypadInput) {
+      rules.push('Callers may also type numbers on their phone keypad: treat digits typed that way exactly like digits they said.')
+    }
   }
 
   if (input.timezone) {

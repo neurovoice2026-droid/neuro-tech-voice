@@ -144,6 +144,8 @@ async function connectElevenLabs(ctx: RoutingContext, call: CallRow, opts: { aft
       [PLATFORM_VARIABLES.callToken]: signCallToken(call.id, 'transfer', CALL_TOKEN_TTL_S),
       [PLATFORM_VARIABLES.afterHours]: opts.afterHours ? 'true' : 'false',
       [PLATFORM_VARIABLES.businessName]: ctx.org.name ?? '',
+      // Gates voicemail_detection to outbound calls (prompt rule).
+      [PLATFORM_VARIABLES.callDirection]: opts.direction,
     },
   }
   if (opts.direction === 'outbound') {

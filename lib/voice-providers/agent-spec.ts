@@ -17,6 +17,8 @@ import type { AgentSpec } from './types'
 import { safeTimeZone } from '@/lib/scheduling/time'
 import { applyDisclosure } from '@/lib/voice/greetings'
 import { normalizeAgentLanguage } from '@/lib/voice/languages'
+import { textNormalisationType } from '@/lib/elevenlabs/models'
+import { effectiveAdditionalLanguages, languagePresetGreetings } from './language-presets'
 
 export interface AgentRow {
   id: string
@@ -93,6 +95,8 @@ export async function buildAgentSpec(db: SupabaseClient, agent: AgentRow): Promi
     endCallEnabled: conversation.allow_end_call,
   }
   const cartesiaToolAvailable = (process.env.CARTESIA_TOOL_SECRET ?? '').trim().length >= 24
+  // ElevenLabs only: the Cartesia fallback agent stays single-language.
+  const additionalLanguages = effectiveAdditionalLanguages(language, conversation.additional_languages)
 
   // The first thing a caller hears always discloses the AI (and recording,
   // when enabled), whatever the customer typed. Idempotent.
@@ -126,10 +130,25 @@ export async function buildAgentSpec(db: SupabaseClient, agent: AgentRow): Promi
     orgName,
     name: agent.name,
     language,
-    systemPrompt: composeSystemPrompt({ ...promptBase, callContext: 'variables' }),
+    systemPrompt: composeSystemPrompt({
+      ...promptBase,
+      callContext: 'variables',
+      voicemailDetection: conversation.voicemail_detection,
+      skipTurn: conversation.skip_turn,
+      additionalLanguages,
+      numbersAsDigits: textNormalisationType() === 'elevenlabs',
+      keypadInput: true,
+    }),
     fallbackSystemPrompt: composeSystemPrompt({ ...promptBase, callContext: cartesiaToolAvailable ? 'tool' : 'none' }),
     knowledgeAppendix: appendix.trim(),
     firstMessage,
+    languagePresetGreetings: languagePresetGreetings({
+      languages: additionalLanguages,
+      tone: agent.metadata?.personality,
+      orgName,
+      agentName: agent.name,
+      recordingNotice: conversation.recording_notice,
+    }),
     voiceId: agent.voice_id,
     voiceTuning: readVoiceTuning(agent.voice_settings),
     fallbackVoiceId: agent.fallback_voice_id,

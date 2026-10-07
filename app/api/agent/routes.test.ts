@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fakeDb, filterOf, type FakeCall, type Handler } from '@/tests/helpers/fake-db'
+import { DEFAULT_CONVERSATION_SETTINGS } from '@/lib/voice-providers/types'
 
 vi.hoisted(() => {
   // PLANS reads price ids at module load.
@@ -229,6 +230,42 @@ describe('PATCH /api/agent', () => {
     const res = await patchAgent(req('/api/agent', 'PATCH', { fallback_voice_id: '34acfaee-c556-41ee-a5f6-c687fb20357c' }))
     expect(res.status).toBe(502)
     expect(await res.text()).not.toContain('SECRET')
+  })
+
+  it('conversation behaviour settings: validated, saved and synced; voice tuning reset to default saved as null', async () => {
+    const conversation = {
+      ...DEFAULT_CONVERSATION_SETTINGS,
+      additional_languages: ['ro', 'de'],
+      asr_keywords: ['  Dr.  Ionescu ', 'Str. Eminescu'],
+      soft_timeout_fillers: false,
+      ignore_backchannels: true,
+      skip_turn: false,
+      background_voice_detection: true,
+    }
+    const res = await patchAgent(req('/api/agent', 'PATCH', { conversation_settings: conversation, voice_settings: { stability: 0.4, similarity_boost: null, speed: 1.1 } }))
+    expect(res.status).toBe(200)
+    const [u] = updates(state.user!, 'agents')
+    expect(u.payload).toMatchObject({
+      conversation_settings: { additional_languages: ['ro', 'de'], asr_keywords: ['Dr. Ionescu', 'Str. Eminescu'], background_voice_detection: true },
+      voice_settings: { stability: 0.4, similarity_boost: null, speed: 1.1 },
+    })
+    expect(syncAgentProviders).toHaveBeenCalledWith(expect.objectContaining({ bump: true, primary: true }))
+  })
+
+  it('rejects invalid conversation behaviour settings and out-of-range voice tuning', async () => {
+    for (const body of [
+      { conversation_settings: { ...DEFAULT_CONVERSATION_SETTINGS, additional_languages: ['ro', 'de', 'fr', 'it'] } },
+      { conversation_settings: { ...DEFAULT_CONVERSATION_SETTINGS, additional_languages: ['tlh'] } },
+      { conversation_settings: { ...DEFAULT_CONVERSATION_SETTINGS, asr_keywords: Array.from({ length: 31 }, (_, i) => `k${i}`) } },
+      { conversation_settings: { ...DEFAULT_CONVERSATION_SETTINGS, asr_keywords: ['{{secret__x}}'] } },
+      { voice_settings: { stability: 2, similarity_boost: null, speed: null } },
+      { voice_settings: { stability: null, similarity_boost: null, speed: 1.5 } },
+    ]) {
+      const res = await patchAgent(req('/api/agent', 'PATCH', body))
+      expect(res.status, JSON.stringify(body).slice(0, 120)).toBe(400)
+    }
+    expect(updates(state.user!, 'agents')).toHaveLength(0)
+    expect(syncAgentProviders).not.toHaveBeenCalled()
   })
 
   it('db error → generic 500', async () => {

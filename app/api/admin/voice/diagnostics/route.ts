@@ -11,6 +11,7 @@ import { summarizeVoiceConfig, validateVoiceConfig } from '@/lib/voice-providers
 import { peek } from '@/lib/voice-providers/circuit-registry'
 import { listPlatformResources } from '@/lib/voice-providers/platform-resources'
 import { probeProviders } from '@/lib/voice-providers/maintenance'
+import { diagnoseModels } from '@/lib/elevenlabs/model-diagnostics'
 
 export async function GET(request: Request) {
   const requestId = requestIdFrom(request)
@@ -60,11 +61,13 @@ export async function GET(request: Request) {
       return out
     }
     const probe = new URL(request.url).searchParams.get('probe') === '1'
+    // TTS model / LLM checks (env, GET /v1/models, GET /v1/convai/llm/list, synced-agent drift).
+    const modelProblems = await diagnoseModels(db, log)
     log.info('admin.diagnostics', { by: admin.kind, probe })
     return NextResponse.json(
       {
         config: summarizeVoiceConfig(),
-        problems: validateVoiceConfig(),
+        problems: [...validateVoiceConfig(), ...modelProblems],
         // `effective` is what routing sees (forced overrides, open → half-open after the open period).
         circuits: {
           elevenlabs: { effective: elCircuit.state, ...elCircuit.raw },

@@ -33,6 +33,22 @@ export interface ConversationSettings {
   /** Always disclose the caller is talking to an AI (on by default; cannot be disabled by prompt). */
   ai_disclosure: boolean
   temperature: number | null
+  /**
+   * Extra languages the agent can switch to when the caller speaks them (max 3,
+   * never the primary language). ElevenLabs only: the Cartesia fallback agent
+   * stays on the primary language.
+   */
+  additional_languages: string[]
+  /** Business words boosted in speech recognition: staff, services, streets (the business name is always added). */
+  asr_keywords: string[]
+  /** Say a short localized filler ("One moment, please.") when a reply takes longer than 3 s. */
+  soft_timeout_fillers: boolean
+  /** Short acknowledgements ("mhm", "da", "ok") do not interrupt the agent. */
+  ignore_backchannels: boolean
+  /** The agent waits quietly when the caller asks for a moment, then checks in. */
+  skip_turn: boolean
+  /** Filter background voices (TV, other people) so they do not trigger turns. */
+  background_voice_detection: boolean
 }
 
 export const DEFAULT_CONVERSATION_SETTINGS: ConversationSettings = {
@@ -47,6 +63,12 @@ export const DEFAULT_CONVERSATION_SETTINGS: ConversationSettings = {
   recording_notice: false,
   ai_disclosure: true,
   temperature: null,
+  additional_languages: [],
+  asr_keywords: [],
+  soft_timeout_fillers: true,
+  ignore_backchannels: true,
+  skip_turn: true,
+  background_voice_detection: false,
 }
 
 export interface TransferSettings {
@@ -78,6 +100,23 @@ export interface AnalysisSettings {
   data_collection: DataCollectionField[]
 }
 
+/**
+ * Allowed values of the platform 'outcome' data-collection field, sent as the
+ * spec `enum` so the post-call analysis returns machine-safe values
+ * (CallOutcome without 'missed', which only the platform sets).
+ */
+export const DATA_COLLECTION_OUTCOME_VALUES = [
+  'booked',
+  'rescheduled',
+  'cancelled',
+  'answered',
+  'message_taken',
+  'transferred',
+  'flagged',
+  'spam',
+  'other',
+] as const
+
 export const DEFAULT_ANALYSIS_SETTINGS: AnalysisSettings = {
   success_criteria: [
     { id: 'caller_helped', name: 'Caller helped', prompt: 'The caller received the information or action they called for, or a clear next step was agreed.' },
@@ -86,7 +125,7 @@ export const DEFAULT_ANALYSIS_SETTINGS: AnalysisSettings = {
     { id: 'caller_name', type: 'string', description: "The caller's full name if they gave it, otherwise empty." },
     { id: 'callback_number', type: 'string', description: 'A phone number the caller asked to be called back on, in E.164 if possible.' },
     { id: 'reason_for_call', type: 'string', description: 'One short sentence describing why the caller called.' },
-    { id: 'outcome', type: 'string', description: 'One of: booked, rescheduled, cancelled, answered, message_taken, transferred, flagged, spam, other.' },
+    { id: 'outcome', type: 'string', description: `One of: ${DATA_COLLECTION_OUTCOME_VALUES.join(', ')}.` },
   ],
 }
 
@@ -118,6 +157,11 @@ export interface AgentSpec {
   /** Bounded plain-text knowledge excerpts for the fallback agent (its KB is not yet available for managed agents). */
   knowledgeAppendix: string
   firstMessage: string
+  /**
+   * First message per additional language (conversation.additional_languages),
+   * composed with the same AI disclosure / recording notice as firstMessage.
+   */
+  languagePresetGreetings: Record<string, string>
   voiceId: string | null
   voiceTuning: VoiceTuning
   /** Cartesia voice used by the fallback agent. */

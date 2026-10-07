@@ -8,6 +8,7 @@ import * as el from '@/lib/elevenlabs/client'
 import { createLogger } from '@/lib/observability/logger'
 import * as ct from '@/lib/cartesia/client'
 import { buildElevenLabsAgentBody, agentTags, configHash } from '@/lib/elevenlabs/agent-config'
+import { agentReasoningEffort } from '@/lib/elevenlabs/model-catalog'
 import { buildCartesiaAgentConfig } from '@/lib/cartesia/agent-config'
 import { cartesiaFallbackVoices } from './config'
 import { isAllowedFallbackVoice } from '@/lib/cartesia/voice-policy'
@@ -49,7 +50,9 @@ async function elevenLabsBody(spec: AgentSpec) {
   const needsTransferTool = spec.appRouted && spec.transfer.enabled && !!spec.transfer.number
   const transferToolId = needsTransferTool ? await tryPlatformResource('elevenlabs.transfer_tool') : null
   const postCallWebhookId = (process.env.ELEVENLABS_POST_CALL_WEBHOOK_ID ?? '').trim() || null
-  return buildElevenLabsAgentBody(spec, { transferToolId, postCallWebhookId })
+  // Cached LLM catalogue: the lowest reasoning level the agent LLM supports (null = not sent).
+  const reasoningEffort = await agentReasoningEffort()
+  return buildElevenLabsAgentBody(spec, { transferToolId, postCallWebhookId }, { reasoningEffort })
 }
 
 export const elevenLabsLifecycle: AgentLifecycle = {

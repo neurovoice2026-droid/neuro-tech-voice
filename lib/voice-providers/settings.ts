@@ -18,10 +18,42 @@ import {
 import { DEFAULT_AFTER_HOURS, type AfterHoursConfig, type WorkingHours } from './working-hours'
 import { E164_REGEX } from '@/lib/phone/e164'
 import { WEEKDAYS } from '@/lib/scheduling/time'
+import { AGENT_LANGUAGES, type AgentLanguageCode } from '@/lib/agent-languages'
 
 export const e164 = z.string().trim().regex(E164_REGEX, 'Use the international format, e.g. +40712345678')
 
 const shortText = (max: number) => z.string().trim().max(max)
+
+/** Extra languages one agent can switch to (ElevenLabs language presets). */
+export const MAX_ADDITIONAL_LANGUAGES = 3
+/** Tenant ASR keywords (the business name is always added on top). */
+export const ASR_KEYWORDS_MAX = 30
+export const ASR_KEYWORD_MAX_CHARS = 50
+
+const LANGUAGE_CODES = AGENT_LANGUAGES.map((l) => l.value) as unknown as readonly [AgentLanguageCode, ...AgentLanguageCode[]]
+
+/** Control characters → space, inner whitespace collapsed, trimmed. */
+export function cleanKeyword(raw: string): string {
+  // \p{Cc} = C0/C1 control characters (escaped so the file stays plain text).
+  return raw.replace(/\p{Cc}/gu, ' ').replace(/\s+/g, ' ').trim()
+}
+
+// Letters (any script, with combining marks), digits, spaces and the
+// punctuation found in names: "Dr. Ionescu", "Str. Mihai Eminescu 12", "B&B".
+const KEYWORD_CHARS = /^[\p{L}\p{M}\p{N} .,'’&+\-/()]+$/u
+
+const asrKeyword = z
+  .string()
+  .transform(cleanKeyword)
+  .pipe(
+    z
+      .string()
+      .min(1, 'Enter a word or name')
+      .max(ASR_KEYWORD_MAX_CHARS, `At most ${ASR_KEYWORD_MAX_CHARS} characters`)
+      .regex(KEYWORD_CHARS, 'Use letters, digits, spaces and . , \' & - + / ( ) only'),
+  )
+
+const distinct = (values: readonly string[]) => new Set(values.map((v) => v.toLocaleLowerCase())).size === values.length
 
 export const ConversationSettingsSchema = z.object({
   allow_interruptions: z.boolean(),
@@ -36,6 +68,20 @@ export const ConversationSettingsSchema = z.object({
   // AI disclosure cannot be turned off from the API (product + legal requirement).
   ai_disclosure: z.literal(true),
   temperature: z.number().min(0).max(1).nullable(),
+  // The primary language is excluded where the agent language is known (UI,
+  // agent builder): the two live in different columns.
+  additional_languages: z
+    .array(z.enum(LANGUAGE_CODES))
+    .max(MAX_ADDITIONAL_LANGUAGES, `At most ${MAX_ADDITIONAL_LANGUAGES} additional languages`)
+    .refine(distinct, 'Each language only once'),
+  asr_keywords: z
+    .array(asrKeyword)
+    .max(ASR_KEYWORDS_MAX, `At most ${ASR_KEYWORDS_MAX} keywords`)
+    .refine(distinct, 'Each keyword only once'),
+  soft_timeout_fillers: z.boolean(),
+  ignore_backchannels: z.boolean(),
+  skip_turn: z.boolean(),
+  background_voice_detection: z.boolean(),
 })
 
 export const TransferSettingsSchema = z

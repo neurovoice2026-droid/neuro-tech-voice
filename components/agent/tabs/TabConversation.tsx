@@ -11,7 +11,8 @@ import { Badge } from '@/components/ui/badge'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { ChevronDown, ChevronUp, Info, Loader2, Play, Sparkles, Square } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronUp, Info, Loader2, Play, Sparkles, Square } from 'lucide-react'
+import { AdditionalLanguagesField, AsrKeywordsField } from '@/components/agent/ConversationBehaviourFields'
 import { useAudioPreview } from '@/hooks/useAudioPreview'
 import { readAgentSettings, type AgentHook } from '@/hooks/useAgent'
 import { ConversationSettingsSchema } from '@/lib/voice-providers/settings'
@@ -131,6 +132,8 @@ const FIRST_MESSAGE_MAX = 1_000
 const SYSTEM_PROMPT_MAX = 20_000
 const FALLBACK_MESSAGE_MAX = 500
 const VOICEMAIL_MESSAGE_MAX = 500
+/** Callers cannot interrupt the first message (it carries the AI disclosure): warn above ~20 s of speech. */
+const PROTECTED_GREETING_WARN = 300
 
 const EAGERNESS_OPTIONS: Array<{ value: ConversationSettings['turn_eagerness']; label: string; description: string }> = [
   { value: 'patient', label: 'Patient', description: 'Waits a little longer before replying. Good for callers who pause while thinking.' },
@@ -155,9 +158,25 @@ interface Draft {
   voicemail_message: string
   temperature_enabled: boolean
   temperature: string
+  additional_languages: string[]
+  asr_keywords: string[]
+  soft_timeout_fillers: boolean
+  ignore_backchannels: boolean
+  skip_turn: boolean
+  background_voice_detection: boolean
 }
 
-type FieldKey = 'first_message' | 'system_prompt' | 'fallback_message' | 'turn_timeout' | 'silence_seconds' | 'max_duration' | 'voicemail_message' | 'temperature'
+type FieldKey =
+  | 'first_message'
+  | 'system_prompt'
+  | 'fallback_message'
+  | 'turn_timeout'
+  | 'silence_seconds'
+  | 'max_duration'
+  | 'voicemail_message'
+  | 'temperature'
+  | 'additional_languages'
+  | 'asr_keywords'
 type FieldErrors = Partial<Record<FieldKey, string>>
 
 function draftFrom(agent: Agent): Draft {
@@ -177,6 +196,12 @@ function draftFrom(agent: Agent): Draft {
     voicemail_message: c.voicemail_message ?? '',
     temperature_enabled: c.temperature !== null,
     temperature: String(c.temperature ?? 0.5),
+    additional_languages: c.additional_languages.filter((l) => l !== agent.language),
+    asr_keywords: c.asr_keywords,
+    soft_timeout_fillers: c.soft_timeout_fillers,
+    ignore_backchannels: c.ignore_backchannels,
+    skip_turn: c.skip_turn,
+    background_voice_detection: c.background_voice_detection,
   }
 }
 
@@ -186,6 +211,8 @@ const SCHEMA_FIELD: Partial<Record<keyof ConversationSettings, FieldKey>> = {
   max_call_duration_minutes: 'max_duration',
   voicemail_message: 'voicemail_message',
   temperature: 'temperature',
+  additional_languages: 'additional_languages',
+  asr_keywords: 'asr_keywords',
 }
 
 /** Builds the full conversation_settings object (keeping fields other tabs own) and validates it. */
@@ -225,6 +252,12 @@ function buildSettings(draft: Draft, base: ConversationSettings): { value: Conve
     voicemail_message: voicemailMessage || null,
     temperature,
     ai_disclosure: true,
+    additional_languages: draft.additional_languages,
+    asr_keywords: draft.asr_keywords,
+    soft_timeout_fillers: draft.soft_timeout_fillers,
+    ignore_backchannels: draft.ignore_backchannels,
+    skip_turn: draft.skip_turn,
+    background_voice_detection: draft.background_voice_detection,
   }
   const parsed = ConversationSettingsSchema.safeParse(candidate)
   if (!parsed.success) {
@@ -327,9 +360,19 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
             <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
             <span>
               The platform always adds a short AI disclosure to this greeting, plus a recording notice when it is
-              enabled under Call handling → Privacy.
+              enabled under Call handling → Privacy. Callers cannot interrupt the greeting, so the disclosure is always
+              heard in full; what they say meanwhile is kept for the next turn.
             </span>
           </p>
+          {draft.first_message.trim().length > PROTECTED_GREETING_WARN && (
+            <p role="status" className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              <span>
+                This greeting is long. Callers have to listen to all of it before they can speak, so keep it under about
+                {` ${PROTECTED_GREETING_WARN}`} characters.
+              </span>
+            </p>
+          )}
           {agent.voice_id && (
             <Button
               type="button"
@@ -453,6 +496,43 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
             onCheckedChange={(v) => set('allow_interruptions', v)}
           />
 
+          <SettingSwitch
+            id="conv-backchannels"
+            label="Ignore short acknowledgements"
+            description={
+              draft.allow_interruptions
+                ? 'Words like “mhm”, “ok” or “da” said while the agent talks do not interrupt it.'
+                : 'Only applies when interruptions are allowed.'
+            }
+            checked={draft.ignore_backchannels}
+            onCheckedChange={(v) => set('ignore_backchannels', v)}
+            disabled={!draft.allow_interruptions}
+          />
+
+          <SettingSwitch
+            id="conv-fillers"
+            label="Fill pauses while looking things up"
+            description="When an answer takes more than 3 seconds, the agent says a short “One moment, please.” in the caller’s language instead of staying silent."
+            checked={draft.soft_timeout_fillers}
+            onCheckedChange={(v) => set('soft_timeout_fillers', v)}
+          />
+
+          <SettingSwitch
+            id="conv-skip-turn"
+            label="Wait when the caller asks for a moment"
+            description="If the caller says “one second, let me check”, the agent waits quietly (up to 20 seconds) and then checks in, instead of talking over them or hanging up."
+            checked={draft.skip_turn}
+            onCheckedChange={(v) => set('skip_turn', v)}
+          />
+
+          <SettingSwitch
+            id="conv-background-voices"
+            label="Filter background voices"
+            description="Ignore voices in the background (TV, other people) so they do not trigger the agent. Useful when callers phone from shops or cars; may miss very quiet callers."
+            checked={draft.background_voice_detection}
+            onCheckedChange={(v) => set('background_voice_detection', v)}
+          />
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="conv-eagerness">Turn eagerness</Label>
@@ -557,8 +637,8 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
 
           <SettingSwitch
             id="conv-voicemail"
-            label="Voicemail detection"
-            description="On outbound calls, detect an answering machine and leave a message (or hang up)."
+            label="Voicemail detection (outgoing calls)"
+            description="On calls your agent places, detect an answering machine and leave a message (or hang up). Never used on incoming calls."
             checked={draft.voicemail_detection}
             onCheckedChange={(v) => set('voicemail_detection', v)}
           >
@@ -589,7 +669,7 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
           <SettingSwitch
             id="conv-temperature"
             label="Custom response creativity"
-            description="Lower values give more consistent answers, higher values more varied ones. Off uses the provider default."
+            description="Lower values give more consistent answers, higher values more varied ones. Off uses the default (0, the most consistent answers)."
             checked={draft.temperature_enabled}
             onCheckedChange={(v) => set('temperature_enabled', v)}
           >
@@ -622,6 +702,33 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
               </div>
             )}
           </SettingSwitch>
+        </CardContent>
+      </Card>
+
+      {/* Languages */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Additional languages</CardTitle>
+          <CardDescription>Let your agent switch to the caller&apos;s language. Each language gets its own greeting with the AI disclosure.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AdditionalLanguagesField
+            primary={agent.language}
+            value={draft.additional_languages}
+            onChange={(next) => set('additional_languages', next)}
+            error={visibleErrors.additional_languages}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Speech recognition */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Speech recognition</CardTitle>
+          <CardDescription>Help the agent hear names correctly.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AsrKeywordsField value={draft.asr_keywords} onChange={(next) => set('asr_keywords', next)} error={visibleErrors.asr_keywords} />
         </CardContent>
       </Card>
 
