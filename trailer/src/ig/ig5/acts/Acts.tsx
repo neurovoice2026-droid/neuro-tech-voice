@@ -81,9 +81,10 @@ const STEP_ASIDE = [T.IMPACT - 14, T.IMPACT] as const;
 const SEAM_GLIDE = [T.END_CARD.seam - 6, T.END_CARD.seam + 6] as const;
 /** her pose on the card: docked on the pulled-back record; as the record goes out on the bar she steps aside to the
  *  top right (where the chip was) */
-/** the step-aside's path: she lifts off the record's header to a lane between it and the chip (y 440, clear of both),
- *  glides right along it, and rises into the corner only once the chip has gone up (its last 30 %) — never over a word */
-const LANE_Y = 440;
+/** the step-aside's path: she lifts off the record's header to a lane between it and the chip (y 420, clear of both:
+ *  the record pulled back to y 458–618 since crit-r2 P4, the chip ends y 366), glides right along it, and rises into
+ *  the corner only once the chip has gone up (its last 30 %) — never over a word */
+const LANE_Y = 420;
 function endOrbPose(t: number) {
   const p = orbPose(t);
   if (t < STEP_ASIDE[0]) return p;

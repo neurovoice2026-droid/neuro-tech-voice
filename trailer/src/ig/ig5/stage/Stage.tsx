@@ -5,16 +5,22 @@
  *   ground    the pearl (MUTED_MESH, light), its warm key low-left with the phone's rose pool round the light (swelling
  *             as each ring leaves it); on "Ours?" the phone's pool goes and her sunday pool rises behind ours (1 s), and
  *             follows ours up in b5
- *   desk      Hook.tsx: the hairline, the ring trio, the phone's single rings, the rose line light (until the pickup)
+ *   desk      Hook.tsx: the hairline, the ring trio, the phone's single rings (R1 and ring 2), the rose line light
+ *             (until the pickup)
  *   papers    Papers.tsx: the agency slip, the setup stub, the answering slip; the square-up; the pile's exit
+ *   rings     the phone's last ring (ring 3, after slip 2 has risen) is drawn OVER the papers and kept small (Ø 150),
+ *             so it reads as a whole ring round the light under slip 2, never a half-ring stuck under a card (crit-r2 P8)
  *   ours      Ours.tsx: the $49 card, its fold into the parked chip; the set-up track
  *   record    Record.tsx: the sample call
  *   orb       HER ORB, born once, on the pickup: the rose line light springs open into her (components/Orb AvaOrb born:
- *             a 3-frame seed, SPRING.pop, the palette crossing rush → sunday over 6 f) and glides (0.45 s) to ours' full
- *             stop after "a month", Ø 44, breathing on her voice; it rides ours up in b5; on "It" it stays where the
- *             full stop was as ours folds away, and on "picks up" it arcs onto the record's ringing rose dot, landing
- *             on the vowel of "up" (M.dock: its stamp sits on the p closure, crit-r1 S1 / SYNC-1), and stays docked
- *             there as the agent, leaning into its listen palette
+ *             a 3-frame seed, SPRING.pop, the palette crossing rush → sunday over 6 f) and, once ours has landed,
+ *             glides (0.53 s on a LINEAR clock under the path's own eases, crit-r2 B1 — the house ease on top made it a
+ *             2-frame dart) to ours' full stop after "a month", Ø 44, breathing on her voice; it rides ours up in b5; on "It" it stays
+ *             where the full stop was as ours folds away, and ("It picks up") it hops over to the record's ringing rose
+ *             dot — x out ahead of y, so she comes DOWN onto the dot from above and never crosses SAMPLE CALL (crit-r2
+ *             P9), 11 f from "It" + 3 — landing on the vowel of "up" (M.dock: its stamp sits on the p closure, crit-r1 S1 / SYNC-1); on the
+ *             click (M.up) she pulses once (× 1.08) as she takes the call (crit-r2 S-R2-1), and stays docked there as
+ *             the agent, leaning into its listen palette
  *   S1        Hook.tsx HookCard (frame 0's card, leaving line by line)
  *   captions  the set-up and does lines in the caption band (x 86, y 1180, ≤ 814 → x 900), word-synced through the
  *             Captions fork (NUDGE where the aligner's stamp is off her energy; a row never ends on "the" / "a" / "an");
@@ -77,22 +83,36 @@ export function orbPose(t: number): { x: number; y: number; d: number; moving: b
   if (t < M.glide[0]) return { x: PHONE.x, y: PHONE.y, d: D, moving: false };
   if (t < M.it) {
     const stop = fullStopAt(t);
-    const g = tween(t, M.glide, [0, 1]);
+    // a LINEAR clock (crit-r2 B1): the path's eases (x out3, y inOut) are the only easing on it
+    const g = tween(t, M.glide, [0, 1], (v) => v);
     // the glide: right first, then down onto the baseline (it never crosses "month")
     const x = mix(PHONE.x, stop.x, EASE.out3(g));
     const y = mix(PHONE.y, stop.y, EASE.inOut(g));
     const o = oursY(t);
     return { x, y, d: D, moving: g < 1 || !!o?.moving };
   }
-  // b6: on "It" she leaves the folding card and waits where the full stop was; on "picks up" she glides onto the
-  // record's rose dot (arriving on "up"), arcing over the record's header so she never crosses its words
+  // b6: on "It" ours folds away from her; then ("It picks up") she hops onto the record's rose dot, landing on the
+  // vowel of "up": her x arrives over the dot first (power2.inOut over the hop's first 80 %), the arc and the descent
+  // finish after it — so the last stretch is a soft drop onto the dot from above, never across the header's words
+  // (crit-r2 P9); 11 f for ≈ 560 px (peak ≈ 115 px/f: in the 7 f between "picks" and "up" it was a dart)
   const from = fullStopAt(M.it);
-  const u = tween(t, [M.picks, M.dock], [0, 1], EASE.inOut);
+  const u = tween(t, HOP, [0, 1], (v) => v);
   const dock = dockAt(t);
   const dd = RECORD.orbD * dock.s;
-  const arc = ORB_ARC * Math.sin(Math.PI * u);
-  return { x: mix(from.x, dock.x, u), y: mix(from.y, dock.y, u) - arc, d: mix(D, dd, u), moving: u > 0 };
+  const x = mix(from.x, dock.x, EASE.draw(Math.min(1, u / 0.8)));
+  const y = mix(from.y, dock.y, u) - ORB_ARC * Math.sin(Math.PI * EASE.draw(Math.min(1, u / 0.95)));
+  return { x, y, d: mix(D, dd, EASE.inOut(u)) * (1 + TAKE.k * takePulse(t)), moving: u > 0 };
 }
+/** her hop onto the record's dot: from 3 f after "It" (ours' words are gone by "It" + 4 and the folding card lifts above
+ *  her path; she has moved 17 px by then) to the vowel of "up" */
+const HOP = [M.it + 3, M.dock] as const;
+/** she takes the call: one pulse on the click of "up" (× 1.08 at + 2.5 f, back by ≈ + 12 f) — the picture's beat under
+ *  the fx-pickup (crit-r2 S-R2-1) */
+const TAKE = { k: 0.08, peak: 2.5 } as const;
+const takePulse = (t: number) => {
+  const x = (t - M.up) / TAKE.peak;
+  return x <= 0 ? 0 : x * Math.exp(1 - x);
+};
 export const Orb5: React.FC<{ t: number; pose?: { x: number; y: number; d: number; moving: boolean }; close?: React.ComponentProps<typeof AvaOrb>['close'] }> = ({ t, pose, close }) => {
   const ready = useKitFaces();
   if (!ready || t < M.pickup) return null;
@@ -140,9 +160,10 @@ export const Stage5: React.FC<{ t: number }> = ({ t }) => (
     <Ground5 t={t} />
     <DeskLine t={t} />
     {t < TRIO.life + 1 ? <TrioRings t={t} /> : null}
-    <PhoneRings t={t} />
+    <PhoneRings t={t} under />
     {t < M.pickup ? <Phone t={t} /> : null}
     <Papers t={t} />
+    <PhoneRings t={t} />
     <Ours t={t} />
     <Track t={t} />
     <RecordCard t={t} />

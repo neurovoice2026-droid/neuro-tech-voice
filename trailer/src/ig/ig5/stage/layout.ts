@@ -9,7 +9,9 @@
  *                 a linear fade (TrioRings)
  *   S1            the hook card, headline 104 at x 86, rows y 400 · 528 · 656
  *   SLIP1 / STUB / SLIP2   b2–b3's quotes: paper at scale 1 with a small tilt; the stub hangs off slip 1's lower right
- *                 edge (pivot at its staple, top left) and covers only slip 1's blank bottom margin
+ *                 edge (pivot at its staple, top left) and covers only slip 1's blank bottom margin; through b2 slip 1
+ *                 and its stub rest B2_DROP lower (the agency beat centred on the frame, crit-r2 P6) and glide up into
+ *                 these places as slip 2 comes
  *   PILE          b4's square-up: the three papers × .88 about x 160 (every $0 point stays on x 160), tilt 0
  *   OURS          the $49 card: y 980 in b4 (under the pile), y 430 in b5; its $49 on the same scale (1.76 px per dollar)
  *   CHIP          b6–b8: ours parked as a pill in the label band, right-aligned to x 900
@@ -25,8 +27,8 @@ export const DESK = { y: 1130, x0: 86, x1: 758 } as const;
 /** frame 0's ring trio (HOOKS §1.2): d(age) = 72 + 4.2·age (Ø 72 / 156 / 240 at ages 0 / 20 / 40), strokes and ink
  *  thinning linearly; born out of the light (Ø 18 at age −12.9), gone at age 60 */
 export const TRIO = { d0: 72, grow: 4.2, life: 60, stroke0: 3, strokeK: 0.0375, ink0: 0.85, inkLife: 68, tail: 8 } as const;
-/** a single ring of the phone (the desk law, RingPulse Ø 18 → 240) */
-export const RING = { d0: 18, d1: 240 } as const;
+/** a single ring of the phone (the desk law, RingPulse Ø 18 → 240); the last (over slip 2's bottom margin) Ø 150 */
+export const RING = { d0: 18, d1: 240, dLast: 150 } as const;
 
 /** the hook card (HOOKS §1.2): headline 104, rows 128 apart */
 export const S1 = { x: 86, y: 400, size: 104, pitch: 128, maxWidth: 814 } as const;
@@ -102,6 +104,8 @@ export const STUB = {
   staple: { x: 46, y: 16 },
   tag: { x: 40, y: 26, size: 36 },
   fig: { x: 40, y: 70, size: 140 },
+  /** the empty amount slot until "$1,500" rises into it (slip 1's idiom, crit-r2 P7): local y, height */
+  slot: { y: 74, h: 128 },
 } as const;
 /** slip 2, the live answering service: x 120–876 (tilted, inside x 880: TikTok's rail), from y 854, +0.8° about its
  *  centre; a 6 px graphite people stripe */
@@ -127,8 +131,9 @@ export const SLIP1_REST: Pose = pivotPose(SLIP1.rest.x + SLIP1.w / 2, SLIP1.rest
 export const STUB_REST: Pose = pivotPose(STUB.rest.x + STUB.staple.x, STUB.rest.y + STUB.staple.y, STUB.staple.x, STUB.staple.y, STUB.tilt);
 export const SLIP2_REST: Pose = pivotPose(SLIP2.rest.x + SLIP2.w / 2, SLIP2.rest.y + SLIP2.h / 2, SLIP2.w / 2, SLIP2.h / 2, SLIP2.tilt);
 
-/** b3's camera: 1.00 → .97 about (540, 740) */
-export const CAMERA = { c: { x: 540, y: 740 }, to: 0.97 } as const;
+/** b2: slip 1 and its stub rest this much lower (slip 1 y 520–790, the stub to ≈ 1020 over the desk at 1130) until
+ *  M.lift glides them up into the b3 places above (crit-r2 P6; b3's camera ease-back is gone, crit-r2 P2) */
+export const B2_DROP = 180;
 
 /** b4's pile: × .88 about x 160 (local x 40 of every paper lands on x 160), tilt 0, from y 300; the stub over slip 1's
  *  bottom margin, slip 2 a breath under the stub */
@@ -146,12 +151,13 @@ export const PILE = {
   labelInk: 0.88,
 } as const;
 
-/** ours: x 120–880; "Ours? From" (52 / 44) and "No setup fee." (44 teal, right to x 860) on row 1; "$49" (200 teal)
- *  "a month" (56) and her orb as the full stop on row 2; its hairline on the pile's scale */
+/** ours: x 120–880; "Ours? From" (52 / 44) on row 1; "$49" (200 teal) "a month" (56) and her orb as the full stop on
+ *  row 2; its hairline on the pile's scale, and "No setup fee." (44 teal, right-aligned under her orb) on the bar's row under the
+ *  figure row — so ours reads "Ours? From" → "$49 a month●" → "No setup fee.", as she says it (crit-r2 P11) */
 export const OURS = {
   x: 120,
   w: 760,
-  h: 306,
+  h: 336,
   r: 22,
   /** b4: under the pile; b5: up into the cleared stage */
   y4: 972,
@@ -159,7 +165,10 @@ export const OURS = {
   row1: { top: 28, title: 52, small: 44 },
   fig: { x: 40, y: 84, size: 200 },
   month: 56,
-  bar: { y: 284 },
+  /** the bar 10 px lower than the figure's box (crit-r2 P5: at 284 it sat 5 px under the "$" and read as its foot) */
+  bar: { y: 294 },
+  /** "No setup fee." on the bar's row, right-aligned to her orb's right edge: its baseline (local) */
+  noSetup: { base: 314 },
   /** px per dollar at the pile's scale (SCRIPT: $49 = 86 px under $99 = 174 and $300 = 528) */
   pxPerDollar: SCALE.pxPerDollar * PILE_S,
   orbD: 44,
@@ -187,5 +196,6 @@ export const RECORD = {
   toolSize: 30,
   orbD: 52,
 } as const;
-/** b7: the record pulled back and up over the CTA (dimmed), × .62 about (540, 330) */
-export const RECORD_BACK = { s: 0.62, c: { x: 540, y: 330 }, opacity: 0.5 } as const;
+/** b7: the record pulled back and up over the CTA (dimmed), × .55 about (540, 260): y ≈ 458–618, ≈ 92 px under the
+ *  chip and ≈ 97 px over the CTA's cap tops (crit-r2 P4: × .62 about (540, 330) left 25 px) */
+export const RECORD_BACK = { s: 0.55, c: { x: 540, y: 260 }, opacity: 0.5 } as const;

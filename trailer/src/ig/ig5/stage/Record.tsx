@@ -42,9 +42,14 @@ const EPS = 2e-4;
 export const REC_UP = M.it + 8;
 /** the dot rings as it lands (an incoming call) */
 export const DOT_RINGS = [REC_UP + 4, REC_UP + 4 + 15] as const;
-/** the outcome: Answered on "up", Booked on "books" (the launch-gate cut: Message taken) */
-const ANSWERED_AT = M.up + 2;
-const OUTCOME_AT = M.books + 2;
+/** the outcome: Answered starts up on the click of "up" (legible 2 f later, with its ting: crit-r2 SYNC-D), and the
+ *  swap to Booked (the launch-gate cut: Message taken) starts a frame before "books" — the kit Swap shows nothing for
+ *  its first 2 f, so the pill changes from "books" + 1 and Booked is legible ≈ + 3 (crit-r2 SYNC-C / S-R2-3). Mirrored
+ *  in timing.ts PIC.answered / PIC.outcome */
+const ANSWERED_AT = M.up;
+const OUTCOME_AT = M.books - 1;
+/** the BETA chip lands once Booked is up (crit-r2 SYNC-C / S-R2-3: at + 1 it sat beside a still-readable Answered) */
+const BETA_AT = OUTCOME_AT + 3;
 const OUTCOME: OutcomeKind = M.booked ? 'booked' : 'messageTaken';
 /** the tool steps: availability after "can't", the booking on "books" (the cut: "Took a message" on "takes") */
 const TOOLS = M.booked
@@ -119,9 +124,9 @@ const ToolStep: React.FC<{ t: number; label: string; x: number; y: number; at: n
     </div>
   );
 };
-/** the BETA chip, landing a frame after the swap to Booked (the pill's pop) */
+/** the BETA chip, landing as Booked reads (the pill's pop) */
 const BetaChip: React.FC<{ t: number; x: number; y: number }> = ({ t, x, y }) => {
-  const r = reveal(t, OUTCOME_AT + 1, { config: SPRING.pop, rise: 40, fade: 0.5, scaleFrom: 0.94 });
+  const r = reveal(t, BETA_AT, { config: SPRING.pop, rise: 40, fade: 0.5, scaleFrom: 0.94 });
   const B = BETA_CHIP;
   const moving = Math.abs(r.y) > 0.03 || Math.abs(r.scale - 1) > 1e-4;
   return (
@@ -172,7 +177,7 @@ export const RecordCard: React.FC<{ t: number }> = ({ t }) => {
   const show = st.opacity > 0.5;
   const h = recordH(t);
   const body = bodyAt(t);
-  const beta = BETA && M.booked && t >= OUTCOME_AT + 1;
+  const beta = BETA && M.booked && t >= BETA_AT;
   const bw = betaW();
   const betaX = R.w - R.pad - pillNew.w - BETA_CHIP.gap - bw;
   const betaH = BETA_CHIP.h * BETA_CHIP.size;

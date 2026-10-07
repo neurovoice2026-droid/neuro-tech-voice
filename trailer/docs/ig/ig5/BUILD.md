@@ -271,3 +271,94 @@ Label `fix-r1`. Written 2026-10-07 on `claude/remotion-trailer` (HEAD `b0edc72`)
 - The return on "forty-nine" measures 10.0 LU bed-under-voice by this round's window (§5.3 said 10.4); the series floor is 10.5. Not raised by a critic; `RIDE.ret` 7 → 6 barely moves the arc's music window (her voice dominates it), so it is cheap if a later round wants it.
 - P3's single-baseline grammar (see 6.2).
 - ZONE-3 (shared wordmark), by design.
+
+---
+
+## 7. Round 2 fixes
+
+Label `fix-r2`. Written 2026-10-07 on `claude/remotion-trailer` (HEAD `90fe6c4`), answering critic round 2 (`look`, `truth`, `sync`, `sound`; QA in `out/ig/qa/ig5/crit-r2-*`). Nothing committed (the orchestrator commits). This section supersedes §1–§6 where they differ. QA for this round: `out/ig/qa/ig5/fix-r2/`.
+
+**Files changed:** `src/ig/ig5/{timing.ts, Cover.tsx, acts/Acts.tsx, stage/{Hook,Ours,Papers,Record,Stage,layout}.ts(x)}`; docs `POSTING.md`, `PIPELINE.md` (§6.2), `SCRIPT.md`, `HOOKS.md`, `RESEARCH-prices.md`, `INFRA-LOG.md`, this file. No shared file was touched (ZoneGuard unchanged; INFRA-LOG "Fix round 2").
+
+**The timeline moved (SYNC-B).** `PLAN.stopLead` 4 → 7 with a new `PLAN.cutQuiet` 8, so the bed's cut stays on f420 (ring 3 still rings out before it) and "Ours?" is said 7 f into the silence. Everything after the pickup is 3 f later ("does" 4 f, on its 16th); the CTA stays on f694 and the impact on f780:
+
+| Moment | Round 1 | Round 2 |
+|---|---|---|
+| bed cut / pickup / ours rises / "Ours?" | f420 / 422 / 427 / 424 | f420 / **421** (the cut + 1) / **425** ("Ours?" − 2) / **427** |
+| her glide to the full stop / its ping | f428–442 / 442 | **f431–447** (after ours lands) / **445** (her visible landing) |
+| "forty-nine" (the bed's return) / "No setup fee." | f458 / 503–515 | f461 / 506–518 |
+| pile exit / "You" / "set" / dots | f525 / 533 / 540 / 552… | f528 / 536 / 543 / 555… |
+| "It" / dock / "up" / "books" | f581 / 595 / 598 / 643 | f585 / 599 / 602 / 647 |
+| stop-time / payoff cover window | f420–458 / f518–525 | **f420–461 / f521–528 (17.4–17.6 s)** |
+
+### 7.1 Blocking
+
+| Issue | Outcome | What changed / measured |
+|---|---|---|
+| **LOOK2-B1** the orb's glide is a 2-frame dart | **fixed** | `Stage.tsx` `orbPose`: the glide's clock is linear (`(v) => v`), x keeps `EASE.out3`, y `EASE.inOut`. 120 fps (`strips/glide`, `scripts/orbtrack.py`): x moves from f431.25, y travels mostly f436–443, within 1 px of the full stop at f445. She lands 2 f before the glide's end, so the ping + chime moved there (`PIC.glideLand = M.glide[1] − 2` = f445). She clears "month": at mid-path (f439, (793, 1170)) she is 9 px from the "h"'s top right corner. **Deviation:** the glide now starts once ours has landed (`M.glide = ["Ours?" + 4, + 20]`, 0.53 s, not 0.45 s). Started on "Ours?", the ping fell mid-word: "Ours?" whole-word SII 0.95 → 0.88 (21 % of blocks < 0.7). Now it is 0.94, 0 %. |
+| **LOOK2-B2** the pile's fade is a vanish; the trio's tail dies in 1 f | **fixed** | `Papers.tsx` `pileFadeAt`: a linear 3 f fade (`PILE_EXIT.fade` 4 → 3). Measured on the pile's rose ink at 120 fps (`strips/pile-exit`): 100 % at f528, 71 % at 529, 34 % at 530, 0 % at 531. The pile has started up, ≈ 35 px of travel when it is gone, and slip 1's tag is still under the y 296 mask line, so T3 holds. The papers report zone rects while their opacity is > .5 (to ≈ f529.5, ≈ 5 px of travel). The whoosh moved to the pile's last frame / ours' start (`PIC.pileOut = M.you − 5` = f531). `Hook.tsx` `TrioRings`: the tail tween is linear. The outer ring's rose excess now falls over f12–15.5 (`strips/trio-tail`, was f12 → f13). Frame 0 is unaffected by both. |
+| **SYNC-B** "Ours?" reaches the screen 3 f after she says it | **fixed** | As above: `PICKUP = LAID.stop + 1` (f421), `OURS_RISE = M.ours − 2` (f425). The pickup click, seed and birth play on the bare desk first: the desk now undraws in 6 f (`Hook.tsx` `UNDRAW` 12 → 6), so it is gone under her orb before the card shows. The card shows its "$49" from f426.25 and is at 94 % by f426.75. "Ours?" is stamped f427.2, and its word lifts 72 → 100 % over [426, 428] (`strips/ours-rise`). `PIC.oursLand` = `M.ours + 3`. `sfx:ig5` restamped and `check:audio:ig5` OK. |
+| **SYNC-A** slip 1's "a month" prints 4 f after her "a" | **fixed** | `NUDGE['ig5-02gt'] = {6: −3}` and `M.month = said('agency', ix('agency','month') − 1)` = f192. With TRUTH-R2-1, "a month" is on the slip at 72 % from f157 and lifts on her "a": 120 fps (`strips/amonth`) 72 % to f191, then 100 % by f192.75. The `fx-tock` at f192 now lands on the lift. |
+
+### 7.2 Polish and truth
+
+| Issue | Outcome | What changed / why not |
+|---|---|---|
+| **LOOK2-P1** cover tile mostly bare | **fixed** | `Cover.tsx`: frame 0's picture is in the lower half, from `stage/Hook.tsx`'s own parts: the desk hairline, the rose light at (740, 1130) with the full-size trio Ø 72 / 156 / 240, on frame 0's ground (`Ground5 t=0`). The small top-right trio is gone. The orb's gap is now `max(10, spaceWidth × 0.8)` ≈ 10 px. Every word stays inside x 86–900, y 260–1380 (zone check PASS, `covers/ig5-cover-0000.png`). |
+| **LOOK2-P2** invisible camera move pops the papers | **fixed** | The b3 camera and its swish are dropped (`M.camera`, `CAMERA`, `camAt` removed). The papers sit on static layers from slip 2's landing to the pickup. The swish now plays on P6's visible lift (f274). |
+| **LOOK2-P3** two prices overlap in the fold | **fixed** (timing differs from the suggestion) | `Ours.tsx`: ours' words go out over [FOLD, FOLD+4] (`EASE.in2`), then the chip's "From $49 a month" rises out of the card's edge over [FOLD+4, FOLD+10]. They no longer overlap. **Deviation:** [FOLD+3, FOLD+8] / FOLD+8 kept ours' words on screen while her orb sets off across them (P9). "No setup fee." goes first, [FOLD, FOLD+3], because the fold carries it up through her orb's place. |
+| **LOOK2-P4** record cramped over the CTA | **fixed** | `RECORD_BACK` { s .55, c (540, 260) }: the record sits at y 458–618, ≈ 92 px under the chip and ≈ 97 px over the CTA's caps (`stills/f0730.png`). `LANE_Y` 440 → 420, between the record and the chip: at full size she clears the chip by ≥ 11 px. |
+| **LOOK2-P5** "$49" bar reads as the "$"'s foot | **fixed** | `OURS.bar.y` 284 → 294. The card is 336 tall (P11), so the bar has room under it. |
+| **LOOK2-P6** the agency beat is top-heavy | **fixed** | `layout.ts` `B2_DROP` 180: slip 1 rests at y 520–790 through b2, with the stub under it to ≈ y 1020, over the desk at 1130. As her agency line ends, both glide up into the b3 places (`M.lift` [273, 285], `EASE.inOut`, 0.4 s, the swish under it). Slip 2 then rises below them at f283 (`sheet-b1b2.png`, `sheet-b2b3.png`). |
+| **LOOK2-P7** blank stub for 1.2 s | **fixed** | The stub carries slip 1's empty amount slot, sized to "$1,500", and it fades as the figure rises (`STUB.slot`, `zoom-slip1-unit.png`). |
+| **LOOK2-P8** ring 3 a half-ring under slip 2 | **fixed** | `PhoneRings` is split. R1 and ring 2 stay under the papers. Ring 3 (after slip 2's rise) is drawn over them at Ø 150 (`RING.dLast`), a whole ring round the light that crosses only slip 2's bottom margin, never its words (`zoom-ring3.png`). |
+| **LOOK2-P9** her dock crosses SAMPLE CALL's "S" | **fixed** (path differs from the suggestion) | x leads with `EASE.draw` over the hop's first 80 %, and the arc and descent finish after it, so she comes down onto the dot at a steep angle while the record rises under her. At its closest (f595.75) her edge is ≈ 15 px from the "S", and x is on the dot by f596.75 (`zoom-dock.png`, `strips/dock`). **Deviation:** out3 / in2 over [picks, dock] made the first 2 f a 225 px/f dart. The hop now runs 11 f from "It" + 3 (`HOP`), peak ≈ 115 px/f, and lands softly on the vowel of "up" (f599). |
+| **LOOK2-P10** frame 0's desk a floating dash | **fixed** | `DeskLine` draws out of the light, x 758 → 86, in the same `EASE.draw` window, so the light always sits on its line (`stills/f0000.png`). The seam uses the same function: at f839 the line spans x 578–758, at f0 x 499–758. |
+| **LOOK2-P11** "Ours? From … No setup fee." on one row | **fixed** (the mini-chart skipped) | "No setup fee." moves to the bar's row under the figure row, right-aligned to her orb's right edge (card 306 → 336 px). Ours now reads "Ours? From" → "$49 a month●" → "No setup fee.", in her order (`zoom-f524.png`). Skipped: the stacked mini-chart. It would put a second scale in the card, and the bars already share the x 160 edge. |
+| **TRUTH-R2-1** "$99" (and "$300") without its qualifier | **fixed** | `Papers.tsx` `liftOn`, the Tag's unit idiom. Slip 2's "from", "a month," and "for 50 minutes" rise as a unit at 72 % from `M.from99 − 2` (f333). "$99" rises on "ninety-nine" (f343), so every frame with "$99" shows "for 50 minutes". Each word lifts on its own onset. Slip 1 works the same way: "commonly" and "a month" rise at `M.hedge − 2` (f157), "$300" at f175. `ZONE_FRAMES` gains `M.hedge`, `M.from99` and `M.lift[1]`, and the zone check passes. |
+| **TRUTH-R2-2** only one master gets rendered and named | **fixed (docs)** | PIPELINE §6.2 "Two masters, two passes": the message pass runs first. Each pass runs `sfx:ig5`, `check:audio:ig5`, guard, zones, render, finish and `check:delivery`, then renames its three files to `…-message-…` / `…-booking-…` with exact-path `mv`. It also covers the chunk and layer folders. POSTING §1 lists both 60 fps and both 120 fps files plus the shared cover, and says to post the message files until §0 items 1–2 are ticked. §7's heading now reads "use these captions whenever the message master is posted". The message cut was re-tested this round: `check:audio:ig5` OK (climax +1.1, arc +0.6, lowest "takes" 0.83), and **Message taken** is on screen (`sheet-message-master.png`). It was then reverted, the booking mix rebuilt, and `check:audio:ig5` OK. |
+| **TRUTH-R2-3** reserve hook carries a category-wide $300 | **fixed (docs)** | POSTING §8 and SCRIPT §4.5: the reserve may be posted only once its frame-0 card is re-scoped. Otherwise prefer `ig5-01c` or the curiosity hook. |
+| **TRUTH-R2-4** stale cover pointers | **fixed (docs)** | HOOKS §1.8 and SCRIPT b4 / §7 now give "between 17.4 and 17.6 s (f521–528), never later", the window after this round's +3 f. POSTING §3 matches. |
+| **TRUTH-R2-5** "No setup fee" has no §6 row | **fixed (docs)** | RESEARCH-prices §6 row 11 (`lib/pages/home/pricing.ts:243`, `lib/phone/pricing.ts:1-6`, both re-read). The §7 annotation points to it. |
+| **TRUTH-R2-6** date carry; "price pages" | **fixed (docs)** | POSTING §0 item 6: carry the re-check date into both captions and both pinned comments, and stop and re-cut if a figure moved outside §6. The IG pinned comment now says "two agencies' own published prices" (771 chars, `detect.py` 74.3 PASS). |
+| **SYNC-C** Booked reads 3–5 f after "books" | **fixed** | `OUTCOME_AT = M.books − 1`, `BETA_AT = OUTCOME_AT + 3`, `PIC.outcome` mirrored. The pill changes from f648 and Booked is legible at f650 ("books" f647). BETA lands as Booked reads, never beside a readable Answered (`zoom-swap.png`). |
+| **SYNC-D** Answered trails its ting | **fixed** | `ANSWERED_AT = M.up` (f602), `PIC.answered` mirrored, the ting cued at `PIC.answered + 2` (f604) as the pill becomes legible. |
+| **SEAM-2** S1 shimmer on the 120 fps loop frame | **fixed** (method differs) | `HookCard`: the seam rise settles to exact rest over t [−4, −1], and S1 holds its glide layers for its whole life (`revealStyle` hold). No layer → plain switch happens anywhere, and frame 0 renders like the last seam frames. A switch at t −1 had only moved the shimmer (S1 diff 2.16 vs 0.24 around it). 120 fps (`strips/seamB*`): 3359 → 0 whole 0.148, S1 0.152, against 0.13–0.14 around it. The only S1 bump is "Three"'s own lift + glint (r36–43). Frame 0's S1 crispness is unchanged (gradient energy 5.08 vs 5.13 static). |
+| **ZONE-3** shared wordmark / field past x 900 | **accepted** (no change) | As crit-r1: the shared `End.tsx` (ig1–ig4's picture). If ig1–ig4 are ever re-rendered, cap `END.wordmarkW` at 720. |
+| **S-R2-1** pickup click over a still picture | **fixed** | On `M.up` the Answered pill starts up (SYNC-D) and her orb pulses once, × 1.08 at + 2.5 f and back by ≈ + 12 f (`takePulse`). Orb area +16 % peak, measured in `strips/dock`. The click stays on the p closure. |
+| **S-R2-2** thumps before the figures land | **fixed** | `PIC.figLand` 4: the thumps sit at `M.three + 4` (f180) and `M.fifteen + 4` (f254), on the landing spring's first crossing. The bar ticks still run from the word. |
+| **S-R2-4** felt-tip strokes with no stroke | **fixed** | One felt-tip on each tag's unit rise: slip 1 at f92, and slip 2 at f283, layered −1 dB under the paper lift. Strokes 2–3 are dropped and the labels updated. "receptionist:" whole-word effects-only minimum 0.61 → 1.00, "Agency" 0.73 → 0.96. |
+| **S-R2-5** payoff bed too forward | **fixed** | `RIDE.ret` 7 → 5.5. Bed under voice in the return 10.0 → **12.0 LU** (`balance.txt`; does 11.8, answering 10.9). Arc still +0.7 LU. The optional EQ / `RIDE.call` changes were not needed. Words with ≥ 25 % of blocks < 0.7: 15 → 12 (`wordsii-full-ig5.txt`). |
+| **S-R2-6** ring 3 barely over the swell | **fixed** | The full-trill ring is +2.5 dB (cue −7.0 → −4.5 dB): +4.7 dB over the bed broadband (was +2.4), +4.7 in 100–700 Hz (was +2.2). |
+| **S-R2-7** plucks on "up yourself.", hot AGENT keys | **fixed** | The plucks are 2 → −1 dB and the check ting 0 → −3 dB: "up yourself." effects-only minimum 0.53 → 0.62, blocks < 0.7 47 → 35 %. `fx-keys` +2 → −1 dB: AGENT effects-only minimum 0.47 → 0.58. |
+
+### 7.3 Gates (re-run after the last change)
+
+- `npx tsc --noEmit -p .`: clean.
+- `npm run sfx:ig5`: 45 cue files, 74 cues, −14.0 LUFS, −1.65 dBTP, limiter 3.2 dB max.
+- `npm run check:audio:ig5`: **OK** (`fix-r2/check-audio.txt`):
+  - climax +1.1 LU (impact −9.2 vs "commonly" −10.3);
+  - arc +0.7 LU;
+  - build → impact −15.1 → −9.2;
+  - last frame −85.3 dBFS;
+  - 60 words mean 0.97, lowest "up" 0.83;
+  - the name 0.95 / 1.00 / 0.99.
+- `npm run check:zones:ig -- --film=ig5`: **PASS** (35 stills + cover). Dense scan of all 840 frames of `IG5-Zones-9x16`: **0 violations** (`fix-r2/zones30.zones.log`).
+- `npm run guard:ig5 -- --check`: **PASS gates 1–5**. 255/257 shas, stamps unchanged, **gate P 24/24 byte-identical** (`fix-r2/guard.log`).
+- `npm run sfx:ig`: 0 built, 4 up to date.
+- `git status --porcelain` on the film 1 / film 2 frozen sets: empty.
+
+**QA** (`out/ig/qa/ig5/fix-r2/`):
+- stills: `stills/` (90 frames), `covers/`;
+- sheets: `contact-every6.png`, `sheet-b1b2.png`, `sheet-b2b3.png`, `sheet-b4.png`, `sheet-b5b6.png`, `sheet-end.png`, `sheet-cta-in.png`, `sheet-message-master.png`;
+- zooms: `zoom-slip1-unit.png`, `zoom-f524.png`, `zoom-swap.png`, `zoom-ring3.png`, `zoom-dock.png`;
+- 120 fps strips: `strips/{glide, pile-exit, trio-tail, ring3, dock, ours-rise, amonth, seamB, seamB0}`;
+- sound: `balance.txt`, `wordsii-full-ig5.txt`;
+- scripts: `scripts/`.
+
+### 7.4 Still open
+
+- ZONE-3 (the shared wordmark and field), by design.
+- The fold has about one frame (f589) with ours' words gone and the chip's not yet up. The card's outline carries it, as in critic P3's own timing.
+- The record's body grows about 1 f before its first tool step rises into it. This is unchanged from round 1, and the critics did not raise it.
+- "It" (f585) has a whole-word effects-only minimum of 0.46 under `fx-paper-fold`, about the same as round 1 (0.42) and not flagged. The check-mix onset score passes.

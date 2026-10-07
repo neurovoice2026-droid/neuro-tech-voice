@@ -209,6 +209,7 @@ Strength: **A** = true for every source surveyed. **B** = true for the typical o
 | 8 | **"A receptionist: ~$3,170 a month"** (or "$18 an hour") | A for the median | BLS OOH: median $38,010/yr, $18.27/hr, May 2025. ÷ 12 = $3,167.50, in wages only. Say "median" in the caption. |
 | 9 | **"$49 ≈ 3 hours of reception pay"** | A for the median | $49 ÷ $18.27 = 2.68 h. Safer wording: "less than 3 hours of a receptionist's pay". |
 | 10 | **"Most answering services bill by the minute"** | A | 9 of 10 bill per minute (one bills per call). |
+| 11 | **"No setup fee."** (ours; added in critic round 2, TRUTH-R2-5) | A | `lib/pages/home/pricing.ts:243`: "No setup fee — On any plan. A custom build is quoted on its own." Checkout has the plan and metered usage only; the $1.15 number is a recurring monthly fee, not a one-time charge (`lib/phone/pricing.ts:1-6`: "Recurring monthly phone number fee … reversing an earlier one-time-fee design"). Say it only about our plans; a custom build is quoted separately. |
 
 **Recommended shortlist for the script:** #1 with #2 (or #3 as the hook), #6, and #8. They cover three
 categories with one figure each and keep the voice-over short.
@@ -228,7 +229,7 @@ categories with one figure each and keep the voice-over short.
 | "Save 90%" or any percentage | It depends on call volume and on which of our two minute allowances is real. That makes it a derived statistic, which voice.md rules out. |
 | "$49, unlimited" / "$49 all-in" / "No hidden fees" | There is a minute cap and an overage rate, and the number costs $1.15/mo extra. |
 | Any of our minutes, our overage rate or other tiers | The site and backend lists disagree (400 vs 150 min, $0.20 vs $0.25). |
-| ~~"No setup fee"~~ | ~~The site never says it outright. It is only implied by the pricing note. Owner to confirm first.~~ **Superseded (critic round 1, T7): stated at `lib/pages/home/pricing.ts:243` (RESEARCH-product §3, SCRIPT §6); defensible, see §6.** |
+| ~~"No setup fee"~~ | ~~The site never says it outright. It is only implied by the pricing note. Owner to confirm first.~~ **Superseded (critic round 1, T7): stated at `lib/pages/home/pricing.ts:243` (RESEARCH-product §3, SCRIPT §6); defensible, see §6 row 11.** |
 | A per-call figure for answering services from the 2025 roundups ($2.50-$4.50/call etc.) | Not from a provider page. Smith.ai's own page is $300/30 calls ($10/call), and the older $292.50 figure in the roundups is out of date. |
 | Freelancer hourly rates | I could not verify them (Upwork 403). |
 | Any provider name, logo or UI | voice.md: competitors by name are off limits. |

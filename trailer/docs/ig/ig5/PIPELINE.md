@@ -297,6 +297,16 @@ npm run check:delivery:ig -- --film=ig5           # both MP4s: size, codec/level
                                                   # no elst, check-render lock at lag 0                (after edit #10)
 ```
 
+**Two masters, two passes (critic round 2, TRUTH-R2-2; POSTING §0 "Two masters", §1).** The commands above make ONE cut, and `finish.mjs` always writes the same names (`out/ig/deliver/<outName>-1080p120.mp4`, `<outName>-1080p60-ig.mp4`, `<outName>-cover.png`; `render-par` writes `out/ig/master/<outName>-1080p120-hevc.mp4`), so a second pass would overwrite the first. Run the block twice, **message master first**, and rename each pass's files (`mv` on the exact names, never a wildcard) before the next pass:
+
+1. **Message pass.** In `src/ig/ig5/timing.ts` set `BODY.does` to `'ig5-06-msg'`. Run `sfx:ig5`, `check:audio:ig5` (must be OK), `guard:ig5 -- --check`, `check:zones:ig -- --film=ig5`, `render:ig -- --film=ig5 --rebundle`, `finish:ig -- --film=ig5`, `check:delivery:ig -- --film=ig5` (before renaming: it reads `<outName>-*`). Then rename:
+   - `out/ig/deliver/neurotechvoice-ig5-dont-pay-300-1080p60-ig.mp4` → `…-dont-pay-300-message-1080p60-ig.mp4`
+   - `out/ig/deliver/neurotechvoice-ig5-dont-pay-300-1080p120.mp4` → `…-dont-pay-300-message-1080p120.mp4`
+   - `out/ig/master/neurotechvoice-ig5-dont-pay-300-1080p120-hevc.mp4` → `…-dont-pay-300-message-1080p120-hevc.mp4`
+2. **Booking pass.** Set `BODY.does` back to `'ig5-06'` (`cmp` the file against the committed one: the only difference must be gone). Run the same commands again (`render:ig … --rebundle`: the bundle sha changes, so `render-par` deletes the message pass's chunks and renders them all again; remove any `…-x1-<suffix>/` re-render layer folder of the message pass first, by its exact path, or the join would lay it over the booking chunks). Rename the three files to `…-booking-…`.
+3. The cover (`…-cover.png`) is the same for both passes (no outcome on it); keep the booking pass's copy.
+4. Leave no file without `-message-` or `-booking-` in its name in `out/ig/deliver/` for ig5 (POSTING §1).
+
 **Render-par notes:**
 - It builds `out/master/bundle-ig5` from `src/ig/index.ts`. It refuses a bundle older than any file under `src/` without `--rebundle`.
 - On (re)bundle it runs `npm run sfx:ig` (ig1–ig4), **not** `sfx:ig5`. So run `sfx:ig5` first, and the guard must be green, so that `sfx:ig` is a pure skip (§7.2).

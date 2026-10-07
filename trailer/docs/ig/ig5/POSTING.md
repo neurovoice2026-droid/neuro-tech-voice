@@ -17,14 +17,14 @@ The reel says and shows that the $49 plan **books the appointment**. Today that 
 - [ ] **3. The live Stripe Starter price is $49.00 USD a month** (`STRIPE_STARTER_PRICE_ID`; the repo can't show it).
 - [ ] **4. The trial still doesn't book** (trial `googleIntegrations: false`, `entitlements.ts:27-29`). Both captions and the DM say so. If the owner turns booking on for the trial too, delete "and doesn't book" / "The trial doesn't book." everywhere.
 - [ ] **5. "(in beta)"** stays in the captions and the DM while the app badges booking as beta. If the badge goes, delete "(in beta)" and the `BETA` chip (built since critic round 1: the app's own badge beside **Booked** on the booking master, `BETA` in `src/ig/ig5/stage/Record.tsx`, one switch, then re-render; the message master has none).
-- [ ] **6. Re-open by eye** the pages behind the three outside figures (the research fetcher summarised them, and prices change): PATLive https://www.patlive.com/pricing/ ($99, 50 minutes), the Trillet agency guide https://trillet.ai/blogs/voice-agent-pricing-strategy-guide and Ciela https://ciela.ai/blogs/how-much-to-charge-for-ai-voice-agent ($300), Agentpro https://agentpro.ai/resources/ai-voice-agent-vs-answering-service-vs-new-hire-a-cost-comparison-for-small-businesses and Constant Concepts https://constantconcepts.ai/pricing/ (setup).
+- [ ] **6. Re-open by eye** the pages behind the three outside figures (the research fetcher summarised them, and prices change): PATLive https://www.patlive.com/pricing/ ($99, 50 minutes), the Trillet agency guide https://trillet.ai/blogs/voice-agent-pricing-strategy-guide and Ciela https://ciela.ai/blogs/how-much-to-charge-for-ai-voice-agent ($300), Agentpro https://agentpro.ai/resources/ai-voice-agent-vs-answering-service-vs-new-hire-a-cost-comparison-for-small-businesses and Constant Concepts https://constantconcepts.ai/pricing/ (setup). **After the re-check (critic round 2, TRUTH-R2-6), set the date in both captions (§3, §4) and both pinned comments to the re-check date. If any figure moved outside RESEARCH-prices §6, stop and re-cut the reel.**
 - [ ] **7. Someone answers AGENT comments on TikTok by hand within the hour** (TikTok has no comment-to-DM automation for us). On Instagram the series comment-to-DM automation is live with keyword AGENT and its own ig5 rule (`utm_campaign=reel_ig5`). If neither can be covered, the reel is rendered with `ig5-07-bio`.
 
 **Strongly recommended in the same pricing edit:** settle Starter's minutes and overage (the site says 400 minutes and $0.20, the app bills 150 minutes and $0.25). The reel never shows them, but it sends viewers to that page, and "how many minutes?" will be the first question. After the change ships, update `.claude/instagram/voice.md:57` and `profile.md:67` ("Calendar booking needs Pro").
 
 **If the booking change is not live but the owner wants to post anyway:** post the message master (`ig5-06-msg`: "…and takes a message.", the record ends on **Message taken**) and use the no-booking captions in §7. Gates 3, 6 and 7 still apply.
 
-**Two masters, rendered together (critic round 1, T1).** The render/deliver step renders BOTH cuts, so posting day never needs a re-render and the booking file cannot go up by mistake: `BODY.does = 'ig5-06'` → `neurotechvoice-ig5-dont-pay-300-booking-…` (records **Booked** + `BETA`), and `BODY.does = 'ig5-06-msg'` → `neurotechvoice-ig5-dont-pay-300-message-…` (**Message taken**). Each is one id in `src/ig/ig5/timing.ts`, then `sfx:ig5` and `check:audio:ig5` (both pass, BUILD §5.4). The **booking** files are posted only after items 1 and 2 above are ticked; until then only the **message** files may go up.
+**Two masters, rendered together (critic round 1, T1; the steps since critic round 2, TRUTH-R2-2: PIPELINE §6.2).** The render/deliver step renders BOTH cuts, so posting day never needs a re-render and the booking file cannot go up by mistake: `BODY.does = 'ig5-06-msg'` → `neurotechvoice-ig5-dont-pay-300-message-…` (**Message taken**), rendered FIRST, and `BODY.does = 'ig5-06'` → `neurotechvoice-ig5-dont-pay-300-booking-…` (records **Booked** + `BETA`). Each is one id in `src/ig/ig5/timing.ts`, then `sfx:ig5` and `check:audio:ig5` (both pass, BUILD §5.4 and §7). `finish.mjs` writes one fixed name (`<outName>-1080p60-ig.mp4` …), so PIPELINE §6.2 renames each pass's files before the next pass. The **booking** files are posted only after items 1 and 2 above are ticked; until then only the **message** files may go up.
 
 **Owner overrides recorded here:** "$49" on screen and in the captions (the owner asked; voice.md's "no prices on Instagram" is lifted for this figure only); "Starter" named in the caption fine print (profile.md allows only "Pro"; kept because it is the honest pointer to which plan "$49" means). No other price, tier or minute count of ours appears anywhere.
 
@@ -32,13 +32,17 @@ The reel says and shows that the $49 plan **books the appointment**. Today that 
 
 ## 1. Files and where they go
 
-Built into `trailer/out/ig/deliver/` (PIPELINE §6.2):
+Built into `trailer/out/ig/deliver/` (PIPELINE §6.2: two passes, the message master first, each pass's files renamed before the next):
 
 | File | What it is | Where |
 |---|---|---|
-| `neurotechvoice-ig5-dont-pay-300-1080p60-ig.mp4` | 1080×1920, 60 fps, H.264 L4.2, ≤ 28 MB, −14 LUFS | **Upload this one to TikTok and to Instagram.** Neither app plays more than 60 fps. |
-| `neurotechvoice-ig5-dont-pay-300-1080p120.mp4` | 1080×1920, 120 fps master, H.264 L5.1, ≤ 28 MB | archive; other platforms |
-| `neurotechvoice-ig5-dont-pay-300-cover.png` | 1080×1920 cover, words inside the 3:4 grid crop | custom cover on both apps |
+| `neurotechvoice-ig5-dont-pay-300-message-1080p60-ig.mp4` | the **message master** (`ig5-06-msg`: the record ends on **Message taken**): 1080×1920, 60 fps, H.264 L4.2, ≤ 28 MB, −14 LUFS | **Upload this one to TikTok and to Instagram until §0 items 1–2 are ticked.** Neither app plays more than 60 fps. Use the no-booking captions (§7). |
+| `neurotechvoice-ig5-dont-pay-300-booking-1080p60-ig.mp4` | the **booking master** (`ig5-06`: **Booked** + `BETA`), same specs | upload this one instead **only after §0 items 1–2 are ticked** (then the captions of §3 / §4) |
+| `neurotechvoice-ig5-dont-pay-300-message-1080p120.mp4` | the message master at 120 fps, H.264 L5.1, ≤ 28 MB | archive; other platforms |
+| `neurotechvoice-ig5-dont-pay-300-booking-1080p120.mp4` | the booking master at 120 fps, H.264 L5.1, ≤ 28 MB | archive; other platforms, only after §0 items 1–2 |
+| `neurotechvoice-ig5-dont-pay-300-cover.png` | 1080×1920 cover, words inside the 3:4 grid crop (the same for both masters) | custom cover on both apps |
+
+**Post the message files until §0 items 1–2 are ticked.** No file without `-message-` or `-booking-` in its name is ever posted.
 
 **Getting it onto the phone:** AirDrop, or send it as a *file* / document (WhatsApp and Messenger recompress anything else). On Instagram: Settings → Data usage and media quality → Upload at highest quality on; Data Saver off; Wi-Fi. On TikTok: if the post screen offers a high-quality upload option, turn it on.
 
@@ -59,7 +63,7 @@ Built into `trailer/out/ig/deliver/` (PIPELINE §6.2):
 
 ## 3. TikTok (post first)
 
-**Cover:** TikTok's feed autoplays from frame 0, which is the hook picture itself (the ringing light, three rings, "Three rings. / Gloves on. / You can't."), so the cover only shows on the profile grid and in search. Upload `…-cover.png` ("Three rings. / Gloves on. / You can't." over "Agency AI receptionist: / commonly $300 a month. / Ours: from $49 a month.", SCRIPT §7: the $300 keeps its hedge on the cover too) if the app offers "upload from photos"; otherwise pick the payoff frame **between 17.25 and 17.5 s (f518–525), never later** (every hedge and "No setup fee." printed, the pile at rest: three quotes and "$49 a month", bars to scale; from 17.5 s the pile fades out) and add no TikTok text sticker.
+**Cover:** TikTok's feed autoplays from frame 0, which is the hook picture itself (the ringing light, three rings, "Three rings. / Gloves on. / You can't."), so the cover only shows on the profile grid and in search. Upload `…-cover.png` ("Three rings. / Gloves on. / You can't." over "Agency AI receptionist: / commonly $300 a month. / Ours: from $49 a month.", SCRIPT §7: the $300 keeps its hedge on the cover too) if the app offers "upload from photos"; otherwise pick the payoff frame **between 17.4 and 17.6 s (f521–528), never later** (every hedge and "No setup fee." printed, the pile at rest: three quotes and "$49 a month● / No setup fee.", bars to scale; from 17.6 s the pile fades out. Critic round 2 moved everything after the pickup 3 f later, SYNC-B) and add no TikTok text sticker.
 
 **Caption** (1,541 / 2,200 characters; keyword-first line for TikTok search; one ask; 4 hashtags; no link):
 
@@ -118,10 +122,10 @@ Fine print: $49 a month is the Starter plan fee in US dollars, excluding VAT. Th
 - **Keyword:** AGENT → the DM in §5 via the series comment-to-DM automation, `utm_campaign=reel_ig5`. Meta allows one private reply per comment within 7 days.
 - **Reels link:** once live, link ig5 → ig1 with the button text "Why we won't replace your desk". Optionally re-point ig4's link to ig5 ("What it costs").
 
-**Pinned comment** (766 characters):
+**Pinned comment** (771 characters; "own published prices" since critic round 2, TRUTH-R2-6: Agentpro's $1,500 / $1,500 is stated in an article on its own site, not on a price page):
 
 ```
-Sources, read 7 Oct 2026. Agencies: two agencies' own price pages and six published pricing guides. Seven of the eight put the lowest monthly retainer at about $300 or more, and the typical lowest setup fee is $1,500 (some agencies waive it). Agency retainers often add per-minute usage on top, as our plan does past its allowance. Answering services: the pricing pages of ten US providers, all staffed by people. Buying 50 minutes costs $99 or more at every one of them. We didn't compare self-serve AI receptionist apps; some cost the same as ours or less. The quote slips in the video are illustrative, not real businesses'. We don't name providers in our posts. Ours: $49 a month is the Starter plan fee (USD, excl. VAT), plus $1.15 a month for the phone number.
+Sources, read 7 Oct 2026. Agencies: two agencies' own published prices and six published pricing guides. Seven of the eight put the lowest monthly retainer at about $300 or more, and the typical lowest setup fee is $1,500 (some agencies waive it). Agency retainers often add per-minute usage on top, as our plan does past its allowance. Answering services: the pricing pages of ten US providers, all staffed by people. Buying 50 minutes costs $99 or more at every one of them. We didn't compare self-serve AI receptionist apps; some cost the same as ours or less. The quote slips in the video are illustrative, not real businesses'. We don't name providers in our posts. Ours: $49 a month is the Starter plan fee (USD, excl. VAT), plus $1.15 a month for the phone number.
 ```
 
 **Alt text** (Accessibility → Alt text; 617 characters):
@@ -181,7 +185,7 @@ The "Can you build it for me?" reply matters: RESEARCH-product §6 warns that "a
 
 ---
 
-## 7. No-booking captions (only if the reel is rendered with `ig5-06-msg`)
+## 7. No-booking captions (use these captions whenever the message master is posted)
 
 **TikTok** (1,433 characters; READY; detect 89.6 PASS): the §3 caption with two edits:
 - "…answers from the documents you give it, and books the appointment into your calendar." → "…answers from the documents you give it, and takes a message for your team."
@@ -201,14 +205,14 @@ The "Can you build it for me?" reply matters: RESEARCH-product §6 warns that "a
 
 | When | Where | Metric | Read it as |
 |---|---|---|---|
-| 48 h | TikTok analytics | average watch time; % who watched the full video; the retention graph at 2-3 s and at the payoff ("Ours?" ≈ 14.1 s, "forty-nine" ≈ 15.3 s) | a steep early drop means the hook; a drop before ≈ 14 s means the two anchors run long |
+| 48 h | TikTok analytics | average watch time; % who watched the full video; the retention graph at 2-3 s and at the payoff ("Ours?" ≈ 14.2 s, "forty-nine" ≈ 15.4 s) | a steep early drop means the hook; a drop before ≈ 14 s means the two anchors run long |
 | 48 h | TikTok | views against the account's baseline (ig1 563; the rest 174-283), AGENT comments, profile views, bio-link taps (Linktree analytics) | the "receptionist" hook family should hold its lead |
 | 24 h | Instagram Reels Insights | skip rate (3 s) | < 40 % healthy; > 50 % means the first 2 s are broken |
 | 72 h | Instagram | sends per reach, saves, AGENT comments per 1,000 reach | the main bet: price tables get sent |
 | 72 h | both | comments asking "how many minutes?" | the cost of not showing minutes; the push to settle 150 vs 400 |
 | 7 d / 14 d | site, UTM | `tt_ig5` vs `reel_ig5`: sign-ups → agent created → test call → number bought → paid Starter | **the real KPI**: paying users per platform |
 
-**Next step from the numbers** (HOOKS §6): about a week later, post a **new** TikTok re-cut on the same body (never repost the same file): if this post's average watch time is below ig1's, the curiosity hook (HOOKS §3, "Live answering: 50 minutes costs you…"); otherwise the runner-up scene hook `ig5-01c` ("Closed at 9? Your phone's not.", already installed). The reserve is the incumbent `ig5-01` / `ig5-01b` ("Don't pay $300 a month for an AI receptionist." / "Before you pay $300 a month for an AI receptionist.", hookscore 87.0), the cheapest test if the 3-second hold comes in under ig1's. Measure against ig1 on the same TikTok numbers: 2-second and 3-second hold, average watch time, AGENT comments per 1,000 views. On Instagram, use Trial Reels for that A/B once the account passes about 200 followers.
+**Next step from the numbers** (HOOKS §6): about a week later, post a **new** TikTok re-cut on the same body (never repost the same file): if this post's average watch time is below ig1's, the curiosity hook (HOOKS §3, "Live answering: 50 minutes costs you…"); otherwise the runner-up scene hook `ig5-01c` ("Closed at 9? Your phone's not.", already installed). The reserve is the incumbent `ig5-01` / `ig5-01b` ("Don't pay $300 a month for an AI receptionist." / "Before you pay $300 a month for an AI receptionist.", hookscore 87.0), the cheapest test if the 3-second hold comes in under ig1's. **The reserve may be posted only after its frame-0 card is re-scoped** (critic round 2, TRUTH-R2-3; HOOKS §1.9: as written it ties $300 to the whole category until "agency" arrives at ≈ 4 s, RESEARCH-prices §7 row 2), e.g. "Don't pay an agency $300 a month / for an AI receptionist." with a new take; otherwise prefer `ig5-01c` or the curiosity hook (HOOKS §2–3), which carry no category-wide figure. Measure against ig1 on the same TikTok numbers: 2-second and 3-second hold, average watch time, AGENT comments per 1,000 views. On Instagram, use Trial Reels for that A/B once the account passes about 200 followers.
 
 ---
 

@@ -12,8 +12,8 @@
  * rung 2 (T1 + T2: ig5-02gt + ig5-05t; the full cast's CTA would end f795, T1's f783, both past f765; CTA ends f746, 19 f
  * to spare). The lines fall at hook f9 · agency f94 (S2 "Agency AI receptionist:" rises f92, 3.07 s: past the cast rule's
  * f78, which no take of four sets reaches — the hook reads 2.56–2.74 s, not HOOKS' 2.1–2.4 s; ig5-01g2 is longer in
- * every set, so the rule keeps ig5-01g) · "$300" heard f176 · answering f285 · "Ours?" f424 (the $49 card, 50.5 %) ·
- * "forty-nine" f458 (54.5 %) · setup f533 · does f581 · CTA f694 (82.6 %). Beat 2 reads 6.1–6.9 s in every take, so
+ * every set, so the rule keeps ig5-01g) · "$300" heard f176 · answering f285 · "Ours?" f427 (the $49 card f425, 50.8 %;
+ * crit-r2 SYNC-B) · "forty-nine" f461 (54.9 %) · setup f536 · does f585 · CTA f694 (82.6 %). Beat 2 reads 6.1–6.9 s in every take, so
  * from the agency line on the lines run a breath apart and the plan frames below are floors.
  *
  * THE PICTURE (the scene step, docs/ig/ig5/BUILD.md) reads only M (the acts' moments, below: every one off the placed
@@ -80,8 +80,12 @@ export const PLAN = {
   s1Gone: 14,
   /** "Ours?" waits at least this long after the answering line (the stop-time before it, SCRIPT §5.2) */
   oursGap: 12,
-  /** the bed cuts this long before "Ours?" (SCRIPT b4: MUSIC.stop from vWord('ig5-04', 0) − 4; the pickup at − 2) */
-  stopLead: 4,
+  /** "Ours?" is spoken this long into the silence (crit-r2 SYNC-B: 4 → 7, so the pickup and her birth play on the bare
+   *  desk BEFORE the word, and ours' card is up 2 f ahead of it — the series' card lead; the pickup sits on the cut + 1) */
+  stopLead: 7,
+  /** the bed cuts on the first 16th that leaves her answering line this much quiet (the stop-time's own breath: it
+   *  was oursGap − the old stopLead 4, so the cut stays on f420 and ring 3 still rings out before it) */
+  cutQuiet: 8,
   /** the comment field rises this long BEFORE her first CTA word "Comment" (SCRIPT b7: f688 for the CTA @694) */
   fieldLead: 6,
   impact: 780,
@@ -119,9 +123,10 @@ const layout = (c: Cast) => {
   const agency = Math.max(place(PLAN.lines.agency, end(hook, c.hook)), upQuarter(s1Gone + PLAN.cardLead - KIT.vWord(c.agency, 0)));
   const answering = place(PLAN.lines.answering, end(agency, c.agency));
   /** THE STOP-TIME (ig4's form: the cut on the 16th, re-anchored to the takes): the bed cuts on the first 16th that leaves
-   *  her answering line PLAN.oursGap − PLAN.stopLead frames of quiet (never before the plan's), and "Ours?" is spoken
-   *  PLAN.stopLead into the silence, on the take's own first onset — so "Ours?" still waits ≥ PLAN.oursGap */
-  const stop = Math.max(PLAN.lines.ours - PLAN.stopLead, upQuarter(end(answering, c.answering) + PLAN.oursGap - PLAN.stopLead));
+   *  her answering line PLAN.cutQuiet frames of quiet (never fewer than PLAN.oursGap − PLAN.stopLead, never before the
+   *  plan's), and "Ours?" is spoken PLAN.stopLead into the silence, on the take's own first onset — so "Ours?" still
+   *  waits ≥ PLAN.oursGap */
+  const stop = Math.max(PLAN.lines.ours - PLAN.stopLead, upQuarter(end(answering, c.answering) + Math.max(PLAN.cutQuiet, PLAN.oursGap - PLAN.stopLead)));
   const ours = stop + PLAN.stopLead - KIT.vWord(c.ours, 0);
   const setup = place(PLAN.lines.setup, end(ours, c.ours));
   const does = place(PLAN.lines.does, end(setup, c.setup));
@@ -270,13 +275,17 @@ const ringIn = (from: number, to: number, burst: number) => {
 type Ring = { f: number; snd: 'fx-trill' | 'fx-trill-1'; what: string };
 const ring1 = (f: number | null, what: string): Ring[] => (f === null ? [] : [{ f, snd: 'fx-trill-1', what }]);
 const BED_CUT = LAID.stop;
-const PICKUP = LINE.ours + vWord(CAST.ours, 0) - 2;
+/** the pickup: on the cut + 1, in the silence (crit-r2 SYNC-B: it was "Ours?" − 2, so ours' card rose AFTER her word) */
+const PICKUP = LAID.stop + 1;
 /** THE ALIGNER'S STAMPS THAT SIT OFF HER ENERGY (crit-r1 sound S1 / sync SYNC-1, read on the voice stem): frames added to
  *  word k of a take — ig5-05t "set" is stamped on its vowel (its /s/ starts 3.6 f before), "up" shares "yourself."'s
  *  stamp (said ≈ 4.5 f before it); ig5-06 "up" is stamped on its p closure (the vowel starts ≈ 3 f before). The band
  *  captions read it (Captions `nudge`, ig3's idiom) and so do the picture's moments below (M.set, M.dock); the cue sheet
  *  keeps "up"'s own stamp for the pickup click (it lands on the p closure, never on the vowel's onset) */
 export const NUDGE: Partial<Record<VoiceId, Readonly<Record<number, number>>>> = {
+  /** crit-r2 SYNC-A: "a" and "month." share one stamp on the creaky vowel of "month" (local 100.7); her schwa starts
+   *  ≈ 3 f before it, out of the d-release of "hundred" */
+  'ig5-02gt': { 6: -3 },
   'ig5-05t': { 1: -3, 3: -4.5 },
   'ig5-06': { 2: -3 },
   'ig5-06-msg': { 2: -3 },
@@ -310,13 +319,17 @@ export const M = {
   tag: [on('agency', 0), on('agency', 1), on('agency', 2)] as const,
   /** b2: T1's "commonly" prints on its word (full cast: "a common retainer" on "a") */
   hedge: has('agency', 'commonly') ? on('agency', ix('agency', 'commonly')) : on('agency', ix('agency', 'common') - 1),
-  /** b2: "$300" rolls on "three hundred"; "a month" prints on "a" */
+  /** b2: "$300" rises on "three hundred"; "a month" lifts on "a" as she says it (crit-r2 SYNC-A: NUDGE, the word
+   *  before "month") */
   three: on('agency', ix('agency', 'three')),
-  month: on('agency', ix('agency', 'month')),
+  month: said('agency', ix('agency', 'month') - 1),
   /** b2: the stub drops on "Setup,"; "OFTEN" on "often"; "$1,500" rolls on "fifteen hundred" */
   setup: on('agency', ix('agency', 'setup')),
   often: on('agency', ix('agency', 'often')),
   fifteen: on('agency', ix('agency', 'fifteen')),
+  /** b2 → b3: slip 1 and its stub rest low in b2 (the agency beat centred on the frame, crit-r2 P6) and glide up into
+   *  the b3 layout as her agency line ends, so slip 2 rises under them (0.4 s, EASE.inOut: done 2 f into slip 2's rise) */
+  lift: [LINE.answering - 12, LINE.answering] as const,
   /** b3: slip 2 rises 2 f before "Live"; its tag on words 0–2; "from" · "$99" · "a month," · "for 50 minutes" */
   slip2: LINE.answering - 2,
   tag2: [on('answering', 0), on('answering', 1), on('answering', 2)] as const,
@@ -324,13 +337,13 @@ export const M = {
   ninetyNine: on('answering', 4),
   month99: on('answering', 5),
   for50: [on('answering', 7), on('answering', 8), on('answering', 9)] as const,
-  /** b3: the camera eases back 1.00 → .97 about (540, 740) over 1 s from slip 2's landing */
-  camera: [LINE.answering + 6, LINE.answering + 36] as const,
-  /** b4: the pickup (the rose light springs open into her orb) 2 f before "Ours?"; the square-up and ours on "Ours?" */
+  /** b4: the pickup (the rose light springs open into her orb) on the bed's cut + 1, 6 f before "Ours?" (crit-r2
+   *  SYNC-B; b3's camera ease-back is gone, crit-r2 P2: its .97 never read and its layer switches popped) */
   pickup: PICKUP,
   ours: on('ours', 0),
-  /** b4: her orb glides from the phone to the full stop after "a month" (0.45 s) */
-  glide: [PICKUP + 6, PICKUP + 20] as const,
+  /** b4: her orb glides from the phone to the full stop after "a month" (0.53 s), once ours has landed (one move at a
+   *  time), landing on the tail of "Ours?" — where its ping stays off the word's body (crit-r2 B1 / SYNC-B) */
+  glide: [on('ours', 0) + 4, on('ours', 0) + 20] as const,
   /** b4: the payoff's words: "From", "forty-nine", "a month.", "No setup fee." */
   fromOurs: on('ours', 1),
   fortyNine: on('ours', 2),
@@ -365,10 +378,12 @@ export const ZONE_FRAMES: readonly number[] = [
   M.month,
   M.setup,
   M.fifteen + 18,
+  M.hedge,
+  M.lift[1],
   M.slip2,
+  M.from99,
   M.ninetyNine + 18,
   M.for50[2],
-  M.camera[1],
   M.ours + 12,
   M.fortyNine,
   M.noSetup[2],
@@ -413,22 +428,32 @@ const PHONE_X = 740 / 1080;
 const PIC = {
   /** stage/type.tsx ROLL.dur: a figure's to-scale bar grows over 18 f from her word (the figure itself just rises) */
   roll: 18,
+  /** stage/type.tsx Figure: a figure rises out of its mask from her word − 1 on SPRING.land; its hard landing (the
+   *  spring's first crossing of rest, the "thump") is ≈ 4.75 f later — the thump goes there (crit-r2 S-R2-2) */
+  figLand: 4,
   /** Papers.tsx stubState: the stub drops on "Setup," (SPRING.land); its staple closes from M.setup + 4 (SPRING.pop) */
   stubLand: M.setup + 5,
   staple: M.setup + 8,
-  /** Papers.tsx squareAt: the quotes square up from the pickup; Ours.tsx OURS_RISE: ours rises 5 f after it (SPRING.site) */
-  oursLand: M.pickup + 10,
-  /** Papers.tsx PILE_EXIT: the pile leaves up through its mask over [M.you − 8, M.you] (power3.in: fastest at its end) */
-  pileOut: M.you - 2,
+  /** Papers.tsx squareAt: the quotes square up from the pickup; Ours.tsx OURS_RISE: ours rises 2 f before "Ours?" (the
+   *  card lead, crit-r2 SYNC-B) and lands ≈ 5 f later (SPRING.site) */
+  oursLand: M.ours + 3,
+  /** Stage.tsx orbPose: the glide runs a LINEAR clock under its eases (x out3, y inOut, crit-r2 B1): she is within 1 px
+   *  of the full stop 2 f before M.glide[1] — her landing's ping and chime go there */
+  glideLand: M.glide[1] - 2,
+  /** Papers.tsx PILE_EXIT: the pile fades out (linear, 3 f) as it starts up through its mask from M.you − 8, gone by
+   *  M.you − 5, as ours starts its glide up (Ours.tsx OURS_UP) — the whoosh goes there (crit-r2 B2) */
+  pileOut: M.you - 5,
   /** Ours.tsx: the fourth dot's check at M.dots[3] + 2 */
   check: M.dots[3] + 2,
-  /** Record.tsx: REC_UP = M.it + 8 (SPRING.site); ANSWERED_AT = M.up + 2; the availability step spins from M.cant + 4 and
-   *  is done at M.books − 7; OUTCOME_AT = M.books + 2 (Answered → Booked / Message taken) */
+  /** Record.tsx: REC_UP = M.it + 8 (SPRING.site); ANSWERED_AT = M.up (the pill starts up on the click, legible 2 f later:
+   *  crit-r2 SYNC-D); the availability step spins from M.cant + 4 and is done at M.books − 7; OUTCOME_AT = M.books − 1
+   *  (the kit Swap shows nothing for its first 2 f: the swap reads from "books" + 1 and Booked is legible ≈ + 3, crit-r2
+   *  SYNC-C / S-R2-3) */
   recUp: M.it + 8,
-  answered: M.up + 2,
+  answered: M.up,
   tool1: M.cant + 4,
   tool1Done: M.books - 7,
-  outcome: M.books + 2,
+  outcome: M.books - 1,
 } as const;
 /** a ring of the phone: one desk trill or its one chirp (a key hit: never under a word — RINGS passed the burst-aware law) */
 const ring = (f: number, label: string, db: number, snd: Ring['snd'] = 'fx-trill'): Hit<Snd> => H(f, snd, 'rush', PHONE_X, 1, label, { db });
@@ -438,29 +463,31 @@ export const HITS: Hit<Snd>[] = [
   // b1 — a phone ringing in a quiet room (HOOKS §1.4): the room tone, the frame-0 ring, R1 in a gap; no bed
   H(0, 'fx-roomtone', 'none', 0.5, 3, 'b1 the room’s tone from frame 0: the quiet room the hook is said in (the stop-time’s air floor too)', { db: -24 }),
   ring(0, 'b1 THE RING AT FRAME 0 (the third ring of the trio already in flight) — the desk phone’s rose light, the reel’s first sound', -3 + HEAD.db),
-  ...RINGS.map((r) => ring(r.f, r.what, -5, r.snd)),
+  // the last ring (the full trill before the pickup) sits on the crest of the bed's swell: +2.5 dB (crit-r2 S-R2-6)
+  ...RINGS.map((r) => ring(r.f, r.what, r.snd === 'fx-trill' ? -2.5 : -5, r.snd)),
   H(M.slip1 + 1, 'fx-paper-lift', 'none', 0.5, 3, 'b1 → b2 slip 1 rises blank (an ink bar, an empty amount slot): the paper lifts', { db: 0 }),
   // b2 — the agency quote
-  H(M.tag[0], 'fx-felttip-short', 'none', 0.24, 3, 'b2 the ink bar writes AGENCY AI RECEPTIONIST, a stroke per word', { db: 2, run: { n: 3, offs: M.tag.map((f) => f - M.tag[0]), xs: [0.22, 0.3, 0.42] } }),
-  H(M.three, 'thump', 'none', 0.3, 2, 'b2 “three hundred”: $300 rises into its slot (the landing spring) — its 600 px bar draws with it', { db: -3 }),
+  // (crit-r2 S-R2-4: the tags rise AS A UNIT since crit-r1 P4, so one felt-tip on each tag's rise, no stroke per word)
+  H(M.tag[0] - 2, 'fx-felttip-short', 'none', 0.3, 3, 'b2 AGENCY AI RECEPTIONIST rises into the ink bar as a unit (one stroke)', { db: 2 }),
+  H(M.three + PIC.figLand, 'thump', 'none', 0.3, 2, 'b2 “three hundred”: $300 lands in its slot (the landing spring’s first crossing) — its 600 px bar draws from the word', { db: -3 }),
   counter(M.three, 0.3, 'b2 … the bar measures out to 600 px: a dry tick per 32nd', 2),
-  H(M.three + PIC.roll - 2, 'fx-tock', 'none', 0.3, 3, 'b2 … and settles (a frame ahead of “a month”)', { db: 1 }),
+  H(M.three + PIC.roll - 2, 'fx-tock', 'none', 0.3, 3, 'b2 … and settles (on “a month”’s lift)', { db: 1 }),
   H(PIC.stubLand, 'thump', 'none', 0.62, 2, 'b2 “Setup,”: the stub drops onto slip 1’s bottom margin with weight', { db: -1 }),
   H(PIC.staple, 'fx-tag', 'none', 0.36, 2, 'b2 … and is stapled there (the staple click)', { db: -3 }),
-  H(M.fifteen, 'thump', 'none', 0.45, 2, 'b2 “fifteen hundred”: $1,500 rises into the stub (the landing spring; no bar, no count: a one-time fee)', { db: -5 }),
+  H(M.fifteen + PIC.figLand, 'thump', 'none', 0.45, 2, 'b2 “fifteen hundred”: $1,500 lands in the stub (the landing spring’s first crossing; no bar, no count: a one-time fee)', { db: -5 }),
+  H(M.lift[0] + 5, 'swish', 'none', [0.42, 0.58], 3, 'b2 → b3 slip 1 and its stub glide up into the b3 layout (slip 2 rises under them)', { db: -6 }),
   // b3 — the live answering quote
   H(M.slip2, 'fx-paper-lift', 'none', 0.5, 3, 'b3 slip 2 rises with its people stripe (the paper lifts, 2 f ahead of “Live”)', { db: 0 }),
-  H(M.tag2[0], 'fx-felttip-short', 'none', 0.24, 3, 'b3 LIVE ANSWERING SERVICE writes, a stroke per word', { db: 2, run: { n: 3, offs: M.tag2.map((f) => f - M.tag2[0]), xs: [0.22, 0.32, 0.44] } }),
-  H(Math.round((M.camera[0] + M.camera[1]) / 2), 'swish', 'none', [0.42, 0.58], 3, 'b3 the papers ease back 1.00 → .97 (one pile)', { db: -6 }),
+  H(M.tag2[0] - 2, 'fx-felttip-short', 'none', 0.3, 3, 'b3 LIVE ANSWERING SERVICE rises with the slip as a unit (one stroke, under the paper’s lift)', { db: -1, layer: true }),
   counter(M.ninetyNine, 0.36, 'b3 “ninety-nine”: $99 rises; its 198 px bar measures out under it', 2),
   H(M.for50[1] - 1, 'fx-tock', 'none', 0.62, 3, 'b3 “fifty”: “50” prints (a frame ahead of the word)', { db: 1 }),
   // b4 — THE STOP-TIME (the bed cut on its 16th, MUSIC.stop): the pickup, her birth and "Ours?" in the room tone alone
   H(M.pickup - 11, 'fx-seed', 'sunday', PHONE_X, 3, 'b4 the seed rises out of the last ring into the pickup (it peaks on the click)', { db: -2 }),
-  H(M.pickup, 'fx-pickup', 'none', PHONE_X, 1, 'b4 PICKUP (2 f before “Ours?”): the click — the phone that rang since frame 0 is answered', { db: 0 }),
+  H(M.pickup, 'fx-pickup', 'none', PHONE_X, 1, 'b4 PICKUP (the bed’s cut + 1, 6 f before “Ours?”): the click — the phone that rang since frame 0 is answered', { db: 0 }),
   H(M.pickup + 3, 'fx-ting', 'sunday', PHONE_X, 2, 'b4 … the rose light springs open into her teal orb (the birth’s ting)', { db: -4, layer: true }),
-  H(PIC.oursLand, 'land', 'none', 0.5, 3, 'b4 ours lands under the pile as the quotes square up (× .88, every $0 on x 160)', { db: -4 }),
-  H(M.glide[1], 'ping', 'sunday', 0.62, 2, 'b4 her orb lands as ours’ full stop (after “a month”)', { db: 1 }),
-  H(M.glide[1], 'chime-sunday-soft', 'sunday', 0.62, 3, 'b4 … the sunday chime under it', { layer: true, db: 2 }),
+  H(PIC.oursLand, 'land', 'none', 0.5, 3, 'b4 ours lands under the pile as the quotes square up (× .88, every $0 on x 160), "Ours?" on it', { db: -4 }),
+  H(PIC.glideLand, 'ping', 'sunday', 0.62, 2, 'b4 her orb lands as ours’ full stop (after “a month”)', { db: 1 }),
+  H(PIC.glideLand, 'chime-sunday-soft', 'sunday', 0.62, 3, 'b4 … the sunday chime under it', { layer: true, db: 2 }),
   H(M.fortyNine - 1, 'fx-mallet-e5', 'sunday', 0.3, 1, 'b4 “forty-nine”: TRUE — the bed returns on E with its pad an octave up; the mallet a frame ahead of the vowel, under the word', { db: -10 }),
   H(M.fortyNine + 1, 'fx-scratch', 'none', [0.2, 0.3], 3, 'b4 … ours’ 86 px hairline draws under the pile’s 174 and 528', { db: -10 }),
   H(M.noSetup[0], 'fx-tag', 'sunday', 0.78, 3, 'b4 “No setup fee.” prints teal at ours’ upper right, under the setup stub’s column', { db: 6 }),
@@ -468,14 +495,15 @@ export const HITS: Hit<Snd>[] = [
   H(PIC.pileOut, 'whoosh-soft', 'none', [0.5, 0.5], 3, 'b5 the pile leaves up through its mask; ours glides up into the cleared stage', { db: -4 }),
   H(M.set + 1, 'fx-scratch', 'none', [0.2, 0.62], 3, 'b5 “set”: the track draws with four empty dots', { db: -8 }),
   ...(['fx-pluck-e5', 'fx-pluck-fs5', 'fx-pluck-gs5', 'fx-pluck-b5'] as const).map((snd, k) =>
-    H(M.dots[k], snd, 'none', 0.22 + 0.17 * k, 2, `b5 dot ${k + 1} fills teal (${['E5', 'F#5', 'G#5', 'B5'][k]}: the pentatonic rising)`, { db: 2 }),
+    // crit-r2 S-R2-7a: −3 dB (all four and the check fall on "up yourself." since T2)
+    H(M.dots[k], snd, 'none', 0.22 + 0.17 * k, 2, `b5 dot ${k + 1} fills teal (${['E5', 'F#5', 'G#5', 'B5'][k]}: the pentatonic rising)`, { db: -1 }),
   ),
-  H(PIC.check, 'fx-ting', 'sunday', 0.73, 2, 'b5 … the fourth dot turns into a drawn check', { db: 0 }),
+  H(PIC.check, 'fx-ting', 'sunday', 0.73, 2, 'b5 … the fourth dot turns into a drawn check', { db: -3 }),
   // b6 — it picks up when you can't, and books the appointment
   H(M.it + 3, 'fx-paper-fold', 'none', [0.5, 0.75], 3, 'b6 “It”: ours folds into the parked price chip (under the word’s vowel, not its onset)', { db: -3 }),
   H(PIC.recUp, 'fx-paper-lift', 'none', 0.5, 3, 'b6 the sample call’s record rises (its rose dot ringing: picture only — no chirp passes the ring law there)', { db: -8 }),
-  H(M.up, 'fx-pickup', 'none', 0.2, 1, 'b6 “picks up”: the click on the p closure of “up” as the record’s rose dot is absorbed (her orb docked on its vowel, M.dock; the kick enters with it)', { db: 0 }),
-  H(PIC.answered, 'fx-ting', 'sunday', 0.7, 3, 'b6 … Answered lands (her teal)', { db: 3, layer: true }),
+  H(M.up, 'fx-pickup', 'none', 0.2, 1, 'b6 “picks up”: the click on the p closure of “up” — her orb (docked on its vowel, M.dock) pulses as she takes the call and Answered starts up (crit-r2 S-R2-1 / SYNC-D); the kick enters with it', { db: 0 }),
+  H(PIC.answered + 2, 'fx-ting', 'sunday', 0.7, 3, 'b6 … Answered lands (her teal), legible', { db: 3, layer: true }),
   // (the launch-gate cut ig5-06-msg has no availability step: one step "Took a message" on "takes", the pill → Message taken)
   ...(M.booked
     ? [
@@ -483,12 +511,13 @@ export const HITS: Hit<Snd>[] = [
         H(PIC.tool1Done, 'fx-glass-tick', 'sunday', 0.3, 2, 'b6 … the spinner resolves to a drawn check', { db: -4 }),
       ]
     : []),
-  H(PIC.outcome - 1, 'fx-mallet-e5', 'sunday', 0.7, 1, `b6 “${M.booked ? 'books' : 'takes'}”: the step ticks and the pill swaps Answered → ${M.booked ? 'Booked' : 'Message taken'} (the mallet: true / done)`, { db: -8 }),
-  H(PIC.outcome, 'pop', 'none', 0.7, 3, 'b6 … a small pop under the swap', { db: -6, layer: true }),
+  H(M.books + 1, 'fx-mallet-e5', 'sunday', 0.7, 1, `b6 “${M.booked ? 'books' : 'takes'}”: the step ticks and the pill swaps Answered → ${M.booked ? 'Booked' : 'Message taken'} (the mallet on the word: true / done)`, { db: -8 }),
+  H(PIC.outcome + 3, 'pop', 'none', 0.7, 3, 'b6 … a small pop as the swap reads (the kit Swap crossfades at + 3)', { db: -6, layer: true }),
   // b7–b9 — the shared end card
   // (the comment field's rise and AGENT's keys are heard over the bed between her lines: the shared levels sat 18–19 dB
   //  under it here, as in ig1)
-  ...endHits(END_CARD).map((h) => (h.snd === 'fx-menu-open' ? { ...h, db: 6 } : h.snd === 'fx-keys' ? { ...h, db: 2 } : h)),
+  //  — the keys back to −1 (crit-r2 S-R2-7b: at +2 they sat 6 dB over ig1–ig4's and the first lands on AGENT's onset)
+  ...endHits(END_CARD).map((h) => (h.snd === 'fx-menu-open' ? { ...h, db: 6 } : h.snd === 'fx-keys' ? { ...h, db: -1 } : h)),
   // THE BUILD: her last word lands 34 f before the bar — a riser cresting with the roll, then the shared stack
   H(IMPACT - 10, 'riser', 'none', 0.5, 1, 'END the build’s crest under the roll (peaks a 16th before the inhale)', { db: 1.5 }),
   ...impactHits(IMPACT),
@@ -529,7 +558,8 @@ const CTA_END = Math.min(voiced(CTA, CAST.cta), IMPACT - 14);
  *  check-mix's arc gate (its second into the logo, f750–780, must top the return on "forty-nine" by 0.5 LU): the taper
  *  keeps the roll's first half full, so the arc still leads by +0.6 */
 const BUILD_TAPER = 3.5;
-const RIDE = { under: 7.5, swell: 9, ret: 7, you: 2, call: 3.5, build: 9 } as const;
+/** crit-r2 S-R2-5: `ret` 7 → 5.5 (the payoff's bed sat 10.0 LU under her, the reel's most forward) */
+const RIDE = { under: 7.5, swell: 9, ret: 5.5, you: 2, call: 3.5, build: 9 } as const;
 export const BED = {
   file: `ig/sfx/${REEL}/bed.wav`,
   vol: 2,

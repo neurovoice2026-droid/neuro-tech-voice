@@ -1,16 +1,18 @@
 /**
  * REEL 5 · OURS (docs/ig/ig5/SCRIPT.md b4–b6): the payoff card, the set-up track and the parked price chip.
  *
- *   ours    just after "Ours?" — once the pickup has had its beat on the open desk (her seed and pop read on the bare
- *           desk, crit-r1 P1) — it rises under the pile (white paper, a 2 px teal edge, lifted higher than the quotes)
- *           AS A UNIT at 72 % ink — "Ours?" (title 52) + "From" (44) / "$49" (200, her teal, STILL: it never rolls) + "a month" (56),
- *           her orb its full stop — and each word lifts to full ink on her onset, so "$49" is SEEN on "Ours?" and heard
- *           on "forty-nine"; on "forty-nine" its hairline draws on the pile's scale (1.76 px per dollar: 86 px under the
- *           pile's 174 and 528, all from x 160); "No setup fee." (44, teal) prints at its upper right on her words, in the
- *           setup stub's column above it. b5: on "You" it glides up into the cleared stage (SPRING.site) and its
- *           hairline undraws with the pile. b6: on "It" it FOLDS into the parked chip (one card: its rect, corner and
- *           lift interpolated, its words SCALING DOWN WITH IT and crossfading into the chip's "From $49 a month", so a
- *           price is readable on every frame of the fold — crit-r1 P2)
+ *   ours    2 f before "Ours?" (the series' card lead), once the pickup has had its beat on the bare desk (the bed's
+ *           cut + 1: her seed and pop read on the desk first, crit-r1 P1; crit-r2 SYNC-B: the card had come up AFTER
+ *           her word) — it rises under the pile (white paper, a 2 px teal edge, lifted higher than the quotes) AS A
+ *           UNIT at 72 % ink — "Ours?" (title 52) + "From" (44) / "$49" (200, her teal, STILL: it never rolls) + "a
+ *           month" (56), her orb its full stop / "No setup fee." (44, teal, under her orb on the bar's row: crit-r2
+ *           P11, so the card reads in her order) — and each word lifts to full ink on her onset, so "$49" is SEEN on
+ *           "Ours?" and heard on "forty-nine"; on "forty-nine" its hairline draws on the pile's scale (1.76 px per
+ *           dollar: 86 px under the pile's 174 and 528, all from x 160). b5: on "You" it glides up into the cleared
+ *           stage (SPRING.site) and its hairline undraws with the pile. b6: on "It" it FOLDS into the parked chip (one
+ *           card: its rect, corner and lift interpolated, its words SCALING DOWN WITH IT and going out before the
+ *           chip's "From $49 a month" rises out of the card's edge — sequenced, never two prices at once, crit-r1 P2 /
+ *           crit-r2 P3)
  *   track   b5: on "set" a 2 px graphite track draws under ours with four EMPTY dots (no labels: the site's four setup
  *           screens, shown, not named); from "yourself" they fill teal one per 16th; the fourth becomes a drawn check;
  *           on "It" the track folds away
@@ -37,9 +39,9 @@ const SHADOW = meshShadowInk(MUTED_MESH);
 const EPS = 2e-4;
 
 /* ── ours' clock ── */
-/** b4: ours rises 5 f after the pickup (the orb's 3-frame seed and SPRING.pop play on the bare desk first; the card
- *  comes up on "Ours?" + 3) — crit-r1 P1 */
-export const OURS_RISE = M.pickup + 5;
+/** b4: ours rises 2 f before "Ours?" (the card lead), 4 f after the pickup (the orb's 3-frame seed and SPRING.pop play
+ *  on the bare desk first, crit-r1 P1) — crit-r2 SYNC-B */
+export const OURS_RISE = M.ours - 2;
 /** its rise: from 40 px under its place (the $49 never drops into the price band's bottom: crit-r1 ZONE-1) */
 const RISE_FROM = 40;
 /** b5: ours glides up just behind the pile's exit, clear of the caption band before "You" rises there */
@@ -85,6 +87,9 @@ export function oursLayout() {
     noSetupW,
     /** her orb: the full stop after "a month" (sitting on its baseline) */
     stop: { x: monthX + monthW + 8 + OURS.orbD / 2, y: figBase - OURS.orbD / 2 + 2 },
+    /** "No setup fee.": right-aligned to her orb's right edge, on the bar's row */
+    noSetupX: monthX + monthW + 8 + OURS.orbD - noSetupW,
+    noSetupTop: OURS.noSetup.base - 0.96 * ROW1.small,
   };
 }
 /** the full stop in frame px at t (her orb's place in b4–b5) */
@@ -105,10 +110,14 @@ export const Ours: React.FC<{ t: number }> = ({ t }) => {
   // the chip it folds into
   const chip = chipBox();
   const r = { x: mix(OURS.x, chip.x, f), y: mix(o.y, chip.y, f), w: mix(OURS.w, chip.w, f), h: mix(OURS.h, chip.h, f), rad: mix(OURS.r, chip.h / 2, f) };
-  // the fold (crit-r1 P2): ours' words scale down with the card and hand over to the chip's words mid-fold — never an
-  // empty box in flight
-  const content = 1 - tween(t, [FOLD[0] + 4, FOLD[0] + 11], [0, 1], EASE.in2);
-  const chipText = tween(t, [FOLD[0] + 8, FOLD[0] + 13], [0, 1], EASE.out3);
+  // the fold (crit-r1 P2): ours' words scale down with the card and go out, THEN the chip's words rise out of the
+  // card's edge (crit-r2 P3: the two crossfades overlapped, two prices at partial ink) — the outline carries it
+  // (out over the fold's first 4 f, before her orb sets off across the card's place — Stage.tsx HOP; the chip's
+  // words rise from FOLD + 4, centred in the card, which by then has lifted above her path)
+  const content = 1 - tween(t, [FOLD[0], FOLD[0] + 4], [0, 1], EASE.in2);
+  const chipText = tween(t, [FOLD[0] + 4, FOLD[0] + 10], [0, 1], EASE.out3);
+  // "No setup fee." (under her orb) goes first, on "It", before the fold carries it up through her orb's place
+  const noSetupInk = 1 - tween(t, [FOLD[0], FOLD[0] + 3], [0, 1], (v) => v);
   const cs = f > 0 ? Math.min(1, r.w / OURS.w, r.h / OURS.h) : 1;
   const moving = o.moving || (f > 0 && f < 1);
   // the $49 rises out of a mask on the price band's line (y 1260): while the card is still under its place, the
@@ -148,18 +157,18 @@ export const Ours: React.FC<{ t: number }> = ({ t }) => {
             {M.noSetup.map((at, i) => {
               const words = ['No', 'setup', 'fee.'];
               const sp = spaceWidth(smallSpec);
-              const x0 = OURS.w - 40 - L.noSetupW;
-              const x = x0 + words.slice(0, i).reduce((s, w) => s + measureText(w, smallSpec) + sp, 0);
-              return <Print key={i} t={t} at={at - 1} text={words[i]} x={x} y={L.row1Base - 0.96 * ROW1.small} size={ROW1.small} color={SUNDAY.ink} moving={moving} />;
+              const x = L.noSetupX + words.slice(0, i).reduce((s, w) => s + measureText(w, smallSpec) + sp, 0);
+              return <Print key={i} t={t} at={at - 1} text={words[i]} x={x} y={L.noSetupTop} size={ROW1.small} color={SUNDAY.ink} ink={noSetupInk} moving={moving} />;
             })}
             {bar > 0.001 ? <ScaleBar x0={SCALE.x0} y={OURS.bar.y} len={49 * OURS.pxPerDollar * bar} color={SUNDAY.ink} stroke={SCALE.stroke} /> : null}
           </div>
         ) : null}
-        {chipText > 0.002 ? <ChipFace w={r.w} h={r.h} opacity={chipText} /> : null}
+        {chipText > 0.002 ? <ChipFace w={r.w} h={r.h} opacity={smooth(0, 0.5, chipText)} rise={(1 - chipText) * CHIP.h * 0.6} /> : null}
       </div>
       {content > 0.5 && o.opacity > 0.5 ? (
         <>
-          <ZoneRect what="ours row 1" rect={{ x: OURS.x + OURS.fig.x, y: o.y + ROW1.top, w: OURS.w - 80, h: ROW1.title * 1.2 }} />
+          <ZoneRect what="ours row 1" rect={{ x: OURS.x + OURS.fig.x, y: o.y + ROW1.top, w: L.fromX + L.fromW - OURS.fig.x, h: ROW1.title * 1.2 }} />
+          {t >= M.noSetup[0] - 1 ? <ZoneRect what="ours No setup fee." rect={{ x: OURS.x + L.noSetupX, y: o.y + L.noSetupTop, w: L.noSetupW, h: ROW1.small * 1.2 }} /> : null}
           {figH > 1 ? <ZoneRect what="price $49 (ours)" rect={{ x: OURS.x + OURS.fig.x, y: o.y + OURS.fig.y, w: L.figW, h: figH }} /> : null}
           <ZoneRect what="ours a month" rect={{ x: OURS.x + L.monthX, y: o.y + L.figBase - 0.96 * OURS.month, w: L.monthW, h: OURS.month * 1.2 }} />
         </>
@@ -176,7 +185,7 @@ export function chipBox(): Box {
   const w = measureText(CHIP_TEXT, chipSpec()) + 2 * CHIP.padX;
   return { x: CHIP.right - w, y: CHIP.y, w, h: CHIP.h };
 }
-const ChipFace: React.FC<{ w: number; h: number; opacity: number }> = ({ w, h, opacity }) => (
+const ChipFace: React.FC<{ w: number; h: number; opacity: number; rise?: number }> = ({ w, h, opacity, rise = 0 }) => (
   <div
     style={{
       position: 'absolute',
@@ -197,7 +206,7 @@ const ChipFace: React.FC<{ w: number; h: number; opacity: number }> = ({ w, h, o
       opacity: opacity >= 0.999 ? undefined : opacity,
     }}
   >
-    <span style={{ display: 'block', transform: 'translateY(-0.02em)' }}>{CHIP_TEXT}</span>
+    <span style={{ display: 'block', ...subpixel(rise > 0.02 ? `translateY(calc(${rise.toFixed(3)}px - 0.02em))` : 'translateY(-0.02em)', rise > 0.02) }}>{CHIP_TEXT}</span>
   </div>
 );
 /** the parked chip after the fold (b6 → the impact) */

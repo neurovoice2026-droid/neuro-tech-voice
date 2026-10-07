@@ -209,11 +209,11 @@ SCRIPT §7's cover line "Don't pay $300 a month." is no longer spoken, so it can
   - "Ours: from $49 a month." ("$49" in teal, with the orb as its full stop)
 - **Thumbnail:** the b4 payoff frame at × .6, y 850-1380. Its "$49" sits above y 1300.
 
-> **Superseded by SCRIPT §7 and the built cover (critic round 1, T8 / P6 / T4).** The attribution is THREE hedged rows: "Agency AI receptionist:" / "commonly $300 a month." / "Ours: from $49 a month." — RESEARCH-prices §6 #6 is a B claim that needs "commonly" wherever $300 shows, so the unhedged "Agency AI receptionist: $300 a month." above must never be built. There is **no thumbnail** (at grid size its labels were ≈ 4-11 px and its "$99" lost "for 50 minutes", the §7 row 3 shape): the cover is a title plus one graphic (the ring trio), as ig1-ig4. Any A/B cover "as §1.8" (§2's runner-up) inherits this.
+> **Superseded by SCRIPT §7 and the built cover (critic round 1, T8 / P6 / T4).** The attribution is THREE hedged rows: "Agency AI receptionist:" / "commonly $300 a month." / "Ours: from $49 a month." — RESEARCH-prices §6 #6 is a B claim that needs "commonly" wherever $300 shows, so the unhedged "Agency AI receptionist: $300 a month." above must never be built. There is **no thumbnail** (at grid size its labels were ≈ 4-11 px and its "$99" lost "for 50 minutes", the §7 row 3 shape): the cover is a title plus one graphic, as ig1-ig4. **Since critic round 2 (P1) the graphic is frame 0's picture in the lower half** (the desk hairline y 1130, the rose light at (740, 1130), the full-size ring trio Ø 72 / 156 / 240, frame 0's ground), not a small trio right of line 1: the 3:4 tile had shown ≈ 52 % bare pearl. Any A/B cover "as §1.8" (§2's runner-up) inherits this.
 
 **TikTok's feed autoplays from frame 0, which is the hook picture itself.** So for TikTok the cover matters only on the profile grid and in search:
 - upload the PNG;
-- otherwise use the payoff frame (about f455), as POSTING §3 says;
+- otherwise use the payoff frame between 17.4 and 17.6 s (f521–528), never later, as POSTING §3 says (critic round 2, TRUTH-R2-4; the frames after the pickup moved 3 f in the same round, SYNC-B);
 - the IG composer's fallback, frame 0, is now a usable cover.
 
 ### 1.9 Truth and voice checks
