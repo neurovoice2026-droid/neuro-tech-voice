@@ -95,6 +95,13 @@ interface SourceBadge {
 }
 
 export function sourceBadge(voice: VoiceOption): SourceBadge {
+  if (voice.recommended && voice.source === 'library') {
+    return {
+      label: 'Recommended',
+      title: 'A voice we recommend for this language',
+      className: 'bg-primary/10 text-primary',
+    }
+  }
   switch (voice.source) {
     case 'cloned':
       return {
@@ -121,10 +128,11 @@ export function sourceBadge(voice: VoiceOption): SourceBadge {
             className: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-400',
           }
     case 'premade':
+      // ElevenLabs default voices expire on 31 Dec 2026 (no longer offered for new choices).
       return {
-        label: 'Recommended',
-        title: 'A recommended voice',
-        className: 'bg-primary/10 text-primary',
+        label: 'Retiring',
+        title: 'This default voice stops working on 31 Dec 2026',
+        className: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
       }
     case 'provider':
     default:

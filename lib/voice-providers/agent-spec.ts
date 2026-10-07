@@ -24,6 +24,8 @@ import { effectiveAdditionalLanguages, languagePresetGreetings } from './languag
 import { stripPlatformVariables } from './template-variables'
 import { callLimitsFor } from './call-limits'
 import { describeOpeningHours } from './opening-hours'
+import { defaultVoiceForNewAgent } from './curated-default'
+import { pronunciationLocatorOf } from './pronunciation-rules'
 
 export interface AgentRow {
   id: string
@@ -48,10 +50,12 @@ export interface AgentRow {
   config_revision: number
   primary_provider: 'elevenlabs' | 'cartesia'
   fallback_provider: 'elevenlabs' | 'cartesia' | null
+  /** {dictionary_id, version_id, rules} (migration 015), platform-written. */
+  pronunciation?: unknown
 }
 
 export const AGENT_COLUMNS =
-  'id, org_id, name, language, system_prompt, first_message, fallback_message, voice_id, fallback_voice_id, is_active, metadata, conversation_settings, transfer_settings, analysis_settings, privacy_settings, voice_settings, dynamic_variables, after_hours, working_hours, config_revision, primary_provider, fallback_provider'
+  'id, org_id, name, language, system_prompt, first_message, fallback_message, voice_id, fallback_voice_id, is_active, metadata, conversation_settings, transfer_settings, analysis_settings, privacy_settings, voice_settings, dynamic_variables, after_hours, working_hours, config_revision, primary_provider, fallback_provider, pronunciation'
 
 const MAX_APPENDIX_CHARS = 24_000
 const MAX_EXCERPT_PER_DOC = 8_000
@@ -210,6 +214,9 @@ export async function buildAgentSpec(db: SupabaseClient, agent: AgentRow): Promi
     }),
     voiceId: agent.voice_id,
     voiceTuning: readVoiceTuning(agent.voice_settings),
+    // A new agent never relies on the API default voice (a retiring premade voice).
+    defaultVoiceId: agent.voice_id ? null : await defaultVoiceForNewAgent(db, agent),
+    pronunciationLocator: pronunciationLocatorOf(agent.pronunciation),
     fallbackVoiceId: agent.fallback_voice_id,
     timezone,
     conversation,

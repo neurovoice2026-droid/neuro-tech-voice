@@ -1,7 +1,8 @@
 // GET /api/elevenlabs/voices — legacy shape { voices: ElevenLabsVoice[] }.
-// Thin compatibility wrapper over the voice catalog: the org's own clones,
-// platform-provisioned library voices and ElevenLabs default voices. It no
-// longer lists the shared workspace (which holds every customer's clones).
+// Thin compatibility wrapper over the voice catalog: the org's own custom
+// voices and platform-provisioned library voices (ElevenLabs default voices
+// are retired on 2026-12-31 and no longer offered). It no longer lists the
+// shared workspace (which holds every customer's clones).
 // New code: GET /api/voices?source=workspace.
 
 import { NextResponse } from 'next/server'

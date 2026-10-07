@@ -1,8 +1,9 @@
 /* In-memory Supabase query-builder fake with real filtering, for tests that
  * exercise several tables (knowledge pipeline, crawls, maintenance). Supports
  * the subset of PostgREST the code under test uses: select/insert/update/
- * upsert/delete, eq/neq/in/is/not(is null)/lt/gt/lte/gte, or (ignored: every
- * row matches), order (by one column), limit, single/maybeSingle, head counts. */
+ * upsert/delete, eq/neq/in/is/not(is null)/lt/gt/lte/gte, contains (array
+ * columns), or (ignored: every row matches), order (by one column), limit,
+ * range, single/maybeSingle, head counts. */
 
 type Row = Record<string, unknown>
 
@@ -26,6 +27,7 @@ export function memoryDb(initial: Record<string, Row[]> = {}, opts: MemoryDbOpti
     private upsertOpts: { onConflict?: string; ignoreDuplicates?: boolean } = {}
     private head = false
     private limitN: number | null = null
+    private offsetN = 0
     private orderBy: { col: string; asc: boolean } | null = null
     private returning = false
     constructor(private table: string) {}
@@ -52,8 +54,11 @@ export function memoryDb(initial: Record<string, Row[]> = {}, opts: MemoryDbOpti
     gt(c: string, v: unknown) { this.filters.push((r) => r[c] !== null && r[c] !== undefined && String(r[c]) > String(v)); return this }
     gte(c: string, v: unknown) { this.filters.push((r) => r[c] !== null && r[c] !== undefined && String(r[c]) >= String(v)); return this }
     or() { return this }
+    /** Array column contains every given value. */
+    contains(c: string, v: unknown[]) { this.filters.push((r) => Array.isArray(r[c]) && v.every((x) => (r[c] as unknown[]).includes(x))); return this }
     order(col: string, o: { ascending?: boolean } = {}) { this.orderBy = { col, asc: o.ascending !== false }; return this }
     limit(n: number) { this.limitN = n; return this }
+    range(from: number, to: number) { this.offsetN = from; this.limitN = to - from + 1; return this }
 
     private conflictKeys(): string[][] {
       if (this.upsertOpts.onConflict) return [this.upsertOpts.onConflict.split(',').map((s) => s.trim())]
@@ -91,7 +96,7 @@ export function memoryDb(initial: Record<string, Row[]> = {}, opts: MemoryDbOpti
           return (av < bv ? -1 : av > bv ? 1 : 0) * (asc ? 1 : -1)
         })
       }
-      if (this.limitN !== null) hit = hit.slice(0, this.limitN)
+      if (this.limitN !== null) hit = hit.slice(this.offsetN, this.offsetN + this.limitN)
       if (this.op === 'delete') {
         tables[this.table] = rows.filter((r) => !hit.includes(r))
         return { data: null, error: null, count: hit.length }

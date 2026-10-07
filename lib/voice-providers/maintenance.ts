@@ -158,6 +158,12 @@ export async function pruneOperationalData(log: Logger, now = Date.now()) {
   return out
 }
 
+/** Wall-clock budget of one maintenance run (VOICE_MAINTENANCE_BUDGET_MS, 30 s – 270 s, default 240 s). */
+export function maintenanceBudgetMs(): number {
+  const v = Number(process.env.VOICE_MAINTENANCE_BUDGET_MS)
+  return Number.isFinite(v) && v >= 30_000 && v <= 270_000 ? Math.floor(v) : 240_000
+}
+
 export async function runVoiceMaintenance(log: Logger = createLogger({ component: 'voice_maintenance' })) {
   const report: Record<string, unknown> = {}
   const steps: Array<[string, () => Promise<unknown>]> = [
@@ -171,10 +177,23 @@ export async function runVoiceMaintenance(log: Logger = createLogger({ component
     ['voice_saves', () => settleInterruptedVoiceSaves(5, log)],
     ['rejected_clones', () => purgeRejectedClones(5, log)],
     ['knowledge_sync', () => import('./knowledge-maintenance').then((m) => m.runKnowledgeMaintenance(log))],
+    ['library_voices', () => import('./library-lifecycle').then((m) => m.checkLibraryVoices({ log }))],
+    ['default_voice_migration', () => import('./default-voices').then((m) => m.runScheduledDefaultVoiceMigration(log))],
+    ['voice_orphans', () => import('./voice-orphans').then((m) => m.runVoiceOrphanMaintenance(log))],
+    ['voice_housekeeping', () => import('./voice-orphans').then((m) => m.runVoiceHousekeeping(log))],
     // Hourly is plenty for retention (the cron fires every 5 minutes).
     ...(new Date().getUTCMinutes() < 5 ? ([['retention', () => pruneOperationalData(log)]] as Array<[string, () => Promise<unknown>]>) : []),
   ]
+  // The route's maxDuration is 300 s: steps left when the budget is spent run
+  // on the next invocation (every step is bounded and idempotent).
+  const startedAt = Date.now()
+  const budgetMs = maintenanceBudgetMs()
   for (const [name, fn] of steps) {
+    if (Date.now() - startedAt > budgetMs) {
+      report[name] = { skipped: 'time_budget' }
+      log.warn('maintenance.step_deferred', { step: name, elapsedMs: Date.now() - startedAt })
+      continue
+    }
     try {
       report[name] = await fn()
     } catch (err) {

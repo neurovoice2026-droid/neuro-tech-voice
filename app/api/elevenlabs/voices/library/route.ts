@@ -41,6 +41,8 @@ export async function GET(request: Request) {
       search: q.search,
       language: q.language,
       gender: q.gender,
+      // Legacy callers keep the unfiltered use cases they had before.
+      useCase: 'all',
       pageSize: 100,
       pageToken: libraryPageToken(q.page ?? 0),
     })

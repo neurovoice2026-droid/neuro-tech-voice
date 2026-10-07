@@ -90,6 +90,7 @@ export async function GET(request: Request) {
         },
         ...(probe ? { health: await probeProviders(log) } : {}),
         knowledge: await knowledgeDiagnostics(log).catch((err: unknown) => (log.error('admin.diagnostics_knowledge_failed', err), { error: 'unavailable' })),
+        voices: await import('@/lib/voice-providers/voice-diagnostics').then((m) => m.voiceDiagnostics(log)).catch((err: unknown) => (log.error('admin.diagnostics_voices_failed', err), { error: 'unavailable' })),
       },
       { headers: { 'Cache-Control': 'no-store' } },
     )

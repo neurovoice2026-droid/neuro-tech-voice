@@ -259,16 +259,45 @@ describe('elevenlabs client — text to speech', () => {
   it('returns the audio bytes and uses the given model id', async () => {
     const bytes = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00])
     fetchMock.mockResolvedValue(new Response(bytes, { status: 200, headers: { 'content-type': 'audio/mpeg' } }))
-    const audio = await el.textToSpeech('voice_1', 'Bună ziua', 'eleven_multilingual_v2', 'ro')
+    const audio = await el.textToSpeech('voice_1', 'Bună ziua', 'eleven_flash_v2_5', 'ro')
     expect(audio).toBeInstanceOf(ArrayBuffer)
     expect(new Uint8Array(audio)).toEqual(bytes)
     const call = callAt(fetchMock)
     expect(call.method).toBe('POST')
     expect(call.url.pathname).toBe('/v1/text-to-speech/voice_1')
     expect(call.url.searchParams.get('output_format')).toBe('mp3_22050_32')
+    expect(call.url.searchParams.has('enable_logging')).toBe(false)
     expect(call.headers.get('accept')).toBe('audio/mpeg')
     expect(call.headers.get('xi-api-key')).toBe(API_KEY)
-    expect(call.json).toEqual({ text: 'Bună ziua', model_id: 'eleven_multilingual_v2', language_code: 'ro' })
+    expect(call.json).toEqual({ text: 'Bună ziua', model_id: 'eleven_flash_v2_5', language_code: 'ro' })
+  })
+
+  it('never sends language_code with eleven_multilingual_v2 (unsupported per the spec)', async () => {
+    fetchMock.mockResolvedValue(new Response(new Uint8Array([1]), { status: 200 }))
+    await el.textToSpeech('voice_1', 'Bună ziua', 'eleven_multilingual_v2', 'ro')
+    expect(callAt(fetchMock).json).toEqual({ text: 'Bună ziua', model_id: 'eleven_multilingual_v2' })
+  })
+
+  it('sends the agent tuning, the dictionary locators (max 3), zero retention and the phone format', async () => {
+    fetchMock.mockResolvedValue(new Response(new Uint8Array([1]), { status: 200 }))
+    const locators = ['a', 'b', 'c', 'd'].map((x) => ({ pronunciation_dictionary_id: `dict_${x}`, version_id: `ver_${x}` }))
+    await el.textToSpeech('voice_1', 'hi', 'eleven_flash_v2', 'en', {
+      voiceSettings: { stability: 0.4, similarity_boost: 0.7, speed: 1.1 },
+      pronunciationLocators: locators,
+      enableLogging: false,
+      outputFormat: 'wav_8000',
+    })
+    const call = callAt(fetchMock)
+    expect(call.url.searchParams.get('enable_logging')).toBe('false')
+    expect(call.url.searchParams.get('output_format')).toBe('wav_8000')
+    expect(call.headers.get('accept')).toBe('audio/wav')
+    expect(call.json).toEqual({
+      text: 'hi',
+      model_id: 'eleven_flash_v2',
+      language_code: 'en',
+      voice_settings: { stability: 0.4, similarity_boost: 0.7, speed: 1.1 },
+      pronunciation_dictionary_locators: locators.slice(0, 3),
+    })
   })
 
   it('omits language_code when none is given and is not retried', async () => {

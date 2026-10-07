@@ -1,10 +1,15 @@
 // POST /api/voices/clone — ElevenLabs Instant Voice Clone for this org only.
 // multipart/form-data:
 //   name, speaker_name, consent='true', rights_attestation='true',
-//   files (1–3 audio samples; `files[]` also accepted), language? (agent language by default)
+//   files (1–3 audio samples; `files[]` also accepted), language? (agent language by default),
+//   gender? (female|male|neutral), remove_background_noise? ('true' for noisy recordings)
 // → 201 { voice: VoiceOption }. When the provider holds the clone for speaker
 //   verification (which a tenant cannot complete in the shared workspace), the
 //   clone is deleted again and the route answers 422 with a product message.
+//
+// Every clone uses a slot of the SHARED workspace, so before the provider
+// call: plan gate (403), per-org custom-voice cap (409, ELEVENLABS_MAX_CLONES_PER_ORG)
+// and the workspace quota preflight (503 voice_capacity).
 //
 // Vercel rejects request bodies above 4.5 MB, so the samples are limited to
 // 4 MB in total. Each file is checked by MIME type AND magic bytes. Audio is
@@ -18,6 +23,8 @@ import { RequestError, assertSameOrigin } from '@/lib/api/http'
 import * as el from '@/lib/elevenlabs/client'
 import { createLogger, requestIdFrom } from '@/lib/observability/logger'
 import { RATE_LIMITS, enforceRateLimit } from '@/lib/security/rate-limit'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { assertCustomVoiceCap, assertCustomVoicePlan, assertWorkspaceVoiceCapacity } from '@/lib/voice-providers/voice-capacity'
 import {
   CLONE_LIMITS,
   CLONE_MIME_TYPES,
@@ -39,6 +46,8 @@ const FieldsSchema = z.object({
   consent: z.string().optional(),
   rights_attestation: z.string().optional(),
   language: z.preprocess((v) => (v === '' ? undefined : v), languageSchema.optional()),
+  gender: z.preprocess((v) => (v === '' ? undefined : v), z.enum(['female', 'male', 'neutral']).optional()),
+  remove_background_noise: z.preprocess((v) => (v === '' ? undefined : v), z.enum(['true', 'false']).optional()),
 })
 
 function textField(form: FormData, key: string): string | undefined {
@@ -88,6 +97,10 @@ export async function POST(request: Request) {
     assertSameOrigin(request)
     const { supabase, user, org } = await requireOrg()
     log = log.child({ orgId: org.id })
+    // Before reading the (large) upload: plan and per-org cap.
+    assertCustomVoicePlan(org.plan)
+    const admin = createAdminClient()
+    await assertCustomVoiceCap(admin, org.id)
 
     const contentType = (request.headers.get('content-type') ?? '').toLowerCase()
     if (!contentType.startsWith('multipart/form-data')) {
@@ -112,6 +125,8 @@ export async function POST(request: Request) {
       consent: textField(form, 'consent'),
       rights_attestation: textField(form, 'rights_attestation'),
       language: textField(form, 'language'),
+      gender: textField(form, 'gender'),
+      remove_background_noise: textField(form, 'remove_background_noise'),
     })
     if (!parsed.success) {
       throw new RequestError(
@@ -139,6 +154,7 @@ export async function POST(request: Request) {
     }
     // Counted only for well-formed requests: a rejected upload does not burn the daily quota.
     await enforceRateLimit([RATE_LIMITS.voiceClone], org.id)
+    await assertWorkspaceVoiceCapacity('clone', log)
 
     const language = fields.language ?? (await orgAgentLanguage(supabase, org.id))
     const result = await createInstantClone({
@@ -150,6 +166,8 @@ export async function POST(request: Request) {
       samples,
       ipHash: hashClientIp(request.headers.get('x-forwarded-for')),
       log,
+      gender: fields.gender ?? null,
+      removeBackgroundNoise: fields.remove_background_noise === 'true',
     })
     return NextResponse.json({ voice: result.voice }, { status: 201 })
   } catch (err) {

@@ -7,16 +7,19 @@ import 'server-only'
 // clone. Every voice-related route goes through this module instead.
 //
 // An organization may list / preview / select only:
-//   (a) ElevenLabs default voices: voice_type=default, category "premade".
-//       NOTE: ElevenLabs retires ALL default voices on 2026-12-31 (and they only
-//       exist for accounts created before March 2026), so the catalog must keep
-//       working when this set is empty: library voices are the long-term path.
-//   (b) provider_voices registry rows that are platform-wide (owner_org_id NULL,
-//       e.g. provisioned library voices) or owned by the org, with status ready.
-//   (c) public Voice Library voices (GET /v1/shared-voices without live
+//   (a) provider_voices registry rows that are platform-wide (owner_org_id NULL,
+//       e.g. provisioned library voices and the curated voices per language) or
+//       owned by the org, with status ready and no lifecycle notice.
+//   (b) public Voice Library voices (GET /v1/shared-voices without live
 //       moderation or custom rates and with a minimum notice period). They are
 //       provisioned (added to the workspace + registered) before an agent uses
 //       them, and eligibility is re-validated against the library server-side.
+// ElevenLabs default ("premade") voices expire on 2026-12-31 and are no longer
+// offered: they are hidden from the catalog and refused for new selections.
+// An agent that already uses one keeps it (re-saving the current voice works)
+// until the default-voice migration moves it (lib/voice-providers/default-voices.ts).
+// A registry voice with a lifecycle notice (scheduled removal, live
+// moderation, custom rate, removed) is likewise kept only by agents already on it.
 // Anything else in the workspace (other orgs' clones, unregistered generated or
 // professional voices) is rejected with 403. Registry/audit writes use the
 // service-role client: those tables have no tenant write policies.
@@ -29,7 +32,9 @@ import * as el from '@/lib/elevenlabs/client'
 import * as ct from '@/lib/cartesia/client'
 import { CARTESIA_VOICE_ID_RE, isAllowedFallbackVoice, platformFallbackIds } from '@/lib/cartesia/voice-policy'
 export { CARTESIA_VOICE_ID_RE } from '@/lib/cartesia/voice-policy'
-import { previewTtsModel } from '@/lib/elevenlabs/models'
+import { previewTtsModel, ttsModelFor } from '@/lib/elevenlabs/models'
+import { TTS_TUNING_DEFAULTS } from '@/lib/elevenlabs/conversation-behaviour'
+import { searchLibrary, type LibrarySort } from '@/lib/elevenlabs/api/voices'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   RequestError,
@@ -47,6 +52,17 @@ import { normalizeAgentLanguage } from '@/lib/voice/languages'
 import type { ElevenLabsVoice, VoiceOption } from '@/types'
 import { libraryMinNoticeDays } from './config'
 import { ProviderError, isProviderError } from './errors'
+import { readVoiceTuning } from './settings'
+import { purgeVoiceHistory } from './tts-history'
+import { locatorBody, pronunciationLocatorOf, type PronunciationLocator } from './pronunciation-rules'
+import type { VoiceTuning } from './types'
+import {
+  VOICE_CAPACITY_MESSAGE,
+  VoiceCapacityError,
+  assertWorkspaceVoiceCapacity,
+  capViolationAfterInsert,
+  isVoiceCapacityProviderError,
+} from './voice-capacity'
 
 // ─── Identifiers and shared input schemas ────────────────────────────────────
 
@@ -119,7 +135,19 @@ export class VoiceNotProvisionedError extends Error {
  */
 export function voiceErrorResponse(err: unknown, log: Logger, event: string, requestId: string): NextResponse {
   let res: NextResponse
-  if (err instanceof VoiceNotProvisionedError) {
+  if (err instanceof VoiceCapacityError || isVoiceCapacityProviderError(err)) {
+    // Ops are alerted where the capacity problem was detected; the tenant gets
+    // a product message without the platform's numbers.
+    if (!(err instanceof VoiceCapacityError)) log.error(event, err, { reason: 'voice_capacity' })
+    res = NextResponse.json(
+      {
+        error: VOICE_CAPACITY_MESSAGE,
+        code: 'voice_capacity',
+        request_id: requestId,
+      },
+      { status: 503 },
+    )
+  } else if (err instanceof VoiceNotProvisionedError) {
     res = NextResponse.json(
       {
         error: err.message,
@@ -264,15 +292,45 @@ interface RegistryRow {
   preview_url: string | null
   status: RegistryStatus
   created_at: string
+  /** Every verified language (migration 015); `language` stays the primary one. */
+  languages?: string[] | null
+  /** Curated platform voice for these languages (migration 015). */
+  featured_languages?: string[] | null
+  featured_rank?: number | null
+  /** Lifecycle notice (migration 015): a voice with a notice is not offered for new selections. */
+  notice?: string | null
+  retiring_at?: string | null
 }
 
 const REGISTRY_COLUMNS =
-  'id, provider, voice_id, source, source_public_owner_id, source_voice_id, owner_org_id, name, language, gender, accent, category, preview_url, status, created_at'
+  'id, provider, voice_id, source, source_public_owner_id, source_voice_id, owner_org_id, name, language, gender, accent, category, preview_url, status, created_at, languages, featured_languages, featured_rank, notice, retiring_at'
 
 const UNIQUE_VIOLATION = '23505'
 
 function visibleTo(row: RegistryRow, orgId: string): boolean {
   return row.status === 'ready' && (row.owner_org_id === null || row.owner_org_id === orgId)
+}
+
+/** The date ElevenLabs retires every default (premade) voice. */
+export const DEFAULT_VOICE_RETIREMENT_DATE = '2026-12-31'
+
+function retiringVoice(): RequestError {
+  return new RequestError(
+    'forbidden',
+    'This voice is being retired by our voice provider and can no longer be selected. Choose another voice.',
+    403,
+    { reason: 'voice_retiring' },
+  )
+}
+
+/** Verified language codes of a library voice (primary first), normalized and de-duplicated. */
+export function libraryLanguages(lib: Pick<el.ELSharedVoice, 'language' | 'locale' | 'verified_languages'>): string[] {
+  const out: string[] = []
+  for (const raw of [lib.language, lib.locale, ...(lib.verified_languages ?? []).map((l) => l.language)]) {
+    const code = normalizeLanguage(raw)
+    if (code && !out.includes(code)) out.push(code)
+  }
+  return out
 }
 
 async function registryByVoiceId(db: SupabaseClient, voiceId: string): Promise<RegistryRow | null> {
@@ -298,39 +356,52 @@ async function registryByLibraryVoice(db: SupabaseClient, libraryVoiceId: string
   return (data as RegistryRow | null) ?? null
 }
 
-function registryToOption(row: RegistryRow): VoiceOption {
+function registryToOption(row: RegistryRow, language?: string): VoiceOption {
   const libraryRef =
     row.source === 'library' && row.source_public_owner_id && row.source_voice_id
       ? { publicOwnerId: row.source_public_owner_id, voiceId: row.source_voice_id }
       : null
+  const featured = row.owner_org_id === null ? (row.featured_languages ?? []) : []
+  const primary = normalizeLanguage(row.language)
+  // A multilingual voice listed under the requested language shows that language.
+  const shown = language && primary !== language && (row.languages ?? []).includes(language) ? language : primary
   return {
     provider: 'elevenlabs',
     voiceId: row.voice_id,
     name: displayName(row.name),
     description: null,
-    language: normalizeLanguage(row.language),
+    language: shown,
     accent: row.accent ?? null,
     gender: normalizeGender(row.gender),
     age: null,
-    category: row.category ?? (row.source === 'cloned' ? 'cloned' : null),
+    category: row.category ?? (row.source === 'cloned' ? 'cloned' : row.source === 'designed' ? 'generated' : null),
     source: row.source,
     previewUrl: publicHttpsUrl(row.preview_url),
     requiresProvisioning: false,
     libraryRef,
+    ...(featured.length && (!language || featured.includes(language)) ? { recommended: true } : {}),
   }
 }
 
-async function writeAudit(
+export async function writeAudit(
   db: SupabaseClient,
-  entry: { orgId: string; userId: string | null; action: string; targetId: string; details: Record<string, unknown> },
+  entry: {
+    orgId: string | null
+    userId: string | null
+    action: string
+    targetId: string
+    details: Record<string, unknown>
+    actorKind?: 'user' | 'system' | 'admin_token' | 'admin_user'
+    targetType?: string
+  },
   log: Logger,
 ): Promise<void> {
   const { error } = await db.from('audit_log').insert({
     org_id: entry.orgId,
     actor_user_id: entry.userId,
-    actor_kind: 'user',
+    actor_kind: entry.actorKind ?? 'user',
     action: entry.action,
-    target_type: 'provider_voice',
+    target_type: entry.targetType ?? 'provider_voice',
     target_id: entry.targetId,
     details: entry.details,
   })
@@ -362,7 +433,11 @@ async function fetchDefaultVoices(): Promise<el.ELVoice[]> {
   return out
 }
 
-/** Default (premade) voices. Expire 2026-12-31 at ElevenLabs: may legitimately be empty. */
+/**
+ * Default (premade) voices. Expire 2026-12-31 at ElevenLabs: may legitimately
+ * be empty. Never offered any more; read only to recognise agents that still
+ * use one (retirement banner, migration, diagnostics).
+ */
 async function defaultVoices(): Promise<el.ELVoice[]> {
   if (!el.isConfigured()) return []
   if (defaultsCache && Date.now() - defaultsCache.at < DEFAULTS_TTL_MS) return defaultsCache.voices
@@ -379,35 +454,23 @@ async function defaultVoices(): Promise<el.ELVoice[]> {
   return defaultsInflight
 }
 
-function defaultToOption(v: el.ELVoice, language: string | undefined): VoiceOption | null {
-  const labels = v.labels ?? {}
-  const verified = v.verified_languages ?? []
-  const labelLanguage = normalizeLanguage(labels.language)
-  const match = language ? verified.find((l) => normalizeLanguage(l.language) === language) : undefined
-  if (language && !match && labelLanguage !== language && !(language === 'en' && !labelLanguage && verified.length === 0)) {
+/**
+ * The ids of the ElevenLabs default voices (cached 10 min). null when the
+ * listing could not be read (callers must not treat "unknown" as "not premade").
+ */
+export async function defaultVoiceIds(log?: Logger): Promise<Set<string> | null> {
+  try {
+    return new Set((await defaultVoices()).map((v) => v.voice_id))
+  } catch (err) {
+    log?.warn('voice_catalog.default_voices_unavailable', { error: isProviderError(err) ? err.code : 'unknown' })
     return null
-  }
-  return {
-    provider: 'elevenlabs',
-    voiceId: v.voice_id,
-    name: displayName(v.name),
-    description: v.description?.trim() || humanize(labels.description) || null,
-    language: match ? (language as string) : labelLanguage ?? normalizeLanguage(verified[0]?.language) ?? null,
-    accent: match?.accent ?? humanize(labels.accent),
-    gender: normalizeGender(labels.gender),
-    age: humanize(labels.age),
-    category: v.category,
-    source: 'premade',
-    previewUrl: publicHttpsUrl(match?.preview_url) ?? publicHttpsUrl(v.preview_url),
-    requiresProvisioning: false,
-    libraryRef: null,
   }
 }
 
 // ─── Voice Library (shared voices) ───────────────────────────────────────────
 
 /** Library entries we accept: no live moderation, no custom rate, long enough notice period. */
-function isUsableLibraryVoice(v: el.ELSharedVoice): boolean {
+export function isUsableLibraryVoice(v: el.ELSharedVoice): boolean {
   if (!EL_VOICE_ID_RE.test(v.voice_id) || !EL_OWNER_ID_RE.test(v.public_owner_id)) return false
   if (v.live_moderation_enabled === true) return false
   if (typeof v.rate === 'number' && v.rate > 1) return false
@@ -488,11 +551,31 @@ async function provisionedLibraryMap(db: SupabaseClient, libraryVoiceIds: string
 
 // ─── Listing ─────────────────────────────────────────────────────────────────
 
+/** Library use-case filter: phone-conversation voices by default, or every use case. */
+export const LIBRARY_USE_CASES = ['conversational', 'all'] as const
+export type LibraryUseCase = (typeof LIBRARY_USE_CASES)[number]
+export const LIBRARY_AGES = ['young', 'middle_aged', 'old'] as const
+export type LibraryAge = (typeof LIBRARY_AGES)[number]
+/** Accent filter values (GET /v1/voices/accents `accent`): lowercase words, spaces, - and _. */
+export const ACCENT_RE = /^[a-z][a-z _-]{0,39}$/
+
 export interface VoiceCatalogQuery {
   source: 'workspace' | 'library'
   search?: string | null
   language?: string | null
   gender?: 'female' | 'male' | 'neutral' | null
+  /** Library + registry rows (matched on the registry's accent label). */
+  accent?: string | null
+  /** Library only. */
+  age?: LibraryAge | null
+  /** Library only; default 'conversational'. */
+  useCase?: LibraryUseCase | null
+  /** Library only: studio-quality voices (category high_quality). */
+  highQuality?: boolean | null
+  /** Library only: voices ElevenLabs features. */
+  featured?: boolean | null
+  /** Library only; default cloned_by_count. */
+  sort?: LibrarySort | null
   pageToken?: string | null
   pageSize?: number | null
 }
@@ -506,6 +589,12 @@ interface NormalizedQuery {
   search: string | undefined
   language: string | undefined
   gender: 'female' | 'male' | 'neutral' | undefined
+  accent: string | undefined
+  age: LibraryAge | undefined
+  useCase: LibraryUseCase
+  highQuality: boolean
+  featured: boolean
+  sort: LibrarySort | undefined
   pageSize: number
 }
 
@@ -538,18 +627,24 @@ export function libraryPageToken(page: number): string | null {
 }
 
 async function registryPage(db: SupabaseClient, orgId: string, q: NormalizedQuery, offset: number, limit: number): Promise<RegistryRow[]> {
-  assertUuid(orgId) // the only interpolated value in the filter below, and it is a server-side UUID
+  assertUuid(orgId) // interpolated below, and it is a server-side UUID
   let query = db
     .from('provider_voices')
     .select(REGISTRY_COLUMNS)
     .eq('provider', 'elevenlabs')
     .eq('status', 'ready')
+    // Voices being removed, live-moderated or with a custom rate are not offered.
+    .is('notice', null)
     .or(`owner_org_id.is.null,owner_org_id.eq.${orgId}`)
   if (q.search) query = query.ilike('name', `%${q.search}%`)
-  if (q.language) query = query.eq('language', q.language)
+  // q.language is a normalized 2–3 letter code (normalizeLanguage), safe to interpolate.
+  if (q.language) query = query.or(`language.eq.${q.language},languages.cs.{${q.language}},featured_languages.cs.{${q.language}}`)
   if (q.gender) query = query.eq('gender', q.gender)
+  // Registry accents are stored humanized ("british"); ACCENT_RE-validated, no wildcards left.
+  if (q.accent) query = query.ilike('accent', q.accent.replace(/[_-]+/g, ' '))
   const { data, error } = await query
     .order('owner_org_id', { ascending: true, nullsFirst: false })
+    .order('featured_rank', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: false })
     .order('id', { ascending: true })
     .range(offset, offset + limit - 1)
@@ -557,75 +652,83 @@ async function registryPage(db: SupabaseClient, orgId: string, q: NormalizedQuer
   return (data as RegistryRow[] | null) ?? []
 }
 
-async function filteredDefaultVoices(q: NormalizedQuery): Promise<VoiceOption[]> {
-  const needle = q.search?.toLowerCase()
-  return (await defaultVoices())
-    .map((v) => ({ v, option: defaultToOption(v, q.language) }))
-    .filter((x): x is { v: el.ELVoice; option: VoiceOption } => x.option !== null)
-    .filter(({ option }) => !q.gender || option.gender === q.gender)
-    .filter(({ v, option }) => {
-      if (!needle) return true
-      const hay = [option.name, option.description, option.accent, ...Object.values(v.labels ?? {})].join(' ').toLowerCase()
-      return hay.includes(needle)
-    })
-    .map(({ option }) => option)
-    .sort((a, b) => a.name.localeCompare(b.name))
+/**
+ * The org's own voices first, then the platform's (curated voices for the
+ * language first). Default voices are no longer listed (retired 2026-12-31).
+ */
+async function listWorkspaceVoices(orgId: string, q: NormalizedQuery, cursor: PageCursor | null): Promise<VoiceCatalogPage> {
+  // A page token from the time default voices were listed ends the listing.
+  if (cursor && cursor.p === 'd') return { voices: [], next_page_token: null }
+  const offset = cursor && cursor.p === 'r' ? cursor.o : 0
+  const rows = await registryPage(createAdminClient(), orgId, q, offset, q.pageSize + 1)
+  return {
+    voices: rows.slice(0, q.pageSize).map((r) => registryToOption(r, q.language)),
+    next_page_token: rows.length > q.pageSize ? encodeCursor({ v: 1, p: 'r', o: offset + q.pageSize }) : null,
+  }
 }
 
-/** Registry rows visible to the org first (its own voices, then platform ones), then default voices. */
-async function listWorkspaceVoices(orgId: string, q: NormalizedQuery, cursor: PageCursor | null): Promise<VoiceCatalogPage> {
-  const voices: VoiceOption[] = []
-  let defaultsOffset = 0
-  if (!cursor || cursor.p === 'r') {
-    const offset = cursor && cursor.p === 'r' ? cursor.o : 0
-    const rows = await registryPage(createAdminClient(), orgId, q, offset, q.pageSize + 1)
-    voices.push(...rows.slice(0, q.pageSize).map(registryToOption))
-    if (rows.length > q.pageSize) {
-      return { voices, next_page_token: encodeCursor({ v: 1, p: 'r', o: offset + q.pageSize }) }
-    }
-  } else if (cursor.p === 'd') {
-    defaultsOffset = cursor.o
-  }
-  const seen = new Set(voices.map((v) => v.voiceId))
-  const defaults = (await filteredDefaultVoices(q)).filter((v) => !seen.has(v.voiceId))
-  const slice = defaults.slice(defaultsOffset, defaultsOffset + (q.pageSize - voices.length))
-  voices.push(...slice)
-  const nextOffset = defaultsOffset + slice.length
-  return { voices, next_page_token: nextOffset < defaults.length ? encodeCursor({ v: 1, p: 'd', o: nextOffset }) : null }
+/**
+ * How well a library voice suits the agent: 2 = verified for the language with
+ * the model the agent speaks it with, 1 = verified for the language, 0 = other.
+ */
+export function libraryLanguageFit(v: Pick<el.ELSharedVoice, 'verified_languages'>, language: string | undefined): number {
+  if (!language) return 0
+  const entries = (v.verified_languages ?? []).filter((l) => normalizeLanguage(l.language) === language)
+  if (!entries.length) return 0
+  const models = new Set<string>([ttsModelFor(language), previewTtsModel(language)])
+  return entries.some((l) => typeof l.model_id === 'string' && models.has(l.model_id)) ? 2 : 1
 }
 
 async function listLibraryVoices(q: NormalizedQuery, page: number): Promise<VoiceCatalogPage> {
-  const res = await el.sharedVoices.list({
+  const res = await searchLibrary({
     search: q.search,
     language: q.language,
     gender: q.gender,
+    accent: q.accent,
+    age: q.age,
+    use_cases: q.useCase === 'all' ? undefined : [q.useCase],
+    category: q.highQuality ? 'high_quality' : undefined,
+    featured: q.featured,
+    sort: q.sort,
     page,
     page_size: q.pageSize,
     min_notice_period_days: libraryMinNoticeDays(),
   })
   const usable = (res.voices ?? []).filter(isUsableLibraryVoice)
+  // Stable: within the page, voices verified for the agent's language (and model) come first.
+  const ranked = usable
+    .map((v, i) => ({ v, i, fit: libraryLanguageFit(v, q.language) }))
+    .sort((a, b) => b.fit - a.fit || a.i - b.i)
+    .map((x) => x.v)
   const provisioned = await provisionedLibraryMap(
     createAdminClient(),
-    usable.map((v) => v.voice_id),
+    ranked.map((v) => v.voice_id),
   )
   return {
-    voices: usable.map((v) => libraryToOption(v, q.language, provisioned.get(v.voice_id) ?? null)),
+    voices: ranked.map((v) => libraryToOption(v, q.language, provisioned.get(v.voice_id) ?? null)),
     next_page_token: res.has_more ? encodeCursor({ v: 1, p: 'l', n: page + 1 }) : null,
   }
 }
 
 /**
  * Voices an organization may pick. `workspace`: registry rows visible to the
- * org + ElevenLabs default voices (opaque offset token). `library`: public
- * Voice Library (page-number token), with already-provisioned voices carrying
- * their workspace voice id and requiresProvisioning=false.
+ * org (opaque offset token). `library`: public Voice Library (page-number
+ * token), with already-provisioned voices carrying their workspace voice id
+ * and requiresProvisioning=false.
  */
 export async function listVoices(orgId: string, query: VoiceCatalogQuery): Promise<VoiceCatalogPage> {
   const pageSize = Math.min(Math.max(Math.floor(query.pageSize ?? DEFAULT_PAGE_SIZE), 1), MAX_PAGE_SIZE)
+  const accent = typeof query.accent === 'string' ? query.accent.trim().toLowerCase() : ''
   const q: NormalizedQuery = {
     search: cleanSearch(query.search),
     language: normalizeLanguage(query.language) ?? undefined,
     gender: query.gender ?? undefined,
+    accent: ACCENT_RE.test(accent) ? accent : undefined,
+    age: query.age && (LIBRARY_AGES as readonly string[]).includes(query.age) ? query.age : undefined,
+    useCase: query.useCase === 'all' ? 'all' : 'conversational',
+    highQuality: query.highQuality === true,
+    featured: query.featured === true,
+    sort: query.sort ?? undefined,
     pageSize,
   }
   const cursor = query.pageToken ? decodeCursor(query.pageToken, query.source) : null
@@ -673,10 +776,19 @@ function notAllowed(): RequestError {
  * Throws 403 unless the org may use `voiceId`. With `libraryRef`, the voice is
  * a public library voice: either already provisioned (registry), or validated
  * against /v1/shared-voices (requiresProvisioning=true).
+ *
+ * `currentVoiceId` is the voice the org's agent already uses (read server-side
+ * by the caller): a retiring default voice or a registry voice with a
+ * lifecycle notice stays usable for that agent (re-save, retry, preview) but
+ * is refused as a new selection.
  */
-export async function assertVoiceEligible(orgId: string, ref: { voiceId: string; libraryRef?: LibraryRef | null }): Promise<EligibleVoice> {
+export async function assertVoiceEligible(
+  orgId: string,
+  ref: { voiceId: string; libraryRef?: LibraryRef | null; currentVoiceId?: string | null },
+): Promise<EligibleVoice> {
   const { voiceId } = ref
   const libraryRef = ref.libraryRef ?? null
+  const isCurrent = !!ref.currentVoiceId && ref.currentVoiceId === voiceId
   if (!EL_VOICE_ID_RE.test(voiceId)) throw new RequestError('invalid_request', 'Invalid voice id.', 400)
   const db = createAdminClient()
 
@@ -685,6 +797,7 @@ export async function assertVoiceEligible(orgId: string, ref: { voiceId: string;
     const row = await registryByLibraryVoice(db, libraryRef.voiceId)
     if (row && visibleTo(row, orgId)) {
       if (voiceId !== row.voice_id && voiceId !== libraryRef.voiceId) throw notAllowed()
+      if (row.notice && !(ref.currentVoiceId && ref.currentVoiceId === row.voice_id)) throw retiringVoice()
       return {
         voiceId: row.voice_id,
         name: displayName(row.name),
@@ -712,6 +825,7 @@ export async function assertVoiceEligible(orgId: string, ref: { voiceId: string;
   const row = await registryByVoiceId(db, voiceId)
   if (row) {
     if (!visibleTo(row, orgId)) throw notAllowed()
+    if (row.notice && !isCurrent) throw retiringVoice()
     return {
       voiceId: row.voice_id,
       name: displayName(row.name),
@@ -732,6 +846,9 @@ export async function assertVoiceEligible(orgId: string, ref: { voiceId: string;
   }
   if (voice.voice_id !== voiceId) throw notAllowed()
   if (voice.category === 'premade') {
+    // Default voices expire on 2026-12-31: kept by the agent already on one
+    // (until migrated), never a new selection.
+    if (!isCurrent) throw retiringVoice()
     return {
       voiceId,
       name: displayName(voice.name),
@@ -772,12 +889,31 @@ async function findWorkspaceCopy(lib: el.ELSharedVoice): Promise<string | null> 
       page_size: MAX_PAGE_SIZE,
       next_page_token: token,
     })
-    const hit = (page.voices ?? []).find((v) => v.sharing?.original_voice_id === lib.voice_id && EL_VOICE_ID_RE.test(v.voice_id))
+    const hit = (page.voices ?? []).find(
+      (v) =>
+        v.sharing?.original_voice_id === lib.voice_id &&
+        (!v.sharing?.public_owner_id || v.sharing.public_owner_id === lib.public_owner_id) &&
+        v.sharing?.status !== 'copied_disabled' &&
+        EL_VOICE_ID_RE.test(v.voice_id),
+    )
     if (hit) return hit.voice_id
     if (!page.has_more || !page.next_page_token) break
     token = page.next_page_token
   }
   return null
+}
+
+/**
+ * "The workspace already holds this voice". The spec documents only 200/422
+ * for POST /v1/voices/add/{public_user_id}/{voice_id}, so the answer is
+ * recognised by the error body's detail.status (kept in ProviderError.detail),
+ * whatever the HTTP status (400, 409 or 422).
+ */
+export function isAlreadyAddedError(err: unknown): boolean {
+  if (!isProviderError(err)) return false
+  if (err.code === 'conflict') return true
+  if (err.code !== 'validation') return false
+  return /already[_ ]?(exists|added|in)|voice_already|duplicate/i.test(err.detail ?? '')
 }
 
 /** Adds the library voice to the shared workspace. `fresh` = we created this copy. */
@@ -789,9 +925,9 @@ async function addToWorkspace(lib: el.ELSharedVoice, log: Logger): Promise<{ voi
     }
     return { voiceId: added.voice_id, fresh: true }
   } catch (err) {
-    // 409 voice_already_exists: the workspace already holds a copy (e.g. added
-    // by the old flow, never registered). Reuse it instead of failing.
-    if (!isProviderError(err) || err.code !== 'conflict') throw err
+    // The workspace already holds a copy (e.g. added by the old flow, never
+    // registered, or a registry row lost). Reuse it instead of failing.
+    if (!isAlreadyAddedError(err)) throw err
     const existing = await findWorkspaceCopy(lib)
     if (!existing) throw err
     log.info('voice_provision.reused_workspace_copy', { voiceId: existing, libraryVoiceId: lib.voice_id })
@@ -845,8 +981,38 @@ export async function provisionLibraryVoice(params: {
   await enforceRateLimit([RATE_LIMITS.voiceProvision], orgId)
   const lib = params.libraryVoice ?? (await findLibraryVoice(libraryRef.publicOwnerId, libraryRef.voiceId))
   if (!lib || lib.voice_id !== libraryRef.voiceId || lib.public_owner_id !== libraryRef.publicOwnerId) throw notAllowed()
+  return provisionCore(db, lib, existing, { orgId, userId, kind: 'user' }, log)
+}
 
-  const added = await addToWorkspace(lib, log)
+interface ProvisionActor {
+  /** Audit only: the row itself is platform-wide (owner_org_id NULL). */
+  orgId: string | null
+  userId: string | null
+  kind: 'user' | 'admin_token' | 'admin_user' | 'system'
+}
+
+/**
+ * Adds `lib` to the workspace (or reuses a copy already there) and registers it
+ * as a platform-wide row; deduplicated and race-safe (see provisionLibraryVoice).
+ */
+async function provisionCore(
+  db: SupabaseClient,
+  lib: el.ELSharedVoice,
+  existing: RegistryRow | null,
+  actor: ProvisionActor,
+  log: Logger,
+): Promise<{ voiceId: string; provisioned: boolean }> {
+  // A deleted/failed row: the workspace may still hold a usable copy (the
+  // registry write was lost, or the voice was marked failed and came back).
+  const reusable = existing ? await findWorkspaceCopy(lib) : null
+  let added: { voiceId: string; fresh: boolean }
+  if (reusable) {
+    added = { voiceId: reusable, fresh: false }
+  } else {
+    // Adding a library voice counts as a voice add/edit operation of the shared workspace.
+    await assertWorkspaceVoiceCapacity('library', log)
+    added = await addToWorkspace(lib, log)
+  }
   const row = {
     provider: 'elevenlabs',
     voice_id: added.voiceId,
@@ -856,13 +1022,17 @@ export async function provisionLibraryVoice(params: {
     owner_org_id: null,
     name: displayName(lib.name),
     language: normalizeLanguage(lib.language),
+    languages: libraryLanguages(lib),
     gender: normalizeGender(lib.gender),
     accent: humanize(lib.accent),
     category: lib.category ?? null,
     preview_url: publicHttpsUrl(lib.preview_url),
     status: 'ready',
     deleted_at: null,
-    created_by: userId,
+    notice: null,
+    retiring_at: null,
+    // Platform-wide rows are readable by every tenant: the actor stays in audit_log only.
+    created_by: null,
   }
 
   let winner: string
@@ -893,8 +1063,9 @@ export async function provisionLibraryVoice(params: {
   await writeAudit(
     db,
     {
-      orgId,
-      userId,
+      orgId: actor.orgId,
+      userId: actor.userId,
+      actorKind: actor.kind,
       action: 'voice.library.provisioned',
       targetId: winner,
       details: { library_voice_id: lib.voice_id, public_owner_id: lib.public_owner_id, name: displayName(lib.name), reused_copy: !added.fresh },
@@ -904,12 +1075,96 @@ export async function provisionLibraryVoice(params: {
   return { voiceId: winner, provisioned: true }
 }
 
+/**
+ * Platform (admin) provisioning of a curated library voice: no tenant rate
+ * limit, audited with the admin actor. `lib` must come from a fresh,
+ * server-side library lookup (findLibraryVoice).
+ */
+export async function provisionPlatformLibraryVoice(params: {
+  lib: el.ELSharedVoice
+  actor: { userId: string | null; kind: 'admin_token' | 'admin_user' }
+  log: Logger
+}): Promise<{ voiceId: string; provisioned: boolean }> {
+  const db = createAdminClient()
+  const log = params.log.child({ component: 'voice_provision' })
+  const existing = await registryByLibraryVoice(db, params.lib.voice_id)
+  if (existing?.status === 'ready') {
+    if (existing.owner_org_id !== null) throw notAllowed()
+    return { voiceId: existing.voice_id, provisioned: false }
+  }
+  return provisionCore(db, params.lib, existing, { orgId: null, userId: params.actor.userId, kind: params.actor.kind }, log)
+}
+
 // ─── Preview (TTS) ───────────────────────────────────────────────────────────
+
+/** How a preview should sound: the agent's tuning and pronunciation dictionary, optionally the phone band. */
+export interface PreviewSound {
+  /** agents.voice_settings (stability / similarity / speed); null values = the agent defaults. */
+  tuning?: VoiceTuning | null
+  /** The org's dictionary version (resolved server-side from its own agent). */
+  pronunciation?: PronunciationLocator | null
+  /** 8 kHz WAV, like a phone call (otherwise MP3 22 kHz). */
+  phoneQuality?: boolean
+}
+
+/** Same values the agent sends (conversation-behaviour ttsConfig), so a preview sounds like a call. */
+export function previewVoiceSettings(tuning: VoiceTuning | null | undefined): { stability: number; similarity_boost: number; speed: number } {
+  const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
+  return {
+    stability: clamp(tuning?.stability ?? TTS_TUNING_DEFAULTS.stability, 0, 1),
+    similarity_boost: clamp(tuning?.similarity_boost ?? TTS_TUNING_DEFAULTS.similarity_boost, 0, 1),
+    speed: clamp(tuning?.speed ?? TTS_TUNING_DEFAULTS.speed, 0.7, 1.2),
+  }
+}
+
+// Zero retention (enable_logging=false) keeps tenant preview text and audio out
+// of the shared workspace history. The spec reserves it for enterprise
+// accounts: when the provider refuses it, previews fall back to logged
+// requests for this instance (purged by the TTS-history retention instead).
+let zeroRetentionRefused = false
+
+function zeroRetentionWanted(): boolean {
+  return process.env.ELEVENLABS_TTS_ZERO_RETENTION !== 'false' && !zeroRetentionRefused
+}
+
+function isZeroRetentionRefusal(err: unknown): boolean {
+  return (
+    isProviderError(err) &&
+    (err.code === 'validation' || err.code === 'auth') &&
+    /retention|enterprise|enable_logging|logging/i.test(err.detail ?? '')
+  )
+}
+
+/** For tests. */
+export function resetZeroRetentionState(): void {
+  zeroRetentionRefused = false
+}
+
+async function previewTts(voiceId: string, text: string, language: string, sound: PreviewSound, log?: Logger): Promise<ArrayBuffer> {
+  const model = previewTtsModel(language)
+  const opts: el.TextToSpeechOptions = {
+    voiceSettings: previewVoiceSettings(sound.tuning),
+    pronunciationLocators: sound.pronunciation ? [locatorBody(sound.pronunciation)] : [],
+    outputFormat: sound.phoneQuality ? 'wav_8000' : 'mp3_22050_32',
+  }
+  if (zeroRetentionWanted()) {
+    try {
+      return await el.textToSpeech(voiceId, text, model, language, { ...opts, enableLogging: false })
+    } catch (err) {
+      if (!isZeroRetentionRefusal(err)) throw err
+      zeroRetentionRefused = true
+      ;(log ?? createLogger({ component: 'voice_preview' })).warn('tts.zero_retention_refused', { detail: isProviderError(err) ? err.detail : null })
+    }
+  }
+  return el.textToSpeech(voiceId, text, model, language, opts)
+}
 
 /**
  * Synthesizes a short preview with an eligible voice. A library voice that is
  * not provisioned yet cannot be synthesized (it is not in the workspace): the
  * caller gets VoiceNotProvisionedError and plays the public sample instead.
+ * The preview uses the agent's model for the language, its voice tuning and
+ * its pronunciation dictionary, so it sounds like a call.
  */
 export async function synthesizePreview(params: {
   orgId: string
@@ -919,25 +1174,32 @@ export async function synthesizePreview(params: {
   language: string
   /** The org's agent's current voice (platform-written after its own check). */
   currentAgentVoiceId?: string | null
+  sound?: PreviewSound
+  log?: Logger
 }): Promise<ArrayBuffer> {
   if (!el.isConfigured()) throw new ProviderError({ system: 'elevenlabs', operation: 'tts.preview', code: 'not_configured' })
+  const sound = params.sound ?? {}
   // The voice the org's agent already uses may predate the voice registry
-  // (legacy agents): previewing it reveals nothing the org does not have.
+  // (legacy agents) or be retiring: previewing it reveals nothing the org does not have.
   if (!params.libraryRef && params.currentAgentVoiceId && params.voiceId === params.currentAgentVoiceId) {
     const language = normalizeAgentLanguage(params.language)
     const text = cleanText(params.text ?? '', PREVIEW_TEXT_MAX_CHARS) || defaultPreviewText(language)
-    return el.textToSpeech(params.voiceId, text, previewTtsModel(language), language)
+    return previewTts(params.voiceId, text, language, sound, params.log)
   }
   if (params.libraryRef) {
     // Cheap check first: no library lookup needed to know it cannot be spoken yet.
     const row = await registryByLibraryVoice(createAdminClient(), params.libraryRef.voiceId)
     if (!row || !visibleTo(row, params.orgId)) throw new VoiceNotProvisionedError(params.libraryRef)
   }
-  const eligible = await assertVoiceEligible(params.orgId, { voiceId: params.voiceId, libraryRef: params.libraryRef })
+  const eligible = await assertVoiceEligible(params.orgId, {
+    voiceId: params.voiceId,
+    libraryRef: params.libraryRef,
+    currentVoiceId: params.currentAgentVoiceId,
+  })
   if (eligible.requiresProvisioning) throw new VoiceNotProvisionedError(eligible.libraryRef)
   const language = normalizeAgentLanguage(params.language)
   const text = cleanText(params.text ?? '', PREVIEW_TEXT_MAX_CHARS) || defaultPreviewText(language)
-  return el.textToSpeech(eligible.voiceId, text, previewTtsModel(language), language)
+  return previewTts(eligible.voiceId, text, language, sound, params.log)
 }
 
 const PreviewBodySchema = z.object({
@@ -946,6 +1208,8 @@ const PreviewBodySchema = z.object({
   // Longer text is accepted and clipped to PREVIEW_TEXT_MAX_CHARS (old callers send whole greetings).
   text: z.string().max(2_000).nullish(),
   language: languageSchema.nullish(),
+  /** 8 kHz WAV, like a phone line. */
+  phone_quality: z.boolean().optional(),
 })
 
 export const PREVIEW_AUDIO_HEADERS = {
@@ -953,6 +1217,8 @@ export const PREVIEW_AUDIO_HEADERS = {
   'Cache-Control': 'private, no-store',
   'X-Content-Type-Options': 'nosniff',
 } as const
+
+export const PREVIEW_WAV_HEADERS = { ...PREVIEW_AUDIO_HEADERS, 'Content-Type': 'audio/wav' } as const
 
 /** POST handler body shared by /api/voices/preview and /api/agent/preview-voice. */
 export async function handleVoicePreview(request: Request, route: string): Promise<Response> {
@@ -966,7 +1232,7 @@ export async function handleVoicePreview(request: Request, route: string): Promi
     await enforceRateLimit([RATE_LIMITS.ttsPreview, RATE_LIMITS.ttsPreviewDaily], org.id)
     const { data: agentRow, error: agentErr } = await supabase
       .from('agents')
-      .select('language, voice_id')
+      .select('language, voice_id, voice_settings, pronunciation')
       .eq('org_id', org.id)
       .order('created_at', { ascending: true })
       .limit(1)
@@ -980,8 +1246,15 @@ export async function handleVoicePreview(request: Request, route: string): Promi
       text: body.text,
       language,
       currentAgentVoiceId: (agentRow?.voice_id as string | null | undefined) ?? null,
+      // The org's own agent row (RLS-bounded read): its tuning and dictionary version.
+      sound: {
+        tuning: readVoiceTuning(agentRow?.voice_settings),
+        pronunciation: pronunciationLocatorOf(agentRow?.pronunciation),
+        phoneQuality: body.phone_quality === true,
+      },
+      log,
     })
-    return new Response(audio, { status: 200, headers: PREVIEW_AUDIO_HEADERS })
+    return new Response(audio, { status: 200, headers: body.phone_quality ? PREVIEW_WAV_HEADERS : PREVIEW_AUDIO_HEADERS })
   } catch (err) {
     return voiceErrorResponse(err, log, `${route}.failed`, requestId)
   }
@@ -1115,6 +1388,17 @@ async function rejectUnverifiedClone(
   throw new RequestError('invalid_request', CLONE_NEEDS_VERIFICATION_MESSAGE, 422, { reason: 'requires_verification' })
 }
 
+/** Provider-side description of the custom voices this platform creates (the orphan scan matches it). */
+export function platformVoiceDescription(kind: 'clone' | 'designed', orgId: string): string {
+  return `${kind === 'clone' ? 'Instant clone' : 'Designed voice'} for org ${orgId}`
+}
+
+/** Provider-side name: the workspace is shared, so the org is tagged for operators. */
+export function platformVoiceName(name: string, orgId: string): string {
+  const tag = ` [${orgId.slice(0, 8)}]`
+  return `${displayName(name).slice(0, 100 - tag.length)}${tag}`
+}
+
 /**
  * Instant voice clone for one org. Audio is streamed to ElevenLabs and never
  * stored by us. The registry row (owner_org_id = org) makes the clone visible
@@ -1131,20 +1415,27 @@ export async function createInstantClone(params: {
   samples: CloneSample[]
   ipHash: string | null
   log: Logger
+  gender?: 'female' | 'male' | 'neutral' | null
+  /** The recordings have background noise: let the provider isolate the voice. */
+  removeBackgroundNoise?: boolean
 }): Promise<{ voice: VoiceOption }> {
   const { orgId, userId, samples } = params
   const log = params.log.child({ component: 'voice_clone' })
   const name = displayName(params.name)
   const speakerName = displayName(params.speakerName, '')
+  const gender = params.gender ?? null
   const db = createAdminClient()
 
+  const labels: Record<string, string> = {}
+  if (params.language) labels.language = params.language
+  if (gender) labels.gender = gender
   const created = await el.voices.addInstantClone(
     {
-      // The workspace is shared: tag the provider-side name/description with the org for operators.
-      name: `${name} [${orgId.slice(0, 8)}]`.slice(0, 100),
-      description: `Instant clone for org ${orgId}`,
-      labels: params.language ? { language: params.language } : undefined,
+      name: platformVoiceName(name, orgId),
+      description: platformVoiceDescription('clone', orgId),
+      labels: Object.keys(labels).length ? labels : undefined,
       files: samples.map((s, i) => ({ blob: s.file, filename: `sample-${i + 1}.${s.kind}` })),
+      removeBackgroundNoise: params.removeBackgroundNoise === true,
     },
     { orgId },
   )
@@ -1170,6 +1461,8 @@ export async function createInstantClone(params: {
     owner_org_id: orgId,
     name,
     language: params.language,
+    languages: params.language ? [params.language] : null,
+    gender,
     category: 'cloned',
     status: 'ready',
     consent,
@@ -1183,6 +1476,12 @@ export async function createInstantClone(params: {
       log.error('voice_clone.compensating_delete_failed', delErr, { voiceId })
     }
     throw new Error(`provider_voices insert failed: ${error.message}`)
+  }
+  // Two concurrent requests may both have passed the cap check: the later one is undone.
+  const overCap = await capViolationAfterInsert(db, orgId, voiceId)
+  if (overCap) {
+    await discardCustomVoice(db, orgId, voiceId, log)
+    throw overCap
   }
   log.info('voice_clone.created', { voiceId, files: samples.length })
 
@@ -1199,6 +1498,7 @@ export async function createInstantClone(params: {
         files: samples.length,
         total_bytes: samples.reduce((n, s) => n + s.file.size, 0),
         statement_version: CONSENT_STATEMENT_VERSION,
+        remove_background_noise: params.removeBackgroundNoise === true,
       },
     },
     log,
@@ -1212,7 +1512,7 @@ export async function createInstantClone(params: {
       description: null,
       language: params.language,
       accent: null,
-      gender: null,
+      gender,
       age: null,
       category: 'cloned',
       source: 'cloned',
@@ -1223,6 +1523,31 @@ export async function createInstantClone(params: {
   }
 }
 
+/**
+ * Undoes a custom voice created over the per-org cap: deleted at the provider,
+ * registry row 'deleted' (or 'failed' when the provider delete failed, so the
+ * maintenance purge retries it). Never throws.
+ */
+export async function discardCustomVoice(db: SupabaseClient, orgId: string, voiceId: string, log: Logger): Promise<void> {
+  let providerDeleted = true
+  try {
+    await el.voices.delete(voiceId, { orgId })
+  } catch (err) {
+    if (!(isProviderError(err) && err.code === 'not_found')) {
+      providerDeleted = false
+      log.error('custom_voice.discard_delete_failed', err, { voiceId })
+    }
+  }
+  const { error } = await db
+    .from('provider_voices')
+    .update({ status: providerDeleted ? 'deleted' : 'failed', deleted_at: providerDeleted ? new Date().toISOString() : null })
+    .eq('provider', 'elevenlabs')
+    .eq('voice_id', voiceId)
+    .eq('owner_org_id', orgId)
+  if (error) log.error('custom_voice.discard_mark_failed', error, { voiceId })
+  log.warn('custom_voice.discarded_over_cap', { voiceId, providerDeleted })
+}
+
 async function agentUsesVoice(db: SupabaseClient, orgId: string, voiceId: string): Promise<boolean> {
   const { data, error } = await db.from('agents').select('id').eq('org_id', orgId).eq('voice_id', voiceId).limit(1)
   if (error) throw new Error(`agents read failed: ${error.message}`)
@@ -1230,9 +1555,11 @@ async function agentUsesVoice(db: SupabaseClient, orgId: string, voiceId: string
 }
 
 /**
- * Deletes one of the org's own clones. The row is flagged 'deleted' first so
- * it cannot be selected while the provider call runs; a failed provider delete
- * restores it. Refused (409) while the org's agent uses the voice.
+ * Deletes one of the org's own custom voices (cloned or designed). The row is
+ * flagged 'deleted' first so it cannot be selected while the provider call
+ * runs; a failed provider delete restores it. Refused (409) while the org's
+ * agent uses the voice. The voice's previews are then purged from the shared
+ * workspace's speech history.
  */
 export async function deleteOrgClone(params: { orgId: string; userId: string; voiceId: string; log: Logger }): Promise<void> {
   const { orgId, userId, voiceId } = params
@@ -1241,14 +1568,14 @@ export async function deleteOrgClone(params: { orgId: string; userId: string; vo
 
   const { data, error } = await db
     .from('provider_voices')
-    .select('id, status')
+    .select('id, status, source')
     .eq('provider', 'elevenlabs')
     .eq('voice_id', voiceId)
     .eq('owner_org_id', orgId)
-    .eq('source', 'cloned')
+    .in('source', ['cloned', 'designed'])
     .maybeSingle()
   if (error) throw new Error(`provider_voices read failed: ${error.message}`)
-  const row = data as { id: string; status: RegistryStatus } | null
+  const row = data as { id: string; status: RegistryStatus; source: RegistrySource } | null
   if (!row || row.status === 'deleted') throw new RequestError('not_found', 'Voice not found.', 404)
 
   const inUse = () => new RequestError('conflict', 'Your agent uses this voice. Choose another voice before deleting it.', 409)
@@ -1290,7 +1617,9 @@ export async function deleteOrgClone(params: { orgId: string; userId: string; vo
     }
   }
   log.info('voice_clone.deleted')
-  await writeAudit(db, { orgId, userId, action: 'voice.clone.deleted', targetId: voiceId, details: {} }, log)
+  await writeAudit(db, { orgId, userId, action: row.source === 'designed' ? 'voice.design.deleted' : 'voice.clone.deleted', targetId: voiceId, details: {} }, log)
+  // Previews rendered in this voice may still be in the workspace history.
+  await purgeVoiceHistory(voiceId, log)
 }
 
 // ─── Cartesia fallback voices ────────────────────────────────────────────────
@@ -1361,8 +1690,9 @@ export async function getAllowedFallbackVoice(voiceId: string): Promise<ct.Carte
 }
 
 /**
- * Maintenance: clones rejected for verification whose provider delete failed
- * (status 'failed') are deleted again; a voice already gone counts as done.
+ * Maintenance: custom voices whose provider delete failed (clones rejected for
+ * verification, voices discarded over the per-org cap; status 'failed') are
+ * deleted again; a voice already gone counts as done.
  */
 export async function purgeRejectedClones(limit: number, log: Logger): Promise<{ purged: number; failed: number }> {
   const db = createAdminClient()
@@ -1370,7 +1700,7 @@ export async function purgeRejectedClones(limit: number, log: Logger): Promise<{
     .from('provider_voices')
     .select('id, voice_id, owner_org_id')
     .eq('provider', 'elevenlabs')
-    .eq('source', 'cloned')
+    .in('source', ['cloned', 'designed'])
     .eq('status', 'failed')
     .limit(limit)
   if (error) throw new Error(`provider_voices scan failed: ${error.message}`)
