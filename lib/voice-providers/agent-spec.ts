@@ -26,6 +26,7 @@ import { callLimitsFor } from './call-limits'
 import { describeOpeningHours } from './opening-hours'
 import { defaultVoiceForNewAgent } from './curated-default'
 import { pronunciationLocatorOf } from './pronunciation-rules'
+import { loadBusinessTools } from './business-tools'
 
 export interface AgentRow {
   id: string
@@ -138,6 +139,9 @@ export async function buildAgentSpec(db: SupabaseClient, agent: AgentRow): Promi
     endCallEnabled: conversation.allow_end_call,
   }
   const cartesiaToolAvailable = (process.env.CARTESIA_TOOL_SECRET ?? '').trim().length >= 24
+  // In-call business tools (slice B2): booking needs Google Calendar; the
+  // fallback agent can take messages (webhook tool) but never books.
+  const businessTools = await loadBusinessTools(db, agent)
   // ElevenLabs only: the Cartesia fallback agent stays single-language.
   const additionalLanguages = effectiveAdditionalLanguages(language, conversation.additional_languages)
 
@@ -195,6 +199,8 @@ export async function buildAgentSpec(db: SupabaseClient, agent: AgentRow): Promi
     // Org with app-routed AND native numbers: both transfer tools are attached.
     mixedTransferTools: appRouted && hasNativeNumbers,
     openingHours,
+    bookingMode: businessTools.booking ? 'tools' : businessTools.bookingEnabled ? 'take_message' : null,
+    takeMessageTool: businessTools.takeMessage,
   }
 
   return {
@@ -206,7 +212,12 @@ export async function buildAgentSpec(db: SupabaseClient, agent: AgentRow): Promi
     systemPrompt: composeSystemPrompt(promptInput),
     // Recomposed by the ElevenLabs adapter when the platform transfer tool is unavailable.
     promptInput,
-    fallbackSystemPrompt: composeSystemPrompt({ ...promptBase, callContext: cartesiaToolAvailable ? 'tool' : 'none' }),
+    fallbackSystemPrompt: composeSystemPrompt({
+      ...promptBase,
+      callContext: cartesiaToolAvailable ? 'tool' : 'none',
+      bookingMode: businessTools.bookingEnabled ? 'take_message' : null,
+      takeMessageTool: businessTools.takeMessage && cartesiaToolAvailable,
+    }),
     knowledgeAppendix: appendix.trim(),
     firstMessage,
     languagePresetGreetings: languagePresetGreetings({
@@ -237,5 +248,6 @@ export async function buildAgentSpec(db: SupabaseClient, agent: AgentRow): Promi
     callLimits: callLimitsFor(org?.plan),
     openingHours,
     revision: agent.config_revision ?? 1,
+    businessTools,
   }
 }

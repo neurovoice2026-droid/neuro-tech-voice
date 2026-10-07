@@ -34,6 +34,7 @@ import { isStricterPrivacy } from '@/lib/voice-providers/privacy-change'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import type { Agent, AgentStatusView } from '@/types'
+import { BusinessToolsSection } from '@/components/agent/business-tools/BusinessToolsCards'
 
 interface TabCallHandlingProps {
   agent: Agent
@@ -69,6 +70,7 @@ export function TabCallHandling({ agent, status, onUpdate, isSaving }: TabCallHa
   return (
     <div className="space-y-6">
       <TransferCard agent={agent} status={status} onUpdate={onUpdate} isSaving={isSaving} />
+      <BusinessToolsSection />
       <FallbackCard status={status} onUpdate={onUpdate} isSaving={isSaving} />
       <AnalysisCard agent={agent} onUpdate={onUpdate} isSaving={isSaving} />
       <PrivacyCard agent={agent} onUpdate={onUpdate} isSaving={isSaving} />

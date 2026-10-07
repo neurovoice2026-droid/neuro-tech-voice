@@ -189,6 +189,7 @@ export async function runVoiceMaintenance(log: Logger = createLogger({ component
     ['voice_housekeeping', () => import('./voice-orphans').then((m) => m.runVoiceHousekeeping(log))],
     ['elevenlabs_workspace_health', () => import('./webhook-health').then((m) => m.runWorkspaceHealth(log))],
     ['call_retention', () => import('./call-retention').then((m) => m.runCallRetention(log))],
+    ['business_tools_retention', () => import('@/lib/voice-tools/retention').then((m) => m.runBusinessToolRetention(log))],
     // Hourly, from the stored last run (not the clock minute: the cron may be daily).
     ['retention', () => import('./maintenance-state').then((m) => m.runIfDue('retention', 3_600_000, log, () => pruneOperationalData(log)))],
   ]

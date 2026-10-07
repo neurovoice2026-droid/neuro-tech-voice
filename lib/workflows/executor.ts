@@ -1,8 +1,11 @@
 import { google } from 'googleapis'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getGoogleClientWithToken } from '@/lib/google/client'
-import { escapeSlackText, renderTemplate } from './templates'
+import { escapeSlackText, renderTemplate, DEFAULT_SMS_MESSAGE } from './templates'
 import { callTemplateVars } from './call-vars'
+import { createLogger } from '@/lib/observability/logger'
+import { callerMessageSms } from '@/lib/sms/templates'
+import { sendTransactionalSms, type SmsFailure } from '@/lib/sms/sender'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -21,6 +24,7 @@ type ActionType =
   | 'notify_slack'
   | 'add_tag'
   | 'wait'
+  | 'send_sms'
 
 interface WorkflowAction {
   id: string
@@ -340,9 +344,68 @@ async function executeNotifySlack(config: Record<string, string>, ctx: CallConte
   }
 }
 
+// ─── Text the caller (send_sms) ──────────────────────────────────────────────
+
+/** Plain-language, final outcome of a text that was not sent (never retried automatically). */
+const SMS_FAILURE_MESSAGES: Record<SmsFailure, string> = {
+  not_configured: 'Not sent: text messages are not available on this platform.',
+  no_sms_number: 'Not sent: your business number cannot send text messages.',
+  opted_out: 'Not sent: the caller opted out of text messages.',
+  invalid_number: "Not sent: the caller's number cannot receive text messages.",
+  daily_cap: 'Not sent: the daily limit of text messages was reached.',
+  recipient_cap: 'Not sent: this caller already received the maximum number of texts today.',
+  empty: 'Not sent: the message is empty.',
+  failed: 'Not sent: the text could not be delivered.',
+}
+
+/**
+ * Texts the other party of the call (from the stored call row, never from
+ * the workflow config) from the org's own SMS-capable number. Transactional
+ * only: the owner's message, signed with the business name. Never for test
+ * calls or calls marked as spam.
+ */
+async function executeSendSms(config: Record<string, string>, ctx: CallContext, idempotencyKey: string): Promise<ActionResult> {
+  const base = { action_id: '', action_type: 'send_sms' }
+  if (!ctx.call_id) return { ...base, success: false, message: 'Not sent: no call to reply to.' }
+  const log = createLogger({ component: 'workflow_sms', orgId: ctx.org_id, callId: ctx.call_id })
+  const db = createAdminClient()
+  try {
+    const { data: call, error } = await db
+      .from('calls')
+      .select('id, direction, from_number, to_number, caller_number, phone_number_id, outcome, is_test')
+      .eq('id', ctx.call_id)
+      .eq('org_id', ctx.org_id)
+      .maybeSingle()
+    if (error) throw new Error(`calls read failed: ${error.message}`)
+    if (!call) return { ...base, success: false, message: 'Not sent: the call was not found.' }
+    if (call.is_test) return { ...base, success: false, message: 'Not sent: test calls never text anyone.' }
+    if (call.outcome === 'spam') return { ...base, success: false, message: 'Not sent: the call was marked as spam.' }
+    const to = (call.direction === 'outbound' ? call.to_number : call.from_number ?? call.caller_number) as string | null
+    if (!to) return { ...base, success: false, message: "Not sent: the caller's number is unknown." }
+    const text = interpolate(config.message || DEFAULT_SMS_MESSAGE, ctx)
+    const body = callerMessageSms({ businessName: ctx.business_name ?? null, message: text })
+    const result = await sendTransactionalSms({
+      db,
+      log,
+      orgId: ctx.org_id,
+      callId: ctx.call_id,
+      preferredNumberId: (call.phone_number_id as string | null) ?? null,
+      to,
+      body,
+      idempotencyKey,
+    })
+    if (result.ok) return { ...base, success: true, message: result.duplicate ? 'Text already sent for this call' : 'Text sent to the caller' }
+    return { ...base, success: false, message: SMS_FAILURE_MESSAGES[result.reason] }
+  } catch (err) {
+    log.error('workflow.sms_failed', err)
+    return { ...base, success: false, message: SMS_FAILURE_MESSAGES.failed }
+  }
+}
+
 async function executeAction(
   action: WorkflowAction,
-  ctx: CallContext
+  ctx: CallContext,
+  workflowId?: string
 ): Promise<ActionResult> {
   let result: ActionResult
 
@@ -370,6 +433,10 @@ async function executeAction(
       break
     case 'notify_slack':
       result = await executeNotifySlack(action.config, ctx)
+      break
+    case 'send_sms':
+      // One text per workflow step and call, whatever retries happen.
+      result = await executeSendSms(action.config, ctx, `wf:${workflowId ?? 'none'}:${action.id}:${ctx.call_id ?? 'none'}`)
       break
     default:
       result = {
@@ -425,7 +492,7 @@ export async function executeWorkflows(
     let allSuccess = true
 
     for (const action of wf.actions) {
-      const result = await executeAction(action, ctx)
+      const result = await executeAction(action, ctx, wf.id)
       results.push(result)
 
       if (!result.success) {

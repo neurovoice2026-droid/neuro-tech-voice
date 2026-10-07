@@ -25,6 +25,7 @@ import { isAllowedFallbackVoice } from '@/lib/cartesia/voice-policy'
 import { forgetPlatformResource, tryPlatformResource } from './platform-resources'
 import { TRANSFER_TOOL_DEGRADED, ensurePlatformTool, invalidatePlatformToolMemo, storedPlatformToolId } from './platform-tools'
 import { composeSystemPrompt } from './prompt'
+import { invalidateBusinessToolMemo, resolveBusinessToolIds, withAttachedBusinessTools } from './business-tools'
 
 export interface SyncedAgent extends ExternalAgentRef {
   configHash: string
@@ -87,10 +88,10 @@ const APP_TRANSFER_UNAVAILABLE_RULE =
 
 /** The spec whose prompt promises no app-routed transfer (the tool is unavailable). */
 export function withoutAppTransfer(spec: AgentSpec): AgentSpec {
-  const systemPrompt = spec.promptInput
-    ? composeSystemPrompt({ ...spec.promptInput, appTransferUnavailable: true })
-    : `${spec.systemPrompt}\n\n${APP_TRANSFER_UNAVAILABLE_RULE}`
-  return { ...spec, systemPrompt }
+  if (!spec.promptInput) return { ...spec, systemPrompt: `${spec.systemPrompt}\n\n${APP_TRANSFER_UNAVAILABLE_RULE}` }
+  // The prompt input carries the flag too, so a later recomposition (business tools) keeps it.
+  const promptInput = { ...spec.promptInput, appTransferUnavailable: true }
+  return { ...spec, promptInput, systemPrompt: composeSystemPrompt(promptInput) }
 }
 
 type AppTransfer = 'attached' | 'unavailable' | 'not_needed'
@@ -101,7 +102,10 @@ type AppTransfer = 'attached' | 'unavailable' | 'not_needed'
  * A tool that cannot be obtained is never swallowed: the body leaves it out,
  * the prompt stops promising it, and the sync is reported degraded.
  */
-async function elevenLabsBody(spec: AgentSpec, mode: 'write' | 'hash' = 'write'): Promise<{ body: AgentBody; degraded: SyncDegradation | null; appTransfer: AppTransfer }> {
+async function elevenLabsBody(
+  spec: AgentSpec,
+  mode: 'write' | 'hash' = 'write',
+): Promise<{ body: AgentBody; degraded: SyncDegradation | null; appTransfer: AppTransfer; business: { booking: boolean; takeMessage: boolean } }> {
   let transferToolId: string | null = null
   let degraded: SyncDegradation | null = null
   const needsTransferTool = needsAppTransferTool(spec)
@@ -117,14 +121,26 @@ async function elevenLabsBody(spec: AgentSpec, mode: 'write' | 'hash' = 'write')
       }
     }
   }
-  const effective = needsTransferTool && !transferToolId ? withoutAppTransfer(spec) : spec
+  // In-call business tools (slice B2): attached only when obtained; the prompt follows what is attached.
+  const business = await resolveBusinessToolIds(spec, mode, createLogger({ component: 'elevenlabs_lifecycle' }))
+  degraded = degraded ?? business.degraded
+  const effective = withAttachedBusinessTools(needsTransferTool && !transferToolId ? withoutAppTransfer(spec) : spec, business)
   // ELEVENLABS_POST_CALL_WEBHOOK_ID, else the workspace webhook pointing at our receiver (discovered once).
   const postCallWebhookId = await import('./webhook-health').then((m) => m.resolvePostCallWebhookId())
   // Cached LLM catalogue: the configured LLM when offered and not deprecated,
   // else the platform default; plus the lowest reasoning level it supports.
   const llm = await effectiveAgentLlm()
-  const body = buildElevenLabsAgentBody(effective, { transferToolId, postCallWebhookId }, { llm: llm.llm, reasoningEffort: llm.reasoningEffort })
-  return { body, degraded, appTransfer: !needsTransferTool ? 'not_needed' : transferToolId ? 'attached' : 'unavailable' }
+  const body = buildElevenLabsAgentBody(
+    effective,
+    { transferToolId, postCallWebhookId, businessToolIds: business.ids, bookingToolsAttached: business.booking },
+    { llm: llm.llm, reasoningEffort: llm.reasoningEffort },
+  )
+  return {
+    body,
+    degraded,
+    appTransfer: !needsTransferTool ? 'not_needed' : transferToolId ? 'attached' : 'unavailable',
+    business: { booking: business.booking, takeMessage: business.takeMessage },
+  }
 }
 
 /**
@@ -211,7 +227,7 @@ export const elevenLabsLifecycle: AgentLifecycle = {
     return configHash((await elevenLabsBody(spec, 'hash')).body)
   },
   async create(spec) {
-    const { body, degraded, appTransfer } = await elevenLabsBody(spec)
+    const { body, degraded, appTransfer, business } = await elevenLabsBody(spec)
     const ctx = { orgId: spec.orgId, agentId: spec.localAgentId }
     let sent: { result: { agent_id: string }; pii: 'applied' | 'rejected' | 'disabled' }
     try {
@@ -221,6 +237,7 @@ export const elevenLabsLifecycle: AgentLifecycle = {
     } catch (err) {
       // A referenced tool may have been deleted: re-verify it on the next attempt.
       if (appTransfer === 'attached') invalidatePlatformToolMemo('elevenlabs.transfer_tool')
+      if (business.booking || business.takeMessage) invalidateBusinessToolMemo()
       throw err
     }
     const { result, pii } = sent
@@ -234,12 +251,12 @@ export const elevenLabsLifecycle: AgentLifecycle = {
       version: remote.version_id ?? null,
       configHash: await configHash(body),
       appliedVoiceId: remote.conversation_config?.tts?.voice_id ?? null,
-      details: elevenLabsDetails(spec, body, remote, pii, appTransfer),
+      details: { ...elevenLabsDetails(spec, body, remote, pii, appTransfer), business_tools: business },
       degraded,
     }
   },
   async update(externalId, spec, opts = {}) {
-    const { body, degraded, appTransfer } = await elevenLabsBody(spec)
+    const { body, degraded, appTransfer, business } = await elevenLabsBody(spec)
     const ctx = { orgId: spec.orgId, agentId: spec.localAgentId }
     // The hash is that of the steady-state body; the one-shot retroactive
     // privacy flag and the version description are only on the wire.
@@ -250,6 +267,7 @@ export const elevenLabsLifecycle: AgentLifecycle = {
     } catch (err) {
       if (isProviderError(err) && err.code === 'not_found' && err.operation === 'agents.update') await confirmAgentMissing(externalId, ctx, err)
       if (appTransfer === 'attached') invalidatePlatformToolMemo('elevenlabs.transfer_tool')
+      if (business.booking || business.takeMessage) invalidateBusinessToolMemo()
       throw err
     }
     const { result: remote, pii } = sent
@@ -259,7 +277,11 @@ export const elevenLabsLifecycle: AgentLifecycle = {
       version: remote.version_id ?? null,
       configHash: await configHash(body),
       appliedVoiceId: remote.conversation_config?.tts?.voice_id ?? null,
-      details: { ...elevenLabsDetails(spec, body, remote, pii, appTransfer), ...(opts.applyPrivacyToExisting ? { privacy_retroactive_at: new Date().toISOString() } : {}) },
+      details: {
+        ...elevenLabsDetails(spec, body, remote, pii, appTransfer),
+        business_tools: business,
+        ...(opts.applyPrivacyToExisting ? { privacy_retroactive_at: new Date().toISOString() } : {}),
+      },
       degraded,
     }
   },
@@ -330,7 +352,9 @@ export async function resolveFallbackVoice(spec: AgentSpec, preferredGender: 'fe
 async function cartesiaConfig(spec: AgentSpec) {
   const voice = await resolveFallbackVoice(spec)
   const contextToolId = await tryPlatformResource('cartesia.context_tool')
-  return { config: buildCartesiaAgentConfig(spec, voice.voiceId, { contextToolId }), voice }
+  // take_message on the fallback agent (slice B2), when the owner enabled it.
+  const messageToolId = spec.active && spec.businessTools?.takeMessage ? await tryPlatformResource('cartesia.message_tool') : null
+  return { config: buildCartesiaAgentConfig(spec, voice.voiceId, { contextToolId, messageToolId }), voice }
 }
 
 /** Pages through the whole listing; throws (keep the id) if it cannot be read completely. */

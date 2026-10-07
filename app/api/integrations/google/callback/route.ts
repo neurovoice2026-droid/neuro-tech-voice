@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getGoogleOAuthClient } from '@/lib/google/client'
+import { createLogger } from '@/lib/observability/logger'
+import { scheduleCalendarResync } from '@/lib/voice-tools/calendar-resync'
 
 // Google OAuth redirect target — exchanges the code and stores the refresh token.
 export async function GET(request: NextRequest) {
@@ -57,6 +59,9 @@ export async function GET(request: NextRequest) {
     console.error('Google OAuth token exchange failed:', err)
     return NextResponse.redirect(new URL('/integrations?error=token_exchange', request.url))
   }
+
+  // In-call booking uses the calendar: attach the booking tools now (slice B2).
+  if (type === 'google_calendar') scheduleCalendarResync(org.id as string, createLogger({ route: 'integrations.google_callback', orgId: org.id as string }))
 
   const res = NextResponse.redirect(new URL(`/integrations?connected=${type}`, request.url))
   res.cookies.delete('g_oauth_state')

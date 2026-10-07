@@ -6,7 +6,7 @@ import {
   Phone, Mail, Calendar, FileText, Zap, Bell, Clock,
   ArrowRight, MoreVertical, Copy, Search,
   PhoneIncoming, Star,
-  CheckCircle2, AlertCircle, Loader2,
+  CheckCircle2, AlertCircle, Loader2, MessageSquareText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
+import { DEFAULT_SMS_MESSAGE } from '@/lib/workflows/templates'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,7 @@ type ActionType =
   | 'notify_slack'
   | 'add_tag'
   | 'wait'
+  | 'send_sms'
 
 interface WorkflowAction {
   id: string
@@ -86,6 +88,7 @@ const ACTION_META: Record<ActionType, { label: string; icon: React.FC<{ classNam
   notify_slack:         { label: 'Notify Slack',         icon: Bell,     color: 'text-purple-600' },
   add_tag:              { label: 'Add Tag',              icon: Star,     color: 'text-orange-500' },
   wait:                 { label: 'Wait',                 icon: Clock,    color: 'text-gray-500' },
+  send_sms:             { label: 'Text the Caller',      icon: MessageSquareText, color: 'text-emerald-600' },
 }
 
 // ─── Wizard step definitions ──────────────────────────────────────────────────
@@ -98,8 +101,16 @@ const WIZARD_STEPS = [
 
 const AVAILABLE_ACTIONS: ActionType[] = [
   'send_email', 'add_to_sheet', 'create_calendar_event',
-  'send_webhook', 'create_doc', 'notify_slack', 'add_tag', 'wait',
+  'send_webhook', 'create_doc', 'notify_slack', 'add_tag', 'wait', 'send_sms',
 ]
+
+/** Why "Text the caller" is not offered (GET /api/workflows/sms-capability). */
+const SMS_UNAVAILABLE: Record<string, string> = {
+  not_configured: 'Text messages are not available yet',
+  no_number: 'Get a phone number first',
+  not_capable: 'Your number cannot send texts',
+  unknown: 'Checking whether your number can send texts…',
+}
 
 // Actions that call a Google API need that integration connected first, or
 // they'd fail on every run (lib/workflows/executor.ts returns "not connected"
@@ -276,11 +287,14 @@ function CreateWorkflowDialog({
   onClose,
   onCreate,
   connectedIntegrations,
+  smsUnavailable,
 }: {
   open: boolean
   onClose: () => void
   onCreate: (data: { name: string; description: string; trigger: TriggerType; trigger_config: Record<string, string>; actions: WorkflowAction[] }) => Promise<void>
   connectedIntegrations: Set<string>
+  /** null = the org can text callers; otherwise why not (SMS_UNAVAILABLE key). */
+  smsUnavailable: string | null
 }) {
   const [step, setStep] = useState(1)
   const [selectedTrigger, setSelectedTrigger] = useState<TriggerType | null>(null)
@@ -291,6 +305,7 @@ function CreateWorkflowDialog({
   const [webhookUrl, setWebhookUrl] = useState('')
   const [slackWebhookUrl, setSlackWebhookUrl] = useState('')
   const [tagValue, setTagValue] = useState('')
+  const [smsMessage, setSmsMessage] = useState(DEFAULT_SMS_MESSAGE)
   const [saving, setSaving] = useState(false)
 
   function reset() {
@@ -303,6 +318,7 @@ function CreateWorkflowDialog({
     setWebhookUrl('')
     setSlackWebhookUrl('')
     setTagValue('')
+    setSmsMessage(DEFAULT_SMS_MESSAGE)
     setSaving(false)
   }
 
@@ -320,6 +336,7 @@ function CreateWorkflowDialog({
         if (type === 'send_webhook' && webhookUrl) config.url = webhookUrl
         if (type === 'notify_slack' && slackWebhookUrl) config.webhook_url = slackWebhookUrl
         if (type === 'add_tag' && tagValue) config.tag = tagValue
+        if (type === 'send_sms') config.message = smsMessage.trim().slice(0, 300) || DEFAULT_SMS_MESSAGE
         return { id: `a${i}`, type, config }
       })
 
@@ -430,13 +447,15 @@ function CreateWorkflowDialog({
                 const requiredIntegration = ACTION_REQUIRES_INTEGRATION[type]
                 const isWorkInProgress = !!requiredIntegration
                 const notConnected = !!requiredIntegration && !connectedIntegrations.has(requiredIntegration)
-                const disabled = isWorkInProgress || notConnected
+                // Only offered when one of the org's numbers can send texts.
+                const smsBlocked = type === 'send_sms' && smsUnavailable !== null
+                const disabled = isWorkInProgress || notConnected || smsBlocked
                 return (
                   <button
                     key={type}
                     onClick={() => !disabled && toggleAction(type)}
                     disabled={disabled}
-                    title={isWorkInProgress ? 'Coming soon' : notConnected ? `Connect ${INTEGRATION_LABEL[requiredIntegration!]} first` : undefined}
+                    title={isWorkInProgress ? 'Coming soon' : notConnected ? `Connect ${INTEGRATION_LABEL[requiredIntegration!]} first` : smsBlocked ? SMS_UNAVAILABLE[smsUnavailable!] ?? SMS_UNAVAILABLE.not_capable : undefined}
                     className={cn(
                       'flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-left transition-all',
                       disabled
@@ -450,6 +469,7 @@ function CreateWorkflowDialog({
                     <span className="min-w-0 text-xs font-medium text-foreground">
                       {meta.label}
                       {notConnected && <span className="block text-[10px] font-normal text-muted-foreground">Not connected</span>}
+                      {smsBlocked && <span className="block text-[10px] font-normal text-muted-foreground">{SMS_UNAVAILABLE[smsUnavailable!] ?? SMS_UNAVAILABLE.not_capable}</span>}
                       {isWorkInProgress && <WorkInProgressBadge className="mt-1" />}
                     </span>
                     {selected && !disabled && <CheckCircle2 className="ml-auto h-3.5 w-3.5 text-purple-600 shrink-0" />}
@@ -485,6 +505,23 @@ function CreateWorkflowDialog({
                   onChange={(e) => setSlackWebhookUrl(e.target.value)}
                   className="text-sm"
                 />
+              </div>
+            )}
+            {selectedActions.includes('send_sms') && (
+              <div className="mt-3">
+                <label htmlFor="workflow-sms-message" className="text-xs font-medium text-foreground mb-1.5 block">Text to send the caller</label>
+                <textarea
+                  id="workflow-sms-message"
+                  value={smsMessage}
+                  maxLength={300}
+                  rows={3}
+                  onChange={(e) => setSmsMessage(e.target.value)}
+                  aria-describedby="workflow-sms-message-hint"
+                  className="w-full resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                <p id="workflow-sms-message-hint" className="mt-1 text-[11px] text-muted-foreground">
+                  Sent once per call from your business number to the person on the call, signed with your business name. Transactional messages only (e.g. confirming you got their call): no promotions or marketing. Variables like {'{{business_name}}'} work.
+                </p>
               </div>
             )}
             {selectedActions.includes('add_tag') && (
@@ -604,6 +641,7 @@ export default function WorkflowsPage() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'active' | 'paused'>('all')
   const [connectedIntegrations, setConnectedIntegrations] = useState<Set<string>>(new Set())
+  const [smsUnavailable, setSmsUnavailable] = useState<string | null>('unknown')
 
   const fetchWorkflows = useCallback(async () => {
     try {
@@ -618,6 +656,22 @@ export default function WorkflowsPage() {
   }, [])
 
   useEffect(() => { fetchWorkflows() }, [fetchWorkflows])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/workflows/sms-capability')
+      .then(async (res) => {
+        const data = (await res.json().catch(() => null)) as { available?: boolean; reason?: string } | null
+        if (cancelled) return
+        setSmsUnavailable(res.ok && data?.available ? null : data?.reason ?? 'not_capable')
+      })
+      .catch(() => {
+        if (!cancelled) setSmsUnavailable('not_capable')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     const supabase = createClient()
@@ -805,7 +859,7 @@ export default function WorkflowsPage() {
         <Zap className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <p className="text-xs text-muted-foreground leading-relaxed">
           Workflows run automatically after each call. Actions execute in order, if one fails, subsequent actions are skipped and the run is marked as failed.
-          <strong> Send Webhook</strong>, <strong>Add Tag</strong>, and <strong>Wait</strong> always work. <strong>Send Email</strong>, <strong>Log to Sheets</strong>, <strong>Create Calendar Event</strong>, and <strong>Create Doc</strong> require the matching Google integration to be connected. <strong>Notify Slack</strong> needs a Slack incoming webhook URL.
+          <strong> Send Webhook</strong>, <strong>Add Tag</strong>, and <strong>Wait</strong> always work. <strong>Send Email</strong>, <strong>Log to Sheets</strong>, <strong>Create Calendar Event</strong>, and <strong>Create Doc</strong> require the matching Google integration to be connected. <strong>Notify Slack</strong> needs a Slack incoming webhook URL. <strong>Text the Caller</strong> is offered when one of your business numbers can send texts.
         </p>
       </div>
 
@@ -814,6 +868,7 @@ export default function WorkflowsPage() {
         onClose={() => setCreateOpen(false)}
         onCreate={handleCreate}
         connectedIntegrations={connectedIntegrations}
+        smsUnavailable={smsUnavailable}
       />
     </div>
   )

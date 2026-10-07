@@ -1,7 +1,7 @@
 /* In-memory Supabase query-builder fake with real filtering, for tests that
  * exercise several tables (knowledge pipeline, crawls, maintenance). Supports
  * the subset of PostgREST the code under test uses: select/insert/update/
- * upsert/delete, eq/neq/in/is/not(is null)/lt/gt/lte/gte, contains (array
+ * upsert/delete, eq/neq/in/is/not(is null)/lt/gt/lte/gte, like (% only), contains (array
  * columns), or (ignored: every row matches), order (by one column), limit,
  * range, single/maybeSingle, head counts. */
 
@@ -54,6 +54,12 @@ export function memoryDb(initial: Record<string, Row[]> = {}, opts: MemoryDbOpti
     gt(c: string, v: unknown) { this.filters.push((r) => r[c] !== null && r[c] !== undefined && String(r[c]) > String(v)); return this }
     gte(c: string, v: unknown) { this.filters.push((r) => r[c] !== null && r[c] !== undefined && String(r[c]) >= String(v)); return this }
     or() { return this }
+    /** SQL LIKE with % wildcards only (no _ or escapes). */
+    like(c: string, pattern: string) {
+      const re = new RegExp(`^${pattern.split('%').map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`)
+      this.filters.push((r) => typeof r[c] === 'string' && re.test(r[c] as string))
+      return this
+    }
     /** Array column contains every given value. */
     contains(c: string, v: unknown[]) { this.filters.push((r) => Array.isArray(r[c]) && v.every((x) => (r[c] as unknown[]).includes(x))); return this }
     order(col: string, o: { ascending?: boolean } = {}) { this.orderBy = { col, asc: o.ascending !== false }; return this }

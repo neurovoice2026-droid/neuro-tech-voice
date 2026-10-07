@@ -11,9 +11,15 @@
 // lib/elevenlabs/agent-config.ts (adapters.ts obtains it with ensurePlatformTool).
 
 import { TRANSFER_BEHAVIOUR } from './behaviour'
+import { BOOK_APPOINTMENT_TOOL, CHECK_AVAILABILITY_TOOL, TAKE_MESSAGE_TOOL } from './business'
 import type { WebhookToolDefinition } from './types'
 
-export type PlatformToolKey = 'elevenlabs.transfer_tool'
+export type PlatformToolKey =
+  | 'elevenlabs.transfer_tool'
+  // In-call business tools (slice B2, ./business.ts).
+  | 'elevenlabs.tool.check_availability'
+  | 'elevenlabs.tool.book_appointment'
+  | 'elevenlabs.tool.take_message'
 
 /** Human transfer for app-routed calls (ElevenLabs cannot transfer a call it does not control). */
 export const TRANSFER_TOOL: WebhookToolDefinition = {
@@ -40,6 +46,13 @@ export const TRANSFER_TOOL: WebhookToolDefinition = {
 
 export const PLATFORM_WEBHOOK_TOOLS: Record<PlatformToolKey, WebhookToolDefinition> = {
   'elevenlabs.transfer_tool': TRANSFER_TOOL,
+  'elevenlabs.tool.check_availability': CHECK_AVAILABILITY_TOOL,
+  'elevenlabs.tool.book_appointment': BOOK_APPOINTMENT_TOOL,
+  'elevenlabs.tool.take_message': TAKE_MESSAGE_TOOL,
 }
 
 export const PLATFORM_TOOL_KEYS = Object.keys(PLATFORM_WEBHOOK_TOOLS) as PlatformToolKey[]
+
+export function isPlatformToolKey(key: string): key is PlatformToolKey {
+  return Object.hasOwn(PLATFORM_WEBHOOK_TOOLS, key)
+}

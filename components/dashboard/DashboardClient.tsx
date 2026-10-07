@@ -7,6 +7,7 @@ import { CallsChart } from './CallsChart'
 import { RecentCallsTable } from './RecentCallsTable'
 import { AgentStatusCard } from './AgentStatusCard'
 import { CallInsightsCard } from './CallInsightsCard'
+import { MessagesToFollowUpCard } from './MessagesToFollowUpCard'
 import { QuickActions } from './QuickActions'
 import { IntegrationsStatus } from './IntegrationsStatus'
 import { RealtimeActivityFeed } from './RealtimeActivityFeed'
@@ -58,6 +59,7 @@ export function DashboardClient({ org, agent, integrations, phoneNumber }: Dashb
           {/* Right column — cards */}
           <div className="space-y-6">
             <AgentStatusCard agent={currentAgent} />
+            <MessagesToFollowUpCard />
             <CallInsightsCard metrics={metricsLoading ? null : metrics} />
             <QuickActions
               onTestCall={() => setTestCallOpen(true)}
