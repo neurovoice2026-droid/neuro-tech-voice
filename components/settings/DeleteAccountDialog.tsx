@@ -68,11 +68,9 @@ export function DeleteAccountDialog({ open, onOpenChange, businessName }: Delete
           body: JSON.stringify({ confirm: typed }),
         })
         if (res.status === 202) {
-          toast.success('Your account is being deleted', {
-            description: 'We will email you when everything is gone. You have been signed out.',
-            duration: 10_000,
-          })
-          window.location.assign('/login')
+          // A toast would not survive the full-page redirect: the login page
+          // explains it (?account_deleted=1).
+          window.location.assign('/login?account_deleted=1')
           return
         }
         const { message, reason } = await readError(res)

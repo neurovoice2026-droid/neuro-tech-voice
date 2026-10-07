@@ -278,6 +278,14 @@ export function VoiceDesignDialog({ open, onOpenChange, language, onSaved }: Voi
                 id={ids.name}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                // The surrounding form designs voices: Enter here must save the
+                // chosen version, never regenerate (and lose) the previews.
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' || e.nativeEvent.isComposing) return
+                  e.preventDefault()
+                  void save()
+                }}
+                enterKeyHint="done"
                 maxLength={NAME_MAX}
                 placeholder="e.g. Front desk – warm"
                 autoComplete="off"

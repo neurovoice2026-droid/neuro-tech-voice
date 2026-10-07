@@ -33,13 +33,16 @@ const COLUMNS: Array<{ id: string; label: string; required: boolean; warning?: s
   { id: 'routing_reason',   label: 'Routing (answered by AI, backup agent, after hours…)', required: false },
   { id: 'failover_reason',  label: 'Failover reason', required: false },
   { id: 'outcome',          label: 'Outcome',        required: false },
+  { id: 'call_successful',  label: 'AI outcome (the AI’s verdict: successful or not)', required: false },
   { id: 'summary_title',    label: 'Summary title',  required: false },
   { id: 'summary',          label: 'AI summary',     required: false },
   { id: 'transcript',       label: 'Transcript',     required: false, warning: 'Makes file larger' },
   { id: 'agent_name',       label: 'Agent name',     required: false },
 ]
 
-const DEFAULT_COLUMNS = ['sentiment', 'created_at', 'provider', 'routing_reason', 'outcome']
+// The AI outcome (the AI's verdict on the call's goal) replaces sentiment by
+// default; sentiment stays selectable.
+const DEFAULT_COLUMNS = ['call_successful', 'created_at', 'provider', 'routing_reason', 'outcome']
 
 export function ExportDialog({ open, onOpenChange, filters, total, selectedIds }: ExportDialogProps) {
   const [format, setFormat] = useState<'csv' | 'json'>('csv')

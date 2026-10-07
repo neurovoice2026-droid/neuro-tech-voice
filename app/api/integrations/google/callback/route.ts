@@ -3,13 +3,18 @@ import { createClient } from '@/lib/supabase/server'
 import { getGoogleOAuthClient } from '@/lib/google/client'
 import { createLogger } from '@/lib/observability/logger'
 import { scheduleCalendarResync } from '@/lib/voice-tools/calendar-resync'
+import { parseOAuthStateCookie, withQuery } from '@/lib/google/oauth-return'
 
 // Google OAuth redirect target — exchanges the code and stores the refresh token.
+// Returns to the allow-listed page the connect route stored in the state
+// cookie (default /integrations), with ?connected= or ?error=.
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams
+  const { nonce: cookieNonce, returnPath } = parseOAuthStateCookie(request.cookies.get('g_oauth_state')?.value)
+  const back = (query: Record<string, string>) => NextResponse.redirect(new URL(withQuery(returnPath, query), request.url))
 
   if (params.get('error')) {
-    return NextResponse.redirect(new URL('/integrations?error=oauth_denied', request.url))
+    return back({ error: 'oauth_denied' })
   }
 
   const code = params.get('code')
@@ -17,9 +22,8 @@ export async function GET(request: NextRequest) {
   const [type, nonce] = state.split('.')
 
   // Verify CSRF nonce against the cookie set at connect time.
-  const cookieNonce = request.cookies.get('g_oauth_state')?.value
   if (!code || !type || !nonce || !cookieNonce || nonce !== cookieNonce) {
-    return NextResponse.redirect(new URL('/integrations?error=invalid_state', request.url))
+    return back({ error: 'invalid_state' })
   }
 
   const supabase = await createClient()
@@ -57,13 +61,13 @@ export async function GET(request: NextRequest) {
     if (error) throw error
   } catch (err) {
     console.error('Google OAuth token exchange failed:', err)
-    return NextResponse.redirect(new URL('/integrations?error=token_exchange', request.url))
+    return back({ error: 'token_exchange' })
   }
 
   // In-call booking uses the calendar: attach the booking tools now (slice B2).
   if (type === 'google_calendar') scheduleCalendarResync(org.id as string, createLogger({ route: 'integrations.google_callback', orgId: org.id as string }))
 
-  const res = NextResponse.redirect(new URL(`/integrations?connected=${type}`, request.url))
+  const res = back({ connected: type })
   res.cookies.delete('g_oauth_state')
   return res
 }

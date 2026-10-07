@@ -18,8 +18,8 @@ import {
 } from '@/lib/api/http'
 import { createLogger, requestIdFrom, type Logger } from '@/lib/observability/logger'
 import {
-  AGENT_NAME_MAX,
   AgentLanguageSchema,
+  AgentNameSchema,
   FALLBACK_MESSAGE_MAX,
   FIRST_MESSAGE_MAX,
   PersonalitySchema,
@@ -54,7 +54,8 @@ import type { Agent } from '@/types'
 export const maxDuration = 60
 
 const PatchAgentSchema = z.strictObject({
-  name: z.string().trim().min(1).max(AGENT_NAME_MAX).optional(),
+  // Spoken in greetings and given to the prompt: no platform variables (like other tenant text).
+  name: AgentNameSchema.optional(),
   language: AgentLanguageSchema.optional(),
   system_prompt: z.string().max(SYSTEM_PROMPT_MAX).refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE).nullable().optional(),
   first_message: z.string().max(FIRST_MESSAGE_MAX).refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE).nullable().optional(),
@@ -66,7 +67,8 @@ const PatchAgentSchema = z.strictObject({
   after_hours: AfterHoursSchema.optional(),
   transfer_settings: TransferSettingsSchema.optional(),
   analysis_settings: AnalysisSettingsSchema.optional(),
-  privacy_settings: PrivacySettingsSchema.optional(),
+  // retention_days may be omitted: merged with the stored value (mergePrivacySettings).
+  privacy_settings: PrivacySettingsSchema.partial({ retention_days: true }).optional(),
   voice_settings: VoiceTuningSchema.optional(),
   dynamic_variables: DynamicVariablesSchema.optional(),
   // Cartesia voice for the fallback agent; null = automatic per language.
@@ -116,6 +118,21 @@ function stableJson(value: unknown): string {
       ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
       : v,
   )
+}
+
+/**
+ * The privacy_settings to store. An explicitly saved retention_days purges our
+ * own copies of call content (call_retention), so it must stay a deliberate
+ * choice: when the patch omits it, an earlier explicit value is kept and a
+ * never-saved one stays absent (the 365-day default then applies at the
+ * provider only).
+ */
+function mergePrivacySettings(stored: unknown, patch: { record_audio: boolean; retention_days?: number }): Record<string, unknown> {
+  const merged: Record<string, unknown> = { record_audio: patch.record_audio }
+  const previous = stored && typeof stored === 'object' && !Array.isArray(stored) ? (stored as Record<string, unknown>).retention_days : undefined
+  if (patch.retention_days !== undefined) merged.retention_days = patch.retention_days
+  else if (typeof previous === 'number') merged.retention_days = previous
+  return merged
 }
 
 function primaryProviderOf(agent: Agent): VoiceProvider {
@@ -181,6 +198,7 @@ export async function PATCH(request: Request) {
       agentPatch[key] = TEXT_FIELDS.has(key) ? blankToNull(value as string | null) : value
     }
     if (body.metadata) agentPatch.metadata = mergeMetadata(agent.metadata, { personality: body.metadata.personality })
+    if (body.privacy_settings) agentPatch.privacy_settings = mergePrivacySettings(agent.privacy_settings, body.privacy_settings)
 
     const changed = (key: string) => key in agentPatch && stableJson(agentPatch[key]) !== stableJson(current[key])
     const providerFieldsChanged = PROVIDER_FIELDS.filter((k) => changed(k))

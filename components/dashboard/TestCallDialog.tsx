@@ -1,7 +1,7 @@
 'use client'
 
 import { Phone, Copy, CheckCheck, Loader2, PhoneIncoming } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import {
@@ -14,6 +14,15 @@ import { Separator } from '@/components/ui/separator'
 import { errorMessage, parseApiError } from '@/hooks/useVoiceCatalog'
 import { normalizeE164 } from '@/lib/phone/e164'
 import { formatPhoneNumber } from '@/lib/utils'
+
+/** 202 body of POST /api/agent/test-call. */
+interface TestCallResponse {
+  status?: string
+  message?: string
+}
+
+/** After an unconfirmed request the call may still ring: block "Call me" this long (no double calls). */
+const UNCONFIRMED_COOLDOWN_SECONDS = 60
 
 interface TestCallDialogProps {
   open: boolean
@@ -28,6 +37,15 @@ export function TestCallDialog({ open, onOpenChange, phoneNumber, agentName }: T
   const [inputError, setInputError] = useState<string | null>(null)
   const [calling, setCalling] = useState(false)
   const [calledNumber, setCalledNumber] = useState<string | null>(null)
+  const [unconfirmedNote, setUnconfirmedNote] = useState<string | null>(null)
+  const [cooldownLeft, setCooldownLeft] = useState(0)
+
+  // Counts down the wait after an unconfirmed call request (kept while the dialog is closed).
+  useEffect(() => {
+    if (cooldownLeft <= 0) return
+    const id = setTimeout(() => setCooldownLeft((s) => Math.max(0, s - 1)), 1000)
+    return () => clearTimeout(id)
+  }, [cooldownLeft])
 
   function copy() {
     if (!phoneNumber) return
@@ -42,13 +60,15 @@ export function TestCallDialog({ open, onOpenChange, phoneNumber, agentName }: T
 
   async function callMe(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (calling) return
+    if (calling || cooldownLeft > 0) return
     const normalized = normalizeE164(toNumber)
     if (!normalized) {
       setInputError('Enter your number in international format, e.g. +40712345678.')
       return
     }
     setInputError(null)
+    setUnconfirmedNote(null)
+    setCalledNumber(null)
     setCalling(true)
     try {
       const res = await fetch('/api/agent/test-call', {
@@ -72,6 +92,17 @@ export function TestCallDialog({ open, onOpenChange, phoneNumber, agentName }: T
         }
         return
       }
+      const data = (await res.json().catch(() => null)) as TestCallResponse | null
+      if (data?.status === 'unconfirmed') {
+        // The provider did not confirm the call: it may still ring. Retrying now could call twice.
+        const message =
+          data.message ||
+          'The call request was sent but not confirmed yet. If your phone does not ring within a minute, check the Calls page before trying again.'
+        setUnconfirmedNote(message)
+        setCooldownLeft(UNCONFIRMED_COOLDOWN_SECONDS)
+        toast.warning('Call not confirmed yet', { description: message })
+        return
+      }
       setCalledNumber(normalized)
       toast.success(`Calling ${formatPhoneNumber(normalized)} now`, { description: `Answer to talk to ${agentName}.` })
     } catch (err) {
@@ -85,7 +116,10 @@ export function TestCallDialog({ open, onOpenChange, phoneNumber, agentName }: T
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) setCalledNumber(null)
+        if (!next) {
+          setCalledNumber(null)
+          setUnconfirmedNote(null)
+        }
         onOpenChange(next)
       }}
     >
@@ -170,7 +204,12 @@ export function TestCallDialog({ open, onOpenChange, phoneNumber, agentName }: T
                 aria-invalid={inputError ? true : undefined}
                 aria-describedby={inputError ? 'test-call-error' : 'test-call-hint'}
               />
-              <Button type="submit" disabled={!phoneNumber || calling || !toNumber.trim()} className="shrink-0 gap-1.5">
+              <Button
+                type="submit"
+                disabled={!phoneNumber || calling || cooldownLeft > 0 || !toNumber.trim()}
+                aria-describedby={cooldownLeft > 0 ? 'test-call-cooldown' : undefined}
+                className="shrink-0 gap-1.5"
+              >
                 {calling ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <PhoneIncoming className="h-4 w-4" aria-hidden="true" />}
                 {calling ? 'Calling…' : 'Call me'}
               </Button>
@@ -181,6 +220,16 @@ export function TestCallDialog({ open, onOpenChange, phoneNumber, agentName }: T
             {calledNumber && !inputError && (
               <p role="status" className="text-xs text-green-700">
                 Calling {formatPhoneNumber(calledNumber)}. Answer to talk to {agentName}.
+              </p>
+            )}
+            {unconfirmedNote && !inputError && (
+              <p role="status" className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+                {unconfirmedNote}
+              </p>
+            )}
+            {cooldownLeft > 0 && (
+              <p id="test-call-cooldown" className="text-xs text-muted-foreground">
+                To avoid calling you twice, you can request another call in {cooldownLeft} s.
               </p>
             )}
             {!phoneNumber && (

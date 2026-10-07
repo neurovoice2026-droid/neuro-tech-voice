@@ -61,6 +61,9 @@ export function TestAgentPanel({ agentName, refreshKey, variant = 'card', classN
   const [loadError, setLoadError] = useState<string | null>(null)
   const [mode, setMode] = useState<WebTestMode>('voice')
   const [inSession, setInSession] = useState(false)
+  // A test was started from this panel: its view (transcript, "ended") stays
+  // on screen even when it was the last free test.
+  const [hadSession, setHadSession] = useState(false)
   const [reloadCount, setReloadCount] = useState(0)
 
   useEffect(() => {
@@ -80,7 +83,10 @@ export function TestAgentPanel({ agentName, refreshKey, variant = 'card', classN
     return () => controller.abort()
   }, [refreshKey, reloadCount])
 
-  const onStart = useCallback(() => setInSession(true), [])
+  const onStart = useCallback(() => {
+    setInSession(true)
+    setHadSession(true)
+  }, [])
   const onGranted = useCallback((grant: WebTestSessionGrant) => {
     setAvailability((prev) => (prev ? { ...prev, sessions_left: grant.sessions_left, privacy: grant.privacy } : prev))
   }, [])
@@ -112,7 +118,8 @@ export function TestAgentPanel({ agentName, refreshKey, variant = 'card', classN
           <div className="flex flex-wrap items-center gap-2">
             <div role="group" aria-label="Test mode" className="inline-flex rounded-lg border p-0.5">
               {(['voice', 'text'] as const).map((m) => {
-                const disabled = inSession || (m === 'text' && !textAvailable)
+                // Out of tests: switching would replace the finished test's transcript with an empty view.
+                const disabled = inSession || outOfTests || (m === 'text' && !textAvailable)
                 return (
                   <button
                     key={m}
@@ -154,10 +161,22 @@ export function TestAgentPanel({ agentName, refreshKey, variant = 'card', classN
               </>
             )}
           </p>
-          {outOfTests ? (
-            <p className="text-sm text-muted-foreground">You have used all free browser tests of your trial. Choose a plan to keep testing.</p>
-          ) : (
-            <WebTestSession key={activeMode} mode={activeMode} agentName={agentName} onStart={onStart} onGranted={onGranted} onFinished={onFinished} />
+          {(!outOfTests || hadSession) && (
+            <WebTestSession
+              key={activeMode}
+              mode={activeMode}
+              agentName={agentName}
+              startBlocked={outOfTests}
+              onStart={onStart}
+              onGranted={onGranted}
+              onFinished={onFinished}
+            />
+          )}
+          {outOfTests && (
+            <p role="status" className="text-sm text-muted-foreground">
+              {hadSession ? 'That was your last free browser test. ' : 'You have used all free browser tests of your trial. '}
+              Choose a plan to keep testing.
+            </p>
           )}
           <PrivacyNote privacy={availability.privacy} mode={activeMode} />
         </>

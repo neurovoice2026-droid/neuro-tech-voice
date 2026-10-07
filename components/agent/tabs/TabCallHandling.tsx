@@ -14,7 +14,7 @@ import {
 import { Info, Loader2, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { FieldError, SaveBar, SettingSwitch } from './TabConversation'
-import { readAgentSettings, type AgentHook } from '@/hooks/useAgent'
+import { readAgentSettings, type AgentHook, type AgentPatch } from '@/hooks/useAgent'
 import {
   AnalysisSettingsSchema,
   ConversationSettingsSchema,
@@ -26,7 +26,6 @@ import {
   DEFAULT_ANALYSIS_SETTINGS,
   type AnalysisSettings,
   type DataCollectionField,
-  type PrivacySettings,
   type TransferSettings,
 } from '@/lib/voice-providers/types'
 import { normalizeE164 } from '@/lib/phone/e164'
@@ -44,6 +43,7 @@ interface TabCallHandlingProps {
 }
 
 type Update = AgentHook['updateWithToast']
+type AgentPrivacyPatch = NonNullable<AgentPatch['privacy_settings']>
 
 /** Runs one card's save and tracks its own spinner (the hook's isSaving is page-wide). */
 function useCardSave(onUpdate: Update) {
@@ -726,6 +726,31 @@ interface PrivacyDraft {
   recording_notice: boolean
 }
 
+/** The owner saved a retention period before (privacy_settings.retention_days stored). */
+function hasSavedRetention(raw: unknown): boolean {
+  return !!raw && typeof raw === 'object' && !Array.isArray(raw) && typeof (raw as { retention_days?: unknown }).retention_days === 'number'
+}
+
+type PrivacyChoice = Pick<PrivacyDraft, 'record_audio' | 'retention_days'>
+
+/**
+ * privacy_settings for PATCH /api/agent, or null when neither recording nor
+ * retention changed. A saved retention period also deletes the call history
+ * here, so retention_days is only sent when the owner chose one (now or in an
+ * earlier save): saving the recording switch alone must not turn the
+ * displayed default into a saved period.
+ */
+export function privacySettingsPatch(storedRaw: unknown, saved: PrivacyChoice, draft: PrivacyChoice): AgentPrivacyPatch | null {
+  const retentionChanged = draft.retention_days !== saved.retention_days
+  if (draft.record_audio === saved.record_audio && !retentionChanged) return null
+  return {
+    record_audio: draft.record_audio,
+    ...(retentionChanged || hasSavedRetention(storedRaw) ? { retention_days: draft.retention_days } : {}),
+  }
+}
+
+const PrivacyPatchSchema = PrivacySettingsSchema.partial({ retention_days: true })
+
 function PrivacyCard({ agent, onUpdate, isSaving }: Omit<TabCallHandlingProps, 'status'>) {
   const saved = useMemo<PrivacyDraft>(() => {
     const s = readAgentSettings(agent)
@@ -747,17 +772,17 @@ function PrivacyCard({ agent, onUpdate, isSaving }: Omit<TabCallHandlingProps, '
     : [...RETENTION_OPTIONS, { value: draft.retention_days, label: retentionLabel(draft.retention_days) }]
 
   const save = async () => {
-    const privacy: PrivacySettings = { record_audio: draft.record_audio, retention_days: draft.retention_days }
+    const privacy = privacySettingsPatch(agent.privacy_settings, saved, draft)
     // conversation_settings is sent whole: keep everything the Conversation tab owns as saved.
     const conversation = { ...readAgentSettings(agent).conversation, recording_notice: draft.recording_notice, ai_disclosure: true as const }
-    const p = PrivacySettingsSchema.safeParse(privacy)
+    const p = privacy ? PrivacyPatchSchema.safeParse(privacy) : null
     const c = ConversationSettingsSchema.safeParse(conversation)
-    if (!p.success || !c.success) {
+    if ((p && !p.success) || !c.success) {
       // Only reachable with corrupted stored settings (the server would reject them too).
       toast.error('These settings could not be saved', { description: 'Reload the page and try again.' })
       return
     }
-    const next = await run({ privacy_settings: p.data, conversation_settings: c.data }, 'Privacy settings saved')
+    const next = await run({ ...(p?.success ? { privacy_settings: p.data } : {}), conversation_settings: c.data }, 'Privacy settings saved')
     if (next) {
       const s = readAgentSettings(next)
       setDraft({ ...s.privacy, recording_notice: s.conversation.recording_notice })

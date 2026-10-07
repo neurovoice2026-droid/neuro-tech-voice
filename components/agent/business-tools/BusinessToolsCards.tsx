@@ -6,7 +6,7 @@
 // columns are platform-managed), which also pushes the agent config.
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CalendarCheck, ExternalLink, Info, Loader2, Mail, Plus, Trash2 } from 'lucide-react'
+import { AlertCircle, CalendarCheck, ExternalLink, Info, Loader2, Mail, Plus, RotateCw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { FieldError, SaveBar, SettingSwitch, parseInteger } from '@/components/agent/tabs/TabConversation'
+import { errorMessage, isAbortError, parseApiError } from '@/hooks/useVoiceCatalog'
 import { BookingSettingsSchema, MAX_EXTRA_MESSAGE_RECIPIENTS, MessageSettingsSchema } from '@/lib/voice-providers/settings'
 import { DEFAULT_BOOKING_SETTINGS, DEFAULT_MESSAGE_SETTINGS, type BookingSettings, type MessageSettings } from '@/lib/voice-providers/types'
 
@@ -30,6 +31,17 @@ interface SyncReport {
   provider: string
   status: string
   error: string | null
+}
+
+/** Where Google sends the owner back after connecting (allow-listed by the OAuth routes). */
+const CONNECT_RETURN_PATH = '/agent?tab=call-handling'
+
+/** The connect URL from the API, with the return path to this tab. */
+function connectUrlWithReturn(connectUrl: string): string {
+  const [path, query = ''] = connectUrl.split('?')
+  const params = new URLSearchParams(query)
+  params.set('return_to', CONNECT_RETURN_PATH)
+  return `${path}?${params.toString()}`
 }
 
 const DURATIONS = [15, 20, 30, 45, 60, 90, 120]
@@ -69,18 +81,19 @@ function toastSaved(label: string, sync: SyncReport[]) {
 
 export function BusinessToolsSection() {
   const [state, setState] = useState<BusinessToolsState | null>(null)
-  const [failed, setFailed] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [retrying, setRetrying] = useState(false)
 
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
-      const res = await fetch('/api/agent/business-tools', { signal })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const res = await fetch('/api/agent/business-tools', { signal, headers: { Accept: 'application/json' } })
+      if (!res.ok) throw await parseApiError(res, 'These settings could not be loaded. Please try again.')
       setState((await res.json()) as BusinessToolsState)
-      setFailed(false)
+      setLoadError(null)
     } catch (err) {
-      if (signal?.aborted) return
+      if (signal?.aborted || isAbortError(err)) return
       console.warn('Business tool settings could not be loaded', err)
-      setFailed(true)
+      setLoadError(errorMessage(err, 'These settings could not be loaded. Please try again.'))
     }
   }, [])
 
@@ -90,13 +103,31 @@ export function BusinessToolsSection() {
     return () => ctrl.abort()
   }, [load])
 
+  const retry = async () => {
+    setRetrying(true)
+    await load()
+    setRetrying(false)
+  }
+
   if (!state) {
     return (
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Appointments and messages</CardTitle>
-          <CardDescription>{failed ? 'These settings could not be loaded. Reload the page to try again.' : 'Loading…'}</CardDescription>
+          <CardDescription>{loadError ? 'These settings could not be loaded.' : 'Loading…'}</CardDescription>
         </CardHeader>
+        {loadError && (
+          <CardContent>
+            <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-destructive">
+              <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+              {loadError}
+              <Button variant="outline" size="sm" onClick={() => void retry()} disabled={retrying} className="gap-1.5">
+                {retrying ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RotateCw aria-hidden="true" />}
+                Retry
+              </Button>
+            </div>
+          </CardContent>
+        )}
       </Card>
     )
   }
@@ -144,25 +175,43 @@ function AppointmentsCard({ state, onSaved }: { state: BusinessToolsState; onSav
   const [draft, setDraft] = useState(saved)
   const [saving, setSaving] = useState(false)
   const [showErrors, setShowErrors] = useState(false)
-  const [calendars, setCalendars] = useState<CalendarOption[] | null>(null)
+  // Result of the calendar list request number `key` (Retry starts a new one).
+  const [calendarRequest, setCalendarRequest] = useState(0)
+  const [calendarResult, setCalendarResult] = useState<{ key: number; calendars: CalendarOption[] | null; error: string | null }>({
+    key: -1,
+    calendars: null,
+    error: null,
+  })
   const cal = state.calendar
 
   useEffect(() => {
     if (!cal.connected) return
     const ctrl = new AbortController()
-    fetch('/api/agent/business-tools/calendars', { signal: ctrl.signal })
-      .then(async (res) => (res.ok ? ((await res.json()) as { calendars: CalendarOption[] }) : null))
-      .then((data) => {
-        if (!ctrl.signal.aborted) setCalendars(data?.calendars ?? [])
-      })
-      .catch((err: unknown) => {
-        if (!ctrl.signal.aborted) {
-          console.warn('Calendars could not be loaded', err)
-          setCalendars([])
-        }
-      })
+    const key = calendarRequest
+    const fallback = 'Your calendars could not be loaded. Please try again.'
+    void (async () => {
+      try {
+        const res = await fetch('/api/agent/business-tools/calendars', { signal: ctrl.signal, headers: { Accept: 'application/json' } })
+        if (!res.ok) throw await parseApiError(res, fallback)
+        const data = (await res.json()) as { needs_reconnect?: boolean; calendars?: CalendarOption[] }
+        if (ctrl.signal.aborted) return
+        setCalendarResult(
+          data.needs_reconnect
+            ? { key, calendars: null, error: 'Google refused access to your calendars. Reconnect Google Calendar, then try again.' }
+            : { key, calendars: Array.isArray(data.calendars) ? data.calendars : [], error: null },
+        )
+      } catch (err) {
+        if (ctrl.signal.aborted || isAbortError(err)) return
+        console.warn('Calendars could not be loaded', err)
+        setCalendarResult({ key, calendars: null, error: errorMessage(err, fallback) })
+      }
+    })()
     return () => ctrl.abort()
-  }, [cal.connected])
+  }, [cal.connected, calendarRequest])
+
+  const calendarsLoading = cal.connected && calendarResult.key !== calendarRequest
+  const calendars = calendarsLoading ? null : calendarResult.calendars
+  const calendarsError = cal.connected && !calendarsLoading ? calendarResult.error : null
 
   const candidate = {
     enabled: draft.enabled,
@@ -197,8 +246,12 @@ function AppointmentsCard({ state, onSaved }: { state: BusinessToolsState; onSav
     toastSaved('Appointment settings', res.sync)
   }
 
+  // Without a loaded list (not connected, loading, failed) only the saved choice is shown, and the select is disabled.
   const calendarOptions: CalendarOption[] = calendars && calendars.length > 0 ? calendars : [{ id: 'primary', name: 'Main calendar', primary: true, can_book: true }]
-  const calendarLabel = (id: string) => (id === 'primary' ? calendarOptions.find((c) => c.primary)?.name ?? 'Main calendar' : calendarOptions.find((c) => c.id === id)?.name ?? id)
+  const calendarLabel = (id: string) =>
+    id === 'primary'
+      ? (calendarOptions.find((c) => c.primary)?.name ?? 'Main calendar')
+      : (calendarOptions.find((c) => c.id === id)?.name ?? (calendars ? id : 'Your saved calendar'))
 
   return (
     <Card>
@@ -235,7 +288,7 @@ function AppointmentsCard({ state, onSaved }: { state: BusinessToolsState; onSav
                   : 'Connect Google Calendar so the agent can see your free times. Until then it takes a message with the caller’s preferred times.'}
             </p>
             {cal.configured && (
-              <Button size="sm" variant="outline" render={<a href={cal.connect_url} />} nativeButton={false}>
+              <Button size="sm" variant="outline" render={<a href={connectUrlWithReturn(cal.connect_url)} />} nativeButton={false}>
                 <ExternalLink aria-hidden="true" />
                 {cal.needs_reconnect ? 'Reconnect Google Calendar' : 'Connect Google Calendar'}
               </Button>
@@ -246,8 +299,16 @@ function AppointmentsCard({ state, onSaved }: { state: BusinessToolsState; onSav
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="booking-calendar">Calendar</Label>
-            <Select value={draft.calendar_id} onValueChange={(v) => v !== null && setDraft((d) => ({ ...d, calendar_id: v }))} disabled={!cal.connected}>
-              <SelectTrigger id="booking-calendar" className="w-full">
+            <Select
+              value={draft.calendar_id}
+              onValueChange={(v) => v !== null && setDraft((d) => ({ ...d, calendar_id: v }))}
+              disabled={!cal.connected || calendarsLoading || !!calendarsError}
+            >
+              <SelectTrigger
+                id="booking-calendar"
+                className="w-full"
+                aria-describedby={calendarsError ? 'booking-calendar-error' : 'booking-calendar-hint'}
+              >
                 <SelectValue>{(v: string) => calendarLabel(v)}</SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -259,7 +320,19 @@ function AppointmentsCard({ state, onSaved }: { state: BusinessToolsState; onSav
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">Busy times are read from this calendar and bookings are added to it.</p>
+            {calendarsError ? (
+              <div id="booking-calendar-error" role="alert" className="flex flex-wrap items-center gap-2 text-xs text-destructive">
+                <span>{calendarsError}</span>
+                <Button type="button" size="xs" variant="outline" onClick={() => setCalendarRequest((n) => n + 1)} className="gap-1">
+                  <RotateCw aria-hidden="true" /> Retry
+                </Button>
+              </div>
+            ) : (
+              <p id="booking-calendar-hint" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                {calendarsLoading && <Loader2 className="size-3 animate-spin" aria-hidden="true" />}
+                {calendarsLoading ? 'Loading your calendars…' : 'Busy times are read from this calendar and bookings are added to it.'}
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="booking-duration">Appointment length</Label>

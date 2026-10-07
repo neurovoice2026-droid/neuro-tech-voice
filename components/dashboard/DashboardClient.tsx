@@ -26,7 +26,7 @@ interface DashboardClientProps {
 }
 
 export function DashboardClient({ org, agent, integrations, phoneNumber }: DashboardClientProps) {
-  const { metrics, isLoading: metricsLoading } = useDashboardMetrics()
+  const { metrics, isLoading: metricsLoading, error: metricsError, refetch: refetchMetrics } = useDashboardMetrics()
   const { calls, isLoading: callsLoading } = useRecentCalls(org.id)
 
   const [testCallOpen, setTestCallOpen] = useState(false)
@@ -60,7 +60,7 @@ export function DashboardClient({ org, agent, integrations, phoneNumber }: Dashb
           <div className="space-y-6">
             <AgentStatusCard agent={currentAgent} />
             <MessagesToFollowUpCard />
-            <CallInsightsCard metrics={metricsLoading ? null : metrics} />
+            <CallInsightsCard metrics={metrics} loading={metricsLoading} error={metricsError} onRetry={refetchMetrics} />
             <QuickActions
               onTestCall={() => setTestCallOpen(true)}
               onKnowledgeUpload={() => setKnowledgeOpen(true)}

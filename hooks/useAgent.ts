@@ -42,7 +42,8 @@ export interface AgentPatch {
   after_hours?: AfterHoursConfig
   transfer_settings?: TransferSettings
   analysis_settings?: AnalysisSettings
-  privacy_settings?: PrivacySettings
+  /** retention_days omitted: the stored value is kept (absent when never saved, see PATCH /api/agent). */
+  privacy_settings?: Pick<PrivacySettings, 'record_audio'> & Partial<Pick<PrivacySettings, 'retention_days'>>
   voice_settings?: VoiceTuning
   dynamic_variables?: Record<string, string>
   fallback_voice_id?: string | null

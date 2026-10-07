@@ -83,16 +83,21 @@ describe('lifecycleFor', () => {
 })
 
 describe('elevenLabsLifecycle.update: LLM reasoning effort', () => {
-  it('sends the reasoning effort resolved from the LLM catalogue, and nothing when there is none', async () => {
+  it('sends the reasoning effort resolved from the LLM catalogue, clears it for a model without levels, and sends nothing when the catalogue is unknown', async () => {
     vi.mocked(el.agents.update).mockResolvedValue({ agent_id: 'agent_1', name: 'x', conversation_config: {} })
+    type Sent = { conversation_config: { agent: { prompt: Record<string, unknown> } } }
     vi.mocked(effectiveAgentLlm).mockResolvedValueOnce(selection({ reasoningEffort: 'minimal' }))
     await elevenLabsLifecycle.update('agent_1', makeAgentSpec())
-    const sent = vi.mocked(el.agents.update).mock.calls[0][1] as { conversation_config: { agent: { prompt: Record<string, unknown> } } }
-    expect(sent.conversation_config.agent.prompt.reasoning_effort).toBe('minimal')
+    expect((vi.mocked(el.agents.update).mock.calls[0][1] as Sent).conversation_config.agent.prompt.reasoning_effort).toBe('minimal')
 
+    // A model the catalogue lists without reasoning levels: null clears a level stored by an earlier model.
     await elevenLabsLifecycle.update('agent_1', makeAgentSpec())
-    const second = vi.mocked(el.agents.update).mock.calls[1][1] as { conversation_config: { agent: { prompt: Record<string, unknown> } } }
-    expect(second.conversation_config.agent.prompt).not.toHaveProperty('reasoning_effort')
+    expect((vi.mocked(el.agents.update).mock.calls[1][1] as Sent).conversation_config.agent.prompt.reasoning_effort).toBeNull()
+
+    // No catalogue entry: the field is left alone.
+    vi.mocked(effectiveAgentLlm).mockResolvedValueOnce(selection({ reasoningEffort: undefined }))
+    await elevenLabsLifecycle.update('agent_1', makeAgentSpec())
+    expect((vi.mocked(el.agents.update).mock.calls[2][1] as Sent).conversation_config.agent.prompt).not.toHaveProperty('reasoning_effort')
   })
 
   it('the config hash includes it (a newly supported level is pushed)', async () => {

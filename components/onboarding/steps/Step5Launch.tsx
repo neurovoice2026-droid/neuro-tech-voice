@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
 import { TestAgentPanel } from '@/components/agent/TestAgentPanel'
-import { startWebsiteImportInBackground } from '@/hooks/useKnowledgeWebsite'
+import { startWebsiteImportInBackground, type WebsiteImportStart } from '@/hooks/useKnowledgeWebsite'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -348,8 +348,21 @@ function TrialPlanCard({ selected, onSelect }: { selected: boolean; onSelect: ()
   )
 }
 
+// ─── Website import problem (opt-in import at launch) ────────────────────────
+function WebsiteImportNote({ message }: { message: string }) {
+  return (
+    <div role="alert" className="flex w-full max-w-lg items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left text-sm text-amber-800">
+      <Globe className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+      <p>
+        <span className="font-medium">Your website was not imported.</span> {message} You can import it again from{' '}
+        <a href="/agent?tab=knowledge" className="font-medium underline underline-offset-2">Agent → Knowledge</a>.
+      </p>
+    </div>
+  )
+}
+
 // ─── Success screen ───────────────────────────────────────────────────────────
-function SuccessScreen({ agentName }: { agentName: string }) {
+function SuccessScreen({ agentName, websiteImportError }: { agentName: string; websiteImportError: string | null }) {
   return (
     <div className="flex flex-col items-center justify-center gap-6 py-10 text-center">
       <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 shadow-xl shadow-purple-500/30">
@@ -361,6 +374,7 @@ function SuccessScreen({ agentName }: { agentName: string }) {
           {agentName ? `${agentName} is` : 'Your AI agent is'} ready to take calls.
         </p>
       </div>
+      {websiteImportError && <WebsiteImportNote message={websiteImportError} />}
       {/* Last onboarding step: the agent is synced and active, so it can be tried in the browser. */}
       <TestAgentPanel variant="onboarding" agentName={agentName} className="max-w-lg" />
       <div className="flex flex-col gap-3 w-full max-w-xs">
@@ -379,8 +393,8 @@ function SuccessScreen({ agentName }: { agentName: string }) {
 // ─── Saved, but not live yet ──────────────────────────────────────────────────
 // The server only switches the agent on when the voice provider sync is ready.
 // Nothing re-activates it later on its own, so point the user at /agent.
-function NotLiveScreen({ agentName, detail, checkoutUrl }: {
-  agentName: string; detail: string | null; checkoutUrl: string | null
+function NotLiveScreen({ agentName, detail, checkoutUrl, websiteImportError }: {
+  agentName: string; detail: string | null; checkoutUrl: string | null; websiteImportError: string | null
 }) {
   return (
     <div className="flex flex-col items-center justify-center gap-6 py-10 text-center">
@@ -398,6 +412,7 @@ function NotLiveScreen({ agentName, detail, checkoutUrl }: {
         </p>
         {detail && <p className="mt-2 text-sm text-amber-700">{detail}</p>}
       </div>
+      {websiteImportError && <WebsiteImportNote message={websiteImportError} />}
       <div className="flex flex-col gap-3 w-full max-w-xs">
         {checkoutUrl ? (
           <a
@@ -438,6 +453,9 @@ interface CompleteResponse {
   warning?: string | null
 }
 
+/** Longest wait for the website import's answer before redirecting to checkout. */
+const WEBSITE_IMPORT_WAIT_MS = 4000
+
 type LaunchOutcome =
   | { kind: 'live' }
   | { kind: 'not_live'; detail: string | null; checkoutUrl: string | null }
@@ -450,6 +468,7 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
   const [showConfetti, setShowConfetti] = useState(false)
   const [outcome, setOutcome]           = useState<LaunchOutcome | null>(null)
   const [importSite, setImportSite]     = useState(false)
+  const [websiteImportError, setWebsiteImportError] = useState<string | null>(null)
 
   const displayCompanyName = company.name || organization.name || '—'
 
@@ -489,8 +508,20 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
       }
 
       // Opt-in website import: started in the background (survives the
-      // redirect to checkout), never blocks or fails the launch.
-      if (importSite && company.website) startWebsiteImportInBackground(company.website)
+      // redirect to checkout), never fails the launch. A refusal (already
+      // running, invalid address, limits, unavailable) is shown to the owner.
+      let websiteImport: Promise<WebsiteImportStart> | null = null
+      if (importSite && company.website) {
+        websiteImport = startWebsiteImportInBackground(company.website)
+        void websiteImport.then((result) => {
+          if (result.ok) return
+          setWebsiteImportError(result.message)
+          toast.warning('Your website was not imported', {
+            description: `${result.message} You can import it again from Agent → Knowledge.`,
+            duration: 10_000,
+          })
+        })
+      }
 
       // The account is set up, but the agent only takes calls once the server
       // activated it (primary voice provider ready). Never claim "live" otherwise.
@@ -510,9 +541,15 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
       setShowConfetti(true)
 
       if (data.checkout_url) {
-        // Paid plan → Stripe checkout (confetti visible briefly before redirect)
+        // Paid plan → Stripe checkout (confetti visible briefly before redirect).
+        // Wait (briefly) for the website import's answer: a refusal stays
+        // readable for a few seconds before leaving the page.
         const checkoutUrl = data.checkout_url
-        setTimeout(() => { window.location.href = checkoutUrl }, 1500)
+        const importResult = websiteImport
+          ? await Promise.race([websiteImport, new Promise<null>((resolve) => setTimeout(() => resolve(null), WEBSITE_IMPORT_WAIT_MS))])
+          : null
+        const importFailed = !!importResult && !importResult.ok
+        setTimeout(() => { window.location.href = checkoutUrl }, importFailed ? 6000 : 1500)
       } else {
         // Free plan or Stripe not configured → show success screen
         setTimeout(() => {
@@ -532,13 +569,20 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
     return (
       <>
         <Confetti active={showConfetti} />
-        <SuccessScreen agentName={agent.name} />
+        <SuccessScreen agentName={agent.name} websiteImportError={websiteImportError} />
       </>
     )
   }
 
   if (outcome?.kind === 'not_live') {
-    return <NotLiveScreen agentName={agent.name} detail={outcome.detail} checkoutUrl={outcome.checkoutUrl} />
+    return (
+      <NotLiveScreen
+        agentName={agent.name}
+        detail={outcome.detail}
+        checkoutUrl={outcome.checkoutUrl}
+        websiteImportError={websiteImportError}
+      />
+    )
   }
 
   return (

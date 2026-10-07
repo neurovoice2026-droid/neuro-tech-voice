@@ -21,7 +21,7 @@ import {
   type useKnowledge, type KnowledgeDoc, type KnowledgeUsage, type UploadingFile,
 } from '@/hooks/useKnowledge'
 import { useKnowledgeWebsite } from '@/hooks/useKnowledgeWebsite'
-import { EditDocumentDialog } from '@/components/agent/knowledge/EditDocumentDialog'
+import { EditDocumentDialog, canEditDocumentText } from '@/components/agent/knowledge/EditDocumentDialog'
 import { KnowledgeTestCard } from '@/components/agent/knowledge/KnowledgeTestCard'
 import { RagBadge, SyncBadge, UsageModeBadge } from '@/components/agent/knowledge/KnowledgeBadges'
 import { WebsiteImportCard } from '@/components/agent/knowledge/WebsiteImportCard'
@@ -580,8 +580,8 @@ function DocRow({ doc, usage, isRetrying, isBusy, onRetry, onDelete, onEdit, onR
             onClick={onEdit}
             disabled={working}
             className={iconButton}
-            title={doc.type === 'text' ? 'Edit text' : 'Rename'}
-            aria-label={doc.type === 'text' ? `Edit ${doc.name}` : `Rename ${doc.name}`}
+            title={canEditDocumentText(doc) ? 'Edit text' : 'Rename'}
+            aria-label={canEditDocumentText(doc) ? `Edit ${doc.name}` : `Rename ${doc.name}`}
           >
             <Pencil className="size-4" />
           </button>

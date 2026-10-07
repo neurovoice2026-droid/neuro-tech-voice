@@ -51,21 +51,31 @@ async function readError(res: Response, fallback: string): Promise<string> {
   return fallback
 }
 
+export type WebsiteImportStart = { ok: true } | { ok: false; status: number | null; message: string }
+
 /**
- * Starts an import without waiting for it (used by onboarding: the request
- * survives the page navigating away). Errors are reported to the console only.
+ * Starts an import without blocking the caller (used by onboarding: the
+ * request survives the page navigating away). Resolves with the outcome, never
+ * rejects, so the caller can tell the owner when nothing was imported
+ * (409 already running/imported/limit, 400 invalid URL, 429, 503…).
  */
-export function startWebsiteImportInBackground(url: string): void {
-  fetch('/api/agent/knowledge/website', {
+export function startWebsiteImportInBackground(url: string): Promise<WebsiteImportStart> {
+  return fetch('/api/agent/knowledge/website', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url, consent: true }),
     keepalive: true,
   })
-    .then(async (res) => {
-      if (!res.ok) console.warn('[knowledge] website import not started', res.status, await readError(res, ''))
+    .then(async (res): Promise<WebsiteImportStart> => {
+      if (res.ok) return { ok: true }
+      const message = await readError(res, res.status === 503 ? 'Website imports are unavailable right now.' : 'The website could not be imported.')
+      console.warn('[knowledge] website import not started', res.status, message)
+      return { ok: false, status: res.status, message }
     })
-    .catch((err: unknown) => console.warn('[knowledge] website import request failed', err))
+    .catch((err: unknown): WebsiteImportStart => {
+      console.warn('[knowledge] website import request failed', err)
+      return { ok: false, status: null, message: 'The website import could not be started. Check your connection.' }
+    })
 }
 
 export function useKnowledgeWebsite(onChanged?: () => void) {

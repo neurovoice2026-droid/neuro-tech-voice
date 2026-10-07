@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Activity, MessageCircleQuestion, Sparkles } from 'lucide-react'
+import { Activity, AlertCircle, Loader2, MessageCircleQuestion, RotateCw, Sparkles } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { outcomeLabel } from '@/lib/calls/labels'
@@ -49,9 +50,32 @@ function useJson<T>(url: string, refreshMs?: number): T | null {
   return data
 }
 
-export function CallInsightsCard({ metrics }: { metrics: DashboardMetrics | null }) {
+/** How long the Retry button shows its spinner (the metrics hook reports no in-flight state). */
+const RETRY_FEEDBACK_MS = 1500
+
+interface CallInsightsCardProps {
+  /** Last good metrics (kept when a background refresh fails). */
+  metrics: DashboardMetrics | null
+  /** True until the first metrics response (success or failure). */
+  loading: boolean
+  /** Message of the last failed metrics request, if any. */
+  error: string | null
+  onRetry: () => void
+}
+
+export function CallInsightsCard({ metrics, loading, error, onRetry }: CallInsightsCardProps) {
   const live = useJson<LiveResponse>('/api/dashboard/live', LIVE_REFRESH_MS)
   const topics = useJson<TopicsResponse>('/api/dashboard/topics')
+  const [retrying, setRetrying] = useState(false)
+  useEffect(() => {
+    if (!retrying) return
+    const id = setTimeout(() => setRetrying(false), RETRY_FEEDBACK_MS)
+    return () => clearTimeout(id)
+  }, [retrying])
+  const retry = () => {
+    setRetrying(true)
+    onRetry()
+  }
 
   const outcomes = Object.entries(metrics?.outcome_breakdown ?? {})
     .filter(([, n]) => n > 0)
@@ -70,13 +94,40 @@ export function CallInsightsCard({ metrics }: { metrics: DashboardMetrics | null
         <CardTitle className="text-base font-semibold">Call insights</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
-        {!metrics ? (
+        {!metrics && loading ? (
           <div className="space-y-2" aria-busy="true" aria-label="Loading call insights">
             <Skeleton className="h-12 w-full" />
             <Skeleton className="h-24 w-full" />
           </div>
+        ) : !metrics ? (
+          <div role="alert" className="flex flex-col items-start gap-2 rounded-xl border border-dashed p-4">
+            <p className="flex items-start gap-2 text-sm text-foreground">
+              <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
+              <span>
+                Call insights could not be loaded.
+                {error && <span className="block text-xs text-muted-foreground">{error}</span>}
+              </span>
+            </p>
+            <Button variant="outline" size="sm" onClick={retry} disabled={retrying} className="gap-1.5">
+              {retrying ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RotateCw aria-hidden="true" />}
+              {retrying ? 'Retrying…' : 'Retry'}
+            </Button>
+          </div>
         ) : (
           <>
+            {error && (
+              <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                Could not refresh these numbers; showing the last ones loaded.
+                <button
+                  type="button"
+                  onClick={retry}
+                  disabled={retrying}
+                  className="font-medium text-primary outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
+                >
+                  {retrying ? 'Retrying…' : 'Retry'}
+                </button>
+              </p>
+            )}
             <dl className="grid grid-cols-2 gap-3">
               <div className="rounded-xl border bg-gray-50 p-3">
                 <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">

@@ -158,6 +158,11 @@ export function VoicePicker({ selectedVoiceId, onSelect, defaultLanguage, layout
     setStudioQuality(false)
   }
   const accentItems: Record<string, string> = { [ALL]: 'Any accent', ...Object.fromEntries(accentOptions.accents.map((a) => [a.value, a.label])) }
+  // Only the language narrows the list: an empty "Recommended & yours" then
+  // means no curated voice for it yet (default voices are retiring), not a
+  // filter to clear. The library has voices for every language.
+  const languageLabel = language !== ALL_LANGUAGES ? (AGENT_LANGUAGES.find((l) => l.value === language)?.label ?? null) : null
+  const onlyLanguageFilter = !!languageLabel && !search.trim() && gender === 'all'
 
   const changeSource = (value: unknown) => {
     const next: VoiceCatalogSource = value === 'library' ? 'library' : 'workspace'
@@ -361,6 +366,7 @@ export function VoicePicker({ selectedVoiceId, onSelect, defaultLanguage, layout
             preview={preview}
             previewLanguage={previewLanguage}
             hasFilters={activeFilters > 0}
+            emptyLanguage={onlyLanguageFilter ? languageLabel : null}
             onClearFilters={clearFilters}
             onBrowseLibrary={() => changeSource('library')}
           />
@@ -394,6 +400,8 @@ interface VoiceResultsProps {
   preview: AudioPreview
   previewLanguage: string | null
   hasFilters: boolean
+  /** The language label when it is the only filter (dedicated empty state for the workspace list). */
+  emptyLanguage: string | null
   onClearFilters: () => void
   onBrowseLibrary: () => void
 }
@@ -408,6 +416,7 @@ function VoiceResults({
   preview,
   previewLanguage,
   hasFilters,
+  emptyLanguage,
   onClearFilters,
   onBrowseLibrary,
 }: VoiceResultsProps) {
@@ -437,6 +446,29 @@ function VoiceResults({
         {Array.from({ length: onboarding ? 9 : 6 }).map((_, i) => (
           <Skeleton key={i} className={onboarding ? 'h-[180px] rounded-2xl' : 'h-16 rounded-xl'} />
         ))}
+      </div>
+    )
+  }
+
+  if (catalog.voices.length === 0 && source === 'workspace' && emptyLanguage) {
+    return (
+      <div role="status" className="flex flex-col items-center gap-3 rounded-2xl border border-dashed px-4 py-10 text-center">
+        <Globe className="size-8 text-muted-foreground/60" aria-hidden="true" />
+        <div className="max-w-md space-y-1">
+          <p className="text-sm font-medium">No recommended {emptyLanguage} voices yet</p>
+          <p className="text-xs text-muted-foreground">
+            We are still adding recommended voices for {emptyLanguage}. Choose one from the voice library instead: it is
+            added to your workspace when you pick it.
+          </p>
+        </div>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button size="sm" onClick={onBrowseLibrary} className="gap-1.5">
+            <Search aria-hidden="true" /> Browse {emptyLanguage} voices in the library
+          </Button>
+          <Button variant="outline" size="sm" onClick={onClearFilters}>
+            Show all languages
+          </Button>
+        </div>
       </div>
     )
   }

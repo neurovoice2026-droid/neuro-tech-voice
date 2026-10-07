@@ -211,6 +211,8 @@ describe('PATCH /api/agent', () => {
       { fallback_message: 'History: {{system__conversation_history}}' },
       { dynamic_variables: { city: '{{ntv_call_id}}' } },
       { transfer_settings: { enabled: true, number: '+40712345678', condition: 'when {{ntv_routing_mode}} is native', label: null } },
+      // The agent name is spoken in greetings: same rule.
+      { name: 'Ana {{secret__ntv_call_token}}' },
     ]) {
       const res = await patchAgent(req('/api/agent', 'PATCH', body))
       expect(res.status, JSON.stringify(body)).toBe(400)

@@ -1,6 +1,8 @@
+import { Suspense } from 'react'
 import type { Metadata } from 'next'
 import { Logo } from '@/components/shared/Logo'
 import { LoginForm } from '@/components/auth/LoginForm'
+import { AccountDeletedNotice } from './AccountDeletedNotice'
 
 export const metadata: Metadata = {
   title: 'Sign in',
@@ -21,6 +23,11 @@ export default function LoginPage() {
           Sign in to your account to continue
         </p>
       </div>
+
+      {/* After Settings → Delete account (?account_deleted=1); client-side so the page stays static. */}
+      <Suspense fallback={null}>
+        <AccountDeletedNotice />
+      </Suspense>
 
       {/* Form */}
       <LoginForm />

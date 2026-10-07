@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -42,6 +43,17 @@ const TABS = [
   { value: 'call-handling', label: 'Call handling', icon: PhoneForwarded },
 ] as const
 
+/** `?tab=` of a known tab (e.g. the Google Calendar connect flow returns to call-handling). */
+function initialTab(requested: string | null): string {
+  return TABS.some((t) => t.value === requested) ? (requested as string) : 'general'
+}
+
+const GOOGLE_OAUTH_ERRORS: Record<string, string> = {
+  oauth_denied: 'Access to Google was not granted.',
+  invalid_state: 'The connection link expired. Please connect again.',
+  token_exchange: 'Google did not complete the connection. Please try again.',
+}
+
 /** Reads the org's time zone when the server page did not provide it. */
 function useOrgTimezone(provided: string | null | undefined) {
   const [loaded, setLoaded] = useState<string | null>(null)
@@ -73,7 +85,24 @@ function useOrgTimezone(provided: string | null | undefined) {
 }
 
 export function AgentPageClient({ initialAgent, phoneNumbers, orgTimezone }: AgentPageClientProps) {
-  const [activeTab, setActiveTab] = useState<string>('general')
+  const searchParams = useSearchParams()
+  const [activeTab, setActiveTab] = useState<string>(() => initialTab(searchParams.get('tab')))
+
+  // Back from the Google OAuth flow (?connected= / ?error=): say how it went once, then clean the URL.
+  useEffect(() => {
+    const connected = searchParams.get('connected')
+    const error = searchParams.get('error')
+    if (!connected && !error) return
+    if (connected === 'google_calendar') {
+      toast.success('Google Calendar connected', { id: 'google-oauth-result', description: 'Your agent can now check your free times and book appointments.' })
+    } else if (error) {
+      toast.error('Google Calendar was not connected', { id: 'google-oauth-result', description: GOOGLE_OAUTH_ERRORS[error] ?? 'Please try again.' })
+    }
+    const url = new URL(window.location.href)
+    url.searchParams.delete('connected')
+    url.searchParams.delete('error')
+    window.history.replaceState(null, '', url.toString())
+  }, [searchParams])
   const statusHook = useAgentStatus()
   const { refetch: refreshStatus, retry: retrySync } = statusHook
   const onSaved = useCallback(() => void refreshStatus(), [refreshStatus])

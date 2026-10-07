@@ -1,7 +1,9 @@
 'use client'
 
 // Rename a document, or edit pasted text in place (same document on the
-// agent: no delete and re-add).
+// agent: no delete and re-add). Text can only be edited once the document is
+// on the agent (PATCH /api/agent/knowledge/[docId] refuses a text edit
+// otherwise); until then the dialog only renames it.
 
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
@@ -12,6 +14,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { KNOWLEDGE_LIMITS, type KnowledgeDoc } from '@/hooks/useKnowledge'
 import { cn } from '@/lib/utils'
+
+/** Pasted text whose content can be edited in place: settled on the agent (provider copy present). */
+export function canEditDocumentText(doc: KnowledgeDoc): boolean {
+  return doc.type === 'text' && doc.status === 'ready' && !!doc.elevenlabs_doc_id && !doc.deleting_at
+}
 
 interface EditDocumentDialogProps {
   doc: KnowledgeDoc | null
@@ -39,7 +46,9 @@ function EditForm({
   saving,
   setSaving,
 }: Omit<EditDocumentDialogProps, 'doc'> & { doc: KnowledgeDoc; saving: boolean; setSaving: (v: boolean) => void }) {
-  const isText = doc.type === 'text'
+  const isText = canEditDocumentText(doc)
+  // Pasted text that is not on the agent yet (failed or not attached): rename only.
+  const textLocked = doc.type === 'text' && !isText
   const [name, setName] = useState(doc.name)
   const [text, setText] = useState('')
   const [original, setOriginal] = useState<string | null>(null)
@@ -80,7 +89,9 @@ function EditForm({
         <DialogDescription>
           {isText
             ? 'Changes reach your agent right away. The document stays on your agent while you edit it.'
-            : 'The new name is shown to your agent as the title of this document.'}
+            : textLocked
+              ? 'This text is not on your agent yet, so only its name can be changed now. Retry the document first, then you can edit its text.'
+              : 'The new name is shown to your agent as the title of this document.'}
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-3">
