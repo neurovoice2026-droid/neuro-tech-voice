@@ -134,8 +134,8 @@ describe('plan minutes', () => {
 describe('override allow-list in force', () => {
   it('reads the paths from the body the sync pushed', () => {
     const body = buildElevenLabsAgentBody(makeAgentSpec(), { transferToolId: null, postCallWebhookId: null })
-    expect(allowedOverridePaths(body)).toEqual([OVERRIDE_FIRST_MESSAGE, OVERRIDE_MAX_DURATION])
-    expect(clientOverridesDetail(body)).toEqual({ version: PLATFORM_AGENT_CONFIG_VERSION, paths: [OVERRIDE_FIRST_MESSAGE, OVERRIDE_MAX_DURATION] })
+    expect(allowedOverridePaths(body)).toEqual([OVERRIDE_FIRST_MESSAGE, OVERRIDE_MAX_DURATION, 'conversation.text_only'])
+    expect(clientOverridesDetail(body)).toEqual({ version: PLATFORM_AGENT_CONFIG_VERSION, paths: [OVERRIDE_FIRST_MESSAGE, OVERRIDE_MAX_DURATION, 'conversation.text_only'] })
   })
 
   it('trusts the stored paths only while they match the platform version of the last sync', () => {

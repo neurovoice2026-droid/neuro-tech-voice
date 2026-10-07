@@ -35,6 +35,14 @@ export const RATE_LIMITS = {
   callAudio: { name: 'call_audio', limit: 120, windowSeconds: 600 },
   callIntegration: { name: 'call_integration', limit: 20, windowSeconds: 600 },
   callsExport: { name: 'calls_export', limit: 20, windowSeconds: 600 },
+  // Browser test sessions (POST /api/agent/web-session): each mints a billed
+  // ElevenLabs conversation. Per org, per org per day, and per client IP
+  // (sign-up farming); unpaid orgs also have a lifetime cap in the DB.
+  webTest: { name: 'web_test', limit: 10, windowSeconds: 600 },
+  webTestDaily: { name: 'web_test_day', limit: 40, windowSeconds: 86_400 },
+  webTestIp: { name: 'web_test_ip', limit: 30, windowSeconds: 86_400 },
+  // Platform regression suite (admin): every run costs credits.
+  agentTests: { name: 'agent_tests', limit: 20, windowSeconds: 3_600 },
 } as const satisfies Record<string, RateLimitRule>
 
 export interface RateLimitResult {

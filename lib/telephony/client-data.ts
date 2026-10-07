@@ -38,7 +38,8 @@ export const CALL_TOKEN_TTL_S = 4 * 60 * 60
 /** A call refused at answer (paused, trial used up) lasts at most this long: the "unavailable" line, then the end. */
 export const UNAVAILABLE_MAX_DURATION_S = 20
 
-export type RoutingModeVariable = 'app_routed' | 'native'
+/** 'web': a browser test session (lib/voice-providers/web-test.ts), never a phone call. */
+export type RoutingModeVariable = 'app_routed' | 'native' | 'web'
 
 export interface ClientDataInput {
   /** calls.id (null only when no row could be created: the tokens are then the placeholders). */

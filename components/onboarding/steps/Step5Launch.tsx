@@ -8,6 +8,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
+import { TestAgentPanel } from '@/components/agent/TestAgentPanel'
 import { startWebsiteImportInBackground } from '@/hooks/useKnowledgeWebsite'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
 import { cn } from '@/lib/utils'
@@ -360,6 +361,8 @@ function SuccessScreen({ agentName }: { agentName: string }) {
           {agentName ? `${agentName} is` : 'Your AI agent is'} ready to take calls.
         </p>
       </div>
+      {/* Last onboarding step: the agent is synced and active, so it can be tried in the browser. */}
+      <TestAgentPanel variant="onboarding" agentName={agentName} className="max-w-lg" />
       <div className="flex flex-col gap-3 w-full max-w-xs">
         <a
           href="/dashboard"

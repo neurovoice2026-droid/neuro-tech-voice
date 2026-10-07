@@ -26,6 +26,7 @@ import { finalizeStaleElevenLabsCalls } from './stale-calls'
 import { processDocument, STALE_PROCESSING_MS } from './knowledge'
 import { purgeRejectedClones } from './voice-catalog'
 import { VOICE_PROVIDERS, isHealthSignalCode, type ProviderErrorCode } from './errors'
+import { KEY_BLOCKING_CODES } from './quota-monitor'
 import type { ProviderHealth } from './types'
 
 export async function probeProviders(log: Logger): Promise<ProviderHealth[]> {
@@ -39,7 +40,12 @@ export async function probeProviders(log: Logger): Promise<ProviderHealth[]> {
       // circuit is driven by real call outcomes (router / call-store).
       if (h.ok) await reportOutcome(p, { ok: true })
       else if (h.errorCode && isHealthSignalCode(h.errorCode as ProviderErrorCode)) await reportOutcome(p, { ok: false, code: h.errorCode as ProviderErrorCode })
-      else log.warn('maintenance.health_non_signal', { provider: p, code: h.errorCode })
+      else if (h.errorCode && KEY_BLOCKING_CODES.has(h.errorCode)) {
+        // A revoked / auto-disabled key, a missing permission or exhausted
+        // credits fails every tenant at once: an alert, not a warning (slice G).
+        log.error('maintenance.provider_blocked', null, { provider: p, code: h.errorCode })
+        emitProviderEvent({ system: p, kind: 'health_check', operation: 'provider_blocked', ok: false, errorCode: h.errorCode })
+      } else log.warn('maintenance.health_non_signal', { provider: p, code: h.errorCode })
     }
   }
   return out
@@ -179,6 +185,7 @@ export async function runVoiceMaintenance(log: Logger = createLogger({ component
     ['cartesia_poll', () => reconcileCartesiaCalls(25, log)],
     ['conversation_reconcile', () => import('./conversation-reconcile').then((m) => m.reconcileElevenLabsConversations({ log }))],
     ['stale_elevenlabs_calls', () => finalizeStaleElevenLabsCalls(50, log)],
+    ['web_test_finalize', () => import('./web-test').then((m) => m.finalizeStaleWebTests(100, log))],
     ['knowledge_retries', () => retryStaleKnowledgeDocs(2, log)],
     ['voice_saves', () => settleInterruptedVoiceSaves(5, log)],
     ['rejected_clones', () => purgeRejectedClones(5, log)],
@@ -188,6 +195,7 @@ export async function runVoiceMaintenance(log: Logger = createLogger({ component
     ['voice_orphans', () => import('./voice-orphans').then((m) => m.runVoiceOrphanMaintenance(log))],
     ['voice_housekeeping', () => import('./voice-orphans').then((m) => m.runVoiceHousekeeping(log))],
     ['elevenlabs_workspace_health', () => import('./webhook-health').then((m) => m.runWorkspaceHealth(log))],
+    ['elevenlabs_quota', () => import('./quota-monitor').then((m) => m.runQuotaMonitor(log))],
     ['call_retention', () => import('./call-retention').then((m) => m.runCallRetention(log))],
     ['business_tools_retention', () => import('@/lib/voice-tools/retention').then((m) => m.runBusinessToolRetention(log))],
     // Hourly, from the stored last run (not the clock minute: the cron may be daily).
