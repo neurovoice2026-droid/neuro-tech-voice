@@ -15,7 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton'
 import { errorMessage, parseApiError } from '@/hooks/useVoiceCatalog'
 import { cn } from '@/lib/utils'
-import type { WebTestAvailability, WebTestMode, WebTestPrivacy, WebTestSessionGrant } from './web-test/types'
+import { MIN_SESSION_SECONDS, type WebTestAvailability, type WebTestMode, type WebTestPrivacy, type WebTestSessionGrant } from './web-test/types'
 
 const WebTestSession = dynamic(() => import('./web-test/WebTestSession'), {
   ssr: false,
@@ -88,7 +88,7 @@ export function TestAgentPanel({ agentName, refreshKey, variant = 'card', classN
     setHadSession(true)
   }, [])
   const onGranted = useCallback((grant: WebTestSessionGrant) => {
-    setAvailability((prev) => (prev ? { ...prev, sessions_left: grant.sessions_left, privacy: grant.privacy } : prev))
+    setAvailability((prev) => (prev ? { ...prev, sessions_left: grant.sessions_left, seconds_left: grant.seconds_left, privacy: grant.privacy } : prev))
   }, [])
   const onFinished = useCallback(() => {
     setInSession(false)
@@ -97,7 +97,12 @@ export function TestAgentPanel({ agentName, refreshKey, variant = 'card', classN
 
   const textAvailable = !!availability?.text_available
   const activeMode: WebTestMode = mode === 'text' && !textAvailable ? 'voice' : mode
-  const outOfTests = availability?.sessions_left === 0 && !inSession
+  // Mirrors the server's refusals (lib/voice-providers/web-test.ts): no sessions or
+  // seconds left, or browser tests paused for the account.
+  const blocked = !!availability?.blocked
+  const unpaid = availability?.sessions_left !== null && availability?.sessions_left !== undefined
+  const timeSpent = availability?.seconds_left !== null && availability?.seconds_left !== undefined && availability.seconds_left < MIN_SESSION_SECONDS
+  const outOfTests = !inSession && (availability?.sessions_left === 0 || blocked || timeSpent)
 
   const body = (
     <div className="space-y-4">
@@ -174,8 +179,11 @@ export function TestAgentPanel({ agentName, refreshKey, variant = 'card', classN
           )}
           {outOfTests && (
             <p role="status" className="text-sm text-muted-foreground">
-              {hadSession ? 'That was your last free browser test. ' : 'You have used all free browser tests of your trial. '}
-              Choose a plan to keep testing.
+              {blocked
+                ? 'Browser tests are paused for your account. Please contact support to turn them back on.'
+                : unpaid
+                  ? `${hadSession ? 'That was your last free browser test. ' : 'You have used all free browser tests of your trial. '}Choose a plan to keep testing.`
+                  : 'You have used today\u2019s browser test time. It resets at midnight UTC; phone test calls still work.'}
             </p>
           )}
           <PrivacyNote privacy={availability.privacy} mode={activeMode} />

@@ -29,7 +29,19 @@ vi.mock('@/lib/security/rate-limit', async (importOriginal) => {
 import { RequestError } from '@/lib/api/http'
 import { ProviderError } from './errors'
 import { MAX_ATTEMPTS } from './conversation-reconcile'
-import { WEB_TEST_RECONCILE_ATTEMPTS_USED, clientIpKey, finalizeStaleWebTests, isPaidPlan, participantName, sdkServerLocation, startWebTestSession, webTestAvailability } from './web-test'
+import {
+  WEB_TEST_RECONCILE_ATTEMPTS_USED,
+  clientIpKey,
+  finalizeStaleWebTests,
+  isPaidPlan,
+  participantName,
+  recordWebTestSeconds,
+  resetWebTestBlock,
+  sdkServerLocation,
+  startWebTestSession,
+  webTestAvailability,
+  webTestBudget,
+} from './web-test'
 
 const ORG = '11111111-1111-4111-8111-111111111111'
 const OTHER_ORG = '22222222-2222-4222-8222-222222222222'
@@ -102,6 +114,8 @@ beforeEach(() => {
   vi.stubEnv('VOICE_TOKEN_SECRET', 'x'.repeat(40))
   vi.stubEnv('WEB_TEST_TRIAL_SESSIONS', '')
   vi.stubEnv('WEB_TEST_MAX_SECONDS', '')
+  vi.stubEnv('WEB_TEST_TRIAL_SECONDS', '')
+  vi.stubEnv('WEB_TEST_DAILY_SECONDS', '')
 })
 
 describe('helpers', () => {
@@ -344,5 +358,135 @@ describe('finalizeStaleWebTests', () => {
     expect(byId['old-phone']).toMatchObject({ status: 'in-progress' })
     // Never billed.
     expect(db.rpcCalls).toHaveLength(0)
+  })
+})
+
+describe('server-side seconds budget (the panel timer is client-side only)', () => {
+  const today = () => new Date().toISOString().slice(0, 10)
+  const usage = (over: Record<string, unknown>) => ({ org_id: ORG, sessions_started: 2, seconds_total: 0, day_utc: null, day_seconds: 0, blocked_at: null, ...over })
+
+  it('budget: lifetime for unpaid orgs (WEB_TEST_TRIAL_SECONDS, default 1800), per UTC day for paid ones (WEB_TEST_DAILY_SECONDS, default 3600)', () => {
+    const now = Date.parse('2026-10-07T12:00:00Z')
+    expect(webTestBudget(usage({ seconds_total: 1500 }), false, now)).toEqual({ blocked: false, limit: 1800, window: 'lifetime', secondsLeft: 300 })
+    expect(webTestBudget(usage({ seconds_total: 99_999, day_utc: '2026-10-07', day_seconds: 600 }), true, now)).toEqual({ blocked: false, limit: 3600, window: 'day', secondsLeft: 3000 })
+    // Yesterday's seconds do not count today.
+    expect(webTestBudget(usage({ day_utc: '2026-10-06', day_seconds: 3600 }), true, now).secondsLeft).toBe(3600)
+    vi.stubEnv('WEB_TEST_TRIAL_SECONDS', '600')
+    vi.stubEnv('WEB_TEST_DAILY_SECONDS', '7200')
+    expect(webTestBudget(usage({ seconds_total: 100 }), false, now).secondsLeft).toBe(500)
+    expect(webTestBudget(usage({}), true, now).secondsLeft).toBe(7200)
+    expect(webTestBudget(usage({ blocked_at: '2026-10-01T00:00:00Z' }), true, now).blocked).toBe(true)
+  })
+
+  it('refuses a trial whose free test time is spent, before claiming or minting anything', async () => {
+    const db = seed()
+    db.tables.web_test_usage.push(usage({ seconds_total: 1790 }))
+    const err = await startWebTestSession({ org: trialOrg, userId: USER, mode: 'voice', ipKey: null }, logger().log).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(RequestError)
+    expect(err).toMatchObject({ status: 403, details: { reason: 'trial_limit' } })
+    expect(db.rpcCalls).toHaveLength(0)
+    expect(tokenMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses a paid org whose daily time is spent (429 until the next UTC day), and lets it test again the next day', async () => {
+    const db = seed()
+    db.tables.web_test_usage.push(usage({ day_utc: today(), day_seconds: 3590 }))
+    const err = await startWebTestSession({ org: proOrg, userId: USER, mode: 'voice', ipKey: null }, logger().log).catch((e: unknown) => e)
+    expect(err).toMatchObject({ status: 429, details: { reason: 'daily_limit' } })
+    const retryAfter = Number((err as RequestError).headers?.['Retry-After'])
+    expect(retryAfter).toBeGreaterThan(0)
+    expect(retryAfter).toBeLessThanOrEqual(86_400)
+    expect(tokenMock).not.toHaveBeenCalled()
+    db.tables.web_test_usage[0].day_utc = '2000-01-01'
+    const res = await startWebTestSession({ org: proOrg, userId: USER, mode: 'voice', ipKey: null }, logger().log)
+    expect(res.conversation_token).toBe(TOKEN)
+    expect(res.seconds_left).toBe(3600)
+  })
+
+  it('an org blocked after an over-long session is refused until an admin reset (paid or not)', async () => {
+    for (const org of [trialOrg, proOrg]) {
+      const db = seed()
+      db.tables.web_test_usage.push(usage({ blocked_at: '2026-10-01T00:00:00Z' }))
+      const { log, calls } = logger()
+      await expect(startWebTestSession({ org, userId: USER, mode: 'voice', ipKey: null }, log)).rejects.toMatchObject({ status: 403, details: { reason: 'web_test_blocked' } })
+      expect(calls.some((c) => c.args[0] === 'web_test.refused_blocked')).toBe(true)
+    }
+    expect(tokenMock).not.toHaveBeenCalled()
+  })
+
+  it('never grants a session longer than the time left', async () => {
+    const db = seed()
+    db.tables.web_test_usage.push(usage({ seconds_total: 1700 }))
+    const res = await startWebTestSession({ org: trialOrg, userId: USER, mode: 'voice', ipKey: null }, logger().log)
+    expect(res).toMatchObject({ max_session_seconds: 100, seconds_left: 100 })
+  })
+
+  it('fails closed for a trial when the budget cannot be read; a paid org is not blocked by it', async () => {
+    const failing = () => {
+      const db = seed()
+      const orig = db.from.bind(db)
+      db.from = ((t: string) => {
+        const q = orig(t)
+        if (t === 'web_test_usage') (q as unknown as { maybeSingle: () => unknown }).maybeSingle = async () => ({ data: null, error: { message: 'column "seconds_total" does not exist' } })
+        return q
+      }) as typeof db.from
+      return db
+    }
+    failing()
+    await expect(startWebTestSession({ org: trialOrg, userId: USER, mode: 'voice', ipKey: null }, logger().log)).rejects.toMatchObject({ status: 503 })
+    expect(tokenMock).not.toHaveBeenCalled()
+    failing()
+    const res = await startWebTestSession({ org: proOrg, userId: USER, mode: 'voice', ipKey: null }, logger().log)
+    expect(res).toMatchObject({ conversation_token: TOKEN, seconds_left: null, max_session_seconds: 300 })
+  })
+
+  it('WEB_TEST_TRIAL_SECONDS=0 keeps browser tests to paid plans', async () => {
+    seed()
+    vi.stubEnv('WEB_TEST_TRIAL_SECONDS', '0')
+    await expect(startWebTestSession({ org: trialOrg, userId: USER, mode: 'voice', ipKey: null }, logger().log)).rejects.toMatchObject({ status: 403, details: { reason: 'trial_limit' } })
+    expect(tokenMock).not.toHaveBeenCalled()
+  })
+
+  it('availability: a spent trial or a blocked org shows no tests left; the panel cap follows the time left', async () => {
+    let db = seed()
+    db.tables.web_test_usage.push(usage({ seconds_total: 1800 }))
+    expect(await webTestAvailability(trialOrg, logger().log)).toMatchObject({ available: true, sessions_left: 0, seconds_left: 0, blocked: false })
+    db = seed()
+    db.tables.web_test_usage.push(usage({ seconds_total: 1650 }))
+    expect(await webTestAvailability(trialOrg, logger().log)).toMatchObject({ sessions_left: 18, seconds_left: 150, max_session_seconds: 150 })
+    db = seed()
+    db.tables.web_test_usage.push(usage({ blocked_at: '2026-10-01T00:00:00Z' }))
+    expect(await webTestAvailability(trialOrg, logger().log)).toMatchObject({ sessions_left: 0, blocked: true })
+    expect(await webTestAvailability(proOrg, logger().log)).toMatchObject({ sessions_left: null, blocked: true })
+  })
+
+  it('records the seconds of a session once, with the block threshold at twice WEB_TEST_MAX_SECONDS', async () => {
+    const rpc = vi.fn(async (_fn: string, _args: unknown) => ({ data: [{ recorded: true, total_seconds: 95, today_seconds: 95, is_blocked: false, newly_blocked: false }], error: null }))
+    const { log, calls } = logger()
+    const res = await recordWebTestSeconds({ rpc } as never, { orgId: ORG, callId: 'c1', seconds: 94.6 }, log)
+    expect(res).toEqual({ recorded: true, totalSeconds: 95, todaySeconds: 95, blocked: false })
+    expect(rpc).toHaveBeenCalledWith('record_web_test_seconds', { p_org_id: ORG, p_call_id: 'c1', p_seconds: 95, p_block_over: 600 })
+    expect(calls.some((c) => c.level === 'error')).toBe(false)
+    vi.stubEnv('WEB_TEST_MAX_SECONDS', '120')
+    await recordWebTestSeconds({ rpc } as never, { orgId: ORG, callId: 'c1', seconds: 10 }, log)
+    expect(rpc.mock.calls[1][1]).toMatchObject({ p_block_over: 240 })
+  })
+
+  it('a session far over the cap blocks the org and logs an error; a database error is thrown (the webhook retries)', async () => {
+    const { log, calls } = logger()
+    const blocked = vi.fn(async () => ({ data: [{ recorded: true, total_seconds: 1700, today_seconds: 1700, is_blocked: true, newly_blocked: true }], error: null }))
+    const res = await recordWebTestSeconds({ rpc: blocked } as never, { orgId: ORG, callId: 'c2', seconds: 1700 }, log)
+    expect(res.blocked).toBe(true)
+    expect(calls).toContainEqual({ level: 'error', args: ['web_test.blocked_session_over_limit', null, { orgId: ORG, callId: 'c2', seconds: 1700, limitSeconds: 600 }] })
+    const failing = vi.fn(async () => ({ data: null, error: { message: 'boom' } }))
+    await expect(recordWebTestSeconds({ rpc: failing } as never, { orgId: ORG, callId: 'c3', seconds: 10 }, log)).rejects.toThrow(/record_web_test_seconds failed/)
+  })
+
+  it('an admin reset lifts the block', async () => {
+    const rpc = vi.fn(async () => ({ data: true, error: null }))
+    const { log, calls } = logger()
+    expect(await resetWebTestBlock(ORG, log, { rpc } as never)).toBe(true)
+    expect(rpc).toHaveBeenCalledWith('reset_web_test_block', { p_org_id: ORG })
+    expect(calls.some((c) => c.args[0] === 'web_test.block_reset')).toBe(true)
   })
 })

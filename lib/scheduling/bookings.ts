@@ -306,6 +306,50 @@ async function recoverCreatedEvent(client: calendar_v3.Calendar, orgId: string, 
   }
 }
 
+export type StalePendingOutcome = 'confirmed' | 'released' | 'kept'
+
+/**
+ * A booking still 'pending' long after its request (the function died between
+ * our insert and the confirmation write): Google may hold its event anyway.
+ * Looks the event up by its private ntv_booking_id and
+ * - confirms the booking ('booked' + event id) when the event exists,
+ * - releases it ('cancelled', its time is free again) when Google has none,
+ * - keeps it pending for a later run when the lookup cannot be made (calendar
+ *   not connected, Google error), unless `giveUp` (then it is released: if an
+ *   event did exist, Google's busy time still keeps the slot taken).
+ * Only rows still 'pending' are changed.
+ */
+export async function settleStalePendingBooking(input: {
+  db: SupabaseClient
+  log: Logger
+  booking: { id: string; org_id: string; calendar_id: string }
+  giveUp?: boolean
+  /** Test seam / per-run cache: the org's calendar client. */
+  client?: calendar_v3.Calendar | null
+}): Promise<StalePendingOutcome> {
+  const { db, log, booking } = input
+  const release = async (reason: string): Promise<StalePendingOutcome> => {
+    const { data, error } = await db.from('bookings').update({ status: 'cancelled' }).eq('id', booking.id).eq('org_id', booking.org_id).eq('status', 'pending').select('id')
+    if (error) throw new Error(`bookings release failed: ${error.message}`)
+    if ((data?.length ?? 0) > 0) log.warn('booking.stale_pending_released', { orgId: booking.org_id, reason })
+    return 'released'
+  }
+  let eventId: string | null
+  try {
+    const client = await calendarClient(booking.org_id, input.client)
+    if (!client) return input.giveUp ? release('not_connected') : 'kept'
+    eventId = await findBookingEvent(client, { orgId: booking.org_id, calendarId: booking.calendar_id, bookingId: booking.id, signal: AbortSignal.timeout(EVENT_LOOKUP_TIMEOUT_MS) })
+  } catch (error) {
+    log.warn('booking.stale_pending_lookup_failed', { orgId: booking.org_id, reason: calendarFailure(error) })
+    return input.giveUp ? release('lookup_failed') : 'kept'
+  }
+  if (!eventId) return release('no_event')
+  const { error } = await db.from('bookings').update({ google_event_id: eventId, status: 'booked' }).eq('id', booking.id).eq('org_id', booking.org_id).eq('status', 'pending')
+  if (error) throw new Error(`bookings confirm failed: ${error.message}`)
+  log.warn('booking.stale_pending_confirmed', { orgId: booking.org_id })
+  return 'confirmed'
+}
+
 export interface IdempotencyRow {
   idempotency_key: string | null
   status: string

@@ -73,6 +73,27 @@ describe('POST /api/agent/web-session', () => {
   })
 })
 
+describe('POST /api/agent/web-session — server-side seconds budget', () => {
+  it('passes the budget refusals through: trial time used (403), daily time used (429 + Retry-After), blocked org (403)', async () => {
+    lib.start.mockRejectedValueOnce(new RequestError('forbidden', 'You have used all your free browser test time.', 403, { reason: 'trial_limit' }))
+    let res = await POST(post({}))
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({ details: { reason: 'trial_limit' } })
+
+    lib.start.mockRejectedValueOnce(new RequestError('rate_limited', "You have used today's browser test time.", 429, { reason: 'daily_limit', retry_after_seconds: 3600 }, { 'Retry-After': '3600' }))
+    res = await POST(post({}))
+    expect(res.status).toBe(429)
+    expect(res.headers.get('retry-after')).toBe('3600')
+    expect(res.headers.get('cache-control')).toContain('no-store')
+    expect(await res.json()).toMatchObject({ details: { reason: 'daily_limit' } })
+
+    lib.start.mockRejectedValueOnce(new RequestError('forbidden', 'Browser tests are paused for your account.', 403, { reason: 'web_test_blocked' }))
+    res = await POST(post({}))
+    expect(res.status).toBe(403)
+    expect(await res.json()).toMatchObject({ details: { reason: 'web_test_blocked' } })
+  })
+})
+
 describe('GET /api/agent/web-session', () => {
   it('returns the availability for the signed-in org', async () => {
     const res = await GET(new Request(URL_))

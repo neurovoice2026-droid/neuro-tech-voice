@@ -8,8 +8,13 @@ import 'server-only'
 //   • workflows: claimed with workflows_triggered_at IS NULL → now().
 // Conversations that are not phone calls (dashboard tests, widget/SDK
 // sessions, ElevenLabs simulations) are stored as test calls (calls.channel,
-// calls.is_test): never billed, never trigger workflows. Provider cost goes to
-// the service-only call_provider_costs table, never to the calls row.
+// calls.is_test): never billed, never trigger workflows. Browser tests
+// (channel 'web') count against the org's browser-test seconds budget
+// instead (web-test.ts, recordWebTestSeconds). Native calls the platform
+// answered with the "unavailable" message (agent or number paused, minutes
+// used up: routing.unavailable / routing_reason) are not billed and start no
+// workflows either. Provider cost goes to the service-only
+// call_provider_costs table, never to the calls row.
 // The same path applies webhooks (source 'webhook') and conversations fetched
 // by the reconciliation (source 'poll', conversation-reconcile.ts).
 
@@ -33,7 +38,7 @@ import { collectedValues } from './call-context'
 import { legacySentimentFromVerdict } from '@/lib/calls/legacy-sentiment'
 
 const STORED_COLUMNS =
-  'id, org_id, agent_id, status, lifecycle_rank, provider, provider_call_id, elevenlabs_conversation_id, cartesia_call_id, transcript, summary, duration_seconds, started_at, ended_at, routing_reason, outcome, direction, caller_number, from_number, to_number, sentiment, updated_at, workflows_triggered_at, channel, is_test, call_metadata, recording_status, retention_applied_at'
+  'id, org_id, agent_id, status, lifecycle_rank, provider, provider_call_id, elevenlabs_conversation_id, cartesia_call_id, transcript, summary, duration_seconds, started_at, ended_at, routing_reason, routing, outcome, direction, caller_number, from_number, to_number, sentiment, updated_at, workflows_triggered_at, channel, is_test, call_metadata, recording_status, retention_applied_at'
 
 interface CallRow extends StoredCall {
   id: string
@@ -47,6 +52,20 @@ interface CallRow extends StoredCall {
   updated_at: string
   channel?: string | null
   is_test?: boolean | null
+  routing?: Record<string, unknown> | null
+}
+
+/** Routing reasons of calls the platform answered only to say the agent is unavailable. */
+const UNAVAILABLE_REASONS: ReadonlySet<string> = new Set(['quota_exhausted', 'agent_inactive', 'number_inactive'])
+
+/**
+ * The platform answered this call only with the "unavailable" message (native
+ * number: agent or number paused, minutes used up — lib/telephony/initiation.ts).
+ * Such a conversation is never billed and never starts the owner's workflows.
+ */
+export function isUnavailableCall(row: { routing?: unknown; routing_reason?: string | null }): boolean {
+  const routing = row.routing && typeof row.routing === 'object' && !Array.isArray(row.routing) ? (row.routing as Record<string, unknown>) : null
+  return routing?.unavailable === true || (!!row.routing_reason && UNAVAILABLE_REASONS.has(row.routing_reason))
 }
 
 /** Where an event came from: the provider's webhook or our own reconciliation poll. */
@@ -245,7 +264,7 @@ export async function applyCallEvent(event: NormalizedCallEvent, log: Logger = c
         if (error.code === '23505') continue // a concurrent event created it: merge into that row
         throw new Error(`calls insert failed: ${error.message}`)
       }
-      await afterWrite(db, data.id as string, owner.org_id, event, l, { source, isTest })
+      await afterWrite(db, data.id as string, owner.org_id, event, l, { source, isTest, channel, unavailable: false })
       return { callId: data.id as string, outcome: 'created', test: isTest }
     }
 
@@ -262,8 +281,9 @@ export async function applyCallEvent(event: NormalizedCallEvent, log: Logger = c
       return { callId: current.id, outcome: 'unchanged' }
     }
     const isTest = current.is_test === true
+    const writeOpts = { source, isTest, channel: current.channel ?? 'phone', unavailable: isUnavailableCall(current) }
     if (!patch || Object.keys(patch).length === 0) {
-      await afterWrite(db, current.id, current.org_id, event, l, { source, isTest })
+      await afterWrite(db, current.id, current.org_id, event, l, writeOpts)
       return { callId: current.id, outcome: 'unchanged', test: isTest }
     }
     if (!current.caller_number) {
@@ -275,7 +295,7 @@ export async function applyCallEvent(event: NormalizedCallEvent, log: Logger = c
     const { data, error } = await db.from('calls').update(patch).eq('id', current.id).eq('updated_at', current.updated_at).select('id')
     if (error) throw new Error(`calls update failed: ${error.message}`)
     if ((data?.length ?? 0) === 0) continue
-    await afterWrite(db, current.id, current.org_id, event, l, { source, isTest })
+    await afterWrite(db, current.id, current.org_id, event, l, writeOpts)
     return { callId: current.id, outcome: 'updated', test: isTest }
   }
   throw new Error('calls update kept conflicting; will be retried')
@@ -316,12 +336,19 @@ async function afterWrite(
   orgId: string,
   event: NormalizedCallEvent,
   log: Logger,
-  opts: { source: EventSource; isTest: boolean },
+  opts: { source: EventSource; isTest: boolean; channel: string; unavailable: boolean },
 ) {
   if (event.kind === 'call.completed') await recordProviderCost(db, callId, orgId, event, log)
   // Test sessions (web, SDK, dashboard): no billing, no workflows, and no
-  // evidence about the telephony media path.
-  if (opts.isTest) return
+  // evidence about the telephony media path. Browser tests count against the
+  // org's server-side browser-test budget (the panel's timer is client-side).
+  if (opts.isTest) {
+    if (opts.channel === 'web' && event.kind === 'call.completed' && typeof event.durationSeconds === 'number' && event.durationSeconds > 0) {
+      const { recordWebTestSeconds } = await import('./web-test')
+      await recordWebTestSeconds(db, { orgId, callId, seconds: event.durationSeconds }, log)
+    }
+    return
+  }
   // A conversation that outlived the early-failure window proves the
   // provider's media path works — but only as fresh evidence: a late or
   // retried webhook for a call that ended before an outage must not close
@@ -332,6 +359,12 @@ async function afterWrite(
     if (Number.isFinite(endedMs) && Date.now() - endedMs < MEDIA_EVIDENCE_MAX_AGE_MS) {
       await reportOutcome(`${event.provider}_media`, { ok: true }, Date.now(), { evidenceStartedAt: startedMs })
     }
+  }
+  if (opts.unavailable) {
+    // Answered only with the "unavailable" message: never billed (the org may
+    // be out of minutes) and the owner's automations are not started.
+    if (event.kind === 'call.completed' || event.kind === 'call.initiation_failed') log.info('call_event.unavailable_not_billed', { callId })
+    return
   }
   if (event.kind === 'call.completed' && typeof event.durationSeconds === 'number' && event.durationSeconds > 0) {
     await recordUsage(db, { orgId, callId, seconds: event.durationSeconds, provider: event.provider, source: `${event.provider}_${opts.source}` }, log)

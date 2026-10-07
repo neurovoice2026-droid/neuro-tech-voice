@@ -9,6 +9,9 @@ import 'server-only'
 // at rank 40; a late webhook or poll (rank 50) still fills
 // transcript/analysis. Logged as a warning: repeated occurrences mean the
 // webhook configuration needs attention (webhook-health.ts).
+// Every condition is a SQL filter (test sessions, rows without a terminal
+// Twilio status): rows this step always skips would otherwise fill the
+// oldest-first batch and keep newer calls from ever being billed.
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createLogger, type Logger } from '@/lib/observability/logger'
@@ -21,7 +24,8 @@ const STALE_AFTER_MS = 60 * 60_000
 const RECONCILE_GRACE_MS = 6 * 60 * 60_000
 /** This many calls finalized in one run means webhooks are being lost: logged as an error. */
 const MISSING_WEBHOOK_ALERT = 3
-const TWILIO_TERMINAL = new Set(['completed', 'busy', 'failed', 'no-answer', 'canceled'])
+const TWILIO_TERMINAL_STATUSES = ['completed', 'busy', 'failed', 'no-answer', 'canceled'] as const
+const TWILIO_TERMINAL: ReadonlySet<string> = new Set(TWILIO_TERMINAL_STATUSES)
 
 export async function finalizeStaleElevenLabsCalls(limit = 50, log: Logger = createLogger({ component: 'stale_calls' }), now = Date.now()) {
   const db = createAdminClient()
@@ -30,6 +34,10 @@ export async function finalizeStaleElevenLabsCalls(limit = 50, log: Logger = cre
     .select('id, org_id, status, routing, usage_recorded_at, duration_seconds')
     .eq('provider', 'elevenlabs')
     .eq('status', 'in-progress')
+    // Browser/SDK test sessions are never billed (and have no Twilio leg).
+    .eq('is_test', false)
+    // Only calls whose Twilio leg ended (routing.twilio_status, set by the status callback).
+    .in('routing->>twilio_status', [...TWILIO_TERMINAL_STATUSES])
     .lt('lifecycle_rank', RANK.finalizedWithoutProvider)
     .lt('created_at', new Date(now - STALE_AFTER_MS).toISOString())
     .gte('created_at', new Date(now - 7 * 24 * 3600_000).toISOString())
@@ -41,7 +49,7 @@ export async function finalizeStaleElevenLabsCalls(limit = 50, log: Logger = cre
   let finalized = 0
   for (const c of calls ?? []) {
     const routing = (c.routing ?? {}) as { twilio_status?: string; twilio_duration?: number }
-    if (!TWILIO_TERMINAL.has(routing.twilio_status ?? '')) continue
+    if (!TWILIO_TERMINAL.has(routing.twilio_status ?? '')) continue // defensive: filtered in SQL
     const seconds = Number(routing.twilio_duration ?? 0) || 0
     try {
       if (seconds > 0 && !c.usage_recorded_at) {

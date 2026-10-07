@@ -86,5 +86,9 @@ describe('browser test row + post-call webhook', () => {
     expect(db.tables.calls[0]).toMatchObject({ id: session.call_id, channel: 'web', is_test: true, status: 'completed', duration_seconds: 95 })
     expect(db.rpcCalls.map((c) => c.fn)).not.toContain('record_call_usage')
     expect(executeWorkflows).not.toHaveBeenCalled()
+    // Counted against the org's browser-test seconds budget instead (server-side).
+    expect(db.rpcCalls.filter((c) => c.fn === 'record_web_test_seconds')).toEqual([
+      { fn: 'record_web_test_seconds', args: { p_org_id: ORG, p_call_id: session.call_id, p_seconds: 95, p_block_over: 600 } },
+    ])
   })
 })

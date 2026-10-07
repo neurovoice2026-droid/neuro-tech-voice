@@ -4,7 +4,7 @@ import { memoryDb, type MemoryDb } from '@/tests/helpers/memory-db'
 import { fakeCalendar } from '@/tests/helpers/calendar'
 import { createLogger } from '@/lib/observability/logger'
 import { GoogleCalendarError } from '@/lib/google/calendar'
-import { bookAppointment, checkAvailability, fullDays, resolveIdempotencyKey } from './bookings'
+import { bookAppointment, checkAvailability, fullDays, resolveIdempotencyKey, settleStalePendingBooking } from './bookings'
 import { slotRulesFor } from './settings'
 import { DEFAULT_BOOKING_SETTINGS, type BookingSettings } from '@/lib/voice-providers/types'
 import { parseIsoDate } from './time'
@@ -224,5 +224,45 @@ describe('pure helpers', () => {
     const full = fullDays([b('2026-10-07T21:30:00Z'), b('2026-10-08T07:00:00Z'), b('2026-10-07T07:00:00Z')], 2, TZ)
     expect([...full]).toEqual(['2026-10-08'])
     expect(fullDays([b('2026-10-07T07:00:00Z')], null, TZ).size).toBe(0)
+  })
+})
+
+describe('settleStalePendingBooking (abandoned mid-write)', () => {
+  const stale = { id: 'b-stale', org_id: ORG, calendar_id: 'primary' }
+  const seedPending = (over: Record<string, unknown> = {}) => {
+    db.tables.bookings = [{ ...stale, status: 'pending', google_event_id: null, ...over }]
+  }
+
+  it('confirms the booking when Google holds its event (found by the private ntv_booking_id)', async () => {
+    seedPending()
+    const cal = fakeCalendar({ listItems: [{ id: 'evt_42' }] })
+    expect(await settleStalePendingBooking({ db: db as unknown as SupabaseClient, log, booking: stale, client: cal.client })).toBe('confirmed')
+    expect(db.tables.bookings[0]).toMatchObject({ status: 'booked', google_event_id: 'evt_42' })
+    expect(cal.eventsList).toHaveBeenCalledWith(expect.objectContaining({ calendarId: 'primary', privateExtendedProperty: ['ntv_booking_id=b-stale'], showDeleted: false }), expect.anything())
+  })
+
+  it('releases it only when Google has no live event; keeps it when Google cannot be asked (unless giving up)', async () => {
+    seedPending()
+    expect(await settleStalePendingBooking({ db: db as unknown as SupabaseClient, log, booking: stale, client: fakeCalendar({ listItems: [{ id: 'x', status: 'cancelled' }] }).client })).toBe('released')
+    expect(db.tables.bookings[0].status).toBe('cancelled')
+
+    seedPending()
+    const down = fakeCalendar()
+    down.eventsList.mockRejectedValue(new GoogleCalendarError('failed', 'down'))
+    expect(await settleStalePendingBooking({ db: db as unknown as SupabaseClient, log, booking: stale, client: down.client })).toBe('kept')
+    expect(await settleStalePendingBooking({ db: db as unknown as SupabaseClient, log, booking: stale, client: null })).toBe('kept')
+    expect(db.tables.bookings[0].status).toBe('pending')
+    expect(await settleStalePendingBooking({ db: db as unknown as SupabaseClient, log, booking: stale, client: down.client, giveUp: true })).toBe('released')
+    expect(db.tables.bookings[0].status).toBe('cancelled')
+  })
+
+  it('never touches a row that is no longer pending or belongs to another organisation', async () => {
+    db.tables.bookings = [
+      { ...stale, status: 'booked', google_event_id: 'evt_1' },
+      { ...stale, id: 'b-foreign', org_id: OTHER_ORG, status: 'pending', google_event_id: null },
+    ]
+    await settleStalePendingBooking({ db: db as unknown as SupabaseClient, log, booking: stale, client: fakeCalendar({ listItems: [] }).client })
+    await settleStalePendingBooking({ db: db as unknown as SupabaseClient, log, booking: { ...stale, id: 'b-foreign' }, client: fakeCalendar({ listItems: [] }).client })
+    expect(db.tables.bookings.map((b) => [b.id, b.status])).toEqual([['b-stale', 'booked'], ['b-foreign', 'pending']])
   })
 })

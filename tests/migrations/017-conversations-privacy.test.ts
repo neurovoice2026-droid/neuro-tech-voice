@@ -72,6 +72,15 @@ describe('migration 017_conversations_privacy', () => {
     expect(fn).toMatch(/recording_status = 'deleted'/)
     expect(fn).toMatch(/retention_applied_at IS NULL/)
     expect(fn).not.toMatch(/duration_seconds\s*=|status\s*=\s*'(?!deleted)|usage_recorded_at\s*=|minutes/)
+    // The transfer reason the AI wrote can quote the caller: removed, the rest of routing is kept.
+    expect(fn).toMatch(/routing = c\.routing #- '\{transfer,reason\}'/)
+  })
+
+  it('documents the lock reality on a large calls table (no misleading NOT VALID claim; CONCURRENTLY only as advice)', () => {
+    expect(sql).not.toMatch(/no long ACCESS EXCLUSIVE lock/)
+    expect(sql).toMatch(/CREATE INDEX CONCURRENTLY/)
+    // Advice in comments only: CONCURRENTLY cannot run inside the migration's transaction.
+    expect(code).not.toMatch(/CONCURRENTLY/)
   })
 
   it('full-text search: immutable vector function, GIN index, org-scoped search function', () => {

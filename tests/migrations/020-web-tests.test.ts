@@ -35,7 +35,7 @@ describe('migration 020_web_tests', () => {
   it('every function has a fixed search_path and is not executable by tenants', () => {
     expect(code).not.toMatch(/guard_platform_columns/)
     const fns = [...code.matchAll(/CREATE OR REPLACE FUNCTION public\.(\w+)\(/g)].map((m) => m[1])
-    expect(fns.sort()).toEqual(['claim_web_test_session', 'release_web_test_session'])
+    expect(fns.sort()).toEqual(['claim_web_test_session', 'record_web_test_seconds', 'release_web_test_session', 'reset_web_test_block'])
     for (const fn of fns) {
       expect(code, fn).toMatch(new RegExp(`CREATE OR REPLACE FUNCTION public\\.${fn}\\([\\s\\S]*?SET search_path = public`))
       expect(code, fn).toMatch(new RegExp(`REVOKE EXECUTE ON FUNCTION public\\.${fn}\\([^)]*\\) FROM PUBLIC, anon, authenticated;`))
@@ -46,6 +46,25 @@ describe('migration 020_web_tests', () => {
   it('the lifetime cap is one atomic statement (check and increment together)', () => {
     const claim = code.split('FUNCTION public.claim_web_test_session')[1].split('$$;')[0]
     expect(claim).toMatch(/ON CONFLICT \(org_id\) DO UPDATE[\s\S]*WHERE p_limit IS NULL OR u\.sessions_started < p_limit/)
+  })
+
+  it('the seconds budget: columns added idempotently, accounted once per call, block only set (never lifted) by the accounting', () => {
+    for (const col of ['seconds_total integer NOT NULL DEFAULT 0', 'day_utc date', 'day_seconds integer NOT NULL DEFAULT 0', 'blocked_at timestamptz', 'blocked_reason text']) {
+      expect(code, col).toContain(`ALTER TABLE public.web_test_usage ADD COLUMN IF NOT EXISTS ${col};`)
+    }
+    const record = code.split('FUNCTION public.record_web_test_seconds')[1].split('$$;')[0]
+    // Idempotent per call: the ledger insert decides whether anything is added.
+    expect(record).toMatch(/INSERT INTO public\.web_test_call_seconds[\s\S]*ON CONFLICT \(call_id\) DO NOTHING;\s+IF NOT FOUND THEN/)
+    expect(record).toMatch(/day_seconds = CASE WHEN u\.day_utc = v_today THEN/)
+    expect(record).toMatch(/blocked_at = CASE WHEN v_over AND u\.blocked_at IS NULL THEN now\(\) ELSE u\.blocked_at END/)
+    expect(record).not.toMatch(/blocked_at = NULL/)
+    const reset = code.split('FUNCTION public.reset_web_test_block')[1].split('$$;')[0]
+    expect(reset).toMatch(/SET blocked_at = NULL, blocked_reason = NULL/)
+    // Ledger: service only, survives a deleted test call (no FK to calls).
+    expect(code).toMatch(/CREATE TABLE IF NOT EXISTS public\.web_test_call_seconds \(\s+call_id\s+uuid PRIMARY KEY,/)
+    expect(code).toContain('ALTER TABLE public.web_test_call_seconds ENABLE ROW LEVEL SECURITY;')
+    expect(code).toContain('REVOKE SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON public.web_test_call_seconds FROM anon, authenticated;')
+    expect(code).not.toMatch(/CREATE POLICY[^;]*web_test_call_seconds/)
   })
 
   it('new tables: RLS on; tenants only SELECT their own usage; test runs are service-only', () => {

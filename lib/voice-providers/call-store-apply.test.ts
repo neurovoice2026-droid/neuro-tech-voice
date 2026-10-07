@@ -154,6 +154,67 @@ describe('applyCallEvent — conversation source classification', () => {
   })
 })
 
+describe('applyCallEvent — calls answered only with the unavailable message', () => {
+  const nativeRow = (over: Record<string, unknown>) => ({
+    id: CALL, org_id: ORG, agent_id: AGENT, status: 'ringing', lifecycle_rank: 20, provider: 'elevenlabs', elevenlabs_conversation_id: 'conv_1', provider_call_id: 'conv_1',
+    is_test: false, channel: 'phone', updated_at: 'u1', direction: 'inbound', routing_reason: 'primary', routing: { mode: 'native', source: 'initiation_webhook' }, ...over,
+  })
+
+  for (const [label, over] of [
+    ['routing.unavailable (initiation webhook)', { routing: { mode: 'native', unavailable: true }, routing_reason: 'quota_exhausted' }],
+    ['quota_exhausted', { routing_reason: 'quota_exhausted' }],
+    ['agent_inactive', { routing_reason: 'agent_inactive' }],
+    ['number_inactive', { routing_reason: 'number_inactive' }],
+    ['routing.unavailable alone', { routing: { mode: 'native', unavailable: true } }],
+  ] as const) {
+    it(`${label}: merged, provider cost kept, never billed, no workflows`, async () => {
+      const db = seed({ calls: [nativeRow(over)] })
+      const res = await applyCallEvent(event())
+      expect(res).toMatchObject({ callId: CALL, outcome: 'updated', test: false })
+      expect(db.tables.calls[0]).toMatchObject({ status: 'completed', duration_seconds: 90 })
+      expect(db.rpcCalls.filter((c) => c.fn === 'record_call_usage')).toHaveLength(0)
+      expect(executeWorkflows).not.toHaveBeenCalled()
+      expect(db.tables.calls[0].workflows_triggered_at ?? null).toBeNull()
+      expect(db.tables.call_provider_costs).toHaveLength(1)
+    })
+  }
+
+  it('a native row the agent really answered is still billed once', async () => {
+    const db = seed({ calls: [nativeRow({})] })
+    await applyCallEvent(event())
+    expect(db.rpcCalls.filter((c) => c.fn === 'record_call_usage')).toHaveLength(1)
+    expect(executeWorkflows).toHaveBeenCalled()
+  })
+})
+
+describe('applyCallEvent — browser test seconds budget', () => {
+  it('a pre-created browser test row counts its seconds against the org budget, once per call', async () => {
+    const token = signCallToken(CALL, 'transfer', 3600)
+    const db = seed({ calls: [{ id: CALL, org_id: ORG, agent_id: AGENT, status: 'in-progress', lifecycle_rank: 20, provider: 'elevenlabs', is_test: true, channel: 'web', updated_at: 'u1', direction: 'inbound' }] })
+    await applyCallEvent(event({ localCallId: CALL, localCallToken: token, channel: 'web', durationSeconds: 120 }))
+    expect(db.rpcCalls.filter((c) => c.fn === 'record_web_test_seconds')).toEqual([{ fn: 'record_web_test_seconds', args: { p_org_id: ORG, p_call_id: CALL, p_seconds: 120, p_block_over: 600 } }])
+    expect(db.rpcCalls.filter((c) => c.fn === 'record_call_usage')).toHaveLength(0)
+  })
+
+  it('a web session stored by the webhook itself (no pre-created row) is counted too; other test channels are not', async () => {
+    let db = seed()
+    const res = await applyCallEvent(event({ channel: 'web', direction: null, fromNumber: null, toNumber: null, durationSeconds: 61, metadata: { channel: 'web', initiation_source: 'react_sdk' } }))
+    expect(db.rpcCalls.filter((c) => c.fn === 'record_web_test_seconds').map((c) => c.args)).toEqual([{ p_org_id: ORG, p_call_id: res.callId, p_seconds: 61, p_block_over: 600 }])
+    db = seed()
+    await applyCallEvent(event({ channel: 'other', direction: null, fromNumber: null, toNumber: null, metadata: { channel: 'other' } }))
+    expect(db.rpcCalls.filter((c) => c.fn === 'record_web_test_seconds')).toHaveLength(0)
+  })
+
+  it('a failed accounting write is thrown so the webhook is retried', async () => {
+    const db = seed()
+    db.rpc = ((fn: string, args: unknown) => {
+      db.rpcCalls.push({ fn, args })
+      return Promise.resolve(fn === 'record_web_test_seconds' ? { data: null, error: { message: 'boom' } } : { data: 2, error: null })
+    }) as unknown as MemoryDb['rpc']
+    await expect(applyCallEvent(event({ channel: 'web', direction: null, fromNumber: null, toNumber: null, metadata: { channel: 'web' } }))).rejects.toThrow(/record_web_test_seconds failed/)
+  })
+})
+
 describe('applyCallEvent — deleted calls', () => {
   it('a late event for a tombstoned call deletes the provider conversation and never recreates the row', async () => {
     const db = seed({ audit_log: [{ id: 'a1', org_id: ORG, action: 'call.deleted', target_id: CALL, details: { provider_call_ids: ['conv_1'] } }] })

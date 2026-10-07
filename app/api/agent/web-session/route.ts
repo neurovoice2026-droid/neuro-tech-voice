@@ -2,7 +2,10 @@
 // "Chat with your agent"): lib/voice-providers/web-test.ts.
 //   GET  → what the test panel may offer (no provider call, nothing counted)
 //   POST {mode: 'voice' | 'text'} → a one-time WebRTC conversation token for
-//        the org's OWN agent (resolved server-side; the browser sends no id)
+//        the org's OWN agent (resolved server-side; the browser sends no id).
+//        Refused once the org's server-side browser-test seconds budget is
+//        spent (403 trial_limit, 429 daily_limit + Retry-After) or its browser
+//        tests are blocked after an over-long session (403 web_test_blocked).
 // Every response is private and never cached: the token is a bearer
 // credential for one conversation.
 import { NextResponse } from 'next/server'

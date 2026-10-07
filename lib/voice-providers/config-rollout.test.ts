@@ -4,7 +4,14 @@ import { makeAgentSpec } from '@/tests/helpers/agent-spec'
 
 vi.mock('server-only', () => ({}))
 
-const state: { db: MemoryDb | null; circuit: string[]; hashes: Record<string, string>; configured: boolean } = { db: null, circuit: [], hashes: {}, configured: true }
+const state: { db: MemoryDb | null; circuit: string[]; hashes: Record<string, string>; configured: boolean; llmReasons: string[] } = {
+  db: null,
+  circuit: [],
+  hashes: {},
+  configured: true,
+  llmReasons: [],
+}
+vi.mock('@/lib/elevenlabs/llm-selection', () => ({ effectiveAgentLlm: async () => ({ llm: 'gemini-2.5-flash', reason: state.llmReasons.shift() ?? 'ok' }) }))
 vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => state.db }))
 vi.mock('./circuit-registry', () => ({ peek: async () => ({ state: state.circuit.shift() ?? 'closed' }) }))
 vi.mock('./agent-spec', () => ({
@@ -37,6 +44,7 @@ function row(agentId: string, over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   state.circuit = []
+  state.llmReasons = []
   state.hashes = {}
   state.configured = true
   syncAgent.mockReset().mockResolvedValue([{ provider: 'elevenlabs', status: 'ready' }])
@@ -88,6 +96,28 @@ describe('config rollout', () => {
     expect(report.synced).toHaveLength(1)
     expect(report.skipped).toBe('circuit_half_open')
     expect(syncAgent).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips the whole run while the LLM catalogue cannot be read: nothing compared, nothing marked drifted or synced', async () => {
+    state.db = memoryDb({ agent_provider_resources: [row('g1', { config_hash: 'stale' }), row('g2', { config_hash: 'stale' })] })
+    for (const reason of ['catalog_unavailable', 'unknown_without_catalog']) {
+      state.llmReasons = [reason]
+      const report = await runConfigRollout({ dryRun: false })
+      expect(report).toMatchObject({ skipped: 'llm_catalog_unavailable', scanned: 0, drifted: 0, synced: [] })
+    }
+    expect(syncAgent).not.toHaveBeenCalled()
+    expect(state.db.tables.agent_provider_resources.every((r) => r.rollout_checked_at === null)).toBe(true)
+    // Readable again (ok, or a deprecated / not offered model, which the catalogue decided): runs.
+    state.llmReasons = ['deprecated']
+    expect(await runConfigRollout({ dryRun: false })).toMatchObject({ skipped: null, drifted: 2 })
+  })
+
+  it('stops pushing when the catalogue becomes unreadable mid-run', async () => {
+    state.db = memoryDb({ agent_provider_resources: [row('h1', { config_hash: 'stale' }), row('h2', { config_hash: 'stale' })] })
+    state.llmReasons = ['ok', 'ok', 'catalog_unavailable']
+    const report = await runConfigRollout({ dryRun: false })
+    expect(report.synced).toHaveLength(1)
+    expect(report).toMatchObject({ skipped: 'llm_catalog_unavailable', deferred: 1 })
   })
 
   it('is off with batch 0, skipped when ElevenLabs is not configured, and limited to canary orgs', async () => {

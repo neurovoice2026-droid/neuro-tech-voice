@@ -11,6 +11,10 @@ import 'server-only'
 //   • at most ELEVENLABS_ROLLOUT_BATCH re-syncs per run (default 10, 0 = off),
 //     after scanning at most ELEVENLABS_ROLLOUT_SCAN agents (default 100);
 //   • not at all while the ElevenLabs API circuit is not closed;
+//   • not at all while the LLM catalogue cannot be read (llm-selection.ts
+//     reason catalog_unavailable / unknown_without_catalog): the hash would
+//     then be computed from the fallback LLM choice, a read that flaps
+//     between instances would mark every agent drifted and re-sync them all;
 //   • ELEVENLABS_ROLLOUT_CANARY_ORGS (comma-separated org ids) limits the
 //     rollout to those organizations, to watch a change on a few first.
 // Safe to run concurrently (cron and the admin endpoint): every write goes
@@ -21,6 +25,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createLogger, type Logger } from '@/lib/observability/logger'
 import { PLATFORM_AGENT_CONFIG_VERSION } from '@/lib/elevenlabs/agent-config'
+import { effectiveAgentLlm, type LlmSelectionReason } from '@/lib/elevenlabs/llm-selection'
 import { LIFECYCLES } from './adapters'
 import { buildAgentSpec, loadAgentRow } from './agent-spec'
 import { syncAgent } from './agent-sync'
@@ -33,6 +38,9 @@ export const DEFAULT_ROLLOUT_SCAN = 100
 const MAX_ROLLOUT_BATCH = 100
 const MAX_ROLLOUT_SCAN = 1000
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** LLM selections made without the catalogue: not a trustworthy basis for drift. */
+const CATALOG_UNREADABLE: ReadonlySet<LlmSelectionReason> = new Set(['catalog_unavailable', 'unknown_without_catalog'])
 
 function intIn(raw: string | undefined, fallback: number, min: number, max: number): number {
   if (raw === undefined || raw.trim() === '') return fallback
@@ -69,7 +77,7 @@ export interface RolloutOptions {
 export interface RolloutReport {
   platformVersion: number
   dryRun: boolean
-  /** Why nothing was done: 'disabled' (batch 0), 'not_configured', 'circuit_<state>'. */
+  /** Why nothing was done: 'disabled' (batch 0), 'not_configured', 'circuit_<state>', 'llm_catalog_unavailable'. */
   skipped: string | null
   canary: boolean
   scanned: number
@@ -112,6 +120,12 @@ export async function runConfigRollout(opts: RolloutOptions): Promise<RolloutRep
   if (circuit.state !== 'closed') {
     log.warn('config_rollout.skipped_circuit', { state: circuit.state })
     return { ...report, skipped: `circuit_${circuit.state}` }
+  }
+  const catalogUnreadable = async () => CATALOG_UNREADABLE.has((await effectiveAgentLlm(log)).reason)
+  if (await catalogUnreadable()) {
+    // Drift would be measured against the fallback LLM choice: nothing is compared or marked.
+    log.warn('config_rollout.skipped_llm_catalog_unavailable')
+    return { ...report, skipped: 'llm_catalog_unavailable' }
   }
 
   const db = createAdminClient()
@@ -169,6 +183,13 @@ export async function runConfigRollout(opts: RolloutOptions): Promise<RolloutRep
       report.deferred++
       report.skipped = `circuit_${now.state}`
       log.warn('config_rollout.stopped_circuit', { state: now.state })
+      break
+    }
+    // Same for the LLM catalogue (a cold instance whose catalogue read fails).
+    if (await catalogUnreadable()) {
+      report.deferred++
+      report.skipped = 'llm_catalog_unavailable'
+      log.warn('config_rollout.stopped_llm_catalog_unavailable')
       break
     }
     try {

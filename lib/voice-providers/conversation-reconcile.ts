@@ -10,15 +10,19 @@ import 'server-only'
 //      that ended (Twilio terminal status, or created more than 20 minutes
 //      ago). With a stored conversation id → GET it; otherwise list the
 //      org's OWN agent's conversations filtered on the dynamic variable
-//      ntv_call_id (= calls.id) around the call's start, then GET.
+//      ntv_call_id (= calls.id) around the call's start, then GET. A listed
+//      conversation is accepted only when it is a phone conversation and its
+//      signed ntv_call_token verifies to this row: a browser/SDK session can
+//      send any ntv_call_id (same rule as trustedLocalCallId, call-store.ts).
 //   2. Native inbound sweep: agents with an active native number; their
 //      conversations since a stored watermark, oldest first, that no calls
 //      row and no processed webhook already holds.
 // A conversation is applied only once it is final (done | failed) and only
 // after its agent_id matched the org's own agent, through the SAME merge path
 // as the webhook (applyCallEvent, source 'poll'). Billing stays exactly once:
-// usage_ledger key call:<id>. Every run is bounded (rows, GETs, agents) and
-// stops while the ElevenLabs API circuit is not closed.
+// usage_ledger key call:<id>. Every run is bounded (rows, GETs, agents, and
+// an optional wall-clock deadline from the maintenance run) and stops while
+// the ElevenLabs API circuit is not closed.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -33,12 +37,14 @@ import {
   type ELConversationDetails,
   type ELConversationListItem,
 } from '@/lib/elevenlabs/api/conversations'
-import { normalizeElevenLabsEvent, readEnvelope } from '@/lib/elevenlabs/webhook'
+import { classifyChannel, normalizeElevenLabsEvent, readEnvelope } from '@/lib/elevenlabs/webhook'
+import { verifyCallToken } from '@/lib/telephony/tokens'
 import { applyCallEvent } from './call-store'
 import { RANK } from './call-merge'
 import { peek } from './circuit-registry'
 import { isProviderError } from './errors'
 import { readWatermarks, writeWatermark } from './maintenance-state'
+import { PLATFORM_VARIABLES } from './prompt'
 
 const SWEEP_KEY_PREFIX = 'conversation_sweep:'
 
@@ -98,7 +104,17 @@ export interface ReconcileReport {
   errors: number
   swept: { agents: number; listed: number; applied: number; errors: number }
   fetches: number
+  /** The run stopped at its deadline (the rest waits for the next run). */
+  deadlineReached?: boolean
 }
+
+/** What one run may still spend: provider GETs and wall-clock time. */
+interface Budget {
+  fetches: number
+  deadline: number
+}
+
+const exhausted = (budget: Budget) => budget.fetches <= 0 || Date.now() >= budget.deadline
 
 type AgentRef = { orgId: string; externalId: string } | null
 
@@ -135,12 +151,26 @@ export function eventFromConversation(details: ELConversationDetails) {
   return normalizeElevenLabsEvent(readEnvelope({ type: 'post_call_transcription', data: details }))
 }
 
+/**
+ * A conversation found by listing on ntv_call_id belongs to `rowId` only when
+ * it is a phone conversation and carries the signed call token we injected
+ * for that row (ntv_call_token, purpose 'transfer'; expiry ignored like the
+ * webhook path). Anyone able to start a session of the agent (widget, SDK)
+ * can set ntv_call_id to any value, never the token.
+ */
+export function listedConversationMatches(details: ELConversationDetails, rowId: string, now = Date.now()): boolean {
+  if (classifyChannel((details.metadata ?? {}) as Record<string, unknown>) !== 'phone') return false
+  const token = dynamicVariable(details, PLATFORM_VARIABLES.callToken)
+  const verified = verifyCallToken(token, 'transfer', now, { ignoreExpiry: true })
+  return !!verified && verified.toLowerCase() === rowId.toLowerCase()
+}
+
 function isNativeOutboundRinging(row: ReconcileRow): boolean {
   return row.status === 'ringing' && !(row.routing && typeof row.routing.twilio_status === 'string')
 }
 
 export async function reconcileElevenLabsConversations(
-  opts: { limit?: number; log?: Logger; now?: number; sweep?: boolean } = {},
+  opts: { limit?: number; log?: Logger; now?: number; sweep?: boolean; deadline?: number } = {},
 ): Promise<ReconcileReport> {
   const log = (opts.log ?? createLogger()).child({ component: 'conversation_reconcile' })
   const now = opts.now ?? Date.now()
@@ -149,7 +179,7 @@ export async function reconcileElevenLabsConversations(
   if ((await peek('elevenlabs', now)).state !== 'closed') return { ...report, skipped: 'circuit_open' }
 
   const db = createAdminClient()
-  const budget = { fetches: maxFetches() }
+  const budget: Budget = { fetches: maxFetches(), deadline: opts.deadline ?? Number.POSITIVE_INFINITY }
   const agents = new Map<string, AgentRef>()
   const limit = opts.limit ?? reconcileBatch()
 
@@ -173,7 +203,7 @@ export async function reconcileElevenLabsConversations(
       return (twilio !== null && TWILIO_TERMINAL.includes(twilio)) || now - Date.parse(r.created_at) >= ENDED_AFTER_MS
     })
     for (const row of ended.slice(0, limit)) {
-      if (budget.fetches <= 0) break
+      if (exhausted(budget)) break
       report.scanned++
       try {
         const result = await reconcileRow(db, row, agents, budget, log, now)
@@ -186,7 +216,7 @@ export async function reconcileElevenLabsConversations(
     }
   }
 
-  if (opts.sweep !== false && sweepAgents() > 0 && budget.fetches > 0) {
+  if (opts.sweep !== false && sweepAgents() > 0 && !exhausted(budget)) {
     try {
       await sweepNativeInbound(db, agents, budget, report, log, now)
     } catch (err) {
@@ -195,6 +225,10 @@ export async function reconcileElevenLabsConversations(
     }
   }
   report.fetches = maxFetches() - budget.fetches
+  if (Date.now() >= budget.deadline) {
+    report.deadlineReached = true
+    log.warn('conversation_reconcile.deadline_reached', { scanned: report.scanned, swept: report.swept.agents })
+  }
   if (report.applied > 0 || report.swept.applied > 0) {
     // Recovered calls mean post-call webhooks are being lost: worth a look.
     log.warn('conversation_reconcile.recovered_without_webhook', { rows: report.applied, native: report.swept.applied })
@@ -215,7 +249,7 @@ async function reconcileRow(
   db: SupabaseClient,
   row: ReconcileRow,
   agents: Map<string, AgentRef>,
-  budget: { fetches: number },
+  budget: Budget,
   log: Logger,
   now: number,
 ): Promise<'applied' | 'pending' | 'notFound' | 'settled'> {
@@ -223,6 +257,8 @@ async function reconcileRow(
   const ref = await agentRefFor(db, row.agent_id, agents)
   const ctx = { orgId: row.org_id, callId: row.id }
   let details: ELConversationDetails | null = null
+  /** Found by listing and proven to be this row's (listedConversationMatches). */
+  let verifiedListing = false
   const knownId = row.elevenlabs_conversation_id ?? row.provider_call_id
 
   if (knownId) {
@@ -249,16 +285,21 @@ async function reconcileRow(
       ctx,
       max: 2,
     })
-    details = found.find((d) => FINAL_CONVERSATION_STATUSES.has(d.status)) ?? found[0] ?? null
+    // Only verified matches count, and an unverified final conversation is
+    // never preferred over a verified one that is still running.
+    const verified = found.filter((d) => listedConversationMatches(d, row.id))
+    if (verified.length < found.length) l.warn('conversation_reconcile.unverified_listing_ignored', { ignored: found.length - verified.length })
+    details = verified.find((d) => FINAL_CONVERSATION_STATUSES.has(d.status)) ?? verified[0] ?? null
+    verifiedListing = details !== null
   }
 
   if (details && FINAL_CONVERSATION_STATUSES.has(details.status)) {
     const event = eventFromConversation(details)
     if (!event) throw new Error('conversation could not be normalized')
     // Verified above: fetched by this row's own conversation id, or found on
-    // the org's own agent with ntv_call_id = this row's id.
-    const echoed = dynamicVariable(details, 'ntv_call_id')
-    if (knownId || (echoed && echoed.toLowerCase() === row.id.toLowerCase())) {
+    // the org's own agent with ntv_call_id = this row's id AND the row's
+    // signed call token, on the phone channel.
+    if (knownId || verifiedListing) {
       event.localCallId = row.id
       event.localCallIdTrusted = true
     }
@@ -301,7 +342,7 @@ async function reconcileRow(
 async function sweepNativeInbound(
   db: SupabaseClient,
   agents: Map<string, AgentRef>,
-  budget: { fetches: number },
+  budget: Budget,
   report: ReconcileReport,
   log: Logger,
   now: number,
@@ -321,7 +362,7 @@ async function sweepNativeInbound(
   const marks = agentIds.map((id) => ({ id, at: watermarks.get(`${SWEEP_KEY_PREFIX}${id}`) ?? null }))
   marks.sort((a, b) => (a.at ?? 0) - (b.at ?? 0))
   for (const { id: agentId, at } of marks.slice(0, sweepAgents())) {
-    if (budget.fetches <= 0) break
+    if (exhausted(budget)) break
     const ref = await agentRefFor(db, agentId, agents)
     if (!ref) continue
     report.swept.agents++
@@ -339,7 +380,7 @@ async function sweepAgent(
   agentId: string,
   ref: { orgId: string; externalId: string },
   watermark: number | null,
-  budget: { fetches: number },
+  budget: Budget,
   report: ReconcileReport,
   log: Logger,
   now: number,
@@ -357,7 +398,7 @@ async function sweepAgent(
     )
     listed.push(...(res.conversations ?? []).filter((c) => c.agent_id === ref.externalId))
     cursor = res.has_more ? (res.next_cursor ?? null) : null
-    if (!cursor || budget.fetches <= 0) break
+    if (!cursor || exhausted(budget)) break
   }
   report.swept.listed += listed.length
   listed.sort((a, b) => a.start_time_unix_secs - b.start_time_unix_secs)
@@ -387,7 +428,7 @@ async function sweepAgent(
       if (now - startMs < SWEEP_STUCK_AFTER_MS) advanceTo = Math.min(advanceTo, startMs - 1000)
       continue
     }
-    if (budget.fetches <= 0) {
+    if (exhausted(budget)) {
       advanceTo = Math.min(advanceTo, startMs - 1000)
       break
     }

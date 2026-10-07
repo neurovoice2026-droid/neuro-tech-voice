@@ -6,8 +6,9 @@ import 'server-only'
 //     1. the org's OWN agent and its ready ElevenLabs agent (ids from our DB
 //        only, never from the browser); it must be switched on, and never
 //        created here;
-//     2. rate limits (per org, per org per day, per client IP) and, for
-//        unpaid organisations, a lifetime cap claimed atomically in the DB
+//     2. rate limits (per org, per org per day, per client IP), the
+//        server-side seconds budget (below) and, for unpaid organisations, a
+//        lifetime session cap claimed atomically in the DB
 //        (claim_web_test_session, migration 020);
 //     3. GET /v1/convai/conversation/token (never retried: each attempt is a
 //        new billed conversation) with an opaque participant name;
@@ -16,6 +17,16 @@ import 'server-only'
 //        merges into it through the existing row path, so the session is
 //        never billed and never starts the owner's automations.
 //   The token is a bearer credential: returned once, never logged or stored.
+//
+//   Seconds budget (server-side: the panel's timer is client-side only and a
+//   modified browser can skip it). recordWebTestSeconds() accounts the length
+//   of every browser test conversation once, when its post-call data is merged
+//   (call-store.ts → record_web_test_seconds, keyed by calls.id). A new session
+//   is refused once the budget is spent: unpaid orgs get
+//   WEB_TEST_TRIAL_SECONDS for life, paid orgs WEB_TEST_DAILY_SECONDS per UTC
+//   day. One session longer than twice WEB_TEST_MAX_SECONDS proves the cap was
+//   bypassed: the org's browser tests are blocked until a platform admin
+//   resets them (resetWebTestBlock / reset_web_test_block).
 //
 //   finalizeStaleWebTests()  maintenance step `web_test_finalize`: test rows
 //   whose post-call result never arrived (session never connected, webhook
@@ -73,6 +84,14 @@ function envInt(name: string, fallback: number, min: number, max: number): numbe
 export const webTestTrialSessions = () => envInt('WEB_TEST_TRIAL_SESSIONS', 20, 0, 1000)
 /** Client-side length cap of one browser test (WEB_TEST_MAX_SECONDS, 60–1800, default 300). */
 export const webTestMaxSeconds = () => envInt('WEB_TEST_MAX_SECONDS', 300, 60, 1800)
+/** Lifetime seconds of browser tests of an unpaid organisation (WEB_TEST_TRIAL_SECONDS, 0–86400, default 1800; 0 = none). */
+export const webTestTrialSeconds = () => envInt('WEB_TEST_TRIAL_SECONDS', 1800, 0, 86_400)
+/** Seconds of browser tests per UTC day of a paid organisation (WEB_TEST_DAILY_SECONDS, 0–86400, default 3600; 0 = none). */
+export const webTestDailySeconds = () => envInt('WEB_TEST_DAILY_SECONDS', 3600, 0, 86_400)
+/** One session longer than this bypassed the panel's cap: the org's browser tests are blocked (admin reset). */
+export const webTestBlockAfterSeconds = () => 2 * webTestMaxSeconds()
+/** A session is not started with less budget left than this. */
+export const WEB_TEST_MIN_SESSION_SECONDS = 30
 
 /** A plan the organisation pays for (Stripe sets it; checkout in progress stays 'trial'). */
 export function isPaidPlan(plan: string | null | undefined): boolean {
@@ -130,6 +149,8 @@ export interface WebSessionResult {
   max_session_seconds: number
   /** Browser tests left for an unpaid organisation (null: no lifetime cap). */
   sessions_left: number | null
+  /** Seconds of browser tests left in the org's budget (lifetime for unpaid orgs, today for paid ones; null: unknown). */
+  seconds_left: number | null
   /** What the business's privacy settings do with this test conversation. */
   privacy: { record_audio: boolean; retention_days: number }
 }
@@ -140,7 +161,12 @@ export interface WebTestAvailability {
   reason: 'agent_missing' | 'agent_inactive' | 'agent_not_ready' | 'not_configured' | null
   text_available: boolean
   max_session_seconds: number
+  /** Unpaid orgs: 0 also when their seconds budget is spent or browser tests are blocked. */
   sessions_left: number | null
+  /** Seconds of browser tests left in the org's budget (null: unknown). */
+  seconds_left: number | null
+  /** Browser tests were blocked after a session far longer than the cap (admin reset needed). */
+  blocked: boolean
   privacy: { record_audio: boolean; retention_days: number } | null
 }
 
@@ -196,26 +222,116 @@ function maxSecondsOf(agent: AgentRow): number {
   return Math.max(60, Math.min(webTestMaxSeconds(), conversation.max_call_duration_minutes * 60))
 }
 
-async function sessionsUsed(db: SupabaseClient, orgId: string): Promise<number | null> {
-  const { data, error } = await db.from('web_test_usage').select('sessions_started').eq('org_id', orgId).maybeSingle()
+interface UsageRow {
+  sessions_started: number
+  seconds_total: number
+  day_utc: string | null
+  day_seconds: number
+  blocked_at: string | null
+}
+
+/** The org's web_test_usage row (zeros when it has none yet; null when it cannot be read). */
+async function readUsage(db: SupabaseClient, orgId: string): Promise<UsageRow | null> {
+  const { data, error } = await db.from('web_test_usage').select('sessions_started, seconds_total, day_utc, day_seconds, blocked_at').eq('org_id', orgId).maybeSingle()
   if (error) return null
-  return Number(data?.sessions_started ?? 0) || 0
+  const n = (v: unknown) => Math.max(0, Number(v ?? 0) || 0)
+  return {
+    sessions_started: n(data?.sessions_started),
+    seconds_total: n(data?.seconds_total),
+    day_utc: typeof data?.day_utc === 'string' ? data.day_utc.slice(0, 10) : null,
+    day_seconds: n(data?.day_seconds),
+    blocked_at: typeof data?.blocked_at === 'string' && data.blocked_at ? data.blocked_at : null,
+  }
+}
+
+export interface WebTestBudget {
+  blocked: boolean
+  /** Lifetime (unpaid) or today's (paid, UTC day) allowance in seconds. */
+  limit: number
+  window: 'lifetime' | 'day'
+  secondsLeft: number
+}
+
+/** The org's browser-test seconds budget (pure). */
+export function webTestBudget(usage: Pick<UsageRow, 'seconds_total' | 'day_utc' | 'day_seconds' | 'blocked_at'>, paid: boolean, now = Date.now()): WebTestBudget {
+  const blocked = !!usage.blocked_at
+  if (!paid) {
+    const limit = webTestTrialSeconds()
+    return { blocked, limit, window: 'lifetime', secondsLeft: Math.max(0, limit - usage.seconds_total) }
+  }
+  const limit = webTestDailySeconds()
+  const today = new Date(now).toISOString().slice(0, 10)
+  const used = usage.day_utc === today ? usage.day_seconds : 0
+  return { blocked, limit, window: 'day', secondsLeft: Math.max(0, limit - used) }
+}
+
+/** Seconds until the next UTC midnight (when a paid org's daily budget starts again). */
+function secondsUntilNextUtcDay(now: number): number {
+  const d = new Date(now)
+  return Math.max(1, Math.ceil((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1) - now) / 1000))
+}
+
+/**
+ * Refuses a new session when the org's browser tests are blocked or its
+ * seconds budget is spent. Unpaid orgs fail closed when the budget cannot be
+ * read (every session costs ElevenLabs credits); paid orgs fail open, like
+ * the session counter.
+ */
+async function assertBudget(db: SupabaseClient, orgId: string, paid: boolean, log: Logger, now: number): Promise<WebTestBudget | null> {
+  const usage = await readUsage(db, orgId)
+  if (!usage) {
+    if (!paid) {
+      log.error('web_test.budget_read_failed', null)
+      throw new RequestError('internal', 'Browser tests are unavailable right now. Please try again later.', 503)
+    }
+    log.warn('web_test.budget_read_failed')
+    return null
+  }
+  const budget = webTestBudget(usage, paid, now)
+  if (budget.blocked) {
+    log.warn('web_test.refused_blocked')
+    throw new RequestError('forbidden', 'Browser tests are paused for your account. Please contact support to turn them back on.', 403, { reason: 'web_test_blocked' })
+  }
+  if (budget.secondsLeft >= WEB_TEST_MIN_SESSION_SECONDS) return budget
+  if (budget.window === 'lifetime') {
+    throw new RequestError('forbidden', 'You have used all your free browser test time. Choose a plan to keep testing your agent.', 403, { reason: 'trial_limit' })
+  }
+  const retryAfter = secondsUntilNextUtcDay(now)
+  throw new RequestError(
+    'rate_limited',
+    'You have used today\'s browser test time. You can test again tomorrow.',
+    429,
+    { reason: 'daily_limit', retry_after_seconds: retryAfter },
+    { 'Retry-After': String(retryAfter) },
+  )
 }
 
 /** What the panel may offer (no provider call, nothing counted). */
 export async function webTestAvailability(org: WebSessionInput['org'], log: Logger, db: SupabaseClient = createAdminClient()): Promise<WebTestAvailability> {
   const resolved = await resolveAgent(db, org.id)
-  const base = { text_available: false, max_session_seconds: webTestMaxSeconds(), sessions_left: null, privacy: null }
+  const base = { text_available: false, max_session_seconds: webTestMaxSeconds(), sessions_left: null, seconds_left: null, blocked: false, privacy: null }
   if (!resolved) return { ...base, available: false, reason: 'agent_missing' }
   const privacy = privacyOf(resolved.agent)
-  const max = maxSecondsOf(resolved.agent)
+  let max = maxSecondsOf(resolved.agent)
+  const paid = isPaidPlan(org.plan)
+  const usage = await readUsage(db, org.id)
+  if (!usage) log.warn('web_test.usage_read_failed')
+  const budget = usage ? webTestBudget(usage, paid) : null
+  const spent = !!budget && (budget.blocked || budget.secondsLeft < WEB_TEST_MIN_SESSION_SECONDS)
+  if (budget && !spent) max = Math.min(max, budget.secondsLeft)
   let sessionsLeft: number | null = null
-  if (!isPaidPlan(org.plan)) {
-    const used = await sessionsUsed(db, org.id)
-    if (used === null) log.warn('web_test.usage_read_failed')
-    sessionsLeft = Math.max(0, webTestTrialSessions() - (used ?? 0))
+  if (!paid) {
+    // The panel shows "no tests left" when the trial's time is spent too.
+    sessionsLeft = spent ? 0 : Math.max(0, webTestTrialSessions() - (usage?.sessions_started ?? 0))
   }
-  const common = { max_session_seconds: max, sessions_left: sessionsLeft, privacy, text_available: resolved.ready && resolved.overrides.has(OVERRIDE_TEXT_ONLY) }
+  const common = {
+    max_session_seconds: max,
+    sessions_left: sessionsLeft,
+    seconds_left: budget ? budget.secondsLeft : null,
+    blocked: budget?.blocked ?? false,
+    privacy,
+    text_available: resolved.ready && resolved.overrides.has(OVERRIDE_TEXT_ONLY),
+  }
   if (!isConfigured()) return { ...common, available: false, reason: 'not_configured', text_available: false }
   if (!resolved.agent.is_active) return { ...common, available: false, reason: 'agent_inactive' }
   if (!resolved.ready) return { ...common, available: false, reason: 'agent_not_ready', text_available: false }
@@ -276,9 +392,11 @@ export async function startWebTestSession(input: WebSessionInput, log: Logger, d
 
   const paid = isPaidPlan(input.org.plan)
   const lifetime = paid ? null : webTestTrialSessions()
-  if (lifetime === 0) {
+  if (lifetime === 0 || (!paid && webTestTrialSeconds() === 0)) {
     throw new RequestError('forbidden', 'Browser tests are available on paid plans. Choose a plan to test your agent.', 403, { reason: 'trial_limit' })
   }
+  // Server-side seconds budget (the panel's timer is client-side only).
+  const budget = await assertBudget(db, orgId, paid, log, Date.now())
   const claim = await claimSession(db, orgId, lifetime, log)
 
   let token: Awaited<ReturnType<typeof conversationToken>>
@@ -358,10 +476,57 @@ export async function startWebTestSession(input: WebSessionInput, log: Logger, d
     connection_type: 'webrtc',
     server_location: sdkServerLocation(),
     dynamic_variables,
-    max_session_seconds: maxSecondsOf(agent),
+    // Never longer than the budget left (the budget is still enforced server-side).
+    max_session_seconds: budget ? Math.min(maxSecondsOf(agent), budget.secondsLeft) : maxSecondsOf(agent),
     sessions_left: lifetime !== null && claim.used !== null ? Math.max(0, lifetime - claim.used) : null,
+    seconds_left: budget ? budget.secondsLeft : null,
     privacy: privacyOf(agent),
   }
+}
+
+export interface WebTestSecondsResult {
+  /** False when this call was already accounted (webhook retry, reconciliation). */
+  recorded: boolean
+  totalSeconds: number
+  todaySeconds: number
+  blocked: boolean
+}
+
+/**
+ * Accounts the length of one browser test conversation (called by the call
+ * store when its post-call data is merged), once per call. A session longer
+ * than webTestBlockAfterSeconds() bypassed the panel's cap: the org's browser
+ * tests are blocked until a platform admin resets them. Throws on a database
+ * error so the webhook (or the reconciliation) retries the accounting.
+ */
+export async function recordWebTestSeconds(db: SupabaseClient, input: { orgId: string; callId: string; seconds: number }, log: Logger): Promise<WebTestSecondsResult> {
+  const seconds = Math.max(0, Math.round(input.seconds))
+  const blockAfter = webTestBlockAfterSeconds()
+  const { data, error } = await db.rpc('record_web_test_seconds', { p_org_id: input.orgId, p_call_id: input.callId, p_seconds: seconds, p_block_over: blockAfter })
+  if (error) throw new Error(`record_web_test_seconds failed: ${error.message}`)
+  const row = (Array.isArray(data) ? data[0] : data) as { recorded?: boolean; total_seconds?: number; today_seconds?: number; is_blocked?: boolean; newly_blocked?: boolean } | null
+  const result: WebTestSecondsResult = {
+    recorded: typeof row === 'object' && row !== null && row.recorded === true,
+    totalSeconds: Number(row?.total_seconds ?? 0) || 0,
+    todaySeconds: Number(row?.today_seconds ?? 0) || 0,
+    blocked: typeof row === 'object' && row !== null && row.is_blocked === true,
+  }
+  if (typeof row === 'object' && row !== null && row.newly_blocked === true) {
+    log.error('web_test.blocked_session_over_limit', null, { orgId: input.orgId, callId: input.callId, seconds, limitSeconds: blockAfter })
+  } else if (result.recorded && seconds > blockAfter) {
+    log.warn('web_test.session_over_limit', { orgId: input.orgId, callId: input.callId, seconds, limitSeconds: blockAfter })
+  }
+  if (result.recorded) log.info('web_test.seconds_recorded', { orgId: input.orgId, callId: input.callId, seconds, totalSeconds: result.totalSeconds })
+  return result
+}
+
+/** Platform admin: lifts the block set by recordWebTestSeconds. True when the org was blocked. */
+export async function resetWebTestBlock(orgId: string, log: Logger, db: SupabaseClient = createAdminClient()): Promise<boolean> {
+  const { data, error } = await db.rpc('reset_web_test_block', { p_org_id: orgId })
+  if (error) throw new Error(`reset_web_test_block failed: ${error.message}`)
+  const reset = data === true
+  if (reset) log.warn('web_test.block_reset', { orgId })
+  return reset
 }
 
 /**

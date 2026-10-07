@@ -37,14 +37,15 @@ Every endpoint, field path, enum and limit below was checked against the officia
 **`POST /api/agent/web-session {mode?: 'voice' | 'text'}`** (strict body: any other field is a 400): same-origin, `requireOrg`, then
 1. the org's agent (`agents.org_id`, oldest first: one agent per org) and its ElevenLabs resource (`org_id` + `agent_id`); 404 without an agent, 409 when switched off, not synced (`ready`/`degraded` with an external id), or chat requested without the override in force;
 2. rate limits: `web_test` 10 / 10 min and `web_test_day` 40 / day per org, `web_test_ip` 30 / day per hashed client IP;
-3. lifetime cap for unpaid orgs (`plan` not a paid plan; a checkout in progress stays `trial`): `claim_web_test_session(org, WEB_TEST_TRIAL_SESSIONS)`, one atomic statement, 403 `trial_limit` when used up, 503 when the counter is unavailable (fails closed). Paid orgs are only counted (fails open);
-4. the token (released back to the trial on failure);
-5. the pre-created calls row (only when the token carries a `conversation_id`, which the spec requires); a write failure is logged and the session still works (the webhook's own classification stores an unmatched web conversation as a test call);
-6. `201 {conversation_token, conversation_id, call_id, mode, connection_type: 'webrtc', server_location, dynamic_variables, max_session_seconds, sessions_left, privacy}`.
+3. seconds budget (`web_test_usage.seconds_total` / `day_seconds`, filled by `record_web_test_seconds` once per test call when its post-call data is merged): an org whose browser tests are blocked gets 403 `web_test_blocked`; unpaid orgs get `WEB_TEST_TRIAL_SECONDS` for life (403 `trial_limit` when spent, 503 when unreadable: fails closed); paid orgs get `WEB_TEST_DAILY_SECONDS` per UTC day (429 `daily_limit` with `Retry-After` until midnight UTC; fails open). The granted length is capped at the seconds left. One session longer than 2 × `WEB_TEST_MAX_SECONDS` (a client that skipped the panel's cap) blocks the org's browser tests until a platform admin calls `POST /api/admin/voice/web-tests {org_id}` (audited). Seconds are counted after each call, so concurrent sessions can overshoot by at most the rate limits × the session cap;
+4. lifetime cap for unpaid orgs (`plan` not a paid plan; a checkout in progress stays `trial`): `claim_web_test_session(org, WEB_TEST_TRIAL_SESSIONS)`, one atomic statement, 403 `trial_limit` when used up, 503 when the counter is unavailable (fails closed). Paid orgs are only counted (fails open);
+5. the token (released back to the trial on failure);
+6. the pre-created calls row (only when the token carries a `conversation_id`, which the spec requires); a write failure is logged and the session still works (the webhook's own classification stores an unmatched web conversation as a test call);
+7. `201 {conversation_token, conversation_id, call_id, mode, connection_type: 'webrtc', server_location, dynamic_variables, max_session_seconds, sessions_left, seconds_left, privacy}`. GET also returns `seconds_left` and `blocked`; the panel disables Start and explains why (trial spent, today's time used, or paused).
 
 **Dynamic variables** come from the shared builder (`platformVariables`): `ntv_routing_mode: 'web'` (new value), `ntv_call_direction: 'inbound'`, the real `after_hours` from the opening hours, and `business_name`. The call id and both tokens are never handed to the browser: the agent keeps its placeholders (`unknown` / `none`), so the transfer, booking and take-a-message tools answer `{ok:false}` with their guidance. A new prompt rule (ElevenLabs agents with any of those tools) tells the agent that on `"web"` these actions only work on real phone calls. The native `transfer_to_number` system tool cannot be blocked by token; the prompt rule covers it (**unverified live**).
 
-**Length and cost.** The panel ends a test after `WEB_TEST_MAX_SECONDS` (300 s) or the agent's own maximum, whichever is lower. The provider-side hard limits are the agent's `max_duration_seconds` and its plan `call_limits` (trial: 2 concurrent conversations, slice A2). A modified browser could skip the client-side cap; the lifetime cap, the rate limits and the concurrency limit bound that.
+**Length and cost.** The panel ends a test after `WEB_TEST_MAX_SECONDS` (300 s) or the agent's own maximum, whichever is lower. The provider-side hard limits are the agent's `max_duration_seconds` and its plan `call_limits` (trial: 2 concurrent conversations, slice A2). A modified browser could skip the client-side cap; the seconds budget, the over-length block, the lifetime cap, the rate limits and the concurrency limit bound that.
 
 **Finalizer.** Maintenance step `web_test_finalize`: test rows (`channel 'web'`, `is_test`) still `in-progress` 2 hours after the token was minted are closed as `canceled` (rank 40, termination reason "No result was received for this browser test"); a late webhook or poll (rank 50) still fills them in. Never billed. Test rows start with 4 of the 6 lost-webhook recovery attempts used (`reconcile_attempts`), so abandoned tests cannot crowd phone calls out of `conversation_reconcile`'s budget.
 
@@ -107,12 +108,14 @@ Additive and idempotent (no DROP; re-run twice on PostgreSQL 16). **Apply it bef
 * `calls_web_test_open`: partial index `calls (created_at) WHERE channel = 'web' AND is_test AND status = 'in-progress'` (finalizer).
 * **Verified** on a throwaway PostgreSQL 16 with Supabase-like roles: 001–018 then 020, then 020 again. With a limit of 2 the third claim is refused and the count stays 2; release gives one back (an unknown org returns 0); `p_limit` NULL counts only; 0 is refused without a write; two **concurrent** claims on the last session: the second waits for the first and is refused. A tenant sees only its own usage row and gets `permission denied` on UPDATE/INSERT/DELETE, on both functions and on `agent_test_runs`; anon cannot read usage. The status check and the unique invocation id are enforced. Deleting an agent keeps its runs (`agent_id` NULL); deleting an org removes its usage row. The finalizer query uses `calls_web_test_open`. `tests/migrations/020-web-tests.test.ts` checks the file statically.
 
-## 7. Environment variables (not added to `.env.example`)
+## 7. Environment variables (documented in `.env.example`)
 
 | Name | Default | Meaning |
 | --- | --- | --- |
 | `WEB_TEST_TRIAL_SESSIONS` | `20` | Lifetime browser tests of an unpaid (trial) organization, 0–1000. `0` = browser tests on paid plans only. |
 | `WEB_TEST_MAX_SECONDS` | `300` | Client-side length cap of one browser test, 60–1800 s (never above the agent's own maximum call duration). |
+| `WEB_TEST_TRIAL_SECONDS` | `1800` | Lifetime browser-test seconds of an unpaid organization, 0–86400. |
+| `WEB_TEST_DAILY_SECONDS` | `3600` | Browser-test seconds per UTC day of a paid organization, 0–86400. |
 | `ELEVENLABS_TEST_AGENT_ID` | unset | ElevenLabs agent id of the canary for the regression suite. Unset: `run` needs an `agent_id`. |
 | `ELEVENLABS_CREDIT_ALERT_PCT` | `80` | Warn threshold (% of the hard credit limit, voice slots and add/edit operations), 1–100. |
 | `ELEVENLABS_CREDIT_CRITICAL_PCT` | `95` | Error threshold, 1–100, never below the warn threshold. |

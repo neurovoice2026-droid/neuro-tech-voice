@@ -25,6 +25,14 @@
 -- INSERT/UPDATE on calls, so no new guard function is needed for them.
 -- Deploy order: apply this file BEFORE deploying the slice D code (the call
 -- store and the calls API select the new columns).
+-- Large calls table: this file runs in ONE transaction, so every ALTER TABLE
+-- below holds its ACCESS EXCLUSIVE lock on calls until COMMIT, and each
+-- CREATE INDEX (btree and the GIN calls_search_fts) blocks writes to calls
+-- while it builds. On a large table, split it: create those indexes first
+-- with CREATE INDEX CONCURRENTLY (outside any transaction, same names and
+-- definitions, so the IF NOT EXISTS here then skips them), and run each
+-- VALIDATE CONSTRAINT in its own transaction afterwards. Production's calls
+-- table is tiny today, so the file is applied as is.
 -- ══════════════════════════════════════════════════════════════════════════════
 
 SET lock_timeout = '5s';
@@ -39,7 +47,11 @@ ALTER TABLE public.calls ADD COLUMN IF NOT EXISTS retention_applied_at timestamp
 ALTER TABLE public.calls ADD COLUMN IF NOT EXISTS reconcile_attempts smallint NOT NULL DEFAULT 0;
 ALTER TABLE public.calls ADD COLUMN IF NOT EXISTS reconcile_checked_at timestamptz;
 
--- NOT VALID + VALIDATE: no long ACCESS EXCLUSIVE lock on a large calls table.
+-- Constraints are added NOT VALID, then validated. Inside this one
+-- transaction that does NOT shorten any lock: the ACCESS EXCLUSIVE lock taken
+-- by ALTER TABLE is held until COMMIT, through the validation scan. The split
+-- only pays off when VALIDATE runs in a separate transaction (it then needs
+-- only SHARE UPDATE EXCLUSIVE): see the note at the top for a large table.
 DO $$ BEGIN
   ALTER TABLE public.calls ADD CONSTRAINT calls_channel_check CHECK (channel IN ('phone', 'web', 'other')) NOT VALID;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -134,10 +146,12 @@ ALTER TABLE public.maintenance_state ENABLE ROW LEVEL SECURITY; -- no policy: te
 REVOKE SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON public.maintenance_state FROM anon, authenticated;
 
 -- ─── Privacy retention of OUR copy ────────────────────────────────────────────
--- Clears transcript, summary, title, analysis, the provider error text and the
--- recording link of up to p_limit calls of one agent that ended before
--- p_cutoff. Billing and statistics columns (status, duration, outcome,
--- call_successful, numbers, usage) are kept. Idempotent (retention_applied_at).
+-- Clears transcript, summary, title, analysis, the provider error text, the
+-- transfer reason the AI wrote (routing.transfer.reason, may quote the
+-- caller) and the recording link of up to p_limit calls of one agent that
+-- ended before p_cutoff. Billing and statistics columns (status, duration,
+-- outcome, call_successful, numbers, usage, the rest of routing) are kept.
+-- Idempotent (retention_applied_at).
 CREATE OR REPLACE FUNCTION public.apply_call_retention(p_agent_id uuid, p_cutoff timestamptz, p_limit integer)
 RETURNS integer
 LANGUAGE plpgsql
@@ -164,6 +178,7 @@ BEGIN
       summary_title = NULL,
       analysis = '{}'::jsonb,
       call_metadata = c.call_metadata - 'provider_error' - 'warnings',
+      routing = c.routing #- '{transfer,reason}',
       has_recording = false,
       recording_status = 'deleted',
       retention_applied_at = now()
