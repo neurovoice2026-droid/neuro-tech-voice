@@ -1,11 +1,15 @@
 /**
  * REEL 5 · b6 THE SAMPLE CALL (docs/ig/ig5/SCRIPT.md b6; the dashboard's own strings, components/calls/call-display.tsx):
- * a white record that rises on "It" — its header chrome ● SAMPLE CALL (label 28) with, at its left, a small rose dot
- * ringing (an incoming call). On "picks up" her orb glides onto the dot and absorbs it (the pickup, one move) and stays
- * docked there as the agent, listening; the OutcomePill **Answered** (blue) lands at the header's right. Then the tool
- * step "Checked your availability" spins and resolves to a drawn check; on "books" the step "Booked an appointment"
- * ticks and the pill swaps Answered → **Booked** (emerald) with the kit's Swap. No calendar brand, no logo, no PRO chip.
- * The launch-gate cut (ig5-06-msg: "…and takes a message.") shows one step "Took a message" and swaps to Message taken.
+ * a white record that rises on "It" AS ITS HEADER ALONE — ● SAMPLE CALL (label 28) with, at its left, a small rose dot
+ * ringing (an incoming call) — and grows its body as its first tool step arrives (never a blank slab, crit-r1 P2). On
+ * "picks up" her orb glides onto the dot and absorbs it (the pickup, one move: docked on the vowel of "up", the dot
+ * gone on the click) and stays docked there as the agent, listening; the OutcomePill **Answered** (blue) lands at the
+ * header's right. Then the tool step "Checked your availability" spins and resolves to a drawn check; on "books" the
+ * step "Booked an appointment" ticks and the pill swaps Answered → **Booked** (emerald) with the kit's Swap, the app's
+ * own **BETA** chip beside it (components/integrations/BetaBadge.tsx: the dashboard badges Google Calendar booking as
+ * beta — crit-r1 T5; POSTING §0 item 5 drops it with the badge). No calendar brand, no logo, no PRO chip.
+ * The launch-gate cut (ig5-06-msg: "…and takes a message.") shows one step "Took a message" and swaps to Message taken
+ * (no BETA chip).
  *
  * b7 (the shared end card): the record is pulled back and up over the CTA (× .62, dimmed to 50 %), her orb docked on
  * it; it goes out under the card's light on the bar.
@@ -24,6 +28,7 @@ import { OutcomePill, outcomePillSize, type OutcomeKind } from '../../components
 import { ZoneRect } from '../../components/ZoneGuard';
 import * as T from '../timing';
 import { at as atPose, bbox, poseTransform, RECORD, RECORD_BACK, type Pose } from './layout';
+import { reveal } from '../../../components/Type';
 import { labelSpec } from './type';
 
 const M = T.M;
@@ -52,6 +57,19 @@ const TOOLS = M.booked
 /** the end card's pull-back (from just before the comment field rises) and the record's exit on the bar */
 const PULL = [E.field - 8, E.field + 12] as const;
 const OUT = [T.IMPACT - 6, T.IMPACT + 1] as const;
+
+/** the record's height: its header alone (to just under the rule) until its first tool step comes, then its body grows
+ *  (the step rises into it) */
+const HEAD_H = RECORD.ruleY + 4;
+const bodyAt = (t: number) => tween(t, [TOOLS[0].at - 4, TOOLS[0].at + 3], [0, 1], EASE.inOut);
+export const recordH = (t: number) => mix(HEAD_H, RECORD.h, bodyAt(t));
+/** the app's BETA badge beside Booked (BetaBadge: text-[10px] semibold uppercase tracking-wide, sky-50 / sky-200 /
+ *  sky-700, Tailwind v4 oklch → sRGB) at the pill's scale (12 px → 28: 10 px → ≈ 24) — while the app still badges
+ *  booking as beta (one switch) */
+export const BETA = true;
+const BETA_CHIP = { size: 24, tracking: 0.025, padX: 0.8, h: 1.6, bg: '#f0f9ff', border: '#b8e6fe', ink: '#0069a8', gap: 12 } as const;
+const betaSpec = () => ({ size: BETA_CHIP.size, weight: 600, tracking: BETA_CHIP.tracking });
+const betaW = () => measureText('BETA', betaSpec()) + 2 * BETA_CHIP.padX * BETA_CHIP.size;
 
 /** the record's pose at t (null before its rise / after its exit) */
 export function recordState(t: number): { pose: Pose; opacity: number; moving: boolean } | null {
@@ -101,6 +119,40 @@ const ToolStep: React.FC<{ t: number; label: string; x: number; y: number; at: n
     </div>
   );
 };
+/** the BETA chip, landing a frame after the swap to Booked (the pill's pop) */
+const BetaChip: React.FC<{ t: number; x: number; y: number }> = ({ t, x, y }) => {
+  const r = reveal(t, OUTCOME_AT + 1, { config: SPRING.pop, rise: 40, fade: 0.5, scaleFrom: 0.94 });
+  const B = BETA_CHIP;
+  const moving = Math.abs(r.y) > 0.03 || Math.abs(r.scale - 1) > 1e-4;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: x,
+        top: y,
+        height: B.h * B.size,
+        padding: `0 ${(B.padX * B.size).toFixed(2)}px`,
+        display: 'flex',
+        alignItems: 'center',
+        borderRadius: 999,
+        background: B.bg,
+        boxShadow: `inset 0 0 0 1.5px ${B.border}`,
+        fontFamily: '"Instrument Sans Variable", "Instrument Sans", system-ui, sans-serif',
+        fontSize: B.size,
+        fontWeight: betaSpec().weight,
+        letterSpacing: `${B.tracking}em`,
+        lineHeight: 1,
+        color: B.ink,
+        whiteSpace: 'nowrap',
+        transformOrigin: '50% 60%',
+        opacity: r.opacity >= 0.999 ? undefined : r.opacity,
+        ...subpixel(moving ? `translateY(${r.y.toFixed(3)}%) scale(${r.scale.toFixed(5)})` : undefined, moving),
+      }}
+    >
+      <span style={{ display: 'block', transform: 'translateY(-0.02em)' }}>BETA</span>
+    </div>
+  );
+};
 const toolW = (label: string, size: number) => Math.round(size * 1.05) + size * 0.45 + measureText(label, { size, weight: W.medium });
 
 export const RecordCard: React.FC<{ t: number }> = ({ t }) => {
@@ -115,9 +167,15 @@ export const RecordCard: React.FC<{ t: number }> = ({ t }) => {
   const pillOld = outcomePillSize('answered', H.pill);
   const pillNew = outcomePillSize(OUTCOME, H.pill);
   const pillW = t < OUTCOME_AT ? pillOld.w : pillNew.w;
-  // the rose dot: ringing until her orb lands on it (absorbed), then gone under her
-  const dotA = 1 - tween(t, [M.up - 3, M.up + 1], [0, 1], EASE.in2);
+  // the rose dot: ringing until her orb lands on it (on the vowel of "up"), absorbed by the click (the stamp)
+  const dotA = 1 - tween(t, [M.dock - 1, M.up], [0, 1], EASE.in2);
   const show = st.opacity > 0.5;
+  const h = recordH(t);
+  const body = bodyAt(t);
+  const beta = BETA && M.booked && t >= OUTCOME_AT + 1;
+  const bw = betaW();
+  const betaX = R.w - R.pad - pillNew.w - BETA_CHIP.gap - bw;
+  const betaH = BETA_CHIP.h * BETA_CHIP.size;
   return (
     <>
       <div
@@ -126,8 +184,9 @@ export const RecordCard: React.FC<{ t: number }> = ({ t }) => {
           left: 0,
           top: 0,
           width: R.w,
-          height: R.h,
+          height: h,
           borderRadius: R.r,
+          overflow: 'hidden',
           background: '#ffffff',
           boxShadow: meshElevation(2.6, SHADOW, 1.1),
           transformOrigin: '0 0',
@@ -157,14 +216,16 @@ export const RecordCard: React.FC<{ t: number }> = ({ t }) => {
             </Swap>
           </div>
         ) : null}
-        <div style={{ position: 'absolute', left: R.pad, right: R.pad, top: R.ruleY, height: 1.25, background: '#e4e0eb' }} />
+        {beta ? <BetaChip t={t} x={betaX} y={cy - betaH / 2} /> : null}
+        {body > 0.002 ? <div style={{ position: 'absolute', left: R.pad, right: R.pad, top: R.ruleY, height: 1.25, background: '#e4e0eb', opacity: body }} /> : null}
         {TOOLS.map((tl, i) => (
           <ToolStep key={i} t={t} label={tl.label} x={R.pad} y={R.tools[i]} at={tl.at} done={tl.done} size={R.toolSize} />
         ))}
       </div>
       {show ? (
         <>
-          <ZoneRect what="object record" rect={bbox(st.pose, { x: 0, y: 0, w: R.w, h: R.h })} />
+          <ZoneRect what="object record" rect={bbox(st.pose, { x: 0, y: 0, w: R.w, h })} />
+          {beta ? <ZoneRect what="record BETA" rect={bbox(st.pose, { x: betaX, y: cy - betaH / 2, w: bw, h: betaH })} /> : null}
           <ZoneRect what="record SAMPLE CALL" rect={bbox(st.pose, { x: H.labelX, y: cy - 17, w: labW, h: 34 })} />
           {t >= ANSWERED_AT ? <ZoneRect what="record pill" rect={bbox(st.pose, { x: R.w - R.pad - pillW, y: cy - pillOld.h / 2, w: pillW, h: pillOld.h })} /> : null}
           {TOOLS.map((tl, i) => (t >= tl.at ? <ZoneRect key={i} what={`record tool “${tl.label}”`} rect={bbox(st.pose, { x: R.pad, y: R.tools[i], w: toolW(tl.label, R.toolSize), h: R.toolSize * 1.3 })} /> : null))}

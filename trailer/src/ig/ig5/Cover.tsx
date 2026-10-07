@@ -5,13 +5,12 @@
  *   kicker       AI RECEPTIONIST · 05 (label role, y 270): the search keyword and the series number
  *   title        the hook, "Three rings." / "Gloves on." / "You can't." on three rows at 112 px from y 330, "Three" in
  *                rose (the ringing phone's colour), the ring trio (three rose hairlines round the light) right of row 1
- *   attribution  three rows at 44 px, graphite, y 720–876: "Agency AI receptionist:" / "commonly $300 a month." ("$300"
+ *   attribution  three rows at 52 px, graphite, y 750–936: "Agency AI receptionist:" / "commonly $300 a month." ("$300"
  *                in rose: the $300 keeps T1's hedge, RESEARCH-prices §6 #6) / "Ours: from $49 a month" ("$49" in her
  *                teal, her orb as the full stop) — so the grid tile can't read as "AI receptionists cost $300"
- *   thumbnail    the b4 payoff itself (stage/Papers + stage/Ours at the payoff frame: the pile with all three anchors and
- *                their hedges, ours with "$49" and "No setup fee.", the bars to scale), y 890–1300, its "$49" above
- *                y 1300 (TikTok's grid view count)
  *
+ * A title and ONE graphic, as ig1–ig4 (crit-r1 P6 / T4): the × .42 payoff thumbnail is gone — its labels rendered at
+ * ≈ 11 px (its "$99" without a legible "for 50 minutes" at grid size) and it repeated the attribution's $300 and $49.
  * Every word on it is spoken in the reel (with T1 placed). An image: its words need no voice.
  */
 import React from 'react';
@@ -22,26 +21,16 @@ import { GRAPHITE } from '../../kb/theme';
 import { CoverCard } from '../components/CoverCard';
 import { PearlGround } from '../components/Ground';
 import { LineLight } from '../components/Orb';
-import { ZoneProvider, ZoneRect } from '../components/ZoneGuard';
-import { OURS } from './stage/layout';
-import { fullStopAt, Ours } from './stage/Ours';
-import { Papers } from './stage/Papers';
+import { ZoneRect } from '../components/ZoneGuard';
 import { registerIg5Zones } from './stage/Zones';
-import { figWidth, money } from './stage/type';
-import * as T from './timing';
 
 registerIg5Zones();
 
 const RUSH = MOMENT_LIGHTS.rush;
 const SUNDAY = MOMENT_LIGHTS.sunday;
 
-/** the payoff frame the thumbnail shows (every word on ours printed, the bars drawn) */
-const PAYOFF = T.M.noSetup[2] + 6;
-/** the thumbnail: the stage's top-left of the payoff (x 120, y 300: ours' and the pile's left edge, the pile's top) →
- *  cover (86, 890), × .42 — on the text's own axis (x 86), its "$49" ending just above y 1300 */
-const THUMB = { s: 0.42, from: { x: 120, y: 300 }, to: { x: 86, y: 890 } } as const;
-/** the attribution rows */
-const ATT = { x: 86, y: 720, size: 44, pitch: 52, weight: 480, tracking: -0.02 } as const;
+/** the attribution rows (52 px: ≈ 19 px on a 390 px grid tile) */
+const ATT = { x: 86, y: 750, size: 52, pitch: 62, weight: 480, tracking: -0.02 } as const;
 /** the ring trio right of title row 1 (cover scale) */
 const TRIO = { x: 832, y: 392, d: [40, 86, 132], w: [2.4, 1.8, 1.2], a: [0.85, 0.6, 0.35], dot: 13 } as const;
 
@@ -57,7 +46,7 @@ const Attribution: React.FC = () => {
   const rowW = (r: readonly Run[]) => measureText(r.map((x) => x.text).join(''), spec);
   const last = ROWS[2];
   const lastW = rowW(last);
-  const orbD = 26;
+  const orbD = 30;
   const orbX = ATT.x + lastW + spaceWidth(spec) * 0.35 + orbD / 2;
   const orbY = ATT.y + 2 * ATT.pitch + ATT.size * 0.96 - orbD / 2 - 1;
   const p49 = measureText('Ours: from ', spec);
@@ -92,35 +81,6 @@ const Trio: React.FC = () => (
   </>
 );
 
-/** her orb as ours' full stop in the thumbnail (a still: the CSS mesh orb in her teal) */
-const StopDot: React.FC<{ at: { x: number; y: number }; d: number }> = ({ at, d }) => <LineLight t={40} x={at.x} y={at.y} d={d} palette={SUNDAY.orb} />;
-
-/** the payoff at the cover's scale; its own rects are not the cover's (they are reported once, scaled, below) */
-const Thumbnail: React.FC = () => {
-  const ready = useKitFaces();
-  const { s, from, to } = THUMB;
-  const tf = `translate(${(to.x - from.x * s).toFixed(3)}px, ${(to.y - from.y * s).toFixed(3)}px) scale(${s})`;
-  const map = (x: number, y: number) => ({ x: to.x + (x - from.x) * s, y: to.y + (y - from.y) * s });
-  // ours' "$49" (stage: x 160, its box top OURS.y4 + fig.y, 200 px) on the cover
-  const a = map(OURS.x + OURS.fig.x, OURS.y4 + OURS.fig.y);
-  const w49 = ready ? figWidth(money(49), OURS.fig.size) * s : 0;
-  const pile = map(120, 300);
-  const end = map(OURS.x + OURS.w, OURS.y4 + OURS.h);
-  return (
-    <>
-      <div style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, transformOrigin: '0 0', transform: tf }}>
-        <ZoneProvider value={{ on: false, reel: 'ig5', frame: 0, cover: true }}>
-          <Papers t={PAYOFF} />
-          <Ours t={PAYOFF} />
-        </ZoneProvider>
-      </div>
-      {ready ? <StopDot at={map(fullStopAt(PAYOFF).x, fullStopAt(PAYOFF).y)} d={44 * s} /> : null}
-      <ZoneRect what="price $49 (cover thumbnail)" rect={{ x: a.x, y: a.y, w: w49, h: OURS.fig.size * s }} />
-      <ZoneRect what="cover thumbnail" rect={{ x: pile.x, y: pile.y, w: end.x - pile.x, h: end.y - pile.y }} />
-    </>
-  );
-};
-
 const Art: React.FC = () => {
   const ready = useKitFaces();
   if (!ready) return null;
@@ -128,7 +88,6 @@ const Art: React.FC = () => {
     <>
       <Trio />
       <Attribution />
-      <Thumbnail />
     </>
   );
 };

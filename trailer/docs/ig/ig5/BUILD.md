@@ -206,3 +206,68 @@ Swapping to the message-taken take is one id, and the sound follows it with no f
 - `hit-levels.txt` (each hit against the bed and the voice);
 - `guard.log`;
 - spectrogram and loudness sheets of mix / voice / bed / effects with every cue, word and music moment: `sheet-full.png`, `sheet-0-300.png` (the hook and the bed's entry), `sheet-380-540.png` (the cut, the pickup, the return), `sheet-520-700.png` (dots, the record, "books"), `sheet-680-840.png` (the CTA, the build, the impact, the tail).
+
+---
+
+## 6. Round 1 fixes
+
+Label `fix-r1`. Written 2026-10-07 on `claude/remotion-trailer` (HEAD `b0edc72`), answering critic round 1 (`look`, `truth`, `sync`, `sound`; QA in `out/ig/qa/ig5/crit-r1-*`). Nothing committed (the orchestrator commits). This section supersedes §1–§5 where they differ. QA for this round: `out/ig/qa/ig5/fix-r1/`.
+
+**Files changed:** `src/ig/ig5/{timing.ts, Cover.tsx, acts/Acts.tsx, stage/{Hook,Ours,Papers,Record,Stage,layout,type}.ts(x)}`; docs `POSTING.md`, `RESEARCH-prices.md`, `HOOKS.md`, `SCRIPT.md`, this file; the `ig5-06` direction text in `scripts/ig5/voice-lines-ig5.json` (documentation only: no take changed). No shared file was touched (`src/ig/components/ZoneGuard.tsx` is unchanged this round, so INFRA-LOG has nothing new).
+
+### 6.1 Blocking
+
+| Issue | Outcome | What changed |
+|---|---|---|
+| **L1** pile hedges illegible | **fixed** | The pile now steps back the FIGURES and bars only (`PILE.ink` .55 → .60, `pileInk`); every word (tags, "commonly", "a month", "from", "for 50 minutes") takes its own `labelInk` (1 → .88). The tags are 36 px (× .88 = 32 px in the pile). Measured on `stills/f0522.png` (`scripts/contrast.py`, glyph cores vs paper): tags 5.6:1 (was 2.6), "commonly" 5.6 (2.6), "a month" / "from" / "for 50 minutes" 9.7 (3.5), the figures 3.1 (2.8: large text ≥ 3:1), "$49" 5.4, "Ours? From" 14.1. |
+| **SEAM-1** rings popping in at f826 | **fixed** | `Hook.tsx` `TrioRings`: for t < 0 the rings' ink × `tween(t, [−10, −2], EASE.inOut)` (`TRIO_SEAM_IN`), t ≥ 0 untouched. With P10 her orb lands on the light at f832, so the rings fade in round her as she closes into it. Frame 0 is byte-identical to round 0's (`stills/f0000.png` vs `crit-r1-look/stills/f0000.png`: mean 0, max 0); the 839 → 0 step equals the step before it (mean 0.295 vs 0.294, as before). |
+| **S1** caption / picture moments late on "set", "up" | **fixed** | `timing.ts` `NUDGE` (ig3's idiom): `ig5-05t {1: −3, 3: −4.5}`, `ig5-06 {2: −3}` (and `ig5-06-msg {2: −3}`). The band captions get `timing={{ nudge }}`. Note: a non-set caption screen rises as a unit on its first word, so the nudge changes no caption pixel here; the moments that were really late were the picture's, and they now read the nudged onsets: `M.set` (the track draws on the /s/, f540; `fx-scratch` f541) and the new `M.dock` (f595: her orb's glide onto the record's dot ends on the vowel of "up"; the dot is absorbed by f598). `M.up` keeps the stamp, so the `fx-pickup` click stays on the p closure (f598) and Answered (f600) is unchanged. |
+
+### 6.2 Polish
+
+| Issue | Outcome | What changed / why not |
+|---|---|---|
+| **P1** pickup hidden under ours | **fixed** (option a) | Ours rises 5 f after the pickup (`OURS_RISE` = f427, from 40 px under its place, not 72): the seed and pop play on the bare desk (`strip-a-pickup.png`). The desk is drawn INTO the light from both ends on the pickup, so its left end clears x 120 within 2 f: no stub beside the card. `PIC.oursLand` → `M.pickup + 10`. |
+| **P2** blank card in the fold, blank record | **fixed** | Ours' words scale down with the card (`min(r.w/760, r.h/306)`) and crossfade into the chip's "From $49 a month" (content out FOLD+4…+11, chip text in FOLD+8…+13): a price on every frame (`strip-c-fold.png`). The record rises as its HEADER alone (`recordH`: 124 px) and grows its body as its first tool step arrives (f610–617): never an empty slab (`stills/f0592.png`, `f0614.png`). |
+| **P3** figure grammar | **partly fixed, rest skipped** | Fixed: slip 1's empty slot is now sized to the figure (± 14 px), so "commonly" (f159) prints right of the slot instead of inside it. Skipped: "qualifier · figure · a month" on one baseline does not fit at the spec sizes — measured, slip 1 needs ≈ 757 px of a 716 px line ("commonly" 36 px 172 + $300 349 + "a month" 160 + gaps), ours ≈ 802 of 720 px — without dropping a figure under the 120 px pile floor or widening the papers past TikTok's rail. |
+| **P4** every b2–b3 word printed twice | **fixed** | `BAND` = set-up + does only: the quotes' words print on their slips alone (ig2 / ig4's idiom). Tags 30 → 36 px. To keep the keyword's time (3.07 s), each slip's tag now rises AS A UNIT at 72 % 2 f before its first word (the card idiom, `Tag` `unit`) and each word lifts on its onset; the ink bar holds its place until then. |
+| **P5** end orb a stray dot, drifting under the wordmark | **fixed** | `PARK` Ø 44 → 96 (ig1's P2); `STEP_ASIDE` [IMPACT − 14, IMPACT]: she arrives ON the impact. Her path lifts off the record to a lane at y 440, glides right, and rises into the corner only after the chip has gone, so she never crosses a word (`strip-h-step`, `sheet-step.png`). `ORB_CANVAS` 64 → 96. |
+| **P6** cover clutter | **fixed** | The × .42 thumbnail is gone: kicker, title, ring trio, attribution (now 52 px, y 750–936), as ig1–ig4's title + one graphic (`covers/ig5-cover-0000.png`). |
+| **P7** rolls open on "$0" | **fixed** (with T2) | Figures no longer count: each RISES out of its mask as its final value on its word (SPRING.land, overshoot cut at rest so it never rises into its tag); the bars still grow with `rollEase`. `rollValue` is gone. |
+| **P8** stray marks | **fixed** | The staple is a 40 px wire crown with two bent legs, a steel gradient, a highlight and a hair of shadow (`zoom-staple.png`); the $0 ticks are gone (the shared left edge says "from zero"); the bars are 5 px with round ends; the stub drops from 30 px (was 90), so it never crosses slip 1's figure row. |
+| **P9** "and books the / appointment." | **fixed** | `placeOf()` in `Stage.tsx`: a row never ends on "the" / "a" / "an" (the break moves before it): "and books / the appointment." (`stills/f0650.png`). |
+| **P10** seam rings with no light | **fixed** | The seam glide starts as the brand leaves (`SEAM_GLIDE` [seam − 6, seam + 6] = f820–832, after the wordmark has gone from her path) and the rings fade in from t −10 (SEAM-1): she lands at f832, the rings come up round her (`strip-g-seam.png`). |
+| **T1** booking claim / both masters | **fixed (docs)** | POSTING §0: the render step renders BOTH masters (`…-booking-…` with `ig5-06`, `…-message-…` with `ig5-06-msg`); only the message master may be posted until §0 items 1–2. SCRIPT §11.1 and the `ig5-06` direction now say the same as this file. The swap was re-tested: `BODY.does = 'ig5-06-msg'` typechecks, `check:audio:ig5` OK (climax +1.1, arc +0.6, lowest "takes" 0.83), reverted (`cmp` identical). |
+| **T2** rolls show false figures | **fixed** | See P7: no frame shows a value other than the final one. Sound: the counters stay only under the growing bars ($300, $99); `$1,500` gets a soft `thump` on its rise instead of its counter and tock. |
+| **T3** pile exit unscopes "$300"; cover window | **fixed** | The pile now leaves AS ONE UNIT: it fades over the exit's first 4 f (≈ 90 px of travel, nowhere near the mask line at y 296), so a tag never goes before its figure (`strip-b-pileexit.png`). POSTING §3 and SCRIPT §7: "between 17.25 and 17.5 s (f518–525), never later". |
+| **T4** cover thumbnail's bare figures | **fixed** | Thumbnail dropped (P6). |
+| **T5** BETA chip undecided | **fixed** | The app's own badge (BetaBadge: sky-50 / sky-200 / sky-700, semibold caps, 24 px) lands beside **Booked** a frame after the swap, booking master only (`BETA` in `Record.tsx`, one switch; `stills/f0660.png`). POSTING §0 item 5 now names it. |
+| **T6** TikTok pinned comment | **fixed** | "…10 US live answering services…" (137 / 150). |
+| **T7** RESEARCH-prices "no setup fee" stale | **fixed** | §0 and §7 rows annotated as superseded (`lib/pages/home/pricing.ts:243`). |
+| **T8** HOOKS §1.8 unhedged attribution | **fixed** | A note under §1.8 points to SCRIPT §7's hedged three rows and records the dropped thumbnail; §2's "as §1.8" inherits it. |
+| **ZONE-1** $49 under the price band during the rise | **fixed** | Ours rises from 40 px, and its "$49" rises out of a mask on the band's line (y 1260) while the card is under its place; its zone rect is the visible part. Dense scan: no violation. |
+| **ZONE-2** false positives in the pile exit | **fixed** | The papers report their rects only while opacity > .5, which now ends 2 f into the exit (≈ 11 px of travel). Dense scan: no violation. |
+| **ZONE-3** shared wordmark's "E" at x 900–912 | **accepted** (no change) | As §4.2: it is the shared `End.tsx` (ig1–ig4's picture); not edited. If ig1–ig4 are ever re-rendered, cap `END.wordmarkW` at 720. |
+| **SYNC-1** dock on "up" late | **fixed** | With S1: the glide ends on `M.dock` (f595), the dot fades over [M.dock − 1, M.up]. |
+| **SYNC-2** other stamps off | **partly fixed** | (a) "set" via `NUDGE` (S1). Skipped (b) "a month," (on-or-after still holds, 3 f), (c) S13 "and" (the card rises 2 f before its first word anyway), (d) `ig1-07` "Voice." (the shared borrowed take and End.tsx, same as ig1). |
+| **S2** rings on word tails | **fixed** | `timing.ts`: a burst-aware ring law (`ringFits`: no onset in (f − 6, f + burst + 1) AND her placed envelope under `CUT.onset` for the whole burst), searched on 16ths per gap: R1 **f37.5** `fx-trill-1`, ring 2 **f153.75** `fx-trill-1`, ring 3 **f408.75** full `fx-trill` (rung out before the cut at f420). The picture's RingPulses follow `M.rings`. Whole-word SII (`wordsii-full-ig5.txt`, the critic's method): "rings." 0.33 → **0.99**, "receptionist:" 0.42 → 0.59 (its floor is now the tag's felt-tip at f125, not the ring), "minutes." 0.17 → 0.54 (effects alone 0.20 → 0.95; the rest is the bed's swell into the cut). HOOKS §1.3 carries the exception. |
+| **S3** the roll louder than the impact | **fixed** (to ≈ the target) | `RIDE.build` 13 → 9, starting AT the CTA's end (`[CTA_END, call] → [CTA_END + 6, build]`), tapering 3.5 dB over its last 11 f; `MUSIC.build.snare` 1.5 → 1.2. Roll 400 ms peak −9.69 vs impact −9.20 LUFS-M (was −8.11 vs −9.27: +1.16 → −0.49 LU), limiter 6.32 → **3.2 dB**, climax +1.1 LU. A flat lower ride fails check-mix's **arc** gate (its second into the logo must top the return on "forty-nine" by 0.5 LU: build 6 flat gave +0.1), hence the taper (arc +0.6). "link." whole-word 0.43 → 0.57. |
+| **S4** bed hot under "It picks up…" | **fixed** | `RIDE.call` 5 → 3.5: the does act's bed-under-voice 10.4 → **11.4 LU** (`scripts/balance.mjs`). |
+| **S5** bed enters mid-"Agency" | **fixed** | `MUSIC.bedFrom` = `upBeat(M.slip1)` = **f90** (the "can't." → "Agency" gap, with slip 1's lift); HOOKS §1.3 notes the exception. "Agency" now sits under the bed (whole-word min 0.55, mean 0.89; check-mix onset SII still passes). The −3.5 dB voice ride on "Agency" is kept (it still sets the climax's headroom). |
+| **S6** paper slap on rises; counter lead | **fixed / moot** | Both slip rises are `fx-paper-lift` now. The counter's lead on the digits is moot: no digits change any more (P7). |
+
+### 6.3 Gates (re-run after the last change)
+
+- `npx tsc --noEmit -p .`: clean.
+- `npm run sfx:ig5`: 45 cue files, −14.0 LUFS, −1.65 dBTP, limiter 3.2 dB max, 75 cues.
+- `npm run check:audio:ig5`: **OK** (`fix-r1/check-audio.txt`): climax +1.1 LU (impact −9.2 vs "commonly" −10.3), arc +0.6 LU, build → impact −15.1 → −9.2, end −85.3 dBFS last frame, 60 words mean 0.96 (lowest "up" 0.80), the name 0.95 / 1.00 / 0.99.
+- `npm run check:zones:ig -- --film=ig5`: **PASS** (36 stills + cover). Dense scan of every frame in f86–99, 174–183, 212–223, 248–255, 342–351, 418–441, 520–539, 578–601, 640–649, 760–798 (2nd), 818–839 on `IG5-Zones-9x16`: **0 violations** (`fix-r1/zones-dense.log`).
+- `npm run guard:ig5 -- --check`: **PASS gates 1–5**, 255/257 shas, stamps unchanged, **gate P 24/24 byte-identical** (`fix-r1/guard.log`).
+- `npm run sfx:ig`: 0 built, 4 up to date.
+- `git status --porcelain` on the film 1 / film 2 frozen sets: empty.
+
+### 6.4 Still open
+
+- The return on "forty-nine" measures 10.0 LU bed-under-voice by this round's window (§5.3 said 10.4); the series floor is 10.5. Not raised by a critic; `RIDE.ret` 7 → 6 barely moves the arc's music window (her voice dominates it), so it is cheap if a later round wants it.
+- P3's single-baseline grammar (see 6.2).
+- ZONE-3 (shared wordmark), by design.

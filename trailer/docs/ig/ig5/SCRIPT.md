@@ -321,7 +321,7 @@ All outside pages read 2026-10-07 through the research fetcher (RESEARCH-prices.
   - **Attribution** (three rows at 44 px, graphite, y 720-876, each ≤ 525 px wide): "Agency AI receptionist:" / "commonly $300 a month." ("$300" in rose) / "Ours: from $49 a month." ("$49" in teal, the orb as its full stop). One row "Agency AI receptionist: commonly $300 a month." would measure ≈ 1,000 px at 44 px, past x 900.
   - **Thumbnail:** the b4 payoff frame (the pile with all three anchors and their hedges, ours with "$49" and "No setup fee", the bars to scale), y 890-1380 (moved down from HOOKS' 850 for the third attribution row). Its "$49" sits above y 1300, clear of TikTok's grid view count.
   - `src/ig/ig5/Cover.tsx` carries the kicker and the three-row title now (112 px fits, checked by eye on a still); the ring trio, the attribution and the thumbnail come with the art.
-- **TikTok:** the feed autoplays from frame 0, which is the hook picture itself, so the cover matters only on the profile grid and in search. Upload the PNG if the app offers "upload from photos"; otherwise pick the payoff frame (≈ f455 on the plan; ≈ f520, 17.3 s, on the placed timeline, once "No setup fee." has printed) with no TikTok text sticker.
+- **TikTok:** the feed autoplays from frame 0, which is the hook picture itself, so the cover matters only on the profile grid and in search. Upload the PNG if the app offers "upload from photos"; otherwise pick the payoff frame (≈ f455 on the plan; on the placed timeline **between 17.25 and 17.5 s, f518-525, never later**: "No setup fee." printed, the pile at rest; POSTING §3) with no TikTok text sticker.
 - **Instagram:** upload it in the composer (Edit cover → Add from camera roll). Fallback: frame 0, now a usable cover on its own.
 
 ---
@@ -368,7 +368,7 @@ The shared `IgEnd`, exactly as ig1-ig4 (docs/ig/SCRIPT.md §0.3):
 
 ## 11. Open owner confirmations
 
-1. **Booking on Starter** works in the product and the pricing page says so (LAUNCH GATE, POSTING §0). Until then, build with `ig5-06-msg`.
+1. **Booking on Starter** works in the product and the pricing page says so (LAUNCH GATE, POSTING §0). *Aligned with BUILD.md (critic round 1, T1):* the reel is built with `ig5-06` (Booked + the app's `BETA` chip) and the render step renders BOTH masters (`…-booking-…` with `ig5-06`, `…-message-…` with `ig5-06-msg`); only the message master may be posted until POSTING §0 items 1-2 are ticked.
 2. **The live Stripe `STRIPE_STARTER_PRICE_ID` is $49.00 USD a month** (the repo can't show it).
 3. **"(in beta)"** stays in the captions while the app badges booking as beta; say if the badge goes.
 4. **Starter's minutes and overage** (site 400 min / $0.20 vs app 150 min / $0.25): settle them in the same pricing edit. The reel never shows them, but it sends viewers to that page.

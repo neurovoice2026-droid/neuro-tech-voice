@@ -19,7 +19,7 @@ compares **categories**.
 | Overage | `overage: 0.2` ($0.20/min) | `overage_per_min: 0.25` | **No.** The two lists disagree. |
 | Phone number | FAQ: "on its own monthly subscription at $1.15" | n/a | Not on screen, but it means **$49 is not all-in**. |
 | Trial | "Five free minutes, fourteen days, and no card." | n/a | Yes (already used in ig1-ig4). |
-| Setup fee | None is listed. The pricing note says the bill is "the plan fee plus that plan's own rate for the minutes past its allowance". | n/a | "No setup fee" is **implied, not stated**. The owner must confirm it before it goes on screen. |
+| Setup fee | None is listed. The pricing note says the bill is "the plan fee plus that plan's own rate for the minutes past its allowance". | n/a | "No setup fee" is **implied, not stated**. The owner must confirm it before it goes on screen. **Superseded (critic round 1, T7): stated at `lib/pages/home/pricing.ts:243` ("No setup fee — On any plan. A custom build is quoted on its own."; RESEARCH-product §3, SCRIPT §6). Defensible as printed.** |
 | Billing rounding | "minutes are rounded up on each call, so ninety seconds costs two" | n/a | Matters for fairness: we round per call like most answering services do. |
 
 **Consequences for the script**
@@ -228,7 +228,7 @@ categories with one figure each and keep the voice-over short.
 | "Save 90%" or any percentage | It depends on call volume and on which of our two minute allowances is real. That makes it a derived statistic, which voice.md rules out. |
 | "$49, unlimited" / "$49 all-in" / "No hidden fees" | There is a minute cap and an overage rate, and the number costs $1.15/mo extra. |
 | Any of our minutes, our overage rate or other tiers | The site and backend lists disagree (400 vs 150 min, $0.20 vs $0.25). |
-| "No setup fee" | The site never says it outright. It is only implied by the pricing note. Owner to confirm first. |
+| ~~"No setup fee"~~ | ~~The site never says it outright. It is only implied by the pricing note. Owner to confirm first.~~ **Superseded (critic round 1, T7): stated at `lib/pages/home/pricing.ts:243` (RESEARCH-product §3, SCRIPT §6); defensible, see §6.** |
 | A per-call figure for answering services from the 2025 roundups ($2.50-$4.50/call etc.) | Not from a provider page. Smith.ai's own page is $300/30 calls ($10/call), and the older $292.50 figure in the roundups is out of date. |
 | Freelancer hourly rates | I could not verify them (Upwork 403). |
 | Any provider name, logo or UI | voice.md: competitors by name are off limits. |

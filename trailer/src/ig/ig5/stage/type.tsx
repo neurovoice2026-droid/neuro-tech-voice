@@ -5,18 +5,19 @@
  *
  *   <Print>      a word (or a run) that rises out of its own mask on her onset (SPRING.caption, 80 % of its height,
  *                the opacity over the first half) — object text is only ever words she says, on or after the word
- *   <Figure>     a price numeral: tabular digits in fixed cells (the width of "0", so a rolling figure never changes
- *                its digits' places), the "$" and "," at their own widths; `roll` counts it 0 → its value on 32nd
- *                ticks over ≈ 0.6 s (an out-cubic, so it decelerates into the value) and it lands on SPRING.land (a
- *                small drop with the landing spring's overshoot); a figure that `never rolls` (ours' $49) is just set
- *   rollValue()  the rolled value at t; rollEase() the continuous share (the to-scale hairline grows with it)
+ *   <Figure>     a price numeral: tabular digits in fixed cells (the width of "0"), the "$" and "," at their own
+ *                widths; with `roll` (her word's frame) it RISES OUT OF ITS MASK AS ITS FINAL VALUE on the landing
+ *                spring (its overshoot is the "thump") — it never counts: a 0 → N count printed prices that are in no
+ *                source ($0, $28, $203, $1,013 — crit-r1 P7 / T2), and a paused frame must never show one; without
+ *                `roll` (ours' $49) it is just set
+ *   rollEase()   the continuous share over ROLL.dur from her word (the to-scale bar grows with it)
  *   figWidth()   a figure's width (needs the faces)
  *
  * No blur, no glow: rises out of masks; moving words ride their own sub-pixel layers (lib/glide via revealStyle).
  */
 import React from 'react';
 import { reveal, revealStyle, useGlide } from '../../../components/Type';
-import { EASE, SPRING, springUnit, tween } from '../../../lib/motion';
+import { EASE, SPRING, tween } from '../../../lib/motion';
 import { maskBox } from '../../../lib/type';
 import { FONT, TYPE } from '../../../theme';
 import { measureText } from '../../../kb/kit';
@@ -101,16 +102,10 @@ export const Print: React.FC<{
 /** "$1,500" from 1500 (no locale: deterministic) */
 export const money = (v: number) => `$${Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 
-/** the roll: ≈ 0.6 s, ticking on 32nds */
-export const ROLL = { dur: 18, tick: 1.875 } as const;
+/** the bar's growth from her word: ≈ 0.6 s (an out-cubic, so it decelerates into the value) */
+export const ROLL = { dur: 18 } as const;
 const outCubic = (u: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, u)), 3);
-/** the rolled value at t (0 before the roll, the value from at + dur on) */
-export function rollValue(t: number, at: number, value: number): number {
-  if (t < at) return 0;
-  const tq = Math.min(ROLL.dur, Math.floor((t - at) / ROLL.tick + 1e-9) * ROLL.tick);
-  return Math.round(value * outCubic(tq / ROLL.dur));
-}
-/** the roll's continuous share (the to-scale hairline grows with it) */
+/** the bar's continuous share (the to-scale bar grows with it) */
 export const rollEase = (t: number, at: number) => outCubic((t - at) / ROLL.dur);
 
 /** the digits' cell: the width of "0", a touch tighter (the figures read as one word, never as spaced digits) */
@@ -130,16 +125,18 @@ export function figCells(text: string, size: number) {
 }
 export const figWidth = (text: string, size: number) => figCells(text, size).w;
 
+/** a figure's mask padding (em): the "$" stands above the cap line and the comma drops under the baseline */
+const FIG_PAD = { top: 0.08, bottom: 0.16, side: 0.06 } as const;
 export const Figure: React.FC<{
   t: number;
-  /** the value it shows at rest */
+  /** the value it shows (always this value: it never counts) */
   value: number;
   /** local px: left and box top (line-height 1) */
   x: number;
   y: number;
   size: number;
   color: string;
-  /** roll from 0 on this frame (her word); omitted: set (shown from `from`) */
+  /** rises out of its mask on this frame (her word); omitted: set (shown from `from`) */
   roll?: number;
   /** a set figure appears from here (default always) */
   from?: number;
@@ -147,48 +144,52 @@ export const Figure: React.FC<{
   moving?: boolean;
 }> = ({ t, value, x, y, size, color, roll, from, ink = 1, moving = false }) => {
   const glide = useGlide();
-  if (roll !== undefined && t < roll - 0.25) return null;
+  if (roll !== undefined && t < roll - 1) return null;
   if (roll === undefined && from !== undefined && t < from) return null;
-  const v = roll !== undefined ? rollValue(t, roll, value) : value;
-  const { cells } = figCells(money(v), size);
-  // the landing: a small drop on the landing spring while it rolls (its overshoot is the "thump")
-  const k = roll !== undefined ? springUnit(t - roll, SPRING.land) : 1;
-  const dy = (1 - k) * -0.07 * size;
-  const o = (roll !== undefined ? tween(t, [roll - 0.25, roll + 1.5], [0, 1], EASE.out3) : 1) * ink;
-  const live = moving || glide || Math.abs(dy) > 0.02;
+  const { cells, w } = figCells(money(value), size);
+  // the rise: out of its own mask from 80 % of its height below on the landing spring, its opacity over the first
+  // half — the Print idiom, the value final from its first visible frame. The spring's overshoot is cut at rest (the
+  // figure lands hard: the thump), so it never rises past its place into the tag above it
+  const r0 = roll !== undefined ? reveal(t, roll - 1, { config: SPRING.land, rise: 80, fade: 0.5 }) : { p: 1, y: 0, opacity: 1, scale: 1 };
+  const r = { ...r0, y: Math.max(0, r0.y) };
+  const o = r.opacity * ink;
+  if (o <= 0.002) return null;
+  const live = moving || glide || Math.abs(r.y) > 0.03 || (roll !== undefined && t - roll < 14);
+  const pt = FIG_PAD.top * size;
+  const pb = FIG_PAD.bottom * size;
+  const ps = FIG_PAD.side * size;
   return (
-    <div
-      style={{
-        position: 'absolute',
-        left: x,
-        top: y,
-        width: 0,
-        height: size,
-        fontFamily: FONT.ui,
-        fontSize: size,
-        fontWeight: FIG.weight,
-        lineHeight: 1,
-        fontKerning: 'normal',
-        fontVariantNumeric: 'tabular-nums lining-nums',
-        whiteSpace: 'nowrap',
-        color,
-        opacity: o >= 0.999 ? undefined : o,
-        ...(live ? { transform: `translateY(${dy.toFixed(3)}px) rotate(0.002deg)`, willChange: 'transform' } : {}),
-      }}
-    >
-      {cells.map((c, i) => (
-        <span key={i} style={{ position: 'absolute', left: c.x, top: 0, width: c.w, textAlign: 'center', display: 'block' }}>
-          {c.ch}
-        </span>
-      ))}
+    <div style={{ position: 'absolute', left: x - ps, top: y - pt, width: w + 2 * ps, height: size + pt + pb, overflow: 'hidden' }}>
+      <div
+        style={{
+          position: 'absolute',
+          left: ps,
+          top: pt,
+          width: w,
+          height: size,
+          fontFamily: FONT.ui,
+          fontSize: size,
+          fontWeight: FIG.weight,
+          lineHeight: 1,
+          fontKerning: 'normal',
+          fontVariantNumeric: 'tabular-nums lining-nums',
+          whiteSpace: 'nowrap',
+          color,
+          opacity: o >= 0.999 ? undefined : o,
+          ...(live ? { transform: `translateY(${r.y.toFixed(3)}%) rotate(0.002deg)`, willChange: 'transform' } : {}),
+        }}
+      >
+        {cells.map((c, i) => (
+          <span key={i} style={{ position: 'absolute', left: c.x, top: 0, width: c.w, textAlign: 'center', display: 'block' }}>
+            {c.ch}
+          </span>
+        ))}
+      </div>
     </div>
   );
 };
 
-/** a to-scale hairline (local px): from x0, `len` long, a $0 tick at its start */
-export const ScaleBar: React.FC<{ x0: number; y: number; len: number; color: string; ink?: number; stroke?: number; tick?: number }> = ({ x0, y, len, color, ink = 1, stroke = 3, tick = 1 }) => (
-  <>
-    {tick > 0.002 ? <div style={{ position: 'absolute', left: x0 - 0.75, top: y - 9, width: 1.5, height: 18, borderRadius: 1, background: '#55535a', opacity: 0.55 * ink * tick }} /> : null}
-    {len > 0.3 ? <div style={{ position: 'absolute', left: x0, top: y - stroke / 2, width: len, height: stroke, borderRadius: stroke / 2, background: color, opacity: ink }} /> : null}
-  </>
-);
+/** a to-scale bar (local px): from x0, `len` long (no $0 tick: crit-r1 P8 — the bars' shared left edge says "from
+ *  zero", and an unlabelled tick read as a glitch) */
+export const ScaleBar: React.FC<{ x0: number; y: number; len: number; color: string; ink?: number; stroke?: number }> = ({ x0, y, len, color, ink = 1, stroke = 5 }) =>
+  len > 0.3 ? <div style={{ position: 'absolute', left: x0, top: y - stroke / 2, width: Math.max(len, stroke), height: stroke, borderRadius: stroke / 2, background: color, opacity: ink }} /> : null;

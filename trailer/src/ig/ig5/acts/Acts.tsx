@@ -12,11 +12,13 @@
  *          b5 the pile leaves, ours glides up, four set-up dots fill
  *          b6 ours parks as a chip; the sample call: the orb picks up the ringing dot, Answered → Booked
  *   end  b7–b9: the shared end card (components/End.tsx IgEnd) — the record pulled back and up over the CTA, the chip in
- *        the label band, her orb docked on the record; the impact (the record out under the light, her orb stepping
- *        aside to the chip's place); the wordmark and the URL. SEAM (the last 14 f): her orb glides down the right of
- *        the frame onto the desk and closes into the phone's rose light while frame 0 re-forms (../stage/Hook.tsx
- *        Frame0 at t − END: the desk hairline redrawing, the ring trio's launches already travelling, S1 rising into its
- *        masks), the ground crossing to frame 0's: the replay continues the picture
+ *        the label band, her orb docked on the record; into the bar she steps aside to the chip's place and GROWS to
+ *        the series' brand size (Ø 96, ig1's P2), arriving ON the impact so nothing travels while the wordmark
+ *        surfaces (crit-r1 P5); the record goes out under the light; the wordmark and the URL. SEAM: as the brand
+ *        leaves she glides down the right of the frame onto the desk (landing 8 f before the loop) and closes into the
+ *        phone's rose light while frame 0 re-forms (../stage/Hook.tsx Frame0 at t − END: the desk hairline redrawing,
+ *        the ring trio's launches already travelling — fading in as she lands, never round an empty point, crit-r1
+ *        SEAM-1 / P10 — S1 rising into its masks), the ground crossing to frame 0's: the replay continues the picture
  */
 import React from 'react';
 import { EASE, mix, mixHex, tween } from '../../../lib/motion';
@@ -68,26 +70,38 @@ function endGround(tm: number) {
   );
 }
 
-/** where she waits through the brand: the parked chip's place at the top right (the chip leaves on the bar), so her
- *  seam glide down to the phone runs down the right of the frame, clear of the re-forming hook card */
-const PARK = { x: 836, y: 320, d: 44 } as const;
-const STEP_ASIDE = [T.IMPACT - 6, T.IMPACT + 14] as const;
+/** where she waits through the brand: the parked chip's place at the top right (the chip leaves on the bar), at the
+ *  series' brand size (ig1's P2: (840, 290), Ø 96), so her seam glide down to the phone runs down the right of the
+ *  frame, clear of the re-forming hook card */
+const PARK = { x: 836, y: 320, d: 96 } as const;
+/** she steps aside and grows into the bar, done ON the impact (the wordmark surfaces with nothing else moving) */
+const STEP_ASIDE = [T.IMPACT - 14, T.IMPACT] as const;
+/** the seam glide: from as the brand starts leaving (End.tsx BRAND_OUT: seam − CAP_OUT) onto the desk 8 f before the
+ *  loop, so the trio's rings (fading in from t −10) always have their light */
+const SEAM_GLIDE = [T.END_CARD.seam - 6, T.END_CARD.seam + 6] as const;
 /** her pose on the card: docked on the pulled-back record; as the record goes out on the bar she steps aside to the
  *  top right (where the chip was) */
+/** the step-aside's path: she lifts off the record's header to a lane between it and the chip (y 440, clear of both),
+ *  glides right along it, and rises into the corner only once the chip has gone up (its last 30 %) — never over a word */
+const LANE_Y = 440;
 function endOrbPose(t: number) {
   const p = orbPose(t);
   if (t < STEP_ASIDE[0]) return p;
   const a = orbPose(STEP_ASIDE[0]);
-  const g = tween(t, STEP_ASIDE, [0, 1], EASE.inOut);
-  return { x: mix(a.x, PARK.x, g), y: mix(a.y, PARK.y, g), d: mix(a.d, PARK.d, g), moving: g < 1 };
+  const u = tween(t, STEP_ASIDE, [0, 1], (v) => v);
+  const x = mix(a.x, PARK.x, EASE.inOut(u));
+  const lift = EASE.out3(Math.min(1, u / 0.4));
+  const rise = EASE.in3(Math.max(0, (u - 0.7) / 0.3));
+  const y = mix(mix(a.y, LANE_Y, lift), PARK.y, rise);
+  return { x, y, d: mix(a.d, PARK.d, EASE.inOut(u)), moving: u < 1 };
 }
 /** her orb on the card; in the seam she glides down onto the desk and closes into the phone's rose light — frame 0's
  *  dot, breathing on frame 0's clock */
 const EndOrb: React.FC<{ t: number }> = ({ t }) => {
   const E = T.END_CARD;
-  if (t < E.seam) return <Orb5 t={t} pose={endOrbPose(t)} />;
-  const from = endOrbPose(E.seam);
-  const g = tween(t, [E.seam, T.DURATION - 2], [0, 1], EASE.inOut);
+  if (t < SEAM_GLIDE[0]) return <Orb5 t={t} pose={endOrbPose(t)} />;
+  const from = endOrbPose(SEAM_GLIDE[0]);
+  const g = tween(t, SEAM_GLIDE, [0, 1], EASE.inOut);
   const pose = { x: mix(from.x, PHONE.x, g), y: mix(from.y, PHONE.y, g), d: from.d, moving: g < 1 };
   return <Orb5 t={t} pose={pose} close={{ at: E.seam + 2, dur: T.DURATION - 4 - E.seam, dot: PHONE.d, t0: T.DURATION, rings: RING_FLASHES }} />;
 };

@@ -41,7 +41,7 @@ import { VOICE, type VoiceId } from './voice.generated.ts';
 import { BEAT, BPM, CUT, DUCK, FPS, LIGHT_NOTES, LIGHT_SEMI, PK, RENDER_FPS, SUB, VERTICAL, b } from '../../timing.ts';
 import { buildCues, makeSpeech, makeVoiceKit, upBeat, upQuarter, type Cue, type Hit, type Room, type Voiced, type VoiceRide } from '../common/cues.ts';
 import {
-  BAR, BRAND, IG_LOUD, IG_NAME, IMPACT_BEFORE_END, IMPACT_GAP, RING_OUT, ROLL, SEAM, SFX, H, afterRing, endHits, bedRide, igArc, igImpact, impactHits, place, ringBefore, upBar,
+  BAR, BRAND, CHIRP_OUT, IG_LOUD, IG_NAME, IMPACT_BEFORE_END, IMPACT_GAP, RING_OUT, ROLL, SEAM, SFX, H, afterRing, endHits, bedRide, igArc, igImpact, impactHits, place, upBar,
   type Display, type LineScreens, type Snd,
 } from '../common/series.ts';
 
@@ -244,21 +244,56 @@ const ix = (r: Role, w: string) => VOICE.lines[CAST[r]].say.split(' ').findIndex
 const has = (r: Role, w: string) => ix(r, w) >= 0;
 /** every placed onset (the series' ring law: a ring never covers one) */
 const ONSETS: readonly number[] = VOICES.flatMap((v) => VOICE.lines[v.id].words.map((_, k) => v.at + vWord(v.id, k)));
-const ringOk = (f: number) => !ONSETS.some((o) => o > f - 6 && o < f + RING_OUT);
-/** the first beat in [from, to) on which a ring passes the law (null: none) */
-const ringIn = (from: number, to: number) => {
-  for (let f = Math.ceil(from / BEAT) * BEAT; f < to; f += BEAT) if (ringOk(f)) return f;
+/** her placed voice at frame f: the loudest envelope of any take sounding there (0 when none) */
+const voiceAt = (f: number) =>
+  VOICES.reduce((m, v) => {
+    const env = VOICE.lines[v.id].env;
+    const i = f - v.at;
+    return i >= 0 && i < env.length ? Math.max(m, env[i]) : m;
+  }, 0);
+const SIX = BEAT / 4;
+/** THE RING LAW, burst-aware (crit-r1 sound S2: the onset-only law let all three rings land on a word's TAIL — the nasal
+ *  of "rings.", the "-nist" of "receptionist:", the final /s/ of "minutes."): a ring of `burst` frames at f covers no
+ *  onset — none in (f − 6, f + burst + 1) — and no voiced frame: her placed envelope stays under CUT.onset over the
+ *  whole burst. The one-chirp fx-trill-1 rings CHIRP_OUT (4 f), the full fx-trill RING_OUT (10 f). */
+const ringFits = (f: number, burst: number) => {
+  if (ONSETS.some((o) => o > f - 6 && o < f + burst + 1)) return false;
+  for (let i = Math.round(f); i < Math.round(f + burst); i++) if (voiceAt(i) >= CUT.onset) return false;
+  return true;
+};
+/** the first 16th in [from, to − burst] on which a ring of `burst` frames fits (null: none) */
+const ringIn = (from: number, to: number, burst: number) => {
+  for (let f = Math.ceil(from / SIX - 1e-9) * SIX; f + burst <= to + 1e-9; f += SIX) if (ringFits(f, burst)) return f;
   return null;
 };
-const SIX = BEAT / 4;
-/** R1 (HOOKS §1.3): ringBefore(the hook's word 2) if it passes, else in the "on." → "You" gap, else none */
-const R1 = (() => {
-  const a = ringBefore(on('hook', 2));
-  if (a > 0 && ringOk(a)) return a;
-  const b = ringIn(on('hook', 3) + 1, on('hook', 4));
-  return b !== null && b > 0 ? b : null;
-})();
+/** a ring of the phone: its frame, its sound (the one chirp in a word gap, the full trill before the stop-time) */
+type Ring = { f: number; snd: 'fx-trill' | 'fx-trill-1'; what: string };
+const ring1 = (f: number | null, what: string): Ring[] => (f === null ? [] : [{ f, snd: 'fx-trill-1', what }]);
+const BED_CUT = LAID.stop;
 const PICKUP = LINE.ours + vWord(CAST.ours, 0) - 2;
+/** THE ALIGNER'S STAMPS THAT SIT OFF HER ENERGY (crit-r1 sound S1 / sync SYNC-1, read on the voice stem): frames added to
+ *  word k of a take — ig5-05t "set" is stamped on its vowel (its /s/ starts 3.6 f before), "up" shares "yourself."'s
+ *  stamp (said ≈ 4.5 f before it); ig5-06 "up" is stamped on its p closure (the vowel starts ≈ 3 f before). The band
+ *  captions read it (Captions `nudge`, ig3's idiom) and so do the picture's moments below (M.set, M.dock); the cue sheet
+ *  keeps "up"'s own stamp for the pickup click (it lands on the p closure, never on the vowel's onset) */
+export const NUDGE: Partial<Record<VoiceId, Readonly<Record<number, number>>>> = {
+  'ig5-05t': { 1: -3, 3: -4.5 },
+  'ig5-06': { 2: -3 },
+  'ig5-06-msg': { 2: -3 },
+};
+/** her onset of word k, as she says it (the stamp + NUDGE) */
+const said = (r: Role, k: number) => on(r, k) + (NUDGE[CAST[r]]?.[k] ?? 0);
+/** THE PHONE'S SINGLE RINGS (HOOKS §1.3 R1, then one in a gap of each quote), each on the first 16th of its gap that
+ *  passes the burst-aware ring law: R1 in "rings." → "Gloves" (else "on." → "You"; a chirp), one after
+ *  "receptionist:" (a chirp), the last after "…minutes." (the full trill, rung out before the bed's cut) */
+const RINGS: readonly Ring[] = [
+  ...ring1(ringIn(on('hook', 1) + 1, on('hook', 2), CHIRP_OUT) ?? ringIn(on('hook', 3) + 1, on('hook', 4), CHIRP_OUT), 'b1 R1: the phone rings again in the hook (“rings.” → “Gloves”), unanswered — a RingPulse leaves the light (one chirp)'),
+  ...ring1(ringIn(on('agency', 2) + 1, on('agency', 3), CHIRP_OUT), 'b2 the phone rings on under the agency quote (“receptionist:” → “commonly”), still unanswered (one chirp)'),
+  ...(() => {
+    const f = ringIn(on('answering', lastWord(CAST.answering)) + 1, BED_CUT, RING_OUT);
+    return f === null ? [] : [{ f, snd: 'fx-trill' as const, what: 'b3 the last ring before the pickup (after “…minutes.”), rung out on the bed’s cut: the stop-time follows it' }];
+  })(),
+];
 export const M = {
   /** b1: the desk hairline draws x 86 → 758 (EASE.draw from f −6, still moving at f0) */
   deskDraw: [-6, 8] as const,
@@ -266,7 +301,7 @@ export const M = {
   trio: [-40, -20, 0] as const,
   /** the phone's single rings (RingPulse, Ø 18 → 240), each on a beat no onset falls near: R1 in the hook, one in a
    *  gap of the agency line (after "receptionist:"), one after the answering line (the last before the pickup) */
-  rings: [R1, ringIn(on('agency', 2) + 1, LINE.answering), ringIn(on('answering', 2) + 1, PICKUP - 6)].filter((f): f is number => f !== null),
+  rings: RINGS.map((r) => r.f),
   /** S1 leaves up through its masks line by line (2 f apart, 4 f each) from her last hook word + 6 */
   s1Out: on('hook', lastWord(CAST.hook)) + 6,
   /** b1 → b2: slip 1 rises (blank: an ink bar, an empty amount slot) at the agency line − 6 */
@@ -304,14 +339,17 @@ export const M = {
   /** b5: on "You" the pile leaves up and ours glides up; the track on "set"; the dots fill from "yourself" one per
    *  16th; the fourth turns into a check (T2 has no "minutes": it lands with the fourth dot) */
   you: on('setup', 0),
-  set: on('setup', 1),
+  set: said('setup', 1),
   dots: [0, 1, 2, 3].map((i) => on('setup', ix('setup', 'yourself')) + i * SIX),
   /** b6: on "It" ours shrinks into the parked price chip and the record rises; on "picks up" her orb glides onto the
    *  record's ringing rose dot (docked as "up" lands) and Answered lands; the availability step; on "books" the booking
    *  step ticks and the pill swaps to Booked */
   it: on('does', 0),
   picks: on('does', 1),
+  /** "up"'s stamp (its p closure): the pickup click */
   up: on('does', 2),
+  /** "up" as she says it (its vowel): her orb docks on the record's dot here */
+  dock: said('does', 2),
   cant: on('does', 5),
   /** "books" (ig5-06) or, the launch-gate cut ig5-06-msg, "takes" (…and takes a message.) */
   books: on('does', has('does', 'books') ? ix('does', 'books') : ix('does', 'takes')),
@@ -373,13 +411,13 @@ const PHONE_X = 740 / 1080;
 /** THE PICTURE'S OWN FRAMES the cue sheet answers — stage/*.tsx is picture only (outside this hash), so its offsets from M
  *  are mirrored here, by name: a spring's landing is its first crossing of rest (SPRING.site ≈ 5 f, land ≈ 5 f, pop ≈ 4 f) */
 const PIC = {
-  /** stage/type.tsx ROLL.dur: a figure rolls 0 → its value over 18 f, a new value every 32nd */
+  /** stage/type.tsx ROLL.dur: a figure's to-scale bar grows over 18 f from her word (the figure itself just rises) */
   roll: 18,
   /** Papers.tsx stubState: the stub drops on "Setup," (SPRING.land); its staple closes from M.setup + 4 (SPRING.pop) */
   stubLand: M.setup + 5,
   staple: M.setup + 8,
-  /** Papers.tsx squareAt / Ours.tsx oursY: the quotes square up and ours rises from the pickup (SPRING.site) */
-  oursLand: M.pickup + 5,
+  /** Papers.tsx squareAt: the quotes square up from the pickup; Ours.tsx OURS_RISE: ours rises 5 f after it (SPRING.site) */
+  oursLand: M.pickup + 10,
   /** Papers.tsx PILE_EXIT: the pile leaves up through its mask over [M.you − 8, M.you] (power3.in: fastest at its end) */
   pileOut: M.you - 2,
   /** Ours.tsx: the fourth dot's check at M.dots[3] + 2 */
@@ -392,35 +430,29 @@ const PIC = {
   tool1Done: M.books - 7,
   outcome: M.books + 2,
 } as const;
-/** a ring of the phone: one desk trill (a key hit: never under a word's onset — M.rings passed the ring law) */
-const ring = (f: number, label: string, db: number): Hit<Snd> => H(f, 'fx-trill', 'rush', PHONE_X, 1, label, { db });
+/** a ring of the phone: one desk trill or its one chirp (a key hit: never under a word — RINGS passed the burst-aware law) */
+const ring = (f: number, label: string, db: number, snd: Ring['snd'] = 'fx-trill'): Hit<Snd> => H(f, snd, 'rush', PHONE_X, 1, label, { db });
 /** a rolling figure's counter: a dry tick per 32nd under the roll, at the figure's x */
 const counter = (f: number, x: number, label: string, db: number): Hit<Snd> => H(f + 1, 'fx-tick', 'none', x, 2, label, { db, run: { n: 8, step: BEAT / 8 } });
-const RING_WHAT = [
-  'b1 R1: the phone rings again in the hook (“rings.” → “Gloves”), unanswered — a RingPulse leaves the light',
-  'b2 the phone rings on under the agency quote (after “receptionist:”), still unanswered',
-  'b3 the last ring before the pickup (after “…minutes.”): the stop-time follows it',
-];
 export const HITS: Hit<Snd>[] = [
   // b1 — a phone ringing in a quiet room (HOOKS §1.4): the room tone, the frame-0 ring, R1 in a gap; no bed
   H(0, 'fx-roomtone', 'none', 0.5, 3, 'b1 the room’s tone from frame 0: the quiet room the hook is said in (the stop-time’s air floor too)', { db: -24 }),
   ring(0, 'b1 THE RING AT FRAME 0 (the third ring of the trio already in flight) — the desk phone’s rose light, the reel’s first sound', -3 + HEAD.db),
-  ...M.rings.map((f, k) => ring(f, RING_WHAT[k] ?? 'the phone rings, unanswered', -5)),
-  H(M.slip1 + 1, 'fx-paper-square', 'none', 0.5, 2, 'b1 → b2 slip 1 rises blank (an ink bar, an empty amount slot)', { db: 2 }),
+  ...RINGS.map((r) => ring(r.f, r.what, -5, r.snd)),
+  H(M.slip1 + 1, 'fx-paper-lift', 'none', 0.5, 3, 'b1 → b2 slip 1 rises blank (an ink bar, an empty amount slot): the paper lifts', { db: 0 }),
   // b2 — the agency quote
   H(M.tag[0], 'fx-felttip-short', 'none', 0.24, 3, 'b2 the ink bar writes AGENCY AI RECEPTIONIST, a stroke per word', { db: 2, run: { n: 3, offs: M.tag.map((f) => f - M.tag[0]), xs: [0.22, 0.3, 0.42] } }),
-  H(M.three, 'thump', 'none', 0.3, 2, 'b2 “three hundred”: $300 lands in its slot (the roll’s landing spring) — its 600 px hairline draws with it', { db: -3 }),
-  counter(M.three, 0.3, 'b2 … $300 rolls 0 → 300: a dry tick per 32nd', 2),
+  H(M.three, 'thump', 'none', 0.3, 2, 'b2 “three hundred”: $300 rises into its slot (the landing spring) — its 600 px bar draws with it', { db: -3 }),
+  counter(M.three, 0.3, 'b2 … the bar measures out to 600 px: a dry tick per 32nd', 2),
   H(M.three + PIC.roll - 2, 'fx-tock', 'none', 0.3, 3, 'b2 … and settles (a frame ahead of “a month”)', { db: 1 }),
   H(PIC.stubLand, 'thump', 'none', 0.62, 2, 'b2 “Setup,”: the stub drops onto slip 1’s bottom margin with weight', { db: -1 }),
   H(PIC.staple, 'fx-tag', 'none', 0.36, 2, 'b2 … and is stapled there (the staple click)', { db: -3 }),
-  counter(M.fifteen, 0.45, 'b2 “fifteen hundred”: $1,500 rolls 0 → 1,500 (no hairline: a one-time fee)', 2),
-  H(M.fifteen + PIC.roll - 2, 'fx-tock', 'none', 0.45, 3, 'b2 … and settles', { db: 1 }),
+  H(M.fifteen, 'thump', 'none', 0.45, 2, 'b2 “fifteen hundred”: $1,500 rises into the stub (the landing spring; no bar, no count: a one-time fee)', { db: -5 }),
   // b3 — the live answering quote
-  H(M.slip2, 'fx-paper-square', 'none', 0.5, 2, 'b3 slip 2 rises with its people stripe (a paper slap, 2 f ahead of “Live”)', { db: 2 }),
+  H(M.slip2, 'fx-paper-lift', 'none', 0.5, 3, 'b3 slip 2 rises with its people stripe (the paper lifts, 2 f ahead of “Live”)', { db: 0 }),
   H(M.tag2[0], 'fx-felttip-short', 'none', 0.24, 3, 'b3 LIVE ANSWERING SERVICE writes, a stroke per word', { db: 2, run: { n: 3, offs: M.tag2.map((f) => f - M.tag2[0]), xs: [0.22, 0.32, 0.44] } }),
   H(Math.round((M.camera[0] + M.camera[1]) / 2), 'swish', 'none', [0.42, 0.58], 3, 'b3 the papers ease back 1.00 → .97 (one pile)', { db: -6 }),
-  counter(M.ninetyNine, 0.36, 'b3 “ninety-nine”: $99 rolls 0 → 99 (its 198 px hairline with it)', 2),
+  counter(M.ninetyNine, 0.36, 'b3 “ninety-nine”: $99 rises; its 198 px bar measures out under it', 2),
   H(M.for50[1] - 1, 'fx-tock', 'none', 0.62, 3, 'b3 “fifty”: “50” prints (a frame ahead of the word)', { db: 1 }),
   // b4 — THE STOP-TIME (the bed cut on its 16th, MUSIC.stop): the pickup, her birth and "Ours?" in the room tone alone
   H(M.pickup - 11, 'fx-seed', 'sunday', PHONE_X, 3, 'b4 the seed rises out of the last ring into the pickup (it peaks on the click)', { db: -2 }),
@@ -442,7 +474,7 @@ export const HITS: Hit<Snd>[] = [
   // b6 — it picks up when you can't, and books the appointment
   H(M.it + 3, 'fx-paper-fold', 'none', [0.5, 0.75], 3, 'b6 “It”: ours folds into the parked price chip (under the word’s vowel, not its onset)', { db: -3 }),
   H(PIC.recUp, 'fx-paper-lift', 'none', 0.5, 3, 'b6 the sample call’s record rises (its rose dot ringing: picture only — no chirp passes the ring law there)', { db: -8 }),
-  H(M.up, 'fx-pickup', 'none', 0.2, 1, 'b6 “picks up”: her orb docks on the record’s rose dot — the click (the kick enters with it)', { db: 0 }),
+  H(M.up, 'fx-pickup', 'none', 0.2, 1, 'b6 “picks up”: the click on the p closure of “up” as the record’s rose dot is absorbed (her orb docked on its vowel, M.dock; the kick enters with it)', { db: 0 }),
   H(PIC.answered, 'fx-ting', 'sunday', 0.7, 3, 'b6 … Answered lands (her teal)', { db: 3, layer: true }),
   // (the launch-gate cut ig5-06-msg has no availability step: one step "Took a message" on "takes", the pill → Message taken)
   ...(M.booked
@@ -469,8 +501,9 @@ export const STOP = [LAID.stop, LINE.ours + vWord(CAST.ours, 2)] as const;
 /** The moments the bed reads (scripts/ig5/bed.mjs inputs(T): ig5's own arrangement) */
 export const MUSIC = {
   /** HOOKS §1.3 / §1.7: no music under the hook (a phone ringing in a quiet room); the bed enters on the first beat at or
-   *  after the agency line's first word, the reel's first music */
-  bedFrom: upBeat(LINE.agency + vWord(CAST.agency, 0)),
+   *  after slip 1 rises (f90, in the "can't." → "Agency" gap, with the paper's lift: crit-r1 sound S5 — on the beat after
+   *  "Agency" it had entered mid-word on no picture event), the reel's first music */
+  bedFrom: upBeat(M.slip1),
   stop: STOP,
   roll: IMPACT - ROLL,
   impact: IMPACT,
@@ -480,14 +513,23 @@ export const MUSIC = {
    *  into the cut), "forty-nine" (the return), "You" (the figure rests an 8th), the kick's entry (the does act, SCRIPT
    *  b6 "from f571"), "books" (E: the call resolved), the CTA */
   ig5: { agency: LINE.agency, answering: LINE.answering, fortyNine: STOP[1], you: M.you, kick: SCENES.does.from, books: M.books, cta: LINE.cta },
-  build: { kick: 1.4, snare: 1.5, inhaleDb: -12 },
+  /** crit-r1 sound S3: the snare roll 1.5 → 1.2 (with the tapered RIDE.build below) */
+  build: { kick: 1.4, snare: 1.2, inhaleDb: -12 },
 } as const;
 /** the bed's fader: under her through the quotes, ridden up into the swell so the cut is an event, the return a touch
  *  forward (the payoff breathes), a step back under "You" (the set-up line's weakest onset), under her through the call;
  *  ridden up into the build as her CTA ends; then the series' shape round the hit, the chord held 2.5 dB higher into the
  *  seam (it still rings 10–5 f from the end) */
 const CTA_END = Math.min(voiced(CTA, CAST.cta), IMPACT - 14);
-const RIDE = { under: 7.5, swell: 9, ret: 7, you: 2, call: 5, build: 13 } as const;
+/** crit-r1 sound S3 / S4: `call` 5 → 3.5 (the bed sat 10.4 LU under "It picks up when you can't"); the build ride
+ *  starts AT her CTA's end (not 12 f before it: it swelled under "the link."), 13 → 9, with the build's snare 1.5 → 1.2,
+ *  and it TAPERS by BUILD_TAPER dB over the roll's last 11 f into the inhale (the arrangement's own crescendo carries
+ *  the rise). The roll had become the reel's loudest moment (+1.2 LU over the impact, the limiter at 6.3 dB); now its
+ *  400 ms peak is −9.7 LUFS-M against the impact's −9.2 and the limiter ≤ 3.2 dB. A flat ride low enough for that fails
+ *  check-mix's arc gate (its second into the logo, f750–780, must top the return on "forty-nine" by 0.5 LU): the taper
+ *  keeps the roll's first half full, so the arc still leads by +0.6 */
+const BUILD_TAPER = 3.5;
+const RIDE = { under: 7.5, swell: 9, ret: 7, you: 2, call: 3.5, build: 9 } as const;
 export const BED = {
   file: `ig/sfx/${REEL}/bed.wav`,
   vol: 2,
@@ -500,9 +542,10 @@ export const BED = {
     [M.you - 3, RIDE.you],
     [M.you + 6, RIDE.you],
     [M.you + 15, RIDE.call],
-    [CTA_END - 12, RIDE.call],
-    [CTA_END, RIDE.build],
-    [IMPACT - 12, RIDE.build],
+    [CTA_END, RIDE.call],
+    [CTA_END + 6, RIDE.build],
+    [IMPACT - 25, RIDE.build],
+    [IMPACT - 12, RIDE.build - BUILD_TAPER],
     ...bedRide(IMPACT, BRAND_AT, vFrames(BRAND), END)
       .filter(([f]) => f >= IMPACT - 1)
       .map(([f, db]) => (f === END - SEAM ? ([f, db + 2.5] as const) : ([f, db] as const))),

@@ -1,14 +1,16 @@
 /**
  * REEL 5 · OURS (docs/ig/ig5/SCRIPT.md b4–b6): the payoff card, the set-up track and the parked price chip.
  *
- *   ours    on "Ours?" it rises under the pile (white paper, a 2 px teal edge, lifted higher than the quotes) AS A UNIT at
- *           72 % ink — "Ours?" (title 52) + "From" (44) / "$49" (200, her teal, STILL: it never rolls) + "a month" (56),
+ *   ours    just after "Ours?" — once the pickup has had its beat on the open desk (her seed and pop read on the bare
+ *           desk, crit-r1 P1) — it rises under the pile (white paper, a 2 px teal edge, lifted higher than the quotes)
+ *           AS A UNIT at 72 % ink — "Ours?" (title 52) + "From" (44) / "$49" (200, her teal, STILL: it never rolls) + "a month" (56),
  *           her orb its full stop — and each word lifts to full ink on her onset, so "$49" is SEEN on "Ours?" and heard
  *           on "forty-nine"; on "forty-nine" its hairline draws on the pile's scale (1.76 px per dollar: 86 px under the
  *           pile's 174 and 528, all from x 160); "No setup fee." (44, teal) prints at its upper right on her words, in the
  *           setup stub's column above it. b5: on "You" it glides up into the cleared stage (SPRING.site) and its
  *           hairline undraws with the pile. b6: on "It" it FOLDS into the parked chip (one card: its rect, corner and
- *           lift interpolated, its words going as the chip's come up)
+ *           lift interpolated, its words SCALING DOWN WITH IT and crossfading into the chip's "From $49 a month", so a
+ *           price is readable on every frame of the fold — crit-r1 P2)
  *   track   b5: on "set" a 2 px graphite track draws under ours with four EMPTY dots (no labels: the site's four setup
  *           screens, shown, not named); from "yourself" they fill teal one per 16th; the fourth becomes a drawn check;
  *           on "It" the track folds away
@@ -25,6 +27,7 @@ import { CAP_OUT } from '../../components/Captions';
 import { ZoneRect } from '../../components/ZoneGuard';
 import * as T from '../timing';
 import { baseline, CHIP, OURS, SCALE, TRACK, type Box } from './layout';
+import { IG5_ZONES } from '../zones';
 import { pileExitAt } from './Papers';
 import { Figure, figWidth, money, objSpec, Print, ScaleBar } from './type';
 
@@ -34,15 +37,21 @@ const SHADOW = meshShadowInk(MUTED_MESH);
 const EPS = 2e-4;
 
 /* ── ours' clock ── */
+/** b4: ours rises 5 f after the pickup (the orb's 3-frame seed and SPRING.pop play on the bare desk first; the card
+ *  comes up on "Ours?" + 3) — crit-r1 P1 */
+export const OURS_RISE = M.pickup + 5;
+/** its rise: from 40 px under its place (the $49 never drops into the price band's bottom: crit-r1 ZONE-1) */
+const RISE_FROM = 40;
 /** b5: ours glides up just behind the pile's exit, clear of the caption band before "You" rises there */
 export const OURS_UP = M.you - 5;
-/** b4 rise, b5 glide; null before its rise */
-export function oursY(t: number): { y: number; opacity: number; moving: boolean } | null {
-  if (t < M.pickup - 0.5) return null;
-  const e = springUnit(t - M.pickup, SPRING.site);
+/** b4 rise, b5 glide; null before its rise. `rise`: how far it still is under its b4 place (px) */
+export function oursY(t: number): { y: number; opacity: number; moving: boolean; rise: number } | null {
+  if (t < OURS_RISE - 0.5) return null;
+  const e = springUnit(t - OURS_RISE, SPRING.site);
   const g = springUnit(t - OURS_UP, SPRING.site);
-  const y = mix(OURS.y4 + (1 - e) * 72, OURS.y5, g);
-  return { y, opacity: smooth(0, 0.35, e), moving: Math.abs(1 - e) > EPS || (g > 0 && Math.abs(1 - g) > EPS) };
+  const rise = (1 - e) * RISE_FROM;
+  const y = mix(OURS.y4 + rise, OURS.y5, g);
+  return { y, opacity: smooth(0, 0.35, e), moving: Math.abs(1 - e) > EPS || (g > 0 && Math.abs(1 - g) > EPS), rise };
 }
 /** the fold into the chip (0 → 1 from "It") */
 export const FOLD = [M.it, M.it + 16] as const;
@@ -96,14 +105,21 @@ export const Ours: React.FC<{ t: number }> = ({ t }) => {
   // the chip it folds into
   const chip = chipBox();
   const r = { x: mix(OURS.x, chip.x, f), y: mix(o.y, chip.y, f), w: mix(OURS.w, chip.w, f), h: mix(OURS.h, chip.h, f), rad: mix(OURS.r, chip.h / 2, f) };
-  const content = 1 - tween(t, [FOLD[0], FOLD[0] + 5], [0, 1], EASE.in2);
-  const chipText = tween(t, [FOLD[1] - 6, FOLD[1]], [0, 1], EASE.out3);
+  // the fold (crit-r1 P2): ours' words scale down with the card and hand over to the chip's words mid-fold — never an
+  // empty box in flight
+  const content = 1 - tween(t, [FOLD[0] + 4, FOLD[0] + 11], [0, 1], EASE.in2);
+  const chipText = tween(t, [FOLD[0] + 8, FOLD[0] + 13], [0, 1], EASE.out3);
+  const cs = f > 0 ? Math.min(1, r.w / OURS.w, r.h / OURS.h) : 1;
   const moving = o.moving || (f > 0 && f < 1);
+  // the $49 rises out of a mask on the price band's line (y 1260): while the card is still under its place, the
+  // figure's ink below that line is cut, so a price numeral never shows under the band (crit-r1 ZONE-1)
+  const figCut = Math.max(0, OURS.h - (IG5_ZONES.price.y1 - o.y));
+  const figH = Math.min(OURS.fig.size, IG5_ZONES.price.y1 - (o.y + OURS.fig.y));
   // the words' ink: the card rises at 72 %, each word up on her onset
   const lift = (on: number) => 0.72 + 0.28 * tween(t, [on - 1, on + 1], [0, 1], EASE.out3);
   // its hairline: drawn on "forty-nine", undrawn with the pile on "You"
   const bar = tween(t, [M.fortyNine, M.fortyNine + 12], [0, 1], EASE.draw) * (1 - pileExitAt(t));
-  const lifted = 4 + 2.5 * Math.max(0, 1 - springUnit(t - M.pickup, SPRING.site));
+  const lifted = 4 + 2.5 * Math.max(0, 1 - springUnit(t - OURS_RISE, SPRING.site));
   return (
     <>
       <div
@@ -122,10 +138,12 @@ export const Ours: React.FC<{ t: number }> = ({ t }) => {
         }}
       >
         {content > 0.002 ? (
-          <div style={{ position: 'absolute', left: 0, top: 0, width: OURS.w, height: OURS.h, opacity: content >= 0.999 ? undefined : content }}>
+          <div style={{ position: 'absolute', left: 0, top: 0, width: OURS.w, height: OURS.h, opacity: content >= 0.999 ? undefined : content, transformOrigin: '0 0', transform: cs < 0.9999 ? `scale(${cs.toFixed(5)})` : undefined }}>
             <Print t={t} at={M.ours} text="Ours?" x={OURS.fig.x} y={ROW1.top} size={ROW1.title} color={GRAPHITE.text} set lift={0.72} moving={moving} />
             <Print t={t} at={M.fromOurs} text="From" x={L.fromX} y={L.row1Base - 0.96 * ROW1.small} size={ROW1.small} color={GRAPHITE.text} set lift={0.72} moving={moving} />
-            <Figure t={t} value={49} x={OURS.fig.x} y={OURS.fig.y} size={OURS.fig.size} color={SUNDAY.ink} ink={lift(M.fortyNine)} moving={moving} />
+            <div style={{ position: 'absolute', left: 0, top: 0, width: OURS.w, height: OURS.h, clipPath: figCut > 0.01 ? `inset(0px 0px ${figCut.toFixed(3)}px 0px)` : undefined }}>
+              <Figure t={t} value={49} x={OURS.fig.x} y={OURS.fig.y} size={OURS.fig.size} color={SUNDAY.ink} ink={lift(M.fortyNine)} moving={moving} />
+            </div>
             <Print t={t} at={M.monthOurs} text="a month" x={L.monthX} y={L.figBase - 0.96 * OURS.month} size={OURS.month} color={GRAPHITE.text} set lift={0.72} moving={moving} />
             {M.noSetup.map((at, i) => {
               const words = ['No', 'setup', 'fee.'];
@@ -134,7 +152,7 @@ export const Ours: React.FC<{ t: number }> = ({ t }) => {
               const x = x0 + words.slice(0, i).reduce((s, w) => s + measureText(w, smallSpec) + sp, 0);
               return <Print key={i} t={t} at={at - 1} text={words[i]} x={x} y={L.row1Base - 0.96 * ROW1.small} size={ROW1.small} color={SUNDAY.ink} moving={moving} />;
             })}
-            {bar > 0.001 ? <ScaleBar x0={SCALE.x0} y={OURS.bar.y} len={49 * OURS.pxPerDollar * bar} color={SUNDAY.ink} stroke={SCALE.stroke} tick={bar} /> : null}
+            {bar > 0.001 ? <ScaleBar x0={SCALE.x0} y={OURS.bar.y} len={49 * OURS.pxPerDollar * bar} color={SUNDAY.ink} stroke={SCALE.stroke} /> : null}
           </div>
         ) : null}
         {chipText > 0.002 ? <ChipFace w={r.w} h={r.h} opacity={chipText} /> : null}
@@ -142,7 +160,7 @@ export const Ours: React.FC<{ t: number }> = ({ t }) => {
       {content > 0.5 && o.opacity > 0.5 ? (
         <>
           <ZoneRect what="ours row 1" rect={{ x: OURS.x + OURS.fig.x, y: o.y + ROW1.top, w: OURS.w - 80, h: ROW1.title * 1.2 }} />
-          <ZoneRect what="price $49 (ours)" rect={{ x: OURS.x + OURS.fig.x, y: o.y + OURS.fig.y, w: L.figW, h: OURS.fig.size }} />
+          {figH > 1 ? <ZoneRect what="price $49 (ours)" rect={{ x: OURS.x + OURS.fig.x, y: o.y + OURS.fig.y, w: L.figW, h: figH }} /> : null}
           <ZoneRect what="ours a month" rect={{ x: OURS.x + L.monthX, y: o.y + L.figBase - 0.96 * OURS.month, w: L.monthW, h: OURS.month * 1.2 }} />
         </>
       ) : null}

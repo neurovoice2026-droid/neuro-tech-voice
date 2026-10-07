@@ -113,12 +113,12 @@ Beats 3-9 are unchanged.
 | 0-15 | **First 0.5 s:** the inner ring travels out (Ø 72 → about 130), the middle and outer rings travel on and thin, and the outer ring is gone by f20. The hairline reaches the light at f8. | | The trill rings out by f10 (`RING_OUT`). |
 | ≈ 10 | | "Three" lifts 72 → 100 % (4 f, `EASE.out3`) | First word at f10 or later (`afterRing(0)`) |
 | ≈ 17 | | "rings." lifts | |
-| R1 | A new `RingPulse` leaves the light (the desk law, Ø 18 → 240). | | `fx-trill` at −8 dB. **R1 = `ringBefore(vWord(hook, 2))`**, only if no onset falls in (R1 − 6, R1 + 10). Otherwise R1 goes in the "on." → "You" gap, under the same test. Otherwise there is no ring. **Never** on or right after "can't": it would mask the t. |
+| R1 | A new `RingPulse` leaves the light (the desk law, Ø 18 → 240). | | `fx-trill` at −8 dB. **R1 = `ringBefore(vWord(hook, 2))`**, only if no onset falls in (R1 − 6, R1 + 10). Otherwise R1 goes in the "on." → "You" gap, under the same test. Otherwise there is no ring. **Never** on or right after "can't": it would mask the t. **Exception (critic round 1, S2):** the onset-only test put R1 at f30 on the nasal tail of "rings." (≈ 0 dB over it, whole-word SII 0.33). R1 is now the one chirp `fx-trill-1` on the first 16th of the "rings." → "Gloves" gap where her placed envelope is under `CUT.onset` for the whole chirp and no onset falls in (R1 − 6, R1 + 5): **f37.5** (`timing.ts` `ringFits`). The later rings follow the same burst-aware law (f153.75 chirp, f408.75 full trill). |
 | ≈ 32-45 | The middle ring is gone by f40. | "Gloves", "on." lift | |
 | ≈ 52-64 | The inner ring is gone by f60. | "You", "can't." lift | The t is audible. |
 | ≈ 70-80 | **Exit:** S1 leaves up through its masks, line by line, 2 f apart and 4 f each (`EASE.in`), starting no earlier than `vWord(hook, 5) + 6`. | | |
 | `LINE.agency` − 6 | **Slip 1 rises** (SCRIPT's blank slip G3, moved here from f0): white `DocPage`, perforated top, −1°, x 120-880, y 360-640, an ink bar and an empty amount slot, `SPRING.site`. | | `fx-paper-square` |
-| `LINE.agency` + `vWord(0)` − 2 (≈ f78-90) | | **S2 "Agency AI receptionist:"** rises in the caption band (y 1170-1270) at 72 %. **It rises only after S1 has left** (one moving text at a time). | **The bed enters** on the first beat at or after `ig5-02g` word 0 (the stub arrangement in E, −6 dB): the reel's first music. |
+| `LINE.agency` + `vWord(0)` − 2 (≈ f78-90) | | **S2 "Agency AI receptionist:"** rises in the caption band (y 1170-1270) at 72 %. **It rises only after S1 has left** (one moving text at a time). *Built since critic round 1 (P4): the words rise on slip 1's tag instead (AGENCY AI RECEPTIONIST as a unit at 72 %, 2 f before "Agency", each word lifting on its onset), the band empty in b2-b3, so every word is on screen once.* | **The bed enters** on the first beat at or after `ig5-02g` word 0 (the stub arrangement in E, −6 dB): the reel's first music. **Exception (critic round 1, S5):** that beat (f105) fell mid-"Agency" on no picture event; the bed now enters on the first beat at or after slip 1 rises (`upBeat(M.slip1)`, **f90**: the "can't." → "Agency" gap, with the paper's lift). The hook (0-86) stays bed-free. |
 | words 0-2 | The slip's ink bar sweeps into the tag **AGENCY AI RECEPTIONIST** (label 30, graphite 70 %, `InkSweep`). | | `fx-felttip-short` |
 
 From here, SCRIPT b2 runs as written (§1.6).
@@ -208,6 +208,8 @@ SCRIPT §7's cover line "Don't pay $300 a month." is no longer spoken, so it can
   - "Agency AI receptionist: $300 a month." ("$300" in rose)
   - "Ours: from $49 a month." ("$49" in teal, with the orb as its full stop)
 - **Thumbnail:** the b4 payoff frame at × .6, y 850-1380. Its "$49" sits above y 1300.
+
+> **Superseded by SCRIPT §7 and the built cover (critic round 1, T8 / P6 / T4).** The attribution is THREE hedged rows: "Agency AI receptionist:" / "commonly $300 a month." / "Ours: from $49 a month." — RESEARCH-prices §6 #6 is a B claim that needs "commonly" wherever $300 shows, so the unhedged "Agency AI receptionist: $300 a month." above must never be built. There is **no thumbnail** (at grid size its labels were ≈ 4-11 px and its "$99" lost "for 50 minutes", the §7 row 3 shape): the cover is a title plus one graphic (the ring trio), as ig1-ig4. Any A/B cover "as §1.8" (§2's runner-up) inherits this.
 
 **TikTok's feed autoplays from frame 0, which is the hook picture itself.** So for TikTok the cover matters only on the profile grid and in search:
 - upload the PNG;

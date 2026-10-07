@@ -34,8 +34,10 @@ export const S1 = { x: 86, y: 400, size: 104, pitch: 128, maxWidth: 814 } as con
 /** the caption band (SCRIPT §1.2: narration cards at x 86, max width 814 → x 900; y 1170–1400) */
 export const CAP = { x: 86, y: 1180, maxWidth: 814 } as const;
 
-/** the to-scale hairlines: 2 px per dollar at scale 1, from local x 40 (frame x 160) */
-export const SCALE = { pxPerDollar: 2, x0: 40, stroke: 3 } as const;
+/** the to-scale bars: 2 px per dollar at scale 1, from local x 40 (frame x 160), 5 px with round ends (crit-r1 P8: a
+ *  3 px line under figures of different widths read as an underline, not a scale; no $0 tick — the shared left edge
+ *  on x 160 says "from zero") */
+export const SCALE = { pxPerDollar: 2, x0: 40, stroke: 5 } as const;
 
 /** a paper's pose: frame position of its local origin (top left), rotation (deg) about that origin, scale */
 export type Pose = { x: number; y: number; r: number; s: number };
@@ -76,9 +78,12 @@ export const SLIP1 = {
   h: 270,
   rest: { x: 120, y: 340 },
   tilt: -1,
-  tag: { x: 40, y: 34, size: 30 },
-  /** the empty amount slot (a 1.5 px hairline rounded rect, 30 % graphite) until "$300" rolls in */
-  slot: { x: 40, y: 84, w: 600, h: 142, r: 18 },
+  /** the tag: 36 px (crit-r1 P4: the slips carry their words alone now, the band is empty in b2–b3; × .88 in the pile
+   *  it is still ≈ 32 px — L1) */
+  tag: { x: 40, y: 34, size: 36 },
+  /** the empty amount slot (a 1.5 px hairline rounded rect, 30 % graphite) until "$300" lands in it: sized to the
+   *  figure (its cells ± `pad`), so the hedge printed before it ("commonly") sits right of the slot, never inside it */
+  slot: { pad: 14, y: 84, h: 142, r: 18 },
   /** "$300": 140 px, its box top (line-height 1: the baseline .86 em below) */
   fig: { x: 40, y: 92, size: 140 },
   /** the column right of the figure (its x: the figure's measured end + gap): "a month" (44) over the hedge (36), the
@@ -95,7 +100,7 @@ export const STUB = {
   rest: { x: 310, y: 598 },
   tilt: 3,
   staple: { x: 46, y: 16 },
-  tag: { x: 40, y: 30, size: 30 },
+  tag: { x: 40, y: 26, size: 36 },
   fig: { x: 40, y: 70, size: 140 },
 } as const;
 /** slip 2, the live answering service: x 120–876 (tilted, inside x 880: TikTok's rail), from y 854, +0.8° about its
@@ -106,7 +111,7 @@ export const SLIP2 = {
   rest: { x: 120, y: 854 },
   tilt: 0.8,
   stripe: 6,
-  tag: { x: 40, y: 34, size: 30 },
+  tag: { x: 40, y: 34, size: 36 },
   /** "from" (44) then "$99" (140) on one baseline */
   fig: { x: 40, y: 82, size: 140, from: 44 },
   /** the column right of the figure: "a month," over "for 50 minutes" (44 both), the lower baseline on the figure's */
@@ -134,8 +139,11 @@ export const PILE = {
   slip1: { x: PILE_X, y: PILE_TOP, r: 0, s: PILE_S } as Pose,
   stub: { x: 160 + (STUB.rest.x - 160) * PILE_S, y: PILE_TOP + 258 * PILE_S, r: 0, s: PILE_S } as Pose,
   slip2: { x: PILE_X, y: PILE_TOP + 258 * PILE_S + STUB.h * PILE_S + 10, r: 0, s: PILE_S } as Pose,
-  /** the papers' ink in the pile (the comparison steps back, every figure and hedge legible) */
-  ink: 0.55,
+  /** the FIGURES' and bars' ink in the pile: the comparison steps back (rose at 60 % ≈ 3:1 on white, large type) */
+  ink: 0.6,
+  /** the WORDS' ink in the pile — tags, hedges, "a month", "from", "for 50 minutes" (crit-r1 L1: at the figures' 55 %
+   *  the tags measured 2.7:1 on white; GRAPHITE.tag at .88 is ≈ 5.2:1, GRAPHITE.text at .88 ≈ 9:1) */
+  labelInk: 0.88,
 } as const;
 
 /** ours: x 120–880; "Ours? From" (52 / 44) and "No setup fee." (44 teal, right to x 860) on row 1; "$49" (200 teal)

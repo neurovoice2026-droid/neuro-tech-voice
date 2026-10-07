@@ -70,7 +70,7 @@
       "id": "ig5-06",
       "voice": "ava",
       "say": "It picks up when you can't, and books the appointment.",
-      "direction": "Reel 5, narrator, over the sample call record: warm and assured. \"when you can't\" gentle (it is the viewer's problem, and ig1's position: the desk keeps its people). \"books the appointment\" is the satisfying close. LAUNCH-GATED: placed only once booking works on the $49 Starter plan; otherwise place ig5-06-msg.",
+      "direction": "Reel 5, narrator, over the sample call record: warm and assured. \"when you can't\" gentle (it is the viewer's problem, and ig1's position: the desk keeps its people). \"books the appointment\" is the satisfying close. LAUNCH-GATED: placed in the booking master; ig5-06-msg is placed in the message master, and both masters are rendered (POSTING §0). The booking master is posted only once booking works on the $49 Starter plan.",
       "speak": "It picks up when you can't, and books the appointment.",
       "emotion": "confident"
     },

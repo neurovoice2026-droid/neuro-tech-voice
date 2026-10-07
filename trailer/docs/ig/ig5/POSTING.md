@@ -16,13 +16,15 @@ The reel says and shows that the $49 plan **books the appointment**. Today that 
 - [ ] **2. The pricing page says so.** The Starter card lists calendar booking; `lib/pages/home/pricing.ts:91` no longer puts Calendar under Pro only; `lib/pages/ai-agents.ts:40` no longer says "booking into Google Calendar on ${CALENDAR_PLAN} and above" with Pro as the plan.
 - [ ] **3. The live Stripe Starter price is $49.00 USD a month** (`STRIPE_STARTER_PRICE_ID`; the repo can't show it).
 - [ ] **4. The trial still doesn't book** (trial `googleIntegrations: false`, `entitlements.ts:27-29`). Both captions and the DM say so. If the owner turns booking on for the trial too, delete "and doesn't book" / "The trial doesn't book." everywhere.
-- [ ] **5. "(in beta)"** stays in the captions and the DM while the app badges booking as beta. If the badge goes, delete "(in beta)" and the `BETA` chip.
+- [ ] **5. "(in beta)"** stays in the captions and the DM while the app badges booking as beta. If the badge goes, delete "(in beta)" and the `BETA` chip (built since critic round 1: the app's own badge beside **Booked** on the booking master, `BETA` in `src/ig/ig5/stage/Record.tsx`, one switch, then re-render; the message master has none).
 - [ ] **6. Re-open by eye** the pages behind the three outside figures (the research fetcher summarised them, and prices change): PATLive https://www.patlive.com/pricing/ ($99, 50 minutes), the Trillet agency guide https://trillet.ai/blogs/voice-agent-pricing-strategy-guide and Ciela https://ciela.ai/blogs/how-much-to-charge-for-ai-voice-agent ($300), Agentpro https://agentpro.ai/resources/ai-voice-agent-vs-answering-service-vs-new-hire-a-cost-comparison-for-small-businesses and Constant Concepts https://constantconcepts.ai/pricing/ (setup).
 - [ ] **7. Someone answers AGENT comments on TikTok by hand within the hour** (TikTok has no comment-to-DM automation for us). On Instagram the series comment-to-DM automation is live with keyword AGENT and its own ig5 rule (`utm_campaign=reel_ig5`). If neither can be covered, the reel is rendered with `ig5-07-bio`.
 
 **Strongly recommended in the same pricing edit:** settle Starter's minutes and overage (the site says 400 minutes and $0.20, the app bills 150 minutes and $0.25). The reel never shows them, but it sends viewers to that page, and "how many minutes?" will be the first question. After the change ships, update `.claude/instagram/voice.md:57` and `profile.md:67` ("Calendar booking needs Pro").
 
-**If the booking change is not live but the owner wants to post anyway:** render with `ig5-06-msg` ("…and takes a message.", the record ends on **Message taken**) and use the no-booking captions in §7. Gates 3, 6 and 7 still apply.
+**If the booking change is not live but the owner wants to post anyway:** post the message master (`ig5-06-msg`: "…and takes a message.", the record ends on **Message taken**) and use the no-booking captions in §7. Gates 3, 6 and 7 still apply.
+
+**Two masters, rendered together (critic round 1, T1).** The render/deliver step renders BOTH cuts, so posting day never needs a re-render and the booking file cannot go up by mistake: `BODY.does = 'ig5-06'` → `neurotechvoice-ig5-dont-pay-300-booking-…` (records **Booked** + `BETA`), and `BODY.does = 'ig5-06-msg'` → `neurotechvoice-ig5-dont-pay-300-message-…` (**Message taken**). Each is one id in `src/ig/ig5/timing.ts`, then `sfx:ig5` and `check:audio:ig5` (both pass, BUILD §5.4). The **booking** files are posted only after items 1 and 2 above are ticked; until then only the **message** files may go up.
 
 **Owner overrides recorded here:** "$49" on screen and in the captions (the owner asked; voice.md's "no prices on Instagram" is lifted for this figure only); "Starter" named in the caption fine print (profile.md allows only "Pro"; kept because it is the honest pointer to which plan "$49" means). No other price, tier or minute count of ours appears anywhere.
 
@@ -57,7 +59,7 @@ Built into `trailer/out/ig/deliver/` (PIPELINE §6.2):
 
 ## 3. TikTok (post first)
 
-**Cover:** TikTok's feed autoplays from frame 0, which is the hook picture itself (the ringing light, three rings, "Three rings. / Gloves on. / You can't."), so the cover only shows on the profile grid and in search. Upload `…-cover.png` ("Three rings. / Gloves on. / You can't." over "Agency AI receptionist: / commonly $300 a month. / Ours: from $49 a month.", SCRIPT §7: the $300 keeps its hedge on the cover too) if the app offers "upload from photos"; otherwise pick the payoff frame at ≈ 17.3 s (once "No setup fee." has printed: three quotes and "$49 a month", bars to scale) and add no TikTok text sticker.
+**Cover:** TikTok's feed autoplays from frame 0, which is the hook picture itself (the ringing light, three rings, "Three rings. / Gloves on. / You can't."), so the cover only shows on the profile grid and in search. Upload `…-cover.png` ("Three rings. / Gloves on. / You can't." over "Agency AI receptionist: / commonly $300 a month. / Ours: from $49 a month.", SCRIPT §7: the $300 keeps its hedge on the cover too) if the app offers "upload from photos"; otherwise pick the payoff frame **between 17.25 and 17.5 s (f518–525), never later** (every hedge and "No setup fee." printed, the pile at rest: three quotes and "$49 a month", bars to scale; from 17.5 s the pile fades out) and add no TikTok text sticker.
 
 **Caption** (1,541 / 2,200 characters; keyword-first line for TikTok search; one ask; 4 hashtags; no link):
 
@@ -75,13 +77,13 @@ Fine print: $49 a month is the Starter plan fee in US dollars, excluding VAT. Th
 #AIReceptionist #AnsweringService #SmallBusinessOwner #SmallBusinessTips
 ```
 
-- **Search:** "AI receptionist cost" opens the caption; "AI receptionist" is also on screen at ≈ 3.1 s ("Agency AI receptionist:") and spoken at ≈ 3.9 s, and the cover kicker carries it; "answering service" is spoken at ≈ 9.9 s, in the body and in a hashtag.
+- **Search:** "AI receptionist cost" opens the caption; "AI receptionist" is also on screen at ≈ 3.1 s (the agency slip's tag AGENCY AI RECEPTIONIST, rising as a unit 2 f before "Agency") and spoken at ≈ 3.9 s, and the cover kicker carries it; "answering service" is spoken at ≈ 9.9 s, in the body and in a hashtag.
 - **"It's also in our bio":** the TikTok bio link is https://linktr.ee/neurotechvoice (profile.md). TikTok links in comments aren't clickable, and TikTok may not let us DM a commenter who doesn't follow us.
 
-**Pinned comment** (132 / 150 characters; TikTok caps comments at 150, so the full sources live in the caption):
+**Pinned comment** (137 / 150 characters; TikTok caps comments at 150, so the full sources live in the caption; "live" since critic round 1, T6: AI answering services exist at $0-$69, RESEARCH-prices §4, and every other text says "live" or "staffed by people"):
 
 ```
-Checked 7 Oct 2026: 10 US answering services, 8 agency pricing sources. Ours: $49/mo Starter plan fee, plus $1.15/mo for the number.
+Checked 7 Oct 2026: 10 US live answering services, 8 agency pricing sources. Ours: $49/mo Starter plan fee, plus $1.15/mo for the number.
 ```
 
 **AGENT comments (by hand, within the hour):**
@@ -217,7 +219,7 @@ The "Can you build it for me?" reply matters: RESEARCH-product §6 warns that "a
 | TikTok caption | READY (1,541 chars; 105-char first line lands whole; 2/2 search terms in the visible window; 1 ask; 4 tags) | **87.5 PASS** | nothing to strip |
 | Instagram caption | READY (1,354 chars; 111-char first line; 2/2 search terms; 1 ask; 4 tags) | **78.0 PASS** | nothing to strip |
 | Instagram pinned comment | | **74.3 PASS** | nothing to strip |
-| TikTok pinned comment (132 chars) | | 62.0, "too short to judge" | nothing to strip |
+| TikTok pinned comment (137 chars since critic round 1: + "live") | | 62.0, "too short to judge" | nothing to strip |
 | DM | | **91.1 PASS** | nothing to strip |
 | Ready replies (10) | all ≤ 150 chars | | nothing to strip |
 | Alt text | | | nothing to strip (re-run on the hook-swap alt text, 617 chars) |

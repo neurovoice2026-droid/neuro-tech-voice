@@ -13,17 +13,20 @@
  *             a 3-frame seed, SPRING.pop, the palette crossing rush → sunday over 6 f) and glides (0.45 s) to ours' full
  *             stop after "a month", Ø 44, breathing on her voice; it rides ours up in b5; on "It" it stays where the
  *             full stop was as ours folds away, and on "picks up" it arcs onto the record's ringing rose dot, landing
- *             as "up" is said, and stays docked there as the agent, leaning into its listen palette
+ *             on the vowel of "up" (M.dock: its stamp sits on the p closure, crit-r1 S1 / SYNC-1), and stays docked
+ *             there as the agent, leaning into its listen palette
  *   S1        Hook.tsx HookCard (frame 0's card, leaving line by line)
- *   captions  every narrator line in the caption band (x 86, y 1180, ≤ 814 → x 900), word-synced through the Captions
- *             fork; the payoff's words print on ours instead (the band is empty in b4); the CTA is the end card's
+ *   captions  the set-up and does lines in the caption band (x 86, y 1180, ≤ 814 → x 900), word-synced through the
+ *             Captions fork (NUDGE where the aligner's stamp is off her energy; a row never ends on "the" / "a" / "an");
+ *             the quotes' and the payoff's words print on their papers instead, so every word is on screen once (the
+ *             band is empty in b2–b4, ig2 / ig4's idiom, crit-r1 P4); the CTA is the end card's
  */
 import React from 'react';
 import { AbsoluteFill } from 'remotion';
 import { EASE, mix, mixHex, SPRING, springUnit, tween } from '../../../lib/motion';
 import { useKitFaces } from '../../../kb/kit';
 import { MOMENT_LIGHTS } from '../../../kb/palettes';
-import { Captions, type CapKey, type CapPlace } from '../../components/Captions';
+import { Captions, captionScreens, layoutScreen, type CapKey, type CapPlace } from '../../components/Captions';
 import { PearlGround } from '../../components/Ground';
 import { AvaOrb, orbTrack, type OrbTrack } from '../../components/Orb';
 import { ZoneRect } from '../../components/ZoneGuard';
@@ -61,7 +64,8 @@ export function groundKeyAt(t: number) {
 export const Ground5: React.FC<{ t: number; keyLight?: React.ComponentProps<typeof PearlGround>['keyLight'] }> = ({ t, keyLight }) => <PearlGround t={t} keyLight={keyLight ?? groundKeyAt(t)} />;
 
 /* ── her orb ── */
-export const ORB_CANVAS = 64;
+/** her orb's canvas: ≥ the largest d she is shown at (the brand's Ø 96, Acts.tsx PARK) */
+export const ORB_CANVAS = 96;
 /** the lift of her glide onto the record (px at mid-glide) */
 const ORB_ARC = 90;
 /** she listens while docked on the record (the call), until the CTA */
@@ -83,7 +87,7 @@ export function orbPose(t: number): { x: number; y: number; d: number; moving: b
   // b6: on "It" she leaves the folding card and waits where the full stop was; on "picks up" she glides onto the
   // record's rose dot (arriving on "up"), arcing over the record's header so she never crosses its words
   const from = fullStopAt(M.it);
-  const u = tween(t, [M.picks, M.up], [0, 1], EASE.inOut);
+  const u = tween(t, [M.picks, M.dock], [0, 1], EASE.inOut);
   const dock = dockAt(t);
   const dd = RECORD.orbD * dock.s;
   const arc = ORB_ARC * Math.sin(Math.PI * u);
@@ -103,15 +107,29 @@ export const Orb5: React.FC<{ t: number; pose?: { x: number; y: number; d: numbe
 
 /* ── the captions ── */
 export const CAP5: CapPlace = { x: CAP.x, y: CAP.y, maxWidth: CAP.maxWidth, align: 'left', role: 'caption' };
-/** the narrator's lines in the band (the hook is S1; the payoff prints on ours; the CTA is the end card's) */
-const BAND = [T.CAST.agency, T.CAST.answering, T.CAST.setup, T.CAST.does] as const;
+/** the narrator's lines in the band (the hook is S1; the quotes print on their slips and the payoff on ours — one place
+ *  per word, crit-r1 P4; the CTA is the end card's) */
+const BAND = [T.CAST.setup, T.CAST.does] as const;
+/** a row never ends on an article: where the balanced wrap leaves "the" / "a" / "an" at a row's end ("and books the /
+ *  appointment."), that row breaks before it (crit-r1 P9) */
+const ARTICLE = /^(the|a|an)$/i;
+function placeOf(id: T.VoiceId): (k: number) => CapPlace {
+  // measured when Captions asks (its faces are loaded by then)
+  return (k) => {
+    const s = captionScreens(T, id, { nudge: T.NUDGE[id] })[k];
+    if (!s) return CAP5;
+    const starts = layoutScreen(s.tokens, CAP5).rows.map((r) => r.tokens[0]).slice(1);
+    const fixed = starts.map((st) => (st > 1 && ARTICLE.test(s.tokens[st - 1].text) ? st - 1 : st));
+    return fixed.some((f, i) => f !== starts[i]) ? { ...CAP5, rows: fixed } : CAP5;
+  };
+}
 /** the anchors in the captions take the phone's rose on their onsets (the display map's "$300", "$1,500.", "$99") */
 const keysOf = (id: string): CapKey[] =>
   T.DISPLAY.filter((d) => d.id === id && d.text.startsWith('$')).map((d) => ({ words: Array.from({ length: d.to - d.from + 1 }, (_, i) => d.from + i), ink: RUSH.ink, glint: RUSH.orb[2] }));
 export const BandCaptions: React.FC<{ t: number }> = ({ t }) => (
   <>
     {BAND.map((id) => (
-      <Captions key={id} T={T} id={id} t={t} place={CAP5} keys={keysOf(id)} what="caption" />
+      <Captions key={id} T={T} id={id} t={t} place={placeOf(id)} keys={keysOf(id)} timing={{ nudge: T.NUDGE[id] }} what="caption" />
     ))}
   </>
 );
