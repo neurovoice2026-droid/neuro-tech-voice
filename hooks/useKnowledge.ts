@@ -17,10 +17,55 @@ import type { KnowledgeDocument } from '@/types'
 
 /** A document as the knowledge API returns it. */
 export type KnowledgeDoc = KnowledgeDocument & {
-  /** Server-computed: failed, abandoned mid-way, or uploaded but not attached → can be retried now. */
+  /** Server-computed: failed, abandoned mid-way, not attached, or search index failed → can be retried now. */
   can_retry?: boolean
   attempt_count?: number
   updated_at?: string
+  /** 'prompt' = "Always include" (in every call's prompt); default 'auto'. */
+  usage_mode?: 'auto' | 'prompt'
+  supported_usages?: string[] | null
+  /** URL pages re-fetched weekly by the voice provider. */
+  auto_sync?: boolean
+  sync_frequency_days?: number | null
+  sync_failures?: number
+  remote_updated_at?: string | null
+  /** Search index state: new|created|processing|succeeded|failed|rag_limit_exceeded|document_too_small|cannot_index_folder. */
+  rag_status?: string | null
+  rag_progress?: number | null
+  /** Set while a delete is in progress. */
+  deleting_at?: string | null
+}
+
+/** Organization-level budgets (GET /api/agent/knowledge/usage). */
+export interface KnowledgeUsage {
+  bytes_used: number
+  bytes_limit: number
+  documents: number
+  documents_limit: number
+  prompt_chars_used: number
+  prompt_chars_limit: number
+  prompt_doc_max_bytes: number
+  websites: number
+  websites_limit: number
+  crawl_max_pages: number
+}
+
+const RAG_PENDING = new Set(['new', 'created', 'processing'])
+
+/** The document is attached and its search index is still being built. */
+export function isIndexing(doc: KnowledgeDoc): boolean {
+  return doc.status === 'ready' && !!doc.rag_status && RAG_PENDING.has(doc.rag_status) && !doc.deleting_at
+}
+
+/**
+ * Whether the owner may try "Always include" (the server checks again: the
+ * provider must support it and the organization's character cap must fit).
+ */
+export function canPinToPrompt(doc: KnowledgeDoc, usage: KnowledgeUsage | null): boolean {
+  if (doc.status !== 'ready' || !doc.elevenlabs_doc_id || doc.deleting_at) return false
+  if (doc.supported_usages && !doc.supported_usages.includes('prompt')) return false
+  if (doc.type === 'text') return true
+  return !!usage && doc.size_bytes > 0 && doc.size_bytes <= usage.prompt_doc_max_bytes
 }
 
 /** Keep in step with lib/voice-providers/knowledge.ts (server-side limits). */
@@ -36,6 +81,7 @@ export const KNOWLEDGE_LIMITS = {
 
 const BUCKET = 'knowledge-documents'
 const POLL_INTERVAL_MS = 5_000
+const INDEX_POLL_INTERVAL_MS = 10_000
 const UPLOAD_CONCURRENCY = 3
 const DONE_ENTRY_TTL_MS = 2_500
 
@@ -176,6 +222,28 @@ export async function retryKnowledgeDocument(docId: string): Promise<KnowledgeDo
   return (await res.json()) as KnowledgeDoc
 }
 
+async function sendJson(url: string, method: 'PATCH' | 'POST', body: unknown): Promise<Response> {
+  return fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+}
+
+/**
+ * Replaces an uploaded file with a new version (same document on the agent):
+ * signed upload to Storage, then the server swaps the file at the provider.
+ */
+export async function replaceKnowledgeFile(docId: string, file: File): Promise<{ document: KnowledgeDoc; warning: string | null }> {
+  const problem = validateKnowledgeFile(file)
+  if (problem) throw new KnowledgeApiError(problem, 400)
+  const base = `/api/agent/knowledge/${encodeURIComponent(docId)}/replace`
+  const start = await postJson(base, { name: file.name, size: file.size, mime: file.type })
+  if (!start.ok) throw new KnowledgeApiError(await readError(start, 'Could not start the upload.'), start.status)
+  const { upload } = (await start.json()) as { upload: { path: string; token: string } }
+  const { error } = await createClient().storage.from(BUCKET).uploadToSignedUrl(upload.path, upload.token, file)
+  if (error) throw new KnowledgeApiError('The file could not be uploaded. Check your connection and try again.', 0)
+  const done = await postJson(`${base}/complete`, { name: file.name })
+  if (!done.ok) throw new KnowledgeApiError(await readError(done, 'The new file could not be applied.'), done.status)
+  return (await done.json()) as { document: KnowledgeDoc; warning: string | null }
+}
+
 async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promise<unknown>): Promise<void> {
   const queue = [...items]
   const runners = Array.from({ length: Math.min(limit, queue.length) }, async () => {
@@ -239,19 +307,42 @@ export function useKnowledge() {
     }
   }, [])
 
+  const [usage, setUsage] = useState<KnowledgeUsage | null>(null)
+  const loadUsage = useCallback(async () => {
+    try {
+      const res = await fetch('/api/agent/knowledge/usage', { cache: 'no-store' })
+      if (!res.ok) {
+        console.warn('[knowledge] usage unavailable', res.status)
+        return
+      }
+      const data = (await res.json()) as KnowledgeUsage
+      if (mounted.current) setUsage(data)
+    } catch (err) {
+      console.warn('[knowledge] usage request failed', err)
+    }
+  }, [])
+
   useEffect(() => {
     void loadDocs()
   }, [loadDocs])
 
   // Poll while the server is still working on something; stop as soon as nothing is.
+  // Search indexing is slower and cheaper to watch: every 10 seconds.
   const hasProcessing = docs.some(isProcessing)
+  const hasIndexing = docs.some(isIndexing)
   useEffect(() => {
-    if (!hasProcessing) return
+    if (!hasProcessing && !hasIndexing) return
     const timer = setInterval(() => {
       if (!listRequest.current) void loadDocs({ quiet: true })
-    }, POLL_INTERVAL_MS)
+    }, hasProcessing ? POLL_INTERVAL_MS : INDEX_POLL_INTERVAL_MS)
     return () => clearInterval(timer)
-  }, [hasProcessing, loadDocs])
+  }, [hasProcessing, hasIndexing, loadDocs])
+
+  // Sizes and caps change when documents finish processing or are removed.
+  const docsSignature = docs.map((d) => `${d.id}:${d.status}:${d.size_bytes}:${d.usage_mode ?? 'auto'}`).join('|')
+  useEffect(() => {
+    void loadUsage()
+  }, [docsSignature, loadUsage])
 
   const refetch = useCallback(() => loadDocs({ spinner: true }), [loadDocs])
 
@@ -427,19 +518,125 @@ export function useKnowledge() {
     setUploading((prev) => prev.filter((u) => u.status !== 'error'))
   }, [])
 
+  /** Marks a document busy for an in-place action (refresh, edit, replace, usage mode). */
+  const [busy, setBusy] = useState<string[]>([])
+  const withBusy = useCallback(async <T,>(docId: string, fn: () => Promise<T>): Promise<T> => {
+    setBusy((prev) => (prev.includes(docId) ? prev : [...prev, docId]))
+    try {
+      return await fn()
+    } finally {
+      if (mounted.current) setBusy((prev) => prev.filter((id) => id !== docId))
+    }
+  }, [])
+
+  /** Re-fetches a web page now (same document, re-indexed by the provider). */
+  const refreshDoc = useCallback(
+    (docId: string): Promise<boolean> =>
+      withBusy(docId, async () => {
+        try {
+          const res = await postJson(`/api/agent/knowledge/${encodeURIComponent(docId)}/refresh`)
+          if (!res.ok) {
+            toast.error(await readError(res, 'The page could not be refreshed.'))
+            return false
+          }
+          upsertDoc((await res.json()) as KnowledgeDoc)
+          toast.success('Page refreshed')
+          return true
+        } catch (err) {
+          console.warn('[knowledge] refresh failed', err)
+          toast.error('Network error. Check your connection and try again.')
+          return false
+        }
+      }),
+    [upsertDoc, withBusy],
+  )
+
+  /** Rename, edit pasted text and/or change the usage mode, in place. */
+  const updateDoc = useCallback(
+    (docId: string, patch: { name?: string; text?: string; usage_mode?: 'auto' | 'prompt' }, successMessage = 'Changes saved'): Promise<boolean> =>
+      withBusy(docId, async () => {
+        try {
+          const res = await sendJson(`/api/agent/knowledge/${encodeURIComponent(docId)}`, 'PATCH', patch)
+          if (!res.ok) {
+            toast.error(await readError(res, 'The changes could not be saved.'))
+            return false
+          }
+          const data = (await res.json()) as { document: KnowledgeDoc; warning: string | null }
+          upsertDoc(data.document)
+          if (data.warning) toast.warning(`Saved. ${data.warning}`)
+          else toast.success(successMessage)
+          void loadUsage()
+          return true
+        } catch (err) {
+          console.warn('[knowledge] update failed', err)
+          toast.error('Network error. Check your connection and try again.')
+          return false
+        }
+      }),
+    [loadUsage, upsertDoc, withBusy],
+  )
+
+  /** The stored text of a pasted-text document (for editing). */
+  const loadDocText = useCallback(async (docId: string): Promise<string | null> => {
+    try {
+      const res = await fetch(`/api/agent/knowledge/${encodeURIComponent(docId)}`, { cache: 'no-store' })
+      if (!res.ok) {
+        toast.error(await readError(res, 'Could not load the text.'))
+        return null
+      }
+      const data = (await res.json()) as { text: string | null }
+      return data.text
+    } catch (err) {
+      console.warn('[knowledge] text load failed', err)
+      toast.error('Network error. Check your connection and try again.')
+      return null
+    }
+  }, [])
+
+  /** Swaps an uploaded file for a new version, keeping the document on the agent. */
+  const replaceFile = useCallback(
+    (docId: string, file: File): Promise<boolean> =>
+      withBusy(docId, async () => {
+        try {
+          const { document, warning } = await replaceKnowledgeFile(docId, file)
+          upsertDoc(document)
+          if (warning) toast.warning(`File replaced. ${warning}`)
+          else toast.success(`"${document.name}" replaced`)
+          void loadUsage()
+          return true
+        } catch (err) {
+          if (err instanceof KnowledgeApiError) toast.error(err.message)
+          else {
+            console.warn('[knowledge] replace failed', err)
+            toast.error('Network error. Check your connection and try again.')
+          }
+          void loadDocs({ quiet: true })
+          return false
+        }
+      }),
+    [loadDocs, loadUsage, upsertDoc, withBusy],
+  )
+
   return {
     docs,
     isLoading,
     uploading,
     retrying,
-    isPolling: hasProcessing,
+    busy,
+    usage,
+    isPolling: hasProcessing || hasIndexing,
     uploadFile,
     uploadFiles,
     addUrl,
     addText,
     retryDoc,
     deleteDoc,
+    refreshDoc,
+    updateDoc,
+    loadDocText,
+    replaceFile,
     refetch,
+    refreshUsage: loadUsage,
     clearErrorUploads,
   }
 }

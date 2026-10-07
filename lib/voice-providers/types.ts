@@ -128,7 +128,17 @@ export interface AgentSpec {
   analysis: AnalysisSettings
   privacy: PrivacySettings
   /** Provider document ids already uploaded, per provider. */
-  knowledge: Array<{ name: string; type: 'file' | 'url' | 'text'; elevenlabsId: string | null; cartesiaId: string | null }>
+  knowledge: Array<{
+    name: string
+    /** 'folder': an imported website (always used through RAG). */
+    type: 'file' | 'url' | 'text' | 'folder'
+    elevenlabsId: string | null
+    cartesiaId: string | null
+    /** 'prompt' = always in the system prompt (capped per organization); default 'auto'. */
+    usageMode?: 'auto' | 'prompt'
+    /** Size known to the platform (null = unknown); documents under 500 bytes cannot be RAG-indexed. */
+    sizeBytes?: number | null
+  }>
   /** Static customer-defined variables available to the prompt. */
   dynamicVariables: Record<string, string>
   /** Whether calls reach this agent through our Twilio ingress (μ-law 8 kHz). */

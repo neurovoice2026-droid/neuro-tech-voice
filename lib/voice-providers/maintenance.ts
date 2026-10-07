@@ -169,6 +169,7 @@ export async function runVoiceMaintenance(log: Logger = createLogger({ component
     ['knowledge_retries', () => retryStaleKnowledgeDocs(2, log)],
     ['voice_saves', () => settleInterruptedVoiceSaves(5, log)],
     ['rejected_clones', () => purgeRejectedClones(5, log)],
+    ['knowledge_sync', () => import('./knowledge-maintenance').then((m) => m.runKnowledgeMaintenance(log))],
     // Hourly is plenty for retention (the cron fires every 5 minutes).
     ...(new Date().getUTCMinutes() < 5 ? ([['retention', () => pruneOperationalData(log)]] as Array<[string, () => Promise<unknown>]>) : []),
   ]

@@ -45,6 +45,7 @@ import {
 import type { VoiceProvider } from '@/lib/voice-providers/errors'
 import * as cartesia from '@/lib/cartesia/client'
 import { getAllowedFallbackVoice } from '@/lib/voice-providers/voice-catalog'
+import { scheduleKnowledgeReindex } from '@/lib/voice-providers/knowledge-rag'
 import { isValidTimeZone } from '@/lib/scheduling/time'
 import type { Agent } from '@/types'
 
@@ -252,6 +253,9 @@ export async function PATCH(request: Request) {
         log,
       })
     }
+
+    // A language change switches the RAG embedding model: re-index the documents for it.
+    if (providerFieldsChanged.includes('language')) scheduleKnowledgeReindex(agent.id, log)
 
     log.info('agent.patch', {
       fields: Object.keys(agentPatch),

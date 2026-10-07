@@ -11,6 +11,7 @@ import { summarizeVoiceConfig, validateVoiceConfig } from '@/lib/voice-providers
 import { peek } from '@/lib/voice-providers/circuit-registry'
 import { listPlatformResources } from '@/lib/voice-providers/platform-resources'
 import { probeProviders } from '@/lib/voice-providers/maintenance'
+import { knowledgeDiagnostics } from '@/lib/voice-providers/knowledge-diagnostics'
 
 export async function GET(request: Request) {
   const requestId = requestIdFrom(request)
@@ -81,6 +82,7 @@ export async function GET(request: Request) {
           final_failures: (failovers.data ?? []).filter((f) => (f.details as { final?: boolean } | null)?.final).length,
         },
         ...(probe ? { health: await probeProviders(log) } : {}),
+        knowledge: await knowledgeDiagnostics(log).catch((err: unknown) => (log.error('admin.diagnostics_knowledge_failed', err), { error: 'unavailable' })),
       },
       { headers: { 'Cache-Control': 'no-store' } },
     )

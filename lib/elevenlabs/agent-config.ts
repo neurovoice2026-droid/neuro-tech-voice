@@ -11,6 +11,7 @@
 import type { AgentSpec } from '@/lib/voice-providers/types'
 import { PLATFORM_VARIABLES } from '@/lib/voice-providers/prompt'
 import { agentLlm, ragEmbeddingModel, ttsModelFor } from './models'
+import { buildKnowledgePromptConfig } from './rag-config'
 import type { AgentBody } from './client'
 
 export interface PlatformResources {
@@ -82,9 +83,7 @@ function builtInTools(spec: AgentSpec) {
 
 export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformResources): AgentBody {
   const c = spec.conversation
-  const knowledge = spec.knowledge
-    .filter((k) => !!k.elevenlabsId)
-    .map((k) => ({ type: k.type, name: k.name.slice(0, 200), id: k.elevenlabsId as string, usage_mode: 'auto' }))
+  const knowledge = buildKnowledgePromptConfig(spec.knowledge, ragEmbeddingModel(spec.language))
   const telephonyFormat = spec.appRouted ? 'ulaw_8000' : 'pcm_16000'
   const appTransfer = spec.appRouted && spec.transfer.enabled && !!spec.transfer.number && !!platform.transferToolId
 
@@ -92,8 +91,8 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
     prompt: spec.systemPrompt,
     llm: agentLlm(),
     max_tokens: -1,
-    knowledge_base: knowledge,
-    rag: { enabled: knowledge.length > 0, embedding_model: ragEmbeddingModel(spec.language) },
+    knowledge_base: knowledge.knowledge_base,
+    rag: knowledge.rag,
     timezone: spec.timezone,
     built_in_tools: builtInTools(spec),
     tool_ids: appTransfer ? [platform.transferToolId] : [],

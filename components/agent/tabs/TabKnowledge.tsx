@@ -10,15 +10,21 @@ import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   FileText, Globe, Trash2, Upload, Link2, CheckCircle2, AlertCircle, Loader2, Info,
-  RefreshCw, RotateCw, Type, Bot, Clock,
+  RefreshCw, RotateCw, Type, Bot, Clock, Pencil, FileUp, RefreshCcw,
 } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
+import { Switch } from '@/components/ui/switch'
 import {
-  KNOWLEDGE_LIMITS, isProcessing, validateKnowledgeFile,
-  type useKnowledge, type KnowledgeDoc, type UploadingFile,
+  KNOWLEDGE_LIMITS, canPinToPrompt, isProcessing, validateKnowledgeFile,
+  type useKnowledge, type KnowledgeDoc, type KnowledgeUsage, type UploadingFile,
 } from '@/hooks/useKnowledge'
+import { useKnowledgeWebsite } from '@/hooks/useKnowledgeWebsite'
+import { EditDocumentDialog } from '@/components/agent/knowledge/EditDocumentDialog'
+import { KnowledgeTestCard } from '@/components/agent/knowledge/KnowledgeTestCard'
+import { RagBadge, SyncBadge, UsageModeBadge } from '@/components/agent/knowledge/KnowledgeBadges'
+import { WebsiteImportCard } from '@/components/agent/knowledge/WebsiteImportCard'
 import { cn, formatDate, formatFileSize } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -37,7 +43,12 @@ const STAGE_LABEL: Record<UploadingFile['stage'], string> = {
 }
 
 export function TabKnowledge({ hook }: TabKnowledgeProps) {
-  const { docs, isLoading, uploading, retrying, uploadFiles, addUrl, addText, retryDoc, deleteDoc, refetch, clearErrorUploads } = hook
+  const {
+    docs, isLoading, uploading, retrying, busy, usage, uploadFiles, addUrl, addText, retryDoc, deleteDoc, refetch, clearErrorUploads,
+    refreshDoc, updateDoc, loadDocText, replaceFile, refreshUsage,
+  } = hook
+  const websiteHook = useKnowledgeWebsite(() => void refreshUsage())
+  const [editTarget, setEditTarget] = useState<KnowledgeDoc | null>(null)
   const [urlInput, setUrlInput] = useState('')
   const [isAddingUrl, setIsAddingUrl] = useState(false)
   const [textName, setTextName] = useState('')
@@ -107,9 +118,10 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
   }
 
   const totalDocs = docs.length
-  const totalSize = docs.reduce((acc, d) => acc + (d.size_bytes ?? 0), 0)
+  const totalSize = usage?.bytes_used ?? docs.reduce((acc, d) => acc + (d.size_bytes ?? 0), 0)
   const attachedCount = docs.filter((d) => d.status === 'ready' && !!d.attached_at).length
   const hasUploadErrors = uploading.some((u) => u.status === 'error')
+  const hasKnowledge = attachedCount > 0 || websiteHook.websites.some((w) => w.status === 'succeeded')
 
   return (
     <div className="space-y-6">
@@ -124,7 +136,9 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
         <Card className="flex-1">
           <CardContent className="py-4">
             <p className="text-2xl font-bold">{formatFileSize(totalSize)}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Total size</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {usage ? `of ${formatFileSize(usage.bytes_limit)} used` : 'Total size'}
+            </p>
           </CardContent>
         </Card>
         <Card className="flex-1">
@@ -228,6 +242,9 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
         </CardContent>
       </Card>
 
+      {/* Import a whole website */}
+      <WebsiteImportCard hook={websiteHook} maxPages={usage?.crawl_max_pages ?? 25} />
+
       {/* Add text */}
       <Card>
         <CardHeader>
@@ -294,15 +311,38 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
                 <DocRow
                   key={doc.id}
                   doc={doc}
+                  usage={usage}
                   isRetrying={retrying.includes(doc.id)}
+                  isBusy={busy.includes(doc.id)}
                   onRetry={() => void retryDoc(doc.id)}
                   onDelete={() => setDeleteTarget(doc)}
+                  onEdit={() => setEditTarget(doc)}
+                  onRefresh={() => void refreshDoc(doc.id)}
+                  onReplace={(file) => void replaceFile(doc.id, file)}
+                  onUsageMode={(mode) =>
+                    void updateDoc(doc.id, { usage_mode: mode }, mode === 'prompt' ? `"${doc.name}" is now always included` : `"${doc.name}" is used when relevant`)
+                  }
                 />
               ))}
             </div>
           )}
+          {usage && usage.prompt_chars_used > 0 && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Always included: {usage.prompt_chars_used.toLocaleString()} of {usage.prompt_chars_limit.toLocaleString()} characters.
+            </p>
+          )}
         </CardContent>
       </Card>
+
+      {/* Ask the knowledge base */}
+      <KnowledgeTestCard disabled={!hasKnowledge} />
+
+      <EditDocumentDialog
+        doc={editTarget}
+        onClose={() => setEditTarget(null)}
+        loadText={loadDocText}
+        onSave={(docId, patch) => updateDoc(docId, patch)}
+      />
 
       {/* Tips */}
       <Card className="border-dashed">
@@ -310,6 +350,10 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
           <Info className="size-4 text-muted-foreground mt-0.5 shrink-0" />
           <div className="text-xs text-muted-foreground space-y-1">
             <p>Your agent uses these documents to answer caller questions accurately.</p>
+            <p>
+              Turn on &quot;Always include&quot; for short, key facts (opening hours, prices, address) so your agent knows them on every call.
+              Web pages and imported websites are re-read automatically every week.
+            </p>
             <p>
               Accepted: {KNOWLEDGE_LIMITS.typesLabel} up to {KNOWLEDGE_LIMITS.maxFileMb} MB each, public web pages, and pasted
               text up to {KNOWLEDGE_LIMITS.maxTextChars.toLocaleString()} characters.
@@ -373,6 +417,14 @@ const STATUS_STYLE = {
 } as const
 
 function StatusBadge({ doc }: { doc: KnowledgeDoc }) {
+  if (doc.deleting_at) {
+    return (
+      <Badge variant="outline" className="gap-1 text-xs" title="This document is being removed. Delete it again if it stays here.">
+        <Loader2 aria-hidden="true" className="animate-spin" />
+        Removing
+      </Badge>
+    )
+  }
   if (doc.status === 'processing') {
     const stalled = !isProcessing(doc)
     return (
@@ -422,11 +474,30 @@ function AttachedIndicator({ doc }: { doc: KnowledgeDoc }) {
   return null
 }
 
-function DocRow({
-  doc, isRetrying, onRetry, onDelete,
-}: { doc: KnowledgeDoc; isRetrying: boolean; onRetry: () => void; onDelete: () => void }) {
+const FILE_TYPES = new Set(['pdf', 'docx', 'txt', 'md', 'html', 'epub'])
+
+interface DocRowProps {
+  doc: KnowledgeDoc
+  usage: KnowledgeUsage | null
+  isRetrying: boolean
+  isBusy: boolean
+  onRetry: () => void
+  onDelete: () => void
+  onEdit: () => void
+  onRefresh: () => void
+  onReplace: (file: File) => void
+  onUsageMode: (mode: 'auto' | 'prompt') => void
+}
+
+function DocRow({ doc, usage, isRetrying, isBusy, onRetry, onDelete, onEdit, onRefresh, onReplace, onUsageMode }: DocRowProps) {
   const Icon = doc.type === 'url' ? Globe : doc.type === 'text' ? Type : FileText
   const showRetry = !!doc.can_retry || isRetrying
+  const settled = doc.status === 'ready' && !!doc.elevenlabs_doc_id && !doc.deleting_at
+  const working = isRetrying || isBusy
+  const replaceInput = useRef<HTMLInputElement>(null)
+  const pinned = doc.usage_mode === 'prompt'
+  const canPin = pinned || canPinToPrompt(doc, usage)
+  const iconButton = 'p-1.5 rounded-md hover:bg-muted transition-colors disabled:opacity-50'
 
   return (
     <div className="flex items-start gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors">
@@ -440,9 +511,27 @@ function DocRow({
           )}
           <Badge variant="outline" className="text-xs">{doc.type.toUpperCase()}</Badge>
           <AttachedIndicator doc={doc} />
+          {settled && <RagBadge status={doc.rag_status} progress={doc.rag_progress} />}
+          <UsageModeBadge doc={doc} />
+          {settled && <SyncBadge doc={doc} />}
         </div>
         {doc.status === 'failed' && doc.error_message && (
           <p className="text-xs text-destructive mt-1.5">{doc.error_message}</p>
+        )}
+        {settled && canPin && (
+          <div className="mt-2 flex items-center gap-2">
+            <Switch
+              id={`kb-pin-${doc.id}`}
+              size="sm"
+              checked={pinned}
+              disabled={working}
+              onCheckedChange={(checked) => onUsageMode(checked ? 'prompt' : 'auto')}
+              aria-label={`Always include ${doc.name} in every call`}
+            />
+            <label htmlFor={`kb-pin-${doc.id}`} className="text-xs text-muted-foreground">
+              Always include (for short key facts)
+            </label>
+          </div>
         )}
       </div>
       <div className="flex items-center gap-1 shrink-0">
@@ -451,17 +540,56 @@ function DocRow({
             variant="outline"
             size="sm"
             onClick={onRetry}
-            disabled={isRetrying}
-            title={doc.status === 'ready' ? 'Add this document to your agent' : 'Try processing this document again'}
+            disabled={working}
+            title={doc.status === 'ready' ? (doc.attached_at ? 'Index this document again' : 'Add this document to your agent') : 'Try processing this document again'}
           >
             {isRetrying ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCw className="size-3.5" />}
             <span className="ml-1">{isRetrying ? 'Retrying…' : 'Retry'}</span>
           </Button>
         )}
+        {isBusy && <Loader2 className="size-4 animate-spin text-muted-foreground" aria-label="Saving" />}
+        {settled && doc.type === 'url' && (
+          <button type="button" onClick={onRefresh} disabled={working} className={iconButton} title="Re-read this page now" aria-label={`Refresh ${doc.name}`}>
+            <RefreshCcw className="size-4" />
+          </button>
+        )}
+        {settled && FILE_TYPES.has(doc.type) && (
+          <>
+            <button type="button" onClick={() => replaceInput.current?.click()} disabled={working} className={iconButton} title="Replace with a new version of the file" aria-label={`Replace the file ${doc.name}`}>
+              <FileUp className="size-4" />
+            </button>
+            <input
+              ref={replaceInput}
+              type="file"
+              accept={KNOWLEDGE_LIMITS.accept}
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                if (!file) return
+                const problem = validateKnowledgeFile(file)
+                if (problem) toast.error(`"${file.name}": ${problem}`)
+                else onReplace(file)
+              }}
+            />
+          </>
+        )}
+        {!doc.deleting_at && doc.status !== 'processing' && (
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={working}
+            className={iconButton}
+            title={doc.type === 'text' ? 'Edit text' : 'Rename'}
+            aria-label={doc.type === 'text' ? `Edit ${doc.name}` : `Rename ${doc.name}`}
+          >
+            <Pencil className="size-4" />
+          </button>
+        )}
         <button
           type="button"
           onClick={onDelete}
-          disabled={isRetrying}
+          disabled={working}
           className="p-1.5 rounded-md hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-50"
           title="Delete document"
           aria-label={`Delete ${doc.name}`}

@@ -8,9 +8,11 @@ import { NextResponse } from 'next/server'
 import { requireOrg } from '@/lib/api/auth'
 import { RequestError, assertSameOrigin, errorResponse, requestErrorResponse } from '@/lib/api/http'
 import { createLogger, requestIdFrom } from '@/lib/observability/logger'
-import { RATE_LIMITS, enforceRateLimit } from '@/lib/security/rate-limit'
+import { RATE_LIMITS, enforceRateLimit, rateLimit } from '@/lib/security/rate-limit'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { defaultAgentName, ensureAgent } from '@/lib/agents/ensure-agent'
+import { KNOWLEDGE_RATE_LIMITS } from '@/lib/voice-providers/knowledge-limits'
+import { refreshRagForList } from '@/lib/voice-providers/knowledge-rag'
 import {
   KNOWLEDGE_BUCKET,
   KNOWLEDGE_DOC_COLUMNS,
@@ -53,16 +55,25 @@ export async function GET(request: Request) {
     if (agentErr) throw new Error(`agents read failed: ${agentErr.message}`)
     if (!agent) return NextResponse.json([], { headers: { 'Cache-Control': 'no-store' } })
 
-    const { data: docs, error } = await supabase
-      .from('knowledge_documents')
-      .select(KNOWLEDGE_DOC_COLUMNS)
-      .eq('org_id', org.id)
-      .eq('agent_id', agent.id)
-      .order('created_at', { ascending: false })
-    if (error) throw new Error(`knowledge_documents read failed: ${error.message}`)
+    const readDocs = async () => {
+      const { data, error } = await supabase
+        .from('knowledge_documents')
+        .select(KNOWLEDGE_DOC_COLUMNS)
+        .eq('org_id', org.id)
+        .eq('agent_id', agent.id)
+        .order('created_at', { ascending: false })
+      if (error) throw new Error(`knowledge_documents read failed: ${error.message}`)
+      return (data ?? []) as unknown as KnowledgeDocumentRow[]
+    }
+    let docs = await readDocs()
+
+    // Search-index progress (and re-indexing after a language change), at most
+    // every 10 s per organization and within the status rate limit; never fails the list.
+    const allow = async () => (await rateLimit(KNOWLEDGE_RATE_LIMITS.status, org.id)).allowed
+    if (await refreshRagForList(createAdminClient(), org.id, agent.id as string, docs, log, allow)) docs = await readDocs()
 
     const now = Date.now()
-    const view = ((docs ?? []) as unknown as KnowledgeDocumentRow[]).map((d) => toDocumentView(d, now))
+    const view = docs.map((d) => toDocumentView(d, now))
     return NextResponse.json(view, { headers: { 'Cache-Control': 'no-store' } })
   } catch (err) {
     if (err instanceof RequestError) return requestErrorResponse(err, requestId)
@@ -114,7 +125,7 @@ export async function POST(request: Request) {
 
     const agent = await ensureAgent(org.id, defaultAgentName(org.name))
     log = log.child({ agentId: agent.id })
-    await assertDocumentCapacity(supabase, org.id, agent.id)
+    await assertDocumentCapacity(supabase, org.id, agent.id, { incomingBytes: bytes.byteLength, log })
 
     const id = newDocumentId()
     const storagePath = storagePathFor(org.id, agent.id, id, safeFileName(name, type.ext))
