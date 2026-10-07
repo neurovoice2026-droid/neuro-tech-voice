@@ -361,7 +361,7 @@ This is QA only, and it writes only `out/ig5-guard/`.
 | **(b) ig1–ig4 sound** | `npm run check:audio:ig` (`check-mix --film=ig1 … ig4`) **and** `npm run sfx:ig`, which must print `igN: up to date (<hash>) — skipped` ×4 and "0 built" | PASS ×4, with the hashes of §1 unchanged |
 | **(b) ig1–ig4 picture (gate P)** | `guard --check` stills | byte-identical (`stillsMode` was `exact` for film 1, so this renderer is deterministic) |
 | **(c) delivered** | `guard --check` shas of `out/ig/deliver/**` and `out/ig/master/*.mp4` | identical; the only new names are `neurotechvoice-ig5-*` |
-| **Git** | `git diff --name-only HEAD` | ⊆ {`scripts/registry.mjs`, `package.json`, `src/ig/Root.tsx`, `src/ig/components/{Captions,End,Orb,Call}.tsx`, `src/ig/components/screens.ts`, `scripts/ig/check-zones.mjs`, `scripts/ig/check-delivery.mjs`} |
+| **Git** | `git diff --name-only HEAD` | ⊆ {`scripts/registry.mjs`, `package.json`, `src/ig/Root.tsx`, `src/ig/components/{Captions,End,Orb,Call}.tsx`, `src/ig/components/screens.ts`, `scripts/ig/check-zones.mjs`, `scripts/ig/check-delivery.mjs`, `src/ig/components/ZoneGuard.tsx` (the per-reel zone registry, SCRIPT §1.3; INFRA-LOG "Scene step")} |
 | **Git** | `git status --porcelain` | new paths only under `scripts/ig5/`, `src/ig/ig5/`, `src/ig/voices.ts`, `public/ig/voice/ig5-*`, `voice-candidates/ig5/`, `docs/ig/ig5/` |
 | **ig5** | tsc; `check-mix --film=ig5`; `check-zones --film=ig5`; `check-delivery --film=ig5` (with `check-render`); the review gates of §6.3 | all PASS |
 

@@ -16,19 +16,18 @@
  * "forty-nine" f458 (54.5 %) · setup f533 · does f581 · CTA f694 (82.6 %). Beat 2 reads 6.1–6.9 s in every take, so
  * from the agency line on the lines run a breath apart and the plan frames below are floors.
  *
- * Still PROVISIONAL (the infrastructure step, docs/ig/ig5/INFRA-LOG.md): the acts are title cards (acts/Acts.tsx).
- * What later steps replace, and where:
- *   · the takes          → `npm run voice:ig5 -- --install=…` rewrites ./voice.generated.ts; everything below re-anchors
- *                          to the measured takes by itself (PLAN + `place`, the stop-time on the 16th, as ig4)
- *   · the cast           → HOOK + CASTS: the hook's readings (the cast rule, HOOKS §1.1), then the trim ladder of
- *                          SCRIPT §4.3 (full → T1 → T1 + T2); the first rung whose CTA lets the impact land on
- *                          PLAN.impact is placed (the launch-gate swap ig5-06 → ig5-06-msg is one id in BODY; an A/B
- *                          hook is one HOOK object)
- *   · the acts' moments  → M (empty now), ZONE_FRAMES, the cue sheet HITS (the series' frame only: the frame-0 ring,
- *                          the end card's stack, the build and the impact) and BED.ride / MUSIC (the IG stub bed). The
- *                          hook's second ring R1 (HOOKS §1.3: ringBefore(the hook's word 2) if no onset falls in
- *                          (R1 − 6, R1 + 10), else in the "on." → "You" gap, else none) and the SCRIPT's later rings
- *                          are the scene step's to place from the onsets (series.ts: a ring never covers an onset)
+ * THE PICTURE (the scene step, docs/ig/ig5/BUILD.md) reads only M (the acts' moments, below: every one off the placed
+ * takes' onsets) and ZONE_FRAMES; the acts are src/ig/ig5/acts/Acts.tsx over the one continuous stage in stage/ (picture
+ * only, outside this hash). M.rings holds the phone's single rings the picture draws — R1 (HOOKS §1.3: ringBefore(the
+ * hook's word 2) if no onset falls in (R1 − 6, R1 + 10), else in the "on." → "You" gap, else none), one in a gap of the
+ * agency line, one before the pickup — each on a beat that passes the series' ring law.
+ *
+ * THE SOUND (the sound step, docs/ig/ig5/BUILD.md §5) hits the same M: the cue sheet HITS (SCRIPT §2 "Sound", HOOKS
+ * §1.3–1.4: room tone and the frame-0 ring under the hook, the rings of M.rings, the slips, the rolls' counters, the
+ * staple, the stop-time's pickup and birth, "forty-nine", the dots, the record, the end card), the VOICE_RIDES that give
+ * the logo its climax, and MUSIC / BED for ig5's own bed (scripts/ig5/bed.mjs: no music under the hook, the quotes, the
+ * cut on its 16th before "Ours?", the return on "forty-nine", the build). The launch-gate swap ig5-06 → ig5-06-msg is
+ * one id in BODY (the picture and the cue sheet follow it: M.booked, M.books); an A/B hook is one HOOK object.
  *
  * Each line sits on its planned frame unless the take before it still sounds (common/series.ts `place`); the stop-time
  * before "Ours?" cuts the bed on a 16th once her answering line has been quiet PLAN.oursGap − PLAN.stopLead frames, and
@@ -158,7 +157,21 @@ export const BRAND_AT = IMPACT + IMPACT_GAP;
 export const VOICES: Voiced<VoiceId>[] = (
   [...(Object.keys(LINE) as Role[]).map((r) => ({ at: LINE[r], id: CAST[r] })), { at: BRAND_AT, id: BRAND }] as Voiced<VoiceId>[]
 ).sort((x, y) => x.at - y.at);
-export const VOICE_RIDES: Partial<Record<VoiceId, readonly VoiceRide[]>> = {};
+/** THE VOICE POST — THE CLIMAX'S HEADROOM (ig1/ig2/ig4's method; check-mix: the logo impact tops the loudest dialogue
+ *  moment by ≥ 1 LU). The reel's loudest 400 ms are all voice: "Agency" opens beat 2 dry, a breath before the bed enters,
+ *  and "commonly", "ninety-nine", "It picks up when" lean forward. Each is ridden down inside the silences around it
+ *  (line-local frames, from the take's envelope; master() re-trims a ridden line so its body sits on the dialogue target,
+ *  so a nominal −2.5 dB is ≈ −2 dB heard). Rides are by take id: a re-cast that places another take is not ridden. */
+export const VOICE_RIDES: Partial<Record<VoiceId, readonly VoiceRide[]>> = {
+  'ig5-02gt': [
+    { from: 0, to: 19, db: -3.5, ramp: 2 },
+    { from: 64, to: 79, db: -2, ramp: 2 },
+  ],
+  'ig5-03': [{ from: 58, to: 84, db: -1.5, ramp: 3 }],
+  'ig5-06': [{ from: 0, to: 23, db: -2, ramp: 2 }],
+  /** the launch-gate cut (BODY.does = 'ig5-06-msg'): the same "It picks up when" */
+  'ig5-06-msg': [{ from: 0, to: 24, db: -2, ramp: 2 }],
+};
 export const { SPEECH, PHRASES, speaking } = makeSpeech(VOICE, VOICES);
 
 /* ── the acts: each starts its plan lead before its line (the end card's act before the comment field rises) ── */
@@ -300,7 +313,8 @@ export const M = {
   picks: on('does', 1),
   up: on('does', 2),
   cant: on('does', 5),
-  books: on('does', ix('does', 'books')),
+  /** "books" (ig5-06) or, the launch-gate cut ig5-06-msg, "takes" (…and takes a message.) */
+  books: on('does', has('does', 'books') ? ix('does', 'books') : ix('does', 'takes')),
   /** the call's outcome: Booked (ig5-06) or, the launch-gate cut ig5-06-msg, Message taken */
   booked: has('does', 'books'),
 } as const;
@@ -343,22 +357,116 @@ export const END_CARD = {
   seam: END - SEAM,
 } as const;
 
-/* ── the cue sheet: the series' frame only (placeholder; SCRIPT §2 "Sound" lands with the acts) ── */
+/* ── the cue sheet (SCRIPT §2 "Sound" beat by beat, HOOKS §1.3–1.4; hierarchy: voice ≫ story sounds ≫ the bed) ──
+ * Every sound is a family of the reels' SHARED library (public/ig/sfx/lib, read-only; scripts/ig5/generate-sfx.mjs checks
+ * each file's sha against lib.json) — no ig5-own copies, no new extras. A family with fewer files there than its
+ * round-robin count (pop, ping, land, glint, whoosh-soft, fx-felttip, fx-riffle: one file; swish: two; fx-keys: the end
+ * card's five) is played at most that many times. SCRIPT's `fx-roomtone-desk` is not among the shared copies: its room is
+ * `fx-roomtone` (30.7 s, the whole reel). */
 export const roomAt = (_f: number): Room => 'white';
-/** the delivery's AAC head (ig4's lesson, check-delivery ≤ −1 dBTP): the frame-0 attack sits `db` under, the bed back by `to` */
-const HEAD = { db: -4, to: 3 } as const;
+/** the delivery's AAC head (ig4's lesson, check-delivery ≤ −1 dBTP: a limiter-pinned onset on the file's first samples
+ *  decodes hot). ig5 has no bed under its first second, and the frame-0 ring peaks ≈ −10 dBFS in the master, far under
+ *  the limiter — so its ring needs no head trim (`db` 0): it is the reel's first sound, a phone in a quiet room */
+const HEAD = { db: 0 } as const;
+/** the phone's screen x (stage/layout.ts PHONE.x 740): its rings, the pickup and her birth pan there */
+const PHONE_X = 740 / 1080;
+/** THE PICTURE'S OWN FRAMES the cue sheet answers — stage/*.tsx is picture only (outside this hash), so its offsets from M
+ *  are mirrored here, by name: a spring's landing is its first crossing of rest (SPRING.site ≈ 5 f, land ≈ 5 f, pop ≈ 4 f) */
+const PIC = {
+  /** stage/type.tsx ROLL.dur: a figure rolls 0 → its value over 18 f, a new value every 32nd */
+  roll: 18,
+  /** Papers.tsx stubState: the stub drops on "Setup," (SPRING.land); its staple closes from M.setup + 4 (SPRING.pop) */
+  stubLand: M.setup + 5,
+  staple: M.setup + 8,
+  /** Papers.tsx squareAt / Ours.tsx oursY: the quotes square up and ours rises from the pickup (SPRING.site) */
+  oursLand: M.pickup + 5,
+  /** Papers.tsx PILE_EXIT: the pile leaves up through its mask over [M.you − 8, M.you] (power3.in: fastest at its end) */
+  pileOut: M.you - 2,
+  /** Ours.tsx: the fourth dot's check at M.dots[3] + 2 */
+  check: M.dots[3] + 2,
+  /** Record.tsx: REC_UP = M.it + 8 (SPRING.site); ANSWERED_AT = M.up + 2; the availability step spins from M.cant + 4 and
+   *  is done at M.books − 7; OUTCOME_AT = M.books + 2 (Answered → Booked / Message taken) */
+  recUp: M.it + 8,
+  answered: M.up + 2,
+  tool1: M.cant + 4,
+  tool1Done: M.books - 7,
+  outcome: M.books + 2,
+} as const;
+/** a ring of the phone: one desk trill (a key hit: never under a word's onset — M.rings passed the ring law) */
+const ring = (f: number, label: string, db: number): Hit<Snd> => H(f, 'fx-trill', 'rush', PHONE_X, 1, label, { db });
+/** a rolling figure's counter: a dry tick per 32nd under the roll, at the figure's x */
+const counter = (f: number, x: number, label: string, db: number): Hit<Snd> => H(f + 1, 'fx-tick', 'none', x, 2, label, { db, run: { n: 8, step: BEAT / 8 } });
+const RING_WHAT = [
+  'b1 R1: the phone rings again in the hook (“rings.” → “Gloves”), unanswered — a RingPulse leaves the light',
+  'b2 the phone rings on under the agency quote (after “receptionist:”), still unanswered',
+  'b3 the last ring before the pickup (after “…minutes.”): the stop-time follows it',
+];
 export const HITS: Hit<Snd>[] = [
-  H(0, 'fx-trill', 'rush', 0.8, 1, 'b1 THE RING AT FRAME 0 (the series’ “a call” attack; HEAD.db under) — the desk phone’s rose light', { db: -3 + HEAD.db }),
-  ...endHits(END_CARD),
+  // b1 — a phone ringing in a quiet room (HOOKS §1.4): the room tone, the frame-0 ring, R1 in a gap; no bed
+  H(0, 'fx-roomtone', 'none', 0.5, 3, 'b1 the room’s tone from frame 0: the quiet room the hook is said in (the stop-time’s air floor too)', { db: -24 }),
+  ring(0, 'b1 THE RING AT FRAME 0 (the third ring of the trio already in flight) — the desk phone’s rose light, the reel’s first sound', -3 + HEAD.db),
+  ...M.rings.map((f, k) => ring(f, RING_WHAT[k] ?? 'the phone rings, unanswered', -5)),
+  H(M.slip1 + 1, 'fx-paper-square', 'none', 0.5, 2, 'b1 → b2 slip 1 rises blank (an ink bar, an empty amount slot)', { db: 2 }),
+  // b2 — the agency quote
+  H(M.tag[0], 'fx-felttip-short', 'none', 0.24, 3, 'b2 the ink bar writes AGENCY AI RECEPTIONIST, a stroke per word', { db: 2, run: { n: 3, offs: M.tag.map((f) => f - M.tag[0]), xs: [0.22, 0.3, 0.42] } }),
+  H(M.three, 'thump', 'none', 0.3, 2, 'b2 “three hundred”: $300 lands in its slot (the roll’s landing spring) — its 600 px hairline draws with it', { db: -3 }),
+  counter(M.three, 0.3, 'b2 … $300 rolls 0 → 300: a dry tick per 32nd', 2),
+  H(M.three + PIC.roll - 2, 'fx-tock', 'none', 0.3, 3, 'b2 … and settles (a frame ahead of “a month”)', { db: 1 }),
+  H(PIC.stubLand, 'thump', 'none', 0.62, 2, 'b2 “Setup,”: the stub drops onto slip 1’s bottom margin with weight', { db: -1 }),
+  H(PIC.staple, 'fx-tag', 'none', 0.36, 2, 'b2 … and is stapled there (the staple click)', { db: -3 }),
+  counter(M.fifteen, 0.45, 'b2 “fifteen hundred”: $1,500 rolls 0 → 1,500 (no hairline: a one-time fee)', 2),
+  H(M.fifteen + PIC.roll - 2, 'fx-tock', 'none', 0.45, 3, 'b2 … and settles', { db: 1 }),
+  // b3 — the live answering quote
+  H(M.slip2, 'fx-paper-square', 'none', 0.5, 2, 'b3 slip 2 rises with its people stripe (a paper slap, 2 f ahead of “Live”)', { db: 2 }),
+  H(M.tag2[0], 'fx-felttip-short', 'none', 0.24, 3, 'b3 LIVE ANSWERING SERVICE writes, a stroke per word', { db: 2, run: { n: 3, offs: M.tag2.map((f) => f - M.tag2[0]), xs: [0.22, 0.32, 0.44] } }),
+  H(Math.round((M.camera[0] + M.camera[1]) / 2), 'swish', 'none', [0.42, 0.58], 3, 'b3 the papers ease back 1.00 → .97 (one pile)', { db: -6 }),
+  counter(M.ninetyNine, 0.36, 'b3 “ninety-nine”: $99 rolls 0 → 99 (its 198 px hairline with it)', 2),
+  H(M.for50[1] - 1, 'fx-tock', 'none', 0.62, 3, 'b3 “fifty”: “50” prints (a frame ahead of the word)', { db: 1 }),
+  // b4 — THE STOP-TIME (the bed cut on its 16th, MUSIC.stop): the pickup, her birth and "Ours?" in the room tone alone
+  H(M.pickup - 11, 'fx-seed', 'sunday', PHONE_X, 3, 'b4 the seed rises out of the last ring into the pickup (it peaks on the click)', { db: -2 }),
+  H(M.pickup, 'fx-pickup', 'none', PHONE_X, 1, 'b4 PICKUP (2 f before “Ours?”): the click — the phone that rang since frame 0 is answered', { db: 0 }),
+  H(M.pickup + 3, 'fx-ting', 'sunday', PHONE_X, 2, 'b4 … the rose light springs open into her teal orb (the birth’s ting)', { db: -4, layer: true }),
+  H(PIC.oursLand, 'land', 'none', 0.5, 3, 'b4 ours lands under the pile as the quotes square up (× .88, every $0 on x 160)', { db: -4 }),
+  H(M.glide[1], 'ping', 'sunday', 0.62, 2, 'b4 her orb lands as ours’ full stop (after “a month”)', { db: 1 }),
+  H(M.glide[1], 'chime-sunday-soft', 'sunday', 0.62, 3, 'b4 … the sunday chime under it', { layer: true, db: 2 }),
+  H(M.fortyNine - 1, 'fx-mallet-e5', 'sunday', 0.3, 1, 'b4 “forty-nine”: TRUE — the bed returns on E with its pad an octave up; the mallet a frame ahead of the vowel, under the word', { db: -10 }),
+  H(M.fortyNine + 1, 'fx-scratch', 'none', [0.2, 0.3], 3, 'b4 … ours’ 86 px hairline draws under the pile’s 174 and 528', { db: -10 }),
+  H(M.noSetup[0], 'fx-tag', 'sunday', 0.78, 3, 'b4 “No setup fee.” prints teal at ours’ upper right, under the setup stub’s column', { db: 6 }),
+  // b5 — set it up yourself
+  H(PIC.pileOut, 'whoosh-soft', 'none', [0.5, 0.5], 3, 'b5 the pile leaves up through its mask; ours glides up into the cleared stage', { db: -4 }),
+  H(M.set + 1, 'fx-scratch', 'none', [0.2, 0.62], 3, 'b5 “set”: the track draws with four empty dots', { db: -8 }),
+  ...(['fx-pluck-e5', 'fx-pluck-fs5', 'fx-pluck-gs5', 'fx-pluck-b5'] as const).map((snd, k) =>
+    H(M.dots[k], snd, 'none', 0.22 + 0.17 * k, 2, `b5 dot ${k + 1} fills teal (${['E5', 'F#5', 'G#5', 'B5'][k]}: the pentatonic rising)`, { db: 2 }),
+  ),
+  H(PIC.check, 'fx-ting', 'sunday', 0.73, 2, 'b5 … the fourth dot turns into a drawn check', { db: 0 }),
+  // b6 — it picks up when you can't, and books the appointment
+  H(M.it + 3, 'fx-paper-fold', 'none', [0.5, 0.75], 3, 'b6 “It”: ours folds into the parked price chip (under the word’s vowel, not its onset)', { db: -3 }),
+  H(PIC.recUp, 'fx-paper-lift', 'none', 0.5, 3, 'b6 the sample call’s record rises (its rose dot ringing: picture only — no chirp passes the ring law there)', { db: -8 }),
+  H(M.up, 'fx-pickup', 'none', 0.2, 1, 'b6 “picks up”: her orb docks on the record’s rose dot — the click (the kick enters with it)', { db: 0 }),
+  H(PIC.answered, 'fx-ting', 'sunday', 0.7, 3, 'b6 … Answered lands (her teal)', { db: 3, layer: true }),
+  // (the launch-gate cut ig5-06-msg has no availability step: one step "Took a message" on "takes", the pill → Message taken)
+  ...(M.booked
+    ? [
+        H(PIC.tool1 + 2, 'fx-tick', 'none', 0.3, 3, 'b6 “Checked your availability”: a quiet tick-roll under the spinner', { db: 2, run: { n: 5, step: SIX } }),
+        H(PIC.tool1Done, 'fx-glass-tick', 'sunday', 0.3, 2, 'b6 … the spinner resolves to a drawn check', { db: -4 }),
+      ]
+    : []),
+  H(PIC.outcome - 1, 'fx-mallet-e5', 'sunday', 0.7, 1, `b6 “${M.booked ? 'books' : 'takes'}”: the step ticks and the pill swaps Answered → ${M.booked ? 'Booked' : 'Message taken'} (the mallet: true / done)`, { db: -8 }),
+  H(PIC.outcome, 'pop', 'none', 0.7, 3, 'b6 … a small pop under the swap', { db: -6, layer: true }),
+  // b7–b9 — the shared end card
+  // (the comment field's rise and AGENT's keys are heard over the bed between her lines: the shared levels sat 18–19 dB
+  //  under it here, as in ig1)
+  ...endHits(END_CARD).map((h) => (h.snd === 'fx-menu-open' ? { ...h, db: 6 } : h.snd === 'fx-keys' ? { ...h, db: 2 } : h)),
+  // THE BUILD: her last word lands 34 f before the bar — a riser cresting with the roll, then the shared stack
   H(IMPACT - 10, 'riser', 'none', 0.5, 1, 'END the build’s crest under the roll (peaks a 16th before the inhale)', { db: 1.5 }),
   ...impactHits(IMPACT),
 ];
 export const CUES: Cue[] = buildCues(HITS, { sfx: SFX, speaking, roomAt });
 
-/** THE STOP-TIME before the payoff (SCRIPT b4): the bed cut on the sample from PLAN.stopLead before "Ours?" (on a 16th,
- *  `layout`) to "forty-nine", from the placed take's onsets (never from plan frames) */
+/** THE STOP-TIME before the payoff (SCRIPT b4, PICKS.md "the stop-time"): the bed cut on the sample from PLAN.stopLead
+ *  before "Ours?" (on a 16th, `layout`) to "forty-nine" — the bed's return — from the placed take's onsets */
 export const STOP = [LAID.stop, LINE.ours + vWord(CAST.ours, 2)] as const;
-/** The moments the bed reads (scripts/ig/bed.mjs inputs(T): no ARRANGEMENTS.ig5, so the stub plays) */
+/** The moments the bed reads (scripts/ig5/bed.mjs inputs(T): ig5's own arrangement) */
 export const MUSIC = {
   /** HOOKS §1.3 / §1.7: no music under the hook (a phone ringing in a quiet room); the bed enters on the first beat at or
    *  after the agency line's first word, the reel's first music */
@@ -368,21 +476,31 @@ export const MUSIC = {
   impact: IMPACT,
   brand: BRAND_AT,
   end: END,
-  /** ig5's own moments (for a later arrangement): the lines by role, "forty-nine", the CTA */
-  ig5: { ...LINE, fortyNine: STOP[1] },
+  /** ig5's own moments (scripts/ig5/bed.mjs ig5Parts): the agency line (the quotes), the answering line (brushed 16ths
+   *  into the cut), "forty-nine" (the return), "You" (the figure rests an 8th), the kick's entry (the does act, SCRIPT
+   *  b6 "from f571"), "books" (E: the call resolved), the CTA */
+  ig5: { agency: LINE.agency, answering: LINE.answering, fortyNine: STOP[1], you: M.you, kick: SCENES.does.from, books: M.books, cta: LINE.cta },
   build: { kick: 1.4, snare: 1.5, inhaleDb: -12 },
 } as const;
-/** the bed's fader (ig3's shape): under her through the body, ridden up into the build as her CTA ends, then the
- *  series' shape round the hit, the chord held 2.5 dB higher into the seam */
+/** the bed's fader: under her through the quotes, ridden up into the swell so the cut is an event, the return a touch
+ *  forward (the payoff breathes), a step back under "You" (the set-up line's weakest onset), under her through the call;
+ *  ridden up into the build as her CTA ends; then the series' shape round the hit, the chord held 2.5 dB higher into the
+ *  seam (it still rings 10–5 f from the end) */
 const CTA_END = Math.min(voiced(CTA, CAST.cta), IMPACT - 14);
-const RIDE = { under: 6, build: 13 } as const;
+const RIDE = { under: 7.5, swell: 9, ret: 7, you: 2, call: 5, build: 13 } as const;
 export const BED = {
   file: `ig/sfx/${REEL}/bed.wav`,
   vol: 2,
   ride: [
-    [0, RIDE.under + HEAD.db],
-    [HEAD.to, RIDE.under],
-    [CTA_END - 12, RIDE.under],
+    [0, RIDE.under],
+    [STOP[0] - 45, RIDE.under],
+    [STOP[0] - 2, RIDE.swell],
+    [STOP[1], RIDE.ret],
+    [M.you - 12, RIDE.ret],
+    [M.you - 3, RIDE.you],
+    [M.you + 6, RIDE.you],
+    [M.you + 15, RIDE.call],
+    [CTA_END - 12, RIDE.call],
     [CTA_END, RIDE.build],
     [IMPACT - 12, RIDE.build],
     ...bedRide(IMPACT, BRAND_AT, vFrames(BRAND), END)
@@ -394,9 +512,12 @@ export const MIX = {
   file: `ig/sfx/${REEL}/mix.wav`,
   ...IG_LOUD,
   fadeOut: [END - SEAM, END] as const,
-  impact: igImpact(IMPACT, BRAND_AT - IMPACT),
+  /** the impact insert held a frame longer and released over the name's first syllable (ig1's tuning: with the voice
+   *  rides, the logo tops her loudest second by ≥ 1 LU; "Neuro" stays ≥ .9) */
+  impact: { ...igImpact(IMPACT, BRAND_AT - IMPACT), hold: [0, 4] as const, release: 8 },
   name: IG_NAME,
-  /** the music-forward passage (placeholder): the bed's return on "forty-nine", 45 f */
+  /** the music-forward passage the converge into the logo must top (check-mix arc): the bed's return on "forty-nine"
+   *  (the rolled E, the pad an octave up), 45 f */
   arc: igArc([[STOP[1], STOP[1] + 45]]),
 } as const;
 export const GRAIN = { ground: 'pearl' as 'pearl' | 'night' };

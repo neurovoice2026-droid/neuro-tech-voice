@@ -325,3 +325,26 @@ Run on 2026-10-07, 13:13–13:25 UTC, by a separate gate-checker that trusted no
 - **`scripts/registry.mjs`:** does what §3.2 edit 1 asks: the import, the three-registry duplicate check (it replaces the old two-registry line with the same effect), the spread, and the `outName`-unique assertion. It also rewrites the header comment, which is comment-only and harmless.
 
 **Verdict: PASS.** Every infrastructure gate is green on re-run, and nothing needed fixing. `check:audio:ig5` is the only red result: it is the known placeholder masking report and closes with the Cartesia takes and the real bed, cues and HITS (§7.2 steps 4–5).
+
+---
+
+## Scene step · the one shared edit: `src/ig/components/ZoneGuard.tsx` (per-reel zones, SCRIPT §1.3)
+
+Run on 2026-10-07 by the picture build (label `picture`, docs/ig/ig5/BUILD.md). It is the ONE extra shared edit the brief allows. `components/` is in no hash (igHash, kbHash, film 1's), so ig1–ig4 stay CURRENT; the proofs below show their picture is unchanged in both modes.
+
+**The change (+23 −1 lines, additive):**
+- `registerZones(reel, { faults, coverFaults?, overlay? })`: a module-level registry keyed by the reel id the shared `ZoneProvider` already carries (`IgReel` sets `reel: T.REEL`, `CoverCard` sets `reel: spec.reel`), so neither `Reel.tsx` nor `CoverCard.tsx` changes.
+- `ZoneRect`: a registered reel's rects go through its `faults(rect, what)` (the label lets a rule tell a `price …` numeral or an `object …` from text); an unregistered reel goes through `zoneFaults` / `coverFaults` exactly as before.
+- `ZoneOverlay`: a registered reel's `overlay` replaces the Instagram bands; otherwise the original JSX, unchanged.
+- ig5's rule is `src/ig/ig5/zones.ts` (SCRIPT §1.2 values; Node-safe; never in `common/`), registered by `src/ig/ig5/stage/Zones.tsx` from `Reel5.tsx` and `Cover.tsx` at module scope. `zones.ts` is a top-level `.ts` of `src/ig/ig5/`, so it is in `ig5Hash`; the ig5 mix was restamped (`sfx:ig5`, same cues).
+
+| # | Check | Result |
+|---|---|---|
+| 1 | `npm run guard:ig5 -- --check` (fresh bundle) | **PASS** gates 1–5 (38 s): 255/257 shas (the 2 allowed QA edits), stamps ig1 `49b90ae44064d049` · ig2 `757d177d35b27cd6` · ig3 `47ae5cf315d3434b` · ig4 `f4500c7a37b6d47e`, 38/38 rows + 11 IG5, **gate P 24/24 byte-identical** (`out/ig/qa/ig5/picture/guard.log`) |
+| 2 | Zone mode (gate P renders zones-off stills only): ig1–ig4 `IG<n>-Zones-9x16` at 4 frames each (ig1 0/104/671/796, ig2 0/70/692/796, ig3 0/76/627/736, ig4 0/591/680/796) + the four covers with `{"zones":true}`, from a bundle with the **pre-edit ZoneGuard (8f62e3d)** and from one with the edit | **20/20 PNGs byte-identical** (`out/ig/qa/ig5/picture/zoneguard-proof/{before,after}/`). The before-bundle's ZoneGuard was 8f62e3d's file plus a no-op `registerZones` export (ig5's modules call it at import; ig1–ig4 never do); the edited file was restored right after (`cmp` against the saved copy; `git diff` empty against HEAD, which already carries it) |
+| 3 | `npm run check:zones:ig -- --film=ig5 --selftest` | **PASS**: 36 zone stills + the cover against ig5's rule; the selftest probe is caught (`right 1050 > 900`) |
+| 4 | `npm run sfx:ig` | `0 built, 4 up to date` |
+| 5 | film 1 / film 2 frozen sets, IG shared sources (`git status --porcelain`) | empty |
+
+PIPELINE §7.1's allowed `git diff` list now names `src/ig/components/ZoneGuard.tsx`.
+
