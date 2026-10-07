@@ -137,16 +137,16 @@ async function connectElevenLabs(ctx: RoutingContext, call: CallRow, opts: { aft
   if (!agentId || !ctx.agent) throw new Error('no ElevenLabs agent')
   const ours = ctx.number.number
   const other = opts.direction === 'outbound' ? call.to_number : call.from_number
-  const callToken = signCallToken(call.id, 'transfer', CALL_TOKEN_TTL_S)
   const clientData: el.ClientData = {
     user_id: ctx.org.id,
     dynamic_variables: {
       [PLATFORM_VARIABLES.callId]: call.id,
-      // ntv_call_token stays for the transfer tool body and post-call
-      // matching (secret__ values come back redacted in webhooks); the
-      // secret copy is never sent to the LLM and is meant for tool headers.
-      [PLATFORM_VARIABLES.callToken]: callToken,
-      [PLATFORM_VARIABLES.secretCallToken]: callToken,
+      // Correlation only (post-call webhook matching needs a non-redacted
+      // value): referenced by no prompt and no tool.
+      [PLATFORM_VARIABLES.callToken]: signCallToken(call.id, 'transfer', CALL_TOKEN_TTL_S),
+      // Tool authentication (X-NTV-Call-Token header): a distinct 'tool'
+      // token in a secret variable, never sent to the LLM.
+      [PLATFORM_VARIABLES.secretCallToken]: signCallToken(call.id, 'tool', CALL_TOKEN_TTL_S),
       // Mixed-mode orgs: tells the agent to transfer with the platform tool.
       [PLATFORM_VARIABLES.routingMode]: 'app_routed',
       [PLATFORM_VARIABLES.afterHours]: opts.afterHours ? 'true' : 'false',
@@ -529,36 +529,72 @@ export async function handleRefer(callId: string, p: Record<string, string>, log
   })
 }
 
+/** Guidance the agent reads (paraphrased) when no transfer happens: offer a message instead. */
+export const TRANSFER_MESSAGES = {
+  started: 'Transferring the caller now.',
+  alreadyStarted: 'The caller is already being transferred.',
+  notTransferable: 'This call cannot be transferred. Apologise and offer to take a message for the team instead.',
+  ended: 'This call has already ended.',
+  notEnabled: 'Transfers are not available for this business. Apologise and offer to take a message for the team instead.',
+} as const
+
 /**
  * Transfer tool (ElevenLabs agent on an app-routed call): redirect the live
  * Twilio call to the configured human. Replacing the TwiML ends the media
  * stream; the conversation's post-call webhook still arrives.
+ *
+ * Concurrent invocations (parallel tool calls, an LLM retry after a timeout)
+ * must never redirect the live call twice, which would drop it: the call is
+ * claimed in the DB with ONE conditional update (outcome is distinct from
+ * 'transferred') before Twilio is called. Only the claimer redirects; the
+ * others answer idempotently. A failed redirect gives the claim back.
  */
 export async function transferLiveCall(callId: string, reason: string, log: Logger = createLogger()): Promise<{ ok: boolean; message: string }> {
   const db = createAdminClient()
   const { data: call, error } = await db.from('calls').select(`${CALL_COLUMNS}, twilio_call_sid`).eq('id', callId).maybeSingle()
   if (error) throw new Error(`calls read failed: ${error.message}`)
-  if (!call?.twilio_call_sid || !call.phone_number_id) return { ok: false, message: 'This call cannot be transferred.' }
-  // The model may call the tool twice; redirecting the live call twice would drop it.
-  if (call.outcome === 'transferred') return { ok: true, message: 'The caller is already being transferred.' }
+  if (!call?.twilio_call_sid || !call.phone_number_id) return { ok: false, message: TRANSFER_MESSAGES.notTransferable }
+  if (call.outcome === 'transferred') return { ok: true, message: TRANSFER_MESSAGES.alreadyStarted }
   if (['completed', 'failed', 'canceled', 'busy', 'no-answer'].includes(call.status as string)) {
-    return { ok: false, message: 'This call has already ended.' }
+    return { ok: false, message: TRANSFER_MESSAGES.ended }
   }
   const number = await numberById(db, call.phone_number_id as string)
-  if (!number) return { ok: false, message: 'This call cannot be transferred.' }
+  if (!number) return { ok: false, message: TRANSFER_MESSAGES.notTransferable }
   const ctx = await loadRoutingContext(number)
-  if (!ctx.agent?.transferEnabled || !ctx.agent.transferNumber) return { ok: false, message: 'Transfers are not enabled for this business.' }
+  if (!ctx.agent?.transferEnabled || !ctx.agent.transferNumber) return { ok: false, message: TRANSFER_MESSAGES.notEnabled }
+
+  // Atomic claim: UPDATE calls SET outcome='transferred' WHERE id=$1 AND outcome IS DISTINCT FROM 'transferred'.
+  const { data: claimed, error: claimErr } = await db
+    .from('calls')
+    .update({ outcome: 'transferred' })
+    .eq('id', callId)
+    .or('outcome.is.null,outcome.neq.transferred')
+    .select('id')
+  if (claimErr) throw new Error(`calls transfer claim failed: ${claimErr.message}`)
+  if (!claimed || claimed.length === 0) {
+    log.info('router.transfer_already_claimed', { callId })
+    return { ok: true, message: TRANSFER_MESSAGES.alreadyStarted }
+  }
+
   const { getTwilioClient } = await import('@/lib/twilio/client')
-  // The agent has already told the caller it is transferring them (platform rule).
+  // The agent has already told the caller it is transferring them
+  // (pre_tool_speech force + post_tool_speech execution on the tool).
   const twiml = forwardCall({
     language: ctx.agent.language,
     to: ctx.agent.transferNumber,
     callerId: (call.direction === 'inbound' ? call.from_number : number.number) as string | null,
     actionUrl: urlWithToken('/api/telephony/twilio/dial-complete', signCallToken(callId, 'dial_complete', CALL_TOKEN_TTL_S), { leg: 'transfer' }),
   })
-  await getTwilioClient().calls(call.twilio_call_sid as string).update({ twiml })
-  await updateCall(db, callId, { outcome: 'transferred', routing: { ...(call.routing as object), transfer: { at: new Date().toISOString(), via: 'tool', reason: reason.slice(0, 200) } } }, log)
-  return { ok: true, message: 'Transferring the caller now.' }
+  try {
+    await getTwilioClient().calls(call.twilio_call_sid as string).update({ twiml })
+  } catch (err) {
+    // Give the claim back (only if it is still ours) so a later attempt can transfer.
+    const { error: revertErr } = await db.from('calls').update({ outcome: (call.outcome as string | null) ?? null }).eq('id', callId).eq('outcome', 'transferred')
+    if (revertErr) log.error('router.transfer_claim_revert_failed', revertErr, { callId })
+    throw err
+  }
+  await updateCall(db, callId, { routing: { ...(call.routing as object), transfer: { at: new Date().toISOString(), via: 'tool', reason: reason.slice(0, 200) } } }, log)
+  return { ok: true, message: TRANSFER_MESSAGES.started }
 }
 
 const TERMINAL = new Set(['completed', 'busy', 'failed', 'no-answer', 'canceled'])

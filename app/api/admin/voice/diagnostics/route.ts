@@ -14,6 +14,7 @@ import { probeProviders } from '@/lib/voice-providers/maintenance'
 import { diagnoseModels } from '@/lib/elevenlabs/model-diagnostics'
 import { knowledgeDiagnostics } from '@/lib/voice-providers/knowledge-diagnostics'
 import { platformAgentDiagnostics } from '@/lib/voice-providers/platform-diagnostics'
+import { platformToolDiagnostics } from '@/lib/voice-providers/platform-tool-monitor'
 
 export async function GET(request: Request) {
   const requestId = requestIdFrom(request)
@@ -67,11 +68,16 @@ export async function GET(request: Request) {
     const modelProblems = await diagnoseModels(db, log)
     // Platform-owned agent config: auth, call limits, guardrails, LLM in use, read-back flags, rollout.
     const platformAgent = await platformAgentDiagnostics(db, log)
+    // Platform webhook tools: secret, config drift, executions, dependent agents (live with ?probe=1).
+    const platformTools = await platformToolDiagnostics(db, log, { probe }).catch((err: unknown) => {
+      log.error('admin.diagnostics_tools_failed', err)
+      return { problems: [{ key: 'PLATFORM_TOOLS', severity: 'error' as const, message: 'Tool diagnostics failed: see the logs.' }], summary: { error: 'unavailable' } }
+    })
     log.info('admin.diagnostics', { by: admin.kind, probe })
     return NextResponse.json(
       {
         config: summarizeVoiceConfig(),
-        problems: [...validateVoiceConfig(), ...modelProblems, ...platformAgent.problems],
+        problems: [...validateVoiceConfig(), ...modelProblems, ...platformAgent.problems, ...platformTools.problems],
         // `effective` is what routing sees (forced overrides, open → half-open after the open period).
         circuits: {
           elevenlabs: { effective: elCircuit.state, ...elCircuit.raw },
@@ -80,6 +86,7 @@ export async function GET(request: Request) {
           cartesia_media: { effective: ctMedia.state, ...ctMedia.raw },
         },
         platform_agent_config: platformAgent.summary,
+        platform_tools: platformTools.summary,
         platform_resources: Object.fromEntries(Object.entries(resources).map(([k, v]) => [k, !!v])),
         agent_sync: tally(syncRows.data ?? [], 'provider', 'status'),
         webhook_backlog: tally(webhookRows.data ?? [], 'provider', 'status'),

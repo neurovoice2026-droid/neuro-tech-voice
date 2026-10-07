@@ -24,12 +24,15 @@ vi.mock('@/lib/voice-providers/circuit-registry', () => ({
 vi.mock('@/lib/voice-providers/platform-resources', () => ({ listPlatformResources: async () => ({}) }))
 vi.mock('@/lib/voice-providers/maintenance', () => ({ probeProviders: async () => [] }))
 vi.mock('@/lib/elevenlabs/model-diagnostics', () => ({ diagnoseModels: (...a: unknown[]) => diagnoseModels(...a) }))
+const platformToolDiagnostics = vi.fn()
+vi.mock('@/lib/voice-providers/platform-tool-monitor', () => ({ platformToolDiagnostics: (...a: unknown[]) => platformToolDiagnostics(...a) }))
 
 import { GET } from './route'
 
 beforeEach(() => {
   state.admin = true
   diagnoseModels.mockReset()
+  platformToolDiagnostics.mockReset().mockResolvedValue({ problems: [], summary: {} })
 })
 
 describe('GET /api/admin/voice/diagnostics', () => {
@@ -66,5 +69,27 @@ describe('GET /api/admin/voice/diagnostics', () => {
     const res = await GET(new Request('https://app.example/api/admin/voice/diagnostics'))
     expect(res.status).toBe(403)
     expect(diagnoseModels).not.toHaveBeenCalled()
+    expect(platformToolDiagnostics).not.toHaveBeenCalled()
+  })
+
+  it('reports the platform tool checks (live only with ?probe=1), and survives their failure', async () => {
+    diagnoseModels.mockResolvedValue([])
+    platformToolDiagnostics.mockResolvedValue({
+      problems: [{ key: 'PLATFORM_TOOLS', severity: 'error', message: '2 of 3 app-routed agents with human transfer do not reference elevenlabs.transfer_tool' }],
+      summary: { 'elevenlabs.transfer_tool': { stored: true } },
+    })
+    const body = await (await GET(new Request('https://app.example/api/admin/voice/diagnostics'))).json()
+    expect(body.problems.map((p: { key: string }) => p.key)).toContain('PLATFORM_TOOLS')
+    expect(body.platform_tools).toEqual({ 'elevenlabs.transfer_tool': { stored: true } })
+    expect(platformToolDiagnostics.mock.calls[0][2]).toEqual({ probe: false })
+
+    await GET(new Request('https://app.example/api/admin/voice/diagnostics?probe=1'))
+    expect(platformToolDiagnostics.mock.calls[1][2]).toEqual({ probe: true })
+
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    platformToolDiagnostics.mockRejectedValue(new Error('db down'))
+    const failed = await GET(new Request('https://app.example/api/admin/voice/diagnostics'))
+    expect(failed.status).toBe(200)
+    expect((await failed.json()).platform_tools).toEqual({ error: 'unavailable' })
   })
 })

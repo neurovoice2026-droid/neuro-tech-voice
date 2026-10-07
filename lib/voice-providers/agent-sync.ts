@@ -56,6 +56,12 @@ export interface ProviderSyncResult {
   error: string | null
   /** A new external agent was created (or adopted) in this sync. */
   created?: boolean
+  /**
+   * The config was written without a platform tool it needed (e.g.
+   * 'transfer_tool_unavailable'): the row is 'degraded' and retried, while
+   * `status` stays 'ready' because everything else was applied.
+   */
+  degraded?: string
 }
 
 /** Exponential backoff with full jitter for the maintenance job: 1 min … 1 h. */
@@ -167,15 +173,18 @@ async function syncOne(db: SupabaseClient, agentId: string, orgId: string, provi
         }
       }
 
+      // Written, but without a platform tool it needed (adapters.ts): degraded and retried.
+      const degraded = synced.degraded ?? null
+      const degradedAttempt = (row.attempt_count ?? 0) + 1
       const patch = {
         external_id: synced.externalId,
         external_version: synced.version,
-        status: 'ready' as const,
-        last_error: null,
-        last_error_code: null,
+        status: (degraded ? 'degraded' : 'ready') as ResourceStatus,
+        last_error: degraded?.message ?? null,
+        last_error_code: degraded?.code ?? null,
         last_synced_at: new Date().toISOString(),
-        attempt_count: 0,
-        next_retry_at: null,
+        attempt_count: degraded ? degradedAttempt : 0,
+        next_retry_at: degraded ? new Date(Date.now() + nextRetryDelayMs(degradedAttempt)).toISOString() : null,
         synced_revision: spec.revision,
         config_hash: synced.configHash,
         details: { ...(row.details ?? {}), ...synced.details },
@@ -187,8 +196,20 @@ async function syncOne(db: SupabaseClient, agentId: string, orgId: string, provi
         const { error } = await db.from('agents').update({ elevenlabs_agent_id: synced.externalId }).eq('id', agentId)
         if (error) log.error('agent_sync.compat_column_failed', error)
       }
-      emitProviderEvent({ system: provider, kind: 'sync_success', ok: true, orgId, agentId, details: { revision: spec.revision } })
-      result = { provider, status: 'ready', externalId: synced.externalId, appliedVoiceId: synced.appliedVoiceId, errorCode: null, error: null, created: synced.externalId !== previousExternalId }
+      emitProviderEvent({ system: provider, kind: 'sync_success', ok: true, orgId, agentId, details: { revision: spec.revision, ...(degraded ? { degraded: degraded.code } : {}) } })
+      if (degraded) log.warn('agent_sync.degraded', { agentId, code: degraded.code })
+      // The config WAS applied (voice, knowledge...): callers see 'ready'; the
+      // missing platform tool is in `degraded` and the row says 'degraded'.
+      result = {
+        provider,
+        status: 'ready',
+        externalId: synced.externalId,
+        appliedVoiceId: synced.appliedVoiceId,
+        errorCode: null,
+        error: null,
+        created: synced.externalId !== previousExternalId,
+        ...(degraded ? { degraded: degraded.code } : {}),
+      }
 
       if ((await currentRevision(db, agentId)) <= spec.revision) break
       log.info('agent_sync.catch_up', { pushed: spec.revision })

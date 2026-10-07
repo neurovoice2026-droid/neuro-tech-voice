@@ -168,6 +168,8 @@ export async function runVoiceMaintenance(log: Logger = createLogger({ component
   const report: Record<string, unknown> = {}
   const steps: Array<[string, () => Promise<unknown>]> = [
     ['health', () => probeProviders(log)],
+    // Platform webhook tools first: reconciled (PATCH/recreate) before any agent sync uses them.
+    ['platform_tools', () => import('./platform-tool-monitor').then((m) => m.runPlatformToolMaintenance(log))],
     ['agent_sync_retries', () => retryAgentSyncs(20, log)],
     ['config_rollout', () => import('./config-rollout').then((m) => m.runConfigRollout({ dryRun: false, log }))],
     ['webhook_retries', () => reprocessPendingWebhooks(50, log)],

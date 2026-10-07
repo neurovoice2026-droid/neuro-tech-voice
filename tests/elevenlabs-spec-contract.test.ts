@@ -265,3 +265,54 @@ describe('ElevenLabs agent body vs the official Create Agent schema', () => {
     expect(errors.some((e) => e.startsWith('body.conversation_config.agent.prompt.built_in_tools.skip_turn'))).toBe(true)
   })
 })
+
+describe('platform webhook tools vs WebhookToolConfig-Input (slice B1)', () => {
+  const CTX = { baseUrl: 'https://voice.example.com', toolKeySecretId: 'sec_123' }
+
+  it('every platform tool config (with and without the workspace key) matches the spec, with no deprecated field', async () => {
+    const { buildWebhookToolConfig } = await import('@/lib/elevenlabs/tools/webhook-tool')
+    const { PLATFORM_TOOL_KEYS, PLATFORM_WEBHOOK_TOOLS } = await import('@/lib/elevenlabs/tools/definitions')
+    for (const key of PLATFORM_TOOL_KEYS) {
+      for (const ctx of [CTX, { ...CTX, toolKeySecretId: null }]) {
+        expect(validate(buildWebhookToolConfig(PLATFORM_WEBHOOK_TOOLS[key], ctx), fixture.schemas['WebhookToolConfig-Input'], key), key).toEqual([])
+      }
+    }
+  })
+
+  it('every behaviour preset, assignments, response filters and parameter sources match the spec', async () => {
+    const { buildWebhookToolConfig } = await import('@/lib/elevenlabs/tools/webhook-tool')
+    const { NOTIFY_BEHAVIOUR, READ_BEHAVIOUR, WRITE_BEHAVIOUR } = await import('@/lib/elevenlabs/tools/behaviour')
+    for (const behaviour of [READ_BEHAVIOUR, WRITE_BEHAVIOUR, NOTIFY_BEHAVIOUR]) {
+      const config = buildWebhookToolConfig(
+        {
+          key: 'elevenlabs.book_tool',
+          name: 'book_appointment',
+          description: 'Book one of the offered slots.',
+          path: '/api/telephony/tools/book',
+          method: 'POST',
+          behaviour,
+          body: {
+            properties: {
+              slot_id: { type: 'string', description: 'Offered slot id.', allowedValuesVariable: 'ntv_offered_slots' },
+              service: { type: 'string', description: 'Service.', enum: ['a', 'b'] },
+              party: { type: 'integer', description: 'People.' },
+              business: { type: 'string', dynamicVariable: 'business_name' },
+              source: { type: 'string', constant: 'voice' },
+            },
+            required: ['slot_id'],
+          },
+          assignments: [{ dynamicVariable: 'ntv_offered_slots', valuePath: 'slot_ids', sanitize: true, preserveNativeType: true }],
+          responseFilter: { mode: 'allow', filters: ['ok', 'message', 'slots'] },
+        },
+        CTX,
+      )
+      expect(validate(config, fixture.schemas['WebhookToolConfig-Input'], 'book')).toEqual([])
+    }
+  })
+
+  it('the validator catches a deprecated tool field and a bad tool enum', () => {
+    const schema = fixture.schemas['WebhookToolConfig-Input']
+    expect(validate({ name: 'x', description: 'x', api_schema: { url: 'https://x' }, force_pre_tool_speech: true }, schema, 't')).toEqual(['t.force_pre_tool_speech: deprecated in the spec'])
+    expect(validate({ name: 'x', description: 'x', api_schema: { url: 'https://x' }, execution_mode: 'later' }, schema, 't')[0]).toMatch(/not in enum/)
+  })
+})

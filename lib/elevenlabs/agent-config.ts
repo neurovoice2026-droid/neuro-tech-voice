@@ -36,6 +36,7 @@ import {
   trustContext,
 } from './platform-settings'
 import { pausedAgentBody } from './paused-agent'
+import { SYSTEM_TRANSFER_BEHAVIOUR } from './tools/behaviour'
 
 /**
  * Version of the platform-owned agent configuration. Part of the config hash:
@@ -43,7 +44,7 @@ import { pausedAgentBody } from './paused-agent'
  * `config_rollout` then re-syncs them in batches (lib/voice-providers/config-rollout.ts).
  * Bump it whenever this builder changes what existing agents should receive.
  */
-export const PLATFORM_AGENT_CONFIG_VERSION = 1
+export const PLATFORM_AGENT_CONFIG_VERSION = 2
 
 export interface PlatformResources {
   /** Workspace webhook tool used for human transfer on app-routed calls. */
@@ -144,6 +145,8 @@ function builtInTools(spec: AgentSpec, hasLanguagePresets: boolean) {
           type: 'system',
           name: 'transfer_to_number',
           description: spec.appRouted ? MIXED_NATIVE_TRANSFER_DESCRIPTION : '',
+          // The agent always announces the transfer and is not cut off (lib/elevenlabs/tools/behaviour.ts).
+          ...SYSTEM_TRANSFER_BEHAVIOUR,
           params: {
             system_tool_type: 'transfer_to_number',
             enable_client_message: true,
@@ -297,30 +300,6 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
   }
   // Paused agent: native numbers still reach it, so it only says "unavailable".
   return spec.active ? body : pausedAgentBody(body, spec)
-}
-
-/** Webhook tool that lets an app-routed agent hand the caller to a human. */
-export function transferToolConfig(url: string): Record<string, unknown> {
-  return {
-    type: 'webhook',
-    name: 'transfer_to_human',
-    description:
-      'Transfer the live phone call to a human member of the team. Use it only when the caller asks for a person or the business rules require it, and only after telling the caller you are transferring them.',
-    response_timeout_secs: 10,
-    api_schema: {
-      url,
-      method: 'POST',
-      content_type: 'application/json',
-      request_body_schema: {
-        type: 'object',
-        required: ['call_token', 'reason'],
-        properties: {
-          call_token: { type: 'string', dynamic_variable: PLATFORM_VARIABLES.callToken },
-          reason: { type: 'string', description: 'One short sentence: why the caller is being transferred.' },
-        },
-      },
-    },
-  }
 }
 
 /**

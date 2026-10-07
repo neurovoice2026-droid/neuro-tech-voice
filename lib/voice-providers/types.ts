@@ -3,6 +3,7 @@
 // Pure type module (safe to import from client components with `import type`).
 
 import type { VoiceProvider } from './errors'
+import type { ComposePromptInput } from './prompt'
 
 export type { VoiceProvider } from './errors'
 
@@ -152,6 +153,12 @@ export interface AgentSpec {
   language: string
   /** Final, server-composed system prompt for ElevenLabs (per-call variables). */
   systemPrompt: string
+  /**
+   * The inputs systemPrompt was composed from, so the ElevenLabs adapter can
+   * recompose it when a platform tool is unavailable (never promise a transfer
+   * that cannot happen). Absent in hand-built specs.
+   */
+  promptInput?: ComposePromptInput
   /** Same rules composed for the Cartesia fallback agent (context via tool). */
   fallbackSystemPrompt: string
   /** Bounded plain-text knowledge excerpts for the fallback agent (its KB is not yet available for managed agents). */
