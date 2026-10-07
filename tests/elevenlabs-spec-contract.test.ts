@@ -215,6 +215,23 @@ describe('ElevenLabs agent body vs the official Create Agent schema', () => {
     expect(bodyErrors(makeAgentSpec(), FULL_PLATFORM, { llm: 'gemini-2.5-flash' })).toEqual([])
   })
 
+  it('native telephony (slice C): initiation webhook with a secret header, extension, blind and conference transfers, override allow-list', () => {
+    const platform: PlatformResources = { ...FULL_PLATFORM, initiationWebhook: { url: 'https://voice.example.com/api/elevenlabs/initiation', secretId: 'sec_1' } }
+    for (const transfer_type of ['conference', 'blind'] as const) {
+      for (const active of [true, false]) {
+        const spec = makeAgentSpec({
+          active,
+          appRouted: false,
+          hasNativeNumbers: true,
+          transfer: { enabled: true, number: '+40712345678', condition: 'Caller asks for billing', label: 'Billing', extension: 'ww12#', transfer_type, whisper: true },
+        })
+        expect(bodyErrors(spec, platform), `${transfer_type} active=${active}`).toEqual([])
+      }
+    }
+    // Without the webhook: the explicit null clearing it.
+    expect(bodyErrors(makeAgentSpec({ appRouted: false, hasNativeNumbers: true }), NO_PLATFORM)).toEqual([])
+  })
+
   it('never writes analysis_items (null = legacy evaluation/data_collection are read); the spec still allows null', () => {
     const analysisItems = (fixture.schemas['AgentPlatformSettingsRequestModel'].properties as Record<string, Schema>).analysis_items
     expect(((analysisItems.anyOf ?? []) as Schema[]).some((b) => b.type === 'null')).toBe(true)

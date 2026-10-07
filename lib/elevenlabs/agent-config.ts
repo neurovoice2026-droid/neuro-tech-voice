@@ -38,6 +38,7 @@ import {
 import { pausedAgentBody } from './paused-agent'
 import { SYSTEM_TRANSFER_BEHAVIOUR } from './tools/behaviour'
 import { OFFERED_SLOTS_VARIABLE } from './tools/business'
+import { initiationWebhookBlock } from './api/telephony'
 
 /**
  * Version of the platform-owned agent configuration. Part of the config hash:
@@ -45,7 +46,7 @@ import { OFFERED_SLOTS_VARIABLE } from './tools/business'
  * `config_rollout` then re-syncs them in batches (lib/voice-providers/config-rollout.ts).
  * Bump it whenever this builder changes what existing agents should receive.
  */
-export const PLATFORM_AGENT_CONFIG_VERSION = 3
+export const PLATFORM_AGENT_CONFIG_VERSION = 4
 
 export interface PlatformResources {
   /** Workspace webhook tool used for human transfer on app-routed calls. */
@@ -56,6 +57,12 @@ export interface PlatformResources {
   businessToolIds?: string[]
   /** check_availability/book_appointment are attached: the offered-slots list variable needs a placeholder. */
   bookingToolsAttached?: boolean
+  /**
+   * Conversation initiation webhook for native inbound calls: our HTTPS URL and
+   * the workspace secret sent in its header (lib/telephony/initiation-config.ts).
+   * null/absent = not configured (native calls keep the placeholders).
+   */
+  initiationWebhook?: { url: string; secretId: string } | null
 }
 
 /** Values read from provider catalogues at sync time (kept out of AgentSpec, which is provider-neutral). */
@@ -159,7 +166,10 @@ function builtInTools(spec: AgentSpec, hasLanguagePresets: boolean) {
               {
                 transfer_destination: { type: 'phone', phone_number: spec.transfer.number },
                 condition: spec.transfer.condition?.trim() || 'The caller asks to speak with a person.',
-                transfer_type: 'conference',
+                // conference (warm message to the human) or blind (keeps the caller's number); sip_refer is SIP-trunk only.
+                transfer_type: spec.transfer.transfer_type === 'blind' ? 'blind' : 'conference',
+                // Extension behind a PBX, dialed after the destination answers (Twilio transfers only).
+                ...(spec.transfer.extension ? { post_dial_digits: { type: 'static', value: spec.transfer.extension } } : {}),
               },
             ],
           },
@@ -179,6 +189,8 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
   const knowledge = buildKnowledgePromptConfig(spec.knowledge, ragEmbeddingModel(spec.language, additionalLanguagesOf(spec)))
   const telephonyFormat = spec.appRouted ? 'ulaw_8000' : 'pcm_16000'
   const appTransfer = spec.appRouted && spec.transfer.enabled && !!spec.transfer.number && !!platform.transferToolId
+  // Only native numbers call the initiation webhook (it fires for inbound native Twilio calls).
+  const initiation = spec.hasNativeNumbers ? (platform.initiationWebhook ?? null) : null
 
   const prompt: Record<string, unknown> = {
     prompt: spec.systemPrompt,
@@ -281,8 +293,16 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
     guardrails: guardrailsConfig(),
     trust_context: trustContext(),
     overrides: {
-      // Outbound calls get their own opening line; nothing else is overridable.
-      conversation_config_override: { agent: { first_message: true } },
+      conversation_config_override: {
+        // Outbound calls get their own opening line (and paused or over-quota
+        // native calls the "unavailable" line, from the initiation webhook).
+        agent: { first_message: true },
+        // Per-call cap set server-side: the plan minutes left on a trial, or a
+        // short "unavailable" call. Never prompt, LLM, tools or voice.
+        conversation: { max_duration_seconds: true },
+      },
+      // Native inbound calls fetch their per-call variables from our webhook.
+      enable_conversation_initiation_client_data_from_webhook: !!initiation,
     },
     // Every legitimate session starts server-side (register-call, outbound
     // call, native telephony): nobody may open an anonymous web session on a
@@ -291,17 +311,23 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
     // telephony path that needs it.
     auth: { enable_auth: process.env.ELEVENLABS_AGENT_AUTH !== 'false' },
   }
+  const workspaceOverrides: Record<string, unknown> = {}
   if (platform.postCallWebhookId) {
-    platform_settings.workspace_overrides = {
-      webhooks: {
-        post_call_webhook_id: platform.postCallWebhookId,
-        // Audio is fetched on demand (bounded, authenticated proxy) instead of
-        // receiving multi-MB base64 bodies that exceed serverless body limits.
-        events: ['transcript', 'call_initiation_failure'],
-        transcript_format: 'json',
-      },
+    workspaceOverrides.webhooks = {
+      post_call_webhook_id: platform.postCallWebhookId,
+      // Audio is fetched on demand (bounded, authenticated proxy) instead of
+      // receiving multi-MB base64 bodies that exceed serverless body limits.
+      events: ['transcript', 'call_initiation_failure'],
+      transcript_format: 'json',
     }
   }
+  // Agents with native numbers: our webhook, or null to clear one pushed
+  // earlier (objects are deep-merged). Elsewhere the key is left out: the
+  // enable flag above (false) already stops ElevenLabs from calling it.
+  if (spec.hasNativeNumbers) {
+    workspaceOverrides.conversation_initiation_client_data_webhook = initiation ? initiationWebhookBlock(initiation.url, initiation.secretId) : null
+  }
+  if (Object.keys(workspaceOverrides).length) platform_settings.workspace_overrides = workspaceOverrides
 
   const body: AgentBody = {
     name: spec.name.slice(0, 100),

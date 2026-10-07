@@ -13,6 +13,7 @@ import 'server-only'
 import { providerRequest, NO_RETRY } from '@/lib/voice-providers/http'
 import { ProviderError } from '@/lib/voice-providers/errors'
 import { readTextPrefix } from './api/body'
+import type { TelephonyCallConfig, TwilioOutboundCallResponse } from './api/telephony'
 
 const PLACEHOLDER_KEYS = new Set(['', 'your-elevenlabs-api-key'])
 
@@ -262,29 +263,32 @@ export interface ELPhoneNumber {
   assigned_agent?: { agent_id: string; agent_name?: string } | null
 }
 
+// No workspace-wide listing here: the shared workspace holds every tenant's
+// imports. Lookups go through lib/elevenlabs/api/phone-numbers.ts (v2, always
+// narrowed to one number or this deployment's label, platform code only).
 export const phoneNumbers = {
-  list() {
-    return req<ELPhoneNumber[]>('phone_numbers.list', '/v1/convai/phone-numbers')
-  },
-  get(id: string) {
-    return req<ELPhoneNumber>('phone_numbers.get', `/v1/convai/phone-numbers/${encodeURIComponent(id)}`)
+  get(id: string, ctx?: Ctx) {
+    return req<ELPhoneNumber>('phone_numbers.get', `/v1/convai/phone-numbers/${encodeURIComponent(id)}`, { ctx })
   },
   /**
    * Imports a Twilio number. ElevenLabs then points the number's voice webhook
    * at its own endpoint (native mode). enable_sms=false keeps SMS routing ours.
+   * Never retried: a lost response is recovered by adopting the existing
+   * import (lib/telephony/binding.ts).
    */
-  importTwilio(params: { phone_number: string; label: string; agent_id?: string | null; sid: string; token: string }) {
+  importTwilio(params: { phone_number: string; label: string; agent_id?: string | null; sid: string; token: string }, ctx?: Ctx) {
     return req<{ phone_number_id: string }>('phone_numbers.import', '/v1/convai/phone-numbers', {
       method: 'POST',
       body: { provider: 'twilio', enable_sms: false, ...params },
       retry: NO_RETRY,
+      ctx,
     })
   },
-  update(id: string, params: { agent_id?: string | null; label?: string }) {
-    return req<ELPhoneNumber>('phone_numbers.update', `/v1/convai/phone-numbers/${encodeURIComponent(id)}`, { method: 'PATCH', body: params, idempotent: true })
+  update(id: string, params: { agent_id?: string | null; label?: string }, ctx?: Ctx) {
+    return req<ELPhoneNumber>('phone_numbers.update', `/v1/convai/phone-numbers/${encodeURIComponent(id)}`, { method: 'PATCH', body: params, idempotent: true, ctx })
   },
-  delete(id: string) {
-    return req<void>('phone_numbers.delete', `/v1/convai/phone-numbers/${encodeURIComponent(id)}`, { method: 'DELETE', responseKind: 'none' })
+  delete(id: string, ctx?: Ctx) {
+    return req<void>('phone_numbers.delete', `/v1/convai/phone-numbers/${encodeURIComponent(id)}`, { method: 'DELETE', responseKind: 'none', ctx })
   },
 }
 
@@ -313,13 +317,30 @@ export const twilio = {
       ctx,
     })
   },
-  /** Native numbers only (needs the ElevenLabs phone_number_id). */
-  outboundCall(params: { agent_id: string; agent_phone_number_id: string; to_number: string; conversation_initiation_client_data?: ClientData }, ctx?: Ctx) {
-    return req<{ success: boolean; message: string; conversation_id: string | null; callSid: string | null }>(
-      'twilio.outbound_call',
-      '/v1/convai/twilio/outbound-call',
-      { method: 'POST', body: params, timeoutMs: T.outbound, retry: NO_RETRY, breaker: true, ctx },
-    )
+  /**
+   * Native numbers only (needs the ElevenLabs phone_number_id). Places a
+   * billed call: never retried. Not on the inbound live path, so it never
+   * feeds the shared routing circuit (one tenant's failed or rate-limited
+   * outbound attempts must not fail every tenant's inbound calls over).
+   */
+  outboundCall(
+    params: {
+      agent_id: string
+      agent_phone_number_id: string
+      to_number: string
+      conversation_initiation_client_data?: ClientData
+      telephony_call_config?: TelephonyCallConfig
+    },
+    ctx?: Ctx,
+  ) {
+    return req<TwilioOutboundCallResponse>('twilio.outbound_call', '/v1/convai/twilio/outbound-call', {
+      method: 'POST',
+      body: params,
+      timeoutMs: T.outbound,
+      retry: NO_RETRY,
+      breaker: false,
+      ctx,
+    })
   },
 }
 

@@ -25,6 +25,7 @@ export type RoutingReason =
   | 'no_provider'
   | 'agent_inactive'
   | 'number_inactive'
+  | 'quota_exhausted'
 
 export type SkipReason =
   | 'not_configured'

@@ -513,8 +513,11 @@ describe('buildElevenLabsAgentBody', () => {
       expect(at(body, 'conversation_config.agent.prompt.llm')).toBe('gemini-2.5-flash')
     })
 
-    it('allows overriding only the first message', () => {
-      expect(at(build(), 'platform_settings.overrides')).toEqual({ conversation_config_override: { agent: { first_message: true } } })
+    it('allows overriding only the first message and the maximum duration (no initiation webhook without native numbers)', () => {
+      expect(at(build(), 'platform_settings.overrides')).toEqual({
+        conversation_config_override: { agent: { first_message: true }, conversation: { max_duration_seconds: true } },
+        enable_conversation_initiation_client_data_from_webhook: false,
+      })
     })
 
     it('always sends a complete guardrails block: focus and prompt injection on by default, content off', () => {

@@ -293,7 +293,7 @@ describe('other lenient readers', () => {
     ['jsonb order', { label: 'x'.repeat(200), number: '+40712345678', enabled: true, condition: null }],
     ['insertion order', { enabled: true, number: '+40712345678', condition: null, label: 'x'.repeat(200) }],
   ])('readTransferSettings keeps a valid enabled+number pair when an unrelated field is invalid (%s)', (_label, raw) => {
-    expect(readTransferSettings(raw)).toEqual({ enabled: true, number: '+40712345678', condition: null, label: null })
+    expect(readTransferSettings(raw)).toEqual({ enabled: true, number: '+40712345678', condition: null, label: null, extension: null, transfer_type: 'conference', whisper: false })
   })
 
   it('readTransferSettings drops an invalid number and therefore disables the transfer', () => {

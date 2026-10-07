@@ -25,14 +25,15 @@ import { outboundRoutingInput, planRouting, type Candidate } from '@/lib/voice-p
 import { peek, reportOutcome, tripCircuit } from '@/lib/voice-providers/circuit-registry'
 import { isProviderError, toProviderError, type VoiceProvider } from '@/lib/voice-providers/errors'
 import { cartesiaSip, earlyFailureWindowSeconds, publicBaseUrl } from '@/lib/voice-providers/config'
-import { PLATFORM_VARIABLES } from '@/lib/voice-providers/prompt'
 import { AFTER_HOURS_MESSAGE } from '@/lib/voice-providers/working-hours'
 import * as el from '@/lib/elevenlabs/client'
 import { maskPhone, normalizeE164 } from '@/lib/phone/e164'
-import { APOLOGY_MESSAGE, UNAVAILABLE_MESSAGE, localized, outboundGreetingFor, applyDisclosure } from '@/lib/voice/greetings'
+import { APOLOGY_MESSAGE, UNAVAILABLE_MESSAGE, localized } from '@/lib/voice/greetings'
 import { signCallToken } from './tokens'
 import { appendRedirect, dialCartesiaSip, forwardCall, hangup, reject, sayAndHangup } from './twiml'
 import { findNumber, loadRoutingContext, numberById, type RoutingContext } from './context'
+import { buildClientData } from './client-data'
+import { callAllowance } from './quota'
 
 const CALL_TOKEN_TTL_S = 4 * 60 * 60
 
@@ -117,6 +118,18 @@ function attemptsOf(call: CallRow): RoutingAttempt[] {
   return Array.isArray(a) ? (a as RoutingAttempt[]) : []
 }
 
+/** <Number url> for the warm-transfer whisper, when the business turned it on (app-routed transfers). */
+function whisperUrlFor(ctx: RoutingContext, callId: string): string | null {
+  return ctx.agent?.transferWhisper ? urlWithToken('/api/telephony/twilio/whisper', signCallToken(callId, 'whisper', CALL_TOKEN_TTL_S)) : null
+}
+
+/** Seconds this call may last: the agent's limit, lowered to the minutes left on a trial. */
+function callTimeLimit(ctx: RoutingContext): number {
+  const max = ctx.agent?.maxDurationSeconds ?? 60
+  const cap = callAllowance(ctx.org.usage).capSeconds
+  return typeof cap === 'number' && cap > 0 ? Math.min(max, cap) : max
+}
+
 function finalFailureTwiml(ctx: RoutingContext, call: CallRow): string {
   const language = ctx.agent?.language ?? 'en'
   if (ctx.agent?.transferEnabled && ctx.agent.transferNumber) {
@@ -127,6 +140,7 @@ function finalFailureTwiml(ctx: RoutingContext, call: CallRow): string {
       to: ctx.agent.transferNumber,
       callerId: ctx.number.number,
       actionUrl: urlWithToken('/api/telephony/twilio/dial-complete', token, { leg: 'handoff' }),
+      sendDigits: ctx.agent.transferDigits ?? null,
     })
   }
   return sayAndHangup(localized(APOLOGY_MESSAGE, language), language)
@@ -137,31 +151,22 @@ async function connectElevenLabs(ctx: RoutingContext, call: CallRow, opts: { aft
   if (!agentId || !ctx.agent) throw new Error('no ElevenLabs agent')
   const ours = ctx.number.number
   const other = opts.direction === 'outbound' ? call.to_number : call.from_number
-  const clientData: el.ClientData = {
-    user_id: ctx.org.id,
-    dynamic_variables: {
-      [PLATFORM_VARIABLES.callId]: call.id,
-      // Correlation only (post-call webhook matching needs a non-redacted
-      // value): referenced by no prompt and no tool.
-      [PLATFORM_VARIABLES.callToken]: signCallToken(call.id, 'transfer', CALL_TOKEN_TTL_S),
-      // Tool authentication (X-NTV-Call-Token header): a distinct 'tool'
-      // token in a secret variable, never sent to the LLM.
-      [PLATFORM_VARIABLES.secretCallToken]: signCallToken(call.id, 'tool', CALL_TOKEN_TTL_S),
-      // Mixed-mode orgs: tells the agent to transfer with the platform tool.
-      [PLATFORM_VARIABLES.routingMode]: 'app_routed',
-      [PLATFORM_VARIABLES.afterHours]: opts.afterHours ? 'true' : 'false',
-      [PLATFORM_VARIABLES.businessName]: ctx.org.name ?? '',
-      // Gates voicemail_detection to outbound calls (prompt rule).
-      [PLATFORM_VARIABLES.callDirection]: opts.direction,
-    },
-  }
-  if (opts.direction === 'outbound') {
-    // The agent places this call: an outbound opening line instead of the inbound greeting.
-    const greeting = outboundGreetingFor({ language: ctx.agent.language, company: ctx.org.name ?? '', agentName: ctx.agent.name })
-    clientData.conversation_config_override = {
-      agent: { first_message: applyDisclosure(greeting, { language: ctx.agent.language, businessName: ctx.org.name ?? '', recordingNotice: false }) },
-    }
-  }
+  // Shared builder (lib/telephony/client-data.ts): signed correlation and tool
+  // tokens, routing mode 'app_routed' (mixed-mode orgs transfer with the
+  // platform tool), the outbound greeting with the disclosure and the
+  // recording notice, and the trial cap where the agent allows it.
+  const clientData = buildClientData({
+    callId: call.id,
+    orgId: ctx.org.id,
+    direction: opts.direction,
+    routingMode: 'app_routed',
+    afterHours: opts.afterHours,
+    businessName: ctx.org.name ?? '',
+    agent: { name: ctx.agent.name, language: ctx.agent.language, recordingNotice: ctx.agent.recordingNotice === true, maxDurationSeconds: ctx.agent.maxDurationSeconds },
+    endUserNumber: other,
+    allowedOverrides: ctx.elevenLabsOverrides,
+    capSeconds: callAllowance(ctx.org.usage).capSeconds,
+  })
   log.debug('router.register_call', { direction: opts.direction, afterHours: opts.afterHours, callId: call.id })
   const twiml = await el.twilio.registerCall(
     {
@@ -194,7 +199,7 @@ function connectCartesia(ctx: RoutingContext, call: CallRow, direction: 'inbound
     password: sip.password,
     actionUrl: urlWithToken('/api/telephony/twilio/dial-complete', signCallToken(call.id, 'dial_complete', CALL_TOKEN_TTL_S), { leg: 'cartesia' }),
     referUrl: urlWithToken('/api/telephony/twilio/refer', signCallToken(call.id, 'refer', CALL_TOKEN_TTL_S)),
-    timeLimitSeconds: Math.max(60, Math.min(4 * 3600, ctx.agent.maxDurationSeconds)),
+    timeLimitSeconds: Math.max(60, Math.min(4 * 3600, callTimeLimit(ctx))),
     callerId: direction === 'outbound' ? call.to_number : null,
   })
 }
@@ -321,6 +326,13 @@ export async function routeInboundCall(p: Record<string, string>, log: Logger = 
       })
     }
     return sayAndHangup(message, language)
+  }
+
+  // A plan without overage (trial) whose minutes are used up: no AI call.
+  if (!callAllowance(ctx.org.usage).allowed) {
+    cl.warn('router.plan_minutes_exhausted')
+    await updateCall(db, call.id, { status: 'failed', routing_reason: 'quota_exhausted', lifecycle_rank: 30 }, cl)
+    return sayAndHangup(localized(UNAVAILABLE_MESSAGE, language), language)
   }
 
   return connect(ctx, call, plan.candidates, { afterHours: plan.afterHoursContext, direction: 'inbound', skipped: skippedSummary(plan) }, cl)
@@ -526,6 +538,8 @@ export async function handleRefer(callId: string, p: Record<string, string>, log
     to: ctx.agent.transferNumber,
     callerId: call.direction === 'inbound' ? call.from_number : number.number,
     actionUrl: urlWithToken('/api/telephony/twilio/dial-complete', signCallToken(callId, 'dial_complete', CALL_TOKEN_TTL_S), { leg: 'transfer' }),
+    sendDigits: ctx.agent.transferDigits ?? null,
+    whisperUrl: whisperUrlFor(ctx, callId),
   })
 }
 
@@ -584,6 +598,9 @@ export async function transferLiveCall(callId: string, reason: string, log: Logg
     to: ctx.agent.transferNumber,
     callerId: (call.direction === 'inbound' ? call.from_number : number.number) as string | null,
     actionUrl: urlWithToken('/api/telephony/twilio/dial-complete', signCallToken(callId, 'dial_complete', CALL_TOKEN_TTL_S), { leg: 'transfer' }),
+    // Extension behind a PBX and the warm-transfer whisper (transfer settings).
+    sendDigits: ctx.agent.transferDigits ?? null,
+    whisperUrl: whisperUrlFor(ctx, callId),
   })
   try {
     await getTwilioClient().calls(call.twilio_call_sid as string).update({ twiml })

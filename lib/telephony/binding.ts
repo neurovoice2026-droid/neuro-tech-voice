@@ -20,11 +20,13 @@ import { createLogger, type Logger } from '@/lib/observability/logger'
 import { getTwilioClient, isTwilioConfigured } from '@/lib/twilio/client'
 import * as el from '@/lib/elevenlabs/client'
 import * as ct from '@/lib/cartesia/client'
+import { findImportedNumber } from '@/lib/elevenlabs/api/phone-numbers'
 import { publicBaseUrl } from '@/lib/voice-providers/config'
 import { tryPlatformResource } from '@/lib/voice-providers/platform-resources'
-import { isProviderError, toProviderError } from '@/lib/voice-providers/errors'
+import { ProviderError, isProviderError, toProviderError } from '@/lib/voice-providers/errors'
 import type { RoutingMode } from '@/lib/voice-providers/types'
 import { maskPhone } from '@/lib/phone/e164'
+import { deploymentEnv, nativeImportLabel, parseImportLabel } from './import-label'
 
 export interface BindingResult {
   status: 'ready' | 'degraded' | 'failed'
@@ -81,6 +83,84 @@ async function bindCartesiaNumber(
   await ct.telephony.updateNumber(existing.id, { agent_id: agentId })
   log.info('binding.cartesia_import_adopted')
   return existing.id
+}
+
+const isNotFound = (err: unknown) => isProviderError(err) && err.code === 'not_found'
+
+/**
+ * Imports the number natively into ElevenLabs and assigns it to the org's
+ * agent, idempotently (mirrors bindCartesiaNumber):
+ *   • a stored import id is PATCHed (agent_id + label refresh); a 404 means it
+ *     was deleted at the provider: forget it and import again;
+ *   • an import that fails because the number is already imported (a lost
+ *     response, a stale import; the exact status is undocumented, so a
+ *     conflict or validation error is confirmed with an exact-number lookup)
+ *     is ADOPTED when it is unassigned or already ours, and replaced
+ *     otherwise (the number belongs to this org: our phone_numbers row is the
+ *     source of truth). An import labelled for another environment of the
+ *     platform (shared workspace) is never adopted or deleted.
+ * Returns the ElevenLabs phone_number_id to persist.
+ */
+export async function bindElevenLabsNumber(
+  n: { number: string; orgId: string; storedId: string | null },
+  agentId: string,
+  log: Logger,
+): Promise<string> {
+  const label = nativeImportLabel(n.orgId)
+  const ctx = { orgId: n.orgId }
+  if (n.storedId) {
+    try {
+      await el.phoneNumbers.update(n.storedId, { agent_id: agentId, label }, ctx)
+      return n.storedId
+    } catch (err) {
+      if (!isNotFound(err)) throw err
+      log.warn('binding.elevenlabs_import_missing_reimporting')
+    }
+  }
+  const sid = (process.env.TWILIO_ACCOUNT_SID ?? '').trim()
+  const token = (process.env.TWILIO_AUTH_TOKEN ?? '').trim()
+  if (!sid || !token || !isTwilioConfigured()) throw new Error('Twilio is not configured (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN)')
+  const importNumber = async () => {
+    const res = await el.phoneNumbers.importTwilio({ phone_number: n.number, label, agent_id: agentId, sid, token }, ctx)
+    if (!res?.phone_number_id) throw new ProviderError({ system: 'elevenlabs', operation: 'phone_numbers.import', code: 'bad_response', detail: 'no phone_number_id' })
+    return res.phone_number_id
+  }
+
+  let importError: unknown
+  try {
+    return await importNumber()
+  } catch (err) {
+    if (!(isProviderError(err) && (err.code === 'conflict' || err.code === 'validation'))) throw err
+    importError = err
+  }
+  const existing = await findImportedNumber(n.number, { ctx })
+  if (!existing) throw importError // a real rejection, not a duplicate
+  const owner = parseImportLabel(existing.label)
+  if (owner && owner.env !== deploymentEnv()) {
+    log.error('binding.elevenlabs_import_other_environment', null, { importEnv: owner.env })
+    throw new ProviderError({
+      system: 'elevenlabs',
+      operation: 'phone_numbers.adopt',
+      code: 'conflict',
+      detail: 'number imported by another environment',
+      safeMessage: 'This number is already connected to the voice provider by another environment of the platform. Please contact support.',
+    })
+  }
+  const assigned = existing.assigned_agent?.agent_id ?? null
+  if (assigned === null || assigned === agentId) {
+    await el.phoneNumbers.update(existing.phone_number_id, { agent_id: agentId, label }, ctx)
+    log.info('binding.elevenlabs_import_adopted', { wasAssigned: assigned !== null })
+    return existing.phone_number_id
+  }
+  // Imported for another agent (a stale import of a released number): this
+  // org owns the number now, so the old import is replaced.
+  log.warn('binding.elevenlabs_import_foreign_agent_replacing')
+  try {
+    await el.phoneNumbers.delete(existing.phone_number_id, ctx)
+  } catch (err) {
+    if (!isNotFound(err)) throw err
+  }
+  return await importNumber()
 }
 
 export async function applyNumberRouting(phoneNumberId: string, log: Logger = createLogger()): Promise<BindingResult> {
@@ -165,18 +245,12 @@ export async function applyNumberRouting(phoneNumberId: string, log: Logger = cr
     await step('elevenlabs.native_import', async () => {
       if (!ext.elevenlabs) throw new Error('ElevenLabs agent not created yet')
       if (!twilioSid) throw new Error('number has no Twilio SID')
-      if (n.elevenlabs_phone_number_id) {
-        await el.phoneNumbers.update(n.elevenlabs_phone_number_id as string, { agent_id: ext.elevenlabs })
-      } else {
-        const imported = await el.phoneNumbers.importTwilio({
-          phone_number: n.number as string,
-          label: `ntv ${String(n.org_id).slice(0, 8)}`,
-          agent_id: ext.elevenlabs,
-          sid: (process.env.TWILIO_ACCOUNT_SID ?? '').trim(),
-          token: (process.env.TWILIO_AUTH_TOKEN ?? '').trim(),
-        })
-        patch.elevenlabs_phone_number_id = imported.phone_number_id
-      }
+      const id = await bindElevenLabsNumber(
+        { number: n.number as string, orgId: n.org_id as string, storedId: (n.elevenlabs_phone_number_id as string | null) ?? null },
+        ext.elevenlabs,
+        l,
+      )
+      if (id !== n.elevenlabs_phone_number_id) patch.elevenlabs_phone_number_id = id
     })
   }
 

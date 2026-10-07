@@ -42,6 +42,7 @@ export const ROUTING_REASON_VALUES: readonly RoutingReason[] = [
   'no_provider',
   'agent_inactive',
   'number_inactive',
+  'quota_exhausted',
 ] as const
 
 export const VOICE_PROVIDER_VALUES: readonly VoiceProviderId[] = ['elevenlabs', 'cartesia'] as const
@@ -86,6 +87,7 @@ export const ROUTING_REASON_LABEL: Record<RoutingReason, string> = {
   no_provider: 'No agent available',
   agent_inactive: 'Agent paused',
   number_inactive: 'Agent paused',
+  quota_exhausted: 'Minutes used up',
 }
 
 export const ROUTING_REASON_DESCRIPTION: Record<RoutingReason, string> = {
@@ -96,6 +98,7 @@ export const ROUTING_REASON_DESCRIPTION: Record<RoutingReason, string> = {
   no_provider: 'No voice agent could take this call. The caller heard an apology or was forwarded.',
   agent_inactive: 'Your agent was paused, so it did not take this call.',
   number_inactive: 'This phone number was paused, so the agent did not take this call.',
+  quota_exhausted: 'The minutes included in your plan are used up, so the agent did not take this call. Upgrade your plan to keep answering calls.',
 }
 
 export function routingReasonLabel(reason: string | null | undefined): string | null {
@@ -396,6 +399,9 @@ export function handledBy(call: HandledByInput): HandledBy {
   }
   if (reason === 'agent_inactive' || reason === 'number_inactive') {
     return { kind: 'paused', label: 'Agent paused', description: ROUTING_REASON_DESCRIPTION[reason] }
+  }
+  if (reason === 'quota_exhausted') {
+    return { kind: 'paused', label: 'Minutes used up', description: ROUTING_REASON_DESCRIPTION.quota_exhausted }
   }
   if (reason === 'no_provider') {
     return { kind: 'failed', label: 'Failed', description: ROUTING_REASON_DESCRIPTION.no_provider }

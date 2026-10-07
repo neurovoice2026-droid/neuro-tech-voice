@@ -91,9 +91,9 @@ retrieval) and `health()` (health). All provider clients are `server-only`.
 |---|---|---|
 | Twilio voice URL | `/api/telephony/twilio/inbound` (+ fallback + status callback) | set by ElevenLabs when the number is imported |
 | Provider fallback (Cartesia) | ✅ | ❌ |
-| Working hours / after-hours gate | ✅ (same for both providers) | ❌ (not enforced) |
+| Working hours / after-hours gate | ✅ (same for both providers) | ⚠️ no message/forward gate; the agent gets the real `after_hours` from the conversation initiation webhook (docs/elevenlabs/C.md) |
 | Human transfer | platform tool → Twilio live-call redirect | ElevenLabs native `transfer_to_number` |
-| Call row created | at ingress (every call, even rejected) | from the post-call webhook |
+| Call row created | at ingress (every call, even rejected) | at call start by the initiation webhook (else from the post-call webhook) |
 
 Existing numbers imported into ElevenLabs before this change were backfilled to
 `native_elevenlabs` (no hidden behaviour change). Owners switch modes on the
@@ -425,7 +425,7 @@ the agent and re-applies every binding.
   covers missing webhooks, and billing falls back to Twilio's dial duration after 30 min.
 * Cartesia managed agents have no knowledge base yet: the fallback agent gets
   inlined document excerpts (≤24k chars).
-* Native ElevenLabs numbers have no failover and no after-hours gate.
+* Native ElevenLabs numbers have no failover and no after-hours message/forward gate (the agent handles closed hours from the initiation webhook's `after_hours`).
 * The ElevenLabs media circuit needs early stream ends from ≥3 organizations
   within 2 minutes to open: on a platform with fewer active organizations it
   will not open from media failures alone (each affected call still fails over

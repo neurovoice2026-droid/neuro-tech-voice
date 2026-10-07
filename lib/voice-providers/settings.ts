@@ -96,12 +96,26 @@ export const ConversationSettingsSchema = z.object({
   background_voice_detection: z.boolean(),
 })
 
+/**
+ * DTMF dialed after a transfer connects (ElevenLabs post_dial_digits pattern
+ * ^[0-9*#wW]*$, Twilio <Number sendDigits>): at least one key, at most 24.
+ */
+export const transferExtension = z
+  .string()
+  .trim()
+  .regex(/^[0-9*#wW]{1,24}$/, 'Use digits, * and #, plus w (half-second pause) or W (one second)')
+  .refine((v) => /[0-9*#]/.test(v), 'Enter at least one digit')
+
 export const TransferSettingsSchema = z
   .object({
     enabled: z.boolean(),
     number: e164.nullable(),
     condition: tenantText(500).nullable(),
     label: tenantText(80).nullable(),
+    // Optional (older clients omit them; stored values get the defaults).
+    extension: transferExtension.nullable().optional(),
+    transfer_type: z.enum(['conference', 'blind']).optional(),
+    whisper: z.boolean().optional(),
   })
   .refine((t) => !t.enabled || !!t.number, { message: 'A transfer number is required when transfer is enabled', path: ['number'] })
 

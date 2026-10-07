@@ -205,6 +205,7 @@ export type CallStatus =
  * - transferred: handed to a human
  * - no_provider: final failure, nobody could take the call
  * - agent_inactive / number_inactive: paused by the owner
+ * - quota_exhausted: the trial's included minutes are used up
  * The conversational fallback phrase is a prompt behaviour, not a routing reason.
  */
 export type RoutingReason =
@@ -215,6 +216,7 @@ export type RoutingReason =
   | 'no_provider'
   | 'agent_inactive'
   | 'number_inactive'
+  | 'quota_exhausted'
 export type Sentiment = 'positive' | 'neutral' | 'negative'
 
 /** What came of a call. Booked / Answered / Flagged are the three the site leads with. */

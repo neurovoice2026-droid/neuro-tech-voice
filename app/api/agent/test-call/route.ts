@@ -25,7 +25,15 @@ export async function POST(request: Request) {
     await enforceRateLimit(RATE_LIMITS.testCall, org.id, 'You have reached the test call limit. Please wait a few minutes.')
     const res = await startOutboundCall({ orgId: org.id, toNumber: body.to_number, phoneNumberId: body.phone_number_id ?? null, purpose: 'test' }, log)
     return NextResponse.json(
-      { call_id: res.callId, routing_mode: res.routingMode, status: res.status, message: 'Calling you now. Answer to talk to your agent.' },
+      {
+        call_id: res.callId,
+        routing_mode: res.routingMode,
+        status: res.status,
+        message:
+          res.status === 'unconfirmed'
+            ? 'The call request was sent but not confirmed yet. If your phone does not ring within a minute, check the Calls page before trying again.'
+            : 'Calling you now. Answer to talk to your agent.',
+      },
       { status: 202 },
     )
   } catch (err) {
