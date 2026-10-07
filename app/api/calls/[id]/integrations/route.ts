@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { google } from 'googleapis'
 import { requireOrg } from '@/lib/api/auth'
+import { legacySentimentFromVerdict } from '@/lib/calls/legacy-sentiment'
 import {
   apiError,
   assertSameOrigin,
@@ -30,11 +31,11 @@ const BodySchema = z.object({
 })
 
 const REPORT_COLUMNS: string =
-  'id, caller_number, direction, duration_seconds, sentiment, summary, summary_title, outcome, status, provider, primary_provider, routing_reason, failover_reason, elevenlabs_conversation_id, started_at, created_at'
+  'id, caller_number, direction, duration_seconds, sentiment, call_successful, summary, summary_title, outcome, status, provider, primary_provider, routing_reason, failover_reason, elevenlabs_conversation_id, started_at, created_at'
 
 type ReportRow = Pick<
   CallRow,
-  | 'id' | 'caller_number' | 'direction' | 'duration_seconds' | 'sentiment' | 'summary' | 'summary_title' | 'outcome'
+  | 'id' | 'caller_number' | 'direction' | 'duration_seconds' | 'sentiment' | 'call_successful' | 'summary' | 'summary_title' | 'outcome'
   | 'status' | 'provider' | 'primary_provider' | 'routing_reason' | 'failover_reason' | 'elevenlabs_conversation_id'
   | 'started_at' | 'created_at'
 >
@@ -64,7 +65,7 @@ function report(call: ReportRow): string {
     `Handled by: ${handledByText(call)}`,
     ...(failover ? [`Failover: ${failover}`] : []),
     `Outcome: ${outcomeLabel(call.outcome) ?? '—'}`,
-    `Sentiment: ${call.sentiment ?? 'unknown'}`,
+    `Sentiment: ${call.sentiment ?? legacySentimentFromVerdict(call.call_successful) ?? 'unknown'}`,
     `Date: ${call.started_at ?? call.created_at ?? ''}`,
     '',
     'Summary:',
@@ -187,7 +188,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             call.direction ?? 'inbound',
             String(call.duration_seconds ?? 0),
             handledByText(call),
-            call.sentiment ?? '',
+            call.sentiment ?? legacySentimentFromVerdict(call.call_successful) ?? '',
             call.summary ?? '',
           ]],
         },

@@ -33,6 +33,11 @@ export interface RetentionReport {
   errors: number
 }
 
+/** True when the owner saved a retention period (privacy_settings.retention_days present). */
+export function hasExplicitRetention(raw: unknown): boolean {
+  return !!raw && typeof raw === 'object' && !Array.isArray(raw) && typeof (raw as { retention_days?: unknown }).retention_days === 'number'
+}
+
 export async function applyCallRetention(log: Logger = createLogger({ component: 'call_retention' }), now = Date.now()): Promise<RetentionReport> {
   const db = createAdminClient()
   const report: RetentionReport = { agents: 0, withRetention: 0, purged: 0, errors: 0 }
@@ -41,6 +46,10 @@ export async function applyCallRetention(log: Logger = createLogger({ component:
   let remaining = retentionBatch()
   for (const a of agents ?? []) {
     report.agents++
+    // Only a retention the owner chose explicitly purges OUR copies: the
+    // default (365 days) used to apply at the voice provider only, and nobody
+    // agreed to irreversible deletion of their call history here.
+    if (!hasExplicitRetention(a.privacy_settings)) continue
     const behavior = (a.metadata as { behavior_settings?: Record<string, unknown> } | null)?.behavior_settings
     const privacy = readPrivacySettings(a.privacy_settings, behavior?.record_calls)
     if (privacy.retention_days < 0) continue

@@ -135,9 +135,10 @@ describe('agent block', () => {
     expect(prompt.timezone).toBe('Europe/Bucharest')
   })
 
-  it('sends reasoning_effort only when the LLM catalogue resolved one', () => {
+  it('sends reasoning_effort when resolved, null when the LLM has none (clears an old value), nothing when the catalogue is unreadable', () => {
     expect(at(build(), 'conversation_config.agent.prompt')).not.toHaveProperty('reasoning_effort')
-    expect(at(build({}, {}, { reasoningEffort: null }), 'conversation_config.agent.prompt')).not.toHaveProperty('reasoning_effort')
+    expect(at(build({}, {}, { reasoningEffort: undefined }), 'conversation_config.agent.prompt')).not.toHaveProperty('reasoning_effort')
+    expect(at(build({}, {}, { reasoningEffort: null }), 'conversation_config.agent.prompt.reasoning_effort')).toBeNull()
     expect(at(build({}, {}, { reasoningEffort: 'minimal' }), 'conversation_config.agent.prompt.reasoning_effort')).toBe('minimal')
   })
 })
@@ -163,20 +164,20 @@ describe('language presets', () => {
     expect(at(body, 'conversation_config.agent.prompt.rag.embedding_model')).toBe('e5_mistral_7b_instruct')
   })
 
-  it('one preset per additional language with its disclosed greeting, closing line, fillers and a TTS model that speaks it', () => {
+  it('one preset per additional language with only language-overridable fields; the base TTS model speaks every language', () => {
     const body = build({ additional_languages: ['ro', 'de'] }, { language: 'en', languagePresetGreetings: GREETINGS })
     expect(at(body, 'conversation_config.language_presets.ro')).toEqual({
       overrides: {
-        agent: { first_message: GREETINGS.ro, language: 'ro', max_conversation_duration_message: MAX_DURATION_MESSAGES.ro },
-        tts: { model_id: 'eleven_flash_v2_5' },
+        agent: { first_message: GREETINGS.ro, max_conversation_duration_message: MAX_DURATION_MESSAGES.ro },
         turn: { soft_timeout_config: { message: SOFT_TIMEOUT_MESSAGES.ro[0], additional_soft_timeout_messages: SOFT_TIMEOUT_MESSAGES.ro.slice(1) } },
       },
     })
-    expect(at(body, 'conversation_config.language_presets.de.overrides.tts.model_id')).toBe('eleven_flash_v2_5')
-    // English primary keeps flash_v2; a Romanian primary with an English preset uses flash_v2 for English.
-    expect(at(body, 'conversation_config.tts.model_id')).toBe('eleven_flash_v2')
+    // tts.model_id is not language-overridable: an English agent that also speaks
+    // Romanian/German needs the multilingual base model (flash_v2 is English-only).
+    expect(at(body, 'conversation_config.tts.model_id')).toBe('eleven_flash_v2_5')
+    expect(at(build({}, { language: 'en' }), 'conversation_config.tts.model_id')).toBe('eleven_flash_v2')
     const roPrimary = build({ additional_languages: ['en'] }, { language: 'ro', languagePresetGreetings: GREETINGS })
-    expect(at(roPrimary, 'conversation_config.language_presets.en.overrides.tts.model_id')).toBe('eleven_flash_v2')
+    expect(at(roPrimary, 'conversation_config.language_presets.en.overrides')).not.toHaveProperty('tts')
     expect(at(roPrimary, 'conversation_config.tts.model_id')).toBe('eleven_flash_v2_5')
   })
 

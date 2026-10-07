@@ -30,6 +30,7 @@ import { earlyFailureWindowSeconds } from './config'
 import { conversations as elConversations } from '@/lib/elevenlabs/client'
 import { isProviderError } from './errors'
 import { collectedValues } from './call-context'
+import { legacySentimentFromVerdict } from '@/lib/calls/legacy-sentiment'
 
 const STORED_COLUMNS =
   'id, org_id, agent_id, status, lifecycle_rank, provider, provider_call_id, elevenlabs_conversation_id, cartesia_call_id, transcript, summary, duration_seconds, started_at, ended_at, routing_reason, outcome, direction, caller_number, from_number, to_number, sentiment, updated_at, workflows_triggered_at, channel, is_test, call_metadata, recording_status, retention_applied_at'
@@ -415,7 +416,9 @@ async function triggerWorkflowsOnce(db: SupabaseClient, callId: string, kind: 'e
     direction: (call.direction as string) ?? 'inbound',
     duration_seconds: (call.duration_seconds as number) ?? 0,
     status: (call.status as string) ?? 'completed',
-    sentiment: (call.sentiment as string | null) ?? null,
+    // Older rows carry a sentiment; newer ones only the AI verdict, which
+    // automations built on {{sentiment}} have always received.
+    sentiment: (call.sentiment as string | null) ?? legacySentimentFromVerdict(call.call_successful),
     summary: (call.summary as string | null) ?? null,
     transcript,
     agent_name: (Array.isArray(agentRel) ? agentRel[0]?.name : agentRel?.name) ?? undefined,

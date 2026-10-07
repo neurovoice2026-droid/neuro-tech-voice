@@ -46,7 +46,7 @@ import { initiationWebhookBlock } from './api/telephony'
  * `config_rollout` then re-syncs them in batches (lib/voice-providers/config-rollout.ts).
  * Bump it whenever this builder changes what existing agents should receive.
  */
-export const PLATFORM_AGENT_CONFIG_VERSION = 5
+export const PLATFORM_AGENT_CONFIG_VERSION = 6
 
 export interface PlatformResources {
   /** Workspace webhook tool used for human transfer on app-routed calls. */
@@ -210,7 +210,8 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
     ignore_default_personality: true,
     enable_reasoning_summary: false,
   }
-  if (runtime.reasoningEffort) prompt.reasoning_effort = runtime.reasoningEffort
+  // null clears a value pushed for an earlier LLM; undefined (catalogue unreadable) leaves it.
+  if (runtime.reasoningEffort !== undefined) prompt.reasoning_effort = runtime.reasoningEffort
 
   const tts = ttsConfig(spec, telephonyFormat)
   // Voices (slice F): a new agent without a chosen voice gets the curated
@@ -250,7 +251,16 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
     vad: vadConfig(spec),
     conversation: {
       max_duration_seconds: clamp(Math.round(c.max_call_duration_minutes * 60), 60, 7200),
-      client_events: c.allow_interruptions ? ['audio', 'interruption'] : ['audio'],
+      // 'interruption' is the barge-in switch; the transcript and response
+      // events feed browser test sessions (the SDK's onMessage), never phone calls.
+      client_events: [
+        'audio',
+        ...(c.allow_interruptions ? ['interruption'] : []),
+        'user_transcript',
+        'agent_response',
+        'agent_response_correction',
+        'agent_chat_response_part',
+      ],
       dtmf_input_settings: { ...DTMF_INPUT_SETTINGS },
     },
     // Always sent (possibly empty). Removing a key relies on the PATCH merge

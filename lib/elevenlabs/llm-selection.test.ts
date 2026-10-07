@@ -77,7 +77,7 @@ describe('effectiveAgentLlm', () => {
   it('never throws when the catalogue is unavailable', async () => {
     vi.mocked(cachedAgentLlms).mockRejectedValue(new Error('down'))
     vi.stubEnv('ELEVENLABS_LLM', 'gemini-2.5-flash')
-    expect(await effectiveAgentLlm(log)).toMatchObject({ llm: 'gemini-2.5-flash', reason: 'catalog_unavailable', reasoningEffort: null })
+    expect(await effectiveAgentLlm(log)).toMatchObject({ llm: 'gemini-2.5-flash', reason: 'catalog_unavailable', reasoningEffort: undefined })
   })
 
   it('diagnostics: an error with the fallback and replacement facts, nothing when fine', async () => {

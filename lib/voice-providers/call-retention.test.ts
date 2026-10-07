@@ -17,10 +17,11 @@ const DAY = 86_400_000
 beforeEach(() => vi.stubEnv('CALL_RETENTION_BATCH', ''))
 
 describe('call retention', () => {
-  it('purges per agent with retention_days >= 0, skips unlimited agents, and stays within the batch', async () => {
+  it('purges per agent with an explicit retention_days >= 0, skips unlimited and never-saved agents, and stays within the batch', async () => {
     const db = memoryDb({
       agents: [
-        { id: 'a-default', org_id: 'o1', privacy_settings: null, metadata: null }, // 365 days (platform default)
+        { id: 'a-default', org_id: 'o1', privacy_settings: null, metadata: null }, // never saved: our copies are kept
+        { id: 'a-365', org_id: 'o1', privacy_settings: { record_audio: true, retention_days: 365 }, metadata: null },
         { id: 'a-30', org_id: 'o1', privacy_settings: { record_audio: true, retention_days: 30 }, metadata: null },
         { id: 'a-unlimited', org_id: 'o2', privacy_settings: { record_audio: true, retention_days: -1 }, metadata: null },
         { id: 'a-zero', org_id: 'o3', privacy_settings: { record_audio: false, retention_days: 0 }, metadata: null },
@@ -33,17 +34,17 @@ describe('call retention', () => {
     }
     state.db = db
     const report = await applyCallRetention(log, NOW)
-    expect(report).toEqual({ agents: 4, withRetention: 3, purged: 7, errors: 0 })
+    expect(report).toEqual({ agents: 5, withRetention: 3, purged: 7, errors: 0 })
     const calls = db.rpcCalls.map((c) => c.args as { p_agent_id: string; p_cutoff: string; p_limit: number })
     // Agents in id order; the first one purged 7 of the 500 allowed.
-    expect(calls.map((c) => c.p_agent_id)).toEqual(['a-30', 'a-default', 'a-zero'])
+    expect(calls.map((c) => c.p_agent_id)).toEqual(['a-30', 'a-365', 'a-zero'])
     expect(calls[0]).toMatchObject({ p_cutoff: new Date(NOW - 30 * DAY).toISOString(), p_limit: 500 })
     expect(calls[1]).toMatchObject({ p_cutoff: new Date(NOW - 365 * DAY).toISOString(), p_limit: 493 })
     expect(calls[2].p_cutoff).toBe(new Date(NOW).toISOString())
   })
 
   it('an RPC failure is logged per agent and the others continue', async () => {
-    const db = memoryDb({ agents: [{ id: 'a1', org_id: 'o1', privacy_settings: null }, { id: 'a2', org_id: 'o1', privacy_settings: null }] })
+    const db = memoryDb({ agents: [{ id: 'a1', org_id: 'o1', privacy_settings: { retention_days: 30 } }, { id: 'a2', org_id: 'o1', privacy_settings: { retention_days: 30 } }] })
     let n = 0
     // The helper's rpc type only models success; the failure shape is cast in.
     db.rpc = ((fn: string, args: unknown) => {

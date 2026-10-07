@@ -42,7 +42,8 @@ export interface LlmSelection {
   fallbackPercentage: number | null
   providerDeprecationDate: string | null
   /** reasoning_effort for the selected LLM (null = not sent). */
-  reasoningEffort: LlmReasoningEffort | null
+  /** null = the model has no configurable reasoning (clears it); undefined = catalogue unreadable (leave as is). */
+  reasoningEffort: LlmReasoningEffort | null | undefined
 }
 
 function usable(info: ELLlmInfo | undefined): boolean {
@@ -105,7 +106,7 @@ export async function effectiveAgentLlm(log: Logger = createLogger({ component: 
     lastReplacementLog = Date.now()
     log.warn('elevenlabs.llm_replaced', { configured, used: selection.llm, reason: selection.reason, replacement: selection.replacement })
   }
-  return { ...selection, reasoningEffort: chooseReasoningEffort(info?.available_reasoning_efforts ?? null) }
+  return { ...selection, reasoningEffort: info ? chooseReasoningEffort(info.available_reasoning_efforts ?? null) : undefined }
 }
 
 /** Diagnostics: an error whenever agents do not get the configured LLM. Never throws. */

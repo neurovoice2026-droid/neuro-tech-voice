@@ -95,3 +95,13 @@ describe('merge across providers (early failover)', () => {
     expect(patch).toMatchObject({ lifecycle_rank: 50, duration_seconds: 600, cartesia_call_id: 'call_c1' })
   })
 })
+
+describe('legacySentimentFromVerdict', () => {
+  it('maps the AI verdict to the sentiment workflows used to receive', async () => {
+    const { legacySentimentFromVerdict } = await import('@/lib/calls/legacy-sentiment')
+    expect(legacySentimentFromVerdict('success')).toBe('positive')
+    expect(legacySentimentFromVerdict('failure')).toBe('negative')
+    expect(legacySentimentFromVerdict('unknown')).toBe('neutral')
+    expect(legacySentimentFromVerdict(null)).toBeNull()
+  })
+})

@@ -116,8 +116,12 @@ export function turnBehaviour(spec: Spec) {
   }
 }
 
-export function ttsConfig(spec: Pick<AgentSpec, 'language' | 'voiceId' | 'voiceTuning'>, audioFormat: string): Record<string, unknown> {
-  const model = ttsModelFor(spec.language)
+export function ttsConfig(spec: Pick<AgentSpec, 'language' | 'voiceId' | 'voiceTuning'> & Partial<Pick<AgentSpec, 'conversation'>>, audioFormat: string): Record<string, unknown> {
+  // tts.model_id is not language-overridable (spec): with additional languages
+  // the base model must speak all of them, so an English agent that also
+  // speaks Romanian uses the multilingual model.
+  const extra = spec.conversation ? additionalLanguagesOf(spec as Spec) : []
+  const model = ttsModelFor(spec.language === 'en' && extra.length > 0 ? extra[0] : spec.language)
   const t = spec.voiceTuning
   const tts: Record<string, unknown> = {
     model_id: model,
@@ -151,8 +155,8 @@ export function languagePresets(spec: Pick<AgentSpec, 'language' | 'conversation
     if (!greeting) continue
     presets[lang] = {
       overrides: {
-        agent: { first_message: greeting, language: lang, max_conversation_duration_message: maxDurationMessage(lang) },
-        tts: { model_id: ttsModelFor(lang) },
+        // Only the fields the spec marks x-convai-language-override.
+        agent: { first_message: greeting, max_conversation_duration_message: maxDurationMessage(lang) },
         turn: { soft_timeout_config: softTimeoutMessagesFor(lang) },
       },
     }

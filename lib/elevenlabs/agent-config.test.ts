@@ -366,10 +366,11 @@ describe('buildElevenLabsAgentBody', () => {
       expect(at(build({ conversation: { ...conv, silence_end_call_seconds: null } }), 'conversation_config.turn.silence_end_call_timeout')).toBe(-1)
     })
 
-    it('enables interruption events only when barge-in is allowed', () => {
+    it('enables interruption events only when barge-in is allowed, and always sends the transcript events browser tests need', () => {
       const conv = makeAgentSpec().conversation
-      expect(at(build(), 'conversation_config.conversation.client_events')).toEqual(['audio', 'interruption'])
-      expect(at(build({ conversation: { ...conv, allow_interruptions: false } }), 'conversation_config.conversation.client_events')).toEqual(['audio'])
+      const transcript = ['user_transcript', 'agent_response', 'agent_response_correction', 'agent_chat_response_part']
+      expect(at(build(), 'conversation_config.conversation.client_events')).toEqual(['audio', 'interruption', ...transcript])
+      expect(at(build({ conversation: { ...conv, allow_interruptions: false } }), 'conversation_config.conversation.client_events')).toEqual(['audio', ...transcript])
     })
 
     it('always sends temperature: 0 (spec default, never null) when unset, clamped to 0..1 otherwise', () => {
