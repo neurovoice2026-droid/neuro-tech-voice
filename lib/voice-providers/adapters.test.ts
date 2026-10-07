@@ -14,6 +14,12 @@ vi.mock('@/lib/cartesia/client', () => ({
 vi.mock('@/lib/voice-providers/platform-resources', () => ({
   tryPlatformResource: vi.fn(),
 }))
+vi.mock('@/lib/voice-providers/platform-tools', () => ({
+  TRANSFER_TOOL_DEGRADED: { code: 'transfer_tool_unavailable', message: 'Human transfer is unavailable on calls to your app-routed numbers right now.' },
+  ensurePlatformTool: vi.fn(),
+  storedPlatformToolId: vi.fn(),
+  invalidatePlatformToolMemo: vi.fn(),
+}))
 vi.mock('@/lib/elevenlabs/llm-selection', () => ({
   effectiveAgentLlm: vi.fn(),
 }))
@@ -21,6 +27,8 @@ vi.mock('@/lib/elevenlabs/llm-selection', () => ({
 import * as el from '@/lib/elevenlabs/client'
 import * as ct from '@/lib/cartesia/client'
 import { tryPlatformResource } from './platform-resources'
+import { ensurePlatformTool, invalidatePlatformToolMemo, storedPlatformToolId } from './platform-tools'
+import { composeSystemPrompt, type ComposePromptInput } from './prompt'
 import { effectiveAgentLlm, type LlmSelection } from '@/lib/elevenlabs/llm-selection'
 import { cartesiaLifecycle, elevenLabsLifecycle, lifecycleFor, resetPiiRedactionMemo, resolveFallbackVoice } from './adapters'
 import { ProviderError } from './errors'
@@ -49,6 +57,9 @@ beforeEach(() => {
   vi.setSystemTime(NOW)
   vi.stubEnv('CARTESIA_FALLBACK_VOICES', '')
   vi.mocked(tryPlatformResource).mockResolvedValue(null)
+  vi.mocked(ensurePlatformTool).mockReset().mockResolvedValue({ key: 'elevenlabs.transfer_tool', toolId: 'tool_transfer_1', action: 'cached' })
+  vi.mocked(storedPlatformToolId).mockReset().mockResolvedValue('tool_transfer_1')
+  vi.mocked(invalidatePlatformToolMemo).mockReset()
   vi.mocked(effectiveAgentLlm).mockResolvedValue(selection())
   resetPiiRedactionMemo()
   vi.mocked(el.isConfigured).mockReturnValue(true)
@@ -381,5 +392,120 @@ describe('cartesiaLifecycle.create', () => {
     expect(body.description).toBe(`ntv-agent:${spec.localAgentId}`)
     expect(body.config.audio.output.voice_id).toBe('mapped-voice-en-01')
     expect(ct.agents.attachWebhook).toHaveBeenCalledWith('ct_agent_1', 'wh_1')
+  })
+})
+
+describe('elevenLabsLifecycle: platform transfer tool (slice B1)', () => {
+  const TRANSFER = { enabled: true, number: '+40712345678', condition: 'Caller asks for billing', label: 'Billing' }
+  const promptInput = (over: Partial<ComposePromptInput> = {}): ComposePromptInput => ({
+    system_prompt: 'You answer calls for Smile Clinic.',
+    language: 'en',
+    transferEnabled: true,
+    transferLabel: 'Billing',
+    transferCondition: 'Caller asks for billing',
+    callContext: 'variables',
+    ...over,
+  })
+  const transferSpec = (over: Partial<ComposePromptInput> = {}, spec: Parameters<typeof makeAgentSpec>[0] = {}) => {
+    const input = promptInput(over)
+    return makeAgentSpec({ transfer: TRANSFER, appRouted: true, systemPrompt: composeSystemPrompt(input), promptInput: input, ...spec })
+  }
+  const promptOf = (call: unknown) => ((call as { conversation_config: { agent: { prompt: { prompt: string; tool_ids: string[]; built_in_tools: Record<string, unknown> } } } }).conversation_config.agent.prompt)
+  const remote = { agent_id: 'agent_1', name: 'x', conversation_config: {} } as unknown as el.ELAgent
+
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(el.agents.update).mockReset().mockResolvedValue(remote)
+    vi.mocked(el.agents.get).mockReset()
+  })
+
+  it('attaches the reconciled tool on app-routed agents with transfer configured', async () => {
+    const res = await elevenLabsLifecycle.update('agent_1', transferSpec())
+    expect(ensurePlatformTool).toHaveBeenCalledWith('elevenlabs.transfer_tool', { verify: 'cached' })
+    const prompt = promptOf(vi.mocked(el.agents.update).mock.calls[0][1])
+    expect(prompt.tool_ids).toEqual(['tool_transfer_1'])
+    expect(prompt.prompt).toContain('Human handoff')
+    expect(res.degraded).toBeNull()
+    expect(res.details.app_transfer).toBe('attached')
+  })
+
+  it('a tool that cannot be obtained is not swallowed: no tool, no transfer promised, degraded result', async () => {
+    vi.mocked(ensurePlatformTool).mockRejectedValue(new ProviderError({ system: 'elevenlabs', code: 'upstream', operation: 'tools.create' }))
+    const res = await elevenLabsLifecycle.update('agent_1', transferSpec())
+    const prompt = promptOf(vi.mocked(el.agents.update).mock.calls[0][1])
+    expect(prompt.tool_ids).toEqual([])
+    expect(prompt.prompt).not.toContain('Human handoff')
+    expect(prompt.prompt).toContain('You cannot transfer calls')
+    expect(res.degraded).toMatchObject({ code: 'transfer_tool_unavailable' })
+    expect(res.details.app_transfer).toBe('unavailable')
+    expect(console.error).toHaveBeenCalled()
+  })
+
+  it('mixed routing with the webhook tool down: native calls keep transfer_to_number, app-routed calls are not promised a transfer', async () => {
+    vi.mocked(ensurePlatformTool).mockRejectedValue(new ProviderError({ system: 'elevenlabs', code: 'not_configured', operation: 'tools.ensure' }))
+    await elevenLabsLifecycle.update('agent_1', transferSpec({ mixedTransferTools: true }, { hasNativeNumbers: true }))
+    const prompt = promptOf(vi.mocked(el.agents.update).mock.calls[0][1])
+    expect(prompt.tool_ids).toEqual([])
+    expect(prompt.built_in_tools.transfer_to_number).not.toBeNull()
+    expect(prompt.prompt).toContain('Human handoff')
+    expect(prompt.prompt).toContain('transferring is not possible right now')
+    expect(prompt.prompt).not.toContain('transfer with the transfer_to_human tool')
+  })
+
+  it('a spec without prompt inputs still gets an explicit override rule', async () => {
+    vi.mocked(ensurePlatformTool).mockRejectedValue(new Error('boom'))
+    await elevenLabsLifecycle.update('agent_1', makeAgentSpec({ transfer: TRANSFER, appRouted: true }))
+    expect(promptOf(vi.mocked(el.agents.update).mock.calls[0][1]).prompt).toContain('transferring calls that arrive through the business line is not possible right now')
+  })
+
+  it('never obtains the tool when it is not needed (native only, transfer off, paused agent)', async () => {
+    await elevenLabsLifecycle.update('agent_1', transferSpec({}, { appRouted: false, hasNativeNumbers: true }))
+    await elevenLabsLifecycle.update('agent_1', transferSpec({}, { transfer: { ...TRANSFER, enabled: false } }))
+    await elevenLabsLifecycle.update('agent_1', transferSpec({}, { active: false }))
+    expect(ensurePlatformTool).not.toHaveBeenCalled()
+    expect(storedPlatformToolId).not.toHaveBeenCalled()
+  })
+
+  it('hash() only reads the stored tool id: it never creates or reconciles a tool', async () => {
+    const spec = transferSpec()
+    const withTool = await elevenLabsLifecycle.hash(spec)
+    expect(ensurePlatformTool).not.toHaveBeenCalled()
+    expect(storedPlatformToolId).toHaveBeenCalledWith('elevenlabs.transfer_tool')
+    // Same body as the write that attached the stored tool.
+    const written = await elevenLabsLifecycle.update('agent_1', spec)
+    expect(written.configHash).toBe(withTool)
+    // No stored tool yet: the hash is that of the body without transfer (so the next sync pushes the tool).
+    vi.mocked(storedPlatformToolId).mockResolvedValue(null)
+    const without = await elevenLabsLifecycle.hash(spec)
+    expect(without).not.toBe(withTool)
+    vi.mocked(ensurePlatformTool).mockRejectedValue(new Error('down'))
+    expect((await elevenLabsLifecycle.update('agent_1', spec)).configHash).toBe(without)
+  })
+
+  it('a 404 on PATCH agent while the agent exists (a referenced tool was deleted) is never treated as "agent missing"', async () => {
+    vi.mocked(el.agents.update).mockRejectedValue(new ProviderError({ system: 'elevenlabs', code: 'not_found', operation: 'agents.update' }))
+    vi.mocked(el.agents.get).mockResolvedValue(remote)
+    await expect(elevenLabsLifecycle.update('agent_1', transferSpec())).rejects.toMatchObject({ code: 'not_found', operation: 'agents.update_reference' })
+    expect(el.agents.get).toHaveBeenCalledWith('agent_1', expect.anything())
+    expect(invalidatePlatformToolMemo).toHaveBeenCalled()
+  })
+
+  it('a 404 on PATCH agent confirmed by GET is reported as the agent missing (the sync engine recreates it)', async () => {
+    const original = new ProviderError({ system: 'elevenlabs', code: 'not_found', operation: 'agents.update' })
+    vi.mocked(el.agents.update).mockRejectedValue(original)
+    vi.mocked(el.agents.get).mockRejectedValue(new ProviderError({ system: 'elevenlabs', code: 'not_found', operation: 'agents.get' }))
+    await expect(elevenLabsLifecycle.update('agent_1', transferSpec())).rejects.toBe(original)
+  })
+
+  it('an unconfirmable 404 (GET fails otherwise) is not reported as the agent missing', async () => {
+    vi.mocked(el.agents.update).mockRejectedValue(new ProviderError({ system: 'elevenlabs', code: 'not_found', operation: 'agents.update' }))
+    vi.mocked(el.agents.get).mockRejectedValue(new ProviderError({ system: 'elevenlabs', code: 'upstream', operation: 'agents.get' }))
+    await expect(elevenLabsLifecycle.update('agent_1', transferSpec())).rejects.toMatchObject({ code: 'upstream', operation: 'agents.get' })
+  })
+
+  it('a failed write with the tool attached forces a re-verification of the tool next time', async () => {
+    vi.mocked(el.agents.update).mockRejectedValue(new ProviderError({ system: 'elevenlabs', code: 'validation', operation: 'agents.update' }))
+    await expect(elevenLabsLifecycle.update('agent_1', transferSpec())).rejects.toMatchObject({ code: 'validation' })
+    expect(invalidatePlatformToolMemo).toHaveBeenCalledWith('elevenlabs.transfer_tool')
   })
 })

@@ -23,6 +23,8 @@ import { buildCartesiaAgentConfig } from '@/lib/cartesia/agent-config'
 import { cartesiaFallbackVoices } from './config'
 import { isAllowedFallbackVoice } from '@/lib/cartesia/voice-policy'
 import { forgetPlatformResource, tryPlatformResource } from './platform-resources'
+import { TRANSFER_TOOL_DEGRADED, ensurePlatformTool, invalidatePlatformToolMemo, storedPlatformToolId } from './platform-tools'
+import { composeSystemPrompt } from './prompt'
 
 export interface SyncedAgent extends ExternalAgentRef {
   configHash: string
@@ -30,6 +32,17 @@ export interface SyncedAgent extends ExternalAgentRef {
   appliedVoiceId: string | null
   /** Provider-specific, non-sensitive details worth remembering. */
   details: Record<string, unknown>
+  /**
+   * The write succeeded without part of the intended config (a platform tool
+   * could not be obtained): the sync is recorded as degraded with this
+   * tenant-safe message and retried by the maintenance job.
+   */
+  degraded?: SyncDegradation | null
+}
+
+export interface SyncDegradation {
+  code: string
+  message: string
 }
 
 export interface UpdateOptions {
@@ -64,14 +77,76 @@ async function timed<T>(fn: () => Promise<T>): Promise<{ value: T | null; ms: nu
 
 // ─── ElevenLabs ──────────────────────────────────────────────────────────────
 
-async function elevenLabsBody(spec: AgentSpec) {
-  const needsTransferTool = spec.appRouted && spec.transfer.enabled && !!spec.transfer.number
-  const transferToolId = needsTransferTool ? await tryPlatformResource('elevenlabs.transfer_tool') : null
+/** App-routed calls need the platform transfer_to_human tool (ElevenLabs cannot transfer a call it does not control). */
+function needsAppTransferTool(spec: AgentSpec): boolean {
+  return spec.active && spec.appRouted && spec.transfer.enabled && !!spec.transfer.number
+}
+
+const APP_TRANSFER_UNAVAILABLE_RULE =
+  '- Override: transferring calls that arrive through the business line is not possible right now. If the caller asks for a human, say so and offer to take a message with their name, number and reason so the team can call back.'
+
+/** The spec whose prompt promises no app-routed transfer (the tool is unavailable). */
+export function withoutAppTransfer(spec: AgentSpec): AgentSpec {
+  const systemPrompt = spec.promptInput
+    ? composeSystemPrompt({ ...spec.promptInput, appTransferUnavailable: true })
+    : `${spec.systemPrompt}\n\n${APP_TRANSFER_UNAVAILABLE_RULE}`
+  return { ...spec, systemPrompt }
+}
+
+type AppTransfer = 'attached' | 'unavailable' | 'not_needed'
+
+/**
+ * 'write' (create/update) obtains the platform tools (reconciled, created on
+ * first use); 'hash' only reads their stored ids and never creates anything.
+ * A tool that cannot be obtained is never swallowed: the body leaves it out,
+ * the prompt stops promising it, and the sync is reported degraded.
+ */
+async function elevenLabsBody(spec: AgentSpec, mode: 'write' | 'hash' = 'write'): Promise<{ body: AgentBody; degraded: SyncDegradation | null; appTransfer: AppTransfer }> {
+  let transferToolId: string | null = null
+  let degraded: SyncDegradation | null = null
+  const needsTransferTool = needsAppTransferTool(spec)
+  if (needsTransferTool) {
+    if (mode === 'hash') {
+      transferToolId = await storedPlatformToolId('elevenlabs.transfer_tool')
+    } else {
+      try {
+        transferToolId = (await ensurePlatformTool('elevenlabs.transfer_tool', { verify: 'cached' })).toolId
+      } catch (err) {
+        createLogger({ component: 'elevenlabs_lifecycle' }).error('agent_sync.transfer_tool_unavailable', err, { orgId: spec.orgId, agentId: spec.localAgentId })
+        degraded = TRANSFER_TOOL_DEGRADED
+      }
+    }
+  }
+  const effective = needsTransferTool && !transferToolId ? withoutAppTransfer(spec) : spec
   const postCallWebhookId = (process.env.ELEVENLABS_POST_CALL_WEBHOOK_ID ?? '').trim() || null
   // Cached LLM catalogue: the configured LLM when offered and not deprecated,
   // else the platform default; plus the lowest reasoning level it supports.
   const llm = await effectiveAgentLlm()
-  return buildElevenLabsAgentBody(spec, { transferToolId, postCallWebhookId }, { llm: llm.llm, reasoningEffort: llm.reasoningEffort })
+  const body = buildElevenLabsAgentBody(effective, { transferToolId, postCallWebhookId }, { llm: llm.llm, reasoningEffort: llm.reasoningEffort })
+  return { body, degraded, appTransfer: !needsTransferTool ? 'not_needed' : transferToolId ? 'attached' : 'unavailable' }
+}
+
+/**
+ * A 404 on PATCH agent may come from a resource the body references (a tool
+ * deleted in the dashboard) rather than from the agent itself: confirm with
+ * GET before the sync engine recreates the agent. Throws the error to report.
+ */
+async function confirmAgentMissing(externalId: string, ctx: { orgId: string; agentId: string }, original: unknown): Promise<never> {
+  // The next sync re-verifies the platform tools (a missing one is recreated).
+  invalidatePlatformToolMemo()
+  try {
+    await el.agents.get(externalId, ctx)
+  } catch (err) {
+    if (isProviderError(err) && err.code === 'not_found') throw original // really gone: the sync engine recreates it
+    throw err // unknown: degraded and retried, never a blind recreate
+  }
+  throw new ProviderError({
+    system: 'elevenlabs',
+    operation: 'agents.update_reference',
+    code: 'not_found',
+    detail: 'agent exists; a resource it references is missing',
+    safeMessage: 'A platform resource used by your agent is missing. It is repaired automatically.',
+  })
 }
 
 /** Transcript redaction rejected by the workspace (enterprise-only): skip it for an hour on this instance. */
@@ -109,10 +184,12 @@ export function resetPiiRedactionMemo(): void {
 }
 
 /** Non-sensitive facts about the write, merged into agent_provider_resources.details. */
-function elevenLabsDetails(spec: AgentSpec, body: AgentBody, remote: ELAgent | null, pii: string): Record<string, unknown> {
+function elevenLabsDetails(spec: AgentSpec, body: AgentBody, remote: ELAgent | null, pii: string, appTransfer: AppTransfer): Record<string, unknown> {
   const report = inspectRemoteAgent(body, remote)
   const prompt = (body.conversation_config.agent as { prompt?: { llm?: string } } | undefined)?.prompt
   return {
+    // Platform transfer tool on app-routed calls: attached | unavailable | not_needed.
+    app_transfer: appTransfer,
     tts_model: remote?.conversation_config?.tts?.model_id ?? null,
     llm: prompt?.llm ?? null,
     platform_version: PLATFORM_AGENT_CONFIG_VERSION,
@@ -129,14 +206,23 @@ export const elevenLabsLifecycle: AgentLifecycle = {
   provider: 'elevenlabs',
   isConfigured: el.isConfigured,
   async hash(spec) {
-    return configHash(await elevenLabsBody(spec))
+    // Read-only: hashing never creates a platform tool.
+    return configHash((await elevenLabsBody(spec, 'hash')).body)
   },
   async create(spec) {
-    const body = await elevenLabsBody(spec)
+    const { body, degraded, appTransfer } = await elevenLabsBody(spec)
     const ctx = { orgId: spec.orgId, agentId: spec.localAgentId }
-    const { result, pii } = await sendWithRedactionFallback(body, (b) =>
-      el.agents.create({ name: b.name, tags: b.tags, conversation_config: b.conversation_config, platform_settings: b.platform_settings }, ctx),
-    )
+    let sent: { result: { agent_id: string }; pii: 'applied' | 'rejected' | 'disabled' }
+    try {
+      sent = await sendWithRedactionFallback(body, (b) =>
+        el.agents.create({ name: b.name, tags: b.tags, conversation_config: b.conversation_config, platform_settings: b.platform_settings }, ctx),
+      )
+    } catch (err) {
+      // A referenced tool may have been deleted: re-verify it on the next attempt.
+      if (appTransfer === 'attached') invalidatePlatformToolMemo('elevenlabs.transfer_tool')
+      throw err
+    }
+    const { result, pii } = sent
     const agent_id = result.agent_id
     if (!agent_id) throw new ProviderError({ system: 'elevenlabs', operation: 'agents.create', code: 'bad_response', detail: 'no agent_id' })
     // Read back once: confirms the voice actually applied and gives the version id.
@@ -147,24 +233,33 @@ export const elevenLabsLifecycle: AgentLifecycle = {
       version: remote.version_id ?? null,
       configHash: await configHash(body),
       appliedVoiceId: remote.conversation_config?.tts?.voice_id ?? null,
-      details: elevenLabsDetails(spec, body, remote, pii),
+      details: elevenLabsDetails(spec, body, remote, pii, appTransfer),
+      degraded,
     }
   },
   async update(externalId, spec, opts = {}) {
-    const body = await elevenLabsBody(spec)
+    const { body, degraded, appTransfer } = await elevenLabsBody(spec)
+    const ctx = { orgId: spec.orgId, agentId: spec.localAgentId }
     // The hash is that of the steady-state body; the one-shot retroactive
     // privacy flag and the version description are only on the wire.
     const wire = opts.applyPrivacyToExisting ? withRetroactivePrivacy(body) : body
-    const { result: remote, pii } = await sendWithRedactionFallback(wire, (b) =>
-      el.agents.update(externalId, { ...b, version_description: versionDescription(spec) }, { orgId: spec.orgId, agentId: spec.localAgentId }),
-    )
+    let sent: { result: ELAgent; pii: 'applied' | 'rejected' | 'disabled' }
+    try {
+      sent = await sendWithRedactionFallback(wire, (b) => el.agents.update(externalId, { ...b, version_description: versionDescription(spec) }, ctx))
+    } catch (err) {
+      if (isProviderError(err) && err.code === 'not_found' && err.operation === 'agents.update') await confirmAgentMissing(externalId, ctx, err)
+      if (appTransfer === 'attached') invalidatePlatformToolMemo('elevenlabs.transfer_tool')
+      throw err
+    }
+    const { result: remote, pii } = sent
     return {
       provider: 'elevenlabs',
       externalId,
       version: remote.version_id ?? null,
       configHash: await configHash(body),
       appliedVoiceId: remote.conversation_config?.tts?.voice_id ?? null,
-      details: { ...elevenLabsDetails(spec, body, remote, pii), ...(opts.applyPrivacyToExisting ? { privacy_retroactive_at: new Date().toISOString() } : {}) },
+      details: { ...elevenLabsDetails(spec, body, remote, pii, appTransfer), ...(opts.applyPrivacyToExisting ? { privacy_retroactive_at: new Date().toISOString() } : {}) },
+      degraded,
     }
   },
   async delete(externalId) {

@@ -4,7 +4,7 @@ import 'server-only'
 // built from this, which is what keeps primary and fallback consistent.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { composeSystemPrompt } from './prompt'
+import { composeSystemPrompt, type ComposePromptInput } from './prompt'
 import {
   readAfterHours,
   readAnalysisSettings,
@@ -184,24 +184,28 @@ export async function buildAgentSpec(db: SupabaseClient, agent: AgentRow): Promi
     appendix += block
   }
 
+  const promptInput: ComposePromptInput = {
+    ...promptBase,
+    callContext: 'variables',
+    voicemailDetection: conversation.voicemail_detection,
+    skipTurn: conversation.skip_turn,
+    additionalLanguages,
+    numbersAsDigits: textNormalisationType() === 'elevenlabs',
+    keypadInput: true,
+    // Org with app-routed AND native numbers: both transfer tools are attached.
+    mixedTransferTools: appRouted && hasNativeNumbers,
+    openingHours,
+  }
+
   return {
     localAgentId: agent.id,
     orgId: agent.org_id,
     orgName,
     name: agent.name,
     language,
-    systemPrompt: composeSystemPrompt({
-      ...promptBase,
-      callContext: 'variables',
-      voicemailDetection: conversation.voicemail_detection,
-      skipTurn: conversation.skip_turn,
-      additionalLanguages,
-      numbersAsDigits: textNormalisationType() === 'elevenlabs',
-      keypadInput: true,
-      // Org with app-routed AND native numbers: both transfer tools are attached.
-      mixedTransferTools: appRouted && hasNativeNumbers,
-      openingHours,
-    }),
+    systemPrompt: composeSystemPrompt(promptInput),
+    // Recomposed by the ElevenLabs adapter when the platform transfer tool is unavailable.
+    promptInput,
     fallbackSystemPrompt: composeSystemPrompt({ ...promptBase, callContext: cartesiaToolAvailable ? 'tool' : 'none' }),
     knowledgeAppendix: appendix.trim(),
     firstMessage,

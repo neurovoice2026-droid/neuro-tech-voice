@@ -1,6 +1,6 @@
 import 'server-only'
 // Short, signed, purpose-bound call tokens. They authenticate callbacks that
-// carry no other credentials: the transfer tool the AI agent invokes, and the
+// carry no other credentials: the webhook tools the AI agent invokes, and the
 // Twilio redirect/action URLs we embed in TwiML (Twilio also signs those
 // requests; the token additionally binds them to one call and one purpose).
 // Format: base64url(JSON payload).base64url(HMAC-SHA256(payload)).
@@ -9,7 +9,14 @@ import crypto from 'crypto'
 import { voiceTokenSecret } from '@/lib/voice-providers/config'
 import { parseJson } from '@/lib/util/json'
 
-export type CallTokenPurpose = 'transfer' | 'stream_ended' | 'dial_complete' | 'refer' | 'outbound_connect'
+/**
+ * 'tool'      authenticates platform webhook tool requests (X-NTV-Call-Token
+ *             header, from the secret__ntv_call_token variable).
+ * 'transfer'  historical name of the ntv_call_token correlation value (post-call
+ *             webhook matching). It authorizes no tool any more, except the
+ *             legacy body token of a transfer tool not yet reconciled.
+ */
+export type CallTokenPurpose = 'tool' | 'transfer' | 'stream_ended' | 'dial_complete' | 'refer' | 'outbound_connect'
 
 interface Payload {
   c: string // calls.id

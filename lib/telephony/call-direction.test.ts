@@ -48,6 +48,7 @@ vi.mock('@/lib/voice-providers/circuit-registry', () => ({ peek: async () => ({ 
 
 import { routeInboundCall } from './router'
 import { startOutboundCall } from './outbound'
+import { verifyCallToken } from './tokens'
 
 beforeEach(() => {
   vi.stubEnv('VOICE_PUBLIC_BASE_URL', 'https://voice.example.com')
@@ -73,19 +74,27 @@ describe('ntv_call_direction', () => {
   })
 })
 
-describe('per-call token and routing mode (slice A2)', () => {
-  it('register-call carries the signed token twice (plain for the tool body and matching, secret__ for headers) and routing app_routed', async () => {
+describe('per-call tokens and routing mode (slices A2, B1)', () => {
+  it('register-call: a correlation token (ntv_call_token) and a DISTINCT tool token (secret__, purpose tool) for the X-NTV-Call-Token header; routing app_routed', async () => {
     await routeInboundCall({ CallSid: 'CA0124', From: '+40712345678', To: '+40312345678' })
     const vars = (registerCall.mock.calls[0][0] as { conversation_initiation_client_data: { dynamic_variables: Record<string, string> } }).conversation_initiation_client_data.dynamic_variables
     expect(vars.ntv_call_token).toMatch(/^[\w-]+\.[\w-]+$/)
-    expect(vars.secret__ntv_call_token).toBe(vars.ntv_call_token)
+    expect(vars.secret__ntv_call_token).toMatch(/^[\w-]+\.[\w-]+$/)
+    expect(vars.secret__ntv_call_token).not.toBe(vars.ntv_call_token)
+    // Post-call matching keeps working on the correlation token (call-store verifies purpose 'transfer').
+    expect(verifyCallToken(vars.ntv_call_token, 'transfer', Date.now(), { ignoreExpiry: true })).toBe(CALL_ID)
+    // Only the secret token authenticates tools, and the correlation token never does.
+    expect(verifyCallToken(vars.secret__ntv_call_token, 'tool')).toBe(CALL_ID)
+    expect(verifyCallToken(vars.ntv_call_token, 'tool')).toBeNull()
     expect(vars.ntv_routing_mode).toBe('app_routed')
   })
 
-  it('native outbound calls carry the secret token and routing native', async () => {
+  it('native outbound calls carry both tokens (distinct purposes) and routing native', async () => {
     await startOutboundCall({ orgId: ORG, toNumber: '+40722222222', purpose: 'outbound' })
     const vars = (outboundCall.mock.calls[0][0] as { conversation_initiation_client_data: { dynamic_variables: Record<string, string> } }).conversation_initiation_client_data.dynamic_variables
-    expect(vars.secret__ntv_call_token).toBe(vars.ntv_call_token)
+    expect(verifyCallToken(vars.secret__ntv_call_token, 'tool')).toBe(CALL_ID)
+    expect(verifyCallToken(vars.ntv_call_token, 'transfer')).toBe(CALL_ID)
+    expect(verifyCallToken(vars.ntv_call_token, 'tool')).toBeNull()
     expect(vars.ntv_routing_mode).toBe('native')
   })
 

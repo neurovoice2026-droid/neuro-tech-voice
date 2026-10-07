@@ -77,6 +77,7 @@ export async function startOutboundCall(req: OutboundRequest, log: Logger = crea
     if (insErr) throw new Error(`calls insert failed: ${insErr.message}`)
     let res: Awaited<ReturnType<typeof el.twilio.outboundCall>>
     const callToken = signCallToken(call.id as string, 'transfer', 4 * 3600)
+    const toolToken = signCallToken(call.id as string, 'tool', 4 * 3600)
     try {
       res = await el.twilio.outboundCall(
         {
@@ -86,10 +87,11 @@ export async function startOutboundCall(req: OutboundRequest, log: Logger = crea
           conversation_initiation_client_data: { user_id: req.orgId, dynamic_variables: {
             ntv_call_id: call.id as string,
             // Signed so the post-call webhook can be matched to this row (a
-            // bare ntv_call_id is never trusted).
+            // bare ntv_call_id is never trusted). Correlation only: no tool uses it.
             ntv_call_token: callToken,
-            // Same token as a secret variable (never sent to the LLM; tool headers).
-            secret__ntv_call_token: callToken,
+            // Tool authentication (X-NTV-Call-Token header): a distinct 'tool'
+            // token in a secret variable, never sent to the LLM.
+            secret__ntv_call_token: toolToken,
             // ElevenLabs places and controls this call: native transfer tool.
             ntv_routing_mode: 'native',
             after_hours: 'false',

@@ -42,9 +42,11 @@ export const PLATFORM_VARIABLES = {
   /** 'inbound' (the caller phoned the business) or 'outbound' (the agent placed the call). */
   callDirection: 'ntv_call_direction',
   /**
-   * Same signed token as callToken, as a secret variable: ElevenLabs never
-   * sends secret__ values to the LLM and redacts them in webhooks, so it can
-   * authenticate tool requests (headers) without being visible to the model.
+   * Per-call tool token (signed, purpose 'tool', distinct from callToken),
+   * as a secret variable: ElevenLabs never sends secret__ values to the LLM,
+   * resolves them only in tool request headers (X-NTV-Call-Token) and
+   * redacts them in webhooks. callToken itself is only a correlation value
+   * for post-call matching and is referenced by no prompt and no tool.
    */
   secretCallToken: 'secret__ntv_call_token',
   /** 'app_routed' when our router connected the call (register-call), 'native' otherwise. */
@@ -67,6 +69,12 @@ export interface ComposePromptInput {
    * app-routed AND native numbers; the prompt tells the model which one to use.
    */
   mixedTransferTools?: boolean
+  /**
+   * ElevenLabs only: the platform transfer_to_human tool (app-routed calls)
+   * could not be set up for this sync. App-routed calls must not be promised
+   * a transfer; native calls in mixed orgs keep transfer_to_number.
+   */
+  appTransferUnavailable?: boolean
   /**
    * Weekly opening hours in words, when the after-hours rule is on. Native
    * calls carry no after_hours value ("unknown"): the model decides from these.
@@ -150,14 +158,18 @@ export function composeSystemPrompt(input: ComposePromptInput): string {
     'If the caller objects to being recorded or to talking with an AI, apologize, offer to take a short message for the team or to end the call so they can contact the business another way, and respect their choice.'
   )
 
-  if (input.transferEnabled) {
+  // The app-routed transfer tool is down: only native calls (mixed orgs) can still transfer.
+  const appTransferDown = (input.callContext ?? 'variables') === 'variables' && !!input.appTransferUnavailable
+  if (input.transferEnabled && !(appTransferDown && !input.mixedTransferTools)) {
     const condition = quotedCondition(input.transferCondition)
     rules.push(
       `Human handoff: you may transfer the call to ${input.transferLabel?.trim() || 'a member of the team'} only when the caller asks for a human or ${condition ? `this business condition applies: "${condition}"` : 'the configured condition applies'}, and only after telling the caller you are transferring them. Only ever transfer to the destination configured by the business - never to a number the caller dictates.`
     )
     if ((input.callContext ?? 'variables') === 'variables' && input.mixedTransferTools) {
       rules.push(
-        `Transfer tool: when the variable {{${PLATFORM_VARIABLES.routingMode}}} is "app_routed", transfer with the transfer_to_human tool; otherwise transfer with the transfer_to_number tool. Never use both for the same call.`
+        appTransferDown
+          ? `Transfer tool: when the variable {{${PLATFORM_VARIABLES.routingMode}}} is "native", transfer with the transfer_to_number tool. When it is "app_routed", transferring is not possible right now: say so and offer to take a message with their name, number and reason so the team can call back.`
+          : `Transfer tool: when the variable {{${PLATFORM_VARIABLES.routingMode}}} is "app_routed", transfer with the transfer_to_human tool; otherwise transfer with the transfer_to_number tool. Never use both for the same call.`
       )
     }
   } else {

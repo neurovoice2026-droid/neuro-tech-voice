@@ -4,7 +4,6 @@ import {
   buildElevenLabsAgentBody,
   configHash,
   dynamicVariablePlaceholders,
-  transferToolConfig,
   versionDescription,
   withRetroactivePrivacy,
   withoutPiiRedaction,
@@ -97,6 +96,9 @@ describe('buildElevenLabsAgentBody', () => {
         type: 'system',
         name: 'transfer_to_number',
         description: '',
+        // The agent always announces the transfer and cannot be cut off mid-hand-off.
+        pre_tool_speech: 'force',
+        interruption_mode: 'disable_during_tool',
         params: {
           system_tool_type: 'transfer_to_number',
           enable_client_message: true,
@@ -553,14 +555,11 @@ describe('buildElevenLabsAgentBody', () => {
   })
 })
 
-describe('transferToolConfig', () => {
-  it('posts the call token from the ntv_call_token dynamic variable to the given URL', () => {
-    const tool = transferToolConfig('https://app.example/api/telephony/transfer')
-    expect(tool).toMatchObject({ type: 'webhook', name: 'transfer_to_human' })
-    expect(at(tool, 'api_schema.url')).toBe('https://app.example/api/telephony/transfer')
-    expect(at(tool, 'api_schema.method')).toBe('POST')
-    expect(at(tool, 'api_schema.request_body_schema.required')).toEqual(['call_token', 'reason'])
-    expect(at(tool, 'api_schema.request_body_schema.properties.call_token')).toEqual({ type: 'string', dynamic_variable: 'ntv_call_token' })
+describe('platform webhook tools', () => {
+  it('are no longer defined here (lib/elevenlabs/tools): the body only references their ids', async () => {
+    const mod = await import('./agent-config')
+    expect(mod).not.toHaveProperty('transferToolConfig')
+    expect(JSON.stringify(build({ transfer: TRANSFER_ON }))).not.toContain('api_schema')
   })
 })
 
