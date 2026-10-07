@@ -3,26 +3,37 @@
  * the contract of docs/ig/PIPELINE.md §6.1, in ig4's shape). Plan 28.0 s · 14 bars · 840 timeline frames (3360 at
  * 120 fps), impact f780 (bar 14), END f840.
  *
- * PROVISIONAL (the infrastructure step, docs/ig/ig5/INFRA-LOG.md): the voices are Kokoro placeholders (engine "kokoro"
- * in ./voice.generated.ts) and the acts are title cards (acts/Acts.tsx). What later steps replace, and where:
+ * WITH THE INSTALLED TAKES (Cartesia Tessa, voice-candidates/ig5/PICKS.md; ig5-01/01b/02/02t PROVISIONAL until
+ * docs/ig/ig5/HOOKS.md): still 28.0 s · impact f780 · the FULL script (rung 0, CTA ends f753, 12 f to spare). The lines
+ * fall at hook f10 ("three" f33, 1.1 s) · agency f124 · answering f255 · "Ours?" f394 (the $49 card, 46.9 %; plan f352) ·
+ * "forty-nine" f428 (51.0 %) · setup f503 · does f596 · CTA f701 (83.5 %). Sonic reads ig5-02 and ig5-03 longer than
+ * their beat windows in every take (+0.5 / +0.25 s here), so from the agency line on the lines run a breath apart and
+ * the plan frames below are floors that no longer bind (SCRIPT §5's "≈ 46–47 %" for "forty-nine" needs ≈ 1 s less
+ * speech before it than any take set has).
+ *
+ * Still PROVISIONAL (the infrastructure step, docs/ig/ig5/INFRA-LOG.md): the acts are title cards (acts/Acts.tsx).
+ * What later steps replace, and where:
  *   · the takes          → `npm run voice:ig5 -- --install=…` rewrites ./voice.generated.ts; everything below re-anchors
- *                          to the measured takes by itself (PLAN + `place`, as ig4)
+ *                          to the measured takes by itself (PLAN + `place`, the stop-time on the 16th, as ig4)
  *   · the cast           → CASTS: the ids placed in each role, the trim ladder of SCRIPT §4.3 (full → T1 → T1 + T2);
  *                          the first rung whose CTA lets the impact land on PLAN.impact is placed (the launch-gate swap
  *                          ig5-06 → ig5-06-msg and the A/B hook ig5-01b are one id each here)
  *   · the acts' moments  → M (empty now), ZONE_FRAMES, the cue sheet HITS (the series' frame only: the frame-0 ring,
- *                          the end card's stack, the build and the impact) and BED.ride / MUSIC (the IG stub bed)
+ *                          the end card's stack, the build and the impact) and BED.ride / MUSIC (the IG stub bed). The
+ *                          SCRIPT's later rings (f30, f150, f285) fall on "three", "retainer." and "service:" with the
+ *                          real reads: they are the scene step's to re-anchor (series.ts: a ring never covers an onset)
  *
- * Each line sits on its planned frame unless the take before it still sounds (common/series.ts `place`; "Ours?" waits
- * PLAN.oursGap for the stop-time); only the CTA can push the end card on by whole bars (and DURATION may not pass 840:
- * the driver contract's 28 s).
+ * Each line sits on its planned frame unless the take before it still sounds (common/series.ts `place`); the stop-time
+ * before "Ours?" cuts the bed on a 16th once her answering line has been quiet PLAN.oursGap − PLAN.stopLead frames, and
+ * "Ours?" is spoken PLAN.stopLead into it; only the CTA can push the end card on by whole bars (and DURATION may not pass
+ * 840: the driver contract's 28 s).
  *
  * Node-safe (PIPELINE.md H10): explicit `.ts` extensions, type-only imports marked, no React or Remotion. It imports
  * ONLY ./voice.generated.ts, film 1's src/timing.ts and src/ig/common/ — scripts/ig5/hash.mjs hashes every .ts here.
  */
 import { VOICE, type VoiceId } from './voice.generated.ts';
 import { BEAT, BPM, CUT, DUCK, FPS, LIGHT_NOTES, LIGHT_SEMI, PK, RENDER_FPS, SUB, VERTICAL, b } from '../../timing.ts';
-import { buildCues, makeSpeech, makeVoiceKit, type Cue, type Hit, type Room, type Voiced, type VoiceRide } from '../common/cues.ts';
+import { buildCues, makeSpeech, makeVoiceKit, upQuarter, type Cue, type Hit, type Room, type Voiced, type VoiceRide } from '../common/cues.ts';
 import {
   BAR, BRAND, IG_LOUD, IG_NAME, IMPACT_BEFORE_END, IMPACT_GAP, ROLL, SEAM, SFX, H, afterRing, endHits, bedRide, igArc, igImpact, impactHits, place, upBar,
   type Display, type LineScreens, type Snd,
@@ -50,8 +61,10 @@ const voiced = (at: number, id: VoiceId) => {
 export const PLAN = {
   acts: { hook: 0, agency: 122, answering: 231, ours: 350, setup: 462, does: 571, end: 690 },
   lines: { hook: 6, agency: 124, answering: 233, ours: 352, setup: 465, does: 574, cta: 694 },
-  /** "Ours?" waits this long after the answering line (the stop-time before it, SCRIPT §5.2) */
+  /** "Ours?" waits at least this long after the answering line (the stop-time before it, SCRIPT §5.2) */
   oursGap: 12,
+  /** the bed cuts this long before "Ours?" (SCRIPT b4: MUSIC.stop from vWord('ig5-04', 0) − 4; the pickup at − 2) */
+  stopLead: 4,
   /** the comment field rises this long BEFORE her first CTA word "Comment" (SCRIPT b7: f688 for the CTA @694) */
   fieldLead: 6,
   impact: 780,
@@ -65,16 +78,24 @@ const FULL: Cast = { hook: 'ig5-01', agency: 'ig5-02', answering: 'ig5-03', ours
 /** full → T1 (ig5-02t) → T1 + T2 (+ ig5-05t): never a hedge cut (SCRIPT §4.3) */
 export const CASTS: readonly Cast[] = [FULL, { ...FULL, agency: 'ig5-02t' }, { ...FULL, agency: 'ig5-02t', setup: 'ig5-05t' }];
 
-/** the voiced timeline of one cast: each role's start, and the impact its CTA allows */
+/** the voiced timeline of one cast: each role's start, the stop-time's cut, and the impact its CTA allows */
 const layout = (c: Cast) => {
   const hook = afterRing(PLAN.lines.hook, 0, KIT.firstSound(c.hook));
   const agency = place(PLAN.lines.agency, end(hook, c.hook));
   const answering = place(PLAN.lines.answering, end(agency, c.agency));
-  const ours = place(PLAN.lines.ours, end(answering, c.answering), PLAN.oursGap);
+  /** THE STOP-TIME (ig4's form: the cut on the 16th, re-anchored to the takes): the bed cuts on the first 16th that leaves
+   *  her answering line PLAN.oursGap − PLAN.stopLead frames of quiet (never before the plan's), and "Ours?" is spoken
+   *  PLAN.stopLead into the silence, on the take's own first onset — so "Ours?" still waits ≥ PLAN.oursGap */
+  const stop = Math.max(PLAN.lines.ours - PLAN.stopLead, upQuarter(end(answering, c.answering) + PLAN.oursGap - PLAN.stopLead));
+  const ours = stop + PLAN.stopLead - KIT.vWord(c.ours, 0);
   const setup = place(PLAN.lines.setup, end(ours, c.ours));
   const does = place(PLAN.lines.does, end(setup, c.setup));
   const cta = place(PLAN.lines.cta, end(does, c.does));
-  return { at: { hook, agency, answering, ours, setup, does, cta } as { readonly [R in Role]: number }, impact: Math.max(PLAN.impact, upBar(end(cta, c.cta) + BEAT)) };
+  return {
+    at: { hook, agency, answering, ours, setup, does, cta } as { readonly [R in Role]: number },
+    stop,
+    impact: Math.max(PLAN.impact, upBar(end(cta, c.cta) + BEAT)),
+  };
 };
 const FIT = CASTS.findIndex((c) => layout(c).impact <= PLAN.impact);
 /** the rung placed (0 full, 1 T1, 2 T1 + T2; the last when none fits — the end card then moves on by bars) */
@@ -171,9 +192,9 @@ export const HITS: Hit<Snd>[] = [
 ];
 export const CUES: Cue[] = buildCues(HITS, { sfx: SFX, speaking, roomAt });
 
-/** THE STOP-TIME before the payoff (SCRIPT b4): the bed cut on the sample from 4 f before "Ours?" to "forty-nine",
- *  from the placed take's onsets (never from plan frames) */
-export const STOP = [LINE.ours + vWord(CAST.ours, 0) - 4, LINE.ours + vWord(CAST.ours, 2)] as const;
+/** THE STOP-TIME before the payoff (SCRIPT b4): the bed cut on the sample from PLAN.stopLead before "Ours?" (on a 16th,
+ *  `layout`) to "forty-nine", from the placed take's onsets (never from plan frames) */
+export const STOP = [LAID.stop, LINE.ours + vWord(CAST.ours, 2)] as const;
 /** The moments the bed reads (scripts/ig/bed.mjs inputs(T): no ARRANGEMENTS.ig5, so the stub plays) */
 export const MUSIC = {
   bedFrom: 0,
