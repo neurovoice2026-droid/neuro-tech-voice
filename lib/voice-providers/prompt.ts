@@ -243,6 +243,15 @@ export function composeSystemPrompt(input: ComposePromptInput): string {
     })
   )
 
+  // Browser test sessions (slice G, lib/voice-providers/web-test.ts) carry
+  // ntv_routing_mode "web": there is no phone line, and the platform tools
+  // refuse them (placeholder call token), so the agent says so up front.
+  if (context === 'variables' && (input.transferEnabled || input.bookingMode || input.takeMessageTool)) {
+    rules.push(
+      `When the variable {{${PLATFORM_VARIABLES.routingMode}}} is "web", this is the business owner testing you from their browser, not a phone call: transfers, bookings and messages cannot be completed. If one is requested, say in one sentence that it works on real phone calls, then continue the conversation as you would on a call.`
+    )
+  }
+
   if (input.timezone) {
     rules.push(`The business operates in the ${input.timezone} time zone; use it when talking about days and times.`)
   }

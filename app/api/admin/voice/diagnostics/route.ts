@@ -81,11 +81,16 @@ export async function GET(request: Request) {
       log.error('admin.diagnostics_tools_failed', err)
       return { problems: [{ key: 'PLATFORM_TOOLS', severity: 'error' as const, message: 'Tool diagnostics failed: see the logs.' }], summary: { error: 'unavailable' } }
     })
+    // Shared workspace credits / voice slots / billing and platform key health (slice G).
+    const quota = await import('@/lib/voice-providers/quota-monitor').then((m) => m.quotaDiagnostics(db, log, { probe })).catch((err: unknown) => {
+      log.error('admin.diagnostics_quota_failed', err)
+      return { snapshot: null, key_health: null, problems: [{ key: 'ELEVENLABS_QUOTA', severity: 'error' as const, message: 'Quota diagnostics failed: see the logs.' }] }
+    })
     log.info('admin.diagnostics', { by: admin.kind, probe })
     return NextResponse.json(
       {
         config: summarizeVoiceConfig(),
-        problems: [...validateVoiceConfig(), ...modelProblems, ...platformAgent.problems, ...platformTools.problems],
+        problems: [...validateVoiceConfig(), ...modelProblems, ...platformAgent.problems, ...platformTools.problems, ...quota.problems],
         // `effective` is what routing sees (forced overrides, open → half-open after the open period).
         circuits: {
           elevenlabs: { effective: elCircuit.state, ...elCircuit.raw },
@@ -95,6 +100,8 @@ export async function GET(request: Request) {
         },
         platform_agent_config: platformAgent.summary,
         platform_tools: platformTools.summary,
+        elevenlabs_quota: quota.snapshot,
+        key_health: quota.key_health,
         platform_resources: Object.fromEntries(Object.entries(resources).map(([k, v]) => [k, !!v])),
         agent_sync: tally(syncRows.data ?? [], 'provider', 'status'),
         webhook_backlog: tally(webhookRows.data ?? [], 'provider', 'status'),

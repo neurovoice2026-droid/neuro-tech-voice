@@ -146,6 +146,11 @@ async function elevenLabsBody(
   }
 }
 
+/** Read-only: the body this deployment would push for `spec` (admin regression runs, slice G). Never creates a platform tool. */
+export async function elevenLabsCandidateBody(spec: AgentSpec): Promise<AgentBody> {
+  return (await elevenLabsBody(spec, 'hash')).body
+}
+
 /**
  * A 404 on PATCH agent may come from a resource the body references (a tool
  * deleted in the dashboard) rather than from the agent itself: confirm with

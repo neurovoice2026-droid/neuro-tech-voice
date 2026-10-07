@@ -193,7 +193,14 @@ startup (`instrumentation.ts`) and shown by `GET /api/admin/voice/diagnostics`
 (presence booleans only — values are never returned).
 
 ### ElevenLabs
-1. API key with ConvAI, voices, TTS and knowledge-base scopes → `ELEVENLABS_API_KEY`.
+1. API key → `ELEVENLABS_API_KEY`, with exactly these permissions (there is no separate knowledge-base
+   permission: the knowledge base is `convai_*`): `convai_read`, `convai_write`, `voices_read`,
+   `voices_write`, `create_instant_voice_clone`, `add_voice_from_voice_library`, `voice_generation`,
+   `text_to_speech`, `models_read`, `pronunciation_dictionaries_read`, `pronunciation_dictionaries_write`,
+   `speech_history_read`, `speech_history_write` and `user_read` (credit and voice-slot monitoring), plus
+   `webhooks_write` for the admin webhook repair. A new service-account key starts with **no access** to
+   existing agents, documents, tools or voices: follow the staged migration in
+   [`docs/elevenlabs/api-key.md`](elevenlabs/api-key.md) before switching keys.
 2. Workspace post-call webhook (Agents Platform → Settings → Webhooks): URL
    `https://<app>/api/elevenlabs/webhook`, HMAC enabled → `ELEVENLABS_WEBHOOK_SECRET`;
    its id → `ELEVENLABS_POST_CALL_WEBHOOK_ID`. Enable *transcription* and

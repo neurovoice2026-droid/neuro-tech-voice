@@ -16,6 +16,7 @@ import { TabKnowledge } from './tabs/TabKnowledge'
 import { TabAvailability } from './tabs/TabAvailability'
 import { TabCallHandling } from './tabs/TabCallHandling'
 import { ProviderStatusCard } from './ProviderStatusCard'
+import { TestAgentPanel } from './TestAgentPanel'
 import { useAgent } from '@/hooks/useAgent'
 import { useAgentStatus } from '@/hooks/useAgentStatus'
 import { useKnowledge } from '@/hooks/useKnowledge'
@@ -172,6 +173,11 @@ export function AgentPageClient({ initialAgent, phoneNumbers, orgTimezone }: Age
             isRetrying={statusHook.isRetrying}
             onRetry={() => void retrySync()}
             onRefresh={() => void refreshStatus()}
+          />
+          <TestAgentPanel
+            className="mt-4"
+            agentName={agent.name}
+            refreshKey={`${agent.is_active}:${statusHook.status?.providers.find((p) => p.provider === 'elevenlabs')?.status ?? ''}`}
           />
         </div>
 

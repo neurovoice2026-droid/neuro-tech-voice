@@ -1,0 +1,2642 @@
+{
+ "source": "https://api.elevenlabs.io/openapi.json",
+ "info_version": "1.0",
+ "extracted_at": "2026-10-07",
+ "roots": [
+  "CreateResponseUnitTestRequest",
+  "CreateToolCallUnitTestRequest",
+  "RunAgentTestsRequestModel"
+ ],
+ "schemas": {
+  "AgentFailureResponseExample": {
+   "properties": {
+    "response": {
+     "type": "string"
+    },
+    "type": {
+     "type": "string",
+     "const": "failure"
+    }
+   },
+   "type": "object",
+   "required": [
+    "response",
+    "type"
+   ]
+  },
+  "AgentMetadata": {
+   "properties": {
+    "agent_id": {
+     "type": "string"
+    },
+    "branch_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "workflow_node_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "version_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "agent_id"
+   ]
+  },
+  "AgentSuccessfulResponseExample": {
+   "properties": {
+    "response": {
+     "type": "string"
+    },
+    "type": {
+     "type": "string",
+     "const": "success"
+    }
+   },
+   "type": "object",
+   "required": [
+    "response",
+    "type"
+   ]
+  },
+  "ChatSourceMedium": {
+   "type": "string",
+   "enum": [
+    "audio",
+    "dtmf",
+    "text",
+    "image",
+    "file"
+   ]
+  },
+  "ConversationHistoryMultivoiceMessageModel": {
+   "properties": {
+    "parts": {
+     "items": {
+      "$ref": "#/components/schemas/ConversationHistoryMultivoiceMessagePartModel"
+     },
+     "type": "array"
+    }
+   },
+   "type": "object",
+   "required": [
+    "parts"
+   ]
+  },
+  "ConversationHistoryMultivoiceMessagePartModel": {
+   "properties": {
+    "text": {
+     "type": "string"
+    },
+    "voice_label": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "time_in_call_secs": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "text",
+    "voice_label",
+    "time_in_call_secs"
+   ]
+  },
+  "ConversationHistoryTranscriptApiIntegrationWebhookToolsResultCommonModel-Input": {
+   "properties": {
+    "request_id": {
+     "type": "string"
+    },
+    "tool_name": {
+     "type": "string"
+    },
+    "result_value": {
+     "type": "string"
+    },
+    "is_error": {
+     "type": "boolean"
+    },
+    "is_blocked": {
+     "type": "boolean",
+     "default": false
+    },
+    "tool_has_been_called": {
+     "type": "boolean"
+    },
+    "tool_latency_secs": {
+     "type": "number",
+     "default": 0
+    },
+    "error_type": {
+     "type": "string",
+     "default": ""
+    },
+    "raw_error_message": {
+     "type": "string",
+     "default": ""
+    },
+    "dynamic_variable_updates": {
+     "items": {
+      "$ref": "#/components/schemas/DynamicVariableUpdateCommonModel"
+     },
+     "type": "array"
+    },
+    "type": {
+     "type": "string",
+     "const": "api_integration_webhook"
+    },
+    "integration_id": {
+     "type": "string",
+     "default": ""
+    },
+    "credential_id": {
+     "type": "string",
+     "default": ""
+    },
+    "integration_connection_id": {
+     "type": "string",
+     "default": ""
+    }
+   },
+   "type": "object",
+   "required": [
+    "request_id",
+    "tool_name",
+    "result_value",
+    "is_error",
+    "tool_has_been_called",
+    "type"
+   ]
+  },
+  "ConversationHistoryTranscriptCommonModel-Input": {
+   "properties": {
+    "role": {
+     "type": "string",
+     "enum": [
+      "user",
+      "agent"
+     ]
+    },
+    "agent_metadata": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/AgentMetadata"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "message": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "multivoice_message": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ConversationHistoryMultivoiceMessageModel"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "tool_calls": {
+     "items": {
+      "$ref": "#/components/schemas/ConversationHistoryTranscriptToolCallCommonModel-Input"
+     },
+     "type": "array"
+    },
+    "tool_results": {
+     "items": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/ConversationHistoryTranscriptOtherToolsResultCommonModel"
+       },
+       {
+        "$ref": "#/components/schemas/ConversationHistoryTranscriptSystemToolResultCommonModel-Input"
+       },
+       {
+        "$ref": "#/components/schemas/ConversationHistoryTranscriptApiIntegrationWebhookToolsResultCommonModel-Input"
+       },
+       {
+        "$ref": "#/components/schemas/ConversationHistoryTranscriptWorkflowToolsResultCommonModel-Input"
+       }
+      ]
+     },
+     "type": "array"
+    },
+    "feedback": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/UserFeedback"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "llm_override": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "producing_llm": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "time_in_call_secs": {
+     "type": "integer"
+    },
+    "conversation_turn_metrics": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ConversationTurnMetrics"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "rag_retrieval_info": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/RagRetrievalInfo"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "llm_usage": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/LLMUsage-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "interrupted": {
+     "type": "boolean",
+     "default": false
+    },
+    "ignored_as_backchannel": {
+     "type": "boolean",
+     "default": false
+    },
+    "platform_event": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/TranscriptPlatformEvent"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "original_message": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "reasoning": {
+     "items": {
+      "$ref": "#/components/schemas/ConversationReasoningModel"
+     },
+     "type": "array"
+    },
+    "source_medium": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ChatSourceMedium"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "source_event_id": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "used_static_kb_document_ids": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "user_identifier": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "triggered_guardrails": {
+     "items": {
+      "$ref": "#/components/schemas/TriggeredGuardrailCommonModel"
+     },
+     "type": "array"
+    }
+   },
+   "type": "object",
+   "required": [
+    "role",
+    "time_in_call_secs"
+   ]
+  },
+  "ConversationHistoryTranscriptOtherToolsResultCommonModel": {
+   "properties": {
+    "request_id": {
+     "type": "string"
+    },
+    "tool_name": {
+     "type": "string"
+    },
+    "result_value": {
+     "type": "string"
+    },
+    "is_error": {
+     "type": "boolean"
+    },
+    "is_blocked": {
+     "type": "boolean",
+     "default": false
+    },
+    "tool_has_been_called": {
+     "type": "boolean"
+    },
+    "tool_latency_secs": {
+     "type": "number",
+     "default": 0
+    },
+    "error_type": {
+     "type": "string",
+     "default": ""
+    },
+    "raw_error_message": {
+     "type": "string",
+     "default": ""
+    },
+    "dynamic_variable_updates": {
+     "items": {
+      "$ref": "#/components/schemas/DynamicVariableUpdateCommonModel"
+     },
+     "type": "array"
+    },
+    "type": {
+     "anyOf": [
+      {
+       "type": "string",
+       "enum": [
+        "client",
+        "webhook",
+        "mcp",
+        "code"
+       ]
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "request_id",
+    "tool_name",
+    "result_value",
+    "is_error",
+    "tool_has_been_called"
+   ]
+  },
+  "ConversationHistoryTranscriptSystemToolResultCommonModel-Input": {
+   "properties": {
+    "request_id": {
+     "type": "string"
+    },
+    "tool_name": {
+     "type": "string"
+    },
+    "result_value": {
+     "type": "string"
+    },
+    "is_error": {
+     "type": "boolean"
+    },
+    "is_blocked": {
+     "type": "boolean",
+     "default": false
+    },
+    "tool_has_been_called": {
+     "type": "boolean"
+    },
+    "tool_latency_secs": {
+     "type": "number",
+     "default": 0
+    },
+    "error_type": {
+     "type": "string",
+     "default": ""
+    },
+    "raw_error_message": {
+     "type": "string",
+     "default": ""
+    },
+    "dynamic_variable_updates": {
+     "items": {
+      "$ref": "#/components/schemas/DynamicVariableUpdateCommonModel"
+     },
+     "type": "array"
+    },
+    "type": {
+     "type": "string",
+     "const": "system"
+    },
+    "result": {
+     "anyOf": [
+      {
+       "oneOf": [
+        {
+         "$ref": "#/components/schemas/EndCallToolResultModel"
+        },
+        {
+         "$ref": "#/components/schemas/LanguageDetectionToolResultModel"
+        },
+        {
+         "$ref": "#/components/schemas/TransferToAgentToolResultSuccessModel-Input"
+        },
+        {
+         "$ref": "#/components/schemas/TransferToAgentToolResultErrorModel"
+        },
+        {
+         "$ref": "#/components/schemas/TransferToNumberResultTwilioSuccessModel"
+        },
+        {
+         "$ref": "#/components/schemas/TransferToNumberResultSipSuccessModel"
+        },
+        {
+         "$ref": "#/components/schemas/TransferToNumberResultExotelSuccessModel"
+        },
+        {
+         "$ref": "#/components/schemas/TransferToNumberResultAmazonConnectSuccessModel"
+        },
+        {
+         "$ref": "#/components/schemas/TransferToNumberResultErrorModel"
+        },
+        {
+         "$ref": "#/components/schemas/SkipTurnToolResponseModel"
+        },
+        {
+         "$ref": "#/components/schemas/PlayDTMFResultSuccessModel"
+        },
+        {
+         "$ref": "#/components/schemas/PlayDTMFResultErrorModel"
+        },
+        {
+         "$ref": "#/components/schemas/VoiceMailDetectionResultSuccessModel"
+        },
+        {
+         "$ref": "#/components/schemas/TestToolResultModel"
+        },
+        {
+         "$ref": "#/components/schemas/KnowledgeBaseRagToolResultModel"
+        },
+        {
+         "$ref": "#/components/schemas/KnowledgeBaseToolResultModel"
+        },
+        {
+         "$ref": "#/components/schemas/StartProcedureToolResultSuccessModel"
+        },
+        {
+         "$ref": "#/components/schemas/StartProcedureToolResultErrorModel"
+        },
+        {
+         "$ref": "#/components/schemas/EndProcedureToolResultSuccessModel"
+        },
+        {
+         "$ref": "#/components/schemas/EndProcedureToolResultErrorModel"
+        },
+        {
+         "$ref": "#/components/schemas/DummyToolResultModel"
+        }
+       ],
+       "discriminator": {}
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "request_id",
+    "tool_name",
+    "result_value",
+    "is_error",
+    "tool_has_been_called",
+    "type"
+   ]
+  },
+  "ConversationHistoryTranscriptToolCallApiIntegrationWebhookDetails-Input": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "api_integration_webhook",
+     "default": "api_integration_webhook"
+    },
+    "integration_id": {
+     "type": "string",
+     "default": ""
+    },
+    "credential_id": {
+     "type": "string",
+     "default": ""
+    },
+    "integration_connection_id": {
+     "type": "string",
+     "default": ""
+    },
+    "webhook_details": {
+     "$ref": "#/components/schemas/ConversationHistoryTranscriptToolCallWebhookDetails"
+    }
+   },
+   "type": "object",
+   "required": [
+    "webhook_details"
+   ]
+  },
+  "ConversationHistoryTranscriptToolCallClientDetails": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "client",
+     "default": "client"
+    },
+    "parameters": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "parameters"
+   ]
+  },
+  "ConversationHistoryTranscriptToolCallCommonModel-Input": {
+   "properties": {
+    "type": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ToolType"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "request_id": {
+     "type": "string"
+    },
+    "tool_name": {
+     "type": "string"
+    },
+    "params_as_json": {
+     "type": "string"
+    },
+    "tool_has_been_called": {
+     "type": "boolean"
+    },
+    "tool_details": {
+     "anyOf": [
+      {
+       "oneOf": [
+        {
+         "$ref": "#/components/schemas/ConversationHistoryTranscriptToolCallWebhookDetails"
+        },
+        {
+         "$ref": "#/components/schemas/ConversationHistoryTranscriptToolCallClientDetails"
+        },
+        {
+         "$ref": "#/components/schemas/ConversationHistoryTranscriptToolCallMCPDetails"
+        },
+        {
+         "$ref": "#/components/schemas/ConversationHistoryTranscriptToolCallApiIntegrationWebhookDetails-Input"
+        }
+       ],
+       "discriminator": {}
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "request_id",
+    "tool_name",
+    "params_as_json",
+    "tool_has_been_called"
+   ]
+  },
+  "ConversationHistoryTranscriptToolCallMCPDetails": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "mcp",
+     "default": "mcp"
+    },
+    "mcp_server_id": {
+     "type": "string"
+    },
+    "mcp_server_name": {
+     "type": "string"
+    },
+    "integration_type": {
+     "type": "string"
+    },
+    "parameters": {
+     "additionalProperties": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "approval_policy": {
+     "type": "string"
+    },
+    "requires_approval": {
+     "type": "boolean",
+     "default": false
+    },
+    "mcp_tool_name": {
+     "type": "string",
+     "default": ""
+    },
+    "mcp_tool_description": {
+     "type": "string",
+     "default": ""
+    }
+   },
+   "type": "object",
+   "required": [
+    "mcp_server_id",
+    "mcp_server_name",
+    "integration_type",
+    "approval_policy"
+   ]
+  },
+  "ConversationHistoryTranscriptToolCallWebhookDetails": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "webhook",
+     "default": "webhook"
+    },
+    "method": {
+     "type": "string"
+    },
+    "url": {
+     "type": "string"
+    },
+    "headers": {
+     "additionalProperties": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "path_params": {
+     "additionalProperties": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "query_params": {
+     "additionalProperties": {
+      "type": "string"
+     },
+     "type": "object"
+    },
+    "body": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "method",
+    "url"
+   ]
+  },
+  "ConversationHistoryTranscriptWorkflowToolsResultCommonModel-Input": {
+   "properties": {
+    "request_id": {
+     "type": "string"
+    },
+    "tool_name": {
+     "type": "string"
+    },
+    "result_value": {
+     "type": "string"
+    },
+    "is_error": {
+     "type": "boolean"
+    },
+    "is_blocked": {
+     "type": "boolean",
+     "default": false
+    },
+    "tool_has_been_called": {
+     "type": "boolean"
+    },
+    "tool_latency_secs": {
+     "type": "number",
+     "default": 0
+    },
+    "error_type": {
+     "type": "string",
+     "default": ""
+    },
+    "raw_error_message": {
+     "type": "string",
+     "default": ""
+    },
+    "dynamic_variable_updates": {
+     "items": {
+      "$ref": "#/components/schemas/DynamicVariableUpdateCommonModel"
+     },
+     "type": "array"
+    },
+    "type": {
+     "type": "string",
+     "const": "workflow"
+    },
+    "result": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/WorkflowToolResponseModel-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "request_id",
+    "tool_name",
+    "result_value",
+    "is_error",
+    "tool_has_been_called",
+    "type"
+   ]
+  },
+  "ConversationInitiationSource": {
+   "type": "string",
+   "enum": [
+    "unknown",
+    "android_sdk",
+    "node_js_sdk",
+    "react_native_sdk",
+    "react_sdk",
+    "js_sdk",
+    "python_sdk",
+    "widget",
+    "sip_trunk",
+    "twilio",
+    "exotel",
+    "genesys",
+    "avaya",
+    "audiocodes",
+    "swift_sdk",
+    "whatsapp",
+    "twilio_sms",
+    "flutter_sdk",
+    "zendesk_integration",
+    "slack_integration",
+    "telegram_integration",
+    "intercom_integration",
+    "freshdesk_integration",
+    "salesforce_integration",
+    "template_preview",
+    "genesys_bot_connector",
+    "subagent_tool"
+   ],
+   "default": "unknown"
+  },
+  "ConversationReasoningModel": {
+   "properties": {
+    "summary": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "provider_redact": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object"
+  },
+  "ConversationTurnMetrics": {
+   "properties": {
+    "metrics": {
+     "additionalProperties": {
+      "$ref": "#/components/schemas/MetricRecord"
+     },
+     "type": "object"
+    },
+    "convai_asr_provider": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "convai_tts_model": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "convai_tts_cascade": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "CreateResponseUnitTestRequest": {
+   "properties": {
+    "from_conversation_metadata": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/TestFromConversationMetadata-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "dynamic_variables": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "chat_history": {
+     "items": {
+      "$ref": "#/components/schemas/ConversationHistoryTranscriptCommonModel-Input"
+     },
+     "type": "array",
+     "maxItems": 200
+    },
+    "conversation_initiation_source": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ConversationInitiationSource"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "environment": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "type": {
+     "type": "string",
+     "const": "llm",
+     "default": "llm"
+    },
+    "success_condition": {
+     "type": "string",
+     "default": ""
+    },
+    "success_examples": {
+     "items": {
+      "$ref": "#/components/schemas/AgentSuccessfulResponseExample"
+     },
+     "type": "array",
+     "maxItems": 5
+    },
+    "failure_examples": {
+     "items": {
+      "$ref": "#/components/schemas/AgentFailureResponseExample"
+     },
+     "type": "array",
+     "maxItems": 5
+    },
+    "name": {
+     "type": "string"
+    },
+    "parent_folder_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "name"
+   ]
+  },
+  "CreateToolCallUnitTestRequest": {
+   "properties": {
+    "from_conversation_metadata": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/TestFromConversationMetadata-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "dynamic_variables": {
+     "additionalProperties": true,
+     "type": "object"
+    },
+    "chat_history": {
+     "items": {
+      "$ref": "#/components/schemas/ConversationHistoryTranscriptCommonModel-Input"
+     },
+     "type": "array",
+     "maxItems": 200
+    },
+    "conversation_initiation_source": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ConversationInitiationSource"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "environment": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "type": {
+     "type": "string",
+     "const": "tool",
+     "default": "tool"
+    },
+    "tool_call_parameters": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/UnitTestToolCallEvaluationModel-Input"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "check_any_tool_matches": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "name": {
+     "type": "string"
+    },
+    "parent_folder_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "name"
+   ]
+  },
+  "DummyToolResultModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "dummy",
+     "default": "dummy"
+    }
+   },
+   "type": "object"
+  },
+  "DynamicVariableUpdateCommonModel": {
+   "properties": {
+    "variable_name": {
+     "type": "string"
+    },
+    "old_value": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "new_value": {
+     "type": "string"
+    },
+    "updated_at": {
+     "type": "number"
+    },
+    "tool_name": {
+     "type": "string"
+    },
+    "tool_request_id": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "variable_name",
+    "old_value",
+    "new_value",
+    "updated_at",
+    "tool_name",
+    "tool_request_id"
+   ]
+  },
+  "EmbeddingModelEnum": {
+   "type": "string",
+   "enum": [
+    "e5_mistral_7b_instruct",
+    "multilingual_e5_large_instruct"
+   ],
+   "default": "e5_mistral_7b_instruct"
+  },
+  "EndCallToolResultModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "end_call_success",
+     "default": "end_call_success"
+    },
+    "status": {
+     "type": "string",
+     "const": "success",
+     "default": "success"
+    },
+    "reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "message": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "EndProcedureToolErrorStatus": {
+   "type": "string",
+   "enum": [
+    "not_found",
+    "invalid_id"
+   ]
+  },
+  "EndProcedureToolResultErrorModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "end_procedure_error",
+     "default": "end_procedure_error"
+    },
+    "status": {
+     "$ref": "#/components/schemas/EndProcedureToolErrorStatus"
+    },
+    "procedure_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "message": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "status",
+    "message"
+   ]
+  },
+  "EndProcedureToolResultSuccessModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "end_procedure_success",
+     "default": "end_procedure_success"
+    },
+    "status": {
+     "type": "string",
+     "const": "success",
+     "default": "success"
+    },
+    "procedure_id": {
+     "type": "string"
+    },
+    "procedure_name": {
+     "type": "string"
+    },
+    "message": {
+     "type": "string",
+     "default": ""
+    }
+   },
+   "type": "object",
+   "required": [
+    "procedure_id",
+    "procedure_name"
+   ]
+  },
+  "ExactParameterEvaluationStrategy": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "exact"
+    },
+    "expected_value": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "type",
+    "expected_value"
+   ]
+  },
+  "GuardrailType": {
+   "type": "string",
+   "enum": [
+    "custom",
+    "prompt_injection",
+    "self_harm_intent",
+    "violence_graphic",
+    "sexual",
+    "violence",
+    "harassment",
+    "sexual_minors",
+    "self_harm",
+    "self_harm_instructions",
+    "harassment_threatening",
+    "hate",
+    "hate_threatening",
+    "profanity",
+    "religion_or_politics",
+    "medical_and_legal",
+    "guardrail"
+   ]
+  },
+  "KnowledgeBaseRagChunkModel": {
+   "properties": {
+    "chunk_id": {
+     "type": "string"
+    },
+    "document_id": {
+     "type": "string"
+    },
+    "content": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "chunk_id",
+    "document_id",
+    "content"
+   ]
+  },
+  "KnowledgeBaseRagToolResultModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "knowledge_base_rag_success",
+     "default": "knowledge_base_rag_success"
+    },
+    "status": {
+     "$ref": "#/components/schemas/KnowledgeBaseRagToolStatus",
+     "default": "success"
+    },
+    "chunk_count": {
+     "type": "integer",
+     "default": 0
+    },
+    "message": {
+     "type": "string",
+     "default": "Referenced knowledge base."
+    },
+    "chunks": {
+     "items": {
+      "$ref": "#/components/schemas/KnowledgeBaseRagChunkModel"
+     },
+     "type": "array"
+    }
+   },
+   "type": "object"
+  },
+  "KnowledgeBaseRagToolStatus": {
+   "type": "string",
+   "enum": [
+    "success",
+    "no_documents",
+    "no_results"
+   ],
+   "default": "success"
+  },
+  "KnowledgeBaseToolResultModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "knowledge_base_success",
+     "default": "knowledge_base_success"
+    },
+    "status": {
+     "$ref": "#/components/schemas/KnowledgeBaseToolStatus",
+     "default": "success"
+    },
+    "chunk_count": {
+     "type": "integer",
+     "default": 0
+    },
+    "message": {
+     "type": "string",
+     "default": "Referenced knowledge base."
+    }
+   },
+   "type": "object"
+  },
+  "KnowledgeBaseToolStatus": {
+   "type": "string",
+   "enum": [
+    "success",
+    "no_matching_documents",
+    "no_results"
+   ],
+   "default": "success"
+  },
+  "LLMInputOutputTokensUsage": {
+   "properties": {
+    "input": {
+     "$ref": "#/components/schemas/LLMTokensCategoryUsage"
+    },
+    "input_cache_read": {
+     "$ref": "#/components/schemas/LLMTokensCategoryUsage"
+    },
+    "input_cache_write": {
+     "$ref": "#/components/schemas/LLMTokensCategoryUsage"
+    },
+    "output_total": {
+     "$ref": "#/components/schemas/LLMTokensCategoryUsage"
+    }
+   },
+   "type": "object"
+  },
+  "LLMParameterEvaluationStrategy": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "llm"
+    },
+    "description": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "type",
+    "description"
+   ]
+  },
+  "LLMTokensCategoryUsage": {
+   "properties": {
+    "tokens": {
+     "type": "integer",
+     "default": 0
+    },
+    "price": {
+     "type": "number",
+     "default": 0
+    }
+   },
+   "type": "object"
+  },
+  "LLMUsage-Input": {
+   "properties": {
+    "model_usage": {
+     "additionalProperties": {
+      "$ref": "#/components/schemas/LLMInputOutputTokensUsage"
+     },
+     "type": "object"
+    }
+   },
+   "type": "object"
+  },
+  "LanguageDetectionToolResultModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "language_detection_success",
+     "default": "language_detection_success"
+    },
+    "status": {
+     "type": "string",
+     "const": "success",
+     "default": "success"
+    },
+    "reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "language": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "MatchAnythingParameterEvaluationStrategy": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "anything"
+    }
+   },
+   "type": "object",
+   "required": [
+    "type"
+   ]
+  },
+  "MetricRecord": {
+   "properties": {
+    "elapsed_time": {
+     "type": "number"
+    }
+   },
+   "type": "object",
+   "required": [
+    "elapsed_time"
+   ]
+  },
+  "PlayDTMFResultErrorModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "play_dtmf_error",
+     "default": "play_dtmf_error"
+    },
+    "status": {
+     "type": "string",
+     "const": "error",
+     "default": "error"
+    },
+    "error": {
+     "type": "string"
+    },
+    "details": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "error"
+   ]
+  },
+  "PlayDTMFResultSuccessModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "play_dtmf_success",
+     "default": "play_dtmf_success"
+    },
+    "status": {
+     "type": "string",
+     "const": "success",
+     "default": "success"
+    },
+    "dtmf_tones": {
+     "type": "string"
+    },
+    "reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "dtmf_tones"
+   ]
+  },
+  "RagChunkMetadata": {
+   "properties": {
+    "document_id": {
+     "type": "string"
+    },
+    "chunk_id": {
+     "type": "string"
+    },
+    "vector_distance": {
+     "type": "number"
+    }
+   },
+   "type": "object",
+   "required": [
+    "document_id",
+    "chunk_id",
+    "vector_distance"
+   ]
+  },
+  "RagRetrievalInfo": {
+   "properties": {
+    "chunks": {
+     "items": {
+      "$ref": "#/components/schemas/RagChunkMetadata"
+     },
+     "type": "array"
+    },
+    "embedding_model": {
+     "$ref": "#/components/schemas/EmbeddingModelEnum"
+    },
+    "retrieval_query": {
+     "type": "string"
+    },
+    "rag_latency_secs": {
+     "type": "number"
+    },
+    "used_chunk_ids": {
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    }
+   },
+   "type": "object",
+   "required": [
+    "chunks",
+    "embedding_model",
+    "retrieval_query",
+    "rag_latency_secs"
+   ]
+  },
+  "ReferencedToolCommonModel": {
+   "properties": {
+    "id": {
+     "type": "string"
+    },
+    "type": {
+     "type": "string",
+     "enum": [
+      "system",
+      "webhook",
+      "client",
+      "workflow",
+      "api_integration_webhook",
+      "mcp",
+      "code"
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "id",
+    "type"
+   ]
+  },
+  "RegexParameterEvaluationStrategy": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "regex"
+    },
+    "pattern": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "type",
+    "pattern"
+   ]
+  },
+  "RunAgentTestsRequestModel": {
+   "properties": {
+    "tests": {
+     "items": {
+      "$ref": "#/components/schemas/SingleTestRunRequestModel"
+     },
+     "type": "array",
+     "maxItems": 5000,
+     "minItems": 1
+    },
+    "agent_config_override": {},
+    "branch_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "repeat_count": {
+     "type": "integer",
+     "maximum": 50,
+     "minimum": 1,
+     "default": 1
+    }
+   },
+   "type": "object",
+   "required": [
+    "tests"
+   ]
+  },
+  "SingleTestRunRequestModel": {
+   "properties": {
+    "test_id": {
+     "type": "string"
+    },
+    "workflow_node_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "root_folder_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "root_folder_name": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "test_id"
+   ]
+  },
+  "SkipTurnToolResponseModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "skip_turn_success",
+     "default": "skip_turn_success"
+    },
+    "status": {
+     "type": "string",
+     "const": "success",
+     "default": "success"
+    },
+    "reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "StartProcedureToolErrorStatus": {
+   "type": "string",
+   "enum": [
+    "not_found",
+    "invalid_name",
+    "already_active"
+   ]
+  },
+  "StartProcedureToolResultErrorModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "start_procedure_error",
+     "default": "start_procedure_error"
+    },
+    "status": {
+     "$ref": "#/components/schemas/StartProcedureToolErrorStatus"
+    },
+    "procedure_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "message": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "status",
+    "message"
+   ]
+  },
+  "StartProcedureToolResultSuccessModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "start_procedure_success",
+     "default": "start_procedure_success"
+    },
+    "status": {
+     "type": "string",
+     "const": "success",
+     "default": "success"
+    },
+    "procedure_id": {
+     "type": "string"
+    },
+    "procedure_name": {
+     "type": "string"
+    },
+    "procedure_entry_workflow_node": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "procedure_return_workflow_node": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "message": {
+     "type": "string",
+     "default": "Procedure is now started. Follow its instructions from the <active-procedures> section of your system prompt."
+    }
+   },
+   "type": "object",
+   "required": [
+    "procedure_id",
+    "procedure_name"
+   ]
+  },
+  "TestFromConversationMetadata-Input": {
+   "properties": {
+    "conversation_id": {
+     "type": "string"
+    },
+    "agent_id": {
+     "type": "string"
+    },
+    "branch_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "workflow_node_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "original_agent_reply": {
+     "items": {
+      "$ref": "#/components/schemas/ConversationHistoryTranscriptCommonModel-Input"
+     },
+     "type": "array",
+     "default": []
+    }
+   },
+   "type": "object",
+   "required": [
+    "conversation_id",
+    "agent_id"
+   ]
+  },
+  "TestToolResultModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "testing_tool_result",
+     "default": "testing_tool_result"
+    },
+    "status": {
+     "type": "string",
+     "const": "success",
+     "default": "success"
+    },
+    "reason": {
+     "type": "string",
+     "default": "Skipping tool call in test mode"
+    }
+   },
+   "type": "object"
+  },
+  "ToolType": {
+   "type": "string",
+   "enum": [
+    "system",
+    "webhook",
+    "client",
+    "mcp",
+    "workflow",
+    "api_integration_webhook",
+    "api_integration_mcp",
+    "smb"
+   ]
+  },
+  "TranscriptPlatformEvent": {
+   "type": "string",
+   "enum": [
+    "user_turn_timeout",
+    "skip_turn_wait_elapsed"
+   ]
+  },
+  "TransferBranchInfoConfigured": {
+   "properties": {
+    "branch_reason": {
+     "type": "string",
+     "const": "configured"
+    },
+    "branch_id": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "branch_reason",
+    "branch_id"
+   ]
+  },
+  "TransferBranchInfoDefaultingToMain": {
+   "properties": {
+    "branch_reason": {
+     "type": "string",
+     "const": "defaulting_to_main"
+    },
+    "branch_id": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "branch_reason",
+    "branch_id"
+   ]
+  },
+  "TransferBranchInfoTrafficSplit": {
+   "properties": {
+    "branch_reason": {
+     "type": "string",
+     "const": "traffic_split"
+    },
+    "branch_id": {
+     "type": "string"
+    },
+    "traffic_percentage": {
+     "type": "number"
+    }
+   },
+   "type": "object",
+   "required": [
+    "branch_reason",
+    "branch_id",
+    "traffic_percentage"
+   ]
+  },
+  "TransferToAgentToolResultErrorModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "transfer_to_agent_error",
+     "default": "transfer_to_agent_error"
+    },
+    "status": {
+     "type": "string",
+     "const": "error",
+     "default": "error"
+    },
+    "from_agent": {
+     "type": "string"
+    },
+    "error": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "from_agent",
+    "error"
+   ]
+  },
+  "TransferToAgentToolResultSuccessModel-Input": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "transfer_to_agent_success",
+     "default": "transfer_to_agent_success"
+    },
+    "status": {
+     "type": "string",
+     "const": "success",
+     "default": "success"
+    },
+    "from_agent": {
+     "type": "string"
+    },
+    "to_agent": {
+     "type": "string"
+    },
+    "to_node": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "condition": {
+     "type": "string"
+    },
+    "delay_ms": {
+     "type": "integer",
+     "default": 0
+    },
+    "transfer_message": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "enable_transferred_agent_first_message": {
+     "type": "boolean",
+     "default": false
+    },
+    "branch_info": {
+     "anyOf": [
+      {
+       "oneOf": [
+        {
+         "$ref": "#/components/schemas/TransferBranchInfoConfigured"
+        },
+        {
+         "$ref": "#/components/schemas/TransferBranchInfoTrafficSplit"
+        },
+        {
+         "$ref": "#/components/schemas/TransferBranchInfoDefaultingToMain"
+        }
+       ],
+       "discriminator": {}
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "preserve_client_tts_overrides": {
+     "type": "boolean",
+     "default": false
+    },
+    "preserve_voice_settings": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "type": "object",
+   "required": [
+    "from_agent",
+    "to_agent",
+    "condition"
+   ]
+  },
+  "TransferToNumberResultAmazonConnectSuccessModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "transfer_to_number_amazon_connect_success",
+     "default": "transfer_to_number_amazon_connect_success"
+    },
+    "status": {
+     "type": "string",
+     "const": "success",
+     "default": "success"
+    },
+    "reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "client_message": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "note": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "TransferToNumberResultErrorModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "transfer_to_number_error",
+     "default": "transfer_to_number_error"
+    },
+    "status": {
+     "type": "string",
+     "const": "error",
+     "default": "error"
+    },
+    "error": {
+     "type": "string"
+    },
+    "details": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "error"
+   ]
+  },
+  "TransferToNumberResultExotelSuccessModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "transfer_to_number_exotel_success",
+     "default": "transfer_to_number_exotel_success"
+    },
+    "status": {
+     "type": "string",
+     "const": "success",
+     "default": "success"
+    },
+    "transfer_number": {
+     "type": "string"
+    },
+    "reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "agent_message": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "note": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "transfer_number"
+   ]
+  },
+  "TransferToNumberResultSipSuccessModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "transfer_to_number_sip_success",
+     "default": "transfer_to_number_sip_success"
+    },
+    "status": {
+     "type": "string",
+     "const": "success",
+     "default": "success"
+    },
+    "transfer_number": {
+     "type": "string"
+    },
+    "reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "note": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "transfer_number"
+   ]
+  },
+  "TransferToNumberResultTwilioSuccessModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "transfer_to_number_twilio_success",
+     "default": "transfer_to_number_twilio_success"
+    },
+    "status": {
+     "type": "string",
+     "const": "success",
+     "default": "success"
+    },
+    "transfer_number": {
+     "type": "string"
+    },
+    "reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "client_message": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "agent_message": {
+     "type": "string"
+    },
+    "conference_name": {
+     "type": "string"
+    },
+    "post_dial_digits": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "note": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "transfer_number",
+    "agent_message",
+    "conference_name"
+   ]
+  },
+  "TriggeredGuardrailCommonModel": {
+   "properties": {
+    "guardrail_type": {
+     "$ref": "#/components/schemas/GuardrailType"
+    },
+    "guardrail_name": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "guardrail_type"
+   ]
+  },
+  "UnitTestToolCallEvaluationModel-Input": {
+   "properties": {
+    "parameters": {
+     "items": {
+      "$ref": "#/components/schemas/UnitTestToolCallParameter"
+     },
+     "type": "array"
+    },
+    "referenced_tool": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ReferencedToolCommonModel"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "verify_absence": {
+     "type": "boolean",
+     "default": false
+    },
+    "workflow_node_transition": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/UnitTestWorkflowNodeTransitionEvaluationNodeId"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "UnitTestToolCallParameter": {
+   "properties": {
+    "eval": {
+     "oneOf": [
+      {
+       "$ref": "#/components/schemas/LLMParameterEvaluationStrategy"
+      },
+      {
+       "$ref": "#/components/schemas/RegexParameterEvaluationStrategy"
+      },
+      {
+       "$ref": "#/components/schemas/ExactParameterEvaluationStrategy"
+      },
+      {
+       "$ref": "#/components/schemas/MatchAnythingParameterEvaluationStrategy"
+      }
+     ],
+     "discriminator": {}
+    },
+    "path": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "eval",
+    "path"
+   ]
+  },
+  "UnitTestWorkflowNodeTransitionEvaluationNodeId": {
+   "properties": {
+    "type": {
+     "type": "string",
+     "const": "node_id",
+     "default": "node_id"
+    },
+    "agent_id": {
+     "type": "string"
+    },
+    "target_node_id": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "agent_id",
+    "target_node_id"
+   ]
+  },
+  "UserFeedback": {
+   "properties": {
+    "score": {
+     "$ref": "#/components/schemas/UserFeedbackScore"
+    },
+    "time_in_call_secs": {
+     "type": "integer"
+    }
+   },
+   "type": "object",
+   "required": [
+    "score",
+    "time_in_call_secs"
+   ]
+  },
+  "UserFeedbackScore": {
+   "type": "string",
+   "enum": [
+    "like",
+    "dislike"
+   ]
+  },
+  "VoiceMailDetectionResultSuccessModel": {
+   "properties": {
+    "result_type": {
+     "type": "string",
+     "const": "voicemail_detection_success",
+     "default": "voicemail_detection_success"
+    },
+    "status": {
+     "type": "string",
+     "const": "success",
+     "default": "success"
+    },
+    "voicemail_message": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "reason": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object"
+  },
+  "WorkflowToolEdgeStepModel": {
+   "properties": {
+    "step_latency_secs": {
+     "type": "number"
+    },
+    "type": {
+     "type": "string",
+     "const": "edge",
+     "default": "edge"
+    },
+    "edge_id": {
+     "type": "string"
+    },
+    "target_node_id": {
+     "type": "string"
+    }
+   },
+   "type": "object",
+   "required": [
+    "step_latency_secs",
+    "edge_id",
+    "target_node_id"
+   ]
+  },
+  "WorkflowToolMaxIterationsExceededStepModel": {
+   "properties": {
+    "step_latency_secs": {
+     "type": "number"
+    },
+    "type": {
+     "type": "string",
+     "const": "max_iterations_exceeded",
+     "default": "max_iterations_exceeded"
+    },
+    "max_iterations": {
+     "type": "integer"
+    }
+   },
+   "type": "object",
+   "required": [
+    "step_latency_secs",
+    "max_iterations"
+   ]
+  },
+  "WorkflowToolNestedToolsStepModel-Input": {
+   "properties": {
+    "step_latency_secs": {
+     "type": "number"
+    },
+    "type": {
+     "type": "string",
+     "const": "nested_tools",
+     "default": "nested_tools"
+    },
+    "node_id": {
+     "type": "string"
+    },
+    "requests": {
+     "items": {
+      "$ref": "#/components/schemas/ConversationHistoryTranscriptToolCallCommonModel-Input"
+     },
+     "type": "array"
+    },
+    "results": {
+     "items": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/ConversationHistoryTranscriptOtherToolsResultCommonModel"
+       },
+       {
+        "$ref": "#/components/schemas/ConversationHistoryTranscriptSystemToolResultCommonModel-Input"
+       },
+       {
+        "$ref": "#/components/schemas/ConversationHistoryTranscriptApiIntegrationWebhookToolsResultCommonModel-Input"
+       },
+       {
+        "$ref": "#/components/schemas/ConversationHistoryTranscriptWorkflowToolsResultCommonModel-Input"
+       }
+      ]
+     },
+     "type": "array"
+    },
+    "is_successful": {
+     "type": "boolean"
+    }
+   },
+   "type": "object",
+   "required": [
+    "step_latency_secs",
+    "node_id",
+    "requests",
+    "results",
+    "is_successful"
+   ]
+  },
+  "WorkflowToolResponseModel-Input": {
+   "properties": {
+    "steps": {
+     "items": {
+      "oneOf": [
+       {
+        "$ref": "#/components/schemas/WorkflowToolEdgeStepModel"
+       },
+       {
+        "$ref": "#/components/schemas/WorkflowToolNestedToolsStepModel-Input"
+       },
+       {
+        "$ref": "#/components/schemas/WorkflowToolMaxIterationsExceededStepModel"
+       }
+      ],
+      "discriminator": {}
+     },
+     "type": "array"
+    }
+   },
+   "type": "object"
+  }
+ }
+}

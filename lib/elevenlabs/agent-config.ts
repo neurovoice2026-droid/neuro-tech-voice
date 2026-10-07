@@ -46,7 +46,7 @@ import { initiationWebhookBlock } from './api/telephony'
  * `config_rollout` then re-syncs them in batches (lib/voice-providers/config-rollout.ts).
  * Bump it whenever this builder changes what existing agents should receive.
  */
-export const PLATFORM_AGENT_CONFIG_VERSION = 4
+export const PLATFORM_AGENT_CONFIG_VERSION = 5
 
 export interface PlatformResources {
   /** Workspace webhook tool used for human transfer on app-routed calls. */
@@ -299,7 +299,9 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
         agent: { first_message: true },
         // Per-call cap set server-side: the plan minutes left on a trial, or a
         // short "unavailable" call. Never prompt, LLM, tools or voice.
-        conversation: { max_duration_seconds: true },
+        // text_only: the owner's "Chat with your agent" browser test (slice G);
+        // sessions need a token minted for the org's own agent (auth below).
+        conversation: { max_duration_seconds: true, text_only: true },
       },
       // Native inbound calls fetch their per-call variables from our webhook.
       enable_conversation_initiation_client_data_from_webhook: !!initiation,

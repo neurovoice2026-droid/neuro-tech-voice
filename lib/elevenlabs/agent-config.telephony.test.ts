@@ -49,7 +49,8 @@ describe('conversation initiation webhook', () => {
 
   it('never allows prompt, LLM, tool or voice overrides', () => {
     const allowed = at(build({ appRouted: false, hasNativeNumbers: true }), 'platform_settings.overrides.conversation_config_override')
-    expect(allowed).toEqual({ agent: { first_message: true }, conversation: { max_duration_seconds: true } })
+    // text_only: the owner's browser chat test (slice G); sessions need a server-minted token.
+    expect(allowed).toEqual({ agent: { first_message: true }, conversation: { max_duration_seconds: true, text_only: true } })
   })
 
   it('bumps the platform version so the rollout pushes it to existing agents', async () => {
