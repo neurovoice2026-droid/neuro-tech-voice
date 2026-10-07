@@ -313,6 +313,8 @@ export interface VoiceOption {
   previewUrl: string | null
   requiresProvisioning: boolean
   libraryRef: { publicOwnerId: string; voiceId: string } | null
+  /** A curated platform voice for the requested language. */
+  recommended?: boolean
 }
 
 // ─── ElevenLabs (legacy shape, kept for old callers) ──────────────────────────

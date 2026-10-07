@@ -1,18 +1,22 @@
 'use client'
 
-import { useState } from 'react'
-import { AlertCircle, Globe, Loader2, MicOff, RotateCw, Search, Sparkles, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { AlertCircle, Globe, Loader2, MicOff, RotateCw, Search, Sparkles, Wand2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { FlagIcon } from '@/components/shared/FlagIcon'
 import { VoiceCard } from '@/components/voice/VoiceCard'
+import { VoiceDesignDialog } from '@/components/voice/VoiceDesignDialog'
 import { AGENT_LANGUAGES } from '@/lib/agent-languages'
 import { cn } from '@/lib/utils'
 import { useAudioPreview, voicePreviewSource, type AudioPreview } from '@/hooks/useAudioPreview'
 import {
+  isAbortError,
   useVoiceCatalog,
   type VoiceCatalog,
   type VoiceCatalogSource,
@@ -29,21 +33,31 @@ export interface VoicePickerProps {
   layout: 'onboarding' | 'dashboard'
   /** Blocks selection (e.g. while a save is in flight); previews still work. */
   disabled?: boolean
+  /**
+   * Offers "Design a voice" (Voice Design) when given. `unavailableReason`
+   * disables it with an explanation (plan, custom-voice limit).
+   */
+  design?: { onSaved: (voice: VoiceOption) => void; unavailableReason?: string | null }
 }
 
 const ALL_LANGUAGES = 'all'
+const ALL = 'all'
 
 const GENDERS: ReadonlyArray<{ value: VoiceGenderFilter; label: string }> = [
   { value: 'all', label: 'All' },
   { value: 'female', label: 'Female' },
   { value: 'male', label: 'Male' },
+  { value: 'neutral', label: 'Neutral' },
 ]
+
+const AGES: Record<string, string> = { [ALL]: 'Any age', young: 'Young', middle_aged: 'Middle-aged', old: 'Older' }
+const SORTS: Record<string, string> = { cloned_by_count: 'Most used', trending: 'Trending', created_date: 'Newest' }
 
 const SOURCES: ReadonlyArray<{ value: VoiceCatalogSource; label: string; hint: string }> = [
   {
     value: 'workspace',
     label: 'Recommended & yours',
-    hint: 'Recommended voices plus the voices saved or cloned in your workspace.',
+    hint: 'Voices we recommend for your language, plus the voices saved, cloned or designed in your workspace.',
   },
   {
     value: 'library',
@@ -51,6 +65,32 @@ const SOURCES: ReadonlyArray<{ value: VoiceCatalogSource; label: string; hint: s
     hint: 'Thousands of community voices. A library voice is added to your workspace when you choose it.',
   },
 ]
+
+/** Library accents for one language (GET /api/voices/accents); empty while loading or unavailable. */
+function useAccents(language: string, enabled: boolean): { accents: Array<{ value: string; label: string }>; unavailable: boolean } {
+  const [state, setState] = useState<{ key: string | null; accents: Array<{ value: string; label: string }>; unavailable: boolean }>({
+    key: null,
+    accents: [],
+    unavailable: false,
+  })
+  useEffect(() => {
+    if (!enabled || language === ALL_LANGUAGES || state.key === language) return
+    const controller = new AbortController()
+    fetch(`/api/voices/accents?language=${encodeURIComponent(language)}`, { signal: controller.signal, headers: { Accept: 'application/json' } })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`accents ${res.status}`)
+        const data = (await res.json()) as { accents?: Array<{ value: string; label: string }> }
+        setState({ key: language, accents: Array.isArray(data.accents) ? data.accents : [], unavailable: false })
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted || isAbortError(err)) return
+        // The accent filter is optional: hide it rather than block the picker.
+        setState({ key: language, accents: [], unavailable: true })
+      })
+    return () => controller.abort()
+  }, [enabled, language, state.key])
+  return state.key === language ? { accents: state.accents, unavailable: state.unavailable } : { accents: [], unavailable: false }
+}
 
 function initialLanguage(defaultLanguage: string | undefined): string {
   const code = defaultLanguage?.toLowerCase().split(/[-_]/)[0]
@@ -76,27 +116,48 @@ function LanguageOption({ value }: { value: string }) {
   )
 }
 
-export function VoicePicker({ selectedVoiceId, onSelect, defaultLanguage, layout, disabled = false }: VoicePickerProps) {
+export function VoicePicker({ selectedVoiceId, onSelect, defaultLanguage, layout, disabled = false, design }: VoicePickerProps) {
   const [source, setSource] = useState<VoiceCatalogSource>('workspace')
   const [search, setSearch] = useState('')
-  const [language, setLanguage] = useState(() => initialLanguage(defaultLanguage))
+  const [language, setLanguageState] = useState(() => initialLanguage(defaultLanguage))
   const [gender, setGender] = useState<VoiceGenderFilter>('all')
+  // Library-only filters. Phone conversation voices are the default use case.
+  const [phoneVoicesOnly, setPhoneVoicesOnly] = useState(true)
+  const [accent, setAccent] = useState(ALL)
+  const [age, setAge] = useState(ALL)
+  const [studioQuality, setStudioQuality] = useState(false)
+  const [sort, setSort] = useState('cloned_by_count')
+  const [designOpen, setDesignOpen] = useState(false)
+
+  // An accent belongs to one language.
+  const setLanguage = (value: string) => {
+    setLanguageState(value)
+    setAccent(ALL)
+  }
 
   const filters = { search, language, gender }
+  const libraryFilters = { useCase: phoneVoicesOnly ? ('conversational' as const) : ('all' as const), accent, age, highQuality: studioQuality, sort }
   const workspace = useVoiceCatalog({ source: 'workspace', ...filters, enabled: source === 'workspace' })
-  const library = useVoiceCatalog({ source: 'library', ...filters, enabled: source === 'library' })
+  const library = useVoiceCatalog({ source: 'library', ...filters, library: libraryFilters, enabled: source === 'library' })
   const active = source === 'workspace' ? workspace : library
   const preview = useAudioPreview()
+  const accentOptions = useAccents(language, source === 'library')
 
   // Generated previews speak the agent's language — that is what callers will hear.
   const previewLanguage = defaultLanguage || (language !== ALL_LANGUAGES ? language : null)
 
-  const activeFilters = (language !== ALL_LANGUAGES ? 1 : 0) + (gender !== 'all' ? 1 : 0) + (search.trim() ? 1 : 0)
+  const libraryFilterCount =
+    source === 'library' ? (!phoneVoicesOnly ? 1 : 0) + (accent !== ALL ? 1 : 0) + (age !== ALL ? 1 : 0) + (studioQuality ? 1 : 0) : 0
+  const activeFilters = (language !== ALL_LANGUAGES ? 1 : 0) + (gender !== 'all' ? 1 : 0) + (search.trim() ? 1 : 0) + libraryFilterCount
   const clearFilters = () => {
     setSearch('')
     setLanguage(ALL_LANGUAGES)
     setGender('all')
+    setPhoneVoicesOnly(true)
+    setAge(ALL)
+    setStudioQuality(false)
   }
+  const accentItems: Record<string, string> = { [ALL]: 'Any accent', ...Object.fromEntries(accentOptions.accents.map((a) => [a.value, a.label])) }
 
   const changeSource = (value: unknown) => {
     const next: VoiceCatalogSource = value === 'library' ? 'library' : 'workspace'
@@ -121,13 +182,35 @@ export function VoicePicker({ selectedVoiceId, onSelect, defaultLanguage, layout
           onboarding && 'sticky top-[70px] z-10 -mx-1 rounded-2xl border bg-background/90 p-3 backdrop-blur-md',
         )}
       >
-        <TabsList className="w-full sm:w-fit" aria-label="Voice source">
-          {SOURCES.map((s) => (
-            <TabsTrigger key={s.value} value={s.value} className="px-3">
-              {s.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <TabsList className="w-full sm:w-fit" aria-label="Voice source">
+            {SOURCES.map((s) => (
+              <TabsTrigger key={s.value} value={s.value} className="px-3">
+                {s.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {design && (
+            <div className="flex flex-col items-start gap-1 sm:items-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setDesignOpen(true)}
+                disabled={!!design.unavailableReason}
+                aria-describedby={design.unavailableReason ? 'voice-design-unavailable' : undefined}
+                className="gap-1.5"
+              >
+                <Wand2 aria-hidden="true" /> Design a voice
+              </Button>
+              {design.unavailableReason && (
+                <p id="voice-design-unavailable" className="text-[11px] text-muted-foreground">
+                  {design.unavailableReason}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="flex flex-col gap-2 sm:flex-row">
           <div className="relative flex-1">
@@ -193,6 +276,61 @@ export function VoicePicker({ selectedVoiceId, onSelect, defaultLanguage, layout
           </div>
         </div>
 
+        {source === 'library' && (
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center" role="group" aria-label="Voice library filters">
+            <div className="flex items-center gap-2 rounded-lg border px-3 py-1.5">
+              <Switch id="voice-filter-phone" size="sm" checked={phoneVoicesOnly} onCheckedChange={(v) => setPhoneVoicesOnly(v)} />
+              <Label htmlFor="voice-filter-phone" className="cursor-pointer text-xs font-normal">
+                Phone conversation voices
+              </Label>
+            </div>
+            {language !== ALL_LANGUAGES && !accentOptions.unavailable && accentOptions.accents.length > 0 && (
+              <Select items={accentItems} value={accent} onValueChange={(v) => typeof v === 'string' && setAccent(v)}>
+                <SelectTrigger aria-label="Filter by accent" className="h-9 w-full sm:w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(accentItems).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Select items={AGES} value={age} onValueChange={(v) => typeof v === 'string' && setAge(v)}>
+              <SelectTrigger aria-label="Filter by age" className="h-9 w-full sm:w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(AGES).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex items-center gap-2 rounded-lg border px-3 py-1.5">
+              <Switch id="voice-filter-studio" size="sm" checked={studioQuality} onCheckedChange={(v) => setStudioQuality(v)} />
+              <Label htmlFor="voice-filter-studio" className="cursor-pointer text-xs font-normal">
+                Studio quality
+              </Label>
+            </div>
+            <Select items={SORTS} value={sort} onValueChange={(v) => typeof v === 'string' && setSort(v)}>
+              <SelectTrigger aria-label="Sort voices" className="h-9 w-full sm:w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(SORTS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         <div className="flex items-center justify-between gap-3 px-1">
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
             {busy && <Loader2 className="size-3 animate-spin" aria-hidden="true" />}
@@ -228,6 +366,18 @@ export function VoicePicker({ selectedVoiceId, onSelect, defaultLanguage, layout
           />
         </TabsContent>
       ))}
+
+      {design && (
+        <VoiceDesignDialog
+          open={designOpen}
+          onOpenChange={setDesignOpen}
+          language={previewLanguage}
+          onSaved={(voice) => {
+            changeSource('workspace')
+            design.onSaved(voice)
+          }}
+        />
+      )}
     </Tabs>
   )
 }

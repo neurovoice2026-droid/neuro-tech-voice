@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useEffectEvent, useState } from 'react'
-import { AlertCircle, Info, Loader2, Mic, Plus, RotateCw, Trash2, Volume2, Wand2 } from 'lucide-react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import { AlertCircle, AlertTriangle, Info, Loader2, Mic, Plus, RotateCw, Trash2, Volume2, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,7 +15,9 @@ import {
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { FallbackVoiceSelect } from '@/components/voice/FallbackVoiceSelect'
+import { PronunciationCard } from '@/components/voice/PronunciationCard'
 import { VoiceCloneDialog } from '@/components/voice/VoiceCloneDialog'
+import { useCustomVoiceLimits, useCurrentVoiceNotice } from '@/components/voice/useVoiceStatus'
 import { PreviewButton, voiceDisplayName, voiceLocaleLine } from '@/components/voice/VoiceCard'
 import { VoicePicker } from '@/components/voice/VoicePicker'
 import { VOICE_SYNC_COPY, VoiceSyncBadge } from '@/components/voice/VoiceSyncBadge'
@@ -56,7 +58,36 @@ export function TabVoice({ agent, onAgentUpdated, onUpdate, isSaving = false }: 
 
   const preview = useAudioPreview()
   const custom = useVoiceCatalog({ source: 'workspace', pageSize: 100 })
-  const customVoices = custom.voices.filter((v) => v.source === 'cloned')
+  const customVoices = custom.voices.filter((v) => v.source === 'cloned' || v.source === 'designed')
+  // Retirement / removal notice of the current voice, and what custom voices the plan allows.
+  const voiceNotice = useCurrentVoiceNotice(agent.voice_id)
+  const limits = useCustomVoiceLimits(customVoices.length)
+  const pickerRef = useRef<HTMLDivElement>(null)
+
+  // The status read records the provider's voice of an agent saved without one: reload the agent to show it.
+  const pinnedVoiceId = !agent.voice_id ? (voiceNotice?.voice_id ?? null) : null
+  const reloadAgent = useEffectEvent((next: Agent) => onAgentUpdated(next))
+  useEffect(() => {
+    if (!pinnedVoiceId) return
+    const controller = new AbortController()
+    fetch('/api/agent', { signal: controller.signal, cache: 'no-store', headers: { Accept: 'application/json' } })
+      .then(async (res) => {
+        if (!res.ok) return
+        const next = (await res.json()) as Agent | null
+        if (next?.voice_id) reloadAgent(next)
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted || isAbortError(err)) return
+        // Shown on the next visit; the voice itself is already recorded server-side.
+        toast.error('Could not refresh your agent', { description: errorMessage(err, 'Reload the page to see its voice.') })
+      })
+    return () => controller.abort()
+  }, [pinnedVoiceId])
+
+  function goToPicker() {
+    pickerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    pickerRef.current?.focus({ preventScroll: true })
+  }
 
   const syncStatus: VoiceSyncStatus = applying ? 'saving' : (agent.voice_sync_status ?? 'pending')
 
@@ -175,6 +206,19 @@ export function TabVoice({ agent, onAgentUpdated, onUpdate, isSaving = false }: 
   const currentName = agent.voice_name ?? 'Unknown voice'
   const busy = applying !== null
 
+  const noticeBanner = voiceNotice?.notice ? (
+    <div
+      role="status"
+      className="flex flex-col gap-3 rounded-lg border border-amber-300/60 bg-amber-50 p-3 sm:flex-row sm:items-center dark:border-amber-500/30 dark:bg-amber-500/10"
+    >
+      <AlertTriangle className="hidden size-4 shrink-0 text-amber-600 sm:block dark:text-amber-400" aria-hidden="true" />
+      <p className="min-w-0 flex-1 text-sm text-amber-900 dark:text-amber-200">{voiceNotice.notice.message}</p>
+      <Button variant="outline" size="sm" onClick={goToPicker} className="shrink-0">
+        Choose a new voice
+      </Button>
+    </div>
+  ) : null
+
   return (
     <div className="space-y-6">
       {/* Current voice */}
@@ -207,6 +251,8 @@ export function TabVoice({ agent, onAgentUpdated, onUpdate, isSaving = false }: 
                 </div>
               </div>
 
+              {noticeBanner}
+
               {syncStatus === 'failed' ? (
                 <div
                   role="alert"
@@ -230,16 +276,19 @@ export function TabVoice({ agent, onAgentUpdated, onUpdate, isSaving = false }: 
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Mic className="size-4" aria-hidden="true" />
-              No voice selected yet. Pick one below.
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Mic className="size-4" aria-hidden="true" />
+                No voice selected yet. Pick one below.
+              </div>
+              {noticeBanner}
             </div>
           )}
         </CardContent>
       </Card>
 
       {/* Picker */}
-      <Card>
+      <Card ref={pickerRef} tabIndex={-1} aria-label="Choose a voice" className="outline-none">
         <CardHeader>
           <CardTitle className="text-base">Choose a voice</CardTitle>
           <CardDescription>Preview voices, pick one, then confirm to apply it to your agent.</CardDescription>
@@ -251,6 +300,10 @@ export function TabVoice({ agent, onAgentUpdated, onUpdate, isSaving = false }: 
             selectedVoiceId={pendingVoice?.voiceId ?? agent.voice_id}
             onSelect={choose}
             disabled={busy}
+            design={{
+              unavailableReason: limits.unavailableReason,
+              onSaved: (voice) => setPendingVoice(voice.voiceId === agent.voice_id ? null : voice),
+            }}
           />
         </CardContent>
       </Card>
@@ -259,14 +312,28 @@ export function TabVoice({ agent, onAgentUpdated, onUpdate, isSaving = false }: 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Your custom voices</CardTitle>
-          <CardDescription>Voices cloned from your own recordings, with the speaker&apos;s consent.</CardDescription>
+          <CardDescription>
+            Voices cloned from your own recordings (with the speaker&apos;s consent) or designed from a description.
+          </CardDescription>
           <CardAction>
-            <Button variant="outline" size="sm" onClick={() => setCloneOpen(true)} className="gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCloneOpen(true)}
+              disabled={!!limits.unavailableReason}
+              aria-describedby={limits.unavailableReason ? 'custom-voices-unavailable' : undefined}
+              className="gap-1.5"
+            >
               <Plus aria-hidden="true" /> Clone a voice
             </Button>
           </CardAction>
         </CardHeader>
         <CardContent>
+          {limits.unavailableReason && (
+            <p id="custom-voices-unavailable" className="mb-3 text-xs text-muted-foreground">
+              {limits.unavailableReason}
+            </p>
+          )}
           {custom.error ? (
             <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
               <p className="min-w-0 flex-1 text-sm text-destructive">{custom.error}</p>
@@ -350,6 +417,8 @@ export function TabVoice({ agent, onAgentUpdated, onUpdate, isSaving = false }: 
       </Card>
 
       {onUpdate && <VoiceTuningCard agent={agent} onUpdate={onUpdate} isSaving={isSaving} />}
+
+      <PronunciationCard agent={agent} />
 
       {/* Provider fallback voice (Cartesia) */}
       <FallbackVoiceSelect agent={agent} onAgentUpdated={onAgentUpdated} />

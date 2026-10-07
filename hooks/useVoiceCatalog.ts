@@ -129,7 +129,21 @@ export function invalidateVoiceCatalog(source: VoiceCatalogSource = 'workspace')
 
 // ─── useVoiceCatalog ──────────────────────────────────────────────────────────
 
-export type VoiceGenderFilter = 'all' | 'female' | 'male'
+export type VoiceGenderFilter = 'all' | 'female' | 'male' | 'neutral'
+
+/** Voice Library-only filters (GET /api/voices?source=library). */
+export interface LibraryFilters {
+  /** 'conversational' (phone-ready voices, the default) or 'all'. */
+  useCase?: 'conversational' | 'all'
+  /** An accent value from GET /api/voices/accents, or 'all'. */
+  accent?: string
+  /** 'young' | 'middle_aged' | 'old' | 'all'. */
+  age?: string
+  /** Studio-quality voices only. */
+  highQuality?: boolean
+  /** cloned_by_count (default) | trending | created_date | usage_character_count_1y. */
+  sort?: string
+}
 
 export interface UseVoiceCatalogOptions {
   source: VoiceCatalogSource
@@ -138,6 +152,8 @@ export interface UseVoiceCatalogOptions {
   /** 'all' or an ISO 639-1 code. */
   language?: string
   gender?: VoiceGenderFilter
+  /** Applied to the library source only. */
+  library?: LibraryFilters
   pageSize?: number
   /** When false nothing is fetched (e.g. the tab is hidden); cached results stay. */
   enabled?: boolean
@@ -210,6 +226,7 @@ export function useVoiceCatalog({
   search = '',
   language = 'all',
   gender = 'all',
+  library,
   pageSize = 24,
   enabled = true,
 }: UseVoiceCatalogOptions): VoiceCatalog {
@@ -233,6 +250,13 @@ export function useVoiceCatalog({
   if (debouncedSearch) params.set('search', debouncedSearch)
   if (language && language !== 'all') params.set('language', language)
   if (gender !== 'all') params.set('gender', gender)
+  if (source === 'library' && library) {
+    if (library.useCase === 'all') params.set('use_case', 'all')
+    if (library.accent && library.accent !== 'all') params.set('accent', library.accent)
+    if (library.age && library.age !== 'all') params.set('age', library.age)
+    if (library.highQuality) params.set('high_quality', 'true')
+    if (library.sort && library.sort !== 'cloned_by_count') params.set('sort', library.sort)
+  }
   const baseUrl = `/api/voices?${params.toString()}`
   const key = `${baseUrl}#${version}#${reloadToken}`
 

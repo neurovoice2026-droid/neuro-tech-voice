@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { voiceDisplayName } from '@/components/voice/VoiceCard'
 import { ApiError, errorMessage, invalidateVoiceCatalog, parseApiError } from '@/hooks/useVoiceCatalog'
 import { cn, formatFileSize } from '@/lib/utils'
@@ -55,6 +56,8 @@ function withAudioType(file: File): File {
 
 const fileKey = (f: File) => `${f.name}:${f.size}:${f.lastModified}`
 
+const GENDER_ITEMS: Record<string, string> = { unset: 'Not specified', female: 'Female', male: 'Male', neutral: 'Neutral' }
+
 export interface VoiceCloneDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -74,12 +77,17 @@ export function VoiceCloneDialog({ open, onOpenChange, onCloned }: VoiceCloneDia
     rights: useId(),
     files: useId(),
     filesHint: useId(),
+    gender: useId(),
+    noise: useId(),
+    noiseHint: useId(),
   }
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState('')
   const [speakerName, setSpeakerName] = useState('')
   const [consent, setConsent] = useState(false)
   const [rights, setRights] = useState(false)
+  const [gender, setGender] = useState('unset')
+  const [noisy, setNoisy] = useState(false)
   const [files, setFiles] = useState<File[]>([])
   const [fileError, setFileError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -102,6 +110,8 @@ export function VoiceCloneDialog({ open, onOpenChange, onCloned }: VoiceCloneDia
     setSpeakerName('')
     setConsent(false)
     setRights(false)
+    setGender('unset')
+    setNoisy(false)
     setFiles([])
     setFileError(null)
     setSubmitError(null)
@@ -150,6 +160,8 @@ export function VoiceCloneDialog({ open, onOpenChange, onCloned }: VoiceCloneDia
       form.append('speaker_name', speakerName.trim())
       form.append('consent', 'true')
       form.append('rights_attestation', 'true')
+      if (gender !== 'unset') form.append('gender', gender)
+      if (noisy) form.append('remove_background_noise', 'true')
       for (const file of files) form.append('files', withAudioType(file), file.name)
 
       const res = await fetch('/api/voices/clone', { method: 'POST', body: form })
@@ -217,6 +229,22 @@ export function VoiceCloneDialog({ open, onOpenChange, onCloned }: VoiceCloneDia
             </div>
           </div>
 
+          <div className="space-y-1.5">
+            <Label id={ids.gender}>Voice gender (optional)</Label>
+            <Select items={GENDER_ITEMS} value={gender} onValueChange={(v) => typeof v === 'string' && setGender(v)} disabled={submitting}>
+              <SelectTrigger aria-labelledby={ids.gender} className="h-9 w-full sm:w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(GENDER_ITEMS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Recordings */}
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
@@ -256,6 +284,24 @@ export function VoiceCloneDialog({ open, onOpenChange, onCloned }: VoiceCloneDia
               1–3 recordings, 4 MB in total. About 1–2 minutes of clear speech from one person, with no music or
               background noise, gives the best result.
             </p>
+            <div className="flex items-start gap-2.5">
+              <Checkbox
+                id={ids.noise}
+                checked={noisy}
+                onCheckedChange={(v) => setNoisy(v)}
+                className="mt-0.5"
+                aria-describedby={ids.noiseHint}
+                disabled={submitting}
+              />
+              <div className="space-y-0.5">
+                <Label htmlFor={ids.noise} className="cursor-pointer text-sm font-normal">
+                  My recordings have background noise
+                </Label>
+                <p id={ids.noiseHint} className="text-xs text-muted-foreground">
+                  The noise is removed before cloning. Leave this off for clean recordings: it can make them sound worse.
+                </p>
+              </div>
+            </div>
 
             {files.length > 0 && (
               <ul className="space-y-1.5" aria-label="Selected recordings">

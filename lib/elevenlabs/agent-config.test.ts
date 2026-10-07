@@ -296,6 +296,7 @@ describe('buildElevenLabsAgentBody', () => {
         stability: 1,
         similarity_boost: 0,
         speed: 1.2,
+        pronunciation_dictionary_locators: [],
       })
       expect(at(build({ voiceTuning: { stability: null, similarity_boost: null, speed: 0.5 } }), 'conversation_config.tts.speed')).toBe(0.7)
     })
@@ -310,6 +311,7 @@ describe('buildElevenLabsAgentBody', () => {
         stability: 0.5,
         similarity_boost: 0.8,
         speed: 1,
+        pronunciation_dictionary_locators: [],
       })
     })
 

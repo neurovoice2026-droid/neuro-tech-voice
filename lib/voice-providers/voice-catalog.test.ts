@@ -25,9 +25,17 @@ class Q implements PromiseLike<{ data: unknown; error: { code: string; message: 
   ilike(c: string, p: string) { const n = p.replace(/%/g, '').toLowerCase(); this.filters.push((r) => String(r[c] ?? '').toLowerCase().includes(n)); return this }
   or(expr: string) {
     const parts = expr.split(',').map((p) => p.split('.'))
-    this.filters.push((r) => parts.some(([c, op, v]) => (op === 'is' && v === 'null' ? (r[c] ?? null) === null : op === 'eq' ? r[c] === v : false)))
+    this.filters.push((r) =>
+      parts.some(([c, op, v]) =>
+        op === 'is' && v === 'null' ? (r[c] ?? null) === null
+        : op === 'eq' ? r[c] === v
+        : op === 'cs' ? Array.isArray(r[c]) && (r[c] as unknown[]).includes(v.replace(/[{}]/g, ''))
+        : false,
+      ),
+    )
     return this
   }
+  contains(c: string, vs: unknown[]) { this.filters.push((r) => Array.isArray(r[c]) && vs.every((v) => (r[c] as unknown[]).includes(v))); return this }
   order() { return this }
   range(a: number, b: number) { this.rangeArgs = [a, b]; return this }
   limit(n: number) { this.limitN = n; return this }
@@ -86,12 +94,31 @@ const el = vi.hoisted(() => ({
   textToSpeech: vi.fn(),
 }))
 vi.mock('@/lib/elevenlabs/client', () => el)
+const elv = vi.hoisted(() => ({
+  searchLibrary: vi.fn(),
+  getVoiceQuota: vi.fn(async () => ({})),
+  getVoicesByIds: vi.fn(),
+  getVoiceDetail: vi.fn(),
+  listWorkspaceVoices: vi.fn(),
+  listAccents: vi.fn(),
+  designVoice: vi.fn(),
+  createVoiceFromPreview: vi.fn(),
+  LIBRARY_SORTS: ['created_date', 'usage_character_count_1y', 'trending', 'cloned_by_count'],
+  VOICE_DESIGN_MODELS: ['eleven_multilingual_ttv_v2', 'eleven_ttv_v3'],
+}))
+vi.mock('@/lib/elevenlabs/api/voices', () => elv)
+const hist = vi.hoisted(() => ({
+  listHistory: vi.fn(async (): Promise<{ history: Array<Record<string, unknown>>; has_more: boolean }> => ({ history: [], has_more: false })),
+  deleteHistoryItem: vi.fn(),
+}))
+vi.mock('@/lib/elevenlabs/api/history', () => hist)
 vi.mock('@/lib/cartesia/client', () => ({ isConfigured: () => true, voices: { list: vi.fn(), get: vi.fn(), previewAudio: vi.fn() } }))
 
 import { ProviderError } from '@/lib/voice-providers/errors'
 import { createLogger } from '@/lib/observability/logger'
 import { RequestError, rateLimitedError } from '@/lib/api/http'
 import * as vc from '@/lib/voice-providers/voice-catalog'
+import { resetVoiceQuotaCache } from '@/lib/voice-providers/voice-capacity'
 
 const ORG_A = '11111111-1111-4111-8111-111111111111'
 const ORG_B = '22222222-2222-4222-8222-222222222222'
@@ -104,9 +131,11 @@ const libVoice = (id: string, extra: Record<string, unknown> = {}) => ({ public_
 
 beforeEach(() => {
   db.tables = { provider_voices: [], audit_log: [], agents: [] }
-  for (const fn of [el.voices.get, el.voices.search, el.voices.delete, el.voices.addInstantClone, el.sharedVoices.list, el.sharedVoices.add, el.textToSpeech]) fn.mockReset()
+  for (const fn of [el.voices.get, el.voices.search, el.voices.delete, el.voices.addInstantClone, el.sharedVoices.list, el.sharedVoices.add, el.textToSpeech, elv.searchLibrary]) fn.mockReset()
   el.isConfigured.mockReturnValue(true)
   el.voices.search.mockResolvedValue({ voices: [premade, strayClone], has_more: false })
+  vc.resetZeroRetentionState()
+  resetVoiceQuotaCache()
 })
 
 describe('pure helpers', () => {
@@ -147,7 +176,7 @@ describe('pure helpers', () => {
 })
 
 describe('listVoices', () => {
-  it('workspace: own + platform rows and premade defaults only, paginated', async () => {
+  it('workspace: own + platform rows only (default voices are retired), paginated', async () => {
     db.tables.provider_voices.push(
       { id: 'r1', provider: 'elevenlabs', voice_id: 'OwnClone000000000001', source: 'cloned', owner_org_id: ORG_A, name: 'Mine', status: 'ready', language: 'en' },
       { id: 'r2', provider: 'elevenlabs', voice_id: 'OtherClone0000000001', source: 'cloned', owner_org_id: ORG_B, name: 'Theirs', status: 'ready', language: 'en' },
@@ -163,25 +192,44 @@ describe('listVoices', () => {
       token = page.next_page_token
       if (!token) break
     }
-    expect(ids.sort()).toEqual(['LibCopy0000000000001', 'OwnClone000000000001', 'PremadeVoice00000001'].sort())
-    expect(el.voices.search).toHaveBeenCalledWith(expect.objectContaining({ voice_type: 'default' }))
+    expect(ids.sort()).toEqual(['LibCopy0000000000001', 'OwnClone000000000001'].sort())
+    expect(el.voices.search).not.toHaveBeenCalled()
   })
 
-  it('workspace language filter uses verified languages for defaults', async () => {
+  it('workspace: multilingual and curated voices match the language; voices with a lifecycle notice are hidden', async () => {
+    db.tables.provider_voices.push(
+      { id: 'm1', provider: 'elevenlabs', voice_id: 'Multi000000000000001', source: 'library', owner_org_id: null, name: 'Multi', status: 'ready', language: 'en', languages: ['en', 'ro'] },
+      { id: 'm2', provider: 'elevenlabs', voice_id: 'Curated0000000000001', source: 'library', owner_org_id: null, name: 'Curated', status: 'ready', language: 'en', languages: ['en'], featured_languages: ['ro'], featured_rank: 1 },
+      { id: 'm3', provider: 'elevenlabs', voice_id: 'Retiring000000000001', source: 'library', owner_org_id: null, name: 'Retiring', status: 'ready', language: 'ro', languages: ['ro'], notice: 'removal_scheduled' },
+      { id: 'm4', provider: 'elevenlabs', voice_id: 'English0000000000001', source: 'library', owner_org_id: null, name: 'English', status: 'ready', language: 'en', languages: ['en'] },
+    )
     const page = await vc.listVoices(ORG_A, { source: 'workspace', language: 'ro' })
-    const ada = page.voices.find((v) => v.voiceId === premade.voice_id)
-    expect(ada).toMatchObject({ language: 'ro', accent: 'romanian', previewUrl: 'https://cdn.example/ada-ro.mp3', source: 'premade' })
+    expect(page.voices.map((v) => v.voiceId).sort()).toEqual(['Curated0000000000001', 'Multi000000000000001'])
+    expect(page.voices.find((v) => v.voiceId === 'Multi000000000000001')).toMatchObject({ language: 'ro' })
+    expect(page.voices.find((v) => v.voiceId === 'Curated0000000000001')).toMatchObject({ recommended: true })
+    expect(page.voices.find((v) => v.voiceId === 'Multi000000000000001')?.recommended).toBeUndefined()
   })
 
-  it('library: filters unusable voices, marks provisioned ones', async () => {
+  it('library: conversational voices by default, filters unusable voices, ranks the language first, marks provisioned ones', async () => {
     db.tables.provider_voices.push({ id: 'r9', provider: 'elevenlabs', voice_id: 'WsCopy00000000000001', source: 'library', source_public_owner_id: owner, source_voice_id: 'LibA0000000000000001', owner_org_id: null, status: 'ready' })
-    el.sharedVoices.list.mockResolvedValue({ voices: [libVoice('LibA0000000000000001'), libVoice('LibB0000000000000001'), libVoice('LibC0000000000000001', { live_moderation_enabled: true }), libVoice('LibD0000000000000001', { fiat_rate: 0.3 })], has_more: true })
-    const page = await vc.listVoices(ORG_A, { source: 'library', language: 'ro', gender: 'male', search: 'x%_*,()' })
-    expect(el.sharedVoices.list).toHaveBeenCalledWith(expect.objectContaining({ page: 0, language: 'ro', gender: 'male', min_notice_period_days: 30, search: 'x' }))
-    expect(page.voices.map((v) => [v.voiceId, v.requiresProvisioning])).toEqual([['WsCopy00000000000001', false], ['LibB0000000000000001', true]])
-    expect(page.voices[1].libraryRef).toEqual({ publicOwnerId: owner, voiceId: 'LibB0000000000000001' })
-    const next = await vc.listVoices(ORG_A, { source: 'library', pageToken: page.next_page_token })
-    expect(el.sharedVoices.list).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1 }))
+    elv.searchLibrary.mockResolvedValue({
+      voices: [
+        libVoice('LibA0000000000000001'),
+        libVoice('LibB0000000000000001', { verified_languages: [{ language: 'ro', model_id: 'eleven_flash_v2_5' }] }),
+        libVoice('LibC0000000000000001', { live_moderation_enabled: true }),
+        libVoice('LibD0000000000000001', { fiat_rate: 0.3 }),
+      ],
+      has_more: true,
+    })
+    const page = await vc.listVoices(ORG_A, { source: 'library', language: 'ro', gender: 'male', search: 'x%_*,()', accent: 'Romanian', age: 'young', highQuality: true, sort: 'trending' })
+    expect(elv.searchLibrary).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 0, language: 'ro', gender: 'male', min_notice_period_days: 30, search: 'x', use_cases: ['conversational'], accent: 'romanian', age: 'young', category: 'high_quality', sort: 'trending' }),
+    )
+    // LibB is verified for Romanian with the agent's model: ranked first.
+    expect(page.voices.map((v) => [v.voiceId, v.requiresProvisioning])).toEqual([['LibB0000000000000001', true], ['WsCopy00000000000001', false]])
+    expect(page.voices[0].libraryRef).toEqual({ publicOwnerId: owner, voiceId: 'LibB0000000000000001' })
+    const next = await vc.listVoices(ORG_A, { source: 'library', pageToken: page.next_page_token, useCase: 'all' })
+    expect(elv.searchLibrary).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, use_cases: undefined }))
     expect(next.voices).toBeDefined()
   })
 
@@ -201,9 +249,21 @@ describe('assertVoiceEligible', () => {
     el.voices.get.mockRejectedValueOnce(new ProviderError({ system: 'elevenlabs', operation: 'voices.get', code: 'not_found' }))
     await expect(vc.assertVoiceEligible(ORG_A, { voiceId: 'Missing0000000000001' })).rejects.toMatchObject({ status: 403 })
   })
-  it('accepts premade, own clones and library voices (validated by owner lookup)', async () => {
+  it('refuses default (premade) voices as a new pick, keeps them for the agent already on one', async () => {
     el.voices.get.mockResolvedValueOnce(premade)
-    await expect(vc.assertVoiceEligible(ORG_A, { voiceId: premade.voice_id })).resolves.toMatchObject({ kind: 'default' })
+    await expect(vc.assertVoiceEligible(ORG_A, { voiceId: premade.voice_id })).rejects.toMatchObject({ status: 403, details: { reason: 'voice_retiring' } })
+    el.voices.get.mockResolvedValueOnce(premade)
+    await expect(vc.assertVoiceEligible(ORG_A, { voiceId: premade.voice_id, currentVoiceId: 'SomethingElse0000001' })).rejects.toMatchObject({ status: 403 })
+    el.voices.get.mockResolvedValueOnce(premade)
+    await expect(vc.assertVoiceEligible(ORG_A, { voiceId: premade.voice_id, currentVoiceId: premade.voice_id })).resolves.toMatchObject({ kind: 'default' })
+  })
+  it('refuses registry voices with a lifecycle notice as a new pick only', async () => {
+    db.tables.provider_voices.push({ id: 'n1', provider: 'elevenlabs', voice_id: 'Noticed0000000000001', source: 'library', source_public_owner_id: owner, source_voice_id: 'NoticedLib0000000001', owner_org_id: null, status: 'ready', notice: 'removal_scheduled' })
+    await expect(vc.assertVoiceEligible(ORG_A, { voiceId: 'Noticed0000000000001' })).rejects.toMatchObject({ status: 403, details: { reason: 'voice_retiring' } })
+    await expect(vc.assertVoiceEligible(ORG_A, { voiceId: 'Noticed0000000000001', libraryRef: { publicOwnerId: owner, voiceId: 'NoticedLib0000000001' } })).rejects.toMatchObject({ status: 403 })
+    await expect(vc.assertVoiceEligible(ORG_A, { voiceId: 'Noticed0000000000001', currentVoiceId: 'Noticed0000000000001' })).resolves.toMatchObject({ kind: 'registry' })
+  })
+  it('accepts own clones and library voices (validated by owner lookup)', async () => {
     db.tables.provider_voices.push({ id: 'r1', provider: 'elevenlabs', voice_id: 'OwnClone000000000001', source: 'cloned', owner_org_id: ORG_A, status: 'ready' })
     await expect(vc.assertVoiceEligible(ORG_A, { voiceId: 'OwnClone000000000001' })).resolves.toMatchObject({ kind: 'registry' })
     el.sharedVoices.list.mockResolvedValue({ voices: [libVoice('LibE0000000000000001')], has_more: false })
@@ -248,19 +308,54 @@ describe('provisionLibraryVoice', () => {
 })
 
 describe('synthesizePreview', () => {
-  it('409 for unprovisioned library voices, TTS for eligible ones', async () => {
+  it('409 for unprovisioned library voices; the current (even retiring) voice is spoken like a call', async () => {
     await expect(vc.synthesizePreview({ orgId: ORG_A, voiceId: 'LibZ0000000000000001', libraryRef: { publicOwnerId: owner, voiceId: 'LibZ0000000000000001' }, text: 'hi', language: 'en' })).rejects.toBeInstanceOf(vc.VoiceNotProvisionedError)
     expect(el.sharedVoices.list).not.toHaveBeenCalled()
-    el.voices.get.mockResolvedValueOnce(premade)
     el.textToSpeech.mockResolvedValueOnce(new ArrayBuffer(4))
-    await vc.synthesizePreview({ orgId: ORG_A, voiceId: premade.voice_id, libraryRef: null, text: 'x'.repeat(500), language: 'ro' })
-    const [vid, text, model, lang] = el.textToSpeech.mock.calls[0]
+    await vc.synthesizePreview({
+      orgId: ORG_A,
+      voiceId: premade.voice_id,
+      libraryRef: null,
+      text: 'x'.repeat(500),
+      language: 'ro',
+      currentAgentVoiceId: premade.voice_id,
+      sound: { tuning: { stability: 0.3, similarity_boost: null, speed: 2 }, pronunciation: { dictionaryId: 'dict_abc123', versionId: 'ver_abc123' } },
+    })
+    const [vid, text, model, lang, opts] = el.textToSpeech.mock.calls[0]
     expect([vid, text.length, model, lang]).toEqual([premade.voice_id, 200, 'eleven_flash_v2_5', 'ro'])
-    el.voices.get.mockResolvedValueOnce(premade)
+    expect(opts).toEqual({
+      voiceSettings: { stability: 0.3, similarity_boost: 0.8, speed: 1.2 },
+      pronunciationLocators: [{ pronunciation_dictionary_id: 'dict_abc123', version_id: 'ver_abc123' }],
+      outputFormat: 'mp3_22050_32',
+      enableLogging: false,
+    })
+  })
+  it('own clone with default tuning; a premade voice that is not the current one is refused', async () => {
+    db.tables.provider_voices.push({ id: 'c1', provider: 'elevenlabs', voice_id: 'OwnClone000000000001', source: 'cloned', owner_org_id: ORG_A, status: 'ready' })
     el.textToSpeech.mockResolvedValueOnce(new ArrayBuffer(4))
-    await vc.synthesizePreview({ orgId: ORG_A, voiceId: premade.voice_id, libraryRef: null, text: '  ', language: 'en' })
-    expect(el.textToSpeech.mock.calls[1][1]).toMatch(/^Hello!/)
-    expect(el.textToSpeech.mock.calls[1][2]).toBe('eleven_flash_v2')
+    await vc.synthesizePreview({ orgId: ORG_A, voiceId: 'OwnClone000000000001', libraryRef: null, text: '  ', language: 'en', sound: { phoneQuality: true } })
+    expect(el.textToSpeech.mock.calls[0][1]).toMatch(/^Hello!/)
+    expect(el.textToSpeech.mock.calls[0][2]).toBe('eleven_flash_v2')
+    expect(el.textToSpeech.mock.calls[0][4]).toMatchObject({ voiceSettings: { stability: 0.5, similarity_boost: 0.8, speed: 1 }, pronunciationLocators: [], outputFormat: 'wav_8000' })
+    el.voices.get.mockResolvedValueOnce(premade)
+    await expect(vc.synthesizePreview({ orgId: ORG_A, voiceId: premade.voice_id, libraryRef: null, text: 'x', language: 'en', currentAgentVoiceId: 'OwnClone000000000001' })).rejects.toMatchObject({ status: 403 })
+  })
+  it('falls back to a logged request once when zero retention is refused (non-enterprise)', async () => {
+    db.tables.provider_voices.push({ id: 'c2', provider: 'elevenlabs', voice_id: 'OwnClone000000000002', source: 'cloned', owner_org_id: ORG_A, status: 'ready' })
+    el.textToSpeech
+      .mockRejectedValueOnce(new ProviderError({ system: 'elevenlabs', operation: 'tts.convert', code: 'auth', status: 403, detail: 'zero_retention_mode_not_allowed - enterprise only' }))
+      .mockResolvedValue(new ArrayBuffer(4))
+    await vc.synthesizePreview({ orgId: ORG_A, voiceId: 'OwnClone000000000002', libraryRef: null, text: 'hi', language: 'en' })
+    expect(el.textToSpeech).toHaveBeenCalledTimes(2)
+    expect(el.textToSpeech.mock.calls[0][4]).toMatchObject({ enableLogging: false })
+    expect(el.textToSpeech.mock.calls[1][4].enableLogging).toBeUndefined()
+    // Later previews skip zero retention on this instance.
+    await vc.synthesizePreview({ orgId: ORG_A, voiceId: 'OwnClone000000000002', libraryRef: null, text: 'hi', language: 'en' })
+    expect(el.textToSpeech).toHaveBeenCalledTimes(3)
+    // Other provider errors are not swallowed.
+    vc.resetZeroRetentionState()
+    el.textToSpeech.mockRejectedValueOnce(new ProviderError({ system: 'elevenlabs', operation: 'tts.convert', code: 'auth', status: 401, detail: 'invalid_api_key' }))
+    await expect(vc.synthesizePreview({ orgId: ORG_A, voiceId: 'OwnClone000000000002', libraryRef: null, text: 'hi', language: 'en' })).rejects.toMatchObject({ code: 'auth' })
   })
 })
 
@@ -335,6 +430,69 @@ describe('clones', () => {
     el.voices.delete.mockResolvedValueOnce(undefined)
     expect(await vc.purgeRejectedClones(5, log)).toEqual({ purged: 1, failed: 0 })
     expect(db.tables.provider_voices[0]).toMatchObject({ status: 'deleted' })
+  })
+})
+
+describe('slice F: provisioning, custom voices, capacity', () => {
+  it('reuses the existing workspace copy when the provider answers "already exists" with 400/422', async () => {
+    const lib = libVoice('LibK0000000000000001')
+    el.sharedVoices.add.mockRejectedValue(new ProviderError({ system: 'elevenlabs', operation: 'shared_voices.add', code: 'validation', status: 400, detail: 'voice_already_exists - You already have this voice' }))
+    el.voices.search.mockResolvedValue({ voices: [{ voice_id: 'OldCopyK000000000001', name: 'x', category: 'professional', sharing: { original_voice_id: lib.voice_id, public_owner_id: owner, status: 'copied' } }], has_more: false })
+    const r = await vc.provisionLibraryVoice({ orgId: ORG_A, userId: 'u1', libraryRef: { publicOwnerId: owner, voiceId: lib.voice_id }, libraryVoice: lib, log })
+    expect(r.voiceId).toBe('OldCopyK000000000001')
+    expect(vc.isAlreadyAddedError(new ProviderError({ system: 'elevenlabs', operation: 'shared_voices.add', code: 'validation', status: 422, detail: 'body.new_name: field required' }))).toBe(false)
+  })
+
+  it('platform rows keep no tenant user id, store every verified language, and the actor stays in the audit log', async () => {
+    const lib = libVoice('LibL0000000000000001', { language: 'en', verified_languages: [{ language: 'en' }, { language: 'ro', model_id: 'eleven_flash_v2_5' }] })
+    el.sharedVoices.add.mockResolvedValue({ voice_id: 'WsCopyL0000000000001' })
+    await vc.provisionLibraryVoice({ orgId: ORG_A, userId: 'u1', libraryRef: { publicOwnerId: owner, voiceId: lib.voice_id }, libraryVoice: lib, log })
+    expect(db.tables.provider_voices[0]).toMatchObject({ owner_org_id: null, created_by: null, language: 'en', languages: ['en', 'ro'] })
+    expect(db.tables.audit_log[0]).toMatchObject({ org_id: ORG_A, actor_user_id: 'u1', action: 'voice.library.provisioned' })
+  })
+
+  it('a deleted/failed registry row reuses a still-usable workspace copy instead of adding a new one', async () => {
+    const lib = libVoice('LibM0000000000000001')
+    db.tables.provider_voices.push({ id: 'old', provider: 'elevenlabs', voice_id: 'OldCopyM000000000001', source: 'library', source_voice_id: lib.voice_id, source_public_owner_id: owner, owner_org_id: null, status: 'deleted' })
+    el.voices.search.mockResolvedValue({ voices: [{ voice_id: 'OldCopyM000000000001', name: 'x', category: 'professional', sharing: { original_voice_id: lib.voice_id, status: 'copied' } }], has_more: false })
+    const r = await vc.provisionLibraryVoice({ orgId: ORG_A, userId: 'u1', libraryRef: { publicOwnerId: owner, voiceId: lib.voice_id }, libraryVoice: lib, log })
+    expect(r).toEqual({ voiceId: 'OldCopyM000000000001', provisioned: true })
+    expect(el.sharedVoices.add).not.toHaveBeenCalled()
+    expect(db.tables.provider_voices[0]).toMatchObject({ status: 'ready' })
+  })
+
+  it('a full workspace (add/edit limit) answers 503 voice_capacity without calling the provider', async () => {
+    elv.getVoiceQuota.mockResolvedValueOnce({ voice_add_edit_counter: 10, max_voice_add_edits: 10 })
+    const lib = libVoice('LibN0000000000000001')
+    const err = await vc.provisionLibraryVoice({ orgId: ORG_A, userId: 'u1', libraryRef: { publicOwnerId: owner, voiceId: lib.voice_id }, libraryVoice: lib, log }).catch((e: unknown) => e)
+    expect(el.sharedVoices.add).not.toHaveBeenCalled()
+    const res = vc.voiceErrorResponse(err, log, 'e', 'rid')
+    expect(res.status).toBe(503)
+    expect(await res.json()).toMatchObject({ code: 'voice_capacity' })
+  })
+
+  it('deletes a designed voice like a clone and purges its previews from the speech history', async () => {
+    db.tables.provider_voices.push({ id: 'd1', provider: 'elevenlabs', voice_id: 'Designed000000000001', source: 'designed', owner_org_id: ORG_A, status: 'ready' })
+    el.voices.delete.mockResolvedValue({ status: 'ok' })
+    hist.listHistory.mockResolvedValueOnce({ history: [{ history_item_id: 'h1', voice_id: 'Designed000000000001', date_unix: 1, state: 'created' }], has_more: false })
+    hist.deleteHistoryItem.mockResolvedValue({ status: 'ok' })
+    await vc.deleteOrgClone({ orgId: ORG_A, userId: 'u1', voiceId: 'Designed000000000001', log })
+    expect(db.tables.provider_voices[0]).toMatchObject({ status: 'deleted' })
+    expect(hist.deleteHistoryItem).toHaveBeenCalledWith('h1')
+    expect(db.tables.audit_log.map((a) => a.action)).toContain('voice.design.deleted')
+  })
+
+  it('a clone created over the per-org cap by a concurrent request is undone (409)', async () => {
+    db.tables.provider_voices.push(
+      { id: 'c1', provider: 'elevenlabs', voice_id: 'Existing000000000001', source: 'cloned', owner_org_id: ORG_A, status: 'ready', created_at: '2026-01-01T00:00:00Z' },
+      { id: 'c2', provider: 'elevenlabs', voice_id: 'Existing000000000002', source: 'designed', owner_org_id: ORG_A, status: 'ready', created_at: '2026-01-02T00:00:00Z' },
+    )
+    el.voices.addInstantClone.mockResolvedValue({ voice_id: 'Racing00000000000001', requires_verification: false })
+    el.voices.delete.mockResolvedValue({ status: 'ok' })
+    const sample = { file: new Blob([new Uint8Array(2048)]), kind: 'wav' as const, mime: 'audio/wav' }
+    await expect(vc.createInstantClone({ orgId: ORG_A, userId: 'u1', name: 'n', speakerName: 's', language: 'ro', samples: [sample], ipHash: null, log, gender: 'male' })).rejects.toMatchObject({ status: 409 })
+    expect(el.voices.delete).toHaveBeenCalledWith('Racing00000000000001', { orgId: ORG_A })
+    expect(db.tables.provider_voices.find((r) => r.voice_id === 'Racing00000000000001')).toMatchObject({ status: 'deleted' })
   })
 })
 

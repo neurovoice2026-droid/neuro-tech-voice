@@ -164,6 +164,10 @@ export interface AgentSpec {
   languagePresetGreetings: Record<string, string>
   voiceId: string | null
   voiceTuning: VoiceTuning
+  /** Explicit voice for a NEW ElevenLabs agent the tenant gave none (curated voice of its language). */
+  defaultVoiceId?: string | null
+  /** The org's ElevenLabs pronunciation dictionary version (null = none). */
+  pronunciationLocator?: { dictionaryId: string; versionId: string } | null
   /** Cartesia voice used by the fallback agent. */
   fallbackVoiceId: string | null
   timezone: string

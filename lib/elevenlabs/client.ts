@@ -411,8 +411,20 @@ export interface ELVoice {
   description?: string | null
   preview_url?: string | null
   labels?: Record<string, string>
-  verified_languages?: Array<{ language: string; accent?: string | null; locale?: string | null; preview_url?: string | null }>
-  sharing?: { public_owner_id?: string | null; original_voice_id?: string | null } | null
+  verified_languages?: Array<{ language: string; model_id?: string | null; accent?: string | null; locale?: string | null; preview_url?: string | null }>
+  sharing?: {
+    public_owner_id?: string | null
+    original_voice_id?: string | null
+    /** VoiceSharingResponseModel.status: enabled | disabled | copied | copied_disabled. */
+    status?: string | null
+    disable_at_unix?: number | null
+    notice_period?: number | null
+    live_moderation_enabled?: boolean | null
+    rate?: number | null
+    fiat_rate?: number | null
+  } | null
+  /** NONE | BAN | CAPTCHA | ENTERPRISE_BAN | ENTERPRISE_CAPTCHA. */
+  safety_control?: string | null
 }
 
 export interface ELSharedVoice {
@@ -434,7 +446,10 @@ export interface ELSharedVoice {
   free_users_allowed?: boolean
   live_moderation_enabled?: boolean
   notice_period?: number | null
-  verified_languages?: Array<{ language: string; accent?: string | null; locale?: string | null; preview_url?: string | null }>
+  verified_languages?: Array<{ language: string; model_id?: string | null; accent?: string | null; locale?: string | null; preview_url?: string | null }> | null
+  featured?: boolean
+  cloned_by_count?: number
+  is_added_by_user?: boolean | null
 }
 
 export const voices = {
@@ -457,14 +472,21 @@ export const voices = {
   delete(voiceId: string, ctx?: Ctx) {
     return req<{ status: string }>('voices.delete', `/v1/voices/${encodeURIComponent(voiceId)}`, { method: 'DELETE', ctx })
   },
-  /** Instant voice clone (multipart). Consent is collected and audited by the caller. */
-  addInstantClone(params: { name: string; files: Array<{ blob: Blob; filename: string }>; description?: string; labels?: Record<string, string> }, ctx?: Ctx) {
+  /**
+   * Instant voice clone (multipart). Consent is collected and audited by the
+   * caller. remove_background_noise defaults to false (spec: it can make clean
+   * samples worse); the tenant opts in for noisy recordings.
+   */
+  addInstantClone(
+    params: { name: string; files: Array<{ blob: Blob; filename: string }>; description?: string; labels?: Record<string, string>; removeBackgroundNoise?: boolean },
+    ctx?: Ctx,
+  ) {
     const form = new FormData()
     form.append('name', params.name)
     for (const f of params.files) form.append('files', f.blob, f.filename)
     if (params.description) form.append('description', params.description)
     if (params.labels) form.append('labels', JSON.stringify(params.labels))
-    form.append('remove_background_noise', 'false')
+    form.append('remove_background_noise', params.removeBackgroundNoise === true ? 'true' : 'false')
     return req<{ voice_id: string; requires_verification?: boolean }>('voices.ivc', '/v1/voices/add', { method: 'POST', body: form, timeoutMs: T.upload, retry: NO_RETRY, ctx })
   },
 }
@@ -498,13 +520,36 @@ export const sharedVoices = {
 
 // ─── Text-to-speech (previews) ───────────────────────────────────────────────
 
-export async function textToSpeech(voiceId: string, text: string, modelId: string, languageCode?: string): Promise<ArrayBuffer> {
+export interface TextToSpeechOptions {
+  /** VoiceSettingsResponseModel overrides for this request only (the agent's tuning). */
+  voiceSettings?: { stability?: number; similarity_boost?: number; speed?: number } | null
+  /** Up to 3 {pronunciation_dictionary_id, version_id} locators, applied in order. */
+  pronunciationLocators?: Array<{ pronunciation_dictionary_id: string; version_id: string }>
+  /**
+   * enable_logging query flag. false = zero retention mode (nothing kept in the
+   * workspace speech history); the spec reserves it for enterprise accounts.
+   */
+  enableLogging?: boolean
+  /** mp3_22050_32 (default) or wav_8000 (telephone band). */
+  outputFormat?: 'mp3_22050_32' | 'wav_8000'
+}
+
+export async function textToSpeech(voiceId: string, text: string, modelId: string, languageCode?: string, opts: TextToSpeechOptions = {}): Promise<ArrayBuffer> {
+  const wav = opts.outputFormat === 'wav_8000'
+  const locators = (opts.pronunciationLocators ?? []).slice(0, 3)
   return req<ArrayBuffer>('tts.convert', `/v1/text-to-speech/${encodeURIComponent(voiceId)}`, {
     method: 'POST',
-    query: { output_format: 'mp3_22050_32' },
-    body: { text, model_id: modelId, ...(languageCode ? { language_code: languageCode } : {}) },
+    query: { output_format: wav ? 'wav_8000' : 'mp3_22050_32', ...(opts.enableLogging === undefined ? {} : { enable_logging: opts.enableLogging }) },
+    body: {
+      text,
+      model_id: modelId,
+      // Spec: language_code is not supported by eleven_multilingual_v2.
+      ...(languageCode && modelId !== 'eleven_multilingual_v2' ? { language_code: languageCode } : {}),
+      ...(opts.voiceSettings ? { voice_settings: opts.voiceSettings } : {}),
+      ...(locators.length ? { pronunciation_dictionary_locators: locators } : {}),
+    },
     responseKind: 'arrayBuffer',
-    accept: 'audio/mpeg',
+    accept: wav ? 'audio/wav' : 'audio/mpeg',
     timeoutMs: T.tts,
     retry: NO_RETRY,
   })

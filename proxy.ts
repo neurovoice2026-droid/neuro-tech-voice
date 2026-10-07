@@ -16,6 +16,7 @@ const PROTECTED_PATHS = [
 // Supabase session cookie.
 const PUBLIC_API_PREFIXES = [
   '/api/elevenlabs/webhook',
+  '/api/elevenlabs/voice-notice',
   '/api/cartesia/',
   '/api/telephony/',
   '/api/cron/',

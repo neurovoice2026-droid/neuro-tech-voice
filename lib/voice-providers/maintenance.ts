@@ -170,6 +170,10 @@ export async function runVoiceMaintenance(log: Logger = createLogger({ component
     ['voice_saves', () => settleInterruptedVoiceSaves(5, log)],
     ['rejected_clones', () => purgeRejectedClones(5, log)],
     ['knowledge_sync', () => import('./knowledge-maintenance').then((m) => m.runKnowledgeMaintenance(log))],
+    ['library_voices', () => import('./library-lifecycle').then((m) => m.checkLibraryVoices({ log }))],
+    ['default_voice_migration', () => import('./default-voices').then((m) => m.runScheduledDefaultVoiceMigration(log))],
+    ['voice_orphans', () => import('./voice-orphans').then((m) => m.runVoiceOrphanMaintenance(log))],
+    ['voice_housekeeping', () => import('./voice-orphans').then((m) => m.runVoiceHousekeeping(log))],
     // Hourly is plenty for retention (the cron fires every 5 minutes).
     ...(new Date().getUTCMinutes() < 5 ? ([['retention', () => pruneOperationalData(log)]] as Array<[string, () => Promise<unknown>]>) : []),
   ]

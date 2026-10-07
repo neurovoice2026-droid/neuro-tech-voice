@@ -130,6 +130,13 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
   if (runtime.reasoningEffort) prompt.reasoning_effort = runtime.reasoningEffort
 
   const tts = ttsConfig(spec, telephonyFormat)
+  // Voices (slice F): a new agent without a chosen voice gets the curated
+  // voice of its language, never the API default (a retiring premade voice).
+  if (!tts.voice_id && spec.defaultVoiceId) tts.voice_id = spec.defaultVoiceId
+  // Always sent (arrays are replaced): [] removes a dictionary cleanly.
+  tts.pronunciation_dictionary_locators = spec.pronunciationLocator
+    ? [{ pronunciation_dictionary_id: spec.pronunciationLocator.dictionaryId, version_id: spec.pronunciationLocator.versionId }]
+    : []
 
   const conversation_config = {
     agent: {
