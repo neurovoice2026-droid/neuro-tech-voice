@@ -217,7 +217,9 @@ describe('upload-url', () => {
     kbMock.ragOverview.mockResolvedValueOnce({ total_used_bytes: 96, total_max_bytes: 100, models: [] })
     const res = await uploadUrl(req('POST', { name: 'a.pdf', size: 10, mime: 'application/pdf' }))
     expect(res.status).toBe(503)
-    expect(JSON.stringify(await res.json())).not.toMatch(/96|100 /)
+    // The workspace-wide quota figures never reach the tenant (request ids are random, so check the fields).
+    const body = await res.json()
+    expect(JSON.stringify({ ...body, request_id: undefined, requestId: undefined })).not.toMatch(/\b96\b|\b100\b/)
   })
 })
 

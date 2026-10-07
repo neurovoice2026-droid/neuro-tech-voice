@@ -15,6 +15,14 @@ export default async function AgentPage() {
     unstable_rethrow(err)
     // Signed out / no organization: the dashboard layout redirects; render nothing.
     if (err instanceof RequestError && (err.status === 401 || err.status === 404)) return null
+    // Account deletion in progress: nothing to edit any more.
+    if (err instanceof RequestError && err.status === 403 && (err.details as { reason?: string } | undefined)?.reason === 'account_deleting') {
+      return (
+        <div className="mx-auto max-w-xl rounded-lg border bg-card p-6 text-sm text-muted-foreground" role="status">
+          {err.message} Your agent no longer answers calls and its settings can no longer be changed.
+        </div>
+      )
+    }
     // Anything else (e.g. the organization read failed) is a real error: log it
     // and let app/(dashboard)/error.tsx render it with a retry.
     createLogger({ route: 'page.agent' }).error('agent_page.require_org_failed', err)
