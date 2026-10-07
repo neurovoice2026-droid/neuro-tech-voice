@@ -6,7 +6,7 @@ Generated on 2026-10-07 between 13:23 and 13:25 UTC at HEAD `59fe4c3` (`claude/r
 node scripts/generate-voice.mjs --film=ig5 --engine=cartesia --out=voice-candidates/ig5/take-a   (then take-b, take-c, take-d)
 ```
 
-Nothing was installed and nothing was committed. `public/ig/voice/`, `src/ig/ig5/voice.generated.ts` and `scripts/ig5/voice-lines-ig5.json` are byte-identical to how they were before the runs (sha256 checked). Picks go in `PICKS.md`, which has not been written yet.
+Nothing was installed and nothing was committed. `public/ig/voice/`, `src/ig/ig5/voice.generated.ts` and `scripts/ig5/voice-lines-ig5.json` are byte-identical to how they were before the runs (sha256 checked). Picks go in `PICKS.md` (written and installed later the same day; this file describes the candidate runs only).
 
 **PROVISIONAL: the hook and its hand-off.** These four lines may still change:
 - `ig5-01` and `ig5-01b` (the hook);
