@@ -1,0 +1,138 @@
+/**
+ * REEL 5 · THE STAGE — b1–b6 are ONE continuous picture (docs/ig/ig5/SCRIPT.md §2), so each act's <Sequence> mounts this
+ * same stage at its own absolute frame (every part a pure function of it: an act boundary is invisible), bottom to top:
+ *
+ *   ground    the pearl (MUTED_MESH, light), its warm key low-left with the phone's rose pool round the light (swelling
+ *             as each ring leaves it); on "Ours?" the phone's pool goes and her sunday pool rises behind ours (1 s), and
+ *             follows ours up in b5
+ *   desk      Hook.tsx: the hairline, the ring trio, the phone's single rings, the rose line light (until the pickup)
+ *   papers    Papers.tsx: the agency slip, the setup stub, the answering slip; the square-up; the pile's exit
+ *   ours      Ours.tsx: the $49 card, its fold into the parked chip; the set-up track
+ *   record    Record.tsx: the sample call
+ *   orb       HER ORB, born once, on the pickup: the rose line light springs open into her (components/Orb AvaOrb born:
+ *             a 3-frame seed, SPRING.pop, the palette crossing rush → sunday over 6 f) and glides (0.45 s) to ours' full
+ *             stop after "a month", Ø 44, breathing on her voice; it rides ours up in b5; on "It" it stays where the
+ *             full stop was as ours folds away, and on "picks up" it arcs onto the record's ringing rose dot, landing
+ *             as "up" is said, and stays docked there as the agent, leaning into its listen palette
+ *   S1        Hook.tsx HookCard (frame 0's card, leaving line by line)
+ *   captions  every narrator line in the caption band (x 86, y 1180, ≤ 814 → x 900), word-synced through the Captions
+ *             fork; the payoff's words print on ours instead (the band is empty in b4); the CTA is the end card's
+ */
+import React from 'react';
+import { AbsoluteFill } from 'remotion';
+import { EASE, mix, mixHex, SPRING, springUnit, tween } from '../../../lib/motion';
+import { useKitFaces } from '../../../kb/kit';
+import { MOMENT_LIGHTS } from '../../../kb/palettes';
+import { Captions, type CapKey, type CapPlace } from '../../components/Captions';
+import { PearlGround } from '../../components/Ground';
+import { AvaOrb, orbTrack, type OrbTrack } from '../../components/Orb';
+import { ZoneRect } from '../../components/ZoneGuard';
+import * as T from '../timing';
+import { DeskLine, HookCard, Phone, PhoneRings, RING_FLASHES, TrioRings } from './Hook';
+import { CAP, OURS, PHONE, RECORD, TRIO } from './layout';
+import { Chip, fullStopAt, Ours, OURS_UP, oursY, Track } from './Ours';
+import { Papers } from './Papers';
+import { dockAt, RecordCard } from './Record';
+
+const M = T.M;
+const RUSH = MOMENT_LIGHTS.rush;
+const SUNDAY = MOMENT_LIGHTS.sunday;
+
+/* ── the ground's light ── */
+/** the warm key low-left (ig1's hook key: the pearl warmed toward graphite) */
+const HOOK_KEY = { x: 160, y: 1560, strength: 0.35, color: '#d9d4cf', radius: 760 } as const;
+/** the phone's rose pool round the light, swelling as a ring leaves it */
+const PHONE_KEY = { x: PHONE.x, y: PHONE.y - 40, strength: 0.24, color: '#f2b8c9', radius: 760 } as const;
+/** her sunday pool behind ours (b4), following it up (b5–b6) */
+const POOL_KEY = { x: 520, y: OURS.y4 + 150, strength: 0.32, color: '#bfeef5', radius: 980 } as const;
+const ringSwell = (t: number) => RING_FLASHES.reduce((m, r) => (t < r ? m : Math.max(m, Math.min(1, (t - r) / 2) * Math.exp(-Math.max(0, t - r - 2) / 12))), 0);
+export const phoneAt = (t: number) => 1 - tween(t, [M.pickup, M.pickup + 12], [0, 1], EASE.inOut);
+export const poolAt = (t: number) => tween(t, [M.ours, M.ours + 30], [0, 1], EASE.inOut);
+export function groundKeyAt(t: number) {
+  const k = poolAt(t);
+  const up = springUnit(t - OURS_UP, SPRING.site);
+  const pool = { ...POOL_KEY, y: mix(POOL_KEY.y, OURS.y5 + 150, up) };
+  const base = { x: mix(HOOK_KEY.x, pool.x, k), y: mix(HOOK_KEY.y, pool.y, k), strength: mix(HOOK_KEY.strength, pool.strength, k), color: mixHex(HOOK_KEY.color, pool.color, k), radius: mix(HOOK_KEY.radius, pool.radius, k) };
+  const ph = phoneAt(t);
+  if (ph <= 0) return base;
+  const s = PHONE_KEY.strength * (0.8 + 0.4 * ringSwell(t));
+  return { x: mix(base.x, PHONE_KEY.x, ph), y: mix(base.y, PHONE_KEY.y, ph), strength: mix(base.strength, s, ph), color: mixHex(base.color, PHONE_KEY.color, ph), radius: mix(base.radius, PHONE_KEY.radius, ph) };
+}
+export const Ground5: React.FC<{ t: number; keyLight?: React.ComponentProps<typeof PearlGround>['keyLight'] }> = ({ t, keyLight }) => <PearlGround t={t} keyLight={keyLight ?? groundKeyAt(t)} />;
+
+/* ── her orb ── */
+export const ORB_CANVAS = 64;
+/** the lift of her glide onto the record (px at mid-glide) */
+const ORB_ARC = 90;
+/** she listens while docked on the record (the call), until the CTA */
+const LISTEN: readonly (readonly [number, number])[] = [[M.up, T.END_CARD.cta - 6]];
+export const track5 = (): OrbTrack => orbTrack(T, { listen: LISTEN });
+/** her pose at t (b4–b7; the seam's glide back to the phone is the end act's) */
+export function orbPose(t: number): { x: number; y: number; d: number; moving: boolean } {
+  const D = OURS.orbD;
+  if (t < M.glide[0]) return { x: PHONE.x, y: PHONE.y, d: D, moving: false };
+  if (t < M.it) {
+    const stop = fullStopAt(t);
+    const g = tween(t, M.glide, [0, 1]);
+    // the glide: right first, then down onto the baseline (it never crosses "month")
+    const x = mix(PHONE.x, stop.x, EASE.out3(g));
+    const y = mix(PHONE.y, stop.y, EASE.inOut(g));
+    const o = oursY(t);
+    return { x, y, d: D, moving: g < 1 || !!o?.moving };
+  }
+  // b6: on "It" she leaves the folding card and waits where the full stop was; on "picks up" she glides onto the
+  // record's rose dot (arriving on "up"), arcing over the record's header so she never crosses its words
+  const from = fullStopAt(M.it);
+  const u = tween(t, [M.picks, M.up], [0, 1], EASE.inOut);
+  const dock = dockAt(t);
+  const dd = RECORD.orbD * dock.s;
+  const arc = ORB_ARC * Math.sin(Math.PI * u);
+  return { x: mix(from.x, dock.x, u), y: mix(from.y, dock.y, u) - arc, d: mix(D, dd, u), moving: u > 0 };
+}
+export const Orb5: React.FC<{ t: number; pose?: { x: number; y: number; d: number; moving: boolean }; close?: React.ComponentProps<typeof AvaOrb>['close'] }> = ({ t, pose, close }) => {
+  const ready = useKitFaces();
+  if (!ready || t < M.pickup) return null;
+  const p = pose ?? orbPose(t);
+  return (
+    <>
+      <AvaOrb t={t} pose={p} canvas={ORB_CANVAS} track={track5()} born={{ at: M.pickup, dot: PHONE.d }} close={close} rim={0.8} shadow={0.35} />
+      {t >= M.pickup + 4 ? <ZoneRect what="object orb" rect={{ x: p.x - p.d / 2, y: p.y - p.d / 2, w: p.d, h: p.d }} /> : null}
+    </>
+  );
+};
+
+/* ── the captions ── */
+export const CAP5: CapPlace = { x: CAP.x, y: CAP.y, maxWidth: CAP.maxWidth, align: 'left', role: 'caption' };
+/** the narrator's lines in the band (the hook is S1; the payoff prints on ours; the CTA is the end card's) */
+const BAND = [T.CAST.agency, T.CAST.answering, T.CAST.setup, T.CAST.does] as const;
+/** the anchors in the captions take the phone's rose on their onsets (the display map's "$300", "$1,500.", "$99") */
+const keysOf = (id: string): CapKey[] =>
+  T.DISPLAY.filter((d) => d.id === id && d.text.startsWith('$')).map((d) => ({ words: Array.from({ length: d.to - d.from + 1 }, (_, i) => d.from + i), ink: RUSH.ink, glint: RUSH.orb[2] }));
+export const BandCaptions: React.FC<{ t: number }> = ({ t }) => (
+  <>
+    {BAND.map((id) => (
+      <Captions key={id} T={T} id={id} t={t} place={CAP5} keys={keysOf(id)} what="caption" />
+    ))}
+  </>
+);
+
+/* ── the stage ── */
+export const Stage5: React.FC<{ t: number }> = ({ t }) => (
+  <AbsoluteFill>
+    <Ground5 t={t} />
+    <DeskLine t={t} />
+    {t < TRIO.life + 1 ? <TrioRings t={t} /> : null}
+    <PhoneRings t={t} />
+    {t < M.pickup ? <Phone t={t} /> : null}
+    <Papers t={t} />
+    <Ours t={t} />
+    <Track t={t} />
+    <RecordCard t={t} />
+    <Chip t={t} />
+    <Orb5 t={t} />
+    <HookCard t={t} />
+    <BandCaptions t={t} />
+  </AbsoluteFill>
+);
+
+export { SUNDAY };
