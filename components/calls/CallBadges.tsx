@@ -2,11 +2,11 @@
 
 import {
   Bot, LifeBuoy, Moon, PhoneForwarded, PhoneOff, CirclePause, PhoneMissed,
-  PhoneCall, CircleQuestionMark, type LucideIcon,
+  PhoneCall, CircleQuestionMark, CircleCheck, CircleX, CircleHelp, FlaskConical, type LucideIcon,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { handledBy, statusLabel, type HandledByInput, type HandledByKind } from '@/lib/calls/labels'
+import { callResultLabel, handledBy, statusLabel, type HandledByInput, type HandledByKind } from '@/lib/calls/labels'
 
 // Shared call badges: the calls table, the call detail sheet and the
 // dashboard's recent calls all use these, so a call reads the same everywhere.
@@ -67,6 +67,42 @@ const SENTIMENT_META: Record<string, { emoji: string; label: string }> = {
   positive: { emoji: '😊', label: 'Positive' },
   neutral:  { emoji: '😐', label: 'Neutral' },
   negative: { emoji: '😞', label: 'Negative' },
+}
+
+const AI_OUTCOME_META: Record<string, { icon: LucideIcon; className: string }> = {
+  success: { icon: CircleCheck, className: 'text-green-600' },
+  failure: { icon: CircleX, className: 'text-red-600' },
+  unknown: { icon: CircleHelp, className: 'text-gray-400' },
+}
+
+/**
+ * "AI outcome": the AI's verdict on whether the call reached its goal
+ * (call_successful). Icon plus an accessible label, never colour alone.
+ */
+export function AiOutcomeIcon({ value }: { value: string | null | undefined }) {
+  const meta = value ? AI_OUTCOME_META[value] : undefined
+  const label = callResultLabel(value)
+  if (!meta || !label) return <span className="text-xs text-muted-foreground" aria-label="No AI outcome">—</span>
+  const Icon = meta.icon
+  return (
+    <span role="img" aria-label={`AI outcome: ${label}`} title={`AI outcome: ${label}`} className="inline-flex">
+      <Icon className={cn('h-4 w-4', meta.className)} aria-hidden="true" />
+    </span>
+  )
+}
+
+/** Marks a conversation that did not come from a phone call (web, SDK or dashboard test): never billed. */
+export function TestCallBadge({ className }: { className?: string }) {
+  return (
+    <Badge
+      variant="outline"
+      title="Test conversation (web or dashboard): not a phone call, not billed, no automations"
+      className={cn('gap-1 border-slate-200 bg-slate-50 text-xs text-slate-600', className)}
+    >
+      <FlaskConical aria-hidden="true" />
+      Test
+    </Badge>
+  )
 }
 
 export function SentimentIcon({ sentiment }: { sentiment: string | null | undefined }) {

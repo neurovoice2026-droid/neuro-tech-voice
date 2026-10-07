@@ -13,14 +13,18 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { RequestError } from '@/lib/api/http'
 import {
+  AI_OUTCOME_VALUES,
   CALL_STATUS_VALUES,
   ROUTING_REASON_VALUES,
   VOICE_PROVIDER_VALUES,
+  isLiveStatus,
   type CallListItem,
 } from '@/lib/calls/labels'
+import { readCallMetadata } from '@/lib/voice-providers/call-metadata'
 import {
   CALL_OUTCOMES,
   type Call,
+  type CallDetails,
   type CallDirection,
   type CallOutcome,
   type CallStatus,
@@ -89,12 +93,14 @@ const BASE_COLUMNS = [
   'started_at', 'ended_at', 'created_at', 'provider', 'primary_provider', 'routing_reason',
   'failover_reason', 'provider_call_id', 'cartesia_call_id', 'from_number', 'to_number', 'outcome',
   'call_successful', 'summary_title', 'termination_reason', 'has_recording', 'recording_status',
+  // Migration 017.
+  'channel', 'is_test', 'owner_feedback',
 ].join(', ')
 
 /** List views: no transcript/analysis (they can be large). */
 export const CALL_LIST_COLUMNS: string = `${BASE_COLUMNS}, agents(name)`
 /** Detail view. */
-export const CALL_DETAIL_COLUMNS: string = `${BASE_COLUMNS}, transcript, analysis, agents(name, voice_name)`
+export const CALL_DETAIL_COLUMNS: string = `${BASE_COLUMNS}, transcript, analysis, call_metadata, retention_applied_at, agents(name, voice_name)`
 
 type AgentJoin = { name?: string | null; voice_name?: string | null }
 
@@ -128,8 +134,13 @@ export interface CallRow {
   termination_reason: string | null
   has_recording: boolean | null
   recording_status: string | null
+  channel?: string | null
+  is_test?: boolean | null
+  owner_feedback?: string | null
   transcript?: unknown
   analysis?: unknown
+  call_metadata?: unknown
+  retention_applied_at?: string | null
   agents?: AgentJoin | AgentJoin[] | null
 }
 
@@ -255,6 +266,32 @@ export function serializeListItem(row: CallRow): CallListItem {
     termination_reason: row.termination_reason,
     has_recording: recording,
     recording_status: oneOf<RecordingStatus>(RECORDING_STATUSES, row.recording_status) ?? 'unknown',
+    channel: oneOf(CHANNELS, row.channel) ?? 'phone',
+    is_test: row.is_test === true,
+    owner_feedback: oneOf(FEEDBACK_VALUES, row.owner_feedback),
+  }
+}
+
+const CHANNELS = ['phone', 'web', 'other'] as const
+const FEEDBACK_VALUES = ['like', 'dislike'] as const
+
+/** The provider conversation id of an ElevenLabs-served call (null otherwise). */
+export function elevenLabsConversationId(row: Pick<CallRow, 'provider' | 'provider_call_id' | 'elevenlabs_conversation_id'>): string | null {
+  if (servingProvider(row) !== 'elevenlabs') return null
+  return row.elevenlabs_conversation_id ?? row.provider_call_id ?? null
+}
+
+/** The call view's provider extras (never cost, never internal routing JSON). */
+export function serializeCallDetails(row: CallRow): CallDetails {
+  const meta = readCallMetadata(row.call_metadata)
+  return {
+    main_language: meta.main_language ?? null,
+    queue_wait_secs: meta.queue_wait_secs ?? null,
+    tool_events: meta.tool_events ?? [],
+    provider_error: meta.provider_error ?? null,
+    warnings: meta.warnings ?? [],
+    content_purged: !!row.retention_applied_at,
+    can_reanalyze: !row.retention_applied_at && !!elevenLabsConversationId(row) && !isLiveStatus(row.status),
   }
 }
 
@@ -267,6 +304,7 @@ export function serializeCallDetail(row: CallRow): CallDetail {
     ...serializeListItem(row),
     transcript: normalizeTranscript(row.transcript),
     analysis: normalizeAnalysis(row.analysis),
+    details: serializeCallDetails(row),
     agents: agent ? { name: agent.name ?? null, voice_name: agent.voice_name ?? null } : null,
   }
 }
@@ -296,6 +334,9 @@ export const CallFilterSchema = z.object({
   sentiment: withDefault(z.enum(['all', 'positive', 'neutral', 'negative']), 'all'),
   provider: withDefault(z.enum(['all', ...VOICE_PROVIDER_VALUES]), 'all'),
   routing: withDefault(z.enum(['all', ...ROUTING_REASON_VALUES]), 'all'),
+  outcome: withDefault(z.enum(['all', ...CALL_OUTCOMES]), 'all'),
+  /** call_successful ("AI outcome"). */
+  aiOutcome: withDefault(z.enum(['all', ...AI_OUTCOME_VALUES]), 'all'),
   dateFrom: optional(dateParam),
   dateTo: optional(dateParam),
   minDuration: withDefault(z.coerce.number().int().min(0).max(86_400), 0),
@@ -342,7 +383,7 @@ function quoted(value: string): string {
  * hyphens for the title/summary columns. Everything else is dropped, so the
  * resulting filter string cannot change the query's structure.
  */
-export function searchExpression(raw: string | undefined): string | null {
+export function searchExpression(raw: string | undefined, fullTextIds?: string[] | null): string | null {
   const input = (raw ?? '').trim()
   if (!input) return null
   if (/^[+\d\s().-]+$/.test(input)) {
@@ -356,9 +397,12 @@ export function searchExpression(raw: string | undefined): string | null {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 80)
-  if (text.length < 2) return null
+  // Full-text matches over transcripts (lib/calls/search.ts): server-made UUIDs only.
+  const ids = (fullTextIds ?? []).filter((id) => UUID_RE.test(id))
+  const idGroup = ids.length ? `id.in.(${ids.join(',')})` : null
+  if (text.length < 2) return idGroup
   const v = quoted(`*${text}*`)
-  return ['summary_title', 'summary'].map((c) => `${c}.ilike.${v}`).join(',')
+  return [...['summary_title', 'summary'].map((c) => `${c}.ilike.${v}`), ...(idGroup ? [idGroup] : [])].join(',')
 }
 
 /** `started_at` in [from, to), falling back to created_at when started_at is null. */
@@ -392,19 +436,25 @@ interface FilterBuilder<Self> {
  */
 export const TRANSFERRED_EXPRESSION = 'outcome.eq.transferred,status.eq.transferred'
 
-/** Applies the validated list filters (status, direction, provider, dates, search...). */
-export function applyCallFilters<Q extends FilterBuilder<Q>>(query: Q, f: CallFilterParams, timeZone: string): Q {
+/**
+ * Applies the validated list filters (status, direction, provider, outcome,
+ * AI outcome, dates, search...). `fullTextIds`: transcript matches found by
+ * lib/calls/search.ts for a text search (OR-ed with the summary match).
+ */
+export function applyCallFilters<Q extends FilterBuilder<Q>>(query: Q, f: CallFilterParams, timeZone: string, fullTextIds?: string[] | null): Q {
   let q = query
   if (f.status !== 'all' && f.status !== 'transferred') q = q.eq('status', f.status)
   if (f.direction !== 'all') q = q.eq('direction', f.direction)
   if (f.sentiment !== 'all') q = q.eq('sentiment', f.sentiment)
   if (f.provider !== 'all') q = q.eq('provider', f.provider)
   if (f.routing !== 'all') q = q.eq('routing_reason', f.routing)
+  if (f.outcome !== 'all') q = q.eq('outcome', f.outcome)
+  if (f.aiOutcome !== 'all') q = q.eq('call_successful', f.aiOutcome)
   if (f.minDuration > 0) q = q.gte('duration_seconds', f.minDuration)
   const from = f.dateFrom ? rangeStart(f.dateFrom, timeZone) : null
   const to = f.dateTo ? rangeEnd(f.dateTo, timeZone) : null
   const statusGroup = f.status === 'transferred' ? TRANSFERRED_EXPRESSION : null
-  const or = combineOrGroups([statusGroup, searchExpression(f.search), timeRangeExpression(from, to)])
+  const or = combineOrGroups([statusGroup, searchExpression(f.search, fullTextIds), timeRangeExpression(from, to)])
   if (or) q = q.or(or)
   return q
 }
@@ -529,9 +579,11 @@ export interface CallFact {
   duration_seconds: number | null
   started_at: string | null
   created_at: string
+  call_successful?: string | null
+  outcome?: string | null
 }
 
-export const FACT_COLUMNS: string = 'status, sentiment, duration_seconds, started_at, created_at'
+export const FACT_COLUMNS: string = 'status, sentiment, duration_seconds, started_at, created_at, call_successful, outcome'
 
 export function factTime(f: Pick<CallFact, 'started_at' | 'created_at'>): number {
   return Date.parse(f.started_at ?? f.created_at)
@@ -559,6 +611,8 @@ export async function loadCallFacts(
       .from('calls')
       .select(FACT_COLUMNS, offset === 0 ? { count: 'exact' } : undefined)
       .eq('org_id', orgId)
+      // Test sessions (web, SDK, dashboard previews) never count in metrics.
+      .eq('is_test', false)
     if (range) q = q.or(range)
     const { data, error, count } = await q
       .order('created_at', { ascending: false })

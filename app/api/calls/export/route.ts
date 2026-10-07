@@ -17,6 +17,7 @@ import {
   type CallDetail,
   type CallRow,
 } from '@/lib/calls/serialize'
+import { buildTsQuery, searchCallIds } from '@/lib/calls/search'
 import {
   callResultLabel,
   failoverReasonLabel,
@@ -58,7 +59,7 @@ const EXPORT_COLUMNS = {
     json: (c) => c.failover_reason ?? null,
   },
   outcome: { label: 'Outcome', csv: (c) => outcomeLabel(c.outcome), json: (c) => c.outcome ?? null },
-  call_successful: { label: 'Call Result', csv: (c) => callResultLabel(c.call_successful), json: (c) => c.call_successful ?? null },
+  call_successful: { label: 'AI Outcome', csv: (c) => callResultLabel(c.call_successful), json: (c) => c.call_successful ?? null },
   summary_title: { label: 'Summary Title', csv: (c) => c.summary_title, json: (c) => c.summary_title ?? null },
   summary: { label: 'AI Summary', csv: (c) => c.summary, json: (c) => c.summary },
   transcript: { label: 'Transcript', csv: transcriptText, json: (c) => c.transcript },
@@ -122,13 +123,15 @@ export async function GET(request: Request) {
     }
 
     const tz = safeTimeZone(org.timezone)
+    // Text search also matches what was said (our own full-text index, org-scoped).
+    const fullTextIds = q.scope === 'filtered' && buildTsQuery(q.search) ? await searchCallIds(org.id, q.search ?? '') : null
     const columns = q.columns
     // Transcripts are large: only read them when the export includes them.
     const select = columns.includes('transcript') ? CALL_DETAIL_COLUMNS : CALL_LIST_COLUMNS
     const rows: CallRow[] = []
     for (let offset = 0; offset < MAX_ROWS; ) {
       let query = supabase.from('calls').select(select).eq('org_id', org.id)
-      if (q.scope === 'filtered') query = applyCallFilters(query, q, tz)
+      if (q.scope === 'filtered') query = applyCallFilters(query, q, tz, fullTextIds)
       if (q.scope === 'selected') query = query.in('id', q.selectedIds)
       const { data, error } = await query
         .order('started_at', { ascending: false, nullsFirst: false })

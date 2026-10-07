@@ -912,7 +912,7 @@ export const ERP_HERO: HeroData = keyed({
     // each sits on its label's line from 360px (the SaaS plate rule), and
     // every figure is read or held.
     plates: [
-      { layer: "Customers", name: "Every call, kept as one record", runs: "Its summary and outcome, the details the business asked for, and the booking, message and actions it led to", datum: `${CALL_OUTCOMES.length} call outcomes` }, // "10 call outcomes"
+      { layer: "Customers", name: "Every call, kept as one record", runs: "Its summary and outcome, the details the business asked for, and the booking, message and actions it led to", datum: `${CALL_OUTCOMES.length} call outcomes` }, // "11 call outcomes"
       { layer: "Bookings", name: "Bookings with a waiting list", runs: "Checked again under a lock before each is written, and a freed time offered to whoever waited longest", datum: `${FACTS_ERP.bookingStates.length} booking states` }, // "5 booking states"
       { layer: "Invoicing", name: "Stripe and SmartBill", runs: "Checkout, a customer portal, and fiscal invoices, each issued only after a check for one on record", datum: `${FACTS.stripeEvents} Stripe event types` }, // "7 Stripe event types"
       { layer: "Reporting", name: "Figures counted by the database", runs: "Calls by day, outcome and how callers felt, in each business’s own time zone, and exports that open safely", datum: `${FACTS_ERP.exportColumns} export columns` }, // "13 export columns"

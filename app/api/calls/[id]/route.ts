@@ -14,8 +14,10 @@ import {
   parseCallId,
   providerTargets,
   serializeCallDetail,
+  servingProvider,
   type CallRow,
 } from '@/lib/calls/serialize'
+import { lookupCallConversationIds } from '@/lib/calls/provider-conversation'
 import type { VoiceProviderId } from '@/types'
 
 type RouteParams = { params: Promise<{ id: string }> }
@@ -40,11 +42,11 @@ export async function GET(request: Request, { params }: RouteParams) {
 }
 
 const DELETE_COLUMNS: string =
-  'id, status, started_at, created_at, provider, provider_call_id, elevenlabs_conversation_id, cartesia_call_id'
+  'id, agent_id, status, started_at, created_at, provider, provider_call_id, elevenlabs_conversation_id, cartesia_call_id'
 
 type DeleteRow = Pick<
   CallRow,
-  'id' | 'status' | 'started_at' | 'created_at' | 'provider' | 'provider_call_id' | 'elevenlabs_conversation_id' | 'cartesia_call_id'
+  'id' | 'agent_id' | 'status' | 'started_at' | 'created_at' | 'provider' | 'provider_call_id' | 'elevenlabs_conversation_id' | 'cartesia_call_id'
 >
 
 const CALL_DELETE_LIMIT = RATE_LIMITS.callDelete
@@ -104,8 +106,33 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return apiError('conflict', 'This call is still in progress. You can delete it once it has ended.', 409, { requestId })
     }
 
+    const targets = providerTargets(row)
+    // An ElevenLabs call without a stored conversation id (app-routed call
+    // whose webhook never arrived): find its conversation on the org's own
+    // agent (ntv_call_id = this call), so the transcript and audio are deleted
+    // at the provider too. Not found: the tombstone below catches it later.
+    if (servingProvider(row) === 'elevenlabs' && !targets.some((t) => t.provider === 'elevenlabs')) {
+      try {
+        const ids = await lookupCallConversationIds({ id: row.id, org_id: org.id, agent_id: row.agent_id, started_at: row.started_at, created_at: row.created_at })
+        for (const externalId of ids) targets.push({ provider: 'elevenlabs', externalId })
+        log.info('calls.delete.conversation_lookup', { found: ids.length })
+      } catch (err) {
+        if (isProviderError(err) && err.code === 'not_configured') {
+          log.warn('calls.delete.provider_not_configured', { provider: 'elevenlabs' })
+        } else {
+          log.error('calls.delete.lookup_failed', err)
+          return apiError(
+            'provider_error',
+            'We could not delete this call at the voice provider, so the record was kept. Please try again in a moment.',
+            502,
+            { requestId, details: { provider: 'elevenlabs', ...(isProviderError(err) ? { code: err.code } : {}) } },
+          )
+        }
+      }
+    }
+
     const results: ProviderDeleteResult[] = []
-    for (const target of providerTargets(row)) {
+    for (const target of targets) {
       try {
         results.push(await deleteAtProvider(target.provider, target.externalId, { orgId: org.id, callId: row.id }, log))
       } catch (err) {
@@ -133,7 +160,8 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       target_id: row.id,
       // provider_call_ids is the tombstone applyCallEvent checks, so a late
       // webhook or poll for this call cannot recreate the deleted row.
-      details: { provider: row.provider, status: row.status, provider_deletes: results, provider_call_ids: providerTargets(row).map((t) => t.externalId) },
+      // A late event for a tombstoned call also deletes its provider copy (call-store.ts).
+      details: { provider: row.provider, status: row.status, provider_deletes: results, provider_call_ids: targets.map((t) => t.externalId) },
     })
     // The call is already gone; a missing audit row must not turn that into an error for the user.
     if (auditError) log.error('calls.delete.audit_failed', dbError('audit_log insert', auditError))

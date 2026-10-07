@@ -5,10 +5,13 @@ import 'server-only'
 //   2. retry failed/pending agent syncs whose next_retry_at has passed, and
 //      resync agents whose config_revision moved ahead;
 //   3. reprocess webhook events that failed or were never processed;
-//   4. pull Cartesia results for fallback calls (webhooks not guaranteed) and
-//      finalize ElevenLabs calls whose post-call webhook never arrived;
+//   4. pull Cartesia results for fallback calls (webhooks not guaranteed),
+//      recover ElevenLabs conversations whose post-call webhook was lost
+//      (conversation_reconcile) and bill the rest from Twilio's duration;
 //   5. retention: prune telemetry, processed webhook receipts, expired
-//      rate-limit windows and payloads of dead-lettered webhooks.
+//      rate-limit windows and payloads of dead-lettered webhooks, hourly from
+//      a stored last-run timestamp (maintenance-state.ts), whatever the cron
+//      cadence (daily on Vercel Hobby, every 5 minutes with pg_cron).
 // Each step is isolated: one failing step never stops the others.
 
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -174,6 +177,7 @@ export async function runVoiceMaintenance(log: Logger = createLogger({ component
     ['config_rollout', () => import('./config-rollout').then((m) => m.runConfigRollout({ dryRun: false, log }))],
     ['webhook_retries', () => reprocessPendingWebhooks(50, log)],
     ['cartesia_poll', () => reconcileCartesiaCalls(25, log)],
+    ['conversation_reconcile', () => import('./conversation-reconcile').then((m) => m.reconcileElevenLabsConversations({ log }))],
     ['stale_elevenlabs_calls', () => finalizeStaleElevenLabsCalls(50, log)],
     ['knowledge_retries', () => retryStaleKnowledgeDocs(2, log)],
     ['voice_saves', () => settleInterruptedVoiceSaves(5, log)],
@@ -183,8 +187,10 @@ export async function runVoiceMaintenance(log: Logger = createLogger({ component
     ['default_voice_migration', () => import('./default-voices').then((m) => m.runScheduledDefaultVoiceMigration(log))],
     ['voice_orphans', () => import('./voice-orphans').then((m) => m.runVoiceOrphanMaintenance(log))],
     ['voice_housekeeping', () => import('./voice-orphans').then((m) => m.runVoiceHousekeeping(log))],
-    // Hourly is plenty for retention (the cron fires every 5 minutes).
-    ...(new Date().getUTCMinutes() < 5 ? ([['retention', () => pruneOperationalData(log)]] as Array<[string, () => Promise<unknown>]>) : []),
+    ['elevenlabs_workspace_health', () => import('./webhook-health').then((m) => m.runWorkspaceHealth(log))],
+    ['call_retention', () => import('./call-retention').then((m) => m.runCallRetention(log))],
+    // Hourly, from the stored last run (not the clock minute: the cron may be daily).
+    ['retention', () => import('./maintenance-state').then((m) => m.runIfDue('retention', 3_600_000, log, () => pruneOperationalData(log)))],
   ]
   // The route's maxDuration is 300 s: steps left when the budget is spent run
   // on the next invocation (every step is bounded and idempotent).

@@ -1,6 +1,8 @@
 import { google } from 'googleapis'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getGoogleClientWithToken } from '@/lib/google/client'
+import { escapeSlackText, renderTemplate } from './templates'
+import { callTemplateVars } from './call-vars'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -48,6 +50,19 @@ export interface CallContext {
   transcript: Array<{ role: string; message: string }>
   agent_name?: string
   started_at: string
+  // Post-call analysis (lib/voice-providers/call-store.ts triggerWorkflowsOnce).
+  ended_at?: string | null
+  from_number?: string | null
+  to_number?: string | null
+  /** The AI's verdict on the call's goal: success | failure | unknown. */
+  call_successful?: string | null
+  outcome?: string | null
+  summary_title?: string | null
+  /** Data-collection values by field id (caller_name, callback_number, reason_for_call, custom fields). */
+  collected?: Record<string, string>
+  business_name?: string | null
+  /** Organization time zone for {{date}} / {{time}}. */
+  timezone?: string | null
 }
 
 interface ActionResult {
@@ -59,20 +74,14 @@ interface ActionResult {
 
 // ─── Template interpolation ─────────────────────────────────────────────────
 
-function interpolate(template: string, ctx: CallContext): string {
-  return template
-    .replace(/\{\{caller\}\}/g, ctx.caller_number ?? 'Unknown')
-    .replace(/\{\{caller_number\}\}/g, ctx.caller_number ?? 'Unknown')
-    .replace(/\{\{caller_email\}\}/g, '') // Requires CRM lookup, not available yet
-    .replace(/\{\{direction\}\}/g, ctx.direction)
-    .replace(/\{\{duration\}\}/g, String(ctx.duration_seconds))
-    .replace(/\{\{sentiment\}\}/g, ctx.sentiment ?? 'unknown')
-    .replace(/\{\{summary\}\}/g, ctx.summary ?? '')
-    .replace(/\{\{call_summary\}\}/g, ctx.summary ?? '')
-    .replace(/\{\{agent\}\}/g, ctx.agent_name ?? 'Agent')
-    .replace(/\{\{date\}\}/g, new Date().toLocaleDateString())
-    .replace(/\{\{time\}\}/g, new Date().toLocaleTimeString())
-    .replace(/\{\{conversation_id\}\}/g, ctx.conversation_id)
+/**
+ * Every documented variable ({{caller_number}}, {{outcome}}, {{caller_name}},
+ * {{intent}}, {{agent_name}}, {{business_name}}, {{call_id}}, …, old aliases
+ * such as {{caller}}) plus each data-collection field by id. Unknown names
+ * render as '' so no literal "{{…}}" ever reaches an email or a document.
+ */
+export function interpolate(template: string, ctx: CallContext, opts?: { escape?: (value: string) => string }): string {
+  return renderTemplate(template, callTemplateVars(ctx), opts)
 }
 
 // ─── Action executors ───────────────────────────────────────────────────────
@@ -97,6 +106,12 @@ async function executeSendWebhook(
         sentiment: ctx.sentiment,
         summary: ctx.summary,
         started_at: ctx.started_at,
+        // Post-call analysis (additive fields).
+        ended_at: ctx.ended_at ?? null,
+        outcome: ctx.outcome ?? null,
+        ai_outcome: ctx.call_successful ?? null,
+        summary_title: ctx.summary_title ?? null,
+        collected: ctx.collected ?? {},
       },
       timestamp: new Date().toISOString(),
     }
@@ -297,17 +312,23 @@ async function executeCreateDoc(config: Record<string, string>, ctx: CallContext
   }
 }
 
+/**
+ * Slack text when the action has no message: variables only (so call data is
+ * escaped for Slack), with the AI outcome when the call has one
+ * (calls.sentiment is only set on older rows).
+ */
+export function defaultSlackTemplate(ctx: Pick<CallContext, 'call_successful' | 'sentiment'>): string {
+  const verdict = ctx.call_successful ? ' (AI outcome: {{ai_outcome}})' : ctx.sentiment ? ' ({{sentiment}})' : ''
+  return `:telephone_receiver: {{direction}} call from {{caller_number}}${verdict}. {{summary}}`
+}
+
 async function executeNotifySlack(config: Record<string, string>, ctx: CallContext): Promise<ActionResult> {
   const base = { action_id: '', action_type: 'notify_slack' }
   const url = config.webhook_url ?? config.url ?? ''
   if (!url) return { ...base, success: false, message: 'No Slack webhook URL configured' }
 
   try {
-    const text = interpolate(
-      config.message ??
-        `:telephone_receiver: ${ctx.direction} call from ${ctx.caller_number ?? 'unknown'} (${ctx.sentiment ?? 'n/a'}). ${ctx.summary ?? ''}`,
-      ctx
-    )
+    const text = interpolate(config.message ?? defaultSlackTemplate(ctx), ctx, { escape: escapeSlackText })
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

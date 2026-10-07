@@ -227,12 +227,14 @@ export type CallOutcome =
   | 'transferred'
   | 'flagged'
   | 'missed'
+  /** An outbound call reached voicemail (set from the provider's voicemail-detection result). */
+  | 'voicemail'
   | 'spam'
   | 'other'
 
 export const CALL_OUTCOMES: readonly CallOutcome[] = [
   'booked', 'rescheduled', 'cancelled', 'answered', 'message_taken',
-  'transferred', 'flagged', 'missed', 'spam', 'other',
+  'transferred', 'flagged', 'missed', 'voicemail', 'spam', 'other',
 ] as const
 
 
@@ -269,6 +271,26 @@ export interface Call {
   termination_reason?: string | null
   has_recording?: boolean
   recording_status?: 'unknown' | 'pending' | 'available' | 'unavailable' | 'deleted'
+  /** Migration 017: how the conversation started; test sessions are never billed. */
+  channel?: 'phone' | 'web' | 'other'
+  is_test?: boolean
+  /** The owner's thumbs up/down on how the call was handled. */
+  owner_feedback?: 'like' | 'dislike' | null
+  /** Provider details for the call view (detail endpoint only). */
+  details?: CallDetails | null
+}
+
+/** Call view extras from calls.call_metadata (lib/voice-providers/call-metadata.ts). */
+export interface CallDetails {
+  main_language: string | null
+  queue_wait_secs: number | null
+  tool_events: Array<{ tool: string; kind: string; ok: boolean; result_type: string | null; at_secs: number }>
+  provider_error: { code: number; reason: string | null } | null
+  warnings: string[]
+  /** Content (transcript, summary, analysis) removed by the privacy retention. */
+  content_purged: boolean
+  /** The provider conversation can be analysed again (ElevenLabs calls). */
+  can_reanalyze: boolean
 }
 
 // ─── Integration ──────────────────────────────────────────────────────────────
@@ -343,9 +365,15 @@ export interface DashboardMetrics {
     negative: number
   }
   peak_hour: number
+  /** Answered rate: share of finished calls that completed (telephony). */
   success_rate: number
   minutes_used: number
   minutes_limit: number
+  /** AI resolution rate: success / (success + failure) of call_successful; null without verdicts. */
+  ai_success_rate?: number | null
+  ai_outcome_breakdown?: { success: number; failure: number; unknown: number }
+  /** Calls per outcome (booked, message_taken, transferred, …). */
+  outcome_breakdown?: Record<string, number>
 }
 
 // ─── Call Filters ─────────────────────────────────────────────────────────────

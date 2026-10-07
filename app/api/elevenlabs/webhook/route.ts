@@ -2,6 +2,7 @@
 // call_initiation_failure).
 //   • HMAC signature over the RAW body (ElevenLabs-Signature: t=..,v0=..),
 //     30-minute tolerance — fails closed when no secret is configured;
+//     ELEVENLABS_WEBHOOK_SECRET_PREVIOUS is also accepted during a rotation;
 //   • persisted with a unique (provider, type:conversation_id) key, so
 //     provider retries are idempotent; processing happens after the 2xx;
 //   • a later/partial event (audio) never downgrades a completed call
@@ -11,7 +12,7 @@ import { createLogger, requestIdFrom } from '@/lib/observability/logger'
 import { emitProviderEvent } from '@/lib/observability/telemetry'
 import { allowUnsignedWebhooks } from '@/lib/voice-providers/config'
 import { ingestWebhookEvent, processAfterResponse } from '@/lib/voice-providers/webhook-ingest'
-import { elevenLabsDedupeKey, readEnvelope, verifyElevenLabsSignature } from '@/lib/elevenlabs/webhook'
+import { elevenLabsDedupeKey, readEnvelope, verifyElevenLabsSignatureRotating, webhookSecrets } from '@/lib/elevenlabs/webhook'
 
 // post_call_audio carries base64 audio; we do not subscribe to it, but bound
 // what we read regardless (the platform caps bodies at 4.5 MB anyway).
@@ -34,12 +35,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'not_configured' }, { status: 503 })
   }
   if (secret) {
-    const check = verifyElevenLabsSignature(raw, request.headers.get('elevenlabs-signature'), secret)
+    // Current secret first, then ELEVENLABS_WEBHOOK_SECRET_PREVIOUS while a rotation is in progress.
+    const check = verifyElevenLabsSignatureRotating(raw, request.headers.get('elevenlabs-signature'), webhookSecrets())
     if (!check.ok) {
-      log.warn('webhook.signature_invalid', { reason: check.reason })
+      log.warn('webhook.signature_invalid', { reason: check.reason, ...(check.ageSeconds !== undefined ? { ageSeconds: check.ageSeconds } : {}) })
       emitProviderEvent({ system: 'elevenlabs', kind: 'webhook_verification_failed', ok: false, details: { reason: check.reason } })
       return NextResponse.json({ error: 'invalid_signature' }, { status: 401 })
     }
+    if (check.secretIndex > 0) log.warn('webhook.previous_secret_used')
   }
 
   let body: unknown
@@ -70,7 +73,9 @@ export async function POST(request: Request) {
     l.info('webhook.accepted', { status: res.status })
     return NextResponse.json({ received: true, duplicate: res.status === 'duplicate' })
   } catch (err) {
-    // Not stored: answer 5xx so ElevenLabs retries the delivery.
+    // Not stored: answer 5xx so ElevenLabs retries the delivery (only when
+    // retries are enabled on the workspace webhook: POST /api/admin/voice/webhooks;
+    // otherwise the conversation reconciliation recovers it).
     l.error('webhook.ingest_failed', err)
     return NextResponse.json({ error: 'temporarily_unavailable' }, { status: 503 })
   }

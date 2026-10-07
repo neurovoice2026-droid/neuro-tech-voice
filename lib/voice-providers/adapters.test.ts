@@ -23,6 +23,10 @@ vi.mock('@/lib/voice-providers/platform-tools', () => ({
 vi.mock('@/lib/elevenlabs/llm-selection', () => ({
   effectiveAgentLlm: vi.fn(),
 }))
+// Post-call webhook id (env or discovered): none in these tests.
+vi.mock('@/lib/voice-providers/webhook-health', () => ({
+  resolvePostCallWebhookId: vi.fn(async () => null),
+}))
 
 import * as el from '@/lib/elevenlabs/client'
 import * as ct from '@/lib/cartesia/client'

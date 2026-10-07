@@ -1,6 +1,7 @@
 import { requireOrg } from '@/lib/api/auth'
 import { apiError, errorResponse, RequestError, requestErrorResponse } from '@/lib/api/http'
 import { createLogger, requestIdFrom } from '@/lib/observability/logger'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { conversations as elConversations } from '@/lib/elevenlabs/client'
 import { calls as cartesiaCalls } from '@/lib/cartesia/client'
 import { isProviderError } from '@/lib/voice-providers/errors'
@@ -71,6 +72,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     } catch (err) {
       if (isProviderError(err) && err.code === 'not_found') {
         log.info('calls.audio.not_found', { provider })
+        // Remember it (deleted by retention or elsewhere): the call view stops
+        // offering a player that always fails, and no rate-limit token is spent
+        // on it again. The row was already scoped to this org above.
+        const { error: updErr } = await createAdminClient()
+          .from('calls')
+          .update({ has_recording: false, recording_status: 'unavailable' })
+          .eq('id', row.id)
+          .eq('org_id', org.id)
+        if (updErr) log.error('calls.audio.mark_unavailable_failed', new Error(updErr.message))
         return notAvailable(requestId)
       }
       throw err

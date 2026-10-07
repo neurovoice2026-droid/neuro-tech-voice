@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     const admin = await requireAdmin(request)
     const db = createAdminClient()
     const since = new Date(Date.now() - 24 * 3600_000).toISOString()
-    const [elCircuit, ctCircuit, elMedia, ctMedia, resources, syncRows, webhookRows, failovers, recentCalls] = await Promise.all([
+    const [elCircuit, ctCircuit, elMedia, ctMedia, resources, syncRows, webhookRows, failovers, recentCalls, recentCosts] = await Promise.all([
       peek('elevenlabs'),
       peek('cartesia'),
       peek('elevenlabs_media'),
@@ -32,9 +32,11 @@ export async function GET(request: Request) {
       db.from('agent_provider_resources').select('provider, status'),
       db.from('webhook_events').select('provider, status').in('status', ['received', 'processing', 'failed']),
       db.from('provider_events').select('system, ok, details').eq('kind', 'failover').gte('created_at', since).limit(1000),
-      db.from('calls').select('provider, routing_reason, duration_seconds, cost_usd').gte('created_at', since).limit(5000),
+      db.from('calls').select('provider, routing_reason, duration_seconds').eq('is_test', false).gte('created_at', since).limit(5000),
+      // Provider cost lives in the service-only table (migration 017), never on calls.
+      db.from('call_provider_costs').select('provider, cost_usd, is_burst').gte('created_at', since).limit(5000),
     ])
-    for (const r of [syncRows, webhookRows, failovers, recentCalls]) if (r.error) throw new Error(`diagnostics read failed: ${r.error.message}`)
+    for (const r of [syncRows, webhookRows, failovers, recentCalls, recentCosts]) if (r.error) throw new Error(`diagnostics read failed: ${r.error.message}`)
 
     // Provider selection and cost per minute over the last 24 h.
     const usage: Record<string, { calls: number; minutes: number; cost_usd: number; cost_per_minute_usd: number | null }> = {}
@@ -44,9 +46,15 @@ export async function GET(request: Request) {
       const u = (usage[key] = usage[key] ?? { calls: 0, minutes: 0, cost_usd: 0, cost_per_minute_usd: null })
       u.calls++
       u.minutes += Number(c.duration_seconds ?? 0) / 60
-      u.cost_usd += Number(c.cost_usd ?? 0)
       const reason = (c.routing_reason as string | null) ?? 'unknown'
       reasons[reason] = (reasons[reason] ?? 0) + 1
+    }
+    let burstCalls = 0
+    for (const c of recentCosts.data ?? []) {
+      const key = (c.provider as string | null) ?? 'none'
+      const u = (usage[key] = usage[key] ?? { calls: 0, minutes: 0, cost_usd: 0, cost_per_minute_usd: null })
+      u.cost_usd += Number(c.cost_usd ?? 0)
+      if (c.is_burst === true) burstCalls++
     }
     for (const u of Object.values(usage)) {
       u.minutes = Math.round(u.minutes * 10) / 10
@@ -90,7 +98,10 @@ export async function GET(request: Request) {
         platform_resources: Object.fromEntries(Object.entries(resources).map(([k, v]) => [k, !!v])),
         agent_sync: tally(syncRows.data ?? [], 'provider', 'status'),
         webhook_backlog: tally(webhookRows.data ?? [], 'provider', 'status'),
-        calls_24h: { by_provider: usage, by_routing_reason: reasons },
+        calls_24h: { by_provider: usage, by_routing_reason: reasons, burst_calls: burstCalls },
+        // Post-call webhook + workspace ConvAI settings (slice D); workspace live count with ?probe=1.
+        post_call_webhook: await import('@/lib/voice-providers/webhook-health').then((m) => m.checkPostCallWebhook(log)).catch((err: unknown) => (log.error('admin.diagnostics_webhook_failed', err), { error: 'unavailable' })),
+        ...(probe ? { workspace_concurrency: await import('@/lib/voice-providers/webhook-health').then((m) => m.sampleWorkspaceConcurrency(log)) } : {}),
         failovers_24h: {
           total: (failovers.data ?? []).length,
           final_failures: (failovers.data ?? []).filter((f) => (f.details as { final?: boolean } | null)?.final).length,

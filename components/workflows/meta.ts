@@ -51,8 +51,8 @@ export const TRIGGER_META: Record<TriggerType, TriggerMeta> = {
     tone: 'bg-red-50 text-red-600',
   },
   sentiment_negative: {
-    label: 'Unhappy caller',
-    description: 'The call’s analysis reads the caller as unhappy.',
+    label: 'Call not resolved',
+    description: 'The AI marked the call as not successful: its goal was not reached.',
     icon: Frown,
     tone: 'bg-amber-50 text-amber-700',
   },

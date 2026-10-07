@@ -10,7 +10,8 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { ExportDialog } from './ExportDialog'
 import { DEFAULT_CALL_FILTERS } from '@/hooks/useCalls'
-import { providerLabel, statusLabel, type CallListFilters } from '@/lib/calls/labels'
+import { OUTCOME_LABEL, callResultLabel, outcomeLabel, providerLabel, statusLabel, type CallListFilters } from '@/lib/calls/labels'
+import { CALL_OUTCOMES } from '@/types'
 
 interface CallsToolbarProps {
   filters: CallListFilters
@@ -42,11 +43,17 @@ const DIRECTION_OPTS = [
   { value: 'outbound', label: '↗ Outbound' },
 ]
 
-const SENTIMENT_OPTS = [
-  { value: 'all',      label: 'All sentiments' },
-  { value: 'positive', label: '😊 Positive' },
-  { value: 'neutral',  label: '😐 Neutral' },
-  { value: 'negative', label: '😞 Negative' },
+// "AI outcome" = calls.call_successful: the AI's verdict on the call's goal (not sentiment).
+const AI_OUTCOME_OPTS: Array<{ value: CallListFilters['aiOutcome']; label: string }> = [
+  { value: 'all',     label: 'Any AI outcome' },
+  { value: 'success', label: '✓ Successful' },
+  { value: 'failure', label: '✕ Not successful' },
+  { value: 'unknown', label: '? Unclear' },
+]
+
+const OUTCOME_OPTS: Array<{ value: CallListFilters['outcome']; label: string }> = [
+  { value: 'all', label: 'Any outcome' },
+  ...CALL_OUTCOMES.map((o) => ({ value: o, label: OUTCOME_LABEL[o] })),
 ]
 
 const SORT_OPTS = [
@@ -149,6 +156,8 @@ export function CallsToolbar({
     filters.provider !== 'all',
     filters.direction !== 'all',
     filters.sentiment !== 'all',
+    filters.outcome !== 'all',
+    filters.aiOutcome !== 'all',
     filters.dateFrom,
     filters.dateTo,
     filters.minDuration > 0,
@@ -167,6 +176,8 @@ export function CallsToolbar({
   if (filters.provider !== 'all')  pills.push({ label: providerLabel(filters.provider) ?? filters.provider, clear: () => update({ provider: 'all' }) })
   if (filters.direction !== 'all') pills.push({ label: filters.direction === 'inbound' ? 'Inbound' : 'Outbound', clear: () => update({ direction: 'all' }) })
   if (filters.sentiment !== 'all') pills.push({ label: `${filters.sentiment.charAt(0).toUpperCase()}${filters.sentiment.slice(1)} sentiment`, clear: () => update({ sentiment: 'all' }) })
+  if (filters.outcome !== 'all')   pills.push({ label: outcomeLabel(filters.outcome) ?? filters.outcome, clear: () => update({ outcome: 'all' }) })
+  if (filters.aiOutcome !== 'all') pills.push({ label: `AI outcome: ${callResultLabel(filters.aiOutcome) ?? filters.aiOutcome}`, clear: () => update({ aiOutcome: 'all' }) })
   if (filters.dateFrom)            pills.push({ label: `From ${filters.dateFrom}`, clear: () => update({ dateFrom: '' }) })
   if (filters.dateTo)              pills.push({ label: `To ${filters.dateTo}`, clear: () => update({ dateTo: '' }) })
   if (filters.minDuration > 0)     pills.push({ label: `Min ${filters.minDuration}s`, clear: () => update({ minDuration: 0 }) })
@@ -182,8 +193,8 @@ export function CallsToolbar({
             type="search"
             value={searchInput}
             onChange={(e) => handleSearch(e.target.value)}
-            placeholder="Search by number or summary…"
-            aria-label="Search calls by phone number or summary"
+            placeholder="Search by number, summary or what was said…"
+            aria-label="Search calls by phone number, summary or transcript"
             maxLength={120}
             className="pl-9 pr-8 h-9"
           />
@@ -241,15 +252,29 @@ export function CallsToolbar({
           </SelectContent>
         </Select>
 
-        {/* Sentiment */}
-        <Select value={filters.sentiment} onValueChange={(v) => v && update({ sentiment: v as CallListFilters['sentiment'] })}>
-          <SelectTrigger className="h-9 w-40" aria-label="Filter by sentiment">
-            <SelectValue placeholder="All sentiments">
-              {(value: string) => SENTIMENT_OPTS.find((o) => o.value === value)?.label ?? value}
+        {/* Outcome */}
+        <Select value={filters.outcome} onValueChange={(v) => v && update({ outcome: v as CallListFilters['outcome'] })}>
+          <SelectTrigger className="h-9 w-44" aria-label="Filter by outcome">
+            <SelectValue placeholder="Any outcome">
+              {(value: string) => OUTCOME_OPTS.find((o) => o.value === value)?.label ?? value}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            {SENTIMENT_OPTS.map((o) => (
+            {OUTCOME_OPTS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* AI outcome */}
+        <Select value={filters.aiOutcome} onValueChange={(v) => v && update({ aiOutcome: v as CallListFilters['aiOutcome'] })}>
+          <SelectTrigger className="h-9 w-40" aria-label="Filter by AI outcome">
+            <SelectValue placeholder="Any AI outcome">
+              {(value: string) => AI_OUTCOME_OPTS.find((o) => o.value === value)?.label ?? value}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {AI_OUTCOME_OPTS.map((o) => (
               <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
             ))}
           </SelectContent>
