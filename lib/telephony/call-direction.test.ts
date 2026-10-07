@@ -72,3 +72,28 @@ describe('ntv_call_direction', () => {
     expect(params.conversation_initiation_client_data.dynamic_variables.ntv_call_direction).toBe('outbound')
   })
 })
+
+describe('per-call token and routing mode (slice A2)', () => {
+  it('register-call carries the signed token twice (plain for the tool body and matching, secret__ for headers) and routing app_routed', async () => {
+    await routeInboundCall({ CallSid: 'CA0124', From: '+40712345678', To: '+40312345678' })
+    const vars = (registerCall.mock.calls[0][0] as { conversation_initiation_client_data: { dynamic_variables: Record<string, string> } }).conversation_initiation_client_data.dynamic_variables
+    expect(vars.ntv_call_token).toMatch(/^[\w-]+\.[\w-]+$/)
+    expect(vars.secret__ntv_call_token).toBe(vars.ntv_call_token)
+    expect(vars.ntv_routing_mode).toBe('app_routed')
+  })
+
+  it('native outbound calls carry the secret token and routing native', async () => {
+    await startOutboundCall({ orgId: ORG, toNumber: '+40722222222', purpose: 'outbound' })
+    const vars = (outboundCall.mock.calls[0][0] as { conversation_initiation_client_data: { dynamic_variables: Record<string, string> } }).conversation_initiation_client_data.dynamic_variables
+    expect(vars.secret__ntv_call_token).toBe(vars.ntv_call_token)
+    expect(vars.ntv_routing_mode).toBe('native')
+  })
+
+  it('a tenant call-limit rejection takes this call to the next path only (apology here, no fallback configured)', async () => {
+    const { ProviderError } = await import('@/lib/voice-providers/errors')
+    registerCall.mockRejectedValueOnce(new ProviderError({ system: 'elevenlabs', code: 'tenant_limited', operation: 'twilio.register_call', providerCode: 'daily_limit_exceeded' }))
+    const twiml = await routeInboundCall({ CallSid: 'CA0125', From: '+40712345678', To: '+40312345678' })
+    expect(twiml).toContain('<Say')
+    expect(twiml).not.toContain('<Stream')
+  })
+})

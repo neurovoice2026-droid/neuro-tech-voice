@@ -15,7 +15,7 @@ import * as ct from '@/lib/cartesia/client'
 import { agentTags } from '@/lib/elevenlabs/agent-config'
 import { LIFECYCLES } from './adapters'
 import { providersFor, syncAgent } from './agent-sync'
-import { toProviderError, VOICE_PROVIDERS, type VoiceProvider } from './errors'
+import { isProviderError, toProviderError, VOICE_PROVIDERS, type VoiceProvider } from './errors'
 
 export interface ReconcileOptions {
   apply: boolean
@@ -28,7 +28,20 @@ export interface ReconcileOptions {
 export interface ReconcileIssue {
   agentId: string
   provider: VoiceProvider
-  kind: 'not_created' | 'missing_remote' | 'unrecorded_remote' | 'duplicates' | 'failed' | 'degraded' | 'pending'
+  kind:
+    | 'not_created'
+    | 'missing_remote'
+    | 'unrecorded_remote'
+    | 'duplicates'
+    | 'failed'
+    | 'degraded'
+    | 'pending'
+    /** The recorded agent exists but lacks this environment's tag (legacy): a sync re-tags it. */
+    | 'untagged_remote'
+    /** The recorded agent is tagged for another environment or local agent: never touched (report only). */
+    | 'foreign_remote'
+    /** The remote agent reads analysis items, not our legacy evaluation/data collection (report only). */
+    | 'analysis_items_migrated'
   externalIds?: string[]
   action?: string
 }
@@ -47,24 +60,62 @@ function envTag(): string {
   return agentTags({ orgId: '', localAgentId: '' }).find((t) => t.startsWith('ntv-env:')) as string
 }
 
-async function remoteElevenLabsAgents(maxPages = 20): Promise<Array<{ id: string; localId: string | null }>> {
+interface RemoteInventory {
+  agents: Array<{ id: string; localId: string | null }>
+  /** The listing stopped before its end: absence cannot be proven from it. */
+  truncated: boolean
+}
+
+/** Hard stop for a runaway cursor (100 agents per page): reported as truncation, never silent. */
+const MAX_LIST_PAGES = 500
+
+/**
+ * Every agent tagged for THIS environment. The tags filter matches ANY of
+ * the given tags (spec: "Repeat the parameter to match any of several
+ * tags"), so only the environment tag is sent: adding 'ntv' would page
+ * through every environment's agents.
+ */
+async function remoteElevenLabsAgents(maxPages = MAX_LIST_PAGES): Promise<RemoteInventory> {
   const out: Array<{ id: string; localId: string | null }> = []
+  const env = envTag()
   let cursor: string | null = null
   for (let page = 0; page < maxPages; page++) {
-    const res = await el.agents.list({ tags: ['ntv', envTag()], cursor, page_size: 100 })
+    const res = await el.agents.list({ tags: [env], cursor, page_size: 100 })
     for (const a of res.agents ?? []) {
       const tags = a.tags ?? []
-      if (!tags.includes(envTag())) continue
+      if (!tags.includes(env)) continue
       const local = tags.find((t) => t.startsWith('ntv-agent:'))?.slice('ntv-agent:'.length) ?? null
       out.push({ id: a.agent_id, localId: local && UUID.test(local) ? local : null })
     }
-    if (!res.has_more || !res.next_cursor) break
+    if (!res.has_more) return { agents: out, truncated: false }
+    if (!res.next_cursor) return { agents: out, truncated: true }
     cursor = res.next_cursor
   }
-  return out
+  return { agents: out, truncated: true }
 }
 
-async function remoteCartesiaAgents(maxPages = 20): Promise<Array<{ id: string; localId: string | null }>> {
+/**
+ * Direct GET of a recorded id: 'exists' (untagged legacy agent, or tagged for
+ * this environment and local agent), 'foreign' (tagged for another environment
+ * or another local agent: a sync would hijack it), 'missing' (404) or
+ * 'unknown' (any other failure).
+ */
+async function remoteAgentState(externalId: string, localAgentId: string, log: Logger): Promise<'exists' | 'foreign' | 'missing' | 'unknown'> {
+  try {
+    const remote = await el.agents.get(externalId)
+    const tags = remote.tags ?? []
+    const env = tags.find((t) => t.startsWith('ntv-env:'))
+    const local = tags.find((t) => t.startsWith('ntv-agent:'))
+    if ((env && env !== envTag()) || (local && local !== `ntv-agent:${localAgentId}`)) return 'foreign'
+    return 'exists'
+  } catch (err) {
+    if (isProviderError(err) && err.code === 'not_found') return 'missing'
+    log.warn('reconcile.agent_get_failed', { externalAgentId: externalId, code: isProviderError(err) ? err.code : 'unknown' })
+    return 'unknown'
+  }
+}
+
+async function remoteCartesiaAgents(maxPages = 20): Promise<RemoteInventory> {
   const out: Array<{ id: string; localId: string | null }> = []
   let after: string | null = null
   for (let page = 0; page < maxPages; page++) {
@@ -73,10 +124,10 @@ async function remoteCartesiaAgents(maxPages = 20): Promise<Array<{ id: string; 
       const m = /^ntv-agent:([0-9a-f-]{36})$/i.exec(a.description ?? '')
       if (m) out.push({ id: a.id, localId: m[1] })
     }
-    if (!res.has_more || !res.data?.length) break
+    if (!res.has_more || !res.data?.length) return { agents: out, truncated: false }
     after = res.data[res.data.length - 1].id
   }
-  return out
+  return { agents: out, truncated: true }
 }
 
 export async function reconcileVoiceProviders(opts: ReconcileOptions): Promise<ReconcileReport> {
@@ -88,16 +139,24 @@ export async function reconcileVoiceProviders(opts: ReconcileOptions): Promise<R
   if (error) throw new Error(`agents read failed: ${error.message}`)
   const agentIds = (agents ?? []).map((a) => a.id as string)
   const { data: resources, error: resErr } = agentIds.length
-    ? await db.from('agent_provider_resources').select('agent_id, provider, external_id, status').in('agent_id', agentIds)
+    ? await db.from('agent_provider_resources').select('agent_id, provider, external_id, status, details').in('agent_id', agentIds)
     : { data: [], error: null }
   if (resErr) throw new Error(`agent_provider_resources read failed: ${resErr.message}`)
 
   // Remote inventories (one listing per provider instead of one call per agent).
   const remote: Partial<Record<VoiceProvider, Array<{ id: string; localId: string | null }>>> = {}
+  const truncated = new Set<VoiceProvider>()
   for (const p of VOICE_PROVIDERS) {
     if (!LIFECYCLES[p].isConfigured()) continue
     try {
-      remote[p] = p === 'elevenlabs' ? await remoteElevenLabsAgents() : await remoteCartesiaAgents()
+      const inventory = p === 'elevenlabs' ? await remoteElevenLabsAgents() : await remoteCartesiaAgents()
+      remote[p] = inventory.agents
+      if (inventory.truncated) {
+        // A partial listing cannot prove that an agent is missing or orphaned.
+        truncated.add(p)
+        log.error('reconcile.list_truncated', undefined, { provider: p, listed: inventory.agents.length })
+        report.errors.push({ provider: p, step: 'list', error: 'The agent listing was truncated: missing and orphan checks were skipped.' })
+      }
     } catch (err) {
       const pe = toProviderError(err, p, 'reconcile.list')
       log.error('reconcile.list_failed', err, { provider: p })
@@ -125,9 +184,25 @@ export async function reconcileVoiceProviders(opts: ReconcileOptions): Promise<R
         report.issues.push({ agentId, provider: p, kind, ...(externalIds ? { externalIds } : {}) })
         if (!needsSync.includes(p)) needsSync.push(p)
       }
+      // A truncated listing may hide the agent: the sync adopts it by tag instead of creating a duplicate.
       if (!recorded && remoteIds.length === 0) push('not_created')
       else if (!recorded && remoteIds.length > 0) push('unrecorded_remote', remoteIds)
-      else if (recorded && !remoteIds.includes(recorded)) push('missing_remote', [recorded])
+      else if (recorded && !remoteIds.includes(recorded) && !truncated.has(p)) {
+        // Not in this environment's listing: a legacy agent created before
+        // the environment tag existed is still there. Only a 404 proves absence.
+        const state = p === 'elevenlabs' ? await remoteAgentState(recorded, agentId, log) : 'missing'
+        if (state === 'missing') push('missing_remote', [recorded])
+        else if (state === 'exists') push('untagged_remote', [recorded])
+        else if (state === 'foreign') {
+          log.error('reconcile.foreign_remote', undefined, { agentId, externalAgentId: recorded })
+          report.issues.push({ agentId, provider: p, kind: 'foreign_remote', externalIds: [recorded], action: 'report_only' })
+        }
+        else report.errors.push({ provider: p, step: 'verify_agent', error: 'Could not verify a recorded agent; it was left alone.' })
+      }
+      if (p === 'elevenlabs' && (row?.details as Record<string, unknown> | null | undefined)?.analysis_items_migrated === true) {
+        // A re-sync does not change this: report only (see docs/elevenlabs/A2.md).
+        report.issues.push({ agentId, provider: p, kind: 'analysis_items_migrated', externalIds: recorded ? [recorded] : undefined, action: 'report_only' })
+      }
       // Duplicates are decided after the sync below (which may adopt one of
       // them): deleting against the pre-sync record could remove the agent
       // that was just adopted.
@@ -137,7 +212,7 @@ export async function reconcileVoiceProviders(opts: ReconcileOptions): Promise<R
     if (opts.apply && needsSync.length) {
       const results = await syncAgent(agentId, { providers: needsSync, force: true, log })
       for (const r of results) {
-        for (const issue of report.issues) if (issue.agentId === agentId && issue.provider === r.provider) issue.action = `synced:${r.status}`
+        for (const issue of report.issues) if (issue.agentId === agentId && issue.provider === r.provider && !issue.action) issue.action = `synced:${r.status}`
       }
     }
   }
@@ -166,6 +241,7 @@ export async function reconcileVoiceProviders(opts: ReconcileOptions): Promise<R
   if (agentIds.length < opts.limit) {
     const known = new Set(agentIds)
     for (const p of VOICE_PROVIDERS) {
+      if (truncated.has(p)) continue
       for (const r of remote[p] ?? []) {
         if (r.localId && known.has(r.localId)) continue
         report.orphans.push({ provider: p, externalId: r.id, localAgentId: r.localId, deleted: false, note: p === 'cartesia' ? 'report_only' : undefined })

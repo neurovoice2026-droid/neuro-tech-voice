@@ -51,7 +51,7 @@ export function errorResponse(err: unknown, log: Logger, event: string, requestI
     const status =
       err.code === 'not_configured' ? 503
       : err.code === 'circuit_open' ? 503
-      : err.code === 'rate_limited' ? 429
+      : err.code === 'rate_limited' || err.code === 'tenant_limited' ? 429
       : err.code === 'validation' ? 422
       : err.code === 'not_found' ? 404
       : 502

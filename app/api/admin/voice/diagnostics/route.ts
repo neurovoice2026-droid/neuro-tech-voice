@@ -13,6 +13,7 @@ import { listPlatformResources } from '@/lib/voice-providers/platform-resources'
 import { probeProviders } from '@/lib/voice-providers/maintenance'
 import { diagnoseModels } from '@/lib/elevenlabs/model-diagnostics'
 import { knowledgeDiagnostics } from '@/lib/voice-providers/knowledge-diagnostics'
+import { platformAgentDiagnostics } from '@/lib/voice-providers/platform-diagnostics'
 
 export async function GET(request: Request) {
   const requestId = requestIdFrom(request)
@@ -64,11 +65,13 @@ export async function GET(request: Request) {
     const probe = new URL(request.url).searchParams.get('probe') === '1'
     // TTS model / LLM checks (env, GET /v1/models, GET /v1/convai/llm/list, synced-agent drift).
     const modelProblems = await diagnoseModels(db, log)
+    // Platform-owned agent config: auth, call limits, guardrails, LLM in use, read-back flags, rollout.
+    const platformAgent = await platformAgentDiagnostics(db, log)
     log.info('admin.diagnostics', { by: admin.kind, probe })
     return NextResponse.json(
       {
         config: summarizeVoiceConfig(),
-        problems: [...validateVoiceConfig(), ...modelProblems],
+        problems: [...validateVoiceConfig(), ...modelProblems, ...platformAgent.problems],
         // `effective` is what routing sees (forced overrides, open → half-open after the open period).
         circuits: {
           elevenlabs: { effective: elCircuit.state, ...elCircuit.raw },
@@ -76,6 +79,7 @@ export async function GET(request: Request) {
           cartesia: { effective: ctCircuit.state, ...ctCircuit.raw },
           cartesia_media: { effective: ctMedia.state, ...ctMedia.raw },
         },
+        platform_agent_config: platformAgent.summary,
         platform_resources: Object.fromEntries(Object.entries(resources).map(([k, v]) => [k, !!v])),
         agent_sync: tally(syncRows.data ?? [], 'provider', 'status'),
         webhook_backlog: tally(webhookRows.data ?? [], 'provider', 'status'),

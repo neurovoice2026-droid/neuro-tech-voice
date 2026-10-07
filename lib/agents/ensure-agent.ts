@@ -28,6 +28,7 @@ import { lifecycleFor } from '@/lib/voice-providers/adapters'
 import { safeMessageFor, type VoiceProvider } from '@/lib/voice-providers/errors'
 import { applyNumberRouting } from '@/lib/telephony/binding'
 import { redactText } from '@/lib/security/redact'
+import { PLATFORM_VARIABLE_MESSAGE, hasNoPlatformVariables } from '@/lib/voice-providers/template-variables'
 import type {
   Agent,
   AgentStatusView,
@@ -90,8 +91,8 @@ export const OnboardingCompanySchema = z.object({
 export const OnboardingAgentSchema = z.object({
   name: z.string().trim().min(1).max(AGENT_NAME_MAX),
   language: AgentLanguageSchema,
-  system_prompt: z.string().max(SYSTEM_PROMPT_MAX).nullable().optional(),
-  first_message: z.string().trim().max(FIRST_MESSAGE_MAX).nullable().optional(),
+  system_prompt: z.string().max(SYSTEM_PROMPT_MAX).refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE).nullable().optional(),
+  first_message: z.string().trim().max(FIRST_MESSAGE_MAX).refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE).nullable().optional(),
   personality: PersonalitySchema.optional(),
 })
 

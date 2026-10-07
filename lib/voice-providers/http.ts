@@ -8,8 +8,7 @@
 
 import {
   ProviderError,
-  codeForStatus,
-  summarizeErrorBody,
+  classifyHttpError,
   toProviderError,
   type ExternalSystem,
   type VoiceProvider,
@@ -148,12 +147,17 @@ async function attemptOnce<T>(req: ProviderRequest, method: string): Promise<Pro
     const text = await readBounded(res).finally(() => {
       if (headerTimer) clearTimeout(headerTimer)
     })
+    // Status plus the documented error code: a tenant-scoped 429 or a 403
+    // permission problem must not look like a provider outage.
+    const classified = classifyHttpError(res.status, text)
     throw new ProviderError({
       system: req.system,
       operation: req.operation,
-      code: codeForStatus(res.status),
+      code: classified.code,
       status: res.status,
-      detail: summarizeErrorBody(text),
+      detail: classified.detail,
+      providerCode: classified.providerCode,
+      ...(classified.safeMessage ? { safeMessage: classified.safeMessage } : {}),
       retryAfterSeconds: parseRetryAfter(res.headers.get('retry-after')),
     })
   }

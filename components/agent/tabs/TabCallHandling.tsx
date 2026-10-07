@@ -30,6 +30,8 @@ import {
   type TransferSettings,
 } from '@/lib/voice-providers/types'
 import { normalizeE164 } from '@/lib/phone/e164'
+import { isStricterPrivacy } from '@/lib/voice-providers/privacy-change'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import type { Agent, AgentStatusView } from '@/types'
 
@@ -108,7 +110,13 @@ function TransferCard({ agent, status, onUpdate, isSaving }: TabCallHandlingProp
     label: draft.label.trim() || null,
   }
   const parsed = TransferSettingsSchema.safeParse(candidate)
-  if (!parsed.success && !errors.number) errors.number = parsed.error.issues[0]?.message ?? 'Invalid transfer settings.'
+  if (!parsed.success) {
+    // Show each schema error under its own field (e.g. a platform variable in the condition).
+    const issue = parsed.error.issues[0]
+    const field = issue?.path[0]
+    if (field === 'condition' || field === 'label') errors[field] = errors[field] ?? issue.message
+    else if (!errors.number) errors.number = issue?.message ?? 'Invalid transfer settings.'
+  }
   const valid = Object.keys(errors).length === 0 && parsed.success
   const visible = showErrors ? errors : {}
   const isDirty = JSON.stringify(draft) !== JSON.stringify(saved)
@@ -615,7 +623,7 @@ const RETENTION_OPTIONS: Array<{ value: number; label: string }> = [
   { value: 180, label: '6 months' },
   { value: 365, label: '1 year' },
   { value: 730, label: '2 years' },
-  { value: -1, label: 'Provider default' },
+  { value: -1, label: 'Unlimited (kept until deleted)' },
 ]
 
 function retentionLabel(days: number): string {
@@ -623,6 +631,23 @@ function retentionLabel(days: number): string {
   if (known) return known.label
   if (days === 0) return 'Delete right after the call'
   return `${days} days`
+}
+
+/** What the confirmation says before a stricter privacy setting is applied to stored calls. */
+function stricterPrivacyMessage(saved: PrivacyDraft, draft: PrivacyDraft): string {
+  const parts: string[] = []
+  if (saved.record_audio && !draft.record_audio) {
+    parts.push('Recording stops, and the voice provider may also delete the recordings of calls it already stores.')
+  }
+  const shorter = draft.retention_days >= 0 && (saved.retention_days < 0 || draft.retention_days < saved.retention_days)
+  if (shorter) {
+    parts.push(
+      draft.retention_days === 0
+        ? 'Transcripts and recordings already stored at the voice provider will be deleted.'
+        : `Transcripts and recordings older than ${retentionLabel(draft.retention_days)} will be deleted at the voice provider, including calls already stored.`,
+    )
+  }
+  return `${parts.join(' ')} This cannot be undone.`
 }
 
 interface PrivacyDraft {
@@ -637,8 +662,15 @@ function PrivacyCard({ agent, onUpdate, isSaving }: Omit<TabCallHandlingProps, '
     return { ...s.privacy, recording_notice: s.conversation.recording_notice }
   }, [agent])
   const [draft, setDraft] = useState(saved)
+  const [confirming, setConfirming] = useState(false)
   const { saving, run } = useCardSave(onUpdate)
   const isDirty = JSON.stringify(draft) !== JSON.stringify(saved)
+  // Turning recording off or shortening retention also applies to calls the
+  // voice provider already stores (deleted, cannot be undone): confirm first.
+  const stricter = isStricterPrivacy(
+    { record_audio: saved.record_audio, retention_days: saved.retention_days },
+    { record_audio: draft.record_audio, retention_days: draft.retention_days },
+  )
 
   const options = RETENTION_OPTIONS.some((o) => o.value === draft.retention_days)
     ? RETENTION_OPTIONS
@@ -660,6 +692,11 @@ function PrivacyCard({ agent, onUpdate, isSaving }: Omit<TabCallHandlingProps, '
       const s = readAgentSettings(next)
       setDraft({ ...s.privacy, recording_notice: s.conversation.recording_notice })
     }
+  }
+
+  const requestSave = () => {
+    if (stricter) setConfirming(true)
+    else void save()
   }
 
   return (
@@ -692,7 +729,11 @@ function PrivacyCard({ agent, onUpdate, isSaving }: Omit<TabCallHandlingProps, '
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">Applies at the voice provider. “Provider default” keeps data without a fixed limit.</p>
+          <p className="text-xs text-muted-foreground">
+            Applies to calls stored at the voice provider. “Unlimited” keeps them until you delete them. Choosing a shorter
+            period, or turning recording off, also applies to calls already stored there: older transcripts and recordings
+            are deleted and cannot be recovered.
+          </p>
         </div>
 
         <SettingSwitch
@@ -726,10 +767,33 @@ function PrivacyCard({ agent, onUpdate, isSaving }: Omit<TabCallHandlingProps, '
           dirty={isDirty}
           saving={saving}
           blocked={isSaving && !saving}
-          onSave={() => void save()}
+          onSave={requestSave}
           onDiscard={() => setDraft(saved)}
         />
       </CardContent>
+
+      <Dialog open={confirming} onOpenChange={(open) => !open && setConfirming(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Apply to calls already stored?</DialogTitle>
+            <DialogDescription>{stricterPrivacyMessage(saved, draft)}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirming(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setConfirming(false)
+                void save()
+              }}
+            >
+              Save and apply
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

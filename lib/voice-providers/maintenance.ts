@@ -163,6 +163,7 @@ export async function runVoiceMaintenance(log: Logger = createLogger({ component
   const steps: Array<[string, () => Promise<unknown>]> = [
     ['health', () => probeProviders(log)],
     ['agent_sync_retries', () => retryAgentSyncs(20, log)],
+    ['config_rollout', () => import('./config-rollout').then((m) => m.runConfigRollout({ dryRun: false, log }))],
     ['webhook_retries', () => reprocessPendingWebhooks(50, log)],
     ['cartesia_poll', () => reconcileCartesiaCalls(25, log)],
     ['stale_elevenlabs_calls', () => finalizeStaleElevenLabsCalls(50, log)],

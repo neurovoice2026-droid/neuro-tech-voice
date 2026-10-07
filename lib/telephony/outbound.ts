@@ -76,6 +76,7 @@ export async function startOutboundCall(req: OutboundRequest, log: Logger = crea
     const { data: call, error: insErr } = await db.from('calls').insert({ ...baseRow, provider: 'elevenlabs', routing_reason: 'primary' }).select('id').single()
     if (insErr) throw new Error(`calls insert failed: ${insErr.message}`)
     let res: Awaited<ReturnType<typeof el.twilio.outboundCall>>
+    const callToken = signCallToken(call.id as string, 'transfer', 4 * 3600)
     try {
       res = await el.twilio.outboundCall(
         {
@@ -86,7 +87,11 @@ export async function startOutboundCall(req: OutboundRequest, log: Logger = crea
             ntv_call_id: call.id as string,
             // Signed so the post-call webhook can be matched to this row (a
             // bare ntv_call_id is never trusted).
-            ntv_call_token: signCallToken(call.id as string, 'transfer', 4 * 3600),
+            ntv_call_token: callToken,
+            // Same token as a secret variable (never sent to the LLM; tool headers).
+            secret__ntv_call_token: callToken,
+            // ElevenLabs places and controls this call: native transfer tool.
+            ntv_routing_mode: 'native',
             after_hours: 'false',
             business_name: ctx.org.name ?? '',
             // Gates voicemail_detection to outbound calls (prompt rule).

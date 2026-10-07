@@ -5,6 +5,10 @@ import {
   configHash,
   dynamicVariablePlaceholders,
   transferToolConfig,
+  versionDescription,
+  withRetroactivePrivacy,
+  withoutPiiRedaction,
+  PLATFORM_AGENT_CONFIG_VERSION,
   type PlatformResources,
 } from './agent-config'
 import { makeAgentSpec } from '@/tests/helpers/agent-spec'
@@ -35,6 +39,9 @@ beforeEach(() => {
   vi.stubEnv('ELEVENLABS_LLM', '')
   vi.stubEnv('ELEVENLABS_ENABLE_GUARDRAILS', '')
   vi.stubEnv('ELEVENLABS_TEXT_NORMALISATION', '')
+  for (const k of ['ELEVENLABS_PII_REDACTION', 'ELEVENLABS_CONTENT_GUARDRAILS', 'ELEVENLABS_GUARDRAIL_FOCUS', 'ELEVENLABS_GUARDRAIL_PROMPT_INJECTION', 'ELEVENLABS_TRUST_CONTEXT', 'ELEVENLABS_BACKUP_LLM', 'ELEVENLABS_LLM_CASCADE_TIMEOUT_SECONDS']) {
+    vi.stubEnv(k, '')
+  }
 })
 
 describe('agentTags', () => {
@@ -85,7 +92,7 @@ describe('buildElevenLabsAgentBody', () => {
 
   describe('human transfer', () => {
     it('native numbers: built-in transfer_to_number with the configured destination, no webhook tool', () => {
-      const body = build({ appRouted: false, transfer: TRANSFER_ON })
+      const body = build({ appRouted: false, hasNativeNumbers: true, transfer: TRANSFER_ON })
       expect(at(body, 'conversation_config.agent.prompt.built_in_tools.transfer_to_number')).toEqual({
         type: 'system',
         name: 'transfer_to_number',
@@ -106,7 +113,7 @@ describe('buildElevenLabsAgentBody', () => {
     })
 
     it('native numbers: default condition when none is configured', () => {
-      const body = build({ appRouted: false, transfer: { ...TRANSFER_ON, condition: '   ' } })
+      const body = build({ appRouted: false, hasNativeNumbers: true, transfer: { ...TRANSFER_ON, condition: '   ' } })
       const transfers = at(body, 'conversation_config.agent.prompt.built_in_tools.transfer_to_number.params.transfers') as Array<{ condition: string }>
       expect(transfers[0].condition).toBe('The caller asks to speak with a person.')
     })
@@ -123,10 +130,21 @@ describe('buildElevenLabsAgentBody', () => {
       expect(at(body, 'conversation_config.agent.prompt.built_in_tools.transfer_to_number')).toBeNull()
     })
 
+    it('mixed routing (app-routed AND native numbers): both tools, the native one says when to use it', () => {
+      const body = build({ appRouted: true, hasNativeNumbers: true, transfer: TRANSFER_ON })
+      expect(at(body, 'conversation_config.agent.prompt.tool_ids')).toEqual(['tool_transfer_1'])
+      const native = at(body, 'conversation_config.agent.prompt.built_in_tools.transfer_to_number') as { description: string; params: { transfers: unknown[] } }
+      expect(native.params.transfers).toHaveLength(1)
+      expect(native.description).toContain('ntv_routing_mode')
+      expect(native.description).toContain('transfer_to_human')
+      // The routing variable defaults to native for calls that bypass our router.
+      expect(at(body, 'conversation_config.agent.dynamic_variables.dynamic_variable_placeholders.ntv_routing_mode')).toBe('native')
+    })
+
     it('transfer disabled or missing number: no transfer in either mode', () => {
-      for (const appRouted of [true, false]) {
+      for (const [appRouted, hasNativeNumbers] of [[true, false], [false, true], [true, true]] as const) {
         for (const transfer of [{ ...TRANSFER_ON, enabled: false }, { ...TRANSFER_ON, number: null }]) {
-          const body = build({ appRouted, transfer })
+          const body = build({ appRouted, hasNativeNumbers, transfer })
           expect(at(body, 'conversation_config.agent.prompt.tool_ids')).toEqual([])
           expect(at(body, 'conversation_config.agent.prompt.built_in_tools.transfer_to_number')).toBeNull()
         }
@@ -367,19 +385,35 @@ describe('buildElevenLabsAgentBody', () => {
     it('includes customer variables and the platform placeholders', () => {
       const body = build({ dynamicVariables: { clinic_city: 'Cluj' } })
       expect(at(body, 'conversation_config.agent.dynamic_variables.dynamic_variable_placeholders')).toEqual({
-        ntv_call_direction: 'inbound',
         clinic_city: 'Cluj',
         ntv_call_id: 'unknown',
         ntv_call_token: 'none',
+        secret__ntv_call_token: 'none',
         after_hours: 'false',
         business_name: 'Smile Clinic',
+        ntv_call_direction: 'inbound',
+        ntv_routing_mode: 'native',
       })
+    })
+
+    it('has a placeholder for every platform variable (one source of truth, no duplicates)', async () => {
+      const { PLATFORM_VARIABLES } = await import('@/lib/voice-providers/prompt')
+      const vars = dynamicVariablePlaceholders(makeAgentSpec())
+      for (const name of Object.values(PLATFORM_VARIABLES)) expect(typeof vars[name]).toBe('string')
+    })
+
+    it('after_hours is "unknown" when opening hours are in the prompt (native calls decide from them)', () => {
+      const vars = dynamicVariablePlaceholders(makeAgentSpec({ openingHours: 'Monday 09:00-17:00; Tuesday closed.' }))
+      expect(vars.after_hours).toBe('unknown')
     })
 
     it('platform placeholders win over customer values with the same name', () => {
       const vars = dynamicVariablePlaceholders(makeAgentSpec({ dynamicVariables: { ntv_call_id: 'spoofed', after_hours: 'true' }, orgName: null }))
       expect(vars.ntv_call_id).toBe('unknown')
       expect(vars.after_hours).toBe('false')
+      const spoof = dynamicVariablePlaceholders(makeAgentSpec({ dynamicVariables: { secret__ntv_call_token: 'x', ntv_routing_mode: 'app_routed' } }))
+      expect(spoof.secret__ntv_call_token).toBe('none')
+      expect(spoof.ntv_routing_mode).toBe('native')
       expect(vars.business_name).toBe('')
     })
   })
@@ -421,17 +455,92 @@ describe('buildElevenLabsAgentBody', () => {
         delete_audio: false,
         apply_to_existing_conversations: false,
         zero_retention_mode: false,
+        conversation_history_redaction: { enabled: true, entities: ['financial_id.payment_card'], excluded_data_collection_ids: [] },
       })
+    })
+
+    it('one-shot retroactive privacy and the redaction fallback leave the original body and hash untouched', async () => {
+      const body = build()
+      const hash = await configHash(body)
+      const once = withRetroactivePrivacy(body)
+      expect(at(once, 'platform_settings.privacy.apply_to_existing_conversations')).toBe(true)
+      expect(at(body, 'platform_settings.privacy.apply_to_existing_conversations')).toBe(false)
+      const noRedaction = withoutPiiRedaction(body)
+      expect(at(noRedaction, 'platform_settings.privacy')).not.toHaveProperty('conversation_history_redaction')
+      expect(at(body, 'platform_settings.privacy.conversation_history_redaction.enabled')).toBe(true)
+      expect(await configHash(body)).toBe(hash)
+    })
+
+    it('PII redaction can be switched off by env (explicitly disabled, never omitted)', () => {
+      vi.stubEnv('ELEVENLABS_PII_REDACTION', 'false')
+      expect(at(build(), 'platform_settings.privacy.conversation_history_redaction')).toEqual({ enabled: false, entities: [], excluded_data_collection_ids: [] })
+    })
+
+    it('sends plan-based call limits and the queue for every routing mode', () => {
+      expect(at(build({ callLimits: { concurrency: 4, daily: 500, bursting: true } }), 'platform_settings.call_limits')).toEqual({
+        agent_concurrency_limit: 4,
+        daily_limit: 500,
+        bursting_enabled: true,
+      })
+      // Any app-routed number: fail fast so the router fails over to Cartesia.
+      expect(at(build({ appRouted: true, hasNativeNumbers: true }), 'platform_settings.queueing_config')).toEqual({ enabled: false })
+      // Native-only: no failover exists, a short queue instead.
+      expect(at(build({ appRouted: false, hasNativeNumbers: true }), 'platform_settings.queueing_config')).toEqual({ enabled: true, wait_timeout_seconds: 30 })
+    })
+
+    it('pins the trust context and the backup LLM cascade', () => {
+      const body = build()
+      expect(at(body, 'platform_settings.trust_context')).toBe('unknown')
+      expect(at(body, 'conversation_config.agent.prompt.backup_llm_config')).toEqual({ preference: 'default' })
+      expect(at(body, 'conversation_config.agent.prompt.cascade_timeout_seconds')).toBe(4)
+      vi.stubEnv('ELEVENLABS_TRUST_CONTEXT', 'low')
+      vi.stubEnv('ELEVENLABS_BACKUP_LLM', 'disabled')
+      vi.stubEnv('ELEVENLABS_LLM_CASCADE_TIMEOUT_SECONDS', '3')
+      const tuned = build()
+      expect(at(tuned, 'platform_settings.trust_context')).toBe('low')
+      expect(at(tuned, 'conversation_config.agent.prompt.backup_llm_config')).toEqual({ preference: 'disabled' })
+      expect(at(tuned, 'conversation_config.agent.prompt.cascade_timeout_seconds')).toBe(3)
+      vi.stubEnv('ELEVENLABS_TRUST_CONTEXT', 'high')
+      expect(at(build(), 'platform_settings.trust_context')).toBe('unknown')
+    })
+
+    it('uses the validated LLM from the runtime options', () => {
+      const body = buildElevenLabsAgentBody(makeAgentSpec(), PLATFORM, { llm: 'gemini-2.5-flash' })
+      expect(at(body, 'conversation_config.agent.prompt.llm')).toBe('gemini-2.5-flash')
     })
 
     it('allows overriding only the first message', () => {
       expect(at(build(), 'platform_settings.overrides')).toEqual({ conversation_config_override: { agent: { first_message: true } } })
     })
 
-    it('adds prompt-injection guardrails only when enabled by env', () => {
-      expect(at(build(), 'platform_settings')).not.toHaveProperty('guardrails')
-      vi.stubEnv('ELEVENLABS_ENABLE_GUARDRAILS', 'true')
-      expect(at(build(), 'platform_settings.guardrails')).toEqual({ version: '1', prompt_injection: { is_enabled: true } })
+    it('always sends a complete guardrails block: focus and prompt injection on by default, content off', () => {
+      const g = at(build(), 'platform_settings.guardrails') as Record<string, unknown>
+      expect(g.version).toBe('1')
+      expect(g.focus).toEqual({ is_enabled: true })
+      expect(g.prompt_injection).toEqual({ is_enabled: true })
+      const content = g.content as { execution_mode: string; config: Record<string, { is_enabled: boolean }>; trigger_action: { type: string } }
+      expect(content.execution_mode).toBe('streaming')
+      expect(Object.keys(content.config)).toHaveLength(7)
+      expect(Object.values(content.config).every((c) => c.is_enabled === false)).toBe(true)
+      expect(content.trigger_action.type).toBe('retry')
+      expect(g.custom).toEqual({ config: { configs: [] } })
+    })
+
+    it('switching guardrails off still sends them, explicitly disabled', () => {
+      vi.stubEnv('ELEVENLABS_ENABLE_GUARDRAILS', 'false')
+      vi.stubEnv('ELEVENLABS_CONTENT_GUARDRAILS', 'violence')
+      const g = at(build(), 'platform_settings.guardrails') as Record<string, { is_enabled?: boolean; config?: Record<string, { is_enabled: boolean }> }>
+      expect(g.focus).toEqual({ is_enabled: false })
+      expect(g.prompt_injection).toEqual({ is_enabled: false })
+      expect(g.content.config?.violence.is_enabled).toBe(false)
+    })
+
+    it('enables only the content categories named by env', () => {
+      vi.stubEnv('ELEVENLABS_CONTENT_GUARDRAILS', 'violence, harassment,bogus')
+      vi.stubEnv('ELEVENLABS_GUARDRAIL_FOCUS', 'false')
+      const g = at(build(), 'platform_settings.guardrails') as { focus: unknown; content: { config: Record<string, { is_enabled: boolean }> } }
+      expect(g.focus).toEqual({ is_enabled: false })
+      expect(Object.entries(g.content.config).filter(([, v]) => v.is_enabled).map(([k]) => k).sort()).toEqual(['harassment', 'violence'])
     })
   })
 
@@ -472,5 +581,43 @@ describe('configHash', () => {
   it('ignores fields that are not part of the pushed body (e.g. revision, fallback prompt)', async () => {
     const base = await configHash(build())
     expect(await configHash(build({ revision: 99, fallbackSystemPrompt: 'other', fallbackVoiceId: 'x' }))).toBe(base)
+  })
+})
+
+describe('config versioning', () => {
+  it('version_description carries only the revision and the platform version', () => {
+    expect(versionDescription(makeAgentSpec({ revision: 12 }))).toBe(`ntv r12 p${PLATFORM_AGENT_CONFIG_VERSION}`)
+  })
+
+  it('the hash ignores version_description but changes with plan limits, pause state and routing', async () => {
+    const body = build()
+    const base = await configHash(body)
+    expect(await configHash({ ...body, version_description: 'ntv r1 p1' })).toBe(base)
+    expect(await configHash(build({ callLimits: { concurrency: 6, daily: 500, bursting: true } }))).not.toBe(base)
+    expect(await configHash(build({ active: false }))).not.toBe(base)
+    expect(await configHash(build({ hasNativeNumbers: true, transfer: TRANSFER_ON }))).not.toBe(await configHash(build({ transfer: TRANSFER_ON })))
+  })
+})
+
+describe('paused agent (native numbers bypass the router)', () => {
+  const conversation = { ...makeAgentSpec().conversation, allow_end_call: false, voicemail_detection: true }
+
+  it('says the localized unavailable line, holds no conversation and only keeps end_call', () => {
+    const body = build({ active: false, language: 'ro', transfer: TRANSFER_ON, hasNativeNumbers: true, conversation })
+    expect(at(body, 'conversation_config.agent.first_message')).toMatch(/Ne pare rău/)
+    expect(at(body, 'conversation_config.agent.prompt.prompt')).toContain('end_call')
+    expect(at(body, 'conversation_config.agent.prompt.prompt')).not.toContain('EL SYSTEM PROMPT')
+    const tools = at(body, 'conversation_config.agent.prompt.built_in_tools') as Record<string, unknown>
+    expect(tools.end_call).toMatchObject({ name: 'end_call' })
+    for (const k of ['transfer_to_number', 'voicemail_detection', 'language_detection', 'skip_turn']) expect(tools[k]).toBeNull()
+    expect(at(body, 'conversation_config.agent.prompt.tool_ids')).toEqual([])
+    expect(at(body, 'conversation_config.language_presets')).toEqual({})
+    expect(at(body, 'conversation_config.conversation.max_duration_seconds')).toBe(60)
+    // Platform-owned settings stay as they are (privacy, limits, guardrails, webhooks).
+    expect(at(body, 'platform_settings')).toEqual(at(build({ language: 'ro', transfer: TRANSFER_ON, hasNativeNumbers: true, conversation }), 'platform_settings'))
+  })
+
+  it('resuming restores the normal body', () => {
+    expect(build({ active: true })).toEqual(build())
   })
 })

@@ -7,8 +7,18 @@ import { ProviderError, isProviderError, type VoiceProvider } from './errors'
 import * as el from '@/lib/elevenlabs/client'
 import { createLogger } from '@/lib/observability/logger'
 import * as ct from '@/lib/cartesia/client'
-import { buildElevenLabsAgentBody, agentTags, configHash } from '@/lib/elevenlabs/agent-config'
-import { agentReasoningEffort } from '@/lib/elevenlabs/model-catalog'
+import {
+  PLATFORM_AGENT_CONFIG_VERSION,
+  agentTags,
+  buildElevenLabsAgentBody,
+  configHash,
+  versionDescription,
+  withRetroactivePrivacy,
+  withoutPiiRedaction,
+} from '@/lib/elevenlabs/agent-config'
+import { effectiveAgentLlm } from '@/lib/elevenlabs/llm-selection'
+import { inspectRemoteAgent } from '@/lib/elevenlabs/remote-agent-checks'
+import type { AgentBody, ELAgent } from '@/lib/elevenlabs/client'
 import { buildCartesiaAgentConfig } from '@/lib/cartesia/agent-config'
 import { cartesiaFallbackVoices } from './config'
 import { isAllowedFallbackVoice } from '@/lib/cartesia/voice-policy'
@@ -22,13 +32,21 @@ export interface SyncedAgent extends ExternalAgentRef {
   details: Record<string, unknown>
 }
 
+export interface UpdateOptions {
+  /**
+   * ElevenLabs: the tenant made retention or recording stricter since the
+   * last applied privacy: send apply_to_existing_conversations: true once.
+   */
+  applyPrivacyToExisting?: boolean
+}
+
 export interface AgentLifecycle {
   provider: VoiceProvider
   isConfigured(): boolean
   /** Payload fingerprint for the spec (skip no-op writes). */
   hash(spec: AgentSpec): Promise<string>
   create(spec: AgentSpec): Promise<SyncedAgent>
-  update(externalId: string, spec: AgentSpec): Promise<SyncedAgent>
+  update(externalId: string, spec: AgentSpec, opts?: UpdateOptions): Promise<SyncedAgent>
   delete(externalId: string): Promise<void>
   /** Agents carrying our local id (reconciliation after a crash between create and DB write). */
   findByLocalAgent(localAgentId: string): Promise<string[]>
@@ -50,9 +68,61 @@ async function elevenLabsBody(spec: AgentSpec) {
   const needsTransferTool = spec.appRouted && spec.transfer.enabled && !!spec.transfer.number
   const transferToolId = needsTransferTool ? await tryPlatformResource('elevenlabs.transfer_tool') : null
   const postCallWebhookId = (process.env.ELEVENLABS_POST_CALL_WEBHOOK_ID ?? '').trim() || null
-  // Cached LLM catalogue: the lowest reasoning level the agent LLM supports (null = not sent).
-  const reasoningEffort = await agentReasoningEffort()
-  return buildElevenLabsAgentBody(spec, { transferToolId, postCallWebhookId }, { reasoningEffort })
+  // Cached LLM catalogue: the configured LLM when offered and not deprecated,
+  // else the platform default; plus the lowest reasoning level it supports.
+  const llm = await effectiveAgentLlm()
+  return buildElevenLabsAgentBody(spec, { transferToolId, postCallWebhookId }, { llm: llm.llm, reasoningEffort: llm.reasoningEffort })
+}
+
+/** Transcript redaction rejected by the workspace (enterprise-only): skip it for an hour on this instance. */
+const PII_REJECTION_MEMO_MS = 3_600_000
+let piiRedactionRejectedAt = 0
+
+function isPiiRedactionRejection(err: unknown): boolean {
+  return isProviderError(err) && ['validation', 'permission', 'quota'].includes(err.code) && /redact/i.test(err.detail ?? '')
+}
+
+/**
+ * Sends `body` with `send`. Payment-card redaction is enterprise-only at
+ * ElevenLabs: when the workspace rejects it, the same write is repeated once
+ * without it, so every tenant's sync keeps working (diagnostics report it).
+ * The config hash stays that of the intended body: nothing re-syncs in a loop.
+ */
+async function sendWithRedactionFallback<T>(body: AgentBody, send: (b: AgentBody) => Promise<T>): Promise<{ result: T; pii: 'applied' | 'rejected' | 'disabled' }> {
+  const privacy = body.platform_settings.privacy as { conversation_history_redaction?: { enabled?: boolean } } | undefined
+  const wanted = privacy?.conversation_history_redaction?.enabled === true
+  if (!wanted) return { result: await send(body), pii: 'disabled' }
+  if (Date.now() - piiRedactionRejectedAt < PII_REJECTION_MEMO_MS) return { result: await send(withoutPiiRedaction(body)), pii: 'rejected' }
+  try {
+    return { result: await send(body), pii: 'applied' }
+  } catch (err) {
+    if (!isPiiRedactionRejection(err)) throw err
+    piiRedactionRejectedAt = Date.now()
+    createLogger({ component: 'elevenlabs_lifecycle' }).error('agent_sync.pii_redaction_rejected', err)
+    return { result: await send(withoutPiiRedaction(body)), pii: 'rejected' }
+  }
+}
+
+/** Test helper: forget a remembered redaction rejection. */
+export function resetPiiRedactionMemo(): void {
+  piiRedactionRejectedAt = 0
+}
+
+/** Non-sensitive facts about the write, merged into agent_provider_resources.details. */
+function elevenLabsDetails(spec: AgentSpec, body: AgentBody, remote: ELAgent | null, pii: string): Record<string, unknown> {
+  const report = inspectRemoteAgent(body, remote)
+  const prompt = (body.conversation_config.agent as { prompt?: { llm?: string } } | undefined)?.prompt
+  return {
+    tts_model: remote?.conversation_config?.tts?.model_id ?? null,
+    llm: prompt?.llm ?? null,
+    platform_version: PLATFORM_AGENT_CONFIG_VERSION,
+    // The privacy now in force at the provider (decides the next one-shot retroactive push).
+    privacy_applied: { record_audio: spec.privacy.record_audio, retention_days: spec.privacy.retention_days },
+    paused: !spec.active,
+    pii_redaction: pii,
+    analysis_items_migrated: report.analysisItemsMigrated,
+    stale_keys: report.staleKeys,
+  }
 }
 
 export const elevenLabsLifecycle: AgentLifecycle = {
@@ -64,7 +134,10 @@ export const elevenLabsLifecycle: AgentLifecycle = {
   async create(spec) {
     const body = await elevenLabsBody(spec)
     const ctx = { orgId: spec.orgId, agentId: spec.localAgentId }
-    const { agent_id } = await el.agents.create({ name: body.name, tags: body.tags, conversation_config: body.conversation_config, platform_settings: body.platform_settings }, ctx)
+    const { result, pii } = await sendWithRedactionFallback(body, (b) =>
+      el.agents.create({ name: b.name, tags: b.tags, conversation_config: b.conversation_config, platform_settings: b.platform_settings }, ctx),
+    )
+    const agent_id = result.agent_id
     if (!agent_id) throw new ProviderError({ system: 'elevenlabs', operation: 'agents.create', code: 'bad_response', detail: 'no agent_id' })
     // Read back once: confirms the voice actually applied and gives the version id.
     const remote = await el.agents.get(agent_id, ctx)
@@ -74,19 +147,24 @@ export const elevenLabsLifecycle: AgentLifecycle = {
       version: remote.version_id ?? null,
       configHash: await configHash(body),
       appliedVoiceId: remote.conversation_config?.tts?.voice_id ?? null,
-      details: { tts_model: remote.conversation_config?.tts?.model_id ?? null },
+      details: elevenLabsDetails(spec, body, remote, pii),
     }
   },
-  async update(externalId, spec) {
+  async update(externalId, spec, opts = {}) {
     const body = await elevenLabsBody(spec)
-    const remote = await el.agents.update(externalId, { ...body, version_description: `sync r${spec.revision}` }, { orgId: spec.orgId, agentId: spec.localAgentId })
+    // The hash is that of the steady-state body; the one-shot retroactive
+    // privacy flag and the version description are only on the wire.
+    const wire = opts.applyPrivacyToExisting ? withRetroactivePrivacy(body) : body
+    const { result: remote, pii } = await sendWithRedactionFallback(wire, (b) =>
+      el.agents.update(externalId, { ...b, version_description: versionDescription(spec) }, { orgId: spec.orgId, agentId: spec.localAgentId }),
+    )
     return {
       provider: 'elevenlabs',
       externalId,
       version: remote.version_id ?? null,
       configHash: await configHash(body),
       appliedVoiceId: remote.conversation_config?.tts?.voice_id ?? null,
-      details: { tts_model: remote.conversation_config?.tts?.model_id ?? null },
+      details: { ...elevenLabsDetails(spec, body, remote, pii), ...(opts.applyPrivacyToExisting ? { privacy_retroactive_at: new Date().toISOString() } : {}) },
     }
   },
   async delete(externalId) {
@@ -106,7 +184,7 @@ export const elevenLabsLifecycle: AgentLifecycle = {
     const checkedAt = new Date().toISOString()
     if (!el.isConfigured()) return { provider: 'elevenlabs', configured: false, ok: false, latencyMs: null, errorCode: 'not_configured', checkedAt }
     let r: { ms: number; error: unknown } = await timed(() => el.subscription())
-    if (r.error && isProviderError(r.error) && r.error.code === 'auth') {
+    if (r.error && isProviderError(r.error) && (r.error.code === 'auth' || r.error.code === 'permission')) {
       // Keys restricted to ConvAI scopes cannot read /v1/user: probe agents instead.
       r = await timed(() => el.agents.list({ page_size: 1 }))
     }

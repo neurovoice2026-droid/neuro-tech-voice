@@ -25,6 +25,7 @@ import { isProviderError, toProviderError, type VoiceProvider } from './errors'
 import { platformFallbackEnabled } from './config'
 import type { ResourceStatus } from './types'
 import { applyNumberRouting } from '@/lib/telephony/binding'
+import { isStricterPrivacy, readAppliedPrivacy } from './privacy-change'
 
 const LEASE_MS = 90_000
 const MAX_CATCH_UP_LOOPS = 3
@@ -102,7 +103,7 @@ async function currentRevision(db: SupabaseClient, agentId: string): Promise<num
 }
 
 /** Pushes the agent's current config to one provider (create or update). */
-async function syncOne(db: SupabaseClient, agentId: string, orgId: string, provider: VoiceProvider, opts: { force: boolean; log: Logger }): Promise<ProviderSyncResult> {
+async function syncOne(db: SupabaseClient, agentId: string, orgId: string, provider: VoiceProvider, opts: { force: boolean; log: Logger; noCreate?: boolean }): Promise<ProviderSyncResult> {
   const lifecycle = lifecycleFor(provider)
   const log = opts.log.child({ provider })
   if (!lifecycle.isConfigured()) {
@@ -127,6 +128,11 @@ async function syncOne(db: SupabaseClient, agentId: string, orgId: string, provi
       const ctx = { orgId, agentId }
 
       let synced: SyncedAgent
+      if (!row.external_id && opts.noCreate) {
+        // Config rollout: only agents that already exist are updated.
+        result = { provider, status: 'skipped', externalId: null, appliedVoiceId: null, errorCode: 'no_remote', error: null }
+        break
+      }
       if (!row.external_id) {
         const adopted = await lifecycle.findByLocalAgent(agentId).catch((err: unknown) => {
           log.warn('agent_sync.adopt_lookup_failed', { error: String((err as Error)?.message ?? err) })
@@ -141,12 +147,17 @@ async function syncOne(db: SupabaseClient, agentId: string, orgId: string, provi
           result = { provider, status: 'ready', externalId: row.external_id, appliedVoiceId: null, errorCode: null, error: null }
           break
         }
+        // Recording turned off or retention shortened since the provider last
+        // applied privacy: this push also applies it to stored conversations
+        // (once; the recorded privacy_applied then matches).
+        const applyPrivacyToExisting = provider === 'elevenlabs' && isStricterPrivacy(readAppliedPrivacy(row.details?.privacy_applied), spec.privacy)
+        if (applyPrivacyToExisting) log.info('agent_sync.privacy_retroactive', { agentId })
         try {
-          synced = await lifecycle.update(row.external_id, spec)
+          synced = await lifecycle.update(row.external_id, spec, { applyPrivacyToExisting })
         } catch (err) {
           // Recreate only when the agent itself is gone, not when a secondary
           // call made during the update (webhook attach, tools) returned 404.
-          if (isProviderError(err) && err.code === 'not_found' && err.operation === 'agents.update') {
+          if (isProviderError(err) && err.code === 'not_found' && err.operation === 'agents.update' && !opts.noCreate) {
             // Deleted out of band at the provider: recreate once.
             log.warn('agent_sync.remote_missing_recreating', { externalId: row.external_id })
             synced = await lifecycle.create(spec)
@@ -171,6 +182,7 @@ async function syncOne(db: SupabaseClient, agentId: string, orgId: string, provi
       }
       await writeRow(db, row.id, lease.token, patch)
       row = { ...row, ...patch }
+      reportReadBack(synced.details, log)
       if (provider === 'elevenlabs') {
         const { error } = await db.from('agents').update({ elevenlabs_agent_id: synced.externalId }).eq('id', agentId)
         if (error) log.error('agent_sync.compat_column_failed', error)
@@ -206,11 +218,29 @@ async function syncOne(db: SupabaseClient, agentId: string, orgId: string, provi
   return result
 }
 
+/** Logs what the provider read-back revealed (flags stay in details for diagnostics/reconcile). */
+function reportReadBack(details: Record<string, unknown>, log: Logger) {
+  if (details.analysis_items_migrated === true) {
+    // Our legacy evaluation/data_collection may no longer be the source the
+    // provider reads: success criteria and extracted fields can silently stop.
+    log.error('agent_sync.analysis_items_migrated', undefined, { hint: 'remote agent has non-null platform_settings.analysis_items' })
+  }
+  const stale = details.stale_keys as Record<string, unknown[]> | undefined
+  const counts = stale ? Object.fromEntries(Object.entries(stale).map(([k, v]) => [k, Array.isArray(v) ? v.length : 0])) : {}
+  if (Object.values(counts).some((n) => n > 0)) log.warn('agent_sync.stale_keys', counts)
+  if (details.pii_redaction === 'rejected') log.warn('agent_sync.pii_redaction_skipped')
+}
+
 export interface SyncOptions {
   /** Restrict to these providers (default: primary + fallback when enabled). */
   providers?: VoiceProvider[]
   force?: boolean
   log?: Logger
+  /**
+   * Never create an external agent (config rollout): an agent without one is
+   * skipped, and one deleted at the provider fails (the retry job handles it).
+   */
+  noCreate?: boolean
 }
 
 /** Which providers an agent needs external resources on. */
@@ -239,7 +269,7 @@ export async function syncAgent(agentId: string, opts: SyncOptions = {}): Promis
   const providers = opts.providers ?? (await providersFor(db, agentId))
   const results: ProviderSyncResult[] = []
   for (const provider of providers) {
-    results.push(await syncOne(db, agentId, agent.org_id as string, provider, { force: !!opts.force, log }))
+    results.push(await syncOne(db, agentId, agent.org_id as string, provider, { force: !!opts.force, log, noCreate: opts.noCreate }))
   }
   const el = results.find((r) => r.provider === 'elevenlabs')
   if (el) await reconcileVoiceStatus(db, agentId, el, log)

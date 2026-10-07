@@ -43,6 +43,7 @@ import {
   WorkingHoursSchema,
 } from '@/lib/voice-providers/settings'
 import type { VoiceProvider } from '@/lib/voice-providers/errors'
+import { PLATFORM_VARIABLE_MESSAGE, hasNoPlatformVariables } from '@/lib/voice-providers/template-variables'
 import * as cartesia from '@/lib/cartesia/client'
 import { getAllowedFallbackVoice } from '@/lib/voice-providers/voice-catalog'
 import { scheduleKnowledgeReindex } from '@/lib/voice-providers/knowledge-rag'
@@ -55,9 +56,9 @@ export const maxDuration = 60
 const PatchAgentSchema = z.strictObject({
   name: z.string().trim().min(1).max(AGENT_NAME_MAX).optional(),
   language: AgentLanguageSchema.optional(),
-  system_prompt: z.string().max(SYSTEM_PROMPT_MAX).nullable().optional(),
-  first_message: z.string().max(FIRST_MESSAGE_MAX).nullable().optional(),
-  fallback_message: z.string().max(FALLBACK_MESSAGE_MAX).nullable().optional(),
+  system_prompt: z.string().max(SYSTEM_PROMPT_MAX).refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE).nullable().optional(),
+  first_message: z.string().max(FIRST_MESSAGE_MAX).refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE).nullable().optional(),
+  fallback_message: z.string().max(FALLBACK_MESSAGE_MAX).refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE).nullable().optional(),
   is_active: z.boolean().optional(),
   working_hours: WorkingHoursSchema.optional(),
   metadata: z.strictObject({ personality: PersonalitySchema }).optional(),
@@ -212,7 +213,15 @@ export async function PATCH(request: Request) {
 
     // Provider pushes are bounded per org (shared provider accounts). Checked
     // before any write so a 429 leaves nothing half-saved.
-    const mayPush = providerFieldsChanged.length > 0 || timezoneChanged || fallbackTurnedOn || (agentPatch.is_active === true && !agent.is_active)
+    // Pausing/resuming and the opening hours also change the ElevenLabs agent:
+    // native numbers bypass our router (paused variant, after-hours rule).
+    // A pause only changes an existing ElevenLabs agent (paused variant): never create one for it.
+    const pauseChanged =
+      typeof agentPatch.is_active === 'boolean' &&
+      agentPatch.is_active !== agent.is_active &&
+      (agentPatch.is_active || (await hasExternalAgent(supabase, org.id, agent.id, 'elevenlabs')))
+    const hoursChanged = changed('working_hours') || changed('after_hours')
+    const mayPush = providerFieldsChanged.length > 0 || timezoneChanged || fallbackTurnedOn || pauseChanged || hoursChanged
     if (mayPush) await enforceRateLimit(RATE_LIMITS.agentSync, org.id, 'Too many changes in a short time. Please wait a moment and save again.')
 
     // ── Writes (user-scoped client: RLS + column guard apply) ──────────────
@@ -233,7 +242,7 @@ export async function PATCH(request: Request) {
     }
 
     // ── Provider propagation ───────────────────────────────────────────────
-    const configChanged = providerFieldsChanged.length > 0 || timezoneChanged
+    const configChanged = providerFieldsChanged.length > 0 || timezoneChanged || pauseChanged || hoursChanged
     const primaryProvider = primaryProviderOf(agent)
     const activated =
       agentPatch.is_active === true &&

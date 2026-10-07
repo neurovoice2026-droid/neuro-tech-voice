@@ -137,11 +137,18 @@ async function connectElevenLabs(ctx: RoutingContext, call: CallRow, opts: { aft
   if (!agentId || !ctx.agent) throw new Error('no ElevenLabs agent')
   const ours = ctx.number.number
   const other = opts.direction === 'outbound' ? call.to_number : call.from_number
+  const callToken = signCallToken(call.id, 'transfer', CALL_TOKEN_TTL_S)
   const clientData: el.ClientData = {
     user_id: ctx.org.id,
     dynamic_variables: {
       [PLATFORM_VARIABLES.callId]: call.id,
-      [PLATFORM_VARIABLES.callToken]: signCallToken(call.id, 'transfer', CALL_TOKEN_TTL_S),
+      // ntv_call_token stays for the transfer tool body and post-call
+      // matching (secret__ values come back redacted in webhooks); the
+      // secret copy is never sent to the LLM and is meant for tool headers.
+      [PLATFORM_VARIABLES.callToken]: callToken,
+      [PLATFORM_VARIABLES.secretCallToken]: callToken,
+      // Mixed-mode orgs: tells the agent to transfer with the platform tool.
+      [PLATFORM_VARIABLES.routingMode]: 'app_routed',
       [PLATFORM_VARIABLES.afterHours]: opts.afterHours ? 'true' : 'false',
       [PLATFORM_VARIABLES.businessName]: ctx.org.name ?? '',
       // Gates voicemail_detection to outbound calls (prompt rule).
@@ -228,6 +235,9 @@ async function connect(
       attempts.push({ provider: cand.provider, at, ok: false, error_code: err.code, probe: cand.probe })
       failoverReason = `${failoverReason ? `${failoverReason},` : ''}${cand.provider}:connect_${err.code}`
       log.error('router.connect_failed', e, { provider: cand.provider, callId: call.id })
+      // One tenant at its own plan cap: only this call takes the next path;
+      // the shared circuit is untouched (tenant_limited is not a health signal).
+      if (err.code === 'tenant_limited') log.warn('router.tenant_call_limit', { provider: cand.provider, callId: call.id, providerCode: err.providerCode })
       // providerRequest already reported the breaker outcome for HTTP errors;
       // a malformed TwiML response is a health signal too.
       if (!isProviderError(e)) await reportOutcome(cand.provider, { ok: false, code: 'bad_response' })
