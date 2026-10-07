@@ -1,0 +1,139 @@
+{
+  "level": {
+    "lufs": -23,
+    "peakMax": -1,
+    "note": "ONE dialogue target for every line: BS.1770 integrated loudness over its phrases (mono file; the IG mix places dialogue at MIX.dialogueLufs -18.5, 4.5 LU under the -14 LUFS Instagram master, the films' voice-to-master balance), after the role EQ. Not a peak: peak-normalising left a 5 LU spread in film 2."
+  },
+  "voices": {
+    "ava": {
+      "sid": 1,
+      "name": "af_bella",
+      "speed": 1.04,
+      "note": "Tessa, the ONLY voice of the four Instagram reels (the client: the woman's voice speaks whenever there is text on screen). She is the narrator (untagged captions) and the sample agent Ava on the calls (captions tagged ● AVA). Callers are never voiced: ig2 and ig3 are one-sided calls (the agent restates what was asked; the caller's turn is a slate level meter with no words), ig4's phrasings are read by the narrator under the site's own 'Asked as' label. Full-band, no phone line. Same voice id and speed as film 2's ava role.",
+      "fish": {
+        "env": "FISH_IG_AVA_VOICE",
+        "gender": "female",
+        "id": "",
+        "speed": 1
+      },
+      "cartesia": {
+        "env": "CARTESIA_IG_AVA_VOICE",
+        "id": "6ccbfb76-1fc6-48f7-b71d-91ac6298247b",
+        "name": "Tessa (Emotive)",
+        "gender": "feminine",
+        "speed": 1.05
+      }
+    }
+  },
+  "lines": [
+    {
+      "id": "ig5-01",
+      "voice": "ava",
+      "say": "Don't pay three hundred a month for an AI receptionist.",
+      "direction": "Reel 5 hook, narrator, from frame 0 over the desk phone's ring and a blank quote slip: calm and dry, one owner warning another, not an ad (the shape of ig1-01 \"Don't fire your receptionist for an AI.\"). Light stress on \"three hundred\", heard by about 1.2 s; no pause after \"month\"; \"AI receptionist\" said plainly (it is the TikTok search phrase). Captions show $300 over \"three hundred\". Target 3.6 s or less.",
+      "speak": "Don't pay three hundred a month for an AI receptionist.",
+      "emotion": "confident"
+    },
+    {
+      "id": "ig5-02",
+      "voice": "ava",
+      "say": "That's a common agency retainer. Setup, often fifteen hundred.",
+      "direction": "Reel 5, narrator, reading an agency quote back: matter-of-fact, never mocking. A small natural beat at the full stop. \"often\" gets honest weight (it is the hedge and must be heard); \"fifteen hundred\" a touch slower. Captions show $1,500. as the display of \"fifteen hundred.\"",
+      "speak": "That's a common agency retainer. Setup, often fifteen hundred.",
+      "emotion": "calm"
+    },
+    {
+      "id": "ig5-03",
+      "voice": "ava",
+      "say": "Live answering service: from ninety-nine a month, for fifty minutes.",
+      "direction": "Reel 5, narrator: even and factual, with no judgement of the people who answer. \"Live\" and \"from\" audible; \"for fifty minutes\" clear, because it is the qualifier that makes $99 true. Captions show $99 and 50.",
+      "speak": "Live answering service: from ninety-nine a month, for fifty minutes.",
+      "emotion": "calm"
+    },
+    {
+      "id": "ig5-04",
+      "voice": "ava",
+      "say": "Ours? From forty-nine dollars a month. No setup fee.",
+      "direction": "Reel 5 PAYOFF, narrator, spoken out of the stop-time silence right after the phone is picked up: a small, real lift on \"Ours?\", then warm and settled, unhurried on \"forty-nine dollars a month\" (\"From\" light but present: it is the hedge). \"No setup fee\" plain. Word SII on \"forty-nine dollars\" must reach 0.7 (captions show $49). No <break/>: Sonic already pauses at the question mark and the full stops.",
+      "speak": "Ours? From forty-nine dollars a month. No setup fee.",
+      "emotion": "content"
+    },
+    {
+      "id": "ig5-05",
+      "voice": "ava",
+      "say": "You set it up yourself, in under ten minutes.",
+      "direction": "Reel 5, narrator, as four dots fill teal: easy and encouraging, a fact, not a boast (the site's own \"Ready in under ten minutes\"). \"yourself\" carries the basis of the comparison (an agency builds it for you; this you do yourself); \"under\" clearly said. Never \"five minutes\".",
+      "speak": "You set it up yourself, in under ten minutes.",
+      "emotion": "content"
+    },
+    {
+      "id": "ig5-06",
+      "voice": "ava",
+      "say": "It picks up when you can't, and books the appointment.",
+      "direction": "Reel 5, narrator, over the sample call record: warm and assured. \"when you can't\" gentle (it is the viewer's problem, and ig1's position: the desk keeps its people). \"books the appointment\" is the satisfying close. LAUNCH-GATED: placed only once booking works on the $49 Starter plan; otherwise place ig5-06-msg.",
+      "speak": "It picks up when you can't, and books the appointment.",
+      "emotion": "confident"
+    },
+    {
+      "id": "ig5-07",
+      "voice": "ava",
+      "say": "Comment AGENT for the link.",
+      "direction": "Reel 5 CTA, narrator, the same words as ig2-07 but a fresh ig5 take (PIPELINE allows exactly one borrow, ig1-07): confident, slightly lower and warm. No \"free\" in this reel's CTA (booking is on screen; the captions and DM carry the trial). speak has \"agent\" in lowercase so Sonic does not spell it out.",
+      "speak": "Comment agent for the link.",
+      "emotion": "confident"
+    },
+    {
+      "id": "ig1-07",
+      "borrow": "ig1"
+    },
+    {
+      "id": "ig5-02t",
+      "voice": "ava",
+      "say": "A common agency retainer. Setup, often fifteen hundred.",
+      "direction": "TRIM T1 for ig5-02 (one token shorter), picked by timing.ts only if the measured takes would push the CTA past f765. Same read as ig5-02. Screens become S3 [0-3] \"A common agency retainer.\" and S4 [4-7] \"Setup, often $1,500.\" (display [6-7]).",
+      "speak": "A common agency retainer. Setup, often fifteen hundred.",
+      "emotion": "calm"
+    },
+    {
+      "id": "ig5-05t",
+      "voice": "ava",
+      "say": "You set it up yourself.",
+      "direction": "TRIM T2 for ig5-05 (four tokens shorter, about 1.4 s), used together with T1 only if the takes still run long. Same read, a touch more settled at the end since it closes the beat. One card; \"in under ten minutes\" stays in both captions.",
+      "speak": "You set it up yourself.",
+      "emotion": "content"
+    },
+    {
+      "id": "ig5-06-msg",
+      "voice": "ava",
+      "say": "It picks up when you can't, and takes a message.",
+      "direction": "ALTERNATE for ig5-06, THE NO-BOOKING CUT: true on Starter today (take_message). Use it if the owner's Starter booking change is not live on posting day; the record then shows \"Took a message\" and the indigo Message taken pill. Same read and length as ig5-06.",
+      "speak": "It picks up when you can't, and takes a message.",
+      "emotion": "confident"
+    },
+    {
+      "id": "ig5-01b",
+      "voice": "ava",
+      "say": "Before you pay three hundred a month for an AI receptionist.",
+      "direction": "ALTERNATE HOOK (A/B, hookscore 87.0) for a second TikTok post a week later or a Trial Reel once the account has about 200 followers: same calm, dry read as ig5-01, addressed to someone about to sign. Cards: \"Before you pay $300 a month\" / \"for an AI receptionist.\" It flows into ig5-02 unchanged.",
+      "speak": "Before you pay three hundred a month for an AI receptionist.",
+      "emotion": "confident"
+    },
+    {
+      "id": "ig5-07-bio",
+      "voice": "ava",
+      "say": "The link's in our bio.",
+      "direction": "ALTERNATE for ig5-07, only if nobody can answer AGENT comments (and the Instagram comment-to-DM automation is not live) on posting day: same read, same slot.",
+      "speak": "The link's in our bio.",
+      "emotion": "confident"
+    },
+    {
+      "id": "ig5-05-num",
+      "voice": "ava",
+      "say": "Plus the number: a dollar fifteen a month.",
+      "direction": "SPARE, not placed by default: if the owner wants the phone-number cost spoken instead of the setup line, it replaces ig5-05 (time-neutral). Light and candid, the small print said out loud with a half-smile and no apology; \"a dollar fifteen\" clear (captions show $1.15).",
+      "speak": "Plus the number: a dollar fifteen a month.",
+      "emotion": "content"
+    }
+  ],
+  "_notes": "Reel ig5 'Don't pay $300' (docs/ig/ig5/SCRIPT.md). DRAFT for scripts/ig5/voice-lines-ig5.json (PIPELINE.md §3.1): copy it there at build time; never write it into scripts/voice-lines-ig.json, which is an igHash input of the four delivered reels. Same schema as voice-lines-ig.json: say = the canonical words the captions and src/ig/ig5/timing.ts index (word k), in SPOKEN form; the Captions fork's display map shows numerals over word spans (ig5-01 [2-3] -> $300; ig5-02 [7-8] -> $1,500.; ig5-03 [4] -> $99, [8] -> 50; ig5-04 [2-3] -> $49; ig5-05-num [3-5] -> $1.15). speak = what Sonic performs, with NO <break/> tags (ig1-ig4 lesson: Sonic already pauses about 0.5 s at a sentence end and breaks doubled it); 'agent' lowercase so the keyword AGENT is never spelled. ONE role (ava = Tessa (Emotive), the same level and voices block as voice-lines-ig.json, env CARTESIA_IG_AVA_VOICE). Every id matches ^ig5- except the single borrow {id: ig1-07, borrow: ig1}, the series sign-off reused byte for byte (never synthesise it, never drop 'borrow'). PLACED: ig5-01..ig5-07 + ig1-07 (62 tokens before the sign-off; the CTA must end by f765 for a 28.0 s reel). ALTERNATES, generated in the same batch and swapped by VOICES id only: ig5-02t and ig5-05t (the trim ladder T1, then T1+T2, picked on measured takes; they never cut a hedge), ig5-06-msg (the no-booking cut for the launch gate), ig5-01b (A/B hook), ig5-07-bio (no DM path), ig5-05-num (spare: the $1.15 spoken instead of the setup line). 14 entries: 8 placed + 6 alternates. Pick takes by measurement first (duration against SCRIPT §5; hook 3.6 s or less; word SII on 'forty-nine dollars' >= 0.7), then by ear (voice-candidates/ig/PICKS.md method)."
+}
