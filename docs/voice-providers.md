@@ -236,6 +236,10 @@ startup (`instrumentation.ts`) and shown by `GET /api/admin/voice/diagnostics`
   secret kept in Vault) so the endpoint is called every 5 minutes. Without
   either, those retries wait up to a day (saves, webhooks and calls themselves
   are unaffected).
+* `vercel.json` pins functions to `dub1` (Dublin), next to the Supabase project
+  (`eu-west-1`): the call-routing webhooks make several sequential database
+  queries, so the function must run close to the database. Change it if the
+  database moves (Hobby allows a single function region).
 * Request bodies are limited to 4.5 MB: knowledge files up to 20 MB are uploaded
   directly to Supabase Storage with a signed URL; voice-clone uploads are capped at 4 MB.
 
