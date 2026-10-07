@@ -37,6 +37,7 @@ import {
 } from './platform-settings'
 import { pausedAgentBody } from './paused-agent'
 import { SYSTEM_TRANSFER_BEHAVIOUR } from './tools/behaviour'
+import { OFFERED_SLOTS_VARIABLE } from './tools/business'
 
 /**
  * Version of the platform-owned agent configuration. Part of the config hash:
@@ -44,13 +45,17 @@ import { SYSTEM_TRANSFER_BEHAVIOUR } from './tools/behaviour'
  * `config_rollout` then re-syncs them in batches (lib/voice-providers/config-rollout.ts).
  * Bump it whenever this builder changes what existing agents should receive.
  */
-export const PLATFORM_AGENT_CONFIG_VERSION = 2
+export const PLATFORM_AGENT_CONFIG_VERSION = 3
 
 export interface PlatformResources {
   /** Workspace webhook tool used for human transfer on app-routed calls. */
   transferToolId: string | null
   /** Workspace webhook that receives post-call events. */
   postCallWebhookId: string | null
+  /** In-call business tools to attach (slice B2: check_availability, book_appointment, take_message). */
+  businessToolIds?: string[]
+  /** check_availability/book_appointment are attached: the offered-slots list variable needs a placeholder. */
+  bookingToolsAttached?: boolean
 }
 
 /** Values read from provider catalogues at sync time (kept out of AgentSpec, which is provider-neutral). */
@@ -185,7 +190,7 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
     rag: knowledge.rag,
     timezone: spec.timezone,
     built_in_tools: builtInTools(spec, hasPresets),
-    tool_ids: appTransfer ? [platform.transferToolId] : [],
+    tool_ids: [...(appTransfer ? [platform.transferToolId] : []), ...(platform.businessToolIds ?? [])],
     // Never omitted: a custom value pushed earlier must not survive "Off".
     // The spec default is 0 (null would drop temperature from the LLM request).
     temperature: typeof c.temperature === 'number' ? clamp(c.temperature, 0, 1) : 0,
@@ -212,7 +217,13 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
       // recording notice): a caller's "Alo?" must not cut it off.
       disable_first_message_interruptions: true,
       max_conversation_duration_message: maxDurationMessage(spec.language),
-      dynamic_variables: { dynamic_variable_placeholders: dynamicVariablePlaceholders(spec) },
+      dynamic_variables: {
+        dynamic_variable_placeholders: {
+          ...dynamicVariablePlaceholders(spec),
+          // book_appointment's allowed values: empty (nothing bookable) until check_availability offers slots.
+          ...(platform.bookingToolsAttached ? { [OFFERED_SLOTS_VARIABLE]: [] as string[] } : {}),
+        },
+      },
       prompt,
     },
     asr: asrConfig(spec, telephonyFormat),

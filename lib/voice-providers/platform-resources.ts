@@ -3,6 +3,8 @@ import 'server-only'
 // first use and remembered in `platform_resources` (service role only):
 //   elevenlabs.transfer_tool   webhook tool → /api/telephony/tools/transfer
 //   elevenlabs.tool_secret     workspace secret behind the X-NTV-Tool-Key header
+//   elevenlabs.tool.*          in-call business tools (check_availability, book_appointment, take_message)
+//   cartesia.message_tool      webhook tool → /api/telephony/tools/cartesia-message (fallback take_message)
 //   cartesia.sip_provider      SIP trunk provider our Twilio ingress dials into
 //   cartesia.call_webhook      call-event webhook → /api/cartesia/webhook
 //   cartesia.context_tool      webhook tool → /api/telephony/tools/cartesia-context
@@ -17,23 +19,32 @@ import { createLogger } from '@/lib/observability/logger'
 import { publicBaseUrl, cartesiaSip } from './config'
 import { ProviderError, isProviderError } from './errors'
 import * as cartesia from '@/lib/cartesia/client'
-import { contextToolDefinition } from '@/lib/cartesia/agent-config'
+import { contextToolDefinition, messageToolDefinition } from '@/lib/cartesia/agent-config'
+import { isPlatformToolKey } from '@/lib/elevenlabs/tools/definitions'
 
 const log = createLogger({ component: 'platform_resources' })
 
 export type PlatformResourceKey =
   | 'elevenlabs.transfer_tool'
   | 'elevenlabs.tool_secret'
+  | 'elevenlabs.tool.check_availability'
+  | 'elevenlabs.tool.book_appointment'
+  | 'elevenlabs.tool.take_message'
   | 'cartesia.sip_provider'
   | 'cartesia.call_webhook'
   | 'cartesia.context_tool'
+  | 'cartesia.message_tool'
 
 const ALL_KEYS: PlatformResourceKey[] = [
   'elevenlabs.transfer_tool',
   'elevenlabs.tool_secret',
+  'elevenlabs.tool.check_availability',
+  'elevenlabs.tool.book_appointment',
+  'elevenlabs.tool.take_message',
   'cartesia.sip_provider',
   'cartesia.call_webhook',
   'cartesia.context_tool',
+  'cartesia.message_tool',
 ]
 
 const ENV_OVERRIDE: Partial<Record<PlatformResourceKey, string>> = {
@@ -83,11 +94,11 @@ function requireBase(operation: string, system: 'elevenlabs' | 'cartesia'): stri
 
 /** Returns the id of the resource, creating it once if needed. Returns null when its prerequisites are missing. */
 export async function ensurePlatformResource(key: PlatformResourceKey): Promise<string | null> {
-  if (key === 'elevenlabs.transfer_tool' || key === 'elevenlabs.tool_secret') {
+  if (key === 'elevenlabs.tool_secret' || isPlatformToolKey(key)) {
     // Reconciled (config hash, 404 recreate, lease) by platform-tools.ts.
     const tools = await import('./platform-tools')
     try {
-      return key === 'elevenlabs.transfer_tool'
+      return key !== 'elevenlabs.tool_secret'
         ? (await tools.ensurePlatformTool(key, { verify: 'cached' })).toolId
         : await tools.ensureToolSecret({ verify: 'cached' })
     } catch (err) {
@@ -129,6 +140,17 @@ export async function ensurePlatformResource(key: PlatformResourceKey): Promise<
       log.info('platform_resource.created', { key, provider: 'cartesia', externalId: created.id })
       return created.id
     }
+    case 'cartesia.message_tool': {
+      const toolSecret = (process.env.CARTESIA_TOOL_SECRET ?? '').trim()
+      if (!cartesia.isConfigured() || toolSecret.length < 24) return null
+      const base = requireBase('tools.create', 'cartesia')
+      const created = await cartesia.tools.create(messageToolDefinition(`${base}/api/telephony/tools/cartesia-message`, toolSecret))
+      await remember(key, 'cartesia', created.id)
+      log.info('platform_resource.created', { key, provider: 'cartesia', externalId: created.id })
+      return created.id
+    }
+    default:
+      return null
   }
 }
 

@@ -147,6 +147,16 @@ describe('ElevenLabs agent body vs the official Create Agent schema', () => {
     expect(bodyErrors(makeAgentSpec(), FULL_PLATFORM)).toEqual([])
   })
 
+  it('agent with the in-call business tools attached (slice B2): tool ids and the list placeholder for allowed values', () => {
+    const platform: PlatformResources = { ...FULL_PLATFORM, businessToolIds: ['tool_avail_1', 'tool_book_1', 'tool_msg_1'], bookingToolsAttached: true }
+    const spec = makeAgentSpec({ transfer: { enabled: true, number: '+40712345678', condition: null, label: null } })
+    expect(bodyErrors(spec, platform)).toEqual([])
+    const body = buildElevenLabsAgentBody(spec, platform)
+    const agent = body.conversation_config.agent as { prompt: { tool_ids: string[] }; dynamic_variables: { dynamic_variable_placeholders: Record<string, unknown> } }
+    expect(agent.prompt.tool_ids).toEqual(['tool_transfer_1', 'tool_avail_1', 'tool_book_1', 'tool_msg_1'])
+    expect(agent.dynamic_variables.dynamic_variable_placeholders.ntv_offered_slots).toEqual([])
+  })
+
   it('Romanian native agent with every conversation feature on', () => {
     vi.stubEnv('ELEVENLABS_ENABLE_GUARDRAILS', 'true')
     const languages = ['en', 'de', 'hu']

@@ -27,12 +27,11 @@ const INTEGRATIONS: IntegrationDef[] = [
   {
     id: 'google_calendar',
     name: 'Google Calendar',
-    description: 'Automatically schedule appointments and send reminders based on call outcomes.',
-    capabilities: ['Book appointments from calls', 'Send calendar invites', 'Check real-time availability', 'Sync call follow-ups'],
+    description: 'Let your agent check your free times and book appointments during calls (Agent → Call handling → Appointments).',
+    capabilities: ['Book appointments during calls', 'Check real-time availability', 'Respects your opening hours', 'Bookings land in your calendar'],
     logoSrc: '/integrari/google_calendar.svg',
     logoBg: 'bg-blue-50',
     category: 'Google Workspace',
-    workInProgress: true,
     recommended: true,
   },
   {

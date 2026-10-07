@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createLogger } from '@/lib/observability/logger'
+import { scheduleCalendarResync } from '@/lib/voice-tools/calendar-resync'
 
 const VALID_TYPES = [
   'google_calendar', 'gmail', 'google_sheets', 'google_docs', 'google_drive', 'webhook',
@@ -82,5 +84,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     .eq('type', type)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // In-call booking needs the calendar: detach the booking tools now (slice B2).
+  if (type === 'google_calendar') scheduleCalendarResync(ctx.orgId, createLogger({ route: 'integrations.delete', orgId: ctx.orgId }))
   return NextResponse.json({ connected: false })
 }

@@ -139,6 +139,62 @@ export interface PrivacySettings {
 
 export const DEFAULT_PRIVACY_SETTINGS: PrivacySettings = { record_audio: true, retention_days: 365 }
 
+// ─── In-call business tools (agents.booking_settings / message_settings) ─────
+
+/** Appointment booking on the business's Google Calendar during the call. */
+export interface BookingSettings {
+  enabled: boolean
+  /** Google Calendar id of the connected account ('primary' = its main calendar). */
+  calendar_id: string
+  duration_minutes: number
+  /** Free time kept before and after every appointment. */
+  buffer_minutes: number
+  /** How many days ahead callers can book. */
+  booking_window_days: number
+  /** Minimum notice before an appointment can start. */
+  min_notice_hours: number
+  /** Most appointments per day (null = no cap). */
+  daily_cap: number | null
+}
+
+export const DEFAULT_BOOKING_SETTINGS: BookingSettings = {
+  enabled: false,
+  calendar_id: 'primary',
+  duration_minutes: 30,
+  buffer_minutes: 0,
+  booking_window_days: 30,
+  min_notice_hours: 2,
+  daily_cap: null,
+}
+
+/** Messages taken during the call (take_message tool) and their e-mail alert. */
+export interface MessageSettings {
+  enabled: boolean
+  /** E-mail the organisation owner's verified account address. */
+  notify_owner: boolean
+  /** Extra addresses the owner added (at most 5). */
+  extra_recipients: string[]
+  /** Which messages are e-mailed right away; urgent ones are always flagged. */
+  email_notifications: 'all' | 'urgent_only' | 'off'
+}
+
+export const DEFAULT_MESSAGE_SETTINGS: MessageSettings = {
+  enabled: false,
+  notify_owner: true,
+  extra_recipients: [],
+  email_notifications: 'all',
+}
+
+/** Which in-call business tools the agent spec carries (resolved at build time). */
+export interface BusinessToolsSpec {
+  /** Booking is enabled in the settings. */
+  bookingEnabled: boolean
+  /** check_availability + book_appointment can be attached (enabled AND Google Calendar connected). */
+  booking: boolean
+  /** take_message is attached. */
+  takeMessage: boolean
+}
+
 export interface VoiceTuning {
   stability: number | null
   similarity_boost: number | null
@@ -211,6 +267,8 @@ export interface AgentSpec {
   /** Weekly opening hours in words when the after-hours rule is on (native calls decide from them). */
   openingHours: string | null
   revision: number
+  /** In-call business tools (slice B2); absent = none. */
+  businessTools?: BusinessToolsSpec
 }
 
 export interface ExternalAgentRef {

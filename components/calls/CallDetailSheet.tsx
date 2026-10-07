@@ -40,6 +40,7 @@ import {
   terminationReasonLabel,
 } from '@/lib/calls/labels'
 import type { Call, CallDetails, TranscriptEntry } from '@/types'
+import { CallBusinessSection } from './CallBusinessSection'
 
 const fmtClock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
@@ -917,6 +918,8 @@ export function CallDetailSheet({ callId, onClose, onDeleted, defaultTab = 'over
                 <CallHandlingSection call={call} />
 
                 <AiOutcomeSection call={call} />
+
+                <CallBusinessSection key={call.id} callId={call.id} />
 
                 {/* Summary */}
                 <section>

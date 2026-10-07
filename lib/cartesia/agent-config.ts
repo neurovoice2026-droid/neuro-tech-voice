@@ -16,6 +16,8 @@ const SUPPORTED_LANGUAGES = new Set(['en', 'ro', 'es', 'fr', 'de', 'it', 'pt', '
 export interface CartesiaPlatformResources {
   /** Webhook tool returning per-call context (after-hours, direction). */
   contextToolId: string | null
+  /** Webhook tool take_message (slice B2): attached when the owner enabled message taking. */
+  messageToolId?: string | null
 }
 
 /** Removes {{variables}}: inbound SIP calls cannot supply custom values for the greeting. */
@@ -50,7 +52,7 @@ export function buildCartesiaAgentConfig(spec: AgentSpec, voiceId: string, platf
       output: { voice_id: voiceId, speed: speed === null ? null : clamp(speed, 0.6, 1.5), volume: null, emotion: null },
     },
     turn: { inactivity_end_call_secs: endCallSecs, inactivity_check_in_secs: checkIn },
-    tools: platform.contextToolId ? [{ id: platform.contextToolId }] : [],
+    tools: [platform.contextToolId, platform.messageToolId].filter((id): id is string => !!id).map((id) => ({ id })),
     system_tools: {
       end_call: c.allow_end_call ? { description: null, pre_tool_speech: 'force' } : null,
       send_dtmf: null,
@@ -92,6 +94,50 @@ export function contextToolDefinition(url: string, bearerToken: string): Record<
           caller_number: { type: 'string', dynamic_variable: 'system__caller_id' },
           direction: { type: 'string', dynamic_variable: 'system__call_direction' },
         },
+      },
+      authentication: { mode: 'bearer', token: { type: 'secret', secret_value: bearerToken } },
+    },
+  }
+}
+
+/**
+ * take_message for the fallback agent (slice B2), shared by every fallback
+ * agent and bearer-authenticated like get_call_context. The call (and so the
+ * organisation) is resolved on our server from the called number and the
+ * caller id (system variables the model cannot change), never from the
+ * model's parameters; the model only provides the message itself.
+ */
+export function messageToolDefinition(url: string, bearerToken: string): Record<string, unknown> {
+  return {
+    type: 'webhook',
+    name: 'take_message',
+    description:
+      'Saves a message for the team and alerts them right away. Call it once per call, after you collected the reason and read the callback number back to the caller. If the result has ok = false, follow its message.',
+    pre_tool_speech: 'force',
+    execution_mode: 'immediate',
+    response_timeout_secs: 15,
+    api_schema: {
+      url,
+      method: 'POST',
+      request_body_schema: {
+        type: 'object',
+        properties: {
+          called_number: { type: 'string', dynamic_variable: 'system__called_number' },
+          caller_number: { type: 'string', dynamic_variable: 'system__caller_id' },
+          caller_name: { type: 'string', description: "The caller's name, if they gave it." },
+          callback_number: {
+            type: 'string',
+            description:
+              'Only when the caller wants to be called back on a different number than the one they are calling from: that number, digits exactly as confirmed. Otherwise leave it empty.',
+          },
+          reason: { type: 'string', description: 'The message for the team in one or two sentences: who it is for and what the caller wants.' },
+          urgency: {
+            type: 'string',
+            enum: ['normal', 'urgent'],
+            description: 'urgent only when it cannot wait for a normal callback (a safety risk, an emergency, something time-critical today); otherwise normal.',
+          },
+        },
+        required: ['reason', 'urgency'],
       },
       authentication: { mode: 'bearer', token: { type: 'secret', secret_value: bearerToken } },
     },

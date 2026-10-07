@@ -14,7 +14,7 @@ import * as toolsApi from '@/lib/elevenlabs/api/tools'
 import * as secretsApi from '@/lib/elevenlabs/api/secrets'
 import { ProviderError } from './errors'
 import { resetPlatformResourceMemo } from './platform-resources'
-import { TRANSFER_TOOL } from '@/lib/elevenlabs/tools/definitions'
+import { PLATFORM_TOOL_KEYS, TRANSFER_TOOL } from '@/lib/elevenlabs/tools/definitions'
 import { buildWebhookToolConfig } from '@/lib/elevenlabs/tools/webhook-tool'
 import { secretFingerprint, toolConfigHash } from '@/lib/elevenlabs/tools/hash'
 import {
@@ -308,7 +308,12 @@ describe('read-only id and reconcile report', () => {
   })
 
   it('reconcilePlatformTools reports per resource and never throws', async () => {
-    expect(await reconcilePlatformTools()).toEqual({ configured: true, secret: { status: 'ok' }, tools: [{ key: T, status: 'ok', toolId: 'tool_1', action: 'created' }] })
+    const first = await reconcilePlatformTools()
+    expect(first).toMatchObject({ configured: true, secret: { status: 'ok' } })
+    expect(first.tools[0]).toEqual({ key: T, status: 'ok', toolId: 'tool_1', action: 'created' })
+    // Every platform tool is reconciled (slice B2 added the in-call business tools).
+    expect(first.tools.map((t) => t.key)).toEqual(PLATFORM_TOOL_KEYS)
+    expect(first.tools.every((t) => t.status === 'ok')).toBe(true)
     resetPlatformToolMemo()
     vi.mocked(toolsApi.getTool).mockRejectedValue(new ProviderError({ system: 'elevenlabs', code: 'auth', operation: 'tools.get' }))
     vi.mocked(secretsApi.getSecret).mockResolvedValue({ secret_id: 'sec_1', name: 'n' })

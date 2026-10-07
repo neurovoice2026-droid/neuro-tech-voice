@@ -10,6 +10,7 @@
 // call router before the conversation starts.
 
 import { AGENT_LANGUAGES } from '@/lib/agent-languages'
+import { businessToolRules, type BookingPromptMode } from './prompt-business'
 
 const DEFAULT_FALLBACK_MESSAGES: Record<string, string> = {
   en: "I'm sorry, I didn't quite catch that. Could you please repeat?",
@@ -101,6 +102,14 @@ export interface ComposePromptInput {
   numbersAsDigits?: boolean
   /** Keypad (DTMF) input is collected. */
   keypadInput?: boolean
+  /**
+   * In-call booking (slice B2): 'tools' when check_availability and
+   * book_appointment are attached, 'take_message' when booking is enabled but
+   * cannot happen on this agent. Absent = booking off.
+   */
+  bookingMode?: BookingPromptMode | null
+  /** The take_message tool is attached. */
+  takeMessageTool?: boolean
 }
 
 const LANGUAGE_NAMES: Record<string, string> = Object.fromEntries(AGENT_LANGUAGES.map((l) => [l.value, l.label]))
@@ -224,6 +233,15 @@ export function composeSystemPrompt(input: ComposePromptInput): string {
       rules.push('Callers may also type numbers on their phone keypad: treat digits typed that way exactly like digits they said.')
     }
   }
+
+  rules.push(
+    ...businessToolRules({
+      bookingMode: input.bookingMode,
+      takeMessageTool: input.takeMessageTool,
+      callContext: context,
+      callIdVariable: PLATFORM_VARIABLES.callId,
+    })
+  )
 
   if (input.timezone) {
     rules.push(`The business operates in the ${input.timezone} time zone; use it when talking about days and times.`)

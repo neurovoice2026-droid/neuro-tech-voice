@@ -6,11 +6,15 @@
 import { z } from 'zod'
 import {
   DEFAULT_ANALYSIS_SETTINGS,
+  DEFAULT_BOOKING_SETTINGS,
   DEFAULT_CONVERSATION_SETTINGS,
+  DEFAULT_MESSAGE_SETTINGS,
   DEFAULT_PRIVACY_SETTINGS,
   DEFAULT_TRANSFER_SETTINGS,
   type AnalysisSettings,
+  type BookingSettings,
   type ConversationSettings,
+  type MessageSettings,
   type PrivacySettings,
   type TransferSettings,
   type VoiceTuning,
@@ -221,6 +225,46 @@ export function readAfterHours(raw: unknown): AfterHoursConfig {
 export function readWorkingHours(raw: unknown): WorkingHours {
   const parsed = WorkingHoursSchema.safeParse(raw ?? {})
   return parsed.success ? (parsed.data as WorkingHours) : {}
+}
+
+// ─── In-call business tools (slice B2) ───────────────────────────────────────
+
+export const MAX_EXTRA_MESSAGE_RECIPIENTS = 5
+
+// Google Calendar ids: 'primary', an e-mail-like id or a group calendar id.
+const calendarId = z
+  .string()
+  .trim()
+  .min(1)
+  .max(255)
+  .regex(/^[^\s<>"'`\\]+$/, 'Choose a calendar from the list')
+
+export const BookingSettingsSchema = z.object({
+  enabled: z.boolean(),
+  calendar_id: calendarId,
+  duration_minutes: z.number().int().min(5).max(240),
+  buffer_minutes: z.number().int().min(0).max(120),
+  booking_window_days: z.number().int().min(1).max(180),
+  min_notice_hours: z.number().int().min(0).max(168),
+  daily_cap: z.number().int().min(1).max(200).nullable(),
+})
+
+export const MessageSettingsSchema = z.object({
+  enabled: z.boolean(),
+  notify_owner: z.boolean(),
+  extra_recipients: z
+    .array(z.string().trim().toLowerCase().pipe(z.email('Enter a valid e-mail address').max(254)))
+    .max(MAX_EXTRA_MESSAGE_RECIPIENTS, `At most ${MAX_EXTRA_MESSAGE_RECIPIENTS} extra addresses`)
+    .refine(distinct, 'Each address only once'),
+  email_notifications: z.enum(['all', 'urgent_only', 'off']),
+})
+
+export function readBookingSettings(raw: unknown): BookingSettings {
+  return lenient(BookingSettingsSchema as unknown as z.ZodType<BookingSettings>, DEFAULT_BOOKING_SETTINGS, raw)
+}
+
+export function readMessageSettings(raw: unknown): MessageSettings {
+  return lenient(MessageSettingsSchema as unknown as z.ZodType<MessageSettings>, DEFAULT_MESSAGE_SETTINGS, raw)
 }
 
 export function readDynamicVariables(raw: unknown): Record<string, string> {
