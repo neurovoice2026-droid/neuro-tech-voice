@@ -189,6 +189,7 @@ export async function runVoiceMaintenance(log: Logger = createLogger({ component
     ['knowledge_retries', () => retryStaleKnowledgeDocs(2, log)],
     ['voice_saves', () => settleInterruptedVoiceSaves(5, log)],
     ['rejected_clones', () => purgeRejectedClones(5, log)],
+    ['account_deletions', () => import('@/lib/account/delete').then((m) => m.resumeAccountDeletions(log))],
     ['knowledge_sync', () => import('./knowledge-maintenance').then((m) => m.runKnowledgeMaintenance(log))],
     ['library_voices', () => import('./library-lifecycle').then((m) => m.checkLibraryVoices({ log }))],
     ['default_voice_migration', () => import('./default-voices').then((m) => m.runScheduledDefaultVoiceMigration(log))],

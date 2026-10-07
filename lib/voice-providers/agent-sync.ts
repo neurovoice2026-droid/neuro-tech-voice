@@ -26,6 +26,7 @@ import { platformFallbackEnabled } from './config'
 import type { ResourceStatus } from './types'
 import { applyNumberRouting } from '@/lib/telephony/binding'
 import { isStricterPrivacy, readAppliedPrivacy } from './privacy-change'
+import { isOrgBeingDeleted } from '@/lib/account/state'
 
 const LEASE_MS = 90_000
 const MAX_CATCH_UP_LOOPS = 3
@@ -287,6 +288,11 @@ export async function syncAgent(agentId: string, opts: SyncOptions = {}): Promis
   const { data: agent, error } = await db.from('agents').select('id, org_id').eq('id', agentId).maybeSingle()
   if (error) throw new Error(`agents read failed: ${error.message}`)
   if (!agent) return []
+  // Account deletion in progress (lib/account): never re-create what it removes.
+  if (await isOrgBeingDeleted(db, agent.org_id as string, log)) {
+    log.info('agent_sync.skipped_account_deleting')
+    return []
+  }
   const providers = opts.providers ?? (await providersFor(db, agentId))
   const results: ProviderSyncResult[] = []
   for (const provider of providers) {

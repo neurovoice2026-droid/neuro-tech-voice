@@ -97,7 +97,7 @@ for (const step of ["booking_reminders", "purge_orphan_uploads"] as const) {
  * constant or to its source text. All exact: none prints with a "+".
  */
 export const FACTS_MOB = {
-  reauthMinutes: 30, // = REAUTH_WINDOW_MS / 60 000 (app/api/account/route.ts)
+  reauthMinutes: 30, // = REAUTH_WINDOW_MS / 60 000 (lib/account/confirmation.ts, used by app/api/account/route.ts)
   liveTokenSeconds: 60, // = BROWSER_TOKEN_TTL_SECONDS (app/api/voice/test-session/route.ts)
   bookingTexts: 5, // `export function …Sms(input: BookingSmsInput)` in lib/sms/templates.ts
   orphanHours: 24, // = ORPHAN_MIN_AGE_MS / 3 600 000 (app/api/cron/storage-cleanup.ts): "day-old"

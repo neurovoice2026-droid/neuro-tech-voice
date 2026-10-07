@@ -149,7 +149,28 @@ describe('requireOrg', () => {
     expect(ctx.user.id).toBe(ADMIN_ID)
     expect(ctx.supabase).toBe(fake.client)
     expect(fake.from).toHaveBeenCalledWith('organizations')
-    expect(fake.select).toHaveBeenCalledWith('id, name, timezone, plan')
+    expect(fake.select).toHaveBeenCalledWith('id, name, timezone, plan, deletion_requested_at')
     expect(fake.eq).toHaveBeenCalledWith('user_id', ADMIN_ID)
+  })
+
+  it('403 account_deleting once the deletion was requested, unless allowDeleting', async () => {
+    const org = { id: 'org_1', name: 'Smile Clinic', timezone: 'Europe/Bucharest', plan: 'pro', deletion_requested_at: '2026-10-07T10:00:00Z' }
+    vi.mocked(createClient).mockResolvedValue(fakeClient({ user: user(ADMIN_ID), org: { data: org, error: null } }).client)
+    const err = await rejection(requireOrg())
+    expect(err).toMatchObject({ status: 403, code: 'forbidden', details: { reason: 'account_deleting' } })
+    await expect(requireOrg({ allowDeleting: true })).resolves.toMatchObject({ org })
+  })
+
+  it('falls back to the columns of a database without migration 021 (undefined column)', async () => {
+    const org = { id: 'org_1', name: 'Smile Clinic', timezone: 'UTC', plan: 'trial' }
+    const maybeSingle = vi
+      .fn()
+      .mockResolvedValueOnce({ data: null, error: { code: '42703', message: 'column organizations.deletion_requested_at does not exist' } })
+      .mockResolvedValueOnce({ data: org, error: null })
+    const select = vi.fn(() => ({ eq: () => ({ maybeSingle }) }))
+    const client = { auth: { getUser: async () => ({ data: { user: user(ADMIN_ID) }, error: null }) }, from: () => ({ select }) }
+    vi.mocked(createClient).mockResolvedValue(client as unknown as ServerClient)
+    await expect(requireOrg()).resolves.toMatchObject({ org })
+    expect(select).toHaveBeenLastCalledWith('id, name, timezone, plan')
   })
 })
