@@ -28,7 +28,8 @@ import { lifecycleFor } from '@/lib/voice-providers/adapters'
 import { safeMessageFor, type VoiceProvider } from '@/lib/voice-providers/errors'
 import { applyNumberRouting } from '@/lib/telephony/binding'
 import { redactText } from '@/lib/security/redact'
-import { PLATFORM_VARIABLE_MESSAGE, hasNoPlatformVariables } from '@/lib/voice-providers/template-variables'
+import { PLATFORM_VARIABLE_MESSAGE, hasNoPlatformVariables, stripPlatformVariables } from '@/lib/voice-providers/template-variables'
+import { tenantName } from '@/lib/voice-providers/settings'
 import type {
   Agent,
   AgentStatusView,
@@ -40,6 +41,7 @@ import type {
 // ─── Input schemas shared by the agent and onboarding routes ─────────────────
 
 export const AGENT_NAME_MAX = 100
+export const COMPANY_NAME_MAX = 100
 export const FIRST_MESSAGE_MAX = 1_000
 export const SYSTEM_PROMPT_MAX = 20_000
 export const FALLBACK_MESSAGE_MAX = 500
@@ -47,6 +49,14 @@ export const FALLBACK_MESSAGE_MAX = 500
 const LANGUAGE_CODES = AGENT_LANGUAGES.map((l) => l.value) as unknown as readonly [AgentLanguageCode, ...AgentLanguageCode[]]
 
 export const AgentLanguageSchema = z.enum(LANGUAGE_CODES)
+
+/**
+ * Agent and company names reach the agent (greetings, prompt, the
+ * {{business_name}} variable): like other tenant text they may not reference
+ * platform variables ({{ntv_*}}, {{secret__*}}, most {{system__*}}).
+ */
+export const AgentNameSchema = tenantName(AGENT_NAME_MAX)
+export const CompanyNameSchema = tenantName(COMPANY_NAME_MAX)
 
 /** Personality / tone slug kept in agents.metadata.personality (UI-only, not sent to providers). */
 export const PersonalitySchema = z
@@ -82,14 +92,14 @@ export const WebsiteSchema = z
   .transform((v) => (v ? withProtocol(v) : null))
 
 export const OnboardingCompanySchema = z.object({
-  name: z.string().trim().min(1).max(100),
+  name: CompanyNameSchema,
   industry: z.string().trim().min(1).max(60),
   website: WebsiteSchema.optional(),
   description: z.string().trim().max(1_000).optional(),
 })
 
 export const OnboardingAgentSchema = z.object({
-  name: z.string().trim().min(1).max(AGENT_NAME_MAX),
+  name: AgentNameSchema,
   language: AgentLanguageSchema,
   system_prompt: z.string().max(SYSTEM_PROMPT_MAX).refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE).nullable().optional(),
   first_message: z.string().trim().max(FIRST_MESSAGE_MAX).refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE).nullable().optional(),
@@ -111,9 +121,9 @@ export function mergeMetadata(current: unknown, patch: Record<string, unknown>):
 
 const UNIQUE_VIOLATION = '23505'
 
-/** "<Company> Agent", or "My Agent" when the company has no name yet. */
+/** "<Company> Agent", or "My Agent" when the company has no name yet (platform variables stripped). */
 export function defaultAgentName(orgName: string | null | undefined): string {
-  const base = typeof orgName === 'string' ? orgName.trim() : ''
+  const base = typeof orgName === 'string' ? stripPlatformVariables(orgName).trim() : ''
   return (base ? `${base} Agent` : 'My Agent').slice(0, AGENT_NAME_MAX)
 }
 
@@ -140,7 +150,7 @@ export async function ensureAgent(orgId: string, defaultName: string): Promise<A
   const existing = await selectOldestAgent(db, orgId)
   if (existing) return existing
 
-  const name = defaultName.trim().slice(0, AGENT_NAME_MAX) || 'My Agent'
+  const name = stripPlatformVariables(defaultName).trim().slice(0, AGENT_NAME_MAX) || 'My Agent'
   const { data, error } = await db
     .from('agents')
     // No voice yet, so the voice is not "synced" (see migration 010).

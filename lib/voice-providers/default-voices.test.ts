@@ -129,11 +129,15 @@ describe('new agents and pinning', () => {
 })
 
 describe('runScheduledDefaultVoiceMigration', () => {
-  it('reports once an hour before the migration date, migrates every quarter hour from it', async () => {
-    expect(await runScheduledDefaultVoiceMigration(log, new Date('2026-10-07T10:07:00Z'))).toEqual({ skipped: 'not_scheduled' })
-    expect(await runScheduledDefaultVoiceMigration(log, new Date('2026-10-07T10:02:00Z'))).toMatchObject({ mode: 'report' })
-    expect(await runScheduledDefaultVoiceMigration(log, new Date('2026-12-16T10:22:00Z'))).toEqual({ skipped: 'not_scheduled' })
-    expect(await runScheduledDefaultVoiceMigration(log, new Date('2026-12-16T10:31:00Z'))).toMatchObject({ mode: 'migrate' })
+  it('reports at most once an hour before the migration date, migrates at most every quarter hour from it (stored last run, not the clock minute)', async () => {
+    // The daily Vercel cron fires at 03:17 UTC: a clock-minute window never matched it.
+    expect(await runScheduledDefaultVoiceMigration(log, new Date('2026-10-07T03:17:00Z'))).toMatchObject({ mode: 'report' })
+    expect(await runScheduledDefaultVoiceMigration(log, new Date('2026-10-07T03:47:00Z'))).toEqual({ skipped: 'not_due' })
+    expect(await runScheduledDefaultVoiceMigration(log, new Date('2026-10-07T04:18:00Z'))).toMatchObject({ mode: 'report' })
+    expect(await runScheduledDefaultVoiceMigration(log, new Date('2026-12-16T03:17:00Z'))).toMatchObject({ mode: 'migrate' })
+    expect(await runScheduledDefaultVoiceMigration(log, new Date('2026-12-16T03:22:00Z'))).toEqual({ skipped: 'not_due' })
+    expect(await runScheduledDefaultVoiceMigration(log, new Date('2026-12-16T03:33:00Z'))).toMatchObject({ mode: 'migrate' })
+    expect(state.db.tables.maintenance_state.map((r) => r.key).sort()).toEqual(['default_voice_migrate', 'default_voice_report'])
   })
 
   it('does not look up the same non-default legacy voice again on the next run', async () => {

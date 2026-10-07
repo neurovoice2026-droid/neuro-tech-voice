@@ -2,8 +2,9 @@
 // shape { voices: (ElevenLabsVoice & { public_owner_id })[], has_more }.
 // Compatibility wrapper over the voice catalog's filtered Voice Library
 // listing (no live-moderated or custom-rate voices, minimum notice period).
-// `voice_id` is always the LIBRARY id here; POST /api/elevenlabs/voices/add
-// turns it into a usable workspace id. New code: GET /api/voices?source=library.
+// `voice_id` is always the LIBRARY id here; PUT /api/agent/voice with
+// library_ref provisions it and applies it to the agent (the legacy
+// POST /api/elevenlabs/voices/add is gone). New code: GET /api/voices?source=library.
 
 import { NextResponse } from 'next/server'
 import { z } from 'zod'

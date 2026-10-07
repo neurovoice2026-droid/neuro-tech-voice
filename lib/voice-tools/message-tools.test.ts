@@ -12,7 +12,7 @@ vi.mock('@/lib/email/client', () => ({ sendEmail: (...a: unknown[]) => sendEmail
 import { createLogger } from '@/lib/observability/logger'
 import { AGENT_A, CALL_A, ORG_A, ORG_B, toolContext, toolDb } from '@/tests/helpers/voice-tools'
 import { takeMessageTool } from './message-tools'
-import { MAX_MESSAGE_EMAILS_PER_CALL } from './notify'
+import { LINK_REMOVED, MAX_MESSAGE_EMAILS_PER_CALL, messageEmailDailyCap, withoutLinks } from './notify'
 
 const log = createLogger({ component: 'test' })
 let db: ReturnType<typeof toolDb>
@@ -34,7 +34,8 @@ beforeEach(() => {
 const ARGS = { caller_name: 'Ana Pop', reason: 'Wants to move her cleaning to next week', urgency: 'normal' }
 
 describe('take_message', () => {
-  it('saves the message on the call (org, agent, caller number from the call) and e-mails the verified owner and the extra recipients', async () => {
+  it('saves the message on the call (org, agent, caller number from the call) and e-mails the verified owner and the extra recipients (paid plan)', async () => {
+    db.tables.organizations = [{ id: ORG_A, plan: 'pro' }]
     const ctx = toolContext(db, { messages: { extra_recipients: ['desk@clinic.example'] } })
     const res = await takeMessageTool(ctx, { ...ARGS, org_id: ORG_B, recipients: ['attacker@evil.example'] }, log, 'elevenlabs')
     expect(res).toEqual({ ok: true, message: expect.stringContaining('ending in 5678') })
@@ -118,6 +119,57 @@ describe('take_message', () => {
     await settle()
     expect(res.ok).toBe(true)
     expect(db.tables.call_messages[0].notify_error).toBe('send_failed')
+  })
+
+  it('trial (or unknown plan): the alert goes to the verified owner only, extra addresses need a paid plan', async () => {
+    db.tables.organizations = [{ id: ORG_A, plan: 'trial' }]
+    await takeMessageTool(toolContext(db, { messages: { extra_recipients: ['relay@target.example'] } }), ARGS, log, 'elevenlabs')
+    await settle()
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+    expect((sendEmail.mock.calls[0][0] as { to: string[] }).to).toEqual(['owner@example.com'])
+    // Owner alerts off on the trial: nobody is e-mailed (the extra address is never used).
+    const db2 = toolDb()
+    await takeMessageTool(toolContext(db2, { messages: { notify_owner: false, extra_recipients: ['relay@target.example'] } }), ARGS, log, 'elevenlabs')
+    await settle()
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+    expect(db2.tables.call_messages[0].notify_error).toBe('no_recipients')
+  })
+
+  it('links are removed from the caller-provided texts and the business name in the alert (the message itself is kept as said)', async () => {
+    db.tables.organizations = [{ id: ORG_A, plan: 'pro' }]
+    const ctx = toolContext(db)
+    ctx.org = { ...ctx.org, name: 'Smile www.cheap-pills.example.com Clinic' }
+    await takeMessageTool(ctx, { caller_name: 'Ana evil.com', reason: 'Please open https://phish.example/login?u=1 and reset at bank.ro/reset, mail ana@clinic.ro', urgency: 'normal' }, log, 'elevenlabs')
+    await settle()
+    const mail = sendEmail.mock.calls[0][0] as { subject: string; html: string }
+    for (const link of ['https://', 'phish.example', 'bank.ro', 'cheap-pills', 'evil.com']) {
+      expect(mail.html).not.toContain(link)
+      expect(mail.subject).not.toContain(link)
+    }
+    expect(mail.html).toContain(LINK_REMOVED)
+    expect(mail.html).toContain('ana@clinic.ro')
+    expect(mail.subject).toBe(`New message from Ana ${LINK_REMOVED}`)
+    expect(db.tables.call_messages[0].reason).toContain('https://phish.example/login')
+    expect(withoutLinks('Dr. Pop, invoice no. 12, at 10.30 tomorrow')).toBe('Dr. Pop, invoice no. 12, at 10.30 tomorrow')
+  })
+
+  it('the daily alert cap is lower on the trial', async () => {
+    expect(messageEmailDailyCap(true)).toBe(100)
+    expect(messageEmailDailyCap(false)).toBe(20)
+    vi.stubEnv('MESSAGE_EMAIL_DAILY_CAP', '10')
+    expect(messageEmailDailyCap(false)).toBe(10)
+    vi.stubEnv('MESSAGE_EMAIL_DAILY_CAP_TRIAL', '1')
+    expect(messageEmailDailyCap(false)).toBe(1)
+    // A fresh organisation on the trial: the second message of the day is not e-mailed.
+    const org = 'ffffffff-ffff-4fff-8fff-ffffffffffff'
+    db.tables.organizations = [{ id: org, plan: 'trial' }]
+    for (const callId of ['c1000000-0000-4000-8000-000000000001', 'c1000000-0000-4000-8000-000000000002']) {
+      const base = toolContext(db)
+      await takeMessageTool({ ...base, org: { ...base.org, id: org }, call: { ...base.call, id: callId, org_id: org } }, ARGS, log, 'elevenlabs')
+      await settle()
+    }
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+    expect(db.tables.call_messages.map((m) => m.notify_error)).toEqual([null, 'daily_cap'])
   })
 
   it('turned off, or missing the reason: ok:false guidance, nothing saved', async () => {

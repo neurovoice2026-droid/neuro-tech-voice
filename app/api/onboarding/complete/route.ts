@@ -30,8 +30,9 @@ import { getStripeClient, isStripeConfigured } from '@/lib/stripe/client'
 import { sendEmail } from '@/lib/email/client'
 import { welcomeEmail } from '@/lib/email/templates'
 import {
-  AGENT_NAME_MAX,
   AgentLanguageSchema,
+  AgentNameSchema,
+  CompanyNameSchema,
   FIRST_MESSAGE_MAX,
   PersonalitySchema,
   SYSTEM_PROMPT_MAX,
@@ -67,7 +68,7 @@ const CompleteSchema = z.object({
   annual: z.boolean().optional(),
   company: z
     .object({
-      name: emptyAsUndefined(z.string().trim().max(100)),
+      name: emptyAsUndefined(CompanyNameSchema),
       industry: emptyAsUndefined(z.string().trim().max(60)),
       website: WebsiteSchema.optional(),
       description: z.string().trim().max(1_000).optional(),
@@ -75,7 +76,7 @@ const CompleteSchema = z.object({
     .optional(),
   agent: z
     .object({
-      name: emptyAsUndefined(z.string().trim().max(AGENT_NAME_MAX)),
+      name: emptyAsUndefined(AgentNameSchema),
       language: emptyAsUndefined(AgentLanguageSchema),
       system_prompt: z.string().max(SYSTEM_PROMPT_MAX).refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE).nullable().optional(),
       first_message: z.string().trim().max(FIRST_MESSAGE_MAX).refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE).nullable().optional(),

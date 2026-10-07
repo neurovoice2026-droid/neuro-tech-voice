@@ -97,7 +97,8 @@ export function placeholderResponse(partial: KnownSoFar = { tenantVariables: {},
       [PLATFORM_VARIABLES.secretCallToken]: 'none',
       // The prompt decides from the opening hours when it has them.
       [PLATFORM_VARIABLES.afterHours]: 'unknown',
-      [PLATFORM_VARIABLES.businessName]: partial.businessName,
+      // Tenant data (organizations.name): never a {{platform variable}}.
+      [PLATFORM_VARIABLES.businessName]: stripPlatformVariables(partial.businessName),
       [PLATFORM_VARIABLES.callDirection]: 'inbound',
       [PLATFORM_VARIABLES.routingMode]: 'native',
     },

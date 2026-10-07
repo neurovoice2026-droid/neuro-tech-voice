@@ -31,6 +31,7 @@ import { PLATFORM_VARIABLES } from '@/lib/voice-providers/prompt'
 import { voiceTokenSecret } from '@/lib/voice-providers/config'
 import { normalizeE164 } from '@/lib/phone/e164'
 import { UNAVAILABLE_MESSAGE, applyDisclosure, localized, outboundGreetingFor } from '@/lib/voice/greetings'
+import { stripPlatformVariables } from '@/lib/voice-providers/template-variables'
 import { signCallToken } from './tokens'
 
 /** Lifetime of the per-call tokens (longer than any call). */
@@ -62,6 +63,15 @@ export interface ClientDataInput {
   unavailable?: boolean
 }
 
+/**
+ * A tenant name (business, agent) as it may reach the conversation: without
+ * platform variables ({{ntv_*}}, {{secret__*}}, most {{system__*}}). The API
+ * rejects them, but organizations.name is also writable through PostgREST.
+ */
+function tenantName(raw: string | null | undefined): string {
+  return stripPlatformVariables(raw ?? '')
+}
+
 /** Opaque end-user id for provider analytics: per organization, never the raw number. */
 export function endUserId(orgId: string, number: string | null | undefined): string | null {
   const e164 = number ? normalizeE164(number) : null
@@ -82,7 +92,7 @@ export function platformVariables(input: ClientDataInput): Record<string, string
     // Which transfer tool applies in mixed-mode orgs (prompt rule).
     [PLATFORM_VARIABLES.routingMode]: input.routingMode,
     [PLATFORM_VARIABLES.afterHours]: input.afterHours ? 'true' : 'false',
-    [PLATFORM_VARIABLES.businessName]: input.businessName,
+    [PLATFORM_VARIABLES.businessName]: tenantName(input.businessName),
     // Gates voicemail_detection to outbound calls (prompt rule).
     [PLATFORM_VARIABLES.callDirection]: input.direction,
   }
@@ -102,8 +112,9 @@ export function conversationOverride(input: ClientDataInput): Record<string, unk
     if (input.direction === 'outbound' && allowed.has(OVERRIDE_FIRST_MESSAGE)) {
       // The agent placed this call: an outbound opening line, with the AI
       // disclosure and, when the business enabled it, the recording notice.
-      const greeting = outboundGreetingFor({ language, company: input.businessName, agentName: input.agent.name })
-      agent.first_message = applyDisclosure(greeting, { language, businessName: input.businessName, recordingNotice: input.agent.recordingNotice })
+      const company = tenantName(input.businessName)
+      const greeting = outboundGreetingFor({ language, company, agentName: tenantName(input.agent.name) })
+      agent.first_message = applyDisclosure(greeting, { language, businessName: company, recordingNotice: input.agent.recordingNotice })
     }
     const cap = input.capSeconds
     if (typeof cap === 'number' && cap > 0 && cap < input.agent.maxDurationSeconds && allowed.has(OVERRIDE_MAX_DURATION)) {

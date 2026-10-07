@@ -610,6 +610,11 @@ GRANT EXECUTE ON FUNCTION public.bump_agent_revision(uuid) TO service_role;
 -- ─── Storage: knowledge documents scoped to the owning org folder ─────────────
 -- Paths are `${org_id}/${agent_id}/${file}`. The previous policy let any
 -- authenticated user read/write every org's documents.
+-- On projects where the migration role does not own storage.objects /
+-- storage.buckets (newer Supabase projects), these statements raise
+-- insufficient_privilege: each part is skipped with a NOTICE instead of
+-- aborting the whole migration (re-runs included). Apply the skipped part
+-- from the dashboard's Storage policies, or as the owner (supabase_storage_admin).
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'storage') THEN
     -- Tenants only READ their own folder: uploads go through server-created
@@ -617,16 +622,26 @@ DO $$ BEGIN
     -- validation and cleanup all live there).
     -- Signed upload URLs do not enforce a size: cap the bucket itself at the
     -- ElevenLabs knowledge-base limit (content is validated server-side).
-    EXECUTE 'UPDATE storage.buckets SET file_size_limit = 20971520 WHERE id = ''knowledge-documents''';
-    EXECUTE 'DROP POLICY IF EXISTS "knowledge_docs_rw" ON storage.objects';
-    EXECUTE 'DROP POLICY IF EXISTS "knowledge_docs_owner" ON storage.objects';
-    EXECUTE $p$
-      CREATE POLICY "knowledge_docs_owner" ON storage.objects
-        FOR SELECT TO authenticated
-        USING (
-          bucket_id = 'knowledge-documents'
-          AND (storage.foldername(name))[1] IN (SELECT id::text FROM public.organizations WHERE user_id = (SELECT auth.uid()))
-        )
-    $p$;
+    BEGIN
+      EXECUTE 'UPDATE storage.buckets SET file_size_limit = 20971520 WHERE id = ''knowledge-documents''';
+    EXCEPTION WHEN insufficient_privilege THEN
+      RAISE NOTICE 'storage.buckets file_size_limit not changed (%): set 20 MB on knowledge-documents in the dashboard', SQLERRM;
+    END;
+    -- One sub-transaction: if the CREATE is refused, the DROPs are rolled
+    -- back too, so the previous policy is never lost without a replacement.
+    BEGIN
+      EXECUTE 'DROP POLICY IF EXISTS "knowledge_docs_rw" ON storage.objects';
+      EXECUTE 'DROP POLICY IF EXISTS "knowledge_docs_owner" ON storage.objects';
+      EXECUTE $p$
+        CREATE POLICY "knowledge_docs_owner" ON storage.objects
+          FOR SELECT TO authenticated
+          USING (
+            bucket_id = 'knowledge-documents'
+            AND (storage.foldername(name))[1] IN (SELECT id::text FROM public.organizations WHERE user_id = (SELECT auth.uid()))
+          )
+      $p$;
+    EXCEPTION WHEN insufficient_privilege THEN
+      RAISE NOTICE 'storage.objects policies not changed (%): apply knowledge_docs_owner as the owner of storage.objects', SQLERRM;
+    END;
   END IF;
 END $$;

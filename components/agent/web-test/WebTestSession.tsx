@@ -37,6 +37,8 @@ export interface WebTestSessionProps {
   onGranted: (grant: WebTestSessionGrant) => void
   /** The session ended or failed (the panel refreshes its availability). */
   onFinished: () => void
+  /** No test can be started any more (trial tests used up): keeps the last test on screen without "Start again". */
+  startBlocked?: boolean
 }
 
 const MAX_LINES = 200
@@ -70,7 +72,7 @@ function formatClock(totalSeconds: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-function SessionView({ mode, agentName, onStart, onGranted, onFinished }: WebTestSessionProps) {
+function SessionView({ mode, agentName, onStart, onGranted, onFinished, startBlocked = false }: WebTestSessionProps) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState<string | null>(null)
   const [lines, setLines] = useState<Line[]>([])
@@ -243,10 +245,12 @@ function SessionView({ mode, agentName, onStart, onGranted, onFinished }: WebTes
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         {!live && !busy ? (
-          <Button onClick={() => void start()} className="gap-2">
-            {mode === 'voice' ? <Mic aria-hidden="true" /> : <Send aria-hidden="true" />}
-            {phase === 'ended' || phase === 'error' ? 'Start again' : mode === 'voice' ? 'Start talking' : 'Start chat'}
-          </Button>
+          startBlocked ? null : (
+            <Button onClick={() => void start()} className="gap-2">
+              {mode === 'voice' ? <Mic aria-hidden="true" /> : <Send aria-hidden="true" />}
+              {phase === 'ended' || phase === 'error' ? 'Start again' : mode === 'voice' ? 'Start talking' : 'Start chat'}
+            </Button>
+          )
         ) : (
           <Button
             variant="destructive"

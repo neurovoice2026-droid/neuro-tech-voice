@@ -15,6 +15,12 @@ import 'server-only'
 // bounded, concurrent batches. 404 counts as deleted; an item that keeps
 // failing is retried with its own backoff and given up on after
 // ITEM_MAX_ATTEMPTS (counted). Both steps resume where they stopped.
+// A Twilio call is a tree: before a parent CallSid is deleted, its child
+// calls (Twilio calls.list({parentCallSid}): <Dial> legs for forwarding,
+// human transfer, whisper and the Cartesia SIP leg, native transfers) are
+// added as items of their own, and so deleted (and their own children
+// listed) in the same loop. If the listing fails the parent is kept and
+// retried, so its children can still be found.
 
 import * as el from '@/lib/elevenlabs/client'
 import * as ct from '@/lib/cartesia/client'
@@ -154,6 +160,19 @@ async function collectCartesiaListing(ctx: StepContext, counts: Record<string, n
   return true
 }
 
+/** Child calls listed per parent (a call has a handful of legs at most). */
+const CHILD_CALLS_LIMIT = 100
+
+/**
+ * CallSids whose ParentCallSid is `parentSid`: the <Dial> legs (forwarding,
+ * human transfer, whisper, the Cartesia SIP leg) and native transfer legs,
+ * separate call records (numbers, timing) that deleting the parent leaves.
+ */
+async function childCallSids(parentSid: string): Promise<string[]> {
+  const children = await getTwilioClient().calls.list({ parentCallSid: parentSid, limit: CHILD_CALLS_LIMIT })
+  return children.map((c) => c.sid).filter((sid) => typeof sid === 'string' && sid !== parentSid && ID_FORMAT.twilio_call.test(sid))
+}
+
 async function itemCount(ctx: StepContext, filter?: { outcome?: ItemOutcome; pending?: boolean }): Promise<number> {
   let q = ctx.db.from('account_deletion_items').select('resource_id', { count: 'exact', head: true }).eq('deletion_id', ctx.jobId)
   if (filter?.outcome) q = q.eq('outcome', filter.outcome)
@@ -190,10 +209,14 @@ async function deleteAtProvider(ctx: StepContext, item: ItemRow): Promise<ItemOu
       if (!ct.isConfigured()) return 'skipped_not_configured'
       await ct.calls.delete(item.resource_id, reqCtx)
       return 'deleted'
-    case 'twilio_call':
+    case 'twilio_call': {
       if (!isTwilioConfigured()) return 'skipped_not_configured'
+      // Children are listed (and queued) while the parent record still exists.
+      const children = await childCallSids(item.resource_id)
+      if (children.length) await addItems(ctx, children.map((sid) => ({ kind: 'twilio_call' as const, resource_id: sid })))
       await getTwilioClient().calls(item.resource_id).remove()
       return 'deleted'
+    }
     case 'twilio_message':
       if (!isTwilioConfigured()) return 'skipped_not_configured'
       await getTwilioClient().messages(item.resource_id).remove()

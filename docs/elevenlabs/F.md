@@ -40,7 +40,7 @@ All tenants share one ElevenLabs workspace. Every voice id, dictionary id and ge
 | voice-catalog.ts:794: "already exists" reuse only on HTTP 409 | fixed | `isAlreadyAddedError` (V:shared-voices-add). |
 | client.ts:466: preview ignores tuning, dictionary and model | fixed | V:tts-preview. |
 | voice-catalog.ts:858: multilingual library voice disappears from its language | fixed | `provider_voices.languages text[]` (all verified languages, backfilled from `language`). `registryPage` matches `language`, `languages` or `featured_languages`. The option shows the requested language for a multilingual row. |
-| 011:79: `created_by` of platform-wide rows readable by every tenant | fixed | Platform-wide rows are written with `created_by = NULL`. Migration 015 clears existing values, and a trigger (`scrub_platform_voice_creator`) keeps it that way. The actor stays in `audit_log`. |
+| 022 (formerly 011):79: `created_by` of platform-wide rows readable by every tenant | fixed | Platform-wide rows are written with `created_by = NULL`. Migration 015 clears existing values, and a trigger (`scrub_platform_voice_creator`) keeps it that way. The actor stays in `audit_log`. |
 | voices/route.ts:25: no `neutral` gender | fixed | `female`, `male`, `neutral` in the route schema, the hook and the picker. |
 
 ## 2. Endpoints and fields used (checked against the OpenAPI spec of 2026-10)

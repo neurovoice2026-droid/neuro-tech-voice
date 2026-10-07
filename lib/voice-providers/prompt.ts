@@ -11,6 +11,7 @@
 
 import { AGENT_LANGUAGES } from '@/lib/agent-languages'
 import { businessToolRules, type BookingPromptMode } from './prompt-business'
+import { stripPlatformVariables } from './template-variables'
 
 const DEFAULT_FALLBACK_MESSAGES: Record<string, string> = {
   en: "I'm sorry, I didn't quite catch that. Could you please repeat?",
@@ -131,7 +132,8 @@ export function composeSystemPrompt(input: ComposePromptInput): string {
   const lang = input.language ?? 'en'
   const base = (input.system_prompt?.trim() || 'You are a helpful assistant.').slice(0, MAX_CUSTOMER_PROMPT_CHARS)
   const fallback = input.fallback_message?.trim() || defaultFallbackMessage(lang)
-  const business = input.businessName?.trim()
+  // organizations.name is tenant data (also writable through PostgREST): never a {{platform variable}}.
+  const business = stripPlatformVariables(input.businessName ?? '').trim()
 
   const rules: string[] = []
 

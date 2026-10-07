@@ -84,4 +84,21 @@ describe('migration 021_account_deletion', () => {
     const usage = code.split('CREATE TABLE IF NOT EXISTS public.usage_archive (')[1].split(');')[0]
     expect(usage).not.toMatch(/call_id|number/)
   })
+
+  it('re-archiving refreshes the mutable fields (never DO NOTHING) and never shortens the retention', () => {
+    expect(code).not.toMatch(/DO NOTHING/)
+    const invoiceUpserts = [...code.matchAll(/INSERT INTO public\.invoices_archive[\s\S]*?ON CONFLICT \(id\) DO UPDATE([\s\S]*?);/g)].map((m) => m[1])
+    // The BEFORE DELETE trigger and archive_org_billing_records.
+    expect(invoiceUpserts).toHaveLength(2)
+    for (const set of invoiceUpserts) {
+      for (const col of ['stripe_invoice_id', 'smartbill_series', 'smartbill_number', 'amount', 'currency', 'status', 'pdf_url', 'client_name', 'client_vat_code', 'issued_at']) {
+        expect(set, col).toMatch(new RegExp(`\\b${col}\\s*= EXCLUDED\\.${col}\\b`))
+      }
+      expect(set).toMatch(/retain_until\s*= GREATEST\(invoices_archive\.retain_until, EXCLUDED\.retain_until\)/)
+      expect(set).toMatch(/archived_at\s*= now\(\)/)
+      // The identity of the archived invoice never changes.
+      expect(set).not.toMatch(/\b(org_id|created_at)\s*=/)
+    }
+    expect(code).toMatch(/INSERT INTO public\.usage_archive[\s\S]*?ON CONFLICT \(org_id, month\) DO UPDATE/)
+  })
 })

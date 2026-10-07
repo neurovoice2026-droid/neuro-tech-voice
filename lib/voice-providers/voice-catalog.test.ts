@@ -11,7 +11,7 @@ class FakeDb {
 let idSeq = 0
 class Q implements PromiseLike<{ data: unknown; error: { code: string; message: string } | null }> {
   private filters: Array<(r: Row) => boolean> = []
-  private op: 'select' | 'insert' | 'update' = 'select'
+  private op: 'select' | 'insert' | 'update' | 'delete' = 'select'
   private payload: Row | null = null
   private mode: 'many' | 'maybe' | 'one' = 'many'
   private rangeArgs: [number, number] | null = null
@@ -20,6 +20,7 @@ class Q implements PromiseLike<{ data: unknown; error: { code: string; message: 
   select() { return this }
   eq(c: string, v: unknown) { this.filters.push((r) => r[c] === v); return this }
   neq(c: string, v: unknown) { this.filters.push((r) => r[c] !== v); return this }
+  gte(c: string, v: string) { this.filters.push((r) => String(r[c] ?? '') >= v); return this }
   is(c: string, v: unknown) { this.filters.push((r) => (r[c] ?? null) === v); return this }
   in(c: string, vs: unknown[]) { this.filters.push((r) => vs.includes(r[c])); return this }
   ilike(c: string, p: string) { const n = p.replace(/%/g, '').toLowerCase(); this.filters.push((r) => String(r[c] ?? '').toLowerCase().includes(n)); return this }
@@ -43,6 +44,7 @@ class Q implements PromiseLike<{ data: unknown; error: { code: string; message: 
   single() { this.mode = 'one'; return this }
   insert(row: Row) { this.op = 'insert'; this.payload = row; return this }
   update(p: Row) { this.op = 'update'; this.payload = p; return this }
+  delete() { this.op = 'delete'; return this }
   private rows() { return (this.db.tables[this.table] ??= []) }
   private uniqueClash(candidate: Row, self: Row | null): boolean {
     if (this.table !== 'provider_voices') return false
@@ -58,6 +60,10 @@ class Q implements PromiseLike<{ data: unknown; error: { code: string; message: 
       return { data: [row], error: null }
     }
     let matched = this.rows().filter((r) => this.filters.every((f) => f(r)))
+    if (this.op === 'delete') {
+      this.db.tables[this.table] = this.rows().filter((r) => !matched.includes(r))
+      return { data: null, error: null }
+    }
     if (this.op === 'update') {
       for (const r of matched) {
         const next = { ...r, ...this.payload }
@@ -119,6 +125,7 @@ import { createLogger } from '@/lib/observability/logger'
 import { RequestError, rateLimitedError } from '@/lib/api/http'
 import * as vc from '@/lib/voice-providers/voice-catalog'
 import { resetVoiceQuotaCache } from '@/lib/voice-providers/voice-capacity'
+import { ProviderError as QuotaError } from '@/lib/voice-providers/errors'
 
 const ORG_A = '11111111-1111-4111-8111-111111111111'
 const ORG_B = '22222222-2222-4222-8222-222222222222'
@@ -136,6 +143,8 @@ beforeEach(() => {
   el.voices.search.mockResolvedValue({ voices: [premade, strayClone], has_more: false })
   vc.resetZeroRetentionState()
   resetVoiceQuotaCache()
+  vc.resetLibraryHeadroomCache()
+  elv.getVoiceQuota.mockReset().mockResolvedValue({})
 })
 
 describe('pure helpers', () => {
@@ -448,7 +457,9 @@ describe('slice F: provisioning, custom voices, capacity', () => {
     el.sharedVoices.add.mockResolvedValue({ voice_id: 'WsCopyL0000000000001' })
     await vc.provisionLibraryVoice({ orgId: ORG_A, userId: 'u1', libraryRef: { publicOwnerId: owner, voiceId: lib.voice_id }, libraryVoice: lib, log })
     expect(db.tables.provider_voices[0]).toMatchObject({ owner_org_id: null, created_by: null, language: 'en', languages: ['en', 'ro'] })
-    expect(db.tables.audit_log[0]).toMatchObject({ org_id: ORG_A, actor_user_id: 'u1', action: 'voice.library.provisioned' })
+    expect(db.tables.audit_log.find((a) => a.action === 'voice.library.provisioned')).toMatchObject({ org_id: ORG_A, actor_user_id: 'u1' })
+    // The add/edit operation was reserved against the org's library-add cap before the provider call.
+    expect(db.tables.audit_log.find((a) => a.action === 'voice.library.add_reserved')).toMatchObject({ org_id: ORG_A, actor_user_id: 'u1', target_id: lib.voice_id })
   })
 
   it('a deleted/failed registry row reuses a still-usable workspace copy instead of adding a new one', async () => {
@@ -493,6 +504,90 @@ describe('slice F: provisioning, custom voices, capacity', () => {
     await expect(vc.createInstantClone({ orgId: ORG_A, userId: 'u1', name: 'n', speakerName: 's', language: 'ro', samples: [sample], ipHash: null, log, gender: 'male' })).rejects.toMatchObject({ status: 409 })
     expect(el.voices.delete).toHaveBeenCalledWith('Racing00000000000001', { orgId: ORG_A })
     expect(db.tables.provider_voices.find((r) => r.voice_id === 'Racing00000000000001')).toMatchObject({ status: 'deleted' })
+  })
+})
+
+describe('library provisioning caps (shared workspace add/edit quota)', () => {
+  // Fresh org ids: the per-instance rate-limit fallback window is shared by the whole file.
+  const orgN = (n: number) => `${String(n).padStart(8, '0')}-3333-4333-8333-333333333333`
+  const provision = (orgId: string, id: string) =>
+    vc.provisionLibraryVoice({ orgId, userId: 'u1', libraryRef: { publicOwnerId: owner, voiceId: id }, libraryVoice: libVoice(id), log })
+  const reservations = (orgId: string) => db.tables.audit_log.filter((r) => r.action === 'voice.library.add_reserved' && r.org_id === orgId)
+  let copy = 0
+  beforeEach(() => {
+    el.sharedVoices.add.mockImplementation(async () => ({ voice_id: `CapCopy${String(++copy).padStart(13, '0')}` }))
+  })
+
+  it('caps new library voices per org per day (default 5, 429 without a provider call); registry hits never count; other orgs are unaffected', async () => {
+    const org = orgN(31)
+    const day = (i: number) => `LibCapDay${String(i).padStart(11, '0')}`
+    for (let i = 1; i <= 5; i++) expect(await provision(org, day(i))).toMatchObject({ provisioned: true })
+    expect(el.sharedVoices.add).toHaveBeenCalledTimes(5)
+    const err = await provision(org, day(6)).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(RequestError)
+    expect(err).toMatchObject({ status: 429, code: 'rate_limited', details: { reason: 'library_add_limit', window: 'day', limit: 5 } })
+    expect((err as RequestError).headers?.['Retry-After']).toMatch(/^\d+$/)
+    expect(el.sharedVoices.add).toHaveBeenCalledTimes(5)
+    expect(reservations(org)).toHaveLength(5)
+    // Already provisioned (registry hit): no add/edit operation, never refused, never counted.
+    expect(await provision(org, day(1))).toMatchObject({ provisioned: false })
+    expect(reservations(org)).toHaveLength(5)
+    // Another organization has its own budget.
+    expect(await provision(orgN(32), day(7))).toMatchObject({ provisioned: true })
+  })
+
+  it('caps per rolling 30 days (ELEVENLABS_LIBRARY_ADDS_PER_ORG_MONTH); older reservations no longer count', async () => {
+    vi.stubEnv('ELEVENLABS_LIBRARY_ADDS_PER_ORG_MONTH', '2')
+    const org = orgN(33)
+    const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString()
+    db.tables.audit_log.push(
+      { id: 'old-1', org_id: org, action: 'voice.library.add_reserved', created_at: ago(40) },
+      { id: 'old-2', org_id: org, action: 'voice.library.add_reserved', created_at: ago(10) },
+    )
+    expect(await provision(org, 'LibCapMonth000000010')).toMatchObject({ provisioned: true })
+    await expect(provision(org, 'LibCapMonth000000020')).rejects.toMatchObject({ status: 429, details: { reason: 'library_add_limit', window: 'month', limit: 2 } })
+    vi.stubEnv('ELEVENLABS_LIBRARY_ADDS_PER_ORG_DAY', '0')
+    await expect(provision(orgN(34), 'LibCapMonth000000030')).rejects.toMatchObject({ status: 429, details: { window: 'day', limit: 0 } })
+    expect(vc.libraryAddCaps()).toEqual({ day: 0, month: 2 })
+    vi.stubEnv('ELEVENLABS_LIBRARY_ADDS_PER_ORG_DAY', 'lots')
+    expect(vc.libraryAddCaps().day).toBe(5)
+  })
+
+  it('concurrent adds cannot overshoot the cap: the oldest reservation wins, the refused one is released', async () => {
+    vi.stubEnv('ELEVENLABS_LIBRARY_ADDS_PER_ORG_DAY', '1')
+    const org = orgN(35)
+    const results = await Promise.allSettled([provision(org, 'LibCapRace0000000010'), provision(org, 'LibCapRace0000000020')])
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    expect(results.find((r) => r.status === 'rejected')).toMatchObject({ reason: { status: 429 } })
+    expect(el.sharedVoices.add).toHaveBeenCalledTimes(1)
+    expect(reservations(org)).toHaveLength(1)
+  })
+
+  it('refuses tenant library adds once the workspace add/edit counter reaches 80 % (503, no provider call, nothing reserved); admin curation keeps the rest', async () => {
+    const org = orgN(36)
+    elv.getVoiceQuota.mockResolvedValue({ voice_add_edit_counter: 80, max_voice_add_edits: 100 })
+    const err = await provision(org, 'LibHeadroom000000010').catch((e: unknown) => e)
+    expect(vc.voiceErrorResponse(err, log, 'e', 'rid').status).toBe(503)
+    expect(el.sharedVoices.add).not.toHaveBeenCalled()
+    expect(reservations(org)).toHaveLength(0)
+    // Platform provisioning (admin, curated voices) is only stopped by the real limit.
+    const lib = libVoice('LibHeadroom000000020')
+    expect(await vc.provisionPlatformLibraryVoice({ lib, actor: { userId: null, kind: 'admin_token' }, log })).toMatchObject({ provisioned: true })
+    vc.resetLibraryHeadroomCache()
+    elv.getVoiceQuota.mockResolvedValue({ voice_add_edit_counter: 79, max_voice_add_edits: 100 })
+    expect(await provision(org, 'LibHeadroom000000030')).toMatchObject({ provisioned: true })
+  })
+
+  it('an unreadable quota fails open (logged); a copy the workspace already held releases the reservation', async () => {
+    const org = orgN(37)
+    elv.getVoiceQuota.mockRejectedValue(new QuotaError({ system: 'elevenlabs', operation: 'user.subscription', code: 'auth', status: 401 }))
+    expect(await provision(org, 'LibUnread0000000010')).toMatchObject({ provisioned: true })
+    expect(reservations(org)).toHaveLength(1)
+    const lib = libVoice('LibAlready0000000010')
+    el.sharedVoices.add.mockRejectedValueOnce(new ProviderError({ system: 'elevenlabs', operation: 'shared_voices.add', code: 'conflict' }))
+    el.voices.search.mockResolvedValue({ voices: [{ voice_id: 'OldCopyCap0000000001', name: 'x', category: 'professional', sharing: { original_voice_id: lib.voice_id } }], has_more: false })
+    expect(await provision(org, lib.voice_id)).toEqual({ voiceId: 'OldCopyCap0000000001', provisioned: true })
+    expect(reservations(org)).toHaveLength(1)
   })
 })
 

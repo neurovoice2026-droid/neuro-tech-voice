@@ -21,11 +21,16 @@ cp .env.example .env.local     # fill in the values (never commit them)
 npm run dev                    # http://localhost:3000
 ```
 
-Database: apply the SQL files in `supabase/migrations/` in order (001 → 011) with
-the Supabase CLI or the SQL editor, and create the private Storage bucket from
-`supabase/STORAGE_BUCKET.sql`. Migrations `010` and `011` are idempotent and
-additive (safe to re-run); `010` briefly locks the main tables, so apply it at
-low traffic, and apply `011` after deploying the app version that ships it
+Database: apply the SQL files in `supabase/migrations/` in order (001 → 021;
+the numbers 012 and 019 are intentionally unused) with the Supabase CLI or the
+SQL editor, and create the private Storage bucket from
+`supabase/STORAGE_BUCKET.sql`. Then, **after** deploying the app version that
+ships it, apply `022_security_performance_hardening.sql`: it is the former
+`011_security_performance_hardening.sql`, renamed because its restrictive
+policies break the previous app version's tenant-client deletes, so it must
+run after the application deploy (a project that already applied it as 011
+can re-run it). Migrations `010` and later are idempotent and additive (safe
+to re-run); `010` briefly locks the main tables, so apply it at low traffic
 (see docs/voice-providers.md §6). On the Vercel Hobby plan, schedule the
 5-minute maintenance from Supabase with `supabase/ops/schedule_voice_maintenance.sql`.
 

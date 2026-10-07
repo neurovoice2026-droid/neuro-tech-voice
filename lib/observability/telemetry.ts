@@ -44,13 +44,62 @@ function successSampleRate(): number {
   return Number.isFinite(raw) && raw >= 0 && raw <= 1 ? raw : 0.1
 }
 
+// ─── Unauthenticated noise ───────────────────────────────────────────────────
+// Public tool and webhook endpoints answer every unauthenticated request with
+// a webhook_verification_failed event. Persisting each one would let anyone
+// write provider_events rows at will, so per route (system + path) at most
+// one is persisted per window and per instance; the others are only logged,
+// with a counter, and the next persisted event carries how many were
+// suppressed since the previous one.
+
+const AUTH_FAILURE_KINDS: ReadonlySet<ProviderEventKind> = new Set(['webhook_verification_failed'])
+export const AUTH_FAILURE_PERSIST_WINDOW_MS = 60_000
+const MAX_THROTTLED_ROUTES = 500
+const authFailureWindows = new Map<string, { windowStart: number; suppressed: number }>()
+
+/** For tests. */
+export function resetAuthFailureThrottle(): void {
+  authFailureWindows.clear()
+}
+
+function routeKey(event: ProviderEvent): string {
+  const path = event.details && typeof event.details.path === 'string' ? event.details.path : (event.operation ?? '')
+  return `${event.system}|${path}`.slice(0, 200)
+}
+
+/**
+ * Whether this auth-failure event is the one persisted for its route in the
+ * current window; otherwise counts it. `suppressed` = events not persisted
+ * since the last persisted one of the route.
+ */
+function claimAuthFailurePersist(event: ProviderEvent, now = Date.now()): { persist: boolean; suppressed: number } {
+  const key = routeKey(event)
+  const cur = authFailureWindows.get(key)
+  if (cur && now - cur.windowStart < AUTH_FAILURE_PERSIST_WINDOW_MS) {
+    cur.suppressed++
+    return { persist: false, suppressed: cur.suppressed }
+  }
+  if (!cur && authFailureWindows.size >= MAX_THROTTLED_ROUTES) authFailureWindows.clear()
+  authFailureWindows.set(key, { windowStart: now, suppressed: 0 })
+  return { persist: true, suppressed: cur?.suppressed ?? 0 }
+}
+
 /**
  * Default sink: always log failures and non-api events; persist everything
- * except sampled-out successful api calls. The DB write is dynamically
- * imported so pure modules that emit telemetry stay testable without Supabase.
+ * except sampled-out successful api calls and throttled auth failures. The
+ * DB write is dynamically imported so pure modules that emit telemetry stay
+ * testable without Supabase.
  */
 const defaultSink: ProviderEventSink = (event) => {
   const routine = event.kind === 'api_call' && event.ok
+  if (AUTH_FAILURE_KINDS.has(event.kind)) {
+    const claim = claimAuthFailurePersist(event)
+    if (!claim.persist) {
+      log.warn('provider.event', { ...event, persisted: false, suppressedInWindow: claim.suppressed })
+      return
+    }
+    if (claim.suppressed) event = { ...event, details: { ...(event.details ?? {}), suppressed_since_last: claim.suppressed } }
+  }
   if (!routine) {
     log[event.ok ? 'info' : 'warn']('provider.event', { ...event })
   }

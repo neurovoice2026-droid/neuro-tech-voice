@@ -101,8 +101,17 @@ function stripeFake(subs: Sub[]) {
 
 function twilioFake() {
   const removed: string[] = []
+  /** parent CallSid → child CallSids (Dial legs), for calls.list({ parentCallSid }). */
+  const children = new Map<string, string[]>()
+  const listed: string[] = []
   const handle = (sid: string) => ({ remove: vi.fn(async () => (removed.push(sid), true)) })
-  return { removed, incomingPhoneNumbers: vi.fn(handle), calls: vi.fn(handle), messages: vi.fn(handle) }
+  const calls = Object.assign(vi.fn(handle), {
+    list: vi.fn(async ({ parentCallSid }: { parentCallSid: string }) => {
+      listed.push(parentCallSid)
+      return (children.get(parentCallSid) ?? []).map((sid) => ({ sid }))
+    }),
+  })
+  return { removed, children, listed, incomingPhoneNumbers: vi.fn(handle), calls, messages: vi.fn(handle) }
 }
 
 type Db = Omit<MemoryDb, 'rpc'> & {
@@ -349,6 +358,21 @@ describe('request', () => {
 })
 
 describe('full run', () => {
+  it('deletes the Twilio child calls (Dial legs, transfers, whisper, SIP) of every call, listed before the parent goes', async () => {
+    const CHILD_1 = `CA${hex('1')}`
+    const CHILD_2 = `CA${hex('2')}`
+    const GRANDCHILD = `CA${hex('3')}`
+    twilio.children.set(CA_A, [CHILD_1, CHILD_2])
+    twilio.children.set(CHILD_1, [GRANDCHILD])
+    const job = await openJob()
+    expect(await runAccountDeletion(job.id, { budgetMs: 60_000 })).toMatchObject({ outcome: 'completed' })
+    expect(twilio.removed).toEqual(expect.arrayContaining([CA_A, CHILD_1, CHILD_2, GRANDCHILD]))
+    // Each call's children were listed before that call was removed.
+    for (const sid of [CA_A, CHILD_1]) expect(twilio.calls.mock.invocationCallOrder[twilio.calls.mock.calls.findIndex((c) => c[0] === sid)]).toBeGreaterThan(twilio.calls.list.mock.invocationCallOrder[twilio.listed.indexOf(sid)])
+    expect(twilio.listed).toEqual(expect.arrayContaining([CA_A, CHILD_1, CHILD_2, GRANDCHILD]))
+    expect((jobRow(job.id).counts as Record<string, Record<string, number>>).delete_call_records).toMatchObject({ deleted: 9, gave_up: 0 })
+  })
+
   it('deletes everything of the organization in order, tolerates 404s, keeps the invoices and leaves a tombstone', async () => {
     const job = await openJob()
     const report = await runAccountDeletion(job.id, { budgetMs: 60_000 })

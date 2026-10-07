@@ -121,6 +121,17 @@ describe('POST /api/onboarding/complete', () => {
     expect(syncAgentProviders).toHaveBeenCalledWith(expect.objectContaining({ bump: true }))
   })
 
+  it('agent and company names may not reference platform variables (400, nothing written)', async () => {
+    for (const body of [
+      { plan: 'trial', agent: { ...sameAgent, name: 'Ana {{secret__ntv_call_token}}' } },
+      { plan: 'trial', company: { name: 'Acme {{ntv_call_id}}' }, agent: sameAgent },
+    ]) {
+      expect((await complete(body)).status).toBe(400)
+    }
+    expect(state.user!.calls.filter((c: FakeCall) => c.op === 'update')).toHaveLength(0)
+    expect(syncAgentProviders).not.toHaveBeenCalled()
+  })
+
   it('rate limited → 429 before anything is written', async () => {
     enforceRateLimit.mockRejectedValue(new RequestError('rate_limited', 'Too many launch attempts.', 429))
     const res = await complete({ plan: 'trial', company: { name: 'Other' }, agent: sameAgent })

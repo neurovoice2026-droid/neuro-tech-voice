@@ -242,7 +242,11 @@ startup (`instrumentation.ts`) and shown by `GET /api/admin/voice/diagnostics`
   `supabase/ops/schedule_voice_maintenance.sql` (Supabase pg_cron + pg_net,
   secret kept in Vault) so the endpoint is called every 5 minutes. Without
   either, those retries wait up to a day (saves, webhooks and calls themselves
-  are unaffected).
+  are unaffected). The slower voice steps (orphan-voice scan and TTS-history
+  retention once a day, Voice Design preview pruning and the default-voice
+  report once an hour, the default-voice migration every 15 min) claim their
+  slot in `maintenance_state` (`runIfDue`), never from the clock minute, so
+  they also run with the daily cron.
 * `vercel.json` pins functions to `dub1` (Dublin), next to the Supabase project
   (`eu-west-1`): the call-routing webhooks make several sequential database
   queries, so the function must run close to the database. Change it if the
@@ -257,8 +261,10 @@ startup (`instrumentation.ts`) and shown by `GET /api/admin/voice/diagnostics`
   while columns are added and legacy rows backfilled: apply it at low traffic.
   `lock_timeout = 5s` makes it fail fast (nothing applied, safe to re-run)
   instead of queueing behind a long transaction while blocking live calls.
-* Then apply `supabase/migrations/011_security_performance_hardening.sql`
-  (no DROP, safe to re-run) **after** deploying the application version that
+* Apply 013 → 021 (012 and 019 are unused numbers), then
+  `supabase/migrations/022_security_performance_hardening.sql` (formerly
+  `011_security_performance_hardening.sql`, renumbered so it runs last; no
+  DROP, safe to re-run) **after** deploying the application version that
   deletes calls/numbers with the service role: it denies direct tenant
   INSERT/DELETE on `calls` and `phone_numbers` (restrictive policies), pins
   `search_path` on the remaining functions, removes RPC access to
@@ -354,6 +360,22 @@ per call through `record_call_usage` (ledger key `call:<uuid>`).
 * Voices: the ElevenLabs workspace is shared, so an org may only use default
   voices, platform-provisioned library voices and its own clones
   (`provider_voices`); voice ids from the browser are checked server-side.
+* Library voices: each new one is an add/edit operation of the shared
+  workspace's monthly quota. Only `PUT /api/agent/voice` adds one (and applies
+  it to the org's own agent; the legacy `POST /api/elevenlabs/voices/add`
+  answers 410). Besides the 10/h rate limit, an org may add
+  `ELEVENLABS_LIBRARY_ADDS_PER_ORG_DAY` (default 5) per 24 h and
+  `ELEVENLABS_LIBRARY_ADDS_PER_ORG_MONTH` (default 20) per rolling 30 days
+  (counted from `audit_log` reservations `voice.library.add_reserved`, written
+  before the provider call), and tenant adds stop (503 `voice_capacity`) once
+  the workspace `voice_add_edit_counter` reaches 80 % of `max_voice_add_edits`
+  (cached subscription read; unreadable = allowed, logged). A voice that is
+  already provisioned never counts.
+* Message alerts (`take_message`): links in the caller's texts and in the
+  business name are replaced by `[link removed]` in the e-mail; extra
+  recipients are used on paid plans only (trial: the owner's verified address);
+  `MESSAGE_EMAIL_DAILY_CAP` (default 100) per org per day,
+  `MESSAGE_EMAIL_DAILY_CAP_TRIAL` (default 20) on the trial.
 * Voice cloning requires the speaker's consent and a rights attestation; the
   consent record (time, user, speaker name, statement version, hashed IP) is
   stored with the voice and in `audit_log`. Audio files are not stored.
@@ -374,6 +396,19 @@ per call through `record_call_usage` (ledger key `call:<uuid>`).
 
 **Dashboards / signals**: `provider_events` (`health_check`, `circuit_transition`,
 `failover`, `sync_failure`, `webhook_verification_failed`, `retry`), admin diagnostics.
+`webhook_verification_failed` (unauthenticated requests to public tool and
+webhook endpoints) is persisted at most once per route per minute per
+instance; the others are only logged (`persisted: false`, with a counter), and
+the next row carries `details.suppressed_since_last`.
+
+**Orphan voices** (`POST /api/admin/voice/orphans`, daily maintenance): custom
+voices are created with the description `… for org <uuid> [ntv-env:<env>]`
+(the agents' `ntv-env:` tag value). A voice marked for another environment is
+never listed; a voice without a marker (created before it) is report-only; a
+voice of this environment is deleted (apply, or
+`ELEVENLABS_VOICE_ORPHAN_DELETE=true`) only when its organization is known to
+be gone: no `organizations` row AND an `account_deletions` record or a
+`provider_voice_purge` history. Otherwise it is reported with its `hold` reason.
 
 **ElevenLabs outage**
 1. Check `GET /api/admin/voice/diagnostics?probe=1` (circuit state, health).
@@ -444,5 +479,14 @@ the agent and re-applies every binding.
   early stream failure (a race of a few hundred milliseconds), that call is
   billed from the abandoned conversation.
 * Voice design, professional voice clones and BYOK are deferred.
+* The Cartesia fallback `take_message` tool cannot carry a signed per-call
+  token over SIP: the call is matched from the `called_number` / `caller_number`
+  body fields (bound to Cartesia's system variables, like `get_call_context`)
+  and accepted only for an in-progress Cartesia call on that org's line, started
+  within the last 60 minutes, with both numbers matching. Residual risk: if
+  Cartesia ever let the model fill those fields, a prompt-injected fallback
+  call could add a message to another live fallback call whose two numbers it
+  knows (alerting that call's own business; nothing is read back). A message in
+  a fallback call longer than 60 minutes is taken by voice only.
 * ElevenLabs premade voices are scheduled for removal on 2026-12-31; library
   voices are filtered by a minimum removal notice period.

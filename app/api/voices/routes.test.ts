@@ -181,7 +181,7 @@ describe('POST /api/voices/clone gates', () => {
     const ok = await cloneRoute(cloneReq())
     expect(ok.status).toBe(201)
     const [params] = el.voices.addInstantClone.mock.calls[0]
-    expect(params).toMatchObject({ labels: { language: 'ro', gender: 'female' }, removeBackgroundNoise: true, description: `Instant clone for org ${ORG}` })
+    expect(params).toMatchObject({ labels: { language: 'ro', gender: 'female' }, removeBackgroundNoise: true, description: expect.stringMatching(new RegExp(`^Instant clone for org ${ORG} \\[ntv-env:[a-z0-9_-]+\\]$`)) })
     expect(state.db.tables.provider_voices.find((r) => r.voice_id === 'NewClone000000000001')).toMatchObject({ gender: 'female', languages: ['ro'] })
   })
 })

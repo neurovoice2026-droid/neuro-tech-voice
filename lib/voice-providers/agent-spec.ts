@@ -118,7 +118,11 @@ export async function buildAgentSpec(db: SupabaseClient, agent: AgentRow): Promi
   const fallbackMessageText = stripPlatformVariables(agent.fallback_message)
   const privacy = readPrivacySettings(agent.privacy_settings, (agent.metadata?.behavior_settings as Record<string, unknown> | undefined)?.record_calls)
   const timezone = safeTimeZone(org?.timezone as string | null)
-  const orgName = (org?.name as string | null) ?? null
+  // Both names reach greetings, the disclosure and the prompt. The API rejects
+  // platform variables in them, but organizations.name is also writable
+  // through PostgREST: strip here, always.
+  const orgName = stripPlatformVariables((org?.name as string | null) ?? null) || null
+  const agentName = stripPlatformVariables(agent.name ?? '')
 
   // New orgs (no number yet) default to app routing, the only mode with failover.
   const modes = (numbers ?? []).map((n) => n.routing_mode as string)
@@ -207,7 +211,7 @@ export async function buildAgentSpec(db: SupabaseClient, agent: AgentRow): Promi
     localAgentId: agent.id,
     orgId: agent.org_id,
     orgName,
-    name: agent.name,
+    name: agentName.trim() ? agentName : 'Agent',
     language,
     systemPrompt: composeSystemPrompt(promptInput),
     // Recomposed by the ElevenLabs adapter when the platform transfer tool is unavailable.
@@ -224,7 +228,7 @@ export async function buildAgentSpec(db: SupabaseClient, agent: AgentRow): Promi
       languages: additionalLanguages,
       tone: agent.metadata?.personality,
       orgName,
-      agentName: agent.name,
+      agentName,
       recordingNotice: conversation.recording_notice,
     }),
     voiceId: agent.voice_id,

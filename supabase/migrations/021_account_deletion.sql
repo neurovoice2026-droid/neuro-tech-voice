@@ -199,7 +199,21 @@ BEGIN
     OLD.pdf_url, OLD.client_name, OLD.client_vat_code, OLD.issued_at, OLD.created_at,
     make_date(EXTRACT(YEAR FROM (COALESCE(OLD.issued_at, OLD.created_at, now()) AT TIME ZONE 'Europe/Bucharest'))::integer + 10, 12, 31)
   )
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE
+    -- A re-archived invoice (status, amounts, PDF or number changed since the
+    -- first copy) keeps its latest values; retention is never shortened.
+    SET stripe_invoice_id = EXCLUDED.stripe_invoice_id,
+        smartbill_series  = EXCLUDED.smartbill_series,
+        smartbill_number  = EXCLUDED.smartbill_number,
+        amount            = EXCLUDED.amount,
+        currency          = EXCLUDED.currency,
+        status            = EXCLUDED.status,
+        pdf_url           = EXCLUDED.pdf_url,
+        client_name       = EXCLUDED.client_name,
+        client_vat_code   = EXCLUDED.client_vat_code,
+        issued_at         = EXCLUDED.issued_at,
+        retain_until      = GREATEST(invoices_archive.retain_until, EXCLUDED.retain_until),
+        archived_at       = now();
   RETURN OLD;
 END;
 $$;
@@ -261,7 +275,21 @@ BEGIN
          make_date(EXTRACT(YEAR FROM (COALESCE(i.issued_at, i.created_at, now()) AT TIME ZONE 'Europe/Bucharest'))::integer + 10, 12, 31)
   FROM public.invoices i
   WHERE i.org_id = p_org_id
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE
+    -- A re-archived invoice (status, amounts, PDF or number changed since the
+    -- first copy) keeps its latest values; retention is never shortened.
+    SET stripe_invoice_id = EXCLUDED.stripe_invoice_id,
+        smartbill_series  = EXCLUDED.smartbill_series,
+        smartbill_number  = EXCLUDED.smartbill_number,
+        amount            = EXCLUDED.amount,
+        currency          = EXCLUDED.currency,
+        status            = EXCLUDED.status,
+        pdf_url           = EXCLUDED.pdf_url,
+        client_name       = EXCLUDED.client_name,
+        client_vat_code   = EXCLUDED.client_vat_code,
+        issued_at         = EXCLUDED.issued_at,
+        retain_until      = GREATEST(invoices_archive.retain_until, EXCLUDED.retain_until),
+        archived_at       = now();
 
   SELECT count(*) INTO v_total FROM public.invoices WHERE org_id = p_org_id;
   SELECT count(*) INTO v_archived

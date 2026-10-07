@@ -104,8 +104,11 @@ export function contextToolDefinition(url: string, bearerToken: string): Record<
  * take_message for the fallback agent (slice B2), shared by every fallback
  * agent and bearer-authenticated like get_call_context. The call (and so the
  * organisation) is resolved on our server from the called number and the
- * caller id (system variables the model cannot change), never from the
- * model's parameters; the model only provides the message itself.
+ * caller id (bound to Cartesia system variables, not model parameters); the
+ * model only provides the message itself. SIP calls carry no signed per-call
+ * token, so the server accepts only an in-progress Cartesia call on that
+ * line, started within the last hour, whose two numbers BOTH match
+ * (lib/voice-tools/cartesia-call.ts).
  */
 export function messageToolDefinition(url: string, bearerToken: string): Record<string, unknown> {
   return {

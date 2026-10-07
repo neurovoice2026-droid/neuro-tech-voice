@@ -1,8 +1,12 @@
 // POST /api/admin/voice/orphans { apply?: false (default), min_age_hours?: 24 }
 // Custom voices this platform created in the shared ElevenLabs workspace
-// (cloned/generated, tagged with an org id prefix) that no provider_voices row
-// owns. Dry run by default: lists them (voice id, category, org tag, age; no
-// names). apply=true deletes them (and their speech history), audited.
+// (cloned/designed, described "… for org <uuid> [ntv-env:<env>]") that no
+// provider_voices row owns. Voices marked for another environment are never
+// listed; unmarked ones are report-only. Dry run by default: lists them (voice
+// id, category, org tag, age, hold reason; no names). apply=true deletes only
+// voices of this environment whose org is known to be gone (no organizations
+// row and an account deletion or voice purge on record), with their speech
+// history, audited; the others stay listed with a hold reason.
 // Also drains the purge queue of deleted organizations when apply=true.
 // Platform admins only.
 

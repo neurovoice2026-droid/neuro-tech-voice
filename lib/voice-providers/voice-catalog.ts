@@ -34,7 +34,8 @@ import { CARTESIA_VOICE_ID_RE, isAllowedFallbackVoice, platformFallbackIds } fro
 export { CARTESIA_VOICE_ID_RE } from '@/lib/cartesia/voice-policy'
 import { previewTtsModel, ttsModelFor } from '@/lib/elevenlabs/models'
 import { TTS_TUNING_DEFAULTS } from '@/lib/elevenlabs/conversation-behaviour'
-import { searchLibrary, type LibrarySort } from '@/lib/elevenlabs/api/voices'
+import { getVoiceQuota, searchLibrary, type ELVoiceQuota, type LibrarySort } from '@/lib/elevenlabs/api/voices'
+import { agentTags } from '@/lib/elevenlabs/agent-config'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   RequestError,
@@ -953,13 +954,173 @@ async function readWinner(db: SupabaseClient, libraryVoiceId: string, addedVoice
   throw new Error('voice provisioning conflict without a ready registry row')
 }
 
+// ─── Library provisioning caps (shared workspace quota) ──────────────────────
+// Every library add is one add/edit operation of the SHARED workspace's
+// monthly quota (voice_add_edit_counter / max_voice_add_edits), which clones
+// and designed voices need too. A tenant add therefore passes, on top of the
+// hourly rate limit:
+//   • a per-organization cap per day and per rolling 30 days, counted from
+//     audit_log reservations written BEFORE the provider call (durable,
+//     shared by every instance, race-safe: the oldest `cap` reservations win);
+//   • a workspace headroom check: refused once the counter reaches 80 % of
+//     max_voice_add_edits (cached subscription read; an unreadable quota fails
+//     open, logged). The rest stays for clones, designed voices and the
+//     curated platform voices (admin provisioning is not capped here).
+// An already provisioned voice (registry hit) or a reused workspace copy
+// never counts: no add/edit operation happens. A reservation is released when
+// nothing was added (the workspace already held a copy) or the post-insert
+// re-check refuses it, and kept when the provider call fails (the operation
+// may still have counted against the workspace quota).
+
+const LIBRARY_ADD_ACTION = 'voice.library.add_reserved'
+const DAY_MS = 86_400_000
+const LIBRARY_ADD_MONTH_MS = 30 * DAY_MS
+/** Share of max_voice_add_edits from which tenants can no longer add library voices. */
+export const LIBRARY_ADD_EDIT_HEADROOM = 0.8
+
+function envCap(name: string, fallback: number): number {
+  const raw = (process.env[name] ?? '').trim()
+  if (!raw) return fallback
+  const v = Number(raw)
+  return Number.isInteger(v) && v >= 0 && v <= 1000 ? v : fallback
+}
+
+/**
+ * Library voices one organization may add to the shared workspace:
+ * ELEVENLABS_LIBRARY_ADDS_PER_ORG_DAY (default 5) per 24 h and
+ * ELEVENLABS_LIBRARY_ADDS_PER_ORG_MONTH (default 20) per rolling 30 days;
+ * integers 0–1000 (0 = no tenant library adds), anything else → the default.
+ */
+export function libraryAddCaps(): { day: number; month: number } {
+  return {
+    day: envCap('ELEVENLABS_LIBRARY_ADDS_PER_ORG_DAY', 5),
+    month: envCap('ELEVENLABS_LIBRARY_ADDS_PER_ORG_MONTH', 20),
+  }
+}
+
+const HEADROOM_TTL_MS = 60_000
+let headroomCache: { at: number; quota: ELVoiceQuota } | null = null
+
+/** For tests. */
+export function resetLibraryHeadroomCache(): void {
+  headroomCache = null
+}
+
+/**
+ * 503 voice_capacity (VoiceCapacityError) when the workspace add/edit counter
+ * is at or above LIBRARY_ADD_EDIT_HEADROOM of its maximum. Fails open, with a
+ * warning, only when the quota cannot be read.
+ */
+async function assertLibraryAddHeadroom(log: Logger): Promise<void> {
+  let quota: ELVoiceQuota
+  try {
+    if (headroomCache && Date.now() - headroomCache.at < HEADROOM_TTL_MS) quota = headroomCache.quota
+    else {
+      quota = await getVoiceQuota()
+      headroomCache = { at: Date.now(), quota }
+    }
+  } catch (err) {
+    log.warn('voice_provision.quota_unavailable', { error: isProviderError(err) ? err.code : 'unknown' })
+    return
+  }
+  const used = quota.voice_add_edit_counter
+  const max = quota.max_voice_add_edits
+  if (typeof used !== 'number' || typeof max !== 'number' || !Number.isFinite(used) || !Number.isFinite(max)) {
+    log.warn('voice_provision.quota_unreadable', { hasCounter: typeof used === 'number', hasMax: typeof max === 'number' })
+    return
+  }
+  if (used < max * LIBRARY_ADD_EDIT_HEADROOM) return
+  log.error('voice_provision.workspace_headroom_reached', null, { addEditCounter: used, maxAddEdits: max, threshold: LIBRARY_ADD_EDIT_HEADROOM })
+  throw new VoiceCapacityError('voice_add_edit_headroom')
+}
+
+type Reservation = { id: string; created_at: string }
+
+async function libraryAddReservations(db: SupabaseClient, orgId: string, now: number): Promise<Reservation[]> {
+  const { data, error } = await db
+    .from('audit_log')
+    .select('id, created_at')
+    .eq('org_id', orgId)
+    .eq('action', LIBRARY_ADD_ACTION)
+    .gte('created_at', new Date(now - LIBRARY_ADD_MONTH_MS).toISOString())
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
+    .limit(1000)
+  if (error) throw new Error(`audit_log read failed: ${error.message}`)
+  return (data ?? []) as Reservation[]
+}
+
+function libraryCapError(window: 'day' | 'month', limit: number, counted: Reservation[], now: number): RequestError {
+  const windowMs = window === 'day' ? DAY_MS : LIBRARY_ADD_MONTH_MS
+  const oldest = counted.length ? Date.parse(counted[0].created_at) : NaN
+  const retryAfter = Math.max(60, Math.ceil(((Number.isFinite(oldest) ? oldest + windowMs : now + windowMs) - now) / 1000))
+  const message =
+    limit === 0
+      ? 'New library voices cannot be added for your account. Choose a voice that is already available.'
+      : window === 'day'
+        ? `You can add up to ${limit} new library voice${limit === 1 ? '' : 's'} per day. Choose a voice that is already available, or try again tomorrow.`
+        : `You can add up to ${limit} new library voice${limit === 1 ? '' : 's'} per 30 days. Choose a voice that is already available.`
+  return new RequestError('rate_limited', message, 429, { reason: 'library_add_limit', window, limit, retry_after_seconds: retryAfter }, { 'Retry-After': String(retryAfter) })
+}
+
+/** The cap that `before` (the org's reservations older than the one being judged) already fills, or null. */
+function libraryCapViolation(before: Reservation[], now: number): RequestError | null {
+  const caps = libraryAddCaps()
+  const today = before.filter((r) => Date.parse(r.created_at) >= now - DAY_MS)
+  if (today.length >= caps.day) return libraryCapError('day', caps.day, today, now)
+  if (before.length >= caps.month) return libraryCapError('month', caps.month, before, now)
+  return null
+}
+
+async function releaseLibraryAdd(db: SupabaseClient, id: string, log: Logger): Promise<void> {
+  const { error } = await db.from('audit_log').delete().eq('id', id).eq('action', LIBRARY_ADD_ACTION)
+  // A leftover reservation only counts once too often against the org's cap.
+  if (error) log.error('voice_provision.reservation_release_failed', error, { reservationId: id })
+}
+
+/**
+ * Reserves one library add for the org (audit_log row) or throws 429
+ * library_add_limit. Re-checked after the insert, so concurrent requests
+ * cannot all pass: the oldest reservations within the cap win.
+ */
+async function reserveLibraryAdd(db: SupabaseClient, actor: { orgId: string; userId: string | null }, lib: el.ELSharedVoice, log: Logger): Promise<string> {
+  const now = Date.now()
+  const pre = libraryCapViolation(await libraryAddReservations(db, actor.orgId, now), now)
+  if (pre) {
+    log.warn('voice_provision.org_cap_reached', { window: (pre.details as { window: string }).window })
+    throw pre
+  }
+  const id = crypto.randomUUID()
+  const { error } = await db.from('audit_log').insert({
+    id,
+    org_id: actor.orgId,
+    actor_user_id: actor.userId,
+    actor_kind: 'user',
+    action: LIBRARY_ADD_ACTION,
+    target_type: 'library_voice',
+    target_id: lib.voice_id,
+    details: { public_owner_id: lib.public_owner_id },
+  })
+  if (error) throw new Error(`audit_log insert failed: ${error.message}`)
+  const rows = await libraryAddReservations(db, actor.orgId, now)
+  const position = rows.findIndex((r) => r.id === id)
+  const post = libraryCapViolation(position === -1 ? rows : rows.slice(0, position), now)
+  if (post) {
+    await releaseLibraryAdd(db, id, log)
+    log.warn('voice_provision.org_cap_reached', { window: (post.details as { window: string }).window, concurrent: true })
+    throw post
+  }
+  return id
+}
+
 /**
  * Makes a public library voice usable by agents: one workspace copy per
  * library voice for the whole platform (owner_org_id NULL). Deduplicated by
  * the unique (provider, source_voice_id) index and race-safe: insert, and on a
  * unique violation re-select the winner and discard our extra copy.
- * Rate-limited per org (only when a provider call is actually needed) and
- * audited.
+ * Rate-limited per org (only when a provider call is actually needed),
+ * capped per org per day / 30 days and by the workspace headroom (only when a
+ * voice is actually added to the workspace), and audited.
  */
 export async function provisionLibraryVoice(params: {
   orgId: string
@@ -1008,8 +1169,15 @@ async function provisionCore(
   let added: { voiceId: string; fresh: boolean }
   if (reusable) {
     added = { voiceId: reusable, fresh: false }
+  } else if (actor.kind === 'user' && actor.orgId) {
+    // A tenant add is one add/edit operation of the shared workspace: headroom, then the org's cap.
+    await assertLibraryAddHeadroom(log)
+    const reservation = await reserveLibraryAdd(db, { orgId: actor.orgId, userId: actor.userId }, lib, log)
+    added = await addToWorkspace(lib, log)
+    // The workspace already held a copy: nothing was added, nothing counts.
+    if (!added.fresh) await releaseLibraryAdd(db, reservation, log)
   } else {
-    // Adding a library voice counts as a voice add/edit operation of the shared workspace.
+    // Platform (admin) provisioning of curated voices: the full quota, no tenant cap.
     await assertWorkspaceVoiceCapacity('library', log)
     added = await addToWorkspace(lib, log)
   }
@@ -1388,9 +1556,24 @@ async function rejectUnverifiedClone(
   throw new RequestError('invalid_request', CLONE_NEEDS_VERIFICATION_MESSAGE, 422, { reason: 'requires_verification' })
 }
 
-/** Provider-side description of the custom voices this platform creates (the orphan scan matches it). */
+/**
+ * This deployment's environment marker, `ntv-env:<env>`: the same tag value
+ * its agents carry (lib/elevenlabs/agent-config.ts agentTags). One ElevenLabs
+ * workspace can serve several deployments (production, preview): the orphan
+ * sweep only ever deletes voices that carry this deployment's marker.
+ */
+export function platformEnvMarker(): string {
+  return agentTags({ orgId: '', localAgentId: '' }).find((t) => t.startsWith('ntv-env:')) as string
+}
+
+/**
+ * Provider-side description of the custom voices this platform creates:
+ * kind, full organization id and the environment marker
+ * ("Instant clone for org <uuid> [ntv-env:production]"). The orphan sweep
+ * (voice-orphans.ts) parses it back.
+ */
 export function platformVoiceDescription(kind: 'clone' | 'designed', orgId: string): string {
-  return `${kind === 'clone' ? 'Instant clone' : 'Designed voice'} for org ${orgId}`
+  return `${kind === 'clone' ? 'Instant clone' : 'Designed voice'} for org ${orgId} [${platformEnvMarker()}]`
 }
 
 /** Provider-side name: the workspace is shared, so the org is tagged for operators. */

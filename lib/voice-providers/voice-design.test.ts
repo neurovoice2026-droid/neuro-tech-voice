@@ -88,7 +88,8 @@ describe('saveDesignedVoice', () => {
     const [body, ctx] = api.createVoiceFromPreview.mock.calls[0]
     expect(body).toEqual({
       voice_name: `Front desk [${ORG.slice(0, 8)}]`,
-      voice_description: `Designed voice for org ${ORG}`,
+      // Full org id + this deployment's environment marker (the orphan sweep reads both).
+      voice_description: expect.stringMatching(new RegExp(`^Designed voice for org ${ORG} \\[ntv-env:[a-z0-9_-]+\\]$`)),
       generated_voice_id: 'gen_aaa111',
       labels: { language: 'ro' },
       played_not_selected_voice_ids: ['gen_bbb222'],

@@ -1,5 +1,10 @@
 -- ══════════════════════════════════════════════════════════════════════════════
--- 011 · Security & performance hardening (Supabase advisor findings)
+-- 022 · Security & performance hardening (Supabase advisor findings)
+--
+-- Formerly 011_security_performance_hardening.sql: renumbered so it sorts
+-- AFTER every migration the new application needs (013-021). Its restrictive
+-- policies break the previous application's tenant-client deletes of calls
+-- and phone numbers, so it is applied last, after the application deploy.
 --
 -- Idempotent and additive: no DROP statements, safe to re-run.
 --   • tenants can no longer DELETE call / phone-number rows directly through
@@ -10,7 +15,8 @@
 --   • RLS policies evaluate auth.uid() once per statement (lint 0003)
 --   • covering indexes for foreign keys (lint 0001)
 -- Requires 010. Deploy the application version that deletes calls/numbers
--- with the service role BEFORE applying this file.
+-- with the service role BEFORE applying this file (a project that already
+-- applied it as 011 can re-run it: every statement is idempotent).
 -- ══════════════════════════════════════════════════════════════════════════════
 
 SET lock_timeout = '5s';
@@ -81,15 +87,21 @@ ALTER POLICY "provider_voices_visible" ON provider_voices
 ALTER POLICY "audit_log_owner_read" ON audit_log
   USING (org_id IN (SELECT id FROM organizations WHERE user_id = (SELECT auth.uid())));
 
+-- Same guard as 010: where the migration role does not own storage.objects
+-- the policy is left as it is (NOTICE) instead of aborting the migration.
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'knowledge_docs_owner') THEN
-    EXECUTE $p$
-      ALTER POLICY "knowledge_docs_owner" ON storage.objects
-        USING (
-          bucket_id = 'knowledge-documents'
-          AND (storage.foldername(name))[1] IN (SELECT id::text FROM public.organizations WHERE user_id = (SELECT auth.uid()))
-        )
-    $p$;
+    BEGIN
+      EXECUTE $p$
+        ALTER POLICY "knowledge_docs_owner" ON storage.objects
+          USING (
+            bucket_id = 'knowledge-documents'
+            AND (storage.foldername(name))[1] IN (SELECT id::text FROM public.organizations WHERE user_id = (SELECT auth.uid()))
+          )
+      $p$;
+    EXCEPTION WHEN insufficient_privilege THEN
+      RAISE NOTICE 'storage.objects policy knowledge_docs_owner not changed (%): apply it as the owner of storage.objects', SQLERRM;
+    END;
   END IF;
 END $$;
 

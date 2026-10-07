@@ -11,7 +11,7 @@ import 'server-only'
 //     voice is pinned (read back from the provider) so the tenant sees it and
 //     the retirement banner;
 //   • the maintenance step `default_voice_migration` reports agents on a
-//     default (or unknown/NULL) voice every hour and, from
+//     default (or unknown/NULL) voice at most once an hour and, from
 //     ELEVENLABS_DEFAULT_VOICE_MIGRATION_AT (default 2026-12-15), switches them
 //     to the top curated voice of their language through the same path as
 //     PUT /api/agent/voice (save, full sync, echo check), with audit_log rows.
@@ -26,7 +26,8 @@ import { isProviderError } from './errors'
 import { curatedDefaultVoice, type CuratedVoice } from './curated-default'
 import { applyAgentVoice } from './voice-apply'
 import { DEFAULT_VOICE_RETIREMENT_DATE, EL_VOICE_ID_RE, defaultVoiceIds, writeAudit } from './voice-catalog'
-import { inHourlyWindow, inQuarterHourWindow } from './voice-schedule'
+import { runIfDue } from './maintenance-state'
+import { HOUR_MS, QUARTER_HOUR_MS, VOICE_STEP_KEYS } from './voice-schedule'
 
 const DEFAULT_MIGRATION_AT = '2026-12-15T00:00:00Z'
 
@@ -378,12 +379,15 @@ export async function runDefaultVoiceMigration(params: {
 }
 
 /**
- * Maintenance entry (`default_voice_migration`; the cron fires every 5
- * minutes): the report (and the pinning of NULL voices) runs once an hour,
- * the migration from ELEVENLABS_DEFAULT_VOICE_MIGRATION_AT every quarter hour.
+ * Maintenance entry (`default_voice_migration`): the report (and the pinning
+ * of NULL voices) runs at most once an hour, the migration from
+ * ELEVENLABS_DEFAULT_VOICE_MIGRATION_AT at most every quarter hour. The slot
+ * is claimed in maintenance_state (runIfDue), never read from the clock
+ * minute, so it also runs with the daily Vercel Hobby cron.
  */
-export async function runScheduledDefaultVoiceMigration(log: Logger, now: Date = new Date()): Promise<DefaultVoiceMigrationReport | { skipped: 'not_scheduled' }> {
+export async function runScheduledDefaultVoiceMigration(log: Logger, now: Date = new Date()): Promise<DefaultVoiceMigrationReport | { skipped: 'not_due' }> {
   const migrating = now.getTime() >= defaultVoiceMigrationAt().getTime()
-  if (!(migrating ? inQuarterHourWindow(now) : inHourlyWindow(now))) return { skipped: 'not_scheduled' }
-  return runDefaultVoiceMigration({ log, now })
+  return migrating
+    ? runIfDue(VOICE_STEP_KEYS.defaultVoiceMigration, QUARTER_HOUR_MS, log, () => runDefaultVoiceMigration({ log, now }), now.getTime())
+    : runIfDue(VOICE_STEP_KEYS.defaultVoiceReport, HOUR_MS, log, () => runDefaultVoiceMigration({ log, now }), now.getTime())
 }

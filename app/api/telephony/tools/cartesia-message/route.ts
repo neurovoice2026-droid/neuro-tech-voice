@@ -1,9 +1,12 @@
 // Webhook tool `take_message` for the Cartesia fallback agent (slice B2).
 // Auth: static bearer token (CARTESIA_TOOL_SECRET) configured on the tool.
 // The call, and so the organisation and the alert recipients, is resolved
-// from the called number and the caller id (Cartesia system variables) —
-// never from the model's parameters, which only carry the message. Same
-// handler, idempotency and e-mail alert as the ElevenLabs tool.
+// from the called number and the caller id (body fields bound to the Cartesia
+// system variables, like get_call_context), never from the message
+// parameters. Those fields are not signed, so the match is strict
+// (lib/voice-tools/cartesia-call.ts): an in-progress Cartesia call on that
+// org's line, started within the last 60 minutes, with BOTH numbers matching.
+// Same handler, idempotency and e-mail alert as the ElevenLabs tool.
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'

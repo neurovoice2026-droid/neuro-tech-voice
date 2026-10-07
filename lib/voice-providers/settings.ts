@@ -36,6 +36,14 @@ const shortText = (max: number) => z.string().trim().max(max)
  */
 export const tenantText = (max: number) => shortText(max).refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE)
 
+/**
+ * A required tenant-chosen name the agent speaks or is told (agent name,
+ * company name): same rule as tenantText. The agent builder strips platform
+ * variables from both names again (organizations.name is also writable
+ * through PostgREST, outside these schemas).
+ */
+export const tenantName = (max: number) => tenantText(max).min(1)
+
 /** Extra languages one agent can switch to (ElevenLabs language presets). */
 export const MAX_ADDITIONAL_LANGUAGES = 3
 /** Tenant ASR keywords (the business name is always added on top). */
