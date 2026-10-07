@@ -30,6 +30,24 @@ session link it to this folder first: `mkdir -p ~/.claude && ln -sfn "$PWD/.clau
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | before 2026-10-06 | Reel | "Closed is for the door, not the phone." | cut from film 1 | 52 | the launch trailer's twist beat, 9:16 |
 
+## TikTok (same reels, cross-posted)
+
+- **Handle:** @neuro.tech.voice · name "Neuro Tech Voice" · bio identical to Instagram's (same overclaims) · link
+  https://linktr.ee/neurotechvoice · profile photo: the NEUROVOICE wordmark disc.
+- **Snapshot (2026-10-07, owner's screenshot):** 1 following, 3 followers, 6 likes. The owner: "Pe tiktok merg mai bine"
+  (the reels do better on TikTok than on Instagram).
+
+| video | views |
+| --- | --- |
+| ig1 "Don't fire your receptionist." | 563 |
+| launch trailer (end card) | 283 |
+| ig2 / ig4 | 250 / 245 |
+| ig3 "Twelve minutes on the colour" | 174 |
+
+- **Read:** the "receptionist" hook family wins (about 2x the rest). New reels are TikTok-first: text inside x 60-940,
+  y 220-1440 (TikTok's right rail and caption block), a searchable keyword in the hook, a TikTok caption next to the
+  Instagram one, the 60 fps copy as the upload.
+
 ## In the pipeline
 
 - **Knowledge-base explainer** (film 2, 100 s, 9:16 v3, delivered 2026-10-05). Caption: Job A, one ask (DM "AGENT"),
