@@ -105,7 +105,7 @@ export const HOOK: { readonly hooks: readonly VoiceId[]; readonly agency: VoiceI
   agency: 'ig5-02g',
   agencyT1: 'ig5-02gt',
 };
-const BODY = { answering: 'ig5-03', ours: 'ig5-04', setup: 'ig5-05', does: 'ig5-06-msg', cta: 'ig5-07' } as const;
+const BODY = { answering: 'ig5-03', ours: 'ig5-04', setup: 'ig5-05', does: 'ig5-06', cta: 'ig5-07' } as const;
 /** full → T1 (HOOK.agencyT1) → T1 + T2 (+ ig5-05t): never a hedge cut (SCRIPT §4.3, HOOKS §1.1) */
 const ladder = (hook: VoiceId): readonly Cast[] => {
   const full: Cast = { hook, agency: HOOK.agency, ...BODY };

@@ -356,3 +356,17 @@ The round-2 fixer touched no shared file: `src/ig/components/ZoneGuard.tsx` and 
 ## Fix round 3 (label `fix-r3`, 2026-10-07): no shared edit
 
 The round-3 fixer touched no shared file: `src/ig/components/ZoneGuard.tsx` and everything else under `src/ig/components/`, `src/ig/common/`, `scripts/ig/` are unchanged (`git status --porcelain` lists only `src/ig/ig5/**` and `docs/ig/ig5/**`; the one new file is `src/ig/ig5/stage/settle.ts`, picture only and outside `ig5Hash`, which hashes the top-level `.ts` of `src/ig/ig5/`). `guard:ig5 -- --check` **PASS** gates 1–5 (255/257 shas, the 2 allowed QA edits; stamps unchanged; gate P 24/24 byte-identical: `out/ig/qa/ig5/fix-r3/guard.log`); `sfx:ig` 0 built, 4 up to date; the film 1 / film 2 frozen sets are clean. `timing.ts` changed (NUDGE `ig5-04`, the whoosh, no seed), so `sfx:ig5` restamped ig5's own mix.
+
+## Master step (label `master`, 2026-10-07): no shared edit
+
+The master and delivery step (`DELIVERY.md`) touched no shared file. `src/ig/components/ZoneGuard.tsx` and everything else under `src/ig/components/`, `src/ig/common/` and `scripts/ig/` are unchanged, and `git status --porcelain` lists only `src/ig/ig5/timing.ts`. Its one mastering line turns the shared impact stack's `slam` down 6 dB in ig5's own HITS; `series.ts` is untouched (DELIVERY §2). Both passes were rendered and finished: the message master first, then the booking master.
+
+After the second pass:
+- **`guard:ig5 -- --check`: PASS gates 1–5.** 255/257 shas (the 2 allowed QA edits); stamps unchanged; gate P 24/24 byte-identical; the delivered ig1–ig4 files are byte-identical; the only new names are the 7 `neurotechvoice-ig5-*` files.
+- **`sfx:ig`:** 0 built, 4 up to date (it also ran inside each `render:ig --rebundle`).
+- **Full `verify-film1`:** PASS 11/11.
+- **Full `verify:film2`:** PASS 7/7.
+- **`check:audio:ig`:** OK ×4.
+- **Film 1 and film 2 frozen sets:** clean.
+
+The logs are in `out/ig/qa/ig5/deliver/gates/`.

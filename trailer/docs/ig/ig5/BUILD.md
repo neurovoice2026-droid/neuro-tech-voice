@@ -420,3 +420,13 @@ Label `fix-r3`. Written 2026-10-07 on `claude/remotion-trailer` (HEAD `0875b09`)
 - P3's pool bloom is a tint on the pearl; a visible bloom would need a stronger key light than the series uses.
 - The step-aside orb passes ≈ 3 px over the dimmed record's top edge at f774.5 (see P6).
 - The pile's slip 2 reaches full crispness in two steps 2 render frames apart (r1780, r1782), both soft → crisp; the second is Chrome's, present in the critic's render too.
+
+## 9. Mastering (label `master`; DELIVERY.md)
+
+- **What changed.** The shared impact stack plays with its `slam` 6 dB down (`timing.ts` HITS, `...impactHits(IMPACT).map(…)`).
+- **Why.** At full level its first 4 ms decoded from the delivery AAC at −0.73 dBTP (check-delivery ≤ −1.0).
+- **Result.**
+  - Delivered peaks: −1.66 dBTP (message) and −1.46 dBTP (booking).
+  - `check:audio:ig5`: OK. Booking: climax +1.2 LU, arc +0.7 LU. Message: +1.1, +0.6.
+  - Everything else in §5.4 and §8.3 is unchanged.
+- **What was ruled out.** A lower `MIX.ceiling` made the overshoot worse (−0.64) and failed the climax.
