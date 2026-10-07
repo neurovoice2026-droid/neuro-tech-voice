@@ -19,10 +19,18 @@ import { DEFAULT_AFTER_HOURS, type AfterHoursConfig, type WorkingHours } from '.
 import { E164_REGEX } from '@/lib/phone/e164'
 import { WEEKDAYS } from '@/lib/scheduling/time'
 import { AGENT_LANGUAGES, type AgentLanguageCode } from '@/lib/agent-languages'
+import { PLATFORM_VARIABLE_MESSAGE, hasNoPlatformVariables } from './template-variables'
 
 export const e164 = z.string().trim().regex(E164_REGEX, 'Use the international format, e.g. +40712345678')
 
 const shortText = (max: number) => z.string().trim().max(max)
+
+/**
+ * Tenant-authored text that reaches the agent: it must not reference platform
+ * variables ({{ntv_*}}, {{secret__*}}, most {{system__*}}); the agent builder
+ * strips them as well (defense in depth).
+ */
+export const tenantText = (max: number) => shortText(max).refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE)
 
 /** Extra languages one agent can switch to (ElevenLabs language presets). */
 export const MAX_ADDITIONAL_LANGUAGES = 3
@@ -63,7 +71,7 @@ export const ConversationSettingsSchema = z.object({
   turn_eagerness: z.enum(['patient', 'normal', 'eager']),
   allow_end_call: z.boolean(),
   voicemail_detection: z.boolean(),
-  voicemail_message: shortText(500).nullable(),
+  voicemail_message: tenantText(500).nullable(),
   recording_notice: z.boolean(),
   // AI disclosure cannot be turned off from the API (product + legal requirement).
   ai_disclosure: z.literal(true),
@@ -88,8 +96,8 @@ export const TransferSettingsSchema = z
   .object({
     enabled: z.boolean(),
     number: e164.nullable(),
-    condition: shortText(500).nullable(),
-    label: shortText(80).nullable(),
+    condition: tenantText(500).nullable(),
+    label: tenantText(80).nullable(),
   })
   .refine((t) => !t.enabled || !!t.number, { message: 'A transfer number is required when transfer is enabled', path: ['number'] })
 
@@ -127,7 +135,7 @@ export const AfterHoursSchema = z
   .object({
     enabled: z.boolean(),
     mode: z.enum(['message', 'forward', 'ai']),
-    message: shortText(500).nullable().optional(),
+    message: tenantText(500).nullable().optional(),
     forward_number: e164.nullable().optional(),
   })
   .refine((a) => !(a.enabled && a.mode === 'forward') || !!a.forward_number, {
@@ -138,7 +146,7 @@ export const AfterHoursSchema = z
 export const DynamicVariablesSchema = z
   .record(
     z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/).refine((k) => !/^(system__|secret__|ntv_)/.test(k) && !['after_hours', 'business_name'].includes(k), 'Reserved variable name'),
-    z.string().max(500),
+    z.string().max(500).refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE),
   )
   .refine((r) => Object.keys(r).length <= 20, 'At most 20 variables')
 
@@ -217,5 +225,13 @@ export function readWorkingHours(raw: unknown): WorkingHours {
 
 export function readDynamicVariables(raw: unknown): Record<string, string> {
   const parsed = DynamicVariablesSchema.safeParse(raw ?? {})
-  return parsed.success ? parsed.data : {}
+  if (parsed.success) return parsed.data
+  // Keep every valid entry (one bad value must not drop all the others).
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (Object.keys(out).length >= 20) break
+    if (DynamicVariablesSchema.safeParse({ [k]: v }).success) out[k] = v as string
+  }
+  return out
 }

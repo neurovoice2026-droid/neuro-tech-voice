@@ -14,15 +14,15 @@ vi.mock('@/lib/cartesia/client', () => ({
 vi.mock('@/lib/voice-providers/platform-resources', () => ({
   tryPlatformResource: vi.fn(),
 }))
-vi.mock('@/lib/elevenlabs/model-catalog', () => ({
-  agentReasoningEffort: vi.fn(),
+vi.mock('@/lib/elevenlabs/llm-selection', () => ({
+  effectiveAgentLlm: vi.fn(),
 }))
 
 import * as el from '@/lib/elevenlabs/client'
 import * as ct from '@/lib/cartesia/client'
 import { tryPlatformResource } from './platform-resources'
-import { agentReasoningEffort } from '@/lib/elevenlabs/model-catalog'
-import { cartesiaLifecycle, elevenLabsLifecycle, lifecycleFor, resolveFallbackVoice } from './adapters'
+import { effectiveAgentLlm, type LlmSelection } from '@/lib/elevenlabs/llm-selection'
+import { cartesiaLifecycle, elevenLabsLifecycle, lifecycleFor, resetPiiRedactionMemo, resolveFallbackVoice } from './adapters'
 import { ProviderError } from './errors'
 import { makeAgentSpec } from '@/tests/helpers/agent-spec'
 
@@ -40,12 +40,17 @@ function page(data: ct.CartesiaVoice[]) {
   return { data, has_more: false }
 }
 
+function selection(over: Partial<LlmSelection> = {}): LlmSelection {
+  return { llm: 'gpt-5.4-mini', configured: 'gpt-5.4-mini', reason: 'ok', replacement: null, fallbackPercentage: null, providerDeprecationDate: null, reasoningEffort: null, ...over }
+}
+
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(NOW)
   vi.stubEnv('CARTESIA_FALLBACK_VOICES', '')
   vi.mocked(tryPlatformResource).mockResolvedValue(null)
-  vi.mocked(agentReasoningEffort).mockResolvedValue(null)
+  vi.mocked(effectiveAgentLlm).mockResolvedValue(selection())
+  resetPiiRedactionMemo()
   vi.mocked(el.isConfigured).mockReturnValue(true)
   vi.mocked(ct.isConfigured).mockReturnValue(true)
 })
@@ -65,7 +70,7 @@ describe('lifecycleFor', () => {
 describe('elevenLabsLifecycle.update: LLM reasoning effort', () => {
   it('sends the reasoning effort resolved from the LLM catalogue, and nothing when there is none', async () => {
     vi.mocked(el.agents.update).mockResolvedValue({ agent_id: 'agent_1', name: 'x', conversation_config: {} })
-    vi.mocked(agentReasoningEffort).mockResolvedValueOnce('minimal')
+    vi.mocked(effectiveAgentLlm).mockResolvedValueOnce(selection({ reasoningEffort: 'minimal' }))
     await elevenLabsLifecycle.update('agent_1', makeAgentSpec())
     const sent = vi.mocked(el.agents.update).mock.calls[0][1] as { conversation_config: { agent: { prompt: Record<string, unknown> } } }
     expect(sent.conversation_config.agent.prompt.reasoning_effort).toBe('minimal')
@@ -77,8 +82,78 @@ describe('elevenLabsLifecycle.update: LLM reasoning effort', () => {
 
   it('the config hash includes it (a newly supported level is pushed)', async () => {
     const without = await elevenLabsLifecycle.hash(makeAgentSpec())
-    vi.mocked(agentReasoningEffort).mockResolvedValueOnce('low')
+    vi.mocked(effectiveAgentLlm).mockResolvedValueOnce(selection({ reasoningEffort: 'low' }))
     expect(await elevenLabsLifecycle.hash(makeAgentSpec())).not.toBe(without)
+  })
+
+  it('sends the LLM the catalogue check selected (platform default when the configured one is unavailable)', async () => {
+    vi.mocked(el.agents.update).mockResolvedValue({ agent_id: 'agent_1', name: 'x', conversation_config: {} })
+    vi.mocked(effectiveAgentLlm).mockResolvedValue(selection({ llm: 'gpt-5.4-mini', configured: 'gpt-4o', reason: 'deprecated' }))
+    const res = await elevenLabsLifecycle.update('agent_1', makeAgentSpec())
+    const sent = vi.mocked(el.agents.update).mock.calls[0][1] as { conversation_config: { agent: { prompt: Record<string, unknown> } } }
+    expect(sent.conversation_config.agent.prompt.llm).toBe('gpt-5.4-mini')
+    expect(res.details.llm).toBe('gpt-5.4-mini')
+  })
+})
+
+describe('elevenLabsLifecycle.update: versioning, privacy and read-back', () => {
+  const remote = (over: Record<string, unknown> = {}) => ({ agent_id: 'agent_1', name: 'x', version_id: 'v2', conversation_config: { tts: { voice_id: 'el-voice-123', model_id: 'eleven_flash_v2' } }, ...over }) as unknown as el.ELAgent
+
+  it('describes the version with the revision and platform version, never tenant data', async () => {
+    vi.mocked(el.agents.update).mockResolvedValue(remote())
+    await elevenLabsLifecycle.update('agent_1', makeAgentSpec({ revision: 7 }))
+    const sent = vi.mocked(el.agents.update).mock.calls[0][1] as { version_description: string }
+    expect(sent.version_description).toMatch(/^ntv r7 p\d+$/)
+  })
+
+  it('applies a stricter privacy to stored conversations once, without changing the config hash', async () => {
+    vi.mocked(el.agents.update).mockResolvedValue(remote())
+    const spec = makeAgentSpec({ privacy: { record_audio: false, retention_days: 30 } })
+    const once = await elevenLabsLifecycle.update('agent_1', spec, { applyPrivacyToExisting: true })
+    const steady = await elevenLabsLifecycle.update('agent_1', spec)
+    const [first, second] = vi.mocked(el.agents.update).mock.calls.map((c) => c[1] as { platform_settings: { privacy: Record<string, unknown> } })
+    expect(first.platform_settings.privacy.apply_to_existing_conversations).toBe(true)
+    expect(second.platform_settings.privacy.apply_to_existing_conversations).toBe(false)
+    expect(once.configHash).toBe(steady.configHash)
+    expect(once.details.privacy_applied).toEqual({ record_audio: false, retention_days: 30 })
+    expect(once.details).toHaveProperty('privacy_retroactive_at')
+    expect(steady.details).not.toHaveProperty('privacy_retroactive_at')
+  })
+
+  it('retries once without transcript redaction when the workspace rejects it, and remembers that', async () => {
+    const rejected = new ProviderError({ system: 'elevenlabs', code: 'permission', operation: 'agents.update', detail: 'feature_not_available - Conversation history redaction requires an enterprise plan' })
+    vi.mocked(el.agents.update).mockRejectedValueOnce(rejected).mockResolvedValue(remote())
+    const res = await elevenLabsLifecycle.update('agent_1', makeAgentSpec())
+    const calls = vi.mocked(el.agents.update).mock.calls.map((c) => c[1] as { platform_settings: { privacy: Record<string, unknown> } })
+    expect(calls).toHaveLength(2)
+    expect(calls[0].platform_settings.privacy).toHaveProperty('conversation_history_redaction')
+    expect(calls[1].platform_settings.privacy).not.toHaveProperty('conversation_history_redaction')
+    expect(res.details.pii_redaction).toBe('rejected')
+    // Next sync on this instance: no doomed first attempt.
+    await elevenLabsLifecycle.update('agent_1', makeAgentSpec())
+    expect(vi.mocked(el.agents.update).mock.calls).toHaveLength(3)
+    // The hash stays that of the intended body (no re-sync loop).
+    expect(res.configHash).toBe(await elevenLabsLifecycle.hash(makeAgentSpec()))
+  })
+
+  it('does not retry other failures', async () => {
+    vi.mocked(el.agents.update).mockRejectedValue(new ProviderError({ system: 'elevenlabs', code: 'validation', operation: 'agents.update', detail: 'invalid_parameters - bad voice' }))
+    await expect(elevenLabsLifecycle.update('agent_1', makeAgentSpec())).rejects.toMatchObject({ code: 'validation' })
+    expect(vi.mocked(el.agents.update).mock.calls).toHaveLength(1)
+  })
+
+  it('flags analysis_items and stale map keys from the PATCH response', async () => {
+    vi.mocked(el.agents.update).mockResolvedValue(
+      remote({
+        platform_settings: { analysis_items: { items: [] }, data_collection: { caller_name: {}, old_field: {} } },
+        conversation_config: { tts: {}, agent: { dynamic_variables: { dynamic_variable_placeholders: { ntv_call_id: 'unknown', removed_var: 'x' } } } },
+      }),
+    )
+    const res = await elevenLabsLifecycle.update('agent_1', makeAgentSpec())
+    expect(res.details.analysis_items_migrated).toBe(true)
+    expect(res.details.stale_keys).toMatchObject({ data_collection: ['old_field'], dynamic_variable_placeholders: ['removed_var'] })
+    vi.mocked(el.agents.update).mockResolvedValue(remote({ platform_settings: { analysis_items: null } }))
+    expect((await elevenLabsLifecycle.update('agent_1', makeAgentSpec())).details.analysis_items_migrated).toBe(false)
   })
 })
 
@@ -133,6 +208,12 @@ describe('elevenLabsLifecycle.health', () => {
     const h = await elevenLabsLifecycle.health()
     expect(h).toMatchObject({ ok: true, errorCode: null })
     expect(el.agents.list).toHaveBeenCalledWith({ page_size: 1 })
+  })
+
+  it('also falls back when the key lacks the user scope (403 insufficient_permissions → permission)', async () => {
+    vi.mocked(el.subscription).mockRejectedValue(pe('elevenlabs', 'permission', 'user.subscription'))
+    vi.mocked(el.agents.list).mockResolvedValue({ agents: [] })
+    expect(await elevenLabsLifecycle.health()).toMatchObject({ ok: true, errorCode: null })
   })
 
   it('fails with the probe error code when the agents probe also fails', async () => {

@@ -51,6 +51,10 @@ export function makeAgentSpec(overrides: Partial<AgentSpec> = {}): AgentSpec {
     knowledge: [],
     dynamicVariables: {},
     appRouted: true,
+    hasNativeNumbers: false,
+    active: true,
+    callLimits: { concurrency: 2, daily: 500, bursting: true },
+    openingHours: null,
     revision: 3,
   }
   return { ...base, ...overrides }

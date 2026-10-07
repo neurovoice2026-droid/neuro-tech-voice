@@ -24,7 +24,17 @@ export interface ELLlmInfo {
   is_checkpoint?: boolean
   /** Null when the model does not support configurable reasoning. */
   available_reasoning_efforts?: LlmReasoningEffort[] | null
-  deprecation_info?: { is_deprecated?: boolean; replacement_model?: string | null; is_in_fallback_period?: boolean } | null
+  deprecation_info?: {
+    is_deprecated?: boolean
+    replacement_model?: string | null
+    is_in_warning_period?: boolean
+    is_in_fallback_period?: boolean
+    /** Share of traffic already routed to replacement_model (0–100). */
+    fallback_percentage?: number
+    provider_deprecation_date?: string | null
+  } | null
+  /** Extra cost of this model in the deployment's data-residency region. */
+  regional_processing_surcharge?: { multiplier: number } | null
 }
 
 /** GET /v1/models: the models the workspace can use, with their languages. */

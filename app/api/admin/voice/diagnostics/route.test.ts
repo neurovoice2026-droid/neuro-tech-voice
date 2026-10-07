@@ -45,6 +45,22 @@ describe('GET /api/admin/voice/diagnostics', () => {
     expect(diagnoseModels).toHaveBeenCalledTimes(1)
   })
 
+  it('reports the platform agent config (limits, guardrails, rollout) and warns when agent auth is off', async () => {
+    diagnoseModels.mockResolvedValue([])
+    vi.stubEnv('ELEVENLABS_AGENT_AUTH', 'false')
+    const res = await GET(new Request('https://app.example/api/admin/voice/diagnostics'))
+    const body = await res.json()
+    expect(body.problems.map((p: { key: string }) => p.key)).toContain('ELEVENLABS_AGENT_AUTH')
+    expect(body.platform_agent_config).toMatchObject({
+      platform_version: expect.any(Number),
+      agent_auth: false,
+      call_limits: { concurrency_by_plan: { trial: 2, starter: 2, pro: 4, business: 6, custom: 10 } },
+      guardrails: { focus: true, prompt_injection: true },
+      rollout: { batch: 10 },
+    })
+    vi.unstubAllEnvs()
+  })
+
   it('is refused to non-admins before any check runs', async () => {
     state.admin = false
     const res = await GET(new Request('https://app.example/api/admin/voice/diagnostics'))

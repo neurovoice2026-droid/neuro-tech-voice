@@ -130,7 +130,7 @@ function withConversation(conv: Partial<AgentSpec['conversation']>, overrides: P
 }
 
 beforeEach(() => {
-  for (const k of ['ELEVENLABS_TTS_MODEL_EN', 'ELEVENLABS_TTS_MODEL_MULTILINGUAL', 'ELEVENLABS_LLM', 'ELEVENLABS_TEXT_NORMALISATION', 'ELEVENLABS_ENABLE_GUARDRAILS', 'ELEVENLABS_AGENT_AUTH']) {
+  for (const k of ['ELEVENLABS_TTS_MODEL_EN', 'ELEVENLABS_TTS_MODEL_MULTILINGUAL', 'ELEVENLABS_LLM', 'ELEVENLABS_TEXT_NORMALISATION', 'ELEVENLABS_ENABLE_GUARDRAILS', 'ELEVENLABS_AGENT_AUTH', 'ELEVENLABS_CONTENT_GUARDRAILS', 'ELEVENLABS_CONTENT_GUARDRAIL_THRESHOLD', 'ELEVENLABS_PII_REDACTION', 'ELEVENLABS_TRUST_CONTEXT', 'ELEVENLABS_BACKUP_LLM', 'ELEVENLABS_LLM_CASCADE_TIMEOUT_SECONDS']) {
     vi.stubEnv(k, '')
   }
 })
@@ -164,6 +164,8 @@ describe('ElevenLabs agent body vs the official Create Agent schema', () => {
       {
         language: 'ro',
         appRouted: false,
+        hasNativeNumbers: true,
+        openingHours: 'Monday 09:00-17:00; Sunday closed.',
         transfer: { enabled: true, number: '+40712345678', condition: 'Caller asks for billing', label: 'Billing' },
         knowledge: [{ name: 'Prețuri.pdf', type: 'file', elevenlabsId: 'kb_1', cartesiaId: null }],
         dynamicVariables: { clinic_city: 'Cluj' },
@@ -182,6 +184,33 @@ describe('ElevenLabs agent body vs the official Create Agent schema', () => {
     const body = buildElevenLabsAgentBody(spec, FULL_PLATFORM, { reasoningEffort: 'minimal' })
     expect(Object.keys(body.conversation_config.language_presets as object)).toEqual(['en', 'de'])
     expect(bodyErrors(spec, FULL_PLATFORM, { reasoningEffort: 'minimal' })).toEqual([])
+  })
+
+  it('platform settings in every variant: mixed routing, paused, content guardrails, redaction off, low trust, cascade off', () => {
+    vi.stubEnv('ELEVENLABS_CONTENT_GUARDRAILS', 'sexual,violence,harassment,self_harm,profanity,religion_or_politics,medical_and_legal_information')
+    vi.stubEnv('ELEVENLABS_CONTENT_GUARDRAIL_THRESHOLD', '0.5')
+    vi.stubEnv('ELEVENLABS_PII_REDACTION', 'false')
+    vi.stubEnv('ELEVENLABS_TRUST_CONTEXT', 'low')
+    vi.stubEnv('ELEVENLABS_BACKUP_LLM', 'disabled')
+    vi.stubEnv('ELEVENLABS_LLM_CASCADE_TIMEOUT_SECONDS', '2')
+    const transfer = { enabled: true, number: '+40712345678', condition: 'Caller asks for billing', label: 'Billing' }
+    for (const active of [true, false]) {
+      const mixed = makeAgentSpec({ active, appRouted: true, hasNativeNumbers: true, transfer, callLimits: { concurrency: -1, daily: 100000, bursting: false } })
+      expect(bodyErrors(mixed, FULL_PLATFORM), `mixed active=${active}`).toEqual([])
+      const native = makeAgentSpec({ active, appRouted: false, hasNativeNumbers: true, transfer, language: 'ro', callLimits: { concurrency: 10, daily: 500, bursting: true } })
+      expect(bodyErrors(native, NO_PLATFORM), `native active=${active}`).toEqual([])
+    }
+    vi.stubEnv('ELEVENLABS_PII_REDACTION', '')
+    vi.stubEnv('ELEVENLABS_ENABLE_GUARDRAILS', 'false')
+    expect(bodyErrors(makeAgentSpec(), FULL_PLATFORM, { llm: 'gemini-2.5-flash' })).toEqual([])
+  })
+
+  it('never writes analysis_items (null = legacy evaluation/data_collection are read); the spec still allows null', () => {
+    const analysisItems = (fixture.schemas['AgentPlatformSettingsRequestModel'].properties as Record<string, Schema>).analysis_items
+    expect(((analysisItems.anyOf ?? []) as Schema[]).some((b) => b.type === 'null')).toBe(true)
+    for (const spec of [makeAgentSpec(), makeAgentSpec({ active: false }), makeAgentSpec({ appRouted: false, hasNativeNumbers: true })]) {
+      expect(buildElevenLabsAgentBody(spec, FULL_PLATFORM).platform_settings).not.toHaveProperty('analysis_items')
+    }
   })
 
   it('barge-in, fillers, skip turn and backchannels off; v3 conversational model; prompt-based normalisation', () => {

@@ -187,6 +187,17 @@ export interface AgentSpec {
   dynamicVariables: Record<string, string>
   /** Whether calls reach this agent through our Twilio ingress (μ-law 8 kHz). */
   appRouted: boolean
+  /** At least one of the org's numbers is imported natively into ElevenLabs (native_elevenlabs). */
+  hasNativeNumbers: boolean
+  /**
+   * agents.is_active. Native numbers bypass our router, so a paused agent is
+   * synced as an "unavailable" variant that only says so and hangs up.
+   */
+  active: boolean
+  /** Per-agent call limits from the org plan (platform-owned; ElevenLabs only). */
+  callLimits: { concurrency: number; daily: number; bursting: boolean }
+  /** Weekly opening hours in words when the after-hours rule is on (native calls decide from them). */
+  openingHours: string | null
   revision: number
 }
 

@@ -101,7 +101,8 @@ export async function remoteModelProblems(log: Logger): Promise<ConfigProblem[]>
     const llm = agentLlm()
     const info = (await cachedAgentLlms()).find((l) => l.llm === llm)
     if (!info) {
-      problems.push({ key: 'ELEVENLABS_LLM', severity: 'error', message: `${llm} is not offered to agents by GET /v1/convai/llm/list: agent syncs will be rejected.` })
+      // Syncs then use the platform default (llm-selection.ts reports which one).
+      problems.push({ key: 'ELEVENLABS_LLM', severity: 'error', message: `${llm} is not offered to agents by GET /v1/convai/llm/list.` })
     } else {
       if (info.deprecation_info?.is_deprecated) {
         const replacement = info.deprecation_info.replacement_model ? ` Replacement: ${info.deprecation_info.replacement_model}.` : ''

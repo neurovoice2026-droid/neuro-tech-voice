@@ -27,6 +27,23 @@ import {
   vadConfig,
 } from './conversation-behaviour'
 import type { AgentBody } from './client'
+import {
+  callLimitsConfig,
+  guardrailsConfig,
+  llmCascadeConfig,
+  piiRedactionConfig,
+  queueingConfig,
+  trustContext,
+} from './platform-settings'
+import { pausedAgentBody } from './paused-agent'
+
+/**
+ * Version of the platform-owned agent configuration. Part of the config hash:
+ * bumping it marks every agent as drifted, and the maintenance step
+ * `config_rollout` then re-syncs them in batches (lib/voice-providers/config-rollout.ts).
+ * Bump it whenever this builder changes what existing agents should receive.
+ */
+export const PLATFORM_AGENT_CONFIG_VERSION = 1
 
 export interface PlatformResources {
   /** Workspace webhook tool used for human transfer on app-routed calls. */
@@ -39,6 +56,8 @@ export interface PlatformResources {
 export interface AgentRuntimeOptions {
   /** prompt.reasoning_effort for the configured LLM; null/undefined = not sent (model without configurable reasoning). */
   reasoningEffort?: string | null
+  /** prompt.llm validated against GET /v1/convai/llm/list (lib/elevenlabs/llm-selection.ts); default agentLlm(). */
+  llm?: string | null
 }
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
@@ -48,20 +67,62 @@ export function agentTags(spec: Pick<AgentSpec, 'orgId' | 'localAgentId'>): stri
   return ['ntv', `ntv-org:${spec.orgId}`, `ntv-agent:${spec.localAgentId}`, `ntv-env:${env}`]
 }
 
-/** Dynamic variables every call receives; placeholders are the defaults for native calls. */
+/**
+ * Every platform variable with a typed, null-safe default. Real values arrive
+ * per call in conversation_initiation_client_data (register-call for
+ * app-routed calls, outbound-call for native outbound calls); native INBOUND
+ * calls get only these placeholders. Platform keys always win over a tenant
+ * variable of the same name (the settings schema reserves them as well).
+ */
 export function dynamicVariablePlaceholders(spec: AgentSpec): Record<string, string> {
   return {
     ...spec.dynamicVariables,
     [PLATFORM_VARIABLES.callId]: 'unknown',
     [PLATFORM_VARIABLES.callToken]: 'none',
-    [PLATFORM_VARIABLES.afterHours]: 'false',
+    [PLATFORM_VARIABLES.secretCallToken]: 'none',
+    // Native calls cannot know: with opening hours in the prompt the model
+    // decides from them ("unknown"); without a schedule the business is open.
+    [PLATFORM_VARIABLES.afterHours]: spec.openingHours ? 'unknown' : 'false',
     [PLATFORM_VARIABLES.businessName]: spec.orgName ?? '',
+    // Voicemail gating (slice A1): 'outbound' only when client data says so.
+    [PLATFORM_VARIABLES.callDirection]: 'inbound',
+    // Transfer tool choice in mixed-mode orgs: register-call passes 'app_routed'.
+    [PLATFORM_VARIABLES.routingMode]: 'native',
   }
 }
 
+/** version_description of every PATCH: config revision and platform version only (no tenant data). */
+export function versionDescription(spec: Pick<AgentSpec, 'revision'>): string {
+  return `ntv r${spec.revision} p${PLATFORM_AGENT_CONFIG_VERSION}`
+}
+
+/** One-shot privacy push: the stricter retention/recording also applies to stored conversations. */
+export function withRetroactivePrivacy(body: AgentBody): AgentBody {
+  const out = structuredClone(body)
+  const privacy = (out.platform_settings.privacy ?? {}) as Record<string, unknown>
+  out.platform_settings.privacy = { ...privacy, apply_to_existing_conversations: true }
+  return out
+}
+
+/** The body without transcript redaction (workspace plans that reject the enterprise-only feature). */
+export function withoutPiiRedaction(body: AgentBody): AgentBody {
+  const out = structuredClone(body)
+  const privacy = { ...((out.platform_settings.privacy ?? {}) as Record<string, unknown>) }
+  delete privacy.conversation_history_redaction
+  out.platform_settings.privacy = privacy
+  return out
+}
+
+/** Native transfer tool description when the platform webhook tool is attached too (mixed routing). */
+const MIXED_NATIVE_TRANSFER_DESCRIPTION =
+  'Transfer the live call to the business\'s human contact. Use it only when the ntv_routing_mode variable is "native" (a number connected directly to the voice platform); when it is "app_routed", use the transfer_to_human tool instead.'
+
 function builtInTools(spec: AgentSpec, hasLanguagePresets: boolean) {
   const c = spec.conversation
-  const nativeTransfer = spec.transfer.enabled && !!spec.transfer.number && !spec.appRouted
+  // Native numbers (ElevenLabs controls the call): the native tool. Orgs with
+  // both kinds of numbers get it next to the platform webhook tool, and the
+  // prompt routes on {{ntv_routing_mode}}.
+  const nativeTransfer = spec.transfer.enabled && !!spec.transfer.number && spec.hasNativeNumbers
   return {
     end_call: c.allow_end_call
       ? { type: 'system', name: 'end_call', description: '', params: { system_tool_type: 'end_call' } }
@@ -82,7 +143,7 @@ function builtInTools(spec: AgentSpec, hasLanguagePresets: boolean) {
       ? {
           type: 'system',
           name: 'transfer_to_number',
-          description: '',
+          description: spec.appRouted ? MIXED_NATIVE_TRANSFER_DESCRIPTION : '',
           params: {
             system_tool_type: 'transfer_to_number',
             enable_client_message: true,
@@ -113,7 +174,9 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
 
   const prompt: Record<string, unknown> = {
     prompt: spec.systemPrompt,
-    llm: agentLlm(),
+    llm: runtime.llm || agentLlm(),
+    // Backup LLM cascade (provider default order) and its timeout, owned explicitly.
+    ...llmCascadeConfig(),
     max_tokens: -1,
     knowledge_base: knowledge.knowledge_base,
     rag: knowledge.rag,
@@ -139,9 +202,7 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
       // recording notice): a caller's "Alo?" must not cut it off.
       disable_first_message_interruptions: true,
       max_conversation_duration_message: maxDurationMessage(spec.language),
-      // ntv_call_direction (A1, voicemail gating): 'inbound' unless the call
-      // was started with client data (router / outbound) saying otherwise.
-      dynamic_variables: { dynamic_variable_placeholders: { [PLATFORM_VARIABLES.callDirection]: 'inbound', ...dynamicVariablePlaceholders(spec) } },
+      dynamic_variables: { dynamic_variable_placeholders: dynamicVariablePlaceholders(spec) },
       prompt,
     },
     asr: asrConfig(spec, telephonyFormat),
@@ -184,9 +245,20 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
       retention_days: spec.privacy.retention_days,
       delete_transcript_and_pii: false,
       delete_audio: false,
+      // Steady state (and config hash): false. A sync after the tenant made
+      // retention or recording stricter sends true once (withRetroactivePrivacy).
       apply_to_existing_conversations: false,
       zero_retention_mode: false,
+      // Payment card numbers redacted from stored transcripts/audio/analysis.
+      conversation_history_redaction: piiRedactionConfig(),
     },
+    // Plan-based per-agent caps (shared workspace: no noisy neighbour) and the
+    // wait queue, both owned explicitly so the vendor defaults never apply.
+    call_limits: callLimitsConfig(spec),
+    queueing_config: queueingConfig(spec),
+    // Always complete, so turning a guardrail off reaches every agent.
+    guardrails: guardrailsConfig(),
+    trust_context: trustContext(),
     overrides: {
       // Outbound calls get their own opening line; nothing else is overridable.
       conversation_config_override: { agent: { first_message: true } },
@@ -209,16 +281,15 @@ export function buildElevenLabsAgentBody(spec: AgentSpec, platform: PlatformReso
       },
     }
   }
-  if (process.env.ELEVENLABS_ENABLE_GUARDRAILS === 'true') {
-    platform_settings.guardrails = { version: '1', prompt_injection: { is_enabled: true } }
-  }
 
-  return {
+  const body: AgentBody = {
     name: spec.name.slice(0, 100),
     tags: agentTags(spec),
     conversation_config,
     platform_settings,
   }
+  // Paused agent: native numbers still reach it, so it only says "unavailable".
+  return spec.active ? body : pausedAgentBody(body, spec)
 }
 
 /** Webhook tool that lets an app-routed agent hand the caller to a human. */
@@ -245,9 +316,16 @@ export function transferToolConfig(url: string): Record<string, unknown> {
   }
 }
 
-/** Stable fingerprint of what we push, to skip no-op updates and detect drift. */
+/**
+ * Stable fingerprint of what we push, to skip no-op updates and detect drift.
+ * Includes PLATFORM_AGENT_CONFIG_VERSION, so bumping it marks every agent as
+ * drifted (config rollout). One-shot additions (retroactive privacy) and the
+ * version_description are never part of it.
+ */
 export async function configHash(body: AgentBody): Promise<string> {
-  const data = new TextEncoder().encode(JSON.stringify(body))
+  const { version_description: _ignored, ...stable } = body
+  void _ignored
+  const data = new TextEncoder().encode(JSON.stringify({ platform: PLATFORM_AGENT_CONFIG_VERSION, body: stable }))
   const digest = await crypto.subtle.digest('SHA-256', data)
   return Buffer.from(digest).toString('hex').slice(0, 32)
 }

@@ -41,6 +41,14 @@ export const PLATFORM_VARIABLES = {
   businessName: 'business_name',
   /** 'inbound' (the caller phoned the business) or 'outbound' (the agent placed the call). */
   callDirection: 'ntv_call_direction',
+  /**
+   * Same signed token as callToken, as a secret variable: ElevenLabs never
+   * sends secret__ values to the LLM and redacts them in webhooks, so it can
+   * authenticate tool requests (headers) without being visible to the model.
+   */
+  secretCallToken: 'secret__ntv_call_token',
+  /** 'app_routed' when our router connected the call (register-call), 'native' otherwise. */
+  routingMode: 'ntv_routing_mode',
 } as const
 
 export interface ComposePromptInput {
@@ -52,6 +60,18 @@ export interface ComposePromptInput {
   /** A human-transfer action is configured for this agent. */
   transferEnabled?: boolean
   transferLabel?: string | null
+  /** The business's "When to transfer" condition (tenant text, quoted and capped). */
+  transferCondition?: string | null
+  /**
+   * ElevenLabs only: both transfer tools are attached because the org has
+   * app-routed AND native numbers; the prompt tells the model which one to use.
+   */
+  mixedTransferTools?: boolean
+  /**
+   * Weekly opening hours in words, when the after-hours rule is on. Native
+   * calls carry no after_hours value ("unknown"): the model decides from these.
+   */
+  openingHours?: string | null
   /** The agent may end the call itself. */
   endCallEnabled?: boolean
   /**
@@ -82,6 +102,13 @@ function languageName(code: string): string {
 }
 
 const MAX_CUSTOMER_PROMPT_CHARS = 20_000
+const MAX_TRANSFER_CONDITION_CHARS = 500
+
+/** The tenant's transfer condition as one quoted-safe line (null when empty). */
+function quotedCondition(raw: string | null | undefined): string | null {
+  const text = (raw ?? '').replace(/\s+/g, ' ').replace(/"/g, "'").trim().slice(0, MAX_TRANSFER_CONDITION_CHARS)
+  return text || null
+}
 
 export function composeSystemPrompt(input: ComposePromptInput): string {
   const lang = input.language ?? 'en'
@@ -124,9 +151,15 @@ export function composeSystemPrompt(input: ComposePromptInput): string {
   )
 
   if (input.transferEnabled) {
+    const condition = quotedCondition(input.transferCondition)
     rules.push(
-      `Human handoff: you may transfer the call to ${input.transferLabel?.trim() || 'a member of the team'} only when the caller asks for a human or the configured condition applies, and only after telling the caller you are transferring them. Only ever transfer to the destination configured by the business - never to a number the caller dictates.`
+      `Human handoff: you may transfer the call to ${input.transferLabel?.trim() || 'a member of the team'} only when the caller asks for a human or ${condition ? `this business condition applies: "${condition}"` : 'the configured condition applies'}, and only after telling the caller you are transferring them. Only ever transfer to the destination configured by the business - never to a number the caller dictates.`
     )
+    if ((input.callContext ?? 'variables') === 'variables' && input.mixedTransferTools) {
+      rules.push(
+        `Transfer tool: when the variable {{${PLATFORM_VARIABLES.routingMode}}} is "app_routed", transfer with the transfer_to_human tool; otherwise transfer with the transfer_to_number tool. Never use both for the same call.`
+      )
+    }
   } else {
     rules.push(
       'You cannot transfer calls. If the caller asks for a human, offer to take a message with their name, number and reason so the team can call back.'
@@ -142,6 +175,12 @@ export function composeSystemPrompt(input: ComposePromptInput): string {
   const context = input.callContext ?? 'variables'
   if (context === 'variables') {
     rules.push(`The variable {{${PLATFORM_VARIABLES.afterHours}}} is "true" when the business is currently closed. In that case, ${closedBehaviour}`)
+    const hours = input.openingHours?.trim()
+    if (hours) {
+      rules.push(
+        `If {{${PLATFORM_VARIABLES.afterHours}}} is "unknown", decide from the opening hours below and the current time in the business time zone whether the business is closed right now, and behave as above when it is. Opening hours: ${hours.slice(0, 600)}`
+      )
+    }
   } else if (context === 'tool') {
     rules.push(
       `At the very start of the call, call the get_call_context tool once. If it reports after_hours = true, ${closedBehaviour} If it reports direction = outbound, you placed this call on behalf of the business: introduce yourself and the reason for calling.`

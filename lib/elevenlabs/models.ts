@@ -72,10 +72,50 @@ function validTts(raw: string | undefined, fallback: AgentTtsModel): AgentTtsMod
   return isAgentTtsModel(mapped) ? mapped : fallback
 }
 
-/** LLM id: only shape-checked here; diagnostics validate it against GET /v1/convai/llm/list. */
+/**
+ * LLM enum of the spec (PromptAgentAPIModel.llm, 2026-10), without
+ * 'custom-llm' (it needs a custom_llm endpoint we never configure). Used only
+ * when the live catalogue (GET /v1/convai/llm/list) cannot be read: new
+ * models the catalogue offers are accepted without updating this list.
+ */
+export const AGENT_LLMS = [
+  'gpt-4o-mini', 'gpt-4o', 'gpt-4', 'gpt-4-turbo', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-5', 'gpt-5.1', 'gpt-5.2',
+  'gpt-5.2-chat-latest', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-5.5', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna',
+  'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-5-mini', 'gpt-5-nano', 'gpt-3.5-turbo', 'gemini-1.5-pro',
+  'gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-2.5-flash-lite', 'gemini-2.5-flash',
+  'gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite-preview',
+  'gemini-3.1-flash-lite', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-3.7-flash',
+  'gemini-3.8-flash', 'claude-sonnet-4-5', 'claude-opus-4-7', 'claude-opus-4-8', 'claude-opus-5', 'claude-opus-5-5',
+  'claude-sonnet-4-6', 'claude-sonnet-5', 'claude-sonnet-5-5', 'claude-sonnet-4', 'claude-haiku-4-5', 'claude-3-7-sonnet',
+  'claude-3-5-sonnet', 'claude-3-5-sonnet-v1', 'claude-3-haiku', 'grok-beta', 'qwen3-4b', 'qwen3-30b-a3b',
+  'qwen36-35b-a3b', 'qwen35-397b-a17b', 'gpt-oss-20b', 'gpt-oss-120b', 'glm-45-air-fp8', 'glm-52', 'deepseek-v41-flash',
+  'gemini-2.5-flash-preview-09-2025', 'gemini-2.5-flash-lite-preview-09-2025', 'gemini-2.5-flash-preview-05-20',
+  'gemini-2.5-flash-preview-04-17', 'gemini-2.5-flash-lite-preview-06-17', 'gemini-2.0-flash-lite-001',
+  'gemini-2.0-flash-001', 'gemini-1.5-flash-002', 'gemini-1.5-flash-001', 'gemini-1.5-pro-002', 'gemini-1.5-pro-001',
+  'claude-sonnet-4@20250514', 'claude-sonnet-4-5@20250929', 'claude-haiku-4-5@20251001', 'claude-3-7-sonnet@20250219',
+  'claude-3-5-sonnet@20240620', 'claude-3-5-sonnet-v2@20241022', 'claude-3-haiku@20240307', 'gpt-5-2025-08-07',
+  'gpt-5.1-2025-11-13', 'gpt-5.2-2025-12-11', 'gpt-5.4-2026-03-05', 'gpt-5.4-mini-2026-03-17', 'gpt-5.4-nano-2026-03-17',
+  'gpt-5.5-2026-04-23', 'gpt-5-mini-2025-08-07', 'gpt-5-nano-2025-08-07', 'gpt-4.1-2025-04-14', 'gpt-4.1-mini-2025-04-14',
+  'gpt-4.1-nano-2025-04-14', 'gpt-4o-mini-2024-07-18', 'gpt-4o-2024-11-20', 'gpt-4o-2024-08-06', 'gpt-4o-2024-05-13',
+  'gpt-4-0613', 'gpt-4-0314', 'gpt-4-turbo-2024-04-09', 'gpt-3.5-turbo-0125', 'gpt-3.5-turbo-1106', 'watt-tool-8b',
+  'watt-tool-70b',
+] as const
+
+/** Whether `llm` is in the vendored spec enum (custom-llm excluded). */
+export function isKnownAgentLlm(llm: string | null | undefined): boolean {
+  return !!llm && (AGENT_LLMS as readonly string[]).includes(llm)
+}
+
+/**
+ * The CONFIGURED LLM id (ELEVENLABS_LLM, shape-checked; 'custom-llm' is
+ * rejected because it needs a custom endpoint). What agents actually get is
+ * decided by lib/elevenlabs/llm-selection.ts against GET /v1/convai/llm/list:
+ * an unknown, unavailable or deprecated model is replaced by the platform
+ * default there, and reported by the admin diagnostics.
+ */
 export function agentLlm(): string {
   const v = (process.env.ELEVENLABS_LLM ?? '').trim()
-  return /^[a-z0-9][a-z0-9.@_-]{1,63}$/i.test(v) ? v : DEFAULT_LLM
+  return /^[a-z0-9][a-z0-9.@_-]{1,63}$/i.test(v) && v.toLowerCase() !== 'custom-llm' ? v : DEFAULT_LLM
 }
 
 export function ttsModelFor(language: string | null | undefined): AgentTtsModel {

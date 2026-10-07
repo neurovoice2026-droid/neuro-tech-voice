@@ -47,6 +47,7 @@ import {
 import type { VoiceProvider } from '@/lib/voice-providers/errors'
 import { PLANS, stripePriceId } from '@/types'
 import type { BillingInterval, Plan } from '@/types'
+import { PLATFORM_VARIABLE_MESSAGE, hasNoPlatformVariables } from '@/lib/voice-providers/template-variables'
 
 // Agent sync with the primary provider + Stripe customer/session creation.
 export const maxDuration = 60
@@ -76,8 +77,8 @@ const CompleteSchema = z.object({
     .object({
       name: emptyAsUndefined(z.string().trim().max(AGENT_NAME_MAX)),
       language: emptyAsUndefined(AgentLanguageSchema),
-      system_prompt: z.string().max(SYSTEM_PROMPT_MAX).nullable().optional(),
-      first_message: z.string().trim().max(FIRST_MESSAGE_MAX).nullable().optional(),
+      system_prompt: z.string().max(SYSTEM_PROMPT_MAX).refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE).nullable().optional(),
+      first_message: z.string().trim().max(FIRST_MESSAGE_MAX).refine(hasNoPlatformVariables, PLATFORM_VARIABLE_MESSAGE).nullable().optional(),
       personality: emptyAsUndefined(PersonalitySchema),
     })
     .optional(),

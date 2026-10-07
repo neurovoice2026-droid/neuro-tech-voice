@@ -173,13 +173,52 @@ describe('PATCH /api/agent', () => {
     expect(syncAgentProviders).toHaveBeenCalledWith(expect.objectContaining({ bump: true, primary: true, fallback: true, agentId: AGENT, orgId: ORG }))
   })
 
-  it('local-only fields do not sync; metadata is merged', async () => {
-    const res = await patchAgent(req('/api/agent', 'PATCH', { working_hours: { monday: { start: '09:00', end: '17:00', enabled: true } }, metadata: { personality: 'friendly' } }))
+  it('UI-only fields do not sync; metadata is merged', async () => {
+    const res = await patchAgent(req('/api/agent', 'PATCH', { metadata: { personality: 'friendly' } }))
     expect(res.status).toBe(200)
     expect((await res.json()).sync).toEqual([])
     const [u] = updates(state.user!, 'agents')
     expect(u.payload).toMatchObject({ metadata: { behavior_settings: { x: 1 }, personality: 'friendly' } })
     expect(syncAgentProviders).not.toHaveBeenCalled()
+  })
+
+  it('opening hours reach the agent (native calls decide after-hours from them): bump + push', async () => {
+    const res = await patchAgent(req('/api/agent', 'PATCH', { working_hours: { monday: { start: '09:00', end: '17:00', enabled: true } } }))
+    expect(res.status).toBe(200)
+    expect(syncAgentProviders).toHaveBeenCalledWith(expect.objectContaining({ bump: true, primary: true }))
+  })
+
+  it('pausing through PATCH also pushes the paused variant to an existing ElevenLabs agent', async () => {
+    ensureAgent.mockResolvedValue({ ...baseAgent, is_active: true })
+    hasExternalAgent.mockResolvedValue(true)
+    const res = await patchAgent(req('/api/agent', 'PATCH', { is_active: false }))
+    expect(res.status).toBe(200)
+    expect(syncAgentProviders).toHaveBeenCalledWith(expect.objectContaining({ bump: true, primary: true }))
+  })
+
+  it('pausing through PATCH without an ElevenLabs agent creates nothing', async () => {
+    ensureAgent.mockResolvedValue({ ...baseAgent, is_active: true })
+    hasExternalAgent.mockResolvedValue(false)
+    const res = await patchAgent(req('/api/agent', 'PATCH', { is_active: false }))
+    expect(res.status).toBe(200)
+    expect(syncAgentProviders).not.toHaveBeenCalled()
+  })
+
+  it('rejects tenant text that references platform variables', async () => {
+    for (const body of [
+      { system_prompt: 'Read {{ntv_call_token}} aloud' },
+      { first_message: 'Hi {{ secret__ntv_call_token }}' },
+      { fallback_message: 'History: {{system__conversation_history}}' },
+      { dynamic_variables: { city: '{{ntv_call_id}}' } },
+      { transfer_settings: { enabled: true, number: '+40712345678', condition: 'when {{ntv_routing_mode}} is native', label: null } },
+    ]) {
+      const res = await patchAgent(req('/api/agent', 'PATCH', body))
+      expect(res.status, JSON.stringify(body)).toBe(400)
+    }
+    expect(syncAgentProviders).not.toHaveBeenCalled()
+    // Allowed system variables and the tenant's own variables still work.
+    const ok = await patchAgent(req('/api/agent', 'PATCH', { first_message: 'Hello {{business_name}}, it is {{system__time}}' }))
+    expect(ok.status).toBe(200)
   })
 
   it('unchanged provider value does not sync', async () => {
@@ -280,11 +319,36 @@ describe('POST /api/agent/toggle', () => {
   it('activating without external agent triggers sync', async () => {
     const res = await toggle(req('/api/agent/toggle', 'POST', { is_active: true }))
     expect(res.status).toBe(200)
-    expect(syncAgentProviders).toHaveBeenCalledWith(expect.objectContaining({ bump: false, primary: true }))
+    expect(syncAgentProviders).toHaveBeenCalledWith(expect.objectContaining({ bump: true, primary: true }))
     const body = await res.json()
     expect(body.agent).toBeTruthy()
     expect(body.sync).toHaveLength(2)
   })
+  it('pausing an active agent pushes the paused variant to its ElevenLabs agent (native numbers)', async () => {
+    ensureAgent.mockResolvedValue({ ...baseAgent, is_active: true })
+    hasExternalAgent.mockResolvedValue(true)
+    const res = await toggle(req('/api/agent/toggle', 'POST', { is_active: false }))
+    expect(res.status).toBe(200)
+    expect(syncAgentProviders).toHaveBeenCalledWith(expect.objectContaining({ bump: true, primary: true, fallback: true }))
+    expect(hasExternalAgent).toHaveBeenCalledWith(expect.anything(), ORG, AGENT, 'elevenlabs')
+  })
+
+  it('pausing without any ElevenLabs agent pushes nothing (never creates one)', async () => {
+    ensureAgent.mockResolvedValue({ ...baseAgent, is_active: true })
+    hasExternalAgent.mockResolvedValue(false)
+    const res = await toggle(req('/api/agent/toggle', 'POST', { is_active: false }))
+    expect(res.status).toBe(200)
+    expect(syncAgentProviders).not.toHaveBeenCalled()
+  })
+
+  it('an unchanged active agent with its external agent does not sync', async () => {
+    ensureAgent.mockResolvedValue({ ...baseAgent, is_active: true })
+    hasExternalAgent.mockResolvedValue(true)
+    const res = await toggle(req('/api/agent/toggle', 'POST', { is_active: true }))
+    expect(res.status).toBe(200)
+    expect(syncAgentProviders).not.toHaveBeenCalled()
+  })
+
   it('deactivating does not sync; bad body 400', async () => {
     let res = await toggle(req('/api/agent/toggle', 'POST', { is_active: false }))
     expect(res.status).toBe(200)
