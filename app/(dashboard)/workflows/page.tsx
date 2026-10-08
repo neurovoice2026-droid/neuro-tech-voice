@@ -6,7 +6,7 @@ import {
   Phone, Mail, Calendar, FileText, Zap, Bell, Clock,
   ArrowRight, MoreHorizontal, Copy, Search,
   PhoneIncoming, Star, Check,
-  CheckCircle2, AlertCircle, MessageSquareText,
+  AlertCircle, MessageSquareText,
   type LucideIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -875,16 +875,15 @@ export default function WorkflowsPage() {
 
       {/* Stats: the tiles keep their place during the first load and show their own orbs. */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile size="sm" label="Total workflows" value={stats.total} icon={GitBranch} loading={isLoading} />
-        <StatTile size="sm" label="Active" value={stats.active} icon={Play} loading={isLoading} />
-        <StatTile size="sm" label="Total runs" value={stats.totalRuns} icon={Zap} loading={isLoading} />
+        <StatTile size="sm" label="Total workflows" value={stats.total} loading={isLoading} />
+        <StatTile size="sm" label="Active" value={stats.active} loading={isLoading} />
+        <StatTile size="sm" label="Total runs" value={stats.totalRuns} loading={isLoading} />
         {/* No runs yet: a dash (as on the dashboard), not a success rate that reads as a failure. */}
         <StatTile
           size="sm"
           label="Avg success"
           value={stats.totalRuns === 0 ? '—' : `${stats.avgSuccess}%`}
           hint={!isLoading && stats.totalRuns === 0 ? 'No runs yet' : undefined}
-          icon={CheckCircle2}
           loading={isLoading}
         />
       </div>

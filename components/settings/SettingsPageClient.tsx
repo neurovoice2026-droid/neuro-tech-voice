@@ -69,10 +69,12 @@ export function SettingsPageClient({ businessName, email, plan, deletionRequeste
   const [deleteOpen, setDeleteOpen] = useState(false)
 
   return (
-    <PageContainer width="narrow">
+    <PageContainer>
       <PageHeader eyebrow="Settings" title="Settings" description="Your account and its data." />
 
-      <div>
+      {/* Default-width page with a left-aligned 768 px column (as Billing), so the header and
+          content start at the same x as on every other dashboard page. */}
+      <div className="max-w-[768px]">
         {/* Account */}
         <SettingsSection id="settings-account" title="Account" description="Your business and the email you sign in with.">
           <Card className="gap-0 py-0">

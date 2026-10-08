@@ -58,7 +58,7 @@ const NAV_GROUPS: Array<{ label?: string; items: NavItem[] }> = [
   },
 ]
 
-/** Pages laid out in the narrow (768 px) PageContainer. */
+/** Pages whose content sits in a left-aligned 768 px column inside the default PageContainer. */
 const NARROW_PAGES = ['/billing', '/settings']
 
 interface DashboardShellProps {
@@ -229,7 +229,8 @@ export function DashboardShell({ children, org, agent, userEmail, hasPhoneNumber
   )
 
   const showNumberBanner = !hasPhoneNumber && !pathname.startsWith('/phone')
-  // The banner lines up with the page below it: form pages use the 768 px column.
+  // The banner lines up with the page below it: same 1176 px container as PageContainer, and on
+  // form pages the same left-aligned 768 px column, so its left edge matches the page header's.
   const narrowPage = NARROW_PAGES.some((p) => pathname.startsWith(p))
   const agentState = !agent ? null : !agent.is_active ? 'paused' : hasPhoneNumber ? 'live' : 'no-number'
 
@@ -290,16 +291,18 @@ export function DashboardShell({ children, org, agent, userEmail, hasPhoneNumber
         <main className="flex-1 overflow-y-auto">
           {showNumberBanner && (
             <div className="px-4 pt-4 sm:px-6 lg:px-10 lg:pt-6">
-              <Alert variant="warning" className={cn('mx-auto', narrowPage ? 'max-w-[768px]' : 'max-w-[1176px]')}>
-                <Phone aria-hidden="true" />
-                <AlertTitle>Your agent can&apos;t take calls yet</AlertTitle>
-                <AlertDescription>Add a phone number to start answering and making calls.</AlertDescription>
-                <AlertAction>
-                  <Link href="/phone" className={buttonVariants({ size: 'sm' })}>
-                    Add a number
-                  </Link>
-                </AlertAction>
-              </Alert>
+              <div className="mx-auto w-full max-w-[1176px]">
+                <Alert variant="warning" className={cn(narrowPage && 'max-w-[768px]')}>
+                  <Phone aria-hidden="true" />
+                  <AlertTitle>Your agent can&apos;t take calls yet</AlertTitle>
+                  <AlertDescription>Add a phone number to start answering and making calls.</AlertDescription>
+                  <AlertAction>
+                    <Link href="/phone" className={buttonVariants({ size: 'sm' })}>
+                      Add a number
+                    </Link>
+                  </AlertAction>
+                </Alert>
+              </div>
             </div>
           )}
           {children}
