@@ -1,17 +1,18 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardAction } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
-import { Badge } from '@/components/ui/badge'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { AlertTriangle, ChevronDown, ChevronUp, Info, Loader2, Play, Sparkles, Square } from 'lucide-react'
+import { AlertCircle, AlertTriangle, ChevronDown, ChevronUp, Info, LayoutTemplate, Play, Square } from 'lucide-react'
+import { FormSection } from '@/components/shared/FormSection'
+import { OrbInline } from '@/components/shared/OrbLoader'
+import { StatusChip } from '@/components/shared/StatusChip'
 import { AdditionalLanguagesField, AsrKeywordsField } from '@/components/agent/ConversationBehaviourFields'
 import { useAudioPreview } from '@/hooks/useAudioPreview'
 import { readAgentSettings, type AgentHook } from '@/hooks/useAgent'
@@ -25,8 +26,9 @@ import type { Agent } from '@/types'
 
 export function FieldError({ id, children }: { id: string; children: React.ReactNode }) {
   return (
-    <p id={id} role="alert" className="text-xs text-destructive">
-      {children}
+    <p id={id} role="alert" className="flex items-start gap-1.5 text-xs leading-4 text-destructive">
+      <AlertCircle className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+      <span className="min-w-0">{children}</span>
     </p>
   )
 }
@@ -45,11 +47,11 @@ interface SettingSwitchProps {
 export function SettingSwitch({ id, label, description, checked, onCheckedChange, disabled, children }: SettingSwitchProps) {
   const descriptionId = `${id}-description`
   return (
-    <div className="space-y-2">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 space-y-0.5">
-          <Label htmlFor={id} className="text-sm font-medium">{label}</Label>
-          <p id={descriptionId} className="text-xs text-muted-foreground">{description}</p>
+    <div data-slot="setting-switch" className="space-y-3">
+      <div className="flex items-start justify-between gap-6">
+        <div className="min-w-0 space-y-1">
+          <Label htmlFor={id} className="text-sm leading-5 font-medium">{label}</Label>
+          <p id={descriptionId} className="text-xs leading-[18px] text-muted-foreground">{description}</p>
         </div>
         <Switch
           id={id}
@@ -73,23 +75,27 @@ interface SaveBarProps {
   label?: string
   /** Disables saving (e.g. invalid fields) without hiding the bar. */
   blocked?: boolean
+  /** Placement of the row (it is right-aligned by default, as the form's last line). */
+  className?: string
 }
 
-export function SaveBar({ dirty, saving, onSave, onDiscard, label = 'Save changes', blocked = false }: SaveBarProps) {
+export function SaveBar({ dirty, saving, onSave, onDiscard, label = 'Save changes', blocked = false, className }: SaveBarProps) {
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <Button onClick={onSave} disabled={!dirty || saving || blocked} className="purple-glow">
-        {saving && <Loader2 className="animate-spin" aria-hidden="true" />}
-        {saving ? 'Saving…' : label}
-      </Button>
-      {dirty && !saving && (
-        <Button variant="ghost" onClick={onDiscard}>
-          Discard
-        </Button>
-      )}
+    <div className={cn('flex flex-wrap items-center justify-end gap-2', className)}>
       {dirty && (
-        <Badge variant="secondary" className="text-xs">Unsaved changes</Badge>
+        <StatusChip tone="warning" dot className="mr-auto sm:mr-1">Unsaved changes</StatusChip>
       )}
+      {/* One group: when the row is too narrow, the buttons wrap together below the chip. */}
+      <div className="flex items-center gap-2">
+        {dirty && !saving && (
+          <Button variant="ghost" onClick={onDiscard}>
+            Discard
+          </Button>
+        )}
+        <Button onClick={onSave} disabled={!dirty || blocked} loading={saving} loadingText="Saving…">
+          {label}
+        </Button>
+      </div>
     </div>
   )
 }
@@ -333,17 +339,15 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
   const errorProps = (key: FieldKey) =>
     visibleErrors[key] ? { 'aria-invalid': true as const, 'aria-describedby': `conv-${key}-error` } : {}
 
+  const previewLabel = previewStatus === 'idle' ? 'Preview the first message with your voice' : 'Stop the preview'
+
   return (
-    <div className="space-y-6">
-      {/* First Message */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">First message</CardTitle>
-          <CardDescription>
-            What your agent says when a call connects. Keep it under 30 words.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
+    <div>
+      <FormSection
+        title="First message"
+        description="What your agent says when a call connects. Keep it under 30 words."
+      >
+        <div className="space-y-3">
           <Label htmlFor="conv-first-message" className="sr-only">First message</Label>
           <Textarea
             id="conv-first-message"
@@ -356,16 +360,8 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
             {...errorProps('first_message')}
           />
           {visibleErrors.first_message && <FieldError id="conv-first_message-error">{visibleErrors.first_message}</FieldError>}
-          <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-            <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-            <span>
-              The platform always adds a short AI disclosure to this greeting, plus a recording notice when it is
-              enabled under Call handling → Privacy. Callers cannot interrupt the greeting, so the disclosure is always
-              heard in full; what they say meanwhile is kept for the next turn.
-            </span>
-          </p>
           {draft.first_message.trim().length > PROTECTED_GREETING_WARN && (
-            <p role="status" className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500">
+            <p role="status" className="flex items-start gap-1.5 text-xs leading-[18px] text-warning">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
               <span>
                 This greeting is long. Callers have to listen to all of it before they can speak, so keep it under about
@@ -380,60 +376,67 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
               size="sm"
               onClick={togglePreview}
               disabled={!draft.first_message.trim()}
-              aria-label={previewStatus === 'idle' ? 'Preview the first message with your voice' : 'Stop the preview'}
+              aria-label={previewLabel}
+              aria-busy={previewStatus === 'loading' || undefined}
             >
               {previewStatus === 'loading' ? (
-                <><Loader2 className="size-3 mr-1.5 animate-spin" aria-hidden="true" /> Loading…</>
+                // Still clickable (it cancels), so the orb is drawn here instead of the button's loading state.
+                <><OrbInline state="breathing" className="-ml-1" /> Loading…</>
               ) : previewStatus === 'playing' ? (
-                <><Square className="size-3 mr-1.5" aria-hidden="true" /> Stop preview</>
+                <><Square className="fill-current" aria-hidden="true" /> Stop preview</>
               ) : (
-                <><Play className="size-3 mr-1.5" aria-hidden="true" /> Preview with voice</>
+                <><Play className="fill-current" aria-hidden="true" /> Preview with voice</>
               )}
             </Button>
           )}
-        </CardContent>
-      </Card>
+        </div>
+        <p className="flex items-start gap-2 rounded-xl bg-secondary px-3.5 py-3 text-xs leading-[18px] text-muted-foreground">
+          <Info className="mt-0.5 size-3.5 shrink-0 text-foreground" aria-hidden="true" />
+          <span>
+            The platform always adds a short AI disclosure to this greeting, plus a recording notice when it is
+            enabled under Call handling → Privacy. Callers cannot interrupt the greeting, so the disclosure is always
+            heard in full; what they say meanwhile is kept for the next turn.
+          </span>
+        </p>
+      </FormSection>
 
-      {/* System Prompt */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">System prompt</CardTitle>
-          <CardDescription>
-            Instructions that define your agent&apos;s role, goals, and constraints.
-          </CardDescription>
-          <CardAction>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setShowTemplates((v) => !v)}
-              aria-expanded={showTemplates}
-              aria-controls="conv-templates"
-            >
-              <Sparkles className="size-3.5 mr-1.5" aria-hidden="true" />
-              Templates
-              {showTemplates ? <ChevronUp className="size-3.5 ml-1" aria-hidden="true" /> : <ChevronDown className="size-3.5 ml-1" aria-hidden="true" />}
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {showTemplates && (
-            <div id="conv-templates" className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 rounded-lg bg-muted/50 border">
-              {PROMPT_TEMPLATES.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => {
-                    set('system_prompt', t.prompt)
-                    setShowTemplates(false)
-                  }}
-                  className="text-left px-3 py-2 rounded-md hover:bg-accent text-sm border border-transparent hover:border-border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <span className="font-medium">{t.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
+      <FormSection
+        title="System prompt"
+        description="Instructions that define your agent's role, goals, and constraints."
+        aside={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowTemplates((v) => !v)}
+            aria-expanded={showTemplates}
+            aria-controls="conv-templates"
+          >
+            <LayoutTemplate aria-hidden="true" />
+            Templates
+            {showTemplates ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
+          </Button>
+        }
+      >
+        {showTemplates && (
+          <div id="conv-templates" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {PROMPT_TEMPLATES.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  set('system_prompt', t.prompt)
+                  setShowTemplates(false)
+                }}
+                className="flex flex-col gap-1 rounded-2xl bg-secondary p-3.5 text-left transition-colors duration-200 outline-none hover:bg-secondary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+              >
+                <span className="text-sm leading-5 font-medium">{t.label}</span>
+                <span aria-hidden="true" className="line-clamp-2 text-xs leading-4 text-muted-foreground">{t.prompt}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="space-y-2">
           <Label htmlFor="conv-system-prompt" className="sr-only">System prompt</Label>
           <Textarea
             id="conv-system-prompt"
@@ -441,28 +444,26 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
             onChange={(e) => set('system_prompt', e.target.value)}
             placeholder="You are a helpful AI assistant for Acme Corp. Your role is to..."
             rows={10}
-            className="font-mono text-sm resize-y"
+            className="max-h-[560px] resize-y font-mono text-base leading-6 md:text-[13px] md:leading-5"
             {...errorProps('system_prompt')}
           />
           {visibleErrors.system_prompt && <FieldError id="conv-system_prompt-error">{visibleErrors.system_prompt}</FieldError>}
-          <p className={cn('text-xs text-right', draft.system_prompt.length > SYSTEM_PROMPT_MAX ? 'text-destructive' : 'text-muted-foreground')}>
-            {draft.system_prompt.length.toLocaleString()} / {SYSTEM_PROMPT_MAX.toLocaleString()} characters
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Safety, privacy and AI-disclosure rules are always added after your prompt and take precedence over it.
-          </p>
-        </CardContent>
-      </Card>
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+            <p className="max-w-[46ch] text-xs leading-[18px] text-muted-foreground">
+              Safety, privacy and AI-disclosure rules are always added after your prompt and take precedence over it.
+            </p>
+            <p className={cn('text-xs leading-[18px] tabular-nums', draft.system_prompt.length > SYSTEM_PROMPT_MAX ? 'text-destructive' : 'text-muted-foreground')}>
+              {draft.system_prompt.length.toLocaleString()} / {SYSTEM_PROMPT_MAX.toLocaleString()} characters
+            </p>
+          </div>
+        </div>
+      </FormSection>
 
-      {/* Conversational fallback phrase */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Fallback phrase</CardTitle>
-          <CardDescription>
-            Said when the agent doesn&apos;t understand or can&apos;t help. This is not the provider fallback (backup voice agent).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
+      <FormSection
+        title="Fallback phrase"
+        description="Said when the agent doesn't understand or can't help. This is not the provider fallback (backup voice agent)."
+      >
+        <div className="space-y-2">
           <Label htmlFor="conv-fallback" className="sr-only">Fallback phrase</Label>
           <Textarea
             id="conv-fallback"
@@ -475,19 +476,14 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
             {...errorProps('fallback_message')}
           />
           {visibleErrors.fallback_message && <FieldError id="conv-fallback_message-error">{visibleErrors.fallback_message}</FieldError>}
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs leading-[18px] text-muted-foreground">
             Leave blank to use the default phrase in your agent&apos;s language (shown above).
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </FormSection>
 
-      {/* Conversation settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Conversation settings</CardTitle>
-          <CardDescription>How your agent takes turns, handles silence and ends calls.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
+      <FormSection title="Conversation settings" description="How your agent takes turns, handles silence and ends calls.">
+        <div className="divide-y divide-rule [&>*]:py-5 [&>*:first-child]:pt-0 [&>*:last-child]:pb-0">
           <SettingSwitch
             id="conv-interruptions"
             label="Allow interruptions"
@@ -533,8 +529,8 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
             onCheckedChange={(v) => set('background_voice_detection', v)}
           />
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div className="grid content-start gap-2">
               <Label htmlFor="conv-eagerness">Turn eagerness</Label>
               <Select
                 value={draft.turn_eagerness}
@@ -551,12 +547,12 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs leading-[18px] text-muted-foreground">
                 {EAGERNESS_OPTIONS.find((o) => o.value === draft.turn_eagerness)?.description}
               </p>
             </div>
 
-            <div className="space-y-1.5">
+            <div className="grid content-start gap-2">
               <Label htmlFor="conv-turn-timeout">Re-prompt after silence (seconds)</Label>
               <Input
                 id="conv-turn-timeout"
@@ -567,13 +563,13 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
                 step={1}
                 value={draft.turn_timeout}
                 onChange={(e) => set('turn_timeout', e.target.value)}
-                className="w-28"
+                className="w-28 tabular-nums"
                 {...errorProps('turn_timeout')}
               />
               {visibleErrors.turn_timeout ? (
                 <FieldError id="conv-turn_timeout-error">{visibleErrors.turn_timeout}</FieldError>
               ) : (
-                <p className="text-xs text-muted-foreground">1–30 s. How long the agent waits before checking in.</p>
+                <p className="text-xs leading-[18px] text-muted-foreground">1–30 s. How long the agent waits before checking in.</p>
               )}
             </div>
           </div>
@@ -586,8 +582,8 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
             onCheckedChange={(v) => set('silence_enabled', v)}
           >
             {draft.silence_enabled && (
-              <div className="flex flex-wrap items-center gap-2 pl-0.5">
-                <Label htmlFor="conv-silence-seconds" className="text-xs text-muted-foreground">After</Label>
+              <div className="flex flex-wrap items-center gap-2 rounded-xl bg-secondary px-3.5 py-2.5">
+                <Label htmlFor="conv-silence-seconds" className="text-xs font-normal text-muted-foreground">After</Label>
                 <Input
                   id="conv-silence-seconds"
                   type="number"
@@ -597,7 +593,7 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
                   step={5}
                   value={draft.silence_seconds}
                   onChange={(e) => set('silence_seconds', e.target.value)}
-                  className="h-8 w-24"
+                  className="h-9 w-24 tabular-nums"
                   {...errorProps('silence_seconds')}
                 />
                 <span className="text-xs text-muted-foreground">seconds (10–600)</span>
@@ -606,7 +602,7 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
             )}
           </SettingSwitch>
 
-          <div className="space-y-1.5">
+          <div className="grid gap-2">
             <Label htmlFor="conv-max-duration">Maximum call duration (minutes)</Label>
             <Input
               id="conv-max-duration"
@@ -617,13 +613,13 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
               step={1}
               value={draft.max_duration}
               onChange={(e) => set('max_duration', e.target.value)}
-              className="w-28"
+              className="w-28 tabular-nums"
               {...errorProps('max_duration')}
             />
             {visibleErrors.max_duration ? (
               <FieldError id="conv-max_duration-error">{visibleErrors.max_duration}</FieldError>
             ) : (
-              <p className="text-xs text-muted-foreground">1–120 minutes. Calls are ended politely when the limit is reached.</p>
+              <p className="text-xs leading-[18px] text-muted-foreground">1–120 minutes. Calls are ended politely when the limit is reached.</p>
             )}
           </div>
 
@@ -643,7 +639,7 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
             onCheckedChange={(v) => set('voicemail_detection', v)}
           >
             {draft.voicemail_detection && (
-              <div className="space-y-1.5">
+              <div className="grid gap-2">
                 <Label htmlFor="conv-voicemail-message" className="text-xs text-muted-foreground">
                   Voicemail message (optional)
                 </Label>
@@ -660,7 +656,7 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
                 {visibleErrors.voicemail_message ? (
                   <FieldError id="conv-voicemail_message-error">{visibleErrors.voicemail_message}</FieldError>
                 ) : (
-                  <p className="text-xs text-muted-foreground">Leave blank to hang up without leaving a message.</p>
+                  <p className="text-xs leading-[18px] text-muted-foreground">Leave blank to hang up without leaving a message.</p>
                 )}
               </div>
             )}
@@ -674,8 +670,8 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
             onCheckedChange={(v) => set('temperature_enabled', v)}
           >
             {draft.temperature_enabled && (
-              <div className="flex flex-wrap items-center gap-3">
-                <Label htmlFor="conv-temperature-value" className="text-xs text-muted-foreground">Temperature</Label>
+              <div className="flex flex-wrap items-center gap-3 rounded-xl bg-secondary px-3.5 py-2.5">
+                <Label htmlFor="conv-temperature-value" className="text-xs font-normal text-muted-foreground">Temperature</Label>
                 <input
                   aria-label="Temperature slider"
                   type="range"
@@ -684,7 +680,7 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
                   step={0.05}
                   value={Number.isFinite(Number(draft.temperature)) ? Number(draft.temperature) : 0.5}
                   onChange={(e) => set('temperature', e.target.value)}
-                  className="w-40 accent-primary"
+                  className="h-5 min-w-0 flex-1 cursor-pointer rounded-full accent-[#140a24] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring sm:max-w-56"
                 />
                 <Input
                   id="conv-temperature-value"
@@ -695,53 +691,44 @@ export function TabConversation({ agent, onUpdate, isSaving }: TabConversationPr
                   step={0.05}
                   value={draft.temperature}
                   onChange={(e) => set('temperature', e.target.value)}
-                  className="h-8 w-20"
+                  className="h-9 w-20 tabular-nums"
                   {...errorProps('temperature')}
                 />
                 {visibleErrors.temperature && <FieldError id="conv-temperature-error">{visibleErrors.temperature}</FieldError>}
               </div>
             )}
           </SettingSwitch>
-        </CardContent>
-      </Card>
+        </div>
+      </FormSection>
 
-      {/* Languages */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Additional languages</CardTitle>
-          <CardDescription>Let your agent switch to the caller&apos;s language. Each language gets its own greeting with the AI disclosure.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AdditionalLanguagesField
-            primary={agent.language}
-            value={draft.additional_languages}
-            onChange={(next) => set('additional_languages', next)}
-            error={visibleErrors.additional_languages}
-          />
-        </CardContent>
-      </Card>
+      <FormSection
+        title="Additional languages"
+        description="Let your agent switch to the caller's language. Each language gets its own greeting with the AI disclosure."
+      >
+        <AdditionalLanguagesField
+          primary={agent.language}
+          value={draft.additional_languages}
+          onChange={(next) => set('additional_languages', next)}
+          error={visibleErrors.additional_languages}
+        />
+      </FormSection>
 
-      {/* Speech recognition */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Speech recognition</CardTitle>
-          <CardDescription>Help the agent hear names correctly.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AsrKeywordsField value={draft.asr_keywords} onChange={(next) => set('asr_keywords', next)} error={visibleErrors.asr_keywords} />
-        </CardContent>
-      </Card>
+      <FormSection title="Speech recognition" description="Help the agent hear names correctly.">
+        <AsrKeywordsField value={draft.asr_keywords} onChange={(next) => set('asr_keywords', next)} error={visibleErrors.asr_keywords} />
+      </FormSection>
 
-      <SaveBar
-        dirty={isDirty}
-        saving={isSaving}
-        onSave={() => void handleSave()}
-        onDiscard={discard}
-        blocked={showErrors && !value}
-      />
-      {showErrors && !value && (
-        <p role="status" className="text-xs text-destructive">Fix the highlighted fields to save.</p>
-      )}
+      <div className="space-y-2 border-t border-rule pt-5">
+        <SaveBar
+          dirty={isDirty}
+          saving={isSaving}
+          onSave={() => void handleSave()}
+          onDiscard={discard}
+          blocked={showErrors && !value}
+        />
+        {showErrors && !value && (
+          <p role="status" className="text-right text-xs text-destructive">Fix the highlighted fields to save.</p>
+        )}
+      </div>
     </div>
   )
 }

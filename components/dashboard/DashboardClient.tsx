@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { PageHeader } from './PageHeader'
 import { MetricsCards } from './MetricsCards'
 import { CallsChart } from './CallsChart'
@@ -14,6 +15,7 @@ import { RealtimeActivityFeed } from './RealtimeActivityFeed'
 import { TestCallDialog } from './TestCallDialog'
 import { KnowledgeUploadDialog } from './KnowledgeUploadDialog'
 import { DashboardWelcome } from './DashboardWelcome'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { useDashboardMetrics } from '@/hooks/useDashboardMetrics'
 import { useRecentCalls } from '@/hooks/useRecentCalls'
 import type { Agent, Organization, Integration } from '@/types'
@@ -27,56 +29,62 @@ interface DashboardClientProps {
 
 export function DashboardClient({ org, agent, integrations, phoneNumber }: DashboardClientProps) {
   const { metrics, isLoading: metricsLoading, error: metricsError, refetch: refetchMetrics } = useDashboardMetrics()
-  const { calls, isLoading: callsLoading } = useRecentCalls(org.id)
+  const { calls, isLoading: callsLoading, error: callsError, refetch: refetchCalls } = useRecentCalls(org.id)
+  const router = useRouter()
 
   const [testCallOpen, setTestCallOpen] = useState(false)
   const [knowledgeOpen, setKnowledgeOpen] = useState(false)
   const [currentAgent, setCurrentAgent] = useState(agent)
 
+  const hasPhoneNumber = Boolean(phoneNumber)
+
   function handleAgentToggle(active: boolean) {
     if (currentAgent) setCurrentAgent({ ...currentAgent, is_active: active })
+    // Re-render the (dashboard) layout so the shell's agent dot (mobile header) follows.
+    router.refresh()
   }
 
   return (
     <>
       <DashboardWelcome agentActive={agent?.is_active === true} />
 
-      <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+      <PageContainer>
         {/* Header */}
-        <PageHeader org={org} agent={currentAgent} onAgentToggle={handleAgentToggle} />
+        <PageHeader org={org} agent={currentAgent} hasPhoneNumber={hasPhoneNumber} onAgentToggle={handleAgentToggle} />
 
         {/* Metrics */}
-        <MetricsCards metrics={metricsLoading ? null : metrics} />
+        <MetricsCards metrics={metricsLoading ? null : metrics} loading={metricsLoading} />
 
-        {/* Main grid */}
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-          {/* Left column — chart + calls table */}
-          <div className="xl:col-span-2 space-y-6">
+        {/* Main grid: a fixed 360 px side column from xl, so its cards never get cramped at 1280. */}
+        <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+          {/* Left column (wide): chart, insights, calls table, follow-ups (their rows read best wide,
+              and the two columns end at about the same height) */}
+          <div className="min-w-0 space-y-6">
             <CallsChart />
-            <RecentCallsTable calls={calls} isLoading={callsLoading} />
+            <CallInsightsCard metrics={metrics} loading={metricsLoading} error={metricsError} onRetry={refetchMetrics} />
+            <RecentCallsTable calls={calls} isLoading={callsLoading} error={callsError} onRetry={refetchCalls} />
+            <MessagesToFollowUpCard />
           </div>
 
-          {/* Right column — cards */}
-          <div className="space-y-6">
-            <AgentStatusCard agent={currentAgent} />
-            <MessagesToFollowUpCard />
-            <CallInsightsCard metrics={metrics} loading={metricsLoading} error={metricsError} onRetry={refetchMetrics} />
+          {/* Right column: agent, shortcuts, integrations, live feed */}
+          <div className="min-w-0 space-y-6">
+            <AgentStatusCard agent={currentAgent} hasPhoneNumber={hasPhoneNumber} />
             <QuickActions
               onTestCall={() => setTestCallOpen(true)}
               onKnowledgeUpload={() => setKnowledgeOpen(true)}
             />
             <IntegrationsStatus integrations={integrations} />
-            <RealtimeActivityFeed calls={calls} />
+            <RealtimeActivityFeed calls={calls} isLoading={callsLoading} error={callsError} onRetry={refetchCalls} />
           </div>
         </div>
-      </div>
+      </PageContainer>
 
       {/* Dialogs */}
       <TestCallDialog
         open={testCallOpen}
         onOpenChange={setTestCallOpen}
         phoneNumber={phoneNumber}
-        agentName={currentAgent?.name ?? 'Your Agent'}
+        agentName={currentAgent?.name ?? 'your agent'}
       />
       <KnowledgeUploadDialog
         open={knowledgeOpen}

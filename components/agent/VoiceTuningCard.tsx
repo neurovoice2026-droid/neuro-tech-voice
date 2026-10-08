@@ -9,10 +9,11 @@
 import { useMemo, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
+import { FormSection } from '@/components/shared/FormSection'
 import { SaveBar } from '@/components/agent/tabs/TabConversation'
 import type { AgentHook } from '@/hooks/useAgent'
+import { cn } from '@/lib/utils'
 import { VoiceTuningSchema, readVoiceTuning } from '@/lib/voice-providers/settings'
 import type { VoiceTuning } from '@/lib/voice-providers/types'
 import type { Agent } from '@/types'
@@ -82,35 +83,39 @@ export function VoiceTuningCard({ agent, onUpdate, isSaving }: VoiceTuningCardPr
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Voice tuning</CardTitle>
-        <CardDescription>Fine-tune how your agent&apos;s voice sounds on calls. Changes apply from the next call.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
+    <FormSection
+      title="Voice tuning"
+      description="Fine-tune how your agent's voice sounds on calls. Changes apply from the next call."
+    >
+      <div className="divide-y divide-rule [&>*]:py-4 [&>*:first-child]:pt-0">
         {SLIDERS.map((s) => {
           const value = draft[s.key]
           const isDefault = value === null
           const shown = value ?? s.defaultValue
           const id = `voice-tuning-${s.key}`
           return (
-            <div key={s.key} className="space-y-1.5">
+            <div key={s.key} className="grid gap-2">
               <div className="flex items-center justify-between gap-3">
                 <Label htmlFor={id}>{s.label}</Label>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs tabular-nums text-muted-foreground" aria-live="polite">
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={cn(
+                      'inline-flex h-6 items-center rounded-full px-2 text-xs font-medium tabular-nums',
+                      isDefault ? 'text-muted-foreground' : 'bg-secondary text-foreground',
+                    )}
+                    aria-live="polite"
+                  >
                     {isDefault ? `Default (${s.defaultValue.toFixed(2)})` : shown.toFixed(2)}
                   </span>
                   <Button
                     type="button"
                     variant="ghost"
-                    size="sm"
+                    size="xs"
                     disabled={isDefault}
                     onClick={() => setDraft((d) => ({ ...d, [s.key]: null }))}
                     aria-label={`Reset ${s.label.toLowerCase()} to the default`}
-                    className="h-7 gap-1 px-2 text-xs"
                   >
-                    <RotateCcw className="size-3" aria-hidden="true" /> Default
+                    <RotateCcw aria-hidden="true" /> Default
                   </Button>
                 </div>
               </div>
@@ -124,17 +129,17 @@ export function VoiceTuningCard({ agent, onUpdate, isSaving }: VoiceTuningCardPr
                 onChange={(e) => setDraft((d) => ({ ...d, [s.key]: round(Number(e.target.value)) }))}
                 aria-describedby={`${id}-hint`}
                 aria-valuetext={isDefault ? `Default, ${s.defaultValue}` : String(shown)}
-                className="w-full accent-primary"
+                className="h-5 w-full cursor-pointer rounded-full accent-[#140a24] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
               />
-              <p id={`${id}-hint`} className="text-xs text-muted-foreground">
+              <p id={`${id}-hint`} className="text-xs leading-[18px] text-muted-foreground">
                 {s.hint}
               </p>
             </div>
           )
         })}
-        <SaveBar dirty={isDirty} saving={isSaving} onSave={() => void save()} onDiscard={() => setDraft(saved)} blocked={!parsed.success} />
-        <p className="text-xs text-muted-foreground">Speed also applies to the backup voice agent; stability and similarity apply to the primary voice only.</p>
-      </CardContent>
-    </Card>
+      </div>
+      <p className="text-xs leading-[18px] text-muted-foreground">Speed also applies to the backup voice agent; stability and similarity apply to the primary voice only.</p>
+      <SaveBar dirty={isDirty} saving={isSaving} onSave={() => void save()} onDiscard={() => setDraft(saved)} blocked={!parsed.success} />
+    </FormSection>
   )
 }

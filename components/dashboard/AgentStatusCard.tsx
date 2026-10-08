@@ -2,128 +2,185 @@
 
 import Link from 'next/link'
 import { AlertTriangle, Bot, Mic, Settings } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
-import { LiveDot } from '@/components/shared/LiveDot'
+import { buttonVariants } from '@/components/ui/button'
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { OrbLoader } from '@/components/shared/OrbLoader'
+import { StatusChip } from '@/components/shared/StatusChip'
 import { StatusPill, backupStatusCopy, providerStatusCopy } from '@/components/agent/ProviderStatusCard'
 import { PROVIDER_LABEL, providerProblem, useAgentStatus } from '@/hooks/useAgentStatus'
+import { cn, formatPhoneNumber } from '@/lib/utils'
 import type { Agent } from '@/types'
+import { CardError } from './CardError'
 
 interface AgentStatusCardProps {
   agent: Agent | null
+  /** False when the org has no active number: an active agent is then "No number", not "Live". */
+  hasPhoneNumber?: boolean
 }
 
-export function AgentStatusCard({ agent }: AgentStatusCardProps) {
+function SettingsLink() {
+  return (
+    <Link
+      href="/agent"
+      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), 'tap-44 -my-1 -mr-2 text-muted-foreground')}
+      aria-label="Agent settings"
+    >
+      <Settings aria-hidden="true" />
+    </Link>
+  )
+}
+
+export function AgentStatusCard({ agent, hasPhoneNumber = true }: AgentStatusCardProps) {
   if (!agent) {
     return (
-      <Card className="border shadow-sm">
+      <Card>
         <CardHeader>
-          <CardTitle className="text-base font-semibold">Agent Status</CardTitle>
+          <CardTitle>Agent status</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">No agent configured.</p>
+          <p className="text-[13px] text-muted-foreground">No agent configured.</p>
         </CardContent>
       </Card>
     )
   }
-  return <AgentStatusDetails agent={agent} />
+  return <AgentStatusDetails agent={agent} hasPhoneNumber={hasPhoneNumber} />
 }
 
-function AgentStatusDetails({ agent }: { agent: Agent }) {
-  const { status, isLoading, error } = useAgentStatus()
-  const isLive = agent.is_active
+/** "en" → "English" (falls back to the code). */
+function languageName(code: string | null | undefined): string | null {
+  if (!code) return null
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'language' }).of(code) ?? code.toUpperCase()
+  } catch (err) {
+    console.warn('Unknown language code', code, err)
+    return code.toUpperCase()
+  }
+}
+
+/** One label/value line of the status list (hairline between rows). */
+function Row({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-11 items-center justify-between gap-3 border-b border-rule px-5 py-2 last:border-b-0">
+      <dt className="min-w-0 truncate text-[13px] text-muted-foreground">{label}</dt>
+      <dd className="flex min-w-0 shrink-0 items-center justify-end text-[13px] text-foreground">{children}</dd>
+    </div>
+  )
+}
+
+function AgentStatusDetails({ agent, hasPhoneNumber }: { agent: Agent; hasPhoneNumber: boolean }) {
+  const { status, isLoading, error, refetch } = useAgentStatus()
+  const isLive = agent.is_active && hasPhoneNumber
   const primary = status?.providers.find((p) => p.role === 'primary')
   const backup = status?.providers.find((p) => p.role === 'fallback')
   const problem = providerProblem(status)
   const routingProblem = status?.numbers.some((n) => n.routing_status === 'failed')
+  const language = languageName(agent.language)
+  const numbers = status?.numbers ?? []
 
   return (
-    <Card className="border shadow-sm">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base font-semibold">Agent Status</CardTitle>
-          <Link
-            href="/agent"
-            className="rounded-md p-1.5 hover:bg-muted transition-colors text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label="Agent settings"
-          >
-            <Settings className="h-4 w-4" aria-hidden="true" />
-          </Link>
-        </div>
+    <Card className="gap-0 pb-0">
+      <CardHeader className="pb-4">
+        <CardTitle>Agent status</CardTitle>
+        <CardAction className="self-center">
+          <SettingsLink />
+        </CardAction>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Agent identity */}
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100">
-            <Bot className="h-5 w-5 text-purple-600" aria-hidden="true" />
-          </div>
-          <div>
-            <p className="font-medium text-foreground">{agent.name}</p>
-            {agent.voice_name && (
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <Mic className="h-3 w-3" aria-hidden="true" /> {agent.voice_name}
-              </p>
-            )}
-          </div>
-          <div className="ml-auto" aria-label={isLive ? 'Agent is live' : 'Agent is paused'} role="img">
-            <LiveDot active={isLive} />
-          </div>
-        </div>
 
-        {/* Status badges */}
-        <div className="flex flex-wrap gap-2">
-          <Badge
-            variant="outline"
-            className={agent.is_active
-              ? 'border-green-200 bg-green-50 text-green-700'
-              : 'border-gray-200 bg-gray-50 text-gray-500'}
-          >
-            {agent.is_active ? 'Enabled' : 'Disabled'}
-          </Badge>
+      {/* Agent identity */}
+      <div className="flex items-center gap-3 border-t border-rule px-5 py-4">
+        <div className="grid size-10 shrink-0 place-items-center rounded-full bg-secondary">
+          <Bot className="size-[18px] text-foreground" aria-hidden="true" />
         </div>
-
-        {/* Voice providers */}
-        <div className="space-y-2 rounded-lg border px-3 py-2.5">
-          {isLoading && !status ? (
-            <div className="space-y-2" aria-busy="true" aria-label="Loading provider status">
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-4 w-2/3" />
-            </div>
-          ) : status ? (
-            <dl className="space-y-1.5 text-xs">
-              <div className="flex items-center justify-between gap-2">
-                <dt className="text-muted-foreground">Primary · {PROVIDER_LABEL[primary?.provider ?? 'elevenlabs']}</dt>
-                <dd>{primary ? <StatusPill copy={providerStatusCopy(primary.status, primary.last_synced_at)} /> : '—'}</dd>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <dt className="text-muted-foreground">Backup · {PROVIDER_LABEL[backup?.provider ?? 'cartesia']}</dt>
-                <dd><StatusPill copy={backupStatusCopy(status)} /></dd>
-              </div>
-            </dl>
-          ) : (
-            <p className="text-xs text-muted-foreground">{error ?? 'Provider status unavailable.'}</p>
-          )}
-          {(problem || routingProblem) && (
-            <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
-              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-              <span>
-                {problem ? `${PROVIDER_LABEL[problem.provider]} is not up to date.` : 'A phone number is not routed correctly.'}{' '}
-                <Link href={problem ? '/agent' : '/phone'} className="underline underline-offset-2">Review</Link>
-              </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] leading-[22px] font-medium text-foreground">{agent.name}</p>
+          {agent.voice_name && (
+            <p className="flex items-center gap-1 truncate text-xs leading-4 text-muted-foreground">
+              <Mic className="size-3 shrink-0" aria-hidden="true" />
+              <span className="truncate">{agent.voice_name}</span>
             </p>
           )}
         </div>
-
-        {/* Prompt preview */}
-        {agent.system_prompt && (
-          <div className="rounded-lg bg-muted/40 px-3 py-2">
-            <p className="text-xs text-muted-foreground line-clamp-3">
-              {agent.system_prompt}
-            </p>
-          </div>
+        {/* Static dot: the pinging dot is kept for calls in progress. */}
+        {isLive ? (
+          <StatusChip tone="success" dot>
+            <span className="sr-only">Agent is </span>Live
+          </StatusChip>
+        ) : agent.is_active ? (
+          <StatusChip tone="warning" dot title="Active, but it has no phone number to answer on">
+            <span className="sr-only">Agent has </span>No number
+          </StatusChip>
+        ) : (
+          <StatusChip tone="muted" dot>
+            <span className="sr-only">Agent is </span>Paused
+          </StatusChip>
         )}
-      </CardContent>
+      </div>
+
+      {/* Status list */}
+      {isLoading && !status ? (
+        <OrbLoader
+          size={32}
+          layout="row"
+          label="Loading provider status…"
+          // Reserves the rows it replaces (44 px each).
+          className={cn('border-t border-rule px-5', language ? 'min-h-[176px]' : 'min-h-[132px]')}
+        />
+      ) : status ? (
+        <dl className="border-t border-rule">
+          {language && <Row label="Language">{language}</Row>}
+          <Row label="Phone">
+            {numbers.length === 0 ? (
+              <Link href="/phone" className="underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground">
+                Add a number
+              </Link>
+            ) : (
+              <span className="tabular-nums">
+                {formatPhoneNumber(numbers[0].number)}
+                {numbers.length > 1 && <span className="text-muted-foreground"> · {numbers.length} numbers</span>}
+              </span>
+            )}
+          </Row>
+          <Row label={`Primary · ${PROVIDER_LABEL[primary?.provider ?? 'elevenlabs']}`}>
+            {primary ? <StatusPill copy={providerStatusCopy(primary.status, primary.last_synced_at)} /> : '—'}
+          </Row>
+          <Row label={`Backup · ${PROVIDER_LABEL[backup?.provider ?? 'cartesia']}`}>
+            <StatusPill copy={backupStatusCopy(status)} />
+          </Row>
+        </dl>
+      ) : (
+        <>
+          {language && (
+            <dl className="border-t border-rule">
+              <Row label="Language">{language}</Row>
+            </dl>
+          )}
+          <CardError
+            message="Provider status could not be loaded."
+            detail={error}
+            onRetry={() => void refetch()}
+            className="border-t border-rule"
+          />
+        </>
+      )}
+
+      {(problem || routingProblem) && (
+        <p className="flex items-start gap-2 border-t border-rule bg-warning-soft px-5 py-3 text-[13px] leading-[19px] text-warning">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          <span>
+            {problem ? `${PROVIDER_LABEL[problem.provider]} is not up to date.` : 'A phone number is not routed correctly.'}{' '}
+            <Link href={problem ? '/agent' : '/phone'} className="font-medium underline underline-offset-2">Review</Link>
+          </span>
+        </p>
+      )}
+
+      {/* Prompt preview */}
+      {agent.system_prompt && (
+        <div className="border-t border-rule px-5 py-4">
+          <div className="rounded-xl bg-secondary px-3 py-2.5">
+            <p className="line-clamp-3 text-xs leading-[18px] text-muted-foreground">{agent.system_prompt}</p>
+          </div>
+        </div>
+      )}
     </Card>
   )
 }

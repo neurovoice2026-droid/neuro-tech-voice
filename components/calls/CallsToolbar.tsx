@@ -1,15 +1,19 @@
 'use client'
 
 import { useState, useRef, useCallback, useEffect, useId } from 'react'
-import { Search, X, Download, SlidersHorizontal } from 'lucide-react'
+import {
+  Search, X, SlidersHorizontal, ArrowDownLeft, ArrowUpRight, CircleCheck, CircleX, CircleHelp,
+  type LucideIcon,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { ExportDialog } from './ExportDialog'
+import { OrbInline } from '@/components/shared/OrbLoader'
 import { DEFAULT_CALL_FILTERS } from '@/hooks/useCalls'
+import { cn } from '@/lib/utils'
 import { OUTCOME_LABEL, callResultLabel, outcomeLabel, providerLabel, statusLabel, type CallListFilters } from '@/lib/calls/labels'
 import { CALL_OUTCOMES } from '@/types'
 
@@ -18,40 +22,42 @@ interface CallsToolbarProps {
   onFiltersChange: (filters: CallListFilters) => void
   totalCount: number
   isLoading: boolean
-  selectedIds: string[]
 }
 
-const STATUS_OPTS: Array<{ value: CallListFilters['status']; label: string }> = [
+type Opt<V> = { value: V; label: string }
+
+// Status options carry a small tone dot in the menu (the label still says it all).
+const STATUS_OPTS: Array<Opt<CallListFilters['status']> & { dot?: string }> = [
   { value: 'all',         label: 'All statuses' },
-  { value: 'completed',   label: '● Completed' },
-  { value: 'failed',      label: '● Failed' },
-  { value: 'transferred', label: '● Transferred' },
-  { value: 'after-hours', label: '● After hours' },
-  { value: 'busy',        label: '● Busy' },
-  { value: 'no-answer',   label: '● No answer' },
+  { value: 'completed',   label: 'Completed',    dot: 'bg-success-dot' },
+  { value: 'failed',      label: 'Failed',       dot: 'bg-destructive' },
+  { value: 'transferred', label: 'Transferred',  dot: 'bg-info' },
+  { value: 'after-hours', label: 'After hours',  dot: 'bg-[#a19dac]' },
+  { value: 'busy',        label: 'Busy',         dot: 'bg-warning-dot' },
+  { value: 'no-answer',   label: 'No answer',    dot: 'bg-[#a19dac]' },
 ]
 
-const PROVIDER_OPTS: Array<{ value: CallListFilters['provider']; label: string }> = [
+const PROVIDER_OPTS: Array<Opt<CallListFilters['provider']>> = [
   { value: 'all',        label: 'Any provider' },
   { value: 'elevenlabs', label: 'ElevenLabs' },
   { value: 'cartesia',   label: 'Cartesia (backup)' },
 ]
 
-const DIRECTION_OPTS = [
+const DIRECTION_OPTS: Array<Opt<string> & { icon?: LucideIcon }> = [
   { value: 'all',      label: 'All calls' },
-  { value: 'inbound',  label: '↙ Inbound' },
-  { value: 'outbound', label: '↗ Outbound' },
+  { value: 'inbound',  label: 'Inbound',  icon: ArrowDownLeft },
+  { value: 'outbound', label: 'Outbound', icon: ArrowUpRight },
 ]
 
 // "AI outcome" = calls.call_successful: the AI's verdict on the call's goal (not sentiment).
-const AI_OUTCOME_OPTS: Array<{ value: CallListFilters['aiOutcome']; label: string }> = [
+const AI_OUTCOME_OPTS: Array<Opt<CallListFilters['aiOutcome']> & { icon?: LucideIcon; iconClass?: string }> = [
   { value: 'all',     label: 'Any AI outcome' },
-  { value: 'success', label: '✓ Successful' },
-  { value: 'failure', label: '✕ Not successful' },
-  { value: 'unknown', label: '? Unclear' },
+  { value: 'success', label: 'Successful',     icon: CircleCheck, iconClass: 'text-success-dot' },
+  { value: 'failure', label: 'Not successful', icon: CircleX,     iconClass: 'text-destructive' },
+  { value: 'unknown', label: 'Unclear',        icon: CircleHelp,  iconClass: 'text-muted-foreground' },
 ]
 
-const OUTCOME_OPTS: Array<{ value: CallListFilters['outcome']; label: string }> = [
+const OUTCOME_OPTS: Array<Opt<CallListFilters['outcome']>> = [
   { value: 'all', label: 'Any outcome' },
   ...CALL_OUTCOMES.map((o) => ({ value: o, label: OUTCOME_LABEL[o] })),
 ]
@@ -63,15 +69,62 @@ const SORT_OPTS = [
   { value: 'caller_number:asc',       label: 'Phone number' },
 ]
 
-const DATE_INPUT_CLASS =
-  'h-9 rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/30'
+/** Width of the "More" panel; it opens towards whichever side has room. */
+const PANEL_WIDTH = 272
+
+/** How many filters (search included, sort excluded) narrow the list. */
+export function countActiveCallFilters(filters: CallListFilters): number {
+  return [
+    filters.search,
+    filters.status !== 'all',
+    filters.provider !== 'all',
+    filters.direction !== 'all',
+    filters.sentiment !== 'all',
+    filters.outcome !== 'all',
+    filters.aiOutcome !== 'all',
+    filters.dateFrom,
+    filters.dateTo,
+    filters.minDuration > 0,
+  ].filter(Boolean).length
+}
+
+/** A filter pill around a native date input ("From ▢"), same look as the select pills. */
+function DatePill({
+  label, ariaLabel, value, min, max, onChange, className,
+}: {
+  label: string; ariaLabel: string; value: string; min?: string; max?: string
+  onChange: (v: string) => void; className?: string
+}) {
+  return (
+    <label
+      className={cn(
+        'inline-flex h-8 items-center gap-1.5 rounded-full bg-white pr-2 pl-3 text-[13px] shadow-pill transition-[background-color] hover:bg-band focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-solid focus-within:outline-ring',
+        className
+      )}
+    >
+      <span className="text-muted-foreground">{label}</span>
+      <input
+        type="date"
+        value={value}
+        min={min}
+        max={max}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={ariaLabel}
+        className={cn(
+          'h-full bg-transparent text-[13px] tabular-nums outline-none [&::-webkit-calendar-picker-indicator]:opacity-60',
+          // Empty: the browser's mm/dd/yyyy placeholder reads muted, like an idle pill.
+          value ? 'font-medium text-foreground' : 'text-muted-foreground'
+        )}
+      />
+    </label>
+  )
+}
 
 export function CallsToolbar({
   filters,
   onFiltersChange,
   totalCount,
   isLoading,
-  selectedIds,
 }: CallsToolbarProps) {
   const [searchInput, setSearchInput] = useState(filters.search)
   // Last search value this toolbar pushed, and the last one it saw from the parent:
@@ -79,7 +132,8 @@ export function CallsToolbar({
   const [pushedSearch, setPushedSearch] = useState(filters.search)
   const [seenSearch, setSeenSearch] = useState(filters.search)
   const [showMoreFilters, setShowMoreFilters] = useState(false)
-  const [exportOpen, setExportOpen] = useState(false)
+  // Horizontal offset of the panel from the More button's left edge (kept inside the viewport).
+  const [panelOffset, setPanelOffset] = useState(0)
   const moreFiltersRef = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const panelId = useId()
@@ -141,6 +195,20 @@ export function CallsToolbar({
     update({ search: '' })
   }
 
+  function toggleMoreFilters() {
+    if (!showMoreFilters) {
+      // Right-aligned to the button, then clamped so the panel keeps a 16 px
+      // gutter on both sides of the viewport wherever the pills wrapped it.
+      const rect = moreFiltersRef.current?.getBoundingClientRect()
+      if (rect) {
+        const width = Math.min(PANEL_WIDTH, window.innerWidth - 32)
+        const left = Math.max(16, Math.min(rect.right - width, window.innerWidth - 16 - width))
+        setPanelOffset(Math.round(left - rect.left))
+      }
+    }
+    setShowMoreFilters(!showMoreFilters)
+  }
+
   const sortValue = `${filters.sortBy}:${filters.sortOrder}`
 
   function handleSort(val: string | null) {
@@ -150,18 +218,7 @@ export function CallsToolbar({
   }
 
   // Active filter count (excluding sort/defaults)
-  const activeCount = [
-    filters.search,
-    filters.status !== 'all',
-    filters.provider !== 'all',
-    filters.direction !== 'all',
-    filters.sentiment !== 'all',
-    filters.outcome !== 'all',
-    filters.aiOutcome !== 'all',
-    filters.dateFrom,
-    filters.dateTo,
-    filters.minDuration > 0,
-  ].filter(Boolean).length
+  const activeCount = countActiveCallFilters(filters)
 
   function clearAll() {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -182,13 +239,15 @@ export function CallsToolbar({
   if (filters.dateTo)              pills.push({ label: `To ${filters.dateTo}`, clear: () => update({ dateTo: '' }) })
   if (filters.minDuration > 0)     pills.push({ label: `Min ${filters.minDuration}s`, clear: () => update({ minDuration: 0 }) })
 
+  /** An active filter pill reads in ink medium; an idle one stays quiet. */
+  const pillClass = (active: boolean) => cn('max-w-full', active ? 'font-medium text-foreground' : 'text-foreground/85')
+
   return (
-    <div className="rounded-xl border bg-card shadow-sm p-4 space-y-3">
-      {/* Row 1 */}
-      <div className="flex flex-wrap gap-3">
-        {/* Search */}
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
+    <div className="space-y-3">
+      {/* Row 1: search · count + sort */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full min-w-0 sm:max-w-[420px] sm:flex-1">
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <Input
             type="search"
             value={searchInput}
@@ -196,42 +255,73 @@ export function CallsToolbar({
             placeholder="Search by number, summary or what was said…"
             aria-label="Search calls by phone number, summary or transcript"
             maxLength={120}
-            className="pl-9 pr-8 h-9"
+            className="h-9 rounded-full pr-10 pl-9 [&::-webkit-search-cancel-button]:appearance-none"
           />
           {searchInput && (
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-xs"
               onClick={clearSearch}
               aria-label="Clear search"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded text-muted-foreground hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="tap-44 absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
-              <X className="h-4 w-4" />
-            </button>
+              <X />
+            </Button>
           )}
         </div>
 
+        <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
+          <span className="flex items-center gap-1.5 text-[13px] whitespace-nowrap text-muted-foreground tabular-nums" aria-live="polite">
+            {/* Refetch only: on first load the table body carries the one orb for this wait. */}
+            {isLoading && totalCount > 0 && <OrbInline state="breathing" />}
+            {isLoading ? (totalCount > 0 ? 'Updating…' : 'Loading…') : `${totalCount.toLocaleString()} calls found`}
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="hidden text-[13px] whitespace-nowrap text-muted-foreground sm:inline">Sort by</span>
+            <Select value={sortValue} onValueChange={(v) => v && handleSort(v)}>
+              <SelectTrigger size="sm" aria-label="Sort calls">
+                <SelectValue>
+                  {(value: string) => SORT_OPTS.find((o) => o.value === value)?.label ?? value}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent align="end" alignItemWithTrigger={false}>
+                {SORT_OPTS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      {/* Row 2: filter pills */}
+      <div className="flex flex-wrap items-center gap-2">
         {/* Status */}
         <Select value={filters.status} onValueChange={(v) => v && update({ status: v as CallListFilters['status'] })}>
-          <SelectTrigger className="h-9 w-36" aria-label="Filter by status">
+          <SelectTrigger size="sm" aria-label="Filter by status" className={pillClass(filters.status !== 'all')}>
             <SelectValue placeholder="All statuses">
               {(value: string) => STATUS_OPTS.find((o) => o.value === value)?.label ?? value}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent alignItemWithTrigger={false} align="start" className="min-w-44">
             {STATUS_OPTS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              <SelectItem key={o.value} value={o.value}>
+                {o.dot ? <span aria-hidden="true" className={cn('size-1.5 self-center rounded-full', o.dot)} /> : null}
+                {o.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
         {/* Provider */}
         <Select value={filters.provider} onValueChange={(v) => v && update({ provider: v as CallListFilters['provider'] })}>
-          <SelectTrigger className="h-9 w-40" aria-label="Filter by voice provider">
+          <SelectTrigger size="sm" aria-label="Filter by voice provider" className={pillClass(filters.provider !== 'all')}>
             <SelectValue placeholder="Any provider">
               {(value: string) => PROVIDER_OPTS.find((o) => o.value === value)?.label ?? value}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent alignItemWithTrigger={false} align="start" className="min-w-44">
             {PROVIDER_OPTS.map((o) => (
               <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
             ))}
@@ -240,26 +330,29 @@ export function CallsToolbar({
 
         {/* Direction */}
         <Select value={filters.direction} onValueChange={(v) => v && update({ direction: v as CallListFilters['direction'] })}>
-          <SelectTrigger className="h-9 w-36" aria-label="Filter by direction">
+          <SelectTrigger size="sm" aria-label="Filter by direction" className={pillClass(filters.direction !== 'all')}>
             <SelectValue placeholder="All directions">
               {(value: string) => DIRECTION_OPTS.find((o) => o.value === value)?.label ?? value}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent alignItemWithTrigger={false} align="start" className="min-w-40">
             {DIRECTION_OPTS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              <SelectItem key={o.value} value={o.value}>
+                {o.icon ? <o.icon aria-hidden="true" className="self-center text-muted-foreground" /> : null}
+                {o.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
         {/* Outcome */}
         <Select value={filters.outcome} onValueChange={(v) => v && update({ outcome: v as CallListFilters['outcome'] })}>
-          <SelectTrigger className="h-9 w-44" aria-label="Filter by outcome">
+          <SelectTrigger size="sm" aria-label="Filter by outcome" className={pillClass(filters.outcome !== 'all')}>
             <SelectValue placeholder="Any outcome">
               {(value: string) => OUTCOME_OPTS.find((o) => o.value === value)?.label ?? value}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent alignItemWithTrigger={false} align="start" className="min-w-48">
             {OUTCOME_OPTS.map((o) => (
               <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
             ))}
@@ -268,34 +361,37 @@ export function CallsToolbar({
 
         {/* AI outcome */}
         <Select value={filters.aiOutcome} onValueChange={(v) => v && update({ aiOutcome: v as CallListFilters['aiOutcome'] })}>
-          <SelectTrigger className="h-9 w-40" aria-label="Filter by AI outcome">
+          <SelectTrigger size="sm" aria-label="Filter by AI outcome" className={pillClass(filters.aiOutcome !== 'all')}>
             <SelectValue placeholder="Any AI outcome">
               {(value: string) => AI_OUTCOME_OPTS.find((o) => o.value === value)?.label ?? value}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent alignItemWithTrigger={false} align="start" className="min-w-48">
             {AI_OUTCOME_OPTS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              <SelectItem key={o.value} value={o.value}>
+                {o.icon ? <o.icon aria-hidden="true" className={cn('self-center', o.iconClass)} /> : null}
+                {o.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
-        {/* Date range */}
-        <input
-          type="date"
+        {/* Date range (in the "More" panel on phones) */}
+        <DatePill
+          label="From"
+          ariaLabel="From date"
           value={filters.dateFrom}
           max={filters.dateTo || undefined}
-          onChange={(e) => update({ dateFrom: e.target.value })}
-          aria-label="From date"
-          className={`hidden md:block ${DATE_INPUT_CLASS}`}
+          onChange={(v) => update({ dateFrom: v })}
+          className="hidden md:inline-flex"
         />
-        <input
-          type="date"
+        <DatePill
+          label="To"
+          ariaLabel="To date"
           value={filters.dateTo}
           min={filters.dateFrom || undefined}
-          onChange={(e) => update({ dateTo: e.target.value })}
-          aria-label="To date"
-          className={`hidden md:block ${DATE_INPUT_CLASS}`}
+          onChange={(v) => update({ dateTo: v })}
+          className="hidden md:inline-flex"
         />
 
         {/* More Filters */}
@@ -303,17 +399,14 @@ export function CallsToolbar({
           <Button
             variant="outline"
             size="sm"
-            className="h-9 gap-2"
             aria-expanded={showMoreFilters}
             aria-controls={panelId}
-            onClick={() => setShowMoreFilters(!showMoreFilters)}
+            onClick={toggleMoreFilters}
           >
-            <SlidersHorizontal className="h-4 w-4" />
+            <SlidersHorizontal aria-hidden="true" />
             More
             {filters.minDuration > 0 && (
-              <Badge className="ml-1 h-4 w-4 flex items-center justify-center p-0 text-[10px] bg-primary text-primary-foreground">
-                1
-              </Badge>
+              <Badge className="h-4 min-w-4 px-1 text-[10px] tabular-nums">1</Badge>
             )}
           </Button>
           {showMoreFilters && (
@@ -321,12 +414,14 @@ export function CallsToolbar({
               id={panelId}
               role="group"
               aria-label="More filters"
-              className="absolute top-10 right-0 z-20 w-64 rounded-xl border bg-card shadow-lg p-4 space-y-3"
+              style={{ width: PANEL_WIDTH, left: panelOffset }}
+              className="absolute top-10 z-20 max-w-[calc(100vw-2rem)] space-y-4 rounded-xl bg-popover p-4 text-popover-foreground shadow-pop animate-in fade-in-0 zoom-in-98 duration-200 ease-site"
             >
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">More filters</p>
+              <p className="text-[11px] leading-4 font-medium tracking-[0.12em] text-muted-foreground uppercase">More filters</p>
               <div>
-                <label htmlFor={`${panelId}-min`} className="text-sm font-medium block mb-2">
-                  Min duration: {filters.minDuration}s
+                <label htmlFor={`${panelId}-min`} className="mb-2 flex items-center justify-between text-[13px] font-medium">
+                  <span>Min duration</span>
+                  <span className="text-muted-foreground tabular-nums">{filters.minDuration}s</span>
                 </label>
                 <input
                   id={`${panelId}-min`}
@@ -336,108 +431,71 @@ export function CallsToolbar({
                   step={10}
                   value={filters.minDuration}
                   onChange={(e) => update({ minDuration: Number(e.target.value) })}
-                  className="w-full accent-primary"
+                  className="w-full accent-[#140a24]"
                 />
-                <div className="flex justify-between text-xs text-muted-foreground mt-1" aria-hidden="true">
+                <div className="mt-1 flex justify-between text-xs text-muted-foreground tabular-nums" aria-hidden="true">
                   <span>0s</span><span>300s</span>
                 </div>
               </div>
-              <div className="md:hidden space-y-2">
-                <p className="text-xs font-medium">Date range</p>
-                <input
-                  type="date"
+              <div className="space-y-2 md:hidden">
+                <p className="text-[13px] font-medium">Date range</p>
+                <DatePill
+                  label="From"
+                  ariaLabel="From date"
                   value={filters.dateFrom}
                   max={filters.dateTo || undefined}
-                  onChange={(e) => update({ dateFrom: e.target.value })}
-                  aria-label="From date"
-                  className="w-full h-8 rounded-lg border border-input bg-transparent px-3 text-sm outline-none"
+                  onChange={(v) => update({ dateFrom: v })}
+                  className="flex w-full justify-between"
                 />
-                <input
-                  type="date"
+                <DatePill
+                  label="To"
+                  ariaLabel="To date"
                   value={filters.dateTo}
                   min={filters.dateFrom || undefined}
-                  onChange={(e) => update({ dateTo: e.target.value })}
-                  aria-label="To date"
-                  className="w-full h-8 rounded-lg border border-input bg-transparent px-3 text-sm outline-none"
+                  onChange={(v) => update({ dateTo: v })}
+                  className="flex w-full justify-between"
                 />
               </div>
-              <Button variant="outline" size="sm" className="w-full" onClick={() => setShowMoreFilters(false)}>
+              <Button variant="secondary" size="sm" className="w-full" onClick={() => setShowMoreFilters(false)}>
                 Done
               </Button>
             </div>
           )}
         </div>
-
-        {/* Export */}
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-9 gap-2"
-          onClick={() => setExportOpen(true)}
-        >
-          <Download className="h-4 w-4" />
-          Export
-        </Button>
       </div>
 
-      {/* Row 2 */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground" aria-live="polite">
-            {isLoading ? 'Loading…' : `${totalCount.toLocaleString()} calls found`}
-          </span>
+      {/* Row 3: active filters */}
+      {(pills.length > 0 || activeCount > 0) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {pills.length > 0 && (
+            <ul className="flex flex-wrap items-center gap-2" aria-label="Active filters">
+              {pills.map((p) => (
+                <li
+                  key={p.label}
+                  className="inline-flex h-7 items-center gap-0.5 rounded-full bg-secondary pr-0.5 pl-3 text-xs font-medium text-foreground"
+                >
+                  {p.label}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={p.clear}
+                    aria-label={`Remove filter: ${p.label}`}
+                    className="tap-44 size-6 text-muted-foreground hover:bg-secondary-hover hover:text-foreground"
+                  >
+                    <X className="size-3" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
           {activeCount > 0 && (
-            <button type="button" onClick={clearAll} className="text-sm text-primary hover:underline">
+            <Button type="button" variant="ghost" size="xs" onClick={clearAll}>
               Clear all filters
-            </button>
+            </Button>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground hidden sm:inline">Sort by:</span>
-          <Select value={sortValue} onValueChange={(v) => v && handleSort(v)}>
-            <SelectTrigger className="h-8 w-40" aria-label="Sort calls">
-              <SelectValue>
-                {(value: string) => SORT_OPTS.find((o) => o.value === value)?.label ?? value}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {SORT_OPTS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {/* Active pills */}
-      {pills.length > 0 && (
-        <ul className="flex flex-wrap gap-2" aria-label="Active filters">
-          {pills.map((p) => (
-            <li
-              key={p.label}
-              className="inline-flex items-center gap-1 rounded-full bg-purple-100 text-purple-700 px-3 py-1 text-xs font-medium"
-            >
-              {p.label}
-              <button
-                type="button"
-                onClick={p.clear}
-                aria-label={`Remove filter: ${p.label}`}
-                className="ml-0.5 rounded-full hover:text-purple-900 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </li>
-          ))}
-        </ul>
       )}
-
-      <ExportDialog
-        open={exportOpen}
-        onOpenChange={setExportOpen}
-        filters={filters}
-        total={totalCount}
-        selectedIds={selectedIds}
-      />
     </div>
   )
 }

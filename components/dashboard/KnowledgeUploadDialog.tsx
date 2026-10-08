@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { UploadCloud, FileText, X, CheckCircle2, Loader2, AlertCircle } from 'lucide-react'
+import { UploadCloud, FileText, X, CheckCircle2, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { OrbInline } from '@/components/shared/OrbLoader'
 import { cn, formatFileSize } from '@/lib/utils'
 import {
   KNOWLEDGE_LIMITS, KnowledgeApiError, retryKnowledgeDocument, uploadKnowledgeFile, validateKnowledgeFile,
@@ -151,24 +152,20 @@ export function KnowledgeUploadDialog({ open, onOpenChange }: KnowledgeUploadDia
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <div className="rounded-full bg-purple-100 p-1.5">
-              <UploadCloud className="h-4 w-4 text-purple-600" />
-            </div>
-            Upload Knowledge Base
-          </DialogTitle>
+          <DialogTitle>Upload knowledge base</DialogTitle>
           <DialogDescription>
             Add documents to give your agent context about your business.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        <div className="space-y-4">
           {/* Drop zone */}
           <div
             role="button"
             tabIndex={0}
+            data-drag={isDragging ? 'true' : undefined}
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
             onDragLeave={() => setIsDragging(false)}
             onDrop={handleDrop}
@@ -179,14 +176,13 @@ export function KnowledgeUploadDialog({ open, onOpenChange }: KnowledgeUploadDia
                 inputRef.current?.click()
               }
             }}
-            className={cn(
-              'cursor-pointer rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-              isDragging ? 'border-primary bg-purple-50' : 'border-border hover:border-purple-300 hover:bg-purple-50/30'
-            )}
+            className="flex cursor-pointer flex-col items-center rounded-2xl border border-dashed border-input bg-band px-6 py-10 text-center transition-[background-color,border-color] duration-200 outline-none hover:border-foreground/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring data-[drag=true]:border-foreground/40 data-[drag=true]:bg-secondary"
           >
-            <UploadCloud className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-            <p className="text-sm font-medium">Drop files here or click to browse</p>
-            <p className="text-xs text-muted-foreground mt-1">
+            <span className="mb-3 grid size-11 place-items-center rounded-full bg-white shadow-hair">
+              <UploadCloud className="size-5 text-foreground" aria-hidden="true" />
+            </span>
+            <p className="text-sm font-medium text-foreground">Drop files here or click to browse</p>
+            <p className="mt-1 text-xs leading-4 text-muted-foreground">
               {KNOWLEDGE_LIMITS.typesLabel} — max {KNOWLEDGE_LIMITS.maxFileMb} MB each
             </p>
             <input
@@ -204,51 +200,66 @@ export function KnowledgeUploadDialog({ open, onOpenChange }: KnowledgeUploadDia
 
           {/* File list */}
           {files.length > 0 && (
-            <div className="space-y-1.5">
-              {files.map((q) => (
-                <div key={q.key} className="rounded-lg border px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    {q.stage === 'done' ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-                    ) : q.stage === 'error' ? (
-                      <AlertCircle className="h-4 w-4 text-destructive flex-shrink-0" />
-                    ) : q.stage === 'queued' ? (
-                      <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    ) : (
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground flex-shrink-0" />
-                    )}
-                    <span className="flex-1 truncate text-sm">{q.file.name}</span>
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {q.stage === 'queued' ? formatFileSize(q.file.size) : STAGE_LABEL[q.stage]}
-                    </span>
-                    {(q.stage === 'queued' || q.stage === 'error') && !isUploading && (
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setFiles((p) => p.filter((x) => x.key !== q.key)) }}
-                        className="text-muted-foreground hover:text-foreground"
-                        aria-label={`Remove ${q.file.name}`}
+            <ul className="overflow-hidden rounded-2xl bg-white shadow-hair" aria-label="Files to upload">
+              {files.map((q) => {
+                const extension = q.file.name.includes('.') ? q.file.name.split('.').pop() : null
+                const busy = q.stage === 'preparing' || q.stage === 'uploading' || q.stage === 'processing'
+                return (
+                  <li key={q.key} className="border-b border-rule px-4 py-3 last:border-b-0">
+                    <div className="flex items-center gap-3">
+                      {q.stage === 'done' ? (
+                        <CheckCircle2 className="size-4 shrink-0 text-success-dot" aria-hidden="true" />
+                      ) : q.stage === 'error' ? (
+                        <AlertCircle className="size-4 shrink-0 text-destructive" aria-hidden="true" />
+                      ) : busy ? (
+                        <OrbInline state={q.stage === 'processing' ? 'weaving' : 'working'} className="-mx-0.5" />
+                      ) : extension ? (
+                        <span className="shrink-0 rounded-md bg-secondary px-1.5 py-0.5 font-mono text-[10px] tracking-wide text-muted-foreground uppercase">
+                          {extension}
+                        </span>
+                      ) : (
+                        <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      )}
+                      <span className="min-w-0 flex-1 truncate text-sm text-foreground">{q.file.name}</span>
+                      <span
+                        className={cn(
+                          'shrink-0 text-xs tabular-nums',
+                          q.stage === 'error' ? 'text-destructive' : q.stage === 'done' ? 'text-success' : 'text-muted-foreground'
+                        )}
                       >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
+                        {q.stage === 'queued' ? formatFileSize(q.file.size) : STAGE_LABEL[q.stage]}
+                      </span>
+                      {(q.stage === 'queued' || q.stage === 'error') && !isUploading && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          onClick={(e) => { e.stopPropagation(); setFiles((p) => p.filter((x) => x.key !== q.key)) }}
+                          className="tap-44 -mr-1.5 shrink-0 text-muted-foreground"
+                          aria-label={`Remove ${q.file.name}`}
+                        >
+                          <X aria-hidden="true" />
+                        </Button>
+                      )}
+                    </div>
+                    {q.stage === 'error' && q.error && (
+                      <p className="mt-1.5 text-xs text-destructive">{q.error}</p>
                     )}
-                  </div>
-                  {q.stage === 'error' && q.error && (
-                    <p className="mt-1 text-xs text-destructive">{q.error}</p>
-                  )}
-                </div>
-              ))}
-            </div>
+                  </li>
+                )
+              })}
+            </ul>
           )}
 
           <Button
-            className="w-full purple-glow"
-            disabled={pendingCount === 0 || isUploading || allDone}
+            className="w-full"
+            disabled={pendingCount === 0 || allDone}
+            loading={isUploading}
+            loadingText="Uploading…"
             onClick={() => void handleUpload()}
           >
             {allDone ? (
-              <><CheckCircle2 className="mr-2 h-4 w-4 text-green-400" />Added!</>
-            ) : isUploading ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading…</>
+              <><CheckCircle2 aria-hidden="true" />Added!</>
             ) : files.some((q) => q.stage === 'error') ? (
               `Retry ${pendingCount} file${pendingCount === 1 ? '' : 's'}`
             ) : (

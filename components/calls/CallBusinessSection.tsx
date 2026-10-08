@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, CalendarCheck, Check, MessageSquareText, Phone, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { StatusChip } from '@/components/shared/StatusChip'
 import type { CallBookingView, CallMessageView } from '@/lib/voice-tools/message-view'
 
 // The message the agent took and the appointments it booked during this call
@@ -14,6 +14,10 @@ interface BusinessResponse {
   messages: CallMessageView[]
   bookings: CallBookingView[]
 }
+
+/** Same rhythm as the call sheet's other sections (hairline-separated blocks). */
+const SECTION = 'py-6 first:pt-0 last:pb-0'
+const HEADING = 'mb-3 flex items-center gap-1.5 text-[11px] leading-4 font-medium tracking-[0.12em] text-muted-foreground uppercase'
 
 function formatWhen(iso: string, timeZone: string): string {
   const date = new Date(iso)
@@ -29,7 +33,8 @@ function formatWhen(iso: string, timeZone: string): string {
 
 export function CallBusinessSection({ callId }: { callId: string }) {
   const [data, setData] = useState<BusinessResponse | null>(null)
-  const [busy, setBusy] = useState(false)
+  // The message being saved: its button shows the orb, the others are only disabled.
+  const [busyId, setBusyId] = useState<string | null>(null)
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -51,7 +56,7 @@ export function CallBusinessSection({ callId }: { callId: string }) {
   }, [load])
 
   const toggle = async (message: CallMessageView) => {
-    setBusy(true)
+    setBusyId(message.id)
     try {
       const status = message.status === 'done' ? 'open' : 'done'
       const res = await fetch(`/api/messages/${encodeURIComponent(message.id)}`, {
@@ -66,7 +71,7 @@ export function CallBusinessSection({ callId }: { callId: string }) {
       console.warn('Message update failed', err)
       toast.error('Could not update the message. Please try again.')
     } finally {
-      setBusy(false)
+      setBusyId(null)
     }
   }
 
@@ -75,54 +80,64 @@ export function CallBusinessSection({ callId }: { callId: string }) {
   return (
     <>
       {data.messages.map((m) => (
-        <section key={m.id} aria-labelledby={`call-message-${m.id}`}>
-          <h3 id={`call-message-${m.id}`} className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <MessageSquareText className="h-3.5 w-3.5" aria-hidden="true" />
+        <section key={m.id} aria-labelledby={`call-message-${m.id}`} className={SECTION}>
+          <h3 id={`call-message-${m.id}`} className={HEADING}>
+            <MessageSquareText className="size-3.5" aria-hidden="true" />
             Message taken
           </h3>
-          <div className="space-y-2 rounded-xl border p-4">
+          <div className="space-y-3 rounded-2xl p-4 shadow-hair">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium">{m.purged ? 'Details removed (retention)' : m.caller_name || 'Unknown caller'}</span>
               {m.urgency === 'urgent' && (
-                <Badge variant="destructive" className="gap-1 text-[10px]">
-                  <AlertTriangle className="size-3" aria-hidden="true" />
+                <StatusChip tone="danger" icon={<AlertTriangle aria-hidden="true" />}>
                   Urgent
-                </Badge>
+                </StatusChip>
               )}
-              <Badge variant={m.status === 'done' ? 'secondary' : 'outline'} className="text-[10px]">
+              <StatusChip tone={m.status === 'done' ? 'muted' : 'warning'} dot>
                 {m.status === 'done' ? 'Done' : 'To follow up'}
-              </Badge>
+              </StatusChip>
             </div>
-            {m.reason && <p className="whitespace-pre-line text-sm text-muted-foreground">{m.reason}</p>}
-            {m.callback_number && (
-              <a href={`tel:${m.callback_number.replace(/[^\d+]/g, '')}`} className="inline-flex items-center gap-1 text-xs font-medium text-purple-600 hover:underline">
-                <Phone className="size-3" aria-hidden="true" />
-                Call back on {m.callback_number}
-              </a>
-            )}
-            <div>
-              <Button size="sm" variant="outline" disabled={busy} onClick={() => void toggle(m)}>
+            {m.reason && <p className="text-[13px] leading-[19px] whitespace-pre-line text-muted-foreground">{m.reason}</p>}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <Button
+                size="sm"
+                variant="outline"
+                loading={busyId === m.id}
+                disabled={busyId !== null && busyId !== m.id}
+                onClick={() => void toggle(m)}
+              >
                 {m.status === 'done' ? <RotateCcw aria-hidden="true" /> : <Check aria-hidden="true" />}
                 {m.status === 'done' ? 'Re-open' : 'Mark as done'}
               </Button>
+              {m.callback_number && (
+                <a
+                  href={`tel:${m.callback_number.replace(/[^\d+]/g, '')}`}
+                  className="inline-flex items-center gap-1.5 rounded-sm text-[13px] font-medium text-foreground underline decoration-foreground/30 underline-offset-4 outline-none hover:decoration-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+                >
+                  <Phone className="size-3.5" aria-hidden="true" />
+                  <span className="tabular-nums">Call back on {m.callback_number}</span>
+                </a>
+              )}
             </div>
           </div>
         </section>
       ))}
       {data.bookings.length > 0 && (
-        <section aria-labelledby="call-bookings-title">
-          <h3 id="call-bookings-title" className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <CalendarCheck className="h-3.5 w-3.5" aria-hidden="true" />
+        <section aria-labelledby="call-bookings-title" className={SECTION}>
+          <h3 id="call-bookings-title" className={HEADING}>
+            <CalendarCheck className="size-3.5" aria-hidden="true" />
             Appointments booked
           </h3>
-          <ul className="space-y-2">
+          <ul className="overflow-hidden rounded-2xl shadow-hair">
             {data.bookings.map((b) => (
-              <li key={b.id} className="flex flex-wrap items-center gap-2 rounded-xl border px-4 py-3 text-sm">
-                <span className="font-medium">{formatWhen(b.starts_at, b.timezone)}</span>
-                {b.caller_name && <span className="text-muted-foreground">for {b.caller_name}</span>}
-                <Badge variant={b.status === 'booked' ? 'secondary' : 'outline'} className="text-[10px]">
+              <li key={b.id} className="flex min-h-14 flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-rule px-4 py-3 last:border-b-0">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{formatWhen(b.starts_at, b.timezone)}</p>
+                  {b.caller_name && <p className="text-xs leading-4 text-muted-foreground">for {b.caller_name}</p>}
+                </div>
+                <StatusChip tone={b.status === 'booked' ? 'success' : b.status === 'cancelled' ? 'muted' : 'warning'} dot>
                   {b.status === 'booked' ? 'In your calendar' : b.status === 'cancelled' ? 'Cancelled' : 'Not confirmed'}
-                </Badge>
+                </StatusChip>
               </li>
             ))}
           </ul>

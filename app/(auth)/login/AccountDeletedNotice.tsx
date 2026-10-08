@@ -12,10 +12,10 @@ export function AccountDeletedNotice() {
   const searchParams = useSearchParams()
   if (searchParams.get('account_deleted') !== '1') return null
   return (
-    <Alert role="status" className="border-green-200 bg-green-50 py-3 text-green-900">
-      <CheckCircle2 className="h-4 w-4 text-green-600" aria-hidden="true" />
+    <Alert role="status" variant="success">
+      <CheckCircle2 aria-hidden="true" />
       <AlertTitle>Your account is being deleted</AlertTitle>
-      <AlertDescription className="text-green-800">
+      <AlertDescription>
         You have been signed out. We are removing your data here and at our providers, and we will email you when
         everything is gone.
       </AlertDescription>

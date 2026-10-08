@@ -1,108 +1,124 @@
 'use client'
 
 import Link from 'next/link'
-import { PhoneIncoming, PhoneOutgoing, Phone } from 'lucide-react'
-import { formatDistanceToNow } from 'date-fns'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
+import { ArrowRight, PhoneIncoming, PhoneOutgoing, Phone } from 'lucide-react'
+import { buttonVariants } from '@/components/ui/button'
+import { Card, CardAction, CardHeader, CardTitle } from '@/components/ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { OrbLoader } from '@/components/shared/OrbLoader'
 import { AiOutcomeIcon, CallStatusBadge, HandledByBadge } from '@/components/calls/CallBadges'
-import { formatDate, formatDuration, formatPhoneNumber } from '@/lib/utils'
+import { cn, formatDate, formatDuration, formatPhoneNumber } from '@/lib/utils'
 import type { CallListItem } from '@/lib/calls/labels'
+import { CardError } from './CardError'
+import { relativeTime } from './relative-time'
+
+/** The home page shows the latest few; "View all" opens the full list. */
+const ROWS_SHOWN = 6
 
 interface RecentCallsTableProps {
   calls: CallListItem[]
   isLoading: boolean
+  /** Last failed request, if any (the calls already shown are kept on a failed refresh). */
+  error?: string | null
+  onRetry?: () => void
 }
 
-export function RecentCallsTable({ calls, isLoading }: RecentCallsTableProps) {
+export function RecentCallsTable({ calls, isLoading, error = null, onRetry }: RecentCallsTableProps) {
+  const shown = calls.slice(0, ROWS_SHOWN)
   return (
-    <Card className="border shadow-sm">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base font-semibold">Recent Calls</CardTitle>
-          <Link href="/calls" className="text-xs text-primary hover:underline">View all</Link>
-        </div>
+    // Column visibility follows the card's own width (container queries), not the viewport:
+    // the card is full width below xl and two-thirds of the page from xl.
+    <Card className="@container/calls gap-0 pb-0">
+      <CardHeader className="pb-4">
+        <CardTitle>Recent calls</CardTitle>
+        <CardAction className="self-center">
+          <Link href="/calls" className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), '-my-1 -mr-2')}>
+            View all
+            <ArrowRight aria-hidden="true" />
+          </Link>
+        </CardAction>
       </CardHeader>
-      <CardContent className="p-0">
-        {isLoading ? (
-          <div className="space-y-3 p-6" aria-busy="true" aria-label="Loading recent calls">
-            {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full rounded-lg" />
-            ))}
-          </div>
-        ) : calls.length === 0 ? (
+      {isLoading ? (
+        // Reserves the 6-row table it replaces (taller rows while the card is narrow).
+        <OrbLoader
+          label="Loading recent calls…"
+          className="min-h-[574px] border-t border-rule @min-[560px]/calls:min-h-[394px]"
+        />
+      ) : error && calls.length === 0 ? (
+        <CardError
+          message="Recent calls could not be loaded."
+          detail={error}
+          onRetry={onRetry}
+          className="border-t border-rule"
+        />
+      ) : calls.length === 0 ? (
+        <div className="border-t border-rule">
           <EmptyState
+            bare
             icon={Phone}
             title="No calls yet"
             description="Calls will appear here once your agent starts receiving them."
           />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <caption className="sr-only">Most recent calls</caption>
-              <thead>
-                <tr className="border-b bg-muted/30">
-                  <th scope="col" className="px-4 py-2.5 text-left font-medium text-muted-foreground">Caller</th>
-                  <th scope="col" className="px-4 py-2.5 text-left font-medium text-muted-foreground hidden sm:table-cell">Direction</th>
-                  <th scope="col" className="px-4 py-2.5 text-left font-medium text-muted-foreground">Status</th>
-                  <th scope="col" className="px-4 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell">Handled by</th>
-                  <th scope="col" className="px-4 py-2.5 text-left font-medium text-muted-foreground hidden md:table-cell">Duration</th>
-                  <th scope="col" className="px-4 py-2.5 text-left font-medium text-muted-foreground hidden lg:table-cell">AI outcome</th>
-                  <th scope="col" className="px-4 py-2.5 text-left font-medium text-muted-foreground hidden lg:table-cell">Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {calls.map((call) => (
-                  <tr key={call.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-xs font-medium">
-                        {call.caller_number ? formatPhoneNumber(call.caller_number) : 'Unknown'}
-                      </span>
-                      <div className="mt-1 md:hidden">
-                        <HandledByBadge call={call} />
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 hidden sm:table-cell">
-                      <span className="flex items-center gap-1.5 text-muted-foreground">
-                        {call.direction === 'inbound' ? (
-                          <PhoneIncoming className="h-3.5 w-3.5 text-blue-500" aria-hidden="true" />
-                        ) : (
-                          <PhoneOutgoing className="h-3.5 w-3.5 text-purple-500" aria-hidden="true" />
-                        )}
-                        <span className="text-xs">{call.direction === 'inbound' ? 'Inbound' : 'Outbound'}</span>
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <CallStatusBadge status={call.status} />
-                    </td>
-                    <td className="px-4 py-3 hidden md:table-cell">
-                      <HandledByBadge call={call} />
-                    </td>
-                    <td className="px-4 py-3 hidden md:table-cell">
-                      <span className="text-xs text-muted-foreground">
-                        {call.duration_seconds > 0 ? formatDuration(call.duration_seconds) : '—'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 hidden lg:table-cell">
-                      <AiOutcomeIcon value={call.call_successful} />
-                    </td>
-                    <td className="px-4 py-3 hidden lg:table-cell">
+        </div>
+      ) : (
+        <Table className="border-t border-rule">
+          <caption className="sr-only">Most recent calls</caption>
+          <TableHeader>
+            <TableRow>
+              <TableHead scope="col">Caller</TableHead>
+              <TableHead scope="col" className="pr-5 pl-3 @min-[440px]/calls:pr-3">Status</TableHead>
+              <TableHead scope="col" className="hidden px-3 @min-[560px]/calls:table-cell">Handled by</TableHead>
+              <TableHead scope="col" className="hidden pr-5 pl-3 text-right @min-[440px]/calls:table-cell @min-[700px]/calls:pr-3">Duration</TableHead>
+              <TableHead scope="col" className="hidden w-24 pl-3 text-center leading-[14px] whitespace-normal @min-[700px]/calls:table-cell">AI outcome</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {shown.map((call) => {
+              const inbound = call.direction === 'inbound'
+              const DirectionIcon = inbound ? PhoneIncoming : PhoneOutgoing
+              return (
+                <TableRow key={call.id}>
+                  <TableCell className="py-2.5">
+                    <span className="block text-sm font-medium text-foreground tabular-nums">
+                      {call.caller_number ? formatPhoneNumber(call.caller_number) : 'Unknown'}
+                    </span>
+                    <span className="mt-0.5 flex items-center gap-1.5 text-xs leading-4 text-muted-foreground">
+                      <DirectionIcon className="size-3 shrink-0" aria-hidden="true" />
+                      <span>{inbound ? 'Inbound' : 'Outbound'}</span>
+                      <span aria-hidden="true">·</span>
                       {call.started_at ? (
-                        <time dateTime={call.started_at} title={formatDate(call.started_at)} className="text-xs text-muted-foreground">
-                          {formatDistanceToNow(new Date(call.started_at), { addSuffix: true })}
+                        <time dateTime={call.started_at} title={formatDate(call.started_at)} className="tabular-nums">
+                          {relativeTime(call.started_at)}
                         </time>
                       ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
+                        <span>—</span>
                       )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </CardContent>
+                    </span>
+                    <div className="mt-1.5 @min-[560px]/calls:hidden">
+                      <HandledByBadge call={call} quiet />
+                    </div>
+                  </TableCell>
+                  <TableCell className="pr-5 pl-3 @min-[440px]/calls:pr-3">
+                    <CallStatusBadge status={call.status} />
+                  </TableCell>
+                  <TableCell className="hidden px-3 @min-[560px]/calls:table-cell">
+                    <HandledByBadge call={call} quiet />
+                  </TableCell>
+                  <TableCell className="hidden pr-5 pl-3 text-right text-muted-foreground tabular-nums @min-[440px]/calls:table-cell @min-[700px]/calls:pr-3">
+                    {call.duration_seconds > 0 ? formatDuration(call.duration_seconds) : '—'}
+                  </TableCell>
+                  <TableCell className="hidden pl-3 @min-[700px]/calls:table-cell">
+                    <span className="flex justify-center">
+                      <AiOutcomeIcon value={call.call_successful} />
+                    </span>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      )}
     </Card>
   )
 }

@@ -2,20 +2,33 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import {
-  Phone, Plus, Search, Trash2, Globe, Copy, Loader2,
-  CheckCircle2, PhoneOff, Bot, RotateCw, Route, AlertCircle,
+  Phone, Plus, Search, Trash2, Copy, MoreHorizontal,
+  CheckCircle2, Bot, RotateCw, Route, AlertCircle, AlertTriangle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
+import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { Field } from '@/components/shared/FormSection'
 import { FlagIcon } from '@/components/shared/FlagIcon'
+import { OptionCard } from '@/components/shared/OptionCard'
+import { OrbInline, OrbLoader } from '@/components/shared/OrbLoader'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusChip } from '@/components/shared/StatusChip'
 import { StatusPill, routingStatusCopy } from '@/components/agent/ProviderStatusCard'
 import { errorMessage, parseApiError } from '@/hooks/useVoiceCatalog'
 import { toast } from 'sonner'
@@ -50,9 +63,10 @@ interface SearchResult {
   region: string
 }
 
-const ROUTING_MODES: Record<RoutingMode, { title: string; summary: string; details: string[] }> = {
+const ROUTING_MODES: Record<RoutingMode, { title: string; short: string; summary: string; details: string[] }> = {
   app_routed: {
     title: 'Smart routing with failover (recommended)',
+    short: 'Smart routing with failover',
     summary: 'Calls reach the platform first, then your agent.',
     details: [
       'Working hours and after-hours handling apply.',
@@ -62,6 +76,7 @@ const ROUTING_MODES: Record<RoutingMode, { title: string; summary: string; detai
   },
   native_elevenlabs: {
     title: 'Direct ElevenLabs (native transfer, no failover/after-hours)',
+    short: 'Direct ElevenLabs',
     summary: 'The number is connected straight to ElevenLabs.',
     details: [
       'Uses ElevenLabs’ native call transfer.',
@@ -114,6 +129,16 @@ const COUNTRIES = [
   { value: 'ZA', label: 'South Africa' },
 ]
 
+/** Small muted bullet list item (phrasing content, so it also works inside an OptionCard button). */
+function Detail({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="flex gap-2 text-xs leading-[18px] text-muted-foreground">
+      <span aria-hidden="true" className="mt-[7px] size-1 shrink-0 rounded-full bg-current" />
+      <span>{children}</span>
+    </span>
+  )
+}
+
 // ─── Buy dialog ───────────────────────────────────────────────────────────────
 function AddNumberDialog({
   open, onClose,
@@ -164,22 +189,16 @@ function AddNumberDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-100">
-              <Phone className="h-4 w-4 text-purple-600" aria-hidden="true" />
-            </div>
-            Buy a phone number
-          </DialogTitle>
+          <DialogTitle>Buy a phone number</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 pt-2">
-          <div className="space-y-1.5">
-            <label htmlFor="buy-country" className="text-sm font-medium text-foreground">Country</label>
+        <div className="min-w-0 space-y-5">
+          <Field label="Country" htmlFor="buy-country">
             <div className="flex gap-2">
               <Select value={country} onValueChange={(v) => { setCountry(v ?? 'US'); setResults([]); setSelected(null); setHasSearched(false) }}>
-                <SelectTrigger id="buy-country" className="h-10">
+                <SelectTrigger id="buy-country" className="min-w-0 flex-1">
                   <SelectValue>
                     {(value: string) => {
                       const c = COUNTRIES.find((o) => o.value === value)
@@ -203,53 +222,86 @@ function AddNumberDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <Button onClick={() => void handleSearch()} disabled={searching} className="shrink-0 gap-2">
-                {searching ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Search className="h-4 w-4" aria-hidden="true" />}
+              {/* The searching orb sits in the results area below (one orb per region), so the
+                  button is only disabled while a search runs; it keeps focus (aria-disabled). */}
+              <Button
+                variant="outline"
+                className="h-10 shrink-0 aria-disabled:opacity-50"
+                onClick={() => void handleSearch()}
+                disabled={searching}
+                focusableWhenDisabled
+                aria-busy={searching || undefined}
+              >
+                <Search aria-hidden="true" />
                 Search
               </Button>
             </div>
-          </div>
+          </Field>
 
-          {hasSearched && !searching && results.length === 0 && (
-            <p className="rounded-lg bg-muted/60 px-3 py-2.5 text-xs text-muted-foreground">
-              No instantly-available numbers for this country right now. Try another country.
-            </p>
-          )}
+          {/* Searching and "no numbers" fill the height of a full results grid (5 numbers: three
+              64 px rows on two columns, or the 280 px scroll area on one), so the centred
+              dialog does not resize again when the results arrive. */}
+          {searching ? (
+            <OrbLoader
+              size={32}
+              layout="row"
+              state="searching"
+              delayMs={0}
+              label="Searching available numbers…"
+              className="min-h-70 justify-center rounded-2xl bg-secondary px-6 sm:min-h-52"
+            />
+          ) : hasSearched && results.length === 0 ? (
+            <EmptyState
+              icon={Search}
+              title="No instantly-available numbers for this country right now"
+              description="Try another country."
+              className="min-h-70 py-8 sm:min-h-52"
+            />
+          ) : null}
 
           {results.length > 0 && (
-            <div className="space-y-1.5 max-h-64 overflow-y-auto" role="radiogroup" aria-label="Available numbers">
-              {results.map((r) => (
-                <button
-                  key={r.number}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected === r.number}
-                  onClick={() => setSelected(r.number)}
-                  className={cn(
-                    'flex w-full items-center justify-between rounded-lg border p-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    selected === r.number ? 'border-primary bg-purple-50 ring-1 ring-primary' : 'border-border hover:border-purple-200'
-                  )}
-                >
-                  <div>
-                    <p className="font-mono text-sm font-medium">{formatPhoneNumber(r.number)}</p>
-                    <p className="text-xs text-muted-foreground">{[r.locality, r.region].filter(Boolean).join(', ') || 'Local number'}</p>
-                  </div>
-                </button>
-              ))}
+            // The wrapper takes the stack spacing; the inner -m-1/p-1 leaves room for the
+            // selected ring and focus outline inside the scroll area.
+            <div>
+              <div
+                className="-m-1 grid max-h-72 gap-2 overflow-y-auto p-1 sm:grid-cols-2"
+                role="radiogroup"
+                aria-label="Available numbers"
+              >
+                {results.map((r) => (
+                  <OptionCard
+                    key={r.number}
+                    selected={selected === r.number}
+                    onSelect={() => setSelected(r.number)}
+                    title={<span className="tabular-nums">{formatPhoneNumber(r.number)}</span>}
+                    description={[r.locality, r.region].filter(Boolean).join(', ') || 'Local number'}
+                    className="py-3"
+                  />
+                ))}
+              </div>
             </div>
           )}
 
-          <Button className="w-full purple-glow gap-2" disabled={!selected || purchasing} onClick={() => void handlePurchase()}>
-            {purchasing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Phone className="h-4 w-4" aria-hidden="true" />}
-            {purchasing
-              ? 'Redirecting to checkout...'
-              : selected
+          <div className="space-y-3">
+            {/* On phones the label ("Buy +1 (212) 555-0122 for $1.15/mo") is set a size down and may
+                wrap, so a long number never pushes the dialog wider than the screen. */}
+            <Button
+              size="lg"
+              className="w-full max-sm:h-auto max-sm:min-h-11 max-sm:px-4 max-sm:py-2.5 max-sm:text-sm max-sm:leading-5 max-sm:whitespace-normal"
+              disabled={!selected}
+              onClick={() => void handlePurchase()}
+              loading={purchasing}
+              loadingText="Redirecting to checkout…"
+            >
+              <Phone aria-hidden="true" />
+              {selected
                 ? `Buy ${formatPhoneNumber(selected)} for $${PHONE_NUMBER_MONTHLY_PRICE_USD}/mo`
                 : 'Select a number'}
-          </Button>
-          <p className="text-center text-xs text-muted-foreground">
-            ${PHONE_NUMBER_MONTHLY_PRICE_USD}/month, billed automatically via Stripe. Cancel anytime from your billing settings.
-          </p>
+            </Button>
+            <p className="text-center text-xs leading-4 text-muted-foreground">
+              ${PHONE_NUMBER_MONTHLY_PRICE_USD}/month, billed automatically via Stripe. Cancel anytime from your billing settings.
+            </p>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -310,7 +362,7 @@ function RoutingDialog({
 
   return (
     <Dialog open={!!number} onOpenChange={(o) => !o && !saving && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>Change routing</DialogTitle>
           <DialogDescription>
@@ -319,54 +371,47 @@ function RoutingDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <fieldset className="space-y-2" disabled={saving}>
-          <legend className="sr-only">Routing mode</legend>
+        <div role="radiogroup" aria-label="Routing mode" className="grid gap-2">
           {(Object.keys(ROUTING_MODES) as RoutingMode[]).map((mode) => {
             const copy = ROUTING_MODES[mode]
-            const checked = choice === mode
             return (
-              <label
+              <OptionCard
                 key={mode}
-                className={cn(
-                  'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
-                  checked ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground/40',
-                )}
+                selected={choice === mode}
+                onSelect={() => setChoice(mode)}
+                disabled={saving}
+                icon={mode === 'app_routed' ? Route : Phone}
+                title={copy.title}
+                badge={mode === current ? <Badge variant="outline">Current</Badge> : undefined}
+                description={copy.summary}
               >
-                <input
-                  type="radio"
-                  name="routing-mode"
-                  value={mode}
-                  checked={checked}
-                  onChange={() => setChoice(mode)}
-                  className="mt-1 accent-primary"
-                />
-                <span className="space-y-1">
-                  <span className="block text-sm font-medium">
-                    {copy.title}
-                    {mode === current && <span className="ml-2 text-xs font-normal text-muted-foreground">(current)</span>}
-                  </span>
-                  <span className="block text-xs text-muted-foreground">{copy.summary}</span>
-                  <ul className="list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">
-                    {copy.details.map((d) => <li key={d}>{d}</li>)}
-                  </ul>
+                <span className="mt-2 flex flex-col gap-1">
+                  {copy.details.map((d) => <Detail key={d}>{d}</Detail>)}
                 </span>
-              </label>
+              </OptionCard>
             )
           })}
-        </fieldset>
+        </div>
 
         {choice === 'native_elevenlabs' && current !== 'native_elevenlabs' && (
-          <p className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
-            <AlertCircle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-            With direct routing, an ElevenLabs outage means missed calls on this number, and your working hours are ignored.
-          </p>
+          <Alert variant="warning">
+            <AlertTriangle aria-hidden="true" />
+            <AlertDescription>
+              With direct routing, an ElevenLabs outage means missed calls on this number, and your working hours are ignored.
+            </AlertDescription>
+          </Alert>
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button onClick={() => void confirm()} disabled={saving || choice === current}>
-            {saving && <Loader2 className="animate-spin" aria-hidden="true" />}
-            {saving ? 'Applying…' : 'Change routing'}
+          <Button variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button
+            onClick={() => void confirm()}
+            disabled={choice === current}
+            loading={saving}
+            loadingState="connecting"
+            loadingText="Applying…"
+          >
+            Change routing
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -404,23 +449,63 @@ function ReleaseDialog({
 
   return (
     <Dialog open={!!number} onOpenChange={(o) => !o && !releasing && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle>Release {number ? formatPhoneNumber(number.number) : 'this number'}?</DialogTitle>
+          <DialogTitle>
+            Release <span className="tabular-nums">{number ? formatPhoneNumber(number.number) : 'this number'}</span>?
+          </DialogTitle>
           <DialogDescription>
             Calls to this number stop immediately and its subscription is cancelled. A released number usually cannot
             be bought back.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={releasing}>Keep number</Button>
-          <Button variant="destructive" onClick={() => void release()} disabled={releasing}>
-            {releasing && <Loader2 className="animate-spin" aria-hidden="true" />}
-            {releasing ? 'Releasing…' : 'Release number'}
+          <Button variant="ghost" onClick={onClose} disabled={releasing}>Keep number</Button>
+          <Button
+            variant="destructive-solid"
+            onClick={() => void release()}
+            loading={releasing}
+            loadingText="Releasing…"
+          >
+            Release number
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// ─── Routing explainer (aside) ───────────────────────────────────────────────
+function RoutingGuide() {
+  return (
+    <aside aria-labelledby="routing-guide" className="rounded-[24px] bg-secondary p-2 sm:p-3 xl:sticky xl:top-6">
+      <div className="px-3 pt-3 pb-4">
+        <h2 id="routing-guide" className="text-[15px] leading-[22px] font-medium">How calls reach your agent</h2>
+      </div>
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-1">
+        {(Object.keys(ROUTING_MODES) as RoutingMode[]).map((mode) => {
+          const copy = ROUTING_MODES[mode]
+          return (
+            <div key={mode} className="rounded-2xl bg-card p-4 shadow-panel">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm leading-5 font-medium">{copy.short}</h3>
+                {mode === 'app_routed'
+                  ? <Badge variant="secondary">Recommended</Badge>
+                  : <Badge variant="outline">No failover</Badge>}
+              </div>
+              <p className="mt-1.5 text-[13px] leading-[19px] text-muted-foreground">{copy.summary}</p>
+              <div className="mt-3 flex flex-col gap-1.5 border-t border-rule pt-3">
+                {copy.details.map((d) => <Detail key={d}>{d}</Detail>)}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <p className="flex items-start gap-2 px-3 pt-4 pb-2 text-xs leading-[18px] text-muted-foreground">
+        <CheckCircle2 className="mt-px size-3.5 shrink-0 text-success-dot" aria-hidden="true" />
+        Inbound calls are handled automatically once a number is assigned to an agent.
+      </p>
+    </aside>
   )
 }
 
@@ -512,165 +597,252 @@ export default function PhonePage() {
   const activeCount = numbers.filter((n) => n.is_active).length
 
   return (
-    <div className="p-4 sm:p-6 max-w-4xl">
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Phone Numbers</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage virtual numbers and how calls reach your AI agent.
-          </p>
-        </div>
-        <Button className="purple-glow gap-2 shrink-0" onClick={() => setAddOpen(true)}>
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Buy a number
-        </Button>
-      </div>
-
-      {/* Summary + search */}
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-muted-foreground">
-          {numbers.length} number{numbers.length !== 1 ? 's' : ''} · {activeCount} active
-        </p>
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <Input
-            placeholder="Search numbers…"
-            aria-label="Search numbers"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-9 pl-9"
-          />
-        </div>
-      </div>
+    <PageContainer>
+      <PageHeader
+        eyebrow="Phone numbers"
+        title="Phone numbers"
+        description="Manage virtual numbers and how calls reach your AI agent."
+        actions={
+          <Button onClick={() => setAddOpen(true)}>
+            <Plus aria-hidden="true" />
+            Buy a number
+          </Button>
+        }
+      />
 
       {loadError && (
-        <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          <span>{loadError}</span>
-          <Button variant="outline" size="sm" onClick={() => { setLoading(true); void load() }}>
-            <RotateCw aria-hidden="true" /> Try again
-          </Button>
-        </div>
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle aria-hidden="true" />
+          <AlertTitle>{loadError}</AlertTitle>
+          <AlertAction>
+            <Button variant="outline" size="sm" onClick={() => { setLoading(true); void load() }}>
+              <RotateCw aria-hidden="true" /> Try again
+            </Button>
+          </AlertAction>
+        </Alert>
       )}
 
-      {/* List */}
-      {loading ? (
-        <div className="space-y-2" aria-busy="true" aria-label="Loading phone numbers">
-          {[...Array(3)].map((_, i) => <div key={i} className="h-24 animate-pulse rounded-xl bg-muted" />)}
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-16 text-center">
-          <Globe className="h-8 w-8 text-muted-foreground/50" aria-hidden="true" />
-          <p className="text-sm text-muted-foreground">
-            {numbers.length === 0 ? 'No phone numbers yet — buy one to start taking calls.' : 'No numbers match your search.'}
-          </p>
-          {numbers.length === 0 && (
-            <Button onClick={() => setAddOpen(true)} className="gap-2"><Plus className="h-4 w-4" aria-hidden="true" /> Buy a number</Button>
+      {/* The guide sits beside the list only from xl: next to a 320 px aside at lg the list
+          was too narrow for the number. Below xl it stacks under the list. */}
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <section aria-label="Your phone numbers" className="min-w-0">
+          {/* Toolbar: search + summary. It is also drawn during the first load (search
+              disabled) so the list does not move down when the numbers arrive. */}
+          {(loading || numbers.length > 0) && (
+            <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+              <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
+                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                <Input
+                  placeholder="Search numbers…"
+                  aria-label="Search numbers"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  disabled={loading && numbers.length === 0}
+                  className="h-9 rounded-full pl-9"
+                />
+              </div>
+              {loading ? (
+                // Refetch with the list still on screen ("Try again"): the rows stay, dimmed.
+                numbers.length > 0 && (
+                  <span className="ml-auto inline-flex">
+                    <OrbInline state="breathing" label="Updating…" />
+                  </span>
+                )
+              ) : (
+                <p className="ml-auto text-[13px] leading-[19px] text-muted-foreground tabular-nums">
+                  {numbers.length} number{numbers.length !== 1 ? 's' : ''} · {activeCount} active
+                </p>
+              )}
+            </div>
           )}
-        </div>
-      ) : (
-        <ul className="space-y-2">
-          {filtered.map((n) => {
-            const mode = modeOf(n)
-            const routing = n.routing_status ? routingStatusCopy(n.routing_status) : null
-            const rowBusy = busy[n.id]
-            return (
-              <li key={n.id} className="rounded-xl border p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={cn('flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full', n.is_active ? 'bg-green-50' : 'bg-gray-100')}>
-                      {n.is_active ? <Phone className="h-4 w-4 text-green-600" aria-hidden="true" /> : <PhoneOff className="h-4 w-4 text-gray-400" aria-hidden="true" />}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-mono text-sm font-semibold">{formatPhoneNumber(n.number)}</p>
-                        <button
-                          type="button"
-                          onClick={() => copyNumber(n.number)}
-                          className="rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          aria-label={`Copy ${formatPhoneNumber(n.number)}`}
-                        >
-                          <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
+
+          {/* List */}
+          {loading && numbers.length === 0 ? (
+            <Card className="py-0">
+              <OrbLoader label="Loading phone numbers…" className="min-h-[240px]" />
+            </Card>
+          ) : numbers.length === 0 ? (
+            <Card className="py-0">
+              {loadError ? (
+                // The alert above carries the message and "Try again"; this only keeps the
+                // list area from claiming there are no numbers.
+                <EmptyState
+                  bare
+                  icon={AlertCircle}
+                  iconClassName="bg-destructive-soft text-destructive shadow-none"
+                  title="Your numbers could not be loaded"
+                  description="They will show here once the list loads."
+                  className="min-h-[280px]"
+                />
+              ) : (
+                <EmptyState
+                  bare
+                  icon={Phone}
+                  title="No phone numbers yet"
+                  description="Buy one to start taking calls."
+                  action={
+                    <Button onClick={() => setAddOpen(true)}>
+                      <Plus aria-hidden="true" /> Buy a number
+                    </Button>
+                  }
+                  className="min-h-[280px]"
+                />
+              )}
+            </Card>
+          ) : filtered.length === 0 ? (
+            <Card className="py-0">
+              <EmptyState bare icon={Search} title="No numbers match your search" />
+            </Card>
+          ) : (
+            <Card
+              aria-busy={loading || undefined}
+              className={cn('gap-0 py-0 transition-opacity duration-200', loading && 'opacity-60')}
+            >
+              {/* Rows lay out by the list's own width (container queries), not the viewport:
+                  the number keeps its full width wherever the panel is narrow. */}
+              <ul className="@container/numbers">
+                {filtered.map((n) => {
+                  const mode = modeOf(n)
+                  const routing = n.routing_status ? routingStatusCopy(n.routing_status) : null
+                  const rowBusy = busy[n.id]
+                  const needsReapply = n.routing_status === 'failed' || n.routing_status === 'degraded'
+                  const pretty = formatPhoneNumber(n.number)
+                  return (
+                    <li
+                      key={n.id}
+                      className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] gap-x-3 gap-y-3 border-b border-rule px-4 py-4 last:border-b-0 @lg/numbers:grid-cols-[2.5rem_minmax(0,1fr)_auto_auto] @lg/numbers:px-5"
+                    >
+                      {/* Flag disc */}
+                      <span
+                        aria-hidden="true"
+                        className="grid size-10 place-items-center rounded-full bg-secondary text-muted-foreground"
+                      >
+                        {n.country ? <FlagIcon country={n.country} /> : <Phone className="size-4" />}
+                      </span>
+
+                      {/* Number + agent */}
+                      <div className="min-w-0 self-center">
+                        <div className="flex items-center gap-1">
+                          <p className="truncate text-base leading-6 font-medium tabular-nums @lg/numbers:text-[17px]" title={pretty}>{pretty}</p>
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            className="tap-44 text-muted-foreground hover:text-foreground"
+                            onClick={() => copyNumber(n.number)}
+                            aria-label={`Copy ${pretty}`}
+                          >
+                            <Copy aria-hidden="true" />
+                          </Button>
+                        </div>
+                        <p className="mt-0.5 flex items-center gap-1.5 text-[13px] leading-[19px] text-muted-foreground">
+                          {n.agents?.name ? (
+                            <><Bot className="size-3.5 shrink-0" aria-hidden="true" /> {n.agents.name}</>
+                          ) : (
+                            'No agent assigned'
+                          )}
+                          {n.country ? ` · ${n.country}` : ''}
+                        </p>
                       </div>
-                      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        {n.agents?.name ? (
-                          <><Bot className="h-3 w-3" aria-hidden="true" /> {n.agents.name}</>
-                        ) : (
-                          'No agent assigned'
+
+                      {/* Active toggle: own row in a narrow list, top-right from @lg */}
+                      <div className="col-span-2 col-start-2 row-start-2 flex items-center gap-2.5 @lg/numbers:col-span-1 @lg/numbers:col-start-3 @lg/numbers:row-start-1 @lg/numbers:self-center">
+                        {/* Named after the number. The Active/Paused text is the visible state, not a
+                            <label>: Base UI would name the switch from a linked label (aria-labelledby),
+                            so its name would flip with the state and never say which number it is. */}
+                        <Switch
+                          aria-label={`Answer calls on ${pretty}`}
+                          checked={n.is_active}
+                          onCheckedChange={() => void handleToggle(n)}
+                          disabled={!!rowBusy}
+                        />
+                        <span className="w-12 text-[13px] leading-[19px] text-muted-foreground">
+                          {n.is_active ? 'Active' : 'Paused'}
+                        </span>
+                        {/* Reserved slot so the switch does not move while the orb shows. */}
+                        <span className="-ml-1.5 inline-flex size-5 shrink-0">
+                          {rowBusy === 'toggle' && <OrbInline state="working" label="Updating…" />}
+                        </span>
+                      </div>
+
+                      {/* Row menu */}
+                      <div className="col-start-3 row-start-1 self-center @lg/numbers:col-start-4">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            aria-label={`Actions for ${pretty}`}
+                            render={<Button variant="ghost" size="icon-sm" className="tap-44 text-muted-foreground hover:text-foreground aria-expanded:text-foreground" />}
+                          >
+                            <MoreHorizontal aria-hidden="true" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-52">
+                            <DropdownMenuGroup>
+                              <DropdownMenuItem onClick={() => setRoutingTargetId(n.id)} disabled={!!rowBusy}>
+                                <Route /> Change routing…
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => void handleReapply(n)} disabled={!!rowBusy}>
+                                <RotateCw /> Re-apply routing
+                              </DropdownMenuItem>
+                            </DropdownMenuGroup>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem variant="destructive" onClick={() => setReleaseTarget(n)}>
+                              <Trash2 /> Release number…
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+
+                      {/* Routing */}
+                      <div className="col-span-3 row-start-3 min-w-0 rounded-xl bg-band px-3 py-2.5 @lg/numbers:col-start-2 @lg/numbers:row-start-2">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+                          <Route className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                          <span className="text-[13px] leading-[19px] font-medium" title={ROUTING_MODES[mode].title}>
+                            {ROUTING_MODES[mode].short}
+                          </span>
+                          {rowBusy === 'reapply' ? (
+                            <StatusChip tone="neutral" icon={<OrbInline state="connecting" />}>Re-applying…</StatusChip>
+                          ) : (
+                            routing && <StatusPill copy={routing} />
+                          )}
+                          {mode === 'native_elevenlabs' && (
+                            <Badge variant="outline">No failover</Badge>
+                          )}
+                          <div className="ml-auto flex flex-wrap gap-1.5">
+                            {needsReapply && (
+                              <Button
+                                size="xs"
+                                onClick={() => void handleReapply(n)}
+                                disabled={!!rowBusy}
+                              >
+                                <RotateCw aria-hidden="true" />
+                                Re-apply routing
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              onClick={() => setRoutingTargetId(n.id)}
+                              disabled={!!rowBusy}
+                            >
+                              Change routing
+                            </Button>
+                          </div>
+                        </div>
+                        {n.routing_error && n.routing_status !== 'ready' && (
+                          <p className="mt-2 flex items-start gap-1.5 text-xs leading-4 break-words text-destructive">
+                            <AlertCircle className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                            {n.routing_error}
+                          </p>
                         )}
-                        {n.country ? ` · ${n.country}` : ''}
-                      </p>
-                    </div>
-                  </div>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            </Card>
+          )}
+        </section>
 
-                  <div className="flex items-center gap-4 shrink-0">
-                    <div className="flex items-center gap-2">
-                      {rowBusy === 'toggle' && <Loader2 className="size-3.5 animate-spin text-muted-foreground" aria-hidden="true" />}
-                      <Switch
-                        id={`number-${n.id}-active`}
-                        checked={n.is_active}
-                        onCheckedChange={() => void handleToggle(n)}
-                        disabled={!!rowBusy}
-                      />
-                      <label htmlFor={`number-${n.id}-active`} className="text-xs text-muted-foreground w-12">
-                        {n.is_active ? 'Active' : 'Paused'}
-                      </label>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => setReleaseTarget(n)}
-                      aria-label={`Release ${formatPhoneNumber(n.number)}`}
-                      title="Release number"
-                    >
-                      <Trash2 className="h-4 w-4 text-red-500" aria-hidden="true" />
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Routing */}
-                <div className="mt-3 flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Route className="size-3.5 text-muted-foreground" aria-hidden="true" />
-                      <span className="text-xs font-medium">{ROUTING_MODES[mode].title}</span>
-                      {routing && <StatusPill copy={routing} />}
-                      {mode === 'native_elevenlabs' && (
-                        <Badge variant="outline" className="text-[10px]">No failover</Badge>
-                      )}
-                    </div>
-                    {n.routing_error && n.routing_status !== 'ready' && (
-                      <p className="text-xs text-destructive break-words">{n.routing_error}</p>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 flex-wrap gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setRoutingTargetId(n.id)} disabled={!!rowBusy}>
-                      Change routing
-                    </Button>
-                    <Button
-                      variant={n.routing_status === 'failed' || n.routing_status === 'degraded' ? 'default' : 'ghost'}
-                      size="sm"
-                      onClick={() => void handleReapply(n)}
-                      disabled={!!rowBusy}
-                    >
-                      {rowBusy === 'reapply' ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RotateCw aria-hidden="true" />}
-                      Re-apply routing
-                    </Button>
-                  </div>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-
-      {/* Verified badge note */}
-      {!loading && numbers.length > 0 && (
-        <p className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <CheckCircle2 className="h-3.5 w-3.5 text-green-500" aria-hidden="true" />
-          Inbound calls are handled automatically once a number is assigned to an agent.
-        </p>
-      )}
+        <RoutingGuide />
+      </div>
 
       <AddNumberDialog open={addOpen} onClose={() => setAddOpen(false)} />
       <RoutingDialog
@@ -687,6 +859,6 @@ export default function PhonePage() {
         onClose={() => setReleaseTarget(null)}
         onReleased={(id) => setNumbers((p) => p.filter((n) => n.id !== id))}
       />
-    </div>
+    </PageContainer>
   )
 }

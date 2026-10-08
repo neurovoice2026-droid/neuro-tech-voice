@@ -5,13 +5,12 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import Link from 'next/link'
-import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Field } from '@/components/shared/FormSection'
 import { signInWithEmail, signInWithGoogle } from '@/lib/auth/actions'
-import { cn } from '@/lib/utils'
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 const loginSchema = z.object({
@@ -32,6 +31,9 @@ export function LoginForm() {
     resolver: zodResolver(loginSchema),
     defaultValues: { email: '', password: '' },
   })
+  const { errors } = form.formState
+  // One auth flow at a time: the email form waits while Google hands off.
+  const fieldsDisabled = isPending || isGooglePending
 
   function onSubmit(values: LoginValues) {
     setError(null)
@@ -55,145 +57,116 @@ export function LoginForm() {
       <Button
         type="button"
         variant="outline"
-        className="h-11 w-full border-border transition-all duration-150 hover:border-primary hover:bg-purple-50"
+        size="lg"
+        className="w-full"
         onClick={handleGoogle}
-        disabled={isGooglePending || isPending}
+        loading={isGooglePending}
+        loadingText="Connecting to Google…"
+        disabled={isPending}
       >
-        {isGooglePending ? (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        ) : (
-          <GoogleIcon />
-        )}
+        <GoogleIcon />
         Continue with Google
       </Button>
 
-      {/* Divider */}
-      <div className="relative flex items-center">
-        <div className="flex-1 border-t border-border" />
-        <span className="mx-3 text-xs uppercase tracking-wider text-muted-foreground">
-          or continue with email
-        </span>
-        <div className="flex-1 border-t border-border" />
-      </div>
+      <OrDivider />
 
       {/* Server error */}
       {error && (
-        <Alert variant="destructive" className="py-3">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+        <Alert variant="destructive">
+          <AlertCircle />
+          <AlertDescription className="text-destructive">{error}</AlertDescription>
         </Alert>
       )}
 
       {/* Form */}
-      <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-4">
-        {/* Email */}
-        <div className="space-y-1.5">
-          <Label htmlFor="email" className="text-sm font-medium">
-            Email address
-          </Label>
+      <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-5">
+        <Field label="Email address" htmlFor="email" error={errors.email?.message}>
           <Input
             id="email"
             type="email"
             placeholder="you@company.com"
             autoComplete="email"
-            disabled={isPending}
+            disabled={fieldsDisabled}
             {...form.register('email')}
-            className={cn(
-              'h-11',
-              form.formState.errors.email &&
-                'border-destructive focus-visible:ring-destructive/30'
-            )}
+            className="h-11"
           />
-          {form.formState.errors.email && (
-            <p className="text-xs text-destructive">
-              {form.formState.errors.email.message}
-            </p>
-          )}
-        </div>
+        </Field>
 
-        {/* Password */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password" className="text-sm font-medium">
-              Password
-            </Label>
+        <Field
+          label="Password"
+          htmlFor="password"
+          error={errors.password?.message}
+          labelAction={
             <Link
               href="/forgot-password"
-              className="text-xs text-primary transition-colors hover:text-primary/80"
+              className="rounded-sm text-[13px] leading-4 font-medium text-foreground underline decoration-foreground/30 underline-offset-4 transition-colors hover:decoration-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               Forgot password?
             </Link>
-          </div>
-          <div className="relative">
-            <Input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              autoComplete="current-password"
-              disabled={isPending}
-              {...form.register('password')}
-              className={cn(
-                'h-11 pr-10',
-                form.formState.errors.password &&
-                  'border-destructive focus-visible:ring-destructive/30'
-              )}
-            />
-            <button
-              type="button"
-              tabIndex={-1}
-              onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-            >
-              {showPassword ? (
-                <EyeOff className="h-4 w-4" />
-              ) : (
-                <Eye className="h-4 w-4" />
-              )}
-            </button>
-          </div>
-          {form.formState.errors.password && (
-            <p className="text-xs text-destructive">
-              {form.formState.errors.password.message}
-            </p>
-          )}
-        </div>
+          }
+        >
+          {/* Fragment, not the bare wrapper: Field wires aria-* onto a direct
+              element child, which would be the <div>; the Input has its own. */}
+          <>
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                disabled={fieldsDisabled}
+                aria-invalid={errors.password ? true : undefined}
+                aria-describedby={errors.password ? 'password-error' : undefined}
+                {...form.register('password')}
+                className="h-11 pr-12"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setShowPassword((v) => !v)}
+                className="tap-44 absolute top-1/2 right-1.5 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-controls="password"
+              >
+                {showPassword ? <EyeOff /> : <Eye />}
+              </Button>
+            </div>
+          </>
+        </Field>
 
-        {/* Submit */}
         <Button
           type="submit"
-          className="h-11 w-full purple-glow"
-          disabled={isPending}
+          size="lg"
+          className="w-full"
+          loading={isPending}
+          loadingText="Signing in…"
+          disabled={isGooglePending}
         >
-          {isPending ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Signing in&hellip;
-            </>
-          ) : (
-            'Sign in'
-          )}
+          Sign in
         </Button>
       </form>
-
-      {/* Footer */}
-      <p className="text-center text-sm text-muted-foreground">
-        Don&apos;t have an account?{' '}
-        <Link
-          href="/register"
-          className="font-medium text-primary transition-colors hover:text-primary/80"
-        >
-          Sign up
-        </Link>
-      </p>
     </div>
   )
 }
 
-// ─── Google SVG icon ──────────────────────────────────────────────────────────
+// ─── "or" divider ─────────────────────────────────────────────────────────────
+function OrDivider() {
+  return (
+    <div className="flex items-center gap-3">
+      <span aria-hidden className="h-px flex-1 bg-rule" />
+      <span className="text-[11px] leading-4 font-medium tracking-[0.12em] text-muted-foreground uppercase">
+        or
+      </span>
+      <span aria-hidden className="h-px flex-1 bg-rule" />
+    </div>
+  )
+}
+
+// ─── Google SVG icon (third-party mark, kept in Google's colours) ─────────────
 function GoogleIcon() {
   return (
     <svg
-      className="mr-2 flex-shrink-0"
+      className="size-[18px] shrink-0"
       width="18"
       height="18"
       viewBox="0 0 18 18"

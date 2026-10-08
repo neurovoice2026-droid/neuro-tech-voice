@@ -2,11 +2,17 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import Image from 'next/image'
-import { CheckCircle2, Link2, ExternalLink, Webhook, Loader2 } from 'lucide-react'
+import { Check, ShieldCheck, Webhook } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
 import { WorkInProgressBadge } from '@/components/shared/WorkInProgressBadge'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { SectionHeading } from '@/components/shared/SectionHeading'
+import { StatusChip } from '@/components/shared/StatusChip'
+import { OrbLoader } from '@/components/shared/OrbLoader'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 
@@ -17,7 +23,6 @@ interface IntegrationDef {
   description: string
   capabilities: string[]
   logoSrc?: string
-  logoBg: string
   category: string
   recommended?: boolean
   workInProgress?: boolean
@@ -30,7 +35,6 @@ const INTEGRATIONS: IntegrationDef[] = [
     description: 'Let your agent check your free times and book appointments during calls (Agent → Call handling → Appointments).',
     capabilities: ['Book appointments during calls', 'Check real-time availability', 'Respects your opening hours', 'Bookings land in your calendar'],
     logoSrc: '/integrari/google_calendar.svg',
-    logoBg: 'bg-blue-50',
     category: 'Google Workspace',
     recommended: true,
   },
@@ -40,7 +44,6 @@ const INTEGRATIONS: IntegrationDef[] = [
     description: 'Send follow-up emails, call summaries, and confirmations automatically after every call.',
     capabilities: ['Send call summaries', 'Automated follow-up emails', 'Email confirmations', 'Custom email templates'],
     logoSrc: '/integrari/google_mail.svg',
-    logoBg: 'bg-red-50',
     category: 'Google Workspace',
     workInProgress: true,
     recommended: true,
@@ -51,7 +54,6 @@ const INTEGRATIONS: IntegrationDef[] = [
     description: 'Log every call, capture leads, and track outcomes in a spreadsheet automatically.',
     capabilities: ['Log calls automatically', 'Capture leads & contacts', 'Track call outcomes', 'Export call data'],
     logoSrc: '/integrari/google_sheets.svg',
-    logoBg: 'bg-green-50',
     category: 'Google Workspace',
     workInProgress: true,
   },
@@ -61,7 +63,6 @@ const INTEGRATIONS: IntegrationDef[] = [
     description: 'Generate call reports, meeting notes, and documentation automatically from conversations.',
     capabilities: ['Auto-generate call reports', 'Create meeting notes', 'Build knowledge base', 'Document workflows'],
     logoSrc: '/integrari/google_docs.svg',
-    logoBg: 'bg-blue-50',
     category: 'Google Workspace',
     workInProgress: true,
   },
@@ -71,7 +72,6 @@ const INTEGRATIONS: IntegrationDef[] = [
     description: 'Store call recordings, transcripts, and reports organized in your Drive automatically.',
     capabilities: ['Store call recordings', 'Organize transcripts', 'Shared team folders', 'Automatic file naming'],
     logoSrc: '/integrari/google_drive.svg',
-    logoBg: 'bg-yellow-50',
     category: 'Google Workspace',
     workInProgress: true,
   },
@@ -80,103 +80,135 @@ const INTEGRATIONS: IntegrationDef[] = [
     name: 'Custom Webhook',
     description: 'Send real-time call data to any external service, CRM, or automation platform.',
     capabilities: ['Real-time call events', 'Custom payload format', 'Retry on failure', 'HMAC signature verification'],
-    logoBg: 'bg-gray-100',
     category: 'Developer',
   },
 ]
 
-// ─── Card component ───────────────────────────────────────────────────────────
-function IntegrationCard({
-  integration,
-  connected,
-  busy,
-  onConnect,
-  onDisconnect,
-}: {
+interface IntegrationCardProps {
   integration: IntegrationDef
   connected: boolean
   busy: boolean
   onConnect: (i: IntegrationDef) => void
   onDisconnect: (i: IntegrationDef) => void
+}
+
+// ─── Shared bits ──────────────────────────────────────────────────────────────
+
+/** Connect (outline, connecting orb) / Disconnect (ghost) pill. Same handlers and disabled rules as before. */
+function ConnectButton({ integration, connected, busy, onConnect, onDisconnect }: IntegrationCardProps) {
+  return (
+    <Button
+      size="sm"
+      variant={connected ? 'ghost' : 'outline'}
+      disabled={integration.workInProgress}
+      loading={busy}
+      loadingState={connected ? 'working' : 'connecting'}
+      loadingText={connected ? 'Disconnecting…' : 'Connecting…'}
+      title={integration.workInProgress ? 'Coming soon' : undefined}
+      onClick={() => (connected ? onDisconnect(integration) : onConnect(integration))}
+      className={cn('tap-44 shrink-0', connected && 'text-muted-foreground hover:text-destructive')}
+    >
+      {connected ? 'Disconnect' : 'Connect'}
+    </Button>
+  )
+}
+
+function ConnectionStatus({ connected }: { connected: boolean }) {
+  return connected ? (
+    <StatusChip tone="success" dot>Connected</StatusChip>
+  ) : (
+    <span className="text-xs leading-4 text-muted-foreground">Not connected</span>
+  )
+}
+
+/**
+ * What the integration does: a quiet check list (like the plan cards' features).
+ * `muted` (work in progress) greys the text instead of fading it, so it stays ≥ 4.5:1.
+ */
+function CapabilityList({
+  capabilities,
+  columns = 1,
+  muted = false,
+}: {
+  capabilities: string[]
+  columns?: 1 | 2
+  muted?: boolean
 }) {
   return (
-    <div
-      className={cn(
-        'relative rounded-2xl border-2 p-5 transition-all duration-200',
-        connected
-          ? 'border-green-400 bg-green-50/40 shadow-sm'
-          : 'border-border bg-card hover:border-purple-200 hover:shadow-sm'
-      )}
+    <ul
+      className={cn('grid gap-x-6 gap-y-1.5', columns === 2 && 'max-w-[560px] sm:grid-cols-2')}
+      aria-label="What it does"
     >
-      {/* Badges */}
-      <div className="absolute -top-2.5 left-4 flex gap-1.5">
-        {connected && (
-          <span className="flex items-center gap-1 rounded-full bg-green-500 px-2.5 py-0.5 text-[10px] font-semibold text-white">
-            <CheckCircle2 className="h-2.5 w-2.5" />
-            Connected
-          </span>
-        )}
-        {integration.recommended && !connected && (
-          <span className="rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground">
-            Recommended
-          </span>
-        )}
-        {integration.workInProgress && <WorkInProgressBadge />}
-      </div>
-
-      <div className="flex items-start justify-between gap-4">
-        {/* Logo + info */}
-        <div className="flex items-start gap-3">
-          <div className={cn('flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl p-2', integration.logoBg)}>
-            {integration.logoSrc ? (
-              <Image
-                src={integration.logoSrc}
-                alt={integration.name}
-                width={28}
-                height={28}
-                className="object-contain"
-              />
-            ) : (
-              <Webhook className="h-5 w-5 text-gray-500" />
-            )}
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-foreground">{integration.name}</h3>
-              <Badge variant="secondary" className="text-[10px]">{integration.category}</Badge>
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed max-w-sm">
-              {integration.description}
-            </p>
-          </div>
-        </div>
-
-        {/* CTA */}
-        <Button
-          size="sm"
-          variant={connected ? 'outline' : 'default'}
-          disabled={busy || integration.workInProgress}
-          title={integration.workInProgress ? 'Coming soon' : undefined}
-          onClick={() => (connected ? onDisconnect(integration) : onConnect(integration))}
+      {capabilities.map((cap) => (
+        <li
+          key={cap}
           className={cn(
-            'shrink-0',
-            connected
-              ? 'border-green-300 text-green-700 hover:border-red-300 hover:bg-red-50 hover:text-red-600'
-              : 'purple-glow'
+            'flex items-start gap-2 text-[13px] leading-[19px]',
+            muted ? 'text-muted-foreground' : 'text-foreground/80'
           )}
         >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : connected ? 'Disconnect' : 'Connect'}
-        </Button>
+          <Check aria-hidden className="mt-[3px] size-3.5 shrink-0 text-muted-foreground" />
+          {cap}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+// ─── Google tile (tinted, like the site's Google Workspace cards) ────────────
+function GoogleTile(props: IntegrationCardProps) {
+  const { integration, connected } = props
+  return (
+    <Card variant="tinted" className="gap-0 p-5">
+      <div className="flex items-start justify-between gap-3">
+        <span className="grid size-11 shrink-0 place-items-center rounded-full bg-white shadow-hair">
+          {integration.logoSrc && (
+            <Image src={integration.logoSrc} alt="" width={28} height={28} className="size-7 object-contain" />
+          )}
+        </span>
+        <div className="flex flex-wrap justify-end gap-1.5">
+          {integration.recommended && !connected && <Badge variant="outline">Recommended</Badge>}
+          {integration.workInProgress && <WorkInProgressBadge />}
+        </div>
       </div>
 
-      {/* Capabilities */}
-      <div className={cn('mt-4 grid grid-cols-2 gap-1.5', integration.workInProgress && 'opacity-60')}>
-        {integration.capabilities.map((cap) => (
-          <div key={cap} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <div className={cn('h-1.5 w-1.5 flex-shrink-0 rounded-full', connected ? 'bg-green-500' : 'bg-gray-300')} />
-            {cap}
-          </div>
-        ))}
+      <div className="mt-5 flex flex-1 flex-col">
+        <h3 className="text-[15px] leading-[22px] font-medium text-foreground">{integration.name}</h3>
+        <p className="mt-1 text-[13px] leading-[19px] text-muted-foreground">{integration.description}</p>
+        {/* Work-in-progress tiles quieten what they promise (as before), not their name. */}
+        <div className="mt-4">
+          <CapabilityList capabilities={integration.capabilities} muted={integration.workInProgress} />
+        </div>
+      </div>
+
+      <div className="mt-5 flex min-h-8 flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <ConnectionStatus connected={connected} />
+        <ConnectButton {...props} />
+      </div>
+    </Card>
+  )
+}
+
+// ─── Developer row (white panel) ──────────────────────────────────────────────
+function DeveloperRow(props: IntegrationCardProps) {
+  const { integration, connected } = props
+  return (
+    <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start">
+      <span className="grid size-11 shrink-0 place-items-center rounded-full bg-secondary text-foreground">
+        <Webhook aria-hidden className="size-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-[15px] leading-[22px] font-medium text-foreground">{integration.name}</h3>
+          {connected && <StatusChip tone="success" dot>Connected</StatusChip>}
+        </div>
+        <p className="mt-1 max-w-[62ch] text-[13px] leading-[19px] text-muted-foreground">{integration.description}</p>
+        <div className="mt-3">
+          <CapabilityList capabilities={integration.capabilities} columns={2} />
+        </div>
+      </div>
+      <div className="self-start">
+        <ConnectButton {...props} />
       </div>
     </div>
   )
@@ -186,6 +218,9 @@ function IntegrationCard({
 export default function IntegrationsPage() {
   const [supabase] = useState(() => createClient())
   const [connected, setConnected] = useState<Record<string, boolean>>({})
+  // Presentation only: during the first load each section shows an orb instead of tiles
+  // that would flip from "Connect" to "Connected" a moment later; the headings stay.
+  const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
@@ -195,11 +230,22 @@ export default function IntegrationsPage() {
       map[row.type] = row.is_active
     }
     setConnected(map)
+    setLoaded(true)
   }, [supabase])
 
   useEffect(() => {
     refresh()
   }, [refresh])
+
+  // Coming back from the Google OAuth page with the browser's Back button can restore
+  // this page from the back/forward cache with the Connect pill still busy: clear it.
+  useEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setBusy(null)
+    }
+    window.addEventListener('pageshow', onPageShow)
+    return () => window.removeEventListener('pageshow', onPageShow)
+  }, [])
 
   // Toast feedback when returning from the Google OAuth redirect.
   useEffect(() => {
@@ -217,6 +263,8 @@ export default function IntegrationsPage() {
   const handleConnect = useCallback((integration: IntegrationDef) => {
     // Google Workspace integrations go through OAuth.
     if (integration.category === 'Google Workspace') {
+      // Presentation only: the pill shows the connecting orb while the browser leaves.
+      setBusy(integration.id)
       window.location.href = `/api/integrations/google/connect?type=${integration.id}`
       return
     }
@@ -261,78 +309,86 @@ export default function IntegrationsPage() {
 
   const googleIntegrations = INTEGRATIONS.filter((i) => i.category === 'Google Workspace')
   const devIntegrations = INTEGRATIONS.filter((i) => i.category === 'Developer')
+  const connectedCount = INTEGRATIONS.filter((i) => connected[i.id]).length
+
+  const cardProps = (i: IntegrationDef): IntegrationCardProps => ({
+    integration: i,
+    connected: !!connected[i.id],
+    busy: busy === i.id,
+    onConnect: handleConnect,
+    onDisconnect: handleDisconnect,
+  })
 
   return (
-    <div className="p-6 max-w-4xl">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground">Integrations</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Connect your tools to automate workflows and supercharge your AI agent.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        eyebrow="Integrations"
+        title="Integrations"
+        description="Connect your tools to automate workflows and supercharge your AI agent."
+        meta={
+          loaded && connectedCount > 0 ? (
+            <StatusChip tone="success" dot className="tabular-nums">{connectedCount} connected</StatusChip>
+          ) : undefined
+        }
+      />
 
-      {/* Google Workspace section */}
-      <div className="mb-8">
-        <div className="mb-4 flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white shadow-sm border">
-              <Image src="/integrari/google_calendar.svg" alt="Google" width={16} height={16} className="object-contain" />
+      <div className="space-y-10">
+        {/* Google Workspace */}
+        <section aria-labelledby="integrations-google">
+          <SectionHeading
+            title={<span id="integrations-google">Google Workspace</span>}
+            description="Calendar, mail, sheets, docs and files, connected through your Google account."
+            action={
+              <span className="hidden text-[13px] leading-[19px] text-muted-foreground tabular-nums sm:inline">
+                {googleIntegrations.length} integrations
+              </span>
+            }
+          />
+          {loaded ? (
+            // Three columns only once the tiles have room next to the sidebar (xl).
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {googleIntegrations.map((i) => (
+                <GoogleTile key={i.id} {...cardProps(i)} />
+              ))}
             </div>
-            <h2 className="text-sm font-semibold text-foreground">Google Workspace</h2>
-          </div>
-          <div className="flex-1 h-px bg-border" />
-          <span className="text-xs text-muted-foreground">{googleIntegrations.length} integrations</span>
-        </div>
+          ) : (
+            // One panel where the tiles land (white, like the other list loaders): about one tile
+            // tall on a phone, two rows from sm, so the Developer section stays below the fold.
+            <Card className="py-0">
+              <OrbLoader label="Loading integrations…" className="min-h-[360px] sm:min-h-[690px]" />
+            </Card>
+          )}
+          <p className="mt-4 flex max-w-[760px] items-start gap-2 text-xs leading-[18px] text-muted-foreground">
+            <ShieldCheck aria-hidden className="mt-px size-3.5 shrink-0" />
+            Connecting Google services opens a secure OAuth authorization window. We request only the minimum permissions needed. You can revoke access at any time from your Google Account settings.
+          </p>
+        </section>
 
-        <div className="space-y-4">
-          {googleIntegrations.map((i) => (
-            <IntegrationCard
-              key={i.id}
-              integration={i}
-              connected={!!connected[i.id]}
-              busy={busy === i.id}
-              onConnect={handleConnect}
-              onDisconnect={handleDisconnect}
-            />
-          ))}
-        </div>
+        {/* Developer */}
+        <section aria-labelledby="integrations-developer">
+          <SectionHeading
+            title={<span id="integrations-developer">Developer</span>}
+            description="Send call events to your own systems."
+            action={
+              <span className="hidden text-[13px] leading-[19px] text-muted-foreground tabular-nums sm:inline">
+                {devIntegrations.length} integration
+              </span>
+            }
+          />
+          <Card className="gap-0 py-0">
+            {loaded ? (
+              <div className="divide-y divide-rule">
+                {devIntegrations.map((i) => (
+                  <DeveloperRow key={i.id} {...cardProps(i)} />
+                ))}
+              </div>
+            ) : (
+              // Compact card body (< 240 px): its own 32 orb, the height of the webhook row.
+              <OrbLoader size={32} className="min-h-[142px]" />
+            )}
+          </Card>
+        </section>
       </div>
-
-      {/* Developer section */}
-      <div>
-        <div className="mb-4 flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100">
-              <Link2 className="h-3.5 w-3.5 text-gray-500" />
-            </div>
-            <h2 className="text-sm font-semibold text-foreground">Developer</h2>
-          </div>
-          <div className="flex-1 h-px bg-border" />
-          <span className="text-xs text-muted-foreground">{devIntegrations.length} integration</span>
-        </div>
-
-        <div className="space-y-4">
-          {devIntegrations.map((i) => (
-            <IntegrationCard
-              key={i.id}
-              integration={i}
-              connected={!!connected[i.id]}
-              busy={busy === i.id}
-              onConnect={handleConnect}
-              onDisconnect={handleDisconnect}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* OAuth note */}
-      <div className="mt-8 flex items-start gap-2.5 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4">
-        <ExternalLink className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Connecting Google services opens a secure OAuth authorization window. We request only the minimum permissions needed. You can revoke access at any time from your Google Account settings.
-        </p>
-      </div>
-    </div>
+    </PageContainer>
   )
 }

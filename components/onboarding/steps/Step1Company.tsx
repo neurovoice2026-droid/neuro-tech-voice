@@ -1,19 +1,21 @@
 'use client'
 
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, useController } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
-  Building2, Globe, ArrowRight, CheckCircle2,
+  Globe, ArrowRight,
   Cpu, Heart, Home, TrendingUp, ShoppingBag,
   Plane, GraduationCap, Scale, Car, Plus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Field } from '@/components/shared/FormSection'
+import { OptionCard } from '@/components/shared/OptionCard'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
 import { cn } from '@/lib/utils'
+import { StepActions, StepBody, StepHeader } from '../StepIndicator'
 
 // Accepts "www.site.com" or "site.com" as well as fully-qualified URLs by
 // checking validity against the https://-prefixed form, without changing the
@@ -51,18 +53,21 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>
 
+// Ink icons on neutral tiles: no per-industry colours (the selection is the ink ring).
 const INDUSTRIES = [
-  { value: 'technology',  label: 'Technology',   icon: Cpu,           color: 'text-blue-600',    bg: 'bg-blue-50',    ring: 'ring-blue-400',    selectedBg: 'bg-blue-50',    selectedBorder: 'border-blue-400' },
-  { value: 'healthcare',  label: 'Healthcare',   icon: Heart,         color: 'text-rose-600',    bg: 'bg-rose-50',    ring: 'ring-rose-400',    selectedBg: 'bg-rose-50',    selectedBorder: 'border-rose-400' },
-  { value: 'real_estate', label: 'Real Estate',  icon: Home,          color: 'text-green-600',   bg: 'bg-green-50',   ring: 'ring-green-400',   selectedBg: 'bg-green-50',   selectedBorder: 'border-green-400' },
-  { value: 'finance',     label: 'Finance',      icon: TrendingUp,    color: 'text-emerald-600', bg: 'bg-emerald-50', ring: 'ring-emerald-400', selectedBg: 'bg-emerald-50', selectedBorder: 'border-emerald-400' },
-  { value: 'retail',      label: 'Retail',       icon: ShoppingBag,   color: 'text-orange-600',  bg: 'bg-orange-50',  ring: 'ring-orange-400',  selectedBg: 'bg-orange-50',  selectedBorder: 'border-orange-400' },
-  { value: 'hospitality', label: 'Hospitality',  icon: Plane,         color: 'text-sky-600',     bg: 'bg-sky-50',     ring: 'ring-sky-400',     selectedBg: 'bg-sky-50',     selectedBorder: 'border-sky-400' },
-  { value: 'education',   label: 'Education',    icon: GraduationCap, color: 'text-purple-600',  bg: 'bg-purple-50',  ring: 'ring-purple-400',  selectedBg: 'bg-purple-50',  selectedBorder: 'border-purple-400' },
-  { value: 'legal',       label: 'Legal',        icon: Scale,         color: 'text-slate-600',   bg: 'bg-slate-50',   ring: 'ring-slate-400',   selectedBg: 'bg-slate-50',   selectedBorder: 'border-slate-400' },
-  { value: 'automotive',  label: 'Automotive',   icon: Car,           color: 'text-zinc-600',    bg: 'bg-zinc-50',    ring: 'ring-zinc-400',    selectedBg: 'bg-zinc-50',    selectedBorder: 'border-zinc-400' },
-  { value: 'other',       label: 'Other',        icon: Plus,          color: 'text-gray-500',    bg: 'bg-gray-50',    ring: 'ring-gray-400',    selectedBg: 'bg-gray-50',    selectedBorder: 'border-gray-400' },
+  { value: 'technology',  label: 'Technology',  icon: Cpu },
+  { value: 'healthcare',  label: 'Healthcare',  icon: Heart },
+  { value: 'real_estate', label: 'Real Estate', icon: Home },
+  { value: 'finance',     label: 'Finance',     icon: TrendingUp },
+  { value: 'retail',      label: 'Retail',      icon: ShoppingBag },
+  { value: 'hospitality', label: 'Hospitality', icon: Plane },
+  { value: 'education',   label: 'Education',   icon: GraduationCap },
+  { value: 'legal',       label: 'Legal',       icon: Scale },
+  { value: 'automotive',  label: 'Automotive',  icon: Car },
+  { value: 'other',       label: 'Other',       icon: Plus },
 ]
+
+const DESCRIPTION_MAX = 500
 
 export function Step1Company() {
   const { company, setCompany, setStep } = useOnboardingStore()
@@ -77,7 +82,13 @@ export function Step1Company() {
     },
   })
 
+  // Registered in page order (name, industry, then the fields below them): a failed submit
+  // focuses the first invalid field in registration order, so this keeps it the top-most one.
+  const nameField = form.register('name')
+  const { field: industry } = useController({ control: form.control, name: 'industry' })
+
   const description = form.watch('description') ?? ''
+  const { errors } = form.formState
 
   function onSubmit(values: FormValues) {
     setCompany({
@@ -88,147 +99,110 @@ export function Step1Company() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col items-start gap-4">
-        <div className="rounded-xl bg-purple-100 p-2.5">
-          <Building2 className="h-7 w-7 text-purple-600" />
-        </div>
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Tell us about your company</h2>
-          <p className="mt-1 text-muted-foreground">This helps us personalize your AI agent</p>
-        </div>
-      </div>
+    <div>
+      <StepHeader
+        step={1}
+        title="Tell us about your company"
+        description="This helps us personalize your AI agent"
+      />
 
-      <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-6">
-        {/* Company Name */}
-        <div className="space-y-1.5">
-          <Label htmlFor="name" className="text-sm font-medium">
-            Company name <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id="name"
-            placeholder="Acme Corporation"
-            {...form.register('name')}
-            className={cn('h-11', form.formState.errors.name && 'border-destructive')}
-          />
-          {form.formState.errors.name && (
-            <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
-          )}
-        </div>
-
-        {/* Industry cards */}
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">
-            Industry <span className="text-destructive">*</span>
-          </Label>
-          <Controller
-            control={form.control}
-            name="industry"
-            render={({ field }) => (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-                {INDUSTRIES.map((ind) => {
-                  const Icon = ind.icon
-                  const isSelected = field.value === ind.value
-                  return (
-                    <button
-                      key={ind.value}
-                      type="button"
-                      onClick={() => field.onChange(ind.value)}
-                      className={cn(
-                        'relative flex flex-col items-center gap-2.5 rounded-xl border-2 px-3 py-4 text-center transition-all duration-150',
-                        isSelected
-                          ? `${ind.selectedBorder} ${ind.selectedBg} ring-2 ${ind.ring} ring-offset-2`
-                          : 'border-border hover:border-purple-200 hover:bg-purple-50/30'
-                      )}
-                    >
-                      <div
-                        className={cn(
-                          'flex h-10 w-10 items-center justify-center rounded-xl transition-colors',
-                          isSelected ? ind.bg : 'bg-gray-100'
-                        )}
-                      >
-                        <Icon className={cn('h-5 w-5', isSelected ? ind.color : 'text-gray-400')} />
-                      </div>
-                      <span
-                        className={cn(
-                          'text-xs font-semibold leading-tight',
-                          isSelected ? 'text-foreground' : 'text-muted-foreground'
-                        )}
-                      >
-                        {ind.label}
-                      </span>
-                      {isSelected && (
-                        <div className="absolute right-1.5 top-1.5">
-                          <CheckCircle2 className={cn('h-3.5 w-3.5', ind.color)} />
-                        </div>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          />
-          {form.formState.errors.industry && (
-            <p className="text-xs text-destructive">{form.formState.errors.industry.message}</p>
-          )}
-        </div>
-
-        {/* Website */}
-        <div className="space-y-1.5">
-          <Label htmlFor="website" className="text-sm font-medium">
-            Website <span className="ml-1 font-normal text-muted-foreground">(optional)</span>
-          </Label>
-          <div className="relative">
-            <Globe className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
+        <StepBody className="space-y-8">
+          {/* Company name */}
+          <Field label="Company name" htmlFor="name" error={errors.name?.message}>
             <Input
-              id="website"
-              type="text"
-              placeholder="www.yourcompany.com"
-              {...form.register('website')}
-              className={cn('h-11 pl-9', form.formState.errors.website && 'border-destructive')}
+              id="name"
+              placeholder="Acme Corporation"
+              autoComplete="organization"
+              {...nameField}
+              className="h-11"
             />
-          </div>
-          {form.formState.errors.website && (
-            <p className="text-xs text-destructive">{form.formState.errors.website.message}</p>
-          )}
-        </div>
+          </Field>
 
-        {/* Description */}
-        <div className="space-y-1.5">
-          <Label htmlFor="description" className="text-sm font-medium">
-            What does your company do? <span className="text-destructive">*</span>
-          </Label>
-          <Textarea
-            id="description"
-            rows={4}
-            placeholder="We help customers with... Our main services are..."
-            {...form.register('description')}
-            className={cn('resize-none', form.formState.errors.description && 'border-destructive')}
-          />
-          <div className="flex items-start justify-between">
-            {form.formState.errors.description ? (
-              <p className="text-xs text-destructive">{form.formState.errors.description.message}</p>
-            ) : (
-              <span />
-            )}
-            <span
-              className={cn(
-                'text-xs tabular-nums',
-                description.length > 450 ? 'text-orange-500' : 'text-muted-foreground'
-              )}
+          {/* Industry. With htmlFor, Field ids the error (industry-error) and wires the group's
+              aria-describedby / aria-invalid (it is Field's single native child). */}
+          <Field
+            label={<span id="industry-label">Industry</span>}
+            htmlFor="industry"
+            error={errors.industry?.message}
+          >
+            <div
+              id="industry"
+              // A failed submit focuses the group's tab stop (the checked or first card).
+              ref={(el) => {
+                if (el) industry.ref({ focus: () => el.querySelector<HTMLElement>('[role="radio"][tabindex="0"]')?.focus() })
+              }}
+              role="radiogroup"
+              aria-labelledby="industry-label"
+              className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5"
             >
-              {description.length}/500
-            </span>
-          </div>
-        </div>
+              {INDUSTRIES.map((ind) => (
+                <OptionCard
+                  key={ind.value}
+                  selected={industry.value === ind.value}
+                  onSelect={() => industry.onChange(ind.value)}
+                  icon={ind.icon}
+                  // nowrap: the label may use the corner dot's gutter (the dot sits at the top).
+                  title={<span className="whitespace-nowrap">{ind.label}</span>}
+                  className="min-h-[88px] justify-between gap-3"
+                />
+              ))}
+            </div>
+          </Field>
 
-        {/* Submit */}
-        <div className="flex justify-end pt-2">
-          <Button type="submit" className="purple-glow px-6">
-            Continue <ArrowRight className="ml-2 h-4 w-4" />
+          {/* Website */}
+          <Field label="Website" htmlFor="website" optional error={errors.website?.message}>
+            <div className="relative">
+              <Globe
+                className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                id="website"
+                type="text"
+                inputMode="url"
+                autoComplete="url"
+                placeholder="www.yourcompany.com"
+                aria-invalid={errors.website ? true : undefined}
+                aria-describedby={errors.website ? 'website-error' : undefined}
+                {...form.register('website')}
+                className="h-11 pl-10"
+              />
+            </div>
+          </Field>
+
+          {/* Description */}
+          <Field
+            label="What does your company do?"
+            htmlFor="description"
+            error={errors.description?.message}
+            labelAction={
+              <span
+                className={cn(
+                  'text-xs leading-4 tabular-nums',
+                  description.length > 450 ? 'text-warning' : 'text-muted-foreground'
+                )}
+              >
+                {description.length}/{DESCRIPTION_MAX}
+              </span>
+            }
+          >
+            <Textarea
+              id="description"
+              rows={4}
+              placeholder="We help customers with... Our main services are..."
+              {...form.register('description')}
+              className="min-h-28 resize-none"
+            />
+          </Field>
+        </StepBody>
+
+        <StepActions>
+          <Button type="submit" size="lg" className="ml-auto max-md:flex-1">
+            Continue
+            <ArrowRight aria-hidden="true" />
           </Button>
-        </div>
+        </StepActions>
       </form>
     </div>
   )

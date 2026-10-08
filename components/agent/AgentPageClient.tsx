@@ -1,13 +1,19 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
+import { buttonVariants } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { OrbInline } from '@/components/shared/OrbLoader'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusChip } from '@/components/shared/StatusChip'
 import {
-  BookOpen, Bot, Clock, Loader2, MessageSquare, Phone, PhoneForwarded, Settings2, Volume2,
+  ArrowRight, BookOpen, Bot, Clock, MessageSquare, Phone, PhoneForwarded, Settings2, Volume2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { TabGeneral } from './tabs/TabGeneral'
@@ -52,6 +58,15 @@ const GOOGLE_OAUTH_ERRORS: Record<string, string> = {
   oauth_denied: 'Access to Google was not granted.',
   invalid_state: 'The connection link expired. Please connect again.',
   token_exchange: 'Google did not complete the connection. Please try again.',
+}
+
+/** Nearest scrolling ancestor (the dashboard shell's <main>), or the document. */
+function scrollParent(el: HTMLElement): Element | null {
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node)
+    if ((overflowY === 'auto' || overflowY === 'scroll') && node.scrollHeight > node.clientHeight) return node
+  }
+  return document.scrollingElement
 }
 
 /** Reads the org's time zone when the server page did not provide it. */
@@ -111,71 +126,98 @@ export function AgentPageClient({ initialAgent, phoneNumbers, orgTimezone }: Age
   const { timezone, failed: timezoneFailed, setTimezone } = useOrgTimezone(orgTimezone)
   const { agent, isSaving, isTogglingActive, toggleActive, updateWithToast, replaceAgent } = agentHook
 
+  // Focus that lands under the sticky tab bar (e.g. Shift+Tab upwards, or a field still inside the
+  // scrollport but covered by the bar) is scrolled just below it. Runs a frame later, after any
+  // scrolling the browser itself does for the focus; portalled popups are not in this subtree.
+  const tabBarRef = useRef<HTMLDivElement>(null)
+  const keepFocusClearOfTabBar = useCallback((e: React.FocusEvent<HTMLDivElement>) => {
+    const target = e.target
+    if (!(target instanceof HTMLElement) || !e.currentTarget.contains(target)) return
+    requestAnimationFrame(() => {
+      const bar = tabBarRef.current
+      if (!bar || document.activeElement !== target) return
+      const barBottom = bar.getBoundingClientRect().bottom
+      const top = target.getBoundingClientRect().top
+      if (top >= barBottom + 8) return
+      scrollParent(bar)?.scrollBy({ top: top - barBottom - 16 })
+    })
+  }, [])
+
   if (!agent) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-center p-6">
-        <div className="rounded-full bg-muted p-5 mb-4">
-          <Bot className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
-        </div>
-        <h2 className="text-lg font-semibold">No agent found</h2>
-        <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-          Complete the onboarding to set up your AI voice agent.
-        </p>
-        <Link href="/onboarding" className="mt-4 text-sm text-primary hover:underline">
-          Go to onboarding →
-        </Link>
-      </div>
+      <PageContainer width="narrow">
+        <h1 className="sr-only">Agent</h1>
+        <EmptyState
+          icon={Bot}
+          title="No agent found"
+          description="Complete the onboarding to set up your AI voice agent."
+          action={
+            <Link href="/onboarding" className={buttonVariants()}>
+              Go to onboarding <ArrowRight aria-hidden="true" />
+            </Link>
+          }
+          className="mt-10"
+        />
+      </PageContainer>
     )
   }
 
+  const numbersText =
+    phoneNumbers.length > 0
+      ? `${phoneNumbers.length} phone number${phoneNumbers.length > 1 ? 's' : ''}`
+      : 'No phone numbers linked'
+  // The same three states as the dashboard and the shell: an active agent with no active number cannot answer calls.
+  const hasActiveNumber = phoneNumbers.some((n) => n.is_active)
+  const agentState = !agent.is_active ? 'paused' : hasActiveNumber ? 'live' : 'no-number'
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Page Header */}
-      <div className="border-b bg-card px-4 py-4 sm:px-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-          <div className="flex min-w-0 flex-1 items-start gap-4">
-            <div className="flex size-12 items-center justify-center rounded-full bg-primary/10 border shrink-0">
-              <Bot className="size-6 text-primary" aria-hidden="true" />
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl font-bold truncate">{agent.name}</h1>
-                <Badge
-                  variant={agent.is_active ? 'default' : 'secondary'}
-                  className={agent.is_active ? 'bg-green-500/15 text-green-600 border-green-500/30' : ''}
-                >
-                  {agent.is_active ? 'Active' : 'Inactive'}
-                </Badge>
-                {agent.voice_name && (
-                  <Badge variant="outline" className="text-xs">
-                    <Volume2 className="size-3 mr-1" aria-hidden="true" />
-                    {agent.voice_name}
-                  </Badge>
-                )}
-                {agent.language && (
-                  <Badge variant="outline" className="text-xs uppercase">
-                    {agent.language}
-                  </Badge>
-                )}
-              </div>
-              <div className="flex items-center gap-2 mt-1.5 text-sm text-muted-foreground">
-                <Phone className="size-3.5" aria-hidden="true" />
-                <span>
-                  {phoneNumbers.length > 0
-                    ? `${phoneNumbers.length} phone number${phoneNumbers.length > 1 ? 's' : ''}`
-                    : 'No phone numbers linked'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="flex items-center gap-2">
-              {isTogglingActive && <Loader2 className="size-3.5 animate-spin text-muted-foreground" aria-hidden="true" />}
-              <label htmlFor="agent-active" className="text-sm text-muted-foreground">
-                {agent.is_active ? 'Online' : 'Offline'}
-                <span className="sr-only"> (agent answers calls)</span>
+    <PageContainer>
+      <PageHeader
+        eyebrow="Agent"
+        title={agent.name}
+        meta={
+          <>
+            {agentState === 'live' ? (
+              <StatusChip tone="success" dot>
+                Live
+              </StatusChip>
+            ) : agentState === 'no-number' ? (
+              <StatusChip tone="warning" dot title="Active, but it has no phone number to answer on">
+                No number
+              </StatusChip>
+            ) : (
+              <StatusChip tone="muted" dot>
+                Paused
+              </StatusChip>
+            )}
+            {agent.voice_name && (
+              <Badge variant="outline">
+                <Volume2 aria-hidden="true" />
+                {agent.voice_name}
+              </Badge>
+            )}
+            {agent.language && (
+              <Badge variant="outline" className="uppercase">
+                {agent.language}
+              </Badge>
+            )}
+            <span className="ml-1 flex items-center gap-1.5 text-[13px] leading-[19px] text-muted-foreground">
+              <Phone className="size-3.5" aria-hidden="true" />
+              {numbersText}
+            </span>
+          </>
+        }
+        actions={
+          <>
+            {/* The site's agent pill: label, ink switch, busy orb while the toggle is in flight.
+                The label names the control and does not change (the status chip in the meta row
+                says Live / No number / Paused), so the pill keeps its width when toggled.
+                Busy indicators are added on the side away from the pill's anchor (right below md,
+                where the row is left-aligned; left from md, where it is right-aligned), so the
+                switch never moves under the pointer. */}
+            <div className="flex h-10 items-center gap-2.5 rounded-full bg-white pr-2.5 pl-4 shadow-pill md:order-last">
+              <label htmlFor="agent-active" className="text-[13px] leading-4 font-medium select-none">
+                Answer calls
               </label>
               <Switch
                 id="agent-active"
@@ -183,102 +225,102 @@ export function AgentPageClient({ initialAgent, phoneNumbers, orgTimezone }: Age
                 onCheckedChange={() => void toggleActive()}
                 disabled={isTogglingActive}
               />
+              {isTogglingActive && <OrbInline state="working" className="md:order-first" />}
             </div>
             {isSaving && (
-              <Badge variant="secondary" className="text-xs gap-1" aria-live="polite">
-                <Loader2 className="size-3 animate-spin" aria-hidden="true" /> Saving
-              </Badge>
+              <StatusChip tone="neutral" icon={<OrbInline state="working" />} aria-hidden="true" className="md:order-first">
+                Saving…
+              </StatusChip>
             )}
-          </div>
-        </div>
+            {/* Always mounted, so the change of text is announced. */}
+            <span aria-live="polite" className="sr-only">
+              {isTogglingActive ? 'Updating…' : isSaving ? 'Saving…' : ''}
+            </span>
+          </>
+        }
+      />
+
+      {/* Side by side from xl, both stretched to the taller one; stacked (provider panel, then the band) below. */}
+      <div className="grid gap-6 xl:grid-cols-2">
+        <ProviderStatusCard
+          status={statusHook.status}
+          isLoading={statusHook.isLoading}
+          error={statusHook.error}
+          isRetrying={statusHook.isRetrying}
+          onRetry={() => void retrySync()}
+          onRefresh={() => void refreshStatus()}
+        />
+        <TestAgentPanel
+          agentName={agent.name}
+          refreshKey={`${agent.is_active}:${statusHook.status?.providers.find((p) => p.provider === 'elevenlabs')?.status ?? ''}`}
+        />
       </div>
 
-      <div className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-5xl px-4 pt-4 sm:px-6">
-          <ProviderStatusCard
-            status={statusHook.status}
-            isLoading={statusHook.isLoading}
-            error={statusHook.error}
-            isRetrying={statusHook.isRetrying}
-            onRetry={() => void retrySync()}
-            onRefresh={() => void refreshStatus()}
-          />
-          <TestAgentPanel
-            className="mt-4"
-            agentName={agent.name}
-            refreshKey={`${agent.is_active}:${statusHook.status?.providers.find((p) => p.provider === 'elevenlabs')?.status ?? ''}`}
-          />
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(String(v))} className="mt-12 gap-0">
+        {/* Sticky under the shell's scroll top; full-bleed white so content scrolls beneath it. */}
+        <div
+          ref={tabBarRef}
+          className="sticky top-0 z-20 -mx-4 bg-white/90 px-4 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10"
+        >
+          <TabsList variant="line" aria-label="Agent settings">
+            {TABS.map(({ value, label, icon: Icon }) => (
+              <TabsTrigger key={value} value={value}>
+                <Icon aria-hidden="true" />
+                <span>{label}</span>
+                {value === 'knowledge' && knowledgeHook.docs.length > 0 && (
+                  <Badge variant="secondary" className="h-5 min-w-5 px-1.5 text-[11px] tabular-nums">
+                    {knowledgeHook.docs.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            ))}
+          </TabsList>
         </div>
 
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(String(v))} className="mt-4">
-          <div className="border-y bg-card px-2 sm:px-6">
-            <TabsList
-              variant="line"
-              aria-label="Agent settings"
-              className="h-11 w-full justify-start gap-0 rounded-none bg-transparent p-0 overflow-x-auto"
-            >
-              {TABS.map(({ value, label, icon: Icon }) => (
-                <TabsTrigger
-                  key={value}
-                  value={value}
-                  className="relative h-full flex-none rounded-none px-3 text-sm data-active:font-medium sm:px-4"
-                >
-                  <Icon className="size-4" aria-hidden="true" />
-                  <span>{label}</span>
-                  {value === 'knowledge' && knowledgeHook.docs.length > 0 && (
-                    <span className="ml-1 flex size-4 items-center justify-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary">
-                      {knowledgeHook.docs.length}
-                    </span>
-                  )}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </div>
+        {/* Left-aligned with the header, panels and tab triggers (one left edge for the page). */}
+        <div className="w-full max-w-[768px] pt-8" onFocusCapture={keepFocusClearOfTabBar}>
+          <TabsContent value="general">
+            <TabGeneral
+              agent={agent}
+              phoneNumbers={phoneNumbers}
+              onUpdate={updateWithToast}
+              isSaving={isSaving}
+            />
+          </TabsContent>
 
-          <div className="p-4 sm:p-6 max-w-3xl mx-auto w-full">
-            <TabsContent value="general">
-              <TabGeneral
-                agent={agent}
-                phoneNumbers={phoneNumbers}
-                onUpdate={updateWithToast}
-                isSaving={isSaving}
-              />
-            </TabsContent>
+          <TabsContent value="conversation">
+            <TabConversation agent={agent} onUpdate={updateWithToast} isSaving={isSaving} />
+          </TabsContent>
 
-            <TabsContent value="conversation">
-              <TabConversation agent={agent} onUpdate={updateWithToast} isSaving={isSaving} />
-            </TabsContent>
+          <TabsContent value="voice">
+            <TabVoice agent={agent} onAgentUpdated={replaceAgent} onUpdate={updateWithToast} isSaving={isSaving} />
+          </TabsContent>
 
-            <TabsContent value="voice">
-              <TabVoice agent={agent} onAgentUpdated={replaceAgent} onUpdate={updateWithToast} isSaving={isSaving} />
-            </TabsContent>
+          <TabsContent value="knowledge">
+            <TabKnowledge hook={knowledgeHook} />
+          </TabsContent>
 
-            <TabsContent value="knowledge">
-              <TabKnowledge hook={knowledgeHook} />
-            </TabsContent>
+          <TabsContent value="availability">
+            <TabAvailability
+              agent={agent}
+              timezone={timezone}
+              timezoneUnavailable={timezoneFailed}
+              onUpdate={updateWithToast}
+              onTimezoneSaved={setTimezone}
+              isSaving={isSaving}
+            />
+          </TabsContent>
 
-            <TabsContent value="availability">
-              <TabAvailability
-                agent={agent}
-                timezone={timezone}
-                timezoneUnavailable={timezoneFailed}
-                onUpdate={updateWithToast}
-                onTimezoneSaved={setTimezone}
-                isSaving={isSaving}
-              />
-            </TabsContent>
-
-            <TabsContent value="call-handling">
-              <TabCallHandling
-                agent={agent}
-                status={statusHook.status}
-                onUpdate={updateWithToast}
-                isSaving={isSaving}
-              />
-            </TabsContent>
-          </div>
-        </Tabs>
-      </div>
-    </div>
+          <TabsContent value="call-handling">
+            <TabCallHandling
+              agent={agent}
+              status={statusHook.status}
+              onUpdate={updateWithToast}
+              isSaving={isSaving}
+            />
+          </TabsContent>
+        </div>
+      </Tabs>
+    </PageContainer>
   )
 }

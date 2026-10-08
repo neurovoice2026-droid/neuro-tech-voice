@@ -2,20 +2,23 @@
 
 import { useState, useRef, useEffect, useTransition } from 'react'
 import {
-  PhoneIncoming, PhoneOutgoing, Bot, User, Copy, CheckCheck,
-  Play, Pause, Download, Loader2, Mail, FileText, Table2,
+  PhoneIncoming, PhoneOutgoing, Copy, CheckCheck,
+  Play, Pause, Download, Mail, FileText, Table2,
   Trash2, Search, ChevronDown, Route, ClipboardList, ListChecks, RotateCw,
   ThumbsUp, ThumbsDown, Sparkles, Wrench, CircleCheck, CircleX, CircleHelp,
+  TriangleAlert, Info, ChevronRight, X, type LucideIcon,
 } from 'lucide-react'
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet'
-import { Badge } from '@/components/ui/badge'
 import { WorkInProgressBadge } from '@/components/shared/WorkInProgressBadge'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { OrbInline, OrbLoader } from '@/components/shared/OrbLoader'
+import { StatusChip, type StatusTone } from '@/components/shared/StatusChip'
 import { cn, formatDuration, formatDate, formatPhoneNumber } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useCallDetail } from '@/hooks/useCallDetail'
@@ -44,20 +47,43 @@ import { CallBusinessSection } from './CallBusinessSection'
 
 const fmtClock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
-function SectionTitle({ children, icon: Icon }: { children: React.ReactNode; icon?: typeof Bot }) {
+/** 11 px tracked uppercase label: section heads, definition terms, transcript speakers. */
+const OVERLINE = 'text-[11px] leading-4 font-medium tracking-[0.12em] uppercase text-muted-foreground'
+
+/** Tab panels are focusable scroll containers: an inset outline, so the sheet edge does not clip it. */
+const PANEL = 'outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring'
+
+/** A titled block of the sheet; blocks are separated by hairlines (see the tab panels). */
+function Section({
+  title, icon: Icon, iconClassName, titleClassName, action, id, children,
+}: {
+  title: React.ReactNode
+  icon?: LucideIcon
+  iconClassName?: string
+  titleClassName?: string
+  action?: React.ReactNode
+  id?: string
+  children: React.ReactNode
+}) {
   return (
-    <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-      {Icon && <Icon className="h-3.5 w-3.5" aria-hidden="true" />}
+    <section aria-labelledby={id} className="py-6 first:pt-0 last:pb-0">
+      <div className="mb-3 flex min-h-6 items-center justify-between gap-3">
+        <h3 id={id} className={cn('flex items-center gap-1.5', OVERLINE, titleClassName)}>
+          {Icon && <Icon className={cn('size-3.5 shrink-0', iconClassName)} aria-hidden="true" />}
+          {title}
+        </h3>
+        {action}
+      </div>
       {children}
-    </h3>
+    </section>
   )
 }
 
 function InfoItem({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <dt className="text-xs text-muted-foreground mb-0.5">{label}</dt>
-      <dd className="font-medium text-sm break-words">{children}</dd>
+      <dt className={OVERLINE}>{label}</dt>
+      <dd className="mt-1 text-sm break-words text-foreground">{children}</dd>
     </div>
   )
 }
@@ -203,19 +229,24 @@ function AudioPlayer({ url, fallbackDuration }: { url: string; fallbackDuration:
 
   if (failure) {
     return (
-      <div className="rounded-xl border bg-gray-50 p-4 text-sm text-muted-foreground flex flex-wrap items-center justify-between gap-2" role="status">
-        <p>{failure.message}</p>
+      <div
+        className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-secondary p-4 text-[13px] leading-[19px] text-muted-foreground"
+        role="status"
+      >
+        <p className="min-w-0 flex-1">{failure.message}</p>
         {failure.retry && (
           <Button type="button" variant="outline" size="sm" onClick={() => setFailure(null)}>
-            <RotateCw className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" /> Try again
+            <RotateCw aria-hidden="true" /> Try again
           </Button>
         )}
       </div>
     )
   }
 
+  const busy = downloading || buffering
+
   return (
-    <div className="rounded-xl bg-gray-50 border p-4 flex items-center gap-3">
+    <div className="flex items-center gap-3 rounded-2xl bg-white py-3 pr-2 pl-3 shadow-hair">
       <audio
         ref={audioRef}
         preload="none"
@@ -235,16 +266,18 @@ function AudioPlayer({ url, fallbackDuration }: { url: string; fallbackDuration:
           setFailure({ message: LOAD_FAILED, retry: false })
         }}
       />
-      <button
+      {/* Not `loading`: pressing again while it downloads cancels the download. */}
+      <Button
         type="button"
+        size="icon"
         onClick={() => void toggle()}
         aria-label={downloading ? 'Loading recording — press to cancel' : playing ? 'Pause recording' : 'Play recording'}
-        aria-busy={downloading || buffering}
-        className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2"
+        aria-busy={busy}
+        className="shrink-0"
       >
-        {downloading || buffering ? <Loader2 className="h-4 w-4 animate-spin" /> : playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
-      </button>
-      <div className="flex-1 min-w-0">
+        {busy ? <OrbInline state="working" surface="dark" /> : playing ? <Pause /> : <Play className="ml-0.5" />}
+      </Button>
+      <div className="min-w-0 flex-1">
         <div
           role="slider"
           tabIndex={duration ? 0 : -1}
@@ -257,16 +290,18 @@ function AudioPlayer({ url, fallbackDuration }: { url: string; fallbackDuration:
           onClick={seekClick}
           onKeyDown={seekKey}
           className={cn(
-            'h-2 w-full rounded-full bg-gray-200 overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+            'flex h-4 w-full items-center rounded-full outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring',
             duration ? 'cursor-pointer' : 'cursor-default'
           )}
         >
-          <div
-            className="h-full rounded-full bg-primary transition-all duration-100"
-            style={{ width: `${progress}%` }}
-          />
+          <div className="h-1 w-full overflow-hidden rounded-full bg-secondary">
+            <div
+              className="h-full rounded-full bg-foreground transition-[width] duration-100"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
         </div>
-        <div className="flex justify-between text-xs text-muted-foreground mt-1" aria-hidden="true">
+        <div className="mt-0.5 flex justify-between text-xs text-muted-foreground tabular-nums" aria-hidden="true">
           <span>{fmtClock(current)}</span>
           <span>{fmtClock(total)}</span>
         </div>
@@ -275,9 +310,9 @@ function AudioPlayer({ url, fallbackDuration }: { url: string; fallbackDuration:
         href={url}
         download
         aria-label="Download recording"
-        className="rounded text-muted-foreground hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), 'tap-44 shrink-0 text-muted-foreground hover:text-foreground')}
       >
-        <Download className="h-4 w-4" />
+        <Download />
       </a>
     </div>
   )
@@ -292,16 +327,13 @@ function RecordingSection({ call }: { call: Call }) {
   else if (status === 'unavailable') message = 'This call was not recorded.'
 
   return (
-    <section aria-labelledby="call-recording-title">
-      <h3 id="call-recording-title" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-        Recording
-      </h3>
+    <Section id="call-recording-title" title="Recording">
       {available ? (
         <AudioPlayer key={call.id} url={`/api/calls/${encodeURIComponent(call.id)}/audio`} fallbackDuration={call.duration_seconds} />
       ) : (
-        <p className="text-sm text-muted-foreground">{message}</p>
+        <p className="text-[13px] text-muted-foreground">{message}</p>
       )}
-    </section>
+    </Section>
   )
 }
 
@@ -316,32 +348,32 @@ function CallHandlingSection({ call }: { call: Call }) {
   const failoverTitle = call.routing_reason === 'provider_fallback' ? 'Why the backup agent answered' : 'What went wrong'
 
   return (
-    <section>
-      <SectionTitle icon={Route}>Call handling</SectionTitle>
-      <div className="rounded-xl border p-4 space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
+    <Section title="Call handling" icon={Route}>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
           <HandledByBadge call={call} />
-          <p className="text-sm text-muted-foreground">{info.description}</p>
+          <p className="text-[13px] leading-[19px] text-muted-foreground">{info.description}</p>
         </div>
-        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-sm">
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
           {routing && <InfoItem label="Routing">{routing}</InfoItem>}
           <InfoItem label="Voice provider">{provider ?? '—'}</InfoItem>
           {ended && <InfoItem label="How the call ended">{ended}</InfoItem>}
         </dl>
         {failover.length > 0 && (
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">{failoverTitle}</p>
-            <ul className="list-disc space-y-0.5 pl-5 text-sm">
+          <div className="rounded-xl bg-warning-soft px-4 py-3">
+            <p className="text-[13px] font-medium text-warning">{failoverTitle}</p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[13px] leading-[19px] text-foreground/80">
               {failover.map((reason) => <li key={reason}>{reason}</li>)}
             </ul>
           </div>
         )}
         {(call.routing_reason || call.failover_reason || call.provider_call_id || call.details?.provider_error || call.termination_reason) && (
-          <details className="text-xs text-muted-foreground">
-            <summary className="cursor-pointer select-none rounded outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
+          <details className="group text-xs text-muted-foreground">
+            <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md outline-none select-none hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+              <ChevronRight className="size-3.5 transition-transform duration-200 group-open:rotate-90" aria-hidden="true" />
               Technical details for support
             </summary>
-            <dl className="mt-2 space-y-1 font-mono break-all">
+            <dl className="mt-2 space-y-1 rounded-xl bg-secondary p-3 font-mono break-all">
               {call.routing_reason && <div><dt className="inline">routing: </dt><dd className="inline">{call.routing_reason}</dd></div>}
               {call.failover_reason && <div><dt className="inline">failover: </dt><dd className="inline">{call.failover_reason}</dd></div>}
               {call.provider_call_id && <div><dt className="inline">provider call id: </dt><dd className="inline">{call.provider_call_id}</dd></div>}
@@ -362,14 +394,14 @@ function CallHandlingSection({ call }: { call: Call }) {
           </details>
         )}
       </div>
-    </section>
+    </Section>
   )
 }
 
-const EVALUATION_TONE: Record<'success' | 'failure' | 'unknown', string> = {
-  success: 'border-green-200 bg-green-50 text-green-700',
-  failure: 'border-red-200 bg-red-50 text-red-700',
-  unknown: 'border-gray-200 bg-gray-100 text-gray-600',
+const EVALUATION_TONE: Record<'success' | 'failure' | 'unknown', StatusTone> = {
+  success: 'success',
+  failure: 'danger',
+  unknown: 'muted',
 }
 
 function AnalysisSections({ call }: { call: Call }) {
@@ -380,50 +412,48 @@ function AnalysisSections({ call }: { call: Call }) {
   return (
     <>
       {data.length > 0 && (
-        <section>
-          <SectionTitle icon={ClipboardList}>Details collected</SectionTitle>
-          <div className="overflow-hidden rounded-xl border">
+        <Section title="Details collected" icon={ClipboardList}>
+          <div className="overflow-hidden rounded-2xl shadow-hair">
             <table className="w-full text-sm">
               <caption className="sr-only">Information the agent collected during the call</caption>
-              <thead className="bg-gray-50/80">
-                <tr>
-                  <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Field</th>
-                  <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Value</th>
+              <thead>
+                <tr className="border-b border-rule">
+                  <th scope="col" className={cn('h-9 px-4 text-left', OVERLINE)}>Field</th>
+                  <th scope="col" className={cn('h-9 px-4 text-left', OVERLINE)}>Value</th>
                 </tr>
               </thead>
               <tbody>
                 {data.map(([key, value]) => (
-                  <tr key={key} className="border-t">
-                    <th scope="row" className="px-3 py-2 text-left font-medium align-top">{humanizeKey(key)}</th>
-                    <td className="px-3 py-2 break-words">{formatCollectedValue(value)}</td>
+                  <tr key={key} className="border-b border-rule last:border-b-0">
+                    <th scope="row" className="w-[42%] px-4 py-2.5 text-left align-top font-normal text-muted-foreground">{humanizeKey(key)}</th>
+                    <td className="px-4 py-2.5 break-words text-foreground">{formatCollectedValue(value)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </section>
+        </Section>
       )}
 
       {evaluation.length > 0 && (
-        <section>
-          <SectionTitle icon={ListChecks}>Evaluation</SectionTitle>
-          <ul className="space-y-2">
+        <Section title="Evaluation" icon={ListChecks}>
+          <ul className="overflow-hidden rounded-2xl shadow-hair">
             {evaluation.map(([key, item]) => {
               const tone = evaluationResultTone(item.result)
               return (
-                <li key={key} className="rounded-xl border p-3">
+                <li key={key} className="border-b border-rule px-4 py-3.5 last:border-b-0">
                   <div className="flex items-start justify-between gap-3">
                     <p className="text-sm font-medium">{humanizeKey(key)}</p>
-                    <Badge variant="outline" className={cn('text-xs', EVALUATION_TONE[tone])}>
+                    <StatusChip tone={EVALUATION_TONE[tone]} dot>
                       {evaluationResultLabel(item.result)}
-                    </Badge>
+                    </StatusChip>
                   </div>
-                  {item.rationale && <p className="mt-1 text-sm text-muted-foreground leading-relaxed">{item.rationale}</p>}
+                  {item.rationale && <p className="mt-1 text-[13px] leading-[19px] text-muted-foreground">{item.rationale}</p>}
                 </li>
               )
             })}
           </ul>
-        </section>
+        </Section>
       )}
     </>
   )
@@ -432,9 +462,9 @@ function AnalysisSections({ call }: { call: Call }) {
 // ─── AI outcome + owner feedback ──────────────────────────────────────────────
 
 const AI_OUTCOME_STYLE = {
-  success: { icon: CircleCheck, className: 'text-green-600' },
-  failure: { icon: CircleX, className: 'text-red-600' },
-  unknown: { icon: CircleHelp, className: 'text-gray-500' },
+  success: { icon: CircleCheck, className: 'text-success-dot' },
+  failure: { icon: CircleX, className: 'text-destructive' },
+  unknown: { icon: CircleHelp, className: 'text-muted-foreground' },
 } as const
 
 function FeedbackControl({ call }: { call: Call }) {
@@ -463,50 +493,25 @@ function FeedbackControl({ call }: { call: Call }) {
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <p id={`feedback-${call.id}`} className="text-sm text-muted-foreground">Was this call handled well?</p>
-      <div role="group" aria-labelledby={`feedback-${call.id}`} className="flex gap-1">
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      <p id={`feedback-${call.id}`} className="text-[13px] text-muted-foreground">Was this call handled well?</p>
+      <div role="group" aria-labelledby={`feedback-${call.id}`} className="flex gap-1.5">
         <Button
-          type="button" variant="outline" size="sm" className={cn('h-8 w-8 p-0', value === 'like' && 'border-green-300 bg-green-50 text-green-700')}
+          type="button" variant="outline" size="icon-sm"
+          className={cn('tap-44', value === 'like' && 'bg-success-soft text-success shadow-none! hover:bg-success-soft')}
           aria-pressed={value === 'like'} aria-label="Handled well" disabled={isPending} onClick={() => send('like')}
         >
-          <ThumbsUp className="h-4 w-4" aria-hidden="true" />
+          <ThumbsUp aria-hidden="true" />
         </Button>
         <Button
-          type="button" variant="outline" size="sm" className={cn('h-8 w-8 p-0', value === 'dislike' && 'border-red-300 bg-red-50 text-red-700')}
+          type="button" variant="outline" size="icon-sm"
+          className={cn('tap-44', value === 'dislike' && 'bg-destructive-soft text-destructive shadow-none! hover:bg-destructive-soft')}
           aria-pressed={value === 'dislike'} aria-label="Not handled well" disabled={isPending} onClick={() => send('dislike')}
         >
-          <ThumbsDown className="h-4 w-4" aria-hidden="true" />
+          <ThumbsDown aria-hidden="true" />
         </Button>
       </div>
     </div>
-  )
-}
-
-/** call_successful, shown as the AI's verdict on the call's goal (never as caller sentiment). */
-function AiOutcomeSection({ call }: { call: Call }) {
-  const verdict = call.call_successful ?? null
-  const look = verdict ? AI_OUTCOME_STYLE[verdict] : null
-  return (
-    <section>
-      <SectionTitle icon={Sparkles}>AI outcome</SectionTitle>
-      <div className="rounded-xl border bg-gray-50 p-4 space-y-3">
-        {verdict && look ? (
-          <div className="flex items-start gap-2">
-            <look.icon className={cn('mt-0.5 h-5 w-5 flex-shrink-0', look.className)} aria-hidden="true" />
-            <div>
-              <p className="text-sm font-semibold">{callResultLabel(verdict)}</p>
-              <p className="text-sm text-muted-foreground">{AI_OUTCOME_DESCRIPTION[verdict]}</p>
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            {isLiveStatus(call.status) ? 'Analysis pending…' : 'No AI verdict for this call.'}
-          </p>
-        )}
-        {!call.is_test && !isLiveStatus(call.status) && <FeedbackControl key={call.id} call={call} />}
-      </div>
-    </section>
   )
 }
 
@@ -532,19 +537,51 @@ function ReanalyzeAction({ call, onDone }: { call: Call; onDone: () => void }) {
   }
 
   return (
-    <div className="flex items-start justify-between gap-4 rounded-xl border p-4">
-      <div>
-        <p className="text-sm font-medium flex items-center gap-1.5">
-          <Sparkles className="h-4 w-4 text-purple-600" aria-hidden="true" /> Analyse again
-        </p>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Re-runs the AI analysis with your current success criteria and the details you ask the agent to collect.
-        </p>
-      </div>
-      <Button variant="outline" size="sm" onClick={run} disabled={isPending}>
-        {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-label="Analysing" /> : 'Analyse'}
+    <div className="flex flex-col gap-3 border-t border-[#e6e4ec] pt-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-xs leading-4 text-muted-foreground sm:max-w-[34ch]">
+        Re-runs the AI analysis with your current success criteria and the details you ask the agent to collect.
+      </p>
+      <Button
+        variant="outline"
+        size="sm"
+        className="self-start sm:self-auto"
+        onClick={run}
+        loading={isPending}
+        loadingState="solving"
+        loadingText="Analysing…"
+      >
+        <RotateCw aria-hidden="true" />
+        Analyse again
       </Button>
     </div>
+  )
+}
+
+/** call_successful, shown as the AI's verdict on the call's goal (never as caller sentiment). */
+function AiOutcomeSection({ call, onReanalyzed }: { call: Call; onReanalyzed: () => void }) {
+  const verdict = call.call_successful ?? null
+  const look = verdict ? AI_OUTCOME_STYLE[verdict] : null
+  return (
+    <Section title="AI outcome" icon={Sparkles} iconClassName="text-brand">
+      <div className="space-y-3 rounded-2xl bg-secondary p-4">
+        {verdict && look ? (
+          <div className="flex items-start gap-2.5">
+            <look.icon className={cn('mt-0.5 size-[18px] shrink-0', look.className)} aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium">{callResultLabel(verdict)}</p>
+              <p className="text-[13px] leading-[19px] text-muted-foreground">{AI_OUTCOME_DESCRIPTION[verdict]}</p>
+            </div>
+          </div>
+        ) : (
+          <p className="flex items-center gap-2 text-[13px] text-muted-foreground">
+            {isLiveStatus(call.status) && <OrbInline state="solving" />}
+            {isLiveStatus(call.status) ? 'Analysis pending…' : 'No AI verdict for this call.'}
+          </p>
+        )}
+        {!call.is_test && !isLiveStatus(call.status) && <FeedbackControl key={call.id} call={call} />}
+        <ReanalyzeAction call={call} onDone={onReanalyzed} />
+      </div>
+    </Section>
   )
 }
 
@@ -575,7 +612,7 @@ function TranscriptView({ transcript, callId, toolEvents = [] }: { transcript: T
     const parts = text.split(new RegExp(`(${search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'))
     return parts.map((part, i) =>
       part.toLowerCase() === search.toLowerCase()
-        ? <mark key={i} className="bg-yellow-200 rounded px-0.5">{part}</mark>
+        ? <mark key={i} className="rounded-sm bg-brand-soft px-0.5 text-brand">{part}</mark>
         : part
     )
   }
@@ -609,12 +646,7 @@ function TranscriptView({ transcript, callId, toolEvents = [] }: { transcript: T
   }
 
   if (transcript.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-        <FileText className="h-8 w-8 mb-2 opacity-40" aria-hidden="true" />
-        <p className="text-sm">No transcript available</p>
-      </div>
-    )
+    return <EmptyState icon={FileText} title="No transcript available" />
   }
 
   const agentWords  = transcript.filter((t) => t.role === 'agent').reduce((s, t) => s + t.message.split(' ').length, 0)
@@ -626,24 +658,36 @@ function TranscriptView({ transcript, callId, toolEvents = [] }: { transcript: T
   return (
     <div className="flex flex-col gap-3">
       {/* Toolbar */}
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+      <div className="flex items-center gap-1.5">
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <Input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search transcript…"
             aria-label="Search transcript"
-            className="pl-8 h-8 text-sm"
+            className="h-9 rounded-full pr-10 pl-9 [&::-webkit-search-cancel-button]:appearance-none"
           />
+          {search && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => setSearch('')}
+              aria-label="Clear transcript search"
+              className="tap-44 absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X />
+            </Button>
+          )}
         </div>
-        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={copyAll} aria-label="Copy transcript">
-          <Copy className="h-3.5 w-3.5" />
+        <Button variant="ghost" size="sm" className="tap-44 h-9 px-2.5 sm:px-3" onClick={copyAll} aria-label="Copy transcript">
+          <Copy aria-hidden="true" />
           <span className="hidden sm:inline">Copy</span>
         </Button>
-        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={downloadTxt} aria-label="Download transcript">
-          <Download className="h-3.5 w-3.5" />
+        <Button variant="ghost" size="sm" className="tap-44 h-9 px-2.5 sm:px-3" onClick={downloadTxt} aria-label="Download transcript">
+          <Download aria-hidden="true" />
           <span className="hidden sm:inline">Download</span>
         </Button>
       </div>
@@ -652,65 +696,69 @@ function TranscriptView({ transcript, callId, toolEvents = [] }: { transcript: T
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="relative max-h-[420px] overflow-y-auto space-y-3 pr-1"
+        className="relative max-h-[min(560px,62vh)] overflow-y-auto rounded-2xl bg-secondary p-3 sm:p-4"
         role="log"
         aria-label="Call transcript"
       >
-        {timelineOf(transcript, toolEvents).map((item, i) => {
-          if (item.type === 'tool') {
+        <div className="flex flex-col gap-4">
+          {timelineOf(transcript, toolEvents).map((item, i) => {
+            if (item.type === 'tool') {
+              return (
+                <div key={`tool-${i}`} className="flex justify-center" role="note">
+                  <span
+                    className={cn(
+                      'inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-xs',
+                      item.event.ok ? 'bg-white text-muted-foreground shadow-hair' : 'bg-destructive-soft text-destructive'
+                    )}
+                  >
+                    <Wrench className="size-3.5 shrink-0" aria-hidden="true" />
+                    <span className="truncate">{toolEventLabel(item.event)}</span>
+                    <span aria-hidden="true">·</span>
+                    <span className="shrink-0 tabular-nums">at {formatDuration(item.event.at_secs)}</span>
+                  </span>
+                </div>
+              )
+            }
+            const msg = item.entry
+            const isAgent = msg.role === 'agent'
             return (
-              <div key={`tool-${i}`} className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground" role="note">
-                <Wrench className={cn('h-3.5 w-3.5', item.event.ok ? 'text-gray-400' : 'text-red-500')} aria-hidden="true" />
-                <span>{toolEventLabel(item.event)}</span>
-                <span aria-hidden="true">·</span>
-                <span>at {formatDuration(item.event.at_secs)}</span>
-              </div>
-            )
-          }
-          const msg = item.entry
-          const isAgent = msg.role === 'agent'
-          return (
-            <div key={i} className={cn('flex items-end gap-2', isAgent ? '' : 'flex-row-reverse')}>
-              <div className={cn(
-                'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full',
-                isAgent ? 'bg-purple-100' : 'bg-gray-100'
-              )}>
-                {isAgent
-                  ? <Bot className="h-3.5 w-3.5 text-purple-600" aria-label="Agent" />
-                  : <User className="h-3.5 w-3.5 text-gray-500" aria-label="Caller" />}
-              </div>
-              <div className={cn('flex flex-col gap-1 max-w-[85%]', isAgent ? 'items-start' : 'items-end')}>
-                <div className={cn(
-                  'rounded-xl px-3 py-2 text-sm leading-relaxed',
-                  isAgent
-                    ? 'bg-purple-50 border border-purple-100 rounded-tl-sm'
-                    : 'bg-white border border-gray-200 rounded-tr-sm'
-                )}>
+              <div key={i} className={cn('flex flex-col gap-1', isAgent ? 'items-start' : 'items-end')}>
+                <p className="flex items-baseline gap-1.5 px-1">
+                  <span className={OVERLINE}>{isAgent ? 'Agent' : 'Caller'}</span>
+                  <span className="text-[11px] leading-4 text-muted-foreground tabular-nums">at {formatDuration(msg.time_in_call_secs)}</span>
+                </p>
+                <div
+                  className={cn(
+                    'max-w-[85%] px-3.5 py-2.5 text-sm leading-[21px] break-words',
+                    isAgent
+                      ? 'rounded-2xl rounded-bl-md bg-white text-foreground shadow-hair'
+                      : 'rounded-2xl rounded-br-md bg-primary text-white'
+                  )}
+                >
                   {highlightText(msg.message)}
                 </div>
-                <span className="text-[11px] text-muted-foreground px-1">
-                  at {formatDuration(msg.time_in_call_secs)}
-                </span>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
 
         {/* Scroll to bottom */}
         {!atBottom && (
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="icon-sm"
             onClick={scrollToBottom}
             aria-label="Scroll to the end of the transcript"
-            className="sticky bottom-2 ml-auto flex h-7 w-7 items-center justify-center rounded-full bg-muted shadow-sm border hover:bg-muted/80"
+            className="sticky bottom-0 mt-2 ml-auto flex"
           >
-            <ChevronDown className="h-4 w-4" />
-          </button>
+            <ChevronDown />
+          </Button>
         )}
       </div>
 
       {/* Stats */}
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-muted-foreground tabular-nums">
         {transcript.length} messages · Agent spoke {agentPct}% · Caller spoke {callerPct}%
       </p>
     </div>
@@ -720,9 +768,9 @@ function TranscriptView({ transcript, callId, toolEvents = [] }: { transcript: T
 // ─── Actions ──────────────────────────────────────────────────────────────────
 
 function IntegrationAction({
-  icon: Icon, iconColor, label, description, buttonLabel, callId, type, connected, workInProgress,
+  icon: Icon, label, description, buttonLabel, callId, type, connected, workInProgress,
 }: {
-  icon: typeof Bot; iconColor: string; label: string; description: string
+  icon: LucideIcon; label: string; description: string
   buttonLabel: string; callId: string; type: string; connected: boolean; workInProgress?: boolean
 }) {
   const [sent, setSent] = useState(false)
@@ -749,30 +797,32 @@ function IntegrationAction({
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 py-3 px-3 border-b last:border-0">
-      <div className="flex items-start gap-3">
-        <Icon className={cn('h-5 w-5 mt-0.5 flex-shrink-0', iconColor)} aria-hidden="true" />
-        <div>
-          <p className="flex items-center gap-1.5 text-sm font-medium">
-            {label}
-            {workInProgress && <WorkInProgressBadge />}
-          </p>
-          <p className="text-xs text-muted-foreground">{description}</p>
-        </div>
+    <div className="flex min-h-14 items-center gap-3 border-b border-rule px-4 py-3 last:border-b-0">
+      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-secondary" aria-hidden="true">
+        <Icon className="size-4 text-foreground" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium">
+          {label}
+          {workInProgress && <WorkInProgressBadge />}
+        </p>
+        <p className="text-xs leading-4 text-muted-foreground">{description}</p>
       </div>
       {sent ? (
-        <span className="text-xs text-green-600 flex items-center gap-1" role="status">
-          <CheckCheck className="h-3.5 w-3.5" /> Sent!
-        </span>
+        <StatusChip tone="success" icon={<CheckCheck aria-hidden="true" />} role="status">
+          Sent!
+        </StatusChip>
       ) : (
         <Button
           variant="outline"
           size="sm"
-          disabled={!connected || isPending || workInProgress}
+          className="shrink-0"
+          disabled={!connected || workInProgress}
+          loading={isPending}
           onClick={handleSend}
           title={workInProgress ? 'Coming soon' : !connected ? 'Connect this integration first' : undefined}
         >
-          {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-label="Sending" /> : buttonLabel}
+          {buttonLabel}
         </Button>
       )}
     </div>
@@ -838,189 +888,206 @@ export function CallDetailSheet({ callId, onClose, onDeleted, defaultTab = 'over
   const outcome = outcomeLabel(call?.outcome)
   const result = callResultLabel(call?.call_successful)
   const language = languageLabel(call?.details?.main_language)
+  const inbound = call?.direction === 'inbound'
+  const meta = call
+    ? [
+        call.started_at ? formatDate(call.started_at) : null,
+        call.duration_seconds > 0 ? formatDuration(call.duration_seconds) : null,
+      ].filter(Boolean).join(' · ')
+    : ''
 
   return (
     <>
       <Sheet open={!!callId} onOpenChange={(open) => !open && onClose()}>
-        <SheetContent side="right" className="w-full sm:max-w-xl flex flex-col p-0 gap-0 overflow-hidden">
+        <SheetContent side="right" className="gap-0 overflow-hidden p-0">
           {/* Header */}
-          <SheetHeader className="px-5 py-4 border-b flex-shrink-0">
-            <div className="flex items-start justify-between gap-3 pr-6">
-              <div className="min-w-0">
-                <SheetTitle>Call details</SheetTitle>
-                <SheetDescription className="font-mono truncate">
-                  {call ? (call.caller_number ? formatPhoneNumber(call.caller_number) : 'Unknown caller') : 'Loading…'}
-                </SheetDescription>
-              </div>
+          <SheetHeader className="shrink-0">
+            <p className={cn('flex items-center gap-1.5', OVERLINE)}>
+              {call && (inbound
+                ? <PhoneIncoming className="size-3.5" aria-hidden="true" />
+                : <PhoneOutgoing className="size-3.5" aria-hidden="true" />)}
+              {call ? (inbound ? 'Inbound call' : 'Outbound call') : 'Call'}
+            </p>
+            <SheetTitle className="mt-1 truncate tabular-nums">
+              {call ? (call.caller_number ? formatPhoneNumber(call.caller_number) : 'Unknown caller') : 'Call details'}
+            </SheetTitle>
+            {/* While the call loads, the meta line and chip row keep their space,
+                so the tabs and body do not move down when the data arrives. */}
+            {call ? (
+              <SheetDescription className="tabular-nums">{meta || 'Call details'}</SheetDescription>
+            ) : (
+              <p aria-hidden="true" className="invisible text-[13px] leading-[19px]">—</p>
+            )}
+            <div className="mt-2.5 flex min-h-6 flex-wrap gap-1.5">
               {call && (
-                <div className="flex flex-wrap justify-end gap-1.5">
+                <>
                   {call.is_test && <TestCallBadge />}
                   <CallStatusBadge status={call.status} />
-                  <HandledByBadge call={call} />
-                </div>
+                  <HandledByBadge call={call} accent />
+                </>
               )}
             </div>
           </SheetHeader>
 
           {!call && error ? (
-            <div className="p-5 flex flex-1 flex-col items-center justify-center gap-3 text-center" role="alert">
-              <p className="text-sm font-medium">This call could not be loaded</p>
-              <p className="text-sm text-muted-foreground">{error}</p>
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={refetch}>
-                <RotateCw className="h-3.5 w-3.5" /> Try again
-              </Button>
+            <div className="flex flex-1 items-center justify-center p-6" role="alert">
+              <EmptyState
+                bare
+                icon={TriangleAlert}
+                iconClassName="bg-destructive-soft text-destructive shadow-none"
+                title="This call could not be loaded"
+                description={error}
+                action={
+                  <Button variant="outline" size="sm" onClick={refetch}>
+                    <RotateCw aria-hidden="true" /> Try again
+                  </Button>
+                }
+              />
             </div>
           ) : isLoading || !call ? (
-            <div className="p-5 space-y-3 flex-1" aria-busy="true" aria-label="Loading call">
-              {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
-            </div>
+            <OrbLoader label="Loading call…" className="min-h-[50vh] flex-1" />
           ) : (
-            <Tabs value={tab} onValueChange={setTab} className="flex flex-col flex-1 overflow-hidden">
-              <TabsList variant="line" className="px-5 pt-1 flex-shrink-0 border-b rounded-none w-full justify-start">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="transcript">Transcript</TabsTrigger>
-                <TabsTrigger value="actions">Actions</TabsTrigger>
-              </TabsList>
+            <Tabs value={tab} onValueChange={setTab} className="min-h-0 flex-1 gap-0">
+              <div className="shrink-0 px-6 pt-4">
+                <TabsList className="w-full sm:w-fit">
+                  <TabsTrigger value="overview">Overview</TabsTrigger>
+                  <TabsTrigger value="transcript">Transcript</TabsTrigger>
+                  <TabsTrigger value="actions">Actions</TabsTrigger>
+                </TabsList>
+              </div>
 
               {/* --- OVERVIEW --- */}
-              <TabsContent value="overview" className="flex-1 overflow-y-auto p-5 space-y-5">
-                {(call.summary_title || outcome) && (
-                  <div className="space-y-1.5">
-                    {call.summary_title && <p className="text-base font-semibold leading-snug">{call.summary_title}</p>}
-                    {outcome && (
-                      <Badge variant="outline" className="border-purple-200 bg-purple-50 text-purple-700 text-xs">
-                        {outcome}
-                      </Badge>
-                    )}
-                  </div>
-                )}
-
-                {/* Call info grid */}
-                <dl className="rounded-xl bg-gray-50 border p-4 grid grid-cols-2 gap-3 text-sm">
-                  <InfoItem label="Direction">
-                    <span className="flex items-center gap-1.5">
-                      {call.direction === 'inbound'
-                        ? <PhoneIncoming className="h-4 w-4 text-blue-500" aria-hidden="true" />
-                        : <PhoneOutgoing className="h-4 w-4 text-purple-500" aria-hidden="true" />}
-                      {call.direction === 'inbound' ? 'Inbound' : 'Outbound'}
-                    </span>
-                  </InfoItem>
-                  <InfoItem label="Duration">{call.duration_seconds > 0 ? formatDuration(call.duration_seconds) : '—'}</InfoItem>
-                  <InfoItem label="Started"><span className="text-xs">{call.started_at ? formatDate(call.started_at) : '—'}</span></InfoItem>
-                  <InfoItem label="Ended"><span className="text-xs">{call.ended_at ? formatDate(call.ended_at) : '—'}</span></InfoItem>
-                  {call.from_number && <InfoItem label="From"><span className="font-mono text-xs">{formatPhoneNumber(call.from_number)}</span></InfoItem>}
-                  {call.to_number && <InfoItem label="To"><span className="font-mono text-xs">{formatPhoneNumber(call.to_number)}</span></InfoItem>}
-                  <InfoItem label="Outcome">{outcome ?? '—'}</InfoItem>
-                  <InfoItem label="AI outcome">{result ?? '—'}</InfoItem>
-                  {language && <InfoItem label="Language">{language}</InfoItem>}
-                </dl>
-
-                <CallHandlingSection call={call} />
-
-                <AiOutcomeSection call={call} />
-
-                <CallBusinessSection key={call.id} callId={call.id} />
-
-                {/* Summary */}
-                <section>
-                  <SectionTitle>Call summary</SectionTitle>
+              <TabsContent value="overview" className={cn(PANEL, 'min-h-0 flex-1 divide-y divide-rule overflow-y-auto px-6 pt-5 pb-8')}>
+                <section aria-labelledby="call-summary-title" className="py-6 first:pt-0">
+                  {(call.summary_title || outcome) && (
+                    <div className="mb-4 space-y-2">
+                      {call.summary_title && (
+                        <p className="text-[15px] leading-[22px] font-medium text-foreground">{call.summary_title}</p>
+                      )}
+                      {outcome && <StatusChip tone="neutral">{outcome}</StatusChip>}
+                    </div>
+                  )}
+                  <h3 id="call-summary-title" className={cn('mb-2 flex items-center gap-1.5', OVERLINE)}>
+                    <Sparkles className="size-3.5 text-brand" aria-hidden="true" />
+                    AI summary
+                  </h3>
                   {call.summary ? (
-                    <div className="rounded-xl bg-purple-50 border border-purple-100 p-4">
-                      <p className="flex items-center gap-1.5 text-xs text-purple-600 font-medium mb-2">
-                        <Bot className="h-3.5 w-3.5" aria-hidden="true" /> AI Summary
-                      </p>
-                      <p className="text-sm leading-relaxed whitespace-pre-line">{call.summary}</p>
+                    <div className="rounded-2xl bg-secondary p-4">
+                      <p className="text-sm leading-[22px] whitespace-pre-line text-foreground">{call.summary}</p>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">Summary not available</p>
+                    <p className="text-[13px] text-muted-foreground">Summary not available</p>
                   )}
                 </section>
 
-                <AnalysisSections call={call} />
+                {/* Call info */}
+                <section aria-label="Call information" className="py-6">
+                  <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
+                    <InfoItem label="Direction">
+                      <span className="flex items-center gap-1.5">
+                        {inbound
+                          ? <PhoneIncoming className="size-4 text-muted-foreground" aria-hidden="true" />
+                          : <PhoneOutgoing className="size-4 text-muted-foreground" aria-hidden="true" />}
+                        {inbound ? 'Inbound' : 'Outbound'}
+                      </span>
+                    </InfoItem>
+                    <InfoItem label="Duration"><span className="tabular-nums">{call.duration_seconds > 0 ? formatDuration(call.duration_seconds) : '—'}</span></InfoItem>
+                    <InfoItem label="Started"><span className="tabular-nums">{call.started_at ? formatDate(call.started_at) : '—'}</span></InfoItem>
+                    <InfoItem label="Ended"><span className="tabular-nums">{call.ended_at ? formatDate(call.ended_at) : '—'}</span></InfoItem>
+                    {call.from_number && <InfoItem label="From"><span className="tabular-nums">{formatPhoneNumber(call.from_number)}</span></InfoItem>}
+                    {call.to_number && <InfoItem label="To"><span className="tabular-nums">{formatPhoneNumber(call.to_number)}</span></InfoItem>}
+                    <InfoItem label="Outcome">{outcome ?? '—'}</InfoItem>
+                    <InfoItem label="AI outcome">{result ?? '—'}</InfoItem>
+                    {language && <InfoItem label="Language">{language}</InfoItem>}
+                  </dl>
+                </section>
+
+                <AiOutcomeSection call={call} onReanalyzed={refetch} />
 
                 <RecordingSection call={call} />
-              </TabsContent>
 
-              {/* --- TRANSCRIPT --- */}
-              <TabsContent value="transcript" className="flex-1 overflow-y-auto p-5">
-                {call.details?.content_purged && (
-                  <p className="mb-3 rounded-lg border bg-gray-50 px-3 py-2 text-xs text-muted-foreground" role="note">
-                    The transcript, summary and recording were removed by your retention setting (Agent › Call handling › Privacy).
-                  </p>
-                )}
-                <TranscriptView transcript={call.transcript ?? []} callId={call.id} toolEvents={call.details?.tool_events ?? []} />
-              </TabsContent>
+                <CallBusinessSection key={call.id} callId={call.id} />
 
-              {/* --- ACTIONS --- */}
-              <TabsContent value="actions" className="flex-1 overflow-y-auto p-5 space-y-5">
-                {/* Integrations */}
-                <section>
-                  <SectionTitle>Send to integrations</SectionTitle>
-                  <div className="rounded-xl border divide-y">
-                    <IntegrationAction
-                      icon={Table2} iconColor="text-green-600"
-                      label="Log to Google Sheets"
-                      description="Add this call to your call-log spreadsheet"
-                      buttonLabel="Send" callId={call.id} type="google_sheets" connected={connected.google_sheets}
-                      workInProgress
-                    />
-                    <IntegrationAction
-                      icon={FileText} iconColor="text-blue-600"
-                      label="Create call report"
-                      description="Generate a formatted report in Google Docs"
-                      buttonLabel="Create" callId={call.id} type="google_docs" connected={connected.google_docs}
-                      workInProgress
-                    />
-                    <IntegrationAction
-                      icon={Mail} iconColor="text-red-500"
-                      label="Email summary"
-                      description="Send call summary to your email"
-                      buttonLabel="Send email" callId={call.id} type="gmail" connected={connected.gmail}
-                    />
-                  </div>
-                </section>
+                <CallHandlingSection call={call} />
 
-                {/* Call management */}
-                <section className="border-t pt-4">
-                  <SectionTitle>Call management</SectionTitle>
-                  <div className="space-y-2">
-                    <ReanalyzeAction call={call} onDone={refetch} />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start gap-2"
-                      onClick={copyNumber}
-                      disabled={!call.caller_number}
-                    >
-                      {copied ? <CheckCheck className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                      {copied ? 'Copied!' : 'Copy caller number'}
-                    </Button>
-                  </div>
-                </section>
+                <AnalysisSections call={call} />
 
                 {/* Danger zone */}
-                <section className="border-t pt-4">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-red-500 mb-3">
-                    Danger zone
-                  </h3>
-                  <div className="rounded-xl border border-red-100 p-4 flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-medium flex items-center gap-1.5">
-                        <Trash2 className="h-4 w-4 text-red-500" aria-hidden="true" /> Delete this call record
+                <Section id="call-danger-zone" title="Danger zone" titleClassName="text-destructive">
+                  <div className="flex flex-col gap-3 rounded-2xl p-4 shadow-[0_0_0_1px_rgb(179_38_30/0.18)] sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-1.5 text-sm font-medium">
+                        <Trash2 className="size-4 text-destructive" aria-hidden="true" /> Delete this call record
                       </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="mt-0.5 text-xs leading-4 text-muted-foreground">
                         Permanently removes the call, transcript and recording, including the copy at the voice provider.
                       </p>
                     </div>
                     <Button
                       variant="destructive"
                       size="sm"
+                      className="self-start sm:self-auto"
                       onClick={() => setDeleteOpen(true)}
                     >
                       Delete
                     </Button>
                   </div>
-                </section>
+                </Section>
+              </TabsContent>
+
+              {/* --- TRANSCRIPT --- */}
+              <TabsContent value="transcript" className={cn(PANEL, 'min-h-0 flex-1 overflow-y-auto px-6 pt-5 pb-8')}>
+                {call.details?.content_purged && (
+                  <Alert role="note" className="mb-4">
+                    <Info aria-hidden="true" />
+                    <AlertDescription>
+                      The transcript, summary and recording were removed by your retention setting (Agent › Call handling › Privacy).
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <TranscriptView transcript={call.transcript ?? []} callId={call.id} toolEvents={call.details?.tool_events ?? []} />
+              </TabsContent>
+
+              {/* --- ACTIONS --- */}
+              <TabsContent value="actions" className={cn(PANEL, 'min-h-0 flex-1 divide-y divide-rule overflow-y-auto px-6 pt-5 pb-8')}>
+                {/* Integrations */}
+                <Section title="Send to integrations">
+                  <div className="overflow-hidden rounded-2xl shadow-hair">
+                    <IntegrationAction
+                      icon={Table2}
+                      label="Log to Google Sheets"
+                      description="Add this call to your call-log spreadsheet"
+                      buttonLabel="Send" callId={call.id} type="google_sheets" connected={connected.google_sheets}
+                      workInProgress
+                    />
+                    <IntegrationAction
+                      icon={FileText}
+                      label="Create call report"
+                      description="Generate a formatted report in Google Docs"
+                      buttonLabel="Create" callId={call.id} type="google_docs" connected={connected.google_docs}
+                      workInProgress
+                    />
+                    <IntegrationAction
+                      icon={Mail}
+                      label="Email summary"
+                      description="Send call summary to your email"
+                      buttonLabel="Send email" callId={call.id} type="gmail" connected={connected.gmail}
+                    />
+                  </div>
+                </Section>
+
+                {/* Call management */}
+                <Section title="Call management">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={copyNumber}
+                    disabled={!call.caller_number}
+                  >
+                    {copied ? <CheckCheck className="text-success-dot" aria-hidden="true" /> : <Copy aria-hidden="true" />}
+                    {copied ? 'Copied!' : 'Copy caller number'}
+                  </Button>
+                </Section>
               </TabsContent>
             </Tabs>
           )}

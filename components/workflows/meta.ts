@@ -30,10 +30,19 @@ import {
 } from '@/lib/workflows/types'
 import type { Plan } from '@/types'
 
+/**
+ * Tone classes for trigger/action icons. The redesign drops the per-item rainbow:
+ * icons are ink on a tinted-grey disc; only semantic triggers (a missed call, an
+ * unresolved call) colour the icon itself, never the background.
+ */
+const NEUTRAL_TILE = 'bg-secondary text-foreground'
+const NEUTRAL_ICON = 'text-foreground'
+
 export interface TriggerMeta {
   label: string
   description: string
   icon: LucideIcon
+  /** Icon disc classes (background + icon colour). */
   tone: string
 }
 
@@ -42,25 +51,25 @@ export const TRIGGER_META: Record<TriggerType, TriggerMeta> = {
     label: 'Call ended',
     description: 'Every call your agent finishes.',
     icon: PhoneOff,
-    tone: 'bg-blue-50 text-blue-600',
+    tone: NEUTRAL_TILE,
   },
   call_missed: {
     label: 'Missed call',
     description: 'A call nobody answered, or that couldn’t be taken.',
     icon: PhoneMissed,
-    tone: 'bg-red-50 text-red-600',
+    tone: 'bg-secondary text-destructive',
   },
   sentiment_negative: {
     label: 'Call not resolved',
     description: 'The AI marked the call as not successful: its goal was not reached.',
     icon: Frown,
-    tone: 'bg-amber-50 text-amber-700',
+    tone: 'bg-secondary text-warning',
   },
   keyword_detected: {
     label: 'Keyword heard',
     description: 'A word or phrase you choose, said by the caller or the agent.',
     icon: TextSearch,
-    tone: 'bg-purple-50 text-purple-600',
+    tone: NEUTRAL_TILE,
   },
 }
 
@@ -70,6 +79,7 @@ export interface ActionMeta {
   label: string
   description: string
   icon: LucideIcon
+  /** Icon colour class. */
   tone: string
   group: ActionGroup
 }
@@ -79,70 +89,70 @@ export const ACTION_META: Record<ActionType, ActionMeta> = {
     label: 'Notify Slack',
     description: 'Post a message to a Slack channel.',
     icon: Hash,
-    tone: 'text-purple-600',
+    tone: NEUTRAL_ICON,
     group: 'notify',
   },
   send_webhook: {
     label: 'Send webhook',
     description: 'Send the call’s details to your CRM, Zapier, Make or n8n.',
     icon: Webhook,
-    tone: 'text-amber-600',
+    tone: NEUTRAL_ICON,
     group: 'notify',
   },
   send_sms: {
     label: 'Text the caller',
     description: 'Send the caller a text message.',
     icon: MessageSquareText,
-    tone: 'text-emerald-600',
+    tone: NEUTRAL_ICON,
     group: 'notify',
   },
   add_tag: {
     label: 'Tag the call',
     description: 'Label the call so it stands out in your call list.',
     icon: Tag,
-    tone: 'text-orange-500',
+    tone: NEUTRAL_ICON,
     group: 'organize',
   },
   wait: {
     label: 'Wait',
     description: 'Pause up to 30 seconds before the next step.',
     icon: Clock,
-    tone: 'text-slate-500',
+    tone: NEUTRAL_ICON,
     group: 'organize',
   },
   send_email: {
     label: 'Send email (Gmail)',
     description: 'Email the call summary from your Gmail account.',
     icon: Mail,
-    tone: 'text-red-500',
+    tone: NEUTRAL_ICON,
     group: 'google',
   },
   add_to_sheet: {
     label: 'Add row (Google Sheets)',
     description: 'Add the call as a new row in a spreadsheet.',
     icon: Sheet,
-    tone: 'text-green-600',
+    tone: NEUTRAL_ICON,
     group: 'google',
   },
   create_calendar_event: {
     label: 'Follow-up (Google Calendar)',
     description: 'Put a follow-up reminder in your calendar.',
     icon: CalendarPlus,
-    tone: 'text-blue-600',
+    tone: NEUTRAL_ICON,
     group: 'google',
   },
   create_doc: {
     label: 'Call report (Google Docs)',
     description: 'Write a call report as a document.',
     icon: FileText,
-    tone: 'text-sky-600',
+    tone: NEUTRAL_ICON,
     group: 'google',
   },
   save_to_drive: {
     label: 'Save transcript (Google Drive)',
     description: 'Save the transcript as a text file in Drive.',
     icon: FolderUp,
-    tone: 'text-yellow-600',
+    tone: NEUTRAL_ICON,
     group: 'google',
   },
 }

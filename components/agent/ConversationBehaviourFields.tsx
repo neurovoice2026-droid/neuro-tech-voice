@@ -5,13 +5,13 @@
 // conversation_settings as a whole.
 
 import { useId, useState } from 'react'
-import { Plus, X } from 'lucide-react'
+import { AlertCircle, Check, Plus, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { FlagIcon } from '@/components/shared/FlagIcon'
+import { Chip } from '@/components/shared/OptionCard'
 import { AGENT_LANGUAGES } from '@/lib/agent-languages'
 import {
   ASR_KEYWORDS_MAX,
@@ -52,34 +52,41 @@ export function AdditionalLanguagesField({ primary, value, onChange, error }: Ad
     <div className="space-y-3">
       <fieldset aria-describedby={`${groupId}-hint${error ? ` ${errorId}` : ''}`} aria-invalid={error ? true : undefined}>
         <legend className="sr-only">Additional languages</legend>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {/* The site's language chips: ink when on, tinted grey when off. */}
+        <div className="flex flex-wrap gap-2">
           {options.map((l) => {
-            const id = `${groupId}-${l.value}`
             const checked = value.includes(l.value)
             const disabled = !checked && full
             return (
-              <div
+              <Chip
                 key={l.value}
-                className={`flex items-center gap-2 rounded-md border px-2.5 py-2 ${disabled ? 'opacity-50' : 'hover:bg-accent'}`}
+                role="checkbox"
+                pressed={checked}
+                disabled={disabled}
+                onClick={() => toggle(l.value, !checked)}
+                className="h-9 gap-2 pr-3.5 pl-3 text-[13px]"
               >
-                <Checkbox id={id} checked={checked} disabled={disabled} onCheckedChange={(c) => toggle(l.value, c === true)} />
-                <Label htmlFor={id} className={`flex min-w-0 items-center gap-2 text-sm font-normal ${disabled ? '' : 'cursor-pointer'}`}>
-                  <FlagIcon country={l.country} />
-                  <span className="truncate">{l.label}</span>
-                </Label>
-              </div>
+                {/* Important sizes: the chip sizes un-sized svgs to 14 px squares. */}
+                <FlagIcon country={l.country} className="h-3.5! w-5!" />
+                {l.label}
+                {checked && <Check className="size-3.5" aria-hidden="true" />}
+              </Chip>
             )
           })}
         </div>
       </fieldset>
-      <p id={`${groupId}-hint`} className="text-xs text-muted-foreground">
-        {value.length} / {MAX_ADDITIONAL_LANGUAGES} selected. Calls start in {languageLabel(primary)}; if the caller speaks one of these
+      <p id={`${groupId}-hint`} className="text-xs leading-[18px] text-muted-foreground">
+        <span className="font-medium text-foreground tabular-nums">
+          {value.length} / {MAX_ADDITIONAL_LANGUAGES} selected.
+        </span>{' '}
+        Calls start in {languageLabel(primary)}; if the caller speaks one of these
         languages in their first two replies, the agent switches to it for the rest of the call. The backup voice agent only speaks{' '}
         {languageLabel(primary)}.
       </p>
       {error && (
-        <p id={errorId} role="alert" className="text-xs text-destructive">
-          {error}
+        <p id={errorId} role="alert" className="flex items-start gap-1.5 text-xs leading-4 text-destructive">
+          <AlertCircle className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+          <span>{error}</span>
         </p>
       )}
     </div>
@@ -124,7 +131,7 @@ export function AsrKeywordsField({ value, onChange, error }: KeywordsFieldProps)
   }
 
   return (
-    <div className="space-y-2">
+    <div className="grid gap-2">
       <Label htmlFor={inputId}>Words to recognize</Label>
       <div className="flex gap-2">
         <Input
@@ -146,25 +153,26 @@ export function AsrKeywordsField({ value, onChange, error }: KeywordsFieldProps)
           aria-invalid={shownError ? true : undefined}
           aria-describedby={`${inputId}-hint${shownError ? ` ${inputId}-error` : ''}`}
         />
-        <Button type="button" variant="outline" onClick={add} disabled={full || !cleanKeyword(text)} className="gap-1.5">
+        <Button type="button" variant="outline" onClick={add} disabled={full || !cleanKeyword(text)} className="h-10">
           <Plus aria-hidden="true" /> Add
         </Button>
       </div>
       {shownError && (
-        <p id={`${inputId}-error`} role="alert" className="text-xs text-destructive">
-          {shownError}
+        <p id={`${inputId}-error`} role="alert" className="flex items-start gap-1.5 text-xs leading-4 text-destructive">
+          <AlertCircle className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+          <span>{shownError}</span>
         </p>
       )}
       {value.length > 0 && (
-        <ul className="flex flex-wrap gap-1.5" aria-label="Words to recognize">
+        <ul className="flex flex-wrap gap-1.5 pt-1" aria-label="Words to recognize">
           {value.map((k) => (
             <li key={k}>
-              <Badge variant="secondary" className="h-6 gap-1 pr-1">
+              <Badge variant="secondary" className="h-7 gap-1 overflow-visible pr-1 pl-3 text-[13px] font-normal">
                 <span className="max-w-48 truncate">{k}</span>
                 <button
                   type="button"
                   onClick={() => onChange(value.filter((v) => v !== k))}
-                  className="rounded-full p-0.5 hover:bg-background/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="tap-44 relative grid size-5 place-items-center rounded-full text-muted-foreground transition-colors outline-none hover:bg-white hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-solid focus-visible:outline-ring"
                   aria-label={`Remove ${k}`}
                 >
                   <X className="size-3" aria-hidden="true" />
@@ -174,7 +182,7 @@ export function AsrKeywordsField({ value, onChange, error }: KeywordsFieldProps)
           ))}
         </ul>
       )}
-      <p id={`${inputId}-hint`} className="text-xs text-muted-foreground">
+      <p id={`${inputId}-hint`} className="text-xs leading-[18px] text-muted-foreground">
         {value.length} / {ASR_KEYWORDS_MAX}. Names callers say that are easy to mishear: staff, services, products, street names (up to{' '}
         {ASR_KEYWORD_MAX_CHARS} characters each). Your business name is always included. Keep the list short and specific.
       </p>

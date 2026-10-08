@@ -6,15 +6,17 @@
 // columns are platform-managed), which also pushes the agent config.
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertCircle, CalendarCheck, ExternalLink, Info, Loader2, Mail, Plus, RotateCw, Trash2 } from 'lucide-react'
+import Image from 'next/image'
+import { AlertCircle, AlertTriangle, ExternalLink, Info, Mail, Plus, RotateCw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { FieldError, SaveBar, SettingSwitch, parseInteger } from '@/components/agent/tabs/TabConversation'
+import { Field, FormSection } from '@/components/shared/FormSection'
+import { OrbLoader } from '@/components/shared/OrbLoader'
+import { StatusChip } from '@/components/shared/StatusChip'
+import { SaveBar, SettingSwitch, parseInteger } from '@/components/agent/tabs/TabConversation'
 import { errorMessage, isAbortError, parseApiError } from '@/hooks/useVoiceCatalog'
 import { BookingSettingsSchema, MAX_EXTRA_MESSAGE_RECIPIENTS, MessageSettingsSchema } from '@/lib/voice-providers/settings'
 import { DEFAULT_BOOKING_SETTINGS, DEFAULT_MESSAGE_SETTINGS, type BookingSettings, type MessageSettings } from '@/lib/voice-providers/types'
@@ -43,6 +45,9 @@ function connectUrlWithReturn(connectUrl: string): string {
   params.set('return_to', CONNECT_RETURN_PATH)
   return `${path}?${params.toString()}`
 }
+
+const APPOINTMENTS_DESCRIPTION = 'Let the agent check your Google Calendar and book appointments during calls.'
+const MESSAGES_DESCRIPTION = 'Let the agent take a message during the call and alert you right away.'
 
 const DURATIONS = [15, 20, 30, 45, 60, 90, 120]
 const BUFFERS = [0, 5, 10, 15, 30, 60]
@@ -109,26 +114,39 @@ export function BusinessToolsSection() {
     setRetrying(false)
   }
 
-  if (!state) {
+  if (!state && loadError) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Appointments and messages</CardTitle>
-          <CardDescription>{loadError ? 'These settings could not be loaded.' : 'Loading…'}</CardDescription>
-        </CardHeader>
-        {loadError && (
-          <CardContent>
-            <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-destructive">
-              <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-              {loadError}
-              <Button variant="outline" size="sm" onClick={() => void retry()} disabled={retrying} className="gap-1.5">
-                {retrying ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RotateCw aria-hidden="true" />}
-                Retry
-              </Button>
-            </div>
-          </CardContent>
-        )}
-      </Card>
+      <FormSection title="Appointments and messages">
+        <Alert variant="destructive">
+          <AlertCircle aria-hidden="true" />
+          <AlertTitle>These settings could not be loaded.</AlertTitle>
+          <AlertDescription>{loadError}</AlertDescription>
+          <AlertAction>
+            <Button variant="outline" size="sm" className="tap-44" onClick={() => void retry()} loading={retrying} loadingState="breathing">
+              <RotateCw aria-hidden="true" />
+              Retry
+            </Button>
+          </AlertAction>
+        </Alert>
+      </FormSection>
+    )
+  }
+  if (!state) {
+    // The two final sections, each holding roughly the height of its loaded fields
+    // (measured at 390 / 640 / 768+ wide), so the sections below do not jump when they arrive.
+    return (
+      <>
+        <FormSection title="Appointments" description={APPOINTMENTS_DESCRIPTION}>
+          <div className="min-h-[900px] sm:min-h-[600px] md:min-h-[640px]">
+            <OrbLoader size={32} layout="row" label="Loading appointment settings…" className="min-h-14 rounded-2xl bg-secondary px-4" />
+          </div>
+        </FormSection>
+        <FormSection title="Messages" description={MESSAGES_DESCRIPTION}>
+          <div className="min-h-[480px] sm:min-h-[410px] md:min-h-[444px]">
+            <OrbLoader size={32} layout="row" label="Loading message settings…" className="min-h-14 rounded-2xl bg-secondary px-4" />
+          </div>
+        </FormSection>
+      </>
     )
   }
   return (
@@ -254,175 +272,176 @@ function AppointmentsCard({ state, onSaved }: { state: BusinessToolsState; onSav
       : (calendarOptions.find((c) => c.id === id)?.name ?? (calendars ? id : 'Your saved calendar'))
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Appointments</CardTitle>
-        <CardDescription>Let the agent check your Google Calendar and book appointments during calls.</CardDescription>
-        <CardAction>
-          {cal.connected && !cal.needs_reconnect ? (
-            <Badge variant="secondary" className="gap-1 text-xs">
-              <CalendarCheck className="size-3" aria-hidden="true" />
-              Google Calendar connected
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="text-xs">{cal.needs_reconnect ? 'Reconnect needed' : 'Calendar not connected'}</Badge>
-          )}
-        </CardAction>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        <SettingSwitch
-          id="booking-enabled"
-          label="Book appointments during calls"
-          description="The agent offers two or three free times, reads the chosen one back and books it in your calendar with the caller's name and number."
-          checked={draft.enabled}
-          onCheckedChange={(v) => setDraft((d) => ({ ...d, enabled: v }))}
-        />
+    <FormSection title="Appointments" description={APPOINTMENTS_DESCRIPTION}>
+      <CalendarConnection calendar={cal} />
 
-        {(!cal.connected || cal.needs_reconnect) && (
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed p-3">
-            <p className="min-w-0 flex-1 text-xs text-muted-foreground">
-              {!cal.configured
-                ? 'Google sign-in is not set up on this platform yet, so booking is not available.'
-                : cal.needs_reconnect
-                  ? 'Google refused access to your calendar. Reconnect it so the agent can book again; until then it takes a message instead.'
-                  : 'Connect Google Calendar so the agent can see your free times. Until then it takes a message with the caller’s preferred times.'}
-            </p>
-            {cal.configured && (
-              <Button size="sm" variant="outline" render={<a href={connectUrlWithReturn(cal.connect_url)} />} nativeButton={false}>
-                <ExternalLink aria-hidden="true" />
-                {cal.needs_reconnect ? 'Reconnect Google Calendar' : 'Connect Google Calendar'}
-              </Button>
-            )}
-          </div>
-        )}
+      <SettingSwitch
+        id="booking-enabled"
+        label="Book appointments during calls"
+        description="The agent offers two or three free times, reads the chosen one back and books it in your calendar with the caller's name and number."
+        checked={draft.enabled}
+        onCheckedChange={(v) => setDraft((d) => ({ ...d, enabled: v }))}
+      />
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="booking-calendar">Calendar</Label>
-            <Select
-              value={draft.calendar_id}
-              onValueChange={(v) => v !== null && setDraft((d) => ({ ...d, calendar_id: v }))}
-              disabled={!cal.connected || calendarsLoading || !!calendarsError}
+      <div className="grid items-start gap-5 sm:grid-cols-2 sm:gap-x-4">
+        <Field
+          label="Calendar"
+          htmlFor="booking-calendar"
+          hint={calendarsError || calendarsLoading ? undefined : 'Busy times are read from this calendar and bookings are added to it.'}
+        >
+          <Select
+            value={draft.calendar_id}
+            onValueChange={(v) => v !== null && setDraft((d) => ({ ...d, calendar_id: v }))}
+            disabled={!cal.connected || calendarsLoading || !!calendarsError}
+          >
+            <SelectTrigger
+              id="booking-calendar"
+              className="w-full"
+              aria-describedby={calendarsError ? 'booking-calendar-error' : calendarsLoading ? 'booking-calendar-loading' : 'booking-calendar-hint'}
             >
-              <SelectTrigger
-                id="booking-calendar"
-                className="w-full"
-                aria-describedby={calendarsError ? 'booking-calendar-error' : 'booking-calendar-hint'}
-              >
-                <SelectValue>{(v: string) => calendarLabel(v)}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {calendarOptions.map((c) => (
-                  <SelectItem key={c.id} value={c.primary ? 'primary' : c.id} disabled={!c.can_book}>
-                    {c.name}
-                    {!c.can_book ? ' (read only)' : ''}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {calendarsError ? (
-              <div id="booking-calendar-error" role="alert" className="flex flex-wrap items-center gap-2 text-xs text-destructive">
-                <span>{calendarsError}</span>
-                <Button type="button" size="xs" variant="outline" onClick={() => setCalendarRequest((n) => n + 1)} className="gap-1">
-                  <RotateCw aria-hidden="true" /> Retry
-                </Button>
-              </div>
-            ) : (
-              <p id="booking-calendar-hint" className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                {calendarsLoading && <Loader2 className="size-3 animate-spin" aria-hidden="true" />}
-                {calendarsLoading ? 'Loading your calendars…' : 'Busy times are read from this calendar and bookings are added to it.'}
-              </p>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="booking-duration">Appointment length</Label>
-            <Select value={String(draft.duration_minutes)} onValueChange={(v) => v !== null && setDraft((d) => ({ ...d, duration_minutes: Number(v) }))}>
-              <SelectTrigger id="booking-duration" className="w-full">
-                <SelectValue>{(v: string) => `${v} minutes`}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {DURATIONS.map((m) => (
-                  <SelectItem key={m} value={String(m)}>{m} minutes</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="booking-buffer">Free time between appointments</Label>
-            <Select value={String(draft.buffer_minutes)} onValueChange={(v) => v !== null && setDraft((d) => ({ ...d, buffer_minutes: Number(v) }))}>
-              <SelectTrigger id="booking-buffer" className="w-full">
-                <SelectValue>{(v: string) => (v === '0' ? 'None' : `${v} minutes`)}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {BUFFERS.map((m) => (
-                  <SelectItem key={m} value={String(m)}>{m === 0 ? 'None' : `${m} minutes`}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="booking-window">Book up to (days ahead)</Label>
-            <Input
-              id="booking-window"
-              inputMode="numeric"
-              value={draft.booking_window_days}
-              onChange={(e) => setDraft((d) => ({ ...d, booking_window_days: e.target.value }))}
-              aria-invalid={visible.booking_window_days ? true : undefined}
-              aria-describedby={visible.booking_window_days ? 'booking-window-error' : undefined}
-            />
-            {visible.booking_window_days && <FieldError id="booking-window-error">{visible.booking_window_days}</FieldError>}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="booking-notice">Minimum notice (hours)</Label>
-            <Input
-              id="booking-notice"
-              inputMode="numeric"
-              value={draft.min_notice_hours}
-              onChange={(e) => setDraft((d) => ({ ...d, min_notice_hours: e.target.value }))}
-              aria-invalid={visible.min_notice_hours ? true : undefined}
-              aria-describedby={visible.min_notice_hours ? 'booking-notice-error' : 'booking-notice-hint'}
-            />
-            {visible.min_notice_hours ? (
-              <FieldError id="booking-notice-error">{visible.min_notice_hours}</FieldError>
-            ) : (
-              <p id="booking-notice-hint" className="text-xs text-muted-foreground">How soon from now a caller can book.</p>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="booking-cap">Most appointments per day (optional)</Label>
-            <Input
-              id="booking-cap"
-              inputMode="numeric"
-              placeholder="No limit"
-              value={draft.daily_cap}
-              onChange={(e) => setDraft((d) => ({ ...d, daily_cap: e.target.value }))}
-              aria-invalid={visible.daily_cap ? true : undefined}
-              aria-describedby={visible.daily_cap ? 'booking-cap-error' : undefined}
-            />
-            {visible.daily_cap && <FieldError id="booking-cap-error">{visible.daily_cap}</FieldError>}
-          </div>
+              <SelectValue>{(v: string) => calendarLabel(v)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {calendarOptions.map((c) => (
+                <SelectItem key={c.id} value={c.primary ? 'primary' : c.id} disabled={!c.can_book}>
+                  {c.name}
+                  {!c.can_book ? ' (read only)' : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {calendarsLoading && (
+            <div id="booking-calendar-loading">
+              <OrbLoader size={32} layout="row" label="Loading your calendars…" className="gap-2" />
+            </div>
+          )}
+          {calendarsError && (
+            <div id="booking-calendar-error" role="alert" className="flex flex-wrap items-center gap-2 text-xs leading-4 text-destructive">
+              <AlertCircle className="size-3.5 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 flex-1">{calendarsError}</span>
+              <Button type="button" size="xs" variant="outline" className="tap-44" onClick={() => setCalendarRequest((n) => n + 1)}>
+                <RotateCw aria-hidden="true" /> Retry
+              </Button>
+            </div>
+          )}
+        </Field>
+        <Field label="Appointment length" htmlFor="booking-duration">
+          <Select value={String(draft.duration_minutes)} onValueChange={(v) => v !== null && setDraft((d) => ({ ...d, duration_minutes: Number(v) }))}>
+            <SelectTrigger id="booking-duration" className="w-full">
+              <SelectValue>{(v: string) => `${v} minutes`}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {DURATIONS.map((m) => (
+                <SelectItem key={m} value={String(m)}>{m} minutes</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Free time between appointments" htmlFor="booking-buffer">
+          <Select value={String(draft.buffer_minutes)} onValueChange={(v) => v !== null && setDraft((d) => ({ ...d, buffer_minutes: Number(v) }))}>
+            <SelectTrigger id="booking-buffer" className="w-full">
+              <SelectValue>{(v: string) => (v === '0' ? 'None' : `${v} minutes`)}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {BUFFERS.map((m) => (
+                <SelectItem key={m} value={String(m)}>{m === 0 ? 'None' : `${m} minutes`}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Book up to (days ahead)" htmlFor="booking-window" error={visible.booking_window_days}>
+          <Input
+            id="booking-window"
+            inputMode="numeric"
+            value={draft.booking_window_days}
+            onChange={(e) => setDraft((d) => ({ ...d, booking_window_days: e.target.value }))}
+            className="tabular-nums"
+          />
+        </Field>
+        <Field
+          label="Minimum notice (hours)"
+          htmlFor="booking-notice"
+          hint={visible.min_notice_hours ? undefined : 'How soon from now a caller can book.'}
+          error={visible.min_notice_hours}
+        >
+          <Input
+            id="booking-notice"
+            inputMode="numeric"
+            value={draft.min_notice_hours}
+            onChange={(e) => setDraft((d) => ({ ...d, min_notice_hours: e.target.value }))}
+            className="tabular-nums"
+          />
+        </Field>
+        <Field label="Most appointments per day" optional htmlFor="booking-cap" error={visible.daily_cap}>
+          <Input
+            id="booking-cap"
+            inputMode="numeric"
+            placeholder="No limit"
+            value={draft.daily_cap}
+            onChange={(e) => setDraft((d) => ({ ...d, daily_cap: e.target.value }))}
+            className="tabular-nums"
+          />
+        </Field>
+      </div>
+
+      <p className="flex items-start gap-2 text-xs leading-[18px] text-muted-foreground">
+        <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+        <span>
+          Bookable hours follow your opening hours (Availability tab). The agent never offers a time your calendar shows as busy and
+          confirms a booking only once it is in your calendar. Bookings include the caller&apos;s name and phone number.
+        </span>
+      </p>
+
+      <SaveBar
+        dirty={isDirty}
+        saving={saving}
+        blocked={showErrors && !valid}
+        onSave={() => void submit()}
+        onDiscard={() => {
+          setDraft(saved)
+          setShowErrors(false)
+        }}
+      />
+    </FormSection>
+  )
+}
+
+/** Integration-style tile: Google Calendar connection state and the connect/reconnect action. */
+function CalendarConnection({ calendar: cal }: { calendar: BusinessToolsState['calendar'] }) {
+  const connected = cal.connected && !cal.needs_reconnect
+  return (
+    <div className="rounded-2xl bg-secondary p-4">
+      <div className="flex items-center gap-3">
+        <span className="grid size-11 shrink-0 place-items-center rounded-full bg-white shadow-hair" aria-hidden="true">
+          <Image src="/integrari/google_calendar.svg" alt="" width={22} height={22} className="object-contain" />
+        </span>
+        <p className="min-w-0 flex-1 text-[15px] leading-[22px] font-medium">Google Calendar</p>
+        {connected ? (
+          <StatusChip tone="success" dot>Connected</StatusChip>
+        ) : cal.needs_reconnect ? (
+          <StatusChip tone="warning" icon={<AlertTriangle aria-hidden="true" />}>Reconnect needed</StatusChip>
+        ) : (
+          <StatusChip tone="outline">Not connected</StatusChip>
+        )}
+      </div>
+      {!connected && (
+        <div className="mt-3 space-y-3 sm:pl-14">
+          <p className="text-[13px] leading-[19px] text-muted-foreground">
+            {!cal.configured
+              ? 'Google sign-in is not set up on this platform yet, so booking is not available.'
+              : cal.needs_reconnect
+                ? 'Google refused access to your calendar. Reconnect it so the agent can book again; until then it takes a message instead.'
+                : 'Connect Google Calendar so the agent can see your free times. Until then it takes a message with the caller’s preferred times.'}
+          </p>
+          {cal.configured && (
+            <Button size="sm" variant="outline" className="tap-44" render={<a href={connectUrlWithReturn(cal.connect_url)} />} nativeButton={false}>
+              <ExternalLink aria-hidden="true" />
+              {cal.needs_reconnect ? 'Reconnect Google Calendar' : 'Connect Google Calendar'}
+            </Button>
+          )}
         </div>
-
-        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-          <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-          <span>
-            Bookable hours follow your opening hours (Availability tab). The agent never offers a time your calendar shows as busy and
-            confirms a booking only once it is in your calendar. Bookings include the caller&apos;s name and phone number.
-          </span>
-        </p>
-
-        <SaveBar
-          dirty={isDirty}
-          saving={saving}
-          blocked={showErrors && !valid}
-          onSave={() => void submit()}
-          onDiscard={() => {
-            setDraft(saved)
-            setShowErrors(false)
-          }}
-        />
-      </CardContent>
-    </Card>
+      )}
+    </div>
   )
 }
 
@@ -465,62 +484,60 @@ function MessagesCard({ state, onSaved }: { state: BusinessToolsState; onSaved: 
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Messages</CardTitle>
-        <CardDescription>Let the agent take a message during the call and alert you right away.</CardDescription>
-        {saving && (
-          <CardAction>
-            <Loader2 className="size-4 animate-spin text-muted-foreground" aria-label="Saving" />
-          </CardAction>
-        )}
-      </CardHeader>
-      <CardContent className="space-y-5">
-        <SettingSwitch
-          id="messages-enabled"
-          label="Take messages during calls"
-          description="The agent saves the caller's name, callback number (read back to them) and reason. Messages appear on your dashboard under “Messages to follow up”."
-          checked={draft.enabled}
-          onCheckedChange={(v) => setDraft((d) => ({ ...d, enabled: v }))}
-        />
+    <FormSection title="Messages" description={MESSAGES_DESCRIPTION}>
+      <SettingSwitch
+        id="messages-enabled"
+        label="Take messages during calls"
+        description="The agent saves the caller's name, callback number (read back to them) and reason. Messages appear on your dashboard under “Messages to follow up”."
+        checked={draft.enabled}
+        onCheckedChange={(v) => setDraft((d) => ({ ...d, enabled: v }))}
+      />
 
-        <div className="space-y-1.5">
-          <Label htmlFor="messages-alerts">E-mail me</Label>
-          <Select
-            value={draft.email_notifications}
-            onValueChange={(v) => v !== null && setDraft((d) => ({ ...d, email_notifications: v as MessageSettings['email_notifications'] }))}
-          >
-            <SelectTrigger id="messages-alerts" className="w-full sm:w-72">
-              <SelectValue>{(v: string) => (v === 'all' ? 'For every message' : v === 'urgent_only' ? 'Only for urgent messages' : 'Never (dashboard only)')}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">For every message</SelectItem>
-              <SelectItem value="urgent_only">Only for urgent messages</SelectItem>
-              <SelectItem value="off">Never (dashboard only)</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">Urgent messages (something that cannot wait for a normal callback) are flagged [URGENT] in the subject.</p>
-        </div>
+      <Field
+        label="E-mail me"
+        htmlFor="messages-alerts"
+        hint="Urgent messages (something that cannot wait for a normal callback) are flagged [URGENT] in the subject."
+      >
+        <Select
+          value={draft.email_notifications}
+          onValueChange={(v) => v !== null && setDraft((d) => ({ ...d, email_notifications: v as MessageSettings['email_notifications'] }))}
+        >
+          <SelectTrigger id="messages-alerts" className="w-full sm:w-72" aria-describedby="messages-alerts-hint">
+            <SelectValue>{(v: string) => (v === 'all' ? 'For every message' : v === 'urgent_only' ? 'Only for urgent messages' : 'Never (dashboard only)')}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">For every message</SelectItem>
+            <SelectItem value="urgent_only">Only for urgent messages</SelectItem>
+            <SelectItem value="off">Never (dashboard only)</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
 
-        <SettingSwitch
-          id="messages-owner"
-          label={state.owner_email ? `Send alerts to ${state.owner_email}` : 'Send alerts to your account e-mail'}
-          description={state.owner_email_verified ? 'Your verified account address.' : 'Verify your account e-mail address to receive alerts there.'}
-          checked={draft.notify_owner}
-          onCheckedChange={(v) => setDraft((d) => ({ ...d, notify_owner: v }))}
-        />
+      <SettingSwitch
+        id="messages-owner"
+        label={state.owner_email ? `Send alerts to ${state.owner_email}` : 'Send alerts to your account e-mail'}
+        description={state.owner_email_verified ? 'Your verified account address.' : 'Verify your account e-mail address to receive alerts there.'}
+        checked={draft.notify_owner}
+        onCheckedChange={(v) => setDraft((d) => ({ ...d, notify_owner: v }))}
+      />
 
+      <Field
+        label="Also send alerts to"
+        htmlFor="messages-recipient"
+        hint={recipientError ? undefined : `Up to ${MAX_EXTRA_MESSAGE_RECIPIENTS} addresses of people on your team. Alerts contain the caller's name, number and message.`}
+        error={recipientError}
+      >
         <div className="space-y-2">
-          <Label htmlFor="messages-recipient">Also send alerts to</Label>
           {draft.extra_recipients.length > 0 && (
-            <ul className="space-y-1.5" aria-label="Extra alert recipients">
+            <ul className="overflow-hidden rounded-2xl bg-white shadow-hair" aria-label="Extra alert recipients">
               {draft.extra_recipients.map((address) => (
-                <li key={address} className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm">
-                  <Mail className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                <li key={address} className="flex items-center gap-3 border-b border-rule py-1.5 pr-1.5 pl-3.5 text-sm last:border-b-0">
+                  <Mail className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                   <span className="min-w-0 flex-1 truncate">{address}</span>
                   <Button
                     size="icon-sm"
                     variant="ghost"
+                    className="tap-44 text-muted-foreground hover:bg-destructive-soft hover:text-destructive"
                     onClick={() => setDraft((d) => ({ ...d, extra_recipients: d.extra_recipients.filter((a) => a !== address) }))}
                     aria-label={`Remove ${address}`}
                   >
@@ -551,28 +568,24 @@ function MessagesCard({ state, onSaved }: { state: BusinessToolsState; onSaved: 
                 aria-invalid={recipientError ? true : undefined}
                 aria-describedby={recipientError ? 'messages-recipient-error' : 'messages-recipient-hint'}
               />
-              <Button variant="outline" onClick={addRecipient} disabled={!newRecipient.trim()}>
+              <Button variant="outline" onClick={addRecipient} disabled={!newRecipient.trim()} className="h-10">
                 <Plus aria-hidden="true" />
                 Add
               </Button>
             </div>
           )}
-          {recipientError ? (
-            <FieldError id="messages-recipient-error">{recipientError}</FieldError>
-          ) : (
-            <p id="messages-recipient-hint" className="text-xs text-muted-foreground">
-              Up to {MAX_EXTRA_MESSAGE_RECIPIENTS} addresses of people on your team. Alerts contain the caller&apos;s name, number and message.
-            </p>
-          )}
         </div>
+      </Field>
 
-        {draft.enabled && noRecipients && (
-          <p className="text-xs text-amber-700" role="note">No one will receive alert e-mails: add an address or turn on alerts to your account e-mail.</p>
-        )}
+      {draft.enabled && noRecipients && (
+        <p className="flex items-start gap-2 text-xs leading-[18px] text-warning" role="note">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          No one will receive alert e-mails: add an address or turn on alerts to your account e-mail.
+        </p>
+      )}
 
-        <SaveBar dirty={isDirty} saving={saving} onSave={() => void submit()} onDiscard={() => setDraft(saved)} />
-      </CardContent>
-    </Card>
+      <SaveBar dirty={isDirty} saving={saving} onSave={() => void submit()} onDiscard={() => setDraft(saved)} />
+    </FormSection>
   )
 }
 

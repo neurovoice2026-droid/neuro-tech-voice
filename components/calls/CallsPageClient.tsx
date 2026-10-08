@@ -1,10 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Download } from 'lucide-react'
 import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { CallsStatsBar } from './CallsStatsBar'
-import { CallsToolbar } from './CallsToolbar'
+import { CallsToolbar, countActiveCallFilters } from './CallsToolbar'
 import { CallsTable } from './CallsTable'
+import { ExportDialog } from './ExportDialog'
 import { useCalls, readApiError } from '@/hooks/useCalls'
 import type { CallStats } from '@/types'
 
@@ -17,6 +22,7 @@ export function CallsPageClient() {
   const [stats, setStats] = useState<CallStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(true)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [exportOpen, setExportOpen] = useState(false)
 
   useEffect(() => {
     const ctrl = new AbortController()
@@ -43,39 +49,56 @@ export function CallsPageClient() {
   }
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Calls</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Review every call your voice agents handled, including backup and after-hours calls.
-        </p>
+    <PageContainer>
+      <PageHeader
+        eyebrow="Calls"
+        title="Calls"
+        description="Review every call your voice agents handled, including backup and after-hours calls."
+        actions={
+          <Button variant="outline" onClick={() => setExportOpen(true)}>
+            <Download aria-hidden="true" />
+            Export
+          </Button>
+        }
+      />
+
+      <div className="space-y-6">
+        <CallsStatsBar stats={stats} isLoading={statsLoading} />
+
+        <div className="space-y-4">
+          <CallsToolbar
+            filters={filters}
+            onFiltersChange={setFilters}
+            totalCount={total}
+            isLoading={isLoading}
+          />
+
+          <CallsTable
+            calls={calls}
+            isLoading={isLoading}
+            error={error}
+            filtered={countActiveCallFilters(filters) > 0}
+            total={total}
+            totalPages={totalPages}
+            page={page}
+            pageSize={pageSize}
+            selectedIds={selectedIds}
+            onSelectedIdsChange={setSelectedIds}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            onDeleteCall={handleDeleted}
+            onRetry={refetch}
+          />
+        </div>
       </div>
 
-      <CallsStatsBar stats={stats} isLoading={statsLoading} />
-
-      <CallsToolbar
+      <ExportDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
         filters={filters}
-        onFiltersChange={setFilters}
-        totalCount={total}
-        isLoading={isLoading}
-        selectedIds={selectedIds}
-      />
-
-      <CallsTable
-        calls={calls}
-        isLoading={isLoading}
-        error={error}
         total={total}
-        totalPages={totalPages}
-        page={page}
-        pageSize={pageSize}
         selectedIds={selectedIds}
-        onSelectedIdsChange={setSelectedIds}
-        onPageChange={setPage}
-        onPageSizeChange={setPageSize}
-        onDeleteCall={handleDeleted}
-        onRetry={refetch}
       />
-    </div>
+    </PageContainer>
   )
 }

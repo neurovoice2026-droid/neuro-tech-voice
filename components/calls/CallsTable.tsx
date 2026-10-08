@@ -2,22 +2,24 @@
 
 import { useState } from 'react'
 import {
-  ArrowDownLeft, ArrowUpRight, MoreHorizontal, Phone, Eye,
-  FileText, Copy, Trash2, ChevronLeft, ChevronRight, Search,
-  CheckCheck, RotateCw,
+  ArrowDownLeft, ArrowUpRight, MoreHorizontal, Eye,
+  FileText, Copy, Trash2, ChevronLeft, ChevronRight, Phone, PhoneCall,
+  CheckCheck, RotateCw, TriangleAlert,
 } from 'lucide-react'
-import { formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNowStrict } from 'date-fns'
 import {
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { OrbInline, OrbLoader } from '@/components/shared/OrbLoader'
 import { cn, formatDuration, formatPhoneNumber, formatDate } from '@/lib/utils'
 import { toast } from 'sonner'
 import { CallDetailSheet } from './CallDetailSheet'
@@ -25,12 +27,28 @@ import { DeleteCallDialog } from './DeleteCallDialog'
 import { AiOutcomeIcon, CallStatusBadge, HandledByBadge, TestCallBadge } from './CallBadges'
 import type { CallListItem } from '@/lib/calls/labels'
 
-const COLUMN_COUNT = 10
+const COLUMN_COUNT = 9
+
+// Columns appear by the table panel's own width (container queries on `@container/calls`),
+// not the viewport: the sidebar takes 240 px from lg up, so viewport breakpoints would
+// overflow between 1024 and 1440. Thresholds are the cumulative column widths:
+//   ≥560 date · ≥700 status · ≥880 handled by · ≥980 duration · ≥1100 AI outcome · ≥1170 agent.
+// Below a threshold the caller cell carries that information (chips, relative time).
+const COL = {
+  date:     'hidden @min-[560px]/calls:table-cell',
+  status:   'hidden @min-[700px]/calls:table-cell',
+  handled:  'hidden @min-[880px]/calls:table-cell',
+  duration: 'hidden @min-[980px]/calls:table-cell',
+  outcome:  'hidden @min-[1100px]/calls:table-cell',
+  agent:    'hidden @min-[1170px]/calls:table-cell',
+}
 
 interface CallsTableProps {
   calls: CallListItem[]
   isLoading: boolean
   error?: string | null
+  /** A search or filter narrows the list: an empty result is a filter miss, not an empty account. */
+  filtered?: boolean
   total: number
   totalPages: number
   page: number
@@ -43,28 +61,13 @@ interface CallsTableProps {
   onRetry?: () => void
 }
 
-function SkeletonRow() {
-  return (
-    <TableRow>
-      <TableCell><Skeleton className="h-4 w-4 rounded" /></TableCell>
-      <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-      <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-6" /></TableCell>
-      <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-16" /></TableCell>
-      <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
-      <TableCell className="hidden md:table-cell"><Skeleton className="h-5 w-28 rounded-full" /></TableCell>
-      <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-6" /></TableCell>
-      <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-20" /></TableCell>
-      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-      <TableCell><Skeleton className="h-4 w-6" /></TableCell>
-    </TableRow>
-  )
-}
-
 function PaginationBar({
-  page, totalPages, pageSize, total,
+  page, totalPages, pageSize, total, updating,
   onPageChange, onPageSizeChange,
 }: {
   page: number; totalPages: number; pageSize: number; total: number
+  /** A page/filter change is loading while the previous rows stay on screen. */
+  updating: boolean
   onPageChange: (p: number) => void; onPageSizeChange: (ps: number) => void
 }) {
   const from = Math.min((page - 1) * pageSize + 1, total)
@@ -83,55 +86,68 @@ function PaginationBar({
   }
 
   return (
-    <nav aria-label="Calls pagination" className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-1 mt-4">
-      <p className="text-sm text-muted-foreground" aria-live="polite">
-        Showing {from}–{to} of {total.toLocaleString()} calls
+    <nav
+      aria-label="Calls pagination"
+      className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center"
+    >
+      <p className="flex min-h-5 items-center justify-center text-[13px] text-muted-foreground tabular-nums sm:justify-start" aria-live="polite">
+        {updating ? (
+          // The range would describe rows that are not on screen yet, so the bar says
+          // "Updating…" next to the control that was pressed. Hidden from the live
+          // region: the toolbar already announces it, and the new range is announced
+          // when it lands.
+          <span className="inline-flex items-center gap-1.5" aria-hidden="true">
+            <OrbInline state="breathing" />
+            Updating…
+          </span>
+        ) : (
+          <>Showing {from}–{to} of {total.toLocaleString()} calls</>
+        )}
       </p>
-      <div className="flex items-center gap-2 justify-center">
+      <div className="flex items-center justify-center gap-1">
         <Button
-          variant="outline"
+          variant="ghost"
           size="icon-sm"
+          className="tap-44"
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 1}
           aria-label="Previous page"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft />
         </Button>
         {pages.map((p, i) =>
           p === '…' ? (
-            <span key={`ellipsis-${i}`} className="px-1 text-muted-foreground text-sm" aria-hidden="true">…</span>
+            <span key={`ellipsis-${i}`} className="px-1 text-sm text-muted-foreground" aria-hidden="true">…</span>
           ) : (
-            <button
+            <Button
               key={p}
               type="button"
+              variant={p === page ? 'secondary' : 'ghost'}
+              size="icon-sm"
               onClick={() => onPageChange(p)}
               aria-label={`Page ${p}`}
               aria-current={p === page ? 'page' : undefined}
-              className={cn(
-                'h-7 min-w-7 rounded-md px-2.5 text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-                p === page
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-purple-50 text-foreground'
-              )}
+              className={cn('tap-44 min-w-8 w-auto px-2 tabular-nums', p !== page && 'text-muted-foreground hover:text-foreground')}
             >
               {p}
-            </button>
+            </Button>
           )
         )}
         <Button
-          variant="outline"
+          variant="ghost"
           size="icon-sm"
+          className="tap-44"
           onClick={() => onPageChange(page + 1)}
           disabled={page >= totalPages}
           aria-label="Next page"
         >
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight />
         </Button>
       </div>
-      <div className="flex items-center gap-2 justify-center sm:justify-end">
-        <span className="text-sm text-muted-foreground" id="calls-page-size-label">Rows per page:</span>
+      <div className="flex items-center justify-center gap-2 sm:justify-end">
+        <span className="text-[13px] text-muted-foreground" id="calls-page-size-label">Rows per page</span>
         <Select value={String(pageSize)} onValueChange={(v) => v && onPageSizeChange(Number(v))}>
-          <SelectTrigger className="h-7 w-16" aria-labelledby="calls-page-size-label">
+          <SelectTrigger size="sm" className="tabular-nums" aria-labelledby="calls-page-size-label">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -149,8 +165,16 @@ function callerText(call: CallListItem): string {
   return call.caller_number ? formatPhoneNumber(call.caller_number) : 'Unknown caller'
 }
 
+function RelativeTime({ iso, className }: { iso: string; className?: string }) {
+  return (
+    <time dateTime={iso} title={formatDate(iso)} className={cn('tabular-nums', className)}>
+      {formatDistanceToNowStrict(new Date(iso), { addSuffix: true })}
+    </time>
+  )
+}
+
 export function CallsTable({
-  calls, isLoading, error, total, totalPages, page, pageSize,
+  calls, isLoading, error, filtered = false, total, totalPages, page, pageSize,
   selectedIds, onSelectedIdsChange,
   onPageChange, onPageSizeChange, onDeleteCall, onRetry,
 }: CallsTableProps) {
@@ -207,12 +231,14 @@ export function CallsTable({
     }
   }
 
+  const refetching = isLoading && calls.length > 0
+
   return (
     <>
-      <div className="rounded-xl border shadow-sm bg-white overflow-hidden">
+      <Card className="@container/calls gap-0 py-0">
         <Table>
           <TableHeader>
-            <TableRow className="bg-gray-50/80 hover:bg-gray-50/80">
+            <TableRow>
               <TableHead className="w-10">
                 <Checkbox
                   checked={allSelected}
@@ -222,47 +248,63 @@ export function CallsTable({
                 />
               </TableHead>
               <TableHead>Caller</TableHead>
-              <TableHead className="w-16 text-center hidden sm:table-cell">Dir.</TableHead>
-              <TableHead className="text-right hidden md:table-cell">Duration</TableHead>
-              <TableHead className="text-center">Status</TableHead>
-              <TableHead className="hidden md:table-cell">Handled by</TableHead>
-              <TableHead className="text-center hidden lg:table-cell">AI outcome</TableHead>
-              <TableHead className="hidden xl:table-cell">Agent</TableHead>
-              <TableHead className="text-right">Date</TableHead>
-              <TableHead className="w-10"><span className="sr-only">Actions</span></TableHead>
+              <TableHead className={cn('text-right', COL.duration)}>Duration</TableHead>
+              <TableHead className={COL.status}>Status</TableHead>
+              <TableHead className={COL.handled}>Handled by</TableHead>
+              <TableHead className={cn('text-center', COL.outcome)}>AI outcome</TableHead>
+              <TableHead className={COL.agent}>Agent</TableHead>
+              <TableHead className={cn('text-right', COL.date)}>Date</TableHead>
+              <TableHead className="w-12 last:pr-3 @min-[560px]/calls:last:pr-5"><span className="sr-only">Actions</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading && calls.length === 0 ? (
-              [...Array(8)].map((_, i) => <SkeletonRow key={i} />)
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={COLUMN_COUNT} className="h-auto p-0">
+                  <OrbLoader label="Loading calls…" className="min-h-[288px]" />
+                </TableCell>
+              </TableRow>
             ) : error && calls.length === 0 ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={COLUMN_COUNT} className="py-16">
-                  <div className="flex flex-col items-center gap-3 text-center" role="alert">
-                    <p className="font-semibold text-sm">Calls could not be loaded</p>
-                    <p className="text-sm text-muted-foreground">{error}</p>
-                    {onRetry && (
-                      <Button variant="outline" size="sm" className="gap-1.5" onClick={onRetry}>
-                        <RotateCw className="h-3.5 w-3.5" /> Try again
-                      </Button>
-                    )}
+                <TableCell colSpan={COLUMN_COUNT} className="h-auto p-0 whitespace-normal">
+                  <div role="alert">
+                    <EmptyState
+                      bare
+                      icon={TriangleAlert}
+                      iconClassName="bg-destructive-soft text-destructive shadow-none"
+                      title="Calls could not be loaded"
+                      description={error}
+                      className="min-h-[288px]"
+                      action={onRetry && (
+                        <Button variant="outline" size="sm" onClick={onRetry}>
+                          <RotateCw aria-hidden="true" /> Try again
+                        </Button>
+                      )}
+                    />
                   </div>
                 </TableCell>
               </TableRow>
             ) : calls.length === 0 ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={COLUMN_COUNT} className="py-16">
-                  <div className="flex flex-col items-center gap-3 text-center">
-                    <div className="rounded-full bg-muted p-4">
-                      <Search className="h-7 w-7 text-muted-foreground" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-sm">No calls found</p>
-                      <p className="text-sm text-muted-foreground mt-0.5">
-                        Try adjusting your filters or search term
-                      </p>
-                    </div>
-                  </div>
+                <TableCell colSpan={COLUMN_COUNT} className="h-auto p-0 whitespace-normal">
+                  {filtered ? (
+                    <EmptyState
+                      bare
+                      icon={PhoneCall}
+                      title="No calls found"
+                      description="Try adjusting your filters or search term"
+                      className="min-h-[288px]"
+                    />
+                  ) : (
+                    // Nothing narrows the list, so the account has no calls yet (same copy as the dashboard).
+                    <EmptyState
+                      bare
+                      icon={Phone}
+                      title="No calls yet"
+                      description="Calls will appear here once your agent starts receiving them."
+                      className="min-h-[288px]"
+                    />
+                  )}
                 </TableCell>
               </TableRow>
             ) : (
@@ -270,6 +312,7 @@ export function CallsTable({
                 const isSelected = selected.has(call.id)
                 const isActive   = selectedCallId === call.id
                 const caller = callerText(call)
+                const inbound = call.direction === 'inbound'
 
                 return (
                   <TableRow
@@ -277,14 +320,14 @@ export function CallsTable({
                     tabIndex={0}
                     aria-label={`Open call from ${caller}`}
                     aria-selected={isSelected}
+                    data-state={isSelected || isActive ? 'selected' : undefined}
                     onClick={() => openDetail(call.id)}
                     onKeyDown={(e) => onRowKeyDown(e, call.id)}
                     className={cn(
-                      'cursor-pointer transition-colors outline-none focus-visible:bg-purple-50/40 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50',
-                      isActive  && 'border-l-4 border-l-primary bg-purple-50',
-                      isSelected && !isActive && 'bg-purple-50/30',
-                      !isActive  && 'hover:bg-purple-50/20',
-                      isLoading && 'opacity-60'
+                      'cursor-pointer outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring',
+                      // The open call gets an ink bar on its leading edge.
+                      isActive && '[&>td:first-child]:shadow-[inset_3px_0_0_var(--foreground)]',
+                      refetching && 'opacity-60'
                     )}
                   >
                     {/* Checkbox */}
@@ -296,69 +339,79 @@ export function CallsTable({
                       />
                     </TableCell>
 
-                    {/* Caller (+ title, and the handled-by badge on small screens) */}
-                    <TableCell className="max-w-[16rem]">
-                      <div className="flex items-center gap-1.5">
-                        <Phone className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" aria-hidden="true" />
-                        <span className={cn('font-mono text-sm font-medium', !call.caller_number && 'font-sans text-muted-foreground')}>
-                          {caller}
-                        </span>
-                        {call.is_test && <TestCallBadge />}
+                    {/* Caller: number, summary line; status/handled-by/time on small screens */}
+                    <TableCell className="py-2.5 pr-1 pl-3 @min-[560px]/calls:px-4">
+                      {/* 102 px = checkbox, actions and this cell's padding on a narrow panel. */}
+                      <div className="max-w-[calc(100cqw-102px)] min-w-0 @min-[560px]/calls:max-w-[260px]">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <span
+                            role="img"
+                            aria-label={inbound ? 'Inbound' : 'Outbound'}
+                            title={inbound ? 'Inbound' : 'Outbound'}
+                            className="inline-flex shrink-0 text-muted-foreground"
+                          >
+                            {inbound ? <ArrowDownLeft className="size-3.5" /> : <ArrowUpRight className="size-3.5" />}
+                          </span>
+                          <span
+                            className={cn(
+                              'truncate text-sm font-medium tabular-nums',
+                              !call.caller_number && 'text-muted-foreground'
+                            )}
+                          >
+                            {caller}
+                          </span>
+                          {call.is_test && <TestCallBadge />}
+                        </div>
+                        {call.summary_title && (
+                          <p className="mt-0.5 truncate text-xs leading-4 text-muted-foreground" title={call.summary_title}>
+                            {call.summary_title}
+                          </p>
+                        )}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 @min-[880px]/calls:hidden">
+                          <span className="@min-[700px]/calls:hidden"><CallStatusBadge status={call.status} /></span>
+                          <HandledByBadge call={call} />
+                        </div>
+                        {call.started_at && (
+                          <p className="mt-1 text-xs leading-4 text-muted-foreground @min-[560px]/calls:hidden">
+                            <RelativeTime iso={call.started_at} />
+                          </p>
+                        )}
                       </div>
-                      {call.summary_title && (
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground" title={call.summary_title}>
-                          {call.summary_title}
-                        </p>
-                      )}
-                      <div className="mt-1 md:hidden">
-                        <HandledByBadge call={call} />
-                      </div>
-                    </TableCell>
-
-                    {/* Direction */}
-                    <TableCell className="text-center hidden sm:table-cell">
-                      {call.direction === 'inbound' ? (
-                        <span title="Inbound"><ArrowDownLeft className="h-4 w-4 text-blue-500 mx-auto" aria-label="Inbound" /></span>
-                      ) : (
-                        <span title="Outbound"><ArrowUpRight className="h-4 w-4 text-purple-500 mx-auto" aria-label="Outbound" /></span>
-                      )}
                     </TableCell>
 
                     {/* Duration */}
-                    <TableCell className="text-right hidden md:table-cell">
-                      <span className="text-sm text-muted-foreground">
-                        {call.duration_seconds > 0 ? formatDuration(call.duration_seconds) : '—'}
-                      </span>
+                    <TableCell className={cn('text-right text-muted-foreground tabular-nums', COL.duration)}>
+                      {call.duration_seconds > 0 ? formatDuration(call.duration_seconds) : '—'}
                     </TableCell>
 
                     {/* Status */}
-                    <TableCell className="text-center">
+                    <TableCell className={COL.status}>
                       <CallStatusBadge status={call.status} />
                     </TableCell>
 
                     {/* Handled by */}
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className={COL.handled}>
                       <HandledByBadge call={call} />
                     </TableCell>
 
                     {/* AI outcome (call_successful; not sentiment) */}
-                    <TableCell className="text-center hidden lg:table-cell">
-                      <AiOutcomeIcon value={call.call_successful} />
+                    <TableCell className={cn('text-center', COL.outcome)}>
+                      <span className="inline-flex justify-center">
+                        <AiOutcomeIcon value={call.call_successful} />
+                      </span>
                     </TableCell>
 
                     {/* Agent */}
-                    <TableCell className="hidden xl:table-cell">
-                      <span className="text-xs text-muted-foreground">{call.agent_name ?? '—'}</span>
+                    <TableCell className={cn('text-[13px] text-muted-foreground', COL.agent)}>
+                      {call.agent_name ?? '—'}
                     </TableCell>
 
                     {/* Date */}
-                    <TableCell className="text-right">
+                    <TableCell className={cn('text-right', COL.date)}>
                       {call.started_at ? (
-                        <div>
-                          <p className="text-xs font-medium">
-                            {formatDistanceToNow(new Date(call.started_at), { addSuffix: true })}
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">
+                        <div className="leading-4">
+                          <RelativeTime iso={call.started_at} className="text-[13px] text-foreground" />
+                          <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
                             {formatDate(call.started_at)}
                           </p>
                         </div>
@@ -368,32 +421,38 @@ export function CallsTable({
                     </TableCell>
 
                     {/* Actions dropdown */}
-                    <TableCell onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                    <TableCell
+                      className="pl-1 last:pr-3 @min-[560px]/calls:last:pr-5"
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
                       <DropdownMenu>
                         <DropdownMenuTrigger
                           aria-label={`Actions for call from ${caller}`}
-                          className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                          render={<Button variant="ghost" size="icon-sm" className="tap-44 text-muted-foreground hover:text-foreground aria-expanded:text-foreground" />}
                         >
-                          <MoreHorizontal className="h-4 w-4" />
+                          <MoreHorizontal />
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44">
-                          <DropdownMenuItem onClick={() => openDetail(call.id, 'overview')}>
-                            <Eye className="mr-2 h-4 w-4" /> View details
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openDetail(call.id, 'transcript')}>
-                            <FileText className="mr-2 h-4 w-4" /> View transcript
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => copyNumber(call)} disabled={!call.caller_number}>
-                            {copiedId === call.id
-                              ? <><CheckCheck className="mr-2 h-4 w-4 text-green-500" /> Copied!</>
-                              : <><Copy className="mr-2 h-4 w-4" /> Copy number</>}
-                          </DropdownMenuItem>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuGroup>
+                            <DropdownMenuItem onClick={() => openDetail(call.id, 'overview')}>
+                              <Eye /> View details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openDetail(call.id, 'transcript')}>
+                              <FileText /> View transcript
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => copyNumber(call)} disabled={!call.caller_number}>
+                              {copiedId === call.id
+                                ? <><CheckCheck className="text-success-dot" /> Copied!</>
+                                : <><Copy /> Copy number</>}
+                            </DropdownMenuItem>
+                          </DropdownMenuGroup>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             variant="destructive"
                             onClick={() => setDeleteTarget(call.id)}
                           >
-                            <Trash2 className="mr-2 h-4 w-4" /> Delete call
+                            <Trash2 /> Delete call
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -405,33 +464,27 @@ export function CallsTable({
           </TableBody>
         </Table>
 
-        {/* Bulk actions */}
+        {/* Selection */}
         {selectedIds.length > 0 && (
-          <div className="mx-4 mb-4 mt-2 flex items-center justify-between rounded-xl bg-purple-900 px-4 py-3 text-white">
-            <span className="text-sm font-medium" aria-live="polite">
+          <div className="flex items-center justify-between gap-3 border-t border-rule bg-band px-5 py-2.5">
+            <span className="text-[13px] font-medium tabular-nums" aria-live="polite">
               {selectedIds.length} call{selectedIds.length > 1 ? 's' : ''} selected
             </span>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs border-white/30 bg-transparent text-white hover:bg-white/10"
-                onClick={() => onSelectedIdsChange([])}
-              >
-                Clear
-              </Button>
-            </div>
+            <Button size="xs" variant="ghost" onClick={() => onSelectedIdsChange([])}>
+              Clear
+            </Button>
           </div>
         )}
-      </div>
+      </Card>
 
-      {/* Pagination */}
-      {!isLoading && total > 0 && (
+      {/* Pagination (kept while a page or filter change refetches, so nothing jumps) */}
+      {total > 0 && (
         <PaginationBar
           page={page}
           totalPages={totalPages}
           pageSize={pageSize}
           total={total}
+          updating={refetching}
           onPageChange={onPageChange}
           onPageSizeChange={onPageSizeChange}
         />

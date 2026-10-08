@@ -5,9 +5,11 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Skeleton } from '@/components/ui/skeleton'
+import type { DotItemDotProps } from 'recharts/types/util/types'
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { OrbLoader } from '@/components/shared/OrbLoader'
 import type { ChartDataPoint } from '@/app/api/dashboard/calls-chart/route'
+import { CardError } from './CardError'
 
 const noopSubscribe = () => () => {}
 
@@ -22,9 +24,26 @@ interface ChartState {
   error: boolean
 }
 
+const CHART_HEIGHT = 220
+const SERIES = 'var(--chart-1)'
+const AXIS_TICK = { fontSize: 12, fill: 'var(--muted-foreground)' }
+
+/** Only the latest day gets a marker: the line's end, ringed in the surface colour. */
+function EndDot(props: DotItemDotProps & { lastIndex: number }) {
+  const { cx, cy, index, lastIndex } = props
+  if (index !== lastIndex || cx == null || cy == null) return <g />
+  return <circle cx={cx} cy={cy} r={4.5} fill={SERIES} stroke="var(--card)" strokeWidth={2} />
+}
+
 export function CallsChart() {
   const [state, setState] = useState<ChartState>({ data: [], loaded: false, error: false })
+  const [attempt, setAttempt] = useState(0)
   const isClient = useIsClient()
+
+  function retry() {
+    setState({ data: [], loaded: false, error: false })
+    setAttempt((n) => n + 1)
+  }
 
   useEffect(() => {
     const ctrl = new AbortController()
@@ -41,63 +60,80 @@ export function CallsChart() {
         if (!ctrl.signal.aborted) setState({ data: [], loaded: true, error: true })
       })
     return () => ctrl.abort()
-  }, [])
+  }, [attempt])
 
   const totalCalls = state.data.reduce((s, d) => s + d.calls, 0)
+  const lastIndex = state.data.length - 1
+  const ready = isClient && state.loaded && !state.error
 
   return (
-    <Card className="border shadow-sm">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base font-semibold">Calls This Week</CardTitle>
+    <Card>
+      <CardHeader>
+        <CardTitle>Calls this week</CardTitle>
+        {/* Always rendered (empty until ready) so the header keeps its height when the total arrives. */}
+        <CardAction className="self-center text-[13px] leading-[19px] text-muted-foreground tabular-nums">
+          {ready && `${totalCalls.toLocaleString('en-US')} ${totalCalls === 1 ? 'call' : 'calls'} · last 7 days`}
+        </CardAction>
       </CardHeader>
       <CardContent>
         {!isClient || !state.loaded ? (
-          <Skeleton className="h-[220px] w-full rounded-lg" />
+          <OrbLoader label="Loading this week's calls…" className="h-[220px]" />
         ) : state.error ? (
-          <div className="flex h-[220px] items-center justify-center text-sm text-muted-foreground" role="status">
-            The chart could not be loaded. It will refresh with the page.
+          <div className="grid h-[220px] place-items-center">
+            <CardError role="status" message="The chart could not be loaded." onRetry={retry} className="px-0 py-0" />
           </div>
         ) : (
-          <figure aria-label={`Calls per day over the last 7 days, ${totalCalls} in total`}>
-            <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={state.data} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+          <figure aria-label={`Calls per day over the last 7 days, ${totalCalls} in total`} className="-mx-1 [&_svg:focus-visible]:outline-2 [&_svg:focus-visible]:outline-offset-2 [&_svg:focus-visible]:outline-solid [&_svg:focus-visible]:outline-ring">
+            <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+              <AreaChart data={state.data} margin={{ top: 8, right: 8, bottom: 0, left: -24 }}>
                 <defs>
-                  <linearGradient id="purpleGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(263, 70%, 58%)" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="hsl(263, 70%, 58%)" stopOpacity={0} />
+                  <linearGradient id="callsArea" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={SERIES} stopOpacity={0.1} />
+                    <stop offset="100%" stopColor={SERIES} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
                 <XAxis
                   dataKey="date"
-                  tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+                  tick={AXIS_TICK}
                   axisLine={false}
                   tickLine={false}
+                  tickMargin={10}
+                  padding={{ left: 8, right: 8 }}
                 />
                 <YAxis
                   allowDecimals={false}
-                  tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+                  tick={AXIS_TICK}
                   axisLine={false}
                   tickLine={false}
+                  tickMargin={8}
+                  width={48}
                 />
                 <Tooltip
+                  cursor={{ stroke: 'var(--border)', strokeWidth: 1 }}
                   contentStyle={{
-                    background: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
+                    background: 'var(--popover)',
+                    border: 'none',
+                    borderRadius: 12,
+                    boxShadow: 'var(--shadow-pop)',
                     fontSize: 12,
+                    padding: '8px 12px',
                   }}
-                  labelStyle={{ fontWeight: 600 }}
+                  labelStyle={{ color: 'var(--foreground)', fontWeight: 500, marginBottom: 2 }}
+                  itemStyle={{ color: 'var(--foreground)', padding: 0 }}
                 />
                 <Area
-                  type="monotone"
+                  type="linear"
                   dataKey="calls"
                   name="Calls"
-                  stroke="hsl(263, 70%, 58%)"
+                  stroke={SERIES}
                   strokeWidth={2}
-                  fill="url(#purpleGradient)"
-                  dot={{ r: 3, fill: 'hsl(263, 70%, 58%)', strokeWidth: 0 }}
-                  activeDot={{ r: 5 }}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  fill="url(#callsArea)"
+                  dot={(props: DotItemDotProps) => <EndDot key={props.index} {...props} lastIndex={lastIndex} />}
+                  activeDot={{ r: 4.5, fill: SERIES, stroke: 'var(--card)', strokeWidth: 2 }}
+                  isAnimationActive={false}
                 />
               </AreaChart>
             </ResponsiveContainer>

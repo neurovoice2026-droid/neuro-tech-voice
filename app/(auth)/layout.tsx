@@ -1,108 +1,124 @@
-import { CheckCircle2, PhoneCall } from 'lucide-react'
+import Image from 'next/image'
+import Link from 'next/link'
+import { CornerDot } from '@/components/site/corner-dot'
+import { AuthSwitchLink } from '@/components/auth/AuthSwitchLink'
+import { Eyebrow } from '@/components/shared/Eyebrow'
+import { Logo } from '@/components/shared/Logo'
 
-const features = [
-  'Set up in under 5 minutes',
-  '100+ natural voices',
-  'Integrates with Google Workspace',
+const facts = [
+  'Live on your number in minutes',
+  'Natural voices in 14 languages',
+  'Every call transcribed and summarised',
 ]
 
+const quietLink =
+  'rounded-sm transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+
+/*
+ * Auth shell: a white form column (wordmark row with the Sign in / Create an
+ * account switch, the page's form centred from sm, a quiet legal row) and,
+ * from lg, the site's dark cover as an inset panel with the hero portrait.
+ */
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen auth-gradient lg:grid lg:grid-cols-2">
-      {/* ── Left branding panel (desktop only) ───────────────────────────── */}
-      <div className="relative hidden overflow-hidden lg:flex lg:flex-col lg:justify-between bg-gradient-to-br from-purple-700 via-purple-800 to-purple-950 p-12">
-        {/* Subtle dot-grid overlay */}
-        <div
-          className="pointer-events-none absolute inset-0 opacity-[0.07]"
-          style={{
-            backgroundImage:
-              'radial-gradient(circle at 1px 1px, white 1px, transparent 0)',
-            backgroundSize: '28px 28px',
-          }}
-        />
-
-        {/* Middle: Tagline + features */}
-        <div className="relative z-10 space-y-10">
-          <div className="space-y-3">
-            <h2 className="text-4xl font-bold leading-tight text-white">
-              Your AI voice agent,
-              <br />
-              working 24/7
-            </h2>
-            <p className="text-lg text-purple-200">
-              Set up in minutes. Handle every call automatically.
-            </p>
-          </div>
-
-          <ul className="space-y-4">
-            {features.map((f) => (
-              <li key={f} className="flex items-center gap-3 text-white">
-                <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-white/15">
-                  <CheckCircle2 className="h-4 w-4 text-purple-200" />
-                </span>
-                <span className="text-base">{f}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Bottom: floating stats card */}
-        <div className="relative z-10">
-          <div className="glass-card inline-flex items-center gap-5 rounded-2xl px-6 py-4">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/20">
-              <PhoneCall className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">This month</p>
-              <p className="text-2xl font-bold text-foreground">1,284</p>
-              <p className="text-xs text-muted-foreground">calls handled</p>
-            </div>
-            {/* Mini sparkline */}
-            <svg
-              width="72"
-              height="36"
-              viewBox="0 0 72 36"
-              fill="none"
-              className="ml-1"
-              aria-hidden="true"
-            >
-              <polyline
-                points="0,30 10,24 20,27 30,14 42,18 54,9 64,6 72,8"
-                stroke="hsl(263 70% 58%)"
-                strokeWidth="2"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <circle cx="72" cy="8" r="3" fill="hsl(263 70% 58%)" />
-            </svg>
-          </div>
-        </div>
-
-        {/* Decorative wave bottom */}
-        <div className="pointer-events-none absolute bottom-0 left-0 right-0">
-          <svg
-            viewBox="0 0 800 120"
-            preserveAspectRatio="none"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
+    <div className="min-h-dvh bg-white lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      {/* ── Form column ─────────────────────────────────────────────────── */}
+      <div className="flex min-h-dvh min-w-0 flex-col">
+        <header className="flex h-16 shrink-0 items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
+          <Link
+            href="/"
+            aria-label="NeuroVoice home"
+            className="-mx-1 rounded-md px-1 py-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           >
-            <path
-              d="M0,70 C180,0 360,120 540,55 S720,0 800,50 L800,120 L0,120 Z"
-              fill="rgba(255,255,255,0.04)"
-            />
-            <path
-              d="M0,95 C120,35 280,115 440,75 S640,20 800,70 L800,120 L0,120 Z"
-              fill="rgba(255,255,255,0.03)"
-            />
-          </svg>
-        </div>
+            <Logo size="sm" />
+          </Link>
+          <AuthSwitchLink />
+        </header>
+
+        <main className="flex flex-1 flex-col sm:justify-center">
+          <div className="mx-auto w-full max-w-[432px] px-4 pt-8 pb-14 lg:py-12">
+            {children}
+          </div>
+        </main>
+
+        <footer className="flex shrink-0 items-center justify-between gap-4 px-4 pb-6 text-xs leading-4 text-muted-foreground sm:px-6 lg:px-10">
+          <span>Neuro Tech Voice</span>
+          <nav aria-label="Legal" className="flex items-center gap-4">
+            <Link href="/privacy" className={quietLink}>
+              Privacy
+            </Link>
+            <Link href="/terms" className={quietLink}>
+              Terms
+            </Link>
+          </nav>
+        </footer>
       </div>
 
-      {/* ── Right: form column ────────────────────────────────────────────── */}
-      <div className="flex min-h-screen items-center justify-center p-8 lg:p-12">
-        <div className="w-full max-w-[440px]">{children}</div>
-      </div>
+      {/* ── Cover panel (lg+) ───────────────────────────────────────────────
+          Sticky on the outer box: `.app-cover` is an unlayered rule that sets
+          `position: relative`, which would beat a `sticky` utility. */}
+      <aside
+        aria-label="About Neuro Tech Voice"
+        className="hidden lg:sticky lg:top-3 lg:m-3 lg:block lg:h-[calc(100dvh-1.5rem)] lg:self-start"
+      >
+        <div className="app-cover h-full overflow-hidden rounded-[28px]">
+          {/* The site hero's own portrait, graded like the cover's and mostly
+              desaturated, so its coloured stripe light reads mauve-grey here
+              (the app keeps the brand hue to small accents). Its box is 117 % of
+              the panel, anchored to the bottom: the render's scan band (the top
+              13.75 % of the art) then always sits above the clip, for any
+              object-position y ≥ 20 %, at every panel aspect. It fades into the
+              cover field at the top and under the copy. Eager: it is the LCP
+              from lg; below lg `sizes` resolves to 0px, so a phone fetches only
+              the smallest candidate (384 w, about 8 KB, cached across the auth
+              pages). */}
+          <div className="absolute inset-x-0 bottom-0 h-[117%]">
+            <Image
+              src="/hero-robot-portrait.webp"
+              alt=""
+              fill
+              sizes="(min-width: 1024px) 50vw, 0px"
+              loading="eager"
+              className="object-cover object-[50%_25%] opacity-80 brightness-[0.78] saturate-[0.4] mask-t-from-72% mask-t-to-90% mask-b-from-42% mask-b-to-76%"
+            />
+          </div>
+          <div aria-hidden className="cover-grain absolute inset-0" />
+
+          {/* Masthead label, like the site cover's wordmark row. It sits on a
+              translucent cover plate so it stays legible (≥ 4.5:1) over any
+              crop of the portrait's backlight. */}
+          <div className="absolute top-6 left-6 rounded-full bg-[#171520]/75 px-3 py-1.5 backdrop-blur-sm xl:top-8 xl:left-8">
+            <Eyebrow tone="cover">Neuro Tech Voice</Eyebrow>
+          </div>
+
+          <div className="absolute inset-x-0 bottom-0 p-8 xl:p-10">
+            <p className="max-w-[30ch] text-[28px] leading-[32px] font-normal tracking-[-0.03em] text-balance text-[#dedce0] [font-family:var(--font-display),var(--font-header),ui-sans-serif,system-ui,sans-serif] xl:text-[34px] xl:leading-[38px]">
+              An AI that answers every call for those who refuse to miss one.
+            </p>
+
+            <ul className="mt-6 space-y-2.5">
+              {facts.map((fact) => (
+                <li
+                  key={fact}
+                  className="flex items-center gap-3 text-sm leading-5 text-[#dedce0]/80"
+                >
+                  <CornerDot className="size-2 shrink-0 text-[#c0ace0]" />
+                  {fact}
+                </li>
+              ))}
+            </ul>
+
+            <figure className="mt-8 hidden max-w-[440px] rounded-2xl bg-[#24212c] p-4 [@media(min-height:880px)]:block">
+              <figcaption className="text-[11px] leading-4 font-medium tracking-[0.12em] text-[#dedce0]/60 uppercase">
+                Sample greeting
+              </figcaption>
+              <blockquote className="mt-2 text-sm leading-[21px] text-[#dedce0]">
+                &ldquo;Thank you for calling Northside Studio. This is Ava, an AI assistant.&rdquo;
+              </blockquote>
+            </figure>
+          </div>
+        </div>
+      </aside>
     </div>
   )
 }

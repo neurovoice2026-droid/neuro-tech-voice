@@ -1,21 +1,21 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { PhoneCall, Clock, TrendingUp, Zap } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
-import { StatBadge } from '@/components/shared/StatBadge'
+import { StatTile } from '@/components/shared/StatTile'
 import { formatDuration } from '@/lib/utils'
 import type { DashboardMetrics } from '@/types'
 
+/** Counts up to `target` in `duration` ms; with reduced motion it shows the value at once. */
 function useCountUp(target: number, duration = 800) {
   const [value, setValue] = useState(0)
   const raf = useRef<number | null>(null)
 
   useEffect(() => {
     const start = performance.now()
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     function tick(now: number) {
       const elapsed = now - start
-      const progress = Math.min(elapsed / duration, 1)
+      const progress = reduce ? 1 : Math.min(elapsed / duration, 1)
       const eased = 1 - Math.pow(1 - progress, 3)
       setValue(Math.round(eased * target))
       if (progress < 1) raf.current = requestAnimationFrame(tick)
@@ -29,9 +29,13 @@ function useCountUp(target: number, duration = 800) {
 
 interface MetricsCardsProps {
   metrics: DashboardMetrics | null
+  /** True until the first metrics response: the values show a breathing orb. */
+  loading?: boolean
 }
 
-export function MetricsCards({ metrics }: MetricsCardsProps) {
+const fmt = (n: number) => n.toLocaleString('en-US')
+
+export function MetricsCards({ metrics, loading = false }: MetricsCardsProps) {
   const callsToday = useCountUp(metrics?.calls_today ?? 0)
   const successRate = useCountUp(metrics?.success_rate ?? 0)
   const minutesUsed = useCountUp(metrics?.minutes_used ?? 0)
@@ -42,86 +46,43 @@ export function MetricsCards({ metrics }: MetricsCardsProps) {
     ? Math.round((metrics.minutes_used / minutesLimit) * 100)
     : 0
   const minutesLeft = Math.max(0, minutesLimit - (metrics?.minutes_used ?? 0))
-
-  const cards = [
-    {
-      label: 'Calls Today',
-      value: callsToday.toString(),
-      icon: PhoneCall,
-      iconColor: 'text-purple-600',
-      iconBg: 'bg-purple-100',
-      badge: <StatBadge value={metrics?.calls_today ?? 0} suffix=" today" />,
-    },
-    {
-      label: 'Avg Call Duration',
-      value: formatDuration(avgDuration),
-      icon: Clock,
-      iconColor: 'text-blue-600',
-      iconBg: 'bg-blue-100',
-      badge: <span className="text-xs text-muted-foreground">completed calls</span>,
-    },
-    {
-      label: 'Answered rate',
-      value: `${successRate}%`,
-      icon: TrendingUp,
-      iconColor: 'text-green-600',
-      iconBg: 'bg-green-100',
-      badge: <span className="text-xs text-muted-foreground" title="Share of finished calls that were answered and completed (not the AI's verdict)">of finished calls</span>,
-    },
-    {
-      label: 'Minutes Used',
-      value: `${minutesUsed}`,
-      icon: Zap,
-      iconColor: 'text-amber-600',
-      iconBg: 'bg-amber-100',
-      badge: (
-        <span className="text-xs text-muted-foreground">
-          of {minutesLimit}
-        </span>
-      ),
-      extra: (
-        <div className="mt-3">
-          <div className="flex justify-between text-xs text-muted-foreground mb-1">
-            <span>{minutesPct}% used</span>
-            <span>{minutesLeft} left</span>
-          </div>
-          <div
-            className="h-1.5 w-full rounded-full bg-muted overflow-hidden"
-            role="progressbar"
-            aria-label="Minutes used this period"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.min(minutesPct, 100)}
-          >
-            <div
-              className="h-full rounded-full bg-amber-500 transition-all duration-700"
-              style={{ width: `${Math.min(minutesPct, 100)}%` }}
-            />
-          </div>
-        </div>
-      ),
-    },
-  ]
+  const meterTone = minutesPct >= 100 ? 'danger' : minutesPct >= 80 ? 'warning' : 'default'
+  // No metrics after loading = the request failed (the insights card explains and retries).
+  const missing = !loading && !metrics
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      {cards.map((c) => (
-        <Card key={c.label} className="border shadow-sm">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div className={`rounded-xl p-2.5 ${c.iconBg}`}>
-                <c.icon className={`h-5 w-5 ${c.iconColor}`} aria-hidden="true" />
-              </div>
-              {c.badge}
-            </div>
-            <div className="mt-3">
-              <p className="text-2xl font-bold text-foreground">{c.value}</p>
-              <p className="text-sm text-muted-foreground">{c.label}</p>
-            </div>
-            {c.extra}
-          </CardContent>
-        </Card>
-      ))}
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <StatTile
+        label="Calls today"
+        loading={loading}
+        value={missing ? '—' : fmt(callsToday)}
+        // No comparison figure from the API yet: a plain hint, not a trend chip.
+        hint="since midnight"
+      />
+      <StatTile
+        label="Avg call duration"
+        loading={loading}
+        value={missing ? '—' : formatDuration(avgDuration)}
+        hint="completed calls"
+      />
+      <StatTile
+        label="Answered rate"
+        loading={loading}
+        value={missing ? '—' : `${successRate}%`}
+        hint={
+          <span title="Share of finished calls that were answered and completed (not the AI's verdict)">
+            of finished calls
+          </span>
+        }
+      />
+      <StatTile
+        label="Minutes used"
+        loading={loading}
+        value={missing ? '—' : fmt(minutesUsed)}
+        // A blank line while loading keeps the tile (the tallest in the row) from growing later.
+        hint={metrics ? `of ${fmt(minutesLimit)} · ${fmt(minutesLeft)} left` : ' '}
+        meter={{ value: minutesPct, tone: meterTone, label: 'Minutes used this period' }}
+      />
     </div>
   )
 }

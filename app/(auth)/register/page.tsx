@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Logo } from '@/components/shared/Logo'
+import { Eyebrow } from '@/components/shared/Eyebrow'
 import { RegisterForm } from '@/components/auth/RegisterForm'
 
 export const metadata: Metadata = {
@@ -8,21 +8,17 @@ export const metadata: Metadata = {
 
 export default function RegisterPage() {
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="space-y-2">
-        <div className="flex justify-center mb-6">
-          <Logo size="sm" showText />
-        </div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+    <div className="flex flex-col gap-8">
+      <div>
+        <Eyebrow>Start free · 14 days</Eyebrow>
+        <h1 className="mt-4 font-heading font-title text-[30px] leading-[36px] tracking-[-0.025em] text-balance text-foreground md:text-[36px] md:leading-[42px]">
           Create your account
         </h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="mt-2 text-[15px] leading-[22px] text-muted-foreground">
           Start your free 14-day trial — no credit card required
         </p>
       </div>
 
-      {/* Form */}
       <RegisterForm />
     </div>
   )

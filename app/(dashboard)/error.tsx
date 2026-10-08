@@ -5,9 +5,9 @@
 // stays usable and the user can retry the page in place.
 
 import { useEffect } from 'react'
-import { AlertTriangle, RotateCw } from 'lucide-react'
+import { RotateCw, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { PageContainer } from '@/components/shared/PageContainer'
 
 export default function DashboardError({
   error,
@@ -23,27 +23,31 @@ export default function DashboardError({
   }, [error])
 
   return (
-    <div className="p-6 max-w-[1600px] mx-auto">
-      <Card className="mx-auto max-w-lg">
-        <CardContent className="flex flex-col items-center gap-4 py-10 text-center" role="alert">
-          <div className="rounded-full bg-red-50 p-4">
-            <AlertTriangle className="h-8 w-8 text-red-500" aria-hidden="true" />
+    <PageContainer width="narrow">
+      <div role="alert" className="flex min-h-[60vh] items-center">
+        {/* The EmptyState look, composed here because the page needs its own heading
+            (EmptyState titles are h3, and nothing else on this page provides an h1). */}
+        <div className="flex w-full flex-col items-center justify-center rounded-2xl bg-secondary px-6 py-12 text-center">
+          <div className="mb-4 grid size-11 place-items-center rounded-full bg-destructive-soft text-destructive">
+            <TriangleAlert aria-hidden="true" className="size-5" />
           </div>
-          <div className="space-y-1">
-            <h2 className="text-lg font-semibold text-foreground">This page could not be loaded</h2>
-            <p className="text-sm text-muted-foreground">
-              Something went wrong on our side. Please try again in a moment.
-            </p>
+          <h1 className="text-[15px] leading-[22px] font-medium text-foreground">This page could not be loaded</h1>
+          <p className="mt-1 max-w-sm text-[13px] leading-[19px] text-muted-foreground">
+            Something went wrong on our side. Please try again in a moment.
             {error.digest && (
-              <p className="text-xs text-muted-foreground">Reference: {error.digest}</p>
+              <span className="mt-2 block text-xs text-muted-foreground">
+                Reference: <span className="font-mono">{error.digest}</span>
+              </span>
             )}
+          </p>
+          <div className="mt-5">
+            <Button onClick={() => unstable_retry()}>
+              <RotateCw aria-hidden="true" />
+              Try again
+            </Button>
           </div>
-          <Button onClick={() => unstable_retry()} className="gap-2">
-            <RotateCw className="h-4 w-4" aria-hidden="true" />
-            Try again
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </div>
+    </PageContainer>
   )
 }

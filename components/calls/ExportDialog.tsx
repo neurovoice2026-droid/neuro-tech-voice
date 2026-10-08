@@ -1,14 +1,14 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Download, Loader2 } from 'lucide-react'
+import { Braces, Download, Sheet as SheetIcon } from 'lucide-react'
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
-import { cn } from '@/lib/utils'
+import { OptionCard } from '@/components/shared/OptionCard'
 import { toast } from 'sonner'
 import { callFilterParams, readApiError } from '@/hooks/useCalls'
 import type { CallListFilters } from '@/lib/calls/labels'
@@ -43,6 +43,8 @@ const COLUMNS: Array<{ id: string; label: string; required: boolean; warning?: s
 // The AI outcome (the AI's verdict on the call's goal) replaces sentiment by
 // default; sentiment stays selectable.
 const DEFAULT_COLUMNS = ['call_successful', 'created_at', 'provider', 'routing_reason', 'outcome']
+
+const LEGEND = 'mb-2.5 text-[11px] leading-4 font-medium tracking-[0.12em] text-muted-foreground uppercase'
 
 export function ExportDialog({ open, onOpenChange, filters, total, selectedIds }: ExportDialogProps) {
   const [format, setFormat] = useState<'csv' | 'json'>('csv')
@@ -95,69 +97,61 @@ export function ExportDialog({ open, onOpenChange, filters, total, selectedIds }
     })
   }
 
+  const scopes = [
+    { id: 'filtered', label: 'Current filters', count: total },
+    { id: 'all',      label: 'All time', count: null },
+    ...(selectedIds.length > 0 ? [{ id: 'selected', label: 'Selected only', count: selectedIds.length }] : []),
+  ]
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <div className="rounded-full bg-purple-100 p-1.5">
-              <Download className="h-4 w-4 text-purple-600" />
-            </div>
-            Export calls
-          </DialogTitle>
+          <DialogTitle>Export calls</DialogTitle>
           <DialogDescription>
             Choose format and columns to include in your export.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5 py-1">
+        <div className="space-y-6">
           {/* Format */}
           <fieldset>
-            <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Format</legend>
-            <div className="grid grid-cols-2 gap-2">
+            <legend className={LEGEND}>Format</legend>
+            <div role="radiogroup" aria-label="Format" className="grid grid-cols-2 gap-2">
               {(['csv', 'json'] as const).map((f) => (
-                <button
+                <OptionCard
                   key={f}
-                  type="button"
-                  aria-pressed={format === f}
-                  onClick={() => setFormat(f)}
-                  className={cn(
-                    'rounded-lg border p-3 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-                    format === f
-                      ? 'border-primary bg-purple-50'
-                      : 'border-border hover:border-purple-200'
-                  )}
-                >
-                  <p className="text-sm font-medium uppercase">{f}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {f === 'csv' ? 'Opens in Excel / Sheets' : 'Raw data for developers'}
-                  </p>
-                </button>
+                  selected={format === f}
+                  onSelect={() => setFormat(f)}
+                  icon={f === 'csv' ? SheetIcon : Braces}
+                  title={f.toUpperCase()}
+                  description={f === 'csv' ? 'Opens in Excel / Sheets' : 'Raw data for developers'}
+                />
               ))}
             </div>
           </fieldset>
 
           {/* Scope */}
           <fieldset>
-            <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Export scope</legend>
-            <div className="space-y-1.5">
-              {[
-                { id: 'filtered', label: `Current filters (${total} calls)` },
-                { id: 'all',      label: 'All time' },
-                ...(selectedIds.length > 0
-                  ? [{ id: 'selected', label: `Selected only (${selectedIds.length} calls)` }]
-                  : []),
-              ].map((s) => (
-                <label key={s.id} className="flex items-center gap-2.5 cursor-pointer">
+            <legend className={LEGEND}>Export scope</legend>
+            <div className="overflow-hidden rounded-2xl shadow-hair">
+              {scopes.map((s) => (
+                <label
+                  key={s.id}
+                  className="flex min-h-11 cursor-pointer items-center gap-3 border-b border-rule px-4 py-2.5 transition-colors last:border-b-0 hover:bg-band has-checked:bg-band"
+                >
                   <input
                     type="radio"
                     name="scope"
                     value={s.id}
                     checked={effectiveScope === s.id}
                     onChange={() => setScope(s.id as typeof scope)}
-                    className="accent-primary"
+                    className="size-4 shrink-0 accent-[#140a24]"
                   />
-                  <span className="text-sm">{s.label}</span>
+                  <span className="flex-1 text-sm">{s.label}</span>
+                  {s.count !== null && (
+                    <span className="text-[13px] text-muted-foreground tabular-nums">{s.count.toLocaleString()} calls</span>
+                  )}
                 </label>
               ))}
             </div>
@@ -165,20 +159,21 @@ export function ExportDialog({ open, onOpenChange, filters, total, selectedIds }
 
           {/* Columns */}
           <fieldset>
-            <legend className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Columns</legend>
-            <div className="space-y-1.5">
+            <legend className={LEGEND}>Columns</legend>
+            <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
               {COLUMNS.map((col) => (
-                <div key={col.id} className="flex items-center gap-2.5">
+                <div key={col.id} className="flex items-start gap-2.5">
                   <Checkbox
                     id={`col-${col.id}`}
                     checked={checkedCols.has(col.id)}
                     onCheckedChange={() => !col.required && toggleCol(col.id)}
                     disabled={col.required}
+                    className="mt-px"
                   />
-                  <Label htmlFor={`col-${col.id}`} className="text-sm cursor-pointer flex items-center gap-2">
+                  <Label htmlFor={`col-${col.id}`} className="block cursor-pointer text-[13px] leading-[19px] font-normal">
                     {col.label}
                     {col.warning && (
-                      <span className="text-xs text-amber-600">({col.warning})</span>
+                      <span className="mt-0.5 block text-xs leading-4 text-warning">{col.warning}</span>
                     )}
                   </Label>
                 </div>
@@ -187,25 +182,20 @@ export function ExportDialog({ open, onOpenChange, filters, total, selectedIds }
           </fieldset>
         </div>
 
-        <div className="flex gap-3 pt-1">
-          <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="border-t border-rule pt-5">
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
-            className="flex-1 purple-glow"
             onClick={handleExport}
-            disabled={isPending || scopeCount === 0}
+            disabled={scopeCount === 0}
+            loading={isPending}
+            loadingText="Exporting…"
           >
-            {isPending ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Exporting…</>
-            ) : (
-              <>
-                <Download className="mr-2 h-4 w-4" />
-                {scopeCount === null ? 'Export all calls' : `Export ${scopeCount} calls`}
-              </>
-            )}
+            <Download aria-hidden="true" />
+            {scopeCount === null ? 'Export all calls' : `Export ${scopeCount} calls`}
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

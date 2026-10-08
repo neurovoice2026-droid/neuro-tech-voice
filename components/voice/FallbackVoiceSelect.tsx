@@ -1,12 +1,14 @@
 'use client'
 
 import { useEffect, useId, useState } from 'react'
-import { Info, Loader2, RotateCw, ShieldCheck } from 'lucide-react'
+import { AlertCircle, Info, RotateCw } from 'lucide-react'
 import { toast } from 'sonner'
+import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
+import { FormSection } from '@/components/shared/FormSection'
+import { OrbInline, OrbLoader } from '@/components/shared/OrbLoader'
 import { PreviewButton, genderLabel, languageDisplay } from '@/components/voice/VoiceCard'
 import { useAudioPreview, type PreviewRequest } from '@/hooks/useAudioPreview'
 import { errorMessage, isAbortError, parseApiError } from '@/hooks/useVoiceCatalog'
@@ -150,57 +152,46 @@ export function FallbackVoiceSelect({ agent, onAgentUpdated }: FallbackVoiceSele
     }
   }
 
-  const header = (
-    <CardHeader>
-      <CardTitle className="flex items-center gap-2 text-base">
-        <ShieldCheck className="size-4 text-muted-foreground" aria-hidden="true" />
-        Fallback voice
-      </CardTitle>
-      <CardDescription>
-        Used only when the primary voice provider is unavailable and your backup agent (Cartesia) answers the
-        call. This is not the conversational fallback message your agent says when it doesn&apos;t understand a
-        caller.
-      </CardDescription>
-    </CardHeader>
+  const section = (children: React.ReactNode) => (
+    <FormSection
+      title="Fallback voice"
+      description={
+        <>
+          Used only when the primary voice provider is unavailable and your backup agent (Cartesia) answers the
+          call. This is not the conversational fallback message your agent says when it doesn&apos;t understand a
+          caller.
+        </>
+      }
+    >
+      {children}
+    </FormSection>
   )
 
   if (!loaded) {
-    return (
-      <Card>
-        {header}
-        <CardContent className="space-y-2" aria-busy="true">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-9 w-full sm:w-80" />
-        </CardContent>
-      </Card>
-    )
+    return section(<OrbLoader size={32} layout="row" label="Loading fallback voices…" className="min-h-[128px] sm:min-h-[96px]" />)
   }
 
   if (!loaded.ok) {
-    return (
-      <Card>
-        {header}
-        <CardContent>
-          {loaded.notConfigured ? (
-            <div className="flex gap-3 rounded-lg border border-dashed bg-muted/30 p-3">
-              <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              <div className="text-sm">
-                <p className="font-medium">Fallback provider not configured</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Calls are answered by your primary voice provider only. There is nothing to choose here yet.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-              <p className="min-w-0 flex-1 text-sm text-destructive">{loaded.message}</p>
-              <Button variant="outline" size="sm" onClick={() => setReloadToken((n) => n + 1)} className="gap-1.5">
-                <RotateCw aria-hidden="true" /> Try again
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+    return section(
+      loaded.notConfigured ? (
+        <Alert role="note">
+          <Info aria-hidden="true" />
+          <AlertTitle>Fallback provider not configured</AlertTitle>
+          <AlertDescription>
+            Calls are answered by your primary voice provider only. There is nothing to choose here yet.
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <Alert variant="destructive">
+          <AlertCircle aria-hidden="true" />
+          <AlertTitle>{loaded.message}</AlertTitle>
+          <AlertAction>
+            <Button variant="outline" size="sm" onClick={() => setReloadToken((n) => n + 1)}>
+              <RotateCw aria-hidden="true" /> Try again
+            </Button>
+          </AlertAction>
+        </Alert>
+      ),
     )
   }
 
@@ -218,53 +209,47 @@ export function FallbackVoiceSelect({ agent, onAgentUpdated }: FallbackVoiceSele
   const canPreview = !!previewId && previewVoice?.hasPreview !== false
   const previewName = previewVoice?.name ?? 'the fallback voice'
 
-  return (
-    <Card>
-      {header}
-      <CardContent className="space-y-2">
-        <p id={labelId} className="text-sm font-medium">
-          Backup voice for {langLabel}
-        </p>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Select items={items} value={value} onValueChange={(v) => typeof v === 'string' && void save(v)} disabled={saving}>
-            <SelectTrigger aria-labelledby={labelId} className="h-9 w-full sm:w-80">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(items).map(([id, label]) => (
-                <SelectItem key={id} value={id}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="flex items-center gap-2">
-            {saving ? (
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
-                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" /> Saving…
-              </span>
-            ) : (
-              <PreviewButton
-                name={previewName}
-                variant="wide"
-                className="w-auto px-3"
-                status={previewId ? preview.statusFor(previewId) : 'idle'}
-                disabled={!canPreview}
-                onClick={() => previewId && preview.toggle(previewId, previewRequest(previewId))}
-              />
-            )}
-          </div>
+  return section(
+    <div className="grid gap-2">
+      <Label id={labelId}>Backup voice for {langLabel}</Label>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <Select items={items} value={value} onValueChange={(v) => typeof v === 'string' && void save(v)} disabled={saving}>
+          <SelectTrigger aria-labelledby={labelId} className="w-full sm:w-80">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(items).map(([id, label]) => (
+              <SelectItem key={id} value={id}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="flex min-h-8 items-center gap-2">
+          {saving ? (
+            <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground" aria-live="polite">
+              <OrbInline state="working" /> Saving…
+            </span>
+          ) : (
+            <PreviewButton
+              name={previewName}
+              variant="wide"
+              status={previewId ? preview.statusFor(previewId) : 'idle'}
+              disabled={!canPreview}
+              onClick={() => previewId && preview.toggle(previewId, previewRequest(previewId))}
+            />
+          )}
         </div>
-        <p className="text-xs text-muted-foreground">
-          {value === AUTO
-            ? autoVoice
-              ? `Automatic currently uses ${autoVoice.name}, a voice tuned for ${langLabel}.`
-              : `We pick a natural ${langLabel} voice for the backup agent.`
-            : !canPreview && previewId
-              ? 'No preview is available for this voice.'
-              : 'Pick a voice close to your main voice so callers notice the switch as little as possible.'}
-        </p>
-      </CardContent>
-    </Card>
+      </div>
+      <p className="text-xs leading-4 text-muted-foreground">
+        {value === AUTO
+          ? autoVoice
+            ? `Automatic currently uses ${autoVoice.name}, a voice tuned for ${langLabel}.`
+            : `We pick a natural ${langLabel} voice for the backup agent.`
+          : !canPreview && previewId
+            ? 'No preview is available for this voice.'
+            : 'Pick a voice close to your main voice so callers notice the switch as little as possible.'}
+      </p>
+    </div>,
   )
 }

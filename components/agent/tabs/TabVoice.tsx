@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
-import { AlertCircle, AlertTriangle, Info, Loader2, Mic, Plus, RotateCw, Trash2, Volume2, Wand2 } from 'lucide-react'
+import { AlertCircle, AlertTriangle, Info, Mic, Plus, RotateCw, Trash2, Volume2, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -13,7 +14,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Skeleton } from '@/components/ui/skeleton'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { FormSection } from '@/components/shared/FormSection'
+import { OrbLoader } from '@/components/shared/OrbLoader'
 import { FallbackVoiceSelect } from '@/components/voice/FallbackVoiceSelect'
 import { PronunciationCard } from '@/components/voice/PronunciationCard'
 import { VoiceCloneDialog } from '@/components/voice/VoiceCloneDialog'
@@ -35,6 +38,7 @@ import {
   useVoiceCatalog,
   type AgentVoiceBody,
 } from '@/hooks/useVoiceCatalog'
+import { cn } from '@/lib/utils'
 import type { Agent, VoiceOption, VoiceSyncStatus } from '@/types'
 
 export interface TabVoiceProps {
@@ -207,214 +211,236 @@ export function TabVoice({ agent, onAgentUpdated, onUpdate, isSaving = false }: 
   const busy = applying !== null
 
   const noticeBanner = voiceNotice?.notice ? (
-    <div
-      role="status"
-      className="flex flex-col gap-3 rounded-lg border border-amber-300/60 bg-amber-50 p-3 sm:flex-row sm:items-center dark:border-amber-500/30 dark:bg-amber-500/10"
-    >
-      <AlertTriangle className="hidden size-4 shrink-0 text-amber-600 sm:block dark:text-amber-400" aria-hidden="true" />
-      <p className="min-w-0 flex-1 text-sm text-amber-900 dark:text-amber-200">{voiceNotice.notice.message}</p>
-      <Button variant="outline" size="sm" onClick={goToPicker} className="shrink-0">
-        Choose a new voice
-      </Button>
-    </div>
+    <Alert variant="warning" role="status">
+      <AlertTriangle aria-hidden="true" />
+      <AlertDescription>{voiceNotice.notice.message}</AlertDescription>
+      <AlertAction>
+        <Button variant="outline" size="sm" onClick={goToPicker}>
+          Choose a new voice
+        </Button>
+      </AlertAction>
+    </Alert>
   ) : null
 
   return (
-    <div className="space-y-6">
+    <div>
       {/* Current voice */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Current voice</CardTitle>
-          <CardDescription>The voice your agent uses on calls.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {agent.voice_id ? (
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                  <Volume2 className="size-5 text-primary" aria-hidden="true" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{currentName}</p>
-                  <p className="truncate font-mono text-xs text-muted-foreground">{agent.voice_id}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {currentPreviewSource && (
-                    <PreviewButton
-                      name={currentName}
-                      variant="icon"
-                      status={preview.statusFor(`current:${agent.voice_id}`)}
-                      onClick={() => preview.toggle(`current:${agent.voice_id}`, currentPreviewSource)}
-                    />
-                  )}
-                  <VoiceSyncBadge status={syncStatus} />
-                </div>
+      <FormSection title="Current voice" description="The voice your agent uses on calls.">
+        {agent.voice_id ? (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-card p-4 shadow-hair">
+              <span
+                className="grid size-10 shrink-0 place-items-center rounded-full bg-secondary text-sm font-medium text-foreground"
+                aria-hidden="true"
+              >
+                {currentName.trim().charAt(0).toUpperCase() || <Volume2 className="size-4" />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[17px] leading-6 font-medium">{currentName}</p>
+                <p className="truncate font-mono text-xs leading-4 text-muted-foreground">{agent.voice_id}</p>
               </div>
+              <div className="flex items-center gap-2">
+                <VoiceSyncBadge status={syncStatus} />
+                {currentPreviewSource && (
+                  <PreviewButton
+                    name={currentName}
+                    variant="icon"
+                    status={preview.statusFor(`current:${agent.voice_id}`)}
+                    onClick={() => preview.toggle(`current:${agent.voice_id}`, currentPreviewSource)}
+                  />
+                )}
+              </div>
+            </div>
 
-              {noticeBanner}
+            {noticeBanner}
 
-              {syncStatus === 'failed' ? (
-                <div
-                  role="alert"
-                  className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 sm:flex-row sm:items-center"
-                >
-                  <AlertCircle className="hidden size-4 shrink-0 text-destructive sm:block" aria-hidden="true" />
-                  <div className="min-w-0 flex-1 text-sm">
-                    <p className="font-medium text-destructive">This voice is not applied yet</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {agent.voice_sync_error || VOICE_SYNC_COPY.failed.description}
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={retrySync} disabled={busy} className="gap-1.5">
+            {syncStatus === 'failed' ? (
+              <Alert variant="destructive">
+                <AlertCircle aria-hidden="true" />
+                <AlertTitle>This voice is not applied yet</AlertTitle>
+                <AlertDescription>{agent.voice_sync_error || VOICE_SYNC_COPY.failed.description}</AlertDescription>
+                <AlertAction>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={retrySync}
+                    disabled={busy && applying !== 'retry'}
+                    loading={applying === 'retry'}
+                    loadingState="connecting"
+                  >
                     <RotateCw aria-hidden="true" /> Retry
                   </Button>
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground" aria-live="polite">
-                  {VOICE_SYNC_COPY[syncStatus].description}
-                </p>
-              )}
+                </AlertAction>
+              </Alert>
+            ) : (
+              <p className="text-xs leading-[18px] text-muted-foreground" aria-live="polite">
+                {VOICE_SYNC_COPY[syncStatus].description}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 rounded-2xl bg-secondary px-4 py-3.5 text-sm text-muted-foreground">
+              <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white text-foreground shadow-hair" aria-hidden="true">
+                <Mic className="size-4" />
+              </span>
+              No voice selected yet. Pick one below.
             </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Mic className="size-4" aria-hidden="true" />
-                No voice selected yet. Pick one below.
-              </div>
-              {noticeBanner}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            {noticeBanner}
+          </div>
+        )}
+      </FormSection>
 
-      {/* Picker */}
-      <Card ref={pickerRef} tabIndex={-1} aria-label="Choose a voice" className="outline-none">
-        <CardHeader>
-          <CardTitle className="text-base">Choose a voice</CardTitle>
-          <CardDescription>Preview voices, pick one, then confirm to apply it to your agent.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <VoicePicker
-            layout="dashboard"
-            defaultLanguage={agent.language}
-            selectedVoiceId={pendingVoice?.voiceId ?? agent.voice_id}
-            onSelect={choose}
-            disabled={busy}
-            design={{
-              unavailableReason: limits.unavailableReason,
-              onSaved: (voice) => setPendingVoice(voice.voiceId === agent.voice_id ? null : voice),
-            }}
-          />
-        </CardContent>
-      </Card>
+      {/* Picker: full width (the voice grid needs the room), focus target of "Choose a new voice". */}
+      <section
+        ref={pickerRef}
+        tabIndex={-1}
+        aria-labelledby="choose-voice-title"
+        className="scroll-mt-16 space-y-5 border-t border-rule py-8 outline-none"
+      >
+        <div>
+          <h2 id="choose-voice-title" className="text-[15px] leading-[22px] font-medium">Choose a voice</h2>
+          <p className="mt-1 text-[13px] leading-[19px] text-muted-foreground">
+            Preview voices, pick one, then confirm to apply it to your agent.
+          </p>
+        </div>
+        <VoicePicker
+          layout="dashboard"
+          defaultLanguage={agent.language}
+          selectedVoiceId={pendingVoice?.voiceId ?? agent.voice_id}
+          onSelect={choose}
+          disabled={busy}
+          design={{
+            unavailableReason: limits.unavailableReason,
+            onSaved: (voice) => setPendingVoice(voice.voiceId === agent.voice_id ? null : voice),
+          }}
+        />
+      </section>
 
-      {/* Custom (cloned) voices */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Your custom voices</CardTitle>
-          <CardDescription>
-            Voices cloned from your own recordings (with the speaker&apos;s consent) or designed from a description.
-          </CardDescription>
-          <CardAction>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCloneOpen(true)}
-              disabled={!!limits.unavailableReason}
-              aria-describedby={limits.unavailableReason ? 'custom-voices-unavailable' : undefined}
-              className="gap-1.5"
-            >
-              <Plus aria-hidden="true" /> Clone a voice
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent>
-          {limits.unavailableReason && (
-            <p id="custom-voices-unavailable" className="mb-3 text-xs text-muted-foreground">
-              {limits.unavailableReason}
-            </p>
-          )}
-          {custom.error ? (
-            <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-              <p className="min-w-0 flex-1 text-sm text-destructive">{custom.error}</p>
-              <Button variant="outline" size="sm" onClick={custom.retry} className="gap-1.5">
+      {/* Custom (cloned / designed) voices */}
+      <FormSection
+        title="Your custom voices"
+        description="Voices cloned from your own recordings (with the speaker's consent) or designed from a description."
+        aside={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCloneOpen(true)}
+            disabled={!!limits.unavailableReason}
+            aria-describedby={limits.unavailableReason ? 'custom-voices-unavailable' : undefined}
+          >
+            <Plus aria-hidden="true" /> Clone a voice
+          </Button>
+        }
+      >
+        {limits.unavailableReason && (
+          <p id="custom-voices-unavailable" className="text-xs leading-[18px] text-muted-foreground">
+            {limits.unavailableReason}
+          </p>
+        )}
+        {custom.error ? (
+          <Alert variant="destructive">
+            <AlertCircle aria-hidden="true" />
+            <AlertDescription>{custom.error}</AlertDescription>
+            <AlertAction>
+              <Button variant="outline" size="sm" onClick={custom.retry}>
                 <RotateCw aria-hidden="true" /> Try again
               </Button>
-            </div>
-          ) : custom.isLoading && custom.voices.length === 0 ? (
-            <div className="space-y-2" aria-busy="true">
-              <Skeleton className="h-14 rounded-xl" />
-              <Skeleton className="h-14 rounded-xl" />
-            </div>
-          ) : customVoices.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed py-8 text-center">
-              <Wand2 className="size-6 text-muted-foreground/60" aria-hidden="true" />
-              <p className="text-sm text-muted-foreground">No custom voices yet.</p>
-              <p className="max-w-sm text-xs text-muted-foreground">
-                Clone a voice from 1–3 short recordings, for example your receptionist or yourself.
-              </p>
-            </div>
-          ) : (
-            <ul className={custom.isLoading ? 'space-y-2 opacity-60' : 'space-y-2'} aria-busy={custom.isLoading}>
-              {customVoices.map((voice) => {
-                const name = voiceDisplayName(voice)
-                const inUse = voice.voiceId === agent.voice_id
-                const isPending = voice.voiceId === pendingVoice?.voiceId
-                const locale = voiceLocaleLine(voice)
-                return (
-                  <li key={voice.voiceId} className="flex flex-wrap items-center gap-2 rounded-xl border p-3 sm:flex-nowrap">
-                    <div className="min-w-0 flex-1">
-                      <p className="flex items-center gap-2 truncate text-sm font-medium">
-                        <span className="truncate">{name}</span>
-                        {inUse && (
-                          <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                            In use
-                          </span>
-                        )}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">{locale.text}</p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <PreviewButton
-                        name={name}
-                        variant="icon"
-                        status={preview.statusFor(voice.voiceId)}
-                        onClick={() => preview.toggle(voice.voiceId, voicePreviewSource(voice, agent.language))}
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => choose(voice)}
-                        disabled={inUse || isPending || busy}
-                      >
-                        {inUse ? 'Current' : isPending ? 'Selected' : 'Use voice'}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => setDeleteTarget(voice)}
-                        disabled={inUse || busy}
-                        aria-label={`Delete ${name}`}
-                        title={inUse ? 'Choose another voice for your agent before deleting this one' : 'Delete voice'}
-                      >
-                        <Trash2 aria-hidden="true" />
-                      </Button>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-          {custom.hasMore && !custom.error && (
-            <div className="mt-3 flex justify-center">
-              <Button variant="ghost" size="sm" onClick={custom.loadMore} disabled={custom.isLoadingMore}>
-                {custom.isLoadingMore && <Loader2 className="animate-spin" aria-hidden="true" />}
-                Show more voices
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            </AlertAction>
+          </Alert>
+        ) : custom.isLoading && custom.voices.length === 0 ? (
+          // The empty state's shell and height (most accounts have no custom voice yet), so nothing jumps.
+          <OrbLoader
+            size={32}
+            layout="row"
+            label="Loading your custom voices…"
+            className="min-h-[204px] justify-center rounded-2xl bg-secondary px-6"
+          />
+        ) : customVoices.length === 0 ? (
+          <EmptyState
+            icon={Wand2}
+            title="No custom voices yet."
+            description="Clone a voice from 1–3 short recordings, for example your receptionist or yourself."
+            className="py-10"
+          />
+        ) : (
+          <ul
+            className={cn('overflow-hidden rounded-2xl bg-card shadow-hair transition-opacity', custom.isLoading && 'opacity-60')}
+            aria-busy={custom.isLoading}
+          >
+            {customVoices.map((voice) => {
+              const name = voiceDisplayName(voice)
+              const inUse = voice.voiceId === agent.voice_id
+              const isPending = voice.voiceId === pendingVoice?.voiceId
+              const locale = voiceLocaleLine(voice)
+              return (
+                <li
+                  key={voice.voiceId}
+                  className="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule px-4 py-3 last:border-b-0 sm:flex-nowrap"
+                >
+                  <span
+                    className="grid size-8 shrink-0 place-items-center rounded-full bg-secondary text-xs font-medium"
+                    aria-hidden="true"
+                  >
+                    {name.trim().charAt(0).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-2 text-sm leading-5 font-medium">
+                      <span className="truncate">{name}</span>
+                      {inUse && (
+                        <Badge variant="secondary" className="h-5 px-2 text-[11px]">
+                          In use
+                        </Badge>
+                      )}
+                    </p>
+                    <p className="truncate text-xs leading-4 text-muted-foreground">{locale.text}</p>
+                  </div>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <PreviewButton
+                      name={name}
+                      variant="icon"
+                      status={preview.statusFor(voice.voiceId)}
+                      onClick={() => preview.toggle(voice.voiceId, voicePreviewSource(voice, agent.language))}
+                    />
+                    <Button
+                      variant={inUse || isPending ? 'secondary' : 'outline'}
+                      size="sm"
+                      onClick={() => choose(voice)}
+                      disabled={inUse || isPending || busy}
+                    >
+                      {inUse ? 'Current' : isPending ? 'Selected' : 'Use voice'}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setDeleteTarget(voice)}
+                      disabled={inUse || busy}
+                      aria-label={`Delete ${name}`}
+                      title={inUse ? 'Choose another voice for your agent before deleting this one' : 'Delete voice'}
+                      className="tap-44 text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </Button>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+        {custom.hasMore && !custom.error && (
+          <div className="flex justify-center">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={custom.loadMore}
+              loading={custom.isLoadingMore}
+              loadingState="breathing"
+            >
+              Show more voices
+            </Button>
+          </div>
+        )}
+      </FormSection>
 
       {onUpdate && <VoiceTuningCard agent={agent} onUpdate={onUpdate} isSaving={isSaving} />}
 
@@ -423,22 +449,20 @@ export function TabVoice({ agent, onAgentUpdated, onUpdate, isSaving = false }: 
       {/* Provider fallback voice (Cartesia) */}
       <FallbackVoiceSelect agent={agent} onAgentUpdated={onAgentUpdated} />
 
-      <Card className="border-dashed">
-        <CardContent className="flex gap-3 py-4">
-          <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <p className="text-xs text-muted-foreground">
-            A new voice applies from the next call. The status above only shows <strong>Active</strong> once our voice
-            provider has confirmed the change.
-          </p>
-        </CardContent>
-      </Card>
+      <p className="flex gap-2.5 rounded-2xl bg-secondary px-4 py-3.5 text-xs leading-[18px] text-muted-foreground">
+        <Info className="mt-0.5 size-3.5 shrink-0 text-foreground" aria-hidden="true" />
+        <span>
+          A new voice applies from the next call. The status above only shows{' '}
+          <strong className="font-medium text-foreground">Active</strong> once our voice provider has confirmed the change.
+        </span>
+      </p>
 
       {/* Confirm bar */}
       {pendingVoice && (
         <div
           role="region"
           aria-label="Confirm voice change"
-          className="sticky bottom-4 z-10 flex flex-col gap-3 rounded-xl border bg-card/95 px-4 py-3 shadow-lg backdrop-blur sm:flex-row sm:items-center"
+          className="sticky bottom-4 z-10 mt-6 flex flex-col gap-3 rounded-2xl bg-white/95 px-4 py-3 shadow-pop backdrop-blur-md sm:flex-row sm:items-center sm:pl-5"
         >
           <div className="min-w-0 flex-1 text-sm">
             <p className="truncate">
@@ -452,23 +476,17 @@ export function TabVoice({ agent, onAgentUpdated, onUpdate, isSaving = false }: 
             )}
           </div>
           <div className="flex shrink-0 gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPendingVoice(null)} disabled={busy}>
+            <Button variant="ghost" size="sm" onClick={() => setPendingVoice(null)} disabled={busy}>
               Cancel
             </Button>
             <Button
               size="sm"
               onClick={() => void applyVoice(agentVoiceBody(pendingVoice), 'apply')}
-              disabled={busy}
-              className="purple-glow gap-1.5"
+              disabled={busy && applying !== 'apply'}
+              loading={applying === 'apply'}
+              loadingText={pendingVoice.requiresProvisioning ? 'Adding voice…' : 'Applying…'}
             >
-              {applying === 'apply' ? (
-                <>
-                  <Loader2 className="animate-spin" aria-hidden="true" />
-                  {pendingVoice.requiresProvisioning ? 'Adding voice…' : 'Applying…'}
-                </>
-              ) : (
-                'Apply voice'
-              )}
+              Apply voice
             </Button>
           </div>
         </div>
@@ -490,11 +508,15 @@ export function TabVoice({ agent, onAgentUpdated, onUpdate, isSaving = false }: 
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)} disabled={deleting}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={() => void confirmDelete()} disabled={deleting} className="gap-1.5">
-              {deleting && <Loader2 className="animate-spin" aria-hidden="true" />}
+            <Button
+              variant="destructive-solid"
+              onClick={() => void confirmDelete()}
+              loading={deleting}
+              loadingText="Deleting…"
+            >
               Delete voice
             </Button>
           </DialogFooter>

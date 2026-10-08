@@ -2,13 +2,11 @@ import { OnboardingTopBar } from '@/components/onboarding/OnboardingTopBar'
 
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-dvh bg-white">
       <OnboardingTopBar />
-      {/* pt accounts for fixed top bar (h-16 = 64px) + progress bar (h-1.5 = 6px) */}
-      <main className="pt-[70px]">
-        <div className="mx-auto max-w-2xl px-4 py-12">
-          {children}
-        </div>
+      {/* pt-14 clears the fixed 56 px top bar; pb-32 clears the sticky step actions on phones. */}
+      <main className="pt-14">
+        <div className="mx-auto w-full max-w-[640px] px-4 pt-10 pb-32 md:pt-14">{children}</div>
       </main>
     </div>
   )

@@ -1,35 +1,65 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { Menu as MenuPrimitive } from '@base-ui/react/menu'
 import {
   LayoutDashboard, PhoneCall, Bot, Phone, Plug, CreditCard,
-  LogOut, Menu, X, ChevronRight, GitBranch, TriangleAlert, Settings,
+  LogOut, Menu, GitBranch, Settings, ChevronsUpDown,
+  type LucideIcon,
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { Progress } from '@/components/ui/progress'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { CornerDot } from '@/components/site/corner-dot'
+import { LiveDot } from '@/components/shared/LiveDot'
 import { Logo } from '@/components/shared/Logo'
+import { OrbInline } from '@/components/shared/OrbLoader'
 import { signOut } from '@/lib/auth/actions'
 import { cn } from '@/lib/utils'
 import type { Organization, Agent } from '@/types'
 
-const NAV_ITEMS = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/calls', label: 'Calls', icon: PhoneCall },
-  { href: '/agent', label: 'Agent', icon: Bot },
-  { href: '/phone', label: 'Phone Numbers', icon: Phone },
-  { href: '/integrations', label: 'Integrations', icon: Plug },
-  { href: '/workflows', label: 'Workflows', icon: GitBranch },
-  { href: '/billing', label: 'Billing', icon: CreditCard },
-  { href: '/settings', label: 'Settings', icon: Settings },
+interface NavItem {
+  href: string
+  label: string
+  icon: LucideIcon
+}
+
+/** Sidebar groups, like the site's drawing of the workspace: no label · Configure · Account. */
+const NAV_GROUPS: Array<{ label?: string; items: NavItem[] }> = [
+  {
+    items: [
+      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/calls', label: 'Calls', icon: PhoneCall },
+    ],
+  },
+  {
+    label: 'Configure',
+    items: [
+      { href: '/agent', label: 'Agent', icon: Bot },
+      { href: '/phone', label: 'Phone numbers', icon: Phone },
+      { href: '/integrations', label: 'Integrations', icon: Plug },
+      { href: '/workflows', label: 'Workflows', icon: GitBranch },
+    ],
+  },
+  {
+    label: 'Account',
+    items: [
+      { href: '/billing', label: 'Billing', icon: CreditCard },
+      { href: '/settings', label: 'Settings', icon: Settings },
+    ],
+  },
 ]
+
+/** Pages laid out in the narrow (768 px) PageContainer. */
+const NARROW_PAGES = ['/billing', '/settings']
 
 interface DashboardShellProps {
   children: React.ReactNode
@@ -39,177 +69,237 @@ interface DashboardShellProps {
   hasPhoneNumber: boolean
 }
 
+function isActive(pathname: string, href: string) {
+  return pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
+}
+
 function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
   return (
-    <nav className="flex flex-col gap-1 px-3">
-      {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-        const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
-        return (
-          <Link
-            key={href}
-            href={href}
-            onClick={onNavigate}
-            className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
-              active
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            )}
-          >
-            <Icon className="h-4 w-4 flex-shrink-0" />
-            {label}
-            {active && <ChevronRight className="ml-auto h-3.5 w-3.5 opacity-60" />}
-          </Link>
-        )
-      })}
+    <nav aria-label="Main" className="mt-1 flex-1 overflow-y-auto px-3 pb-3">
+      {NAV_GROUPS.map((group, i) => (
+        <div key={group.label ?? i}>
+          {group.label && (
+            <p className="px-2.5 pt-5 pb-1.5 text-[11px] leading-4 text-muted-foreground">{group.label}</p>
+          )}
+          <ul className="flex flex-col gap-0.5">
+            {group.items.map(({ href, label, icon: Icon }) => {
+              const active = isActive(pathname, href)
+              return (
+                <li key={href}>
+                  <Link
+                    href={href}
+                    onClick={onNavigate}
+                    aria-current={active ? 'page' : undefined}
+                    className={cn(
+                      'flex h-9 items-center gap-2.5 rounded-[10px] px-2.5 text-[13.5px] transition-[background-color,color] duration-200 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring',
+                      active
+                        ? 'bg-secondary font-medium text-foreground'
+                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                    )}
+                  >
+                    <Icon className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+                    <span className="min-w-0 truncate">{label}</span>
+                    {active && <CornerDot className="ml-auto size-2 shrink-0 text-brand" />}
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      ))}
     </nav>
   )
 }
 
-function UserMenu({ org, userEmail }: { org: Organization; userEmail: string }) {
-  const initials = (org.name ?? userEmail).slice(0, 2).toUpperCase()
+/** Menu row that navigates (Base UI LinkItem rendered as a Next link), styled like DropdownMenuItem. */
+function MenuLink({ href, onNavigate, children }: { href: string; onNavigate?: () => void; children: React.ReactNode }) {
+  return (
+    <MenuPrimitive.LinkItem
+      closeOnClick
+      onClick={onNavigate}
+      render={<Link href={href} />}
+      className="relative flex h-9 cursor-default items-center gap-2 rounded-lg px-2.5 text-sm text-foreground outline-hidden select-none focus:bg-secondary data-highlighted:bg-secondary [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground"
+    >
+      {children}
+    </MenuPrimitive.LinkItem>
+  )
+}
+
+/** The workspace pill under the wordmark: org name, and the account menu behind it. */
+function WorkspaceMenu({ org, userEmail, onNavigate }: { org: Organization; userEmail: string; onNavigate?: () => void }) {
+  const [signingOut, startSignOut] = useTransition()
+  const orgName = org.name ?? 'My Company'
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="flex w-full items-center gap-3 rounded-lg px-3 py-2 hover:bg-muted transition-colors text-left outline-none"
+        aria-label={`${orgName} (${userEmail}): account menu`}
+        className="mx-3 flex h-9 items-center justify-between gap-2 rounded-[10px] bg-white px-3 text-left text-[13px] text-foreground shadow-hair transition-[background-color,color] duration-200 outline-none hover:bg-band focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring data-popup-open:bg-band"
       >
-        <Avatar className="h-8 w-8 flex-shrink-0">
-          <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-foreground">{org.name ?? 'My Company'}</p>
-          <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
-        </div>
+        <span className="min-w-0 truncate font-medium">{orgName}</span>
+        <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-56">
-        <div className="px-2 py-1.5">
-          <p className="text-sm font-medium">{org.name ?? 'My Company'}</p>
-          <p className="text-xs text-muted-foreground">{userEmail}</p>
-        </div>
+      {/* Wide enough for a typical e-mail address; longer ones still truncate. */}
+      <DropdownMenuContent align="start" className="w-auto min-w-64 max-w-80">
+        <DropdownMenuGroup>
+          <div className="px-2.5 pt-2 pb-2.5">
+            <p className="truncate text-sm font-medium text-foreground">{orgName}</p>
+            <p className="truncate text-xs text-muted-foreground">{userEmail}</p>
+            <Badge variant="secondary" className="mt-2">
+              <span className="capitalize">{org.plan}</span> plan
+            </Badge>
+          </div>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
-          <a href="/billing" className="flex items-center w-full">
-            <CreditCard className="mr-2 h-4 w-4" />
+        <DropdownMenuGroup>
+          <MenuLink href="/billing" onNavigate={onNavigate}>
+            <CreditCard aria-hidden="true" />
             Billing
-            <Badge variant="outline" className="ml-auto text-xs capitalize">{org.plan}</Badge>
-          </a>
-        </DropdownMenuItem>
+          </MenuLink>
+          <MenuLink href="/settings" onNavigate={onNavigate}>
+            <Settings aria-hidden="true" />
+            Settings
+          </MenuLink>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           variant="destructive"
-          onClick={async () => { await signOut() }}
+          closeOnClick={false}
+          disabled={signingOut}
+          onClick={() => startSignOut(async () => { await signOut() })}
         >
-          <LogOut className="mr-2 h-4 w-4" />
-          Sign out
+          {signingOut ? <OrbInline state="working" className="-ml-0.5" /> : <LogOut aria-hidden="true" />}
+          {signingOut ? 'Signing out…' : 'Sign out'}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
 }
 
-export function DashboardShell({ children, org, userEmail, hasPhoneNumber }: DashboardShellProps) {
+/** Minutes meter at the foot of the sidebar (≥ 80 % warning, ≥ 100 % danger). */
+function UsageTile({ org }: { org: Organization }) {
+  const pct = org.minutes_limit > 0 ? Math.round((org.minutes_used / org.minutes_limit) * 100) : 0
+  const tone = pct >= 100 ? 'danger' : pct >= 80 ? 'warning' : 'default'
+  return (
+    <div className="rounded-2xl bg-secondary p-3">
+      <div className="flex items-center justify-between gap-2 text-xs leading-4">
+        <span className="min-w-0 truncate text-muted-foreground">
+          Minutes · <span className="capitalize">{org.plan}</span>
+        </span>
+        <span className="shrink-0 text-foreground tabular-nums">
+          {org.minutes_used.toLocaleString('en-US')} / {org.minutes_limit.toLocaleString('en-US')}
+        </span>
+      </div>
+      <Progress
+        value={Math.min(pct, 100)}
+        tone={tone}
+        surface="tinted"
+        aria-label="Minutes used this period"
+        className="mt-2"
+      />
+    </div>
+  )
+}
+
+export function DashboardShell({ children, org, agent, userEmail, hasPhoneNumber }: DashboardShellProps) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
 
   const sidebar = (
-    <div className="flex h-full flex-col gap-2">
-      {/* Logo */}
-      <div className="flex items-center px-4 py-4">
-        <Logo size="sm" showText />
-      </div>
-
-      {/* Plan badge */}
-      <div className="px-4 mb-2">
-        <Badge
-          variant="outline"
-          className={cn(
-            'text-xs capitalize w-full justify-center py-1',
-            org.plan === 'custom' && 'border-purple-300 bg-purple-50 text-purple-700',
-            org.plan === 'business' && 'border-indigo-200 bg-indigo-50 text-indigo-700',
-            org.plan === 'pro' && 'border-blue-200 bg-blue-50 text-blue-700',
-            org.plan === 'starter' && 'border-emerald-200 bg-emerald-50 text-emerald-700',
-            org.plan === 'trial' && 'border-gray-200 bg-gray-50 text-gray-500'
-          )}
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="px-5 pt-5 pb-4">
+        <Link
+          href="/dashboard"
+          aria-label="NeuroVoice home"
+          onClick={() => setMobileOpen(false)}
+          className="inline-flex rounded-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-solid focus-visible:outline-ring"
         >
-          {org.plan} plan
-        </Badge>
+          <Logo size="sm" />
+        </Link>
       </div>
 
-      {/* Nav */}
-      <div className="flex-1 overflow-y-auto">
-        <NavLinks pathname={pathname} onNavigate={() => setMobileOpen(false)} />
-      </div>
+      <WorkspaceMenu org={org} userEmail={userEmail} onNavigate={() => setMobileOpen(false)} />
 
-      {/* Usage bar */}
-      <div className="px-4 py-2">
-        <div className="rounded-lg bg-muted/60 px-3 py-2.5">
-          <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
-            <span>Minutes used</span>
-            <span>{org.minutes_used} / {org.minutes_limit}</span>
-          </div>
-          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-            <div
-              className="h-full rounded-full bg-primary transition-all"
-              style={{ width: `${Math.min((org.minutes_used / org.minutes_limit) * 100, 100)}%` }}
-            />
-          </div>
-        </div>
-      </div>
+      <NavLinks pathname={pathname} onNavigate={() => setMobileOpen(false)} />
 
-      {/* User menu */}
-      <div className="border-t px-1 py-2">
-        <UserMenu org={org} userEmail={userEmail} />
+      <div className="p-3">
+        <UsageTile org={org} />
       </div>
     </div>
   )
 
+  const showNumberBanner = !hasPhoneNumber && !pathname.startsWith('/phone')
+  // The banner lines up with the page below it: form pages use the 768 px column.
+  const narrowPage = NARROW_PAGES.some((p) => pathname.startsWith(p))
+  const agentState = !agent ? null : !agent.is_active ? 'paused' : hasPhoneNumber ? 'live' : 'no-number'
+
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-dvh overflow-hidden bg-white">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex lg:w-60 lg:flex-col border-r bg-card/50">
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-rule bg-white lg:flex">
         {sidebar}
       </aside>
 
       {/* Mobile sidebar */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="w-60 p-0">
+        <SheetContent side="left" className="bg-white">
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
           {sidebar}
         </SheetContent>
       </Sheet>
 
       {/* Main area */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Mobile header */}
-        <header className="flex h-14 items-center justify-between border-b bg-card/50 px-4 lg:hidden">
-          <Logo size="xs" showText />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="-mr-2"
-            onClick={() => setMobileOpen(!mobileOpen)}
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b border-rule bg-white/85 px-4 backdrop-blur-md lg:hidden">
+          <Link
+            href="/dashboard"
+            aria-label="NeuroVoice home"
+            className="inline-flex rounded-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-solid focus-visible:outline-ring"
           >
-            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </Button>
+            <Logo size="sm" />
+          </Link>
+          <div className="flex items-center gap-1">
+            {agent && (
+              <span className="flex items-center gap-2 px-2 text-[13px] text-muted-foreground">
+                {/* Static dot: the pinging dot is kept for calls in progress. */}
+                <LiveDot
+                  active={false}
+                  tone={agentState === 'live' ? 'success' : agentState === 'no-number' ? 'warning' : 'idle'}
+                />
+                <span className="max-w-[9rem] truncate">{agent.name}</span>
+                <span className="sr-only">
+                  {agentState === 'live' ? 'is live' : agentState === 'no-number' ? 'has no phone number' : 'is paused'}
+                </span>
+              </span>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="tap-44 -mr-2"
+              aria-label="Open menu"
+              aria-expanded={mobileOpen}
+              onClick={() => setMobileOpen(true)}
+            >
+              <Menu aria-hidden="true" />
+            </Button>
+          </div>
         </header>
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
-          {!hasPhoneNumber && (
-            <div className="flex items-center gap-3 bg-red-600 px-4 py-3 text-sm text-white">
-              <TriangleAlert className="h-5 w-5 shrink-0" />
-              <p className="flex-1">
-                <strong className="font-semibold">Your agent can&apos;t take calls yet.</strong>{' '}
-                Add a phone number to start answering and making calls.
-              </p>
-              <Link
-                href="/phone"
-                className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-50"
-              >
-                Add a number
-              </Link>
+          {showNumberBanner && (
+            <div className="px-4 pt-4 sm:px-6 lg:px-10 lg:pt-6">
+              <Alert variant="warning" className={cn('mx-auto', narrowPage ? 'max-w-[768px]' : 'max-w-[1176px]')}>
+                <Phone aria-hidden="true" />
+                <AlertTitle>Your agent can&apos;t take calls yet</AlertTitle>
+                <AlertDescription>Add a phone number to start answering and making calls.</AlertDescription>
+                <AlertAction>
+                  <Link href="/phone" className={buttonVariants({ size: 'sm' })}>
+                    Add a number
+                  </Link>
+                </AlertAction>
+              </Alert>
             </div>
           )}
           {children}

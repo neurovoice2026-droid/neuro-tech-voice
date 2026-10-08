@@ -1,8 +1,8 @@
 'use client'
 
-import { AlertCircle, CheckCircle2, Clock, Loader2 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
+import { AlertCircle, CheckCircle2, Clock } from 'lucide-react'
+import { OrbInline } from '@/components/shared/OrbLoader'
+import { StatusChip } from '@/components/shared/StatusChip'
 import type { VoiceSyncStatus } from '@/types'
 
 interface SyncCopy {
@@ -25,46 +25,41 @@ interface VoiceSyncBadgeProps {
   className?: string
 }
 
+/** Voice sync status chip: Active (success) · Syncing (connecting orb) · Not applied (danger) · Pending (warning). */
 export function VoiceSyncBadge({ status, className }: VoiceSyncBadgeProps) {
   const s: VoiceSyncStatus = status ?? 'pending'
   const copy = VOICE_SYNC_COPY[s]
 
   if (s === 'synced') {
     return (
-      <Badge
-        variant="outline"
-        title={copy.description}
-        className={cn('border-green-500/30 bg-green-500/15 text-green-600 dark:text-green-400', className)}
-      >
-        <CheckCircle2 aria-hidden="true" />
+      <StatusChip tone="success" icon={<CheckCircle2 aria-hidden="true" />} title={copy.description} className={className}>
         {copy.label}
-      </Badge>
+      </StatusChip>
     )
   }
   if (s === 'saving') {
     return (
-      <Badge variant="secondary" title={copy.description} className={className} aria-live="polite">
-        <Loader2 className="animate-spin" aria-hidden="true" />
+      <StatusChip
+        tone="neutral"
+        icon={<OrbInline state="connecting" />}
+        title={copy.description}
+        aria-live="polite"
+        className={className}
+      >
         {copy.label}
-      </Badge>
+      </StatusChip>
     )
   }
   if (s === 'failed') {
     return (
-      <Badge variant="destructive" title={copy.description} className={className}>
-        <AlertCircle aria-hidden="true" />
+      <StatusChip tone="danger" icon={<AlertCircle aria-hidden="true" />} title={copy.description} className={className}>
         {copy.label}
-      </Badge>
+      </StatusChip>
     )
   }
   return (
-    <Badge
-      variant="outline"
-      title={copy.description}
-      className={cn('border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400', className)}
-    >
-      <Clock aria-hidden="true" />
+    <StatusChip tone="warning" icon={<Clock aria-hidden="true" />} title={copy.description} className={className}>
       {copy.label}
-    </Badge>
+    </StatusChip>
   )
 }

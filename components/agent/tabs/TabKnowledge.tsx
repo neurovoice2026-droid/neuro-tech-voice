@@ -1,21 +1,28 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
-  FileText, Globe, Trash2, Upload, Link2, CheckCircle2, AlertCircle, Loader2, Info,
-  RefreshCw, RotateCw, Type, Bot, Clock, Pencil, FileUp, RefreshCcw,
+  AlertCircle, Bot, CheckCircle2, Clock, FileText, FileUp, Globe, Link2, MoreHorizontal, Pencil, RefreshCcw,
+  RefreshCw, RotateCw, Trash2, Type, Upload,
 } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Switch } from '@/components/ui/switch'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { Field, FormSection } from '@/components/shared/FormSection'
+import { OrbInline, OrbLoader } from '@/components/shared/OrbLoader'
+import { StatTile } from '@/components/shared/StatTile'
+import { StatusChip } from '@/components/shared/StatusChip'
 import {
   KNOWLEDGE_LIMITS, canPinToPrompt, isProcessing, validateKnowledgeFile,
   type useKnowledge, type KnowledgeDoc, type KnowledgeUsage, type UploadingFile,
@@ -23,7 +30,7 @@ import {
 import { useKnowledgeWebsite } from '@/hooks/useKnowledgeWebsite'
 import { EditDocumentDialog, canEditDocumentText } from '@/components/agent/knowledge/EditDocumentDialog'
 import { KnowledgeTestCard } from '@/components/agent/knowledge/KnowledgeTestCard'
-import { RagBadge, SyncBadge, UsageModeBadge } from '@/components/agent/knowledge/KnowledgeBadges'
+import { RagBadge, SyncBadge, UsageModeBadge, hasRagBadge } from '@/components/agent/knowledge/KnowledgeBadges'
 import { WebsiteImportCard } from '@/components/agent/knowledge/WebsiteImportCard'
 import { cn, formatDate, formatFileSize } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -41,6 +48,9 @@ const STAGE_LABEL: Record<UploadingFile['stage'], string> = {
   done: 'Done',
   error: 'Failed',
 }
+
+/** Overline label (11 px, tracked, uppercase, muted). */
+const OVERLINE = 'text-[11px] leading-4 font-medium tracking-[0.12em] text-muted-foreground uppercase'
 
 export function TabKnowledge({ hook }: TabKnowledgeProps) {
   const {
@@ -122,191 +132,136 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
   const attachedCount = docs.filter((d) => d.status === 'ready' && !!d.attached_at).length
   const hasUploadErrors = uploading.some((u) => u.status === 'error')
   const hasKnowledge = attachedCount > 0 || websiteHook.websites.some((w) => w.status === 'succeeded')
+  const firstLoad = isLoading && docs.length === 0
+  const refreshing = isLoading && docs.length > 0
+  const storagePct = usage && usage.bytes_limit > 0 ? (totalSize / usage.bytes_limit) * 100 : null
+  const acceptedTypes = KNOWLEDGE_LIMITS.typesLabel.split(', ')
 
   return (
-    <div className="space-y-6">
+    <div>
       {/* Stats */}
-      <div className="flex gap-4">
-        <Card className="flex-1">
-          <CardContent className="py-4">
-            <p className="text-2xl font-bold">{totalDocs}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Documents</p>
-          </CardContent>
-        </Card>
-        <Card className="flex-1">
-          <CardContent className="py-4">
-            <p className="text-2xl font-bold">{formatFileSize(totalSize)}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {usage ? `of ${formatFileSize(usage.bytes_limit)} used` : 'Total size'}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="flex-1">
-          <CardContent className="py-4">
-            <p className="text-2xl font-bold">{attachedCount}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">On your agent</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-2 gap-3 pb-8 sm:grid-cols-3">
+        <StatTile size="sm" label="Documents" value={totalDocs} loading={firstLoad} hint="Files, pages and text" />
+        <StatTile size="sm" label="On your agent" value={attachedCount} loading={firstLoad} hint="Ready to use on calls" />
+        <StatTile
+          size="sm"
+          className="col-span-2 sm:col-span-1"
+          label="Storage"
+          value={formatFileSize(totalSize)}
+          loading={firstLoad}
+          hint={usage ? `of ${formatFileSize(usage.bytes_limit)} used` : 'Total size'}
+          meter={
+            storagePct !== null
+              ? {
+                  value: storagePct,
+                  tone: storagePct >= 100 ? 'danger' : storagePct >= 80 ? 'warning' : 'default',
+                  label: 'Knowledge storage used',
+                }
+              : undefined
+          }
+        />
       </div>
 
-      {/* Upload Zone */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Upload Files</CardTitle>
-          <CardDescription>
-            Supported: {KNOWLEDGE_LIMITS.typesLabel} — max {KNOWLEDGE_LIMITS.maxFileMb} MB per file
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div
-            role="button"
-            tabIndex={0}
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
-            onClick={() => fileInputRef.current?.click()}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                fileInputRef.current?.click()
-              }
+      {/* Upload zone */}
+      <FormSection
+        title="Upload files"
+        description={`Supported: ${KNOWLEDGE_LIMITS.typesLabel} — max ${KNOWLEDGE_LIMITS.maxFileMb} MB per file.`}
+      >
+        <div
+          role="button"
+          tabIndex={0}
+          data-drag={isDragging ? 'true' : undefined}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onClick={() => fileInputRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              fileInputRef.current?.click()
+            }
+          }}
+          className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-[#d6d4dc] bg-band px-6 py-10 text-center transition-colors outline-none hover:border-foreground/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring focus-visible:outline-solid data-[drag=true]:border-foreground/40 data-[drag=true]:bg-secondary"
+        >
+          <span className="mb-3 grid size-11 place-items-center rounded-full bg-white shadow-hair" aria-hidden="true">
+            <Upload className="size-5 text-foreground" />
+          </span>
+          <p className="text-sm font-medium">
+            {isDragging ? 'Drop files here' : 'Click or drag & drop files'}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {KNOWLEDGE_LIMITS.typesLabel} up to {KNOWLEDGE_LIMITS.maxFileMb} MB
+          </p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={KNOWLEDGE_LIMITS.accept}
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) void handleFiles(e.target.files)
+              e.target.value = ''
             }}
-            className={cn(
-              'flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 cursor-pointer transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-              isDragging ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/50 hover:bg-muted/30',
-            )}
-          >
-            <Upload className={cn('size-8 mb-3', isDragging ? 'text-primary' : 'text-muted-foreground')} />
-            <p className="text-sm font-medium">
-              {isDragging ? 'Drop files here' : 'Click or drag & drop files'}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {KNOWLEDGE_LIMITS.typesLabel} up to {KNOWLEDGE_LIMITS.maxFileMb} MB
-            </p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={KNOWLEDGE_LIMITS.accept}
-              multiple
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files) void handleFiles(e.target.files)
-                e.target.value = ''
-              }}
-            />
-          </div>
+          />
+        </div>
 
-          {/* Upload progress */}
-          {uploading.length > 0 && (
-            <div className="space-y-2">
+        {/* Upload progress */}
+        {uploading.length > 0 && (
+          <div className="space-y-2">
+            <ul className="overflow-hidden rounded-2xl bg-white shadow-hair" aria-label="Uploads">
               {uploading.map((u) => (
                 <UploadProgress key={u.id} item={u} />
               ))}
-              {hasUploadErrors && (
-                <Button variant="ghost" size="sm" onClick={clearErrorUploads} className="text-xs">
-                  Clear failed uploads
-                </Button>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            </ul>
+            {hasUploadErrors && (
+              <Button variant="ghost" size="sm" className="tap-44" onClick={clearErrorUploads}>
+                Clear failed uploads
+              </Button>
+            )}
+          </div>
+        )}
+      </FormSection>
 
-      {/* Add URL */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Add URL</CardTitle>
-          <CardDescription>Import a public web page into your knowledge base.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-2">
-            <Input
-              value={urlInput}
-              onChange={(e) => setUrlInput(e.target.value)}
-              placeholder="https://example.com/faq"
-              className="flex-1"
-              inputMode="url"
-              maxLength={2048}
-              disabled={isAddingUrl}
-              onKeyDown={(e) => e.key === 'Enter' && void handleAddUrl()}
-            />
+      {/* Document list */}
+      <section aria-labelledby="kb-documents-title" className="border-t border-rule py-8">
+        <div className="mb-4 flex items-end justify-between gap-4">
+          <div className="min-w-0">
+            <h2 id="kb-documents-title" className="text-[15px] leading-[22px] font-medium">Knowledge base</h2>
+            <p className="mt-1 text-[13px] leading-[19px] text-muted-foreground">Files, pages and text your agent can reference.</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            {refreshing && <OrbInline state="breathing" label="Updating…" />}
             <Button
-              onClick={() => void handleAddUrl()}
-              disabled={!urlInput.trim() || isAddingUrl}
-              className="shrink-0"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => void refetch()}
+              title="Refresh"
+              aria-label="Refresh documents"
+              className="tap-44 text-muted-foreground hover:text-foreground"
             >
-              {isAddingUrl ? <Loader2 className="size-4 animate-spin" /> : <Link2 className="size-4" />}
-              <span className="ml-1.5">{isAddingUrl ? 'Adding…' : 'Add URL'}</span>
+              <RefreshCw />
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* Import a whole website */}
-      <WebsiteImportCard hook={websiteHook} maxPages={usage?.crawl_max_pages ?? 25} />
-
-      {/* Add text */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Add Text</CardTitle>
-          <CardDescription>Paste opening hours, prices, policies or FAQs directly.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Input
-            value={textName}
-            onChange={(e) => setTextName(e.target.value)}
-            placeholder="Name, e.g. Opening hours & prices"
-            maxLength={KNOWLEDGE_LIMITS.maxNameChars}
-            disabled={isAddingText}
-          />
-          <Textarea
-            value={textBody}
-            onChange={(e) => setTextBody(e.target.value)}
-            placeholder="Paste or type the information your agent should know…"
-            className="min-h-32 max-h-80 overflow-y-auto"
-            disabled={isAddingText}
-            aria-invalid={textTooLong || undefined}
-          />
-          <div className="flex items-center justify-between gap-2">
-            <p className={cn('text-xs', textTooLong ? 'text-destructive' : 'text-muted-foreground')}>
-              {textBody.length.toLocaleString()} / {KNOWLEDGE_LIMITS.maxTextChars.toLocaleString()} characters
-            </p>
-            <Button onClick={() => void handleAddText()} disabled={!canAddText} className="shrink-0">
-              {isAddingText ? <Loader2 className="size-4 animate-spin" /> : <Type className="size-4" />}
-              <span className="ml-1.5">{isAddingText ? 'Adding…' : 'Add text'}</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Document List */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-base">Knowledge Base</CardTitle>
-            <CardDescription>Files, pages and text your agent can reference.</CardDescription>
-          </div>
-          <Button variant="ghost" size="sm" onClick={() => void refetch()} title="Refresh">
-            <RefreshCw className={cn('size-3.5', isLoading && 'animate-spin')} />
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {isLoading && docs.length === 0 ? (
-            <div className="space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-14 rounded-lg" />
-              ))}
-            </div>
-          ) : docs.length === 0 ? (
-            <div className="py-12 text-center">
-              <FileText className="size-8 text-muted-foreground mx-auto mb-3" />
-              <p className="text-sm font-medium">No documents yet</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Upload files, add pages or paste text to help your agent answer questions.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
+        {firstLoad ? (
+          <Card className="py-0">
+            {/* About five rows: closer to a typical list (69 px a row) than the empty state, so less moves when it arrives. */}
+            <OrbLoader label="Loading documents…" className="min-h-[360px]" />
+          </Card>
+        ) : docs.length === 0 ? (
+          <Card className="py-0">
+            <EmptyState
+              bare
+              icon={FileText}
+              title="No documents yet"
+              description="Upload files, add pages or paste text to help your agent answer questions."
+              className="py-10"
+            />
+          </Card>
+        ) : (
+          <Card className="gap-0 py-0">
+            <ul className={cn('transition-opacity duration-200', refreshing && 'opacity-60')} aria-busy={refreshing || undefined}>
               {docs.map((doc) => (
                 <DocRow
                   key={doc.id}
@@ -324,15 +279,82 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
                   }
                 />
               ))}
-            </div>
-          )}
-          {usage && usage.prompt_chars_used > 0 && (
-            <p className="mt-3 text-xs text-muted-foreground">
-              Always included: {usage.prompt_chars_used.toLocaleString()} of {usage.prompt_chars_limit.toLocaleString()} characters.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+            </ul>
+            {usage && usage.prompt_chars_used > 0 && (
+              <p className="border-t border-rule px-4 py-3 text-xs text-muted-foreground tabular-nums sm:px-5">
+                Always included: {usage.prompt_chars_used.toLocaleString()} of {usage.prompt_chars_limit.toLocaleString()} characters.
+              </p>
+            )}
+          </Card>
+        )}
+      </section>
+
+      {/* Add URL */}
+      <FormSection title="Add a web page" description="Import a public web page into your knowledge base.">
+        <div className="flex gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Link2 className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Input
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              placeholder="https://example.com/faq"
+              aria-label="Web page address"
+              className="pl-9"
+              inputMode="url"
+              maxLength={2048}
+              disabled={isAddingUrl}
+              onKeyDown={(e) => e.key === 'Enter' && void handleAddUrl()}
+            />
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => void handleAddUrl()}
+            disabled={!urlInput.trim()}
+            loading={isAddingUrl}
+            loadingText="Adding…"
+            className="h-10"
+          >
+            Add URL
+          </Button>
+        </div>
+      </FormSection>
+
+      {/* Import a whole website */}
+      <WebsiteImportCard hook={websiteHook} maxPages={usage?.crawl_max_pages ?? 25} />
+
+      {/* Add text */}
+      <FormSection title="Add text" description="Paste opening hours, prices, policies or FAQs directly.">
+        <Field label="Name" htmlFor="kb-text-name">
+          <Input
+            id="kb-text-name"
+            value={textName}
+            onChange={(e) => setTextName(e.target.value)}
+            placeholder="e.g. Opening hours & prices"
+            maxLength={KNOWLEDGE_LIMITS.maxNameChars}
+            disabled={isAddingText}
+          />
+        </Field>
+        <Field label="Text" htmlFor="kb-text-body">
+          <Textarea
+            id="kb-text-body"
+            value={textBody}
+            onChange={(e) => setTextBody(e.target.value)}
+            placeholder="Paste or type the information your agent should know…"
+            className="min-h-32 max-h-80 overflow-y-auto"
+            disabled={isAddingText}
+            aria-invalid={textTooLong || undefined}
+          />
+        </Field>
+        <div className="flex items-center justify-between gap-3">
+          <p className={cn('text-xs tabular-nums', textTooLong ? 'text-destructive' : 'text-muted-foreground')}>
+            {textBody.length.toLocaleString()} / {KNOWLEDGE_LIMITS.maxTextChars.toLocaleString()} characters
+          </p>
+          <Button variant="outline" onClick={() => void handleAddText()} disabled={!canAddText} loading={isAddingText} loadingText="Adding…">
+            <Type aria-hidden="true" />
+            Add text
+          </Button>
+        </div>
+      </FormSection>
 
       {/* Ask the knowledge base */}
       <KnowledgeTestCard disabled={!hasKnowledge} />
@@ -345,23 +367,26 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
       />
 
       {/* Tips */}
-      <Card className="border-dashed">
-        <CardContent className="py-4 flex gap-3">
-          <Info className="size-4 text-muted-foreground mt-0.5 shrink-0" />
-          <div className="text-xs text-muted-foreground space-y-1">
-            <p>Your agent uses these documents to answer caller questions accurately.</p>
-            <p>
-              Turn on &quot;Always include&quot; for short, key facts (opening hours, prices, address) so your agent knows them on every call.
-              Web pages and imported websites are re-read automatically every week.
-            </p>
-            <p>
-              Accepted: {KNOWLEDGE_LIMITS.typesLabel} up to {KNOWLEDGE_LIMITS.maxFileMb} MB each, public web pages, and pasted
-              text up to {KNOWLEDGE_LIMITS.maxTextChars.toLocaleString()} characters.
-            </p>
-            <p>For best results: use clear, well-structured, text-based documents. Scanned images can&apos;t be read.</p>
-          </div>
-        </CardContent>
-      </Card>
+      <section aria-label="Tips for your knowledge base" className="rounded-2xl bg-secondary p-5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className={cn(OVERLINE, 'mr-1.5')}>Accepted</span>
+          {[...acceptedTypes, 'Web page', 'Text'].map((t) => (
+            <Badge key={t} variant="outline">{t}</Badge>
+          ))}
+        </div>
+        <p className="mt-2.5 text-xs leading-[18px] text-muted-foreground">
+          Files up to {KNOWLEDGE_LIMITS.maxFileMb} MB each, public web pages, and pasted text up to{' '}
+          {KNOWLEDGE_LIMITS.maxTextChars.toLocaleString()} characters.
+        </p>
+        <div className="mt-4 space-y-1.5 border-t border-[#e2e0e8] pt-4 text-[13px] leading-[19px] text-muted-foreground">
+          <p>Your agent uses these documents to answer caller questions accurately.</p>
+          <p>
+            Turn on &quot;Always include&quot; for short, key facts (opening hours, prices, address) so your agent knows them on every call.
+            Web pages and imported websites are re-read automatically every week.
+          </p>
+          <p>For best results: use clear, well-structured, text-based documents. Scanned images can&apos;t be read.</p>
+        </div>
+      </section>
 
       {/* Delete confirmation dialog */}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && !isDeleting && setDeleteTarget(null)}>
@@ -373,9 +398,8 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>Cancel</Button>
-            <Button variant="destructive" onClick={() => void handleDelete()} disabled={isDeleting}>
-              {isDeleting && <Loader2 className="size-4 animate-spin mr-1.5" />}
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>Cancel</Button>
+            <Button variant="destructive-solid" onClick={() => void handleDelete()} loading={isDeleting} loadingText="Deleting…">
               Delete
             </Button>
           </DialogFooter>
@@ -387,77 +411,70 @@ export function TabKnowledge({ hook }: TabKnowledgeProps) {
 
 function UploadProgress({ item }: { item: UploadingFile }) {
   return (
-    <div className="space-y-1.5 rounded-lg border p-3 bg-muted/30">
-      <div className="flex items-center gap-2 text-sm">
-        {item.status === 'error' ? (
-          <AlertCircle className="size-4 text-destructive shrink-0" />
-        ) : item.status === 'done' ? (
-          <CheckCircle2 className="size-4 text-green-500 shrink-0" />
-        ) : (
-          <Loader2 className="size-4 animate-spin shrink-0" />
-        )}
-        <span className="truncate flex-1 font-medium">{item.name}</span>
-        <span className="text-xs text-muted-foreground shrink-0">{STAGE_LABEL[item.stage]}</span>
+    <li className="space-y-2 border-b border-rule px-4 py-3 last:border-b-0">
+      <div className="flex items-center gap-3 text-sm">
+        <span className="grid size-5 shrink-0 place-items-center">
+          {item.status === 'error' ? (
+            <AlertCircle className="size-4 text-destructive" aria-hidden="true" />
+          ) : item.status === 'done' ? (
+            <CheckCircle2 className="size-4 text-success-dot" aria-hidden="true" />
+          ) : (
+            <OrbInline state="weaving" />
+          )}
+        </span>
+        <span className="min-w-0 flex-1 truncate font-medium">{item.name}</span>
+        <span className={cn('shrink-0 text-xs', item.status === 'error' ? 'text-destructive' : 'text-muted-foreground')}>
+          {STAGE_LABEL[item.stage]}
+        </span>
       </div>
       {item.status === 'uploading' && (
-        <Progress value={item.progress} className="h-1" />
+        <Progress value={item.progress} aria-label={`Upload progress for ${item.name}`} className="pl-8" />
       )}
       {item.status === 'error' && item.error && (
-        <p className="text-xs text-destructive">{item.error}</p>
+        <p className="pl-8 text-xs text-destructive">{item.error}</p>
       )}
-    </div>
+    </li>
   )
 }
-
-const STATUS_STYLE = {
-  processing: 'border-blue-200 bg-blue-50 text-blue-700',
-  stalled: 'border-amber-300 bg-amber-50 text-amber-800',
-  ready: 'border-green-200 bg-green-50 text-green-700',
-  failed: 'border-red-200 bg-red-50 text-red-700',
-} as const
 
 function StatusBadge({ doc }: { doc: KnowledgeDoc }) {
   if (doc.deleting_at) {
     return (
-      <Badge variant="outline" className="gap-1 text-xs" title="This document is being removed. Delete it again if it stays here.">
-        <Loader2 aria-hidden="true" className="animate-spin" />
+      <StatusChip tone="muted" icon={<OrbInline state="working" />} title="This document is being removed. Delete it again if it stays here.">
         Removing
-      </Badge>
+      </StatusChip>
     )
   }
   if (doc.status === 'processing') {
     const stalled = !isProcessing(doc)
-    return (
-      <Badge
-        variant="outline"
-        className={cn('gap-1 text-xs', stalled ? STATUS_STYLE.stalled : STATUS_STYLE.processing)}
-        title={stalled ? 'Processing stopped before it finished. Retry to continue.' : 'Uploading to your agent'}
-      >
-        {stalled ? <Clock aria-hidden="true" /> : <Loader2 aria-hidden="true" className="animate-spin" />}
-        {stalled ? 'Stalled' : 'Processing'}
-      </Badge>
+    return stalled ? (
+      <StatusChip tone="warning" icon={<Clock aria-hidden="true" />} title="Processing stopped before it finished. Retry to continue.">
+        Stalled
+      </StatusChip>
+    ) : (
+      <StatusChip tone="neutral" icon={<OrbInline state="weaving" />} title="Uploading to your agent">
+        Processing
+      </StatusChip>
     )
   }
   if (doc.status === 'failed') {
     return (
-      <Badge variant="outline" className={cn('gap-1 text-xs', STATUS_STYLE.failed)}>
-        <AlertCircle aria-hidden="true" />
+      <StatusChip tone="danger" icon={<AlertCircle aria-hidden="true" />}>
         Failed
-      </Badge>
+      </StatusChip>
     )
   }
   return (
-    <Badge variant="outline" className={cn('gap-1 text-xs', STATUS_STYLE.ready)}>
-      <CheckCircle2 aria-hidden="true" />
+    <StatusChip tone="success" dot>
       Ready
-    </Badge>
+    </StatusChip>
   )
 }
 
 function AttachedIndicator({ doc }: { doc: KnowledgeDoc }) {
   if (doc.attached_at && doc.status === 'ready') {
     return (
-      <span className="inline-flex items-center gap-1 text-xs text-green-700" title={`Added to your agent on ${formatDate(doc.attached_at)}`}>
+      <span className="inline-flex items-center gap-1" title={`Added to your agent on ${formatDate(doc.attached_at)}`}>
         <Bot className="size-3.5" aria-hidden="true" />
         On your agent
       </span>
@@ -465,7 +482,7 @@ function AttachedIndicator({ doc }: { doc: KnowledgeDoc }) {
   }
   if (doc.status === 'ready') {
     return (
-      <span className="inline-flex items-center gap-1 text-xs text-amber-700" title="This document is not part of your agent yet. Retry to add it.">
+      <span className="inline-flex items-center gap-1 text-warning" title="This document is not part of your agent yet. Retry to add it.">
         <Bot className="size-3.5" aria-hidden="true" />
         Not on your agent yet
       </span>
@@ -497,106 +514,138 @@ function DocRow({ doc, usage, isRetrying, isBusy, onRetry, onDelete, onEdit, onR
   const replaceInput = useRef<HTMLInputElement>(null)
   const pinned = doc.usage_mode === 'prompt'
   const canPin = pinned || canPinToPrompt(doc, usage)
-  const iconButton = 'p-1.5 rounded-md hover:bg-muted transition-colors disabled:opacity-50'
+  const canRefresh = settled && doc.type === 'url'
+  const canReplace = settled && FILE_TYPES.has(doc.type)
+  const canEdit = !doc.deleting_at && doc.status !== 'processing'
+  const editLabel = canEditDocumentText(doc) ? 'Edit text' : 'Rename'
+  // Chips under the name: the status chip moves here below `sm` (it sits next to the menu from `sm`).
+  const extraChips = (settled && hasRagBadge(doc.rag_status)) || pinned
+  const showError = doc.status === 'failed' && !!doc.error_message
+  const showPin = settled && canPin
+  const desktopExtras = extraChips || showError || showPin || showRetry
 
-  return (
-    <div className="flex items-start gap-3 rounded-lg border p-3 hover:bg-muted/30 transition-colors">
-      <Icon className="size-5 text-muted-foreground shrink-0 mt-0.5" />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate" title={doc.url ?? doc.name}>{doc.name}</p>
-        <div className="flex flex-wrap items-center gap-2 mt-1">
+  const extras = (
+    <>
+      <div className={cn('flex flex-wrap items-center gap-1.5', !extraChips && 'sm:hidden')}>
+        <span className="contents sm:hidden">
           <StatusBadge doc={doc} />
-          {doc.size_bytes > 0 && (
-            <span className="text-xs text-muted-foreground">{formatFileSize(doc.size_bytes)}</span>
-          )}
-          <Badge variant="outline" className="text-xs">{doc.type.toUpperCase()}</Badge>
-          <AttachedIndicator doc={doc} />
-          {settled && <RagBadge status={doc.rag_status} progress={doc.rag_progress} />}
-          <UsageModeBadge doc={doc} />
-          {settled && <SyncBadge doc={doc} />}
-        </div>
-        {doc.status === 'failed' && doc.error_message && (
-          <p className="text-xs text-destructive mt-1.5">{doc.error_message}</p>
-        )}
-        {settled && canPin && (
-          <div className="mt-2 flex items-center gap-2">
-            <Switch
-              id={`kb-pin-${doc.id}`}
-              size="sm"
-              checked={pinned}
-              disabled={working}
-              onCheckedChange={(checked) => onUsageMode(checked ? 'prompt' : 'auto')}
-              aria-label={`Always include ${doc.name} in every call`}
-            />
-            <label htmlFor={`kb-pin-${doc.id}`} className="text-xs text-muted-foreground">
-              Always include (for short key facts)
-            </label>
-          </div>
-        )}
+        </span>
+        {settled && <RagBadge status={doc.rag_status} progress={doc.rag_progress} />}
+        <UsageModeBadge doc={doc} />
       </div>
-      <div className="flex items-center gap-1 shrink-0">
-        {showRetry && (
+      {showError && (
+        <p className="flex items-start gap-1.5 text-xs text-destructive">
+          <AlertCircle className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+          {doc.error_message}
+        </p>
+      )}
+      {showPin && (
+        <div className="flex items-center gap-2">
+          <Switch
+            id={`kb-pin-${doc.id}`}
+            size="sm"
+            checked={pinned}
+            disabled={working}
+            onCheckedChange={(checked) => onUsageMode(checked ? 'prompt' : 'auto')}
+            aria-label={`Always include ${doc.name} in every call`}
+          />
+          <label htmlFor={`kb-pin-${doc.id}`} className="text-xs text-muted-foreground">
+            Always include (for short key facts)
+          </label>
+        </div>
+      )}
+      {showRetry && (
+        <div>
           <Button
             variant="outline"
             size="sm"
+            className="tap-44"
             onClick={onRetry}
-            disabled={working}
+            disabled={working && !isRetrying}
+            loading={isRetrying}
+            loadingText="Retrying…"
             title={doc.status === 'ready' ? (doc.attached_at ? 'Index this document again' : 'Add this document to your agent') : 'Try processing this document again'}
           >
-            {isRetrying ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCw className="size-3.5" />}
-            <span className="ml-1">{isRetrying ? 'Retrying…' : 'Retry'}</span>
+            <RotateCw aria-hidden="true" />
+            Retry
           </Button>
-        )}
-        {isBusy && <Loader2 className="size-4 animate-spin text-muted-foreground" aria-label="Saving" />}
-        {settled && doc.type === 'url' && (
-          <button type="button" onClick={onRefresh} disabled={working} className={iconButton} title="Re-read this page now" aria-label={`Refresh ${doc.name}`}>
-            <RefreshCcw className="size-4" />
-          </button>
-        )}
-        {settled && FILE_TYPES.has(doc.type) && (
-          <>
-            <button type="button" onClick={() => replaceInput.current?.click()} disabled={working} className={iconButton} title="Replace with a new version of the file" aria-label={`Replace the file ${doc.name}`}>
-              <FileUp className="size-4" />
-            </button>
-            <input
-              ref={replaceInput}
-              type="file"
-              accept={KNOWLEDGE_LIMITS.accept}
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                e.target.value = ''
-                if (!file) return
-                const problem = validateKnowledgeFile(file)
-                if (problem) toast.error(`"${file.name}": ${problem}`)
-                else onReplace(file)
-              }}
-            />
-          </>
-        )}
-        {!doc.deleting_at && doc.status !== 'processing' && (
-          <button
-            type="button"
-            onClick={onEdit}
-            disabled={working}
-            className={iconButton}
-            title={canEditDocumentText(doc) ? 'Edit text' : 'Rename'}
-            aria-label={canEditDocumentText(doc) ? `Edit ${doc.name}` : `Rename ${doc.name}`}
-          >
-            <Pencil className="size-4" />
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={onDelete}
-          disabled={working}
-          className="p-1.5 rounded-md hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-50"
-          title="Delete document"
-          aria-label={`Delete ${doc.name}`}
-        >
-          <Trash2 className="size-4" />
-        </button>
+        </div>
+      )}
+    </>
+  )
+
+  return (
+    <li className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 border-b border-rule px-4 py-3.5 last:border-b-0 sm:px-5">
+      <span className="mt-0.5 grid size-9 place-items-center rounded-full bg-secondary" aria-hidden="true">
+        <Icon className="size-4 text-foreground" />
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-sm leading-5 font-medium" title={doc.url ?? doc.name}>{doc.name}</p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-4 text-muted-foreground">
+          <span className="rounded-md bg-secondary px-1.5 py-0.5 font-mono text-[10px] leading-3 tracking-wide uppercase">{doc.type}</span>
+          {doc.size_bytes > 0 && <span className="tabular-nums">{formatFileSize(doc.size_bytes)}</span>}
+          <AttachedIndicator doc={doc} />
+          {settled && <SyncBadge doc={doc} />}
+        </div>
       </div>
-    </div>
+      <div className="-mr-1.5 flex items-center gap-1.5">
+        {isBusy && <OrbInline state="working" label="Saving" />}
+        <span className="hidden sm:contents">
+          <StatusBadge doc={doc} />
+        </span>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label={`Actions for ${doc.name}`}
+            disabled={working}
+            render={<Button variant="ghost" size="icon-sm" className="tap-44 text-muted-foreground hover:text-foreground aria-expanded:text-foreground" />}
+          >
+            <MoreHorizontal />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-60">
+            <DropdownMenuGroup>
+              {canRefresh && (
+                <DropdownMenuItem onClick={onRefresh}>
+                  <RefreshCcw /> Re-read this page now
+                </DropdownMenuItem>
+              )}
+              {canReplace && (
+                <DropdownMenuItem onClick={() => replaceInput.current?.click()}>
+                  <FileUp /> Replace with a new version
+                </DropdownMenuItem>
+              )}
+              {canEdit && (
+                <DropdownMenuItem onClick={onEdit}>
+                  <Pencil /> {editLabel}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuGroup>
+            {(canRefresh || canReplace || canEdit) && <DropdownMenuSeparator />}
+            <DropdownMenuGroup>
+              <DropdownMenuItem variant="destructive" onClick={onDelete}>
+                <Trash2 /> Delete document
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {canReplace && (
+          <input
+            ref={replaceInput}
+            type="file"
+            accept={KNOWLEDGE_LIMITS.accept}
+            className="hidden"
+            aria-label={`Replace the file ${doc.name}`}
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              e.target.value = ''
+              if (!file) return
+              const problem = validateKnowledgeFile(file)
+              if (problem) toast.error(`"${file.name}": ${problem}`)
+              else onReplace(file)
+            }}
+          />
+        )}
+      </div>
+      <div className={cn('col-start-2 col-end-4 mt-2.5 space-y-2.5', !desktopExtras && 'sm:hidden')}>{extras}</div>
+    </li>
   )
 }

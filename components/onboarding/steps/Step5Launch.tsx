@@ -1,13 +1,19 @@
 'use client'
-// Step 6 — Launch & Pricing
-import { useState, useMemo } from 'react'
+// Step 4 — Launch & Pricing
+import { useEffect, useRef, useState } from 'react'
 import {
-  Rocket, Check, Building2, Bot, Mic2, CreditCard,
-  ArrowLeft, Zap, Shield, Star, Layers, Gift, AlertTriangle, Globe,
+  Rocket, Check, Bot, CreditCard, ArrowLeft, ArrowRight, AlertTriangle, Globe,
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Switch } from '@/components/ui/switch'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Eyebrow } from '@/components/shared/Eyebrow'
+import { LiveDot } from '@/components/shared/LiveDot'
+import { Chip, OptionCard } from '@/components/shared/OptionCard'
+import { OrbLoader } from '@/components/shared/OrbLoader'
+import { SectionHeading } from '@/components/shared/SectionHeading'
 import { TestAgentPanel } from '@/components/agent/TestAgentPanel'
 import { startWebsiteImportInBackground, type WebsiteImportStart } from '@/hooks/useKnowledgeWebsite'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
@@ -15,90 +21,13 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { PLANS } from '@/types'
 import type { Plan, Organization } from '@/types'
+import { StepBody, StepHeader } from '../StepIndicator'
 
 interface Step6LaunchProps {
   organization: Organization
 }
 
-// ─── Confetti ─────────────────────────────────────────────────────────────────
-const CONFETTI_COLORS = [
-  '#9333ea', '#a855f7', '#c084fc',
-  '#ec4899', '#f472b6',
-  '#3b82f6', '#60a5fa',
-  '#f59e0b', '#fbbf24',
-  '#10b981', '#34d399',
-  '#f97316', '#fb923c',
-  '#ffffff',
-]
-
-interface ConfettiParticle {
-  id: number; left: number; delay: number; duration: number
-  color: string; size: number; rotation: number; isCircle: boolean; sway: number
-}
-
-function useConfettiParticles(count = 130): ConfettiParticle[] {
-  return useMemo(() =>
-    Array.from({ length: count }, (_, i) => ({
-      id: i,
-      left: Math.random() * 100,
-      delay: Math.random() * 1.4,
-      duration: 2 + Math.random() * 2,
-      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
-      size: 6 + Math.random() * 10,
-      rotation: Math.random() * 360,
-      isCircle: Math.random() > 0.55,
-      sway: (Math.random() > 0.5 ? 1 : -1) * (30 + Math.random() * 70),
-    })),
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  [])
-}
-
-function Confetti({ active }: { active: boolean }) {
-  const particles = useConfettiParticles(130)
-  if (!active) return null
-  return (
-    <div className="pointer-events-none fixed inset-0 z-[9999] overflow-hidden">
-      <style>{`
-        @keyframes confettiFall {
-          0%   { transform: translateY(-12px) rotate(0deg) translateX(0px); opacity: 1; }
-          85%  { opacity: 1; }
-          100% { transform: translateY(105vh) rotate(720deg) translateX(var(--sway)); opacity: 0; }
-        }
-      `}</style>
-      {particles.map((p) => (
-        <div key={p.id} style={{
-          position: 'absolute', left: `${p.left}%`, top: '-12px',
-          width: p.size, height: p.isCircle ? p.size : p.size * 0.45,
-          backgroundColor: p.color, borderRadius: p.isCircle ? '50%' : '2px',
-          transform: `rotate(${p.rotation}deg)`,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ['--sway' as any]: `${p.sway}px`,
-          animation: `confettiFall ${p.duration}s ease-in ${p.delay}s forwards`,
-        }} />
-      ))}
-    </div>
-  )
-}
-
-// ─── Summary Row ──────────────────────────────────────────────────────────────
-function SummaryRow({ icon: Icon, label, value, muted = false }: {
-  icon: React.ElementType; label: string; value: string; muted?: boolean
-}) {
-  return (
-    <div className="flex items-center justify-between py-2.5">
-      <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
-        <Icon className="h-4 w-4 flex-shrink-0" />
-        {label}
-      </div>
-      <span className={cn('text-sm font-medium', muted ? 'text-muted-foreground italic' : 'text-foreground')}>
-        {value}
-      </span>
-    </div>
-  )
-}
-
-// ─── Plan Cards (horizontal stacked) ─────────────────────────────────────────
-interface PlanCardProps { id: Plan; selected: boolean; onSelect: () => void; annual: boolean }
+// ─── Plan cards ───────────────────────────────────────────────────────────────
 
 // Annual billing = pay for 10 months (2 months free).
 function priceFor(id: Plan, annual: boolean): number {
@@ -106,287 +35,196 @@ function priceFor(id: Plan, annual: boolean): number {
   return annual ? Math.round((monthly * 10) / 12) : monthly
 }
 
-// Generic light card used for the self-serve paid tiers (Starter, Business).
-function LightPlanCard({ id, selected, onSelect, annual, icon: Icon }: PlanCardProps & { icon: React.ElementType }) {
+interface PlanCardProps {
+  id: Plan
+  selected: boolean
+  onSelect: () => void
+  annual: boolean
+  /** Chip next to the name ("Our pick", "No card required"). */
+  badge?: React.ReactNode
+  disabled?: boolean
+  className?: string
+}
+
+/**
+ * A plan as a selectable white panel (radio): name, price, billing note and features.
+ * Selected = ink 2 px ring + the brand corner dot (OptionCard).
+ *
+ * Every card has the same five rows (name, tagline, price + note, rule, features) on the parent
+ * grid's rows (subgrid), so prices, rules and lists line up across a row whatever each card holds.
+ * The grid has no row gap (a subgrid shares it, and an empty tagline row would keep it): cards are
+ * spaced by their own bottom margin, and the last one passes `mb-0`.
+ * The radio's accessible name stays short: name, price, billing note and the minutes allowance;
+ * the tagline and the rest of the list are visual detail (OptionCard has no aria-describedby).
+ */
+function PlanCard({ id, selected, onSelect, annual, badge, disabled, className }: PlanCardProps) {
   const p = PLANS[id]
-  const price = priceFor(id, annual)
+  const isTrial = id === 'trial'
+  const isCustom = id === 'custom'
+  const isPaid = !isTrial && !isCustom
+
+  const name = isTrial ? 'Free Trial' : p.name
+  const tagline = isTrial ? 'Set everything up, no payment' : isCustom ? 'For large teams & agencies' : null
+  const price = isTrial ? '$0' : isCustom ? `$${p.price_monthly}+` : `$${priceFor(id, annual)}`
+  const note = isTrial
+    ? `${p.minutes_limit} minutes · 14 days`
+    : isCustom
+      ? 'Volume pricing · let\'s talk'
+      : annual
+        ? 'billed annually · 2 months free'
+        : '14-day free trial'
+
   return (
-    <div
-      onClick={onSelect}
+    <OptionCard
+      selected={selected}
+      onSelect={onSelect}
+      // leading-6 = the badge's height, so a badge never makes one title row taller than another.
+      title={<span className="text-[15px] leading-6">{name}</span>}
+      badge={badge}
+      disabled={disabled}
       className={cn(
-        'group cursor-pointer overflow-hidden rounded-2xl border-2 transition-all duration-200',
-        selected
-          ? 'border-primary shadow-lg ring-2 ring-primary ring-offset-2'
-          : 'border-border hover:border-purple-300 hover:shadow-md'
+        'row-span-5 mb-3 grid grid-rows-subgrid gap-0 p-5',
+        !selected && 'bg-white shadow-hair hover:bg-band',
+        className
       )}
     >
-      <div className="flex flex-col sm:flex-row sm:min-h-[130px] sm:items-stretch">
-        {/* Left identity panel */}
-        <div className="flex w-full sm:w-52 sm:flex-shrink-0 flex-col justify-between bg-gray-50 p-5 transition-colors group-hover:bg-gray-100/70">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-200">
-            <Icon className="h-4.5 w-4.5 text-gray-500" />
-          </div>
-          <div>
-            <p className="text-lg font-bold text-foreground">{p.name}</p>
-            <p className="text-xs text-muted-foreground">{p.minutes_limit.toLocaleString()} minutes/month</p>
-          </div>
-          <div>
-            <span className="text-3xl font-black text-foreground">${price}</span>
-            <span className="ml-1 text-xs text-muted-foreground">/ month</span>
-            <p className="text-[11px] text-muted-foreground">
-              {annual ? 'billed annually · 2 months free' : '14-day free trial'}
-            </p>
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div className="hidden sm:block w-px flex-shrink-0 bg-border" />
-
-        {/* Features + CTA */}
-        <div className="flex flex-1 flex-col sm:flex-row sm:items-center gap-4 px-6 py-5">
-          <ul className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-            {p.features.map((f) => (
-              <li key={f} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Check className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
-                {f}
-              </li>
-            ))}
-          </ul>
-          <Button
-            variant="outline"
-            onClick={(e) => { e.stopPropagation(); onSelect() }}
-            className={cn('shrink-0 px-5', selected && 'border-primary text-primary')}
+      {/* Rendered (empty) without a tagline too: the rows must match from card to card. */}
+      <span aria-hidden="true" className={cn('text-[13px] leading-[19px] text-muted-foreground', tagline && 'mt-0.5')}>
+        {tagline}
+      </span>
+      <span className="mt-4 flex flex-col">
+        <span className="flex flex-wrap items-baseline gap-x-1.5">
+          <span className="text-[28px] leading-8 font-semibold tracking-[-0.02em] tabular-nums">{price}</span>
+          {!isTrial && <span className="text-[13px] leading-[19px] text-muted-foreground">/ month</span>}
+          {isPaid && annual && (
+            <>
+              <s aria-hidden="true" className="text-[13px] leading-[19px] text-muted-foreground tabular-nums">
+                ${p.price_monthly}
+              </s>
+              <span className="sr-only">(normally ${p.price_monthly} a month)</span>
+            </>
+          )}
+        </span>
+        <span className="mt-1 text-xs leading-4 text-muted-foreground">{note}</span>
+      </span>
+      <span aria-hidden="true" className="my-4 block h-px w-full bg-rule" />
+      <span className={cn('grid w-full content-start gap-x-6 gap-y-2', isCustom && 'sm:grid-cols-2')}>
+        {p.features.map((f, i) => (
+          <span
+            key={f}
+            // The first line is the minutes allowance (the trial's note already says it).
+            aria-hidden={isTrial || i > 0 ? true : undefined}
+            className="flex items-start gap-2 text-[13px] leading-[19px] text-foreground"
           >
-            {selected ? 'Selected' : 'Choose'}
-          </Button>
-        </div>
-      </div>
-    </div>
+            <Check className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            {f}
+          </span>
+        ))}
+      </span>
+    </OptionCard>
   )
 }
 
-function ProPlanCard({ selected, onSelect, annual }: PlanCardProps) {
-  const monthly = PLANS.pro.price_monthly
-  const price   = priceFor('pro', annual)
-
+/**
+ * Monthly / yearly as the segmented pill (tinted track, white active segment). A radio group, not
+ * tabs: it only changes the prices shown, there is no panel to switch to. Arrow keys select.
+ */
+function BillingPeriod({ annual, onChange, disabled }: { annual: boolean; onChange: (annual: boolean) => void; disabled?: boolean }) {
+  const options = [
+    { label: 'Monthly', annual: false },
+    { label: 'Yearly', annual: true },
+  ]
   return (
-    <div
-      onClick={onSelect}
-      className={cn(
-        'group cursor-pointer overflow-hidden rounded-2xl transition-all duration-200',
-        'bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-700',
-        'shadow-xl shadow-purple-500/25',
-        selected
-          ? 'ring-4 ring-white/70 ring-offset-2 ring-offset-purple-700 scale-[1.01]'
-          : 'hover:shadow-purple-500/40 hover:scale-[1.005]'
-      )}
-    >
-      {/* Most Popular strip */}
-      <div className="flex items-center justify-center gap-1.5 bg-white/15 py-1.5 text-[11px] font-bold uppercase tracking-widest text-white">
-        <Star className="h-3 w-3 fill-current text-yellow-300" />
-        Most Popular
-        <Star className="h-3 w-3 fill-current text-yellow-300" />
-      </div>
-
-      <div className="flex flex-col sm:flex-row sm:min-h-[130px] sm:items-stretch">
-        {/* Left identity */}
-        <div className="flex w-full sm:w-52 sm:flex-shrink-0 flex-col justify-between bg-white/10 p-5 backdrop-blur-sm">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/20">
-            <Zap className="h-4.5 w-4.5 text-yellow-300" />
-          </div>
-          <div>
-            <p className="text-lg font-bold text-white">Pro</p>
-            <p className="text-xs text-purple-200">{PLANS.pro.minutes_limit.toLocaleString()} minutes/month</p>
-          </div>
-          <div>
-            <span className="text-3xl font-black text-white">${price}</span>
-            <span className="ml-1 text-xs text-purple-200">/ month</span>
-            {annual ? (
-              <p className="text-[11px] text-purple-300 mt-0.5">
-                <span className="line-through opacity-60">${monthly}/mo</span> · 2 months free
-              </p>
-            ) : (
-              <p className="text-[11px] text-purple-300">14-day free trial</p>
+    <div role="radiogroup" aria-label="Billing period" className="inline-flex h-9 items-center gap-0.5 rounded-full bg-secondary p-1">
+      {options.map((o) => {
+        const on = o.annual === annual
+        return (
+          <Chip
+            key={o.label}
+            role="radio"
+            pressed={on}
+            onClick={() => onChange(o.annual)}
+            disabled={disabled}
+            className={cn(
+              'h-7 px-3 font-medium',
+              on
+                ? 'bg-white text-foreground shadow-pill hover:bg-white'
+                : 'bg-transparent text-muted-foreground hover:bg-transparent hover:text-foreground'
             )}
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div className="hidden sm:block w-px flex-shrink-0 bg-white/20" />
-
-        {/* Features + CTA */}
-        <div className="flex flex-1 flex-col sm:flex-row sm:items-center gap-4 px-6 py-5">
-          <ul className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-            {PLANS.pro.features.map((f) => (
-              <li key={f} className="flex items-center gap-1.5 text-xs text-purple-100">
-                <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-white/25">
-                  <Check className="h-2.5 w-2.5 text-white" />
-                </div>
-                {f}
-              </li>
-            ))}
-          </ul>
-          <button
-            onClick={(e) => { e.stopPropagation(); onSelect() }}
-            className="shrink-0 rounded-xl bg-white px-5 py-2.5 text-sm font-bold text-purple-700 shadow-lg transition-all hover:bg-purple-50 hover:shadow-xl active:scale-95"
           >
-            Start free trial
-          </button>
-        </div>
-      </div>
+            {o.label}
+          </Chip>
+        )
+      })}
     </div>
   )
 }
 
-function CustomPlanCard({ selected, onSelect }: PlanCardProps) {
-  return (
-    <div
-      onClick={onSelect}
-      className={cn(
-        'group cursor-pointer overflow-hidden rounded-2xl border-2 transition-all duration-200',
-        'bg-gray-950',
-        selected
-          ? 'border-purple-500 ring-2 ring-purple-500/40 ring-offset-2 shadow-[0_0_30px_rgba(147,51,234,0.2)]'
-          : 'border-gray-800 hover:border-purple-700/70 hover:shadow-[0_0_20px_rgba(147,51,234,0.12)]'
-      )}
-    >
-      {/* Top neon accent bar */}
-      <div className="h-0.5 w-full bg-gradient-to-r from-transparent via-purple-500 to-transparent opacity-70" />
-
-      <div className="flex flex-col sm:flex-row sm:min-h-[130px] sm:items-stretch">
-        {/* Left identity */}
-        <div className="flex w-full sm:w-52 sm:flex-shrink-0 flex-col justify-between border-r border-gray-800 bg-black/30 p-5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-900/60">
-            <Shield className="h-4.5 w-4.5 text-purple-400" />
-          </div>
-          <div>
-            <p className="text-lg font-bold text-white">Custom</p>
-            <p className="text-xs text-gray-400">For large teams & agencies</p>
-          </div>
-          <div>
-            <span className="text-3xl font-black text-white">${PLANS.custom.price_monthly}+</span>
-            <span className="ml-1 text-xs text-gray-400">/ month</span>
-            <p className="text-[11px] text-gray-500">Volume pricing · let&apos;s talk</p>
-          </div>
-        </div>
-
-        {/* Features + CTA */}
-        <div className="flex flex-1 flex-col sm:flex-row sm:items-center gap-4 px-6 py-5">
-          <ul className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-            {PLANS.custom.features.map((f) => (
-              <li key={f} className="flex items-center gap-1.5 text-xs text-gray-400">
-                <div className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-purple-900/60">
-                  <Check className="h-2.5 w-2.5 text-purple-400" />
-                </div>
-                {f}
-              </li>
-            ))}
-          </ul>
-          {/* Custom button — no shadcn variant="outline" to avoid white-on-white */}
-          <button
-            onClick={(e) => { e.stopPropagation(); onSelect() }}
-            className="shrink-0 rounded-xl border border-purple-600/50 bg-purple-950/60 px-5 py-2.5 text-sm font-semibold text-purple-300 transition-all hover:border-purple-500 hover:bg-purple-900/60 hover:text-purple-200 hover:shadow-[0_0_12px_rgba(147,51,234,0.3)] active:scale-95"
-          >
-            Contact sales →
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Free Trial card (no card required) ──────────────────────────────────────
-function TrialPlanCard({ selected, onSelect }: { selected: boolean; onSelect: () => void }) {
-  const p = PLANS.trial
-  return (
-    <div
-      onClick={onSelect}
-      className={cn(
-        'group cursor-pointer overflow-hidden rounded-2xl border-2 transition-all duration-200',
-        selected
-          ? 'border-primary bg-purple-50 ring-2 ring-primary ring-offset-2 shadow-lg'
-          : 'border-emerald-300 bg-emerald-50/40 hover:border-emerald-400 hover:shadow-md'
-      )}
-    >
-      <div className="flex items-center justify-center gap-1.5 bg-emerald-500/10 py-1.5 text-[11px] font-bold uppercase tracking-widest text-emerald-700">
-        <Star className="h-3 w-3 fill-current" /> Best to start · no card required
-      </div>
-      <div className="flex flex-col sm:flex-row sm:items-stretch">
-        <div className="flex w-full sm:w-52 sm:flex-shrink-0 flex-col justify-between p-5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100">
-            <Gift className="h-4.5 w-4.5 text-emerald-600" />
-          </div>
-          <div>
-            <p className="text-lg font-bold text-foreground">Free Trial</p>
-            <p className="text-xs text-muted-foreground">Set everything up, no payment</p>
-          </div>
-          <div>
-            <span className="text-3xl font-black text-foreground">$0</span>
-            <p className="text-[11px] text-muted-foreground">{p.minutes_limit} minutes · 14 days</p>
-          </div>
-        </div>
-        <div className="hidden sm:block w-px flex-shrink-0 bg-emerald-100" />
-        <div className="flex flex-1 flex-col sm:flex-row sm:items-center gap-4 px-6 py-5">
-          <ul className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-            {p.features.map((f) => (
-              <li key={f} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Check className="h-3.5 w-3.5 flex-shrink-0 text-emerald-500" />
-                {f}
-              </li>
-            ))}
-          </ul>
-          <Button
-            variant={selected ? 'default' : 'outline'}
-            onClick={(e) => { e.stopPropagation(); onSelect() }}
-            className={cn('shrink-0 px-5', selected ? 'purple-glow' : 'border-emerald-400 text-emerald-700 hover:bg-emerald-50')}
-          >
-            {selected ? 'Selected' : 'Start free'}
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
+/**
+ * The launch outcome replaces the form in place: bring its heading into view and give it
+ * focus (the Launch button that had focus is gone), so the result is seen and announced.
+ */
+function useOutcomeHeading() {
+  const ref = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' })
+    ref.current?.focus({ preventScroll: true })
+  }, [])
+  return ref
 }
 
 // ─── Website import problem (opt-in import at launch) ────────────────────────
 function WebsiteImportNote({ message }: { message: string }) {
   return (
-    <div role="alert" className="flex w-full max-w-lg items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left text-sm text-amber-800">
-      <Globe className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
-      <p>
-        <span className="font-medium">Your website was not imported.</span> {message} You can import it again from{' '}
-        <a href="/agent?tab=knowledge" className="font-medium underline underline-offset-2">Agent → Knowledge</a>.
-      </p>
-    </div>
+    <Alert variant="warning">
+      <Globe aria-hidden="true" />
+      <AlertTitle>Your website was not imported.</AlertTitle>
+      <AlertDescription>
+        {message} You can import it again from <a href="/agent?tab=knowledge">Agent → Knowledge</a>.
+      </AlertDescription>
+    </Alert>
   )
 }
 
 // ─── Success screen ───────────────────────────────────────────────────────────
 function SuccessScreen({ agentName, websiteImportError }: { agentName: string; websiteImportError: string | null }) {
+  const headingRef = useOutcomeHeading()
   return (
-    <div className="flex flex-col items-center justify-center gap-6 py-10 text-center">
-      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 shadow-xl shadow-purple-500/30">
-        <Rocket className="h-10 w-10 text-white" />
-      </div>
-      <div>
-        <h2 className="text-3xl font-extrabold text-foreground">You&apos;re live! 🎉</h2>
-        <p className="mt-2 text-muted-foreground">
-          {agentName ? `${agentName} is` : 'Your AI agent is'} ready to take calls.
-        </p>
-      </div>
-      {websiteImportError && <WebsiteImportNote message={websiteImportError} />}
-      {/* Last onboarding step: the agent is synced and active, so it can be tried in the browser. */}
-      <TestAgentPanel variant="onboarding" agentName={agentName} className="max-w-lg" />
-      <div className="flex flex-col gap-3 w-full max-w-xs">
-        <a
-          href="/dashboard"
-          className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-purple-500/25 transition-all hover:shadow-purple-500/40 hover:scale-[1.02]"
+    <StepBody className="space-y-6">
+      {/* The onboarding's one cover moment (spec §0). */}
+      <section aria-labelledby="onboarding-live-title" className="app-cover cover-grain overflow-hidden rounded-[28px] p-8 md:p-10">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Eyebrow tone="cover">You&apos;re live</Eyebrow>
+          <span className="inline-flex h-7 items-center gap-2 rounded-full bg-white/10 px-3 text-xs font-medium text-[#dedce0]">
+            <LiveDot onDark />
+            Live
+          </span>
+        </div>
+        <h1
+          ref={headingRef}
+          id="onboarding-live-title"
+          tabIndex={-1}
+          className="mt-10 outline-none font-heading font-title text-[30px] leading-[36px] tracking-[-0.025em] text-balance text-[#dedce0] md:mt-14 md:text-[36px] md:leading-[42px]"
         >
-          <Rocket className="h-4 w-4" />
-          Go to Dashboard
+          {agentName ? `${agentName} is` : 'Your AI agent is'} ready to take calls.
+        </h1>
+        <p className="mt-3 max-w-[48ch] text-[15px] leading-[22px] text-[#dedce0]/80">
+          Your setup is saved and your agent is switched on. Try it right here before you head to your dashboard.
+        </p>
+      </section>
+
+      {websiteImportError && <WebsiteImportNote message={websiteImportError} />}
+
+      {/* Last onboarding step: the agent is synced and active, so it can be tried in the browser. */}
+      <TestAgentPanel variant="onboarding" agentName={agentName} />
+
+      <div className="flex justify-end border-t border-rule pt-6">
+        <a href="/dashboard" className={cn(buttonVariants({ size: 'lg' }), 'w-full sm:w-auto')}>
+          Go to your dashboard
+          <ArrowRight aria-hidden="true" />
         </a>
       </div>
-    </div>
+    </StepBody>
   )
 }
 
@@ -396,50 +234,52 @@ function SuccessScreen({ agentName, websiteImportError }: { agentName: string; w
 function NotLiveScreen({ agentName, detail, checkoutUrl, websiteImportError }: {
   agentName: string; detail: string | null; checkoutUrl: string | null; websiteImportError: string | null
 }) {
+  const headingRef = useOutcomeHeading()
   return (
-    <div className="flex flex-col items-center justify-center gap-6 py-10 text-center">
-      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-xl shadow-amber-500/30">
-        <AlertTriangle className="h-10 w-10 text-white" />
-      </div>
-      <div className="max-w-md">
-        <h2 className="text-3xl font-extrabold text-foreground">Saved — not live yet</h2>
-        <p className="mt-2 text-muted-foreground">
-          Your setup is saved, but the voice provider setup did not complete, so{' '}
-          {agentName ? `${agentName} is` : 'your AI agent is'} not taking calls yet.
-          {checkoutUrl
-            ? ' Once checkout is complete, open the Agent page to retry the setup and activate your agent.'
-            : ' Open the Agent page to retry the setup and activate your agent.'}
-        </p>
-        {detail && <p className="mt-2 text-sm text-amber-700">{detail}</p>}
-      </div>
-      {websiteImportError && <WebsiteImportNote message={websiteImportError} />}
-      <div className="flex flex-col gap-3 w-full max-w-xs">
-        {checkoutUrl ? (
-          <a
-            href={checkoutUrl}
-            className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-purple-500/25 transition-all hover:shadow-purple-500/40 hover:scale-[1.02]"
-          >
-            <CreditCard className="h-4 w-4" />
-            Continue to checkout
-          </a>
-        ) : (
-          <>
-            <a
-              href="/agent"
-              className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-purple-500/25 transition-all hover:shadow-purple-500/40 hover:scale-[1.02]"
-            >
-              <Bot className="h-4 w-4" />
-              Activate my agent
+    <div>
+      <StepHeader
+        headingRef={headingRef}
+        step={4}
+        title="Saved — not live yet"
+        description={`Your setup is saved, but ${agentName ? `${agentName} is` : 'your AI agent is'} not taking calls yet.`}
+      />
+
+      <StepBody>
+        <div className="space-y-4">
+          <Alert variant="warning">
+            <AlertTriangle aria-hidden="true" />
+            <AlertTitle>The voice provider setup did not complete</AlertTitle>
+            <AlertDescription>
+              {detail && <p>{detail}</p>}
+              <p>
+                {checkoutUrl
+                  ? 'Once checkout is complete, open the Agent page to retry the setup and activate your agent.'
+                  : 'Open the Agent page to retry the setup and activate your agent.'}
+              </p>
+            </AlertDescription>
+          </Alert>
+          {websiteImportError && <WebsiteImportNote message={websiteImportError} />}
+        </div>
+
+        <div className="mt-10 flex flex-col-reverse gap-2 border-t border-rule pt-6 sm:flex-row sm:justify-end">
+          {checkoutUrl ? (
+            <a href={checkoutUrl} className={cn(buttonVariants({ size: 'lg' }), 'w-full sm:w-auto')}>
+              <CreditCard aria-hidden="true" />
+              Continue to checkout
             </a>
-            <a
-              href="/dashboard"
-              className="flex items-center justify-center gap-2 rounded-xl border border-border px-6 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              Go to Dashboard
-            </a>
-          </>
-        )}
-      </div>
+          ) : (
+            <>
+              <a href="/dashboard" className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'w-full sm:w-auto')}>
+                Go to your dashboard
+              </a>
+              <a href="/agent" className={cn(buttonVariants({ size: 'lg' }), 'w-full sm:w-auto')}>
+                <Bot aria-hidden="true" />
+                Activate my agent
+              </a>
+            </>
+          )}
+        </div>
+      </StepBody>
     </div>
   )
 }
@@ -465,7 +305,6 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
   const { plan, setPlan, setStep, agent, voice, company } = useOnboardingStore()
   const [annual, setAnnual]             = useState(false)
   const [isLaunching, setIsLaunching]   = useState(false)
-  const [showConfetti, setShowConfetti] = useState(false)
   const [outcome, setOutcome]           = useState<LaunchOutcome | null>(null)
   const [importSite, setImportSite]     = useState(false)
   const [websiteImportError, setWebsiteImportError] = useState<string | null>(null)
@@ -538,10 +377,8 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
         })
       }
 
-      setShowConfetti(true)
-
       if (data.checkout_url) {
-        // Paid plan → Stripe checkout (confetti visible briefly before redirect).
+        // Paid plan → Stripe checkout (the launch state stays visible briefly before redirect).
         // Wait (briefly) for the website import's answer: a refusal stays
         // readable for a few seconds before leaving the page.
         const checkoutUrl = data.checkout_url
@@ -566,12 +403,7 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
   }
 
   if (outcome?.kind === 'live') {
-    return (
-      <>
-        <Confetti active={showConfetti} />
-        <SuccessScreen agentName={agent.name} websiteImportError={websiteImportError} />
-      </>
-    )
+    return <SuccessScreen agentName={agent.name} websiteImportError={websiteImportError} />
   }
 
   if (outcome?.kind === 'not_live') {
@@ -585,61 +417,94 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
     )
   }
 
+  const agentLabel = agent.name || 'your agent'
+
   return (
-    <>
-      <Confetti active={showConfetti} />
+    <div>
+      <StepHeader step={4} title="You're almost ready" description="Choose a plan and launch your AI agent" />
 
-      <div className="space-y-8">
-        {/* Header */}
-        <div className="flex flex-col items-start gap-4">
-          <div className="rounded-xl bg-purple-100 p-2.5">
-            <Rocket className="h-7 w-7 text-purple-600" />
+      <StepBody>
+        {/* Plan */}
+        <section aria-labelledby="onboarding-plan-title">
+          <SectionHeading
+            title={<span id="onboarding-plan-title">Choose a plan</span>}
+            className="flex-wrap"
+            action={
+              <>
+                <BillingPeriod annual={annual} onChange={setAnnual} disabled={isLaunching} />
+                <Badge variant="brand">Two months free</Badge>
+              </>
+            }
+          />
+
+          {/* While launching, the plan sent with the request is locked: the other cards are disabled. */}
+          <div role="radiogroup" aria-labelledby="onboarding-plan-title" className="grid gap-x-3 sm:grid-cols-2">
+            <PlanCard
+              id="trial"
+              selected={plan === 'trial'}
+              onSelect={() => setPlan('trial')}
+              annual={annual}
+              badge={<Badge variant="secondary">No card required</Badge>}
+              disabled={isLaunching && plan !== 'trial'}
+            />
+            <PlanCard
+              id="starter"
+              selected={plan === 'starter'}
+              onSelect={() => setPlan('starter')}
+              annual={annual}
+              disabled={isLaunching && plan !== 'starter'}
+            />
+            <PlanCard
+              id="pro"
+              selected={plan === 'pro'}
+              onSelect={() => setPlan('pro')}
+              annual={annual}
+              badge={<Badge>Our pick</Badge>}
+              disabled={isLaunching && plan !== 'pro'}
+            />
+            <PlanCard
+              id="business"
+              selected={plan === 'business'}
+              onSelect={() => setPlan('business')}
+              annual={annual}
+              disabled={isLaunching && plan !== 'business'}
+            />
+            <PlanCard
+              id="custom"
+              selected={plan === 'custom'}
+              onSelect={() => setPlan('custom')}
+              annual={annual}
+              disabled={isLaunching && plan !== 'custom'}
+              className="mb-0 sm:col-span-2"
+            />
           </div>
-          <div>
-            <h2 className="text-2xl font-bold text-foreground">You&apos;re almost ready!</h2>
-            <p className="mt-1 text-muted-foreground">Choose a plan and launch your AI agent</p>
-          </div>
-        </div>
-
-        {/* Annual / Monthly toggle */}
-        <div className="flex items-center justify-center gap-3">
-          <span className={cn('text-sm font-medium', !annual ? 'text-foreground' : 'text-muted-foreground')}>
-            Monthly
-          </span>
-          <Switch checked={annual} onCheckedChange={setAnnual} />
-          <span className={cn('flex items-center gap-1.5 text-sm font-medium', annual ? 'text-foreground' : 'text-muted-foreground')}>
-            Annual
-            {annual && (
-              <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700">
-                2 MONTHS FREE
-              </span>
-            )}
-          </span>
-        </div>
-
-        {/* Plan cards — stacked horizontal */}
-        <div className="space-y-4">
-          <TrialPlanCard selected={plan === 'trial'} onSelect={() => setPlan('trial')} />
-          <LightPlanCard  id="starter"  icon={Layers}    selected={plan === 'starter'}  onSelect={() => setPlan('starter')}  annual={annual} />
-          <ProPlanCard    id="pro"                       selected={plan === 'pro'}      onSelect={() => setPlan('pro')}      annual={annual} />
-          <LightPlanCard  id="business" icon={Building2}  selected={plan === 'business'} onSelect={() => setPlan('business')} annual={annual} />
-          <CustomPlanCard id="custom"                     selected={plan === 'custom'}   onSelect={() => setPlan('custom')}   annual={annual} />
-        </div>
+        </section>
 
         {/* Summary */}
-        <div className="rounded-xl border border-purple-100 bg-purple-50 p-6">
-          <p className="mb-3 font-semibold text-foreground">Your setup summary</p>
-          <div className="divide-y divide-purple-100">
-            <SummaryRow icon={Building2} label="Company"      value={displayCompanyName} />
-            <SummaryRow icon={Bot}       label="Agent name"   value={agent.name ? `${agent.name} · ${agent.personality}` : '—'} />
-            <SummaryRow icon={Mic2}      label="Voice"        value={voice.voice_name || '—'} />
-            <SummaryRow icon={CreditCard} label="Plan" value={PLANS[plan].name} />
-          </div>
-        </div>
+        <section aria-labelledby="onboarding-summary-title" className="mt-10">
+          <SectionHeading title={<span id="onboarding-summary-title">Your setup summary</span>} />
+          <Card>
+            <CardContent>
+              <dl className="divide-y divide-rule">
+                {[
+                  { label: 'Company', value: displayCompanyName },
+                  { label: 'Agent name', value: agent.name ? `${agent.name} · ${agent.personality}` : '—' },
+                  { label: 'Voice', value: voice.voice_name || '—' },
+                  { label: 'Plan', value: PLANS[plan].name },
+                ].map((row) => (
+                  <div key={row.label} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
+                    <dt className="text-[13px] leading-[19px] text-muted-foreground">{row.label}</dt>
+                    <dd className="min-w-0 truncate text-right text-sm font-medium text-foreground">{row.value}</dd>
+                  </div>
+                  ))}
+              </dl>
+            </CardContent>
+          </Card>
+        </section>
 
         {/* Optional: teach the agent from the company website (non-blocking) */}
         {company.website && (
-          <div className="flex items-start gap-3 rounded-xl border border-border p-4">
+          <div className="mt-3 flex items-start gap-3 rounded-2xl bg-secondary p-4">
             <Checkbox
               id="onboarding-import-website"
               checked={importSite}
@@ -647,11 +512,11 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
               disabled={isLaunching}
               className="mt-0.5"
             />
-            <label htmlFor="onboarding-import-website" className="space-y-1 text-sm">
+            <label htmlFor="onboarding-import-website" className="grid min-w-0 gap-1 text-sm">
               <span className="flex items-center gap-1.5 font-medium text-foreground">
-                <Globe className="h-4 w-4" aria-hidden="true" /> Import my website
+                <Globe className="size-4" aria-hidden="true" /> Import my website
               </span>
-              <span className="block text-xs leading-relaxed text-muted-foreground">
+              <span className="block text-[13px] leading-[19px] break-words text-muted-foreground">
                 Your agent learns from the pages of {company.website} (same domain only), refreshed weekly. I confirm I own this website or am
                 authorised to import it. You can remove it later in Agent → Knowledge.
               </span>
@@ -659,29 +524,41 @@ export function Step6Launch({ organization }: Step6LaunchProps) {
           </div>
         )}
 
-        {/* Launch button */}
-        <Button
-          className="w-full py-4 text-base purple-glow"
-          onClick={completeOnboarding}
-          disabled={isLaunching}
-        >
-          {isLaunching ? (
-            <span className="flex items-center gap-2">
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              Setting everything up…
-            </span>
-          ) : (
-            <><Rocket className="mr-2 h-5 w-5" />Launch my AI agent</>
-          )}
-        </Button>
-
-        {/* Back */}
-        <div className="flex justify-center">
-          <Button variant="ghost" size="sm" onClick={() => setStep(3)} disabled={isLaunching} className="gap-2 text-muted-foreground">
-            <ArrowLeft className="h-4 w-4" /> Back
+        {/* Launch */}
+        <div className="mt-10 border-t border-rule pt-6">
+          <Button
+            size="lg"
+            className="w-full"
+            onClick={completeOnboarding}
+            loading={isLaunching}
+            loadingState="connecting"
+            loadingText={`Setting up ${agentLabel}…`}
+          >
+            <Rocket aria-hidden="true" />
+            Launch my AI agent
           </Button>
+          {/* One fixed-height slot for Back and, while launching, the status line that replaces it:
+              nothing moves when the launch starts. */}
+          <div className="mt-2 flex min-h-14 items-center justify-center">
+            {isLaunching ? (
+              <OrbLoader
+                size={32}
+                layout="row"
+                state="connecting"
+                delayMs={0}
+                label="Setting everything up…"
+                description="Creating your agent and connecting its voice. Please keep this page open."
+                className="justify-center text-left"
+              />
+            ) : (
+              <Button variant="ghost" size="sm" onClick={() => setStep(3)} className="text-muted-foreground hover:text-foreground">
+                <ArrowLeft aria-hidden="true" />
+                Back
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
-    </>
+      </StepBody>
+    </div>
   )
 }

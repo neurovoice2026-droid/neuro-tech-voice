@@ -2,21 +2,20 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { Separator } from '@/components/ui/separator'
-import { Phone, Smile, Briefcase, HeartHandshake, Zap, BookOpen, Loader2 } from 'lucide-react'
+import { Phone, Smile, Briefcase, HeartHandshake, Zap, BookOpen } from 'lucide-react'
 import type { Agent, PhoneNumber } from '@/types'
 import type { AgentHook } from '@/hooks/useAgent'
 import { AGENT_LANGUAGES } from '@/lib/agent-languages'
 import { formatPhoneNumber } from '@/lib/utils'
 import { FlagIcon } from '@/components/shared/FlagIcon'
+import { Field, FormSection } from '@/components/shared/FormSection'
+import { OptionCard } from '@/components/shared/OptionCard'
 import { ROUTING_MODE_SHORT, StatusPill, routingStatusCopy } from '@/components/agent/ProviderStatusCard'
 
 const PERSONALITIES = [
@@ -67,150 +66,120 @@ export function TabGeneral({ agent, phoneNumbers, onUpdate, isSaving }: TabGener
   }
 
   return (
-    <div className="space-y-6">
-      {/* Name */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Agent Name</CardTitle>
-          <CardDescription>This is displayed to callers and in your dashboard.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <Label htmlFor="agent-name">Name</Label>
-            <div className="flex gap-3">
-              <Input
-                id="agent-name"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="e.g. Aria, Support Agent"
-                className="max-w-sm"
-                maxLength={100}
-                aria-invalid={nameError ? true : undefined}
-                aria-describedby={nameError ? 'agent-name-error' : undefined}
-              />
-            </div>
-            {nameError && (
-              <p id="agent-name-error" role="alert" className="text-xs text-destructive">{nameError}</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+    <div>
+      <FormSection title="Agent name" description="This is displayed to callers and in your dashboard.">
+        <Field label="Name" htmlFor="agent-name" error={nameError}>
+          <Input
+            id="agent-name"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="e.g. Aria, Support Agent"
+            className="max-w-sm"
+            maxLength={100}
+          />
+        </Field>
+      </FormSection>
 
-      {/* Personality */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Personality</CardTitle>
-          <CardDescription>Sets the overall tone and style of your agent&apos;s conversations.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {PERSONALITIES.map(p => {
-              const Icon = p.icon
-              const active = personality === p.id
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setPersonality(p.id)}
-                  aria-pressed={active}
-                  className={[
-                    'rounded-xl border-2 p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    active
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border bg-card hover:border-muted-foreground/40',
-                  ].join(' ')}
-                >
-                  <Icon className={['size-5 mb-2', active ? 'text-primary' : 'text-muted-foreground'].join(' ')} aria-hidden="true" />
-                  <p className="font-medium text-sm">{p.label}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{p.description}</p>
-                </button>
-              )
-            })}
-          </div>
-        </CardContent>
-      </Card>
+      <FormSection title="Personality" description="Sets the overall tone and style of your agent's conversations.">
+        <div role="radiogroup" aria-label="Personality" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {PERSONALITIES.map(p => (
+            <OptionCard
+              key={p.id}
+              selected={personality === p.id}
+              onSelect={() => setPersonality(p.id)}
+              icon={p.icon}
+              title={p.label}
+              description={p.description}
+            />
+          ))}
+        </div>
+      </FormSection>
 
-      {/* Language */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Language</CardTitle>
-          <CardDescription>Primary language your agent will speak and understand.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Select value={language} onValueChange={v => v && setLanguage(v)}>
-            <SelectTrigger className="w-[220px]" aria-label="Agent language">
-              <SelectValue>
-                {(value: string) => {
-                  const l = AGENT_LANGUAGES.find(o => o.value === value)
-                  return l ? (
-                    <span className="flex items-center gap-2">
-                      <FlagIcon country={l.country} />
-                      {l.label}
-                    </span>
-                  ) : value
-                }}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {AGENT_LANGUAGES.map(l => (
-                <SelectItem key={l.value} value={l.value}>
+      <FormSection title="Language" description="Primary language your agent will speak and understand.">
+        <Select value={language} onValueChange={v => v && setLanguage(v)}>
+          <SelectTrigger className="w-full max-w-[280px]" aria-label="Agent language">
+            <SelectValue>
+              {(value: string) => {
+                const l = AGENT_LANGUAGES.find(o => o.value === value)
+                return l ? (
                   <span className="flex items-center gap-2">
                     <FlagIcon country={l.country} />
                     {l.label}
                   </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
+                ) : value
+              }}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {AGENT_LANGUAGES.map(l => (
+              <SelectItem key={l.value} value={l.value}>
+                <span className="flex items-center gap-2">
+                  <FlagIcon country={l.country} />
+                  {l.label}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </FormSection>
 
-      {/* Phone Numbers */}
       {phoneNumbers.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Linked Phone Numbers</CardTitle>
-            <CardDescription>
+        <FormSection
+          title="Linked phone numbers"
+          description={
+            <>
               Phone numbers routed to this agent. Change how each number is routed on the{' '}
-              <Link href="/phone" className="text-primary underline-offset-4 hover:underline">Phone Numbers</Link> page.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-3">
-              {phoneNumbers.map(pn => (
-                <li key={pn.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                  <Phone className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
-                  <span className="font-mono">{formatPhoneNumber(pn.number)}</span>
-                  {pn.friendly_name && (
-                    <span className="text-muted-foreground">{pn.friendly_name}</span>
-                  )}
-                  <span className="text-xs text-muted-foreground">
+              <Link
+                href="/phone"
+                className="rounded-sm font-medium text-foreground underline decoration-foreground/30 underline-offset-4 transition-colors hover:decoration-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                Phone Numbers
+              </Link>{' '}
+              page.
+            </>
+          }
+        >
+          <ul className="overflow-hidden rounded-2xl bg-card shadow-hair">
+            {phoneNumbers.map(pn => (
+              <li key={pn.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule px-4 py-3 last:border-b-0">
+                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-secondary" aria-hidden="true">
+                  <Phone className="size-4" strokeWidth={1.75} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="flex flex-wrap items-baseline gap-x-2 text-sm leading-5">
+                    <span className="font-medium whitespace-nowrap tabular-nums">{formatPhoneNumber(pn.number)}</span>
+                    {pn.friendly_name && <span className="text-muted-foreground">{pn.friendly_name}</span>}
+                  </p>
+                  <p className="text-xs leading-4 text-muted-foreground">
                     {ROUTING_MODE_SHORT[pn.routing_mode === 'native_elevenlabs' ? 'native_elevenlabs' : 'app_routed']}
-                  </span>
-                  <span className="ml-auto flex items-center gap-1.5">
-                    {pn.routing_status && <StatusPill copy={routingStatusCopy(pn.routing_status)} />}
-                    <Badge variant={pn.is_active ? 'default' : 'secondary'} className="text-xs">
-                      {pn.is_active ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+                  </p>
+                </div>
+                {/* Chips wrap under the number on phones, aligned with the text. */}
+                <span className="flex w-full items-center gap-1.5 pl-11 sm:w-auto sm:pl-0">
+                  {pn.routing_status && <StatusPill copy={routingStatusCopy(pn.routing_status)} />}
+                  <Badge variant={pn.is_active ? 'secondary' : 'muted'}>
+                    {pn.is_active ? 'Active' : 'Inactive'}
+                  </Badge>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </FormSection>
       )}
 
-      <Separator />
-
-      {/* Save bar */}
-      <div className="flex items-center gap-3">
-        <Button onClick={() => void handleSave()} disabled={!isDirty || isSaving || !!nameError} className="purple-glow">
-          {isSaving && <Loader2 className="animate-spin" aria-hidden="true" />}
-          {isSaving ? 'Saving…' : 'Save Changes'}
-        </Button>
+      {/* Save row */}
+      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-rule pt-5">
         {isDirty && (
-          <span className="text-xs text-muted-foreground">You have unsaved changes</span>
+          <span className="mr-auto text-xs text-muted-foreground sm:mr-0">You have unsaved changes</span>
         )}
+        <Button
+          onClick={() => void handleSave()}
+          disabled={!isDirty || !!nameError}
+          loading={isSaving}
+          loadingText="Saving…"
+        >
+          Save changes
+        </Button>
       </div>
     </div>
   )

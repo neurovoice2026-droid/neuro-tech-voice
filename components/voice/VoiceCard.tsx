@@ -1,7 +1,12 @@
 'use client'
 
-import { Check, CheckCircle2, Loader2, Mic2, Play, Square } from 'lucide-react'
+import { Fragment } from 'react'
+import { Check, Mic2, Play, Square } from 'lucide-react'
+import { CornerDot } from '@/components/site/corner-dot'
+import { Button } from '@/components/ui/button'
 import { FlagIcon } from '@/components/shared/FlagIcon'
+import { OrbInline } from '@/components/shared/OrbLoader'
+import { StatusChip, type StatusTone } from '@/components/shared/StatusChip'
 import { AGENT_LANGUAGES } from '@/lib/agent-languages'
 import { cn } from '@/lib/utils'
 import type { PreviewStatus } from '@/hooks/useAudioPreview'
@@ -91,73 +96,49 @@ export function ageLabel(age: string | null): string | null {
 interface SourceBadge {
   label: string
   title: string
-  className: string
+  /** StatusChip tone: neutral by default, a status colour only where it means something. */
+  tone: StatusTone
 }
 
 export function sourceBadge(voice: VoiceOption): SourceBadge {
   if (voice.recommended && voice.source === 'library') {
-    return {
-      label: 'Recommended',
-      title: 'A voice we recommend for this language',
-      className: 'bg-primary/10 text-primary',
-    }
+    return { label: 'Recommended', title: 'A voice we recommend for this language', tone: 'neutral' }
   }
   switch (voice.source) {
     case 'cloned':
-      return {
-        label: 'Your clone',
-        title: 'A custom voice cloned in your workspace',
-        className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
-      }
+      return { label: 'Your clone', title: 'A custom voice cloned in your workspace', tone: 'success' }
     case 'designed':
-      return {
-        label: 'Designed',
-        title: 'A custom voice designed in your workspace',
-        className: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-400',
-      }
+      // Generated from a description: the AI-provenance accent (brand chip, accent policy #5).
+      return { label: 'Designed', title: 'A custom voice designed in your workspace', tone: 'brand' }
     case 'library':
       return voice.requiresProvisioning
-        ? {
-            label: 'Library',
-            title: 'Added to your workspace when you choose it',
-            className: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
-          }
-        : {
-            label: 'Saved',
-            title: 'Saved to your workspace from the voice library',
-            className: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-400',
-          }
+        ? { label: 'Library', title: 'Added to your workspace when you choose it', tone: 'outline' }
+        : { label: 'Saved', title: 'Saved to your workspace from the voice library', tone: 'muted' }
     case 'premade':
       // ElevenLabs default voices expire on 31 Dec 2026 (no longer offered for new choices).
-      return {
-        label: 'Retiring',
-        title: 'This default voice stops working on 31 Dec 2026',
-        className: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
-      }
+      return { label: 'Retiring', title: 'This default voice stops working on 31 Dec 2026', tone: 'warning' }
     case 'provider':
     default:
-      return {
-        label: 'Standard',
-        title: 'A standard provider voice',
-        className: 'bg-muted text-muted-foreground',
-      }
+      return { label: 'Standard', title: 'A standard provider voice', tone: 'muted' }
   }
 }
 
-const GENDER_CHIP: Record<string, string> = {
-  Female: 'bg-pink-50 text-pink-600 dark:bg-pink-500/15 dark:text-pink-400',
-  Male: 'bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400',
-  Neutral: 'bg-muted text-muted-foreground',
-}
-
+/** First letters of the first two words, ignoring punctuation ("Maya (studio owner)" → "MS"). */
 function initialsOf(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
+  return (name.match(/[\p{L}\p{N}]+/gu) ?? [])
     .map((w) => w[0])
     .join('')
     .slice(0, 2)
     .toUpperCase()
+}
+
+/** "English · American · Female · Young" (the site's Dana card meta line). */
+function voiceMetaLine(voice: VoiceOption): { parts: string[]; text: string; country: string | null } {
+  const locale = voiceLocaleLine(voice)
+  const parts = [...locale.text.split(' · '), genderLabel(voice.gender), ageLabel(voice.age)].filter(
+    (p): p is string => !!p,
+  )
+  return { parts, text: parts.join(' · '), country: locale.country }
 }
 
 // ─── Preview button ───────────────────────────────────────────────────────────
@@ -166,59 +147,60 @@ interface PreviewButtonProps {
   name: string
   status: PreviewStatus
   onClick: () => void
+  /** 'icon' = 32 px round play/stop; 'wide' = pill with a "Preview" label. */
   variant: 'wide' | 'icon'
   disabled?: boolean
   className?: string
 }
 
+/**
+ * Play / stop pill: white outline at rest, a breathing orb while the sample loads,
+ * ink while it plays. It stays clickable while loading so a slow preview can be cancelled.
+ */
 export function PreviewButton({ name, status, onClick, variant, disabled, className }: PreviewButtonProps) {
   const label =
     status === 'playing' ? `Stop preview of ${name}` : status === 'loading' ? `Loading preview of ${name}` : `Preview ${name}`
   const icon =
     status === 'loading' ? (
-      <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+      <OrbInline state="breathing" className={variant === 'wide' ? '-ml-1' : undefined} />
     ) : status === 'playing' ? (
-      <Square className="size-3.5 fill-current" aria-hidden="true" />
+      <Square className="size-3 fill-current" aria-hidden="true" />
     ) : (
-      <Play className="size-3.5 fill-current" aria-hidden="true" />
+      <Play className="size-3.5 translate-x-px fill-current" aria-hidden="true" />
     )
 
   if (variant === 'icon') {
     return (
-      <button
+      <Button
         type="button"
+        variant={status === 'playing' ? 'default' : 'outline'}
+        size="icon-sm"
         onClick={onClick}
         disabled={disabled}
         aria-label={label}
+        aria-busy={status === 'loading' || undefined}
         title={status === 'playing' ? 'Stop' : 'Preview'}
-        className={cn(
-          'relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full transition-colors outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50',
-          status !== 'idle' && 'bg-primary/10 text-primary',
-          className,
-        )}
+        className={cn('tap-44 relative z-10', className)}
       >
         {icon}
-      </button>
+      </Button>
     )
   }
 
   return (
-    <button
+    <Button
       type="button"
+      variant={status === 'playing' ? 'default' : 'outline'}
+      size="sm"
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className={cn(
-        'relative z-10 flex w-full items-center justify-center gap-2 rounded-xl border py-2 text-xs font-medium transition-all outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50',
-        status !== 'idle'
-          ? 'border-primary bg-primary/5 text-primary'
-          : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-primary',
-        className,
-      )}
+      aria-busy={status === 'loading' || undefined}
+      className={cn('relative z-10', className)}
     >
       {icon}
       <span aria-hidden="true">{status === 'playing' ? 'Stop' : status === 'loading' ? 'Loading…' : 'Preview'}</span>
-    </button>
+    </Button>
   )
 }
 
@@ -235,6 +217,22 @@ export interface VoiceCardProps {
   disabled?: boolean
 }
 
+/** Initial disc, like the site's voice chooser: ink when chosen, tinted grey otherwise. */
+function VoiceInitials({ name, selected, size }: { name: string; selected: boolean; size: 'sm' | 'md' }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        'grid shrink-0 place-items-center rounded-full font-medium transition-colors duration-200',
+        size === 'md' ? 'size-10 text-sm' : 'size-9 text-[13px]',
+        selected ? 'bg-primary text-white' : 'bg-secondary text-foreground',
+      )}
+    >
+      {initialsOf(name) || <Mic2 className="size-4" />}
+    </span>
+  )
+}
+
 export function VoiceCard({
   voice,
   selected,
@@ -245,137 +243,125 @@ export function VoiceCard({
   disabled = false,
 }: VoiceCardProps) {
   const name = voiceDisplayName(voice)
-  const locale = voiceLocaleLine(voice)
-  const gender = genderLabel(voice.gender)
-  const age = ageLabel(voice.age)
+  const meta = voiceMetaLine(voice)
   const badge = sourceBadge(voice)
 
-  const languageLine = (
-    <span className="flex min-w-0 items-center gap-1">
-      {locale.country ? (
-        <FlagIcon country={locale.country} className="h-3 w-4.5" />
+  // Up to two lines (gender and age stay readable in narrow cards); the title
+  // carries the whole line if a long accent still clips it.
+  const metaLine = (
+    <span className="flex min-w-0 items-start gap-1.5 text-xs leading-4 text-muted-foreground">
+      {meta.country ? (
+        <FlagIcon country={meta.country} className="mt-[3px] h-2.5 w-[15px] rounded-[1.5px]" />
       ) : (
-        <Mic2 className="size-3 shrink-0" aria-hidden="true" />
+        <Mic2 className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
       )}
-      <span className="truncate">{locale.text}</span>
+      <span className="line-clamp-2 min-w-0" title={meta.text}>
+        {/* Lines break between facts, never inside one ("Middle aged"). */}
+        {meta.parts.map((part, i) => (
+          <Fragment key={i}>
+            {i > 0 && ' · '}
+            <span className="whitespace-nowrap">{part}</span>
+          </Fragment>
+        ))}
+      </span>
     </span>
   )
 
-  const chips = (
-    <span className="flex flex-wrap gap-1.5">
-      {gender && (
-        <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-medium', GENDER_CHIP[gender])}>{gender}</span>
-      )}
-      {age && (
-        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">{age}</span>
-      )}
-    </span>
-  )
-
-  const sourceChip = (
-    <span
-      title={badge.title}
-      className={cn('shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide', badge.className)}
-    >
-      {badge.label}
-    </span>
+  // White panel; the chosen one gets the 2 px ink ring and the brand corner dot.
+  const shell = cn(
+    // isolate: the preview button's z-10 stays inside the card (sticky toolbars pass over it).
+    'group/voice relative isolate rounded-2xl bg-white transition-[box-shadow,background-color] duration-200',
+    selected ? 'shadow-[0_0_0_2px_var(--foreground)]' : 'shadow-hair hover:bg-band',
+    disabled && 'opacity-60',
   )
 
   // The select button is stretched over the whole card (after:inset-0) so the
   // card is one click target, while the preview button stays a separate,
   // focusable control above it (z-10). No nested interactive elements.
+  const stretched =
+    "outline-none after:absolute after:inset-0 after:rounded-2xl after:content-[''] focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-ring focus-visible:after:outline-solid disabled:cursor-not-allowed"
+
   if (variant === 'compact') {
     return (
-      <div
-        className={cn(
-          'relative flex items-center gap-2 rounded-xl border-2 p-3 transition-all',
-          selected ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/40',
-          disabled && 'opacity-60',
-        )}
-      >
+      <div data-voice-card="" className={cn(shell, 'flex min-h-[60px] items-center gap-2 py-2.5 pr-8 pl-3')}>
+        {selected && <CornerDot className="pointer-events-none absolute top-3 right-3 size-2.5 text-brand" />}
         <button
           type="button"
           aria-pressed={selected}
           disabled={disabled}
           onClick={() => onSelect(voice)}
-          className="min-w-0 flex-1 text-left outline-none after:absolute after:inset-0 after:rounded-xl after:content-[''] focus-visible:after:ring-3 focus-visible:after:ring-ring/50 disabled:cursor-not-allowed"
+          className={cn('flex min-w-0 flex-1 items-center gap-3 text-left', stretched)}
         >
-          <span className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium">{name}</span>
-            {sourceChip}
-          </span>
-          <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-            {languageLine}
-            {chips}
+          <VoiceInitials name={name} selected={selected} size="sm" />
+          <span className="min-w-0 flex-1">
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-sm leading-5 font-medium text-foreground">{name}</span>
+              <StatusChip tone={badge.tone} title={badge.title} className="h-5 px-2 text-[11px]">
+                {badge.label}
+              </StatusChip>
+            </span>
+            <span className="mt-0.5 flex">{metaLine}</span>
           </span>
         </button>
-        <PreviewButton
-          name={name}
-          status={previewStatus}
-          onClick={() => onTogglePreview(voice)}
-          variant="icon"
-        />
-        {selected ? (
-          <Check className="size-4 shrink-0 text-primary" aria-hidden="true" />
-        ) : (
-          <span className="size-4 shrink-0" aria-hidden="true" />
-        )}
+        <PreviewButton name={name} status={previewStatus} onClick={() => onTogglePreview(voice)} variant="icon" />
       </div>
     )
   }
 
   return (
-    <div
-      className={cn(
-        'group relative flex flex-col overflow-hidden rounded-2xl border bg-card p-4 transition-all duration-200',
-        selected
-          ? 'border-primary shadow-lg shadow-primary/10 ring-2 ring-primary/40'
-          : 'border-border hover:-translate-y-0.5 hover:border-purple-200 hover:shadow-md',
-        disabled && 'opacity-60',
-      )}
-    >
-      {selected && (
-        <CheckCircle2 className="pointer-events-none absolute right-3 top-3 h-5 w-5 text-primary" aria-hidden="true" />
-      )}
+    <div data-voice-card="" className={cn(shell, 'flex flex-col p-4')}>
+      {selected && <CornerDot className="pointer-events-none absolute top-3.5 right-3.5 size-2.5 text-brand" />}
 
       <button
         type="button"
         aria-pressed={selected}
         disabled={disabled}
         onClick={() => onSelect(voice)}
-        className="flex items-center gap-3 pr-6 text-left outline-none after:absolute after:inset-0 after:rounded-2xl after:content-[''] focus-visible:after:ring-3 focus-visible:after:ring-ring/50 disabled:cursor-not-allowed"
+        className={cn('flex min-w-0 items-center gap-3 pr-5 text-left', stretched)}
       >
-        <span
-          aria-hidden="true"
-          className={cn(
-            'flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white',
-            selected ? 'bg-primary' : 'bg-gradient-to-br from-violet-500 to-indigo-600',
-          )}
-        >
-          {initialsOf(name) || <Mic2 className="h-5 w-5" />}
-        </span>
+        <VoiceInitials name={name} selected={selected} size="md" />
         <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-semibold text-foreground">{name}</span>
-            {sourceChip}
+          <span className="block truncate text-[17px] leading-6 font-medium tracking-[-0.01em] text-foreground">
+            {name}
           </span>
-          <span className="mt-0.5 flex text-xs text-muted-foreground">{languageLine}</span>
+          <span className="mt-0.5 flex">{metaLine}</span>
+          {/* The chip is drawn in the footer; screen readers get it with the name. */}
+          <span className="sr-only">, {badge.label}</span>
         </span>
       </button>
 
       {voice.description && (
-        <p className="mt-3 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{voice.description}</p>
+        <p className="mt-3 line-clamp-2 text-[13px] leading-[19px] text-muted-foreground">{voice.description}</p>
       )}
 
-      <div className="mt-3">{chips}</div>
-
-      <div className="mt-auto pt-3">
-        <PreviewButton
-          name={name}
-          status={previewStatus}
-          onClick={() => onTogglePreview(voice)}
-          variant="wide"
-        />
+      {/* Chip left, actions right; in a card too narrow for one row the actions
+          wrap under the chip (right-aligned) instead of running past the edge. */}
+      <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
+        <StatusChip tone={badge.tone} title={badge.title} aria-hidden="true" className="px-2">
+          {badge.label}
+        </StatusChip>
+        <div className="ml-auto flex items-center gap-1.5">
+          <PreviewButton name={name} status={previewStatus} onClick={() => onTogglePreview(voice)} variant="icon" />
+          {/* Visual only: a click lands on the stretched select button underneath. */}
+          <span
+            aria-hidden="true"
+            className={cn(
+              'inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-medium whitespace-nowrap transition-colors duration-200',
+              selected
+                ? 'bg-primary text-white'
+                : 'bg-secondary text-foreground group-hover/voice:bg-secondary-hover',
+            )}
+          >
+            {selected ? (
+              <>
+                <Check className="size-3.5" />
+                Selected
+              </>
+            ) : (
+              'Use this voice'
+            )}
+          </span>
+        </div>
       </div>
     </div>
   )

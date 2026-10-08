@@ -5,13 +5,14 @@
 // pronunciation dictionary and applied to the live agent and to previews.
 
 import { useEffect, useEffectEvent, useId, useState } from 'react'
-import { AlertCircle, Languages, Loader2, Plus, RotateCw, Trash2 } from 'lucide-react'
+import { AlertCircle, ArrowRight, Plus, RotateCw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { Alert, AlertAction, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { Skeleton } from '@/components/ui/skeleton'
+import { FormSection } from '@/components/shared/FormSection'
+import { OrbLoader } from '@/components/shared/OrbLoader'
 import { PreviewButton } from '@/components/voice/VoiceCard'
 import { useAudioPreview } from '@/hooks/useAudioPreview'
 import { errorMessage, isAbortError, parseApiError } from '@/hooks/useVoiceCatalog'
@@ -147,57 +148,69 @@ export function PronunciationCard({ agent }: PronunciationCardProps) {
     .slice(0, PREVIEW_MAX)
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Languages className="size-4 text-muted-foreground" aria-hidden="true" /> Pronunciation
-        </CardTitle>
-        <CardDescription>
+    <FormSection
+      title="Pronunciation"
+      description={
+        <>
           Teach your agent how to say your business name, staff names, products or streets. Write how it should
           sound, for example &quot;Xenia&quot; → &quot;Ksenia&quot;.
-        </CardDescription>
-        <CardAction>
-          {agent.voice_id && sample && (
-            <PreviewButton
-              name="your pronunciation list"
-              variant="icon"
-              disabled={dirty}
-              status={preview.statusFor('pronunciation')}
-              onClick={() =>
-                preview.toggle('pronunciation', {
-                  kind: 'request',
-                  url: '/api/voices/preview',
-                  method: 'POST',
-                  body: { voice_id: agent.voice_id, text: sample, ...(agent.language ? { language: agent.language } : {}) },
-                })
-              }
-            />
-          )}
-        </CardAction>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {loadError ? (
-          <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-            <p className="min-w-0 flex-1 text-sm text-destructive">{loadError}</p>
-            <Button variant="outline" size="sm" onClick={() => setReload((n) => n + 1)} className="gap-1.5">
+        </>
+      }
+      aside={
+        agent.voice_id && sample ? (
+          <PreviewButton
+            name="your pronunciation list"
+            variant="wide"
+            disabled={dirty}
+            status={preview.statusFor('pronunciation')}
+            onClick={() =>
+              preview.toggle('pronunciation', {
+                kind: 'request',
+                url: '/api/voices/preview',
+                method: 'POST',
+                body: { voice_id: agent.voice_id, text: sample, ...(agent.language ? { language: agent.language } : {}) },
+              })
+            }
+          />
+        ) : undefined
+      }
+    >
+      {loadError ? (
+        <Alert variant="destructive">
+          <AlertCircle aria-hidden="true" />
+          <AlertTitle>{loadError}</AlertTitle>
+          <AlertAction>
+            <Button variant="outline" size="sm" onClick={() => setReload((n) => n + 1)}>
               <RotateCw aria-hidden="true" /> Try again
             </Button>
-          </div>
-        ) : loading ? (
-          <div className="space-y-2" aria-busy="true">
-            <Skeleton className="h-9 rounded-lg" />
-            <Skeleton className="h-9 rounded-lg" />
-          </div>
-        ) : (
-          <>
-            {rules.length === 0 ? (
-              <p className="rounded-xl border border-dashed py-6 text-center text-sm text-muted-foreground">
-                No words yet. Add the names your agent mispronounces.
-              </p>
-            ) : (
-              <ul id={listId} className="space-y-2" aria-label="Pronunciation rules">
+          </AlertAction>
+        </Alert>
+      ) : loading ? (
+        <OrbLoader size={32} layout="row" label="Loading your pronunciation list…" className="min-h-[212px] md:min-h-[156px]" />
+      ) : (
+        <div className="@container/pron space-y-4">
+          {rules.length === 0 ? (
+            <p className="rounded-2xl bg-secondary px-4 py-6 text-center text-[13px] leading-[19px] text-muted-foreground">
+              No words yet. Add the names your agent mispronounces.
+            </p>
+          ) : (
+            <div>
+              {/* Column overlines for the wide layout; each field keeps its own label. */}
+              <div
+                aria-hidden="true"
+                className="grid grid-cols-[minmax(0,1fr)_16px_minmax(0,1.25fr)] gap-2 pb-2 text-[11px] leading-4 font-medium tracking-[0.12em] text-muted-foreground uppercase @md/pron:grid-cols-[minmax(0,1fr)_16px_minmax(0,1.25fr)_auto]"
+              >
+                <span>Word</span>
+                <span />
+                <span>Say it as</span>
+                <span className="hidden w-[136px] @md/pron:block" />
+              </div>
+              <ul id={listId} className="divide-y divide-rule @md/pron:divide-y-0" aria-label="Pronunciation rules">
                 {rules.map((r, i) => (
-                  <li key={r.key} className="flex flex-col gap-2 rounded-xl border p-2.5 sm:flex-row sm:items-center">
+                  <li
+                    key={r.key}
+                    className="grid grid-cols-[minmax(0,1fr)_16px_minmax(0,1.25fr)] items-center gap-2 py-3 first:pt-0 last:pb-0 @md/pron:grid-cols-[minmax(0,1fr)_16px_minmax(0,1.25fr)_auto] @md/pron:py-1"
+                  >
                     <Input
                       value={r.term}
                       onChange={(e) => update(r.key, { term: e.target.value })}
@@ -205,11 +218,8 @@ export function PronunciationCard({ agent }: PronunciationCardProps) {
                       placeholder="Word or name"
                       aria-label={`Word ${i + 1}`}
                       disabled={saving}
-                      className="h-9 sm:w-48"
                     />
-                    <span className="hidden text-muted-foreground sm:inline" aria-hidden="true">
-                      →
-                    </span>
+                    <ArrowRight className="size-4 text-muted-foreground" aria-hidden="true" />
                     <Input
                       value={r.say_as}
                       onChange={(e) => update(r.key, { say_as: e.target.value })}
@@ -217,10 +227,9 @@ export function PronunciationCard({ agent }: PronunciationCardProps) {
                       placeholder="Say it as"
                       aria-label={`How to say word ${i + 1}`}
                       disabled={saving}
-                      className="h-9 flex-1"
                     />
-                    <div className="flex items-center justify-between gap-2 sm:justify-end">
-                      <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <div className="col-span-3 flex items-center justify-between gap-2 @md/pron:col-span-1 @md/pron:w-[136px] @md/pron:justify-end">
+                      <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
                         <Checkbox
                           checked={r.case_sensitive}
                           onCheckedChange={(v) => update(r.key, { case_sensitive: v })}
@@ -235,6 +244,7 @@ export function PronunciationCard({ agent }: PronunciationCardProps) {
                         onClick={() => setRules((prev) => prev.filter((x) => x.key !== r.key))}
                         disabled={saving}
                         aria-label={`Remove word ${i + 1}`}
+                        className="tap-44"
                       >
                         <Trash2 aria-hidden="true" />
                       </Button>
@@ -242,35 +252,33 @@ export function PronunciationCard({ agent }: PronunciationCardProps) {
                   </li>
                 ))}
               </ul>
-            )}
-
-            {problem && (
-              <p role="alert" className="flex items-center gap-1.5 text-xs text-destructive">
-                <AlertCircle className="size-3.5" aria-hidden="true" /> {problem}
-              </p>
-            )}
-
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setRules((prev) => [...prev, { key: newKey(), term: '', say_as: '', case_sensitive: false }])}
-                disabled={saving || rules.length >= maxRules}
-                className="gap-1.5"
-              >
-                <Plus aria-hidden="true" /> Add word
-              </Button>
-              <div className="flex items-center gap-2">
-                {dirty && <span className="text-xs text-muted-foreground">Save to hear your changes.</span>}
-                <Button size="sm" onClick={() => void save()} disabled={!dirty || saving || !!problem} className="gap-1.5">
-                  {saving && <Loader2 className="animate-spin" aria-hidden="true" />}
-                  {saving ? 'Saving…' : 'Save'}
-                </Button>
-              </div>
             </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+          )}
+
+          {problem && (
+            <p role="alert" className="flex items-start gap-1.5 text-xs leading-4 text-destructive">
+              <AlertCircle className="mt-px size-3.5 shrink-0" aria-hidden="true" /> {problem}
+            </p>
+          )}
+
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-rule pt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRules((prev) => [...prev, { key: newKey(), term: '', say_as: '', case_sensitive: false }])}
+              disabled={saving || rules.length >= maxRules}
+            >
+              <Plus aria-hidden="true" /> Add word
+            </Button>
+            <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
+              {dirty && <span className="text-xs text-muted-foreground">Save to hear your changes.</span>}
+              <Button size="sm" onClick={() => void save()} disabled={!dirty || !!problem} loading={saving} loadingText="Saving…">
+                Save
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </FormSection>
   )
 }

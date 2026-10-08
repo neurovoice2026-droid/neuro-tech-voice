@@ -1,31 +1,48 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { PhoneIncoming, CheckCircle2, XCircle, Clock } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { cn, formatDuration, formatPhoneNumber } from '@/lib/utils'
+import { CheckCircle2, XCircle, Clock } from 'lucide-react'
+import { Card, CardAction, CardHeader, CardTitle } from '@/components/ui/card'
+import { cn, formatDate, formatDuration, formatPhoneNumber } from '@/lib/utils'
 import { LiveDot } from '@/components/shared/LiveDot'
+import { OrbLoader } from '@/components/shared/OrbLoader'
 import type { Call } from '@/types'
+import { CardError } from './CardError'
+import { relativeTime } from './relative-time'
 
-const ICON_MAP: Record<string, React.ReactNode> = {
-  completed: <CheckCircle2 className="h-4 w-4 text-green-500" />,
-  failed: <XCircle className="h-4 w-4 text-red-500" />,
-  'in-progress': <PhoneIncoming className="h-4 w-4 text-purple-500 animate-pulse" />,
+/** Leading status mark of a row, with its name for screen readers (never colour alone). */
+function StatusMark({ status }: { status: string }) {
+  const inProgress = status === 'in-progress'
+  return (
+    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-secondary">
+      {inProgress ? (
+        <LiveDot />
+      ) : status === 'completed' ? (
+        <CheckCircle2 className="size-4 text-success-dot" aria-hidden="true" />
+      ) : status === 'failed' ? (
+        <XCircle className="size-4 text-destructive" aria-hidden="true" />
+      ) : (
+        <Clock className="size-4 text-muted-foreground" aria-hidden="true" />
+      )}
+      <span className="sr-only">
+        {inProgress ? 'In progress' : status === 'completed' ? 'Completed' : status === 'failed' ? 'Failed' : status}
+      </span>
+    </span>
+  )
 }
 
-function timeAgo(date: string | null) {
-  if (!date) return '—'
-  const diff = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
-  if (diff < 60) return `${diff}s ago`
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  return `${Math.floor(diff / 3600)}h ago`
-}
+const ROWS_SHOWN = 8
 
 interface RealtimeActivityFeedProps {
   calls: Call[]
+  /** True until the first recent-calls response. */
+  isLoading?: boolean
+  /** Last failed request, if any (rows already shown are kept on a failed refresh). */
+  error?: string | null
+  onRetry?: () => void
 }
 
-export function RealtimeActivityFeed({ calls }: RealtimeActivityFeedProps) {
+export function RealtimeActivityFeed({ calls, isLoading = false, error = null, onRetry }: RealtimeActivityFeedProps) {
   const [, setTick] = useState(0)
 
   // Re-render every 30s to update "time ago"
@@ -34,56 +51,69 @@ export function RealtimeActivityFeed({ calls }: RealtimeActivityFeedProps) {
     return () => clearInterval(id)
   }, [])
 
-  const recent = calls.slice(0, 8)
+  const recent = calls.slice(0, ROWS_SHOWN)
   const inProgress = recent.filter((c) => c.status === 'in-progress')
 
   return (
-    <Card className="border shadow-sm">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base font-semibold">Live Activity</CardTitle>
+    <Card className="gap-0 pb-0">
+      <CardHeader className="pb-4">
+        <CardTitle>Live activity</CardTitle>
+        {/* Always rendered (empty when nothing is live) so the header keeps its height. */}
+        <CardAction className="flex items-center gap-2 self-center text-xs text-muted-foreground">
           {inProgress.length > 0 && (
-            <div className="flex items-center gap-1.5">
-              <LiveDot />
-              <span className="text-xs text-muted-foreground">
-                {inProgress.length} active
-              </span>
-            </div>
+            <>
+              {/* Static here: the in-progress row below carries the pinging dot. */}
+              <LiveDot active={false} tone="success" />
+              <span className="tabular-nums">{inProgress.length} active</span>
+            </>
           )}
-        </div>
+        </CardAction>
       </CardHeader>
-      <CardContent className="space-y-1 p-3">
-        {recent.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted-foreground">No recent activity</p>
-        ) : (
-          recent.map((call) => (
-            <div
+      {isLoading ? (
+        // Reserves the 8 rows it replaces (56 px each + hairlines).
+        <OrbLoader label="Loading activity…" className="min-h-[456px] border-t border-rule" />
+      ) : error && recent.length === 0 ? (
+        <CardError message="Activity could not be loaded." onRetry={onRetry} className="border-t border-rule" />
+      ) : recent.length === 0 ? (
+        <p className="border-t border-rule px-5 py-6 text-center text-[13px] text-muted-foreground">No recent activity</p>
+      ) : (
+        <ul className="border-t border-rule">
+          {recent.map((call) => (
+            <li
               key={call.id}
               className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 transition-colors',
-                call.status === 'in-progress' ? 'bg-purple-50' : 'hover:bg-muted/30'
+                'flex min-h-14 items-center gap-3 border-b border-rule px-5 py-2.5 transition-colors last:border-b-0',
+                call.status === 'in-progress' ? 'bg-band' : 'hover:bg-band'
               )}
             >
-              {ICON_MAP[call.status] ?? <Clock className="h-4 w-4 text-gray-400" />}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">
+              <StatusMark status={call.status} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-foreground tabular-nums">
                   {call.caller_number ? formatPhoneNumber(call.caller_number) : 'Unknown'}
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  {call.direction === 'inbound' ? '↙ Inbound' : '↗ Outbound'}
+                <p className="text-xs leading-4 text-muted-foreground tabular-nums">
+                  {call.direction === 'inbound' ? 'Inbound' : 'Outbound'}
                   {' · '}
                   {call.status === 'in-progress'
                     ? 'In progress'
                     : formatDuration(call.duration_seconds)}
                 </p>
               </div>
-              <span className="text-xs text-muted-foreground flex-shrink-0">
-                {timeAgo(call.started_at)}
-              </span>
-            </div>
-          ))
-        )}
-      </CardContent>
+              {call.started_at ? (
+                <time
+                  dateTime={call.started_at}
+                  title={formatDate(call.started_at)}
+                  className="shrink-0 text-xs text-muted-foreground tabular-nums"
+                >
+                  {relativeTime(call.started_at)}
+                </time>
+              ) : (
+                <span className="shrink-0 text-xs text-muted-foreground">—</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   )
 }

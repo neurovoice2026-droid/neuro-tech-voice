@@ -31,7 +31,7 @@ export function PageHeader({ eyebrow, title, description, meta, actions, classNa
           {title}
         </h1>
         {description && (
-          <p className="mt-2 max-w-[62ch] text-[15px] leading-[22px] text-muted-foreground">{description}</p>
+          <p className="mt-2 max-w-[62ch] text-[15px] leading-[22px] text-pretty text-muted-foreground">{description}</p>
         )}
         {meta && <div className="mt-3 flex flex-wrap items-center gap-2">{meta}</div>}
       </div>

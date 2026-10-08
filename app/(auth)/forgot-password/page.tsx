@@ -1,17 +1,17 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Mail, Loader2, ArrowLeft, CheckCircle2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Mail, ArrowLeft, MailCheck } from 'lucide-react'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Logo } from '@/components/shared/Logo'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Eyebrow } from '@/components/shared/Eyebrow'
+import { Field } from '@/components/shared/FormSection'
 import { createClient } from '@/lib/supabase/client'
-import { cn } from '@/lib/utils'
 
 const schema = z.object({
   email: z.string().email('Please enter a valid email'),
@@ -28,6 +28,23 @@ export default function ForgotPasswordPage() {
     resolver: zodResolver(schema),
     defaultValues: { email: '' },
   })
+  const emailError = form.formState.errors.email?.message
+
+  // Focus follows the view swap, so keyboard and screen-reader users are not
+  // dropped to <body> when the focused button unmounts: the success message is
+  // focused (and so read out) when it appears, and "Try a different email"
+  // returns to the email field.
+  const successRef = useRef<HTMLDivElement>(null)
+  const refocusEmail = useRef(false)
+  const { setFocus } = form
+  useEffect(() => {
+    if (sent) {
+      successRef.current?.focus()
+    } else if (refocusEmail.current) {
+      refocusEmail.current = false
+      setFocus('email')
+    }
+  }, [sent, setFocus])
 
   function onSubmit(values: Values) {
     startTransition(async () => {
@@ -42,15 +59,13 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-2">
-        <div className="flex justify-center mb-6">
-          <Logo size="sm" showText />
-        </div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+    <div className="flex flex-col gap-8">
+      <div>
+        <Eyebrow>Reset password</Eyebrow>
+        <h1 className="mt-4 font-heading font-title text-[30px] leading-[36px] tracking-[-0.025em] text-balance text-foreground md:text-[36px] md:leading-[42px]">
           Reset your password
         </h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="mt-2 text-[15px] leading-[22px] text-muted-foreground">
           Enter your email and we&apos;ll send you a reset link
         </p>
       </div>
@@ -58,81 +73,90 @@ export default function ForgotPasswordPage() {
       {sent ? (
         /* ── Success state ── */
         <div className="space-y-6">
-          <div className="flex flex-col items-center gap-4 rounded-xl border border-green-200 bg-green-50 p-8 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-green-100">
-              <CheckCircle2 className="h-7 w-7 text-green-600" />
-            </div>
-            <div className="space-y-1">
-              <p className="font-semibold text-foreground">Check your inbox</p>
-              <p className="text-sm text-muted-foreground">
+          <Alert ref={successRef} tabIndex={-1} role="status" variant="success" className="outline-none">
+            <MailCheck aria-hidden="true" />
+            <AlertTitle>Check your inbox</AlertTitle>
+            <AlertDescription>
+              <p>
                 We sent a reset link to{' '}
-                <span className="font-medium text-foreground">{submittedEmail}</span>
+                <span className="font-medium text-foreground [overflow-wrap:anywhere]">{submittedEmail}</span>
               </p>
-              <p className="text-xs text-muted-foreground">
-                Didn&apos;t receive it? Check your spam folder.
-              </p>
-            </div>
+              <p>Didn&apos;t receive it? Check your spam folder.</p>
+            </AlertDescription>
+          </Alert>
+
+          <div className="space-y-2">
+            <Link
+              href="/login"
+              className={buttonVariants({ variant: 'outline', size: 'lg', className: 'w-full' })}
+            >
+              <ArrowLeft />
+              Back to sign in
+            </Link>
+            <Button
+              variant="ghost"
+              size="lg"
+              className="w-full"
+              onClick={() => {
+                refocusEmail.current = true
+                setSent(false)
+                form.reset()
+              }}
+            >
+              Try a different email
+            </Button>
           </div>
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => { setSent(false); form.reset() }}
-          >
-            Try a different email
-          </Button>
         </div>
       ) : (
         /* ── Form state ── */
-        <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="email" className="text-sm font-medium">
-              Email address
-            </Label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@company.com"
-                autoComplete="email"
-                disabled={isPending}
-                {...form.register('email')}
-                className={cn(
-                  'h-11 pl-9',
-                  form.formState.errors.email &&
-                    'border-destructive focus-visible:ring-destructive/30'
-                )}
-              />
-            </div>
-            {form.formState.errors.email && (
-              <p className="text-xs text-destructive">
-                {form.formState.errors.email.message}
-              </p>
-            )}
-          </div>
-
-          <Button type="submit" className="h-11 w-full purple-glow" disabled={isPending}>
-            {isPending ? (
+        <div className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-5">
+            <Field label="Email address" htmlFor="email" error={emailError}>
+              {/* Fragment, not the bare wrapper: Field wires aria-* onto a direct
+                  element child, which would be the <div>; the Input has its own. */}
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Sending reset link&hellip;
+                <div className="relative">
+                  <Mail
+                    aria-hidden="true"
+                    className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground"
+                  />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@company.com"
+                    autoComplete="email"
+                    disabled={isPending}
+                    aria-invalid={emailError ? true : undefined}
+                    aria-describedby={emailError ? 'email-error' : undefined}
+                    {...form.register('email')}
+                    className="h-11 pl-10"
+                  />
+                </div>
               </>
-            ) : (
-              'Send reset link'
-            )}
-          </Button>
-        </form>
-      )}
+            </Field>
 
-      <div className="flex justify-center">
-        <Link
-          href="/login"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to sign in
-        </Link>
-      </div>
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full"
+              loading={isPending}
+              loadingText="Sending reset link…"
+            >
+              Send reset link
+            </Button>
+          </form>
+
+          <div className="flex justify-center">
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-1.5 rounded-sm text-[13px] leading-[19px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <ArrowLeft aria-hidden="true" className="size-3.5" />
+              Back to sign in
+            </Link>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

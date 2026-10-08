@@ -5,11 +5,13 @@
 // dashboard card and its "Show all" dialog.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, Check, MailWarning, Phone, RotateCcw } from 'lucide-react'
+import { AlertTriangle, Check, MailWarning, MessageSquareText, Phone } from 'lucide-react'
 import { toast } from 'sonner'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { StatusChip } from '@/components/shared/StatusChip'
 import type { CallMessageView } from '@/lib/voice-tools/message-view'
+import { formatDate } from '@/lib/utils'
+import { relativeTime } from './relative-time'
 
 export interface MessagesResponse {
   messages: CallMessageView[]
@@ -21,17 +23,6 @@ const NOTIFY_PROBLEM: Record<string, string> = {
   no_recipients: 'No alert e-mail: add a recipient in Agent → Call handling → Messages.',
   daily_cap: 'No alert e-mail: the daily alert limit was reached.',
   send_failed: 'The alert e-mail could not be sent.',
-}
-
-function timeAgo(iso: string): string {
-  const ms = Date.now() - Date.parse(iso)
-  if (!Number.isFinite(ms)) return ''
-  const minutes = Math.round(ms / 60_000)
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes} min ago`
-  const hours = Math.round(minutes / 60)
-  if (hours < 24) return `${hours} h ago`
-  return new Date(iso).toLocaleDateString()
 }
 
 interface UseOpenMessagesOptions {
@@ -109,44 +100,53 @@ interface OpenMessagesListProps {
   onDone: (message: CallMessageView) => void
 }
 
+/** List rows (hairline between them, 20 px side padding): place it flush inside a panel. */
 export function OpenMessagesList({ messages, busyId, onDone }: OpenMessagesListProps) {
   return (
-    <ul className="divide-y" aria-label="Open messages">
+    <ul aria-label="Open messages">
       {messages.map((m) => (
-        <li key={m.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
-          <div className="min-w-0 flex-1 space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
+        <li key={m.id} className="flex items-start gap-3 border-b border-rule px-5 py-3.5 last:border-b-0">
+          <div className="hidden size-8 shrink-0 place-items-center rounded-full bg-secondary sm:grid" aria-hidden="true">
+            <MessageSquareText className="size-4 text-foreground" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className="text-sm font-medium text-foreground">{m.purged ? 'Details removed (retention)' : m.caller_name || 'Unknown caller'}</span>
               {m.urgency === 'urgent' && (
-                <Badge variant="destructive" className="gap-1 text-[10px]">
-                  <AlertTriangle className="size-3" aria-hidden="true" />
+                <StatusChip tone="danger" icon={<AlertTriangle aria-hidden="true" />}>
                   Urgent
-                </Badge>
+                </StatusChip>
               )}
-              <span className="text-xs text-muted-foreground">{timeAgo(m.created_at)}</span>
+              <time dateTime={m.created_at} title={formatDate(m.created_at)} className="text-xs text-muted-foreground tabular-nums">
+                {relativeTime(m.created_at)}
+              </time>
             </div>
-            {m.reason && <p className="line-clamp-2 text-sm text-muted-foreground">{m.reason}</p>}
+            {m.reason && <p className="mt-0.5 line-clamp-2 text-[13px] leading-[19px] text-muted-foreground">{m.reason}</p>}
             {m.callback_number && (
-              <a href={`tel:${m.callback_number.replace(/[^\d+]/g, '')}`} className="inline-flex items-center gap-1 text-xs font-medium text-purple-600 hover:underline">
+              <a
+                href={`tel:${m.callback_number.replace(/[^\d+]/g, '')}`}
+                className="mt-1 inline-flex items-center gap-1 rounded-sm text-xs font-medium text-foreground tabular-nums underline decoration-foreground/30 underline-offset-4 outline-none hover:decoration-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-solid focus-visible:outline-ring"
+              >
                 <Phone className="size-3" aria-hidden="true" />
                 {m.callback_number}
               </a>
             )}
             {m.notify_error && NOTIFY_PROBLEM[m.notify_error] && (
-              <p className="flex items-center gap-1 text-[11px] text-amber-700">
-                <MailWarning className="size-3" aria-hidden="true" />
+              <p className="mt-1 flex items-center gap-1 text-xs text-warning">
+                <MailWarning className="size-3 shrink-0" aria-hidden="true" />
                 {NOTIFY_PROBLEM[m.notify_error]}
               </p>
             )}
           </div>
           <Button
-            size="sm"
+            size="xs"
             variant="outline"
-            disabled={busyId === m.id}
+            loading={busyId === m.id}
             onClick={() => onDone(m)}
             aria-label={`Mark the message from ${m.caller_name || 'unknown caller'} as done`}
+            className="tap-44 shrink-0"
           >
-            {busyId === m.id ? <RotateCcw className="animate-spin" aria-hidden="true" /> : <Check aria-hidden="true" />}
+            <Check aria-hidden="true" />
             Done
           </Button>
         </li>

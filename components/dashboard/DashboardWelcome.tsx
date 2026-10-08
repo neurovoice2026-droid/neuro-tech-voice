@@ -17,7 +17,7 @@ export function DashboardWelcome({ agentActive }: { agentActive: boolean }) {
   useEffect(() => {
     if (searchParams.get('welcome') === 'true') {
       if (agentActive) {
-        toast.success('🎉 Setup complete! Your AI voice agent is ready.', {
+        toast.success('Setup complete! Your AI voice agent is ready.', {
           description: "Add a phone number if you haven't already to start receiving calls.",
           duration: 6000,
         })

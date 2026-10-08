@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, Mic2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { FlagIcon } from '@/components/shared/FlagIcon'
+import { StatusChip } from '@/components/shared/StatusChip'
 import { VoicePicker } from '@/components/voice/VoicePicker'
 import { voiceDisplayName, voiceLocaleLine } from '@/components/voice/VoiceCard'
 import {
@@ -16,6 +17,7 @@ import {
 } from '@/hooks/useVoiceCatalog'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
 import type { VoiceOption } from '@/types'
+import { StepActions, StepBody, StepHeader } from '../StepIndicator'
 
 type Phase = 'idle' | 'adding' | 'saving'
 
@@ -76,69 +78,73 @@ export function Step3Voice() {
   }
 
   return (
-    <div className="space-y-6 pb-24">
-      {/* Header */}
-      <div className="flex flex-col items-start gap-4">
-        <div className="rounded-xl bg-purple-100 p-2.5">
-          <Mic2 className="h-7 w-7 text-purple-600" aria-hidden="true" />
-        </div>
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Choose your agent&apos;s voice</h2>
-          <p className="mt-1 text-muted-foreground">
-            Browse thousands of natural-sounding voices, preview them and pick the perfect one.
-          </p>
-        </div>
-      </div>
-
-      <VoicePicker
-        layout="onboarding"
-        defaultLanguage={agentLanguage}
-        selectedVoiceId={selectedVoiceId}
-        onSelect={setSelected}
-        disabled={busy}
+    <div>
+      <StepHeader
+        step={3}
+        title="Choose your agent's voice"
+        description="Browse thousands of natural-sounding voices, preview them and pick the perfect one."
       />
 
-      {/* Sticky footer: selection + navigation */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 px-4 py-3 backdrop-blur-md">
-        <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
-          {selectedVoiceId ? (
-            <div className="flex min-w-0 items-center gap-2.5" aria-live="polite">
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-foreground">{selectedName || 'Selected voice'}</p>
-                {selectedLocale && (
-                  <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
-                    {selectedLocale.country && <FlagIcon country={selectedLocale.country} className="h-3 w-4.5" />}
-                    <span className="truncate">{selectedLocale.text}</span>
-                  </p>
-                )}
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Select a voice to continue</p>
-          )}
+      <StepBody>
+        <VoicePicker
+          layout="onboarding"
+          defaultLanguage={agentLanguage}
+          selectedVoiceId={selectedVoiceId}
+          onSelect={setSelected}
+          disabled={busy}
+        />
+      </StepBody>
 
-          <div className="flex shrink-0 items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setStep(2)} disabled={busy} className="gap-1.5">
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden sm:inline">Back</span>
-              <span className="sr-only sm:hidden">Back</span>
-            </Button>
-            <Button onClick={handleContinue} disabled={!selectedVoiceId || busy} className="purple-glow px-5">
-              {busy ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                  {phase === 'adding' ? 'Adding voice…' : 'Saving…'}
-                </>
-              ) : (
-                <>
-                  Continue <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
-                </>
+      {/* Sticky at every width: the list is long, the choice and Continue stay in reach. */}
+      <StepActions sticky="always" className="justify-between">
+        <div className="flex min-w-0 items-center gap-2" aria-live="polite">
+          {selectedVoiceId ? (
+            <>
+              <StatusChip
+                tone="neutral"
+                icon={<CheckCircle2 className="text-success-dot" aria-hidden="true" />}
+                className="max-w-full min-w-0 shrink"
+              >
+                <span className="truncate">
+                  <span className="sr-only sm:not-sr-only">Selected: </span>
+                  {selectedName || 'Selected voice'}
+                </span>
+              </StatusChip>
+              {selectedLocale && (
+                <span className="hidden min-w-0 items-center gap-1.5 text-xs leading-4 text-muted-foreground sm:flex">
+                  {selectedLocale.country && <FlagIcon country={selectedLocale.country} className="h-3 w-[18px]" />}
+                  <span className="truncate">{selectedLocale.text}</span>
+                </span>
               )}
-            </Button>
-          </div>
+            </>
+          ) : (
+            <p className="text-[13px] leading-[19px] text-muted-foreground">Select a voice to continue</p>
+          )}
         </div>
-      </div>
+
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+          <Button
+            variant="ghost"
+            size="lg"
+            onClick={() => setStep(2)}
+            disabled={busy}
+            className="max-sm:size-11 max-sm:px-0"
+          >
+            <ArrowLeft aria-hidden="true" />
+            <span className="max-sm:sr-only">Back</span>
+          </Button>
+          <Button
+            size="lg"
+            onClick={handleContinue}
+            disabled={!selectedVoiceId}
+            loading={busy}
+            loadingText={phase === 'adding' ? 'Adding voice…' : 'Saving…'}
+          >
+            Continue
+            <ArrowRight aria-hidden="true" />
+          </Button>
+        </div>
+      </StepActions>
     </div>
   )
 }

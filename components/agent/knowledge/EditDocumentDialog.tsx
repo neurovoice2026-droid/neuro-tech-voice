@@ -6,12 +6,13 @@
 // otherwise); until then the dialog only renames it.
 
 import { useEffect, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Field } from '@/components/shared/FormSection'
+import { OrbLoader } from '@/components/shared/OrbLoader'
 import { KNOWLEDGE_LIMITS, type KnowledgeDoc } from '@/hooks/useKnowledge'
 import { cn } from '@/lib/utils'
 
@@ -31,7 +32,7 @@ export function EditDocumentDialog({ doc, onClose, loadText, onSave }: EditDocum
   const [saving, setSaving] = useState(false)
   return (
     <Dialog open={!!doc} onOpenChange={(open) => !open && !saving && onClose()}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-[560px]">
         {doc && <EditForm key={doc.id} doc={doc} onClose={onClose} loadText={loadText} onSave={onSave} saving={saving} setSaving={setSaving} />}
       </DialogContent>
     </Dialog>
@@ -70,6 +71,7 @@ function EditForm({
 
   const trimmed = name.trim()
   const tooLong = text.length > KNOWLEDGE_LIMITS.maxTextChars
+  const textUnavailable = isText && !loading && original === null
   const nameChanged = trimmed !== doc.name
   const textChanged = isText && original !== null && text !== original
   const canSave = !!trimmed && (nameChanged || textChanged) && !tooLong && !saving && !loading && (!isText || !!text.trim())
@@ -94,39 +96,43 @@ function EditForm({
               : 'The new name is shown to your agent as the title of this document.'}
         </DialogDescription>
       </DialogHeader>
-      <div className="space-y-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="kb-edit-name">Name</Label>
+      <div className="space-y-5">
+        <Field label="Name" htmlFor="kb-edit-name">
           <Input id="kb-edit-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={KNOWLEDGE_LIMITS.maxNameChars} disabled={saving} />
-        </div>
+        </Field>
         {isText && (
-          <div className="space-y-1.5">
-            <Label htmlFor="kb-edit-text">Text</Label>
-            {loading ? (
-              <div className="flex h-32 items-center justify-center rounded-lg border text-sm text-muted-foreground">
-                <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" /> Loading…
-              </div>
-            ) : (
-              <Textarea
-                id="kb-edit-text"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                className="min-h-48 max-h-[50vh] overflow-y-auto"
-                disabled={saving || original === null}
-                aria-invalid={tooLong || undefined}
-              />
+          <div className="grid gap-2">
+            <Field label="Text" htmlFor="kb-edit-text">
+              {loading ? (
+                <OrbLoader size={32} label="Loading the text…" className="h-48 rounded-[10px] bg-band" />
+              ) : (
+                <Textarea
+                  id="kb-edit-text"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  className="min-h-48 max-h-[50vh] overflow-y-auto"
+                  disabled={saving || original === null}
+                  aria-invalid={tooLong || undefined}
+                  aria-describedby={textUnavailable ? 'kb-edit-text-unavailable' : undefined}
+                />
+              )}
+            </Field>
+            {/* A load failure, not a validation error: the (disabled) field is not marked invalid. */}
+            {textUnavailable && (
+              <p id="kb-edit-text-unavailable" role="alert" className="flex items-start gap-1.5 text-xs leading-4 text-destructive">
+                <AlertCircle className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                <span>The text could not be loaded. You can still rename the document.</span>
+              </p>
             )}
-            {!loading && original === null && <p className="text-xs text-destructive">The text could not be loaded. You can still rename the document.</p>}
-            <p className={cn('text-xs', tooLong ? 'text-destructive' : 'text-muted-foreground')}>
+            <p className={cn('text-xs tabular-nums', tooLong ? 'text-destructive' : 'text-muted-foreground')}>
               {text.length.toLocaleString()} / {KNOWLEDGE_LIMITS.maxTextChars.toLocaleString()} characters
             </p>
           </div>
         )}
       </div>
       <DialogFooter>
-        <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-        <Button onClick={() => void save()} disabled={!canSave}>
-          {saving && <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden="true" />}
+        <Button variant="ghost" onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button onClick={() => void save()} disabled={!canSave} loading={saving} loadingText="Saving…">
           Save
         </Button>
       </DialogFooter>

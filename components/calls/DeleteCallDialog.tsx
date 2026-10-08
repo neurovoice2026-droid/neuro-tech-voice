@@ -1,9 +1,9 @@
 'use client'
 
 import { useTransition } from 'react'
-import { Trash2, Loader2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -38,41 +38,34 @@ export function DeleteCallDialog({ open, onOpenChange, callId, onDeleted }: Dele
 
   return (
     <Dialog open={open} onOpenChange={(next) => !isPending && onOpenChange(next)}>
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <div className="rounded-full bg-red-100 p-1.5">
-              <Trash2 className="h-4 w-4 text-red-600" />
-            </div>
-            Delete call record?
-          </DialogTitle>
+          <span className="mb-2 grid size-10 place-items-center rounded-full bg-destructive-soft text-destructive" aria-hidden="true">
+            <Trash2 className="size-[18px]" />
+          </span>
+          <DialogTitle>Delete call record?</DialogTitle>
           <DialogDescription>
             This permanently deletes the call, its transcript and its recording, here and at the
             voice provider that handled it. This action cannot be undone.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex gap-3 pt-2">
+        <DialogFooter>
           <Button
-            variant="outline"
-            className="flex-1"
+            variant="ghost"
             onClick={() => onOpenChange(false)}
             disabled={isPending}
           >
             Cancel
           </Button>
           <Button
-            variant="destructive"
-            className="flex-1"
+            variant="destructive-solid"
             onClick={handleDelete}
-            disabled={isPending}
+            loading={isPending}
+            loadingText="Deleting…"
           >
-            {isPending ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Deleting…</>
-            ) : (
-              'Delete call'
-            )}
+            Delete call
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

@@ -1,9 +1,12 @@
 import { unstable_rethrow } from 'next/navigation'
+import { UserX } from 'lucide-react'
 import { requireOrg } from '@/lib/api/auth'
 import { RequestError } from '@/lib/api/http'
 import { createLogger } from '@/lib/observability/logger'
 import { defaultAgentName, ensureAgent } from '@/lib/agents/ensure-agent'
 import { AgentPageClient } from '@/components/agent/AgentPageClient'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageContainer } from '@/components/shared/PageContainer'
 import type { PhoneNumber } from '@/types'
 
 export default async function AgentPage() {
@@ -18,9 +21,16 @@ export default async function AgentPage() {
     // Account deletion in progress: nothing to edit any more.
     if (err instanceof RequestError && err.status === 403 && (err.details as { reason?: string } | undefined)?.reason === 'account_deleting') {
       return (
-        <div className="mx-auto max-w-xl rounded-lg border bg-card p-6 text-sm text-muted-foreground" role="status">
-          {err.message} Your agent no longer answers calls and its settings can no longer be changed.
-        </div>
+        <PageContainer width="narrow">
+          <h1 className="sr-only">Agent</h1>
+          <div role="status" className="mt-10">
+            <EmptyState
+              icon={UserX}
+              title={err.message}
+              description="Your agent no longer answers calls and its settings can no longer be changed."
+            />
+          </div>
+        </PageContainer>
       )
     }
     // Anything else (e.g. the organization read failed) is a real error: log it

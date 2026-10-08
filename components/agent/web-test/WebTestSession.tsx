@@ -9,11 +9,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ConversationProvider, useConversation } from '@elevenlabs/react'
-import { Bot, Loader2, Mic, MicOff, PhoneOff, Send, Timer, User } from 'lucide-react'
+import { AlertCircle, MessageSquare, Mic, MicOff, PhoneOff, Send, Timer } from 'lucide-react'
 import { toast } from 'sonner'
-import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Eyebrow } from '@/components/shared/Eyebrow'
+import { OrbLoader, type OrbState } from '@/components/shared/OrbLoader'
 import { errorMessage, parseApiError } from '@/hooks/useVoiceCatalog'
 import { cn } from '@/lib/utils'
 import type { WebTestMode, WebTestSessionGrant } from './types'
@@ -39,6 +41,11 @@ export interface WebTestSessionProps {
   onFinished: () => void
   /** No test can be started any more (trial tests used up): keeps the last test on screen without "Start again". */
   startBlocked?: boolean
+  /**
+   * Surface of the stage shown while a test starts or runs: 'cover' (the dark live-call
+   * stage, agent page) or 'light' (tinted, where the screen already has a cover surface).
+   */
+  stage?: 'cover' | 'light'
 }
 
 const MAX_LINES = 200
@@ -72,7 +79,7 @@ function formatClock(totalSeconds: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-function SessionView({ mode, agentName, onStart, onGranted, onFinished, startBlocked = false }: WebTestSessionProps) {
+function SessionView({ mode, agentName, onStart, onGranted, onFinished, startBlocked = false, stage = 'cover' }: WebTestSessionProps) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState<string | null>(null)
   const [lines, setLines] = useState<Line[]>([])
@@ -232,6 +239,8 @@ function SessionView({ mode, agentName, onStart, onGranted, onFinished, startBlo
 
   const busy = phase === 'mic' || phase === 'requesting' || phase === 'connecting'
   const live = phase === 'connected'
+  // While a test is starting or running, the controls become a stage around the orb.
+  const onStage = busy || live
   const remaining = maxSeconds ? maxSeconds - elapsed : null
   const statusText =
     phase === 'mic' ? 'Waiting for microphone permission…'
@@ -240,46 +249,90 @@ function SessionView({ mode, agentName, onStart, onGranted, onFinished, startBlo
     : live ? (mode === 'voice' ? (isSpeaking ? `${agentName} is speaking` : 'Listening to you') : `Chatting with ${agentName}`)
     : phase === 'ended' ? (endedByLimit ? 'The test reached its time limit and ended.' : 'The test has ended.')
     : 'Not connected'
+  const awaitingReply = lines.length > 0 && lines[lines.length - 1].role === 'user'
+  const orbState: OrbState =
+    phase === 'mic' ? 'breathing'
+    : busy ? 'connecting'
+    : mode === 'voice' ? (isSpeaking ? 'composing' : 'listening')
+    : awaitingReply ? 'composing' : 'breathing'
+  const dark = stage === 'cover'
+  // The brand tint is reserved for a live voice orb on a light surface (accent policy #9).
+  const orbTone = !dark && live && mode === 'voice' ? 'brand' : 'ink'
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        {!live && !busy ? (
-          startBlocked ? null : (
-            <Button onClick={() => void start()} className="gap-2">
-              {mode === 'voice' ? <Mic aria-hidden="true" /> : <Send aria-hidden="true" />}
-              {phase === 'ended' || phase === 'error' ? 'Start again' : mode === 'voice' ? 'Start talking' : 'Start chat'}
-            </Button>
-          )
+      {/* The stage: one element throughout (tinted when idle, the dark cover while a test starts
+          or runs), so the status line inside it stays the same live region. */}
+      <div
+        className={cn(
+          'flex flex-col items-center overflow-hidden rounded-2xl px-4 pt-4 pb-5 text-center transition-colors duration-300 sm:px-5',
+          onStage && dark ? 'app-cover' : 'bg-secondary',
+        )}
+      >
+        <div className="flex min-h-6 w-full items-center justify-between gap-3">
+          {onStage && dark ? (
+            <Eyebrow tone="cover">{mode === 'voice' ? 'Test call' : 'Test chat'}</Eyebrow>
+          ) : (
+            <p className="text-[11px] leading-4 font-medium tracking-[0.12em] text-muted-foreground uppercase">
+              {mode === 'voice' ? 'Test call' : 'Test chat'}
+            </p>
+          )}
+          {live && remaining !== null && (
+            <span
+              className={cn(
+                'inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium tabular-nums',
+                dark ? 'bg-white/10 text-[#dedce0]' : 'bg-white text-foreground shadow-hair',
+              )}
+              title="Time left in this test"
+            >
+              <Timer className="size-3" aria-hidden="true" />
+              <span className="sr-only">Time left: </span>
+              {formatClock(remaining)}
+            </span>
+          )}
+        </div>
+        {onStage ? (
+          // Decorative: the status line below is the announced text.
+          <div aria-hidden="true" className="mt-2">
+            <OrbLoader state={orbState} size={64} surface={dark ? 'dark' : 'light'} tone={orbTone} hideLabel delayMs={0} />
+          </div>
         ) : (
+          <span aria-hidden="true" className="mt-2 grid size-16 place-items-center rounded-full bg-white text-foreground shadow-hair">
+            {mode === 'voice' ? <Mic className="size-6" strokeWidth={1.5} /> : <MessageSquare className="size-6" strokeWidth={1.5} />}
+          </span>
+        )}
+        <p
+          role="status"
+          aria-live="polite"
+          className={cn(
+            'mt-3 text-sm leading-[21px]',
+            onStage ? (dark ? 'font-medium text-[#dedce0]' : 'font-medium text-foreground') : 'text-muted-foreground',
+          )}
+        >
+          {statusText}
+        </p>
+        {onStage ? (
           <Button
             variant="destructive"
             onClick={end}
             disabled={phase === 'mic' || phase === 'requesting'}
-            className="gap-2"
+            className="mt-4"
           >
             <PhoneOff aria-hidden="true" /> End test
           </Button>
-        )}
-        <span role="status" aria-live="polite" className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          {busy && <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />}
-          {live && mode === 'voice' && (isSpeaking ? <Bot className="size-3.5" aria-hidden="true" /> : <Mic className="size-3.5 text-green-600" aria-hidden="true" />)}
-          {statusText}
-        </span>
-        {live && remaining !== null && (
-          <Badge variant="outline" className="ml-auto gap-1 tabular-nums" title="Time left in this test">
-            <Timer aria-hidden="true" />
-            <span className="sr-only">Time left: </span>
-            {formatClock(remaining)}
-          </Badge>
+        ) : startBlocked ? null : (
+          <Button onClick={() => void start()} className="mt-4">
+            {mode === 'voice' ? <Mic aria-hidden="true" /> : <Send aria-hidden="true" />}
+            {phase === 'ended' || phase === 'error' ? 'Start again' : mode === 'voice' ? 'Start talking' : 'Start chat'}
+          </Button>
         )}
       </div>
 
       {error && (
-        <p role="alert" className="flex items-start gap-1.5 text-sm text-destructive">
-          {mode === 'voice' && phase === 'idle' ? <MicOff className="mt-0.5 size-4 shrink-0" aria-hidden="true" /> : null}
-          {error}
-        </p>
+        <Alert variant="destructive">
+          {mode === 'voice' && phase === 'idle' ? <MicOff aria-hidden="true" /> : <AlertCircle aria-hidden="true" />}
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
       {(lines.length > 0 || live) && (
@@ -288,16 +341,27 @@ function SessionView({ mode, agentName, onStart, onGranted, onFinished, startBlo
           role="log"
           aria-live="polite"
           aria-label="Test conversation transcript"
-          className="max-h-72 space-y-2 overflow-y-auto rounded-lg border bg-muted/30 p-3"
+          className="flex max-h-80 flex-col gap-3 overflow-y-auto rounded-2xl bg-secondary p-4"
         >
-          {lines.length === 0 && <p className="text-sm text-muted-foreground">{mode === 'voice' ? 'Say hello to start the conversation.' : 'Type a message to start the conversation.'}</p>}
+          {lines.length === 0 && (
+            <p className="text-[13px] leading-[19px] text-muted-foreground">
+              {mode === 'voice' ? 'Say hello to start the conversation.' : 'Type a message to start the conversation.'}
+            </p>
+          )}
           {lines.map((l) => (
-            <div key={l.id} className={cn('flex gap-2 text-sm', l.role === 'user' && 'flex-row-reverse text-right')}>
-              <span className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true">
-                {l.role === 'user' ? <User className="size-4" /> : <Bot className="size-4" />}
+            <div key={l.id} className={cn('flex flex-col gap-1', l.role === 'user' ? 'items-end' : 'items-start')}>
+              <span className="px-1 text-[11px] leading-4 font-medium tracking-[0.12em] text-muted-foreground uppercase">
+                {l.role === 'user' ? 'You' : agentName}
               </span>
-              <p className={cn('max-w-[85%] rounded-lg px-3 py-1.5', l.role === 'user' ? 'bg-primary/10' : 'bg-card ring-1 ring-foreground/10')}>
-                <span className="sr-only">{l.role === 'user' ? 'You: ' : `${agentName}: `}</span>
+              <p
+                className={cn(
+                  'max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-[21px] break-words',
+                  l.role === 'user'
+                    ? 'rounded-br-md bg-primary text-white'
+                    : 'rounded-bl-md bg-white text-foreground shadow-hair',
+                  l.local && 'opacity-75',
+                )}
+              >
                 {l.text}
               </p>
             </div>
@@ -316,7 +380,7 @@ function SessionView({ mode, agentName, onStart, onGranted, onFinished, startBlo
             placeholder="Type what a caller would say…"
             autoComplete="off"
           />
-          <Button type="submit" disabled={!draft.trim()} className="gap-1.5">
+          <Button type="submit" disabled={!draft.trim()} className="h-10">
             <Send aria-hidden="true" /> Send
           </Button>
         </form>

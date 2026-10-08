@@ -2,25 +2,21 @@
 
 import { useState } from 'react'
 import {
-  CreditCard, Zap, Shield, Layers, Clock, Building2,
-  AlertTriangle, ArrowUpRight, ExternalLink, Loader2, Settings,
+  AlertTriangle, ArrowUpRight, Check, CreditCard, ExternalLink, Settings, Shield,
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
-import { cn } from '@/lib/utils'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { OrbLoader } from '@/components/shared/OrbLoader'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { SectionHeading } from '@/components/shared/SectionHeading'
+import { StatusChip } from '@/components/shared/StatusChip'
 import { useOrganization } from '@/hooks/useOrganization'
 import { PLANS } from '@/types'
 import type { Plan, BillingInterval } from '@/types'
-
-const PLAN_META: Record<Plan, { icon: LucideIcon; iconBg: string; iconColor: string }> = {
-  trial: { icon: Layers, iconBg: 'bg-gray-100', iconColor: 'text-gray-500' },
-  starter: { icon: Layers, iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' },
-  pro: { icon: Zap, iconBg: 'bg-purple-100', iconColor: 'text-purple-600' },
-  business: { icon: Building2, iconBg: 'bg-indigo-100', iconColor: 'text-indigo-600' },
-  custom: { icon: Shield, iconBg: 'bg-gray-900', iconColor: 'text-purple-400' },
-}
 
 // Self-serve upgrade path (custom is sales-led, trial is the entry tier).
 const UPGRADE_NEXT: Partial<Record<Plan, Plan>> = {
@@ -29,13 +25,27 @@ const UPGRADE_NEXT: Partial<Record<Plan, Plan>> = {
   pro: 'business',
 }
 
+/** The plan the picker recommends ("Our pick"). */
+const RECOMMENDED: Plan = 'pro'
+
+/** Plans shown as cards; `custom` is the wide sales-led tile after them. */
+const CARD_PLANS: Plan[] = ['trial', 'starter', 'pro', 'business']
+
+const OVERLINE = 'text-[11px] leading-4 font-medium tracking-[0.12em] uppercase text-muted-foreground'
+
+function money(n: number): string {
+  return `$${n.toLocaleString('en-US')}`
+}
+
 export default function BillingPage() {
   const { organization: org, isLoading } = useOrganization()
+  // Which control started the redirect ("header:pro", "card:business", "portal:manage" …), so only
+  // that button shows the orb; any value blocks the other billing actions.
   const [pending, setPending] = useState<string | null>(null)
   const [cycle, setCycle] = useState<BillingInterval>('month')
 
-  async function goToCheckout(plan: Plan) {
-    setPending(plan)
+  async function goToCheckout(plan: Plan, source: 'header' | 'card' = 'card') {
+    setPending(`${source}:${plan}`)
     try {
       const res = await fetch('/api/billing/checkout', {
         method: 'POST',
@@ -54,8 +64,8 @@ export default function BillingPage() {
     setPending(null)
   }
 
-  async function openPortal() {
-    setPending('portal')
+  async function openPortal(source: 'manage' | 'downgrade' | 'invoices') {
+    setPending(`portal:${source}`)
     try {
       const res = await fetch('/api/billing/portal', { method: 'POST' })
       const data = await res.json()
@@ -70,12 +80,22 @@ export default function BillingPage() {
     setPending(null)
   }
 
+  const header = (
+    <PageHeader
+      eyebrow="Billing"
+      title="Billing"
+      description="Manage your subscription, payment method, and billing history."
+    />
+  )
+
   if (isLoading || !org) {
     return (
-      <div className="p-6 max-w-3xl space-y-6">
-        <div className="h-44 animate-pulse rounded-2xl bg-muted" />
-        <div className="h-64 animate-pulse rounded-2xl bg-muted" />
-      </div>
+      <PageContainer>
+        {header}
+        <div className="max-w-[768px]">
+          <OrbLoader label="Loading your plan…" className="min-h-[360px]" />
+        </div>
+      </PageContainer>
     )
   }
 
@@ -84,216 +104,276 @@ export default function BillingPage() {
   const minutesUsed = org.minutes_used ?? 0
   const minutesLimit = org.minutes_limit ?? planCfg.minutes_limit
   const usagePct = minutesLimit > 0 ? Math.min(100, Math.round((minutesUsed / minutesLimit) * 100)) : 0
+  const usageTone = usagePct >= 100 ? 'danger' : usagePct >= 80 ? 'warning' : 'default'
   const hasBilling = !!org.stripe_customer_id
-  const PlanIcon = PLAN_META[currentPlan].icon
   const nextTier: Plan | null = UPGRADE_NEXT[currentPlan] ?? null
   const busy = pending !== null
+  const isTrial = currentPlan === 'trial'
+
+  const custom = PLANS.custom
+  const customIsCurrent = currentPlan === 'custom'
 
   return (
-    <div className="p-6 max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Billing</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Manage your subscription, payment method, and billing history.
-        </p>
-      </div>
+    <PageContainer className="space-y-10">
+      {header}
 
-      {/* Current plan + usage */}
-      <div className="rounded-2xl overflow-hidden border-2 border-primary shadow-sm">
-        <div className="bg-gradient-to-r from-purple-600 via-purple-700 to-indigo-700 px-6 py-5">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20">
-                <PlanIcon className="h-5 w-5 text-yellow-300" />
+      {/* Default-width page with a left-aligned 768 px column (as the Agent tab panels), so the
+          header and content start at the same x as on every other dashboard page. */}
+      <div className="max-w-[768px] space-y-10">
+        {/* Current plan + usage */}
+        <section
+          aria-labelledby="billing-current-plan-label billing-current-plan"
+          className="overflow-hidden rounded-2xl bg-card shadow-hair"
+        >
+          <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
+            <div className="min-w-0">
+              <p id="billing-current-plan-label" className={OVERLINE}>Current plan</p>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                <h2
+                  id="billing-current-plan"
+                  className="font-heading font-title text-[28px] leading-[34px] tracking-[-0.02em]"
+                >
+                  {planCfg.name}
+                </h2>
+                <StatusChip tone={isTrial ? 'warning' : 'success'} dot>
+                  {isTrial ? 'Trial' : 'Active'}
+                </StatusChip>
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-white">{planCfg.name} Plan</h2>
-                  <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[11px] font-semibold text-white">
-                    {currentPlan === 'trial' ? 'Trial' : 'Active'}
-                  </span>
-                </div>
-                <p className="text-sm text-purple-200">
-                  {planCfg.price_monthly === 0 ? 'No subscription' : `$${planCfg.price_monthly}/month`}
-                </p>
+              <p className="mt-1 text-[15px] leading-[22px] text-muted-foreground tabular-nums">
+                {planCfg.price_monthly === 0 ? 'No subscription' : `${money(planCfg.price_monthly)} / month`}
+              </p>
+            </div>
+
+            {(hasBilling || nextTier) && (
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                {hasBilling && (
+                  <Button
+                    variant="outline"
+                    onClick={() => void openPortal('manage')}
+                    disabled={busy}
+                    loading={pending === 'portal:manage'}
+                    loadingText="Opening billing portal…"
+                  >
+                    <Settings aria-hidden="true" />
+                    Manage subscription
+                  </Button>
+                )}
+                {nextTier && (
+                  <Button
+                    onClick={() => void goToCheckout(nextTier, 'header')}
+                    disabled={busy}
+                    loading={pending === `header:${nextTier}`}
+                    loadingText="Redirecting to checkout…"
+                  >
+                    <ArrowUpRight aria-hidden="true" />
+                    Upgrade to {PLANS[nextTier].name}
+                  </Button>
+                )}
               </div>
-            </div>
-            <div className="text-right">
-              <p className="text-2xl font-black text-white">${planCfg.price_monthly}</p>
-              <p className="text-xs text-purple-200">per month</p>
-            </div>
+            )}
           </div>
-        </div>
 
-        <div className="bg-card px-6 py-5 space-y-4">
-          <p className="text-sm font-semibold text-foreground">This month&apos;s usage</p>
-          <div>
-            <div className="flex items-center justify-between text-xs mb-1.5">
-              <span className="flex items-center gap-1.5 text-muted-foreground">
-                <Clock className="h-3.5 w-3.5" />
-                Minutes used
-              </span>
-              <span className={cn('font-semibold', usagePct > 80 ? 'text-orange-500' : 'text-foreground')}>
-                {minutesUsed} / {minutesLimit}
-              </span>
+          <div className="border-t border-rule p-5 sm:p-6">
+            <div className="flex items-center justify-between gap-4">
+              <p className={OVERLINE}>This month&apos;s usage</p>
+              <p className="text-[13px] leading-[19px] text-muted-foreground tabular-nums">{usagePct}% used</p>
             </div>
-            <Progress value={usagePct} className="h-2" />
-            {usagePct > 80 && (
-              <p className="mt-1 flex items-center gap-1 text-[11px] text-orange-500">
-                <AlertTriangle className="h-3 w-3" />
+            <p className="mt-3 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              <span className="text-[48px] leading-[52px] font-semibold tracking-[-0.03em] tabular-nums">
+                {minutesUsed.toLocaleString('en-US')}
+              </span>
+              <span className="text-[15px] leading-[22px] text-muted-foreground tabular-nums">
+                of {minutesLimit.toLocaleString('en-US')} minutes this period
+              </span>
+            </p>
+            <Progress value={usagePct} tone={usageTone} aria-label="Minutes used" className="mt-4" />
+            {usagePct >= 80 && (
+              <p className="mt-3 flex items-center gap-1.5 text-[13px] leading-[19px] text-warning">
+                <AlertTriangle className="size-3.5 shrink-0" aria-hidden="true" />
                 {100 - usagePct}% of minutes remaining — consider upgrading
               </p>
             )}
           </div>
+        </section>
 
-          <div className="flex flex-wrap gap-2 pt-1">
-            {hasBilling && (
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={openPortal} disabled={busy}>
-                {pending === 'portal' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Settings className="h-3.5 w-3.5" />}
-                Manage subscription
-              </Button>
-            )}
-            {nextTier && (
-              <Button size="sm" className="purple-glow gap-1.5 ml-auto" onClick={() => goToCheckout(nextTier)} disabled={busy}>
-                {pending === nextTier ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5" />}
-                Upgrade to {PLANS[nextTier].name}
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
+        {/* Plan picker */}
+        <section>
+          <Tabs value={cycle} onValueChange={(v) => setCycle(v as BillingInterval)} className="gap-0">
+            <SectionHeading
+              title="Change plan"
+              className="flex-wrap items-center"
+              action={
+                <>
+                  <Badge variant="brand">Two months free</Badge>
+                  <TabsList aria-label="Billing cycle">
+                    <TabsTrigger value="month">Monthly</TabsTrigger>
+                    <TabsTrigger value="year">Annual</TabsTrigger>
+                  </TabsList>
+                </>
+              }
+            />
 
-      {/* Plan picker */}
-      <div className="rounded-2xl border bg-card p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-foreground">Change plan</h2>
-          {/* Billing cycle toggle */}
-          <div className="flex items-center gap-1 rounded-lg border bg-muted/40 p-0.5 text-xs">
-            <button
-              type="button"
-              onClick={() => setCycle('month')}
-              className={cn('rounded-md px-2.5 py-1 font-medium transition-colors', cycle === 'month' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground')}
-            >
-              Monthly
-            </button>
-            <button
-              type="button"
-              onClick={() => setCycle('year')}
-              className={cn('flex items-center gap-1 rounded-md px-2.5 py-1 font-medium transition-colors', cycle === 'year' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground')}
-            >
-              Annual
-              <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[9px] font-bold text-green-700">2 MO FREE</span>
-            </button>
-          </div>
-        </div>
-        <div className="space-y-3">
-          {(Object.keys(PLANS) as Plan[]).map((planId) => {
-            const cfg = PLANS[planId]
-            const meta = PLAN_META[planId]
-            const Icon = meta.icon
-            const isCurrent = planId === currentPlan
-            const isCustom = planId === 'custom'
-            const isPaid = !isCustom && planId !== 'trial'
-            // Annual shows the monthly-equivalent (yearly total / 12).
-            const displayPrice = cycle === 'year' && isPaid
-              ? Math.round(cfg.price_annual / 12)
-              : cfg.price_monthly
-
-            return (
-              <div
-                key={planId}
-                className={cn(
-                  'relative rounded-xl border-2 p-4 transition-all',
-                  isCustom ? 'bg-gray-950 border-gray-800' : isCurrent ? 'border-primary bg-purple-50/60' : 'border-border'
-                )}
+            {(['month', 'year'] as const).map((c) => (
+              // The panel is a tab stop (its first content is not focusable), so it shows the ring.
+              <TabsContent
+                key={c}
+                value={c}
+                className="rounded-2xl focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-4 focus-visible:outline-ring"
               >
-                {isCurrent && (
-                  <span className="absolute -top-2.5 left-4 rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-bold text-primary-foreground">
-                    Current plan
-                  </span>
-                )}
-                <div className="flex items-center gap-3">
-                  <div className={cn('flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl', meta.iconBg)}>
-                    <Icon className={cn('h-4 w-4', meta.iconColor)} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className={cn('font-semibold text-sm', isCustom ? 'text-white' : 'text-foreground')}>
-                      {cfg.name}
-                    </span>
-                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
-                      {cfg.features.slice(0, 3).map((f) => (
-                        <span key={f} className={cn('text-[11px]', isCustom ? 'text-gray-400' : 'text-muted-foreground')}>
-                          · {f}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {CARD_PLANS.map((planId) => {
+                    const cfg = PLANS[planId]
+                    const isCurrent = planId === currentPlan
+                    const isPaid = planId !== 'trial'
+                    // Annual shows the monthly-equivalent (yearly total / 12).
+                    const displayPrice = c === 'year' && isPaid ? Math.round(cfg.price_annual / 12) : cfg.price_monthly
+
+                    return (
+                      <div
+                        key={planId}
+                        data-current={isCurrent || undefined}
+                        className="flex flex-col rounded-2xl bg-card p-5 shadow-hair"
+                      >
+                        {/* min-h-6 = badge height, so prices line up whether or not a card has a badge. */}
+                        <div className="flex min-h-6 flex-wrap items-center gap-2">
+                          <h3 className="text-[15px] leading-[22px] font-medium">{cfg.name}</h3>
+                          {isCurrent ? (
+                            <Badge variant="secondary">Current plan</Badge>
+                          ) : planId === RECOMMENDED ? (
+                            <Badge>Our pick</Badge>
+                          ) : null}
+                        </div>
+
+                        <p className="mt-3 flex items-baseline gap-1">
+                          <span className="text-[28px] leading-8 font-semibold tracking-[-0.02em] tabular-nums">
+                            {money(displayPrice)}
+                          </span>
+                          <span className="text-[13px] text-muted-foreground">/mo</span>
+                        </p>
+                        <p className="mt-1 min-h-4 text-xs leading-4 text-muted-foreground tabular-nums">
+                          {c === 'year' && isPaid ? `${money(cfg.price_annual)}/yr billed annually` : null}
+                        </p>
+
+                        <ul className="mt-3 space-y-2">
+                          {cfg.features.slice(0, 3).map((f) => (
+                            <li key={f} className="flex items-start gap-2 text-[13px] leading-[19px]">
+                              <Check className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                              {f}
+                            </li>
+                          ))}
+                        </ul>
+
+                        {!isCurrent && (isPaid || hasBilling) && (
+                          <div className="mt-auto pt-5">
+                            {isPaid ? (
+                              // Outline on every card: the header holds the one ink upgrade and
+                              // "Our pick" already marks the recommended plan.
+                              <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => void goToCheckout(planId)}
+                                disabled={busy}
+                                loading={pending === `card:${planId}`}
+                                loadingText="Redirecting to checkout…"
+                              >
+                                Upgrade<span className="sr-only"> to {cfg.name}</span>
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="secondary"
+                                className="w-full"
+                                onClick={() => void openPortal('downgrade')}
+                                disabled={busy}
+                                loading={pending === 'portal:downgrade'}
+                                loadingText="Opening billing portal…"
+                              >
+                                Downgrade<span className="sr-only"> to {cfg.name}</span>
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+
+                  {/* Custom: sales-led, full width */}
+                  <div
+                    data-current={customIsCurrent || undefined}
+                    className="flex flex-col gap-4 rounded-2xl bg-secondary p-5 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex min-h-6 flex-wrap items-center gap-2">
+                        <h3 className="text-[15px] leading-[22px] font-medium">{custom.name}</h3>
+                        {customIsCurrent && <Badge variant="secondary">Current plan</Badge>}
+                      </div>
+                      <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
+                        {custom.features.slice(0, 3).map((f) => (
+                          <li key={f} className="flex items-center gap-1.5 text-[13px] leading-[19px] text-muted-foreground">
+                            <Check className="size-3.5 shrink-0" aria-hidden="true" />
+                            {f}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="flex shrink-0 items-center justify-between gap-4 sm:justify-end">
+                      <p className="flex items-baseline gap-1">
+                        <span className="text-[22px] leading-7 font-semibold tracking-[-0.02em] tabular-nums">
+                          {money(custom.price_monthly)}+
                         </span>
-                      ))}
+                        <span className="text-[13px] text-muted-foreground">/mo</span>
+                      </p>
+                      {!customIsCurrent && (
+                        <a
+                          href="mailto:sales@neuro-tech-voice.com?subject=Custom%20plan%20enquiry"
+                          className={buttonVariants({ variant: 'outline' })}
+                        >
+                          Contact sales
+                        </a>
+                      )}
                     </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className={cn('text-lg font-black', isCustom ? 'text-white' : 'text-foreground')}>
-                      ${displayPrice}{isCustom && '+'}
-                      <span className={cn('text-xs font-normal ml-0.5', isCustom ? 'text-gray-400' : 'text-muted-foreground')}>/mo</span>
-                    </p>
-                    {cycle === 'year' && isPaid && (
-                      <p className="text-[10px] text-muted-foreground">${cfg.price_annual}/yr billed annually</p>
-                    )}
-                    {!isCurrent && isCustom && (
-                      <a
-                        href="mailto:sales@neuro-tech-voice.com?subject=Custom%20plan%20enquiry"
-                        className="mt-1.5 inline-flex h-7 items-center rounded-md border border-gray-600 px-3 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
-                      >
-                        Contact sales
-                      </a>
-                    )}
-                    {!isCurrent && !isCustom && planId !== 'trial' && (
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className={cn('mt-1.5 h-7 text-xs', planId === 'pro' && 'purple-glow')}
-                        onClick={() => goToCheckout(planId)}
-                        disabled={busy}
-                      >
-                        {pending === planId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Upgrade'}
-                      </Button>
-                    )}
-                    {!isCurrent && planId === 'trial' && hasBilling && (
-                      <Button size="sm" variant="ghost" className="mt-1.5 h-7 text-xs text-muted-foreground" onClick={openPortal} disabled={busy}>
-                        Downgrade
-                      </Button>
-                    )}
-                  </div>
                 </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
+              </TabsContent>
+            ))}
+          </Tabs>
+        </section>
 
-      {/* Payment method & invoices → Stripe customer portal */}
-      <div className="rounded-2xl border bg-card p-5">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-muted">
-              <CreditCard className="h-4 w-4 text-muted-foreground" />
+        {/* Payment method & invoices → Stripe customer portal */}
+        <section aria-labelledby="billing-payment" className="rounded-2xl bg-card shadow-hair">
+          <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-secondary">
+                <CreditCard className="size-4" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <h2 id="billing-payment" className="text-[15px] leading-[22px] font-medium">
+                  Payment method &amp; invoices
+                </h2>
+                <p className="mt-0.5 text-[13px] leading-[19px] text-muted-foreground">
+                  Update your card, download invoices, or cancel — securely via Stripe.
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-foreground">Payment method &amp; invoices</p>
-              <p className="text-xs text-muted-foreground">
-                Update your card, download invoices, or cancel — securely via Stripe.
-              </p>
-            </div>
+            <Button
+              variant="outline"
+              className="shrink-0 self-start sm:self-center"
+              onClick={() => void openPortal('invoices')}
+              disabled={busy || !hasBilling}
+              loading={pending === 'portal:invoices'}
+              loadingText="Opening billing portal…"
+            >
+              <ExternalLink aria-hidden="true" />
+              Open portal
+            </Button>
           </div>
-          <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={openPortal} disabled={busy || !hasBilling}>
-            {pending === 'portal' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
-            Open portal
-          </Button>
-        </div>
-        {!hasBilling && (
-          <p className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <Shield className="h-3.5 w-3.5" />
-            No billing account yet — upgrade to a paid plan to manage payments here.
-          </p>
-        )}
+          {!hasBilling && (
+            <p className="flex items-center gap-2 border-t border-rule px-5 py-3 text-xs leading-4 text-muted-foreground">
+              <Shield className="size-3.5 shrink-0" aria-hidden="true" />
+              No billing account yet — upgrade to a paid plan to manage payments here.
+            </p>
+          )}
+        </section>
       </div>
-    </div>
+    </PageContainer>
   )
 }

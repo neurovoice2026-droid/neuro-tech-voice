@@ -1,23 +1,25 @@
 import Image from 'next/image'
-import { CheckCircle2, XCircle, ExternalLink, Link2 } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { WorkInProgressBadge } from '@/components/shared/WorkInProgressBadge'
+import Link from 'next/link'
+import { ArrowUpRight, Link2 } from 'lucide-react'
+import { buttonVariants } from '@/components/ui/button'
+import { Card, CardAction, CardHeader, CardTitle } from '@/components/ui/card'
+import { StatusChip } from '@/components/shared/StatusChip'
+import { cn } from '@/lib/utils'
 import type { Integration, IntegrationType } from '@/types'
 
 interface IntegrationMeta {
   label: string
   logoSrc?: string   // path in /public
-  logoBg: string
   workInProgress?: boolean
 }
 
 const INTEGRATION_META: Record<IntegrationType, IntegrationMeta> = {
-  google_calendar: { label: 'Google Calendar', logoSrc: '/integrari/google_calendar.svg', logoBg: 'bg-blue-50',   workInProgress: true },
-  gmail:           { label: 'Gmail',            logoSrc: '/integrari/google_mail.svg',     logoBg: 'bg-red-50',    workInProgress: true },
-  google_sheets:   { label: 'Google Sheets',    logoSrc: '/integrari/google_sheets.svg',   logoBg: 'bg-green-50',  workInProgress: true },
-  google_docs:     { label: 'Google Docs',      logoSrc: '/integrari/google_docs.svg',     logoBg: 'bg-blue-50',   workInProgress: true },
-  google_drive:    { label: 'Google Drive',     logoSrc: '/integrari/google_drive.svg',    logoBg: 'bg-yellow-50', workInProgress: true },
-  webhook:         { label: 'Webhook',           logoBg: 'bg-gray-100'                                                                  },
+  google_calendar: { label: 'Google Calendar', logoSrc: '/integrari/google_calendar.svg', workInProgress: true },
+  gmail:           { label: 'Gmail',           logoSrc: '/integrari/google_mail.svg',     workInProgress: true },
+  google_sheets:   { label: 'Google Sheets',   logoSrc: '/integrari/google_sheets.svg',   workInProgress: true },
+  google_docs:     { label: 'Google Docs',     logoSrc: '/integrari/google_docs.svg',     workInProgress: true },
+  google_drive:    { label: 'Google Drive',    logoSrc: '/integrari/google_drive.svg',    workInProgress: true },
+  webhook:         { label: 'Webhook' },
 }
 
 interface IntegrationsStatusProps {
@@ -29,51 +31,52 @@ export function IntegrationsStatus({ integrations }: IntegrationsStatusProps) {
   const connectedMap = new Map(integrations.map((i) => [i.type, i]))
 
   return (
-    <Card className="border shadow-sm">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base font-semibold">Integrations</CardTitle>
-          <a
+    <Card className="gap-0 pb-0">
+      <CardHeader className="pb-4">
+        <CardTitle>Integrations</CardTitle>
+        <CardAction className="self-center">
+          <Link
             href="/integrations"
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted"
+            aria-label="Manage integrations"
+            className={cn(buttonVariants({ variant: 'ghost', size: 'icon-sm' }), 'tap-44 -my-1 -mr-2 text-muted-foreground')}
           >
-            <ExternalLink className="h-4 w-4" />
-          </a>
-        </div>
+            <ArrowUpRight aria-hidden="true" />
+          </Link>
+        </CardAction>
       </CardHeader>
-      <CardContent className="space-y-2.5">
+      <ul className="border-t border-rule">
         {all.map((type) => {
           const meta = INTEGRATION_META[type]
           const isConnected = connectedMap.get(type)?.is_active ?? false
 
           return (
-            <div key={type} className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${meta.logoBg}`}>
-                  {meta.logoSrc ? (
-                    <Image
-                      src={meta.logoSrc}
-                      alt={meta.label}
-                      width={18}
-                      height={18}
-                      className="object-contain"
-                    />
-                  ) : (
-                    <Link2 className="h-3.5 w-3.5 text-gray-500" />
-                  )}
-                </div>
-                <span className="text-sm font-medium">{meta.label}</span>
-                {meta.workInProgress && <WorkInProgressBadge />}
+            // flex-wrap + a name column with a floor width: when the card is too narrow, the
+            // status chip wraps under the row instead of squeezing the provider name.
+            // "Work in progress" is plain meta text here (the Integrations page carries the
+            // warning badge) so the compact card does not stack five amber chips.
+            <li key={type} className="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule px-5 py-2.5 last:border-b-0">
+              <div className="grid size-8 shrink-0 place-items-center rounded-full bg-white shadow-hair">
+                {meta.logoSrc ? (
+                  <Image src={meta.logoSrc} alt="" width={16} height={16} className="object-contain" />
+                ) : (
+                  <Link2 className="size-4 text-foreground" aria-hidden="true" />
+                )}
+              </div>
+              <div className="min-w-0 flex-[1_1_8.5rem]">
+                <p className="truncate text-sm font-medium text-foreground">{meta.label}</p>
+                {meta.workInProgress && (
+                  <p className="mt-0.5 truncate text-xs leading-4 text-muted-foreground">Work in progress</p>
+                )}
               </div>
               {isConnected ? (
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <StatusChip tone="success" dot className="ml-auto">Connected</StatusChip>
               ) : (
-                <XCircle className="h-4 w-4 text-gray-300" />
+                <StatusChip tone="muted" className="ml-auto">Not connected</StatusChip>
               )}
-            </div>
+            </li>
           )
         })}
-      </CardContent>
+      </ul>
     </Card>
   )
 }
