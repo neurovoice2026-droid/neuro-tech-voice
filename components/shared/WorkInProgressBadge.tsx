@@ -1,5 +1,5 @@
 import { Construction } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
 
 // Google integrations (OAuth connect + workflow/call actions) aren't
 // reliably verified against live production credentials yet - this flags
@@ -7,14 +7,9 @@ import { cn } from '@/lib/utils'
 // "Connect"/"Send" action doesn't do what it says.
 export function WorkInProgressBadge({ className }: { className?: string }) {
   return (
-    <span
-      className={cn(
-        'inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700',
-        className
-      )}
-    >
-      <Construction className="h-2.5 w-2.5" />
+    <Badge variant="warning" className={className}>
+      <Construction aria-hidden />
       Work in progress
-    </span>
+    </Badge>
   )
 }

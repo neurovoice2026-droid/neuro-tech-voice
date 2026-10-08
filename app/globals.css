@@ -15,7 +15,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-app-display), var(--font-header), ui-sans-serif, system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -71,86 +71,132 @@
   --animate-blob: blob 18s ease-in-out infinite;
   --animate-float: float 6s ease-in-out infinite;
   --animate-marquee: marquee 32s linear infinite;
+
+  /* App palette additions (see the :root block below). */
+  --color-primary-hover: var(--primary-hover);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-band: var(--band);
+  --color-rule: var(--rule);
+  --color-destructive-hover: var(--destructive-hover);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-dot: var(--success-dot);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-dot: var(--warning-dot);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-lilac: var(--brand-lilac);
+  --color-chart-ink: var(--chart-ink);
+  --color-chart-grid: var(--chart-grid);
+
+  --font-weight-title: 480;              /* → utility `font-title` (Onest is variable) */
+  --ease-site: cubic-bezier(0.16, 1, 0.3, 1);   /* → `ease-site` */
+
+  --shadow-hair: 0 0 0 1px rgb(20 10 36 / 0.07), 0 1px 2px rgb(20 10 36 / 0.04);
+  --shadow-panel: 0 0 0 1px rgb(24 16 40 / 0.06), 0 14px 32px -18px rgb(24 16 40 / 0.22);
+  --shadow-pill: 0 0 1px rgb(0 0 0 / 0.4), 0 1px 1px rgb(0 0 0 / 0.04), 0 2px 4px rgb(0 0 0 / 0.04);
+  --shadow-pop: 0 0 0 1px rgb(0 0 0 / 0.06), 0 1px 1px -0.5px rgb(0 0 0 / 0.06), 0 3px 3px -1.5px rgb(0 0 0 / 0.06), 0 6px 6px -3px rgb(0 0 0 / 0.06), 0 12px 12px -6px rgb(0 0 0 / 0.04), 0 24px 24px -12px rgb(0 0 0 / 0.04);
 }
 
-/* ─── Ghost Purple Brand Palette ─────────────────────────────────────────── */
-:root {
-  --background:            hsl(0 0% 100%);
-  --foreground:            hsl(263 15% 10%);
-  --card:                  hsl(0 0% 100%);
-  --card-foreground:       hsl(263 15% 10%);
-  --popover:               hsl(0 0% 100%);
-  --popover-foreground:    hsl(263 15% 10%);
-  --primary:               hsl(263 70% 58%);
-  --primary-foreground:    hsl(0 0% 100%);
-  --secondary:             hsl(263 30% 96%);
-  --secondary-foreground:  hsl(263 40% 30%);
-  --muted:                 hsl(263 20% 96%);
-  --muted-foreground:      hsl(263 15% 50%);
-  --accent:                hsl(263 30% 94%);
-  --accent-foreground:     hsl(263 50% 35%);
-  --destructive:           hsl(0 84% 60%);
-  --destructive-foreground: hsl(0 0% 100%);
-  --border:                hsl(263 20% 90%);
-  --input:                 hsl(263 20% 90%);
-  --ring:                  hsl(263 70% 58%);
-  --radius:                0.75rem;
+/* `font-title` = the display face at weight 480 (the weight comes from
+   --font-weight-title above). tailwind-merge, behind `cn()`, files any unknown
+   `font-*` class under font-family and drops a preceding `font-heading`, so the
+   utility carries the family as well: `cn("font-heading font-title")` still
+   renders Onest 480. */
+@utility font-title {
+  font-family: var(--font-app-display), var(--font-header), ui-sans-serif, system-ui, sans-serif;
+}
 
-  /* Charts — purple scale */
-  --chart-1: hsl(263 70% 58%);
-  --chart-2: hsl(263 55% 68%);
-  --chart-3: hsl(263 40% 75%);
-  --chart-4: hsl(263 30% 82%);
-  --chart-5: hsl(263 20% 90%);
+/* ─── App palette (light only) ─────────────────────────────────────────────
+   Ink type on white stock, violet-grey secondary text, tinted-grey surfaces,
+   hairline rules. Purple is an accent token (--brand), never --primary.
+   `.dark` mirrors :root because the product is light-only (nothing sets it). */
+:root,
+.dark {
+  color-scheme: light;
 
-  /* Sidebar */
-  --sidebar:                    hsl(263 20% 98%);
-  --sidebar-foreground:         hsl(263 15% 10%);
-  --sidebar-primary:            hsl(263 70% 58%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent:             hsl(263 30% 94%);
-  --sidebar-accent-foreground:  hsl(263 50% 35%);
-  --sidebar-border:             hsl(263 20% 90%);
-  --sidebar-ring:               hsl(263 70% 58%);
+  --background:            #ffffff;
+  --foreground:            #140a24;   /* ink — 19.1:1 on white */
+  --card:                  #ffffff;
+  --card-foreground:       #140a24;
+  --popover:               #ffffff;
+  --popover-foreground:    #140a24;
 
-  /* Font */
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --primary:               #140a24;   /* ink pill */
+  --primary-foreground:    #ffffff;
+  --primary-hover:         #2b2338;
 
-  /* ── Marketing site additions ──────────────────────────────────────────
-     The palette above is unchanged; these are extra tokens the editorial
-     cover composes with — the primary as rgb channels (for glows built out
-     of rgba), the lighter/darker steps of the ramp, and the deep
-     purple-black the cover is printed on. */
+  --secondary:             #f4f3f7;   /* tinted grey (site --pp-card) */
+  --secondary-foreground:  #140a24;
+  --secondary-hover:       #ebe9f1;
+  --muted:                 #f4f3f7;
+  --muted-foreground:      #6b6878;   /* violet-grey — 5.4:1 white, 4.9:1 on #f4f3f7 */
+  --accent:                #f4f3f7;   /* menu/select hover */
+  --accent-foreground:     #140a24;
+  --band:                  #f8f7fb;   /* row hover, subtle bands (site --pp-band) */
+
+  --border:                #e8e7ea;   /* hairline (site --pp-hair on white) */
+  --rule:                  #efeef1;   /* row dividers (site --pp-rule on white) */
+  --input:                 #dcdae2;   /* field border */
+  --ring:                  #551a89;   /* focus outline — brand violet, 11:1 */
+
+  --destructive:           #b3261e;   /* 6.5:1 */
+  --destructive-foreground:#ffffff;
+  --destructive-hover:     #9c2019;
+  --destructive-soft:      #fdecea;
+  --success:               #1f6b3f;   /* 5.7:1 on its soft */
+  --success-soft:          #e6f4ea;
+  --success-dot:           #1f8a55;   /* live dots, check icons (non-text, 4.4:1) */
+  --warning:               #9a4a14;   /* 5.6:1 on its soft */
+  --warning-soft:          #fdf1e6;
+  --warning-dot:           #d97706;   /* meter fill / dot (non-text, 3.2:1) */
+  --info:                  #3c50c8;   /* 5.9:1 on its soft */
+  --info-soft:             #eef1fc;
+
+  --brand:                 #551a89;   /* the site's accent (--pp-accent / --cover-brand) */
+  --brand-foreground:      #ffffff;
+  --brand-soft:            #f3eefa;   /* brand text on it: 9.7:1 */
+  --brand-lilac:           #b8a2dc;   /* decorative only (never text) */
+
+  --radius:                0.75rem;   /* UNCHANGED — marketing rounded-* depends on it */
+
+  /* Charts. Single-series charts use --chart-1 only. Categorical order is fixed
+     (validated with the dataviz validator: lightness band, chroma, CVD, contrast PASS
+     on #ffffff and #f4f3f7). --chart-5 is the neutral "Other" bucket, not an identity. */
+  --chart-1:               #6d28d9;   /* violet — the one accent series */
+  --chart-2:               #e0663a;   /* ember (site) */
+  --chart-3:               #3c50c8;   /* blue (site caller) */
+  --chart-4:               #2e9b7a;   /* moss (site) */
+  --chart-5:               #8c86a0;   /* neutral other */
+  --chart-ink:             #140a24;   /* neutral magnitude bars */
+  --chart-grid:            #efeef1;
+
+  --sidebar:                    #ffffff;
+  --sidebar-foreground:         #140a24;
+  --sidebar-primary:            #140a24;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent:             #f4f3f7;
+  --sidebar-accent-foreground:  #140a24;
+  --sidebar-border:             #efeef1;
+  --sidebar-ring:               #551a89;
+
+  /* Body face: Inter (the marketing site's own body face, --font-header,
+     now declared in the root layout). Display face: Onest (--font-app-display). */
+  --font-sans: var(--font-header), ui-sans-serif, system-ui, sans-serif;
+
+  /* ── Marketing editorial tokens — UNCHANGED, still used by the cover/scrollbar.
+     They are no longer derived from --primary. */
   --primary-rgb: 124, 58, 237;
   --primary-soft: #b39bf0;
   --primary-strong: #6d34cf;
   --primary-deep: #4c1d95;
-
   --ink: #120a24;
   --ink-rgb: 18, 10, 36;
-}
-
-/* Light-only design — .dark mirrors :root */
-.dark {
-  --background:            hsl(0 0% 100%);
-  --foreground:            hsl(263 15% 10%);
-  --card:                  hsl(0 0% 100%);
-  --card-foreground:       hsl(263 15% 10%);
-  --popover:               hsl(0 0% 100%);
-  --popover-foreground:    hsl(263 15% 10%);
-  --primary:               hsl(263 70% 58%);
-  --primary-foreground:    hsl(0 0% 100%);
-  --secondary:             hsl(263 30% 96%);
-  --secondary-foreground:  hsl(263 40% 30%);
-  --muted:                 hsl(263 20% 96%);
-  --muted-foreground:      hsl(263 15% 50%);
-  --accent:                hsl(263 30% 94%);
-  --accent-foreground:     hsl(263 50% 35%);
-  --destructive:           hsl(0 84% 60%);
-  --destructive-foreground: hsl(0 0% 100%);
-  --border:                hsl(263 20% 90%);
-  --input:                 hsl(263 20% 90%);
-  --ring:                  hsl(263 70% 58%);
 }
 
 @layer base {
@@ -219,8 +265,8 @@
   }
 
   ::selection {
-    background: color-mix(in oklab, var(--primary) 22%, transparent);
-    color: var(--primary-strong);
+    background: color-mix(in oklab, var(--brand) 18%, transparent);
+    color: inherit;
   }
 
   ::-webkit-scrollbar {
@@ -265,51 +311,50 @@
 
 /* ─── Custom Utility Classes ─────────────────────────────────────────────── */
 
-/* Subtle radial gradient background for auth pages */
-.auth-gradient {
-  background: radial-gradient(ellipse at top left, #ede9fe 0%, #ffffff 50%, #f5f3ff 100%);
+/* The site's cover field as a rare app surface (auth panel, "you're live", live test call). */
+.app-cover {
+  position: relative;
+  isolation: isolate;
+  color: #dedce0;                       /* --cover-paper: 13.2:1 on #171520, 6.9:1 at the brightest point */
+  /* The cover's lilac accent as the focus colour: #551a89 would be 1.6:1 here.
+     8.8:1 on #171520, 4.55:1 at the backlight centre (#4b4451). Every
+     outline-ring / ring-ring inside the cover reads var(--ring). */
+  --ring: #c0ace0;
+  --sidebar-ring: #c0ace0;
+  background:
+    radial-gradient(62% 50% at 52% 32%, #4b4451, #3b2f4a 46%, transparent 72%),
+    radial-gradient(105% 88% at 50% 46%, transparent 34%, rgb(23 21 32 / 0.55) 76%, #171520 100%),
+    #171520;
 }
+.app-cover ::selection { background: rgb(192 172 224 / 0.35); }
 
-/* Frosted glass card effect */
+/* Stopgap, neutral (no purple): the pre-redesign auth layout (app/(auth)/layout.tsx,
+   slice S1) still wraps ink text in `glass-card` on its purple panel, and without
+   a background that text drops to 1.9:1. Delete once nothing uses the class. */
 .glass-card {
-  background: rgba(255, 255, 255, 0.85);
+  background: rgb(255 255 255 / 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(124, 58, 237, 0.12);
-  box-shadow: 0 4px 24px rgba(124, 58, 237, 0.08);
-}
-
-/* Purple glow hover effect for primary CTA buttons */
-.purple-glow {
-  box-shadow: 0 0 0 0 rgba(124, 58, 237, 0);
-  transition: box-shadow 0.2s ease, transform 0.15s ease;
-}
-
-.purple-glow:hover {
-  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.35);
-}
-
-.purple-glow:active {
-  transform: translateY(1px);
+  box-shadow: 0 0 0 1px rgb(24 16 40 / 0.06), 0 14px 32px -18px rgb(24 16 40 / 0.22);   /* = shadow-panel */
 }
 
 /* ─── Onboarding Step Animations ─────────────────────────────────────────── */
 @keyframes step-enter {
-  from { opacity: 0; transform: translateX(20px); }
+  from { opacity: 0; transform: translateX(12px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes step-enter-back {
-  from { opacity: 0; transform: translateX(-20px); }
+  from { opacity: 0; transform: translateX(-12px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 
 .animate-step-enter {
-  animation: step-enter 300ms ease-out forwards;
+  animation: step-enter 240ms var(--ease-site) forwards;
 }
 
 .animate-step-enter-back {
-  animation: step-enter-back 300ms ease-out forwards;
+  animation: step-enter-back 240ms var(--ease-site) forwards;
 }
 
 /* ─── Marketing Hero Animations ──────────────────────────────────────────── */

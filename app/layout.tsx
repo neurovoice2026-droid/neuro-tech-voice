@@ -1,13 +1,16 @@
 import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono, Inter_Tight } from 'next/font/google'
+import { Geist_Mono, Inter_Tight } from 'next/font/google'
+import { siteHeader } from '@/components/site/fonts'
+import { appDisplay } from '@/lib/fonts/app-display'
 import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-  display: 'swap',
-})
+/*
+ * Body face: Inter (`siteHeader`, --font-header) — the marketing site's own
+ * instance, so pages that already use it download the same file. Display
+ * face for app titles: Onest (`appDisplay`, --font-app-display, preload off).
+ * Both are declared on <html> so the variables reach portals too.
+ */
 
 const geistMono = Geist_Mono({
   variable: '--font-geist-mono',
@@ -76,11 +79,11 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} ${display.variable} h-full`}
+      className={`${siteHeader.variable} ${appDisplay.variable} ${geistMono.variable} ${display.variable} h-full`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground antialiased">
         {children}
-        <Toaster richColors position="top-right" />
+        <Toaster position="top-right" />
       </body>
     </html>
   )
