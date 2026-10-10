@@ -122,8 +122,11 @@ export function guardrailsConfig(settings: GuardrailSettings = guardrailSettings
     focus: { is_enabled: settings.focus },
     prompt_injection: { is_enabled: settings.promptInjection },
     content: {
-      // Streaming is the mode the guardrails guide recommends for voice.
-      execution_mode: 'streaming' as const,
+      // ElevenLabs accepts the retry action only in blocking mode (a 400
+      // "Retry trigger action is only allowed when execution mode is
+      // blocking" otherwise). Blocking adds a check before each reply only
+      // when a content category is enabled; all are off by default.
+      execution_mode: 'blocking' as const,
       config: Object.fromEntries(CONTENT_GUARDRAIL_CATEGORIES.map((c) => [c, { is_enabled: enabled.has(c), threshold: settings.contentThreshold }])),
       // Retry (the agent apologises and moves on) rather than hanging up on a caller.
       trigger_action: { type: 'retry' as const, feedback: CONTENT_RETRY_FEEDBACK },

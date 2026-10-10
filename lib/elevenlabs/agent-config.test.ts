@@ -527,10 +527,11 @@ describe('buildElevenLabsAgentBody', () => {
       expect(g.focus).toEqual({ is_enabled: true })
       expect(g.prompt_injection).toEqual({ is_enabled: true })
       const content = g.content as { execution_mode: string; config: Record<string, { is_enabled: boolean }>; trigger_action: { type: string } }
-      expect(content.execution_mode).toBe('streaming')
+      // Retry is only accepted with blocking execution (ElevenLabs 400 otherwise).
+      expect(content.execution_mode).toBe('blocking')
+      expect(content.trigger_action.type).toBe('retry')
       expect(Object.keys(content.config)).toHaveLength(7)
       expect(Object.values(content.config).every((c) => c.is_enabled === false)).toBe(true)
-      expect(content.trigger_action.type).toBe('retry')
       expect(g.custom).toEqual({ config: { configs: [] } })
     })
 
