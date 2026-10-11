@@ -110,9 +110,10 @@ export async function signUpWithEmail(
 
 // ─── Request a password-reset email ───────────────────────────────────────────
 // The app sends the email itself (lib/auth/password-reset.ts) with a link that
-// works on any device. When it cannot (email not configured, send failed), it
-// falls back to Supabase's own email, whose PKCE link works in this browser.
-// The answer is the same whether or not the address has an account.
+// works on any device. When it did not mint a token (email not configured,
+// overall cap reached, link generation failed), it falls back to Supabase's own
+// email, whose PKCE link works in this browser. The answer is the same whether
+// or not the address has an account.
 export async function requestPasswordReset(email: string): Promise<{ error?: string } | undefined> {
   const parsed = emailSchema.safeParse(email)
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Please enter a valid email' }
@@ -120,8 +121,18 @@ export async function requestPasswordReset(email: string): Promise<{ error?: str
   const log = createLogger({ route: 'auth.password_reset' })
   const requestHeaders = await headers()
   const outcome = await requestPasswordResetEmail(parsed.data, { ipKey: clientIpKey(requestHeaders), log })
-  if (outcome === 'rate_limited') return { error: 'You just requested a reset link. Please wait a minute before requesting another one.' }
-  if (outcome === 'sent') return undefined
+  switch (outcome.status) {
+    case 'sent':
+      return undefined
+    case 'rate_limited':
+      return outcome.wait === 'minute'
+        ? { error: 'You just requested a reset link. Please wait a minute before requesting another one.' }
+        : { error: 'Too many reset requests. Please try again later.' }
+    case 'send_failed':
+      return { error: "We couldn't send the reset link. Please try again in a few minutes." }
+    case 'unavailable':
+      break
+  }
 
   // The PKCE verifier cookie is set on this host, so the link must come back to it. Next.js
   // rejects a server action whose Origin does not match its host, so the header is trustworthy.

@@ -34,7 +34,12 @@ describe('022 (formerly 011) security hardening', () => {
   it('is renumbered: 011 is gone, 022 sorts after every migration the new app needs', () => {
     expect(existsSync(`${dir}011_security_performance_hardening.sql`)).toBe(false)
     const files = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()
-    expect(files.at(-1)).toBe('022_security_performance_hardening.sql')
+    const at = files.indexOf('022_security_performance_hardening.sql')
+    expect(at).toBeGreaterThan(-1)
+    // Everything the application of that deploy needed (013-021) runs before it.
+    for (const f of files.filter((name) => Number(name.slice(0, 3)) >= 13 && Number(name.slice(0, 3)) <= 21)) {
+      expect(files.indexOf(f)).toBeLessThan(at)
+    }
     expect(files.map((f) => f.slice(0, 3))).not.toContain('011')
     expect(read('022_security_performance_hardening.sql')).toMatch(/^-- 022 · Security & performance hardening/m)
   })
@@ -56,5 +61,21 @@ describe('022 (formerly 011) security hardening', () => {
       }
       expect(text, f).not.toMatch(/001 → 011|then 011 afterwards/)
     }
+  })
+})
+
+describe('023 password-reset account lookup', () => {
+  const sql = code(read('023_password_reset_lookup.sql'))
+
+  it('is a security-definer lookup with an empty search_path, callable by the service role only', () => {
+    expect(sql).toMatch(/CREATE OR REPLACE FUNCTION public\.auth_account_can_reset\(p_email text\)[\s\S]*SECURITY DEFINER SET search_path = ''/)
+    expect(sql).toContain('REVOKE ALL ON FUNCTION public.auth_account_can_reset(text) FROM PUBLIC, anon, authenticated;')
+    expect(sql).toContain('GRANT EXECUTE ON FUNCTION public.auth_account_can_reset(text) TO service_role;')
+  })
+
+  it('treats deleted and banned (being deleted) accounts as absent, and stays additive', () => {
+    expect(sql).toMatch(/deleted_at IS NULL/)
+    expect(sql).toMatch(/banned_until IS NULL OR u\.banned_until < now\(\)/)
+    expect(sql).not.toMatch(/\bdrop\b/i)
   })
 })

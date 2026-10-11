@@ -44,11 +44,15 @@ export const RATE_LIMITS = {
   // Platform regression suite (admin): every run costs credits.
   agentTests: { name: 'agent_tests', limit: 20, windowSeconds: 3_600 },
   // Password-reset emails (lib/auth/password-reset.ts), counted whether or not
-  // the address has an account: per address (one a minute, a few an hour, so
-  // nobody can flood an inbox) and per client IP.
+  // the address has an account. Per client IP first (so a client over its limit
+  // cannot use up other people's address quota), then per address (one a
+  // minute, a few an hour, so nobody can flood an inbox), then overall caps
+  // that keep the shared Resend quota for billing and notification email.
+  passwordResetIp: { name: 'password_reset_ip', limit: 20, windowSeconds: 3_600 },
   passwordResetEmail: { name: 'password_reset_email', limit: 1, windowSeconds: 60 },
   passwordResetEmailHourly: { name: 'password_reset_email_hour', limit: 5, windowSeconds: 3_600 },
-  passwordResetIp: { name: 'password_reset_ip', limit: 20, windowSeconds: 3_600 },
+  passwordResetGlobalHourly: { name: 'password_reset_all_hour', limit: 30, windowSeconds: 3_600 },
+  passwordResetGlobalDaily: { name: 'password_reset_all_day', limit: 60, windowSeconds: 86_400 },
 } as const satisfies Record<string, RateLimitRule>
 
 export interface RateLimitResult {

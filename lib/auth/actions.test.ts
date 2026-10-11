@@ -189,9 +189,9 @@ describe('requestPasswordReset', () => {
     expect(requestPasswordResetEmail).not.toHaveBeenCalled()
   })
 
-  it('sends the app\'s own email, keyed by the hashed client IP, and reports success', async () => {
+  it("sends the app's own email, keyed by the hashed client IP, and reports success", async () => {
     const { resetPasswordForEmail } = fakeClient()
-    vi.mocked(requestPasswordResetEmail).mockResolvedValue('sent')
+    vi.mocked(requestPasswordResetEmail).mockResolvedValue({ status: 'sent' })
     await expect(requestPasswordReset(' ana@example.com ')).resolves.toBeUndefined()
     const [email, opts] = vi.mocked(requestPasswordResetEmail).mock.calls[0]
     expect(email).toBe('ana@example.com')
@@ -200,22 +200,31 @@ describe('requestPasswordReset', () => {
     expect(resetPasswordForEmail).not.toHaveBeenCalled()
   })
 
-  it('tells the user to wait when rate limited', async () => {
-    vi.mocked(requestPasswordResetEmail).mockResolvedValue('rate_limited')
+  it('says how long to wait when rate limited', async () => {
+    vi.mocked(requestPasswordResetEmail).mockResolvedValue({ status: 'rate_limited', wait: 'minute' })
     await expect(requestPasswordReset('ana@example.com')).resolves.toEqual({
       error: 'You just requested a reset link. Please wait a minute before requesting another one.',
     })
+    vi.mocked(requestPasswordResetEmail).mockResolvedValue({ status: 'rate_limited', wait: 'later' })
+    await expect(requestPasswordReset('ana@example.com')).resolves.toEqual({ error: 'Too many reset requests. Please try again later.' })
   })
 
-  it("falls back to the auth server's own email, linking back to this host", async () => {
+  it("does not fall back once a token was minted but the email failed (Supabase would refuse within a minute)", async () => {
     const { resetPasswordForEmail } = fakeClient()
-    vi.mocked(requestPasswordResetEmail).mockResolvedValue('unavailable')
+    vi.mocked(requestPasswordResetEmail).mockResolvedValue({ status: 'send_failed' })
+    await expect(requestPasswordReset('ana@example.com')).resolves.toEqual({ error: "We couldn't send the reset link. Please try again in a few minutes." })
+    expect(resetPasswordForEmail).not.toHaveBeenCalled()
+  })
+
+  it("falls back to the auth server's own email when the app minted no token, linking back to this host", async () => {
+    const { resetPasswordForEmail } = fakeClient()
+    vi.mocked(requestPasswordResetEmail).mockResolvedValue({ status: 'unavailable' })
     await expect(requestPasswordReset('ana@example.com')).resolves.toBeUndefined()
     expect(resetPasswordForEmail).toHaveBeenCalledWith('ana@example.com', { redirectTo: 'https://www.example.com/auth/callback?next=/reset-password' })
   })
 
   it('reports a failed fallback without claiming the email went out', async () => {
-    vi.mocked(requestPasswordResetEmail).mockResolvedValue('unavailable')
+    vi.mocked(requestPasswordResetEmail).mockResolvedValue({ status: 'unavailable' })
     fakeClient({ resetError: { message: 'Email rate limit exceeded', code: 'over_email_send_rate_limit', status: 429 } })
     await expect(requestPasswordReset('ana@example.com')).resolves.toEqual({
       error: 'You just requested a reset link. Please wait a minute before requesting another one.',

@@ -287,12 +287,19 @@ startup (`instrumentation.ts`) and shown by `GET /api/admin/voice/diagnostics`
   token, nothing is sent by Supabase). The link opens `/reset-password/confirm`,
   which spends the one-time token only when the user presses Continue (mail
   scanners that open links cannot burn it) and works in any browser or device.
-  Limits: one email a minute and five an hour per address, twenty an hour per
-  client IP, counted before the account lookup; unknown addresses get the same
-  answer. No Supabase email template change is needed. Only when Resend is not
-  configured or fails does the app fall back to Supabase's own email, whose PKCE
-  link (`/auth/callback?next=/reset-password`) works only in the browser that
-  requested it (`/forgot-password/unusable` otherwise).
+  Limits: twenty an hour per client IP (checked first, so a blocked client
+  cannot use up anyone's address quota), then one email a minute and five an
+  hour per address, all before the account lookup (`auth_account_can_reset`,
+  migration 023, service role only); unknown addresses get the same answer and
+  send nothing. Overall caps (30 an hour, 60 a day) count only real sends and
+  protect the Resend quota shared with billing and notification email. No
+  Supabase email template change is needed. When the app mints no token (Resend
+  or `NEXT_PUBLIC_APP_URL` not configured, overall cap reached, link generation
+  failed) it falls back to Supabase's own email, whose PKCE link
+  (`/auth/callback?next=/reset-password`) works only in the browser that
+  requested it (`/forgot-password/unusable` otherwise). Once a token is minted
+  and only the send fails, there is no fallback (Supabase refuses a second
+  recovery email within a minute): the user is asked to retry.
 * Storage bucket `knowledge-documents` (private); the migration scopes object
   access to the owning org's folder.
 

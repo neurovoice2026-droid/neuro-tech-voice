@@ -73,7 +73,15 @@ export function ForgotPasswordForm({ notice }: { notice?: ResetLinkNotice }) {
     startTransition(async () => {
       // The server sends the email (or falls back to the auth server's own); the answer is the
       // same whether or not the address has an account.
-      const result = await requestPasswordReset(values.email)
+      let result: Awaited<ReturnType<typeof requestPasswordReset>>
+      try {
+        result = await requestPasswordReset(values.email)
+      } catch (err) {
+        // The request itself failed (offline, server error, a deploy in between): keep the form.
+        console.error('[forgot-password] reset request failed', err instanceof Error ? err.name : err)
+        setSendError("We couldn't send the reset link. Please check your connection and try again.")
+        return
+      }
       setLinkRequested(true)
       if (result?.error) {
         setSendError(result.error)
