@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { Suspense, useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Mail, ArrowLeft, MailCheck } from 'lucide-react'
+import { Mail, ArrowLeft, MailCheck, Clock } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -49,8 +50,9 @@ export default function ForgotPasswordPage() {
   function onSubmit(values: Values) {
     startTransition(async () => {
       const supabase = createClient()
+      // The link signs the user in through the callback, which then opens the new-password page.
       await supabase.auth.resetPasswordForEmail(values.email, {
-        redirectTo: `${window.location.origin}/auth/reset-password`,
+        redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
       })
       // Always show success regardless of whether email exists (security)
       setSubmittedEmail(values.email)
@@ -110,6 +112,10 @@ export default function ForgotPasswordPage() {
       ) : (
         /* ── Form state ── */
         <div className="space-y-6">
+          {/* After an expired or reused reset link (/auth/callback?next=/reset-password). */}
+          <Suspense fallback={null}>
+            <LinkExpiredNotice />
+          </Suspense>
           <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-5">
             <Field label="Email address" htmlFor="email" error={emailError}>
               {/* Fragment, not the bare wrapper: Field wires aria-* onto a direct
@@ -158,5 +164,17 @@ export default function ForgotPasswordPage() {
         </div>
       )}
     </div>
+  )
+}
+
+function LinkExpiredNotice() {
+  const searchParams = useSearchParams()
+  if (searchParams.get('error') !== 'link_expired') return null
+  return (
+    <Alert role="status" variant="warning">
+      <Clock aria-hidden="true" />
+      <AlertTitle>That reset link has expired</AlertTitle>
+      <AlertDescription>Reset links work once and for a limited time. Enter your email to get a new one.</AlertDescription>
+    </Alert>
   )
 }

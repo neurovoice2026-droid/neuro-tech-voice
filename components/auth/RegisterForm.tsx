@@ -5,25 +5,22 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import Link from 'next/link'
-import { Eye, EyeOff, AlertCircle, Check } from 'lucide-react'
+import { AlertCircle, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Field } from '@/components/shared/FormSection'
 import { signUpWithEmail, signInWithGoogle } from '@/lib/auth/actions'
-import { cn } from '@/lib/utils'
+import { newPasswordSchema } from '@/lib/auth/password-policy'
+import { PasswordStrengthMeter, PasswordToggle } from './password-fields'
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 const registerSchema = z
   .object({
     fullName: z.string().min(2, 'Name must be at least 2 characters'),
     email: z.string().email('Please enter a valid email'),
-    password: z
-      .string()
-      .min(8, 'Password must be at least 8 characters')
-      .regex(/[A-Z]/, 'Must contain at least one uppercase letter')
-      .regex(/[0-9]/, 'Must contain at least one number'),
+    password: newPasswordSchema,
     confirmPassword: z.string(),
     terms: z
       .boolean()
@@ -35,30 +32,6 @@ const registerSchema = z
   })
 
 type RegisterValues = z.infer<typeof registerSchema>
-
-// ─── Password strength helpers ────────────────────────────────────────────────
-function getPasswordStrength(password: string): number {
-  if (!password) return 0
-  const has8 = password.length >= 8
-  const hasUpper = /[A-Z]/.test(password)
-  const hasNumber = /[0-9]/.test(password)
-  const hasSpecial = /[^A-Za-z0-9]/.test(password)
-  if (has8 && hasUpper && hasNumber && hasSpecial) return 4
-  if (has8 && hasUpper && hasNumber) return 3
-  if (has8 && (hasUpper || hasNumber)) return 2
-  if (has8 || hasUpper || hasNumber) return 1
-  return 0
-}
-
-// Semantic status tones (spec §3.4): the meter fill carries the level, the
-// label says it in words, so colour is never the only signal.
-const STRENGTH_META = [
-  { label: '',       bar: '',                text: '' },
-  { label: 'Weak',   bar: 'bg-destructive',  text: 'text-destructive' },
-  { label: 'Fair',   bar: 'bg-warning-dot',  text: 'text-warning' },
-  { label: 'Good',   bar: 'bg-primary',      text: 'text-foreground' },
-  { label: 'Strong', bar: 'bg-success-dot',  text: 'text-success' },
-]
 
 const inkLink =
   'rounded-sm font-medium text-foreground underline decoration-foreground/30 underline-offset-4 transition-colors hover:decoration-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
@@ -87,7 +60,6 @@ export function RegisterForm() {
 
   const passwordVal = form.watch('password')
   const confirmVal = form.watch('confirmPassword')
-  const strength = getPasswordStrength(passwordVal)
   const passwordsMatch =
     passwordVal.length > 0 && confirmVal.length > 0 && passwordVal === confirmVal
 
@@ -99,7 +71,9 @@ export function RegisterForm() {
         values.email,
         values.password
       )
-      if (result?.error) setError(result.error)
+      // A password problem (e.g. found in a data breach) shows under the field; anything else above the form.
+      if (result?.field) form.setError(result.field, { type: 'server', message: result.error }, { shouldFocus: true })
+      else if (result?.error) setError(result.error)
     })
   }
 
@@ -188,30 +162,7 @@ export function RegisterForm() {
                 />
               </div>
 
-              {/* Strength meter: always laid out (empty bars until something is
-                  typed) and the label slot is a fixed 48 × 16 px, so typing never
-                  moves the fields below. */}
-              <div className="flex items-center gap-3">
-                <div className="flex flex-1 gap-1">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div
-                      key={i}
-                      className={cn(
-                        'h-1 flex-1 rounded-full transition-colors duration-300 ease-site',
-                        i <= strength ? STRENGTH_META[strength].bar : 'bg-border'
-                      )}
-                    />
-                  ))}
-                </div>
-                <p
-                  className={cn(
-                    'h-4 w-12 shrink-0 text-right text-xs leading-4 font-medium',
-                    STRENGTH_META[strength].text
-                  )}
-                >
-                  {STRENGTH_META[strength].label}
-                </p>
-              </div>
+              <PasswordStrengthMeter password={passwordVal} />
             </div>
           </>
         </Field>
@@ -305,32 +256,6 @@ export function RegisterForm() {
         </Button>
       </form>
     </div>
-  )
-}
-
-// ─── Show/hide password (ghost icon button inside the field) ──────────────────
-function PasswordToggle({
-  controls,
-  shown,
-  onToggle,
-}: {
-  /** id of the password input it shows/hides. */
-  controls: string
-  shown: boolean
-  onToggle: () => void
-}) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-sm"
-      onClick={onToggle}
-      className="tap-44 absolute top-1/2 right-1.5 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-      aria-label={shown ? 'Hide password' : 'Show password'}
-      aria-controls={controls}
-    >
-      {shown ? <EyeOff /> : <Eye />}
-    </Button>
   )
 }
 

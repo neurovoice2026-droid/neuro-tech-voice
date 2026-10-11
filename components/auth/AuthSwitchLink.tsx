@@ -10,6 +10,8 @@ const toSignUp = { prompt: 'New to NeuroVoice?', label: 'Create an account', hre
 
 export function AuthSwitchLink() {
   const pathname = usePathname()
+  // Setting a new password happens signed in (the reset link's session): neither switch applies.
+  if (pathname === '/reset-password') return null
   const { prompt, label, href } = pathname === '/register' ? toSignIn : toSignUp
 
   return (

@@ -272,7 +272,17 @@ startup (`instrumentation.ts`) and shown by `GET /api/admin/voice/diagnostics`
   statement and adds the foreign-key indexes reported by the Supabase advisors.
   The remaining advisor notices are intentional: service-only tables have RLS
   enabled with no policies, and new indexes show as unused until traffic grows.
-* Supabase Auth → enable *Leaked password protection* (dashboard setting).
+* Leaked passwords: Supabase's *Leaked password protection* is a Pro-plan
+  setting, so the app checks new passwords itself (sign-up and password reset,
+  `lib/security/pwned-passwords.ts`: Have I Been Pwned range API, only a 5-character
+  SHA-1 prefix leaves the server; fails open with an `auth.pwned_check.unavailable`
+  warning). Direct GoTrue calls with the public anon key bypass the app, so also
+  set Supabase Auth → Email → *Minimum password length* 8 and *Password
+  requirements* lowercase, uppercase and digits, which GoTrue enforces everywhere.
+  On Pro, enable *Leaked password protection* as well.
+* Password reset: the email link goes to `/auth/callback?next=/reset-password`;
+  it must be covered by Auth → URL Configuration (the Site URL's host is always
+  accepted).
 * Storage bucket `knowledge-documents` (private); the migration scopes object
   access to the owning org's folder.
 
