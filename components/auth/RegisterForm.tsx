@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -12,14 +12,14 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Field } from '@/components/shared/FormSection'
 import { signUpWithEmail, signInWithGoogle } from '@/lib/auth/actions'
-import { newPasswordSchema } from '@/lib/auth/password-policy'
+import { emailSchema, fullNameSchema, newPasswordSchema, type AuthFormField } from '@/lib/auth/password-policy'
 import { PasswordStrengthMeter, PasswordToggle } from './password-fields'
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 const registerSchema = z
   .object({
-    fullName: z.string().min(2, 'Name must be at least 2 characters'),
-    email: z.string().email('Please enter a valid email'),
+    fullName: fullNameSchema,
+    email: emailSchema,
     password: newPasswordSchema,
     confirmPassword: z.string(),
     terms: z
@@ -41,6 +41,10 @@ export function RegisterForm() {
   const [isPending, startTransition] = useTransition()
   const [isGooglePending, startGoogleTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  // A field the server refused: focused once the inputs are enabled again
+  // (focus() on a disabled input does nothing, and they stay disabled until
+  // the transition ends).
+  const focusAfterPending = useRef<AuthFormField | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
 
@@ -57,6 +61,12 @@ export function RegisterForm() {
   const { errors } = form.formState
   // One auth flow at a time: the email form waits while Google hands off.
   const fieldsDisabled = isPending || isGooglePending
+  const { setFocus } = form
+  useEffect(() => {
+    if (fieldsDisabled || !focusAfterPending.current) return
+    setFocus(focusAfterPending.current)
+    focusAfterPending.current = null
+  }, [fieldsDisabled, setFocus])
 
   const passwordVal = form.watch('password')
   const confirmVal = form.watch('confirmPassword')
@@ -71,9 +81,11 @@ export function RegisterForm() {
         values.email,
         values.password
       )
-      // A password problem (e.g. found in a data breach) shows under the field; anything else above the form.
-      if (result?.field) form.setError(result.field, { type: 'server', message: result.error }, { shouldFocus: true })
-      else if (result?.error) setError(result.error)
+      // A field problem (e.g. a password found in a data breach) shows under that field; anything else above the form.
+      if (result?.field) {
+        form.setError(result.field, { type: result.reason ?? 'server', message: result.error })
+        focusAfterPending.current = result.field
+      } else if (result?.error) setError(result.error)
     })
   }
 
@@ -162,7 +174,7 @@ export function RegisterForm() {
                 />
               </div>
 
-              <PasswordStrengthMeter password={passwordVal} />
+              <PasswordStrengthMeter password={passwordVal} rejected={errors.password?.type === 'pwned' || errors.password?.type === 'weak'} />
             </div>
           </>
         </Field>

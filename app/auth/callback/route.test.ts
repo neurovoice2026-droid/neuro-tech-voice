@@ -59,8 +59,16 @@ describe('GET /auth/callback', () => {
   })
 
   it('offers a new link when a reset link is expired or reused', async () => {
-    state.exchangeError = { message: 'invalid flow state' }
-    expect(location(await GET(req('code=abc&next=/reset-password')))).toBe('https://app.example.com/forgot-password?error=link_expired')
+    state.exchangeError = { message: 'invalid flow state', code: 'flow_state_expired' }
+    expect(location(await GET(req('code=abc&next=/reset-password')))).toBe('https://app.example.com/forgot-password/expired')
+    // A used link comes back from the auth server with error params and no code.
+    state.exchangeError = null
+    expect(location(await GET(req('next=/reset-password&error=access_denied&error_code=otp_expired')))).toBe('https://app.example.com/forgot-password/expired')
+  })
+
+  it('says so when the link was opened in a browser without its PKCE verifier', async () => {
+    state.exchangeError = { message: 'PKCE code verifier not found in storage.', code: 'pkce_code_verifier_not_found' }
+    expect(location(await GET(req('code=abc&next=/reset-password')))).toBe('https://app.example.com/forgot-password/unusable')
   })
 
   it('sends any other failed sign-in back to the login page', async () => {

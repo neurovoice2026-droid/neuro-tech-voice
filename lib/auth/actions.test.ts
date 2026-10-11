@@ -16,19 +16,29 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { checkPwnedPassword } from '@/lib/security/pwned-passwords'
 import { PWNED_PASSWORD_MESSAGE } from './password-policy'
-import { signUpWithEmail, updatePassword } from './actions'
+import { confirmPasswordReset, signUpWithEmail, updatePassword } from './actions'
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>
 
 const GOOD = 'Correct-Horse-9'
 const USER = { id: '0b5c1d2e-3f40-4a51-8b62-7c83d94e0f1a' } as User
 
-function fakeClient(opts: { user?: User | null; signUpError?: string; updateError?: { message: string; code?: string } } = {}) {
-  const signUp = vi.fn(async () => ({ data: {}, error: opts.signUpError ? { message: opts.signUpError } : null }))
+type FakeAuthError = { message: string; code?: string; status?: number; reasons?: string[] }
+
+function fakeClient(opts: { user?: User | null; signUpError?: string | FakeAuthError; updateError?: FakeAuthError; verifyError?: FakeAuthError } = {}) {
+  const signUpError = typeof opts.signUpError === 'string' ? { message: opts.signUpError } : opts.signUpError ?? null
+  const signUp = vi.fn(async () => ({ data: {}, error: signUpError }))
   const updateUser = vi.fn(async () => ({ data: {}, error: opts.updateError ?? null }))
   const getUser = vi.fn(async () => ({ data: { user: opts.user === undefined ? USER : opts.user }, error: null }))
-  vi.mocked(createClient).mockResolvedValue({ auth: { signUp, updateUser, getUser } } as unknown as ServerClient)
-  return { signUp, updateUser, getUser }
+  const verifyOtp = vi.fn(async () => ({ data: {}, error: opts.verifyError ?? null }))
+  vi.mocked(createClient).mockResolvedValue({ auth: { signUp, updateUser, getUser, verifyOtp } } as unknown as ServerClient)
+  return { signUp, updateUser, getUser, verifyOtp }
+}
+
+function form(entries: Record<string, string>): FormData {
+  const fd = new FormData()
+  for (const [k, v] of Object.entries(entries)) fd.set(k, v)
+  return fd
 }
 
 async function redirectedTo(p: Promise<unknown>): Promise<string> {
@@ -47,7 +57,7 @@ describe('signUpWithEmail', () => {
   it('refuses a password found in a data breach without creating the account', async () => {
     const { signUp } = fakeClient()
     vi.mocked(checkPwnedPassword).mockResolvedValue({ status: 'pwned', count: 3 })
-    await expect(signUpWithEmail('Ana Pop', 'ana@example.com', GOOD)).resolves.toEqual({ error: PWNED_PASSWORD_MESSAGE, field: 'password' })
+    await expect(signUpWithEmail('Ana Pop', 'ana@example.com', GOOD)).resolves.toEqual({ error: PWNED_PASSWORD_MESSAGE, field: 'password', reason: 'pwned' })
     expect(signUp).not.toHaveBeenCalled()
   })
 
@@ -78,11 +88,24 @@ describe('signUpWithEmail', () => {
     expect(signUp).not.toHaveBeenCalled()
   })
 
-  it('re-validates the other fields on the server', async () => {
+  it('re-validates the other fields on the server, under their own field', async () => {
     const { signUp } = fakeClient()
-    await expect(signUpWithEmail('A', 'ana@example.com', GOOD)).resolves.toEqual({ error: 'Name must be at least 2 characters' })
-    await expect(signUpWithEmail('Ana Pop', 'not-an-email', GOOD)).resolves.toEqual({ error: 'Please enter a valid email' })
+    await expect(signUpWithEmail('A ', 'ana@example.com', GOOD)).resolves.toEqual({ error: 'Name must be at least 2 characters', field: 'fullName' })
+    await expect(signUpWithEmail('Ana Pop', 'not-an-email', GOOD)).resolves.toEqual({ error: 'Please enter a valid email', field: 'email' })
     expect(signUp).not.toHaveBeenCalled()
+  })
+
+  it("puts the auth server's own password refusals under the password field, reworded", async () => {
+    vi.mocked(checkPwnedPassword).mockResolvedValue({ status: 'clean' })
+    fakeClient({ signUpError: { message: 'Password should contain at least one character of each: abcdefghijklmnopqrstuvwxyz, …', code: 'weak_password', reasons: ['characters'] } })
+    await expect(signUpWithEmail('Ana Pop', 'ana@example.com', GOOD)).resolves.toEqual({
+      error: "This password doesn't meet the security requirements. Please choose a stronger one.",
+      field: 'password',
+      reason: 'weak',
+    })
+    // Supabase Pro's own leaked-password check.
+    fakeClient({ signUpError: { message: 'Password is known to be weak and easy to guess', code: 'weak_password', reasons: ['pwned'] } })
+    await expect(signUpWithEmail('Ana Pop', 'ana@example.com', GOOD)).resolves.toEqual({ error: PWNED_PASSWORD_MESSAGE, field: 'password', reason: 'pwned' })
   })
 
   it('returns the auth error when sign-up fails', async () => {
@@ -110,7 +133,7 @@ describe('updatePassword', () => {
   it('refuses a password found in a data breach', async () => {
     const { updateUser } = fakeClient()
     vi.mocked(checkPwnedPassword).mockResolvedValue({ status: 'pwned', count: 1 })
-    await expect(updatePassword(GOOD)).resolves.toEqual({ error: PWNED_PASSWORD_MESSAGE, field: 'password' })
+    await expect(updatePassword(GOOD)).resolves.toEqual({ error: PWNED_PASSWORD_MESSAGE, field: 'password', reason: 'pwned' })
     expect(updateUser).not.toHaveBeenCalled()
   })
 
@@ -124,8 +147,32 @@ describe('updatePassword', () => {
   it('puts password errors from the auth server under the field, others above the form', async () => {
     vi.mocked(checkPwnedPassword).mockResolvedValue({ status: 'clean' })
     fakeClient({ updateError: { message: 'New password should be different from the old password.', code: 'same_password' } })
-    await expect(updatePassword(GOOD)).resolves.toEqual({ error: 'New password should be different from the old password.', field: 'password' })
+    await expect(updatePassword(GOOD)).resolves.toEqual({ error: 'New password should be different from the old password.', field: 'password', reason: 'same' })
     fakeClient({ updateError: { message: 'Request rate limit reached', code: 'over_request_rate_limit' } })
     await expect(updatePassword(GOOD)).resolves.toEqual({ error: 'Request rate limit reached' })
   })
+})
+
+describe('confirmPasswordReset', () => {
+  const TOKEN = 'pkce_0123456789abcdef0123456789abcdef0123456789abcdef01234567'
+
+  it('verifies the recovery token and opens the new-password page', async () => {
+    const { verifyOtp } = fakeClient()
+    expect(await redirectedTo(confirmPasswordReset(form({ token_hash: TOKEN })))).toBe('/reset-password')
+    expect(verifyOtp).toHaveBeenCalledWith({ type: 'recovery', token_hash: TOKEN })
+  })
+
+  it('offers a new link when the token is expired or used', async () => {
+    fakeClient({ verifyError: { message: 'Email link is invalid or has expired', code: 'otp_expired', status: 403 } })
+    expect(await redirectedTo(confirmPasswordReset(form({ token_hash: TOKEN })))).toBe('/forgot-password/expired')
+  })
+
+  it.each([['missing', {}], ['malformed', { token_hash: '../../etc' }], ['too short', { token_hash: 'abc' }]])(
+    'never calls the auth server with a %s token',
+    async (_name, entries) => {
+      const { verifyOtp } = fakeClient()
+      expect(await redirectedTo(confirmPasswordReset(form(entries as Record<string, string>)))).toBe('/forgot-password/expired')
+      expect(verifyOtp).not.toHaveBeenCalled()
+    },
+  )
 })

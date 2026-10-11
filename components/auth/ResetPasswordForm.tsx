@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -29,6 +29,9 @@ type ResetValues = z.infer<typeof resetSchema>
 export function ResetPasswordForm() {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  // A field the server refused: focused once the inputs are enabled again
+  // (focus() on a disabled input does nothing).
+  const focusAfterPending = useRef<'password' | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
 
@@ -38,14 +41,22 @@ export function ResetPasswordForm() {
   })
   const { errors } = form.formState
   const passwordVal = form.watch('password')
+  const { setFocus } = form
+  useEffect(() => {
+    if (isPending || !focusAfterPending.current) return
+    setFocus('password')
+    focusAfterPending.current = null
+  }, [isPending, setFocus])
 
   function onSubmit(values: ResetValues) {
     setError(null)
     startTransition(async () => {
       const result = await updatePassword(values.password)
-      // A password problem (e.g. found in a data breach) shows under the field; anything else above the form.
-      if (result?.field) form.setError(result.field, { type: 'server', message: result.error }, { shouldFocus: true })
-      else if (result?.error) setError(result.error)
+      // A field problem (e.g. a password found in a data breach) shows under that field; anything else above the form.
+      if (result?.field === 'password') {
+        form.setError('password', { type: result.reason ?? 'server', message: result.error })
+        focusAfterPending.current = 'password'
+      } else if (result?.error) setError(result.error)
     })
   }
 
@@ -77,7 +88,7 @@ export function ResetPasswordForm() {
                 />
                 <PasswordToggle controls="password" shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />
               </div>
-              <PasswordStrengthMeter password={passwordVal} />
+              <PasswordStrengthMeter password={passwordVal} rejected={errors.password?.type === 'pwned' || errors.password?.type === 'weak'} />
             </div>
           </>
         </Field>

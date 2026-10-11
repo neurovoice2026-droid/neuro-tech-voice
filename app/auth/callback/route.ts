@@ -9,10 +9,15 @@ export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
   const next = searchParams.get('next')
+  const recovery = next === '/reset-password'
+  let verifierMissing = false
 
   if (code) {
     const supabase = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
+    // PKCE: the code can only be exchanged with the verifier cookie of the browser that asked for
+    // the link. Missing means another browser or device, or a link already used here.
+    verifierMissing = error?.code === 'pkce_code_verifier_not_found'
 
     if (!error) {
       const {
@@ -37,7 +42,7 @@ export async function GET(request: Request) {
     }
   }
 
-  // An expired or reused reset link: offer a new one instead of the sign-in page.
-  if (next === '/reset-password') return NextResponse.redirect(`${origin}/forgot-password?error=link_expired`)
+  // A reset link that cannot be used: offer a new one (saying why) instead of the sign-in page.
+  if (recovery) return NextResponse.redirect(`${origin}/forgot-password/${verifierMissing ? 'unusable' : 'expired'}`)
   return NextResponse.redirect(`${origin}/login?error=auth_failed`)
 }

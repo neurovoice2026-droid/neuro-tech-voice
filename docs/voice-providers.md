@@ -278,11 +278,19 @@ startup (`instrumentation.ts`) and shown by `GET /api/admin/voice/diagnostics`
   SHA-1 prefix leaves the server; fails open with an `auth.pwned_check.unavailable`
   warning). Direct GoTrue calls with the public anon key bypass the app, so also
   set Supabase Auth → Email → *Minimum password length* 8 and *Password
-  requirements* lowercase, uppercase and digits, which GoTrue enforces everywhere.
-  On Pro, enable *Leaked password protection* as well.
-* Password reset: the email link goes to `/auth/callback?next=/reset-password`;
-  it must be covered by Auth → URL Configuration (the Site URL's host is always
-  accepted).
+  requirements* "Letters and digits" (looser than the app's own rule, so GoTrue
+  never refuses a password the forms accepted). On Pro, enable *Leaked password
+  protection* as well. Optional hardening: *Secure password change* (asks for a
+  recent sign-in before a password change outside the reset flow).
+* Password reset — set the *Reset Password* email template (Auth → Email
+  Templates) to link to
+  `{{ .SiteURL }}/reset-password/confirm?token_hash={{ .TokenHash }}&type=recovery`.
+  That page spends the one-time token only when the user presses Continue (mail
+  scanners that open links cannot burn it) and works in any browser or device.
+  With the default template the link goes through `/auth/callback?next=/reset-password`
+  (PKCE): it only works in the browser that requested it, and the user is sent to
+  `/forgot-password/unusable` otherwise. Either URL must be on the Site URL's host
+  or in Auth → URL Configuration → Redirect URLs.
 * Storage bucket `knowledge-documents` (private); the migration scopes object
   access to the owning org's folder.
 

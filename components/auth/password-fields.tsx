@@ -33,9 +33,11 @@ const STRENGTH_META = [
 /**
  * Strength meter: always laid out (empty bars until something is typed) and
  * the label slot is a fixed 48 × 16 px, so typing never moves the fields below.
+ * `rejected`: the server refused the password as unsafe (found in a breach,
+ * too weak), so the meter must not call it strong next to that error.
  */
-export function PasswordStrengthMeter({ password }: { password: string }) {
-  const strength = getPasswordStrength(password)
+export function PasswordStrengthMeter({ password, rejected = false }: { password: string; rejected?: boolean }) {
+  const strength = rejected && password ? 1 : getPasswordStrength(password)
   return (
     <div className="flex items-center gap-3">
       <div className="flex flex-1 gap-1">
