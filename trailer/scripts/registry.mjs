@@ -1,7 +1,8 @@
 /**
  * The merged film registry (docs/ig/PIPELINE.md §3.2): scripts/films.mjs (film 1 "main", film 2 "kb") plus the
- * Instagram reels of scripts/ig/films.mjs (ig1…ig4) and the fifth reel of scripts/ig5/films.mjs (ig5,
- * docs/ig/ig5/PIPELINE.md §0, §3.2 edit 1), with the same API. The shared tools (generate-voice, check-mix,
+ * Instagram reels of scripts/ig/films.mjs (ig1…ig4), the fifth reel of scripts/ig5/films.mjs (ig5,
+ * docs/ig/ig5/PIPELINE.md §0, §3.2 edit 1) and the sixth of scripts/ig6/films.mjs (ig6, docs/ig/ig6/PIPELINE.md §0,
+ * §3.2 edit 1), with the same API. The shared tools (generate-voice, check-mix,
  * check-render, render-master, sfx, scripts/ig/{render-par,finish,check-zones,check-delivery}) import from here,
  * so `--film=ig<n>` resolves while scripts/films.mjs — an input to film 2's mix hash — and scripts/ig/films.mjs —
  * an input to ig1–ig4's igHash — stay byte-identical. `main`, `kb` and ig1–ig4 resolve to exactly the objects
@@ -12,10 +13,11 @@
 import { FILMS as BASE, ROOT, abs, need, voiceFile } from './films.mjs';
 import { IG_FILMS } from './ig/films.mjs';
 import { IG5_FILMS } from './ig5/films.mjs';
+import { IG6_FILMS } from './ig6/films.mjs';
 
 /* every film id in exactly one registry (a duplicate would silently shadow a delivered film's entry) */
 {
-  const REGS = [['scripts/films.mjs', BASE], ['scripts/ig/films.mjs', IG_FILMS], ['scripts/ig5/films.mjs', IG5_FILMS]];
+  const REGS = [['scripts/films.mjs', BASE], ['scripts/ig/films.mjs', IG_FILMS], ['scripts/ig5/films.mjs', IG5_FILMS], ['scripts/ig6/films.mjs', IG6_FILMS]];
   const seen = new Map();
   for (const [file, reg] of REGS)
     for (const id of Object.keys(reg)) {
@@ -24,7 +26,7 @@ import { IG5_FILMS } from './ig5/films.mjs';
     }
 }
 
-export const FILMS = { ...BASE, ...IG_FILMS, ...IG5_FILMS };
+export const FILMS = { ...BASE, ...IG_FILMS, ...IG5_FILMS, ...IG6_FILMS };
 
 /* every outName unique: finish writes <outDir>/deliver/<outName>-*, so a shared name would overwrite a delivered file */
 {

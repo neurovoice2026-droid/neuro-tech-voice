@@ -17,16 +17,19 @@ import * as T2 from './ig2/timing';
 import * as T3 from './ig3/timing';
 import * as T4 from './ig4/timing';
 import * as T5 from './ig5/timing';
+import * as T6 from './ig6/timing';
 import { Reel1 } from './ig1/Reel1';
 import { Reel2 } from './ig2/Reel2';
 import { Reel3 } from './ig3/Reel3';
 import { Reel4 } from './ig4/Reel4';
 import { Reel5 } from './ig5/Reel5';
+import { Reel6 } from './ig6/Reel6';
 import { Cover1 } from './ig1/Cover';
 import { Cover2 } from './ig2/Cover';
 import { Cover3 } from './ig3/Cover';
 import { Cover4 } from './ig4/Cover';
 import { Cover5 } from './ig5/Cover';
+import { Cover6 } from './ig6/Cover';
 import { NightProbe, PearlProbe, PROBE_FRAMES, type ProbeProps } from './qa/Probe';
 import { KIT_FRAMES, KitSpecimen } from './qa/Kit';
 import type { ReelProps, ReelTimeline } from './types';
@@ -38,6 +41,7 @@ const REELS: readonly ReelEntry[] = [
   { n: 3, T: T3, Reel: Reel3, Cover: Cover3 },
   { n: 4, T: T4, Reel: Reel4, Cover: Cover4 },
   { n: 5, T: T5, Reel: Reel5, Cover: Cover5 },
+  { n: 6, T: T6, Reel: Reel6, Cover: Cover6 },
 ];
 const title = (k: string) => k[0].toUpperCase() + k.slice(1);
 
