@@ -4,6 +4,7 @@
 // callers should not let an email failure break the main flow.
 
 const ENDPOINT = 'https://api.resend.com/emails'
+const TIMEOUT_MS = 10_000
 
 /** True when a real Resend API key + from address are configured. */
 export function isConfigured(): boolean {
@@ -33,6 +34,7 @@ export async function sendEmail(params: SendEmailParams): Promise<boolean> {
   try {
     const res = await fetch(ENDPOINT, {
       method: 'POST',
+      signal: AbortSignal.timeout(TIMEOUT_MS),
       headers: {
         Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
         'Content-Type': 'application/json',
@@ -47,13 +49,14 @@ export async function sendEmail(params: SendEmailParams): Promise<boolean> {
     })
 
     if (!res.ok) {
-      const body = await res.text()
-      console.error(`Resend send failed (${res.status}): ${body}`)
+      // Only Resend's error type is logged: its message can quote the recipient address.
+      const body = (await res.json().catch(() => null)) as { name?: unknown } | null
+      console.error(`Resend send failed (${res.status}${typeof body?.name === 'string' ? `, ${body.name}` : ''})`)
       return false
     }
     return true
   } catch (err) {
-    console.error('Resend send error:', err instanceof Error ? err.message : err)
+    console.error('Resend send error:', err instanceof DOMException && err.name === 'TimeoutError' ? 'timeout' : err instanceof Error ? err.name : 'unknown')
     return false
   }
 }

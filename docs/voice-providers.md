@@ -282,15 +282,17 @@ startup (`instrumentation.ts`) and shown by `GET /api/admin/voice/diagnostics`
   never refuses a password the forms accepted). On Pro, enable *Leaked password
   protection* as well. Optional hardening: *Secure password change* (asks for a
   recent sign-in before a password change outside the reset flow).
-* Password reset — set the *Reset Password* email template (Auth → Email
-  Templates) to link to
-  `{{ .SiteURL }}/reset-password/confirm?token_hash={{ .TokenHash }}&type=recovery`.
-  That page spends the one-time token only when the user presses Continue (mail
+* Password reset: the app sends the email itself through Resend
+  (`lib/auth/password-reset.ts`: `auth.admin.generateLink` creates the recovery
+  token, nothing is sent by Supabase). The link opens `/reset-password/confirm`,
+  which spends the one-time token only when the user presses Continue (mail
   scanners that open links cannot burn it) and works in any browser or device.
-  With the default template the link goes through `/auth/callback?next=/reset-password`
-  (PKCE): it only works in the browser that requested it, and the user is sent to
-  `/forgot-password/unusable` otherwise. Either URL must be on the Site URL's host
-  or in Auth → URL Configuration → Redirect URLs.
+  Limits: one email a minute and five an hour per address, twenty an hour per
+  client IP, counted before the account lookup; unknown addresses get the same
+  answer. No Supabase email template change is needed. Only when Resend is not
+  configured or fails does the app fall back to Supabase's own email, whose PKCE
+  link (`/auth/callback?next=/reset-password`) works only in the browser that
+  requested it (`/forgot-password/unusable` otherwise).
 * Storage bucket `knowledge-documents` (private); the migration scopes object
   access to the owning org's folder.
 

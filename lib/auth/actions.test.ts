@@ -5,6 +5,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
 vi.mock('@/lib/security/pwned-passwords', () => ({ checkPwnedPassword: vi.fn() }))
+vi.mock('@/lib/auth/password-reset', () => ({ requestPasswordResetEmail: vi.fn() }))
+const requestHeaders = vi.hoisted(() => ({ value: new Headers({ origin: 'https://www.example.com', 'x-forwarded-for': '203.0.113.7' }) }))
+vi.mock('next/headers', () => ({ headers: async () => requestHeaders.value }))
 vi.mock('next/navigation', () => ({
   redirect: vi.fn((url: string) => {
     throw Object.assign(new Error('NEXT_REDIRECT'), { url })
@@ -15,8 +18,9 @@ import type { User } from '@supabase/supabase-js'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { checkPwnedPassword } from '@/lib/security/pwned-passwords'
+import { requestPasswordResetEmail } from '@/lib/auth/password-reset'
 import { PWNED_PASSWORD_MESSAGE } from './password-policy'
-import { confirmPasswordReset, signUpWithEmail, updatePassword } from './actions'
+import { confirmPasswordReset, requestPasswordReset, signUpWithEmail, updatePassword } from './actions'
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>
 
@@ -25,14 +29,15 @@ const USER = { id: '0b5c1d2e-3f40-4a51-8b62-7c83d94e0f1a' } as User
 
 type FakeAuthError = { message: string; code?: string; status?: number; reasons?: string[] }
 
-function fakeClient(opts: { user?: User | null; signUpError?: string | FakeAuthError; updateError?: FakeAuthError; verifyError?: FakeAuthError } = {}) {
+function fakeClient(opts: { user?: User | null; signUpError?: string | FakeAuthError; updateError?: FakeAuthError; verifyError?: FakeAuthError; resetError?: FakeAuthError } = {}) {
   const signUpError = typeof opts.signUpError === 'string' ? { message: opts.signUpError } : opts.signUpError ?? null
   const signUp = vi.fn(async () => ({ data: {}, error: signUpError }))
   const updateUser = vi.fn(async () => ({ data: {}, error: opts.updateError ?? null }))
   const getUser = vi.fn(async () => ({ data: { user: opts.user === undefined ? USER : opts.user }, error: null }))
   const verifyOtp = vi.fn(async () => ({ data: {}, error: opts.verifyError ?? null }))
-  vi.mocked(createClient).mockResolvedValue({ auth: { signUp, updateUser, getUser, verifyOtp } } as unknown as ServerClient)
-  return { signUp, updateUser, getUser, verifyOtp }
+  const resetPasswordForEmail = vi.fn(async () => ({ data: {}, error: opts.resetError ?? null }))
+  vi.mocked(createClient).mockResolvedValue({ auth: { signUp, updateUser, getUser, verifyOtp, resetPasswordForEmail } } as unknown as ServerClient)
+  return { signUp, updateUser, getUser, verifyOtp, resetPasswordForEmail }
 }
 
 function form(entries: Record<string, string>): FormData {
@@ -48,6 +53,7 @@ async function redirectedTo(p: Promise<unknown>): Promise<string> {
 }
 
 beforeEach(() => {
+  vi.mocked(requestPasswordResetEmail).mockReset()
   vi.mocked(checkPwnedPassword).mockReset()
   vi.mocked(createClient).mockReset()
   vi.mocked(redirect).mockClear()
@@ -175,4 +181,46 @@ describe('confirmPasswordReset', () => {
       expect(verifyOtp).not.toHaveBeenCalled()
     },
   )
+})
+
+describe('requestPasswordReset', () => {
+  it('validates the address before doing anything', async () => {
+    await expect(requestPasswordReset('not-an-email')).resolves.toEqual({ error: 'Please enter a valid email' })
+    expect(requestPasswordResetEmail).not.toHaveBeenCalled()
+  })
+
+  it('sends the app\'s own email, keyed by the hashed client IP, and reports success', async () => {
+    const { resetPasswordForEmail } = fakeClient()
+    vi.mocked(requestPasswordResetEmail).mockResolvedValue('sent')
+    await expect(requestPasswordReset(' ana@example.com ')).resolves.toBeUndefined()
+    const [email, opts] = vi.mocked(requestPasswordResetEmail).mock.calls[0]
+    expect(email).toBe('ana@example.com')
+    expect(opts.ipKey).toMatch(/^[0-9a-f]{32}$/)
+    expect(opts.ipKey).not.toContain('203.0.113.7')
+    expect(resetPasswordForEmail).not.toHaveBeenCalled()
+  })
+
+  it('tells the user to wait when rate limited', async () => {
+    vi.mocked(requestPasswordResetEmail).mockResolvedValue('rate_limited')
+    await expect(requestPasswordReset('ana@example.com')).resolves.toEqual({
+      error: 'You just requested a reset link. Please wait a minute before requesting another one.',
+    })
+  })
+
+  it("falls back to the auth server's own email, linking back to this host", async () => {
+    const { resetPasswordForEmail } = fakeClient()
+    vi.mocked(requestPasswordResetEmail).mockResolvedValue('unavailable')
+    await expect(requestPasswordReset('ana@example.com')).resolves.toBeUndefined()
+    expect(resetPasswordForEmail).toHaveBeenCalledWith('ana@example.com', { redirectTo: 'https://www.example.com/auth/callback?next=/reset-password' })
+  })
+
+  it('reports a failed fallback without claiming the email went out', async () => {
+    vi.mocked(requestPasswordResetEmail).mockResolvedValue('unavailable')
+    fakeClient({ resetError: { message: 'Email rate limit exceeded', code: 'over_email_send_rate_limit', status: 429 } })
+    await expect(requestPasswordReset('ana@example.com')).resolves.toEqual({
+      error: 'You just requested a reset link. Please wait a minute before requesting another one.',
+    })
+    fakeClient({ resetError: { message: 'boom', status: 500 } })
+    await expect(requestPasswordReset('ana@example.com')).resolves.toEqual({ error: "We couldn't send the reset link. Please try again in a moment." })
+  })
 })

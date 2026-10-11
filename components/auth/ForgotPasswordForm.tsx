@@ -12,7 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Eyebrow } from '@/components/shared/Eyebrow'
 import { Field } from '@/components/shared/FormSection'
 import { emailSchema } from '@/lib/auth/password-policy'
-import { createClient } from '@/lib/supabase/client'
+import { requestPasswordReset } from '@/lib/auth/actions'
 
 const schema = z.object({
   email: emailSchema,
@@ -71,21 +71,12 @@ export function ForgotPasswordForm({ notice }: { notice?: ResetLinkNotice }) {
   function onSubmit(values: Values) {
     setSendError(null)
     startTransition(async () => {
-      const supabase = createClient()
-      // The link signs the user in through the callback, which then opens the new-password page.
-      const { error } = await supabase.auth.resetPasswordForEmail(values.email, {
-        redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
-      })
+      // The server sends the email (or falls back to the auth server's own); the answer is the
+      // same whether or not the address has an account.
+      const result = await requestPasswordReset(values.email)
       setLinkRequested(true)
-      // Unknown addresses succeed too (the auth server does not reveal which emails exist). An
-      // error means no email went out, typically a second request within a minute: saying
-      // "check your inbox" then would send the user to a link that no longer works.
-      if (error) {
-        setSendError(
-          error.code === 'over_email_send_rate_limit' || error.status === 429
-            ? 'You just requested a reset link. Please wait a minute before requesting another one.'
-            : "We couldn't send the reset link. Please try again in a moment."
-        )
+      if (result?.error) {
+        setSendError(result.error)
         return
       }
       setSubmittedEmail(values.email)

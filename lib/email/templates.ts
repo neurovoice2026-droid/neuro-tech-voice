@@ -129,3 +129,19 @@ export function usageAlertEmail(params: {
     ].join('')),
   }
 }
+
+// ─── Password reset ───────────────────────────────────────────────────────────
+
+/** `link` is the app's /reset-password/confirm URL carrying the one-time token. */
+export function passwordResetEmail(params: { link: string }): EmailContent {
+  return {
+    subject: `Reset your ${APP_NAME} password`,
+    html: layout(
+      'Reset your password',
+      p('We received a request to reset the password of your account. Open the link below and choose a new password.') +
+        `<p style="margin:22px 0">${button(esc(params.link), 'Reset password')}</p>` +
+        p('The link works once and expires after a short time. You can open it on any device.') +
+        p("If you didn't ask for this, you can ignore this email: your password stays the same."),
+    ),
+  }
+}

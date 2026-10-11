@@ -1,10 +1,13 @@
 'use server'
 
+import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/observability/logger'
 import { checkPwnedPassword } from '@/lib/security/pwned-passwords'
+import { requestPasswordResetEmail } from '@/lib/auth/password-reset'
+import { clientIpKey } from '@/lib/voice-providers/web-test'
 import {
   emailSchema,
   fullNameSchema,
@@ -105,7 +108,38 @@ export async function signUpWithEmail(
   redirect('/onboarding')
 }
 
-// ─── Open a password-reset link (token-hash email template) ───────────────────
+// ─── Request a password-reset email ───────────────────────────────────────────
+// The app sends the email itself (lib/auth/password-reset.ts) with a link that
+// works on any device. When it cannot (email not configured, send failed), it
+// falls back to Supabase's own email, whose PKCE link works in this browser.
+// The answer is the same whether or not the address has an account.
+export async function requestPasswordReset(email: string): Promise<{ error?: string } | undefined> {
+  const parsed = emailSchema.safeParse(email)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Please enter a valid email' }
+
+  const log = createLogger({ route: 'auth.password_reset' })
+  const requestHeaders = await headers()
+  const outcome = await requestPasswordResetEmail(parsed.data, { ipKey: clientIpKey(requestHeaders), log })
+  if (outcome === 'rate_limited') return { error: 'You just requested a reset link. Please wait a minute before requesting another one.' }
+  if (outcome === 'sent') return undefined
+
+  // The PKCE verifier cookie is set on this host, so the link must come back to it. Next.js
+  // rejects a server action whose Origin does not match its host, so the header is trustworthy.
+  const origin = requestHeaders.get('origin') ?? (process.env.NEXT_PUBLIC_APP_URL ?? '').trim().replace(/\/+$/, '')
+  const supabase = await createClient()
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data, {
+    redirectTo: `${origin}/auth/callback?next=/reset-password`,
+  })
+  if (error) {
+    log.warn('auth.password_reset.fallback_failed', { code: error.code ?? null, status: error.status ?? null })
+    return error.status === 429
+      ? { error: 'You just requested a reset link. Please wait a minute before requesting another one.' }
+      : { error: "We couldn't send the reset link. Please try again in a moment." }
+  }
+  return undefined
+}
+
+// ─── Open a password-reset link (token-hash link) ─────────────────────────────
 // /reset-password/confirm posts the link's token here from a button, so mail
 // scanners that open links do not use up the one-time token. Unlike the PKCE
 // link handled by /auth/callback, this works in any browser or device.
