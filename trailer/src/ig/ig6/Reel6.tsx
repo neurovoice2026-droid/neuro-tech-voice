@@ -17,6 +17,7 @@ import { Soundtrack } from '../Soundtrack';
 import type { ReelProps } from '../types';
 import { ACTS6 } from './acts/Acts';
 import { FINISH6, INK } from './stage/style';
+import { Ig6Qa } from './stage/qa';
 import { registerIg6Zones } from './stage/Zones';
 import * as T from './timing';
 
@@ -30,6 +31,7 @@ export const Reel6: React.FC<ReelProps> = ({ only, audio = true, zones = false, 
   const frame = useTimelineFrame();
   return (
     <ZoneProvider value={{ on: zones, reel: T.REEL, frame, cover: false }}>
+      <Ig6Qa.Provider value={{ zones }}>
       <AbsoluteFill style={{ background: INK.ground, overflow: 'hidden' }}>
         {T.ORDER.filter((k) => !only || k === only).map((key) => {
           const s = T.SCENES[key];
@@ -45,6 +47,7 @@ export const Reel6: React.FC<ReelProps> = ({ only, audio = true, zones = false, 
         {zones && zoneProbe ? <ZoneRect what="selftest probe (deliberately on the rail)" rect={{ x: 930, y: 1000, w: 120, h: 60 }} /> : null}
         {audio && !only && !zones ? <Soundtrack file={T.MIX.file} /> : null}
       </AbsoluteFill>
+      </Ig6Qa.Provider>
     </ZoneProvider>
   );
 };

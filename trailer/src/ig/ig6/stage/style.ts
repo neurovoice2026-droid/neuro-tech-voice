@@ -78,9 +78,60 @@ export type LayoutSpec = {
 };
 export const LAYOUT: Record<'hook1a' | 'hook1b' | 'default' | 'underline' | 'wide' | 'cta', LayoutSpec> = {
   hook1a: { lead: { size: 69, x: 345, base: 1150 }, accent: { size: 126, x: 330, base: 1236 }, tier: { x: 580, base: [1296] } },
-  hook1b: { lead: { size: 66, x: 360, base: 1150 }, accent: { size: 120, x: 345, base: 1230 }, tier: { x: 617, base: [1292] } },
-  default: { lead: { size: 60, x: 411, base: 1160 }, accent: { size: 110, x: 396, base: 1235 }, tier: { x: null, base: [1290, 1328] } },
-  underline: { lead: { size: 60, x: 411, base: 1150 }, accent: { size: 110, x: 396, base: 1225 }, tier: { x: null, base: [1282] } },
-  wide: { lead: { size: 60, x: 311, base: 1160 }, accent: { size: 100, x: 296, base: 1235 }, tier: { x: 596, base: [1290] } },
+  hook1b: { lead: { size: 66, x: 360, base: 1140 }, accent: { size: 120, x: 345, base: 1230 }, tier: { x: 617, base: [1292] } },
+  default: { lead: { size: 60, x: 411, base: 1150 }, accent: { size: 110, x: 396, base: 1235 }, tier: { x: null, base: [1296, 1334] } },
+  underline: { lead: { size: 60, x: 411, base: 1140 }, accent: { size: 110, x: 396, base: 1225 }, tier: { x: null, base: [1282] } },
+  wide: { lead: { size: 60, x: 311, base: 1156 }, accent: { size: 100, x: 296, base: 1235 }, tier: { x: 596, base: [1290] } },
   cta: { lead: { size: 60, x: 540, base: 760 }, accent: { size: 110, x: 540, base: 845 }, tier: { x: 540, base: [905] }, centred: true },
 };
+
+/* ── the scene build's geometry (SCRIPT §1–§3, §8; STYLE §9.5–§9.11) ── */
+/** the dial's marks (M1 world px, radii from the dial centre; STYLE §9.5): rim 9 px at R; ticks inside it */
+export const MARKS = {
+  rim: 9,
+  minor: { every: 1.2, r0: 1512, r1: 1554, w: 2, color: '#D6D6D6' },
+  sec: { every: 6, r0: 1505, r1: 1556, w: 3, color: '#9A9A9A' },
+  major: { every: 36, r0: 1497, r1: 1560, w: 4, color: '#222222' },
+  /** a hollow ring node (your phone): r 9, stroke 6 → outer Ø 24, white centre Ø 12 */
+  node: { r: 9, w: 6 },
+  /** an answered call (the agent): a filled teal dome, Ø 26 */
+  dome: { r: 13 },
+  /** one ring = 2 s of tone = 12° of dial after its node (ANSI T1.401 "2 sec on, 4 sec off"); a node every 36° */
+  stretch: 12,
+  nodeEvery: 36,
+  nodes: 10,
+} as const;
+/** the dial angle φ of node 1 sits at world angle φ + PHI0 + ρ at M1; the needle crosses the rim at the reading point */
+export const PHI0 = 28.1;
+/** M5′: the whole dial, drawn upright (φ 0 at the top) as its own picture (STYLE §9.6) */
+export const FULL = {
+  cx: 520,
+  cy: 600,
+  R: 410,
+  /** the hand redrawn at the true centre, scaled (430 px long, hub Ø 38, dome Ø 21) */
+  hand: 0.393,
+  rim: 4.5,
+  stretch: 4.5,
+  /** ticks as fractions of R (the M1 radii / 1623) */
+  minor: { r0: 0.934, r1: 0.958, w: 1.5, color: '#E2E2E2' },
+  sec: { r0: 0.927, r1: 0.959, w: 2, color: '#9A9A9A' },
+  major: { r0: 0.918, r1: 0.962, w: 3, color: '#222222' },
+  node: { r: 7, w: 4 },
+  /** domes keep a constant screen Ø 28 */
+  dome: { r: 14 },
+} as const;
+/** M3′ (the tip macro) and M2′ (the hub macro) (STYLE §9.6) */
+export const CROPS = {
+  m3: { zoom: 1.8, punch: 0.3, lift: 90 },
+  m2: { anchor: { x: 260, y: 900 }, zoom: 2.2 },
+  /** the macro drift: +1.5 % per second about the shot's focus (never frozen) */
+  drift: 0.015,
+} as const;
+/** the end card (SCRIPT §8; the field kept left of TikTok's rail: x ≤ 880 below y 840) */
+export const END6 = {
+  field: { x0: 200, x1: 880, y0: 940, y1: 1060, r: 60, icon: { x: 236, size: 44 }, textX: 300, textSize: 50 },
+  send: { cx: 820, cy: 1000, d: 72 },
+  url: { base: 1006, size: 34, weight: 450 },
+  /** the wordmark: 720 px wide, its cap line centred on y 830 (y 760–900); the full stop 12 px after the R */
+  wordmark: { w: 720, capMid: 830, gap: 12 },
+} as const;
