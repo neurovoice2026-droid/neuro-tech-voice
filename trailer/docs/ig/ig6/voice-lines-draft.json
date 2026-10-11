@@ -1,0 +1,123 @@
+{
+  "level": {
+    "lufs": -23,
+    "peakMax": -1,
+    "note": "ONE dialogue target for every line: BS.1770 integrated loudness over its phrases (mono file; the IG mix places dialogue at MIX.dialogueLufs -18.5, 4.5 LU under the -14 LUFS Instagram master, the films' voice-to-master balance), after the role EQ. Not a peak: peak-normalising left a 5 LU spread in film 2."
+  },
+  "voices": {
+    "ava": {
+      "sid": 1,
+      "name": "af_bella",
+      "speed": 1.04,
+      "note": "Tessa, the ONLY voice of the four Instagram reels (the client: the woman's voice speaks whenever there is text on screen). She is the narrator (untagged captions) and the sample agent Ava on the calls (captions tagged ● AVA). Callers are never voiced: ig2 and ig3 are one-sided calls (the agent restates what was asked; the caller's turn is a slate level meter with no words), ig4's phrasings are read by the narrator under the site's own 'Asked as' label. Full-band, no phone line. Same voice id and speed as film 2's ava role.",
+      "fish": {
+        "env": "FISH_IG_AVA_VOICE",
+        "gender": "female",
+        "id": "",
+        "speed": 1
+      },
+      "cartesia": {
+        "env": "CARTESIA_IG_AVA_VOICE",
+        "id": "6ccbfb76-1fc6-48f7-b71d-91ac6298247b",
+        "name": "Tessa (Emotive)",
+        "gender": "feminine",
+        "speed": 1.05
+      }
+    }
+  },
+  "lines": [
+    {
+      "id": "ig6-01",
+      "voice": "ava",
+      "say": "One ring, six seconds. Your receptionist can't answer.",
+      "direction": "Reel 6 HOOK, narrator, from f10 after the frame-0 trill rings out, over a giant clock that has just stepped one second: calm, close and dry, an owner naming a fact and then the moment, not an ad. \"One ring, six seconds\" even and unhurried (a fact the viewer can feel; heard by about 1.3 s); a natural sentence pause; \"Your receptionist can't answer\" warm, with empathy, never blame (she is busy with someone, never replaced: ig1's stance). \"receptionist\" said plainly (it is the TikTok search word). Target 3.4 s or less; the whole hook plus ig6-02a must end by f174 (SCRIPT.md §1.3). Screens S1a [0-3] \"One ring,\" / \"six seconds.\" (set at frame 0) and S1b [4-7] \"Your receptionist\" / \"can't answer.\"",
+      "speak": "One ring, six seconds. Your receptionist can't answer.",
+      "emotion": "calm"
+    },
+    {
+      "id": "ig6-02a",
+      "voice": "ava",
+      "say": "While it rings,",
+      "direction": "Reel 6 beat 2, FIRST HALF of a sentence that ring 2 interrupts (SCRIPT.md §4 b2): it must sound UNFINISHED, a light continuing lift on \"rings,\", not a full stop. Synthesise several candidates and pick by ear for the continuation. Placed at about f120, it must END BY f174 (ring 2 lands at f180 on the dot). Screen S2a [0-2] \"While it\" / \"rings,\".",
+      "speak": "While it rings,",
+      "emotion": "calm"
+    },
+    {
+      "id": "ig6-02b",
+      "voice": "ava",
+      "say": "someone's still waiting.",
+      "direction": "Reel 6 beat 2, SECOND HALF, placed at ring 2 + 10 f (f190): it completes ig6-02a's sentence after the ring, so it starts mid-thought (no new-sentence attack), with a quiet weight on \"still\" and a settled fall on \"waiting.\" Display: the big lockup shows \"Someone's\" capitalised; the tier keeps \"someone's\". Screen S2b [0-2] \"Someone's\" / \"still waiting.\"",
+      "speak": "someone's still waiting.",
+      "emotion": "calm"
+    },
+    {
+      "id": "ig6-03",
+      "voice": "ava",
+      "say": "A missed call is someone else's customer.",
+      "direction": "Reel 6 beat 3, over the whole ring clock filling with black stretches: the house opinion (voice.md position 1), said plainly and a little lower, never alarmist, no emphasis on \"missed\". \"someone else's customer\" lands as a quiet truth. Screen S3 [4-6] \"Someone else's\" / \"customer.\" with the full line in the tier.",
+      "speak": "A missed call is someone else's customer.",
+      "emotion": "calm"
+    },
+    {
+      "id": "ig6-04",
+      "voice": "ava",
+      "say": "Our AI receptionist picks up, day or night.",
+      "direction": "Reel 6 PAYOFF, narrator, spoken out of the stop-time silence right after the hub stamps teal (the pickup): warm and settled, a small real lift on \"receptionist\" (the keyword, underlined on screen), a natural comma pause, then \"day or night\" easy and confident. Never \"first ring\" (truth judge T-C1). Screens S4a [0-2] \"Our AI\" / \"receptionist\" and S4b [3-7] \"Picks up,\" / \"day or night.\"",
+      "speak": "Our AI receptionist picks up, day or night.",
+      "emotion": "content"
+    },
+    {
+      "id": "ig6-05",
+      "voice": "ava",
+      "say": "It answers from your words.",
+      "direction": "Reel 6 beat 5, over the agent's clock sweeping a whole day: easy and plain; \"from your words\" is the product's promise (answers only from what the owner wrote), not a boast. Screen S5 [0-4] \"It answers\" / \"from your words.\"",
+      "speak": "It answers from your words.",
+      "emotion": "content"
+    },
+    {
+      "id": "ig6-06",
+      "voice": "ava",
+      "say": "Ring it yourself.",
+      "direction": "Reel 6 beat 6, an invitation with a half-smile (the trial's free test calls), not a dare shouted. Short and warm. TRIM T1 drops this line if the measured takes would push the CTA past f765. Screen S6 [0-2] \"Ring it\" / \"yourself.\"",
+      "speak": "Ring it yourself.",
+      "emotion": "content"
+    },
+    {
+      "id": "ig6-07",
+      "voice": "ava",
+      "say": "Comment AGENT for the link.",
+      "direction": "Reel 6 CTA, narrator, a fresh ig6 take (the pipeline allows exactly one borrow, ig1-07): confident, slightly lower and warm. speak has \"agent\" in lowercase so Sonic does not spell it out. Must END BY f765 (impact f780 − 15). Screen S7 [0-4] \"Comment\" / \"AGENT\".",
+      "speak": "Comment agent for the link.",
+      "emotion": "confident"
+    },
+    {
+      "id": "ig1-07",
+      "borrow": "ig1"
+    },
+    {
+      "id": "ig6-01r",
+      "voice": "ava",
+      "say": "One ring, six seconds. Your receptionist can't answer.",
+      "direction": "ALTERNATE READING of ig6-01 (the hook ladder's rung 3, SCRIPT.md §1.3), about 0.3 s quicker: the same calm, dry read with a shorter pause between the two sentences (a comma's breath, not a full stop's). Same screens. timing.ts places it only if ig6-01 cannot let ig6-02a end by f174.",
+      "speak": "One ring, six seconds. Your receptionist can't answer.",
+      "emotion": "calm"
+    },
+    {
+      "id": "ig6-01b",
+      "voice": "ava",
+      "say": "One ring, six seconds. You can't answer.",
+      "direction": "ALTERNATE HOOK (hookscore 84.4): the TikTok B re-cut a week after the first post, for owner-operators who are their own front desk (judge-viewers §3.2), and the hook ladder's last rung. Same calm read; \"You can't answer\" with empathy, the t of \"can't\" released. Screen S1b becomes \"You\" / \"can't answer.\" [4-6].",
+      "speak": "One ring, six seconds. You can't answer.",
+      "emotion": "calm"
+    },
+    {
+      "id": "ig6-07b",
+      "voice": "ava",
+      "say": "The link's in our bio.",
+      "direction": "ALTERNATE for ig6-07, only if nobody can answer AGENT comments on posting day (TikTok has no keyword auto-DM; truth judge R4): same read, same slot. The end card's lockup becomes \"The link's\" / \"in our bio.\" and the comment field is replaced by the bio pointer only if the owner asks (SCRIPT.md §14 question 5).",
+      "speak": "The link's in our bio.",
+      "emotion": "confident"
+    }
+  ],
+  "_notes": "Reel ig6 'One ring' (docs/ig/ig6/SCRIPT.md). DRAFT for scripts/ig6/voice-lines-ig6.json (docs/ig/ig6/PIPELINE.md §3.1): copy it there byte for byte at build time; never write it into scripts/voice-lines-ig.json (an igHash input of ig1-ig4) or scripts/ig5/voice-lines-ig5.json (an ig5Hash input). Same schema as voice-lines-ig5.json: say = the canonical words the lockups and src/ig/ig6/timing.ts index (word k), in spoken form (no numerals anywhere in this reel); speak = what Sonic performs, with NO <break/> tags (Sonic already pauses about 0.5 s at a sentence end); 'agent' lowercase in speak. ONE role (ava = Tessa (Emotive) 6ccbfb76-1fc6-48f7-b71d-91ac6298247b, speed 1.05; the level and voices blocks are byte-equal to scripts/voice-lines-ig.json, env CARTESIA_IG_AVA_VOICE). Every id matches ^ig6- except the single borrow {id: ig1-07, borrow: ig1}, the series sign-off reused byte for byte (never synthesise it, never drop 'borrow'). PLACED: ig6-01, ig6-02a, ig6-02b, ig6-03, ig6-04, ig6-05, ig6-06, ig6-07 + ig1-07 (42 words before the sign-off, 45 with it). Hard anchors: ring 2 is fixed at f180, so ig6-01 + ig6-02a must leave ig6-02a ending by f174 (the hook ladder ig6-01 -> ig6-01r -> ig6-01b picks the first that fits); ig6-02b starts at f190; the CTA must end by f765 (28.0 s, impact f780). ALTERNATES, generated in the same batch and swapped by VOICES id only: ig6-01r (tighter reading of the hook), ig6-01b (B hook: TikTok re-cut a week later, and the last ladder rung), ig6-07b (no AGENT path). 12 entries: 9 placed + 3 alternates. Pick takes by measurement first (durations against SCRIPT.md §5.3; ig6-02a <= 1.3 s and ending on a continuing intonation; word SII), then by ear (voice-candidates/ig/PICKS.md method). Parked, not in this batch: 'Our AI receptionist picks up on the first ring.' (truth judge T-C1: with 'one ring, six seconds' it implies a speed; only after a logged launch check on a US/Canada agent number and the owner's request)."
+}
