@@ -35,11 +35,12 @@ const kickInk = (u: number) => (u <= 0 ? 0 : EASE.expo(Math.min(1, u / 3)));
 export const STEP = 30;
 const STEP_DEG = 6;
 const STEP_OS = 0.8 / STEP_DEG;
-/** the dial's rotation ρ (deg): a step on every second from frame 0 (f0, 30, 60, …) */
-export function phoneRho(t: number): number {
+/** the dial's rotation ρ (deg): a step on every second from frame 0 (f0, 30, 60, …); `os` scales the overshoot (the
+ *  macro passes 1 / its zoom, so the kick's swing on screen stays the reference frame's — crit-r1 N4) */
+export function phoneRho(t: number, os = 1): number {
   if (t < 0) return 0;
   const k = Math.floor(t / STEP);
-  return -STEP_DEG * k - STEP_DEG * kick(t - k * STEP, STEP_OS);
+  return -STEP_DEG * k - STEP_DEG * kick(t - k * STEP, STEP_OS * os);
 }
 /** the dial angle up to which the ring stretches are ink (the needle's reading, without the overshoot) */
 export function phoneInkTo(t: number): number {
@@ -47,11 +48,11 @@ export function phoneInkTo(t: number): number {
   const k = Math.floor(t / STEP);
   return needlePhi(-STEP_DEG * k - STEP_DEG * kickInk(t - k * STEP));
 }
-/** the hand's recoil (deg, clockwise) on each step: +0.8° in 2 f, SPRING.land back */
-export function recoil(t: number): number {
+/** the hand's recoil (deg, clockwise) on each step: +0.8° in 2 f, SPRING.land back (`k` scales it, as `os` above) */
+export function recoil(t: number, k = 1): number {
   if (t < 0) return 0;
   const u = t - Math.floor(t / STEP) * STEP;
-  return u < 2 ? 0.8 * EASE.out3(u / 2) : 0.8 * (1 - springUnit(u - 2, SPRING.land));
+  return k * (u < 2 ? 0.8 * EASE.out3(u / 2) : 0.8 * (1 - springUnit(u - 2, SPRING.land)));
 }
 
 /* ── a ring: the node pulses (1 → 1.15 → 1), shivers (±2 px along the rim, 12 Hz, e^(−t/4 f)) and sends one ping ── */
@@ -119,7 +120,7 @@ const yourself = (() => {
   const id = T.TAKES.ring;
   if (at === null || id === null) return M.ringShot + 30;
   const k = Math.max(0, VOICE.lines[id].say.split(' ').findIndex((w) => /^yourself/i.test(w)));
-  return at + T.vWord(id, k);
+  return at + T.said(id, k);
 })();
 /** the agent's answered calls on the world dial, each a dome that pops at the reading point at `pop` and then rides the
  *  dial: this call (the rebuild), another on the words cut, one on "yourself" */

@@ -12,8 +12,10 @@
  *              shadow; it opens out of the disc leftward (12 f expo) — lucide message-circle, a caret blinking on the
  *              beat while idle, AGENT typed one letter per 16th from her word (Instrument Sans 600, 50 px, ink)
  *   the CTA    "Comment / AGENT" + the tier "Comment AGENT for the link." (the stage's Lockup, layout `cta`)
- *   impact     on the bar line: the CTA and the field leave up through their masks, the dome stamps, NEUROVOICE (film 1's
- *              Wordmark: Inter Tight 500, −0.07em, ink #0A0A0A, 720 px wide) surfaces centre-out; neurotechvoice.com
+ *   impact     11 f before the bar the CTA leaves up through its masks and the field leaves in place (fade + 0.96);
+ *              the dome flies the last 6 f and stamps as the full stop ON the bar line, as NEUROVOICE (film 1's
+ *              Wordmark: Inter Tight 500, −0.07em, ink #0A0A0A, 720 px wide) lands centre-out from the impact − 5
+ *              (its middle at full ink on the bar; crit-r1 B2 / N2); neurotechvoice.com
  *              (Instrument Sans 450, 34 px, grey) types in three chunks on "Neuro | Tech | Voice"
  *   the seam   the wordmark and the URL leave up (f826–830) while the dome goes home and frame 0 re-forms (Stage.tsx)
  *
@@ -38,14 +40,18 @@ import { END6, FACE, INK, SHADOW } from './style';
 
 const E = T.END_CARD;
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
-/** the field leaves (and the dome departs) a frame before the stage must be clear for the bar */
-export const CTA_OUT = T.IMPACT - 6;
+/** the field leaves with the S7 lockup (Lockup.tsx e7), in place, 11 f before the bar: the stage is clear by the impact
+ *  − 6, when the dome flies and NEUROVOICE starts to surface (crit-r1 B2 / N2) */
+export const CTA_OUT = T.IMPACT - 11;
+/** NEUROVOICE starts surfacing here (centre-out), so its middle letters are at full ink on the impact and the last ones
+ *  2 f later — the bar line lands on a word, not on a white frame with a dot (crit-r1 N2) */
+const WM_AT = T.IMPACT - 5;
 /** the dome's moments */
 export const DOME_T = {
   leave: T.M.exit[0],
   send: T.M.exit[1],
   arrow: [T.M.exit[1], T.M.exit[1] + 6] as const,
-  fly: [CTA_OUT, T.IMPACT] as const,
+  fly: [T.IMPACT - 6, T.IMPACT] as const,
   home: [E.seam, E.seam + 10] as const,
   drain: [E.seam + 6, E.seam + 10] as const,
 } as const;
@@ -178,10 +184,10 @@ export const CommentField6: React.FC<{ t: number }> = ({ t }) => {
   const h = mix(S.d + 12, F.y1 - F.y0, EASE.out3(clamp01((t - E.field) / 8)));
   const cy = (F.y0 + F.y1) / 2;
   const a = clamp01((t - E.field + 0.5) / 2);
-  // the exit: up through its mask (4 f, in3)
+  // the exit: IN PLACE (opacity 1 → 0, scale 1 → 0.96 about its centre; 4 f in3) — it never travels into the CTA
+  // tier's band above it (crit-r1 B2: moving up 230 px it drew "AGENT" through "Comment AGENT for the link.")
   const q = EASE.in3(clamp01((t - CTA_OUT) / 4));
-  // (far enough that its long shadow, 48 px below it, clears the mask line too; the shadow goes with it)
-  const dy = -q * (F.y1 - F.y0 + 110);
+  const sc = 1 - 0.04 * q;
   const keys = agentKeys(T);
   const typed = typedCount(t, keys);
   const word = 'AGENT';
@@ -197,7 +203,7 @@ export const CommentField6: React.FC<{ t: number }> = ({ t }) => {
   return (
     <>
       <div style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, clipPath: `inset(${F.y0 - 40}px 0px 0px 0px)`, pointerEvents: 'none' }}>
-        <div style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, opacity: a < 0.999 ? a : undefined, filter: `drop-shadow(${L.dx}px ${L.dy}px ${L.blur}px rgba(10,10,10,${(0.07 * (1 - q)).toFixed(4)}))`, ...subpixel(dy !== 0 ? `translateY(${dy.toFixed(3)}px)` : undefined, dy !== 0) }}>
+        <div style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, opacity: a * (1 - q) < 0.999 ? a * (1 - q) : undefined, filter: `drop-shadow(${L.dx}px ${L.dy}px ${L.blur}px rgba(10,10,10,0.07))`, transformOrigin: `${((x0 + F.x1) / 2).toFixed(2)}px ${cy}px`, ...subpixel(q > 0 ? `scale(${sc.toFixed(5)})` : undefined, q > 0) }}>
           <div style={{ position: 'absolute', left: x0, top: cy - h / 2, width: w, height: h, borderRadius: Math.min(F.r, h / 2), background: '#FFFFFF', boxShadow: `inset 0 0 0 1.5px ${INK.fieldBorder}` }} />
           {iconOn > 0.001 ? (
             <div style={{ position: 'absolute', left: F.icon.x, top: cy - F.icon.size / 2, opacity: iconOn < 0.999 ? iconOn : undefined }}>
@@ -228,14 +234,14 @@ const URL_TEXT = 'neurotechvoice.com';
 const URL_CHUNKS = [0, 5, 9] as const;
 export const Brand6: React.FC<{ t: number }> = ({ t }) => {
   const ready = useWordmarkFace();
-  if (t < T.IMPACT - 1 || t >= E.seam + 5) return null;
+  if (t < WM_AT - 1 || t >= E.seam + 5) return null;
   const B = brandGeom(ready);
   const q = EASE.in3(clamp01((t - E.seam) / 4));
   const lift = -q * B.size * 1.1;
   const fade = 1 - smooth(0.35, 1, q);
   const top = B.baseline - IT.cap * B.size - 30;
-  // centre-out from the bar line itself: the middle letters start on the impact, the ends ≈ 2 f later
-  const arrive = (xEm: number) => 0.8 * xEm;
+  // centre-out, the middle letters from WM_AT, the ends ≈ 1 f later (all at full ink by the impact + 2)
+  const arrive = (xEm: number) => 0.35 * xEm;
   // the URL, typed chunk by chunk (a ½ f ripple per glyph), centred
   const U = END6.url;
   const uw = measureSans(URL_TEXT, U.size, U.weight);
@@ -249,8 +255,9 @@ export const Brand6: React.FC<{ t: number }> = ({ t }) => {
     <>
       <div style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, clipPath: `inset(${top.toFixed(1)}px 0px 0px 0px)` }}>
         <div style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, opacity: fade < 0.999 ? fade : undefined, ...subpixel(q > 0 ? `translateY(${lift.toFixed(3)}px)` : undefined, q > 0) }}>
-          <Wordmark t={t} at={T.IMPACT} ready={ready} rest={(_t, v) => v} spec={{ x: B.cx, y: END6.wordmark.capMid, size: B.size, arrive, color: INK.ink }} />
-          <svg width={1080} height={1920} viewBox="0 0 1080 1920" style={{ position: 'absolute', left: 0, top: 0 }} aria-hidden>
+          <Wordmark t={t} at={WM_AT} ready={ready} rest={(_t, v) => v} spec={{ x: B.cx, y: END6.wordmark.capMid, size: B.size, arrive, color: INK.ink }} />
+          {/* its own layer: greyscale AA for the small grey URL (crit-r1 N3) */}
+          <svg width={1080} height={1920} viewBox="0 0 1080 1920" style={{ position: 'absolute', left: 0, top: 0, willChange: 'transform' }} aria-hidden>
             <text y={U.base} style={{ fontFamily: FACE.sans, fontSize: U.size, fontWeight: U.weight, fontSynthesis: 'none', whiteSpace: 'pre' }} fill={INK.tier}>
               {URL_TEXT.split('').map((ch, i) => {
                 const op = typedOpacity(t, keyOf(i));
@@ -264,7 +271,7 @@ export const Brand6: React.FC<{ t: number }> = ({ t }) => {
           </svg>
         </div>
       </div>
-      {t >= T.IMPACT && q < 0.5 ? <ZoneRect what="wordmark NEUROVOICE + full stop" rect={{ x: B.x0, y: B.baseline - IT.cap * B.size, w: B.x1 - B.x0, h: IT.cap * B.size }} /> : null}
+      {t >= WM_AT && q < 0.5 ? <ZoneRect what="wordmark NEUROVOICE + full stop" rect={{ x: B.x0, y: B.baseline - IT.cap * B.size, w: B.x1 - B.x0, h: IT.cap * B.size }} /> : null}
       {t >= E.url[0] && q < 0.5 ? <ZoneRect what="text url" rect={{ x: ux, y: U.base - U.size * 0.76, w: uw, h: U.size }} /> : null}
     </>
   );

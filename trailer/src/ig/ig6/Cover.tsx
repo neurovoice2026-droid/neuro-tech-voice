@@ -48,7 +48,8 @@ export const Cover6: React.FC<{ zones?: boolean }> = ({ zones = false }) => {
         <DialSvg prim={prim} id="ig6-cover-dial" />
         <WorldHand id="ig6-cover-hand" plane={IDENT_PLANE} pivot={HUB} look={{ angle: HAND.angle, dome: { kind: 'graphite' }, shadow: 9 / 7 }} />
         {ready ? (
-          <svg width={1080} height={1920} style={{ position: 'absolute', left: 0, top: 0 }} aria-hidden>
+          // its own layer (will-change): greyscale AA for the small grey kicker and stakes line (crit-r1 N3: LCD fringes)
+          <svg width={1080} height={1920} style={{ position: 'absolute', left: 0, top: 0, willChange: 'transform' }} aria-hidden>
             <text x={C.kicker.x} y={C.kicker.base} fill={INK.tier} style={sans(C.kicker.size, C.kicker.weight, C.kicker.tracking)}>
               {C.kicker.text}
             </text>

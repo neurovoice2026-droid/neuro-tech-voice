@@ -4,7 +4,8 @@
  *
  *   A  f0–90       M1 the reference frame (screen = world), your phone ticking
  *   B  f90–210     M3′ tip macro ×1.8 about the reading point (T1 tick cut: the reading point keeps its screen spot);
- *                  the snap punch-in ×1.0 → ×1.3 on ring 2 (8 f expo, no overshoot), lifting 90 px (TikTok rail)
+ *                  the snap punch-in ×1.0 → ×1.3 on ring 2 (8 f expo, no overshoot), lifting 90 px (TikTok rail),
+ *                  released f197–205 (8 f inOut) so the f210 cut keeps the reading point too
  *   C  f210–222    M1 (T1)
  *   D  f222–232    T2 the fall-through: world ×1 → ×12 → ×240 about node 2 (an accelerating exponential push) while
  *                  node 2 pans to the frame's centre line (540, 800; inOut, 6 f); the rim and ticks thin away ×3 → ×6,
@@ -32,9 +33,12 @@ export const drift = (t: number, t0: number) => 1 + (CROPS.drift * (t - t0)) / 3
 
 /** M1 about the reading point (identity at zoom 1) */
 const m1 = (t: number, t0: number): Cam => ({ ax: RP.x, ay: RP.y, fx: RP.x, fy: RP.y, zoom: drift(t, t0), rot: 0 });
-/** M3′ ×1.8 about the reading point (+ the punch-in) */
+/** the punch-in eases back out (8 f inOut) before the f210 T1 cut, so the reading point is at (601, 310) on both sides of
+ *  it (crit-r1 N9: with the punch's 90 px lift still on, the eye-trace anchor jumped ≈ 95 px at the cut) */
+const PUNCH_OUT = [M.shotC - 13, M.shotC - 5] as const;
+/** M3′ ×1.8 about the reading point (+ the punch-in, released before the cut back to M1) */
 const m3 = (t: number, t0: number, punchAt?: number): Cam => {
-  const p = punchAt === undefined ? 0 : EASE.expo(clamp01((t - punchAt) / 8));
+  const p = punchAt === undefined ? 0 : EASE.expo(clamp01((t - punchAt) / 8)) * (1 - EASE.inOut(clamp01((t - PUNCH_OUT[0]) / (PUNCH_OUT[1] - PUNCH_OUT[0]))));
   // the punch-in lifts the frame 90 px as it lands, so the ticks at the right edge stay above TikTok's rail (y 840)
   return { ax: RP.x, ay: RP.y - CROPS.m3.lift * p, fx: RP.x, fy: RP.y, zoom: CROPS.m3.zoom * drift(t, t0) * (1 + CROPS.m3.punch * p), rot: 0 };
 };

@@ -7,14 +7,14 @@
  *                phone's recoil on each step; the hub's dome graphite (your phone) or teal (the agent), the pickup's
  *                radial wipe graphite → teal, the stamp (1 → 1.15 → 1), the collar's flash, the hub's ping; in the seam
  *                it extends out of the hub (a growing clip about the pivot) as the hub disc grows under the dome
- *   <HandShape>  the drawing itself (hand-local), reused by M5′ at scale 0.393
+ *   <HandShape>  the drawing itself (hand-local); M5′ draws handPath's HAND_FULL at FULL.hand
  *   handPts()    the outline's screen points (zone and overlap checks)
  */
 import React from 'react';
 import { INK, SHADOW } from './style';
 import { DomeDefs } from './Dial';
 import { matrix, project, type Plane, type Pt } from './geom';
-import { COLLAR, HAND_D, HUB_R, OUTLINE } from './handPath';
+import { COLLAR, HAND_FULL, HAND_WORLD, HUB_R, type HandDrawing } from './handPath';
 
 export type DomeLook =
   | { kind: 'none' }
@@ -33,12 +33,14 @@ export type HandLook = {
   reach?: number;
   /** the shadow's strength (0..1 of its 7 %) */
   shadow?: number;
-  /** a ping out of the hub (hand-local radius, opacity) */
-  ping?: { r: number; o: number } | null;
+  /** a ping out of the hub (hand-local radius, opacity; `w` its screen stroke, default 2 px) */
+  ping?: { r: number; o: number; w?: number } | null;
+  /** the whole hand's opacity (the T2 push culls it over 1 f, before it can sweep through the lockup) */
+  opacity?: number;
 };
 
 /** the hand, the collar, the hub and its dome, drawn at a pivot in local px (the caller transforms) */
-export const HandShape: React.FC<{ id: string; look: HandLook; pivot: Pt; screenScale: number }> = ({ id, look, pivot, screenScale }) => {
+export const HandShape: React.FC<{ id: string; look: HandLook; pivot: Pt; screenScale: number; shape?: HandDrawing }> = ({ id, look, pivot, screenScale, shape = HAND_WORLD }) => {
   const dome = look.dome;
   const hub = look.hub ?? 1;
   const ds = dome.kind === 'none' ? 0 : (dome.scale ?? 1);
@@ -53,7 +55,7 @@ export const HandShape: React.FC<{ id: string; look: HandLook; pivot: Pt; screen
       ) : null}
       <g clipPath={clip ? `url(#${clip})` : undefined}>
         <g transform={`translate(${pivot.x} ${pivot.y}) rotate(${look.angle.toFixed(4)})`}>
-          <path d={HAND_D} fill={INK.ink} fillRule="evenodd" />
+          <path d={shape.d} fill={INK.ink} fillRule="evenodd" />
           <rect x={COLLAR.x} y={COLLAR.y} width={COLLAR.w} height={COLLAR.h} fill={look.collar ?? INK.tealDeep} />
         </g>
       </g>
@@ -69,7 +71,7 @@ export const HandShape: React.FC<{ id: string; look: HandLook; pivot: Pt; screen
         </>
       ) : null}
       {dome.kind !== 'none' && rD > 0 ? <circle cx={pivot.x} cy={pivot.y} r={Math.max(0, rD - 0.5)} fill="none" stroke={INK.tealRim} strokeOpacity={0.4} strokeWidth={1 / Math.max(0.2, screenScale)} /> : null}
-      {look.ping ? <circle cx={pivot.x} cy={pivot.y} r={look.ping.r} fill="none" stroke={INK.ink} strokeWidth={2 / Math.max(0.2, screenScale)} strokeOpacity={look.ping.o} /> : null}
+      {look.ping ? <circle cx={pivot.x} cy={pivot.y} r={look.ping.r} fill="none" stroke={INK.ink} strokeWidth={(look.ping.w ?? 2) / Math.max(0.2, screenScale)} strokeOpacity={look.ping.o} /> : null}
     </>
   );
 };
@@ -84,8 +86,9 @@ const shadowFilter = (S: number, k: number) => {
 /** the hand on a camera plane (screen-space SVG under one matrix), its shadow on the non-rotating wrapper */
 export const WorldHand: React.FC<{ id: string; plane: Plane; pivot: Pt; look: HandLook }> = ({ id, plane, pivot, look }) => {
   const k = look.shadow ?? 1;
+  const op = look.opacity ?? 1;
   return (
-    <div style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, filter: k > 0.001 ? shadowFilter(plane.S, k) : undefined }}>
+    <div style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, filter: k > 0.001 ? shadowFilter(plane.S, k) : undefined, opacity: op < 0.999 ? op : undefined }}>
       <svg width={1080} height={1920} viewBox="0 0 1080 1920" style={{ position: 'absolute', left: 0, top: 0, overflow: 'hidden' }} shapeRendering="geometricPrecision" aria-hidden>
         <DomeDefs id={id} />
         <g transform={matrix(plane)}>
@@ -105,7 +108,7 @@ export const FullHand: React.FC<{ id: string; plane: Plane; centre: Pt; scale: n
       <svg width={1080} height={1920} viewBox="0 0 1080 1920" style={{ position: 'absolute', left: 0, top: 0, overflow: 'hidden' }} shapeRendering="geometricPrecision" aria-hidden>
         <DomeDefs id={id} />
         <g transform={`${matrix(plane)} translate(${centre.x} ${centre.y}) scale(${scale})`}>
-          <HandShape id={id} look={look} pivot={{ x: 0, y: 0 }} screenScale={S} />
+          <HandShape id={id} look={look} pivot={{ x: 0, y: 0 }} screenScale={S} shape={HAND_FULL} />
         </g>
       </svg>
     </div>
@@ -113,11 +116,11 @@ export const FullHand: React.FC<{ id: string; plane: Plane; centre: Pt; scale: n
 };
 
 /** the hand's outline + hub as screen points (every ~4th outline sample; the hub as a ring of 12) */
-export function handPts(plane: Plane, pivot: Pt, angle: number, scale = 1, reach?: number): Pt[] {
+export function handPts(plane: Plane, pivot: Pt, angle: number, scale = 1, reach?: number, shape: HandDrawing = HAND_WORLD): Pt[] {
   const c = Math.cos((angle * Math.PI) / 180);
   const s = Math.sin((angle * Math.PI) / 180);
   const out: Pt[] = [];
-  OUTLINE.forEach(([x, y], i) => {
+  shape.outline.forEach(([x, y], i) => {
     if (i % 2) return;
     if (reach !== undefined && Math.hypot(x, y) > reach) return;
     const wx = pivot.x + scale * (c * x - s * y);

@@ -31,7 +31,7 @@ import { CommentField6, domeAt, DomeFlyer, Brand6, DOME_T } from './End6';
 import { useWordmarkFace } from './fonts';
 import { HUB, K, NEEDLE_A, planeOf, project, type Plane, type Pt } from './geom';
 import { FullHand, handPts, WorldHand, type HandLook } from './Hand';
-import { HUB_R } from './handPath';
+import { HAND_FULL, HUB_R } from './handPath';
 import { Lockups, lockupShowing } from './Lockup';
 import { useIg6Qa } from './qa';
 import { FULL, HAND, INK } from './style';
@@ -43,6 +43,9 @@ const SEAM = T.END_CARD.seam;
 const BUILD = SEAM + 4;
 /** the agent's clock rebuilds from the pull-back's start (ticks out from the needle, the rim trimming on both ways) */
 const REBUILD = M.rebuild[0];
+
+/** the M3′ macro's overshoot / recoil scale: 1 / its zoom (shot B; the reference frame keeps 1) */
+const macroOs = (shot: Extract<Shot, { kind: 'world' }>) => (shot.name === 'B' ? 1 / shot.cam.zoom : 1);
 
 /* ── the world dial's state ── */
 function phoneRing(t: number, n: number): Ring {
@@ -62,7 +65,9 @@ function worldState(t: number, shot: Extract<Shot, { kind: 'world' }>): DialStat
     // during the push the dial is frozen at the push's first frame (the f210 step's settle would otherwise drift node 2
     // off the camera's focus by hundreds of px at ×100)
     const tt = shot.fall !== undefined ? FALL.from : t;
-    const rho = seam ? 0 : phoneRho(tt);
+    // the M3′ macro keeps the kick's on-screen swing at the reference frame's (crit-r1 N4: ×2.34 made ring 2 overshoot
+    // the needle by ≈ 100 px on f184)
+    const rho = seam ? 0 : phoneRho(tt, macroOs(shot));
     const s: DialState = {
       mode: 'phone',
       rho,
@@ -74,9 +79,11 @@ function worldState(t: number, shot: Extract<Shot, { kind: 'world' }>): DialStat
       }),
     };
     if (shot.fall !== undefined) {
-      // the push (STYLE §9.9): the rim and the ticks thin away ×3 → ×6 (no pop, no fade), then only node 2 is drawn —
-      // the ring we fall through; the hand (nearer, so faster) leaves the frame by itself
-      s.thin = clamp01((6 - shot.fall) / 3);
+      // the push (STYLE §9.9): the rim and the ticks thin away ×2.4 → ×5 (no pop, no fade: gone well before the cull at
+      // ×6, crit-r1 N6c), then only node 2 is drawn — the ring we fall through, its band thinning from 6–12 to 9–12 node
+      // radii as it grows (a sweeping ring, not a black flood; crit-r1 N6b); the hand is culled at the push's start
+      s.thin = clamp01((5 - shot.fall) / 2.6);
+      s.nodeThin = clamp01((shot.fall - 1.5) / 4.5);
       if (shot.fall > 6) {
         s.only = 2;
         s.noTicks = true;
@@ -121,14 +128,16 @@ function worldLook(t: number, shot: Extract<Shot, { kind: 'world' }>): HandLook 
       shadow: clamp01((t - BUILD) / 8),
     };
   }
-  if (shot.mode === 'phone' && t < M.cut) return { angle: HAND.angle + recoil(t), dome: { kind: 'graphite' } };
+  if (shot.mode === 'phone' && t < M.cut) return { angle: HAND.angle + recoil(t, macroOs(shot)), dome: { kind: 'graphite' } };
   // the fresh clock's hub (shot G on): it rings, then the pickup stamps it teal on the bar line
   const ringU = t - HUB_RING;
   const sh = ringU > 0 && ringU < 10 ? 1 + 0.04 * Math.max(0, Math.sin((2 * Math.PI * ringU) / 2.5)) * Math.exp(-ringU / 4) : 1;
-  const scale = sh * pulse(t, PICKUP, 0.15);
+  // the stamp 1 → 1.2 → 1 (crit-r1 N10: at 1.15 the wordless pickup read weakly at phone size)
+  const scale = sh * pulse(t, PICKUP, 0.2);
   const dome: HandLook['dome'] = t >= DOME_T.leave ? { kind: 'none' } : t < PICKUP ? { kind: 'graphite', scale } : t < PICKUP + 4 ? { kind: 'wipe', u: (t - PICKUP) / 4, scale } : { kind: 'teal', scale };
+  // M2′'s ping: 3.5 px at 80 % ink (crit-r1 N10: the M1 / M3′ hairline idiom read as a pale grey line at phone size)
   const g = ping(t, HUB_RING, HUB_R.dome, 90);
-  return { angle: HAND.angle, dome, collar: collarFlash(t), ping: g };
+  return { angle: HAND.angle, dome, collar: collarFlash(t), ping: g ? { r: g.r, o: (g.o * 0.8) / 0.6, w: 3.5 } : null };
 }
 
 /* ── the object layers of a shot ── */
@@ -139,7 +148,12 @@ function worldLayers(t: number, shot: Extract<Shot, { kind: 'world' }>): Layers 
   const st = worldState(t, shot);
   const prim: Prim | null = shot.dial ? worldPrims(dialPlane, st) : null;
   const look = worldLook(t, shot);
-  const showHand = shot.fall === undefined || shot.fall <= 12;
+  // the T2 push culls the hand over its first frame (crit-r1 B1 / ZONE-1: nearer, so faster, it swept through the
+  // leaving 2b lockup on f224–226; SCRIPT D culls every layer but node 2 anyway). One frame, so it reads as a cut-out at
+  // 30 / 60 fps, never as a grey dissolve.
+  const handOp = shot.fall === undefined ? 1 : 1 - clamp01(t - FALL.from);
+  const showHand = handOp > 0.001;
+  if (handOp < 1) look.opacity = handOp;
   const objects: Layers['objects'] = [];
   if (prim) objects.push({ what: 'object dial', pts: prim.pts });
   if (showHand) objects.push({ what: 'object hand', pts: handPts(handPlane, HUB, look.angle, 1, look.reach) });
@@ -159,11 +173,18 @@ function fullPlane(t: number, mode: 'phone' | 'agent'): Plane {
   const t0 = mode === 'phone' ? M.fall[1] : M.day;
   let g = drift(t, t0);
   let rot = 0;
+  let ax: number = FULL.cx;
+  let ay: number = FULL.cy;
   if (mode === 'phone') {
-    g *= 1 + 2 * (1 - EASE.expo(clamp01((t - M.fall[1]) / 12)));
+    const e = EASE.expo(clamp01((t - M.fall[1]) / 12));
+    g *= 1 + 2 * (1 - e);
+    // the open is concentric with the hole we fell through: the dial's centre starts where node 2 ended (FALL.to) and
+    // travels home with the contraction, so its rim closes in from every edge (crit-r1 N6a)
+    ax = FALL.to.x + (FULL.cx - FALL.to.x) * e;
+    ay = FALL.to.y + (FULL.cy - FALL.to.y) * e;
     if (t >= M.whip) rot = 75 * EASE.peel(clamp01((t - M.whip) / 7));
   }
-  return { ax: FULL.cx, ay: FULL.cy, fx: FULL.cx, fy: FULL.cy, S: g, rot };
+  return { ax, ay, fx: FULL.cx, fy: FULL.cy, S: g, rot };
 }
 function fullLayers(t: number, mode: 'phone' | 'agent'): Layers {
   const p = fullPlane(t, mode);
@@ -183,7 +204,7 @@ function fullLayers(t: number, mode: 'phone' | 'agent'): Layers {
   });
   const look: HandLook = { angle: theta, dome: { kind: phone ? 'graphite' : 'teal' } };
   const centre = { x: FULL.cx, y: FULL.cy };
-  const hp = handPts(p, centre, theta, FULL.hand);
+  const hp = handPts(p, centre, theta, FULL.hand, undefined, HAND_FULL);
   return {
     node: (
       <>

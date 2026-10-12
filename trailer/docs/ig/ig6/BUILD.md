@@ -296,3 +296,91 @@ To clear gate 6, the orchestrator either commits `timing.ts` or widens gate 6 to
 | Balance | `balance-A.txt`, `balance-B.txt` (per-section stems) |
 | Gates | `guard-check-final.txt` (full), `guard-check-fast-final.txt`, `sfx-skips.txt`, `git-frozen.txt`, `tsc.txt`, `stamp-A.txt`, `stamp-B.txt` |
 | Scripts | `scripts/` (`env.mjs` + `plot.py`, `loud.mjs`, `stems.mjs`, `prof.mjs`, `bedprof.mjs`, `picdump.mjs`) |
+
+---
+
+## 10. Round 1 fixes
+
+Label `fix-r1`. Done 2026-10-12 on `claude/remotion-trailer` at HEAD `4080a68`. Nothing committed. No `npm install`, no shared file edited, `CARTESIA_API_KEY` never read. QA output is in `out/ig/qa/ig6/fix-r1/` (scripts, logs, gates, stills, strips, sheets). Every still and strip named below was looked at and compared with the reference thumbnail and `mock-one-ring.png`.
+
+### 10.1 Files
+
+| File | What changed |
+|---|---|
+| `src/ig/ig6/timing.ts` | `NUDGE` + `said()` (SYNC-2, SYNC-3); the cue-sheet fixes S1, S3, S4, S5 and T2. The placement (`layout()`, the hook ladder, `ASSERTS`, `M`, `LINE`, `SCENES`) is unchanged. Re-stamped: A `5d26f284bc53fe53`, B `56d05d4b421e032c`. |
+| `stage/Lockup.tsx` | `toks()` reads `T.said`; `ACC.lead` 3 → 2; 2b leaves at `fall[0] − 3`; S7 leaves at `IMPACT − 11`; the S2a/S2b tier sits at the mean of the two accents' centres; each lockup SVG has `will-change: transform` |
+| `stage/Stage.tsx` | the hand is culled over the push's first frame; rim and ticks thin out from ×2.4 to ×5; node 2's band thins from 6–12 to 9–12; the M3′ macro scales the kick and recoil by 1/zoom; the M5′ open runs concentric with the hole; stamp 1.2; the M2′ ping is 3.5 px at 80 % |
+| `stage/Camera.ts` | the ring-2 punch-in (×1.3 and its 90 px lift) is released over f197–205 |
+| `stage/clock.ts` | `phoneRho(t, os)` and `recoil(t, k)`; "yourself" reads `T.said` |
+| `stage/handPath.ts` | rewritten: the hole is a constant 11 px inward normal offset, P 1.75 → 1.4; two drawings, `HAND_WORLD` (tail −310) and `HAND_FULL` (M5′: tail −205, needle half-width 7) |
+| `stage/Hand.tsx` | the `shape` prop (world or M5′ drawing), `look.opacity`, `ping.w` |
+| `stage/Dial.tsx` | `nodeThin`; node points at the outer edge |
+| `stage/style.ts` | `FULL` = (536, 490), R 460, hand 0.441; M5′ ticks ≥ 2 px and ≥ 30 % ink |
+| `stage/End6.tsx` | the field leaves in place; `CTA_OUT = IMPACT − 11`; the dome flies over the last 6 f; NEUROVOICE starts at `IMPACT − 5` with `arrive = 0.35·xEm`; the URL SVG has `will-change` |
+| `Cover.tsx` | its text SVG has `will-change` (N3) |
+| `docs/ig/ig6/POSTING.md` | T1, T3, T4, T5, T6, T7; the counts updated; the round-1 lint rows added to §9 |
+
+### 10.2 Outcome per issue
+
+| Id | Outcome | What was done, and the measurement |
+|---|---|---|
+| **B1 / ZONE-1** (blocking) | **fixed** | 2b leaves before the push can reach the box. The lead goes f219–223, the accent f220–225 and the tier f221–225. The hand is culled over f222 → f223. It was nearer than the dial, so faster, and entered the box at f223.75; SCRIPT D culls every layer but node 2 anyway. The rim and ticks first reach the box at about f225.75, after the lockup has gone. **The 120 fps sweep (IG6-Reel with zones on, every render frame 0–3359, both casts) logs zero "inside the lockup box" lines.** Every remaining line is the dial under the rail during the two designed full-frame moves (see ZONE-2). Strip: `strip-T2.png` (r884–r931). The accent's hold after "waiting." (f216) is short, but the accent has been up since "still" (f204). |
+| **B2** (blocking) | **fixed** | The comment field now leaves in place: opacity 1 → 0 and scale 1 → 0.96 about its own centre, 4 f in3. It never leaves its own band (y 940–1060), while the CTA tier sits at y ≈ 880–912 and leaves up through its mask. `strip-end.png` (r3068–r3134, every 2nd frame) shows no frame where a field glyph, icon or edge meets a lockup glyph. |
+| **T1** (blocking) | **fixed** | The reply now reads "No. It answers its own number, next to your line, so your people can stay with the people in front of them." (107 characters). It makes no overflow claim. |
+| **SYNC-1** (blocking) | **fixed** | `ACC.lead` 2. Re-measured with the sync critic's `reveal.py` on 120 fps half-scale frames (`logs/reveal-A.txt`; 2b's window starts at f188, once 2a's ink has gone). The 50 % ink of every accent against her heard onset: can't −1.30, rings −0.73, still −1.68, customer −1.37, receptionist −1.62, day −1.95, from −1.35, yourself −0.71, AGENT −0.31. All are within ±2 f. |
+| **SYNC-2** (blocking) | **fixed** | An ig6-local `NUDGE` map and `said()` in `timing.ts`, read by `on()` (so `ACC`, the cue sheet's word hits and `END_CARD`), `stage/Lockup.tsx` `toks()` and `stage/clock.ts`. The values are the critic's, with two exceptions. "for" takes −3: it sits within 2 f of both its /f/ (−4.5) and its vowel (−1.4). "still" takes −1.5 rather than −1.85: it leads its accent's left-to-right wipe, and at −1.85 it measured −2.08. Tier lifts re-measured (`logs/reveal-A-tier.txt`): answer. +0.31, answers −0.19, from +0.40, your +0.19, someone +0.01, customer. −0.18, for +1.20, the +0.27. The lead "answers" measures −0.78. Every lead, accent and tier word in cast A is within ±2 f, and the file has no `**` flags. `M` is unchanged: the "from" nudge leaves the words cut on f525. |
+| N1 | **fixed** | The hole is the outline offset 11 px inward along its normal, which closes near the tips; P is now 1.4. The walls are even all round: 11 px at ×1, ≈ 27 px at M3′ ×2.5 and ≈ 4.9 px in M5′. See `cmp-lozenge.png` (f184, f111) and `cmp-ref-f0.png` (it now reads as the reference's paper-cut lozenge). |
+| N2 | **fixed** | The CTA and field leave f769–774. The disc sits alone for 1 frame (f774–775), then flies f774–780 and stamps on f780. NEUROVOICE surfaces from f775, centre-out: ≈ 85 % ink on f780 and full ink on f781–782 (`strip-end.png`, `sheet-end.png`). No frame is blank. |
+| N3 | **fixed** | `will-change: transform` on the lockup, URL and cover text SVGs. Chroma pixels (max−min > 6) inside the tier, URL, kicker and stakes boxes are now 0 at f0, f134, f136, f301, f705, f815 and on the cover (f136 was 3724 before). |
+| N4 | **fixed** | The M3′ macro scales the step overshoot and the hand recoil by 1/zoom. Ring 2 lands under the needle on f181. The largest node-to-needle offset is ≈ 34 px (f182.5), and the node sits centred from f184 (`strip-punch.png`, r716–r760). |
+| N5 | **fixed (within the zone limits)** | M5′ is R 460 at (536, 490) (was R 410 at (520, 600)). The whole rim stays in frame, with its top 30 px under the edge: the minute of rings and the day need all ten nodes, so the critic's R 470 at (540, 470) would have half-cropped the pickup's dome at φ 0. Below y 840 the rim stays at x ≤ 838 and the needle tip at x ≤ 872. The hand is 0.441 (needle ≥ 6 px, walls ≈ 4.9 px). Ticks are ≥ 2 px: minor #B5B5B5, seconds #8A8A8A, majors 3.5 px. It is still a whole clock (not cropped by 2 edges): that is the SCRIPT's beat. |
+| N6 | **fixed** | (a) The M5′ open is concentric with the hole: the dial's centre starts at node 2's last spot (540, 800) and travels home as the zoom runs ×3 → ×1, so the rim closes in from every edge. (b) Node 2's band thins from 6–12 to 9–12 node radii as it grows: a sweeping ring, not a black flood. (c) The rim and ticks thin out over ×2.4 → ×5 (f225–226.5) and are gone before the cull at ×6, so nothing vanishes in a single frame (`strip-T2.png`). |
+| N7 | **fixed** | The shared S2a/S2b tier is centred on the mean of the "rings," and "still waiting." centres (x ≈ 568). It is static: no second moving text. |
+| N8 | **fixed** | The world hand's tail ends at −310. It runs off the left edge in M1 (f0) and in M2′ (f345–368, `sheet-pickup.png`). M5′ keeps −205. |
+| N9 | **f210 fixed; f438 and f525 skipped** | The punch-in releases over f197–205. The needle–rim crossing is at ≈ (601, 320) on f209.75 and at ≈ (598, 320) on f210 (`strip-cut210.png`). **Skipped:** at f438 and f525 M5′'s needle–rim crossing sits at 12 o'clock, at the top of the frame: the day starts at 12 and lands back on 12 on "from". No M1 or M3′ framing can hold that point without moving the reference composition, so these two stay plain T1 cuts, on "day" and on the beat. |
+| N10 | **fixed (partly)** | The M2′ ping is 3.5 px at 80 % ink, and the stamp is 1 → 1.2 → 1. **Not done:** a second ping, which would show a ring the sound no longer plays (T2, one trill). The dome shadow growth is not done either: the dome sits on the black hub disc, so its shadow would be invisible. |
+| T2 | **fixed** | The f355.5 `fx-trill-1` is gone. The hub's one trill rings out before the click, as SCRIPT b4 specifies. |
+| T3 | **fixed** | The TikTok pinned comment now reads "Why six? North America's ring is 2 s on, 4 s off (ANSI T1.401). Europe's standard is 1 on, 4 off. Ours answers its own number, next to your line." (145 characters) |
+| T4 | **fixed** | The Instagram pinned comment now says "…no porting and your current line stays as it is." (458 characters) |
+| T5 | **fixed** | The reply now reads "We don't publish a speed figure. Try it free and judge for yourself." (68 characters). The note under the table says the trial's test calls run in the browser. |
+| T6 | **fixed (POSTING only)** | §1 and §8: the B re-cut uses frame 0 as its cover, not `…-cover.png`, and its alt text has "Text: One ring, six seconds. You can't answer.". No B cover variant was built: `finish.mjs` writes one fixed cover name per pass, and PIPELINE §6.4 keeps a single cover. |
+| T7 | **fixed** | The Instagram caption opens "In the US and Canada, one ring is six seconds. Our AI receptionist picks up, day or night, from the answers you write once." (`caption.py` READY: 1010 characters, the 123-character first line lands whole). |
+| T8 | **owner action, unchanged** | Set the proposed bio (POSTING §7) on both apps before posting. |
+| T9 | **no change** | " · 06" is the series index, as ig1–ig5 use. |
+| ZONE-2 | **partly fixed** | The single-frame grazes at f270.25 and f463.75 are gone with the new M5′ geometry. The two designed full-frame moves still cross the rail: the push at f224.25–226.75 and the open at f234.25–239.5. That is 33 render frames per cast, all `object dial`, with no text involved. The transitions stay as BUILD §6 argues. |
+| ZONE-3 | **watch, no change** | The full stop is at x ≤ 925, inside the wordmark exception. |
+| SYNC-3 | **fixed** | `NUDGE['ig1-07'][2] = −2`: the URL's third chunk types from f807. The borrowed wav is untouched. |
+| S1 | **fixed** | Ring 1 rings at f0, f12 and f24 only. "six" no longer appears among the lowest words: the lowest five are "someone's" 0.90, "is" 0.90, "picks" 0.91, "it" 0.92, "from" 0.92. |
+| S2 | **done (procedure)** | After every rebuild the AAC prediction (`fix-r1/scripts/aac.mjs`, finish.mjs's exact chain) was run: final A −1.48 dBTP, B −1.48 dBTP (both ≤ −1.1; they were −1.21 and −1.14). `HEAD.db` is untouched. |
+| S3 | **fixed** | The swish now peaks on f648 (`M.exit[0] + 8`), as the hand leaves, at +3 dB. |
+| S4 | **fixed** | Ring 2's f192 repetition is gone. Every time-lapse jump inside a word's first 200 ms (6 f after her onset as said) plays 6 dB down: f255, 262.5, 277.5, 285, 292.5 and 307.5. "someone's" and "is" are now 0.90 each (both were 0.84). |
+| S5 | **fixed** | The bed comes up to the swell's level from "yourself." + 10 f through the hold, the exit and the field, and back under her before "Comment" (`HOLD_UP`). check-mix arc +2.1 LU and climax +1.4 LU are unchanged. |
+
+### 10.3 Gates
+
+| Gate | Result |
+|---|---|
+| `npx tsc --noEmit -p .` | **PASS** (`gates/tsc.log`) |
+| `npm run check:audio:ig6`, cut A | **OK**: −14.0 LUFS, −1.65 dBTP, climax +1.4 LU, arc +2.1 LU, 45 words with mean SII 0.97 and lowest 0.90, the name 0.95 / 1.00 / 0.99, stamp `5d26f284bc53fe53` (`logs/check-audio-A.txt`) |
+| `npm run check:audio:ig6`, cut B (`CAST = 'B'`, then restored byte-identical, sha256 checked) | **OK**: −14.0 LUFS, −1.65 dBTP, climax +1.3 LU, arc +2.1 LU, 44 words with lowest 0.90, stamp `56d05d4b421e032c` (`logs/check-audio-B.txt`). The A mix was rebuilt afterwards. |
+| AAC prediction (finish.mjs chain) | A −14.33 LUFS / **−1.48 dBTP**; B −14.33 LUFS / **−1.48 dBTP** (`logs/aac-*.txt`) |
+| `check:zones:ig -- --film=ig6` (fresh bundle) | **PASS**: 15 zone stills plus the cover (`gates/check-zones.log`) |
+| 120 fps zone + overlap sweep (every render frame, both casts) | **0 lockup-box lines, 0 text lines.** 33 lines per cast, all `object dial` under the rail during the two designed moves (`gates/zones120-A-full.log`, `zones120-B-full.log`, `zones120-A-T2.log`) |
+| `guard:ig6 -- --check` (full) | **Gates 1–5 PASS**: 1747/1747 shas, 19 delivered prefixes, stamps ig1–ig4 plus ig5 `19ca5ef2038155ea`, compositions (+12 IG6 rows), **gate P 30/30 byte-identical**. **Gate 6 FAILS only on ig6's own committed files**: the 11 modified `src/ig/ig6/**` files listed in §10.1; `docs/ig/ig6/POSTING.md` is allowed. This is the known gate 6 issue (§6 note). No path outside ig6's prefixes changed. (`gates/guard-check.log`) |
+| `npm run sfx:ig` / `sfx:ig5` / `sfx:ig6` | 4 up to date, 0 built / skipped (`19ca5ef2038155ea`) / skipped (`5d26f284bc53fe53`) |
+| `git status` on the film 1 / film 2 frozen sets | **empty** (`gates/git-frozen.log`) |
+| `git status` on `scripts/ig`, `scripts/ig5`, `src/ig/ig1…ig5`, `src/ig/common`, `src/ig/components` | **empty** (`gates/git-ig-shared.log`) |
+| Loop seam | f839 vs f0: 0.232 % of pixels over 8 levels (0.031 % over 32) |
+
+### 10.4 For the master step
+
+- Cut A is the committed state (`CAST = 'A'`), and its mix is current (`5d26f284bc53fe53`). The B pass rebuilds `56d05d4b421e032c`.
+- Re-run the AAC prediction after any further sound change (S2). Both casts sit at −1.48 dBTP now.
+- Deviations from SCRIPT / STYLE added in this round:
+  - 2b leaves at f219–225, not f224–229.
+  - The S7 CTA and the field leave f769–774, not on the bar. The field leaves in place, and NEUROVOICE starts at f775.
+  - The hand is culled at the T2 push's first frame.
+  - M5′ is R 460 at (536, 490).
+  - The world hand's tail is −310.
+  - The lozenge hole is an 11 px normal offset (P 1.4).
+  - The ring-2 punch-in is released f197–205.

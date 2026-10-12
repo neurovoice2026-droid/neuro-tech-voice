@@ -25,7 +25,7 @@ Built into `trailer/out/ig/deliver/` (PIPELINE.md §6.2):
 | `neurotechvoice-ig6-one-ring-a-1080p120.mp4` | the A cut at 120 fps, H.264 L5.1, ≤ 28 MB | archive; other platforms |
 | `neurotechvoice-ig6-one-ring-b-1080p60-ig.mp4` | **the B cut** (hook `ig6-01b`, "…You can't answer."), same specs | TikTok only, a week later (§8) |
 | `neurotechvoice-ig6-one-ring-b-1080p120.mp4` | the B cut at 120 fps | archive |
-| `neurotechvoice-ig6-one-ring-cover.png` | 1080×1920 cover, words inside the 3:4 grid crop (the same for both cuts) | custom cover on both apps |
+| `neurotechvoice-ig6-one-ring-cover.png` | 1080×1920 cover, words inside the 3:4 grid crop; its stakes line is cut A's ("Your receptionist can't answer.") | custom cover for the A posts on both apps; the B re-cut uses frame 0 (§8) |
 
 The A and B cuts differ by one voice id and the S1b lockup; both are rendered in the master step (PIPELINE.md §6.4), A first, so posting day never needs a re-render. No video without `-a-` or `-b-` in its name is ever posted.
 
@@ -69,10 +69,10 @@ Fine print: one ring = 2 s of tone + 4 s of silence, the North American standard
 - **The question** ("when do missed calls pile up at yours?") answers in a word or two ("lunch", "Saturdays"), which is easier than the AGENT ask alone (growth judge G4). It counts as part of the one ask: `caption.py` reads one call to action.
 - **Truth:** "one ring is six seconds" is scoped in the fine print (the North American standard, ANSI T1.401) and in the pinned comment (truth judge R1); "Ours picks up, day or night" never says "first ring" (T-C2); "its own number, next to your line" is the series' line for U5 (R3).
 
-**Pinned comment** (146 / 150 characters; TikTok caps comments at 150):
+**Pinned comment** (145 / 150 characters; TikTok caps comments at 150; Europe's cadence named as its standard, since the UK and others differ):
 
 ```
-Why six? It's the North American ring: 2 s on, 4 s off (ANSI T1.401). Europe's is 1 s on, 4 s off. Ours answers its own number, next to your line.
+Why six? North America's ring is 2 s on, 4 s off (ANSI T1.401). Europe's standard is 1 on, 4 off. Ours answers its own number, next to your line.
 ```
 
 **AGENT comments (by hand, within the hour):**
@@ -87,10 +87,10 @@ Why six? It's the North American ring: 2 s on, 4 s off (ANSI T1.401). Europe's i
 
 **Cover:** Edit cover → Add from camera roll → `…-cover.png`. Fallback: frame 0.
 
-**Caption** (988 / 2,200 characters; the first line lands whole; one ask; 4 hashtags; no link):
+**Caption** (1010 / 2,200 characters; the first line lands whole and carries the North American scoping; one ask; 4 hashtags; no link):
 
 ```
-One ring is six seconds. Our AI receptionist picks up, day or night, from the answers you write once.
+In the US and Canada, one ring is six seconds. Our AI receptionist picks up, day or night, from the answers you write once.
 
 Comment AGENT and we'll DM you the link. 5 free minutes for 14 days, no card.
 
@@ -105,10 +105,10 @@ Fine print: one ring = 2 s of tone + 4 s of silence, the North American standard
 - **Keyword:** AGENT → the DM in §5 via the series automation, `utm_campaign=reel_ig6`. Meta allows one private reply per comment within 7 days.
 - **Reels link:** once live, link ig6 → ig1 with the button text "Why we won't replace your desk".
 
-**Pinned comment** (448 characters):
+**Pinned comment** (458 characters):
 
 ```
-Where the six seconds comes from: in the US and Canada a ring is 2 seconds of tone and then 4 seconds of silence, the ANSI T1.401-1988 cadence. Europe's standard is 1 on, 4 off. Some countries differ. How ours works: the agent answers its own number, next to your line, so there's no porting and nothing to switch over. It tells every caller it's an AI. It answers from what you wrote down, and when it can't help, it takes a message for your team.
+Where the six seconds comes from: in the US and Canada a ring is 2 seconds of tone and then 4 seconds of silence, the ANSI T1.401-1988 cadence. Europe's standard is 1 on, 4 off. Some countries differ. How ours works: the agent answers its own number, next to your line, so there's no porting and your current line stays as it is. It tells every caller it's an AI. It answers from what you wrote down, and when it can't help, it takes a message for your team.
 ```
 
 **Alt text** (Accessibility → Alt text; 849 characters):
@@ -150,11 +150,11 @@ Never argue, never quote minutes, never name a provider, never say "first ring" 
 | When someone says | Reply | Chars |
 |---|---|---|
 | "Is it really six seconds?" | Only in the US and Canada: 2 s ring, 4 s pause (ANSI T1.401). Europe's standard is 1 s on, 4 s off, and some countries use their own. | 133 |
-| "So it replaces the receptionist?" | No. It picks up when your desk can't, so your people can stay with the people in front of them. | 95 |
+| "So it replaces the receptionist?" | No. It answers its own number, next to your line, so your people can stay with the people in front of them. | 107 |
 | "How does it get my calls?" | It answers its own number, next to your line. No porting. | 57 |
 | "What if it doesn't know the answer?" | It says so, then takes a name, a number and a message for your team. | 68 |
 | "Do callers know it's an AI?" | Yes. It tells every caller it's an AI. | 38 |
-| "How fast does it pick up?" | We don't publish a speed figure. Ring it yourself on the free trial and judge it. | 81 |
+| "How fast does it pick up?" | We don't publish a speed figure. Try it free and judge for yourself. | 68 |
 | "What languages?" | 14, one per agent. You pick the language in a setting. | 54 |
 | "How long to set up?" | Under ten minutes. Then you add your answers: hours, prices, the questions you get every day. | 93 |
 | "How much?" | The trial is free: 5 minutes over 14 days, no card. Plans are on our site. | 74 |
@@ -163,7 +163,7 @@ Never argue, never quote minutes, never name a provider, never say "first ring" 
 | "How did you make this?" (designers) | Remotion. Every frame is code: the clock is SVG, the type is Instrument Sans and Cormorant Garamond. | 100 |
 
 - "Is it really six seconds?" quotes the source instead of guessing (truth judge R1: the UK cycle is about 3 s, so never "a little faster").
-- "How fast does it pick up?" is the honest answer to the question the hook invites: the product has no measured speed (`lib/site.ts:706-713`), and the trial lets the viewer test it.
+- "How fast does it pick up?" is the honest answer to the question the hook invites: the product has no measured speed (`lib/site.ts:706-713`). It invites a try, not a speed test: the trial has no phone number, its test calls run in the browser (`lib/site.ts:1813`, `lib/audio/capture.ts:1`).
 - "Can it book appointments?" is true today (`lib/billing/entitlements.ts`: trial and starter `googleIntegrations: false`; `lib/pages/home/pricing.ts:91`). If the owner ships booking on Starter, change it to what the pricing page then says.
 
 ---
@@ -192,7 +192,7 @@ The longer options in `docs/ig/POSTING.md` §7 are also true. After the change, 
 | 72 h | both | comments correcting the six seconds ("ours rings faster") | expected and welcome: reply with the sourced line (§6) |
 | 7 d / 14 d | site, UTM | `tt_ig6` vs `reel_ig6`: sign-ups → agent created → test call → number bought → paid | **the real KPI** |
 
-**The B re-cut (Tue 10 Nov, TikTok only):** the same body with `ig6-01b` "One ring, six seconds. You can't answer." (hookscore 84.4; lockup 1b becomes "You" / *can't answer.*), aimed at owner-operators who are their own front desk (judge-viewers §3.2). It is the `-b-` file rendered in the master step (one VOICES id in `timing.ts`; PIPELINE.md §6.4). Compare the 2-second and 3-second hold, average watch time and AGENT comments per 1,000 views against the A post. The B post reuses the TikTok caption, pinned comment and replies unchanged (they carry no hook words).
+**The B re-cut (Tue 10 Nov, TikTok only):** the same body with `ig6-01b` "One ring, six seconds. You can't answer." (hookscore 84.4; lockup 1b becomes "You" / *can't answer.*), aimed at owner-operators who are their own front desk (judge-viewers §3.2). It is the `-b-` file rendered in the master step (one VOICES id in `timing.ts`; PIPELINE.md §6.4). Compare the 2-second and 3-second hold, average watch time and AGENT comments per 1,000 views against the A post. The B post reuses the TikTok caption, pinned comment and replies unchanged (they carry no hook words). Two things change for it, because B never shows "Your receptionist can't answer.": its **cover is frame 0** ("One ring, / *six seconds.*"), not `…-cover.png`, whose stakes line is cut A's; and its **alt text** has the sentence "Text: One ring, six seconds. You can't answer." in place of "Text: One ring, six seconds. Your receptionist can't answer."
 
 **Next reel lead:** if the curve sags in the 2-6 s tick wait, the next reel (ig7) keeps its first 6 s busier.
 
@@ -210,3 +210,8 @@ The longer options in `docs/ig/POSTING.md` §7 are also true. After the change, 
 | Alt text | | **71.4 PASS** | nothing to strip |
 | Ready replies (12, all ≤ 150 chars) | | **76.4 PASS** (as one block) | nothing to strip |
 | Proposed bio (118 chars) | | | nothing to strip |
+| **Round 1 re-checks (2026-10-12, `python3 -I` on the repo's `.claude/skills`, after the truth fixes T1, T3–T7)** | | | |
+| Instagram caption (new first line, T7) | **READY** (1010 chars; 123-char first line lands whole; 3/3 search terms, 1 in the visible window; 1 ask; 4 tags) | **78.6 PASS** | nothing to strip |
+| Instagram pinned comment (T4, 458 chars) | | **92.4 PASS** | nothing to strip |
+| TikTok pinned comment (T3, 145 chars) | | 71.5 REVIEW (the same "too short to judge" burstiness as before) | nothing to strip |
+| Ready replies (T1, T5; 12 lines) | | **79.0 PASS** (as one block) | nothing to strip |

@@ -3,15 +3,20 @@
  * measured profile, so frame 0 is never a trace of it). One outline in hand-local px — pivot (0, 0), pointing up −y —
  * with the lozenge's hole as a second sub-path (fill-rule evenodd), built from the width profile:
  *
- *   s −230 … −50   tail (counterweight), 50 wide, a round end r 25
+ *   s −310 … −50   tail (counterweight), 50 wide, a round end r 25 — long enough to run off the page in M1 and in the
+ *                  M2′ hub macro (crit-r1 N8; STYLE's −230 left its cap inside the frame there)
  *   s 48 → 220–320 → 400 → 460 → 520 → 570 → 610 → 640    32 → 44 → 40 → 32 → 26 → 22 → 18 → 15 (concave taper)
  *   s 618–632      the collar, a 46 × 14 deep-teal band (drawn on top, not part of the outline)
  *   s 640–668      the neck, 15
- *   s 668 → 772 → 880   the hollow lozenge, 0 → 92 → 0 outer (concave sides: width ∝ u^1.75 from each end)
- *   s 694 → 772 → 866   its hole, 0 → 58 → 0 (the ground shows through; outline ≈ 10–12 px normal to the edge)
+ *   s 668 → 772 → 880   the hollow lozenge, 0 → 92 → 0 outer (concave sides: width ∝ u^1.4 from each end)
+ *   the hole       the lozenge's outline offset INWARD by a constant 11 px along its normal (STYLE §9.5 "outline ≈ 10–12
+ *                  px normal to the edge"), so the walls are even all round — a bold paper-cut lozenge, not a ribbon
+ *                  that thins to a hairline at the needle (crit-r1 N1); it closes where the offset meets the axis
  *   s 880–1095     the needle, 12, square end; it crosses the rim at s ≈ 1008 (the reading point)
  *
- * Pure data: the path string and the outline's sample points (the zone and overlap checks project them).
+ * Two drawings share the profile: HAND (the world hand, M1 / M3′ / M2′ / the cover) and HAND_FULL (M5′, redrawn at the
+ * dial's true centre ×0.44: its needle widened so it stays ≥ 6 px on screen, the counterweight kept short — crit-r1 N5).
+ * Pure data: the path strings and the outlines' sample points (the zone and overlap checks project them).
  */
 import { pchip } from './geom';
 
@@ -30,23 +35,34 @@ const BODY = pchip([
   [668, 15],
 ]);
 const LOZ = { s0: 668, waist: 772, s1: 880, half: 46 } as const;
-const HOLE = { s0: 694, waist: 772, s1: 866, half: 29 } as const;
-const NEEDLE_HALF = 6;
-const TAIL = { half: 25, end: -205 } as const;
-const P = 1.75;
+/** the lozenge's wall, normal to its outline (hand-local px) */
+const WALL = 11;
+const TAIL_HALF = 25;
+const P = 1.4;
 
-const lozHalf = (s: number, L: { s0: number; waist: number; s1: number; half: number }) => {
-  if (s <= L.s0 || s >= L.s1) return 0;
-  const u = s < L.waist ? (s - L.s0) / (L.waist - L.s0) : (L.s1 - s) / (L.s1 - L.waist);
-  return L.half * Math.pow(u, P);
+type Spec = { tailEnd: number; needleHalf: number };
+
+const lozHalf = (s: number) => {
+  if (s <= LOZ.s0 || s >= LOZ.s1) return 0;
+  const u = s < LOZ.waist ? (s - LOZ.s0) / (LOZ.waist - LOZ.s0) : (LOZ.s1 - s) / (LOZ.s1 - LOZ.waist);
+  return LOZ.half * Math.pow(u, P);
 };
 /** the outline's half-width at s */
-export function halfWidth(s: number): number {
-  if (s < -50) return TAIL.half;
-  if (s < -30) return TAIL.half + ((s + 50) / 20) * (BODY(-30) / 2 - TAIL.half);
+function halfWidth(s: number, sp: Spec): number {
+  if (s < -50) return TAIL_HALF;
+  if (s < -30) return TAIL_HALF + ((s + 50) / 20) * (BODY(-30) / 2 - TAIL_HALF);
   if (s <= 668) return BODY(s) / 2;
-  const base = s < LOZ.s1 ? 7.5 + ((s - 668) / (LOZ.s1 - 668)) * (NEEDLE_HALF - 7.5) : NEEDLE_HALF;
-  return Math.max(base, lozHalf(s, LOZ));
+  const base = s < LOZ.s1 ? 7.5 + ((s - 668) / (LOZ.s1 - 668)) * (sp.needleHalf - 7.5) : sp.needleHalf;
+  return Math.max(base, lozHalf(s));
+}
+/** the hole's half-width at s: the largest w whose disc of radius WALL stays inside the outline (the inward normal
+ *  offset of the outline), 0 where it closes */
+function holeHalf(s: number, sp: Spec): number {
+  let w = Infinity;
+  for (let k = -WALL; k <= WALL; k += 0.5) {
+    w = Math.min(w, halfWidth(s + k, sp) - Math.sqrt(Math.max(0, WALL * WALL - k * k)));
+  }
+  return Math.max(0, w);
 }
 
 const samples = (a: number, b: number, step: number) => {
@@ -55,32 +71,39 @@ const samples = (a: number, b: number, step: number) => {
   out.push(b);
   return out;
 };
-/** the s values the outline is sampled at (finer through the lozenge's curves) */
-const S_OUT = [...samples(TAIL.end, 660, 6).slice(0, -1), ...samples(660, LOZ.s1 + 4, 1.5).slice(0, -1), ...samples(LOZ.s1 + 4, HAND_LEN, 30)];
-const S_HOLE = samples(HOLE.s0, HOLE.s1, 1.5);
 const f = (v: number) => (Math.round(v * 100) / 100).toString();
 
-/** the outline (right side up, the needle's square end, left side down, the tail's round end) */
-export const OUTLINE: readonly (readonly [number, number])[] = (() => {
-  const right = S_OUT.map((s) => [halfWidth(s), -s] as const);
-  const left = [...S_OUT].reverse().map((s) => [-halfWidth(s), -s] as const);
-  // the tail's round end: a semicircle below s = TAIL.end, sampled for the checks (the path draws it as an arc)
+export type HandDrawing = {
+  /** the hand as one SVG path (evenodd: the hole is a second sub-path) */
+  d: string;
+  /** the outline's sample points (right side up, the needle's square end, left side down, the tail's round end) */
+  outline: readonly (readonly [number, number])[];
+};
+function build(sp: Spec): HandDrawing {
+  const sOut = [...samples(sp.tailEnd, 660, 6).slice(0, -1), ...samples(660, LOZ.s1 + 4, 1.5).slice(0, -1), ...samples(LOZ.s1 + 4, HAND_LEN, 30)];
+  const hw = sOut.map((s) => halfWidth(s, sp));
+  // the hole: where the offset is open, sampled finely, with its two ends closed on the axis
+  const hs = samples(LOZ.s0, LOZ.s1, 1).map((s) => [s, holeHalf(s, sp)] as const);
+  const first = hs.findIndex(([, w]) => w > 0.05);
+  let last = hs.length - 1;
+  while (last > 0 && hs[last][1] <= 0.05) last--;
+  const open = first < 0 ? [] : hs.slice(Math.max(0, first - 1), Math.min(hs.length, last + 2));
+  const holePts: (readonly [number, number])[] = [...open.map(([s, w]) => [w, -s] as const), ...[...open].reverse().map(([s, w]) => [-w, -s] as const)];
+  const right = sOut.map((s, i) => [hw[i], -s] as const);
+  const left = [...sOut].reverse().map((s, i) => [-hw[sOut.length - 1 - i], -s] as const);
   const arc = Array.from({ length: 9 }, (_, i) => {
     const th = Math.PI + (i / 8) * Math.PI;
-    return [TAIL.half * Math.cos(th), -TAIL.end - TAIL.half * Math.sin(th)] as const;
+    return [TAIL_HALF * Math.cos(th), -sp.tailEnd - TAIL_HALF * Math.sin(th)] as const;
   });
-  return [...right, ...left, ...arc.slice(1, -1)];
-})();
-const HOLE_PTS: readonly (readonly [number, number])[] = [...S_HOLE.map((s) => [lozHalf(s, HOLE), -s] as const), ...[...S_HOLE].reverse().map((s) => [-lozHalf(s, HOLE), -s] as const)];
+  const outer = `M ${right.map(([x, y]) => `${f(x)} ${f(y)}`).join(' L ')} L ${left.map(([x, y]) => `${f(x)} ${f(y)}`).join(' L ')} A ${TAIL_HALF} ${TAIL_HALF} 0 0 0 ${f(TAIL_HALF)} ${f(-sp.tailEnd)} Z`;
+  const hole = holePts.length ? ` M ${holePts.map(([x, y]) => `${f(x)} ${f(y)}`).join(' L ')} Z` : '';
+  return { d: outer + hole, outline: [...right, ...left, ...arc.slice(1, -1)] };
+}
 
-/** the hand as one SVG path (evenodd: the hole is a second sub-path) */
-export const HAND_D: string = (() => {
-  const right = S_OUT.map((s) => `${f(halfWidth(s))} ${f(-s)}`);
-  const left = [...S_OUT].reverse().map((s) => `${f(-halfWidth(s))} ${f(-s)}`);
-  const outer = `M ${right.join(' L ')} L ${left.join(' L ')} A ${TAIL.half} ${TAIL.half} 0 0 0 ${f(TAIL.half)} ${f(-TAIL.end)} Z`;
-  const hole = `M ${HOLE_PTS.map(([x, y]) => `${f(x)} ${f(y)}`).join(' L ')} Z`;
-  return `${outer} ${hole}`;
-})();
+/** the world hand (M1, M3′, M2′, the T2 push, the seam, the cover) */
+export const HAND_WORLD: HandDrawing = build({ tailEnd: -310, needleHalf: 6 });
+/** M5′'s hand (drawn ×0.44 at the dial's centre): the needle 6 px on screen, the counterweight STYLE's length */
+export const HAND_FULL: HandDrawing = build({ tailEnd: -205, needleHalf: 7 });
 
 /** the collar band (hand-local rect) */
 export const COLLAR = { x: -23, y: -632, w: 46, h: 14 } as const;

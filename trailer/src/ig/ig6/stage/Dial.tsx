@@ -76,8 +76,10 @@ export type DialState = {
   pings?: readonly { phi: number; r: number; o: number }[];
   /** heavier strokes (the cover: rim 12 px, ticks × 1.33) */
   bold?: { rim: number; tick: number };
-  /** the T2 push: the rim, stretches and ticks thin away by this factor (1 → 0 over ×3 → ×6) */
+  /** the T2 push: the rim, stretches and ticks thin away by this factor (1 → 0 over ×2.4 → ×5) */
   thin?: number;
+  /** the T2 push: the nodes' band thins inward 0 → 1 (inner radius 6 → 9 node units, outer 12 kept) */
+  nodeThin?: number;
 };
 
 /** the world dial's primitives on screen (M1 / M3′ / the T2 push) */
@@ -152,10 +154,13 @@ export function worldPrims(p: Plane, s: DialState): Prim {
       const w = polar(a, C.R, C.cx, C.cy);
       const tan = { x: Math.cos(a * DEG), y: Math.sin(a * DEG) };
       const q = project(p, w.x + tan.x * ring.shiver, w.y + tan.y * ring.shiver);
-      const r = MARKS.node.r * p.S * ring.scale;
-      if (!onScreen(q, r + 20) && s.only === undefined) continue;
-      out.nodes.push({ cx: q.x, cy: q.y, r, w: MARKS.node.w * p.S * ring.scale });
-      out.pts.push(q, { x: q.x + r, y: q.y }, { x: q.x - r, y: q.y }, { x: q.x, y: q.y + r });
+      const k = p.S * ring.scale;
+      const rOut = (MARKS.node.r + MARKS.node.w / 2) * k;
+      const rIn = (MARKS.node.r - MARKS.node.w / 2 + (MARKS.node.w / 2) * (s.nodeThin ?? 0)) * k;
+      const r = (rOut + rIn) / 2;
+      if (!onScreen(q, rOut + 20) && s.only === undefined) continue;
+      out.nodes.push({ cx: q.x, cy: q.y, r, w: rOut - rIn });
+      out.pts.push(q, { x: q.x + rOut, y: q.y }, { x: q.x - rOut, y: q.y }, { x: q.x, y: q.y + rOut }, { x: q.x, y: q.y - rOut });
     }
   }
   // the agent's answered calls

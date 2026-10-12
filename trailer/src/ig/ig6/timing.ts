@@ -20,8 +20,8 @@
  *   · the trim           → TRIMS: full → T1 (ig6-06 dropped, SCRIPT §5.3) when the CTA would end past f765
  *   · the acts' moments  → M (the anchors SCRIPT §3–§4 re-anchors on the takes), ZONE_FRAMES (none yet)
  * THE SOUND (the sound step, docs/ig/ig6/BUILD.md §9) hangs on the same M and onsets: the cue sheet HITS (the clock's
- * steps, the two rings in the North American cadence, the fall-through, the whip, the hub's ring cut short by the
- * pickup, the agent's glass domes, the end card), VOICE_RIDES (the climax's headroom) and MUSIC / BED for ig6's own bed
+ * steps, the two rings in the North American cadence, the fall-through, the whip, the hub's one ring (rung out) and
+ * the pickup, the agent's glass domes, the end card), VOICE_RIDES (the climax's headroom) and MUSIC / BED for ig6's own bed
  * (scripts/ig6/bed.mjs: no music under the hook, the clock as the hat, the fall-through's cut, the stop-time, the return).
  *
  * FIXED, never moved by a take (SCRIPT §1.3, §2): ring 1 on f0, ring 2 on f180 (six real seconds later, the reel's
@@ -236,11 +236,31 @@ export const VOICE_RIDES: Partial<Record<VoiceId, readonly VoiceRide[]>> = {
 };
 export const { SPEECH, PHRASES, speaking } = makeSpeech(VOICE, VOICES);
 
-/** her onset of word k of a role's placed take */
+/** THE ALIGNER'S STAMPS THAT SIT OFF HER SOUND (crit-r1 sync SYNC-2, read on the wavs; ig5's idiom): frames added to word
+ *  k of a take. Cartesia stamps in 80 ms steps and several land after the word is heard, so the grey tier's lift, the
+ *  lead's rise and the accent's wipe printed late. The PLACEMENT (layout(), the hook ladder, ASSERTS, the lockups' exits)
+ *  stays on the raw stamps, so no line or screen moves; the word-level picture (stage/Lockup.tsx toks) and the cue sheet's
+ *  word hits read `said`. "for" sits between its /f/ (−4.5) and its vowel (−1.4): −3 is within 2 f of both; "still"
+ *  takes −1.5, not the measured −1.85, because it leads its accent's left-to-right wipe (at −1.85 it read 2.1 f early). ig1-07 [2]
+ *  "Voice." (the borrow, its wav untouched): the URL's third chunk types on her /v/ (crit-r1 SYNC-3). */
+export const NUDGE: Partial<Record<VoiceId, Readonly<Record<number, number>>>> = {
+  'ig6-01': { 1: -2.1, 7: -4.4 },
+  'ig6-02a': { 1: -2.0 },
+  'ig6-02b': { 1: -1.5 },
+  'ig6-03': { 3: -2.4, 4: -2.5, 6: 0.8 },
+  'ig6-05': { 1: -2.9, 2: -2.6, 3: -3.6 },
+  'ig6-06': { 1: -1.8 },
+  'ig6-07': { 2: -3, 3: -1.75 },
+  'ig1-07': { 2: -2 },
+};
+/** her onset of word k of take id as she says it (local frames: the rounded stamp + NUDGE) */
+export const said = (id: VoiceId, k: number) => vWord(id, k) + (NUDGE[id]?.[k] ?? 0);
+
+/** her onset of word k of a role's placed take (as she says it) */
 const on = (r: Role, k: number) => {
   const at = LINE[r];
   const id = TAKES[r];
-  return at === null || id === null ? NaN : at + vWord(id, k);
+  return at === null || id === null ? NaN : at + said(id, k);
 };
 /** her onset of a role's word by its letters */
 const onWord = (r: Role, w: string) => {
@@ -372,12 +392,12 @@ const AGENT_K = Math.max(0, VOICE.lines[CTA_TAKE].say.split(' ').findIndex((w) =
 export const END_CARD = {
   cta: CTA,
   field: FIELD,
-  agent: CTA + vWord(CTA_TAKE, AGENT_K),
+  agent: CTA + said(CTA_TAKE, AGENT_K),
   send: end(CTA, CTA_TAKE),
   roll: IMPACT - ROLL,
   impact: IMPACT,
   brand: BRAND_AT,
-  url: [0, 1, 2].map((k) => BRAND_AT + vWord(BRAND, k)),
+  url: [0, 1, 2].map((k) => BRAND_AT + said(BRAND, k)),
   seam: END - SEAM,
 } as const;
 
@@ -410,7 +430,7 @@ export const FAULTS: readonly Assert[] = ASSERTS.filter((a) => !a.ok);
  *    the hat until the pickup) and RINGS in the North American cadence — two seconds of ringing (the desk trill again
  *    every 0.4 s, its own length, while the ring's stretch inks), four of silence, ring 2 six real seconds after ring 1;
  *    the fall-through is a reversed whoosh into node 2 and a low hit out of the white; the whip a swish. THE AGENT is
- *    glass and a click: the hub's ring is cut short by the pickup (the click, a low hit, the teal ting); its answered
+ *    glass and a click: the hub rings once, rings out, and the pickup clicks (a low hit, the teal ting); its answered
  *    calls are glass ticks; it glides (no ticks). Every sound is in the shared library (public/ig/sfx/lib, read-only;
  *    a multi-variant family is used only as far as its copied variants go: pop, land, whoosh-soft once, swish twice)
  *    or the shared fx-impact-end. ── */
@@ -431,20 +451,30 @@ const CLOCK = {
  *  moved: SCRIPT §6) — measured on the built mix, per cast (BUILD.md §9) */
 const DROP: readonly number[] = [];
 const kept = (f: number) => !DROP.some((d) => Math.abs(d - f) < 0.01);
+/** her onsets as she says them (the stamps + NUDGE) */
+const SAID: readonly number[] = VOICES.flatMap((v) => VOICE.lines[v.id].words.map((_, k) => v.at + said(v.id, k)));
+/** SCRIPT b3: a time-lapse jump inside a word's first 200 ms (within 6 f after her onset) plays 6 dB down (crit-r1 S4:
+ *  the f277.5 jump sat 0.3 f after "is", SII 0.84) */
+const LAPSE_DUCK = 6;
+const inWordHead = (f: number) => SAID.some((o) => f - o > 0 && f - o <= 6);
 /** a step: tock on the even seconds, tick on the odd (a clock), at `db`; under her voice buildCues takes 5 dB more */
 const step = (f: number, k: number, label: string, db: number): Hit<Snd> =>
   k % 2 === 0 ? H(f, 'fx-tock', 'none', SX.rp, 3, label, { db: db - 1, layer: true }) : H(f, 'fx-tick', 'none', SX.rp, 3, label, { db, layer: true });
 /** A RING of your phone (SCRIPT §2, F1): the desk trill on its frame (a key hit), then its two seconds of ringing — the
  *  trill again every 12 f (0.4 s, its own length) to the ring + 48, under her voice — while the ring's stretch inks */
 const RING_ON = [12, 24, 36, 48] as const;
-/** the ringing's levels (dB on top of weight 2; buildCues takes 5 more under her voice): ring 1 recedes as "six seconds."
- *  comes forward (its sibilant onset sits in the trill's band); ring 2 steps back for "someone's" and swells into the
- *  push (the fall-through goes INTO the ringing node) */
-const RING1_ON = [-6, -8, -22, -18] as const;
-const RING2_ON = [-16, -10, -10, -2] as const;
-const ring = (f: number, x: number, label: string, db: number, on: readonly number[]): Hit<Snd>[] => [
+/** the ringing's levels (dB on top of weight 2; buildCues takes 5 more under her voice; null: that repetition is left
+ *  out): ring 1 rings out before "six" (crit-r1 S1: its f36 and f48 trills sat on the sibilant onset of the hook's key
+ *  word, SII 0.79, and were inaudible anyway — SCRIPT §1.2 puts her first word after ring 1); ring 2 leaves out its f192
+ *  repetition, 2 f after "someone's" (crit-r1 S4), and swells into the push (the fall-through goes INTO the ringing node) */
+const RING1_ON = [-6, -8, null, null] as const;
+const RING2_ON = [null, -10, -10, -2] as const;
+const ring = (f: number, x: number, label: string, db: number, on: readonly (number | null)[]): Hit<Snd>[] => [
   H(f, 'fx-trill', 'rush', x, 1, label, { db }),
-  ...RING_ON.map((d, j) => H(f + d, 'fx-trill', 'rush', x, 2, `${label.split(':')[0]} … still ringing (${j + 2}/5, the North American 2 s on)`, { db: on[j] })),
+  ...RING_ON.flatMap((d, j) => {
+    const lv = on[j];
+    return lv === null ? [] : [H(f + d, 'fx-trill', 'rush', x, 2, `${label.split(':')[0]} … still ringing (${j + 2}/5, the North American 2 s on)`, { db: lv })];
+  }),
 ];
 /** her onset of the first word of each lockup's accent (the teal italic lands on it: stage/Lockup.tsx), by role and screen */
 const accentOn = (r: Role, screen = 0) => {
@@ -495,15 +525,18 @@ export const HITS: Hit<Snd>[] = [
     return H(f, 'fx-tick', 'none', x, 3, `b3 … the ticks sweep in clockwise (a 32nd ratchet, ${j + 1}/6)`, { db: -2 - j + (speaking(f) ? 5 : 0), layer: true });
   }),
   // ── b3 MISSED: the time-lapse — the hand jumps node to node on 8ths, tick / tock (the minute of rings, never said)
-  ...CLOCK.lapse.filter(kept).map((f, k) => step(f, k + 1, `b3 time-lapse jump ${k + 1}/${CLOCK.lapse.length} (a ring’s stretch inks)`, 1)),
+  ...CLOCK.lapse.filter(kept).map((f, k) =>
+    step(f, k + 1, `b3 time-lapse jump ${k + 1}/${CLOCK.lapse.length} (a ring’s stretch inks)${inWordHead(f) ? ' — in a word’s first 200 ms: 6 dB down' : ''}`, inWordHead(f) ? 1 - LAPSE_DUCK : 1),
+  ),
   H(ACC.customer - 1, 'tap', 'none', 0.56, 3, 'b3 “customer.” lands (teal italic) on the bar 6 line', { db: -1 }),
   H(CLOCK.lapse[CLOCK.lapse.length - 1] + 3, 'land', 'none', SX.full, 3, 'b3 the last jump lands at φ 336: ten black stretches on the rim', { db: -6 }),
   // ── b4 PICKUP: the stop-time (the bed cut on its 16th, MUSIC.stop): the riser into it, the whip, the hub's ring cut
   // short by the pickup, in the room tone alone
   H(STOP[0], 'riser-short', 'none', 0.5, 3, 'b4 into the stop-time (the riser crests on the bed’s cut)', { db: -6 }),
   H(M.cut, 'swish', 'none', [0.35, 0.65], 2, 'b4 T3 THE WHIP (+75°, peel): the swish peaks on the cut to the hub', { db: -2 }),
-  H(M.ring, 'fx-trill', 'rush', SX.hub, 1, 'b4 a fresh call rings at the hub of a clean clock (the dome shivers, one ping)', { db: -3 }),
-  H(M.pickup - 4.5, 'fx-trill-1', 'rush', SX.hub, 2, 'b4 … it starts to ring again — cut short by the pickup', { db: -4 }),
+  // (one trill, rung out before the click — SCRIPT b4; a second ring cut off by the pickup would claim "answered within
+  //  the first ring", crit-r1 T2)
+  H(M.ring, 'fx-trill', 'rush', SX.hub, 1, 'b4 a fresh call rings at the hub of a clean clock (the dome shivers, one ping; it rings out)', { db: -3 }),
   H(M.pickup, 'fx-pickup', 'none', SX.hub, 1, 'b4 THE PICKUP on the bar 7 line: the dome stamps (the click)', { db: 0 }),
   H(M.pickup, 'thump', 'none', SX.hub, 2, 'b4 … LOW HIT: the teal stamp’s weight', { db: -3, layer: true }),
   H(M.pickup, 'fx-tock', 'none', SX.hub, 3, 'b4 … the dome’s knock', { db: -2, layer: true }),
@@ -527,7 +560,9 @@ export const HITS: Hit<Snd>[] = [
   H(M.sweep[1], 'sub', 'none', 0.5, 2, 'b5 … the weight under “from your words.”', { db: -9, layer: true }),
   // ── b7 RING: "yourself." lands with the dome (above); the exit lifts the dial and the hand away
   H(ACC.yourself - 1, 'tap', 'none', 0.56, 3, 'b7 “yourself.” lands (teal italic)', { db: -2 }),
-  H(M.exit[0] + 6, 'swish', 'none', [0.45, 0.5], 3, 'b7 → b8 the exit: the hand, then the dial, lift up and leave (the swish on the fastest frame)', { db: 0 }),
+  // (stage/Camera.ts EXIT: in3 over 8 f, the hand 2 f ahead — its fastest frames are f647–648, the dial's f649–650: the
+  //  swish peaks as the hand leaves, +3 dB to read over the pad; crit-r1 S3)
+  H(M.exit[0] + 8, 'swish', 'none', [0.45, 0.5], 3, 'b7 → b8 the exit: the hand, then the dial, lift up and leave (the swish peaks as the hand leaves)', { db: 3 }),
   H(ARROW, 'fx-felttip-short', 'none', 0.76, 3, 'b8 the white arrow draws into the send disc (6 f)', { db: -2 }),
   // ── b8–b9 the end card: the shared stack (no hairline in End6: its draw is left out), the build and the impact
   ...endHits(END_CARD)
@@ -570,6 +605,15 @@ export const MUSIC = {
 const CTA_END = Math.min(LAID.ctaVoiced, IMPACT - 14);
 const BUILD_TAPER = 3.5;
 const RIDE = { under: 6, swell: 9, ret: 6, day: 4, ring: 5, build: 9 } as const;
+/** crit-r1 S5: once "Ring it yourself." has ended, the bed comes up (the swell's level) through the hold, the exit and the
+ *  field, and back under her before "Comment" — the ring act's 1.7 s of pad alone read as the reel ending */
+const RING_DONE = LINE.ring !== null && TAKES.ring !== null ? voiced(LINE.ring, TAKES.ring) : M.words + PLAN.wordsHold;
+const HOLD_UP = [
+  [RING_DONE + 4, RIDE.ring],
+  [RING_DONE + 10, RIDE.swell],
+  [FIELD + 6, RIDE.swell],
+  [CTA - 4, RIDE.ring],
+] as const;
 export const BED = {
   file: `ig/sfx/${REEL}/bed.wav`,
   vol: 2,
@@ -582,6 +626,7 @@ export const BED = {
     [M.day, RIDE.day],
     [M.words - 6, RIDE.day],
     [M.words + 6, RIDE.ring],
+    ...HOLD_UP,
     [CTA_END, RIDE.ring],
     [CTA_END + 6, RIDE.build],
     [IMPACT - 25, RIDE.build],

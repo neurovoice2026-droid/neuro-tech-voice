@@ -5,7 +5,7 @@
  *   lead     Instrument Sans 580, −0.03em, ink — per word, a MASK RISE from +105 % of its line box behind a clip line,
  *            7 f expo, starting 2 f before her onset; out: 4 f up through the mask (in3)
  *   accent   Cormorant Garamond Italic 600, −0.01em, THE TEAL — a slide (x −40 → 0) under a left-to-right wipe, 8 f
- *            expo from 3 f before its first word (the hit on her onset), teal from its first frame; out: 5 f, scale
+ *            expo from 2 f before its first word (the hit on her onset), teal from its first frame; out: 5 f, scale
  *            1 → 0.94 + opacity
  *   tier     Instrument Sans 450, 32 px, grey — the whole screen SET at 72 % ink (a 6 f rise of 16 px, house ease)
  *            2 f before her first word; each word LIFTS to full ink on its onset (2 f); out: 4 f up through the mask
@@ -40,8 +40,9 @@ export type LockSpec = {
   /** the tier's set (rise) frame; null: it continues the previous screen's tier (S2b) */
   tierFrom: number | null;
   out: { lead: number; accent: number; tier: number | null };
-  /** the tier's centre under another lockup's accent (default: under its own; S2a/S2b share 2b's) */
-  tierUnder?: { text: string; layout: T.LockupLayout };
+  /** the tier centred on the mean of these accents' centres (default: under its own accent). S2a and S2b share one tier
+   *  screen: it sits between the two accents (crit-r1 N7: under 2b's alone, 2a's block hung 136 px left of it) */
+  tierUnder?: readonly { text: string; layout: T.LockupLayout }[];
   underline?: boolean;
 };
 
@@ -49,8 +50,10 @@ const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 const SAY = (id: T.VoiceId) => typo(VOICE.lines[id].say).split(' ');
 const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
 const shown = (id: T.VoiceId, k: number) => T.DISPLAY.find((d) => d.id === id && d.from === k)?.text ?? SAY(id)[k];
+/** her words of a span, each on its onset AS SHE SAYS IT (T.said: the stamp + timing.ts NUDGE, crit-r1 SYNC-2); the
+ *  screens' windows (tierFrom, the exits) stay on the raw stamps, as the placement does */
 const toks = (id: T.VoiceId, at: number, [a, b]: readonly [number, number], display: boolean): Tok[] =>
-  range(a, b).map((k) => ({ text: display ? shown(id, k) : SAY(id)[k], onset: at + T.vWord(id, k) }));
+  range(a, b).map((k) => ({ text: display ? shown(id, k) : SAY(id)[k], onset: at + T.said(id, k) }));
 
 /** every lockup of the reel, in order (pure, from the timeline); `shift` re-times them by a loop (the seam's 1a) */
 export function lockSpecs(): LockSpec[] {
@@ -76,9 +79,15 @@ export function lockSpecs(): LockSpec[] {
   const [L2b] = T.LOCKUPS[wa];
   const rowsS2 = [toks(ra, rAt, T.SCREENS[ra].spans[0], false), toks(wa, wAt, T.SCREENS[wa].spans[0], false)];
   const w0 = wAt + T.vWord(wa, 0);
-  const s2x = { text: L2b.accent.map((k) => shown(wa, k)).join(' '), layout: L2b.layout };
+  const s2x = [
+    { text: L2a.accent.map((k) => shown(ra, k)).join(' '), layout: L2a.layout },
+    { text: L2b.accent.map((k) => shown(wa, k)).join(' '), layout: L2b.layout },
+  ];
   out.push({ key: '2a', layout: L2a.layout, lead: toks(ra, rAt, L2a.lead, true), accent: toks(ra, rAt, L2a.accent, true), rows: rowsS2, tierFrom: rAt + T.vWord(ra, 0) - 2, out: { lead: w0 - 7, accent: w0 - 7, tier: null }, tierUnder: s2x });
-  const eF = T.M.fall[0] + 2;
+  // 2b leaves BEFORE the T2 push can sweep the dial through the lockup box (crit-r1 B1 / ZONE-1): the lead f219–223, the
+  // accent f220–225, the tier f221–225 — the push starts f222 (the hand is culled by f223; the rim first reaches the
+  // box after f225). The accent has been up since "still" (f204), so the short hold after "waiting." still reads.
+  const eF = T.M.fall[0] - 3;
   out.push({ key: '2b', layout: L2b.layout, lead: toks(wa, wAt, L2b.lead, true), accent: toks(wa, wAt, L2b.accent, true), rows: rowsS2, tierFrom: null, out: { lead: eF, accent: eF + 1, tier: eF + 2 }, tierUnder: s2x });
   // S3: the tier from "A", the big words later; out as the whip starts
   const mi = T.TAKES.missed!;
@@ -116,7 +125,9 @@ export function lockSpecs(): LockSpec[] {
   const ct = T.TAKES.cta!;
   const cAt = T.LINE.cta;
   const [L7] = T.LOCKUPS[ct];
-  const e7 = T.IMPACT - 6;
+  // (crit-r1 N2: out f769–774, so the stage is clear when the wordmark starts surfacing at the impact − 5; the field
+  // leaves in place with it, End6.tsx CTA_OUT)
+  const e7 = T.IMPACT - 11;
   out.push({ key: '7', layout: L7.layout, lead: toks(ct, cAt, L7.lead, true), accent: toks(ct, cAt, L7.accent, true), rows: [toks(ct, cAt, T.SCREENS[ct].spans[0], false)], tierFrom: cAt + T.vWord(ct, 0) - 2, out: { lead: e7, accent: e7, tier: e7 + 1 } });
   // the seam: 1a again, re-timed one loop later (its words 72 %), rising into its set state by the last frame
   const a = out[0];
@@ -151,16 +162,22 @@ export function lockGeom(s: LockSpec): LockGeom {
   const accW = measureSerif(accText, P.accent.size);
   const leadX = P.centred ? P.lead.x - leadW / 2 : P.lead.x;
   const accX = P.centred ? P.accent.x - accW / 2 : P.accent.x;
-  const under = s.tierUnder ? LAYOUT[s.tierUnder.layout].accent.x + measureSerif(s.tierUnder.text, LAYOUT[s.tierUnder.layout].accent.size) / 2 : null;
+  const centreOf = (u: { text: string; layout: T.LockupLayout }) => {
+    const L = LAYOUT[u.layout];
+    const w = measureSerif(u.text, L.accent.size);
+    return L.centred ? L.accent.x : L.accent.x + w / 2;
+  };
+  const under = s.tierUnder?.length ? s.tierUnder.reduce((a, u) => a + centreOf(u), 0) / s.tierUnder.length : null;
   const tierX = under ?? P.tier.x ?? accX + accW / 2;
   const rowW = s.rows.map((r) => measureSans(r.map((w) => w.text).join(' '), TIER.tier.size, TIER.tier.weight, TIER.tier.tracking));
   return { leadX, leadW, accX, accW, tierX, rowW };
 }
 
-/** the accent's slide + wipe: from 3 f before its first word, 8 f expo — the expo puts its hit (most of the travel and
- *  the wipe) on her onset, so the word reads on or ≤ 2 f before she says it (the series' sync rule); STYLE §9.8's
- *  "10 f landing on the onset" showed it ≈ 9 f early */
-const ACC = { lead: 3, dur: 8 } as const;
+/** the accent's slide + wipe: from 2 f before its first word, 8 f expo — the expo puts its hit (most of the travel and
+ *  the wipe) on her onset, so the word reads within 2 f of when she says it (the series' sync rule; crit-r1 SYNC-1: from
+ *  3 f before, "customer.", "day", "receptionist" and "can't" were 50 % legible 2.3–3.2 f early); STYLE §9.8's "10 f
+ *  landing on the onset" showed it ≈ 9 f early */
+const ACC = { lead: 2, dur: 8 } as const;
 /** the first frame a lockup shows anything */
 const startOf = (s: LockSpec) => (s.set0 ? (s.set0.rise ?? -Infinity) : Math.min(s.lead[0].onset - 2, s.accent[0].onset - ACC.lead, s.tierFrom ?? Infinity));
 /** a screen whose tier continues into the next (S2a → S2b) hands it over at the next one's start */
@@ -321,7 +338,10 @@ const One: React.FC<{ s: LockSpec; t: number; all: readonly LockSpec[]; id: stri
   }
   return (
     <>
-      <svg width={1080} height={1920} viewBox="0 0 1080 1920" style={{ position: 'absolute', left: 0, top: 0, overflow: 'hidden' }} aria-hidden>
+      {/* its own compositor layer (will-change): Chrome then antialiases the small grey tier in greyscale whether or not a
+          word is moving — on the opaque white it used LCD sub-pixel AA at rest (orange / blue fringes, a weight pop as each
+          tier settled; crit-r1 N3) */}
+      <svg width={1080} height={1920} viewBox="0 0 1080 1920" style={{ position: 'absolute', left: 0, top: 0, overflow: 'hidden', willChange: 'transform' }} aria-hidden>
         {nodes}
       </svg>
       {rects}

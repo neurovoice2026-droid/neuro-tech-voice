@@ -103,20 +103,24 @@ export const MARKS = {
 } as const;
 /** the dial angle φ of node 1 sits at world angle φ + PHI0 + ρ at M1; the needle crosses the rim at the reading point */
 export const PHI0 = 28.1;
-/** M5′: the whole dial, drawn upright (φ 0 at the top) as its own picture (STYLE §9.6) */
+/** M5′: the whole dial, drawn upright (φ 0 at the top) as its own picture (STYLE §9.6). crit-r1 N5: as big as the frame
+ *  allows while the whole rim stays in it (the minute of rings and the day need all ten nodes): R 460 (was 410), its
+ *  top 30 px under the frame's edge, its bottom at y 950 (the lockup box starts at 1080), the rim at x ≤ 838 and the
+ *  needle's tip at x ≤ 872 below y 840 (TikTok's rail, x 880) */
 export const FULL = {
-  cx: 520,
-  cy: 600,
-  R: 410,
-  /** the hand redrawn at the true centre, scaled (430 px long, hub Ø 38, dome Ø 21) */
-  hand: 0.393,
-  rim: 4.5,
-  stretch: 4.5,
-  /** ticks as fractions of R (the M1 radii / 1623) */
-  minor: { r0: 0.934, r1: 0.958, w: 1.5, color: '#E2E2E2' },
-  sec: { r0: 0.927, r1: 0.959, w: 2, color: '#9A9A9A' },
-  major: { r0: 0.918, r1: 0.962, w: 3, color: '#222222' },
-  node: { r: 7, w: 4 },
+  cx: 536,
+  cy: 490,
+  R: 460,
+  /** the hand redrawn at the true centre, scaled (483 px long, hub Ø 42, dome Ø 24): handPath's HAND_FULL */
+  hand: 0.441,
+  rim: 5,
+  stretch: 5,
+  /** ticks as fractions of R (the M1 radii / 1623); every class ≥ 2 px and ≥ 30 % ink on screen (crit-r1 N5: at
+   *  M1's #E2E2E2 / 1.5 px the minor ticks antialiased away at phone size) */
+  minor: { r0: 0.934, r1: 0.958, w: 2, color: '#B5B5B5' },
+  sec: { r0: 0.927, r1: 0.959, w: 2.5, color: '#8A8A8A' },
+  major: { r0: 0.918, r1: 0.962, w: 3.5, color: '#222222' },
+  node: { r: 7.8, w: 4.5 },
   /** domes keep a constant screen Ø 28 */
   dome: { r: 14 },
 } as const;
