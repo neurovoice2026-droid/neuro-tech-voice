@@ -8,10 +8,14 @@
  *                  released f197–205 (8 f inOut) so the f210 cut keeps the reading point too
  *   C  f210–222    M1 (T1)
  *   D  f222–232    T2 the fall-through: world ×1 → ×12 → ×240 about node 2 (an accelerating exponential push) while
- *                  node 2 pans to the frame's centre line (540, 800; inOut, 6 f); the rim and ticks thin away ×3 → ×6,
- *                  then only node 2 is drawn; f232–234 pure white (its white centre)
- *   E  f234–cut    M5′ the whole dial (its own upright drawing; it opens out of the white ×3 → ×1); the T3 whip
- *                  (+75° in 7 f, peel) cut on its fastest frame
+ *                  node 2 pans toward the frame's centre line (540, 400), riding the zoom. The hand LEAVES FIRST, by
+ *                  motion: its plane lifts straight up and out of the frame over f220–223 (in3), 2 f ahead of the push,
+ *                  as the exit lifts it ahead of the dial (crit-r2 B1: never a translucent hand). The rim, the ticks and node 2 scale
+ *                  physically: the ticks fly out of the bottom edge, the rim thickens, node 2's white centre swallows the
+ *                  frame (crit-r2 P3: no thinning, no cull — one accelerating dive); f232–234 pure white
+ *   E  f234–cut    M5′ the whole dial (its own upright drawing; it opens out of the white ×3 → ×1 from the frame's
+ *                  centre, so the rim closes in from all four corners; the hand extends out of its hub once the rim is
+ *                  in frame — crit-r2 P5); the T3 whip (+75° in 7 f, peel) cut on its fastest frame
  *   G  cut–364     M2′ the hub macro of a fresh clock (no dial in frame), its rotation continuing −35° → 0 (12 f expo)
  *   H  364–384     the pull-back M2′ → M1 (20 f inOut), the hub travelling (260, 900) → (97, 1183); then M1, the agent
  *   I  day–words   M5′ the agent's day
@@ -58,9 +62,20 @@ const pull = (t: number): Cam => {
 };
 
 /* ── T2: the fall-through into node 2 ── */
-/** node 2 pans to (540, 800) — the frame's centre line, a little high so the growing ring stays off the leaving lockup —
- *  and the zoom reaches ×240 by the white frame (its white centre then covers the farthest corner, 1280 px away) */
-export const FALL = { from: M.fall[0], white: M.fall[0] + 10, open: M.fall[1], zEnd: 240, pan: 6, to: { x: 540, y: 800 } } as const;
+/** node 2 pans to (540, 400) — the frame's centre line, high: the ticks below the rim fly down through the lower frame
+ *  as they scale, and from up here their longest (the majors, at the right edge) reach the lockup box only at f226.75,
+ *  after 2b has gone (crit-r2 P4; no pan at all would buy 0.25 f more) — and the zoom reaches ×240 by the white frame
+ *  (its white centre, r 9·z, covers the farthest corner, 1612 px away, by ×179 ≈ f231.6) */
+export const FALL = { from: M.fall[0], white: M.fall[0] + 10, open: M.fall[1], zEnd: 240, panZ: 40, to: { x: 540, y: 400 } } as const;
+/** the hand's exit: its plane (M1, the drift continuing) lifts straight up `lift` px over `dur` f (in3), `lead` f ahead of
+ *  the push, as the exit into End6 lifts the hand 2 f ahead of the dial — its fastest frames land on the push's first
+ *  frame and it is gone by f223, so the dive that follows is one accelerating move (crit-r2 B1, P3). The hand's lowest
+ *  visible point (its tail at the left edge, y ≈ 1350, + the shadow) clears the top edge. */
+export const HAND_OUT = { lead: 2, dur: 3, lift: 1550 } as const;
+const handOut = (t: number): Cam => {
+  const c = m1(t, M.shotC);
+  return { ...c, ay: c.ay - HAND_OUT.lift * EASE.in3(clamp01((t - (FALL.from - HAND_OUT.lead)) / HAND_OUT.dur)) };
+};
 /** node 2's world position during the push (the dial stands still between the f210 step and E) */
 const n2World = () => polar(worldA(36, phoneRho(FALL.from)), DIAL.R);
 /** the push's zoom factor: 1 → ×12 by f228 → ×240 by f232 (log-space u^p with p chosen so ×12 lands on the plan's f228) */
@@ -70,8 +85,12 @@ const fall = (t: number): Cam => {
   const c0 = m1(FALL.from, M.shotC);
   const n2 = n2World();
   const s0 = project(planeOf(c0, K.dial), n2.x, n2.y);
-  const u = EASE.inOut(clamp01((t - FALL.from) / FALL.pan));
-  return { ax: mix(s0.x, FALL.to.x, u), ay: mix(s0.y, FALL.to.y, u), fx: n2.x, fy: n2.y, zoom: c0.zoom * fallZoom(t), rot: 0 };
+  const z = fallZoom(t);
+  // the pan rides the push: its progress is the square of the zoom's (in log space), done by ×panZ — it only ever
+  // accelerates, with the dive, and lands where the ring's own growth swamps it (crit-r2 P3: a time-based 6 f inOut
+  // decelerated mid-push, and the dive seemed to stall)
+  const u = Math.pow(clamp01(Math.log(z) / Math.log(FALL.panZ)), 2);
+  return { ax: mix(s0.x, FALL.to.x, u), ay: mix(s0.y, FALL.to.y, u), fx: n2.x, fy: n2.y, zoom: c0.zoom * z, rot: 0 };
 };
 
 /* ── the exit into End6: dial + hand lift straight up and leave (8 f in3, the hand plane 2 f ahead). Straight up because
@@ -101,8 +120,8 @@ const world = (name: string, cam: Cam, mode: Mode, o: { handCam?: Cam; dial?: bo
 export function shotAt(t: number): Shot {
   if (t < M.shotB) return world('A', m1(t, 0), 'phone');
   if (t < M.shotC) return world('B', m3(t, M.shotB, M.ring2), 'phone');
-  if (t < FALL.from) return world('C', m1(t, M.shotC), 'phone');
-  if (t < FALL.white) return world('D', fall(t), 'phone', { fall: fallZoom(t) });
+  if (t < FALL.from) return world('C', m1(t, M.shotC), 'phone', { handCam: handOut(t) });
+  if (t < FALL.white) return world('D', fall(t), 'phone', { fall: fallZoom(t), handCam: handOut(t) });
   if (t < FALL.open) return { kind: 'white', name: 'D-white' };
   if (t < M.cut) return { kind: 'full', name: 'E', mode: 'phone' };
   if (t < PULL[0]) return world('G', m2(t), 'phone', { dial: false });

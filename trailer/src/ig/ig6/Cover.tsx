@@ -16,7 +16,7 @@ import { DialSvg, worldPrims } from './stage/Dial';
 import { measureSans, measureSerif, useIg6Faces } from './stage/fonts';
 import { HUB, IDENT_PLANE, needlePhi } from './stage/geom';
 import { WorldHand } from './stage/Hand';
-import { FACE, HAND, INK, TIER } from './stage/style';
+import { FACE, GREY_AA, HAND, INK, TIER } from './stage/style';
 import { registerIg6Zones } from './stage/Zones';
 
 registerIg6Zones();
@@ -48,8 +48,9 @@ export const Cover6: React.FC<{ zones?: boolean }> = ({ zones = false }) => {
         <DialSvg prim={prim} id="ig6-cover-dial" />
         <WorldHand id="ig6-cover-hand" plane={IDENT_PLANE} pivot={HUB} look={{ angle: HAND.angle, dome: { kind: 'graphite' }, shadow: 9 / 7 }} />
         {ready ? (
-          // its own layer (will-change): greyscale AA for the small grey kicker and stakes line (crit-r1 N3: LCD fringes)
-          <svg width={1080} height={1920} style={{ position: 'absolute', left: 0, top: 0, willChange: 'transform' }} aria-hidden>
+          // greyscale AA for the small grey kicker and stakes line (crit-r1 N3: LCD fringes) through a transparency group,
+          // not a composited layer (crit-r2 D1)
+          <svg width={1080} height={1920} style={{ position: 'absolute', left: 0, top: 0, opacity: GREY_AA }} aria-hidden>
             <text x={C.kicker.x} y={C.kicker.base} fill={INK.tier} style={sans(C.kicker.size, C.kicker.weight, C.kicker.tracking)}>
               {C.kicker.text}
             </text>

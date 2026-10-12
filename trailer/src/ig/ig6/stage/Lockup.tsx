@@ -26,7 +26,7 @@ import * as T from '../timing';
 import { VOICE } from '../voice.generated';
 import { bump } from './clock';
 import { measureSans, measureSerif, useIg6Faces } from './fonts';
-import { FACE, INK, LAYOUT, TIER } from './style';
+import { FACE, GREY_AA, INK, LAYOUT, TIER } from './style';
 
 type Tok = { text: string; onset: number };
 export type LockSpec = {
@@ -79,16 +79,18 @@ export function lockSpecs(): LockSpec[] {
   const [L2b] = T.LOCKUPS[wa];
   const rowsS2 = [toks(ra, rAt, T.SCREENS[ra].spans[0], false), toks(wa, wAt, T.SCREENS[wa].spans[0], false)];
   const w0 = wAt + T.vWord(wa, 0);
+  // each accent's WORDS (its [from, to] span, crit-r2 P1: mapping the span's two endpoints measured "rings, rings,")
   const s2x = [
-    { text: L2a.accent.map((k) => shown(ra, k)).join(' '), layout: L2a.layout },
-    { text: L2b.accent.map((k) => shown(wa, k)).join(' '), layout: L2b.layout },
+    { text: range(L2a.accent[0], L2a.accent[1]).map((k) => shown(ra, k)).join(' '), layout: L2a.layout },
+    { text: range(L2b.accent[0], L2b.accent[1]).map((k) => shown(wa, k)).join(' '), layout: L2b.layout },
   ];
   out.push({ key: '2a', layout: L2a.layout, lead: toks(ra, rAt, L2a.lead, true), accent: toks(ra, rAt, L2a.accent, true), rows: rowsS2, tierFrom: rAt + T.vWord(ra, 0) - 2, out: { lead: w0 - 7, accent: w0 - 7, tier: null }, tierUnder: s2x });
-  // 2b leaves BEFORE the T2 push can sweep the dial through the lockup box (crit-r1 B1 / ZONE-1): the lead f219–223, the
-  // accent f220–225, the tier f221–225 — the push starts f222 (the hand is culled by f223; the rim first reaches the
-  // box after f225). The accent has been up since "still" (f204), so the short hold after "waiting." still reads.
-  const eF = T.M.fall[0] - 3;
-  out.push({ key: '2b', layout: L2b.layout, lead: toks(wa, wAt, L2b.lead, true), accent: toks(wa, wAt, L2b.accent, true), rows: rowsS2, tierFrom: null, out: { lead: eF, accent: eF + 1, tier: eF + 2 }, tierUnder: s2x });
+  // 2b holds as late as the T2 push allows (crit-r2 P4): the hand has lifted away upward by f223 (Camera.ts HAND_OUT), and
+  // the dial's ticks, scaling physically, first reach the lockup box at f226.75 (the majors at the right edge) — so the
+  // lead leaves f221–225, the accent f221.5–226.5, the tier f222–226 (½ f apart, not 1: the last of it is gone 0.25 f
+  // before the first stroke arrives). The accent has been up since "still" (f204).
+  const eF = T.M.fall[0] - 1;
+  out.push({ key: '2b', layout: L2b.layout, lead: toks(wa, wAt, L2b.lead, true), accent: toks(wa, wAt, L2b.accent, true), rows: rowsS2, tierFrom: null, out: { lead: eF, accent: eF + 0.5, tier: eF + 1 }, tierUnder: s2x });
   // S3: the tier from "A", the big words later; out as the whip starts
   const mi = T.TAKES.missed!;
   const mAt = T.LINE.missed;
@@ -338,10 +340,11 @@ const One: React.FC<{ s: LockSpec; t: number; all: readonly LockSpec[]; id: stri
   }
   return (
     <>
-      {/* its own compositor layer (will-change): Chrome then antialiases the small grey tier in greyscale whether or not a
-          word is moving — on the opaque white it used LCD sub-pixel AA at rest (orange / blue fringes, a weight pop as each
-          tier settled; crit-r1 N3) */}
-      <svg width={1080} height={1920} viewBox="0 0 1080 1920" style={{ position: 'absolute', left: 0, top: 0, overflow: 'hidden', willChange: 'transform' }} aria-hidden>
+      {/* NO compositor layer (crit-r2 D1: with `will-change: transform` Chrome dropped the whole lockup, or showed a stale
+          copy of it, on random single frames of a full render). Greyscale AA for the small grey tier (crit-r1 N3: on the
+          opaque white Chrome used LCD sub-pixel AA at rest — colour fringes, a weight pop as each tier settled) comes from
+          painting the svg through a transparency group instead (opacity .999: LCD text needs an opaque target) */}
+      <svg width={1080} height={1920} viewBox="0 0 1080 1920" style={{ position: 'absolute', left: 0, top: 0, overflow: 'hidden', opacity: GREY_AA }} aria-hidden>
         {nodes}
       </svg>
       {rects}

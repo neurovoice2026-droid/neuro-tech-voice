@@ -4,10 +4,10 @@
  *   <WorldDial>  the dial at its true M1 geometry (centre (−9, 1814), R 1623), projected into screen space through the
  *                camera's dial plane, its marks generated for the visible angular window only: the teal rim (9 px), your
  *                phone's ring stretches (12° after each node: pending grey ahead of the needle, ink once rung), the ticks
- *                (fine every 1.2°, seconds every 6°, majors at each node), the hollow nodes (your phone) or the filled
+ *                (fine every 0.75°, seconds every 6°, majors at each node), the hollow nodes (your phone) or the filled
  *                teal domes of answered calls (the agent), and the hairline pings
- *   <FullDial>   M5′: the whole dial as its own upright drawing (centre (520, 600), R 410), with its hand redrawn at the
- *                true centre (Hand.tsx HandShape, scale 0.393)
+ *   <FullDial>   M5′: the whole dial as its own upright drawing (stage/style.ts FULL: top y 100, R 420 growing downward),
+ *                fine ticks every 1.2°, with its hand redrawn at the true centre (Hand.tsx HandShape, FULL.hand)
  *
  * Both build their primitives in a pure function first (so the stage can hand the same points to the zone and
  * lockup-overlap checks), then draw them. Strokes ≥ 2 px on screen; geometricPrecision.
@@ -125,12 +125,15 @@ export function worldPrims(p: Plane, s: DialState): Prim {
   // the ticks (the visible window only; the highest class wins at shared angles)
   if (!s.noTicks) {
     const step = MARKS.minor.every;
+    // fine ticks every 0.75°: a second (6°) every 8th, a major (36°, at each node) every 48th
+    const perSec = Math.round(MARKS.sec.every / step);
+    const perMajor = Math.round(MARKS.major.every / step);
     const i0 = Math.ceil((w0 - worldA(0, s.rho)) / step);
     const i1 = Math.floor((w1 - worldA(0, s.rho)) / step);
     for (let i = i0; i <= i1; i++) {
       const a = worldA(i * step, s.rho);
-      const k = ((i % 30) + 30) % 30;
-      const spec = k === 0 ? MARKS.major : k % 5 === 0 ? MARKS.sec : MARKS.minor;
+      const k = ((i % perMajor) + perMajor) % perMajor;
+      const spec = k === 0 ? MARKS.major : k % perSec === 0 ? MARKS.sec : MARKS.minor;
       const on = s.tickOn ? s.tickOn(a) : 1;
       if (on <= 0.001) continue;
       const rIn = spec.r1 - (spec.r1 - spec.r0) * Math.min(1, on);

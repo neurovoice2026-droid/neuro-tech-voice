@@ -57,6 +57,10 @@ export const READING_POINT = { x: 601, y: 310 } as const;
 export const FINISH6 = { paper: 0, dark: 0, dither: 0 } as const;
 
 /* ── type (§9.2, §9.8) ── */
+/** a text svg painted through a transparency group: Skia then antialiases its glyphs in greyscale, never LCD (crit-r1 N3:
+ *  colour fringes on the small grey type), and it is NOT a composited layer, so the compositor has nothing to drop or
+ *  serve stale (crit-r2 D1: `will-change: transform` lost whole lockups on random single frames of a full render) */
+export const GREY_AA = 0.999;
 export const FACE = {
   sans: '"Instrument Sans Variable", "Instrument Sans", system-ui, sans-serif',
   serif: '"Cormorant Garamond", serif',
@@ -79,7 +83,7 @@ export type LayoutSpec = {
 export const LAYOUT: Record<'hook1a' | 'hook1b' | 'default' | 'underline' | 'wide' | 'cta', LayoutSpec> = {
   hook1a: { lead: { size: 69, x: 345, base: 1150 }, accent: { size: 126, x: 330, base: 1236 }, tier: { x: 580, base: [1296] } },
   hook1b: { lead: { size: 66, x: 360, base: 1140 }, accent: { size: 120, x: 345, base: 1230 }, tier: { x: 617, base: [1292] } },
-  default: { lead: { size: 60, x: 411, base: 1150 }, accent: { size: 110, x: 396, base: 1235 }, tier: { x: null, base: [1296, 1334] } },
+  default: { lead: { size: 60, x: 411, base: 1150 }, accent: { size: 110, x: 396, base: 1235 }, tier: { x: null, base: [1302, 1340] } },
   underline: { lead: { size: 60, x: 411, base: 1140 }, accent: { size: 110, x: 396, base: 1225 }, tier: { x: null, base: [1282] } },
   wide: { lead: { size: 60, x: 311, base: 1156 }, accent: { size: 100, x: 296, base: 1235 }, tier: { x: 596, base: [1290] } },
   cta: { lead: { size: 60, x: 540, base: 760 }, accent: { size: 110, x: 540, base: 845 }, tier: { x: 540, base: [905] }, centred: true },
@@ -89,7 +93,10 @@ export const LAYOUT: Record<'hook1a' | 'hook1b' | 'default' | 'underline' | 'wid
 /** the dial's marks (M1 world px, radii from the dial centre; STYLE §9.5): rim 9 px at R; ticks inside it */
 export const MARKS = {
   rim: 9,
-  minor: { every: 1.2, r0: 1512, r1: 1554, w: 2, color: '#D6D6D6' },
+  /** fine ticks every 0.75° (≈ 20 px along the band: 8 per 6° second, so seconds and majors still coincide) — the
+   *  reference's fine instrument scale (STYLE §1.1 measured ≈ 0.85°; crit-r2 P6: 1.2° read coarse beside it). M5′ keeps
+   *  1.2° (FULL), where 0.75° would turn to moiré */
+  minor: { every: 0.75, r0: 1512, r1: 1554, w: 2, color: '#D6D6D6' },
   sec: { every: 6, r0: 1505, r1: 1556, w: 3, color: '#9A9A9A' },
   major: { every: 36, r0: 1497, r1: 1560, w: 4, color: '#222222' },
   /** a hollow ring node (your phone): r 9, stroke 6 → outer Ø 24, white centre Ø 12 */
@@ -103,16 +110,19 @@ export const MARKS = {
 } as const;
 /** the dial angle φ of node 1 sits at world angle φ + PHI0 + ρ at M1; the needle crosses the rim at the reading point */
 export const PHI0 = 28.1;
-/** M5′: the whole dial, drawn upright (φ 0 at the top) as its own picture (STYLE §9.6). crit-r1 N5: as big as the frame
- *  allows while the whole rim stays in it (the minute of rings and the day need all ten nodes): R 460 (was 410), its
- *  top 30 px under the frame's edge, its bottom at y 950 (the lockup box starts at 1080), the rim at x ≤ 838 and the
- *  needle's tip at x ≤ 872 below y 840 (TikTok's rail, x 880) */
+/** M5′: the whole dial, drawn upright (φ 0 at the top) as its own picture (STYLE §9.6). crit-r2 P2: its macro drift
+ *  (+1.5 %/s) grows it DOWNWARD about its top point, which stays at y 100 — clear of the frame's edge and of the apps'
+ *  status band, so the 12 o'clock dome (the pickup's call, where the day starts and lands) is never cut (at R 460 about
+ *  its centre the rim reached the edge mid-shot). R 420 at the shot's start, ≈ 440 at its end: the rim at x ≤ 860 and the
+ *  needle inside x 880 below y 840 (TikTok's rail), the needle pointing down above y ≈ 1005 (the lockup box from 1080) */
 export const FULL = {
   cx: 536,
-  cy: 490,
-  R: 460,
-  /** the hand redrawn at the true centre, scaled (483 px long, hub Ø 42, dome Ø 24): handPath's HAND_FULL */
-  hand: 0.441,
+  /** the dial's top point (the drift's fixed point) and its radius at drift 1; the centre is top + R */
+  top: 100,
+  R: 420,
+  cy: 520,
+  /** the hand redrawn at the true centre, scaled (0.441 × 420 / 460: 441 px long, hub Ø 39, dome Ø 22): HAND_FULL */
+  hand: 0.4027,
   rim: 5,
   stretch: 5,
   /** ticks as fractions of R (the M1 radii / 1623); every class ≥ 2 px and ≥ 30 % ink on screen (crit-r1 N5: at

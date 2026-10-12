@@ -35,8 +35,6 @@ export type HandLook = {
   shadow?: number;
   /** a ping out of the hub (hand-local radius, opacity; `w` its screen stroke, default 2 px) */
   ping?: { r: number; o: number; w?: number } | null;
-  /** the whole hand's opacity (the T2 push culls it over 1 f, before it can sweep through the lockup) */
-  opacity?: number;
 };
 
 /** the hand, the collar, the hub and its dome, drawn at a pivot in local px (the caller transforms) */
@@ -86,9 +84,9 @@ const shadowFilter = (S: number, k: number) => {
 /** the hand on a camera plane (screen-space SVG under one matrix), its shadow on the non-rotating wrapper */
 export const WorldHand: React.FC<{ id: string; plane: Plane; pivot: Pt; look: HandLook }> = ({ id, plane, pivot, look }) => {
   const k = look.shadow ?? 1;
-  const op = look.opacity ?? 1;
+  // never translucent (crit-r2 B1): the hand enters and leaves by motion only
   return (
-    <div style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, filter: k > 0.001 ? shadowFilter(plane.S, k) : undefined, opacity: op < 0.999 ? op : undefined }}>
+    <div style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, filter: k > 0.001 ? shadowFilter(plane.S, k) : undefined }}>
       <svg width={1080} height={1920} viewBox="0 0 1080 1920" style={{ position: 'absolute', left: 0, top: 0, overflow: 'hidden' }} shapeRendering="geometricPrecision" aria-hidden>
         <DomeDefs id={id} />
         <g transform={matrix(plane)}>

@@ -80,7 +80,14 @@ export function visibleWindow(p: Plane, r0: number, r1: number, margin = 40): [n
     if (cosd >= 1) continue;
     half = Math.max(half, Math.acos(cosd) / DEG);
   }
-  if (half <= 0) return null;
+  if (half <= 0) {
+    // neither circle crosses the frame's disc, yet the frame may lie INSIDE the band (deep in the T2 push the rim passes
+    // through node 2 at the frame's middle while both band edges are thousands of px away): the frame's disc then spans
+    // asin(reach / D) either side of its direction (crit-r2 P3: the push draws the dial, not only node 2, to the white)
+    const inBand = D > reach && D >= r0 * p.S - reach && D <= r1 * p.S + reach;
+    if (!inBand) return null;
+    half = Math.asin(Math.min(1, reach / D)) / DEG;
+  }
   return [ac - half - 1, ac + half + 1];
 }
 /** bring angle a into [lo, lo + 360) */

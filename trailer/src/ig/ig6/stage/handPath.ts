@@ -3,8 +3,9 @@
  * measured profile, so frame 0 is never a trace of it). One outline in hand-local px — pivot (0, 0), pointing up −y —
  * with the lozenge's hole as a second sub-path (fill-rule evenodd), built from the width profile:
  *
- *   s −310 … −50   tail (counterweight), 50 wide, a round end r 25 — long enough to run off the page in M1 and in the
+ *   s −310 … −90   tail (counterweight), 50 wide, a round end r 25 — long enough to run off the page in M1 and in the
  *                  M2′ hub macro (crit-r1 N8; STYLE's −230 left its cap inside the frame there)
+ *   s −90 → −46    the tail necks into the hub: 50 → 26 wide, leaving the hub disc inside its chord (crit-r2 P7)
  *   s 48 → 220–320 → 400 → 460 → 520 → 570 → 610 → 640    32 → 44 → 40 → 32 → 26 → 22 → 18 → 15 (concave taper)
  *   s 618–632      the collar, a 46 × 14 deep-teal band (drawn on top, not part of the outline)
  *   s 640–668      the neck, 15
@@ -15,7 +16,7 @@
  *   s 880–1095     the needle, 12, square end; it crosses the rim at s ≈ 1008 (the reading point)
  *
  * Two drawings share the profile: HAND (the world hand, M1 / M3′ / M2′ / the cover) and HAND_FULL (M5′, redrawn at the
- * dial's true centre ×0.44: its needle widened so it stays ≥ 6 px on screen, the counterweight kept short — crit-r1 N5).
+ * dial's true centre ×0.40: its needle widened so it stays ≥ 6 px on screen, the counterweight kept short — crit-r1 N5).
  * Pure data: the path strings and the outlines' sample points (the zone and overlap checks project them).
  */
 import { pchip } from './geom';
@@ -34,6 +35,16 @@ const BODY = pchip([
   [640, 15],
   [668, 15],
 ]);
+/** the tail (counterweight): it NECKS into the hub — half-width 13 where it leaves the hub disc (s −46, inside the disc's
+ *  chord there, so no corner pokes out: crit-r2 P7, the full-width paddle left two stepped shoulders) — and flares to
+ *  the 50 px paddle by s −90, as the reference's does */
+const TAIL = pchip([
+  [-130, 25],
+  [-90, 25],
+  [-68, 19],
+  [-46, 13],
+  [-30, 16],
+]);
 const LOZ = { s0: 668, waist: 772, s1: 880, half: 46 } as const;
 /** the lozenge's wall, normal to its outline (hand-local px) */
 const WALL = 11;
@@ -49,8 +60,8 @@ const lozHalf = (s: number) => {
 };
 /** the outline's half-width at s */
 function halfWidth(s: number, sp: Spec): number {
-  if (s < -50) return TAIL_HALF;
-  if (s < -30) return TAIL_HALF + ((s + 50) / 20) * (BODY(-30) / 2 - TAIL_HALF);
+  if (s < -130) return TAIL_HALF;
+  if (s < -30) return TAIL(s);
   if (s <= 668) return BODY(s) / 2;
   const base = s < LOZ.s1 ? 7.5 + ((s - 668) / (LOZ.s1 - 668)) * (sp.needleHalf - 7.5) : sp.needleHalf;
   return Math.max(base, lozHalf(s));
@@ -102,8 +113,9 @@ function build(sp: Spec): HandDrawing {
 
 /** the world hand (M1, M3′, M2′, the T2 push, the seam, the cover) */
 export const HAND_WORLD: HandDrawing = build({ tailEnd: -310, needleHalf: 6 });
-/** M5′'s hand (drawn ×0.44 at the dial's centre): the needle 6 px on screen, the counterweight STYLE's length */
-export const HAND_FULL: HandDrawing = build({ tailEnd: -205, needleHalf: 7 });
+/** M5′'s hand (drawn ×0.40 at the dial's centre, stage/style.ts FULL.hand): the needle ≥ 6 px on screen, the
+ *  counterweight STYLE's length */
+export const HAND_FULL: HandDrawing = build({ tailEnd: -205, needleHalf: 7.5 });
 
 /** the collar band (hand-local rect) */
 export const COLLAR = { x: -23, y: -632, w: 46, h: 14 } as const;

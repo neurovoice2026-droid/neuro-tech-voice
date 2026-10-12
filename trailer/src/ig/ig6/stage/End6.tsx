@@ -25,7 +25,6 @@
 import React from 'react';
 import { typedCount, typedOpacity } from '../../../kb/kit';
 import { EASE, mix, smooth, springUnit } from '../../../lib/motion';
-import { subpixel } from '../../../lib/glide';
 import { TRACK } from '../../../theme';
 import { Wordmark, WORDMARK_FONT, WORDMARK_TEXT } from '../../../scenes/cta/EndCard';
 import { agentKeys } from '../../components/End';
@@ -36,7 +35,7 @@ import { bump } from './clock';
 import { Dome, DomeDefs } from './Dial';
 import { measureSans, useWordmarkFace } from './fonts';
 import type { Pt } from './geom';
-import { END6, FACE, INK, SHADOW } from './style';
+import { END6, FACE, GREY_AA, INK, SHADOW } from './style';
 
 const E = T.END_CARD;
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
@@ -203,7 +202,7 @@ export const CommentField6: React.FC<{ t: number }> = ({ t }) => {
   return (
     <>
       <div style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, clipPath: `inset(${F.y0 - 40}px 0px 0px 0px)`, pointerEvents: 'none' }}>
-        <div style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, opacity: a * (1 - q) < 0.999 ? a * (1 - q) : undefined, filter: `drop-shadow(${L.dx}px ${L.dy}px ${L.blur}px rgba(10,10,10,0.07))`, transformOrigin: `${((x0 + F.x1) / 2).toFixed(2)}px ${cy}px`, ...subpixel(q > 0 ? `scale(${sc.toFixed(5)})` : undefined, q > 0) }}>
+        <div style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, opacity: a * (1 - q) < 0.999 ? a * (1 - q) : undefined, filter: `drop-shadow(${L.dx}px ${L.dy}px ${L.blur}px rgba(10,10,10,0.07))`, transformOrigin: `${((x0 + F.x1) / 2).toFixed(2)}px ${cy}px`, transform: q > 0 ? `scale(${sc.toFixed(5)})` : undefined }}>
           <div style={{ position: 'absolute', left: x0, top: cy - h / 2, width: w, height: h, borderRadius: Math.min(F.r, h / 2), background: '#FFFFFF', boxShadow: `inset 0 0 0 1.5px ${INK.fieldBorder}` }} />
           {iconOn > 0.001 ? (
             <div style={{ position: 'absolute', left: F.icon.x, top: cy - F.icon.size / 2, opacity: iconOn < 0.999 ? iconOn : undefined }}>
@@ -254,10 +253,10 @@ export const Brand6: React.FC<{ t: number }> = ({ t }) => {
   return (
     <>
       <div style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, clipPath: `inset(${top.toFixed(1)}px 0px 0px 0px)` }}>
-        <div style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, opacity: fade < 0.999 ? fade : undefined, ...subpixel(q > 0 ? `translateY(${lift.toFixed(3)}px)` : undefined, q > 0) }}>
+        <div style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, opacity: fade < 0.999 ? fade : undefined, transform: q > 0 ? `translateY(${lift.toFixed(3)}px)` : undefined }}>
           <Wordmark t={t} at={WM_AT} ready={ready} rest={(_t, v) => v} spec={{ x: B.cx, y: END6.wordmark.capMid, size: B.size, arrive, color: INK.ink }} />
-          {/* its own layer: greyscale AA for the small grey URL (crit-r1 N3) */}
-          <svg width={1080} height={1920} viewBox="0 0 1080 1920" style={{ position: 'absolute', left: 0, top: 0, willChange: 'transform' }} aria-hidden>
+          {/* greyscale AA for the small grey URL (crit-r1 N3) through a transparency group, not a composited layer (crit-r2 D1) */}
+          <svg width={1080} height={1920} viewBox="0 0 1080 1920" style={{ position: 'absolute', left: 0, top: 0, opacity: GREY_AA }} aria-hidden>
             <text y={U.base} style={{ fontFamily: FACE.sans, fontSize: U.size, fontWeight: U.weight, fontSynthesis: 'none', whiteSpace: 'pre' }} fill={INK.tier}>
               {URL_TEXT.split('').map((ch, i) => {
                 const op = typedOpacity(t, keyOf(i));

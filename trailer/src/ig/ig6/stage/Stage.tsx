@@ -31,7 +31,7 @@ import { CommentField6, domeAt, DomeFlyer, Brand6, DOME_T } from './End6';
 import { useWordmarkFace } from './fonts';
 import { HUB, K, NEEDLE_A, planeOf, project, type Plane, type Pt } from './geom';
 import { FullHand, handPts, WorldHand, type HandLook } from './Hand';
-import { HAND_FULL, HUB_R } from './handPath';
+import { HAND_FULL, HAND_LEN, HUB_R } from './handPath';
 import { Lockups, lockupShowing } from './Lockup';
 import { useIg6Qa } from './qa';
 import { FULL, HAND, INK } from './style';
@@ -79,17 +79,12 @@ function worldState(t: number, shot: Extract<Shot, { kind: 'world' }>): DialStat
       }),
     };
     if (shot.fall !== undefined) {
-      // the push (STYLE §9.9): the rim and the ticks thin away ×2.4 → ×5 (no pop, no fade: gone well before the cull at
-      // ×6, crit-r1 N6c), then only node 2 is drawn — the ring we fall through, its band thinning from 6–12 to 9–12 node
-      // radii as it grows (a sweeping ring, not a black flood; crit-r1 N6b); the hand is culled at the push's start
-      s.thin = clamp01((5 - shot.fall) / 2.6);
+      // the push (STYLE §9.9): everything on the dial scales PHYSICALLY — the ticks thicken and fly out of the bottom
+      // edge, the rim thickens through node 2 and leaves through the frame's sides as the ring outgrows them, node 2's
+      // white centre swallows the frame (crit-r2 P3: thinning the rim and ticks away mid-push left node 2 alone and
+      // almost still, a stall in the dive). Node 2's band thins from 6–12 to 9–12 node radii as it grows (a sweeping
+      // ring, not a black flood; crit-r1 N6b). Nothing is culled: what leaves, leaves by the frame's edges or the hole.
       s.nodeThin = clamp01((shot.fall - 1.5) / 4.5);
-      if (shot.fall > 6) {
-        s.only = 2;
-        s.noTicks = true;
-        s.noRim = true;
-        s.pings = [];
-      }
     }
     if (seam) {
       s.rimSpan = 26 * EASE.out3(clamp01((t - BUILD) / 10));
@@ -148,15 +143,15 @@ function worldLayers(t: number, shot: Extract<Shot, { kind: 'world' }>): Layers 
   const st = worldState(t, shot);
   const prim: Prim | null = shot.dial ? worldPrims(dialPlane, st) : null;
   const look = worldLook(t, shot);
-  // the T2 push culls the hand over its first frame (crit-r1 B1 / ZONE-1: nearer, so faster, it swept through the
-  // leaving 2b lockup on f224–226; SCRIPT D culls every layer but node 2 anyway). One frame, so it reads as a cut-out at
-  // 30 / 60 fps, never as a grey dissolve.
-  const handOp = shot.fall === undefined ? 1 : 1 - clamp01(t - FALL.from);
-  const showHand = handOp > 0.001;
-  if (handOp < 1) look.opacity = handOp;
+  // the T2 push: the hand has left by motion — its plane lifts up and out over the push's first 3 f (Camera.ts HAND_OUT;
+  // crit-r2 B1: the one-frame opacity cull read as a grey dissolve, a glitch). It is never translucent; once every point
+  // of it and its shadow is past the top edge it is simply not drawn.
+  const hp = handPts(handPlane, HUB, look.angle, 1, look.reach);
+  const m = 60 * handPlane.S;
+  const showHand = shot.fall === undefined || hp.some((q) => q.y > -m && q.y < 1920 + m && q.x > -m && q.x < 1080 + m);
   const objects: Layers['objects'] = [];
   if (prim) objects.push({ what: 'object dial', pts: prim.pts });
-  if (showHand) objects.push({ what: 'object hand', pts: handPts(handPlane, HUB, look.angle, 1, look.reach) });
+  if (showHand) objects.push({ what: 'object hand', pts: hp });
   return {
     node: (
       <>
@@ -168,20 +163,30 @@ function worldLayers(t: number, shot: Extract<Shot, { kind: 'world' }>): Layers 
     hub: { p: project(handPlane, HUB.x, HUB.y), d: 2 * HUB_R.dome * handPlane.S },
   };
 }
-/** M5′'s plane: the drawing's own scale (the drift, the open ×3 → ×1) and the whip's rotation */
+/** the M5′ open starts centred on the frame (out of the white: the rim closes in from all four corners at once, then
+ *  from the top and bottom — crit-r2 P5: centred low, its bottom arc came in first and the clock seemed to rise) */
+const OPEN_FROM = { x: 540, y: 960 } as const;
+/** the hand and hub appear once the rim is in frame (f237: ×1.4, the rim at the sides) and extend out of the hub (6 f
+ *  expo, the seam's grammar), so the first frames out of the white are the rim closing in, not a giant hand */
+const HAND_IN = M.fall[1] + 3;
+/** M5′'s plane: the drawing's own scale (the drift, the open ×3 → ×1) and the whip's rotation. The drift grows the dial
+ *  about its TOP point (FULL.top, crit-r2 P2), so it grows downward and its 12 o'clock never meets the frame's edge */
 function fullPlane(t: number, mode: 'phone' | 'agent'): Plane {
   const t0 = mode === 'phone' ? M.fall[1] : M.day;
-  let g = drift(t, t0);
+  const d = drift(t, t0);
+  const home = { x: FULL.cx, y: FULL.top + d * FULL.R };
+  let g = d;
   let rot = 0;
-  let ax: number = FULL.cx;
-  let ay: number = FULL.cy;
+  let ax = home.x;
+  let ay = home.y;
   if (mode === 'phone') {
     const e = EASE.expo(clamp01((t - M.fall[1]) / 12));
     g *= 1 + 2 * (1 - e);
-    // the open is concentric with the hole we fell through: the dial's centre starts where node 2 ended (FALL.to) and
-    // travels home with the contraction, so its rim closes in from every edge (crit-r1 N6a)
-    ax = FALL.to.x + (FULL.cx - FALL.to.x) * e;
-    ay = FALL.to.y + (FULL.cy - FALL.to.y) * e;
+    // the centre holds the frame's centre while the rim closes in (the scale on expo), then glides home (7 f inOut): home
+    // before S3's tier sets (f241), so no stroke meets the lockup box
+    const ec = EASE.inOut(clamp01((t - M.fall[1]) / 7));
+    ax = OPEN_FROM.x + (home.x - OPEN_FROM.x) * ec;
+    ay = OPEN_FROM.y + (home.y - OPEN_FROM.y) * ec;
     if (t >= M.whip) rot = 75 * EASE.peel(clamp01((t - M.whip) / 7));
   }
   return { ax, ay, fx: FULL.cx, fy: FULL.cy, S: g, rot };
@@ -202,19 +207,25 @@ function fullLayers(t: number, mode: 'phone' | 'agent'): Layers {
       : undefined,
     domes: phone ? undefined : DAY_DOMES.map((d) => ({ phi: d.phi, scale: Number.isFinite(d.pop) ? popIn(t, d.pop) : 1 })),
   });
-  const look: HandLook = { angle: theta, dome: { kind: phone ? 'graphite' : 'teal' } };
+  // the open (shot E): the hub pops and the hand extends out of it once the rim is in frame (crit-r2 P5)
+  const ext = phone ? EASE.expo(clamp01((t - HAND_IN) / 6)) : 1;
+  // the hub leads (3 f expo), the hand grows out of it (6 f expo) — the seam's build, quicker
+  const hubIn = phone ? EASE.expo(clamp01((t - HAND_IN) / 3)) : 1;
+  const look: HandLook =
+    ext >= 1 ? { angle: theta, dome: { kind: phone ? 'graphite' : 'teal' } } : { angle: theta, dome: { kind: 'graphite', scale: hubIn }, hub: hubIn, reach: (HAND_LEN + 40) * ext, shadow: ext };
   const centre = { x: FULL.cx, y: FULL.cy };
-  const hp = handPts(p, centre, theta, FULL.hand, undefined, HAND_FULL);
+  const showHand = ext > 0 || hubIn > 0;
+  const hp = showHand ? handPts(p, centre, theta, FULL.hand, look.reach, HAND_FULL) : [];
   return {
     node: (
       <>
         <DialSvg prim={prim} id="ig6-full" />
-        <FullHand id="ig6-fullhand" plane={p} centre={centre} scale={FULL.hand} look={look} />
+        {showHand ? <FullHand id="ig6-fullhand" plane={p} centre={centre} scale={FULL.hand} look={look} /> : null}
       </>
     ),
     objects: [
       { what: 'object dial', pts: prim.pts },
-      { what: 'object hand', pts: hp },
+      ...(hp.length ? [{ what: 'object hand', pts: hp }] : []),
     ],
   };
 }
