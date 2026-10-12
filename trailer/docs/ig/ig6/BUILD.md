@@ -384,3 +384,84 @@ Label `fix-r1`. Done 2026-10-12 on `claude/remotion-trailer` at HEAD `4080a68`. 
   - The world hand's tail is −310.
   - The lozenge hole is an 11 px normal offset (P 1.4).
   - The ring-2 punch-in is released f197–205.
+
+---
+
+## 11. Round 2 fixes
+
+Label `fix-r2`. Done 2026-10-12 on `claude/remotion-trailer` from HEAD `2d95654`; the orchestrator's WIP commit `eb106c8` (02:41 UTC) already holds every source change below except `docs/ig/ig6/POSTING.md` and this section. Nothing committed by this step. No `npm install`, no shared file edited, `CARTESIA_API_KEY` never read. QA output is in `out/ig/qa/ig6/fix-r2/` (scripts, logs, gates, sound, posting, stills, strips, `f120-T2-r868-975/`). Every still and strip named here was looked at beside the reference thumbnail and `mock-one-ring.png`.
+
+### 11.1 Files
+
+| File | What changed |
+|---|---|
+| `src/ig/ig6/stage/Camera.ts` | `HAND_OUT`: in the T2 the hand plane (M1, its drift continuing) lifts 1550 px straight up over f220–223 (in3), 2 f ahead of the push, used by shots C and D. `FALL.to` is (540, 400). The pan rides the zoom: progress = (ln z / ln 40)², not a 6 f inOut. |
+| `stage/Stage.tsx` | The hand's opacity ramp is gone; the hand is simply not drawn once every point of it is past the frame edge. No `thin`, no `only`/`noTicks`/`noRim` cull in the push. M5′: `fullPlane` grows the dial about its top point (`FULL.top`), the open starts centred on the frame (540, 960) and glides home over 7 f (inOut) while the scale contracts on expo, and the hub (3 f expo) and the hand (6 f expo, reach clip) grow in from f237. |
+| `stage/geom.ts` | `visibleWindow`: when neither band edge crosses the frame but the frame lies inside the band (deep in the push), the window is ± asin(reach / D). Before, it returned null there; the old cull at ×6 had hidden that. |
+| `stage/Dial.tsx` | World ticks every `MARKS.minor.every` (0.75°): a second every 8th, a major every 48th. |
+| `stage/style.ts` | `MARKS.minor.every` 0.75. `FULL` = top y 100, R 420 (centre 536, 520), hand 0.4027. The default tier baselines are 1302 / 1340 (were 1296 / 1334). New `GREY_AA = 0.999`. |
+| `stage/handPath.ts` | The tail necks into the hub (half-width 13 at s −46, inside the disc's chord) and flares to the 50 px paddle by s −90 (pchip). `HAND_FULL` needle half-width 7.5. |
+| `stage/Hand.tsx` | The `opacity` look prop is removed (the hand is never translucent). |
+| `stage/Lockup.tsx` | S2a/S2b tier: each accent's words come from `range(from, to)`. 2b leaves at `fall[0] − 1`: lead f221, accent f221.5, tier f222. The lockup svg has no `will-change`; it uses `opacity: GREY_AA`. |
+| `stage/End6.tsx`, `Cover.tsx` | No `will-change` (the URL, kicker and stakes svgs use `GREY_AA`). End6's two `subpixel()` transforms (field exit, brand exit) are plain transforms. |
+| `src/ig/ig6/timing.ts` | `NUDGE['ig6-01'][3] = −2.5`. A ride `{74, 80, −3}` on `ig6-01`. `inWordHead` is widened to (−1.5, 6] and applied to the ring repetitions (ring 2) as well as the time-lapse. Time-lapse jumps clear of words play +3 dB. The day domes clear of word heads (> 7 f after her last onset) are key hits at −10 dB. `HOLD_UP` steps the bed back at the field, and `fx-menu-open` is at +6. The RING_ON comment and labels are reworded. Re-stamped: A `eb6657700cc1c94c`, B `cc34eeeda0060923`. |
+| `docs/ig/ig6/POSTING.md` | TR2-1, TR2-2, TR2-3. Counts updated; round-2 lint rows added to §9. |
+
+### 11.2 Outcome per issue
+
+| Id | Outcome | What was done, and the measurement |
+|---|---|---|
+| **R2-B1** (blocking) | **fixed** | The hand leaves by motion only. Its plane lifts straight up and out over f220–223 (in3, 1550 px), 2 f ahead of the push, as the exit at f640 lifts it ahead of the dial. Its fastest frames land on the push's first frame, and it is gone by f223. It never has a translucent frame, and the lift only takes strokes away from the lockup box. The **120 fps zone sweep (every render frame, both casts) logs 0 lockup-box lines** (`gates/zones120-A.log`, `-B.log`). Strip: `strips/T2-A-r880-940.png`; stills `stills/A/A-f0221.png`, `A-f0224.png`. The lead of 2 f deviates from the critic's "starting on f222", for the reason R2-P3 gives. |
+| **D1** (blocking) | **fixed** | `will-change: transform` is removed from Lockup.tsx, End6.tsx and Cover.tsx, and End6's two `subpixel()` exits are plain transforms, so ig6 has no `will-change` layer left. Greyscale AA for the small grey type now comes from `opacity: 0.999` on those svgs, which paints them through a transparency group (Skia then never uses LCD AA) and creates no composited layer. **Full renders of all 3360 frames, `glitch.py`: cut A 0, cut B 0 single-frame outliers** (`logs/glitch-A.txt`, `glitch-B.txt`). The master-like window (scale 1, q100, concurrency 2, r1700–2299, where 7 dropouts were seen) gives 0 (`logs/glitch-A-master-like-r1700-2299.txt`). **N3 chroma** (max − min > 6 inside the grey-text boxes): 0 px at f0, f136, f301, f392, f705 and f815, and on the cover's kicker and stakes. A control bundle with `GREY_AA = 1` gives 3738 px at f136, so the check would catch fringes. |
+| R2-P1 | **fixed** | The tier now measures each accent's words (`range(from, to)`). Both tier lines centre on x ≈ 568: "While it rings," x 470–667, "someone's still waiting." x 400–736. The default tier baselines drop 6 px, to 1302 / 1340. That leaves about 13 px between 2a's *g* and the tier's cap line, and the lowest tier row still ends by y 1348 (≤ 1400). Stills: `A-f0165.png`, `A-f0216.png`. |
+| R2-P2 | **fixed** | The M5′ drift now grows the dial about its top point, which stays at y 100. R is 420 at a shot's start and ≈ 441 at the end of shot E. The dial's top, the 12 o'clock dome included, measures y 87–98 in every M5′ still (f245, f318, f438, f470, f513, f520; `strips/side-m5.png`). It is never cut and sits clear of the frame edge. The 120 fps sweep logs no rail line in shots E or I outside the open (below). |
+| R2-P3 | **fixed** | Nothing thins or is culled. The ticks thicken and fly out through the bottom edge, the rim thickens through node 2 and leaves through the sides as the ring outgrows them, and node 2's white centre swallows the frame (white from f231.75). The pan rides the zoom ((ln z / ln 40)²), so it only accelerates. `geom.visibleWindow` gained the in-band fallback, without which the dial vanished at ×70. Frame diffs at 120 fps (`logs/diff120-A-r880-940.tsv`): the hand's exit is r881–r892. Then the dial alone runs r893 1.20 → r901 1.44, a plateau between 1.2 and 1.6 (the push's slow start, with 2b's exit motion on top), and rises without a dip from r900 1.37 to r921 46.1. The ring band leaves at r924–925 (54, 64), and r928 is white. The old curve fell 5.30 → 0.95 at r903–908. |
+| R2-P4 / P2-2b | **fixed (as far as the push allows)** | A probe with 2b held long showed that the first dial stroke reaches the box at f226.25 with the pan target (540, 480) and at f226.75 with (540, 400). The ticks scale physically, and from the top their majors at the right edge reach the box first. With no pan at all it would be f227.0. 2b now leaves later: the lead f221–225 (was f219), the accent f221.5–226.5 (was f220) and the tier f222–226 (was f221). It is gone 0.25 f before the first stroke arrives, and the sweep logs 0 box lines. "waiting." is at full ink for 6 f before its exit (was 3). SCRIPT's ≥ 15 f hold is still not met: listed deviation. |
+| R2-P5 | **fixed** | The open starts centred on the frame, (540, 960), and the scale contracts on expo while the centre holds, then glides home (7 f inOut). The rim therefore closes in from all four corners at once, then from the top and bottom (`f120-T2-r868-975/`, r938–r948). The hub and hand appear only once the rim is in frame: from f237 the hub grows over 3 f (expo) and the hand extends out of it over 6 f (expo), the seam's grammar, complete by about f240. White runs f231.75–234 (≈ 2.25 f). |
+| R2-P6 | **fixed** | The world dial's fine ticks are every 0.75° (≈ 20 px along the band at r 1533). Seconds and majors still coincide (every 8th and 48th). M5′ keeps 1.2°. The finer ticks also reach the cover. `A-f0000.png`, `cover-0000.png`. |
+| R2-P7 | **fixed** | The tail necks into the hub: half-width 13 at s −46, inside the disc's chord, so no corner pokes out. It flares to w 50 by s −90. Visible at f0, M2′ (f345) and M5′ (`strips/hand-in-238-240.png`). |
+| P1-seconds | **fixed** | `NUDGE['ig6-01'][3] = −2.5`. The 1a grey "seconds." reaches 50 % ink at f48.5 against a heard f48.0 (was f51.0). Stills f47 (set) / f49 (lifted): darkest 148 → 117. Cut B is unaffected. |
+| P3-rail | **no change (designed)** | 33 lines per cast, all `object dial (below y 840)`, 0 text lines. They fall during the push (f225.5–228.75) and the open (f234.5–239.25), the two full-frame camera moves. |
+| S2-1 | **fixed (via S2-3's rule)** | The f204 trill now plays 6 dB down (`inWordHead` covers the 1.5 f before "still"): cue −21 → −27 dB. "still" at the heard onset (f204.5) goes from 0.77 to **0.85**, both casts (`sound/ana-A.txt`, `ana-B.txt` §4b). f192 stays out. |
+| S2-2 | **fixed** | `HOLD_UP` is [FIELD − 8, swell], [FIELD − 1, ring], and `fx-menu-open` is at +6. The cue now sits −1.6 / −7.0 / +1.4 dB against the bed in its three bands (was −9.5 / −14.9 / −6.5; `sound/swells-A.txt`). |
+| S2-3 | **fixed, with one exemption** | `inWordHead` = (−1.5, 6] after her onset as said, applied to the time-lapse and to the ring repetitions. Ring 2's f204 and f216 trills are ducked (f216 sits on "waiting."). Ring 1's two repetitions are exempt: they were levelled under "One ring," in round 1, "One" and "ring," score SII 1.00 with them, and ducked, the hook's ring would be one 0.4 s trill (S2-7). check-mix is untouched. The corrected-onset scoring (`crit-r2-sound/scripts/ana.py` with dump.mjs and gr.mjs) was run after each sfx:ig6 build. The lowest corrected words are "still" 0.85, then "link." 0.95, "night." 0.95 … |
+| S2-4 | **partly fixed** | f468, f490.5 and f505.5 are now key hits at −10 dB, picked by rule: clear of a word's head and > 7 f after her last onset. f445.5 and f460.5 are unchanged. Margin over voice + bed in their band: f468 +2.8 dB (was masked), f490.5 +4.5 dB, f505.5 −8.3 dB (was −12.5; still under "answers"). "night." 0.95, "from" 0.93, "It" ≥ 0.95. Not raised further, to keep her words clear. |
+| S2-5 | **fixed** | The ride `{74, 80, −3}` on `ig6-01` brings the dialogue limiter on ig6-01 from 6.5 to **5.2 dB**. Climax +1.3 LU (≥ +1); "receptionist" SII 1.00. |
+| S2-6 | **cheap part done** | The time-lapse jumps clear of her words (no onset from 3 f after to 6 f before) play +3 dB: f270 (margin −3.1 dB, "soft") and f315 (+3.8 dB). The tick → tock swap on sibilants was not done, since SCRIPT §6 accepts clock sounds under words. |
+| S2-7 | **fixed (labels only)** | The RING_ON comment, the sound header and the repetition labels now read "rings until her first word". No sound changed for this. |
+| TR2-1 | **fixed** | TikTok's first line: "AI receptionist for small businesses: in the US and Canada, one ring is six seconds. Ours picks up, day or night." 113 characters, lands whole. `caption.py`: READY, 1033 characters, 3/3 search terms with 2 in the visible window. detect 82.6 PASS. |
+| TR2-2 | **fixed** | Pin: "Why six? North America's ring is 2 s on, 4 s off (ANSI T1.401). ETSI's is 1 on, 4 off; others vary. Our AI answers its own number, next to your line." (149 / 150). Reply: "In North America: 2 s ring, 4 s pause (ANSI T1.401). Europe's standard is 1 s on, 4 s off, and some countries use their own." (124). Counts are updated in §3, §6 and §9. |
+| TR2-3 | **fixed** | §3: "receptionist" ≈ 2.6 s, "AI receptionist" ≈ 12.6–12.9 s. §8: the receptionist card ≈ 2.6 s (cut B's "You" ≈ 2.6 s too); a cliff before 2.5 s means the frame-0 card; a drop between 2.6 and 6 s means the tick wait. |
+
+### 11.3 Gates
+
+| Gate | Result |
+|---|---|
+| `npx tsc --noEmit -p .` | **PASS** |
+| `npm run check:audio:ig6`, cut A | **OK**: −14.0 LUFS, −1.65 dBTP, climax **+1.3 LU** (ig6-01 @13), arc +2.1 LU, 45 words with mean 0.97 and lowest 0.90, the name 0.95 / 1.00 / 0.99, stamp `eb6657700cc1c94c` (`gates/check-audio-A-final.txt`) |
+| `npm run check:audio:ig6`, cut B (`CAST = 'B'`, then `timing.ts` restored byte-identical, sha256 `bd0afbc6…`, and the A mix rebuilt) | **OK**: −14.0 LUFS, −1.65 dBTP, climax +1.3 LU (ig6-01b @14), arc +2.0 LU, 44 words with lowest 0.90, stamp `cc34eeeda0060923` (`logs/check-audio-B.txt`) |
+| AAC prediction (finish.mjs chain) | A −14.33 LUFS / **−1.37 dBTP**; B −14.33 / **−1.38 dBTP** (`sound/aac-*.txt`). This is 0.1 dB hotter than round 1 (−1.48) but still ≤ −1.1. |
+| Corrected-onset SII (`ana.py`) | lowest "still" **0.85** (was 0.77), both casts |
+| `check:zones:ig -- --film=ig6` (fresh bundle) | **PASS**: 15 zone stills plus the cover (`gates/check-zones.log`) |
+| 120 fps zone + overlap sweep (every render frame, both casts) | **0 lockup-box lines, 0 text lines**; 33 lines per cast, all `object dial` during the two designed moves (`gates/zones120-A.log`, `zones120-B.log`) |
+| Full 120 fps renders + `glitch.py` | **0 / 0** single-frame outliers (A / B); master-like window 0 |
+| `guard:ig6 -- --check` (full) | **PASS, gates 1–6**: 1747/1747 shas, 19 delivered prefixes, stamps ig1–ig4 plus ig5 `19ca5ef2038155ea`, compositions (+12 IG6 rows), **gate P 30/30 byte-identical**, git (`gates/guard-check.log`) |
+| `npm run sfx:ig` / `sfx:ig5` / `sfx:ig6` | 4 up to date, 0 built / skipped (`19ca5ef2038155ea`) / skipped (`eb6657700cc1c94c`) |
+| `git status` on the film 1 / film 2 frozen sets | **empty** (`gates/git-frozen.log`) |
+| `git status` on `scripts/ig`, `scripts/ig5`, `src/ig/ig1…ig5`, `src/ig/common`, `src/ig/components` | **empty** (`gates/git-ig-shared.log`) |
+| `verify-film1 --fast` (extra) | **PASS** 6/6 |
+| Loop seam | f839 vs f0: 0.235 % of pixels over 8 levels (0.024 % over 32) |
+
+### 11.4 For the master step
+
+- Cut A is the committed state (`CAST = 'A'`), and its mix is current (`eb6657700cc1c94c`). The B pass rebuilds `cc34eeeda0060923`.
+- Deviations from SCRIPT / STYLE added in this round:
+  - T2 culls nothing past ×6 (STYLE §9.9): everything scales physically. Node 2 pans to (540, 400), riding the zoom.
+  - The hand lifts away over f220–223, 2 f ahead of the push.
+  - 2b leaves f221–226.5: "waiting." holds 6 f, not ≥ 15 f.
+  - M5′ is R 420 with its top fixed at y 100, growing downward (STYLE §9.6: centre (520, 600), R 410).
+  - M5′ opens from the frame's centre, and its hand grows out of the hub from f237.
+  - World ticks are every 0.75° (STYLE §9.5: 1.2°).
+  - The default tier baselines are 1302 / 1340.
+  - Ring 2's f216 repetition is ducked too (the widened word-head rule); ring 1's repetitions are exempt from that rule.
+  - Time-lapse jumps clear of words play +3 dB.

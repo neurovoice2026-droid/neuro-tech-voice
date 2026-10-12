@@ -119,7 +119,7 @@ export const PLAN = {
 /* ── the casts (SCRIPT §0.1 "Cuts", §1.3; PIPELINE §6.4) ── */
 /** THE PASS: A = the receptionist hook (ig6-01, posted on both apps), B = the owner-operator hook (ig6-01b, the TikTok
  *  re-cut a week later; lockup 1b becomes "You" / can't answer.). The master step renders A, then B. */
-export const CAST: 'A' | 'B' = 'A';
+export const CAST: 'A' | 'B' = 'B';
 /** a hook rung: the take, and how long lockup 1b holds after "answer." before it leaves */
 export type HookRung = { readonly id: VoiceId; readonly hold: number };
 /** THE HOOK LADDER per cast (SCRIPT §1.3), in order: ig6-01 with 1b holding 15 f, then 8 f; the tighter reading ig6-01r;

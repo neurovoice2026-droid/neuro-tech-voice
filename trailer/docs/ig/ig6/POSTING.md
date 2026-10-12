@@ -51,10 +51,10 @@ The A and B cuts differ by one voice id and the S1b lockup; both are rendered in
 
 **Cover:** TikTok's feed autoplays from frame 0, which is the cover's composition (the giant clock, "One ring, / *six seconds.*"), so the cover only shows on the profile grid and in search. Upload `…-cover.png` if the app offers "upload from photos"; otherwise pick frame 0 and add no text sticker.
 
-**Caption** (1011 / 2,200 characters; keyword-first; one ask; 4 hashtags; no link):
+**Caption** (1033 / 2,200 characters; keyword-first, and the first line carries the North American scoping, since TikTok is posted first to a global feed; one ask; 4 hashtags; no link):
 
 ```
-AI receptionist for small businesses: one ring is six seconds. Ours picks up, day or night.
+AI receptionist for small businesses: in the US and Canada, one ring is six seconds. Ours picks up, day or night.
 
 Comment AGENT and we'll send you the link. It's also in our bio.
 
@@ -65,14 +65,14 @@ Fine print: one ring = 2 s of tone + 4 s of silence, the North American standard
 #AIReceptionist #SmallBusinessOwner #MissedCalls #SmallBusinessTips
 ```
 
-- **Search:** "AI receptionist" opens the caption (and the cover kicker); "receptionist" is spoken at ≈ 1.9 s and "AI receptionist" at ≈ 12.5 s, in 110 px type with the teal underline; "missed calls" and "small business" are in the body as phrases.
+- **Search:** "AI receptionist" opens the caption (and the cover kicker); "receptionist" is spoken at ≈ 2.6 s and "AI receptionist" at ≈ 12.6–12.9 s, in 110 px type with the teal underline; "missed calls" and "small business" are in the body as phrases.
 - **The question** ("when do missed calls pile up at yours?") answers in a word or two ("lunch", "Saturdays"), which is easier than the AGENT ask alone (growth judge G4). It counts as part of the one ask: `caption.py` reads one call to action.
-- **Truth:** "one ring is six seconds" is scoped in the fine print (the North American standard, ANSI T1.401) and in the pinned comment (truth judge R1); "Ours picks up, day or night" never says "first ring" (T-C2); "its own number, next to your line" is the series' line for U5 (R3).
+- **Truth:** "one ring is six seconds" is scoped in the first line ("in the US and Canada", crit-r2 TR2-1: the only line most viewers read), in the fine print (the North American standard, ANSI T1.401) and in the pinned comment (truth judge R1); "Ours picks up, day or night" never says "first ring" (T-C2); "its own number, next to your line" is the series' line for U5 (R3).
 
-**Pinned comment** (145 / 150 characters; TikTok caps comments at 150; Europe's cadence named as its standard, since the UK and others differ):
+**Pinned comment** (149 / 150 characters; TikTok caps comments at 150; ETSI's cadence named as such, "others vary" for the UK, France and the rest; "Our AI", so the last sentence can't read as "our ring"):
 
 ```
-Why six? North America's ring is 2 s on, 4 s off (ANSI T1.401). Europe's standard is 1 on, 4 off. Ours answers its own number, next to your line.
+Why six? North America's ring is 2 s on, 4 s off (ANSI T1.401). ETSI's is 1 on, 4 off; others vary. Our AI answers its own number, next to your line.
 ```
 
 **AGENT comments (by hand, within the hour):**
@@ -149,7 +149,7 @@ Never argue, never quote minutes, never name a provider, never say "first ring" 
 
 | When someone says | Reply | Chars |
 |---|---|---|
-| "Is it really six seconds?" | Only in the US and Canada: 2 s ring, 4 s pause (ANSI T1.401). Europe's standard is 1 s on, 4 s off, and some countries use their own. | 133 |
+| "Is it really six seconds?" | In North America: 2 s ring, 4 s pause (ANSI T1.401). Europe's standard is 1 s on, 4 s off, and some countries use their own. | 124 |
 | "So it replaces the receptionist?" | No. It answers its own number, next to your line, so your people can stay with the people in front of them. | 107 |
 | "How does it get my calls?" | It answers its own number, next to your line. No porting. | 57 |
 | "What if it doesn't know the answer?" | It says so, then takes a name, a number and a message for your team. | 68 |
@@ -186,7 +186,7 @@ The longer options in `docs/ig/POSTING.md` §7 are also true. After the change, 
 
 | When | Where | Metric | Read it as |
 |---|---|---|---|
-| 48 h | TikTok analytics | the retention curve at ≈ 1.3 s ("six seconds"), ≈ 2 s (the receptionist card), **6.0 s (ring 2)**, ≈ 12 s (the pickup) and the end; average watch time; % who watched to the end | a cliff before 2 s = the frame-0 card; a drop between 2 and 6 s = the tick wait reads as dead air; the curve should flatten after ring 2 |
+| 48 h | TikTok analytics | the retention curve at ≈ 1.3 s ("six seconds"), ≈ 2.6 s (the receptionist card; cut B's "You" is at ≈ 2.6 s too), **6.0 s (ring 2)**, ≈ 12 s (the pickup) and the end; average watch time; % who watched to the end | a cliff before 2.5 s = the frame-0 card; a drop between 2.6 and 6 s = the tick wait reads as dead air; the curve should flatten after ring 2 |
 | 48 h | TikTok | views against the account's baseline (ig1 563; the rest 174-283), AGENT comments, profile views, Linktree taps | the receptionist family's second test (log it in `log.md` with its hook formula) |
 | 72 h | Instagram Reels Insights | 3-second skip rate, sends per reach, saves, AGENT comments per 1,000 reach | < 40 % skip is healthy |
 | 72 h | both | comments correcting the six seconds ("ours rings faster") | expected and welcome: reply with the sourced line (§6) |
@@ -215,3 +215,7 @@ The longer options in `docs/ig/POSTING.md` §7 are also true. After the change, 
 | Instagram pinned comment (T4, 458 chars) | | **92.4 PASS** | nothing to strip |
 | TikTok pinned comment (T3, 145 chars) | | 71.5 REVIEW (the same "too short to judge" burstiness as before) | nothing to strip |
 | Ready replies (T1, T5; 12 lines) | | **79.0 PASS** (as one block) | nothing to strip |
+| **Round 2 re-checks (2026-10-12, `python3 -I` on the repo's `.claude/skills`, after crit-r2 TR2-1…3; out/ig/qa/ig6/fix-r2/posting/)** | | | |
+| TikTok caption (TR2-1: "in the US and Canada," in the first line) | **READY** (1033 chars; 113-char first line lands whole; 3/3 search terms, 2 in the visible window; 1 ask; 4 tags) | **82.6 PASS** | nothing to strip |
+| TikTok pinned comment (TR2-2, 149 chars) | | 73.5 REVIEW (the same "too short to judge" burstiness as before) | nothing to strip |
+| Ready replies (TR2-2: "In North America: …", 124 chars; 12 lines) | | **79.0 PASS** (as one block) | nothing to strip |
