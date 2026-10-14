@@ -2,6 +2,9 @@
 // Body: { voice_id, voice_name, library_ref?: { public_owner_id, voice_id } }
 // → { agent, voice_sync_status: 'synced' | 'failed' | 'pending', error? }
 //
+// 0. The org's agent row is found or created (ensureAgent): during the service
+//    onboarding the voice is picked before launch, so the row may not exist yet.
+//    Only the local row is created here; the provider agent is created at launch.
 // 1. The voice must be eligible for this org (never another tenant's clone).
 //    A retiring voice (ElevenLabs default voices, library voices with a
 //    lifecycle notice) is refused as a NEW choice; the agent's current voice
@@ -16,6 +19,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireOrg } from '@/lib/api/auth'
+import { defaultAgentName, ensureAgent } from '@/lib/agents/ensure-agent'
 import { RequestError, assertSameOrigin, parseJsonBody } from '@/lib/api/http'
 import { createLogger, requestIdFrom } from '@/lib/observability/logger'
 import { RATE_LIMITS, enforceRateLimit } from '@/lib/security/rate-limit'
@@ -58,14 +62,20 @@ async function handle(request: Request): Promise<Response> {
       .limit(1)
       .maybeSingle()
     if (agentErr) throw new Error(`agents read failed: ${agentErr.message}`)
-    if (!agentRow) throw new RequestError('not_found', 'Agent not found. Finish setting up your agent first.', 404)
-    const agentId = agentRow.id as string
+    // No row yet (a voice picked during onboarding, before the company and agent
+    // steps reached the server): create the org's single local agent instead of
+    // failing. The unique agents(org_id) index keeps this duplicate-free.
+    const agentRef = agentRow
+      ? { id: agentRow.id as string, voice_id: (agentRow.voice_id as string | null) ?? null }
+      : await ensureAgent(org.id, defaultAgentName(org.name)).then((a) => ({ id: a.id, voice_id: a.voice_id ?? null }))
+    if (!agentRow) log.info('agent.voice.agent_created', { agentId: agentRef.id })
+    const agentId = agentRef.id
     log = log.child({ agentId })
 
     const eligible = await assertVoiceEligible(org.id, {
       voiceId: body.voice_id,
       libraryRef: toLibraryRef(body.library_ref),
-      currentVoiceId: (agentRow.voice_id as string | null) ?? null,
+      currentVoiceId: agentRef.voice_id,
     })
     let voiceId = eligible.voiceId
     if (eligible.requiresProvisioning && eligible.libraryRef) {

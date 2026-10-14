@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useForm, useController, type FieldErrors } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { toast } from 'sonner'
 import {
   ArrowRight, ArrowLeft, Sparkles, RefreshCw,
   Briefcase, Heart, Award, Coffee, Zap, HeartHandshake,
@@ -16,6 +17,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Field } from '@/components/shared/FormSection'
 import { Chip, OptionCard } from '@/components/shared/OptionCard'
 import { useOnboardingStore, type Personality } from '@/store/useOnboardingStore'
+import { errorMessage, parseApiError } from '@/hooks/useVoiceCatalog'
 import { cn } from '@/lib/utils'
 import { AGENT_LANGUAGES } from '@/lib/agent-languages'
 import { buildIndustrySystemPrompt } from '@/lib/agent-prompts'
@@ -31,6 +33,8 @@ const schema = z.object({
 })
 
 type FormValues = z.infer<typeof schema>
+
+const SAVE_FAILED = 'Could not save your agent. Please try again.'
 
 const PERSONALITIES = [
   { id: 'professional' as Personality, icon: Briefcase,      name: 'Professional', desc: 'Formal, precise, business-focused' },
@@ -112,7 +116,26 @@ export function Step2Agent() {
     )
   }
 
-  function onSubmit(values: FormValues) {
+  // Saved on the server before moving on (the agent row the voice step updates; launch pushes it
+  // to the providers). A refusal (e.g. a platform variable in the text) keeps the owner here.
+  async function onSubmit(values: FormValues) {
+    try {
+      const res = await fetch('/api/onboarding/agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          name: values.name,
+          language: values.language,
+          system_prompt: values.system_prompt ?? null,
+          first_message: values.first_message,
+          personality: values.personality,
+        }),
+      })
+      if (!res.ok) throw await parseApiError(res, SAVE_FAILED)
+    } catch (err) {
+      toast.error(errorMessage(err, SAVE_FAILED))
+      return
+    }
     setAgent(values as typeof agent)
     setStep(3)
   }
@@ -272,11 +295,11 @@ export function Step2Agent() {
         </StepBody>
 
         <StepActions>
-          <Button type="button" variant="ghost" size="lg" onClick={() => setStep(1)}>
+          <Button type="button" variant="ghost" size="lg" onClick={() => setStep(1)} disabled={form.formState.isSubmitting}>
             <ArrowLeft aria-hidden="true" />
             Back
           </Button>
-          <Button type="submit" size="lg" className="ml-auto max-md:flex-1">
+          <Button type="submit" size="lg" className="ml-auto max-md:flex-1" loading={form.formState.isSubmitting} loadingText="Saving…">
             Continue
             <ArrowRight aria-hidden="true" />
           </Button>

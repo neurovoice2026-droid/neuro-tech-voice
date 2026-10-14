@@ -3,6 +3,7 @@
 import { useForm, useController } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { toast } from 'sonner'
 import {
   Globe, ArrowRight,
   Cpu, Heart, Home, TrendingUp, ShoppingBag,
@@ -14,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Field } from '@/components/shared/FormSection'
 import { OptionCard } from '@/components/shared/OptionCard'
 import { useOnboardingStore } from '@/store/useOnboardingStore'
+import { errorMessage, parseApiError } from '@/hooks/useVoiceCatalog'
 import { cn } from '@/lib/utils'
 import { StepActions, StepBody, StepHeader } from '../StepIndicator'
 
@@ -68,6 +70,7 @@ const INDUSTRIES = [
 ]
 
 const DESCRIPTION_MAX = 500
+const SAVE_FAILED = 'Could not save your company details. Please try again.'
 
 export function Step1Company() {
   const { company, setCompany, setStep } = useOnboardingStore()
@@ -90,11 +93,27 @@ export function Step1Company() {
   const description = form.watch('description') ?? ''
   const { errors } = form.formState
 
-  function onSubmit(values: FormValues) {
-    setCompany({
-      ...values,
-      website: values.website ? normalizeUrl(values.website) : values.website,
-    })
+  // Saved on the server before moving on: this also creates the org's agent row, which the
+  // voice step (PUT /api/agent/voice) needs, and keeps onboarding_step in step with the wizard.
+  async function onSubmit(values: FormValues) {
+    const website = values.website ? normalizeUrl(values.website) : values.website
+    try {
+      const res = await fetch('/api/onboarding/company', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          name: values.name,
+          industry: values.industry,
+          website: website || null,
+          description: values.description,
+        }),
+      })
+      if (!res.ok) throw await parseApiError(res, SAVE_FAILED)
+    } catch (err) {
+      toast.error(errorMessage(err, SAVE_FAILED))
+      return
+    }
+    setCompany({ ...values, website })
     setStep(2)
   }
 
@@ -198,7 +217,7 @@ export function Step1Company() {
         </StepBody>
 
         <StepActions>
-          <Button type="submit" size="lg" className="ml-auto max-md:flex-1">
+          <Button type="submit" size="lg" className="ml-auto max-md:flex-1" loading={form.formState.isSubmitting} loadingText="Saving…">
             Continue
             <ArrowRight aria-hidden="true" />
           </Button>

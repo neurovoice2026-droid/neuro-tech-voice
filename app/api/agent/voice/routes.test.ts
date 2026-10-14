@@ -15,7 +15,12 @@ const el = vi.hoisted(() => ({ isConfigured: vi.fn(() => true), voices: { get: v
 vi.mock('@/lib/elevenlabs/client', () => el)
 const apply = vi.hoisted(() => ({ applyAgentVoice: vi.fn() }))
 vi.mock('@/lib/voice-providers/voice-apply', () => apply)
-const sync = vi.hoisted(() => ({ hasExternalAgent: vi.fn(), runAgentSync: vi.fn() }))
+const sync = vi.hoisted(() => ({
+  hasExternalAgent: vi.fn(),
+  runAgentSync: vi.fn(),
+  ensureAgent: vi.fn(),
+  defaultAgentName: (name: string | null) => (name ? `${name} Agent` : 'My Agent'),
+}))
 vi.mock('@/lib/agents/ensure-agent', () => sync)
 vi.mock('@/lib/voice-providers/agent-sync', () => ({ bumpRevision: vi.fn(async () => 2) }))
 const pron = vi.hoisted(() => ({ savePronunciationRules: vi.fn(), PRONUNCIATION_SAVE_LIMIT: { name: 'pronunciation_save' } }))
@@ -47,6 +52,7 @@ beforeEach(() => {
   pron.savePronunciationRules.mockReset()
   sync.hasExternalAgent.mockReset()
   sync.runAgentSync.mockReset()
+  sync.ensureAgent.mockReset()
 })
 
 describe('GET /api/agent/voice (retirement banner)', () => {
@@ -77,6 +83,26 @@ describe('PUT /api/agent/voice', () => {
     const refused = await putVoice(new Request('http://app.test/api/agent/voice', { method: 'PUT', headers: H, body: JSON.stringify({ voice_id: PREMADE, voice_name: 'Brian' }) }))
     expect(refused.status).toBe(403)
     expect(apply.applyAgentVoice).not.toHaveBeenCalled()
+  })
+  it('creates the org agent row when it does not exist yet (voice picked during onboarding)', async () => {
+    sync.ensureAgent.mockImplementation(async (orgId: string, name: string) => {
+      const row = { id: AGENT, org_id: orgId, name, voice_id: null, voice_name: null, created_at: '1', pronunciation: null }
+      await state.db.from('agents').insert(row)
+      return row
+    })
+    el.voices.get.mockResolvedValue({ voice_id: 'Curated0000000000001', name: 'Ana', category: 'professional' })
+    state.db = memoryDb({
+      agents: [],
+      provider_voices: [{ id: 'p1', provider: 'elevenlabs', voice_id: 'Curated0000000000001', source: 'library', owner_org_id: null, status: 'ready', notice: null, name: 'Ana' }],
+      agent_provider_resources: [],
+      audit_log: [],
+    })
+    apply.applyAgentVoice.mockResolvedValue({ status: 'pending', error: null })
+    const res = await putVoice(new Request('http://app.test/api/agent/voice', { method: 'PUT', headers: H, body: JSON.stringify({ voice_id: 'Curated0000000000001', voice_name: 'Ana' }) }))
+    expect(res.status).toBe(200)
+    expect(sync.ensureAgent).toHaveBeenCalledWith(ORG, 'Acme Agent')
+    expect(apply.applyAgentVoice).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, agentId: AGENT, voiceId: 'Curated0000000000001' }))
+    expect(await res.json()).toMatchObject({ voice_sync_status: 'pending', agent: { id: AGENT } })
   })
   it('a voice with a lifecycle notice is refused as a new pick', async () => {
     seed('Curated0000000000001')
