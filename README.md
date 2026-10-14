@@ -22,7 +22,7 @@ npm run dev                    # http://localhost:3000
 ```
 
 Database: apply the SQL files in `supabase/migrations/` in order (001 → 021,
-then 023 and 024; the numbers 012 and 019 are intentionally unused) with the Supabase CLI or the
+then 023, 024 and 025; the numbers 012 and 019 are intentionally unused) with the Supabase CLI or the
 SQL editor, and create the private Storage bucket from
 `supabase/STORAGE_BUCKET.sql`. Then, **after** deploying the app version that
 ships it, apply `022_security_performance_hardening.sql`: it is the former
@@ -70,7 +70,7 @@ prerequisites, the custom connector contract, webhooks, the job scheduler
 (the `commerce` step of `/api/cron/voice-maintenance`, so the 5-minute
 schedule above applies), retention and the runbook:
 [`docs/commerce-integrations.md`](docs/commerce-integrations.md). Requires
-migration `024_commerce.sql` and `COMMERCE_CREDENTIALS_ENCRYPTION_KEY`.
+migrations `024_commerce.sql` and `025_commerce_fk_indexes.sql` and `COMMERCE_CREDENTIALS_ENCRYPTION_KEY`.
 
 ## Deployment (Vercel)
 
